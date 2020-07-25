@@ -3,6 +3,7 @@ package types
 import (
 	"errors"
 	"fmt"
+	"github.com/tendermint/tendermint/crypto"
 	"time"
 
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -54,10 +55,10 @@ func DefaultEvidenceParams() tmproto.EvidenceParams {
 }
 
 // DefaultValidatorParams returns a default ValidatorParams, which allows
-// only ed25519 pubkeys.
+// only bls12381 pubkeys.
 func DefaultValidatorParams() tmproto.ValidatorParams {
 	return tmproto.ValidatorParams{
-		PubKeyTypes: []string{ABCIPubKeyTypeEd25519},
+		PubKeyTypes: []string{ABCIPubKeyTypeBLS12381},
 	}
 }
 
@@ -113,9 +114,9 @@ func ValidateConsensusParams(params tmproto.ConsensusParams) error {
 			params.Evidence.MaxNum, MaxEvidencePerBlock)
 	}
 
-	if int64(params.Evidence.MaxNum)*MaxEvidenceBytes > params.Block.MaxBytes {
+	if int64(params.Evidence.MaxNum)*MaxEvidenceBytesForKeyType(crypto.BLS12381) > params.Block.MaxBytes {
 		return fmt.Errorf("total possible evidence size is bigger than block.MaxBytes, %d > %d",
-			int64(params.Evidence.MaxNum)*MaxEvidenceBytes, params.Block.MaxBytes)
+			int64(params.Evidence.MaxNum)*MaxEvidenceBytesForKeyType(crypto.BLS12381), params.Block.MaxBytes)
 	}
 
 	if params.Evidence.ProofTrialPeriod <= 0 {

@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"github.com/tendermint/tendermint/crypto/bls12381"
 	"reflect"
 	"time"
 
@@ -25,12 +26,14 @@ const (
 
 const (
 	ABCIPubKeyTypeEd25519 = "ed25519"
+	ABCIPubKeyTypeBLS12381 = "bls12381"
 )
 
 // TODO: Make non-global by allowing for registration of more pubkey types
 
 var ABCIPubKeyTypesToNames = map[string]string{
 	ABCIPubKeyTypeEd25519: ed25519.PubKeyName,
+	ABCIPubKeyTypeBLS12381: bls12381.PubKeyName,
 }
 
 //-------------------------------------------------------

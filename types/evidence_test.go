@@ -1,6 +1,7 @@
 package types
 
 import (
+	"github.com/tendermint/tendermint/crypto/bls12381"
 	"math"
 	"testing"
 	"time"
@@ -9,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/crypto/tmhash"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -147,7 +147,7 @@ func TestMaxEvidenceBytes(t *testing.T) {
 		bz, err := pb.Marshal()
 		require.NoError(t, err, tt.testName)
 
-		assert.LessOrEqual(t, int64(len(bz)), MaxEvidenceBytes, tt.testName)
+		assert.LessOrEqual(t, int64(len(bz)), MaxEvidenceBytesForKeyType(crypto.BLS12381), tt.testName)
 	}
 
 }
@@ -246,7 +246,7 @@ func TestLunaticValidatorEvidence(t *testing.T) {
 
 	// invalid evidence
 	assert.Error(t, ev.Verify("other", pubKey))
-	privKey2 := ed25519.GenPrivKey()
+	privKey2 := bls12381.GenPrivKey()
 	pubKey2 := privKey2.PubKey()
 	assert.Error(t, ev.Verify(header.ChainID, pubKey2))
 	assert.Error(t, ev.VerifyHeader(header))
@@ -289,7 +289,7 @@ func TestPhantomValidatorEvidence(t *testing.T) {
 	require.NoError(t, err)
 	assert.NoError(t, ev.Verify(header.ChainID, pubKey))
 	assert.Error(t, ev.Verify("other", pubKey))
-	privKey2 := ed25519.GenPrivKey()
+	privKey2 := bls12381.GenPrivKey()
 	pubKey2 := privKey2.PubKey()
 	assert.Error(t, ev.Verify("other", pubKey2))
 	assert.True(t, ev.Equal(ev))
@@ -394,7 +394,7 @@ func TestPotentialAmnesiaEvidence(t *testing.T) {
 	require.NoError(t, err)
 	assert.NoError(t, ev.Verify(chainID, pubKey))
 	assert.Error(t, ev.Verify("other", pubKey))
-	privKey2 := ed25519.GenPrivKey()
+	privKey2 := bls12381.GenPrivKey()
 	pubKey2 := privKey2.PubKey()
 	assert.Error(t, ev.Verify("other", pubKey2))
 	assert.True(t, ev.Equal(ev))

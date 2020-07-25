@@ -657,16 +657,16 @@ func testHandshakeReplay(t *testing.T, config *cfg.Config, nBlocks int, mode uin
 	var commits []*types.Commit
 	var store *mockBlockStore
 	var stateDB dbm.DB
-	var genisisState sm.State
+	var genesisState sm.State
 	if testValidatorsChange {
 		testConfig := ResetConfig(fmt.Sprintf("%s_%v_m", t.Name(), mode))
 		defer os.RemoveAll(testConfig.RootDir)
 		stateDB = dbm.NewMemDB()
-		genisisState = sim.GenesisState
+		genesisState = sim.GenesisState
 		config = sim.Config
 		chain = append([]*types.Block{}, sim.Chain...) // copy chain
 		commits = sim.Commits
-		store = newMockBlockStore(config, genisisState.ConsensusParams)
+		store = newMockBlockStore(config, genesisState.ConsensusParams)
 	} else { //test single node
 		testConfig := ResetConfig(fmt.Sprintf("%s_%v_s", t.Name(), mode))
 		defer os.RemoveAll(testConfig.RootDir)
@@ -687,13 +687,13 @@ func testHandshakeReplay(t *testing.T, config *cfg.Config, nBlocks int, mode uin
 		require.NoError(t, err)
 		pubKey, err := privVal.GetPubKey()
 		require.NoError(t, err)
-		stateDB, genisisState, store = stateAndStore(config, pubKey, kvstore.ProtocolVersion)
+		stateDB, genesisState, store = stateAndStore(config, pubKey, kvstore.ProtocolVersion)
 
 	}
 	store.chain = chain
 	store.commits = commits
 
-	state := genisisState.Copy()
+	state := genesisState.Copy()
 	// run the chain through state.ApplyBlock to build up the tendermint state
 	state = buildTMStateFromChain(config, stateDB, state, chain, nBlocks, mode)
 	latestAppHash := state.AppHash
@@ -708,8 +708,8 @@ func testHandshakeReplay(t *testing.T, config *cfg.Config, nBlocks int, mode uin
 		// use a throwaway tendermint state
 		proxyApp := proxy.NewAppConns(clientCreator2)
 		stateDB1 := dbm.NewMemDB()
-		sm.SaveState(stateDB1, genisisState)
-		buildAppStateFromChain(proxyApp, stateDB1, genisisState, chain, nBlocks, mode)
+		sm.SaveState(stateDB1, genesisState)
+		buildAppStateFromChain(proxyApp, stateDB1, genesisState, chain, nBlocks, mode)
 	}
 
 	// Prune block store if requested

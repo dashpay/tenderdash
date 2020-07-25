@@ -360,7 +360,7 @@ temp_dir = "{{ .StateSync.TempDir }}"
 # Fast Sync version to use:
 #   1) "v0" (default) - the legacy fast sync implementation
 #   2) "v1" - refactor of v0 version for better testability
-#   2) "v2" - complete redesign of v0, optimized for testability & readability 
+#   2) "v2" - complete redesign of v0, optimized for testability & readability
 version = "{{ .FastSync.Version }}"
 
 #######################################################
@@ -395,7 +395,7 @@ peer_query_maj23_sleep_duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 [tx_index]
 
 # What indexer to use for transactions
-# 
+#
 # The application will set which txs to index. In some cases a node operator will be able
 # to decide which txs to index based on configuration set in the application.
 #
@@ -473,7 +473,7 @@ func ResetTestRootWithChainID(testName string, chainID string) *Config {
 	return config
 }
 
-var testGenesisFmt = `{
+var testEd25519GenesisFmt = `{
   "genesis_time": "2018-10-10T08:20:13.695936996Z",
   "chain_id": "%s",
   "validators": [
@@ -489,7 +489,23 @@ var testGenesisFmt = `{
   "app_hash": ""
 }`
 
-var testPrivValidatorKey = `{
+var testGenesisFmt = `{
+  "genesis_time": "2018-10-10T08:20:13.695936996Z",
+  "chain_id": "%s",
+  "validators": [
+    {
+      "pub_key": {
+        "type": "tendermint/PubKeyBLS12381",
+        "value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+      },
+      "power": "10",
+      "name": ""
+    }
+  ],
+  "app_hash": ""
+}`
+
+var testEd25519PrivValidatorKey = `{
   "address": "A3258DCBF45DCA0DF052981870F2D1441A36D145",
   "pub_key": {
     "type": "tendermint/PubKeyEd25519",
@@ -498,6 +514,18 @@ var testPrivValidatorKey = `{
   "priv_key": {
     "type": "tendermint/PrivKeyEd25519",
     "value": "EVkqJO/jIXp3rkASXfh9YnyToYXRXhBr6g9cQVxPFnQBP/5povV4HTjvsy530kybxKHwEi85iU8YL0qQhSYVoQ=="
+  }
+}`
+
+var testPrivValidatorKey = `{
+  "address": "DDAD59BB10A10088C5A9CA219C3CF5BB4599B54E",
+  "pub_key": {
+    "type": "tendermint/PubKeyBLS12381",
+    "value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+  },
+  "priv_key": {
+    "type": "tendermint/PrivKeyBLS12381",
+    "value": "RokcLOxJWTyBkh5HPbdIACng/B65M8a5PYH1Nw6xn70="
   }
 }`
 

@@ -3,6 +3,7 @@ package encoding
 import (
 	"errors"
 	"fmt"
+	"github.com/tendermint/tendermint/crypto/bls12381"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -17,6 +18,12 @@ func PubKeyToProto(k crypto.PubKey) (pc.PublicKey, error) {
 		kp = pc.PublicKey{
 			Sum: &pc.PublicKey_Ed25519{
 				Ed25519: k,
+			},
+		}
+	case bls12381.PubKey:
+		kp = pc.PublicKey{
+			Sum: &pc.PublicKey_Bls12381{
+				Bls12381: k,
 			},
 		}
 	default:
@@ -35,6 +42,14 @@ func PubKeyFromProto(k pc.PublicKey) (crypto.PubKey, error) {
 		}
 		pk := make(ed25519.PubKey, ed25519.PubKeySize)
 		copy(pk, k.Ed25519)
+		return pk, nil
+	case *pc.PublicKey_Bls12381:
+		if len(k.Bls12381) != bls12381.PubKeySize {
+			return nil, fmt.Errorf("invalid size for PubKeyBLS12381. Got %d, expected %d",
+				len(k.Bls12381), bls12381.PubKeySize)
+		}
+		pk := make(bls12381.PubKey, bls12381.PubKeySize)
+		copy(pk, k.Bls12381)
 		return pk, nil
 	default:
 		return nil, fmt.Errorf("fromproto: key type %v is not supported", k)

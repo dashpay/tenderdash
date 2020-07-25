@@ -58,7 +58,7 @@ program](https://hackerone.com/tendermint).
 ### SECURITY:
 
 - [consensus] Do not allow signatures for a wrong block in commits (@ebuchman)
-- [consensus] Verify all the signatures during block execution (@melekes) 
+- [consensus] Verify all the signatures during block execution (@melekes)
 
 **Please note that the fix for the False Witness issue renames the `VerifyCommitTrusting`
 function to `VerifyCommitLightTrusting`. If you were relying on the light client, you may
@@ -66,7 +66,7 @@ need to update your code.**
 
 ## v0.33.5
 
-Special thanks to external contributors on this release: @tau3, 
+Special thanks to external contributors on this release: @tau3,
 
 Friendly reminder, we have a [bug bounty program](https://hackerone.com/tendermint).
 

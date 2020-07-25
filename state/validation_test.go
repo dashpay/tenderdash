@@ -1,6 +1,7 @@
 package state_test
 
 import (
+	"github.com/tendermint/tendermint/crypto/bls12381"
 	"testing"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/proto/tendermint/version"
 
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/crypto/tmhash"
 	"github.com/tendermint/tendermint/libs/log"
 	memmock "github.com/tendermint/tendermint/mempool/mock"
@@ -72,7 +72,7 @@ func TestValidateBlockHeader(t *testing.T) {
 		{"LastResultsHash wrong", func(block *types.Block) { block.LastResultsHash = wrongHash }},
 
 		{"EvidenceHash wrong", func(block *types.Block) { block.EvidenceHash = wrongHash }},
-		{"Proposer wrong", func(block *types.Block) { block.ProposerAddress = ed25519.GenPrivKey().PubKey().Address() }},
+		{"Proposer wrong", func(block *types.Block) { block.ProposerAddress = bls12381.GenPrivKey().PubKey().Address() }},
 		{"Proposer invalid", func(block *types.Block) { block.ProposerAddress = []byte("wrong size") }},
 	}
 
@@ -639,7 +639,7 @@ func TestVerifyEvidenceWithPhantomValidatorEvidence(t *testing.T) {
 	require.NoError(t, err)
 	err = sm.VerifyEvidence(stateDB, state, ev, nil)
 	if assert.Error(t, err) {
-		assert.Equal(t, "address 576585A00DD4D58318255611D8AAC60E8E77CB32 was a validator at height 3", err.Error())
+		assert.Equal(t, "address 0670F498BCB1EF1AF27350939B4C55A419F421B0 was a validator at height 3", err.Error())
 	}
 
 	privVal := types.NewMockPV()
