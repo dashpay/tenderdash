@@ -14,7 +14,7 @@ from base64 import b64encode
 
 def request(baseurl, path, mimetype, mimeencoding, data):
   user_and_pass = b64encode(b"{0}:{1}".format(os.environ['GITHUB_USERNAME'], os.environ['GITHUB_TOKEN'])).decode("ascii")
-  
+
   headers = {
     'User-Agent': 'tenderbot',
     'Accept': 'application/vnd.github.v3.raw+json',
@@ -59,7 +59,7 @@ if __name__ == "__main__":
   with open(args.file,'rb') as f:
     asset = f.read()
 
-  result = request('uploads.github.com', '/repos/tendermint/tendermint/releases/{0}/assets?name={1}'.format(args.id, filename), mimetype, mimeencoding, asset)
+  result = request('uploads.github.com', '/repos/dashevo/tendermint/releases/{0}/assets?name={1}'.format(args.id, filename), mimetype, mimeencoding, asset)
 
   if args.return_id_only:
     print(result['id'])

@@ -18,7 +18,7 @@ fi
 git checkout "${BRANCH}"
 
 # Add entry to public repository
-git remote add tendermint-origin git@github.com:tendermint/tendermint.git
+git remote add tendermint-origin git@github.com:dashevo/tendermint.git
 
 # Push branch and tag to public repository
 git push tendermint-origin

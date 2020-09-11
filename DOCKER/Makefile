@@ -5,7 +5,7 @@ push:
 	@sh -c "'$(CURDIR)/push.sh'"
 
 build_testing:
-	docker build --tag dashpay/tendermint-testing -f ./Dockerfile.testing .
+	docker build --tag dashpay/tendermint:testing -f ./Dockerfile.testing .
 
 build_amazonlinux_buildimage:
 	docker build -t "dashpay/tendermint:build_c-amazonlinux" -f Dockerfile.build_c-amazonlinux .
