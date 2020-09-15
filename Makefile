@@ -1,7 +1,7 @@
 PACKAGES=$(shell go list ./...)
 OUTPUT?=build/tendermint
 
-REPO_NAME=github.com/dashevo/tendermint
+REPO_NAME=github.com/dashevo/tenderdash
 BUILD_TAGS?=tendermint
 LD_FLAGS = -X ${REPO_NAME}/version.GitCommit=`git rev-parse --short=8 HEAD`
 BUILD_FLAGS = -mod=readonly -ldflags "$(LD_FLAGS)"
@@ -191,7 +191,7 @@ sync-docs:
 
 build-docker:
 	cp $(OUTPUT) DOCKER/tendermint
-	docker build --label=tendermint --tag="dashpay/tendermint" DOCKER
+	docker build --label=tendermint --tag="dashpay/tenderdash" DOCKER
 	rm -rf DOCKER/tendermint
 .PHONY: build-docker
 
@@ -213,12 +213,12 @@ build-docker-localnode:
 # Linux-compatible binary. Produces a compatible binary at ./build/tendermint
 build_c-amazonlinux:
 	$(MAKE) -C ./DOCKER build_amazonlinux_buildimage
-	docker run --rm -it -v `pwd`:/tendermint dashpay/tendermint:build_c-amazonlinux
+	docker run --rm -it -v `pwd`:/tendermint dashpay/tenderdash:build_c-amazonlinux
 .PHONY: build_c-amazonlinux
 
 # Run a 4-node testnet locally
 localnet-start: localnet-stop build-docker-localnode
-	@if ! [ -f build/node0/config/genesis.json ]; then docker run --rm -v $(CURDIR)/build:/tendermint:Z dashpay/tendermint:localnode testnet --config /etc/tendermint/config-template.toml --v 4 --o . --populate-persistent-peers --starting-ip-address 192.167.10.2; fi
+	@if ! [ -f build/node0/config/genesis.json ]; then docker run --rm -v $(CURDIR)/build:/tendermint:Z dashpay/tenderdash:localnode testnet --config /etc/tendermint/config-template.toml --v 4 --o . --populate-persistent-peers --starting-ip-address 192.167.10.2; fi
 	docker-compose up
 .PHONY: localnet-start
 

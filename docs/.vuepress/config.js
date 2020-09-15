@@ -11,8 +11,8 @@ module.exports = {
   // },
   base: process.env.VUEPRESS_BASE,
   themeConfig: {
-    repo: "dashevo/tendermint",
-    docsRepo: "dashevo/tendermint",
+    repo: "dashevo/tenderdash",
+    docsRepo: "dashevo/tenderdash",
     docsDir: "docs",
     editLinks: true,
     label: "core",
@@ -122,11 +122,11 @@ module.exports = {
           children: [
             {
               title: "Contributing to the docs",
-              url: "https://github.com/dashevo/tendermint"
+              url: "https://github.com/dashevo/tenderdash"
             },
             {
               title: "Source code on GitHub",
-              url: "https://github.com/dashevo/tendermint"
+              url: "https://github.com/dashevo/tenderdash"
             },
             {
               title: "Careers at Tendermint",

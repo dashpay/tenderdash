@@ -37,7 +37,7 @@ for i in $(seq 1 4); do
 	  --ip="172.57.0.$((100 + $i))" \
 	  --name local_testnet_$i \
 	  --entrypoint tendermint \
-	  -e TMHOME=/go/src/github.com/dashevo/tendermint/test/p2p/data/mach$((i-1)) \
+	  -e TMHOME=/go/src/github.com/dashevo/tenderdash/test/p2p/data/mach$((i-1)) \
 	  tendermint_tester node --p2p.persistent_peers 172.57.0.101:26656,172.57.0.102:26656,172.57.0.103:26656,172.57.0.104:26656 --proxy_app=kvstore
 done
 ```

@@ -21,7 +21,7 @@ if [[ -n "$PORT" ]]; then
 fi
 
 if [[ -n "$DOCKER_IMAGE" ]]; then
-    NODEID="$(docker run --rm -e TMHOME=/go/src/github.com/dashevo/tendermint/test/p2p/data/mach$((ID-1)) $DOCKER_IMAGE tendermint show_node_id)"
+    NODEID="$(docker run --rm -e TMHOME=/go/src/github.com/dashevo/tenderdash/test/p2p/data/mach$((ID-1)) $DOCKER_IMAGE tendermint show_node_id)"
     ADDRESS="$NODEID@$ADDRESS"
 fi
 
