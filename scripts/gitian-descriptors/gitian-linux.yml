@@ -20,7 +20,7 @@ packages:
 - "xxd"
 - "quilt"
 remotes:
-- "url": "https://github.com/dashevo/tendermint.git"
+- "url": "https://github.com/dashevo/tenderdash.git"
   "dir": "tendermint"
 files:
 - "go1.13.3.linux-amd64.tar.gz"
@@ -64,7 +64,7 @@ script: |
   popd
 
   # Prepare GOPATH and install deps
-  distsrc=${GOPATH}/src/github.com/dashevo/tendermint
+  distsrc=${GOPATH}/src/github.com/dashevo/tenderdash
   mkdir -p ${distsrc}
   pushd ${distsrc}
   tar --strip-components=1 -xf $SOURCEDIST
@@ -73,7 +73,7 @@ script: |
 
   # Configure LDFLAGS for reproducible builds
   LDFLAGS="-extldflags=-static -buildid=${VERSION} -s -w \
-    -X github.com/dashevo/tendermint/version.GitCommit=${COMMIT}"
+    -X github.com/dashevo/tenderdash/version.GitCommit=${COMMIT}"
 
   # Extract release tarball and build
   for arch in ${ARCHS}; do
