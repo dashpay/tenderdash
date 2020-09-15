@@ -148,7 +148,7 @@ spec:
       containers:
       - name: tm
         imagePullPolicy: IfNotPresent
-        image: dashevo/tenderdash:0.10.0
+        image: dashpay/tenderdash:0.10.0
         ports:
         - containerPort: 26656
           name: p2p

@@ -38,7 +38,7 @@ SHA256SUM=$(shasum -a256 "${DIR}/build/dist/tendermint_${VERSION}_linux_amd64.zi
 sed -i -e "s/TM_VERSION .*/TM_VERSION $VERSION/g" "$DIR/DOCKER/Dockerfile"
 sed -i -e "s/TM_SHA256SUM .*/TM_SHA256SUM $SHA256SUM/g" "$DIR/DOCKER/Dockerfile"
 git commit -m "update Dockerfile" -a "$DIR/DOCKER/Dockerfile"
-echo "==> TODO: update DOCKER/README.md (latest Dockerfile's hash is $(git rev-parse HEAD)) and copy it's content to https://store.docker.com/community/images/dashevo/tenderdash"
+echo "==> TODO: update DOCKER/README.md (latest Dockerfile's hash is $(git rev-parse HEAD)) and copy it's content to https://store.docker.com/community/images/dashpay/tenderdash"
 
 pushd "$DIR/DOCKER"
 

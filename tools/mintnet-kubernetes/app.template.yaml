@@ -82,7 +82,7 @@ spec:
       containers:
       - name: tm
         imagePullPolicy: IfNotPresent
-        image: dashevo/tenderdash:0.10.0
+        image: dashpay/tenderdash:0.10.0
         resources:
           requests:
             cpu: 50m
