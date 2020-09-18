@@ -21,7 +21,7 @@ mkdir -p build/pkg
 
 # Get the git commit
 GIT_COMMIT="$(git rev-parse --short=8 HEAD)"
-GIT_IMPORT="github.com/tendermint/tendermint/version"
+GIT_IMPORT="github.com/dashevo/tenderdash/version"
 
 # Determine the arch/os combos we're building for
 XC_ARCH=${XC_ARCH:-"386 amd64 arm"}
