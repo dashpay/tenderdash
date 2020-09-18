@@ -21,7 +21,7 @@ jobs:
       - name: 10 Blocks
         run: |
           set -x
-          docker run --rm -v "$PWD":/go/src/github.com/tendermint/tendermint -w /go/src/github.com/tendermint/tendermint golang make build-linux
+          docker run --rm -v "$PWD":/go/src/github.com/dashevo/tenderdash -w /go/src/github.com/dashevo/tenderdash golang make build-linux
           make localnet-start &
           ./scripts/localnet-blocks-test.sh 40 5 10 localhost
 # Decide if we want to run longer lived testnets

@@ -18,7 +18,7 @@ DEFAULT_SIGN_COMMAND='gpg --detach-sign'
 DEFAULT_TENDERMINT_SIGS=${TENDERMINT_SIGS:-'tendermint.sigs'}
 DEFAULT_GITIAN_REPO='https://github.com/tendermint/gitian-builder'
 DEFAULT_GBUILD_FLAGS=''
-DEFAULT_SIGS_REPO='https://github.com/tendermint/tendermint.sigs'
+DEFAULT_SIGS_REPO='https://github.com/dashevo/tenderdash.sigs'
 
 # Overrides
 

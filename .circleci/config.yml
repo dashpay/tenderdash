@@ -4,7 +4,7 @@ executors:
   golang:
     docker:
       - image: tendermintdev/docker-tendermint-build
-    working_directory: /go/src/github.com/tendermint/tendermint
+    working_directory: /go/src/github.com/dashevo/tenderdash
     environment:
       GOBIN: /tmp/bin
   release:
@@ -91,7 +91,7 @@ jobs:
     steps:
       - checkout
       - run: mkdir -p $GOPATH/src/github.com/tendermint
-      - run: ln -sf /home/circleci/project $GOPATH/src/github.com/tendermint/tendermint
+      - run: ln -sf /home/circleci/project $GOPATH/src/github.com/dashevo/tenderdash
       - run: bash test/p2p/circleci.sh << parameters.ipv >>
       - store_artifacts:
           path: /home/circleci/project/test/p2p/logs
@@ -213,9 +213,9 @@ jobs:
             # Setting CIRCLE_TAG because we do not tag the release ourselves.
             source /tmp/workspace/release-version.source
             cp /tmp/workspace/tendermint_linux_amd64 DOCKER/tendermint
-            docker build --label="tendermint" --tag="tendermint/tendermint:${CIRCLE_TAG}" --tag="tendermint/tendermint:latest" "DOCKER"
+            docker build --label="tendermint" --tag="dashpay/tenderdash:${CIRCLE_TAG}" --tag="dashpay/tenderdash:latest" "DOCKER"
             docker login -u "${DOCKERHUB_USER}" --password-stdin \<<< "${DOCKERHUB_PASS}"
-            docker push "tendermint/tendermint"
+            docker push "dashpay/tenderdash"
             docker logout
   reproducible_builds:
     executor: golang
@@ -238,17 +238,17 @@ jobs:
               rm -rf gitian-build-${os}/
             done
       - store_artifacts:
-          path: /go/src/github.com/tendermint/tendermint/tendermint-darwin-res.yml
+          path: /go/src/github.com/dashevo/tenderdash/tendermint-darwin-res.yml
       - store_artifacts:
-          path: /go/src/github.com/tendermint/tendermint/tendermint-linux-res.yml
+          path: /go/src/github.com/dashevo/tenderdash/tendermint-linux-res.yml
       - store_artifacts:
-          path: /go/src/github.com/tendermint/tendermint/tendermint-windows-res.yml
+          path: /go/src/github.com/dashevo/tenderdash/tendermint-windows-res.yml
       - store_artifacts:
-          path: /go/src/github.com/tendermint/tendermint/tendermint-*.tar.gz
+          path: /go/src/github.com/dashevo/tenderdash/tendermint-*.tar.gz
 
   # # Test RPC implementation against the swagger documented specs
   # contract_tests:
-  #   working_directory: /home/circleci/.go_workspace/src/github.com/tendermint/tendermint
+  #   working_directory: /home/circleci/.go_workspace/src/github.com/dashevo/tenderdash
   #   machine:
   #     image: circleci/classic:latest
   #   environment:
@@ -267,7 +267,7 @@ jobs:
   #           # install node and dredd
   #           ./scripts/get_nodejs.sh
   #           # build the binaries with a proper version of Go
-  #           docker run --rm -v "$PWD":/go/src/github.com/tendermint/tendermint -w /go/src/github.com/tendermint/tendermint golang make build-linux build-contract-tests-hooks
+  #           docker run --rm -v "$PWD":/go/src/github.com/dashevo/tenderdash -w /go/src/github.com/tendermint/tendermint golang make build-linux build-contract-tests-hooks
   #           # This docker image works with go 1.7, we can install here the hook handler that contract-tests is going to use
   #           go get github.com/snikch/goodman/cmd/goodman
   #           make contract-tests
