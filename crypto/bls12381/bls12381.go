@@ -155,7 +155,7 @@ func (pubKey PubKey) VerifyBytes(msg []byte, sig []byte) bool {
 		// maybe log/panic?
 		return false
 	}
-	aggregationInfo, err := bls.AggregationInfoFromMsg(publicKey, msg)
+	aggregationInfo := bls.AggregationInfoFromMsg(publicKey, msg)
 	if err != nil {
 		// maybe log/panic?
 		return false
