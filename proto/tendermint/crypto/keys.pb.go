@@ -97,7 +97,7 @@ func (m *PublicKey) GetEd25519() []byte {
 	return nil
 }
 
-func (m *PublicKey) GetBls12381() []byte {
+func (m *PublicKey) GetBLS12381() []byte {
 	if x, ok := m.GetSum().(*PublicKey_Bls12381); ok {
 		return x.Bls12381
 	}
@@ -184,7 +184,7 @@ func (m *PrivateKey) GetEd25519() []byte {
 	return nil
 }
 
-func (m *PrivateKey) GetBls12381() []byte {
+func (m *PrivateKey) GetBLS12381() []byte {
 	if x, ok := m.GetSum().(*PrivateKey_Bls12381); ok {
 		return x.Bls12381
 	}
