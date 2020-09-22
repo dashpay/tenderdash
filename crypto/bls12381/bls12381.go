@@ -152,12 +152,10 @@ func (pubKey PubKey) VerifyBytes(msg []byte, sig []byte) bool {
 	}
 	publicKey, err := bls.PublicKeyFromBytes(pubKey)
 	if err != nil {
-		// maybe log/panic?
 		return false
 	}
 	aggregationInfo := bls.AggregationInfoFromMsg(publicKey, msg)
 	if err != nil {
-		// maybe log/panic?
 		return false
 	}
 	blsSignature, err := bls.SignatureFromBytesWithAggregationInfo(sig, aggregationInfo)
