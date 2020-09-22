@@ -2,6 +2,7 @@ package light_test
 
 import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	"time"
 
 	"github.com/tendermint/tendermint/crypto"
@@ -27,7 +28,9 @@ func genPrivKeys(n int, keyType crypto.KeyType) privKeys {
 		if keyType == crypto.BLS12381 {
 			res[i] = bls12381.GenPrivKey()
 		} else if keyType == crypto.Ed25519 {
-			res[i] = bls12381.GenPrivKey()
+			res[i] = ed25519.GenPrivKey()
+		} else {
+			res[i] = ed25519.GenPrivKey()
 		}
 	}
 	return res
