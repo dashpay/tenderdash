@@ -129,7 +129,7 @@ func TestValUpdates(t *testing.T) {
 	total := 10
 	nInit := 5
 	vals := RandVals(total)
-	// initialize with the first nInit
+	// iniitalize with the first nInit
 	kvstore.InitChain(types.RequestInitChain{
 		Validators: vals[:nInit],
 	})

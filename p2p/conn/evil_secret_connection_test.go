@@ -241,7 +241,7 @@ func (c *evilConn) signChallenge() []byte {
 	return locSignature
 }
 
-// TestMakeSecretConnection creates an evil connection and tests it
+// TestMakeSecretConnection creates an evil connection and tests that
 // MakeSecretConnection errors at different stages.
 func TestMakeSecretConnection(t *testing.T) {
 	testCases := []struct {
@@ -249,8 +249,8 @@ func TestMakeSecretConnection(t *testing.T) {
 		conn   *evilConn
 		errMsg string
 	}{
-		{"refuse to share ephemeral key", newEvilConn(false, false, false, false), "EOF"},
-		{"share bad ephemeral key", newEvilConn(true, true, false, false), "wrong wireType"},
+		{"refuse to share ethimeral key", newEvilConn(false, false, false, false), "EOF"},
+		{"share bad ethimeral key", newEvilConn(true, true, false, false), "wrong wireType"},
 		{"refuse to share auth signature", newEvilConn(true, false, false, false), "EOF"},
 		{"share bad auth signature", newEvilConn(true, false, true, true), "failed to decrypt SecretConnection"},
 		{"all good", newEvilConn(true, false, true, false), ""},

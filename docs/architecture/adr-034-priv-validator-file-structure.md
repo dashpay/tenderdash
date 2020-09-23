@@ -6,8 +6,8 @@
 
 ## Context
 
-For now, the PrivValidator file `priv_validator.json` contains mutable and immutable parts.
-Even in an insecure mode which does not encrypt private key on disk, it is reasonable to separate
+For now, the PrivValidator file `priv_validator.json` contains mutable and immutable parts. 
+Even in an insecure mode which does not encrypt private key on disk, it is reasonable to separate 
 the mutable part and immutable part.
 
 References:
@@ -50,7 +50,7 @@ type FilePV struct {
 }
 ```
 
-As discussed, `FilePV` should be located in `config`, and `FilePVLastSignState` should be stored in `data`. The
+As discussed, `FilePV` should be located in `config`, and `FilePVLastSignState` should be stored in `data`. The 
 store path of each file should be specified in `config.yml`.
 
 What we need to do next is changing the methods of `FilePV`.
