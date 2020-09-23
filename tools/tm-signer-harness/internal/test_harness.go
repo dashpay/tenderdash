@@ -3,7 +3,6 @@ package internal
 import (
 	"bytes"
 	"fmt"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"net"
 	"os"
 	"os/signal"
@@ -11,6 +10,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto/tmhash"
 
+	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/state"
 
