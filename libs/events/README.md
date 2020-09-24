@@ -26,7 +26,7 @@ Pub-Sub in go with event caching
 
 
 #### <a name="pkg-files">Package files</a>
-[event_cache.go](/src/github.com/tendermint/tendermint/libs/events/event_cache.go) [events.go](/src/github.com/tendermint/tendermint/libs/events/events.go)
+[event_cache.go](/src/github.com/tendermint/tendermint/libs/events/event_cache.go) [events.go](/src/github.com/tendermint/tendermint/libs/events/events.go) 
 
 
 

@@ -6,13 +6,13 @@
 
 ## Context
 
-The responsibility for signaling and acting upon peer behaviour lacks a single
+The responsibility for signaling and acting upon peer behaviour lacks a single 
 owning component and is heavily coupled with the network stack[<sup>1</sup>](#references). Reactors
-maintain a reference to the `p2p.Switch` which they use to call
-`switch.StopPeerForError(...)` when a peer misbehaves and
-`switch.MarkAsGood(...)` when a peer contributes in some meaningful way.
-While the switch handles `StopPeerForError` internally, the `MarkAsGood`
-method delegates to another component, `p2p.AddrBook`. This scheme of delegation
+maintain a reference to the `p2p.Switch` which they use to call 
+`switch.StopPeerForError(...)` when a peer misbehaves and 
+`switch.MarkAsGood(...)` when a peer contributes in some meaningful way. 
+While the switch handles `StopPeerForError` internally, the `MarkAsGood` 
+method delegates to another component, `p2p.AddrBook`. This scheme of delegation 
 across Switch obscures the responsibility for handling peer behaviour
 and ties up the reactors in a larger dependency graph when testing.
 
@@ -37,7 +37,7 @@ type PeerBehaviour interface {
 ```
 
 Instead of signaling peers to stop with arbitrary reasons:
-`reason interface{}`
+`reason interface{}` 
 
 We introduce a concrete error type ErrorBehaviourPeer:
 ```go
