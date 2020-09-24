@@ -46,7 +46,7 @@ func genPrivKeys(n int, keyType crypto.KeyType) privKeys {
 
 // Extend adds n more keys (to remove, just take a slice).
 func (pkz privKeys) Extend(n int) privKeys {
-	extra := genPrivKeys(n,crypto.BLS12381)
+	extra := genPrivKeys(n, crypto.BLS12381)
 	return append(pkz, extra...)
 }
 
