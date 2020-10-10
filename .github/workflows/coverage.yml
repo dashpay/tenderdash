@@ -5,7 +5,7 @@ on:
     branches:
       - master
       - release/**
-
+​
 jobs:
   split-test-files:
     runs-on: ubuntu-latest
@@ -32,7 +32,7 @@ jobs:
         with:
           name: "${{ github.sha }}-ad"
           path: ./xad.txt
-
+​
   test-coverage-part-1:
     runs-on: ubuntu-latest
     needs: split-test-files
@@ -48,15 +48,24 @@ jobs:
         with:
           name: "${{ github.sha }}-aa"
         if: env.GIT_DIFF
+      - name: Set GOPATH
+        run: |
+          echo "::set-env name=GOPATH::$(go env GOPATH)"
+      - name: Set CGO_LDFLAGS
+        run: |
+          echo "::set-env name=CGO_LDFLAGS::"-L${GOPATH}/src/github.com/quantumexplorer/bls-signatures/build""
+      - name: Set CGO_CXXFLAGS
+        run: |
+          echo "::set-env name=CGO_CXXFLAGS::"-I${GOPATH}/src/github.com/quantumexplorer/bls-signatures/src -I${GOPATH}/src/github.com/quantumexplorer/bls-signatures/contrib/relic/include -I${GOPATH}/src/github.com/quantumexplorer/bls-signatures/build/contrib/relic/include""
       - name: test & coverage report creation
         run: |
-          cat xaa.txt | xargs go test -mod=readonly -timeout 8m -race -coverprofile=coverage.txt -covermode=atomic
+          (echo "Gopath: $CGO_CXXFLAGS") && (cat xaa.txt | xargs CGO_CXXFLAGS="$CGO_CXXFLAGS" CGO_LDFLAGS="$CGO_LDFLAGS" go test -mod=readonly -timeout 8m -race -coverprofile=coverage.txt -covermode=atomic)
         if: env.GIT_DIFF
       - uses: codecov/codecov-action@v1.0.13
         with:
           file: ./coverage.txt
         if: env.GIT_DIFF
-
+​
   test-coverage-part-2:
     runs-on: ubuntu-latest
     needs: split-test-files
@@ -80,7 +89,7 @@ jobs:
         with:
           file: ./coverage.txt
         if: env.GIT_DIFF
-
+​
   test-coverage-part-3:
     runs-on: ubuntu-latest
     needs: split-test-files
@@ -104,7 +113,7 @@ jobs:
         with:
           file: ./coverage.txt
         if: env.GIT_DIFF
-
+​
   test-coverage-part-4:
     runs-on: ubuntu-latest
     needs: split-test-files

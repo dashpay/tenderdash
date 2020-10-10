@@ -27,6 +27,7 @@ func TestEvidenceList(t *testing.T) {
 	assert.False(t, evl.Has(&DuplicateVoteEvidence{}))
 }
 
+
 func randomDuplicateVoteEvidence(t *testing.T) *DuplicateVoteEvidence {
 	val := NewMockPV()
 	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"))
@@ -84,6 +85,7 @@ func TestDuplicateVoteEvidenceValidation(t *testing.T) {
 		})
 	}
 }
+
 
 func TestLightClientAttackEvidence(t *testing.T) {
 	height := int64(5)

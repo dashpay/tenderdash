@@ -85,7 +85,7 @@ func TestEvidencePoolBasic(t *testing.T) {
 
 	evs, size = pool.PendingEvidence(defaultEvidenceMaxBytes)
 	assert.Equal(t, 1, len(evs))
-	assert.Equal(t, int64(357), size) // check that the size of the single evidence in bytes is correct
+	assert.Equal(t, int64(421), size) // check that the size of the single evidence in bytes is correct, bls is 64 more than edwards
 
 	// shouldn't be able to add evidence twice
 	assert.Error(t, pool.AddEvidence(ev))
