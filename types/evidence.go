@@ -19,7 +19,8 @@ import (
 
 const (
 	// MaxEvidenceBytes is a maximum size of any evidence (including amino overhead).
-	MaxEvidenceBytes int64 = 444
+	MaxEvidenceBytesBLS12381 int64 = 492
+	MaxEvidenceBytesEd25519 int64 = 444
 
 	// An invalid field in the header from LunaticValidatorEvidence.
 	// Must be a function of the ABCI application state.
@@ -29,6 +30,16 @@ const (
 	AppHashField            = "AppHash"
 	LastResultsHashField    = "LastResultsHash"
 )
+
+func MaxEvidenceBytesForKeyType(keyType crypto.KeyType) int64 {
+	switch keyType {
+	case crypto.Ed25519:
+		return MaxEvidenceBytesEd25519
+	case crypto.BLS12381:
+		return MaxEvidenceBytesBLS12381
+	}
+	return MaxEvidenceBytesBLS12381
+}
 
 // ErrEvidenceInvalid wraps a piece of evidence and the error denoting how or why it is invalid.
 type ErrEvidenceInvalid struct {

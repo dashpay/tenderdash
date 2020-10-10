@@ -134,7 +134,7 @@ func TestBlockMakePartSetWithEvidence(t *testing.T) {
 
 	partSet := MakeBlock(h, []Tx{Tx("Hello World")}, commit, evList).MakePartSet(512)
 	assert.NotNil(t, partSet)
-	assert.EqualValues(t, 4, partSet.Total())
+	assert.EqualValues(t, 5, partSet.Total())
 }
 
 func TestBlockHashesTo(t *testing.T) {
@@ -397,28 +397,34 @@ func hexBytesFromString(s string) bytes.HexBytes {
 func TestBlockMaxDataBytes(t *testing.T) {
 	testCases := []struct {
 		maxBytes      int64
+		keyType       crypto.KeyType
 		valsCount     int
 		evidenceCount int
 		panics        bool
 		result        int64
 	}{
-		0: {-10, 1, 0, true, 0},
-		1: {10, 1, 0, true, 0},
-		2: {844, 1, 0, true, 0},
-		3: {846, 1, 0, false, 0},
-		4: {847, 1, 0, false, 1},
+		0: {-10, crypto.Ed25519, 1, 0, true, 0},
+		1: {10, crypto.Ed25519,1, 0, true, 0},
+		2: {844, crypto.Ed25519,1, 0, true, 0},
+		3: {846, crypto.Ed25519,1, 0, false, 0},
+		4: {847, crypto.Ed25519,1, 0, false, 1},
+		5: {-10, crypto.BLS12381, 1, 0, true, 0},
+		6: {10, crypto.BLS12381,1, 0, true, 0},
+		7: {876, crypto.BLS12381,1, 0, true, 0},
+		8: {878, crypto.BLS12381,1, 0, false, 0},
+		9: {879, crypto.BLS12381,1, 0, false, 1},
 	}
 
 	for i, tc := range testCases {
 		tc := tc
 		if tc.panics {
 			assert.Panics(t, func() {
-				MaxDataBytes(tc.maxBytes, tc.valsCount, tc.evidenceCount)
+				MaxDataBytes(tc.maxBytes, tc.keyType, tc.valsCount, tc.evidenceCount)
 			}, "#%v", i)
 		} else {
 			assert.Equal(t,
 				tc.result,
-				MaxDataBytes(tc.maxBytes, tc.valsCount, tc.evidenceCount),
+				MaxDataBytes(tc.maxBytes, tc.keyType, tc.valsCount, tc.evidenceCount),
 				"#%v", i)
 		}
 	}
@@ -428,28 +434,35 @@ func TestBlockMaxDataBytesUnknownEvidence(t *testing.T) {
 	testCases := []struct {
 		maxBytes    int64
 		maxEvidence uint32
+		keyType       crypto.KeyType
 		valsCount   int
 		panics      bool
 		result      int64
 	}{
-		0: {-10, 0, 1, true, 0},
-		1: {10, 0, 1, true, 0},
-		2: {845, 0, 1, true, 0},
-		3: {846, 0, 1, false, 0},
-		4: {1290, 1, 1, false, 0},
-		5: {1291, 1, 1, false, 1},
+		0: {-10, 0, crypto.Ed25519,1, true, 0},
+		1: {10, 0, crypto.Ed25519,1, true, 0},
+		2: {845, 0, crypto.Ed25519,1, true, 0},
+		3: {846, 0, crypto.Ed25519,1, false, 0},
+		4: {1290, 1, crypto.Ed25519,1, false, 0},
+		5: {1291, 1, crypto.Ed25519,1, false, 1},
+		6: {-10, 0, crypto.BLS12381,1, true, 0},
+		7: {10, 0, crypto.BLS12381,1, true, 0},
+		8: {877, 0, crypto.BLS12381,1, true, 0},
+		9: {878, 0, crypto.BLS12381,1, false, 0},
+		10: {1370, 1, crypto.BLS12381,1, false, 0},
+		11: {1371, 1, crypto.BLS12381,1, false, 1},
 	}
 
 	for i, tc := range testCases {
 		tc := tc
 		if tc.panics {
 			assert.Panics(t, func() {
-				MaxDataBytesUnknownEvidence(tc.maxBytes, tc.valsCount, tc.maxEvidence)
+				MaxDataBytesUnknownEvidence(tc.maxBytes, tc.keyType, tc.valsCount, tc.maxEvidence)
 			}, "#%v", i)
 		} else {
 			assert.Equal(t,
 				tc.result,
-				MaxDataBytesUnknownEvidence(tc.maxBytes, tc.valsCount, tc.maxEvidence),
+				MaxDataBytesUnknownEvidence(tc.maxBytes, tc.keyType, tc.valsCount, tc.maxEvidence),
 				"#%v", i)
 		}
 	}
