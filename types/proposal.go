@@ -23,25 +23,27 @@ var (
 // a so-called Proof-of-Lock (POL) round, as noted in the POLRound.
 // If POLRound >= 0, then BlockID corresponds to the block that is locked in POLRound.
 type Proposal struct {
-	Type      tmproto.SignedMsgType
-	Height    int64     `json:"height"`
-	Round     int32     `json:"round"`     // there can not be greater than 2_147_483_647 rounds
-	POLRound  int32     `json:"pol_round"` // -1 if null.
-	BlockID   BlockID   `json:"block_id"`
-	Timestamp time.Time `json:"timestamp"`
-	Signature []byte    `json:"signature"`
+	Type       			  tmproto.SignedMsgType
+	Height                int64     `json:"height"`
+	CoreChainLockedHeight uint32    `json:"coreHeight"`
+	Round                 int32     `json:"round"`     // there can not be greater than 2_147_483_647 rounds
+	POLRound              int32     `json:"pol_round"` // -1 if null.
+	BlockID               BlockID   `json:"block_id"`
+	Timestamp             time.Time `json:"timestamp"`
+	Signature             []byte    `json:"signature"`
 }
 
 // NewProposal returns a new Proposal.
 // If there is no POLRound, polRound should be -1.
-func NewProposal(height int64, round int32, polRound int32, blockID BlockID) *Proposal {
+func NewProposal(height int64, coreHeight uint32, round int32, polRound int32, blockID BlockID) *Proposal {
 	return &Proposal{
-		Type:      tmproto.ProposalType,
-		Height:    height,
-		Round:     round,
-		BlockID:   blockID,
-		POLRound:  polRound,
-		Timestamp: tmtime.Now(),
+		Type:                  tmproto.ProposalType,
+		Height:                height,
+		CoreChainLockedHeight: coreHeight,
+		Round:                 round,
+		BlockID:               blockID,
+		POLRound:              polRound,
+		Timestamp:             tmtime.Now(),
 	}
 }
 
@@ -52,6 +54,9 @@ func (p *Proposal) ValidateBasic() error {
 	}
 	if p.Height < 0 {
 		return errors.New("negative Height")
+	}
+	if p.CoreChainLockedHeight == 0 {
+		return errors.New("core height not set")
 	}
 	if p.Round < 0 {
 		return errors.New("negative Round")
@@ -125,6 +130,7 @@ func (p *Proposal) ToProto() *tmproto.Proposal {
 	pb.BlockID = p.BlockID.ToProto()
 	pb.Type = p.Type
 	pb.Height = p.Height
+	pb.CoreChainLockedHeight = p.CoreChainLockedHeight
 	pb.Round = p.Round
 	pb.PolRound = p.POLRound
 	pb.Timestamp = p.Timestamp
@@ -150,6 +156,7 @@ func ProposalFromProto(pp *tmproto.Proposal) (*Proposal, error) {
 	p.BlockID = *blockID
 	p.Type = pp.Type
 	p.Height = pp.Height
+	p.CoreChainLockedHeight = pp.CoreChainLockedHeight
 	p.Round = pp.Round
 	p.POLRound = pp.PolRound
 	p.Timestamp = pp.Timestamp

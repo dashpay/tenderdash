@@ -277,6 +277,7 @@ func TestCreateProposalBlock(t *testing.T) {
 		stateDB,
 		logger,
 		proxyApp.Consensus(),
+		proxyApp.Validation(),
 		mempool,
 		evidencePool,
 	)

@@ -336,6 +336,7 @@ func newVote(addr types.Address, idx int32, height int64, round int32,
 func newProposal(height int64, round int32, blockID types.BlockID) *types.Proposal {
 	return &types.Proposal{
 		Height:    height,
+		CoreChainLockedHeight: 1,
 		Round:     round,
 		BlockID:   blockID,
 		Timestamp: tmtime.Now(),

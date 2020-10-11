@@ -5,7 +5,7 @@ import (
 	"github.com/tendermint/tendermint/abci/types"
 )
 
-//go:generate mockery -case underscore -name AppConnConsensus|AppConnMempool|AppConnQuery|AppConnSnapshot
+//go:generate mockery -case underscore -name AppConnConsensus|AppConnMempool|AppConnQuery|AppConnSnapshot|AppConnValidation
 
 //----------------------------------------------------------------------------------------
 // Enforce which abci msgs can be sent on a connection at the type level
@@ -50,6 +50,13 @@ type AppConnSnapshot interface {
 	OfferSnapshotSync(types.RequestOfferSnapshot) (*types.ResponseOfferSnapshot, error)
 	LoadSnapshotChunkSync(types.RequestLoadSnapshotChunk) (*types.ResponseLoadSnapshotChunk, error)
 	ApplySnapshotChunkSync(types.RequestApplySnapshotChunk) (*types.ResponseApplySnapshotChunk, error)
+}
+
+type AppConnValidation interface {
+	Error() error
+
+	CheckQuorumSignatureAsync(types.RequestCheckQuorumSignature) *abcicli.ReqRes
+	CheckQuorumSignatureSync(types.RequestCheckQuorumSignature) (*types.ResponseCheckQuorumSignature, error)
 }
 
 //-----------------------------------------------------------------------------------------
@@ -192,4 +199,33 @@ func (app *appConnSnapshot) LoadSnapshotChunkSync(
 func (app *appConnSnapshot) ApplySnapshotChunkSync(
 	req types.RequestApplySnapshotChunk) (*types.ResponseApplySnapshotChunk, error) {
 	return app.appConn.ApplySnapshotChunkSync(req)
+}
+
+//------------------------------------------------
+// Implements AppConnValidation (subset of abcicli.Client)
+
+type appConnValidation struct {
+	appConn abcicli.Client
+}
+
+func NewAppConnValidation(appConn abcicli.Client) AppConnValidation {
+	return &appConnValidation{
+		appConn: appConn,
+	}
+}
+
+func (app *appConnValidation) SetResponseCallback(cb abcicli.Callback) {
+	app.appConn.SetResponseCallback(cb)
+}
+
+func (app *appConnValidation) Error() error {
+	return app.appConn.Error()
+}
+
+func (app *appConnValidation) CheckQuorumSignatureAsync(req types.RequestCheckQuorumSignature) *abcicli.ReqRes {
+	return app.appConn.CheckQuorumSignatureAsync(req)
+}
+
+func (app *appConnValidation) CheckQuorumSignatureSync(req types.RequestCheckQuorumSignature) (*types.ResponseCheckQuorumSignature, error) {
+	return app.appConn.CheckQuorumSignatureSync(req)
 }

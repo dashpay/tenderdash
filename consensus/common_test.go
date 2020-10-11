@@ -202,7 +202,7 @@ func decideProposal(
 
 	// Make proposal
 	polRound, propBlockID := validRound, types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
-	proposal = types.NewProposal(height, round, polRound, propBlockID)
+	proposal = types.NewProposal(height, 1, round, polRound, propBlockID)
 	p := proposal.ToProto()
 	if err := vs.SignProposal(chainID, p); err != nil {
 		panic(err)
@@ -375,10 +375,11 @@ func newStateWithConfigAndBlockStore(
 	// Get BlockStore
 	blockStore := store.NewBlockStore(blockDB)
 
-	// one for mempool, one for consensus
+	// one for mempool, one for consensus, one for signature validation
 	mtx := new(tmsync.Mutex)
 	proxyAppConnMem := abcicli.NewLocalClient(mtx, app)
 	proxyAppConnCon := abcicli.NewLocalClient(mtx, app)
+	proxyAppConnVal := abcicli.NewLocalClient(mtx, app)
 
 	// Make Mempool
 	mempool := mempl.NewCListMempool(thisConfig.Mempool, proxyAppConnMem, 0)
@@ -392,7 +393,7 @@ func newStateWithConfigAndBlockStore(
 	// Make State
 	stateDB := blockDB
 	sm.SaveState(stateDB, state) //for save height 1's validators info
-	blockExec := sm.NewBlockExecutor(stateDB, log.TestingLogger(), proxyAppConnCon, mempool, evpool)
+	blockExec := sm.NewBlockExecutor(stateDB, log.TestingLogger(), proxyAppConnCon, proxyAppConnVal, mempool, evpool)
 	cs := NewState(thisConfig.Consensus, state, blockExec, blockStore, mempool, evpool)
 	cs.SetLogger(log.TestingLogger().With("module", "consensus"))
 	cs.SetPrivValidator(pv)
@@ -444,6 +445,7 @@ func randStateWithEvpool(nValidators int) (*State, []*validatorStub, *evidence.P
 	mtx := new(tmsync.Mutex)
 	proxyAppConnMem := abcicli.NewLocalClient(mtx, app)
 	proxyAppConnCon := abcicli.NewLocalClient(mtx, app)
+	proxyAppConnVal := abcicli.NewLocalClient(mtx, app)
 
 	mempool := mempl.NewCListMempool(config.Mempool, proxyAppConnMem, 0)
 	mempool.SetLogger(log.TestingLogger().With("module", "mempool"))
@@ -452,7 +454,7 @@ func randStateWithEvpool(nValidators int) (*State, []*validatorStub, *evidence.P
 	}
 	stateDB := dbm.NewMemDB()
 	evpool, _ := evidence.NewPool(stateDB, evidenceDB, blockStore)
-	blockExec := sm.NewBlockExecutor(stateDB, log.TestingLogger(), proxyAppConnCon, mempool, evpool)
+	blockExec := sm.NewBlockExecutor(stateDB, log.TestingLogger(), proxyAppConnCon, proxyAppConnVal, mempool, evpool)
 	cs := NewState(config.Consensus, state, blockExec, blockStore, mempool, evpool)
 	cs.SetLogger(log.TestingLogger().With("module", "consensus"))
 	cs.SetPrivValidator(privVals[0])

@@ -36,7 +36,7 @@ func TestApplyBlock(t *testing.T) {
 
 	state, stateDB, _ := makeState(1, 1)
 
-	blockExec := sm.NewBlockExecutor(stateDB, log.TestingLogger(), proxyApp.Consensus(),
+	blockExec := sm.NewBlockExecutor(stateDB, log.TestingLogger(), proxyApp.Consensus(), proxyApp.Validation(),
 		mock.Mempool{}, sm.MockEvidencePool{})
 
 	block := makeBlock(state, 1)
@@ -316,6 +316,7 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 		stateDB,
 		log.TestingLogger(),
 		proxyApp.Consensus(),
+		proxyApp.Validation(),
 		mock.Mempool{},
 		sm.MockEvidencePool{},
 	)
@@ -385,6 +386,7 @@ func TestEndBlockValidatorUpdatesResultingInEmptySet(t *testing.T) {
 		stateDB,
 		log.TestingLogger(),
 		proxyApp.Consensus(),
+		proxyApp.Validation(),
 		mock.Mempool{},
 		sm.MockEvidencePool{},
 	)

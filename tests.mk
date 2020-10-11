@@ -92,7 +92,7 @@ test_release:
 .PHONY: test_release
 
 test100:
-	@for i in {1..100}; do make test; done
+	@for i in {1..100}; do make test; go clean -testcache; done
 .PHONY: test100
 
 vagrant_test:
@@ -104,6 +104,11 @@ vagrant_test:
 test:
 	@echo "--> Running go test"
 	CGO_LDFLAGS=$(CGO_LDFLAGS) CGO_CXXFLAGS=$(CGO_CXXFLAGS) go test -p 1 $(PACKAGES) -tags deadlock
+.PHONY: test
+
+test_verbose:
+	@echo "--> Running go test"
+	CGO_LDFLAGS=$(CGO_LDFLAGS) CGO_CXXFLAGS=$(CGO_CXXFLAGS) go test -p 1 -v $(PACKAGES)
 .PHONY: test
 
 test_race:

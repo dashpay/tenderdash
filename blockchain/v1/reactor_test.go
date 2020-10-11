@@ -114,7 +114,7 @@ func newBlockchainReactor(
 	// pool.height is determined from the store.
 	fastSync := true
 	db := dbm.NewMemDB()
-	blockExec := sm.NewBlockExecutor(db, log.TestingLogger(), proxyApp.Consensus(),
+	blockExec := sm.NewBlockExecutor(db, log.TestingLogger(), proxyApp.Consensus(), proxyApp.Validation(),
 		mock.Mempool{}, sm.MockEvidencePool{})
 	sm.SaveState(db, state)
 

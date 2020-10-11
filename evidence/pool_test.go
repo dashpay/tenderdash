@@ -161,6 +161,7 @@ func TestEvidencePoolUpdate(t *testing.T) {
 		val          = types.NewMockPV()
 		valAddr      = val.PrivKey.PubKey().Address()
 		height       = int64(21)
+		chainLock   = types.NewMockChainLock()
 		stateDB      = initializeValidatorState(val, height)
 		evidenceDB   = dbm.NewMemDB()
 		blockStoreDB = dbm.NewMemDB()
@@ -174,9 +175,10 @@ func TestEvidencePoolUpdate(t *testing.T) {
 	// create new block (no need to save it to blockStore)
 	evidence := types.NewMockDuplicateVoteEvidence(height, time.Now(), evidenceChainID)
 	lastCommit := makeCommit(height, valAddr)
-	block := types.MakeBlock(height+1, []types.Tx{}, lastCommit, []types.Evidence{evidence})
+	block := types.MakeBlock(height+1, chainLock.CoreBlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{evidence})
 	// update state (partially)
 	state.LastBlockHeight = height + 1
+	state.LastChainLock = chainLock
 
 	pool.Update(block, state)
 
@@ -215,6 +217,7 @@ func TestAddingAndPruningPOLC(t *testing.T) {
 		state        = sm.LoadState(stateDB)
 		blockStore   = initializeBlockStore(blockStoreDB, state, valAddr)
 		height       = state.ConsensusParams.Evidence.MaxAgeNumBlocks * 2
+		chainLock    = types.NewMockChainLock()
 		evidenceTime = time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
 		firstBlockID = types.BlockID{
 			Hash: tmrand.Bytes(tmhash.Size),
@@ -254,7 +257,7 @@ func TestAddingAndPruningPOLC(t *testing.T) {
 	assert.Nil(t, emptyPolc)
 
 	lastCommit := makeCommit(height-1, valAddr)
-	block := types.MakeBlock(height, []types.Tx{}, lastCommit, []types.Evidence{})
+	block := types.MakeBlock(height,chainLock.CoreBlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{})
 	// update state (partially)
 	state.LastBlockHeight = height
 	pool.state.LastBlockHeight = height
@@ -322,6 +325,7 @@ func TestAddingPotentialAmnesiaEvidence(t *testing.T) {
 			Proposer: val.ExtractIntoValidator(1),
 		}
 		height       = int64(30)
+		chainLock    = types.NewMockChainLock()
 		stateDB      = initializeStateFromValidatorSet(valSet, height)
 		evidenceDB   = dbm.NewMemDB()
 		blockStoreDB = dbm.NewMemDB()
@@ -419,7 +423,7 @@ func TestAddingPotentialAmnesiaEvidence(t *testing.T) {
 	// now evidence is ready to be upgraded to amnesia evidence -> we expect -1 to be the next height as their is
 	// no more pending potential amnesia evidence left
 	lastCommit := makeCommit(height+1, pubKey.Address())
-	block := types.MakeBlock(height+2, []types.Tx{}, lastCommit, []types.Evidence{})
+	block := types.MakeBlock(height+2, chainLock.CoreBlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{})
 	state.LastBlockHeight = height + 2
 
 	pool.Update(block, state)

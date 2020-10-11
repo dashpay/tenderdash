@@ -4,6 +4,7 @@
 package types
 
 import (
+	bytes "bytes"
 	fmt "fmt"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
@@ -31,9 +32,10 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 // validity of blocks.
 type ConsensusParams struct {
 	Block     BlockParams     `protobuf:"bytes,1,opt,name=block,proto3" json:"block"`
-	Evidence  EvidenceParams  `protobuf:"bytes,2,opt,name=evidence,proto3" json:"evidence"`
-	Validator ValidatorParams `protobuf:"bytes,3,opt,name=validator,proto3" json:"validator"`
-	Version   VersionParams   `protobuf:"bytes,4,opt,name=version,proto3" json:"version"`
+	ChainLock ChainLockParams `protobuf:"bytes,2,opt,name=chain_lock,json=chainLock,proto3" json:"chain_lock"`
+	Evidence  EvidenceParams  `protobuf:"bytes,3,opt,name=evidence,proto3" json:"evidence"`
+	Validator ValidatorParams `protobuf:"bytes,4,opt,name=validator,proto3" json:"validator"`
+	Version   VersionParams   `protobuf:"bytes,5,opt,name=version,proto3" json:"version"`
 }
 
 func (m *ConsensusParams) Reset()         { *m = ConsensusParams{} }
@@ -74,6 +76,13 @@ func (m *ConsensusParams) GetBlock() BlockParams {
 		return m.Block
 	}
 	return BlockParams{}
+}
+
+func (m *ConsensusParams) GetChainLock() ChainLockParams {
+	if m != nil {
+		return m.ChainLock
+	}
+	return ChainLockParams{}
 }
 
 func (m *ConsensusParams) GetEvidence() EvidenceParams {
@@ -166,6 +175,130 @@ func (m *BlockParams) GetTimeIotaMs() int64 {
 	return 0
 }
 
+// VoteInfo
+type ChainLockParam struct {
+	// Note: must be greater than 0
+	ChainLockHeight uint32 `protobuf:"varint,1,opt,name=chain_lock_height,json=chainLockHeight,proto3" json:"chain_lock_height,omitempty"`
+	// Note: this must be a 256 bit Hash
+	ChainLockHash []byte `protobuf:"bytes,2,opt,name=chain_lock_hash,json=chainLockHash,proto3" json:"chain_lock_hash,omitempty"`
+	// Note: This must be a 96 byte signature
+	Signature []byte `protobuf:"bytes,3,opt,name=signature,proto3" json:"signature,omitempty"`
+}
+
+func (m *ChainLockParam) Reset()         { *m = ChainLockParam{} }
+func (m *ChainLockParam) String() string { return proto.CompactTextString(m) }
+func (*ChainLockParam) ProtoMessage()    {}
+func (*ChainLockParam) Descriptor() ([]byte, []int) {
+	return fileDescriptor_e12598271a686f57, []int{2}
+}
+func (m *ChainLockParam) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ChainLockParam) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ChainLockParam.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ChainLockParam) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChainLockParam.Merge(m, src)
+}
+func (m *ChainLockParam) XXX_Size() int {
+	return m.Size()
+}
+func (m *ChainLockParam) XXX_DiscardUnknown() {
+	xxx_messageInfo_ChainLockParam.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ChainLockParam proto.InternalMessageInfo
+
+func (m *ChainLockParam) GetChainLockHeight() uint32 {
+	if m != nil {
+		return m.ChainLockHeight
+	}
+	return 0
+}
+
+func (m *ChainLockParam) GetChainLockHash() []byte {
+	if m != nil {
+		return m.ChainLockHash
+	}
+	return nil
+}
+
+func (m *ChainLockParam) GetSignature() []byte {
+	if m != nil {
+		return m.Signature
+	}
+	return nil
+}
+
+type ChainLockParams struct {
+	NewestChainLock                ChainLockParam `protobuf:"bytes,1,opt,name=newest_chain_lock,json=newestChainLock,proto3" json:"newest_chain_lock"`
+	MinAcceptableChainLockedHeight uint32         `protobuf:"varint,2,opt,name=min_acceptable_chain_locked_height,json=minAcceptableChainLockedHeight,proto3" json:"min_acceptable_chain_locked_height,omitempty"`
+	MinDesiredChainLockedHeight    uint32         `protobuf:"varint,3,opt,name=min_desired_chain_locked_height,json=minDesiredChainLockedHeight,proto3" json:"min_desired_chain_locked_height,omitempty"`
+}
+
+func (m *ChainLockParams) Reset()         { *m = ChainLockParams{} }
+func (m *ChainLockParams) String() string { return proto.CompactTextString(m) }
+func (*ChainLockParams) ProtoMessage()    {}
+func (*ChainLockParams) Descriptor() ([]byte, []int) {
+	return fileDescriptor_e12598271a686f57, []int{3}
+}
+func (m *ChainLockParams) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ChainLockParams) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ChainLockParams.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ChainLockParams) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ChainLockParams.Merge(m, src)
+}
+func (m *ChainLockParams) XXX_Size() int {
+	return m.Size()
+}
+func (m *ChainLockParams) XXX_DiscardUnknown() {
+	xxx_messageInfo_ChainLockParams.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ChainLockParams proto.InternalMessageInfo
+
+func (m *ChainLockParams) GetNewestChainLock() ChainLockParam {
+	if m != nil {
+		return m.NewestChainLock
+	}
+	return ChainLockParam{}
+}
+
+func (m *ChainLockParams) GetMinAcceptableChainLockedHeight() uint32 {
+	if m != nil {
+		return m.MinAcceptableChainLockedHeight
+	}
+	return 0
+}
+
+func (m *ChainLockParams) GetMinDesiredChainLockedHeight() uint32 {
+	if m != nil {
+		return m.MinDesiredChainLockedHeight
+	}
+	return 0
+}
+
 // EvidenceParams determine how we handle evidence of malfeasance.
 type EvidenceParams struct {
 	// Max age of evidence, in blocks.
@@ -194,7 +327,7 @@ func (m *EvidenceParams) Reset()         { *m = EvidenceParams{} }
 func (m *EvidenceParams) String() string { return proto.CompactTextString(m) }
 func (*EvidenceParams) ProtoMessage()    {}
 func (*EvidenceParams) Descriptor() ([]byte, []int) {
-	return fileDescriptor_e12598271a686f57, []int{2}
+	return fileDescriptor_e12598271a686f57, []int{4}
 }
 func (m *EvidenceParams) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -261,7 +394,7 @@ func (m *ValidatorParams) Reset()         { *m = ValidatorParams{} }
 func (m *ValidatorParams) String() string { return proto.CompactTextString(m) }
 func (*ValidatorParams) ProtoMessage()    {}
 func (*ValidatorParams) Descriptor() ([]byte, []int) {
-	return fileDescriptor_e12598271a686f57, []int{3}
+	return fileDescriptor_e12598271a686f57, []int{5}
 }
 func (m *ValidatorParams) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -306,7 +439,7 @@ func (m *VersionParams) Reset()         { *m = VersionParams{} }
 func (m *VersionParams) String() string { return proto.CompactTextString(m) }
 func (*VersionParams) ProtoMessage()    {}
 func (*VersionParams) Descriptor() ([]byte, []int) {
-	return fileDescriptor_e12598271a686f57, []int{4}
+	return fileDescriptor_e12598271a686f57, []int{6}
 }
 func (m *VersionParams) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -354,7 +487,7 @@ func (m *HashedParams) Reset()         { *m = HashedParams{} }
 func (m *HashedParams) String() string { return proto.CompactTextString(m) }
 func (*HashedParams) ProtoMessage()    {}
 func (*HashedParams) Descriptor() ([]byte, []int) {
-	return fileDescriptor_e12598271a686f57, []int{5}
+	return fileDescriptor_e12598271a686f57, []int{7}
 }
 func (m *HashedParams) XXX_Unmarshal(b []byte) error {
 	return m.Unmarshal(b)
@@ -400,6 +533,8 @@ func (m *HashedParams) GetBlockMaxGas() int64 {
 func init() {
 	proto.RegisterType((*ConsensusParams)(nil), "tendermint.types.ConsensusParams")
 	proto.RegisterType((*BlockParams)(nil), "tendermint.types.BlockParams")
+	proto.RegisterType((*ChainLockParam)(nil), "tendermint.types.ChainLockParam")
+	proto.RegisterType((*ChainLockParams)(nil), "tendermint.types.ChainLockParams")
 	proto.RegisterType((*EvidenceParams)(nil), "tendermint.types.EvidenceParams")
 	proto.RegisterType((*ValidatorParams)(nil), "tendermint.types.ValidatorParams")
 	proto.RegisterType((*VersionParams)(nil), "tendermint.types.VersionParams")
@@ -409,43 +544,54 @@ func init() {
 func init() { proto.RegisterFile("tendermint/types/params.proto", fileDescriptor_e12598271a686f57) }
 
 var fileDescriptor_e12598271a686f57 = []byte{
-	// 572 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x53, 0xcd, 0x6e, 0xd3, 0x4c,
-	0x14, 0x8d, 0xeb, 0x7e, 0x6d, 0x7a, 0xd3, 0x34, 0xd1, 0xe8, 0x93, 0x08, 0x45, 0xb5, 0x83, 0x17,
-	0xa8, 0x12, 0xc8, 0x96, 0x60, 0x81, 0xe8, 0xa6, 0xc2, 0x50, 0x15, 0x84, 0x52, 0x55, 0x56, 0x61,
-	0xd1, 0x8d, 0x35, 0x8e, 0xa7, 0xae, 0xd5, 0x8c, 0x67, 0xe4, 0x19, 0x47, 0xc9, 0x5b, 0xb0, 0xec,
-	0xb2, 0x4b, 0x1e, 0x81, 0x47, 0xe8, 0xb2, 0x12, 0x1b, 0x56, 0x80, 0x92, 0x0d, 0x8f, 0x81, 0x3c,
-	0xce, 0x90, 0x9f, 0xb2, 0xb3, 0xef, 0xf9, 0x99, 0xb9, 0xe7, 0x68, 0x60, 0x4f, 0x92, 0x2c, 0x26,
-	0x39, 0x4d, 0x33, 0xe9, 0xc9, 0x31, 0x27, 0xc2, 0xe3, 0x38, 0xc7, 0x54, 0xb8, 0x3c, 0x67, 0x92,
-	0xa1, 0xf6, 0x1c, 0x76, 0x15, 0xbc, 0xfb, 0x7f, 0xc2, 0x12, 0xa6, 0x40, 0xaf, 0xfc, 0xaa, 0x78,
-	0xbb, 0x56, 0xc2, 0x58, 0x32, 0x20, 0x9e, 0xfa, 0x8b, 0x8a, 0x0b, 0x2f, 0x2e, 0x72, 0x2c, 0x53,
-	0x96, 0x55, 0xb8, 0x73, 0xbd, 0x06, 0xad, 0x37, 0x2c, 0x13, 0x24, 0x13, 0x85, 0x38, 0x55, 0x27,
-	0xa0, 0x57, 0xf0, 0x5f, 0x34, 0x60, 0xfd, 0xab, 0x8e, 0xd1, 0x35, 0xf6, 0x1b, 0xcf, 0xf7, 0xdc,
-	0xd5, 0xb3, 0x5c, 0xbf, 0x84, 0x2b, 0xb6, 0xbf, 0x7e, 0xfb, 0xc3, 0xae, 0x05, 0x95, 0x02, 0xf9,
-	0x50, 0x27, 0xc3, 0x34, 0x26, 0x59, 0x9f, 0x74, 0xd6, 0x94, 0xba, 0x7b, 0x5f, 0x7d, 0x34, 0x63,
-	0x2c, 0x19, 0xfc, 0xd5, 0xa1, 0x23, 0xd8, 0x1a, 0xe2, 0x41, 0x1a, 0x63, 0xc9, 0xf2, 0x8e, 0xa9,
-	0x4c, 0x1e, 0xdf, 0x37, 0xf9, 0xa4, 0x29, 0x4b, 0x2e, 0x73, 0x25, 0x3a, 0x84, 0xcd, 0x21, 0xc9,
-	0x45, 0xca, 0xb2, 0xce, 0xba, 0x32, 0xb1, 0xff, 0x61, 0x52, 0x11, 0x96, 0x2c, 0xb4, 0xca, 0x21,
-	0xd0, 0x58, 0xd8, 0x13, 0x3d, 0x82, 0x2d, 0x8a, 0x47, 0x61, 0x34, 0x96, 0x44, 0xa8, 0x64, 0xcc,
-	0xa0, 0x4e, 0xf1, 0xc8, 0x2f, 0xff, 0xd1, 0x03, 0xd8, 0x2c, 0xc1, 0x04, 0x0b, 0xb5, 0xb6, 0x19,
-	0x6c, 0x50, 0x3c, 0x3a, 0xc6, 0x02, 0x75, 0x61, 0x5b, 0xa6, 0x94, 0x84, 0x29, 0x93, 0x38, 0xa4,
-	0x42, 0xed, 0x63, 0x06, 0x50, 0xce, 0xde, 0x33, 0x89, 0x7b, 0xc2, 0xf9, 0x66, 0xc0, 0xce, 0x72,
-	0x22, 0xe8, 0x29, 0xa0, 0xd2, 0x0d, 0x27, 0x24, 0xcc, 0x0a, 0x1a, 0xaa, 0x68, 0xf5, 0x99, 0x2d,
-	0x8a, 0x47, 0xaf, 0x13, 0x72, 0x52, 0x50, 0x75, 0x39, 0x81, 0x7a, 0xd0, 0xd6, 0x64, 0xdd, 0xed,
-	0x2c, 0xfa, 0x87, 0x6e, 0x55, 0xbe, 0xab, 0xcb, 0x77, 0xdf, 0xce, 0x08, 0x7e, 0xbd, 0x5c, 0xf5,
-	0xfa, 0xa7, 0x6d, 0x04, 0x3b, 0x95, 0x9f, 0x46, 0xf4, 0x26, 0x59, 0x41, 0xd5, 0x5d, 0x9b, 0x6a,
-	0x93, 0x93, 0x82, 0xa2, 0x67, 0x80, 0x78, 0xce, 0xd8, 0x45, 0x28, 0xf3, 0x14, 0x0f, 0x42, 0x4e,
-	0xf2, 0x94, 0xc5, 0x2a, 0x5a, 0x33, 0x68, 0x2b, 0xe4, 0xac, 0x04, 0x4e, 0xd5, 0xdc, 0x39, 0x84,
-	0xd6, 0x4a, 0x43, 0xc8, 0x81, 0x26, 0x2f, 0xa2, 0xf0, 0x8a, 0x8c, 0x43, 0x95, 0x7e, 0xc7, 0xe8,
-	0x9a, 0xfb, 0x5b, 0x41, 0x83, 0x17, 0xd1, 0x07, 0x32, 0x3e, 0x2b, 0x47, 0x07, 0xf5, 0xaf, 0x37,
-	0xb6, 0xf1, 0xfb, 0xc6, 0x36, 0x9c, 0x03, 0x68, 0x2e, 0xb5, 0x83, 0x6c, 0x68, 0x60, 0xce, 0x43,
-	0xdd, 0x69, 0x99, 0xc6, 0x7a, 0x00, 0x98, 0xf3, 0x19, 0x6d, 0x41, 0x7b, 0x0e, 0xdb, 0xef, 0xb0,
-	0xb8, 0x24, 0xf1, 0x4c, 0xfa, 0x04, 0x5a, 0x2a, 0xc3, 0x70, 0xb5, 0xc0, 0xa6, 0x1a, 0xf7, 0x74,
-	0x8b, 0x0e, 0x34, 0xe7, 0xbc, 0x79, 0x97, 0x0d, 0xcd, 0x3a, 0xc6, 0xc2, 0xff, 0xf8, 0x65, 0x62,
-	0x19, 0xb7, 0x13, 0xcb, 0xb8, 0x9b, 0x58, 0xc6, 0xaf, 0x89, 0x65, 0x7c, 0x9e, 0x5a, 0xb5, 0xbb,
-	0xa9, 0x55, 0xfb, 0x3e, 0xb5, 0x6a, 0xe7, 0x2f, 0x93, 0x54, 0x5e, 0x16, 0x91, 0xdb, 0x67, 0xd4,
-	0x5b, 0x7c, 0xc0, 0xf3, 0xcf, 0xea, 0x85, 0xae, 0x3e, 0xee, 0x68, 0x43, 0xcd, 0x5f, 0xfc, 0x09,
-	0x00, 0x00, 0xff, 0xff, 0xf4, 0xdd, 0x09, 0xef, 0xf7, 0x03, 0x00, 0x00,
+	// 744 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x74, 0x54, 0x4d, 0x4f, 0xdb, 0x48,
+	0x18, 0x8e, 0x09, 0x1f, 0xc9, 0x9b, 0x04, 0xc3, 0x68, 0xa5, 0xcd, 0xc2, 0xe2, 0x64, 0x7d, 0x40,
+	0x68, 0x77, 0xe5, 0x48, 0xbb, 0x87, 0xaa, 0x5c, 0x10, 0x01, 0x4a, 0xbf, 0x40, 0xc8, 0xa2, 0x3d,
+	0x70, 0xb1, 0xc6, 0xf1, 0xe0, 0x8c, 0xc8, 0x78, 0x2c, 0xcf, 0x98, 0x26, 0xd7, 0xfe, 0x82, 0x1e,
+	0x7b, 0xe4, 0xd8, 0x9f, 0xd0, 0x9f, 0xc0, 0x11, 0xa9, 0x97, 0x9e, 0x5a, 0x14, 0x2e, 0xfd, 0x07,
+	0xbd, 0x56, 0x1e, 0xdb, 0xf9, 0x02, 0x6e, 0xf6, 0xfb, 0x3e, 0xcf, 0xe3, 0xf1, 0xf3, 0xbe, 0xcf,
+	0xc0, 0x86, 0x24, 0x81, 0x47, 0x22, 0x46, 0x03, 0xd9, 0x92, 0x83, 0x90, 0x88, 0x56, 0x88, 0x23,
+	0xcc, 0x84, 0x15, 0x46, 0x5c, 0x72, 0xb4, 0x32, 0x6e, 0x5b, 0xaa, 0xbd, 0xf6, 0x9b, 0xcf, 0x7d,
+	0xae, 0x9a, 0xad, 0xe4, 0x29, 0xc5, 0xad, 0x19, 0x3e, 0xe7, 0x7e, 0x8f, 0xb4, 0xd4, 0x9b, 0x1b,
+	0x9f, 0xb7, 0xbc, 0x38, 0xc2, 0x92, 0xf2, 0x20, 0xed, 0x9b, 0xb7, 0x73, 0xa0, 0xef, 0xf1, 0x40,
+	0x90, 0x40, 0xc4, 0xe2, 0x44, 0x7d, 0x01, 0x3d, 0x85, 0x05, 0xb7, 0xc7, 0x3b, 0x17, 0x75, 0xad,
+	0xa9, 0x6d, 0x55, 0xfe, 0xdb, 0xb0, 0x66, 0xbf, 0x65, 0xb5, 0x93, 0x76, 0x8a, 0x6e, 0xcf, 0x5f,
+	0x7f, 0x6b, 0x14, 0xec, 0x94, 0x81, 0x9e, 0x01, 0x74, 0xba, 0x98, 0x06, 0x8e, 0xe2, 0xcf, 0x29,
+	0xfe, 0x5f, 0xf7, 0xf9, 0x7b, 0x09, 0xe6, 0xf5, 0xac, 0x46, 0xb9, 0x93, 0x97, 0x51, 0x1b, 0x4a,
+	0xe4, 0x92, 0x7a, 0x24, 0xe8, 0x90, 0x7a, 0x51, 0xa9, 0x34, 0xef, 0xab, 0x1c, 0x64, 0x88, 0x29,
+	0x91, 0x11, 0x0f, 0x1d, 0x40, 0xf9, 0x12, 0xf7, 0xa8, 0x87, 0x25, 0x8f, 0xea, 0xf3, 0x8f, 0x1d,
+	0xe5, 0x6d, 0x0e, 0x99, 0x3e, 0xca, 0x88, 0x89, 0x76, 0x60, 0xe9, 0x92, 0x44, 0x82, 0xf2, 0xa0,
+	0xbe, 0xa0, 0x44, 0x1a, 0x0f, 0x88, 0xa4, 0x80, 0x29, 0x89, 0x9c, 0x65, 0x12, 0xa8, 0x4c, 0xf8,
+	0x85, 0xd6, 0xa1, 0xcc, 0x70, 0xdf, 0x71, 0x07, 0x92, 0x08, 0xe5, 0x70, 0xd1, 0x2e, 0x31, 0xdc,
+	0x6f, 0x27, 0xef, 0xe8, 0x77, 0x58, 0x4a, 0x9a, 0x3e, 0x16, 0xca, 0xbc, 0xa2, 0xbd, 0xc8, 0x70,
+	0xff, 0x10, 0x0b, 0xd4, 0x84, 0xaa, 0xa4, 0x8c, 0x38, 0x94, 0x4b, 0xec, 0x30, 0xa1, 0x4c, 0x29,
+	0xda, 0x90, 0xd4, 0x5e, 0x70, 0x89, 0x8f, 0x84, 0xf9, 0x5e, 0x83, 0xe5, 0x69, 0x5f, 0xd1, 0xdf,
+	0xb0, 0x3a, 0x9e, 0x86, 0xd3, 0x25, 0xd4, 0xef, 0x4a, 0xf5, 0xc9, 0x9a, 0xad, 0x8f, 0xbc, 0x7e,
+	0xae, 0xca, 0x68, 0x13, 0xf4, 0x49, 0x2c, 0x16, 0x5d, 0x75, 0x82, 0xaa, 0x5d, 0x1b, 0x23, 0xb1,
+	0xe8, 0xa2, 0x3f, 0xa1, 0x2c, 0xa8, 0x1f, 0x60, 0x19, 0x47, 0xe9, 0x68, 0xaa, 0xf6, 0xb8, 0x60,
+	0xfe, 0xd4, 0x40, 0x9f, 0x19, 0x2e, 0xb2, 0x61, 0x35, 0x20, 0xef, 0x88, 0x90, 0xce, 0xc4, 0x6a,
+	0x68, 0x8f, 0x0d, 0x75, 0x9a, 0x9d, 0x79, 0xa9, 0xa7, 0x02, 0xa3, 0x1e, 0x7a, 0x09, 0x26, 0xa3,
+	0x81, 0x83, 0x3b, 0x1d, 0x12, 0x4a, 0xec, 0xf6, 0xc8, 0x84, 0x36, 0xf1, 0xf2, 0x5f, 0x9d, 0x53,
+	0xbf, 0x6a, 0x30, 0x1a, 0xec, 0x8e, 0x80, 0x23, 0x0d, 0xe2, 0x65, 0x7f, 0xbe, 0x0f, 0x8d, 0x44,
+	0xcb, 0x23, 0x82, 0x46, 0xc4, 0x7b, 0x50, 0xa8, 0xa8, 0x84, 0xd6, 0x19, 0x0d, 0xf6, 0x53, 0xd4,
+	0x3d, 0x15, 0xf3, 0x8b, 0x06, 0xcb, 0xd3, 0x0b, 0x89, 0xfe, 0x01, 0x94, 0x0c, 0x13, 0xfb, 0xc4,
+	0x09, 0x62, 0xe6, 0xa8, 0x84, 0xe4, 0x23, 0xd7, 0x19, 0xee, 0xef, 0xfa, 0xe4, 0x38, 0x66, 0x6a,
+	0x37, 0x04, 0x3a, 0x82, 0x95, 0x1c, 0x9c, 0x47, 0x34, 0xcb, 0xcf, 0x1f, 0x56, 0x9a, 0x61, 0x2b,
+	0xcf, 0xb0, 0xb5, 0x9f, 0x01, 0xda, 0xa5, 0xc4, 0x9d, 0x8f, 0xdf, 0x1b, 0x9a, 0xbd, 0x9c, 0xea,
+	0xe5, 0x9d, 0x7c, 0x91, 0x82, 0x98, 0x65, 0x87, 0x4f, 0x16, 0xe9, 0x38, 0x66, 0xe8, 0x5f, 0x40,
+	0x61, 0xc4, 0xf9, 0xb9, 0x23, 0x23, 0x8a, 0x7b, 0x4e, 0x48, 0x22, 0xca, 0x3d, 0x15, 0x8f, 0xa2,
+	0xbd, 0xa2, 0x3a, 0xa7, 0x49, 0xe3, 0x44, 0xd5, 0xcd, 0x1d, 0xd0, 0x67, 0x02, 0x82, 0x4c, 0xa8,
+	0x85, 0xb1, 0xeb, 0x5c, 0x90, 0x81, 0xa3, 0x26, 0x56, 0xd7, 0x9a, 0xc5, 0xad, 0xb2, 0x5d, 0x09,
+	0x63, 0xf7, 0x15, 0x19, 0x9c, 0x26, 0xa5, 0xed, 0xd2, 0xe7, 0xab, 0x86, 0xf6, 0xe3, 0xaa, 0xa1,
+	0x99, 0xdb, 0x50, 0x9b, 0x0a, 0x07, 0x6a, 0x40, 0x05, 0x87, 0xa1, 0x93, 0x47, 0x2a, 0x71, 0x63,
+	0xde, 0x06, 0x1c, 0x86, 0x19, 0x6c, 0x82, 0x7b, 0x06, 0xd5, 0x64, 0xe5, 0x88, 0x97, 0x51, 0x37,
+	0x41, 0x57, 0x1e, 0x3a, 0xb3, 0xf9, 0xa9, 0xa9, 0xf2, 0x51, 0x1e, 0x22, 0x13, 0x6a, 0x63, 0xdc,
+	0x38, 0x4a, 0x95, 0x1c, 0x75, 0x88, 0x45, 0xfb, 0xcd, 0xa7, 0xa1, 0xa1, 0x5d, 0x0f, 0x0d, 0xed,
+	0x66, 0x68, 0x68, 0xb7, 0x43, 0x43, 0xfb, 0x70, 0x67, 0x14, 0x6e, 0xee, 0x8c, 0xc2, 0xd7, 0x3b,
+	0xa3, 0x70, 0xf6, 0xc4, 0xa7, 0xb2, 0x1b, 0xbb, 0x56, 0x87, 0xb3, 0xd6, 0xe4, 0x3d, 0x3c, 0x7e,
+	0x4c, 0x2f, 0xda, 0xd9, 0x3b, 0xda, 0x5d, 0x54, 0xf5, 0xff, 0x7f, 0x05, 0x00, 0x00, 0xff, 0xff,
+	0x9d, 0x20, 0x61, 0x9c, 0xbe, 0x05, 0x00, 0x00,
 }
 
 func (this *ConsensusParams) Equal(that interface{}) bool {
@@ -468,6 +614,9 @@ func (this *ConsensusParams) Equal(that interface{}) bool {
 		return false
 	}
 	if !this.Block.Equal(&that1.Block) {
+		return false
+	}
+	if !this.ChainLock.Equal(&that1.ChainLock) {
 		return false
 	}
 	if !this.Evidence.Equal(&that1.Evidence) {
@@ -507,6 +656,66 @@ func (this *BlockParams) Equal(that interface{}) bool {
 		return false
 	}
 	if this.TimeIotaMs != that1.TimeIotaMs {
+		return false
+	}
+	return true
+}
+func (this *ChainLockParam) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ChainLockParam)
+	if !ok {
+		that2, ok := that.(ChainLockParam)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.ChainLockHeight != that1.ChainLockHeight {
+		return false
+	}
+	if !bytes.Equal(this.ChainLockHash, that1.ChainLockHash) {
+		return false
+	}
+	if !bytes.Equal(this.Signature, that1.Signature) {
+		return false
+	}
+	return true
+}
+func (this *ChainLockParams) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ChainLockParams)
+	if !ok {
+		that2, ok := that.(ChainLockParams)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if !this.NewestChainLock.Equal(&that1.NewestChainLock) {
+		return false
+	}
+	if this.MinAcceptableChainLockedHeight != that1.MinAcceptableChainLockedHeight {
+		return false
+	}
+	if this.MinDesiredChainLockedHeight != that1.MinDesiredChainLockedHeight {
 		return false
 	}
 	return true
@@ -653,7 +862,7 @@ func (m *ConsensusParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i = encodeVarintParams(dAtA, i, uint64(size))
 	}
 	i--
-	dAtA[i] = 0x22
+	dAtA[i] = 0x2a
 	{
 		size, err := m.Validator.MarshalToSizedBuffer(dAtA[:i])
 		if err != nil {
@@ -663,9 +872,19 @@ func (m *ConsensusParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i = encodeVarintParams(dAtA, i, uint64(size))
 	}
 	i--
-	dAtA[i] = 0x1a
+	dAtA[i] = 0x22
 	{
 		size, err := m.Evidence.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintParams(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0x1a
+	{
+		size, err := m.ChainLock.MarshalToSizedBuffer(dAtA[:i])
 		if err != nil {
 			return 0, err
 		}
@@ -725,6 +944,91 @@ func (m *BlockParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *ChainLockParam) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ChainLockParam) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ChainLockParam) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if len(m.Signature) > 0 {
+		i -= len(m.Signature)
+		copy(dAtA[i:], m.Signature)
+		i = encodeVarintParams(dAtA, i, uint64(len(m.Signature)))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if len(m.ChainLockHash) > 0 {
+		i -= len(m.ChainLockHash)
+		copy(dAtA[i:], m.ChainLockHash)
+		i = encodeVarintParams(dAtA, i, uint64(len(m.ChainLockHash)))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.ChainLockHeight != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.ChainLockHeight))
+		i--
+		dAtA[i] = 0x8
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ChainLockParams) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ChainLockParams) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ChainLockParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.MinDesiredChainLockedHeight != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.MinDesiredChainLockedHeight))
+		i--
+		dAtA[i] = 0x18
+	}
+	if m.MinAcceptableChainLockedHeight != 0 {
+		i = encodeVarintParams(dAtA, i, uint64(m.MinAcceptableChainLockedHeight))
+		i--
+		dAtA[i] = 0x10
+	}
+	{
+		size, err := m.NewestChainLock.MarshalToSizedBuffer(dAtA[:i])
+		if err != nil {
+			return 0, err
+		}
+		i -= size
+		i = encodeVarintParams(dAtA, i, uint64(size))
+	}
+	i--
+	dAtA[i] = 0xa
+	return len(dAtA) - i, nil
+}
+
 func (m *EvidenceParams) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -755,12 +1059,12 @@ func (m *EvidenceParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x18
 	}
-	n5, err5 := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.MaxAgeDuration, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(m.MaxAgeDuration):])
-	if err5 != nil {
-		return 0, err5
+	n7, err7 := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.MaxAgeDuration, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(m.MaxAgeDuration):])
+	if err7 != nil {
+		return 0, err7
 	}
-	i -= n5
-	i = encodeVarintParams(dAtA, i, uint64(n5))
+	i -= n7
+	i = encodeVarintParams(dAtA, i, uint64(n7))
 	i--
 	dAtA[i] = 0x12
 	if m.MaxAgeNumBlocks != 0 {
@@ -975,6 +1279,8 @@ func (m *ConsensusParams) Size() (n int) {
 	_ = l
 	l = m.Block.Size()
 	n += 1 + l + sovParams(uint64(l))
+	l = m.ChainLock.Size()
+	n += 1 + l + sovParams(uint64(l))
 	l = m.Evidence.Size()
 	n += 1 + l + sovParams(uint64(l))
 	l = m.Validator.Size()
@@ -998,6 +1304,43 @@ func (m *BlockParams) Size() (n int) {
 	}
 	if m.TimeIotaMs != 0 {
 		n += 1 + sovParams(uint64(m.TimeIotaMs))
+	}
+	return n
+}
+
+func (m *ChainLockParam) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.ChainLockHeight != 0 {
+		n += 1 + sovParams(uint64(m.ChainLockHeight))
+	}
+	l = len(m.ChainLockHash)
+	if l > 0 {
+		n += 1 + l + sovParams(uint64(l))
+	}
+	l = len(m.Signature)
+	if l > 0 {
+		n += 1 + l + sovParams(uint64(l))
+	}
+	return n
+}
+
+func (m *ChainLockParams) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	l = m.NewestChainLock.Size()
+	n += 1 + l + sovParams(uint64(l))
+	if m.MinAcceptableChainLockedHeight != 0 {
+		n += 1 + sovParams(uint64(m.MinAcceptableChainLockedHeight))
+	}
+	if m.MinDesiredChainLockedHeight != 0 {
+		n += 1 + sovParams(uint64(m.MinDesiredChainLockedHeight))
 	}
 	return n
 }
@@ -1134,6 +1477,39 @@ func (m *ConsensusParams) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 2:
 			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChainLock", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.ChainLock.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Evidence", wireType)
 			}
 			var msglen int
@@ -1165,7 +1541,7 @@ func (m *ConsensusParams) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 3:
+		case 4:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Validator", wireType)
 			}
@@ -1198,7 +1574,7 @@ func (m *ConsensusParams) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
-		case 4:
+		case 5:
 			if wireType != 2 {
 				return fmt.Errorf("proto: wrong wireType = %d for field Version", wireType)
 			}
@@ -1337,6 +1713,270 @@ func (m *BlockParams) Unmarshal(dAtA []byte) error {
 				b := dAtA[iNdEx]
 				iNdEx++
 				m.TimeIotaMs |= int64(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipParams(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthParams
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthParams
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ChainLockParam) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowParams
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ChainLockParam: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ChainLockParam: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChainLockHeight", wireType)
+			}
+			m.ChainLockHeight = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.ChainLockHeight |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ChainLockHash", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.ChainLockHash = append(m.ChainLockHash[:0], dAtA[iNdEx:postIndex]...)
+			if m.ChainLockHash == nil {
+				m.ChainLockHash = []byte{}
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Signature", wireType)
+			}
+			var byteLen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				byteLen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if byteLen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + byteLen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			m.Signature = append(m.Signature[:0], dAtA[iNdEx:postIndex]...)
+			if m.Signature == nil {
+				m.Signature = []byte{}
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipParams(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if skippy < 0 {
+				return ErrInvalidLengthParams
+			}
+			if (iNdEx + skippy) < 0 {
+				return ErrInvalidLengthParams
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ChainLockParams) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowParams
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ChainLockParams: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ChainLockParams: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field NewestChainLock", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if err := m.NewestChainLock.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MinAcceptableChainLockedHeight", wireType)
+			}
+			m.MinAcceptableChainLockedHeight = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MinAcceptableChainLockedHeight |= uint32(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+		case 3:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MinDesiredChainLockedHeight", wireType)
+			}
+			m.MinDesiredChainLockedHeight = 0
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				m.MinDesiredChainLockedHeight |= uint32(b&0x7F) << shift
 				if b < 0x80 {
 					break
 				}

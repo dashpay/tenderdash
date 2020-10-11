@@ -10,6 +10,7 @@ import "tendermint/types/evidence.proto";
 message Block {
   Header                        header      = 1 [(gogoproto.nullable) = false];
   Data                          data        = 2 [(gogoproto.nullable) = false];
-  tendermint.types.EvidenceData evidence    = 3 [(gogoproto.nullable) = false];
-  Commit                        last_commit = 4;
+  ChainLock                     chain_lock  = 3 [(gogoproto.nullable) = true];
+  tendermint.types.EvidenceData evidence    = 4 [(gogoproto.nullable) = false];
+  Commit                        last_commit = 5;
 }

@@ -11,10 +11,11 @@ option (gogoproto.equal_all) = true;
 // ConsensusParams contains consensus critical parameters that determine the
 // validity of blocks.
 message ConsensusParams {
-  BlockParams     block     = 1 [(gogoproto.nullable) = false];
-  EvidenceParams  evidence  = 2 [(gogoproto.nullable) = false];
-  ValidatorParams validator = 3 [(gogoproto.nullable) = false];
-  VersionParams   version   = 4 [(gogoproto.nullable) = false];
+  BlockParams     block      = 1 [(gogoproto.nullable) = false];
+  ChainLockParams chain_lock = 2 [(gogoproto.nullable) = false];
+  EvidenceParams  evidence   = 3 [(gogoproto.nullable) = false];
+  ValidatorParams validator  = 4 [(gogoproto.nullable) = false];
+  VersionParams   version    = 5 [(gogoproto.nullable) = false];
 }
 
 // BlockParams contains limits on the block size.
@@ -31,6 +32,23 @@ message BlockParams {
   // Not exposed to the application.
   int64 time_iota_ms = 3;
 }
+
+// VoteInfo
+message ChainLockParam {
+  // Note: must be greater than 0
+  uint32 chain_lock_height = 1;
+  // Note: this must be a 256 bit Hash
+  bytes chain_lock_hash = 2;
+  // Note: This must be a 96 byte signature
+  bytes signature = 3;
+}
+
+message ChainLockParams {
+  ChainLockParam newest_chain_lock = 1 [(gogoproto.nullable) = false];
+  uint32 min_acceptable_chain_locked_height = 2;
+  uint32 min_desired_chain_locked_height = 3;
+}
+
 
 // EvidenceParams determine how we handle evidence of malfeasance.
 message EvidenceParams {

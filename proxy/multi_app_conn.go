@@ -10,10 +10,11 @@ import (
 )
 
 const (
-	connConsensus = "consensus"
-	connMempool   = "mempool"
-	connQuery     = "query"
-	connSnapshot  = "snapshot"
+	connConsensus    = "consensus"
+	connMempool      = "mempool"
+	connQuery        = "query"
+	connSnapshot     = "snapshot"
+	connValidation   = "validation"
 )
 
 // AppConns is the Tendermint's interface to the application that consists of
@@ -29,6 +30,8 @@ type AppConns interface {
 	Query() AppConnQuery
 	// Snapshot connection
 	Snapshot() AppConnSnapshot
+	// Validation connection
+	Validation() AppConnValidation
 }
 
 // NewAppConns calls NewMultiAppConn.
@@ -44,15 +47,17 @@ func NewAppConns(clientCreator ClientCreator) AppConns {
 type multiAppConn struct {
 	service.BaseService
 
-	consensusConn AppConnConsensus
-	mempoolConn   AppConnMempool
-	queryConn     AppConnQuery
-	snapshotConn  AppConnSnapshot
+	consensusConn   AppConnConsensus
+	mempoolConn     AppConnMempool
+	queryConn       AppConnQuery
+	snapshotConn    AppConnSnapshot
+	validationConn  AppConnValidation
 
-	consensusConnClient abcicli.Client
-	mempoolConnClient   abcicli.Client
-	queryConnClient     abcicli.Client
-	snapshotConnClient  abcicli.Client
+	consensusConnClient  abcicli.Client
+	mempoolConnClient    abcicli.Client
+	queryConnClient      abcicli.Client
+	snapshotConnClient   abcicli.Client
+	validationConnClient abcicli.Client
 
 	clientCreator ClientCreator
 }
@@ -82,6 +87,10 @@ func (app *multiAppConn) Snapshot() AppConnSnapshot {
 	return app.snapshotConn
 }
 
+func (app *multiAppConn) Validation() AppConnValidation {
+	return app.validationConn
+}
+
 func (app *multiAppConn) OnStart() error {
 	c, err := app.abciClientFor(connQuery)
 	if err != nil {
@@ -105,6 +114,14 @@ func (app *multiAppConn) OnStart() error {
 	}
 	app.mempoolConnClient = c
 	app.mempoolConn = NewAppConnMempool(c)
+
+	c, err = app.abciClientFor(connValidation)
+	if err != nil {
+		app.stopAllClients()
+		return err
+	}
+	app.validationConnClient = c
+	app.validationConn = NewAppConnValidation(c)
 
 	c, err = app.abciClientFor(connConsensus)
 	if err != nil {
@@ -152,6 +169,10 @@ func (app *multiAppConn) killTMOnClientError() {
 		if err := app.snapshotConnClient.Error(); err != nil {
 			killFn(connSnapshot, err, app.Logger)
 		}
+	case <-app.validationConnClient.Quit():
+		if err := app.validationConnClient.Error(); err != nil {
+			killFn(connValidation, err, app.Logger)
+		}
 	}
 }
 
@@ -167,6 +188,9 @@ func (app *multiAppConn) stopAllClients() {
 	}
 	if app.snapshotConnClient != nil {
 		app.snapshotConnClient.Stop()
+	}
+	if app.validationConnClient != nil {
+		app.validationConnClient.Stop()
 	}
 }
 
