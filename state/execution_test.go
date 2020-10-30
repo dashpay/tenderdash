@@ -39,7 +39,7 @@ func TestApplyBlock(t *testing.T) {
 	state, stateDB, _ := makeState(1, 1)
 	stateStore := sm.NewStore(stateDB)
 
-	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(),
+	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(), proxyApp.Query(),
 		mmock.Mempool{}, sm.EmptyEvidencePool{})
 
 	block := makeBlock(state, 1)
@@ -152,7 +152,7 @@ func TestBeginBlockByzantineValidators(t *testing.T) {
 	evpool.On("Update", mock.AnythingOfType("state.State")).Return()
 	evpool.On("CheckEvidence", mock.AnythingOfType("types.EvidenceList")).Return(nil)
 
-	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(),
+	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(), proxyApp.Query(),
 		mmock.Mempool{}, evpool)
 
 	block := makeBlock(state, 1)
@@ -312,6 +312,7 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 		stateStore,
 		log.TestingLogger(),
 		proxyApp.Consensus(),
+		proxyApp.Query(),
 		mmock.Mempool{},
 		sm.EmptyEvidencePool{},
 	)
@@ -382,6 +383,7 @@ func TestEndBlockValidatorUpdatesResultingInEmptySet(t *testing.T) {
 		stateStore,
 		log.TestingLogger(),
 		proxyApp.Consensus(),
+		proxyApp.Query(),
 		mmock.Mempool{},
 		sm.EmptyEvidencePool{},
 	)

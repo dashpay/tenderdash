@@ -234,7 +234,7 @@ func TestCreateProposalBlock(t *testing.T) {
 	var height int64 = 1
 	state, stateDB, privVals := state(1, height)
 	stateStore := sm.NewStore(stateDB)
-	maxBytes := 16384
+	maxBytes := 16568
 	var partSize uint32 = 256
 	maxEvidenceBytes := int64(maxBytes / 2)
 	state.ConsensusParams.Block.MaxBytes = int64(maxBytes)
@@ -283,6 +283,7 @@ func TestCreateProposalBlock(t *testing.T) {
 		stateStore,
 		logger,
 		proxyApp.Consensus(),
+		proxyApp.Query(),
 		mempool,
 		evidencePool,
 	)
@@ -351,6 +352,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 		stateStore,
 		logger,
 		proxyApp.Consensus(),
+		proxyApp.Query(),
 		mempool,
 		sm.EmptyEvidencePool{},
 	)
