@@ -108,7 +108,7 @@ func TestVerifyLightClientAttack_Lunatic(t *testing.T) {
 	pubKey, err := newPrivVal.GetPubKey()
 	require.NoError(t, err)
 	lastCommit := makeCommit(state.LastBlockHeight, pubKey.Address())
-	chainLock := types.NewMockChainLock()
+	chainLock := types.NewMockChainLock(1)
 	block := types.MakeBlock(state.LastBlockHeight, chainLock.CoreBlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
 
 	abciEv := pool.ABCIEvidence(block.Height, block.Evidence.Evidence)
@@ -213,7 +213,7 @@ func TestVerifyLightClientAttack_Equivocation(t *testing.T) {
 	pubKey, err := conflictingPrivVals[0].GetPubKey()
 	require.NoError(t, err)
 	lastCommit := makeCommit(state.LastBlockHeight, pubKey.Address())
-	chainLock := types.NewMockChainLock()
+	chainLock := types.NewMockChainLock(1)
 	block := types.MakeBlock(state.LastBlockHeight, chainLock.CoreBlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
 
 	abciEv := pool.ABCIEvidence(block.Height, block.Evidence.Evidence)
@@ -311,7 +311,7 @@ func TestVerifyLightClientAttack_Amnesia(t *testing.T) {
 	pubKey, err := conflictingPrivVals[0].GetPubKey()
 	require.NoError(t, err)
 	lastCommit := makeCommit(state.LastBlockHeight, pubKey.Address())
-	chainLock := types.NewMockChainLock()
+	chainLock := types.NewMockChainLock(1)
 	block := types.MakeBlock(state.LastBlockHeight, chainLock.CoreBlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
 
 	abciEv := pool.ABCIEvidence(block.Height, block.Evidence.Evidence)
