@@ -65,11 +65,12 @@ jobs:
       - name: Set GOPATH
         run: |
           echo "::set-env name=GOPATH::$(go env GOPATH)"
+      - name: build bls lib
+        run: |
+         make bls_bindings_build
       - uses: actions/download-artifact@v2
         with:
           name: "${{ github.sha }}-${{ matrix.part }}"
-      - name: build bls lib
-        run: make bls_bindings_build
         if: env.GIT_DIFF
       - name: Set CGO_LDFLAGS
         run: |
