@@ -41,7 +41,7 @@ jobs:
         run: |
           echo "::set-env name=GOPATH::$(go env GOPATH)"
       - name: build bls lib
-        run: make build_bls_lib
+        run: make bls_bindings_build
       - uses: actions/upload-artifact@v2
         with:
           name: "${{ github.sha }}-bls"
@@ -82,7 +82,7 @@ jobs:
 
   tests:
     runs-on: ubuntu-latest
-    needs: split-test-files
+    needs: [split-test-files, build_bls_lib]
     strategy:
       fail-fast: false
       matrix:
