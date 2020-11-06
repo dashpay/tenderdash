@@ -19,5 +19,3 @@ mkdir build
 cd build
 cmake ../
 cmake --build . -- -j 6
-cd "${BLS_REPO_PATH}"/go-bindings
-make test
