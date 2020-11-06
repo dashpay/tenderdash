@@ -5,7 +5,7 @@ on:
     branches:
       - master
       - release/**
-​
+
 jobs:
   split-test-files:
     runs-on: ubuntu-latest
@@ -14,28 +14,79 @@ jobs:
       - name: Create a file with all the pkgs
         run: go list ./... > pkgs.txt
       - name: Split pkgs into 4 files
-        run: split -n l/4 --additional-suffix=.txt ./pkgs.txt
+        run: split -d -n l/4 pkgs.txt pkgs.txt.part.
       # cache multiple
       - uses: actions/upload-artifact@v2
         with:
-          name: "${{ github.sha }}-aa"
-          path: ./xaa.txt
+          name: "${{ github.sha }}-00"
+          path: ./pkgs.txt.part.00
       - uses: actions/upload-artifact@v2
         with:
-          name: "${{ github.sha }}-ab"
-          path: ./xab.txt
+          name: "${{ github.sha }}-01"
+          path: ./pkgs.txt.part.01
       - uses: actions/upload-artifact@v2
         with:
-          name: "${{ github.sha }}-ac"
-          path: ./xac.txt
+          name: "${{ github.sha }}-02"
+          path: ./pkgs.txt.part.02
       - uses: actions/upload-artifact@v2
         with:
-          name: "${{ github.sha }}-ad"
-          path: ./xad.txt
-​
-  test-coverage-part-1:
+          name: "${{ github.sha }}-03"
+          path: ./pkgs.txt.part.03
+
+  build_bls_lib:
+    runs-on: ubuntu-latest
+    steps: 
+      - uses: actions/checkout@v2
+      - name: Set GOPATH
+        run: |
+          echo "::set-env name=GOPATH::$(go env GOPATH)"
+      - name: build bls lib
+        run: make build_bls_lib
+      - uses: actions/upload-artifact@v2
+        with:
+          name: "${{ github.sha }}-bls"
+          path: ${GOPATH}/src/github.com/quantumexplorer/bls-signatures
+
+  # test-coverage-part-1:
+  #   runs-on: ubuntu-latest
+  #   needs: split-test-files
+  #   steps:
+  #     - uses: actions/checkout@v2
+  #     - uses: technote-space/get-diff-action@v4
+  #       with:
+  #         PATTERNS: |
+  #           **/**.go
+  #           go.mod
+  #           go.sum
+  #     - uses: actions/download-artifact@v2
+  #       with:
+  #         name: "${{ github.sha }}-aa"
+  #       if: env.GIT_DIFF
+  #     - name: Set GOPATH
+  #       run: |
+  #         echo "::set-env name=GOPATH::$(go env GOPATH)"
+  #     - name: Set CGO_LDFLAGS
+  #       run: |
+  #         echo "::set-env name=CGO_LDFLAGS::"-L${GOPATH}/src/github.com/quantumexplorer/bls-signatures/build""
+  #     - name: Set CGO_CXXFLAGS
+  #       run: |
+  #         echo "::set-env name=CGO_CXXFLAGS::"-I${GOPATH}/src/github.com/quantumexplorer/bls-signatures/src -I${GOPATH}/src/github.com/quantumexplorer/bls-signatures/contrib/relic/include -I${GOPATH}/src/github.com/quantumexplorer/bls-signatures/build/contrib/relic/include""
+  #     - name: test & coverage report creation
+  #       run: |
+  #         (echo "Gopath: $CGO_CXXFLAGS") && (cat xaa.txt | xargs CGO_CXXFLAGS="$CGO_CXXFLAGS" CGO_LDFLAGS="$CGO_LDFLAGS" go test -mod=readonly -timeout 8m -race -coverprofile=coverage.txt -covermode=atomic)
+  #       if: env.GIT_DIFF
+  #     - uses: codecov/codecov-action@v1.0.13
+  #       with:
+  #         file: ./coverage.txt
+  #       if: env.GIT_DIFF
+
+  tests:
     runs-on: ubuntu-latest
     needs: split-test-files
+    strategy:
+      fail-fast: false
+      matrix:
+        part: ["00", "01", "02", "03"]
     steps:
       - uses: actions/checkout@v2
       - uses: technote-space/get-diff-action@v4
@@ -44,13 +95,17 @@ jobs:
             **/**.go
             go.mod
             go.sum
-      - uses: actions/download-artifact@v2
-        with:
-          name: "${{ github.sha }}-aa"
-        if: env.GIT_DIFF
       - name: Set GOPATH
         run: |
           echo "::set-env name=GOPATH::$(go env GOPATH)"
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ github.sha }}-${{ matrix.part }}"
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ github.sha }}-bls"
+          path: ${GOPATH}/src/github.com/quantumexplorer/bls-signatures
+        if: env.GIT_DIFF
       - name: Set CGO_LDFLAGS
         run: |
           echo "::set-env name=CGO_LDFLAGS::"-L${GOPATH}/src/github.com/quantumexplorer/bls-signatures/build""
@@ -59,16 +114,15 @@ jobs:
           echo "::set-env name=CGO_CXXFLAGS::"-I${GOPATH}/src/github.com/quantumexplorer/bls-signatures/src -I${GOPATH}/src/github.com/quantumexplorer/bls-signatures/contrib/relic/include -I${GOPATH}/src/github.com/quantumexplorer/bls-signatures/build/contrib/relic/include""
       - name: test & coverage report creation
         run: |
-          (echo "Gopath: $CGO_CXXFLAGS") && (cat xaa.txt | xargs CGO_CXXFLAGS="$CGO_CXXFLAGS" CGO_LDFLAGS="$CGO_LDFLAGS" go test -mod=readonly -timeout 8m -race -coverprofile=coverage.txt -covermode=atomic)
-        if: env.GIT_DIFF
-      - uses: codecov/codecov-action@v1.0.13
+          (echo "Gopath: $CGO_CXXFLAGS") && (cat pkgs.txt.part.${{ matrix.part }}| xargs CGO_CXXFLAGS="$CGO_CXXFLAGS" CGO_LDFLAGS="$CGO_LDFLAGS" go test -mod=readonly -timeout 8m -race -coverprofile=${{ matrix.part }}profile.out -covermode=atomic)
+      - uses: actions/upload-artifact@v2
         with:
-          file: ./coverage.txt
-        if: env.GIT_DIFF
-​
-  test-coverage-part-2:
+          name: "${{ github.sha }}-${{ matrix.part }}-coverage"
+          path: ./${{ matrix.part }}profile.out
+
+  upload-coverage-report:
     runs-on: ubuntu-latest
-    needs: split-test-files
+    needs: tests
     steps:
       - uses: actions/checkout@v2
       - uses: technote-space/get-diff-action@v4
@@ -79,61 +133,24 @@ jobs:
             go.sum
       - uses: actions/download-artifact@v2
         with:
-          name: "${{ github.sha }}-ab"
+          name: "${{ github.sha }}-00-coverage"
         if: env.GIT_DIFF
-      - name: test & coverage report creation
-        run: |
-          cat xab.txt | xargs go test -mod=readonly -timeout 5m -race -coverprofile=coverage.txt -covermode=atomic
-        if: env.GIT_DIFF
-      - uses: codecov/codecov-action@v1.0.13
-        with:
-          file: ./coverage.txt
-        if: env.GIT_DIFF
-​
-  test-coverage-part-3:
-    runs-on: ubuntu-latest
-    needs: split-test-files
-    steps:
-      - uses: actions/checkout@v2
-      - uses: technote-space/get-diff-action@v4
-        with:
-          PATTERNS: |
-            **/**.go
-            go.mod
-            go.sum
       - uses: actions/download-artifact@v2
         with:
-          name: "${{ github.sha }}-ac"
+          name: "${{ github.sha }}-01-coverage"
         if: env.GIT_DIFF
-      - name: test & coverage report creation
-        run: |
-          cat xac.txt | xargs go test -mod=readonly -timeout 10m -race -coverprofile=coverage.txt -covermode=atomic
-        if: env.GIT_DIFF
-      - uses: codecov/codecov-action@v1.0.13
-        with:
-          file: ./coverage.txt
-        if: env.GIT_DIFF
-​
-  test-coverage-part-4:
-    runs-on: ubuntu-latest
-    needs: split-test-files
-    steps:
-      - uses: actions/checkout@v2
-      - uses: technote-space/get-diff-action@v4
-        with:
-          PATTERNS: |
-            **/**.go
-            go.mod
-            go.sum
       - uses: actions/download-artifact@v2
         with:
-          name: "${{ github.sha }}-ad"
+          name: "${{ github.sha }}-02-coverage"
         if: env.GIT_DIFF
-      - name: test & coverage report creation
-        run: |
-          cat xad.txt | xargs go test -mod=readonly -timeout 5m -race -coverprofile=coverage.txt -covermode=atomic
+      - uses: actions/download-artifact@v2
+        with:
+          name: "${{ github.sha }}-03-coverage"
         if: env.GIT_DIFF
-      - uses: codecov/codecov-action@v1.0.13
+      - run: |
+          cat ./*profile.out | grep -v "mode: atomic" >> coverage.txt
+        if: env.GIT_DIFF
+      - uses: codecov/codecov-action@v1.0.14
         with:
           file: ./coverage.txt
         if: env.GIT_DIFF
