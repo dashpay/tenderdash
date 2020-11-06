@@ -68,10 +68,8 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: "${{ github.sha }}-${{ matrix.part }}"
-      - uses: actions/download-artifact@v2
-        with:
-          name: "${{ github.sha }}-bls"
-          path: quantumexplorer/bls-signatures
+      - name: build bls lib
+        run: make bls_bindings_build
         if: env.GIT_DIFF
       - name: Set CGO_LDFLAGS
         run: |
