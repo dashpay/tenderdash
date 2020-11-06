@@ -45,7 +45,7 @@ jobs:
       - uses: actions/upload-artifact@v2
         with:
           name: "${{ github.sha }}-bls"
-          path: ${GOPATH}/src/github.com/quantumexplorer/bls-signatures/**
+          path: quantumexplorer/bls-signatures/**
 
   tests:
     runs-on: ubuntu-latest
