@@ -71,7 +71,7 @@ jobs:
       - uses: actions/download-artifact@v2
         with:
           name: "${{ github.sha }}-bls"
-          path: ${GOPATH}/src/github.com/quantumexplorer/bls-signatures
+          path: quantumexplorer/bls-signatures
         if: env.GIT_DIFF
       - name: Set CGO_LDFLAGS
         run: |
