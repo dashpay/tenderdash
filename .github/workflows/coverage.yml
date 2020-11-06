@@ -40,10 +40,6 @@ jobs:
       - name: Set GOPATH
         run: |
           echo "::set-env name=GOPATH::$(go env GOPATH)"
-      - run: |
-          # Install packages for bindings
-          GO111MODULE=off go get golang.org/x/tools/cmd/goimports
-          GO111MODULE=off go get golang.org/x/lint/golint
       - name: build bls lib
         run: make bls_bindings_build
       - uses: actions/upload-artifact@v2
