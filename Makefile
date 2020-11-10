@@ -3,6 +3,7 @@ OUTPUT?=build/tendermint
 
 REPO_NAME=github.com/dashevo/tenderdash
 BUILD_TAGS?=tendermint
+
 VERSION := $(shell git describe --always)
 LD_FLAGS = -X ${REPO_NAME}/version.TMCoreSemVer=$(VERSION)
 CGO_LDFLAGS = "-L${GOPATH}/src/github.com/dashpay/bls-signatures/build"

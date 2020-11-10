@@ -1,5 +1,9 @@
 GOPATH=$(go env GOPATH)
+<<<<<<< HEAD
 BLS_REPO_PATH="${GOPATH}"/src/github.com/dashpay/bls-signatures
+=======
+BLS_REPO_PATH="${GOPATH}"/src/github.com/quantumexplorer/bls-signatures
+>>>>>>> a82aea7df... postpone new bls changes
 
 # Install packages for bindings
 GO111MODULE=off go get golang.org/x/tools/cmd/goimports
