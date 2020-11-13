@@ -153,7 +153,7 @@ func genValSet(size int) *types.ValidatorSet {
 func makeHeaderPartsResponsesValPubKeyChange(
 	state sm.State,
 	pubkey crypto.PubKey,
-) (types.Header, *types.ChainLock, types.BlockID, *tmstate.ABCIResponses) {
+) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
 
 	block := makeBlock(state, state.LastBlockHeight+1)
 	abciResponses := &tmstate.ABCIResponses{
@@ -171,13 +171,13 @@ func makeHeaderPartsResponsesValPubKeyChange(
 		}
 	}
 
-	return block.Header, block.ChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
+	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
 }
 
 func makeHeaderPartsResponsesValPowerChange(
 	state sm.State,
 	power int64,
-) (types.Header, *types.ChainLock, types.BlockID, *tmstate.ABCIResponses) {
+) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
 
 	block := makeBlock(state, state.LastBlockHeight+1)
 	abciResponses := &tmstate.ABCIResponses{
@@ -195,20 +195,20 @@ func makeHeaderPartsResponsesValPowerChange(
 		}
 	}
 
-	return block.Header, block.ChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
+	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
 }
 
 func makeHeaderPartsResponsesParams(
 	state sm.State,
 	params tmproto.ConsensusParams,
-) (types.Header, *types.ChainLock, types.BlockID, *tmstate.ABCIResponses) {
+) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
 
 	block := makeBlock(state, state.LastBlockHeight+1)
 	abciResponses := &tmstate.ABCIResponses{
 		BeginBlock: &abci.ResponseBeginBlock{},
 		EndBlock:   &abci.ResponseEndBlock{ConsensusParamUpdates: types.TM2PB.ConsensusParams(&params)},
 	}
-	return block.Header, block.ChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
+	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
 }
 
 func randomGenesisDoc() *types.GenesisDoc {
