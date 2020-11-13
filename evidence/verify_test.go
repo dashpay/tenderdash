@@ -109,7 +109,7 @@ func TestVerifyLightClientAttack_Lunatic(t *testing.T) {
 	require.NoError(t, err)
 	lastCommit := makeCommit(state.LastBlockHeight, pubKey.Address())
 	chainLock := types.NewMockChainLock(1)
-	block := types.MakeBlock(state.LastBlockHeight, chainLock.CoreBlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
+	block := types.MakeBlock(state.LastBlockHeight, chainLock.BlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
 
 	abciEv := pool.ABCIEvidence(block.Height, block.Evidence.Evidence)
 	expectedAbciEv := make([]abci.Evidence, len(commonVals.Validators))
@@ -214,7 +214,7 @@ func TestVerifyLightClientAttack_Equivocation(t *testing.T) {
 	require.NoError(t, err)
 	lastCommit := makeCommit(state.LastBlockHeight, pubKey.Address())
 	chainLock := types.NewMockChainLock(1)
-	block := types.MakeBlock(state.LastBlockHeight, chainLock.CoreBlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
+	block := types.MakeBlock(state.LastBlockHeight, chainLock.BlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
 
 	abciEv := pool.ABCIEvidence(block.Height, block.Evidence.Evidence)
 	expectedAbciEv := make([]abci.Evidence, len(conflictingVals.Validators)-1)
@@ -312,13 +312,13 @@ func TestVerifyLightClientAttack_Amnesia(t *testing.T) {
 	require.NoError(t, err)
 	lastCommit := makeCommit(state.LastBlockHeight, pubKey.Address())
 	chainLock := types.NewMockChainLock(1)
-	block := types.MakeBlock(state.LastBlockHeight, chainLock.CoreBlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
+	block := types.MakeBlock(state.LastBlockHeight, chainLock.BlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
 
 	abciEv := pool.ABCIEvidence(block.Height, block.Evidence.Evidence)
 	// as we are unable to find out which subset of validators in the commit were malicious, no information
 	// is sent to the application. We expect the array to be empty
 
-	emptyEvidenceBlock := types.MakeBlock(state.LastBlockHeight, chainLock.CoreBlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{})
+	emptyEvidenceBlock := types.MakeBlock(state.LastBlockHeight, chainLock.BlockHeight, &chainLock, []types.Tx{}, lastCommit, []types.Evidence{})
 	expectedAbciEv := pool.ABCIEvidence(emptyEvidenceBlock.Height, emptyEvidenceBlock.Evidence.Evidence)
 
 	assert.Equal(t, expectedAbciEv, abciEv)
