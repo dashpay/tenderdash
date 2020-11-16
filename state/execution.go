@@ -458,7 +458,7 @@ func updateState(
 		nextCoreChainLock = &state.NextCoreChainLock
 	}
 
-	if nextCoreChainLock.BlockHeight < lastCoreChainLock.BlockHeight {
+	if nextCoreChainLock.CoreBlockHeight < lastCoreChainLock.CoreBlockHeight {
 		nextCoreChainLock = lastCoreChainLock
 	}
 

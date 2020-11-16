@@ -255,15 +255,15 @@ func (state State) MakeBlock(
 ) (*types.Block, *types.PartSet) {
 
 	var coreChainLock *types.CoreChainLock = nil
-	if state.NextCoreChainLock.BlockHeight > state.LastCoreChainLock.BlockHeight {
+	if state.NextCoreChainLock.CoreBlockHeight > state.LastCoreChainLock.CoreBlockHeight {
 		coreChainLock = &state.NextCoreChainLock
 	}
 
 	var coreChainLockHeight uint32
 	if coreChainLock == nil {
-		coreChainLockHeight = state.LastCoreChainLock.BlockHeight
+		coreChainLockHeight = state.LastCoreChainLock.CoreBlockHeight
 	} else {
-		coreChainLockHeight = coreChainLock.BlockHeight
+		coreChainLockHeight = coreChainLock.CoreBlockHeight
 	}
 
 	// Build base block with block data.

@@ -174,15 +174,15 @@ func TestEvidencePoolUpdate(t *testing.T) {
 	lastCommit := makeCommit(height, val.PrivKey.PubKey().Address())
 
 	var coreChainLock *types.CoreChainLock = nil
-	if state.NextCoreChainLock.BlockHeight > state.LastCoreChainLock.BlockHeight {
+	if state.NextCoreChainLock.CoreBlockHeight > state.LastCoreChainLock.CoreBlockHeight {
 		coreChainLock = &state.NextCoreChainLock
 	}
 
 	var coreChainLockHeight uint32
 	if coreChainLock == nil {
-		coreChainLockHeight = state.LastCoreChainLock.BlockHeight
+		coreChainLockHeight = state.LastCoreChainLock.CoreBlockHeight
 	} else {
-		coreChainLockHeight = coreChainLock.BlockHeight
+		coreChainLockHeight = coreChainLock.CoreBlockHeight
 	}
 
 	block := types.MakeBlock(height + 1, coreChainLockHeight, coreChainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
