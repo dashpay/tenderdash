@@ -167,13 +167,13 @@ func validateBlock(evidencePool EvidencePool, proxyAppQueryConn proxy.AppConnQue
 			)
 		}
 
-		chainLocksBytes, err := block.CoreChainLock.ToProto().Marshal()
+		coreChainLocksBytes, err := block.CoreChainLock.ToProto().Marshal()
 		if err != nil {
 			panic(err)
 		}
 
 		verifySignatureQueryRequest := abci.RequestQuery{
-			Data: chainLocksBytes,
+			Data: coreChainLocksBytes,
 			Path: "/verify-chainlock",
 		}
 
