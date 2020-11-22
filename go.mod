@@ -37,3 +37,5 @@ require (
 )
 
 replace github.com/tendermint/tendermint => ./
+
+replace github.com/dashpay/bls-signatures/go-bindings => /Users/samuelw/Documents/src/go/github.com/dashpay/bls-signatures/go-bindings
