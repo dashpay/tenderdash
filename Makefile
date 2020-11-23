@@ -1,5 +1,5 @@
 PACKAGES=$(shell go list ./...)
-OUTPUT?=build/tendermint
+OUTPUT?=build/tenderdash
 
 REPO_NAME=github.com/dashevo/tenderdash
 BUILD_TAGS?=tendermint
