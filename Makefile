@@ -227,9 +227,9 @@ sync-docs:
 ###############################################################################
 
 build-docker: build-linux
-	cp $(OUTPUT) DOCKER/tendermint
-	docker build --label=tendermint --tag="dashpay/tenderdash" DOCKER
-	rm -rf DOCKER/tendermint
+	cp $(OUTPUT) DOCKER/tenderdash
+	docker build --label=tenderdash --tag="dashpay/tenderdash" DOCKER
+	rm -rf DOCKER/tenderdash
 .PHONY: build-docker
 
 ###############################################################################
