@@ -47,9 +47,9 @@ endif
 # allow users to pass additional flags via the conventional LDFLAGS variable
 LD_FLAGS += $(LDFLAGS)
 
-all: check bls_bindings_build build test install
-install: bls_bindings_build
-build: bls_bindings_build
+all: check build test install
+build: bls_build
+install: bls_install
 
 .PHONY: all
 
@@ -60,9 +60,14 @@ include tests.mk
 ###############################################################################
 ###                           Build BLS library                             ###
 ###############################################################################
-bls_bindings_build:
-	@sh scripts/build_bls_library.sh
-.PHONY: bls_bindings_build
+
+bls_build:
+	@third_party/bls-signatures/bls-signatures.sh
+.PHONY: bls_build
+
+bls_install:
+	@third_party/bls-signatures/bls-signatures.sh install
+.PHONY: bls_install
 
 ###############################################################################
 ###                                Build Tendermint                        ###
