@@ -65,7 +65,7 @@ build-bls:
 	@third_party/bls-signatures/build.sh
 .PHONY: build-bls
 
-install-bls:
+install-bls: build-bls
 	@sudo third_party/bls-signatures/install.sh
 .PHONY: install-bls
 
