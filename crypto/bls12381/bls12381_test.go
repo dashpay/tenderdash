@@ -3,11 +3,12 @@ package bls12381_test
 import (
 	"encoding/base64"
 	"encoding/hex"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"testing"
 )
 
 func TestSignAndValidateBLS12381(t *testing.T) {

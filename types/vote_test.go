@@ -1,9 +1,10 @@
 package types
 
 import (
-	"github.com/tendermint/tendermint/crypto/bls12381"
 	"testing"
 	"time"
+
+	"github.com/tendermint/tendermint/crypto/bls12381"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
