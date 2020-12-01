@@ -62,11 +62,11 @@ include tests.mk
 ###############################################################################
 
 build-bls:
-	@third_party/bls-signatures/bls-signatures.sh
+	@third_party/bls-signatures/build.sh
 .PHONY: build-bls
 
 install-bls:
-	@third_party/bls-signatures/bls-signatures.sh install
+	@sudo third_party/bls-signatures/install.sh
 .PHONY: install-bls
 
 ###############################################################################

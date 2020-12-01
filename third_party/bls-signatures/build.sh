@@ -12,7 +12,7 @@ mkdir -p $BUILD_PATH
 # Configurate the library build
 cmake -B $BUILD_PATH -S $SRC_PATH
 
-# Build and/or install the library
-make -C $BUILD_PATH $1
+# Build the library
+make -C $BUILD_PATH
 
 exit 0
