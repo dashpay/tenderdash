@@ -5,7 +5,7 @@ on:
     branches:
       - master
       - release/**
-​
+
 jobs:
   bls-signatures:
     runs-on: ubuntu-latest
