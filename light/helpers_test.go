@@ -194,7 +194,7 @@ func genMockNodeWithKeys(
 		headers         = make(map[int64]*types.SignedHeader, blockSize)
 		valset          = make(map[int64]*types.ValidatorSet, blockSize+1)
 		keymap          = make(map[int64]privKeys, blockSize+1)
-		keys            = genPrivKeys(valSize,crypto.BLS12381)
+		keys            = genPrivKeys(valSize, crypto.BLS12381)
 		totalVariation  = valVariation
 		valVariationInt int
 		newKeys         privKeys
