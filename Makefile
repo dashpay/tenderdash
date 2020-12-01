@@ -48,8 +48,8 @@ endif
 LD_FLAGS += $(LDFLAGS)
 
 all: check build test install
-build: bls_build
-install: bls_install
+build: build-bls
+install: install-bls
 
 .PHONY: all
 
@@ -58,16 +58,16 @@ include tools.mk
 include tests.mk
 
 ###############################################################################
-###                           Build BLS library                             ###
+###                      Build/Install BLS library                          ###
 ###############################################################################
 
-bls_build:
+build-bls:
 	@third_party/bls-signatures/bls-signatures.sh
-.PHONY: bls_build
+.PHONY: build-bls
 
-bls_install:
+install-bls:
 	@third_party/bls-signatures/bls-signatures.sh install
-.PHONY: bls_install
+.PHONY: install-bls
 
 ###############################################################################
 ###                                Build Tendermint                        ###
