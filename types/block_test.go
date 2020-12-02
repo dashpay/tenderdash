@@ -98,7 +98,7 @@ func TestBlockValidateBasic(t *testing.T) {
 		tc := tc
 		i := i
 		t.Run(tc.testName, func(t *testing.T) {
-			block := MakeBlock(h,0, nil, txs, commit, evList)
+			block := MakeBlock(h, 0, nil, txs, commit, evList)
 			block.ProposerAddress = valSet.GetProposer().Address
 			tc.malleateBlock(block)
 			err = block.ValidateBasic()
@@ -115,7 +115,7 @@ func TestBlockHash(t *testing.T) {
 func TestBlockMakePartSet(t *testing.T) {
 	assert.Nil(t, (*Block)(nil).MakePartSet(2))
 
-	partSet := MakeBlock(int64(3), 0,nil, []Tx{Tx("Hello World")}, nil, nil).MakePartSet(1024)
+	partSet := MakeBlock(int64(3), 0, nil, []Tx{Tx("Hello World")}, nil, nil).MakePartSet(1024)
 	assert.NotNil(t, partSet)
 	assert.EqualValues(t, 1, partSet.Total())
 }
@@ -164,7 +164,7 @@ func TestBlockHashesTo(t *testing.T) {
 }
 
 func TestBlockSize(t *testing.T) {
-	size := MakeBlock(int64(3),0, nil, []Tx{Tx("Hello World")}, nil, nil).Size()
+	size := MakeBlock(int64(3), 0, nil, []Tx{Tx("Hello World")}, nil, nil).Size()
 	if size <= 0 {
 		t.Fatal("Size of the block is zero or negative")
 	}
@@ -175,7 +175,7 @@ func TestBlockString(t *testing.T) {
 	assert.Equal(t, "nil-Block", (*Block)(nil).StringIndented(""))
 	assert.Equal(t, "nil-Block", (*Block)(nil).StringShort())
 
-	block := MakeBlock(int64(3),0, nil, []Tx{Tx("Hello World")}, nil, nil)
+	block := MakeBlock(int64(3), 0, nil, []Tx{Tx("Hello World")}, nil, nil)
 	assert.NotEqual(t, "nil-Block", block.String())
 	assert.NotEqual(t, "nil-Block", block.StringIndented(""))
 	assert.NotEqual(t, "nil-Block", block.StringShort())
@@ -463,20 +463,20 @@ func TestBlockMaxDataBytes(t *testing.T) {
 		panics        bool
 		result        int64
 	}{
-		0: {-10, crypto.Ed25519, 1, 0, true, 0},
-		1: {10, crypto.Ed25519, 1, 0, true, 0},
-		2: {979, crypto.Ed25519, 1, 0, true, 0},
-		3: {981, crypto.Ed25519, 1, 0, false, 0},
-		4: {982, crypto.Ed25519, 1, 0, false, 1},
-		5: {1093, crypto.Ed25519, 2, 0, false, 1},
-		6: {1192, crypto.Ed25519, 2, 100, false, 0},
-		7: {1012, crypto.BLS12381, 1, 0, true, 0},
-		8: {1014, crypto.BLS12381, 1, 0, false, 0},
-		9: {1015, crypto.BLS12381, 1, 0, false, 1},
+		0:  {-10, crypto.Ed25519, 1, 0, true, 0},
+		1:  {10, crypto.Ed25519, 1, 0, true, 0},
+		2:  {979, crypto.Ed25519, 1, 0, true, 0},
+		3:  {981, crypto.Ed25519, 1, 0, false, 0},
+		4:  {982, crypto.Ed25519, 1, 0, false, 1},
+		5:  {1093, crypto.Ed25519, 2, 0, false, 1},
+		6:  {1192, crypto.Ed25519, 2, 100, false, 0},
+		7:  {1012, crypto.BLS12381, 1, 0, true, 0},
+		8:  {1014, crypto.BLS12381, 1, 0, false, 0},
+		9:  {1015, crypto.BLS12381, 1, 0, false, 1},
 		10: {1159, crypto.BLS12381, 2, 0, false, 1},
 		11: {1258, crypto.BLS12381, 2, 100, false, 0},
 	}
-	//An extra 33 bytes (32 for sig, 1 for proto encoding are needed for BLS compared to edwards per validator
+	// An extra 33 bytes (32 for sig, 1 for proto encoding are needed for BLS compared to edwards per validator
 
 	for i, tc := range testCases {
 		tc := tc
@@ -497,19 +497,19 @@ func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
 	testCases := []struct {
 		maxBytes    int64
 		maxEvidence uint32
-		keyType       crypto.KeyType
+		keyType     crypto.KeyType
 		valsCount   int
 		panics      bool
 		result      int64
 	}{
-		0: {-10, 1, crypto.Ed25519,1, true, 0},
-		1: {10, 1, crypto.Ed25519,1, true, 0},
-		2: {979, 1, crypto.Ed25519,1, true, 0},
-		3: {981, 1, crypto.Ed25519,1, false, 0},
-		4: {982, 1, crypto.Ed25519,1, false, 1},
-		5: {1012, 1, crypto.BLS12381,1, true, 0},
-		6: {1014, 1, crypto.BLS12381,1, false, 0},
-		7: {1015, 1, crypto.BLS12381,1, false, 1},
+		0: {-10, 1, crypto.Ed25519, 1, true, 0},
+		1: {10, 1, crypto.Ed25519, 1, true, 0},
+		2: {979, 1, crypto.Ed25519, 1, true, 0},
+		3: {981, 1, crypto.Ed25519, 1, false, 0},
+		4: {982, 1, crypto.Ed25519, 1, false, 1},
+		5: {1012, 1, crypto.BLS12381, 1, true, 0},
+		6: {1014, 1, crypto.BLS12381, 1, false, 0},
+		7: {1015, 1, crypto.BLS12381, 1, false, 1},
 	}
 
 	for i, tc := range testCases {

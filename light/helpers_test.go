@@ -1,9 +1,10 @@
 package light_test
 
 import (
+	"time"
+
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/ed25519"
-	"time"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/tmhash"
@@ -27,12 +28,13 @@ type privKeys []crypto.PrivKey
 func genPrivKeys(n int, keyType crypto.KeyType) privKeys {
 	res := make(privKeys, n)
 	for i := range res {
-		if keyType == crypto.BLS12381 {
+		switch keyType {
+		case crypto.BLS12381:
 			res[i] = bls12381.GenPrivKey()
-		} else if keyType == crypto.Ed25519 {
+		case crypto.Ed25519:
 			res[i] = ed25519.GenPrivKey()
-		} else {
-			res[i] = ed25519.GenPrivKey()
+		default:
+			panic("genPrivKeys: unsupported keyType received")
 		}
 	}
 	return res
@@ -194,7 +196,7 @@ func genMockNodeWithKeys(
 		headers         = make(map[int64]*types.SignedHeader, blockSize)
 		valset          = make(map[int64]*types.ValidatorSet, blockSize+1)
 		keymap          = make(map[int64]privKeys, blockSize+1)
-		keys            = genPrivKeys(valSize,crypto.BLS12381)
+		keys            = genPrivKeys(valSize, crypto.BLS12381)
 		totalVariation  = valVariation
 		valVariationInt int
 		newKeys         privKeys

@@ -1,13 +1,10 @@
 PACKAGES=$(shell go list ./...)
-OUTPUT?=build/tendermint
+OUTPUT?=build/tenderdash
 
 REPO_NAME=github.com/dashevo/tenderdash
-BUILD_TAGS?=tendermint
-
+BUILD_TAGS?=tenderdash
 VERSION := $(shell git describe --always)
 LD_FLAGS = -X ${REPO_NAME}/version.TMCoreSemVer=$(VERSION)
-CGO_LDFLAGS = "-L${GOPATH}/src/github.com/dashpay/bls-signatures/build"
-CGO_CXXFLAGS = "-I${GOPATH}/src/github.com/dashpay/bls-signatures/src -I${GOPATH}/src/github.com/dashpay/bls-signatures/contrib/relic/include -I${GOPATH}/src/github.com/dashpay/bls-signatures/build/contrib/relic/include"
 BUILD_FLAGS = -mod=readonly -ldflags "$(LD_FLAGS)"
 HTTPS_GIT := https://${REPO_NAME}.git
 DOCKER_BUF := docker run -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf
@@ -50,9 +47,9 @@ endif
 # allow users to pass additional flags via the conventional LDFLAGS variable
 LD_FLAGS += $(LDFLAGS)
 
-all: check bls_bindings_build build test install
-install: bls_bindings_build
-build: bls_bindings_build
+all: check build test install
+build: build-bls
+install: install-bls
 
 .PHONY: all
 
@@ -61,22 +58,27 @@ include tools.mk
 include tests.mk
 
 ###############################################################################
-###                           Build BLS library                             ###
+###                      Build/Install BLS library                          ###
 ###############################################################################
-bls_bindings_build:
-	@sh scripts/build_bls_library.sh
-.PHONY: bls_bindings_build
+
+build-bls:
+	@third_party/bls-signatures/build.sh
+.PHONY: build-bls
+
+install-bls: build-bls
+	@sudo third_party/bls-signatures/install.sh
+.PHONY: install-bls
 
 ###############################################################################
 ###                                Build Tendermint                        ###
 ###############################################################################
 
 build:
-	CGO_CXXFLAGS=$(CGO_CXXFLAGS) CGO_LDFLAGS=$(CGO_LDFLAGS) go build $(BUILD_FLAGS) -tags '$(BUILD_TAGS)' -o $(OUTPUT) ./cmd/tendermint/
+	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_FLAGS) -tags '$(BUILD_TAGS)' -o $(OUTPUT) ./cmd/tendermint/
 .PHONY: build
 
 install:
-	CGO_CXXFLAGS=$(CGO_CXXFLAGS) CGO_LDFLAGS=$(CGO_LDFLAGS) go install $(BUILD_FLAGS) -tags $(BUILD_TAGS) ./cmd/tendermint
+	CGO_ENABLED=$(CGO_ENABLED) go install $(BUILD_FLAGS) -tags $(BUILD_TAGS) ./cmd/tendermint
 .PHONY: install
 
 ###############################################################################
@@ -122,11 +124,11 @@ proto-check-breaking-ci:
 ###############################################################################
 
 build_abci:
-	CGO_CXXFLAGS=$(CGO_CXXFLAGS) CGO_LDFLAGS=$(CGO_LDFLAGS) go build -mod=readonly -i ./abci/cmd/...
+	@go build -mod=readonly -i ./abci/cmd/...
 .PHONY: build_abci
 
 install_abci:
-	CGO_CXXFLAGS=$(CGO_CXXFLAGS) CGO_LDFLAGS=$(CGO_LDFLAGS) go install -mod=readonly ./abci/cmd/...
+	@go install -mod=readonly ./abci/cmd/...
 .PHONY: install_abci
 
 ###############################################################################
@@ -193,8 +195,6 @@ format:
 
 lint:
 	@echo "--> Running linter"
-	@export CGO_CXXFLAGS=$(CGO_CXXFLAGS)
-	@export CGO_LDFLAGS=$(CGO_LDFLAGS)
 	@golangci-lint run
 .PHONY: lint
 
@@ -226,10 +226,8 @@ sync-docs:
 ###                            Docker image                                 ###
 ###############################################################################
 
-build-docker: build-linux
-	cp $(OUTPUT) DOCKER/tendermint
-	docker build --label=tendermint --tag="dashpay/tenderdash" DOCKER
-	rm -rf DOCKER/tendermint
+build-docker:
+	docker build --label=tenderdash --tag="dashpay/tenderdash" --file DOCKER/Dockerfile .
 .PHONY: build-docker
 
 ###############################################################################
