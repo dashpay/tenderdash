@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/proxy"
@@ -144,7 +145,6 @@ func validateBlock(proxyAppQueryConn proxy.AppConnQuery, state State, block *typ
 			)
 		}
 
-
 	default:
 		return fmt.Errorf("block height %v lower than initial height %v",
 			block.Height, state.InitialHeight)
@@ -196,8 +196,6 @@ func validateBlock(proxyAppQueryConn proxy.AppConnQuery, state State, block *typ
 			)
 		}
 	}
-
-
 
 	// Check evidence doesn't exceed the limit amount of bytes.
 	if max, got := state.ConsensusParams.Evidence.MaxBytes, block.Evidence.ByteSize(); got > max {

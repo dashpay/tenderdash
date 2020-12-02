@@ -24,7 +24,7 @@ var (
 // a so-called Proof-of-Lock (POL) round, as noted in the POLRound.
 // If POLRound >= 0, then BlockID corresponds to the block that is locked in POLRound.
 type Proposal struct {
-	Type       			  tmproto.SignedMsgType
+	Type                  tmproto.SignedMsgType
 	Height                int64     `json:"height"`
 	CoreChainLockedHeight uint32    `json:"core_height"`
 	Round                 int32     `json:"round"`     // there can not be greater than 2_147_483_647 rounds

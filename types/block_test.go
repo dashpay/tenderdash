@@ -148,7 +148,6 @@ func TestBlockHashesTo(t *testing.T) {
 	lastID := makeBlockIDRandom()
 	h := int64(3)
 
-
 	voteSet, valSet, vals := randVoteSet(h-1, 1, tmproto.PrecommitType, 10, 1)
 	commit, err := MakeCommit(lastID, h-1, 1, voteSet, vals, time.Now())
 	require.NoError(t, err)
@@ -318,39 +317,39 @@ func TestHeaderHash(t *testing.T) {
 		expectHash bytes.HexBytes
 	}{
 		{"Generates expected hash", &Header{
-			Version:            tmversion.Consensus{Block: 1, App: 2},
-			ChainID:            "chainId",
-			Height:             3,
+			Version:               tmversion.Consensus{Block: 1, App: 2},
+			ChainID:               "chainId",
+			Height:                3,
 			CoreChainLockedHeight: 1,
-			Time:               time.Date(2019, 10, 13, 16, 14, 44, 0, time.UTC),
-			LastBlockID:        makeBlockID(make([]byte, tmhash.Size), 6, make([]byte, tmhash.Size)),
-			LastCommitHash:     tmhash.Sum([]byte("last_commit_hash")),
-			DataHash:           tmhash.Sum([]byte("data_hash")),
-			ValidatorsHash:     tmhash.Sum([]byte("validators_hash")),
-			NextValidatorsHash: tmhash.Sum([]byte("next_validators_hash")),
-			ConsensusHash:      tmhash.Sum([]byte("consensus_hash")),
-			AppHash:            tmhash.Sum([]byte("app_hash")),
-			LastResultsHash:    tmhash.Sum([]byte("last_results_hash")),
-			EvidenceHash:       tmhash.Sum([]byte("evidence_hash")),
-			ProposerAddress:    crypto.AddressHash([]byte("proposer_address")),
+			Time:                  time.Date(2019, 10, 13, 16, 14, 44, 0, time.UTC),
+			LastBlockID:           makeBlockID(make([]byte, tmhash.Size), 6, make([]byte, tmhash.Size)),
+			LastCommitHash:        tmhash.Sum([]byte("last_commit_hash")),
+			DataHash:              tmhash.Sum([]byte("data_hash")),
+			ValidatorsHash:        tmhash.Sum([]byte("validators_hash")),
+			NextValidatorsHash:    tmhash.Sum([]byte("next_validators_hash")),
+			ConsensusHash:         tmhash.Sum([]byte("consensus_hash")),
+			AppHash:               tmhash.Sum([]byte("app_hash")),
+			LastResultsHash:       tmhash.Sum([]byte("last_results_hash")),
+			EvidenceHash:          tmhash.Sum([]byte("evidence_hash")),
+			ProposerAddress:       crypto.AddressHash([]byte("proposer_address")),
 		}, hexBytesFromString("3CE00D7341FDB70D1B4F4E9D7969CADF91362A5663A0BAA0C1061C4B9DC0694A")},
 		{"nil header yields nil", nil, nil},
 		{"nil ValidatorsHash yields nil", &Header{
-			Version:            tmversion.Consensus{Block: 1, App: 2},
-			ChainID:            "chainId",
-			Height:             3,
+			Version:               tmversion.Consensus{Block: 1, App: 2},
+			ChainID:               "chainId",
+			Height:                3,
 			CoreChainLockedHeight: 1,
-			Time:               time.Date(2019, 10, 13, 16, 14, 44, 0, time.UTC),
-			LastBlockID:        makeBlockID(make([]byte, tmhash.Size), 6, make([]byte, tmhash.Size)),
-			LastCommitHash:     tmhash.Sum([]byte("last_commit_hash")),
-			DataHash:           tmhash.Sum([]byte("data_hash")),
-			ValidatorsHash:     nil,
-			NextValidatorsHash: tmhash.Sum([]byte("next_validators_hash")),
-			ConsensusHash:      tmhash.Sum([]byte("consensus_hash")),
-			AppHash:            tmhash.Sum([]byte("app_hash")),
-			LastResultsHash:    tmhash.Sum([]byte("last_results_hash")),
-			EvidenceHash:       tmhash.Sum([]byte("evidence_hash")),
-			ProposerAddress:    crypto.AddressHash([]byte("proposer_address")),
+			Time:                  time.Date(2019, 10, 13, 16, 14, 44, 0, time.UTC),
+			LastBlockID:           makeBlockID(make([]byte, tmhash.Size), 6, make([]byte, tmhash.Size)),
+			LastCommitHash:        tmhash.Sum([]byte("last_commit_hash")),
+			DataHash:              tmhash.Sum([]byte("data_hash")),
+			ValidatorsHash:        nil,
+			NextValidatorsHash:    tmhash.Sum([]byte("next_validators_hash")),
+			ConsensusHash:         tmhash.Sum([]byte("consensus_hash")),
+			AppHash:               tmhash.Sum([]byte("app_hash")),
+			LastResultsHash:       tmhash.Sum([]byte("last_results_hash")),
+			EvidenceHash:          tmhash.Sum([]byte("evidence_hash")),
+			ProposerAddress:       crypto.AddressHash([]byte("proposer_address")),
 		}, nil},
 	}
 	for _, tc := range testCases {
@@ -653,17 +652,17 @@ func TestBlockIDValidateBasic(t *testing.T) {
 func TestBlockProtoBuf(t *testing.T) {
 	h := tmrand.Int63()
 	c1 := randCommit(time.Now())
-	b1 := MakeBlock(h,0, nil, []Tx{Tx([]byte{1})}, &Commit{Signatures: []CommitSig{}}, []Evidence{})
+	b1 := MakeBlock(h, 0, nil, []Tx{Tx([]byte{1})}, &Commit{Signatures: []CommitSig{}}, []Evidence{})
 	b1.ProposerAddress = tmrand.Bytes(crypto.AddressSize)
 
-	b2 := MakeBlock(h,0, nil, []Tx{Tx([]byte{1})}, c1, []Evidence{})
+	b2 := MakeBlock(h, 0, nil, []Tx{Tx([]byte{1})}, c1, []Evidence{})
 	b2.ProposerAddress = tmrand.Bytes(crypto.AddressSize)
 	evidenceTime := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
 	evi := NewMockDuplicateVoteEvidence(h, evidenceTime, "block-test-chain")
 	b2.Evidence = EvidenceData{Evidence: EvidenceList{evi}}
 	b2.EvidenceHash = b2.Evidence.Hash()
 
-	b3 := MakeBlock(h,0, nil, []Tx{}, c1, []Evidence{})
+	b3 := MakeBlock(h, 0, nil, []Tx{}, c1, []Evidence{})
 	b3.ProposerAddress = tmrand.Bytes(crypto.AddressSize)
 	testCases := []struct {
 		msg      string

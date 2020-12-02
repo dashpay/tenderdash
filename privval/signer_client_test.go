@@ -119,22 +119,22 @@ func TestSignerProposal(t *testing.T) {
 		ts := time.Now()
 		hash := tmrand.Bytes(tmhash.Size)
 		have := &types.Proposal{
-			Type:      tmproto.ProposalType,
-			Height:    1,
+			Type:                  tmproto.ProposalType,
+			Height:                1,
 			CoreChainLockedHeight: 1,
-			Round:     2,
-			POLRound:  2,
-			BlockID:   types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
-			Timestamp: ts,
+			Round:                 2,
+			POLRound:              2,
+			BlockID:               types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+			Timestamp:             ts,
 		}
 		want := &types.Proposal{
-			Type:      tmproto.ProposalType,
-			Height:    1,
+			Type:                  tmproto.ProposalType,
+			Height:                1,
 			CoreChainLockedHeight: 1,
-			Round:     2,
-			POLRound:  2,
-			BlockID:   types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
-			Timestamp: ts,
+			Round:                 2,
+			POLRound:              2,
+			BlockID:               types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+			Timestamp:             ts,
 		}
 
 		tc := tc
@@ -328,14 +328,14 @@ func TestSignerSignProposalErrors(t *testing.T) {
 		ts := time.Now()
 		hash := tmrand.Bytes(tmhash.Size)
 		proposal := &types.Proposal{
-			Type:      tmproto.ProposalType,
-			Height:    1,
+			Type:                  tmproto.ProposalType,
+			Height:                1,
 			CoreChainLockedHeight: 1,
-			Round:     2,
-			POLRound:  2,
-			BlockID:   types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
-			Timestamp: ts,
-			Signature: []byte("signature"),
+			Round:                 2,
+			POLRound:              2,
+			BlockID:               types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+			Timestamp:             ts,
+			Signature:             []byte("signature"),
 		}
 
 		err := tc.signerClient.SignProposal(tc.chainID, proposal.ToProto())

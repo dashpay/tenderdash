@@ -2,12 +2,13 @@ package consensus
 
 import (
 	"fmt"
+	"testing"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/tendermint/tendermint/abci/example/counter"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
-	"testing"
 )
 
 func newCounterWithCoreChainLocks() abci.Application {
@@ -64,7 +65,6 @@ func TestReactorInvalidProposalHeightForCoreChainLocks(t *testing.T) {
 
 	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, N)
 
-
 	// this proposer sends a chain lock at each height
 	byzProposerId := 0
 	byzProposer := css[byzProposerId]
@@ -81,7 +81,6 @@ func TestReactorInvalidProposalHeightForCoreChainLocks(t *testing.T) {
 		}
 	}(int32(0))
 	byzProposer.mtx.Unlock()
-
 
 	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
@@ -124,7 +123,7 @@ func invalidProposeCoreChainLockFunc(t *testing.T, height int64, round int32, cs
 
 	// Make proposal
 	propBlockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
-	proposal := types.NewProposal(height, cs.state.NextCoreChainLock.CoreBlockHeight- 1, round, cs.ValidRound, propBlockID)
+	proposal := types.NewProposal(height, cs.state.NextCoreChainLock.CoreBlockHeight-1, round, cs.ValidRound, propBlockID)
 	p := proposal.ToProto()
 	if err := cs.privValidator.SignProposal(cs.state.ChainID, p); err == nil {
 		proposal.Signature = p.Signature
@@ -141,7 +140,6 @@ func invalidProposeCoreChainLockFunc(t *testing.T, height int64, round int32, cs
 		cs.Logger.Error("enterPropose: Error signing proposal", "height", height, "round", round, "err", err)
 	}
 }
-
 
 // one byz val sends a proposal for the correct height update, but does not include the chain lock
 func TestReactorInvalidBlockCoreChainLock(t *testing.T) {

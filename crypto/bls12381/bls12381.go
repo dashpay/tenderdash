@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"fmt"
+	"io"
+
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/tmhash"
 	tmjson "github.com/tendermint/tendermint/libs/json"
-	"io"
 )
 
 //-------------------------------------

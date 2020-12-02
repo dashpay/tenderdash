@@ -186,7 +186,7 @@ func TestEvidencePoolUpdate(t *testing.T) {
 		coreChainLockHeight = coreChainLock.CoreBlockHeight
 	}
 
-	block := types.MakeBlock(height + 1, coreChainLockHeight, coreChainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
+	block := types.MakeBlock(height+1, coreChainLockHeight, coreChainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
 	// update state (partially)
 	state.LastBlockHeight = height + 1
 	state.LastBlockTime = defaultEvidenceTime.Add(22 * time.Minute)

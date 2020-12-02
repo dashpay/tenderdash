@@ -10,11 +10,11 @@ import (
 
 // BlockMeta contains meta information.
 type BlockMeta struct {
-	BlockID      BlockID `json:"block_id"`
-	BlockSize    int     `json:"block_size"`
-	Header       Header  `json:"header"`
+	BlockID          BlockID `json:"block_id"`
+	BlockSize        int     `json:"block_size"`
+	Header           Header  `json:"header"`
 	HasCoreChainLock bool    `json:"has_core_chain_lock"`
-	NumTxs       int     `json:"num_txs"`
+	NumTxs           int     `json:"num_txs"`
 }
 
 // NewBlockMeta returns a new BlockMeta.
@@ -34,9 +34,9 @@ func (bm *BlockMeta) ToProto() *tmproto.BlockMeta {
 	}
 
 	pb := &tmproto.BlockMeta{
-		BlockID:         bm.BlockID.ToProto(),
-		BlockSize:       int64(bm.BlockSize),
-		Header:          *bm.Header.ToProto(),
+		BlockID:          bm.BlockID.ToProto(),
+		BlockSize:        int64(bm.BlockSize),
+		Header:           *bm.Header.ToProto(),
 		HasCoreChainLock: bm.HasCoreChainLock,
 		NumTxs:           int64(bm.NumTxs),
 	}

@@ -3,6 +3,7 @@ package counter
 import (
 	"encoding/binary"
 	"fmt"
+
 	types1 "github.com/tendermint/tendermint/types"
 
 	"github.com/tendermint/tendermint/abci/example/code"
@@ -21,7 +22,7 @@ type Application struct {
 }
 
 func NewApplication(serial bool) *Application {
-	return &Application{serial: serial, CoreChainLockStep:1}
+	return &Application{serial: serial, CoreChainLockStep: 1}
 }
 
 func (app *Application) Info(req types.RequestInfo) types.ResponseInfo {

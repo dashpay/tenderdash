@@ -3,11 +3,12 @@ package internal
 import (
 	"bytes"
 	"fmt"
-	"github.com/tendermint/tendermint/crypto/ed25519"
 	"net"
 	"os"
 	"os/signal"
 	"time"
+
+	"github.com/tendermint/tendermint/crypto/ed25519"
 
 	"github.com/tendermint/tendermint/crypto/tmhash"
 
@@ -216,11 +217,11 @@ func (th *TestHarness) TestSignProposal() error {
 	// sha256 hash of "hash"
 	hash := tmhash.Sum([]byte("hash"))
 	prop := &types.Proposal{
-		Type:     tmproto.ProposalType,
-		Height:   100,
+		Type:                  tmproto.ProposalType,
+		Height:                100,
 		CoreChainLockedHeight: 1,
-		Round:    0,
-		POLRound: -1,
+		Round:                 0,
+		POLRound:              -1,
 		BlockID: types.BlockID{
 			Hash: hash,
 			PartSetHeader: types.PartSetHeader{
