@@ -157,7 +157,16 @@ func newTestReactor(p testReactorParams) *BlockchainReactor {
 		}
 		db := dbm.NewMemDB()
 		stateStore := sm.NewStore(db)
-		appl = sm.NewBlockExecutor(stateStore, p.logger, proxyApp.Consensus(), proxyApp.Query(), mock.Mempool{}, sm.EmptyEvidencePool{})
+
+		appl = sm.NewBlockExecutor(
+			stateStore,
+			p.logger,
+			proxyApp.Consensus(),
+			proxyApp.Query(),
+			mock.Mempool{},
+			sm.EmptyEvidencePool{},
+		)
+
 		if err = stateStore.Save(state); err != nil {
 			panic(err)
 		}

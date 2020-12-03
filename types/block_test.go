@@ -136,8 +136,8 @@ func TestBlockMakePartSetWithEvidence(t *testing.T) {
 	block := MakeBlock(h, 0, nil, []Tx{Tx("Hello World")}, commit, evList)
 	partSet := block.MakePartSet(512)
 	assert.NotNil(t, partSet)
-	//The part set can be either 4 or 5 parts, this is because of variance in sizes due to the non second part of
-	// timestamps marshalling to different sizes
+	// The part set can be either 4 or 5 parts, this is because of variance
+	// in sizes due to the non second part of timestamps marshalling to different sizes
 	assert.True(t, partSet.Total() >= 4)
 	assert.True(t, partSet.Total() <= 5)
 }

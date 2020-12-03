@@ -1806,7 +1806,8 @@ func (cs *State) addProposalBlockPart(msg *BlockPartMessage, peerID p2p.ID) (add
 			return added, err
 		}
 
-		if cs.RoundState.Proposal != nil && block.Header.CoreChainLockedHeight != cs.RoundState.Proposal.CoreChainLockedHeight {
+		if cs.RoundState.Proposal != nil &&
+			block.Header.CoreChainLockedHeight != cs.RoundState.Proposal.CoreChainLockedHeight {
 			return added, errors.New("core chain lock height of block does not match proposal")
 		}
 

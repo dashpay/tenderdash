@@ -57,8 +57,9 @@ type State struct {
 	LastBlockID     types.BlockID
 	LastBlockTime   time.Time
 
-	//Last Chain Lock is the last known chain lock in consensus, and does not go to nil if a block had no chain lock
-	//Next Chain Lock is a chain lock being proposed by the abci application
+	// Last Chain Lock is the last known chain lock in consensus, and does not go to nil
+	// if a block had no chain lock.
+	// Next Chain Lock is a chain lock being proposed by the abci application
 	LastCoreChainLock types.CoreChainLock
 	NextCoreChainLock types.CoreChainLock
 
@@ -362,7 +363,10 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 
 	var initialChainLock types.CoreChainLock
 
-	initialChainLock.PopulateFromProto(genDoc.GenesisCoreChainLock)
+	err = initialChainLock.PopulateFromProto(genDoc.GenesisCoreChainLock)
+	if err != nil {
+		return State{}, fmt.Errorf("invalid core chain lock in genesis file: %v", err)
+	}
 
 	return State{
 		Version:       InitStateVersion,

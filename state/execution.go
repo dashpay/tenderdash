@@ -180,7 +180,16 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	}
 
 	// Update the state with the block and responses.
-	state, err = updateState(state, blockID, &block.Header, block.CoreChainLock, nextCoreChainLock, abciResponses, validatorUpdates)
+	state, err = updateState(
+		state,
+		blockID,
+		&block.Header,
+		block.CoreChainLock,
+		nextCoreChainLock,
+		abciResponses,
+		validatorUpdates,
+	)
+
 	if err != nil {
 		return state, 0, fmt.Errorf("commit failed for application: %v", err)
 	}

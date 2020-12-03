@@ -28,7 +28,14 @@ func newCounterWithBackwardsCoreChainLocks() abci.Application {
 
 func TestValidProposalCoreChainLocks(t *testing.T) {
 	N := 4
-	css, cleanup := randConsensusNet(N, "consensus_core_chainlocks_test", newMockTickerFunc(true), newCounterWithCoreChainLocks)
+
+	css, cleanup := randConsensusNet(
+		N,
+		"consensus_core_chainlocks_test",
+		newMockTickerFunc(true),
+		newCounterWithCoreChainLocks,
+	)
+
 	defer cleanup()
 
 	for i := 0; i < 4; i++ {
@@ -45,7 +52,8 @@ func TestValidProposalCoreChainLocks(t *testing.T) {
 		timeoutWaitGroup(t, N, func(j int) {
 			msg := <-blocksSubs[j].Out()
 			block := msg.Data().(types.EventDataNewBlock).Block
-			//this is true just because of this test where each new height has a new chain lock that is incremented by 1
+			// this is true just because of this test where each new height has a new chain lock
+			// that is incremented by 1
 			assert.EqualValues(t, block.Header.Height, block.Header.CoreChainLockedHeight)
 		}, css)
 	}
@@ -54,7 +62,14 @@ func TestValidProposalCoreChainLocks(t *testing.T) {
 // one byz val sends a proposal for a height 1 less than it should, but then sends the correct block after it
 func TestReactorInvalidProposalHeightForCoreChainLocks(t *testing.T) {
 	N := 4
-	css, cleanup := randConsensusNet(N, "consensus_core_chainlocks_test", newMockTickerFunc(true), newCounterWithCoreChainLocks)
+
+	css, cleanup := randConsensusNet(
+		N,
+		"consensus_core_chainlocks_test",
+		newMockTickerFunc(true),
+		newCounterWithCoreChainLocks,
+	)
+
 	defer cleanup()
 
 	for i := 0; i < 4; i++ {
@@ -66,20 +81,18 @@ func TestReactorInvalidProposalHeightForCoreChainLocks(t *testing.T) {
 	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, N)
 
 	// this proposer sends a chain lock at each height
-	byzProposerId := 0
-	byzProposer := css[byzProposerId]
-
-	//hitIt := false
+	byzProposerID := 0
+	byzProposer := css[byzProposerID]
 
 	// update the decide proposal to propose the incorrect height
 	byzProposer.mtx.Lock()
 
 	byzProposer.decideProposal = func(j int32) func(int64, int32) {
 		return func(height int64, round int32) {
-			//hitIt = true
 			invalidProposeCoreChainLockFunc(t, height, round, css[j])
 		}
 	}(int32(0))
+
 	byzProposer.mtx.Unlock()
 
 	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
@@ -88,7 +101,9 @@ func TestReactorInvalidProposalHeightForCoreChainLocks(t *testing.T) {
 		timeoutWaitGroup(t, N, func(j int) {
 			msg := <-blocksSubs[j].Out()
 			block := msg.Data().(types.EventDataNewBlock).Block
-			//this is true just because of this test where each new height has a new chain lock that is incremented by 1
+
+			// this is true just because of this test where each new height
+			// has a new chain lock that is incremented by 1
 			assert.EqualValues(t, block.Header.Height, block.Header.CoreChainLockedHeight)
 		}, css)
 	}
@@ -144,7 +159,14 @@ func invalidProposeCoreChainLockFunc(t *testing.T, height int64, round int32, cs
 // one byz val sends a proposal for the correct height update, but does not include the chain lock
 func TestReactorInvalidBlockCoreChainLock(t *testing.T) {
 	N := 4
-	css, cleanup := randConsensusNet(N, "consensus_core_chainlocks_test", newMockTickerFunc(true), newCounterWithBackwardsCoreChainLocks)
+
+	css, cleanup := randConsensusNet(
+		N,
+		"consensus_core_chainlocks_test",
+		newMockTickerFunc(true),
+		newCounterWithBackwardsCoreChainLocks,
+	)
+
 	defer cleanup()
 
 	for i := 0; i < 4; i++ {
@@ -161,12 +183,13 @@ func TestReactorInvalidBlockCoreChainLock(t *testing.T) {
 		timeoutWaitGroup(t, N, func(j int) {
 			msg := <-blocksSubs[j].Out()
 			block := msg.Data().(types.EventDataNewBlock).Block
-			//this is true just because of this test where each new height has a new chain lock that is incremented by 1
+			// this is true just because of this test where each new height
+			// has a new chain lock that is incremented by 1
 			if block.Header.Height == 1 {
 				assert.EqualValues(t, 1, block.Header.CoreChainLockedHeight)
 			} else {
-				//We started at 1 then 99, then try 98, 97, 96...
-				//The chain lock should stay on 99
+				// We started at 1 then 99, then try 98, 97, 96...
+				// The chain lock should stay on 99
 				assert.EqualValues(t, 99, block.Header.CoreChainLockedHeight)
 			}
 

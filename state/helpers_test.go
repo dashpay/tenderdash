@@ -172,7 +172,10 @@ func makeHeaderPartsResponsesValPubKeyChange(
 		}
 	}
 
-	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
+	return block.Header,
+		block.CoreChainLock,
+		types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}},
+		abciResponses
 }
 
 func makeHeaderPartsResponsesValPowerChange(
@@ -196,7 +199,10 @@ func makeHeaderPartsResponsesValPowerChange(
 		}
 	}
 
-	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
+	return block.Header,
+		block.CoreChainLock,
+		types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}},
+		abciResponses
 }
 
 func makeHeaderPartsResponsesParams(
@@ -209,7 +215,11 @@ func makeHeaderPartsResponsesParams(
 		BeginBlock: &abci.ResponseBeginBlock{},
 		EndBlock:   &abci.ResponseEndBlock{ConsensusParamUpdates: types.TM2PB.ConsensusParams(&params)},
 	}
-	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
+
+	return block.Header,
+		block.CoreChainLock,
+		types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}},
+		abciResponses
 }
 
 func randomGenesisDoc() *types.GenesisDoc {
