@@ -99,20 +99,13 @@ func (p *Proposal) ValidateBasic() error {
 //
 // See BlockID#String.
 func (p *Proposal) String() string {
-	var signatureFingerprint []byte
-	var canonicalTime string
-	if p != nil {
-		signatureFingerprint = tmbytes.Fingerprint(p.Signature)
-		canonicalTime = CanonicalTime(p.Timestamp)
-	}
-
 	return fmt.Sprintf("Proposal{%v/%v (%v, %v) %X @ %s}",
 		p.Height,
 		p.Round,
 		p.BlockID,
 		p.POLRound,
-		signatureFingerprint,
-		canonicalTime)
+		tmbytes.Fingerprint(p.Signature),
+		CanonicalTime(p.Timestamp))
 }
 
 // ProposalSignBytes returns the proto-encoding of the canonicalized Proposal,

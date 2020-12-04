@@ -210,8 +210,8 @@ func validateBlock(proxyAppQueryConn proxy.AppConnQuery, state State, block *typ
 			if block.Header.CoreChainLockedHeight != state.InitialCoreChainLockedHeight {
 				// If there is no last Chain Lock we need to make sure the height has stayed the same
 				return fmt.Errorf(
-					"wrong Block.Header.CoreChainLockedHeight when no new Chain Lock. Previous CoreChainLockedHeight %d, got %d",
-					state.LastCoreChainLock.CoreBlockHeight,
+					"wrong Block.Header.CoreChainLockedHeight when no Chain Locks. Initial CoreChainLockedHeight %d, got %d",
+					state.InitialCoreChainLockedHeight,
 					block.Header.CoreChainLockedHeight,
 				)
 			}
