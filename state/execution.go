@@ -486,6 +486,7 @@ func updateState(
 		LastBlockHeight:                  header.Height,
 		LastBlockID:                      blockID,
 		LastBlockTime:                    header.Time,
+		InitialCoreChainLockedHeight:     state.InitialCoreChainLockedHeight,
 		LastCoreChainLock:                *lastCoreChainLock,
 		NextCoreChainLock:                *nextCoreChainLock,
 		NextValidators:                   nValSet,

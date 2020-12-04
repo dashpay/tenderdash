@@ -57,9 +57,10 @@ func initFilesWithConfig(config *cfg.Config) error {
 		logger.Info("Found genesis file", "path", genFile)
 	} else {
 		genDoc := types.GenesisDoc{
-			ChainID:         fmt.Sprintf("test-chain-%v", tmrand.Str(6)),
-			GenesisTime:     tmtime.Now(),
-			ConsensusParams: types.DefaultConsensusParams(),
+			ChainID:                      fmt.Sprintf("test-chain-%v", tmrand.Str(6)),
+			GenesisTime:                  tmtime.Now(),
+			ConsensusParams:              types.DefaultConsensusParams(),
+			InitialCoreChainLockedHeight: 1,
 		}
 		pubKey, err := pv.GetPubKey()
 		if err != nil {

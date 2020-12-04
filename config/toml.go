@@ -534,6 +534,7 @@ var testGenesisFmt = `{
       "name": ""
     }
   ],
+  "initial_core_chain_locked_height": 1,
   "app_hash": ""
 }`
 

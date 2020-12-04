@@ -72,6 +72,7 @@ func TestGenesisGood(t *testing.T) {
 				"name":""
 			}],
 			"app_hash":"",
+			"initial_core_chain_locked_height": 1,
 			"app_state":{"account_owner": "Bob"}
 		}`,
 	)
@@ -81,8 +82,9 @@ func TestGenesisGood(t *testing.T) {
 	pubkey := bls12381.GenPrivKey().PubKey()
 	// create a base gendoc from struct
 	baseGenDoc := &GenesisDoc{
-		ChainID:    "abc",
-		Validators: []GenesisValidator{{pubkey.Address(), pubkey, 10, "myval"}},
+		ChainID:                      "abc",
+		Validators:                   []GenesisValidator{{pubkey.Address(), pubkey, 10, "myval"}},
+		InitialCoreChainLockedHeight: 1,
 	}
 	genDocBytes, err = tmjson.Marshal(baseGenDoc)
 	assert.NoError(t, err, "error marshalling genDoc")
@@ -110,10 +112,10 @@ func TestGenesisGood(t *testing.T) {
 
 	// Genesis doc from raw json
 	missingValidatorsTestCases := [][]byte{
-		[]byte(`{"chain_id":"mychain"}`),                   // missing validators
-		[]byte(`{"chain_id":"mychain","validators":[]}`),   // missing validators
-		[]byte(`{"chain_id":"mychain","validators":null}`), // nil validator
-		[]byte(`{"chain_id":"mychain"}`),                   // missing validators
+		[]byte(`{"chain_id":"mychain", "initial_core_chain_locked_height": 1}`),                   // missing validators
+		[]byte(`{"chain_id":"mychain","validators":[], "initial_core_chain_locked_height": 1}`),   // missing validators
+		[]byte(`{"chain_id":"mychain","validators":null, "initial_core_chain_locked_height": 1}`), // nil validator
+		[]byte(`{"chain_id":"mychain", "initial_core_chain_locked_height": 1}`),                   // missing validators
 	}
 
 	for _, tc := range missingValidatorsTestCases {
@@ -156,11 +158,12 @@ func TestGenesisValidatorHash(t *testing.T) {
 func randomGenesisDoc() *GenesisDoc {
 	pubkey := bls12381.GenPrivKey().PubKey()
 	return &GenesisDoc{
-		GenesisTime:     tmtime.Now(),
-		ChainID:         "abc",
-		InitialHeight:   1000,
-		Validators:      []GenesisValidator{{pubkey.Address(), pubkey, 10, "myval"}},
-		ConsensusParams: DefaultConsensusParams(),
-		AppHash:         []byte{1, 2, 3},
+		GenesisTime:                  tmtime.Now(),
+		ChainID:                      "abc",
+		InitialHeight:                1000,
+		Validators:                   []GenesisValidator{{pubkey.Address(), pubkey, 10, "myval"}},
+		ConsensusParams:              DefaultConsensusParams(),
+		InitialCoreChainLockedHeight: 1,
+		AppHash:                      []byte{1, 2, 3},
 	}
 }

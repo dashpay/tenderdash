@@ -186,10 +186,11 @@ services:
 // MakeGenesis generates a genesis document.
 func MakeGenesis(testnet *e2e.Testnet) (types.GenesisDoc, error) {
 	genesis := types.GenesisDoc{
-		GenesisTime:     time.Now(),
-		ChainID:         testnet.Name,
-		ConsensusParams: types.DefaultConsensusParams(),
-		InitialHeight:   testnet.InitialHeight,
+		GenesisTime:                  time.Now(),
+		ChainID:                      testnet.Name,
+		ConsensusParams:              types.DefaultConsensusParams(),
+		InitialHeight:                testnet.InitialHeight,
+		InitialCoreChainLockedHeight: 1,
 	}
 	for validator, power := range testnet.Validators {
 		genesis.Validators = append(genesis.Validators, types.GenesisValidator{

@@ -37,14 +37,14 @@ type GenesisValidator struct {
 
 // GenesisDoc defines the initial conditions for a tendermint blockchain, in particular its validator set.
 type GenesisDoc struct {
-	GenesisTime          time.Time                `json:"genesis_time"`
-	ChainID              string                   `json:"chain_id"`
-	InitialHeight        int64                    `json:"initial_height"`
-	GenesisCoreChainLock *tmproto.CoreChainLock   `json:"genesis_core_chain_lock"`
-	ConsensusParams      *tmproto.ConsensusParams `json:"consensus_params,omitempty"`
-	Validators           []GenesisValidator       `json:"validators,omitempty"`
-	AppHash              tmbytes.HexBytes         `json:"app_hash"`
-	AppState             json.RawMessage          `json:"app_state,omitempty"`
+	GenesisTime                  time.Time                `json:"genesis_time"`
+	ChainID                      string                   `json:"chain_id"`
+	InitialHeight                int64                    `json:"initial_height"`
+	InitialCoreChainLockedHeight uint32                   `json:"initial_core_chain_locked_height"`
+	ConsensusParams              *tmproto.ConsensusParams `json:"consensus_params,omitempty"`
+	Validators                   []GenesisValidator       `json:"validators,omitempty"`
+	AppHash                      tmbytes.HexBytes         `json:"app_hash"`
+	AppState                     json.RawMessage          `json:"app_state,omitempty"`
 }
 
 // SaveAs is a utility method for saving GenensisDoc as a JSON file.
@@ -75,11 +75,19 @@ func (genDoc *GenesisDoc) ValidateAndComplete() error {
 	if len(genDoc.ChainID) > MaxChainIDLen {
 		return fmt.Errorf("chain_id in genesis doc is too long (max: %d)", MaxChainIDLen)
 	}
+
 	if genDoc.InitialHeight < 0 {
 		return fmt.Errorf("initial_height cannot be negative (got %v)", genDoc.InitialHeight)
 	}
 	if genDoc.InitialHeight == 0 {
 		genDoc.InitialHeight = 1
+	}
+
+	if genDoc.InitialCoreChainLockedHeight == 0 {
+		return fmt.Errorf(
+			"genesis doc must include initial_core_chain_locked_height greater than 0 (got %v)",
+			genDoc.InitialCoreChainLockedHeight,
+		)
 	}
 
 	if genDoc.ConsensusParams == nil {

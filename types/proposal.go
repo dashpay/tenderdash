@@ -26,7 +26,7 @@ var (
 type Proposal struct {
 	Type                  tmproto.SignedMsgType
 	Height                int64     `json:"height"`
-	CoreChainLockedHeight uint32    `json:"core_height"`
+	CoreChainLockedHeight uint32    `json:"core_chain_locked_height"`
 	Round                 int32     `json:"round"`     // there can not be greater than 2_147_483_647 rounds
 	POLRound              int32     `json:"pol_round"` // -1 if null.
 	BlockID               BlockID   `json:"block_id"`
@@ -56,8 +56,11 @@ func (p *Proposal) ValidateBasic() error {
 	if p.Height < 0 {
 		return errors.New("negative Height")
 	}
+	if p.CoreChainLockedHeight == 0 {
+		return errors.New("core chain locked height not set")
+	}
 	if p.CoreChainLockedHeight == math.MaxUint32 {
-		return errors.New("core height not set")
+		return errors.New("core chain locked height reached max size")
 	}
 	if p.Round < 0 {
 		return errors.New("negative Round")
@@ -96,13 +99,20 @@ func (p *Proposal) ValidateBasic() error {
 //
 // See BlockID#String.
 func (p *Proposal) String() string {
+	var signatureFingerprint []byte
+	var canonicalTime string
+	if p != nil {
+		signatureFingerprint = tmbytes.Fingerprint(p.Signature)
+		canonicalTime = CanonicalTime(p.Timestamp)
+	}
+
 	return fmt.Sprintf("Proposal{%v/%v (%v, %v) %X @ %s}",
 		p.Height,
 		p.Round,
 		p.BlockID,
 		p.POLRound,
-		tmbytes.Fingerprint(p.Signature),
-		CanonicalTime(p.Timestamp))
+		signatureFingerprint,
+		canonicalTime)
 }
 
 // ProposalSignBytes returns the proto-encoding of the canonicalized Proposal,

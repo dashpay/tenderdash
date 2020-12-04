@@ -3,7 +3,7 @@ FROM golang:1.15
 # Grab deps (jq, hexdump, xxd, killall)
 RUN apt-get update && \
   apt-get install -y --no-install-recommends \
-  jq bsdmainutils vim-common psmisc netcat curl
+  jq bsdmainutils vim-common psmisc netcat curl sudo
 
 # Setup tendermint repo
 ENV REPO $GOPATH/src/github.com/dashevo/tenderdash
@@ -19,7 +19,7 @@ COPY . $REPO
 RUN make tools
 
 # install ABCI CLI
-RUN make install_abci
+RUN make install-bls install_abci
 
 # install Tendermint
 RUN make install

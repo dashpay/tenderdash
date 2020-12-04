@@ -110,9 +110,10 @@ func makeState(nVals, height int) (sm.State, dbm.DB, map[string]types.PrivValida
 		privVals[valAddr.String()] = types.NewMockPVWithParams(pk, false, false)
 	}
 	s, _ := sm.MakeGenesisState(&types.GenesisDoc{
-		ChainID:    chainID,
-		Validators: vals,
-		AppHash:    nil,
+		ChainID:                      chainID,
+		Validators:                   vals,
+		AppHash:                      nil,
+		InitialCoreChainLockedHeight: 1,
 	})
 
 	stateDB := dbm.NewMemDB()
@@ -235,7 +236,8 @@ func randomGenesisDoc() *types.GenesisDoc {
 				Name:    "myval",
 			},
 		},
-		ConsensusParams: types.DefaultConsensusParams(),
+		ConsensusParams:              types.DefaultConsensusParams(),
+		InitialCoreChainLockedHeight: 1,
 	}
 }
 

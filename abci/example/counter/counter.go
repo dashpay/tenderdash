@@ -22,7 +22,7 @@ type Application struct {
 }
 
 func NewApplication(serial bool) *Application {
-	return &Application{serial: serial, CoreChainLockStep: 1}
+	return &Application{serial: serial, CurrentCoreChainLockHeight: 1, CoreChainLockStep: 1}
 }
 
 func (app *Application) Info(req types.RequestInfo) types.ResponseInfo {
@@ -93,6 +93,7 @@ func (app *Application) Commit() (resp types.ResponseCommit) {
 	}
 	hash := make([]byte, 8)
 	binary.BigEndian.PutUint64(hash, uint64(app.txCount))
+
 	return types.ResponseCommit{Data: hash}
 }
 

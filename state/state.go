@@ -57,6 +57,9 @@ type State struct {
 	LastBlockID     types.BlockID
 	LastBlockTime   time.Time
 
+	// Initial core block height from genesis
+	InitialCoreChainLockedHeight uint32
+
 	// Last Chain Lock is the last known chain lock in consensus, and does not go to nil
 	// if a block had no chain lock.
 	// Next Chain Lock is a chain lock being proposed by the abci application
@@ -97,6 +100,8 @@ func (state State) Copy() State {
 		LastBlockHeight: state.LastBlockHeight,
 		LastBlockID:     state.LastBlockID,
 		LastBlockTime:   state.LastBlockTime,
+
+		InitialCoreChainLockedHeight: state.InitialCoreChainLockedHeight,
 
 		LastCoreChainLock: state.LastCoreChainLock,
 		NextCoreChainLock: state.NextCoreChainLock,
@@ -153,6 +158,8 @@ func (state *State) ToProto() (*tmstate.State, error) {
 	sm.InitialHeight = state.InitialHeight
 	sm.LastBlockHeight = state.LastBlockHeight
 
+	sm.InitialCoreChainLockedHeight = state.InitialCoreChainLockedHeight
+
 	sm.LastCoreChainLock = tmproto.CoreChainLock(state.LastCoreChainLock)
 	sm.NextCoreChainLock = tmproto.CoreChainLock(state.NextCoreChainLock)
 
@@ -207,6 +214,8 @@ func StateFromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 	state.LastBlockHeight = pb.LastBlockHeight
 	state.LastBlockTime = pb.LastBlockTime
 
+	state.InitialCoreChainLockedHeight = pb.InitialCoreChainLockedHeight
+
 	state.LastCoreChainLock = types.CoreChainLock(pb.LastCoreChainLock)
 	state.NextCoreChainLock = types.CoreChainLock(pb.NextCoreChainLock)
 
@@ -255,6 +264,7 @@ func (state State) MakeBlock(
 	proposerAddress []byte,
 ) (*types.Block, *types.PartSet) {
 
+	// determine the most recent chain lock
 	var coreChainLock *types.CoreChainLock = nil
 	if state.NextCoreChainLock.CoreBlockHeight > state.LastCoreChainLock.CoreBlockHeight {
 		coreChainLock = &state.NextCoreChainLock
@@ -262,7 +272,13 @@ func (state State) MakeBlock(
 
 	var coreChainLockHeight uint32
 	if coreChainLock == nil {
-		coreChainLockHeight = state.LastCoreChainLock.CoreBlockHeight
+		// if chain lock is not present use core block height from the previous block
+		// or from genesis if there is no previous chain locks yet
+		if state.LastCoreChainLock.CoreBlockHeight > state.InitialCoreChainLockedHeight {
+			coreChainLockHeight = state.LastCoreChainLock.CoreBlockHeight
+		} else {
+			coreChainLockHeight = state.InitialCoreChainLockedHeight
+		}
 	} else {
 		coreChainLockHeight = coreChainLock.CoreBlockHeight
 	}
@@ -361,13 +377,6 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 		nextValidatorSet = types.NewValidatorSet(validators).CopyIncrementProposerPriority(1)
 	}
 
-	var initialChainLock types.CoreChainLock
-
-	err = initialChainLock.PopulateFromProto(genDoc.GenesisCoreChainLock)
-	if err != nil {
-		return State{}, fmt.Errorf("invalid core chain lock in genesis file: %v", err)
-	}
-
 	return State{
 		Version:       InitStateVersion,
 		ChainID:       genDoc.ChainID,
@@ -377,7 +386,7 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 		LastBlockID:     types.BlockID{},
 		LastBlockTime:   genDoc.GenesisTime,
 
-		NextCoreChainLock: initialChainLock,
+		InitialCoreChainLockedHeight: genDoc.InitialCoreChainLockedHeight,
 
 		NextValidators:              nextValidatorSet,
 		Validators:                  validatorSet,
