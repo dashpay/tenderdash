@@ -6,6 +6,41 @@ on:
     - cron: '0 2 * * *'
 
 jobs:
+  bls-signatures:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/setup-go@v2
+        with:
+          go-version: "^1.15.5"
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Get BLS library revision
+        id: bls-revision
+        run: |
+          echo "::set-output name=hash::$(git --git-dir=third_party/bls-signatures/src/.git rev-parse HEAD)"
+        shell: bash
+      - uses: actions/cache@v2
+        id: bls-cache
+        with:
+          path: ~/bls-cache
+          key: ${{ runner.os }}-bls-${{ steps.bls-revision.outputs.hash }}
+      - name: Build BLS library
+        run: make install-bls
+        if: steps.bls-cache.outputs.cache-hit != 'true'
+      - name: Save BLS library
+        run: |
+          mkdir -p ~/bls-cache/include
+          cp -vr /usr/local/include/chiabls ~/bls-cache/include
+          cp -vr /usr/local/include/relic* ~/bls-cache/include
+          cp -v /usr/local/lib/libchiabls.a ~/bls-cache/
+        if: steps.bls-cache.outputs.cache-hit != 'true'
+      - uses: actions/cache@v2.1.2
+        with:
+          path: ~/bls-cache
+          key: ${{ runner.os }}-bls-${{ steps.bls-revision.outputs.hash }}
+        if: steps.bls-cache.outputs.cache-hit != 'true'
   e2e-nightly-test:
     # Run parallel jobs for the listed testnet groups (must match the
     # ./build/generator -g flag)
@@ -14,6 +49,7 @@ jobs:
       matrix:
         group: ['00', '01', '02', '03']
     runs-on: ubuntu-latest
+    needs: bls-signatures
     timeout-minutes: 60
     steps:
       - uses: actions/setup-go@v2
@@ -21,6 +57,15 @@ jobs:
           go-version: '^1.15.4'
 
       - uses: actions/checkout@v2
+
+      - uses: actions/cache@v2
+        with:
+          path: ~/bls-cache
+          key: ${{ runner.os }}-bls-${{ steps.bls-revision.outputs.hash }}
+      - name: Install BLS library
+        run: |
+          sudo cp -vr ~/bls-cache/include/* /usr/local/include/
+          sudo cp -vr ~/bls-cache/libchiabls.a /usr/local/lib/
 
       - name: Build
         working-directory: test/e2e
