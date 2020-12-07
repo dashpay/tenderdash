@@ -32,8 +32,10 @@ var (
 	// FIXME v2 disabled due to:
 	// https://github.com/tendermint/tendermint/issues/5513
 	// https://github.com/tendermint/tendermint/issues/5541
-	nodeFastSyncs         = uniformChoice{"", "v0"} // "v1", "v2"
-	nodeStateSyncs        = uniformChoice{false, true}
+	nodeFastSyncs = uniformChoice{"", "v0"} // "v1", "v2"
+	// Disabled since core chain locks doesn't work properly with state sync
+	// wrong Block.Header.CoreChainLockedHeight. LastCoreChainLockedHeight 0, got 1
+	nodeStateSyncs        = uniformChoice{false /* , true*/}
 	nodePersistIntervals  = uniformChoice{0, 1, 5}
 	nodeSnapshotIntervals = uniformChoice{0, 3}
 	nodeRetainBlocks      = uniformChoice{0, 1, 5}
