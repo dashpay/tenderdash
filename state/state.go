@@ -131,13 +131,15 @@ func (state State) LastCoreChainLockedHeight() uint32 {
 }
 
 // NextCoreChainLockedHeight returns core height from next chainlock
-// or last core chain locked height
+// if it's higher than last core chain locked height
 func (state State) NextCoreChainLockedHeight() uint32 {
-	if state.NextCoreChainLock.CoreBlockHeight > 0 {
+	lastCoreChainLockedHeight := state.LastCoreChainLockedHeight()
+
+	if state.NextCoreChainLock.CoreBlockHeight > lastCoreChainLockedHeight {
 		return state.NextCoreChainLock.CoreBlockHeight
 	}
 
-	return state.LastCoreChainLockedHeight()
+	return lastCoreChainLockedHeight
 }
 
 // Equals returns true if the States are identical.
