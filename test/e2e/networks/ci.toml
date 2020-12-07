@@ -87,6 +87,8 @@ mode = "full"
 # https://github.com/tendermint/tendermint/issues/5513
 # https://github.com/tendermint/tendermint/issues/5541
 fast_sync = "v0"
-state_sync = true
+# Disabled since core chain locks doesn't work properly with state sync
+# wrong Block.Header.CoreChainLockedHeight. LastCoreChainLockedHeight 0, got 1
+state_sync = false
 seeds = ["seed01"]
 perturb = ["restart"]
