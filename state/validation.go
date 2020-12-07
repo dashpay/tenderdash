@@ -152,24 +152,16 @@ func validateBlock(proxyAppQueryConn proxy.AppConnQuery, state State, block *typ
 
 		// If there is a new Chain Lock we need to make sure the height in the header is the same as the chain lock
 		if block.Header.CoreChainLockedHeight != block.CoreChainLock.CoreBlockHeight {
-			return fmt.Errorf("wrong Block.Header.CoreChainLockedHeight. CoreChainLock CoreBlockHeight %d, got %d",
+			return fmt.Errorf("wrong Block.Header.CoreChainLockedHeight. CoreChainLock.CoreBlockHeight %d, got %d",
 				block.CoreChainLock.CoreBlockHeight,
 				block.Header.CoreChainLockedHeight,
 			)
 		}
 
-		// We also need to make sure that the new height is superior to the old height
-		if block.Header.CoreChainLockedHeight <= state.LastCoreChainLock.CoreBlockHeight {
-			return fmt.Errorf("wrong Block.Header.CoreChainLockedHeight. Previous CoreChainLockedHeight %d, got %d",
-				state.LastCoreChainLock.CoreBlockHeight,
-				block.Header.CoreChainLockedHeight,
-			)
-		}
-
-		// New proposed chain lock must be higher than initial chain locked height
-		if block.Header.CoreChainLockedHeight <= state.InitialCoreChainLockedHeight {
-			return fmt.Errorf("wrong Block.Header.CoreChainLockedHeight. InitialCoreChainLockedHeight %d, got %d",
-				state.InitialCoreChainLockedHeight,
+		// We also need to make sure that the new height is superior to the previous height
+		if block.Header.CoreChainLockedHeight <= state.LastCoreChainLockedHeight() {
+			return fmt.Errorf("wrong Block.Header.CoreChainLockedHeight. LastCoreChainLockedHeight %d, got %d",
+				state.LastCoreChainLockedHeight(),
 				block.Header.CoreChainLockedHeight,
 			)
 		}
@@ -184,7 +176,7 @@ func validateBlock(proxyAppQueryConn proxy.AppConnQuery, state State, block *typ
 			Path: "/verify-chainlock",
 		}
 
-		// We need to query our abci application to make sure the chain lock signature is valid
+		// Query ABCI application to make sure the chain lock signature is valid
 
 		checkQuorumSignatureResponse, err := proxyAppQueryConn.QuerySync(verifySignatureQueryRequest)
 		if err != nil {
@@ -194,28 +186,12 @@ func validateBlock(proxyAppQueryConn proxy.AppConnQuery, state State, block *typ
 		if checkQuorumSignatureResponse.Code != 0 {
 			return fmt.Errorf("chain Lock signature deemed invalid by abci application")
 		}
-	} else {
-		// If there is no new Chain Lock we need to make sure the height has stayed the same
-		if state.LastCoreChainLock.CoreBlockHeight > 0 {
-			// If chain locks were present the chain locked height must equal to the last one
-			if block.Header.CoreChainLockedHeight != state.LastCoreChainLock.CoreBlockHeight {
-				return fmt.Errorf(
-					"wrong Block.Header.CoreChainLockedHeight when no new Chain Lock. Previous CoreChainLockedHeight %d, got %d",
-					state.LastCoreChainLock.CoreBlockHeight,
-					block.Header.CoreChainLockedHeight,
-				)
-			}
-		} else {
-			// If there are no chain locks yet, the chain locked height must equal to the initial chain locked height
-			if block.Header.CoreChainLockedHeight != state.InitialCoreChainLockedHeight {
-				// If there is no last Chain Lock we need to make sure the height has stayed the same
-				return fmt.Errorf(
-					"wrong Block.Header.CoreChainLockedHeight when no Chain Locks. Initial CoreChainLockedHeight %d, got %d",
-					state.InitialCoreChainLockedHeight,
-					block.Header.CoreChainLockedHeight,
-				)
-			}
-		}
+	} else if block.Header.CoreChainLockedHeight != state.LastCoreChainLockedHeight() {
+		return fmt.Errorf(
+			"wrong Block.Header.CoreChainLockedHeight. LastCoreChainLockedHeight %d, got %d",
+			state.LastCoreChainLockedHeight(),
+			block.Header.CoreChainLockedHeight,
+		)
 	}
 
 	// Check evidence doesn't exceed the limit amount of bytes.

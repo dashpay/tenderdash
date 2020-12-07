@@ -120,6 +120,26 @@ func (state State) Copy() State {
 	}
 }
 
+// LastCoreChainLockedHeight returns core height from last chainlock
+// or initial core height from genesis if it's not present yet
+func (state State) LastCoreChainLockedHeight() uint32 {
+	if state.LastCoreChainLock.CoreBlockHeight > 0 {
+		return state.LastCoreChainLock.CoreBlockHeight
+	}
+
+	return state.InitialCoreChainLockedHeight
+}
+
+// NextCoreChainLockedHeight returns core height from next chainlock
+// or last core chain locked height
+func (state State) NextCoreChainLockedHeight() uint32 {
+	if state.NextCoreChainLock.CoreBlockHeight > 0 {
+		return state.NextCoreChainLock.CoreBlockHeight
+	}
+
+	return state.LastCoreChainLockedHeight()
+}
+
 // Equals returns true if the States are identical.
 func (state State) Equals(state2 State) bool {
 	sbz, s2bz := state.Bytes(), state2.Bytes()
@@ -265,26 +285,20 @@ func (state State) MakeBlock(
 ) (*types.Block, *types.PartSet) {
 
 	// determine the most recent chain lock
-	var coreChainLock *types.CoreChainLock = nil
+	var nextCoreChainLock *types.CoreChainLock = nil
 	if state.NextCoreChainLock.CoreBlockHeight > state.LastCoreChainLock.CoreBlockHeight {
-		coreChainLock = &state.NextCoreChainLock
-	}
-
-	var coreChainLockHeight uint32
-	if coreChainLock == nil {
-		// if chain lock is not present use core block height from the previous block
-		// or from genesis if there is no previous chain locks yet
-		if state.LastCoreChainLock.CoreBlockHeight > state.InitialCoreChainLockedHeight {
-			coreChainLockHeight = state.LastCoreChainLock.CoreBlockHeight
-		} else {
-			coreChainLockHeight = state.InitialCoreChainLockedHeight
-		}
-	} else {
-		coreChainLockHeight = coreChainLock.CoreBlockHeight
+		nextCoreChainLock = &state.NextCoreChainLock
 	}
 
 	// Build base block with block data.
-	block := types.MakeBlock(height, coreChainLockHeight, coreChainLock, txs, commit, evidence)
+	block := types.MakeBlock(
+		height,
+		state.NextCoreChainLockedHeight(),
+		nextCoreChainLock,
+		txs,
+		commit,
+		evidence,
+	)
 
 	// Set time.
 	var timestamp time.Time

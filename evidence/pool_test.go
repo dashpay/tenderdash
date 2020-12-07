@@ -179,12 +179,7 @@ func TestEvidencePoolUpdate(t *testing.T) {
 		coreChainLock = &state.NextCoreChainLock
 	}
 
-	var coreChainLockHeight uint32
-	if coreChainLock == nil {
-		coreChainLockHeight = state.LastCoreChainLock.CoreBlockHeight
-	} else {
-		coreChainLockHeight = coreChainLock.CoreBlockHeight
-	}
+	coreChainLockHeight := state.NextCoreChainLockedHeight()
 
 	block := types.MakeBlock(height+1, coreChainLockHeight, coreChainLock, []types.Tx{}, lastCommit, []types.Evidence{ev})
 	// update state (partially)
