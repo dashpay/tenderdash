@@ -106,8 +106,10 @@ func (app *Application) Query(reqQuery types.RequestQuery) types.ResponseQuery {
 	case "tx":
 		return types.ResponseQuery{Value: []byte(fmt.Sprintf("%v", app.txCount))}
 	default:
-		return types.ResponseQuery{Code: 1, Log: fmt.Sprintf("Invalid query path. Expected " +
-			"'hash', 'tx' or '/verify-chainlock', got %v", reqQuery.Path)}
+		return types.ResponseQuery{
+			Code: 1,
+			Log:  fmt.Sprintf("Invalid query path. Expected 'hash', 'tx' or '/verify-chainlock', got %v", reqQuery.Path),
+		}
 	}
 }
 
