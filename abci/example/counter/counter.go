@@ -99,14 +99,15 @@ func (app *Application) Commit() (resp types.ResponseCommit) {
 
 func (app *Application) Query(reqQuery types.RequestQuery) types.ResponseQuery {
 	switch reqQuery.Path {
-	case "verify-chainlock":
+	case "/verify-chainlock":
 		return types.ResponseQuery{Code: 0}
 	case "hash":
 		return types.ResponseQuery{Value: []byte(fmt.Sprintf("%v", app.hashCount))}
 	case "tx":
 		return types.ResponseQuery{Value: []byte(fmt.Sprintf("%v", app.txCount))}
 	default:
-		return types.ResponseQuery{Log: fmt.Sprintf("Invalid query path. Expected hash or tx, got %v", reqQuery.Path)}
+		return types.ResponseQuery{Code: 1, Log: fmt.Sprintf("Invalid query path. Expected " +
+			"'hash', 'tx' or '/verify-chainlock', got %v", reqQuery.Path)}
 	}
 }
 
