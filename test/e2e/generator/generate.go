@@ -25,14 +25,12 @@ var (
 	}
 
 	// The following specify randomly chosen values for testnet nodes.
-	nodeDatabases        = uniformChoice{"goleveldb", "cleveldb", "rocksdb", "boltdb", "badgerdb"}
-	nodeABCIProtocols    = uniformChoice{"unix", "tcp", "grpc", "builtin"}
+	nodeDatabases = uniformChoice{"goleveldb", "cleveldb", "rocksdb", "boltdb", "badgerdb"}
+	// FIXME: grpc disabled due to https://github.com/tendermint/tendermint/issues/5439
+	nodeABCIProtocols    = uniformChoice{"unix", "tcp", "builtin"} // "grpc"
 	nodePrivvalProtocols = uniformChoice{"file", "unix", "tcp"}
-	// FIXME v1 disabled due to https://github.com/tendermint/tendermint/issues/5444
-	// FIXME v2 disabled due to:
-	// https://github.com/tendermint/tendermint/issues/5513
-	// https://github.com/tendermint/tendermint/issues/5541
-	nodeFastSyncs = uniformChoice{"", "v0"} // "v1", "v2"
+	// FIXME: v2 disabled due to flake
+	nodeFastSyncs         = uniformChoice{"", "v0"} // "v2"
 	// Disabled since core chain locks doesn't work properly with state sync
 	// wrong Block.Header.CoreChainLockedHeight. LastCoreChainLockedHeight 0, got 1
 	nodeStateSyncs        = uniformChoice{false /* , true*/}
@@ -46,8 +44,11 @@ var (
 		"restart":    0.1,
 	}
 	nodeMisbehaviors = weightedChoice{
-		misbehaviorOption{"double-prevote"}: 1,
-		misbehaviorOption{}:                 9,
+		// FIXME: evidence disabled due to node panicing when not
+		// having sufficient block history to process evidence.
+		// https://github.com/tendermint/tendermint/issues/5617
+		// misbehaviorOption{"double-prevote"}: 1,
+		misbehaviorOption{}: 9,
 	}
 )
 
