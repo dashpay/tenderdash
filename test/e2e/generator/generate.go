@@ -30,7 +30,7 @@ var (
 	nodeABCIProtocols    = uniformChoice{"unix", "tcp", "builtin"} // "grpc"
 	nodePrivvalProtocols = uniformChoice{"file", "unix", "tcp"}
 	// FIXME: v2 disabled due to flake
-	nodeFastSyncs         = uniformChoice{"", "v0"} // "v2"
+	nodeFastSyncs = uniformChoice{"", "v0"} // "v2"
 	// Disabled since core chain locks doesn't work properly with state sync
 	// wrong Block.Header.CoreChainLockedHeight. LastCoreChainLockedHeight 0, got 1
 	nodeStateSyncs        = uniformChoice{false /* , true*/}

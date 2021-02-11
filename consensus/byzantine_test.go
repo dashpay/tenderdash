@@ -203,7 +203,15 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 
 		// Make proposal
 		propBlockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
-		proposal := types.NewProposal(height, lazyProposer.state.InitialCoreChainLockedHeight, round, lazyProposer.ValidRound, propBlockID)
+
+		proposal := types.NewProposal(
+			height,
+			lazyProposer.state.InitialCoreChainLockedHeight,
+			round,
+			lazyProposer.ValidRound,
+			propBlockID,
+		)
+
 		p := proposal.ToProto()
 		if err := lazyProposer.privValidator.SignProposal(lazyProposer.state.ChainID, p); err == nil {
 			proposal.Signature = p.Signature
