@@ -15,7 +15,7 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: "^1.15.5"
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2.3.4
         with:
           submodules: true
       - name: Get BLS library revision
@@ -50,7 +50,7 @@ jobs:
     needs: bls-signatures
     timeout-minutes: 4
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v2.3.4
         with:
           submodules: true
       - name: Get BLS library revision
