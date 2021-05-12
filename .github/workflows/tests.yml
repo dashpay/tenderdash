@@ -33,7 +33,7 @@ jobs:
         run: |
           echo "::set-output name=hash::$(git --git-dir=third_party/bls-signatures/src/.git rev-parse HEAD)"
         shell: bash
-      - uses: actions/cache@v2
+      - uses: actions/cache@v2.1.5
         id: bls-cache
         with:
           path: ~/bls-cache
@@ -48,7 +48,7 @@ jobs:
           cp -vr /usr/local/include/relic* ~/bls-cache/include
           cp -v /usr/local/lib/libchiabls.a ~/bls-cache/
         if: steps.bls-cache.outputs.cache-hit != 'true'
-      - uses: actions/cache@v2.1.2
+      - uses: actions/cache@v2.1.5
         with:
           path: ~/bls-cache
           key: ${{ runner.os }}-bls-${{ steps.bls-revision.outputs.hash }}
@@ -72,7 +72,7 @@ jobs:
       - name: install
         run: make install install_abci
         if: "env.GIT_DIFF != ''"
-      - uses: actions/cache@v2.1.2
+      - uses: actions/cache@v2.1.5
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -80,7 +80,7 @@ jobs:
             ${{ runner.os }}-go-
         if: env.GIT_DIFF
       # Cache binaries for use by other jobs
-      - uses: actions/cache@v2.1.2
+      - uses: actions/cache@v2.1.5
         with:
           path: ~/go/bin
           key: ${{ runner.os }}-${{ github.sha }}-tm-binary
@@ -101,19 +101,19 @@ jobs:
             **/**.go
             go.mod
             go.sum
-      - uses: actions/cache@v2.1.3
+      - uses: actions/cache@v2.1.5
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
         if: env.GIT_DIFF
-      - uses: actions/cache@v2.1.2
+      - uses: actions/cache@v2.1.5
         with:
           path: ~/go/bin
           key: ${{ runner.os }}-${{ github.sha }}-tm-binary
         if: env.GIT_DIFF
-      - uses: actions/cache@v2
+      - uses: actions/cache@v2.1.5
         with:
           path: ~/bls-cache
           key: ${{ runner.os }}-bls-${{ steps.bls-revision.outputs.hash }}
@@ -141,14 +141,14 @@ jobs:
             **/**.go
             go.mod
             go.sum
-      - uses: actions/cache@v2.1.3
+      - uses: actions/cache@v2.1.5
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
         if: env.GIT_DIFF
-      - uses: actions/cache@v2.1.2
+      - uses: actions/cache@v2.1.5
         with:
           path: ~/go/bin
           key: ${{ runner.os }}-${{ github.sha }}-tm-binary
@@ -172,19 +172,19 @@ jobs:
             **/**.go
             go.mod
             go.sum
-      - uses: actions/cache@v2.1.3
+      - uses: actions/cache@v2.1.5
         with:
           path: ~/go/pkg/mod
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
         if: env.GIT_DIFF
-      - uses: actions/cache@v2.1.2
+      - uses: actions/cache@v2.1.5
         with:
           path: ~/go/bin
           key: ${{ runner.os }}-${{ github.sha }}-tm-binary
         if: env.GIT_DIFF
-      - uses: actions/cache@v2
+      - uses: actions/cache@v2.1.5
         with:
           path: ~/bls-cache
           key: ${{ runner.os }}-bls-${{ steps.bls-revision.outputs.hash }}
