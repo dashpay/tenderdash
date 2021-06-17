@@ -788,6 +788,9 @@ func (commit *Commit) GetHeight() int64 {
 // GetRound returns height of the commit.
 // Implements VoteSetReader.
 func (commit *Commit) GetRound() int32 {
+	if commit == nil {
+		return -1
+	}
 	return commit.Round
 }
 
