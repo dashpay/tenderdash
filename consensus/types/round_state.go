@@ -93,7 +93,7 @@ type RoundState struct {
 	TriggeredTimeoutPrecommit bool                `json:"triggered_timeout_precommit"`
 }
 
-// Compressed version of the RoundState for use in RPC
+// RoundStateSimple is a compressed version of the RoundState for use in RPC
 type RoundStateSimple struct {
 	HeightRoundStep   string              `json:"height/round/step"`
 	StartTime         time.Time           `json:"start_time"`
@@ -104,7 +104,7 @@ type RoundStateSimple struct {
 	Proposer          types.ValidatorInfo `json:"proposer"`
 }
 
-// Compress the RoundState to RoundStateSimple
+// RoundStateSimple compresses the RoundState to RoundStateSimple
 func (rs *RoundState) RoundStateSimple() RoundStateSimple {
 	votesJSON, err := rs.Votes.MarshalJSON()
 	if err != nil {
