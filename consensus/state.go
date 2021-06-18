@@ -1366,7 +1366,8 @@ func (cs *State) enterPrecommit(height int64, round int32) {
 	if cs.Height != height || round < cs.Round || (cs.Round == round && cstypes.RoundStepPrecommit <= cs.Step) {
 		logger.Debug(
 			"entering precommit step with invalid args",
-			"current", fmt.Sprintf("%v/%v/%v", cs.Height, cs.Round, cs.Step),
+			"current", fmt.Sprintf("height state:%v value:%v / round state:%v value:%v / state step:%v",
+				cs.Height, height, cs.Round, round, cs.Step),
 		)
 		return
 	}
