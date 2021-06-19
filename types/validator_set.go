@@ -919,7 +919,7 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID, stateID 
 		return fmt.Errorf("incorrect threshold state signature lc %X %X", canonicalVoteStateSignBytes,
 			commit.ThresholdStateSignature)
 	}
-	
+
 	return nil
 }
 

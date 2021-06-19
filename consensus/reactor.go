@@ -382,6 +382,11 @@ func (conR *Reactor) Receive(chID byte, src p2p.Peer, msgBytes []byte) {
 			ps.SetHasVote(msg.Vote)
 
 			cs.peerMsgQueue <- msgInfo{msg, src.ID()}
+		case *CommitMessage:
+			cs := conR.conS
+			ps.SetHasCommit(msg.Commit)
+
+			cs.peerMsgQueue <- msgInfo{ msg, src.ID()}
 
 		default:
 			// don't punish (leave room for soft upgrades)
@@ -465,6 +470,12 @@ func (conR *Reactor) subscribeToBroadcastEvents() {
 		conR.Logger.Error("Error adding listener for events", "err", err)
 	}
 
+	if err := conR.conS.evsw.AddListenerForEvent(subscriber, types.EventCommit,
+		func(data tmevents.EventData) {
+			conR.broadcastHasCommitMessage(data.(*types.Commit))
+		}); err != nil {
+		conR.Logger.Error("Error adding listener for events", "err", err)
+	}
 }
 
 func (conR *Reactor) unsubscribeFromBroadcastEvents() {
@@ -495,6 +506,33 @@ func (conR *Reactor) broadcastHasVoteMessage(vote *types.Vote) {
 		Round:  vote.Round,
 		Type:   vote.Type,
 		Index:  vote.ValidatorIndex,
+	}
+	conR.Switch.Broadcast(StateChannel, MustEncode(msg))
+	/*
+		// TODO: Make this broadcast more selective.
+		for _, peer := range conR.Switch.Peers().List() {
+			ps, ok := peer.Get(PeerStateKey).(*PeerState)
+			if !ok {
+				panic(fmt.Sprintf("Peer %v has no state", peer))
+			}
+			prs := ps.GetRoundState()
+			if prs.Height == vote.Height {
+				// TODO: Also filter on round?
+				peer.TrySend(StateChannel, struct{ ConsensusMessage }{msg})
+			} else {
+				// Height doesn't match
+				// TODO: check a field, maybe CatchupCommitRound?
+				// TODO: But that requires changing the struct field comment.
+			}
+		}
+	*/
+}
+
+// Broadcasts HasVoteMessage to peers that care.
+func (conR *Reactor) broadcastHasCommitMessage(commit *types.Commit) {
+	msg := &HasCommitMessage{
+		Height: commit.Height,
+		Round:  commit.Round,
 	}
 	conR.Switch.Broadcast(StateChannel, MustEncode(msg))
 	/*
