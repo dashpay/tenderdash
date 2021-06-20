@@ -5,7 +5,8 @@ import "fmt"
 type level byte
 
 const (
-	levelDebug level = 1 << iota
+	levelP2PDebug level = 1 << iota
+	levelDebug
 	levelInfo
 	levelError
 )
@@ -44,6 +45,14 @@ func (l *filter) Info(msg string, keyvals ...interface{}) {
 		return
 	}
 	l.next.Info(msg, keyvals...)
+}
+
+func (l *filter) P2PDebug(msg string, keyvals ...interface{}) {
+	levelAllowed := l.allowed&levelP2PDebug != 0
+	if !levelAllowed {
+		return
+	}
+	l.next.P2PDebug(msg, keyvals...)
 }
 
 func (l *filter) Debug(msg string, keyvals ...interface{}) {

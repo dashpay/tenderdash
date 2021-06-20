@@ -455,13 +455,13 @@ func TestReactorWithTimeoutCommit(t *testing.T) {
 
 func waitForAndValidateBlock(
 	t *testing.T,
-	n int,
+	nPeers int,
 	activeVals map[string]struct{},
 	blocksSubs []types.Subscription,
 	css []*State,
 	txs ...[]byte,
 ) {
-	timeoutWaitGroup(t, n, func(j int) {
+	timeoutWaitGroup(t, nPeers, func(j int) {
 		css[j].Logger.Debug("waitForAndValidateBlock")
 		msg := <-blocksSubs[j].Out()
 		newBlock := msg.Data().(types.EventDataNewBlock).Block

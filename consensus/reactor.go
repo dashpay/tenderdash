@@ -1891,7 +1891,7 @@ func (m *CommitMessage) ValidateBasic() error {
 
 // String returns a string representation.
 func (m *CommitMessage) String() string {
-	return fmt.Sprintf("[Commit %v]", m.Commit)
+	return m.Commit.String()
 }
 
 //-------------------------------------

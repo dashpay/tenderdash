@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"encoding/base64"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -837,6 +838,24 @@ func (commit *Commit) Hash() tmbytes.HexBytes {
 	}
 	return commit.hash
 }
+
+// String returns a string representation of the block
+//
+// See StringIndented.
+func (commit *Commit) String() string {
+	if commit == nil {
+		return "nil-Commit"
+	}
+	return fmt.Sprintf(`Commit{H: %d, R: %d, BlockID: %v, StateID: %v, BlockSignature: %v, StateSignature: %v}#%v`,
+		commit.Height,
+		commit.Round,
+		commit.BlockID,
+		commit.StateID,
+		base64.StdEncoding.EncodeToString(commit.ThresholdBlockSignature),
+		base64.StdEncoding.EncodeToString(commit.ThresholdStateSignature),
+		commit.hash)
+}
+
 
 // StringIndented returns a string representation of the commit.
 func (commit *Commit) StringIndented(indent string) string {
