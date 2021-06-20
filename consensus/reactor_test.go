@@ -55,6 +55,7 @@ func startConsensusNet(t *testing.T, css []*State, n int) (
 	reactors := make([]*Reactor, n)
 	blocksSubs := make([]types.Subscription, 0)
 	eventBuses := make([]*types.EventBus, n)
+	nodeProTxHashes := make([]*crypto.ProTxHash, n)
 	for i := 0; i < n; i++ {
 		/*logger, err := tmflags.ParseLogLevel("consensus:info,*:error", logger, "info")
 		if err != nil {	t.Fatal(err)}*/
@@ -75,9 +76,10 @@ func startConsensusNet(t *testing.T, css []*State, n int) (
 			}
 
 		}
+		nodeProTxHashes[i] = &css[i].privValidatorProTxHash
 	}
 	// make connected switches and start all reactors
-	p2p.MakeConnectedSwitches(config.P2P, n, func(i int, s *p2p.Switch) *p2p.Switch {
+	p2p.MakeConnectedSwitches(config.P2P, nodeProTxHashes, func(i int, s *p2p.Switch) *p2p.Switch {
 		s.AddReactor("CONSENSUS", reactors[i])
 		s.SetLogger(reactors[i].conS.Logger.With("module", "p2p"))
 		return s

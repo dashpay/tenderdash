@@ -3,6 +3,7 @@ package consensus
 import (
 	"context"
 	"fmt"
+	"github.com/tendermint/tendermint/crypto"
 	"os"
 	"path"
 	"sync"
@@ -102,6 +103,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	reactors := make([]*Reactor, nValidators)
 	blocksSubs := make([]types.Subscription, 0)
 	eventBuses := make([]*types.EventBus, nValidators)
+	nodeProTxHashes := make([]*crypto.ProTxHash, nValidators)
 	for i := 0; i < nValidators; i++ {
 		reactors[i] = NewReactor(css[i], true) // so we dont start the consensus states
 		reactors[i].SetLogger(css[i].Logger)
@@ -118,9 +120,10 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			err = css[i].blockExec.Store().Save(css[i].state)
 			require.NoError(t, err)
 		}
+		nodeProTxHashes[i] = &css[i].privValidatorProTxHash
 	}
 	// make connected switches and start all reactors
-	p2p.MakeConnectedSwitches(config.P2P, nValidators, func(i int, s *p2p.Switch) *p2p.Switch {
+	p2p.MakeConnectedSwitches(config.P2P, nodeProTxHashes, func(i int, s *p2p.Switch) *p2p.Switch {
 		s.AddReactor("CONSENSUS", reactors[i])
 		s.SetLogger(reactors[i].conS.Logger.With("module", "p2p"))
 		return s
@@ -290,11 +293,16 @@ func TestByzantineConflictingProposalsWithPartition(t *testing.T) {
 
 	switches := make([]*p2p.Switch, N)
 	p2pLogger := logger.With("module", "p2p")
+	nodeProTxHashes := make([]*crypto.ProTxHash, N)
+	for i := 0; i < N; i++ {
+		nodeProTxHashes[i] = &css[i].privValidatorProTxHash
+	}
 	for i := 0; i < N; i++ {
 		switches[i] = p2p.MakeSwitch(
 			config.P2P,
 			i,
 			"foo", "1.0.0",
+			nodeProTxHashes[i],
 			func(i int, sw *p2p.Switch) *p2p.Switch {
 				return sw
 			})
@@ -357,7 +365,7 @@ func TestByzantineConflictingProposalsWithPartition(t *testing.T) {
 		}
 	}()
 
-	p2p.MakeConnectedSwitches(config.P2P, N, func(i int, s *p2p.Switch) *p2p.Switch {
+	p2p.MakeConnectedSwitches(config.P2P, nodeProTxHashes, func(i int, s *p2p.Switch) *p2p.Switch {
 		// ignore new switch s, we already made ours
 		switches[i].AddReactor("CONSENSUS", reactors[i])
 		return switches[i]
