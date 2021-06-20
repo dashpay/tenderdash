@@ -2226,12 +2226,6 @@ func (cs *State) addCommit(commit *types.Commit, peerID p2p.ID) (added bool, err
 		return false, fmt.Errorf("error validating commit: %v", err)
 	}
 
-	cs.Logger.Debug(
-		"adding commit",
-		"commit_height", commit.Height,
-		"cs_height", cs.Height,
-	)
-
 	rs := cs.RoundState
 	height := cs.Height
 
@@ -2250,6 +2244,12 @@ func (cs *State) addCommit(commit *types.Commit, peerID p2p.ID) (added bool, err
 
 		return
 	}
+
+	cs.Logger.Debug(
+		"trying to add commit from remote validator",
+		"commit_height", commit.Height,
+		"cs_height", cs.Height,
+	)
 
 	// Height mismatch is ignored.
 	// Not necessarily a bad peer, but not favourable behaviour.

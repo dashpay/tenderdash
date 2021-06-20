@@ -311,6 +311,8 @@ func (conR *Reactor) Receive(chID byte, src p2p.Peer, msgBytes []byte) {
 			ps.ApplyNewValidBlockMessage(msg)
 		case *HasVoteMessage:
 			ps.ApplyHasVoteMessage(msg)
+		case *HasCommitMessage:
+			ps.ApplyHasCommitMessage(msg)
 		case *VoteSetMaj23Message:
 			cs := conR.conS
 			cs.mtx.Lock()
@@ -756,20 +758,25 @@ OUTER_LOOP:
 		}
 
 		// Special catchup logic.
-		// If peer is lagging by height 1, send LastCommit.
-		if prs.Height != 0 && rs.Height == prs.Height+1 {
+		// If peer is lagging by height 1, send LastCommit if we haven't already.
+		if prs.Height != 0 && rs.Height == prs.Height+1 && prs.HasCommit == false {
 			if ps.SendCommit(rs.LastCommit) {
-				logger.Debug("Picked rs.LastCommit to send", "height", prs.Height)
+				peerProTxHash := peer.NodeInfo().GetProTxHash()
+				if peerProTxHash != nil {
+					logger.Debug("Picked rs.LastCommit to send", "height", prs.Height, "remoteProTxHash", peer.NodeInfo().GetProTxHash())
+				} else {
+					logger.Debug("Picked rs.LastCommit to send", "height", prs.Height)
+				}
+
 				continue OUTER_LOOP
 			}
 		}
 
 		// Catchup logic
-		// If peer is lagging by more than 1, send Commit.
+		// If peer is lagging by more than 1, send Commit for that height to allow them to catch up.
 		blockStoreBase := conR.conS.blockStore.Base()
-		if blockStoreBase > 0 && prs.Height != 0 && rs.Height >= prs.Height+2 && prs.Height >= blockStoreBase {
+		if blockStoreBase > 0 && prs.Height != 0 && rs.Height >= prs.Height+2 && prs.Height >= blockStoreBase && prs.HasCommit == false {
 			// Load the block commit for prs.Height,
-			// which contains precommit signatures for prs.Height.
 			if commit := conR.conS.blockStore.LoadBlockCommit(prs.Height); commit != nil {
 				if ps.SendCommit(commit) {
 					logger.Debug("Picked Catchup commit to send", "height", prs.Height)
@@ -876,7 +883,7 @@ func (conR *Reactor) gossipVotesToFullNodeForHeight(
 ) bool {
 
 	// If there are lastCommits to send...
-	if prs.Step == cstypes.RoundStepNewHeight {
+	if prs.Step == cstypes.RoundStepNewHeight && prs.Height+1 == rs.Height && prs.HasCommit == false {
 		if ps.SendCommit(rs.LastCommit) {
 			logger.Debug("Picked rs.LastCommit to send")
 			return true
@@ -1558,6 +1565,18 @@ func (ps *PeerState) ApplyHasVoteMessage(msg *HasVoteMessage) {
 	ps.setHasVote(msg.Height, msg.Round, msg.Type, msg.Index)
 }
 
+// ApplyHasCommitMessage updates the peer state for the new commit.
+func (ps *PeerState) ApplyHasCommitMessage(msg *HasCommitMessage) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	if ps.PRS.Height != msg.Height {
+		return
+	}
+
+	ps.setHasCommit(msg.Height, msg.Round)
+}
+
 // ApplyVoteSetBitsMessage updates the peer state for the bit-array of votes
 // it claims to have for the corresponding BlockID.
 // `ourVotes` is a BitArray of votes we have for msg.BlockID
@@ -1615,6 +1634,7 @@ func init() {
 	tmjson.RegisterType(&BlockPartMessage{}, "tendermint/BlockPart")
 	tmjson.RegisterType(&VoteMessage{}, "tendermint/Vote")
 	tmjson.RegisterType(&HasVoteMessage{}, "tendermint/HasVote")
+	tmjson.RegisterType(&HasCommitMessage{}, "tendermint/HasCommit")
 	tmjson.RegisterType(&VoteSetMaj23Message{}, "tendermint/VoteSetMaj23")
 	tmjson.RegisterType(&VoteSetBitsMessage{}, "tendermint/VoteSetBits")
 }
