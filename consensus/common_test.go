@@ -678,7 +678,7 @@ func consensusLogger() log.Logger {
 			}
 		}
 		return term.FgBgColor{}
-	}).With("module", "consensus")
+	}, "debug").With("module", "consensus")
 }
 
 func randConsensusNet(nValidators int, testName string, tickerFunc func() TimeoutTicker,
