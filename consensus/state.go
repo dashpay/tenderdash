@@ -1738,6 +1738,11 @@ func (cs *State) applyCommit(commit *types.Commit) {
 	// must be called before we update state
 	cs.recordMetrics(height, block)
 
+	// Set the last commit if we received it
+	if commit != nil && cs.LastCommit == nil {
+		cs.LastCommit = commit
+	}
+
 	// NewHeightStep!
 	cs.updateToState(stateCopy)
 
@@ -2302,19 +2307,6 @@ func (cs *State) addCommit(commit *types.Commit, peerID p2p.ID) (added bool, err
 		return added, err
 	}
 	cs.evsw.FireEvent(types.EventCommit, commit)
-
-	cs.enterNewRound(height, commit.Round)
-	cs.enterPrecommit(height, commit.Round)
-
-	if len(commit.BlockID.Hash) != 0 {
-		cs.enterCommit(height, commit.Round)
-		if cs.config.SkipTimeoutCommit {
-			cs.enterNewRound(cs.Height, 0)
-		}
-	} else {
-		cs.enterPrecommitWait(height, commit.Round)
-	}
-
 
 	return added, err
 }
