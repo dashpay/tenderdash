@@ -925,6 +925,10 @@ func randConsensusNetWithPeers(
 			}
 
 			privVal = privval.GenFilePV(tempKeyFile.Name(), tempStateFile.Name())
+
+			// These validator might not have the public keys, for testing purposes let's assume they don't
+			state.Validators.HasPublicKeys = false
+			state.NextValidators.HasPublicKeys = false
 		}
 
 		app := appFunc(path.Join(config.DBDir(), fmt.Sprintf("%s_%d", testName, i)))

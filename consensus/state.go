@@ -2043,14 +2043,6 @@ func (cs *State) tryAddVote(vote *types.Vote, peerID p2p.ID) (bool, error) {
 }
 
 func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error) {
-	cs.Logger.Debug(
-		"adding vote",
-		"vote_height", vote.Height,
-		"vote_type", vote.Type,
-		"val_index", vote.ValidatorIndex,
-		"cs_height", cs.Height,
-	)
-
 	// A precommit for the previous height?
 	// These come in while we wait timeoutCommit
 	if vote.Height+1 == cs.Height && vote.Type == tmproto.PrecommitType {
@@ -2075,6 +2067,14 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 		return
 	}
 
+	// Ignore vote if we do not have public keys to verify votes
+	if cs.Validators.HasPublicKeys == false {
+		added = false
+		cs.Logger.Debug("vote received on non-validator, ignoring it", "vote_height", vote.Height,
+			"cs_height", cs.Height, "peer", peerID)
+		return
+	}
+
 	if vote.BlockID.Hash != nil && !bytes.Equal(vote.StateID.LastAppHash, cs.state.AppHash) {
 		added = false
 		err = errors.New("vote state last app hash does not match the known state app hash")
@@ -2082,6 +2082,14 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 			"csHeight", cs.Height, "peerID", peerID)
 		return false, err
 	}
+
+	cs.Logger.Debug(
+		"adding vote",
+		"vote_height", vote.Height,
+		"vote_type", vote.Type,
+		"val_index", vote.ValidatorIndex,
+		"cs_height", cs.Height,
+	)
 
 	height := cs.Height
 	added, err = cs.Votes.AddVote(vote, peerID)
