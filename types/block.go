@@ -513,7 +513,7 @@ func (h *Header) StringIndented(indent string) string {
 %s  CoreCLHeight:   %v
 %s  Time:           %v
 %s  LastBlockID:    %v
-%s  LastPrecommits:     %v
+%s  LastCommitHash: %v
 %s  Data:           %v
 %s  Validators:     %v
 %s  NextValidators: %v
@@ -874,8 +874,8 @@ func (commit *Commit) StringIndented(indent string) string {
 		indent, commit.Round,
 		indent, commit.BlockID,
 		indent, commit.StateID,
-		indent, commit.ThresholdBlockSignature,
-		indent, commit.ThresholdStateSignature,
+		indent, base64.StdEncoding.EncodeToString(commit.ThresholdBlockSignature),
+		indent, base64.StdEncoding.EncodeToString(commit.ThresholdStateSignature),
 		indent, commit.hash)
 }
 

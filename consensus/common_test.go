@@ -942,7 +942,8 @@ func randConsensusNetWithPeers(
 
 		css[i] = newStateWithConfig(thisConfig, state, privVal, app)
 		css[i].SetTimeoutTicker(tickerFunc())
-		css[i].SetLogger(logger.With("validator", i, "module", "consensus"))
+		proTxHash, _ := privVal.GetProTxHash()
+		css[i].SetLogger(logger.With("validator", i, "proTxHash", proTxHash.ShortString(), "module", "consensus"))
 	}
 	return css, genDoc, peer0Config, func() {
 		for _, dir := range configRootDirs {

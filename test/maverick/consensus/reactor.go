@@ -1266,7 +1266,7 @@ func (ps *PeerState) SetHasCommit(commit *types.Commit) {
 }
 
 func (ps *PeerState) setHasCommit(height int64, round int32) {
-	logger := ps.logger.With(
+	logger := ps.logger.With("peer", ps.peer,
 		"peerH/R",
 		fmt.Sprintf("%d/%d", ps.PRS.Height, ps.PRS.Round),
 		"H/R",

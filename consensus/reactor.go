@@ -759,15 +759,9 @@ OUTER_LOOP:
 
 		// Special catchup logic.
 		// If peer is lagging by height 1, send LastCommit if we haven't already.
-		if prs.Height != 0 && rs.Height == prs.Height+1 && prs.HasCommit == false {
+		if prs.Height != 0 && rs.Height == prs.Height+1 && prs.HasCommit == false && isValidator == false {
 			if ps.SendCommit(rs.LastCommit) {
-				peerProTxHash := peer.NodeInfo().GetProTxHash()
-				if peerProTxHash != nil {
-					logger.Debug("Picked rs.LastCommit to send", "height", prs.Height, "remoteProTxHash", peer.NodeInfo().GetProTxHash())
-				} else {
-					logger.Debug("Picked rs.LastCommit to send", "height", prs.Height)
-				}
-
+				logger.Debug("Picked rs.LastCommit to send", "height", prs.Height)
 				continue OUTER_LOOP
 			}
 		}
@@ -821,14 +815,6 @@ func (conR *Reactor) gossipVotesToValidatorForHeight(
 	prs *cstypes.PeerRoundState,
 	ps *PeerState,
 ) bool {
-
-	// If there are lastCommits to send...
-	if prs.Step == cstypes.RoundStepNewHeight {
-		if ps.SendCommit(rs.LastCommit) {
-			logger.Debug("Picked rs.LastCommit to send")
-			return true
-		}
-	}
 	// If there are POL prevotes to send...
 	if prs.Step <= cstypes.RoundStepPropose && prs.Round != -1 && prs.Round <= rs.Round && prs.ProposalPOLRound != -1 {
 		if polPrevotes := rs.Votes.Prevotes(prs.ProposalPOLRound); polPrevotes != nil {
@@ -885,7 +871,7 @@ func (conR *Reactor) gossipVotesToFullNodeForHeight(
 	// If there are lastCommits to send...
 	if prs.Step == cstypes.RoundStepNewHeight && prs.Height+1 == rs.Height && prs.HasCommit == false {
 		if ps.SendCommit(rs.LastCommit) {
-			logger.Debug("Picked rs.LastCommit to send")
+			logger.Debug("Picked rs.LastCommit to send to non-validator node")
 			return true
 		}
 	}
@@ -1225,7 +1211,7 @@ func (ps *PeerState) SetHasProposalBlockPart(height int64, round int32, index in
 func (ps *PeerState) SendCommit(commit *types.Commit) bool {
 	if commit != nil {
 		msg := &CommitMessage{commit}
-		ps.logger.Debug("Sending commit message", "ps", ps, "commit", commit)
+		ps.logger.Debug("Sending commit message", "peer", ps.peer, "ps", ps, "commit", commit)
 		if ps.peer.Send(VoteChannel, MustEncode(msg)) {
 			ps.SetHasCommit(commit)
 			return true
@@ -1900,7 +1886,6 @@ func (m *CommitMessage) String() string {
 type HasCommitMessage struct {
 	Height int64
 	Round  int32
-	BlockID types.BlockID
 }
 
 // ValidateBasic performs basic validation.
@@ -1911,15 +1896,12 @@ func (m *HasCommitMessage) ValidateBasic() error {
 	if m.Round < 0 {
 		return errors.New("negative Round")
 	}
-	if err := m.BlockID.ValidateBasic(); err != nil {
-		return fmt.Errorf("wrong BlockID: %v", err)
-	}
 	return nil
 }
 
 // String returns a string representation.
 func (m *HasCommitMessage) String() string {
-	return fmt.Sprintf("[HasCommit %v/%02d/%v]", m.Height, m.Round, m.BlockID)
+	return fmt.Sprintf("[HasCommit %v/%02d]", m.Height, m.Round)
 }
 
 //-------------------------------------
