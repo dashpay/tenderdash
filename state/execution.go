@@ -181,6 +181,13 @@ func (blockExec *BlockExecutor) ValidateBlockTime(state State, block *types.Bloc
 func (blockExec *BlockExecutor) ApplyBlock(
 	state State, blockID types.BlockID, block *types.Block,
 ) (State, int64, error) {
+	return blockExec.ApplyBlockWithLogger(state, blockID, block, blockExec.logger)
+}
+
+// ApplyBlockWithLogger calls ApplyBlock with a specified logger making things easier for debugging
+func (blockExec *BlockExecutor) ApplyBlockWithLogger(
+	state State, blockID types.BlockID, block *types.Block, logger log.Logger,
+) (State, int64, error) {
 
 	if err := validateBlock(state, block); err != nil {
 		return state, 0, ErrInvalidBlock(err)
@@ -188,7 +195,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 
 	startTime := time.Now().UnixNano()
 	abciResponses, err := execBlockOnProxyApp(
-		blockExec.logger, blockExec.proxyApp, block, blockExec.store, state.InitialHeight,
+		logger, blockExec.proxyApp, block, blockExec.store, state.InitialHeight,
 	)
 	endTime := time.Now().UnixNano()
 	blockExec.metrics.BlockProcessingTime.Observe(float64(endTime-startTime) / 1000000)
@@ -258,7 +265,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
-	fireEvents(blockExec.logger, blockExec.eventBus, block, abciResponses, validatorUpdates)
+	fireEvents(logger, blockExec.eventBus, block, abciResponses, validatorUpdates)
 
 	return state, retainHeight, nil
 }

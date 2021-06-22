@@ -1124,10 +1124,8 @@ func (cs *State) enterPropose(height int64, round int32) {
 
 	// if not a validator, we're done
 	if !cs.Validators.HasProTxHash(proTxHash) {
-		logger.Debug("This node is not a validator", "proTxHash", proTxHash, "vals", cs.Validators)
+		logger.Debug("propose step; this node is not a validator", "proTxHash", proTxHash, "vals", cs.Validators)
 		return
-	} else {
-		logger.Debug("This node is a validator", "proTxHash", proTxHash)
 	}
 
 	if cs.isProposer(proTxHash) {
@@ -1658,17 +1656,16 @@ func (cs *State) finalizeCommit(height int64) {
 		// but may differ from the LastPrecommits included in the next block
 		precommits := cs.Votes.Precommits(cs.CommitRound)
 		seenCommit := precommits.MakeCommit()
-		cs.applyCommit(seenCommit)
+		cs.applyCommit(seenCommit, logger)
 	} else {
 		// Happens during replay if we already saved the block but didn't commit
 		logger.Debug("calling finalizeCommit on already stored block", "height", block.Height)
-		cs.applyCommit(nil)
+		cs.applyCommit(nil, logger)
 	}
 }
 
-func (cs *State) applyCommit(commit *types.Commit) {
+func (cs *State) applyCommit(commit *types.Commit, logger log.Logger) {
 	height := commit.Height
-	logger := cs.Logger.With("height", height)
 	block, blockParts := cs.ProposalBlock, cs.ProposalBlockParts
 	// Save to blockStore.
 	if commit != nil {
@@ -1710,13 +1707,14 @@ func (cs *State) applyCommit(commit *types.Commit) {
 		retainHeight int64
 	)
 
-	stateCopy, retainHeight, err = cs.blockExec.ApplyBlock(
+	stateCopy, retainHeight, err = cs.blockExec.ApplyBlockWithLogger(
 		stateCopy,
 		types.BlockID{
 			Hash:          block.Hash(),
 			PartSetHeader: blockParts.Header(),
 		},
 		block,
+		logger,
 	)
 	if err != nil {
 		logger.Error("failed to apply block", "err", err)
@@ -2056,11 +2054,6 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 			cs.Logger.Debug("precommit vote came in after commit timeout and has been ignored", "vote", vote)
 			return
 		}
-
-		// Because we advance as soon as the threshold has been acquired we will receive a lot of votes at height + 1
-		// Just ignore them
-		// cs.Logger.Debug("precommit vote came in after commit and has been ignored", "vote", vote)
-
 		return
 	}
 
@@ -2240,35 +2233,30 @@ func (cs *State) addCommit(commit *types.Commit, peerID p2p.ID) (added bool, err
 	}
 
 	rs := cs.RoundState
-	height := cs.Height
+	stateHeight := cs.Height
 
 	// A commit for the previous height?
 	// These come in while we wait timeoutCommit
-	if commit.Height+1 == height {
+	if commit.Height+1 == stateHeight {
 		if cs.Step != cstypes.RoundStepNewHeight {
-			// Late precommit at prior height is ignored
+			// Late commit at prior height is ignored
 			cs.Logger.Debug("commit came in after commit timeout and has been ignored", "commit", commit)
 			return
 		}
-
-		// Because we advance as soon as the threshold has been acquired we will receive a lot of votes at height + 1
-		// Just ignore them
-		// cs.Logger.Debug("precommit vote came in after commit and has been ignored", "vote", vote)
-
 		return
 	}
 
 	cs.Logger.Debug(
-		"trying to add commit from remote validator",
+		"adding commit from remote",
 		"commit_height", commit.Height,
 		"cs_height", cs.Height,
 	)
 
 	// Height mismatch is ignored.
 	// Not necessarily a bad peer, but not favourable behaviour.
-	if commit.Height != height {
+	if commit.Height != stateHeight {
 		added = false
-		cs.Logger.Debug("commit ignored and not added", "commit_height", commit.Height, "cs_height", height, "peer", peerID)
+		cs.Logger.Debug("commit ignored and not added", "commit_height", commit.Height, "cs_height", stateHeight, "peer", peerID)
 		return
 	}
 
@@ -2301,12 +2289,17 @@ func (cs *State) addCommit(commit *types.Commit, peerID p2p.ID) (added bool, err
 	}
 
 	// The commit is all good, let's apply it to the state
-	cs.applyCommit(commit)
+	cs.applyCommit(commit, cs.Logger)
 
+	// This will relay the commit to peers
 	if err := cs.eventBus.PublishEventCommit(types.EventDataCommit{Commit: commit}); err != nil {
 		return added, err
 	}
 	cs.evsw.FireEvent(types.EventCommit, commit)
+
+	if cs.config.SkipTimeoutCommit {
+		cs.enterNewRound(cs.Height, 0)
+	}
 
 	return added, err
 }
