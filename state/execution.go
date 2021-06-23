@@ -179,14 +179,14 @@ func (blockExec *BlockExecutor) ValidateBlockTime(state State, block *types.Bloc
 // from outside this package to process and commit an entire block.
 // It takes a blockID to avoid recomputing the parts hash.
 func (blockExec *BlockExecutor) ApplyBlock(
-	state State, blockID types.BlockID, block *types.Block,
+	state State, nodeProTxHash *crypto.ProTxHash, blockID types.BlockID, block *types.Block,
 ) (State, int64, error) {
-	return blockExec.ApplyBlockWithLogger(state, blockID, block, blockExec.logger)
+	return blockExec.ApplyBlockWithLogger(state, nodeProTxHash, blockID, block, blockExec.logger)
 }
 
 // ApplyBlockWithLogger calls ApplyBlock with a specified logger making things easier for debugging
 func (blockExec *BlockExecutor) ApplyBlockWithLogger(
-	state State, blockID types.BlockID, block *types.Block, logger log.Logger,
+	state State, nodeProTxHash *crypto.ProTxHash, blockID types.BlockID, block *types.Block, logger log.Logger,
 ) (State, int64, error) {
 
 	if err := validateBlock(state, block); err != nil {
@@ -236,7 +236,7 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 	blockExec.store.Load()
 
 	// Update the state with the block and responses.
-	state, err = updateState(state, blockID, &block.Header, abciResponses, validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
+	state, err = updateState(state, nodeProTxHash, blockID, &block.Header, abciResponses, validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
 	if err != nil {
 		return state, 0, fmt.Errorf("commit failed for application: %v", err)
 	}
@@ -475,6 +475,7 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 // updateState returns a new State updated according to the header and responses.
 func updateState(
 	state State,
+	nodeProTxHash *crypto.ProTxHash,
 	blockID types.BlockID,
 	header *types.Header,
 	abciResponses *tmstate.ABCIResponses,
@@ -499,7 +500,7 @@ func updateState(
 			lastHeightValsChanged = header.Height + 1 + 1
 		} else {
 			nValSet = types.NewValidatorSetWithLocalNodeProTxHash(validatorUpdates, newThresholdPublicKey,
-				state.Validators.QuorumType, quorumHash, state.NodeProTxHash)
+				state.Validators.QuorumType, quorumHash, nodeProTxHash)
 			// Change results from this height but only applies to the next next height.
 			lastHeightValsChanged = header.Height + 1 + 1
 		}

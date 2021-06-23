@@ -102,56 +102,9 @@ func (conR *Reactor) OnStop() {
 }
 
 // SwitchToConsensus switches from fast_sync mode to consensus mode.
-// It resets the state, turns off fast_sync, and starts the consensus state-machine
-// It decides based on the current validator set to either go into validator consensus or full node consensus
-func (conR *Reactor) SwitchToConsensus(state sm.State, skipWAL bool) {
-	if state.Validators.HasPublicKeys {
-		conR.SwitchToValidatorConsensus(state, skipWAL)
-	} else {
-		conR.SwitchToFullNodeConsensus(state, skipWAL)
-	}
-}
-
-// SwitchToValidatorConsensus switches from fast_sync mode to consensus mode.
 // It resets the state, turns off fast_sync, and starts the validator consensus state-machine
-func (conR *Reactor) SwitchToValidatorConsensus(state sm.State, skipWAL bool) {
-	conR.Logger.Info("SwitchToValidatorConsensus")
-
-	// We have no votes, so reconstruct LastPrecommits from SeenCommit.
-	if state.LastBlockHeight > 0 {
-		conR.conS.reconstructLastCommit(state)
-	}
-
-	// NOTE: The line below causes broadcastNewRoundStepRoutine() to broadcast a
-	// NewRoundStepMessage.
-	conR.conS.updateToState(state, nil, conR.Logger)
-
-	conR.mtx.Lock()
-	conR.waitSync = false
-	conR.mtx.Unlock()
-	conR.Metrics.FastSyncing.Set(0)
-	conR.Metrics.StateSyncing.Set(0)
-
-	if skipWAL {
-		conR.conS.doWALCatchup = false
-	}
-	err := conR.conS.Start()
-	if err != nil {
-		panic(fmt.Sprintf(`Failed to start consensus state: %v
-
-conS:
-%+v
-
-conR:
-%+v`, err, conR.conS, conR))
-	}
-}
-
-// SwitchToFullNodeConsensus switches from fast_sync mode to consensus mode.
-// It resets the state, turns off fast_sync, and starts the full node consensus state-machine
-// This state machine does not verify votes, but only commits
-func (conR *Reactor) SwitchToFullNodeConsensus(state sm.State, skipWAL bool) {
-	conR.Logger.Info("SwitchToValidatorConsensus")
+func (conR *Reactor) SwitchToConsensus(state sm.State, skipWAL bool) {
+	conR.Logger.Info("SwitchToConsensus")
 
 	// We have no votes, so reconstruct LastPrecommits from SeenCommit.
 	if state.LastBlockHeight > 0 {
@@ -735,8 +688,10 @@ OUTER_LOOP:
 		prs := ps.GetRoundState()
 
 		isValidator := false
+		wasValidator := false
 		if nodeProTxHash != nil {
 			isValidator = rs.Validators.HasProTxHash(*nodeProTxHash)
+			wasValidator = rs.LastValidators.HasProTxHash(*nodeProTxHash)
 		}
 
 		switch sleeping {
@@ -749,17 +704,28 @@ OUTER_LOOP:
 		// logger.Debug("gossipVotesRoutine", "rsHeight", rs.Height, "rsRound", rs.Round,
 		// "prsHeight", prs.Height, "prsRound", prs.Round, "prsStep", prs.Step)
 
-		// If height matches, then send LastPrecommits, Prevotes, Precommits.
+		// If height matches, then send LastCommit, Prevotes, Precommits.
 		if rs.Height == prs.Height {
 			heightLogger := logger.With("height", prs.Height)
-			if conR.gossipVotesForHeight(heightLogger, rs, prs, ps, isValidator) {
-				continue OUTER_LOOP
+			if wasValidator == false {
+				// If there are lastCommits to send...
+				if prs.Step == cstypes.RoundStepNewHeight && prs.Height+1 == rs.Height && prs.HasCommit == false {
+					if ps.SendCommit(rs.LastCommit) {
+						logger.Debug("Picked rs.LastCommit to send to non-validator node")
+						continue OUTER_LOOP
+					}
+				}
+			}
+			if isValidator == true {
+				if conR.gossipVotesForHeight(heightLogger, rs, prs, ps) {
+					continue OUTER_LOOP
+				}
 			}
 		}
 
 		// Special catchup logic.
 		// If peer is lagging by height 1, send LastCommit if we haven't already.
-		if prs.Height != 0 && rs.Height == prs.Height+1 && prs.HasCommit == false && isValidator == false {
+		if prs.Height != 0 && rs.Height == prs.Height+1 && prs.HasCommit == false && wasValidator == false {
 			if ps.SendCommit(rs.LastCommit) {
 				logger.Debug("Picked rs.LastCommit to send", "height", prs.Height)
 				continue OUTER_LOOP
@@ -800,81 +766,7 @@ func (conR *Reactor) gossipVotesForHeight(
 	rs *cstypes.RoundState,
 	prs *cstypes.PeerRoundState,
 	ps *PeerState,
-	isValidator bool,
 ) bool {
-	if isValidator {
-		return conR.gossipVotesToValidatorForHeight(logger, rs, prs, ps)
-	} else {
-		return conR.gossipVotesToFullNodeForHeight(logger, rs, prs, ps)
-	}
-}
-
-func (conR *Reactor) gossipVotesToValidatorForHeight(
-	logger log.Logger,
-	rs *cstypes.RoundState,
-	prs *cstypes.PeerRoundState,
-	ps *PeerState,
-) bool {
-	// If there are POL prevotes to send...
-	if prs.Step <= cstypes.RoundStepPropose && prs.Round != -1 && prs.Round <= rs.Round && prs.ProposalPOLRound != -1 {
-		if polPrevotes := rs.Votes.Prevotes(prs.ProposalPOLRound); polPrevotes != nil {
-			if ps.PickSendVote(polPrevotes) {
-				logger.Debug("Picked rs.Prevotes(prs.ProposalPOLRound) to send",
-					"round", prs.ProposalPOLRound)
-				return true
-			}
-		}
-	}
-	// If there are prevotes to send...
-	if prs.Step <= cstypes.RoundStepPrevoteWait && prs.Round != -1 && prs.Round <= rs.Round {
-		if ps.PickSendVote(rs.Votes.Prevotes(prs.Round)) {
-			logger.Debug("Picked rs.Prevotes(prs.Round) to send", "round", prs.Round)
-			return true
-		}
-	}
-	// If there are precommits to send...
-	if prs.Step <= cstypes.RoundStepPrecommitWait && prs.Round != -1 && prs.Round <= rs.Round {
-		if ps.PickSendVote(rs.Votes.Precommits(prs.Round)) {
-			logger.Debug("Picked rs.Precommits(prs.Round) to send", "round", prs.Round)
-			return true
-		}
-	}
-	// If there are prevotes to send...Needed because of validBlock mechanism
-	if prs.Round != -1 && prs.Round <= rs.Round {
-		if ps.PickSendVote(rs.Votes.Prevotes(prs.Round)) {
-			logger.Debug("Picked rs.Prevotes(prs.Round) to send", "round", prs.Round)
-			return true
-		}
-	}
-	// If there are POLPrevotes to send...
-	if prs.ProposalPOLRound != -1 {
-		if polPrevotes := rs.Votes.Prevotes(prs.ProposalPOLRound); polPrevotes != nil {
-			if ps.PickSendVote(polPrevotes) {
-				logger.Debug("Picked rs.Prevotes(prs.ProposalPOLRound) to send",
-					"round", prs.ProposalPOLRound)
-				return true
-			}
-		}
-	}
-
-	return false
-}
-
-
-func (conR *Reactor) gossipVotesToFullNodeForHeight(
-	logger log.Logger,
-	rs *cstypes.RoundState,
-	prs *cstypes.PeerRoundState,
-	ps *PeerState,
-) bool {
-
-	// If there are lastCommits to send...
-	if prs.Step == cstypes.RoundStepNewHeight && prs.Height+1 == rs.Height && prs.HasCommit == false {
-		if ps.SendCommit(rs.LastCommit) {
-			logger.Debug("Picked rs.LastCommit to send to non-validator node")
-			return true
-		}
-	}
 	// If there are POL prevotes to send...
 	if prs.Step <= cstypes.RoundStepPropose && prs.Round != -1 && prs.Round <= rs.Round && prs.ProposalPOLRound != -1 {
 		if polPrevotes := rs.Votes.Prevotes(prs.ProposalPOLRound); polPrevotes != nil {

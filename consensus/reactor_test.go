@@ -91,7 +91,7 @@ func startConsensusNet(t *testing.T, css []*State, n int) (
 	// TODO: is this still true with new pubsub?
 	for i := 0; i < n; i++ {
 		s := reactors[i].conS.GetState()
-		reactors[i].SwitchToValidatorConsensus(s, false)
+		reactors[i].SwitchToConsensus(s, false)
 	}
 	return reactors, blocksSubs, eventBuses
 }

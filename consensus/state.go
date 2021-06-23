@@ -582,7 +582,7 @@ func (cs *State) sendInternalMessage(mi msgInfo) {
 	}
 }
 
-// Reconstruct LastPrecommits from SeenCommit, which we saved along with the block,
+// Reconstruct LastCommit from SeenCommit, which we saved along with the block,
 // (which happens even before saving the state)
 func (cs *State) reconstructLastCommit(state sm.State) {
 	seenCommit := cs.blockStore.LoadSeenCommit(state.LastBlockHeight)
@@ -1838,8 +1838,11 @@ func (cs *State) applyCommit(commit *types.Commit, logger log.Logger) {
 		retainHeight int64
 	)
 
+
+
 	stateCopy, retainHeight, err = cs.blockExec.ApplyBlockWithLogger(
 		stateCopy,
+		&cs.privValidatorProTxHash,
 		types.BlockID{
 			Hash:          block.Hash(),
 			PartSetHeader: blockParts.Header(),
