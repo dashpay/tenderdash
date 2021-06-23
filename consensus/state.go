@@ -673,7 +673,9 @@ func (cs *State) updateToState(state sm.State, commit *types.Commit, logger log.
 		height = state.InitialHeight
 	}
 
-	logger.Debug("updating state height", "newHeight", height)
+	if logger != nil {
+		logger.Debug("updating state height", "newHeight", height)
+	}
 
 	// RoundState fields
 	cs.updateHeight(height)
@@ -1713,11 +1715,7 @@ func (cs *State) verifyCommit(commit *types.Commit, peerID p2p.ID) (added bool, 
 	// A commit for the previous height?
 	// These come in while we wait timeoutCommit
 	if commit.Height+1 == stateHeight {
-		if cs.Step != cstypes.RoundStepNewHeight {
-			// Late commit at prior height is ignored
-			cs.Logger.Debug("commit came in after commit timeout and has been ignored", "commit", commit)
-			return false, nil
-		}
+		cs.Logger.Debug("old commit ignored", "commit", commit)
 		return false, nil
 	}
 
