@@ -124,7 +124,7 @@ func (conR *Reactor) SwitchToValidatorConsensus(state sm.State, skipWAL bool) {
 
 	// NOTE: The line below causes broadcastNewRoundStepRoutine() to broadcast a
 	// NewRoundStepMessage.
-	conR.conS.updateToState(state)
+	conR.conS.updateToState(state, nil, conR.Logger)
 
 	conR.mtx.Lock()
 	conR.waitSync = false
@@ -160,7 +160,7 @@ func (conR *Reactor) SwitchToFullNodeConsensus(state sm.State, skipWAL bool) {
 
 	// NOTE: The line below causes broadcastNewRoundStepRoutine() to broadcast a
 	// NewRoundStepMessage.
-	conR.conS.updateToState(state)
+	conR.conS.updateToState(state, nil, conR.Logger)
 
 	conR.mtx.Lock()
 	conR.waitSync = false
@@ -1022,8 +1022,10 @@ func (conR *Reactor) peerStatsRoutine() {
 			// Get peer
 			peer := conR.Switch.Peers().Get(msg.PeerID)
 			if peer == nil {
-				conR.Logger.Debug("Attempt to update stats for non-existent peer",
-					"peer", msg.PeerID)
+				if msg.PeerID != "" { //this would be internal
+					conR.Logger.Debug("Attempt to update stats for non-existent peer",
+						"peer", msg.PeerID)
+				}
 				continue
 			}
 			// Get peer state

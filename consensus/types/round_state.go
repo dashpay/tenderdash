@@ -79,6 +79,7 @@ type RoundState struct {
 	LockedRound        int32               `json:"locked_round"`
 	LockedBlock        *types.Block        `json:"locked_block"`
 	LockedBlockParts   *types.PartSet      `json:"locked_block_parts"`
+	Commit             *types.Commit       `json:"commit"`
 
 	// Last known round with POL for non-nil valid block.
 	ValidRound int32        `json:"valid_round"`
@@ -186,8 +187,8 @@ func (rs *RoundState) StringIndented(indent string) string {
 %s  ProposalBlock: %v %v
 %s  LockedRound:   %v
 %s  LockedBlock:   %v %v
-%s  ValidRound:   %v
-%s  ValidBlock:   %v %v
+%s  ValidRound:    %v
+%s  ValidBlock:    %v %v
 %s  Votes:         %v
 %s  LastCommit:    %v
 %s  LastValidators:%v

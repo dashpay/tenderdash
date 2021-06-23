@@ -204,7 +204,7 @@ func NewStateWithLogger(
 	// NOTE: we do not call scheduleRound0 yet, we do that upon Start()
 	cs.BaseService = *service.NewBaseService(logger, "State", cs)
 
-	cs.updateToState(state)
+	cs.updateToState(state, nil, logger)
 
 	for _, option := range options {
 		option(cs)
@@ -598,7 +598,7 @@ func (cs *State) reconstructLastCommit(state sm.State) {
 
 // Updates State and increments height to match that of state.
 // The round becomes 0 and cs.Step becomes cstypes.RoundStepNewHeight.
-func (cs *State) updateToState(state sm.State) {
+func (cs *State) updateToState(state sm.State, commit *types.Commit, logger log.Logger) {
 	if cs.CommitRound > -1 && 0 < cs.Height && cs.Height != state.LastBlockHeight {
 		panic(fmt.Sprintf(
 			"updateToState() expected state height of %v but found %v",
@@ -628,8 +628,8 @@ func (cs *State) updateToState(state sm.State) {
 		// signal the new round step, because other services (eg. txNotifier)
 		// depend on having an up-to-date peer state!
 		if state.LastBlockHeight <= cs.state.LastBlockHeight {
-			if cs.Logger != nil {
-				cs.Logger.Debug(
+			if logger != nil {
+				logger.Debug(
 					"ignoring updateToState()",
 					"new_height", state.LastBlockHeight+1,
 					"old_height", cs.state.LastBlockHeight+1,
@@ -646,7 +646,7 @@ func (cs *State) updateToState(state sm.State) {
 	switch {
 	case state.LastBlockHeight == 0: // Very first commit should be empty.
 		cs.RoundState.LastCommit = (*types.Commit)(nil)
-	case cs.CommitRound > -1 && cs.Votes != nil: // Otherwise, use cs.Votes
+	case cs.CommitRound > -1 && cs.Votes != nil && commit == nil: // Otherwise, use cs.Votes
 		if !cs.Votes.Precommits(cs.CommitRound).HasTwoThirdsMajority() {
 			panic(fmt.Sprintf(
 				"wanted to form a commit, but precommits (H/R: %d/%d) didn't have 2/3+: %v",
@@ -655,7 +655,9 @@ func (cs *State) updateToState(state sm.State) {
 		}
 
 		cs.LastCommit = cs.Votes.Precommits(cs.CommitRound).MakeCommit()
-
+	case commit != nil:
+		// We got the commit from a remote node
+		cs.LastCommit = commit
 	case cs.LastCommit == nil:
 		// NOTE: when Tendermint starts, it has no votes. reconstructLastCommit
 		// must be called to reconstruct LastPrecommits from SeenCommit.
@@ -670,6 +672,8 @@ func (cs *State) updateToState(state sm.State) {
 	if height == 1 {
 		height = state.InitialHeight
 	}
+
+	logger.Debug("updating state height", "newHeight", height)
 
 	// RoundState fields
 	cs.updateHeight(height)
@@ -701,6 +705,7 @@ func (cs *State) updateToState(state sm.State) {
 	cs.ValidRound = -1
 	cs.ValidBlock = nil
 	cs.ValidBlockParts = nil
+	cs.Commit = nil
 	cs.Votes = cstypes.NewHeightVoteSet(state.ChainID, height, validators)
 	cs.CommitRound = -1
 	cs.LastValidators = state.LastValidators
@@ -1552,6 +1557,10 @@ func (cs *State) enterCommit(height int64, commitRound int32) {
 		panic("RunActionCommit() expects +2/3 precommits")
 	}
 
+	cs.updateProposalBlockAndPartsBeforeCommit(blockID, logger)
+}
+
+func (cs *State) updateProposalBlockAndPartsBeforeCommit(blockID types.BlockID, logger log.Logger) {
 	// The Locked* fields no longer matter.
 	// Move them over to ProposalBlock if they match the commit hash,
 	// otherwise they'll be cleared in updateToState.
@@ -1664,12 +1673,134 @@ func (cs *State) finalizeCommit(height int64) {
 	}
 }
 
+
+// If we received a commit message from an external source try to add it then finalize it.
+func (cs *State) tryAddCommit(commit *types.Commit, peerID p2p.ID) (bool, error) {
+	// Let's only add one remote commit
+	if cs.Commit != nil {
+		return false, nil
+	}
+	// First lets verify that the commit is what we are expecting
+	verified, err := cs.verifyCommit(commit, peerID)
+	if verified == false || err != nil {
+		return verified, err
+	}
+
+	cs.Commit = commit
+
+	// We need to make sure we are past the Propose step
+	if cs.Step <= cstypes.RoundStepPropose {
+		// In this case we need to apply the commit after the proposal block comes in
+		return false, nil
+	}
+
+	added, err := cs.addCommit(commit)
+	if err != nil {
+		return added, ErrAddingCommit
+	}
+	return added, nil
+}
+
+func (cs *State) verifyCommit(commit *types.Commit, peerID p2p.ID) (added bool, err error) {
+	// Lets first do some basic commit validation before more complicated commit verification
+	if err := commit.ValidateBasic(); err != nil {
+		return false, fmt.Errorf("error validating commit: %v", err)
+	}
+
+	rs := cs.RoundState
+	stateHeight := cs.Height
+
+	// A commit for the previous height?
+	// These come in while we wait timeoutCommit
+	if commit.Height+1 == stateHeight {
+		if cs.Step != cstypes.RoundStepNewHeight {
+			// Late commit at prior height is ignored
+			cs.Logger.Debug("commit came in after commit timeout and has been ignored", "commit", commit)
+			return false, nil
+		}
+		return false, nil
+	}
+
+	cs.Logger.Debug(
+		"adding commit from remote",
+		"commit_height", commit.Height,
+		"cs_height", cs.Height,
+	)
+
+	// Height mismatch is ignored.
+	// Not necessarily a bad peer, but not favourable behaviour.
+	if commit.Height != stateHeight {
+		added = false
+		cs.Logger.Debug("commit ignored and not added", "commit_height", commit.Height, "cs_height", stateHeight, "peer", peerID)
+		return false, nil
+	}
+
+	if commit.BlockID.Hash != nil && !bytes.Equal(commit.StateID.LastAppHash, cs.state.AppHash) {
+		added = false
+		err = errors.New("commit state last app hash does not match the known state app hash")
+		cs.Logger.Debug("commit ignored because sending wrong app hash", "voteHeight", commit.Height,
+			"csHeight", cs.Height, "peerID", peerID)
+		return false, err
+	}
+
+	stateId := types.StateID{LastAppHash: cs.state.AppHash}
+
+	// Lets verify that the commit signatures match the current validator set
+	if err := cs.Validators.VerifyCommit(cs.state.ChainID, rs.Proposal.BlockID, stateId, cs.Height, commit); err != nil {
+		return false, fmt.Errorf("error verifying commit: %v", err)
+	}
+
+	block, blockParts := cs.ProposalBlock, cs.ProposalBlockParts
+
+	if !blockParts.HasHeader(commit.BlockID.PartSetHeader) {
+		panic("expected ProposalBlockParts header to be commit header")
+	}
+	if !block.HashesTo(commit.BlockID.Hash) {
+		panic("cannot finalize commit; proposal block does not hash to commit hash")
+	}
+
+	if err := cs.blockExec.ValidateBlock(cs.state, block); err != nil {
+		panic(fmt.Errorf("+2/3 committed an invalid block: %w", err))
+	}
+	return true, nil
+}
+
+func (cs *State) addCommit(commit *types.Commit) (added bool, err error) {
+
+	// The commit is all good, let's apply it to the state
+	cs.updateProposalBlockAndPartsBeforeCommit(commit.BlockID, cs.Logger)
+
+	cs.updateRoundStep(cs.Round, cstypes.RoundStepApplyCommit)
+	cs.CommitRound = commit.Round
+	cs.CommitTime = tmtime.Now()
+	cs.newStep()
+
+	// The commit is all good, let's apply it to the state
+	cs.applyCommit(commit, cs.Logger)
+
+	// This will relay the commit to peers
+	if err := cs.eventBus.PublishEventCommit(types.EventDataCommit{Commit: commit}); err != nil {
+		return added, err
+	}
+	cs.evsw.FireEvent(types.EventCommit, commit)
+
+	if cs.config.SkipTimeoutCommit {
+		cs.enterNewRound(cs.Height, 0)
+	}
+
+	return added, err
+}
+
 func (cs *State) applyCommit(commit *types.Commit, logger log.Logger) {
-	height := commit.Height
+	var height int64
+
 	block, blockParts := cs.ProposalBlock, cs.ProposalBlockParts
 	// Save to blockStore.
 	if commit != nil {
+		height = commit.Height
 		cs.blockStore.SaveBlock(block, blockParts, commit)
+	} else {
+		height = cs.Height
 	}
 
 	fail.Fail() // XXX
@@ -1736,13 +1867,8 @@ func (cs *State) applyCommit(commit *types.Commit, logger log.Logger) {
 	// must be called before we update state
 	cs.recordMetrics(height, block)
 
-	// Set the last commit if we received it
-	if commit != nil && cs.LastCommit == nil {
-		cs.LastCommit = commit
-	}
-
 	// NewHeightStep!
-	cs.updateToState(stateCopy)
+	cs.updateToState(stateCopy, commit, logger)
 
 	fail.Fail() // XXX
 
@@ -1955,39 +2081,51 @@ func (cs *State) addProposalBlockPart(msg *BlockPartMessage, peerID p2p.ID, from
 			cs.Logger.Error("failed publishing event complete proposal", "err", err)
 		}
 
-		// Update Valid* if we can.
-		prevotes := cs.Votes.Prevotes(cs.Round)
-		blockID, hasTwoThirds := prevotes.TwoThirdsMajority()
-		if hasTwoThirds && !blockID.IsZero() && (cs.ValidRound < cs.Round) {
-			if cs.ProposalBlock.HashesTo(blockID.Hash) {
-				cs.Logger.Debug(
-					"updating valid block to new proposal block",
-					"valid_round", cs.Round,
-					"valid_block_hash", cs.ProposalBlock.Hash(),
-				)
 
-				cs.ValidRound = cs.Round
-				cs.ValidBlock = cs.ProposalBlock
-				cs.ValidBlockParts = cs.ProposalBlockParts
-			}
-			// TODO: In case there is +2/3 majority in Prevotes set for some
-			// block and cs.ProposalBlock contains different block, either
-			// proposer is faulty or voting power of faulty processes is more
-			// than 1/3. We should trigger in the future accountability
-			// procedure at this point.
-		}
+		if cs.Commit == nil {
+			// No commit has come in yet allowing the fast forwarding of these steps
+			// Update Valid* if we can.
+			prevotes := cs.Votes.Prevotes(cs.Round)
+			blockID, hasThreshold := prevotes.TwoThirdsMajority()
 
-		if cs.Step <= cstypes.RoundStepPropose && cs.isProposalComplete() {
-			// Move onto the next step
-			// We should allow old blocks if we are recovering from replay
-			allowOldBlocks := fromReplay
-			cs.enterPrevote(height, cs.Round, allowOldBlocks)
-			if hasTwoThirds { // this is optimisation as this will be triggered when prevote is added
-				cs.enterPrecommit(height, cs.Round)
+			if hasThreshold && !blockID.IsZero() && (cs.ValidRound < cs.Round) {
+				if cs.ProposalBlock.HashesTo(blockID.Hash) {
+					cs.Logger.Debug(
+						"updating valid block to new proposal block",
+						"valid_round", cs.Round,
+						"valid_block_hash", cs.ProposalBlock.Hash(),
+					)
+
+					cs.ValidRound = cs.Round
+					cs.ValidBlock = cs.ProposalBlock
+					cs.ValidBlockParts = cs.ProposalBlockParts
+				}
+				// TODO: In case there is +2/3 majority in Prevotes set for some
+				// block and cs.ProposalBlock contains different block, either
+				// proposer is faulty or voting power of faulty processes is more
+				// than 1/3. We should trigger in the future accountability
+				// procedure at this point.
 			}
-		} else if cs.Step == cstypes.RoundStepApplyCommit {
-			// If we're waiting on the proposal block...
-			cs.tryFinalizeCommit(height)
+
+			if cs.Step <= cstypes.RoundStepPropose && cs.isProposalComplete() {
+				// Move onto the next step
+				// We should allow old blocks if we are recovering from replay
+				allowOldBlocks := fromReplay
+				cs.enterPrevote(height, cs.Round, allowOldBlocks)
+				if hasThreshold { // this is optimisation as this will be triggered when prevote is added
+					cs.enterPrecommit(height, cs.Round)
+				}
+			} else if cs.Step == cstypes.RoundStepApplyCommit {
+				// If we're waiting on the proposal block...
+				cs.tryFinalizeCommit(height)
+			}
+		} else {
+			// We received a commit before the block
+			added, err := cs.addCommit(cs.Commit)
+			if err != nil {
+				return added, ErrAddingCommit
+			}
+			return added, nil
 		}
 
 		return added, nil
@@ -2053,6 +2191,12 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 			// Late precommit at prior height is ignored
 			cs.Logger.Debug("precommit vote came in after commit timeout and has been ignored", "vote", vote)
 			return
+		}
+		// if we can skip timeoutCommit and have enough of the votes now
+		if cs.config.SkipTimeoutCommit && cs.LastCommit != nil {
+			// go straight to new round (skip timeout commit)
+			// cs.scheduleTimeout(time.Duration(0), cs.Height, 0, cstypes.RoundStepNewHeight)
+			cs.enterNewRound(cs.Height, 0)
 		}
 		return
 	}
@@ -2212,93 +2356,6 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 
 	default:
 		panic(fmt.Sprintf("unexpected vote type %v", vote.Type))
-	}
-
-	return added, err
-}
-
-// If we received a commit message from an external source try to add it then finalize it.
-func (cs *State) tryAddCommit(commit *types.Commit, peerID p2p.ID) (bool, error) {
-	added, err := cs.addCommit(commit, peerID)
-	if err != nil {
-		return added, ErrAddingCommit
-	}
-	return added, nil
-}
-
-func (cs *State) addCommit(commit *types.Commit, peerID p2p.ID) (added bool, err error) {
-	// Lets first do some basic commit validation before more complicated commit verification
-	if err := commit.ValidateBasic(); err != nil {
-		return false, fmt.Errorf("error validating commit: %v", err)
-	}
-
-	rs := cs.RoundState
-	stateHeight := cs.Height
-
-	// A commit for the previous height?
-	// These come in while we wait timeoutCommit
-	if commit.Height+1 == stateHeight {
-		if cs.Step != cstypes.RoundStepNewHeight {
-			// Late commit at prior height is ignored
-			cs.Logger.Debug("commit came in after commit timeout and has been ignored", "commit", commit)
-			return
-		}
-		return
-	}
-
-	cs.Logger.Debug(
-		"adding commit from remote",
-		"commit_height", commit.Height,
-		"cs_height", cs.Height,
-	)
-
-	// Height mismatch is ignored.
-	// Not necessarily a bad peer, but not favourable behaviour.
-	if commit.Height != stateHeight {
-		added = false
-		cs.Logger.Debug("commit ignored and not added", "commit_height", commit.Height, "cs_height", stateHeight, "peer", peerID)
-		return
-	}
-
-	if commit.BlockID.Hash != nil && !bytes.Equal(commit.StateID.LastAppHash, cs.state.AppHash) {
-		added = false
-		err = errors.New("commit state last app hash does not match the known state app hash")
-		cs.Logger.Debug("commit ignored because sending wrong app hash", "voteHeight", commit.Height,
-			"csHeight", cs.Height, "peerID", peerID)
-		return false, err
-	}
-
-	stateId := types.StateID{LastAppHash: cs.state.AppHash}
-
-	// Lets verify that the commit signatures match the current validator set
-	if err := cs.Validators.VerifyCommit(cs.state.ChainID, rs.Proposal.BlockID, stateId, cs.Height, commit); err != nil {
-		return false, fmt.Errorf("error verifying commit: %v", err)
-	}
-
-	block, blockParts := cs.ProposalBlock, cs.ProposalBlockParts
-
-	if !blockParts.HasHeader(commit.BlockID.PartSetHeader) {
-		panic("expected ProposalBlockParts header to be commit header")
-	}
-	if !block.HashesTo(commit.BlockID.Hash) {
-		panic("cannot finalize commit; proposal block does not hash to commit hash")
-	}
-
-	if err := cs.blockExec.ValidateBlock(cs.state, block); err != nil {
-		panic(fmt.Errorf("+2/3 committed an invalid block: %w", err))
-	}
-
-	// The commit is all good, let's apply it to the state
-	cs.applyCommit(commit, cs.Logger)
-
-	// This will relay the commit to peers
-	if err := cs.eventBus.PublishEventCommit(types.EventDataCommit{Commit: commit}); err != nil {
-		return added, err
-	}
-	cs.evsw.FireEvent(types.EventCommit, commit)
-
-	if cs.config.SkipTimeoutCommit {
-		cs.enterNewRound(cs.Height, 0)
 	}
 
 	return added, err
