@@ -767,6 +767,14 @@ func (conR *Reactor) gossipVotesForHeight(
 	prs *cstypes.PeerRoundState,
 	ps *PeerState,
 ) bool {
+
+	// If there are lastPrecommits to send...
+	if prs.Step == cstypes.RoundStepNewHeight {
+		if ps.PickSendVote(rs.LastPrecommits) {
+			logger.Debug("Picked rs.LastCommit to send")
+			return true
+		}
+	}
 	// If there are POL prevotes to send...
 	if prs.Step <= cstypes.RoundStepPropose && prs.Round != -1 && prs.Round <= rs.Round && prs.ProposalPOLRound != -1 {
 		if polPrevotes := rs.Votes.Prevotes(prs.ProposalPOLRound); polPrevotes != nil {
