@@ -701,6 +701,15 @@ OUTER_LOOP:
 			sleeping = 0
 		}
 
+		// Special catchup logic.
+		// If peer is lagging by height 1, send LastCommit.
+		if prs.Height != 0 && rs.Height == prs.Height+1 && wasValidator {
+			if ps.PickSendVote(rs.LastPrecommits) {
+				logger.Debug("Picked rs.LastCommit to send", "height", prs.Height)
+				continue OUTER_LOOP
+			}
+		}
+
 		// logger.Debug("gossipVotesRoutine", "rsHeight", rs.Height, "rsRound", rs.Round,
 		// "prsHeight", prs.Height, "prsRound", prs.Round, "prsStep", prs.Step)
 
