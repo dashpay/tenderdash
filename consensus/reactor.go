@@ -705,7 +705,7 @@ OUTER_LOOP:
 		// If peer is lagging by height 1, send LastCommit.
 		if prs.Height != 0 && rs.Height == prs.Height+1 && wasValidator {
 			if ps.PickSendVote(rs.LastPrecommits) {
-				logger.Debug("Picked rs.LastCommit to send", "height", prs.Height)
+				logger.Debug("Picked a previous precommit vote to send", "height", prs.Height)
 				continue OUTER_LOOP
 			}
 		}
@@ -720,7 +720,7 @@ OUTER_LOOP:
 				// If there are lastCommits to send...
 				if prs.Step == cstypes.RoundStepNewHeight && prs.Height+1 == rs.Height && prs.HasCommit == false {
 					if ps.SendCommit(rs.LastCommit) {
-						logger.Debug("Picked rs.LastCommit to send to non-validator node")
+						logger.Debug("Sending LastCommit to non-validator node")
 						continue OUTER_LOOP
 					}
 				}
@@ -736,7 +736,7 @@ OUTER_LOOP:
 		// If peer is lagging by height 1, send LastCommit if we haven't already.
 		if prs.Height != 0 && rs.Height == prs.Height+1 && prs.HasCommit == false && wasValidator == false {
 			if ps.SendCommit(rs.LastCommit) {
-				logger.Debug("Picked rs.LastCommit to send", "height", prs.Height)
+				logger.Debug("Sending LastCommit for catch up", "height", prs.Height)
 				continue OUTER_LOOP
 			}
 		}
@@ -780,7 +780,7 @@ func (conR *Reactor) gossipVotesForHeight(
 	// If there are lastPrecommits to send...
 	if prs.Step == cstypes.RoundStepNewHeight {
 		if ps.PickSendVote(rs.LastPrecommits) {
-			logger.Debug("Picked rs.LastCommit to send")
+			logger.Debug("Picked previous precommit vote to send")
 			return true
 		}
 	}
