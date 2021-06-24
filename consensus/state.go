@@ -2193,12 +2193,26 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 			cs.Logger.Debug("precommit vote came in after commit timeout and has been ignored", "vote", vote)
 			return
 		}
-		// if we can skip timeoutCommit and have enough of the votes now
-		if cs.config.SkipTimeoutCommit && cs.LastCommit != nil {
+
+		added, err = cs.LastPrecommits.AddVote(vote)
+		if !added {
+			return
+		}
+
+		cs.Logger.Debug("added vote to last precommits", "last_precommits", cs.LastPrecommits.StringShort())
+		if err := cs.eventBus.PublishEventVote(types.EventDataVote{Vote: vote}); err != nil {
+			return added, err
+		}
+
+		cs.evsw.FireEvent(types.EventVote, vote)
+
+		// if we can skip timeoutCommit and have all the votes now,
+		if cs.config.SkipTimeoutCommit && cs.LastPrecommits.HasAll() {
 			// go straight to new round (skip timeout commit)
 			// cs.scheduleTimeout(time.Duration(0), cs.Height, 0, cstypes.RoundStepNewHeight)
 			cs.enterNewRound(cs.Height, 0)
 		}
+
 		return
 	}
 
