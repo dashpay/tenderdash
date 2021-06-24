@@ -655,10 +655,13 @@ func (cs *State) updateToState(state sm.State, commit *types.Commit, logger log.
 			))
 		}
 		cs.LastPrecommits = cs.Votes.Precommits(cs.CommitRound)
-		cs.LastCommit = cs.Votes.Precommits(cs.CommitRound).MakeCommit()
+		cs.LastCommit = cs.LastPrecommits.MakeCommit()
 	case commit != nil:
-		// We got the commit from a remote node
-		cs.LastPrecommits = nil
+		// We either got the commit from a remote node
+		// In which Last precommits will be nil
+		// Or we got the commit from finalize commit
+		// In which Last precommits will not be nil
+		cs.LastPrecommits = cs.Votes.Precommits(cs.CommitRound)
 		cs.LastCommit = commit
 	case cs.LastCommit == nil:
 		// NOTE: when Tendermint starts, it has no votes. reconstructLastCommit
@@ -2193,6 +2196,10 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 		if cs.Step != cstypes.RoundStepNewHeight {
 			// Late precommit at prior height is ignored
 			cs.Logger.Debug("precommit vote came in after commit timeout and has been ignored", "vote", vote)
+			return
+		}
+		if cs.LastPrecommits == nil {
+			cs.Logger.Debug("no last round precommits on node", "vote", vote)
 			return
 		}
 
