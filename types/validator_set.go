@@ -908,7 +908,7 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID, stateID 
 
 	if !vals.ThresholdPublicKey.VerifySignatureDigest(blockSignId, commit.ThresholdBlockSignature) {
 		canonicalVoteBlockSignBytes := commit.CanonicalVoteVerifySignBytes(chainID)
-		return fmt.Errorf("incorrect threshold block signature lc %X %X", canonicalVoteBlockSignBytes,
+		return fmt.Errorf("incorrect threshold block signature %X %X", canonicalVoteBlockSignBytes,
 			commit.ThresholdBlockSignature)
 	}
 
@@ -916,7 +916,7 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID, stateID 
 
 	if !vals.ThresholdPublicKey.VerifySignatureDigest(stateSignId, commit.ThresholdStateSignature) {
 		canonicalVoteStateSignBytes := commit.CanonicalVoteStateSignBytes(chainID)
-		return fmt.Errorf("incorrect threshold state signature lc %X %X", canonicalVoteStateSignBytes,
+		return fmt.Errorf("incorrect threshold state signature %X %X", canonicalVoteStateSignBytes,
 			commit.ThresholdStateSignature)
 	}
 
