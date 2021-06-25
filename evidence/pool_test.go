@@ -477,7 +477,7 @@ func initializeValidatorState(privVal types.PrivValidator, height int64, quorumT
 	if len(proTxHash) != 32 {
 		panic("proTxHash len not correct")
 	}
-	validator := &types.Validator{Address: pubKey.Address(), VotingPower: types.DefaultDashVotingPower, PubKey: pubKey, ProTxHash: proTxHash}
+	validator := &types.Validator{VotingPower: types.DefaultDashVotingPower, PubKey: pubKey, ProTxHash: proTxHash}
 
 	// create validator set and state
 	valSet := &types.ValidatorSet{

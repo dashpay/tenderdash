@@ -193,7 +193,6 @@ func (pv *MockPV) ExtractIntoValidator(height int64, quorumHash crypto.QuorumHas
 		panic("proTxHash wrong length")
 	}
 	return &Validator{
-		Address:     pubKey.Address(),
 		PubKey:      pubKey,
 		VotingPower: DefaultDashVotingPower,
 		ProTxHash:   pv.ProTxHash,

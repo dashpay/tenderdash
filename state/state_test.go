@@ -441,7 +441,7 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	val1VotingPower := types.DefaultDashVotingPower
 	val1ProTxHash := proTxHashes[0]
 	val1PubKey := privateKeys[0].PubKey()
-	val1 := &types.Validator{ProTxHash: val1ProTxHash, Address: val1PubKey.Address(), PubKey: val1PubKey, VotingPower: val1VotingPower}
+	val1 := &types.Validator{ProTxHash: val1ProTxHash, PubKey: val1PubKey, VotingPower: val1VotingPower}
 
 	quorumHash := crypto.RandQuorumHash()
 	state.Validators = types.NewValidatorSet([]*types.Validator{val1}, val1PubKey, btcjson.LLMQType_5_60, quorumHash, true)
@@ -571,7 +571,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	val1VotingPower := types.DefaultDashVotingPower
 	val1ProTxHash := proTxHashes[0]
 	val1PubKey := privateKeys[0].PubKey()
-	val1 := &types.Validator{ProTxHash: val1ProTxHash, Address: val1PubKey.Address(), PubKey: val1PubKey, VotingPower: val1VotingPower}
+	val1 := &types.Validator{ProTxHash: val1ProTxHash, PubKey: val1PubKey, VotingPower: val1VotingPower}
 
 	// reset state validators to above validator, the threshold key is just the validator key since there is only 1 validator
 	quorumHash := crypto.RandQuorumHash()
@@ -601,7 +601,6 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	totalPower := val1VotingPower
 	wantVal1Prio := 0 + val1VotingPower - totalPower
 	assert.Equal(t, wantVal1Prio, updatedState.NextValidators.Validators[0].ProposerPriority)
-	assert.Equal(t, val1PubKey.Address(), updatedState.NextValidators.Proposer.Address)
 	assert.Equal(t, val1ProTxHash, updatedState.NextValidators.Proposer.ProTxHash)
 
 	// add a validator with the same voting power as the first
@@ -621,11 +620,6 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	assert.Equal(t, updatedState2.Validators, updatedState.NextValidators)
 
 	// val1 will still be proposer as val2 just got added:
-	assert.Equal(t, val1PubKey.Address(), updatedState.NextValidators.Proposer.Address)
-	assert.Equal(t, updatedState2.Validators.Proposer.Address, updatedState2.NextValidators.Proposer.Address)
-	assert.Equal(t, updatedState2.Validators.Proposer.Address, val1PubKey.Address())
-	assert.Equal(t, updatedState2.NextValidators.Proposer.Address, val1PubKey.Address())
-
 	assert.Equal(t, val1ProTxHash, updatedState.NextValidators.Proposer.ProTxHash)
 	assert.Equal(t, updatedState2.Validators.Proposer.ProTxHash, updatedState2.NextValidators.Proposer.ProTxHash)
 	assert.Equal(t, updatedState2.Validators.Proposer.ProTxHash, val1ProTxHash)
@@ -667,7 +661,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 		validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
 	assert.NoError(t, err)
 
-	assert.Equal(t, updatedState3.Validators.Proposer.Address, updatedState3.NextValidators.Proposer.Address)
+	assert.Equal(t, updatedState3.Validators.Proposer.ProTxHash, updatedState3.NextValidators.Proposer.ProTxHash)
 
 	assert.Equal(t, updatedState3.Validators, updatedState2.NextValidators)
 	_, updatedVal1 = updatedState3.NextValidators.GetByProTxHash(val1ProTxHash)
@@ -732,24 +726,22 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 		// alternate (and cyclic priorities):
 		assert.NotEqual(
 			t,
-			updatedState.Validators.Proposer.Address,
-			updatedState.NextValidators.Proposer.Address,
+			updatedState.Validators.Proposer.ProTxHash,
+			updatedState.NextValidators.Proposer.ProTxHash,
 			"iter: %v",
 			i,
 		)
-		assert.Equal(t, oldState.Validators.Proposer.Address, updatedState.NextValidators.Proposer.Address, "iter: %v", i)
+		assert.Equal(t, oldState.Validators.Proposer.ProTxHash, updatedState.NextValidators.Proposer.ProTxHash, "iter: %v", i)
 
 		_, updatedVal1 = updatedState.NextValidators.GetByProTxHash(val1ProTxHash)
 		_, updatedVal2 = updatedState.NextValidators.GetByProTxHash(val2ProTxHash)
 
 		if i%2 == 0 {
 			assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val2ProTxHash)
-			assert.Equal(t, updatedState.Validators.Proposer.Address, val2PubKey.Address())
 			assert.Equal(t, expectedVal1Prio, updatedVal1.ProposerPriority) // -19
 			assert.Equal(t, expectedVal2Prio, updatedVal2.ProposerPriority) // 0
 		} else {
 			assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val1ProTxHash)
-			assert.Equal(t, updatedState.Validators.Proposer.Address, val1PubKey.Address())
 			assert.Equal(t, expectedVal1Prio2, updatedVal1.ProposerPriority) // -9
 			assert.Equal(t, expectedVal2Prio2, updatedVal2.ProposerPriority) // -10
 		}
@@ -934,7 +926,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 		curState, err = sm.UpdateState(curState, &firstNodeProTxHash, blockID, &block.Header,
 			abciResponses, validatorUpdates, thresholdPublicKey, quorumHash)
 		require.NoError(t, err)
-		if !bytes.Equal(curState.Validators.Proposer.Address, curState.NextValidators.Proposer.Address) {
+		if !bytes.Equal(curState.Validators.Proposer.ProTxHash, curState.NextValidators.Proposer.ProTxHash) {
 			isProposerUnchanged = false
 		}
 		count++
