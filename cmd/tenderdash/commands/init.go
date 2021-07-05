@@ -35,15 +35,17 @@ func initFilesSingleNode(cmd *cobra.Command, args []string) error {
 var (
 	quorumType int
 	coreChainLockedHeight uint32
-	initialHeight int64
+	initChainInitialHeight int64
+	appHash []byte
 	proTxHash []byte
 )
 
 func AddInitFlags(cmd *cobra.Command) {
 	cmd.Flags().IntVar(&quorumType, "quorumType", 0, "Quorum Type")
 	cmd.Flags().Uint32Var(&coreChainLockedHeight, "coreChainLockedHeight", 0, "Initial Core Chain Locked Height")
-	cmd.Flags().Int64Var(&initialHeight, "initialHeight", 0, "Initial Height")
+	cmd.Flags().Int64Var(&initChainInitialHeight, "initialHeight", 0, "Initial Height")
 	cmd.Flags().BytesHexVar(&proTxHash, "proTxHash", []byte(nil), "Node pro tx hash")
+	cmd.Flags().BytesHexVar(&appHash, "appHash", []byte(nil), "App hash")
 }
 
 func initFiles(cmd *cobra.Command, args []string) error {
@@ -81,7 +83,8 @@ func initFilesWithConfig(config *cfg.Config) error {
 			ConsensusParams: types.DefaultConsensusParams(),
 			QuorumType:      btcjson.LLMQType(quorumType),
 			InitialCoreChainLockedHeight: coreChainLockedHeight,
-			InitialHeight: initialHeight,
+			InitialHeight:   initChainInitialHeight,
+			AppHash:         appHash,
 		}
 		if len(nodeProTxHash) != 0 {
 			if len(nodeProTxHash) != crypto.ProTxHashSize {
@@ -89,7 +92,6 @@ func initFilesWithConfig(config *cfg.Config) error {
 			}
 			genDoc.NodeProTxHash = &nodeProTxHash
 		}
-
 
 		if err := genDoc.SaveAs(genFile); err != nil {
 			return err
