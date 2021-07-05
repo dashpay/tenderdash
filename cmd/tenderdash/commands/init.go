@@ -103,7 +103,6 @@ func initFilesWithConfig(config *cfg.Config) error {
 }
 
 func initFilesSingleNodeWithConfig(config *cfg.Config) error {
-
 	// private validator
 	privValKeyFile := config.PrivValidatorKeyFile()
 	privValStateFile := config.PrivValidatorStateFile()
