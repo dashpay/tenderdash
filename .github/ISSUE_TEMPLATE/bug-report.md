@@ -30,10 +30,12 @@ assignees: ''
 <!--- How has this issue affected you? What are you trying to accomplish? -->
 <!--- Providing context helps us come up with a solution that is most useful in the real world -->
 
+## ABCI app 
+<!--- name for built-in, URL for self-written if it's publicly available) -->
+
 ## Your Environment
 <!--- Include as many relevant details about the environment you experienced the bug in -->
 * Version used: (use `tenderdash version`)
-* Environment name and version (e.g. Chrome 39, node.js 5.4):
 * Operating System and version (desktop, server, or mobile):
 * Install tools:
 * Link to your project:
