@@ -773,6 +773,7 @@ func NewNode(config *cfg.Config,
 	// Create the handshaker, which calls RequestInfo, sets the AppVersion on the state,
 	// and replays any blocks as necessary to sync tenderdash with the app.
 	consensusLogger := logger.With("module", "consensus")
+	proposedAppVersion := uint64(0)
 	if !stateSync {
 		handshaker := cs.NewHandshaker(stateStore, state, blockStore, genDoc, proTxHashP, config.Consensus.AppHashSize)
 		handshaker.SetLogger(consensusLogger)
