@@ -75,8 +75,12 @@ func TestValidateBlockHeader(t *testing.T) {
 		{"EvidenceHash wrong", func(block *types.Block) { block.EvidenceHash = wrongHash }},
 		{"Proposer wrong", func(block *types.Block) { block.ProposerProTxHash = crypto.RandProTxHash() }},
 		{"Proposer invalid", func(block *types.Block) { block.ProposerProTxHash = []byte("wrong size") }},
-		{"Proposed app version is invalid", func(block *types.Block) { block.ProposedAppVersion = 0 }},
+		// Set appVersion to 2 allow "invalid proposed app version" case
+		{"Proposed app version is invalid", func(block *types.Block) { block.ProposedAppVersion = 1; state.Version.Consensus.App = 2 }},
 	}
+
+	// Set appVersion to 2 allow "invalid proposed app version" case
+
 
 	// Build up state for multiple heights
 	for height := int64(1); height < validationTestsStopHeight; height++ {
@@ -85,7 +89,7 @@ func TestValidateBlockHeader(t *testing.T) {
 			Invalid blocks don't pass
 		*/
 		for _, tc := range testCases {
-			block, _ := state.MakeBlock(height, nextChainLock, makeTxs(height), lastCommit, nil, proposerProTxHash, 1)
+			block, _ := state.MakeBlock(height, nextChainLock, makeTxs(height), lastCommit, nil, proposerProTxHash, 2)
 			tc.malleateBlock(block)
 			err := blockExec.ValidateBlock(state, block)
 			require.Error(t, err, tc.name)
@@ -94,6 +98,9 @@ func TestValidateBlockHeader(t *testing.T) {
 		/*
 			A good block passes
 		*/
+		// Set appVersion back to 1 make good block works
+		state.Version.Consensus.App = 1
+
 		var err error
 		state, _, _, lastCommit, err = makeAndCommitGoodBlock(state, nodeProTxHash, height, lastCommit, proposerProTxHash,
 			blockExec, privVals, nil)
