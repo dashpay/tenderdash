@@ -2375,22 +2375,10 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 		return false, err
 	}
 
-	cs.Logger.Debug(
-		"adding vote",
-		"vote_height", vote.Height,
-		"vote_round", vote.Round,
-		"vote_type", vote.Type,
-		"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
-		"vote_block_key", vote.BlockID.Key(),
-		"vote_block_signature", vote.BlockSignature,
-		"vote_state_signature", vote.StateSignature,
-		"val_index", vote.ValidatorIndex,
-		"cs_height", cs.Height,
-	)
-
 	height := cs.Height
 	added, err = cs.Votes.AddVote(vote, peerID)
 	if !added {
+		// Either duplicate, or error upon cs.Votes.AddByIndex()
 		if err != nil {
 			cs.Logger.Error(
 				"error adding vote",
@@ -2403,10 +2391,24 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 				"vote_state_signature", vote.StateSignature,
 				"val_index", vote.ValidatorIndex,
 				"cs_height", cs.Height,
+				"add_vote_err", err,
 			)
 		}
-		// Either duplicate, or error upon cs.Votes.AddByIndex()
+		// We won't log if duplicate
 		return
+	} else {
+		cs.Logger.Debug(
+			"added vote",
+			"vote_height", vote.Height,
+			"vote_round", vote.Round,
+			"vote_type", vote.Type,
+			"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
+			"vote_block_key", vote.BlockID.Key(),
+			"vote_block_signature", vote.BlockSignature,
+			"vote_state_signature", vote.StateSignature,
+			"val_index", vote.ValidatorIndex,
+			"cs_height", cs.Height,
+		)
 	}
 
 	if err := cs.eventBus.PublishEventVote(types.EventDataVote{Vote: vote}); err != nil {
