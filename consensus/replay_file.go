@@ -323,14 +323,23 @@ func newConsensusStateForReplay(config cfg.BaseConfig, csConfig *cfg.ConsensusCo
 	// We should be able to just pass nil here for the node pro tx hash
 	handshaker := NewHandshaker(stateStore, state, blockStore, gdoc, nil, csConfig.AppHashSize)
 	handshaker.SetEventBus(eventBus)
-	err = handshaker.Handshake(proxyApp)
+	proposedAppVersion, err := handshaker.Handshake(proxyApp)
 	if err != nil {
 		tmos.Exit(fmt.Sprintf("Error on handshake: %v", err))
 	}
 
 	mempool, evpool := emptyMempool{}, sm.EmptyEvidencePool{}
-	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(),
-		proxyApp.Query(), mempool, evpool, nil, sm.BlockExecutorWithAppHashSize(csConfig.AppHashSize))
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		log.TestingLogger(),
+		proxyApp.Consensus(),
+		proxyApp.Query(),
+		mempool,
+		evpool,
+		nil,
+		proposedAppVersion,
+		sm.BlockExecutorWithAppHashSize(csConfig.AppHashSize),
+	)
 
 	consensusState := NewState(csConfig, state.Copy(), blockExec,
 		blockStore, mempool, evpool)

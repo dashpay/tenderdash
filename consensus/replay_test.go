@@ -1051,7 +1051,7 @@ func testHandshakeReplay(t *testing.T, config *cfg.Config, nBlocks int, mode uin
 		}
 	})
 
-	err = handshaker.Handshake(proxyApp)
+	_, err = handshaker.Handshake(proxyApp)
 	if expectError {
 		require.Error(t, err)
 		return
@@ -1093,8 +1093,7 @@ func applyBlock(
 	proxyApp proxy.AppConns,
 ) sm.State {
 	testPartSize := types.BlockPartSizeBytes
-	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(),
-		proxyApp.Query(), mempool, evpool, nil)
+	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(), proxyApp.Query(), mempool, evpool, nil, 0)
 
 	blkID := types.BlockID{Hash: blk.Hash(), PartSetHeader: blk.MakePartSet(testPartSize).Header()}
 	newState, _, err := blockExec.ApplyBlock(st, nodeProTxHash, blkID, blk)
@@ -1238,7 +1237,7 @@ func TestHandshakePanicsIfAppReturnsWrongAppHash(t *testing.T) {
 
 		assert.Panics(t, func() {
 			h := NewHandshaker(stateStore, state, store, genDoc, &proTxHash, config.Consensus.AppHashSize)
-			if err = h.Handshake(proxyApp); err != nil {
+			if _, err = h.Handshake(proxyApp); err != nil {
 				t.Log(err)
 			}
 		})
@@ -1262,7 +1261,7 @@ func TestHandshakePanicsIfAppReturnsWrongAppHash(t *testing.T) {
 
 		assert.Panics(t, func() {
 			h := NewHandshaker(stateStore, state, store, genDoc, &proTxHash, config.Consensus.AppHashSize)
-			if err = h.Handshake(proxyApp); err != nil {
+			if _, err = h.Handshake(proxyApp); err != nil {
 				t.Log(err)
 			}
 		})
@@ -1316,7 +1315,7 @@ func makeBlock(state sm.State, lastBlock *types.Block, lastBlockMeta *types.Bloc
 			vote.BlockSignature, vote.StateSignature)
 	}
 
-	return state.MakeBlock(height, nil, []types.Tx{}, lastCommit, nil, state.Validators.GetProposer().ProTxHash)
+	return state.MakeBlock(height, nil, []types.Tx{}, lastCommit, nil, state.Validators.GetProposer().ProTxHash, 0)
 }
 
 type badApp struct {
@@ -1576,7 +1575,7 @@ func TestHandshakeUpdatesValidators(t *testing.T) {
 			t.Error(err)
 		}
 	})
-	if err := handshaker.Handshake(proxyApp); err != nil {
+	if _, err := handshaker.Handshake(proxyApp); err != nil {
 		t.Fatalf("Error on abci handshake: %v", err)
 	}
 	// reload the state, check the validator set was updated

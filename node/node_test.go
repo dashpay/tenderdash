@@ -295,15 +295,7 @@ func TestCreateProposalBlock(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	blockExec := sm.NewBlockExecutor(
-		stateStore,
-		logger,
-		proxyApp.Consensus(),
-		proxyApp.Query(),
-		mempool,
-		evidencePool,
-		nil,
-	)
+	blockExec := sm.NewBlockExecutor(stateStore, logger, proxyApp.Consensus(), proxyApp.Query(), mempool, evidencePool, nil, 0)
 
 	commit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil, nil, nil)
 	block, _ := blockExec.CreateProposalBlock(height, state, commit, proposerProTxHash)
@@ -361,16 +353,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	err = mempool.CheckTx(tx, nil, mempl.TxInfo{})
 	assert.NoError(t, err)
 
-	blockExec := sm.NewBlockExecutor(
-		stateStore,
-		logger,
-		proxyApp.Consensus(),
-		proxyApp.Query(),
-		mempool,
-
-		sm.EmptyEvidencePool{},
-		nil,
-	)
+	blockExec := sm.NewBlockExecutor(stateStore, logger, proxyApp.Consensus(), proxyApp.Query(), mempool, sm.EmptyEvidencePool{}, nil, 0)
 
 	commit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil, nil, nil)
 	block, _ := blockExec.CreateProposalBlock(height, state, commit, proposerProTxHash)

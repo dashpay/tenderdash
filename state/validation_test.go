@@ -38,15 +38,7 @@ func TestValidateBlockHeader(t *testing.T) {
 		CoreBlockHash:   tmrand.Bytes(32),
 		Signature:       tmrand.Bytes(96),
 	}
-	blockExec := sm.NewBlockExecutor(
-		stateStore,
-		log.TestingLogger(),
-		proxyApp.Consensus(),
-		proxyApp.Query(),
-		memmock.Mempool{},
-		sm.EmptyEvidencePool{},
-		nextChainLock,
-	)
+	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(), proxyApp.Query(), memmock.Mempool{}, sm.EmptyEvidencePool{}, nextChainLock, 1)
 	lastCommit := types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil, nil, nil)
 
 	// some bad values
@@ -83,6 +75,7 @@ func TestValidateBlockHeader(t *testing.T) {
 		{"EvidenceHash wrong", func(block *types.Block) { block.EvidenceHash = wrongHash }},
 		{"Proposer wrong", func(block *types.Block) { block.ProposerProTxHash = crypto.RandProTxHash() }},
 		{"Proposer invalid", func(block *types.Block) { block.ProposerProTxHash = []byte("wrong size") }},
+		{"Proposed app version is invalid", func(block *types.Block) { block.ProposedAppVersion = 0 }},
 	}
 
 	// Build up state for multiple heights
@@ -92,8 +85,7 @@ func TestValidateBlockHeader(t *testing.T) {
 			Invalid blocks don't pass
 		*/
 		for _, tc := range testCases {
-			block, _ := state.MakeBlock(height, nextChainLock, makeTxs(height), lastCommit, nil,
-				proposerProTxHash)
+			block, _ := state.MakeBlock(height, nextChainLock, makeTxs(height), lastCommit, nil, proposerProTxHash, 1)
 			tc.malleateBlock(block)
 			err := blockExec.ValidateBlock(state, block)
 			require.Error(t, err, tc.name)
@@ -124,15 +116,7 @@ func TestValidateBlockCommit(t *testing.T) {
 		Signature:       tmrand.Bytes(96),
 	}
 
-	blockExec := sm.NewBlockExecutor(
-		stateStore,
-		log.TestingLogger(),
-		proxyApp.Consensus(),
-		proxyApp.Query(),
-		memmock.Mempool{},
-		sm.EmptyEvidencePool{},
-		nextChainLock,
-	)
+	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(), proxyApp.Query(), memmock.Mempool{}, sm.EmptyEvidencePool{}, nextChainLock, 1)
 	lastCommit := types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil,
 		nil, nil)
 	wrongSignorCommit := types.NewCommit(1, 0, types.BlockID{}, types.StateID{}, nil,
@@ -170,8 +154,7 @@ func TestValidateBlockCommit(t *testing.T) {
 				wrongHeightVote.BlockSignature,
 				wrongHeightVote.StateSignature,
 			)
-			block, _ := state.MakeBlock(height, nextChainLock, makeTxs(height), wrongHeightCommit, nil,
-				proTxHash)
+			block, _ := state.MakeBlock(height, nextChainLock, makeTxs(height), wrongHeightCommit, nil, proTxHash, 1)
 			err = blockExec.ValidateBlock(state, block)
 			require.True(t, strings.HasPrefix(err.Error(), "error validating block: Invalid commit -- wrong height:"),
 				"expected error on block threshold signature at height %d, but got: %v",
@@ -181,7 +164,7 @@ func TestValidateBlockCommit(t *testing.T) {
 			/*
 				Test that the threshold block signatures are good
 			*/
-			block, _ = state.MakeBlock(height, nextChainLock, makeTxs(height), wrongSignorCommit, nil, proTxHash)
+			block, _ = state.MakeBlock(height, nextChainLock, makeTxs(height), wrongSignorCommit, nil, proTxHash, 1)
 			err = blockExec.ValidateBlock(state, block)
 			require.Error(t, err)
 			require.True(t, strings.HasPrefix(err.Error(), "error validating block: incorrect threshold block signature"),
@@ -193,7 +176,7 @@ func TestValidateBlockCommit(t *testing.T) {
 			/*
 				Test that the threshold block signatures are good
 			*/
-			block, _ = state.MakeBlock(height, nextChainLock, makeTxs(height), wrongVoteMessageSignedCommit, nil, proTxHash)
+			block, _ = state.MakeBlock(height, nextChainLock, makeTxs(height), wrongVoteMessageSignedCommit, nil, proTxHash, 1)
 			err = blockExec.ValidateBlock(state, block)
 			require.Error(t, err)
 			require.True(t, strings.HasPrefix(err.Error(), "error validating block: incorrect threshold block signature"),
@@ -286,15 +269,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 		mock.AnythingOfType("[]types.Evidence")).Return([]abci.Evidence{})
 
 	state.ConsensusParams.Evidence.MaxBytes = 1000
-	blockExec := sm.NewBlockExecutor(
-		stateStore,
-		log.TestingLogger(),
-		proxyApp.Consensus(),
-		proxyApp.Query(),
-		memmock.Mempool{},
-		evpool,
-		nil,
-	)
+	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(), proxyApp.Query(), memmock.Mempool{}, evpool, nil, 1)
 	lastCommit := types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil,
 		nil, nil)
 
@@ -315,7 +290,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 				evidence = append(evidence, newEv)
 				currentBytes += int64(len(newEv.Bytes()))
 			}
-			block, _ := state.MakeBlock(height, nil, makeTxs(height), lastCommit, evidence, proposerProTxHash)
+			block, _ := state.MakeBlock(height, nil, makeTxs(height), lastCommit, evidence, proposerProTxHash, 1)
 			err := blockExec.ValidateBlock(state, block)
 			if assert.Error(t, err) {
 				_, ok := err.(*types.ErrEvidenceOverflow)

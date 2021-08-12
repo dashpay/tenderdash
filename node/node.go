@@ -777,7 +777,7 @@ func NewNode(config *cfg.Config,
 		handshaker := cs.NewHandshaker(stateStore, state, blockStore, genDoc, proTxHashP, config.Consensus.AppHashSize)
 		handshaker.SetLogger(consensusLogger)
 		handshaker.SetEventBus(eventBus)
-		if err := handshaker.Handshake(proxyApp); err != nil {
+		if proposedAppVersion, err = handshaker.Handshake(proxyApp); err != nil {
 			return nil, fmt.Errorf("error during handshake: %v", err)
 		}
 
@@ -821,6 +821,7 @@ func NewNode(config *cfg.Config,
 		mempool,
 		evidencePool,
 		nextCoreChainLock,
+		proposedAppVersion,
 		sm.BlockExecutorWithMetrics(smMetrics),
 		sm.BlockExecutorWithAppHashSize(config.Consensus.AppHashSize),
 	)

@@ -49,6 +49,8 @@ type BlockExecutor struct {
 	metrics *Metrics
 
 	appHashSize int
+
+	proposedAppVersion uint64
 }
 
 type BlockExecutorOption func(executor *BlockExecutor)
@@ -76,6 +78,7 @@ func NewBlockExecutor(
 	mempool mempl.Mempool,
 	evpool EvidencePool,
 	nextCoreChainLock *types.CoreChainLock,
+	proposedAppVersion uint64,
 	options ...BlockExecutorOption,
 ) *BlockExecutor {
 	res := &BlockExecutor{
@@ -89,6 +92,7 @@ func NewBlockExecutor(
 		logger:            logger,
 		metrics:           NopMetrics(),
 		appHashSize:       crypto.DefaultAppHashSize,
+		proposedAppVersion: proposedAppVersion,
 	}
 
 	for _, option := range options {
@@ -130,11 +134,13 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 
 	nextCoreChainLock := blockExec.NextCoreChainLock
 
+	proposedAppVersion := blockExec.proposedAppVersion;
+
 	if nextCoreChainLock != nil && nextCoreChainLock.CoreBlockHeight <= state.LastCoreChainLockedBlockHeight {
 		nextCoreChainLock = nil
 	}
 
-	return state.MakeBlock(height, nextCoreChainLock, txs, commit, evidence, proposerProTxHash)
+	return state.MakeBlock(height, nextCoreChainLock, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 }
 
 // ValidateBlock validates the given block against the given state.

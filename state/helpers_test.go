@@ -54,7 +54,7 @@ func makeAndCommitGoodBlock(
 
 func makeAndApplyGoodBlock(state sm.State, nodeProTxHash *crypto.ProTxHash, height int64, lastCommit *types.Commit, proposerProTxHash []byte,
 	blockExec *sm.BlockExecutor, evidence []types.Evidence) (sm.State, types.BlockID, types.StateID, error) {
-	block, _ := state.MakeBlock(height, nil, makeTxs(height), lastCommit, evidence, proposerProTxHash)
+	block, _ := state.MakeBlock(height, nil, makeTxs(height), lastCommit, evidence, proposerProTxHash, 1)
 	if err := blockExec.ValidateBlock(state, block); err != nil {
 		return state, types.BlockID{}, types.StateID{}, err
 	}
@@ -137,14 +137,7 @@ func makeState(nVals, height int) (sm.State, dbm.DB, map[string]types.PrivValida
 }
 
 func makeBlock(state sm.State, height int64) *types.Block {
-	block, _ := state.MakeBlock(
-		height,
-		nil,
-		makeTxs(state.LastBlockHeight),
-		new(types.Commit),
-		nil,
-		state.Validators.GetProposer().ProTxHash,
-	)
+	block, _ := state.MakeBlock(height, nil, makeTxs(state.LastBlockHeight), new(types.Commit), nil, state.Validators.GetProposer().ProTxHash, 0)
 	return block
 }
 

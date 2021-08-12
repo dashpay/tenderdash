@@ -246,17 +246,17 @@ func (h *Handshaker) NBlocks() int {
 }
 
 // TODO: retry the handshake/replay if it fails ?
-func (h *Handshaker) Handshake(proxyApp proxy.AppConns) error {
+func (h *Handshaker) Handshake(proxyApp proxy.AppConns) (uint64, error) {
 
 	// Handshake is done via ABCI Info on the query conn.
 	res, err := proxyApp.Query().InfoSync(proxy.RequestInfo)
 	if err != nil {
-		return fmt.Errorf("error calling Info: %v", err)
+		return 0, fmt.Errorf("error calling Info: %v", err)
 	}
 
 	blockHeight := res.LastBlockHeight
 	if blockHeight < 0 {
-		return fmt.Errorf("got a negative last block height (%d) from the app", blockHeight)
+		return 0, fmt.Errorf("got a negative last block height (%d) from the app", blockHeight)
 	}
 	appHash := res.LastBlockAppHash
 	coreChainLockedHeight := res.LastCoreChainLockedHeight
@@ -277,7 +277,7 @@ func (h *Handshaker) Handshake(proxyApp proxy.AppConns) error {
 	// Replay blocks up to the latest in the blockstore.
 	_, err = h.ReplayBlocks(h.initialState, appHash, blockHeight, proxyApp)
 	if err != nil {
-		return fmt.Errorf("error on replay: %v", err)
+		return 0, fmt.Errorf("error on replay: %v", err)
 	}
 
 	// Set the initial state last core chain locked block height
@@ -288,7 +288,7 @@ func (h *Handshaker) Handshake(proxyApp proxy.AppConns) error {
 
 	// TODO: (on restart) replay mempool
 
-	return nil
+	return res.AppVersion, nil
 }
 
 // ReplayBlocks replays all blocks since appBlockHeight and ensures the result
@@ -551,8 +551,18 @@ func (h *Handshaker) replayBlock(state sm.State, height int64, proxyApp proxy.Ap
 	// Use stubs for both mempool and evidence pool since no transactions nor
 	// evidence are needed here - block already exists.
 
-	blockExec := sm.NewBlockExecutor(h.stateStore, h.logger, proxyApp, proxyAppQuery,
-		emptyMempool{}, sm.EmptyEvidencePool{}, nil, sm.BlockExecutorWithAppHashSize(h.appHashSize))
+	blockExec := sm.NewBlockExecutor(
+		h.stateStore,
+		h.logger,
+		proxyApp,
+		proxyAppQuery,
+		emptyMempool{},
+		sm.EmptyEvidencePool{},
+		nil,
+		0,
+		sm.BlockExecutorWithAppHashSize(h.appHashSize),
+	)
+
 	blockExec.SetEventBus(h.eventBus)
 
 	var err error

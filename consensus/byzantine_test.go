@@ -80,8 +80,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		evpool.SetLogger(logger.With("module", "evidence"))
 
 		// Make State
-		blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyAppConnCon, proxyAppConnQry,
-			mempool, evpool, nil)
+		blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyAppConnCon, proxyAppConnQry, mempool, evpool, nil, 0)
 		cs := NewState(thisConfig.Consensus, state, blockExec, blockStore, mempool, evpool)
 		cs.SetLogger(cs.Logger)
 		// set private validator
@@ -192,9 +191,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 		proposerProTxHash := lazyProposer.privValidatorProTxHash
 
-		block, blockParts := lazyProposer.blockExec.CreateProposalBlock(
-			lazyProposer.Height, lazyProposer.state, commit, proposerProTxHash,
-		)
+		block, blockParts := lazyProposer.blockExec.CreateProposalBlock(lazyProposer.Height, lazyProposer.state, commit, proposerProTxHash)
 
 		// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,
 		// and the privValidator will refuse to sign anything.

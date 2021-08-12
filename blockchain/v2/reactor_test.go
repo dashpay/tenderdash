@@ -181,8 +181,7 @@ func newTestReactor(p testReactorParams) *BlockchainReactor {
 		}
 		db := dbm.NewMemDB()
 		stateStore := sm.NewStore(db)
-		appl = sm.NewBlockExecutor(stateStore, p.logger, proxyApp.Consensus(), proxyApp.Query(),
-			mock.Mempool{}, sm.EmptyEvidencePool{}, nil)
+		appl = sm.NewBlockExecutor(stateStore, p.logger, proxyApp.Consensus(), proxyApp.Query(), mock.Mempool{}, sm.EmptyEvidencePool{}, nil, 0)
 		if err = stateStore.Save(state); err != nil {
 			panic(err)
 		}
@@ -479,8 +478,7 @@ func makeTxs(height int64) (txs []types.Tx) {
 
 func makeBlock(height int64, coreChainLock *types.CoreChainLock, state sm.State,
 	lastCommit *types.Commit) *types.Block {
-	block, _ := state.MakeBlock(height, coreChainLock, makeTxs(height), lastCommit,
-		nil, state.Validators.GetProposer().ProTxHash)
+	block, _ := state.MakeBlock(height, coreChainLock, makeTxs(height), lastCommit, nil, state.Validators.GetProposer().ProTxHash, 0)
 	return block
 }
 
@@ -533,8 +531,7 @@ func newReactorStore(
 
 	db := dbm.NewMemDB()
 	stateStore = sm.NewStore(db)
-	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(), proxyApp.Query(),
-		mock.Mempool{}, sm.EmptyEvidencePool{}, nil)
+	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(), proxyApp.Query(), mock.Mempool{}, sm.EmptyEvidencePool{}, nil, 0)
 	if err = stateStore.Save(state); err != nil {
 		panic(err)
 	}

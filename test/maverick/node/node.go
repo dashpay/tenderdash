@@ -810,6 +810,7 @@ func NewNode(config *cfg.Config,
 	// Create the handshaker, which calls RequestInfo, sets the AppVersion on the state,
 	// and replays any blocks as necessary to sync tendermint with the app.
 	consensusLogger := logger.With("module", "consensus")
+
 	if !stateSync {
 		handshaker := cs.NewHandshaker(stateStore, state, blockStore, genDoc, proTxHashP, config.Consensus.AppHashSize)
 		handshaker.SetLogger(consensusLogger)
@@ -858,6 +859,7 @@ func NewNode(config *cfg.Config,
 		mempool,
 		evidencePool,
 		nextCoreChainLock,
+		0,
 		sm.BlockExecutorWithMetrics(smMetrics),
 		sm.BlockExecutorWithAppHashSize(config.Consensus.AppHashSize),
 	)
