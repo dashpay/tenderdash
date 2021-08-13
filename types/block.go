@@ -376,7 +376,7 @@ type Header struct {
 	EvidenceHash      tmbytes.HexBytes `json:"evidence_hash"`        // evidence included in the block
 	ProposerProTxHash ProTxHash        `json:"proposer_pro_tx_hash"` // original proposer of the block
 
-	ProposedAppVersion uint64          `json:"proposed_protocol_version"` // proposer's latest available app protocol version
+	ProposedAppVersion uint64 `json:"proposed_protocol_version"` // proposer's latest available app protocol version
 }
 
 // Populate the Header with state-derived data.

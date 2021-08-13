@@ -105,7 +105,10 @@ func (cs *State) catchupReplay(csHeight int64) error {
 	// this check (since we can crash after writing #ENDHEIGHT).
 	//
 	// Ignore data corruption errors since this is a sanity check.
-	gr, found, err := cs.wal.SearchForEndHeight(csHeight, &WALSearchOptions{IgnoreDataCorruptionErrors: true})
+	gr, found, err := cs.wal.SearchForEndHeight(
+		csHeight,
+		&WALSearchOptions{IgnoreDataCorruptionErrors: true},
+	)
 	if err != nil {
 		return err
 	}
@@ -122,20 +125,31 @@ func (cs *State) catchupReplay(csHeight int64) error {
 	//
 	// Ignore data corruption errors in previous heights because we only care about last height
 	if csHeight < cs.state.InitialHeight {
-		return fmt.Errorf("cannot replay height %v, below initial height %v", csHeight, cs.state.InitialHeight)
+		return fmt.Errorf(
+			"cannot replay height %v, below initial height %v",
+			csHeight,
+			cs.state.InitialHeight,
+		)
 	}
 	endHeight := csHeight - 1
 	if csHeight == cs.state.InitialHeight {
 		endHeight = 0
 	}
-	gr, found, err = cs.wal.SearchForEndHeight(endHeight, &WALSearchOptions{IgnoreDataCorruptionErrors: true})
+	gr, found, err = cs.wal.SearchForEndHeight(
+		endHeight,
+		&WALSearchOptions{IgnoreDataCorruptionErrors: true},
+	)
 	if err == io.EOF {
 		cs.Logger.Error("Replay: wal.group.Search returned EOF", "#ENDHEIGHT", endHeight)
 	} else if err != nil {
 		return err
 	}
 	if !found {
-		return fmt.Errorf("cannot replay height %d. WAL does not contain #ENDHEIGHT for %d", csHeight, endHeight)
+		return fmt.Errorf(
+			"cannot replay height %d. WAL does not contain #ENDHEIGHT for %d",
+			csHeight,
+			endHeight,
+		)
 	}
 	defer gr.Close()
 
@@ -214,8 +228,14 @@ type Handshaker struct {
 	appHashSize int
 }
 
-func NewHandshaker(stateStore sm.Store, state sm.State,
-	store sm.BlockStore, genDoc *types.GenesisDoc, nodeProTxHash *crypto.ProTxHash, appHashSize int) *Handshaker {
+func NewHandshaker(
+	stateStore sm.Store,
+	state sm.State,
+	store sm.BlockStore,
+	genDoc *types.GenesisDoc,
+	nodeProTxHash *crypto.ProTxHash,
+	appHashSize int,
+) *Handshaker {
 
 	return &Handshaker{
 		stateStore:    stateStore,
@@ -331,7 +351,11 @@ func (h *Handshaker) ReplayBlocks(
 				}
 			}
 			validatorSet := types.NewValidatorSetWithLocalNodeProTxHash(
-				validators, h.genDoc.ThresholdPublicKey, h.genDoc.QuorumType, h.genDoc.QuorumHash, h.nodeProTxHash,
+				validators,
+				h.genDoc.ThresholdPublicKey,
+				h.genDoc.QuorumType,
+				h.genDoc.QuorumHash,
+				h.nodeProTxHash,
 			)
 			err := validatorSet.ValidateBasic()
 			if err != nil {
@@ -373,14 +397,22 @@ func (h *Handshaker) ReplayBlocks(
 			}
 			// If the app returned validators or consensus params, update the state.
 			if len(res.ValidatorSetUpdate.ValidatorUpdates) > 0 {
-				vals, thresholdPublicKey, quorumHash, err := types.PB2TM.ValidatorUpdatesFromValidatorSet(&res.ValidatorSetUpdate)
+				vals, thresholdPublicKey, quorumHash, err := types.PB2TM.ValidatorUpdatesFromValidatorSet(
+					&res.ValidatorSetUpdate,
+				)
 				if err != nil {
 					return nil, err
 				}
 				newValidatorSet := types.NewValidatorSetWithLocalNodeProTxHash(
 					vals, thresholdPublicKey, h.genDoc.QuorumType, quorumHash, h.nodeProTxHash,
 				)
-				h.logger.Debug("Updating validator set", "old", state.Validators, "new", newValidatorSet)
+				h.logger.Debug(
+					"Updating validator set",
+					"old",
+					state.Validators,
+					"new",
+					newValidatorSet,
+				)
 				state.Validators = newValidatorSet
 				state.NextValidators = types.NewValidatorSetWithLocalNodeProTxHash(
 					vals,
@@ -396,7 +428,10 @@ func (h *Handshaker) ReplayBlocks(
 			}
 
 			if res.ConsensusParams != nil {
-				state.ConsensusParams = types.UpdateConsensusParams(state.ConsensusParams, res.ConsensusParams)
+				state.ConsensusParams = types.UpdateConsensusParams(
+					state.ConsensusParams,
+					res.ConsensusParams,
+				)
 				state.Version.Consensus.App = state.ConsensusParams.Version.AppVersion
 			}
 			// We update the last results hash with the empty hash, to conform with RFC-6962.
@@ -415,23 +450,44 @@ func (h *Handshaker) ReplayBlocks(
 
 	case appBlockHeight == 0 && state.InitialHeight < storeBlockBase:
 		// the app has no state, and the block store is truncated above the initial height
-		return appHash, sm.ErrAppBlockHeightTooLow{AppHeight: appBlockHeight, StoreBase: storeBlockBase}
+		return appHash, sm.ErrAppBlockHeightTooLow{
+			AppHeight: appBlockHeight,
+			StoreBase: storeBlockBase,
+		}
 
 	case appBlockHeight > 0 && appBlockHeight < storeBlockBase-1:
 		// the app is too far behind truncated store (can be 1 behind since we replay the next)
-		return appHash, sm.ErrAppBlockHeightTooLow{AppHeight: appBlockHeight, StoreBase: storeBlockBase}
+		return appHash, sm.ErrAppBlockHeightTooLow{
+			AppHeight: appBlockHeight,
+			StoreBase: storeBlockBase,
+		}
 
 	case storeBlockHeight < appBlockHeight:
 		// the app should never be ahead of the store (but this is under app's control)
-		return appHash, sm.ErrAppBlockHeightTooHigh{CoreHeight: storeBlockHeight, AppHeight: appBlockHeight}
+		return appHash, sm.ErrAppBlockHeightTooHigh{
+			CoreHeight: storeBlockHeight,
+			AppHeight:  appBlockHeight,
+		}
 
 	case storeBlockHeight < stateBlockHeight:
 		// the state should never be ahead of the store (this is under tendermint's control)
-		panic(fmt.Sprintf("StateBlockHeight (%d) > StoreBlockHeight (%d)", stateBlockHeight, storeBlockHeight))
+		panic(
+			fmt.Sprintf(
+				"StateBlockHeight (%d) > StoreBlockHeight (%d)",
+				stateBlockHeight,
+				storeBlockHeight,
+			),
+		)
 
 	case storeBlockHeight > stateBlockHeight+1:
 		// store should be at most one ahead of the state (this is under tendermint's control)
-		panic(fmt.Sprintf("StoreBlockHeight (%d) > StateBlockHeight + 1 (%d)", storeBlockHeight, stateBlockHeight+1))
+		panic(
+			fmt.Sprintf(
+				"StoreBlockHeight (%d) > StateBlockHeight + 1 (%d)",
+				storeBlockHeight,
+				stateBlockHeight+1,
+			),
+		)
 	}
 
 	var err error
@@ -521,7 +577,13 @@ func (h *Handshaker) replayBlocks(
 			assertAppHashEqualsOneFromBlock(appHash, block)
 		}
 
-		appHash, err = sm.ExecCommitBlock(proxyApp.Consensus(), block, h.logger, h.stateStore, h.genDoc.InitialHeight)
+		appHash, err = sm.ExecCommitBlock(
+			proxyApp.Consensus(),
+			block,
+			h.logger,
+			h.stateStore,
+			h.genDoc.InitialHeight,
+		)
 		if err != nil {
 			return nil, err
 		}
@@ -559,7 +621,6 @@ func (h *Handshaker) replayBlock(state sm.State, height int64, proxyApp proxy.Ap
 		emptyMempool{},
 		sm.EmptyEvidencePool{},
 		nil,
-		0,
 		sm.BlockExecutorWithAppHashSize(h.appHashSize),
 	)
 

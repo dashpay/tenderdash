@@ -46,7 +46,8 @@ func TestNodeStartStop(t *testing.T) {
 	t.Logf("Started node %v", n.sw.NodeInfo())
 
 	// wait for the node to produce a block
-	blocksSub, err := n.EventBus().Subscribe(context.Background(), "node_test", types.EventQueryNewBlock)
+	blocksSub, err := n.EventBus().
+		Subscribe(context.Background(), "node_test", types.EventQueryNewBlock)
 	require.NoError(t, err)
 	select {
 	case <-blocksSub.Out():
@@ -275,8 +276,14 @@ func TestCreateProposalBlock(t *testing.T) {
 	// than can fit in a block
 	var currentBytes int64 = 0
 	for currentBytes <= maxEvidenceBytes {
-		ev := types.NewMockDuplicateVoteEvidenceWithValidator(height, time.Now(), privVals[0], "test-chain",
-			state.Validators.QuorumType, state.Validators.QuorumHash)
+		ev := types.NewMockDuplicateVoteEvidenceWithValidator(
+			height,
+			time.Now(),
+			privVals[0],
+			"test-chain",
+			state.Validators.QuorumType,
+			state.Validators.QuorumHash,
+		)
 		currentBytes += int64(len(ev.Bytes()))
 		evidencePool.ReportConflictingVotes(ev.VoteA, ev.VoteB)
 	}
@@ -295,10 +302,27 @@ func TestCreateProposalBlock(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	blockExec := sm.NewBlockExecutor(stateStore, logger, proxyApp.Consensus(), proxyApp.Query(), mempool, evidencePool, nil, 0)
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		logger,
+		proxyApp.Consensus(),
+		proxyApp.Query(),
+		mempool,
+		evidencePool,
+		nil,
+	)
 
 	commit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil, nil, nil)
-	block, _ := blockExec.CreateProposalBlock(height, state, commit, proposerProTxHash)
+
+	proposedAppVersion := uint64(1)
+
+	block, _ := blockExec.CreateProposalBlock(
+		height,
+		state,
+		commit,
+		proposerProTxHash,
+		proposedAppVersion,
+	)
 
 	// check that the part set does not exceed the maximum block size
 	partSet := block.MakePartSet(partSize)
@@ -314,6 +338,8 @@ func TestCreateProposalBlock(t *testing.T) {
 
 	err = blockExec.ValidateBlock(state, block)
 	assert.NoError(t, err)
+
+	assert.EqualValues(t, block.Header.ProposedAppVersion, proposedAppVersion)
 }
 
 func TestMaxProposalBlockSize(t *testing.T) {
@@ -353,10 +379,27 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	err = mempool.CheckTx(tx, nil, mempl.TxInfo{})
 	assert.NoError(t, err)
 
-	blockExec := sm.NewBlockExecutor(stateStore, logger, proxyApp.Consensus(), proxyApp.Query(), mempool, sm.EmptyEvidencePool{}, nil, 0)
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		logger,
+		proxyApp.Consensus(),
+		proxyApp.Query(),
+		mempool,
+		sm.EmptyEvidencePool{},
+		nil,
+	)
 
 	commit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil, nil, nil)
-	block, _ := blockExec.CreateProposalBlock(height, state, commit, proposerProTxHash)
+
+	proposedAppVersion := uint64(1)
+
+	block, _ := blockExec.CreateProposalBlock(
+		height,
+		state,
+		commit,
+		proposerProTxHash,
+		proposedAppVersion,
+	)
 
 	pb, err := block.ToProto()
 	require.NoError(t, err)

@@ -84,7 +84,18 @@ func makeBlockPool(bcr *testBcR, height int64, peers []BpPeer, blocks map[int64]
 		bPool.peers[p.id].RequestSent(h)
 		if p.create {
 			// simulate that a block at height h has been received
-			_ = bPool.peers[p.id].AddBlock(types.MakeBlock(h, coreChainLock.CoreBlockHeight, &coreChainLock, txs, nil, nil, 0), 100)
+			_ = bPool.peers[p.id].AddBlock(
+				types.MakeBlock(
+					h,
+					coreChainLock.CoreBlockHeight,
+					&coreChainLock,
+					txs,
+					nil,
+					nil,
+					0,
+				),
+				100,
+			)
 		}
 	}
 	return bPool

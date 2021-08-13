@@ -181,7 +181,17 @@ func newTestReactor(p testReactorParams) *BlockchainReactor {
 		}
 		db := dbm.NewMemDB()
 		stateStore := sm.NewStore(db)
-		appl = sm.NewBlockExecutor(stateStore, p.logger, proxyApp.Consensus(), proxyApp.Query(), mock.Mempool{}, sm.EmptyEvidencePool{}, nil, 0)
+
+		appl = sm.NewBlockExecutor(
+			stateStore,
+			p.logger,
+			proxyApp.Consensus(),
+			proxyApp.Query(),
+			mock.Mempool{},
+			sm.EmptyEvidencePool{},
+			nil,
+		)
+
 		if err = stateStore.Save(state); err != nil {
 			panic(err)
 		}
@@ -478,7 +488,16 @@ func makeTxs(height int64) (txs []types.Tx) {
 
 func makeBlock(height int64, coreChainLock *types.CoreChainLock, state sm.State,
 	lastCommit *types.Commit) *types.Block {
-	block, _ := state.MakeBlock(height, coreChainLock, makeTxs(height), lastCommit, nil, state.Validators.GetProposer().ProTxHash, 0)
+	block, _ := state.MakeBlock(
+		height,
+		coreChainLock,
+		makeTxs(height),
+		lastCommit,
+		nil,
+		state.Validators.GetProposer().ProTxHash,
+		0,
+	)
+
 	return block
 }
 
@@ -488,7 +507,9 @@ type testApp struct {
 
 func randGenesisDoc(chainID string, numValidators int) (
 	*types.GenesisDoc, []types.PrivValidator) {
-	validators, privValidators, quorumHash, thresholdPublicKey := types.GenerateGenesisValidators(numValidators)
+	validators, privValidators, quorumHash, thresholdPublicKey := types.GenerateGenesisValidators(
+		numValidators,
+	)
 	return &types.GenesisDoc{
 		GenesisTime:        tmtime.Now(),
 		ChainID:            chainID,
@@ -531,7 +552,15 @@ func newReactorStore(
 
 	db := dbm.NewMemDB()
 	stateStore = sm.NewStore(db)
-	blockExec := sm.NewBlockExecutor(stateStore, log.TestingLogger(), proxyApp.Consensus(), proxyApp.Query(), mock.Mempool{}, sm.EmptyEvidencePool{}, nil, 0)
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		log.TestingLogger(),
+		proxyApp.Consensus(),
+		proxyApp.Query(),
+		mock.Mempool{},
+		sm.EmptyEvidencePool{},
+		nil,
+	)
 	if err = stateStore.Save(state); err != nil {
 		panic(err)
 	}
