@@ -118,7 +118,7 @@ func TestValidateBlockHeader(t *testing.T) {
 				lastCommit,
 				nil,
 				proposerProTxHash,
-				2,
+				0,
 			)
 			tc.malleateBlock(block)
 			err := blockExec.ValidateBlock(state, block)
@@ -128,9 +128,6 @@ func TestValidateBlockHeader(t *testing.T) {
 		/*
 			A good block passes
 		*/
-		// Set appVersion back to 1 make good block works
-		state.Version.Consensus.App = 1
-
 		var err error
 		state, _, _, lastCommit, err = makeAndCommitGoodBlock(
 			state,
@@ -141,6 +138,7 @@ func TestValidateBlockHeader(t *testing.T) {
 			blockExec,
 			privVals,
 			nil,
+			3,
 		)
 		require.NoError(t, err, "height %d", height)
 	}
@@ -214,7 +212,7 @@ func TestValidateBlockCommit(t *testing.T) {
 				wrongHeightCommit,
 				nil,
 				proTxHash,
-				1,
+				0,
 			)
 			err = blockExec.ValidateBlock(state, block)
 			require.True(
@@ -237,7 +235,7 @@ func TestValidateBlockCommit(t *testing.T) {
 				wrongSignorCommit,
 				nil,
 				proTxHash,
-				1,
+				0,
 			)
 			err = blockExec.ValidateBlock(state, block)
 			require.Error(t, err)
@@ -262,7 +260,7 @@ func TestValidateBlockCommit(t *testing.T) {
 				wrongVoteMessageSignedCommit,
 				nil,
 				proTxHash,
-				1,
+				0,
 			)
 			err = blockExec.ValidateBlock(state, block)
 			require.Error(t, err)
@@ -284,16 +282,7 @@ func TestValidateBlockCommit(t *testing.T) {
 		var err error
 		var blockID types.BlockID
 		var stateID types.StateID
-		state, blockID, stateID, lastCommit, err = makeAndCommitGoodBlock(
-			state,
-			nodeProTxHash,
-			height,
-			lastCommit,
-			proTxHash,
-			blockExec,
-			privVals,
-			nil,
-		)
+		state, blockID, stateID, lastCommit, err = makeAndCommitGoodBlock(state, nodeProTxHash, height, lastCommit, proTxHash, blockExec, privVals, nil, 0)
 		require.NoError(t, err, "height %d", height)
 
 		/*
@@ -409,7 +398,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 				lastCommit,
 				evidence,
 				proposerProTxHash,
-				1,
+				0,
 			)
 			err := blockExec.ValidateBlock(state, block)
 			if assert.Error(t, err) {
@@ -448,16 +437,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 		}
 
 		var err error
-		state, _, _, lastCommit, err = makeAndCommitGoodBlock(
-			state,
-			nodeProTxHash,
-			height,
-			lastCommit,
-			proposerProTxHash,
-			blockExec,
-			privVals,
-			evidence,
-		)
+		state, _, _, lastCommit, err = makeAndCommitGoodBlock(state, nodeProTxHash, height, lastCommit, proposerProTxHash, blockExec, privVals, evidence, 0)
 		require.NoError(t, err, "height %d", height)
 	}
 }
