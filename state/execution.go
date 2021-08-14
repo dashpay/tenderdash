@@ -137,6 +137,11 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		nextCoreChainLock = nil
 	}
 
+	// Pass proposed app version only if it's higher than current network app version
+	if proposedAppVersion <= state.Version.Consensus.App {
+		proposedAppVersion = 0
+	}
+
 	return state.MakeBlock(
 		height,
 		nextCoreChainLock,
