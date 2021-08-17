@@ -282,7 +282,17 @@ func TestValidateBlockCommit(t *testing.T) {
 		var err error
 		var blockID types.BlockID
 		var stateID types.StateID
-		state, blockID, stateID, lastCommit, err = makeAndCommitGoodBlock(state, nodeProTxHash, height, lastCommit, proTxHash, blockExec, privVals, nil, 0)
+		state, blockID, stateID, lastCommit, err = makeAndCommitGoodBlock(
+			state,
+			nodeProTxHash,
+			height,
+			lastCommit,
+			proTxHash,
+			blockExec,
+			privVals,
+			nil,
+			0,
+		)
 		require.NoError(t, err, "height %d", height)
 
 		/*
@@ -437,7 +447,17 @@ func TestValidateBlockEvidence(t *testing.T) {
 		}
 
 		var err error
-		state, _, _, lastCommit, err = makeAndCommitGoodBlock(state, nodeProTxHash, height, lastCommit, proposerProTxHash, blockExec, privVals, evidence, 0)
+		state, _, _, lastCommit, err = makeAndCommitGoodBlock(
+			state,
+			nodeProTxHash,
+			height,
+			lastCommit,
+			proposerProTxHash,
+			blockExec,
+			privVals,
+			evidence,
+			0,
+		)
 		require.NoError(t, err, "height %d", height)
 	}
 }
