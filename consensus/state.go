@@ -145,6 +145,9 @@ type State struct {
 
 	// for reporting metrics
 	metrics *Metrics
+
+	// proposer's latest available app protocol version that goes to block header
+	proposedAppVersion uint64
 }
 
 // StateOption sets an optional parameter on the State.
@@ -160,7 +163,7 @@ func NewState(
 	evpool evidencePool,
 	options ...StateOption,
 ) *State {
-	return NewStateWithLogger(config, state, blockExec, blockStore, txNotifier, evpool, nil, options...)
+	return NewStateWithLogger(config, state, blockExec, blockStore, txNotifier, evpool, nil, 0, options...)
 }
 
 // NewStateWithLogger returns a new State with the logger set.
@@ -172,23 +175,25 @@ func NewStateWithLogger(
 	txNotifier txNotifier,
 	evpool evidencePool,
 	logger log.Logger,
+	proposedAppVersion uint64,
 	options ...StateOption,
 ) *State {
 	cs := &State{
-		config:           config,
-		blockExec:        blockExec,
-		blockStore:       blockStore,
-		txNotifier:       txNotifier,
-		peerMsgQueue:     make(chan msgInfo, msgQueueSize),
-		internalMsgQueue: make(chan msgInfo, msgQueueSize),
-		timeoutTicker:    NewTimeoutTicker(),
-		statsMsgQueue:    make(chan msgInfo, msgQueueSize),
-		done:             make(chan struct{}),
-		doWALCatchup:     true,
-		wal:              nilWAL{},
-		evpool:           evpool,
-		evsw:             tmevents.NewEventSwitch(),
-		metrics:          NopMetrics(),
+		config:             config,
+		blockExec:          blockExec,
+		blockStore:         blockStore,
+		txNotifier:         txNotifier,
+		peerMsgQueue:       make(chan msgInfo, msgQueueSize),
+		internalMsgQueue:   make(chan msgInfo, msgQueueSize),
+		timeoutTicker:      NewTimeoutTicker(),
+		statsMsgQueue:      make(chan msgInfo, msgQueueSize),
+		done:               make(chan struct{}),
+		doWALCatchup:       true,
+		wal:                nilWAL{},
+		evpool:             evpool,
+		evsw:               tmevents.NewEventSwitch(),
+		metrics:            NopMetrics(),
+		proposedAppVersion: proposedAppVersion,
 	}
 
 	// set function defaults (may be overwritten before calling Start)
@@ -1288,7 +1293,7 @@ func (cs *State) createProposalBlock() (block *types.Block, blockParts *types.Pa
 	}
 	proposerProTxHash := cs.privValidatorProTxHash
 
-	return cs.blockExec.CreateProposalBlock(cs.Height, cs.state, commit, proposerProTxHash)
+	return cs.blockExec.CreateProposalBlock(cs.Height, cs.state, commit, proposerProTxHash, cs.proposedAppVersion)
 }
 
 // Enter: `timeoutPropose` after entering Propose.
@@ -2378,8 +2383,12 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 	cs.Logger.Debug(
 		"adding vote",
 		"vote_height", vote.Height,
+		"vote_round", vote.Round,
 		"vote_type", vote.Type,
 		"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
+		"vote_block_key", vote.BlockID.Key(),
+		"vote_block_signature", vote.BlockSignature,
+		"vote_state_signature", vote.StateSignature,
 		"val_index", vote.ValidatorIndex,
 		"cs_height", cs.Height,
 	)
@@ -2387,6 +2396,20 @@ func (cs *State) addVote(vote *types.Vote, peerID p2p.ID) (added bool, err error
 	height := cs.Height
 	added, err = cs.Votes.AddVote(vote, peerID)
 	if !added {
+		if err != nil {
+			cs.Logger.Error(
+				"error adding vote",
+				"vote_height", vote.Height,
+				"vote_round", vote.Round,
+				"vote_type", vote.Type,
+				"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
+				"vote_block_key", vote.BlockID.Key(),
+				"vote_block_signature", vote.BlockSignature,
+				"vote_state_signature", vote.StateSignature,
+				"val_index", vote.ValidatorIndex,
+				"cs_height", cs.Height,
+			)
+		}
 		// Either duplicate, or error upon cs.Votes.AddByIndex()
 		return
 	}
