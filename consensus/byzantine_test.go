@@ -218,6 +218,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			1,
 		)
 
+
 		// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,
 		// and the privValidator will refuse to sign anything.
 		if err := lazyProposer.wal.FlushAndSync(); err != nil {
