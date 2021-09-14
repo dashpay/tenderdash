@@ -93,7 +93,10 @@ jobs:
       - name: setupinstall
         run: make install
       - name: install
-        run: GOOS=linux GOARCH=${{ matrix.goarch }} make build
+        run: |
+          export CC=arm-linux-gnueabi-gcc
+          GOOS=linux GOARCH=${{ matrix.goarch }} make build
+        #if: "env.GIT_DIFF != ''"
 
   tests:
     runs-on: ubuntu-latest
