@@ -94,6 +94,7 @@ jobs:
         run: make install
       - name: install
         run: |
+          apt-get install gcc-arm-linux-gnueabi
           export CC=arm-linux-gnueabi-gcc
           GOOS=linux GOARCH=${{ matrix.goarch }} make build
         #if: "env.GIT_DIFF != ''"
