@@ -84,7 +84,7 @@ jobs:
         with:
           go-version: "^1.15.4"
       - uses: actions/checkout@v2
-      - uses: technote-space/get-diff-action@v4
+      - uses: technote-space/get-diff-action@v5.0.1
         with:
           PATTERNS: |
             **/**.go
@@ -111,7 +111,7 @@ jobs:
         with:
           go-version: "^1.15.4"
       - uses: actions/checkout@v2
-      - uses: technote-space/get-diff-action@v4
+      - uses: technote-space/get-diff-action@v5.0.1
         with:
           PATTERNS: |
             **/**.go
@@ -149,7 +149,7 @@ jobs:
         run: |
           echo "::set-output name=hash::$(git --git-dir=third_party/bls-signatures/src/.git rev-parse HEAD)"
         shell: bash
-      - uses: technote-space/get-diff-action@v4
+      - uses: technote-space/get-diff-action@v5.0.1
         with:
           PATTERNS: |
             **/**.go
@@ -174,7 +174,7 @@ jobs:
       - run: |
           cat ./*profile.out | grep -v "mode: atomic" >> coverage.txt
         if: env.GIT_DIFF
-      - uses: codecov/codecov-action@v2.0.2
+      - uses: codecov/codecov-action@v2.1.0
         with:
           file: ./coverage.txt
         if: env.GIT_DIFF
