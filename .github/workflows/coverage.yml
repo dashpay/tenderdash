@@ -90,6 +90,8 @@ jobs:
             **/**.go
             go.mod
             go.sum
+      - name: setup-install
+        run: make install
       - name: install
         run: GOOS=linux GOARCH=${{ matrix.goarch }} make build
         if: "env.GIT_DIFF != ''"
