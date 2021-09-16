@@ -99,9 +99,9 @@ jobs:
       - name: build
         run: |
           sudo apt-get install gcc-arm-linux-gnueabihf
-          sudo apt-get install g++-7-arm-linux-gnueabi
+          sudo apt-get install g++-8-arm-linux-gnueabihf
           export CC=arm-linux-gnueabihf-gcc
-          export CXX=arm-linux-gnueabi-g++-7
+          export CXX=arm-linux-gnueabi-g++-8
           GOOS=linux GOARCH=${{ matrix.goarch }} make build
         if: matrix.goarch == 'arm'
         #if: "env.GIT_DIFF != ''"
