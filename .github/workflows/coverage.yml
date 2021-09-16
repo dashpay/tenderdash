@@ -103,7 +103,7 @@ jobs:
           sudo apt-get install doxygen
           export CC=arm-linux-gnueabihf-gcc
           export CXX=arm-linux-gnueabihf-g++-8
-          GOOS=linux GOARCH=${{ matrix.goarch }} make build
+          GOOS=linux GOARCH=${{ matrix.goarch }} sudo make build
         if: matrix.goarch == 'arm'
         #if: "env.GIT_DIFF != ''"
 
