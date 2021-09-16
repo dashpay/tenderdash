@@ -100,6 +100,7 @@ jobs:
         run: |
           sudo apt-get install gcc-arm-linux-gnueabihf
           export CC=arm-linux-gnueabihf-gcc
+          export CXX=arm-linux-gnueabi-g++-7
           GOOS=linux GOARCH=${{ matrix.goarch }} make build
         if: matrix.goarch == 'arm'
         #if: "env.GIT_DIFF != ''"
