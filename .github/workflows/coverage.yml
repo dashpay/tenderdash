@@ -91,8 +91,11 @@ jobs:
             go.mod
             go.sum
       - name: install
+        run: make install
+        if: matrix.goarch == "amd64"
+      - name: build
         run: GOOS=linux GOARCH=${{ matrix.goarch }} make build
-        if: "env.GIT_DIFF != ''"
+        #if: "env.GIT_DIFF != ''"
 
   tests:
     runs-on: ubuntu-latest
