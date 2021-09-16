@@ -100,7 +100,6 @@ jobs:
         run: |
           sudo apt-get install gcc-arm-linux-gnueabihf
           sudo apt-get install g++-8-arm-linux-gnueabihf
-          sudo apt-get install doxygen
           export CC=arm-linux-gnueabihf-gcc
           export CXX=arm-linux-gnueabihf-g++-8
           GOOS=linux GOARCH=${{ matrix.goarch }} sudo make build
