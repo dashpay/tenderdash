@@ -95,6 +95,13 @@ jobs:
         if: matrix.goarch == 'amd64'
       - name: build
         run: GOOS=linux GOARCH=${{ matrix.goarch }} make build
+        if: matrix.goarch == 'amd64'
+      - name: build
+        run: |
+          sudo apt-get install gcc-arm-linux-gnueabihf
+          export CC=arm-linux-gnueabihf-gcc
+          GOOS=linux GOARCH=${{ matrix.goarch }} make build
+        if: matrix.goarch == 'arm'
         #if: "env.GIT_DIFF != ''"
 
   tests:
