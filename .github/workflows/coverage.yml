@@ -90,10 +90,10 @@ jobs:
             **/**.go
             go.mod
             go.sum
-      - name: install
-        run: make install
       - name: build
-        run: GOOS=linux GOARCH=${{ matrix.goarch }} make build
+        run: |
+          make install
+          GOOS=linux GOARCH=${{ matrix.goarch }} make build
         if: matrix.goarch == 'amd64'
       - name: build
         run: |
@@ -101,6 +101,7 @@ jobs:
           sudo apt-get install g++-8-arm-linux-gnueabihf
           export CC=arm-linux-gnueabihf-gcc
           export CXX=arm-linux-gnueabihf-g++-8
+          make install
           GOOS=linux GOARCH=${{ matrix.goarch }} make build
         if: matrix.goarch == 'arm'
         #if: "env.GIT_DIFF != ''"
