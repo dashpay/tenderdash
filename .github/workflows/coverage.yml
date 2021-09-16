@@ -90,9 +90,10 @@ jobs:
             **/**.go
             go.mod
             go.sum
+      - name: install
+        run: sudo make install
       - name: build
         run: |
-          sudo make install
           GOOS=linux GOARCH=${{ matrix.goarch }} make build
         if: matrix.goarch == 'amd64'
       - name: build
@@ -102,7 +103,6 @@ jobs:
           sudo apt-get install doxygen
           export CC=arm-linux-gnueabihf-gcc
           export CXX=arm-linux-gnueabihf-g++-8
-          sudo make install
           GOOS=linux GOARCH=${{ matrix.goarch }} make build
         if: matrix.goarch == 'arm'
         #if: "env.GIT_DIFF != ''"
