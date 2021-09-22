@@ -5,8 +5,8 @@ go 1.15
 require (
 	github.com/BurntSushi/toml v0.3.1
 	github.com/Workiva/go-datastructures v1.0.52
-	github.com/btcsuite/btcd v0.21.0-beta
-	github.com/btcsuite/btcutil v1.0.2
+	github.com/btcsuite/btcd v0.22.0-beta
+	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/dashevo/dashd-go v0.0.0-20210630125816-b417ad8eb165
 	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20201127091120-745324b80143
 	github.com/fortytw2/leaktest v1.3.0
