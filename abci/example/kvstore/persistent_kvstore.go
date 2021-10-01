@@ -40,6 +40,7 @@ type PersistentKVStoreApplication struct {
 	logger log.Logger
 }
 
+
 func NewPersistentKVStoreApplication(dbDir string) *PersistentKVStoreApplication {
 	name := "kvstore"
 	db, err := dbm.NewGoLevelDB(name, dbDir)
