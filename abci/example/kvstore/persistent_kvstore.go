@@ -7,11 +7,12 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tendermint/tendermint/crypto"
+
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/tendermint/tendermint/abci/example/code"
 	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/libs/log"
 	pc "github.com/tendermint/tendermint/proto/tendermint/crypto"
@@ -167,9 +168,8 @@ func (app *PersistentKVStoreApplication) BeginBlock(req types.RequestBeginBlock)
 }
 
 // Update the validator set
-func (app *PersistentKVStoreApplication) EndBlock(_ types.RequestEndBlock) types.ResponseEndBlock {
-	c := copyValidatorSetUpdate(app.ValidatorSetUpdates)
-	return types.ResponseEndBlock{ValidatorSetUpdate: &c}
+func (app *PersistentKVStoreApplication) EndBlock(req types.RequestEndBlock) types.ResponseEndBlock {
+	return types.ResponseEndBlock{ValidatorSetUpdate: &app.ValidatorSetUpdates}
 }
 
 func (app *PersistentKVStoreApplication) ListSnapshots(
@@ -446,17 +446,4 @@ func (app *PersistentKVStoreApplication) updateQuorumHash(
 	app.ValidatorSetUpdates.QuorumHash = quorumHashUpdate.GetQuorumHash()
 
 	return types.ResponseDeliverTx{Code: code.CodeTypeOK}
-}
-
-func copyValidatorSetUpdate(vsu types.ValidatorSetUpdate) types.ValidatorSetUpdate {
-	vsu.QuorumHash = append([]byte{}, vsu.QuorumHash...)
-	vsu.ValidatorUpdates = make([]types.ValidatorUpdate, 0, len(vsu.ValidatorUpdates))
-	for _, vu := range vsu.ValidatorUpdates {
-		cvu := vu
-		pkv := *vu.PubKey
-		cvu.PubKey = &pkv
-		cvu.ProTxHash = append([]byte{}, vu.ProTxHash...)
-		vsu.ValidatorUpdates = append(vsu.ValidatorUpdates, cvu)
-	}
-	return vsu
 }
