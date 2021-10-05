@@ -23,7 +23,7 @@ func (cm *CMap) Set(key string, value interface{}) {
 }
 
 // GetOrSet returns the existing value if present. Otherwise, it stores `newValue` and returns it.
-func (cm *CMap) GetOrSet(key string, newValue interface{}) (value interface{}, ok bool) {
+func (cm *CMap) GetOrSet(key string, newValue interface{}) (value interface{}, loaded bool) {
 	cm.l.Lock()
 	defer cm.l.Unlock()
 	if v, ok := cm.m[key]; ok {
