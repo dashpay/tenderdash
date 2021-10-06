@@ -22,7 +22,8 @@ func (cm *CMap) Set(key string, value interface{}) {
 	cm.l.Unlock()
 }
 
-// GetOrSet returns the existing value if present. Otherwise, it stores `newValue` and returns it. The loaded result is true if the value was loaded, false if stored.
+// GetOrSet returns the existing value if present. Otherwise, it stores `newValue` and returns it. 
+// The loaded result is true if the value was loaded, false if stored.
 func (cm *CMap) GetOrSet(key string, newValue interface{}) (value interface{}, loaded bool) {
 	cm.l.Lock()
 	defer cm.l.Unlock()
