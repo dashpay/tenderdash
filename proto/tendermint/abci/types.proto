@@ -336,6 +336,13 @@ message TxResult {
   ResponseDeliverTx result = 4 [(gogoproto.nullable) = false];
 }
 
+// NetworkEndpoint represents network endpoint address, that is - IP address and port.
+// IP address is encoded as IPv6 address (128 bit, big endian).
+// IPv4 addresses are mapped to IPv6.
+message NetworkEndpoint {
+  bytes address = 1 [(gogoproto.customtype) = "IPAddress"]; // Big-endian encoded ipv4 or ipv6 address
+  uint32 port = 2;
+}
 //----------------------------------------
 // Blockchain Types
 
@@ -347,11 +354,13 @@ message Validator {
   bytes pro_tx_hash = 4;
 }
 
+
 // ValidatorUpdate
 message ValidatorUpdate {
   tendermint.crypto.PublicKey pub_key     = 1 [(gogoproto.nullable) = true];
   int64                       power       = 2;
   bytes                       pro_tx_hash = 3;
+  NetworkEndpoint             address = 4;
 }
 
 message ValidatorSetUpdate {
