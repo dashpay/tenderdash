@@ -46,6 +46,7 @@ require (
 	golang.org/x/sys v0.0.0-20210927094055-39ccf1dd6fa6 // indirect
 	google.golang.org/genproto v0.0.0-20210929214142-896c89f843d2 // indirect
 	google.golang.org/grpc v1.41.0
+	inet.af/netaddr v0.0.0-20210903134321-85fa6c94624e
 )
 
 replace github.com/tendermint/tendermint => ./
