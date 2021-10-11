@@ -23,7 +23,11 @@ func (ip *IPAddress) Parse(address string) error {
 	if err != nil {
 		return err
 	}
-
+	// Convert ipv4 to ipv6 form without unmapping, as that's what we store
+	if addr.Is4() {
+		v6 := addr.As16()
+		addr = netaddr.IPv6Raw(v6)
+	}
 	ip.data = addr
 	return nil
 }
@@ -64,8 +68,17 @@ func (ip IPAddress) Copy() *IPAddress {
 	return &copied
 }
 
+func (ip IPAddress) String() string {
+	if ip.data.IsZero() {
+		return ""
+	}
+
+	return ip.data.Unmap().String()
+}
+
 // METHODS REQUIRED BY GOGO PROTOBUF
 
+// Marshal converts this ip address to binary form (BigEndian 16-byte IPv6 address).
 func (ip IPAddress) Marshal() ([]byte, error) {
 	data := make([]byte, net.IPv6len)
 	n, err := ip.MarshalTo(data)
@@ -79,8 +92,7 @@ func (ip IPAddress) Marshal() ([]byte, error) {
 	return data, nil
 }
 
-// MarshalTo puts binary form of IP Address into data slice.
-// Data needs 4 bytes for ipv4 address and 16 bytes for ipv6 address
+// MarshalTo puts binary form of IP Address into 16-byte data slice.
 func (ip *IPAddress) MarshalTo(data []byte) (n int, err error) {
 	ret := ip.data.As16()
 
@@ -100,7 +112,7 @@ func (ip *IPAddress) Unmarshal(data []byte) error {
 
 	var ipaddr [16]byte
 	copy(ipaddr[:], data)
-	ip.data = netaddr.IPFrom16(ipaddr)
+	ip.data = netaddr.IPv6Raw(ipaddr)
 	return nil
 	// ip.high = binary.BigEndian.Uint64(data[:8])
 	// ip.low = binary.BigEndian.Uint64(data[8:])
@@ -115,13 +127,12 @@ func (ip IPAddress) MarshalJSON() ([]byte, error) {
 	if !ip.data.IsValid() {
 		return json.Marshal("")
 	}
-	return json.Marshal(ip.data.String())
+	return json.Marshal(ip.String())
 }
 
 func (ip *IPAddress) UnmarshalJSON(data []byte) error {
 	var (
-		s     string
-		newIP netaddr.IP // "zero" IP by default
+		s string
 	)
 
 	err := json.Unmarshal(data, &s)
@@ -130,13 +141,15 @@ func (ip *IPAddress) UnmarshalJSON(data []byte) error {
 	}
 
 	if len(s) > 0 {
-		newIP, err = netaddr.ParseIP(s)
+		err = ip.Parse(s)
 		if err != nil {
 			return err
 		}
+	} else {
+		// empty JSON string means zero value
+		ip.data = netaddr.IP{}
 	}
 
-	ip.data = newIP
 	return nil
 }
 
@@ -151,6 +164,3 @@ func (ip IPAddress) Compare(other IPAddress) int {
 func (ip IPAddress) Equal(other IPAddress) bool {
 	return (ip.Compare(other) == 0)
 }
-
-// only required if populate option is set
-// func NewPopulatedT(r randyThetest) *IPAddress {}
