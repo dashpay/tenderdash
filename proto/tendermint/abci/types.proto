@@ -6,9 +6,11 @@ option go_package = "github.com/tendermint/tendermint/abci/types";
 // For more information on gogo.proto, see:
 // https://github.com/gogo/protobuf/blob/master/extensions.md
 import "tendermint/crypto/proof.proto";
-import "tendermint/types/types.proto";
 import "tendermint/crypto/keys.proto";
+import "tendermint/types/header.proto";
 import "tendermint/types/params.proto";
+import "tendermint/types/types.proto";
+// import "tendermint/abci/ipaddress.proto";
 import "google/protobuf/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -336,13 +338,6 @@ message TxResult {
   ResponseDeliverTx result = 4 [(gogoproto.nullable) = false];
 }
 
-// NetworkEndpoint represents network endpoint address, that is - IP address and port.
-// IP address is encoded as IPv6 address (128 bit, big endian).
-// IPv4 addresses are mapped to IPv6.
-message NetworkEndpoint {
-  bytes ip = 1 [(gogoproto.customtype) = "IPAddress", (gogoproto.customname)="IP"]; // Big-endian encoded ipv4 or ipv6 address
-  uint32 port = 2;
-}
 //----------------------------------------
 // Blockchain Types
 
@@ -357,10 +352,10 @@ message Validator {
 
 // ValidatorUpdate
 message ValidatorUpdate {
-  tendermint.crypto.PublicKey pub_key     = 1 [(gogoproto.nullable) = true];
-  int64                       power       = 2;
-  bytes                       pro_tx_hash = 3;
-  NetworkEndpoint             address = 4;
+  tendermint.crypto.PublicKey      pub_key     = 1 [(gogoproto.nullable) = true];
+  int64                            power       = 2;
+  bytes                            pro_tx_hash = 3;
+  tendermint.types.NetworkEndpoint address = 4;
 }
 
 message ValidatorSetUpdate {

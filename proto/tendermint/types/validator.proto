@@ -5,6 +5,8 @@ option go_package = "github.com/tendermint/tendermint/proto/tendermint/types";
 
 import "gogoproto/gogo.proto";
 import "tendermint/crypto/keys.proto";
+import "tendermint/types/types.proto";
+
 
 message ValidatorSet {
   repeated Validator          validators           = 1;
@@ -21,6 +23,7 @@ message Validator {
   int64                       voting_power      = 3;
   int64                       proposer_priority = 4;
   bytes                       pro_tx_hash       = 5;
+  tendermint.types.NetworkEndpoint  address = 6;
 }
 
 message SimpleValidator {
