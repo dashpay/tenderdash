@@ -57,6 +57,13 @@ func (ip IPAddress) ToIPAddr() *net.IPAddr {
 	return ip.data.IPAddr()
 }
 
+// Copy returns a pointer to new instance of IP Address.
+// Nothing fancy here :)
+func (ip IPAddress) Copy() *IPAddress {
+	copied := ip
+	return &copied
+}
+
 // METHODS REQUIRED BY GOGO PROTOBUF
 
 func (ip IPAddress) Marshal() ([]byte, error) {
@@ -105,18 +112,28 @@ func (ip *IPAddress) Size() int {
 }
 
 func (ip IPAddress) MarshalJSON() ([]byte, error) {
+	if !ip.data.IsValid() {
+		return json.Marshal("")
+	}
 	return json.Marshal(ip.data.String())
 }
+
 func (ip *IPAddress) UnmarshalJSON(data []byte) error {
-	var s string
+	var (
+		s     string
+		newIP netaddr.IP // "zero" IP by default
+	)
+
 	err := json.Unmarshal(data, &s)
 	if err != nil {
 		return err
 	}
 
-	newIP, err := netaddr.ParseIP(s)
-	if err != nil {
-		return err
+	if len(s) > 0 {
+		newIP, err = netaddr.ParseIP(s)
+		if err != nil {
+			return err
+		}
 	}
 
 	ip.data = newIP
