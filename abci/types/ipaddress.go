@@ -17,7 +17,39 @@ func (ip IPAddress) ToNetaddrIP() netaddr.IP {
 	return ip.data
 }
 
-// IPAddr returns the net.IPAddr representation of an IP.
+// Parse parses provided IP and sets its value to itself. Supports IPv4 and IPv6.
+func (ip *IPAddress) Parse(address string) error {
+	addr, err := netaddr.ParseIP(address)
+	if err != nil {
+		return err
+	}
+
+	ip.data = addr
+	return nil
+}
+
+// MustParse parses provided address and returns itself.
+// It will panic on error.
+// Useful for chaining in tests.
+func (ip *IPAddress) MustParse(address string) *IPAddress {
+	if err := ip.Parse(address); err != nil {
+		panic(err.Error())
+	}
+	return ip
+}
+
+// ParseStdIP sets IP address based on the standard library's net.IP type.
+func (ip *IPAddress) ParseStdIP(address net.IP) error {
+	addr, ok := netaddr.FromStdIP(address)
+	if !ok {
+		return fmt.Errorf("cannot parse IP address %s", address.String())
+	}
+
+	ip.data = addr
+	return nil
+}
+
+// ToIPAddr returns the net.IPAddr representation of an IP.
 // The returned value is always non-nil, but the IPAddr.
 // IP will be nil if ip is the zero value.
 // If ip contains a zone identifier, IPAddr.Zone is populated.

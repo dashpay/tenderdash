@@ -340,7 +340,7 @@ message TxResult {
 // IP address is encoded as IPv6 address (128 bit, big endian).
 // IPv4 addresses are mapped to IPv6.
 message NetworkEndpoint {
-  bytes address = 1 [(gogoproto.customtype) = "IPAddress"]; // Big-endian encoded ipv4 or ipv6 address
+  bytes ip = 1 [(gogoproto.customtype) = "IPAddress", (gogoproto.customname)="IP"]; // Big-endian encoded ipv4 or ipv6 address
   uint32 port = 2;
 }
 //----------------------------------------
