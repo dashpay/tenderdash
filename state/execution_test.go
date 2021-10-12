@@ -154,6 +154,11 @@ func TestValidateValidatorUpdates(t *testing.T) {
 		PubKeyTypes: []string{types.ABCIPubKeyTypeBLS12381},
 	}
 
+	addr := &tmproto.NetworkEndpoint{
+		IP:   (&tmproto.IPAddress{}).MustParse("127.0.0.1"),
+		Port: 12345,
+	}
+
 	testCases := []struct {
 		name string
 
@@ -164,25 +169,25 @@ func TestValidateValidatorUpdates(t *testing.T) {
 	}{
 		{
 			"adding a validator is OK",
-			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: 100, ProTxHash: proTxHash2}},
+			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: 100, ProTxHash: proTxHash2, Address: addr}},
 			defaultValidatorParams,
 			false,
 		},
 		{
 			"updating a validator is OK",
-			[]abci.ValidatorUpdate{{PubKey: &pk1, Power: 100, ProTxHash: proTxHash1}},
+			[]abci.ValidatorUpdate{{PubKey: &pk1, Power: 100, ProTxHash: proTxHash1, Address: addr}},
 			defaultValidatorParams,
 			false,
 		},
 		{
 			"removing a validator is OK",
-			[]abci.ValidatorUpdate{{Power: 0, ProTxHash: proTxHash2}},
+			[]abci.ValidatorUpdate{{Power: 0, ProTxHash: proTxHash2, Address: addr}},
 			defaultValidatorParams,
 			false,
 		},
 		{
 			"adding a validator with negative power results in error",
-			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: -100, ProTxHash: proTxHash2}},
+			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: -100, ProTxHash: proTxHash2, Address: addr}},
 			defaultValidatorParams,
 			true,
 		},
