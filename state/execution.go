@@ -527,6 +527,18 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 				valUpdate.ProTxHash,
 			)
 		}
+
+		// Validate endpoint address
+		if valUpdate.Address == nil || valUpdate.Address.IP == nil {
+			return fmt.Errorf("validator address cannot be empty")
+		}
+		if err := valUpdate.Address.IP.ValidateBasic(); err != nil {
+			return err
+		}
+
+		if valUpdate.Address.Port < 1 || valUpdate.Address.Port >= (1<<16) {
+			return fmt.Errorf("validator port number %d is invalid", valUpdate.Address.Port)
+		}
 	}
 	return nil
 }

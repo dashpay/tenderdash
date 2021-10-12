@@ -18,9 +18,11 @@ import (
 // make sure to update that method if changes are made here
 // The ProTxHash is part of Dash additions required for BLS threshold signatures
 type Validator struct {
-	PubKey      crypto.PubKey `json:"pub_key"`
-	VotingPower int64         `json:"voting_power"`
-	ProTxHash   ProTxHash     `json:"pro_tx_hash"`
+	PubKey      crypto.PubKey     `json:"pub_key"`
+	VotingPower int64             `json:"voting_power"`
+	ProTxHash   ProTxHash         `json:"pro_tx_hash"`
+	IPAddress   tmproto.IPAddress `json:"ip_address"`
+	Port        uint16            `json:"port"`
 
 	ProposerPriority int64 `json:"proposer_priority"`
 }
@@ -52,6 +54,9 @@ func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash []byte) *Va
 		VotingPower:      votingPower,
 		ProposerPriority: 0,
 		ProTxHash:        proTxHash,
+		// TODO TD-10 set correct IP and port
+		IPAddress: *(&tmproto.IPAddress{}).MustParse("127.0.0.1"),
+		Port:      12345,
 	}
 	return val
 }
@@ -201,6 +206,11 @@ func (v *Validator) ToProto() (*tmproto.Validator, error) {
 		vp.PubKey = &pk
 	}
 
+	vp.Address = &tmproto.NetworkEndpoint{
+		IP:   v.IPAddress.Copy(),
+		Port: uint32(v.Port),
+	}
+
 	return &vp, nil
 }
 
@@ -223,6 +233,9 @@ func ValidatorFromProto(vp *tmproto.Validator) (*Validator, error) {
 		}
 		v.PubKey = pk
 	}
+
+	v.IPAddress = *vp.Address.IP
+	v.Port = uint16(vp.Address.Port)
 
 	return v, nil
 }
