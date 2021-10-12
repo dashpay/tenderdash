@@ -13,6 +13,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 func TestABCIPubKey(t *testing.T) {
@@ -84,12 +85,15 @@ func (pubKeyBLS) TypeValue() crypto.KeyType                               { retu
 
 func TestABCIValidatorFromPubKeyAndPower(t *testing.T) {
 	pubkey := bls12381.GenPrivKey().PubKey()
-
-	abciVal := TM2PB.NewValidatorUpdate(pubkey, DefaultDashVotingPower, crypto.RandProTxHash())
+	ip := tmproto.IPAddress{}
+	port := uint16(12345)
+	abciVal := TM2PB.NewValidatorUpdate(pubkey, DefaultDashVotingPower, crypto.RandProTxHash(), ip, port)
 	assert.Equal(t, DefaultDashVotingPower, abciVal.Power)
 
-	assert.NotPanics(t, func() { TM2PB.NewValidatorUpdate(nil, DefaultDashVotingPower, crypto.RandProTxHash()) })
-	assert.Panics(t, func() { TM2PB.NewValidatorUpdate(pubKeyBLS{}, DefaultDashVotingPower, crypto.RandProTxHash()) })
+	assert.NotPanics(t, func() { TM2PB.NewValidatorUpdate(nil, DefaultDashVotingPower, crypto.RandProTxHash(), ip, port) })
+	assert.Panics(t, func() {
+		TM2PB.NewValidatorUpdate(pubKeyBLS{}, DefaultDashVotingPower, crypto.RandProTxHash(), ip, port)
+	})
 }
 
 func TestABCIValidatorWithoutPubKey(t *testing.T) {
