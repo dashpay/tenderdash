@@ -8,57 +8,61 @@ import (
 	"inet.af/netaddr"
 )
 
-type IPAddress struct {
-	data netaddr.IP
-}
+// IPAddress represents an IP address that can be easily marshalled to 16-byte slice.
+// It is focused on IPv6 addresses and IPv4 mapped to IPv6.
+// It works nice as a gogo protobuf custom type.
+type IPAddress netaddr.IP
 
-// Returns underlying netaddr.IP
-func (ip IPAddress) ToNetaddrIP() netaddr.IP {
-	return ip.data
-}
+// ************ Factory functions ********** //
 
-// Parse parses provided IP and sets its value to itself. Supports IPv4 and IPv6.
-func (ip *IPAddress) Parse(address string) error {
+// ParseIP parses provided IP and sets its value to itself. Supports IPv4 and IPv6.
+func ParseIP(address string) (IPAddress, error) {
+	ip := IPAddress{}
 	addr, err := netaddr.ParseIP(address)
 	if err != nil {
-		return err
+		return ip, err
 	}
+
 	// Convert ipv4 to ipv6 form without unmapping, as that's what we store
 	if addr.Is4() {
 		v6 := addr.As16()
 		addr = netaddr.IPv6Raw(v6)
 	}
-	ip.data = addr
-	return nil
+	ip = IPAddress(addr)
+	return ip, nil
 }
 
-// MustParse parses provided address and returns itself.
+// MustParseIP parses provided address and returns itself.
 // It will panic on error.
 // Useful for chaining in tests.
-func (ip *IPAddress) MustParse(address string) *IPAddress {
-	if err := ip.Parse(address); err != nil {
+func MustParseIP(address string) IPAddress {
+	ip, err := ParseIP(address)
+	if err != nil {
 		panic(err.Error())
 	}
 	return ip
 }
 
 // ParseStdIP sets IP address based on the standard library's net.IP type.
-func (ip *IPAddress) ParseStdIP(address net.IP) error {
+func ParseStdIP(address net.IP) (IPAddress, error) {
+	var ip IPAddress
 	addr, ok := netaddr.FromStdIP(address)
 	if !ok {
-		return fmt.Errorf("cannot parse IP address %s", address.String())
+		return ip, fmt.Errorf("cannot parse IP address %s", address.String())
 	}
 
-	ip.data = addr
-	return nil
+	ip = IPAddress(addr)
+	return ip, nil
 }
+
+// ********** Some useful format conversions ********** //
 
 // ToIPAddr returns the net.IPAddr representation of an IP.
 // The returned value is always non-nil, but the IPAddr.
 // IP will be nil if ip is the zero value.
 // If ip contains a zone identifier, IPAddr.Zone is populated.
 func (ip IPAddress) ToIPAddr() *net.IPAddr {
-	return ip.data.IPAddr()
+	return netaddr.IP(ip).IPAddr()
 }
 
 // Copy returns a pointer to new instance of IP Address.
@@ -69,11 +73,12 @@ func (ip IPAddress) Copy() *IPAddress {
 }
 
 func (ip IPAddress) String() string {
-	if ip.data.IsZero() {
+	netaddr := netaddr.IP(ip)
+	if netaddr.IsZero() {
 		return ""
 	}
 
-	return ip.data.Unmap().String()
+	return netaddr.Unmap().String()
 }
 
 // METHODS REQUIRED BY GOGO PROTOBUF
@@ -93,8 +98,9 @@ func (ip IPAddress) Marshal() ([]byte, error) {
 }
 
 // MarshalTo puts binary form of IP Address into 16-byte data slice.
-func (ip *IPAddress) MarshalTo(data []byte) (n int, err error) {
-	ret := ip.data.As16()
+func (ip IPAddress) MarshalTo(data []byte) (n int, err error) {
+	addr := netaddr.IP(ip)
+	ret := addr.As16()
 
 	if len(data) < len(ret) {
 		return 0, fmt.Errorf("IP address requires at least %d bytes, has only %d", len(ret), len(data))
@@ -103,7 +109,7 @@ func (ip *IPAddress) MarshalTo(data []byte) (n int, err error) {
 	return copy(data, ret[:]), nil
 }
 
-// Unmarshal parses BigEndian-encoded IPv6 address.
+// Unmarshal parses BigEndian-encoded IPv6 address and stores result in `ip`.
 // It also supports IPv4 addresses mapped to IPv6.
 func (ip *IPAddress) Unmarshal(data []byte) error {
 	if len(data) != net.IPv6len {
@@ -112,27 +118,30 @@ func (ip *IPAddress) Unmarshal(data []byte) error {
 
 	var ipaddr [16]byte
 	copy(ipaddr[:], data)
-	ip.data = netaddr.IPv6Raw(ipaddr)
+	addr := netaddr.IPv6Raw(ipaddr)
+	*ip = IPAddress(addr)
 	return nil
-	// ip.high = binary.BigEndian.Uint64(data[:8])
-	// ip.low = binary.BigEndian.Uint64(data[8:])
-	// return nil
 }
 
+// Size returns expected size of marshalled content.
 func (ip *IPAddress) Size() int {
 	return net.IPv6len
 }
 
+// MarshalJSON converts this ip address to a JSON representation
 func (ip IPAddress) MarshalJSON() ([]byte, error) {
-	if !ip.data.IsValid() {
+	addr := netaddr.IP(ip)
+	if !addr.IsValid() {
 		return json.Marshal("")
 	}
 	return json.Marshal(ip.String())
 }
 
+// UnmarshalJSON parses JSON value of and IP address and assigns parsed value to self.
 func (ip *IPAddress) UnmarshalJSON(data []byte) error {
 	var (
-		s string
+		s    string
+		addr IPAddress
 	)
 
 	err := json.Unmarshal(data, &s)
@@ -141,13 +150,14 @@ func (ip *IPAddress) UnmarshalJSON(data []byte) error {
 	}
 
 	if len(s) > 0 {
-		err = ip.Parse(s)
+		addr, err = ParseIP(s)
 		if err != nil {
 			return err
 		}
+		*ip = addr
 	} else {
 		// empty JSON string means zero value
-		ip.data = netaddr.IP{}
+		*ip = IPAddress{}
 	}
 
 	return nil
@@ -157,7 +167,7 @@ func (ip *IPAddress) UnmarshalJSON(data []byte) error {
 // The result will be 0 if ip==ip2, -1 if ip < ip2, and +1 if ip > ip2.
 // The definition of "less than" is the same as the IP.Less method.
 func (ip IPAddress) Compare(other IPAddress) int {
-	return ip.data.Compare(other.data)
+	return netaddr.IP(ip).Compare(netaddr.IP(other))
 }
 
 // Equal returns true if both addresses are equal, false otherwise

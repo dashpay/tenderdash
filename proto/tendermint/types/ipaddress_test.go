@@ -17,26 +17,11 @@ var correctIPAddresses []string = []string{
 	"10.0.0.1",
 }
 
-func TestIPAddress_ToNetaddrIP(t *testing.T) {
-	//nolint:scopelint
-	for _, testCase := range correctIPAddresses {
-		t.Run(testCase, func(t *testing.T) {
-			ip := (&IPAddress{}).MustParse(testCase)
-			got := ip.ToNetaddrIP()
-			assert.True(t, got.IsValid())
-			if testCase != got.Unmap().String() {
-				t.Errorf("IPAddress.ToNetaddrIP() = %v, want %v", got, testCase)
-			}
-		})
-	}
-}
-
 func TestIPAddress_Parse(t *testing.T) {
 	//nolint:scopelint
 	for _, inputIP := range correctIPAddresses {
 		t.Run(inputIP, func(t *testing.T) {
-			ip := (&IPAddress{})
-			err := ip.Parse(inputIP)
+			ip, err := ParseIP(inputIP)
 			assert.NoError(t, err)
 
 			assert.EqualValues(t, inputIP, ip.String())
@@ -62,12 +47,12 @@ func TestIPAddress_MustParse(t *testing.T) {
 	//nolint:scopelint
 	for _, tt := range tests {
 		t.Run(tt.ip, func(t *testing.T) {
-			ip := &IPAddress{}
+			ip := IPAddress{}
 
 			if tt.shouldPanic {
-				assert.Panics(t, func() { ip.MustParse(tt.ip) })
+				assert.Panics(t, func() { ip = MustParseIP(tt.ip) })
 			} else {
-				assert.NotPanics(t, func() { ip.MustParse(tt.ip) })
+				assert.NotPanics(t, func() { ip = MustParseIP(tt.ip) })
 				assert.EqualValues(t, tt.ip, ip.String())
 			}
 		})
@@ -79,10 +64,8 @@ func TestIPAddress_ParseStdIP(t *testing.T) {
 	for _, inputIP := range correctIPAddresses {
 		t.Run(inputIP, func(t *testing.T) {
 			stdip := net.ParseIP(inputIP)
-			ip := (&IPAddress{})
-			err := ip.ParseStdIP(stdip)
+			ip, err := ParseStdIP(stdip)
 			assert.NoError(t, err)
-
 			assert.EqualValues(t, inputIP, ip.String())
 		})
 	}
@@ -92,15 +75,15 @@ func TestIPAddress_ToIPAddr(t *testing.T) {
 	//nolint:scopelint
 	for _, inputIP := range correctIPAddresses {
 		t.Run(inputIP, func(t *testing.T) {
-			ip := (&IPAddress{})
-			ip.MustParse(inputIP)
+
+			ip := MustParseIP(inputIP)
 			stdIP := ip.ToIPAddr()
 			assert.NotNil(t, stdIP)
 
 			assert.EqualValues(t, inputIP, stdIP.String())
 			assert.Zero(t, stdIP.Zone)
 
-			err := ip.ParseStdIP(stdIP.IP)
+			ip, err := ParseStdIP(stdIP.IP)
 			assert.NoError(t, err)
 			assert.Equal(t, inputIP, ip.String())
 		})
@@ -115,21 +98,20 @@ func TestIPAddress_Copy(t *testing.T) {
 	for _, inputIP := range tests {
 		t.Run(inputIP, func(t *testing.T) {
 
-			ip := (&IPAddress{})
+			// We want pointer here, to be able to change the value later on
+			ip := new(IPAddress)
 			// support "zero" address
 			if inputIP != "" {
-
-				ip.MustParse(inputIP)
+				*ip = MustParseIP(inputIP)
 			}
 
 			ip2 := ip.Copy()
 			assert.NotNil(t, ip2)
-
-			assert.NotEqual(t, &ip, ip2)
+			assert.NotSame(t, ip, ip2, "%p should not be equal %p", ip, ip2)
 			assert.EqualValues(t, ip.String(), ip2.String())
 			assert.True(t, ip.Equal(*ip2))
 
-			ip.MustParse("1.2.3.4")
+			*ip = MustParseIP("1.2.3.4")
 			assert.False(t, ip.Equal(*ip2))
 		})
 	}
@@ -150,7 +132,7 @@ func TestIPAddress_Marshal(t *testing.T) {
 		t.Run(tt.ip, func(t *testing.T) {
 			ip := IPAddress{}
 			if tt.ip != "" {
-				ip.MustParse(tt.ip)
+				ip = MustParseIP(tt.ip)
 			}
 
 			got, err := ip.Marshal()
@@ -185,7 +167,7 @@ func TestIPAddress_MarshalTo(t *testing.T) {
 		t.Run(tt.ip, func(t *testing.T) {
 			ip := IPAddress{}
 			if tt.ip != "" {
-				ip.MustParse(tt.ip)
+				ip = MustParseIP(tt.ip)
 			}
 
 			length := len(tt.buf)
@@ -232,7 +214,7 @@ func TestIPAddress_MarshalJSON(t *testing.T) {
 		t.Run(tt.ip, func(t *testing.T) {
 			ip := IPAddress{}
 			if tt.ip != "" {
-				ip.MustParse(tt.ip)
+				ip = MustParseIP(tt.ip)
 			}
 
 			got, err := ip.MarshalJSON()
@@ -292,11 +274,9 @@ func TestIPAddress_Compare(t *testing.T) {
 	//nolint:scopelint
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s==%s?%d", tt.left, tt.right, tt.result), func(t *testing.T) {
-			left := IPAddress{}
-			left.MustParse(tt.left)
 
-			right := IPAddress{}
-			right.MustParse(tt.right)
+			left := MustParseIP(tt.left)
+			right := MustParseIP(tt.right)
 
 			assert.Equal(t, tt.result, left.Compare(right), "left:%s right:%s", left.String(), right.String())
 		})
