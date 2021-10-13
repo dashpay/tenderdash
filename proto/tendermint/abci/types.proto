@@ -348,13 +348,12 @@ message Validator {
   bytes pro_tx_hash = 4;
 }
 
-
 // ValidatorUpdate
 message ValidatorUpdate {
   tendermint.crypto.PublicKey      pub_key     = 1 [(gogoproto.nullable) = true];
   int64                            power       = 2;
   bytes                            pro_tx_hash = 3;
-  tendermint.types.NetworkEndpoint address = 4;
+  tendermint.types.NetworkEndpoint address     = 4;
 }
 
 message ValidatorSetUpdate {
