@@ -19,7 +19,6 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/crypto/secp256k1"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	mcs "github.com/tendermint/tendermint/test/maverick/consensus"
 	"github.com/tendermint/tendermint/types"
@@ -726,14 +725,9 @@ func (t Testnet) LastMisbehaviorHeight() int64 {
 // ValidatorUpdate() creates an abci.ValidatorUpdate struct from the current node
 func (n *Node) ValidatorUpdate(publicKey []byte) (abci.ValidatorUpdate, error) {
 	proTxHash := n.ProTxHash.Bytes()
-	ip := tmproto.IPAddress{}
-	if err := ip.ParseStdIP(n.IP); err != nil {
-		return abci.ValidatorUpdate{}, err
-	}
+
 	// TODO TD-10 find real power
 	power := types.DefaultDashVotingPower
-	// FIXME we should not hardcode the port, just use some const, but it's everywhere
-	p2pPort := networkPortP2P
 
 	// The lines below don't work, not sure why
 	// quorumHash := n.Testnet.QuorumHash.String()
@@ -744,7 +738,9 @@ func (n *Node) ValidatorUpdate(publicKey []byte) (abci.ValidatorUpdate, error) {
 	// }
 	// publicKey := n.Testnet.ThresholdPublicKey
 
-	validatorUpdate := abci.UpdateValidator(proTxHash, publicKey, power, ip, p2pPort)
+	address := n.AddressP2P(true)
+
+	validatorUpdate := abci.UpdateValidator(proTxHash, publicKey, power, address)
 	return validatorUpdate, nil
 }
 

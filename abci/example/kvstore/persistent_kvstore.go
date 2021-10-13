@@ -15,7 +15,6 @@ import (
 	"github.com/tendermint/tendermint/abci/types"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/libs/log"
-	pbtypes "github.com/tendermint/tendermint/proto/tendermint/types"
 
 	pc "github.com/tendermint/tendermint/proto/tendermint/crypto"
 )
@@ -73,10 +72,10 @@ func (app *PersistentKVStoreApplication) SetOption(req types.RequestSetOption) t
 	return app.app.SetOption(req)
 }
 
-// tx is either "val:proTxHash!pubkey!power!ip!port" or "key=value" or just arbitrary bytes
+// tx is either "val:proTxHash!pubkey!power!uri" or "key=value" or just arbitrary bytes
 func (app *PersistentKVStoreApplication) DeliverTx(req types.RequestDeliverTx) types.ResponseDeliverTx {
 	// if it starts with "vals:", update the validator set
-	// format is "val:proTxHash!pubkey!power!ip!port"
+	// format is "val:proTxHash!pubkey!power!uri"
 	switch {
 	case isValidatorTx(req.Tx):
 		// update validators in the merkle tree
@@ -234,7 +233,7 @@ func (app *PersistentKVStoreApplication) ValidatorSet() (validatorSet types.Vali
 	return validatorSet
 }
 
-func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64) []byte {
+func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64, uri string) []byte {
 	pubStr := ""
 	if pubkey != nil {
 		pk, err := cryptoenc.PubKeyFromProto(*pubkey)
@@ -244,15 +243,12 @@ func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64) []b
 		pubStr = base64.StdEncoding.EncodeToString(pk.Bytes())
 	}
 	proTxHashStr := base64.StdEncoding.EncodeToString(proTxHash)
-	// TODO TD-10
-	ip := "127.0.0.1"
-	port := 12345
-	return []byte(fmt.Sprintf("%s%s!%s!%d!%s!%d", ValidatorSetChangePrefix, proTxHashStr, pubStr, power, ip, port))
+	return []byte(fmt.Sprintf("%s%s!%s!%d!%s", ValidatorSetChangePrefix, proTxHashStr, pubStr, power, uri))
 }
 
 func MakeValSetRemovalTx(proTxHash []byte) []byte {
 	proTxHashStr := base64.StdEncoding.EncodeToString(proTxHash)
-	return []byte(fmt.Sprintf("%s%s!!%d!!", ValidatorSetChangePrefix, proTxHashStr, 0))
+	return []byte(fmt.Sprintf("%s%s!!%d!", ValidatorSetChangePrefix, proTxHashStr, 0))
 }
 
 func MakeThresholdPublicKeyChangeTx(thresholdPublicKey pc.PublicKey) []byte {
@@ -281,19 +277,19 @@ func isQuorumHashTx(tx []byte) bool {
 	return strings.HasPrefix(string(tx), ValidatorSetQuorumHashPrefix)
 }
 
-// format is "val:proTxHash!pubkey!power!ip!port"
+// format is "val:proTxHash!pubkey!power!uri"
 // pubkey is a base64-encoded 48-byte bls12381 key
 func (app *PersistentKVStoreApplication) execValidatorTx(tx []byte) types.ResponseDeliverTx {
 	tx = tx[len(ValidatorSetChangePrefix):]
 
 	//  get the pubkey and power
 	values := strings.Split(string(tx), "!")
-	if len(values) != 5 {
+	if len(values) != 4 {
 		return types.ResponseDeliverTx{
 			Code: code.CodeTypeEncodingError,
-			Log:  fmt.Sprintf("Expected 'proTxHash!pubkey!power!ip!port'. Got %v", values)}
+			Log:  fmt.Sprintf("Expected 'proTxHash!pubkey!power!uri'. Got %v", values)}
 	}
-	proTxHashS, pubkeyS, powerS, ipS, portS := values[0], values[1], values[2], values[3], values[4]
+	proTxHashS, pubkeyS, powerS, uri := values[0], values[1], values[2], values[3]
 
 	// decode the proTxHash
 	proTxHash, err := base64.StdEncoding.DecodeString(proTxHashS)
@@ -322,25 +318,8 @@ func (app *PersistentKVStoreApplication) execValidatorTx(tx []byte) types.Respon
 			Log:  fmt.Sprintf("Power (%s) is not an int", powerS)}
 	}
 	// TODO TD-10 We need to add the address to the Validator TX
-	ip := pbtypes.IPAddress{}
-	port := 0
 	// no IP on delete request
-	if power != 0 {
-		err = ip.Parse(ipS)
-		if err != nil {
-			return types.ResponseDeliverTx{
-				Code: code.CodeTypeEncodingError,
-				Log:  fmt.Sprintf("Cannot parse IP address %s: %s", ipS, err.Error())}
-		}
-
-		port, err = strconv.Atoi(portS)
-		if err != nil {
-			return types.ResponseDeliverTx{
-				Code: code.CodeTypeEncodingError,
-				Log:  fmt.Sprintf("Cannot parse IP port %s: %s", portS, err.Error())}
-		}
-	}
-	return app.updateValidatorSet(types.UpdateValidator(proTxHash, pubkey, power, ip, uint16(port)))
+	return app.updateValidatorSet(types.UpdateValidator(proTxHash, pubkey, power, uri))
 }
 
 // format is "tpk:pubkey"
