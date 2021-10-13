@@ -106,13 +106,12 @@ func TestIPAddress_Copy(t *testing.T) {
 			}
 
 			ip2 := ip.Copy()
-			assert.NotNil(t, ip2)
-			assert.NotSame(t, ip, ip2, "%p should not be equal %p", ip, ip2)
+			assert.NotSame(t, ip, &ip2, "%p should not be equal %p", ip, ip2)
 			assert.EqualValues(t, ip.String(), ip2.String())
-			assert.True(t, ip.Equal(*ip2))
+			assert.True(t, ip.Equal(ip2))
 
 			*ip = MustParseIP("1.2.3.4")
-			assert.False(t, ip.Equal(*ip2))
+			assert.False(t, ip.Equal(ip2))
 		})
 	}
 }

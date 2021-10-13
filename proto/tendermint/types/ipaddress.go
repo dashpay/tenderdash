@@ -1,3 +1,4 @@
+// Package types defines various protobuf types used internally by tendermint
 package types
 
 import (
@@ -64,13 +65,14 @@ func (ip IPAddress) ToIPAddr() *net.IPAddr {
 	return netaddr.IP(ip).IPAddr()
 }
 
-// Copy returns a pointer to new instance of IP Address.
-// Nothing fancy here :)
-func (ip IPAddress) Copy() *IPAddress {
-	copied := ip
-	return &copied
+// Copy make a deep copy of the object and returns it.
+// This is a convenience method to help people not worry about making
+// deep copies of various types of objects.
+func (ip IPAddress) Copy() IPAddress {
+	return ip
 }
 
+// String returns string representation of an IP address.
 func (ip IPAddress) String() string {
 	netaddr := netaddr.IP(ip)
 	if netaddr.IsZero() {
