@@ -32,9 +32,8 @@ func ParseIP(address string) (IPAddress, error) {
 	return ip, nil
 }
 
-// MustParseIP parses provided address and returns itself.
+// MustParseIP parses provided address.
 // It will panic on error.
-// Useful for chaining in tests.
 func MustParseIP(address string) IPAddress {
 	ip, err := ParseIP(address)
 	if err != nil {
