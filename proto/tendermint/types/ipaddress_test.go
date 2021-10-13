@@ -50,9 +50,9 @@ func TestIPAddress_MustParse(t *testing.T) {
 			ip := IPAddress{}
 
 			if tt.shouldPanic {
-				assert.Panics(t, func() { ip = MustParseIP(tt.ip) })
+				assert.Panics(t, func() { ip = mustParseIP(tt.ip) })
 			} else {
-				assert.NotPanics(t, func() { ip = MustParseIP(tt.ip) })
+				assert.NotPanics(t, func() { ip = mustParseIP(tt.ip) })
 				assert.EqualValues(t, tt.ip, ip.String())
 			}
 		})
@@ -76,7 +76,7 @@ func TestIPAddress_ToIPAddr(t *testing.T) {
 	for _, inputIP := range correctIPAddresses {
 		t.Run(inputIP, func(t *testing.T) {
 
-			ip := MustParseIP(inputIP)
+			ip := mustParseIP(inputIP)
 			stdIP := ip.ToIPAddr()
 			assert.NotNil(t, stdIP)
 
@@ -102,7 +102,7 @@ func TestIPAddress_Copy(t *testing.T) {
 			ip := new(IPAddress)
 			// support "zero" address
 			if inputIP != "" {
-				*ip = MustParseIP(inputIP)
+				*ip = mustParseIP(inputIP)
 			}
 
 			ip2 := ip.Copy()
@@ -110,7 +110,7 @@ func TestIPAddress_Copy(t *testing.T) {
 			assert.EqualValues(t, ip.String(), ip2.String())
 			assert.True(t, ip.Equal(ip2))
 
-			*ip = MustParseIP("1.2.3.4")
+			*ip = mustParseIP("1.2.3.4")
 			assert.False(t, ip.Equal(ip2))
 		})
 	}
@@ -131,7 +131,7 @@ func TestIPAddress_Marshal(t *testing.T) {
 		t.Run(tt.ip, func(t *testing.T) {
 			ip := IPAddress{}
 			if tt.ip != "" {
-				ip = MustParseIP(tt.ip)
+				ip = mustParseIP(tt.ip)
 			}
 
 			got, err := ip.Marshal()
@@ -166,7 +166,7 @@ func TestIPAddress_MarshalTo(t *testing.T) {
 		t.Run(tt.ip, func(t *testing.T) {
 			ip := IPAddress{}
 			if tt.ip != "" {
-				ip = MustParseIP(tt.ip)
+				ip = mustParseIP(tt.ip)
 			}
 
 			length := len(tt.buf)
@@ -213,7 +213,7 @@ func TestIPAddress_MarshalJSON(t *testing.T) {
 		t.Run(tt.ip, func(t *testing.T) {
 			ip := IPAddress{}
 			if tt.ip != "" {
-				ip = MustParseIP(tt.ip)
+				ip = mustParseIP(tt.ip)
 			}
 
 			got, err := ip.MarshalJSON()
@@ -274,10 +274,22 @@ func TestIPAddress_Compare(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(fmt.Sprintf("%s==%s?%d", tt.left, tt.right, tt.result), func(t *testing.T) {
 
-			left := MustParseIP(tt.left)
-			right := MustParseIP(tt.right)
+			left := mustParseIP(tt.left)
+			right := mustParseIP(tt.right)
 
 			assert.Equal(t, tt.result, left.Compare(right), "left:%s right:%s", left.String(), right.String())
 		})
 	}
+}
+
+// ******* General purpose functions ******* //
+
+// mustParseIP parses provided address.
+// It will panic on error.
+func mustParseIP(address string) IPAddress {
+	ip, err := ParseIP(address)
+	if err != nil {
+		panic(err.Error())
+	}
+	return ip
 }

@@ -33,16 +33,6 @@ func ParseIP(address string) (IPAddress, error) {
 	return ip, nil
 }
 
-// MustParseIP parses provided address.
-// It will panic on error.
-func MustParseIP(address string) IPAddress {
-	ip, err := ParseIP(address)
-	if err != nil {
-		panic(err.Error())
-	}
-	return ip
-}
-
 // ParseStdIP sets IP address based on the standard library's net.IP type.
 func ParseStdIP(address net.IP) (IPAddress, error) {
 	var ip IPAddress
