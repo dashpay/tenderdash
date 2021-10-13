@@ -5,7 +5,6 @@ option go_package = "github.com/tendermint/tendermint/proto/tendermint/types";
 
 import "gogoproto/gogo.proto";
 import "tendermint/crypto/keys.proto";
-import "tendermint/types/network.proto";
 
 message ValidatorSet {
   repeated Validator          validators           = 1;
@@ -18,11 +17,11 @@ message ValidatorSet {
 }
 
 message Validator {
-  tendermint.crypto.PublicKey      pub_key           = 2 [(gogoproto.nullable) = true];
-  int64                            voting_power      = 3;
-  int64                            proposer_priority = 4;
-  bytes                            pro_tx_hash       = 5;
-  tendermint.types.NetworkEndpoint address           = 6;
+  tendermint.crypto.PublicKey pub_key           = 2 [(gogoproto.nullable) = true];
+  int64                       voting_power      = 3;
+  int64                       proposer_priority = 4;
+  bytes                       pro_tx_hash       = 5;
+  string                      address           = 6;  // address of the Validator, correct URI (RFC 3986)
 }
 
 message SimpleValidator {

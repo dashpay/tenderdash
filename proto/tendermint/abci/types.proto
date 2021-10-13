@@ -9,7 +9,6 @@ import "tendermint/crypto/proof.proto";
 import "tendermint/types/types.proto";
 import "tendermint/crypto/keys.proto";
 import "tendermint/types/params.proto";
-import "tendermint/types/network.proto";
 import "google/protobuf/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -350,10 +349,10 @@ message Validator {
 
 // ValidatorUpdate
 message ValidatorUpdate {
-  tendermint.crypto.PublicKey      pub_key     = 1 [(gogoproto.nullable) = true];
-  int64                            power       = 2;
-  bytes                            pro_tx_hash = 3;
-  tendermint.types.NetworkEndpoint address     = 4;
+  tendermint.crypto.PublicKey pub_key     = 1 [(gogoproto.nullable) = true];
+  int64                       power       = 2;
+  bytes                       pro_tx_hash = 3;
+  string                      address     = 4;  // address of the Validator, correct URI (RFC 3986)
 }
 
 message ValidatorSetUpdate {
