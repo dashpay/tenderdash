@@ -154,10 +154,7 @@ func TestValidateValidatorUpdates(t *testing.T) {
 		PubKeyTypes: []string{types.ABCIPubKeyTypeBLS12381},
 	}
 
-	addr := &tmproto.NetworkEndpoint{
-		IP:   (&tmproto.IPAddress{}).MustParse("127.0.0.1"),
-		Port: 12345,
-	}
+	addr := types.RandValidatorAddress()
 
 	testCases := []struct {
 		name string
@@ -188,6 +185,12 @@ func TestValidateValidatorUpdates(t *testing.T) {
 		{
 			"adding a validator with negative power results in error",
 			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: -100, ProTxHash: proTxHash2, Address: addr}},
+			defaultValidatorParams,
+			true,
+		},
+		{
+			"adding a validator without address should fail",
+			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: 100, ProTxHash: proTxHash2, Address: ""}},
 			defaultValidatorParams,
 			true,
 		},
@@ -359,6 +362,11 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 		if bytes.Equal(proTxHash.Bytes(), addProTxHash.Bytes()) {
 			pos = i
 		}
+	}
+
+	// Ensure new validators have some IP addresses set
+	for _, validator := range newVals.Validators {
+		validator.Address = types.RandValidatorAddress()
 	}
 
 	app.ValidatorSetUpdate = newVals.ABCIEquivalentValidatorUpdates()

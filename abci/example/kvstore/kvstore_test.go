@@ -152,7 +152,7 @@ func TestValUpdates(t *testing.T) {
 		removalUpdates[i].Power = 0
 	}
 	for i, val := range fullVals.ValidatorUpdates {
-		txs[i+5] = MakeValSetChangeTx(val.ProTxHash, val.PubKey, val.Power)
+		txs[i+5] = MakeValSetChangeTx(val.ProTxHash, val.PubKey, val.Power, val.Address)
 	}
 	txs[15] = MakeThresholdPublicKeyChangeTx(fullVals.ThresholdPublicKey)
 	txs[16] = MakeQuorumHashTx(fullVals.QuorumHash)

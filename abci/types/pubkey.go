@@ -5,15 +5,14 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	crypto2 "github.com/tendermint/tendermint/proto/tendermint/crypto"
-	pbtypes "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 func UpdateValidator(
-	proTxHash crypto.ProTxHash, pubkeyBytes []byte, power int64, ip pbtypes.IPAddress, port uint16) ValidatorUpdate {
+	proTxHash crypto.ProTxHash, pubkeyBytes []byte, power int64, address string) ValidatorUpdate {
 	valUpdate := ValidatorUpdate{
 		Power:     power,
 		ProTxHash: proTxHash,
-		Address:   &pbtypes.NetworkEndpoint{IP: &ip, Port: uint32(port)},
+		Address:   address,
 	}
 
 	if len(pubkeyBytes) > 0 {

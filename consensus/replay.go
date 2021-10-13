@@ -344,6 +344,7 @@ func (h *Handshaker) ReplayBlocks(
 		if h.genDoc.QuorumHash != nil && len(h.genDoc.QuorumHash) == crypto.DefaultHashSize {
 			validators := make([]*types.Validator, len(h.genDoc.Validators))
 			for i, val := range h.genDoc.Validators {
+				// No validator address here, we still need to autodetect it
 				validators[i] = types.NewValidatorDefaultVotingPower(val.PubKey, val.ProTxHash)
 				err := validators[i].ValidateBasic()
 				if err != nil {

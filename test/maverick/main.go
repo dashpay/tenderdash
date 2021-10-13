@@ -220,6 +220,10 @@ func initFilesWithConfig(config *cfg.Config) error {
 		if err != nil {
 			return fmt.Errorf("can't get proTxHash maverick init files with config: %w", err)
 		}
+		address := config.P2P.ExternalAddress
+		if address != "" {
+			address = config.P2P.ListenAddress
+		}
 		genDoc.Validators = []types.GenesisValidator{{
 			PubKey:    pubKey,
 			ProTxHash: proTxHash,

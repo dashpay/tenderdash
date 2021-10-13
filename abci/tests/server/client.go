@@ -10,7 +10,6 @@ import (
 
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/types"
-	pbtypes "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 func InitChain(client abcicli.Client) error {
@@ -21,12 +20,9 @@ func InitChain(client abcicli.Client) error {
 		pubkey := privKeys[i].PubKey()
 		proTxHash := proTxHashes[i]
 		power := 100
-		ip := pbtypes.IPAddress{}
-		if err := ip.Parse("127.0.0.1"); err != nil {
-			return err
-		}
+		uri := fmt.Sprintf("tcp://%s:%d", "127.0.0.1", i+1)
 
-		vals[i] = types.UpdateValidator(proTxHash, pubkey.Bytes(), int64(power), ip, 1234)
+		vals[i] = types.UpdateValidator(proTxHash, pubkey.Bytes(), int64(power), uri)
 	}
 	abciThresholdPublicKey, err := cryptoenc.PubKeyToProto(thresholdPublicKey)
 	if err != nil {

@@ -1013,7 +1013,7 @@ func (vals *ValidatorSet) ABCIEquivalentValidatorUpdates() *abci.ValidatorSetUpd
 	for i := 0; i < len(vals.Validators); i++ {
 
 		valUpdate := TM2PB.NewValidatorUpdate(vals.Validators[i].PubKey, DefaultDashVotingPower,
-			vals.Validators[i].ProTxHash, vals.Validators[i].IPAddress, vals.Validators[i].Port)
+			vals.Validators[i].ProTxHash, vals.Validators[i].Address)
 		valUpdates = append(valUpdates, valUpdate)
 	}
 	abciThresholdPublicKey, err := cryptoenc.PubKeyToProto(vals.ThresholdPublicKey)
@@ -1321,6 +1321,7 @@ func GenerateTestValidatorSetWithProTxHashes(
 			privateKeys[i].PubKey(),
 			originalPowerMap[string(orderedProTxHashes[i])],
 			orderedProTxHashes[i],
+			"",
 		)
 	}
 
@@ -1532,19 +1533,11 @@ func ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes []crypto.ProTxHash) abc
 		bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThreshold(proTxHashes)
 	var valUpdates []abci.ValidatorUpdate
 	for i := 0; i < len(proTxHashes); i++ {
-		// TODO TD-10 check if the IP and port are correct
-		ip := tmproto.IPAddress{}
-		if err := ip.Parse("127.0.0.1"); err != nil {
-			panic("Cannot parse balidator ip address")
-		}
-		port := uint16(0)
-
 		valUpdate := TM2PB.NewValidatorUpdate(
 			privateKeys[i].PubKey(),
 			DefaultDashVotingPower,
 			orderedProTxHashes[i],
-			ip,
-			port,
+			"",
 		)
 		valUpdates = append(valUpdates, valUpdate)
 	}
