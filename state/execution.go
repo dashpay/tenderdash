@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"net/url"
 	"time"
 
 	"github.com/tendermint/tendermint/crypto/bls12381"
@@ -534,9 +533,14 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 			return fmt.Errorf("validator address cannot be empty")
 		}
 
-		if _, err := url.Parse(valUpdate.Address); err != nil {
+		addr, err := types.NewValidatorAddress(valUpdate.Address)
+		if err != nil {
+			return fmt.Errorf("cannot parse validator address %s: %w", valUpdate.Address, err)
+		}
+		if err = addr.Validate(); err != nil {
 			return fmt.Errorf("validator address %s is invalid: %w", valUpdate.Address, err)
 		}
+
 	}
 	return nil
 }

@@ -845,7 +845,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 		abciValidatorUpdates := make([]abci.ValidatorUpdate, len(proTxHashes))
 		for j, proTxHash := range proTxHashes {
 			abciValidatorUpdates[j] = abci.UpdateValidator(proTxHash, privateKeys3[j].PubKey().Bytes(),
-				types.DefaultDashVotingPower, types.RandValidatorAddress())
+				types.DefaultDashVotingPower, types.RandValidatorAddress().String())
 		}
 		abciThresholdPublicKey3, err := cryptoenc.PubKeyToProto(thresholdPublicKey3)
 		assert.NoError(t, err)

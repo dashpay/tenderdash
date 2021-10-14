@@ -7,7 +7,6 @@ import (
 	"strings"
 
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/libs/rand"
 
 	"github.com/tendermint/tendermint/crypto"
 	ce "github.com/tendermint/tendermint/crypto/encoding"
@@ -19,10 +18,10 @@ import (
 // make sure to update that method if changes are made here
 // The ProTxHash is part of Dash additions required for BLS threshold signatures
 type Validator struct {
-	PubKey      crypto.PubKey `json:"pub_key"`
-	VotingPower int64         `json:"voting_power"`
-	ProTxHash   ProTxHash     `json:"pro_tx_hash"`
-	Address     string        `json:"address"`
+	PubKey      crypto.PubKey    `json:"pub_key"`
+	VotingPower int64            `json:"voting_power"`
+	ProTxHash   ProTxHash        `json:"pro_tx_hash"`
+	Address     ValidatorAddress `json:"address"`
 
 	ProposerPriority int64 `json:"proposer_priority"`
 }
@@ -49,12 +48,17 @@ func NewValidatorDefaultVotingPower(pubKey crypto.PubKey, proTxHash []byte) *Val
 
 // NewValidator returns a new validator with the given pubkey and voting power.
 func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash []byte, address string) *Validator {
+	addr, err := NewValidatorAddress(address)
+	if err != nil {
+		panic(fmt.Sprintf("cannot parse validator address %s: %s", address, err))
+	}
+
 	val := &Validator{
 		PubKey:           pubKey,
 		VotingPower:      votingPower,
 		ProposerPriority: 0,
 		ProTxHash:        proTxHash,
-		Address:          address,
+		Address:          addr,
 	}
 	return val
 }
@@ -204,7 +208,7 @@ func (v *Validator) ToProto() (*tmproto.Validator, error) {
 		vp.PubKey = &pk
 	}
 
-	vp.Address = v.Address
+	vp.Address = v.Address.String()
 
 	return &vp, nil
 }
@@ -229,7 +233,11 @@ func ValidatorFromProto(vp *tmproto.Validator) (*Validator, error) {
 		v.PubKey = pk
 	}
 
-	v.Address = vp.Address
+	address, err := NewValidatorAddress(vp.Address)
+	if err != nil {
+		return nil, err
+	}
+	v.Address = address
 
 	return v, nil
 }
@@ -252,8 +260,4 @@ func RandValidator() (*Validator, PrivValidator) {
 	}
 	val := NewValidatorDefaultVotingPower(pubKey, proTxHash)
 	return val, privVal
-}
-
-func RandValidatorAddress() string {
-	return fmt.Sprintf("tcp://127.0.0.1:%d", (rand.Int()%65535)+1)
 }

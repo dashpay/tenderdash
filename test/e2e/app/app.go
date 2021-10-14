@@ -226,7 +226,7 @@ func (app *Application) ApplySnapshotChunk(req abci.RequestApplySnapshotChunk) a
 	return abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}
 }
 
-// validatorUpdates generates a validator set update.
+// validatorSetUpdates generates a validator set update.
 func (app *Application) validatorSetUpdates(height uint64) (*abci.ValidatorSetUpdate, error) {
 	updates := app.cfg.ValidatorUpdates[fmt.Sprintf("%v", height)]
 	if len(updates) == 0 {

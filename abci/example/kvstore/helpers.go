@@ -1,9 +1,9 @@
 package kvstore
 
 import (
-	"fmt"
-
 	"github.com/tendermint/tendermint/abci/types"
+	tmtypes "github.com/tendermint/tendermint/types"
+
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 
@@ -11,8 +11,8 @@ import (
 )
 
 func ValUpdate(
-	pubKey crypto.PubKey, proTxHash crypto.ProTxHash, address string) types.ValidatorUpdate {
-	return types.UpdateValidator(proTxHash, pubKey.Bytes(), 100, address)
+	pubKey crypto.PubKey, proTxHash crypto.ProTxHash, address tmtypes.ValidatorAddress) types.ValidatorUpdate {
+	return types.UpdateValidator(proTxHash, pubKey.Bytes(), 100, address.String())
 }
 
 // RandValidatorSetUpdate returns a list of cnt validators for initializing
@@ -23,8 +23,7 @@ func RandValidatorSetUpdate(cnt int) types.ValidatorSetUpdate {
 
 	privKeys, proTxHashes, thresholdPublicKey := bls12381.CreatePrivLLMQDataDefaultThreshold(cnt)
 	for i := 0; i < cnt; i++ {
-		ip := fmt.Sprintf("tcp://%s:%d", "127.0.0.1", i+1)
-		res[i] = ValUpdate(privKeys[i].PubKey(), proTxHashes[i], ip)
+		res[i] = ValUpdate(privKeys[i].PubKey(), proTxHashes[i], tmtypes.RandValidatorAddress())
 	}
 	thresholdPublicKeyABCI, err := cryptoenc.PubKeyToProto(thresholdPublicKey)
 	if err != nil {
