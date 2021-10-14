@@ -15,6 +15,7 @@ import (
 	"github.com/tendermint/tendermint/abci/types"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/libs/log"
+	tmtypes "github.com/tendermint/tendermint/types"
 
 	pc "github.com/tendermint/tendermint/proto/tendermint/crypto"
 )
@@ -233,7 +234,7 @@ func (app *PersistentKVStoreApplication) ValidatorSet() (validatorSet types.Vali
 	return validatorSet
 }
 
-func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64, uri string) []byte {
+func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64, uri tmtypes.ValidatorAddress) []byte {
 	pubStr := ""
 	if pubkey != nil {
 		pk, err := cryptoenc.PubKeyFromProto(*pubkey)

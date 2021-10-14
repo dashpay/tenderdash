@@ -93,7 +93,7 @@ func (tm2pb) ValidatorUpdate(val *Validator) abci.ValidatorUpdate {
 	valUpdate := abci.ValidatorUpdate{
 		Power:     val.VotingPower,
 		ProTxHash: val.ProTxHash,
-		Address:   val.Address,
+		Address:   val.Address.String(),
 	}
 	if val.PubKey != nil {
 		pk, err := cryptoenc.PubKeyToProto(val.PubKey)
@@ -135,7 +135,7 @@ func (tm2pb) ConsensusParams(params *tmproto.ConsensusParams) *abci.ConsensusPar
 
 // XXX: panics on nil or unknown pubkey type
 func (tm2pb) NewValidatorUpdate(
-	pubkey crypto.PubKey, power int64, proTxHash []byte, address string) abci.ValidatorUpdate {
+	pubkey crypto.PubKey, power int64, proTxHash []byte, address ValidatorAddress) abci.ValidatorUpdate {
 
 	var pubkeyABCI *crypto2.PublicKey
 	if pubkey != nil {
@@ -152,7 +152,7 @@ func (tm2pb) NewValidatorUpdate(
 		PubKey:    pubkeyABCI,
 		Power:     power,
 		ProTxHash: proTxHash,
-		Address:   address,
+		Address:   address.String(),
 	}
 }
 

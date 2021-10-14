@@ -1537,7 +1537,7 @@ func ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes []crypto.ProTxHash) abc
 			privateKeys[i].PubKey(),
 			DefaultDashVotingPower,
 			orderedProTxHashes[i],
-			"",
+			ValidatorAddress{},
 		)
 		valUpdates = append(valUpdates, valUpdate)
 	}

@@ -448,8 +448,12 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 			updateVals := map[string]string{}
 			for node, validatorUpdate := range validators {
 				key := hex.EncodeToString(node.ProTxHash.Bytes())
-				value := proto.MarshalTextString(&validatorUpdate)
-				updateVals[key] = value
+				value, err := proto.Marshal(&validatorUpdate)
+				if err != nil {
+					return nil, err
+				}
+				valueBase64 := base64.StdEncoding.EncodeToString(value)
+				updateVals[key] = valueBase64
 			}
 			validatorUpdates[fmt.Sprintf("%v", height)] = updateVals
 		}
