@@ -8,6 +8,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
@@ -66,6 +67,10 @@ func TestValidator_Sets(t *testing.T) {
 				require.Equal(t, valScheduleValidator.PubKey.Bytes(), validator.PubKey.Bytes(),
 					"mismatching validator %X publicKey at height %v (%X <=> %X",
 					valScheduleValidator.ProTxHash, h, valScheduleValidator.PubKey.Bytes(), validator.PubKey.Bytes())
+
+				// Validators in the schedule don't contain addresses
+				assert.NotZero(t, validator.Address)
+				validator.Address = types.ValidatorAddress{}
 			}
 			require.Equal(t, valSchedule.Set.Validators, validators,
 				"incorrect validator set at height %v", h)
