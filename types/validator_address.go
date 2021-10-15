@@ -23,7 +23,7 @@ func NewValidatorAddress(uri string) (ValidatorAddress, error) {
 
 // RandValidatorAddress generates a random validator address
 func RandValidatorAddress() ValidatorAddress {
-	nodeID := tmrand.Bytes(16)
+	nodeID := tmrand.Bytes(20)
 	port := (tmrand.Int() % 65535) + 1
 	addr, err := NewValidatorAddress(fmt.Sprintf("tcp://%x@127.0.0.1:%d", nodeID, port))
 	if err != nil {
@@ -38,6 +38,15 @@ func RandValidatorAddress() ValidatorAddress {
 // NodeAddress converts validator address to a node address that can be used to establish a connection.
 func (a ValidatorAddress) NodeAddress() p2p.NodeAddress {
 	return p2p.NodeAddress(a)
+}
+
+// NetAddress converts validator address to a NetAddress struct that can be used to establish a connection.
+func (a ValidatorAddress) NetAddress() (*p2p.NetAddress, error) {
+	addr, err := p2p.NewNetAddressString(a.String())
+	if err != nil || addr == nil {
+		return nil, err
+	}
+	return addr, nil
 }
 
 // String converts the validator address to a string representation of the URI.
