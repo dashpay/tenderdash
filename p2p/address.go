@@ -116,7 +116,7 @@ func (a NodeAddress) Resolve(ctx context.Context) ([]Endpoint, error) {
 		}
 		return []Endpoint{{
 			Protocol: a.Protocol,
-			Path:     string(a.NodeID),
+			Path:     a.NodeID,
 		}}, nil
 	}
 
@@ -138,9 +138,9 @@ func (a NodeAddress) Resolve(ctx context.Context) ([]Endpoint, error) {
 
 // String formats the address as a URL string.
 func (a NodeAddress) String() string {
-	u := url.URL{Scheme: string(a.Protocol)}
+	u := url.URL{Scheme: a.Protocol}
 	if a.NodeID != "" {
-		u.User = url.User(string(a.NodeID))
+		u.User = url.User(a.NodeID)
 	}
 	switch {
 	case a.Hostname != "":
@@ -151,9 +151,9 @@ func (a NodeAddress) String() string {
 		}
 		u.Path = a.Path
 
-	case a.Protocol != "" && (a.Path == "" || a.Path == string(a.NodeID)):
+	case a.Protocol != "" && (a.Path == "" || a.Path == a.NodeID):
 		u.User = nil
-		u.Opaque = string(a.NodeID) // e.g. memory:id
+		u.Opaque = a.NodeID // e.g. memory:id
 
 	case a.Path != "" && a.Path[0] != '/':
 		u.Path = "/" + a.Path // e.g. some/path

@@ -250,7 +250,7 @@ func MakeGenesis(testnet *e2e.Testnet, genesisTime time.Time) (types.GenesisDoc,
 	}
 	for validator, validatorUpdate := range testnet.Validators {
 		if validatorUpdate.PubKey == nil {
-			return genesis, fmt.Errorf("Public key for validator %s is nil", validator.Name)
+			return genesis, fmt.Errorf("public key for validator %s is nil", validator.Name)
 		}
 		pubkey, err := cryptoenc.PubKeyFromProto(*validatorUpdate.PubKey)
 		if err != nil {
@@ -448,7 +448,8 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 			updateVals := map[string]string{}
 			for node, validatorUpdate := range validators {
 				key := hex.EncodeToString(node.ProTxHash.Bytes())
-				value, err := proto.Marshal(&validatorUpdate)
+				update := validatorUpdate // avoid getting address of a range variable to make linter happy
+				value, err := proto.Marshal(&update)
 				if err != nil {
 					return nil, err
 				}
