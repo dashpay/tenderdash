@@ -146,11 +146,6 @@ func initFilesSingleNodeWithConfig(config *cfg.Config) error {
 			InitialCoreChainLockedHeight: 1,
 		}
 
-		address := config.P2P.ExternalAddress
-		if address == "" {
-			address = config.P2P.ListenAddress
-		}
-
 		genDoc.Validators = []types.GenesisValidator{{
 			PubKey:    pubKey,
 			ProTxHash: proTxHash,
