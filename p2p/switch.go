@@ -557,7 +557,7 @@ func (sw *Switch) IsDialingOrExistingAddress(addr *NetAddress) bool {
 		(!sw.config.AllowDuplicateIP && sw.peers.HasIP(addr.IP))
 }
 
-// AddPersistentPeers allows you to set persistent peers. It ignores
+// AddPersistentPeers allows you to add new persistent peers. It ignores
 // ErrNetAddressLookup. However, if there are other errors, first encounter is
 // returned.
 func (sw *Switch) AddPersistentPeers(addrs []string) error {
@@ -574,7 +574,28 @@ func (sw *Switch) AddPersistentPeers(addrs []string) error {
 		}
 		return err
 	}
-	sw.persistentPeersAddrs = netAddrs
+	sw.persistentPeersAddrs = append(sw.persistentPeersAddrs, netAddrs...)
+	return nil
+}
+
+// RemovePersistentPeer allows you to delete persistent peer from persistent peers list.
+// It ignores ErrNetAddressLookup. However, if there are other errors, first encounter is
+// returned.
+func (sw *Switch) RemovePersistentPeer(addr string) error {
+	sw.Logger.Info("Removing persistent peer", "addr", addr)
+	toDelete, err := NewNetAddressString(addr)
+	if err != nil {
+		return err
+	}
+
+	newPersistentPeers := make([]*NetAddress, 0, len(sw.persistentPeersAddrs)-1)
+	for _, existingAddr := range sw.persistentPeersAddrs {
+		if !existingAddr.Equals(toDelete) {
+			newPersistentPeers = append(newPersistentPeers, existingAddr)
+		}
+	}
+
+	sw.persistentPeersAddrs = newPersistentPeers
 	return nil
 }
 

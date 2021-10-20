@@ -411,6 +411,7 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 
 // TestEndBlockValidatorConnect ensures we update validator set and send an event.
 func TestEndBlockValidatorConnect(t *testing.T) {
+	wait := 15 * time.Second // how long we'll wait for connection
 	app := &testApp{}
 	cc := proxy.NewLocalClientCreator(app)
 	proxyApp := proxy.NewAppConns(cc)
@@ -447,7 +448,8 @@ func TestEndBlockValidatorConnect(t *testing.T) {
 	require.NoError(t, err)
 
 	sw := createSwitch(t, 1)
-	vc := dash.NewValidatorConnExecutor(context.Background(), eventBus, sw, log.TestingLogger())
+	nodeID := state.Validators.Validators[0].Address.NodeID
+	vc := dash.NewValidatorConnExecutor(nodeID, eventBus, sw, log.TestingLogger())
 	err = vc.Start()
 	require.NoError(t, err)
 	defer func() { err := vc.Stop(); require.NoError(t, err) }()
@@ -509,7 +511,7 @@ func TestEndBlockValidatorConnect(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("Did not receive EventValidatorSetUpdates within 1 sec.")
 	}
-	time.Sleep(10 * time.Second)
+	time.Sleep(wait)
 }
 
 // TestEndBlockValidatorUpdatesResultingInEmptySet checks that processing validator updates that

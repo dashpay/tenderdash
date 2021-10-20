@@ -36,7 +36,7 @@ var (
 // If the URL is opaque, i.e. of the form "scheme:opaque", then the opaque part
 // is expected to contain a node ID.
 type NodeAddress struct {
-	NodeID   string
+	NodeID   ID
 	Protocol string
 	Hostname string
 	Port     uint16
@@ -63,13 +63,13 @@ func ParseNodeAddress(urlString string) (NodeAddress, error) {
 
 	// Opaque URLs are expected to contain only a node ID.
 	if url.Opaque != "" {
-		address.NodeID = url.Opaque
+		address.NodeID = ID(url.Opaque)
 		return address, address.Validate()
 	}
 
 	// Otherwise, just parse a normal networked URL.
 	if url.User != nil {
-		address.NodeID = strings.ToLower(url.User.Username())
+		address.NodeID = ID(strings.ToLower(url.User.Username()))
 	}
 
 	address.Hostname = strings.ToLower(url.Hostname())
@@ -116,7 +116,7 @@ func (a NodeAddress) Resolve(ctx context.Context) ([]Endpoint, error) {
 		}
 		return []Endpoint{{
 			Protocol: a.Protocol,
-			Path:     a.NodeID,
+			Path:     string(a.NodeID),
 		}}, nil
 	}
 
@@ -140,7 +140,7 @@ func (a NodeAddress) Resolve(ctx context.Context) ([]Endpoint, error) {
 func (a NodeAddress) String() string {
 	u := url.URL{Scheme: a.Protocol}
 	if a.NodeID != "" {
-		u.User = url.User(a.NodeID)
+		u.User = url.User(string(a.NodeID))
 	}
 	switch {
 	case a.Hostname != "":
@@ -151,9 +151,9 @@ func (a NodeAddress) String() string {
 		}
 		u.Path = a.Path
 
-	case a.Protocol != "" && (a.Path == "" || a.Path == a.NodeID):
+	case a.Protocol != "" && (a.Path == "" || ID(a.Path) == a.NodeID):
 		u.User = nil
-		u.Opaque = a.NodeID // e.g. memory:id
+		u.Opaque = string(a.NodeID) // e.g. memory:id
 
 	case a.Path != "" && a.Path[0] != '/':
 		u.Path = "/" + a.Path // e.g. some/path

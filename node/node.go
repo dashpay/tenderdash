@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/tendermint/tendermint/dash"
 	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -232,6 +233,8 @@ type Node struct {
 	blockIndexer      indexer.BlockIndexer
 	indexerService    *txindex.IndexerService
 	prometheusSrv     *http.Server
+
+	validatorConnExecutor service.Service
 
 	dashCoreRPCClient dashcore.Client
 }
@@ -1029,6 +1032,15 @@ func NewNode(config *cfg.Config,
 		}()
 	}
 
+	// Initialize ValidatorConnExecutor on a validator
+	// TODO TD-10 start only on validators
+
+	validatorConnExecutor := dash.NewValidatorConnExecutor(
+		nodeInfo.ID(),
+		eventBus,
+		sw,
+		logger.With("module", "ValidatorConnExecutor"))
+
 	node := &Node{
 		config:        config,
 		genesisDoc:    genDoc,
@@ -1058,7 +1070,8 @@ func NewNode(config *cfg.Config,
 		blockIndexer:     blockIndexer,
 		eventBus:         eventBus,
 
-		dashCoreRPCClient: dashCoreRPCClient,
+		validatorConnExecutor: validatorConnExecutor,
+		dashCoreRPCClient:     dashCoreRPCClient,
 	}
 	node.BaseService = *service.NewBaseService(logger, "Node", node)
 
@@ -1129,6 +1142,12 @@ func (n *Node) OnStart() error {
 		return fmt.Errorf("could not dial peers from persistent_peers field: %w", err)
 	}
 
+	// start
+	if n.validatorConnExecutor != nil {
+		if err := n.validatorConnExecutor.Start(); err != nil {
+			return fmt.Errorf("cannot start ValidatorConnExecutor: %w", err)
+		}
+	}
 	// Run state sync
 	if n.stateSync {
 		bcR, ok := n.bcReactor.(fastSyncReactor)
