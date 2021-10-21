@@ -14,8 +14,9 @@ import (
 
 type mockSwitchHistoryEvent struct {
 	Timestamp time.Time
-	Operation string // "dial", "disconnect"
+	Operation string // "dialMany", "stopOne"
 	Params    []string
+	Comment   string
 }
 type MockSwitch struct {
 	PeerSet         *p2p.PeerSet
@@ -59,17 +60,7 @@ func (sw *MockSwitch) RemovePersistentPeer(addr string) error {
 	delete(sw.PersistentPeers, addr)
 	return nil
 }
-func (sw *MockSwitch) history(op string, args ...string) {
-	event := mockSwitchHistoryEvent{
-		Timestamp: time.Now(),
-		Operation: op,
-		Params:    args,
-	}
-	sw.History = append(sw.History, event)
 
-	sw.HistoryChan <- event
-
-}
 func (sw *MockSwitch) DialPeersAsync(addrs []string) error {
 
 	for _, addr := range addrs {
@@ -82,7 +73,7 @@ func (sw *MockSwitch) DialPeersAsync(addrs []string) error {
 			return err
 		}
 	}
-	sw.history("dial", addrs...)
+	sw.history("dialMany", addrs...)
 	return nil
 }
 
@@ -92,5 +83,16 @@ func (sw *MockSwitch) IsDialingOrExistingAddress(addr *p2p.NetAddress) bool {
 
 func (sw *MockSwitch) StopPeerGracefully(peer p2p.Peer) {
 	sw.PeerSet.Remove(peer)
-	sw.history("stop", peer.String())
+	sw.history("stopOne", peer.String())
+}
+
+func (sw *MockSwitch) history(op string, args ...string) {
+	event := mockSwitchHistoryEvent{
+		Timestamp: time.Now(),
+		Operation: op,
+		Params:    args,
+	}
+	sw.History = append(sw.History, event)
+
+	sw.HistoryChan <- event
 }

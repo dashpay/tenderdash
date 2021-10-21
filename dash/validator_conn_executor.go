@@ -188,9 +188,14 @@ func (vc *ValidatorConnExecutor) selectValidators(count int) validatorMap {
 	selectedValidators := validatorMap{}
 	activeValidators := vc.validatorSetMembers
 
-	size := len(activeValidators)
-	if size < count {
-		count = size
+	validatorSetSize := len(activeValidators)
+	if validatorSetSize <= 0 {
+		return validatorMap{}
+	}
+
+	// We need 1 more Validator in validator set, because one of them is current node
+	if (validatorSetSize - 1) < count {
+		count = validatorSetSize - 1
 	}
 
 	IDs := make([]p2p.ID, 0, len(activeValidators))
@@ -210,8 +215,12 @@ func (vc *ValidatorConnExecutor) selectValidators(count int) validatorMap {
 	}
 
 	for len(selectedValidators) < count {
-		index := rand.Intn(size)
+		index := rand.Intn(validatorSetSize)
 		id := IDs[index]
+		if id == vc.nodeID {
+			// we can't connect to ourselves
+			continue
+		}
 		if _, found := selectedValidators[IDs[index]]; !found {
 			selectedValidators[id] = activeValidators[id]
 			vc.BaseService.Logger.Debug("selected validator to connect",
@@ -242,8 +251,8 @@ func (vc *ValidatorConnExecutor) disconnectValidator(validator *types.Validator)
 	return nil
 }
 
-// disconnectUnusedValidators disconnects unused validators, unless they are part of the exceptions map
-func (vc *ValidatorConnExecutor) disconnectUnusedValidators(exceptions validatorMap) error {
+// disconnectValidators disconnects connected validators which are not a part of the exceptions map
+func (vc *ValidatorConnExecutor) disconnectValidators(exceptions validatorMap) error {
 	for currentKey := range vc.connectedValidators {
 		if _, isException := exceptions[currentKey]; !isException {
 			validator := vc.connectedValidators[currentKey]
@@ -270,14 +279,14 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 		vc.BaseService.Logger.Debug("not a member of active ValidatorSet")
 		// We need to disconnect connected validators. It needs to be done explicitly
 		// because they are marked as persistent and will never disconnect themselves.
-		return vc.disconnectUnusedValidators(validatorMap{})
+		return vc.disconnectValidators(validatorMap{})
 	}
 
 	// Find new newValidators
 	newValidators = vc.selectValidators(vc.NumConnections)
 
 	// Disconnect existing validators unless they are selected to be connected again
-	if err := vc.disconnectUnusedValidators(newValidators); err != nil {
+	if err := vc.disconnectValidators(newValidators); err != nil {
 		return fmt.Errorf("cannot disconnect unused validators: %w", err)
 	}
 
@@ -305,6 +314,12 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 		addresses = append(addresses, addressString)
 		vc.connectedValidators[id] = validator
 	}
+
+	if len(addresses) == 0 {
+		vc.BaseService.Logger.P2PDebug("no validators will be dialed")
+		return nil
+	}
+
 	if err := vc.p2pSwitch.AddPersistentPeers(addresses); err != nil {
 		vc.BaseService.Logger.Error("cannot set validators as persistent", "peers", addresses, "err", err)
 		return fmt.Errorf("cannot set validators as persistent: %w", err)
