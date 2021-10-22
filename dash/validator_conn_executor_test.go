@@ -61,7 +61,8 @@ func TestValidatorConnExecutor_NotValidator(t *testing.T) {
 	executeTestCase(t, tc)
 }
 
-// TestValidatorConnExecutor_WrongAddress checks behavior in case of several issues in the address
+// TestValidatorConnExecutor_WrongAddress checks behavior in case of several issues in the address.
+// Expected behavior: invalid address is dialed. Previous addresses are disconnected.
 func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 
 	me := deterministicValidator(65535)
@@ -88,14 +89,17 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 				},
 				expectedHistory: []mockSwitchHistoryEvent{
 					{Operation: "stopOne"},
-					{Operation: "stopOne"}},
+					{Operation: "stopOne"},
+					{Operation: "stopOne"},
+				},
 			},
 		},
 	}
 	executeTestCase(t, tc)
 }
 
-// TestValidatorConnExecutor_Myself checks what happens if we want to connect to ourselves
+// TestValidatorConnExecutor_Myself checks what happens if we want to connect to ourselves.
+// Expected: connections from previous update are stopped, no new connection established.
 func TestValidatorConnExecutor_Myself(t *testing.T) {
 
 	me := deterministicValidator(65535)
@@ -104,8 +108,8 @@ func TestValidatorConnExecutor_Myself(t *testing.T) {
 		me: me,
 		validatorUpdates: []validatorUpdate{
 			0: {
-				validators: []*types.Validator{me},
-				// expectedHistory: []mockSwitchHistoryEvent{},
+				validators:      []*types.Validator{me},
+				expectedHistory: []mockSwitchHistoryEvent{},
 			},
 			1: {
 				validators: []*types.Validator{
@@ -114,13 +118,11 @@ func TestValidatorConnExecutor_Myself(t *testing.T) {
 				},
 				expectedHistory: []mockSwitchHistoryEvent{{
 					Operation: "dialMany",
+					Params:    []string{deterministicValidatorAddress(1)},
 				}},
 			},
 			2: {
-
-				validators: []*types.Validator{
-					me,
-				},
+				validators: []*types.Validator{me},
 				expectedHistory: []mockSwitchHistoryEvent{{
 					Operation: "stopOne",
 					Params:    []string{deterministicValidatorAddress(1)},
@@ -134,7 +136,6 @@ func TestValidatorConnExecutor_Myself(t *testing.T) {
 // TestValidatorConnExecutor_EmptyVSet checks what will happen if the ABCI App provides an empty validator set.
 // Expected: nothing happens
 func TestValidatorConnExecutor_EmptyVSet(t *testing.T) {
-
 	me := deterministicValidator(65535)
 	tc := testCase{
 		me: me,
@@ -151,8 +152,8 @@ func TestValidatorConnExecutor_EmptyVSet(t *testing.T) {
 	executeTestCase(t, tc)
 }
 
+// TestValidatorConnExecutor_ValidatorUpdatesSequence checks sequence of multiple validators switched
 func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
-
 	me := deterministicValidator(65535)
 	tc := testCase{
 		me: me,
@@ -171,13 +172,15 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 					deterministicValidator(4),
 				},
 				expectedHistory: []mockSwitchHistoryEvent{
-					{Comment: "Stop old peers that are not part of new validator set", Operation: "stopOne",
-						Params: []string{deterministicValidatorAddress(1)},
+					{
+						Comment:   "Stop old peers that are not part of new validator set",
+						Operation: "stopOne",
+						Params:    []string{deterministicValidatorAddress(1)},
 					},
 					{Comment: "Dial two members of current validator set", Operation: "dialMany"},
 				},
 			},
-			2: { // the same as above
+			2: { // the same validator set as above, nothing should happen
 				validators: []*types.Validator{
 					me,
 					deterministicValidator(2),
@@ -186,7 +189,7 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 				},
 				expectedHistory: []mockSwitchHistoryEvent{},
 			},
-			3: {
+			3: { // only 1 validator (except myself), we should stop existing validators and dial the new one
 				validators: []*types.Validator{
 					me,
 					deterministicValidator(1),
@@ -194,7 +197,8 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 				expectedHistory: []mockSwitchHistoryEvent{
 					0: {Operation: "stopOne"},
 					1: {Operation: "stopOne"},
-					2: {Comment: "Dial new validators",
+					2: {Operation: "stopOne"},
+					3: {Comment: "Dial new validators",
 						Operation: "dialMany",
 						Params: []string{
 							me.Address.String(),
@@ -211,7 +215,6 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 
 // TestEndBlock verifies if ValidatorConnExecutor is called correctly during processing of EndBlock
 // message from the ABCI app.
-
 func TestEndBlock(t *testing.T) {
 	const timeout = 3 * time.Second // how long we'll wait for connection
 	app := newTestApp()
@@ -358,17 +361,16 @@ func executeTestCase(t *testing.T, tc testCase) {
 				switch check.Operation {
 				case "dialMany":
 					if allowedParams == nil {
-						allowedParams = validatorAddresses(update.validators)
+						allowedParams = validatorAddresses(update.validators, []*types.Validator{tc.me})
 					}
 				case "stopOne":
 					if allowedParams == nil {
 						if updateID > 0 {
-							allowedParams = validatorAddresses(tc.validatorUpdates[updateID-1].validators)
+							allowedParams = validatorAddresses(tc.validatorUpdates[updateID-1].validators, []*types.Validator{tc.me})
 						} else {
 							t.Error("for 'stop' operation in validator update 0, you need to explicitly provide hisotry Params")
 						}
 					}
-
 				}
 				for _, param := range msg.Params {
 					// Params of the call need to "contains" only these values as:
@@ -410,7 +412,7 @@ func setup(
 
 	nodeID := me.Address.NodeID
 	vc = dash.NewValidatorConnExecutor(nodeID, eventBus, sw, log.TestingLogger())
-	vc.NumConnections = 2
+	vc.NumConnections = 3
 	err = vc.Start()
 	require.NoError(t, err)
 
@@ -423,10 +425,18 @@ func cleanup(t *testing.T, bus *types.EventBus, sw dash.ISwitch, vc *dash.Valida
 	assert.NoError(t, vc.Stop())
 }
 
-func validatorAddresses(validators []*types.Validator) []string {
+// validatorAddresses converts slice of validator into slice of their addresses.
+// The output does not contain addreses of validators which are part of `exceptions` slice.
+func validatorAddresses(validators []*types.Validator, exceptions []*types.Validator) []string {
+	skip := map[p2p.ID]bool{}
+	for _, e := range exceptions {
+		skip[e.Address.NodeID] = true
+	}
 	addresses := make([]string, 0, len(validators))
 	for _, v := range validators {
-		addresses = append(addresses, v.Address.String())
+		if !skip[v.Address.NodeID] {
+			addresses = append(addresses, v.Address.String())
+		}
 	}
 
 	return addresses
@@ -503,7 +513,7 @@ func makeBlock(state sm.State, height int64, commit *types.Commit) *types.Block 
 
 // TEST APP //
 
-// testApp just changes validators every Nth block
+// testApp which changes validators according to updates defined in testApp.ValidatorSetUpdates
 type testApp struct {
 	abci.BaseApplication
 
