@@ -14,6 +14,7 @@ import (
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/dash"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -51,11 +52,13 @@ func startConsensusNet(t *testing.T, css []*State, n int) (
 	[]*Reactor,
 	[]types.Subscription,
 	[]*types.EventBus,
+	[]*dash.ValidatorConnExecutor,
 ) {
 	reactors := make([]*Reactor, n)
 	blocksSubs := make([]types.Subscription, 0)
 	eventBuses := make([]*types.EventBus, n)
 	nodeProTxHashes := make([]*crypto.ProTxHash, n)
+	validatorConnExecutors := make([]*dash.ValidatorConnExecutor, 0, n)
 	for i := 0; i < n; i++ {
 		/*logger, err := tmflags.ParseLogLevel("consensus:info,*:error", logger, "info")
 		if err != nil {	t.Fatal(err)}*/
@@ -79,11 +82,21 @@ func startConsensusNet(t *testing.T, css []*State, n int) (
 		nodeProTxHashes[i] = &css[i].privValidatorProTxHash
 	}
 	// make connected switches and start all reactors
+	//	switches :=
 	p2p.MakeConnectedSwitches(config.P2P, nodeProTxHashes, func(i int, s *p2p.Switch) *p2p.Switch {
 		s.AddReactor("CONSENSUS", reactors[i])
 		s.SetLogger(reactors[i].conS.Logger.With("module", "p2p"))
 		return s
 	}, p2p.Connect2Switches)
+
+	// for i, sw := range switches {
+	// 	vc := dash.NewValidatorConnExecutor(
+	// 		sw.NodeInfo().ID(), eventBuses[i], sw, css[i].Logger.With("module", "dash"))
+	// 	err := validatorConnExecutors[i].Start()
+	// 	require.NoError(t, err)
+
+	// 	validatorConnExecutors = append(validatorConnExecutors, vc)
+	// }
 
 	// now that everyone is connected,  start the state machines
 	// If we started the state machines before everyone was connected,
@@ -93,11 +106,22 @@ func startConsensusNet(t *testing.T, css []*State, n int) (
 		s := reactors[i].conS.GetState()
 		reactors[i].SwitchToConsensus(s, false)
 	}
-	return reactors, blocksSubs, eventBuses
+	return reactors, blocksSubs, eventBuses, validatorConnExecutors
 }
 
-func stopConsensusNet(logger log.Logger, reactors []*Reactor, eventBuses []*types.EventBus) {
+func stopConsensusNet(logger log.Logger,
+	reactors []*Reactor,
+	eventBuses []*types.EventBus,
+	validatorConnExecutors []*dash.ValidatorConnExecutor) {
+
 	logger.Info("stopConsensusNet", "n", len(reactors))
+	for i, v := range validatorConnExecutors {
+		logger.Info("stopConsensusNet: Stopping ValidatorConnExecutor", "i", i)
+		if err := v.Stop(); err != nil {
+			logger.Error("error trying to stop ValidatorConnExecutor", "error", err)
+		}
+	}
+
 	for i, r := range reactors {
 		logger.Info("stopConsensusNet: Stopping Reactor", "i", i)
 		if err := r.Switch.Stop(); err != nil {
@@ -110,6 +134,7 @@ func stopConsensusNet(logger log.Logger, reactors []*Reactor, eventBuses []*type
 			logger.Error("error trying to stop eventbus", "error", err)
 		}
 	}
+
 	logger.Info("stopConsensusNet: DONE", "n", len(reactors))
 }
 
@@ -132,8 +157,8 @@ func TestReactorBasic(t *testing.T) {
 			css, cleanup := randConsensusNet(nValidators, initialHeight, "consensus_reactor_test",
 				newMockTickerFunc(true), newCounter)
 			defer cleanup()
-			reactors, blocksSubs, eventBuses := startConsensusNet(t, css, nValidators)
-			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+			reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, nValidators)
+			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
 			// wait till everyone makes the first new block
 			timeoutWaitGroup(t, nValidators, func(j int) {
 				<-blocksSubs[j].Out()
@@ -175,7 +200,7 @@ func TestReactorThreshold(t *testing.T) {
 			}
 			defer cleanup()
 
-			reactors, blocksSubs, eventBuses := startConsensusNet(t, css, activeValidators)
+			reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, activeValidators)
 
 			voteCh := subscribe(css[0].eventBus, types.EventQueryVote)
 			// map of active validators
@@ -186,7 +211,7 @@ func TestReactorThreshold(t *testing.T) {
 				activeVals[string(proTxHash)] = struct{}{}
 			}
 
-			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
 
 			if shouldGenerate {
 				waitForAndValidateBlock(t, activeValidators, activeVals, blocksSubs, css)
@@ -289,8 +314,8 @@ func TestReactorWithEvidence(t *testing.T) {
 				css[i] = cs
 			}
 
-			reactors, blocksSubs, eventBuses := startConsensusNet(t, css, nValidators)
-			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+			reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, nValidators)
+			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
 
 			// we expect for each validator that is the proposer to propose one piece of evidence.
 			for i := 0; i < nValidators; i++ {
@@ -328,8 +353,8 @@ func TestReactorCreatesBlockWhenEmptyBlocksFalse(t *testing.T) {
 					c.Consensus.CreateEmptyBlocks = false
 				})
 			defer cleanup()
-			reactors, blocksSubs, eventBuses := startConsensusNet(t, css, nValidators)
-			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+			reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, nValidators)
+			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
 
 			// send a tx
 			if err := assertMempool(css[3].txNotifier).CheckTx([]byte{1, 2, 3}, nil, mempl.TxInfo{}); err != nil {
@@ -348,8 +373,8 @@ func TestReactorReceiveDoesNotPanicIfAddPeerHasntBeenCalledYet(t *testing.T) {
 	N := 1
 	css, cleanup := randConsensusNet(N, 1, "consensus_reactor_test", newMockTickerFunc(true), newCounter)
 	defer cleanup()
-	reactors, _, eventBuses := startConsensusNet(t, css, N)
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+	reactors, _, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
 
 	var (
 		reactor = reactors[0]
@@ -371,8 +396,8 @@ func TestReactorReceivePanicsIfInitPeerHasntBeenCalledYet(t *testing.T) {
 	N := 1
 	css, cleanup := randConsensusNet(N, 1, "consensus_reactor_test", newMockTickerFunc(true), newCounter)
 	defer cleanup()
-	reactors, _, eventBuses := startConsensusNet(t, css, N)
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+	reactors, _, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
 
 	var (
 		reactor = reactors[0]
@@ -394,8 +419,8 @@ func TestReactorRecordsVotesAndBlockParts(t *testing.T) {
 	N := 4
 	css, cleanup := randConsensusNet(N, 1, "consensus_reactor_test", newMockTickerFunc(true), newCounter)
 	defer cleanup()
-	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, N)
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+	reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
 
 	// wait till everyone makes the first new block
 	timeoutWaitGroup(t, N, func(j int) {
@@ -424,8 +449,8 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 	defer cleanup()
 	logger := log.TestingLogger()
 
-	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, nPeers)
-	defer stopConsensusNet(logger, reactors, eventBuses)
+	reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, nPeers)
+	defer stopConsensusNet(logger, reactors, eventBuses, validatorConnExecutors)
 
 	// map of active validators
 	activeVals := make(map[string]struct{})
@@ -454,7 +479,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		abciPubKey, err := cryptoenc.PubKeyToProto(updatedValidators[i].PubKey)
 		require.NoError(t, err)
 		updateTransactions[i] = kvstore.MakeValSetChangeTx(
-			updatedValidators[i].ProTxHash, &abciPubKey, testMinPower, updatedValidators[i].Address)
+			updatedValidators[i].ProTxHash, &abciPubKey, testMinPower)
 	}
 	abciThresholdPubKey, err := cryptoenc.PubKeyToProto(newThresholdPublicKey)
 	require.NoError(t, err)
@@ -498,7 +523,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		abciPubKey, err := cryptoenc.PubKeyToProto(updatedValidators[i].PubKey)
 		require.NoError(t, err)
 		updateTransactions2[i] = kvstore.MakeValSetChangeTx(
-			updatedValidators[i].ProTxHash, &abciPubKey, testMinPower, updatedValidators[i].Address)
+			updatedValidators[i].ProTxHash, &abciPubKey, testMinPower)
 	}
 	abciThresholdPubKey, err = cryptoenc.PubKeyToProto(newThresholdPublicKey)
 	require.NoError(t, err)
@@ -533,8 +558,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		// start by adding all validator transactions
 		abciPubKey, err := cryptoenc.PubKeyToProto(updatedValidators[i].PubKey)
 		require.NoError(t, err)
-		updateTransactions3[i] = kvstore.MakeValSetChangeTx(updatedValidators[i].ProTxHash, &abciPubKey, testMinPower,
-			updatedValidators[i].Address)
+		updateTransactions3[i] = kvstore.MakeValSetChangeTx(updatedValidators[i].ProTxHash, &abciPubKey, testMinPower)
 	}
 	abciThresholdPubKey, err = cryptoenc.PubKeyToProto(newThresholdPublicKey)
 	require.NoError(t, err)
@@ -568,8 +592,8 @@ func TestReactorWithTimeoutCommit(t *testing.T) {
 		css[i].config.SkipTimeoutCommit = false
 	}
 
-	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, N-1)
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+	reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N-1)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
 
 	// wait till everyone makes the first new block
 	timeoutWaitGroup(t, N-1, func(j int) {
@@ -700,7 +724,7 @@ func timeoutWaitGroup(t *testing.T, n int, f func(int), css []*State) {
 
 	// we're running many nodes in-process, possibly in in a virtual machine,
 	// and spewing debug messages - making a block could take a while,
-	timeout := time.Second * 20
+	timeout := time.Second * 10
 
 	select {
 	case <-done:

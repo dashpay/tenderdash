@@ -191,12 +191,6 @@ func TestValidateValidatorUpdates(t *testing.T) {
 			defaultValidatorParams,
 			true,
 		},
-		{
-			"adding a validator without address should fail",
-			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: 100, ProTxHash: proTxHash2, Address: ""}},
-			defaultValidatorParams,
-			true,
-		},
 	}
 
 	for _, tc := range testCases {

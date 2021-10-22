@@ -17,7 +17,6 @@ import (
 	abciserver "github.com/tendermint/tendermint/abci/server"
 	"github.com/tendermint/tendermint/abci/types"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	tmtypes "github.com/tendermint/tendermint/types"
 )
 
 const (
@@ -153,9 +152,9 @@ func TestValUpdates(t *testing.T) {
 		removalUpdates[i].Power = 0
 	}
 	for i, val := range fullVals.ValidatorUpdates {
-		addr, err := tmtypes.NewValidatorAddress(val.Address)
-		require.NoError(t, err)
-		txs[i+5] = MakeValSetChangeTx(val.ProTxHash, val.PubKey, val.Power, addr)
+		// addr, err := tmtypes.NewValidatorAddress(val.Address)
+		// require.NoError(t, err)
+		txs[i+5] = MakeValSetChangeTx(val.ProTxHash, val.PubKey, val.Power)
 	}
 	txs[15] = MakeThresholdPublicKeyChangeTx(fullVals.ThresholdPublicKey)
 	txs[16] = MakeQuorumHashTx(fullVals.QuorumHash)

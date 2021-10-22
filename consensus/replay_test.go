@@ -408,7 +408,6 @@ func TestSimulateValidatorsChange(t *testing.T) {
 			updatedValidators2[i].ProTxHash,
 			&abciPubKey,
 			testMinPower,
-			updatedValidators2[i].Address,
 		)
 	}
 	abciThresholdPubKey, err := cryptoenc.PubKeyToProto(newThresholdPublicKey)
@@ -508,7 +507,6 @@ func TestSimulateValidatorsChange(t *testing.T) {
 			updatedValidators4[i].ProTxHash,
 			&abciPubKey,
 			testMinPower,
-			updatedValidators4[i].Address,
 		)
 		var oldPubKey crypto.PubKey
 		for _, validatorAt2 := range updatedValidators2 {
@@ -678,7 +676,6 @@ func TestSimulateValidatorsChange(t *testing.T) {
 			updatedValidators6[i].ProTxHash,
 			&abciPubKey,
 			testMinPower,
-			updatedValidators6[i].Address,
 		)
 		var oldPubKey crypto.PubKey
 		for _, validatorAt4 := range updatedValidators4 {
@@ -868,7 +865,7 @@ func TestSimulateValidatorsChange(t *testing.T) {
 		abciPubKey, err := cryptoenc.PubKeyToProto(updatedValidators8[i].PubKey)
 		require.NoError(t, err)
 		updateTransactions4[i] = kvstore.MakeValSetChangeTx(
-			updatedValidators8[i].ProTxHash, &abciPubKey, testMinPower, updatedValidators8[i].Address,
+			updatedValidators8[i].ProTxHash, &abciPubKey, testMinPower,
 		)
 	}
 	abciThresholdPubKey, err = cryptoenc.PubKeyToProto(newThresholdPublicKey)

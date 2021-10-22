@@ -39,9 +39,9 @@ func TestValidProposalChainLocks(t *testing.T) {
 		css[i].SetTimeoutTicker(ticker)
 	}
 
-	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, N)
+	reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N)
 
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
 
 	for i := 0; i < 3; i++ {
 		timeoutWaitGroup(t, N, func(j int) {
@@ -68,7 +68,7 @@ func TestReactorInvalidProposalHeightForChainLocks(t *testing.T) {
 		css[i].SetTimeoutTicker(ticker)
 	}
 
-	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, N)
+	reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N)
 
 	// this proposer sends a chain lock at each height
 	byzProposerID := 0
@@ -84,7 +84,7 @@ func TestReactorInvalidProposalHeightForChainLocks(t *testing.T) {
 	}(int32(0))
 	byzProposer.mtx.Unlock()
 
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
 
 	for i := 0; i < 3; i++ {
 		timeoutWaitGroup(t, N, func(j int) {
@@ -161,9 +161,9 @@ func TestReactorInvalidBlockChainLock(t *testing.T) {
 		css[i].SetTimeoutTicker(ticker)
 	}
 
-	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, N)
+	reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N)
 
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
 
 	for i := 0; i < 10; i++ {
 		timeoutWaitGroup(t, N, func(j int) {

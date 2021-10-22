@@ -15,7 +15,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/libs/log"
-	tmtypes "github.com/tendermint/tendermint/types"
 
 	pc "github.com/tendermint/tendermint/proto/tendermint/crypto"
 )
@@ -73,10 +72,10 @@ func (app *PersistentKVStoreApplication) SetOption(req types.RequestSetOption) t
 	return app.app.SetOption(req)
 }
 
-// tx is either "val:proTxHash!pubkey!power!uri" or "key=value" or just arbitrary bytes
+// tx is either "val:proTxHash!pubkey!power" or "key=value" or just arbitrary bytes
 func (app *PersistentKVStoreApplication) DeliverTx(req types.RequestDeliverTx) types.ResponseDeliverTx {
 	// if it starts with "vals:", update the validator set
-	// format is "val:proTxHash!pubkey!power!uri"
+	// format is "val:proTxHash!pubkey!power"
 	switch {
 	case isValidatorTx(req.Tx):
 		// update validators in the merkle tree
@@ -235,7 +234,7 @@ func (app *PersistentKVStoreApplication) ValidatorSet() (validatorSet types.Vali
 	return validatorSet
 }
 
-func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64, uri tmtypes.ValidatorAddress) []byte {
+func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64) []byte {
 	pubStr := ""
 	if pubkey != nil {
 		pk, err := cryptoenc.PubKeyFromProto(*pubkey)
@@ -245,12 +244,12 @@ func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64, uri
 		pubStr = base64.StdEncoding.EncodeToString(pk.Bytes())
 	}
 	proTxHashStr := base64.StdEncoding.EncodeToString(proTxHash)
-	return []byte(fmt.Sprintf("%s%s!%s!%d!%s", ValidatorSetChangePrefix, proTxHashStr, pubStr, power, uri))
+	return []byte(fmt.Sprintf("%s%s!%s!%d", ValidatorSetChangePrefix, proTxHashStr, pubStr, power))
 }
 
 func MakeValSetRemovalTx(proTxHash []byte) []byte {
 	proTxHashStr := base64.StdEncoding.EncodeToString(proTxHash)
-	return []byte(fmt.Sprintf("%s%s!!%d!", ValidatorSetChangePrefix, proTxHashStr, 0))
+	return []byte(fmt.Sprintf("%s%s!!%d", ValidatorSetChangePrefix, proTxHashStr, 0))
 }
 
 func MakeThresholdPublicKeyChangeTx(thresholdPublicKey pc.PublicKey) []byte {
@@ -279,19 +278,19 @@ func isQuorumHashTx(tx []byte) bool {
 	return strings.HasPrefix(string(tx), ValidatorSetQuorumHashPrefix)
 }
 
-// format is "val:proTxHash!pubkey!power!uri"
+// format is "val:proTxHash!pubkey!power"
 // pubkey is a base64-encoded 48-byte bls12381 key
 func (app *PersistentKVStoreApplication) execValidatorTx(tx []byte) types.ResponseDeliverTx {
 	tx = tx[len(ValidatorSetChangePrefix):]
 
 	//  get the pubkey and power
 	values := strings.Split(string(tx), "!")
-	if len(values) != 4 {
+	if len(values) != 3 {
 		return types.ResponseDeliverTx{
 			Code: code.CodeTypeEncodingError,
-			Log:  fmt.Sprintf("Expected 'proTxHash!pubkey!power!uri'. Got %v", values)}
+			Log:  fmt.Sprintf("Expected 'proTxHash!pubkey!power'. Got %v", values)}
 	}
-	proTxHashS, pubkeyS, powerS, uri := values[0], values[1], values[2], values[3]
+	proTxHashS, pubkeyS, powerS := values[0], values[1], values[2]
 
 	// decode the proTxHash
 	proTxHash, err := base64.StdEncoding.DecodeString(proTxHashS)
@@ -319,9 +318,7 @@ func (app *PersistentKVStoreApplication) execValidatorTx(tx []byte) types.Respon
 			Code: code.CodeTypeEncodingError,
 			Log:  fmt.Sprintf("Power (%s) is not an int", powerS)}
 	}
-	// TODO TD-10 We need to add the address to the Validator TX
-	// no IP on delete request
-	return app.updateValidatorSet(types.UpdateValidator(proTxHash, pubkey, power, uri))
+	return app.updateValidatorSet(types.UpdateValidator(proTxHash, pubkey, power, ""))
 }
 
 // format is "tpk:pubkey"
