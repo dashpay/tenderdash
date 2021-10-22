@@ -10,6 +10,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash"
+	"github.com/tendermint/tendermint/p2p"
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/stretchr/testify/assert"
@@ -64,7 +65,7 @@ func TestValidatorConnExecutor_NotValidator(t *testing.T) {
 func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 
 	me := deterministicValidator(65535)
-	addr1, err := types.NewValidatorAddress("http://john@www.google.com:80")
+	addr1, err := p2p.ParseNodeAddress("http://john@www.google.com:80")
 	val1 := &types.Validator{Address: addr1}
 
 	require.NoError(t, err)
@@ -268,7 +269,7 @@ func TestEndBlock(t *testing.T) {
 
 	// Ensure new validators have some IP addresses set
 	for _, validator := range newVals.Validators {
-		validator.Address = types.RandValidatorAddress()
+		validator.Address = p2p.RandNodeAddress()
 	}
 
 	// setup ValidatorConnExecutor
@@ -446,7 +447,7 @@ func deterministicValidatorAddress(n uint16) string {
 
 // deterministicValidator returns new Validator with deterministic address
 func deterministicValidator(n uint16) *types.Validator {
-	a, _ := types.NewValidatorAddress(deterministicValidatorAddress(n))
+	a, _ := p2p.ParseNodeAddress(deterministicValidatorAddress(n))
 	return &types.Validator{Address: a}
 }
 

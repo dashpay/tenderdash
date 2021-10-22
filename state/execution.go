@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/crypto/bls12381"
+	"github.com/tendermint/tendermint/p2p"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -530,7 +531,7 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 
 		// Validate endpoint address
 		if valUpdate.Address != "" {
-			addr, err := types.NewValidatorAddress(valUpdate.Address)
+			addr, err := p2p.ParseNodeAddress(valUpdate.Address)
 			if err != nil {
 				return fmt.Errorf("cannot parse validator address %s: %w", valUpdate.Address, err)
 			}

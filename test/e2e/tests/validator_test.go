@@ -7,6 +7,7 @@ import (
 	"github.com/dashevo/dashd-go/btcjson"
 
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/p2p"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -70,7 +71,7 @@ func TestValidator_Sets(t *testing.T) {
 
 				// Validators in the schedule don't contain addresses
 				assert.NotZero(t, validator.Address)
-				validator.Address = types.ValidatorAddress{}
+				validator.Address = p2p.NodeAddress{}
 			}
 			require.Equal(t, valSchedule.Set.Validators, validators,
 				"incorrect validator set at height %v", h)

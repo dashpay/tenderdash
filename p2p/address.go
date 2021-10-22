@@ -16,6 +16,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	tmrand "github.com/tendermint/tendermint/libs/rand"
 )
 
 var (
@@ -176,6 +178,29 @@ func (a NodeAddress) Validate() error {
 		return errors.New("cannot specify port without hostname")
 	}
 	return nil
+}
+
+func (a NodeAddress) NetAddress() (*NetAddress, error) {
+	addr, err := NewNetAddressString(a.String())
+	if err != nil || addr == nil {
+		return nil, err
+	}
+	return addr, nil
+}
+
+// p2p.RandNodeAddress generates a random validator address
+func RandNodeAddress() NodeAddress {
+
+	nodeID := tmrand.Bytes(20)
+	port := (tmrand.Int() % 65535) + 1
+	addr, err := ParseNodeAddress(fmt.Sprintf("tcp://%x@127.0.0.1:%d", nodeID, port))
+	if err != nil {
+		panic(fmt.Sprintf("cannot generate random validator address: %s", err))
+	}
+	if err := addr.Validate(); err != nil {
+		panic(fmt.Sprintf("randomly generated validator address %s is invalid: %s", addr.String(), err))
+	}
+	return addr
 }
 
 // Endpoint represents a transport connection endpoint, either local or remote.

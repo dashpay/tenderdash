@@ -156,7 +156,7 @@ func TestValidateValidatorUpdates(t *testing.T) {
 		PubKeyTypes: []string{types.ABCIPubKeyTypeBLS12381},
 	}
 
-	addr := types.RandValidatorAddress()
+	addr := p2p.RandNodeAddress()
 
 	testCases := []struct {
 		name string
@@ -367,7 +367,7 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 
 	// Ensure new validators have some IP addresses set
 	for _, validator := range newVals.Validators {
-		validator.Address = types.RandValidatorAddress()
+		validator.Address = p2p.RandNodeAddress()
 	}
 
 	app.ValidatorSetUpdate = newVals.ABCIEquivalentValidatorUpdates()
