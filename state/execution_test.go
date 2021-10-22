@@ -6,7 +6,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/p2p"
@@ -457,50 +456,4 @@ func TestEndBlockValidatorUpdatesResultingInEmptySet(t *testing.T) {
 	)
 	assert.NotNil(t, err)
 	assert.NotEmpty(t, state.NextValidators.Validators)
-}
-
-/*
-func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte) types.BlockID {
-	var (
-		h   = make([]byte, tmhash.Size)
-		psH = make([]byte, tmhash.Size)
-	)
-	copy(h, hash)
-	copy(psH, partSetHash)
-	return types.BlockID{
-		Hash: h,
-		PartSetHeader: types.PartSetHeader{
-			Total: partSetSize,
-			Hash:  psH,
-		},
-	}
-}
-*/
-
-/*
-func makeStateID(lastAppHash []byte) types.StateID {
-	var (
-		h = make([]byte, tmhash.Size)
-	)
-	copy(h, lastAppHash)
-	return types.StateID{
-		LastAppHash: h,
-	}
-}*/
-
-// Creates a peer with the provided config
-func createSwitch(t *testing.T, id int) *p2p.Switch {
-	cfg := config.P2PConfig{}
-	peer := p2p.MakeSwitch(
-		&cfg,
-		id,
-		"127.0.0.1",
-		"123.123.123",
-		nil,
-		func(i int, sw *p2p.Switch) *p2p.Switch {
-			sw.SetLogger(log.TestingLogger())
-			return sw
-		},
-	)
-	return peer
 }

@@ -84,7 +84,7 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 			1: {
 				validators: []*types.Validator{
 					me,
-					val1, //nolint:simplifycompositelit
+					val1,
 				},
 				expectedHistory: []mockSwitchHistoryEvent{
 					{Operation: "stopOne"},
