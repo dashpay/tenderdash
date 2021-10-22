@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -140,6 +141,10 @@ func (a NodeAddress) Resolve(ctx context.Context) ([]Endpoint, error) {
 
 // String formats the address as a URL string.
 func (a NodeAddress) String() string {
+	if a.Zero() {
+		return ""
+	}
+
 	u := url.URL{Scheme: a.Protocol}
 	if a.NodeID != "" {
 		u.User = url.User(string(a.NodeID))
@@ -178,6 +183,10 @@ func (a NodeAddress) Validate() error {
 		return errors.New("cannot specify port without hostname")
 	}
 	return nil
+}
+
+func (a NodeAddress) Zero() bool {
+	return reflect.ValueOf(a).IsZero()
 }
 
 func (a NodeAddress) NetAddress() (*NetAddress, error) {

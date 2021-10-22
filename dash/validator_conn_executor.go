@@ -54,7 +54,7 @@ type ValidatorConnExecutor struct {
 	// mux is a mutex to ensure only one goroutine is processing connections
 	mux sync.Mutex
 
-	// configuration //
+	// *** configuration *** //
 
 	// NumConnections is the number of connections to establish, defaults to 3
 	NumConnections int

@@ -49,18 +49,21 @@ func NewValidatorDefaultVotingPower(pubKey crypto.PubKey, proTxHash []byte) *Val
 
 // NewValidator returns a new validator with the given pubkey and voting power.
 func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash []byte, address string) *Validator {
-	addr, err := p2p.ParseNodeAddress(address)
-	if err != nil {
-		panic(fmt.Sprintf("cannot parse validator address %s: %s", address, err))
-	}
-
 	val := &Validator{
 		PubKey:           pubKey,
 		VotingPower:      votingPower,
 		ProposerPriority: 0,
 		ProTxHash:        proTxHash,
-		Address:          addr,
 	}
+
+	if address != "" {
+		addr, err := p2p.ParseNodeAddress(address)
+		if err != nil {
+			panic(fmt.Sprintf("cannot parse validator address %s: %s", address, err))
+		}
+		val.Address = addr
+	}
+
 	return val
 }
 
@@ -235,11 +238,13 @@ func ValidatorFromProto(vp *tmproto.Validator) (*Validator, error) {
 		v.PubKey = pk
 	}
 
-	address, err := p2p.ParseNodeAddress(vp.Address)
-	if err != nil {
-		return nil, err
+	if vp.Address != "" {
+		address, err := p2p.ParseNodeAddress(vp.Address)
+		if err != nil {
+			return nil, err
+		}
+		v.Address = address
 	}
-	v.Address = address
 
 	return v, nil
 }
