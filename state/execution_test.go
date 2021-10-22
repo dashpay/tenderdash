@@ -9,7 +9,6 @@ import (
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/dash"
 	"github.com/tendermint/tendermint/p2p"
 
 	"github.com/stretchr/testify/assert"
@@ -170,6 +169,11 @@ func TestValidateValidatorUpdates(t *testing.T) {
 		{
 			"adding a validator is OK",
 			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: 100, ProTxHash: proTxHash2, Address: addr.String()}},
+			defaultValidatorParams,
+			false,
+		},
+		{"adding a validator without address is OK",
+			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: 100, ProTxHash: proTxHash2}},
 			defaultValidatorParams,
 			false,
 		},
@@ -401,111 +405,6 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 	case <-time.After(1 * time.Second):
 		t.Fatal("Did not receive EventValidatorSetUpdates within 1 sec.")
 	}
-}
-
-// TestEndBlockValidatorConnect ensures we update validator set and send an event.
-func TestEndBlockValidatorConnect(t *testing.T) {
-	wait := 15 * time.Second // how long we'll wait for connection
-	app := &testApp{}
-	cc := proxy.NewLocalClientCreator(app)
-	proxyApp := proxy.NewAppConns(cc)
-	err := proxyApp.Start()
-	require.Nil(t, err)
-	defer proxyApp.Stop() //nolint:errcheck // ignore for tests
-
-	state, stateDB, _ := makeState(1, 1)
-	nodeProTxHash := &state.Validators.Validators[0].ProTxHash
-	stateStore := sm.NewStore(stateDB)
-
-	blockExec := sm.NewBlockExecutor(
-		stateStore,
-		log.TestingLogger(),
-		proxyApp.Consensus(),
-		proxyApp.Query(),
-		mmock.Mempool{},
-		sm.EmptyEvidencePool{},
-		nil,
-	)
-
-	eventBus := types.NewEventBus()
-	err = eventBus.Start()
-	require.NoError(t, err)
-	defer eventBus.Stop() //nolint:errcheck // ignore for tests
-
-	blockExec.SetEventBus(eventBus)
-
-	updatesSub, err := eventBus.Subscribe(
-		context.Background(),
-		"TestEndBlockValidatorUpdates",
-		types.EventQueryValidatorSetUpdates,
-	)
-	require.NoError(t, err)
-
-	sw := createSwitch(t, 1)
-	nodeID := state.Validators.Validators[0].Address.NodeID
-	vc := dash.NewValidatorConnExecutor(nodeID, eventBus, sw, log.TestingLogger())
-	err = vc.Start()
-	require.NoError(t, err)
-	defer func() { err := vc.Stop(); require.NoError(t, err) }()
-
-	block := makeBlock(state, 1)
-	blockID := types.BlockID{
-		Hash:          block.Hash(),
-		PartSetHeader: block.MakePartSet(testPartSize).Header(),
-	}
-
-	vals := state.Validators
-	proTxHashes := vals.GetProTxHashes()
-	addProTxHash := crypto.RandProTxHash()
-	proTxHashes = append(proTxHashes, addProTxHash)
-	newVals, _ := types.GenerateValidatorSetUsingProTxHashes(proTxHashes)
-	var pos int
-	for i, proTxHash := range newVals.GetProTxHashes() {
-		if bytes.Equal(proTxHash.Bytes(), addProTxHash.Bytes()) {
-			pos = i
-		}
-	}
-
-	// Ensure new validators have some IP addresses set
-	for _, validator := range newVals.Validators {
-		validator.Address = types.RandValidatorAddress()
-	}
-
-	app.ValidatorSetUpdate = newVals.ABCIEquivalentValidatorUpdates()
-
-	state, _, err = blockExec.ApplyBlock(state, nodeProTxHash, blockID, block)
-	require.Nil(t, err)
-	// test new validator was added to NextValidators
-	if assert.Equal(t, state.Validators.Size()+1, state.NextValidators.Size()) {
-		idx, _ := state.NextValidators.GetByProTxHash(addProTxHash)
-		if idx < 0 {
-			t.Fatalf("can't find proTxHash %v in the set %v", addProTxHash, state.NextValidators)
-		}
-	}
-	// test we threw an event
-	select {
-	case msg := <-updatesSub.Out():
-		event, ok := msg.Data().(types.EventDataValidatorSetUpdates)
-		require.True(
-			t,
-			ok,
-			"Expected event of type EventDataValidatorSetUpdates, got %T",
-			msg.Data(),
-		)
-		if assert.NotEmpty(t, event.ValidatorUpdates) {
-			assert.Equal(t, addProTxHash, event.ValidatorUpdates[pos].ProTxHash)
-			assert.EqualValues(
-				t,
-				types.DefaultDashVotingPower,
-				event.ValidatorUpdates[1].VotingPower,
-			)
-		}
-	case <-updatesSub.Cancelled():
-		t.Fatalf("updatesSub was cancelled (reason: %v)", updatesSub.Err())
-	case <-time.After(1 * time.Second):
-		t.Fatal("Did not receive EventValidatorSetUpdates within 1 sec.")
-	}
-	time.Sleep(wait)
 }
 
 // TestEndBlockValidatorUpdatesResultingInEmptySet checks that processing validator updates that

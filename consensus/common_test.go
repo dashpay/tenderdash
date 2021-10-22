@@ -788,12 +788,6 @@ func updateConsensusNetAddNewValidators(css []*State, height int64, addValCount 
 				privVal.UpdatePrivateKey(privKeys[j], quorumHash, thresholdPublicKey, height+3)
 				updatedValidators[j] = privVal.ExtractIntoValidator(quorumHash)
 				publicKeys[j] = privKeys[j].PubKey()
-				// address, err := types.NewValidatorAddress(fmt.Sprintf("tcp://%x@127.0.0.1:%d", p2p.PubKeyToID(publicKeys[j]), j+1))
-				// if err != nil {
-				// 	panic(err)
-				// }
-				// updatedValidators[j].Address = address
-
 				if !bytes.Equal(updatedValidators[j].PubKey.Bytes(), publicKeys[j].Bytes()) {
 					panic("the validator public key should match the public key")
 				}

@@ -729,17 +729,7 @@ func (n *Node) ValidatorUpdate(publicKey []byte) (abci.ValidatorUpdate, error) {
 	// TODO TD-10 find real power
 	power := types.DefaultDashVotingPower
 
-	// The lines below don't work, not sure why
-	// quorumHash := n.Testnet.QuorumHash.String()
-	// privateKey := n.PrivvalKeys[quorumHash]
-	// pk2 := privateKey.PrivKey.PubKey().Bytes()
-	// if len(publicKey) == 0 {
-	// 	publicKey = pk2
-	// }
-	// publicKey := n.Testnet.ThresholdPublicKey
-
 	address := n.AddressP2P(true)
-
 	validatorUpdate := abci.UpdateValidator(proTxHash, publicKey, power, address)
 	return validatorUpdate, nil
 }

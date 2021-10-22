@@ -28,7 +28,7 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 
 	}
 
-	reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N)
+	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, N)
 
 	// this val sends a random precommit at each height
 	byzValIdx := 0
@@ -43,7 +43,7 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 		invalidDoPrevoteFunc(t, height, round, byzVal, byzR.Switch, pv)
 	}
 	byzVal.mtx.Unlock()
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
 	// wait for a bunch of blocks
 	// TODO: make this tighter by ensuring the halt happens by block 2

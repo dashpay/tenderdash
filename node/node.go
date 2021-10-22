@@ -1032,9 +1032,7 @@ func NewNode(config *cfg.Config,
 		}()
 	}
 
-	// Initialize ValidatorConnExecutor on a validator
-	// TODO TD-10 start only on validators
-
+	// Initialize ValidatorConnExecutor
 	validatorConnExecutor := dash.NewValidatorConnExecutor(
 		nodeInfo.ID(),
 		eventBus,

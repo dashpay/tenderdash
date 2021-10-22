@@ -269,7 +269,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		s := reactors[i].conS.GetState()
 		reactors[i].SwitchToConsensus(s, false)
 	}
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, nil)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
 	// Evidence should be submitted and committed at the third height but
 	// we will check the first six just in case

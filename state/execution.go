@@ -530,7 +530,6 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 
 		// Validate endpoint address
 		if valUpdate.Address != "" {
-			// return fmt.Errorf("validator address cannot be empty")
 			addr, err := types.NewValidatorAddress(valUpdate.Address)
 			if err != nil {
 				return fmt.Errorf("cannot parse validator address %s: %w", valUpdate.Address, err)

@@ -132,7 +132,7 @@ func (v *Validator) CompareProposerPriority(other *Validator) *Validator {
 // 2. public key
 // 3. voting power
 // 4. proposer priority
-// 5. node addredd
+// 5. node address
 func (v *Validator) String() string {
 	if v == nil {
 		return "nil-Validator"
@@ -209,7 +209,6 @@ func (v *Validator) ToProto() (*tmproto.Validator, error) {
 		}
 		vp.PubKey = &pk
 	}
-
 	vp.Address = v.Address.String()
 
 	return &vp, nil

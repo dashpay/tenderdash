@@ -152,8 +152,6 @@ func TestValUpdates(t *testing.T) {
 		removalUpdates[i].Power = 0
 	}
 	for i, val := range fullVals.ValidatorUpdates {
-		// addr, err := tmtypes.NewValidatorAddress(val.Address)
-		// require.NoError(t, err)
 		txs[i+5] = MakeValSetChangeTx(val.ProTxHash, val.PubKey, val.Power)
 	}
 	txs[15] = MakeThresholdPublicKeyChangeTx(fullVals.ThresholdPublicKey)

@@ -84,8 +84,10 @@ func (pubKeyBLS) TypeValue() crypto.KeyType                               { retu
 
 func TestABCIValidatorFromPubKeyAndPower(t *testing.T) {
 	pubkey := bls12381.GenPrivKey().PubKey()
-	abciVal := TM2PB.NewValidatorUpdate(pubkey, DefaultDashVotingPower, crypto.RandProTxHash(), RandValidatorAddress())
+	address := RandValidatorAddress()
+	abciVal := TM2PB.NewValidatorUpdate(pubkey, DefaultDashVotingPower, crypto.RandProTxHash(), address)
 	assert.Equal(t, DefaultDashVotingPower, abciVal.Power)
+	assert.Equal(t, address.String(), abciVal.Address)
 
 	assert.NotPanics(t, func() {
 		TM2PB.NewValidatorUpdate(nil, DefaultDashVotingPower, crypto.RandProTxHash(), RandValidatorAddress())

@@ -14,7 +14,6 @@ import (
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -52,13 +51,11 @@ func startConsensusNet(t *testing.T, css []*State, n int) (
 	[]*Reactor,
 	[]types.Subscription,
 	[]*types.EventBus,
-	[]*dash.ValidatorConnExecutor,
 ) {
 	reactors := make([]*Reactor, n)
 	blocksSubs := make([]types.Subscription, 0)
 	eventBuses := make([]*types.EventBus, n)
 	nodeProTxHashes := make([]*crypto.ProTxHash, n)
-	validatorConnExecutors := make([]*dash.ValidatorConnExecutor, 0, n)
 	for i := 0; i < n; i++ {
 		/*logger, err := tmflags.ParseLogLevel("consensus:info,*:error", logger, "info")
 		if err != nil {	t.Fatal(err)}*/
@@ -82,21 +79,11 @@ func startConsensusNet(t *testing.T, css []*State, n int) (
 		nodeProTxHashes[i] = &css[i].privValidatorProTxHash
 	}
 	// make connected switches and start all reactors
-	//	switches :=
 	p2p.MakeConnectedSwitches(config.P2P, nodeProTxHashes, func(i int, s *p2p.Switch) *p2p.Switch {
 		s.AddReactor("CONSENSUS", reactors[i])
 		s.SetLogger(reactors[i].conS.Logger.With("module", "p2p"))
 		return s
 	}, p2p.Connect2Switches)
-
-	// for i, sw := range switches {
-	// 	vc := dash.NewValidatorConnExecutor(
-	// 		sw.NodeInfo().ID(), eventBuses[i], sw, css[i].Logger.With("module", "dash"))
-	// 	err := validatorConnExecutors[i].Start()
-	// 	require.NoError(t, err)
-
-	// 	validatorConnExecutors = append(validatorConnExecutors, vc)
-	// }
 
 	// now that everyone is connected,  start the state machines
 	// If we started the state machines before everyone was connected,
@@ -106,22 +93,12 @@ func startConsensusNet(t *testing.T, css []*State, n int) (
 		s := reactors[i].conS.GetState()
 		reactors[i].SwitchToConsensus(s, false)
 	}
-	return reactors, blocksSubs, eventBuses, validatorConnExecutors
+	return reactors, blocksSubs, eventBuses
 }
 
-func stopConsensusNet(logger log.Logger,
-	reactors []*Reactor,
-	eventBuses []*types.EventBus,
-	validatorConnExecutors []*dash.ValidatorConnExecutor) {
+func stopConsensusNet(logger log.Logger, reactors []*Reactor, eventBuses []*types.EventBus) {
 
 	logger.Info("stopConsensusNet", "n", len(reactors))
-	for i, v := range validatorConnExecutors {
-		logger.Info("stopConsensusNet: Stopping ValidatorConnExecutor", "i", i)
-		if err := v.Stop(); err != nil {
-			logger.Error("error trying to stop ValidatorConnExecutor", "error", err)
-		}
-	}
-
 	for i, r := range reactors {
 		logger.Info("stopConsensusNet: Stopping Reactor", "i", i)
 		if err := r.Switch.Stop(); err != nil {
@@ -134,7 +111,6 @@ func stopConsensusNet(logger log.Logger,
 			logger.Error("error trying to stop eventbus", "error", err)
 		}
 	}
-
 	logger.Info("stopConsensusNet: DONE", "n", len(reactors))
 }
 
@@ -157,8 +133,8 @@ func TestReactorBasic(t *testing.T) {
 			css, cleanup := randConsensusNet(nValidators, initialHeight, "consensus_reactor_test",
 				newMockTickerFunc(true), newCounter)
 			defer cleanup()
-			reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, nValidators)
-			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
+			reactors, blocksSubs, eventBuses := startConsensusNet(t, css, nValidators)
+			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 			// wait till everyone makes the first new block
 			timeoutWaitGroup(t, nValidators, func(j int) {
 				<-blocksSubs[j].Out()
@@ -200,7 +176,7 @@ func TestReactorThreshold(t *testing.T) {
 			}
 			defer cleanup()
 
-			reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, activeValidators)
+			reactors, blocksSubs, eventBuses := startConsensusNet(t, css, activeValidators)
 
 			voteCh := subscribe(css[0].eventBus, types.EventQueryVote)
 			// map of active validators
@@ -211,7 +187,7 @@ func TestReactorThreshold(t *testing.T) {
 				activeVals[string(proTxHash)] = struct{}{}
 			}
 
-			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
+			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
 			if shouldGenerate {
 				waitForAndValidateBlock(t, activeValidators, activeVals, blocksSubs, css)
@@ -314,8 +290,8 @@ func TestReactorWithEvidence(t *testing.T) {
 				css[i] = cs
 			}
 
-			reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, nValidators)
-			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
+			reactors, blocksSubs, eventBuses := startConsensusNet(t, css, nValidators)
+			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
 			// we expect for each validator that is the proposer to propose one piece of evidence.
 			for i := 0; i < nValidators; i++ {
@@ -353,8 +329,8 @@ func TestReactorCreatesBlockWhenEmptyBlocksFalse(t *testing.T) {
 					c.Consensus.CreateEmptyBlocks = false
 				})
 			defer cleanup()
-			reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, nValidators)
-			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
+			reactors, blocksSubs, eventBuses := startConsensusNet(t, css, nValidators)
+			defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
 			// send a tx
 			if err := assertMempool(css[3].txNotifier).CheckTx([]byte{1, 2, 3}, nil, mempl.TxInfo{}); err != nil {
@@ -373,8 +349,8 @@ func TestReactorReceiveDoesNotPanicIfAddPeerHasntBeenCalledYet(t *testing.T) {
 	N := 1
 	css, cleanup := randConsensusNet(N, 1, "consensus_reactor_test", newMockTickerFunc(true), newCounter)
 	defer cleanup()
-	reactors, _, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N)
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
+	reactors, _, eventBuses := startConsensusNet(t, css, N)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
 	var (
 		reactor = reactors[0]
@@ -396,8 +372,8 @@ func TestReactorReceivePanicsIfInitPeerHasntBeenCalledYet(t *testing.T) {
 	N := 1
 	css, cleanup := randConsensusNet(N, 1, "consensus_reactor_test", newMockTickerFunc(true), newCounter)
 	defer cleanup()
-	reactors, _, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N)
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
+	reactors, _, eventBuses := startConsensusNet(t, css, N)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
 	var (
 		reactor = reactors[0]
@@ -419,8 +395,8 @@ func TestReactorRecordsVotesAndBlockParts(t *testing.T) {
 	N := 4
 	css, cleanup := randConsensusNet(N, 1, "consensus_reactor_test", newMockTickerFunc(true), newCounter)
 	defer cleanup()
-	reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N)
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
+	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, N)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
 	// wait till everyone makes the first new block
 	timeoutWaitGroup(t, N, func(j int) {
@@ -449,8 +425,8 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 	defer cleanup()
 	logger := log.TestingLogger()
 
-	reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, nPeers)
-	defer stopConsensusNet(logger, reactors, eventBuses, validatorConnExecutors)
+	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, nPeers)
+	defer stopConsensusNet(logger, reactors, eventBuses)
 
 	// map of active validators
 	activeVals := make(map[string]struct{})
@@ -592,8 +568,8 @@ func TestReactorWithTimeoutCommit(t *testing.T) {
 		css[i].config.SkipTimeoutCommit = false
 	}
 
-	reactors, blocksSubs, eventBuses, validatorConnExecutors := startConsensusNet(t, css, N-1)
-	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses, validatorConnExecutors)
+	reactors, blocksSubs, eventBuses := startConsensusNet(t, css, N-1)
+	defer stopConsensusNet(log.TestingLogger(), reactors, eventBuses)
 
 	// wait till everyone makes the first new block
 	timeoutWaitGroup(t, N-1, func(j int) {

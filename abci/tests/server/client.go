@@ -20,9 +20,7 @@ func InitChain(client abcicli.Client) error {
 		pubkey := privKeys[i].PubKey()
 		proTxHash := proTxHashes[i]
 		power := 100
-		uri := fmt.Sprintf("tcp://%s:%d", "127.0.0.1", i+1)
-
-		vals[i] = types.UpdateValidator(proTxHash, pubkey.Bytes(), int64(power), uri)
+		vals[i] = types.UpdateValidator(proTxHash, pubkey.Bytes(), int64(power), "")
 	}
 	abciThresholdPublicKey, err := cryptoenc.PubKeyToProto(thresholdPublicKey)
 	if err != nil {
