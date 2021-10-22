@@ -1258,6 +1258,11 @@ func (n *Node) ConfigureRPC() error {
 	}
 
 	rpccore.SetEnvironment(&env)
+
+	if err := rpccore.InitGenesisChunks(); err != nil {
+		return err
+	}
+
 	return nil
 }
 
