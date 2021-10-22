@@ -126,36 +126,38 @@ through another Validator) to any other Validator which is a member of the same 
 
 ### What new data structures are needed, what data structures need changes?
 
-1. Separate Validator Set member connection pool from Full node connection pool
-2. Additional tuning parameters:
-    1. Full node connection slots
-    2. Validator node connection slots
+1. Additional configuration parameter: number of validator connections
 
 ### What new APIs will be needed, what APIs will change?
 
 In the ABCI protocol, we add a network address of each member of the active Validator Set to the
-`ResponseEndBlock.ValidatorSetUpdate.ValidatorUpdate` structure. The network address structure is as follows:
+`ResponseEndBlock.ValidatorSetUpdate.ValidatorUpdate` structure. The network address should be an URI:
+
+```uri
+tcp://<node_id>@<address>:<port>
+```
+
+where:
+
+* `<node_id>` - node ID (can be generated based on node public key, see [p2p.PubKeyToID](https://github.com/dashevo/tenderdash/blob/20d1f91c0adb29d1b5d03a945b17513a368759e4/p2p/key.go#L45))
+* `<address>` - IP address of the validator node
+* `<port>` - p2p port number of the validator node
+
+The `ValidatorUpdate` structure looks as follows:
 
 ```protobuf
-enum NetAddressType {
-  IPv4 = 0;
-};
-
-message NetAddress {
-  reserved 1; // Reserved for compatibility with tendermint.p2p.NetAddress
-  reserved "id"; // Reserved for compatibility with tendermint.p2p.NetAddress
-  string address = 2;
-  uint32 port = 3;
-  NetAddressType address_type = 4;
+message ValidatorUpdate {
+  tendermint.crypto.PublicKey pub_key     = 1 [(gogoproto.nullable) = true];
+  int64                       power       = 2;
+  bytes                       pro_tx_hash = 3;
+  string                      address     = 4;  // address of the Validator, correct URI (RFC 3986)
 }
 ```
 
 ### What are the efficiency considerations (time/space)?
 
-1. This change will increase the amount of data sent by the ABCI application to Tenderdash. The connection between them
-is local. Therefore the change should not have any noticeable performance or bandwidth impact.
-2. Improved consensus performance thanks to a shorter and more predictable distance between each Validator in a
-Validator Set.
+1. This change will increase the amount of data sent by the ABCI application to Tenderdash. The connection between them is local. Therefore the change should not have any noticeable performance or bandwidth impact.
+2. Improved consensus performance thanks to a shorter and more predictable distance between each Validator in a Validator Set.
 
 In the future, additional optimizations can further improve the performance, for example:
 
@@ -164,13 +166,12 @@ In the future, additional optimizations can further improve the performance, for
 
 ### What are the expected access patterns (load/throughput)?
 
-1. Each rotation of the active Validator Set will cause the ABCI application to send additional data to Tenderdash. 
-   The number of blocks between rotation events is a configuration parameter of the ABCI application.
+1. Each rotation of the active Validator Set will cause the ABCI application to send additional data to Tenderdash. The number of blocks between rotation events is a configuration parameter of the ABCI application.
+2. Each validator in the active validator set will establish a few more tcp connections.
 
 ### Are there any logging, monitoring, or observability needs?
 
-1. Operator shall be able to determine a list of node peers, together with their type (Full, inactive Validator, active 
-Validator) and connection status. This information can be part of debug logs.
+1. Operator shall be able to determine a list of node peers, together with their type (Full, inactive Validator, active Validator) and connection status. This information can be part of debug logs.
 
 ### Are there any security considerations?
 
@@ -189,8 +190,7 @@ This change does not impact user privacy.
 
 Testing strategy for this change involves:
 
-1. Reproduction of the problem statement as an end-to-end (e2e) test, with a network of much many more full nodes than
-   validator nodes.
+1. Reproduction of the problem statement as an end-to-end (e2e) test, with a network of much many more full nodes than validator nodes.
 2. Implementation of unit tests for the new code
 3. Execution of e2e tests to confirm the issue is not reproduced anymore
 4. Starting a long-living end-to-end cluster (at least a few days of operation) and monitoring of the outcome
@@ -206,12 +206,11 @@ This change consists of the following tasks:
    1. Addition of new field on Tenderdash
    2. Update of end-to-end tests to reflect ABCI protocol changes
    3. Implementation of ABCI protocol changes inside the ABCI application
-3. Implementation of dedicated slots for Intra Validator Set connectivity within Tenderdash
-4. Tenderdash reactions on Validator Set rotation events:
+3. Tenderdash reactions on Validator Set rotation events:
    1. Storing and updating Validator Set members network addresses
    2. Establishing connections within Validator Sets
    3. Unit tests that emulate and validate Inter Validator Set communication
-5. Implementation of end-to-end tests to verify Full node "starving" scenarios
+4. Implementation of end-to-end tests to verify Full node "starving" scenarios
 
 ### Will these changes require a breaking (major) release?
 
@@ -225,7 +224,7 @@ The change requires coordination with the ABCI application.
 
 > {Deprecated|Proposed|Accepted|Declined}
 
-Proposed
+Accepted
 
 ## Consequences
 
