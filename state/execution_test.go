@@ -167,7 +167,7 @@ func TestValidateValidatorUpdates(t *testing.T) {
 	}{
 		{
 			"adding a validator is OK",
-			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: 100, ProTxHash: proTxHash2, Address: addr.String()}},
+			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: 100, ProTxHash: proTxHash2, NodeAddress: addr.String()}},
 			defaultValidatorParams,
 			false,
 		},
@@ -178,19 +178,19 @@ func TestValidateValidatorUpdates(t *testing.T) {
 		},
 		{
 			"updating a validator is OK",
-			[]abci.ValidatorUpdate{{PubKey: &pk1, Power: 100, ProTxHash: proTxHash1, Address: addr.String()}},
+			[]abci.ValidatorUpdate{{PubKey: &pk1, Power: 100, ProTxHash: proTxHash1, NodeAddress: addr.String()}},
 			defaultValidatorParams,
 			false,
 		},
 		{
 			"removing a validator is OK",
-			[]abci.ValidatorUpdate{{Power: 0, ProTxHash: proTxHash2, Address: addr.String()}},
+			[]abci.ValidatorUpdate{{Power: 0, ProTxHash: proTxHash2, NodeAddress: addr.String()}},
 			defaultValidatorParams,
 			false,
 		},
 		{
 			"adding a validator with negative power results in error",
-			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: -100, ProTxHash: proTxHash2, Address: addr.String()}},
+			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: -100, ProTxHash: proTxHash2, NodeAddress: addr.String()}},
 			defaultValidatorParams,
 			true,
 		},
@@ -366,7 +366,7 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 
 	// Ensure new validators have some IP addresses set
 	for _, validator := range newVals.Validators {
-		validator.Address = p2p.RandNodeAddress()
+		validator.NodeAddress = p2p.RandNodeAddress()
 	}
 
 	app.ValidatorSetUpdate = newVals.ABCIEquivalentValidatorUpdates()

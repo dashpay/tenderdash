@@ -530,13 +530,13 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 		}
 
 		// Validate endpoint address
-		if valUpdate.Address != "" {
-			addr, err := p2p.ParseNodeAddress(valUpdate.Address)
+		if valUpdate.NodeAddress != "" {
+			addr, err := p2p.ParseNodeAddress(valUpdate.NodeAddress)
 			if err != nil {
-				return fmt.Errorf("cannot parse validator address %s: %w", valUpdate.Address, err)
+				return fmt.Errorf("cannot parse validator address %s: %w", valUpdate.NodeAddress, err)
 			}
 			if err = addr.Validate(); err != nil {
-				return fmt.Errorf("validator address %s is invalid: %w", valUpdate.Address, err)
+				return fmt.Errorf("validator address %s is invalid: %w", valUpdate.NodeAddress, err)
 			}
 		}
 	}

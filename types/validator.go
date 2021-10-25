@@ -22,7 +22,7 @@ type Validator struct {
 	PubKey      crypto.PubKey   `json:"pub_key"`
 	VotingPower int64           `json:"voting_power"`
 	ProTxHash   ProTxHash       `json:"pro_tx_hash"`
-	Address     p2p.NodeAddress `json:"address"`
+	NodeAddress p2p.NodeAddress `json:"address"`
 
 	ProposerPriority int64 `json:"proposer_priority"`
 }
@@ -61,7 +61,7 @@ func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash []byte, add
 		if err != nil {
 			panic(fmt.Sprintf("cannot parse validator address %s: %s", address, err))
 		}
-		val.Address = addr
+		val.NodeAddress = addr
 	}
 
 	return val
@@ -146,7 +146,7 @@ func (v *Validator) String() string {
 		v.PubKey,
 		v.VotingPower,
 		v.ProposerPriority,
-		v.Address.String())
+		v.NodeAddress.String())
 }
 
 func (v *Validator) ShortStringBasic() string {
@@ -213,7 +213,7 @@ func (v *Validator) ToProto() (*tmproto.Validator, error) {
 		}
 		vp.PubKey = &pk
 	}
-	vp.Address = v.Address.String()
+	vp.NodeAddress = v.NodeAddress.String()
 
 	return &vp, nil
 }
@@ -238,12 +238,12 @@ func ValidatorFromProto(vp *tmproto.Validator) (*Validator, error) {
 		v.PubKey = pk
 	}
 
-	if vp.Address != "" {
-		address, err := p2p.ParseNodeAddress(vp.Address)
+	if vp.NodeAddress != "" {
+		address, err := p2p.ParseNodeAddress(vp.NodeAddress)
 		if err != nil {
 			return nil, err
 		}
-		v.Address = address
+		v.NodeAddress = address
 	}
 
 	return v, nil

@@ -70,8 +70,8 @@ func TestValidator_Sets(t *testing.T) {
 					valScheduleValidator.ProTxHash, h, valScheduleValidator.PubKey.Bytes(), validator.PubKey.Bytes())
 
 				// Validators in the schedule don't contain addresses
-				assert.NotZero(t, validator.Address)
-				validator.Address = p2p.NodeAddress{}
+				assert.NotZero(t, validator.NodeAddress)
+				validator.NodeAddress = p2p.NodeAddress{}
 			}
 			require.Equal(t, valSchedule.Set.Validators, validators,
 				"incorrect validator set at height %v", h)

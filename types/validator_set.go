@@ -1014,7 +1014,7 @@ func (vals *ValidatorSet) ABCIEquivalentValidatorUpdates() *abci.ValidatorSetUpd
 	for i := 0; i < len(vals.Validators); i++ {
 
 		valUpdate := TM2PB.NewValidatorUpdate(vals.Validators[i].PubKey, DefaultDashVotingPower,
-			vals.Validators[i].ProTxHash, vals.Validators[i].Address)
+			vals.Validators[i].ProTxHash, vals.Validators[i].NodeAddress)
 		valUpdates = append(valUpdates, valUpdate)
 	}
 	abciThresholdPublicKey, err := cryptoenc.PubKeyToProto(vals.ThresholdPublicKey)

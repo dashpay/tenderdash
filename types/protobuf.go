@@ -92,9 +92,9 @@ func (tm2pb) PartSetHeader(header PartSetHeader) tmproto.PartSetHeader {
 // ValidatorUpdate panics on unknown pubkey type
 func (tm2pb) ValidatorUpdate(val *Validator) abci.ValidatorUpdate {
 	valUpdate := abci.ValidatorUpdate{
-		Power:     val.VotingPower,
-		ProTxHash: val.ProTxHash,
-		Address:   val.Address.String(),
+		Power:       val.VotingPower,
+		ProTxHash:   val.ProTxHash,
+		NodeAddress: val.NodeAddress.String(),
 	}
 	if val.PubKey != nil {
 		pk, err := cryptoenc.PubKeyToProto(val.PubKey)
@@ -150,10 +150,10 @@ func (tm2pb) NewValidatorUpdate(
 	}
 
 	return abci.ValidatorUpdate{
-		PubKey:    pubkeyABCI,
-		Power:     power,
-		ProTxHash: proTxHash,
-		Address:   address.String(),
+		PubKey:      pubkeyABCI,
+		Power:       power,
+		ProTxHash:   proTxHash,
+		NodeAddress: address.String(),
 	}
 }
 
@@ -176,7 +176,7 @@ func (pb2tm) ValidatorUpdates(vals []abci.ValidatorUpdate) ([]*Validator, error)
 				return nil, err
 			}
 		}
-		tmVals[i] = NewValidator(pub, v.Power, v.ProTxHash, v.Address)
+		tmVals[i] = NewValidator(pub, v.Power, v.ProTxHash, v.NodeAddress)
 	}
 	return tmVals, nil
 }
@@ -196,7 +196,7 @@ func (pb2tm) ValidatorUpdatesFromValidatorSet(valSetUpdate *abci.ValidatorSetUpd
 				return nil, nil, nil, err
 			}
 		}
-		tmVals[i] = NewValidator(pub, v.Power, v.ProTxHash, v.Address)
+		tmVals[i] = NewValidator(pub, v.Power, v.ProTxHash, v.NodeAddress)
 		err = tmVals[i].ValidateBasic()
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("validator updates from validator set error when validating validator: %s", err)

@@ -67,7 +67,7 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 
 	me := deterministicValidator(65535)
 	addr1, err := p2p.ParseNodeAddress("http://john@www.google.com:80")
-	val1 := &types.Validator{Address: addr1}
+	val1 := &types.Validator{NodeAddress: addr1}
 
 	require.NoError(t, err)
 	tc := testCase{
@@ -143,7 +143,7 @@ func TestValidatorConnExecutor_EmptyVSet(t *testing.T) {
 			0: {
 				validators: []*types.Validator{me, deterministicValidator(1)},
 				expectedHistory: []mockSwitchHistoryEvent{
-					{Operation: "dialMany", Params: []string{me.Address.String(), deterministicValidatorAddress(1)}},
+					{Operation: "dialMany", Params: []string{me.NodeAddress.String(), deterministicValidatorAddress(1)}},
 				},
 			},
 			1: {},
@@ -201,7 +201,7 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 					3: {Comment: "Dial new validators",
 						Operation: "dialMany",
 						Params: []string{
-							me.Address.String(),
+							me.NodeAddress.String(),
 							deterministicValidatorAddress(1),
 						},
 					},
@@ -272,12 +272,12 @@ func TestEndBlock(t *testing.T) {
 
 	// Ensure new validators have some IP addresses set
 	for _, validator := range newVals.Validators {
-		validator.Address = p2p.RandNodeAddress()
+		validator.NodeAddress = p2p.RandNodeAddress()
 	}
 
 	// setup ValidatorConnExecutor
 	sw := NewMockSwitch()
-	nodeID := newVals.Validators[0].Address.NodeID
+	nodeID := newVals.Validators[0].NodeAddress.NodeID
 	vc := dash.NewValidatorConnExecutor(nodeID, eventBus, sw, log.TestingLogger())
 	err = vc.Start()
 	require.NoError(t, err)
@@ -410,7 +410,7 @@ func setup(
 
 	sw = NewMockSwitch()
 
-	nodeID := me.Address.NodeID
+	nodeID := me.NodeAddress.NodeID
 	vc = dash.NewValidatorConnExecutor(nodeID, eventBus, sw, log.TestingLogger())
 	vc.NumConnections = 3
 	err = vc.Start()
@@ -430,12 +430,12 @@ func cleanup(t *testing.T, bus *types.EventBus, sw dash.ISwitch, vc *dash.Valida
 func validatorAddresses(validators []*types.Validator, exceptions []*types.Validator) []string {
 	skip := map[p2p.ID]bool{}
 	for _, e := range exceptions {
-		skip[e.Address.NodeID] = true
+		skip[e.NodeAddress.NodeID] = true
 	}
 	addresses := make([]string, 0, len(validators))
 	for _, v := range validators {
-		if !skip[v.Address.NodeID] {
-			addresses = append(addresses, v.Address.String())
+		if !skip[v.NodeAddress.NodeID] {
+			addresses = append(addresses, v.NodeAddress.String())
 		}
 	}
 
@@ -458,7 +458,7 @@ func deterministicValidatorAddress(n uint16) string {
 // deterministicValidator returns new Validator with deterministic address
 func deterministicValidator(n uint16) *types.Validator {
 	a, _ := p2p.ParseNodeAddress(deterministicValidatorAddress(n))
-	return &types.Validator{Address: a}
+	return &types.Validator{NodeAddress: a}
 }
 
 // Utility functions //

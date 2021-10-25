@@ -174,7 +174,7 @@ func (vc *ValidatorConnExecutor) receiveEvents() error {
 func (vc *ValidatorConnExecutor) parseValidatorUpdate(validators []*types.Validator) error {
 	vc.validatorSetMembers = validatorMap{}
 	for _, validator := range validators {
-		vc.validatorSetMembers[validator.Address.NodeID] = validator
+		vc.validatorSetMembers[validator.NodeAddress.NodeID] = validator
 	}
 
 	return nil
@@ -206,7 +206,7 @@ func (vc *ValidatorConnExecutor) selectValidators(count int) validatorMap {
 		if vc.p2pSwitch.Peers().Has(id) {
 			selectedValidators[id] = activeValidators[id]
 			vc.BaseService.Logger.Debug("keeping validator connection",
-				"id", id, "address", activeValidators[id].Address.String())
+				"id", id, "address", activeValidators[id].NodeAddress.String())
 			// we are good - no need to select new random Validators
 			if len(selectedValidators) >= count {
 				return selectedValidators
@@ -224,7 +224,7 @@ func (vc *ValidatorConnExecutor) selectValidators(count int) validatorMap {
 		if _, found := selectedValidators[IDs[index]]; !found {
 			selectedValidators[id] = activeValidators[id]
 			vc.BaseService.Logger.Debug("selected validator to connect",
-				"id", id, "address", activeValidators[id].Address.String())
+				"id", id, "address", activeValidators[id].NodeAddress.String())
 		}
 	}
 
@@ -233,14 +233,14 @@ func (vc *ValidatorConnExecutor) selectValidators(count int) validatorMap {
 
 func (vc *ValidatorConnExecutor) disconnectValidator(validator *types.Validator) error {
 	vc.BaseService.Logger.Debug("disconnect Validator", "validator", validator)
-	address := validator.Address.String()
+	address := validator.NodeAddress.String()
 
 	err := vc.p2pSwitch.RemovePersistentPeer(address)
 	if err != nil {
 		return err
 	}
 
-	id := validator.Address.NodeID
+	id := validator.NodeAddress.NodeID
 	peer := vc.p2pSwitch.Peers().Get(id)
 	if peer == nil {
 		return fmt.Errorf("cannot stop peer %s: not found", id)
@@ -299,9 +299,9 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 			continue
 		}
 
-		address, err := validator.Address.NetAddress()
+		address, err := validator.NodeAddress.NetAddress()
 		if err != nil {
-			vc.BaseService.Logger.Error("cannot parse validator address", "address", validator.Address, "err", err)
+			vc.BaseService.Logger.Error("cannot parse validator address", "address", validator.NodeAddress, "err", err)
 			continue
 		}
 		addressString := address.String()

@@ -88,7 +88,7 @@ func TestABCIValidatorFromPubKeyAndPower(t *testing.T) {
 	address := p2p.RandNodeAddress()
 	abciVal := TM2PB.NewValidatorUpdate(pubkey, DefaultDashVotingPower, crypto.RandProTxHash(), address)
 	assert.Equal(t, DefaultDashVotingPower, abciVal.Power)
-	assert.Equal(t, address.String(), abciVal.Address)
+	assert.Equal(t, address.String(), abciVal.NodeAddress)
 
 	assert.NotPanics(t, func() {
 		TM2PB.NewValidatorUpdate(nil, DefaultDashVotingPower, crypto.RandProTxHash(), p2p.RandNodeAddress())
