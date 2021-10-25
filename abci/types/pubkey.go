@@ -10,9 +10,9 @@ import (
 func UpdateValidator(
 	proTxHash crypto.ProTxHash, pubkeyBytes []byte, power int64, nodeAddress string) ValidatorUpdate {
 	valUpdate := ValidatorUpdate{
-		Power:     power,
-		ProTxHash: proTxHash,
-		NodeAddress:   nodeAddress,
+		Power:       power,
+		ProTxHash:   proTxHash,
+		NodeAddress: nodeAddress,
 	}
 
 	if len(pubkeyBytes) > 0 {
