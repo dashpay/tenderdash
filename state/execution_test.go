@@ -391,6 +391,7 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 			"Expected event of type EventDataValidatorSetUpdates, got %T",
 			msg.Data(),
 		)
+		assert.Len(t, event.QuorumHash, crypto.QuorumHashSize)
 		if assert.NotEmpty(t, event.ValidatorUpdates) {
 			assert.Equal(t, addProTxHash, event.ValidatorUpdates[pos].ProTxHash)
 			assert.EqualValues(

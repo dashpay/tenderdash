@@ -12,6 +12,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/fail"
 	"github.com/tendermint/tendermint/libs/log"
 	mempl "github.com/tendermint/tendermint/mempool"
@@ -305,7 +306,7 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
-	fireEvents(logger, blockExec.eventBus, block, abciResponses, validatorUpdates)
+	fireEvents(logger, blockExec.eventBus, block, abciResponses, validatorUpdates, quorumHash)
 
 	return state, retainHeight, nil
 }
@@ -636,6 +637,7 @@ func fireEvents(
 	block *types.Block,
 	abciResponses *tmstate.ABCIResponses,
 	validatorUpdates []*types.Validator,
+	quorumHash tmbytes.HexBytes,
 ) {
 	if err := eventBus.PublishEventNewBlock(types.EventDataNewBlock{
 		Block:            block,
@@ -677,8 +679,13 @@ func fireEvents(
 	}
 
 	if len(validatorUpdates) > 0 {
+		qHash := make(tmbytes.HexBytes, len(quorumHash))
+		copy(qHash, quorumHash)
 		if err := eventBus.PublishEventValidatorSetUpdates(
-			types.EventDataValidatorSetUpdates{ValidatorUpdates: validatorUpdates}); err != nil {
+			types.EventDataValidatorSetUpdates{
+				QuorumHash:       qHash,
+				ValidatorUpdates: validatorUpdates,
+			}); err != nil {
 			logger.Error("failed publishing event", "err", err)
 		}
 	}
