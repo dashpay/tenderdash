@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tendermint/tendermint/crypto"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/libs/service"
@@ -48,6 +50,8 @@ type ValidatorConnExecutor struct {
 	validatorSetMembers validatorMap
 	// connectedValidators contains validators we should be connected to, indexed by node ID
 	connectedValidators validatorMap
+	// quorumHash contains current quorum hash
+	quorumHash tmbytes.HexBytes
 
 	// mux is a mutex to ensure only one goroutine is processing connections
 	mux sync.Mutex
@@ -76,6 +80,7 @@ func NewValidatorConnExecutor(
 		EventBusCapacity:    10,
 		validatorSetMembers: validatorMap{},
 		connectedValidators: validatorMap{},
+		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),
 	}
 
 	baseService := service.NewBaseService(logger, validatorConnExecutorName, vc)
