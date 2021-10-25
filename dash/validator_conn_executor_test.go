@@ -342,7 +342,10 @@ func executeTestCase(t *testing.T, tc testCase) {
 	defer cleanup(t, eventBus, sw, vc)
 
 	for updateID, update := range tc.validatorUpdates {
-		updateEvent := types.EventDataValidatorSetUpdates{ValidatorUpdates: update.validators}
+		updateEvent := types.EventDataValidatorSetUpdates{
+			ValidatorUpdates: update.validators,
+			QuorumHash:       crypto.RandQuorumHash(),
+		}
 		err := eventBus.PublishEventValidatorSetUpdates(updateEvent)
 		assert.NoError(t, err)
 
