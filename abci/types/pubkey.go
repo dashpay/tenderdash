@@ -7,8 +7,11 @@ import (
 	crypto2 "github.com/tendermint/tendermint/proto/tendermint/crypto"
 )
 
-func UpdateValidator(
-	proTxHash crypto.ProTxHash, pubkeyBytes []byte, power int64, nodeAddress string) ValidatorUpdate {
+func UpdateValidator(proTxHash crypto.ProTxHash,
+	pubkeyBytes []byte,
+	power int64,
+	nodeAddress string,
+) ValidatorUpdate {
 	valUpdate := ValidatorUpdate{
 		Power:       power,
 		ProTxHash:   proTxHash,

@@ -341,7 +341,6 @@ func executeTestCase(t *testing.T, tc testCase) {
 
 	eventBus, sw, vc := setup(t, tc.me)
 	defer cleanup(t, eventBus, sw, vc)
-	// myAddress := strings.TrimPrefix(me.Address.String(), "tcp://")
 
 	for updateID, update := range tc.validatorUpdates {
 		updateEvent := types.EventDataValidatorSetUpdates{ValidatorUpdates: update.validators}

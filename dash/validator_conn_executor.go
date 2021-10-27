@@ -12,7 +12,8 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-const ValidatorConnExecutorName = "ValidatorConnExecutor"
+// validatorConnExecutorName contains name that is used to represent the ValidatorConnExecutor in BaseService and logs
+const validatorConnExecutorName = "ValidatorConnExecutor"
 
 // ISwitch defines p2p.Switch methods that are used by this Executor.
 // Useful to create a mock  of the p2p.Switch.
@@ -30,6 +31,16 @@ type ISwitch interface {
 // validatorMap maps validator ID to the validator
 type validatorMap map[p2p.ID]*types.Validator
 
+// newValidatorMap creates a new validatoMap based on a slice of Validators
+func newValidatorMap(validators []*types.Validator) validatorMap {
+	newMap := make(validatorMap, len(validators))
+	for _, validator := range validators {
+		newMap[validator.NodeAddress.NodeID] = validator
+	}
+
+	return newMap
+}
+
 // ValidatorConnExecutor retrieves validator update events and establishes new validator connections
 // within the ValidatorSet.
 // If it's already connected to a member of current validator set, it will keep that connection.
@@ -39,9 +50,9 @@ type validatorMap map[p2p.ID]*types.Validator
 // Note that we mark peers that are members of active validator set as Persistent, so p2p subsystem
 // will retry the connection if it fails.
 type ValidatorConnExecutor struct {
-	ctx    context.Context
-	nodeID p2p.ID
 	service.BaseService
+	ctx          context.Context
+	nodeID       p2p.ID
 	eventBus     *types.EventBus
 	p2pSwitch    ISwitch
 	subscription types.Subscription
@@ -62,9 +73,13 @@ type ValidatorConnExecutor struct {
 	EventBusCapacity int
 }
 
-func NewValidatorConnExecutor(nodeID p2p.ID,
-	eventBus *types.EventBus, sw ISwitch, logger log.Logger) *ValidatorConnExecutor {
-
+// NewValidatorConnExecutor creates a Service that connects to other validators within the same Validator Set.
+// Don't forget to Start() and Stop() the service.
+func NewValidatorConnExecutor(
+	nodeID p2p.ID,
+	eventBus *types.EventBus,
+	sw ISwitch,
+	logger log.Logger) *ValidatorConnExecutor {
 	vc := &ValidatorConnExecutor{
 		ctx:                 context.Background(),
 		nodeID:              nodeID,
@@ -76,7 +91,7 @@ func NewValidatorConnExecutor(nodeID p2p.ID,
 		connectedValidators: validatorMap{},
 	}
 
-	baseService := service.NewBaseService(logger, ValidatorConnExecutorName, vc)
+	baseService := service.NewBaseService(logger, validatorConnExecutorName, vc)
 	vc.BaseService = *baseService
 
 	return vc
@@ -93,7 +108,7 @@ func (vc *ValidatorConnExecutor) OnStart() error {
 		for err == nil {
 			err = vc.receiveEvents()
 		}
-		vc.BaseService.Logger.Error("ValidatorConnExecutor goroutine finished", "reason", err)
+		vc.Logger.Error("ValidatorConnExecutor goroutine finished", "reason", err)
 	}()
 
 	return nil
@@ -102,9 +117,9 @@ func (vc *ValidatorConnExecutor) OnStart() error {
 // OnStop implements Service to clean up (unsubscribe from all events, stop timers, etc.)
 func (vc *ValidatorConnExecutor) OnStop() {
 	if vc.eventBus != nil {
-		err := vc.eventBus.UnsubscribeAll(vc.ctx, ValidatorConnExecutorName)
+		err := vc.eventBus.UnsubscribeAll(vc.ctx, validatorConnExecutorName)
 		if err != nil {
-			vc.BaseService.Logger.Error("cannot unsubscribe from channels", "error", err)
+			vc.Logger.Error("cannot unsubscribe from channels", "error", err)
 		}
 		vc.eventBus = nil
 	}
@@ -114,7 +129,7 @@ func (vc *ValidatorConnExecutor) OnStop() {
 func (vc *ValidatorConnExecutor) subscribe() error {
 	updatesSub, err := vc.eventBus.Subscribe(
 		vc.ctx,
-		ValidatorConnExecutorName,
+		validatorConnExecutorName,
 		types.EventQueryValidatorSetUpdates,
 		vc.EventBusCapacity,
 	)
@@ -129,36 +144,18 @@ func (vc *ValidatorConnExecutor) subscribe() error {
 // receiveEvents processes received events and executes all the logic.
 // Returns non-nil error only if fatal error occurred and the main goroutine should be terminated.
 func (vc *ValidatorConnExecutor) receiveEvents() error {
-
-	vc.BaseService.Logger.Debug("ValidatorConnExecutor: waiting for an event")
-
+	vc.Logger.Debug("ValidatorConnExecutor: waiting for an event")
 	select {
 	case msg := <-vc.subscription.Out():
 		event, ok := msg.Data().(types.EventDataValidatorSetUpdates)
 		if !ok {
 			return fmt.Errorf("invalid type of validator set update message: %T", event)
 		}
-
-		if len(event.ValidatorUpdates) < 1 {
-			vc.BaseService.Logger.Debug("no validators in ValidatorUpdates")
-			return nil // non-fatal, so no error returned
+		if err := vc.handleValidatorUpdateEvent(event); err != nil {
+			vc.Logger.Error("cannot handle validator update", "error", err)
+			return nil // non-fatal, so no error returned to continue the loop
 		}
-		vc.mux.Lock()
-		defer vc.mux.Unlock()
-		// TODO process validators only if our node belongs to active validator set
-
-		if err := vc.parseValidatorUpdate(event.ValidatorUpdates); err != nil {
-			vc.BaseService.Logger.Error("error when processing validator updates", "error", err)
-			return nil // non-fatal, so no error returned
-		}
-
-		if err := vc.updateConnections(); err != nil {
-			vc.BaseService.Logger.Error("error when scheduling validator connections", "error", err)
-			return nil // non-fatal, so no error returned
-		}
-
-		vc.BaseService.Logger.Debug("validator updates processed successfully", "event", event)
-
+		vc.Logger.Debug("validator updates processed successfully", "event", event)
 	case <-vc.subscription.Cancelled():
 		return fmt.Errorf("subscription cancelled due to error: %w", vc.subscription.Err())
 	case <-vc.BaseService.Quit():
@@ -170,13 +167,19 @@ func (vc *ValidatorConnExecutor) receiveEvents() error {
 	return nil
 }
 
-// parseValidatorUpdate parses received validator update and saves active validator set
-func (vc *ValidatorConnExecutor) parseValidatorUpdate(validators []*types.Validator) error {
-	vc.validatorSetMembers = validatorMap{}
-	for _, validator := range validators {
-		vc.validatorSetMembers[validator.NodeAddress.NodeID] = validator
-	}
+// handleValidatorUpdateEvent checks and executes event of type EventDataValidatorSetUpdates, received from event bus.
+func (vc *ValidatorConnExecutor) handleValidatorUpdateEvent(event types.EventDataValidatorSetUpdates) error {
+	vc.mux.Lock()
+	defer vc.mux.Unlock()
 
+	if len(event.ValidatorUpdates) < 1 {
+		vc.Logger.Debug("no validators in ValidatorUpdates")
+		return nil // not really an error
+	}
+	vc.validatorSetMembers = newValidatorMap(event.ValidatorUpdates)
+	if err := vc.updateConnections(); err != nil {
+		return fmt.Errorf("inter-validator set connections error: %w", err)
+	}
 	return nil
 }
 
@@ -205,7 +208,7 @@ func (vc *ValidatorConnExecutor) selectValidators(count int) validatorMap {
 		// prefer validators that are already connected
 		if vc.p2pSwitch.Peers().Has(id) {
 			selectedValidators[id] = activeValidators[id]
-			vc.BaseService.Logger.Debug("keeping validator connection",
+			vc.Logger.Debug("keeping validator connection",
 				"id", id, "address", activeValidators[id].NodeAddress.String())
 			// we are good - no need to select new random Validators
 			if len(selectedValidators) >= count {
@@ -223,7 +226,7 @@ func (vc *ValidatorConnExecutor) selectValidators(count int) validatorMap {
 		}
 		if _, found := selectedValidators[IDs[index]]; !found {
 			selectedValidators[id] = activeValidators[id]
-			vc.BaseService.Logger.Debug("selected validator to connect",
+			vc.Logger.Debug("selected validator to connect",
 				"id", id, "address", activeValidators[id].NodeAddress.String())
 		}
 	}
@@ -232,7 +235,7 @@ func (vc *ValidatorConnExecutor) selectValidators(count int) validatorMap {
 }
 
 func (vc *ValidatorConnExecutor) disconnectValidator(validator *types.Validator) error {
-	vc.BaseService.Logger.Debug("disconnect Validator", "validator", validator)
+	vc.Logger.Debug("disconnect Validator", "validator", validator)
 	address := validator.NodeAddress.String()
 
 	err := vc.p2pSwitch.RemovePersistentPeer(address)
@@ -246,7 +249,7 @@ func (vc *ValidatorConnExecutor) disconnectValidator(validator *types.Validator)
 		return fmt.Errorf("cannot stop peer %s: not found", id)
 	}
 
-	vc.BaseService.Logger.Debug("stopping peer", "id", id, "address", address)
+	vc.Logger.Debug("stopping peer", "id", id, "address", address)
 	vc.p2pSwitch.StopPeerGracefully(peer)
 	return nil
 }
@@ -257,7 +260,7 @@ func (vc *ValidatorConnExecutor) disconnectValidators(exceptions validatorMap) e
 		if _, isException := exceptions[currentKey]; !isException {
 			validator := vc.connectedValidators[currentKey]
 			if err := vc.disconnectValidator(validator); err != nil {
-				vc.BaseService.Logger.Error("cannot disconnect Validator", "error", err)
+				vc.Logger.Error("cannot disconnect Validator", "error", err)
 				continue // no return, as we see it as non-fatal
 			}
 			delete(vc.connectedValidators, currentKey)
@@ -273,17 +276,17 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 	if vc.NumConnections <= 0 {
 		return fmt.Errorf("number of connections to establish should be positive, is %d", vc.NumConnections)
 	}
-	var newValidators validatorMap
+
 	// We only do something if we are part of new ValidatorSet
 	if _, ok := vc.validatorSetMembers[vc.nodeID]; !ok {
-		vc.BaseService.Logger.Debug("not a member of active ValidatorSet")
+		vc.Logger.Debug("not a member of active ValidatorSet")
 		// We need to disconnect connected validators. It needs to be done explicitly
 		// because they are marked as persistent and will never disconnect themselves.
 		return vc.disconnectValidators(validatorMap{})
 	}
 
 	// Find new newValidators
-	newValidators = vc.selectValidators(vc.NumConnections)
+	newValidators := vc.selectValidators(vc.NumConnections)
 
 	// Disconnect existing validators unless they are selected to be connected again
 	if err := vc.disconnectValidators(newValidators); err != nil {
@@ -295,19 +298,19 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 
 	for id, validator := range newValidators {
 		if _, alreadyConnected := vc.connectedValidators[id]; alreadyConnected {
-			vc.BaseService.Logger.Debug("validator already connected", "id", id)
+			vc.Logger.Debug("validator already connected", "id", id)
 			continue
 		}
 
 		address, err := validator.NodeAddress.NetAddress()
 		if err != nil {
-			vc.BaseService.Logger.Error("cannot parse validator address", "address", validator.NodeAddress, "err", err)
+			vc.Logger.Error("cannot parse validator address", "address", validator.NodeAddress, "err", err)
 			continue
 		}
 		addressString := address.String()
 
 		if vc.p2pSwitch.IsDialingOrExistingAddress(address) {
-			vc.BaseService.Logger.Debug("already dialing this validator", "id", id, "address", addressString)
+			vc.Logger.Debug("already dialing this validator", "id", id, "address", addressString)
 			continue
 		}
 
@@ -316,20 +319,20 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 	}
 
 	if len(addresses) == 0 {
-		vc.BaseService.Logger.P2PDebug("no validators will be dialed")
+		vc.Logger.P2PDebug("no validators will be dialed")
 		return nil
 	}
 
 	if err := vc.p2pSwitch.AddPersistentPeers(addresses); err != nil {
-		vc.BaseService.Logger.Error("cannot set validators as persistent", "peers", addresses, "err", err)
+		vc.Logger.Error("cannot set validators as persistent", "peers", addresses, "err", err)
 		return fmt.Errorf("cannot set validators as persistent: %w", err)
 	}
 
 	if err := vc.p2pSwitch.DialPeersAsync(addresses); err != nil {
-		vc.BaseService.Logger.Error("cannot dial validators", "peers", addresses, "err", err)
+		vc.Logger.Error("cannot dial validators", "peers", addresses, "err", err)
 		return fmt.Errorf("cannot dial peers: %w", err)
 	}
-	vc.BaseService.Logger.P2PDebug("connected to Validators", "addresses", addresses)
+	vc.Logger.P2PDebug("connected to Validators", "addresses", addresses)
 
 	return nil
 }
