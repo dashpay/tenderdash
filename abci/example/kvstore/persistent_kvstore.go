@@ -108,7 +108,7 @@ func (app *PersistentKVStoreApplication) Query(reqQuery types.RequestQuery) (res
 
 		return resQuery
 	case "/val":
-		key := []byte(ValidatorSetChangePrefix + string(reqQuery.Data))
+		key := []byte(valSetTxKey(string(reqQuery.Data)))
 		value, err := app.app.state.db.Get(key)
 		if err != nil {
 			panic(err)
@@ -233,6 +233,12 @@ func (app *PersistentKVStoreApplication) ValidatorSet() (validatorSet types.Vali
 	return validatorSet
 }
 
+// valSetTxKey generates a key for validator set change transaction, like:
+//   `val:BASE64ENCODINGOFPROTXHASH`
+func valSetTxKey(proTxHashBase64 string) string {
+	return ValidatorSetChangePrefix + proTxHashBase64
+}
+
 func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64) []byte {
 	pubStr := ""
 	if pubkey != nil {
@@ -243,12 +249,12 @@ func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64) []b
 		pubStr = base64.StdEncoding.EncodeToString(pk.Bytes())
 	}
 	proTxHashStr := base64.StdEncoding.EncodeToString(proTxHash)
-	return []byte(fmt.Sprintf("%s%s!%s!%d", ValidatorSetChangePrefix, proTxHashStr, pubStr, power))
+	return []byte(fmt.Sprintf("%s!%s!%d", valSetTxKey(proTxHashStr), pubStr, power))
 }
 
 func MakeValSetRemovalTx(proTxHash []byte) []byte {
 	proTxHashStr := base64.StdEncoding.EncodeToString(proTxHash)
-	return []byte(fmt.Sprintf("%s%s!!%d", ValidatorSetChangePrefix, proTxHashStr, 0))
+	return []byte(fmt.Sprintf("%s!!%d", valSetTxKey(proTxHashStr), 0))
 }
 
 func MakeThresholdPublicKeyChangeTx(thresholdPublicKey pc.PublicKey) []byte {
@@ -364,7 +370,7 @@ func (app *PersistentKVStoreApplication) updateValidatorSet(v types.ValidatorUpd
 	if v.ProTxHash == nil {
 		panic(fmt.Errorf("proTxHash can not be nil"))
 	}
-	key := []byte(ValidatorSetChangePrefix + string(v.ProTxHash))
+	key := []byte(valSetTxKey(string(v.ProTxHash)))
 
 	if v.Power == 0 {
 		// remove validator

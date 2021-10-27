@@ -15,9 +15,9 @@ import (
 // validatorConnExecutorName contains name that is used to represent the ValidatorConnExecutor in BaseService and logs
 const validatorConnExecutorName = "ValidatorConnExecutor"
 
-// ISwitch defines p2p.Switch methods that are used by this Executor.
+// iSwitch defines p2p.Switch methods that are used by this Executor.
 // Useful to create a mock  of the p2p.Switch.
-type ISwitch interface {
+type iSwitch interface {
 	Peers() p2p.IPeerSet
 
 	AddPersistentPeers(addrs []string) error
@@ -54,7 +54,7 @@ type ValidatorConnExecutor struct {
 	ctx          context.Context
 	nodeID       p2p.ID
 	eventBus     *types.EventBus
-	p2pSwitch    ISwitch
+	p2pSwitch    iSwitch
 	subscription types.Subscription
 
 	// validatorSetMembers contains validators active in the current Validator Set, indexed by node ID
@@ -78,7 +78,7 @@ type ValidatorConnExecutor struct {
 func NewValidatorConnExecutor(
 	nodeID p2p.ID,
 	eventBus *types.EventBus,
-	sw ISwitch,
+	sw iSwitch,
 	logger log.Logger) *ValidatorConnExecutor {
 	vc := &ValidatorConnExecutor{
 		ctx:                 context.Background(),
@@ -110,7 +110,6 @@ func (vc *ValidatorConnExecutor) OnStart() error {
 		}
 		vc.Logger.Error("ValidatorConnExecutor goroutine finished", "reason", err)
 	}()
-
 	return nil
 }
 
@@ -186,23 +185,20 @@ func (vc *ValidatorConnExecutor) handleValidatorUpdateEvent(event types.EventDat
 // selectValidators selects `count` validators from current ValidatorSet.
 // It uses random algorithm right now.
 // Returns map indexed by validator address.
-// TODO ensure selected validator doesn't contain ourselves
+// DEPRECATED, to be replaced with DIP-6 implementation very soon
 func (vc *ValidatorConnExecutor) selectValidators(count int) validatorMap {
-	selectedValidators := validatorMap{}
 	activeValidators := vc.validatorSetMembers
-
 	validatorSetSize := len(activeValidators)
 	if validatorSetSize <= 0 {
 		return validatorMap{}
 	}
-
 	// We need 1 more Validator in validator set, because one of them is current node
 	if (validatorSetSize - 1) < count {
 		count = validatorSetSize - 1
 	}
 
 	IDs := make([]p2p.ID, 0, len(activeValidators))
-
+	selectedValidators := validatorMap{}
 	for id := range activeValidators {
 		IDs = append(IDs, id)
 		// prefer validators that are already connected

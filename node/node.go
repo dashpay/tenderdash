@@ -234,7 +234,7 @@ type Node struct {
 	indexerService    *txindex.IndexerService
 	prometheusSrv     *http.Server
 
-	validatorConnExecutor service.Service
+	validatorConnExecutor *dash.ValidatorConnExecutor
 
 	dashCoreRPCClient dashcore.Client
 }

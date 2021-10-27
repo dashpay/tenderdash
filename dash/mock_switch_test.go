@@ -1,21 +1,26 @@
-package dash_test
+package dash
 
 import (
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/tendermint/tendermint/dash"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/p2p/mocks"
 )
 
 // MOCK SWITCH //
+const (
+	OpDialMany historyOperation = "dialMany"
+	OpStopOne  historyOperation = "stopOne"
+)
+
+type historyOperation string
 
 // mockSwitchHistoryEvent is a log of dial and stop operations executed by the MockSwitch
 type mockSwitchHistoryEvent struct {
 	Timestamp time.Time
-	Operation string // "dialMany", "stopOne"
+	Operation historyOperation // OpDialMany, OpStopOne
 	Params    []string
 	Comment   string
 }
@@ -38,8 +43,6 @@ func NewMockSwitch() *MockSwitch {
 		History:         []mockSwitchHistoryEvent{},
 		HistoryChan:     make(chan mockSwitchHistoryEvent, 1000),
 	}
-
-	_ = dash.ISwitch(isw) // ensure we implement the interface
 	return isw
 }
 
@@ -70,7 +73,7 @@ func (sw *MockSwitch) RemovePersistentPeer(addr string) error {
 }
 
 // DialPeersAsync implements ISwitch. It emulates connecting to provided addresses
-// and adds them as peers and emits history event "dialMany".
+// and adds them as peers and emits history event OpDialMany.
 func (sw *MockSwitch) DialPeersAsync(addrs []string) error {
 	for _, addr := range addrs {
 		peer := &mocks.Peer{}
@@ -82,7 +85,7 @@ func (sw *MockSwitch) DialPeersAsync(addrs []string) error {
 			return err
 		}
 	}
-	sw.history("dialMany", addrs...)
+	sw.history(OpDialMany, addrs...)
 	return nil
 }
 
@@ -96,11 +99,11 @@ func (sw *MockSwitch) IsDialingOrExistingAddress(addr *p2p.NetAddress) bool {
 // event "stopOne".
 func (sw *MockSwitch) StopPeerGracefully(peer p2p.Peer) {
 	sw.PeerSet.Remove(peer)
-	sw.history("stopOne", peer.String())
+	sw.history(OpStopOne, peer.String())
 }
 
 // history adds info about an operation to sw.History and sends it to sw.HistoryChan
-func (sw *MockSwitch) history(op string, args ...string) {
+func (sw *MockSwitch) history(op historyOperation, args ...string) {
 	event := mockSwitchHistoryEvent{
 		Timestamp: time.Now(),
 		Operation: op,

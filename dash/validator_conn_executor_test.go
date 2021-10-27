@@ -1,4 +1,4 @@
-package dash_test
+package dash
 
 import (
 	"bytes"
@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash"
 	"github.com/tendermint/tendermint/p2p"
 	dbm "github.com/tendermint/tm-db"
 
@@ -80,7 +79,7 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 					deterministicValidator(2),
 					deterministicValidator(3),
 				},
-				expectedHistory: []mockSwitchHistoryEvent{{Operation: "dialMany"}},
+				expectedHistory: []mockSwitchHistoryEvent{{Operation: OpDialMany}},
 			},
 			1: {
 				validators: []*types.Validator{
@@ -117,7 +116,7 @@ func TestValidatorConnExecutor_Myself(t *testing.T) {
 					deterministicValidator(1),
 				},
 				expectedHistory: []mockSwitchHistoryEvent{{
-					Operation: "dialMany",
+					Operation: OpDialMany,
 					Params:    []string{deterministicValidatorAddress(1)},
 				}},
 			},
@@ -143,7 +142,7 @@ func TestValidatorConnExecutor_EmptyVSet(t *testing.T) {
 			0: {
 				validators: []*types.Validator{me, deterministicValidator(1)},
 				expectedHistory: []mockSwitchHistoryEvent{
-					{Operation: "dialMany", Params: []string{me.NodeAddress.String(), deterministicValidatorAddress(1)}},
+					{Operation: OpDialMany, Params: []string{me.NodeAddress.String(), deterministicValidatorAddress(1)}},
 				},
 			},
 			1: {},
@@ -162,7 +161,7 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 				validators: []*types.Validator{me,
 					deterministicValidator(1),
 				},
-				expectedHistory: []mockSwitchHistoryEvent{{Operation: "dialMany"}},
+				expectedHistory: []mockSwitchHistoryEvent{{Operation: OpDialMany}},
 			},
 			1: {
 				validators: []*types.Validator{
@@ -177,7 +176,7 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 						Operation: "stopOne",
 						Params:    []string{deterministicValidatorAddress(1)},
 					},
-					{Comment: "Dial two members of current validator set", Operation: "dialMany"},
+					{Comment: "Dial two members of current validator set", Operation: OpDialMany},
 				},
 			},
 			2: { // the same validator set as above, nothing should happen
@@ -199,7 +198,7 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 					1: {Operation: "stopOne"},
 					2: {Operation: "stopOne"},
 					3: {Comment: "Dial new validators",
-						Operation: "dialMany",
+						Operation: OpDialMany,
 						Params: []string{
 							me.NodeAddress.String(),
 							deterministicValidatorAddress(1),
@@ -278,7 +277,7 @@ func TestEndBlock(t *testing.T) {
 	// setup ValidatorConnExecutor
 	sw := NewMockSwitch()
 	nodeID := newVals.Validators[0].NodeAddress.NodeID
-	vc := dash.NewValidatorConnExecutor(nodeID, eventBus, sw, log.TestingLogger())
+	vc := NewValidatorConnExecutor(nodeID, eventBus, sw, log.TestingLogger())
 	err = vc.Start()
 	require.NoError(t, err)
 	defer func() { err := vc.Stop(); require.NoError(t, err) }()
@@ -322,7 +321,7 @@ func TestEndBlock(t *testing.T) {
 	select {
 	case msg := <-sw.HistoryChan:
 		t.Logf("Got message: %s %+v", msg.Operation, msg.Params)
-		assert.EqualValues(t, "dialMany", msg.Operation)
+		assert.EqualValues(t, OpDialMany, msg.Operation)
 	case <-time.After(timeout):
 		t.Error("Timed out waiting for switch history message")
 		t.FailNow()
@@ -358,7 +357,7 @@ func executeTestCase(t *testing.T, tc testCase) {
 				allowedParams := check.Params
 				// if params are nil, we default to all validator addresses; use []string{} to allow no addresses
 				switch check.Operation {
-				case "dialMany":
+				case OpDialMany:
 					if allowedParams == nil {
 						allowedParams = validatorAddresses(update.validators, []*types.Validator{tc.me})
 					}
@@ -401,8 +400,9 @@ func executeTestCase(t *testing.T, tc testCase) {
 // setup creates ValidatorConnExecutor and some dependencies.
 // Use `defer cleanup()` to free the resources.
 func setup(
-	t *testing.T, me *types.Validator) (eventBus *types.EventBus, sw *MockSwitch, vc *dash.ValidatorConnExecutor) {
-
+	t *testing.T,
+	me *types.Validator,
+) (eventBus *types.EventBus, sw *MockSwitch, vc *ValidatorConnExecutor) {
 	eventBus = types.NewEventBus()
 	err := eventBus.Start()
 	require.NoError(t, err)
@@ -410,7 +410,7 @@ func setup(
 	sw = NewMockSwitch()
 
 	nodeID := me.NodeAddress.NodeID
-	vc = dash.NewValidatorConnExecutor(nodeID, eventBus, sw, log.TestingLogger())
+	vc = NewValidatorConnExecutor(nodeID, eventBus, sw, log.TestingLogger())
 	vc.NumConnections = 3
 	err = vc.Start()
 	require.NoError(t, err)
@@ -419,7 +419,7 @@ func setup(
 }
 
 // cleanup frees some resources allocated for tests
-func cleanup(t *testing.T, bus *types.EventBus, sw dash.ISwitch, vc *dash.ValidatorConnExecutor) {
+func cleanup(t *testing.T, bus *types.EventBus, sw iSwitch, vc *ValidatorConnExecutor) {
 	assert.NoError(t, bus.Stop())
 	assert.NoError(t, vc.Stop())
 }
