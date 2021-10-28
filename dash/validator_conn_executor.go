@@ -168,9 +168,28 @@ func (vc *ValidatorConnExecutor) handleValidatorUpdateEvent(event types.EventDat
 		return nil // not really an error
 	}
 	vc.validatorSetMembers = newValidatorMap(event.ValidatorUpdates)
+	if len(event.QuorumHash) > 0 {
+		if err := vc.setQuorumHash(event.QuorumHash); err != nil {
+			vc.BaseService.Logger.Error("received invalid quorum hash", "error", err)
+			return fmt.Errorf("received invalid quorum hash: %w", err)
+		}
+	} else {
+		vc.BaseService.Logger.Debug("received empty quorum hash")
+	}
 	if err := vc.updateConnections(); err != nil {
 		return fmt.Errorf("inter-validator set connections error: %w", err)
 	}
+	return nil
+}
+
+// setQuorumHash sets quorum hash to provided bytes
+func (vc *ValidatorConnExecutor) setQuorumHash(newQuorumHash tmbytes.HexBytes) error {
+	// New quorum hash must be exactly `crypto.QuorumHashSize` bytes long
+	if len(newQuorumHash) != crypto.QuorumHashSize {
+		return fmt.Errorf("invalid quorum hash size: got %d, expected %d; quorum hash: %x",
+			len(newQuorumHash), crypto.QuorumHashSize, newQuorumHash)
+	}
+	copy(vc.quorumHash, newQuorumHash)
 	return nil
 }
 
