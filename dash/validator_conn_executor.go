@@ -28,19 +28,6 @@ type iSwitch interface {
 	StopPeerGracefully(p2p.Peer)
 }
 
-// validatorMap maps validator ID to the validator
-type validatorMap map[p2p.ID]*types.Validator
-
-// newValidatorMap creates a new validatoMap based on a slice of Validators
-func newValidatorMap(validators []*types.Validator) validatorMap {
-	newMap := make(validatorMap, len(validators))
-	for _, validator := range validators {
-		newMap[validator.NodeAddress.NodeID] = validator
-	}
-
-	return newMap
-}
-
 // ValidatorConnExecutor retrieves validator update events and establishes new validator connections
 // within the ValidatorSet.
 // If it's already connected to a member of current validator set, it will keep that connection.
@@ -252,15 +239,15 @@ func (vc *ValidatorConnExecutor) disconnectValidator(validator *types.Validator)
 
 // disconnectValidators disconnects connected validators which are not a part of the exceptions map
 func (vc *ValidatorConnExecutor) disconnectValidators(exceptions validatorMap) error {
-	for currentKey := range vc.connectedValidators {
-		if _, isException := exceptions[currentKey]; !isException {
-			validator := vc.connectedValidators[currentKey]
-			if err := vc.disconnectValidator(validator); err != nil {
-				vc.Logger.Error("cannot disconnect Validator", "error", err)
-				continue // no return, as we see it as non-fatal
-			}
-			delete(vc.connectedValidators, currentKey)
+	for currentKey, validator := range vc.connectedValidators {
+		if exceptions.contains(validator) {
+			continue
 		}
+		if err := vc.disconnectValidator(validator); err != nil {
+			vc.Logger.Error("cannot disconnect Validator", "error", err)
+			continue // no return, as we see it as non-fatal
+		}
+		delete(vc.connectedValidators, currentKey)
 	}
 
 	return nil
@@ -293,7 +280,7 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 	addresses := make([]string, 0, len(newValidators))
 
 	for id, validator := range newValidators {
-		if _, alreadyConnected := vc.connectedValidators[id]; alreadyConnected {
+		if vc.connectedValidators.contains(validator) {
 			vc.Logger.Debug("validator already connected", "id", id)
 			continue
 		}
