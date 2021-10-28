@@ -3,7 +3,6 @@ package dash
 import (
 	"bytes"
 	"crypto/sha256"
-	"sort"
 
 	"github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
@@ -47,16 +46,14 @@ func (v SortableValidator) Equals(other SortableValidator) bool {
 
 type sortableValidatorList []SortableValidator
 
-func (vl sortableValidatorList) sortable() sort.Interface {
-	return sort.Interface(vl)
-}
-
 func (vl sortableValidatorList) Len() int {
 	return len(vl)
 }
+
 func (vl sortableValidatorList) Less(i, j int) bool {
 	return (bytes.Compare(vl[i].SortKey(), vl[j].SortKey()) < 0)
 }
+
 func (vl sortableValidatorList) Swap(i, j int) {
 	vl[i], vl[j] = vl[j], vl[i]
 }
