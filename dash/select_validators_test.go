@@ -12,7 +12,7 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-func TestSelectNodesDIP6(t *testing.T) {
+func TestSelectValidatorsDIP6(t *testing.T) {
 	tests := []struct {
 		name            string
 		validators      []*types.Validator
