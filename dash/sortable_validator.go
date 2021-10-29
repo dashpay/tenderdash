@@ -9,13 +9,14 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
+// sortableValidator is a `types.Validator` which can generate SortKey(), as specified in DIP-6
 type sortableValidator struct {
 	*types.Validator
-	quorumHash tmbytes.HexBytes
-
+	quorumHash    tmbytes.HexBytes
 	sortKeyCached []byte
 }
 
+// newSortableValidator extends the validator with an option to generate DIP-6 compatible SortKey()
 func newSortableValidator(validator *types.Validator, quorumHash tmbytes.HexBytes) sortableValidator {
 	sv := sortableValidator{
 		Validator:  validator,
@@ -45,8 +46,10 @@ func (v sortableValidator) Equal(other sortableValidator) bool {
 	return bytes.Equal(v.ProTxHash, other.ProTxHash)
 }
 
+// sortableValidatorList is a list of sortableValidators that can be sorted by `sortableValidator.SortKey()`
 type sortableValidatorList []sortableValidator
 
+// newSortableValidatorList generates sortable validator list containing provided `validators`
 func newSortableValidatorList(validators []*types.Validator, quorumHash tmbytes.HexBytes) sortableValidatorList {
 	ret := make(sortableValidatorList, 0, len(validators))
 	for _, validator := range validators {
