@@ -43,6 +43,9 @@ const (
 	// check some peers every this
 	crawlPeerPeriod = 30 * time.Second
 
+	// try to connect to at least 1 peer every this
+	seedConnectRetryPeriod = 10 * time.Second
+
 	maxAttemptsToDial = 16 // ~ 35h in total (last attempt - 18h)
 
 	// if node connects to seed, it does not have any trusted peers.
@@ -530,7 +533,7 @@ func (r *Reactor) ensurePeers() {
 		// peers not participating in PEX.
 		if len(toDial) == 0 {
 			r.Logger.Info("No addresses to dial. Falling back to seeds")
-			r.dialSeeds()
+			r.dialSeeds(false)
 		}
 	}
 }
@@ -620,9 +623,11 @@ func (r *Reactor) checkSeeds() (numOnline int, netAddrs []*p2p.NetAddress, err e
 }
 
 // randomly dial seeds until we connect to one or exhaust them
-func (r *Reactor) dialSeeds() {
+// If `retry` is true, it will retry every `seedConnectRetryPeriod`
+// until at least one connection is successful
+func (r *Reactor) dialSeeds(retry bool) {
+
 	perm := tmrand.Perm(len(r.seedAddrs))
-	// perm := r.Switch.rng.Perm(lSeeds)
 	for _, i := range perm {
 		// dial a random seed
 		seedAddr := r.seedAddrs[i]
@@ -637,6 +642,9 @@ func (r *Reactor) dialSeeds() {
 	// do not write error message if there were no seeds specified in config
 	if len(r.seedAddrs) > 0 {
 		r.Switch.Logger.Error("Couldn't connect to any seeds")
+		if retry {
+			time.AfterFunc(seedConnectRetryPeriod, func() { r.dialSeeds(true) })
+		}
 	}
 }
 
@@ -658,7 +666,7 @@ func (r *Reactor) AttemptsToDial(addr *p2p.NetAddress) int {
 func (r *Reactor) crawlPeersRoutine() {
 	// If we have any seed nodes, consult them first
 	if len(r.seedAddrs) > 0 {
-		r.dialSeeds()
+		r.dialSeeds(true)
 	} else {
 		// Do an initial crawl
 		r.crawlPeers(r.book.GetSelection())
@@ -676,7 +684,7 @@ func (r *Reactor) crawlPeersRoutine() {
 			out, in, dial := r.Switch.NumPeers()
 			if out+in+dial < 1 {
 				r.Logger.Info("All peers disconnected, dialing seeds")
-				r.dialSeeds()
+				r.dialSeeds(false)
 			}
 
 			r.crawlPeers(r.book.GetSelection())
