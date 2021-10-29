@@ -1,9 +1,8 @@
-package dash
+package dip6
 
 import (
 	"fmt"
 	"math"
-	"sort"
 
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/types"
@@ -20,8 +19,7 @@ func SelectValidatorsDIP6(
 	// 1. Retrieve the deterministic masternode list which is valid at quorumHeight
 	// 2. Calculate SHA256(proTxHash, quorumHash) for each entry in the list
 	// 3. Sort the resulting list by the calculated hashes
-	sortedValidators := newSortableValidatorList(validatorSetMembers, quorumHash)
-	sort.Sort(sortedValidators)
+	sortedValidators := newSortedValidatorList(validatorSetMembers, quorumHash)
 
 	// Loop through the list until the member finds itself in the list. The index at which it finds itself is called i.
 	meSortable := newSortableValidator(me, quorumHash)
