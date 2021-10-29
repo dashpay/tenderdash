@@ -7,7 +7,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/libs/sync"
 	"github.com/tendermint/tendermint/p2p"
@@ -58,8 +57,6 @@ type ValidatorConnExecutor struct {
 
 	// *** configuration *** //
 
-	// NumConnections is the number of connections to establish, defaults to 3
-	NumConnections int
 	// EventBusCapacity sets event bus buffer capacity, defaults to 10
 	EventBusCapacity int
 }
@@ -76,7 +73,6 @@ func NewValidatorConnExecutor(
 		nodeID:              nodeID,
 		eventBus:            eventBus,
 		p2pSwitch:           sw,
-		NumConnections:      3,
 		EventBusCapacity:    10,
 		validatorSetMembers: validatorMap{},
 		connectedValidators: validatorMap{},
@@ -194,51 +190,21 @@ func (vc *ValidatorConnExecutor) setQuorumHash(newQuorumHash tmbytes.HexBytes) e
 }
 
 // selectValidators selects `count` validators from current ValidatorSet.
-// It uses random algorithm right now.
+// It uses algorithm described in DIP-6 (`SelectValidatorsDIP6()`).
 // Returns map indexed by validator address.
-// DEPRECATED, to be replaced with DIP-6 implementation very soon
-func (vc *ValidatorConnExecutor) selectValidators(count int) validatorMap {
+func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 	activeValidators := vc.validatorSetMembers
-	validatorSetSize := len(activeValidators)
-	if validatorSetSize <= 0 {
-		return validatorMap{}
-	}
-	// We need 1 more Validator in validator set, because one of them is current node
-	if (validatorSetSize - 1) < count {
-		count = validatorSetSize - 1
+	me, ok := activeValidators[vc.nodeID]
+	if !ok {
+		return validatorMap{}, fmt.Errorf("current node is not member of active validator set")
 	}
 
-	IDs := make([]p2p.ID, 0, len(activeValidators))
-	selectedValidators := validatorMap{}
-	for id := range activeValidators {
-		IDs = append(IDs, id)
-		// prefer validators that are already connected
-		if vc.p2pSwitch.Peers().Has(id) {
-			selectedValidators[id] = activeValidators[id]
-			vc.Logger.Debug("keeping validator connection",
-				"id", id, "address", activeValidators[id].NodeAddress.String())
-			// we are good - no need to select new random Validators
-			if len(selectedValidators) >= count {
-				return selectedValidators
-			}
-		}
+	selectedValidators, err := SelectValidatorsDIP6(activeValidators.values(), me, vc.quorumHash)
+	if err != nil {
+		return validatorMap{}, err
 	}
 
-	for len(selectedValidators) < count {
-		index := rand.Intn(validatorSetSize)
-		id := IDs[index]
-		if id == vc.nodeID {
-			// we can't connect to ourselves
-			continue
-		}
-		if _, found := selectedValidators[IDs[index]]; !found {
-			selectedValidators[id] = activeValidators[id]
-			vc.Logger.Debug("selected validator to connect",
-				"id", id, "address", activeValidators[id].NodeAddress.String())
-		}
-	}
-
-	return selectedValidators
+	return newValidatorMap(selectedValidators), nil
 }
 
 func (vc *ValidatorConnExecutor) disconnectValidator(validator *types.Validator) error {
@@ -280,10 +246,6 @@ func (vc *ValidatorConnExecutor) disconnectValidators(exceptions validatorMap) e
 // updateConnections processes current validator set, selects a few validators and schedules connections
 // to be established. It will also disconnect previous validators.
 func (vc *ValidatorConnExecutor) updateConnections() error {
-	if vc.NumConnections <= 0 {
-		return fmt.Errorf("number of connections to establish should be positive, is %d", vc.NumConnections)
-	}
-
 	// We only do something if we are part of new ValidatorSet
 	if _, ok := vc.validatorSetMembers[vc.nodeID]; !ok {
 		vc.Logger.Debug("not a member of active ValidatorSet")
@@ -293,53 +255,65 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 	}
 
 	// Find new newValidators
-	newValidators := vc.selectValidators(vc.NumConnections)
-
+	newValidators, err := vc.selectValidators()
+	if err != nil {
+		vc.Logger.Error("cannot determine list of validators to connect", "error", err)
+		// no return, as we still need to disconnect unused validators
+	}
 	// Disconnect existing validators unless they are selected to be connected again
 	if err := vc.disconnectValidators(newValidators); err != nil {
 		return fmt.Errorf("cannot disconnect unused validators: %w", err)
 	}
-
+	// ensure that we can connect to all validators
+	newValidators = vc.filterAddresses(newValidators)
 	// Connect to new validators
-	addresses := make([]string, 0, len(newValidators))
+	if err := vc.dial(newValidators); err != nil {
+		return fmt.Errorf("cannot dial validators: %w", err)
+	}
+	vc.Logger.P2PDebug("connected to Validators", "validators", newValidators)
+	return nil
+}
 
-	for id, validator := range newValidators {
+// filterValidators returns new validatorMap that contains only validators to which we can connect
+func (vc *ValidatorConnExecutor) filterAddresses(validators validatorMap) validatorMap {
+	filtered := make(validatorMap, len(validators))
+	for id, validator := range validators {
 		if vc.connectedValidators.contains(validator) {
-			vc.Logger.Debug("validator already connected", "id", id)
+			vc.Logger.P2PDebug("validator already connected", "id", id)
 			continue
 		}
-
 		address, err := validator.NodeAddress.NetAddress()
 		if err != nil {
 			vc.Logger.Error("cannot parse validator address", "address", validator.NodeAddress, "err", err)
 			continue
 		}
-		addressString := address.String()
-
 		if vc.p2pSwitch.IsDialingOrExistingAddress(address) {
-			vc.Logger.Debug("already dialing this validator", "id", id, "address", addressString)
+			vc.Logger.P2PDebug("already dialing this validator", "id", id, "address", address.String())
 			continue
 		}
-
-		addresses = append(addresses, addressString)
-		vc.connectedValidators[id] = validator
+		filtered[id] = validator
 	}
+	return filtered
+}
 
-	if len(addresses) == 0 {
-		vc.Logger.P2PDebug("no validators will be dialed")
+// dial dials the validators and ensures they will be persistent
+func (vc *ValidatorConnExecutor) dial(vals validatorMap) error {
+	if len(vals) < 1 {
 		return nil
 	}
 
+	// we mark all validators as connected, to disconnect it in future validator rotation even if sth went wrong
+	for id, validator := range vals {
+		vc.connectedValidators[id] = validator
+	}
+	addresses := vals.URIs()
 	if err := vc.p2pSwitch.AddPersistentPeers(addresses); err != nil {
 		vc.Logger.Error("cannot set validators as persistent", "peers", addresses, "err", err)
 		return fmt.Errorf("cannot set validators as persistent: %w", err)
 	}
-
 	if err := vc.p2pSwitch.DialPeersAsync(addresses); err != nil {
 		vc.Logger.Error("cannot dial validators", "peers", addresses, "err", err)
 		return fmt.Errorf("cannot dial peers: %w", err)
 	}
-	vc.Logger.P2PDebug("connected to Validators", "addresses", addresses)
-
 	return nil
 }

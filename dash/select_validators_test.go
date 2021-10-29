@@ -1,14 +1,10 @@
 package dash
 
 import (
-	"encoding/binary"
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -104,67 +100,11 @@ func TestSelectValidatorsDIP6(t *testing.T) {
 				t.FailNow()
 			}
 			if tt.wantProTxHashes != nil {
-				assert.EqualValues(t, tt.wantProTxHashes, getProTxHashes(got))
+				assert.EqualValues(t, tt.wantProTxHashes, validatorsProTxHashes(got))
 			}
 			if tt.wantLen > 0 {
 				assert.Len(t, got, tt.wantLen)
 			}
 		})
 	}
-}
-
-// mockValidator generates a validator with only fields needed for node selection filled.
-// For the same `id`, mock validator will always have the same data (proTxHash, NodeID)
-func mockValidator(id int) *types.Validator {
-	return &types.Validator{
-		ProTxHash: mockProTxHash(id),
-		NodeAddress: p2p.NodeAddress{
-			NodeID: p2p.ID(strconv.Itoa(id)),
-		},
-	}
-}
-
-// mockValidators generates a slice containing `n` mock validators.
-// Each element is generated using `mockValidator()`.
-func mockValidators(n int) []*types.Validator {
-	vals := make([]*types.Validator, 0, n)
-	for i := 0; i < n; i++ {
-		vals = append(vals, mockValidator(i))
-	}
-	return vals
-}
-
-// mockProTxHash generates a deterministic proTxHash.
-// For the same `id`, generated data is always the same.
-func mockProTxHash(id int) []byte {
-	data := make([]byte, crypto.ProTxHashSize)
-	binary.LittleEndian.PutUint64(data, uint64(id))
-	return data
-}
-
-// mockQuorumHash generates a deterministic quorum hash.
-// For the same `id`, generated data is always the same.
-func mockQuorumHash(id int) []byte {
-	data := make([]byte, crypto.QuorumHashSize)
-	binary.LittleEndian.PutUint64(data, uint64(id))
-	return data
-}
-
-// mockProTxHashes generates multiple deterministic proTxHash'es using mockProTxHash.
-// Each argument will be passed to mockProTxHash.
-func mockProTxHashes(ids ...int) []bytes.HexBytes {
-	hashes := make([]bytes.HexBytes, 0, len(ids))
-	for _, id := range ids {
-		hashes = append(hashes, mockProTxHash(id))
-	}
-	return hashes
-}
-
-// getProTxHashes returns slice of proTxHashes for provided list of validators
-func getProTxHashes(vals []*types.Validator) []bytes.HexBytes {
-	hashes := make([]bytes.HexBytes, len(vals))
-	for id, val := range vals {
-		hashes[id] = val.ProTxHash
-	}
-	return hashes
 }
