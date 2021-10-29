@@ -4,6 +4,7 @@
 
 * 2021-09-29: Initial version of the document
 * 2021-10-05: Clarification of the document based on peer review
+* 2021-10-22: Updated document based on implementation
 
 ## Table of contents <!-- omit in toc -->
  
