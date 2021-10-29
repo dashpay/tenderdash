@@ -96,7 +96,7 @@ func (sw *MockSwitch) IsDialingOrExistingAddress(addr *p2p.NetAddress) bool {
 }
 
 // StopPeerGracefully implements iSwitch. It removes the peer from Peers() and emits history
-// event "stopOne".
+// event OpStopOne.
 func (sw *MockSwitch) StopPeerGracefully(peer p2p.Peer) {
 	sw.PeerSet.Remove(peer)
 	sw.history(OpStopOne, peer.String())
