@@ -45,6 +45,8 @@ const (
 
 	// try to connect to at least 1 peer every this
 	seedConnectRetryPeriod = 10 * time.Second
+	// limit number of retries to dial other seeds during initialization
+	seedInitMaxAttemptToDial = 12
 
 	maxAttemptsToDial = 16 // ~ 35h in total (last attempt - 18h)
 
@@ -533,7 +535,7 @@ func (r *Reactor) ensurePeers() {
 		// peers not participating in PEX.
 		if len(toDial) == 0 {
 			r.Logger.Info("No addresses to dial. Falling back to seeds")
-			r.dialSeeds(false)
+			r.dialSeeds()
 		}
 	}
 }
@@ -623,10 +625,8 @@ func (r *Reactor) checkSeeds() (numOnline int, netAddrs []*p2p.NetAddress, err e
 }
 
 // randomly dial seeds until we connect to one or exhaust them
-// If `retry` is true, it will retry every `seedConnectRetryPeriod`
-// until at least one connection is successful
-func (r *Reactor) dialSeeds(retry bool) {
-
+// It returns true if at least one peer is connected or being dialed, false otherwise
+func (r *Reactor) dialSeeds() bool {
 	perm := tmrand.Perm(len(r.seedAddrs))
 	for _, i := range perm {
 		// dial a random seed
@@ -635,17 +635,15 @@ func (r *Reactor) dialSeeds(retry bool) {
 
 		switch err.(type) {
 		case nil, p2p.ErrCurrentlyDialingOrExistingAddress:
-			return
+			return true
 		}
 		r.Switch.Logger.Error("Error dialing seed", "err", err, "seed", seedAddr)
 	}
 	// do not write error message if there were no seeds specified in config
 	if len(r.seedAddrs) > 0 {
 		r.Switch.Logger.Error("Couldn't connect to any seeds")
-		if retry {
-			time.AfterFunc(seedConnectRetryPeriod, func() { r.dialSeeds(true) })
-		}
 	}
+	return false
 }
 
 // AttemptsToDial returns the number of attempts to dial specific address. It
@@ -666,7 +664,12 @@ func (r *Reactor) AttemptsToDial(addr *p2p.NetAddress) int {
 func (r *Reactor) crawlPeersRoutine() {
 	// If we have any seed nodes, consult them first
 	if len(r.seedAddrs) > 0 {
-		r.dialSeeds(true)
+		for try := 0; try < seedInitMaxAttemptToDial; try++ {
+			if r.dialSeeds() {
+				break
+			}
+			time.Sleep(seedConnectRetryPeriod)
+		}
 	} else {
 		// Do an initial crawl
 		r.crawlPeers(r.book.GetSelection())
@@ -684,7 +687,7 @@ func (r *Reactor) crawlPeersRoutine() {
 			out, in, dial := r.Switch.NumPeers()
 			if out+in+dial < 1 {
 				r.Logger.Info("All peers disconnected, dialing seeds")
-				r.dialSeeds(false)
+				r.dialSeeds()
 			}
 
 			r.crawlPeers(r.book.GetSelection())
