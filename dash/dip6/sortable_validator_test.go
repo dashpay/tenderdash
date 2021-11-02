@@ -48,7 +48,7 @@ func Test_sortableValidator_SortKey(t *testing.T) {
 	// nolint:scopelint
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			v := newSortableValidator(tt.Validator, tt.quorumHash)
+			v := newSortableValidator(*tt.Validator, tt.quorumHash)
 			assert.EqualValues(t, tt.want, v.sortKey)
 		})
 	}
@@ -63,8 +63,8 @@ func Test_sortableValidator_Compare(t *testing.T) {
 	}{
 		{
 			name:  "equal",
-			left:  newSortableValidator(mock.NewValidator(1000), mock.NewQuorumHash(1000)),
-			right: newSortableValidator(mock.NewValidator(1000), mock.NewQuorumHash(1000)),
+			left:  newSortableValidator(*mock.NewValidator(1000), mock.NewQuorumHash(1000)),
+			right: newSortableValidator(*mock.NewValidator(1000), mock.NewQuorumHash(1000)),
 			want:  0,
 		},
 	}

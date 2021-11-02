@@ -205,7 +205,7 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 		return validatorMap{}, fmt.Errorf("current node is not member of active validator set")
 	}
 
-	selectedValidators, err := dip6.SelectValidatorsDIP6(activeValidators.values(), me, vc.quorumHash)
+	selectedValidators, err := dip6.SelectValidatorsDIP6(activeValidators.values(), &me, vc.quorumHash)
 	if err != nil {
 		return validatorMap{}, err
 	}
@@ -213,7 +213,7 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 	return newValidatorMap(selectedValidators), nil
 }
 
-func (vc *ValidatorConnExecutor) disconnectValidator(validator *types.Validator) error {
+func (vc *ValidatorConnExecutor) disconnectValidator(validator types.Validator) error {
 	vc.Logger.Debug("disconnect Validator", "validator", validator)
 	address := validator.NodeAddress.String()
 

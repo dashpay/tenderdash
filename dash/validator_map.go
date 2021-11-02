@@ -6,13 +6,13 @@ import (
 )
 
 // validatorMap maps validator ID to the validator
-type validatorMap map[p2p.ID]*types.Validator
+type validatorMap map[p2p.ID]types.Validator
 
 // newValidatorMap creates a new validatoMap based on a slice of Validators
 func newValidatorMap(validators []*types.Validator) validatorMap {
 	newMap := make(validatorMap, len(validators))
 	for _, validator := range validators {
-		newMap[validator.NodeAddress.NodeID] = validator
+		newMap[validator.NodeAddress.NodeID] = *validator
 	}
 
 	return newMap
@@ -22,14 +22,14 @@ func newValidatorMap(validators []*types.Validator) validatorMap {
 func (vm validatorMap) values() []*types.Validator {
 	vals := make([]*types.Validator, 0, len(vm))
 	for _, v := range vm {
-		vals = append(vals, v)
+		vals = append(vals, v.Copy())
 	}
 	return vals
 }
 
 // contains returns true if the validatorMap contains `What`, false otherwise.
 // Items are compared using node ID.
-func (vm validatorMap) contains(what *types.Validator) bool {
+func (vm validatorMap) contains(what types.Validator) bool {
 	_, ok := vm[what.NodeAddress.NodeID]
 	return ok
 }
