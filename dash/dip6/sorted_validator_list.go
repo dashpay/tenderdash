@@ -16,7 +16,7 @@ type sortedValidatorList []sortableValidator
 func newSortedValidatorList(validators []*types.Validator, quorumHash tmbytes.HexBytes) sortedValidatorList {
 	ret := make(sortedValidatorList, 0, len(validators))
 	for _, validator := range validators {
-		sv := newSortableValidator(validator, quorumHash)
+		sv := newSortableValidator(*validator, quorumHash)
 		ret = append(ret, sv)
 	}
 

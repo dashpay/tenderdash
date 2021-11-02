@@ -11,13 +11,13 @@ import (
 
 // sortableValidator is a `types.Validator` which can generate SortKey(), as specified in DIP-6
 type sortableValidator struct {
-	*types.Validator
+	types.Validator
 	quorumHash tmbytes.HexBytes
 	sortKey    []byte
 }
 
 // newSortableValidator extends the validator with an option to generate DIP-6 compatible SortKey()
-func newSortableValidator(validator *types.Validator, quorumHash tmbytes.HexBytes) sortableValidator {
+func newSortableValidator(validator types.Validator, quorumHash tmbytes.HexBytes) sortableValidator {
 	sv := sortableValidator{
 		Validator:  validator,
 		quorumHash: make([]byte, crypto.QuorumHashSize),
