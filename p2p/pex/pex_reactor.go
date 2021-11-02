@@ -44,7 +44,7 @@ const (
 	crawlPeerPeriod = 30 * time.Second
 
 	// try to connect to at least 1 peer every this
-	seedConnectRetryPeriod = 10 * time.Second
+	seedConnectMaxDelayPeriod = 5 * time.Second
 	// limit number of retries to dial other seeds during initialization
 	seedInitMaxAttemptToDial = 12
 
@@ -665,10 +665,13 @@ func (r *Reactor) crawlPeersRoutine() {
 	// If we have any seed nodes, consult them first
 	if len(r.seedAddrs) > 0 {
 		for try := 0; try < seedInitMaxAttemptToDial; try++ {
+			// we sleep a few (random) secs to avoid connection storm when whole network restarts
+			delay := time.Duration(tmrand.Int63n(seedConnectMaxDelayPeriod.Nanoseconds()))
+			time.Sleep(delay)
+
 			if r.dialSeeds() {
 				break
 			}
-			time.Sleep(seedConnectRetryPeriod)
 		}
 	} else {
 		// Do an initial crawl
