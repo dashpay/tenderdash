@@ -10,58 +10,60 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// NodeAddress generates a string that is accepted as validator address.
+// NewNodeAddress generates a string that is accepted as validator address.
 // For given `n`, the address will always be the same.
-func NodeAddress(n uint64) string {
+func NewNodeAddress(n uint64) string {
 	nodeID := make([]byte, 20)
 	binary.LittleEndian.PutUint64(nodeID, n)
 
 	return fmt.Sprintf("tcp://%x@127.0.0.1:%d", nodeID, uint16(n))
 }
 
-// Validator generates a validator with only fields needed for node selection filled.
+// NewValidator generates a validator with only fields needed for node selection filled.
 // For the same `id`, mock validator will always have the same data (proTxHash, NodeID)
-func Validator(id uint64) *types.Validator {
-	address, _ := p2p.ParseNodeAddress(NodeAddress(id))
-
+func NewValidator(id uint64) *types.Validator {
+	address, err := p2p.ParseNodeAddress(NewNodeAddress(id))
+	if err != nil {
+		panic(err)
+	}
 	return &types.Validator{
-		ProTxHash:   ProTxHash(id),
+		ProTxHash:   NewProTxHash(id),
 		NodeAddress: address,
 	}
 }
 
-// Validators generates a slice containing `n` mock validators.
-// Each element is generated using `mockValidator()`.
-func Validators(n uint64) []*types.Validator {
+// NewValidators generates a slice containing `n` mock validators.
+// Each element is generated using `mock.NewValidator()`.
+func NewValidators(n uint64) []*types.Validator {
 	vals := make([]*types.Validator, 0, n)
 	for i := uint64(0); i < n; i++ {
-		vals = append(vals, Validator(i))
+		vals = append(vals, NewValidator(i))
 	}
 	return vals
 }
 
-// ProTxHash generates a deterministic proTxHash.
+// NewProTxHash generates a deterministic proTxHash.
 // For the same `id`, generated data is always the same.
-func ProTxHash(id uint64) []byte {
+func NewProTxHash(id uint64) []byte {
 	data := make([]byte, crypto.ProTxHashSize)
 	binary.LittleEndian.PutUint64(data, id)
 	return data
 }
 
-// QuorumHash generates a deterministic quorum hash.
+// NewQuorumHash generates a deterministic quorum hash.
 // For the same `id`, generated data is always the same.
-func QuorumHash(id uint64) []byte {
+func NewQuorumHash(id uint64) []byte {
 	data := make([]byte, crypto.QuorumHashSize)
 	binary.LittleEndian.PutUint64(data, id)
 	return data
 }
 
-// ProTxHashes generates multiple deterministic proTxHash'es using mockProTxHash.
+// NewProTxHashes generates multiple deterministic proTxHash'es using mockProTxHash.
 // Each argument will be passed to mockProTxHash.
-func ProTxHashes(ids ...uint64) []bytes.HexBytes {
+func NewProTxHashes(ids ...uint64) []bytes.HexBytes {
 	hashes := make([]bytes.HexBytes, 0, len(ids))
 	for _, id := range ids {
-		hashes = append(hashes, ProTxHash(id))
+		hashes = append(hashes, NewProTxHash(id))
 	}
 	return hashes
 }

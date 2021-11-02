@@ -23,7 +23,7 @@ func SelectValidatorsDIP6(
 
 	// Loop through the list until the member finds itself in the list. The index at which it finds itself is called i.
 	meSortable := newSortableValidator(me, quorumHash)
-	i := float64(sortedValidators.Index(meSortable))
+	i := float64(sortedValidators.index(meSortable))
 	if i < 0 {
 		return []*types.Validator{}, fmt.Errorf("current node is not a member of provided validator set")
 	}
@@ -38,7 +38,7 @@ func SelectValidatorsDIP6(
 	}
 	ret := make([]*types.Validator, 0, int(count))
 	for k := float64(0); k <= count; k++ {
-		index := int(math.Mod((i + math.Pow(2, k)), n))
+		index := int(math.Mod(i+math.Pow(2, k), n))
 		// Add addresses of masternodes at indexes calculated at previous step
 		// to the set of deterministic connections.
 		ret = append(ret, sortedValidators[index].Validator)

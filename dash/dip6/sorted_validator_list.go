@@ -37,7 +37,7 @@ func (vl sortedValidatorList) Len() int {
 // Less implements sort.Interface. It returns true when i'th element
 // of sortableValidatorList has lower key than j'th element.
 func (vl sortedValidatorList) Less(i, j int) bool {
-	return (bytes.Compare(vl[i].SortKey(), vl[j].SortKey()) < 0)
+	return bytes.Compare(vl[i].sortKey, vl[j].sortKey) < 0
 }
 
 // Swap implements sort.Interface. It swaps i'th element with j'th element.
@@ -45,14 +45,16 @@ func (vl sortedValidatorList) Swap(i, j int) {
 	vl[i], vl[j] = vl[j], vl[i]
 }
 
-// Index finds a validator on the list and returns its index.
-// Assumes the list is sorted. It uses sortableValidator.Equal() (which uses ProTxHash) to compare validators.
+// index finds a validator on the list and returns its index.
+// It uses sortableValidator.Equal() (which uses ProTxHash) to compare validators.
 // Returns -1 when validator was not found.
-func (vl sortedValidatorList) Index(search sortableValidator) int {
-	for index, validator := range vl {
-		if search.Equal(validator) {
-			return index
-		}
+func (vl sortedValidatorList) index(search sortableValidator) int {
+	found := sort.Search(vl.Len(), func(i int) bool {
+		return search.compare(vl[i]) <= 0
+	})
+
+	if found < 0 || found >= vl.Len() || !search.equal(vl[found]) {
+		return -1
 	}
-	return -1
+	return found
 }
