@@ -11,16 +11,14 @@ import (
 
 // MOCK SWITCH //
 const (
-	OpDialMany SwitchHistoryOperation = "dialMany"
-	OpStopOne  SwitchHistoryOperation = "stopOne"
+	OpDialMany = "dialMany"
+	OpStopOne  = "stopOne"
 )
-
-type SwitchHistoryOperation string
 
 // SwitchHistoryEvent is a log of dial and stop operations executed by the MockSwitch
 type SwitchHistoryEvent struct {
 	Timestamp time.Time
-	Operation SwitchHistoryOperation // OpDialMany, OpStopOne
+	Operation string // OpDialMany, OpStopOne
 	Params    []string
 	Comment   string
 }
@@ -103,7 +101,7 @@ func (sw *Switch) StopPeerGracefully(peer p2p.Peer) {
 }
 
 // history adds info about an operation to sw.History and sends it to sw.HistoryChan
-func (sw *Switch) history(op SwitchHistoryOperation, args ...string) {
+func (sw *Switch) history(op string, args ...string) {
 	event := SwitchHistoryEvent{
 		Timestamp: time.Now(),
 		Operation: op,

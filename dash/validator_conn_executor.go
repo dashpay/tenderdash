@@ -3,6 +3,7 @@ package dash
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/dip6"
@@ -14,8 +15,12 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// validatorConnExecutorName contains name that is used to represent the ValidatorConnExecutor in BaseService and logs
-const validatorConnExecutorName = "ValidatorConnExecutor"
+const (
+	// validatorConnExecutorName contains name that is used to represent the ValidatorConnExecutor in BaseService and logs
+	validatorConnExecutorName = "ValidatorConnExecutor"
+	// defaultTimeout is timeout that is applied to setup / cleanup code
+	defaultTimeout = 1 * time.Second
+)
 
 // iSwitch defines p2p.Switch methods that are used by this Executor.
 // Useful to create a mock  of the p2p.Switch.
@@ -40,7 +45,6 @@ type iSwitch interface {
 // will retry the connection if it fails.
 type ValidatorConnExecutor struct {
 	service.BaseService
-	ctx          context.Context
 	nodeID       p2p.ID
 	eventBus     *types.EventBus
 	p2pSwitch    iSwitch
@@ -70,7 +74,6 @@ func NewValidatorConnExecutor(
 	sw iSwitch,
 	logger log.Logger) *ValidatorConnExecutor {
 	vc := &ValidatorConnExecutor{
-		ctx:                 context.Background(),
 		nodeID:              nodeID,
 		eventBus:            eventBus,
 		p2pSwitch:           sw,
@@ -105,7 +108,9 @@ func (vc *ValidatorConnExecutor) OnStart() error {
 // OnStop implements Service to clean up (unsubscribe from all events, stop timers, etc.)
 func (vc *ValidatorConnExecutor) OnStop() {
 	if vc.eventBus != nil {
-		err := vc.eventBus.UnsubscribeAll(vc.ctx, validatorConnExecutorName)
+		ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+		defer cancel()
+		err := vc.eventBus.UnsubscribeAll(ctx, validatorConnExecutorName)
 		if err != nil {
 			vc.Logger.Error("cannot unsubscribe from channels", "error", err)
 		}
@@ -115,8 +120,10 @@ func (vc *ValidatorConnExecutor) OnStop() {
 
 // subscribe subscribes to event bus to receive validator update messages
 func (vc *ValidatorConnExecutor) subscribe() error {
+	ctx, cancel := context.WithTimeout(context.Background(), defaultTimeout)
+	defer cancel()
 	updatesSub, err := vc.eventBus.Subscribe(
-		vc.ctx,
+		ctx,
 		validatorConnExecutorName,
 		types.EventQueryValidatorSetUpdates,
 		vc.EventBusCapacity,
@@ -148,8 +155,6 @@ func (vc *ValidatorConnExecutor) receiveEvents() error {
 		return fmt.Errorf("subscription cancelled due to error: %w", vc.subscription.Err())
 	case <-vc.BaseService.Quit():
 		return fmt.Errorf("quit signal received")
-	case <-vc.ctx.Done():
-		return fmt.Errorf("context expired: %w", vc.ctx.Err())
 	}
 
 	return nil
@@ -167,11 +172,11 @@ func (vc *ValidatorConnExecutor) handleValidatorUpdateEvent(event types.EventDat
 	vc.validatorSetMembers = newValidatorMap(event.ValidatorUpdates)
 	if len(event.QuorumHash) > 0 {
 		if err := vc.setQuorumHash(event.QuorumHash); err != nil {
-			vc.BaseService.Logger.Error("received invalid quorum hash", "error", err)
+			vc.Logger.Error("received invalid quorum hash", "error", err)
 			return fmt.Errorf("received invalid quorum hash: %w", err)
 		}
 	} else {
-		vc.BaseService.Logger.Debug("received empty quorum hash")
+		vc.Logger.Debug("received empty quorum hash")
 	}
 	if err := vc.updateConnections(); err != nil {
 		return fmt.Errorf("inter-validator set connections error: %w", err)
