@@ -1,4 +1,4 @@
-package dash
+package quorum
 
 import (
 	"context"
@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/dip6"
-	"github.com/tendermint/tendermint/dash/mock"
+	"github.com/tendermint/tendermint/dash/quorum/mock"
+	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	mmock "github.com/tendermint/tendermint/mempool/mock"
@@ -443,7 +443,7 @@ func allowedParamsDefaults(
 		}
 	}
 
-	allowedValidators, err := dip6.SelectValidatorsDIP6(validators, tc.me, quorumHash)
+	allowedValidators, err := selectpeers.SelectValidatorsDIP6(validators, tc.me, quorumHash)
 	require.NoError(t, err)
 	return newValidatorMap(allowedValidators).URIs()
 }

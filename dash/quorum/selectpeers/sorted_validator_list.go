@@ -1,4 +1,4 @@
-package dip6
+package selectpeers
 
 import (
 	"bytes"

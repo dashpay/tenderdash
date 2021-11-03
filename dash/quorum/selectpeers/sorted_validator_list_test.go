@@ -1,10 +1,10 @@
-package dip6
+package selectpeers
 
 import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/tendermint/tendermint/dash/mock"
+	"github.com/tendermint/tendermint/dash/quorum/mock"
 )
 
 // Test_sortableValidatorList_Index checks if the sortableValidatorList.Index() works correctly

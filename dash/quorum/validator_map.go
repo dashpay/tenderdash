@@ -1,4 +1,4 @@
-package dash
+package quorum
 
 import (
 	"github.com/tendermint/tendermint/p2p"

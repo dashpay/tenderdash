@@ -1,4 +1,4 @@
-package dash
+package quorum
 
 import (
 	"context"
@@ -6,7 +6,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/dip6"
+	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
@@ -205,7 +205,7 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 		return validatorMap{}, fmt.Errorf("current node is not member of active validator set")
 	}
 
-	selectedValidators, err := dip6.SelectValidatorsDIP6(activeValidators.values(), &me, vc.quorumHash)
+	selectedValidators, err := selectpeers.SelectValidatorsDIP6(activeValidators.values(), &me, vc.quorumHash)
 	if err != nil {
 		return validatorMap{}, err
 	}
