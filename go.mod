@@ -10,7 +10,6 @@ require (
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/dashevo/dashd-go v0.0.0-20210630125816-b417ad8eb165
 	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20201127091120-745324b80143
-	github.com/dgraph-io/badger/v2 v2.2007.3 // indirect
 	github.com/didip/tollbooth/v6 v6.1.1 // indirect
 	github.com/didip/tollbooth_chi v0.0.0-20200828173446-a7173453ea21 // indirect
 	github.com/fortytw2/leaktest v1.3.0
@@ -42,8 +41,7 @@ require (
 	github.com/spf13/viper v1.9.0
 	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/stretchr/testify v1.7.0
-	github.com/tendermint/tm-db v0.6.4
-	go.etcd.io/bbolt v1.3.6 // indirect
+	github.com/tendermint/tm-db v0.6.5
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
 	golang.org/x/net v0.0.0-20211005001312-d4b1ae081e3b
 	google.golang.org/genproto v0.0.0-20210929214142-896c89f843d2 // indirect
