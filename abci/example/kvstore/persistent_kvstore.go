@@ -249,12 +249,11 @@ func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64) []b
 		pubStr = base64.StdEncoding.EncodeToString(pk.Bytes())
 	}
 	proTxHashStr := base64.StdEncoding.EncodeToString(proTxHash)
-	return []byte(fmt.Sprintf("%s!%s!%d", valSetTxKey(proTxHashStr), pubStr, power))
+	return []byte(valSetTxKey(proTxHashStr) + "!" + pubStr + "!" + strconv.FormatInt(power, 10))
 }
 
 func MakeValSetRemovalTx(proTxHash []byte) []byte {
-	proTxHashStr := base64.StdEncoding.EncodeToString(proTxHash)
-	return []byte(fmt.Sprintf("%s!!%d", valSetTxKey(proTxHashStr), 0))
+	return MakeValSetChangeTx(proTxHash, nil, 0)
 }
 
 func MakeThresholdPublicKeyChangeTx(thresholdPublicKey pc.PublicKey) []byte {

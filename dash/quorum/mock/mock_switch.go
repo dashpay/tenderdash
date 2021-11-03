@@ -34,7 +34,6 @@ type Switch struct {
 
 // NewMockSwitch creates a new mock Switch
 func NewMockSwitch() *Switch {
-
 	isw := &Switch{
 		PeerSet:         p2p.NewPeerSet(),
 		PersistentPeers: map[string]bool{},
@@ -52,7 +51,7 @@ func (sw *Switch) Peers() p2p.IPeerSet {
 // AddPersistentPeers implements iSwitch by marking provided addresses as persistent
 func (sw *Switch) AddPersistentPeers(addrs []string) error {
 	for _, addr := range addrs {
-		addr = strings.TrimPrefix(addr, "tcp://")
+		addr = simplifyAddress(addr)
 		sw.PersistentPeers[addr] = true
 	}
 	return nil
@@ -60,9 +59,9 @@ func (sw *Switch) AddPersistentPeers(addrs []string) error {
 
 // RemovePersistentPeer implements iSwitch. It checks if the addr is persistent, and
 // marks it as non-persistent if needed.
-func (sw *Switch) RemovePersistentPeer(addr string) error {
-	addr = strings.TrimPrefix(addr, "tcp://")
-	if !sw.PersistentPeers[addr] {
+func (sw Switch) RemovePersistentPeer(addr string) error {
+	addr = simplifyAddress(addr)
+	if sw.PersistentPeers[addr] != true {
 		return fmt.Errorf("peer is not persisitent, addr=%s", addr)
 	}
 
@@ -110,4 +109,10 @@ func (sw *Switch) history(op string, args ...string) {
 	sw.History = append(sw.History, event)
 
 	sw.HistoryChan <- event
+}
+
+// simplifyAddress converts provided `addr` to a simplified form, to make
+// comparisons inside the tests easier
+func simplifyAddress(addr string) string {
+	return strings.TrimPrefix(addr, "tcp://")
 }
