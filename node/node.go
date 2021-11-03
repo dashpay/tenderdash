@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
-	"github.com/tendermint/tendermint/dash"
+	dashquorum "github.com/tendermint/tendermint/dash/quorum"
 	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
 
 	"github.com/prometheus/client_golang/prometheus"
@@ -235,7 +235,7 @@ type Node struct {
 	indexerService    *txindex.IndexerService
 	prometheusSrv     *http.Server
 
-	validatorConnExecutor *dash.ValidatorConnExecutor
+	validatorConnExecutor *dashquorum.ValidatorConnExecutor
 
 	dashCoreRPCClient dashcore.Client
 }
@@ -1043,7 +1043,7 @@ func NewNode(config *cfg.Config,
 	}
 
 	// Initialize ValidatorConnExecutor
-	validatorConnExecutor := dash.NewValidatorConnExecutor(
+	validatorConnExecutor := dashquorum.NewValidatorConnExecutor(
 		nodeInfo.ID(),
 		eventBus,
 		sw,
