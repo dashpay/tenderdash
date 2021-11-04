@@ -616,7 +616,7 @@ func TestTransportHandshake(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	ni, err := handshake(c, 200*time.Millisecond, emptyNodeInfo())
+	ni, err := handshake(c, 20*time.Millisecond, emptyNodeInfo())
 	if err != nil {
 		t.Fatal(err)
 	}
