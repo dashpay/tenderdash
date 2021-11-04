@@ -443,7 +443,7 @@ func allowedParamsDefaults(
 		}
 	}
 
-	allowedValidators, err := selectpeers.SelectValidatorsDIP6(validators, tc.me, quorumHash)
+	allowedValidators, err := selectpeers.DIP6(validators, tc.me, quorumHash)
 	require.NoError(t, err)
 	return newValidatorMap(allowedValidators).URIs()
 }
