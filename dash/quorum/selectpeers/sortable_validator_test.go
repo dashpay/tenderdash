@@ -73,9 +73,8 @@ func Test_sortableValidator_Compare(t *testing.T) {
 	// nolint:scopelint
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := tt.left.compare(tt.right); got != tt.want {
-				t.Errorf("sortableValidator.Compare() = %v, want %v", got, tt.want)
-			}
+			got := tt.left.compare(tt.right)
+			assert.Equal(t, tt.want, got, "sortableValidator.Compare() = %v, want %v", got, tt.want)
 		})
 	}
 }

@@ -37,8 +37,7 @@ func NewValidator(id uint64) *types.Validator {
 func NewValidators(n uint64) []*types.Validator {
 	vals := make([]*types.Validator, 0, n)
 	for i := uint64(0); i < n; i++ {
-		val := NewValidator(i)
-		vals = append(vals, val)
+		vals = append(vals, NewValidator(i))
 	}
 	return vals
 }
