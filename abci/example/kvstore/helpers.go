@@ -2,12 +2,10 @@ package kvstore
 
 import (
 	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/p2p"
-
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
-
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/tendermint/tendermint/p2p"
 )
 
 func ValUpdate(

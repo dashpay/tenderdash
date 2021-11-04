@@ -352,7 +352,7 @@ func TestEndBlock(t *testing.T) {
 		t.Fatal("Did not receive EventValidatorSetUpdates within 1 sec.")
 	}
 
-	// ensure some history got generated inside the iSwitch; we expect 1 dial event
+	// ensure some history got generated inside the Switch; we expect 1 dial event
 	select {
 	case msg := <-sw.HistoryChan:
 		t.Logf("Got message: %s %+v", msg.Operation, msg.Params)
@@ -470,7 +470,7 @@ func setup(
 }
 
 // cleanup frees some resources allocated for tests
-func cleanup(t *testing.T, bus *types.EventBus, sw iSwitch, vc *ValidatorConnExecutor) {
+func cleanup(t *testing.T, bus *types.EventBus, sw Switch, vc *ValidatorConnExecutor) {
 	assert.NoError(t, bus.Stop())
 	assert.NoError(t, vc.Stop())
 }

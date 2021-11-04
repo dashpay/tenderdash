@@ -20,11 +20,13 @@ const (
 	validatorConnExecutorName = "ValidatorConnExecutor"
 	// defaultTimeout is timeout that is applied to setup / cleanup code
 	defaultTimeout = 1 * time.Second
+	// defaultEventBusCapacity determines how many events can wait in the event bus for processing. 10 looks very safe.
+	defaultEventBusCapacity = 10
 )
 
-// iSwitch defines p2p.Switch methods that are used by this Executor.
+// Switch defines p2p.Switch methods that are used by this Executor.
 // Useful to create a mock  of the p2p.Switch.
-type iSwitch interface {
+type Switch interface {
 	Peers() p2p.IPeerSet
 
 	AddPersistentPeers(addrs []string) error
@@ -47,7 +49,7 @@ type ValidatorConnExecutor struct {
 	service.BaseService
 	nodeID       p2p.ID
 	eventBus     *types.EventBus
-	p2pSwitch    iSwitch
+	p2pSwitch    Switch
 	subscription types.Subscription
 
 	// validatorSetMembers contains validators active in the current Validator Set, indexed by node ID
@@ -71,13 +73,13 @@ type ValidatorConnExecutor struct {
 func NewValidatorConnExecutor(
 	nodeID p2p.ID,
 	eventBus *types.EventBus,
-	sw iSwitch,
+	sw Switch,
 	logger log.Logger) *ValidatorConnExecutor {
 	vc := &ValidatorConnExecutor{
 		nodeID:              nodeID,
 		eventBus:            eventBus,
 		p2pSwitch:           sw,
-		EventBusCapacity:    10,
+		EventBusCapacity:    defaultEventBusCapacity,
 		validatorSetMembers: validatorMap{},
 		connectedValidators: validatorMap{},
 		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),

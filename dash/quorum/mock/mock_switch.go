@@ -23,7 +23,7 @@ type SwitchHistoryEvent struct {
 	Comment   string
 }
 
-// Switch implements `dash.iSwitch`. It sends event about DialPeersAsync() and StopPeerGracefully() calls
+// Switch implements `dash.Switch`. It sends event about DialPeersAsync() and StopPeerGracefully() calls
 // to HistoryChan and stores them in History
 type Switch struct {
 	PeerSet         *p2p.PeerSet
@@ -43,12 +43,12 @@ func NewMockSwitch() *Switch {
 	return isw
 }
 
-// Peers implements iSwitch by returning sw.PeerSet
+// Peers implements Switch by returning sw.PeerSet
 func (sw *Switch) Peers() p2p.IPeerSet {
 	return sw.PeerSet
 }
 
-// AddPersistentPeers implements iSwitch by marking provided addresses as persistent
+// AddPersistentPeers implements Switch by marking provided addresses as persistent
 func (sw *Switch) AddPersistentPeers(addrs []string) error {
 	for _, addr := range addrs {
 		addr = simplifyAddress(addr)
@@ -57,7 +57,7 @@ func (sw *Switch) AddPersistentPeers(addrs []string) error {
 	return nil
 }
 
-// RemovePersistentPeer implements iSwitch. It checks if the addr is persistent, and
+// RemovePersistentPeer implements Switch. It checks if the addr is persistent, and
 // marks it as non-persistent if needed.
 func (sw Switch) RemovePersistentPeer(addr string) error {
 	addr = simplifyAddress(addr)
@@ -69,7 +69,7 @@ func (sw Switch) RemovePersistentPeer(addr string) error {
 	return nil
 }
 
-// DialPeersAsync implements iSwitch. It emulates connecting to provided addresses
+// DialPeersAsync implements Switch. It emulates connecting to provided addresses
 // and adds them as peers and emits history event OpDialMany.
 func (sw *Switch) DialPeersAsync(addrs []string) error {
 	for _, addr := range addrs {
@@ -86,13 +86,13 @@ func (sw *Switch) DialPeersAsync(addrs []string) error {
 	return nil
 }
 
-// IsDialingOrExistingAddress implements iSwitch. It checks if provided peer has been dialed
+// IsDialingOrExistingAddress implements Switch. It checks if provided peer has been dialed
 // before.
 func (sw *Switch) IsDialingOrExistingAddress(addr *p2p.NetAddress) bool {
 	return sw.PeerSet.Has(addr.ID)
 }
 
-// StopPeerGracefully implements iSwitch. It removes the peer from Peers() and emits history
+// StopPeerGracefully implements Switch. It removes the peer from Peers() and emits history
 // event OpStopOne.
 func (sw *Switch) StopPeerGracefully(peer p2p.Peer) {
 	sw.PeerSet.Remove(peer)
