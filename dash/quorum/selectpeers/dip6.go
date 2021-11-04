@@ -10,9 +10,9 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// SelectValidatorsDIP6 selects validators from the `validatorSetMembers`, based on algorithm
+// DIP6 selects validators from the `validatorSetMembers`, based on algorithm
 // described in DIP-6 https://github.com/dashpay/dips/blob/master/dip-0006.md
-func SelectValidatorsDIP6(
+func DIP6(
 	validatorSetMembers []*types.Validator,
 	me *types.Validator,
 	quorumHash tmbytes.HexBytes,

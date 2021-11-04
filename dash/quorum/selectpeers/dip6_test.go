@@ -9,7 +9,7 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-func TestSelectValidatorsDIP6(t *testing.T) {
+func TestDIP6(t *testing.T) {
 	tests := []struct {
 		name            string
 		validators      []*types.Validator
@@ -95,7 +95,7 @@ func TestSelectValidatorsDIP6(t *testing.T) {
 	// nolint:scopelint
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := SelectValidatorsDIP6(tt.validators, tt.me, tt.quorumHash)
+			got, err := DIP6(tt.validators, tt.me, tt.quorumHash)
 			if (err == nil) == tt.wantErr {
 				assert.FailNow(t, "unexpected error: %s", err)
 			}

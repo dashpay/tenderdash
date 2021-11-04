@@ -205,7 +205,7 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 		return validatorMap{}, fmt.Errorf("current node is not member of active validator set")
 	}
 
-	selectedValidators, err := selectpeers.SelectValidatorsDIP6(activeValidators.values(), &me, vc.quorumHash)
+	selectedValidators, err := selectpeers.DIP6(activeValidators.values(), &me, vc.quorumHash)
 	if err != nil {
 		return validatorMap{}, err
 	}
