@@ -61,7 +61,7 @@ func (sw *Switch) AddPersistentPeers(addrs []string) error {
 // marks it as non-persistent if needed.
 func (sw Switch) RemovePersistentPeer(addr string) error {
 	addr = simplifyAddress(addr)
-	if sw.PersistentPeers[addr] != true {
+	if !sw.PersistentPeers[addr] {
 		return fmt.Errorf("peer is not persisitent, addr=%s", addr)
 	}
 
