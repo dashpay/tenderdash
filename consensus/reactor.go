@@ -1151,7 +1151,14 @@ func (ps *PeerState) SendCommit(commit *types.Commit) bool {
 func (ps *PeerState) PickSendVote(votes types.VoteSetReader) bool {
 	if vote, ok := ps.PickVoteToSend(votes); ok {
 		msg := &VoteMessage{vote}
-		ps.logger.Debug("Sending vote message", "ps", ps, "vote", vote)
+		ps.logger.Debug("Sending vote message",
+			"ps", ps,
+			"peer_proTxHash", ps.peer.NodeInfo().GetProTxHash().ShortString(),
+			"vote", vote,
+			"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
+			"height", vote.Height,
+			"round", vote.Round,
+		)
 		if ps.peer.Send(VoteChannel, MustEncode(msg)) {
 			ps.SetHasVote(vote, nil)
 			return true
