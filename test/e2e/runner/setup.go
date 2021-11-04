@@ -282,6 +282,7 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 	cfg.StateSync.DiscoveryTime = 5 * time.Second
 	cfg.Consensus.AppHashSize = crypto.DefaultAppHashSize
 	cfg.BaseConfig.LogLevel = "debug"
+	cfg.BaseConfig.LogFormat = config.LogFormatJSON
 
 	switch node.ABCIProtocol {
 	case e2e.ProtocolUNIX:
