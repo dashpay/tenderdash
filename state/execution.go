@@ -679,11 +679,9 @@ func fireEvents(
 	}
 
 	if len(validatorUpdates) > 0 {
-		qHash := make(tmbytes.HexBytes, len(quorumHash))
-		copy(qHash, quorumHash)
 		if err := eventBus.PublishEventValidatorSetUpdates(
 			types.EventDataValidatorSetUpdates{
-				QuorumHash:       qHash,
+				QuorumHash:       append(tmbytes.HexBytes{}, quorumHash...),
 				ValidatorUpdates: validatorUpdates,
 			}); err != nil {
 			logger.Error("failed publishing event", "err", err)

@@ -135,10 +135,11 @@ func TestValidatorConnExecutor_Myself(t *testing.T) {
 				expectedHistory: []mock.SwitchHistoryEvent{{
 					Operation: mock.OpStopOne,
 					Params:    []string{mock.NewNodeAddress(2), mock.NewNodeAddress(5)},
-				}, {
-					Operation: mock.OpStopOne,
-					Params:    []string{mock.NewNodeAddress(2), mock.NewNodeAddress(5)},
 				},
+					{
+						Operation: mock.OpStopOne,
+						Params:    []string{mock.NewNodeAddress(2), mock.NewNodeAddress(5)},
+					},
 				},
 			},
 		},
