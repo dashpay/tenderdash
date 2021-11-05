@@ -20,6 +20,7 @@ require (
 	github.com/go-logfmt/logfmt v0.5.1
 	github.com/go-pkgz/jrpc v0.2.0
 	github.com/go-pkgz/rest v1.11.0 // indirect
+	github.com/goccy/go-graphviz v0.0.9 // indirect
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.2
 	github.com/google/btree v1.0.1 // indirect
