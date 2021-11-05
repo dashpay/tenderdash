@@ -115,7 +115,9 @@ func TestValidatorConnExecutor_Myself(t *testing.T) {
 					mock.NewValidator(2),
 					mock.NewValidator(3),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{},
+				expectedHistory: []mock.SwitchHistoryEvent{
+					{Operation: mock.OpDialMany},
+				},
 			},
 			1: {
 				validators: []*types.Validator{
@@ -126,9 +128,11 @@ func TestValidatorConnExecutor_Myself(t *testing.T) {
 					mock.NewValidator(4),
 					mock.NewValidator(5),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{{
-					Operation: mock.OpDialMany,
-				}},
+				expectedHistory: []mock.SwitchHistoryEvent{
+					{Operation: mock.OpStopOne},
+					{Operation: mock.OpStopOne},
+					{Operation: mock.OpDialMany},
+				},
 			},
 			2: {
 				validators: []*types.Validator{me},
@@ -230,9 +234,16 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 				expectedHistory: []mock.SwitchHistoryEvent{
 					0: {Operation: mock.OpStopOne},
 					1: {Operation: mock.OpStopOne},
+					2: {Operation: mock.OpDialMany, Params: []string{mock.NewNodeAddress(1)}},
 				},
 			},
-			4: { // 20 validators
+			4: { // everything stops
+				validators: []*types.Validator{me},
+				expectedHistory: []mock.SwitchHistoryEvent{
+					0: {Operation: mock.OpStopOne},
+				},
+			},
+			5: { // 20 validators
 				validators: append(mock.NewValidators(20), me),
 				expectedHistory: []mock.SwitchHistoryEvent{
 					{
