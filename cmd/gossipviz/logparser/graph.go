@@ -3,6 +3,7 @@ package logparser
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/goccy/go-graphviz"
 	"github.com/goccy/go-graphviz/cgraph"
@@ -21,6 +22,12 @@ type Graph struct {
 	graphViz *graphviz.Graphviz
 	graph    *cgraph.Graph
 	logger   log.Logger
+	edges    map[string]edgeInfo
+}
+
+type edgeInfo struct {
+	*cgraph.Edge
+	timestamp time.Time
 }
 
 // NewGraph initializes graph visualization mechanism
@@ -29,6 +36,7 @@ func NewGraph(logger log.Logger) (Graph, error) {
 	graph := Graph{
 		logger:   logger,
 		graphViz: graphviz.New(),
+		edges:    make(map[string]edgeInfo),
 	}
 
 	if graph.graph, err = graph.graphViz.Graph(); err != nil {
@@ -51,18 +59,40 @@ func (g *Graph) getOrAddNode(proTxHash string) (*cgraph.Node, error) {
 }
 
 // getOrAddNode creates an edge if it does not exist yet
-func (g *Graph) getOrAddEdge(label string, src, dst *cgraph.Node) (*cgraph.Edge, error) {
+func (g *Graph) getOrAddEdge(label string, src, dst *cgraph.Node, t time.Time) (*cgraph.Edge, error) {
+	edgeName := src.Name() + "->" + dst.Name()
+	if edge, ok := g.edges[edgeName]; ok {
+		oldTime := edge.timestamp
+
+		if oldTime.Before(t) {
+			g.logger.Debug("ignoring duplicate edge",
+				"src", src.Name(), "dst", dst.Name(), "label", label,
+				"oldTime", oldTime, "newTime", t)
+			return edge.Edge, nil
+		}
+
+		g.logger.Debug("overwriting duplicate edge",
+			"src", src.Name(), "dst", dst.Name(), "label", label,
+			"oldTime", oldTime, "newTime", t)
+	}
+
 	edge, err := g.graph.CreateEdge(label, src, dst)
 	if err != nil {
 		return nil, err
 	}
 	edge.SetDir(cgraph.ForwardDir)
 	edge.SetLabel(label)
+
+	g.edges[edgeName] = edgeInfo{
+		Edge:      edge,
+		timestamp: t,
+	}
+
 	return edge, nil
 }
 
 // Add adds nodes `src` and `dst`, and connects them with an edge with label `label`
-func (g *Graph) Add(src, dst, label string) error {
+func (g *Graph) Add(src, dst, label string, eventTime time.Time) error {
 	srcNode, err := g.getOrAddNode(src)
 	if err != nil {
 		return err
@@ -71,7 +101,7 @@ func (g *Graph) Add(src, dst, label string) error {
 	if err != nil {
 		return err
 	}
-	_, err = g.getOrAddEdge(label, srcNode, dstNode)
+	_, err = g.getOrAddEdge(label, srcNode, dstNode, eventTime)
 	if err != nil {
 		return err
 	}

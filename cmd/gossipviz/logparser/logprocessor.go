@@ -61,7 +61,7 @@ func (g *LogProcessor) Run(ctx context.Context) error {
 					continue // non-fatal, try another parser
 				}
 
-				if err := g.graph.Add(src, dst, label); err != nil {
+				if err := g.graph.Add(src, dst, label, item.Timestamp); err != nil {
 					g.logger.Error("error adding item to the graph", "error", err)
 					return err // fatal
 				}
