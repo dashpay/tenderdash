@@ -1,4 +1,4 @@
-// selectpeers package contains algorithm that selects peers based on the deterministic connection selection algorithm
+// Package selectpeers is package contains algorithm that selects peers based on the deterministic connection selection algorithm
 // described in DIP-6
 package selectpeers
 
