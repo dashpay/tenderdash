@@ -148,10 +148,10 @@ The `ValidatorUpdate` structure looks as follows:
 
 ```protobuf
 message ValidatorUpdate {
-  tendermint.crypto.PublicKey pub_key     = 1 [(gogoproto.nullable) = true];
-  int64                       power       = 2;
-  bytes                       pro_tx_hash = 3;
-  string                      address     = 4;  // address of the Validator, correct URI (RFC 3986)
+  tendermint.crypto.PublicKey pub_key      = 1 [(gogoproto.nullable) = true];
+  int64                       power        = 2;
+  bytes                       pro_tx_hash  = 3;
+  string                      node_address = 4;  // address of the Validator, correct URI (RFC 3986)
 }
 ```
 
