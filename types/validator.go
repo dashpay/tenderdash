@@ -49,22 +49,23 @@ func NewValidatorDefaultVotingPower(pubKey crypto.PubKey, proTxHash []byte) *Val
 
 // NewValidator returns a new validator with the given pubkey and voting power.
 func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash []byte, address string) *Validator {
-	val := &Validator{
+	var (
+		addr p2p.NodeAddress
+		err  error
+	)
+	if address != "" {
+		addr, err = p2p.ParseNodeAddressWithPubkey(address, pubKey)
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+	return &Validator{
 		PubKey:           pubKey,
 		VotingPower:      votingPower,
 		ProposerPriority: 0,
 		ProTxHash:        proTxHash,
+		NodeAddress:      addr,
 	}
-
-	if address != "" {
-		addr, err := p2p.ParseNodeAddress(address)
-		if err != nil {
-			panic(fmt.Sprintf("cannot parse validator address %s: %s", address, err))
-		}
-		val.NodeAddress = addr
-	}
-
-	return val
 }
 
 // ValidateBasic performs basic validation.
@@ -83,6 +84,12 @@ func (v *Validator) ValidateBasic() error {
 
 	if len(v.ProTxHash) != crypto.DefaultHashSize {
 		return fmt.Errorf("validator proTxHash is the wrong size: %v", len(v.ProTxHash))
+	}
+
+	if !v.NodeAddress.Zero() {
+		if err := v.NodeAddress.Validate(); err != nil {
+			return fmt.Errorf("validator node address is invalid: %w", err)
+		}
 	}
 
 	return nil

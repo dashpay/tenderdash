@@ -1,9 +1,11 @@
 package types
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/p2p"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -106,4 +108,25 @@ func TestValidatorValidateBasic(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestNewValidator(t *testing.T) {
+	quorumHash := crypto.RandQuorumHash()
+	priv := NewMockPVForQuorum(quorumHash)
+	pubKey, err := priv.GetPubKey(quorumHash)
+	nodeID := p2p.PubKeyToID(pubKey)
+	proTxHash := crypto.RandProTxHash()
+	require.NoError(t, err)
+
+	validator := NewValidator(pubKey, DefaultDashVotingPower, proTxHash,
+		fmt.Sprintf("tcp://%s@127.0.0.1:12345", nodeID))
+	require.NotNil(t, validator)
+	assert.Equal(t, nodeID, validator.NodeAddress.NodeID)
+
+	validator = NewValidator(pubKey, DefaultDashVotingPower, proTxHash, "127.0.0.1:23456")
+	require.NotNil(t, validator)
+	assert.EqualValues(t, "127.0.0.1", validator.NodeAddress.Hostname)
+	assert.EqualValues(t, 23456, validator.NodeAddress.Port)
+	assert.EqualValues(t, "tcp", validator.NodeAddress.Protocol)
+	assert.EqualValues(t, nodeID, validator.NodeAddress.NodeID)
 }
