@@ -49,6 +49,16 @@ func (v *validatorUpdatesPopulator) populate(validatorUpdates map[string]map[str
 		}
 		prevHs = hs
 	}
+	// if initial height greater than 0, then it is necessary to add an update validator set at 0 height
+	if v.initialHeight > 0 {
+		s := strconv.FormatInt(v.initialHeight, 10)
+		validatorUpdates["0"] = validatorUpdates[s]
+		for name, val := range valHeights {
+			if val[0] == v.initialHeight {
+				valHeights[name] = append([]int64{0}, val...)
+			}
+		}
+	}
 	return valHeights
 }
 

@@ -196,9 +196,11 @@ func generateNode(
 		if startAt == 0 {
 			misbehaveAt += initialHeight - 1
 		}
-		node.Misbehaviors = n.misbehaviors.Choose(r).(misbehaviorOption).atHeight(misbehaveAt)
-		if len(node.Misbehaviors) != 0 {
-			node.PrivvalProtocol = "file"
+		if n.misbehaviors != nil {
+			node.Misbehaviors = n.misbehaviors.Choose(r).(misbehaviorOption).atHeight(misbehaveAt)
+			if len(node.Misbehaviors) != 0 {
+				node.PrivvalProtocol = "file"
+			}
 		}
 	}
 
@@ -227,6 +229,7 @@ func generateNode(
 }
 
 func generateLightNode(r *rand.Rand, startAt int64, providers []string) *e2e.ManifestNode {
+	n := cfg.node
 	return &e2e.ManifestNode{
 		Mode:            string(e2e.ModeLight),
 		StartAt:         startAt,
@@ -234,6 +237,7 @@ func generateLightNode(r *rand.Rand, startAt int64, providers []string) *e2e.Man
 		ABCIProtocol:    "builtin",
 		PersistInterval: ptrUint64(0),
 		PersistentPeers: providers,
+		PrivvalProtocol: n.privvalProtocols.Choose(r).(string),
 	}
 }
 
