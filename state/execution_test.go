@@ -156,6 +156,7 @@ func TestValidateValidatorUpdates(t *testing.T) {
 	}
 
 	addr := p2p.RandNodeAddress()
+	addr.NodeID = ""
 
 	testCases := []struct {
 		name string

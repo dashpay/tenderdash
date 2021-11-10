@@ -74,7 +74,10 @@ func (sw Switch) RemovePersistentPeer(addr string) error {
 func (sw *Switch) DialPeersAsync(addrs []string) error {
 	for _, addr := range addrs {
 		peer := &mocks.Peer{}
-		parsed, _ := p2p.ParseNodeAddress(addr)
+		parsed, err := p2p.ParseNodeAddress(addr)
+		if err != nil {
+			return err
+		}
 
 		peer.On("ID").Return(parsed.NodeID)
 		peer.On("String").Return(addr)

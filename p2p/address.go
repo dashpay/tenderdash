@@ -5,8 +5,9 @@ package p2p
 // This file was downloaded from Tendermint master, revision bc1a20dbb86e4fa2120b2c8a9de88814471f4a2c:
 // https://raw.githubusercontent.com/tendermint/tendermint/bc1a20dbb86e4fa2120b2c8a9de88814471f4a2c/internal/p2p/address.go
 // and refactored to workaround some dependencies.
-// When backporting upstream, you can replace this file.
-
+// Changed functions:
+// 1. ParseNodeAddress divided into 2 functions
+// 2. ParseNodeAddressWithPubkey added
 import (
 	"context"
 	"errors"
@@ -18,6 +19,7 @@ import (
 	"strconv"
 	"strings"
 
+	tmcrypto "github.com/tendermint/tendermint/crypto"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 )
 
@@ -46,9 +48,32 @@ type NodeAddress struct {
 	Path     string
 }
 
+// ParseNodeAddressWithPubkey parses a node address URL into a NodeAddress, normalizing
+// and validating it. If the node address does not contain Node ID, it will be generated
+// based on provided public key
+func ParseNodeAddressWithPubkey(urlString string, pubKey tmcrypto.PubKey) (NodeAddress, error) {
+	if urlString == "" {
+		return NodeAddress{}, fmt.Errorf("empty node address")
+	}
+	address, err := parseNodeAddressWithoutValidation(urlString)
+	if err != nil {
+		return address, err
+	}
+	if address.NodeID == "" && pubKey != nil {
+		address.NodeID = PubKeyToID(pubKey)
+	}
+	return address, address.Validate()
+}
+
 // ParseNodeAddress parses a node address URL into a NodeAddress, normalizing
 // and validating it.
 func ParseNodeAddress(urlString string) (NodeAddress, error) {
+	return ParseNodeAddressWithPubkey(urlString, nil)
+}
+
+// parseNodeAddressWithoutValidation  parses a node address URL into a NodeAddress, normalizing it.
+// It does NOT validate parsed address
+func parseNodeAddressWithoutValidation(urlString string) (NodeAddress, error) {
 	// url.Parse requires a scheme, so if it fails to parse a scheme-less URL
 	// we try to apply a default scheme.
 	url, err := url.Parse(urlString)
@@ -67,7 +92,7 @@ func ParseNodeAddress(urlString string) (NodeAddress, error) {
 	// Opaque URLs are expected to contain only a node ID.
 	if url.Opaque != "" {
 		address.NodeID = ID(url.Opaque)
-		return address, address.Validate()
+		return address, nil
 	}
 
 	// Otherwise, just parse a normal networked URL.
@@ -100,7 +125,7 @@ func ParseNodeAddress(urlString string) (NodeAddress, error) {
 		}
 	}
 
-	return address, address.Validate()
+	return address, nil
 }
 
 // Resolve resolves a NodeAddress into a set of Endpoints, by expanding
@@ -199,7 +224,6 @@ func (a NodeAddress) NetAddress() (*NetAddress, error) {
 
 // p2p.RandNodeAddress generates a random validator address
 func RandNodeAddress() NodeAddress {
-
 	nodeID := tmrand.Bytes(20)
 	port := (tmrand.Int() % 65535) + 1
 	addr, err := ParseNodeAddress(fmt.Sprintf("tcp://%x@127.0.0.1:%d", nodeID, port))
