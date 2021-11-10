@@ -9,12 +9,11 @@ import (
 	"math/rand"
 	"net"
 	"path/filepath"
-	"sort"
 	"strconv"
 	"strings"
 
 	"github.com/dashevo/dashd-go/btcjson"
-
+	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -54,6 +53,8 @@ const (
 )
 
 // Testnet represents a single testnet.
+
+type ValidatorsMap map[*Node]abci.ValidatorUpdate
 type Testnet struct {
 	Name                      string
 	File                      string
@@ -131,30 +132,8 @@ func LoadTestnet(file string) (*Testnet, error) {
 	proxyPortGen := newPortGenerator(proxyPortFirst)
 
 	// Set up nodes, in alphabetical order (IPs and ports get same order).
-	nodeNames := []string{}
-	for name := range manifest.Nodes {
-		nodeNames = append(nodeNames, name)
-	}
-	sort.Strings(nodeNames)
-
-	var validatorCount int
-
-	if manifest.Validators != nil {
-		validatorCount = len(*manifest.Validators)
-	} else {
-		validatorCount = 0
-		for _, name := range nodeNames {
-			nodeManifest := manifest.Nodes[name]
-			if nodeManifest.Mode != "" {
-				if Mode(nodeManifest.Mode) == ModeValidator {
-					validatorCount++
-				}
-			} else {
-				validatorCount++
-			}
-		}
-	}
-
+	nodeNames := manifest.NodeNames()
+	validatorCount := manifest.ValidatorCount()
 	fmt.Printf("validator count is %v\n", validatorCount)
 
 	quorumType := manifest.QuorumType
@@ -162,17 +141,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 		quorumType = 100
 	}
 
-	proTxHashes := make([]crypto.ProTxHash, validatorCount)
-
-	for i := 0; i < validatorCount; i++ {
-		proTxHashes[i] = proTxHashGen.Generate()
-		if proTxHashes[i] == nil || len(proTxHashes[i]) != crypto.ProTxHashSize {
-			panic("the proTxHash must be 32 bytes")
-		}
-	}
-
-	proTxHashes, privateKeys, thresholdPublicKey :=
-		bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(proTxHashes, randomSeed)
+	proTxHashes, privateKeys, thresholdPublicKey := generateValidatorKeys(proTxHashGen, validatorCount)
 
 	quorumHash := quorumHashGen.Generate()
 
@@ -200,274 +169,105 @@ func LoadTestnet(file string) (*Testnet, error) {
 	if manifest.InitialCoreChainLockedHeight > 0 {
 		testnet.InitialCoreHeight = manifest.InitialCoreChainLockedHeight
 	}
+	testnet.Nodes, err = createNodes(
+		nodeNames,
+		testnet,
+		manifest,
+		generateNodeKey(keyGen),
+		generateIP(ipGen),
+		generateProxyPort(proxyPortGen),
+		initPrivvalKeys(quorumHash, keyGen.Generate(manifest.KeyType), thresholdPublicKey),
+		nodeManifest(manifest),
+	)
+	if err != nil {
+		return nil, err
+	}
+	err = updateNodes(testnet.Nodes, bindSeedsAndPeers(testnet, manifest))
+	if err != nil {
+		return nil, err
+	}
 
-	for _, name := range nodeNames {
-		fmt.Printf("Creating node: %s\n", name)
-		privKey := keyGen.Generate(manifest.KeyType)
+	validators, err := getValidators(manifest, testnet)
+	if err != nil {
+		return nil, err
+	}
+
+	for i, validator := range validators {
+		pubKey := privateKeys[i].PubKey()
+		vu, err := validator.ValidatorUpdate(pubKey.Bytes(), types.DefaultDashVotingPower)
+		if err != nil {
+			return nil, err
+		}
+		testnet.Validators[validator] = vu
+		validator.ProTxHash = proTxHashes[i]
 		quorumKeys := crypto.QuorumKeys{
-			PrivKey:            privKey,
+			PrivKey:            privateKeys[i],
+			PubKey:             pubKey,
 			ThresholdPublicKey: thresholdPublicKey,
 		}
-		privateKeysMap := make(map[string]crypto.QuorumKeys)
-		privateKeysMap[quorumHash.String()] = quorumKeys
-
-		nodeManifest := manifest.Nodes[name]
-		node := &Node{
-			Name:             name,
-			Testnet:          testnet,
-			PrivvalKeys:      privateKeysMap,
-			NodeKey:          keyGen.Generate("ed25519"),
-			ProTxHash:        nil,
-			IP:               ipGen.Next(),
-			ProxyPort:        proxyPortGen.Next(),
-			Mode:             ModeValidator,
-			Database:         "goleveldb",
-			ABCIProtocol:     ProtocolBuiltin,
-			PrivvalProtocol:  ProtocolFile,
-			StartAt:          nodeManifest.StartAt,
-			FastSync:         nodeManifest.FastSync,
-			StateSync:        nodeManifest.StateSync,
-			PersistInterval:  1,
-			SnapshotInterval: nodeManifest.SnapshotInterval,
-			RetainBlocks:     nodeManifest.RetainBlocks,
-			Perturbations:    []Perturbation{},
-			Misbehaviors:     make(map[int64]string),
-		}
-		if node.StartAt == testnet.InitialHeight {
-			node.StartAt = 0 // normalize to 0 for initial nodes, since code expects this
-		}
-		if nodeManifest.Mode != "" {
-			node.Mode = Mode(nodeManifest.Mode)
-		}
-		if nodeManifest.Database != "" {
-			node.Database = nodeManifest.Database
-		}
-		if nodeManifest.ABCIProtocol != "" {
-			node.ABCIProtocol = Protocol(nodeManifest.ABCIProtocol)
-		}
-		if nodeManifest.PrivvalProtocol != "" {
-			node.PrivvalProtocol = Protocol(nodeManifest.PrivvalProtocol)
-		}
-		if nodeManifest.PersistInterval != nil {
-			node.PersistInterval = *nodeManifest.PersistInterval
-		}
-		for _, p := range nodeManifest.Perturb {
-			node.Perturbations = append(node.Perturbations, Perturbation(p))
-		}
-		for heightString, misbehavior := range nodeManifest.Misbehaviors {
-			height, err := strconv.ParseInt(heightString, 10, 64)
-			if err != nil {
-				return nil, fmt.Errorf("unable to parse height %s to int64: %w", heightString, err)
-			}
-			node.Misbehaviors[height] = misbehavior
-		}
-		testnet.Nodes = append(testnet.Nodes, node)
+		validator.PrivvalKeys[quorumHash.String()] = quorumKeys
 	}
 
-	// We do a second pass to set up seeds and persistent peers, which allows graph cycles.
-	for _, node := range testnet.Nodes {
-		nodeManifest, ok := manifest.Nodes[node.Name]
-		if !ok {
-			return nil, fmt.Errorf("failed to look up manifest for node %q", node.Name)
-		}
-		for _, seedName := range nodeManifest.Seeds {
-			seed := testnet.LookupNode(seedName)
-			if seed == nil {
-				return nil, fmt.Errorf("unknown seed %q for node %q", seedName, node.Name)
-			}
-			node.Seeds = append(node.Seeds, seed)
-		}
-		for _, peerName := range nodeManifest.PersistentPeers {
-			peer := testnet.LookupNode(peerName)
-			if peer == nil {
-				return nil, fmt.Errorf("unknown persistent peer %q for node %q", peerName, node.Name)
-			}
-			node.PersistentPeers = append(node.PersistentPeers, peer)
-		}
-
-		// If there are no seeds or persistent peers specified, default to persistent
-		// connections to all other nodes.
-		if len(node.PersistentPeers) == 0 && len(node.Seeds) == 0 {
-			for _, peer := range testnet.Nodes {
-				if peer.Name == node.Name {
-					continue
-				}
-				node.PersistentPeers = append(node.PersistentPeers, peer)
-			}
-		}
+	heights, err := prepareValidatorUpdateHeights(manifest.ValidatorUpdates)
+	if err != nil {
+		return nil, err
 	}
 
-	// Set up genesis validators. If not specified explicitly, use all validator nodes.
-	if manifest.Validators != nil {
-		for _, node := range testnet.Nodes {
-			if node.Mode != ModeValidator {
-				quorumKeys := crypto.QuorumKeys{
-					ThresholdPublicKey: thresholdPublicKey,
-				}
-				if node.PrivvalKeys == nil {
-					node.PrivvalKeys = make(map[string]crypto.QuorumKeys)
-				}
-				node.PrivvalKeys[quorumHash.String()] = quorumKeys
-			}
-		}
-		var i = 0
-		for validatorName := range *manifest.Validators {
-			validator := testnet.LookupNode(validatorName)
-			if validator == nil {
-				return nil, fmt.Errorf("unknown validator %q", validatorName)
-			}
-			pubKey := privateKeys[i].PubKey()
-			testnet.Validators[validator] = pubKey
-			validator.ProTxHash = proTxHashes[i]
-
-			quorumKeys := crypto.QuorumKeys{
-				PrivKey:            privateKeys[i],
-				PubKey:             pubKey,
-				ThresholdPublicKey: thresholdPublicKey,
-			}
-			privateKeysMap := make(map[string]crypto.QuorumKeys)
-			privateKeysMap[quorumHash.String()] = quorumKeys
-
-			validator.PrivvalKeys = privateKeysMap
-			fmt.Printf("Set validator %s/%X (at file genesis) pubkey to %X\n", validatorName,
-				validator.ProTxHash, pubKey.Bytes())
-			i++
-		}
-	} else {
-		var i = 0
-		for _, node := range testnet.Nodes {
-			if node.Mode == ModeValidator {
-				testnet.Validators[node] = privateKeys[i].PubKey()
-				node.ProTxHash = proTxHashes[i]
-				quorumKeys := crypto.QuorumKeys{
-					PrivKey:            privateKeys[i],
-					PubKey:             privateKeys[i].PubKey(),
-					ThresholdPublicKey: thresholdPublicKey,
-				}
-				if node.PrivvalKeys == nil {
-					node.PrivvalKeys = make(map[string]crypto.QuorumKeys)
-				}
-				node.PrivvalKeys[quorumHash.String()] = quorumKeys
-				fmt.Printf("Setting validator %s proTxHash to %X\n", node.Name, node.ProTxHash)
-				i++
-			} else {
-				quorumKeys := crypto.QuorumKeys{
-					ThresholdPublicKey: thresholdPublicKey,
-				}
-				if node.PrivvalKeys == nil {
-					node.PrivvalKeys = make(map[string]crypto.QuorumKeys)
-				}
-				node.PrivvalKeys[quorumHash.String()] = quorumKeys
-			}
-		}
-	}
-
-	heights := make([]int, len(manifest.ValidatorUpdates))
-	i := 0
-	// We need to do validator updates in order, as we use the previous validator set as the basis of current proTxHashes
-	for heightStr := range manifest.ValidatorUpdates {
-		height, err := strconv.Atoi(heightStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid validator update height %q: %w", height, err)
-		}
-		heights[i] = height
-		i++
-	}
-
-	sort.Ints(heights)
+	prepProTxHashes := prepareProTxHashesFunc(proTxHashGen)
 
 	// Set up validator updates.
 	for _, height := range heights {
 		heightStr := strconv.FormatInt(int64(height), 10)
 		validators := manifest.ValidatorUpdates[heightStr]
-		valUpdate := map[*Node]crypto.PubKey{}
-		proTxHashesInUpdate := make([]crypto.ProTxHash, len(validators))
-		i := 0
-		for name := range validators {
-			node := testnet.LookupNode(name)
-			if node == nil {
-				return nil, fmt.Errorf("unknown validator %q for update at height %v", name, height)
-			}
-			if node.ProTxHash == nil {
-				node.ProTxHash = proTxHashGen.Generate()
-				fmt.Printf("Set validator (at update) %s proTxHash to %X\n", node.Name, node.ProTxHash)
-			}
-			proTxHashesInUpdate[i] = node.ProTxHash
-			i++
-		}
-		proTxHashes = proTxHashesInUpdate
+		valUpdate := ValidatorsMap{}
 
-		sort.Sort(crypto.SortProTxHash(proTxHashes))
+		nodes, err := testnet.LookupNodes(mapGetStrKeys(validators))
+		if err != nil {
+			return nil, fmt.Errorf("unable to find the validators at height %v: %w", height, err)
+		}
 
 		proTxHashes, privateKeys, thresholdPublicKey :=
-			bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(proTxHashes, randomSeed+int64(height))
+			bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(
+				prepProTxHashes(nodes),
+				randomSeed+int64(height),
+			)
 
 		quorumHash := quorumHashGen.Generate()
 
 		for i, proTxHash := range proTxHashes {
+			privKey := privateKeys[i]
+			pubKey := privKey.PubKey()
 			node := testnet.LookupNodeByProTxHash(proTxHash)
 			valUpdate[node] = privateKeys[i].PubKey()
 			if node == nil {
 				return nil, fmt.Errorf("unknown validator with protxHash %X for update at height %v", proTxHash, height)
 			}
-			if height == 0 {
-				pubKey := privateKeys[i].PubKey()
-				quorumKeys := crypto.QuorumKeys{
-					PrivKey:            privateKeys[i],
-					PubKey:             pubKey,
-					ThresholdPublicKey: thresholdPublicKey,
-				}
-				privateKeysMap := make(map[string]crypto.QuorumKeys)
-				privvalUpdateHeights := make(map[string]crypto.QuorumHash)
-				privateKeysMap[quorumHash.String()] = quorumKeys
-				privvalUpdateHeights[strconv.Itoa(height)] = quorumHash
 
-				node.PrivvalKeys = privateKeysMap
-				node.PrivvalUpdateHeights = privvalUpdateHeights
+			//power := manifest.ValidatorUpdates[heightStr][node.Name]
+			vu, err := node.ValidatorUpdate(pubKey.Bytes(), types.DefaultDashVotingPower)
+			if err != nil {
+				return nil, err
+			}
+			valUpdate[node] = vu // privateKeys[i].PubKey()}
+			quorumKeys := crypto.QuorumKeys{
+				PrivKey:            privateKeys[i],
+				PubKey:             pubKey,
+				ThresholdPublicKey: thresholdPublicKey,
+			}
+			step := 0
+			if height == 0 {
 				fmt.Printf("Set validator %s/%X (at genesis) pubkey to %X\n", node.Name,
 					node.ProTxHash, pubKey.Bytes())
 			} else {
+				step = 2
 				fmt.Printf("Set validator %s/%X (at height %d (+ 2)) pubkey to %X\n", node.Name,
 					node.ProTxHash, height, privateKeys[i].PubKey().Bytes())
-				if node.PrivvalKeys == nil {
-					node.PrivvalKeys = make(map[string]crypto.QuorumKeys)
-				}
-				if node.PrivvalUpdateHeights == nil {
-					node.PrivvalUpdateHeights = make(map[string]crypto.QuorumHash)
-				}
-				pubKey := privateKeys[i].PubKey()
-				quorumKeys := crypto.QuorumKeys{
-					PrivKey:            privateKeys[i],
-					PubKey:             pubKey,
-					ThresholdPublicKey: thresholdPublicKey,
-				}
-				node.PrivvalKeys[quorumHash.String()] = quorumKeys
-				node.PrivvalUpdateHeights[strconv.Itoa(height+2)] = quorumHash
 			}
+			node.PrivvalKeys[quorumHash.String()] = quorumKeys
+			node.PrivvalUpdateHeights[strconv.Itoa(height+step)] = quorumHash
 		}
-
-		for _, node := range testnet.Nodes {
-			isPartOfQuorum := false
-			for _, proTxHash := range proTxHashes {
-				if bytes.Equal(node.ProTxHash, proTxHash) {
-					isPartOfQuorum = true
-				}
-			}
-			if !isPartOfQuorum {
-				if node.PrivvalKeys == nil {
-					node.PrivvalKeys = make(map[string]crypto.QuorumKeys)
-				}
-				if node.PrivvalUpdateHeights == nil {
-					node.PrivvalUpdateHeights = make(map[string]crypto.QuorumHash)
-				}
-				quorumKeys := crypto.QuorumKeys{
-					ThresholdPublicKey: thresholdPublicKey,
-				}
-				node.PrivvalKeys[quorumHash.String()] = quorumKeys
-				node.PrivvalUpdateHeights[strconv.Itoa(height+2)] = quorumHash
-			}
-		}
-		if height == 0 {
+		updateOutOfQuorumNodes(testnet.Nodes, height, proTxHashes, thresholdPublicKey, quorumHash)
+		if height == heights[0] {
 			testnet.QuorumHash = quorumHash
 			testnet.ThresholdPublicKey = thresholdPublicKey
 			testnet.Validators = valUpdate
@@ -477,28 +277,17 @@ func LoadTestnet(file string) (*Testnet, error) {
 		testnet.QuorumHashUpdates[int64(height)] = quorumHash
 	}
 
-	chainLockSetHeights := make([]int, len(manifest.ChainLockUpdates))
-	i = 0
+	//
+	if _, ok := testnet.ValidatorUpdates[0]; !ok {
+		testnet.ValidatorUpdates[0] = testnet.ValidatorUpdates[int64(heights[0])]
+	}
+	//
+
 	// We need to do validator updates in order, as we use the previous validator set as the basis of current proTxHashes
-	for heightStr := range manifest.ChainLockUpdates {
-		height, err := strconv.Atoi(heightStr)
-		if err != nil {
-			return nil, fmt.Errorf("invalid validator update height %q: %w", height, err)
-		}
-		chainLockSetHeights[i] = height
-		i++
+	for height, lockHeight := range manifest.ChainLockUpdates {
+		testnet.ChainLockUpdates[int64(mustAtoi(height))] = lockHeight
+		fmt.Printf("Set chainlock at height %q / core height is %d\n", height, lockHeight)
 	}
-
-	sort.Ints(chainLockSetHeights)
-
-	// Set up validator updates.
-	for _, height := range chainLockSetHeights {
-		heightStr := strconv.FormatInt(int64(height), 10)
-		chainLockHeight := manifest.ChainLockUpdates[heightStr]
-		testnet.ChainLockUpdates[int64(height)] = chainLockHeight
-		fmt.Printf("Set chainlock at height %d / core height is %d\n", height, chainLockHeight)
-	}
-
 	return testnet, testnet.Validate()
 }
 
@@ -636,7 +425,20 @@ func (t Testnet) LookupNode(name string) *Node {
 	return nil
 }
 
-// LookupNode looks up a node by name. For now, simply do a linear search.
+// LookupNodes returns slice of nodes corresponding to passed node names
+func (t Testnet) LookupNodes(names []string) ([]*Node, error) {
+	nodes := make([]*Node, 0, len(names))
+	for _, name := range names {
+		node := t.LookupNode(name)
+		if node == nil {
+			return nil, fmt.Errorf("node %q not found", name)
+		}
+		nodes = append(nodes, node)
+	}
+	return nodes, nil
+}
+
+// LookupNodeByProTxHash looks up a node by name. For now, simply do a linear search.
 func (t Testnet) LookupNodeByProTxHash(proTxHash crypto.ProTxHash) *Node {
 	for _, node := range t.Nodes {
 		if bytes.Equal(node.ProTxHash, proTxHash) {
@@ -650,7 +452,7 @@ func (t Testnet) LookupNodeByProTxHash(proTxHash crypto.ProTxHash) *Node {
 // and contain the entire blockchain history. They are used e.g. as light client
 // RPC servers.
 func (t Testnet) ArchiveNodes() []*Node {
-	nodes := []*Node{}
+	var nodes []*Node
 	for _, node := range t.Nodes {
 		if !node.Stateless() && node.StartAt == 0 && node.RetainBlocks == 0 {
 			nodes = append(nodes, node)
@@ -697,7 +499,15 @@ func (t Testnet) LastMisbehaviorHeight() int64 {
 	return lastHeight
 }
 
-// Address returns a P2P endpoint address for the node.
+// ValidatorUpdate creates an abci.ValidatorUpdate struct from the current node
+func (n *Node) ValidatorUpdate(publicKey []byte, power int64) (abci.ValidatorUpdate, error) {
+	proTxHash := n.ProTxHash.Bytes()
+	address := n.AddressP2P(true)
+	validatorUpdate := abci.UpdateValidator(proTxHash, publicKey, power, address)
+	return validatorUpdate, nil
+}
+
+// AddressP2P returns a P2P endpoint address for the node.
 func (n Node) AddressP2P(withID bool) string {
 	ip := n.IP.String()
 	if n.IP.To4() == nil {
@@ -711,7 +521,7 @@ func (n Node) AddressP2P(withID bool) string {
 	return addr
 }
 
-// Address returns an RPC endpoint address for the node.
+// AddressRPC returns an RPC endpoint address for the node.
 func (n Node) AddressRPC() string {
 	ip := n.IP.String()
 	if n.IP.To4() == nil {
