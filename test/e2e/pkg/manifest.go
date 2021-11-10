@@ -3,6 +3,7 @@ package e2e
 import (
 	"fmt"
 	"os"
+	"sort"
 
 	"github.com/BurntSushi/toml"
 )
@@ -168,4 +169,34 @@ func LoadManifest(file string) (Manifest, error) {
 		return manifest, fmt.Errorf("failed to load testnet manifest %q: %w", file, err)
 	}
 	return manifest, nil
+}
+
+// NodeNames returns sorted slice of node names
+func (m *Manifest) NodeNames() []string {
+	var names []string
+	for name := range m.Nodes {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+// ValidatorCount returns a count of the validator which are necessary to generate
+func (m *Manifest) ValidatorCount() int {
+	if m.Validators != nil && len(*m.Validators) > 0 {
+		return len(*m.Validators)
+	}
+	cnt := 0
+	nodeNames := m.NodeNames()
+	for _, name := range nodeNames {
+		nodeManifest := m.Nodes[name]
+		if nodeManifest.Mode != "" {
+			if Mode(nodeManifest.Mode) == ModeValidator {
+				cnt++
+			}
+		} else {
+			cnt++
+		}
+	}
+	return cnt
 }
