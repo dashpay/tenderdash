@@ -173,7 +173,7 @@ func LoadManifest(file string) (Manifest, error) {
 
 // NodeNames returns sorted slice of node names
 func (m *Manifest) NodeNames() []string {
-	var names []string
+	names := mapGetStrKeys(m.Nodes)
 	for name := range m.Nodes {
 		names = append(names, name)
 	}
