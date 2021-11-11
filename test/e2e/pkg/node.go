@@ -138,12 +138,7 @@ func bindSeedsAndPeers(testnet *Testnet, manifest Manifest) func(node *Node) err
 		// If there are no seeds or persistent peers specified, default to persistent
 		// connections to all other nodes.
 		if len(node.PersistentPeers) == 0 && len(node.Seeds) == 0 {
-			for _, peer := range testnet.Nodes {
-				if peer.Name == node.Name {
-					continue
-				}
-				node.PersistentPeers = append(node.PersistentPeers, peer)
-			}
+			node.PersistentPeers = testnet.findNodes(not(eqName(node.Name)))
 		}
 		return nil
 	}

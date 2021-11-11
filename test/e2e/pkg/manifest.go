@@ -35,7 +35,7 @@ type Manifest struct {
 	// specifying an empty set will start with no validators in genesis, and
 	// the application must return the validator set in InitChain via the
 	// setting validator_update.0 (see below).
-	Validators *map[string]int64 `toml:"validators"`
+	Validators map[string]int64 `toml:"validators"`
 
 	// ValidatorUpdates is a map of heights to validator proTxHashes and their power,
 	// and will be returned by the ABCI application. For example, the following
@@ -174,27 +174,20 @@ func LoadManifest(file string) (Manifest, error) {
 // NodeNames returns sorted slice of node names
 func (m *Manifest) NodeNames() []string {
 	names := mapGetStrKeys(m.Nodes)
-	for name := range m.Nodes {
-		names = append(names, name)
-	}
 	sort.Strings(names)
 	return names
 }
 
 // ValidatorCount returns a count of the validator which are necessary to generate
 func (m *Manifest) ValidatorCount() int {
-	if m.Validators != nil && len(*m.Validators) > 0 {
-		return len(*m.Validators)
+	if len(m.Validators) > 0 {
+		return len(m.Validators)
 	}
 	cnt := 0
 	nodeNames := m.NodeNames()
 	for _, name := range nodeNames {
 		nodeManifest := m.Nodes[name]
-		if nodeManifest.Mode != "" {
-			if Mode(nodeManifest.Mode) == ModeValidator {
-				cnt++
-			}
-		} else {
+		if nodeManifest.Mode == "" || Mode(nodeManifest.Mode) == ModeValidator {
 			cnt++
 		}
 	}

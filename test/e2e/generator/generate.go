@@ -32,7 +32,7 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 		InitialHeight:                int64(opt["initialHeight"].(int)),
 		InitialCoreChainLockedHeight: uint32(opt["initialCoreChainLockedHeight"].(int)),
 		InitialState:                 opt["initialState"].(map[string]string),
-		Validators:                   &map[string]int64{},
+		Validators:                   map[string]int64{},
 		ValidatorUpdates:             map[string]map[string]int64{},
 		ChainLockUpdates:             map[string]int64{},
 		Nodes:                        map[string]*e2e.ManifestNode{},
@@ -80,7 +80,7 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 	// Move validators to InitChain if specified.
 	switch opt["validators"].(string) {
 	case "genesis":
-		*manifest.Validators = manifest.ValidatorUpdates["0"]
+		manifest.Validators = manifest.ValidatorUpdates["0"]
 		delete(manifest.ValidatorUpdates, "0")
 	case "initchain":
 	default:
