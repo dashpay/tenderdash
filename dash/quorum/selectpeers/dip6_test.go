@@ -32,11 +32,12 @@ func TestDIP6(t *testing.T) {
 			wantErr:    true,
 		},
 		{
-			name:       "4 validators",
-			validators: mock.NewValidators(4),
-			me:         mock.NewValidator(0),
-			quorumHash: mock.NewQuorumHash(0),
-			wantErr:    true,
+			name:            "4 validators",
+			validators:      mock.NewValidators(4),
+			me:              mock.NewValidator(0),
+			quorumHash:      mock.NewQuorumHash(0),
+			wantLen:         3,
+			wantProTxHashes: mock.NewProTxHashes(0x01, 0x02, 0x03),
 		},
 		{
 			name:            "5 validators",
