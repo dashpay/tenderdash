@@ -247,7 +247,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 				return nil, fmt.Errorf("unknown validator with protxHash %X for update at height %v", proTxHash, height)
 			}
 
-			//power := manifest.ValidatorUpdates[heightStr][node.Name]
+			// power := manifest.ValidatorUpdates[heightStr][node.Name]
 			vu, err := node.ValidatorUpdate(pubKey.Bytes(), types.DefaultDashVotingPower)
 			if err != nil {
 				return nil, err
