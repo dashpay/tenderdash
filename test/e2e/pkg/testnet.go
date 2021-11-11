@@ -187,7 +187,10 @@ func LoadTestnet(file string) (*Testnet, error) {
 		return nil, err
 	}
 
-	validators, err := getValidators(manifest, testnet)
+	validators := testnet.findNodes(orQuery(
+		orQuery(eqNames(mapGetStrKeys(manifest.Validators))...),
+		eqMode(ModeValidator),
+	))
 	if err != nil {
 		return nil, err
 	}
@@ -417,12 +420,11 @@ func (n Node) Validate(testnet Testnet) error {
 
 // LookupNode looks up a node by name. For now, simply do a linear search.
 func (t Testnet) LookupNode(name string) *Node {
-	for _, node := range t.Nodes {
-		if node.Name == name {
-			return node
-		}
+	nodes := t.findNodes(eqName(name))
+	if len(nodes) == 0 {
+		return nil
 	}
-	return nil
+	return nodes[0]
 }
 
 // LookupNodes returns slice of nodes corresponding to passed node names

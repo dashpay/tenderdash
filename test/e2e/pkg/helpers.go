@@ -10,6 +10,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 )
 
+// updateOutOfQuorumNodes adds some quorum data to every node that is not participated in a quorum (not validator)
 func updateOutOfQuorumNodes(
 	nodes []*Node,
 	height int,
@@ -17,18 +18,19 @@ func updateOutOfQuorumNodes(
 	threshold crypto.PubKey,
 	quorumHash crypto.QuorumHash,
 ) {
-	set := make(map[string]struct{})
+	// make a set of validators' using proTxHash
+	set := make(map[string]bool)
 	for _, proTxHash := range proTxHashes {
-		set[proTxHash.String()] = struct{}{}
+		set[proTxHash.String()] = true
 	}
 	for _, node := range nodes {
-		if _, ok := set[node.ProTxHash.String()]; ok {
+		// if the node is a validator, go to the next node in the slice
+		if set[node.ProTxHash.String()] {
 			continue
 		}
-		quorumKeys := crypto.QuorumKeys{
+		node.PrivvalKeys[quorumHash.String()] = crypto.QuorumKeys{
 			ThresholdPublicKey: threshold,
 		}
-		node.PrivvalKeys[quorumHash.String()] = quorumKeys
 		node.PrivvalUpdateHeights[strconv.Itoa(height+2)] = quorumHash
 	}
 }
@@ -82,7 +84,10 @@ func prepareValidatorUpdateHeights(validatorUpdates map[string]map[string]int64)
 	return heights, nil
 }
 
-func generateValidatorKeys(proTxHashGen *proTxHashGenerator, cnt int) ([]crypto.ProTxHash, []crypto.PrivKey, crypto.PubKey) {
+func generateValidatorKeys(
+	proTxHashGen *proTxHashGenerator,
+	cnt int,
+) ([]crypto.ProTxHash, []crypto.PrivKey, crypto.PubKey) {
 	proTxHashes := make([]crypto.ProTxHash, cnt)
 	for i := 0; i < cnt; i++ {
 		proTxHashes[i] = proTxHashGen.Generate()
@@ -99,24 +104,4 @@ func mustAtoi(s string) int {
 		panic(err)
 	}
 	return n
-}
-
-func getValidators(manifest Manifest, testnet *Testnet) ([]*Node, error) {
-	var validators []*Node
-	if manifest.Validators == nil {
-		for _, node := range testnet.Nodes {
-			if node.Mode == ModeValidator {
-				validators = append(validators, node)
-			}
-		}
-		return validators, nil
-	}
-	for validatorName := range *manifest.Validators {
-		validator := testnet.LookupNode(validatorName)
-		if validator == nil {
-			return nil, fmt.Errorf("unknown validator %q", validatorName)
-		}
-		validators = append(validators, validator)
-	}
-	return validators, nil
 }
