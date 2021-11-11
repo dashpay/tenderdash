@@ -38,6 +38,15 @@ var topologies = map[string]topology{
 		quorumMembersCount: 3,
 		quorumRotate:       15,
 	},
+	"validatorIslands": {
+		seeds:              topologyItem{val: 2, rand: 3},
+		validators:         topologyItem{val: 5},
+		fulls:              topologyItem{rand: 50},
+		chainLocks:         topologyItem{rand: 10},
+		lightClients:       topologyItem{rand: 3},
+		quorumMembersCount: 5,
+		quorumRotate:       15,
+	},
 }
 
 var cfg = defaultCfg()
@@ -135,7 +144,14 @@ func defaultCfg() config {
 
 func dashCfg() config {
 	cfg := defaultCfg()
-	cfg.testnetCombinations["topology"] = []interface{}{"dash"}
+	cfg.testnetCombinations["topology"] = []interface{}{"dash", "validatorIslands"}
+	cfg.testnetCombinations["ipv6"] = []interface{}{false}
+	cfg.testnetCombinations["initialHeight"] = []interface{}{1000}
+	cfg.testnetCombinations["initialCoreChainLockedHeight"] = []interface{}{3400}
+	cfg.testnetCombinations["initialState"] = []interface{}{
+		map[string]string{"initial01": "a", "initial02": "b", "initial03": "c"},
+	}
+	cfg.testnetCombinations["validators"] = []interface{}{"initchain"}
 	cfg.node.privvalProtocols = uniformChoice{"dashcore"}
 	return cfg
 }
