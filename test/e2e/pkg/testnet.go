@@ -175,16 +175,16 @@ func LoadTestnet(file string) (*Testnet, error) {
 		nodeNames,
 		testnet,
 		manifest,
-		generateNodeKey(keyGen),
-		generateIP(ipGen),
-		generateProxyPort(proxyPortGen),
-		initPrivvalKeys(quorumHash, keyGen.Generate(manifest.KeyType), thresholdPublicKey),
-		nodeManifest(manifest),
+		generateNodeKeyOpt(keyGen),
+		generateIPOpt(ipGen),
+		generateProxyPortOpt(proxyPortGen),
+		initPrivvalKeysOpt(quorumHash, keyGen.Generate(manifest.KeyType), thresholdPublicKey),
+		nodeManifestOpt(manifest),
 	)
 	if err != nil {
 		return nil, err
 	}
-	err = updateNodes(testnet.Nodes, bindSeedsAndPeers(testnet, manifest))
+	err = updateNodes(testnet.Nodes, bindSeedsAndPeersOpt(testnet, manifest))
 	if err != nil {
 		return nil, err
 	}

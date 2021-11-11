@@ -41,28 +41,33 @@ func newNode(name string, testnet *Testnet, manifest Manifest, opts ...func(node
 	return node, nil
 }
 
-func generateNodeKey(keyGen *keyGenerator) func(node *Node) error {
+// generateNodeKeyOpt generates "ed25519" key for a node
+func generateNodeKeyOpt(keyGen *keyGenerator) func(node *Node) error {
 	return func(node *Node) error {
 		node.NodeKey = keyGen.Generate(nodeKeyType)
 		return nil
 	}
 }
 
-func generateIP(ipGen *ipGenerator) func(node *Node) error {
+// generateIPOpt generates a node IP
+func generateIPOpt(ipGen *ipGenerator) func(node *Node) error {
 	return func(node *Node) error {
 		node.IP = ipGen.Next()
 		return nil
 	}
 }
 
-func generateProxyPort(proxyPortGen *portGenerator) func(node *Node) error {
+// generateProxyPortOpt generates proxy port for a node
+func generateProxyPortOpt(proxyPortGen *portGenerator) func(node *Node) error {
 	return func(node *Node) error {
 		node.ProxyPort = proxyPortGen.Next()
 		return nil
 	}
 }
 
-func initPrivvalKeys(
+// initPrivvalKeysOpt adds private and threshold (quorum) keys for corresponding quorum-hash for validator
+// and only threshold for other nodes
+func initPrivvalKeysOpt(
 	quorumHash crypto.QuorumHash,
 	privKey crypto.PrivKey,
 	thresholdPubKey crypto.PubKey,
@@ -83,7 +88,8 @@ func initPrivvalKeys(
 	}
 }
 
-func nodeManifest(manifest Manifest) func(node *Node) error {
+// nodeManifestOpt takes some options from the manifest config on the node structure
+func nodeManifestOpt(manifest Manifest) func(node *Node) error {
 	return func(node *Node) error {
 		nodeManifest := manifest.Nodes[node.Name]
 		node.StartAt = nodeManifest.StartAt
@@ -117,7 +123,8 @@ func nodeManifest(manifest Manifest) func(node *Node) error {
 	}
 }
 
-func bindSeedsAndPeers(testnet *Testnet, manifest Manifest) func(node *Node) error {
+// bindSeedsAndPeersOpt populates node' seeds and persistent peers lists using node' manifest configuration
+func bindSeedsAndPeersOpt(testnet *Testnet, manifest Manifest) func(node *Node) error {
 	return func(node *Node) error {
 		// We do a second pass to set up seeds and persistent peers, which allows graph cycles.
 		nodeManifest, ok := manifest.Nodes[node.Name]
