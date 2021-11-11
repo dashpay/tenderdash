@@ -38,6 +38,15 @@ var topologies = map[string]topology{
 		quorumMembersCount: 5,
 		quorumRotate:       15,
 	},
+	"validatorIslands": {
+		seeds:              topologyItem{val: 2, rand: 3},
+		validators:         topologyItem{val: 5},
+		fulls:              topologyItem{rand: 50},
+		chainLocks:         topologyItem{rand: 10},
+		lightClients:       topologyItem{rand: 3},
+		quorumMembersCount: 5,
+		quorumRotate:       15,
+	},
 }
 
 var cfg = defaultCfg()
