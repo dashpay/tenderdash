@@ -152,7 +152,7 @@ func bindSeedsAndPeersOpt(testnet *Testnet, manifest Manifest) func(node *Node) 
 }
 
 func createNodes(names []string, testnet *Testnet, manifest Manifest, opts ...func(node *Node) error) ([]*Node, error) {
-	var nodes []*Node
+	nodes := make([]*Node, 0, len(names))
 	for _, name := range names {
 		fmt.Printf("Creating node: %s\n", name)
 		node, err := newNode(name, testnet, manifest, opts...)
