@@ -180,9 +180,6 @@ func (m *Manifest) NodeNames() []string {
 
 // ValidatorCount returns a count of the validator which are necessary to generate
 func (m *Manifest) ValidatorCount() int {
-	if len(m.Validators) > 0 {
-		return len(m.Validators)
-	}
 	cnt := 0
 	nodeNames := m.NodeNames()
 	for _, name := range nodeNames {
