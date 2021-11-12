@@ -45,9 +45,43 @@ jobs:
           key: ${{ runner.os }}-bls-${{ steps.bls-revision.outputs.hash }}
         if: steps.bls-cache.outputs.cache-hit != 'true'
 
+  build-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v2
+        with:
+          submodules: true
+      - name: Get BLS library revision
+        id: bls-revision
+        run: |
+          echo "::set-output name=hash::$(git --git-dir=third_party/bls-signatures/src/.git rev-parse HEAD)"
+        shell: bash
+      - uses: technote-space/get-diff-action@v5.0.1
+        with:
+          PATTERNS: |
+            **/**.go
+            go.mod
+            go.sum
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Build and export
+        uses: docker/build-push-action@v2
+        with:
+          context: .
+          file: test/e2e/docker/Dockerfile
+          tags: tenderdash:latest
+          outputs: type=docker,dest=/tmp/tenderdash.tar
+        if: "env.GIT_DIFF != ''"
+      - name: Upload artifact
+        uses: actions/upload-artifact@v2
+        with:
+          name: tenderdash
+          path: /tmp/tenderdash.tar
+
   e2e-test-dashcore:
     runs-on: ubuntu-latest
-    needs: bls-signatures
+    needs: build-image
     timeout-minutes: 15
     env:
       FULLNODE_PUBKEY_KEEP: false
@@ -77,17 +111,26 @@ jobs:
         run: |
           sudo cp -vr ~/bls-cache/include/* /usr/local/include/
           sudo cp -vr ~/bls-cache/libchiabls.a /usr/local/lib/
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: tenderdash
+          path: /tmp
+      - name: Load image
+        run: |
+          docker load --input /tmp/tenderdash.tar
+          docker tag tenderdash tenderdash/e2e-node:latest
+          docker image ls -a
       - name: Build
         working-directory: test/e2e
-        # Run two make jobs in parallel, since we can't run steps in parallel.
-        run: make -j2 docker runner
+        run: make runner
         if: "env.GIT_DIFF != ''"
-
       - name: Run CI dashcore testnet
         working-directory: test/e2e
         run: ./build/runner -f networks/dashcore.toml
         if: "env.GIT_DIFF != ''"
-
       - name: Emit dashcore logs on failure
         if: ${{ failure() }}
         working-directory: test/e2e
@@ -95,7 +138,7 @@ jobs:
 
   e2e-test-rotate:
     runs-on: ubuntu-latest
-    needs: bls-signatures
+    needs: build-image
     timeout-minutes: 15
     env:
       FULLNODE_PUBKEY_KEEP: false
@@ -125,25 +168,34 @@ jobs:
         run: |
           sudo cp -vr ~/bls-cache/include/* /usr/local/include/
           sudo cp -vr ~/bls-cache/libchiabls.a /usr/local/lib/
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: tenderdash
+          path: /tmp
+      - name: Load image
+        run: |
+          docker load --input /tmp/tenderdash.tar
+          docker tag tenderdash tenderdash/e2e-node:latest
+          docker image ls -a
       - name: Build
         working-directory: test/e2e
-        # Run two make jobs in parallel, since we can't run steps in parallel.
-        run: make -j2 docker runner
+        run: make runner
         if: "env.GIT_DIFF != ''"
-
       - name: Run CI rotate testnet
         working-directory: test/e2e
         run: ./build/runner -f networks/rotate.toml
         if: "env.GIT_DIFF != ''"
-
-      - name: Emit rotate logs on failure
+      - name: Emit dashcore logs on failure
         if: ${{ failure() }}
         working-directory: test/e2e
         run: ./build/runner -f networks/rotate.toml logs
 
   e2e-test-validators-island:
     runs-on: ubuntu-latest
-    needs: bls-signatures
+    needs: build-image
     timeout-minutes: 15
     env:
       FULLNODE_PUBKEY_KEEP: false
@@ -173,22 +225,30 @@ jobs:
         run: |
           sudo cp -vr ~/bls-cache/include/* /usr/local/include/
           sudo cp -vr ~/bls-cache/libchiabls.a /usr/local/lib/
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v1
+      - name: Download artifact
+        uses: actions/download-artifact@v2
+        with:
+          name: tenderdash
+          path: /tmp
+      - name: Load image
+        run: |
+          docker load --input /tmp/tenderdash.tar
+          docker tag tenderdash tenderdash/e2e-node:latest
+          docker image ls -a
       - name: Build
         working-directory: test/e2e
-        # Run two make jobs in parallel, since we can't run steps in parallel.
-        run: make -j3 docker runner generator
+        run: make -j2 runner generator
         if: "env.GIT_DIFF != ''"
-
       - name: Generate the validator island manifest files
         working-directory: test/e2e
         run: ./build/generator -d ./networks/generated -p dash
         if: "env.GIT_DIFF != ''"
-
       - name: Run CI validators island testnet
         working-directory: test/e2e
         run: ./build/runner -f networks/generated/gen-0001.toml
         if: "env.GIT_DIFF != ''"
-
       - name: Emit rotate logs on failure
         if: ${{ failure() }}
         working-directory: test/e2e
