@@ -41,7 +41,7 @@ var topologies = map[string]topology{
 	"validatorIslands": {
 		seeds:              topologyItem{val: 2, rand: 3},
 		validators:         topologyItem{val: 5},
-		fulls:              topologyItem{rand: 50},
+		fulls:              topologyItem{rand: 30},
 		chainLocks:         topologyItem{rand: 10},
 		lightClients:       topologyItem{rand: 3},
 		quorumMembersCount: 5,
