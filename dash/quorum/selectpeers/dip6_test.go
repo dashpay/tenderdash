@@ -106,7 +106,7 @@ func TestDIP6(t *testing.T) {
 	// nolint:scopelint
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := DIP6(tt.validators, tt.me, tt.quorumHash)
+			got, err := NewDIP6ValidatorSelector(tt.quorumHash).SelectValidators(tt.validators, tt.me)
 			if (err == nil) == tt.wantErr {
 				assert.FailNow(t, "unexpected error: %s", err)
 			}

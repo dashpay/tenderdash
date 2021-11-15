@@ -455,7 +455,8 @@ func allowedParamsDefaults(
 		}
 	}
 
-	allowedValidators, err := selectpeers.DIP6(validators, tc.me, quorumHash)
+	selector := selectpeers.NewDIP6ValidatorSelector(quorumHash)
+	allowedValidators, err := selector.SelectValidators(validators, tc.me)
 	require.NoError(t, err)
 	return newValidatorMap(allowedValidators).URIs()
 }
