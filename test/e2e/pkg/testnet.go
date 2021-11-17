@@ -20,6 +20,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/secp256k1"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	mcs "github.com/tendermint/tendermint/test/maverick/consensus"
+	"github.com/tendermint/tendermint/types"
 )
 
 const (
@@ -27,6 +28,7 @@ const (
 	proxyPortFirst uint32 = 5701
 	networkIPv4           = "10.186.73.0/24"
 	networkIPv6           = "fd80:b10c::/48"
+	networkPortP2P uint16 = 26656
 )
 
 type Mode string
@@ -63,8 +65,8 @@ type Testnet struct {
 	InitialHeight             int64
 	InitialCoreHeight         uint32
 	InitialState              map[string]string
-	Validators                map[*Node]crypto.PubKey
-	ValidatorUpdates          map[int64]map[*Node]crypto.PubKey
+	Validators                ValidatorsMap
+	ValidatorUpdates          map[int64]ValidatorsMap
 	ChainLockUpdates          map[int64]int64
 	Nodes                     []*Node
 	KeyType                   string
@@ -153,8 +155,8 @@ func LoadTestnet(file string) (*Testnet, error) {
 		InitialHeight:             1,
 		InitialCoreHeight:         1,
 		InitialState:              manifest.InitialState,
-		Validators:                map[*Node]crypto.PubKey{},
-		ValidatorUpdates:          map[int64]map[*Node]crypto.PubKey{},
+		Validators:                ValidatorsMap{},
+		ValidatorUpdates:          map[int64]ValidatorsMap{},
 		ChainLockUpdates:          map[int64]int64{},
 		Nodes:                     []*Node{},
 		ThresholdPublicKey:        thresholdPublicKey,
@@ -241,7 +243,6 @@ func LoadTestnet(file string) (*Testnet, error) {
 			privKey := privateKeys[i]
 			pubKey := privKey.PubKey()
 			node := testnet.LookupNodeByProTxHash(proTxHash)
-			valUpdate[node] = privateKeys[i].PubKey()
 			if node == nil {
 				return nil, fmt.Errorf("unknown validator with protxHash %X for update at height %v", proTxHash, height)
 			}
@@ -504,8 +505,7 @@ func (t Testnet) LastMisbehaviorHeight() int64 {
 // ValidatorUpdate creates an abci.ValidatorUpdate struct from the current node
 func (n *Node) ValidatorUpdate(publicKey []byte, power int64) (abci.ValidatorUpdate, error) {
 	proTxHash := n.ProTxHash.Bytes()
-	address := n.AddressP2P(true)
-	validatorUpdate := abci.UpdateValidator(proTxHash, publicKey, power, address)
+	validatorUpdate := abci.UpdateValidator(proTxHash, publicKey, power)
 	return validatorUpdate, nil
 }
 
@@ -516,7 +516,7 @@ func (n Node) AddressP2P(withID bool) string {
 		// IPv6 addresses must be wrapped in [] to avoid conflict with : port separator
 		ip = fmt.Sprintf("[%v]", ip)
 	}
-	addr := fmt.Sprintf("%v:26656", ip)
+	addr := fmt.Sprintf("%v:%d", ip, networkPortP2P)
 	if withID {
 		addr = fmt.Sprintf("%x@%v", n.NodeKey.PubKey().Address().Bytes(), addr)
 	}

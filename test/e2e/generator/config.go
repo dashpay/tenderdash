@@ -144,7 +144,7 @@ func defaultCfg() config {
 
 func dashCfg() config {
 	cfg := defaultCfg()
-	cfg.testnetCombinations["topology"] = []interface{}{"dash"}
+	cfg.testnetCombinations["topology"] = []interface{}{"dash", "validatorIslands"}
 	cfg.testnetCombinations["ipv6"] = []interface{}{false}
 	cfg.testnetCombinations["initialHeight"] = []interface{}{1000}
 	cfg.testnetCombinations["initialCoreChainLockedHeight"] = []interface{}{3400}
