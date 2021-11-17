@@ -64,14 +64,19 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 
 	me := mock.NewValidator(65535)
 	addr1, err := p2p.ParseNodeAddress("http://john@www.google.com:80")
-	val1 := mock.NewValidator(5)
-	val1.NodeAddress = addr1
-	// val1 := &types.Validator{NodeAddress: addr1}
-
 	require.NoError(t, err)
+
+	val1 := mock.NewValidator(100)
+	val1.NodeAddress = addr1
+
+	valsWithoutAddress := make([]*types.Validator, 5)
+	for i := 0; i < len(valsWithoutAddress); i++ {
+		valsWithoutAddress[i] = mock.NewValidator(uint64(200 + i))
+		valsWithoutAddress[i].NodeAddress = p2p.NodeAddress{}
+	}
+
 	tc := testCase{
 		me: me,
-		// quorumHash: ,
 		validatorUpdates: []validatorUpdate{
 			0: {
 				validators: []*types.Validator{
@@ -92,6 +97,30 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 					{Operation: mock.OpStopOne},
 					{Operation: mock.OpStopOne},
 					// {Operation: mock.OpStopOne},
+				},
+			},
+			2: {
+				validators: []*types.Validator{
+					me,
+					valsWithoutAddress[0],
+					mock.NewValidator(1),
+					mock.NewValidator(2),
+					mock.NewValidator(3),
+					mock.NewValidator(4),
+					mock.NewValidator(5),
+				},
+				expectedHistory: []mock.SwitchHistoryEvent{
+					{Operation: mock.OpDialMany, Params: []string{
+						mock.NewNodeAddress(2),
+						mock.NewNodeAddress(5),
+					}},
+				},
+			},
+			3: { // this should disconnect everyone because none of the validators has correct address
+				validators: append([]*types.Validator{me}, valsWithoutAddress...),
+				expectedHistory: []mock.SwitchHistoryEvent{
+					{Operation: mock.OpStopOne},
+					{Operation: mock.OpStopOne},
 				},
 			},
 		},
