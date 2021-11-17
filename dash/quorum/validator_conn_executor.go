@@ -233,7 +233,7 @@ func (vc *ValidatorConnExecutor) setQuorumHash(newQuorumHash tmbytes.HexBytes) e
 }
 
 // selectValidators selects `count` validators from current ValidatorSet.
-// It uses algorithm described in DIP-6 (`SelectValidatorsDIP6()`).
+// It uses algorithm described in DIP-6.
 // Returns map indexed by validator address.
 func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 	activeValidators := vc.validatorSetMembers

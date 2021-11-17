@@ -123,11 +123,11 @@ through another Validator) to any other Validator which is a member of the same 
 ### What systems will be affected?
 
 * Tenderdash
-* ABCI App
+* ABCI App (Dash Drive)
 
 ### What new data structures are needed, what data structures need changes?
 
-1. Additional configuration parameter: number of validator connections
+None
 
 ### What new APIs will be needed, what APIs will change?
 
@@ -151,9 +151,14 @@ message ValidatorUpdate {
   tendermint.crypto.PublicKey pub_key      = 1 [(gogoproto.nullable) = true];
   int64                       power        = 2;
   bytes                       pro_tx_hash  = 3;
-  string                      node_address = 4;  // address of the Validator, correct URI (RFC 3986)
+  string                      node_address = 4 [(gogoproto.nullable) = true];  // address of the Validator
 }
 ```
+
+
+If ABCI app cannot determine node address, it can leave it empty.
+
+Note that the Dash Drive as an ABCI app should be able to determine node address if it is member of the active Validator Set. If the node is NOT a member of active Validator Set, the `node_address` should be empty.
 
 ### What are the efficiency considerations (time/space)?
 

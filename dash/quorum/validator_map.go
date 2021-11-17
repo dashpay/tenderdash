@@ -12,9 +12,10 @@ type validatorMap map[p2p.ID]types.Validator
 func newValidatorMap(validators []*types.Validator) validatorMap {
 	newMap := make(validatorMap, len(validators))
 	for _, validator := range validators {
-		newMap[validator.NodeAddress.NodeID] = *validator
+		if !validator.NodeAddress.Zero() && validator.NodeAddress.NodeID != "" {
+			newMap[validator.NodeAddress.NodeID] = *validator
+		}
 	}
-
 	return newMap
 }
 
