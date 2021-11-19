@@ -434,6 +434,9 @@ func (h *Handshaker) ReplayBlocks(
 				)
 				state.Version.Consensus.App = state.ConsensusParams.Version.AppVersion
 			}
+			if res.InitialCoreHeight > 0 && res.InitialCoreHeight != req.InitialCoreHeight {
+				state.LastCoreChainLockedBlockHeight = res.InitialCoreHeight
+			}
 			// We update the last results hash with the empty hash, to conform with RFC-6962.
 			state.LastResultsHash = merkle.HashFromByteSlices(nil)
 			if err := h.stateStore.Save(state); err != nil {

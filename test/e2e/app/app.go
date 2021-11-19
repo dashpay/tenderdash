@@ -66,7 +66,7 @@ func (app *Application) Info(req abci.RequestInfo) abci.ResponseInfo {
 	}
 }
 
-// Info implements ABCI.
+// InitChain implements ABCI.
 func (app *Application) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
 	var err error
 	app.state.initialHeight = uint64(req.InitialHeight)
