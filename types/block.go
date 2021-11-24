@@ -824,6 +824,14 @@ func (commit *Commit) StringIndented(indent string) string {
 		indent, commit.hash)
 }
 
+// LoggerKeyVals implements LoggableObject
+func (commit Commit) LoggerKeyVals() []interface{} {
+	return []interface{}{
+		"height", commit.GetHeight(),
+		"round", commit.GetRound(),
+	}
+}
+
 // ToProto converts Commit to protobuf
 func (commit *Commit) ToProto() *tmproto.Commit {
 	if commit == nil {

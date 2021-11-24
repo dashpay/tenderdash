@@ -215,3 +215,11 @@ func (rs *RoundState) StringShort() string {
 	return fmt.Sprintf(`RoundState{H:%v R:%v S:%v ST:%v}`,
 		rs.Height, rs.Round, rs.Step, rs.StartTime)
 }
+
+// LoggerKeyVals implements LoggableObject
+func (rs RoundState) LoggerKeyVals() []interface{} {
+	return []interface{}{
+		"height", rs.Height,
+		"round", rs.Round,
+	}
+}

@@ -1351,11 +1351,9 @@ func (ps *PeerState) SetHasVote(vote *types.Vote, cs *State) {
 	logger := log.Logger(nil)
 	if cs != nil {
 		roundState := cs.GetRoundState()
-		logger = ps.logger.With("peer", peerProTxHash.ShortString(),
-			"peerHR",
-			fmt.Sprintf("%d/%d", ps.PRS.Height, ps.PRS.Round),
-			"HR",
-			fmt.Sprintf("%d/%d", roundState.Height, roundState.Round))
+		logger = ps.logger.With("peer", peerProTxHash.ShortString()).
+			WithObject("", roundState).
+			WithObject("peer", ps.PRS)
 	}
 
 	ps.setHasVote(vote.Height, vote.Round, vote.Type, vote.ValidatorIndex, logger)
@@ -1366,11 +1364,9 @@ func (ps *PeerState) setHasVote(
 
 	if logger == nil {
 		peerProTxHash := ps.peer.NodeInfo().GetProTxHash()
-		logger = ps.logger.With("peer", peerProTxHash.ShortString(),
-			"peerHR",
-			fmt.Sprintf("%d/%d", ps.PRS.Height, ps.PRS.Round),
-			"HR",
-			fmt.Sprintf("%d/%d", height, round))
+		logger = ps.logger.With("peer", peerProTxHash.ShortString()).
+			With("height", height, "round", round).
+			WithObject("peer", ps.PRS)
 	}
 
 	// NOTE: some may be nil BitArrays -> no side effects.
@@ -1389,11 +1385,8 @@ func (ps *PeerState) SetHasCommit(commit *types.Commit) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
 
-	logger := ps.logger.With(
-		"peerHR",
-		fmt.Sprintf("%d/%d", ps.PRS.Height, ps.PRS.Round),
-		"HR",
-		fmt.Sprintf("%d/%d", commit.Height, commit.Round))
+	logger := ps.logger.WithObject("", commit).
+		WithObject("peer", ps.PRS)
 	logger.Debug("setHasCommit")
 
 	ps.setHasCommit(commit.Height, commit.Round)

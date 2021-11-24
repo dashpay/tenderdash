@@ -132,6 +132,11 @@ func (l *filter) With(keyvals ...interface{}) Logger {
 	}
 }
 
+// WithObject adds object metadata to Logger info
+func (l *filter) WithObject(keyPrefix string, object LoggableObject) Logger {
+	return l.With(prefixKeys(keyPrefix, object.LoggerKeyVals()...)...)
+}
+
 //--------------------------------------------------------------------------------
 
 // Option sets a parameter for the filter.
