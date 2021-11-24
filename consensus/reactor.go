@@ -1594,6 +1594,7 @@ func init() {
 	tmjson.RegisterType(&HasCommitMessage{}, "tendermint/HasCommit")
 	tmjson.RegisterType(&VoteSetMaj23Message{}, "tendermint/VoteSetMaj23")
 	tmjson.RegisterType(&VoteSetBitsMessage{}, "tendermint/VoteSetBits")
+	tmjson.RegisterType(&CommitMessage{}, "tendermint/CommitMessage")
 }
 
 func decodeMsg(bz []byte) (msg Message, err error) {
