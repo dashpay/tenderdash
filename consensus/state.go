@@ -957,6 +957,12 @@ func (cs *State) handleTimeout(ti timeoutInfo, rs cstypes.RoundState) {
 
 		cs.enterPrevote(ti.Height, ti.Round, false)
 
+	case cstypes.RoundStepPrevote:
+		if err := cs.eventBus.PublishEventTimeoutWait(cs.RoundStateEvent()); err != nil {
+			cs.Logger.Error("failed publishing timeout wait", "err", err)
+		}
+
+		cs.enterNewRound(ti.Height, ti.Round+1)
 	case cstypes.RoundStepPrevoteWait:
 		if err := cs.eventBus.PublishEventTimeoutWait(cs.RoundStateEvent()); err != nil {
 			cs.Logger.Error("failed publishing timeout wait", "err", err)
@@ -1329,6 +1335,7 @@ func (cs *State) enterPrevote(height int64, round int32, allowOldBlocks bool) {
 
 	// Once `addVote` hits any +2/3 prevotes, we will go to PrevoteWait
 	// (so we have more time to try and collect +2/3 prevotes for a single block)
+	cs.scheduleTimeout(cs.config.Prevote(round), height, round, cstypes.RoundStepPrevote)
 }
 
 func (cs *State) defaultDoPrevote(height int64, round int32, allowOldBlocks bool) {
