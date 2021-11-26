@@ -49,7 +49,7 @@ type optionFunc func(vc *ValidatorConnExecutor) error
 // will retry the connection if it fails.
 type ValidatorConnExecutor struct {
 	service.BaseService
-	nodeID       p2p.ID
+	proTxHash    types.ProTxHash
 	eventBus     *types.EventBus
 	p2pSwitch    Switch
 	subscription types.Subscription
@@ -73,13 +73,13 @@ type ValidatorConnExecutor struct {
 // NewValidatorConnExecutor creates a Service that connects to other validators within the same Validator Set.
 // Don't forget to Start() and Stop() the service.
 func NewValidatorConnExecutor(
-	nodeID p2p.ID,
+	proTxHash types.ProTxHash,
 	eventBus *types.EventBus,
 	sw Switch,
 	opts ...optionFunc,
 ) (*ValidatorConnExecutor, error) {
 	vc := &ValidatorConnExecutor{
-		nodeID:              nodeID,
+		proTxHash:           proTxHash,
 		eventBus:            eventBus,
 		p2pSwitch:           sw,
 		EventBusCapacity:    defaultEventBusCapacity,
@@ -232,18 +232,24 @@ func (vc *ValidatorConnExecutor) setQuorumHash(newQuorumHash tmbytes.HexBytes) e
 	return nil
 }
 
+// me returns current node's validator object, if any, or nil if not found
+func (vc *ValidatorConnExecutor) me() *types.Validator {
+	me := vc.validatorSetMembers[validatorMapIndexType(vc.proTxHash.String())]
+	return &me
+}
+
 // selectValidators selects `count` validators from current ValidatorSet.
 // It uses algorithm described in DIP-6.
 // Returns map indexed by validator address.
 func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 	activeValidators := vc.validatorSetMembers
-	me, ok := activeValidators[vc.nodeID]
-	if !ok {
+	me := vc.me()
+	if me == nil {
 		return validatorMap{}, fmt.Errorf("current node is not member of active validator set")
 	}
 
 	selector := selectpeers.NewDIP6ValidatorSelector(vc.quorumHash)
-	selectedValidators, err := selector.SelectValidators(activeValidators.values(), &me)
+	selectedValidators, err := selector.SelectValidators(activeValidators.values(), me)
 	if err != nil {
 		return validatorMap{}, err
 	}
@@ -260,7 +266,10 @@ func (vc *ValidatorConnExecutor) disconnectValidator(validator types.Validator) 
 		return err
 	}
 
-	id := validator.NodeAddress.NodeID
+	id, err := validator.NodeAddress.NodeID()
+	if err != nil {
+		return err
+	}
 	peer := vc.p2pSwitch.Peers().Get(id)
 	if peer == nil {
 		return fmt.Errorf("cannot stop peer %s: not found", id)
@@ -291,7 +300,7 @@ func (vc *ValidatorConnExecutor) disconnectValidators(exceptions validatorMap) e
 // to be established. It will also disconnect previous validators.
 func (vc *ValidatorConnExecutor) updateConnections() error {
 	// We only do something if we are part of new ValidatorSet
-	if _, ok := vc.validatorSetMembers[vc.nodeID]; !ok {
+	if me := vc.me(); me == nil {
 		vc.Logger.Debug("not a member of active ValidatorSet")
 		// We need to disconnect connected validators. It needs to be done explicitly
 		// because they are marked as persistent and will never disconnect themselves.
@@ -355,6 +364,7 @@ func (vc *ValidatorConnExecutor) dial(vals validatorMap) error {
 		vc.Logger.Error("cannot set validators as persistent", "peers", addresses, "err", err)
 		return fmt.Errorf("cannot set validators as persistent: %w", err)
 	}
+	// TODO in tendermint 0.35, we will use router.connectPeer instead of DialPeersAsync
 	if err := vc.p2pSwitch.DialPeersAsync(addresses); err != nil {
 		vc.Logger.Error("cannot dial validators", "peers", addresses, "err", err)
 		return fmt.Errorf("cannot dial peers: %w", err)

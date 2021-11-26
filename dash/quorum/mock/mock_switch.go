@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tendermint/tendermint/dash/dashtypes"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/p2p/mocks"
 )
@@ -74,12 +75,12 @@ func (sw Switch) RemovePersistentPeer(addr string) error {
 func (sw *Switch) DialPeersAsync(addrs []string) error {
 	for _, addr := range addrs {
 		peer := &mocks.Peer{}
-		parsed, err := p2p.ParseNodeAddress(addr)
+		parsed, err := dashtypes.ParseValidatorAddress(addr)
 		if err != nil {
 			return err
 		}
 
-		peer.On("ID").Return(parsed.NodeID)
+		peer.On("ID").Return(parsed.NodeID())
 		peer.On("String").Return(addr)
 		if err := sw.PeerSet.Add(peer); err != nil {
 			return err

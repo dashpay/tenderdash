@@ -258,19 +258,30 @@ func TestDeriveSecretsAndChallengeGolden(t *testing.T) {
 	}
 }
 
+// TestNilPubkey ensures that we can retrieve peer public key without revealing ours
 func TestNilPubkey(t *testing.T) {
 	var fooConn, barConn = makeKVStoreConnPair()
-	defer fooConn.Close()
-	defer barConn.Close()
 	var fooPrvKey = ed25519.GenPrivKey()
-	var barPrvKey = privKeyWithNilPubKey{ed25519.GenPrivKey()}
 
-	go MakeSecretConnection(fooConn, fooPrvKey) //nolint:errcheck // ignore for tests
-
-	_, err := MakeSecretConnection(barConn, barPrvKey)
-	require.Error(t, err)
-	wantErr := "toproto: key type <nil> is not supported"
-	assert.Containsf(t, err.Error(), wantErr, "expected error containing %q, got %s", wantErr, err)
+	wg := sync.WaitGroup{}
+	wg.Add(2)
+	// Foo thread never receives peer's public key
+	go func() {
+		_, err := MakeSecretConnection(fooConn, fooPrvKey)
+		fooConn.Close()
+		assert.Error(t, err)
+		wg.Done()
+	}()
+	// Bar thread never sends its public key, but receives peers
+	go func() {
+		sc, err := MakeSecretConnection(barConn, nil)
+		barConn.Close()
+		require.NoError(t, err)
+		require.NotNil(t, sc)
+		assert.NotNil(t, sc.RemotePubKey())
+		wg.Done()
+	}()
+	wg.Wait()
 }
 
 func writeLots(t *testing.T, wg *sync.WaitGroup, conn io.Writer, txt string, n int) {

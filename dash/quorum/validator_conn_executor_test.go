@@ -10,12 +10,12 @@ import (
 	"github.com/stretchr/testify/require"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/dash/dashtypes"
 	"github.com/tendermint/tendermint/dash/quorum/mock"
 	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	mmock "github.com/tendermint/tendermint/mempool/mock"
-	"github.com/tendermint/tendermint/p2p"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/proxy"
 	sm "github.com/tendermint/tendermint/state"
@@ -63,7 +63,7 @@ func TestValidatorConnExecutor_NotValidator(t *testing.T) {
 func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 
 	me := mock.NewValidator(65535)
-	addr1, err := p2p.ParseNodeAddress("http://john@www.google.com:80")
+	addr1, err := dashtypes.ParseValidatorAddress("http://john@www.google.com:80")
 	require.NoError(t, err)
 
 	val1 := mock.NewValidator(100)
@@ -72,7 +72,7 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 	valsWithoutAddress := make([]*types.Validator, 5)
 	for i := 0; i < len(valsWithoutAddress); i++ {
 		valsWithoutAddress[i] = mock.NewValidator(uint64(200 + i))
-		valsWithoutAddress[i].NodeAddress = p2p.NodeAddress{}
+		valsWithoutAddress[i].NodeAddress = dashtypes.ValidatorAddress{}
 	}
 
 	tc := testCase{
@@ -343,13 +343,13 @@ func TestEndBlock(t *testing.T) {
 
 	// Ensure new validators have some IP addresses set
 	for _, validator := range newVals.Validators {
-		validator.NodeAddress = p2p.RandNodeAddress()
+		validator.NodeAddress = dashtypes.RandValidatorAddress()
 	}
 
 	// setup ValidatorConnExecutor
 	sw := mock.NewMockSwitch()
-	nodeID := newVals.Validators[0].NodeAddress.NodeID
-	vc, err := NewValidatorConnExecutor(nodeID, eventBus, sw)
+	proTxHash := newVals.Validators[0].ProTxHash
+	vc, err := NewValidatorConnExecutor(proTxHash, eventBus, sw)
 	require.NoError(t, err)
 	err = vc.Start()
 	require.NoError(t, err)
@@ -503,8 +503,8 @@ func setup(
 
 	sw = mock.NewMockSwitch()
 
-	nodeID := me.NodeAddress.NodeID
-	vc, err = NewValidatorConnExecutor(nodeID, eventBus, sw)
+	proTxHash := me.ProTxHash
+	vc, err = NewValidatorConnExecutor(proTxHash, eventBus, sw)
 	require.NoError(t, err)
 	err = vc.Start()
 	require.NoError(t, err)

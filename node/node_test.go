@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/dash/dashtypes"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,6 +57,13 @@ func TestNodeStartStop(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for the node to produce a block")
 	}
+
+	// check if we can read node ID of this node
+	va, err := dashtypes.ParseValidatorAddress(config.P2P.ListenAddress)
+	assert.NoError(t, err)
+	id, err := va.NodeID()
+	assert.NoError(t, err)
+	assert.Equal(t, n.nodeInfo.ID(), id)
 
 	// stop the node
 	go func() {
