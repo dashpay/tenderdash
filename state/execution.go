@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/p2p"
+	"github.com/tendermint/tendermint/dash/dashtypes"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -490,10 +490,8 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 		}
 
 		// Check if validator's pubkey matches an ABCI type in the consensus params
-		var pk crypto.PubKey // needed for NodeAddress
 		if valUpdate.PubKey != nil {
-			var err error
-			pk, err = cryptoenc.PubKeyFromProto(*valUpdate.PubKey)
+			pk, err := cryptoenc.PubKeyFromProto(*valUpdate.PubKey)
 			if err != nil {
 				return err
 			}
@@ -532,9 +530,8 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 			)
 		}
 
-		// Validate endpoint address; note that we need to support case where node ID is not set
 		if valUpdate.NodeAddress != "" {
-			_, err := p2p.ParseNodeAddressWithPubkey(valUpdate.NodeAddress, pk)
+			_, err := dashtypes.ParseValidatorAddress(valUpdate.NodeAddress)
 			if err != nil {
 				return fmt.Errorf("cannot parse validator address %s: %w", valUpdate.NodeAddress, err)
 			}

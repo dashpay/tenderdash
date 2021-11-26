@@ -121,12 +121,17 @@ func TestNewValidator(t *testing.T) {
 	validator := NewValidator(pubKey, DefaultDashVotingPower, proTxHash,
 		fmt.Sprintf("tcp://%s@127.0.0.1:12345", nodeID))
 	require.NotNil(t, validator)
-	assert.Equal(t, nodeID, validator.NodeAddress.NodeID)
+	newNodeID, err := validator.NodeAddress.NodeID()
+	require.NoError(t, err)
+	assert.Equal(t, nodeID, newNodeID)
 
 	validator = NewValidator(pubKey, DefaultDashVotingPower, proTxHash, "127.0.0.1:23456")
 	require.NotNil(t, validator)
-	assert.EqualValues(t, "127.0.0.1", validator.NodeAddress.Hostname)
-	assert.EqualValues(t, 23456, validator.NodeAddress.Port)
-	assert.EqualValues(t, "tcp", validator.NodeAddress.Protocol)
-	assert.EqualValues(t, nodeID, validator.NodeAddress.NodeID)
+	assert.EqualValues(t, "127.0.0.1", validator.NodeAddress.Hostname())
+	assert.EqualValues(t, 23456, validator.NodeAddress.Port())
+	assert.EqualValues(t, "tcp", validator.NodeAddress.Protocol())
+	newNodeID, err = validator.NodeAddress.NodeID()
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "connection refused")
+	assert.Zero(t, newNodeID)
 }

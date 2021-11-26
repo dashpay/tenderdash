@@ -10,14 +10,12 @@ import (
 	"strings"
 
 	"github.com/dashevo/dashd-go/btcjson"
-	"github.com/tendermint/tendermint/crypto/merkle"
-	"github.com/tendermint/tendermint/p2p"
-
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-
+	"github.com/tendermint/tendermint/crypto/merkle"
+	"github.com/tendermint/tendermint/dash/dashtypes"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -1539,7 +1537,7 @@ func ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes []crypto.ProTxHash) abc
 			privateKeys[i].PubKey(),
 			DefaultDashVotingPower,
 			orderedProTxHashes[i],
-			p2p.NodeAddress{},
+			dashtypes.ValidatorAddress{},
 		)
 		valUpdates = append(valUpdates, valUpdate)
 	}

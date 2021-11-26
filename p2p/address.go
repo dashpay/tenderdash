@@ -5,9 +5,9 @@ package p2p
 // This file was downloaded from Tendermint master, revision bc1a20dbb86e4fa2120b2c8a9de88814471f4a2c:
 // https://raw.githubusercontent.com/tendermint/tendermint/bc1a20dbb86e4fa2120b2c8a9de88814471f4a2c/internal/p2p/address.go
 // and refactored to workaround some dependencies.
-// Changed functions:
-// 1. ParseNodeAddress divided into 2 functions
-// 2. ParseNodeAddressWithPubkey added
+// Changes:
+// 1. ParseNodeAddress divided into 2 functions (added ParseNodeAddressWithoutValidation)
+// 2. Added some missing types at the end of file
 import (
 	"context"
 	"errors"
@@ -18,9 +18,6 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
-
-	tmcrypto "github.com/tendermint/tendermint/crypto"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
 )
 
 var (
@@ -48,32 +45,22 @@ type NodeAddress struct {
 	Path     string
 }
 
-// ParseNodeAddressWithPubkey parses a node address URL into a NodeAddress, normalizing
-// and validating it. If the node address does not contain Node ID, it will be generated
-// based on provided public key
-func ParseNodeAddressWithPubkey(urlString string, pubKey tmcrypto.PubKey) (NodeAddress, error) {
+// ParseNodeAddress parses a node address URL into a NodeAddress, normalizing
+// and validating it.
+func ParseNodeAddress(urlString string) (NodeAddress, error) {
 	if urlString == "" {
 		return NodeAddress{}, fmt.Errorf("empty node address")
 	}
-	address, err := parseNodeAddressWithoutValidation(urlString)
+	address, err := ParseNodeAddressWithoutValidation(urlString)
 	if err != nil {
 		return address, err
-	}
-	if address.NodeID == "" && pubKey != nil {
-		address.NodeID = PubKeyToID(pubKey)
 	}
 	return address, address.Validate()
 }
 
-// ParseNodeAddress parses a node address URL into a NodeAddress, normalizing
-// and validating it.
-func ParseNodeAddress(urlString string) (NodeAddress, error) {
-	return ParseNodeAddressWithPubkey(urlString, nil)
-}
-
-// parseNodeAddressWithoutValidation  parses a node address URL into a NodeAddress, normalizing it.
+// ParseNodeAddressWithoutValidation  parses a node address URL into a NodeAddress, normalizing it.
 // It does NOT validate parsed address
-func parseNodeAddressWithoutValidation(urlString string) (NodeAddress, error) {
+func ParseNodeAddressWithoutValidation(urlString string) (NodeAddress, error) {
 	// url.Parse requires a scheme, so if it fails to parse a scheme-less URL
 	// we try to apply a default scheme.
 	url, err := url.Parse(urlString)
@@ -220,20 +207,6 @@ func (a NodeAddress) NetAddress() (*NetAddress, error) {
 		return nil, err
 	}
 	return addr, nil
-}
-
-// p2p.RandNodeAddress generates a random validator address
-func RandNodeAddress() NodeAddress {
-	nodeID := tmrand.Bytes(20)
-	port := (tmrand.Int() % 65535) + 1
-	addr, err := ParseNodeAddress(fmt.Sprintf("tcp://%x@127.0.0.1:%d", nodeID, port))
-	if err != nil {
-		panic(fmt.Sprintf("cannot generate random validator address: %s", err))
-	}
-	if err := addr.Validate(); err != nil {
-		panic(fmt.Sprintf("randomly generated validator address %s is invalid: %s", addr.String(), err))
-	}
-	return addr
 }
 
 // Endpoint represents a transport connection endpoint, either local or remote.

@@ -8,7 +8,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/p2p"
+	"github.com/tendermint/tendermint/dash/dashtypes"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -155,8 +155,7 @@ func TestValidateValidatorUpdates(t *testing.T) {
 		PubKeyTypes: []string{types.ABCIPubKeyTypeBLS12381},
 	}
 
-	addr := p2p.RandNodeAddress()
-	addr.NodeID = ""
+	addr := dashtypes.RandValidatorAddress()
 
 	testCases := []struct {
 		name string
@@ -367,7 +366,7 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 
 	// Ensure new validators have some IP addresses set
 	for _, validator := range newVals.Validators {
-		validator.NodeAddress = p2p.RandNodeAddress()
+		validator.NodeAddress = dashtypes.RandValidatorAddress()
 	}
 
 	app.ValidatorSetUpdate = newVals.ABCIEquivalentValidatorUpdates()

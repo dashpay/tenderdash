@@ -6,11 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/p2p"
-
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/bls12381"
 	ce "github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/tendermint/tendermint/dash/dashtypes"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -19,10 +18,10 @@ import (
 // make sure to update that method if changes are made here
 // The ProTxHash is part of Dash additions required for BLS threshold signatures
 type Validator struct {
-	PubKey      crypto.PubKey   `json:"pub_key"`
-	VotingPower int64           `json:"voting_power"`
-	ProTxHash   ProTxHash       `json:"pro_tx_hash"`
-	NodeAddress p2p.NodeAddress `json:"address"`
+	PubKey      crypto.PubKey              `json:"pub_key"`
+	VotingPower int64                      `json:"voting_power"`
+	ProTxHash   ProTxHash                  `json:"pro_tx_hash"`
+	NodeAddress dashtypes.ValidatorAddress `json:"address"`
 
 	ProposerPriority int64 `json:"proposer_priority"`
 }
@@ -50,11 +49,11 @@ func NewValidatorDefaultVotingPower(pubKey crypto.PubKey, proTxHash []byte) *Val
 // NewValidator returns a new validator with the given pubkey and voting power.
 func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash []byte, address string) *Validator {
 	var (
-		addr p2p.NodeAddress
+		addr dashtypes.ValidatorAddress
 		err  error
 	)
 	if address != "" {
-		addr, err = p2p.ParseNodeAddressWithPubkey(address, pubKey)
+		addr, err = dashtypes.ParseValidatorAddress(address)
 		if err != nil {
 			panic(err.Error())
 		}
@@ -237,20 +236,17 @@ func ValidatorFromProto(vp *tmproto.Validator) (*Validator, error) {
 	v.ProposerPriority = vp.GetProposerPriority()
 	v.ProTxHash = vp.ProTxHash
 
+	var err error
 	if vp.PubKey != nil && vp.PubKey.Sum != nil {
-		pk, err := ce.PubKeyFromProto(*vp.PubKey)
-		if err != nil {
+		if v.PubKey, err = ce.PubKeyFromProto(*vp.PubKey); err != nil {
 			return nil, err
 		}
-		v.PubKey = pk
 	}
 
 	if vp.NodeAddress != "" {
-		address, err := p2p.ParseNodeAddress(vp.NodeAddress)
-		if err != nil {
+		if v.NodeAddress, err = dashtypes.ParseValidatorAddress(vp.NodeAddress); err != nil {
 			return nil, err
 		}
-		v.NodeAddress = address
 	}
 
 	return v, nil

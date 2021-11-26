@@ -16,8 +16,8 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/tendermint/tendermint/dash/dashtypes"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
-	"github.com/tendermint/tendermint/p2p"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	sm "github.com/tendermint/tendermint/state"
@@ -114,7 +114,7 @@ func TestABCIResponsesSaveLoad1(t *testing.T) {
 	abciPubKey, err := cryptoenc.PubKeyToProto(pubKey)
 	require.NoError(t, err)
 
-	vu := types.TM2PB.NewValidatorUpdate(pubKey, 100, crypto.RandProTxHash(), p2p.RandNodeAddress())
+	vu := types.TM2PB.NewValidatorUpdate(pubKey, 100, crypto.RandProTxHash(), dashtypes.RandValidatorAddress())
 	abciResponses.EndBlock = &abci.ResponseEndBlock{ValidatorSetUpdate: &abci.ValidatorSetUpdate{
 		ValidatorUpdates:   []abci.ValidatorUpdate{vu},
 		ThresholdPublicKey: abciPubKey,
@@ -846,7 +846,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 		abciValidatorUpdates := make([]abci.ValidatorUpdate, len(proTxHashes))
 		for j, proTxHash := range proTxHashes {
 			abciValidatorUpdates[j] = abci.UpdateValidator(proTxHash, privateKeys3[j].PubKey().Bytes(),
-				types.DefaultDashVotingPower, p2p.RandNodeAddress().String())
+				types.DefaultDashVotingPower, dashtypes.RandValidatorAddress().String())
 		}
 		abciThresholdPublicKey3, err := cryptoenc.PubKeyToProto(thresholdPublicKey3)
 		assert.NoError(t, err)

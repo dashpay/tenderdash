@@ -1,19 +1,26 @@
 package quorum
 
 import (
-	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
 
+// validatorMapIndexType represents data that is used to index `validatorMap` elements
+type validatorMapIndexType string
+
 // validatorMap maps validator ID to the validator
-type validatorMap map[p2p.ID]types.Validator
+type validatorMap map[validatorMapIndexType]types.Validator
+
+// validatorMapIndex returns index value to use inside validator map
+func validatorMapIndex(v types.Validator) validatorMapIndexType {
+	return validatorMapIndexType(v.ProTxHash.String())
+}
 
 // newValidatorMap creates a new validatoMap based on a slice of Validators
 func newValidatorMap(validators []*types.Validator) validatorMap {
 	newMap := make(validatorMap, len(validators))
 	for _, validator := range validators {
-		if !validator.NodeAddress.Zero() && validator.NodeAddress.NodeID != "" {
-			newMap[validator.NodeAddress.NodeID] = *validator
+		if !validator.NodeAddress.Zero() {
+			newMap[validatorMapIndex(*validator)] = *validator
 		}
 	}
 	return newMap
@@ -31,7 +38,7 @@ func (vm validatorMap) values() []*types.Validator {
 // contains returns true if the validatorMap contains `What`, false otherwise.
 // Items are compared using node ID.
 func (vm validatorMap) contains(what types.Validator) bool {
-	_, ok := vm[what.NodeAddress.NodeID]
+	_, ok := vm[validatorMapIndex(what)]
 	return ok
 }
 
