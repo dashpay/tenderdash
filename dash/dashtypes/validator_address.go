@@ -52,7 +52,7 @@ func (va ValidatorAddress) Port() uint16 {
 	return va.NodeAddress.Port
 }
 
-// Protocol returns protocl name of this address, like "tcp"
+// Protocol returns protocol name of this address, like "tcp"
 func (va ValidatorAddress) Protocol() string {
 	return va.NodeAddress.Protocol
 }
@@ -92,6 +92,7 @@ func (va ValidatorAddress) retrieveNodeID() (p2p.ID, error) {
 		return "", err
 	}
 
+	// TODO create a simplified version of MakeSecretConnection to just retrieve the public key
 	sc, err := conn.MakeSecretConnection(connection, nil)
 	if err != nil {
 		return "", err
