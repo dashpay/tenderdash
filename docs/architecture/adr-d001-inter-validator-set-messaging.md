@@ -21,6 +21,8 @@
    2. [What systems will be affected?](#what-systems-will-be-affected)
    3. [What new data structures are needed, what data structures need changes?](#what-new-data-structures-are-needed-what-data-structures-need-changes)
    4. [What new APIs will be needed, what APIs will change?](#what-new-apis-will-be-needed-what-apis-will-change)
+      1. [ABCI Protocol](#abci-protocol)
+      2. [P2P Handshake](#p2p-handshake)
    5. [What are the efficiency considerations (time/space)?](#what-are-the-efficiency-considerations-timespace)
    6. [What are the expected access patterns (load/throughput)?](#what-are-the-expected-access-patterns-loadthroughput)
    7. [Are there any logging, monitoring, or observability needs?](#are-there-any-logging-monitoring-or-observability-needs)
@@ -127,10 +129,11 @@ through another Validator) to any other Validator which is a member of the same 
 
 ### What new data structures are needed, what data structures need changes?
 
-None
+Implemented `dashtypes.ValidatorAddress` which represents an address of a validator received from ABCI app.
 
 ### What new APIs will be needed, what APIs will change?
 
+#### ABCI Protocol
 In the ABCI protocol, we add a network address of each member of the active Validator Set to the
 `ResponseEndBlock.ValidatorSetUpdate.ValidatorUpdate` structure. The network address should be an URI:
 
@@ -140,7 +143,7 @@ tcp://<node_id>@<address>:<port>
 
 where:
 
-* `<node_id>` - node ID (can be generated based on node public key, see [p2p.PubKeyToID](https://github.com/dashevo/tenderdash/blob/20d1f91c0adb29d1b5d03a945b17513a368759e4/p2p/key.go#L45))
+* `<node_id>` - node ID (can be generated based on node P2P public key, see [p2p.PubKeyToID](https://github.com/dashevo/tenderdash/blob/20d1f91c0adb29d1b5d03a945b17513a368759e4/p2p/key.go#L45))
 * `<address>` - IP address of the validator node
 * `<port>` - p2p port number of the validator node
 
@@ -156,9 +159,14 @@ message ValidatorUpdate {
 ```
 
 
-If ABCI app cannot determine node address, it can leave it empty.
+If ABCI app cannot determine `<node_id>`, it can leave it empty. In this case, Tenderdash will try to retrieve a public
+key from remote host and derive node ID from it.
 
-Note that the Dash Drive as an ABCI app should be able to determine node address if it is member of the active Validator Set. If the node is NOT a member of active Validator Set, the `node_address` should be empty.
+#### P2P Handshake
+
+To retrieve node ID from a **remote node**, **local node** can establish a short-lived connection to the **remote node** to download its public key. This feature does not require any changes to the P2P protocol; it just uses existing capabilities.
+
+Public key request starts with a normal flow Diffie-Hellman protocol, as implemented in `conn.MakeSecretConnection()`. Once epheremal keys are exchanged between nodes, **local node** proceeds to  `shareAuthSignature()`. However, instead of sending its own `AuthSigMessage`, it waits for **remote node**'s auth signature to arrive.As the communication is asynchronous, the **remote node** sends its `AuthSigMessage`. That's when the **local node** closes the connection.
 
 ### What are the efficiency considerations (time/space)?
 
@@ -174,19 +182,28 @@ In the future, additional optimizations can further improve the performance, for
 
 1. Each rotation of the active Validator Set will cause the ABCI application to send additional data to Tenderdash. The number of blocks between rotation events is a configuration parameter of the ABCI application.
 2. Each validator in the active validator set will establish a few more tcp connections.
+3. Retrieving public keys for validators can be resource and time-intensive, as it establishes new connections to validators and performs a DH handshake. This issue is mitigated by:
+   a. ensuring that this feature is used only when needed
+   b. refactoring and simplification of the P2P protocol and source code used to retrieve public keys
 
+   Note that for the needs of Inter-Validator Set Messaging, retrieving public keys is executed only for `log2(n-1)` Validators, where `n` is size of active Validator Set.
+   
 ### Are there any logging, monitoring, or observability needs?
 
 1. Operator shall be able to determine a list of node peers, together with their type (Full, inactive Validator, active Validator) and connection status. This information can be part of debug logs.
 
 ### Are there any security considerations?
 
-This change makes connectivity between Validators more predictable.
+1. This change makes connectivity between Validators more predictable.
 It can make it a bit easier for a malicious user to deliberately block communication
 for a given Validator node to make it unable to participate in the Validator Set.
-
 However, this risk is already present at the ABCI application level, so the change
 does not introduce new risks.
+2. Missing node ID can be determined based on a public key, which is retrieved without proper validation. It cannot be guaranteed that it will not be spoofed. 
+
+   This can allow an attacker who controls the network connectivity to perform a man-in-the-middle attack. As the attacker doesn't have validator private keys, he/she cannot perform unauthorized operations. However, it is possible to intercept communication and isolate the attacked validator from the quorum. 
+   
+   Note that, if the attacker controls the network connectivity, he can still drop that traffic on the network level.
 
 ### Are there any privacy considerations?
 
