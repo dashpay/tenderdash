@@ -197,10 +197,10 @@ func (vc *ValidatorConnExecutor) setQuorumHash(newQuorumHash tmbytes.HexBytes) e
 	return nil
 }
 
-// me returns current node's validator object, if any, or nil if not found
-func (vc *ValidatorConnExecutor) me() *types.Validator {
-	me := vc.validatorSetMembers[validatorMapIndexType(vc.proTxHash.String())]
-	return &me
+// me returns current node's validator object, if any. `ok` if false when current node is not a validator
+func (vc *ValidatorConnExecutor) me() (validator *types.Validator, ok bool) {
+	v, ok := vc.validatorSetMembers[validatorMapIndexType(vc.proTxHash.String())]
+	return &v, ok
 }
 
 // selectValidators selects `count` validators from current ValidatorSet.
@@ -208,8 +208,8 @@ func (vc *ValidatorConnExecutor) me() *types.Validator {
 // Returns map indexed by validator address.
 func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 	activeValidators := vc.validatorSetMembers
-	me := vc.me()
-	if me == nil {
+	me, ok := vc.me()
+	if !ok {
 		return validatorMap{}, fmt.Errorf("current node is not member of active validator set")
 	}
 
@@ -261,11 +261,17 @@ func (vc *ValidatorConnExecutor) disconnectValidators(exceptions validatorMap) e
 	return nil
 }
 
+// isValidator returns true when current node is a validator
+func (vc *ValidatorConnExecutor) isValidator() bool {
+	_, ok := vc.me()
+	return ok
+}
+
 // updateConnections processes current validator set, selects a few validators and schedules connections
 // to be established. It will also disconnect previous validators.
 func (vc *ValidatorConnExecutor) updateConnections() error {
 	// We only do something if we are part of new ValidatorSet
-	if me := vc.me(); me == nil {
+	if !vc.isValidator() {
 		vc.Logger.Debug("not a member of active ValidatorSet")
 		// We need to disconnect connected validators. It needs to be done explicitly
 		// because they are marked as persistent and will never disconnect themselves.

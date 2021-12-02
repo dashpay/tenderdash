@@ -7,7 +7,6 @@ import (
 )
 
 func TestValidatorAddress_String(t *testing.T) {
-
 	tests := []struct {
 		uri  string
 		want string
@@ -54,7 +53,7 @@ func TestValidatorAddress_NodeID_fail(t *testing.T) {
 			va, err := ParseValidatorAddress(tt.uri)
 			assert.NoError(t, err)
 			got, err := va.NodeID()
-			assert.Equal(t, err != nil, tt.wantErr, "wantErr=%s, but err = %s", tt.wantErr, err)
+			assert.Equal(t, err != nil, tt.wantErr, "wantErr=%t, but err = %s", tt.wantErr, err)
 			assert.EqualValues(t, tt.want, got)
 		})
 	}

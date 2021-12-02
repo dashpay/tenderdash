@@ -3,18 +3,24 @@ package dashtypes
 import (
 	"errors"
 	"fmt"
-	"net"
-	"time"
+	"math"
 
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/p2p"
-	"github.com/tendermint/tendermint/p2p/conn"
 )
 
 // ValidatorAddress is a NodeAddress that does not require node ID to be set
 type ValidatorAddress struct {
 	p2p.NodeAddress
+	resolver NodeIDResolver
 }
+
+var (
+	ErrNoHostname error = errors.New("no hostname")
+	ErrNoPort     error = errors.New("no port")
+	ErrNoProtocol error = errors.New("no protocol")
+	ErrNoResolver error = errors.New("resolver not defined, validator address not initialized correctly")
+)
 
 // ParseValidatorAddress parses provided address, which should be in `proto://nodeID@host:port` form.
 // `proto://` and `nodeID@` parts are optional.
@@ -23,7 +29,10 @@ func ParseValidatorAddress(address string) (ValidatorAddress, error) {
 	if err != nil {
 		return ValidatorAddress{}, err
 	}
-	va := ValidatorAddress{NodeAddress: addr}
+	va := ValidatorAddress{
+		NodeAddress: addr,
+		resolver:    NewNodeIDResolver(),
+	}
 	return va, va.Validate()
 }
 
@@ -31,13 +40,13 @@ func ParseValidatorAddress(address string) (ValidatorAddress, error) {
 // It ignores missing node IDs.
 func (va ValidatorAddress) Validate() error {
 	if va.NodeAddress.Protocol == "" {
-		return errors.New("no protocol")
+		return ErrNoProtocol
 	}
 	if va.NodeAddress.Hostname == "" {
-		return errors.New("no hostname")
+		return ErrNoHostname
 	}
 	if va.NodeAddress.Port <= 0 {
-		return errors.New("no port")
+		return ErrNoPort
 	}
 	return nil
 }
@@ -70,7 +79,12 @@ func (va ValidatorAddress) NetAddress() (*p2p.NetAddress, error) {
 func (va *ValidatorAddress) NodeID() (p2p.ID, error) {
 	if va.NodeAddress.NodeID == "" {
 		var err error
-		va.NodeAddress.NodeID, err = va.retrieveNodeID()
+
+		if va.resolver == nil {
+			return "", ErrNoResolver
+		}
+
+		va.NodeAddress.NodeID, err = va.resolver.Resolve(*va)
 		if err != nil {
 			return "", err
 		}
@@ -78,32 +92,10 @@ func (va *ValidatorAddress) NodeID() (p2p.ID, error) {
 	return va.NodeAddress.NodeID, nil
 }
 
-// retrieveNodeID retrieves a node ID from remote node.
-// Note that it is quite expensive, as it establishes secure connection to the other node
-// which is dropped afterwards.
-func (va ValidatorAddress) retrieveNodeID() (p2p.ID, error) {
-	dialer := net.Dialer{Timeout: 1000 * time.Millisecond}
-	connection, err := dialer.Dial("tcp4", fmt.Sprintf("%s:%d", va.NodeAddress.Hostname, va.NodeAddress.Port))
-	if err != nil {
-		return "", fmt.Errorf("cannot lookup node ID: %w", err)
-	}
-	defer connection.Close()
-	if err := connection.SetDeadline(time.Now().Add(1 * time.Second)); err != nil {
-		return "", err
-	}
-
-	// TODO create a simplified version of MakeSecretConnection to just retrieve the public key
-	sc, err := conn.MakeSecretConnection(connection, nil)
-	if err != nil {
-		return "", err
-	}
-	return p2p.PubKeyToID(sc.RemotePubKey()), nil
-}
-
-// dashtypes.RandValidatorAddress generates a random validator address
+// RandValidatorAddress generates a random validator address. Used in tests.
 func RandValidatorAddress() ValidatorAddress {
 	nodeID := tmrand.Bytes(20)
-	port := (tmrand.Int() % 65535) + 1
+	port := tmrand.Int()%math.MaxUint16 + 1
 	addr, err := ParseValidatorAddress(fmt.Sprintf("tcp://%x@127.0.0.1:%d", nodeID, port))
 	if err != nil {
 		panic(fmt.Sprintf("cannot generate random validator address: %s", err))
