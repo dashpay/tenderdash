@@ -20,6 +20,7 @@ var (
 	ErrNoPort     error = errors.New("no port")
 	ErrNoProtocol error = errors.New("no protocol")
 	ErrNoResolver error = errors.New("resolver not defined, validator address not initialized correctly")
+	ErrNoNodeID   error = errors.New("no node ID")
 )
 
 // ParseValidatorAddress parses provided address, which should be in `proto://nodeID@host:port` form.
@@ -48,6 +49,12 @@ func (va ValidatorAddress) Validate() error {
 	if va.NodeAddress.Port <= 0 {
 		return ErrNoPort
 	}
+	if len(va.NodeAddress.NodeID) > 0 {
+		if err := p2p.ValidateID(va.NodeAddress.NodeID); err != nil {
+			return err
+		}
+	}
+
 	return nil
 }
 
