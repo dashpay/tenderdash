@@ -729,7 +729,7 @@ func (n *Node) ValidatorUpdate(publicKey []byte) (abci.ValidatorUpdate, error) {
 	// TODO TD-10 find real power
 	power := types.DefaultDashVotingPower
 
-	address := n.AddressP2P(true)
+	address := n.AddressP2P(false)
 	validatorUpdate := abci.UpdateValidator(proTxHash, publicKey, power, address)
 	return validatorUpdate, nil
 }
