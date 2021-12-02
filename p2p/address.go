@@ -28,7 +28,8 @@ var (
 
 	// reSchemeIsHost tries to detect URLs where the scheme part is instead a
 	// hostname, i.e. of the form "host:80/path" where host: is a hostname.
-	reSchemeIsHost = regexp.MustCompile(`^[^/:]+:\d+(/|$)`)
+	reSchemeIsHost      = regexp.MustCompile(`^[^/:]+:\d+(/|$)`)
+	ErrEmptyNodeAddress = errors.New("empty node address")
 )
 
 // NodeAddress is a node address URL. It differs from a transport Endpoint in
@@ -49,7 +50,7 @@ type NodeAddress struct {
 // and validating it.
 func ParseNodeAddress(urlString string) (NodeAddress, error) {
 	if urlString == "" {
-		return NodeAddress{}, fmt.Errorf("empty node address")
+		return NodeAddress{}, ErrEmptyNodeAddress
 	}
 	address, err := ParseNodeAddressWithoutValidation(urlString)
 	if err != nil {
