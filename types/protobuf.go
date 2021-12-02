@@ -5,7 +5,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/p2p"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -136,8 +136,11 @@ func (tm2pb) ConsensusParams(params *tmproto.ConsensusParams) *abci.ConsensusPar
 
 // XXX: panics on nil or unknown pubkey type
 func (tm2pb) NewValidatorUpdate(
-	pubkey crypto.PubKey, power int64, proTxHash []byte, address p2p.NodeAddress) abci.ValidatorUpdate {
-
+	pubkey crypto.PubKey,
+	power int64,
+	proTxHash []byte,
+	address dashtypes.ValidatorAddress,
+) abci.ValidatorUpdate {
 	var pubkeyABCI *crypto2.PublicKey
 	if pubkey != nil {
 		pubkeyProto, err := cryptoenc.PubKeyToProto(pubkey)
