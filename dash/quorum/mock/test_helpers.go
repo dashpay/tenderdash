@@ -3,6 +3,7 @@ package mock
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/dashtypes"
@@ -16,7 +17,7 @@ func NewNodeAddress(n uint64) string {
 	nodeID := make([]byte, 20)
 	binary.LittleEndian.PutUint64(nodeID, n)
 	if n == 0 {
-		n = 65535
+		n = math.MaxUint16
 	}
 	return fmt.Sprintf("tcp://%x@127.0.0.1:%d", nodeID, uint16(n))
 }
