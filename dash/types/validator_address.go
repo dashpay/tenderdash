@@ -1,4 +1,4 @@
-package dashtypes
+package types
 
 import (
 	"errors"

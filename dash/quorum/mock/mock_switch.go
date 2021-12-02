@@ -5,7 +5,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tendermint/tendermint/dash/dashtypes"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/p2p/mocks"
 )
