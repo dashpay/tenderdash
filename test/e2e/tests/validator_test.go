@@ -7,7 +7,7 @@ import (
 	"github.com/dashevo/dashd-go/btcjson"
 
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/dashtypes"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 
 	"github.com/stretchr/testify/require"
 

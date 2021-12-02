@@ -5,7 +5,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-	"github.com/tendermint/tendermint/dash/dashtypes"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 )
 
 func ValUpdate(

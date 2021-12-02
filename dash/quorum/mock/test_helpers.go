@@ -6,7 +6,7 @@ import (
 	"math"
 
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/dashtypes"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/types"
 )
