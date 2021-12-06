@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/p2p"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -530,14 +530,10 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 			)
 		}
 
-		// Validate endpoint address
 		if valUpdate.NodeAddress != "" {
-			addr, err := p2p.ParseNodeAddress(valUpdate.NodeAddress)
+			_, err := dashtypes.ParseValidatorAddress(valUpdate.NodeAddress)
 			if err != nil {
 				return fmt.Errorf("cannot parse validator address %s: %w", valUpdate.NodeAddress, err)
-			}
-			if err = addr.Validate(); err != nil {
-				return fmt.Errorf("validator address %s is invalid: %w", valUpdate.NodeAddress, err)
 			}
 		}
 	}

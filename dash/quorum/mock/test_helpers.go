@@ -3,10 +3,11 @@ package mock
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
 
 	"github.com/tendermint/tendermint/crypto"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -15,14 +16,16 @@ import (
 func NewNodeAddress(n uint64) string {
 	nodeID := make([]byte, 20)
 	binary.LittleEndian.PutUint64(nodeID, n)
-
+	if n == 0 {
+		n = math.MaxUint16
+	}
 	return fmt.Sprintf("tcp://%x@127.0.0.1:%d", nodeID, uint16(n))
 }
 
 // NewValidator generates a validator with only fields needed for node selection filled.
 // For the same `id`, mock validator will always have the same data (proTxHash, NodeID)
 func NewValidator(id uint64) *types.Validator {
-	address, err := p2p.ParseNodeAddress(NewNodeAddress(id))
+	address, err := dashtypes.ParseValidatorAddress(NewNodeAddress(id))
 	if err != nil {
 		panic(err)
 	}

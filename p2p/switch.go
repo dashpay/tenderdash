@@ -602,7 +602,7 @@ func (sw *Switch) RemovePersistentPeer(addr string) error {
 func (sw *Switch) AddUnconditionalPeerIDs(ids []string) error {
 	sw.Logger.Info("Adding unconditional peer ids", "ids", ids)
 	for i, id := range ids {
-		err := validateID(ID(id))
+		err := ValidateID(ID(id))
 		if err != nil {
 			return fmt.Errorf("wrong ID #%d: %w", i, err)
 		}
@@ -614,7 +614,7 @@ func (sw *Switch) AddUnconditionalPeerIDs(ids []string) error {
 func (sw *Switch) AddPrivatePeerIDs(ids []string) error {
 	validIDs := make([]string, 0, len(ids))
 	for i, id := range ids {
-		err := validateID(ID(id))
+		err := ValidateID(ID(id))
 		if err != nil {
 			return fmt.Errorf("wrong ID #%d: %w", i, err)
 		}
