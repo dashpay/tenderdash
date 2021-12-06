@@ -15,6 +15,7 @@ const (
 )
 
 type NodeIDResolver interface {
+	// Resolve retrieves a node ID from remote node.
 	Resolve(ValidatorAddress) (p2p.ID, error)
 }
 
@@ -51,6 +52,7 @@ func (resolver nodeIDResolver) connect(host string, port uint16) (net.Conn, erro
 	return connection, nil
 }
 
+// Resolve implements NodeIDResolver
 // Resolve retrieves a node ID from remote node.
 // Note that it is quite expensive, as it establishes secure connection to the other node
 // which is dropped afterwards.
