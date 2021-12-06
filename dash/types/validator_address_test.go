@@ -64,6 +64,16 @@ func TestValidatorAddress_NodeID_fail(t *testing.T) {
 	}
 }
 
+// TestValidatorAddress_NodeID_Positive
+// func TestValidatorAddress_NodeID_Positive(t *testing.T) {
+// 	uri := "tcp://10.186.73.7:26656"
+// 	va, err := ParseValidatorAddress(uri)
+// 	assert.NoError(t, err)
+// 	got, err := va.NodeID()
+// 	assert.NoError(t, err)
+// 	t.Log("Node ID: " + got)
+// }
+
 // TestValidatorAddress_HostPortProto verifies if host, port and proto is detected correctly when parsing
 // ValidatorAddress
 func TestValidatorAddress_HostPortProto(t *testing.T) {

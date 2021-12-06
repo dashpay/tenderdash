@@ -218,6 +218,14 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 	if err != nil {
 		return validatorMap{}, err
 	}
+	// fetch node IDs
+	for _, validator := range selectedValidators {
+		_, err := validator.NodeAddress.NodeID()
+		if err != nil {
+			vc.Logger.Debug("cannot determine node id for validator", "url", validator.String(), "error", err)
+			return nil, err
+		}
+	}
 
 	return newValidatorMap(selectedValidators), nil
 }
