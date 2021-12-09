@@ -162,17 +162,11 @@ func LoadTestnet(file string) (*Testnet, error) {
 		quorumType = 100
 	}
 
-	proTxHashes := make([]crypto.ProTxHash, validatorCount)
-
-	for i := 0; i < validatorCount; i++ {
-		proTxHashes[i] = proTxHashGen.Generate()
-		if proTxHashes[i] == nil || len(proTxHashes[i]) != crypto.ProTxHashSize {
-			panic("the proTxHash must be 32 bytes")
-		}
-	}
-
 	proTxHashes, privateKeys, thresholdPublicKey :=
-		bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(proTxHashes, randomSeed)
+		bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(
+			proTxHashGen.GenerateSlice(validatorCount),
+			randomSeed,
+		)
 
 	quorumHash := quorumHashGen.Generate()
 
@@ -395,12 +389,9 @@ func LoadTestnet(file string) (*Testnet, error) {
 			proTxHashesInUpdate[i] = node.ProTxHash
 			i++
 		}
-		proTxHashes = proTxHashesInUpdate
-
-		sort.Sort(crypto.SortProTxHash(proTxHashes))
 
 		proTxHashes, privateKeys, thresholdPublicKey :=
-			bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(proTxHashes, randomSeed+int64(height))
+			bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(proTxHashesInUpdate, randomSeed+int64(height))
 
 		quorumHash := quorumHashGen.Generate()
 
@@ -837,6 +828,14 @@ func (g *proTxHashGenerator) Generate() crypto.ProTxHash {
 		panic(err) // this shouldn't happen
 	}
 	return crypto.ProTxHash(seed)
+}
+
+func (g *proTxHashGenerator) GenerateSlice(n int) []crypto.ProTxHash {
+	proTxHashes := make([]crypto.ProTxHash, n)
+	for i := 0; i < n; i++ {
+		proTxHashes[i] = g.Generate()
+	}
+	return proTxHashes
 }
 
 // quorumHashGenerator generates pseudorandom quorumHash based on a seed.
