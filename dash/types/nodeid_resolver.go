@@ -19,14 +19,14 @@ type NodeIDResolver interface {
 	Resolve(ValidatorAddress) (p2p.ID, error)
 }
 
-type nodeIDResolver struct {
+type tcpNodeIDResolver struct {
 	DialerTimeout     time.Duration
 	ConnectionTimeout time.Duration
 	// other dependencies
 }
 
-func NewNodeIDResolver() NodeIDResolver {
-	return &nodeIDResolver{
+func NewTCPNodeIDResolver() NodeIDResolver {
+	return &tcpNodeIDResolver{
 		DialerTimeout:     DefaultDialTimeout,
 		ConnectionTimeout: DefaultConnectionTimeout,
 	}
@@ -34,7 +34,7 @@ func NewNodeIDResolver() NodeIDResolver {
 
 // connect establishes a TCP connection to remote host.
 // When err == nil, caller is responsible for closing of the connection
-func (resolver nodeIDResolver) connect(host string, port uint16) (net.Conn, error) {
+func (resolver tcpNodeIDResolver) connect(host string, port uint16) (net.Conn, error) {
 	dialer := net.Dialer{
 		Timeout: resolver.DialerTimeout,
 	}
@@ -56,8 +56,8 @@ func (resolver nodeIDResolver) connect(host string, port uint16) (net.Conn, erro
 // Resolve retrieves a node ID from remote node.
 // Note that it is quite expensive, as it establishes secure connection to the other node
 // which is dropped afterwards.
-func (resolver nodeIDResolver) Resolve(va ValidatorAddress) (p2p.ID, error) {
-	connection, err := resolver.connect(va.Hostname(), va.Port())
+func (resolver tcpNodeIDResolver) Resolve(va ValidatorAddress) (p2p.ID, error) {
+	connection, err := resolver.connect(va.Hostname, va.Port)
 	if err != nil {
 		return "", err
 	}
@@ -68,4 +68,34 @@ func (resolver nodeIDResolver) Resolve(va ValidatorAddress) (p2p.ID, error) {
 		return "", err
 	}
 	return p2p.PubKeyToID(sc.RemotePubKey()), nil
+}
+
+type addrbookNodeIDResolver struct {
+	addrBook p2p.AddrBook
+}
+
+// NewAddrbookNodeIDResolver creates new node ID resolver.
+// It looks up fora node ID based on IP address, using the p2p addressbook.
+func NewAddrbookNodeIDResolver(addrBook p2p.AddrBook) NodeIDResolver {
+	return addrbookNodeIDResolver{addrBook: addrBook}
+}
+
+// Resolve implements NodeIDResolver
+// Resolve retrieves a node ID from address book.
+func (resolver addrbookNodeIDResolver) Resolve(va ValidatorAddress) (p2p.ID, error) {
+	ip := net.ParseIP(va.Hostname)
+	if ip == nil {
+		ips, err := net.LookupIP(va.Hostname)
+		if err != nil {
+			return "", p2p.ErrNetAddressLookup{Addr: va.Hostname, Err: err}
+		}
+		ip = ips[0]
+	}
+
+	id := resolver.addrBook.FindIP(ip, va.Port)
+	if id == "" {
+		return "", ErrNoNodeID
+	}
+
+	return id, nil
 }

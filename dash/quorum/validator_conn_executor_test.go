@@ -2,6 +2,7 @@ package quorum
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"testing"
 	"time"
@@ -16,6 +17,7 @@ import (
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	mmock "github.com/tendermint/tendermint/mempool/mock"
+	"github.com/tendermint/tendermint/p2p"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/proxy"
 	sm "github.com/tendermint/tendermint/state"
@@ -61,9 +63,10 @@ func TestValidatorConnExecutor_NotValidator(t *testing.T) {
 // TestValidatorConnExecutor_WrongAddress checks behavior in case of several issues in the address.
 // Expected behavior: invalid address is dialed. Previous addresses are disconnected.
 func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
-
 	me := mock.NewValidator(65535)
-	addr1, err := dashtypes.ParseValidatorAddress("http://john@www.google.com:80")
+	zeroBytes := make([]byte, p2p.IDByteLength)
+	nodeID := hex.EncodeToString(zeroBytes)
+	addr1, err := dashtypes.ParseValidatorAddress("http://" + nodeID + "@www.domain-that-does-not-exist.com:80")
 	require.NoError(t, err)
 
 	val1 := mock.NewValidator(100)

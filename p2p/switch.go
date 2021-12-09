@@ -3,6 +3,7 @@ package p2p
 import (
 	"fmt"
 	"math"
+	"net"
 	"sync"
 	"time"
 
@@ -52,6 +53,7 @@ type AddrBook interface {
 	MarkGood(ID)
 	RemoveAddress(*NetAddress)
 	HasAddress(*NetAddress) bool
+	FindIP(ip net.IP, port uint16) ID
 	Save()
 }
 
@@ -431,6 +433,11 @@ func (sw *Switch) reconnectToPeer(addr *NetAddress) {
 // SetAddrBook allows to set address book on Switch.
 func (sw *Switch) SetAddrBook(addrBook AddrBook) {
 	sw.addrBook = addrBook
+}
+
+// AddrBook() returns address book used by a switch
+func (sw *Switch) AddrBook() AddrBook {
+	return sw.addrBook
 }
 
 // MarkPeerAsGood marks the given peer as good when it did something useful
