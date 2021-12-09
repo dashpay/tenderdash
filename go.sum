@@ -590,6 +590,20 @@ github.com/sasha-s/go-deadlock v0.3.1 h1:sqv7fDNShgjcaxkO0JNcOAlr8B9+cV5Ey/OB71e
 github.com/sasha-s/go-deadlock v0.3.1/go.mod h1:F73l+cr82YSh10GxyRI6qZiCgK64VaZjwesgfQ1/iLM=
 github.com/sean-/seed v0.0.0-20170313163322-e2103e2c3529/go.mod h1:DxrIzT+xaE7yg65j358z/aeFdxmN0P9QXhEzd20vsDc=
 github.com/seccomp/libseccomp-golang v0.9.1/go.mod h1:GbW5+tmTXfcxTToHLXlScSlAvWlF4P2Ca7zGrPiEpWo=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211202125640-f3ff241c56ee h1:yjtQZnsmeOjSsVhE0ZqWMeP9Al0WwC4qEzDmfRl63xk=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211202125640-f3ff241c56ee/go.mod h1:a6rmox81yeots7tdJAf//6VI1bTuDwsk1oBtNvCb3GQ=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211202174910-96da4456ad68 h1:pBMP+wuZpfufSXWVersy984UO7JCdnefTq7jvBoZTTs=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211202174910-96da4456ad68/go.mod h1:a6rmox81yeots7tdJAf//6VI1bTuDwsk1oBtNvCb3GQ=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211203134950-125eef06467b h1:e96At3PTnqwPHhlMEmm958r77qyWFTUUJ/98RFYS4Us=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211203134950-125eef06467b/go.mod h1:a6rmox81yeots7tdJAf//6VI1bTuDwsk1oBtNvCb3GQ=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211203164137-843764b991f4 h1:luiXC8yC7uxmeOWoGv4xZMDGz0FG1EyAT2G4J0TsSKk=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211203164137-843764b991f4/go.mod h1:a6rmox81yeots7tdJAf//6VI1bTuDwsk1oBtNvCb3GQ=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211204105536-471b7fa1633d h1:aR/QXIe2lQI9ZlwLKFunDTWg/J/HlPf5ymOG8kSjcvE=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211204105536-471b7fa1633d/go.mod h1:a6rmox81yeots7tdJAf//6VI1bTuDwsk1oBtNvCb3GQ=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211204125518-31f66f50237a h1:AgCvy3sukSXa+Yd6EBYSIvOwwjV/t2PnGIb3NA6stVo=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211204125518-31f66f50237a/go.mod h1:a6rmox81yeots7tdJAf//6VI1bTuDwsk1oBtNvCb3GQ=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211204172642-8f5a3a144f86 h1:ZoHm6YPUXmM5+4H4fvpsKByz4kM7Pe3kYzLwOt+WWyM=
+github.com/shotonoff/bls-signatures/go-bindings v0.0.0-20211204172642-8f5a3a144f86/go.mod h1:a6rmox81yeots7tdJAf//6VI1bTuDwsk1oBtNvCb3GQ=
 github.com/shurcooL/sanitized_anchor_name v1.0.0/go.mod h1:1NzhyTcUVG4SuEtjjoZeVRXNmyL/1OwPU0+IJeTBvfc=
 github.com/sirupsen/logrus v1.2.0/go.mod h1:LxeOpSwHxABJmUn/MG1IvRgCAasNZTLOkJPxbbu5VWo=
 github.com/sirupsen/logrus v1.4.2/go.mod h1:tLMulIdttU9McNUspp0xgXVQah82FyeX6MwdIuYE2rE=
@@ -1185,4 +1199,3 @@ rsc.io/pdf v0.1.1/go.mod h1:n8OzWcQ6Sp37PL01nO98y4iUCRdTGarVfzxY20ICaU4=
 rsc.io/quote/v3 v3.1.0/go.mod h1:yEA65RcK8LyAZtP9Kv3t0HmxON59tX3rD+tICJqUlj0=
 rsc.io/sampler v1.3.0/go.mod h1:T1hPZKmBbMNahiBKFy5HrXp6adAjACjK9JXDnKaTXpA=
 sigs.k8s.io/yaml v1.2.0/go.mod h1:yfXDCHCao9+ENCvLSE62v9VSji2MKu5jeNfTrofGhJc=
-

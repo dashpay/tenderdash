@@ -8,10 +8,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
-	"sort"
 
-	bls "github.com/dashpay/bls-signatures/go-bindings"
+	bls "github.com/shotonoff/bls-signatures/go-bindings"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/tmhash"
 	tmjson "github.com/tendermint/tendermint/libs/json"
@@ -28,7 +26,7 @@ const (
 	PubKeySize = 48
 	// PrivateKeySize is the size, in bytes, of private keys as used in this package.
 	PrivateKeySize = 32
-	// Size of an BLS12381 signature.
+	// SignatureSize of an BLS12381 signature.
 	SignatureSize = 96
 	// SeedSize is the size, in bytes, of private key seeds. These are the
 	// private key representations used by RFC 8032.
@@ -47,7 +45,7 @@ type PrivKey []byte
 
 // Bytes returns the privkey byte format.
 func (privKey PrivKey) Bytes() []byte {
-	return []byte(privKey)
+	return privKey
 }
 
 // Sign produces a signature on the provided message.
@@ -59,20 +57,20 @@ func (privKey PrivKey) Bytes() []byte {
 // incorrect signature.
 func (privKey PrivKey) Sign(msg []byte) ([]byte, error) {
 	if len(privKey.Bytes()) != PrivateKeySize {
-		panic(fmt.Sprintf("incorrect private key %d bytes but expected %d bytes", len(privKey.Bytes()), PrivateKeySize))
+		panic(errInvalidPrivateKeySize(len(privKey.Bytes())))
 	}
 	// set modOrder flag to true so that too big random bytes will wrap around and be a valid key
 	blsPrivateKey, err := bls.PrivateKeyFromBytes(privKey, true)
 	if err != nil {
 		return nil, err
 	}
-	insecureSignature := blsPrivateKey.SignInsecure(msg)
-	serializedSignature := insecureSignature.Serialize()
+	sig := bls.NewAugSchemeMPL().Sign(blsPrivateKey, msg)
+	serializedSignature := sig.Serialize()
 	// fmt.Printf("signature %X created for msg %X with key %X\n", serializedSignature, msg, privKey.PubKey().Bytes())
 	return serializedSignature, nil
 }
 
-// Sign produces a signature on the provided message.
+// SignDigest produces a signature on the provided message.
 // This assumes the privkey is wellformed in the golang format.
 // The first 32 bytes should be random,
 // corresponding to the normal bls12381 private key.
@@ -81,15 +79,17 @@ func (privKey PrivKey) Sign(msg []byte) ([]byte, error) {
 // incorrect signature.
 func (privKey PrivKey) SignDigest(msg []byte) ([]byte, error) {
 	if len(privKey.Bytes()) != PrivateKeySize {
-		panic(fmt.Sprintf("incorrect private key %d bytes but expected %d bytes", len(privKey.Bytes()), PrivateKeySize))
+		return nil, errInvalidPrivateKeySize(len(privKey.Bytes()))
 	}
 	// set modOrder flag to true so that too big random bytes will wrap around and be a valid key
 	blsPrivateKey, err := bls.PrivateKeyFromBytes(privKey, true)
 	if err != nil {
 		return nil, err
 	}
-	insecureSignature := blsPrivateKey.SignInsecurePrehashed(msg)
-	serializedSignature := insecureSignature.Serialize()
+	var hash bls.Hash
+	copy(hash[:], msg)
+	sig := bls.ThresholdSign(blsPrivateKey, hash)
+	serializedSignature := sig.Serialize()
 	// fmt.Printf("signature %X created for msg %X with key %X\n", serializedSignature, msg, privKey.PubKey().Bytes())
 	return serializedSignature, nil
 }
@@ -99,7 +99,7 @@ func (privKey PrivKey) SignDigest(msg []byte) ([]byte, error) {
 // Panics if the private key is not initialized.
 func (privKey PrivKey) PubKey() crypto.PubKey {
 	if len(privKey.Bytes()) != PrivateKeySize {
-		panic(fmt.Sprintf("incorrect private key %d bytes but expected %d bytes", len(privKey.Bytes()), PrivateKeySize))
+		panic(errInvalidPrivateKeySize(len(privKey.Bytes())))
 	}
 
 	// set modOrder flag to true so that too big random bytes will wrap around and be a valid key
@@ -109,8 +109,11 @@ func (privKey PrivKey) PubKey() crypto.PubKey {
 		// that's not available just panic...
 		panic("bad key")
 	}
-	publicKeyBytes := blsPrivateKey.PublicKey().Serialize()
-	return PubKey(publicKeyBytes)
+	pk, err := blsPrivateKey.G1Element()
+	if err != nil {
+		panic(fmt.Errorf("couldn't retrieve a public key from bls private key: %w", err))
+	}
+	return PubKey(pk.Serialize())
 }
 
 // Equals - you probably don't need to use this.
@@ -146,11 +149,11 @@ func genPrivKey(rand io.Reader) PrivKey {
 	if err != nil {
 		panic(err)
 	}
-	privateKey, err := bls.PrivateKeyFromSeed(seed)
+	sk, err := bls.NewAugSchemeMPL().KeyGen(seed)
 	if err != nil {
 		panic(err)
 	}
-	return PrivKey(privateKey.Serialize())
+	return sk.Serialize()
 }
 
 // GenPrivKeyFromSecret hashes the secret with SHA2, and uses
@@ -159,18 +162,19 @@ func genPrivKey(rand io.Reader) PrivKey {
 // if it's derived from user input.
 func GenPrivKeyFromSecret(secret []byte) PrivKey {
 	seed := crypto.Sha256(secret) // Not Ripemd160 because we want 32 bytes.
-	privKey, err := bls.PrivateKeyFromSeed(seed)
+	sk, err := bls.NewAugSchemeMPL().KeyGen(seed)
 	if err != nil {
 		panic(err)
 	}
-	return PrivKey(privKey.Serialize())
+	return sk.Serialize()
 }
 
+// ReverseBytes returns a reversed sequence bytes of passed slice
 func ReverseBytes(bz []byte) []byte {
-	s := make([]byte, len(bz))
-	copy(s, bz)
-	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
-		s[i], s[j] = s[j], s[i]
+	l := len(bz)
+	s := make([]byte, l)
+	for i, j := 0, l-1; i <= j; i, j = i+1, j-1 {
+		s[i], s[j] = bz[j], bz[i]
 	}
 	return s
 }
@@ -220,125 +224,46 @@ func CreatePrivLLMQDataOnProTxHashes(
 
 func CreatePrivLLMQDataOnProTxHashesUsingSeed(proTxHashes []crypto.ProTxHash, threshold int,
 	seedSource int64) ([]crypto.ProTxHash, []crypto.PrivKey, crypto.PubKey) {
-	members := len(proTxHashes)
-	if members < threshold {
-		panic(fmt.Sprintf("members %d must be bigger than threshold %d", members, threshold))
-	}
-	if threshold == 0 {
-		panic("threshold must not be 0")
-	}
-	if len(proTxHashes) == 0 {
-		panic("there must be at least one pro_tx_hash")
-	}
-	for _, proTxHash := range proTxHashes {
-		if len(proTxHash.Bytes()) != crypto.ProTxHashSize {
-			panic(fmt.Errorf("blsId incorrect size in public key recovery, expected 32 bytes (got %d)", len(proTxHash)))
-		}
-	}
-	var reader io.Reader
-	if seedSource != 0 {
-		reader = rand.New(rand.NewSource(seedSource))
-	} else {
-		reader = crypto.CReader()
-	}
-
-	if len(proTxHashes) == 1 {
-		createdSeed := make([]byte, SeedSize)
-		_, err := io.ReadFull(reader, createdSeed)
-		if err != nil {
-			panic(err)
-		}
-		privKey := GenPrivKeyFromSecret(createdSeed)
-		return proTxHashes, []crypto.PrivKey{privKey}, privKey.PubKey()
-	}
-
-	reversedProTxHashes := ReverseProTxHashes(proTxHashes)
-
-	// sorting makes this easier
-	sort.Sort(crypto.SortProTxHash(reversedProTxHashes))
-
-	ids := make([]bls.Hash, members)
-	secrets := make([]*bls.PrivateKey, threshold)
-	skShares := make([]crypto.PrivKey, members)
-	testPubKey := make([]crypto.PubKey, members)
-	testProTxHashes := make([][]byte, members)
-
-	for i := 0; i < threshold; i++ {
-		createdSeed := make([]byte, SeedSize)
-		_, err := io.ReadFull(reader, createdSeed)
-		if err != nil {
-			panic(err)
-		}
-		privKey, err := bls.PrivateKeyFromSeed(createdSeed)
-		if err != nil {
-			panic(err)
-		}
-		secrets[i] = privKey
-	}
-
-	for i := 0; i < members; i++ {
-		var hash bls.Hash
-		copy(hash[:], reversedProTxHashes[i].Bytes())
-		ids[i] = hash
-		skShare, err := bls.PrivateKeyShare(secrets, ids[i])
-		if err != nil {
-			panic(err)
-		}
-		skShares[i] = PrivKey(skShare.Serialize())
-		testPubKey[i] = skShares[i].PubKey()
-		testProTxHashes[i] = ReverseBytes(reversedProTxHashes[i].Bytes())
-	}
-
-	// as this is not used in production, we can add this test
-	testKey, err := RecoverThresholdPublicKeyFromPublicKeys(testPubKey, testProTxHashes)
-	if err != nil {
-		panic(err)
-	}
-	if !testKey.Equals(PubKey(secrets[0].PublicKey().Serialize())) {
-		panic("these should be equal")
-	}
-	return ReverseProTxHashes(reversedProTxHashes), skShares, PubKey(secrets[0].PublicKey().Serialize())
+	llmqData, _ := NewLLMQData(proTxHashes, WithThreshold(threshold), WithSeed(seedSource))
+	return llmqData.ProTxHashes, llmqData.PrivKeyShares, llmqData.ThresholdPubKey
 }
 
 func RecoverThresholdPublicKeyFromPublicKeys(publicKeys []crypto.PubKey, blsIds [][]byte) (crypto.PubKey, error) {
-	if len(publicKeys) != len(blsIds) {
-		return nil, errors.New("the length of the public keys must match the length of the blsIds")
-	}
 	// if there is only 1 key use it
 	if len(publicKeys) == 1 {
 		return publicKeys[0], nil
 	}
-	publicKeyShares := make([]*bls.PublicKey, len(publicKeys))
+	publicKeyShares := make([]*bls.G1Element, len(publicKeys))
 	hashes := make([]bls.Hash, len(publicKeys))
 	// Create and validate sigShares for each member and populate BLS-IDs from members into ids
 	for i, publicKey := range publicKeys {
-		publicKeyShare, error := bls.PublicKeyFromBytes(publicKey.Bytes())
-		if error != nil {
+		publicKeyShare, err := bls.G1ElementFromBytes(publicKey.Bytes())
+		if err != nil {
 			return nil, fmt.Errorf("error recovering public key share from bytes %X (size %d - proTxHash %X): %w",
-				publicKey.Bytes(), len(publicKey.Bytes()), blsIds[i], error)
+				publicKey.Bytes(), len(publicKey.Bytes()), blsIds[i], err)
 		}
 		publicKeyShares[i] = publicKeyShare
 	}
 
 	for i, blsID := range blsIds {
 		if len(blsID) != tmhash.Size {
-			return nil, fmt.Errorf("blsID incorrect size in public key recovery, expected 32 bytes (got %d)", len(blsID))
+			return nil, fmt.Errorf("blsID incorrect size in public key recoveryTestCase, expected 32 bytes (got %d)", len(blsID))
 		}
 		var hash bls.Hash
 		copy(hash[:], ReverseBytes(blsID))
 		hashes[i] = hash
 	}
 
-	thresholdPublicKey, error := bls.PublicKeyRecover(publicKeyShares, hashes)
-	if error != nil {
-		return nil, fmt.Errorf("error recovering threshold public key from shares: %w", error)
+	thresholdPublicKey, err := bls.ThresholdPublicKeyRecover(publicKeyShares, hashes)
+	if err != nil {
+		return nil, fmt.Errorf("error recovering threshold public key from shares: %w", err)
 	}
 	return PubKey(thresholdPublicKey.Serialize()), nil
 }
 
 // RecoverThresholdSignatureFromShares BLS Ids are the Pro_tx_hashes from validators
 func RecoverThresholdSignatureFromShares(sigSharesData [][]byte, blsIds [][]byte) ([]byte, error) {
-	sigShares := make([]*bls.InsecureSignature, len(sigSharesData))
+	sigShares := make([]*bls.G2Element, len(sigSharesData))
 	hashes := make([]bls.Hash, len(sigSharesData))
 	if len(sigSharesData) != len(blsIds) {
 		return nil, errors.New("the length of the signature shares must match the length of the blsIds")
@@ -349,27 +274,27 @@ func RecoverThresholdSignatureFromShares(sigSharesData [][]byte, blsIds [][]byte
 	}
 	// Create and validate sigShares for each member and populate BLS-IDs from members into ids
 	for i, sigShareData := range sigSharesData {
-		sigShare, error := bls.InsecureSignatureFromBytes(sigShareData)
-		if error != nil {
-			return nil, error
+		sigShare, err := bls.G2ElementFromBytes(sigShareData)
+		if err != nil {
+			return nil, err
 		}
 		sigShares[i] = sigShare
 	}
 
 	for i, blsID := range blsIds {
 		if len(blsID) != tmhash.Size {
-			return nil, fmt.Errorf("blsID incorrect size in signature recovery, expected 32 bytes (got %d)", len(blsID))
+			return nil, fmt.Errorf("blsID incorrect size in signature recoveryTestCase, expected 32 bytes (got %d)", len(blsID))
 		}
 		var hash bls.Hash
 		copy(hash[:], ReverseBytes(blsID))
 		hashes[i] = hash
 	}
 
-	thresholdSignature, error := bls.InsecureSignatureRecover(sigShares, hashes)
-	if error != nil {
-		return nil, error
+	thresholdSignature, err := bls.ThresholdSignatureRecover(sigShares, hashes)
+	if err != nil {
+		return nil, err
 	}
-	return thresholdSignature.Serialize(), error
+	return thresholdSignature.Serialize(), nil
 }
 
 //-------------------------------------
@@ -392,27 +317,10 @@ func (pubKey PubKey) Bytes() []byte {
 	return []byte(pubKey)
 }
 
-func (pubKey PubKey) AggregateSignatures(sigSharesData [][]byte, messages [][]byte) ([]byte, error) {
-	publicKey, err := bls.PublicKeyFromBytes(pubKey)
-	if err != nil {
-		return nil, err
-	}
-	aggregationInfos := make([]*bls.AggregationInfo, len(messages))
-	for i, message := range messages {
-		aggregationInfo := bls.AggregationInfoFromMsg(publicKey, message)
-		aggregationInfos[i] = aggregationInfo
-	}
-	sigShares := make([]*bls.Signature, len(messages))
-	for i, sigShareData := range sigSharesData {
-		sigShare, error := bls.SignatureFromBytesWithAggregationInfo(sigShareData, aggregationInfos[i])
-		if error != nil {
-			return nil, error
-		}
-		sigShares[i] = sigShare
-	}
-
-	aggregatedSignature, error := bls.SignatureAggregate(sigShares)
-	return aggregatedSignature.Serialize(), error
+func (pubKey PubKey) AggregateSignatures(_ [][]byte, _ [][]byte) ([]byte, error) {
+	// to aggregate signatures use one of these schemes: BasicSchemeMPL, AugSchemeMPL, PopSchemeMPL
+	// for example: aggSig := bls.NewAugSchemeMPL().AggregateSigs(sigs)
+	panic("not implemented")
 }
 
 func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
@@ -425,23 +333,19 @@ func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
 		// fmt.Printf("bls verifying error (signature size) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
 		return false
 	}
-	publicKey, err := bls.PublicKeyFromBytes(pubKey)
+	publicKey, err := bls.G1ElementFromBytes(pubKey)
 	if err != nil {
 		// fmt.Printf("bls verifying error (publicKey) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
 		return false
 	}
-	publicKeys := make([]*bls.PublicKey, 1)
-	publicKeys[0] = publicKey
-
-	hashes := make([][]byte, 1)
-	hashes[0] = hash
-
-	blsSignature, err := bls.InsecureSignatureFromBytes(sig)
+	blsSignature, err := bls.G2ElementFromBytes(sig)
 	if err != nil {
 		// fmt.Printf("bls verifying error (blsSignature) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
 		return false
 	}
-	verified := blsSignature.Verify(hashes, publicKeys)
+	var h bls.Hash
+	copy(h[:], hash)
+	verified := bls.ThresholdVerify(publicKey, h, blsSignature)
 	//  if !verified {
 	//	  fmt.Printf("bls verified (%t) sig %X from message %X with key %X\n", verified, sig, msg, pubKey.Bytes())
 	//	  debug.PrintStack()
@@ -459,22 +363,17 @@ func (pubKey PubKey) VerifySignature(msg []byte, sig []byte) bool {
 		// fmt.Printf("bls verifying error (signature size) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
 		return false
 	}
-	publicKey, err := bls.PublicKeyFromBytes(pubKey)
+	publicKey, err := bls.G1ElementFromBytes(pubKey)
 	if err != nil {
 		// fmt.Printf("bls verifying error (publicKey) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
 		return false
 	}
-	aggregationInfo := bls.AggregationInfoFromMsg(publicKey, msg)
-	if err != nil {
-		// fmt.Printf("bls verifying error (aggregationInfo) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
-		return false
-	}
-	blsSignature, err := bls.SignatureFromBytesWithAggregationInfo(sig, aggregationInfo)
+	sig1, err := bls.G2ElementFromBytes(sig)
 	if err != nil {
 		// fmt.Printf("bls verifying error (blsSignature) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
 		return false
 	}
-	verified := blsSignature.Verify()
+	verified := bls.NewAugSchemeMPL().Verify(publicKey, msg, sig1)
 	//  if !verified {
 	//	  fmt.Printf("bls verified (%t) sig %X from message %X with key %X\n", verified, sig, msg, pubKey.Bytes())
 	//	  debug.PrintStack()
@@ -482,30 +381,10 @@ func (pubKey PubKey) VerifySignature(msg []byte, sig []byte) bool {
 	return verified
 }
 
-func (pubKey PubKey) VerifyAggregateSignature(messages [][]byte, sig []byte) bool {
-	if len(sig) != SignatureSize {
-		return false
-	}
-	publicKey, err := bls.PublicKeyFromBytes(pubKey)
-	if err != nil {
-		return false
-	}
-	aggregationInfos := make([]*bls.AggregationInfo, len(messages))
-	for i, message := range messages {
-		aggregationInfo := bls.AggregationInfoFromMsg(publicKey, message)
-		aggregationInfos[i] = aggregationInfo
-	}
-	aggregationInfo := bls.MergeAggregationInfos(aggregationInfos)
-
-	if err != nil {
-		return false
-	}
-	blsSignature, err := bls.SignatureFromBytesWithAggregationInfo(sig, aggregationInfo)
-	if err != nil {
-		// maybe log/panic?
-		return false
-	}
-	return blsSignature.Verify()
+func (pubKey PubKey) VerifyAggregateSignature(_ [][]byte, _ []byte) bool {
+	// to verify aggregated signature use one of these schemes: BasicSchemeMPL, AugSchemeMPL, PopSchemeMPL
+	// for example: isVerified := bls.NewAugSchemeMPL().AggregateVerify(publicKeys, messages, aggSig)
+	panic("not implemented")
 }
 
 func (pubKey PubKey) String() string {
@@ -531,4 +410,8 @@ func (pubKey PubKey) Equals(other crypto.PubKey) bool {
 	}
 
 	return false
+}
+
+func errInvalidPrivateKeySize(size int) error {
+	return fmt.Errorf("incorrect private key %d bytes but expected %d bytes", size, PrivateKeySize)
 }
