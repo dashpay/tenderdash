@@ -12,7 +12,6 @@ import (
 // ValidatorAddress is a NodeAddress that does not require node ID to be set
 type ValidatorAddress struct {
 	p2p.NodeAddress
-	resolver NodeIDResolver
 }
 
 var (
@@ -32,7 +31,6 @@ func ParseValidatorAddress(address string) (ValidatorAddress, error) {
 	}
 	va := ValidatorAddress{
 		NodeAddress: addr,
-		resolver:    NewNodeIDResolver(),
 	}
 	return va, va.Validate()
 }
@@ -58,45 +56,12 @@ func (va ValidatorAddress) Validate() error {
 	return nil
 }
 
-// Hostname returns host name of this address
-func (va ValidatorAddress) Hostname() string {
-	return va.NodeAddress.Hostname
-}
-
-// Port returns port number of this address
-func (va ValidatorAddress) Port() uint16 {
-	return va.NodeAddress.Port
-}
-
-// Protocol returns protocol name of this address, like "tcp"
-func (va ValidatorAddress) Protocol() string {
-	return va.NodeAddress.Protocol
-}
-
 //  NetAddress returns this ValidatorAddress as a *p2p.NetAddress that can be used to establish connection
 func (va ValidatorAddress) NetAddress() (*p2p.NetAddress, error) {
-	if _, err := va.NodeID(); err != nil {
-		return nil, fmt.Errorf("cannot determine node id for address %s: %w", va.String(), err)
+	if va.NodeID == "" {
+		return nil, fmt.Errorf("cannot determine node id for address %s", va.String())
 	}
 	return va.NodeAddress.NetAddress()
-}
-
-// NodeID() returns node ID. If it is not set, it will connect to remote node, retrieve its public key
-// and calculate Node ID based on it. Noe this connection can be expensive.
-func (va *ValidatorAddress) NodeID() (p2p.ID, error) {
-	if va.NodeAddress.NodeID == "" {
-		var err error
-
-		if va.resolver == nil {
-			return "", ErrNoResolver
-		}
-
-		va.NodeAddress.NodeID, err = va.resolver.Resolve(*va)
-		if err != nil {
-			return "", err
-		}
-	}
-	return va.NodeAddress.NodeID, nil
 }
 
 // RandValidatorAddress generates a random validator address. Used in tests.

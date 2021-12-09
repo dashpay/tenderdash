@@ -31,6 +31,7 @@ type Switch struct {
 	PersistentPeers map[string]bool
 	History         []SwitchHistoryEvent
 	HistoryChan     chan SwitchHistoryEvent
+	AddressBook     p2p.AddrBook
 }
 
 // NewMockSwitch creates a new mock Switch
@@ -40,8 +41,13 @@ func NewMockSwitch() *Switch {
 		PersistentPeers: map[string]bool{},
 		History:         []SwitchHistoryEvent{},
 		HistoryChan:     make(chan SwitchHistoryEvent, 1000),
+		AddressBook:     &p2p.AddrBookMock{},
 	}
 	return isw
+}
+
+func (sw *Switch) AddrBook() p2p.AddrBook {
+	return sw.AddressBook
 }
 
 // Peers implements Switch by returning sw.PeerSet
@@ -80,7 +86,7 @@ func (sw *Switch) DialPeersAsync(addrs []string) error {
 			return err
 		}
 
-		peer.On("ID").Return(parsed.NodeID())
+		peer.On("ID").Return(parsed.NodeID)
 		peer.On("String").Return(addr)
 		if err := sw.PeerSet.Add(peer); err != nil {
 			return err
