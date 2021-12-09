@@ -57,8 +57,9 @@ func TestValidatorAddress_NodeID_fail(t *testing.T) {
 		t.Run(tt.uri, func(t *testing.T) {
 			va, err := ParseValidatorAddress(tt.uri)
 			assert.NoError(t, err)
-			got, err := va.NodeID()
-			assert.Equal(t, err != nil, tt.wantErr, "wantErr=%t, but err = %s", tt.wantErr, err)
+			// todo lookup for an address
+			got := va.NodeID
+			// assert.Equal(t, err != nil, tt.wantErr, "wantErr=%t, but err = %s", tt.wantErr, err)
 			assert.EqualValues(t, tt.want, got)
 		})
 	}
@@ -133,13 +134,12 @@ func TestValidatorAddress_HostPortProto(t *testing.T) {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
-				assert.EqualValues(t, tt.wantHost, va.Hostname())
-				assert.EqualValues(t, tt.wantPort, va.Port())
-				assert.EqualValues(t, tt.wantProto, va.Protocol())
+				assert.EqualValues(t, tt.wantHost, va.Hostname)
+				assert.EqualValues(t, tt.wantPort, va.Port)
+				assert.EqualValues(t, tt.wantProto, va.Protocol)
 
 				if tt.wantNodeID != "" {
-					nodeID, err := va.NodeID()
-					assert.NoError(t, err)
+					nodeID := va.NodeID
 					assert.EqualValues(t, tt.wantNodeID, nodeID)
 				}
 				err = va.Validate()

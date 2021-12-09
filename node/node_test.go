@@ -61,9 +61,9 @@ func TestNodeStartStop(t *testing.T) {
 	// check if we can read node ID of this node
 	va, err := dashtypes.ParseValidatorAddress(config.P2P.ListenAddress)
 	assert.NoError(t, err)
-	id, err := va.NodeID()
-	assert.NoError(t, err)
+	id, err := dashtypes.NewTCPNodeIDResolver().Resolve(va)
 	assert.Equal(t, n.nodeInfo.ID(), id)
+	assert.NoError(t, err)
 
 	// stop the node
 	go func() {

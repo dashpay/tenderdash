@@ -7,6 +7,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
@@ -35,6 +36,8 @@ type Switch interface {
 	DialPeersAsync(addrs []string) error
 	IsDialingOrExistingAddress(*p2p.NetAddress) bool
 	StopPeerGracefully(p2p.Peer)
+
+	AddrBook() p2p.AddrBook
 }
 
 // ValidatorConnExecutor retrieves validator update events and establishes new validator connections
@@ -58,6 +61,9 @@ type ValidatorConnExecutor struct {
 	connectedValidators validatorMap
 	// quorumHash contains current quorum hash
 	quorumHash tmbytes.HexBytes
+
+	// nodeIDResolvers can be used to determine a node ID for a validator
+	nodeIDResolvers []dashtypes.NodeIDResolver
 
 	// mux is a mutex to ensure only one goroutine is processing connections
 	mux sync.Mutex
@@ -83,6 +89,10 @@ func NewValidatorConnExecutor(
 		validatorSetMembers: validatorMap{},
 		connectedValidators: validatorMap{},
 		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),
+		nodeIDResolvers: []dashtypes.NodeIDResolver{
+			dashtypes.NewAddrbookNodeIDResolver(sw.AddrBook()),
+			dashtypes.NewTCPNodeIDResolver(),
+		},
 	}
 
 	baseService := service.NewBaseService(logger, validatorConnExecutorName, vc)
@@ -203,6 +213,22 @@ func (vc *ValidatorConnExecutor) me() (validator *types.Validator, ok bool) {
 	return &v, ok
 }
 
+// resolveNodeID adds node ID to the validator address if it's not set
+func (vc *ValidatorConnExecutor) resolveNodeID(va *dashtypes.ValidatorAddress) error {
+	if va.NodeID != "" {
+		return nil
+	}
+	for _, resolver := range vc.nodeIDResolvers {
+		nid, err := resolver.Resolve(*va)
+		if err == nil && nid != "" {
+			va.NodeID = nid
+			return nil
+		}
+		vc.Logger.Debug("node id not found, trying another method", "url", va.String(), "error", err)
+	}
+	return dashtypes.ErrNoNodeID
+}
+
 // selectValidators selects `count` validators from current ValidatorSet.
 // It uses algorithm described in DIP-6.
 // Returns map indexed by validator address.
@@ -220,10 +246,10 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 	}
 	// fetch node IDs
 	for _, validator := range selectedValidators {
-		_, err := validator.NodeAddress.NodeID()
+		err := vc.resolveNodeID(&validator.NodeAddress)
 		if err != nil {
 			vc.Logger.Debug("cannot determine node id for validator", "url", validator.String(), "error", err)
-			return nil, err
+			// no return, as it's not critical
 		}
 	}
 
@@ -239,10 +265,12 @@ func (vc *ValidatorConnExecutor) disconnectValidator(validator types.Validator) 
 		return err
 	}
 
-	id, err := validator.NodeAddress.NodeID()
+	err = vc.resolveNodeID(&validator.NodeAddress)
 	if err != nil {
 		return err
 	}
+	id := validator.NodeAddress.NodeID
+
 	peer := vc.p2pSwitch.Peers().Get(id)
 	if peer == nil {
 		return fmt.Errorf("cannot stop peer %s: not found", id)
@@ -296,9 +324,11 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 	if err := vc.disconnectValidators(newValidators); err != nil {
 		return fmt.Errorf("cannot disconnect unused validators: %w", err)
 	}
+	vc.Logger.Debug("filtering validators", "validators", newValidators)
 	// ensure that we can connect to all validators
 	newValidators = vc.filterAddresses(newValidators)
 	// Connect to new validators
+	vc.Logger.Debug("dialing validators", "validators", newValidators)
 	if err := vc.dial(newValidators); err != nil {
 		return fmt.Errorf("cannot dial validators: %w", err)
 	}
@@ -311,7 +341,7 @@ func (vc *ValidatorConnExecutor) filterAddresses(validators validatorMap) valida
 	filtered := make(validatorMap, len(validators))
 	for id, validator := range validators {
 		if vc.connectedValidators.contains(validator) {
-			vc.Logger.P2PDebug("validator already connected", "id", id)
+			vc.Logger.Debug("validator already connected", "id", id)
 			continue
 		}
 		address, err := validator.NodeAddress.NetAddress()
@@ -320,7 +350,7 @@ func (vc *ValidatorConnExecutor) filterAddresses(validators validatorMap) valida
 			continue
 		}
 		if vc.p2pSwitch.IsDialingOrExistingAddress(address) {
-			vc.Logger.P2PDebug("already dialing this validator", "id", id, "address", address.String())
+			vc.Logger.Debug("already dialing this validator", "id", id, "address", address.String())
 			continue
 		}
 		filtered[id] = validator
