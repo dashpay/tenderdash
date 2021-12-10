@@ -94,20 +94,3 @@ func (l *tmLogger) Error(msg string, keyvals ...interface{}) {
 func (l *tmLogger) With(keyvals ...interface{}) Logger {
 	return &tmLogger{kitlog.With(l.srcLogger, keyvals...)}
 }
-
-// WithObject adds object metadata to Logger info
-func (l *tmLogger) WithObject(keyPrefix string, object LoggableObject) Logger {
-	return l.With(prefixKeys(keyPrefix, object.LoggerKeyVals()...)...)
-}
-
-func prefixKeys(keyPrefix string, keyvals ...interface{}) []interface{} {
-	if keyPrefix != "" && keyPrefix[len(keyPrefix)-1] != '_' {
-		keyPrefix += "_"
-	}
-	for i := 0; i < len(keyvals); i += 2 {
-		if keyS, ok := keyvals[i].(string); ok {
-			keyvals[i] = keyPrefix + keyS
-		}
-	}
-	return keyvals
-}

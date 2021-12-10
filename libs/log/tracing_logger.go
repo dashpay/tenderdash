@@ -48,11 +48,6 @@ func (l *tracingLogger) With(keyvals ...interface{}) Logger {
 	return &tracingLogger{next: l.next.With(formatErrors(keyvals)...)}
 }
 
-// WithObject adds object metadata to Logger
-func (l *tracingLogger) WithObject(keyPrefix string, object LoggableObject) Logger {
-	return l.With(prefixKeys(keyPrefix, object.LoggerKeyVals()...)...)
-}
-
 func formatErrors(keyvals []interface{}) []interface{} {
 	newKeyvals := make([]interface{}, len(keyvals))
 	copy(newKeyvals, keyvals)

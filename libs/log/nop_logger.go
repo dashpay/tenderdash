@@ -16,8 +16,3 @@ func (nopLogger) Error(string, ...interface{})    {}
 func (l *nopLogger) With(...interface{}) Logger {
 	return l
 }
-
-// WithObject adds object metadata to Logger
-func (l *nopLogger) WithObject(string, LoggableObject) Logger {
-	return l
-}

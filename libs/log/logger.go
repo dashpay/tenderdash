@@ -14,16 +14,6 @@ type Logger interface {
 	Error(msg string, keyvals ...interface{})
 
 	With(keyvals ...interface{}) Logger
-	WithObject(keyPrefix string, object LoggableObject) Logger
-}
-
-// LoggableObject represents an object that is aware of
-// logging mechanisms and can add its own key/value pairs
-// to the logs to identify it
-type LoggableObject interface {
-	// LoggerKeyVals returns key/value pairs that will be
-	// added to logs using Logger.With(). Keys should be string
-	LoggerKeyVals() []interface{}
 }
 
 // NewSyncWriter returns a new writer that is safe for concurrent use by

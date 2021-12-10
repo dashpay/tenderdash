@@ -2,7 +2,6 @@ package types
 
 import (
 	"fmt"
-
 	"time"
 
 	"github.com/tendermint/tendermint/libs/bits"
@@ -68,12 +67,4 @@ func (prs PeerRoundState) StringIndented(indent string) string {
 		indent, prs.LastPrecommits, prs.LastCommitRound,
 		indent, prs.CatchupCommit, prs.CatchupCommitRound,
 		indent)
-}
-
-// LoggerKeyVals implements LoggableObject
-func (prs PeerRoundState) LoggerKeyVals() []interface{} {
-	return []interface{}{
-		"height", prs.Height,
-		"round", prs.Round,
-	}
 }
