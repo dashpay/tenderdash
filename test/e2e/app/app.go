@@ -85,7 +85,7 @@ func (app *Application) InitChain(req abci.RequestInitChain) abci.ResponseInitCh
 		panic(err)
 	}
 	resp.ValidatorSetUpdate = *validatorSetUpdate
-
+	resp.InitialCoreHeight = app.cfg.InitAppInitialCoreHeight
 	if resp.NextCoreChainLockUpdate, err = app.chainLockUpdate(0); err != nil {
 		panic(err)
 	}
