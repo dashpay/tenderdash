@@ -21,7 +21,7 @@ type Config struct {
 	ValidatorUpdates         map[string]map[string]string `toml:"validator_update"`
 	ThesholdPublicKeyUpdate  map[string]string            `toml:"threshold_public_key_update"`
 	QuorumHashUpdate         map[string]string            `toml:"quorum_hash_update"`
-	InitAppInitialCoreHeight uint32                       `toml:"initapp_core_height"`
+	InitAppInitialCoreHeight uint32                       `toml:"init_app_core_chain_locked_height"`
 	ChainLockUpdates         map[string]string            `toml:"chainlock_updates"`
 	PrivValServerType        string                       `toml:"privval_server_type"`
 	PrivValServer            string                       `toml:"privval_server"`

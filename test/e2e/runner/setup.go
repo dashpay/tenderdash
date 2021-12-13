@@ -459,7 +459,7 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 	}
 
 	if node.Testnet.InitAppCoreHeight > 0 {
-		cfg["initapp_core_height"] = node.Testnet.InitAppCoreHeight
+		cfg["init_app_core_chain_locked_height"] = node.Testnet.InitAppCoreHeight
 	}
 	if len(node.Testnet.ChainLockUpdates) > 0 {
 		chainLockUpdates := map[string]string{}
