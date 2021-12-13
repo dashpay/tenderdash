@@ -294,14 +294,15 @@ func (h *Handshaker) Handshake(proxyApp proxy.AppConns) (uint64, error) {
 		h.initialState.Version.Consensus.App = res.AppVersion
 	}
 
+	// Set the initial state last core chain locked block height
+	// It can be overwritten in ReplayBlocks(), based on response from InitChain
+	h.initialState.LastCoreChainLockedBlockHeight = coreChainLockedHeight
+
 	// Replay blocks up to the latest in the blockstore.
 	_, err = h.ReplayBlocks(h.initialState, appHash, blockHeight, proxyApp)
 	if err != nil {
 		return 0, fmt.Errorf("error on replay: %v", err)
 	}
-
-	// Set the initial state last core chain locked block height
-	h.initialState.LastCoreChainLockedBlockHeight = coreChainLockedHeight
 
 	h.logger.Info("Completed ABCI Handshake - Tendermint and App are synced",
 		"appHeight", blockHeight, "appHash", appHash)
@@ -434,8 +435,10 @@ func (h *Handshaker) ReplayBlocks(
 				)
 				state.Version.Consensus.App = state.ConsensusParams.Version.AppVersion
 			}
+			// If we received non-zero initial core height, we set it here
 			if res.InitialCoreHeight > 0 && res.InitialCoreHeight != req.InitialCoreHeight {
 				state.LastCoreChainLockedBlockHeight = res.InitialCoreHeight
+				h.initialState.LastCoreChainLockedBlockHeight = res.InitialCoreHeight
 			}
 			// We update the last results hash with the empty hash, to conform with RFC-6962.
 			state.LastResultsHash = merkle.HashFromByteSlices(nil)
