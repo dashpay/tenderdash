@@ -88,9 +88,3 @@ func (mock *mockProxyApp) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlo
 func (mock *mockProxyApp) Commit() abci.ResponseCommit {
 	return abci.ResponseCommit{Data: mock.appHash}
 }
-
-func (mock *mockProxyApp) InitChain(req abci.RequestInitChain) abci.ResponseInitChain {
-	return abci.ResponseInitChain{
-		InitialCoreHeight: 1234,
-	}
-}
