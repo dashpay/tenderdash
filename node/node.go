@@ -1044,11 +1044,16 @@ func NewNode(config *cfg.Config,
 	}
 
 	// Initialize ValidatorConnExecutor
-	validatorConnExecutor := dashquorum.NewValidatorConnExecutor(
+	validatorConnExecutor, err := dashquorum.NewValidatorConnExecutor(
 		nodeInfo.ID(),
 		eventBus,
 		sw,
-		logger.With("module", "ValidatorConnExecutor"))
+		logger.With("module", "ValidatorConnExecutor"),
+		dashquorum.WithValidatorsSet(state.Validators),
+	)
+	if err != nil {
+		return nil, err
+	}
 
 	node := &Node{
 		config:        config,

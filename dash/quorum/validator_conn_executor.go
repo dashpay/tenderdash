@@ -2,6 +2,7 @@ package quorum
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -24,6 +25,10 @@ const (
 	defaultEventBusCapacity = 10
 )
 
+var (
+	errValidatorsForUpdateInvalid = errors.New("no validators to establish a connection")
+)
+
 // Switch defines p2p.Switch methods that are used by this Executor.
 // Useful to create a mock  of the p2p.Switch.
 type Switch interface {
@@ -36,6 +41,8 @@ type Switch interface {
 	IsDialingOrExistingAddress(*p2p.NetAddress) bool
 	StopPeerGracefully(p2p.Peer)
 }
+
+type optionFunc func(vc *ValidatorConnExecutor) error
 
 // ValidatorConnExecutor retrieves validator update events and establishes new validator connections
 // within the ValidatorSet.
@@ -74,7 +81,9 @@ func NewValidatorConnExecutor(
 	nodeID p2p.ID,
 	eventBus *types.EventBus,
 	sw Switch,
-	logger log.Logger) *ValidatorConnExecutor {
+	logger log.Logger,
+	opts ...optionFunc,
+) (*ValidatorConnExecutor, error) {
 	vc := &ValidatorConnExecutor{
 		nodeID:              nodeID,
 		eventBus:            eventBus,
@@ -88,7 +97,28 @@ func NewValidatorConnExecutor(
 	baseService := service.NewBaseService(logger, validatorConnExecutorName, vc)
 	vc.BaseService = *baseService
 
-	return vc
+	for _, opt := range opts {
+		err := opt(vc)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return vc, nil
+}
+
+// WithValidatorsSet sets the validators and quorum-hash as default values
+func WithValidatorsSet(valSet *types.ValidatorSet) func(vc *ValidatorConnExecutor) error {
+	return func(vc *ValidatorConnExecutor) error {
+		if len(valSet.Validators) == 0 {
+			return errValidatorsForUpdateInvalid
+		}
+		err := vc.setQuorumHash(valSet.QuorumHash)
+		if err != nil {
+			return err
+		}
+		vc.validatorSetMembers = newValidatorMap(valSet.Validators)
+		return nil
+	}
 }
 
 // OnStart implements Service to subscribe to Validator Update events
@@ -96,7 +126,11 @@ func (vc *ValidatorConnExecutor) OnStart() error {
 	if err := vc.subscribe(); err != nil {
 		return err
 	}
-
+	// establish connection with validators retrieves from genesis or init-chain
+	err := vc.updateConnections()
+	if err != nil {
+		return err
+	}
 	go func() {
 		var err error
 		for err == nil {
