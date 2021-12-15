@@ -2,7 +2,6 @@ package quorum
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"time"
 
@@ -23,10 +22,6 @@ const (
 	defaultTimeout = 1 * time.Second
 	// defaultEventBusCapacity determines how many events can wait in the event bus for processing. 10 looks very safe.
 	defaultEventBusCapacity = 10
-)
-
-var (
-	errValidatorsForUpdateInvalid = errors.New("no validators to establish a connection")
 )
 
 // Switch defines p2p.Switch methods that are used by this Executor.
@@ -108,7 +103,7 @@ func NewValidatorConnExecutor(
 func WithValidatorsSet(valSet *types.ValidatorSet) func(vc *ValidatorConnExecutor) error {
 	return func(vc *ValidatorConnExecutor) error {
 		if len(valSet.Validators) == 0 {
-			return errValidatorsForUpdateInvalid
+			return nil
 		}
 		err := vc.setQuorumHash(valSet.QuorumHash)
 		if err != nil {
@@ -259,8 +254,6 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 func (vc *ValidatorConnExecutor) disconnectValidator(validator types.Validator) error {
 	vc.Logger.Debug("disconnect Validator", "validator", validator)
 	address := validator.NodeAddress.String()
-
-	fmt.Printf("[DEBUG] address=%v\n", address)
 
 	err := vc.p2pSwitch.RemovePersistentPeer(address)
 	if err != nil {
