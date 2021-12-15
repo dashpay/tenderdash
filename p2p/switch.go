@@ -582,6 +582,9 @@ func (sw *Switch) AddPersistentPeers(addrs []string) error {
 // It ignores ErrNetAddressLookup. However, if there are other errors, first encounter is
 // returned.
 func (sw *Switch) RemovePersistentPeer(addr string) error {
+	if len(sw.persistentPeersAddrs) == 0 {
+		return nil
+	}
 	sw.Logger.Info("Removing persistent peer", "addr", addr)
 	toDelete, err := NewNetAddressString(addr)
 	if err != nil {
