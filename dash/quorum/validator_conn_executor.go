@@ -81,7 +81,6 @@ func NewValidatorConnExecutor(
 	nodeID p2p.ID,
 	eventBus *types.EventBus,
 	sw Switch,
-	logger log.Logger,
 	opts ...optionFunc,
 ) (*ValidatorConnExecutor, error) {
 	vc := &ValidatorConnExecutor{
@@ -93,8 +92,7 @@ func NewValidatorConnExecutor(
 		connectedValidators: validatorMap{},
 		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),
 	}
-
-	baseService := service.NewBaseService(logger, validatorConnExecutorName, vc)
+	baseService := service.NewBaseService(log.NewNopLogger(), validatorConnExecutorName, vc)
 	vc.BaseService = *baseService
 
 	for _, opt := range opts {
@@ -117,6 +115,14 @@ func WithValidatorsSet(valSet *types.ValidatorSet) func(vc *ValidatorConnExecuto
 			return err
 		}
 		vc.validatorSetMembers = newValidatorMap(valSet.Validators)
+		return nil
+	}
+}
+
+// WithLogger sets a logger
+func WithLogger(logger log.Logger) func(vc *ValidatorConnExecutor) error {
+	return func(vc *ValidatorConnExecutor) error {
+		vc.Logger = logger.With("module", "ValidatorConnExecutor")
 		return nil
 	}
 }
@@ -253,6 +259,8 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 func (vc *ValidatorConnExecutor) disconnectValidator(validator types.Validator) error {
 	vc.Logger.Debug("disconnect Validator", "validator", validator)
 	address := validator.NodeAddress.String()
+
+	fmt.Printf("[DEBUG] address=%v\n", address)
 
 	err := vc.p2pSwitch.RemovePersistentPeer(address)
 	if err != nil {

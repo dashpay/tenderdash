@@ -1048,7 +1048,7 @@ func NewNode(config *cfg.Config,
 		nodeInfo.ID(),
 		eventBus,
 		sw,
-		logger.With("module", "ValidatorConnExecutor"),
+		dashquorum.WithLogger(logger),
 		dashquorum.WithValidatorsSet(state.Validators),
 	)
 	if err != nil {
