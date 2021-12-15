@@ -12,8 +12,7 @@ import (
 )
 
 var (
-	errThresholdInvalid            = errors.New("threshold must be greater than 0")
-	errProTxHashListMustNotBeEmpty = errors.New("there must be at least one pro_tx_hash")
+	errThresholdInvalid = errors.New("threshold must be greater than 0")
 )
 
 type optionFunc func(c *llmqConfig)
@@ -114,18 +113,15 @@ type llmqConfig struct {
 
 func (c *llmqConfig) validate() error {
 	n := len(c.proTxHashes)
-	if n < c.threshold {
-		return fmt.Errorf("n %d must be bigger than threshold %d", n, c.threshold)
-	}
 	if c.threshold <= 0 {
 		return errThresholdInvalid
 	}
-	if len(c.proTxHashes) == 0 {
-		return errProTxHashListMustNotBeEmpty
+	if n < c.threshold {
+		return fmt.Errorf("n %d must be bigger than threshold %d", n, c.threshold)
 	}
 	for _, proTxHash := range c.proTxHashes {
 		if len(proTxHash.Bytes()) != crypto.ProTxHashSize {
-			return fmt.Errorf("blsId incorrect size in public key recoveryTestCase, expected 32 bytes (got %d)", len(proTxHash))
+			return fmt.Errorf("blsId incorrect size in public key recovery, expected 32 bytes (got %d)", len(proTxHash))
 		}
 	}
 	return nil

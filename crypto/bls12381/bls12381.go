@@ -79,7 +79,7 @@ func (privKey PrivKey) Sign(msg []byte) ([]byte, error) {
 // incorrect signature.
 func (privKey PrivKey) SignDigest(msg []byte) ([]byte, error) {
 	if len(privKey.Bytes()) != PrivateKeySize {
-		return nil, errInvalidPrivateKeySize(len(privKey.Bytes()))
+		panic(errInvalidPrivateKeySize(len(privKey.Bytes())))
 	}
 	// set modOrder flag to true so that too big random bytes will wrap around and be a valid key
 	blsPrivateKey, err := bls.PrivateKeyFromBytes(privKey, true)
@@ -247,7 +247,7 @@ func RecoverThresholdPublicKeyFromPublicKeys(publicKeys []crypto.PubKey, blsIds 
 
 	for i, blsID := range blsIds {
 		if len(blsID) != tmhash.Size {
-			return nil, fmt.Errorf("blsID incorrect size in public key recoveryTestCase, expected 32 bytes (got %d)", len(blsID))
+			return nil, fmt.Errorf("blsID incorrect size in public key recovery, expected 32 bytes (got %d)", len(blsID))
 		}
 		var hash bls.Hash
 		copy(hash[:], ReverseBytes(blsID))
@@ -283,7 +283,7 @@ func RecoverThresholdSignatureFromShares(sigSharesData [][]byte, blsIds [][]byte
 
 	for i, blsID := range blsIds {
 		if len(blsID) != tmhash.Size {
-			return nil, fmt.Errorf("blsID incorrect size in signature recoveryTestCase, expected 32 bytes (got %d)", len(blsID))
+			return nil, fmt.Errorf("blsID incorrect size in signature recovery, expected 32 bytes (got %d)", len(blsID))
 		}
 		var hash bls.Hash
 		copy(hash[:], ReverseBytes(blsID))

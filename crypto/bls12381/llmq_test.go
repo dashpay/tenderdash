@@ -14,41 +14,6 @@ import (
 
 const defaultSeedSource = 999
 
-func TestReverse(t *testing.T) {
-	testCases := []struct {
-		data []byte
-		want []byte
-	}{
-		{
-			data: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9},
-			want: []byte{9, 8, 7, 6, 5, 4, 3, 2, 1},
-		},
-		{
-			data: []byte{1, 2},
-			want: []byte{2, 1},
-		},
-		{
-			data: []byte{1, 2, 3},
-			want: []byte{3, 2, 1},
-		},
-		{
-			data: []byte{1},
-			want: []byte{1},
-		},
-		{
-			data: []byte{},
-			want: []byte{},
-		},
-		{
-			data: []byte{1, 2, 3, 4},
-			want: []byte{4, 3, 2, 1},
-		},
-	}
-	for _, tc := range testCases {
-		require.Equal(t, tc.want, ReverseBytes(tc.data))
-	}
-}
-
 func TestLLMQFailed(t *testing.T) {
 	signHash := mustHashFromString("b6d8ee31bbd375dfd55d5fb4b02cfccc68709e64f4c5ffcd3895ceb46540311d")
 	llmqData := llmqTestDataGetter(4, 4, signHash)()

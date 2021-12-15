@@ -1,5 +1,5 @@
 // nolint:lll
-package bls12381_test
+package bls12381
 
 import (
 	"encoding/base64"
@@ -10,12 +10,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/libs/rand"
 )
 
 func TestSignAndValidateBLS12381(t *testing.T) {
-	privKey := bls12381.GenPrivKey()
+	privKey := GenPrivKey()
 	pubKey := privKey.PubKey()
 
 	msg := crypto.CRandBytes(128)
@@ -46,7 +45,7 @@ func TestBLSAddress(t *testing.T) {
 			assert.NoError(t, err)
 			addrBytes, err := hex.DecodeString(tc.addrHex)
 			assert.NoError(t, err)
-			privKey := bls12381.PrivKey(skBytes)
+			privKey := PrivKey(skBytes)
 			pubKey := privKey.PubKey()
 			assert.EqualValues(t, pkBytes, pubKey)
 			assert.EqualValues(t, addrBytes, pubKey.Address())
@@ -150,18 +149,18 @@ func TestRecoverThresholdPublicKeyFromPublicKeys(t *testing.T) {
 			for i, s := range tc.skShares {
 				skBytes, err := base64.StdEncoding.DecodeString(s)
 				require.NoError(t, err)
-				privateKeys[i] = bls12381.PrivKey(skBytes)
+				privateKeys[i] = PrivKey(skBytes)
 			}
 			publicKeys := make([]crypto.PubKey, tc.n)
 			for i, s := range tc.pkShares {
 				pkBytes, err := base64.StdEncoding.DecodeString(s)
 				require.NoError(t, err)
-				pk := bls12381.PubKey(pkBytes)
+				pk := PubKey(pkBytes)
 				publicKeys[i] = pk
 				sk := privateKeys[i]
 				require.Equal(t, sk.PubKey().Bytes(), pk.Bytes())
 			}
-			thresholdPublicKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(publicKeys, proTxHashes)
+			thresholdPublicKey, err := RecoverThresholdPublicKeyFromPublicKeys(publicKeys, proTxHashes)
 			require.NoError(t, err)
 			encodedThresholdPublicKey := base64.StdEncoding.EncodeToString(thresholdPublicKey.Bytes())
 			require.Equal(t, tc.pkThreshold, encodedThresholdPublicKey)
@@ -183,7 +182,7 @@ func TestPublicKeyGeneration(t *testing.T) {
 		t.Run(fmt.Sprintf("test-case #%d", i+1), func(t *testing.T) {
 			skBytes, err := base64.StdEncoding.DecodeString(tc.sk)
 			require.NoError(t, err)
-			privateKey := bls12381.PrivKey(skBytes)
+			privateKey := PrivKey(skBytes)
 			pkBytes := base64.StdEncoding.EncodeToString(privateKey.PubKey().Bytes())
 			require.Equal(t, tc.wantPk, pkBytes)
 		})
@@ -209,7 +208,7 @@ func Test100Members(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
-			privKeys, proTxHashes, thresholdPublicKey := bls12381.CreatePrivLLMQData(tc.n, tc.m)
+			privKeys, proTxHashes, thresholdPublicKey := CreatePrivLLMQData(tc.n, tc.m)
 			proTxHashesBytes := make([][]byte, len(proTxHashes))
 			for i, proTxHash := range proTxHashes {
 				proTxHashesBytes[i] = proTxHash
@@ -227,7 +226,7 @@ func Test100Members(t *testing.T) {
 			}
 			check := tc.n - tc.omit
 			require.True(t, check > 66)
-			sig, err := bls12381.RecoverThresholdSignatureFromShares(
+			sig, err := RecoverThresholdSignatureFromShares(
 				signatures[offset:check+offset], proTxHashesBytes[offset:check+offset],
 			)
 			require.NoError(t, err)
@@ -803,15 +802,50 @@ func TestRecoverThresholdSignatureFromSharesCaseStudy(t *testing.T) {
 				pubKeyShares[i], err = hex.DecodeString(share)
 				require.NoError(t, err, "should be able to decode publicKey")
 			}
-			thresholdSignature, err := bls12381.RecoverThresholdSignatureFromShares(sigShares, proTxHashes)
+			thresholdSignature, err := RecoverThresholdSignatureFromShares(sigShares, proTxHashes)
 			require.NoError(t, err, "should be able to recover threshold signature")
 			thresholdPublicKeyBytes, err := hex.DecodeString(tc.thresholdPubKey)
 			require.NoError(t, err, "should be able to decode thresholdPublicKeyBytes")
-			thresholdPublicKey := bls12381.PubKey(thresholdPublicKeyBytes)
+			thresholdPublicKey := PubKey(thresholdPublicKeyBytes)
 			msg, err := hex.DecodeString(tc.msg)
 			require.NoError(t, err, "should be able to decode msg")
 			result := thresholdPublicKey.VerifySignatureDigest(msg, thresholdSignature)
 			require.True(t, result, "signature should be verified")
 		})
+	}
+}
+
+func TestReverse(t *testing.T) {
+	testCases := []struct {
+		data []byte
+		want []byte
+	}{
+		{
+			data: []byte{1, 2, 3, 4, 5, 6, 7, 8, 9},
+			want: []byte{9, 8, 7, 6, 5, 4, 3, 2, 1},
+		},
+		{
+			data: []byte{1, 2},
+			want: []byte{2, 1},
+		},
+		{
+			data: []byte{1, 2, 3},
+			want: []byte{3, 2, 1},
+		},
+		{
+			data: []byte{1},
+			want: []byte{1},
+		},
+		{
+			data: []byte{},
+			want: []byte{},
+		},
+		{
+			data: []byte{1, 2, 3, 4},
+			want: []byte{4, 3, 2, 1},
+		},
+	}
+	for _, tc := range testCases {
+		require.Equal(t, tc.want, ReverseBytes(tc.data))
 	}
 }

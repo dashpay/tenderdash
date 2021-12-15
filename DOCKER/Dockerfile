@@ -2,7 +2,7 @@ FROM golang:1.15-alpine AS builder
 
 RUN apk update && \
     apk upgrade && \
-    apk add bash git gmp-dev sudo cmake build-base
+    apk add bash git gmp-dev sudo cmake build-base python3-dev
 
 COPY . /go/src/github.com/dashevo/tenderdash
 
