@@ -58,11 +58,10 @@ func NewApplication(cfg *Config) (*Application, error) {
 // Info implements ABCI.
 func (app *Application) Info(req abci.RequestInfo) abci.ResponseInfo {
 	return abci.ResponseInfo{
-		Version:                   version.ABCIVersion,
-		AppVersion:                1,
-		LastBlockHeight:           int64(app.state.Height),
-		LastBlockAppHash:          app.state.Hash,
-		LastCoreChainLockedHeight: app.state.CoreHeight,
+		Version:          version.ABCIVersion,
+		AppVersion:       1,
+		LastBlockHeight:  int64(app.state.Height),
+		LastBlockAppHash: app.state.Hash,
 	}
 }
 

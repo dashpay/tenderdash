@@ -167,9 +167,11 @@ message ResponseInfo {
   string version     = 2;
   uint64 app_version = 3;
 
-  int64  last_block_height             = 4;
-  bytes  last_block_app_hash           = 5;
-  uint32 last_core_chain_locked_height = 100;
+  int64 last_block_height   = 4;
+  bytes last_block_app_hash = 5;
+ 
+  reserved "last_core_chain_locked_height";
+  reserved 100;
 }
 
 // nondeterministic

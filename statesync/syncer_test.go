@@ -198,7 +198,6 @@ func TestSyncer_SyncAny(t *testing.T) {
 	connQuery.On("InfoSync", proxy.RequestInfo).Return(&abci.ResponseInfo{
 		AppVersion:                9,
 		LastBlockHeight:           1,
-		LastCoreChainLockedHeight: 1,
 		LastBlockAppHash:          []byte("app_hash"),
 	}, nil)
 
@@ -683,7 +682,6 @@ func TestSyncer_verifyApp(t *testing.T) {
 	}{
 		"verified": {&abci.ResponseInfo{
 			LastBlockHeight:           3,
-			LastCoreChainLockedHeight: 10,
 			LastBlockAppHash:          []byte("app_hash"),
 			AppVersion:                9,
 		}, nil, nil},

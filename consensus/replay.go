@@ -279,11 +279,9 @@ func (h *Handshaker) Handshake(proxyApp proxy.AppConns) (uint64, error) {
 		return 0, fmt.Errorf("got a negative last block height (%d) from the app", blockHeight)
 	}
 	appHash := res.LastBlockAppHash
-	coreChainLockedHeight := res.LastCoreChainLockedHeight
 
 	h.logger.Info("ABCI Handshake App Info",
 		"height", blockHeight,
-		"core height", coreChainLockedHeight,
 		"hash", appHash,
 		"software-version", res.Version,
 		"protocol-version", res.AppVersion,
@@ -298,11 +296,6 @@ func (h *Handshaker) Handshake(proxyApp proxy.AppConns) (uint64, error) {
 	_, err = h.ReplayBlocks(h.initialState, appHash, blockHeight, proxyApp)
 	if err != nil {
 		return 0, fmt.Errorf("error on replay: %v", err)
-	}
-
-	// Set the initial state last core chain locked block height (if not set during replay)
-	if h.initialState.LastCoreChainLockedBlockHeight == 0 {
-		h.initialState.LastCoreChainLockedBlockHeight = coreChainLockedHeight
 	}
 
 	h.logger.Info("Completed ABCI Handshake - Tendermint and App are synced",
