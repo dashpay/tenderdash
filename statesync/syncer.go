@@ -512,7 +512,7 @@ func (s *syncer) verifyApp(snapshot *snapshot) (uint64, error) {
 			"expected", snapshot.Height, "actual", resp.LastBlockHeight)
 		return 0, errVerifyFailed
 	}
-	
+
 	s.logger.Info(
 		"Verified ABCI app",
 		"height",
