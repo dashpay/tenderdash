@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"crypto/subtle"
 	"encoding/hex"
-	"errors"
 	"fmt"
 	"io"
 
@@ -147,7 +146,7 @@ func GenPrivKeyFromSecret(secret []byte) PrivKey {
 
 var _ crypto.PubKey = PubKey{}
 
-// PubKeyEd25519 implements crypto.PubKey for the Ed25519 signature scheme.
+// PubKey implements crypto.PubKey for the Ed25519 signature scheme.
 type PubKey []byte
 
 // Address is the SHA256-20 of the raw pubkey bytes.
@@ -161,14 +160,6 @@ func (pubKey PubKey) Address() crypto.Address {
 // Bytes returns the PubKey byte format.
 func (pubKey PubKey) Bytes() []byte {
 	return []byte(pubKey)
-}
-
-func (pubKey PubKey) AggregateSignatures(sigSharesData [][]byte, messages [][]byte) ([]byte, error) {
-	return nil, errors.New("should not aggregate an edwards signature")
-}
-
-func (pubKey PubKey) VerifyAggregateSignature(messages [][]byte, sig []byte) bool {
-	return false
 }
 
 func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {

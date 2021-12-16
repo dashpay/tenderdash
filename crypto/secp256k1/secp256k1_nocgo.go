@@ -4,7 +4,6 @@
 package secp256k1
 
 import (
-	"errors"
 	"math/big"
 
 	secp256k1 "github.com/btcsuite/btcd/btcec"
@@ -44,14 +43,6 @@ func (privKey PrivKey) SignDigest(msg []byte) ([]byte, error) {
 
 	sigBytes := serializeSig(sig)
 	return sigBytes, nil
-}
-
-func (pubKey PubKey) AggregateSignatures(sigSharesData [][]byte, messages [][]byte) ([]byte, error) {
-	return nil, errors.New("should not aggregate an edwards signature")
-}
-
-func (pubKey PubKey) VerifyAggregateSignature(messages [][]byte, sig []byte) bool {
-	return false
 }
 
 func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {

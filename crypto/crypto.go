@@ -84,8 +84,6 @@ type PubKey interface {
 	Bytes() []byte
 	VerifySignature(msg []byte, sig []byte) bool
 	VerifySignatureDigest(hash []byte, sig []byte) bool
-	AggregateSignatures(sigSharesData [][]byte, messages [][]byte) ([]byte, error)
-	VerifyAggregateSignature(msgs [][]byte, sig []byte) bool
 	Equals(PubKey) bool
 	Type() string
 	TypeValue() KeyType

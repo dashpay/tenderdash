@@ -317,12 +317,6 @@ func (pubKey PubKey) Bytes() []byte {
 	return []byte(pubKey)
 }
 
-func (pubKey PubKey) AggregateSignatures(_ [][]byte, _ [][]byte) ([]byte, error) {
-	// to aggregate signatures use one of these schemes: BasicSchemeMPL, AugSchemeMPL, PopSchemeMPL
-	// for example: aggSig := bls.NewAugSchemeMPL().AggregateSigs(sigs)
-	panic("not implemented")
-}
-
 func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
 	// make sure we use the same algorithm to sign
 	if len(sig) == 0 {
@@ -379,12 +373,6 @@ func (pubKey PubKey) VerifySignature(msg []byte, sig []byte) bool {
 	//	  debug.PrintStack()
 	//  }
 	return verified
-}
-
-func (pubKey PubKey) VerifyAggregateSignature(_ [][]byte, _ []byte) bool {
-	// to verify aggregated signature use one of these schemes: BasicSchemeMPL, AugSchemeMPL, PopSchemeMPL
-	// for example: isVerified := bls.NewAugSchemeMPL().AggregateVerify(publicKeys, messages, aggSig)
-	panic("not implemented")
 }
 
 func (pubKey PubKey) String() string {
