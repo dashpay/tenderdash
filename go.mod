@@ -39,15 +39,14 @@ require (
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/snikch/goodman v0.0.0-20171125024755-10e37e294daa
 	github.com/spf13/cobra v1.2.1
-	github.com/spf13/viper v1.9.0
+	github.com/spf13/viper v1.10.1
 	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/stretchr/testify v1.7.0
 	github.com/tendermint/tm-db v0.6.4
 	go.etcd.io/bbolt v1.3.6 // indirect
 	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
 	golang.org/x/net v0.0.0-20211208012354-db4efeb81f4b
-	google.golang.org/genproto v0.0.0-20210929214142-896c89f843d2 // indirect
-	google.golang.org/grpc v1.41.0
+	google.golang.org/grpc v1.43.0
 )
 
 replace github.com/tendermint/tendermint => ./
