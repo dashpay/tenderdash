@@ -429,6 +429,7 @@ func (h *Handshaker) ReplayBlocks(
 				)
 				state.Version.Consensus.App = state.ConsensusParams.Version.AppVersion
 			}
+
 			// If we received non-zero initial core height, we set it here
 			if res.InitialCoreHeight > 0 && res.InitialCoreHeight != req.InitialCoreHeight {
 				state.LastCoreChainLockedBlockHeight = res.InitialCoreHeight
