@@ -7,7 +7,7 @@ initial_core_chain_locked_height = 3400
 init_app_core_chain_locked_height = 2308 # should override initial_core_chain_locked_height
 
 [chainlock_updates]
-1002 = 3450
+1000 = 3450
 1004 = 3451
 1009 = 3452
 1020 = 3454
