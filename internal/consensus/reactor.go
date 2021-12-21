@@ -288,7 +288,7 @@ func (r *Reactor) SwitchToConsensus(state sm.State, skipWAL bool) {
 
 	// NOTE: The line below causes broadcastNewRoundStepRoutine() to broadcast a
 	// NewRoundStepMessage.
-	r.state.updateToState(state)
+	r.state.updateToState(state, nil, r.Logger)
 
 	r.mtx.Lock()
 	r.waitSync = false
@@ -368,7 +368,7 @@ func (r *Reactor) broadcastNewValidBlockMessage(rs *cstypes.RoundState) {
 			Round:              rs.Round,
 			BlockPartSetHeader: psHeader.ToProto(),
 			BlockParts:         rs.ProposalBlockParts.BitArray().ToProto(),
-			IsCommit:           rs.Step == cstypes.RoundStepCommit,
+			IsCommit:           rs.Step == cstypes.RoundStepApplyCommit,
 		},
 	}
 }
@@ -673,7 +673,7 @@ func (r *Reactor) gossipVotesForHeight(rs *cstypes.RoundState, prs *cstypes.Peer
 
 	// if there are lastCommits to send...
 	if prs.Step == cstypes.RoundStepNewHeight {
-		if r.pickSendVote(ps, rs.LastCommit) {
+		if r.pickSendVote(ps, rs.LastPrecommits) {
 			logger.Debug("picked rs.LastCommit to send")
 			return true
 		}
@@ -768,7 +768,7 @@ OUTER_LOOP:
 
 		// special catchup logic -- if peer is lagging by height 1, send LastCommit
 		if prs.Height != 0 && rs.Height == prs.Height+1 {
-			if r.pickSendVote(ps, rs.LastCommit) {
+			if r.pickSendVote(ps, rs.LastPrecommits) {
 				logger.Debug("picked rs.LastCommit to send", "height", prs.Height)
 				continue OUTER_LOOP
 			}
@@ -1143,7 +1143,7 @@ func (r *Reactor) handleVoteMessage(envelope p2p.Envelope, msgI Message) error {
 	switch msg := envelope.Message.(type) {
 	case *tmcons.Vote:
 		r.state.mtx.RLock()
-		height, valSize, lastCommitSize := r.state.Height, r.state.Validators.Size(), r.state.LastCommit.Size()
+		height, valSize, lastCommitSize := r.state.Height, r.state.Validators.Size(), r.state.LastPrecommits.Size()
 		r.state.mtx.RUnlock()
 
 		vMsg := msgI.(*VoteMessage)

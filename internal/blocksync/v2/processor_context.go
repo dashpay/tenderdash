@@ -19,12 +19,11 @@ type processorContext interface {
 }
 
 type pContext struct {
-<<<<<<< HEAD:blockchain/v2/processor_context.go
 	store         blockStore
 	nodeProTxHash *crypto.ProTxHash
 	applier       blockApplier
 	state         state.State
-	metrics *consensus.Metrics
+	metrics       *consensus.Metrics
 }
 
 func newProcessorContext(st blockStore, nodeProTxHash *crypto.ProTxHash, ex blockApplier, s state.State, m *consensus.Metrics) *pContext {
