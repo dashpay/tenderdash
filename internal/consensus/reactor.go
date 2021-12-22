@@ -668,6 +668,19 @@ func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 	return false
 }
 
+func (r *Reactor) sendCommit(ps *PeerState, commit *types.Commit) bool {
+	if commit == nil {
+		return false
+	}
+	r.Logger.Debug("sending commit message", "ps", ps, "commit", commit)
+	r.voteCh.Out <- p2p.Envelope{
+		To:      ps.peerID,
+		Message: commit.ToProto(),
+	}
+	ps.SetHasCommit(commit)
+	return true
+}
+
 func (r *Reactor) gossipVotesForHeight(rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState) bool {
 	logger := r.Logger.With("height", prs.Height).With("peer", ps.peerID)
 
@@ -768,7 +781,7 @@ OUTER_LOOP:
 
 		// special catchup logic -- if peer is lagging by height 1, send LastCommit
 		if prs.Height != 0 && rs.Height == prs.Height+1 {
-			if r.pickSendVote(ps, rs.LastPrecommits) {
+			if r.sendCommit(ps, rs.LastCommit) {
 				logger.Debug("picked rs.LastCommit to send", "height", prs.Height)
 				continue OUTER_LOOP
 			}
@@ -780,7 +793,7 @@ OUTER_LOOP:
 			// Load the block commit for prs.Height, which contains precommit
 			// signatures for prs.Height.
 			if commit := r.state.blockStore.LoadBlockCommit(prs.Height); commit != nil {
-				if r.pickSendVote(ps, commit) {
+				if r.sendCommit(ps, commit) {
 					logger.Debug("picked Catchup commit to send", "height", prs.Height)
 					continue OUTER_LOOP
 				}

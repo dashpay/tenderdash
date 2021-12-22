@@ -1,7 +1,6 @@
 package consensus
 
 import (
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -14,11 +13,6 @@ import (
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
-)
-
-var (
-	ErrPeerStateHeightRegression = errors.New("peer state height regression")
-	ErrPeerStateInvalidStartTime = errors.New("peer state invalid startTime")
 )
 
 // peerStateStats holds internal statistics for a peer.
@@ -376,6 +370,47 @@ func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.Sign
 	psVotes := ps.getVoteBitArray(height, round, voteType)
 	if psVotes != nil {
 		psVotes.SetIndex(int(index), true)
+	}
+}
+
+// SetHasCommit sets the given vote as known by the peer
+func (ps *PeerState) SetHasCommit(commit *types.Commit) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	ps.logger.
+		With(
+			"height", commit.Height,
+			"round", commit.Round,
+			"peer_height", ps.PRS.Height,
+			"peer_round", ps.PRS.Round,
+		).
+		Debug("setHasCommit")
+
+	ps.setHasCommit(commit.Height, commit.Round)
+
+	if ps.PRS.Height < commit.Height || (ps.PRS.Height == commit.Height && ps.PRS.Round < commit.Round) {
+		ps.PRS.ProposalBlockPartSetHeader = commit.BlockID.PartSetHeader
+		ps.PRS.ProposalBlockParts = bits.NewBitArray(int(commit.BlockID.PartSetHeader.Total))
+		ps.PRS.ProposalPOLRound = -1
+		ps.PRS.ProposalPOL = nil
+	}
+}
+
+func (ps *PeerState) setHasCommit(height int64, round int32) {
+	logger := ps.logger.With(
+		"height", height,
+		"round", round,
+		"peer_height", ps.PRS.Height,
+		"peer_round", ps.PRS.Round,
+	)
+	logger.Debug("setHasCommit")
+
+	if ps.PRS.Height < height || (ps.PRS.Height == height && ps.PRS.Round <= round) {
+		ps.PRS.Height = height
+		ps.PRS.Round = round
+		ps.PRS.Step = cstypes.RoundStepPropose // shouldn't matter
+		ps.PRS.HasCommit = true
 	}
 }
 
