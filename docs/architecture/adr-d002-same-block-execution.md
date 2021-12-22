@@ -55,16 +55,16 @@ APIs to remove:
 - DeliverTX - replaced by **Process Proposal**
 - EndBlock - replaced by **Finalize Block**
 
-Modified workflow for the ABCI app will look as follows:
+Modified workflow from the perspective of ABCI app will look as follows:
 
 ![Process Proposal flow](img/adr-d0002-limited-abci-plus-plus.png "Proposal flow")
 
 1. Proposer node sends a **Prepare Proposal** request to the **ABCI App**. **ABCI App** saves received transaction in a non-committed state and responds with the new `AppHash`.
-1a. Proposer node generates new proposal and distributes it to other Validators in the active Validator Set.
-2. Non-proposer validator nodes send a **Process Proposal** request to the **ABCI App**. **ABCI App** saves received transaction in a non-committed state and responds with accept or reject message.
-2a. Active Validator nodes sign and distribute votes.
-2b. Once majority of votes has been reached, block is committed.
-3. All nodes send a **Finalize Block** to their **ABCI App**. **ABCI App** commits received transactions.
+2. Proposer node signs the proposal and distributes it to other Validators in the active Validator Set.
+3. Non-proposer validator nodes send a **Process Proposal** request to the **ABCI App**. 
+4. **ABCI App** saves received transaction in a non-committed state and responds with accept or reject message.
+5. Active Validator nodes sign and distribute votes. Once majority of votes has been reached, block is committed.
+6. All nodes send a **Finalize Block** to their **ABCI App**. **ABCI App** commits received transactions.
 
 The following alternative flows shall be considered:
 
@@ -87,6 +87,17 @@ API changes include:
 - EndBlock shall return AppHash (current `data` field from `Commit` response)
 
 All nodes will verify AppHash returned by EndBlock before signing a vote.
+
+Modified workflow from the perspective of the ABCI app shall look as follows:
+
+![Process Proposal flow](img/adr-d0002-move-beginblock.png "Proposal flow")
+
+1. On the Proposer, **BeginBlock**, **DeliverTX** and **EndBlock** calls are executed.
+2. In response to **EndBlock**, ABCI App returns the `AppHash`, which is included in the block to sign.
+3. Proposer node signs the proposal and distributes it to other Validators in the active Validator Set.
+4. Non-proposer validator nodes send  **BeginBlock**, **DeliverTX** and **EndBlock** requests to the **ABCI App**. ABCI App accepts or rejects the block.
+5. Once the block candidate is accepted by **ABCI App**,  the node signs and distributes its vote.
+6. Once majority of votes is received, **Commit** message is sent to the **ABCI App**.
 
 ### Additional voting phase
 
