@@ -18,15 +18,15 @@ Problem statement defined above can be reduced to a "two-phase commit" problem, 
 
 2PC protocols consist of two phases:
 
-* **commit request** - where data is received and stored by the app, but not committed (applied),
-* **commit completion** - where data received by the app is committed (applied) or rolled back.
+- *commit request* - where data is received and stored by the app, but not committed (applied),
+- *commit completion* - where data received by the app is committed (applied) or rolled back.
 
-Each participant of the 2PC protocol shall ensure that if the **commit request** succeeds, then **commit completion** will almost always succeed. Any failures shall be detected during the **commit request** phase.
+Each participant of the 2PC protocol shall ensure that if the *commit request* succeeds, then *commit completion* will almost always succeed. Any failures shall be detected during the *commit request* phase.
 
 ### External references
 
-*  [ABCI++ basic concepts](https://github.com/tendermint/spec/blob/0d81bfbfe3cb8c86dded06e98303685e3de702c5/spec/abci++/abci++_basic_concepts_002_draft.md)
-*  [two-phase commit (2PC) protocol](https://en.wikipedia.org/wiki/Two-phase_commit_protocol)
+- [ABCI++ basic concepts](https://github.com/tendermint/spec/blob/0d81bfbfe3cb8c86dded06e98303685e3de702c5/spec/abci++/abci++_basic_concepts_002_draft.md)
+- [two-phase commit (2PC) protocol](https://en.wikipedia.org/wiki/Two-phase_commit_protocol)
 
 ## Alternative Approaches
 
@@ -40,49 +40,57 @@ In this solution, we will implement a subset of features planned for ABCI++. Thi
 
 This approach has the following advantages:
 
-* it's in sync with what upstream project does, thus making it easier to backport future changes
+- it's in sync with what upstream project does, thus making it easier to backport future changes
 
 In order to implement this solution, the following APIs need to be added:
 
-* Process Proposal (**commit request** phase of 2PC protocol)
-* Finalize Block (**commit completion** phase of 2PC protocol)
+- Prepare Proposal (*commit request* phase of 2PC protocol) - only on proposer node
+- Process Proposal (*commit request* phase of 2PC protocol) - only on non-proposer members of active Validator Set
+- Finalize Block (*commit completion* phase of 2PC protocol)
+
 
 APIs to remove:
 
-* BeginBlock - replaced by **Process Proposal**
-* DeliverTX - replaced by **Process Proposal**
-* EndBlock - replaced by **Finalize Block**
+- BeginBlock - replaced by **Process Proposal**
+- DeliverTX - replaced by **Process Proposal**
+- EndBlock - replaced by **Finalize Block**
 
-#### Process Proposal
+Modified workflow for the ABCI app will look as follows:
 
-Process Proposal is a commit request in terms of 2PC protocols.
+![Process Proposal flow](img/adr-d0002-limited-abci-plus-plus.png "Proposal flow")
 
-In the **Process Proposal** phase, Tenderdash will deliver list of all transactions. In response the ABCI App should return Merkle tree root (`data` == `AppHash` field).
+1. Proposer node sends a **Prepare Proposal** request to the **ABCI App**. **ABCI App** saves received transaction in a non-committed state and responds with the new `AppHash`.
+1a. Proposer node generates new proposal and distributes it to other Validators in the active Validator Set.
+2. Non-proposer validator nodes send a **Process Proposal** request to the **ABCI App**. **ABCI App** saves received transaction in a non-committed state and responds with accept or reject message.
+2a. Active Validator nodes sign and distribute votes.
+2b. Once majority of votes has been reached, block is committed.
+3. All nodes send a **Finalize Block** to their **ABCI App**. **ABCI App** commits received transactions.
 
-#### Finalize Block
+The following alternative flows shall be considered:
 
-Finalize Block is a **commit completion** request in therms of 2PC protocols. It supports "commit" and "rollback" mechanism.
+1. If the response to **Process Proposal** is negative (eg. ABCI App did not accept provided proposal), the proposal is dropped by the node, and it votes `nil`; another round starts.
+2. If the ABCI App receives **Prepare Proposal**/**Process Proposal** for a new round, it should assume that previous round has failed and respective transactions should be rolled back
+3. ABCI App cannot fail during execution of Finalize Block; if it does, it should be shut down and/or banned.
 
 ### Move BeginBlock/DeliverTX/EndBlock to proposal creation/receipt step
 
 In this case, we will keep BeginBlock/DeliverTX/EndBlock requests. The biggest change will be that these requests will be executed during:
 
-* creation of vote proposal on the proposer
-* receipt of a proposal - by all other nodes
+- creation of vote proposal on the proposer
+- receipt of a proposal - by all other nodes
 
 Commit request will be sent after the block is finalized.
 
 API changes include:
 
-* BeginBlock shall rollback any uncommitted changes (eg. on new round)
-* EndBlock shall return AppHash (current `data` field from `Commit` response)
+- BeginBlock shall rollback any uncommitted changes (eg. on new round)
+- EndBlock shall return AppHash (current `data` field from `Commit` response)
 
 All nodes will verify AppHash returned by EndBlock before signing a vote.
 
 ### Additional voting phase
 
 ## Decision
-
 
 > This section records the decision that was made.
 > It is best to record as much info as possible from the discussion that happened. This aids in not having to go back to the Pull Request to get the needed information.
