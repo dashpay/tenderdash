@@ -56,7 +56,7 @@ func TestGetPubKey(t *testing.T) {
 func TestSignVote(t *testing.T) {
 
 	hash := tmrand.Bytes(tmhash.Size)
-	valAddr := crypto.RandQuorumHash()
+	proTxHash := crypto.RandProTxHash()
 
 	testCases := []struct {
 		name       string
@@ -69,14 +69,14 @@ func TestSignVote(t *testing.T) {
 			Height:             1,
 			Round:              2,
 			BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
-			ValidatorProTxHash: valAddr,
+			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
 		}, want: &types.Vote{
 			Type:               tmproto.PrecommitType,
 			Height:             1,
 			Round:              2,
 			BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
-			ValidatorProTxHash: valAddr,
+			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
 		},
 			err: false},
@@ -85,7 +85,7 @@ func TestSignVote(t *testing.T) {
 			Height:             1,
 			Round:              2,
 			BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
-			ValidatorProTxHash: valAddr,
+			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
 			BlockSignature:     []byte("signed"),
 		}, want: &types.Vote{
@@ -93,7 +93,7 @@ func TestSignVote(t *testing.T) {
 			Height:             1,
 			Round:              2,
 			BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
-			ValidatorProTxHash: valAddr,
+			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
 			BlockSignature:     []byte("signed"),
 		},
