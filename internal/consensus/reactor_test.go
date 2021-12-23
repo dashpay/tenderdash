@@ -72,7 +72,7 @@ func setup(t *testing.T, numNodes int, states []*State, size int) *reactorTestSu
 	rts.voteChannels = rts.network.MakeChannelsNoCleanup(t, chDesc(VoteChannel), new(tmcons.Message), size)
 	rts.voteSetBitsChannels = rts.network.MakeChannelsNoCleanup(t, chDesc(VoteSetBitsChannel), new(tmcons.Message), size)
 
-	_, cancel := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
 
 	i := 0
 	for nodeID, node := range rts.network.Nodes {
@@ -91,10 +91,10 @@ func setup(t *testing.T, numNodes int, states []*State, size int) *reactorTestSu
 
 		reactor.SetEventBus(state.eventBus)
 
-		blocksSub, err := state.eventBus.Subscribe(context.Background(), testSubscriber, types.EventQueryNewBlock, size)
+		blocksSub, err := state.eventBus.Subscribe(ctx, testSubscriber, types.EventQueryNewBlock, size)
 		require.NoError(t, err)
 
-		fsSub, err := state.eventBus.Subscribe(context.Background(), testSubscriber, types.EventQueryBlockSyncStatus, size)
+		fsSub, err := state.eventBus.Subscribe(ctx, testSubscriber, types.EventQueryBlockSyncStatus, size)
 		require.NoError(t, err)
 
 		rts.states[nodeID] = state
@@ -133,20 +133,10 @@ func setup(t *testing.T, numNodes int, states []*State, size int) *reactorTestSu
 }
 
 func validateBlock(block *types.Block, activeVals map[string]struct{}) error {
-	if block.LastCommit.Size() != len(activeVals) {
-		return fmt.Errorf(
-			"commit size doesn't match number of active validators. Got %d, expected %d",
-			block.LastCommit.Size(), len(activeVals),
-		)
+	if _, ok := activeVals[block.ProposerProTxHash.String()]; !ok {
+		return fmt.Errorf("found vote for inactive validator %X", block.ProposerProTxHash)
 	}
-
-	for _, commitSig := range block.LastCommit.Signatures {
-		if _, ok := activeVals[string(commitSig.ValidatorAddress)]; !ok {
-			return fmt.Errorf("found vote for inactive validator %X", commitSig.ValidatorAddress)
-		}
-	}
-
-	return nil
+	return block.ValidateBasic()
 }
 
 func waitForAndValidateBlock(
@@ -232,7 +222,7 @@ func waitForBlockWithUpdatedValsAndValidateIt(
 	n int,
 	updatedVals map[string]struct{},
 	blocksSubs []types.Subscription,
-	css []*State,
+	states []*State,
 ) {
 
 	fn := func(j int) {
@@ -242,7 +232,7 @@ func waitForBlockWithUpdatedValsAndValidateIt(
 		for {
 			msg := <-blocksSubs[j].Out()
 			newBlock = msg.Data().(types.EventDataNewBlock).Block
-			if newBlock.LastCommit.Size() == len(updatedVals) {
+			if states[j].LastPrecommits.Size() == len(updatedVals) {
 				break LOOP
 			}
 		}

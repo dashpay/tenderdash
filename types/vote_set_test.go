@@ -638,9 +638,13 @@ func randVoteSet(
 	signedMsgType tmproto.SignedMsgType,
 	numValidators int,
 	stateID StateID,
-) (*VoteSet, *ValidatorSet, []*MockPV) {
-	valSet, privValidators := factory.GenerateMockValidatorSet(numValidators)
-	return NewVoteSet("test_chain_id", height, round, signedMsgType, valSet, stateID), valSet, privValidators
+) (*VoteSet, *ValidatorSet, []PrivValidator) {
+	valSet, mockPVs := factory.GenerateMockValidatorSet(numValidators)
+	var privVals []PrivValidator
+	for _, pv := range mockPVs {
+		privVals = append(privVals, pv)
+	}
+	return NewVoteSet("test_chain_id", height, round, signedMsgType, valSet, stateID), valSet, privVals
 }
 
 func randVoteSetWithLLMQType(

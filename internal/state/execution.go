@@ -95,8 +95,8 @@ func NewBlockExecutor(
 		metrics:           NopMetrics(),
 		// TODO: appHashSize should be read from config
 		appHashSize: crypto.DefaultAppHashSize,
-		cache:      make(map[string]struct{}),
-		blockStore: blockStore,
+		cache:       make(map[string]struct{}),
+		blockStore:  blockStore,
 	}
 
 	for _, option := range options {
@@ -268,20 +268,30 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 	}
 
 	// The quorum type should not even matter here
-	validatorUpdates, err :=
+	validatorSet, err :=
 		types.PB2TM.ValidatorSetFromProtoUpdate(state.Validators.QuorumType, abciValidatorSetUpdates)
 	if err != nil {
 		return state, fmt.Errorf("error when converting abci validator updates: %v", err)
 	}
-	if len(validatorUpdates.Validators) > 0 {
+
+	var (
+		validators         []*types.Validator
+		thresholdPublicKey crypto.PubKey
+		quorumHash         crypto.QuorumHash
+	)
+
+	if validatorSet != nil {
+		validators = validatorSet.Validators
+		thresholdPublicKey = validatorSet.ThresholdPublicKey
+		quorumHash = validatorSet.QuorumHash
 		blockExec.logger.Debug(
 			"updates to validators",
 			"quorumHash",
-			validatorUpdates.QuorumHash,
+			validatorSet.QuorumHash,
 			"thresholdPublicKey",
-			validatorUpdates.ThresholdPublicKey,
+			validatorSet.ThresholdPublicKey,
 			"updates",
-			types.ValidatorListString(validatorUpdates.Validators),
+			types.ValidatorListString(validatorSet.Validators),
 		)
 	}
 
@@ -294,7 +304,7 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 	// Update the state with the block and responses.
 	state, err = updateState(
 		state, nodeProTxHash, blockID, &block.Header,
-		abciResponses, validatorUpdates.Validators, validatorUpdates.ThresholdPublicKey, validatorUpdates.QuorumHash,
+		abciResponses, validators, thresholdPublicKey, quorumHash,
 	)
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %v", err)
@@ -337,7 +347,7 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
-	fireEvents(logger, blockExec.eventBus, block, blockID, abciResponses, validatorUpdates)
+	fireEvents(logger, blockExec.eventBus, block, blockID, abciResponses, validatorSet)
 
 	return state, nil
 }
@@ -467,7 +477,7 @@ func execBlockOnProxyApp(
 			Header:              *pbh,
 			LastCommitInfo:      commitInfo,
 			ByzantineValidators: byzVals,
-	})
+		})
 	if err != nil {
 		logger.Error("error in proxyAppConn.BeginBlock", "err", err)
 		return nil, err
@@ -490,7 +500,6 @@ func execBlockOnProxyApp(
 		logger.Error("error in proxyAppConn.EndBlock", "err", err)
 		return nil, err
 	}
-
 
 	logger.Info(
 		"executed block", "height", block.Height, "coreHeight",
@@ -706,8 +715,8 @@ func fireEvents(
 		if err := eventBus.PublishEventValidatorSetUpdates(
 			types.EventDataValidatorSetUpdate{
 				ValidatorSetUpdates: validatorSetUpdate.Validators,
-				ThresholdPublicKey: validatorSetUpdate.ThresholdPublicKey,
-				QuorumHash: validatorSetUpdate.QuorumHash,
+				ThresholdPublicKey:  validatorSetUpdate.ThresholdPublicKey,
+				QuorumHash:          validatorSetUpdate.QuorumHash,
 			}); err != nil {
 			logger.Error("failed publishing event", "err", err)
 		}
