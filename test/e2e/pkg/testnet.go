@@ -68,7 +68,8 @@ type Testnet struct {
 	Dir                       string
 	IP                        *net.IPNet
 	InitialHeight             int64
-	InitialCoreHeight         uint32
+	GenesisCoreHeight         uint32 // InitialCoreHeight is a core height put into genesis file
+	InitAppCoreHeight         uint32 // InitAppCoreHeight returned in InitApp response
 	InitialState              map[string]string
 	Validators                ValidatorsMap
 	ValidatorUpdates          map[int64]ValidatorsMap
@@ -190,7 +191,8 @@ func LoadTestnet(file string) (*Testnet, error) {
 		Dir:                       dir,
 		IP:                        ipGen.Network(),
 		InitialHeight:             1,
-		InitialCoreHeight:         1,
+		GenesisCoreHeight:         1,
+		InitAppCoreHeight:         0,
 		InitialState:              manifest.InitialState,
 		Validators:                ValidatorsMap{},
 		ValidatorUpdates:          map[int64]ValidatorsMap{},
@@ -205,8 +207,11 @@ func LoadTestnet(file string) (*Testnet, error) {
 	if manifest.InitialHeight > 0 {
 		testnet.InitialHeight = manifest.InitialHeight
 	}
-	if manifest.InitialCoreChainLockedHeight > 0 {
-		testnet.InitialCoreHeight = manifest.InitialCoreChainLockedHeight
+	if manifest.GenesisCoreChainLockedHeight > 0 {
+		testnet.GenesisCoreHeight = manifest.GenesisCoreChainLockedHeight
+	}
+	if manifest.InitAppCoreChainLockedHeight > 0 {
+		testnet.InitAppCoreHeight = manifest.InitAppCoreChainLockedHeight
 	}
 
 	for _, name := range nodeNames {
