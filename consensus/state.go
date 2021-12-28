@@ -1079,19 +1079,37 @@ func (cs *State) enterNewRound(height int64, round int32) {
 	}
 }
 
-// needProofBlock returns true on the first height (so the genesis app hash is signed right away)
-// and where the last block (height-1) caused the app hash to change
+// needProofBlock returns true if additional proof block needs to be created.
+// It happens on the first height (so the genesis app hash is signed right away)
+// and where the last block (height-1) or the previous one (height - 2) caused
+// the app hash to change.
 func (cs *State) needProofBlock(height int64) bool {
 	if height == cs.state.InitialHeight {
 		return true
 	}
 
-	lastBlockMeta := cs.blockStore.LoadBlockMeta(height - 1)
-	if lastBlockMeta == nil {
+	h1BlockMeta := cs.blockStore.LoadBlockMeta(height - 1)
+	if h1BlockMeta == nil {
 		panic(fmt.Sprintf("needProofBlock: last block meta for height %d not found", height-1))
 	}
+	h1Equal := bytes.Equal(cs.state.AppHash, h1BlockMeta.Header.AppHash)
 
-	return !bytes.Equal(cs.state.AppHash, lastBlockMeta.Header.AppHash)
+	h2Equal := true
+	if cs.state.InitialHeight <= height-2 {
+		h2BlockMeta := cs.blockStore.LoadBlockMeta(height - 2)
+		if h2BlockMeta != nil {
+			h2Equal = bytes.Equal(cs.state.AppHash, h2BlockMeta.Header.AppHash)
+		}
+	}
+	cs.Logger.Debug(
+		"needProofBlock executed",
+		"height", height,
+		"h1_equal", h1Equal,
+		"h2_equal", h2Equal,
+		"result", !h1Equal || !h2Equal,
+	)
+
+	return !h1Equal || !h2Equal
 }
 
 // Enter (CreateEmptyBlocks): from enterNewRound(height,round)
