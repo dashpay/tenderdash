@@ -1088,28 +1088,22 @@ func (cs *State) needProofBlock(height int64) bool {
 		return true
 	}
 
-	h1BlockMeta := cs.blockStore.LoadBlockMeta(height - 1)
-	if h1BlockMeta == nil {
-		panic(fmt.Sprintf("needProofBlock: last block meta for height %d not found", height-1))
-	}
-	h1Equal := bytes.Equal(cs.state.AppHash, h1BlockMeta.Header.AppHash)
-
-	h2Equal := true
-	if cs.state.InitialHeight <= height-2 {
-		h2BlockMeta := cs.blockStore.LoadBlockMeta(height - 2)
-		if h2BlockMeta != nil {
-			h2Equal = bytes.Equal(cs.state.AppHash, h2BlockMeta.Header.AppHash)
+	heights := []int64{height - 1, height - 2}
+	for _, blockHeight := range heights {
+		if blockHeight >= cs.state.InitialHeight {
+			blockMeta := cs.blockStore.LoadBlockMeta(blockHeight)
+			if blockMeta == nil {
+				panic(fmt.Sprintf("needProofBlock: last block meta for height %d not found", height-1))
+			}
+			if !bytes.Equal(cs.state.AppHash, blockMeta.Header.AppHash) {
+				cs.Logger.Debug("needProofBlock: proof block needed", "height", height, "modified_since", blockHeight)
+				return true
+			}
 		}
 	}
-	cs.Logger.Debug(
-		"needProofBlock executed",
-		"height", height,
-		"h1_equal", h1Equal,
-		"h2_equal", h2Equal,
-		"result", !h1Equal || !h2Equal,
-	)
 
-	return !h1Equal || !h2Equal
+	cs.Logger.Debug("needProofBlock: proof block not needed", "height", height)
+	return false
 }
 
 // Enter (CreateEmptyBlocks): from enterNewRound(height,round)
