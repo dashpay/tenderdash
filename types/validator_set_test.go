@@ -86,8 +86,8 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 	badValNoPublicKey := &Validator{ProTxHash: val.ProTxHash}
 	badValNoProTxHash := &Validator{PubKey: val.PubKey}
 
-	goodValSet, _ := factory.GenerateMockValidatorSet(4)
-	badValSet, _ := factory.GenerateMockValidatorSet(4)
+	goodValSet, _ := factory.RandValidatorSet(4)
+	badValSet, _ := factory.RandValidatorSet(4)
 	badValSet.ThresholdPublicKey = val.PubKey
 
 	testCases := []struct {

@@ -1071,7 +1071,9 @@ func TestStateMakeBlock(t *testing.T) {
 
 	proposerProTxHash := state.Validators.GetProposer().ProTxHash
 	stateVersion := state.Version.Consensus
-	block, err := statefactory.MakeBlock(state, 2, new(types.Commit), nil, 0)
+	var height int64 = 2
+	state.LastBlockHeight = height - 1
+	block, err := statefactory.MakeBlock(state, height, new(types.Commit), nil, 0)
 	require.NoError(t, err)
 
 	// test we set some fields

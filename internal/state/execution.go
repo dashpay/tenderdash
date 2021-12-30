@@ -268,17 +268,17 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 	}
 
 	// The quorum type should not even matter here
-	validatorSet, err :=
-		types.PB2TM.ValidatorSetFromProtoUpdate(state.Validators.QuorumType, abciValidatorSetUpdates)
+	validators, thresholdPublicKey, quorumHash, err :=
+		types.PB2TM.ValidatorUpdatesFromValidatorSet(abciValidatorSetUpdates)
 	if err != nil {
-		return state, fmt.Errorf("error when converting abci validator updates: %v", err)
+		return state, fmt.Errorf("error when converting abci validator updates: %w", err)
 	}
 
-	var (
-		validators         []*types.Validator
-		thresholdPublicKey crypto.PubKey
-		quorumHash         crypto.QuorumHash
-	)
+	validatorSet := state.Validators.Copy()
+	err = validatorSet.UpdateWithChangeSet(validators, thresholdPublicKey, quorumHash)
+	if err != nil {
+		return state, fmt.Errorf("error when updating validator set with a new change set: %w", err)
+	}
 
 	if validatorSet != nil {
 		validators = validatorSet.Validators
@@ -751,9 +751,16 @@ func ExecCommitBlock(
 			logger.Error("err", err)
 			return nil, err
 		}
-		validatorSetUpdate, err := types.PB2TM.ValidatorSetFromProtoUpdate(s.Validators.QuorumType, abciValSetUpdate)
+
+		validatorUpdates, thresholdPublicKeyUpdate, quorumHash, err :=
+			types.PB2TM.ValidatorUpdatesFromValidatorSet(abciValSetUpdate)
 		if err != nil {
-			logger.Error("err", err)
+			return nil, err
+		}
+
+		validatorSetUpdate := s.Validators.Copy()
+		err = validatorSetUpdate.UpdateWithChangeSet(validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
+		if err != nil {
 			return nil, err
 		}
 

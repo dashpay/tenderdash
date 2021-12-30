@@ -53,6 +53,11 @@ type Block struct {
 	LastCommit    *Commit        `json:"last_commit"`
 }
 
+// StateID returns a state ID of this block
+func (b *Block) StateID() StateID {
+	return StateID{Height: b.Height, LastAppHash: b.AppHash}
+}
+
 // ValidateBasic performs basic validation that doesn't involve state data.
 // It checks the internal consistency of the block.
 // Further validation is done using state#ValidateBlock.

@@ -37,7 +37,7 @@ func newProcessorContext(st blockStore, nodeProTxHash *crypto.ProTxHash, ex bloc
 }
 
 func (pc *pContext) applyBlock(blockID types.BlockID, block *types.Block) error {
-	newState, _, err := pc.applier.ApplyBlock(pc.state, pc.nodeProTxHash, blockID, block)
+	newState, err := pc.applier.ApplyBlock(pc.state, pc.nodeProTxHash, blockID, block)
 	pc.state = newState
 	return err
 }
