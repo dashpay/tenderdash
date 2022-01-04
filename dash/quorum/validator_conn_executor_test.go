@@ -320,7 +320,8 @@ func TestEndBlock(t *testing.T) {
 	// setup ValidatorConnExecutor
 	sw := mock.NewMockSwitch()
 	nodeID := newVals.Validators[0].NodeAddress.NodeID
-	vc := NewValidatorConnExecutor(nodeID, eventBus, sw, log.TestingLogger())
+	vc, err := NewValidatorConnExecutor(nodeID, eventBus, sw)
+	require.NoError(t, err)
 	err = vc.Start()
 	require.NoError(t, err)
 	defer func() { err := vc.Stop(); require.NoError(t, err) }()
@@ -474,7 +475,8 @@ func setup(
 	sw = mock.NewMockSwitch()
 
 	nodeID := me.NodeAddress.NodeID
-	vc = NewValidatorConnExecutor(nodeID, eventBus, sw, log.TestingLogger())
+	vc, err = NewValidatorConnExecutor(nodeID, eventBus, sw)
+	require.NoError(t, err)
 	err = vc.Start()
 	require.NoError(t, err)
 
