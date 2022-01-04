@@ -352,7 +352,8 @@ func TestEndBlock(t *testing.T) {
 	// setup ValidatorConnExecutor
 	sw := mock.NewMockSwitch()
 	proTxHash := newVals.Validators[0].ProTxHash
-	vc := NewValidatorConnExecutor(proTxHash, eventBus, sw, log.TestingLogger())
+	vc, err := NewValidatorConnExecutor(proTxHash, eventBus, sw)
+	require.NoError(t, err)
 	err = vc.Start()
 	require.NoError(t, err)
 	defer func() { err := vc.Stop(); require.NoError(t, err) }()
@@ -506,7 +507,8 @@ func setup(
 	sw = mock.NewMockSwitch()
 
 	proTxHash := me.ProTxHash
-	vc = NewValidatorConnExecutor(proTxHash, eventBus, sw, log.TestingLogger())
+	vc, err = NewValidatorConnExecutor(proTxHash, eventBus, sw)
+	require.NoError(t, err)
 	err = vc.Start()
 	require.NoError(t, err)
 

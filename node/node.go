@@ -1049,12 +1049,16 @@ func NewNode(config *cfg.Config,
 	// Initialize ValidatorConnExecutor (only on Validators)
 	var validatorConnExecutor *dashquorum.ValidatorConnExecutor
 	if proTxHashP != nil {
-		validatorConnExecutor = dashquorum.NewValidatorConnExecutor(
+		validatorConnExecutor, err = dashquorum.NewValidatorConnExecutor(
 			*proTxHashP,
 			eventBus,
 			sw,
-			logger.With("module", "ValidatorConnExecutor"),
+			dashquorum.WithLogger(logger),
+			dashquorum.WithValidatorsSet(state.Validators),
 		)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	node := &Node{
