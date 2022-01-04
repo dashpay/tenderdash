@@ -3,6 +3,7 @@ package p2p
 import (
 	"fmt"
 	"math"
+	"net"
 	"sync"
 	"time"
 
@@ -52,6 +53,7 @@ type AddrBook interface {
 	MarkGood(ID)
 	RemoveAddress(*NetAddress)
 	HasAddress(*NetAddress) bool
+	FindIP(ip net.IP, port uint16) ID
 	Save()
 }
 
@@ -433,6 +435,11 @@ func (sw *Switch) SetAddrBook(addrBook AddrBook) {
 	sw.addrBook = addrBook
 }
 
+// AddrBook() returns address book used by a switch
+func (sw *Switch) AddrBook() AddrBook {
+	return sw.addrBook
+}
+
 // MarkPeerAsGood marks the given peer as good when it did something useful
 // like contributed to consensus.
 func (sw *Switch) MarkPeerAsGood(peer Peer) {
@@ -605,7 +612,7 @@ func (sw *Switch) RemovePersistentPeer(addr string) error {
 func (sw *Switch) AddUnconditionalPeerIDs(ids []string) error {
 	sw.Logger.Info("Adding unconditional peer ids", "ids", ids)
 	for i, id := range ids {
-		err := validateID(ID(id))
+		err := ValidateID(ID(id))
 		if err != nil {
 			return fmt.Errorf("wrong ID #%d: %w", i, err)
 		}
@@ -617,7 +624,7 @@ func (sw *Switch) AddUnconditionalPeerIDs(ids []string) error {
 func (sw *Switch) AddPrivatePeerIDs(ids []string) error {
 	validIDs := make([]string, 0, len(ids))
 	for i, id := range ids {
-		err := validateID(ID(id))
+		err := ValidateID(ID(id))
 		if err != nil {
 			return fmt.Errorf("wrong ID #%d: %w", i, err)
 		}

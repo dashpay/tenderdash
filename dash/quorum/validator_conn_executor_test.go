@@ -2,6 +2,7 @@ package quorum
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/quorum/mock"
 	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	mmock "github.com/tendermint/tendermint/mempool/mock"
@@ -61,17 +63,23 @@ func TestValidatorConnExecutor_NotValidator(t *testing.T) {
 // TestValidatorConnExecutor_WrongAddress checks behavior in case of several issues in the address.
 // Expected behavior: invalid address is dialed. Previous addresses are disconnected.
 func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
-
 	me := mock.NewValidator(65535)
-	addr1, err := p2p.ParseNodeAddress("http://john@www.google.com:80")
-	val1 := mock.NewValidator(5)
-	val1.NodeAddress = addr1
-	// val1 := &types.Validator{NodeAddress: addr1}
-
+	zeroBytes := make([]byte, p2p.IDByteLength)
+	nodeID := hex.EncodeToString(zeroBytes)
+	addr1, err := dashtypes.ParseValidatorAddress("http://" + nodeID + "@www.domain-that-does-not-exist.com:80")
 	require.NoError(t, err)
+
+	val1 := mock.NewValidator(100)
+	val1.NodeAddress = addr1
+
+	valsWithoutAddress := make([]*types.Validator, 5)
+	for i := 0; i < len(valsWithoutAddress); i++ {
+		valsWithoutAddress[i] = mock.NewValidator(uint64(200 + i))
+		valsWithoutAddress[i].NodeAddress = dashtypes.ValidatorAddress{}
+	}
+
 	tc := testCase{
 		me: me,
-		// quorumHash: ,
 		validatorUpdates: []validatorUpdate{
 			0: {
 				validators: []*types.Validator{
@@ -92,6 +100,30 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 					{Operation: mock.OpStopOne},
 					{Operation: mock.OpStopOne},
 					// {Operation: mock.OpStopOne},
+				},
+			},
+			2: {
+				validators: []*types.Validator{
+					me,
+					valsWithoutAddress[0],
+					mock.NewValidator(1),
+					mock.NewValidator(2),
+					mock.NewValidator(3),
+					mock.NewValidator(4),
+					mock.NewValidator(5),
+				},
+				expectedHistory: []mock.SwitchHistoryEvent{
+					{Operation: mock.OpDialMany, Params: []string{
+						mock.NewNodeAddress(2),
+						mock.NewNodeAddress(5),
+					}},
+				},
+			},
+			3: { // this should disconnect everyone because none of the validators has correct address
+				validators: append([]*types.Validator{me}, valsWithoutAddress...),
+				expectedHistory: []mock.SwitchHistoryEvent{
+					{Operation: mock.OpStopOne},
+					{Operation: mock.OpStopOne},
 				},
 			},
 		},
@@ -314,13 +346,13 @@ func TestEndBlock(t *testing.T) {
 
 	// Ensure new validators have some IP addresses set
 	for _, validator := range newVals.Validators {
-		validator.NodeAddress = p2p.RandNodeAddress()
+		validator.NodeAddress = dashtypes.RandValidatorAddress()
 	}
 
 	// setup ValidatorConnExecutor
 	sw := mock.NewMockSwitch()
-	nodeID := newVals.Validators[0].NodeAddress.NodeID
-	vc, err := NewValidatorConnExecutor(nodeID, eventBus, sw)
+	proTxHash := newVals.Validators[0].ProTxHash
+	vc, err := NewValidatorConnExecutor(proTxHash, eventBus, sw)
 	require.NoError(t, err)
 	err = vc.Start()
 	require.NoError(t, err)
@@ -474,8 +506,8 @@ func setup(
 
 	sw = mock.NewMockSwitch()
 
-	nodeID := me.NodeAddress.NodeID
-	vc, err = NewValidatorConnExecutor(nodeID, eventBus, sw)
+	proTxHash := me.ProTxHash
+	vc, err = NewValidatorConnExecutor(proTxHash, eventBus, sw)
 	require.NoError(t, err)
 	err = vc.Start()
 	require.NoError(t, err)

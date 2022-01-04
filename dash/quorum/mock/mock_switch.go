@@ -5,6 +5,7 @@ import (
 	"strings"
 	"time"
 
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/p2p/mocks"
 )
@@ -30,6 +31,7 @@ type Switch struct {
 	PersistentPeers map[string]bool
 	History         []SwitchHistoryEvent
 	HistoryChan     chan SwitchHistoryEvent
+	AddressBook     p2p.AddrBook
 }
 
 // NewMockSwitch creates a new mock Switch
@@ -39,8 +41,14 @@ func NewMockSwitch() *Switch {
 		PersistentPeers: map[string]bool{},
 		History:         []SwitchHistoryEvent{},
 		HistoryChan:     make(chan SwitchHistoryEvent, 1000),
+		AddressBook:     &p2p.AddrBookMock{},
 	}
 	return isw
+}
+
+// AddBook returns mock address book to use in this mock switch
+func (sw *Switch) AddrBook() p2p.AddrBook {
+	return sw.AddressBook
 }
 
 // Peers implements Switch by returning sw.PeerSet
@@ -74,7 +82,10 @@ func (sw Switch) RemovePersistentPeer(addr string) error {
 func (sw *Switch) DialPeersAsync(addrs []string) error {
 	for _, addr := range addrs {
 		peer := &mocks.Peer{}
-		parsed, _ := p2p.ParseNodeAddress(addr)
+		parsed, err := dashtypes.ParseValidatorAddress(addr)
+		if err != nil {
+			return err
+		}
 
 		peer.On("ID").Return(parsed.NodeID)
 		peer.On("String").Return(addr)
