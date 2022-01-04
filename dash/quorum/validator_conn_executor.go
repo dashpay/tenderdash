@@ -359,15 +359,15 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 	if err := vc.disconnectValidators(newValidators); err != nil {
 		return fmt.Errorf("cannot disconnect unused validators: %w", err)
 	}
-	vc.Logger.Debug("filtering validators", "validators", newValidators)
+	vc.Logger.Debug("filtering validators", "validators", newValidators.String())
 	// ensure that we can connect to all validators
 	newValidators = vc.filterAddresses(newValidators)
 	// Connect to new validators
-	vc.Logger.Debug("dialing validators", "validators", newValidators)
+	vc.Logger.Debug("dialing validators", "validators", newValidators.String())
 	if err := vc.dial(newValidators); err != nil {
 		return fmt.Errorf("cannot dial validators: %w", err)
 	}
-	vc.Logger.P2PDebug("connected to Validators", "validators", newValidators)
+	vc.Logger.P2PDebug("connected to Validators", "validators", newValidators.String())
 	return nil
 }
 

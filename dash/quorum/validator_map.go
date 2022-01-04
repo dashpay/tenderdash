@@ -1,6 +1,9 @@
 package quorum
 
 import (
+	"sort"
+	"strings"
+
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -49,4 +52,13 @@ func (vm validatorMap) URIs() []string {
 		uris = append(uris, v.NodeAddress.String())
 	}
 	return uris
+}
+
+func (vm validatorMap) String() string {
+	resp := make(sort.StringSlice, 0, len(vm))
+	for _, v := range vm {
+		resp = append(resp, v.String())
+	}
+	resp.Sort()
+	return strings.Join(resp, "\n")
 }
