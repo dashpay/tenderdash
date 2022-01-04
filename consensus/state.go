@@ -1102,7 +1102,6 @@ func (cs *State) needProofBlock(height int64) bool {
 		}
 	}
 
-	cs.Logger.Debug("needProofBlock: proof block not needed", "height", height)
 	return false
 }
 
