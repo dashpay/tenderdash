@@ -3,6 +3,7 @@ package quorum
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/tendermint/tendermint/crypto"
@@ -63,10 +64,8 @@ type ValidatorConnExecutor struct {
 	connectedValidators validatorMap
 	// quorumHash contains current quorum hash
 	quorumHash tmbytes.HexBytes
-
 	// nodeIDResolvers can be used to determine a node ID for a validator
 	nodeIDResolvers []dashtypes.NodeIDResolver
-
 	// mux is a mutex to ensure only one goroutine is processing connections
 	mux sync.Mutex
 
@@ -242,7 +241,8 @@ func (vc *ValidatorConnExecutor) setQuorumHash(newQuorumHash tmbytes.HexBytes) e
 	return nil
 }
 
-// me returns current node's validator object, if any. `ok` if false when current node is not a validator
+// me returns current node's validator object, if any.
+// `ok` is false when current node is not a validator.
 func (vc *ValidatorConnExecutor) me() (validator *types.Validator, ok bool) {
 	v, ok := vc.validatorSetMembers[validatorMapIndexType(vc.proTxHash.String())]
 	return &v, ok
@@ -259,7 +259,12 @@ func (vc *ValidatorConnExecutor) resolveNodeID(va *dashtypes.ValidatorAddress) e
 			va.NodeID = nid
 			return nil
 		}
-		vc.Logger.Debug("node id not found, trying another method", "url", va.String(), "error", err)
+		vc.Logger.Debug(
+			"validator node id lookup method failed",
+			"url", va.String(),
+			"method", reflect.TypeOf(resolver).String(),
+			"error", err,
+		)
 	}
 	return dashtypes.ErrNoNodeID
 }

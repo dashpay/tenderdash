@@ -317,6 +317,7 @@ func (book *AddrBookMock) AddPrivateIDs(addrs []string) {
 	}
 }
 
+// FindIP implements AddrBook
 func (book *AddrBookMock) FindIP(net.IP, uint16) ID {
 	return ID(hex.EncodeToString(tmrand.Bytes(IDByteLength)))
 }

@@ -10,10 +10,13 @@ import (
 )
 
 const (
-	DefaultDialTimeout       = 1000 * time.Millisecond
+	// DefaultDialTimeout when resolving node id using TCP connection
+	DefaultDialTimeout = 1000 * time.Millisecond
+	// DefaultConnectionTimeout is a connection timeout when resolving node id using TCP connection
 	DefaultConnectionTimeout = 1 * time.Second
 )
 
+// NodeIDResolver determines a node ID based on validator address
 type NodeIDResolver interface {
 	// Resolve retrieves a node ID from remote node.
 	Resolve(ValidatorAddress) (p2p.ID, error)
@@ -25,6 +28,8 @@ type tcpNodeIDResolver struct {
 	// other dependencies
 }
 
+// NewTCPNodeIDResolver creates new NodeIDResolver that connects to remote host with p2p protocol and
+// derives node ID from remote p2p public key.
 func NewTCPNodeIDResolver() NodeIDResolver {
 	return &tcpNodeIDResolver{
 		DialerTimeout:     DefaultDialTimeout,
@@ -38,12 +43,10 @@ func (resolver tcpNodeIDResolver) connect(host string, port uint16) (net.Conn, e
 	dialer := net.Dialer{
 		Timeout: resolver.DialerTimeout,
 	}
-
 	connection, err := dialer.Dial("tcp4", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		return nil, fmt.Errorf("cannot lookup node ID: %w", err)
 	}
-
 	if err := connection.SetDeadline(time.Now().Add(resolver.ConnectionTimeout)); err != nil {
 		connection.Close()
 		return nil, err
@@ -75,13 +78,13 @@ type addrbookNodeIDResolver struct {
 }
 
 // NewAddrbookNodeIDResolver creates new node ID resolver.
-// It looks up fora node ID based on IP address, using the p2p addressbook.
+// It looks up for the node ID based on IP address, using the p2p addressbook.
 func NewAddrbookNodeIDResolver(addrBook p2p.AddrBook) NodeIDResolver {
 	return addrbookNodeIDResolver{addrBook: addrBook}
 }
 
 // Resolve implements NodeIDResolver
-// Resolve retrieves a node ID from address book.
+// Resolve retrieves a node ID from the address book.
 func (resolver addrbookNodeIDResolver) Resolve(va ValidatorAddress) (p2p.ID, error) {
 	ip := net.ParseIP(va.Hostname)
 	if ip == nil {

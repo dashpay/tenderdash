@@ -15,11 +15,14 @@ type ValidatorAddress struct {
 }
 
 var (
+	// ErrNoHostname is returned when no hostname is set for the validator address
 	ErrNoHostname error = errors.New("no hostname")
-	ErrNoPort     error = errors.New("no port")
+	// ErrNoPort is returned when no valid port is set for the validator address
+	ErrNoPort error = errors.New("no port")
+	// ErrNoProtocol is returned when no protocol (like `tcp://`) is set for the validator address
 	ErrNoProtocol error = errors.New("no protocol")
-	ErrNoResolver error = errors.New("resolver not defined, validator address not initialized correctly")
-	ErrNoNodeID   error = errors.New("no node ID")
+	// ErrNoNodeID is returned when node ID is not set for the node ID
+	ErrNoNodeID error = errors.New("no node ID")
 )
 
 // ParseValidatorAddress parses provided address, which should be in `proto://nodeID@host:port` form.
@@ -56,7 +59,7 @@ func (va ValidatorAddress) Validate() error {
 	return nil
 }
 
-//  NetAddress returns this ValidatorAddress as a *p2p.NetAddress that can be used to establish connection
+//  NetAddress converts this ValidatorAddress to `*p2p.NetAddress` that can be used to establish connection
 func (va ValidatorAddress) NetAddress() (*p2p.NetAddress, error) {
 	if va.NodeID == "" {
 		return nil, fmt.Errorf("cannot determine node id for address %s", va.String())
@@ -65,6 +68,7 @@ func (va ValidatorAddress) NetAddress() (*p2p.NetAddress, error) {
 }
 
 // RandValidatorAddress generates a random validator address. Used in tests.
+// It will panic in (very unlikely) case of error.
 func RandValidatorAddress() ValidatorAddress {
 	nodeID := tmrand.Bytes(20)
 	port := tmrand.Int()%math.MaxUint16 + 1

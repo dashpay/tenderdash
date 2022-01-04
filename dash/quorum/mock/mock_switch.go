@@ -46,6 +46,7 @@ func NewMockSwitch() *Switch {
 	return isw
 }
 
+// AddBook returns mock address book to use in this mock switch
 func (sw *Switch) AddrBook() p2p.AddrBook {
 	return sw.AddressBook
 }
