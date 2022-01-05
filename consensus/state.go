@@ -1097,7 +1097,12 @@ func (cs *State) needProofBlock(height int64) bool {
 				panic(fmt.Sprintf("needProofBlock (height=%d): last block meta for height %d not found", height, blockHeight))
 			}
 			if !bytes.Equal(cs.state.AppHash, blockMeta.Header.AppHash) {
-				cs.Logger.Debug("needProofBlock: proof block needed", "height", height, "modified_since", blockHeight)
+				cs.Logger.Debug(
+					"needProofBlock: proof block needed",
+					"height", height,
+					"modified_height", blockHeight,
+					"range", proofBlockRange,
+				)
 				return true
 			}
 		}
