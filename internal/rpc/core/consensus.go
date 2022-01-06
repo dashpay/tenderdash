@@ -45,11 +45,11 @@ func (env *Environment) Validators(
 	v := validators.Validators[skipCount : skipCount+tmmath.MinInt(perPage, totalCount-skipCount)]
 
 	result := &coretypes.ResultValidators{
-		BlockHeight:        height,
-		Validators:         v,
-		Count:              len(v),
-		Total:              totalCount}
-	if *requestQuorumInfo == true {
+		BlockHeight: height,
+		Validators:  v,
+		Count:       len(v),
+		Total:       totalCount}
+	if requestQuorumInfo != nil && *requestQuorumInfo == true {
 		result.QuorumHash = &validators.QuorumHash
 		result.QuorumType = validators.QuorumType
 		result.ThresholdPublicKey = &validators.ThresholdPublicKey
