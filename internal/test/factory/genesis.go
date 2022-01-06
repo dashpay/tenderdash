@@ -39,5 +39,6 @@ func RandGenesisDoc(cfg *config.Config, numValidators int, initialHeight int64) 
 		InitialProposalCoreChainLock: coreChainLock.ToProto(),
 		ThresholdPublicKey:           thresholdPublicKey,
 		QuorumHash:                   quorumHash,
+		AppHash:                      RandomHash(),
 	}, privValidators
 }
