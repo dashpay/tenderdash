@@ -163,7 +163,7 @@ func (state State) IsEmpty() bool {
 	return state.Validators == nil // XXX can't compare to Empty
 }
 
-// StateID() generates new state ID based on current `state`
+// StateID generates new state ID based on current `state`
 func (state State) StateID() types.StateID {
 	lastAppHash := make([]byte, len(state.AppHash))
 	copy(lastAppHash, state.AppHash)

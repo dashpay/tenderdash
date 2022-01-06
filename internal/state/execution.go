@@ -280,18 +280,15 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 		return state, fmt.Errorf("error when updating validator set with a new change set: %w", err)
 	}
 
-	if validatorSet != nil {
-		validators = validatorSet.Validators
-		thresholdPublicKey = validatorSet.ThresholdPublicKey
-		quorumHash = validatorSet.QuorumHash
+	if len(validators) > 0 {
 		blockExec.logger.Debug(
 			"updates to validators",
 			"quorumHash",
-			validatorSet.QuorumHash,
+			quorumHash,
 			"thresholdPublicKey",
-			validatorSet.ThresholdPublicKey,
+			thresholdPublicKey,
 			"updates",
-			types.ValidatorListString(validatorSet.Validators),
+			types.ValidatorListString(validators),
 		)
 	}
 
