@@ -459,7 +459,7 @@ func TestReactorSetSwitchNil(t *testing.T) {
 	cfg, err := config.ResetTestRoot("blockchain_reactor_v2_test")
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.RootDir)
-	genDoc, privVals := factory.RandGenesisDoc(cfg, 1, 30)
+	genDoc, privVals := factory.RandGenesisDoc(cfg, 1, 1)
 
 	reactor := newTestReactor(t, testReactorParams{
 		logger:   log.TestingLogger(),
