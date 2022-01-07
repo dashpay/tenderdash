@@ -140,8 +140,8 @@ func TestBroadcastEvidence_DuplicateVoteEvidence(t *testing.T) {
 	require.NoError(t, err)
 
 	for i, c := range GetClients(t, n, config) {
-		h := int64(1)
-		vals, _ := c.Validators(context.Background(), &h, nil, nil, nil)
+		vals, err := c.Validators(ctx, int64Prt(1), nil, nil, boolPrt(true))
+		require.NoError(t, err)
 		correct, fakes := makeEvidences(t, pv, chainID, vals.QuorumType, *vals.QuorumHash)
 		t.Logf("client %d", i)
 
@@ -208,4 +208,12 @@ func waitForBlock(ctx context.Context, t *testing.T, c client.Client, height int
 			timer.Reset(200 * time.Millisecond)
 		}
 	}
+}
+
+func int64Prt(n int64) *int64 {
+	return &n
+}
+
+func boolPrt(b bool) *bool {
+	return &b
 }
