@@ -252,7 +252,7 @@ The change requires coordination with the ABCI application.
 ### Future work
 
 1. Implement additional validation of the Validator's private key based on proTxHash.
-2. Extend Dash Core to keep nodeID, p2p port, and other platform information. It will allow us to remove the handshake process described in "Security considerations" above.
+2. Extend service data in Deterministic Masternode Lists (DIP-3) to keep node ID, p2p port, and other platform information. It will allow us to remove the handshake process described in "Security considerations" above.
 
 ## Status
 
@@ -278,4 +278,4 @@ Accepted
 
 * [Dash Core Group Release Announcement: Dash Platform v0.20 on Testnet](https://blog.dash.org/dash-core-group-release-announcement-dash-platform-v0-20-on-testnet-c8fa00d28af7)
 * [DIP 0006: Long Living Masternode Quorums (LLMQ)](https://github.com/dashpay/dips/blob/master/dip-0006.md)
-* {reference link}
+* [DIP 0003: Deterministic Masternode Lists (DML)](https://github.com/dashpay/dips/blob/master/dip-0003.md)
