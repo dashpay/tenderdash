@@ -553,7 +553,6 @@ FOR_LOOP:
 			// first.Hash() doesn't verify the tx contents, so MakePartSet() is
 			// currently necessary.
 			err := state.Validators.VerifyCommit(chainID, firstID, stateID, first.Height, second.LastCommit)
-			fmt.Printf("[DEBUG] proTxHash=%s %v\n", r.nodeProTxHash.ShortString(), err)
 			if err != nil {
 				err = fmt.Errorf("invalid last commit: %w", err)
 				r.Logger.Error(
