@@ -33,7 +33,7 @@ func TestMempoolNoProgressUntilTxsAvailable(t *testing.T) {
 		config.Consensus.CreateEmptyBlocks = false
 		config.Consensus.CreateProofBlockRange = proofBlockRange
 
-		state, privVals := randGenesisState(1, false, 100)
+		state, privVals := randGenesisState(1, false, types.DefaultDashVotingPower)
 
 		cs := newStateWithConfig(config, state, privVals[0], NewCounterApplication())
 		assertMempool(cs.txNotifier).EnableTxsAvailable()
