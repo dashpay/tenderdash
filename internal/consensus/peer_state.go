@@ -18,11 +18,12 @@ import (
 // peerStateStats holds internal statistics for a peer.
 type peerStateStats struct {
 	Votes      int `json:"votes"`
+	Commits    int `json:"commits"`
 	BlockParts int `json:"block_parts"`
 }
 
 func (pss peerStateStats) String() string {
-	return fmt.Sprintf("peerStateStats{votes: %d, blockParts: %d}", pss.Votes, pss.BlockParts)
+	return fmt.Sprintf("peerStateStats{votes: %d, commits: %d, blockParts: %d}", pss.Votes, pss.Commits, pss.BlockParts)
 }
 
 // PeerState contains the known state of a peer, including its connection and
@@ -330,6 +331,22 @@ func (ps *PeerState) VotesSent() int {
 	defer ps.mtx.Unlock()
 
 	return ps.Stats.Votes
+}
+
+func (ps *PeerState) RecordCommit() int {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	ps.Stats.Commits++
+
+	return ps.Stats.Commits
+}
+
+func (ps *PeerState) CommitsSent() int {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+
+	return ps.Stats.Commits
 }
 
 // RecordBlockPart increments internal block part related statistics for this peer.
