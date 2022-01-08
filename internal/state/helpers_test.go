@@ -204,7 +204,7 @@ func makeRandomStateFromValidatorSet(
 
 func makeRandomStateFromConsensusParams(consensusParams *types.ConsensusParams,
 	height, lastHeightConsensusParamsChanged int64) sm.State {
-	valSet, _ := factory.RandValidatorSet(1)
+	valSet, _ := types.RandValidatorSet(1)
 	return sm.State{
 		LastBlockHeight:                  height - 1,
 		ConsensusParams:                  *consensusParams,

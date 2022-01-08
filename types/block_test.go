@@ -114,7 +114,7 @@ func TestBlockValidateBasic(t *testing.T) {
 			blk.LastCommit = nil
 		}, true},
 		{"Invalid LastCommit", func(blk *Block) {
-			blk.LastCommit = NewCommit(-1, 0, *voteSet.maj23, StateID{}, nil, nil, nil )
+			blk.LastCommit = NewCommit(-1, 0, *voteSet.maj23, StateID{}, nil, nil, nil)
 		}, true},
 		{"Invalid Evidence", func(blk *Block) {
 			emptyEv := &DuplicateVoteEvidence{}
@@ -298,7 +298,6 @@ func TestCommitValidateBasic(t *testing.T) {
 }
 
 func TestMaxCommitBytes(t *testing.T) {
-
 	// check size with a single commit
 	commit := &Commit{
 		Height: math.MaxInt64,
@@ -319,8 +318,7 @@ func TestMaxCommitBytes(t *testing.T) {
 
 	pb := commit.ToProto()
 	pbSize := int64(pb.Size())
-	maxCommitBytes := MaxCommitOverheadBytes
-	assert.EqualValues(t, maxCommitBytes, pbSize)
+	assert.EqualValues(t, MaxCommitOverheadBytes, pbSize)
 
 	pb = commit.ToProto()
 
@@ -1062,9 +1060,9 @@ func TestHeader_ValidateBasic(t *testing.T) {
 				LastCommitHash:    make([]byte, tmhash.Size),
 				DataHash:          make([]byte, tmhash.Size),
 				EvidenceHash:      make([]byte, tmhash.Size),
-				ProposerProTxHash: make([]byte, crypto.ProTxHashSize + 1),
+				ProposerProTxHash: make([]byte, crypto.ProTxHashSize+1),
 			},
-			true, "invalid ProposerAddress length",
+			true, "invalid ProposerProTxHash length; got: 33, expected: 32",
 		},
 		{
 			"invalid validator hash",
@@ -1101,7 +1099,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 				LastCommitHash:     make([]byte, tmhash.Size),
 				DataHash:           make([]byte, tmhash.Size),
 				EvidenceHash:       make([]byte, tmhash.Size),
-				ProposerProTxHash:    make([]byte, crypto.ProTxHashSize),
+				ProposerProTxHash:  make([]byte, crypto.ProTxHashSize),
 				ValidatorsHash:     make([]byte, tmhash.Size),
 				NextValidatorsHash: make([]byte, tmhash.Size+1),
 			},
@@ -1122,7 +1120,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 				LastCommitHash:     make([]byte, tmhash.Size),
 				DataHash:           make([]byte, tmhash.Size),
 				EvidenceHash:       make([]byte, tmhash.Size),
-				ProposerProTxHash:    make([]byte, crypto.ProTxHashSize),
+				ProposerProTxHash:  make([]byte, crypto.ProTxHashSize),
 				ValidatorsHash:     make([]byte, tmhash.Size),
 				NextValidatorsHash: make([]byte, tmhash.Size),
 				ConsensusHash:      make([]byte, tmhash.Size+1),
@@ -1144,7 +1142,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 				LastCommitHash:     make([]byte, tmhash.Size),
 				DataHash:           make([]byte, tmhash.Size),
 				EvidenceHash:       make([]byte, tmhash.Size),
-				ProposerProTxHash:      make([]byte, crypto.ProTxHashSize),
+				ProposerProTxHash:  make([]byte, crypto.ProTxHashSize),
 				ValidatorsHash:     make([]byte, tmhash.Size),
 				NextValidatorsHash: make([]byte, tmhash.Size),
 				ConsensusHash:      make([]byte, tmhash.Size),
@@ -1155,9 +1153,9 @@ func TestHeader_ValidateBasic(t *testing.T) {
 		{
 			"valid header",
 			Header{
-				Version: version.Consensus{Block: version.BlockProtocol},
-				ChainID: string(make([]byte, MaxChainIDLen)),
-				Height:  1,
+				Version:               version.Consensus{Block: version.BlockProtocol},
+				ChainID:               string(make([]byte, MaxChainIDLen)),
+				Height:                1,
 				CoreChainLockedHeight: 1,
 				LastBlockID: BlockID{
 					Hash: make([]byte, tmhash.Size),
@@ -1168,7 +1166,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 				LastCommitHash:     make([]byte, tmhash.Size),
 				DataHash:           make([]byte, tmhash.Size),
 				EvidenceHash:       make([]byte, tmhash.Size),
-				ProposerProTxHash:    make([]byte, crypto.ProTxHashSize),
+				ProposerProTxHash:  make([]byte, crypto.ProTxHashSize),
 				ValidatorsHash:     make([]byte, tmhash.Size),
 				NextValidatorsHash: make([]byte, tmhash.Size),
 				ConsensusHash:      make([]byte, tmhash.Size),
@@ -1279,7 +1277,7 @@ func TestCommit_ValidateBasic(t *testing.T) {
 						Hash: make([]byte, tmhash.Size),
 					},
 				},
-				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize + 1),
+				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize+1),
 				ThresholdStateSignature: make([]byte, bls12381.SignatureSize),
 			},
 			true, "wrong CommitSig",
@@ -1296,7 +1294,7 @@ func TestCommit_ValidateBasic(t *testing.T) {
 					},
 				},
 				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize),
-				ThresholdStateSignature: make([]byte, bls12381.SignatureSize + 1),
+				ThresholdStateSignature: make([]byte, bls12381.SignatureSize+1),
 			},
 			true, "wrong CommitSig",
 		},
@@ -1358,7 +1356,7 @@ func TestHeaderHashVector(t *testing.T) {
 
 		LastResultsHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 
-		EvidenceHash:    []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+		EvidenceHash:      []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 		ProposerProTxHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 	}
 

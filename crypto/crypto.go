@@ -50,6 +50,15 @@ func RandProTxHash() ProTxHash {
 	return ProTxHash(CRandBytes(ProTxHashSize))
 }
 
+// GenProTxHashes generates and returns a list of proTxHashes
+func GenProTxHashes(n int) []ProTxHash {
+	proTxHashes := make([]ProTxHash, n)
+	for i := 0; i < n; i++ {
+		proTxHashes[i] = RandProTxHash()
+	}
+	return proTxHashes
+}
+
 func RandQuorumHash() QuorumHash {
 	return QuorumHash(CRandBytes(ProTxHashSize))
 }
@@ -107,7 +116,6 @@ type Symmetric interface {
 	Encrypt(plaintext []byte, secret []byte) (ciphertext []byte)
 	Decrypt(ciphertext []byte, secret []byte) (plaintext []byte, err error)
 }
-
 
 // HexStringer ...
 type HexStringer interface {

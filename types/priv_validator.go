@@ -346,11 +346,12 @@ func (pv *MockPV) DisableChecks() {
 	// as MockPV has no safety checks at all.
 }
 
-func MapMockPVByProTxHashes(privValidators []*MockPV) map[string]*MockPV {
+func MapMockPVByProTxHashes(privValidators []PrivValidator) map[string]*MockPV {
 	privValidatorProTxHashMap := make(map[string]*MockPV)
-	for _, privValidator := range privValidators {
-		proTxHash := privValidator.ProTxHash
-		privValidatorProTxHashMap[proTxHash.String()] = privValidator
+	for _, pv := range privValidators {
+		mockPV := pv.(*MockPV)
+		proTxHash := mockPV.ProTxHash
+		privValidatorProTxHashMap[proTxHash.String()] = mockPV
 	}
 	return privValidatorProTxHashMap
 }

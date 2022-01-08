@@ -18,7 +18,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/internal/test/factory"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -86,8 +85,8 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 	badValNoPublicKey := &Validator{ProTxHash: val.ProTxHash}
 	badValNoProTxHash := &Validator{PubKey: val.PubKey}
 
-	goodValSet, _ := factory.RandValidatorSet(4)
-	badValSet, _ := factory.RandValidatorSet(4)
+	goodValSet, _ := RandValidatorSet(4)
+	badValSet, _ := RandValidatorSet(4)
 	badValSet.ThresholdPublicKey = val.PubKey
 
 	testCases := []struct {
@@ -240,7 +239,7 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 }
 
 func TestCopy(t *testing.T) {
-	vset, _ := factory.RandValidatorSetWithPriority(10, true)
+	vset, _ := RandValidatorSet(10)
 	vsetHash := vset.Hash()
 	if len(vsetHash) == 0 {
 		t.Fatalf("ValidatorSet had unexpected zero hash")
@@ -325,7 +324,7 @@ func TestProposerSelection2(t *testing.T) {
 	addresses[1] = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1}
 	addresses[2] = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
-	vals, _ := factory.GenerateValidatorSetUsingProTxHashes(proTxHashes)
+	vals, _ := GenerateValidatorSet(NewValSetParam(proTxHashes))
 	for i := 0; i < len(proTxHashes)*5; i++ {
 		ii := (i) % len(proTxHashes)
 		prop := vals.GetProposer()
@@ -353,7 +352,7 @@ func TestProposerSelection3(t *testing.T) {
 	proTxHashes[2] = crypto.Sha256([]byte("cvalidator_address12"))
 	proTxHashes[3] = crypto.Sha256([]byte("dvalidator_address12"))
 
-	vset, _ := factory.GenerateTestValidatorSetWithProTxHashesDefaultPower(proTxHashes)
+	vset, _ := GenerateValidatorSet(NewValSetParam(proTxHashes))
 
 	proposerOrder := make([]*Validator, 4)
 	for i := 0; i < 4; i++ {
@@ -583,7 +582,7 @@ func TestEmptySet(t *testing.T) {
 
 	// Add to empty set
 	proTxHashes := []crypto.ProTxHash{crypto.Sha256([]byte("v1")), crypto.Sha256([]byte("v2"))}
-	valSetAdd, _ := factory.GenerateTestValidatorSetWithProTxHashesDefaultPower(proTxHashes)
+	valSetAdd, _ := GenerateValidatorSet(NewValSetParam(proTxHashes))
 	assert.NoError(t, valSet.UpdateWithChangeSet(valSetAdd.Validators, valSetAdd.ThresholdPublicKey, crypto.RandQuorumHash()))
 	verifyValidatorSet(t, valSet)
 
@@ -602,7 +601,7 @@ func TestUpdatesForNewValidatorSet(t *testing.T) {
 
 	addresses12 := []crypto.Address{crypto.Sha256([]byte("v1")), crypto.Sha256([]byte("v2"))}
 
-	valSet, _ := factory.GenerateTestValidatorSetWithProTxHashesDefaultPower(addresses12)
+	valSet, _ := GenerateValidatorSet(NewValSetParam(addresses12))
 	verifyValidatorSet(t, valSet)
 
 	// Verify duplicates are caught in NewValidatorSet() and it panics
@@ -664,13 +663,14 @@ func createNewValidatorList(testValList []testVal) []*Validator {
 }
 
 func createNewValidatorSet(testValList []testVal) *ValidatorSet {
-	proTxHashList := make([]crypto.ProTxHash, 0, len(testValList))
-	powers := make([]int64, 0, len(testValList))
-	for _, val := range testValList {
-		proTxHashList = append(proTxHashList, crypto.Sha256([]byte(val.name)))
-		powers = append(powers, val.power)
+	opts := make([]ValSetParam, len(testValList))
+	for i, val := range testValList {
+		opts[i] = ValSetParam{
+			ProTxHash:   crypto.Sha256([]byte(val.name)),
+			VotingPower: val.power,
+		}
 	}
-	vals, _ := factory.GenerateTestValidatorSetWithProTxHashes(proTxHashList, powers)
+	vals, _ := GenerateValidatorSet(opts)
 	return vals
 }
 
@@ -709,7 +709,7 @@ func addValidatorsToValidatorSet(vals *ValidatorSet, testValList []testVal) ([]*
 	}
 	combinedProTxHashes = append(combinedProTxHashes, addedProTxHashes...)
 	if len(combinedProTxHashes) > 0 {
-		rVals, _ := factory.GenerateTestValidatorSetWithProTxHashesDefaultPower(combinedProTxHashes)
+		rVals, _ := GenerateValidatorSet(NewValSetParam(combinedProTxHashes))
 		rValidators := append(rVals.Validators, removedVals...) // nolint:gocritic
 		return rValidators, rVals.ThresholdPublicKey
 	}
@@ -1251,7 +1251,7 @@ func verifyValSetUpdatePriorityOrder(t *testing.T, valSet *ValidatorSet, cfg tes
 
 func TestNewValidatorSetFromExistingValidators(t *testing.T) {
 	size := 5
-	valSet, _ := factory.GenerateMockValidatorSet(size)
+	valSet, _ := GenerateValidatorSet(NewValSetParam(crypto.GenProTxHashes(size)))
 	valSet.IncrementProposerPriority(3)
 
 	newValSet0 := NewValidatorSet(valSet.Validators, valSet.ThresholdPublicKey, valSet.QuorumType, valSet.QuorumHash, true)
@@ -1366,14 +1366,14 @@ func TestSafeMul(t *testing.T) {
 }
 
 func TestValidatorSetProtoBuf(t *testing.T) {
-	valset, _ := factory.RandValidatorSet(10)
-	valset2, _ := factory.RandValidatorSet(10)
+	valset, _ := RandValidatorSet(10)
+	valset2, _ := RandValidatorSet(10)
 	valset2.Validators[0] = &Validator{}
 
-	valset3, _ := factory.RandValidatorSet(10)
+	valset3, _ := RandValidatorSet(10)
 	valset3.Proposer = nil
 
-	valset4, _ := factory.RandValidatorSet(10)
+	valset4, _ := RandValidatorSet(10)
 	valset4.Proposer = &Validator{}
 
 	testCases := []struct {
@@ -1463,7 +1463,7 @@ func BenchmarkUpdates(b *testing.B) {
 	for j := 0; j < n; j++ {
 		proTxHashes0[j] = crypto.Sha256([]byte(fmt.Sprintf("v%d", j)))
 	}
-	valSet, _ := factory.GenerateTestValidatorSetWithProTxHashesDefaultPower(proTxHashes0)
+	valSet, _ := GenerateValidatorSet(NewValSetParam(proTxHashes0))
 
 	proTxHashes1 := make([]crypto.ProTxHash, n+m)
 	newValList := make([]*Validator, m)
@@ -1473,7 +1473,7 @@ func BenchmarkUpdates(b *testing.B) {
 			newValList[j-n] = NewTestValidatorGeneratedFromProTxHash(crypto.Sha256([]byte(fmt.Sprintf("v%d", j))))
 		}
 	}
-	valSet2, _ := factory.GenerateTestValidatorSetWithProTxHashesDefaultPower(proTxHashes1)
+	valSet2, _ := GenerateValidatorSet(NewValSetParam(proTxHashes1))
 
 	b.ResetTimer()
 

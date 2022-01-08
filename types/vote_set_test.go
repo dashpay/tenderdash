@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/internal/test/factory"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
@@ -639,7 +638,7 @@ func randVoteSet(
 	numValidators int,
 	stateID StateID,
 ) (*VoteSet, *ValidatorSet, []PrivValidator) {
-	valSet, mockPVs := factory.RandValidatorSet(numValidators)
+	valSet, mockPVs := RandValidatorSet(numValidators)
 	var privVals []PrivValidator
 	for _, pv := range mockPVs {
 		privVals = append(privVals, pv)
