@@ -487,10 +487,10 @@ func TestBlockMaxDataBytes(t *testing.T) {
 		0: {-10, crypto.BLS12381, 1, 0, true, 0},
 		1: {10, crypto.BLS12381, 1, 0, true, 0},
 		2: {1114, crypto.BLS12381, 1, 0, true, 0},
-		3: {1115, crypto.BLS12381, 1, 0, false, 0},
-		4: {1116, crypto.BLS12381, 1, 0, false, 1},
-		5: {1116, crypto.BLS12381, 2, 0, false, 1},
-		6: {1215, crypto.BLS12381, 2, 100, false, 0},
+		3: {1118, crypto.BLS12381, 1, 0, false, 0},
+		4: {1119, crypto.BLS12381, 1, 0, false, 1},
+		5: {1119, crypto.BLS12381, 2, 0, false, 1},
+		6: {1218, crypto.BLS12381, 2, 100, false, 0},
 	}
 	// An extra 33 bytes (32 for sig, 1 for proto encoding are needed for BLS compared to edwards per validator
 
@@ -524,8 +524,8 @@ func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
 		0: {-10, 1, crypto.BLS12381, 1, true, 0},
 		1: {10, 1, crypto.BLS12381, 1, true, 0},
 		2: {1114, 1, crypto.BLS12381, 1, true, 0},
-		3: {1115, 1, crypto.BLS12381, 1, false, 0},
-		4: {1116, 1, crypto.BLS12381, 1, false, 1},
+		3: {1118, 1, crypto.BLS12381, 1, false, 0},
+		4: {1119, 1, crypto.BLS12381, 1, false, 1},
 	}
 
 	for i, tc := range testCases {
@@ -1253,20 +1253,6 @@ func TestCommit_ValidateBasic(t *testing.T) {
 			true, "commit cannot be for nil block",
 		},
 		{
-			"no signatures",
-			&Commit{
-				Height: 1,
-				Round:  1,
-				BlockID: BlockID{
-					Hash: make([]byte, tmhash.Size),
-					PartSetHeader: PartSetHeader{
-						Hash: make([]byte, tmhash.Size),
-					},
-				},
-			},
-			true, "no signatures in commit",
-		},
-		{
 			"invalid block signature",
 			&Commit{
 				Height: 1,
@@ -1280,7 +1266,7 @@ func TestCommit_ValidateBasic(t *testing.T) {
 				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize+1),
 				ThresholdStateSignature: make([]byte, bls12381.SignatureSize),
 			},
-			true, "wrong CommitSig",
+			true, "block threshold signature is wrong size",
 		},
 		{
 			"invalid state signature",
@@ -1296,7 +1282,7 @@ func TestCommit_ValidateBasic(t *testing.T) {
 				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize),
 				ThresholdStateSignature: make([]byte, bls12381.SignatureSize+1),
 			},
-			true, "wrong CommitSig",
+			true, "state threshold signature is wrong size",
 		},
 		{
 			"valid commit",
@@ -1364,7 +1350,7 @@ func TestHeaderHashVector(t *testing.T) {
 		header   Header
 		expBytes string
 	}{
-		{header: h, expBytes: "87b6117ac7f827d656f178a3d6d30b24b205db2b6a3a053bae8baf4618570bfc"},
+		{header: h, expBytes: "8df5f303af2ae303adaaa56d8f5645247dd8fd12dc5ebdff55444649f653452f"},
 	}
 
 	for _, tc := range testCases {

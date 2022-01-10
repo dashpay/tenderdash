@@ -28,7 +28,7 @@ const (
 	// MaxHeaderBytes is a maximum header size.
 	// NOTE: Because app hash can be of arbitrary size, the header is therefore not
 	// capped in size and thus this number should be seen as a soft max
-	MaxHeaderBytes       int64 = 646
+	MaxHeaderBytes       int64 = 639
 	MaxCoreChainLockSize int64 = 132
 
 	// MaxOverheadForBlock - maximum overhead to encode a block (up to
@@ -640,8 +640,8 @@ const (
 
 const (
 	// MaxCommitOverheadBytes is the max size of commit -> 82 for BlockID, 34 for StateID, 8 for Height, 4 for Round.
-	// 96 for Block signature, 96 for State Signature
-	MaxCommitOverheadBytes int64 = 326
+	// 96 for Block signature, 96 for State Signature and -> 3 bytes overhead
+	MaxCommitOverheadBytes int64 = 329
 )
 
 //-------------------------------------
