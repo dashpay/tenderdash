@@ -2,10 +2,12 @@ package p2p
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
-	"github.com/tendermint/tendermint/crypto"
 	mrand "math/rand"
 	"net"
+
+	"github.com/tendermint/tendermint/crypto"
 
 	"github.com/tendermint/tendermint/libs/log"
 	tmnet "github.com/tendermint/tendermint/libs/net"
@@ -288,4 +290,9 @@ func (book *AddrBookMock) AddPrivateIDs(addrs []string) {
 	for _, addr := range addrs {
 		book.PrivateAddrs[addr] = struct{}{}
 	}
+}
+
+// FindIP implements AddrBook
+func (book *AddrBookMock) FindIP(net.IP, uint16) types.NodeID {
+	return types.NodeID(hex.EncodeToString(tmrand.Bytes(types.NodeIDByteLength)))
 }

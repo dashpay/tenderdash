@@ -6,6 +6,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/bls12381"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -159,6 +163,8 @@ func TestValidateValidatorUpdates(t *testing.T) {
 		PubKeyTypes: []string{types.ABCIPubKeyTypeBLS12381},
 	}
 
+	addr := dashtypes.RandValidatorAddress()
+
 	testCases := []struct {
 		name string
 
@@ -169,25 +175,30 @@ func TestValidateValidatorUpdates(t *testing.T) {
 	}{
 		{
 			"adding a validator is OK",
+			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: 100, ProTxHash: proTxHash2, NodeAddress: addr.String()}},
+			defaultValidatorParams,
+			false,
+		},
+		{"adding a validator without address is OK",
 			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: 100, ProTxHash: proTxHash2}},
 			defaultValidatorParams,
 			false,
 		},
 		{
 			"updating a validator is OK",
-			[]abci.ValidatorUpdate{{PubKey: &pk1, Power: 100, ProTxHash: proTxHash1}},
+			[]abci.ValidatorUpdate{{PubKey: &pk1, Power: 100, ProTxHash: proTxHash1, NodeAddress: addr.String()}},
 			defaultValidatorParams,
 			false,
 		},
 		{
 			"removing a validator is OK",
-			[]abci.ValidatorUpdate{{Power: 0, ProTxHash: proTxHash2}},
+			[]abci.ValidatorUpdate{{Power: 0, ProTxHash: proTxHash2, NodeAddress: addr.String()}},
 			defaultValidatorParams,
 			false,
 		},
 		{
 			"adding a validator with negative power results in error",
-			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: -100, ProTxHash: proTxHash2}},
+			[]abci.ValidatorUpdate{{PubKey: &pk2, Power: -100, ProTxHash: proTxHash2, NodeAddress: addr.String()}},
 			defaultValidatorParams,
 			true,
 		},
@@ -365,6 +376,11 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 		}
 	}
 
+	// Ensure new validators have some IP addresses set
+	for _, validator := range newVals.Validators {
+		validator.NodeAddress = dashtypes.RandValidatorAddress()
+	}
+
 	app.ValidatorSetUpdate = newVals.ABCIEquivalentValidatorUpdates()
 
 	state, err = blockExec.ApplyBlock(state, nodeProTxHash, blockID, block)
@@ -387,8 +403,9 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 			"Expected event of type EventDataValidatorSetUpdate, got %T",
 			msg.Data(),
 		)
-		if assert.NotEmpty(t, event.ValidatorSetUpdates) {
-			assert.Equal(t, addProTxHash, event.ValidatorSetUpdates[pos].ProTxHash)
+		assert.Len(t, event.QuorumHash, crypto.QuorumHashSize)
+		if assert.NotEmpty(t, event.ValidatorUpdates) {
+			assert.Equal(t, addProTxHash, event.ValidatorUpdates[pos].ProTxHash)
 			assert.EqualValues(
 				t,
 				types.DefaultDashVotingPower,

@@ -4,13 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/dashevo/dashd-go/btcjson"
-	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
 	"net"
 	"net/http"
 	"strconv"
 	"time"
 
+	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/cors"
@@ -18,6 +17,8 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
+	dashquorum "github.com/tendermint/tendermint/dash/quorum"
+	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
 	"github.com/tendermint/tendermint/internal/consensus"
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/internal/p2p"
@@ -81,7 +82,9 @@ type nodeImpl struct {
 	rpcEnv           *rpccore.Environment
 	prometheusSrv    *http.Server
 
-	dashCoreRPCClient dashcore.Client
+	// Dash
+	validatorConnExecutor *dashquorum.ValidatorConnExecutor
+	dashCoreRPCClient     dashcore.Client
 }
 
 // newDefaultNode returns a Tendermint node with default settings for the
@@ -284,6 +287,9 @@ func makeNode(cfg *config.Config,
 	// Create the handshaker, which calls RequestInfo, sets the AppVersion on the state,
 	// and replays any blocks as necessary to sync tendermint with the app.
 	consensusLogger := logger.With("module", "consensus")
+	if proTxHashP != nil {
+		consensusLogger = consensusLogger.With("proTxHash", proTxHashP.ShortString())
+	}
 	proposedAppVersion := uint64(0)
 	if !stateSync {
 		if proposedAppVersion, err = doHandshake(stateStore, state, blockStore, genDoc, proTxHashP, cfg.Consensus.AppHashSize, eventBus, proxyApp, consensusLogger); err != nil {
@@ -507,6 +513,23 @@ func makeNode(cfg *config.Config,
 		}()
 	}
 
+	// Start Dash connection executor
+	var validatorConnExecutor *dashquorum.ValidatorConnExecutor
+	if proTxHashP != nil {
+		vcLogger := logger.With("proTxHash", proTxHashP.ShortString())
+
+		validatorConnExecutor, err = dashquorum.NewValidatorConnExecutor(
+			*proTxHashP,
+			eventBus,
+			sw,
+			dashquorum.WithLogger(vcLogger),
+			dashquorum.WithValidatorsSet(state.Validators),
+		)
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	node := &nodeImpl{
 		config:        cfg,
 		genesisDoc:    genDoc,
@@ -533,7 +556,8 @@ func makeNode(cfg *config.Config,
 		indexerService:   indexerService,
 		eventBus:         eventBus,
 
-		dashCoreRPCClient: dashCoreRPCClient,
+		validatorConnExecutor: validatorConnExecutor,
+		dashCoreRPCClient:     dashCoreRPCClient,
 
 		rpcEnv: &rpccore.Environment{
 			ProxyAppQuery:   proxyApp.Query(),
@@ -783,6 +807,12 @@ func (n *nodeImpl) OnStart() error {
 	} else if n.config.P2P.PexReactor {
 		if err := n.pexReactor.Start(); err != nil {
 			return err
+		}
+	}
+	// Initialize ValidatorConnExecutor (only on Validators)
+	if n.validatorConnExecutor != nil {
+		if err := n.validatorConnExecutor.Start(); err != nil {
+			return fmt.Errorf("cannot start ValidatorConnExecutor: %w", err)
 		}
 	}
 

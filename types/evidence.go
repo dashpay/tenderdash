@@ -5,9 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/dashevo/dashd-go/btcjson"
 	"strings"
 	"time"
+
+	"github.com/dashevo/dashd-go/btcjson"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -370,7 +371,7 @@ func NewMockDuplicateVoteEvidenceWithValidator(
 	stateID := RandStateID().WithHeight(height - 1)
 
 	proTxHash, _ := pv.GetProTxHash(context.Background())
-	val := NewValidator(pubKey, DefaultDashVotingPower, proTxHash)
+	val := NewValidator(pubKey, DefaultDashVotingPower, proTxHash, "")
 
 	voteA := makeMockVote(height, 0, 0, proTxHash, randBlockID())
 	vA := voteA.ToProto()

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/crypto/bls12381"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -344,7 +345,7 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
-	fireEvents(logger, blockExec.eventBus, block, blockID, abciResponses, validatorSet)
+	fireEvents(logger, blockExec.eventBus, block, blockID, abciResponses, validatorSet, quorumHash)
 
 	return state, nil
 }
@@ -572,6 +573,13 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 				valUpdate.ProTxHash,
 			)
 		}
+
+		if valUpdate.NodeAddress != "" {
+			_, err := dashtypes.ParseValidatorAddress(valUpdate.NodeAddress)
+			if err != nil {
+				return fmt.Errorf("cannot parse validator address %s: %w", valUpdate.NodeAddress, err)
+			}
+		}
 	}
 	return nil
 }
@@ -667,6 +675,7 @@ func fireEvents(
 	blockID types.BlockID,
 	abciResponses *tmstate.ABCIResponses,
 	validatorSetUpdate *types.ValidatorSet,
+	quorumHash tmbytes.HexBytes,
 ) {
 	if err := eventBus.PublishEventNewBlock(types.EventDataNewBlock{
 		Block:            block,

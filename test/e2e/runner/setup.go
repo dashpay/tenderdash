@@ -19,9 +19,11 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
+	"github.com/gogo/protobuf/proto"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
+	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/privval"
 	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
 	"github.com/tendermint/tendermint/types"
@@ -32,7 +34,7 @@ const (
 	AppAddressUNIX = "unix:///var/run/app.sock"
 
 	PrivvalAddressTCP      = "tcp://0.0.0.0:27559"
-    PrivvalAddressGRPC    = "grpc://0.0.0.0:27559"
+	PrivvalAddressGRPC     = "grpc://0.0.0.0:27559"
 	PrivvalAddressUNIX     = "unix:///var/run/privval.sock"
 	PrivvalAddressDashCore = "127.0.0.1:19998"
 	PrivvalKeyFile         = "config/priv_validator_key.json"
@@ -234,7 +236,7 @@ func MakeGenesis(testnet *e2e.Testnet, genesisTime time.Time) (types.GenesisDoc,
 		ChainID:                      testnet.Name,
 		ConsensusParams:              types.DefaultConsensusParams(),
 		InitialHeight:                testnet.InitialHeight,
-		InitialCoreChainLockedHeight: testnet.InitialCoreHeight,
+		InitialCoreChainLockedHeight: testnet.GenesisCoreHeight,
 		ThresholdPublicKey:           testnet.ThresholdPublicKey,
 		QuorumType:                   testnet.QuorumType,
 		QuorumHash:                   testnet.QuorumHash,
@@ -243,7 +245,16 @@ func MakeGenesis(testnet *e2e.Testnet, genesisTime time.Time) (types.GenesisDoc,
 		append(genesis.ConsensusParams.Validator.PubKeyTypes, types.ABCIPubKeyTypeBLS12381)
 	genesis.ConsensusParams.Evidence.MaxAgeNumBlocks = e2e.EvidenceAgeHeight
 	genesis.ConsensusParams.Evidence.MaxAgeDuration = e2e.EvidenceAgeTime
-	for validator, pubkey := range testnet.Validators {
+
+	for validator, validatorUpdate := range testnet.Validators {
+		if validatorUpdate.PubKey == nil {
+			return genesis, fmt.Errorf("public key for validator %s is nil", validator.Name)
+		}
+		pubkey, err := cryptoenc.PubKeyFromProto(*validatorUpdate.PubKey)
+		if err != nil {
+			return genesis, err
+		}
+
 		genesis.Validators = append(genesis.Validators, types.GenesisValidator{
 			Name:      validator.Name,
 			PubKey:    pubkey,
@@ -457,8 +468,15 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 		validatorUpdates := map[string]map[string]string{}
 		for height, validators := range node.Testnet.ValidatorUpdates {
 			updateVals := map[string]string{}
-			for node, pubkey := range validators {
-				updateVals[hex.EncodeToString(node.ProTxHash.Bytes())] = base64.StdEncoding.EncodeToString(pubkey.Bytes())
+			for node, validatorUpdate := range validators {
+				key := hex.EncodeToString(node.ProTxHash.Bytes())
+				update := validatorUpdate // avoid getting address of a range variable to make linter happy
+				value, err := proto.Marshal(&update)
+				if err != nil {
+					return nil, err
+				}
+				valueBase64 := base64.StdEncoding.EncodeToString(value)
+				updateVals[key] = valueBase64
 			}
 			validatorUpdates[fmt.Sprintf("%v", height)] = updateVals
 		}
@@ -477,6 +495,10 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 			quorumHashUpdates[fmt.Sprintf("%v", height)] = hex.EncodeToString(quorumHash.Bytes())
 		}
 		cfg["quorum_hash_update"] = quorumHashUpdates
+	}
+
+	if node.Testnet.InitAppCoreHeight > 0 {
+		cfg["init_app_core_chain_locked_height"] = node.Testnet.InitAppCoreHeight
 	}
 	if len(node.Testnet.ChainLockUpdates) > 0 {
 		chainLockUpdates := map[string]string{}

@@ -6,6 +6,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -48,8 +49,9 @@ func (tm2pb) Validator(val *Validator) abci.Validator {
 // ValidatorUpdate panics on unknown pubkey type
 func (tm2pb) ValidatorUpdate(val *Validator) abci.ValidatorUpdate {
 	valUpdate := abci.ValidatorUpdate{
-		Power:     val.VotingPower,
-		ProTxHash: val.ProTxHash,
+		Power:       val.VotingPower,
+		ProTxHash:   val.ProTxHash,
+		NodeAddress: val.NodeAddress.String(),
 	}
 	if val.PubKey != nil {
 		pk, err := cryptoenc.PubKeyToProto(val.PubKey)
@@ -79,7 +81,12 @@ func (tm2pb) ValidatorUpdates(vals *ValidatorSet) abci.ValidatorSetUpdate {
 }
 
 // XXX: panics on nil or unknown pubkey type
-func (tm2pb) NewValidatorUpdate(pubkey crypto.PubKey, power int64, proTxHash []byte) abci.ValidatorUpdate {
+func (tm2pb) NewValidatorUpdate(
+	pubkey crypto.PubKey,
+	power int64,
+	proTxHash []byte,
+	address dashtypes.ValidatorAddress,
+) abci.ValidatorUpdate {
 	var pubkeyABCI *crypto2.PublicKey
 	if pubkey != nil {
 		pubkeyProto, err := cryptoenc.PubKeyToProto(pubkey)
@@ -92,9 +99,10 @@ func (tm2pb) NewValidatorUpdate(pubkey crypto.PubKey, power int64, proTxHash []b
 	}
 
 	return abci.ValidatorUpdate{
-		PubKey:    pubkeyABCI,
-		Power:     power,
-		ProTxHash: proTxHash,
+		PubKey:      pubkeyABCI,
+		Power:       power,
+		ProTxHash:   proTxHash,
+		NodeAddress: address.String(),
 	}
 }
 
@@ -117,7 +125,7 @@ func (pb2tm) ValidatorUpdates(vals []abci.ValidatorUpdate) ([]*Validator, error)
 				return nil, err
 			}
 		}
-		tmVals[i] = NewValidator(pub, v.Power, v.ProTxHash)
+		tmVals[i] = NewValidator(pub, v.Power, v.ProTxHash, v.NodeAddress)
 	}
 	return tmVals, nil
 }
@@ -137,7 +145,7 @@ func (pb2tm) ValidatorUpdatesFromValidatorSet(valSetUpdate *abci.ValidatorSetUpd
 				return nil, nil, nil, err
 			}
 		}
-		tmVals[i] = NewValidator(pub, v.Power, v.ProTxHash)
+		tmVals[i] = NewValidator(pub, v.Power, v.ProTxHash, v.NodeAddress)
 		err = tmVals[i].ValidateBasic()
 		if err != nil {
 			return nil, nil, nil, fmt.Errorf("validator updates from validator set error when validating validator: %s", err)

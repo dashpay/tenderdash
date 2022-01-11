@@ -6,6 +6,7 @@ import (
 	"github.com/dashevo/dashd-go/btcjson"
 
 	"github.com/tendermint/tendermint/crypto/bls12381"
+	dashtypes "github.com/tendermint/tendermint/dash/types"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -56,6 +57,50 @@ func TestABCIValidators(t *testing.T) {
 	tmVals, err = PB2TM.ValidatorUpdates([]abci.ValidatorUpdate{abciVal})
 	assert.Nil(t, err)
 	assert.Equal(t, tmValExpected, tmVals[0])
+}
+
+func TestABCIConsensusParams(t *testing.T) {
+	cp := DefaultConsensusParams()
+	abciCP := TM2PB.ConsensusParams(cp)
+	cp2 := UpdateConsensusParams(*cp, abciCP)
+
+	assert.Equal(t, *cp, cp2)
+}
+
+type pubKeyBLS struct{}
+
+func (pubKeyBLS) Address() Address                                  { return []byte{} }
+func (pubKeyBLS) Bytes() []byte                                     { return []byte{} }
+func (pubKeyBLS) VerifySignature(msg []byte, sig []byte) bool       { return false }
+func (pubKeyBLS) VerifySignatureDigest(msg []byte, sig []byte) bool { return false }
+func (pubKeyBLS) AggregateSignatures(sigSharesData [][]byte, messages [][]byte) ([]byte, error) {
+	return []byte{}, nil
+}
+func (pubKeyBLS) VerifyAggregateSignature(msgs [][]byte, sig []byte) bool { return false }
+func (pubKeyBLS) Equals(crypto.PubKey) bool                               { return false }
+func (pubKeyBLS) String() string                                          { return "" }
+func (pubKeyBLS) HexString() string                                       { return "" }
+func (pubKeyBLS) Type() string                                            { return "pubKeyBLS12381" }
+func (pubKeyBLS) TypeValue() crypto.KeyType                               { return crypto.BLS12381 }
+
+func TestABCIValidatorFromPubKeyAndPower(t *testing.T) {
+	pubkey := bls12381.GenPrivKey().PubKey()
+	address := dashtypes.RandValidatorAddress()
+	abciVal := TM2PB.NewValidatorUpdate(pubkey, DefaultDashVotingPower, crypto.RandProTxHash(), address)
+	assert.Equal(t, DefaultDashVotingPower, abciVal.Power)
+	assert.Equal(t, address.String(), abciVal.NodeAddress)
+
+	assert.NotPanics(t, func() {
+		TM2PB.NewValidatorUpdate(nil, DefaultDashVotingPower, crypto.RandProTxHash(), dashtypes.RandValidatorAddress())
+	})
+	assert.Panics(t, func() {
+		TM2PB.NewValidatorUpdate(
+			pubKeyBLS{},
+			DefaultDashVotingPower,
+			crypto.RandProTxHash(),
+			dashtypes.RandValidatorAddress(),
+		)
+	})
 }
 
 func TestABCIValidatorWithoutPubKey(t *testing.T) {
