@@ -1,7 +1,7 @@
 package types
 
 import (
-	"math/rand"
+	"context"
 	"sort"
 
 	"github.com/tendermint/tendermint/crypto"
@@ -34,8 +34,28 @@ func NewValSetParam(proTxHashes []crypto.ProTxHash) []ValSetParam {
 	return opts
 }
 
+// ValSetOptions is the options for generation of validator set and private validators
+type ValSetOptions struct {
+	PrivValsMap      map[string]PrivValidator
+	PrivValsAtHeight int64
+}
+
+// WithUpdatePrivValAt sets a list of the private validators to update validator set at passed the height
+func WithUpdatePrivValAt(privVals []PrivValidator, height int64) func(opt *ValSetOptions) {
+	return func(opt *ValSetOptions) {
+		for _, pv := range privVals {
+			proTxhash, _ := pv.GetProTxHash(context.Background())
+			opt.PrivValsMap[proTxhash.String()] = pv
+		}
+		opt.PrivValsAtHeight = height
+	}
+}
+
+// ValSetOptionFunc is a type of validator-set function to manage options of generator
+type ValSetOptionFunc func(opt *ValSetOptions)
+
 // GenerateValidatorSet generates a validator set and a list of private validators
-func GenerateValidatorSet(valParams []ValSetParam) (*ValidatorSet, []PrivValidator) {
+func GenerateValidatorSet(valParams []ValSetParam, opts ...ValSetOptionFunc) (*ValidatorSet, []PrivValidator) {
 	var (
 		n              = len(valParams)
 		proTxHashes    = make([]crypto.ProTxHash, n)
@@ -47,18 +67,18 @@ func GenerateValidatorSet(valParams []ValSetParam) (*ValidatorSet, []PrivValidat
 		proTxHashes[i] = opt.ProTxHash
 		valzOptsMap[opt.ProTxHash.String()] = opt
 	}
+	valSetOpts := ValSetOptions{
+		PrivValsMap: make(map[string]PrivValidator),
+	}
+	for _, fn := range opts {
+		fn(&valSetOpts)
+	}
 	orderedProTxHashes, privateKeys, thresholdPublicKey :=
 		bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThreshold(proTxHashes)
 	quorumHash := crypto.RandQuorumHash()
+	mockPVFunc := newMockPVFunc(valSetOpts, quorumHash, thresholdPublicKey)
 	for i := 0; i < n; i++ {
-		privValidators[i] = NewMockPVWithParams(
-			privateKeys[i],
-			orderedProTxHashes[i],
-			quorumHash,
-			thresholdPublicKey,
-			false,
-			false,
-		)
+		privValidators[i] = mockPVFunc(orderedProTxHashes[i], privateKeys[i])
 		opt := valzOptsMap[orderedProTxHashes[i].String()]
 		valz[i] = NewValidator(privateKeys[i].PubKey(), opt.VotingPower, orderedProTxHashes[i])
 	}
@@ -66,10 +86,40 @@ func GenerateValidatorSet(valParams []ValSetParam) (*ValidatorSet, []PrivValidat
 	return NewValidatorSet(valz, thresholdPublicKey, crypto.SmallQuorumType(), quorumHash, true), privValidators
 }
 
-func WithPriority(valParams []ValSetParam) []ValSetParam {
-	n := len(valParams)
-	for i := 0; i < n; i++ {
-		valParams[i].ProposerPriority = rand.Int63() % (MaxTotalVotingPower - (int64(n) * DefaultDashVotingPower))
+// MakeGenesisValsFromValidatorSet converts ValidatorSet data into a list of GenesisValidator
+func MakeGenesisValsFromValidatorSet(valz *ValidatorSet) []GenesisValidator {
+	genVals := make([]GenesisValidator, len(valz.Validators))
+	for i, val := range valz.Validators {
+		genVals[i] = GenesisValidator{
+			PubKey:    val.PubKey,
+			Power:     DefaultDashVotingPower,
+			ProTxHash: val.ProTxHash,
+		}
 	}
-	return valParams
+	return genVals
+}
+
+func newMockPVFunc(
+	opts ValSetOptions,
+	quorumHash crypto.QuorumHash,
+	thresholdPubKey crypto.PubKey,
+) func(crypto.ProTxHash, crypto.PrivKey) PrivValidator {
+	return func(
+		proTxHash crypto.ProTxHash,
+		privKey crypto.PrivKey,
+	) PrivValidator {
+		privVal, ok := opts.PrivValsMap[proTxHash.String()]
+		if ok && opts.PrivValsAtHeight > 0 {
+			privVal.UpdatePrivateKey(context.Background(), privKey, quorumHash, thresholdPubKey, opts.PrivValsAtHeight)
+			return privVal
+		}
+		return NewMockPVWithParams(
+			privKey,
+			proTxHash,
+			quorumHash,
+			thresholdPubKey,
+			false,
+			false,
+		)
+	}
 }
