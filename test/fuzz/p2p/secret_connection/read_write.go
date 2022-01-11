@@ -1,36 +1,14 @@
 package secretconnection
 
 import (
-	"bytes"
 	"fmt"
 	"io"
 	"log"
 
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	sc "github.com/tendermint/tendermint/internal/p2p/conn"
 	"github.com/tendermint/tendermint/libs/async"
-	sc "github.com/tendermint/tendermint/p2p/conn"
 )
-
-func Fuzz(data []byte) int {
-	if len(data) == 0 {
-		return -1
-	}
-
-	fooConn, barConn := makeSecretConnPair()
-	n, err := fooConn.Write(data)
-	if err != nil {
-		panic(err)
-	}
-	dataRead := make([]byte, n)
-	m, err := barConn.Read(dataRead)
-	if err != nil {
-		panic(err)
-	}
-	if !bytes.Equal(data[:n], dataRead[:m]) {
-		panic(fmt.Sprintf("bytes written %X != read %X", data[:n], dataRead[:m]))
-	}
-	return 1
-}
 
 type kvstoreConn struct {
 	*io.PipeReader
