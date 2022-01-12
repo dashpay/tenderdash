@@ -20,7 +20,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/crypto/tmhash"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
+	"github.com/tendermint/tendermint/dash/quorum"
 	"github.com/tendermint/tendermint/internal/evidence"
 	"github.com/tendermint/tendermint/internal/mempool"
 	mempoolv0 "github.com/tendermint/tendermint/internal/mempool/v0"
@@ -64,9 +64,9 @@ func TestNodeStartStop(t *testing.T) {
 	}
 
 	// check if we can read node ID of this node
-	va, err := dashtypes.ParseValidatorAddress(config.P2P.ListenAddress)
+	va, err := types.ParseValidatorAddress(cfg.P2P.ListenAddress)
 	assert.NoError(t, err)
-	id, err := dashtypes.NewTCPNodeIDResolver().Resolve(va)
+	id, err := quorum.NewTCPNodeIDResolver().Resolve(va)
 	assert.Equal(t, n.nodeInfo.ID(), id)
 	assert.NoError(t, err)
 

@@ -4,18 +4,16 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"io/ioutil"
 	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
-
-	"github.com/tendermint/tendermint/crypto/bls12381"
-
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/bls12381"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	tmtime "github.com/tendermint/tendermint/libs/time"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 const (

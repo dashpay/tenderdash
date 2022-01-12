@@ -4,15 +4,11 @@ import (
 	"testing"
 
 	"github.com/dashevo/dashd-go/btcjson"
-
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/encoding"
 )
 
@@ -59,14 +55,6 @@ func TestABCIValidators(t *testing.T) {
 	assert.Equal(t, tmValExpected, tmVals[0])
 }
 
-func TestABCIConsensusParams(t *testing.T) {
-	cp := DefaultConsensusParams()
-	abciCP := TM2PB.ConsensusParams(cp)
-	cp2 := UpdateConsensusParams(*cp, abciCP)
-
-	assert.Equal(t, *cp, cp2)
-}
-
 type pubKeyBLS struct{}
 
 func (pubKeyBLS) Address() Address                                  { return []byte{} }
@@ -85,20 +73,20 @@ func (pubKeyBLS) TypeValue() crypto.KeyType                               { retu
 
 func TestABCIValidatorFromPubKeyAndPower(t *testing.T) {
 	pubkey := bls12381.GenPrivKey().PubKey()
-	address := dashtypes.RandValidatorAddress()
-	abciVal := TM2PB.NewValidatorUpdate(pubkey, DefaultDashVotingPower, crypto.RandProTxHash(), address)
+	address := RandValidatorAddress()
+	abciVal := TM2PB.NewValidatorUpdate(pubkey, DefaultDashVotingPower, crypto.RandProTxHash(), address.String())
 	assert.Equal(t, DefaultDashVotingPower, abciVal.Power)
 	assert.Equal(t, address.String(), abciVal.NodeAddress)
 
 	assert.NotPanics(t, func() {
-		TM2PB.NewValidatorUpdate(nil, DefaultDashVotingPower, crypto.RandProTxHash(), dashtypes.RandValidatorAddress())
+		TM2PB.NewValidatorUpdate(nil, DefaultDashVotingPower, crypto.RandProTxHash(), RandValidatorAddress().String())
 	})
 	assert.Panics(t, func() {
 		TM2PB.NewValidatorUpdate(
 			pubKeyBLS{},
 			DefaultDashVotingPower,
 			crypto.RandProTxHash(),
-			dashtypes.RandValidatorAddress(),
+			RandValidatorAddress().String(),
 		)
 	})
 }

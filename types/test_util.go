@@ -3,7 +3,6 @@ package types
 import (
 	"context"
 	"fmt"
-	"math/rand"
 
 	"github.com/tendermint/tendermint/crypto/tmhash"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
@@ -95,7 +94,7 @@ func MakeVote(
 
 func RandStateID() StateID {
 	return StateID{
-		Height:      rand.Int63(),
+		Height:      tmrand.NewRand().Int63(),
 		LastAppHash: tmrand.Bytes(tmhash.Size),
 	}
 }

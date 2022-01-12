@@ -8,7 +8,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/tmhash"
-	"github.com/tendermint/tendermint/internal/test/factory"
 	provider_mocks "github.com/tendermint/tendermint/light/provider/mocks"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -175,59 +174,6 @@ func (pkz privKeys) GenSignedHeaderLastBlockID(chainID string, height int64, bTi
 	}
 }
 
-// Generates the header and validator set to create a full entire mock node with blocks to height (
-// blockSize) and with variation in validator sets. BlockIntervals are in per minute.
-// NOTE: Expected to have a large validator set size ~ 100 validators.
-func genMockNodeWithKeys(
-	chainID string,
-	blockSize int64,
-	valSize int,
-	bTime time.Time) (
-	map[int64]*types.SignedHeader,
-	map[int64]*types.ValidatorSet,
-	map[string]*types.MockPV) {
-
-	var (
-		headers           = make(map[int64]*types.SignedHeader, blockSize)
-		valsets           = make(map[int64]*types.ValidatorSet, blockSize+1)
-		valset0, privVals = types.RandValidatorSet(valSize)
-		keys              = exposeMockPVKeys(privVals, valset0.QuorumHash)
-		privValMap        = types.MapMockPVByProTxHashes(privVals)
-	)
-
-	nextValSet, _ := factory.GenerateMockValidatorSetUpdatingPrivateValidatorsAtHeight(
-		valset0.GetProTxHashes(),
-		privValMap,
-		0,
-	)
-
-	// genesis header and vals
-	lastHeader := keys.GenSignedHeader(chainID, 1, bTime.Add(1*time.Minute), nil,
-		valset0, nextValSet, hash("app_hash"), hash("cons_hash"),
-		hash("results_hash"), 0, len(keys))
-	currentHeader := lastHeader
-	headers[1] = currentHeader
-	valsets[1] = valset0
-	currentValset := nextValSet
-
-	for height := int64(2); height <= blockSize; height++ {
-		keysAtHeight := exposeMockPVKeys(privVals, currentValset.QuorumHash)
-		nextValSet, _ := factory.GenerateMockValidatorSetUpdatingPrivateValidatorsAtHeight(
-			valset0.GetProTxHashes(), privValMap, height,
-		)
-		currentHeader = keysAtHeight.GenSignedHeaderLastBlockID(
-			chainID, height, bTime.Add(time.Duration(height)*time.Minute),
-			nil,
-			currentValset, nextValSet, hash("app_hash"), hash("cons_hash"),
-			hash("results_hash"), 0, len(keys), types.BlockID{Hash: lastHeader.Hash()})
-		headers[height] = currentHeader
-		valsets[height] = currentValset
-		lastHeader = currentHeader
-		currentValset = nextValSet
-	}
-
-	return headers, valsets, privValMap
-}
 func hash(s string) []byte {
 	return tmhash.Sum([]byte(s))
 }

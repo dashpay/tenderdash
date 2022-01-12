@@ -9,7 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
 	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
 	"github.com/tendermint/tendermint/types"
 )
@@ -70,7 +69,7 @@ func TestValidator_Sets(t *testing.T) {
 					valScheduleValidator.ProTxHash, h, valScheduleValidator.PubKey.Bytes(), validator.PubKey.Bytes())
 
 				// Validators in the schedule don't contain addresses
-				validator.NodeAddress = dashtypes.ValidatorAddress{}
+				validator.NodeAddress = types.ValidatorAddress{}
 			}
 			require.Equal(t, valSchedule.Set.Validators, validators,
 				"incorrect validator set at height %v", h)

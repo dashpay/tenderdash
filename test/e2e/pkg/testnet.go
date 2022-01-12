@@ -363,9 +363,10 @@ func LoadTestnet(file string) (*Testnet, error) {
 			if validator == nil {
 				return nil, fmt.Errorf("unknown validator %q", validatorName)
 			}
+
 			pubKey := privateKeys[i].PubKey()
 
-			vu, err := validator.ValidatorUpdate(pubKey.Bytes())
+			vu, err := validator.validatorUpdate(pubKey.Bytes())
 			if err != nil {
 				return nil, err
 			}
@@ -390,7 +391,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 		var i = 0
 		for _, node := range testnet.Nodes {
 			if node.Mode == ModeValidator {
-				vu, err := node.ValidatorUpdate(privateKeys[i].PubKey().Bytes())
+				vu, err := node.validatorUpdate(privateKeys[i].PubKey().Bytes())
 				if err != nil {
 					return nil, err
 				}
@@ -468,7 +469,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 				return nil, fmt.Errorf("unknown validator with protxHash %X for update at height %v", proTxHash, height)
 			}
 
-			vu, err := node.ValidatorUpdate(privateKeys[i].PubKey().Bytes())
+			vu, err := node.validatorUpdate(privateKeys[i].PubKey().Bytes())
 			if err != nil {
 				return nil, err
 			}
@@ -736,6 +737,17 @@ func (t Testnet) HasPerturbations() bool {
 		}
 	}
 	return false
+}
+
+// ValidatorUpdate creates an abci.ValidatorUpdate struct from the current node
+func (n *Node) validatorUpdate(publicKey []byte) (abci.ValidatorUpdate, error) {
+	proTxHash := n.ProTxHash.Bytes()
+
+	power := types.DefaultDashVotingPower
+
+	address := n.AddressP2P(false)
+	validatorUpdate := abci.UpdateValidator(proTxHash, publicKey, power, address)
+	return validatorUpdate, nil
 }
 
 // Address returns a P2P endpoint address for the node.

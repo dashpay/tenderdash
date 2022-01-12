@@ -30,11 +30,11 @@ type ValidatorAddress struct {
 
 var (
 	// ErrNoHostname is returned when no hostname is set for the validator address
-	ErrNoHostname error = errors.New("no hostname")
+	ErrNoHostname = errors.New("no hostname")
 	// ErrNoPort is returned when no valid port is set for the validator address
-	ErrNoPort error = errors.New("no port")
+	ErrNoPort = errors.New("no port")
 	// ErrNoNodeID is returned when node ID is not set for the node ID
-	ErrNoNodeID error = errors.New("no node ID")
+	ErrNoNodeID = errors.New("no node ID")
 )
 
 // ParseValidatorAddress parses provided address, which should be in `proto://nodeID@host:port` form.
@@ -60,7 +60,7 @@ func parseValidatorAddressString(urlString string) (ValidatorAddress, error) {
 	url, err := url.Parse(urlString)
 	if (err != nil || url.Scheme == "") &&
 		(!stringHasScheme(urlString) || reSchemeIsHost.MatchString(urlString)) {
-		url, err = url.Parse(string("tcp://" + urlString))
+		url, err = url.Parse("tcp://" + urlString)
 	}
 	if err != nil {
 		return ValidatorAddress{}, fmt.Errorf("invalid node address %q: %w", urlString, err)

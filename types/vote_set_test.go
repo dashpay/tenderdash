@@ -639,7 +639,7 @@ func randVoteSet(
 	stateID StateID,
 ) (*VoteSet, *ValidatorSet, []PrivValidator) {
 	valSet, mockPVs := RandValidatorSet(numValidators)
-	var privVals []PrivValidator
+	privVals := make([]PrivValidator, 0, len(mockPVs))
 	for _, pv := range mockPVs {
 		privVals = append(privVals, pv)
 	}

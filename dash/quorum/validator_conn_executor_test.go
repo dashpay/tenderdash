@@ -3,7 +3,6 @@ package quorum
 import (
 	"context"
 	"encoding/hex"
-	"fmt"
 	"testing"
 	"time"
 
@@ -18,7 +17,6 @@ import (
 	"github.com/tendermint/tendermint/internal/proxy"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/store"
-	"github.com/tendermint/tendermint/internal/test/factory"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -540,18 +538,18 @@ func makeTxs(height int64) (txs []types.Tx) {
 
 func makeState(nVals int, height int64) (sm.State, dbm.DB, map[string]types.PrivValidator) {
 	privValsByProTxHash := make(map[string]types.PrivValidator, nVals)
-	vals, privVals, quorumHash, thresholdPublicKey := factory.GenerateMockGenesisValidators(nVals)
-	// vals and privals are sorted
+	valSet, privVals := types.RandValidatorSet(nVals)
 	for i := 0; i < nVals; i++ {
-		vals[i].Name = fmt.Sprintf("test%d", i)
-		proTxHash := vals[i].ProTxHash
+		validator := valSet.Validators[i]
+		proTxHash := validator.ProTxHash
 		privValsByProTxHash[proTxHash.String()] = privVals[i]
 	}
+	genVals := types.MakeGenesisValsFromValidatorSet(valSet)
 	s, _ := sm.MakeGenesisState(&types.GenesisDoc{
 		ChainID:            chainID,
-		Validators:         vals,
-		ThresholdPublicKey: thresholdPublicKey,
-		QuorumHash:         quorumHash,
+		Validators:         genVals,
+		ThresholdPublicKey: valSet.ThresholdPublicKey,
+		QuorumHash:         valSet.QuorumHash,
 		AppHash:            nil,
 	})
 
