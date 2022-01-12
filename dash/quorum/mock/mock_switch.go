@@ -5,9 +5,9 @@ import (
 	"strings"
 	"time"
 
-	dashtypes "github.com/tendermint/tendermint/dash/types"
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/internal/p2p/mocks"
+	"github.com/tendermint/tendermint/types"
 )
 
 // MOCK SWITCH //
@@ -82,7 +82,7 @@ func (sw Switch) RemovePersistentPeer(addr string) error {
 func (sw *Switch) DialPeersAsync(addrs []string) error {
 	for _, addr := range addrs {
 		peer := &mocks.Peer{}
-		parsed, err := dashtypes.ParseValidatorAddress(addr)
+		parsed, err := types.ParseValidatorAddress(addr)
 		if err != nil {
 			return err
 		}

@@ -644,7 +644,8 @@ func (sw *Switch) RemovePersistentPeer(addr string) error {
 		return nil
 	}
 	sw.Logger.Info("Removing persistent peer", "addr", addr)
-	toDelete, err := NewNetAddressString(addr)
+
+	toDelete, err := ParseNodeAddress(addr)
 	if err != nil {
 		return err
 	}

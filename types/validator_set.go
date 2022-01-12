@@ -15,7 +15,6 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/crypto/merkle"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -1013,7 +1012,7 @@ func (vals *ValidatorSet) ABCIEquivalentValidatorUpdates() *abci.ValidatorSetUpd
 	for i := 0; i < len(vals.Validators); i++ {
 
 		valUpdate := TM2PB.NewValidatorUpdate(vals.Validators[i].PubKey, DefaultDashVotingPower,
-			vals.Validators[i].ProTxHash, vals.Validators[i].NodeAddress)
+			vals.Validators[i].ProTxHash, vals.Validators[i].NodeAddress.String())
 		valUpdates = append(valUpdates, valUpdate)
 	}
 	abciThresholdPublicKey, err := cryptoenc.PubKeyToProto(vals.ThresholdPublicKey)
@@ -1272,7 +1271,7 @@ func ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes []crypto.ProTxHash) abc
 			privateKeys[i].PubKey(),
 			DefaultDashVotingPower,
 			orderedProTxHashes[i],
-			dashtypes.ValidatorAddress{},
+			"",
 		)
 		valUpdates = append(valUpdates, valUpdate)
 	}

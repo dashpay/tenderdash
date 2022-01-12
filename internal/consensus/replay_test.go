@@ -1849,19 +1849,25 @@ func TestHandshakeUpdatesValidators(t *testing.T) {
 
 func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 	const InitialCoreHeight uint32 = 12345
-	config := ResetConfig("handshake_test_initial_core_lock_height")
+	config, err := ResetConfig("handshake_test_initial_core_lock_height")
+	require.NoError(t, err)
 	defer os.RemoveAll(config.RootDir)
-	privVal := privval.LoadFilePV(config.PrivValidatorKeyFile(), config.PrivValidatorStateFile())
 
-	randQuorumHash, err := privVal.GetFirstQuorumHash()
+	privVal, err := privval.LoadFilePV(config.PrivValidator.KeyFile(), config.PrivValidator.StateFile())
+	require.NoError(t, err)
+
+	randQuorumHash, err := privVal.GetFirstQuorumHash(context.TODO())
 	require.NoError(t, err)
 
 	app := &initChainApp{initialCoreHeight: InitialCoreHeight}
-	clientCreator := proxy.NewLocalClientCreator(app)
+	clientCreator := abciclient.NewLocalCreator(app)
+	require.NotNil(t, clientCreator)
+	proxyApp := proxy.NewAppConns(clientCreator)
+	require.NotNil(t, proxyApp)
 
-	pubKey, err := privVal.GetPubKey(randQuorumHash)
+	pubKey, err := privVal.GetPubKey(context.TODO(), randQuorumHash)
 	require.NoError(t, err)
-	proTxHash, err := privVal.GetProTxHash()
+	proTxHash, err := privVal.GetProTxHash(context.TODO())
 	require.NoError(t, err)
 	stateDB, state, store := stateAndStore(config, pubKey, 0x0)
 	stateStore := sm.NewStore(stateDB)
@@ -1876,7 +1882,7 @@ func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 		&proTxHash,
 		config.Consensus.AppHashSize,
 	)
-	proxyApp := proxy.NewAppConns(clientCreator)
+
 	if err := proxyApp.Start(); err != nil {
 		t.Fatalf("Error starting proxy app connections: %v", err)
 	}

@@ -322,7 +322,7 @@ func removeProtocolIfDefined(addr string) string {
 
 }
 
-func ValidateID(id ID) error {
+func ValidateID(id NodeID) error {
 	if len(id) == 0 {
 		return errors.New("no ID")
 	}
@@ -330,8 +330,8 @@ func ValidateID(id ID) error {
 	if err != nil {
 		return err
 	}
-	if len(idBytes) != IDByteLength {
-		return fmt.Errorf("invalid hex length - got %d, expected %d", len(idBytes), IDByteLength)
+	if len(idBytes) != NodeIDByteLength {
+		return fmt.Errorf("invalid hex length - got %d, expected %d", len(idBytes), NodeIDByteLength)
 	}
 	return nil
 }

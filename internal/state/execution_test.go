@@ -6,15 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	dbm "github.com/tendermint/tm-db"
-
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -28,6 +22,7 @@ import (
 	"github.com/tendermint/tendermint/internal/store"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
+	dbm "github.com/tendermint/tm-db"
 )
 
 var (
@@ -163,7 +158,7 @@ func TestValidateValidatorUpdates(t *testing.T) {
 		PubKeyTypes: []string{types.ABCIPubKeyTypeBLS12381},
 	}
 
-	addr := dashtypes.RandValidatorAddress()
+	addr := types.RandValidatorAddress()
 
 	testCases := []struct {
 		name string
@@ -378,7 +373,7 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 
 	// Ensure new validators have some IP addresses set
 	for _, validator := range newVals.Validators {
-		validator.NodeAddress = dashtypes.RandValidatorAddress()
+		validator.NodeAddress = types.RandValidatorAddress()
 	}
 
 	app.ValidatorSetUpdate = newVals.ABCIEquivalentValidatorUpdates()
@@ -404,8 +399,8 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 			msg.Data(),
 		)
 		assert.Len(t, event.QuorumHash, crypto.QuorumHashSize)
-		if assert.NotEmpty(t, event.ValidatorUpdates) {
-			assert.Equal(t, addProTxHash, event.ValidatorUpdates[pos].ProTxHash)
+		if assert.NotEmpty(t, event.ValidatorSetUpdates) {
+			assert.Equal(t, addProTxHash, event.ValidatorSetUpdates[pos].ProTxHash)
 			assert.EqualValues(
 				t,
 				types.DefaultDashVotingPower,

@@ -657,7 +657,7 @@ func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 		ps.logger.Debug(
 			"Sending vote message",
 			"ps", ps,
-			"peer_proTxHash", ps.peer.NodeInfo().GetProTxHash().ShortString(),
+			"peer_id", ps.peerID,
 			"vote", vote,
 			"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
 			"height", vote.Height,

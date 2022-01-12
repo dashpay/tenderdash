@@ -9,14 +9,16 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/quorum/mock"
 	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
 	mmock "github.com/tendermint/tendermint/internal/mempool/mock"
 	"github.com/tendermint/tendermint/internal/proxy"
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/internal/store"
+	"github.com/tendermint/tendermint/internal/test/factory"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -65,7 +67,7 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 	me := mock.NewValidator(65535)
 	zeroBytes := make([]byte, types.NodeIDByteLength)
 	nodeID := hex.EncodeToString(zeroBytes)
-	addr1, err := dashtypes.ParseValidatorAddress("http://" + nodeID + "@www.domain-that-does-not-exist.com:80")
+	addr1, err := types.ParseValidatorAddress("http://" + nodeID + "@www.domain-that-does-not-exist.com:80")
 	require.NoError(t, err)
 
 	val1 := mock.NewValidator(100)
@@ -74,7 +76,7 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 	valsWithoutAddress := make([]*types.Validator, 5)
 	for i := 0; i < len(valsWithoutAddress); i++ {
 		valsWithoutAddress[i] = mock.NewValidator(uint64(200 + i))
-		valsWithoutAddress[i].NodeAddress = dashtypes.ValidatorAddress{}
+		valsWithoutAddress[i].NodeAddress = types.ValidatorAddress{}
 	}
 
 	tc := testCase{
@@ -293,8 +295,12 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 func TestEndBlock(t *testing.T) {
 	const timeout = 3 * time.Second // how long we'll wait for connection
 	app := newTestApp()
-	cc := proxy.NewLocalClientCreator(app)
-	proxyApp := proxy.NewAppConns(cc)
+
+	clientCreator := abciclient.NewLocalCreator(app)
+	require.NotNil(t, clientCreator)
+	proxyApp := proxy.NewAppConns(clientCreator)
+	require.NotNil(t, proxyApp)
+
 	err := proxyApp.Start()
 	require.Nil(t, err)
 	defer proxyApp.Stop() //nolint:errcheck // ignore for tests
@@ -302,6 +308,7 @@ func TestEndBlock(t *testing.T) {
 	state, stateDB, _ := makeState(3, 1)
 	nodeProTxHash := &state.Validators.Validators[0].ProTxHash
 	stateStore := sm.NewStore(stateDB)
+	blockStore := store.NewBlockStore(dbm.NewMemDB())
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
@@ -310,6 +317,7 @@ func TestEndBlock(t *testing.T) {
 		proxyApp.Query(),
 		mmock.Mempool{},
 		sm.EmptyEvidencePool{},
+		blockStore,
 		nil,
 	)
 
@@ -341,11 +349,11 @@ func TestEndBlock(t *testing.T) {
 		addProTxHashes = append(addProTxHashes, addProTxHash)
 	}
 	proTxHashes = append(proTxHashes, addProTxHashes...)
-	newVals, _ := types.GenerateValidatorSetUsingProTxHashes(proTxHashes)
+	newVals, _ := types.GenerateValidatorSet(types.NewValSetParam(proTxHashes))
 
 	// Ensure new validators have some IP addresses set
 	for _, validator := range newVals.Validators {
-		validator.NodeAddress = dashtypes.RandValidatorAddress()
+		validator.NodeAddress = types.RandValidatorAddress()
 	}
 
 	// setup ValidatorConnExecutor
@@ -359,7 +367,7 @@ func TestEndBlock(t *testing.T) {
 
 	app.ValidatorSetUpdates[1] = newVals.ABCIEquivalentValidatorUpdates()
 
-	state, _, err = blockExec.ApplyBlock(state, nodeProTxHash, blockID, block)
+	state, err = blockExec.ApplyBlock(state, nodeProTxHash, blockID, block)
 	require.Nil(t, err)
 	// test new validator was added to NextValidators
 	require.Equal(t, state.Validators.Size()+100, state.NextValidators.Size())
@@ -371,25 +379,25 @@ func TestEndBlock(t *testing.T) {
 	// test we threw an event
 	select {
 	case msg := <-updatesSub.Out():
-		event, ok := msg.Data().(types.EventDataValidatorSetUpdates)
+		event, ok := msg.Data().(types.EventDataValidatorSetUpdate)
 		require.True(
 			t,
 			ok,
 			"Expected event of type EventDataValidatorSetUpdates, got %T",
 			msg.Data(),
 		)
-		if assert.NotEmpty(t, event.ValidatorUpdates) {
+		if assert.NotEmpty(t, event.ValidatorSetUpdates) {
 			for _, addProTxHash := range addProTxHashes {
-				assert.Contains(t, mock.ValidatorsProTxHashes(event.ValidatorUpdates), addProTxHash)
+				assert.Contains(t, mock.ValidatorsProTxHashes(event.ValidatorSetUpdates), addProTxHash)
 			}
 			assert.EqualValues(
 				t,
 				types.DefaultDashVotingPower,
-				event.ValidatorUpdates[1].VotingPower,
+				event.ValidatorSetUpdates[1].VotingPower,
 			)
 			assert.NotEmpty(t, event.QuorumHash)
 		}
-	case <-updatesSub.Cancelled():
+	case <-updatesSub.Canceled():
 		t.Fatalf("updatesSub was cancelled (reason: %v)", updatesSub.Err())
 	case <-time.After(1 * time.Second):
 		t.Fatal("Did not receive EventValidatorSetUpdates within 1 sec.")
@@ -420,9 +428,9 @@ func executeTestCase(t *testing.T, tc testCase) {
 	defer cleanup(t, eventBus, sw, vc)
 
 	for updateID, update := range tc.validatorUpdates {
-		updateEvent := types.EventDataValidatorSetUpdates{
-			ValidatorUpdates: update.validators,
-			QuorumHash:       mock.NewQuorumHash(1000),
+		updateEvent := types.EventDataValidatorSetUpdate{
+			ValidatorSetUpdates: update.validators,
+			QuorumHash:          mock.NewQuorumHash(1000),
 		}
 		err := eventBus.PublishEventValidatorSetUpdates(updateEvent)
 		assert.NoError(t, err)
@@ -532,7 +540,7 @@ func makeTxs(height int64) (txs []types.Tx) {
 
 func makeState(nVals int, height int64) (sm.State, dbm.DB, map[string]types.PrivValidator) {
 	privValsByProTxHash := make(map[string]types.PrivValidator, nVals)
-	vals, privVals, quorumHash, thresholdPublicKey := types.GenerateMockGenesisValidators(nVals)
+	vals, privVals, quorumHash, thresholdPublicKey := factory.GenerateMockGenesisValidators(nVals)
 	// vals and privals are sorted
 	for i := 0; i < nVals; i++ {
 		vals[i].Name = fmt.Sprintf("test%d", i)
@@ -601,7 +609,7 @@ func (app *testApp) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlo
 func (app *testApp) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	return abci.ResponseEndBlock{
 		ValidatorSetUpdate: app.ValidatorSetUpdates[req.Height],
-		ConsensusParamUpdates: &abci.ConsensusParams{
+		ConsensusParamUpdates: &tmproto.ConsensusParams{
 			Version: &tmproto.VersionParams{
 				AppVersion: 1}}}
 }

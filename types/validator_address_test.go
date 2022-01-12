@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/tendermint/tendermint/libs/rand"
-	"github.com/tendermint/tendermint/types"
 )
 
 func TestValidatorAddress_String(t *testing.T) {
@@ -126,7 +125,6 @@ func TestValidatorAddress_HostPortProto(t *testing.T) {
 				assert.NoError(t, err)
 				assert.EqualValues(t, tt.wantHost, va.Hostname)
 				assert.EqualValues(t, tt.wantPort, va.Port)
-				assert.EqualValues(t, tt.wantProto, va.Protocol)
 
 				if tt.wantNodeID != "" {
 					nodeID := va.NodeID
@@ -161,6 +159,6 @@ func TestValidatorAddress_NetAddress(t *testing.T) {
 // utility functions
 
 func randNodeID() string {
-	nodeID := rand.Bytes(types.NodeIDByteLength)
+	nodeID := rand.Bytes(NodeIDByteLength)
 	return hex.EncodeToString(nodeID)
 }

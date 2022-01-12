@@ -9,7 +9,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	ce "github.com/tendermint/tendermint/crypto/encoding"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -18,10 +17,10 @@ import (
 // make sure to update that method if changes are made here
 // The ProTxHash is part of Dash additions required for BLS threshold signatures
 type Validator struct {
-	PubKey      crypto.PubKey              `json:"pub_key"`
-	VotingPower int64                      `json:"voting_power"`
-	ProTxHash   ProTxHash                  `json:"pro_tx_hash"`
-	NodeAddress dashtypes.ValidatorAddress `json:"address"`
+	PubKey      crypto.PubKey    `json:"pub_key"`
+	VotingPower int64            `json:"voting_power"`
+	ProTxHash   ProTxHash        `json:"pro_tx_hash"`
+	NodeAddress ValidatorAddress `json:"address"`
 
 	ProposerPriority int64 `json:"proposer_priority"`
 }
@@ -49,11 +48,11 @@ func NewValidatorDefaultVotingPower(pubKey crypto.PubKey, proTxHash []byte) *Val
 // NewValidator returns a new validator with the given pubkey and voting power.
 func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash []byte, address string) *Validator {
 	var (
-		addr dashtypes.ValidatorAddress
+		addr ValidatorAddress
 		err  error
 	)
 	if address != "" {
-		addr, err = dashtypes.ParseValidatorAddress(address)
+		addr, err = ParseValidatorAddress(address)
 		if err != nil {
 			panic(err.Error())
 		}
@@ -243,7 +242,7 @@ func ValidatorFromProto(vp *tmproto.Validator) (*Validator, error) {
 	}
 
 	if vp.NodeAddress != "" {
-		if v.NodeAddress, err = dashtypes.ParseValidatorAddress(vp.NodeAddress); err != nil {
+		if v.NodeAddress, err = ParseValidatorAddress(vp.NodeAddress); err != nil {
 			return nil, err
 		}
 	}

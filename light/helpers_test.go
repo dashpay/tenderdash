@@ -1,8 +1,10 @@
 package light_test
 
 import (
-	"github.com/tendermint/tendermint/internal/test/factory"
+	"fmt"
 	"time"
+
+	"github.com/tendermint/tendermint/internal/test/factory"
 
 	"github.com/dashevo/dashd-go/btcjson"
 
@@ -189,7 +191,7 @@ func genMockNodeWithKeys(
 	var (
 		headers           = make(map[int64]*types.SignedHeader, blockSize)
 		valsets           = make(map[int64]*types.ValidatorSet, blockSize+1)
-		valset0, privVals = factory.GenerateMockValidatorSet(valSize)
+		valset0, privVals = types.RandValidatorSet(valSize)
 		keys              = exposeMockPVKeys(privVals, valset0.QuorumHash)
 		privValMap        = types.MapMockPVByProTxHashes(privVals)
 	)
@@ -267,7 +269,7 @@ func genLightBlocksWithValidatorsRotatingEveryBlock(
 		valset  = make(map[int64]*types.ValidatorSet, numBlocks+1)
 	)
 
-	vals, privVals := factory.GenerateMockValidatorSet(valSize)
+	vals, privVals := types.RandValidatorSet(valSize)
 	keys := exposeMockPVKeys(privVals, vals.QuorumHash)
 
 	newVals, newPrivVals := factory.GenerateMockValidatorSetUpdatingPrivateValidatorsAtHeight(vals.GetProTxHashes(), types.MapMockPVByProTxHashes(privVals), 1)

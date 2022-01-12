@@ -9,7 +9,6 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
 	"github.com/tendermint/tendermint/internal/libs/sync"
 	"github.com/tendermint/tendermint/internal/p2p"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
@@ -66,7 +65,7 @@ type ValidatorConnExecutor struct {
 	// quorumHash contains current quorum hash
 	quorumHash tmbytes.HexBytes
 	// nodeIDResolvers can be used to determine a node ID for a validator
-	nodeIDResolvers []dashtypes.NodeIDResolver
+	nodeIDResolvers []NodeIDResolver
 	// mux is a mutex to ensure only one goroutine is processing connections
 	mux sync.Mutex
 
@@ -96,9 +95,9 @@ func NewValidatorConnExecutor(
 		validatorSetMembers: validatorMap{},
 		connectedValidators: validatorMap{},
 		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),
-		nodeIDResolvers: []dashtypes.NodeIDResolver{
-			dashtypes.NewAddrbookNodeIDResolver(sw.AddrBook()),
-			dashtypes.NewTCPNodeIDResolver(),
+		nodeIDResolvers: []NodeIDResolver{
+			NewAddrbookNodeIDResolver(sw.AddrBook()),
+			NewTCPNodeIDResolver(),
 		},
 	}
 	baseService := service.NewBaseService(log.NewNopLogger(), validatorConnExecutorName, vc)
@@ -254,7 +253,7 @@ func (vc *ValidatorConnExecutor) me() (validator *types.Validator, ok bool) {
 }
 
 // resolveNodeID adds node ID to the validator address if it's not set
-func (vc *ValidatorConnExecutor) resolveNodeID(va *dashtypes.ValidatorAddress) error {
+func (vc *ValidatorConnExecutor) resolveNodeID(va *types.ValidatorAddress) error {
 	if va.NodeID != "" {
 		return nil
 	}
@@ -271,7 +270,7 @@ func (vc *ValidatorConnExecutor) resolveNodeID(va *dashtypes.ValidatorAddress) e
 			"error", err,
 		)
 	}
-	return dashtypes.ErrNoNodeID
+	return types.ErrNoNodeID
 }
 
 // selectValidators selects `count` validators from current ValidatorSet.
@@ -394,7 +393,12 @@ func (vc *ValidatorConnExecutor) filterAddresses(validators validatorMap) valida
 			vc.Logger.Debug("validator already connected", "id", id)
 			continue
 		}
-		address := validator.NodeAddress
+		address, err := validator.NodeAddress.NetAddress()
+		if err != nil {
+			vc.Logger.Error("cannot generate node address for a validator", "id", id, "address", validator.NodeAddress.String())
+			continue
+		}
+
 		if vc.p2pSwitch.IsDialingOrExistingAddress(address) {
 			vc.Logger.Debug("already dialing this validator", "id", id, "address", address.String())
 			continue

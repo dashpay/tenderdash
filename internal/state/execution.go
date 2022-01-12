@@ -7,15 +7,14 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
-
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/bls12381"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/internal/libs/fail"
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/internal/proxy"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
@@ -575,7 +574,7 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 		}
 
 		if valUpdate.NodeAddress != "" {
-			_, err := dashtypes.ParseValidatorAddress(valUpdate.NodeAddress)
+			_, err := types.ParseValidatorAddress(valUpdate.NodeAddress)
 			if err != nil {
 				return fmt.Errorf("cannot parse validator address %s: %w", valUpdate.NodeAddress, err)
 			}
@@ -771,7 +770,7 @@ func ExecCommitBlock(
 		}
 
 		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(types.BlockPartSizeBytes).Header()}
-		fireEvents(be.logger, be.eventBus, block, blockID, abciResponses, validatorSetUpdate)
+		fireEvents(be.logger, be.eventBus, block, blockID, abciResponses, validatorSetUpdate, quorumHash)
 	}
 
 	// Commit block, get hash back

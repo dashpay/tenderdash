@@ -2,11 +2,11 @@ package types
 
 import (
 	"fmt"
+
 	"github.com/dashevo/dashd-go/btcjson"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -85,7 +85,7 @@ func (tm2pb) NewValidatorUpdate(
 	pubkey crypto.PubKey,
 	power int64,
 	proTxHash []byte,
-	address dashtypes.ValidatorAddress,
+	address string,
 ) abci.ValidatorUpdate {
 	var pubkeyABCI *crypto2.PublicKey
 	if pubkey != nil {
@@ -102,7 +102,7 @@ func (tm2pb) NewValidatorUpdate(
 		PubKey:      pubkeyABCI,
 		Power:       power,
 		ProTxHash:   proTxHash,
-		NodeAddress: address.String(),
+		NodeAddress: address,
 	}
 }
 

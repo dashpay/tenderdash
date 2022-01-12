@@ -78,10 +78,11 @@ type Config struct {
 	ValidatorUpdates map[string]map[string]string `toml:"validator_update"`
 
 	// dash parameters
-	ThesholdPublicKeyUpdate map[string]string `toml:"threshold_public_key_update"`
-	QuorumHashUpdate        map[string]string `toml:"quorum_hash_update"`
-	ChainLockUpdates        map[string]string `toml:"chainlock_updates"`
-	PrivValServerType       string            `toml:"privval_server_type"`
+	ThesholdPublicKeyUpdate  map[string]string `toml:"threshold_public_key_update"`
+	QuorumHashUpdate         map[string]string `toml:"quorum_hash_update"`
+	ChainLockUpdates         map[string]string `toml:"chainlock_updates"`
+	PrivValServerType        string            `toml:"privval_server_type"`
+	InitAppInitialCoreHeight uint32            `toml:"init_app_core_chain_locked_height"`
 }
 
 func DefaultConfig(dir string) *Config {

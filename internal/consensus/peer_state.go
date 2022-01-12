@@ -376,11 +376,11 @@ func (ps *PeerState) SetHasVote(vote *types.Vote) {
 }
 
 func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.SignedMsgType, index int32) {
-	peerProTxHash := ps.peer.NodeInfo().GetProTxHash()
-	logger = ps.logger.With(
-		"peer", peerProTxHash.ShortString(),
-		"height", roundState.Height,
-		"round", roundState.Round,
+
+	logger := ps.logger.With(
+		"peer_id", ps.peerID,
+		"height", height,
+		"round", round,
 		"peer_height", ps.PRS.Height,
 		"peer_round", ps.PRS.Round,
 	)
@@ -389,8 +389,7 @@ func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.Sign
 		"peerState setHasVote",
 		"type", voteType,
 		"index", index,
-		"peerVotes", psVotes,
-		"peerVoteCount", countVotes,
+		"peerVotes", ps.Stats.Votes,
 	)
 
 	// NOTE: some may be nil BitArrays -> no side effects
