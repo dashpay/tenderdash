@@ -144,7 +144,7 @@ func NewClient(
 	dashCoreRPCClient dashcore.Client,
 	options ...Option) (*Client, error) {
 
-	return NewClientAtHeight(ctx, 0, chainID, primary, witnesses, trustedStore, dashCoreRPCClient, options...)
+	return NewClientAtHeight(ctx, 1, chainID, primary, witnesses, trustedStore, dashCoreRPCClient, options...)
 }
 
 func NewClientAtHeight(
@@ -187,17 +187,15 @@ func NewClientFromTrustedStore(
 	}
 
 	c := &Client{
-		chainID:          chainID,
-		verificationMode: dashCoreVerification,
-		maxRetryAttempts: defaultMaxRetryAttempts,
-		maxClockDrift:    defaultMaxClockDrift,
-		maxBlockLag:      defaultMaxBlockLag,
-		primary:          primary,
-		witnesses:        witnesses,
-		trustedStore:     trustedStore,
-		pruningSize:      defaultPruningSize,
-		//confirmationFn:    func(action string) bool { return true },
-		//quit:              make(chan struct{}),
+		chainID:           chainID,
+		verificationMode:  dashCoreVerification,
+		maxRetryAttempts:  defaultMaxRetryAttempts,
+		maxClockDrift:     defaultMaxClockDrift,
+		maxBlockLag:       defaultMaxBlockLag,
+		primary:           primary,
+		witnesses:         witnesses,
+		trustedStore:      trustedStore,
+		pruningSize:       defaultPruningSize,
 		logger:            log.NewNopLogger(),
 		dashCoreRPCClient: dashCoreRPCClient,
 	}
@@ -454,6 +452,10 @@ func (c *Client) VerifyHeader(ctx context.Context, newHeader *types.Header, now 
 
 func (c *Client) verifyLightBlock(ctx context.Context, newLightBlock *types.LightBlock, now time.Time) error {
 	c.logger.Info("verify light block", "height", newLightBlock.Height, "hash", newLightBlock.Hash())
+
+	if err := newLightBlock.ValidateBasic(c.ChainID()); err != nil {
+		return err
+	}
 
 	var (
 		verifyFunc func(ctx context.Context, new *types.LightBlock) error

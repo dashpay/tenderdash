@@ -101,17 +101,18 @@ func makeValidCommit(
 
 func makeState(nVals int, height int64) (sm.State, dbm.DB, map[string]types.PrivValidator) {
 	privValsByProTxHash := make(map[string]types.PrivValidator, nVals)
-	vals, privVals, quorumHash, thresholdPublicKey := factory.GenerateMockGenesisValidators(nVals)
+	vals, privVals := types.RandValidatorSet(nVals)
+	genVals := types.MakeGenesisValsFromValidatorSet(vals)
 	for i := 0; i < nVals; i++ {
-		vals[i].Name = fmt.Sprintf("test%d", i)
-		proTxHash := vals[i].ProTxHash
+		genVals[i].Name = fmt.Sprintf("test%d", i)
+		proTxHash := genVals[i].ProTxHash
 		privValsByProTxHash[proTxHash.String()] = privVals[i]
 	}
 	s, _ := sm.MakeGenesisState(&types.GenesisDoc{
 		ChainID:            chainID,
-		Validators:         vals,
-		ThresholdPublicKey: thresholdPublicKey,
-		QuorumHash:         quorumHash,
+		Validators:         genVals,
+		ThresholdPublicKey: vals.ThresholdPublicKey,
+		QuorumHash:         vals.QuorumHash,
 		AppHash:            nil,
 	})
 

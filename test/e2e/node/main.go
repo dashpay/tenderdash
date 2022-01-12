@@ -218,11 +218,6 @@ func startLightNode(cfg *Config) error {
 	c, err := light.NewHTTPClient(
 		context.Background(),
 		cfg.ChainID,
-		light.TrustOptions{
-			Period: tmcfg.StateSync.TrustPeriod,
-			Height: tmcfg.StateSync.TrustHeight,
-			Hash:   tmcfg.StateSync.TrustHashBytes(),
-		},
 		providers[0],
 		providers[1:],
 		dbs.New(lightDB),
