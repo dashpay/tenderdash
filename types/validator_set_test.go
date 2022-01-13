@@ -406,10 +406,6 @@ func TestProposerSelection3(t *testing.T) {
 	}
 }
 
-func newValidator(proTxHash []byte) *Validator {
-	return &Validator{ProTxHash: proTxHash, VotingPower: DefaultDashVotingPower}
-}
-
 func randPubKey() crypto.PubKey {
 	pubKey := make(bls12381.PubKey, bls12381.PubKeySize)
 	copy(pubKey, tmrand.Bytes(32))
@@ -1251,7 +1247,7 @@ func verifyValSetUpdatePriorityOrder(t *testing.T, valSet *ValidatorSet, cfg tes
 
 func TestNewValidatorSetFromExistingValidators(t *testing.T) {
 	size := 5
-	valSet, _ := GenerateValidatorSet(NewValSetParam(crypto.GenProTxHashes(size)))
+	valSet, _ := GenerateValidatorSet(NewValSetParam(crypto.RandProTxHashes(size)))
 	valSet.IncrementProposerPriority(3)
 
 	newValSet0 := NewValidatorSet(valSet.Validators, valSet.ThresholdPublicKey, valSet.QuorumType, valSet.QuorumHash, true)

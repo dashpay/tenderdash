@@ -39,8 +39,7 @@ const (
 	defaultMaxClockDrift = 10 * time.Second
 
 	// 10s is sufficient for most networks.
-	defaultMaxBlockLag     = 10 * time.Second
-	defaultProviderTimeout = 10 * time.Second
+	defaultMaxBlockLag = 10 * time.Second
 )
 
 // Option sets a parameter for the light client.

@@ -272,8 +272,7 @@ func TestCreateProposalBlock(t *testing.T) {
 
 	// fill the evidence pool with more evidence
 	// than can fit in a block
-	var currentBytes int64 = 0
-	for currentBytes <= maxEvidenceBytes {
+	for currentBytes := 0; int64(currentBytes) <= maxEvidenceBytes; {
 		ev, err := types.NewMockDuplicateVoteEvidenceWithValidator(
 			height,
 			time.Now(),
@@ -283,7 +282,7 @@ func TestCreateProposalBlock(t *testing.T) {
 			state.Validators.QuorumHash,
 		)
 		require.NoError(t, err)
-		currentBytes += int64(len(ev.Bytes()))
+		currentBytes += len(ev.Bytes())
 		evidencePool.ReportConflictingVotes(ev.VoteA, ev.VoteB)
 	}
 
