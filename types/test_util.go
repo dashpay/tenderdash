@@ -3,10 +3,15 @@ package types
 import (
 	"context"
 	"fmt"
+	"math/rand"
 
 	"github.com/tendermint/tendermint/crypto/tmhash"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+)
+
+var (
+	randSeed *rand.Rand = tmrand.NewRand()
 )
 
 func MakeCommit(blockID BlockID, stateID StateID, height int64, round int32,
@@ -94,7 +99,7 @@ func MakeVote(
 
 func RandStateID() StateID {
 	return StateID{
-		Height:      tmrand.NewRand().Int63(),
+		Height:      randSeed.Int63(),
 		LastAppHash: tmrand.Bytes(tmhash.Size),
 	}
 }

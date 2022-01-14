@@ -14,7 +14,6 @@ import (
 	"github.com/tendermint/tendermint/internal/libs/fail"
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/internal/proxy"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
@@ -344,7 +343,7 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
-	fireEvents(logger, blockExec.eventBus, block, blockID, abciResponses, validatorSet, quorumHash)
+	fireEvents(logger, blockExec.eventBus, block, blockID, abciResponses, validatorSet)
 
 	return state, nil
 }
@@ -674,7 +673,6 @@ func fireEvents(
 	blockID types.BlockID,
 	abciResponses *tmstate.ABCIResponses,
 	validatorSetUpdate *types.ValidatorSet,
-	quorumHash tmbytes.HexBytes,
 ) {
 	if err := eventBus.PublishEventNewBlock(types.EventDataNewBlock{
 		Block:            block,
@@ -770,7 +768,7 @@ func ExecCommitBlock(
 		}
 
 		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(types.BlockPartSizeBytes).Header()}
-		fireEvents(be.logger, be.eventBus, block, blockID, abciResponses, validatorSetUpdate, quorumHash)
+		fireEvents(be.logger, be.eventBus, block, blockID, abciResponses, validatorSetUpdate)
 	}
 
 	// Commit block, get hash back

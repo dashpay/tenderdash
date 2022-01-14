@@ -640,9 +640,7 @@ func randVoteSet(
 ) (*VoteSet, *ValidatorSet, []PrivValidator) {
 	valSet, mockPVs := RandValidatorSet(numValidators)
 	privVals := make([]PrivValidator, 0, len(mockPVs))
-	for _, pv := range mockPVs {
-		privVals = append(privVals, pv)
-	}
+	privVals = append(privVals, mockPVs...)
 	return NewVoteSet("test_chain_id", height, round, signedMsgType, valSet, stateID), valSet, privVals
 }
 

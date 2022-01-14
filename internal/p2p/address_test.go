@@ -1,14 +1,11 @@
 package p2p_test
 
 import (
-	"fmt"
 	"net"
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/types"
@@ -380,14 +377,4 @@ func TestNodeAddress_Validate(t *testing.T) {
 			}
 		})
 	}
-}
-
-func TestNodeAddress_Zero(t *testing.T) {
-	peerID := make([]byte, 20)
-	a, err := p2p.ParseNodeAddress(fmt.Sprintf("tcp://%x@1.2.3.4:123", peerID))
-	assert.NoError(t, err)
-	assert.False(t, a.Zero())
-
-	a = p2p.NodeAddress{}
-	assert.True(t, a.Zero())
 }

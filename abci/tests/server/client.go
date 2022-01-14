@@ -20,10 +20,10 @@ func InitChain(client abcicli.Client) error {
 	vals := make([]types.ValidatorUpdate, total)
 	privKeys, proTxHashes, thresholdPublicKey := bls12381.CreatePrivLLMQDataDefaultThreshold(total)
 	for i := 0; i < total; i++ {
-		pubkey := privKeys[i].PubKey()
+		pubkey := privKeys[i].PubKey().Bytes()
 		proTxHash := proTxHashes[i]
 		power := 100
-		vals[i] = types.UpdateValidator(proTxHash, pubkey.Bytes(), int64(power), "")
+		vals[i] = types.UpdateValidator(proTxHash, pubkey, int64(power), "")
 	}
 	abciThresholdPublicKey, err := encoding.PubKeyToProto(thresholdPublicKey)
 	if err != nil {

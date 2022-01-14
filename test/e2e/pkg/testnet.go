@@ -233,7 +233,6 @@ func LoadTestnet(file string) (*Testnet, error) {
 	if manifest.InitialHeight > 0 {
 		testnet.InitialHeight = manifest.InitialHeight
 	}
-
 	if testnet.ABCIProtocol == "" {
 		testnet.ABCIProtocol = string(ProtocolBuiltin)
 	}
@@ -363,7 +362,6 @@ func LoadTestnet(file string) (*Testnet, error) {
 			if validator == nil {
 				return nil, fmt.Errorf("unknown validator %q", validatorName)
 			}
-
 			pubKey := privateKeys[i].PubKey()
 
 			vu, err := validator.validatorUpdate(pubKey.Bytes())
@@ -739,7 +737,7 @@ func (t Testnet) HasPerturbations() bool {
 	return false
 }
 
-// ValidatorUpdate creates an abci.ValidatorUpdate struct from the current node
+// validatorUpdate creates an abci.ValidatorUpdate struct from the current node
 func (n *Node) validatorUpdate(publicKey []byte) (abci.ValidatorUpdate, error) {
 	proTxHash := n.ProTxHash.Bytes()
 

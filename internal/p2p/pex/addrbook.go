@@ -703,7 +703,7 @@ func (a *addrBook) addAddress(addr, src *p2p.NetAddress) error {
 }
 
 // FindIP implements AddBook.
-// Finds node ID based on IP address
+// Finds node ID based on IP address. Returns empty string when not found.
 func (a *addrBook) FindIP(ip net.IP, port uint16) types.NodeID {
 	for nodeID, item := range a.addrLookup {
 		if item.Addr != nil && item.Addr.IP.Equal(ip) && item.Addr.Port == port {

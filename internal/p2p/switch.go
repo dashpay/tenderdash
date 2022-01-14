@@ -485,7 +485,7 @@ func (sw *Switch) SetAddrBook(addrBook AddrBook) {
 	sw.addrBook = addrBook
 }
 
-// AddrBook() returns address book used by a switch
+// AddrBook implements Switch. It returns address book used by the switch.
 func (sw *Switch) AddrBook() AddrBook {
 	return sw.addrBook
 }

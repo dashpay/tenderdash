@@ -1912,11 +1912,9 @@ func (ica *initChainApp) InitChain(req abci.RequestInitChain) abci.ResponseInitC
 	resp := abci.ResponseInitChain{
 		InitialCoreHeight: ica.initialCoreHeight,
 	}
-
 	if ica.vals != nil {
 		resp.ValidatorSetUpdate = *ica.vals
 	}
-
 	return resp
 }
 

@@ -165,7 +165,10 @@ func (pb2tm) ValidatorUpdatesFromValidatorSet(valSetUpdate *abci.ValidatorSetUpd
 	return tmVals, pub, valSetUpdate.QuorumHash, nil
 }
 
-func (pb2tm) ValidatorSetFromProtoUpdate(quorumType btcjson.LLMQType, valSetUpdate *abci.ValidatorSetUpdate) (*ValidatorSet, error) {
+func (pb2tm) ValidatorSetFromProtoUpdate(
+	quorumType btcjson.LLMQType,
+	valSetUpdate *abci.ValidatorSetUpdate,
+) (*ValidatorSet, error) {
 	hasPublicKeys := true
 	for _, v := range valSetUpdate.ValidatorUpdates {
 		if v.PubKey == nil {

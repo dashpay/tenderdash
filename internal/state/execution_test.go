@@ -371,9 +371,11 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 		}
 	}
 
-	// Ensure new validators have some IP addresses set
+	// Ensure new validators have some node addresses set
 	for _, validator := range newVals.Validators {
-		validator.NodeAddress = types.RandValidatorAddress()
+		if validator.NodeAddress.Zero() {
+			validator.NodeAddress = types.RandValidatorAddress()
+		}
 	}
 
 	app.ValidatorSetUpdate = newVals.ABCIEquivalentValidatorUpdates()

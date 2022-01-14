@@ -1,20 +1,11 @@
 package p2p
 
-// BACKPORTING NOTE:
-//
-// This file was downloaded from Tendermint master, revision bc1a20dbb86e4fa2120b2c8a9de88814471f4a2c:
-// https://raw.githubusercontent.com/tendermint/tendermint/bc1a20dbb86e4fa2120b2c8a9de88814471f4a2c/internal/p2p/address.go
-// and refactored to workaround some dependencies.
-// Changes:
-// 1. ParseNodeAddress divided into 2 functions (added ParseNodeAddressWithoutValidation)
-// 2. Added some missing types at the end of file
 import (
 	"context"
 	"errors"
 	"fmt"
 	"net"
 	"net/url"
-	"reflect"
 	"regexp"
 	"strconv"
 	"strings"
@@ -30,8 +21,7 @@ var (
 
 	// reSchemeIsHost tries to detect URLs where the scheme part is instead a
 	// hostname, i.e. of the form "host:80/path" where host: is a hostname.
-	reSchemeIsHost      = regexp.MustCompile(`^[^/:]+:\d+(/|$)`)
-	ErrEmptyNodeAddress = errors.New("empty node address")
+	reSchemeIsHost = regexp.MustCompile(`^[^/:]+:\d+(/|$)`)
 )
 
 // NodeAddress is a node address URL. It differs from a transport Endpoint in
@@ -51,19 +41,6 @@ type NodeAddress struct {
 // ParseNodeAddress parses a node address URL into a NodeAddress, normalizing
 // and validating it.
 func ParseNodeAddress(urlString string) (NodeAddress, error) {
-	if urlString == "" {
-		return NodeAddress{}, ErrEmptyNodeAddress
-	}
-	address, err := ParseNodeAddressWithoutValidation(urlString)
-	if err != nil {
-		return address, err
-	}
-	return address, address.Validate()
-}
-
-// ParseNodeAddressWithoutValidation  parses a node address URL into a NodeAddress, normalizing it.
-// It does NOT validate parsed address
-func ParseNodeAddressWithoutValidation(urlString string) (NodeAddress, error) {
 	// url.Parse requires a scheme, so if it fails to parse a scheme-less URL
 	// we try to apply a default scheme.
 	url, err := url.Parse(urlString)
@@ -82,7 +59,7 @@ func ParseNodeAddressWithoutValidation(urlString string) (NodeAddress, error) {
 	// Opaque URLs are expected to contain only a node ID.
 	if url.Opaque != "" {
 		address.NodeID = types.NodeID(url.Opaque)
-		return address, nil
+		return address, address.Validate()
 	}
 
 	// Otherwise, just parse a normal networked URL.
@@ -115,7 +92,7 @@ func ParseNodeAddressWithoutValidation(urlString string) (NodeAddress, error) {
 		}
 	}
 
-	return address, nil
+	return address, address.Validate()
 }
 
 // Resolve resolves a NodeAddress into a set of Endpoints, by expanding
@@ -156,10 +133,6 @@ func (a NodeAddress) Resolve(ctx context.Context) ([]Endpoint, error) {
 
 // String formats the address as a URL string.
 func (a NodeAddress) String() string {
-	if a.Zero() {
-		return ""
-	}
-
 	u := url.URL{Scheme: string(a.Protocol)}
 	if a.NodeID != "" {
 		u.User = url.User(string(a.NodeID))
@@ -200,8 +173,4 @@ func (a NodeAddress) Validate() error {
 		return errors.New("cannot specify port without hostname")
 	}
 	return nil
-}
-
-func (a NodeAddress) Zero() bool {
-	return reflect.ValueOf(a).IsZero()
 }

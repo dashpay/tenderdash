@@ -5,7 +5,6 @@
 package types
 
 import (
-	"encoding/hex"
 	"errors"
 	"flag"
 	"fmt"
@@ -320,20 +319,6 @@ func removeProtocolIfDefined(addr string) string {
 	}
 	return addr
 
-}
-
-func ValidateID(id NodeID) error {
-	if len(id) == 0 {
-		return errors.New("no ID")
-	}
-	idBytes, err := hex.DecodeString(string(id))
-	if err != nil {
-		return err
-	}
-	if len(idBytes) != NodeIDByteLength {
-		return fmt.Errorf("invalid hex length - got %d, expected %d", len(idBytes), NodeIDByteLength)
-	}
-	return nil
 }
 
 // ipNet returns a net.IPNet struct given the passed IP address string, number

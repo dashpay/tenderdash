@@ -1,4 +1,3 @@
-
 ROOT_PATH := $(abspath $(lastword $(MAKEFILE_LIST)/../../../))
 
 all: docker generator runner tests

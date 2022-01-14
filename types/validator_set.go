@@ -1010,7 +1010,6 @@ func (e ErrNotEnoughVotingPowerSigned) Error() string {
 func (vals *ValidatorSet) ABCIEquivalentValidatorUpdates() *abci.ValidatorSetUpdate {
 	var valUpdates []abci.ValidatorUpdate
 	for i := 0; i < len(vals.Validators); i++ {
-
 		valUpdate := TM2PB.NewValidatorUpdate(vals.Validators[i].PubKey, DefaultDashVotingPower,
 			vals.Validators[i].ProTxHash, vals.Validators[i].NodeAddress.String())
 		valUpdates = append(valUpdates, valUpdate)
