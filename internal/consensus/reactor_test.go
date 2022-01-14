@@ -643,7 +643,7 @@ type privValUpdate struct {
 
 type validatorUpdater struct {
 	lastProTxHashes []crypto.ProTxHash
-	stateMap        map[string]int
+	stateIndexMap   map[string]int
 	states          []*State
 }
 
@@ -651,7 +651,7 @@ func newValidatorUpdater(states []*State, nVals int) (*validatorUpdater, error) 
 	updater := validatorUpdater{
 		lastProTxHashes: make([]crypto.ProTxHash, nVals),
 		states:          states,
-		stateMap:        make(map[string]int),
+		stateIndexMap:   make(map[string]int),
 	}
 	var (
 		proTxHash crypto.ProTxHash
@@ -668,7 +668,7 @@ func newValidatorUpdater(states []*State, nVals int) (*validatorUpdater, error) 
 		if err != nil {
 			return nil, err
 		}
-		updater.stateMap[proTxHash.String()] = i
+		updater.stateIndexMap[proTxHash.String()] = i
 	}
 	return &updater, nil
 }
@@ -684,7 +684,7 @@ func (u *validatorUpdater) addValidatorsAt(height int64, count int) (*privValUpd
 		}
 		proTxHashes = append(proTxHashes, proTxHash)
 	}
-	res, err := genPrivValUpdate(proTxHashes)
+	res, err := generatePrivValUpdate(proTxHashes)
 	if err != nil {
 		return nil, err
 	}
@@ -705,7 +705,7 @@ func (u *validatorUpdater) removeValidatorsAt(height int64, count int) (*privVal
 		}
 		newProTxHashes = append(newProTxHashes, proTxHash)
 	}
-	priValUpdate, err := genPrivValUpdate(newProTxHashes)
+	priValUpdate, err := generatePrivValUpdate(newProTxHashes)
 	if err != nil {
 		return nil, err
 	}
@@ -715,7 +715,7 @@ func (u *validatorUpdater) removeValidatorsAt(height int64, count int) (*privVal
 
 func (u *validatorUpdater) updateStatePrivVals(privValUpdate *privValUpdate, height int64) {
 	for i, proTxHash := range privValUpdate.newProTxHashes {
-		j := u.stateMap[proTxHash.String()]
+		j := u.stateIndexMap[proTxHash.String()]
 		u.states[j].privValidator.UpdatePrivateKey(
 			context.Background(),
 			privValUpdate.privKeys[i],
@@ -727,7 +727,7 @@ func (u *validatorUpdater) updateStatePrivVals(privValUpdate *privValUpdate, hei
 	u.lastProTxHashes = privValUpdate.newProTxHashes
 }
 
-func genPrivValUpdate(proTxHashes []crypto.ProTxHash) (*privValUpdate, error) {
+func generatePrivValUpdate(proTxHashes []crypto.ProTxHash) (*privValUpdate, error) {
 	privVal := privValUpdate{
 		quorumHash: crypto.RandQuorumHash(),
 	}

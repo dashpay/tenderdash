@@ -117,12 +117,12 @@ func TestVerifyDuplicateVoteEvidence(t *testing.T) {
 
 	evList := types.EvidenceList{goodEv}
 	err = pool.CheckEvidence(evList)
-	assert.NoError(t, err) // error
+	assert.NoError(t, err)
 
 	// evidence with a different validator power should fail
 	evList = types.EvidenceList{badEv}
 	err = pool.CheckEvidence(evList)
-	assert.Error(t, err) // error
+	assert.Error(t, err)
 
 	// evidence with a different timestamp should fail
 	evList = types.EvidenceList{badTimeEv}

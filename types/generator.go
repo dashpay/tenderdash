@@ -11,14 +11,13 @@ import (
 // RandValidatorSet returns a randomized validator set (size: +numValidators+),
 // where each validator has the same default voting power.
 func RandValidatorSet(n int) (*ValidatorSet, []PrivValidator) {
-	return GenerateValidatorSet(NewValSetParam(crypto.GenProTxHashes(n)))
+	return GenerateValidatorSet(NewValSetParam(crypto.RandProTxHashes(n)))
 }
 
 // ValSetParam is a structure of parameters to make a validator set
 type ValSetParam struct {
-	ProTxHash        ProTxHash
-	VotingPower      int64
-	ProposerPriority int64
+	ProTxHash   ProTxHash
+	VotingPower int64
 }
 
 // NewValSetParam returns a list of validator set parameters with for every proTxHashes

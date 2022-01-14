@@ -1249,7 +1249,7 @@ func verifyValSetUpdatePriorityOrder(t *testing.T, valSet *ValidatorSet, cfg tes
 
 func TestNewValidatorSetFromExistingValidators(t *testing.T) {
 	size := 5
-	valSet, _ := GenerateValidatorSet(NewValSetParam(crypto.GenProTxHashes(size)))
+	valSet, _ := GenerateValidatorSet(NewValSetParam(crypto.RandProTxHashes(size)))
 	valSet.IncrementProposerPriority(3)
 
 	newValSet0 := NewValidatorSet(valSet.Validators, valSet.ThresholdPublicKey, valSet.QuorumType, valSet.QuorumHash, true)

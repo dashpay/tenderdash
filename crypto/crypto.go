@@ -46,8 +46,8 @@ func RandProTxHash() ProTxHash {
 	return CRandBytes(ProTxHashSize)
 }
 
-// GenProTxHashes generates and returns a list of proTxHashes
-func GenProTxHashes(n int) []ProTxHash {
+// RandProTxHashes generates and returns a list of N random generated proTxHashes
+func RandProTxHashes(n int) []ProTxHash {
 	proTxHashes := make([]ProTxHash, n)
 	for i := 0; i < n; i++ {
 		proTxHashes[i] = RandProTxHash()

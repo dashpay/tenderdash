@@ -35,7 +35,6 @@ import (
 	"github.com/tendermint/tendermint/test/e2e/app"
 	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
 	"github.com/tendermint/tendermint/test/e2e/pkg/mockcoreserver"
-	"github.com/tendermint/tendermint/types"
 )
 
 var logger = log.MustNewDefaultLogger(log.LogFormatPlain, log.LogLevelInfo, false)
@@ -44,7 +43,6 @@ var (
 	tmhome            string
 	tmcfg             *config.Config
 	nodeLogger        log.Logger
-	nodeKey           *types.NodeKey
 	dashCoreRPCClient dashcore.Client
 )
 
