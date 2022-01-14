@@ -111,7 +111,7 @@ func TestSignerClient_SignVote(t *testing.T) {
 
 	pbHave := have.ToProto()
 	stateID := types.StateID{
-		Height:      1,
+		Height:      0,
 		LastAppHash: factory.RandomHash(),
 	}
 
