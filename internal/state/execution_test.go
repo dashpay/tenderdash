@@ -3,6 +3,7 @@ package state_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -355,7 +356,11 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 
 	vals := state.Validators
 	proTxHashes := vals.GetProTxHashes()
+
 	addProTxHash := crypto.RandProTxHash()
+
+	fmt.Printf("old: %x, new: %x\n", proTxHashes[0], addProTxHash)
+
 	proTxHashes = append(proTxHashes, addProTxHash)
 	newVals, _ := types.GenerateValidatorSet(types.NewValSetParam(proTxHashes))
 	var pos int
@@ -392,7 +397,7 @@ func TestEndBlockValidatorUpdates(t *testing.T) {
 			assert.EqualValues(
 				t,
 				types.DefaultDashVotingPower,
-				event.ValidatorSetUpdates[1].VotingPower,
+				event.ValidatorSetUpdates[pos].VotingPower,
 			)
 		}
 	case <-updatesSub.Canceled():
