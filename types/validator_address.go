@@ -122,10 +122,12 @@ func (va ValidatorAddress) String() string {
 		return ""
 	}
 
-	address := "tcp://" + net.JoinHostPort(va.Hostname, strconv.Itoa(int(va.Port)))
+	address := "tcp://"
 	if va.NodeID != "" {
-		return va.NodeID.AddressString(address)
+		address += string(va.NodeID) + "@"
+
 	}
+	address += net.JoinHostPort(va.Hostname, strconv.Itoa(int(va.Port)))
 	return address
 }
 

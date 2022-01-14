@@ -22,11 +22,11 @@ func Test_validatorMap_String(t *testing.T) {
 		},
 		{
 			vm:      newValidatorMap(vals[:2]),
-			wantCrc: 0xb7acb0958c821e5f,
+			wantCrc: 0x1f78f540f6d32856,
 		},
 		{
 			vm:      newValidatorMap(vals),
-			wantCrc: 0x55096f67242d1a7b,
+			wantCrc: 0xc7ca01eea9504bdf,
 		},
 	}
 
