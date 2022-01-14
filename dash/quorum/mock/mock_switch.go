@@ -2,7 +2,6 @@ package mock
 
 import (
 	"fmt"
-	"strings"
 	"time"
 
 	"github.com/tendermint/tendermint/internal/p2p"
@@ -59,7 +58,7 @@ func (sw *Switch) Peers() p2p.IPeerSet {
 // AddPersistentPeers implements Switch by marking provided addresses as persistent
 func (sw *Switch) AddPersistentPeers(addrs []string) error {
 	for _, addr := range addrs {
-		addr = simplifyAddress(addr)
+		addr := canonicalAddress(addr)
 		sw.PersistentPeers[addr] = true
 	}
 	return nil
@@ -68,11 +67,10 @@ func (sw *Switch) AddPersistentPeers(addrs []string) error {
 // RemovePersistentPeer implements Switch. It checks if the addr is persistent, and
 // marks it as non-persistent if needed.
 func (sw Switch) RemovePersistentPeer(addr string) error {
-	addr = simplifyAddress(addr)
+	addr = canonicalAddress(addr)
 	if !sw.PersistentPeers[addr] {
 		return fmt.Errorf("peer is not persisitent, addr=%s", addr)
 	}
-
 	delete(sw.PersistentPeers, addr)
 	return nil
 }
@@ -80,6 +78,7 @@ func (sw Switch) RemovePersistentPeer(addr string) error {
 // DialPeersAsync implements Switch. It emulates connecting to provided addresses
 // and adds them as peers and emits history event OpDialMany.
 func (sw *Switch) DialPeersAsync(addrs []string) error {
+	canonicalAddresses := make([]string, 0, len(addrs))
 	for _, addr := range addrs {
 		peer := &mocks.Peer{}
 		parsed, err := types.ParseValidatorAddress(addr)
@@ -92,8 +91,9 @@ func (sw *Switch) DialPeersAsync(addrs []string) error {
 		if err := sw.PeerSet.Add(peer); err != nil {
 			return err
 		}
+		canonicalAddresses = append(canonicalAddresses, canonicalAddress(addr))
 	}
-	sw.history(OpDialMany, addrs...)
+	sw.history(OpDialMany, canonicalAddresses...)
 	return nil
 }
 
@@ -107,7 +107,7 @@ func (sw *Switch) IsDialingOrExistingAddress(addr *p2p.NetAddress) bool {
 // event OpStopOne.
 func (sw *Switch) StopPeerGracefully(peer p2p.Peer) {
 	sw.PeerSet.Remove(peer)
-	sw.history(OpStopOne, peer.String())
+	sw.history(OpStopOne, canonicalAddress(peer.String()))
 }
 
 // history adds info about an operation to sw.History and sends it to sw.HistoryChan
@@ -122,8 +122,12 @@ func (sw *Switch) history(op string, args ...string) {
 	sw.HistoryChan <- event
 }
 
-// simplifyAddress converts provided `addr` to a simplified form, to make
+// canonicalAddress converts provided `addr` to a canonical form, to make
 // comparisons inside the tests easier
-func simplifyAddress(addr string) string {
-	return strings.TrimPrefix(addr, "tcp://")
+func canonicalAddress(addr string) string {
+	va, err := types.ParseValidatorAddress(addr)
+	if err != nil {
+		panic(fmt.Sprintf("cannot parse validator address %s: %s", addr, err))
+	}
+	return va.String()
 }

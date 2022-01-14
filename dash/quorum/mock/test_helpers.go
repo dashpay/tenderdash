@@ -18,7 +18,7 @@ func NewNodeAddress(n uint64) string {
 	if n == 0 {
 		n = math.MaxUint16
 	}
-	return fmt.Sprintf("tcp://%x@127.0.0.1:%d", nodeID, uint16(n))
+	return canonicalAddress(fmt.Sprintf("tcp://%x@127.0.0.1:%d", nodeID, uint16(n)))
 }
 
 // NewValidator generates a validator with only fields needed for node selection filled.
