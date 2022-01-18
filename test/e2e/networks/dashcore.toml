@@ -3,6 +3,8 @@
 
 initial_height = 1000
 initial_state = {initial01 = "a", initial02 = "b", initial03 = "c"}
+initial_core_chain_locked_height = 3400
+queue_type = "priority"
 
 [chainlock_updates]
 1000 = 3450
@@ -29,7 +31,7 @@ validator05 = 100
 
 [node.seed01]
 mode = "seed"
-seeds = ["seed02"]
+perturb = ["restart"]
 
 [node.seed02]
 mode = "seed"
@@ -42,7 +44,7 @@ perturb = ["disconnect"]
 privval_protocol = "dashcore"
 
 [node.validator02]
-seeds = ["seed02"]
+seeds = ["seed01"]
 database = "boltdb"
 abci_protocol = "tcp"
 privval_protocol = "dashcore"
@@ -56,7 +58,7 @@ database = "badgerdb"
 #abci_protocol = "grpc"
 privval_protocol = "dashcore"
 persist_interval = 3
-retain_blocks = 3
+retain_blocks = 10
 perturb = ["kill"]
 
 [node.validator04]
@@ -82,7 +84,7 @@ block_sync = "v0"
 state_sync = "rpc"
 persistent_peers = ["validator01", "validator02", "validator03", "validator04", "validator05"]
 privval_protocol = "dashcore"
-retain_blocks = 1
+retain_blocks = 10
 perturb = ["restart"]
 
 [node.full02]

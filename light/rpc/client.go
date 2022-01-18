@@ -5,13 +5,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/dashevo/dashd-go/btcjson"
 	"regexp"
 	"time"
 
-	"github.com/tendermint/tendermint/crypto"
-
+	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
+	"github.com/tendermint/tendermint/crypto"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/merkle"
@@ -132,9 +131,6 @@ func (c *Client) ABCIQuery(ctx context.Context, path string, data tmbytes.HexByt
 // ABCIQueryWithOptions returns an error if opts.Prove is false.
 func (c *Client) ABCIQueryWithOptions(ctx context.Context, path string, data tmbytes.HexBytes,
 	opts rpcclient.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
-
-	// always request the proof
-	opts.Prove = true
 
 	// always request the proof
 	opts.Prove = true

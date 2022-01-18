@@ -268,8 +268,7 @@ func makeNode(cfg *config.Config,
 			llmqType = btcjson.LLMQType_100_67
 		}
 		// This is used for light client verification only
-		mockClient := dashcore.NewMockClient(cfg.ChainID(), llmqType, privValidator, false)
-		dashCoreRPCClient = mockClient
+		dashCoreRPCClient = dashcore.NewMockClient(cfg.ChainID(), llmqType, privValidator, false)
 	}
 
 	weAreOnlyValidator := onlyValidatorIsUs(state, proTxHashP)

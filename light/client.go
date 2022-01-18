@@ -143,7 +143,7 @@ func NewClient(
 	dashCoreRPCClient dashcore.Client,
 	options ...Option) (*Client, error) {
 
-	return NewClientAtHeight(ctx, 1, chainID, primary, witnesses, trustedStore, dashCoreRPCClient, options...)
+	return NewClientAtHeight(ctx, 0, chainID, primary, witnesses, trustedStore, dashCoreRPCClient, options...)
 }
 
 func NewClientAtHeight(
@@ -161,8 +161,8 @@ func NewClientAtHeight(
 		return nil, err
 	}
 
-	if c.latestTrustedBlock == nil {
-		c.logger.Info("Downloading trusted light block using options")
+	if c.latestTrustedBlock == nil && height > 0 {
+		c.logger.Info("Downloading trusted light block")
 		if err := c.initializeAtHeight(ctx, height); err != nil {
 			return nil, err
 		}
@@ -796,7 +796,7 @@ func (c *Client) findNewPrimary(ctx context.Context, height int64, remove bool) 
 		// process benign errors by logging them only
 		case provider.ErrNoResponse, provider.ErrLightBlockNotFound, provider.ErrHeightTooHigh, provider.ErrLightBlockTooOld:
 			lastError = response.err
-			c.logger.Debug("error on light block request from witness",
+			c.logger.Info("error on light block request from witness",
 				"error", response.err, "primary", c.witnesses[response.witnessIndex])
 			continue
 		// catch canceled contexts or deadlines

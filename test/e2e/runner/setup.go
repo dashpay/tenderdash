@@ -32,7 +32,7 @@ const (
 	AppAddressUNIX = "unix:///var/run/app.sock"
 
 	PrivvalAddressTCP      = "tcp://0.0.0.0:27559"
-    PrivvalAddressGRPC    = "grpc://0.0.0.0:27559"
+	PrivvalAddressGRPC     = "grpc://0.0.0.0:27559"
 	PrivvalAddressUNIX     = "unix:///var/run/privval.sock"
 	PrivvalAddressDashCore = "127.0.0.1:19998"
 	PrivvalKeyFile         = "config/priv_validator_key.json"
@@ -196,6 +196,10 @@ services:
     - 6060
 {{- if $.Debug }}
     - {{ debugPort $index }}:{{ debugPort $index }}
+    security_opt:
+      - "seccomp:unconfined"
+    cap_add:
+      - SYS_PTRACE
 {{- end }}
     volumes:
     - ./{{ .Name }}:/tenderdash

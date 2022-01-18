@@ -211,6 +211,7 @@ func NewP2PStateProvider(
 	ctx context.Context,
 	chainID string,
 	initialHeight int64,
+	trustHeight int64,
 	providers []lightprovider.Provider,
 	paramsSendCh chan<- p2p.Envelope,
 	logger log.Logger,
@@ -220,7 +221,7 @@ func NewP2PStateProvider(
 		return nil, fmt.Errorf("at least 2 peers are required, got %d", len(providers))
 	}
 
-	lc, err := light.NewClientAtHeight(ctx, initialHeight, chainID, providers[0], providers[1:],
+	lc, err := light.NewClientAtHeight(ctx, trustHeight, chainID, providers[0], providers[1:],
 		lightdb.New(dbm.NewMemDB()), dashCoreClient, light.Logger(logger))
 	if err != nil {
 		return nil, err
