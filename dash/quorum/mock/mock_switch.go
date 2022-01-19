@@ -1,18 +1,19 @@
 package mock
 
 import (
-	"fmt"
+	"encoding/binary"
+	"encoding/hex"
 	"time"
 
+	"github.com/tendermint/tendermint/internal/libs/sync"
 	"github.com/tendermint/tendermint/internal/p2p"
-	"github.com/tendermint/tendermint/internal/p2p/mocks"
 	"github.com/tendermint/tendermint/types"
 )
 
 // MOCK SWITCH //
 const (
-	OpDialMany = "dialMany"
-	OpStopOne  = "stopOne"
+	OpDial    = "dialOne"
+	OpStopOne = "stopOne"
 )
 
 // SwitchHistoryEvent is a log of dial and stop operations executed by the MockSwitch
@@ -26,88 +27,68 @@ type SwitchHistoryEvent struct {
 // Switch implements `dash.Switch`. It sends event about DialPeersAsync() and StopPeerGracefully() calls
 // to HistoryChan and stores them in History
 type Switch struct {
-	PeerSet         *p2p.PeerSet
-	PersistentPeers map[string]bool
-	History         []SwitchHistoryEvent
-	HistoryChan     chan SwitchHistoryEvent
-	AddressBook     p2p.AddrBook
+	mux            sync.Mutex
+	ConnectedPeers map[types.NodeID]bool
+	// History        []SwitchHistoryEvent
+	HistoryChan chan SwitchHistoryEvent
 }
 
 // NewMockSwitch creates a new mock Switch
 func NewMockSwitch() *Switch {
 	isw := &Switch{
-		PeerSet:         p2p.NewPeerSet(),
-		PersistentPeers: map[string]bool{},
-		History:         []SwitchHistoryEvent{},
-		HistoryChan:     make(chan SwitchHistoryEvent, 1000),
-		AddressBook:     &p2p.AddrBookMock{},
+		ConnectedPeers: map[types.NodeID]bool{},
+		// History:        []SwitchHistoryEvent{},
+		HistoryChan: make(chan SwitchHistoryEvent, 1000),
 	}
 	return isw
 }
 
-// AddBook returns mock address book to use in this mock switch
-func (sw *Switch) AddrBook() p2p.AddrBook {
-	return sw.AddressBook
-}
-
-// Peers implements Switch by returning sw.PeerSet
-func (sw *Switch) Peers() p2p.IPeerSet {
-	return sw.PeerSet
-}
-
-// AddPersistentPeers implements Switch by marking provided addresses as persistent
-func (sw *Switch) AddPersistentPeers(addrs []string) error {
-	for _, addr := range addrs {
-		addr := canonicalAddress(addr)
-		sw.PersistentPeers[addr] = true
-	}
-	return nil
-}
-
-// RemovePersistentPeer implements Switch. It checks if the addr is persistent, and
-// marks it as non-persistent if needed.
-func (sw Switch) RemovePersistentPeer(addr string) error {
-	addr = canonicalAddress(addr)
-	if !sw.PersistentPeers[addr] {
-		return fmt.Errorf("peer is not persisitent, addr=%s", addr)
-	}
-	delete(sw.PersistentPeers, addr)
-	return nil
-}
-
 // DialPeersAsync implements Switch. It emulates connecting to provided addresses
 // and adds them as peers and emits history event OpDialMany.
-func (sw *Switch) DialPeersAsync(addrs []string) error {
-	canonicalAddresses := make([]string, 0, len(addrs))
-	for _, addr := range addrs {
-		peer := &mocks.Peer{}
-		parsed, err := types.ParseValidatorAddress(addr)
-		if err != nil {
-			return err
-		}
+func (sw *Switch) ConnectAsync(addr p2p.NodeAddress) error {
+	id := addr.NodeID
+	sw.mux.Lock()
+	sw.ConnectedPeers[id] = true
+	sw.mux.Unlock()
 
-		peer.On("ID").Return(parsed.NodeID)
-		peer.On("String").Return(addr)
-		if err := sw.PeerSet.Add(peer); err != nil {
-			return err
-		}
-		canonicalAddresses = append(canonicalAddresses, canonicalAddress(addr))
-	}
-	sw.history(OpDialMany, canonicalAddresses...)
+	sw.history(OpDial, string(id))
 	return nil
 }
 
 // IsDialingOrExistingAddress implements Switch. It checks if provided peer has been dialed
 // before.
-func (sw *Switch) IsDialingOrExistingAddress(addr *p2p.NetAddress) bool {
-	return sw.PeerSet.Has(addr.ID)
+func (sw *Switch) IsDialingOrConnected(id types.NodeID) bool {
+	sw.mux.Lock()
+	defer sw.mux.Unlock()
+	return sw.ConnectedPeers[id]
 }
 
 // StopPeerGracefully implements Switch. It removes the peer from Peers() and emits history
 // event OpStopOne.
-func (sw *Switch) StopPeerGracefully(peer p2p.Peer) {
-	sw.PeerSet.Remove(peer)
-	sw.history(OpStopOne, canonicalAddress(peer.String()))
+func (sw *Switch) DisconnectAsync(id types.NodeID) error {
+	sw.mux.Lock()
+	sw.ConnectedPeers[id] = true
+	sw.mux.Unlock()
+	sw.history(OpStopOne, string(id))
+
+	return nil
+}
+func (sw *Switch) Resolve(val types.ValidatorAddress) (p2p.NodeAddress, error) {
+	// Generate node ID
+	nodeID := make([]byte, 20)
+	n := val.Port
+
+	binary.LittleEndian.PutUint64(nodeID, uint64(n))
+
+	addr := p2p.NodeAddress{
+		NodeID:   types.NodeID(hex.EncodeToString(nodeID)),
+		Protocol: p2p.TCPProtocol,
+		Hostname: val.Hostname,
+		Port:     val.Port,
+		Path:     "",
+	}
+
+	return addr, nil
 }
 
 // history adds info about an operation to sw.History and sends it to sw.HistoryChan
@@ -117,17 +98,15 @@ func (sw *Switch) history(op string, args ...string) {
 		Operation: op,
 		Params:    args,
 	}
-	sw.History = append(sw.History, event)
-
 	sw.HistoryChan <- event
 }
 
 // canonicalAddress converts provided `addr` to a canonical form, to make
 // comparisons inside the tests easier
-func canonicalAddress(addr string) string {
-	va, err := types.ParseValidatorAddress(addr)
-	if err != nil {
-		panic(fmt.Sprintf("cannot parse validator address %s: %s", addr, err))
-	}
-	return va.String()
-}
+// func canonicalAddress(addr string) string {
+// 	va, err := types.ParseValidatorAddress(addr)
+// 	if err != nil {
+// 		panic(fmt.Sprintf("cannot parse validator address %s: %s", addr, err))
+// 	}
+// 	return va.String()
+// }

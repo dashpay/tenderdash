@@ -13,8 +13,6 @@ import (
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 )
 
-const ()
-
 var (
 	reSchemeIsHost = regexp.MustCompile(`^[^/:]+:\d+(/|$)`)
 	rng            = tmrand.NewRand()

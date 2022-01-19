@@ -26,21 +26,6 @@ const (
 	defaultEventBusCapacity = 10
 )
 
-// Switch defines p2p.Switch methods that are used by this Executor.
-// Useful to create a mock  of the p2p.Switch.
-type Switch interface {
-	Peers() p2p.IPeerSet
-
-	AddPersistentPeers(addrs []string) error
-	RemovePersistentPeer(addr string) error
-
-	DialPeersAsync(addrs []string) error
-	IsDialingOrExistingAddress(*p2p.NetAddress) bool
-	StopPeerGracefully(p2p.Peer)
-
-	AddrBook() p2p.AddrBook
-}
-
 type optionFunc func(vc *ValidatorConnExecutor) error
 
 // ValidatorConnExecutor retrieves validator update events and establishes new validator connections
@@ -53,10 +38,11 @@ type optionFunc func(vc *ValidatorConnExecutor) error
 // will retry the connection if it fails.
 type ValidatorConnExecutor struct {
 	service.BaseService
-	proTxHash    types.ProTxHash
-	eventBus     *types.EventBus
-	p2pSwitch    Switch
-	subscription types.Subscription
+	proTxHash types.ProTxHash
+	eventBus  *types.EventBus
+	// connectionManager    Switch
+	connectionManager DashConnectionManager
+	subscription      types.Subscription
 
 	// validatorSetMembers contains validators active in the current Validator Set, indexed by node ID
 	validatorSetMembers validatorMap
@@ -75,6 +61,12 @@ type ValidatorConnExecutor struct {
 	EventBusCapacity int
 }
 
+// DashConnectionManager represents methods required to establish connections within Dash
+type DashConnectionManager interface {
+	p2p.DashDialer
+	NodeIDResolver
+}
+
 var (
 	errPeerNotFound = fmt.Errorf("cannot stop peer: not found")
 )
@@ -84,21 +76,21 @@ var (
 func NewValidatorConnExecutor(
 	proTxHash types.ProTxHash,
 	eventBus *types.EventBus,
-	sw Switch,
+	connMgr DashConnectionManager,
 	opts ...optionFunc,
 ) (*ValidatorConnExecutor, error) {
 	vc := &ValidatorConnExecutor{
 		proTxHash:           proTxHash,
 		eventBus:            eventBus,
-		p2pSwitch:           sw,
+		connectionManager:   connMgr,
 		EventBusCapacity:    defaultEventBusCapacity,
 		validatorSetMembers: validatorMap{},
 		connectedValidators: validatorMap{},
 		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),
-		nodeIDResolvers: []NodeIDResolver{
-			NewAddrbookNodeIDResolver(sw.AddrBook()),
-			NewTCPNodeIDResolver(),
-		},
+	}
+	vc.nodeIDResolvers = []NodeIDResolver{
+		vc.connectionManager,
+		NewTCPNodeIDResolver(),
 	}
 	baseService := service.NewBaseService(log.NewNopLogger(), validatorConnExecutorName, vc)
 	vc.BaseService = *baseService
@@ -130,7 +122,7 @@ func WithValidatorsSet(valSet *types.ValidatorSet) func(vc *ValidatorConnExecuto
 // WithLogger sets a logger
 func WithLogger(logger log.Logger) func(vc *ValidatorConnExecutor) error {
 	return func(vc *ValidatorConnExecutor) error {
-		vc.Logger = logger.With("module", "ValidatorConnExecutor")
+		vc.Logger = logger
 		return nil
 	}
 }
@@ -202,7 +194,7 @@ func (vc *ValidatorConnExecutor) receiveEvents() error {
 		}
 		vc.Logger.Debug("validator updates processed successfully", "event", event)
 	case <-vc.subscription.Canceled():
-		return fmt.Errorf("subscription cancelled due to error: %w", vc.subscription.Err())
+		return fmt.Errorf("subscription canceled due to error: %w", vc.subscription.Err())
 	case <-vc.BaseService.Quit():
 		return fmt.Errorf("quit signal received")
 	}
@@ -258,13 +250,13 @@ func (vc *ValidatorConnExecutor) resolveNodeID(va *types.ValidatorAddress) error
 		return nil
 	}
 	for _, resolver := range vc.nodeIDResolvers {
-		nid, err := resolver.Resolve(*va)
-		if err == nil && nid != "" {
-			va.NodeID = nid
+		address, err := resolver.Resolve(*va)
+		if err == nil && address.NodeID != "" {
+			va.NodeID = address.NodeID
 			return nil
 		}
 		vc.Logger.Debug(
-			"validator node id lookup method failed",
+			"warning: validator node id lookup method failed",
 			"url", va.String(),
 			"method", reflect.TypeOf(resolver).String(),
 			"error", err,
@@ -301,27 +293,14 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 }
 
 func (vc *ValidatorConnExecutor) disconnectValidator(validator types.Validator) error {
-	vc.Logger.Debug("disconnect Validator", "validator", validator)
-	address := validator.NodeAddress.String()
-
-	err := vc.p2pSwitch.RemovePersistentPeer(address)
-	if err != nil {
-		return err
-	}
-
-	err = vc.resolveNodeID(&validator.NodeAddress)
-	if err != nil {
+	if err := vc.resolveNodeID(&validator.NodeAddress); err != nil {
 		return err
 	}
 	id := validator.NodeAddress.NodeID
-
-	peer := vc.p2pSwitch.Peers().Get(id)
-	if peer == nil {
-		return errPeerNotFound
+	vc.Logger.Debug("disconnecting Validator", "validator", validator, "id", id, "address", validator.NodeAddress.String())
+	if err := vc.connectionManager.DisconnectAsync(id); err != nil {
+		return err
 	}
-
-	vc.Logger.Debug("stopping peer", "id", id, "address", address)
-	vc.p2pSwitch.StopPeerGracefully(peer)
 	return nil
 }
 
@@ -393,14 +372,8 @@ func (vc *ValidatorConnExecutor) filterAddresses(validators validatorMap) valida
 			vc.Logger.Debug("validator already connected", "id", id)
 			continue
 		}
-		address, err := validator.NodeAddress.NetAddress()
-		if err != nil {
-			vc.Logger.Error("cannot generate node address for a validator", "id", id, "address", validator.NodeAddress.String())
-			continue
-		}
-
-		if vc.p2pSwitch.IsDialingOrExistingAddress(address) {
-			vc.Logger.Debug("already dialing this validator", "id", id, "address", address.String())
+		if vc.connectionManager.IsDialingOrConnected(validator.NodeAddress.NodeID) {
+			vc.Logger.Debug("already dialing this validator", "id", id, "address", validator.NodeAddress.String())
 			continue
 		}
 		filtered[id] = validator
@@ -417,16 +390,12 @@ func (vc *ValidatorConnExecutor) dial(vals validatorMap) error {
 	// we mark all validators as connected, to disconnect it in future validator rotation even if sth went wrong
 	for id, validator := range vals {
 		vc.connectedValidators[id] = validator
+		address := nodeAddress(validator.NodeAddress)
+		if err := vc.connectionManager.ConnectAsync(address); err != nil {
+			vc.Logger.Error("cannot dial validator", "address", address.String(), "err", err)
+			return fmt.Errorf("cannot dial validator %s: %w", address.String(), err)
+		}
 	}
-	addresses := vals.URIs()
-	if err := vc.p2pSwitch.AddPersistentPeers(addresses); err != nil {
-		vc.Logger.Error("cannot set validators as persistent", "peers", addresses, "err", err)
-		return fmt.Errorf("cannot set validators as persistent: %w", err)
-	}
-	// TODO in tendermint 0.35, we will use router.connectPeer instead of DialPeersAsync
-	if err := vc.p2pSwitch.DialPeersAsync(addresses); err != nil {
-		vc.Logger.Error("cannot dial validators", "peers", addresses, "err", err)
-		return fmt.Errorf("cannot dial peers: %w", err)
-	}
+
 	return nil
 }
