@@ -29,8 +29,8 @@ func Test_sortedValidatorList_Index(t *testing.T) {
 		},
 		{
 			name:   "i=4",
-			list:   newSortedValidatorList(mock.NewValidators(500), mock.NewQuorumHash(2054231)),
-			search: newSortableValidator(*mock.NewValidator(4), mock.NewQuorumHash(2054231)),
+			list:   newSortedValidatorList(mock.NewValidators(500), mock.NewQuorumHash(20531)),
+			search: newSortableValidator(*mock.NewValidator(4), mock.NewQuorumHash(20531)),
 			want:   4,
 		},
 	}

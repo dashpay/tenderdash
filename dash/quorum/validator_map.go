@@ -46,10 +46,10 @@ func (vm validatorMap) contains(what types.Validator) bool {
 }
 
 // URIs returns URIs of all validators in this map
-func (vm validatorMap) URIs() []string {
+func (vm validatorMap) NodeIDs() []string {
 	uris := make([]string, 0, len(vm))
 	for _, v := range vm {
-		uris = append(uris, v.NodeAddress.String())
+		uris = append(uris, string(v.NodeAddress.NodeID))
 	}
 	return uris
 }

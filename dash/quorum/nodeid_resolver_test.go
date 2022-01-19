@@ -31,7 +31,7 @@ func TestNewValidator(t *testing.T) {
 	require.NotNil(t, validator)
 	assert.EqualValues(t, "127.0.0.1", validator.NodeAddress.Hostname)
 	assert.EqualValues(t, 23456, validator.NodeAddress.Port)
-	newNodeID, err = NewTCPNodeIDResolver().Resolve(validator.NodeAddress)
+	newNodeAddress, err := NewTCPNodeIDResolver().Resolve(validator.NodeAddress)
 	assert.Contains(t, err.Error(), "connection refused")
-	assert.Zero(t, newNodeID)
+	assert.Zero(t, newNodeAddress)
 }

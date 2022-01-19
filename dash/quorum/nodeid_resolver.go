@@ -5,6 +5,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/internal/p2p/conn"
 	"github.com/tendermint/tendermint/types"
 )
@@ -19,7 +20,7 @@ const (
 // NodeIDResolver determines a node ID based on validator address
 type NodeIDResolver interface {
 	// Resolve retrieves a node ID from remote node.
-	Resolve(types.ValidatorAddress) (types.NodeID, error)
+	Resolve(types.ValidatorAddress) (p2p.NodeAddress, error)
 }
 
 type tcpNodeIDResolver struct {
@@ -59,51 +60,17 @@ func (resolver tcpNodeIDResolver) connect(host string, port uint16) (net.Conn, e
 // Resolve retrieves a node ID from remote node.
 // Note that it is quite expensive, as it establishes secure connection to the other node
 // which is dropped afterwards.
-func (resolver tcpNodeIDResolver) Resolve(va types.ValidatorAddress) (types.NodeID, error) {
+func (resolver tcpNodeIDResolver) Resolve(va types.ValidatorAddress) (p2p.NodeAddress, error) {
 	connection, err := resolver.connect(va.Hostname, va.Port)
 	if err != nil {
-		return "", err
+		return p2p.NodeAddress{}, err
 	}
 	defer connection.Close()
 
 	sc, err := conn.MakeSecretConnection(connection, nil)
 	if err != nil {
-		return "", err
+		return p2p.NodeAddress{}, err
 	}
-
-	return types.NodeIDFromPubKey(sc.RemotePubKey()), nil
-}
-
-// AddrBook is an interface that defines subset of p2p.AddBook functions, as required by `addrbookNodeIDResolver`
-type AddrBook interface {
-	FindIP(ip net.IP, port uint16) types.NodeID
-}
-type addrbookNodeIDResolver struct {
-	addrBook AddrBook
-}
-
-// NewAddrbookNodeIDResolver creates new node ID resolver.
-// It looks up for the node ID based on IP address, using the p2p addressbook.
-func NewAddrbookNodeIDResolver(addrBook AddrBook) NodeIDResolver {
-	return addrbookNodeIDResolver{addrBook: addrBook}
-}
-
-// Resolve implements NodeIDResolver
-// Resolve retrieves a node ID from the address book.
-func (resolver addrbookNodeIDResolver) Resolve(va types.ValidatorAddress) (types.NodeID, error) {
-	ip := net.ParseIP(va.Hostname)
-	if ip == nil {
-		ips, err := net.LookupIP(va.Hostname)
-		if err != nil {
-			return "", types.ErrNetAddressLookup{Addr: va.Hostname, Err: err}
-		}
-		ip = ips[0]
-	}
-
-	id := resolver.addrBook.FindIP(ip, va.Port)
-	if id == "" {
-		return "", types.ErrNoNodeID
-	}
-
-	return id, nil
+	va.NodeID = types.NodeIDFromPubKey(sc.RemotePubKey())
+	return nodeAddress(va), nil
 }
