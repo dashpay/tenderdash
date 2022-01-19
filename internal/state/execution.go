@@ -229,10 +229,12 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 	block *types.Block,
 	logger log.Logger,
 ) (State, error) {
-
+	logger.Info("#debug applying block", "height", block.Height, "stateLastBlockHeight", state.LastBlockHeight)
 	if err := blockExec.ValidateBlock(state, block); err != nil {
 		return state, ErrInvalidBlock(err)
 	}
+
+	logger.Info("#debug the block is valid", "height", block.Height, "stateLastBlockHeight", state.LastBlockHeight)
 
 	startTime := time.Now().UnixNano()
 	abciResponses, err := execBlockOnProxyApp(
@@ -245,6 +247,8 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 	}
 
 	fail.Fail() // XXX
+
+	logger.Info("#debug saving ABCI responses", "height", block.Height, "stateLastBlockHeight", state.LastBlockHeight)
 
 	// Save the results before we commit.
 	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
@@ -292,6 +296,8 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 			return state, 0, fmt.Errorf("unable to load store when applying block: %v", err)
 		}*/
 
+	logger.Info("#debug update state", "height", block.Height, "stateLastBlockHeight", state.LastBlockHeight)
+
 	// Update the state with the block and responses.
 	state, err = updateState(
 		state, nodeProTxHash, blockID, &block.Header,
@@ -301,11 +307,15 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 		return state, fmt.Errorf("commit failed for application: %v", err)
 	}
 
+	logger.Info("#debug commit", "height", block.Height, "stateLastBlockHeight", state.LastBlockHeight)
+
 	// Lock mempool, commit app state, update mempoool.
 	appHash, retainHeight, err := blockExec.Commit(state, block, abciResponses.DeliverTxs)
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %v", err)
 	}
+
+	logger.Info("#debug update evpool", "height", block.Height, "stateLastBlockHeight", state.LastBlockHeight)
 
 	// Update evpool with the latest state.
 	blockExec.evpool.Update(state, block.Evidence.Evidence)
@@ -315,6 +325,7 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 
 	fail.Fail() // XXX
 
+	logger.Info("#debug store saving", "height", block.Height, "stateLastBlockHeight", state.LastBlockHeight)
 	// Update the app hash and save the state.
 	state.AppHash = appHash
 	if err := blockExec.store.Save(state); err != nil {
@@ -322,6 +333,8 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 	}
 
 	fail.Fail() // XXX
+
+	logger.Info("#debug prune blocks", "retainHeight", retainHeight)
 
 	// Prune old heights, if requested by ABCI app.
 	if retainHeight > 0 {
@@ -335,6 +348,8 @@ func (blockExec *BlockExecutor) ApplyBlockWithLogger(
 
 	// reset the verification cache
 	blockExec.cache = make(map[string]struct{})
+
+	logger.Info("#debug firing events", "height", block.Height)
 
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
