@@ -120,8 +120,9 @@ func TestClient_Cleanup(t *testing.T) {
 	mockFullNode := &provider_mocks.Provider{}
 	mockFullNode.On("LightBlock", mock.Anything, int64(1)).Return(l1, nil)
 
-	c, err := light.NewClient(
+	c, err := light.NewClientAtHeight(
 		ctx,
+		1,
 		chainID,
 		mockFullNode,
 		[]provider.Provider{mockFullNode},
@@ -213,8 +214,9 @@ func TestClient_Update(t *testing.T) {
 	mockFullNode.On("LightBlock", mock.Anything, int64(1)).Return(l1, nil)
 	mockFullNode.On("LightBlock", mock.Anything, int64(3)).Return(l3, nil)
 
-	c, err := light.NewClient(
+	c, err := light.NewClientAtHeight(
 		ctx,
+		1,
 		chainID,
 		mockFullNode,
 		[]provider.Provider{mockFullNode},
@@ -239,8 +241,9 @@ func TestClient_Concurrency(t *testing.T) {
 	mockFullNode.On("LightBlock", mock.Anything, int64(2)).Return(l2, nil)
 	mockFullNode.On("LightBlock", mock.Anything, int64(1)).Return(l1, nil)
 
-	c, err := light.NewClient(
+	c, err := light.NewClientAtHeight(
 		ctx,
+		1,
 		chainID,
 		mockFullNode,
 		[]provider.Provider{mockFullNode},
@@ -286,8 +289,9 @@ func TestClientReplacesPrimaryWithWitnessIfPrimaryIsUnavailable(t *testing.T) {
 
 	mockDeadNode := &provider_mocks.Provider{}
 	mockDeadNode.On("LightBlock", mock.Anything, mock.Anything).Return(nil, provider.ErrNoResponse)
-	c, err := light.NewClient(
+	c, err := light.NewClientAtHeight(
 		ctx,
+		1,
 		chainID,
 		mockDeadNode,
 		[]provider.Provider{mockDeadNode, mockFullNode},
@@ -317,8 +321,9 @@ func TestClientReplacesPrimaryWithWitnessIfPrimaryDoesntHaveBlock(t *testing.T) 
 
 	mockDeadNode := &provider_mocks.Provider{}
 	mockDeadNode.On("LightBlock", mock.Anything, mock.Anything).Return(nil, provider.ErrLightBlockNotFound)
-	c, err := light.NewClient(
+	c, err := light.NewClientAtHeight(
 		ctx,
+		1,
 		chainID,
 		mockDeadNode,
 		[]provider.Provider{mockDeadNode, mockFullNode},
@@ -382,8 +387,9 @@ func TestClient_TrustedValidatorSet(t *testing.T) {
 			1: vals,
 			2: vals,
 		})
-	c, err := light.NewClient(
+	c, err := light.NewClientAtHeight(
 		ctx,
+		1,
 		chainID,
 		mockFullNode,
 		[]provider.Provider{mockBadValSetNode, mockFullNode},
@@ -415,8 +421,9 @@ func TestClientPrunesHeadersAndValidatorSets(t *testing.T) {
 			0: vals,
 		})
 
-	c, err := light.NewClient(
+	c, err := light.NewClientAtHeight(
 		ctx,
+		1,
 		chainID,
 		mockFullNode,
 		[]provider.Provider{mockFullNode},
@@ -543,10 +550,11 @@ func TestClientHandlesContexts(t *testing.T) {
 	dashcoreClient := dashcore.NewMockClient(chainID, llmqType, privVals[0], true)
 
 	// instantiate the light client with a timeout
-	ctxTimeOut, cancel := context.WithTimeout(ctx, 1*time.Millisecond)
+	ctxTimeOut, cancel := context.WithTimeout(ctx, 1*time.Nanosecond)
 	defer cancel()
-	_, err := light.NewClient(
+	_, err := light.NewClientAtHeight(
 		ctxTimeOut,
+		1,
 		chainID,
 		mockNode,
 		[]provider.Provider{mockNode, mockNode},

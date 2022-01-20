@@ -64,8 +64,9 @@ func TestClientIntegration_Update(t *testing.T) {
 	db, err := dbm.NewGoLevelDB("light-client-db", dbDir)
 	require.NoError(t, err)
 
-	c, err := light.NewClient(
+	c, err := light.NewClientAtHeight(
 		ctx,
+		1,
 		chainID,
 		primary,
 		[]provider.Provider{primary}, // NOTE: primary should not be used here
