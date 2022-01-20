@@ -40,6 +40,8 @@ const (
 
 	// 10s is sufficient for most networks.
 	defaultMaxBlockLag = 10 * time.Second
+
+	defaultProviderTimeout = 10 * time.Second
 )
 
 // Option sets a parameter for the light client.
@@ -197,6 +199,7 @@ func NewClientFromTrustedStore(
 		pruningSize:       defaultPruningSize,
 		logger:            log.NewNopLogger(),
 		dashCoreRPCClient: dashCoreRPCClient,
+		providerTimeout:   defaultProviderTimeout,
 	}
 
 	for _, o := range options {
@@ -667,14 +670,15 @@ func (c *Client) lightBlockFromPrimary(ctx context.Context) (*types.LightBlock, 
 // lightBlockFromPrimaryAtHeight retrieves a light block from the primary provider
 func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64) (*types.LightBlock, error) {
 	c.providerMutex.Lock()
-	c.logger.Info("#debug looking for light block from primary", "height", height)
-	l, err := c.primary.LightBlock(ctx, height)
-	c.logger.Info("#debug found light block from primary", "height", height)
+	l, err := c.getLightBlock(ctx, c.primary, height)
 	c.providerMutex.Unlock()
 
 	switch err {
 	case nil:
-		// Everything went smoothly. We reset the lightBlockRequests and return the light block
+
+	// catch canceled contexts or deadlines
+	case context.Canceled, context.DeadlineExceeded:
+		return l, err
 
 	case provider.ErrLightBlockTooOld:
 		// If the block is too old check to see if it the same as our current block
@@ -686,9 +690,6 @@ func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64
 		} else {
 			err = nil
 		}
-
-	case context.Canceled, context.DeadlineExceeded:
-		return l, err
 
 	case provider.ErrNoResponse, provider.ErrLightBlockNotFound, provider.ErrHeightTooHigh:
 		// we find a new witness to replace the primary
@@ -714,6 +715,17 @@ func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64
 	}
 
 	return l, nil
+}
+
+func (c *Client) getLightBlock(ctx context.Context, p provider.Provider, height int64) (*types.LightBlock, error) {
+	subCtx, cancel := context.WithTimeout(ctx, c.providerTimeout)
+	defer cancel()
+	l, err := p.LightBlock(subCtx, height)
+
+	if err == context.DeadlineExceeded || ctx.Err() != nil {
+		return nil, provider.ErrNoResponse
+	}
+	return l, err
 }
 
 // NOTE: requires a providerMutex lock

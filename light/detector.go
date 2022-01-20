@@ -20,14 +20,7 @@ import (
 func (c *Client) compareNewHeaderWithWitness(ctx context.Context, errc chan error, h *types.SignedHeader,
 	witness provider.Provider, witnessIndex int) {
 
-	tt := time.Now()
-
-	c.logger.Info("#debug before compareNewHeaderWithWitness", "height", h.Height, "witnessIndex", witnessIndex)
-
-	lightBlock, err := witness.LightBlock(ctx, h.Height)
-
-	c.logger.Info("#debug after compareNewHeaderWithWitness", "height", h.Height, "witnessIndex", witnessIndex, "elapsed", time.Since(tt)*time.Second)
-
+	lightBlock, err := c.getLightBlock(ctx, witness, h.Height)
 	switch err {
 	// no error means we move on to checking the hash of the two headers
 	case nil:
