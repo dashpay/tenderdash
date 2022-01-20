@@ -812,7 +812,6 @@ func (n *nodeImpl) OnStart() error {
 		// FIXME: We shouldn't allow state sync to silently error out without
 		// bubbling up the error and gracefully shutting down the rest of the node
 		go func() {
-
 			n.Logger.Info("starting state sync")
 			state, err := n.stateSyncReactor.Sync(context.TODO())
 			if err != nil {

@@ -722,7 +722,6 @@ func (r *Reactor) handleLightBlockMessage(envelope p2p.Envelope) error {
 			return nil
 		}
 
-		r.Logger.Info("#debug light block found", "height", lb.Height, "peer", envelope.From)
 		lbproto, err := lb.ToProto()
 		if err != nil {
 			r.Logger.Error("marshaling light block to proto", "err", err)
@@ -1057,7 +1056,6 @@ func (r *Reactor) initStateProvider(ctx context.Context, chainID string, initial
 		peers := r.peers.All()
 		providers := make([]provider.Provider, len(peers))
 		for idx, p := range peers {
-			spLogger.Info("#debug witness init", "idx", idx, "peer", p)
 			providers[idx] = NewBlockProvider(p, chainID, r.dispatcher)
 		}
 

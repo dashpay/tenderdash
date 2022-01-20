@@ -65,11 +65,6 @@ func (d *Dispatcher) LightBlock(ctx context.Context, height int64, peer types.No
 	// wait for a response, cancel or timeout
 	select {
 	case resp := <-callCh:
-		m := "#debug received light block response height=%d"
-		if resp == nil {
-			m += " but response is nil"
-		}
-		fmt.Printf(m+"\n", height)
 		return resp, nil
 
 	case <-ctx.Done():

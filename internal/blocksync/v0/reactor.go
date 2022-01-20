@@ -591,7 +591,6 @@ FOR_LOOP:
 				// without persisting the state.
 				state, err = r.blockExec.ApplyBlock(state, r.nodeProTxHash, firstID, first)
 				if err != nil {
-					fmt.Printf("#debug failed to process committed block (%d:%X): %v", first.Height, first.Hash(), err)
 					// TODO: This is bad, are we zombie?
 					panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", first.Height, first.Hash(), err))
 				}

@@ -266,8 +266,6 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 		return fmt.Errorf("invalid commit: height %d does not match commit height %d", l.Height, l.Commit.Height)
 	}
 
-	c.logger.Info("#debug verify commit", "height", height)
-
 	// 3) Ensure that the commit is valid based on validator set we got back.
 	// Todo: we will want to remove validator sets entirely from light blocks and just have quorum hashes
 	err = l.ValidatorSet.VerifyCommit(c.chainID, l.Commit.BlockID, l.Commit.StateID, l.Height, l.Commit)
@@ -275,22 +273,16 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 		return fmt.Errorf("invalid commit: %w", err)
 	}
 
-	c.logger.Info("#debug verify block with dash core", "height", height)
-
 	// 4) Ensure that the commit is valid based on local dash core verification.
 	err = c.verifyBlockWithDashCore(ctx, l)
 	if err != nil {
 		return fmt.Errorf("invalid light block: %w", err)
 	}
 
-	c.logger.Info("#debug compare first header with witnesses", "height", height)
-
 	// 5) Cross-verify with witnesses to ensure everybody has the same state.
 	if err := c.compareFirstHeaderWithWitnesses(ctx, l.SignedHeader); err != nil {
 		return err
 	}
-
-	c.logger.Info("#debug update trusted light block", "height", height)
 
 	// 6) Persist both of them and continue.
 	return c.updateTrustedLightBlock(l)
@@ -821,6 +813,7 @@ func (c *Client) findNewPrimary(ctx context.Context, height int64, remove bool) 
 			c.logger.Info("error on light block request from witness",
 				"error", response.err, "primary", c.witnesses[response.witnessIndex])
 			continue
+
 		// catch canceled contexts or deadlines
 		case context.Canceled, context.DeadlineExceeded:
 			return nil, response.err
@@ -854,8 +847,6 @@ func (c *Client) compareFirstHeaderWithWitnesses(ctx context.Context, h *types.S
 	if len(c.witnesses) < 1 {
 		return ErrNoWitnesses
 	}
-
-	c.logger.Info("#debug witness length", "length", len(c.witnesses))
 
 	errc := make(chan error, len(c.witnesses))
 	for i, witness := range c.witnesses {
