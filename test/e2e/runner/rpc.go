@@ -13,7 +13,7 @@ import (
 )
 
 const (
-	WaitForHeightTimeout = 20 * time.Second
+	WaitForHeightTimeout = 30 * time.Second
 )
 
 // waitForHeight waits for the network to reach a certain height (or above),
