@@ -706,7 +706,7 @@ func (r *Reactor) handleChunkMessage(envelope p2p.Envelope) error {
 func (r *Reactor) handleLightBlockMessage(envelope p2p.Envelope) error {
 	switch msg := envelope.Message.(type) {
 	case *ssproto.LightBlockRequest:
-		r.Logger.Info("received light block request", "height", msg.Height, "peer", envelope.From)
+		r.Logger.Info("received light block request", "height", msg.Height)
 		lb, err := r.fetchLightBlock(msg.Height)
 		if err != nil {
 			r.Logger.Error("failed to retrieve light block", "err", err, "height", msg.Height)
