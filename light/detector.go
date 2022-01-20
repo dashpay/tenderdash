@@ -3,7 +3,6 @@ package light
 import (
 	"bytes"
 	"context"
-	"errors"
 	"time"
 
 	"github.com/tendermint/tendermint/light/provider"
@@ -41,10 +40,10 @@ func (c *Client) compareNewHeaderWithWitness(ctx context.Context, errc chan erro
 		var isTargetHeight bool
 		isTargetHeight, lightBlock, err = c.getTargetBlockOrLatest(ctx, h.Height, witness)
 		if err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				errc <- err
-			} else {
+			if c.providerShouldBeRemoved(err) {
 				errc <- errBadWitness{Reason: err, WitnessIndex: witnessIndex}
+			} else {
+				errc <- err
 			}
 			return
 		}
@@ -69,7 +68,11 @@ func (c *Client) compareNewHeaderWithWitness(ctx context.Context, errc chan erro
 		time.Sleep(2*c.maxClockDrift + c.maxBlockLag)
 		isTargetHeight, lightBlock, err = c.getTargetBlockOrLatest(ctx, h.Height, witness)
 		if err != nil {
-			errc <- errBadWitness{Reason: err, WitnessIndex: witnessIndex}
+			if c.providerShouldBeRemoved(err) {
+				errc <- errBadWitness{Reason: err, WitnessIndex: witnessIndex}
+			} else {
+				errc <- err
+			}
 			return
 		}
 		if isTargetHeight {
