@@ -13,6 +13,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 
 	abci "github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmmath "github.com/tendermint/tendermint/libs/math"
@@ -524,9 +525,11 @@ func (c *Client) Validators(
 
 	skipCount := validateSkipCount(page, perPage)
 	v := l.ValidatorSet.Validators[skipCount : skipCount+tmmath.MinInt(perPage, totalCount-skipCount)]
-	var thresholdPublicKey crypto.PubKey = nil
-	var quorumHash crypto.QuorumHash = nil
-	var quorumType btcjson.LLMQType
+	var (
+		thresholdPublicKey crypto.PubKey
+		quorumHash         crypto.QuorumHash
+		quorumType         btcjson.LLMQType
+	)
 	if *requestQuorumInfo {
 		thresholdPublicKey = l.ValidatorSet.ThresholdPublicKey
 		quorumHash = l.ValidatorSet.QuorumHash
