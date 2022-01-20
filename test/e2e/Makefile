@@ -11,16 +11,16 @@ node:
 e2e/app/compile:
 	docker run --rm -it --entrypoint "/src/tenderdash/test/e2e/entrypoint.sh" -w "/src/tenderdash/test/e2e" -v $(ROOT_PATH):/src/tenderdash tenderdash/e2e-node
 
-runner/simple: runner e2e/app/compile
+runner/simple: runner tests e2e/app/compile
 	./build/runner -f networks/simple.toml
 
-runner/ci: runner e2e/app/compile
+runner/ci: runner tests e2e/app/compile
 	./build/runner -f networks/ci.toml
 
-runner/dashcore: runner e2e/app/compile
+runner/dashcore: runner tests e2e/app/compile
 	./build/runner -f networks/dashcore.toml
 
-runner/rotate: runner e2e/app/compile
+runner/rotate: runner tests e2e/app/compile
 	./build/runner -f networks/rotate.toml
 
 generator:
