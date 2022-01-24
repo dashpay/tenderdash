@@ -25,6 +25,13 @@ validator04 = 100
 [validator_update.1010]
 validator01 = 100
 validator02 = 100
+validator03 = 0
+validator04 = 100
+validator05 = 100
+
+[validator_update.1020]
+validator01 = 0
+validator02 = 100
 validator03 = 100
 validator04 = 100
 validator05 = 100
@@ -32,10 +39,6 @@ validator05 = 100
 [node.seed01]
 mode = "seed"
 perturb = ["restart"]
-
-[node.seed02]
-mode = "seed"
-seeds = ["seed01"]
 
 [node.validator01]
 seeds = ["seed01"]
@@ -87,24 +90,8 @@ privval_protocol = "dashcore"
 retain_blocks = 10
 perturb = ["restart"]
 
-[node.full02]
-start_at = 1015
-mode = "full"
-# FIXME: should be v2, disabled due to flake
-block_sync = "v0"
-state_sync = "p2p"
-privval_protocol = "dashcore"
-seeds = ["seed01"]
-perturb = ["restart"]
-
 [node.light01]
 mode= "light"
-start_at= 1005
+start_at= 1010
 privval_protocol = "dashcore"
 persistent_peers = ["validator01", "validator02", "validator03"]
-
-[node.light02]
-mode= "light"
-start_at= 1015
-privval_protocol = "dashcore"
-persistent_peers = ["full01", "validator04", "validator05"]
