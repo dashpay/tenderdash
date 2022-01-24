@@ -30,6 +30,7 @@ const (
 	// capped in size and thus this number should be seen as a soft max
 	MaxHeaderBytes       int64 = 646
 	MaxCoreChainLockSize int64 = 132
+	MaxCommitSize        int64 = 374
 
 	// MaxOverheadForBlock - maximum overhead to encode a block (up to
 	// MaxBlockSizeBytes in size) not including it's parts except Data.
