@@ -53,6 +53,7 @@ func NewRPCStateProvider(
 	chainID string,
 	initialHeight int64,
 	servers []string,
+	trustHeight int64,
 	logger log.Logger,
 	dashCoreClient dashcore.Client,
 ) (StateProvider, error) {
@@ -74,7 +75,7 @@ func NewRPCStateProvider(
 		providerRemotes[provider] = server
 	}
 
-	lc, err := light.NewClient(ctx, chainID, providers[0], providers[1:],
+	lc, err := light.NewClientAtHeight(ctx, trustHeight, chainID, providers[0], providers[1:],
 		lightdb.New(dbm.NewMemDB()), dashCoreClient, light.Logger(logger))
 	if err != nil {
 		return nil, err

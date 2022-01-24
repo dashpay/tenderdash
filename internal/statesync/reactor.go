@@ -1064,7 +1064,7 @@ func (r *Reactor) initStateProvider(ctx context.Context, chainID string, initial
 			return fmt.Errorf("failed to initialize P2P state provider: %w", err)
 		}
 	} else {
-		r.stateProvider, err = NewRPCStateProvider(ctx, chainID, initialHeight, r.cfg.RPCServers, spLogger, r.dashCoreClient)
+		r.stateProvider, err = NewRPCStateProvider(ctx, chainID, initialHeight, r.cfg.RPCServers, r.cfg.TrustHeight, spLogger, r.dashCoreClient)
 		if err != nil {
 			return fmt.Errorf("failed to initialize RPC state provider: %w", err)
 		}
