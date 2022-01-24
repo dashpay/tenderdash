@@ -24,10 +24,7 @@ None
 
 ## Checklist:
 <!--- Go over all the following points, and put an `x` in all the boxes that apply. -->
-- [x] I have performed a self-review of my own code
-- [x] I have commented my code, particularly in hard-to-understand areas
-- [x] I have added or updated relevant unit/integration/functional/e2e tests
-- [x] I have made corresponding changes to the documentation
+- [ ] I have performed a self-review of the generated changelog
 
 **For repository code-owners and collaborators only**
-- [x] I have assigned this pull request to a milestone
+- [ ] I have assigned this pull request to a milestone
