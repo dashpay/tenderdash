@@ -1,6 +1,7 @@
 package selectpeers
 
 import (
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -9,7 +10,14 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
+const (
+	mySeed = math.MaxUint16 - 1
+)
+
 func TestDIP6(t *testing.T) {
+	me := mock.NewValidator(mySeed)
+	quorumHash := mock.NewQuorumHash(0xaa)
+
 	tests := []struct {
 		name            string
 		validators      []*types.Validator
@@ -21,84 +29,92 @@ func TestDIP6(t *testing.T) {
 	}{
 		{
 			name:    "No validators",
-			me:      mock.NewValidator(0),
+			me:      me,
 			wantErr: true,
 		},
 		{
 			name:       "Only me",
-			validators: mock.NewValidators(1),
-			me:         mock.NewValidator(0),
-			quorumHash: mock.NewQuorumHash(0),
+			validators: append([]*types.Validator{}, me),
+			me:         me,
+			quorumHash: quorumHash,
 			wantErr:    true,
 		},
 		{
 			name:            "4 validators",
-			validators:      mock.NewValidators(4),
-			me:              mock.NewValidator(0),
-			quorumHash:      mock.NewQuorumHash(0),
+			validators:      append(mock.NewValidators(3), me),
+			me:              me,
+			quorumHash:      quorumHash,
 			wantLen:         3,
-			wantProTxHashes: mock.NewProTxHashes(0x01, 0x02, 0x03),
+			wantProTxHashes: mock.NewProTxHashes(0x01, 0x03, 0x02),
 		},
 		{
 			name:            "5 validators",
-			validators:      mock.NewValidators(5),
-			me:              mock.NewValidator(0),
-			quorumHash:      mock.NewQuorumHash(0),
-			wantProTxHashes: mock.NewProTxHashes(0x01, 0x02),
+			validators:      append(mock.NewValidators(4), me),
+			me:              me,
+			quorumHash:      quorumHash,
+			wantProTxHashes: mock.NewProTxHashes(0x03, 0x04),
 			wantLen:         2,
 		},
 		{
 			name:       "5 validators, not me",
 			validators: mock.NewValidators(5),
 			me:         mock.NewValidator(1000),
-			quorumHash: mock.NewQuorumHash(0),
+			quorumHash: quorumHash,
 			wantErr:    true,
 		},
 		{
 			name:            "5 validators, different quorum hash",
-			validators:      mock.NewValidators(5),
-			me:              mock.NewValidator(0),
+			validators:      append(mock.NewValidators(4), me),
+			me:              me,
 			quorumHash:      mock.NewQuorumHash(1),
 			wantProTxHashes: mock.NewProTxHashes(0x01, 0x03),
 			wantLen:         2,
 		},
 		{
+			name:            "6 validators",
+			validators:      append(mock.NewValidators(5), me),
+			me:              me,
+			quorumHash:      quorumHash,
+			wantProTxHashes: mock.NewProTxHashes(0x03, 0x04),
+			wantLen:         2,
+		},
+		{
 			name:            "8 validators",
-			validators:      mock.NewValidators(6),
-			me:              mock.NewValidator(0),
-			quorumHash:      mock.NewQuorumHash(0),
-			wantProTxHashes: mock.NewProTxHashes(0x01, 0x02),
+			validators:      append(mock.NewValidators(7), me),
+			me:              me,
+			quorumHash:      quorumHash,
+			wantProTxHashes: mock.NewProTxHashes(0x03, 0x04),
 			wantLen:         2,
 		},
 		{
 			name:            "9 validators",
-			validators:      mock.NewValidators(9),
-			me:              mock.NewValidator(0),
-			quorumHash:      mock.NewQuorumHash(0),
-			wantProTxHashes: mock.NewProTxHashes(0x06, 0x01, 0x02),
+			validators:      append(mock.NewValidators(8), me),
+			me:              me,
+			quorumHash:      quorumHash,
+			wantProTxHashes: mock.NewProTxHashes(0x03, 0x08, 0x02),
 			wantLen:         3,
 		},
 		{
 			name:            "37 validators",
-			validators:      mock.NewValidators(37),
-			me:              mock.NewValidator(0),
-			quorumHash:      mock.NewQuorumHash(0),
-			wantProTxHashes: mock.NewProTxHashes(0xc, 0xa, 0x15, 0x19, 0x1d),
+			validators:      append(mock.NewValidators(36), me),
+			me:              me,
+			quorumHash:      quorumHash,
+			wantProTxHashes: mock.NewProTxHashes(0x03, 0x0b, 0x08, 0x22, 0x1d),
 			wantLen:         5,
 		},
 		{
 			name:            "37 validators, I am last",
 			validators:      mock.NewValidators(37),
 			me:              mock.NewValidator(36),
-			quorumHash:      mock.NewQuorumHash(0),
-			wantProTxHashes: mock.NewProTxHashes(0x08, 0x1b, 0x22, 0x23, 0x16),
+			quorumHash:      quorumHash,
+			wantProTxHashes: mock.NewProTxHashes(0x0a, 0x10, 0x06, 0x03, 0x02),
 			wantLen:         5,
 		},
 		{
 			name:       "37 validators, not me",
 			validators: mock.NewValidators(37),
-			me:         mock.NewValidator(37),
-			quorumHash: mock.NewQuorumHash(0),
+			me:         me,
+			quorumHash: quorumHash,
 			wantErr:    true,
 		},
 	}

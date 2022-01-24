@@ -368,6 +368,10 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 func (vc *ValidatorConnExecutor) filterAddresses(validators validatorMap) validatorMap {
 	filtered := make(validatorMap, len(validators))
 	for id, validator := range validators {
+		if err := validator.ValidateBasic(); err != nil {
+			vc.Logger.Debug("validator address is invalid", "id", id, "address", validator.NodeAddress.String())
+			continue
+		}
 		if vc.connectedValidators.contains(validator) {
 			vc.Logger.Debug("validator already connected", "id", id)
 			continue
@@ -376,6 +380,7 @@ func (vc *ValidatorConnExecutor) filterAddresses(validators validatorMap) valida
 			vc.Logger.Debug("already dialing this validator", "id", id, "address", validator.NodeAddress.String())
 			continue
 		}
+
 		filtered[id] = validator
 	}
 	return filtered
