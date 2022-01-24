@@ -3,7 +3,6 @@ package mock
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"time"
 
 	"github.com/tendermint/tendermint/internal/libs/sync"
 	"github.com/tendermint/tendermint/internal/p2p"
@@ -12,16 +11,14 @@ import (
 
 // MOCK SWITCH //
 const (
-	OpDial    = "dialOne"
-	OpStopOne = "stopOne"
+	OpDial = "dialOne"
+	OpStop = "stopOne"
 )
 
 // SwitchHistoryEvent is a log of dial and stop operations executed by the MockSwitch
 type SwitchHistoryEvent struct {
-	Timestamp time.Time
 	Operation string // OpDialMany, OpStopOne
 	Params    []string
-	Comment   string
 }
 
 // Switch implements `dash.Switch`. It sends event about DialPeersAsync() and StopPeerGracefully() calls
@@ -67,9 +64,9 @@ func (sw *Switch) IsDialingOrConnected(id types.NodeID) bool {
 // event OpStopOne.
 func (sw *Switch) DisconnectAsync(id types.NodeID) error {
 	sw.mux.Lock()
-	sw.ConnectedPeers[id] = true
+	sw.ConnectedPeers[id] = false
 	sw.mux.Unlock()
-	sw.history(OpStopOne, string(id))
+	sw.history(OpStop, string(id))
 
 	return nil
 }
@@ -94,7 +91,6 @@ func (sw *Switch) Resolve(val types.ValidatorAddress) (p2p.NodeAddress, error) {
 // history adds info about an operation to sw.History and sends it to sw.HistoryChan
 func (sw *Switch) history(op string, args ...string) {
 	event := SwitchHistoryEvent{
-		Timestamp: time.Now(),
 		Operation: op,
 		Params:    args,
 	}
