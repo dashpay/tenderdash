@@ -20,7 +20,8 @@ type errPeerNotFound error
 
 // // NodeIDResolver determines a node ID based on validator address
 type NodeIDResolver interface {
-	// Resolve retrieves a node ID from remote node.
+	// Resolve determines real node address, including node ID, based on the provided
+	// validator address.
 	Resolve(types.ValidatorAddress) (NodeAddress, error)
 }
 
@@ -34,8 +35,6 @@ type DashDialer interface {
 	IsDialingOrConnected(types.NodeID) bool
 	// ConnectAsync schedules asynchronous job to disconnect from the provided node.
 	DisconnectAsync(types.NodeID) error
-	// Resolve determines real node address, including node ID, based on the provided validator address.
-
 }
 
 type routerDashDialer struct {
@@ -101,7 +100,7 @@ func (cm *routerDashDialer) DisconnectAsync(id types.NodeID) error {
 	return nil
 }
 
-// Resolve implements dashquorum.NodeIDResolver
+// Resolve implements NodeIDResolver
 func (cm *routerDashDialer) Resolve(va types.ValidatorAddress) (nodeAddress NodeAddress, err error) {
 	ctx, cancel := context.WithTimeout(context.Background(), dnsLookupTimeout)
 	defer cancel()

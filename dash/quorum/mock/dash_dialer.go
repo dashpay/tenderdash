@@ -20,7 +20,7 @@ type HistoryEvent struct {
 	Params    []string
 }
 
-// DashDialer implements `p2p.DashDialer`.
+// DashDialer is a mock `p2p.DashDialer`.
 // It sends event about DialPeersAsync() and StopPeerGracefully() calls
 // to HistoryChan and stores them in History
 type DashDialer struct {
@@ -40,8 +40,8 @@ func NewDashDialer() *DashDialer {
 }
 
 // DialPeersAsync implements p2p.DashDialer.
-// It emulates connecting to provided addresses
-// and adds them as peers and emits history event OpDialMany.
+// It emulates connecting to provided address, adds is as a connected peer
+// and emits history event OpDial.
 func (sw *DashDialer) ConnectAsync(addr p2p.NodeAddress) error {
 	id := addr.NodeID
 	sw.mux.Lock()
@@ -52,16 +52,17 @@ func (sw *DashDialer) ConnectAsync(addr p2p.NodeAddress) error {
 	return nil
 }
 
-// IsDialingOrExistingAddress implements p2p.DashDialer. It checks if provided peer has been dialed
-// before.
+// IsDialingOrExistingAddress implements p2p.DashDialer.
+// It checks if provided peer is connected or dial is in progress.
 func (sw *DashDialer) IsDialingOrConnected(id types.NodeID) bool {
 	sw.mux.Lock()
 	defer sw.mux.Unlock()
 	return sw.ConnectedPeers[id]
 }
 
-// StopPeerGracefully implements p2p.DashDialer. It removes the peer from Peers() and emits history
-// event OpStopOne.
+// StopPeerGracefully implements p2p.DashDialer.
+// It removes the peer from list of connected peers and emits history
+// event OpStop
 func (sw *DashDialer) DisconnectAsync(id types.NodeID) error {
 	sw.mux.Lock()
 	sw.ConnectedPeers[id] = false
@@ -88,7 +89,7 @@ func (sw *DashDialer) Resolve(val types.ValidatorAddress) (p2p.NodeAddress, erro
 	return addr, nil
 }
 
-// history adds info about an operation to sw.History and sends it to sw.HistoryChan
+// history adds info about an operation to sw.HistoryChan
 func (sw *DashDialer) history(op string, args ...string) {
 	event := HistoryEvent{
 		Operation: op,

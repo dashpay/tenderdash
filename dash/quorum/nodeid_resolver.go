@@ -20,7 +20,6 @@ const (
 type tcpNodeIDResolver struct {
 	DialerTimeout     time.Duration
 	ConnectionTimeout time.Duration
-	// other dependencies
 }
 
 // NewTCPNodeIDResolver creates new NodeIDResolver that connects to remote host with p2p protocol and
@@ -51,7 +50,7 @@ func (resolver tcpNodeIDResolver) connect(host string, port uint16) (net.Conn, e
 }
 
 // Resolve implements NodeIDResolver
-// Resolve retrieves a node ID from remote node.
+// Resolve retrieves a node ID from remote validator and generates a correct node address.
 // Note that it is quite expensive, as it establishes secure connection to the other node
 // which is dropped afterwards.
 func (resolver tcpNodeIDResolver) Resolve(va types.ValidatorAddress) (p2p.NodeAddress, error) {
