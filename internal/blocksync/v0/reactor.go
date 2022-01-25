@@ -2,11 +2,11 @@ package v0
 
 import (
 	"fmt"
-	"github.com/tendermint/tendermint/crypto"
 	"runtime/debug"
 	"sync"
 	"time"
 
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/blocksync"
 	"github.com/tendermint/tendermint/internal/consensus"
 	"github.com/tendermint/tendermint/internal/p2p"
