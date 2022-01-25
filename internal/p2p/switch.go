@@ -60,7 +60,6 @@ type AddrBook interface {
 	MarkGood(types.NodeID)
 	RemoveAddress(*NetAddress)
 	HasAddress(*NetAddress) bool
-	FindIP(ip net.IP, port uint16) types.NodeID
 	Save()
 }
 
@@ -485,11 +484,6 @@ func (sw *Switch) SetAddrBook(addrBook AddrBook) {
 	sw.addrBook = addrBook
 }
 
-// AddrBook implements Switch. It returns address book used by the switch.
-func (sw *Switch) AddrBook() AddrBook {
-	return sw.addrBook
-}
-
 // MarkPeerAsGood marks the given peer as good when it did something useful
 // like contributed to consensus.
 func (sw *Switch) MarkPeerAsGood(peer Peer) {
@@ -615,7 +609,7 @@ func (sw *Switch) IsDialingOrExistingAddress(addr *NetAddress) bool {
 		(!sw.config.AllowDuplicateIP && sw.peers.HasIP(addr.IP))
 }
 
-// AddPersistentPeers allows you to add new persistent peers. It ignores
+// AddPersistentPeers allows you to set persistent peers. It ignores
 // ErrNetAddressLookup. However, if there are other errors, first encounter is
 // returned.
 func (sw *Switch) AddPersistentPeers(addrs []string) error {
@@ -632,32 +626,7 @@ func (sw *Switch) AddPersistentPeers(addrs []string) error {
 		}
 		return err
 	}
-	sw.persistentPeersAddrs = append(sw.persistentPeersAddrs, netAddrs...)
-	return nil
-}
-
-// RemovePersistentPeer allows you to delete persistent peer from persistent peers list.
-// It ignores ErrNetAddressLookup. However, if there are other errors, first encounter is
-// returned.
-func (sw *Switch) RemovePersistentPeer(addr string) error {
-	if len(sw.persistentPeersAddrs) == 0 {
-		return nil
-	}
-	sw.Logger.Info("Removing persistent peer", "addr", addr)
-
-	toDelete, err := ParseNodeAddress(addr)
-	if err != nil {
-		return err
-	}
-
-	newPersistentPeers := make([]*NetAddress, 0, len(sw.persistentPeersAddrs)-1)
-	for _, existingAddr := range sw.persistentPeersAddrs {
-		if !existingAddr.Equals(toDelete) {
-			newPersistentPeers = append(newPersistentPeers, existingAddr)
-		}
-	}
-
-	sw.persistentPeersAddrs = newPersistentPeers
+	sw.persistentPeersAddrs = netAddrs
 	return nil
 }
 
