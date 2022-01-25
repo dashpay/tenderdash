@@ -38,9 +38,8 @@ type optionFunc func(vc *ValidatorConnExecutor) error
 // will retry the connection if it fails.
 type ValidatorConnExecutor struct {
 	service.BaseService
-	proTxHash types.ProTxHash
-	eventBus  *types.EventBus
-	// connectionManager    Switch
+	proTxHash         types.ProTxHash
+	eventBus          *types.EventBus
 	connectionManager DashConnectionManager
 	subscription      types.Subscription
 
