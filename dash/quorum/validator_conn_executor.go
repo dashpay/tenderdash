@@ -38,10 +38,10 @@ type optionFunc func(vc *ValidatorConnExecutor) error
 // will retry the connection if it fails.
 type ValidatorConnExecutor struct {
 	service.BaseService
-	proTxHash         types.ProTxHash
-	eventBus          *types.EventBus
-	connectionManager DashConnectionManager
-	subscription      types.Subscription
+	proTxHash    types.ProTxHash
+	eventBus     *types.EventBus
+	dialer       p2p.DashDialer
+	subscription types.Subscription
 
 	// validatorSetMembers contains validators active in the current Validator Set, indexed by node ID
 	validatorSetMembers validatorMap
@@ -50,7 +50,7 @@ type ValidatorConnExecutor struct {
 	// quorumHash contains current quorum hash
 	quorumHash tmbytes.HexBytes
 	// nodeIDResolvers can be used to determine a node ID for a validator
-	nodeIDResolvers []NodeIDResolver
+	nodeIDResolvers []p2p.NodeIDResolver
 	// mux is a mutex to ensure only one goroutine is processing connections
 	mux sync.Mutex
 
@@ -58,12 +58,6 @@ type ValidatorConnExecutor struct {
 
 	// EventBusCapacity sets event bus buffer capacity, defaults to 10
 	EventBusCapacity int
-}
-
-// DashConnectionManager represents methods required to establish connections within Dash
-type DashConnectionManager interface {
-	p2p.DashDialer
-	NodeIDResolver
 }
 
 var (
@@ -75,20 +69,20 @@ var (
 func NewValidatorConnExecutor(
 	proTxHash types.ProTxHash,
 	eventBus *types.EventBus,
-	connMgr DashConnectionManager,
+	connMgr p2p.DashDialer,
 	opts ...optionFunc,
 ) (*ValidatorConnExecutor, error) {
 	vc := &ValidatorConnExecutor{
 		proTxHash:           proTxHash,
 		eventBus:            eventBus,
-		connectionManager:   connMgr,
+		dialer:              connMgr,
 		EventBusCapacity:    defaultEventBusCapacity,
 		validatorSetMembers: validatorMap{},
 		connectedValidators: validatorMap{},
 		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),
 	}
-	vc.nodeIDResolvers = []NodeIDResolver{
-		vc.connectionManager,
+	vc.nodeIDResolvers = []p2p.NodeIDResolver{
+		vc.dialer,
 		NewTCPNodeIDResolver(),
 	}
 	baseService := service.NewBaseService(log.NewNopLogger(), validatorConnExecutorName, vc)
@@ -297,7 +291,7 @@ func (vc *ValidatorConnExecutor) disconnectValidator(validator types.Validator) 
 	}
 	id := validator.NodeAddress.NodeID
 	vc.Logger.Debug("disconnecting Validator", "validator", validator, "id", id, "address", validator.NodeAddress.String())
-	if err := vc.connectionManager.DisconnectAsync(id); err != nil {
+	if err := vc.dialer.DisconnectAsync(id); err != nil {
 		return err
 	}
 	return nil
@@ -375,7 +369,7 @@ func (vc *ValidatorConnExecutor) filterAddresses(validators validatorMap) valida
 			vc.Logger.Debug("validator already connected", "id", id)
 			continue
 		}
-		if vc.connectionManager.IsDialingOrConnected(validator.NodeAddress.NodeID) {
+		if vc.dialer.IsDialingOrConnected(validator.NodeAddress.NodeID) {
 			vc.Logger.Debug("already dialing this validator", "id", id, "address", validator.NodeAddress.String())
 			continue
 		}
@@ -395,7 +389,7 @@ func (vc *ValidatorConnExecutor) dial(vals validatorMap) error {
 	for id, validator := range vals {
 		vc.connectedValidators[id] = validator
 		address := nodeAddress(validator.NodeAddress)
-		if err := vc.connectionManager.ConnectAsync(address); err != nil {
+		if err := vc.dialer.ConnectAsync(address); err != nil {
 			vc.Logger.Error("cannot dial validator", "address", address.String(), "err", err)
 			return fmt.Errorf("cannot dial validator %s: %w", address.String(), err)
 		}

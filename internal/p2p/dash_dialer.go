@@ -11,53 +11,47 @@ import (
 )
 
 const (
-	DNSLookupTimeout = 1 * time.Second
+	dnsLookupTimeout = 1 * time.Second
 )
 
 type errPeerNotFound error
 
 // This file contains interface between dash/quorum and p2p connectivity subsystem
 
-// DashDialer defines a service that can be used to establish and manage peer connections
-type DashDialer interface {
-	// SetPersistentPeer(peerID types.NodeID, persistent bool)
-	ConnectAsync(NodeAddress) error
-	IsDialingOrConnected(types.NodeID) bool
-	DisconnectAsync(types.NodeID) error
-
+// // NodeIDResolver determines a node ID based on validator address
+type NodeIDResolver interface {
+	// Resolve retrieves a node ID from remote node.
 	Resolve(types.ValidatorAddress) (NodeAddress, error)
 }
 
-type routerPeerManager struct {
+// DashDialer defines a service that can be used to establish and manage peer connections
+type DashDialer interface {
+	NodeIDResolver
+	// ConnectAsync schedules asynchronous job to establish connection with provided node.
+	ConnectAsync(NodeAddress) error
+	// IsDialingOrConnected determines whether node with provided node ID is already connected,
+	// or there is a pending connection attempt.
+	IsDialingOrConnected(types.NodeID) bool
+	// ConnectAsync schedules asynchronous job to disconnect from the provided node.
+	DisconnectAsync(types.NodeID) error
+	// Resolve determines real node address, including node ID, based on the provided validator address.
+
+}
+
+type routerDashDialer struct {
 	peerManager *PeerManager
 	logger      log.Logger
 }
 
-func NewDashConnectionManager(peerManager *PeerManager, logger log.Logger) DashDialer {
-	return &routerPeerManager{
+func NewRouterDashDialer(peerManager *PeerManager, logger log.Logger) DashDialer {
+	return &routerDashDialer{
 		peerManager: peerManager,
 		logger:      logger,
 	}
 }
 
-// // // It was Peers().Get()
-// // func (cm *routerPeerManager) GetPeer(nodeID types.NodeID) IPeerSet {
-// // 	return cm.peerManager.store.peers[nodeID].AddressInfo
-// // }
-// func (cm *routerPeerManager) SetPersistentPeer(peerID types.NodeID, persistent bool) {
-
-// 	cm.peerManager.mtx.Lock()
-// 	defer cm.peerManager.mtx.Unlock()
-// 	if persistent {
-// 		cm.peerManager.options.persistentPeers[peerID] = true
-// 	} else {
-// 		delete(cm.peerManager.options.persistentPeers, peerID)
-// 	}
-
-// }
-
-// TODO rename to Connect()
-func (cm *routerPeerManager) ConnectAsync(addr NodeAddress) error {
+// ConnectAsync implements DashDialer
+func (cm *routerDashDialer) ConnectAsync(addr NodeAddress) error {
 	if err := addr.Validate(); err != nil {
 		return err
 	}
@@ -72,7 +66,7 @@ func (cm *routerPeerManager) ConnectAsync(addr NodeAddress) error {
 }
 
 // setPeerScore changes score for a peer
-func (cm *routerPeerManager) setPeerScore(nodeID types.NodeID, newScore PeerScore) error {
+func (cm *routerDashDialer) setPeerScore(nodeID types.NodeID, newScore PeerScore) error {
 	// peerManager.store assumes that peerManager is managing it
 	cm.peerManager.mtx.Lock()
 	defer cm.peerManager.mtx.Unlock()
@@ -88,11 +82,13 @@ func (cm *routerPeerManager) setPeerScore(nodeID types.NodeID, newScore PeerScor
 	return nil
 }
 
-func (cm *routerPeerManager) IsDialingOrConnected(id types.NodeID) bool {
+// IsDialingOrConnected implements DashDialer
+func (cm *routerDashDialer) IsDialingOrConnected(id types.NodeID) bool {
 	return cm.peerManager.dialing[id] || cm.peerManager.connected[id]
 }
 
-func (cm *routerPeerManager) DisconnectAsync(id types.NodeID) error {
+// DisconnectAsync implements DashDialer
+func (cm *routerDashDialer) DisconnectAsync(id types.NodeID) error {
 	if err := cm.setPeerScore(id, 0); err != nil {
 		return err
 	}
@@ -106,8 +102,8 @@ func (cm *routerPeerManager) DisconnectAsync(id types.NodeID) error {
 }
 
 // Resolve implements dashquorum.NodeIDResolver
-func (cm *routerPeerManager) Resolve(va types.ValidatorAddress) (nodeAddress NodeAddress, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), DNSLookupTimeout)
+func (cm *routerDashDialer) Resolve(va types.ValidatorAddress) (nodeAddress NodeAddress, err error) {
+	ctx, cancel := context.WithTimeout(context.Background(), dnsLookupTimeout)
 	defer cancel()
 
 	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", va.Hostname)
@@ -115,7 +111,7 @@ func (cm *routerPeerManager) Resolve(va types.ValidatorAddress) (nodeAddress Nod
 		return nodeAddress, err
 	}
 	for _, ip := range ips {
-		nodeAddress, err = cm.LookupIPPort(ctx, ip, va.Port)
+		nodeAddress, err = cm.lookupIPPort(ctx, ip, va.Port)
 		// First match is returned
 		if err == nil {
 			return nodeAddress, nil
@@ -124,7 +120,7 @@ func (cm *routerPeerManager) Resolve(va types.ValidatorAddress) (nodeAddress Nod
 	return nodeAddress, err
 }
 
-func (cm *routerPeerManager) LookupIPPort(ctx context.Context, ip net.IP, port uint16) (NodeAddress, error) {
+func (cm *routerDashDialer) lookupIPPort(ctx context.Context, ip net.IP, port uint16) (NodeAddress, error) {
 	for nodeID, peer := range cm.peerManager.store.peers {
 		for addr := range peer.AddressInfo {
 			if endpoints, err := addr.Resolve(ctx); err != nil {

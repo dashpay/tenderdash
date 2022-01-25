@@ -409,7 +409,7 @@ func TestEndBlock(t *testing.T) {
 	}
 
 	// setup ValidatorConnExecutor
-	sw := mock.NewDashConnectionManager()
+	sw := mock.NewDashDialer()
 	proTxHash := newVals.Validators[0].ProTxHash
 	vc, err := NewValidatorConnExecutor(proTxHash, eventBus, sw)
 	require.NoError(t, err)
@@ -564,12 +564,12 @@ func allowedParamsDefaults(
 func setup(
 	t *testing.T,
 	me *types.Validator,
-) (eventBus *types.EventBus, sw *mock.DashConnectionManager, vc *ValidatorConnExecutor) {
+) (eventBus *types.EventBus, sw *mock.DashDialer, vc *ValidatorConnExecutor) {
 	eventBus = types.NewEventBus()
 	err := eventBus.Start()
 	require.NoError(t, err)
 
-	sw = mock.NewDashConnectionManager()
+	sw = mock.NewDashDialer()
 
 	proTxHash := me.ProTxHash
 	vc, err = NewValidatorConnExecutor(proTxHash, eventBus, sw, WithLogger(log.TestingLogger()))

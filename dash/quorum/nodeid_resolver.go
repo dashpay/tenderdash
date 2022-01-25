@@ -17,12 +17,6 @@ const (
 	DefaultConnectionTimeout = 1 * time.Second
 )
 
-// NodeIDResolver determines a node ID based on validator address
-type NodeIDResolver interface {
-	// Resolve retrieves a node ID from remote node.
-	Resolve(types.ValidatorAddress) (p2p.NodeAddress, error)
-}
-
 type tcpNodeIDResolver struct {
 	DialerTimeout     time.Duration
 	ConnectionTimeout time.Duration
@@ -31,7 +25,7 @@ type tcpNodeIDResolver struct {
 
 // NewTCPNodeIDResolver creates new NodeIDResolver that connects to remote host with p2p protocol and
 // derives node ID from remote p2p public key.
-func NewTCPNodeIDResolver() NodeIDResolver {
+func NewTCPNodeIDResolver() p2p.NodeIDResolver {
 	return &tcpNodeIDResolver{
 		DialerTimeout:     DefaultDialTimeout,
 		ConnectionTimeout: DefaultConnectionTimeout,

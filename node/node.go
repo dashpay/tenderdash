@@ -517,7 +517,7 @@ func makeNode(cfg *config.Config,
 	var validatorConnExecutor *dashquorum.ValidatorConnExecutor
 	if proTxHashP != nil {
 		vcLogger := logger.With("proTxHash", proTxHashP.ShortString(), "module", "ValidatorConnExecutor")
-		dcm := p2p.NewDashConnectionManager(peerManager, vcLogger)
+		dcm := p2p.NewRouterDashDialer(peerManager, vcLogger)
 		validatorConnExecutor, err = dashquorum.NewValidatorConnExecutor(
 			*proTxHashP,
 			eventBus,

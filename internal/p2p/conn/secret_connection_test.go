@@ -5,7 +5,6 @@ import (
 	"encoding/hex"
 	"flag"
 	"fmt"
-	"github.com/tendermint/tendermint/crypto/bls12381"
 	"io"
 	"io/ioutil"
 	"log"
@@ -16,6 +15,8 @@ import (
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/tendermint/tendermint/crypto/bls12381"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

@@ -217,7 +217,7 @@ func TestSwitchFiltersOutItself(t *testing.T) {
 }
 
 func TestSwitchDialFailsOnIncompatiblePeer(t *testing.T) {
-	s1 := MakeSwitch(cfg, 1, "127.0.0.1", "123.123.123", nil,  initSwitchFunc, log.TestingLogger())
+	s1 := MakeSwitch(cfg, 1, "127.0.0.1", "123.123.123", nil, initSwitchFunc, log.TestingLogger())
 	ni := s1.NodeInfo()
 	ni.Network = "network-a"
 	s1.SetNodeInfo(ni)
