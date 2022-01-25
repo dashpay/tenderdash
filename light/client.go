@@ -888,11 +888,3 @@ func (c *Client) compareFirstHeaderWithWitnesses(ctx context.Context, h *types.S
 	// remove all witnesses that misbehaved
 	return c.removeWitnesses(witnessesToRemove)
 }
-
-// providerShouldBeRemoved analyzes the nature of the error and whether the provider
-// should be removed from the light clients set
-func (c *Client) providerShouldBeRemoved(err error) bool {
-	return errors.As(err, &provider.ErrUnreliableProvider{}) ||
-		errors.As(err, &provider.ErrBadLightBlock{}) ||
-		errors.Is(err, provider.ErrConnectionClosed)
-}

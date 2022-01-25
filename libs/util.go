@@ -9,3 +9,11 @@ func Int64Ptr(n int64) *int64 {
 func BoolPtr(b bool) *bool {
 	return &b
 }
+
+// BoolValue returns a boolean value of a passed pointer
+func BoolValue(b *bool) bool {
+	if b == nil {
+		return false
+	}
+	return *b
+}

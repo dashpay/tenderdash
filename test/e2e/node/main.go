@@ -42,7 +42,6 @@ var logger = log.MustNewDefaultLogger(log.LogFormatPlain, log.LogLevelInfo, fals
 var (
 	tmhome            string
 	tmcfg             *config.Config
-	nodeLogger        log.Logger
 	dashCoreRPCClient dashcore.Client
 )
 
@@ -52,7 +51,7 @@ func init() {
 		panic("TMHOME is missed")
 	}
 	var err error
-	tmcfg, nodeLogger, err = setupNode()
+	tmcfg, _, err = setupNode()
 	if err != nil {
 		panic("failed to setup config: " + err.Error())
 	}

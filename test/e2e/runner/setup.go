@@ -39,6 +39,8 @@ const (
 	PrivvalStateFile       = "data/priv_validator_state.json"
 	PrivvalDummyKeyFile    = "config/dummy_validator_key.json"
 	PrivvalDummyStateFile  = "data/dummy_validator_state.json"
+
+	ABCIGRPC = "grpc"
 )
 
 // Setup sets up the testnet configuration.
@@ -301,7 +303,7 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 		cfg.ProxyApp = AppAddressTCP
 	case e2e.ProtocolGRPC:
 		cfg.ProxyApp = AppAddressTCP
-		cfg.ABCI = "grpc"
+		cfg.ABCI = ABCIGRPC
 	case e2e.ProtocolBuiltin:
 		cfg.ProxyApp = ""
 		cfg.ABCI = ""
@@ -421,7 +423,7 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 		cfg["listen"] = AppAddressTCP
 	case e2e.ProtocolGRPC:
 		cfg["listen"] = AppAddressTCP
-		cfg["protocol"] = "grpc"
+		cfg["protocol"] = ABCIGRPC
 	case e2e.ProtocolBuiltin:
 		delete(cfg, "listen")
 		cfg["protocol"] = "builtin"
@@ -445,7 +447,7 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 			cfg["privval_key"] = PrivvalKeyFile
 			cfg["privval_state"] = PrivvalStateFile
 		case e2e.ProtocolGRPC:
-			cfg["privval_server_type"] = "grpc"
+			cfg["privval_server_type"] = ABCIGRPC
 			cfg["privval_server"] = PrivvalAddressGRPC
 			cfg["privval_key"] = PrivvalKeyFile
 			cfg["privval_state"] = PrivvalStateFile

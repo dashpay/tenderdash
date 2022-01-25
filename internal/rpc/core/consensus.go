@@ -4,6 +4,7 @@ import (
 	"errors"
 
 	"github.com/tendermint/tendermint/internal/consensus"
+	"github.com/tendermint/tendermint/libs"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	"github.com/tendermint/tendermint/rpc/coretypes"
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
@@ -49,7 +50,7 @@ func (env *Environment) Validators(
 		Validators:  v,
 		Count:       len(v),
 		Total:       totalCount}
-	if requestQuorumInfo != nil && *requestQuorumInfo == true {
+	if requestQuorumInfo != nil && libs.BoolValue(requestQuorumInfo) {
 		result.QuorumHash = &validators.QuorumHash
 		result.QuorumType = validators.QuorumType
 		result.ThresholdPublicKey = &validators.ThresholdPublicKey

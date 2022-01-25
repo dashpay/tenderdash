@@ -310,6 +310,7 @@ func (pv *MockPV) UpdatePrivateKey(
 	// fmt.Printf("mockpv node %X setting a new key %X at height %d\n", pv.ProTxHash,
 	//  privateKey.PubKey().Bytes(), height)
 	pv.mtx.RLock()
+	defer pv.mtx.RUnlock()
 	pv.PrivateKeys[quorumHash.String()] = crypto.QuorumKeys{
 		PrivKey:            privateKey,
 		PubKey:             privateKey.PubKey(),
@@ -319,7 +320,6 @@ func (pv *MockPV) UpdatePrivateKey(
 	if _, ok := pv.FirstHeightOfQuorums[quorumHash.String()]; !ok {
 		pv.FirstHeightOfQuorums[quorumHash.String()] = strconv.Itoa(int(height))
 	}
-	pv.mtx.RUnlock()
 }
 
 func (pv *MockPV) ExtractIntoValidator(ctx context.Context, quorumHash crypto.QuorumHash) *Validator {
