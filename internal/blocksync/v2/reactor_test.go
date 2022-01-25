@@ -515,7 +515,7 @@ func newReactorStore(
 				lastBlock.Header.ChainID, 0,
 				lastBlock.Header.Height, 0, 2,
 				lastBlockMeta.BlockID,
-				state.LastStateID,
+				state.LastStateID, // todo: figure out using state.StateID() instead
 			)
 			require.NoError(t, err)
 			lastCommit = types.NewCommit(vote.Height, vote.Round,

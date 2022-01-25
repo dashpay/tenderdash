@@ -333,6 +333,7 @@ func (ps *PeerState) VotesSent() int {
 	return ps.Stats.Votes
 }
 
+// RecordCommit safely increments the commit counter and returns the new value
 func (ps *PeerState) RecordCommit() int {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
@@ -342,6 +343,7 @@ func (ps *PeerState) RecordCommit() int {
 	return ps.Stats.Commits
 }
 
+// CommitsSent safely returns a last value of a commit counter
 func (ps *PeerState) CommitsSent() int {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()

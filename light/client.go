@@ -143,7 +143,7 @@ func NewClient(
 	dashCoreRPCClient dashcore.Client,
 	options ...Option) (*Client, error) {
 
-	return NewClientAtHeight(ctx, 1, chainID, primary, witnesses, trustedStore, dashCoreRPCClient, options...)
+	return NewClientAtHeight(ctx, 0, chainID, primary, witnesses, trustedStore, dashCoreRPCClient, options...)
 }
 
 func NewClientAtHeight(
@@ -161,7 +161,7 @@ func NewClientAtHeight(
 		return nil, err
 	}
 
-	if c.latestTrustedBlock == nil {
+	if c.latestTrustedBlock == nil && height > 0 {
 		c.logger.Info("Downloading trusted light block using options")
 		if err := c.initializeAtHeight(ctx, height); err != nil {
 			return nil, err

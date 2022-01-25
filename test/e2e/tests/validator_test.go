@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/dashevo/dashd-go/btcjson"
-
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
