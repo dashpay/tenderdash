@@ -4,12 +4,12 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	tmtime "github.com/tendermint/tendermint/libs/time"
 	"io/ioutil"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
 
+	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	tmversion "github.com/tendermint/tendermint/proto/tendermint/version"
 	"github.com/tendermint/tendermint/types"

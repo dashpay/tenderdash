@@ -165,8 +165,6 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 	numChainLocks := topology.chainLocks.compute(r)
 	numLightClients := topology.lightClients.compute(r)
 
-	const legacyP2PFactor float64 = 0.5
-
 	// First we generate seed nodes, starting at the initial height.
 	for i := 1; i <= numSeeds; i++ {
 		node := generateNode(r, manifest, e2e.ModeSeed, 0, false)
