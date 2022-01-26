@@ -95,14 +95,11 @@ jobs:
             **/**.go
             go.mod
             go.sum
-      - uses: actions/cache@v2
-        with:
-          path: ~/bls-cache
-          key: ${{ runner.os }}-bls-${{ steps.bls-revision.outputs.hash }}
-      - name: Install BLS library
+      - name: install
         run: |
-          sudo cp -vr ~/bls-cache/include/* /usr/local/include/
-          sudo cp -vr ~/bls-cache/libchiabls.a /usr/local/lib/
+          sudo mv /bin/go /bin/go-tmp
+          sudo ln -s "$GOROOT/bin/go" /bin/go
+          make install
       - name: build
         run: GOOS=linux GOARCH=${{ matrix.goarch }} make build
         if: matrix.goarch == 'amd64' && env.GIT_DIFF != ''
