@@ -78,7 +78,6 @@ jobs:
   build-linux:
     name: Build
     runs-on: ubuntu-latest
-    needs: bls-signatures
     strategy:
       fail-fast: false
       matrix:
