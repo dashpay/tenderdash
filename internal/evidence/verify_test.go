@@ -2,10 +2,10 @@ package evidence_test
 
 import (
 	"context"
-	"github.com/dashevo/dashd-go/btcjson"
 	"testing"
 	"time"
 
+	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
