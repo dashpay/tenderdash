@@ -87,6 +87,10 @@ jobs:
       - uses: actions/setup-go@v2
         with:
           go-version: "1.17"
+      - name: post setup go
+        run: |
+          sudo mv /bin/go /bin/go-prev
+          sudo ln -s "$GOROOT/bin/go" /bin/go
       - uses: actions/checkout@v2.3.4
       - uses: technote-space/get-diff-action@v5
         with:
@@ -95,10 +99,8 @@ jobs:
             go.mod
             go.sum
       - name: install
-        run: |
-          sudo mv /bin/go /bin/go-tmp
-          sudo ln -s "$GOROOT/bin/go" /bin/go
-          make install
+        run: make install
+        if: env.GIT_DIFF != ''
       - name: build
         run: GOOS=linux GOARCH=${{ matrix.goarch }} make build
         if: matrix.goarch == 'amd64' && env.GIT_DIFF != ''
