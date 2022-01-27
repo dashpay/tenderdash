@@ -78,7 +78,6 @@ jobs:
   build-linux:
     name: Build
     runs-on: ubuntu-latest
-    needs: bls-signatures
     strategy:
       fail-fast: false
       matrix:
@@ -95,14 +94,13 @@ jobs:
             **/**.go
             go.mod
             go.sum
-      - uses: actions/cache@v2
-        with:
-          path: ~/bls-cache
-          key: ${{ runner.os }}-bls-${{ steps.bls-revision.outputs.hash }}
-      - name: Install BLS library
+      - name: post-setup go 1.17
         run: |
-          sudo cp -vr ~/bls-cache/include/* /usr/local/include/
-          sudo cp -vr ~/bls-cache/libchiabls.a /usr/local/lib/
+          sudo mv /bin/go /bin/go-old
+          sudo ln -s "$GOROOT/bin/go" /bin/go
+      - name: install
+        run: sudo make install
+        if: env.GIT_DIFF != ''
       - name: build
         run: GOOS=linux GOARCH=${{ matrix.goarch }} make build
         if: matrix.goarch == 'amd64' && env.GIT_DIFF != ''

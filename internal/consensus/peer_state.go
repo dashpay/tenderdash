@@ -480,7 +480,7 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 		// shift Precommits to LastCommit
 		if psHeight+1 == msg.Height && psRound == msg.LastCommitRound {
 			ps.PRS.LastCommitRound = msg.LastCommitRound
-			ps.PRS.LastPrecommits = ps.PRS.Precommits
+			ps.PRS.LastPrecommits = ps.PRS.Precommits.Copy()
 		} else {
 			ps.PRS.LastCommitRound = msg.LastCommitRound
 			ps.PRS.LastPrecommits = nil
