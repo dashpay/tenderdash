@@ -98,7 +98,6 @@ jobs:
         run: |
           sudo mv /bin/go /bin/go-old
           sudo ln -s "$GOROOT/bin/go" /bin/go
-        if: env.GIT_DIFF != ''
       - name: install
         run: sudo make install
         if: env.GIT_DIFF != ''
