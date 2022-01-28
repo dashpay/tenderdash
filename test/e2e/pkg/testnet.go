@@ -155,19 +155,11 @@ func LoadTestnet(file string) (*Testnet, error) {
 
 	var validatorCount int
 
-	if manifest.Validators != nil {
-		validatorCount = len(*manifest.Validators)
-	} else {
-		validatorCount = 0
-		for _, name := range nodeNames {
-			nodeManifest := manifest.Nodes[name]
-			if nodeManifest.Mode != "" {
-				if Mode(nodeManifest.Mode) == ModeValidator {
-					validatorCount++
-				}
-			} else {
-				validatorCount++
-			}
+	validatorCount = 0
+	for _, name := range nodeNames {
+		nodeManifest := manifest.Nodes[name]
+		if nodeManifest.Mode == "" || Mode(nodeManifest.Mode) == ModeValidator {
+			validatorCount++
 		}
 	}
 
