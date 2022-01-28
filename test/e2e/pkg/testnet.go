@@ -153,9 +153,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 	}
 	sort.Strings(nodeNames)
 
-	var validatorCount int
-
-	validatorCount = 0
+	validatorCount := 0
 	for _, name := range nodeNames {
 		nodeManifest := manifest.Nodes[name]
 		if nodeManifest.Mode == "" || Mode(nodeManifest.Mode) == ModeValidator {
