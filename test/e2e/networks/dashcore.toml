@@ -24,12 +24,10 @@ validator04 = 100
 [validator_update.1010]
 validator01 = 100
 validator02 = 100
-validator03 = 0
 validator04 = 100
 validator05 = 100
 
 [validator_update.1020]
-validator01 = 0
 validator02 = 100
 validator03 = 100
 validator04 = 100
