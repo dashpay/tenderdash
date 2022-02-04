@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strconv"
 
 	"github.com/tendermint/tendermint/crypto"
 )
@@ -52,6 +53,7 @@ func (g *quorumHashGenerator) generate() crypto.QuorumHash {
 }
 
 type initNodeFunc func(node *Node) error
+type initValidatorFunc func(node *Node, params validatorParams) error
 
 type validatorParams struct {
 	crypto.QuorumKeys
@@ -88,66 +90,85 @@ func (i *validatorParamsIter) next() bool {
 	return true
 }
 
-func withInitNode(hd initNodeFunc, mws ...func(next initNodeFunc) initNodeFunc) initNodeFunc {
-	for _, mw := range mws {
-		hd = mw(hd)
-	}
-	return hd
-}
-
-func allowedValidator(allowedValidators map[string]int64) func(next initNodeFunc) initNodeFunc {
-	return func(next initNodeFunc) initNodeFunc {
-		return func(node *Node) error {
-			if node.Mode != ModeValidator || len(allowedValidators) == 0 {
-				return next(node)
-			}
-			_, ok := allowedValidators[node.Name]
-			if ok {
-				return next(node)
-			}
-			return nil
-		}
-	}
-}
-
-func initValidator(iter *validatorParamsIter, testnet *Testnet) initNodeFunc {
+func initValidator(iter *validatorParamsIter, handlers ...initValidatorFunc) initNodeFunc {
 	return func(node *Node) error {
-		if node.Mode != ModeValidator {
-			return nil
-		}
 		params := iter.value()
-		node.ProTxHash = params.proTxHash
 		if node.PrivvalKeys == nil {
 			node.PrivvalKeys = make(map[string]crypto.QuorumKeys)
 		}
 		node.PrivvalKeys[params.quorumHash.String()] = params.QuorumKeys
-		testnet.Validators[node] = params.PrivKey.PubKey()
-		fmt.Printf("Setting validator %s proTxHash to %s\n", node.Name, node.ProTxHash.ShortString())
+		for _, handler := range handlers {
+			err := handler(node, params)
+			if err != nil {
+				return err
+			}
+		}
 		if !iter.next() {
-			return errors.New("unable ")
+			return errors.New("unable to move iterator to next an element")
 		}
 		return nil
 	}
 }
 
-func initNotValidator(
-	thresholdPublicKey crypto.PubKey,
-	quorumHash crypto.QuorumHash,
-) func(next initNodeFunc) initNodeFunc {
-	return func(next initNodeFunc) initNodeFunc {
-		return func(node *Node) error {
-			if node.Mode == ModeValidator {
-				return next(node)
-			}
-			quorumKeys := crypto.QuorumKeys{
-				ThresholdPublicKey: thresholdPublicKey,
-			}
-			if node.PrivvalKeys == nil {
-				node.PrivvalKeys = make(map[string]crypto.QuorumKeys)
-			}
-			node.PrivvalKeys[quorumHash.String()] = quorumKeys
+func updateProTxHash() initValidatorFunc {
+	return func(node *Node, params validatorParams) error {
+		node.ProTxHash = params.proTxHash
+		fmt.Printf("Setting validator %s proTxHash to %s\n", node.Name, node.ProTxHash.ShortString())
+		return nil
+	}
+}
+
+func updateGenesisValidators(testnet *Testnet) initValidatorFunc {
+	return func(node *Node, params validatorParams) error {
+		testnet.Validators[node] = params.PrivKey.PubKey()
+		return nil
+	}
+}
+
+func updatePrivvalUpdateHeights(height int, quorumHash crypto.QuorumHash) initNodeFunc {
+	return func(node *Node) error {
+		if height == 0 {
 			return nil
 		}
+		if node.PrivvalUpdateHeights == nil {
+			node.PrivvalUpdateHeights = make(map[string]crypto.QuorumHash)
+		}
+		node.PrivvalUpdateHeights[strconv.Itoa(height)] = quorumHash
+		return nil
+	}
+}
+
+func updateValidatorUpdate(valUpdate map[*Node]crypto.PubKey) initValidatorFunc {
+	return func(node *Node, params validatorParams) error {
+		valUpdate[node] = params.PrivKey.PubKey()
+		return nil
+	}
+}
+
+func initAnyNode(thresholdPublicKey crypto.PubKey, quorumHash crypto.QuorumHash) initNodeFunc {
+	return func(node *Node) error {
+		quorumKeys := crypto.QuorumKeys{
+			ThresholdPublicKey: thresholdPublicKey,
+		}
+		if node.PrivvalKeys == nil {
+			node.PrivvalKeys = make(map[string]crypto.QuorumKeys)
+		}
+		node.PrivvalKeys[quorumHash.String()] = quorumKeys
+		return nil
+	}
+}
+
+func printInitValidatorInfo(height int) initValidatorFunc {
+	return func(node *Node, params validatorParams) error {
+		pubKey := params.PrivKey.PubKey()
+		if height == 0 {
+			fmt.Printf("Set validator %s/%X (at genesis) pubkey to %X\n", node.Name,
+				node.ProTxHash, pubKey.Bytes())
+			return nil
+		}
+		fmt.Printf("Set validator %s/%X (at height %d (+ 2)) pubkey to %X\n", node.Name,
+			node.ProTxHash, height, pubKey.Bytes())
+		return nil
 	}
 }
 
@@ -173,13 +194,80 @@ func countValidators(nodes map[string]*ManifestNode) int {
 	return cnt
 }
 
-func updateNodeParams(nodes []*Node, initFunc initNodeFunc) error {
+func updateNodeParams(nodes []*Node, initFuncs ...initNodeFunc) error {
 	// Set up genesis validators. If not specified explicitly, use all validator nodes.
 	for _, node := range nodes {
-		err := initFunc(node)
-		if err != nil {
-			return err
+		for _, initFunc := range initFuncs {
+			err := initFunc(node)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
+}
+
+func makeProTxHashMap(proTxHashes []crypto.ProTxHash) map[string]struct{} {
+	m := make(map[string]struct{})
+	for _, proTxHash := range proTxHashes {
+		m[proTxHash.String()] = struct{}{}
+	}
+	return m
+}
+
+func modifyHeight(height int) int {
+	if height > 0 {
+		return height + 2
+	}
+	return height
+}
+
+// filter
+func nodesFilter(nodes []*Node, cond func(node *Node) bool) []*Node {
+	var res []*Node
+	for _, node := range nodes {
+		if cond(node) {
+			res = append(res, node)
+		}
+	}
+	return res
+}
+
+func shouldNotBeValidator() func(node *Node) bool {
+	return func(node *Node) bool {
+		return node.Mode != ModeValidator
+	}
+}
+
+func shouldHaveName(allowed map[string]int64) func(node *Node) bool {
+	return func(node *Node) bool {
+		if node.Mode == ModeValidator && len(allowed) == 0 {
+			return true
+		}
+		_, ok := allowed[node.Name]
+		return ok
+	}
+}
+
+func proTxHashShouldNotBeIn(proTxHashes []crypto.ProTxHash) func(node *Node) bool {
+	proTxHashesMap := makeProTxHashMap(proTxHashes)
+	return func(node *Node) bool {
+		flag := false
+		if node.ProTxHash != nil {
+			_, flag = proTxHashesMap[node.ProTxHash.String()]
+		}
+		return !flag
+	}
+}
+
+func lookupNodesByProTxHash(testnet *Testnet, proTxHashes ...crypto.ProTxHash) []*Node {
+	var res []*Node
+	nodeMap := make(map[string]*Node)
+	for _, node := range testnet.Nodes {
+		nodeMap[node.ProTxHash.String()] = node
+	}
+	for _, proTxHash := range proTxHashes {
+		res = append(res, nodeMap[proTxHash.String()])
+	}
+	return res
 }

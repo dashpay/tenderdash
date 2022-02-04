@@ -305,37 +305,34 @@ func LoadTestnet(file string) (*Testnet, error) {
 		}
 	}
 	err = updateNodeParams(
-		testnet.Nodes,
-		withInitNode(
-			withInitNode(
-				initValidator(
-					&validatorParamsIter{
-						privKeys:           privateKeys,
-						proTxHashes:        proTxHashes,
-						quorumHash:         quorumHash,
-						thresholdPublicKey: thresholdPublicKey,
-					},
-					testnet,
-				),
-				allowedValidator(manifest.Validators),
-			),
-			initNotValidator(thresholdPublicKey, quorumHash),
+		nodesFilter(testnet.Nodes, shouldHaveName(manifest.Validators)),
+		initValidator(
+			&validatorParamsIter{
+				privKeys:           privateKeys,
+				proTxHashes:        proTxHashes,
+				quorumHash:         quorumHash,
+				thresholdPublicKey: thresholdPublicKey,
+			},
+			updateProTxHash(),
+			updateGenesisValidators(testnet),
 		),
+	)
+	err = updateNodeParams(
+		nodesFilter(testnet.Nodes, shouldNotBeValidator()),
+		initAnyNode(thresholdPublicKey, quorumHash),
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	heights := make([]int, len(manifest.ValidatorUpdates))
-	i := 0
+	heights := make([]int, 0, len(manifest.ValidatorUpdates))
 	// We need to do validator updates in order, as we use the previous validator set as the basis of current proTxHashes
 	for heightStr := range manifest.ValidatorUpdates {
 		height, err := strconv.Atoi(heightStr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid validator update height %q: %w", height, err)
 		}
-		heights[i] = height
-		i++
+		heights = append(heights, height)
 	}
 
 	sort.Ints(heights)
@@ -345,8 +342,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 		heightStr := strconv.FormatInt(int64(height), 10)
 		validators := manifest.ValidatorUpdates[heightStr]
 		valUpdate := map[*Node]crypto.PubKey{}
-		proTxHashesInUpdate := make([]crypto.ProTxHash, len(validators))
-		i := 0
+		proTxHashes = make([]crypto.ProTxHash, 0, len(validators))
 		for name := range validators {
 			node := testnet.LookupNode(name)
 			if node == nil {
@@ -356,80 +352,39 @@ func LoadTestnet(file string) (*Testnet, error) {
 				node.ProTxHash = proTxHashGen.Generate()
 				fmt.Printf("Set validator (at update) %s proTxHash to %X\n", node.Name, node.ProTxHash)
 			}
-			proTxHashesInUpdate[i] = node.ProTxHash
-			i++
+			proTxHashes = append(proTxHashes, node.ProTxHash)
 		}
-		proTxHashes = proTxHashesInUpdate
-
-		sort.Sort(crypto.SortProTxHash(proTxHashes))
 
 		proTxHashes, privateKeys, thresholdPublicKey :=
 			bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(proTxHashes, randomSeed+int64(height))
 
 		quorumHash := quorumHashGen.generate()
 
-		for i, proTxHash := range proTxHashes {
-			node := testnet.LookupNodeByProTxHash(proTxHash)
-			valUpdate[node] = privateKeys[i].PubKey()
-			if node == nil {
-				return nil, fmt.Errorf("unknown validator with protxHash %X for update at height %v", proTxHash, height)
-			}
-			if height == 0 {
-				pubKey := privateKeys[i].PubKey()
-				quorumKeys := crypto.QuorumKeys{
-					PrivKey:            privateKeys[i],
-					PubKey:             pubKey,
-					ThresholdPublicKey: thresholdPublicKey,
-				}
-				privateKeysMap := make(map[string]crypto.QuorumKeys)
-				privvalUpdateHeights := make(map[string]crypto.QuorumHash)
-				privateKeysMap[quorumHash.String()] = quorumKeys
-				privvalUpdateHeights[strconv.Itoa(height)] = quorumHash
-
-				node.PrivvalKeys = privateKeysMap
-				node.PrivvalUpdateHeights = privvalUpdateHeights
-				fmt.Printf("Set validator %s/%X (at genesis) pubkey to %X\n", node.Name,
-					node.ProTxHash, pubKey.Bytes())
-			} else {
-				fmt.Printf("Set validator %s/%X (at height %d (+ 2)) pubkey to %X\n", node.Name,
-					node.ProTxHash, height, privateKeys[i].PubKey().Bytes())
-				if node.PrivvalKeys == nil {
-					node.PrivvalKeys = make(map[string]crypto.QuorumKeys)
-				}
-				if node.PrivvalUpdateHeights == nil {
-					node.PrivvalUpdateHeights = make(map[string]crypto.QuorumHash)
-				}
-				pubKey := privateKeys[i].PubKey()
-				quorumKeys := crypto.QuorumKeys{
-					PrivKey:            privateKeys[i],
-					PubKey:             pubKey,
-					ThresholdPublicKey: thresholdPublicKey,
-				}
-				node.PrivvalKeys[quorumHash.String()] = quorumKeys
-				node.PrivvalUpdateHeights[strconv.Itoa(height+2)] = quorumHash
-			}
+		err = updateNodeParams(
+			lookupNodesByProTxHash(testnet, proTxHashes...),
+			initValidator(
+				&validatorParamsIter{
+					privKeys:           privateKeys,
+					proTxHashes:        proTxHashes,
+					quorumHash:         quorumHash,
+					thresholdPublicKey: thresholdPublicKey,
+				},
+				updateValidatorUpdate(valUpdate),
+				printInitValidatorInfo(height),
+			),
+			updatePrivvalUpdateHeights(modifyHeight(height), quorumHash),
+		)
+		if err != nil {
+			return nil, err
 		}
 
-		for _, node := range testnet.Nodes {
-			isPartOfQuorum := false
-			for _, proTxHash := range proTxHashes {
-				if bytes.Equal(node.ProTxHash, proTxHash) {
-					isPartOfQuorum = true
-				}
-			}
-			if !isPartOfQuorum {
-				if node.PrivvalKeys == nil {
-					node.PrivvalKeys = make(map[string]crypto.QuorumKeys)
-				}
-				if node.PrivvalUpdateHeights == nil {
-					node.PrivvalUpdateHeights = make(map[string]crypto.QuorumHash)
-				}
-				quorumKeys := crypto.QuorumKeys{
-					ThresholdPublicKey: thresholdPublicKey,
-				}
-				node.PrivvalKeys[quorumHash.String()] = quorumKeys
-				node.PrivvalUpdateHeights[strconv.Itoa(height+2)] = quorumHash
-			}
+		err = updateNodeParams(
+			nodesFilter(testnet.Nodes, proTxHashShouldNotBeIn(proTxHashes)),
+			initAnyNode(thresholdPublicKey, quorumHash),
+			updatePrivvalUpdateHeights(modifyHeight(height), quorumHash),
+		)
+		if err != nil {
+			return nil, err
 		}
 		if height == 0 {
 			testnet.QuorumHash = quorumHash
@@ -441,16 +396,14 @@ func LoadTestnet(file string) (*Testnet, error) {
 		testnet.QuorumHashUpdates[int64(height)] = quorumHash
 	}
 
-	chainLockSetHeights := make([]int, len(manifest.ChainLockUpdates))
-	i = 0
+	chainLockSetHeights := make([]int, 0, len(manifest.ChainLockUpdates))
 	// We need to do validator updates in order, as we use the previous validator set as the basis of current proTxHashes
 	for heightStr := range manifest.ChainLockUpdates {
 		height, err := strconv.Atoi(heightStr)
 		if err != nil {
 			return nil, fmt.Errorf("invalid validator update height %q: %w", height, err)
 		}
-		chainLockSetHeights[i] = height
-		i++
+		chainLockSetHeights = append(chainLockSetHeights, height)
 	}
 
 	sort.Ints(chainLockSetHeights)
