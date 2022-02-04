@@ -7,8 +7,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tendermint/tendermint/crypto/bls12381"
-
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
@@ -537,16 +535,9 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 					pk.Type(),
 				)
 			}
-
-			if len(pk.Bytes()) != bls12381.PubKeySize {
-				return fmt.Errorf("validator %X has incorrect public key size %v",
-					valUpdate.ProTxHash, pk.String())
-			}
-
-			if pk.String() ==
-				"PubKeyBLS12381{000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000}" {
-				return fmt.Errorf("validator %X public key should not be empty %v",
-					valUpdate.ProTxHash, pk.String())
+			if err := pk.Validate(); err != nil {
+				fmt.Printf("#debug %v\n", err)
+				return fmt.Errorf("validator %X public key is invalid: %w", valUpdate.ProTxHash, err)
 			}
 		}
 
@@ -557,7 +548,7 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 			)
 		}
 
-		if len(valUpdate.ProTxHash) != 32 {
+		if len(valUpdate.ProTxHash) != crypto.ProTxHashSize {
 			return fmt.Errorf(
 				"validator %v is using protxhash %s, which is not the required length",
 				valUpdate,
