@@ -317,6 +317,9 @@ func LoadTestnet(file string) (*Testnet, error) {
 			updateGenesisValidators(testnet),
 		),
 	)
+	if err != nil {
+		return nil, err
+	}
 	err = updateNodeParams(
 		nodesFilter(testnet.Nodes, shouldNotBeValidator()),
 		initAnyNode(thresholdPublicKey, quorumHash),
@@ -349,7 +352,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 				return nil, fmt.Errorf("unknown validator %q for update at height %v", name, height)
 			}
 			if node.ProTxHash == nil {
-				node.ProTxHash = proTxHashGen.Generate()
+				node.ProTxHash = proTxHashGen.generate()
 				fmt.Printf("Set validator (at update) %s proTxHash to %X\n", node.Name, node.ProTxHash)
 			}
 			proTxHashes = append(proTxHashes, node.ProTxHash)

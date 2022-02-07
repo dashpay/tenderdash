@@ -536,7 +536,6 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 				)
 			}
 			if err := pk.Validate(); err != nil {
-				fmt.Printf("#debug %v\n", err)
 				return fmt.Errorf("validator %X public key is invalid: %w", valUpdate.ProTxHash, err)
 			}
 		}

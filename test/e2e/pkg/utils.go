@@ -17,13 +17,12 @@ type proTxHashGenerator struct {
 
 func newProTxHashGenerator(seed int64) *proTxHashGenerator {
 	return &proTxHashGenerator{
-		random: rand.New(rand.NewSource(seed)),
+		random: rand.New(rand.NewSource(seed)), //nolint: gosec
 	}
 }
 
-func (g *proTxHashGenerator) Generate() crypto.ProTxHash {
+func (g *proTxHashGenerator) generate() crypto.ProTxHash {
 	seed := make([]byte, crypto.DefaultHashSize)
-
 	_, err := io.ReadFull(g.random, seed)
 	if err != nil {
 		panic(err) // this shouldn't happen
@@ -175,7 +174,7 @@ func printInitValidatorInfo(height int) initValidatorFunc {
 func genProTxHashes(proTxHashGen *proTxHashGenerator, n int) []crypto.ProTxHash {
 	proTxHashes := make([]crypto.ProTxHash, n)
 	for i := 0; i < n; i++ {
-		proTxHashes[i] = proTxHashGen.Generate()
+		proTxHashes[i] = proTxHashGen.generate()
 		if proTxHashes[i] == nil || len(proTxHashes[i]) != crypto.ProTxHashSize {
 			panic("the proTxHash must be 32 bytes")
 		}
@@ -261,7 +260,7 @@ func proTxHashShouldNotBeIn(proTxHashes []crypto.ProTxHash) func(node *Node) boo
 }
 
 func lookupNodesByProTxHash(testnet *Testnet, proTxHashes ...crypto.ProTxHash) []*Node {
-	var res []*Node
+	res := make([]*Node, 0, len(proTxHashes))
 	nodeMap := make(map[string]*Node)
 	for _, node := range testnet.Nodes {
 		nodeMap[node.ProTxHash.String()] = node
