@@ -138,6 +138,7 @@ type Reactor struct {
 	voteCh        *p2p.Channel
 	voteSetBitsCh *p2p.Channel
 	peerUpdates   *p2p.PeerUpdates
+	nodeInfos     types.NodeInfoRepository
 
 	// NOTE: We need a dedicated stateCloseCh channel for signaling closure of
 	// the StateChannel due to the fact that the StateChannel message handler
@@ -277,12 +278,17 @@ func ReactorMetrics(metrics *Metrics) ReactorOption {
 	return func(r *Reactor) { r.Metrics = metrics }
 }
 
+// NodeInfos sets the node-info store as an option function
+func NodeInfos(nodeInfos types.NodeInfoRepository) ReactorOption {
+	return func(r *Reactor) { r.nodeInfos = nodeInfos }
+}
+
 // SwitchToConsensus switches from block-sync mode to consensus mode. It resets
 // the state, turns off block-sync, and starts the consensus state-machine.
 func (r *Reactor) SwitchToConsensus(state sm.State, skipWAL bool) {
 	r.Logger.Info("switching to consensus")
 
-	// we have no votes, so reconstruct LastCommit from SeenCommit
+	// We have no votes, so reconstruct LastPrecommits from SeenCommit.
 	if state.LastBlockHeight > 0 {
 		r.state.reconstructLastCommit(state)
 	}
@@ -386,6 +392,17 @@ func (r *Reactor) broadcastHasVoteMessage(vote *types.Vote) {
 	}
 }
 
+// Broadcasts HasCommitMessage to peers that care.
+func (r *Reactor) broadcastHasCommitMessage(commit *types.Commit) {
+	r.stateCh.Out <- p2p.Envelope{
+		Broadcast: true,
+		Message: &tmcons.HasCommit{
+			Height: commit.Height,
+			Round:  commit.Round,
+		},
+	}
+}
+
 // subscribeToBroadcastEvents subscribes for new round steps and votes using the
 // internal pubsub defined in the consensus state to broadcast them to peers
 // upon receiving.
@@ -425,6 +442,13 @@ func (r *Reactor) subscribeToBroadcastEvents() {
 	)
 	if err != nil {
 		r.Logger.Error("failed to add listener for events", "err", err)
+	}
+
+	if err := r.state.evsw.AddListenerForEvent(listenerIDConsensus, types.EventCommitValue,
+		func(data tmevents.EventData) {
+			r.broadcastHasCommitMessage(data.(*types.Commit))
+		}); err != nil {
+		r.Logger.Error("Error adding listener for events", "err", err)
 	}
 }
 
@@ -520,6 +544,9 @@ func (r *Reactor) gossipDataRoutine(ps *PeerState) {
 
 	defer ps.broadcastWG.Done()
 
+	nodeInfo, _ := r.nodeInfos.GetNodeInfo(ps.peerID)
+	nodeProTxHash := nodeInfo.GetProTxHash()
+
 OUTER_LOOP:
 	for {
 		if !r.IsRunning() {
@@ -538,8 +565,16 @@ OUTER_LOOP:
 		rs := r.state.GetRoundState()
 		prs := ps.GetRoundState()
 
+		isValidator := rs.Validators.HasProTxHash(nodeProTxHash)
+
 		// Send proposal Block parts?
-		if rs.ProposalBlockParts.HasHeader(prs.ProposalBlockPartSetHeader) {
+		if (isValidator && rs.ProposalBlockParts.HasHeader(prs.ProposalBlockPartSetHeader)) ||
+			(prs.HasCommit && rs.ProposalBlockParts != nil) {
+			if !isValidator && prs.HasCommit && prs.ProposalBlockParts == nil {
+				// We can assume if they have the commit then they should have the same part set header
+				ps.PRS.ProposalBlockPartSetHeader = rs.ProposalBlockParts.Header()
+				ps.PRS.ProposalBlockParts = bits.NewBitArray(int(rs.ProposalBlockParts.Header().Total))
+			}
 			if index, ok := rs.ProposalBlockParts.BitArray().Sub(prs.ProposalBlockParts.Copy()).PickRandom(); ok {
 				part := rs.ProposalBlockParts.GetPart(index)
 				partProto, err := part.ToProto()
@@ -604,7 +639,7 @@ OUTER_LOOP:
 		// Now consider sending other things, like the Proposal itself.
 
 		// Send Proposal && ProposalPOL BitArray?
-		if rs.Proposal != nil && !prs.Proposal {
+		if rs.Proposal != nil && !prs.Proposal && isValidator {
 			// Proposal: share the proposal metadata with peer.
 			{
 				propProto := rs.Proposal.ToProto()
@@ -653,8 +688,16 @@ OUTER_LOOP:
 // pickSendVote picks a vote and sends it to the peer. It will return true if
 // there is a vote to send and false otherwise.
 func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
+	nodeInfo, _ := r.nodeInfos.GetNodeInfo(ps.peerID)
 	if vote, ok := ps.PickVoteToSend(votes); ok {
-		r.Logger.Debug("sending vote message", "ps", ps, "vote", vote)
+		r.Logger.Debug("sending vote message",
+			"ps", ps,
+			"vote", vote,
+			"peer_proTxHash", nodeInfo.GetProTxHash().ShortString(),
+			"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
+			"height", vote.Height,
+			"round", vote.Round,
+		)
 		r.voteCh.Out <- p2p.Envelope{
 			To: ps.peerID,
 			Message: &tmcons.Vote{
@@ -687,10 +730,10 @@ func (r *Reactor) sendCommit(ps *PeerState, commit *types.Commit) bool {
 func (r *Reactor) gossipVotesForHeight(rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState) bool {
 	logger := r.Logger.With("height", prs.Height).With("peer", ps.peerID)
 
-	// if there are lastCommits to send...
+	// If there are lastPrecommits to send...
 	if prs.Step == cstypes.RoundStepNewHeight {
 		if r.pickSendVote(ps, rs.LastPrecommits) {
-			logger.Debug("picked rs.LastCommit to send")
+			logger.Debug("picked previous precommit vote to send")
 			return true
 		}
 	}
@@ -742,13 +785,16 @@ func (r *Reactor) gossipVotesForHeight(rs *cstypes.RoundState, prs *cstypes.Peer
 	return false
 }
 
-func (r *Reactor) gossipVotesRoutine(ps *PeerState) {
+func (r *Reactor) gossipVotesAndCommitRoutine(ps *PeerState) {
 	logger := r.Logger.With("peer", ps.peerID)
 
 	defer ps.broadcastWG.Done()
 
 	// XXX: simple hack to throttle logs upon sleep
 	logThrottle := 0
+
+	info, _ := r.nodeInfos.GetNodeInfo(ps.peerID)
+	nodeProTxHash := info.GetProTxHash()
 
 OUTER_LOOP:
 	for {
@@ -768,6 +814,9 @@ OUTER_LOOP:
 		rs := r.state.GetRoundState()
 		prs := ps.GetRoundState()
 
+		isValidator := rs.Validators.HasProTxHash(nodeProTxHash)
+		wasValidator := rs.LastValidators.HasProTxHash(nodeProTxHash)
+
 		switch logThrottle {
 		case 1: // first sleep
 			logThrottle = 2
@@ -777,14 +826,25 @@ OUTER_LOOP:
 
 		// if height matches, then send LastCommit, Prevotes, and Precommits
 		if rs.Height == prs.Height {
-			if r.gossipVotesForHeight(rs, prs, ps) {
-				continue OUTER_LOOP
+			if !wasValidator {
+				//	If there are lastCommits to send...
+				if prs.Step == cstypes.RoundStepNewHeight && prs.Height+1 == rs.Height && !prs.HasCommit {
+					if r.sendCommit(ps, rs.LastCommit) {
+						logger.Info("Sending LastCommit to non-validator node")
+						continue OUTER_LOOP
+					}
+				}
+			}
+			if isValidator {
+				if r.gossipVotesForHeight(rs, prs, ps) {
+					continue OUTER_LOOP
+				}
 			}
 		}
 
 		// special catchup logic -- if peer is lagging by height 1, send LastCommit
-		if prs.Height != 0 && rs.Height == prs.Height+1 {
-			if r.sendCommit(ps, rs.LastCommit) {
+		if prs.Height != 0 && rs.Height == prs.Height+1 && wasValidator {
+			if r.pickSendVote(ps, rs.LastPrecommits) {
 				logger.Debug("picked rs.LastCommit to send", "height", prs.Height)
 				continue OUTER_LOOP
 			}
@@ -980,7 +1040,7 @@ func (r *Reactor) processPeerUpdate(peerUpdate p2p.PeerUpdate) {
 
 			// start goroutines for this peer
 			go r.gossipDataRoutine(ps)
-			go r.gossipVotesRoutine(ps)
+			go r.gossipVotesAndCommitRoutine(ps)
 			go r.queryMaj23Routine(ps)
 
 			// Send our state to the peer. If we're block-syncing, broadcast a
@@ -1038,6 +1098,9 @@ func (r *Reactor) handleStateMessage(envelope p2p.Envelope, msgI Message) error 
 
 	case *tmcons.NewValidBlock:
 		ps.ApplyNewValidBlockMessage(msgI.(*NewValidBlockMessage))
+
+	case *tmcons.HasCommit:
+		ps.ApplyHasCommitMessage(msgI.(*HasCommitMessage))
 
 	case *tmcons.HasVote:
 		ps.ApplyHasVoteMessage(msgI.(*HasVoteMessage))

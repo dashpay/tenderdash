@@ -381,15 +381,28 @@ func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.Sign
 	logger := ps.logger.With(
 		"peerH/R", fmt.Sprintf("%d/%d", ps.PRS.Height, ps.PRS.Round),
 		"H/R", fmt.Sprintf("%d/%d", height, round),
+		"height", height,
+		"round", round,
+		"peer_height", ps.PRS.Height,
+		"peer_round", ps.PRS.Round,
 	)
 
 	logger.Debug("setHasVote", "type", voteType, "index", index)
 
 	// NOTE: some may be nil BitArrays -> no side effects
 	psVotes := ps.getVoteBitArray(height, round, voteType)
+	countVotes := -1
 	if psVotes != nil {
 		psVotes.SetIndex(int(index), true)
+		countVotes = psVotes.CountTrueBits()
 	}
+	logger.Debug(
+		"peerState setHasVote",
+		"type", voteType,
+		"index", index,
+		"peerVotes", psVotes,
+		"peerVoteCount", countVotes,
+	)
 }
 
 // SetHasCommit sets the given vote as known by the peer
@@ -457,6 +470,7 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 		// we'll update the BitArray capacity later
 		ps.PRS.Prevotes = nil
 		ps.PRS.Precommits = nil
+		ps.PRS.HasCommit = false
 	}
 
 	if psHeight == msg.Height && psRound != msg.Round && msg.Round == psCatchupCommitRound {
@@ -468,7 +482,7 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 	}
 
 	if psHeight != msg.Height {
-		// shift Precommits to LastCommit
+		// Shift Precommits to LastPrecommits.
 		if psHeight+1 == msg.Height && psRound == msg.LastCommitRound {
 			ps.PRS.LastCommitRound = msg.LastCommitRound
 			ps.PRS.LastPrecommits = ps.PRS.Precommits.Copy()
@@ -527,6 +541,16 @@ func (ps *PeerState) ApplyHasVoteMessage(msg *HasVoteMessage) {
 	}
 
 	ps.setHasVote(msg.Height, msg.Round, msg.Type, msg.Index)
+}
+
+// ApplyHasCommitMessage updates the peer state for the new commit.
+func (ps *PeerState) ApplyHasCommitMessage(msg *HasCommitMessage) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+	if ps.PRS.Height != msg.Height {
+		return
+	}
+	ps.setHasCommit(msg.Height, msg.Round)
 }
 
 // ApplyVoteSetBitsMessage updates the peer state for the bit-array of votes

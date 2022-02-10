@@ -290,6 +290,7 @@ type PeerManager struct {
 	ready         map[types.NodeID]bool         // ready peers (Ready → Disconnected)
 	evict         map[types.NodeID]bool         // peers scheduled for eviction (Connected → EvictNext)
 	evicting      map[types.NodeID]bool         // peers being evicted (EvictNext → Disconnected)
+	nodeInfoMap   *sync.Map
 }
 
 // NewPeerManager creates a new peer manager.
@@ -324,6 +325,7 @@ func NewPeerManager(selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptio
 		evict:         map[types.NodeID]bool{},
 		evicting:      map[types.NodeID]bool{},
 		subscriptions: map[*PeerUpdates]*PeerUpdates{},
+		nodeInfoMap:   &sync.Map{},
 	}
 	if err = peerManager.configurePeers(); err != nil {
 		return nil, err
@@ -762,6 +764,8 @@ func (m *PeerManager) Disconnected(peerID types.NodeID) {
 	defer m.mtx.Unlock()
 
 	ready := m.ready[peerID]
+
+	m.DeleteNodeInfo(peerID)
 
 	delete(m.connected, peerID)
 	delete(m.upgrading, peerID)
@@ -1388,4 +1392,21 @@ func keyPeerInfoRange() ([]byte, []byte) {
 		panic(err)
 	}
 	return start, end
+}
+
+// AddNodeInfo adds a node-info to a store
+func (m *PeerManager) AddNodeInfo(info types.NodeInfo) {
+	m.nodeInfoMap.Store(info.NodeID, info)
+}
+
+// DeleteNodeInfo deletes a node-info from a store
+func (m *PeerManager) DeleteNodeInfo(nodeID types.NodeID) {
+	m.nodeInfoMap.Delete(nodeID)
+}
+
+// GetNodeInfo gets information about a node by nodeID from the store and returns a result with a flag indicating
+// that the item is in the store.
+func (m *PeerManager) GetNodeInfo(nodeID types.NodeID) (types.NodeInfo, bool) {
+	val, ok := m.nodeInfoMap.Load(nodeID)
+	return val.(types.NodeInfo), ok
 }

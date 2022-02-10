@@ -394,6 +394,7 @@ func createConsensusReactor(
 		peerUpdates,
 		waitSync,
 		consensus.ReactorMetrics(csMetrics),
+		consensus.NodeInfos(peerManager),
 	)
 
 	// Services which will be publishing and/or subscribing for messages (events)
@@ -674,6 +675,7 @@ func createPEXReactorV2(
 func makeNodeInfo(
 	cfg *config.Config,
 	nodeKey types.NodeKey,
+	proTxHash crypto.ProTxHash,
 	eventSinks []indexer.EventSink,
 	genDoc *types.GenesisDoc,
 	state sm.State,
@@ -723,6 +725,7 @@ func makeNodeInfo(
 			TxIndex:    txIndexerStatus,
 			RPCAddress: cfg.RPC.ListenAddress,
 		},
+		ProTxHash: proTxHash,
 	}
 
 	if cfg.P2P.PexReactor {

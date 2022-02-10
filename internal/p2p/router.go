@@ -633,7 +633,16 @@ func (r *Router) openConnection(ctx context.Context, conn Connection) {
 		return
 	}
 
-	if err := r.runWithPeerMutex(func() error { return r.peerManager.Accepted(peerInfo.NodeID) }); err != nil {
+	r.peerManager.AddNodeInfo(peerInfo)
+
+	if err := r.runWithPeerMutex(func() error {
+		err := r.peerManager.Accepted(peerInfo.NodeID)
+		if err != nil {
+			r.peerManager.DeleteNodeInfo(peerInfo.NodeID)
+			return err
+		}
+		return nil
+	}); err != nil {
 		r.logger.Error("failed to accept connection",
 			"op", "incoming/accepted", "peer", peerInfo.NodeID, "err", err)
 		return
@@ -734,6 +743,8 @@ func (r *Router) connectPeer(ctx context.Context, address NodeAddress) {
 		conn.Close()
 		return
 	}
+
+	r.peerManager.AddNodeInfo(peerInfo)
 
 	// routePeer (also) calls connection close
 	go r.routePeer(address.NodeID, conn, toChannelIDs(peerInfo.Channels))
