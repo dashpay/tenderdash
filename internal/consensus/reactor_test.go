@@ -94,7 +94,7 @@ func setup(t *testing.T, numNodes int, states []*State, size int) *reactorTestSu
 			rts.voteSetBitsChannels[nodeID],
 			node.MakePeerUpdates(t),
 			true,
-			NodeInfos(node.PeerManager),
+			NodeInfoRepository(node.PeerManager),
 		)
 
 		reactor.SetEventBus(state.eventBus)

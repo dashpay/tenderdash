@@ -394,7 +394,7 @@ func createConsensusReactor(
 		peerUpdates,
 		waitSync,
 		consensus.ReactorMetrics(csMetrics),
-		consensus.NodeInfos(peerManager),
+		consensus.NodeInfoRepository(peerManager),
 	)
 
 	// Services which will be publishing and/or subscribing for messages (events)

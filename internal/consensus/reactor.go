@@ -138,7 +138,7 @@ type Reactor struct {
 	voteCh        *p2p.Channel
 	voteSetBitsCh *p2p.Channel
 	peerUpdates   *p2p.PeerUpdates
-	nodeInfos     types.NodeInfoRepository
+	nodeInfoRepo  types.NodeInfoRepository
 
 	// NOTE: We need a dedicated stateCloseCh channel for signaling closure of
 	// the StateChannel due to the fact that the StateChannel message handler
@@ -278,9 +278,9 @@ func ReactorMetrics(metrics *Metrics) ReactorOption {
 	return func(r *Reactor) { r.Metrics = metrics }
 }
 
-// NodeInfos sets the node-info store as an option function
-func NodeInfos(nodeInfos types.NodeInfoRepository) ReactorOption {
-	return func(r *Reactor) { r.nodeInfos = nodeInfos }
+// NodeInfoRepository sets the node-info repository as an option function
+func NodeInfoRepository(nodeInfoRepo types.NodeInfoRepository) ReactorOption {
+	return func(r *Reactor) { r.nodeInfoRepo = nodeInfoRepo }
 }
 
 // SwitchToConsensus switches from block-sync mode to consensus mode. It resets
@@ -544,7 +544,7 @@ func (r *Reactor) gossipDataRoutine(ps *PeerState) {
 
 	defer ps.broadcastWG.Done()
 
-	nodeInfo, _ := r.nodeInfos.GetNodeInfo(ps.peerID)
+	nodeInfo, _ := r.nodeInfoRepo.GetNodeInfo(ps.peerID)
 	nodeProTxHash := nodeInfo.GetProTxHash()
 
 OUTER_LOOP:
@@ -688,7 +688,7 @@ OUTER_LOOP:
 // pickSendVote picks a vote and sends it to the peer. It will return true if
 // there is a vote to send and false otherwise.
 func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
-	nodeInfo, _ := r.nodeInfos.GetNodeInfo(ps.peerID)
+	nodeInfo, _ := r.nodeInfoRepo.GetNodeInfo(ps.peerID)
 	if vote, ok := ps.PickVoteToSend(votes); ok {
 		r.Logger.Debug("sending vote message",
 			"ps", ps,
@@ -793,7 +793,7 @@ func (r *Reactor) gossipVotesAndCommitRoutine(ps *PeerState) {
 	// XXX: simple hack to throttle logs upon sleep
 	logThrottle := 0
 
-	info, _ := r.nodeInfos.GetNodeInfo(ps.peerID)
+	info, _ := r.nodeInfoRepo.GetNodeInfo(ps.peerID)
 	nodeProTxHash := info.GetProTxHash()
 
 OUTER_LOOP:
