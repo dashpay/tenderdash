@@ -175,7 +175,7 @@ func makeNode(cfg *config.Config,
 		return nil, err
 	}
 
-	var proTxHashP *crypto.ProTxHash
+	var proTxHash crypto.ProTxHash
 	switch {
 	case cfg.PrivValidatorCoreRPCHost != "":
 		logger.Info(
@@ -206,11 +206,10 @@ func makeNode(cfg *config.Config,
 			if err != nil {
 				return nil, fmt.Errorf("error with private validator socket client: %w", err)
 			}
-			proTxHash, err := privValidator.GetProTxHash(context.TODO())
+			proTxHash, err = privValidator.GetProTxHash(context.TODO())
 			if err != nil {
 				return nil, fmt.Errorf("can't get proTxHash using dash core signing: %w", err)
 			}
-			proTxHashP = &proTxHash
 			logger.Info("Connected to Core RPC Masternode", "proTxHash", proTxHash.String())
 		} else {
 			logger.Info("Connected to Core RPC FullNode")
@@ -234,11 +233,10 @@ func makeNode(cfg *config.Config,
 			}
 		}
 		if cfg.IsMasternode {
-			proTxHash, err := privValidator.GetProTxHash(context.TODO())
+			proTxHash, err = privValidator.GetProTxHash(context.TODO())
 			if err != nil {
 				return nil, fmt.Errorf("can't get proTxHash using dash core signing: %w", err)
 			}
-			proTxHashP = &proTxHash
 			logger.Info(
 				"Connected to Private Validator through listen address",
 				"proTxHash",
@@ -255,11 +253,10 @@ func makeNode(cfg *config.Config,
 		if err != nil {
 			return nil, fmt.Errorf("error with private validator loaded: %w", err)
 		}
-		proTxHash, err := privValidator.GetProTxHash(context.TODO())
+		proTxHash, err = privValidator.GetProTxHash(context.TODO())
 		if err != nil {
 			return nil, fmt.Errorf("can't get proTxHash through file: %w", err)
 		}
-		proTxHashP = &proTxHash
 		logger.Info("Private Validator using local file", "proTxHash", proTxHash.String())
 	}
 
@@ -272,7 +269,7 @@ func makeNode(cfg *config.Config,
 		dashCoreRPCClient = dashcore.NewMockClient(cfg.ChainID(), llmqType, privValidator, false)
 	}
 
-	weAreOnlyValidator := onlyValidatorIsUs(state, proTxHashP)
+	weAreOnlyValidator := onlyValidatorIsUs(state, proTxHash)
 
 	// Determine whether we should attempt state sync.
 	stateSync := cfg.StateSync.Enable && !weAreOnlyValidator
@@ -286,7 +283,7 @@ func makeNode(cfg *config.Config,
 	consensusLogger := logger.With("module", "consensus")
 	proposedAppVersion := uint64(0)
 	if !stateSync {
-		if proposedAppVersion, err = doHandshake(stateStore, state, blockStore, genDoc, proTxHashP, cfg.Consensus.AppHashSize, eventBus, proxyApp, consensusLogger); err != nil {
+		if proposedAppVersion, err = doHandshake(stateStore, state, blockStore, genDoc, proTxHash, cfg.Consensus.AppHashSize, eventBus, proxyApp, consensusLogger); err != nil {
 			return nil, err
 		}
 
@@ -303,11 +300,11 @@ func makeNode(cfg *config.Config,
 	// app may modify the validator set, specifying ourself as the only validator.
 	blockSync := cfg.BlockSync.Enable && !weAreOnlyValidator
 
-	logNodeStartupInfo(state, proTxHashP, logger, consensusLogger, cfg.Mode)
+	logNodeStartupInfo(state, proTxHash, logger, consensusLogger, cfg.Mode)
 
 	// TODO: Fetch and provide real options and do proper p2p bootstrapping.
 	// TODO: Use a persistent peer database.
-	nodeInfo, err := makeNodeInfo(cfg, nodeKey, eventSinks, genDoc, state)
+	nodeInfo, err := makeNodeInfo(cfg, nodeKey, proTxHash, eventSinks, genDoc, state)
 	if err != nil {
 		return nil, err
 	}
@@ -370,7 +367,7 @@ func makeNode(cfg *config.Config,
 	// Create the blockchain reactor. Note, we do not start block sync if we're
 	// doing a state sync first.
 	bcReactorShim, bcReactor, err := createBlockchainReactor(
-		logger, cfg, state, blockExec, blockStore, proTxHashP, csReactor,
+		logger, cfg, state, blockExec, blockStore, proTxHash, csReactor,
 		peerManager, router, blockSync && !stateSync, nodeMetrics.consensus,
 	)
 	if err != nil {
