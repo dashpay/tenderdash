@@ -305,7 +305,7 @@ func makeNode(cfg *config.Config,
 
 	// TODO: Fetch and provide real options and do proper p2p bootstrapping.
 	// TODO: Use a persistent peer database.
-	nodeInfo, err := makeNodeInfo(cfg, nodeKey, proTxHash, eventSinks, genDoc, state)
+	nodeInfo, err := makeNodeInfo(cfg, nodeKey, eventSinks, genDoc, state)
 	if err != nil {
 		return nil, err
 	}
