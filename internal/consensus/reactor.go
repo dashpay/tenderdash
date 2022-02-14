@@ -690,8 +690,9 @@ OUTER_LOOP:
 func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 	nodeInfo, _ := r.nodeInfoRepo.GetNodeInfo(ps.peerID)
 	if vote, ok := ps.PickVoteToSend(votes); ok {
+		psJSON, _ := ps.ToJSON()
 		r.Logger.Debug("sending vote message",
-			"ps", ps,
+			"ps", psJSON,
 			"vote", vote,
 			"peer_proTxHash", nodeInfo.GetProTxHash().ShortString(),
 			"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
