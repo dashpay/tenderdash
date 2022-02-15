@@ -357,7 +357,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 	for _, height := range heights {
 		heightStr := strconv.FormatInt(int64(height), 10)
 		validators := manifest.ValidatorUpdates[heightStr]
-		valUpdate := map[*Node]crypto.PubKey{}
+		valUpdate := ValidatorsMap{}
 		proTxHashes = make([]crypto.ProTxHash, 0, len(validators))
 		for name := range validators {
 			node := testnet.LookupNode(name)
