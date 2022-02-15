@@ -94,6 +94,13 @@ jobs:
             **/**.go
             go.mod
             go.sum
+      - name: post-setup go 1.17
+        run: |
+          sudo mv /bin/go /bin/go-old
+          sudo ln -s "$GOROOT/bin/go" /bin/go
+      - name: install
+        run: sudo make install
+        if: env.GIT_DIFF != ''
       - name: build
         run: GOOS=linux GOARCH=${{ matrix.goarch }} make build
         if: matrix.goarch == 'amd64' && env.GIT_DIFF != ''

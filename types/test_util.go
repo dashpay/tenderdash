@@ -10,10 +10,6 @@ import (
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
-var (
-	randSeed *rand.Rand = tmrand.NewRand()
-)
-
 func MakeCommit(blockID BlockID, stateID StateID, height int64, round int32,
 	voteSet *VoteSet, validators []PrivValidator) (*Commit, error) {
 
@@ -99,7 +95,7 @@ func MakeVote(
 
 func RandStateID() StateID {
 	return StateID{
-		Height:      randSeed.Int63(),
+		Height:      rand.Int63(), // nolint:gosec
 		LastAppHash: tmrand.Bytes(tmhash.Size),
 	}
 }

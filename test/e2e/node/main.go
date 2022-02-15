@@ -15,6 +15,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dashevo/dashd-go/btcjson"
+
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/server"
 	"github.com/tendermint/tendermint/config"
@@ -42,7 +43,6 @@ var logger = log.MustNewDefaultLogger(log.LogFormatPlain, log.LogLevelInfo, fals
 var (
 	tmhome            string
 	tmcfg             *config.Config
-	nodeLogger        log.Logger
 	dashCoreRPCClient dashcore.Client
 )
 
@@ -52,7 +52,7 @@ func init() {
 		panic("TMHOME is missed")
 	}
 	var err error
-	tmcfg, nodeLogger, err = setupNode()
+	tmcfg, _, err = setupNode()
 	if err != nil {
 		panic("failed to setup config: " + err.Error())
 	}

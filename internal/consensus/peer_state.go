@@ -406,6 +406,15 @@ func (ps *PeerState) SetHasCommit(commit *types.Commit) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
 
+	ps.logger.
+		With(
+			"height", commit.Height,
+			"round", commit.Round,
+			"peer_height", ps.PRS.Height,
+			"peer_round", ps.PRS.Round,
+		).
+		Debug("setHasCommit")
+
 	ps.setHasCommit(commit.Height, commit.Round)
 
 	if ps.PRS.Height < commit.Height || (ps.PRS.Height == commit.Height && ps.PRS.Round < commit.Round) {
@@ -480,7 +489,7 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 		// shift Precommits to LastCommit
 		if psHeight+1 == msg.Height && psRound == msg.LastCommitRound {
 			ps.PRS.LastCommitRound = msg.LastCommitRound
-			ps.PRS.LastPrecommits = ps.PRS.Precommits
+			ps.PRS.LastPrecommits = ps.PRS.Precommits.Copy()
 		} else {
 			ps.PRS.LastCommitRound = msg.LastCommitRound
 			ps.PRS.LastPrecommits = nil

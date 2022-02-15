@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
+
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
