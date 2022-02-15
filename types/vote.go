@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/rs/zerolog"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 
 	"github.com/tendermint/tendermint/crypto"
@@ -315,6 +316,13 @@ func (vote *Vote) ToProto() *tmproto.Vote {
 		BlockSignature:     vote.BlockSignature,
 		StateSignature:     vote.StateSignature,
 	}
+}
+
+// MarshalZerologObject formats this object for logging purposes
+func (vote *Vote) MarshalZerologObject(e *zerolog.Event) {
+	e.Str("vote", vote.String())
+	e.Int64("height", vote.Height)
+	e.Int32("round", vote.Round)
 }
 
 // FromProto converts a proto generetad type to a handwritten type
