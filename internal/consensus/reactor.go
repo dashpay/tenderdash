@@ -691,8 +691,10 @@ func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 	nodeInfo, _ := r.nodeInfoRepo.GetNodeInfo(ps.peerID)
 	if vote, ok := ps.PickVoteToSend(votes); ok {
 		psJSON, _ := ps.ToJSON()
-		r.Logger.Debug("sending vote message",
+		ps.logger.Debug(
+			"Sending vote message",
 			"ps", psJSON,
+			"peer_id", ps.peerID,
 			"vote", vote,
 			"peer_proTxHash", nodeInfo.GetProTxHash().ShortString(),
 			"val_proTxHash", vote.ValidatorProTxHash.ShortString(),

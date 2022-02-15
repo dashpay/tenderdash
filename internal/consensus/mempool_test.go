@@ -26,17 +26,17 @@ func assertMempool(txn txNotifier) mempool.Mempool {
 }
 
 func TestMempoolNoProgressUntilTxsAvailable(t *testing.T) {
+	baseConfig := configSetup(t)
 	for proofBlockRange := int64(1); proofBlockRange <= 3; proofBlockRange++ {
 		t.Logf("Checking proof block range %d", proofBlockRange)
-
 		config, err := ResetConfig("consensus_mempool_txs_available_test")
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = os.RemoveAll(config.RootDir) })
+
 		config.Consensus.CreateEmptyBlocks = false
 		config.Consensus.CreateProofBlockRange = proofBlockRange
 
-		state, privVals := randGenesisState(config, 1, false, types.DefaultDashVotingPower)
-
+		state, privVals := randGenesisState(baseConfig, 1, false, types.DefaultDashVotingPower)
 		cs := newStateWithConfig(config, state, privVals[0], NewCounterApplication())
 		assertMempool(cs.txNotifier).EnableTxsAvailable()
 		height, round := cs.Height, cs.Round

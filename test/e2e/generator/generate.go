@@ -137,6 +137,8 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 		IPv6:             ipv6.Choose(r).(bool),
 		ABCIProtocol:     nodeABCIProtocols.Choose(r),
 		InitialHeight:    int64(opt["initialHeight"].(int)),
+		GenesisCoreChainLockedHeight: uint32(opt["initialCoreChainLockedHeight"].(int)),
+		InitAppCoreChainLockedHeight: uint32(opt["initAppCoreChainLockedHeight"].(int)),
 		InitialState:     opt["initialState"].(map[string]string),
 		Validators:       map[string]int64{},
 		ValidatorUpdates: map[string]map[string]int64{},

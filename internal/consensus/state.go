@@ -1137,9 +1137,8 @@ func (cs *State) enterNewRound(height int64, round int32) {
 }
 
 // needProofBlock returns true if additional proof block needs to be created.
-// It happens on the first height (so the genesis app hash is signed right away)
-// and where the last block (height-1) or the previous one (height - 2) caused
-// the app hash to change.
+// It happens on the first height (so the genesis app hash is signed right away) and
+// where at least one of the last `proofBlockRange` blocks caused the app hash to change.
 func (cs *State) needProofBlock(height int64) bool {
 	if height == cs.state.InitialHeight {
 		return true
@@ -2191,7 +2190,11 @@ func (cs *State) defaultSetProposal(proposal *types.Proposal) error {
 // NOTE: block is not necessarily valid.
 // Asynchronously triggers either enterPrevote (before we timeout of propose) or tryFinalizeCommit,
 // once we have the full block.
-func (cs *State) addProposalBlockPart(msg *BlockPartMessage, peerID types.NodeID, fromReplay bool) (added bool, err error) {
+func (cs *State) addProposalBlockPart(
+	msg *BlockPartMessage,
+	peerID types.NodeID,
+	fromReplay bool,
+) (added bool, err error) {
 	height, round, part := msg.Height, msg.Round, msg.Part
 
 	// Blocks might be reused, so round mismatch is OK
