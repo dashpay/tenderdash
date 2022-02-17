@@ -37,7 +37,7 @@ type quorumHashGenerator struct {
 
 func newQuorumHashGenerator(seed int64) *quorumHashGenerator {
 	return &quorumHashGenerator{
-		random: rand.New(rand.NewSource(seed)),
+		random: rand.New(rand.NewSource(seed)), //nolint: gosec
 	}
 }
 
