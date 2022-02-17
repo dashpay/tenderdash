@@ -24,6 +24,9 @@ var (
 			map[string]string{"initial01": "a", "initial02": "b", "initial03": "c"},
 		},
 		"validators": {"genesis", "initchain"},
+		// Tenderdash-specific
+		"initialCoreChainLockedHeight": {0},
+		"initAppCoreChainLockedHeight": {0},
 	}
 
 	// The following specify randomly chosen values for testnet nodes.
