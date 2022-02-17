@@ -18,11 +18,14 @@ RUN go get github.com/go-delve/delve/cmd/dlv
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Install BLS library
+COPY third_party ./third_party
+COPY test/Makefile ./test/Makefile
+COPY Makefile ./
+RUN make install-bls
+
 # Copy Tenderdash source
 COPY . .
-
-# Install BLS library
-RUN make install-bls
 
 # Build Tenderdash and install into /usr/bin/tenderdash
 RUN make build && cp build/tenderdash /usr/bin/tenderdash
