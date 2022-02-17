@@ -535,8 +535,8 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate,
 					pk.Type(),
 				)
 			}
-			if err := pk.Validate(); err != nil {
-				return fmt.Errorf("validator %X public key is invalid: %w", valUpdate.ProTxHash, err)
+			if err := validatePuKey(pk); err != nil {
+				return fmt.Errorf("public key in validator %X is invalid: %w", valUpdate.ProTxHash, err)
 			}
 		}
 
@@ -780,4 +780,15 @@ func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64) (uint64, error) 
 		return 0, fmt.Errorf("failed to prune state store: %w", err)
 	}
 	return pruned, nil
+}
+
+func validatePuKey(pk crypto.PubKey) error {
+	v, ok := pk.(crypto.Validator)
+	if !ok {
+		return nil
+	}
+	if err := v.Validate(); err != nil {
+		return err
+	}
+	return nil
 }
