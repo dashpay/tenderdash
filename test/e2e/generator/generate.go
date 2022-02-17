@@ -145,6 +145,7 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 		InitialState:                 opt["initialState"].(map[string]string),
 		Validators:                   map[string]int64{},
 		ValidatorUpdates:             map[string]map[string]int64{},
+		ChainLockUpdates:             map[string]int64{},
 		Nodes:                        map[string]*e2e.ManifestNode{},
 		KeyType:                      keyType.Choose(r).(string),
 		Evidence:                     evidence.Choose(r).(int),
@@ -226,7 +227,7 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 	for i := 1; i <= numChainLocks; i++ {
 		startAtChainLocks += r.Intn(5)
 		startAtChainLocksHeight += r.Intn(5)
-		//manifest.ChainLockUpdates[fmt.Sprintf("%d", startAtChainLocks)] = int64(startAtChainLocksHeight)
+		manifest.ChainLockUpdates[fmt.Sprintf("%d", startAtChainLocks)] = int64(startAtChainLocksHeight)
 	}
 
 	// We now set up peer discovery for nodes. Seed nodes are fully meshed with
