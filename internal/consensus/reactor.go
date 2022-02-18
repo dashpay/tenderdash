@@ -138,7 +138,6 @@ type Reactor struct {
 	voteCh        *p2p.Channel
 	voteSetBitsCh *p2p.Channel
 	peerUpdates   *p2p.PeerUpdates
-	nodeInfoRepo  types.NodeInfoRepository
 
 	// NOTE: We need a dedicated stateCloseCh channel for signaling closure of
 	// the StateChannel due to the fact that the StateChannel message handler
@@ -276,11 +275,6 @@ func (r *Reactor) WaitSync() bool {
 // ReactorMetrics sets the reactor's metrics as an option function.
 func ReactorMetrics(metrics *Metrics) ReactorOption {
 	return func(r *Reactor) { r.Metrics = metrics }
-}
-
-// NodeInfoRepository sets the node-info repository as an option function
-func NodeInfoRepository(nodeInfoRepo types.NodeInfoRepository) ReactorOption {
-	return func(r *Reactor) { r.nodeInfoRepo = nodeInfoRepo }
 }
 
 // SwitchToConsensus switches from block-sync mode to consensus mode. It resets
@@ -544,9 +538,6 @@ func (r *Reactor) gossipDataRoutine(ps *PeerState) {
 
 	defer ps.broadcastWG.Done()
 
-	nodeInfo, _ := r.nodeInfoRepo.GetNodeInfo(ps.peerID)
-	nodeProTxHash := nodeInfo.GetProTxHash()
-
 OUTER_LOOP:
 	for {
 		if !r.IsRunning() {
@@ -565,7 +556,7 @@ OUTER_LOOP:
 		rs := r.state.GetRoundState()
 		prs := ps.GetRoundState()
 
-		isValidator := rs.Validators.HasProTxHash(nodeProTxHash)
+		isValidator := rs.Validators.HasProTxHash(ps.ProTxHash)
 
 		// Send proposal Block parts?
 		if (isValidator && rs.ProposalBlockParts.HasHeader(prs.ProposalBlockPartSetHeader)) ||
@@ -688,7 +679,6 @@ OUTER_LOOP:
 // pickSendVote picks a vote and sends it to the peer. It will return true if
 // there is a vote to send and false otherwise.
 func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
-	nodeInfo, _ := r.nodeInfoRepo.GetNodeInfo(ps.peerID)
 	if vote, ok := ps.PickVoteToSend(votes); ok {
 		psJSON, _ := ps.ToJSON()
 		ps.logger.Debug(
@@ -696,7 +686,7 @@ func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 			"ps", psJSON,
 			"peer_id", ps.peerID,
 			"vote", vote,
-			"peer_proTxHash", nodeInfo.GetProTxHash().ShortString(),
+			"peer_proTxHash", ps.ProTxHash.ShortString(),
 			"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
 			"height", vote.Height,
 			"round", vote.Round,
@@ -796,9 +786,6 @@ func (r *Reactor) gossipVotesAndCommitRoutine(ps *PeerState) {
 	// XXX: simple hack to throttle logs upon sleep
 	logThrottle := 0
 
-	info, _ := r.nodeInfoRepo.GetNodeInfo(ps.peerID)
-	nodeProTxHash := info.GetProTxHash()
-
 OUTER_LOOP:
 	for {
 		if !r.IsRunning() {
@@ -817,8 +804,8 @@ OUTER_LOOP:
 		rs := r.state.GetRoundState()
 		prs := ps.GetRoundState()
 
-		isValidator := rs.Validators.HasProTxHash(nodeProTxHash)
-		wasValidator := rs.LastValidators.HasProTxHash(nodeProTxHash)
+		isValidator := rs.Validators.HasProTxHash(ps.ProTxHash)
+		wasValidator := rs.LastValidators.HasProTxHash(ps.ProTxHash)
 
 		switch logThrottle {
 		case 1: // first sleep

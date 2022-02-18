@@ -30,13 +30,6 @@ type ProtocolVersion struct {
 
 //-------------------------------------------------------------
 
-// NodeInfoRepository declares node-info repository
-type NodeInfoRepository interface {
-	AddNodeInfo(info NodeInfo)
-	DeleteNodeInfo(nodeID NodeID)
-	GetNodeInfo(nodeID NodeID) (NodeInfo, bool)
-}
-
 // NodeInfo is the basic node information exchanged
 // between two peers during the Tendermint P2P handshake.
 type NodeInfo struct {
