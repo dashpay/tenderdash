@@ -1407,7 +1407,7 @@ func (m *PeerManager) UpdatePeerInfo(nodeID types.NodeID, modifier func(peerInfo
 	if !ok {
 		return errPeerNotFound(fmt.Errorf("peer with id %s not found", nodeID))
 	}
-	modifier(peer)
+	peer = modifier(peer)
 	return m.store.Set(peer)
 }
 
