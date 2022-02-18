@@ -49,6 +49,8 @@ const (
 type PeerUpdate struct {
 	NodeID types.NodeID
 	Status PeerStatus
+	// ProTxHash is accessible only for validator
+	ProTxHash types.ProTxHash
 }
 
 // PeerUpdates is a peer update subscription with notifications about peer
@@ -565,7 +567,7 @@ func (m *PeerManager) DialFailed(address NodeAddress) error {
 
 // Dialed marks a peer as successfully dialed. Any further connections will be
 // rejected, and once disconnected the peer may be dialed again.
-func (m *PeerManager) Dialed(address NodeAddress) error {
+func (m *PeerManager) Dialed(address NodeAddress, peerOpts ...func(*peerInfo)) error {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
@@ -599,6 +601,9 @@ func (m *PeerManager) Dialed(address NodeAddress) error {
 	}
 	now := time.Now().UTC()
 	peer.LastConnected = now
+	for _, opt := range peerOpts {
+		opt(&peer)
+	}
 	if addressInfo, ok := peer.AddressInfo[address]; ok {
 		addressInfo.DialFailures = 0
 		addressInfo.LastDialSuccess = now
@@ -696,9 +701,11 @@ func (m *PeerManager) Ready(peerID types.NodeID) {
 
 	if m.connected[peerID] {
 		m.ready[peerID] = true
+		peer, _ := m.store.Get(peerID)
 		m.broadcast(PeerUpdate{
-			NodeID: peerID,
-			Status: PeerStatusUp,
+			NodeID:    peerID,
+			Status:    PeerStatusUp,
+			ProTxHash: peer.ProTxHash,
 		})
 	}
 }
@@ -770,9 +777,11 @@ func (m *PeerManager) Disconnected(peerID types.NodeID) {
 	delete(m.ready, peerID)
 
 	if ready {
+		peer, _ := m.store.Get(peerID)
 		m.broadcast(PeerUpdate{
-			NodeID: peerID,
-			Status: PeerStatusDown,
+			NodeID:    peerID,
+			Status:    PeerStatusDown,
+			ProTxHash: peer.ProTxHash,
 		})
 	}
 
@@ -1059,6 +1068,13 @@ func (m *PeerManager) SetHeight(peerID types.NodeID, height int64) error {
 	}
 	peer.Height = height
 	return m.store.Set(peer)
+}
+
+// SetProTxHashToPeerInfo sets a proTxHash in peerInfo.proTxHash to keep this value in a store
+func SetProTxHashToPeerInfo(proTxHash types.ProTxHash) func(info *peerInfo) {
+	return func(info *peerInfo) {
+		info.ProTxHash = proTxHash
+	}
 }
 
 // peerStore stores information about peers. It is not thread-safe, assuming it
