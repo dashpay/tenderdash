@@ -6,7 +6,6 @@ import (
 	"net"
 	"time"
 
-	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -30,7 +29,7 @@ type NodeIDResolver interface {
 type DashDialer interface {
 	NodeIDResolver
 	// ConnectAsync schedules asynchronous job to establish connection with provided node.
-	ConnectAsync(DashDialerOptions) error
+	ConnectAsync(NodeAddress) error
 	// IsDialingOrConnected determines whether node with provided node ID is already connected,
 	// or there is a pending connection attempt.
 	IsDialingOrConnected(types.NodeID) bool
@@ -51,12 +50,11 @@ func NewRouterDashDialer(peerManager *PeerManager, logger log.Logger) DashDialer
 }
 
 // ConnectAsync implements DashDialer
-func (cm *routerDashDialer) ConnectAsync(opts DashDialerOptions) error {
-	if err := opts.Validate(); err != nil {
+func (cm *routerDashDialer) ConnectAsync(addr NodeAddress) error {
+	if err := addr.Validate(); err != nil {
 		return err
 	}
-	addr := opts.NodeAddress
-	if _, err := cm.peerManager.Add(addr, WithProTxHash(opts.ProTxHash)); err != nil {
+	if _, err := cm.peerManager.Add(addr); err != nil {
 		return err
 	}
 	if err := cm.setPeerScore(addr.NodeID, PeerScorePersistent); err != nil {
@@ -121,18 +119,4 @@ func (cm *routerDashDialer) lookupIPPort(ctx context.Context, ip net.IP, port ui
 	}
 
 	return NodeAddress{}, errPeerNotFound(fmt.Errorf("peer %s:%dd not found in the address book", ip, port))
-}
-
-// DashDialerOptions is a data for dialing a validator in dash network
-type DashDialerOptions struct {
-	NodeAddress
-	ProTxHash types.ProTxHash
-}
-
-// Validate validates dash dialer options
-func (d *DashDialerOptions) Validate() error {
-	if err := d.NodeAddress.Validate(); err != nil {
-		return err
-	}
-	return crypto.ProTxHashValidate(d.ProTxHash)
 }

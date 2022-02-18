@@ -49,6 +49,8 @@ const (
 type PeerUpdate struct {
 	NodeID types.NodeID
 	Status PeerStatus
+	// ProTxHash is accessible only for validator
+	ProTxHash types.ProTxHash
 }
 
 // PeerUpdates is a peer update subscription with notifications about peer
@@ -402,7 +404,7 @@ func (m *PeerManager) prunePeers() error {
 // Add adds a peer to the manager, given as an address. If the peer already
 // exists, the address is added to it if it isn't already present. This will push
 // low scoring peers out of the address book if it exceeds the maximum size.
-func (m *PeerManager) Add(address NodeAddress, peerOpts ...func(*peerInfo)) (bool, error) {
+func (m *PeerManager) Add(address NodeAddress) (bool, error) {
 	if err := address.Validate(); err != nil {
 		return false, err
 	}
@@ -425,9 +427,6 @@ func (m *PeerManager) Add(address NodeAddress, peerOpts ...func(*peerInfo)) (boo
 
 	// else add the new address
 	peer.AddressInfo[address] = &peerAddressInfo{Address: address}
-	for _, opt := range peerOpts {
-		opt(&peer)
-	}
 	if err := m.store.Set(peer); err != nil {
 		return false, err
 	}
@@ -568,7 +567,7 @@ func (m *PeerManager) DialFailed(address NodeAddress) error {
 
 // Dialed marks a peer as successfully dialed. Any further connections will be
 // rejected, and once disconnected the peer may be dialed again.
-func (m *PeerManager) Dialed(address NodeAddress) error {
+func (m *PeerManager) Dialed(address NodeAddress, peerOpts ...func(*peerInfo)) error {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
@@ -602,6 +601,9 @@ func (m *PeerManager) Dialed(address NodeAddress) error {
 	}
 	now := time.Now().UTC()
 	peer.LastConnected = now
+	for _, opt := range peerOpts {
+		opt(&peer)
+	}
 	if addressInfo, ok := peer.AddressInfo[address]; ok {
 		addressInfo.DialFailures = 0
 		addressInfo.LastDialSuccess = now
@@ -699,10 +701,15 @@ func (m *PeerManager) Ready(peerID types.NodeID) {
 
 	if m.connected[peerID] {
 		m.ready[peerID] = true
-		m.broadcast(PeerUpdate{
+		pu := PeerUpdate{
 			NodeID: peerID,
 			Status: PeerStatusUp,
-		})
+		}
+		peer, ok := m.store.Get(peerID)
+		if ok {
+			pu.ProTxHash = peer.ProTxHash
+		}
+		m.broadcast(pu)
 	}
 }
 
@@ -773,10 +780,15 @@ func (m *PeerManager) Disconnected(peerID types.NodeID) {
 	delete(m.ready, peerID)
 
 	if ready {
-		m.broadcast(PeerUpdate{
+		pu := PeerUpdate{
 			NodeID: peerID,
 			Status: PeerStatusDown,
-		})
+		}
+		peer, ok := m.store.Get(peerID)
+		if ok {
+			pu.ProTxHash = peer.ProTxHash
+		}
+		m.broadcast(pu)
 	}
 
 	m.dialWaker.Wake()
@@ -1062,6 +1074,13 @@ func (m *PeerManager) SetHeight(peerID types.NodeID, height int64) error {
 	}
 	peer.Height = height
 	return m.store.Set(peer)
+}
+
+// SetProTxHashToPeerInfo sets a proTxHash in peerInfo.proTxHash to keep this value in a store
+func SetProTxHashToPeerInfo(proTxHash types.ProTxHash) func(info *peerInfo) {
+	return func(info *peerInfo) {
+		info.ProTxHash = proTxHash
+	}
 }
 
 // peerStore stores information about peers. It is not thread-safe, assuming it
@@ -1422,11 +1441,4 @@ func (m *PeerManager) IsDialingOrConnected(nodeID types.NodeID) bool {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 	return m.dialing[nodeID] || m.connected[nodeID]
-}
-
-// WithProTxHash sets a proTxHash in peerInfo.proTxHash to keep this value in a store
-func WithProTxHash(proTxHash types.ProTxHash) func(info *peerInfo) {
-	return func(info *peerInfo) {
-		info.ProTxHash = proTxHash
-	}
 }

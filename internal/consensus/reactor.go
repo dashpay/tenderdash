@@ -1029,7 +1029,7 @@ func (r *Reactor) processPeerUpdate(peerUpdate p2p.PeerUpdate) {
 
 		ps, ok = r.peers[peerUpdate.NodeID]
 		if !ok {
-			ps = NewPeerState(r.Logger, peerUpdate.NodeID)
+			ps = NewPeerState(r.Logger, peerUpdate.NodeID, peerUpdate.ProTxHash)
 			r.peers[peerUpdate.NodeID] = ps
 		}
 

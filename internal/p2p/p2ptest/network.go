@@ -94,15 +94,16 @@ func (n *Network) Start(t *testing.T) {
 		for _, targetAddress := range dialQueue[i+1:] { // nodes <i already connected
 			targetNode := n.Nodes[targetAddress.NodeID]
 			targetSub := subs[targetAddress.NodeID]
-			added, err := sourceNode.PeerManager.Add(targetAddress, p2p.WithProTxHash(targetNode.NodeInfo.ProTxHash))
+			added, err := sourceNode.PeerManager.Add(targetAddress)
 			require.NoError(t, err)
 			require.True(t, added)
 
 			select {
 			case peerUpdate := <-sourceSub.Updates():
 				require.Equal(t, p2p.PeerUpdate{
-					NodeID: targetNode.NodeID,
-					Status: p2p.PeerStatusUp,
+					NodeID:    targetNode.NodeID,
+					Status:    p2p.PeerStatusUp,
+					ProTxHash: targetNode.NodeInfo.ProTxHash,
 				}, peerUpdate)
 			case <-time.After(3 * time.Second):
 				require.Fail(t, "timed out waiting for peer", "%v dialing %v",
@@ -122,7 +123,7 @@ func (n *Network) Start(t *testing.T) {
 
 			// Add the address to the target as well, so it's able to dial the
 			// source back if that's even necessary.
-			added, err = targetNode.PeerManager.Add(sourceAddress, p2p.WithProTxHash(sourceNode.NodeInfo.ProTxHash))
+			added, err = targetNode.PeerManager.Add(sourceAddress)
 			require.NoError(t, err)
 			require.True(t, added)
 		}
