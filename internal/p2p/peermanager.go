@@ -402,7 +402,7 @@ func (m *PeerManager) prunePeers() error {
 // Add adds a peer to the manager, given as an address. If the peer already
 // exists, the address is added to it if it isn't already present. This will push
 // low scoring peers out of the address book if it exceeds the maximum size.
-func (m *PeerManager) Add(address NodeAddress, peerOpts ...func(*peerInfo)) (bool, error) {
+func (m *PeerManager) Add(address NodeAddress) (bool, error) {
 	if err := address.Validate(); err != nil {
 		return false, err
 	}
@@ -425,9 +425,6 @@ func (m *PeerManager) Add(address NodeAddress, peerOpts ...func(*peerInfo)) (boo
 
 	// else add the new address
 	peer.AddressInfo[address] = &peerAddressInfo{Address: address}
-	for _, opt := range peerOpts {
-		opt(&peer)
-	}
 	if err := m.store.Set(peer); err != nil {
 		return false, err
 	}
@@ -1422,11 +1419,4 @@ func (m *PeerManager) IsDialingOrConnected(nodeID types.NodeID) bool {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 	return m.dialing[nodeID] || m.connected[nodeID]
-}
-
-// WithProTxHash sets a proTxHash in peerInfo.proTxHash to keep this value in a store
-func WithProTxHash(proTxHash types.ProTxHash) func(info *peerInfo) {
-	return func(info *peerInfo) {
-		info.ProTxHash = proTxHash
-	}
 }
