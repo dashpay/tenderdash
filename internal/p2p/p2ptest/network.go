@@ -30,9 +30,10 @@ type Network struct {
 // NetworkOptions is an argument structure to parameterize the
 // MakeNetwork function.
 type NetworkOptions struct {
-	NumNodes   int
-	BufferSize int
-	NodeOpts   NodeOptions
+	NumNodes    int
+	BufferSize  int
+	NodeOpts    NodeOptions
+	ProTxHashes []crypto.ProTxHash
 }
 
 type NodeOptions struct {
@@ -58,7 +59,11 @@ func MakeNetwork(t *testing.T, opts NetworkOptions) *Network {
 	}
 
 	for i := 0; i < opts.NumNodes; i++ {
-		node := network.MakeNode(t, opts.NodeOpts)
+		var proTxHash crypto.ProTxHash
+		if i < len(opts.ProTxHashes) {
+			proTxHash = opts.ProTxHashes[i]
+		}
+		node := network.MakeNode(t, proTxHash, opts.NodeOpts)
 		network.Nodes[node.NodeID] = node
 	}
 
@@ -89,7 +94,7 @@ func (n *Network) Start(t *testing.T) {
 		for _, targetAddress := range dialQueue[i+1:] { // nodes <i already connected
 			targetNode := n.Nodes[targetAddress.NodeID]
 			targetSub := subs[targetAddress.NodeID]
-			added, err := sourceNode.PeerManager.Add(targetAddress)
+			added, err := sourceNode.PeerManager.Add(targetAddress, p2p.WithProTxHash(targetNode.NodeInfo.ProTxHash))
 			require.NoError(t, err)
 			require.True(t, added)
 
@@ -117,7 +122,7 @@ func (n *Network) Start(t *testing.T) {
 
 			// Add the address to the target as well, so it's able to dial the
 			// source back if that's even necessary.
-			added, err = targetNode.PeerManager.Add(sourceAddress)
+			added, err = targetNode.PeerManager.Add(sourceAddress, p2p.WithProTxHash(sourceNode.NodeInfo.ProTxHash))
 			require.NoError(t, err)
 			require.True(t, added)
 		}
@@ -226,13 +231,14 @@ type Node struct {
 // MakeNode creates a new Node configured for the network with a
 // running peer manager, but does not add it to the existing
 // network. Callers are responsible for updating peering relationships.
-func (n *Network) MakeNode(t *testing.T, opts NodeOptions) *Node {
+func (n *Network) MakeNode(t *testing.T, proTxHash crypto.ProTxHash, opts NodeOptions) *Node {
 	privKey := ed25519.GenPrivKey()
 	nodeID := types.NodeIDFromPubKey(privKey.PubKey())
 	nodeInfo := types.NodeInfo{
 		NodeID:     nodeID,
 		ListenAddr: "0.0.0.0:0", // FIXME: We have to fake this for now.
 		Moniker:    string(nodeID),
+		ProTxHash:  proTxHash,
 	}
 
 	transport := n.memoryNetwork.CreateTransport(nodeID)
