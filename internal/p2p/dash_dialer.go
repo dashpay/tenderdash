@@ -66,37 +66,23 @@ func (cm *routerDashDialer) ConnectAsync(addr NodeAddress) error {
 
 // setPeerScore changes score for a peer
 func (cm *routerDashDialer) setPeerScore(nodeID types.NodeID, newScore PeerScore) error {
-	// peerManager.store assumes that peerManager is managing it
-	cm.peerManager.mtx.Lock()
-	defer cm.peerManager.mtx.Unlock()
-
-	peer, ok := cm.peerManager.store.Get(nodeID)
-	if !ok {
-		return errPeerNotFound(fmt.Errorf("peer with id %s not found", nodeID))
-	}
-	peer.MutableScore = int64(newScore)
-	if err := cm.peerManager.store.Set(cm.peerManager.configurePeer(peer)); err != nil {
-		return err
-	}
-	return nil
+	return cm.peerManager.UpdatePeerInfo(nodeID, func(peer peerInfo) peerInfo {
+		peer.MutableScore = int64(newScore)
+		return cm.peerManager.configurePeer(peer)
+	})
 }
 
 // IsDialingOrConnected implements DashDialer
-func (cm *routerDashDialer) IsDialingOrConnected(id types.NodeID) bool {
-	return cm.peerManager.dialing[id] || cm.peerManager.connected[id]
+func (cm *routerDashDialer) IsDialingOrConnected(nodeID types.NodeID) bool {
+	return cm.peerManager.IsDialingOrConnected(nodeID)
 }
 
 // DisconnectAsync implements DashDialer
-func (cm *routerDashDialer) DisconnectAsync(id types.NodeID) error {
-	if err := cm.setPeerScore(id, 0); err != nil {
+func (cm *routerDashDialer) DisconnectAsync(nodeID types.NodeID) error {
+	if err := cm.setPeerScore(nodeID, 0); err != nil {
 		return err
 	}
-
-	cm.peerManager.mtx.Lock()
-	cm.peerManager.evict[id] = true
-	cm.peerManager.mtx.Unlock()
-
-	cm.peerManager.evictWaker.Wake()
+	cm.peerManager.EvictPeer(nodeID)
 	return nil
 }
 
