@@ -1226,6 +1226,8 @@ type peerInfo struct {
 	FixedScore PeerScore // mainly for tests
 
 	MutableScore int64 // updated by router
+
+	ProTxHash types.ProTxHash
 }
 
 // peerInfoFromProto converts a Protobuf PeerInfo message to a peerInfo,
@@ -1256,6 +1258,7 @@ func (p *peerInfo) ToProto() *p2pproto.PeerInfo {
 	msg := &p2pproto.PeerInfo{
 		ID:            string(p.ID),
 		LastConnected: &p.LastConnected,
+		ProTxHash:     p.ProTxHash,
 	}
 	for _, addressInfo := range p.AddressInfo {
 		msg.AddressInfo = append(msg.AddressInfo, addressInfo.ToProto())
