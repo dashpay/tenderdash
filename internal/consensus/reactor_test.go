@@ -63,9 +63,9 @@ func chDesc(chID p2p.ChannelID) p2p.ChannelDescriptor {
 func setup(t *testing.T, numNodes int, states []*State, size int) *reactorTestSuite {
 	t.Helper()
 
-	var privProTxHashes []crypto.ProTxHash
-	for _, state := range states {
-		privProTxHashes = append(privProTxHashes, state.privValidatorProTxHash)
+	privProTxHashes := make([]crypto.ProTxHash, len(states))
+	for i, state := range states {
+		privProTxHashes[i] = state.privValidatorProTxHash
 	}
 	rts := &reactorTestSuite{
 		network:       p2ptest.MakeNetwork(t, p2ptest.NetworkOptions{NumNodes: numNodes, ProTxHashes: privProTxHashes}),
@@ -95,7 +95,6 @@ func setup(t *testing.T, numNodes int, states []*State, size int) *reactorTestSu
 			rts.voteSetBitsChannels[nodeID],
 			node.MakePeerUpdates(t),
 			true,
-			NodeInfoRepository(node.PeerManager),
 		)
 
 		reactor.SetEventBus(state.eventBus)

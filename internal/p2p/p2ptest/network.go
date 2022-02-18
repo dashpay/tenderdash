@@ -94,7 +94,7 @@ func (n *Network) Start(t *testing.T) {
 		for _, targetAddress := range dialQueue[i+1:] { // nodes <i already connected
 			targetNode := n.Nodes[targetAddress.NodeID]
 			targetSub := subs[targetAddress.NodeID]
-			added, err := sourceNode.PeerManager.Add(targetAddress)
+			added, err := sourceNode.PeerManager.Add(targetAddress, p2p.WithProTxHash(targetNode.NodeInfo.ProTxHash))
 			require.NoError(t, err)
 			require.True(t, added)
 
@@ -122,7 +122,7 @@ func (n *Network) Start(t *testing.T) {
 
 			// Add the address to the target as well, so it's able to dial the
 			// source back if that's even necessary.
-			added, err = targetNode.PeerManager.Add(sourceAddress)
+			added, err = targetNode.PeerManager.Add(sourceAddress, p2p.WithProTxHash(sourceNode.NodeInfo.ProTxHash))
 			require.NoError(t, err)
 			require.True(t, added)
 		}

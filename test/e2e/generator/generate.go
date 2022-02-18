@@ -24,6 +24,9 @@ var (
 			map[string]string{"initial01": "a", "initial02": "b", "initial03": "c"},
 		},
 		"validators": {"genesis", "initchain"},
+		// Tenderdash-specific
+		"initialCoreChainLockedHeight": {0},
+		"initAppCoreChainLockedHeight": {0},
 	}
 
 	// The following specify randomly chosen values for testnet nodes.
@@ -223,7 +226,7 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 	for i := 1; i <= numChainLocks; i++ {
 		startAtChainLocks += r.Intn(5)
 		startAtChainLocksHeight += r.Intn(5)
-		//manifest.ChainLockUpdates[fmt.Sprintf("%d", startAtChainLocks)] = int64(startAtChainLocksHeight)
+		manifest.ChainLockUpdates[fmt.Sprintf("%d", startAtChainLocks)] = int64(startAtChainLocksHeight)
 	}
 
 	// We now set up peer discovery for nodes. Seed nodes are fully meshed with

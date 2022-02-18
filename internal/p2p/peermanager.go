@@ -290,7 +290,6 @@ type PeerManager struct {
 	ready         map[types.NodeID]bool         // ready peers (Ready → Disconnected)
 	evict         map[types.NodeID]bool         // peers scheduled for eviction (Connected → EvictNext)
 	evicting      map[types.NodeID]bool         // peers being evicted (EvictNext → Disconnected)
-	nodeInfoMap   *sync.Map
 }
 
 // NewPeerManager creates a new peer manager.
@@ -325,7 +324,6 @@ func NewPeerManager(selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptio
 		evict:         map[types.NodeID]bool{},
 		evicting:      map[types.NodeID]bool{},
 		subscriptions: map[*PeerUpdates]*PeerUpdates{},
-		nodeInfoMap:   &sync.Map{},
 	}
 	if err = peerManager.configurePeers(); err != nil {
 		return nil, err
@@ -404,7 +402,7 @@ func (m *PeerManager) prunePeers() error {
 // Add adds a peer to the manager, given as an address. If the peer already
 // exists, the address is added to it if it isn't already present. This will push
 // low scoring peers out of the address book if it exceeds the maximum size.
-func (m *PeerManager) Add(address NodeAddress) (bool, error) {
+func (m *PeerManager) Add(address NodeAddress, peerOpts ...func(*peerInfo)) (bool, error) {
 	if err := address.Validate(); err != nil {
 		return false, err
 	}
@@ -427,6 +425,9 @@ func (m *PeerManager) Add(address NodeAddress) (bool, error) {
 
 	// else add the new address
 	peer.AddressInfo[address] = &peerAddressInfo{Address: address}
+	for _, opt := range peerOpts {
+		opt(&peer)
+	}
 	if err := m.store.Set(peer); err != nil {
 		return false, err
 	}
@@ -764,8 +765,6 @@ func (m *PeerManager) Disconnected(peerID types.NodeID) {
 	defer m.mtx.Unlock()
 
 	ready := m.ready[peerID]
-
-	m.DeleteNodeInfo(peerID)
 
 	delete(m.connected, peerID)
 	delete(m.upgrading, peerID)
@@ -1230,6 +1229,8 @@ type peerInfo struct {
 	FixedScore PeerScore // mainly for tests
 
 	MutableScore int64 // updated by router
+
+	ProTxHash types.ProTxHash
 }
 
 // peerInfoFromProto converts a Protobuf PeerInfo message to a peerInfo,
@@ -1260,6 +1261,7 @@ func (p *peerInfo) ToProto() *p2pproto.PeerInfo {
 	msg := &p2pproto.PeerInfo{
 		ID:            string(p.ID),
 		LastConnected: &p.LastConnected,
+		ProTxHash:     p.ProTxHash,
 	}
 	for _, addressInfo := range p.AddressInfo {
 		msg.AddressInfo = append(msg.AddressInfo, addressInfo.ToProto())
@@ -1394,19 +1396,37 @@ func keyPeerInfoRange() ([]byte, []byte) {
 	return start, end
 }
 
-// AddNodeInfo adds a node-info to a store
-func (m *PeerManager) AddNodeInfo(info types.NodeInfo) {
-	m.nodeInfoMap.Store(info.NodeID, info)
+// EvictPeer evicts a peer by a node id
+func (m *PeerManager) EvictPeer(nodeID types.NodeID) {
+	m.mtx.Lock()
+	m.evict[nodeID] = true
+	m.mtx.Unlock()
+	m.evictWaker.Wake()
 }
 
-// DeleteNodeInfo deletes a node-info from a store
-func (m *PeerManager) DeleteNodeInfo(nodeID types.NodeID) {
-	m.nodeInfoMap.Delete(nodeID)
+// UpdatePeerInfo modifies a peer-info using a function modificator, this operation is a transactional
+func (m *PeerManager) UpdatePeerInfo(nodeID types.NodeID, modifier func(peerInfo peerInfo) peerInfo) error {
+	// peerManager.store assumes that peerManager is managing it
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	peer, ok := m.store.Get(nodeID)
+	if !ok {
+		return errPeerNotFound(fmt.Errorf("peer with id %s not found", nodeID))
+	}
+	modifier(peer)
+	return m.store.Set(peer)
 }
 
-// GetNodeInfo gets information about a node by nodeID from the store and returns a result with a flag indicating
-// that the item is in the store.
-func (m *PeerManager) GetNodeInfo(nodeID types.NodeID) (types.NodeInfo, bool) {
-	val, ok := m.nodeInfoMap.Load(nodeID)
-	return val.(types.NodeInfo), ok
+// IsDialingOrConnected returns true if dialing to a peer at the moment or already connected otherwise false
+func (m *PeerManager) IsDialingOrConnected(nodeID types.NodeID) bool {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	return m.dialing[nodeID] || m.connected[nodeID]
+}
+
+// WithProTxHash sets a proTxHash in peerInfo.proTxHash to keep this value in a store
+func WithProTxHash(proTxHash types.ProTxHash) func(info *peerInfo) {
+	return func(info *peerInfo) {
+		info.ProTxHash = proTxHash
+	}
 }

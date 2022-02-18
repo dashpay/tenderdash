@@ -18,7 +18,7 @@ require (
 	github.com/golangci/golangci-lint v1.43.0
 	github.com/google/orderedcode v0.0.1
 	github.com/google/uuid v1.3.0
-	github.com/gorilla/websocket v1.4.2
+	github.com/gorilla/websocket v1.5.0
 	github.com/grpc-ecosystem/go-grpc-middleware v1.3.0
 	github.com/grpc-ecosystem/go-grpc-prometheus v1.2.0
 	github.com/lib/pq v1.10.4
@@ -30,7 +30,7 @@ require (
 	github.com/prometheus/client_golang v1.12.0
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/rs/cors v1.8.2
-	github.com/rs/zerolog v1.26.0
+	github.com/rs/zerolog v1.26.1
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/snikch/goodman v0.0.0-20171125024755-10e37e294daa
 	github.com/spf13/cobra v1.2.1
@@ -38,7 +38,7 @@ require (
 	github.com/stretchr/testify v1.7.0
 	github.com/tendermint/tm-db v0.6.4
 	github.com/vektra/mockery/v2 v2.9.4
-	golang.org/x/crypto v0.0.0-20210921155107-089bfa567519
+	golang.org/x/crypto v0.0.0-20211215165025-cf75a172585e
 	golang.org/x/net v0.0.0-20211208012354-db4efeb81f4b
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
 	google.golang.org/grpc v1.41.0
