@@ -701,12 +701,15 @@ func (m *PeerManager) Ready(peerID types.NodeID) {
 
 	if m.connected[peerID] {
 		m.ready[peerID] = true
-		peer, _ := m.store.Get(peerID)
-		m.broadcast(PeerUpdate{
-			NodeID:    peerID,
-			Status:    PeerStatusUp,
-			ProTxHash: peer.ProTxHash,
-		})
+		pu := PeerUpdate{
+			NodeID: peerID,
+			Status: PeerStatusUp,
+		}
+		peer, ok := m.store.Get(peerID)
+		if ok {
+			pu.ProTxHash = peer.ProTxHash
+		}
+		m.broadcast(pu)
 	}
 }
 
@@ -777,12 +780,15 @@ func (m *PeerManager) Disconnected(peerID types.NodeID) {
 	delete(m.ready, peerID)
 
 	if ready {
-		peer, _ := m.store.Get(peerID)
-		m.broadcast(PeerUpdate{
-			NodeID:    peerID,
-			Status:    PeerStatusDown,
-			ProTxHash: peer.ProTxHash,
-		})
+		pu := PeerUpdate{
+			NodeID: peerID,
+			Status: PeerStatusDown,
+		}
+		peer, ok := m.store.Get(peerID)
+		if ok {
+			pu.ProTxHash = peer.ProTxHash
+		}
+		m.broadcast(pu)
 	}
 
 	m.dialWaker.Wake()
