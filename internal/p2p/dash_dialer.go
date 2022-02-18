@@ -19,7 +19,7 @@ type errPeerNotFound error
 
 // This file contains interface between dash/quorum and p2p connectivity subsystem
 
-// // NodeIDResolver determines a node ID based on validator address
+// NodeIDResolver determines a node ID based on validator address
 type NodeIDResolver interface {
 	// Resolve determines real node address, including node ID, based on the provided
 	// validator address.
@@ -34,7 +34,7 @@ type DashDialer interface {
 	// IsDialingOrConnected determines whether node with provided node ID is already connected,
 	// or there is a pending connection attempt.
 	IsDialingOrConnected(types.NodeID) bool
-	// ConnectAsync schedules asynchronous job to disconnect from the provided node.
+	// DisconnectAsync schedules asynchronous job to disconnect from the provided node.
 	DisconnectAsync(types.NodeID) error
 }
 
