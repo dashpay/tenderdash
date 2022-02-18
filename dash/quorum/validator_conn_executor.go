@@ -389,7 +389,11 @@ func (vc *ValidatorConnExecutor) dial(vals validatorMap) error {
 	for id, validator := range vals {
 		vc.connectedValidators[id] = validator
 		address := nodeAddress(validator.NodeAddress)
-		if err := vc.dialer.ConnectAsync(address); err != nil {
+		opts := p2p.DashDialerOptions{
+			NodeAddress: address,
+			ProTxHash:   validator.ProTxHash,
+		}
+		if err := vc.dialer.ConnectAsync(opts); err != nil {
 			vc.Logger.Error("cannot dial validator", "address", address.String(), "err", err)
 			return fmt.Errorf("cannot dial validator %s: %w", address.String(), err)
 		}

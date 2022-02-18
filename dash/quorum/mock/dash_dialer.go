@@ -42,8 +42,8 @@ func NewDashDialer() *DashDialer {
 // DialPeersAsync implements p2p.DashDialer.
 // It emulates connecting to provided address, adds is as a connected peer
 // and emits history event OpDial.
-func (sw *DashDialer) ConnectAsync(addr p2p.NodeAddress) error {
-	id := addr.NodeID
+func (sw *DashDialer) ConnectAsync(opt p2p.DashDialerOptions) error {
+	id := opt.NodeAddress.NodeID
 	sw.mux.Lock()
 	sw.ConnectedPeers[id] = true
 	sw.mux.Unlock()
