@@ -83,7 +83,8 @@ func NewValidatorConnExecutor(
 	}
 	vc.nodeIDResolvers = []p2p.NodeIDResolver{
 		vc.dialer,
-		NewTCPNodeIDResolver(),
+		// TODO: tcp NodeID resolver is disabled temporary.
+		//NewTCPNodeIDResolver(),
 	}
 	baseService := service.NewBaseService(log.NewNopLogger(), validatorConnExecutorName, vc)
 	vc.BaseService = *baseService
