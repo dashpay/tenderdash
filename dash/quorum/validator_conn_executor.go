@@ -126,11 +126,12 @@ func (vc *ValidatorConnExecutor) OnStart() error {
 	if err := vc.subscribe(); err != nil {
 		return err
 	}
+	// TODO the operation is temp disabled if it's enabled then it leads to failure if even one node is unavailable
 	// establish connection with validators retrieves from genesis or init-chain
-	err := vc.updateConnections()
-	if err != nil {
-		return err
-	}
+	//err := vc.updateConnections()
+	//if err != nil {
+	//	return err
+	//}
 	go func() {
 		var err error
 		for err == nil {
