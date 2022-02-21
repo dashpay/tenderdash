@@ -411,15 +411,6 @@ func (ps *PeerState) SetHasCommit(commit *types.Commit) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
 
-	ps.logger.
-		With(
-			"height", commit.Height,
-			"round", commit.Round,
-			"peer_height", ps.PRS.Height,
-			"peer_round", ps.PRS.Round,
-		).
-		Debug("setHasCommit")
-
 	ps.setHasCommit(commit.Height, commit.Round)
 
 	if ps.PRS.Height < commit.Height || (ps.PRS.Height == commit.Height && ps.PRS.Round < commit.Round) {
@@ -431,13 +422,13 @@ func (ps *PeerState) SetHasCommit(commit *types.Commit) {
 }
 
 func (ps *PeerState) setHasCommit(height int64, round int32) {
-	logger := ps.logger.With(
+	ps.logger.Debug(
+		"setHasCommit",
 		"height", height,
 		"round", round,
 		"peer_height", ps.PRS.Height,
 		"peer_round", ps.PRS.Round,
 	)
-	logger.Debug("setHasCommit")
 
 	if ps.PRS.Height < height || (ps.PRS.Height == height && ps.PRS.Round <= round) {
 		ps.PRS.Height = height
