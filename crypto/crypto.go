@@ -110,7 +110,6 @@ type Validator interface {
 
 type PubKey interface {
 	HexStringer
-	Validator
 	Address() Address
 	Bytes() []byte
 	VerifySignature(msg []byte, sig []byte) bool

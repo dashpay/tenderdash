@@ -234,11 +234,6 @@ func (pubKey PubKey) Equals(other crypto.PubKey) bool {
 	return false
 }
 
-// Validate this method is necessary for Validator interface
-func (pubKey PubKey) Validate() error {
-	return nil
-}
-
 var _ crypto.BatchVerifier = &BatchVerifier{}
 
 // BatchVerifier implements batch verification for ed25519.
