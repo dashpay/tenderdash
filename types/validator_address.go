@@ -26,13 +26,13 @@ type ValidatorAddress struct {
 	Port     uint16
 }
 
-var (
+type (
 	// ErrNoHostname is returned when no hostname is set for the validator address
-	ErrNoHostname = errors.New("no hostname")
+	ErrNoHostname error
 	// ErrNoPort is returned when no valid port is set for the validator address
-	ErrNoPort = errors.New("no port")
+	ErrNoPort error
 	// ErrNoNodeID is returned when node ID is not set for the node ID
-	ErrNoNodeID = errors.New("no node ID")
+	ErrNoNodeID error
 )
 
 // ParseValidatorAddress parses provided address, which should be in `proto://nodeID@host:port` form.
@@ -95,10 +95,10 @@ func parseValidatorAddressString(urlString string) (ValidatorAddress, error) {
 func (va ValidatorAddress) Validate() error {
 
 	if va.Hostname == "" {
-		return ErrNoHostname
+		return ErrNoHostname(errors.New("hostname not set"))
 	}
 	if va.Port <= 0 {
-		return ErrNoPort
+		return ErrNoPort(errors.New("port not defined"))
 	}
 	if len(va.NodeID) > 0 {
 		if err := va.NodeID.Validate(); err != nil {
