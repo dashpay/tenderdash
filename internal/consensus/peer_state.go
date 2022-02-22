@@ -384,16 +384,13 @@ func (ps *PeerState) SetHasVote(vote *types.Vote) {
 
 func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.SignedMsgType, index int32) {
 
-	logger := ps.logger.With(
+	ps.logger.Debug(
+		"peerState setHasVote",
 		"peer_id", ps.peerID,
 		"height", height,
 		"round", round,
 		"peer_height", ps.PRS.Height,
 		"peer_round", ps.PRS.Round,
-	)
-
-	logger.Debug(
-		"peerState setHasVote",
 		"type", voteType,
 		"index", index,
 		"peerVotes", ps.Stats.Votes,
@@ -422,6 +419,7 @@ func (ps *PeerState) SetHasCommit(commit *types.Commit) {
 }
 
 func (ps *PeerState) setHasCommit(height int64, round int32) {
+	// Don't create a new logger here with logger.With(), as this adds significant memory overhead.
 	ps.logger.Debug(
 		"setHasCommit",
 		"height", height,
