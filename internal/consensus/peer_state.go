@@ -398,18 +398,9 @@ func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.Sign
 
 	// NOTE: some may be nil BitArrays -> no side effects
 	psVotes := ps.getVoteBitArray(height, round, voteType)
-	countVotes := -1
 	if psVotes != nil {
 		psVotes.SetIndex(int(index), true)
-		countVotes = psVotes.CountTrueBits()
 	}
-	logger.Debug(
-		"peerState setHasVote",
-		"type", voteType,
-		"index", index,
-		"peerVotes", psVotes,
-		"peerVoteCount", countVotes,
-	)
 }
 
 // SetHasCommit sets the given vote as known by the peer
