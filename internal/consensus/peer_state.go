@@ -419,7 +419,6 @@ func (ps *PeerState) SetHasCommit(commit *types.Commit) {
 }
 
 func (ps *PeerState) setHasCommit(height int64, round int32) {
-	// Don't create a new logger here with logger.With(), as this adds significant memory overhead.
 	ps.logger.Debug(
 		"setHasCommit",
 		"height", height,
