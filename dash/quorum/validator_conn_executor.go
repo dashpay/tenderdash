@@ -125,7 +125,6 @@ func (vc *ValidatorConnExecutor) OnStart() error {
 	if err := vc.subscribe(); err != nil {
 		return err
 	}
-	// establish connection with validators retrieves from genesis or init-chain
 	err := vc.updateConnections()
 	if err != nil {
 		return err
@@ -242,20 +241,26 @@ func (vc *ValidatorConnExecutor) resolveNodeID(va *types.ValidatorAddress) error
 	if va.NodeID != "" {
 		return nil
 	}
+	var allErrors string
 	for _, resolver := range vc.nodeIDResolvers {
 		address, err := resolver.Resolve(*va)
 		if err == nil && address.NodeID != "" {
 			va.NodeID = address.NodeID
-			return nil
+			return nil // success
 		}
+
+		method := reflect.TypeOf(resolver).String()
 		vc.Logger.Debug(
 			"warning: validator node id lookup method failed",
 			"url", va.String(),
-			"method", reflect.TypeOf(resolver).String(),
+			"method", method,
 			"error", err,
 		)
+
+		allErrors += method + " error: " + err.Error() + "; "
 	}
-	return types.ErrNoNodeID
+
+	return types.ErrNoNodeID(errors.New(allErrors))
 }
 
 // selectValidators selects `count` validators from current ValidatorSet.
@@ -273,16 +278,26 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 	if err != nil {
 		return validatorMap{}, err
 	}
+
 	// fetch node IDs
-	for _, validator := range selectedValidators {
+	selectedValidators = vc.ensureValidatorsHaveNodeIDs(selectedValidators)
+	return newValidatorMap(selectedValidators), nil
+}
+
+// ensureValidatorsHaveNodeIDs will determine Node IDs for `validators`.
+// Note that it modifies members of `validators` slice.
+// Returns subset of `validators` slice containing only validators with valid node
+func (vc *ValidatorConnExecutor) ensureValidatorsHaveNodeIDs(validators []*types.Validator) (results []*types.Validator) {
+	results = make([]*types.Validator, 0, len(validators))
+	for _, validator := range validators {
 		err := vc.resolveNodeID(&validator.NodeAddress)
 		if err != nil {
-			vc.Logger.Debug("cannot determine node id for validator", "url", validator.String(), "error", err)
-			// no return, as it's not critical
+			vc.Logger.Error("cannot determine node id for validator, skipping", "url", validator.String(), "error", err)
+			continue
 		}
+		results = append(results, validator)
 	}
-
-	return newValidatorMap(selectedValidators), nil
+	return results
 }
 
 func (vc *ValidatorConnExecutor) disconnectValidator(validator types.Validator) error {
