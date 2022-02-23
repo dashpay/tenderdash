@@ -25,6 +25,9 @@ const (
 	defaultTimeout = 1 * time.Second
 	// defaultEventBusCapacity determines how many events can wait in the event bus for processing. 10 looks very safe.
 	defaultEventBusCapacity = 10
+
+	resolverAddressBook = "DashDialer"
+	resolverTCP         = "TCPNodeIDResolver"
 )
 
 type optionFunc func(vc *ValidatorConnExecutor) error
@@ -83,8 +86,8 @@ func NewValidatorConnExecutor(
 		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),
 	}
 	vc.nodeIDResolvers = map[string]p2p.NodeIDResolver{
-		"DashDialer":        vc.dialer,
-		"TCPNodeIDResolver": NewTCPNodeIDResolver(),
+		resolverAddressBook: vc.dialer,
+		resolverTCP:         NewTCPNodeIDResolver(),
 	}
 	baseService := service.NewBaseService(log.NewNopLogger(), validatorConnExecutorName, vc)
 	vc.BaseService = *baseService
@@ -243,7 +246,11 @@ func (vc *ValidatorConnExecutor) resolveNodeID(va *types.ValidatorAddress) error
 		return nil
 	}
 	var allErrors error
-	for method, resolver := range vc.nodeIDResolvers {
+	for _, method := range []string{resolverAddressBook, resolverTCP} {
+		resolver, ok := vc.nodeIDResolvers[method]
+		if !ok {
+			return errors.New("invalid node ID resolver: " + method)
+		}
 		address, err := resolver.Resolve(*va)
 		if err == nil && address.NodeID != "" {
 			va.NodeID = address.NodeID
