@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"reflect"
 	"time"
+
+	"github.com/hashicorp/go-multierror"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
@@ -50,7 +51,7 @@ type ValidatorConnExecutor struct {
 	// quorumHash contains current quorum hash
 	quorumHash tmbytes.HexBytes
 	// nodeIDResolvers can be used to determine a node ID for a validator
-	nodeIDResolvers []p2p.NodeIDResolver
+	nodeIDResolvers map[string]p2p.NodeIDResolver
 	// mux is a mutex to ensure only one goroutine is processing connections
 	mux sync.Mutex
 
@@ -81,9 +82,9 @@ func NewValidatorConnExecutor(
 		connectedValidators: validatorMap{},
 		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),
 	}
-	vc.nodeIDResolvers = []p2p.NodeIDResolver{
-		vc.dialer,
-		NewTCPNodeIDResolver(),
+	vc.nodeIDResolvers = map[string]p2p.NodeIDResolver{
+		"DashDialer":        vc.dialer,
+		"TCPNodeIDResolver": NewTCPNodeIDResolver(),
 	}
 	baseService := service.NewBaseService(log.NewNopLogger(), validatorConnExecutorName, vc)
 	vc.BaseService = *baseService
@@ -241,26 +242,23 @@ func (vc *ValidatorConnExecutor) resolveNodeID(va *types.ValidatorAddress) error
 	if va.NodeID != "" {
 		return nil
 	}
-	var allErrors string
-	for _, resolver := range vc.nodeIDResolvers {
+	var allErrors error
+	for method, resolver := range vc.nodeIDResolvers {
 		address, err := resolver.Resolve(*va)
 		if err == nil && address.NodeID != "" {
 			va.NodeID = address.NodeID
 			return nil // success
 		}
-
-		method := reflect.TypeOf(resolver).String()
 		vc.Logger.Debug(
 			"warning: validator node id lookup method failed",
 			"url", va.String(),
 			"method", method,
 			"error", err,
 		)
-
-		allErrors += method + " error: " + err.Error() + "; "
+		allErrors = multierror.Append(allErrors, fmt.Errorf(method+" error: %w", err))
 	}
 
-	return types.ErrNoNodeID(errors.New(allErrors))
+	return allErrors
 }
 
 // selectValidators selects `count` validators from current ValidatorSet.
@@ -284,9 +282,10 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 	return newValidatorMap(selectedValidators), nil
 }
 
-// ensureValidatorsHaveNodeIDs will determine Node IDs for `validators`.
-// Note that it modifies members of `validators` slice.
-// Returns subset of `validators` slice containing only validators with valid node
+// ensureValidatorsHaveNodeIDs iterates through all `validators` and determines their Node IDs where validtes.
+// Returns a slice that contains only validators with valid node ID.
+// Validators where node ID lookup failed are skipped (no error reported).
+// Note that this function modifies validators which are in the input slice.
 func (vc *ValidatorConnExecutor) ensureValidatorsHaveNodeIDs(validators []*types.Validator) (results []*types.Validator) {
 	results = make([]*types.Validator, 0, len(validators))
 	for _, validator := range validators {
