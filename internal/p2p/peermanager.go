@@ -785,7 +785,7 @@ func (m *PeerManager) Disconnected(peerID types.NodeID) {
 			Status: PeerStatusDown,
 		}
 		peer, ok := m.store.Get(peerID)
-		if ok {
+		if ok && len(peer.ProTxHash) > 0 {
 			pu.ProTxHash = peer.ProTxHash
 		}
 		m.broadcast(pu)

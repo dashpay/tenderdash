@@ -994,7 +994,7 @@ OUTER_LOOP:
 // the peer. During peer removal, we remove the peer for our set of peers and
 // signal to all spawned goroutines to gracefully exit in a non-blocking manner.
 func (r *Reactor) processPeerUpdate(peerUpdate p2p.PeerUpdate) {
-	r.Logger.Debug("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
+	r.Logger.Debug("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status, "peer_protxhash", peerUpdate.ProTxHash.ShortString())
 
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
@@ -1018,6 +1018,8 @@ func (r *Reactor) processPeerUpdate(peerUpdate p2p.PeerUpdate) {
 		if !ok {
 			ps = NewPeerState(r.Logger, peerUpdate.NodeID, peerUpdate.ProTxHash)
 			r.peers[peerUpdate.NodeID] = ps
+		} else if len(peerUpdate.ProTxHash) > 0 {
+			ps.SetProTxHash(peerUpdate.ProTxHash)
 		}
 
 		if !ps.IsRunning() {

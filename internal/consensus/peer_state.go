@@ -368,10 +368,20 @@ func (ps *PeerState) RecordBlockPart() int {
 
 // BlockPartsSent returns the number of useful block parts the peer has sent us.
 func (ps *PeerState) BlockPartsSent() int {
+	ps.mtx.RLock()
+	defer ps.mtx.RUnlock()
+
+	return ps.Stats.BlockParts
+}
+
+func (ps *PeerState) SetProTxHash(proTxHash types.ProTxHash) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
 
-	return ps.Stats.BlockParts
+	if len(ps.ProTxHash) > 0 {
+		ps.logger.Debug("proTxHash for the peer is already defined, overwriting", "old", ps.ProTxHash, "new", proTxHash)
+	}
+	ps.ProTxHash = proTxHash
 }
 
 // SetHasVote sets the given vote as known by the peer
