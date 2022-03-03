@@ -85,8 +85,8 @@ func (ps *PeerState) IsRunning() bool {
 // GetRoundState returns a shallow copy of the PeerRoundState. There's no point
 // in mutating it since it won't change PeerState.
 func (ps *PeerState) GetRoundState() *cstypes.PeerRoundState {
-	ps.mtx.Lock()
-	defer ps.mtx.Unlock()
+	ps.mtx.RLock()
+	defer ps.mtx.RUnlock()
 
 	prs := ps.PRS.Copy()
 	return &prs
@@ -151,14 +151,15 @@ func (ps *PeerState) InitProposalBlockParts(partSetHeader types.PartSetHeader) {
 
 // SetHasProposalBlockPart sets the given block part index as known for the peer.
 func (ps *PeerState) SetHasProposalBlockPart(height int64, round int32, index int) {
-	ps.mtx.Lock()
-	defer ps.mtx.Unlock()
-
-	if ps.PRS.Height != height || ps.PRS.Round != round {
+	prs := ps.GetRoundState()
+	if prs.Height != height || prs.Round != round {
+		ps.logger.Debug("SetHasProposalBlockPart height/round mismatch",
+			"height", height, "round", round, "peer_height", prs.Height, "peer_round", prs.Round)
 		return
 	}
-
+	ps.mtx.Lock()
 	ps.PRS.ProposalBlockParts.SetIndex(index, true)
+	ps.mtx.Unlock()
 }
 
 // PickVoteToSend picks a vote to send to the peer. It will return true if a
@@ -589,8 +590,8 @@ func (ps *PeerState) String() string {
 
 // StringIndented returns a string representation of the PeerState
 func (ps *PeerState) StringIndented(indent string) string {
-	ps.mtx.Lock()
-	defer ps.mtx.Unlock()
+	ps.mtx.RLock()
+	defer ps.mtx.RUnlock()
 	return fmt.Sprintf(`PeerState{
 %s  Key        %v
 %s  RoundState %v
