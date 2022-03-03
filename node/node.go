@@ -492,12 +492,12 @@ func makeNode(cfg *config.Config,
 		}
 
 		if cfg.P2P.PexReactor {
-			pexReactor = createPEXReactorAndAddToSwitch(addrBook, cfg, sw, logger)
+			pexReactor = createPEXReactorAndAddToSwitch(addrBook, cfg, sw, logger.With("module", "pex"))
 		}
 	} else {
 		addrBook = nil
 		if cfg.P2P.PexReactor {
-			pexReactor, err = createPEXReactorV2(cfg, logger, peerManager, router)
+			pexReactor, err = createPEXReactorV2(cfg, logger.With("module", "pex"), peerManager, router)
 			if err != nil {
 				return nil, err
 			}

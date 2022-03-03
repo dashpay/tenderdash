@@ -16,6 +16,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/internal/proxy"
 	sm "github.com/tendermint/tendermint/internal/state"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -279,7 +280,7 @@ func (h *Handshaker) Handshake(proxyApp proxy.AppConns) (uint64, error) {
 	if blockHeight < 0 {
 		return 0, fmt.Errorf("got a negative last block height (%d) from the app", blockHeight)
 	}
-	appHash := res.LastBlockAppHash
+	appHash := tmbytes.HexBytes(res.LastBlockAppHash)
 
 	h.logger.Info("ABCI Handshake App Info",
 		"height", blockHeight,

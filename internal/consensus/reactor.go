@@ -63,7 +63,7 @@ var (
 				SendQueueCapacity:   64,
 				RecvBufferCapacity:  128,
 				RecvMessageCapacity: maxMsgSize,
-				MaxSendBytes:        150,
+				MaxSendBytes:        4096,
 			},
 		},
 		VoteSetBitsChannel: {
