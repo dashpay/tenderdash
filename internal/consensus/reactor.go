@@ -289,7 +289,7 @@ func (r *Reactor) SwitchToConsensus(state sm.State, skipWAL bool) {
 
 	// NOTE: The line below causes broadcastNewRoundStepRoutine() to broadcast a
 	// NewRoundStepMessage.
-	r.state.updateToState(state, nil, r.Logger)
+	r.state.updateToState(state, nil)
 
 	r.mtx.Lock()
 	r.waitSync = false
@@ -681,8 +681,9 @@ OUTER_LOOP:
 func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 	if vote, ok := ps.PickVoteToSend(votes); ok {
 		psJSON, _ := ps.ToJSON()
+		voteProto := vote.ToProto()
 		ps.logger.Debug(
-			"Sending vote message",
+			"sending vote message",
 			"ps", psJSON,
 			"peer_id", ps.peerID,
 			"vote", vote,
@@ -690,11 +691,12 @@ func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 			"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
 			"height", vote.Height,
 			"round", vote.Round,
+			"size", voteProto.Size(),
 		)
 		r.voteCh.Out <- p2p.Envelope{
 			To: ps.peerID,
 			Message: &tmcons.Vote{
-				Vote: vote.ToProto(),
+				Vote: voteProto,
 			},
 		}
 
@@ -709,11 +711,12 @@ func (r *Reactor) sendCommit(ps *PeerState, commit *types.Commit) bool {
 	if commit == nil {
 		return false
 	}
-	r.Logger.Debug("sending commit message", "ps", ps, "commit", commit)
+	protoCommit := commit.ToProto()
+	r.Logger.Debug("sending commit message", "height", commit.Height, "round", commit.Round, "size", protoCommit.Size())
 	r.voteCh.Out <- p2p.Envelope{
 		To: ps.peerID,
 		Message: &tmcons.Commit{
-			Commit: commit.ToProto(),
+			Commit: protoCommit,
 		},
 	}
 	ps.SetHasCommit(commit)
@@ -835,7 +838,7 @@ OUTER_LOOP:
 		// special catchup logic -- if peer is lagging by height 1, send LastCommit
 		if prs.Height != 0 && rs.Height == prs.Height+1 && wasValidator {
 			if r.pickSendVote(ps, rs.LastPrecommits) {
-				logger.Debug("picked rs.LastCommit to send", "height", prs.Height)
+				logger.Debug("picked rs.LastPrecommits to send", "height", prs.Height)
 				continue OUTER_LOOP
 			}
 		}

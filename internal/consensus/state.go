@@ -213,7 +213,7 @@ func NewStateWithLogger(
 		cs.reconstructLastCommit(state)
 	}
 
-	cs.updateToState(state, nil, logger)
+	cs.updateToState(state, nil)
 
 	// NOTE: we do not call scheduleRound0 yet, we do that upon Start()
 	cs.BaseService = *service.NewBaseService(logger, "State", cs)
@@ -653,7 +653,7 @@ func (cs *State) reconstructLastCommit(state sm.State) {
 
 // Updates State and increments height to match that of state.
 // The round becomes 0 and cs.Step becomes cstypes.RoundStepNewHeight.
-func (cs *State) updateToState(state sm.State, commit *types.Commit, logger log.Logger) {
+func (cs *State) updateToState(state sm.State, commit *types.Commit) {
 	if cs.CommitRound > -1 && 0 < cs.Height && cs.Height != state.LastBlockHeight {
 		panic(fmt.Sprintf(
 			"updateToState() expected state height of %v but found %v",
@@ -683,11 +683,8 @@ func (cs *State) updateToState(state sm.State, commit *types.Commit, logger log.
 		// signal the new round step, because other services (eg. txNotifier)
 		// depend on having an up-to-date peer state!
 		if state.LastBlockHeight <= cs.state.LastBlockHeight {
-			if logger == nil {
-				logger = cs.Logger
-			}
-			if logger != nil {
-				logger.Debug(
+			if cs.Logger != nil {
+				cs.Logger.Debug(
 					"ignoring updateToState()",
 					"new_height", state.LastBlockHeight+1,
 					"old_height", cs.state.LastBlockHeight+1,
@@ -736,8 +733,8 @@ func (cs *State) updateToState(state sm.State, commit *types.Commit, logger log.
 		height = state.InitialHeight
 	}
 
-	if logger != nil {
-		logger.Debug("updating state height", "newHeight", height)
+	if cs.Logger != nil {
+		cs.Logger.Debug("updating state height", "newHeight", height)
 	}
 
 	// RoundState fields
@@ -2036,7 +2033,7 @@ func (cs *State) applyCommit(commit *types.Commit, logger log.Logger) {
 	cs.RecordMetrics(height, block)
 
 	// NewHeightStep!
-	cs.updateToState(stateCopy, commit, logger)
+	cs.updateToState(stateCopy, commit)
 
 	fail.Fail() // XXX
 
@@ -2199,7 +2196,12 @@ func (cs *State) addProposalBlockPart(
 
 	// Blocks might be reused, so round mismatch is OK
 	if cs.Height != height {
-		cs.Logger.Debug("received block part from wrong height", "height", height, "round", round)
+		cs.Logger.Debug(
+			"received block part from wrong height",
+			"height", cs.Height,
+			"round", cs.Round,
+			"msg_height", height,
+			"msg_round", round)
 		return false, nil
 	}
 
