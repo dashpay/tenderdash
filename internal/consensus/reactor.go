@@ -996,9 +996,6 @@ OUTER_LOOP:
 func (r *Reactor) processPeerUpdate(peerUpdate p2p.PeerUpdate) {
 	r.Logger.Debug("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status, "peer_protxhash", peerUpdate.ProTxHash.ShortString())
 
-	r.mtx.Lock()
-	defer r.mtx.Unlock()
-
 	switch peerUpdate.Status {
 	case p2p.PeerStatusUp:
 		// Do not allow starting new broadcasting goroutines after reactor shutdown
@@ -1008,12 +1005,26 @@ func (r *Reactor) processPeerUpdate(peerUpdate p2p.PeerUpdate) {
 		if !r.IsRunning() {
 			return
 		}
+		r.peerUp(peerUpdate, 3)
+	case p2p.PeerStatusDown:
+		r.peerDown(peerUpdate)
+	}
+}
+
+// peerUp starts the peer. If it returns true, the function should be executed one more time
+func (r *Reactor) peerUp(peerUpdate p2p.PeerUpdate, retries int) {
+	if retries < 1 {
+		r.Logger.Error("peer up failed: max retries exceeded", "peer", peerUpdate.NodeID)
+		return
+	}
+
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
 
 		var (
 			ps *PeerState
 			ok bool
 		)
-
 		ps, ok = r.peers[peerUpdate.NodeID]
 		if !ok {
 			ps = NewPeerState(r.Logger, peerUpdate.NodeID, peerUpdate.ProTxHash)
@@ -1021,6 +1032,18 @@ func (r *Reactor) processPeerUpdate(peerUpdate p2p.PeerUpdate) {
 		} else if len(peerUpdate.ProTxHash) > 0 {
 			ps.SetProTxHash(peerUpdate.ProTxHash)
 		}
+
+	select {
+	case <-ps.closer.Done():
+		// Hmm, someone is closing this peer right now, let's wait and retry
+		// Note: we run this in a goroutine to not block main goroutine in ps.broadcastWG.Wait()
+		go func() {
+			ps.broadcastWG.Wait()
+			r.peerUp(peerUpdate, retries-1)
+		}()
+		return
+	default:
+	}
 
 		if !ps.IsRunning() {
 			// Set the peer state's closer to signal to all spawned goroutines to exit
@@ -1041,12 +1064,16 @@ func (r *Reactor) processPeerUpdate(peerUpdate p2p.PeerUpdate) {
 				go r.sendNewRoundStepMessage(ps.peerID)
 			}
 		}
+}
 
-	case p2p.PeerStatusDown:
+func (r *Reactor) peerDown(peerUpdate p2p.PeerUpdate) {
+	r.mtx.Lock()
 		ps, ok := r.peers[peerUpdate.NodeID]
 		if ok && ps.IsRunning() {
 			// signal to all spawned goroutines for the peer to gracefully exit
 			ps.closer.Close()
+	}
+	r.mtx.Unlock()
 
 			go func() {
 				// Wait for all spawned broadcast goroutines to exit before marking the
@@ -1059,8 +1086,6 @@ func (r *Reactor) processPeerUpdate(peerUpdate p2p.PeerUpdate) {
 
 				ps.SetRunning(false)
 			}()
-		}
-	}
 }
 
 // handleStateMessage handles envelopes sent from peers on the StateChannel.
@@ -1202,7 +1227,7 @@ func (r *Reactor) handleVoteMessage(envelope p2p.Envelope, msgI Message) error {
 
 	ps, ok := r.GetPeerState(envelope.From)
 	if !ok || ps == nil {
-		r.Logger.Debug("failed to find peer state")
+		logger.Debug("failed to find peer state")
 		return nil
 	}
 
@@ -1211,7 +1236,7 @@ func (r *Reactor) handleVoteMessage(envelope p2p.Envelope, msgI Message) error {
 		return nil
 	}
 
-	logger.Debug("vote channel processing", "msg", envelope.Message)
+	logger.Debug("vote channel processing", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
 	switch msg := envelope.Message.(type) {
 	case *tmcons.Commit:
 		c, err := types.CommitFromProto(msg.Commit)
