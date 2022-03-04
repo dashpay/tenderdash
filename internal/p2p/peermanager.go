@@ -647,7 +647,7 @@ func (m *PeerManager) Dialed(address NodeAddress, peerOpts ...func(*peerInfo)) e
 // that, we'll need to get the remote address after all, but as noted above that
 // can't be the remote endpoint since that will usually have the wrong port
 // number.
-func (m *PeerManager) Accepted(peerID types.NodeID) error {
+func (m *PeerManager) Accepted(peerID types.NodeID, peerOpts ...func(*peerInfo)) error {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
@@ -679,6 +679,9 @@ func (m *PeerManager) Accepted(peerID types.NodeID) error {
 	}
 
 	peer.LastConnected = time.Now().UTC()
+	for _, opt := range peerOpts {
+		opt(&peer)
+	}
 	if err := m.store.Set(peer); err != nil {
 		return err
 	}

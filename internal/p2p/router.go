@@ -633,8 +633,9 @@ func (r *Router) openConnection(ctx context.Context, conn Connection) {
 		return
 	}
 
+	proTxHashSetter := SetProTxHashToPeerInfo(peerInfo.ProTxHash)
 	if err := r.runWithPeerMutex(func() error {
-		err := r.peerManager.Accepted(peerInfo.NodeID)
+		err := r.peerManager.Accepted(peerInfo.NodeID, proTxHashSetter)
 		if err != nil {
 			return err
 		}
