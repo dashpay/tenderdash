@@ -61,7 +61,7 @@ var (
 				ID:                  byte(VoteChannel),
 				Priority:            10,
 				SendQueueCapacity:   64,
-				RecvBufferCapacity:  128,
+				RecvBufferCapacity:  4096,
 				RecvMessageCapacity: maxMsgSize,
 				MaxSendBytes:        4096,
 			},
@@ -526,7 +526,8 @@ func (r *Reactor) gossipDataForCatchup(rs *cstypes.RoundState, prs *cstypes.Peer
 				Part:   *partProto,
 			},
 		}
-
+		// time.Sleep(r.state.config.PeerGossipSleepDuration)
+		ps.SetHasProposalBlockPart(prs.Height, prs.Round, index)
 		return
 	}
 
@@ -810,6 +811,8 @@ OUTER_LOOP:
 		isValidator := rs.Validators.HasProTxHash(ps.ProTxHash)
 		wasValidator := rs.LastValidators.HasProTxHash(ps.ProTxHash)
 
+		// logger.Debug("peer validator status", "peer", ps.peerID, "peer_protxhash", ps.ProTxHash, "isValidator", isValidator, "wasValidator", wasValidator)
+
 		switch logThrottle {
 		case 1: // first sleep
 			logThrottle = 2
@@ -817,17 +820,19 @@ OUTER_LOOP:
 			logThrottle = 0
 		}
 
-		// if height matches, then send LastCommit, Prevotes, and Precommits
-		if rs.Height == prs.Height {
-			if !wasValidator {
-				//	If there are lastCommits to send...
-				if prs.Step == cstypes.RoundStepNewHeight && prs.Height+1 == rs.Height && !prs.HasCommit {
-					if r.sendCommit(ps, rs.LastCommit) {
-						logger.Info("Sending LastCommit to non-validator node")
-						continue OUTER_LOOP
-					}
+		if !wasValidator {
+			//	If there are lastCommits to send...
+			//prs.Step == cstypes.RoundStepNewHeight &&
+			if prs.Height+1 == rs.Height && !prs.HasCommit {
+				if r.sendCommit(ps, rs.LastCommit) {
+					logger.Info("Sending LastCommit to non-validator node")
+					continue OUTER_LOOP
 				}
 			}
+		}
+
+		// if height matches, then send LastCommit, Prevotes, and Precommits
+		if rs.Height == prs.Height {
 			if isValidator {
 				if r.gossipVotesForHeight(rs, prs, ps) {
 					continue OUTER_LOOP
@@ -844,13 +849,16 @@ OUTER_LOOP:
 		}
 
 		// catchup logic -- if peer is lagging by more than 1, send Commit
+		// note that peer can ignore a commit if it doesn't have a complete block,
+		// so we might need to resend it until it notifies us that it's all right
 		blockStoreBase := r.state.blockStore.Base()
-		if blockStoreBase > 0 && prs.Height != 0 && rs.Height >= prs.Height+2 && prs.Height >= blockStoreBase {
+		if rs.Height >= prs.Height+2 && prs.Height >= blockStoreBase && !prs.HasCommit {
 			// Load the block commit for prs.Height, which contains precommit
 			// signatures for prs.Height.
 			if commit := r.state.blockStore.LoadBlockCommit(prs.Height); commit != nil {
 				if r.sendCommit(ps, commit) {
 					logger.Debug("picked Catchup commit to send", "height", prs.Height)
+					// time.Sleep(r.state.config.PeerGossipSleepDuration)
 					continue OUTER_LOOP
 				}
 			}
@@ -1024,17 +1032,17 @@ func (r *Reactor) peerUp(peerUpdate p2p.PeerUpdate, retries int) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
-		var (
-			ps *PeerState
-			ok bool
-		)
-		ps, ok = r.peers[peerUpdate.NodeID]
-		if !ok {
-			ps = NewPeerState(r.Logger, peerUpdate.NodeID, peerUpdate.ProTxHash)
-			r.peers[peerUpdate.NodeID] = ps
-		} else if len(peerUpdate.ProTxHash) > 0 {
-			ps.SetProTxHash(peerUpdate.ProTxHash)
-		}
+	var (
+		ps *PeerState
+		ok bool
+	)
+	ps, ok = r.peers[peerUpdate.NodeID]
+	if !ok {
+		ps = NewPeerState(r.Logger, peerUpdate.NodeID, peerUpdate.ProTxHash)
+		r.peers[peerUpdate.NodeID] = ps
+	} else if len(peerUpdate.ProTxHash) > 0 {
+		ps.SetProTxHash(peerUpdate.ProTxHash)
+	}
 
 	select {
 	case <-ps.closer.Done():
@@ -1048,47 +1056,47 @@ func (r *Reactor) peerUp(peerUpdate p2p.PeerUpdate, retries int) {
 	default:
 	}
 
-		if !ps.IsRunning() {
-			// Set the peer state's closer to signal to all spawned goroutines to exit
-			// when the peer is removed. We also set the running state to ensure we
-			// do not spawn multiple instances of the same goroutines and finally we
-			// set the waitgroup counter so we know when all goroutines have exited.
-			ps.broadcastWG.Add(3)
-			ps.SetRunning(true)
+	if !ps.IsRunning() {
+		// Set the peer state's closer to signal to all spawned goroutines to exit
+		// when the peer is removed. We also set the running state to ensure we
+		// do not spawn multiple instances of the same goroutines and finally we
+		// set the waitgroup counter so we know when all goroutines have exited.
+		ps.broadcastWG.Add(3)
+		ps.SetRunning(true)
 
-			// start goroutines for this peer
-			go r.gossipDataRoutine(ps)
-			go r.gossipVotesAndCommitRoutine(ps)
-			go r.queryMaj23Routine(ps)
+		// start goroutines for this peer
+		go r.gossipDataRoutine(ps)
+		go r.gossipVotesAndCommitRoutine(ps)
+		go r.queryMaj23Routine(ps)
 
-			// Send our state to the peer. If we're block-syncing, broadcast a
-			// RoundStepMessage later upon SwitchToConsensus().
-			if !r.waitSync {
-				go r.sendNewRoundStepMessage(ps.peerID)
-			}
+		// Send our state to the peer. If we're block-syncing, broadcast a
+		// RoundStepMessage later upon SwitchToConsensus().
+		if !r.waitSync {
+			go r.sendNewRoundStepMessage(ps.peerID)
 		}
+	}
 }
 
 func (r *Reactor) peerDown(peerUpdate p2p.PeerUpdate) {
 	r.mtx.Lock()
-		ps, ok := r.peers[peerUpdate.NodeID]
-		if ok && ps.IsRunning() {
-			// signal to all spawned goroutines for the peer to gracefully exit
-			ps.closer.Close()
+	ps, ok := r.peers[peerUpdate.NodeID]
+	if ok && ps.IsRunning() {
+		// signal to all spawned goroutines for the peer to gracefully exit
+		ps.closer.Close()
 	}
 	r.mtx.Unlock()
 
-			go func() {
-				// Wait for all spawned broadcast goroutines to exit before marking the
-				// peer state as no longer running and removal from the peers map.
-				ps.broadcastWG.Wait()
+	go func() {
+		// Wait for all spawned broadcast goroutines to exit before marking the
+		// peer state as no longer running and removal from the peers map.
+		ps.broadcastWG.Wait()
 
-				r.mtx.Lock()
-				delete(r.peers, peerUpdate.NodeID)
-				r.mtx.Unlock()
+		r.mtx.Lock()
+		delete(r.peers, peerUpdate.NodeID)
+		r.mtx.Unlock()
 
-				ps.SetRunning(false)
-			}()
+		ps.SetRunning(false)
+	}()
 }
 
 // handleStateMessage handles envelopes sent from peers on the StateChannel.
@@ -1197,6 +1205,8 @@ func (r *Reactor) handleDataMessage(envelope p2p.Envelope, msgI Message) error {
 		return nil
 	}
 
+	logger.Debug("data channel processing", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
+
 	switch msg := envelope.Message.(type) {
 	case *tmcons.Proposal:
 		pMsg := msgI.(*ProposalMessage)
@@ -1210,10 +1220,14 @@ func (r *Reactor) handleDataMessage(envelope p2p.Envelope, msgI Message) error {
 	case *tmcons.BlockPart:
 		bpMsg := msgI.(*BlockPartMessage)
 
-		ps.SetHasProposalBlockPart(bpMsg.Height, bpMsg.Round, int(bpMsg.Part.Index))
-		r.Metrics.BlockParts.With("peer_id", string(envelope.From)).Add(1)
-		r.state.peerMsgQueue <- msgInfo{bpMsg, envelope.From}
+		logger.Debug("data channel info SetHasProposalBlockPart", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
 
+		ps.SetHasProposalBlockPart(bpMsg.Height, bpMsg.Round, int(bpMsg.Part.Index))
+		logger.Debug("data channel info metrics", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
+		r.Metrics.BlockParts.With("peer_id", string(envelope.From)).Add(1)
+
+		r.state.peerMsgQueue <- msgInfo{bpMsg, envelope.From}
+		logger.Debug("data channel info sent to peerMsgQueue", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
 	default:
 		return fmt.Errorf("received unknown message on DataChannel: %T", msg)
 	}
@@ -1359,7 +1373,7 @@ func (r *Reactor) handleMessage(chID p2p.ChannelID, envelope p2p.Envelope) (err 
 		return err
 	}
 
-	// r.Logger.Debug("received message", "ch_id", chID, "msg", msgI, "peer", envelope.From)
+	r.Logger.Debug("received message on channel", "ch_id", chID, "msg", msgI, "peer", envelope.From, "type", fmt.Sprintf("%T", msgI))
 
 	switch chID {
 	case StateChannel:

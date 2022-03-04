@@ -930,10 +930,23 @@ func (cs *State) handleMsg(mi msgInfo, fromReplay bool) {
 				"received block part from wrong round",
 				"height", cs.Height,
 				"cs_round", cs.Round,
+				"block_height", msg.Height,
 				"block_round", msg.Round,
 			)
 			err = nil
 		}
+
+		cs.Logger.Debug(
+			"received block part",
+			"height", cs.Height,
+			"round", cs.Round,
+			"block_height", msg.Height,
+			"block_round", msg.Round,
+			"added", added,
+			"peer", peerID,
+			"index", msg.Part.Index,
+			"error", err,
+		)
 
 	case *VoteMessage:
 		// attempt to add the vote and dupeout the validator if its a duplicate signature
@@ -957,14 +970,34 @@ func (cs *State) handleMsg(mi msgInfo, fromReplay bool) {
 		// TODO: If rs.Height == vote.Height && rs.Round < vote.Round,
 		// the peer is sending us CatchupCommit precommits.
 		// We could make note of this and help filter in broadcastHasVoteMessage().
+		cs.Logger.Debug(
+			"received vote",
+			"height", cs.Height,
+			"cs_round", cs.Round,
+			"vote_height", msg.Vote.Height,
+			"vote_round", msg.Vote.Round,
+			"added", added,
+			"peer", peerID,
+			"error", err,
+		)
 	case *CommitMessage:
+
 		// attempt to add the commit and dupeout the validator if its a duplicate signature
-		// if the vote gives us a 2/3-any or 2/3-one, we transition
+		// if the vote gives us a 2/3-any or 2/3-one, we transitio
 		added, err = cs.tryAddCommit(msg.Commit, peerID)
 		if added {
 			cs.statsMsgQueue <- mi
 		}
-
+		cs.Logger.Debug(
+			"received commit",
+			"height", cs.Height,
+			"cs_round", cs.Round,
+			"commit_height", msg.Commit.Height,
+			"commit_round", msg.Commit.Round,
+			"added", added,
+			"peer", peerID,
+			"error", err,
+		)
 	default:
 		cs.Logger.Error("unknown msg type", "type", fmt.Sprintf("%T", msg))
 		return
@@ -2211,8 +2244,10 @@ func (cs *State) addProposalBlockPart(
 		// then receive parts from the previous round - not necessarily a bad peer.
 		cs.Logger.Debug(
 			"received a block part when we are not expecting any",
-			"height", height,
-			"round", round,
+			"height", cs.Height,
+			"round", cs.Round,
+			"block_height", height,
+			"block_round", round,
 			"index", part.Index,
 			"peer", peerID,
 		)
