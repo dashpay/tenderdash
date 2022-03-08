@@ -1201,6 +1201,7 @@ func (cs *State) needProofBlock(height int64) bool {
 // Enter (CreateEmptyBlocks, CreateEmptyBlocksInterval > 0 ):
 // 		after enterNewRound(height,round), after timeout of CreateEmptyBlocksInterval
 // Enter (!CreateEmptyBlocks) : after enterNewRound(height,round), once txs are in the mempool
+// Caller should hold cs.mtx lock
 func (cs *State) enterPropose(height int64, round int32) {
 	logger := cs.Logger.With("height", height, "round", round)
 
@@ -2494,13 +2495,9 @@ func (cs *State) addVote(vote *types.Vote, peerID types.NodeID) (added bool, err
 				"error adding vote",
 				"vote_height", vote.Height,
 				"vote_round", vote.Round,
-				"vote_type", vote.Type,
-				"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
-				"vote_block_key", vote.BlockID.Key(),
-				"vote_block_signature", vote.BlockSignature,
-				"vote_state_signature", vote.StateSignature,
-				"val_index", vote.ValidatorIndex,
+				"vote", vote,
 				"cs_height", cs.Height,
+				"error", err,
 			)
 		}
 		// Either duplicate, or error upon cs.Votes.AddByIndex()
