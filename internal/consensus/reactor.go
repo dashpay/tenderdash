@@ -1221,14 +1221,10 @@ func (r *Reactor) handleDataMessage(envelope p2p.Envelope, msgI Message) error {
 	case *tmcons.BlockPart:
 		bpMsg := msgI.(*BlockPartMessage)
 
-		logger.Debug("data channel info SetHasProposalBlockPart", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
-
 		ps.SetHasProposalBlockPart(bpMsg.Height, bpMsg.Round, int(bpMsg.Part.Index))
-		logger.Debug("data channel info metrics", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
 		r.Metrics.BlockParts.With("peer_id", string(envelope.From)).Add(1)
-
 		r.state.peerMsgQueue <- msgInfo{bpMsg, envelope.From}
-		logger.Debug("data channel info sent to peerMsgQueue", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
+
 	default:
 		return fmt.Errorf("received unknown message on DataChannel: %T", msg)
 	}

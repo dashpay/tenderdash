@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rs/zerolog"
+
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	ce "github.com/tendermint/tendermint/crypto/encoding"
@@ -161,6 +163,20 @@ func (v *Validator) ShortStringBasic() string {
 	return fmt.Sprintf("Validator{%v %v}",
 		v.ProTxHash.ShortString(),
 		v.PubKey)
+}
+
+// MarshalZerologObject implements zerolog.LogObjectMarshaler
+func (v *Validator) MarshalZerologObject(e *zerolog.Event) {
+	e.Str("protxhash", v.ProTxHash.ShortString())
+	e.Int64("voting_power", v.VotingPower)
+	e.Int64("proposer_priority", v.ProposerPriority)
+	e.Str("address", v.NodeAddress.String())
+	pubkey := v.PubKey.HexString()
+	if len(pubkey) > 8 {
+		pubkey = pubkey[:8]
+	}
+	e.Str("pub_key", pubkey)
+	e.Str("pub_key_type", v.PubKey.Type())
 }
 
 // ValidatorListString returns a prettified validator list for logging purposes.
