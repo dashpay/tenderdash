@@ -13,7 +13,7 @@ import (
 	deadlock "github.com/sasha-s/go-deadlock"
 )
 
-const LockTimeout = 15 * time.Second
+const LockTimeout = 30 * time.Second
 
 // muxHelper adds some debugging features, like timeout support, to mutex locks.
 type muxHelper struct {
