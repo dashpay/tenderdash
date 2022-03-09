@@ -1079,24 +1079,25 @@ func (r *Reactor) peerUp(peerUpdate p2p.PeerUpdate, retries int) {
 
 func (r *Reactor) peerDown(peerUpdate p2p.PeerUpdate) {
 	r.mtx.Lock()
+	defer r.mtx.Unlock()
+
 	ps, ok := r.peers[peerUpdate.NodeID]
 	if ok && ps.IsRunning() {
 		// signal to all spawned goroutines for the peer to gracefully exit
 		ps.closer.Close()
+
+		go func() {
+			// Wait for all spawned broadcast goroutines to exit before marking the
+			// peer state as no longer running and removal from the peers map.
+			ps.broadcastWG.Wait()
+
+			r.mtx.Lock()
+			delete(r.peers, peerUpdate.NodeID)
+			r.mtx.Unlock()
+
+			ps.SetRunning(false)
+		}()
 	}
-	r.mtx.Unlock()
-
-	go func() {
-		// Wait for all spawned broadcast goroutines to exit before marking the
-		// peer state as no longer running and removal from the peers map.
-		ps.broadcastWG.Wait()
-
-		r.mtx.Lock()
-		delete(r.peers, peerUpdate.NodeID)
-		r.mtx.Unlock()
-
-		ps.SetRunning(false)
-	}()
 }
 
 // handleStateMessage handles envelopes sent from peers on the StateChannel.
