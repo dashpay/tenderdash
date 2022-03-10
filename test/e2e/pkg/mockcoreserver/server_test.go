@@ -4,7 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"io/ioutil"
-	"log"
+
+	"github.com/tendermint/tendermint/libs/log"
+
 	"net/http"
 	"net/url"
 	"testing"
@@ -15,6 +17,7 @@ import (
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/privval"
@@ -23,6 +26,7 @@ import (
 func TestServer(t *testing.T) {
 	ctx := context.Background()
 	srv := NewHTTPServer(":9981")
+	logger := log.TestingLogger()
 	go func() {
 		srv.Start()
 	}()
@@ -50,7 +54,7 @@ func TestServer(t *testing.T) {
 		srv.
 			On("/test").
 			Expect(func(req *http.Request) error {
-				log.Println(req.URL.String())
+				logger.Debug("mock core server request received", "url", req.URL.String())
 				return nil
 			}).
 			Expect(And(BodyShouldBeEmpty(), QueryShouldHave(tc.query))).
@@ -80,7 +84,8 @@ func TestDashCoreSignerPingMethod(t *testing.T) {
 	go func() {
 		srv.Start()
 	}()
-	dashCoreRPCClient, err := dashcore.NewRPCClient(addr, "root", "root")
+	logger := log.TestingLogger()
+	dashCoreRPCClient, err := dashcore.NewRPCClient(addr, "root", "root", logger)
 	assert.NoError(t, err)
 	client, err := privval.NewDashCoreSignerClient(dashCoreRPCClient, btcjson.LLMQType_5_60)
 	assert.NoError(t, err)
@@ -126,7 +131,8 @@ func TestGetPubKey(t *testing.T) {
 		srv.Start()
 	}()
 
-	dashCoreRPCClient, err := dashcore.NewRPCClient(addr, "root", "root")
+	logger := log.TestingLogger()
+	dashCoreRPCClient, err := dashcore.NewRPCClient(addr, "root", "root", logger)
 	assert.NoError(t, err)
 	client, err := privval.NewDashCoreSignerClient(dashCoreRPCClient, btcjson.LLMQType_5_60)
 	assert.NoError(t, err)

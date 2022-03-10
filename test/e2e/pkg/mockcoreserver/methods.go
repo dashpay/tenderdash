@@ -66,7 +66,6 @@ func WithQuorumVerifyMethod(cs CoreServer, times int) MethodFunc {
 			&cmd.QuorumHash,
 			&cmd.Signature,
 		)
-		fmt.Printf("cmd is %v\n", cmd)
 		if err != nil {
 			return nil, err
 		}

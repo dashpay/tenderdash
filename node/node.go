@@ -192,7 +192,7 @@ func makeNode(cfg *config.Config,
 				llmqType = btcjson.LLMQType_100_67
 			}*/
 		if dashCoreRPCClient == nil {
-			rpcClient, err := DefaultDashCoreRPCClient(cfg)
+			rpcClient, err := DefaultDashCoreRPCClient(cfg, logger.With("module", dashcore.ModuleName))
 			if err != nil {
 				return nil, fmt.Errorf("failed to create Dash Core RPC client %w", err)
 			}
@@ -599,11 +599,12 @@ func makeNode(cfg *config.Config,
 }
 
 // DefaultDashCoreRPCClient returns RPC client for the Dash Core node
-func DefaultDashCoreRPCClient(cfg *config.Config) (dashcore.Client, error) {
+func DefaultDashCoreRPCClient(cfg *config.Config, logger log.Logger) (dashcore.Client, error) {
 	return dashcore.NewRPCClient(
 		cfg.PrivValidatorCoreRPCHost,
 		cfg.BaseConfig.PrivValidatorCoreRPCUsername,
 		cfg.BaseConfig.PrivValidatorCoreRPCPassword,
+		logger,
 	)
 }
 
