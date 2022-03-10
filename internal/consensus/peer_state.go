@@ -397,7 +397,7 @@ func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.Sign
 
 	ps.logger.Debug(
 		"peerState setHasVote",
-		"peer_id", ps.peerID,
+		"peer", ps.peerID,
 		"height", height,
 		"round", round,
 		"peer_height", ps.PRS.Height,

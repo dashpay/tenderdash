@@ -1247,12 +1247,12 @@ func (cs *State) enterPropose(height int64, round int32) {
 
 	// if not a validator, we're done
 	if !cs.Validators.HasProTxHash(proTxHash) {
-		logger.Debug("propose step; this node is not a validator", "proTxHash", proTxHash, "vals", cs.Validators)
+		logger.Debug("propose step; this node is not a validator", "proTxHash", proTxHash.ShortString(), "vals", cs.Validators)
 		return
 	}
 
 	if cs.isProposer(proTxHash) {
-		logger.Debug("propose step; our turn to propose", "proposer", proTxHash, "privValidator",
+		logger.Debug("propose step; our turn to propose", "proposer", proTxHash.ShortString(), "privValidator",
 			cs.privValidator)
 		cs.decideProposal(height, round)
 	} else {
