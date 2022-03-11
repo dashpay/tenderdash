@@ -2002,6 +2002,15 @@ func (cs *State) addCommit(commit *types.Commit) (added bool, err error) {
 	return added, err
 }
 
+// PublishCommitEvent ...
+func (cs *State) PublishCommitEvent(commit *types.Commit) error {
+	if err := cs.eventBus.PublishEventCommit(types.EventDataCommit{Commit: commit}); err != nil {
+		return err
+	}
+	cs.evsw.FireEvent(types.EventCommitValue, commit)
+	return nil
+}
+
 func (cs *State) applyCommit(commit *types.Commit, logger log.Logger) {
 	logger.Info("applying commit", "commit", commit)
 
