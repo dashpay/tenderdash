@@ -240,7 +240,7 @@ func (n *Network) MakeNode(t *testing.T, proTxHash crypto.ProTxHash, opts NodeOp
 		NodeID:     nodeID,
 		ListenAddr: "0.0.0.0:0", // FIXME: We have to fake this for now.
 		Moniker:    string(nodeID),
-		ProTxHash:  proTxHash,
+		ProTxHash:  proTxHash.Copy(),
 	}
 
 	transport := n.memoryNetwork.CreateTransport(nodeID)

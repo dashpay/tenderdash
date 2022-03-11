@@ -1038,7 +1038,8 @@ func (r *Reactor) peerUp(peerUpdate p2p.PeerUpdate, retries int) {
 	)
 	ps, ok = r.peers[peerUpdate.NodeID]
 	if !ok {
-		ps = NewPeerState(r.Logger, peerUpdate.NodeID, peerUpdate.ProTxHash)
+		ps = NewPeerState(r.Logger, peerUpdate.NodeID)
+		ps.SetProTxHash(peerUpdate.ProTxHash)
 		r.peers[peerUpdate.NodeID] = ps
 	} else if len(peerUpdate.ProTxHash) > 0 {
 		ps.SetProTxHash(peerUpdate.ProTxHash)

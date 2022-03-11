@@ -15,6 +15,7 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	p2pproto "github.com/tendermint/tendermint/proto/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
@@ -51,6 +52,12 @@ type PeerUpdate struct {
 	Status PeerStatus
 	// ProTxHash is accessible only for validator
 	ProTxHash types.ProTxHash
+}
+
+// SetProTxHash copies `protxhash` into `PeerUpdate.ProTxHash`
+func (pu *PeerUpdate) SetProTxHash(protxhash types.ProTxHash) {
+	pu.ProTxHash = make(tmbytes.HexBytes, len(protxhash))
+	copy(pu.ProTxHash, protxhash)
 }
 
 // PeerUpdates is a peer update subscription with notifications about peer
@@ -709,8 +716,8 @@ func (m *PeerManager) Ready(peerID types.NodeID) {
 			Status: PeerStatusUp,
 		}
 		peer, ok := m.store.Get(peerID)
-		if ok {
-			pu.ProTxHash = peer.ProTxHash
+		if ok && len(peer.ProTxHash) > 0 {
+			pu.SetProTxHash(peer.ProTxHash)
 		}
 		m.broadcast(pu)
 	}
@@ -789,7 +796,7 @@ func (m *PeerManager) Disconnected(peerID types.NodeID) {
 		}
 		peer, ok := m.store.Get(peerID)
 		if ok && len(peer.ProTxHash) > 0 {
-			pu.ProTxHash = peer.ProTxHash
+			pu.SetProTxHash(peer.ProTxHash)
 		}
 		m.broadcast(pu)
 	}
@@ -1082,7 +1089,7 @@ func (m *PeerManager) SetHeight(peerID types.NodeID, height int64) error {
 // SetProTxHashToPeerInfo sets a proTxHash in peerInfo.proTxHash to keep this value in a store
 func SetProTxHashToPeerInfo(proTxHash types.ProTxHash) func(info *peerInfo) {
 	return func(info *peerInfo) {
-		info.ProTxHash = proTxHash
+		info.ProTxHash = proTxHash.Copy()
 	}
 }
 
@@ -1304,6 +1311,7 @@ func (p *peerInfo) Copy() peerInfo {
 		addressInfoCopy := addressInfo.Copy()
 		c.AddressInfo[i] = &addressInfoCopy
 	}
+	c.ProTxHash = p.ProTxHash.Copy()
 	return c
 }
 
