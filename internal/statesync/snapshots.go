@@ -21,7 +21,7 @@ type snapshot struct {
 	CoreChainLockedHeight uint32
 	Format                uint32
 	Chunks                uint32
-	Hash                  []byte
+	Hash                  tmbytes.HexBytes
 	Metadata              []byte
 
 	trustedAppHash tmbytes.HexBytes // populated by light client

@@ -49,7 +49,7 @@ type PeerState struct {
 }
 
 // NewPeerState returns a new PeerState for the given node ID.
-func NewPeerState(logger log.Logger, peerID types.NodeID, proTxHash types.ProTxHash) *PeerState {
+func NewPeerState(logger log.Logger, peerID types.NodeID) *PeerState {
 	return &PeerState{
 		peerID: peerID,
 		logger: logger,
@@ -60,8 +60,7 @@ func NewPeerState(logger log.Logger, peerID types.NodeID, proTxHash types.ProTxH
 			LastCommitRound:    -1,
 			CatchupCommitRound: -1,
 		},
-		Stats:     &peerStateStats{},
-		ProTxHash: proTxHash,
+		Stats: &peerStateStats{},
 	}
 }
 
@@ -379,10 +378,7 @@ func (ps *PeerState) SetProTxHash(proTxHash types.ProTxHash) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
 
-	if len(ps.ProTxHash) > 0 {
-		ps.logger.Debug("proTxHash for the peer is already defined, overwriting", "old", ps.ProTxHash, "new", proTxHash)
-	}
-	ps.ProTxHash = proTxHash
+	ps.ProTxHash = proTxHash.Copy()
 }
 
 // SetHasVote sets the given vote as known by the peer
@@ -397,7 +393,7 @@ func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.Sign
 
 	ps.logger.Debug(
 		"peerState setHasVote",
-		"peer_id", ps.peerID,
+		"peer", ps.peerID,
 		"height", height,
 		"round", round,
 		"peer_height", ps.PRS.Height,

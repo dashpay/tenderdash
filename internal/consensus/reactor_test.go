@@ -24,6 +24,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/encoding"
 	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
+
 	"github.com/tendermint/tendermint/internal/mempool"
 	mempoolv0 "github.com/tendermint/tendermint/internal/mempool/v0"
 	"github.com/tendermint/tendermint/internal/p2p"
@@ -82,10 +83,11 @@ func setup(t *testing.T, numNodes int, states []*State, size int) *reactorTestSu
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	i := 0
-	for nodeID, node := range rts.network.Nodes {
+	for i := 0; i < numNodes; i++ {
 		state := states[i]
-
+		node := rts.network.NodeByProTxHash(state.privValidatorProTxHash)
+		require.NotNil(t, node)
+		nodeID := node.NodeID
 		reactor := NewReactor(
 			state.Logger.With("node", nodeID),
 			state,
@@ -117,8 +119,6 @@ func setup(t *testing.T, numNodes int, states []*State, size int) *reactorTestSu
 
 		require.NoError(t, reactor.Start())
 		require.True(t, reactor.IsRunning())
-
-		i++
 	}
 
 	require.Len(t, rts.reactors, numNodes)

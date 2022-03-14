@@ -303,12 +303,12 @@ func WithUpdateHeights(updateHeights map[string]crypto.QuorumHash) FilePVOption 
 }
 
 // WithProTxHash ...
-func WithProTxHash(proTxHash []byte) FilePVOption {
+func WithProTxHash(proTxHash types.ProTxHash) FilePVOption {
 	return func(filePV *FilePV) error {
 		if len(proTxHash) != crypto.ProTxHashSize {
 			return fmt.Errorf("error setting incorrect proTxHash size in NewFilePV")
 		}
-		filePV.Key.ProTxHash = proTxHash
+		filePV.Key.ProTxHash = proTxHash.Copy()
 		return nil
 	}
 }

@@ -53,6 +53,11 @@ type PeerUpdate struct {
 	ProTxHash types.ProTxHash
 }
 
+// SetProTxHash copies `protxhash` into `PeerUpdate.ProTxHash`
+func (pu *PeerUpdate) SetProTxHash(protxhash types.ProTxHash) {
+	pu.ProTxHash = protxhash.Copy()
+}
+
 // PeerUpdates is a peer update subscription with notifications about peer
 // events (currently just status changes).
 type PeerUpdates struct {
@@ -709,8 +714,8 @@ func (m *PeerManager) Ready(peerID types.NodeID) {
 			Status: PeerStatusUp,
 		}
 		peer, ok := m.store.Get(peerID)
-		if ok {
-			pu.ProTxHash = peer.ProTxHash
+		if ok && len(peer.ProTxHash) > 0 {
+			pu.SetProTxHash(peer.ProTxHash)
 		}
 		m.broadcast(pu)
 	}
@@ -789,7 +794,7 @@ func (m *PeerManager) Disconnected(peerID types.NodeID) {
 		}
 		peer, ok := m.store.Get(peerID)
 		if ok && len(peer.ProTxHash) > 0 {
-			pu.ProTxHash = peer.ProTxHash
+			pu.SetProTxHash(peer.ProTxHash)
 		}
 		m.broadcast(pu)
 	}
@@ -1082,7 +1087,7 @@ func (m *PeerManager) SetHeight(peerID types.NodeID, height int64) error {
 // SetProTxHashToPeerInfo sets a proTxHash in peerInfo.proTxHash to keep this value in a store
 func SetProTxHashToPeerInfo(proTxHash types.ProTxHash) func(info *peerInfo) {
 	return func(info *peerInfo) {
-		info.ProTxHash = proTxHash
+		info.ProTxHash = proTxHash.Copy()
 	}
 }
 
@@ -1304,6 +1309,7 @@ func (p *peerInfo) Copy() peerInfo {
 		addressInfoCopy := addressInfo.Copy()
 		c.AddressInfo[i] = &addressInfoCopy
 	}
+	c.ProTxHash = p.ProTxHash.Copy()
 	return c
 }
 
