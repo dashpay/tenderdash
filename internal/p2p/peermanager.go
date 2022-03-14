@@ -15,7 +15,6 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	p2pproto "github.com/tendermint/tendermint/proto/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
@@ -56,8 +55,7 @@ type PeerUpdate struct {
 
 // SetProTxHash copies `protxhash` into `PeerUpdate.ProTxHash`
 func (pu *PeerUpdate) SetProTxHash(protxhash types.ProTxHash) {
-	pu.ProTxHash = make(tmbytes.HexBytes, len(protxhash))
-	copy(pu.ProTxHash, protxhash)
+	pu.ProTxHash = protxhash.Copy()
 }
 
 // PeerUpdates is a peer update subscription with notifications about peer

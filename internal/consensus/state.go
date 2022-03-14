@@ -912,6 +912,8 @@ func (cs *State) handleMsg(mi msgInfo, fromReplay bool) {
 
 	msg, peerID := mi.Msg, mi.PeerID
 
+	cs.Logger.Debug("consensus handleMsg", "type", fmt.Sprintf("%T", mi.Msg))
+
 	switch msg := msg.(type) {
 	case *ProposalMessage:
 		// will not cause transition.
@@ -1990,16 +1992,25 @@ func (cs *State) addCommit(commit *types.Commit) (added bool, err error) {
 	cs.applyCommit(commit, cs.Logger)
 
 	// This will relay the commit to peers
-	if err := cs.eventBus.PublishEventCommit(types.EventDataCommit{Commit: commit}); err != nil {
+	if err := cs.PublishCommitEvent(commit); err != nil {
 		return added, err
 	}
-	cs.evsw.FireEvent(types.EventCommitValue, commit)
 
 	if cs.config.SkipTimeoutCommit {
 		cs.enterNewRound(cs.Height, 0)
 	}
 
 	return added, err
+}
+
+// PublishCommitEvent ...
+func (cs *State) PublishCommitEvent(commit *types.Commit) error {
+	cs.Logger.Debug("publish commit event", "commit", commit)
+	if err := cs.eventBus.PublishEventCommit(types.EventDataCommit{Commit: commit}); err != nil {
+		return err
+	}
+	cs.evsw.FireEvent(types.EventCommitValue, commit)
+	return nil
 }
 
 func (cs *State) applyCommit(commit *types.Commit, logger log.Logger) {
@@ -2469,7 +2480,7 @@ func (cs *State) addVote(vote *types.Vote, peerID types.NodeID) (added bool, err
 	// Ignore vote if we do not have public keys to verify votes
 	if !cs.Validators.HasPublicKeys {
 		added = false
-		cs.Logger.Debug("vote received on non-validator, ignoring it", "vote_height", vote.Height,
+		cs.Logger.Debug("vote received on non-validator, ignoring it", "vote", vote,
 			"cs_height", cs.Height, "peer", peerID)
 		return
 	}
@@ -2702,10 +2713,11 @@ func (cs *State) signAddVote(msgType tmproto.SignedMsgType, hash []byte, header 
 	}
 
 	// TODO: pass pubKey to signVote
+	start := time.Now()
 	vote, err := cs.signVote(msgType, hash, header)
 	if err == nil {
 		cs.sendInternalMessage(msgInfo{&VoteMessage{vote}, ""})
-		cs.Logger.Debug("signed and pushed vote", "height", cs.Height, "round", cs.Round, "vote", vote)
+		cs.Logger.Debug("signed and pushed vote", "height", cs.Height, "round", cs.Round, "vote", vote, "took", time.Since(start).String())
 		return vote
 	}
 

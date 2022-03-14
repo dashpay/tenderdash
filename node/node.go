@@ -285,7 +285,7 @@ func makeNode(cfg *config.Config,
 	// and replays any blocks as necessary to sync tendermint with the app.
 	consensusLogger := logger.With("module", "consensus")
 	if len(proTxHash) > 0 {
-		consensusLogger = consensusLogger.With("proTxHash", proTxHash.ShortString())
+		consensusLogger = consensusLogger.With("node_proTxHash", proTxHash.ShortString())
 	}
 	proposedAppVersion := uint64(0)
 	if !stateSync {
@@ -513,7 +513,7 @@ func makeNode(cfg *config.Config,
 	// Start Dash connection executor
 	var validatorConnExecutor *dashquorum.ValidatorConnExecutor
 	if len(proTxHash) > 0 {
-		vcLogger := logger.With("proTxHash", proTxHash.ShortString(), "module", "ValidatorConnExecutor")
+		vcLogger := logger.With("node_proTxHash", proTxHash.ShortString(), "module", "ValidatorConnExecutor")
 		dcm := p2p.NewRouterDashDialer(peerManager, vcLogger)
 		validatorConnExecutor, err = dashquorum.NewValidatorConnExecutor(
 			proTxHash,

@@ -384,6 +384,7 @@ func (r *Reactor) broadcastHasVoteMessage(vote *types.Vote) {
 			Index:  vote.ValidatorIndex,
 		},
 	}
+	r.Logger.Debug("sent HasVoteMessage broadcast", "vote", vote)
 }
 
 // Broadcasts HasCommitMessage to peers that care.
@@ -395,6 +396,8 @@ func (r *Reactor) broadcastHasCommitMessage(commit *types.Commit) {
 			Round:  commit.Round,
 		},
 	}
+
+	r.Logger.Debug("sent HasCommitMessage broadcast", "commit", commit)
 }
 
 // subscribeToBroadcastEvents subscribes for new round steps and votes using the
@@ -693,6 +696,7 @@ func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 			"height", vote.Height,
 			"round", vote.Round,
 			"size", voteProto.Size(),
+			"isValidator", r.state.Validators.HasProTxHash(vote.ValidatorProTxHash),
 		)
 		r.voteCh.Out <- p2p.Envelope{
 			To: ps.peerID,
@@ -809,9 +813,15 @@ OUTER_LOOP:
 		prs := ps.GetRoundState()
 
 		isValidator := rs.Validators.HasProTxHash(ps.ProTxHash)
-		wasValidator := rs.LastValidators.HasProTxHash(ps.ProTxHash)
 
-		// logger.Debug("peer validator status", "peer", ps.peerID, "peer_protxhash", ps.ProTxHash, "isValidator", isValidator, "wasValidator", wasValidator)
+		// ptx, _ := r.state.privValidator.GetProTxHash(context.TODO())
+		// logger.Debug(
+		// 	"peer validator status",
+		// 	"peer", ps.peerID,
+		// 	"peer_protxhash", ps.ProTxHash.ShortString(),
+		// 	"isValidator", isValidator,
+		// 	"my_protxhash", ptx.ShortString(),
+		// ) //"wasValidator", wasValidator)
 
 		switch logThrottle {
 		case 1: // first sleep
@@ -820,30 +830,18 @@ OUTER_LOOP:
 			logThrottle = 0
 		}
 
-		if !wasValidator {
-			//	If there are lastCommits to send...
-			//prs.Step == cstypes.RoundStepNewHeight &&
-			if prs.Height+1 == rs.Height && !prs.HasCommit {
-				if r.sendCommit(ps, rs.LastCommit) {
-					logger.Info("Sending LastCommit to non-validator node")
-					continue OUTER_LOOP
-				}
+		//	If there are lastCommits to send...
+		//prs.Step == cstypes.RoundStepNewHeight &&
+		if prs.Height+1 == rs.Height && !prs.HasCommit {
+			if r.sendCommit(ps, rs.LastCommit) {
+				logger.Info("Sending LastCommit to peer node", "commit", rs.LastCommit)
+				continue OUTER_LOOP
 			}
 		}
 
 		// if height matches, then send LastCommit, Prevotes, and Precommits
-		if rs.Height == prs.Height {
-			if isValidator {
-				if r.gossipVotesForHeight(rs, prs, ps) {
-					continue OUTER_LOOP
-				}
-			}
-		}
-
-		// special catchup logic -- if peer is lagging by height 1, send LastCommit
-		if prs.Height != 0 && rs.Height == prs.Height+1 && wasValidator {
-			if r.pickSendVote(ps, rs.LastPrecommits) {
-				logger.Debug("picked rs.LastPrecommits to send", "height", prs.Height)
+		if isValidator && rs.Height == prs.Height {
+			if r.gossipVotesForHeight(rs, prs, ps) {
 				continue OUTER_LOOP
 			}
 		}
@@ -869,10 +867,13 @@ OUTER_LOOP:
 			logThrottle = 1
 			logger.Debug(
 				"no votes to send; sleeping",
+				"peer_protxhash", ps.ProTxHash,
 				"rs.Height", rs.Height,
 				"prs.Height", prs.Height,
 				"localPV", rs.Votes.Prevotes(rs.Round).BitArray(), "peerPV", prs.Prevotes,
 				"localPC", rs.Votes.Precommits(rs.Round).BitArray(), "peerPC", prs.Precommits,
+				"isValidator", isValidator,
+				"validators", rs.Validators,
 			)
 		} else if logThrottle == 2 {
 			logThrottle = 1
@@ -1371,7 +1372,7 @@ func (r *Reactor) handleMessage(chID p2p.ChannelID, envelope p2p.Envelope) (err 
 		return err
 	}
 
-	r.Logger.Debug("received message on channel", "ch_id", chID, "msg", msgI, "peer", envelope.From, "type", fmt.Sprintf("%T", msgI))
+	// r.Logger.Debug("received message on channel", "ch_id", chID, "msg", msgI, "peer", envelope.From, "type", fmt.Sprintf("%T", msgI))
 
 	switch chID {
 	case StateChannel:
