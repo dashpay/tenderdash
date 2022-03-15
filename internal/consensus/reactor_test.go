@@ -721,6 +721,7 @@ func (u *validatorUpdater) removeValidatorsAt(height int64, count int) (*privVal
 func (u *validatorUpdater) updateStatePrivVals(privValUpdate *privValUpdate, height int64) {
 	for i, proTxHash := range privValUpdate.newProTxHashes {
 		j := u.stateIndexMap[proTxHash.String()]
+		u.states[j].mtx.Lock()
 		u.states[j].privValidator.UpdatePrivateKey(
 			context.Background(),
 			privValUpdate.privKeys[i],
@@ -728,6 +729,7 @@ func (u *validatorUpdater) updateStatePrivVals(privValUpdate *privValUpdate, hei
 			privValUpdate.thresholdPubKey,
 			height,
 		)
+		u.states[j].mtx.Unlock()
 	}
 	u.lastProTxHashes = privValUpdate.newProTxHashes
 }
