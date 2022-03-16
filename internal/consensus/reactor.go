@@ -564,8 +564,10 @@ OUTER_LOOP:
 			(prs.HasCommit && rs.ProposalBlockParts != nil) {
 			if !isValidator && prs.HasCommit && prs.ProposalBlockParts == nil {
 				// We can assume if they have the commit then they should have the same part set header
-				ps.PRS.ProposalBlockPartSetHeader = rs.ProposalBlockParts.Header()
-				ps.PRS.ProposalBlockParts = bits.NewBitArray(int(rs.ProposalBlockParts.Header().Total))
+				ps.UpdateRoundState(func(prs *cstypes.PeerRoundState) {
+					prs.ProposalBlockPartSetHeader = rs.ProposalBlockParts.Header()
+					prs.ProposalBlockParts = bits.NewBitArray(int(rs.ProposalBlockParts.Header().Total))
+				})
 			}
 			if index, ok := rs.ProposalBlockParts.BitArray().Sub(prs.ProposalBlockParts.Copy()).PickRandom(); ok {
 				part := rs.ProposalBlockParts.GetPart(index)
