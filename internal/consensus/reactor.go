@@ -671,7 +671,7 @@ func (r *Reactor) sendProposalBlockPart(ps *PeerState, part *types.Part, height 
 		return fmt.Errorf("failed to convert block part to proto, error: %w", err)
 	}
 
-	r.Logger.Debug("sending block part for catchup", "round", round, "height", height, "index", part.Index)
+	r.Logger.Debug("sending block part for catchup", "round", round, "height", height, "index", part.Index, "peer", ps.peerID)
 	r.dataCh.Out <- p2p.Envelope{
 		To: ps.peerID,
 		Message: &tmcons.BlockPart{
@@ -722,7 +722,7 @@ func (r *Reactor) sendCommit(ps *PeerState, commit *types.Commit) error {
 		return fmt.Errorf("attempt to send nil commit to peer %s", ps.peerID)
 	}
 	protoCommit := commit.ToProto()
-	r.Logger.Debug("sending commit message", "height", commit.Height, "round", commit.Round, "size", protoCommit.Size())
+	r.Logger.Debug("sending commit message", "height", commit.Height, "round", commit.Round, "peer", ps.peerID)
 	r.voteCh.Out <- p2p.Envelope{
 		To: ps.peerID,
 		Message: &tmcons.Commit{
@@ -1302,17 +1302,19 @@ func (r *Reactor) handleVoteMessage(envelope p2p.Envelope, msgI Message) error {
 		r.state.peerMsgQueue <- msgInfo{cMsg, envelope.From}
 	case *tmcons.Vote:
 		r.state.mtx.RLock()
+		isValidator := r.state.Validators.HasProTxHash(r.state.privValidatorProTxHash)
 		height, valSize, lastCommitSize := r.state.Height, r.state.Validators.Size(), r.state.LastPrecommits.Size()
 		r.state.mtx.RUnlock()
 
-		vMsg := msgI.(*VoteMessage)
+		if isValidator { // ignore votes on non-validator nodes; TODO don't even send it
+			vMsg := msgI.(*VoteMessage)
 
-		ps.EnsureVoteBitArrays(height, valSize)
-		ps.EnsureVoteBitArrays(height-1, lastCommitSize)
-		ps.SetHasVote(vMsg.Vote)
+			ps.EnsureVoteBitArrays(height, valSize)
+			ps.EnsureVoteBitArrays(height-1, lastCommitSize)
+			ps.SetHasVote(vMsg.Vote)
 
-		r.state.peerMsgQueue <- msgInfo{vMsg, envelope.From}
-
+			r.state.peerMsgQueue <- msgInfo{vMsg, envelope.From}
+		}
 	default:
 		return fmt.Errorf("received unknown message on VoteChannel: %T", msg)
 	}

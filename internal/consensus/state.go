@@ -983,7 +983,6 @@ func (cs *State) handleMsg(mi msgInfo, fromReplay bool) {
 			"error", err,
 		)
 	case *CommitMessage:
-
 		// attempt to add the commit and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transitio
 		added, err = cs.tryAddCommit(msg.Commit, peerID)
@@ -1967,14 +1966,19 @@ func (cs *State) verifyCommit(
 	block, blockParts := cs.ProposalBlock, cs.ProposalBlockParts
 
 	if !blockParts.HasHeader(commit.BlockID.PartSetHeader) {
-		panic("expected ProposalBlockParts header to be commit header")
+		return false, fmt.Errorf("expected ProposalBlockParts header to be commit header")
 	}
 	if !block.HashesTo(commit.BlockID.Hash) {
-		panic("cannot finalize commit; proposal block does not hash to commit hash")
+		cs.Logger.Error("proposal block does not hash to commit hash",
+			"block", block,
+			"commit", commit,
+			"complete_proposal", cs.isProposalComplete(),
+		)
+		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
 	if err := cs.blockExec.ValidateBlock(cs.state, block); err != nil {
-		panic(fmt.Errorf("+2/3 committed an invalid block: %w", err))
+		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
 	return true, nil
 }
