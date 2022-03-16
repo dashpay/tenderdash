@@ -557,7 +557,7 @@ OUTER_LOOP:
 		rs := r.state.GetRoundState()
 		prs := ps.GetRoundState()
 
-		isValidator := r.isValidator(ps)
+		isValidator := r.isValidator(ps.ProTxHash)
 
 		// Send proposal Block parts?
 		if (isValidator && rs.ProposalBlockParts.HasHeader(prs.ProposalBlockPartSetHeader)) ||
@@ -701,7 +701,7 @@ func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 			"height", vote.Height,
 			"round", vote.Round,
 			"size", voteProto.Size(),
-			"isValidator", r.state.Validators.HasProTxHash(vote.ValidatorProTxHash),
+			"isValidator", r.isValidator(vote.ValidatorProTxHash),
 		)
 		r.voteCh.Out <- p2p.Envelope{
 			To: ps.peerID,
@@ -842,7 +842,7 @@ OUTER_LOOP:
 		rs := r.state.GetRoundState()
 		prs := ps.GetRoundState()
 
-		isValidator := r.isValidator(ps)
+		isValidator := r.isValidator(ps.ProTxHash)
 
 		// ptx, _ := r.state.privValidator.GetProTxHash(context.TODO())
 		// logger.Debug(
@@ -931,7 +931,7 @@ OUTER_LOOP:
 		}
 
 		// If peer is not a validator, we do nothing
-		if !r.isValidator(ps) {
+		if !r.isValidator(ps.ProTxHash) {
 			time.Sleep(r.state.config.PeerQueryMaj23SleepDuration)
 			continue OUTER_LOOP
 		}
@@ -1032,9 +1032,9 @@ OUTER_LOOP:
 	}
 }
 
-func (r *Reactor) isValidator(ps *PeerState) bool {
+func (r *Reactor) isValidator(proTxHash types.ProTxHash) bool {
 	_, vset := r.state.GetValidatorSet()
-	return vset.HasProTxHash(ps.ProTxHash)
+	return vset.HasProTxHash(proTxHash)
 }
 
 // processPeerUpdate process a peer update message. For new or reconnected peers,
