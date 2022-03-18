@@ -18,6 +18,7 @@ import (
 	"github.com/tendermint/tendermint/internal/libs/fail"
 	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
 	sm "github.com/tendermint/tendermint/internal/state"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmevents "github.com/tendermint/tendermint/libs/events"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/libs/log"
@@ -1325,10 +1326,16 @@ func (cs *State) defaultDecideProposal(height int64, round int32) {
 		return
 	}
 	messageBytes := types.ProposalBlockSignBytes(cs.state.ChainID, p)
-	cs.Logger.Debug("signing proposal", "height", proposal.Height, "round", proposal.Round,
-		"proposerProTxHash", proTxHash.ShortString(), "publicKey", pubKey.Bytes(),
-		"proposalBytes", messageBytes, "quorumType",
-		validatorsAtProposalHeight.QuorumType, "quorumHash", validatorsAtProposalHeight.QuorumHash)
+	cs.Logger.Debug(
+		"signing proposal",
+		"height", proposal.Height,
+		"round", proposal.Round,
+		"proposer_ProTxHash", proTxHash.ShortString(),
+		"publicKey", pubKey.HexString(),
+		"proposalBytes", tmbytes.HexBytes(messageBytes),
+		"quorumType", validatorsAtProposalHeight.QuorumType,
+		"quorumHash", validatorsAtProposalHeight.QuorumHash,
+	)
 	// wait the max amount we would wait for a proposal
 	ctx, cancel := context.WithTimeout(context.TODO(), cs.config.TimeoutPropose)
 	defer cancel()
@@ -1348,7 +1355,7 @@ func (cs *State) defaultDecideProposal(height int64, round int32) {
 			cs.sendInternalMessage(msgInfo{&BlockPartMessage{cs.Height, cs.Round, part}, ""})
 		}
 
-		cs.Logger.Debug("signed proposal", "height", height, "round", round, "proposal", proposal)
+		cs.Logger.Debug("signed proposal", "height", height, "round", round, "proposal", proposal, "pubKey", pubKey.HexString())
 	} else if !cs.replayMode {
 		cs.Logger.Error("propose step; failed signing proposal", "height", height, "round", round, "err", err)
 	}
@@ -2200,10 +2207,16 @@ func (cs *State) defaultSetProposal(proposal *types.Proposal) error {
 	case proposer.PubKey != nil:
 		// We are part of the validator set
 		if !proposer.PubKey.VerifySignatureDigest(proposalBlockSignID, proposal.Signature) {
-			cs.Logger.Debug("error verifying signature", "height", proposal.Height,
-				"round", proposal.Round, "proposer", proposer.ProTxHash.ShortString(), "signature", proposal.Signature, "pubkey",
-				proposer.PubKey.Bytes(), "quorumType", cs.state.Validators.QuorumType,
-				"quorumHash", cs.state.Validators.QuorumHash, "proposalSignId", proposalBlockSignID)
+			cs.Logger.Debug(
+				"error verifying signature",
+				"height", proposal.Height,
+				"round", proposal.Round,
+				"proposal", proposal,
+				"proposer", proposer.ProTxHash.ShortString(),
+				"pubkey", proposer.PubKey.HexString(),
+				"quorumType", cs.state.Validators.QuorumType,
+				"quorumHash", cs.state.Validators.QuorumHash,
+				"proposalSignId", tmbytes.HexBytes(proposalBlockSignID))
 			return ErrInvalidProposalSignature
 		}
 	case cs.Commit != nil && cs.Commit.Height == proposal.Height && cs.Commit.Round == proposal.Round:

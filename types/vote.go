@@ -216,7 +216,7 @@ func (vote *Vote) Verify(
 	if !pubKey.VerifySignatureDigest(signID, vote.BlockSignature) {
 		return nil, nil, fmt.Errorf(
 			"%s proTxHash %s pubKey %v vote %v sign bytes %s block signature %s", ErrVoteInvalidBlockSignature.Error(),
-			proTxHash, pubKey, vote, hex.EncodeToString(voteBlockSignBytes), hex.EncodeToString(vote.BlockSignature))
+			proTxHash.ShortString(), pubKey, vote, hex.EncodeToString(voteBlockSignBytes), hex.EncodeToString(vote.BlockSignature))
 	}
 
 	stateSignID := []byte(nil)

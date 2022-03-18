@@ -1093,7 +1093,6 @@ func (vals *ValidatorSet) StringIndentedBasic(indent string) string {
 }
 
 // MarshalZerologObject implements zerolog.LogObjectMarshaler
-
 func (vals *ValidatorSet) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("proposer", vals.GetProposer().ProTxHash.ShortString())
 	e.Str("quorum_hash", vals.QuorumHash.ShortString())
