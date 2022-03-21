@@ -534,7 +534,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		nVals,
 		nPeers,
 		"consensus_val_set_changes_test",
-		func() TimeoutTicker { return NewTimeoutTicker() },
+		newMockTickerFunc(true),
 		newPersistentKVStoreWithPath,
 	)
 	t.Cleanup(cleanup)
