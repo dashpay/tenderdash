@@ -912,9 +912,6 @@ func (cs *State) handleMsg(mi msgInfo, fromReplay bool) {
 	)
 
 	msg, peerID := mi.Msg, mi.PeerID
-
-	cs.Logger.Debug("consensus handleMsg", "type", fmt.Sprintf("%T", mi.Msg))
-
 	switch msg := msg.(type) {
 	case *ProposalMessage:
 		// will not cause transition.
