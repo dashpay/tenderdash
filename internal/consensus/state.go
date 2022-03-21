@@ -985,7 +985,7 @@ func (cs *State) handleMsg(mi msgInfo, fromReplay bool) {
 		)
 	case *CommitMessage:
 		// attempt to add the commit and dupeout the validator if its a duplicate signature
-		// if the vote gives us a 2/3-any or 2/3-one, we transitio
+		// if the vote gives us a 2/3-any or 2/3-one, we transition
 		added, err = cs.tryAddCommit(msg.Commit, peerID)
 		if added {
 			cs.statsMsgQueue <- mi
@@ -1018,11 +1018,11 @@ func (cs *State) handleMsg(mi msgInfo, fromReplay bool) {
 }
 
 func (cs *State) handleTimeout(ti timeoutInfo, rs cstypes.RoundState) {
-	cs.Logger.Debug("received tock", "timeout", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
+	cs.Logger.Debug("received tock", "timeout", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step.String())
 
 	// timeouts must be for current height, round, step
 	if ti.Height != rs.Height || ti.Round < rs.Round || (ti.Round == rs.Round && ti.Step < rs.Step) {
-		cs.Logger.Debug("ignoring tock because we are ahead", "height", rs.Height, "round", rs.Round, "step", rs.Step)
+		cs.Logger.Debug("ignoring tock because we are ahead", "height", rs.Height, "round", rs.Round, "step", rs.Step.String())
 		return
 	}
 
@@ -1301,6 +1301,7 @@ func (cs *State) defaultDecideProposal(height int64, round int32) {
 	proposal := types.NewProposal(height, proposedChainLockHeight, round, cs.ValidRound, propBlockID)
 	p := proposal.ToProto()
 	validatorsAtProposalHeight := cs.state.ValidatorsAtHeight(p.Height)
+	quorumHash := validatorsAtProposalHeight.QuorumHash
 
 	proTxHash, err := cs.privValidator.GetProTxHash(context.Background())
 	if err != nil {
@@ -1312,16 +1313,13 @@ func (cs *State) defaultDecideProposal(height int64, round int32) {
 		)
 		return
 	}
-	pubKey, err := cs.privValidator.GetPubKey(context.Background(), validatorsAtProposalHeight.QuorumHash)
+	pubKey, err := cs.privValidator.GetPubKey(context.Background(), quorumHash)
 	if err != nil {
 		cs.Logger.Error(
 			"propose step; failed signing proposal; couldn't get pubKey",
-			"height",
-			height,
-			"round",
-			round,
-			"err",
-			err,
+			"height", height,
+			"round", round,
+			"err", err,
 		)
 		return
 	}
@@ -1331,10 +1329,10 @@ func (cs *State) defaultDecideProposal(height int64, round int32) {
 		"height", proposal.Height,
 		"round", proposal.Round,
 		"proposer_ProTxHash", proTxHash.ShortString(),
-		"publicKey", pubKey.HexString(),
-		"proposalBytes", tmbytes.HexBytes(messageBytes),
+		"publicKey", tmbytes.HexBytes(pubKey.Bytes()).ShortString(), //pubKey.HexString(),
+		"proposalBytes", tmbytes.HexBytes(messageBytes).ShortString(),
 		"quorumType", validatorsAtProposalHeight.QuorumType,
-		"quorumHash", validatorsAtProposalHeight.QuorumHash,
+		"quorumHash", quorumHash.ShortString(),
 	)
 	// wait the max amount we would wait for a proposal
 	ctx, cancel := context.WithTimeout(context.TODO(), cs.config.TimeoutPropose)
@@ -1342,7 +1340,7 @@ func (cs *State) defaultDecideProposal(height int64, round int32) {
 	if _, err := cs.privValidator.SignProposal(ctx,
 		cs.state.ChainID,
 		validatorsAtProposalHeight.QuorumType,
-		validatorsAtProposalHeight.QuorumHash,
+		quorumHash,
 		p,
 	); err == nil {
 		proposal.Signature = p.Signature
@@ -2195,7 +2193,9 @@ func (cs *State) defaultSetProposal(proposal *types.Proposal) error {
 		cs.state.Validators.QuorumHash,
 	)
 
-	proposer := cs.Validators.GetProposer()
+	vset := cs.Validators
+	height := cs.Height
+	proposer := vset.GetProposer()
 
 	//  fmt.Printf("verifying request Id %s signID %s quorum hash %s proposalBlockSignBytes %s\n",
 	//	hex.EncodeToString(proposalRequestId),
@@ -2210,6 +2210,7 @@ func (cs *State) defaultSetProposal(proposal *types.Proposal) error {
 			cs.Logger.Debug(
 				"error verifying signature",
 				"height", proposal.Height,
+				"cs_height", height,
 				"round", proposal.Round,
 				"proposal", proposal,
 				"proposer", proposer.ProTxHash.ShortString(),
@@ -2437,10 +2438,9 @@ func (cs *State) tryAddVote(vote *types.Vote, peerID types.NodeID) (bool, error)
 func (cs *State) addVote(vote *types.Vote, peerID types.NodeID) (added bool, err error) {
 	cs.Logger.Debug(
 		"adding vote",
-		"vote_height", vote.Height,
-		"vote_type", vote.Type,
-		"val_index", vote.ValidatorIndex,
-		"cs_height", cs.Height,
+		"vote", vote,
+		"height", cs.Height,
+		"round", cs.Round,
 	)
 
 	// A precommit for the previous height?
@@ -2503,16 +2503,10 @@ func (cs *State) addVote(vote *types.Vote, peerID types.NodeID) (added bool, err
 	}
 
 	cs.Logger.Debug(
-		"adding vote",
-		"height", vote.Height,
-		"round", vote.Round,
-		"type", vote.Type,
-		"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
-		"vote_block_key", vote.BlockID.Key(),
-		"vote_block_signature", vote.BlockSignature,
-		"vote_state_signature", vote.StateSignature,
-		"val_index", vote.ValidatorIndex,
-		"cs_height", cs.Height,
+		"adding vote to vote set",
+		"height", cs.Height,
+		"round", cs.Round,
+		"vote", vote,
 	)
 
 	height := cs.Height
@@ -2521,8 +2515,6 @@ func (cs *State) addVote(vote *types.Vote, peerID types.NodeID) (added bool, err
 		if err != nil {
 			cs.Logger.Error(
 				"error adding vote",
-				"vote_height", vote.Height,
-				"vote_round", vote.Round,
 				"vote", vote,
 				"cs_height", cs.Height,
 				"error", err,

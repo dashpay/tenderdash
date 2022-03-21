@@ -329,6 +329,7 @@ func (vote *Vote) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("state_signature", vote.StateSignature.ShortString())
 	e.Str("val_proTxHash", vote.ValidatorProTxHash.ShortString())
 	e.Int32("val_index", vote.ValidatorIndex)
+	e.Bool("nil", vote.BlockID.IsZero())
 }
 
 // FromProto converts a proto generetad type to a handwritten type
