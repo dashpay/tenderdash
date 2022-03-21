@@ -594,6 +594,13 @@ func (cs *State) SetProposalAndBlock(
 	return nil
 }
 
+// PrivValidator returns safely a PrivValidator
+func (cs *State) PrivValidator() types.PrivValidator {
+	cs.mtx.RLock()
+	defer cs.mtx.RUnlock()
+	return cs.privValidator
+}
+
 //------------------------------------------------------------
 // internal functions for managing the state
 
