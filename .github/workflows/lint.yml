@@ -23,7 +23,7 @@ jobs:
         run: |
           echo "::set-output name=hash::$(git --git-dir=third_party/bls-signatures/src/.git rev-parse HEAD)"
         shell: bash
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         id: bls-cache
         with:
           path: ~/bls-cache
@@ -38,7 +38,7 @@ jobs:
           cp -vr /usr/local/include/relic* ~/bls-cache/include
           cp -v /usr/local/lib/libchiabls.a ~/bls-cache/
         if: steps.bls-cache.outputs.cache-hit != 'true'
-      - uses: actions/cache@v2.1.2
+      - uses: actions/cache@v3
         with:
           path: ~/bls-cache
           key: ${{ runner.os }}-bls-${{ steps.bls-revision.outputs.hash }}
@@ -64,7 +64,7 @@ jobs:
             **/**.go
             go.mod
             go.sum
-      - uses: actions/cache@v2
+      - uses: actions/cache@v3
         with:
           path: ~/bls-cache
           key: ${{ runner.os }}-bls-${{ steps.bls-revision.outputs.hash }}
