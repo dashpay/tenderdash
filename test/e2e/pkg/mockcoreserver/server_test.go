@@ -4,15 +4,9 @@ import (
 	"context"
 	"encoding/hex"
 	"io/ioutil"
-
-	"github.com/tendermint/tendermint/libs/log"
-
 	"net/http"
 	"net/url"
 	"testing"
-	"time"
-
-	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
@@ -20,6 +14,8 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
+	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 )
 
@@ -30,7 +26,7 @@ func TestServer(t *testing.T) {
 	go func() {
 		srv.Start()
 	}()
-	time.Sleep(10 * time.Microsecond)
+	srv.WaitReady()
 	testCases := []struct {
 		url   string
 		e     string
@@ -61,7 +57,7 @@ func TestServer(t *testing.T) {
 			Once().
 			Respond(JSONBody(tc.e), JSONContentType())
 		resp, err := http.Get(tc.url)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		data, err := ioutil.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		assert.NoError(t, err)

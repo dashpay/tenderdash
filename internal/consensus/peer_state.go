@@ -91,6 +91,13 @@ func (ps *PeerState) GetRoundState() *cstypes.PeerRoundState {
 	return &prs
 }
 
+// UpdateRoundState ensures that the update function is called using the blocking mechanism
+func (ps *PeerState) UpdateRoundState(fn func(prs *cstypes.PeerRoundState)) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+	fn(&ps.PRS)
+}
+
 // ToJSON returns a json of PeerState.
 func (ps *PeerState) ToJSON() ([]byte, error) {
 	ps.mtx.Lock()

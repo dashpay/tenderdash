@@ -435,6 +435,7 @@ func makeNode(cfg *config.Config,
 		cfg.StateSync.TempDir,
 		nodeMetrics.statesync,
 		dashCoreRPCClient,
+		csState,
 	)
 
 	// add the channel descriptors to both the transports

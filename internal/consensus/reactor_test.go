@@ -96,6 +96,7 @@ func setup(t *testing.T, numNodes int, states []*State, size int) *reactorTestSu
 			node.MakePeerUpdates(t),
 			true,
 		)
+		state.timeoutTicker.SetLogger(state.Logger.With("impl", "TimeoutTicker"))
 
 		reactor.SetEventBus(state.eventBus)
 
@@ -524,6 +525,7 @@ func TestReactorRecordsVotesAndBlockParts(t *testing.T) {
 
 func TestReactorValidatorSetChanges(t *testing.T) {
 	cfg := configSetup(t)
+	cfg.Consensus.TimeoutPropose = 2 * time.Second
 
 	nPeers := 7
 	nVals := 4
@@ -532,7 +534,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		nVals,
 		nPeers,
 		"consensus_val_set_changes_test",
-		newMockTickerFunc(true),
+		func() TimeoutTicker { return NewTimeoutTicker() },
 		newPersistentKVStoreWithPath,
 	)
 	t.Cleanup(cleanup)

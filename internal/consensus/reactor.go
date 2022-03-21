@@ -521,7 +521,7 @@ func (r *Reactor) gossipDataForCatchup(rs *cstypes.RoundState, prs *cstypes.Peer
 	}
 
 	// block parts already delivered -  send commits?
-	if !prs.HasCommit {
+	if rs.Height > 0 && !prs.HasCommit {
 		if err := r.gossipCommit(rs, ps, prs); err != nil {
 			logger.Error("cannot gossip commit to peer", "error", err)
 		} else {
@@ -557,15 +557,17 @@ OUTER_LOOP:
 		rs := r.state.GetRoundState()
 		prs := ps.GetRoundState()
 
-		isValidator := r.isValidator(ps)
+		isValidator := r.isValidator(ps.ProTxHash)
 
 		// Send proposal Block parts?
 		if (isValidator && rs.ProposalBlockParts.HasHeader(prs.ProposalBlockPartSetHeader)) ||
 			(prs.HasCommit && rs.ProposalBlockParts != nil) {
 			if !isValidator && prs.HasCommit && prs.ProposalBlockParts == nil {
 				// We can assume if they have the commit then they should have the same part set header
-				ps.PRS.ProposalBlockPartSetHeader = rs.ProposalBlockParts.Header()
-				ps.PRS.ProposalBlockParts = bits.NewBitArray(int(rs.ProposalBlockParts.Header().Total))
+				ps.UpdateRoundState(func(prs *cstypes.PeerRoundState) {
+					prs.ProposalBlockPartSetHeader = rs.ProposalBlockParts.Header()
+					prs.ProposalBlockParts = bits.NewBitArray(int(rs.ProposalBlockParts.Header().Total))
+				})
 			}
 			if index, ok := rs.ProposalBlockParts.BitArray().Sub(prs.ProposalBlockParts.Copy()).PickRandom(); ok {
 				part := rs.ProposalBlockParts.GetPart(index)
@@ -701,7 +703,7 @@ func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 			"height", vote.Height,
 			"round", vote.Round,
 			"size", voteProto.Size(),
-			"isValidator", r.state.Validators.HasProTxHash(vote.ValidatorProTxHash),
+			"isValidator", r.isValidator(vote.ValidatorProTxHash),
 		)
 		r.voteCh.Out <- p2p.Envelope{
 			To: ps.peerID,
@@ -842,7 +844,7 @@ OUTER_LOOP:
 		rs := r.state.GetRoundState()
 		prs := ps.GetRoundState()
 
-		isValidator := r.isValidator(ps)
+		isValidator := r.isValidator(ps.ProTxHash)
 
 		// ptx, _ := r.state.privValidator.GetProTxHash(context.TODO())
 		// logger.Debug(
@@ -931,7 +933,7 @@ OUTER_LOOP:
 		}
 
 		// If peer is not a validator, we do nothing
-		if !r.isValidator(ps) {
+		if !r.isValidator(ps.ProTxHash) {
 			time.Sleep(r.state.config.PeerQueryMaj23SleepDuration)
 			continue OUTER_LOOP
 		}
@@ -1032,9 +1034,9 @@ OUTER_LOOP:
 	}
 }
 
-func (r *Reactor) isValidator(ps *PeerState) bool {
+func (r *Reactor) isValidator(proTxHash types.ProTxHash) bool {
 	_, vset := r.state.GetValidatorSet()
-	return vset.HasProTxHash(ps.ProTxHash)
+	return vset.HasProTxHash(proTxHash)
 }
 
 // processPeerUpdate process a peer update message. For new or reconnected peers,
