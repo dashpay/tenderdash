@@ -954,7 +954,7 @@ func newStateQuorumManager(states []*State) (*stateQuorumManager, error) {
 	return &manager, nil
 }
 
-func (s *stateQuorumManager) addValidator(height int64, cnt int) (*quorumData, error) { //([]*types.Validator, crypto.PubKey, crypto.QuorumHash) {
+func (s *stateQuorumManager) addValidator(height int64, cnt int) (*quorumData, error) {
 	_, currentValidators := s.states[0].GetValidatorSet()
 	currentValidatorCount := len(currentValidators.Validators)
 	proTxHashes := currentValidators.GetProTxHashes()
