@@ -216,7 +216,7 @@ func (vote *Vote) Verify(
 	if !pubKey.VerifySignatureDigest(signID, vote.BlockSignature) {
 		return nil, nil, fmt.Errorf(
 			"%s proTxHash %s pubKey %v vote %v sign bytes %s block signature %s", ErrVoteInvalidBlockSignature.Error(),
-			proTxHash, pubKey, vote, hex.EncodeToString(voteBlockSignBytes), hex.EncodeToString(vote.BlockSignature))
+			proTxHash.ShortString(), pubKey, vote, hex.EncodeToString(voteBlockSignBytes), hex.EncodeToString(vote.BlockSignature))
 	}
 
 	stateSignID := []byte(nil)
@@ -329,6 +329,7 @@ func (vote *Vote) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("state_signature", vote.StateSignature.ShortString())
 	e.Str("val_proTxHash", vote.ValidatorProTxHash.ShortString())
 	e.Int32("val_index", vote.ValidatorIndex)
+	e.Bool("nil", vote.BlockID.IsZero())
 }
 
 // FromProto converts a proto generetad type to a handwritten type

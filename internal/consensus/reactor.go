@@ -521,7 +521,7 @@ func (r *Reactor) gossipDataForCatchup(rs *cstypes.RoundState, prs *cstypes.Peer
 	}
 
 	// block parts already delivered -  send commits?
-	if !prs.HasCommit {
+	if rs.Height > 0 && !prs.HasCommit {
 		if err := r.gossipCommit(rs, ps, prs); err != nil {
 			logger.Error("cannot gossip commit to peer", "error", err)
 		} else {
