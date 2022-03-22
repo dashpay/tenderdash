@@ -739,8 +739,12 @@ func generatePrivValUpdate(proTxHashes []crypto.ProTxHash) (*privValUpdate, erro
 	}
 	// generate LLMQ data
 	proTxHashes, privKeys, thresholdPubKey := bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThreshold(proTxHashes)
+	pubKeys := make([]crypto.PubKey, len(privKeys))
+	for i, privKey := range privKeys {
+		pubKeys[i] = privKey.PubKey()
+	}
 	// make transactions to update a validator-set
-	tx, err := kvstore.MakeValidatorSetUpdateTx(proTxHashes, privKeys, thresholdPubKey, privVal.quorumHash)
+	tx, err := kvstore.MakeValidatorSetUpdateTx(proTxHashes, pubKeys, thresholdPubKey, privVal.quorumHash)
 	if err != nil {
 		return nil, err
 	}

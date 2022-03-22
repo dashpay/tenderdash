@@ -89,18 +89,6 @@ func (app *PersistentKVStoreApplication) DeliverTx(req types.RequestDeliverTx) t
 		}
 		return types.ResponseDeliverTx{Code: code.CodeTypeOK}
 	}
-	// if it starts with "vals:", update the validator set
-	// format is "val:proTxHash!pubkey!power"
-	switch {
-	case isValidatorTx(req.Tx):
-		// update validators in the merkle tree
-		// and in app.ValUpdates
-		return app.execValidatorTx(req.Tx)
-	case isThresholdPublicKeyTx(req.Tx):
-		return app.execThresholdPublicKeyTx(req.Tx)
-	case isQuorumHashTx(req.Tx):
-		return app.execQuorumHashTx(req.Tx)
-	}
 	return app.app.DeliverTx(req)
 }
 
@@ -156,7 +144,7 @@ func (app *PersistentKVStoreApplication) Query(reqQuery types.RequestQuery) (res
 	}
 }
 
-// Save the validators in the merkle tree
+// InitChain saves the validators in the merkle tree
 func (app *PersistentKVStoreApplication) InitChain(req types.RequestInitChain) types.ResponseInitChain {
 	for _, v := range req.ValidatorSet.ValidatorUpdates {
 		r := app.updateValidatorSet(v)
@@ -258,25 +246,13 @@ func valSetTxKey(proTxHashBase64 string) string {
 	return ValidatorSetChangePrefix + proTxHashBase64
 }
 
-func MakeValSetChangeTx(proTxHash []byte, pubkey *cryptoproto.PublicKey, power int64) []byte {
-	pubStr := ""
-	if pubkey != nil {
-		pk, err := cryptoenc.PubKeyFromProto(*pubkey)
-		if err != nil {
-			panic(err)
-		}
-		pubStr = base64.StdEncoding.EncodeToString(pk.Bytes())
-	}
-	proTxHashStr := base64.StdEncoding.EncodeToString(proTxHash)
-	return []byte(valSetTxKey(proTxHashStr) + "!" + pubStr + "!" + strconv.FormatInt(power, 10))
-}
-
-func MakeValSetRemovalTx(proTxHash []byte) []byte {
-	return MakeValSetChangeTx(proTxHash, nil, 0)
-}
-
 // MakeValidatorSetUpdateTx returns a transaction for updating validator-set in abci application
-func MakeValidatorSetUpdateTx(proTxHashes []crypto.ProTxHash, privKeys []crypto.PrivKey, thresholdPubKey crypto.PubKey, quorumHash crypto.QuorumHash) ([]byte, error) {
+func MakeValidatorSetUpdateTx(
+	proTxHashes []crypto.ProTxHash,
+	pubKeys []crypto.PubKey,
+	thresholdPubKey crypto.PubKey,
+	quorumHash crypto.QuorumHash,
+) ([]byte, error) {
 	buf := bytes.NewBufferString(ValidatorSetUpdatePrefix)
 	_, err := fmt.Fprintf(
 		buf,
@@ -290,8 +266,8 @@ func MakeValidatorSetUpdateTx(proTxHashes []crypto.ProTxHash, privKeys []crypto.
 	for i, proTxHash := range proTxHashes {
 		var pubKey []byte
 		power := 0
-		if i < len(privKeys) {
-			pubKey = privKeys[i].PubKey().Bytes()
+		if i < len(pubKeys) {
+			pubKey = pubKeys[i].Bytes()
 			power = 100
 		}
 		fmt.Fprintf(
@@ -306,20 +282,6 @@ func MakeValidatorSetUpdateTx(proTxHashes []crypto.ProTxHash, privKeys []crypto.
 		}
 	}
 	return buf.Bytes(), nil
-}
-
-func MakeThresholdPublicKeyChangeTx(thresholdPublicKey cryptoproto.PublicKey) []byte {
-	pk, err := cryptoenc.PubKeyFromProto(thresholdPublicKey)
-	if err != nil {
-		panic(err)
-	}
-	pubStr := base64.StdEncoding.EncodeToString(pk.Bytes())
-	return []byte(fmt.Sprintf("tpk:%s", pubStr))
-}
-
-func MakeQuorumHashTx(quorumHash crypto.QuorumHash) []byte {
-	pubStr := base64.StdEncoding.EncodeToString(quorumHash)
-	return []byte(fmt.Sprintf("vqh:%s", pubStr))
 }
 
 func isValidatorSetUpdateTx(tx []byte) bool {
