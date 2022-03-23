@@ -127,8 +127,8 @@ func (bA *BitArray) Or(o *BitArray) *BitArray {
 		return bA.Copy()
 	}
 	o = o.Copy()
-	bA.mtx.Lock()
-	defer bA.mtx.Unlock()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 	c := bA.copyBits(tmmath.MaxInt(bA.Bits, o.Bits))
 	smaller := tmmath.MinInt(len(bA.Elems), len(o.Elems))
 	for i := 0; i < smaller; i++ {
@@ -145,8 +145,8 @@ func (bA *BitArray) And(o *BitArray) *BitArray {
 		return nil
 	}
 	o = o.Copy()
-	bA.mtx.Lock()
-	defer bA.mtx.Unlock()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 	return bA.and(o)
 }
 
@@ -367,7 +367,7 @@ func (bA *BitArray) Update(o *BitArray) {
 	if bA == nil || o == nil {
 		return
 	}
-	o = o.Copy()
+
 	bA.mtx.Lock()
 	copy(bA.Elems, o.Elems)
 	bA.mtx.Unlock()
