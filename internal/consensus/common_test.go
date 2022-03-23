@@ -972,7 +972,7 @@ func (s *stateQuorumManager) remValidators(height int64, cnt int) (*quorumData, 
 	currentValidators := s.validatorSet()
 	currentValidatorCount := len(currentValidators.Validators)
 	if cnt >= currentValidatorCount {
-		panic("you can not remove all validators")
+		return nil, fmt.Errorf("you can not remove all validators")
 	}
 	validatorProTxHashes := currentValidators.GetProTxHashes()
 	removedValidatorProTxHashes := validatorProTxHashes[len(validatorProTxHashes)-cnt:]
