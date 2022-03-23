@@ -616,12 +616,14 @@ func setupSimulator(t *testing.T) *simulatorTestSuite {
 
 	// HEIGHT 6
 	hvsu6, err := sqm.remValidators(height, 1)
+	require.NoError(t, err)
 	height++
 	incrementHeight(vss...)
 	tx, err = hvsu6.tx()
+	require.NoError(t, err)
 
 	err = assertMempool(css[0].txNotifier).CheckTx(context.Background(), tx, nil, mempl.TxInfo{})
-	assert.Nil(t, err)
+	require.NoError(t, err)
 
 	propBlock, _ = css[0].createProposalBlock() // changeProposer(t, cs1, vs2)
 	propBlockParts = propBlock.MakePartSet(partSize)
@@ -794,6 +796,7 @@ func setupSimulator(t *testing.T) *simulatorTestSuite {
 	// HEIGHT 8
 	proTxHashToRemove := hvsu6.validators[len(hvsu6.validators)-1].ProTxHash
 	hvsu8, err := sqm.remValidatorsByProTxHash(height, []crypto.ProTxHash{proTxHashToRemove})
+	require.NoError(t, err)
 	height++
 	incrementHeight(vss...)
 	tx, err = hvsu8.tx()

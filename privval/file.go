@@ -608,19 +608,6 @@ func (pv *FilePV) UpdatePrivateKey(
 	if _, ok := pv.Key.FirstHeightOfQuorums[quorumHash.String()]; !ok {
 		pv.Key.FirstHeightOfQuorums[quorumHash.String()] = strconv.Itoa(int(height))
 	}
-
-	// var hashes = make([]string, 0, len(pv.Key.PrivateKeys))
-	// for hash := range pv.Key.PrivateKeys {
-	// 	hashes = append(hashes, hash[:8])
-	// }
-	// debugging code
-	fmt.Printf(
-		"Update private key node_protxhash=%s quorumHash=%s height=%d quorums=%+v\n",
-		pv.Key.ProTxHash,
-		quorumHash.ShortString(),
-		height,
-		pv.Key.UpdateHeights,
-	)
 }
 
 //------------------------------------------------------------------------------------

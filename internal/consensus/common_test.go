@@ -955,7 +955,7 @@ func newStateQuorumManager(states []*State) (*stateQuorumManager, error) {
 }
 
 func (s *stateQuorumManager) addValidator(height int64, cnt int) (*quorumData, error) {
-	_, currentValidators := s.states[0].GetValidatorSet()
+	currentValidators := s.validatorSet()
 	currentValidatorCount := len(currentValidators.Validators)
 	proTxHashes := currentValidators.GetProTxHashes()
 	for i := 0; i < cnt; i++ {
@@ -969,7 +969,7 @@ func (s *stateQuorumManager) addValidator(height int64, cnt int) (*quorumData, e
 }
 
 func (s *stateQuorumManager) remValidators(height int64, cnt int) (*quorumData, error) {
-	_, currentValidators := s.states[0].GetValidatorSet()
+	currentValidators := s.validatorSet()
 	currentValidatorCount := len(currentValidators.Validators)
 	if cnt >= currentValidatorCount {
 		panic("you can not remove all validators")
@@ -980,7 +980,7 @@ func (s *stateQuorumManager) remValidators(height int64, cnt int) (*quorumData, 
 }
 
 func (s *stateQuorumManager) remValidatorsByProTxHash(height int64, removal []crypto.ProTxHash) (*quorumData, error) {
-	currentValidators := s.states[0].Validators
+	currentValidators := s.validatorSet()
 	removalMap := make(map[string]struct{})
 	for _, proTxHash := range removal {
 		removalMap[proTxHash.String()] = struct{}{}
@@ -1032,6 +1032,11 @@ func (s *stateQuorumManager) updateState(
 	privVal := s.states[j].privValidator
 	privVal.UpdatePrivateKey(context.Background(), privKey, quorumHash, thresholdPubKey, height)
 	return privVal.ExtractIntoValidator(context.Background(), quorumHash), nil
+}
+
+func (s *stateQuorumManager) validatorSet() *types.ValidatorSet {
+	_, vals := s.states[0].GetValidatorSet()
+	return vals
 }
 
 type quorumData struct {
