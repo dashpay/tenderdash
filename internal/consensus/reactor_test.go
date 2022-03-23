@@ -23,6 +23,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
+
 	"github.com/tendermint/tendermint/internal/mempool"
 	mempoolv0 "github.com/tendermint/tendermint/internal/mempool/v0"
 	"github.com/tendermint/tendermint/internal/p2p"
@@ -534,7 +535,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		nVals,
 		nPeers,
 		"consensus_val_set_changes_test",
-		newMockTickerFunc(true),
+		func() TimeoutTicker { return NewTimeoutTicker() },
 		newPersistentKVStoreWithPath,
 	)
 	t.Cleanup(cleanup)
