@@ -1347,7 +1347,7 @@ func (cs *State) defaultDecideProposal(height int64, round int32) {
 		"height", proposal.Height,
 		"round", proposal.Round,
 		"proposer_ProTxHash", proTxHash.ShortString(),
-		"publicKey", tmbytes.HexBytes(pubKey.Bytes()).ShortString(), //pubKey.HexString(),
+		"publicKey", tmbytes.HexBytes(pubKey.Bytes()).ShortString(),
 		"proposalBytes", tmbytes.HexBytes(messageBytes).ShortString(),
 		"quorumType", validatorsAtProposalHeight.QuorumType,
 		"quorumHash", quorumHash.ShortString(),

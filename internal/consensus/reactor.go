@@ -846,15 +846,6 @@ OUTER_LOOP:
 
 		isValidator := r.isValidator(ps.ProTxHash)
 
-		// ptx, _ := r.state.privValidator.GetProTxHash(context.TODO())
-		// logger.Debug(
-		// 	"peer validator status",
-		// 	"peer", ps.peerID,
-		// 	"peer_protxhash", ps.ProTxHash.ShortString(),
-		// 	"isValidator", isValidator,
-		// 	"my_protxhash", ptx.ShortString(),
-		// ) //"wasValidator", wasValidator)
-
 		switch logThrottle {
 		case 1: // first sleep
 			logThrottle = 2
