@@ -137,15 +137,13 @@ func TestValUpdates(t *testing.T) {
 	fullVals := RandValidatorSetUpdate(total)
 	initVals := RandValidatorSetUpdate(nInit)
 
-	var (
-		proTxHashes []crypto.ProTxHash
-		pubKeys     []crypto.PubKey
-	)
-	for _, val := range fullVals.ValidatorUpdates {
-		proTxHashes = append(proTxHashes, val.ProTxHash)
+	proTxHashes := make([]crypto.ProTxHash, len(fullVals.ValidatorUpdates))
+	pubKeys := make([]crypto.PubKey, len(fullVals.ValidatorUpdates))
+	for i, val := range fullVals.ValidatorUpdates {
+		proTxHashes[i] = val.ProTxHash
 		pubKey, err := encoding.PubKeyFromProto(*val.PubKey)
 		require.NoError(t, err)
-		pubKeys = append(pubKeys, pubKey)
+		pubKeys[i] = pubKey
 	}
 	for _, val := range initVals.ValidatorUpdates {
 		proTxHashes = append(proTxHashes, val.ProTxHash)
