@@ -28,7 +28,7 @@ type ValidatorAddress struct {
 
 var (
 	// ErrNoHostname is returned when no hostname is set for the validator address
-	ErrNoHostname error
+	ErrNoHostname = errors.New("no hostname")
 	// ErrNoPort is returned when no valid port is set for the validator address
 	ErrNoPort = errors.New("no port")
 
