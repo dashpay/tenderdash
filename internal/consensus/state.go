@@ -595,6 +595,27 @@ func (cs *State) SetProposalAndBlock(
 	return nil
 }
 
+// InitialHeight returns an initial height
+func (cs *State) InitialHeight() int64 {
+	cs.mtx.RLock()
+	defer cs.mtx.RUnlock()
+	return cs.state.InitialHeight
+}
+
+// CurrentHeight returns a current/last height
+func (cs *State) CurrentHeight() int64 {
+	cs.mtx.RLock()
+	defer cs.mtx.RUnlock()
+	return cs.Height
+}
+
+// HeightVoteSet returns a height-vote-set manager
+func (cs *State) HeightVoteSet() *cstypes.HeightVoteSet {
+	cs.mtx.RLock()
+	defer cs.mtx.RUnlock()
+	return cs.Votes
+}
+
 // PrivValidator returns safely a PrivValidator
 func (cs *State) PrivValidator() types.PrivValidator {
 	cs.mtx.RLock()
