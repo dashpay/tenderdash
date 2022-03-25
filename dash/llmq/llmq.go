@@ -184,8 +184,7 @@ func initShares() func(ld *blsLLMQData) error {
 			if err != nil {
 				return err
 			}
-			pkShare, err := bls.PublicKeyShare(ld.pks, id)
-			ld.pkShares = append(ld.pkShares, pkShare)
+			ld.pkShares = append(ld.pkShares, skShare.PublicKey())
 			if err != nil {
 				return err
 			}
