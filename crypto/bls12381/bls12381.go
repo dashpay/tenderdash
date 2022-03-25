@@ -178,11 +178,12 @@ func GenPrivKeyFromSecret(secret []byte) PrivKey {
 	return privKey.Serialize()
 }
 
+// ReverseBytes returns a reversed sequence bytes of passed slice
 func ReverseBytes(bz []byte) []byte {
-	s := make([]byte, len(bz))
-	copy(s, bz)
-	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
-		s[i], s[j] = s[j], s[i]
+	l := len(bz)
+	s := make([]byte, l)
+	for i, j := 0, l-1; i <= j; i, j = i+1, j-1 {
+		s[i], s[j] = bz[j], bz[i]
 	}
 	return s
 }
