@@ -325,10 +325,10 @@ func RecoverThresholdPublicKeyFromPublicKeys(publicKeys []crypto.PubKey, blsIds 
 	hashes := make([]bls.Hash, len(publicKeys))
 	// Create and validate sigShares for each member and populate BLS-IDs from members into ids
 	for i, publicKey := range publicKeys {
-		publicKeyShare, error := bls.PublicKeyFromBytes(publicKey.Bytes())
-		if error != nil {
+		publicKeyShare, err := bls.PublicKeyFromBytes(publicKey.Bytes())
+		if err != nil {
 			return nil, fmt.Errorf("error recovering public key share from bytes %X (size %d - proTxHash %X): %w",
-				publicKey.Bytes(), len(publicKey.Bytes()), blsIds[i], error)
+				publicKey.Bytes(), len(publicKey.Bytes()), blsIds[i], err)
 		}
 		publicKeyShares[i] = publicKeyShare
 	}
@@ -342,9 +342,9 @@ func RecoverThresholdPublicKeyFromPublicKeys(publicKeys []crypto.PubKey, blsIds 
 		hashes[i] = hash
 	}
 
-	thresholdPublicKey, error := bls.PublicKeyRecover(publicKeyShares, hashes)
-	if error != nil {
-		return nil, fmt.Errorf("error recovering threshold public key from shares: %w", error)
+	thresholdPublicKey, err := bls.PublicKeyRecover(publicKeyShares, hashes)
+	if err != nil {
+		return nil, fmt.Errorf("error recovering threshold public key from shares: %w", err)
 	}
 	return PubKey(thresholdPublicKey.Serialize()), nil
 }
@@ -362,9 +362,9 @@ func RecoverThresholdSignatureFromShares(sigSharesData [][]byte, blsIds [][]byte
 	}
 	// Create and validate sigShares for each member and populate BLS-IDs from members into ids
 	for i, sigShareData := range sigSharesData {
-		sigShare, error := bls.InsecureSignatureFromBytes(sigShareData)
-		if error != nil {
-			return nil, error
+		sigShare, err := bls.InsecureSignatureFromBytes(sigShareData)
+		if err != nil {
+			return nil, err
 		}
 		sigShares[i] = sigShare
 	}
@@ -378,11 +378,11 @@ func RecoverThresholdSignatureFromShares(sigSharesData [][]byte, blsIds [][]byte
 		hashes[i] = hash
 	}
 
-	thresholdSignature, error := bls.InsecureSignatureRecover(sigShares, hashes)
-	if error != nil {
-		return nil, error
+	thresholdSignature, err := bls.InsecureSignatureRecover(sigShares, hashes)
+	if err != nil {
+		return nil, err
 	}
-	return thresholdSignature.Serialize(), error
+	return thresholdSignature.Serialize(), err
 }
 
 //-------------------------------------
@@ -417,15 +417,18 @@ func (pubKey PubKey) AggregateSignatures(sigSharesData [][]byte, messages [][]by
 	}
 	sigShares := make([]*bls.Signature, len(messages))
 	for i, sigShareData := range sigSharesData {
-		sigShare, error := bls.SignatureFromBytesWithAggregationInfo(sigShareData, aggregationInfos[i])
-		if error != nil {
-			return nil, error
+		sigShare, err := bls.SignatureFromBytesWithAggregationInfo(sigShareData, aggregationInfos[i])
+		if err != nil {
+			return nil, err
 		}
 		sigShares[i] = sigShare
 	}
 
-	aggregatedSignature, error := bls.SignatureAggregate(sigShares)
-	return aggregatedSignature.Serialize(), error
+	aggregatedSignature, err := bls.SignatureAggregate(sigShares)
+	if err != nil {
+		return nil, err
+	}
+	return aggregatedSignature.Serialize(), nil
 }
 
 func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
