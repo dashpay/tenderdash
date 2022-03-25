@@ -8,8 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"math/rand"
-	"sort"
 
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 
@@ -194,123 +192,6 @@ func ReverseProTxHashes(proTxHashes []crypto.ProTxHash) []crypto.ProTxHash {
 		reversedProTxHashes[i] = ReverseBytes(proTxHashes[i])
 	}
 	return reversedProTxHashes
-}
-
-func CreatePrivLLMQDataDefaultThreshold(members int) ([]crypto.PrivKey, []crypto.ProTxHash, crypto.PubKey) {
-	return CreatePrivLLMQData(members, members*2/3+1)
-}
-
-func CreateProTxHashes(members int) []crypto.ProTxHash {
-	proTxHashes := make([]crypto.ProTxHash, members)
-	for i := 0; i < members; i++ {
-		proTxHashes[i] = crypto.RandProTxHash()
-	}
-	return proTxHashes
-}
-
-func CreatePrivLLMQData(members int, threshold int) ([]crypto.PrivKey, []crypto.ProTxHash, crypto.PubKey) {
-	proTxHashes := CreateProTxHashes(members)
-	orderedProTxHashes, skShares, thresholdPublicKey := CreatePrivLLMQDataOnProTxHashes(proTxHashes, threshold)
-	return skShares, orderedProTxHashes, thresholdPublicKey
-}
-
-func CreatePrivLLMQDataOnProTxHashesDefaultThreshold(proTxHashes []crypto.ProTxHash) ([]crypto.ProTxHash,
-	[]crypto.PrivKey, crypto.PubKey) {
-	return CreatePrivLLMQDataOnProTxHashes(proTxHashes, len(proTxHashes)*2/3+1)
-}
-
-func CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(proTxHashes []crypto.ProTxHash,
-	seedSource int64) ([]crypto.ProTxHash, []crypto.PrivKey, crypto.PubKey) {
-	return CreatePrivLLMQDataOnProTxHashesUsingSeed(proTxHashes, len(proTxHashes)*2/3+1, seedSource)
-}
-
-func CreatePrivLLMQDataOnProTxHashes(
-	proTxHashes []crypto.ProTxHash,
-	threshold int,
-) ([]crypto.ProTxHash, []crypto.PrivKey, crypto.PubKey) {
-	return CreatePrivLLMQDataOnProTxHashesUsingSeed(proTxHashes, threshold, 0)
-}
-
-func CreatePrivLLMQDataOnProTxHashesUsingSeed(proTxHashes []crypto.ProTxHash, threshold int,
-	seedSource int64) ([]crypto.ProTxHash, []crypto.PrivKey, crypto.PubKey) {
-	members := len(proTxHashes)
-	if members < threshold {
-		panic(fmt.Sprintf("members %d must be bigger than threshold %d", members, threshold))
-	}
-	if threshold == 0 {
-		panic("threshold must not be 0")
-	}
-	if len(proTxHashes) == 0 {
-		panic("there must be at least one pro_tx_hash")
-	}
-	for _, proTxHash := range proTxHashes {
-		if len(proTxHash.Bytes()) != crypto.ProTxHashSize {
-			panic(fmt.Errorf("blsId incorrect size in public key recovery, expected 32 bytes (got %d)", len(proTxHash)))
-		}
-	}
-	var reader io.Reader
-	if seedSource != 0 {
-		reader = rand.New(rand.NewSource(seedSource))
-	} else {
-		reader = crypto.CReader()
-	}
-
-	if len(proTxHashes) == 1 {
-		createdSeed := make([]byte, SeedSize)
-		_, err := io.ReadFull(reader, createdSeed)
-		if err != nil {
-			panic(err)
-		}
-		privKey := GenPrivKeyFromSecret(createdSeed)
-		return proTxHashes, []crypto.PrivKey{privKey}, privKey.PubKey()
-	}
-
-	reversedProTxHashes := ReverseProTxHashes(proTxHashes)
-
-	// sorting makes this easier
-	sort.Sort(crypto.SortProTxHash(reversedProTxHashes))
-
-	ids := make([]bls.Hash, members)
-	secrets := make([]*bls.PrivateKey, threshold)
-	skShares := make([]crypto.PrivKey, members)
-	testPubKey := make([]crypto.PubKey, members)
-	testProTxHashes := make([][]byte, members)
-
-	for i := 0; i < threshold; i++ {
-		createdSeed := make([]byte, SeedSize)
-		_, err := io.ReadFull(reader, createdSeed)
-		if err != nil {
-			panic(err)
-		}
-		privKey, err := bls.PrivateKeyFromSeed(createdSeed)
-		if err != nil {
-			panic(err)
-		}
-		secrets[i] = privKey
-	}
-
-	for i := 0; i < members; i++ {
-		var hash bls.Hash
-		copy(hash[:], reversedProTxHashes[i].Bytes())
-		ids[i] = hash
-		skShare, err := bls.PrivateKeyShare(secrets, ids[i])
-		if err != nil {
-			panic(err)
-		}
-		skShares[i] = PrivKey(skShare.Serialize())
-		testPubKey[i] = skShares[i].PubKey()
-		testProTxHashes[i] = ReverseBytes(reversedProTxHashes[i].Bytes())
-	}
-
-	// as this is not used in production, we can add this test
-	testKey, err := RecoverThresholdPublicKeyFromPublicKeys(testPubKey, testProTxHashes)
-	if err != nil {
-		panic(err)
-	}
-	if !testKey.Equals(PubKey(secrets[0].PublicKey().Serialize())) {
-		panic("these should be equal")
-	}
-	return ReverseProTxHashes(reversedProTxHashes), skShares, PubKey(secrets[0].PublicKey().Serialize())
 }
 
 func RecoverThresholdPublicKeyFromPublicKeys(publicKeys []crypto.PubKey, blsIds [][]byte) (crypto.PubKey, error) {

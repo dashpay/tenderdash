@@ -4,7 +4,6 @@ package bls12381_test
 import (
 	"encoding/base64"
 	"encoding/hex"
-	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -176,66 +175,6 @@ func TestPublicKeyGeneration(t *testing.T) {
 	expectedPublicKeyString := "BBdEXubJCrsGbU3vFyYpfQs1F9iuj6YBB6mc6ntizjX7bh8mnEWk3NkBEs/cVVfN"
 	encodedPublicKeyString := base64.StdEncoding.EncodeToString(privateKey.PubKey().Bytes())
 	require.Equal(t, expectedPublicKeyString, encodedPublicKeyString)
-}
-
-func Test100MemberOverThreshold(t *testing.T) {
-	n := 100
-	threshold := 67
-	privKeys, proTxHashes, thresholdPublicKey := bls12381.CreatePrivLLMQData(n, threshold)
-	proTxHashesBytes := make([][]byte, len(proTxHashes))
-	for i, proTxHash := range proTxHashes {
-		proTxHashesBytes[i] = proTxHash
-	}
-	signID := crypto.CRandBytes(32)
-	signatures := make([][]byte, 100)
-	var err error
-	for i, privKey := range privKeys {
-		signatures[i], err = privKey.SignDigest(signID)
-		require.NoError(t, err)
-	}
-	omit := rand.Intn(34)
-	offset := 0
-	if omit > 0 {
-		offset = rand.Intn(omit)
-	}
-	check := n - omit
-	require.True(t, check > 66)
-	sig, err := bls12381.RecoverThresholdSignatureFromShares(
-		signatures[offset:check+offset], proTxHashesBytes[offset:check+offset],
-	)
-	require.NoError(t, err)
-	verified := thresholdPublicKey.VerifySignatureDigest(signID, sig)
-	require.True(t, verified, "offset %d check %d", offset, check)
-}
-
-func Test100MemberAtThreshold(t *testing.T) {
-	n := 100
-	threshold := 67
-	privKeys, proTxHashes, thresholdPublicKey := bls12381.CreatePrivLLMQData(n, threshold)
-	proTxHashesBytes := make([][]byte, len(proTxHashes))
-	for i, proTxHash := range proTxHashes {
-		proTxHashesBytes[i] = proTxHash
-	}
-	signID := crypto.CRandBytes(32)
-	signatures := make([][]byte, 100)
-	var err error
-	for i, privKey := range privKeys {
-		signatures[i], err = privKey.SignDigest(signID)
-		require.NoError(t, err)
-	}
-	omit := 33 // rand.Intn(34)
-	offset := 0
-	if omit > 0 {
-		offset = rand.Intn(omit)
-	}
-	check := n - omit
-	require.True(t, check > 66)
-	sig, err := bls12381.RecoverThresholdSignatureFromShares(
-		signatures[offset:check+offset], proTxHashesBytes[offset:check+offset],
-	)
-	require.NoError(t, err)
-	verified := thresholdPublicKey.VerifySignatureDigest(signID, sig)
-	require.True(t, verified, "offset %d check %d", offset, check)
 }
 
 // func Test100MemberThresholdManyTimes(t *testing.T) {

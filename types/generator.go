@@ -5,7 +5,7 @@ import (
 	"sort"
 
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
+	"github.com/tendermint/tendermint/dash/llmq"
 )
 
 // RandValidatorSet returns a randomized validator set (size: +numValidators+),
@@ -72,17 +72,16 @@ func GenerateValidatorSet(valParams []ValSetParam, opts ...ValSetOptionFunc) (*V
 	for _, fn := range opts {
 		fn(&valSetOpts)
 	}
-	orderedProTxHashes, privateKeys, thresholdPublicKey :=
-		bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThreshold(proTxHashes)
+	ld := llmq.MustGenerate(proTxHashes)
 	quorumHash := crypto.RandQuorumHash()
-	mockPVFunc := newMockPVFunc(valSetOpts, quorumHash, thresholdPublicKey)
+	mockPVFunc := newMockPVFunc(valSetOpts, quorumHash, ld.ThresholdPubKey)
 	for i := 0; i < n; i++ {
-		privValidators[i] = mockPVFunc(orderedProTxHashes[i], privateKeys[i])
-		opt := valzOptsMap[orderedProTxHashes[i].String()]
-		valz[i] = NewValidator(privateKeys[i].PubKey(), opt.VotingPower, orderedProTxHashes[i], "")
+		privValidators[i] = mockPVFunc(ld.ProTxHashes[i], ld.PrivKeyShares[i])
+		opt := valzOptsMap[ld.ProTxHashes[i].String()]
+		valz[i] = NewValidator(ld.PubKeyShares[i], opt.VotingPower, ld.ProTxHashes[i], "")
 	}
 	sort.Sort(PrivValidatorsByProTxHash(privValidators))
-	return NewValidatorSet(valz, thresholdPublicKey, crypto.SmallQuorumType(), quorumHash, true), privValidators
+	return NewValidatorSet(valz, ld.ThresholdPubKey, crypto.SmallQuorumType(), quorumHash, true), privValidators
 }
 
 // MakeGenesisValsFromValidatorSet converts ValidatorSet data into a list of GenesisValidator

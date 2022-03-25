@@ -17,6 +17,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/crypto/merkle"
+	"github.com/tendermint/tendermint/dash/llmq"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -458,25 +459,23 @@ func (vals *ValidatorSet) Size() int {
 
 func (vals *ValidatorSet) RegenerateWithNewKeys() (*ValidatorSet, []PrivValidator) {
 	var (
-		proTxHashes    = vals.GetProTxHashes()
 		numValidators  = len(vals.Validators)
 		valz           = make([]*Validator, numValidators)
 		privValidators = make([]PrivValidator, numValidators)
 	)
-	orderedProTxHashes, privateKeys, thresholdPublicKey :=
-		bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThreshold(proTxHashes)
+	ld := llmq.MustGenerate(vals.GetProTxHashes())
 	quorumHash := crypto.RandQuorumHash()
 
 	for i := 0; i < numValidators; i++ {
 		privValidators[i] = NewMockPVWithParams(
-			privateKeys[i],
-			orderedProTxHashes[i],
+			ld.PrivKeyShares[i],
+			ld.ProTxHashes[i],
 			quorumHash,
-			thresholdPublicKey,
+			ld.ThresholdPubKey,
 			false,
 			false,
 		)
-		valz[i] = NewValidatorDefaultVotingPower(privateKeys[i].PubKey(), orderedProTxHashes[i])
+		valz[i] = NewValidatorDefaultVotingPower(ld.PrivKeyShares[i].PubKey(), ld.ProTxHashes[i])
 	}
 
 	// Just to make sure
@@ -484,7 +483,7 @@ func (vals *ValidatorSet) RegenerateWithNewKeys() (*ValidatorSet, []PrivValidato
 
 	return NewValidatorSet(
 		valz,
-		thresholdPublicKey,
+		ld.ThresholdPubKey,
 		vals.QuorumType,
 		crypto.RandQuorumHash(),
 		vals.HasPublicKeys,
@@ -1275,19 +1274,18 @@ func ValidatorSetFromExistingValidators(
 //----------------------------------------
 
 func ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes []crypto.ProTxHash) abci.ValidatorSetUpdate {
-	orderedProTxHashes, privateKeys, thresholdPublicKey :=
-		bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThreshold(proTxHashes)
+	ld := llmq.MustGenerate(proTxHashes)
 	var valUpdates []abci.ValidatorUpdate
 	for i := 0; i < len(proTxHashes); i++ {
 		valUpdate := TM2PB.NewValidatorUpdate(
-			privateKeys[i].PubKey(),
+			ld.PrivKeyShares[i].PubKey(),
 			DefaultDashVotingPower,
-			orderedProTxHashes[i],
+			ld.ProTxHashes[i],
 			"",
 		)
 		valUpdates = append(valUpdates, valUpdate)
 	}
-	abciThresholdPublicKey, err := cryptoenc.PubKeyToProto(thresholdPublicKey)
+	abciThresholdPublicKey, err := cryptoenc.PubKeyToProto(ld.ThresholdPubKey)
 	if err != nil {
 		panic(err)
 	}

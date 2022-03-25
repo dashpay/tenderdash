@@ -21,6 +21,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/crypto/secp256k1"
+	"github.com/tendermint/tendermint/dash/llmq"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
 )
@@ -171,8 +172,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 	}
 
 	proTxHashes := genProTxHashes(proTxHashGen, validatorCount)
-	proTxHashes, privateKeys, thresholdPublicKey :=
-		bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(proTxHashes, randomSeed)
+	ld := llmq.MustGenerate(proTxHashes, llmq.WithSeed(randomSeed))
 
 	quorumHash := quorumHashGen.generate()
 
@@ -194,7 +194,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 		LogLevel:                  manifest.LogLevel,
 		TxSize:                    manifest.TxSize,
 		ABCIProtocol:              manifest.ABCIProtocol,
-		ThresholdPublicKey:        thresholdPublicKey,
+		ThresholdPublicKey:        ld.ThresholdPubKey,
 		ThresholdPublicKeyUpdates: map[int64]crypto.PubKey{},
 		QuorumType:                btcjson.LLMQType(quorumType),
 		QuorumHash:                quorumHash,
@@ -224,7 +224,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 		privKey := keyGen.Generate(manifest.KeyType)
 		quorumKeys := crypto.QuorumKeys{
 			PrivKey:            privKey,
-			ThresholdPublicKey: thresholdPublicKey,
+			ThresholdPublicKey: ld.ThresholdPubKey,
 		}
 		privateKeysMap := make(map[string]crypto.QuorumKeys)
 		privateKeysMap[quorumHash.String()] = quorumKeys
@@ -321,10 +321,10 @@ func LoadTestnet(file string) (*Testnet, error) {
 		nodesFilter(testnet.Nodes, shouldHaveName(manifest.Validators)),
 		initValidator(
 			&validatorParamsIter{
-				privKeys:           privateKeys,
+				privKeys:           ld.PrivKeyShares,
 				proTxHashes:        proTxHashes,
 				quorumHash:         quorumHash,
-				thresholdPublicKey: thresholdPublicKey,
+				thresholdPublicKey: ld.ThresholdPubKey,
 			},
 			updateProTxHash(),
 			updateGenesisValidators(testnet),
@@ -335,7 +335,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 	}
 	err = updateNodeParams(
 		nodesFilter(testnet.Nodes, shouldNotBeValidator()),
-		initAnyNode(thresholdPublicKey, quorumHash),
+		initAnyNode(ld.ThresholdPubKey, quorumHash),
 	)
 	if err != nil {
 		return nil, err
@@ -371,19 +371,17 @@ func LoadTestnet(file string) (*Testnet, error) {
 			proTxHashes = append(proTxHashes, node.ProTxHash)
 		}
 
-		proTxHashes, privateKeys, thresholdPublicKey :=
-			bls12381.CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(proTxHashes, randomSeed+int64(height))
-
+		ld = llmq.MustGenerate(proTxHashes, llmq.WithSeed(randomSeed+int64(height)))
 		quorumHash := quorumHashGen.generate()
 
 		err = updateNodeParams(
 			lookupNodesByProTxHash(testnet, proTxHashes...),
 			initValidator(
 				&validatorParamsIter{
-					privKeys:           privateKeys,
+					privKeys:           ld.PrivKeyShares,
 					proTxHashes:        proTxHashes,
 					quorumHash:         quorumHash,
-					thresholdPublicKey: thresholdPublicKey,
+					thresholdPublicKey: ld.ThresholdPubKey,
 				},
 				updateValidatorUpdate(valUpdate),
 				printInitValidatorInfo(height),
@@ -396,7 +394,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 
 		err = updateNodeParams(
 			nodesFilter(testnet.Nodes, proTxHashShouldNotBeIn(proTxHashes)),
-			initAnyNode(thresholdPublicKey, quorumHash),
+			initAnyNode(ld.ThresholdPubKey, quorumHash),
 			updatePrivvalUpdateHeights(modifyHeight(height), quorumHash),
 		)
 		if err != nil {
@@ -404,11 +402,11 @@ func LoadTestnet(file string) (*Testnet, error) {
 		}
 		if height == 0 {
 			testnet.QuorumHash = quorumHash
-			testnet.ThresholdPublicKey = thresholdPublicKey
+			testnet.ThresholdPublicKey = ld.ThresholdPubKey
 			testnet.Validators = valUpdate
 		}
 		testnet.ValidatorUpdates[int64(height)] = valUpdate
-		testnet.ThresholdPublicKeyUpdates[int64(height)] = thresholdPublicKey
+		testnet.ThresholdPublicKeyUpdates[int64(height)] = ld.ThresholdPubKey
 		testnet.QuorumHashUpdates[int64(height)] = quorumHash
 	}
 

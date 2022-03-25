@@ -6,11 +6,12 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/crypto/encoding"
-
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/tendermint/tendermint/dash/llmq"
+	tmtypes "github.com/tendermint/tendermint/types"
 )
 
 var ctx = context.Background()
@@ -18,14 +19,16 @@ var ctx = context.Background()
 func InitChain(client abcicli.Client) error {
 	total := 10
 	vals := make([]types.ValidatorUpdate, total)
-	privKeys, proTxHashes, thresholdPublicKey := bls12381.CreatePrivLLMQDataDefaultThreshold(total)
-	for i := 0; i < total; i++ {
-		pubkey := privKeys[i].PubKey().Bytes()
-		proTxHash := proTxHashes[i]
-		power := 100
-		vals[i] = types.UpdateValidator(proTxHash, pubkey, int64(power), "")
+	ld, err := llmq.Generate(crypto.RandProTxHashes(total))
+	if err != nil {
+		return err
 	}
-	abciThresholdPublicKey, err := encoding.PubKeyToProto(thresholdPublicKey)
+	for i := 0; i < total; i++ {
+		pubKey := ld.PubKeyShares[i].Bytes()
+		power := tmtypes.DefaultDashVotingPower
+		vals[i] = types.UpdateValidator(ld.ProTxHashes[i], pubKey, power, "")
+	}
+	abciThresholdPublicKey, err := encoding.PubKeyToProto(ld.ThresholdPubKey)
 	if err != nil {
 		return err
 	}
