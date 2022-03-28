@@ -120,7 +120,7 @@ func updateProTxHash() initValidatorFunc {
 func updateGenesisValidators(testnet *Testnet) initValidatorFunc {
 	return func(node *Node, params validatorParams) error {
 		pk := params.PrivKey.PubKey()
-		vu, err := node.validatorUpdate(pk.Bytes())
+		vu, err := node.validatorUpdate(pk)
 		if err != nil {
 			return err
 		}
@@ -145,7 +145,7 @@ func updatePrivvalUpdateHeights(height int, quorumHash crypto.QuorumHash) initNo
 func updateValidatorUpdate(valUpdate ValidatorsMap) initValidatorFunc {
 	return func(node *Node, params validatorParams) error {
 		pk := params.PrivKey.PubKey()
-		vu, err := node.validatorUpdate(pk.Bytes())
+		vu, err := node.validatorUpdate(pk)
 		if err != nil {
 			return err
 		}

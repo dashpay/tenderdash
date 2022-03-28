@@ -774,10 +774,26 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	// reset state validators to above validator
 	state.Validators = originalValidatorSet
 	state.NextValidators = originalValidatorSet
-	require.True(t, len(state.Validators.Validators) == 4)
 
 	// Any node pro tx hash should do
-	firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
+	firstProTxHash, _ := state.Validators.GetByIndex(0)
+
+	execute := func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
+		resp := &tmstate.ABCIResponses{
+			BeginBlock: &abci.ResponseBeginBlock{},
+			EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: vsu},
+		}
+		validatorUpdates, thresholdPubKey, quorumHash, err :=
+			types.PB2TM.ValidatorUpdatesFromValidatorSet(resp.EndBlock.ValidatorSetUpdate)
+		require.NoError(t, err)
+		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit), nil, 0)
+		require.NoError(t, err)
+		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
+		state, err = sm.UpdateState(state, firstProTxHash, blockID, &block.Header, resp,
+			validatorUpdates, thresholdPubKey, quorumHash)
+		require.NoError(t, err)
+		return state
+	}
 
 	// All operations will be on same quorum hash
 	quorumHash := crypto.RandQuorumHash()
@@ -786,66 +802,22 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	oldState := state
 	for i := 0; i < 10; i++ {
 		// no updates:
-		abciResponses := &tmstate.ABCIResponses{
-			BeginBlock: &abci.ResponseBeginBlock{},
-			EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: nil},
-		}
-		validatorUpdates, thresholdPublicKeyUpdate, _, err :=
-			types.PB2TM.ValidatorUpdatesFromValidatorSet(abciResponses.EndBlock.ValidatorSetUpdate)
-		require.NoError(t, err)
-
-		block, err := statefactory.MakeBlock(oldState, oldState.LastBlockHeight+1, new(types.Commit), nil, 0)
-		require.NoError(t, err)
-		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
-
-		updatedState, err := sm.UpdateState(oldState, firstNodeProTxHash, blockID, &block.Header, abciResponses,
-			validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
-		require.NoError(t, err)
+		updatedState := execute(oldState, oldState, nil)
 		// no changes in voting power (ProposerPrio += VotingPower == Voting in 1st round; than shiftByAvg == 0,
 		// than -Total == -Voting)
 		// -> no change in ProposerPrio (stays zero):
 		assert.EqualValues(t, oldState.NextValidators.GetProTxHashesOrdered(), updatedState.NextValidators.GetProTxHashesOrdered())
-
 		oldState = updatedState
 	}
 
 	addedProTxHashes := crypto.RandProTxHashes(4)
 	proTxHashes := append(originalValidatorSet.GetProTxHashes(), addedProTxHashes...)
 	abciValidatorUpdates0 := types.ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes)
-	abciResponses := &tmstate.ABCIResponses{
-		BeginBlock: &abci.ResponseBeginBlock{},
-		EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: &abciValidatorUpdates0},
-	}
-	validatorUpdates, thresholdPublicKey, quorumHash, err :=
-		types.PB2TM.ValidatorUpdatesFromValidatorSet(abciResponses.EndBlock.ValidatorSetUpdate)
-	require.NoError(t, err)
-
-	block, err := statefactory.MakeBlock(oldState, oldState.LastBlockHeight+1, new(types.Commit), nil, 0)
-	require.NoError(t, err)
-	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
-	updatedState, err := sm.UpdateState(oldState, firstNodeProTxHash, blockID, &block.Header, abciResponses, validatorUpdates,
-		thresholdPublicKey, quorumHash)
-	require.NoError(t, err)
+	updatedState := execute(state, state, &abciValidatorUpdates0)
 
 	lastState := updatedState
 	for i := 0; i < 200; i++ {
-		// no updates:
-		abciResponses := &tmstate.ABCIResponses{
-			BeginBlock: &abci.ResponseBeginBlock{},
-			EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: nil},
-		}
-		validatorUpdates, thresholdPublicKey, _, err :=
-			types.PB2TM.ValidatorUpdatesFromValidatorSet(abciResponses.EndBlock.ValidatorSetUpdate)
-		require.NoError(t, err)
-
-		block, err := statefactory.MakeBlock(lastState, lastState.LastBlockHeight+1, new(types.Commit), nil, 0)
-		require.NoError(t, err)
-		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
-
-		updatedStateInner, err := sm.UpdateState(lastState, firstNodeProTxHash, blockID, &block.Header, abciResponses,
-			validatorUpdates, thresholdPublicKey, quorumHash)
-		require.NoError(t, err)
-		lastState = updatedStateInner
+		lastState = execute(lastState, lastState, nil)
 	}
 	// set state to last state of above iteration
 	state = lastState
@@ -858,80 +830,21 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	// add 10 validators with the same voting power as the one added directly after genesis:
 	for i := 0; i < 10; i++ {
 		ld := llmq.MustGenerate(append(proTxHashes, crypto.RandProTxHash()))
-		abciValidatorUpdates := make([]abci.ValidatorUpdate, len(ld.ProTxHashes))
-		for j, proTxHash := range ld.ProTxHashes {
-			abciValidatorUpdates[j] = abci.UpdateValidator(
-				proTxHash,
-				ld.PubKeyShares[j].Bytes(),
-				types.DefaultDashVotingPower,
-				types.RandValidatorAddress().String(),
-			)
-		}
-		abciThresholdPublicKey3, err := cryptoenc.PubKeyToProto(ld.ThresholdPubKey)
-		assert.NoError(t, err)
-		abciValidatorSetUpdate := abci.ValidatorSetUpdate{
-			ValidatorUpdates:   abciValidatorUpdates,
-			ThresholdPublicKey: abciThresholdPublicKey3,
-			QuorumHash:         quorumHash,
-		}
-
-		validatorUpdates, thresholdPublicKey3, _, err :=
-			types.PB2TM.ValidatorUpdatesFromValidatorSet(&abciValidatorSetUpdate)
-		assert.NoError(t, err)
-
-		abciResponses := &tmstate.ABCIResponses{
-			BeginBlock: &abci.ResponseBeginBlock{},
-			EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: &abciValidatorSetUpdate},
-		}
-		block, err := statefactory.MakeBlock(oldState, oldState.LastBlockHeight+1, new(types.Commit), nil, 0)
+		abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld)
 		require.NoError(t, err)
-		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
-		state, err = sm.UpdateState(state, firstNodeProTxHash, blockID, &block.Header, abciResponses,
-			validatorUpdates, thresholdPublicKey3, quorumHash)
-		require.NoError(t, err)
+		abciValidatorSetUpdate.QuorumHash = quorumHash
+		state = execute(oldState, state, abciValidatorSetUpdate)
 	}
 	require.Equal(t, 18, len(state.NextValidators.Validators))
 
 	// remove one genesis validator:
 	ld := llmq.MustGenerate(proTxHashes[1:])
-	var abciValidatorUpdates []abci.ValidatorUpdate
-	updatedPubKey, err := cryptoenc.PubKeyToProto(originalValidatorSet.Validators[0].PubKey)
+	abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld)
 	require.NoError(t, err)
-	updatePreviousVal := abci.ValidatorUpdate{ProTxHash: ld.ProTxHashes[0], PubKey: &updatedPubKey}
-	abciValidatorUpdates = append(abciValidatorUpdates, updatePreviousVal)
-	for i := 1; i < len(ld.ProTxHashes); i++ {
-		updatedPubKey, err = cryptoenc.PubKeyToProto(ld.PrivKeyShares[i-1].PubKey())
-		require.NoError(t, err)
-		updatePreviousVal = abci.ValidatorUpdate{
-			ProTxHash: ld.ProTxHashes[i],
-			Power:     types.DefaultDashVotingPower,
-			PubKey:    &updatedPubKey,
-		}
-		abciValidatorUpdates = append(abciValidatorUpdates, updatePreviousVal)
-	}
+	abciValidatorSetUpdate.ValidatorUpdates[0] = abci.ValidatorUpdate{ProTxHash: proTxHashes[0]}
+	abciValidatorSetUpdate.QuorumHash = quorumHash
+	updatedState = execute(oldState, state, abciValidatorSetUpdate)
 
-	abciThresholdPublicKey4, err := cryptoenc.PubKeyToProto(ld.ThresholdPubKey)
-	assert.NoError(t, err)
-
-	abciValidatorSetUpdate := abci.ValidatorSetUpdate{
-		ValidatorUpdates:   abciValidatorUpdates,
-		ThresholdPublicKey: abciThresholdPublicKey4,
-		QuorumHash:         quorumHash,
-	}
-
-	abciResponses = &tmstate.ABCIResponses{
-		BeginBlock: &abci.ResponseBeginBlock{},
-		EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: &abciValidatorSetUpdate},
-	}
-	block, err = statefactory.MakeBlock(oldState, oldState.LastBlockHeight+1, new(types.Commit), nil, 0)
-	require.NoError(t, err)
-	blockID = types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
-	validatorUpdates, thresholdPublicKey, quorumHash, err =
-		types.PB2TM.ValidatorUpdatesFromValidatorSet(abciResponses.EndBlock.ValidatorSetUpdate)
-	require.NoError(t, err)
-	updatedState, err = sm.UpdateState(state, firstNodeProTxHash, blockID, &block.Header, abciResponses,
-		validatorUpdates, thresholdPublicKey, quorumHash)
-	require.NoError(t, err)
 	// only the first added val (not the genesis val) should be left
 	assert.Equal(t, 17, len(updatedState.NextValidators.Validators))
 
@@ -941,19 +854,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	count := 0
 	isProposerUnchanged := true
 	for isProposerUnchanged {
-		abciResponses := &tmstate.ABCIResponses{
-			BeginBlock: &abci.ResponseBeginBlock{},
-			EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: nil},
-		}
-		validatorUpdates, thresholdPublicKey, quorumHash, err =
-			types.PB2TM.ValidatorUpdatesFromValidatorSet(abciResponses.EndBlock.ValidatorSetUpdate)
-		require.NoError(t, err)
-		block, err = statefactory.MakeBlock(curState, curState.LastBlockHeight+1, new(types.Commit), nil, 0)
-		require.NoError(t, err)
-		blockID = types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
-		curState, err = sm.UpdateState(curState, firstNodeProTxHash, blockID, &block.Header,
-			abciResponses, validatorUpdates, thresholdPublicKey, quorumHash)
-		require.NoError(t, err)
+		curState = execute(curState, curState, nil)
 		if !bytes.Equal(curState.Validators.Proposer.ProTxHash, curState.NextValidators.Proposer.ProTxHash) {
 			isProposerUnchanged = false
 		}
@@ -967,22 +868,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	numVals := len(updatedState.Validators.Validators)
 	proposers := make([]*types.Validator, numVals)
 	for i := 0; i < 100; i++ {
-		// no updates:
-		abciResponses := &tmstate.ABCIResponses{
-			BeginBlock: &abci.ResponseBeginBlock{},
-			EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: nil},
-		}
-		validatorUpdates, thresholdPublicKey, quorumHash, err :=
-			types.PB2TM.ValidatorUpdatesFromValidatorSet(abciResponses.EndBlock.ValidatorSetUpdate)
-		require.NoError(t, err)
-
-		block, err := statefactory.MakeBlock(updatedState, updatedState.LastBlockHeight+1, new(types.Commit), nil, 0)
-		require.NoError(t, err)
-		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
-
-		updatedState, err = sm.UpdateState(updatedState, firstNodeProTxHash, blockID, &block.Header, abciResponses,
-			validatorUpdates, thresholdPublicKey, quorumHash)
-		require.NoError(t, err)
+		updatedState = execute(state, updatedState, nil)
 		if i > numVals { // expect proposers to cycle through after the first iteration (of numVals blocks):
 			if proposers[i%numVals] == nil {
 				proposers[i%numVals] = updatedState.NextValidators.Proposer

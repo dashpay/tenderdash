@@ -3,35 +3,20 @@ package kvstore
 import (
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/dash/llmq"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
-
-func ValUpdate(
-	pubKey crypto.PubKey, proTxHash crypto.ProTxHash, address tmtypes.ValidatorAddress) types.ValidatorUpdate {
-	return types.UpdateValidator(proTxHash, pubKey.Bytes(), tmtypes.DefaultDashVotingPower, address.String())
-}
 
 // RandValidatorSetUpdate returns a list of cnt validators for initializing
 // the application. Note that the keys are deterministically
 // derived from the index in the array
 func RandValidatorSetUpdate(cnt int) types.ValidatorSetUpdate {
-	res := make([]types.ValidatorUpdate, cnt)
-
 	ld := llmq.MustGenerate(crypto.RandProTxHashes(cnt))
-	for i := 0; i < cnt; i++ {
-		res[i] = ValUpdate(ld.PubKeyShares[i], ld.ProTxHashes[i], tmtypes.RandValidatorAddress())
-	}
-	thresholdPublicKeyABCI, err := cryptoenc.PubKeyToProto(ld.ThresholdPubKey)
+	vsu, err := types.LLMQToValidatorSetProto(*ld, types.WithNodeAddrs(randNodeAddrs(cnt)))
 	if err != nil {
 		panic(err)
 	}
-	return types.ValidatorSetUpdate{
-		ValidatorUpdates:   res,
-		ThresholdPublicKey: thresholdPublicKeyABCI,
-		QuorumHash:         crypto.RandQuorumHash(),
-	}
+	return *vsu
 }
 
 // InitKVStore initializes the kvstore app with some data,
@@ -42,4 +27,12 @@ func InitKVStore(app *PersistentKVStoreApplication) {
 	app.InitChain(types.RequestInitChain{
 		ValidatorSet: &val,
 	})
+}
+
+func randNodeAddrs(n int) []string {
+	addrs := make([]string, n)
+	for i := 0; i < n; i++ {
+		addrs[i] = tmtypes.RandValidatorAddress().String()
+	}
+	return addrs
 }
