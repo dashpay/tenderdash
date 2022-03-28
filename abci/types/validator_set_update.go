@@ -30,10 +30,7 @@ func WithPower(power int64) QuorumOptionFunc {
 
 // LLMQToValidatorSetProto returns a protobuf validator-set-update structure for passed llmq-data
 // use option-functions to override default values like power or node-addresses
-func LLMQToValidatorSetProto(
-	ld llmq.Data,
-	opts ...QuorumOptionFunc,
-) (*ValidatorSetUpdate, error) {
+func LLMQToValidatorSetProto(ld llmq.Data, opts ...QuorumOptionFunc) (*ValidatorSetUpdate, error) {
 	conf := quorumConfig{
 		power: 100,
 	}
