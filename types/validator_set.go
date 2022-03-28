@@ -1015,10 +1015,7 @@ func (vals *ValidatorSet) ABCIEquivalentValidatorUpdates() *abci.ValidatorSetUpd
 			vals.Validators[i].ProTxHash, vals.Validators[i].NodeAddress.String())
 		valUpdates = append(valUpdates, valUpdate)
 	}
-	abciThresholdPublicKey, err := cryptoenc.PubKeyToProto(vals.ThresholdPublicKey)
-	if err != nil {
-		panic(err)
-	}
+	abciThresholdPublicKey := cryptoenc.MustPubKeyToProto(vals.ThresholdPublicKey)
 	return &abci.ValidatorSetUpdate{
 		ValidatorUpdates:   valUpdates,
 		ThresholdPublicKey: abciThresholdPublicKey,
@@ -1285,10 +1282,7 @@ func ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes []crypto.ProTxHash) abc
 		)
 		valUpdates = append(valUpdates, valUpdate)
 	}
-	abciThresholdPublicKey, err := cryptoenc.PubKeyToProto(ld.ThresholdPubKey)
-	if err != nil {
-		panic(err)
-	}
+	abciThresholdPublicKey := cryptoenc.MustPubKeyToProto(ld.ThresholdPubKey)
 	return abci.ValidatorSetUpdate{
 		ValidatorUpdates:   valUpdates,
 		ThresholdPublicKey: abciThresholdPublicKey,
