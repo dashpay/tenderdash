@@ -152,9 +152,6 @@ func initKeys(seed io.Reader) func(ld *blsLLMQData) error {
 				return err
 			}
 			ld.pks[i] = ld.sks[i].PublicKey()
-			if err != nil {
-				return err
-			}
 		}
 		return nil
 	}
