@@ -1008,7 +1008,7 @@ func (s *stateQuorumManager) generateKeysAndUpdateState(
 		Data:       *lq,
 		quorumHash: crypto.RandQuorumHash(),
 	}
-	vsu, err := abci.LLMQToValidatorSetProto(*lq)
+	vsu, err := abci.LLMQToValidatorSetProto(*lq, abci.WithQuorumHash(qd.quorumHash))
 	if err != nil {
 		return nil, err
 	}
@@ -1057,5 +1057,5 @@ func (s *stateQuorumManager) validatorSet() *types.ValidatorSet {
 type quorumData struct {
 	llmq.Data
 	quorumHash crypto.QuorumHash
-	tx []byte
+	tx         []byte
 }

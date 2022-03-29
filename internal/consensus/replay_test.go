@@ -487,7 +487,7 @@ func setupSimulator(t *testing.T) *simulatorTestSuite {
 	vssProposer := findProposer(vss, css[0].Validators.Proposer.ProTxHash)
 	proposal = types.NewProposal(vss[3].Height, 1, round, -1, blockID)
 	p = proposal.ToProto()
-	if _, err := vssProposer.SignProposal(ctx, cfg.ChainID(), genDoc.QuorumType, hvsu2.QuorumHash, p); err != nil {
+	if _, err := vssProposer.SignProposal(ctx, cfg.ChainID(), genDoc.QuorumType, hvsu2.quorumHash, p); err != nil {
 		t.Fatal("failed to sign bad proposal", err)
 	}
 	proposal.Signature = p.Signature
@@ -569,7 +569,7 @@ func setupSimulator(t *testing.T) *simulatorTestSuite {
 		panic(fmt.Sprintf("validator proTxHash %X not found in newVss", proposerProTxHash))
 	}
 	proposerIndex := valIndexFnByProTxHash(proposerProTxHash)
-	if _, err := vss[proposerIndex].SignProposal(ctx, cfg.ChainID(), genDoc.QuorumType, hvsu2.QuorumHash, p); err != nil {
+	if _, err := vss[proposerIndex].SignProposal(ctx, cfg.ChainID(), genDoc.QuorumType, hvsu2.quorumHash, p); err != nil {
 		t.Fatal("failed to sign bad proposal", err)
 	}
 	proposal.Signature = p.Signature

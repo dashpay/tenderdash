@@ -606,7 +606,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 
 	// wait till everyone makes block 5
 	// it includes the commit for block 4, which should have the updated validator set
-	waitForBlockWithUpdatedValsAndValidateIt(t, nPeers, addOneVal.QuorumHash, blocksSubs, states)
+	waitForBlockWithUpdatedValsAndValidateIt(t, nPeers, addOneVal.quorumHash, blocksSubs, states)
 
 	validate(t, states)
 
@@ -617,7 +617,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 	// the commits for block 8 should be with the updated validator set
 	activeVals = makeProTxHashMap(addTwoVals.ProTxHashes)
 
-	waitForBlockWithUpdatedValsAndValidateIt(t, nPeers, addTwoVals.QuorumHash, blocksSubs, states)
+	waitForBlockWithUpdatedValsAndValidateIt(t, nPeers, addTwoVals.quorumHash, blocksSubs, states)
 
 	validate(t, states)
 
@@ -625,7 +625,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 	waitForAndValidateBlockWithTx(t, nPeers, activeVals, blocksSubs, states, removeTwoVals.tx)
 	waitForAndValidateBlock(t, nPeers, activeVals, blocksSubs, states)
 
-	waitForBlockWithUpdatedValsAndValidateIt(t, nPeers, removeTwoVals.QuorumHash, blocksSubs, states)
+	waitForBlockWithUpdatedValsAndValidateIt(t, nPeers, removeTwoVals.quorumHash, blocksSubs, states)
 
 	validate(t, states)
 }
@@ -711,13 +711,15 @@ func (u *validatorUpdater) removeValidatorsAt(height int64, count int) (*quorumD
 }
 
 func (u *validatorUpdater) updateStatePrivVals(data *quorumData, height int64) {
-	for i, proTxHash := range data.ProTxHashes {
+	iter := data.Iter()
+	for iter.Next() {
+		proTxHash, qks := iter.Value()
 		j := u.stateIndexMap[proTxHash.String()]
 		priVal := u.states[j].PrivValidator()
 		priVal.UpdatePrivateKey(
 			context.Background(),
-			data.PrivKeyShares[i],
-			data.QuorumHash,
+			qks.PrivKey,
+			data.quorumHash,
 			data.ThresholdPubKey,
 			height,
 		)
@@ -731,8 +733,8 @@ func generatePrivValUpdate(proTxHashes []crypto.ProTxHash) (*quorumData, error) 
 	if err != nil {
 		return nil, err
 	}
-	qd := quorumData{Data: *ld}
-	vsu, err := abci.LLMQToValidatorSetProto(*ld)
+	qd := quorumData{Data: *ld, quorumHash: crypto.RandQuorumHash()}
+	vsu, err := abci.LLMQToValidatorSetProto(*ld, abci.WithQuorumHash(qd.quorumHash))
 	if err != nil {
 		return nil, err
 	}

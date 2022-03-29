@@ -24,9 +24,9 @@ var _ types.Application = (*PersistentKVStoreApplication)(nil)
 type PersistentKVStoreApplication struct {
 	mtx    sync.Mutex
 	app    *Application
-	repo   *repository
 	logger log.Logger
 
+	valUpdatesRepo      *repository
 	ValidatorSetUpdates types.ValidatorSetUpdate
 }
 
@@ -38,8 +38,9 @@ func NewPersistentKVStoreApplication(dbDir string) *PersistentKVStoreApplication
 	}
 	return &PersistentKVStoreApplication{
 		app:    &Application{state: loadState(db)},
-		repo:   &repository{db: db},
 		logger: log.NewNopLogger(),
+
+		valUpdatesRepo: &repository{db: db},
 	}
 }
 
@@ -66,7 +67,7 @@ func (app *PersistentKVStoreApplication) DeliverTx(req types.RequestDeliverTx) t
 		err := app.execValidatorSetTx(req.Tx)
 		if err != nil {
 			return types.ResponseDeliverTx{
-				Code: code.CodeTypeEncodingError,
+				Code: code.CodeTypeUnknownError,
 				Log:  err.Error(),
 			}
 		}
@@ -89,10 +90,10 @@ func (app *PersistentKVStoreApplication) Commit() types.ResponseCommit {
 func (app *PersistentKVStoreApplication) Query(reqQuery types.RequestQuery) (resQuery types.ResponseQuery) {
 	switch reqQuery.Path {
 	case "/vsu":
-		vsu, err := app.repo.get()
+		vsu, err := app.valUpdatesRepo.get()
 		if err != nil {
 			return types.ResponseQuery{
-				Code: code.CodeTypeEncodingError,
+				Code: code.CodeTypeUnknownError,
 				Log:  err.Error(),
 			}
 		}
@@ -116,7 +117,7 @@ func (app *PersistentKVStoreApplication) Query(reqQuery types.RequestQuery) (res
 
 // InitChain saves the validators in the merkle tree
 func (app *PersistentKVStoreApplication) InitChain(req types.RequestInitChain) types.ResponseInitChain {
-	err := app.repo.set(req.ValidatorSet)
+	err := app.valUpdatesRepo.set(req.ValidatorSet)
 	if err != nil {
 		app.logger.Error("error updating validators", "err", err)
 		return types.ResponseInitChain{}
@@ -167,7 +168,7 @@ func (app *PersistentKVStoreApplication) ApplySnapshotChunk(
 // update validators
 
 func (app *PersistentKVStoreApplication) ValidatorSet() (*types.ValidatorSetUpdate, error) {
-	return app.repo.get()
+	return app.valUpdatesRepo.get()
 }
 
 func (app *PersistentKVStoreApplication) execValidatorSetTx(tx []byte) error {
@@ -175,7 +176,7 @@ func (app *PersistentKVStoreApplication) execValidatorSetTx(tx []byte) error {
 	if err != nil {
 		return err
 	}
-	err = app.repo.set(vsu)
+	err = app.valUpdatesRepo.set(vsu)
 	if err != nil {
 		return err
 	}

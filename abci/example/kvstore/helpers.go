@@ -12,7 +12,11 @@ import (
 // derived from the index in the array
 func RandValidatorSetUpdate(cnt int) types.ValidatorSetUpdate {
 	ld := llmq.MustGenerate(crypto.RandProTxHashes(cnt))
-	vsu, err := types.LLMQToValidatorSetProto(*ld, types.WithNodeAddrs(randNodeAddrs(cnt)))
+	vsu, err := types.LLMQToValidatorSetProto(
+		*ld,
+		types.WithNodeAddrs(randNodeAddrs(cnt)),
+		types.WithRandQuorumHash(),
+	)
 	if err != nil {
 		panic(err)
 	}

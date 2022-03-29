@@ -778,25 +778,12 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	// Any node pro tx hash should do
 	firstProTxHash, _ := state.Validators.GetByIndex(0)
 
-	execute := func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
-		resp := &tmstate.ABCIResponses{
-			BeginBlock: &abci.ResponseBeginBlock{},
-			EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: vsu},
-		}
-		validatorUpdates, thresholdPubKey, quorumHash, err :=
-			types.PB2TM.ValidatorUpdatesFromValidatorSet(resp.EndBlock.ValidatorSetUpdate)
-		require.NoError(t, err)
-		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit), nil, 0)
-		require.NoError(t, err)
-		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
-		state, err = sm.UpdateState(state, firstProTxHash, blockID, &block.Header, resp,
-			validatorUpdates, thresholdPubKey, quorumHash)
-		require.NoError(t, err)
-		return state
-	}
+	execute := bockExecutorFunc(t, firstProTxHash)
 
 	// All operations will be on same quorum hash
 	quorumHash := crypto.RandQuorumHash()
+	quorumHashOpt := abci.WithQuorumHash(quorumHash)
+
 	// update state a few times with no validator updates
 	// asserts that the single validator's ProposerPrio stays the same
 	oldState := state
@@ -830,19 +817,17 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	// add 10 validators with the same voting power as the one added directly after genesis:
 	for i := 0; i < 10; i++ {
 		ld := llmq.MustGenerate(append(proTxHashes, crypto.RandProTxHash()))
-		abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld)
+		abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
 		require.NoError(t, err)
-		abciValidatorSetUpdate.QuorumHash = quorumHash
 		state = execute(oldState, state, abciValidatorSetUpdate)
 	}
 	require.Equal(t, 18, len(state.NextValidators.Validators))
 
 	// remove one genesis validator:
 	ld := llmq.MustGenerate(proTxHashes[1:])
-	abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld)
+	abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
 	require.NoError(t, err)
 	abciValidatorSetUpdate.ValidatorUpdates[0] = abci.ValidatorUpdate{ProTxHash: proTxHashes[0]}
-	abciValidatorSetUpdate.QuorumHash = quorumHash
 	updatedState = execute(oldState, state, abciValidatorSetUpdate)
 
 	// only the first added val (not the genesis val) should be left
@@ -1102,4 +1087,24 @@ func TestState_StateID(t *testing.T) {
 
 	err := stateID.ValidateBasic()
 	assert.NoError(t, err, "StateID validation failed")
+}
+
+func bockExecutorFunc(t *testing.T, firstProTxHash crypto.ProTxHash) func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
+	t.Helper()
+	return func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
+		resp := &tmstate.ABCIResponses{
+			BeginBlock: &abci.ResponseBeginBlock{},
+			EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: vsu},
+		}
+		validatorUpdates, thresholdPubKey, quorumHash, err :=
+			types.PB2TM.ValidatorUpdatesFromValidatorSet(resp.EndBlock.ValidatorSetUpdate)
+		require.NoError(t, err)
+		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit), nil, 0)
+		require.NoError(t, err)
+		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
+		state, err = sm.UpdateState(state, firstProTxHash, blockID, &block.Header, resp,
+			validatorUpdates, thresholdPubKey, quorumHash)
+		require.NoError(t, err)
+		return state
+	}
 }

@@ -10,8 +10,9 @@ import (
 type QuorumOptionFunc func(conf *quorumConfig)
 
 type quorumConfig struct {
-	nodeAddrs []string
-	power     int64
+	nodeAddrs  []string
+	power      int64
+	quorumHash crypto.QuorumHash
 }
 
 // WithNodeAddrs sets node-addresses using option function
@@ -25,6 +26,18 @@ func WithNodeAddrs(addrs []string) QuorumOptionFunc {
 func WithPower(power int64) QuorumOptionFunc {
 	return func(conf *quorumConfig) {
 		conf.power = power
+	}
+}
+
+// WithRandQuorumHash generates and sets a quorum-hash through option QuorumOptionFunc function
+func WithRandQuorumHash() QuorumOptionFunc {
+	return WithQuorumHash(crypto.RandQuorumHash())
+}
+
+// WithQuorumHash sets a quorum-hash through option QuorumOptionFunc function
+func WithQuorumHash(quorumHash crypto.QuorumHash) QuorumOptionFunc {
+	return func(conf *quorumConfig) {
+		conf.quorumHash = quorumHash
 	}
 }
 
@@ -49,7 +62,7 @@ func LLMQToValidatorSetProto(ld llmq.Data, opts ...QuorumOptionFunc) (*Validator
 			conf.power,
 		),
 		ThresholdPublicKey: tpk,
-		QuorumHash:         ld.QuorumHash,
+		QuorumHash:         conf.quorumHash,
 	}
 	return &vsu, nil
 }
@@ -83,10 +96,10 @@ func ValidatorUpdatesProto(
 	power int64,
 ) []ValidatorUpdate {
 	var (
-		vals     []ValidatorUpdate
 		nodeAddr string
 		pubKey   crypto.PubKey
 	)
+	vals := make([]ValidatorUpdate, 0, len(proTxHashes))
 	for i, proTxHash := range proTxHashes {
 		nodeAddr = ""
 		pubKey = nil

@@ -31,7 +31,6 @@ type Data struct {
 	ThresholdPrivKey crypto.PrivKey
 	ThresholdPubKey  crypto.PubKey
 	ThresholdSig     []byte
-	QuorumHash       crypto.QuorumHash
 }
 
 // blsLLMQData is an intermediate structure that contains the BLS keys/shares/signatures
@@ -240,7 +239,6 @@ func newLLMQDataFromBLSData(ld blsLLMQData, threshold int) *Data {
 		PrivKeyShares: blsPrivKeys2CPrivKeys(ld.skShares),
 		PubKeys:       blsPubKeys2CPubKeys(ld.pks),
 		PubKeyShares:  blsPubKeys2CPubKeys(ld.pkShares),
-		QuorumHash:    crypto.RandQuorumHash(),
 	}
 	llmqData.ThresholdPrivKey = llmqData.PrivKeys[0]
 	llmqData.ThresholdPubKey = llmqData.PubKeys[0]
