@@ -858,14 +858,16 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	// add 10 validators with the same voting power as the one added directly after genesis:
 	for i := 0; i < 10; i++ {
 		ld := llmq.MustGenerate(append(proTxHashes, crypto.RandProTxHash()))
-		abciValidatorUpdates := make([]abci.ValidatorUpdate, len(ld.ProTxHashes))
-		for j, proTxHash := range ld.ProTxHashes {
-			abciValidatorUpdates[j] = abci.UpdateValidator(
+		abciValidatorUpdates := make([]abci.ValidatorUpdate, 0, len(ld.ProTxHashes))
+		iter := ld.Iter()
+		for iter.Next() {
+			proTxHash, qks := iter.Value()
+			abciValidatorUpdates = append(abciValidatorUpdates, abci.UpdateValidator(
 				proTxHash,
-				ld.PubKeyShares[j].Bytes(),
+				qks.PubKey.Bytes(),
 				types.DefaultDashVotingPower,
 				types.RandValidatorAddress().String(),
-			)
+			))
 		}
 		abciThresholdPublicKey3, err := cryptoenc.PubKeyToProto(ld.ThresholdPubKey)
 		assert.NoError(t, err)

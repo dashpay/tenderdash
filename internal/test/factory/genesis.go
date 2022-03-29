@@ -15,26 +15,27 @@ func RandGenesisDoc(
 	numValidators int,
 	initialHeight int64,
 ) (*types.GenesisDoc, []types.PrivValidator) {
-	validators := make([]types.GenesisValidator, numValidators)
-	privValidators := make([]types.PrivValidator, numValidators)
+	validators := make([]types.GenesisValidator, 0, numValidators)
+	privValidators := make([]types.PrivValidator, 0, numValidators)
 
 	ld := llmq.MustGenerate(crypto.RandProTxHashes(numValidators))
 	quorumHash := crypto.RandQuorumHash()
-	for i := 0; i < numValidators; i++ {
-		val := types.NewValidatorDefaultVotingPower(ld.PubKeyShares[i], ld.ProTxHashes[i])
-		validators[i] = types.GenesisValidator{
-			PubKey:    val.PubKey,
-			Power:     val.VotingPower,
-			ProTxHash: val.ProTxHash,
-		}
-		privValidators[i] = types.NewMockPVWithParams(
-			ld.PrivKeyShares[i],
-			ld.ProTxHashes[i],
+	iter := ld.Iter()
+	for iter.Next() {
+		proTxHash, qks := iter.Value()
+		validators = append(validators, types.GenesisValidator{
+			PubKey:    qks.PubKey,
+			Power:     types.DefaultDashVotingPower,
+			ProTxHash: proTxHash,
+		})
+		privValidators = append(privValidators, types.NewMockPVWithParams(
+			qks.PrivKey,
+			proTxHash,
 			quorumHash,
 			ld.ThresholdPubKey,
 			false,
 			false,
-		)
+		))
 	}
 	sort.Sort(types.PrivValidatorsByProTxHash(privValidators))
 

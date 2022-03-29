@@ -17,11 +17,12 @@ func ValUpdate(
 // the application. Note that the keys are deterministically
 // derived from the index in the array
 func RandValidatorSetUpdate(cnt int) types.ValidatorSetUpdate {
-	res := make([]types.ValidatorUpdate, cnt)
-
+	res := make([]types.ValidatorUpdate, 0, cnt)
 	ld := llmq.MustGenerate(crypto.RandProTxHashes(cnt))
-	for i := 0; i < cnt; i++ {
-		res[i] = ValUpdate(ld.PubKeyShares[i], ld.ProTxHashes[i], tmtypes.RandValidatorAddress())
+	iter := ld.Iter()
+	for iter.Next() {
+		proTxHash, qks := iter.Value()
+		res = append(res, ValUpdate(qks.PubKey, proTxHash, tmtypes.RandValidatorAddress()))
 	}
 	thresholdPublicKeyABCI, err := cryptoenc.PubKeyToProto(ld.ThresholdPubKey)
 	if err != nil {

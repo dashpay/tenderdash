@@ -17,16 +17,19 @@ import (
 var ctx = context.Background()
 
 func InitChain(client abcicli.Client) error {
-	total := 10
-	vals := make([]types.ValidatorUpdate, total)
+	const (
+		power = tmtypes.DefaultDashVotingPower
+		total = 10
+	)
+	vals := make([]types.ValidatorUpdate, 0, total)
 	ld, err := llmq.Generate(crypto.RandProTxHashes(total))
 	if err != nil {
 		return err
 	}
-	for i := 0; i < total; i++ {
-		pubKey := ld.PubKeyShares[i].Bytes()
-		power := tmtypes.DefaultDashVotingPower
-		vals[i] = types.UpdateValidator(ld.ProTxHashes[i], pubKey, power, "")
+	iter := ld.Iter()
+	for iter.Next() {
+		proTxHash, qks := iter.Value()
+		vals = append(vals, types.UpdateValidator(proTxHash, qks.PubKey.Bytes(), power, ""))
 	}
 	abciThresholdPublicKey, err := encoding.PubKeyToProto(ld.ThresholdPubKey)
 	if err != nil {

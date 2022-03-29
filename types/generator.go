@@ -58,8 +58,8 @@ func GenerateValidatorSet(valParams []ValSetParam, opts ...ValSetOptionFunc) (*V
 	var (
 		n              = len(valParams)
 		proTxHashes    = make([]crypto.ProTxHash, n)
-		valz           = make([]*Validator, n)
-		privValidators = make([]PrivValidator, n)
+		valz           = make([]*Validator, 0, n)
+		privValidators = make([]PrivValidator, 0, n)
 		valzOptsMap    = make(map[string]ValSetParam)
 	)
 	for i, opt := range valParams {
@@ -75,10 +75,12 @@ func GenerateValidatorSet(valParams []ValSetParam, opts ...ValSetOptionFunc) (*V
 	ld := llmq.MustGenerate(proTxHashes)
 	quorumHash := crypto.RandQuorumHash()
 	mockPVFunc := newMockPVFunc(valSetOpts, quorumHash, ld.ThresholdPubKey)
-	for i := 0; i < n; i++ {
-		privValidators[i] = mockPVFunc(ld.ProTxHashes[i], ld.PrivKeyShares[i])
-		opt := valzOptsMap[ld.ProTxHashes[i].String()]
-		valz[i] = NewValidator(ld.PubKeyShares[i], opt.VotingPower, ld.ProTxHashes[i], "")
+	iter := ld.Iter()
+	for iter.Next() {
+		proTxHash, qks := iter.Value()
+		opt := valzOptsMap[proTxHash.String()]
+		privValidators = append(privValidators, mockPVFunc(proTxHash, qks.PrivKey))
+		valz = append(valz, NewValidator(qks.PubKey, opt.VotingPower, proTxHash, ""))
 	}
 	sort.Sort(PrivValidatorsByProTxHash(privValidators))
 	return NewValidatorSet(valz, ld.ThresholdPubKey, crypto.SmallQuorumType(), quorumHash, true), privValidators

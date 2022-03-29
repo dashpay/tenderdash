@@ -1005,14 +1005,16 @@ func (s *stateQuorumManager) generateKeysAndUpdateState(
 		return nil, err
 	}
 	qd := quorumData{
-		validators:         make([]*types.Validator, len(proTxHashes)),
+		validators:         make([]*types.Validator, 0, len(proTxHashes)),
 		quorumHash:         crypto.RandQuorumHash(),
 		thresholdPublicKey: lq.ThresholdPubKey,
 	}
-	for i, proTxHash := range lq.ProTxHashes {
-		qd.validators[i], err = s.updateState(
+	iter := lq.Iter()
+	for iter.Next() {
+		proTxHash, qks := iter.Value()
+		validator, err := s.updateState(
 			proTxHash,
-			lq.PrivKeyShares[i],
+			qks.PrivKey,
 			qd.quorumHash,
 			lq.ThresholdPubKey,
 			height+3,
@@ -1020,6 +1022,7 @@ func (s *stateQuorumManager) generateKeysAndUpdateState(
 		if err != nil {
 			return nil, err
 		}
+		qd.validators = append(qd.validators, validator)
 	}
 	return &qd, nil
 }

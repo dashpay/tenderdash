@@ -460,22 +460,23 @@ func (vals *ValidatorSet) Size() int {
 func (vals *ValidatorSet) RegenerateWithNewKeys() (*ValidatorSet, []PrivValidator) {
 	var (
 		numValidators  = len(vals.Validators)
-		valz           = make([]*Validator, numValidators)
-		privValidators = make([]PrivValidator, numValidators)
+		valz           = make([]*Validator, 0, numValidators)
+		privValidators = make([]PrivValidator, 0, numValidators)
 	)
 	ld := llmq.MustGenerate(vals.GetProTxHashes())
 	quorumHash := crypto.RandQuorumHash()
-
-	for i := 0; i < numValidators; i++ {
-		privValidators[i] = NewMockPVWithParams(
-			ld.PrivKeyShares[i],
-			ld.ProTxHashes[i],
+	iter := ld.Iter()
+	for iter.Next() {
+		proTxHash, qks := iter.Value()
+		privValidators = append(privValidators, NewMockPVWithParams(
+			qks.PrivKey,
+			proTxHash,
 			quorumHash,
 			ld.ThresholdPubKey,
 			false,
 			false,
-		)
-		valz[i] = NewValidatorDefaultVotingPower(ld.PrivKeyShares[i].PubKey(), ld.ProTxHashes[i])
+		))
+		valz = append(valz, NewValidatorDefaultVotingPower(qks.PubKey, proTxHash))
 	}
 
 	// Just to make sure
@@ -1272,12 +1273,14 @@ func ValidatorSetFromExistingValidators(
 
 func ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes []crypto.ProTxHash) abci.ValidatorSetUpdate {
 	ld := llmq.MustGenerate(proTxHashes)
-	var valUpdates []abci.ValidatorUpdate
-	for i := 0; i < len(proTxHashes); i++ {
+	valUpdates := make([]abci.ValidatorUpdate, 0, len(proTxHashes))
+	iter := ld.Iter()
+	for iter.Next() {
+		proTxHash, qks := iter.Value()
 		valUpdate := TM2PB.NewValidatorUpdate(
-			ld.PrivKeyShares[i].PubKey(),
+			qks.PubKey,
 			DefaultDashVotingPower,
-			ld.ProTxHashes[i],
+			proTxHash,
 			"",
 		)
 		valUpdates = append(valUpdates, valUpdate)

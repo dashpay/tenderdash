@@ -171,9 +171,10 @@ func LoadTestnet(file string) (*Testnet, error) {
 		quorumType = 100
 	}
 
-	proTxHashes := genProTxHashes(proTxHashGen, validatorCount)
-	ld := llmq.MustGenerate(proTxHashes, llmq.WithSeed(randomSeed))
-
+	ld := llmq.MustGenerate(
+		genProTxHashes(proTxHashGen, validatorCount),
+		llmq.WithSeed(randomSeed),
+	)
 	quorumHash := quorumHashGen.generate()
 
 	testnet := &Testnet{
@@ -320,12 +321,8 @@ func LoadTestnet(file string) (*Testnet, error) {
 	err = updateNodeParams(
 		nodesFilter(testnet.Nodes, shouldHaveName(manifest.Validators)),
 		initValidator(
-			&validatorParamsIter{
-				privKeys:           ld.PrivKeyShares,
-				proTxHashes:        proTxHashes,
-				quorumHash:         quorumHash,
-				thresholdPublicKey: ld.ThresholdPubKey,
-			},
+			ld.Iter(),
+			quorumHash,
 			updateProTxHash(),
 			updateGenesisValidators(testnet),
 		),
@@ -358,7 +355,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 		heightStr := strconv.FormatInt(int64(height), 10)
 		validators := manifest.ValidatorUpdates[heightStr]
 		valUpdate := ValidatorsMap{}
-		proTxHashes = make([]crypto.ProTxHash, 0, len(validators))
+		proTxHashes := make([]crypto.ProTxHash, 0, len(validators))
 		for name := range validators {
 			node := testnet.LookupNode(name)
 			if node == nil {
@@ -375,14 +372,10 @@ func LoadTestnet(file string) (*Testnet, error) {
 		quorumHash := quorumHashGen.generate()
 
 		err = updateNodeParams(
-			lookupNodesByProTxHash(testnet, proTxHashes...),
+			lookupNodesByProTxHash(testnet, ld.ProTxHashes...),
 			initValidator(
-				&validatorParamsIter{
-					privKeys:           ld.PrivKeyShares,
-					proTxHashes:        proTxHashes,
-					quorumHash:         quorumHash,
-					thresholdPublicKey: ld.ThresholdPubKey,
-				},
+				ld.Iter(),
+				quorumHash,
 				updateValidatorUpdate(valUpdate),
 				printInitValidatorInfo(height),
 			),
@@ -393,7 +386,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 		}
 
 		err = updateNodeParams(
-			nodesFilter(testnet.Nodes, proTxHashShouldNotBeIn(proTxHashes)),
+			nodesFilter(testnet.Nodes, proTxHashShouldNotBeIn(ld.ProTxHashes)),
 			initAnyNode(ld.ThresholdPubKey, quorumHash),
 			updatePrivvalUpdateHeights(modifyHeight(height), quorumHash),
 		)
