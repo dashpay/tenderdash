@@ -118,7 +118,7 @@ func (c *llmqConfig) validate() error {
 		return errThresholdInvalid
 	}
 	if n < c.threshold {
-		return fmt.Errorf("n %d must be bigger than threshold %d", n, c.threshold)
+		return fmt.Errorf("number of proTxHashes %d must be bigger than threshold %d", n, c.threshold)
 	}
 	for _, proTxHash := range c.proTxHashes {
 		if len(proTxHash.Bytes()) != crypto.ProTxHashSize {
