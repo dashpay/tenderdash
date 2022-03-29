@@ -2,7 +2,7 @@ package llmq
 
 import "github.com/tendermint/tendermint/crypto"
 
-// Iter initialises and returns LLMQ iterator
+// Iter creates and returns LLMQ iterator
 func (l *Data) Iter() *Iter {
 	return &Iter{data: l}
 }
