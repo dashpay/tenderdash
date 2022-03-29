@@ -654,22 +654,22 @@ func randVoteSetWithLLMQType(
 	llmqType btcjson.LLMQType,
 	threshold int,
 ) (*VoteSet, *ValidatorSet, []PrivValidator) {
-	var (
-		valz           = make([]*Validator, numValidators)
-		privValidators = make([]PrivValidator, numValidators)
-	)
+	valz := make([]*Validator, 0, numValidators)
+	privValidators := make([]PrivValidator, 0, numValidators)
 	ld := llmq.MustGenerate(crypto.RandProTxHashes(numValidators), llmq.WithThreshold(threshold))
 	quorumHash := crypto.RandQuorumHash()
-	for i := 0; i < numValidators; i++ {
-		privValidators[i] = NewMockPVWithParams(
-			ld.PrivKeyShares[i],
-			ld.ProTxHashes[i],
+	iter := ld.Iter()
+	for iter.Next() {
+		proTxHash, qks := iter.Value()
+		privValidators = append(privValidators, NewMockPVWithParams(
+			qks.PrivKey,
+			proTxHash,
 			quorumHash,
 			ld.ThresholdPubKey,
 			false,
 			false,
-		)
-		valz[i] = NewValidatorDefaultVotingPower(ld.PubKeyShares[i], ld.ProTxHashes[i])
+		))
+		valz = append(valz, NewValidatorDefaultVotingPower(qks.PubKey, proTxHash))
 	}
 
 	sort.Sort(PrivValidatorsByProTxHash(privValidators))

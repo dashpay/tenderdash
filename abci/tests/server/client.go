@@ -15,7 +15,7 @@ import (
 var ctx = context.Background()
 
 func InitChain(client abcicli.Client) error {
-	total := 10
+	const total = 10
 	ld, err := llmq.Generate(crypto.RandProTxHashes(total))
 	if err != nil {
 		return err

@@ -1,4 +1,3 @@
-//nolint: gosec
 package bls12381
 
 import (
@@ -13,6 +12,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/tmhash"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 )
 
@@ -176,20 +176,10 @@ func GenPrivKeyFromSecret(secret []byte) PrivKey {
 	return privKey.Serialize()
 }
 
-// ReverseBytes returns a reversed sequence bytes of passed slice
-func ReverseBytes(bz []byte) []byte {
-	l := len(bz)
-	s := make([]byte, l)
-	for i, j := 0, l-1; i <= j; i, j = i+1, j-1 {
-		s[i], s[j] = bz[j], bz[i]
-	}
-	return s
-}
-
 func ReverseProTxHashes(proTxHashes []crypto.ProTxHash) []crypto.ProTxHash {
 	reversedProTxHashes := make([]crypto.ProTxHash, len(proTxHashes))
 	for i := 0; i < len(proTxHashes); i++ {
-		reversedProTxHashes[i] = ReverseBytes(proTxHashes[i])
+		reversedProTxHashes[i] = proTxHashes[i].ReverseBytes()
 	}
 	return reversedProTxHashes
 }
@@ -219,7 +209,7 @@ func RecoverThresholdPublicKeyFromPublicKeys(publicKeys []crypto.PubKey, blsIds 
 			return nil, fmt.Errorf("blsID incorrect size in public key recovery, expected 32 bytes (got %d)", len(blsID))
 		}
 		var hash bls.Hash
-		copy(hash[:], ReverseBytes(blsID))
+		copy(hash[:], tmbytes.Reverse(blsID))
 		hashes[i] = hash
 	}
 
@@ -255,7 +245,7 @@ func RecoverThresholdSignatureFromShares(sigSharesData [][]byte, blsIds [][]byte
 			return nil, fmt.Errorf("blsID incorrect size in signature recovery, expected 32 bytes (got %d)", len(blsID))
 		}
 		var hash bls.Hash
-		copy(hash[:], ReverseBytes(blsID))
+		copy(hash[:], tmbytes.Reverse(blsID))
 		hashes[i] = hash
 	}
 

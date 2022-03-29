@@ -1004,7 +1004,10 @@ func (s *stateQuorumManager) generateKeysAndUpdateState(
 	if err != nil {
 		return nil, err
 	}
-	qd := quorumData{Data: *lq}
+	qd := quorumData{
+		Data:       *lq,
+		quorumHash: crypto.RandQuorumHash(),
+	}
 	vsu, err := abci.LLMQToValidatorSetProto(*lq)
 	if err != nil {
 		return nil, err
@@ -1013,11 +1016,13 @@ func (s *stateQuorumManager) generateKeysAndUpdateState(
 	if err != nil {
 		return nil, err
 	}
-	for i, proTxHash := range lq.ProTxHashes {
+	iter := lq.Iter()
+	for iter.Next() {
+		proTxHash, qks := iter.Value()
 		_, err = s.updateState(
 			proTxHash,
-			lq.PrivKeyShares[i],
-			lq.QuorumHash,
+			qks.PrivKey,
+			qd.quorumHash,
 			lq.ThresholdPubKey,
 			height+3,
 		)
@@ -1051,5 +1056,6 @@ func (s *stateQuorumManager) validatorSet() *types.ValidatorSet {
 
 type quorumData struct {
 	llmq.Data
+	quorumHash crypto.QuorumHash
 	tx []byte
 }

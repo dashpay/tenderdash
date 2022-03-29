@@ -60,14 +60,10 @@ func Generate(proTxHashes []crypto.ProTxHash, opts ...optionFunc) (*Data, error)
 		threshold:   len(proTxHashes)*2/3 + 1,
 		seedReader:  crypto.CReader(),
 	}
-	_, err := crypto.CReader().Read(conf.hash[:])
-	if err != nil {
-		return nil, err
-	}
 	for _, opt := range opts {
 		opt(&conf)
 	}
-	err = conf.validate()
+	err := conf.validate()
 	if err != nil {
 		return nil, err
 	}
@@ -92,7 +88,7 @@ func Generate(proTxHashes []crypto.ProTxHash, opts ...optionFunc) (*Data, error)
 func WithSeed(seedSource int64) func(c *llmqConfig) {
 	return func(c *llmqConfig) {
 		if seedSource > 0 {
-			c.seedReader = rand.New(rand.NewSource(seedSource))
+			c.seedReader = rand.New(rand.NewSource(seedSource)) //nolint: gosec
 		}
 	}
 }
@@ -106,7 +102,6 @@ func WithThreshold(threshold int) func(c *llmqConfig) {
 }
 
 type llmqConfig struct {
-	hash        bls.Hash
 	proTxHashes []crypto.ProTxHash
 	threshold   int
 	seedReader  io.Reader
@@ -118,11 +113,11 @@ func (c *llmqConfig) validate() error {
 		return errThresholdInvalid
 	}
 	if n < c.threshold {
-		return fmt.Errorf("n %d must be bigger than threshold %d", n, c.threshold)
+		return fmt.Errorf("number of proTxHashes %d must be bigger than threshold %d", n, c.threshold)
 	}
 	for _, proTxHash := range c.proTxHashes {
 		if len(proTxHash.Bytes()) != crypto.ProTxHashSize {
-			return fmt.Errorf("blsId incorrect size in public key recovery, expected 32 bytes (got %d)", len(proTxHash))
+			return fmt.Errorf("incorrect proTxHash size in public key recovery, expected 32 bytes (got %d)", len(proTxHash))
 		}
 	}
 	return nil
@@ -157,9 +152,6 @@ func initKeys(seed io.Reader) func(ld *blsLLMQData) error {
 				return err
 			}
 			ld.pks[i] = ld.sks[i].PublicKey()
-			if err != nil {
-				return err
-			}
 		}
 		return nil
 	}
@@ -198,7 +190,7 @@ func initValidation() func(ld *blsLLMQData) error {
 		l := len(ld.proTxHashes)
 		proTxHashes := make([][]byte, l)
 		for i := 0; i < l; i++ {
-			proTxHashes[i] = bls12381.ReverseBytes(ld.proTxHashes[i].Bytes())
+			proTxHashes[i] = ld.proTxHashes[i].ReverseBytes()
 		}
 		thresholdPubKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(
 			blsPubKeys2CPubKeys(ld.pkShares),
