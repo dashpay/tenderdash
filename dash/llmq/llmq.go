@@ -60,14 +60,10 @@ func Generate(proTxHashes []crypto.ProTxHash, opts ...optionFunc) (*Data, error)
 		threshold:   len(proTxHashes)*2/3 + 1,
 		seedReader:  crypto.CReader(),
 	}
-	_, err := crypto.CReader().Read(conf.hash[:])
-	if err != nil {
-		return nil, err
-	}
 	for _, opt := range opts {
 		opt(&conf)
 	}
-	err = conf.validate()
+	err := conf.validate()
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +102,6 @@ func WithThreshold(threshold int) func(c *llmqConfig) {
 }
 
 type llmqConfig struct {
-	hash        bls.Hash
 	proTxHashes []crypto.ProTxHash
 	threshold   int
 	seedReader  io.Reader
