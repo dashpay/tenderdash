@@ -113,11 +113,11 @@ func (c *llmqConfig) validate() error {
 		return errThresholdInvalid
 	}
 	if n < c.threshold {
-		return fmt.Errorf("n %d must be bigger than threshold %d", n, c.threshold)
+		return fmt.Errorf("number of proTxHashes %d must be bigger than threshold %d", n, c.threshold)
 	}
 	for _, proTxHash := range c.proTxHashes {
 		if len(proTxHash.Bytes()) != crypto.ProTxHashSize {
-			return fmt.Errorf("blsId incorrect size in public key recovery, expected 32 bytes (got %d)", len(proTxHash))
+			return fmt.Errorf("incorrect proTxHash size in public key recovery, expected 32 bytes (got %d)", len(proTxHash))
 		}
 	}
 	return nil
