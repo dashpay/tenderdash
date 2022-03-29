@@ -122,7 +122,7 @@ func (c *llmqConfig) validate() error {
 	}
 	for _, proTxHash := range c.proTxHashes {
 		if len(proTxHash.Bytes()) != crypto.ProTxHashSize {
-			return fmt.Errorf("blsId incorrect size in public key recovery, expected 32 bytes (got %d)", len(proTxHash))
+			return fmt.Errorf("incorrect proTxHash size in public key recovery, expected 32 bytes (got %d)", len(proTxHash))
 		}
 	}
 	return nil
