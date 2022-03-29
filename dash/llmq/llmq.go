@@ -198,7 +198,7 @@ func initValidation() func(ld *blsLLMQData) error {
 		l := len(ld.proTxHashes)
 		proTxHashes := make([][]byte, l)
 		for i := 0; i < l; i++ {
-			proTxHashes[i] = bls12381.ReverseBytes(ld.proTxHashes[i].Bytes())
+			proTxHashes[i] = ld.proTxHashes[i].ReverseBytes()
 		}
 		thresholdPubKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(
 			blsPubKeys2CPubKeys(ld.pkShares),
