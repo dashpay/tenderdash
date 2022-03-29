@@ -92,7 +92,7 @@ func Generate(proTxHashes []crypto.ProTxHash, opts ...optionFunc) (*Data, error)
 func WithSeed(seedSource int64) func(c *llmqConfig) {
 	return func(c *llmqConfig) {
 		if seedSource > 0 {
-			c.seedReader = rand.New(rand.NewSource(seedSource))
+			c.seedReader = rand.New(rand.NewSource(seedSource)) //nolint: gosec
 		}
 	}
 }

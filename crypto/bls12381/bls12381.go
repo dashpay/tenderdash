@@ -1,4 +1,3 @@
-//nolint: gosec
 package bls12381
 
 import (
