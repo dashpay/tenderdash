@@ -123,6 +123,9 @@ const (
 	// maxLightBlockRequestRetries is the amount of retries acceptable before
 	// the backfill process aborts
 	maxLightBlockRequestRetries = 20
+
+	// backfillSleepTime uses to sleep if no connected peers to fetch light blocks
+	backfillSleepTime = 1 * time.Second
 )
 
 // Metricer defines an interface used for the rpc sync info query, please see statesync.metrics
@@ -384,6 +387,8 @@ func (r *Reactor) Backfill(ctx context.Context, state sm.State) error {
 		state.InitialHeight,
 		state.LastBlockID,
 		stopTime,
+		backfillSleepTime,
+		lightBlockResponseTimeout,
 	)
 }
 
@@ -393,6 +398,8 @@ func (r *Reactor) backfill(
 	startHeight, stopHeight, initialHeight int64,
 	trustedBlockID types.BlockID,
 	stopTime time.Time,
+	sleepTime time.Duration,
+	lightBlockResponseTimeout time.Duration,
 ) error {
 	r.Logger.Info("starting backfill process...", "startHeight", startHeight,
 		"stopHeight", stopHeight, "stopTime", stopTime, "trustedBlockID", trustedBlockID)
@@ -400,7 +407,6 @@ func (r *Reactor) backfill(
 	r.backfillBlockTotal = startHeight - stopHeight + 1
 	r.metrics.BackFillBlocksTotal.Set(float64(r.backfillBlockTotal))
 
-	const sleepTime = 1 * time.Second
 	var (
 		lastValidatorSet *types.ValidatorSet
 		lastChangeHeight = startHeight
