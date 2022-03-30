@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/libs/rand"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 )
 
@@ -135,7 +134,7 @@ func TestRecoverThresholdPublicKeyFromPublicKeys(t *testing.T) {
 			for i, s := range tc.proTxHashes {
 				data, err := hex.DecodeString(s)
 				require.NoError(t, err)
-				proTxHashes[i] = reverseBytes(data)
+				proTxHashes[i] = tmbytes.Reverse(data)
 			}
 			privateKeys := make([]crypto.PrivKey, tc.n)
 			for i, s := range tc.skShares {
@@ -177,53 +176,6 @@ func TestPublicKeyGeneration(t *testing.T) {
 			privateKey := PrivKey(skBytes)
 			pkBytes := base64.StdEncoding.EncodeToString(privateKey.PubKey().Bytes())
 			require.Equal(t, tc.wantPk, pkBytes)
-		})
-	}
-}
-
-func Test100Members(t *testing.T) {
-	testCases := []struct {
-		n    int
-		m    int
-		omit int
-	}{
-		{
-			n:    100,
-			m:    67,
-			omit: rand.Intn(34),
-		},
-		{
-			n:    100,
-			m:    67,
-			omit: 33,
-		},
-	}
-	for i, tc := range testCases {
-		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
-			privKeys, proTxHashes, thresholdPublicKey := CreatePrivLLMQData(tc.n, tc.m)
-			proTxHashesBytes := make([][]byte, len(proTxHashes))
-			for i, proTxHash := range proTxHashes {
-				proTxHashesBytes[i] = proTxHash
-			}
-			signID := crypto.CRandBytes(32)
-			signatures := make([][]byte, 100)
-			var err error
-			for i, privKey := range privKeys {
-				signatures[i], err = privKey.SignDigest(signID)
-				require.NoError(t, err)
-			}
-			offset := 0
-			if tc.omit > 0 {
-				offset = rand.Intn(tc.omit)
-			}
-			check := tc.n - tc.omit
-			require.True(t, check > 66)
-			sig, err := RecoverThresholdSignatureFromShares(
-				signatures[offset:check+offset], proTxHashesBytes[offset:check+offset],
-			)
-			require.NoError(t, err)
-			verified := thresholdPublicKey.VerifySignatureDigest(signID, sig)
-			require.True(t, verified, "offset %d check %d", offset, check)
 		})
 	}
 }
@@ -838,6 +790,6 @@ func TestReverse(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		require.Equal(t, tc.want, ReverseBytes(tc.data))
+		require.Equal(t, tc.want, tmbytes.Reverse(tc.data))
 	}
 }

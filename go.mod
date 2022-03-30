@@ -9,7 +9,7 @@ require (
 	github.com/btcsuite/btcd v0.22.0-beta
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/dashevo/dashd-go v0.23.4
-	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20201127091120-745324b80143
+	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20220324185745-cc53ca3c3a43 // indirect
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/go-kit/kit v0.12.0
 	github.com/go-pkgz/jrpc v0.2.0

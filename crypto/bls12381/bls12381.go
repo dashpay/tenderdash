@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 
-	bls "github.com/shotonoff/bls-signatures/go-bindings"
+	bls "github.com/dashpay/bls-signatures/go-bindings"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/tmhash"

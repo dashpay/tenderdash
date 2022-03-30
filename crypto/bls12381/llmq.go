@@ -7,8 +7,9 @@ import (
 	"math/rand"
 	"sort"
 
-	bls "github.com/shotonoff/bls-signatures/go-bindings"
+	bls "github.com/dashpay/bls-signatures/go-bindings"
 	"github.com/tendermint/tendermint/crypto"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 )
 
 var (
@@ -222,7 +223,7 @@ func initValidation() func(ld *blsLLMQData) error {
 		l := len(ld.proTxHashes)
 		proTxHashes := make([][]byte, l)
 		for i := 0; i < l; i++ {
-			proTxHashes[i] = ReverseBytes(ld.proTxHashes[i].Bytes())
+			proTxHashes[i] = tmbytes.Reverse(ld.proTxHashes[i].Bytes())
 		}
 		thresholdPubKey, err := RecoverThresholdPublicKeyFromPublicKeys(
 			blsPubKeys2CPubKeys(ld.pkShares),
