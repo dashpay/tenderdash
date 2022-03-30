@@ -414,14 +414,15 @@ func (r *Reactor) backfill(
 
 	queue := newBlockQueue(startHeight, stopHeight, initialHeight, stopTime, maxLightBlockRequestRetries)
 
+	ctxWithCancel, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	// fetch light blocks across four workers. The aim with deploying concurrent
 	// workers is to equate the network messaging time with the verification
 	// time. Ideally we want the verification process to never have to be
 	// waiting on blocks. If it takes 4s to retrieve a block and 1s to verify
 	// it, then steady state involves four workers.
 	for i := 0; i < int(r.cfg.Fetchers); i++ {
-		ctxWithCancel, cancel := context.WithCancel(ctx)
-		defer cancel()
 		go func() {
 			for {
 				select {
@@ -429,9 +430,8 @@ func (r *Reactor) backfill(
 					// pop the next peer of the list to send a request to
 					peer := r.peers.Pop(ctx)
 					r.Logger.Debug("fetching next block", "height", height, "peer", peer)
-					subCtx, cancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
-					defer cancel()
 					lb, err := func() (*types.LightBlock, error) {
+						subCtx, cancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
 						defer cancel()
 						// request the light block with a timeout
 						return r.dispatcher.LightBlock(subCtx, height, peer)
