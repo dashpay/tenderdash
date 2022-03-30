@@ -7,6 +7,7 @@ import (
 	"math/rand"
 	"sort"
 
+	"github.com/dashevo/dashd-go/btcjson"
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 
 	"github.com/tendermint/tendermint/crypto"
@@ -41,6 +42,16 @@ type blsLLMQData struct {
 	pks         []*bls.PublicKey
 	skShares    []*bls.PrivateKey
 	pkShares    []*bls.PublicKey
+}
+
+// MustGenerateForQuorum takes a passed quorum-type to derive a quorum size and threshold value
+// quorum-size is used to generate a list of pro-tx hashes
+func MustGenerateForQuorum(quorumType btcjson.LLMQType) *Data {
+	size, threshold := quorumProps(quorumType)
+	return MustGenerate(
+		crypto.RandProTxHashes(size),
+		WithThreshold(threshold),
+	)
 }
 
 // MustGenerate generates long-living master node quorum, but panics if a got error
@@ -240,9 +251,22 @@ func newLLMQDataFromBLSData(ld blsLLMQData, threshold int) *Data {
 		PrivKeyShares: blsPrivKeys2CPrivKeys(ld.skShares),
 		PubKeys:       blsPubKeys2CPubKeys(ld.pks),
 		PubKeyShares:  blsPubKeys2CPubKeys(ld.pkShares),
-		QuorumHash:    crypto.RandQuorumHash(),
 	}
 	llmqData.ThresholdPrivKey = llmqData.PrivKeys[0]
 	llmqData.ThresholdPubKey = llmqData.PubKeys[0]
 	return &llmqData
+}
+
+func quorumProps(quorumType btcjson.LLMQType) (int, int) {
+	switch quorumType {
+	case btcjson.LLMQType_50_60:
+		return 50, 30
+	case btcjson.LLMQType_400_60:
+		return 400, 240
+	case btcjson.LLMQType_400_85:
+		return 400, 340
+	case btcjson.LLMQType_100_67:
+		return 100, 67
+	}
+	panic(fmt.Sprintf("quorumType '%d' doesn't match with available", quorumType))
 }
