@@ -778,7 +778,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	// Any node pro tx hash should do
 	firstProTxHash, _ := state.Validators.GetByIndex(0)
 
-	execute := bockExecutorFunc(t, firstProTxHash)
+	execute := blockExecutorFunc(t, firstProTxHash)
 
 	// All operations will be on same quorum hash
 	quorumHash := crypto.RandQuorumHash()
