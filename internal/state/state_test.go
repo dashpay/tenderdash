@@ -459,7 +459,7 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 
 	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), nil, 0)
 	require.NoError(t, err)
-	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
+	blockID := block.BlockID()
 	abciResponses := &tmstate.ABCIResponses{
 		BeginBlock: &abci.ResponseBeginBlock{},
 		EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: nil},
@@ -597,7 +597,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), nil, 0)
 	require.NoError(t, err)
-	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
+	blockID := block.BlockID()
 	// no updates:
 	abciResponses := &tmstate.ABCIResponses{
 		BeginBlock: &abci.ResponseBeginBlock{},
@@ -1101,8 +1101,7 @@ func blockExecutorFunc(t *testing.T, firstProTxHash crypto.ProTxHash) func(prevS
 		require.NoError(t, err)
 		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit), nil, 0)
 		require.NoError(t, err)
-		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: block.MakePartSet(testPartSize).Header()}
-		state, err = sm.UpdateState(state, firstProTxHash, blockID, &block.Header, resp,
+		state, err = sm.UpdateState(state, firstProTxHash, block.BlockID(), &block.Header, resp,
 			validatorUpdates, thresholdPubKey, quorumHash)
 		require.NoError(t, err)
 		return state
