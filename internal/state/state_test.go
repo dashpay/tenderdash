@@ -1089,7 +1089,7 @@ func TestState_StateID(t *testing.T) {
 	assert.NoError(t, err, "StateID validation failed")
 }
 
-func bockExecutorFunc(t *testing.T, firstProTxHash crypto.ProTxHash) func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
+func blockExecutorFunc(t *testing.T, firstProTxHash crypto.ProTxHash) func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
 	t.Helper()
 	return func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
 		resp := &tmstate.ABCIResponses{
