@@ -2,33 +2,30 @@ package testsuite
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-
 	abcicli "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/dash/llmq"
 )
 
+var ctx = context.Background()
+
 func InitChain(client abcicli.Client) error {
-	total := 10
-	vals := make([]types.ValidatorUpdate, total)
-	privKeys, proTxHashes, thresholdPublicKey := bls12381.CreatePrivLLMQDataDefaultThreshold(total)
-	for i := 0; i < total; i++ {
-		pubkey := privKeys[i].PubKey().Bytes()
-		proTxHash := proTxHashes[i]
-		power := 100
-		vals[i] = types.UpdateValidator(proTxHash, pubkey, int64(power))
-	}
-	abciThresholdPublicKey, err := cryptoenc.PubKeyToProto(thresholdPublicKey)
+	const total = 10
+	ld, err := llmq.Generate(crypto.RandProTxHashes(total))
 	if err != nil {
 		return err
 	}
-	validatorSet := types.UpdateValidatorSet(vals, abciThresholdPublicKey)
-	_, err = client.InitChainSync(types.RequestInitChain{
-		ValidatorSet: &validatorSet,
+	validatorSet, err := types.LLMQToValidatorSetProto(*ld)
+	if err != nil {
+		return err
+	}
+	_, err = client.InitChainSync(context.Background(), types.RequestInitChain{
+		ValidatorSet: validatorSet,
 	})
 	if err != nil {
 		fmt.Printf("Failed test: InitChain - %v\n", err)
@@ -38,19 +35,8 @@ func InitChain(client abcicli.Client) error {
 	return nil
 }
 
-func SetOption(client abcicli.Client, key, value string) error {
-	_, err := client.SetOptionSync(types.RequestSetOption{Key: key, Value: value})
-	if err != nil {
-		fmt.Println("Failed test: SetOption")
-		fmt.Printf("error while setting %v=%v: \nerror: %v\n", key, value, err)
-		return err
-	}
-	fmt.Println("Passed test: SetOption")
-	return nil
-}
-
 func Commit(client abcicli.Client, hashExp []byte) error {
-	res, err := client.CommitSync()
+	res, err := client.CommitSync(ctx)
 	data := res.Data
 	if err != nil {
 		fmt.Println("Failed test: Commit")
@@ -67,7 +53,7 @@ func Commit(client abcicli.Client, hashExp []byte) error {
 }
 
 func DeliverTx(client abcicli.Client, txBytes []byte, codeExp uint32, dataExp []byte) error {
-	res, _ := client.DeliverTxSync(types.RequestDeliverTx{Tx: txBytes})
+	res, _ := client.DeliverTxSync(ctx, types.RequestDeliverTx{Tx: txBytes})
 	code, data, log := res.Code, res.Data, res.Log
 	if code != codeExp {
 		fmt.Println("Failed test: DeliverTx")
@@ -86,7 +72,7 @@ func DeliverTx(client abcicli.Client, txBytes []byte, codeExp uint32, dataExp []
 }
 
 func CheckTx(client abcicli.Client, txBytes []byte, codeExp uint32, dataExp []byte) error {
-	res, _ := client.CheckTxSync(types.RequestCheckTx{Tx: txBytes})
+	res, _ := client.CheckTxSync(ctx, types.RequestCheckTx{Tx: txBytes})
 	code, data, log := res.Code, res.Data, res.Log
 	if code != codeExp {
 		fmt.Println("Failed test: CheckTx")

@@ -3,56 +3,44 @@ package kvstore
 import (
 	"bytes"
 	"encoding/base64"
-	"fmt"
-	"strconv"
 	"strings"
 
+	"github.com/gogo/protobuf/proto"
 	dbm "github.com/tendermint/tm-db"
 
-	"github.com/gogo/protobuf/proto"
 	"github.com/tendermint/tendermint/abci/example/code"
 	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/tendermint/tendermint/internal/libs/protoio"
+	"github.com/tendermint/tendermint/internal/libs/sync"
 	"github.com/tendermint/tendermint/libs/log"
-	pc "github.com/tendermint/tendermint/proto/tendermint/crypto"
 )
 
-const (
-	ValidatorSetChangePrefix                string = "val:"
-	ValidatorThresholdPublicKeyChangePrefix string = "tpk:"
-	ValidatorThresholdPublicKeyPrefix       string = "tpk"
-	ValidatorSetQuorumHashPrefix            string = "vqh"
-	ValidatorSetQuorumHashChangePrefix      string = "vqh:"
-)
+const ValidatorSetUpdatePrefix string = "vsu:"
 
 //-----------------------------------------
 
 var _ types.Application = (*PersistentKVStoreApplication)(nil)
 
 type PersistentKVStoreApplication struct {
-	app *Application
-
-	ValidatorSetUpdates types.ValidatorSetUpdate
-
-	valProTxHashToPubKeyMap map[string]*pc.PublicKey
-
+	mtx    sync.Mutex
+	app    *Application
 	logger log.Logger
+
+	valUpdatesRepo      *repository
+	ValidatorSetUpdates types.ValidatorSetUpdate
 }
 
 func NewPersistentKVStoreApplication(dbDir string) *PersistentKVStoreApplication {
-	name := "kvstore"
+	const name = "kvstore"
 	db, err := dbm.NewGoLevelDB(name, dbDir)
 	if err != nil {
 		panic(err)
 	}
-
-	state := loadState(db)
-
 	return &PersistentKVStoreApplication{
-		app:                     &Application{state: state},
-		valProTxHashToPubKeyMap: make(map[string]*pc.PublicKey),
-		logger:                  log.NewNopLogger(),
+		app:    &Application{state: loadState(db)},
+		logger: log.NewNopLogger(),
+
+		valUpdatesRepo: &repository{db: db},
 	}
 }
 
@@ -71,108 +59,87 @@ func (app *PersistentKVStoreApplication) Info(req types.RequestInfo) types.Respo
 	return res
 }
 
-func (app *PersistentKVStoreApplication) SetOption(req types.RequestSetOption) types.ResponseSetOption {
-	return app.app.SetOption(req)
-}
-
-// tx is either "val:proTxHash!pubkey!power" or "key=value" or just arbitrary bytes
+// DeliverTx will deliver a tx which is either "val:proTxHash!pubkey!power" or "key=value" or just arbitrary bytes
 func (app *PersistentKVStoreApplication) DeliverTx(req types.RequestDeliverTx) types.ResponseDeliverTx {
-	// if it starts with "vals:", update the validator set
-	// format is "val:proTxHash!pubkey!power"
-	switch {
-	case isValidatorTx(req.Tx):
-		// update validators in the merkle tree
-		// and in app.ValUpdates
-		return app.execValidatorTx(req.Tx)
-	case isThresholdPublicKeyTx(req.Tx):
-		return app.execThresholdPublicKeyTx(req.Tx)
-	case isQuorumHashTx(req.Tx):
-		return app.execQuorumHashTx(req.Tx)
-	default:
-		// otherwise, update the key-value store
-		return app.app.DeliverTx(req)
+	app.mtx.Lock()
+	defer app.mtx.Unlock()
+	if isValidatorSetUpdateTx(req.Tx) {
+		err := app.execValidatorSetTx(req.Tx)
+		if err != nil {
+			return types.ResponseDeliverTx{
+				Code: code.CodeTypeUnknownError,
+				Log:  err.Error(),
+			}
+		}
+		return types.ResponseDeliverTx{Code: code.CodeTypeOK}
 	}
+	return app.app.DeliverTx(req)
 }
 
 func (app *PersistentKVStoreApplication) CheckTx(req types.RequestCheckTx) types.ResponseCheckTx {
 	return app.app.CheckTx(req)
 }
 
-// Commit will panic if InitChain was not called
+// Commit makes a commit in application's state
 func (app *PersistentKVStoreApplication) Commit() types.ResponseCommit {
 	return app.app.Commit()
 }
 
-// When path=/val and data={validator address}, returns the validator update (types.ValidatorUpdate) varint encoded.
+// Query when path=/val and data={validator address}, returns the validator update (types.ValidatorUpdate) varint encoded.
 // For any other path, returns an associated value or nil if missing.
 func (app *PersistentKVStoreApplication) Query(reqQuery types.RequestQuery) (resQuery types.ResponseQuery) {
 	switch reqQuery.Path {
+	case "/vsu":
+		vsu, err := app.valUpdatesRepo.get()
+		if err != nil {
+			return types.ResponseQuery{
+				Code: code.CodeTypeUnknownError,
+				Log:  err.Error(),
+			}
+		}
+		data, err := encodeMsg(vsu)
+		if err != nil {
+			return types.ResponseQuery{
+				Code: code.CodeTypeEncodingError,
+				Log:  err.Error(),
+			}
+		}
+		resQuery.Key = reqQuery.Data
+		resQuery.Value = data
+		return
 	case "/verify-chainlock":
 		resQuery.Code = 0
-
 		return resQuery
-	case "/val":
-		key := []byte("val:" + string(reqQuery.Data))
-		value, err := app.app.state.db.Get(key)
-		if err != nil {
-			panic(err)
-		}
-
-		resQuery.Key = reqQuery.Data
-		resQuery.Value = value
-		return
-	case "/tpk":
-		key := []byte("tpk")
-		value, err := app.app.state.db.Get(key)
-		if err != nil {
-			panic(err)
-		}
-
-		resQuery.Key = reqQuery.Data
-		resQuery.Value = value
-		return
-	case "/vqh":
-		key := []byte("vqh")
-		value, err := app.app.state.db.Get(key)
-		if err != nil {
-			panic(err)
-		}
-
-		resQuery.Key = reqQuery.Data
-		resQuery.Value = value
-		return
 	default:
 		return app.app.Query(reqQuery)
 	}
 }
 
-// Save the validators in the merkle tree
+// InitChain saves the validators in the merkle tree
 func (app *PersistentKVStoreApplication) InitChain(req types.RequestInitChain) types.ResponseInitChain {
-	for _, v := range req.ValidatorSet.ValidatorUpdates {
-		r := app.updateValidatorSet(v)
-		if r.IsErr() {
-			app.logger.Error("Error updating validators", "r", r)
-		}
+	err := app.valUpdatesRepo.set(req.ValidatorSet)
+	if err != nil {
+		app.logger.Error("error updating validators", "err", err)
+		return types.ResponseInitChain{}
 	}
-	app.updateThresholdPublicKey(types.ThresholdPublicKeyUpdate{
-		ThresholdPublicKey: req.ValidatorSet.ThresholdPublicKey,
-	})
-	app.updateQuorumHash(types.QuorumHashUpdate{
-		QuorumHash: req.ValidatorSet.QuorumHash,
-	})
 	return types.ResponseInitChain{}
 }
 
-// Track the block hash and header information
+// BeginBlock tracks the block hash and header information
 func (app *PersistentKVStoreApplication) BeginBlock(req types.RequestBeginBlock) types.ResponseBeginBlock {
+	app.mtx.Lock()
+	defer app.mtx.Unlock()
+
 	// reset valset changes
 	app.ValidatorSetUpdates.ValidatorUpdates = make([]types.ValidatorUpdate, 0)
 
 	return types.ResponseBeginBlock{}
 }
 
-// Update the validator set
+// EndBlock updates the validator set
 func (app *PersistentKVStoreApplication) EndBlock(_ types.RequestEndBlock) types.ResponseEndBlock {
+	app.mtx.Lock()
+	defer app.mtx.Unlock()
 	c := proto.Clone(&app.ValidatorSetUpdates).(*types.ValidatorSetUpdate)
 	return types.ResponseEndBlock{ValidatorSetUpdate: c}
 }
@@ -200,255 +167,79 @@ func (app *PersistentKVStoreApplication) ApplySnapshotChunk(
 //---------------------------------------------
 // update validators
 
-func (app *PersistentKVStoreApplication) ValidatorSet() (validatorSet types.ValidatorSetUpdate) {
-	itr, err := app.app.state.db.Iterator(nil, nil)
+func (app *PersistentKVStoreApplication) ValidatorSet() (*types.ValidatorSetUpdate, error) {
+	return app.valUpdatesRepo.get()
+}
+
+func (app *PersistentKVStoreApplication) execValidatorSetTx(tx []byte) error {
+	vsu, err := UnmarshalValidatorSetUpdate(tx)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	for ; itr.Valid(); itr.Next() {
-		key := itr.Key()
-		switch {
-		case isValidatorTx(key):
-			validator := new(types.ValidatorUpdate)
-			err := types.ReadMessage(bytes.NewBuffer(itr.Value()), validator)
-			if err != nil {
-				panic(err)
-			}
-			validatorSet.ValidatorUpdates = append(validatorSet.ValidatorUpdates, *validator)
-		case isThresholdPublicKeyTx(key):
-			thresholdPublicKeyMessage := new(types.ThresholdPublicKeyUpdate)
-			err := types.ReadMessage(bytes.NewBuffer(itr.Value()), thresholdPublicKeyMessage)
-			if err != nil {
-				panic(err)
-			}
-			validatorSet.ThresholdPublicKey = thresholdPublicKeyMessage.GetThresholdPublicKey()
-		case isQuorumHashTx(key):
-			quorumHashMessage := new(types.QuorumHashUpdate)
-			err := types.ReadMessage(bytes.NewBuffer(itr.Value()), quorumHashMessage)
-			if err != nil {
-				panic(err)
-			}
-			validatorSet.QuorumHash = quorumHashMessage.GetQuorumHash()
-		}
-	}
-	if err = itr.Error(); err != nil {
-		panic(err)
-	}
-	return validatorSet
-}
-
-func MakeValSetChangeTx(proTxHash []byte, pubkey *pc.PublicKey, power int64) []byte {
-	pubStr := ""
-	if pubkey != nil {
-		pk, err := cryptoenc.PubKeyFromProto(*pubkey)
-		if err != nil {
-			panic(err)
-		}
-		pubStr = base64.StdEncoding.EncodeToString(pk.Bytes())
-	}
-	proTxHashStr := base64.StdEncoding.EncodeToString(proTxHash)
-	return []byte(fmt.Sprintf("val:%s!%s!%d", proTxHashStr, pubStr, power))
-}
-
-func MakeValSetRemovalTx(proTxHash []byte) []byte {
-	proTxHashStr := base64.StdEncoding.EncodeToString(proTxHash)
-	return []byte(fmt.Sprintf("val:%s!!%d", proTxHashStr, 0))
-}
-
-func MakeThresholdPublicKeyChangeTx(thresholdPublicKey pc.PublicKey) []byte {
-	pk, err := cryptoenc.PubKeyFromProto(thresholdPublicKey)
+	err = app.valUpdatesRepo.set(vsu)
 	if err != nil {
-		panic(err)
+		return err
 	}
-	pubStr := base64.StdEncoding.EncodeToString(pk.Bytes())
-	return []byte(fmt.Sprintf("tpk:%s", pubStr))
+	app.ValidatorSetUpdates = *vsu
+	return nil
 }
 
-func MakeQuorumHashTx(quorumHash crypto.QuorumHash) []byte {
-	pubStr := base64.StdEncoding.EncodeToString(quorumHash)
-	return []byte(fmt.Sprintf("vqh:%s", pubStr))
-}
-
-func isValidatorTx(tx []byte) bool {
-	return strings.HasPrefix(string(tx), ValidatorSetChangePrefix)
-}
-
-func isThresholdPublicKeyTx(tx []byte) bool {
-	return strings.HasPrefix(string(tx), ValidatorThresholdPublicKeyPrefix)
-}
-
-func isQuorumHashTx(tx []byte) bool {
-	return strings.HasPrefix(string(tx), ValidatorSetQuorumHashPrefix)
-}
-
-// format is "val:proTxHash!pubkey!power"
-// pubkey is a base64-encoded 48-byte bls12381 key
-func (app *PersistentKVStoreApplication) execValidatorTx(tx []byte) types.ResponseDeliverTx {
-	tx = tx[len(ValidatorSetChangePrefix):]
-
-	//  get the pubkey and power
-	values := strings.Split(string(tx), "!")
-	if len(values) != 3 {
-		return types.ResponseDeliverTx{
-			Code: code.CodeTypeEncodingError,
-			Log:  fmt.Sprintf("Expected 'proTxHash!pubkey!power'. Got %v", values)}
-	}
-	proTxHashS, pubkeyS, powerS := values[0], values[1], values[2]
-
-	// decode the proTxHash
-	proTxHash, err := base64.StdEncoding.DecodeString(proTxHashS)
+// MarshalValidatorSetUpdate encodes validator-set-update into protobuf, encode into base64 and add "vsu:" prefix
+func MarshalValidatorSetUpdate(vsu *types.ValidatorSetUpdate) ([]byte, error) {
+	pbData, err := proto.Marshal(vsu)
 	if err != nil {
-		return types.ResponseDeliverTx{
-			Code: code.CodeTypeEncodingError,
-			Log:  fmt.Sprintf("ProTxHash (%s) is invalid base64", proTxHash)}
+		return nil, err
 	}
+	return []byte(ValidatorSetUpdatePrefix + base64.StdEncoding.EncodeToString(pbData)), nil
+}
 
-	var pubkey []byte
-	if pubkeyS != "" {
-		// decode the pubkey
-		pubkey, err = base64.StdEncoding.DecodeString(pubkeyS)
-		if err != nil {
-			return types.ResponseDeliverTx{
-				Code: code.CodeTypeEncodingError,
-				Log:  fmt.Sprintf("Pubkey (%s) is invalid base64", pubkeyS)}
-		}
-	}
-
-	// decode the power
-	power, err := strconv.ParseInt(powerS, 10, 64)
+// UnmarshalValidatorSetUpdate removes "vsu:" prefix and unmarshal a string into validator-set-update
+func UnmarshalValidatorSetUpdate(data []byte) (*types.ValidatorSetUpdate, error) {
+	l := len(ValidatorSetUpdatePrefix)
+	data, err := base64.StdEncoding.DecodeString(string(data[l:]))
 	if err != nil {
-		return types.ResponseDeliverTx{
-			Code: code.CodeTypeEncodingError,
-			Log:  fmt.Sprintf("Power (%s) is not an int", powerS)}
+		return nil, err
 	}
-
-	return app.updateValidatorSet(types.UpdateValidator(proTxHash, pubkey, power))
+	vsu := new(types.ValidatorSetUpdate)
+	err = proto.Unmarshal(data, vsu)
+	return vsu, err
 }
 
-// format is "tpk:pubkey"
-// pubkey is a base64-encoded 48-byte bls12381 key
-func (app *PersistentKVStoreApplication) execThresholdPublicKeyTx(tx []byte) types.ResponseDeliverTx {
-	tx = tx[len(ValidatorThresholdPublicKeyChangePrefix):]
+type repository struct {
+	db dbm.DB
+}
 
-	// decode the pubkey
-	pubkey, err := base64.StdEncoding.DecodeString(string(tx))
+func (r *repository) set(vsu *types.ValidatorSetUpdate) error {
+	data, err := proto.Marshal(vsu)
 	if err != nil {
-		return types.ResponseDeliverTx{
-			Code: code.CodeTypeEncodingError,
-			Log:  fmt.Sprintf("Threshold Pubkey (%s) is invalid base64", string(tx))}
+		return err
 	}
-
-	return app.updateThresholdPublicKey(types.UpdateThresholdPublicKey(pubkey))
+	return r.db.Set([]byte(ValidatorSetUpdatePrefix), data)
 }
 
-// format is "vqh:hash"
-// hash is a base64-encoded 32-byte hash
-func (app *PersistentKVStoreApplication) execQuorumHashTx(tx []byte) types.ResponseDeliverTx {
-	tx = tx[len(ValidatorSetQuorumHashChangePrefix):]
-
-	// decode the pubkey
-	quorumHash, err := base64.StdEncoding.DecodeString(string(tx))
+func (r *repository) get() (*types.ValidatorSetUpdate, error) {
+	data, err := r.db.Get([]byte(ValidatorSetUpdatePrefix))
 	if err != nil {
-		return types.ResponseDeliverTx{
-			Code: code.CodeTypeEncodingError,
-			Log:  fmt.Sprintf("Quorum Hash (%s) is invalid base64", string(tx))}
+		return nil, err
 	}
-
-	return app.updateQuorumHash(types.UpdateQuorumHash(quorumHash))
-}
-
-// add, update, or remove a validator
-func (app *PersistentKVStoreApplication) updateValidatorSet(v types.ValidatorUpdate) types.ResponseDeliverTx {
-	if v.PubKey != nil {
-		_, err := cryptoenc.PubKeyFromProto(*v.PubKey)
-		if err != nil {
-			panic(fmt.Errorf("can't decode public key: %w", err))
-		}
-	}
-
-	if v.ProTxHash == nil {
-		panic(fmt.Errorf("proTxHash can not be nil"))
-	}
-	key := []byte("val:" + string(v.ProTxHash))
-
-	if v.Power == 0 {
-		// remove validator
-		hasKey, err := app.app.state.db.Has(key)
-		if err != nil {
-			panic(err)
-		}
-		if !hasKey {
-			proTxHashString := base64.StdEncoding.EncodeToString(v.ProTxHash)
-			return types.ResponseDeliverTx{
-				Code: code.CodeTypeUnauthorized,
-				Log:  fmt.Sprintf("Cannot remove non-existent validator %s", proTxHashString)}
-		}
-		if err = app.app.state.db.Delete(key); err != nil {
-			panic(err)
-		}
-		delete(app.valProTxHashToPubKeyMap, string(v.ProTxHash))
-	} else {
-		// add or update validator
-		value := bytes.NewBuffer(make([]byte, 0))
-		if err := types.WriteMessage(&v, value); err != nil {
-			return types.ResponseDeliverTx{
-				Code: code.CodeTypeEncodingError,
-				Log:  fmt.Sprintf("Error encoding validator: %v", err)}
-		}
-		if err := app.app.state.db.Set(key, value.Bytes()); err != nil {
-			panic(err)
-		}
-		app.valProTxHashToPubKeyMap[string(v.ProTxHash)] = v.PubKey
-	}
-
-	// we only update the changes array if we successfully updated the tree
-	app.ValidatorSetUpdates.ValidatorUpdates = append(app.ValidatorSetUpdates.ValidatorUpdates, v)
-
-	return types.ResponseDeliverTx{Code: code.CodeTypeOK}
-}
-
-func (app *PersistentKVStoreApplication) updateThresholdPublicKey(
-	thresholdPublicKeyUpdate types.ThresholdPublicKeyUpdate) types.ResponseDeliverTx {
-	_, err := cryptoenc.PubKeyFromProto(thresholdPublicKeyUpdate.ThresholdPublicKey)
+	vsu := new(types.ValidatorSetUpdate)
+	err = proto.Unmarshal(data, vsu)
 	if err != nil {
-		panic(fmt.Errorf("can't decode threshold public key: %w", err))
+		return nil, err
 	}
-	key := []byte("tpk")
-
-	// add or update thresholdPublicKey
-	value := bytes.NewBuffer(make([]byte, 0))
-	if err := types.WriteMessage(&thresholdPublicKeyUpdate, value); err != nil {
-		return types.ResponseDeliverTx{
-			Code: code.CodeTypeEncodingError,
-			Log:  fmt.Sprintf("Error encoding threshold public key: %v", err)}
-	}
-	if err = app.app.state.db.Set(key, value.Bytes()); err != nil {
-		panic(err)
-	}
-
-	// we only update the changes array if we successfully updated the tree
-	app.ValidatorSetUpdates.ThresholdPublicKey = thresholdPublicKeyUpdate.GetThresholdPublicKey()
-
-	return types.ResponseDeliverTx{Code: code.CodeTypeOK}
+	return vsu, nil
 }
 
-func (app *PersistentKVStoreApplication) updateQuorumHash(
-	quorumHashUpdate types.QuorumHashUpdate) types.ResponseDeliverTx {
-	key := []byte("vqh")
+func isValidatorSetUpdateTx(tx []byte) bool {
+	return strings.HasPrefix(string(tx), ValidatorSetUpdatePrefix)
+}
 
-	// add or update thresholdPublicKey
-	value := bytes.NewBuffer(make([]byte, 0))
-	if err := types.WriteMessage(&quorumHashUpdate, value); err != nil {
-		return types.ResponseDeliverTx{
-			Code: code.CodeTypeEncodingError,
-			Log:  fmt.Sprintf("Error encoding threshold public key: %v", err)}
+func encodeMsg(data proto.Message) ([]byte, error) {
+	buf := bytes.NewBufferString("")
+	w := protoio.NewDelimitedWriter(buf)
+	_, err := w.WriteMsg(data)
+	if err != nil {
+		return nil, err
 	}
-	if err := app.app.state.db.Set(key, value.Bytes()); err != nil {
-		panic(err)
-	}
-
-	// we only update the changes array if we successfully updated the tree
-	app.ValidatorSetUpdates.QuorumHash = quorumHashUpdate.GetQuorumHash()
-
-	return types.ResponseDeliverTx{Code: code.CodeTypeOK}
+	return buf.Bytes(), nil
 }

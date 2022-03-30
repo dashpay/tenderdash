@@ -1,4 +1,3 @@
-//nolint: gosec
 package bls12381
 
 import (
@@ -10,8 +9,10 @@ import (
 	"io"
 
 	bls "github.com/shotonoff/bls-signatures/go-bindings"
+
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/tmhash"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmjson "github.com/tendermint/tendermint/libs/json"
 )
 
@@ -33,6 +34,17 @@ const (
 	SeedSize = 32
 
 	KeyType = "bls12381"
+)
+
+var (
+	errPubKeyIsEmpty     = errors.New("public key should not be empty")
+	errPubKeyInvalidSize = errors.New("invalid public key size")
+
+	emptyPubKeyVal = []byte{
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+	}
 )
 
 func init() {
@@ -169,63 +181,12 @@ func GenPrivKeyFromSecret(secret []byte) PrivKey {
 	return sk.Serialize()
 }
 
-// ReverseBytes returns a reversed sequence bytes of passed slice
-func ReverseBytes(bz []byte) []byte {
-	l := len(bz)
-	s := make([]byte, l)
-	for i, j := 0, l-1; i <= j; i, j = i+1, j-1 {
-		s[i], s[j] = bz[j], bz[i]
-	}
-	return s
-}
-
 func ReverseProTxHashes(proTxHashes []crypto.ProTxHash) []crypto.ProTxHash {
 	reversedProTxHashes := make([]crypto.ProTxHash, len(proTxHashes))
 	for i := 0; i < len(proTxHashes); i++ {
-		reversedProTxHashes[i] = ReverseBytes(proTxHashes[i])
+		reversedProTxHashes[i] = proTxHashes[i].ReverseBytes()
 	}
 	return reversedProTxHashes
-}
-
-func CreatePrivLLMQDataDefaultThreshold(members int) ([]crypto.PrivKey, []crypto.ProTxHash, crypto.PubKey) {
-	return CreatePrivLLMQData(members, members*2/3+1)
-}
-
-func CreateProTxHashes(members int) []crypto.ProTxHash {
-	proTxHashes := make([]crypto.ProTxHash, members)
-	for i := 0; i < members; i++ {
-		proTxHashes[i] = crypto.RandProTxHash()
-	}
-	return proTxHashes
-}
-
-func CreatePrivLLMQData(members int, threshold int) ([]crypto.PrivKey, []crypto.ProTxHash, crypto.PubKey) {
-	proTxHashes := CreateProTxHashes(members)
-	orderedProTxHashes, skShares, thresholdPublicKey := CreatePrivLLMQDataOnProTxHashes(proTxHashes, threshold)
-	return skShares, orderedProTxHashes, thresholdPublicKey
-}
-
-func CreatePrivLLMQDataOnProTxHashesDefaultThreshold(proTxHashes []crypto.ProTxHash) ([]crypto.ProTxHash,
-	[]crypto.PrivKey, crypto.PubKey) {
-	return CreatePrivLLMQDataOnProTxHashes(proTxHashes, len(proTxHashes)*2/3+1)
-}
-
-func CreatePrivLLMQDataOnProTxHashesDefaultThresholdUsingSeedSource(proTxHashes []crypto.ProTxHash,
-	seedSource int64) ([]crypto.ProTxHash, []crypto.PrivKey, crypto.PubKey) {
-	return CreatePrivLLMQDataOnProTxHashesUsingSeed(proTxHashes, len(proTxHashes)*2/3+1, seedSource)
-}
-
-func CreatePrivLLMQDataOnProTxHashes(
-	proTxHashes []crypto.ProTxHash,
-	threshold int,
-) ([]crypto.ProTxHash, []crypto.PrivKey, crypto.PubKey) {
-	return CreatePrivLLMQDataOnProTxHashesUsingSeed(proTxHashes, threshold, 0)
-}
-
-func CreatePrivLLMQDataOnProTxHashesUsingSeed(proTxHashes []crypto.ProTxHash, threshold int,
-	seedSource int64) ([]crypto.ProTxHash, []crypto.PrivKey, crypto.PubKey) {
-	llmqData, _ := NewLLMQData(proTxHashes, WithThreshold(threshold), WithSeed(seedSource))
-	return llmqData.ProTxHashes, llmqData.PrivKeyShares, llmqData.ThresholdPubKey
 }
 
 func RecoverThresholdPublicKeyFromPublicKeys(publicKeys []crypto.PubKey, blsIds [][]byte) (crypto.PubKey, error) {
@@ -250,7 +211,7 @@ func RecoverThresholdPublicKeyFromPublicKeys(publicKeys []crypto.PubKey, blsIds 
 			return nil, fmt.Errorf("blsID incorrect size in public key recovery, expected 32 bytes (got %d)", len(blsID))
 		}
 		var hash bls.Hash
-		copy(hash[:], ReverseBytes(blsID))
+		copy(hash[:], tmbytes.Reverse(blsID))
 		hashes[i] = hash
 	}
 
@@ -286,7 +247,7 @@ func RecoverThresholdSignatureFromShares(sigSharesData [][]byte, blsIds [][]byte
 			return nil, fmt.Errorf("blsID incorrect size in signature recovery, expected 32 bytes (got %d)", len(blsID))
 		}
 		var hash bls.Hash
-		copy(hash[:], ReverseBytes(blsID))
+		copy(hash[:], tmbytes.Reverse(blsID))
 		hashes[i] = hash
 	}
 
@@ -309,12 +270,12 @@ func (pubKey PubKey) Address() crypto.Address {
 	if len(pubKey) != PubKeySize {
 		panic("pubkey is incorrect size")
 	}
-	return crypto.Address(tmhash.SumTruncated(pubKey))
+	return tmhash.SumTruncated(pubKey)
 }
 
 // Bytes returns the PubKey byte format.
 func (pubKey PubKey) Bytes() []byte {
-	return []byte(pubKey)
+	return pubKey
 }
 
 func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
@@ -398,6 +359,18 @@ func (pubKey PubKey) Equals(other crypto.PubKey) bool {
 	}
 
 	return false
+}
+
+// Validate validates a public key value
+func (pubKey PubKey) Validate() error {
+	size := len(pubKey)
+	if size != PubKeySize {
+		return fmt.Errorf("public key has wrong size %d: %w", size, errPubKeyInvalidSize)
+	}
+	if bytes.Equal(pubKey, emptyPubKeyVal) {
+		return errPubKeyIsEmpty
+	}
+	return nil
 }
 
 func errInvalidPrivateKeySize(size int) error {

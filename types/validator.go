@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/tendermint/tendermint/crypto/bls12381"
+	"github.com/rs/zerolog"
 
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/bls12381"
 	ce "github.com/tendermint/tendermint/crypto/encoding"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
@@ -18,9 +19,10 @@ import (
 // make sure to update that method if changes are made here
 // The ProTxHash is part of Dash additions required for BLS threshold signatures
 type Validator struct {
-	PubKey      crypto.PubKey `json:"pub_key"`
-	VotingPower int64         `json:"voting_power"`
-	ProTxHash   ProTxHash     `json:"pro_tx_hash"`
+	PubKey      crypto.PubKey    `json:"pub_key"`
+	VotingPower int64            `json:"voting_power"`
+	ProTxHash   ProTxHash        `json:"pro_tx_hash"`
+	NodeAddress ValidatorAddress `json:"address"`
 
 	ProposerPriority int64 `json:"proposer_priority"`
 }
@@ -42,18 +44,28 @@ func NewTestRemoveValidatorGeneratedFromProTxHash(proTxHash crypto.ProTxHash) *V
 }
 
 func NewValidatorDefaultVotingPower(pubKey crypto.PubKey, proTxHash []byte) *Validator {
-	return NewValidator(pubKey, DefaultDashVotingPower, proTxHash)
+	return NewValidator(pubKey, DefaultDashVotingPower, proTxHash, "")
 }
 
 // NewValidator returns a new validator with the given pubkey and voting power.
-func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash []byte) *Validator {
-	val := &Validator{
+func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash ProTxHash, address string) *Validator {
+	var (
+		addr ValidatorAddress
+		err  error
+	)
+	if address != "" {
+		addr, err = ParseValidatorAddress(address)
+		if err != nil {
+			panic(err.Error())
+		}
+	}
+	return &Validator{
 		PubKey:           pubKey,
 		VotingPower:      votingPower,
 		ProposerPriority: 0,
 		ProTxHash:        proTxHash,
+		NodeAddress:      addr,
 	}
-	return val
 }
 
 // ValidateBasic performs basic validation.
@@ -72,6 +84,12 @@ func (v *Validator) ValidateBasic() error {
 
 	if len(v.ProTxHash) != crypto.DefaultHashSize {
 		return fmt.Errorf("validator proTxHash is the wrong size: %v", len(v.ProTxHash))
+	}
+
+	if !v.NodeAddress.Zero() {
+		if err := v.NodeAddress.Validate(); err != nil {
+			return fmt.Errorf("validator node address is invalid: %w", err)
+		}
 	}
 
 	return nil
@@ -125,15 +143,17 @@ func (v *Validator) CompareProposerPriority(other *Validator) *Validator {
 // 2. public key
 // 3. voting power
 // 4. proposer priority
+// 5. node address
 func (v *Validator) String() string {
 	if v == nil {
 		return "nil-Validator"
 	}
-	return fmt.Sprintf("Validator{%v %v VP:%v A:%v}",
+	return fmt.Sprintf("Validator{%v %v VP:%v A:%v N:%s}",
 		v.ProTxHash,
 		v.PubKey,
 		v.VotingPower,
-		v.ProposerPriority)
+		v.ProposerPriority,
+		v.NodeAddress.String())
 }
 
 func (v *Validator) ShortStringBasic() string {
@@ -143,6 +163,23 @@ func (v *Validator) ShortStringBasic() string {
 	return fmt.Sprintf("Validator{%v %v}",
 		v.ProTxHash.ShortString(),
 		v.PubKey)
+}
+
+// MarshalZerologObject implements zerolog.LogObjectMarshaler
+func (v *Validator) MarshalZerologObject(e *zerolog.Event) {
+	e.Str("protxhash", v.ProTxHash.ShortString())
+	e.Int64("voting_power", v.VotingPower)
+	e.Int64("proposer_priority", v.ProposerPriority)
+	e.Str("address", v.NodeAddress.String())
+
+	if v.PubKey != nil {
+		pubkey := v.PubKey.HexString()
+		if len(pubkey) > 8 {
+			pubkey = pubkey[:8]
+		}
+		e.Str("pub_key", pubkey)
+		e.Str("pub_key_type", v.PubKey.Type())
+	}
 }
 
 // ValidatorListString returns a prettified validator list for logging purposes.
@@ -160,10 +197,7 @@ func ValidatorListString(vals []*Validator) string {
 // as its redundant with the pubkey. This also excludes ProposerPriority
 // which changes every round.
 func (v *Validator) Bytes() []byte {
-	pk, err := ce.PubKeyToProto(v.PubKey)
-	if err != nil {
-		panic(err)
-	}
+	pk := ce.MustPubKeyToProto(v.PubKey)
 
 	pbv := tmproto.SimpleValidator{
 		PubKey:      &pk,
@@ -200,6 +234,7 @@ func (v *Validator) ToProto() (*tmproto.Validator, error) {
 		}
 		vp.PubKey = &pk
 	}
+	vp.NodeAddress = v.NodeAddress.String()
 
 	return &vp, nil
 }
@@ -210,39 +245,23 @@ func ValidatorFromProto(vp *tmproto.Validator) (*Validator, error) {
 	if vp == nil {
 		return nil, errors.New("nil validator")
 	}
-
 	v := new(Validator)
 	v.VotingPower = vp.GetVotingPower()
 	v.ProposerPriority = vp.GetProposerPriority()
 	v.ProTxHash = vp.ProTxHash
 
+	var err error
 	if vp.PubKey != nil && vp.PubKey.Sum != nil {
-		pk, err := ce.PubKeyFromProto(*vp.PubKey)
-		if err != nil {
+		if v.PubKey, err = ce.PubKeyFromProto(*vp.PubKey); err != nil {
 			return nil, err
 		}
-		v.PubKey = pk
+	}
+
+	if vp.NodeAddress != "" {
+		if v.NodeAddress, err = ParseValidatorAddress(vp.NodeAddress); err != nil {
+			return nil, err
+		}
 	}
 
 	return v, nil
-}
-
-//----------------------------------------
-// RandValidator
-
-// RandValidator returns a randomized validator, useful for testing.
-// UNSTABLE
-func RandValidator() (*Validator, PrivValidator) {
-	quorumHash := crypto.RandQuorumHash()
-	privVal := NewMockPVForQuorum(quorumHash)
-	proTxHash, err := privVal.GetProTxHash()
-	if err != nil {
-		panic(fmt.Errorf("could not retrieve proTxHash %w", err))
-	}
-	pubKey, err := privVal.GetPubKey(quorumHash)
-	if err != nil {
-		panic(fmt.Errorf("could not retrieve pubkey %w", err))
-	}
-	val := NewValidatorDefaultVotingPower(pubKey, proTxHash)
-	return val, privVal
 }

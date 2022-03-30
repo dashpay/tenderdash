@@ -8,11 +8,12 @@ import (
 	"fmt"
 
 	"github.com/dashevo/dashd-go/btcjson"
-	"github.com/tendermint/tendermint/crypto/bls12381"
+	"github.com/rs/zerolog"
 
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/bls12381"
+	"github.com/tendermint/tendermint/internal/libs/protoio"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/protoio"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -76,8 +77,8 @@ type Vote struct {
 	BlockID            BlockID               `json:"block_id"` // zero if vote is nil.
 	ValidatorProTxHash ProTxHash             `json:"validator_pro_tx_hash"`
 	ValidatorIndex     int32                 `json:"validator_index"`
-	BlockSignature     []byte                `json:"block_signature"`
-	StateSignature     []byte                `json:"state_signature"`
+	BlockSignature     tmbytes.HexBytes      `json:"block_signature"`
+	StateSignature     tmbytes.HexBytes      `json:"state_signature"`
 }
 
 // VoteBlockSignBytes returns the proto-encoding of the canonicalized Vote, for
@@ -108,9 +109,9 @@ func VoteBlockSignID(chainID string, vote *tmproto.Vote, quorumType btcjson.LLMQ
 
 	blockSignID := crypto.SignID(
 		quorumType,
-		bls12381.ReverseBytes(quorumHash),
-		bls12381.ReverseBytes(blockRequestID),
-		bls12381.ReverseBytes(blockMessageHash),
+		tmbytes.Reverse(quorumHash),
+		tmbytes.Reverse(blockRequestID),
+		tmbytes.Reverse(blockMessageHash),
 	)
 
 	return blockSignID
@@ -204,9 +205,9 @@ func (vote *Vote) Verify(
 
 	signID := crypto.SignID(
 		quorumType,
-		bls12381.ReverseBytes(quorumHash),
-		bls12381.ReverseBytes(blockRequestID),
-		bls12381.ReverseBytes(blockMessageHash),
+		tmbytes.Reverse(quorumHash),
+		tmbytes.Reverse(blockRequestID),
+		tmbytes.Reverse(blockMessageHash),
 	)
 
 	// fmt.Printf("block vote verify sign ID %s (%d - %s  - %s  - %s)\n", hex.EncodeToString(signID), quorumType,
@@ -215,7 +216,7 @@ func (vote *Vote) Verify(
 	if !pubKey.VerifySignatureDigest(signID, vote.BlockSignature) {
 		return nil, nil, fmt.Errorf(
 			"%s proTxHash %s pubKey %v vote %v sign bytes %s block signature %s", ErrVoteInvalidBlockSignature.Error(),
-			proTxHash, pubKey, vote, hex.EncodeToString(voteBlockSignBytes), hex.EncodeToString(vote.BlockSignature))
+			proTxHash.ShortString(), pubKey, vote, hex.EncodeToString(voteBlockSignBytes), hex.EncodeToString(vote.BlockSignature))
 	}
 
 	stateSignID := []byte(nil)
@@ -227,8 +228,10 @@ func (vote *Vote) Verify(
 		stateRequestID := stateID.SignRequestID()
 
 		stateSignID = crypto.SignID(
-			quorumType, bls12381.ReverseBytes(quorumHash), bls12381.ReverseBytes(stateRequestID),
-			bls12381.ReverseBytes(stateMessageHash))
+			quorumType,
+			tmbytes.Reverse(quorumHash),
+			tmbytes.Reverse(stateRequestID),
+			tmbytes.Reverse(stateMessageHash))
 
 		// fmt.Printf("state vote verify sign ID %s (%d - %s  - %s  - %s)\n", hex.EncodeToString(stateSignID), quorumType,
 		//	hex.EncodeToString(quorumHash), hex.EncodeToString(stateRequestID), hex.EncodeToString(stateMessageHash))
@@ -315,6 +318,20 @@ func (vote *Vote) ToProto() *tmproto.Vote {
 		BlockSignature:     vote.BlockSignature,
 		StateSignature:     vote.StateSignature,
 	}
+}
+
+// MarshalZerologObject formats this object for logging purposes
+func (vote *Vote) MarshalZerologObject(e *zerolog.Event) {
+	e.Str("vote", vote.String())
+	e.Int64("height", vote.Height)
+	e.Int32("round", vote.Round)
+	e.Str("type", vote.Type.String())
+	e.Str("block_key", vote.BlockID.String())
+	e.Str("block_signature", vote.BlockSignature.ShortString())
+	e.Str("state_signature", vote.StateSignature.ShortString())
+	e.Str("val_proTxHash", vote.ValidatorProTxHash.ShortString())
+	e.Int32("val_index", vote.ValidatorIndex)
+	e.Bool("nil", vote.BlockID.IsZero())
 }
 
 // FromProto converts a proto generetad type to a handwritten type

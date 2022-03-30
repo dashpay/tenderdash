@@ -1,35 +1,28 @@
 package commands
 
 import (
+	"context"
+	"errors"
 	"fmt"
+	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/spf13/cobra"
 	cfg "github.com/tendermint/tendermint/config"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
-	"github.com/tendermint/tendermint/p2p"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/types"
-	tmtime "github.com/tendermint/tendermint/types/time"
 )
 
-// InitFilesCmd initialises a fresh Tendermint Core instance.
+// InitFilesCmd initializes a fresh Tendermint Core instance.
 var InitFilesCmd = &cobra.Command{
-	Use:   "init",
-	Short: "Initialize Tenderdash for network use",
-	RunE:  initFiles,
-}
-
-// LocalInitFilesCmd initialises a fresh Tendermint Core instance.
-var LocalInitFilesCmd = &cobra.Command{
-	Use:   "init-single",
-	Short: "Initialize Tenderdash for single node use",
-	RunE:  initFilesSingleNode,
-}
-
-func initFilesSingleNode(cmd *cobra.Command, args []string) error {
-	return initFilesSingleNodeWithConfig(config)
+	Use:       "init [full|validator|seed|single]",
+	Short:     "Initializes a Tenderdash node",
+	ValidArgs: []string{"full", "validator", "seed", "single"},
+	// We allow for zero args so we can throw a more informative error
+	Args: cobra.MaximumNArgs(1),
+	RunE: initFiles,
 }
 
 var (
@@ -49,26 +42,50 @@ func AddInitFlags(cmd *cobra.Command) {
 }
 
 func initFiles(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		return errors.New("must specify a node type: tendermint init [validator|full|seed|single]")
+	}
+	config.Mode = args[0]
 	return initFilesWithConfig(config)
 }
 
-func initializeNodeKey(config *cfg.Config) error {
+func initFilesWithConfig(config *cfg.Config) error {
+	var (
+		pv  *privval.FilePV
+		err error
+	)
+
+	if config.Mode == cfg.ModeValidator {
+		// private validator
+		privValKeyFile := config.PrivValidator.KeyFile()
+		privValStateFile := config.PrivValidator.StateFile()
+		if tmos.FileExists(privValKeyFile) {
+			pv, err = privval.LoadFilePV(privValKeyFile, privValStateFile)
+			if err != nil {
+				return err
+			}
+
+			logger.Info("Found private validator", "keyFile", privValKeyFile,
+				"stateFile", privValStateFile)
+		} else {
+			pv = privval.GenFilePV(privValKeyFile, privValStateFile)
+			if err != nil {
+				return err
+			}
+			pv.Save()
+			logger.Info("Generated private validator", "keyFile", privValKeyFile,
+				"stateFile", privValStateFile)
+		}
+	}
+
 	nodeKeyFile := config.NodeKeyFile()
 	if tmos.FileExists(nodeKeyFile) {
 		logger.Info("Found node key", "path", nodeKeyFile)
 	} else {
-		if _, err := p2p.LoadOrGenNodeKey(nodeKeyFile); err != nil {
+		if _, err := types.LoadOrGenNodeKey(nodeKeyFile); err != nil {
 			return err
 		}
 		logger.Info("Generated node key", "path", nodeKeyFile)
-	}
-	return nil
-}
-
-func initFilesWithConfig(config *cfg.Config) error {
-	// node key
-	if err := initializeNodeKey(config); err != nil {
-		return err
 	}
 
 	// genesis file
@@ -76,9 +93,10 @@ func initFilesWithConfig(config *cfg.Config) error {
 	if tmos.FileExists(genFile) {
 		logger.Info("Found genesis file", "path", genFile)
 	} else {
+
 		genDoc := types.GenesisDoc{
 			ChainID:                      fmt.Sprintf("test-chain-%v", tmrand.Str(6)),
-			GenesisTime:                  tmtime.Now(),
+			GenesisTime:                  time.Now(),
 			ConsensusParams:              types.DefaultConsensusParams(),
 			QuorumType:                   btcjson.LLMQType(quorumType),
 			InitialCoreChainLockedHeight: coreChainLockedHeight,
@@ -86,77 +104,45 @@ func initFilesWithConfig(config *cfg.Config) error {
 			AppHash:                      appHash,
 		}
 
+		ctx, cancel := context.WithTimeout(context.TODO(), ctxTimeout)
+		defer cancel()
+
+		// if this is a validator we add it to genesis
+		if pv != nil {
+			proTxHash, err := pv.GetProTxHash(ctx)
+			if err != nil {
+				return fmt.Errorf("can't get proTxHash: %w", err)
+			}
+			genesisValidator := types.GenesisValidator{
+				ProTxHash: proTxHash,
+				Power:     types.DefaultDashVotingPower,
+			}
+			quorumHash, _ := pv.GetFirstQuorumHash(ctx)
+			if quorumHash != nil {
+				pubKey, err := pv.GetPubKey(ctx, quorumHash)
+				if err != nil {
+					return fmt.Errorf("can't get pubkey: %w", err)
+				}
+				genesisValidator.PubKey = pubKey
+
+				genDoc.QuorumHash = quorumHash
+				genDoc.ThresholdPublicKey = pubKey
+			}
+
+			genDoc.Validators = []types.GenesisValidator{genesisValidator}
+		}
+
 		if err := genDoc.SaveAs(genFile); err != nil {
 			return err
 		}
 		logger.Info("Generated genesis file", "path", genFile)
 	}
 
-	return nil
-}
-
-func initFilesSingleNodeWithConfig(config *cfg.Config) error {
-	// private validator
-	privValKeyFile := config.PrivValidatorKeyFile()
-	privValStateFile := config.PrivValidatorStateFile()
-	var pv *privval.FilePV
-	if tmos.FileExists(privValKeyFile) {
-		pv = privval.LoadFilePV(privValKeyFile, privValStateFile)
-		logger.Info("Found private validator", "keyFile", privValKeyFile,
-			"stateFile", privValStateFile)
-	} else {
-		pv = privval.GenFilePV(privValKeyFile, privValStateFile)
-		pv.Save()
-		logger.Info("Generated private validator", "keyFile", privValKeyFile,
-			"stateFile", privValStateFile)
-	}
-
-	// node key
-	if err := initializeNodeKey(config); err != nil {
+	// write config file
+	if err := cfg.WriteConfigFile(config.RootDir, config); err != nil {
 		return err
 	}
-
-	// genesis file
-	genFile := config.GenesisFile()
-	if tmos.FileExists(genFile) {
-		logger.Info("Found genesis file", "path", genFile)
-	} else {
-		quorumHash, err := pv.GetFirstQuorumHash()
-		if err != nil {
-			return fmt.Errorf("there is no quorum hash: %w", err)
-		}
-		pubKey, err := pv.GetPubKey(quorumHash)
-		if err != nil {
-			return fmt.Errorf("can't get pubkey in init files with config: %w", err)
-		}
-
-		proTxHash, err := pv.GetProTxHash()
-		if err != nil {
-			return fmt.Errorf("can't get proTxHash: %w", err)
-		}
-
-		logger.Info("Found proTxHash", "proTxHash", proTxHash)
-
-		genDoc := types.GenesisDoc{
-			ChainID:                      fmt.Sprintf("test-chain-%v", tmrand.Str(6)),
-			GenesisTime:                  tmtime.Now(),
-			ConsensusParams:              types.DefaultConsensusParams(),
-			ThresholdPublicKey:           pubKey,
-			QuorumHash:                   quorumHash,
-			InitialCoreChainLockedHeight: 1,
-		}
-
-		genDoc.Validators = []types.GenesisValidator{{
-			PubKey:    pubKey,
-			ProTxHash: proTxHash,
-			Power:     types.DefaultDashVotingPower,
-		}}
-
-		if err := genDoc.SaveAs(genFile); err != nil {
-			return err
-		}
-		logger.Info("Generated genesis file", "path", genFile)
-	}
+	logger.Info("Generated config", "mode", config.Mode)
 
 	return nil
 }

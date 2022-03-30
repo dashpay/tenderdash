@@ -1,12 +1,14 @@
 package crypto
 
 import (
-	bytes2 "bytes"
+	"bytes"
+	"errors"
+	"fmt"
 
 	"github.com/dashevo/dashd-go/btcjson"
 
 	"github.com/tendermint/tendermint/crypto/tmhash"
-	"github.com/tendermint/tendermint/libs/bytes"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 )
 
 const (
@@ -22,6 +24,11 @@ const (
 
 type KeyType int
 
+var (
+	// ErrInvalidProTxHash uses in proTxHash validation
+	ErrInvalidProTxHash = errors.New("proTxHash is invalid")
+)
+
 const (
 	Ed25519 KeyType = iota
 	BLS12381
@@ -29,29 +36,47 @@ const (
 	KeyTypeAny
 )
 
-// An address is a []byte, but hex-encoded even in JSON.
+// Address is an address is a []byte, but hex-encoded even in JSON.
 // []byte leaves us the option to change the address length.
 // Use an alias so Unmarshal methods (with ptr receivers) are available too.
-type Address = bytes.HexBytes
+type Address = tmbytes.HexBytes
 
-type ProTxHash = bytes.HexBytes
+type ProTxHash = tmbytes.HexBytes
 
-type QuorumHash = bytes.HexBytes
-
-func AddressHash(bz []byte) Address {
-	return Address(tmhash.SumTruncated(bz))
-}
+type QuorumHash = tmbytes.HexBytes
 
 func ProTxHashFromSeedBytes(bz []byte) ProTxHash {
-	return ProTxHash(tmhash.Sum(bz))
+	return tmhash.Sum(bz)
 }
 
 func RandProTxHash() ProTxHash {
-	return ProTxHash(CRandBytes(ProTxHashSize))
+	return CRandBytes(ProTxHashSize)
+}
+
+// RandProTxHashes generates and returns a list of N random generated proTxHashes
+func RandProTxHashes(n int) []ProTxHash {
+	proTxHashes := make([]ProTxHash, n)
+	for i := 0; i < n; i++ {
+		proTxHashes[i] = RandProTxHash()
+	}
+	return proTxHashes
+}
+
+// ProTxHashValidate validates the proTxHash value
+func ProTxHashValidate(val ProTxHash) error {
+	if len(val) != ProTxHashSize {
+		return fmt.Errorf(
+			"incorrect size actual %d, expected %d: %w",
+			len(val),
+			ProTxHashSize,
+			ErrInvalidProTxHash,
+		)
+	}
+	return nil
 }
 
 func RandQuorumHash() QuorumHash {
-	return QuorumHash(CRandBytes(ProTxHashSize))
+	return CRandBytes(ProTxHashSize)
 }
 
 func SmallQuorumType() btcjson.LLMQType {
@@ -65,7 +90,7 @@ func (sptxh SortProTxHash) Len() int {
 }
 
 func (sptxh SortProTxHash) Less(i, j int) bool {
-	return bytes2.Compare(sptxh[i], sptxh[j]) == -1
+	return bytes.Compare(sptxh[i], sptxh[j]) == -1
 }
 
 func (sptxh SortProTxHash) Swap(i, j int) {
@@ -76,6 +101,11 @@ type QuorumKeys struct {
 	PrivKey            PrivKey `json:"priv_key"`
 	PubKey             PubKey  `json:"pub_key"`
 	ThresholdPublicKey PubKey  `json:"threshold_public_key"`
+}
+
+// Validator is a validator interface
+type Validator interface {
+	Validate() error
 }
 
 type PubKey interface {
@@ -109,4 +139,16 @@ type Symmetric interface {
 // HexStringer ...
 type HexStringer interface {
 	HexString() string
+}
+
+// BatchVerifier If a new key type implements batch verification,
+// the key type must be registered in github.com/tendermint/tendermint/crypto/batch
+type BatchVerifier interface {
+	// Add appends an entry into the BatchVerifier.
+	Add(key PubKey, message, signature []byte) error
+	// Verify verifies all the entries in the BatchVerifier, and returns
+	// if every signature in the batch is valid, and a vector of bools
+	// indicating the verification status of each signature (in the order
+	// that signatures were added to the batch).
+	Verify() (bool, []bool)
 }

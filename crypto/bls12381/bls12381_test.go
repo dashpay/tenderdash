@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/rand"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 )
 
 func TestSignAndValidateBLS12381(t *testing.T) {
@@ -51,15 +52,6 @@ func TestBLSAddress(t *testing.T) {
 			assert.EqualValues(t, addrBytes, pubKey.Address())
 		})
 	}
-}
-
-func reverseBytes(bz []byte) []byte {
-	s := make([]byte, len(bz))
-	copy(s, bz)
-	for i, j := 0, len(s)-1; i < j; i, j = i+1, j-1 {
-		s[i], s[j] = s[j], s[i]
-	}
-	return s
 }
 
 func TestRecoverThresholdPublicKeyFromPublicKeys(t *testing.T) {

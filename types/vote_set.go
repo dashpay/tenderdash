@@ -7,10 +7,9 @@ import (
 	"strings"
 
 	"github.com/tendermint/tendermint/crypto/bls12381"
-
+	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
 	"github.com/tendermint/tendermint/libs/bits"
 	tmjson "github.com/tendermint/tendermint/libs/json"
-	tmsync "github.com/tendermint/tendermint/libs/sync"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -22,7 +21,7 @@ const (
 )
 
 // UNSTABLE
-// XXX: duplicate of p2p.ID to avoid dependence between packages.
+// XXX: duplicate of types.NodeID to avoid dependence between packages.
 // Perhaps we can have a minimal types package containing this (and other things?)
 // that both `types` and `p2p` import ?
 type P2PID string
@@ -598,7 +597,7 @@ func (voteSet *VoteSet) MarshalJSON() ([]byte, error) {
 }
 
 // More human readable JSON of the vote set
-// NOTE: insufficient for unmarshalling from (compressed votes)
+// NOTE: insufficient for unmarshaling from (compressed votes)
 // TODO: make the peerMaj23s nicer to read (eg just the block hash)
 type VoteSetJSON struct {
 	Votes         []string          `json:"votes"`

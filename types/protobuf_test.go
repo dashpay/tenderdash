@@ -4,15 +4,12 @@ import (
 	"testing"
 
 	"github.com/dashevo/dashd-go/btcjson"
-
-	"github.com/tendermint/tendermint/crypto/bls12381"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/tendermint/tendermint/crypto/bls12381"
+	"github.com/tendermint/tendermint/crypto/encoding"
 )
 
 func TestABCIPubKey(t *testing.T) {
@@ -22,9 +19,9 @@ func TestABCIPubKey(t *testing.T) {
 }
 
 func testABCIPubKey(t *testing.T, pk crypto.PubKey, typeStr string) error {
-	abciPubKey, err := cryptoenc.PubKeyToProto(pk)
+	abciPubKey, err := encoding.PubKeyToProto(pk)
 	require.NoError(t, err)
-	pk2, err := cryptoenc.PubKeyFromProto(abciPubKey)
+	pk2, err := encoding.PubKeyFromProto(abciPubKey)
 	require.NoError(t, err)
 	require.Equal(t, pk, pk2)
 	return nil
@@ -58,14 +55,6 @@ func TestABCIValidators(t *testing.T) {
 	assert.Equal(t, tmValExpected, tmVals[0])
 }
 
-func TestABCIConsensusParams(t *testing.T) {
-	cp := DefaultConsensusParams()
-	abciCP := TM2PB.ConsensusParams(cp)
-	cp2 := UpdateConsensusParams(*cp, abciCP)
-
-	assert.Equal(t, *cp, cp2)
-}
-
 type pubKeyBLS struct{}
 
 func (pubKeyBLS) Address() Address                                  { return []byte{} }
@@ -80,12 +69,22 @@ func (pubKeyBLS) TypeValue() crypto.KeyType                         { return cry
 
 func TestABCIValidatorFromPubKeyAndPower(t *testing.T) {
 	pubkey := bls12381.GenPrivKey().PubKey()
-
-	abciVal := TM2PB.NewValidatorUpdate(pubkey, DefaultDashVotingPower, crypto.RandProTxHash())
+	address := RandValidatorAddress()
+	abciVal := TM2PB.NewValidatorUpdate(pubkey, DefaultDashVotingPower, crypto.RandProTxHash(), address.String())
 	assert.Equal(t, DefaultDashVotingPower, abciVal.Power)
+	assert.Equal(t, address.String(), abciVal.NodeAddress)
 
-	assert.NotPanics(t, func() { TM2PB.NewValidatorUpdate(nil, DefaultDashVotingPower, crypto.RandProTxHash()) })
-	assert.Panics(t, func() { TM2PB.NewValidatorUpdate(pubKeyBLS{}, DefaultDashVotingPower, crypto.RandProTxHash()) })
+	assert.NotPanics(t, func() {
+		TM2PB.NewValidatorUpdate(nil, DefaultDashVotingPower, crypto.RandProTxHash(), RandValidatorAddress().String())
+	})
+	assert.Panics(t, func() {
+		TM2PB.NewValidatorUpdate(
+			pubKeyBLS{},
+			DefaultDashVotingPower,
+			crypto.RandProTxHash(),
+			RandValidatorAddress().String(),
+		)
+	})
 }
 
 func TestABCIValidatorWithoutPubKey(t *testing.T) {

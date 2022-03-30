@@ -2,11 +2,14 @@ package bits
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
+	"math"
+	mrand "math/rand"
 	"regexp"
 	"strings"
-	"sync"
 
+	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmprotobits "github.com/tendermint/tendermint/proto/tendermint/libs/bits"
@@ -14,7 +17,7 @@ import (
 
 // BitArray is a thread-safe implementation of a bit array.
 type BitArray struct {
-	mtx   sync.Mutex
+	mtx   tmsync.RWMutex
 	Bits  int      `json:"bits"`  // NOTE: persisted via reflect, must be exported
 	Elems []uint64 `json:"elems"` // NOTE: persisted via reflect, must be exported
 }
@@ -22,12 +25,14 @@ type BitArray struct {
 // NewBitArray returns a new bit array.
 // It returns nil if the number of bits is zero.
 func NewBitArray(bits int) *BitArray {
+	// Reseed non-deterministically.
+	tmrand.Reseed()
 	if bits <= 0 {
 		return nil
 	}
 	return &BitArray{
 		Bits:  bits,
-		Elems: make([]uint64, (bits+63)/64),
+		Elems: make([]uint64, numElems(bits)),
 	}
 }
 
@@ -45,8 +50,8 @@ func (bA *BitArray) GetIndex(i int) bool {
 	if bA == nil {
 		return false
 	}
-	bA.mtx.Lock()
-	defer bA.mtx.Unlock()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 	return bA.getIndex(i)
 }
 
@@ -85,8 +90,8 @@ func (bA *BitArray) Copy() *BitArray {
 	if bA == nil {
 		return nil
 	}
-	bA.mtx.Lock()
-	defer bA.mtx.Unlock()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 	return bA.copy()
 }
 
@@ -100,7 +105,7 @@ func (bA *BitArray) copy() *BitArray {
 }
 
 func (bA *BitArray) copyBits(bits int) *BitArray {
-	c := make([]uint64, (bits+63)/64)
+	c := make([]uint64, numElems(bits))
 	copy(c, bA.Elems)
 	return &BitArray{
 		Bits:  bits,
@@ -121,15 +126,14 @@ func (bA *BitArray) Or(o *BitArray) *BitArray {
 	if o == nil {
 		return bA.Copy()
 	}
-	bA.mtx.Lock()
-	o.mtx.Lock()
+	o = o.Copy()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 	c := bA.copyBits(tmmath.MaxInt(bA.Bits, o.Bits))
 	smaller := tmmath.MinInt(len(bA.Elems), len(o.Elems))
 	for i := 0; i < smaller; i++ {
 		c.Elems[i] |= o.Elems[i]
 	}
-	bA.mtx.Unlock()
-	o.mtx.Unlock()
 	return c
 }
 
@@ -140,12 +144,9 @@ func (bA *BitArray) And(o *BitArray) *BitArray {
 	if bA == nil || o == nil {
 		return nil
 	}
-	bA.mtx.Lock()
-	o.mtx.Lock()
-	defer func() {
-		bA.mtx.Unlock()
-		o.mtx.Unlock()
-	}()
+	o = o.Copy()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 	return bA.and(o)
 }
 
@@ -162,8 +163,8 @@ func (bA *BitArray) Not() *BitArray {
 	if bA == nil {
 		return nil // Degenerate
 	}
-	bA.mtx.Lock()
-	defer bA.mtx.Unlock()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 	return bA.not()
 }
 
@@ -184,8 +185,9 @@ func (bA *BitArray) Sub(o *BitArray) *BitArray {
 		// TODO: Decide if we should do 1's complement here?
 		return nil
 	}
-	bA.mtx.Lock()
-	o.mtx.Lock()
+	o = o.Copy()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 	// output is the same size as bA
 	c := bA.copyBits(bA.Bits)
 	// Only iterate to the minimum size between the two.
@@ -197,8 +199,6 @@ func (bA *BitArray) Sub(o *BitArray) *BitArray {
 		// &^ is and not in golang
 		c.Elems[i] &^= o.Elems[i]
 	}
-	bA.mtx.Unlock()
-	o.mtx.Unlock()
 	return c
 }
 
@@ -207,8 +207,8 @@ func (bA *BitArray) IsEmpty() bool {
 	if bA == nil {
 		return true // should this be opposite?
 	}
-	bA.mtx.Lock()
-	defer bA.mtx.Unlock()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 	for _, e := range bA.Elems {
 		if e > 0 {
 			return false
@@ -222,8 +222,8 @@ func (bA *BitArray) IsFull() bool {
 	if bA == nil {
 		return true
 	}
-	bA.mtx.Lock()
-	defer bA.mtx.Unlock()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 
 	// Check all elements except the last
 	for _, elem := range bA.Elems[:len(bA.Elems)-1] {
@@ -240,21 +240,21 @@ func (bA *BitArray) IsFull() bool {
 
 // PickRandom returns a random index for a set bit in the bit array.
 // If there is no such value, it returns 0, false.
-// It uses the global randomness in `random.go` to get this index.
+// It uses math/rand's global randomness Source to get this index.
 func (bA *BitArray) PickRandom() (int, bool) {
 	if bA == nil {
 		return 0, false
 	}
 
-	bA.mtx.Lock()
+	bA.mtx.RLock()
 	trueIndices := bA.getTrueIndices()
-	bA.mtx.Unlock()
+	bA.mtx.RUnlock()
 
 	if len(trueIndices) == 0 { // no bits set to true
 		return 0, false
 	}
-
-	return trueIndices[tmrand.Intn(len(trueIndices))], true
+	// nolint:gosec // G404: Use of weak random number generator
+	return trueIndices[mrand.Intn(len(trueIndices))], true
 }
 
 func (bA *BitArray) getTrueIndices() []int {
@@ -303,12 +303,14 @@ func (bA *BitArray) StringIndented(indent string) string {
 	if bA == nil {
 		return "nil-BitArray"
 	}
-	bA.mtx.Lock()
-	defer bA.mtx.Unlock()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 	return bA.stringIndented(indent)
 }
 
 func (bA *BitArray) CountTrueBits() int {
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 	bits := 0
 	for i := 0; i < bA.Bits; i++ {
 		if bA.getIndex(i) {
@@ -346,8 +348,8 @@ func (bA *BitArray) stringIndented(indent string) string {
 
 // Bytes returns the byte representation of the bits within the bitarray.
 func (bA *BitArray) Bytes() []byte {
-	bA.mtx.Lock()
-	defer bA.mtx.Unlock()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 
 	numBytes := (bA.Bits + 7) / 8
 	bytes := make([]byte, numBytes)
@@ -367,9 +369,7 @@ func (bA *BitArray) Update(o *BitArray) {
 	}
 
 	bA.mtx.Lock()
-	o.mtx.Lock()
 	copy(bA.Elems, o.Elems)
-	o.mtx.Unlock()
 	bA.mtx.Unlock()
 }
 
@@ -380,8 +380,8 @@ func (bA *BitArray) MarshalJSON() ([]byte, error) {
 		return []byte("null"), nil
 	}
 
-	bA.mtx.Lock()
-	defer bA.mtx.Unlock()
+	bA.mtx.RLock()
+	defer bA.mtx.RUnlock()
 
 	bits := `"`
 	for i := 0; i < bA.Bits; i++ {
@@ -428,27 +428,48 @@ func (bA *BitArray) UnmarshalJSON(bz []byte) error {
 	return nil
 }
 
-// ToProto converts BitArray to protobuf
+// ToProto converts BitArray to protobuf. It returns nil if BitArray is
+// nil/empty.
 func (bA *BitArray) ToProto() *tmprotobits.BitArray {
-	if bA == nil || len(bA.Elems) == 0 {
+	if bA == nil ||
+		(len(bA.Elems) == 0 && bA.Bits == 0) { // empty
 		return nil
 	}
 
-	return &tmprotobits.BitArray{
-		Bits:  int64(bA.Bits),
-		Elems: bA.Elems,
-	}
+	bc := bA.Copy()
+	return &tmprotobits.BitArray{Bits: int64(bc.Bits), Elems: bc.Elems}
 }
 
-// FromProto sets a protobuf BitArray to the given pointer.
-func (bA *BitArray) FromProto(protoBitArray *tmprotobits.BitArray) {
+// FromProto sets BitArray to the given protoBitArray. It returns an error if
+// protoBitArray is invalid.
+func (bA *BitArray) FromProto(protoBitArray *tmprotobits.BitArray) error {
 	if protoBitArray == nil {
-		bA = nil
-		return
+		return nil
 	}
 
-	bA.Bits = int(protoBitArray.Bits)
-	if len(protoBitArray.Elems) > 0 {
-		bA.Elems = protoBitArray.Elems
+	// Validate protoBitArray.
+	if protoBitArray.Bits < 0 {
+		return errors.New("negative Bits")
 	}
+	// #[32bit]
+	if protoBitArray.Bits > math.MaxInt32 { // prevent overflow on 32bit systems
+		return errors.New("too many Bits")
+	}
+	if got, exp := len(protoBitArray.Elems), numElems(int(protoBitArray.Bits)); got != exp {
+		return fmt.Errorf("invalid number of Elems: got %d, but exp %d", got, exp)
+	}
+
+	bA.mtx.Lock()
+	defer bA.mtx.Unlock()
+
+	ec := make([]uint64, len(protoBitArray.Elems))
+	copy(ec, protoBitArray.Elems)
+
+	bA.Bits = int(protoBitArray.Bits)
+	bA.Elems = ec
+	return nil
+}
+
+func numElems(bits int) int {
+	return (bits + 63) / 64
 }

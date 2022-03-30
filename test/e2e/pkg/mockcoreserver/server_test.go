@@ -4,29 +4,29 @@ import (
 	"context"
 	"encoding/hex"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"testing"
-	"time"
-
-	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
+	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 )
 
 func TestServer(t *testing.T) {
 	ctx := context.Background()
 	srv := NewHTTPServer(":9981")
+	logger := log.TestingLogger()
 	go func() {
 		srv.Start()
 	}()
-	time.Sleep(10 * time.Microsecond)
+	srv.WaitReady()
 	testCases := []struct {
 		url   string
 		e     string
@@ -50,14 +50,14 @@ func TestServer(t *testing.T) {
 		srv.
 			On("/test").
 			Expect(func(req *http.Request) error {
-				log.Println(req.URL.String())
+				logger.Debug("mock core server request received", "url", req.URL.String())
 				return nil
 			}).
 			Expect(And(BodyShouldBeEmpty(), QueryShouldHave(tc.query))).
 			Once().
 			Respond(JSONBody(tc.e), JSONContentType())
 		resp, err := http.Get(tc.url)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		data, err := ioutil.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		assert.NoError(t, err)
@@ -80,7 +80,8 @@ func TestDashCoreSignerPingMethod(t *testing.T) {
 	go func() {
 		srv.Start()
 	}()
-	dashCoreRPCClient, err := dashcore.NewRPCClient(addr, "root", "root")
+	logger := log.TestingLogger()
+	dashCoreRPCClient, err := dashcore.NewRPCClient(addr, "root", "root", logger)
 	assert.NoError(t, err)
 	client, err := privval.NewDashCoreSignerClient(dashCoreRPCClient, btcjson.LLMQType_5_60)
 	assert.NoError(t, err)
@@ -126,12 +127,13 @@ func TestGetPubKey(t *testing.T) {
 		srv.Start()
 	}()
 
-	dashCoreRPCClient, err := dashcore.NewRPCClient(addr, "root", "root")
+	logger := log.TestingLogger()
+	dashCoreRPCClient, err := dashcore.NewRPCClient(addr, "root", "root", logger)
 	assert.NoError(t, err)
 	client, err := privval.NewDashCoreSignerClient(dashCoreRPCClient, btcjson.LLMQType_5_60)
 	assert.NoError(t, err)
 	quorumHash := crypto.RandQuorumHash()
-	pubKey, err := client.GetPubKey(quorumHash)
+	pubKey, err := client.GetPubKey(context.Background(), quorumHash)
 	assert.NoError(t, err)
 	b, _ := hex.DecodeString(
 		"83349BA8363E5C03E9D6318B0491E38305CF59D9D57CEA2295A86ECFA696622571F266C28BACC78666E8B9B0FB2B3123",

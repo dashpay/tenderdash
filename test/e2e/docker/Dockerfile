@@ -7,7 +7,6 @@ RUN apt-get -qq update -y && apt-get -qq upgrade -y >/dev/null
 RUN apt-get -qq install -y cmake sudo libgmp-dev libleveldb-dev librocksdb-dev python3-dev >/dev/null
 
 # Set up build directory /src/tenderdash
-ENV TENDERMINT_BUILD_OPTIONS badgerdb,boltdb,cleveldb,rocksdb,nostrip
 WORKDIR /src/tenderdash
 
 # Install DLV debugger
@@ -20,18 +19,16 @@ RUN go mod download
 
 # Install BLS library
 COPY third_party ./third_party
-COPY Makefile *.mk ./
+COPY test/Makefile ./test/Makefile
+COPY Makefile ./
 RUN make install-bls
 
 # Copy Tenderdash source
 COPY . .
 
-# Build Tenderdash and install into /usr/bin/tenderdash
-RUN make build && cp build/tenderdash /usr/bin/tenderdash
 COPY test/e2e/docker/entrypoint* /usr/bin/
 
-RUN cd test/e2e && make maverick && cp build/maverick /usr/bin/maverick
-RUN cd test/e2e && make app && cp build/app /usr/bin/app
+RUN cd test/e2e && make node && cp build/node /usr/bin/app
 
 # Set up runtime directory. We don't use a separate runtime image since we need
 # e.g. leveldb and rocksdb which are already installed in the build image.
@@ -42,5 +39,5 @@ ENV GOTRACEBACK=crash
 
 EXPOSE 26656 26657 26660 6060
 ENTRYPOINT ["/usr/bin/entrypoint"]
-CMD ["node"]
+CMD ["start"]
 STOPSIGNAL SIGTERM
