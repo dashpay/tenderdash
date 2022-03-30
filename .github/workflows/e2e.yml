@@ -52,4 +52,4 @@ jobs:
         if: ${{ failure() }}
         working-directory: test/e2e
         run: ./build/runner -f networks/${{ matrix.testnet }}.toml logs
-        
+
