@@ -831,22 +831,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	// only the first added val (not the genesis val) should be left
 	assert.Equal(t, 17, len(updatedState.NextValidators.Validators))
 
-	// call update state until the effect for the 3rd added validator
-	// being proposer for a long time after the genesis validator left wears off:
-	curState := updatedState
-	count := 0
-	isProposerUnchanged := true
-	for isProposerUnchanged {
-		curState = execute(curState, curState, nil)
-		if !bytes.Equal(curState.Validators.Proposer.ProTxHash, curState.NextValidators.Proposer.ProTxHash) {
-			isProposerUnchanged = false
-		}
-		count++
-	}
-	updatedState = curState
-	// the proposer changes after this number of blocks
-	firstProposerChangeExpectedAfter := 1
-	assert.Equal(t, firstProposerChangeExpectedAfter, count)
+	updatedState = execute(updatedState, updatedState, nil)
 	// store proposers here to see if we see them again in the same order:
 	numVals := len(updatedState.Validators.Validators)
 	proposers := make([]*types.Validator, numVals)
