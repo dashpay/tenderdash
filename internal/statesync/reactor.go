@@ -431,8 +431,8 @@ func (r *Reactor) backfill(
 					peer := r.peers.Pop(ctx)
 					r.Logger.Debug("fetching next block", "height", height, "peer", peer)
 					lb, err := func() (*types.LightBlock, error) {
-						subCtx, cancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
-						defer cancel()
+						subCtx, reqCancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
+						defer reqCancel()
 						// request the light block with a timeout
 						return r.dispatcher.LightBlock(subCtx, height, peer)
 					}()
