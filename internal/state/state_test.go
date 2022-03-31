@@ -815,17 +815,15 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	// we will keep the same quorum hash as to be able to add validators
 
 	// add 10 validators with the same voting power as the one added directly after genesis:
-	for i := 0; i < 10; i++ {
-		ld := llmq.MustGenerate(append(proTxHashes, crypto.RandProTxHash()))
-		abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
-		require.NoError(t, err)
-		state = execute(oldState, state, abciValidatorSetUpdate)
-	}
+	ld := llmq.MustGenerate(append(proTxHashes, crypto.RandProTxHashes(10)...))
+	abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
+	require.NoError(t, err)
+	state = execute(oldState, state, abciValidatorSetUpdate)
 	require.Equal(t, 18, len(state.NextValidators.Validators))
 
 	// remove one genesis validator:
-	ld := llmq.MustGenerate(proTxHashes[1:])
-	abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
+	ld = llmq.MustGenerate(proTxHashes[1:])
+	abciValidatorSetUpdate, err = abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
 	require.NoError(t, err)
 	abciValidatorSetUpdate.ValidatorUpdates[0] = abci.ValidatorUpdate{ProTxHash: proTxHashes[0]}
 	updatedState = execute(oldState, state, abciValidatorSetUpdate)
