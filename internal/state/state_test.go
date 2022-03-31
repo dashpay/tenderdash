@@ -819,7 +819,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
 	require.NoError(t, err)
 	state = execute(oldState, state, abciValidatorSetUpdate)
-	require.Equal(t, 18, len(state.NextValidators.Validators))
+	assertLLMQDataWithValidatorSet(t, ld, state.NextValidators)
 
 	// remove one genesis validator:
 	ld = llmq.MustGenerate(proTxHashes[1:])
@@ -1104,4 +1104,17 @@ func blockExecutorFunc(t *testing.T, firstProTxHash crypto.ProTxHash) func(prevS
 		require.NoError(t, err)
 		return state
 	}
+}
+
+func assertLLMQDataWithValidatorSet(t *testing.T, ld *llmq.Data, valSet *types.ValidatorSet) {
+	require.Equal(t, len(ld.ProTxHashes), len(valSet.Validators))
+	m := make(map[string]struct{})
+	for _, proTxHash := range ld.ProTxHashes {
+		m[proTxHash.String()] = struct{}{}
+	}
+	for _, val := range valSet.Validators {
+		_, ok := m[val.ProTxHash.String()]
+		require.True(t, ok)
+	}
+	require.Equal(t, ld.ThresholdPubKey, valSet.ThresholdPublicKey)
 }
