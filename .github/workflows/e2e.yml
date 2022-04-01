@@ -19,9 +19,6 @@ jobs:
     timeout-minutes: 25
     env:
       FULLNODE_PUBKEY_KEEP: false
-    strategy:
-      matrix:
-        manifest: [ "dashcore", "rotate" ]
     steps:
       - uses: actions/setup-go@v2
         with:
