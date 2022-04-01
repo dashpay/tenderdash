@@ -167,5 +167,3 @@ message TxProof {
   bytes                   data      = 2;
   tendermint.crypto.Proof proof     = 3;
 }
-
-
