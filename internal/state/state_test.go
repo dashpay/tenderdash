@@ -831,15 +831,22 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	state = execute(oldState, state, abciValidatorSetUpdate)
 	assertLLMQDataWithValidatorSet(t, ld, state.NextValidators)
 
-	// remove one genesis validator:
-	ld = llmq.MustGenerate(proTxHashes[1:])
-	abciValidatorSetUpdate, err = abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
-	require.NoError(t, err)
-	abciValidatorSetUpdate.ValidatorUpdates[0] = abci.ValidatorUpdate{ProTxHash: proTxHashes[0]}
+	abciValidatorSetUpdate.ValidatorUpdates[0] = abci.ValidatorUpdate{ProTxHash: ld.ProTxHashes[0]}
 	updatedState = execute(oldState, state, abciValidatorSetUpdate)
 
 	// only the first added val (not the genesis val) should be left
-	assert.Equal(t, 17, len(updatedState.NextValidators.Validators))
+	ld.ProTxHashes = ld.ProTxHashes[1:]
+	assertLLMQDataWithValidatorSet(t, ld, updatedState.NextValidators)
+
+	abciValidatorSetUpdate.ValidatorUpdates = []abci.ValidatorUpdate{
+		{ProTxHash: ld.ProTxHashes[0]},
+		{ProTxHash: ld.ProTxHashes[1]},
+	}
+	updatedState = execute(state, updatedState, abciValidatorSetUpdate)
+
+	// the second and third should be left
+	ld.ProTxHashes = ld.ProTxHashes[2:]
+	assertLLMQDataWithValidatorSet(t, ld, updatedState.NextValidators)
 
 	updatedState = execute(updatedState, updatedState, nil)
 	// store proposers here to see if we see them again in the same order:
@@ -1083,8 +1090,8 @@ func TestState_StateID(t *testing.T) {
 }
 
 func blockExecutorFunc(t *testing.T, firstProTxHash crypto.ProTxHash) func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
-	t.Helper()
 	return func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
+		t.Helper()
 		resp := &tmstate.ABCIResponses{
 			BeginBlock: &abci.ResponseBeginBlock{},
 			EndBlock:   &abci.ResponseEndBlock{ValidatorSetUpdate: vsu},
