@@ -815,7 +815,17 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	// we will keep the same quorum hash as to be able to add validators
 
 	// add 10 validators with the same voting power as the one added directly after genesis:
-	ld := llmq.MustGenerate(append(proTxHashes, crypto.RandProTxHashes(10)...))
+
+	for i := 0; i < 5; i++ {
+		ld := llmq.MustGenerate(append(proTxHashes, crypto.RandProTxHash()))
+		abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
+		require.NoError(t, err)
+		state = execute(oldState, state, abciValidatorSetUpdate)
+		assertLLMQDataWithValidatorSet(t, ld, state.NextValidators)
+		proTxHashes = ld.ProTxHashes
+	}
+
+	ld := llmq.MustGenerate(append(proTxHashes, crypto.RandProTxHashes(5)...))
 	abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
 	require.NoError(t, err)
 	state = execute(oldState, state, abciValidatorSetUpdate)
