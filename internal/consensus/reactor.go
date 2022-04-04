@@ -379,7 +379,9 @@ func (r *Reactor) subscribeToBroadcastEvents() {
 		listenerIDConsensus,
 		types.EventNewRoundStepValue,
 		func(data tmevents.EventData) {
-			r.broadcast(r.stateCh, makeRoundStepMessage(data.(*cstypes.RoundState)))
+			rs := data.(*cstypes.RoundState)
+			err := r.broadcast(r.stateCh, makeRoundStepMessage(rs))
+			r.logResult(err, r.Logger, "broadcasting round step message", "height", rs.Height, "round", rs.Round)
 			select {
 			case r.state.onStopCh <- data.(*cstypes.RoundState):
 			default:
@@ -394,7 +396,10 @@ func (r *Reactor) subscribeToBroadcastEvents() {
 		listenerIDConsensus,
 		types.EventValidBlockValue,
 		func(data tmevents.EventData) {
-			r.broadcast(r.stateCh, r.makeNewValidBlockMessage(data.(*cstypes.RoundState)))
+			rs := data.(*cstypes.RoundState)
+			err := r.broadcast(r.stateCh, r.makeNewValidBlockMessage(rs))
+			r.logResult(err, r.Logger, "broadcasting new valid block message", "height", rs.Height, "round", rs.Round)
+
 		},
 	)
 	if err != nil {
@@ -405,7 +410,9 @@ func (r *Reactor) subscribeToBroadcastEvents() {
 		listenerIDConsensus,
 		types.EventVoteValue,
 		func(data tmevents.EventData) {
-			r.broadcast(r.stateCh, r.makeHasVoteMessage(data.(*types.Vote)))
+			rs := data.(*types.Vote)
+			err := r.broadcast(r.stateCh, r.makeHasVoteMessage(rs))
+			r.logResult(err, r.Logger, "broadcasting HasVote message", "height", rs.Height, "round", rs.Round)
 		},
 	)
 	if err != nil {
@@ -414,7 +421,9 @@ func (r *Reactor) subscribeToBroadcastEvents() {
 
 	if err := r.state.evsw.AddListenerForEvent(listenerIDConsensus, types.EventCommitValue,
 		func(data tmevents.EventData) {
-			r.broadcast(r.stateCh, r.makeHasCommitMessage(data.(*types.Commit)))
+			rs := data.(*types.Commit)
+			err := r.broadcast(r.stateCh, r.makeHasCommitMessage(rs))
+			r.logResult(err, r.Logger, "broadcasting HasVote message", "height", rs.Height, "round", rs.Round)
 		}); err != nil {
 		r.Logger.Error("Error adding listener for events", "err", err)
 	}
@@ -587,11 +596,10 @@ OUTER_LOOP:
 			// Proposal: share the proposal metadata with peer.
 			{
 				propProto := rs.Proposal.ToProto()
-
-				logger.Debug("sending proposal", "height", prs.Height, "round", prs.Round)
-				r.send(ps, r.dataCh, &tmcons.Proposal{
+				err := r.send(ps, r.dataCh, &tmcons.Proposal{
 					Proposal: *propProto,
 				})
+				r.logResult(err, logger, "sending proposal", "height", prs.Height, "round", prs.Round)
 
 				// NOTE: A peer might have received a different proposal message, so
 				// this Proposal msg will be rejected!
@@ -606,12 +614,12 @@ OUTER_LOOP:
 				pPol := rs.Votes.Prevotes(rs.Proposal.POLRound).BitArray()
 				pPolProto := pPol.ToProto()
 
-				logger.Debug("sending POL", "height", prs.Height, "round", prs.Round)
-				r.send(ps, r.dataCh, &tmcons.ProposalPOL{
+				err := r.send(ps, r.dataCh, &tmcons.ProposalPOL{
 					Height:           rs.Height,
 					ProposalPolRound: rs.Proposal.POLRound,
 					ProposalPol:      *pPolProto,
 				})
+				r.logResult(err, logger, "sending POL", "height", prs.Height, "round", prs.Round)
 			}
 
 			continue OUTER_LOOP
@@ -629,15 +637,16 @@ func (r *Reactor) sendProposalBlockPart(ps *PeerState, part *types.Part, height 
 		return fmt.Errorf("failed to convert block part to proto, error: %w", err)
 	}
 
-	r.Logger.Debug("sending block part for catchup", "round", round, "height", height, "index", part.Index, "peer", ps.peerID)
-	r.send(ps, r.dataCh, &tmcons.BlockPart{
-		Height: height, // not our height, so it does not matter.
+	err = r.send(ps, r.dataCh, &tmcons.BlockPart{
+		Height: height, // not our height, so it does not matter
 		Round:  round,  // not our height, so it does not matter
 		Part:   *partProto,
-	},
-	)
+	})
 
-	ps.SetHasProposalBlockPart(height, round, int(part.Index))
+	r.logResult(err, r.Logger, "sending block part for catchup", "round", round, "height", height, "index", part.Index, "peer", ps.peerID)
+	if err == nil {
+		ps.SetHasProposalBlockPart(height, round, int(part.Index))
+	}
 	return nil
 }
 
@@ -647,7 +656,12 @@ func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 	if vote, ok := ps.PickVoteToSend(votes); ok {
 		psJSON, _ := ps.ToJSON()
 		voteProto := vote.ToProto()
-		ps.logger.Debug(
+		err := r.send(ps, r.voteCh, &tmcons.Vote{
+			Vote: voteProto,
+		})
+		r.logResult(
+			err,
+			r.Logger,
 			"sending vote message",
 			"ps", psJSON,
 			"peer", ps.peerID,
@@ -659,11 +673,11 @@ func (r *Reactor) pickSendVote(ps *PeerState, votes types.VoteSetReader) bool {
 			"size", voteProto.Size(),
 			"isValidator", r.isValidator(vote.ValidatorProTxHash),
 		)
-		r.send(ps, r.voteCh, &tmcons.Vote{
-			Vote: voteProto,
-		})
-		ps.SetHasVote(vote)
-		return true
+
+		if err == nil {
+			ps.SetHasVote(vote)
+			return true
+		}
 	}
 
 	return false
@@ -674,50 +688,54 @@ func (r *Reactor) sendCommit(ps *PeerState, commit *types.Commit) error {
 		return fmt.Errorf("attempt to send nil commit to peer %s", ps.peerID)
 	}
 	protoCommit := commit.ToProto()
-	r.Logger.Debug("sending commit message", "height", commit.Height, "round", commit.Round, "peer", ps.peerID)
-	r.send(ps, r.voteCh, &tmcons.Commit{
+
+	err := r.send(ps, r.voteCh, &tmcons.Commit{
 		Commit: protoCommit,
 	})
-
-	return nil
+	r.logResult(err, r.Logger, "sending commit message", "height", commit.Height, "round", commit.Round, "peer", ps.peerID)
+	return err
 }
 
 // send sends a message to provided channel.
 // If to is nil, message will be broadcasted.
-func (r *Reactor) send(ps *PeerState, channel *p2p.Channel, msg proto.Message) {
-	var err error
-
+func (r *Reactor) send(ps *PeerState, channel *p2p.Channel, msg proto.Message) error {
 	select {
 	case <-ps.closer.Done():
-		err = fmt.Errorf("peer is closed")
+		return fmt.Errorf("peer is closed")
 	case <-r.closeCh:
-		err = fmt.Errorf("reactor is closed")
+		return fmt.Errorf("reactor is closed")
 	case channel.Out <- p2p.Envelope{
 		To:      ps.peerID,
 		Message: msg,
 	}:
 	}
 
-	if err != nil {
-		r.Logger.Error("cannot send message to channel", "error", err, "channel", channel.ID, "message", msg.String())
-	}
+	return nil
 }
 
-func (r *Reactor) broadcast(channel *p2p.Channel, msg proto.Message) {
-	var err error
-
+// broadcast sends a broadcast message to all peers connected to the `channel`.
+func (r *Reactor) broadcast(channel *p2p.Channel, msg proto.Message) error {
 	select {
 	case <-r.closeCh:
-		err = fmt.Errorf("reactor is closed")
+		return fmt.Errorf("reactor is closed")
 	case channel.Out <- p2p.Envelope{
 		Broadcast: true,
 		Message:   msg,
 	}:
 	}
 
+	return nil
+}
+
+// logResult creates a log that depends on value of err
+func (r *Reactor) logResult(err error, logger log.Logger, message string, keyvals ...interface{}) bool {
 	if err != nil {
-		r.Logger.Error("cannot send message to channel", "error", err, "channel", channel.ID, "message", msg.String())
+		logger.Debug("error "+message, append(keyvals, "error", err))
+		return false
 	}
+
+	logger.Debug("success "+message, keyvals...)
+	return true
 }
 
 func (r *Reactor) gossipVotesForHeight(rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState) bool {
@@ -936,12 +954,13 @@ OUTER_LOOP:
 
 				// maybe send Height/Round/Prevotes
 				if maj23, ok := rs.Votes.Prevotes(prs.Round).TwoThirdsMajority(); ok {
-					r.send(ps, r.stateCh, &tmcons.VoteSetMaj23{
+					err := r.send(ps, r.stateCh, &tmcons.VoteSetMaj23{
 						Height:  prs.Height,
 						Round:   prs.Round,
 						Type:    tmproto.PrevoteType,
 						BlockID: maj23.ToProto(),
 					})
+					r.logResult(err, r.Logger, "sending prevotes", "height", prs.Height, "round", prs.Round)
 				}
 			}(rs, prs)
 		}
@@ -953,14 +972,14 @@ OUTER_LOOP:
 			// maybe send Height/Round/Precommits
 			if rs.Height == prs.Height {
 				if maj23, ok := rs.Votes.Precommits(prs.Round).TwoThirdsMajority(); ok {
-					r.send(ps, r.stateCh, &tmcons.VoteSetMaj23{
+					err := r.send(ps, r.stateCh, &tmcons.VoteSetMaj23{
 						Height:  prs.Height,
 						Round:   prs.Round,
 						Type:    tmproto.PrecommitType,
 						BlockID: maj23.ToProto(),
 					},
 					)
-
+					r.logResult(err, r.Logger, "sending precommits", "height", prs.Height, "round", prs.Round)
 					time.Sleep(r.state.config.PeerQueryMaj23SleepDuration)
 				}
 			}
@@ -973,12 +992,13 @@ OUTER_LOOP:
 				// maybe send Height/Round/ProposalPOL
 				if rs.Height == prs.Height && prs.ProposalPOLRound >= 0 {
 					if maj23, ok := rs.Votes.Prevotes(prs.ProposalPOLRound).TwoThirdsMajority(); ok {
-						r.send(ps, r.stateCh, &tmcons.VoteSetMaj23{
+						err := r.send(ps, r.stateCh, &tmcons.VoteSetMaj23{
 							Height:  prs.Height,
 							Round:   prs.ProposalPOLRound,
 							Type:    tmproto.PrevoteType,
 							BlockID: maj23.ToProto(),
 						})
+						r.logResult(err, r.Logger, "sending POL prevotes", "height", prs.Height, "round", prs.Round)
 					}
 				}
 			}(rs, prs)
@@ -993,12 +1013,13 @@ OUTER_LOOP:
 				if prs.CatchupCommitRound != -1 && prs.Height > 0 && prs.Height <= r.state.blockStore.Height() &&
 					prs.Height >= r.state.blockStore.Base() {
 					if commit := r.state.LoadCommit(prs.Height); commit != nil {
-						r.send(ps, r.stateCh, &tmcons.VoteSetMaj23{
+						err := r.send(ps, r.stateCh, &tmcons.VoteSetMaj23{
 							Height:  prs.Height,
 							Round:   commit.Round,
 							Type:    tmproto.PrecommitType,
 							BlockID: commit.BlockID.ToProto(),
 						})
+						r.logResult(err, r.Logger, "sending catchup precommits", "height", prs.Height, "round", prs.Round)
 
 						time.Sleep(r.state.config.PeerQueryMaj23SleepDuration)
 					}
@@ -1108,7 +1129,9 @@ func (r *Reactor) peerUp(peerUpdate p2p.PeerUpdate, retries int) {
 				if !r.WaitSync() {
 					go func() {
 						rs := r.state.GetRoundState()
-						r.send(ps, r.stateCh, makeRoundStepMessage(rs))
+						err := r.send(ps, r.stateCh, makeRoundStepMessage(rs))
+						r.logResult(err, r.Logger, "sending round step msg", "height", rs.Height, "round", rs.Round)
+
 					}()
 				}
 			}
