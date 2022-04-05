@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"strconv"
 	"testing"
 	"time"
 
@@ -232,6 +233,94 @@ func TestStateBadProposal(t *testing.T) {
 	ensurePrecommit(voteCh, height, round)
 	validatePrecommit(t, cs1, round, -1, vss[0], nil, nil)
 	signAddVotes(cs1, tmproto.PrecommitType, propBlock.Hash(), propBlock.MakePartSet(partSize).Header(), vs2)
+}
+
+// TestStateProposalTime tries to sign and vote on proposal with invalid time.
+func TestStateProposalTime(t *testing.T) {
+	cs1, vss := randState(1)
+	height, round := cs1.Height, cs1.Round
+	cs1.config.ProposedBlockTimeWindow = 1 * time.Second
+	cs1.config.DontAutoPropose = true
+	cs1.config.CreateEmptyBlocksInterval = 0
+
+	newRoundCh := subscribe(cs1.eventBus, types.EventQueryNewRound)
+	proposalCh := subscribe(cs1.eventBus, types.EventQueryCompleteProposal)
+	newBlockCh := subscribe(cs1.eventBus, types.EventQueryNewBlock)
+
+	startTestRound(cs1, height, round)
+
+	// Wait for new round so proposer is set.
+	ensureNewRound(newRoundCh, height, round)
+
+	// Wait for complete proposal.
+	cs1.enterPropose(cs1.Height, cs1.Round)
+	ensureNewProposal(proposalCh, height, round)
+
+	rs := cs1.GetRoundState()
+	signAddVotes(cs1, tmproto.PrecommitType, rs.ProposalBlock.Hash(), rs.ProposalBlockParts.Header(), vss[1:]...)
+
+	ensureNewBlock(newBlockCh, height)
+
+	// Wait for new round so next validator is set.
+	ensureNewRound(newRoundCh, height+1, 0)
+
+	testCases := []struct {
+		blockTimeFunc  func(*State) time.Time
+		sleep          time.Duration
+		expectNewBlock bool
+	}{
+		{ // TEST 0: EVERYTHING GOES FINE
+			expectNewBlock: false,
+		},
+		{ // TEST 1: BLOCK TIME IS IN FUTURE
+			blockTimeFunc:  func(s *State) time.Time { return time.Now().Add(s.config.ProposedBlockTimeWindow + 24*time.Hour) },
+			expectNewBlock: true,
+		},
+		{ // TEST 2: BLOCK TIME IS OLDER THAN PREVIOUS BLOCK TIME
+			blockTimeFunc:  func(s *State) time.Time { return s.state.LastBlockTime.Add(-1 * time.Second) },
+			expectNewBlock: true,
+		}, // TEST 3: BLOCK TIME IS IN THE PAST, PROPOSAL IS NEW
+		{
+			blockTimeFunc:  nil,
+			sleep:          cs1.config.ProposedBlockTimeWindow + 1*time.Millisecond,
+			expectNewBlock: true,
+		},
+	}
+
+	for id, tc := range testCases {
+		t.Run(strconv.Itoa(id), func(t *testing.T) {
+			height, round = cs1.Height, cs1.Round
+			// TEST 1: BLOCK TIME IS IN FUTURE
+
+			// Generate proposal block
+			propBlock, propBlockParts := cs1.createProposalBlock()
+			if tc.blockTimeFunc != nil {
+				propBlock.Time = tc.blockTimeFunc(cs1)
+			}
+			blockID := propBlock.BlockID(propBlockParts.Header())
+
+			cs1.mtx.Lock()
+			cs1.ValidBlock = propBlock
+			cs1.ValidBlockParts = propBlockParts
+			cs1.mtx.Unlock()
+
+			// sleep if needed
+			if tc.sleep > 0 {
+				time.Sleep(tc.sleep)
+			}
+
+			// Wait for complete proposal.
+			cs1.enterPropose(height, round)
+
+			ensureNewRound(newRoundCh, height+1, 0)
+
+			if tc.expectNewBlock {
+				assert.NotEqual(t, blockID, cs1.LastCommit.BlockID, "expected that block will be regenerated")
+			} else {
+				assert.Equal(t, blockID, cs1.LastCommit.BlockID, "expected that block will not change")
+			}
+		})
+	}
 }
 
 func TestStateOversizedBlock(t *testing.T) {
