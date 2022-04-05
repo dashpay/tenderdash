@@ -237,32 +237,18 @@ func TestStateBadProposal(t *testing.T) {
 
 // TestStateProposalTime tries to sign and vote on proposal with invalid time.
 func TestStateProposalTime(t *testing.T) {
-	cs1, vss := randState(1)
+	cs1, _ := randState(1)
 	height, round := cs1.Height, cs1.Round
 	cs1.config.ProposedBlockTimeWindow = 1 * time.Second
 	cs1.config.DontAutoPropose = true
 	cs1.config.CreateEmptyBlocksInterval = 0
 
 	newRoundCh := subscribe(cs1.eventBus, types.EventQueryNewRound)
-	proposalCh := subscribe(cs1.eventBus, types.EventQueryCompleteProposal)
-	newBlockCh := subscribe(cs1.eventBus, types.EventQueryNewBlock)
 
 	startTestRound(cs1, height, round)
 
 	// Wait for new round so proposer is set.
 	ensureNewRound(newRoundCh, height, round)
-
-	// Wait for complete proposal.
-	cs1.enterPropose(cs1.Height, cs1.Round)
-	ensureNewProposal(proposalCh, height, round)
-
-	rs := cs1.GetRoundState()
-	signAddVotes(cs1, tmproto.PrecommitType, rs.ProposalBlock.Hash(), rs.ProposalBlockParts.Header(), vss[1:]...)
-
-	ensureNewBlock(newBlockCh, height)
-
-	// Wait for new round so next validator is set.
-	ensureNewRound(newRoundCh, height+1, 0)
 
 	testCases := []struct {
 		blockTimeFunc  func(*State) time.Time
@@ -279,8 +265,8 @@ func TestStateProposalTime(t *testing.T) {
 		{ // TEST 2: BLOCK TIME IS OLDER THAN PREVIOUS BLOCK TIME
 			blockTimeFunc:  func(s *State) time.Time { return s.state.LastBlockTime.Add(-1 * time.Second) },
 			expectNewBlock: true,
-		}, // TEST 3: BLOCK TIME IS IN THE PAST, PROPOSAL IS NEW
-		{
+		},
+		{ // TEST 3: BLOCK TIME IS IN THE PAST, PROPOSAL IS NEW
 			blockTimeFunc:  nil,
 			sleep:          cs1.config.ProposedBlockTimeWindow + 1*time.Millisecond,
 			expectNewBlock: true,
@@ -290,7 +276,6 @@ func TestStateProposalTime(t *testing.T) {
 	for id, tc := range testCases {
 		t.Run(strconv.Itoa(id), func(t *testing.T) {
 			height, round = cs1.Height, cs1.Round
-			// TEST 1: BLOCK TIME IS IN FUTURE
 
 			// Generate proposal block
 			propBlock, propBlockParts := cs1.createProposalBlock()
