@@ -343,34 +343,6 @@ func (r *Reactor) GetPeerState(peerID types.NodeID) (*PeerState, bool) {
 	return ps, ok
 }
 
-func (r *Reactor) makeNewValidBlockMessage(rs *cstypes.RoundState) proto.Message {
-	psHeader := rs.ProposalBlockParts.Header()
-	return &tmcons.NewValidBlock{
-		Height:             rs.Height,
-		Round:              rs.Round,
-		BlockPartSetHeader: psHeader.ToProto(),
-		BlockParts:         rs.ProposalBlockParts.BitArray().ToProto(),
-		IsCommit:           rs.Step == cstypes.RoundStepApplyCommit,
-	}
-}
-
-func (r *Reactor) makeHasVoteMessage(vote *types.Vote) proto.Message {
-	return &tmcons.HasVote{
-		Height: vote.Height,
-		Round:  vote.Round,
-		Type:   vote.Type,
-		Index:  vote.ValidatorIndex,
-	}
-}
-
-// Broadcasts HasCommitMessage to peers that care.
-func (r *Reactor) makeHasCommitMessage(commit *types.Commit) proto.Message {
-	return &tmcons.HasCommit{
-		Height: commit.Height,
-		Round:  commit.Round,
-	}
-}
-
 // subscribeToBroadcastEvents subscribes for new round steps and votes using the
 // internal pubsub defined in the consensus state to broadcast them to peers
 // upon receiving.
@@ -380,7 +352,7 @@ func (r *Reactor) subscribeToBroadcastEvents() {
 		types.EventNewRoundStepValue,
 		func(data tmevents.EventData) {
 			rs := data.(*cstypes.RoundState)
-			err := r.broadcast(r.stateCh, makeRoundStepMessage(rs))
+			err := r.broadcast(r.stateCh, rs.NewRoundStepMessage())
 			r.logResult(err, r.Logger, "broadcasting round step message", "height", rs.Height, "round", rs.Round)
 			select {
 			case r.state.onStopCh <- data.(*cstypes.RoundState):
@@ -397,7 +369,7 @@ func (r *Reactor) subscribeToBroadcastEvents() {
 		types.EventValidBlockValue,
 		func(data tmevents.EventData) {
 			rs := data.(*cstypes.RoundState)
-			err := r.broadcast(r.stateCh, r.makeNewValidBlockMessage(rs))
+			err := r.broadcast(r.stateCh, rs.NewValidBlockMessage())
 			r.logResult(err, r.Logger, "broadcasting new valid block message", "height", rs.Height, "round", rs.Round)
 
 		},
@@ -410,9 +382,9 @@ func (r *Reactor) subscribeToBroadcastEvents() {
 		listenerIDConsensus,
 		types.EventVoteValue,
 		func(data tmevents.EventData) {
-			rs := data.(*types.Vote)
-			err := r.broadcast(r.stateCh, r.makeHasVoteMessage(rs))
-			r.logResult(err, r.Logger, "broadcasting HasVote message", "height", rs.Height, "round", rs.Round)
+			vote := data.(*types.Vote)
+			err := r.broadcast(r.stateCh, vote.HasVoteMessage())
+			r.logResult(err, r.Logger, "broadcasting HasVote message", "height", vote.Height, "round", vote.Round)
 		},
 	)
 	if err != nil {
@@ -421,9 +393,9 @@ func (r *Reactor) subscribeToBroadcastEvents() {
 
 	if err := r.state.evsw.AddListenerForEvent(listenerIDConsensus, types.EventCommitValue,
 		func(data tmevents.EventData) {
-			rs := data.(*types.Commit)
-			err := r.broadcast(r.stateCh, r.makeHasCommitMessage(rs))
-			r.logResult(err, r.Logger, "broadcasting HasVote message", "height", rs.Height, "round", rs.Round)
+			commit := data.(*types.Commit)
+			err := r.broadcast(r.stateCh, commit.HasCommitMessage())
+			r.logResult(err, r.Logger, "broadcasting HasVote message", "height", commit.Height, "round", commit.Round)
 		}); err != nil {
 		r.Logger.Error("Error adding listener for events", "err", err)
 	}
@@ -431,16 +403,6 @@ func (r *Reactor) subscribeToBroadcastEvents() {
 
 func (r *Reactor) unsubscribeFromBroadcastEvents() {
 	r.state.evsw.RemoveListener(listenerIDConsensus)
-}
-
-func makeRoundStepMessage(rs *cstypes.RoundState) *tmcons.NewRoundStep {
-	return &tmcons.NewRoundStep{
-		Height:                rs.Height,
-		Round:                 rs.Round,
-		Step:                  uint32(rs.Step),
-		SecondsSinceStartTime: int64(time.Since(rs.StartTime).Seconds()),
-		LastCommitRound:       rs.LastCommit.GetRound(),
-	}
 }
 
 func (r *Reactor) gossipDataForCatchup(rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState) {
@@ -1129,7 +1091,7 @@ func (r *Reactor) peerUp(peerUpdate p2p.PeerUpdate, retries int) {
 				if !r.WaitSync() {
 					go func() {
 						rs := r.state.GetRoundState()
-						err := r.send(ps, r.stateCh, makeRoundStepMessage(rs))
+						err := r.send(ps, r.stateCh, rs.NewRoundStepMessage())
 						r.logResult(err, r.Logger, "sending round step msg", "height", rs.Height, "round", rs.Round)
 
 					}()
