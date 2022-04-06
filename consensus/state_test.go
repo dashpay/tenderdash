@@ -291,9 +291,7 @@ func TestStateProposalTime(t *testing.T) {
 			cs.ValidBlockParts = propBlockParts
 
 			// sleep if needed
-			if tc.sleep > 0 {
-				time.Sleep(tc.sleep)
-			}
+			time.Sleep(tc.sleep)
 
 			// Wait for complete proposal.
 			cs.enterPropose(height, round)
