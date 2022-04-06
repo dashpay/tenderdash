@@ -245,7 +245,9 @@ func TestStateProposalTime(t *testing.T) {
 
 	newRoundCh := subscribe(cs1.eventBus, types.EventQueryNewRound)
 
+	cs1.mtx.Lock()
 	startTestRound(cs1, height, round)
+	cs1.mtx.Unlock()
 
 	// Wait for new round so proposer is set.
 	ensureNewRound(newRoundCh, height, round)
@@ -276,18 +278,17 @@ func TestStateProposalTime(t *testing.T) {
 	for id, tc := range testCases {
 		t.Run(strconv.Itoa(id), func(t *testing.T) {
 			height, round = cs1.Height, cs1.Round
-
+			cs := cs1
 			// Generate proposal block
-			propBlock, propBlockParts := cs1.createProposalBlock()
+			cs.mtx.Lock()
+			propBlock, propBlockParts := cs.createProposalBlock()
 			if tc.blockTimeFunc != nil {
-				propBlock.Time = tc.blockTimeFunc(cs1)
+				propBlock.Time = tc.blockTimeFunc(cs)
 			}
 			blockID := propBlock.BlockID(propBlockParts.Header())
 
-			cs1.mtx.Lock()
-			cs1.ValidBlock = propBlock
-			cs1.ValidBlockParts = propBlockParts
-			cs1.mtx.Unlock()
+			cs.ValidBlock = propBlock
+			cs.ValidBlockParts = propBlockParts
 
 			// sleep if needed
 			if tc.sleep > 0 {
@@ -295,14 +296,15 @@ func TestStateProposalTime(t *testing.T) {
 			}
 
 			// Wait for complete proposal.
-			cs1.enterPropose(height, round)
+			cs.enterPropose(height, round)
+			cs.mtx.Unlock()
 
 			ensureNewRound(newRoundCh, height+1, 0)
 
 			if tc.expectNewBlock {
-				assert.NotEqual(t, blockID, cs1.LastCommit.BlockID, "expected that block will be regenerated")
+				assert.NotEqual(t, blockID, cs.LastCommit.BlockID, "expected that block will be regenerated")
 			} else {
-				assert.Equal(t, blockID, cs1.LastCommit.BlockID, "expected that block will not change")
+				assert.Equal(t, blockID, cs.LastCommit.BlockID, "expected that block will not change")
 			}
 		})
 	}

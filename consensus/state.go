@@ -794,7 +794,7 @@ func (cs *State) receiveRoutine(maxSteps int) {
 			}
 		}
 
-		rs := cs.RoundState
+		rs := cs.GetRoundState()
 		var mi msgInfo
 
 		select {
@@ -837,7 +837,7 @@ func (cs *State) receiveRoutine(maxSteps int) {
 
 			// if the timeout is relevant to the rs
 			// go to the next step
-			cs.handleTimeout(ti, rs)
+			cs.handleTimeout(ti, *rs)
 
 		case <-cs.Quit():
 			onExit(cs)
