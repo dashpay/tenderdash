@@ -6,7 +6,6 @@ import (
 	"io/ioutil"
 	"os"
 	"path/filepath"
-
 	// "sync"
 	"testing"
 	"time"
