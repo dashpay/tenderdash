@@ -82,7 +82,8 @@ func (i *walIter) readMsg() bool {
 func (i *walIter) processMsg(msg *TimedWALMessage) bool {
 	switch m := msg.Msg.(type) {
 	case msgInfo:
-		if mi, ok := m.Msg.(*ProposalMessage); ok {
+		switch mi := m.Msg.(type) {
+		case *ProposalMessage:
 			i.processProposal(mi.Proposal)
 		}
 	}

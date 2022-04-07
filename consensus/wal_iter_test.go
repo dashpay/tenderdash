@@ -109,7 +109,7 @@ func TestWalIter_Next(t *testing.T) {
 			for it.Next() {
 				msg := it.Value()
 				mi := msg.Msg.(msgInfo)
-				require.Equal(t, tc.want[cnt], mi.Msg.(Message))
+				require.Equal(t, tc.want[cnt], mi.Msg)
 				cnt++
 			}
 			require.NoError(t, it.Err())
