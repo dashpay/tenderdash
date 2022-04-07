@@ -13,15 +13,11 @@ import (
 
 func TestWalIter_Next(t *testing.T) {
 	testCases := []struct {
-		input   []interface{}
-		want    []Message
-		wantLen int
+		input []interface{}
+		want  []Message
 	}{
+		{},
 		{
-			wantLen: 0,
-		},
-		{
-			wantLen: 3,
 			input: []interface{}{
 				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1000, Round: 0}},
 				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1001, Round: 0}},
@@ -34,7 +30,6 @@ func TestWalIter_Next(t *testing.T) {
 			},
 		},
 		{
-			wantLen: 5,
 			input: []interface{}{
 				&VoteMessage{Vote: &tmtypes.Vote{Height: 0, Round: 0}},
 				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1000, Round: 0}},
@@ -51,7 +46,6 @@ func TestWalIter_Next(t *testing.T) {
 			},
 		},
 		{
-			wantLen: 9,
 			want: []Message{
 				&VoteMessage{Vote: &tmtypes.Vote{Height: 0, Round: 0}},
 				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1000, Round: 0}},
@@ -85,8 +79,7 @@ func TestWalIter_Next(t *testing.T) {
 			},
 		},
 		{
-			wantLen: 9,
-			input:   generateMessageSequence(1000, 1002, 1000),
+			input: generateMessageSequence(1000, 1002, 1000),
 			want: []Message{
 				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1000, Round: 1000}},
 				&BlockPartMessage{Height: 1000, Round: 1000},
@@ -113,7 +106,7 @@ func TestWalIter_Next(t *testing.T) {
 				cnt++
 			}
 			require.NoError(t, it.Err())
-			require.Equal(t, tc.wantLen, cnt)
+			require.Equal(t, len(tc.want), cnt)
 		})
 	}
 }
