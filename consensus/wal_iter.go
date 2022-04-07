@@ -1,7 +1,6 @@
 package consensus
 
 import (
-	"fmt"
 	"io"
 
 	"github.com/tendermint/tendermint/types"
@@ -83,16 +82,8 @@ func (i *walIter) readMsg() bool {
 func (i *walIter) processMsg(msg *TimedWALMessage) bool {
 	switch m := msg.Msg.(type) {
 	case msgInfo:
-		switch mi := m.Msg.(type) {
-		case *ProposalMessage:
+		if mi, ok := m.Msg.(*ProposalMessage); ok {
 			i.processProposal(mi.Proposal)
-		case *BlockPartMessage:
-		case *VoteMessage:
-		default:
-			i.queue = nil
-			i.cache = nil
-			i.err = fmt.Errorf("unsupported type %T", i.err)
-			return false
 		}
 	}
 	return true
