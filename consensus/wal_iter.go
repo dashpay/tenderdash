@@ -74,6 +74,9 @@ func (i *walIter) readMsg() bool {
 	if i.err == io.EOF {
 		return false
 	}
+	if i.err != nil {
+		return false
+	}
 	return true
 }
 
