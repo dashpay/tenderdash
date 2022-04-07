@@ -12,19 +12,18 @@ type walReader interface {
 }
 
 type walIter struct {
-	queue     []*TimedWALMessage
+	reader    walReader
 	curHeight int64
 	curRound  int32
-	cache     []*TimedWALMessage
-
-	r   walReader
-	msg *TimedWALMessage
-	err error
+	queue     []*TimedWALMessage
+	hold      []*TimedWALMessage
+	msg       *TimedWALMessage
+	err       error
 }
 
 func newWalIter(reader walReader) *walIter {
 	return &walIter{
-		r: reader,
+		reader: reader,
 	}
 }
 
@@ -51,10 +50,10 @@ func (i *walIter) Next() bool {
 		if !i.processMsg(i.msg) {
 			return false
 		}
-		i.cache = append(i.cache, i.msg)
+		i.hold = append(i.hold, i.msg)
 	}
 	if len(i.queue) == 0 {
-		i.queue = i.cache
+		i.queue = i.hold
 	}
 	return len(i.queue) > 0
 }
@@ -71,7 +70,7 @@ func (i *walIter) readMsg() bool {
 	if i.err == io.EOF {
 		return false
 	}
-	i.msg, i.err = i.r.Decode()
+	i.msg, i.err = i.reader.Decode()
 	if i.err == io.EOF {
 		return false
 	}
@@ -98,13 +97,13 @@ func (i *walIter) processMsg(msg *TimedWALMessage) bool {
 
 func (i *walIter) processProposal(p *types.Proposal) {
 	if p.Height == i.curHeight && i.curRound < p.Round {
-		i.cache = nil
+		i.hold = nil
 		i.curRound = p.Round
 	}
 	if p.Height > i.curHeight {
 		i.curHeight = p.Height
 		i.curRound = p.Round
-		i.queue = i.cache
-		i.cache = nil
+		i.queue = i.hold
+		i.hold = nil
 	}
 }
