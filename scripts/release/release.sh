@@ -37,6 +37,7 @@ To use, you need to checkout your current development branch (like 'v0.7-dev') f
 where flags can be one of:
     -r=<x.y.z-dev.n>, --release=<x.y.z-dev.n> - release number, like 0.7.0 (REQUIRED)
     --cleanup - clean up before releasing; it can remove your local changes
+    -C=<path> - path to local Tenderdash repository
     -h, --help - display this help message
 
 ## Examples
@@ -88,6 +89,15 @@ function parseArgs {
             fi
             shift
             ;;
+        -C=*)
+            REPO_DIR="${arg#*=}"
+            shift
+            ;;
+        -C)
+            shift
+            REPO_DIR="${1#*=}"
+            shift
+            ;;
         -h | --help)
             displayHelp
             shift
@@ -122,6 +132,7 @@ function configureFinal() {
         TARGET_BRANCH="v${VERSION_WITHOUT_PRERELEASE%.*}-dev"
     fi
 
+    debug "Repository: ${REPO_DIR}"
     debug "Release type: ${RELEASE_TYPE}"
     debug "Latest tag: ${LATEST_TAG}"
     debug "Previous version: ${CURRENT_VERSION}"
@@ -154,6 +165,7 @@ function validate {
 
 function generateChangelog {
     debug Generating CHANGELOG
+    
     docker run -ti -u "$(id -u)" \
         -v "${REPO_DIR}/.git":/app/:ro -v "${REPO_DIR}/scripts/release/cliff.toml":/cliff.toml:ro \
         -v "${REPO_DIR}/CHANGELOG.md":/CHANGELOG.md \
@@ -162,7 +174,8 @@ function generateChangelog {
         --strip all \
         --tag "$NEW_PACKAGE_VERSION" \
         --prepend /CHANGELOG.md \
-        --unreleased
+        --unreleased \
+        "${LATEST_TAG}..HEAD"
 }
 
 function updateVersionGo {
@@ -185,7 +198,7 @@ function createReleasePR {
     debug "Creating milestone $MILESTONE if it doesn't exist yet"
     gh api --silent --method POST 'repos/dashevo/tenderdash/milestones' --field "title=${MILESTONE}" || true
 
-    if gh pr view release_0.7.0-dev.7 >/dev/null; then
+    if [[ -n "$(getPrURL)" ]] ; then
         debug "PR for branch $TARGET_BRANCH already exists, skipping creation"
     else
         debug "Creating PR for branch $TARGET_BRANCH"
@@ -195,6 +208,10 @@ function createReleasePR {
             --body-file "$REPO_DIR/scripts/release/pr_description.md" \
             --milestone "$MILESTONE"
     fi
+}
+
+function getPrURL() {
+    gh pr list --json url --jq '.[0].url' -H "${RELEASE_BRANCH}" -B "$TARGET_BRANCH"
 }
 
 function cleanup() {
@@ -223,4 +240,8 @@ createReleasePR
 
 cleanup
 
-success "Pull Request for a new release {$NEW_PACKAGE_VERSION} created successfully."
+PR_URL="$(getPrURL)"
+
+success "New release ${NEW_PACKAGE_VERSION} prepared successfully."
+success "Release PR: ${PR_URL}"
+success "Please review it, merge and create a release in Github."
