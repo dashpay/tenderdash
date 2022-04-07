@@ -80,12 +80,13 @@ func (i *walIter) readMsg() bool {
 }
 
 func (i *walIter) processMsg(msg *TimedWALMessage) bool {
-	switch m := msg.Msg.(type) {
-	case msgInfo:
-		switch mi := m.Msg.(type) {
-		case *ProposalMessage:
-			i.processProposal(mi.Proposal)
-		}
+	m, ok := msg.Msg.(msgInfo)
+	if !ok {
+		return true
+	}
+	mi, ok := m.Msg.(*ProposalMessage)
+	if ok {
+		i.processProposal(mi.Proposal)
 	}
 	return true
 }
