@@ -757,12 +757,9 @@ func (c *Client) findNewPrimary(ctx context.Context, height int64, remove bool) 
 		wg.Add(1)
 		go func(witnessIndex int, witnessResponsesC chan witnessResponse) {
 			defer wg.Done()
-
-			lb, err := c.witnesses[witnessIndex].LightBlock(ctx, height)
-			select {
-			case witnessResponsesC <- witnessResponse{lb, witnessIndex, err}:
-			case <-ctx.Done():
-			}
+			resp := witnessResponse{witnessIndex: witnessIndex}
+			resp.lb, resp.err = c.witnesses[witnessIndex].LightBlock(ctx, height)
+			witnessResponsesC <- resp
 		}(index, witnessResponsesC)
 	}
 
