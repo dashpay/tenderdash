@@ -40,7 +40,7 @@ require (
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-multierror v1.1.1
 	github.com/klauspost/compress v1.15.1 // indirect
-	github.com/lib/pq v1.10.4
+	github.com/lib/pq v1.10.5
 	github.com/libp2p/go-buffer-pool v0.0.2
 	github.com/magiconair/properties v1.8.6 // indirect
 	github.com/minio/highwayhash v1.0.2
