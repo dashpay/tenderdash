@@ -672,18 +672,10 @@ func (r *Reactor) send(ps *PeerState, channel *p2p.Channel, msg proto.Message) e
 	case <-r.closeCh:
 		return errReactorClosed
 	default:
-	}
-	select {
-	case <-channel.Done():
-		return p2p.ErrPeerChannelClosed
-	case <-ps.closer.Done():
-		return errPeerClosed
-	case <-r.closeCh:
-		return errReactorClosed
-	case channel.Out <- p2p.Envelope{
-		To:      ps.peerID,
-		Message: msg,
-	}:
+		channel.Send(p2p.Envelope{
+			To:      ps.peerID,
+			Message: msg,
+		})
 	}
 	return nil
 }

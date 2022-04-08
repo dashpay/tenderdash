@@ -69,9 +69,9 @@ type Channel struct {
 	Out   chan<- Envelope  // outbound messages (reactors to peers)
 	Error chan<- PeerError // peer error reporting
 
+	mtx         sync.RWMutex
 	messageType proto.Message // the channel's message type, used for unmarshaling
 	closeCh     chan struct{}
-	closeOnce   sync.Once
 }
 
 // NewChannel creates a new channel. It is primarily for internal and test
@@ -93,15 +93,33 @@ func NewChannel(
 	}
 }
 
+// Send sends an envelope to a peer through a channel
+func (c *Channel) Send(e Envelope) error {
+	c.mtx.RLock()
+	defer c.mtx.RUnlock()
+	select {
+	case <-c.closeCh:
+		return ErrPeerChannelClosed
+	default:
+		c.Out <- e
+	}
+	return nil
+}
+
 // Close closes the channel. Future sends on Out and Error will panic. The In
 // channel remains open to avoid having to synchronize Router senders, which
 // should use Done() to detect channel closure instead.
 func (c *Channel) Close() {
-	c.closeOnce.Do(func() {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	select {
+	case <-c.closeCh:
+		return
+	default:
 		close(c.closeCh)
 		close(c.Out)
 		close(c.Error)
-	})
+	}
 }
 
 // Done returns a channel that's closed when Channel.Close() is called.
