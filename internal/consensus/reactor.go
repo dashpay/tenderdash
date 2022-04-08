@@ -672,12 +672,11 @@ func (r *Reactor) send(ps *PeerState, channel *p2p.Channel, msg proto.Message) e
 	case <-r.closeCh:
 		return errReactorClosed
 	default:
-		channel.Send(p2p.Envelope{
+		return channel.Send(p2p.Envelope{
 			To:      ps.peerID,
 			Message: msg,
 		})
 	}
-	return nil
 }
 
 // broadcast sends a broadcast message to all peers connected to the `channel`.
@@ -694,12 +693,12 @@ func (r *Reactor) broadcast(channel *p2p.Channel, msg proto.Message) error {
 		return p2p.ErrPeerChannelClosed
 	case <-r.closeCh:
 		return errReactorClosed
-	case channel.Out <- p2p.Envelope{
-		Broadcast: true,
-		Message:   msg,
-	}:
+	default:
+		return channel.Send(p2p.Envelope{
+			Broadcast: true,
+			Message:   msg,
+		})
 	}
-	return nil
 }
 
 // logResult creates a log that depends on value of err
