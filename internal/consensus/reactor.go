@@ -665,8 +665,6 @@ func (r *Reactor) sendCommit(ps *PeerState, commit *types.Commit) error {
 // If to is nil, message will be broadcasted.
 func (r *Reactor) send(ps *PeerState, channel *p2p.Channel, msg proto.Message) error {
 	select {
-	case <-channel.Done():
-		return p2p.ErrPeerChannelClosed
 	case <-ps.closer.Done():
 		return errPeerClosed
 	case <-r.closeCh:
@@ -682,15 +680,11 @@ func (r *Reactor) send(ps *PeerState, channel *p2p.Channel, msg proto.Message) e
 // broadcast sends a broadcast message to all peers connected to the `channel`.
 func (r *Reactor) broadcast(channel *p2p.Channel, msg proto.Message) error {
 	select {
-	case <-channel.Done():
-		return p2p.ErrPeerChannelClosed
 	case <-r.closeCh:
 		return errReactorClosed
 	default:
 	}
 	select {
-	case <-channel.Done():
-		return p2p.ErrPeerChannelClosed
 	case <-r.closeCh:
 		return errReactorClosed
 	default:
