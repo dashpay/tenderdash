@@ -21,6 +21,11 @@ import (
 
 const queueBufferDefault = 32
 
+var (
+	// ErrPeerChannelClosed is for when the send/receive an envelope but a peer was already disconnected
+	ErrPeerChannelClosed = errors.New("a peer channel is closed")
+)
+
 // ChannelID is an arbitrary channel ID.
 type ChannelID uint16
 
