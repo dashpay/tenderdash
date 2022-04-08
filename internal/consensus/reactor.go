@@ -683,11 +683,6 @@ func (r *Reactor) broadcast(channel *p2p.Channel, msg proto.Message) error {
 	case <-r.closeCh:
 		return errReactorClosed
 	default:
-	}
-	select {
-	case <-r.closeCh:
-		return errReactorClosed
-	default:
 		return channel.Send(p2p.Envelope{
 			Broadcast: true,
 			Message:   msg,
