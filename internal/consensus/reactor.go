@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"errors"
 	"fmt"
 	"runtime/debug"
 	"sync"
@@ -81,6 +82,8 @@ var (
 			},
 		},
 	}
+
+	errReactorClosed = errors.New("reactor is closed")
 )
 
 const (
@@ -663,30 +666,28 @@ func (r *Reactor) sendCommit(ps *PeerState, commit *types.Commit) error {
 func (r *Reactor) send(ps *PeerState, channel *p2p.Channel, msg proto.Message) error {
 	select {
 	case <-ps.closer.Done():
-		return fmt.Errorf("peer is closed")
+		return errPeerClosed
 	case <-r.closeCh:
-		return fmt.Errorf("reactor is closed")
-	case channel.Out <- p2p.Envelope{
-		To:      ps.peerID,
-		Message: msg,
-	}:
+		return errReactorClosed
+	default:
+		return channel.Send(p2p.Envelope{
+			To:      ps.peerID,
+			Message: msg,
+		})
 	}
-
-	return nil
 }
 
 // broadcast sends a broadcast message to all peers connected to the `channel`.
 func (r *Reactor) broadcast(channel *p2p.Channel, msg proto.Message) error {
 	select {
 	case <-r.closeCh:
-		return fmt.Errorf("reactor is closed")
-	case channel.Out <- p2p.Envelope{
-		Broadcast: true,
-		Message:   msg,
-	}:
+		return errReactorClosed
+	default:
+		return channel.Send(p2p.Envelope{
+			Broadcast: true,
+			Message:   msg,
+		})
 	}
-
-	return nil
 }
 
 // logResult creates a log that depends on value of err
