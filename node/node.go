@@ -184,7 +184,7 @@ func makeNode(cfg *config.Config,
 
 	var proTxHash crypto.ProTxHash
 	switch {
-	case cfg.PrivValidatorCoreRPCHost != "":
+	case cfg.PrivValidator.PrivValidatorCoreRPCHost != "":
 		logger.Info(
 			"Initializing Dash Core Signing",
 			"quorum hash",
@@ -603,9 +603,9 @@ func makeNode(cfg *config.Config,
 // DefaultDashCoreRPCClient returns RPC client for the Dash Core node
 func DefaultDashCoreRPCClient(cfg *config.Config, logger log.Logger) (dashcore.Client, error) {
 	return dashcore.NewRPCClient(
-		cfg.PrivValidatorCoreRPCHost,
-		cfg.BaseConfig.PrivValidatorCoreRPCUsername,
-		cfg.BaseConfig.PrivValidatorCoreRPCPassword,
+		cfg.PrivValidator.PrivValidatorCoreRPCHost,
+		cfg.PrivValidator.PrivValidatorCoreRPCUsername,
+		cfg.PrivValidator.PrivValidatorCoreRPCPassword,
 		logger,
 	)
 }
