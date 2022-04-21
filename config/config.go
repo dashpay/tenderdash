@@ -416,13 +416,13 @@ type PrivValidatorConfig struct {
 
 	// RPC port for Tendermint to query for
 	// an external PrivValidator process
-	PrivValidatorCoreRPCHost string `mapstructure:"core-rpc-host"`
+	CoreRPCHost string `mapstructure:"core-rpc-host"`
 
 	// RPC username for Dash Core
-	PrivValidatorCoreRPCUsername string `mapstructure:"core-rpc-username"`
+	CoreRPCUsername string `mapstructure:"core-rpc-username"`
 
 	// RPC password for Dash Core
-	PrivValidatorCoreRPCPassword string `mapstructure:"core-rpc-password"`
+	CoreRPCPassword string `mapstructure:"core-rpc-password"`
 }
 
 // DefaultBaseConfig returns a default private validator configuration
@@ -432,9 +432,9 @@ func DefaultPrivValidatorConfig() *PrivValidatorConfig {
 		Key:   defaultPrivValKeyPath,
 		State: defaultPrivValStatePath,
 
-		PrivValidatorCoreRPCHost:     "",
-		PrivValidatorCoreRPCUsername: "",
-		PrivValidatorCoreRPCPassword: "",
+		CoreRPCHost:     "",
+		CoreRPCUsername: "",
+		CoreRPCPassword: "",
 	}
 }
 
