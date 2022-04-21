@@ -433,8 +433,8 @@ func DefaultPrivValidatorConfig() *PrivValidatorConfig {
 		State: defaultPrivValStatePath,
 
 		CoreRPCHost:     "",
-		CoreRPCUsername: "",
-		CoreRPCPassword: "",
+		CoreRPCUsername: "rpcuser",
+		CoreRPCPassword: "rpcpassword",
 	}
 }
 

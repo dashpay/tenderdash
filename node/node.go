@@ -211,7 +211,7 @@ func makeNode(cfg *config.Config,
 				logger,
 			)
 			if err != nil {
-				return nil, fmt.Errorf("error with private validator socket client: %w", err)
+				return nil, fmt.Errorf("error with private validator RPC client: %w", err)
 			}
 			proTxHash, err = privValidator.GetProTxHash(context.TODO())
 			if err != nil {
