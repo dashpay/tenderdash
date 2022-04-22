@@ -239,8 +239,9 @@ github.com/dashevo/dashd-go v0.23.0-test.7/go.mod h1:vc45V5rc4L4uA8ccXwyj6uuAcXQ
 github.com/dashevo/dashd-go v0.23.0-test.8/go.mod h1:OLSRGjMkJbTVHVDDaAYOJ0ronCLDBe7AV02BzHo40VE=
 github.com/dashevo/dashd-go v0.23.2/go.mod h1:GaTY1dpsl+KkfQwW6APnMim9YUx78XiyDIwn3aVN4Rk=
 github.com/dashevo/dashd-go v0.23.3/go.mod h1:+oo4XZA9z6HjWatY+kCnXV/Xr2gsqY0hrN3eKtmBC5A=
-github.com/dashevo/dashd-go v0.23.4 h1:T+5xBQ4Xh0SNXVlqHQ6wghiusGxLqFGuoqGk+8J0Xw0=
 github.com/dashevo/dashd-go v0.23.4/go.mod h1:zFiVRZcW0ZPXBv+5EuvreE/9K48Ia+fufLJEfBTRhVU=
+github.com/dashevo/dashd-go v0.23.5 h1:qdxkshl9WwGLWW8vuDpo6rvscPHBb1xfOoMV/IjJJqc=
+github.com/dashevo/dashd-go v0.23.5/go.mod h1:uG5ar+fyAMPql9U/2nwQNYHzp7auj9DzrBe6RoEGojg=
 github.com/dashevo/dashd-go/btcec/v2 v2.0.0-test.10/go.mod h1:39vNUG89K3jziuKblivGAH9KsDtAjsTJ+E0xZRb4V40=
 github.com/dashevo/dashd-go/btcec/v2 v2.0.5/go.mod h1:YRg19QFarQOqJN+WUoFYZEBusj6+GjcI3MdFUXI5WnQ=
 github.com/dashevo/dashd-go/btcec/v2 v2.0.6 h1:BAOTh8Ness9GALu9HVJpCmO9hoTD6ARaatO+1SVmP2Y=

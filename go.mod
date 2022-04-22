@@ -10,7 +10,7 @@ require (
 	github.com/btcsuite/btcd v0.22.0-beta
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/containerd/continuity v0.2.2 // indirect
-	github.com/dashevo/dashd-go v0.23.4
+	github.com/dashevo/dashd-go v0.23.5
 	github.com/dashevo/dashd-go/btcec/v2 v2.0.6 // indirect
 	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20201127091120-745324b80143
 	github.com/dgraph-io/badger/v2 v2.2007.4 // indirect
