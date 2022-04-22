@@ -258,7 +258,9 @@ func TestStateBadProposal(t *testing.T) {
 
 // TestStateProposalTime tries to sign and vote on proposal with invalid time.
 func TestStateProposalTime(t *testing.T) {
-	cs1, _ := randState(1)
+	config := configSetup(t)
+
+	cs1, _, _ := randState(config, 1)
 	height, round := cs1.Height, cs1.Round
 	cs1.config.ProposedBlockTimeWindow = 1 * time.Second
 	cs1.config.DontAutoPropose = true
@@ -306,7 +308,7 @@ func TestStateProposalTime(t *testing.T) {
 			if tc.blockTimeFunc != nil {
 				propBlock.Time = tc.blockTimeFunc(cs)
 			}
-			blockID := propBlock.BlockID(propBlockParts.Header())
+			blockID := propBlock.BlockID()
 
 			cs.ValidBlock = propBlock
 			cs.ValidBlockParts = propBlockParts
