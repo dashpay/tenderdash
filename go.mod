@@ -49,7 +49,7 @@ require (
 	github.com/opencontainers/runc v1.1.1 // indirect
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/petermattis/goid v0.0.0-20220302125637-5f11c28912df // indirect
-	github.com/prometheus/client_golang v1.12.1
+	github.com/prometheus/client_golang v1.12.2
 	github.com/prometheus/common v0.33.0 // indirect
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475
 	github.com/rs/cors v1.8.2
