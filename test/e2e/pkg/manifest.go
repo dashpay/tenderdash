@@ -86,7 +86,7 @@ type Manifest struct {
 	QueueType string `toml:"queue_type"`
 
 	// Number of bytes per tx. Default is 1kb (1024)
-	TxSize int64
+	TxSize int
 
 	// ABCIProtocol specifies the protocol used to communicate with the ABCI
 	// application: "unix", "tcp", "grpc", or "builtin". Defaults to builtin.
@@ -126,10 +126,6 @@ type ManifestNode struct {
 	// runner will wait for the network to reach at least this block height.
 	StartAt int64 `toml:"start_at"`
 
-	// BlockSync specifies the block sync mode: "" (disable), "v0" or "v2".
-	// Defaults to disabled.
-	BlockSync string `toml:"block_sync"`
-
 	// Mempool specifies which version of mempool to use. Either "v0" or "v1"
 	Mempool string `toml:"mempool_version"`
 
@@ -167,9 +163,6 @@ type ManifestNode struct {
 	// This is helpful when debugging a specific problem. This overrides the network
 	// level.
 	LogLevel string `toml:"log_level"`
-
-	// UseLegacyP2P enables use of the legacy p2p layer for this node.
-	UseLegacyP2P bool `toml:"use_legacy_p2p"`
 }
 
 // Stateless reports whether m is a node that does not own state, including light and seed nodes.

@@ -1,10 +1,9 @@
 #!/usr/bin/make -f
 
-PACKAGES=$(shell go list ./...)
-OUTPUT?=build/tenderdash
-
-REPO_NAME=github.com/dashevo/tenderdash
-BUILD_TAGS?=tenderdash
+OUTPUT ?= build/tenderdash
+BUILDDIR ?= $(CURDIR)/build
+REPO_NAME ?= github.com/dashevo/tenderdash
+BUILD_TAGS ?= tenderdash
 # If building a release, please checkout the version tag to get the correct version setting
 ifneq ($(shell git symbolic-ref -q --short HEAD),)
 VERSION := unreleased-$(shell git symbolic-ref -q --short HEAD)-$(shell git rev-parse HEAD)
@@ -14,8 +13,16 @@ endif
 LD_FLAGS = -X ${REPO_NAME}/version.TMCoreSemVer=$(VERSION)
 BUILD_FLAGS = -mod=readonly -ldflags "$(LD_FLAGS)"
 HTTPS_GIT := https://${REPO_NAME}.git
-DOCKER_BUF := docker run -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf
+BUILD_IMAGE := ghcr.io/tendermint/docker-build-proto
+BASE_BRANCH ?= v0.8-dev
+DOCKER_PROTO := docker run -v $(shell pwd):/workspace --workdir /workspace $(BUILD_IMAGE)
 CGO_ENABLED ?= 1
+
+# handle ARM builds
+ifeq (arm,$(GOARCH))
+	export CC = arm-linux-gnueabi-gcc-10
+	export CXX = arm-linux-gnueabi-g++-10
+endif
 
 # handle nostrip
 ifeq (,$(findstring nostrip,$(TENDERMINT_BUILD_OPTIONS)))
@@ -62,8 +69,9 @@ endif
 # allow users to pass additional flags via the conventional LDFLAGS variable
 LD_FLAGS += $(LDFLAGS)
 
-all: check build test install
-build: build-bls
+all: build install
+build: build-bls build-binary
+.PHONY: build
 install: install-bls
 
 .PHONY: all
@@ -86,9 +94,9 @@ install-bls: build-bls
 ###                                Build Tendermint                        ###
 ###############################################################################
 
-build:
+build-binary:
 	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_FLAGS) -tags '$(BUILD_TAGS)' -o $(OUTPUT) ./cmd/tenderdash/
-.PHONY: build
+.PHONY: build-binary
 
 install:
 	CGO_ENABLED=$(CGO_ENABLED) go install $(BUILD_FLAGS) -tags $(BUILD_TAGS) ./cmd/tenderdash
@@ -101,31 +109,46 @@ $(BUILDDIR)/:
 ###                                Protobuf                                 ###
 ###############################################################################
 
-proto-all: proto-gen proto-lint proto-check-breaking
-.PHONY: proto-all
+check-proto-deps:
+ifeq (,$(shell which buf))
+	$(error "buf is required for Protobuf building, linting and breakage checking. See https://docs.buf.build/installation for installation instructions.")
+endif
+ifeq (,$(shell which protoc-gen-gogofaster))
+	$(error "gogofaster plugin for protoc is required. Run 'go install github.com/gogo/protobuf/protoc-gen-gogofaster@latest' to install")
+endif
+.PHONY: check-proto-deps
 
-proto-gen:
-	@docker pull -q tendermintdev/docker-build-proto
+check-proto-format-deps:
+ifeq (,$(shell which clang-format))
+	$(error "clang-format is required for Protobuf formatting. See instructions for your platform on how to install it.")
+endif
+.PHONY: check-proto-format-deps
+
+proto-gen: check-proto-deps
 	@echo "Generating Protobuf files"
-	@docker run -v $(shell pwd):/workspace --workdir /workspace tendermintdev/docker-build-proto sh ./scripts/protocgen.sh
+	@buf generate
+	@mv ./proto/tendermint/abci/types.pb.go ./abci/types/
 .PHONY: proto-gen
 
-proto-lint:
-	@$(DOCKER_BUF) lint --error-format=json
+# These targets are provided for convenience and are intended for local
+# execution only.
+proto-lint: check-proto-deps
+	@echo "Linting Protobuf files"
+	@buf lint
 .PHONY: proto-lint
 
-proto-format:
+proto-format: check-proto-format-deps
 	@echo "Formatting Protobuf files"
-	docker run -v $(shell pwd):/workspace --workdir /workspace tendermintdev/docker-build-proto find ./ -not -path "./third_party/*" -name *.proto -exec clang-format -i {} \;
+	@find . -name '*.proto' -path "./proto/*" -exec clang-format -i {} \;
 .PHONY: proto-format
 
-proto-check-breaking:
-	@$(DOCKER_BUF) breaking --against ".git#branch=master"
+proto-check-breaking: check-proto-deps
+	@echo "Checking for breaking changes in Protobuf files against local branch"
+	@echo "Note: This is only useful if your changes have not yet been committed."
+	@echo "      Otherwise read up on buf's \"breaking\" command usage:"
+	@echo "      https://docs.buf.build/breaking/usage"
+	@buf breaking --against ".git"
 .PHONY: proto-check-breaking
-
-proto-check-breaking-ci:
-	$(DOCKER_BUF) breaking --against "$(HTTPS_GIT)#branch=master"
-.PHONY: proto-check-breaking-ci
 
 ###############################################################################
 ###                              Build ABCI                                 ###
@@ -140,7 +163,7 @@ install_abci:
 .PHONY: install_abci
 
 ###############################################################################
-###                           	Privval Server                              ###
+###				Privval Server                              ###
 ###############################################################################
 
 build_privval_server:
@@ -182,7 +205,7 @@ go.sum: go.mod
 
 draw_deps:
 	@# requires brew install graphviz or apt-get install graphviz
-	go get github.com/RobotsAndPencils/goviz
+	go install github.com/RobotsAndPencils/goviz@latest
 	@goviz -i ${REPO_NAME}/cmd/tendermint -d 3 | dot -Tpng -o dependency-graph.png
 .PHONY: draw_deps
 
@@ -241,7 +264,9 @@ build-docs:
 		mkdir -p ~/output/$${path_prefix} ; \
 		cp -r .vuepress/dist/* ~/output/$${path_prefix}/ ; \
 		cp ~/output/$${path_prefix}/index.html ~/output ; \
-	done < versions ;
+	done < versions ; \
+	mkdir -p ~/output/master ; \
+	cp -r .vuepress/dist/* ~/output/master/
 .PHONY: build-docs
 
 ###############################################################################
@@ -326,3 +351,25 @@ build-reproducible:
 		--name latest-build cosmossdk/rbuilder:latest
 	docker cp -a latest-build:/home/builder/artifacts/ $(CURDIR)/
 .PHONY: build-reproducible
+
+# Implements test splitting and running. This is pulled directly from
+# the github action workflows for better local reproducibility.
+
+GO_TEST_FILES != find $(CURDIR) -name "*_test.go"
+
+# default to four splits by default
+NUM_SPLIT ?= 4
+
+$(BUILDDIR):
+	mkdir -p $@
+
+# The format statement filters out all packages that don't have tests.
+# Note we need to check for both in-package tests (.TestGoFiles) and
+# out-of-package tests (.XTestGoFiles).
+$(BUILDDIR)/packages.txt:$(GO_TEST_FILES) $(BUILDDIR)
+	go list -f "{{ if (or .TestGoFiles .XTestGoFiles) }}{{ .ImportPath }}{{ end }}" ./... | sort > $@
+
+split-test-packages:$(BUILDDIR)/packages.txt
+	split -d -n l/$(NUM_SPLIT) $< $<.
+test-group-%:split-test-packages
+	cat $(BUILDDIR)/packages.txt.$* | xargs go test -mod=readonly -timeout=5m -race -coverprofile=$(BUILDDIR)/$*.profile.out

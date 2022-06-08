@@ -4,6 +4,7 @@ package mocks
 
 import (
 	bytes "github.com/tendermint/tendermint/libs/bytes"
+	client "github.com/tendermint/tendermint/rpc/client"
 
 	context "context"
 
@@ -11,7 +12,7 @@ import (
 
 	mock "github.com/stretchr/testify/mock"
 
-	rpcclient "github.com/tendermint/tendermint/rpc/client"
+	testing "testing"
 
 	types "github.com/tendermint/tendermint/types"
 )
@@ -68,11 +69,11 @@ func (_m *RemoteClient) ABCIQuery(ctx context.Context, path string, data bytes.H
 }
 
 // ABCIQueryWithOptions provides a mock function with given fields: ctx, path, data, opts
-func (_m *RemoteClient) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts rpcclient.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
+func (_m *RemoteClient) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	ret := _m.Called(ctx, path, data, opts)
 
 	var r0 *coretypes.ResultABCIQuery
-	if rf, ok := ret.Get(0).(func(context.Context, string, bytes.HexBytes, rpcclient.ABCIQueryOptions) *coretypes.ResultABCIQuery); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, bytes.HexBytes, client.ABCIQueryOptions) *coretypes.ResultABCIQuery); ok {
 		r0 = rf(ctx, path, data, opts)
 	} else {
 		if ret.Get(0) != nil {
@@ -81,7 +82,7 @@ func (_m *RemoteClient) ABCIQueryWithOptions(ctx context.Context, path string, d
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, string, bytes.HexBytes, rpcclient.ABCIQueryOptions) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, string, bytes.HexBytes, client.ABCIQueryOptions) error); ok {
 		r1 = rf(ctx, path, data, opts)
 	} else {
 		r1 = ret.Error(1)
@@ -412,6 +413,29 @@ func (_m *RemoteClient) DumpConsensusState(_a0 context.Context) (*coretypes.Resu
 	return r0, r1
 }
 
+// Events provides a mock function with given fields: ctx, req
+func (_m *RemoteClient) Events(ctx context.Context, req *coretypes.RequestEvents) (*coretypes.ResultEvents, error) {
+	ret := _m.Called(ctx, req)
+
+	var r0 *coretypes.ResultEvents
+	if rf, ok := ret.Get(0).(func(context.Context, *coretypes.RequestEvents) *coretypes.ResultEvents); ok {
+		r0 = rf(ctx, req)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*coretypes.ResultEvents)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *coretypes.RequestEvents) error); ok {
+		r1 = rf(ctx, req)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Genesis provides a mock function with given fields: _a0
 func (_m *RemoteClient) Genesis(_a0 context.Context) (*coretypes.ResultGenesis, error) {
 	ret := _m.Called(_a0)
@@ -458,6 +482,52 @@ func (_m *RemoteClient) GenesisChunked(_a0 context.Context, _a1 uint) (*coretype
 	return r0, r1
 }
 
+// Header provides a mock function with given fields: ctx, height
+func (_m *RemoteClient) Header(ctx context.Context, height *int64) (*coretypes.ResultHeader, error) {
+	ret := _m.Called(ctx, height)
+
+	var r0 *coretypes.ResultHeader
+	if rf, ok := ret.Get(0).(func(context.Context, *int64) *coretypes.ResultHeader); ok {
+		r0 = rf(ctx, height)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*coretypes.ResultHeader)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *int64) error); ok {
+		r1 = rf(ctx, height)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// HeaderByHash provides a mock function with given fields: ctx, hash
+func (_m *RemoteClient) HeaderByHash(ctx context.Context, hash bytes.HexBytes) (*coretypes.ResultHeader, error) {
+	ret := _m.Called(ctx, hash)
+
+	var r0 *coretypes.ResultHeader
+	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) *coretypes.ResultHeader); ok {
+		r0 = rf(ctx, hash)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*coretypes.ResultHeader)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes) error); ok {
+		r1 = rf(ctx, hash)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Health provides a mock function with given fields: _a0
 func (_m *RemoteClient) Health(_a0 context.Context) (*coretypes.ResultHealth, error) {
 	ret := _m.Called(_a0)
@@ -479,20 +549,6 @@ func (_m *RemoteClient) Health(_a0 context.Context) (*coretypes.ResultHealth, er
 	}
 
 	return r0, r1
-}
-
-// IsRunning provides a mock function with given fields:
-func (_m *RemoteClient) IsRunning() bool {
-	ret := _m.Called()
-
-	var r0 bool
-	if rf, ok := ret.Get(0).(func() bool); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-
-	return r0
 }
 
 // NetInfo provides a mock function with given fields: _a0
@@ -569,13 +625,13 @@ func (_m *RemoteClient) RemoveTx(_a0 context.Context, _a1 types.TxKey) error {
 	return r0
 }
 
-// Start provides a mock function with given fields:
-func (_m *RemoteClient) Start() error {
-	ret := _m.Called()
+// Start provides a mock function with given fields: _a0
+func (_m *RemoteClient) Start(_a0 context.Context) error {
+	ret := _m.Called(_a0)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func() error); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -604,20 +660,6 @@ func (_m *RemoteClient) Status(_a0 context.Context) (*coretypes.ResultStatus, er
 	}
 
 	return r0, r1
-}
-
-// Stop provides a mock function with given fields:
-func (_m *RemoteClient) Stop() error {
-	ret := _m.Called()
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func() error); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
 }
 
 // Subscribe provides a mock function with given fields: ctx, subscriber, query, outCapacity
@@ -696,13 +738,13 @@ func (_m *RemoteClient) TxSearch(ctx context.Context, query string, prove bool, 
 	return r0, r1
 }
 
-// UnconfirmedTxs provides a mock function with given fields: ctx, limit
-func (_m *RemoteClient) UnconfirmedTxs(ctx context.Context, limit *int) (*coretypes.ResultUnconfirmedTxs, error) {
-	ret := _m.Called(ctx, limit)
+// UnconfirmedTxs provides a mock function with given fields: ctx, page, perPage
+func (_m *RemoteClient) UnconfirmedTxs(ctx context.Context, page *int, perPage *int) (*coretypes.ResultUnconfirmedTxs, error) {
+	ret := _m.Called(ctx, page, perPage)
 
 	var r0 *coretypes.ResultUnconfirmedTxs
-	if rf, ok := ret.Get(0).(func(context.Context, *int) *coretypes.ResultUnconfirmedTxs); ok {
-		r0 = rf(ctx, limit)
+	if rf, ok := ret.Get(0).(func(context.Context, *int, *int) *coretypes.ResultUnconfirmedTxs); ok {
+		r0 = rf(ctx, page, perPage)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*coretypes.ResultUnconfirmedTxs)
@@ -710,8 +752,8 @@ func (_m *RemoteClient) UnconfirmedTxs(ctx context.Context, limit *int) (*corety
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *int) error); ok {
-		r1 = rf(ctx, limit)
+	if rf, ok := ret.Get(1).(func(context.Context, *int, *int) error); ok {
+		r1 = rf(ctx, page, perPage)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -768,4 +810,14 @@ func (_m *RemoteClient) Validators(ctx context.Context, height *int64, page *int
 	}
 
 	return r0, r1
+}
+
+// NewRemoteClient creates a new instance of RemoteClient. It also registers the testing.TB interface on the mock and a cleanup function to assert the mocks expectations.
+func NewRemoteClient(t testing.TB) *RemoteClient {
+	mock := &RemoteClient{}
+	mock.Mock.Test(t)
+
+	t.Cleanup(func() { mock.AssertExpectations(t) })
+
+	return mock
 }

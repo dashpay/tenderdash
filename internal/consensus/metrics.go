@@ -1,12 +1,16 @@
 package consensus
 
 import (
+	"strings"
+	"time"
+
 	"github.com/go-kit/kit/metrics"
 	"github.com/go-kit/kit/metrics/discard"
-	"github.com/tendermint/tendermint/types"
 
-	prometheus "github.com/go-kit/kit/metrics/prometheus"
+	"github.com/go-kit/kit/metrics/prometheus"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
+	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
+	"github.com/tendermint/tendermint/types"
 )
 
 const (
@@ -25,6 +29,9 @@ type Metrics struct {
 
 	// Number of rounds.
 	Rounds metrics.Gauge
+
+	// Histogram of round duration.
+	RoundDuration metrics.Histogram
 
 	// Number of validators.
 	Validators metrics.Gauge
@@ -61,6 +68,40 @@ type Metrics struct {
 
 	// Number of blockparts transmitted by peer.
 	BlockParts metrics.Counter
+
+	// Histogram of step duration.
+	StepDuration metrics.Histogram
+	stepStart    time.Time
+
+	// Histogram of time taken to receive a block in seconds, measured between when a new block is first
+	// discovered to when the block is completed.
+	BlockGossipReceiveLatency metrics.Histogram
+	blockGossipStart          time.Time
+
+	// Number of block parts received by the node, separated by whether the part
+	// was relevant to the block the node is trying to gather or not.
+	BlockGossipPartsReceived metrics.Counter
+
+	// QuroumPrevoteMessageDelay is the interval in seconds between the proposal
+	// timestamp and the timestamp of the earliest prevote that achieved a quorum
+	// during the prevote step.
+	//
+	// To compute it, sum the voting power over each prevote received, in increasing
+	// order of timestamp. The timestamp of the first prevote to increase the sum to
+	// be above 2/3 of the total voting power of the network defines the endpoint
+	// the endpoint of the interval. Subtract the proposal timestamp from this endpoint
+	// to obtain the quorum delay.
+	QuorumPrevoteDelay metrics.Gauge
+
+	// FullPrevoteDelay is the interval in seconds between the proposal
+	// timestamp and the timestamp of the latest prevote in a round where 100%
+	// of the voting power on the network issued prevotes.
+	FullPrevoteDelay metrics.Gauge
+
+	// ProposalTimestampDifference is the difference between the timestamp in
+	// the proposal message and the local time of the validator at the time
+	// that the validator received the message.
+	ProposalTimestampDifference metrics.Histogram
 }
 
 // PrometheusMetrics returns Metrics build using Prometheus client library.
@@ -84,7 +125,13 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "rounds",
 			Help:      "Number of rounds.",
 		}, labels).With(labelsAndValues...),
-
+		RoundDuration: prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "round_duration",
+			Help:      "Time spent in a round.",
+			Buckets:   stdprometheus.ExponentialBucketsRange(0.1, 100, 8),
+		}, labels).With(labelsAndValues...),
 		Validators: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
@@ -187,6 +234,51 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "block_parts",
 			Help:      "Number of blockparts transmitted by peer.",
 		}, append(labels, "peer_id")).With(labelsAndValues...),
+		BlockGossipReceiveLatency: prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "block_gossip_receive_latency",
+			Help: "Difference in seconds between when the validator learns of a new block" +
+				"and when the validator receives the last piece of the block.",
+			Buckets: stdprometheus.ExponentialBucketsRange(0.1, 100, 8),
+		}, labels).With(labelsAndValues...),
+		BlockGossipPartsReceived: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "block_gossip_parts_received",
+			Help: "Number of block parts received by the node, labeled by whether the " +
+				"part was relevant to the block the node was currently gathering or not.",
+		}, append(labels, "matches_current")).With(labelsAndValues...),
+		StepDuration: prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "step_duration",
+			Help:      "Time spent per step.",
+			Buckets:   stdprometheus.ExponentialBucketsRange(0.1, 100, 8),
+		}, append(labels, "step")).With(labelsAndValues...),
+		QuorumPrevoteDelay: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "quorum_prevote_delay",
+			Help: "Difference in seconds between the proposal timestamp and the timestamp " +
+				"of the latest prevote that achieved a quorum in the prevote step.",
+		}, append(labels, "proposer_address")).With(labelsAndValues...),
+		FullPrevoteDelay: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "full_prevote_delay",
+			Help: "Difference in seconds between the proposal timestamp and the timestamp " +
+				"of the latest prevote that achieved 100% of the voting power in the prevote step.",
+		}, append(labels, "proposer_address")).With(labelsAndValues...),
+		ProposalTimestampDifference: prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+			Namespace: namespace,
+			Subsystem: MetricsSubsystem,
+			Name:      "proposal_timestamp_difference",
+			Help: "Difference in seconds between the timestamp in the proposal " +
+				"message and the local time when the message was received. " +
+				"Only calculated when a new block is proposed.",
+			Buckets: []float64{-10, -.5, -.025, 0, .1, .5, 1, 1.5, 2, 10},
+		}, append(labels, "is_timely")).With(labelsAndValues...),
 	}
 }
 
@@ -197,7 +289,9 @@ func NopMetrics() *Metrics {
 
 		ValidatorLastSignedHeight: discard.NewGauge(),
 
-		Rounds: discard.NewGauge(),
+		Rounds:        discard.NewGauge(),
+		RoundDuration: discard.NewHistogram(),
+		StepDuration:  discard.NewHistogram(),
 
 		Validators:               discard.NewGauge(),
 		ValidatorsPower:          discard.NewGauge(),
@@ -210,13 +304,18 @@ func NopMetrics() *Metrics {
 
 		BlockIntervalSeconds: discard.NewHistogram(),
 
-		NumTxs:          discard.NewGauge(),
-		BlockSizeBytes:  discard.NewHistogram(),
-		TotalTxs:        discard.NewGauge(),
-		CommittedHeight: discard.NewGauge(),
-		BlockSyncing:    discard.NewGauge(),
-		StateSyncing:    discard.NewGauge(),
-		BlockParts:      discard.NewCounter(),
+		NumTxs:                      discard.NewGauge(),
+		BlockSizeBytes:              discard.NewHistogram(),
+		TotalTxs:                    discard.NewGauge(),
+		CommittedHeight:             discard.NewGauge(),
+		BlockSyncing:                discard.NewGauge(),
+		StateSyncing:                discard.NewGauge(),
+		BlockParts:                  discard.NewCounter(),
+		BlockGossipReceiveLatency:   discard.NewHistogram(),
+		BlockGossipPartsReceived:    discard.NewCounter(),
+		QuorumPrevoteDelay:          discard.NewGauge(),
+		FullPrevoteDelay:            discard.NewGauge(),
+		ProposalTimestampDifference: discard.NewHistogram(),
 	}
 }
 
@@ -226,4 +325,27 @@ func (m *Metrics) RecordConsMetrics(block *types.Block) {
 	m.TotalTxs.Add(float64(len(block.Data.Txs)))
 	m.BlockSizeBytes.Observe(float64(block.Size()))
 	m.CommittedHeight.Set(float64(block.Height))
+}
+
+func (m *Metrics) MarkBlockGossipStarted() {
+	m.blockGossipStart = time.Now()
+}
+
+func (m *Metrics) MarkBlockGossipComplete() {
+	m.BlockGossipReceiveLatency.Observe(time.Since(m.blockGossipStart).Seconds())
+}
+
+func (m *Metrics) MarkRound(r int32, st time.Time) {
+	m.Rounds.Set(float64(r))
+	roundTime := time.Since(st).Seconds()
+	m.RoundDuration.Observe(roundTime)
+}
+
+func (m *Metrics) MarkStep(s cstypes.RoundStepType) {
+	if !m.stepStart.IsZero() {
+		stepTime := time.Since(m.stepStart).Seconds()
+		stepName := strings.TrimPrefix(s.String(), "RoundStep")
+		m.StepDuration.With("step", stepName).Observe(stepTime)
+	}
+	m.stepStart = time.Now()
 }

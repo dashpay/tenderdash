@@ -3,15 +3,15 @@ package statesync
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
+	"sync"
 	"time"
 
 	dbm "github.com/tendermint/tm-db"
 
-	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
+	dashcore "github.com/tendermint/tendermint/dash/core"
 	"github.com/tendermint/tendermint/internal/p2p"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/log"
@@ -41,10 +41,11 @@ type StateProvider interface {
 }
 
 type stateProviderRPC struct {
-	tmsync.Mutex  // light.Client is not concurrency-safe
+	sync.Mutex    // light.Client is not concurrency-safe
 	lc            *light.Client
 	initialHeight int64
 	providers     map[lightprovider.Provider]string
+	logger        log.Logger
 }
 
 // NewRPCStateProvider creates a new StateProvider using a light client and RPC clients.
@@ -81,10 +82,17 @@ func NewRPCStateProvider(
 		return nil, err
 	}
 	return &stateProviderRPC{
+		logger:        logger,
 		lc:            lc,
 		initialHeight: initialHeight,
 		providers:     providerRemotes,
 	}, nil
+}
+
+func (s *stateProviderRPC) verifyLightBlockAtHeight(ctx context.Context, height uint64, ts time.Time) (*types.LightBlock, error) {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	return s.lc.VerifyLightBlockAtHeight(ctx, int64(height), ts)
 }
 
 // AppHash implements part of StateProvider. It calls the application to verify the
@@ -95,7 +103,7 @@ func (s *stateProviderRPC) AppHash(ctx context.Context, height uint64) ([]byte, 
 	defer s.Unlock()
 
 	// We have to fetch the next height, which contains the app hash for the previous height.
-	header, err := s.lc.VerifyLightBlockAtHeight(ctx, int64(height+1), time.Now())
+	header, err := s.verifyLightBlockAtHeight(ctx, height+1, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +111,7 @@ func (s *stateProviderRPC) AppHash(ctx context.Context, height uint64) ([]byte, 
 	// We also try to fetch the blocks at H+2, since we need these
 	// when building the state while restoring the snapshot. This avoids the race
 	// condition where we try to restore a snapshot before H+2 exists.
-	_, err = s.lc.VerifyLightBlockAtHeight(ctx, int64(height+2), time.Now())
+	_, err = s.verifyLightBlockAtHeight(ctx, height+2, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -114,7 +122,7 @@ func (s *stateProviderRPC) AppHash(ctx context.Context, height uint64) ([]byte, 
 func (s *stateProviderRPC) Commit(ctx context.Context, height uint64) (*types.Commit, error) {
 	s.Lock()
 	defer s.Unlock()
-	header, err := s.lc.VerifyLightBlockAtHeight(ctx, int64(height), time.Now())
+	header, err := s.verifyLightBlockAtHeight(ctx, height, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -142,15 +150,15 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	//
 	// We need to fetch the NextValidators from height+2 because if the application changed
 	// the validator set at the snapshot height then this only takes effect at height+2.
-	lastLightBlock, err := s.lc.VerifyLightBlockAtHeight(ctx, int64(height), time.Now())
+	lastLightBlock, err := s.verifyLightBlockAtHeight(ctx, height, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
-	currentLightBlock, err := s.lc.VerifyLightBlockAtHeight(ctx, int64(height+1), time.Now())
+	currentLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+1, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
-	nextLightBlock, err := s.lc.VerifyLightBlockAtHeight(ctx, int64(height+2), time.Now())
+	nextLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+2, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
@@ -180,7 +188,7 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	if err != nil {
 		return sm.State{}, fmt.Errorf("unable to create RPC client: %w", err)
 	}
-	rpcclient := lightrpc.NewClient(primaryRPC, s.lc)
+	rpcclient := lightrpc.NewClient(s.logger, primaryRPC, s.lc)
 	result, err := rpcclient.ConsensusParams(ctx, &currentLightBlock.Height)
 	if err != nil {
 		return sm.State{}, fmt.Errorf("unable to fetch consensus parameters for height %v: %w",
@@ -201,10 +209,10 @@ func rpcClient(server string) (*rpchttp.HTTP, error) {
 }
 
 type stateProviderP2P struct {
-	tmsync.Mutex  // light.Client is not concurrency-safe
+	sync.Mutex    // light.Client is not concurrency-safe
 	lc            *light.Client
 	initialHeight int64
-	paramsSendCh  chan<- p2p.Envelope
+	paramsSendCh  *p2p.Channel
 	paramsRecvCh  chan types.ConsensusParams
 }
 
@@ -216,7 +224,7 @@ func NewP2PStateProvider(
 	initialHeight int64,
 	trustHeight int64,
 	providers []lightprovider.Provider,
-	paramsSendCh chan<- p2p.Envelope,
+	paramsSendCh *p2p.Channel,
 	logger log.Logger,
 	dashCoreClient dashcore.Client,
 ) (StateProvider, error) {
@@ -238,13 +246,19 @@ func NewP2PStateProvider(
 	}, nil
 }
 
+func (s *stateProviderP2P) verifyLightBlockAtHeight(ctx context.Context, height uint64, ts time.Time) (*types.LightBlock, error) {
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
+	defer cancel()
+	return s.lc.VerifyLightBlockAtHeight(ctx, int64(height), ts)
+}
+
 // AppHash implements StateProvider.
 func (s *stateProviderP2P) AppHash(ctx context.Context, height uint64) ([]byte, error) {
 	s.Lock()
 	defer s.Unlock()
 
 	// We have to fetch the next height, which contains the app hash for the previous height.
-	header, err := s.lc.VerifyLightBlockAtHeight(ctx, int64(height+1), time.Now())
+	header, err := s.verifyLightBlockAtHeight(ctx, height+1, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -252,7 +266,7 @@ func (s *stateProviderP2P) AppHash(ctx context.Context, height uint64) ([]byte, 
 	// We also try to fetch the blocks at H+2, since we need these
 	// when building the state while restoring the snapshot. This avoids the race
 	// condition where we try to restore a snapshot before H+2 exists.
-	_, err = s.lc.VerifyLightBlockAtHeight(ctx, int64(height+2), time.Now())
+	_, err = s.verifyLightBlockAtHeight(ctx, height+2, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -263,7 +277,7 @@ func (s *stateProviderP2P) AppHash(ctx context.Context, height uint64) ([]byte, 
 func (s *stateProviderP2P) Commit(ctx context.Context, height uint64) (*types.Commit, error) {
 	s.Lock()
 	defer s.Unlock()
-	header, err := s.lc.VerifyLightBlockAtHeight(ctx, int64(height), time.Now())
+	header, err := s.verifyLightBlockAtHeight(ctx, height, time.Now())
 	if err != nil {
 		return nil, err
 	}
@@ -291,15 +305,15 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	//
 	// We need to fetch the NextValidators from height+2 because if the application changed
 	// the validator set at the snapshot height then this only takes effect at height+2.
-	lastLightBlock, err := s.lc.VerifyLightBlockAtHeight(ctx, int64(height), time.Now())
+	lastLightBlock, err := s.verifyLightBlockAtHeight(ctx, height, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
-	currentLightBlock, err := s.lc.VerifyLightBlockAtHeight(ctx, int64(height+1), time.Now())
+	currentLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+1, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
-	nextLightBlock, err := s.lc.VerifyLightBlockAtHeight(ctx, int64(height+2), time.Now())
+	nextLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+2, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
@@ -323,7 +337,7 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	// We'll also need to fetch consensus params via P2P.
 	state.ConsensusParams, err = s.consensusParams(ctx, currentLightBlock.Height)
 	if err != nil {
-		return sm.State{}, err
+		return sm.State{}, fmt.Errorf("fetching consensus params: %w", err)
 	}
 	// validate the consensus params
 	if !bytes.Equal(nextLightBlock.ConsensusHash, state.ConsensusParams.HashConsensusParams()) {
@@ -347,73 +361,110 @@ func (s *stateProviderP2P) addProvider(p lightprovider.Provider) {
 // consensusParams sends out a request for consensus params blocking
 // until one is returned.
 //
-// If it fails to get a valid set of consensus params from any of the
-// providers it returns an error; however, it will retry indefinitely
-// (with backoff) until the context is canceled.
+// It attempts to send requests to all witnesses in parallel, but if
+// none responds it will retry them all sometime later until it
+// receives some response. This operation will block until it receives
+// a response or the context is canceled.
 func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (types.ConsensusParams, error) {
-	iterCount := 0
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	out := make(chan types.ConsensusParams)
+
+	retryAll := func() (<-chan struct{}, error) {
+		wg := &sync.WaitGroup{}
+
+		for _, provider := range s.lc.Witnesses() {
+			p, ok := provider.(*BlockProvider)
+			if !ok {
+				return nil, fmt.Errorf("witness is not BlockProvider [%T]", provider)
+			}
+
+			peer, err := types.NewNodeID(p.String())
+			if err != nil {
+				return nil, fmt.Errorf("invalid provider (%s) node id: %w", p.String(), err)
+			}
+
+			wg.Add(1)
+			go func(peer types.NodeID) {
+				defer wg.Done()
+
+				timer := time.NewTimer(0)
+				defer timer.Stop()
+				var iterCount int64
+
+				for {
+					iterCount++
+					if err := s.paramsSendCh.Send(ctx, p2p.Envelope{
+						To: peer,
+						Message: &ssproto.ParamsRequest{
+							Height: uint64(height),
+						},
+					}); err != nil {
+						// this only errors if
+						// the context is
+						// canceled which we
+						// don't need to
+						// propagate here
+						return
+					}
+
+					// jitter+backoff the retry loop
+					timer.Reset(time.Duration(iterCount)*consensusParamsResponseTimeout +
+						time.Duration(100*rand.Int63n(iterCount))*time.Millisecond) // nolint:gosec
+
+					select {
+					case <-timer.C:
+						continue
+					case <-ctx.Done():
+						return
+					case params, ok := <-s.paramsRecvCh:
+						if !ok {
+							return
+						}
+						select {
+						case <-ctx.Done():
+							return
+						case out <- params:
+							return
+						}
+					}
+				}
+
+			}(peer)
+		}
+		sig := make(chan struct{})
+		go func() { wg.Wait(); close(sig) }()
+		return sig, nil
+	}
+
+	timer := time.NewTimer(0)
+	defer timer.Stop()
+
+	var iterCount int64
 	for {
-		params, err := s.tryGetConsensusParamsFromWitnesses(ctx, height)
+		iterCount++
+		sig, err := retryAll()
 		if err != nil {
 			return types.ConsensusParams{}, err
 		}
-		if params != nil {
-			return *params, nil
-		}
-		iterCount++
-
 		select {
+		case <-sig:
+			// jitter+backoff the retry loop
+			timer.Reset(time.Duration(iterCount)*consensusParamsResponseTimeout +
+				time.Duration(100*rand.Int63n(iterCount))*time.Millisecond) // nolint:gosec
+			select {
+			case param := <-out:
+				return param, nil
+			case <-ctx.Done():
+				return types.ConsensusParams{}, ctx.Err()
+			case <-timer.C:
+			}
 		case <-ctx.Done():
 			return types.ConsensusParams{}, ctx.Err()
-		case <-time.After(time.Duration(iterCount) * consensusParamsResponseTimeout):
-		}
-	}
-}
-
-// tryGetConsensusParamsFromWitnesses attempts to get consensus
-// parameters from the light clients available witnesses. If both
-// return parameters are nil, then it can be retried.
-func (s *stateProviderP2P) tryGetConsensusParamsFromWitnesses(
-	ctx context.Context,
-	height int64,
-) (*types.ConsensusParams, error) {
-	for _, provider := range s.lc.Witnesses() {
-		p, ok := provider.(*BlockProvider)
-		if !ok {
-			panic("expected p2p state provider to use p2p block providers")
-		}
-
-		// extract the nodeID of the provider
-		peer, err := types.NewNodeID(p.String())
-		if err != nil {
-			return nil, fmt.Errorf("invalid provider (%s) node id: %w", p.String(), err)
-		}
-
-		select {
-		case s.paramsSendCh <- p2p.Envelope{
-			To: peer,
-			Message: &ssproto.ParamsRequest{
-				Height: uint64(height),
-			},
-		}:
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-
-		select {
-		// if we get no response from this provider we move on to the next one
-		case <-time.After(consensusParamsResponseTimeout):
-			continue
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case params, ok := <-s.paramsRecvCh:
-			if !ok {
-				return nil, errors.New("params channel closed")
-			}
-			return &params, nil
+		case param := <-out:
+			return param, nil
 		}
 	}
 
-	// signal to caller to retry.
-	return nil, nil
 }

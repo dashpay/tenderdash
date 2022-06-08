@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/tendermint/tendermint/libs/bytes"
+	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
+
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -72,15 +74,25 @@ type RoundState struct {
 	StartTime time.Time     `json:"start_time"`
 
 	// Subjective time when +2/3 precommits for Block at Round were found
-	CommitTime         time.Time           `json:"commit_time"`
-	Validators         *types.ValidatorSet `json:"validators"`
-	Proposal           *types.Proposal     `json:"proposal"`
-	ProposalBlock      *types.Block        `json:"proposal_block"`
-	ProposalBlockParts *types.PartSet      `json:"proposal_block_parts"`
-	LockedRound        int32               `json:"locked_round"`
-	LockedBlock        *types.Block        `json:"locked_block"`
-	LockedBlockParts   *types.PartSet      `json:"locked_block_parts"`
-	Commit             *types.Commit       `json:"commit"`
+	CommitTime          time.Time           `json:"commit_time"`
+	Validators          *types.ValidatorSet `json:"validators"`
+	Proposal            *types.Proposal     `json:"proposal"`
+	ProposalReceiveTime time.Time           `json:"proposal_receive_time"`
+	ProposalBlock       *types.Block        `json:"proposal_block"`
+	ProposalBlockParts  *types.PartSet      `json:"proposal_block_parts"`
+	LockedRound         int32               `json:"locked_round"`
+	LockedBlock         *types.Block        `json:"locked_block"`
+	LockedBlockParts    *types.PartSet      `json:"locked_block_parts"`
+	Commit              *types.Commit       `json:"commit"`
+
+	// The variables below starting with "Valid..." derive their name from
+	// the algorithm presented in this paper:
+	// [The latest gossip on BFT consensus](https://arxiv.org/abs/1807.04938).
+	// Therefore, "Valid...":
+	//   * means that the block or round that the variable refers to has
+	//     received 2/3+ non-`nil` prevotes (a.k.a. a *polka*)
+	//   * has nothing to do with whether the Application returned "Accept" in its
+	//     response to `ProcessProposal`, or "Reject"
 
 	// Last known round with POL for non-nil valid block.
 	ValidRound int32        `json:"valid_round"`
@@ -170,6 +182,29 @@ func (rs *RoundState) RoundStateEvent() types.EventDataRoundState {
 		Height: rs.Height,
 		Round:  rs.Round,
 		Step:   rs.Step.String(),
+	}
+}
+
+// NewRoundStepMessage generates tmcons.NewRoundStep message for the RoundState.
+func (rs RoundState) NewRoundStepMessage() *tmcons.NewRoundStep {
+	return &tmcons.NewRoundStep{
+		Height:                rs.Height,
+		Round:                 rs.Round,
+		Step:                  uint32(rs.Step),
+		SecondsSinceStartTime: int64(time.Since(rs.StartTime).Seconds()),
+		LastCommitRound:       rs.LastCommit.GetRound(),
+	}
+}
+
+// NewValidBlockMessage generates tmcons.NewValidBlock message for the RoundState.
+func (rs RoundState) NewValidBlockMessage() *tmcons.NewValidBlock {
+	psHeader := rs.ProposalBlockParts.Header()
+	return &tmcons.NewValidBlock{
+		Height:             rs.Height,
+		Round:              rs.Round,
+		BlockPartSetHeader: psHeader.ToProto(),
+		BlockParts:         rs.ProposalBlockParts.BitArray().ToProto(),
+		IsCommit:           rs.Step == RoundStepApplyCommit,
 	}
 }
 

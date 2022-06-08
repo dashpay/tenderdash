@@ -72,23 +72,25 @@ type ValidatorConfig struct {
 
 type ValidatorsMap map[*Node]ValidatorConfig
 type Testnet struct {
-	Name                      string
-	File                      string
-	Dir                       string
-	IP                        *net.IPNet
-	InitialHeight             int64
+	Name             string
+	File             string
+	Dir              string
+	IP               *net.IPNet
+	InitialHeight    int64
+	InitialState     map[string]string
+	Validators       ValidatorsMap
+	ValidatorUpdates map[int64]ValidatorsMap
+	Nodes            []*Node
+	KeyType          string
+	Evidence         int
+	LogLevel         string
+	TxSize           int
+	ABCIProtocol     string
+
+	// Tenderdash-specific fields
 	GenesisCoreHeight         uint32 // InitialCoreHeight is a core height put into genesis file
 	InitAppCoreHeight         uint32 // InitAppCoreHeight returned in InitApp response
-	InitialState              map[string]string
-	Validators                ValidatorsMap
-	ValidatorUpdates          map[int64]ValidatorsMap
 	ChainLockUpdates          map[int64]int64
-	Nodes                     []*Node
-	KeyType                   string
-	Evidence                  int
-	LogLevel                  string
-	TxSize                    int64
-	ABCIProtocol              string
 	ThresholdPublicKey        crypto.PubKey
 	ThresholdPublicKeyUpdates map[int64]crypto.PubKey
 	QuorumType                btcjson.LLMQType
@@ -108,7 +110,6 @@ type Node struct {
 	IP                   net.IP
 	ProxyPort            uint32
 	StartAt              int64
-	BlockSync            string
 	Mempool              string
 	StateSync            string
 	Database             string
@@ -121,7 +122,6 @@ type Node struct {
 	PersistentPeers      []*Node
 	Perturbations        []Perturbation
 	LogLevel             string
-	UseLegacyP2P         bool
 	QueueType            string
 	HasStarted           bool
 }
@@ -242,7 +242,6 @@ func LoadTestnet(file string) (*Testnet, error) {
 			ABCIProtocol:     Protocol(testnet.ABCIProtocol),
 			PrivvalProtocol:  ProtocolFile,
 			StartAt:          nodeManifest.StartAt,
-			BlockSync:        nodeManifest.BlockSync,
 			Mempool:          nodeManifest.Mempool,
 			StateSync:        nodeManifest.StateSync,
 			PersistInterval:  1,
@@ -251,7 +250,6 @@ func LoadTestnet(file string) (*Testnet, error) {
 			Perturbations:    []Perturbation{},
 			LogLevel:         manifest.LogLevel,
 			QueueType:        manifest.QueueType,
-			UseLegacyP2P:     nodeManifest.UseLegacyP2P,
 		}
 		if node.StartAt == testnet.InitialHeight {
 			node.StartAt = 0 // normalize to 0 for initial nodes, since code expects this
@@ -479,11 +477,6 @@ func (n Node) Validate(testnet Testnet) error {
 			return fmt.Errorf("validator %s must have a proTxHash of size 32 (%d)", n.Name, len(n.ProTxHash))
 		}
 	}
-	switch n.BlockSync {
-	case "", "v0", "v2":
-	default:
-		return fmt.Errorf("invalid block sync setting %q", n.BlockSync)
-	}
 	switch n.StateSync {
 	case StateSyncDisabled, StateSyncP2P, StateSyncRPC:
 	default:
@@ -495,7 +488,7 @@ func (n Node) Validate(testnet Testnet) error {
 		return fmt.Errorf("invalid mempool version %q", n.Mempool)
 	}
 	switch n.QueueType {
-	case "", "priority", "wdrr", "fifo":
+	case "", "priority", "fifo":
 	default:
 		return fmt.Errorf("unsupported p2p queue type: %s", n.QueueType)
 	}

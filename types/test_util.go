@@ -5,17 +5,31 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/tendermint/tendermint/crypto/tmhash"
+	"github.com/tendermint/tendermint/crypto"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
-func MakeCommit(blockID BlockID, stateID StateID, height int64, round int32,
-	voteSet *VoteSet, validators []PrivValidator) (*Commit, error) {
+func RandStateID() StateID {
+	return StateID{
+		Height:      rand.Int63(), // nolint:gosec
+		LastAppHash: tmrand.Bytes(crypto.HashSize),
+	}
+}
+
+func makeCommit(
+	ctx context.Context,
+	blockID BlockID,
+	stateID StateID,
+	height int64,
+	round int32,
+	voteSet *VoteSet,
+	validators []PrivValidator,
+) (*Commit, error) {
 
 	// all sign
 	for i := 0; i < len(validators); i++ {
-		proTxHash, err := validators[i].GetProTxHash(context.Background())
+		proTxHash, err := validators[i].GetProTxHash(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("can't get proTxHash: %w", err)
 		}
@@ -26,9 +40,19 @@ func MakeCommit(blockID BlockID, stateID StateID, height int64, round int32,
 			Round:              round,
 			Type:               tmproto.PrecommitType,
 			BlockID:            blockID,
+			VoteExtensions: []VoteExtension{
+				{
+					Type:      tmproto.VoteExtensionType_DEFAULT,
+					Extension: []byte("default"),
+				},
+				{
+					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+					Extension: []byte("threshold"),
+				},
+			},
 		}
 
-		_, err = signAddVote(validators[i], vote, voteSet)
+		_, err = signAddVote(ctx, validators[i], vote, voteSet)
 		if err != nil {
 			return nil, err
 		}
@@ -38,64 +62,34 @@ func MakeCommit(blockID BlockID, stateID StateID, height int64, round int32,
 }
 
 // signAddVote signs a vote using StateID configured inside voteSet, and adds it to that voteSet
-func signAddVote(privVal PrivValidator, vote *Vote, voteSet *VoteSet) (signed bool, err error) {
-	return signAddVoteForStateID(privVal, vote, voteSet, voteSet.stateID)
+func signAddVote(ctx context.Context, privVal PrivValidator, vote *Vote, voteSet *VoteSet) (signed bool, err error) {
+	return signAddVoteForStateID(ctx, privVal, vote, voteSet, voteSet.stateID)
 }
 
-// signAddVoteForStateID signs a vote using specific StateID and adds it to voteSet
-func signAddVoteForStateID(privVal PrivValidator, vote *Vote, voteSet *VoteSet,
+func signAddVoteForStateID(ctx context.Context, privVal PrivValidator, vote *Vote, voteSet *VoteSet,
 	stateID StateID) (signed bool, err error) {
 	v := vote.ToProto()
-	err = privVal.SignVote(context.Background(), voteSet.ChainID(), voteSet.valSet.QuorumType, voteSet.valSet.QuorumHash,
+	err = privVal.SignVote(ctx, voteSet.ChainID(), voteSet.valSet.QuorumType, voteSet.valSet.QuorumHash,
 		v, stateID, nil)
 	if err != nil {
 		return false, err
 	}
 	vote.BlockSignature = v.BlockSignature
 	vote.StateSignature = v.StateSignature
+	for i, ext := range v.VoteExtensions {
+		vote.VoteExtensions[i].Signature = ext.Signature
+	}
 	return voteSet.AddVote(vote)
 }
 
-func MakeVote(
-	height int64,
-	blockID BlockID,
-	stateID StateID,
-	valSet *ValidatorSet,
-	privVal PrivValidator,
-	chainID string,
-) (*Vote, error) {
-	if privVal == nil {
-		return nil, fmt.Errorf("privVal must be set")
+// VoteExtSigns2BytesSlices returns a list of vote-extensions signatures
+func VoteExtSigns2BytesSlices(exts []VoteExtension, onlyRecoverable bool) [][]byte {
+	sigs := make([][]byte, 0, len(exts))
+	for _, ext := range exts {
+		if onlyRecoverable && !ext.IsRecoverable() {
+			continue
+		}
+		sigs = append(sigs, ext.Signature)
 	}
-	proTxHash, err := privVal.GetProTxHash(context.Background())
-	if err != nil {
-		return nil, fmt.Errorf("can't get proTxHash: %w", err)
-	}
-	idx, _ := valSet.GetByProTxHash(proTxHash)
-	vote := &Vote{
-		ValidatorProTxHash: proTxHash,
-		ValidatorIndex:     idx,
-		Height:             height,
-		Round:              0,
-		Type:               tmproto.PrecommitType,
-		BlockID:            blockID,
-	}
-	v := vote.ToProto()
-
-	if err := privVal.SignVote(context.Background(), chainID, valSet.QuorumType, valSet.QuorumHash,
-		v, stateID, nil); err != nil {
-		return nil, err
-	}
-
-	vote.BlockSignature = v.BlockSignature
-	vote.StateSignature = v.StateSignature
-
-	return vote, nil
-}
-
-func RandStateID() StateID {
-	return StateID{
-		Height:      rand.Int63(), // nolint:gosec
-		LastAppHash: tmrand.Bytes(tmhash.Size),
-	}
+	return sigs
 }

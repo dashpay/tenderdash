@@ -1,19 +1,19 @@
 package llmq
 
 import (
+	cryptorand "crypto/rand"
 	"errors"
 	"fmt"
 	"io"
 	"math/rand"
 	"sort"
 
+	"github.com/dashevo/dashd-go/btcjson"
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 )
-
-const defaultSeedSource = 999
 
 var (
 	errThresholdInvalid      = errors.New("threshold must be greater than 0")
@@ -48,6 +48,26 @@ type blsLLMQData struct {
 	sigShares   []*bls.G2Element
 }
 
+// QuorumProps returns corresponding LLMQ parameters
+// the first integer is an expected size of quorum
+// the second is an expected threshold
+// the third parameter is an error, it returns in a case if quorumType is not supported
+func QuorumProps(quorumType btcjson.LLMQType) (int, int, error) {
+	switch quorumType {
+	case btcjson.LLMQType_50_60:
+		return 50, 30, nil
+	case btcjson.LLMQType_400_60:
+		return 400, 240, nil
+	case btcjson.LLMQType_400_85:
+		return 400, 340, nil
+	case btcjson.LLMQType_100_67:
+		return 100, 67, nil
+	case 101:
+		return 10, 6, nil
+	}
+	return 0, 0, fmt.Errorf("quorumType '%d' doesn't match with available", quorumType)
+}
+
 // MustGenerate generates long-living master node quorum, but panics if a got error
 func MustGenerate(proTxHashes []crypto.ProTxHash, opts ...optionFunc) *Data {
 	data, err := Generate(proTxHashes, opts...)
@@ -63,7 +83,7 @@ func Generate(proTxHashes []crypto.ProTxHash, opts ...optionFunc) (*Data, error)
 	conf := llmqConfig{
 		proTxHashes: bls12381.ReverseProTxHashes(proTxHashes),
 		threshold:   len(proTxHashes)*2/3 + 1,
-		seedReader:  crypto.CReader(),
+		seedReader:  cryptorand.Reader,
 	}
 	_, err := crypto.CReader().Read(conf.hash[:])
 	if err != nil {

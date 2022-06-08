@@ -70,6 +70,12 @@ type ValidatorSet struct {
 	totalVotingPower int64
 }
 
+type ValidatorSetUpdate struct {
+	Validators         []*Validator
+	ThresholdPublicKey crypto.PubKey
+	QuorumHash         crypto.QuorumHash
+}
+
 // NewValidatorSet initializes a ValidatorSet by copying over the values from
 // `valz`, a list of Validators. If valz is nil or empty, the new ValidatorSet
 // will have an empty list of Validators.
@@ -358,7 +364,7 @@ func (vals *ValidatorSet) shiftByAvgProposerPriority() {
 
 // Makes a copy of the validator list.
 func validatorListCopy(valsList []*Validator) []*Validator {
-	if valsList == nil {
+	if len(valsList) == 0 {
 		return nil
 	}
 	valsCopy := make([]*Validator, len(valsList))
@@ -370,6 +376,9 @@ func validatorListCopy(valsList []*Validator) []*Validator {
 
 // Copy each validator into a new ValidatorSet.
 func (vals *ValidatorSet) Copy() *ValidatorSet {
+	if vals == nil {
+		return nil
+	}
 	return &ValidatorSet{
 		Validators:         validatorListCopy(vals.Validators),
 		Proposer:           vals.Proposer,
@@ -384,6 +393,9 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 // HasProTxHash returns true if proTxHash given is in the validator set, false -
 // otherwise.
 func (vals *ValidatorSet) HasProTxHash(proTxHash crypto.ProTxHash) bool {
+	if len(proTxHash) == 0 {
+		return false
+	}
 	for _, val := range vals.Validators {
 		if bytes.Equal(val.ProTxHash, proTxHash) {
 			return true
@@ -529,38 +541,22 @@ func (vals *ValidatorSet) QuorumVotingThresholdPower() int64 {
 	return int64(vals.QuorumTypeThresholdCount()) * DefaultDashVotingPower
 }
 
+// QuorumTypeMemberCount returns a number of validators for a quorum by a type
 func (vals *ValidatorSet) QuorumTypeMemberCount() int {
-	switch vals.QuorumType {
-	case btcjson.LLMQType_50_60:
-		return 50
-	case btcjson.LLMQType_400_60:
-		return 400
-	case btcjson.LLMQType_400_85:
-		return 400
-	case btcjson.LLMQType_100_67:
-		return 100
-	case 101:
-		return 10
-	default:
+	size, _, err := llmq.QuorumProps(vals.QuorumType)
+	if err != nil {
 		return len(vals.Validators)
 	}
+	return size
 }
 
+// QuorumTypeThresholdCount returns a threshold number for a quorum by a type
 func (vals *ValidatorSet) QuorumTypeThresholdCount() int {
-	switch vals.QuorumType {
-	case btcjson.LLMQType_50_60:
-		return 30
-	case btcjson.LLMQType_400_60:
-		return 240
-	case btcjson.LLMQType_400_85:
-		return 340
-	case btcjson.LLMQType_100_67:
-		return 67
-	case 101:
-		return 6
-	default:
+	_, threshold, err := llmq.QuorumProps(vals.QuorumType)
+	if err != nil {
 		return len(vals.Validators)*2/3 + 1
 	}
+	return threshold
 }
 
 // GetProposer returns the current proposer. If the validator set is empty, nil
@@ -918,15 +914,6 @@ func (vals *ValidatorSet) UpdateWithChangeSet(
 	return vals.updateWithChangeSet(changes, true, newThresholdPublicKey, newQuorumHash)
 }
 
-func (vals *ValidatorSet) CommitSignIds(chainID string, commit *Commit) ([]byte, []byte) {
-
-	blockSignID := commit.CanonicalVoteVerifySignID(chainID, vals.QuorumType, vals.QuorumHash)
-
-	stateSignID := commit.StateID.SignID(chainID, vals.QuorumType, vals.QuorumHash)
-
-	return blockSignID, stateSignID
-}
-
 // VerifyCommit verifies +2/3 of the set had signed the given commit.
 //
 // It checks all the signatures! While it's safe to exit as soon as we have
@@ -951,24 +938,41 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID, stateID 
 			stateID, commit.StateID)
 	}
 
-	blockSignID := commit.CanonicalVoteVerifySignID(chainID, vals.QuorumType, vals.QuorumHash)
+	canonVote := commit.GetCanonicalVoteWithExtensions()
+	quorumSigns, err := MakeQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto(), stateID)
+	if err != nil {
+		return err
+	}
 
-	if !vals.ThresholdPublicKey.VerifySignatureDigest(blockSignID, commit.ThresholdBlockSignature) {
-		canonicalVoteBlockSignBytes := commit.CanonicalVoteVerifySignBytes(chainID)
+	if !vals.ThresholdPublicKey.VerifySignatureDigest(quorumSigns.Block.ID, commit.ThresholdBlockSignature) {
 		return fmt.Errorf(
 			"incorrect threshold block signature bytes: %X signId %X commit: %v valQuorumType %d valQuorumHash %X valThresholdPublicKey %X", // nolint:lll
-			canonicalVoteBlockSignBytes, blockSignID, commit, vals.QuorumType, vals.QuorumHash, vals.ThresholdPublicKey)
+			quorumSigns.Block.Raw, quorumSigns.Block.ID, commit, vals.QuorumType, vals.QuorumHash, vals.ThresholdPublicKey)
 	}
 
-	stateSignID := commit.StateID.SignID(chainID, vals.QuorumType, vals.QuorumHash)
-
-	if !vals.ThresholdPublicKey.VerifySignatureDigest(stateSignID, commit.ThresholdStateSignature) {
-		commit.StateID.SignBytes(chainID)
-		stateSignBytes := commit.StateID.SignBytes(chainID)
+	if !vals.ThresholdPublicKey.VerifySignatureDigest(quorumSigns.State.ID, commit.ThresholdStateSignature) {
 		return fmt.Errorf("incorrect threshold state signature bytes: %X commit: %v valQuorumHash %X",
-			stateSignBytes, commit, vals.QuorumHash)
+			quorumSigns.State.Raw, commit, vals.QuorumHash)
 	}
 
+	return vals.verifyThresholdVoteExtensions(commit, canonVote, quorumSigns)
+}
+
+func (vals *ValidatorSet) verifyThresholdVoteExtensions(commit *Commit, canonVote *Vote, quorumSigns QuorumSigns) error {
+	signItems := GetRecoverableSingItems(canonVote.VoteExtensions, quorumSigns.VoteExts)
+	if len(signItems) == 0 {
+		return nil
+	}
+	if len(signItems) != len(commit.ThresholdVoteExtensionSignatures) {
+		return fmt.Errorf("count of threshold vote extension signatures (%d) doesn't match with recoverable vote extensions (%d)",
+			len(commit.ThresholdVoteExtensionSignatures), len(signItems))
+	}
+	for i, thresholdSign := range commit.ThresholdVoteExtensionSignatures {
+		if !vals.ThresholdPublicKey.VerifySignatureDigest(signItems[i].ID, thresholdSign) {
+			return fmt.Errorf("incorrect threshold vote-extension signature bytes: %X commit: %v valQuorumHash %X",
+				signItems[i].Raw, commit, vals.QuorumHash)
+		}
+	}
 	return nil
 }
 

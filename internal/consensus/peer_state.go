@@ -1,6 +1,9 @@
 package consensus
 
 import (
+	"context"
+	"encoding/json"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -8,20 +11,25 @@ import (
 	"github.com/rs/zerolog"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
 	"github.com/tendermint/tendermint/libs/bits"
-	tmjson "github.com/tendermint/tendermint/libs/json"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
 
+var (
+	ErrPeerStateHeightRegression = errors.New("peer state height regression")
+	ErrPeerStateInvalidStartTime = errors.New("peer state invalid startTime")
+	ErrPeerStateSetNilVote       = errors.New("peer state set a nil vote")
+	ErrPeerStateInvalidVoteIndex = errors.New("peer sent a vote with an invalid vote index")
+)
+
 // peerStateStats holds internal statistics for a peer.
 type peerStateStats struct {
-	Votes      int `json:"votes"`
-	Commits    int `json:"commits"`
-	BlockParts int `json:"block_parts"`
+	Votes      int `json:"votes,string"`
+	BlockParts int `json:"block_parts,string"`
+	Commits    int `json:"commits,string"`
 }
 
 func (pss peerStateStats) String() string {
@@ -37,15 +45,14 @@ type PeerState struct {
 	logger log.Logger
 
 	// NOTE: Modify below using setters, never directly.
-	mtx     tmsync.RWMutex
+	mtx     sync.RWMutex
+	cancel  context.CancelFunc
 	running bool
 	PRS     cstypes.PeerRoundState `json:"round_state"`
 	Stats   *peerStateStats        `json:"stats"`
+
 	// ProTxHash is accessible only for the validator
 	ProTxHash types.ProTxHash
-
-	broadcastWG sync.WaitGroup
-	closer      *tmsync.Closer
 }
 
 // NewPeerState returns a new PeerState for the given node ID.
@@ -53,7 +60,6 @@ func NewPeerState(logger log.Logger, peerID types.NodeID) *PeerState {
 	return &PeerState{
 		peerID: peerID,
 		logger: logger,
-		closer: tmsync.NewCloser(),
 		PRS: cstypes.PeerRoundState{
 			Round:              -1,
 			ProposalPOLRound:   -1,
@@ -102,8 +108,7 @@ func (ps *PeerState) UpdateRoundState(fn func(prs *cstypes.PeerRoundState)) {
 func (ps *PeerState) ToJSON() ([]byte, error) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
-
-	return tmjson.Marshal(ps)
+	return json.Marshal(ps)
 }
 
 // GetHeight returns an atomic snapshot of the PeerRoundState's height used by
@@ -200,7 +205,10 @@ func (ps *PeerState) PickVoteToSend(votes types.VoteSetReader) (*types.Vote, boo
 	}
 
 	if index, ok := votes.BitArray().Sub(psVotes).PickRandom(); ok {
-		return votes.GetByIndex(int32(index)), true
+		vote := votes.GetByIndex(int32(index))
+		if vote != nil {
+			return vote, true
+		}
 	}
 
 	return nil, false
@@ -388,16 +396,28 @@ func (ps *PeerState) SetProTxHash(proTxHash types.ProTxHash) {
 	ps.ProTxHash = proTxHash.Copy()
 }
 
+// GetProTxHash returns a copy of peer's pro-tx-hash
+func (ps *PeerState) GetProTxHash() types.ProTxHash {
+	ps.mtx.RLock()
+	defer ps.mtx.RUnlock()
+
+	return ps.ProTxHash.Copy()
+}
+
 // SetHasVote sets the given vote as known by the peer
-func (ps *PeerState) SetHasVote(vote *types.Vote) {
+func (ps *PeerState) SetHasVote(vote *types.Vote) error {
+	// sanity check
+	if vote == nil {
+		return ErrPeerStateSetNilVote
+	}
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
 
-	ps.setHasVote(vote.Height, vote.Round, vote.Type, vote.ValidatorIndex)
+	return ps.setHasVote(vote.Height, vote.Round, vote.Type, vote.ValidatorIndex)
 }
 
-func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.SignedMsgType, index int32) {
-
+// setHasVote will return an error when the index exceeds the bitArray length
+func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.SignedMsgType, index int32) error {
 	ps.logger.Debug(
 		"peerState setHasVote",
 		"peer", ps.peerID,
@@ -413,8 +433,12 @@ func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.Sign
 	// NOTE: some may be nil BitArrays -> no side effects
 	psVotes := ps.getVoteBitArray(height, round, voteType)
 	if psVotes != nil {
-		psVotes.SetIndex(int(index), true)
+		if ok := psVotes.SetIndex(int(index), true); !ok {
+			// https://github.com/tendermint/tendermint/issues/2871
+			return ErrPeerStateInvalidVoteIndex
+		}
 	}
+	return nil
 }
 
 // SetHasCommit sets the given vote as known by the peer
@@ -544,15 +568,15 @@ func (ps *PeerState) ApplyProposalPOLMessage(msg *ProposalPOLMessage) {
 }
 
 // ApplyHasVoteMessage updates the peer state for the new vote.
-func (ps *PeerState) ApplyHasVoteMessage(msg *HasVoteMessage) {
+func (ps *PeerState) ApplyHasVoteMessage(msg *HasVoteMessage) error {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
 
 	if ps.PRS.Height != msg.Height {
-		return
+		return nil
 	}
 
-	ps.setHasVote(msg.Height, msg.Round, msg.Type, msg.Index)
+	return ps.setHasVote(msg.Height, msg.Round, msg.Type, msg.Index)
 }
 
 // ApplyHasCommitMessage updates the peer state for the new commit.
