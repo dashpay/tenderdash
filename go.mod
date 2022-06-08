@@ -7,7 +7,6 @@ require (
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/Workiva/go-datastructures v1.0.53
 	github.com/adlio/schema v1.3.0
-	github.com/btcsuite/btcd v0.22.0-beta
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/containerd/continuity v0.2.2 // indirect
 	github.com/dashevo/dashd-go v0.23.4
@@ -211,7 +210,7 @@ require (
 	github.com/stbenjam/no-sprintf-host-port v0.1.1 // indirect
 	github.com/subosito/gotenv v1.2.0 // indirect
 	github.com/sylvia7788/contextcheck v1.0.4 // indirect
-	github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca // indirect
+	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7 // indirect
 	github.com/tdakkota/asciicheck v0.1.1 // indirect
 	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c // indirect
 	github.com/tetafro/godot v1.4.11 // indirect
