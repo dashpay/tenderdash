@@ -1322,6 +1322,20 @@ func TestValidatorSetProtoBuf(t *testing.T) {
 	}
 }
 
+func TestValdiatorSetGetByNodeID(t *testing.T) {
+	vset, _ := RandValidatorSet(10)
+	for _, v := range vset.Validators {
+		v.NodeAddress = RandValidatorAddress()
+	}
+
+	const index int32 = 2
+	nodeID := vset.Validators[index].NodeAddress.NodeID
+	idx, val := vset.GetByNodeID(nodeID)
+	assert.Equal(t, index, idx, "index mismatch for node id %s", nodeID)
+	assert.NotNil(t, val)
+	assert.EqualValues(t, nodeID, val.NodeAddress.NodeID)
+}
+
 //---------------------
 // Sort validators by priority and address
 type validatorsByPriority []*Validator

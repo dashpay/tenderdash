@@ -415,6 +415,17 @@ func (vals *ValidatorSet) GetByProTxHash(proTxHash []byte) (index int32, val *Va
 	return -1, nil
 }
 
+// GetByNodeID returns an index of the validator with nodeID and validator
+// itself (copy) if found. Otherwise, -1 and nil are returned.
+func (vals *ValidatorSet) GetByNodeID(nid NodeID) (index int32, val *Validator) {
+	for idx, val := range vals.Validators {
+		if strings.EqualFold(string(val.NodeAddress.NodeID), string(nid)) {
+			return int32(idx), val.Copy()
+		}
+	}
+	return -1, nil
+}
+
 // GetByIndex returns the validator's address and validator itself (copy) by
 // index.
 // It returns nil values if index is less than 0 or greater or equal to
