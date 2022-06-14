@@ -42,6 +42,7 @@ func (v Validator) MarshalJSON() ([]byte, error) {
 		ProTxHash:        v.ProTxHash,
 		VotingPower:      v.VotingPower,
 		ProposerPriority: v.ProposerPriority,
+		NodeAddress:      v.NodeAddress,
 	}
 	if v.PubKey != nil {
 		pk, err := jsontypes.Marshal(v.PubKey)
@@ -64,6 +65,7 @@ func (v *Validator) UnmarshalJSON(data []byte) error {
 	v.ProTxHash = val.ProTxHash
 	v.VotingPower = val.VotingPower
 	v.ProposerPriority = val.ProposerPriority
+	v.NodeAddress = val.NodeAddress
 	return nil
 }
 
