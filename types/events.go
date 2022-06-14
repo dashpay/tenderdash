@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/dashevo/dashd-go/btcjson"
+
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/jsontypes"
@@ -234,6 +236,7 @@ type EventDataValidatorSetUpdate struct {
 	ValidatorSetUpdates []*Validator      `json:"validator_updates"`
 	ThresholdPublicKey  crypto.PubKey     `json:"threshold_public_key"`
 	QuorumHash          crypto.QuorumHash `json:"quorum_hash"`
+	QuorumType          btcjson.LLMQType  `json:"quorum_type"`
 }
 
 // TypeTag implements the required method of jsontypes.Tagged.

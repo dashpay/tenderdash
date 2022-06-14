@@ -524,6 +524,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 	event, ok := msg.Data().(types.EventDataValidatorSetUpdate)
 	require.True(t, ok, "Expected event of type EventDataValidatorSetUpdate, got %T", msg.Data())
 	assert.Len(t, event.QuorumHash, crypto.QuorumHashSize)
+	assert.Equal(t, state.NextValidators.QuorumType, event.QuorumType)
 	if assert.NotEmpty(t, event.ValidatorSetUpdates) {
 		assert.Equal(t, addProTxHash, event.ValidatorSetUpdates[pos].ProTxHash)
 		assert.EqualValues(

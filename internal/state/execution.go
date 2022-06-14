@@ -745,6 +745,7 @@ func fireEvents(
 				ValidatorSetUpdates: validatorSetUpdate.Validators,
 				ThresholdPublicKey:  validatorSetUpdate.ThresholdPublicKey,
 				QuorumHash:          validatorSetUpdate.QuorumHash,
+				QuorumType:          validatorSetUpdate.QuorumType,
 			}); err != nil {
 			logger.Error("failed publishing event validator-set update", "err", err)
 		}
