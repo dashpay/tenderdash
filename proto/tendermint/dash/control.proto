@@ -1,0 +1,20 @@
+syntax = "proto3";
+package tendermint.dash;
+
+option go_package = "github.com/tendermint/tendermint/proto/tendermint/dash";
+
+message ControlMessage {
+  oneof sum {
+    ValidatorChallenge         validator_challenge          = 1;
+    ValidatorChallengeResponse validator_challenge_response = 2;
+  }
+}
+
+message ValidatorChallenge {
+  bytes challenge = 1;
+  bytes signature = 2;
+}
+
+message ValidatorChallengeResponse {
+  bytes signature = 1;
+}
