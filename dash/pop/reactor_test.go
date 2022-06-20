@@ -16,10 +16,11 @@ import (
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/libs/log"
+	dashproto "github.com/tendermint/tendermint/proto/tendermint/dash"
 	"github.com/tendermint/tendermint/types"
 )
 
-func TestReactor(t *testing.T) {
+func TestReactorPositive(t *testing.T) {
 	// logger := log.NewTestingLogger(t)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -30,9 +31,76 @@ func TestReactor(t *testing.T) {
 	bob := newSecurityReactorInstance(ctx, t, "Bob")
 	defer bob.cleanup(t)
 
-	forwardBetweenChannels(ctx, t, alice.controlOutCh, bob.controlInCh)
-	forwardBetweenChannels(ctx, t, bob.controlOutCh, alice.controlInCh)
+	// bidirectional connection between Alice and Bob
+	forwardChannels(ctx, t, alice.controlOutCh, bob.controlInCh)
+	forwardChannels(ctx, t, bob.controlOutCh, alice.controlInCh)
 
+	executePoP(t, &alice, &bob, false, false)
+
+	cancel()
+	time.Sleep(time.Millisecond)
+}
+
+func TestReactorNoResponse(t *testing.T) {
+	// logger := log.NewTestingLogger(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	alice := newSecurityReactorInstance(ctx, t, "Alice")
+	defer alice.cleanup(t)
+
+	bob := newSecurityReactorInstance(ctx, t, "Bob")
+	defer bob.cleanup(t)
+
+	forwardChannels(ctx, t, alice.controlOutCh, bob.controlInCh)
+	// we don't allow connectivity from Bob to Alice to get a timeout
+
+	executePoP(t, &alice, &bob, true, true)
+
+	cancel()
+	time.Sleep(time.Millisecond)
+}
+
+func TestReactorWrongBobSig(t *testing.T) {
+	// logger := log.NewTestingLogger(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	alice := newSecurityReactorInstance(ctx, t, "Alice")
+	defer alice.cleanup(t)
+
+	bob := newSecurityReactorInstance(ctx, t, "Bob")
+	defer bob.cleanup(t)
+
+	forwardChannels(ctx, t, alice.controlOutCh, bob.controlInCh)
+	// messages from Bob to Alice have malformed signatures
+	go func() {
+		for {
+			select {
+			case msg := <-bob.controlOutCh:
+				resp, ok := msg.Message.(*dashproto.ControlMessage)
+				if !ok {
+					t.Error("invalid msg type")
+				}
+				if resp2, ok := resp.Sum.(*dashproto.ControlMessage_ValidatorChallengeResponse); ok {
+					resp2.ValidatorChallengeResponse.Signature[2] = 0x00
+				}
+
+				alice.controlInCh <- msg
+
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	executePoP(t, &alice, &bob, true, false)
+
+	cancel()
+	time.Sleep(time.Millisecond)
+}
+
+func executePoP(t *testing.T, alice, bob *securityReactorInstance, expectAliceFail, expectBobFail bool) {
 	// set validators
 	thresholdPubkey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(
 		[]tmcrypto.PubKey{alice.consensusPrivKey.PubKey(), bob.consensusPrivKey.PubKey()},
@@ -66,20 +134,30 @@ func TestReactor(t *testing.T) {
 		ProTxHash: alice.proTxHash,
 	}
 
-	// let the handshake timeout happen
-	time.Sleep(handshakeTimeout + 10*time.Millisecond)
+	aliceFailed := false
+	bobFailed := false
 
 LOOP:
 	for {
 		select {
 		case msg := <-alice.controlErrCh:
-			t.Error("alice: ", msg.Err)
+			t.Log("alice: ", msg.Err)
+			aliceFailed = true
 		case msg := <-bob.controlErrCh:
-			t.Error("bob: ", msg.Err)
-		default:
+			t.Log("bob: ", msg.Err)
+			bobFailed = true
+		case <-time.After(handshakeTimeout + 10*time.Millisecond):
+			t.Logf("handshake timeout passed")
+			break LOOP
+		}
+
+		if aliceFailed == expectAliceFail && bobFailed == expectBobFail {
 			break LOOP
 		}
 	}
+
+	assert.Equal(t, expectAliceFail, aliceFailed, "Alice")
+	assert.Equal(t, expectBobFail, bobFailed, "Bob")
 }
 
 type securityReactorInstance struct {
@@ -177,12 +255,15 @@ func (p securityReactorInstance) cleanup(t *testing.T) {
 	p.eventBus.Stop()
 }
 
-func forwardBetweenChannels(ctx context.Context, t *testing.T, src, dst chan p2p.Envelope) {
+func forwardChannels(ctx context.Context, t *testing.T, src, dst chan p2p.Envelope) {
 	go func() {
 		for {
 			select {
 			case msg := <-src:
+				t.Logf("forwarding msg %+v\n", msg)
 				dst <- msg
+				t.Logf("forwarded msg %+v\n", msg)
+
 			case <-ctx.Done():
 				return
 			}

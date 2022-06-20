@@ -200,8 +200,12 @@ func (r *Reactor) sendChallenge(ctx context.Context, peerID types.NodeID) error 
 			},
 		},
 	}
+	if err = r.controlChannel.Send(ctx, envelope); err != nil {
+		return err
+	}
+	r.logger.Debug("challenge sent", "peer", peerID)
 
-	return r.controlChannel.Send(ctx, envelope)
+	return nil
 }
 
 // recvControlChannelRoutine handles messages received on the control channel
@@ -405,7 +409,7 @@ func (r *Reactor) valUpdatesRoutine(ctx context.Context, validatorUpdatesSub eve
 
 		event, ok := msg.Data().(types.EventDataValidatorSetUpdate)
 		if !ok {
-			r.logger.Error("invalid type of validator set update message", "type", fmt.Sprintf("%T", event))
+			r.logger.Error("invalid type of validator set update message", "type", fmt.Sprintf("%T", msg.Data()))
 			continue
 		}
 		// r.logger.Debug("processing validators update", "event", event)
