@@ -1,4 +1,4 @@
-package quorum
+package pop
 
 import (
 	"context"
@@ -21,7 +21,6 @@ import (
 
 func TestReactor(t *testing.T) {
 	// logger := log.NewTestingLogger(t)
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

@@ -11,8 +11,12 @@ message ControlMessage {
 }
 
 message ValidatorChallenge {
-  bytes challenge = 1;
-  bytes signature = 2;
+  bytes  sender_protxhash    = 1;
+  bytes  recipient_protxhash = 2;
+  string sender_node_id      = 3;
+  string recipient_node_id   = 4;
+  bytes  token               = 5;
+  bytes  signature           = 6;
 }
 
 message ValidatorChallengeResponse {

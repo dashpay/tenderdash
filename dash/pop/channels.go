@@ -1,4 +1,4 @@
-package quorum
+package pop
 
 import (
 	"github.com/tendermint/tendermint/internal/p2p"

@@ -48,6 +48,10 @@ func (id NodeID) Bytes() ([]byte, error) {
 	return bz, nil
 }
 
+func (id NodeID) Equal(to NodeID) bool {
+	return strings.EqualFold(string(id), string(to))
+}
+
 // Validate validates the NodeID.
 func (id NodeID) Validate() error {
 	switch {
