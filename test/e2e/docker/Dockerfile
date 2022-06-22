@@ -4,7 +4,7 @@
 FROM golang:1.18-bullseye
 
 RUN apt-get -qq update -y && apt-get -qq upgrade -y >/dev/null
-RUN apt-get -qq install -y cmake sudo libgmp-dev libleveldb-dev librocksdb-dev python3-dev >/dev/null
+RUN apt-get -qq install -y cmake sudo libsodium-dev libleveldb-dev librocksdb-dev python3-dev >/dev/null
 
 # Set up build directory /src/tenderdash
 WORKDIR /src/tenderdash

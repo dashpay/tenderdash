@@ -13,6 +13,8 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 )
 
+const defaultSeedSource = 999
+
 func Test100Members(t *testing.T) {
 	testCases := []struct {
 		name      string
