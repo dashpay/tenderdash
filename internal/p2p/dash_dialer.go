@@ -6,6 +6,8 @@ import (
 	"net"
 	"time"
 
+	"github.com/rs/zerolog"
+
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -121,4 +123,9 @@ func (cm *routerDashDialer) lookupIPPort(ctx context.Context, ip net.IP, port ui
 	}
 
 	return NodeAddress{}, errPeerNotFound(fmt.Errorf("peer %s:%d not found in the address book", ip, port))
+}
+
+// MarshalZerologObject implements zerolog.LogObjectMarshaler
+func (cm *routerDashDialer) MarshalZerologObject(e *zerolog.Event) {
+	e.Str("type", "routerDashDialer")
 }

@@ -5,8 +5,12 @@ import (
 	"net"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
+	"github.com/rs/zerolog"
+
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/internal/p2p/conn"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -66,4 +70,41 @@ func (resolver tcpNodeIDResolver) Resolve(va types.ValidatorAddress) (p2p.NodeAd
 	}
 	va.NodeID = types.NodeIDFromPubKey(sc.RemotePubKey())
 	return nodeAddress(va), nil
+}
+
+// MarshalZerologObject implements zerolog.LogObjectMarshaler
+func (resolver tcpNodeIDResolver) MarshalZerologObject(e *zerolog.Event) {
+	e.Str("type", "tcpNodeIDResolver")
+}
+
+// ResolveNodeID adds node ID to the validator address if it's not set.
+// If `resolvers` is empty or nil, it fefaults to tcpNodeIDResolver
+func ResolveNodeID(va *types.ValidatorAddress, resolvers []p2p.NodeIDResolver, logger log.Logger) error {
+	if len(resolvers) == 0 {
+		resolvers = []p2p.NodeIDResolver{
+			NewTCPNodeIDResolver(),
+		}
+	}
+
+	if va.NodeID != "" {
+		return nil
+	}
+	var allErrors error
+	for index, resolver := range resolvers {
+		address, err := resolver.Resolve(*va)
+		if err == nil && address.NodeID != "" {
+			va.NodeID = address.NodeID
+			return nil // success
+		}
+
+		logger.Debug(
+			"warning: validator node id lookup method failed",
+			"url", va.String(),
+			"index", index,
+			"resolver", resolver,
+			"error", err,
+		)
+		allErrors = multierror.Append(allErrors, fmt.Errorf("%d: %T error: %w", index, resolver, err))
+	}
+	return allErrors
 }

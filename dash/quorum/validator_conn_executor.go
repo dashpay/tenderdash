@@ -7,8 +7,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/hashicorp/go-multierror"
-
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
 	"github.com/tendermint/tendermint/internal/eventbus"
@@ -27,9 +25,6 @@ const (
 	defaultTimeout = 1 * time.Second
 	// defaultEventBusCapacity determines how many events can wait in the event bus for processing. 10 looks very safe.
 	defaultEventBusCapacity = 10
-
-	resolverAddressBook = "DashDialer"
-	resolverTCP         = "TCPNodeIDResolver"
 )
 
 type optionFunc func(vc *ValidatorConnExecutor) error
@@ -57,7 +52,7 @@ type ValidatorConnExecutor struct {
 	// quorumHash contains current quorum hash
 	quorumHash tmbytes.HexBytes
 	// nodeIDResolvers can be used to determine a node ID for a validator
-	nodeIDResolvers map[string]p2p.NodeIDResolver
+	nodeIDResolvers []p2p.NodeIDResolver
 	// mux is a mutex to ensure only one goroutine is processing connections
 	mux sync.Mutex
 
@@ -89,10 +84,11 @@ func NewValidatorConnExecutor(
 		connectedValidators: validatorMap{},
 		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),
 	}
-	vc.nodeIDResolvers = map[string]p2p.NodeIDResolver{
-		resolverAddressBook: vc.dialer,
-		resolverTCP:         NewTCPNodeIDResolver(),
+	vc.nodeIDResolvers = []p2p.NodeIDResolver{
+		vc.dialer,
+		NewTCPNodeIDResolver(),
 	}
+
 	vc.BaseService = service.NewBaseService(log.NewNopLogger(), validatorConnExecutorName, vc)
 
 	for _, opt := range opts {
@@ -249,29 +245,7 @@ func (vc *ValidatorConnExecutor) me() (validator *types.Validator, ok bool) {
 
 // resolveNodeID adds node ID to the validator address if it's not set
 func (vc *ValidatorConnExecutor) resolveNodeID(va *types.ValidatorAddress) error {
-	if va.NodeID != "" {
-		return nil
-	}
-	var allErrors error
-	for _, method := range []string{resolverAddressBook, resolverTCP} {
-		resolver, ok := vc.nodeIDResolvers[method]
-		if !ok {
-			return errors.New("invalid node ID resolver: " + method)
-		}
-		address, err := resolver.Resolve(*va)
-		if err == nil && address.NodeID != "" {
-			va.NodeID = address.NodeID
-			return nil // success
-		}
-		vc.logger.Debug(
-			"warning: validator node id lookup method failed",
-			"url", va.String(),
-			"method", method,
-			"error", err,
-		)
-		allErrors = multierror.Append(allErrors, fmt.Errorf(method+" error: %w", err))
-	}
-	return allErrors
+	return ResolveNodeID(va, vc.nodeIDResolvers, vc.logger)
 }
 
 // selectValidators selects `count` validators from current ValidatorSet.
