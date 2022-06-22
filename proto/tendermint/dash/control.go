@@ -72,11 +72,11 @@ func NewValidatorChallenge(
 	binary.LittleEndian.PutUint64(token, uint64(now))
 
 	challenge := ValidatorChallenge{
-		SenderProtxhash:    senderProTxHash,
-		RecipientProtxhash: recipientProTxHash,
 		SenderNodeId:       string(senderNodeID),
 		RecipientNodeId:    string(recipientNodeID),
-		// Token:              token,
+		SenderProtxhash:    senderProTxHash,
+		RecipientProtxhash: recipientProTxHash,
+		Token:              token,
 	}
 
 	return challenge
@@ -85,15 +85,15 @@ func NewValidatorChallenge(
 // Validate checks if the challenge is valid. It does NOT verify the signature.
 // If `token` arg is nil, also token will not be verified
 func (challenge ValidatorChallenge) Validate(
-	senderNodeID, recipientPeerID types.NodeID,
+	senderNodeID, recipientNodeID types.NodeID,
 	senderProTxHash, recipientProTxHash types.ProTxHash,
 	token tmbytes.HexBytes,
 ) error {
 	if !senderNodeID.Equal(types.NodeID(challenge.GetSenderNodeId())) {
 		return fmt.Errorf("invalid sender node ID - got: %s, expected: %s", challenge.GetSenderNodeId(), senderNodeID)
 	}
-	if !recipientPeerID.Equal(types.NodeID(challenge.GetRecipientNodeId())) {
-		return fmt.Errorf("invalid recipient node ID - got: %s, expected: %s", challenge.GetRecipientNodeId(), recipientPeerID)
+	if !recipientNodeID.Equal(types.NodeID(challenge.GetRecipientNodeId())) {
+		return fmt.Errorf("invalid recipient node ID - got: %s, expected: %s", challenge.GetRecipientNodeId(), recipientNodeID)
 	}
 
 	if !senderProTxHash.Equal(challenge.GetSenderProtxhash()) {
@@ -124,7 +124,9 @@ func (challenge ValidatorChallenge) Validate(
 
 	return nil
 }
-func (challenge ValidatorChallenge) signBytes() (tmbytes.HexBytes, error) {
+
+// Digest returns digest (checksum/hash) of the challenge, excluding signature field
+func (challenge ValidatorChallenge) Digest() (tmbytes.HexBytes, error) {
 	challenge.Signature = nil // this should not affect original signature, as we don't pass challenge by ptr
 	signBytes, err := proto.Marshal(&challenge)
 	if err != nil {
@@ -137,7 +139,6 @@ func (challenge ValidatorChallenge) signBytes() (tmbytes.HexBytes, error) {
 
 // Sign signs the challenge with privkey.
 func (challenge *ValidatorChallenge) Sign(consensusPrivKey crypto.PrivKey) error {
-
 	signature, err := signChallenge(*challenge, consensusPrivKey)
 	if err != nil {
 		return err
@@ -174,26 +175,28 @@ func (resp ValidatorChallengeResponse) Verify(challenge ValidatorChallenge, peer
 	return verifyChallengeSignature(challenge, resp.GetSignature(), peerPubkey)
 }
 
-func signChallenge(challenge ValidatorChallenge, key crypto.PrivKey) (tmbytes.HexBytes, error) {
-	signBytes, err := challenge.signBytes()
+func signChallenge(challenge ValidatorChallenge, privkey crypto.PrivKey) (tmbytes.HexBytes, error) {
+	digest, err := challenge.Digest()
 	if err != nil {
 		return nil, err
 	}
-	sign, err := key.SignDigest(signBytes)
+	signature, err := privkey.SignDigest(digest)
 	if err != nil {
 		return nil, fmt.Errorf("cannot sign challenge: %w", err)
 	}
-
-	return sign, nil
+	fmt.Printf("signed challenge, hash=%X, signature=%X, privkey=%X, pubkey=%X\n",
+		digest, signature, privkey, privkey.PubKey().Bytes(),
+	)
+	return signature, nil
 }
 
 func verifyChallengeSignature(challenge ValidatorChallenge, signature tmbytes.HexBytes, key crypto.PubKey) error {
-	signBytes, err := challenge.signBytes()
+	digest, err := challenge.Digest()
 	if err != nil {
 		return err
 	}
-	if !key.VerifySignatureDigest(signBytes, signature) {
-		return fmt.Errorf("challenge signature is invalid: sign bytes %X, signature %X", signBytes, signature)
+	if !key.VerifySignatureDigest(digest, signature) {
+		return fmt.Errorf("challenge signature is invalid: hash=%X, signature=%X, pubkey=%X", digest, signature, key.Bytes())
 	}
 	return nil
 }

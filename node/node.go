@@ -18,6 +18,7 @@ import (
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/core"
+	"github.com/tendermint/tendermint/dash/pop"
 	dashquorum "github.com/tendermint/tendermint/dash/quorum"
 	"github.com/tendermint/tendermint/internal/blocksync"
 	"github.com/tendermint/tendermint/internal/consensus"
@@ -77,7 +78,8 @@ type nodeImpl struct {
 	prometheusSrv  *http.Server
 
 	// Dash
-	validatorConnExecutor *dashquorum.ValidatorConnExecutor
+	validatorConnExecutor    *dashquorum.ValidatorConnExecutor
+	proofOfPossessionReactor *pop.Reactor
 }
 
 // newDefaultNode returns a Tendermint node with default settings for the
@@ -442,6 +444,22 @@ func makeNode(
 			csState.SetPrivValidator(ctx, privValidator)
 		}
 		node.rpcEnv.ProTxHash = proTxHash
+
+		// Start dash Proof-of-Possession reactor
+		node.proofOfPossessionReactor, err = pop.NewReactor(
+			logger.With("module", "dash_pop"),
+			peerManager.Subscribe,
+			eventBus,
+			node.router.OpenChannel,
+			node.nodeKey.ID,
+			privValidator,
+			state.Validators,
+			peerManager,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create Dash Proof of Possession Reactor: %w", err)
+		}
+		node.services = append(node.services, node.proofOfPossessionReactor)
 	}
 
 	node.BaseService = *service.NewBaseService(logger, "Node", node)

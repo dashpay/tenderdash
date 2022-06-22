@@ -10,6 +10,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	db "github.com/tendermint/tm-db"
+
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -25,17 +27,15 @@ func TestReactorPositive(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	alice := newSecurityReactorInstance(ctx, t, "Alice")
+	alice, bob := newAliceAndBob(ctx, t)
 	defer alice.cleanup(t)
-
-	bob := newSecurityReactorInstance(ctx, t, "Bob")
 	defer bob.cleanup(t)
 
 	// bidirectional connection between Alice and Bob
 	forwardChannels(ctx, t, alice.controlOutCh, bob.controlInCh)
 	forwardChannels(ctx, t, bob.controlOutCh, alice.controlInCh)
 
-	executePoP(t, &alice, &bob, false, false)
+	executePoP(ctx, t, &alice, &bob, false, false)
 
 	cancel()
 	time.Sleep(time.Millisecond)
@@ -46,16 +46,14 @@ func TestReactorNoResponse(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	alice := newSecurityReactorInstance(ctx, t, "Alice")
+	alice, bob := newAliceAndBob(ctx, t)
 	defer alice.cleanup(t)
-
-	bob := newSecurityReactorInstance(ctx, t, "Bob")
 	defer bob.cleanup(t)
 
 	forwardChannels(ctx, t, alice.controlOutCh, bob.controlInCh)
 	// we don't allow connectivity from Bob to Alice to get a timeout
 
-	executePoP(t, &alice, &bob, true, true)
+	executePoP(ctx, t, &alice, &bob, true, true)
 
 	cancel()
 	time.Sleep(time.Millisecond)
@@ -66,10 +64,8 @@ func TestReactorWrongBobSig(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	alice := newSecurityReactorInstance(ctx, t, "Alice")
+	alice, bob := newAliceAndBob(ctx, t)
 	defer alice.cleanup(t)
-
-	bob := newSecurityReactorInstance(ctx, t, "Bob")
 	defer bob.cleanup(t)
 
 	forwardChannels(ctx, t, alice.controlOutCh, bob.controlInCh)
@@ -94,23 +90,36 @@ func TestReactorWrongBobSig(t *testing.T) {
 		}
 	}()
 
-	executePoP(t, &alice, &bob, true, false)
+	executePoP(ctx, t, &alice, &bob, true, false)
 
 	cancel()
 	time.Sleep(time.Millisecond)
 }
 
-func executePoP(t *testing.T, alice, bob *securityReactorInstance, expectAliceFail, expectBobFail bool) {
-	// set validators
-	thresholdPubkey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(
-		[]tmcrypto.PubKey{alice.consensusPrivKey.PubKey(), bob.consensusPrivKey.PubKey()},
-		[][]byte{alice.proTxHash, bob.proTxHash},
+func executePoP(ctx context.Context, t *testing.T, alice, bob *securityReactorInstance, expectAliceFail, expectBobFail bool) {
+	quorumHash, err := alice.privValidator.GetFirstQuorumHash(ctx)
+	require.NoError(t, err)
+
+	alicePubkey, err := alice.privValidator.GetPubKey(ctx, quorumHash)
+	require.NoError(t, err)
+	bobPubkey, err := bob.privValidator.GetPubKey(ctx, quorumHash)
+	require.NoError(t, err)
+
+	aliceProTxHash, err := alice.reactor.getProTxHash(ctx)
+	require.NoError(t, err)
+	bobProTxHash, err := bob.reactor.getProTxHash(ctx)
+	require.NoError(t, err)
+
+	thresholdPublicKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(
+		[]tmcrypto.PubKey{alicePubkey, bobPubkey},
+		[][]byte{aliceProTxHash, bobProTxHash},
 	)
 	require.NoError(t, err)
+
 	valsetUpdate := types.EventDataValidatorSetUpdate{
-		ValidatorSetUpdates: []*types.Validator{alice.Validator(t), bob.Validator(t)},
-		ThresholdPublicKey:  thresholdPubkey,
-		QuorumHash:          tmcrypto.RandQuorumHash(),
+		ValidatorSetUpdates: []*types.Validator{alice.Validator(ctx, t), bob.Validator(ctx, t)},
+		ThresholdPublicKey:  thresholdPublicKey,
+		QuorumHash:          quorumHash,
 		QuorumType:          btcjson.LLMQType_5_60,
 	}
 
@@ -119,20 +128,27 @@ func executePoP(t *testing.T, alice, bob *securityReactorInstance, expectAliceFa
 	assert.NoError(t, bob.eventBus.PublishEventValidatorSetUpdates(valsetUpdate))
 
 	// wait until validator updates get processed
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(100 * time.Millisecond)
 	// Bob connected to Alice
-	alice.peerUpdatesCh <- p2p.PeerUpdate{
-		NodeID:    bob.nodeID(),
-		Status:    p2p.PeerStatusUp,
-		ProTxHash: bob.proTxHash,
-	}
+	err = alice.reactor.peerManager.Accepted(bob.nodeID(), p2p.SetProTxHashToPeerInfo(bobProTxHash))
+	require.NoError(t, err)
+	alice.reactor.peerManager.Ready(ctx, bob.nodeID(), p2p.ChannelIDSet{})
+	err = bob.reactor.peerManager.Accepted(alice.nodeID(), p2p.SetProTxHashToPeerInfo(aliceProTxHash))
+	require.NoError(t, err)
+	bob.reactor.peerManager.Ready(ctx, alice.nodeID(), p2p.ChannelIDSet{})
+
+	// alice.peerUpdatesCh <- p2p.PeerUpdate{
+	// 	NodeID:    bob.nodeID(),
+	// 	Status:    p2p.PeerStatusUp,
+	// 	ProTxHash: bob.reactor.getQuorumHash(ctx),
+	// }
 
 	// ...what means that Alice also connected to Bob
-	bob.peerUpdatesCh <- p2p.PeerUpdate{
-		NodeID:    alice.nodeID(),
-		Status:    p2p.PeerStatusUp,
-		ProTxHash: alice.proTxHash,
-	}
+	// bob.peerUpdatesCh <- p2p.PeerUpdate{
+	// 	NodeID:    alice.nodeID(),
+	// 	Status:    p2p.PeerStatusUp,
+	// 	ProTxHash: alice.reactor.getQuorumHash(ctx),
+	// }
 
 	aliceFailed := false
 	bobFailed := false
@@ -156,25 +172,47 @@ LOOP:
 		}
 	}
 
-	assert.Equal(t, expectAliceFail, aliceFailed, "Alice")
-	assert.Equal(t, expectBobFail, bobFailed, "Bob")
+	assert.Equal(t, expectAliceFail, aliceFailed, "Alice should fail")
+	assert.Equal(t, expectBobFail, bobFailed, "Bob should fail")
+}
+
+func newAliceAndBob(ctx context.Context, t *testing.T) (securityReactorInstance, securityReactorInstance) {
+
+	quorumHash := tmcrypto.RandQuorumHash()
+
+	aliceProTxHash := tmcrypto.RandProTxHash()
+	bobProTxHash := tmcrypto.RandProTxHash()
+
+	aliceConsensusPrivKey := bls12381.GenPrivKey()
+	bobConsensusPrivKey := bls12381.GenPrivKey()
+
+	thresholdPubkey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(
+		[]tmcrypto.PubKey{aliceConsensusPrivKey.PubKey(), bobConsensusPrivKey.PubKey()},
+		[][]byte{aliceProTxHash, bobProTxHash},
+	)
+	require.NoError(t, err)
+
+	alice := newSecurityReactorInstance(ctx, t, "alice", aliceProTxHash, quorumHash, aliceConsensusPrivKey, thresholdPubkey)
+	bob := newSecurityReactorInstance(ctx, t, "bob", bobProTxHash, quorumHash, bobConsensusPrivKey, thresholdPubkey)
+
+	return alice, bob
 }
 
 type securityReactorInstance struct {
-	proTxHash types.ProTxHash
-
 	// services
 	eventBus *eventbus.EventBus
 	reactor  *Reactor
+	peerDB   db.DB
 
 	// keys
-	p2pPrivKey       tmcrypto.PrivKey
-	consensusPrivKey bls12381.PrivKey
+	p2pPrivKey    tmcrypto.PrivKey
+	privValidator types.PrivValidator
+	// proTxHash     tmcrypto.ProTxHash
 
 	// channels
 
-	peerUpdatesCh chan p2p.PeerUpdate
-	peerUpdates   *p2p.PeerUpdates
+	// peerUpdatesCh chan p2p.PeerUpdate
+	// peerUpdates   *p2p.PeerUpdates
 
 	controlInCh  chan p2p.Envelope
 	controlOutCh chan p2p.Envelope
@@ -190,12 +228,16 @@ func newSecurityReactorInstance(
 	ctx context.Context,
 	t *testing.T,
 	label string,
+	proTxHash tmcrypto.ProTxHash,
+	quorumHash tmcrypto.QuorumHash,
+	privKey bls12381.PrivKey,
+	thresholdPublicKey tmcrypto.PubKey,
 ) securityReactorInstance {
 	logger := log.NewTestingLogger(t).With("label", label)
 	instance := securityReactorInstance{
 		eventBus: eventbus.NewDefault(logger),
 
-		peerUpdatesCh: make(chan p2p.PeerUpdate, 1),
+		// peerUpdatesCh: make(chan p2p.PeerUpdate, 1),
 
 		controlInCh:  make(chan p2p.Envelope, 1),
 		controlOutCh: make(chan p2p.Envelope, 1),
@@ -205,11 +247,17 @@ func newSecurityReactorInstance(
 	err := instance.eventBus.Start(ctx)
 	require.NoError(t, err)
 
-	instance.peerUpdates = p2p.NewPeerUpdates(instance.peerUpdatesCh, 1)
+	// instance.peerUpdates = p2p.NewPeerUpdates(instance.peerUpdatesCh, 1)
 	instance.p2pPrivKey = ed25519.GenPrivKey()
 
-	instance.proTxHash = tmcrypto.RandProTxHash()
-	instance.consensusPrivKey = bls12381.GenPrivKey()
+	instance.privValidator = types.NewMockPVWithParams(
+		privKey,
+		proTxHash,
+		quorumHash,
+		thresholdPublicKey,
+		false,
+		false,
+	)
 
 	chCreator := func(ctx context.Context, desc *p2p.ChannelDescriptor) (*p2p.Channel, error) {
 		return p2p.NewChannel(
@@ -221,15 +269,24 @@ func newSecurityReactorInstance(
 			nil
 	}
 
-	instance.reactor = NewReactor(
+	vs := types.NewEmptyValidatorSet()
+	vs.QuorumHash = quorumHash
+
+	instance.peerDB = db.NewMemDB()
+	peerManager, err := p2p.NewPeerManager(instance.nodeID(), instance.peerDB, p2p.PeerManagerOptions{})
+	require.NoError(t, err)
+
+	instance.reactor, err = NewReactor(
 		logger.With("module", "dash"),
-		func(ctx context.Context) *p2p.PeerUpdates { return instance.peerUpdates },
+		peerManager.Subscribe, //func(ctx context.Context) *p2p.PeerUpdates { return instance.peerUpdates },
 		instance.eventBus,
 		chCreator,
 		instance.nodeID(),
-		instance.proTxHash,
-		instance.consensusPrivKey,
+		instance.privValidator,
+		vs,
+		peerManager,
 	)
+	require.NoError(t, err)
 	require.NotNil(t, instance.reactor)
 
 	err = instance.reactor.Start(ctx)
@@ -239,13 +296,17 @@ func newSecurityReactorInstance(
 }
 
 // Validator creates a mock validator
-func (p securityReactorInstance) Validator(t *testing.T) *types.Validator {
-	validator := types.NewValidatorDefaultVotingPower(p.consensusPrivKey.PubKey(), p.proTxHash)
+func (p securityReactorInstance) Validator(ctx context.Context, t *testing.T) *types.Validator {
+	quorumHash := p.reactor.getQuorumHash(ctx)
+	assert.NotEmpty(t, quorumHash)
+
+	validator := p.privValidator.ExtractIntoValidator(ctx, quorumHash)
+	assert.NotNil(t, validator.PubKey)
 	validator.NodeAddress.NodeID = p.nodeID()
 	validator.NodeAddress.Hostname = "127.0.0.1"
 	validator.NodeAddress.Port = uint16(rand.Uint32())
 	assert.NotZero(t, validator.NodeAddress.NodeID)
-
+	t.Logf("Validator: %+v\n", validator)
 	return validator
 }
 
@@ -253,6 +314,7 @@ func (p securityReactorInstance) Validator(t *testing.T) *types.Validator {
 func (p securityReactorInstance) cleanup(t *testing.T) {
 	p.reactor.Stop()
 	p.eventBus.Stop()
+	require.NoError(t, p.peerDB.Close())
 }
 
 func forwardChannels(ctx context.Context, t *testing.T, src, dst chan p2p.Envelope) {
@@ -260,9 +322,9 @@ func forwardChannels(ctx context.Context, t *testing.T, src, dst chan p2p.Envelo
 		for {
 			select {
 			case msg := <-src:
-				t.Logf("forwarding msg %+v\n", msg)
+				// t.Logf("forwarding msg %+v\n", msg)
 				dst <- msg
-				t.Logf("forwarded msg %+v\n", msg)
+				// t.Logf("forwarded msg %+v\n", msg)
 
 			case <-ctx.Done():
 				return
