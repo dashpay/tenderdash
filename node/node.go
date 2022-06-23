@@ -464,7 +464,7 @@ func makeNode(
 			privValidator,
 			state.Validators,
 			peerManager,
-			// nodeIDResolvers,
+			nodeIDResolvers,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create Dash Proof of Possession Reactor: %w", err)

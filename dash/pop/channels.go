@@ -6,6 +6,8 @@ import (
 )
 
 const (
+	// Dash control channel that is used to exchange dash-specific messages, like challenge-response when
+	// verifying peer validator keys
 	DashControlChannel = p2p.ChannelID(0xd0)
 
 	maxMsgSize = 1024
@@ -13,7 +15,8 @@ const (
 
 func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
 	return map[p2p.ChannelID]*p2p.ChannelDescriptor{
-		// Dash Control Channel is a channel where Tenderdash-specific messages are exchanged
+		// Dash control channel that is used to exchange dash-specific messages, like challenge-response when
+		// verifying peer validator keys
 		DashControlChannel: {
 			ID:                  DashControlChannel,
 			MessageType:         new(dashproto.ControlMessage),

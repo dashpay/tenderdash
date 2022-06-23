@@ -16,6 +16,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/dash/core"
+	"github.com/tendermint/tendermint/dash/quorum"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/libs/log"
@@ -298,6 +299,7 @@ func newSecurityReactorInstance(
 		instance.privValidator,
 		vs,
 		peerManager,
+		[]p2p.NodeIDResolver{quorum.NewTCPNodeIDResolver()},
 	)
 	require.NoError(t, err)
 	require.NotNil(t, instance.reactor)
