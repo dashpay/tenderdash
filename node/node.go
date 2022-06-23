@@ -19,7 +19,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/core"
 	"github.com/tendermint/tendermint/dash/pop"
-	"github.com/tendermint/tendermint/dash/quorum"
 	dashquorum "github.com/tendermint/tendermint/dash/quorum"
 	"github.com/tendermint/tendermint/internal/blocksync"
 	"github.com/tendermint/tendermint/internal/consensus"
@@ -240,8 +239,8 @@ func makeNode(
 	var dashDialer p2p.DashDialer
 
 	nodeIDResolvers := []p2p.NodeIDResolver{
-		quorum.NewPeerManagerResolver(peerManager),
-		quorum.NewTCPNodeIDResolver(),
+		dashquorum.NewPeerManagerResolver(peerManager),
+		dashquorum.NewTCPNodeIDResolver(),
 	}
 
 	if len(proTxHash) > 0 {

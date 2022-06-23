@@ -20,11 +20,8 @@ import (
 )
 
 const (
-	// defaultTimeout is timeout that is applied to setup / cleanup code
-	defaultTimeout = 1 * time.Second
 	// defaultEventBusCapacity determines how many events can wait in the event bus for processing. 10 looks very safe.
 	defaultEventBusCapacity = 10
-
 	// TODO move to config file
 	handshakeTimeout     = 3 * time.Second
 	proofOfPosessionName = "PoP"

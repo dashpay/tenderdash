@@ -9,8 +9,6 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-const ()
-
 type ErrPeerNotFound error
 
 // This file contains interface between dash/quorum and p2p connectivity subsystem
