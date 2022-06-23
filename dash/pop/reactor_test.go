@@ -15,11 +15,18 @@ import (
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	"github.com/tendermint/tendermint/dash/core"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/privval"
 	dashproto "github.com/tendermint/tendermint/proto/tendermint/dash"
 	"github.com/tendermint/tendermint/types"
+)
+
+const (
+	llmqType    = btcjson.LLMQType_100_67
+	testTimeout = handshakeTimeout + 100*time.Millisecond //+ 130*time.Second
 )
 
 func TestReactorPositive(t *testing.T) {
@@ -74,12 +81,13 @@ func TestReactorWrongBobSig(t *testing.T) {
 		for {
 			select {
 			case msg := <-bob.controlOutCh:
-				resp, ok := msg.Message.(*dashproto.ControlMessage)
-				if !ok {
-					t.Error("invalid msg type")
-				}
-				if resp2, ok := resp.Sum.(*dashproto.ControlMessage_ValidatorChallengeResponse); ok {
-					resp2.ValidatorChallengeResponse.Signature[2] = 0x00
+				switch resp := msg.Message.(type) {
+				case *dashproto.ValidatorChallenge:
+					// noop
+				case *dashproto.ValidatorChallengeResponse:
+					resp.Signature[2] = 0x00
+				default:
+					t.Errorf("invalid msg type: %T", msg.Message)
 				}
 
 				alice.controlInCh <- msg
@@ -97,8 +105,9 @@ func TestReactorWrongBobSig(t *testing.T) {
 }
 
 func executePoP(ctx context.Context, t *testing.T, alice, bob *securityReactorInstance, expectAliceFail, expectBobFail bool) {
-	quorumHash, err := alice.privValidator.GetFirstQuorumHash(ctx)
-	require.NoError(t, err)
+	quorumHash := alice.reactor.getQuorumHash(ctx)
+	// quorumHash, err := alice.privValidator.GetFirstQuorumHash(ctx)
+	// require.NoError(t, err)
 
 	alicePubkey, err := alice.privValidator.GetPubKey(ctx, quorumHash)
 	require.NoError(t, err)
@@ -120,7 +129,7 @@ func executePoP(ctx context.Context, t *testing.T, alice, bob *securityReactorIn
 		ValidatorSetUpdates: []*types.Validator{alice.Validator(ctx, t), bob.Validator(ctx, t)},
 		ThresholdPublicKey:  thresholdPublicKey,
 		QuorumHash:          quorumHash,
-		QuorumType:          btcjson.LLMQType_5_60,
+		QuorumType:          llmqType,
 	}
 
 	// logger.Debug("publishing validator set updates", "event", valsetUpdate)
@@ -162,7 +171,7 @@ LOOP:
 		case msg := <-bob.controlErrCh:
 			t.Log("bob: ", msg.Err)
 			bobFailed = true
-		case <-time.After(handshakeTimeout + 10*time.Millisecond):
+		case <-time.After(testTimeout):
 			t.Logf("handshake timeout passed")
 			break LOOP
 		}
@@ -239,9 +248,9 @@ func newSecurityReactorInstance(
 
 		// peerUpdatesCh: make(chan p2p.PeerUpdate, 1),
 
-		controlInCh:  make(chan p2p.Envelope, 1),
-		controlOutCh: make(chan p2p.Envelope, 1),
-		controlErrCh: make(chan p2p.PeerError, 1),
+		controlInCh:  make(chan p2p.Envelope, 10),
+		controlOutCh: make(chan p2p.Envelope, 10),
+		controlErrCh: make(chan p2p.PeerError, 10),
 	}
 
 	err := instance.eventBus.Start(ctx)
@@ -250,7 +259,7 @@ func newSecurityReactorInstance(
 	// instance.peerUpdates = p2p.NewPeerUpdates(instance.peerUpdatesCh, 1)
 	instance.p2pPrivKey = ed25519.GenPrivKey()
 
-	instance.privValidator = types.NewMockPVWithParams(
+	localPrivval := types.NewMockPVWithParams(
 		privKey,
 		proTxHash,
 		quorumHash,
@@ -258,6 +267,10 @@ func newSecurityReactorInstance(
 		false,
 		false,
 	)
+	localPrivval.UpdatePrivateKey(ctx, privKey, quorumHash, thresholdPublicKey, 1)
+	mockClient := core.NewMockClient("testchain", llmqType, localPrivval, true)
+	instance.privValidator, err = privval.NewDashCoreSignerClient(mockClient, llmqType)
+	require.NoError(t, err)
 
 	chCreator := func(ctx context.Context, desc *p2p.ChannelDescriptor) (*p2p.Channel, error) {
 		return p2p.NewChannel(
@@ -306,7 +319,7 @@ func (p securityReactorInstance) Validator(ctx context.Context, t *testing.T) *t
 	validator.NodeAddress.Hostname = "127.0.0.1"
 	validator.NodeAddress.Port = uint16(rand.Uint32())
 	assert.NotZero(t, validator.NodeAddress.NodeID)
-	t.Logf("Validator: %+v\n", validator)
+	// t.Logf("Validator: %+v\n", validator)
 	return validator
 }
 

@@ -324,6 +324,7 @@ func (r *Reactor) processValidatorChallenge(ctx context.Context, challenge *dash
 		return fmt.Errorf("cannot respond to challenge: %w", err)
 	}
 
+	r.logger.Debug("challenge response sent", "peer", senderID)
 	return nil
 }
 
@@ -363,7 +364,7 @@ func (r *Reactor) processValidatorChallengeResponse(ctx context.Context, respons
 		return err
 	}
 
-	r.logger.Info("remote validator authenticated successfully", "peer", peerID)
+	r.logger.Info("peer validator consensus private key verified successfully", "peer", peerID)
 	return nil
 }
 
@@ -517,7 +518,7 @@ func (r *Reactor) valUpdatesRoutine(ctx context.Context, validatorUpdatesSub eve
 			r.logger.Error("invalid type of validator set update message", "type", fmt.Sprintf("%T", msg.Data()))
 			continue
 		}
-		r.logger.Debug("processing validators update", "event", event)
+		r.logger.Debug("processing validators update", "quorum", event.QuorumHash)
 
 		r.setValidatorSet(types.NewValidatorSet(
 			event.ValidatorSetUpdates,
