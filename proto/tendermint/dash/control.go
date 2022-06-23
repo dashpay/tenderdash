@@ -83,7 +83,7 @@ func NewValidatorChallenge(
 }
 
 // Validate checks if the challenge is valid. It does NOT verify the signature.
-// If `token` arg is nil, also token will not be verified
+// If `token` arg is nil, also token will not be verified.
 func (challenge ValidatorChallenge) Validate(
 	senderNodeID, recipientNodeID types.NodeID,
 	senderProTxHash, recipientProTxHash types.ProTxHash,

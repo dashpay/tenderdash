@@ -8,7 +8,7 @@ import (
 	"time"
 
 	tmcrypto "github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/quorum"
+	dashquorum "github.com/tendermint/tendermint/dash/quorum"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/p2p"
 	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
@@ -179,7 +179,7 @@ func (r *Reactor) valUpdatesRoutine(ctx context.Context, validatorUpdatesSub eve
 		for _, validator := range event.ValidatorSetUpdates {
 			peerID := validator.NodeAddress.NodeID
 			if peerID == "" {
-				if err := quorum.ResolveNodeID(ctx, &validator.NodeAddress, r.resolvers, r.logger); err != nil {
+				if err := dashquorum.ResolveNodeID(ctx, &validator.NodeAddress, r.resolvers, r.logger); err != nil {
 					r.logger.Error("cannot determine node ID for validator, skipping", "address", validator.NodeAddress, "peer_protxhash", validator.ProTxHash)
 					continue
 				}
@@ -334,16 +334,23 @@ func (r *Reactor) processValidatorChallenge(ctx context.Context, challenge *dash
 	r.logger.Debug("challenge response sent", "peer", senderID)
 	return nil
 }
+func (r *Reactor) findValidator(ctx context.Context, protxhash tmcrypto.ProTxHash) (*types.Validator, error) {
+	_, val := r.getValidatorSet().GetByProTxHash(protxhash)
+	if val == nil || val.PubKey == nil {
+		return nil, fmt.Errorf("validator with proTxHash %X not found", protxhash)
+	}
 
-// checkChallenge ensures that the challenge is valid; if not, peer should be punished by the caller
+	return val, nil
+}
+
+// checkChallenge ensures that the challenge is valid; if not, peer should be punished by the caller.
+// Challenge is a claim made by its sender (identified by SenderProTxHash) that it has some node ID and respective
+// consensus keys.
 func (r *Reactor) checkChallenge(ctx context.Context, challenge *dashproto.ValidatorChallenge, senderID types.NodeID) error {
 	senderProTxHash := challenge.GetSenderProtxhash()
-	_, val := r.getValidatorSet().GetByProTxHash(senderProTxHash)
-	if val == nil || val.PubKey == nil {
-		return fmt.Errorf("sender proTxHash %X not found, peer: %s", senderProTxHash, senderID)
-	}
-	if !senderID.Equal(val.NodeAddress.NodeID) {
-		return fmt.Errorf("node ID mismatch: val %s, sender %s, proTxHash %X", val.NodeAddress.NodeID, senderID, senderProTxHash)
+	val, err := r.findValidator(ctx, senderProTxHash)
+	if err != nil {
+		return err
 	}
 
 	proTxHash, err := r.getProTxHash(ctx)
@@ -390,9 +397,10 @@ func (r *Reactor) respondToChallenge(ctx context.Context, challenge *dashproto.V
 
 // processValidatorChallengeResponse verifies response and punishes peer on error
 func (r *Reactor) processValidatorChallengeResponse(ctx context.Context, response *dashproto.ValidatorChallengeResponse, peerID types.NodeID) error {
+	var peerProTxHash tmcrypto.ProTxHash
 	err := r.unscheduleTimeout(peerID)
 	if err == nil {
-		err = r.checkChallengeResponse(ctx, response, peerID)
+		peerProTxHash, err = r.checkChallengeResponse(ctx, response, peerID)
 	}
 	if err != nil {
 		if err2 := r.punishPeer(peerID, err); err != nil {
@@ -400,45 +408,64 @@ func (r *Reactor) processValidatorChallengeResponse(ctx context.Context, respons
 		}
 		return err
 	}
-
+	r.markAuthenticated(peerID, peerProTxHash)
 	r.logger.Info("peer validator consensus private key verified successfully", "peer", peerID)
 	return nil
 }
 
-// checkChallengeResponse checks if received response matches the challenge
-func (r *Reactor) checkChallengeResponse(ctx context.Context, response *dashproto.ValidatorChallengeResponse, peerID types.NodeID) error {
-	if err := response.Validate(); err != nil {
-		return err
+// markAuthenticated marks the peer as authenticated
+func (r *Reactor) markAuthenticated(peerID types.NodeID, peerProTxHash tmcrypto.ProTxHash) {
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+
+	r.authenticatedPeers[peerID] = peerProTxHash
+}
+
+// isAuthenticated checks if peer with provided ID and proTxHash is already authenticated
+func (r *Reactor) isAuthenticated(peerID types.NodeID, peerProTxHash tmcrypto.ProTxHash) bool {
+	r.mtx.RLock()
+	defer r.mtx.RUnlock()
+
+	authenticatedProTXHash, ok := r.authenticatedPeers[peerID]
+	if !ok || len(authenticatedProTXHash) == 0 {
+		return false
 	}
 
-	challenge, err := r.fetchPeerChallenge(peerID)
+	return authenticatedProTXHash.Equal(peerProTxHash)
+}
+
+// checkChallengeResponse checks if received response matches the challenge
+func (r *Reactor) checkChallengeResponse(ctx context.Context, response *dashproto.ValidatorChallengeResponse, peerID types.NodeID) (tmcrypto.ProTxHash, error) {
+	if err := response.Validate(); err != nil {
+		return nil, err
+	}
+
+	challenge, err := r.removePeerChallenge(peerID)
 	if err != nil {
-		return fmt.Errorf("challenge for peer %s not found", peerID)
+		return nil, fmt.Errorf("challenge for peer %s not found", peerID)
 	}
 
 	peerProTxHash := challenge.GetRecipientProtxhash()
-	_, val := r.getValidatorSet().GetByProTxHash(peerProTxHash)
-	if val == nil || val.PubKey == nil {
-		return fmt.Errorf("validator key for peer %s not found", peerID)
+	val, err := r.findValidator(ctx, peerProTxHash)
+	if err != nil {
+		return nil, err
 	}
-	if !peerID.Equal(val.NodeAddress.NodeID) {
-		return fmt.Errorf("node ID mismatch: val %s, sender %s, proTxHash %X", val.NodeAddress.NodeID, peerID, peerProTxHash)
-	}
+
 	myProTxHash, err := r.getProTxHash(ctx)
 	if err != nil {
-		return err
+		return nil, err
 	}
 	if err := challenge.Validate(r.nodeID, peerID, myProTxHash, val.ProTxHash, nil); err != nil {
 		r.logger.Debug("invalid challenge", "challenge", challenge, "peer", peerID)
-		return fmt.Errorf("challenge validation failed: %w", err)
+		return nil, fmt.Errorf("challenge validation failed: %w", err)
 	}
 
 	pubkey := privval.NewDashConsensusPublicKey(val.PubKey, r.getQuorumHash(ctx), r.getValidatorSet().QuorumType)
 	if err := response.Verify(challenge, pubkey); err != nil {
-		return fmt.Errorf("cannot verify challenge response sig for peer %s: %w", peerID, err)
+		return nil, fmt.Errorf("cannot verify challenge response sig for peer %s: %w", peerID, err)
 	}
 
-	return nil
+	return peerProTxHash, nil
 }
 
 func (r *Reactor) punishPeer(nodeID types.NodeID, reason error) error {
@@ -471,8 +498,8 @@ func (r *Reactor) newPeerChallenge(ctx context.Context, peerNodeID types.NodeID,
 	return challenge, nil
 }
 
-// fetchPeerChallenge reads peer challenge for a peer and removes it
-func (r *Reactor) fetchPeerChallenge(peerID types.NodeID) (dashproto.ValidatorChallenge, error) {
+// removePeerChallenge reads peer challenge for a peer, returns it and removes
+func (r *Reactor) removePeerChallenge(peerID types.NodeID) (dashproto.ValidatorChallenge, error) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
 
@@ -493,16 +520,13 @@ func (r *Reactor) fetchPeerChallenge(peerID types.NodeID) (dashproto.ValidatorCh
 // * was not executed yet against this peer
 // * is a validator with proTxHash
 // * is connected (p2p.PeerStatusUp)
-// * is a member of active validator set
+// * both peer and current node is a member of active validator set
 func (r *Reactor) needsProofOfPossession(ctx context.Context, peerID types.NodeID, protxhash tmcrypto.ProTxHash) bool {
 	if len(protxhash) == 0 {
 		return false // not a validator
 	}
 
-	r.mtx.RLock()
-	authenticatedProTXHash, ok := r.authenticatedPeers[peerID]
-	r.mtx.RUnlock()
-	if ok && protxhash.Equal(authenticatedProTXHash) {
+	if r.isAuthenticated(peerID, protxhash) {
 		// already authenticated
 		return false
 	}
@@ -521,7 +545,7 @@ func (r *Reactor) needsProofOfPossession(ctx context.Context, peerID types.NodeI
 		return false // we are not a validator
 	}
 	if _, validator := valSet.GetByProTxHash(protxhash); validator == nil {
-		return false // not a member of active validator set
+		return false // peer is not a member of active validator set
 	}
 
 	return true
