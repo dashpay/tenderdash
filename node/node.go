@@ -19,6 +19,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/core"
 	"github.com/tendermint/tendermint/dash/pop"
+	"github.com/tendermint/tendermint/dash/quorum"
 	dashquorum "github.com/tendermint/tendermint/dash/quorum"
 	"github.com/tendermint/tendermint/internal/blocksync"
 	"github.com/tendermint/tendermint/internal/consensus"
@@ -236,13 +237,21 @@ func makeNode(
 
 	// Start Dash connection executor
 	var validatorConnExecutor *dashquorum.ValidatorConnExecutor
+	var dashDialer p2p.DashDialer
+
+	nodeIDResolvers := []p2p.NodeIDResolver{
+		quorum.NewPeerManagerResolver(peerManager),
+		quorum.NewTCPNodeIDResolver(),
+	}
+
 	if len(proTxHash) > 0 {
 		vcLogger := logger.With("node_proTxHash", proTxHash.ShortString(), "module", "ValidatorConnExecutor")
-		dcm := p2p.NewRouterDashDialer(peerManager, vcLogger)
+		dashDialer = p2p.NewRouterDashDialer(peerManager, vcLogger)
 		validatorConnExecutor, err = dashquorum.NewValidatorConnExecutor(
 			proTxHash,
 			eventBus,
-			dcm,
+			dashDialer,
+			nodeIDResolvers,
 			dashquorum.WithLogger(vcLogger),
 			dashquorum.WithValidatorsSet(state.Validators),
 		)
@@ -455,6 +464,7 @@ func makeNode(
 			privValidator,
 			state.Validators,
 			peerManager,
+			// nodeIDResolvers,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("cannot create Dash Proof of Possession Reactor: %w", err)

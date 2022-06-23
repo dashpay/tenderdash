@@ -1,6 +1,7 @@
 package quorum
 
 import (
+	"context"
 	"fmt"
 	"net"
 	"time"
@@ -19,6 +20,8 @@ const (
 	DefaultDialTimeout = 1000 * time.Millisecond
 	// DefaultConnectionTimeout is a connection timeout when resolving node id using TCP connection
 	DefaultConnectionTimeout = 1 * time.Second
+
+	dnsLookupTimeout = 1 * time.Second
 )
 
 type tcpNodeIDResolver struct {
@@ -37,11 +40,12 @@ func NewTCPNodeIDResolver() p2p.NodeIDResolver {
 
 // connect establishes a TCP connection to remote host.
 // When err == nil, caller is responsible for closing of the connection
-func (resolver tcpNodeIDResolver) connect(host string, port uint16) (net.Conn, error) {
+func (resolver tcpNodeIDResolver) connect(ctx context.Context, host string, port uint16) (net.Conn, error) {
 	dialer := net.Dialer{
 		Timeout: resolver.DialerTimeout,
 	}
-	connection, err := dialer.Dial("tcp4", fmt.Sprintf("%s:%d", host, port))
+
+	connection, err := dialer.DialContext(ctx, "tcp4", fmt.Sprintf("%s:%d", host, port))
 	if err != nil {
 		return nil, fmt.Errorf("cannot lookup node ID: %w", err)
 	}
@@ -57,8 +61,8 @@ func (resolver tcpNodeIDResolver) connect(host string, port uint16) (net.Conn, e
 // Resolve retrieves a node ID from remote validator and generates a correct node address.
 // Note that it is quite expensive, as it establishes secure connection to the other node
 // which is dropped afterwards.
-func (resolver tcpNodeIDResolver) Resolve(va types.ValidatorAddress) (p2p.NodeAddress, error) {
-	connection, err := resolver.connect(va.Hostname, va.Port)
+func (resolver tcpNodeIDResolver) Resolve(ctx context.Context, va types.ValidatorAddress) (p2p.NodeAddress, error) {
+	connection, err := resolver.connect(ctx, va.Hostname, va.Port)
 	if err != nil {
 		return p2p.NodeAddress{}, err
 	}
@@ -79,7 +83,7 @@ func (resolver tcpNodeIDResolver) MarshalZerologObject(e *zerolog.Event) {
 
 // ResolveNodeID adds node ID to the validator address if it's not set.
 // If `resolvers` is empty or nil, it fefaults to tcpNodeIDResolver
-func ResolveNodeID(va *types.ValidatorAddress, resolvers []p2p.NodeIDResolver, logger log.Logger) error {
+func ResolveNodeID(ctx context.Context, va *types.ValidatorAddress, resolvers []p2p.NodeIDResolver, logger log.Logger) error {
 	if len(resolvers) == 0 {
 		resolvers = []p2p.NodeIDResolver{
 			NewTCPNodeIDResolver(),
@@ -91,7 +95,7 @@ func ResolveNodeID(va *types.ValidatorAddress, resolvers []p2p.NodeIDResolver, l
 	}
 	var allErrors error
 	for index, resolver := range resolvers {
-		address, err := resolver.Resolve(*va)
+		address, err := resolver.Resolve(ctx, *va)
 		if err == nil && address.NodeID != "" {
 			va.NodeID = address.NodeID
 			return nil // success
@@ -107,4 +111,50 @@ func ResolveNodeID(va *types.ValidatorAddress, resolvers []p2p.NodeIDResolver, l
 		allErrors = multierror.Append(allErrors, fmt.Errorf("%d: %T error: %w", index, resolver, err))
 	}
 	return allErrors
+}
+
+type peerManagerResolver struct {
+	peerManager *p2p.PeerManager
+}
+
+func NewPeerManagerResolver(peerManager *p2p.PeerManager) p2p.NodeIDResolver {
+	return peerManagerResolver{peerManager: peerManager}
+}
+
+// Resolve implements NodeIDResolver.
+// Resolve determines node ID using address book.
+func (resolver peerManagerResolver) Resolve(ctx context.Context, va types.ValidatorAddress) (nodeAddress p2p.NodeAddress, err error) {
+	ctx, cancel := context.WithTimeout(ctx, dnsLookupTimeout)
+	defer cancel()
+
+	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", va.Hostname)
+	if err != nil {
+		return nodeAddress, err
+	}
+	for _, ip := range ips {
+		nodeAddress, err = resolver.lookupIPPort(ctx, ip, va.Port)
+		// First match is returned
+		if err == nil {
+			return nodeAddress, nil
+		}
+	}
+	return nodeAddress, err
+}
+
+func (resolver peerManagerResolver) lookupIPPort(ctx context.Context, ip net.IP, port uint16) (p2p.NodeAddress, error) {
+	peers := resolver.peerManager.Peers()
+	for _, nodeID := range peers {
+		addresses := resolver.peerManager.Addresses(nodeID)
+		for _, addr := range addresses {
+			if endpoints, err := addr.Resolve(ctx); err != nil {
+				for _, item := range endpoints {
+					if item.IP.Equal(ip) && item.Port == port {
+						return item.NodeAddress(nodeID), nil
+					}
+				}
+			}
+		}
+	}
+
+	return p2p.NodeAddress{}, p2p.ErrPeerNotFound(fmt.Errorf("peer %s:%d not found in the address book", ip, port))
 }

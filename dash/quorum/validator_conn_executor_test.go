@@ -418,7 +418,7 @@ func TestFinalizeBlock(t *testing.T) {
 	// setup ValidatorConnExecutor
 	sw := mock.NewDashDialer()
 	proTxHash := newVals.Validators[0].ProTxHash
-	vc, err := NewValidatorConnExecutor(proTxHash, eventBus, sw)
+	vc, err := NewValidatorConnExecutor(proTxHash, eventBus, sw, []p2p.NodeIDResolver{sw})
 	require.NoError(t, err)
 	err = vc.Start(ctx)
 	require.NoError(t, err)
@@ -580,7 +580,7 @@ func setup(
 
 	sw = mock.NewDashDialer()
 
-	vc, err = NewValidatorConnExecutor(me.ProTxHash, eventBus, sw, WithLogger(logger))
+	vc, err = NewValidatorConnExecutor(me.ProTxHash, eventBus, sw, []p2p.NodeIDResolver{sw}, WithLogger(logger))
 	require.NoError(t, err)
 	err = vc.Start(ctx)
 	require.NoError(t, err)

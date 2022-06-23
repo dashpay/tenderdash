@@ -2,9 +2,6 @@ package p2p
 
 import (
 	"context"
-	"fmt"
-	"net"
-	"time"
 
 	"github.com/rs/zerolog"
 
@@ -12,11 +9,9 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-const (
-	dnsLookupTimeout = 1 * time.Second
-)
+const ()
 
-type errPeerNotFound error
+type ErrPeerNotFound error
 
 // This file contains interface between dash/quorum and p2p connectivity subsystem
 
@@ -24,12 +19,11 @@ type errPeerNotFound error
 type NodeIDResolver interface {
 	// Resolve determines real node address, including node ID, based on the provided
 	// validator address.
-	Resolve(types.ValidatorAddress) (NodeAddress, error)
+	Resolve(context.Context, types.ValidatorAddress) (NodeAddress, error)
 }
 
 // DashDialer defines a service that can be used to establish and manage peer connections
 type DashDialer interface {
-	NodeIDResolver
 	// ConnectAsync schedules asynchronous job to establish connection with provided node.
 	ConnectAsync(NodeAddress) error
 	// IsDialingOrConnected determines whether node with provided node ID is already connected,
@@ -86,43 +80,6 @@ func (cm *routerDashDialer) DisconnectAsync(nodeID types.NodeID) error {
 	}
 	cm.peerManager.EvictPeer(nodeID)
 	return nil
-}
-
-// Resolve implements NodeIDResolver
-func (cm *routerDashDialer) Resolve(va types.ValidatorAddress) (nodeAddress NodeAddress, err error) {
-	ctx, cancel := context.WithTimeout(context.Background(), dnsLookupTimeout)
-	defer cancel()
-
-	ips, err := net.DefaultResolver.LookupIP(ctx, "ip", va.Hostname)
-	if err != nil {
-		return nodeAddress, err
-	}
-	for _, ip := range ips {
-		nodeAddress, err = cm.lookupIPPort(ctx, ip, va.Port)
-		// First match is returned
-		if err == nil {
-			return nodeAddress, nil
-		}
-	}
-	return nodeAddress, err
-}
-
-func (cm *routerDashDialer) lookupIPPort(ctx context.Context, ip net.IP, port uint16) (NodeAddress, error) {
-	peers := cm.peerManager.Peers()
-	for _, nodeID := range peers {
-		addresses := cm.peerManager.Addresses(nodeID)
-		for _, addr := range addresses {
-			if endpoints, err := addr.Resolve(ctx); err != nil {
-				for _, item := range endpoints {
-					if item.IP.Equal(ip) && item.Port == port {
-						return item.NodeAddress(nodeID), nil
-					}
-				}
-			}
-		}
-	}
-
-	return NodeAddress{}, errPeerNotFound(fmt.Errorf("peer %s:%d not found in the address book", ip, port))
 }
 
 // MarshalZerologObject implements zerolog.LogObjectMarshaler

@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/types"
 )
@@ -14,9 +15,11 @@ import (
 // TestNewValidator checks if new validator can be created with some validator address, and then the address can be
 // looked up using NodeIDResolver
 func TestNewValidator(t *testing.T) {
+	ctx := context.Background()
+
 	quorumHash := crypto.RandQuorumHash()
 	priv := types.NewMockPVForQuorum(quorumHash)
-	pubKey, err := priv.GetPubKey(context.TODO(), quorumHash)
+	pubKey, err := priv.GetPubKey(ctx, quorumHash)
 	nodeID := types.NodeIDFromPubKey(pubKey)
 	proTxHash := crypto.RandProTxHash()
 	require.NoError(t, err)
@@ -31,7 +34,7 @@ func TestNewValidator(t *testing.T) {
 	require.NotNil(t, validator)
 	assert.EqualValues(t, "127.0.0.1", validator.NodeAddress.Hostname)
 	assert.EqualValues(t, 23456, validator.NodeAddress.Port)
-	newNodeAddress, err := NewTCPNodeIDResolver().Resolve(validator.NodeAddress)
+	newNodeAddress, err := NewTCPNodeIDResolver().Resolve(ctx, validator.NodeAddress)
 	assert.Contains(t, err.Error(), "connection refused")
 	assert.Zero(t, newNodeAddress)
 }

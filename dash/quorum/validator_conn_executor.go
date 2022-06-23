@@ -63,7 +63,7 @@ type ValidatorConnExecutor struct {
 }
 
 var (
-	errPeerNotFound = fmt.Errorf("cannot stop peer: not found")
+	errPeerNotFound = p2p.ErrPeerNotFound(errors.New("peer not found"))
 )
 
 // NewValidatorConnExecutor creates a Service that connects to other validators within the same Validator Set.
@@ -72,21 +72,20 @@ func NewValidatorConnExecutor(
 	proTxHash types.ProTxHash,
 	eventBus *eventbus.EventBus,
 	connMgr p2p.DashDialer,
+	nodeIDResolvers []p2p.NodeIDResolver,
 	opts ...optionFunc,
 ) (*ValidatorConnExecutor, error) {
 	vc := &ValidatorConnExecutor{
-		logger:              log.NewNopLogger(),
-		proTxHash:           proTxHash,
-		eventBus:            eventBus,
-		dialer:              connMgr,
+		logger:          log.NewNopLogger(),
+		proTxHash:       proTxHash,
+		eventBus:        eventBus,
+		dialer:          connMgr,
+		nodeIDResolvers: nodeIDResolvers,
+
 		EventBusCapacity:    defaultEventBusCapacity,
 		validatorSetMembers: validatorMap{},
 		connectedValidators: validatorMap{},
 		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),
-	}
-	vc.nodeIDResolvers = []p2p.NodeIDResolver{
-		vc.dialer,
-		NewTCPNodeIDResolver(),
 	}
 
 	vc.BaseService = service.NewBaseService(log.NewNopLogger(), validatorConnExecutorName, vc)
@@ -128,7 +127,7 @@ func (vc *ValidatorConnExecutor) OnStart(ctx context.Context) error {
 	if err := vc.subscribe(); err != nil {
 		return err
 	}
-	err := vc.updateConnections()
+	err := vc.updateConnections(ctx)
 	if err != nil {
 		vc.logger.Error("Warning: ValidatorConnExecutor OnStart failed", "error", err)
 	}
@@ -193,7 +192,7 @@ func (vc *ValidatorConnExecutor) receiveEvents(ctx context.Context) error {
 	if !ok {
 		return fmt.Errorf("invalid type of validator set update message: %T", event)
 	}
-	if err := vc.handleValidatorUpdateEvent(event); err != nil {
+	if err := vc.handleValidatorUpdateEvent(ctx, event); err != nil {
 		vc.logger.Error("cannot handle validator update", "error", err)
 		return nil // non-fatal, so no error returned to continue the loop
 	}
@@ -202,7 +201,7 @@ func (vc *ValidatorConnExecutor) receiveEvents(ctx context.Context) error {
 }
 
 // handleValidatorUpdateEvent checks and executes event of type EventDataValidatorSetUpdate, received from event bus.
-func (vc *ValidatorConnExecutor) handleValidatorUpdateEvent(event types.EventDataValidatorSetUpdate) error {
+func (vc *ValidatorConnExecutor) handleValidatorUpdateEvent(ctx context.Context, event types.EventDataValidatorSetUpdate) error {
 	vc.mux.Lock()
 	defer vc.mux.Unlock()
 
@@ -219,7 +218,7 @@ func (vc *ValidatorConnExecutor) handleValidatorUpdateEvent(event types.EventDat
 	} else {
 		vc.logger.Debug("received empty quorum hash")
 	}
-	if err := vc.updateConnections(); err != nil {
+	if err := vc.updateConnections(ctx); err != nil {
 		return fmt.Errorf("inter-validator set connections error: %w", err)
 	}
 	return nil
@@ -244,14 +243,14 @@ func (vc *ValidatorConnExecutor) me() (validator *types.Validator, ok bool) {
 }
 
 // resolveNodeID adds node ID to the validator address if it's not set
-func (vc *ValidatorConnExecutor) resolveNodeID(va *types.ValidatorAddress) error {
-	return ResolveNodeID(va, vc.nodeIDResolvers, vc.logger)
+func (vc *ValidatorConnExecutor) resolveNodeID(ctx context.Context, va *types.ValidatorAddress) error {
+	return ResolveNodeID(ctx, va, vc.nodeIDResolvers, vc.logger)
 }
 
 // selectValidators selects `count` validators from current ValidatorSet.
 // It uses algorithm described in DIP-6.
 // Returns map indexed by validator address.
-func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
+func (vc *ValidatorConnExecutor) selectValidators(ctx context.Context) (validatorMap, error) {
 	activeValidators := vc.validatorSetMembers
 	me, ok := vc.me()
 	if !ok {
@@ -265,7 +264,7 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 	}
 
 	// fetch node IDs
-	selectedValidators = vc.ensureValidatorsHaveNodeIDs(selectedValidators)
+	selectedValidators = vc.ensureValidatorsHaveNodeIDs(ctx, selectedValidators)
 	return newValidatorMap(selectedValidators), nil
 }
 
@@ -273,10 +272,10 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 // Returns a slice that contains only validators with valid node ID.
 // Validators where node ID lookup failed are skipped (no error reported).
 // Note that this function modifies validators which are in the input slice.
-func (vc *ValidatorConnExecutor) ensureValidatorsHaveNodeIDs(validators []*types.Validator) (results []*types.Validator) {
+func (vc *ValidatorConnExecutor) ensureValidatorsHaveNodeIDs(ctx context.Context, validators []*types.Validator) (results []*types.Validator) {
 	results = make([]*types.Validator, 0, len(validators))
 	for _, validator := range validators {
-		err := vc.resolveNodeID(&validator.NodeAddress)
+		err := vc.resolveNodeID(ctx, &validator.NodeAddress)
 		if err != nil {
 			vc.logger.Error("cannot determine node id for validator, skipping", "url", validator.String(), "error", err)
 			continue
@@ -286,8 +285,8 @@ func (vc *ValidatorConnExecutor) ensureValidatorsHaveNodeIDs(validators []*types
 	return results
 }
 
-func (vc *ValidatorConnExecutor) disconnectValidator(validator types.Validator) error {
-	if err := vc.resolveNodeID(&validator.NodeAddress); err != nil {
+func (vc *ValidatorConnExecutor) disconnectValidator(ctx context.Context, validator types.Validator) error {
+	if err := vc.resolveNodeID(ctx, &validator.NodeAddress); err != nil {
 		return err
 	}
 	id := validator.NodeAddress.NodeID
@@ -299,12 +298,12 @@ func (vc *ValidatorConnExecutor) disconnectValidator(validator types.Validator) 
 }
 
 // disconnectValidators disconnects connected validators which are not a part of the exceptions map
-func (vc *ValidatorConnExecutor) disconnectValidators(exceptions validatorMap) error {
+func (vc *ValidatorConnExecutor) disconnectValidators(ctx context.Context, exceptions validatorMap) error {
 	for currentKey, validator := range vc.connectedValidators {
 		if exceptions.contains(validator) {
 			continue
 		}
-		if err := vc.disconnectValidator(validator); err != nil {
+		if err := vc.disconnectValidator(ctx, validator); err != nil {
 			if !errors.Is(err, errPeerNotFound) {
 				// no return, as we see it as non-fatal
 				vc.logger.Error("cannot disconnect Validator", "error", err)
@@ -327,23 +326,23 @@ func (vc *ValidatorConnExecutor) isValidator() bool {
 
 // updateConnections processes current validator set, selects a few validators and schedules connections
 // to be established. It will also disconnect previous validators.
-func (vc *ValidatorConnExecutor) updateConnections() error {
+func (vc *ValidatorConnExecutor) updateConnections(ctx context.Context) error {
 	// We only do something if we are part of new ValidatorSet
 	if !vc.isValidator() {
 		vc.logger.Debug("not a member of active ValidatorSet")
 		// We need to disconnect connected validators. It needs to be done explicitly
 		// because they are marked as persistent and will never disconnect themselves.
-		return vc.disconnectValidators(validatorMap{})
+		return vc.disconnectValidators(ctx, validatorMap{})
 	}
 
 	// Find new newValidators
-	newValidators, err := vc.selectValidators()
+	newValidators, err := vc.selectValidators(ctx)
 	if err != nil {
 		vc.logger.Error("cannot determine list of validators to connect", "error", err)
 		// no return, as we still need to disconnect unused validators
 	}
 	// Disconnect existing validators unless they are selected to be connected again
-	if err := vc.disconnectValidators(newValidators); err != nil {
+	if err := vc.disconnectValidators(ctx, newValidators); err != nil {
 		return fmt.Errorf("cannot disconnect unused validators: %w", err)
 	}
 	vc.logger.Debug("filtering validators", "validators", newValidators.String())

@@ -1,6 +1,7 @@
 package mock
 
 import (
+	"context"
 	"encoding/binary"
 	"encoding/hex"
 	"sync"
@@ -71,7 +72,7 @@ func (sw *DashDialer) DisconnectAsync(id types.NodeID) error {
 
 	return nil
 }
-func (sw *DashDialer) Resolve(val types.ValidatorAddress) (p2p.NodeAddress, error) {
+func (sw *DashDialer) Resolve(ctx context.Context, val types.ValidatorAddress) (p2p.NodeAddress, error) {
 	// Generate node ID
 	nodeID := make([]byte, 20)
 	n := val.Port

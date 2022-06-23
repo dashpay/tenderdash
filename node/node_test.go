@@ -79,7 +79,7 @@ func TestNodeStartStop(t *testing.T) {
 	// check if we can read node ID of this node
 	va, err := types.ParseValidatorAddress(cfg.P2P.ListenAddress)
 	assert.NoError(t, err)
-	nodeAddress, err := quorum.NewTCPNodeIDResolver().Resolve(va)
+	nodeAddress, err := quorum.NewTCPNodeIDResolver().Resolve(ctx, va)
 	assert.Equal(t, n.nodeInfo.ID(), nodeAddress.NodeID)
 	assert.NoError(t, err)
 
