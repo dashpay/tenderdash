@@ -12,6 +12,8 @@ import (
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/p2p"
 	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/privval"
@@ -23,7 +25,7 @@ const (
 	// defaultEventBusCapacity determines how many events can wait in the event bus for processing. 10 looks very safe.
 	defaultEventBusCapacity = 10
 	// TODO move to config file
-	handshakeTimeout     = 3 * time.Second
+	handshakeTimeout     = 5 * time.Second
 	proofOfPosessionName = "PoP"
 )
 
@@ -88,9 +90,10 @@ func NewReactor(
 		validators:    validatorSet,
 		quorumHash:    validatorSet.QuorumHash,
 
-		challenges: map[types.NodeID]dashproto.ValidatorChallenge{},
-		timers:     map[types.NodeID]*time.Timer{},
-		resolvers:  resolvers,
+		challenges:         map[types.NodeID]dashproto.ValidatorChallenge{},
+		timers:             map[types.NodeID]*time.Timer{},
+		authenticatedPeers: map[types.NodeID]tmbytes.HexBytes{},
+		resolvers:          resolvers,
 	}
 	r.BaseService = *service.NewBaseService(logger, "SecurityReactor", r)
 
