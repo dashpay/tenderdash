@@ -3,7 +3,7 @@ FROM golang:1.17-alpine AS builder
 
 RUN apk update && \
     apk upgrade && \
-    apk add bash git gmp-dev sudo cmake build-base python3-dev
+    apk add bash git sudo cmake build-base python3-dev libsodium-dev
 
 COPY . /go/src/github.com/dashevo/tenderdash
 
@@ -30,7 +30,7 @@ ENV TMHOME /tenderdash
 # could execute bash commands.
 RUN apk update && \
     apk upgrade && \
-    apk --no-cache add curl jq bash gmp libstdc++ && \
+    apk --no-cache add curl jq bash libsodium-dev libstdc++ && \
     addgroup tmuser && \
     adduser -S -G tmuser tmuser -h "$TMHOME"
 
