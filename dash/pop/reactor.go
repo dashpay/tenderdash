@@ -361,13 +361,12 @@ func (r *Reactor) recvControlChannelRoutine(ctx context.Context) {
 
 // processValidatorChallenge processes validator challenges received on the control channel.
 func (r *Reactor) processValidatorChallenge(ctx context.Context, challenge *dashproto.ValidatorChallenge, senderID types.NodeID) error {
-	// TODO restore once we fix the issue with auth during state sync
-	// if err := r.checkChallenge(ctx, challenge, senderID); err != nil {
-	// 	if err2 := r.punishPeer(senderID, err); err2 != nil {
-	// 		return err
-	// 	}
-	// 	return err
-	// }
+	if err := r.checkChallenge(ctx, challenge, senderID); err != nil {
+		if err2 := r.punishPeer(senderID, err); err2 != nil {
+			return err
+		}
+		return err
+	}
 
 	if err := r.respondToChallenge(ctx, challenge, senderID); err != nil {
 		return fmt.Errorf("cannot respond to challenge: %w", err)
@@ -378,6 +377,8 @@ func (r *Reactor) processValidatorChallenge(ctx context.Context, challenge *dash
 }
 
 func (r *Reactor) findValidator(ctx context.Context, protxhash tmcrypto.ProTxHash) (*types.Validator, error) {
+	// FIXME: this only finds current validators, we should also be able to check historical validators
+	// (maybe using state.Store?)
 	_, val := r.getValidatorSet().GetByProTxHash(protxhash)
 	if val == nil || val.PubKey == nil {
 		return nil, fmt.Errorf("validator with proTxHash %X not found", protxhash)
@@ -392,8 +393,10 @@ func (r *Reactor) findValidator(ctx context.Context, protxhash tmcrypto.ProTxHas
 func (r *Reactor) checkChallenge(ctx context.Context, challenge *dashproto.ValidatorChallenge, senderID types.NodeID) error {
 	senderProTxHash := challenge.GetSenderProtxhash()
 	val, err := r.findValidator(ctx, senderProTxHash)
-	if err != nil {
-		return err
+	// FIXME: this is a way to avoid challenge checks
+	if err != nil || val == nil {
+		r.logger.Debug("warning: skipping challenge validation - peer validator not found", "peer", senderID, "error", err)
+		return nil
 	}
 
 	if err := challenge.Validate(senderID, r.nodeID, val.ProTxHash, r.proTxHash); err != nil {
