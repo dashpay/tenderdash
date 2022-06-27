@@ -5,11 +5,16 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
+	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
 
 	tmcrypto "github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+)
+
+const (
+	requestTimeout = 5 * time.Second
 )
 
 type dashConsensusPrivateKey struct {
@@ -42,14 +47,20 @@ func (key dashConsensusPrivateKey) Sign(messageBytes []byte) ([]byte, error) {
 
 // SignDigest implements tmcrypto.PrivKey
 func (key dashConsensusPrivateKey) SignDigest(messageHash []byte) ([]byte, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+
 	requestIDhash := messageHash
-	decodedSignature, _, err := key.privval.QuorumSign(context.TODO(), messageHash, requestIDhash, key.quorumType, key.quorumHash)
+	decodedSignature, _, err := key.privval.QuorumSign(ctx, messageHash, requestIDhash, key.quorumType, key.quorumHash)
 	return decodedSignature, err
 }
 
 // PubKey implements tmcrypto.PrivKey
 func (key dashConsensusPrivateKey) PubKey() tmcrypto.PubKey {
-	pubkey, err := key.privval.GetPubKey(context.TODO(), key.quorumHash)
+	ctx, cancel := context.WithTimeout(context.Background(), requestTimeout)
+	defer cancel()
+
+	pubkey, err := key.privval.GetPubKey(ctx, key.quorumHash)
 	if err != nil {
 		panic("cannot retrieve public key: " + err.Error()) // not nice, but this iface doesn;t support error handling
 	}

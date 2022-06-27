@@ -25,8 +25,8 @@ const (
 	// defaultEventBusCapacity determines how many events can wait in the event bus for processing. 10 looks very safe.
 	defaultEventBusCapacity = 10
 	// TODO move to config file
-	handshakeTimeout     = 5 * time.Second
-	proofOfPosessionName = "PoP"
+	handshakeTimeout = 5 * time.Second
+	serviceName      = "dash_proof-of-possession"
 )
 
 var (
@@ -95,7 +95,7 @@ func NewReactor(
 		authenticatedPeers: map[types.NodeID]tmbytes.HexBytes{},
 		resolvers:          resolvers,
 	}
-	r.BaseService = *service.NewBaseService(logger, "SecurityReactor", r)
+	r.BaseService = *service.NewBaseService(logger, serviceName, r)
 
 	return r, nil
 }
@@ -132,7 +132,7 @@ func (r *Reactor) valUpdatesSubscribe(ctx context.Context) (eventbus.Subscriptio
 	updatesSub, err := r.eventBus.SubscribeWithArgs(
 		ctx,
 		tmpubsub.SubscribeArgs{
-			ClientID: proofOfPosessionName,
+			ClientID: serviceName,
 			Query:    types.EventQueryValidatorSetUpdates,
 			Limit:    defaultEventBusCapacity,
 		},
@@ -305,9 +305,14 @@ func (r *Reactor) recvControlChannelRoutine(ctx context.Context) {
 		switch msg := envelope.Message.(type) {
 		case *dashproto.ValidatorChallenge:
 			r.logger.Debug("validator challenge received", "peer", envelope.From)
-			if err := r.processValidatorChallenge(ctx, msg, envelope.From); err != nil {
-				r.logger.Error("cannot respond to peer challenge", "peer", envelope.From, "error", err)
-			}
+			go func(ctx context.Context) {
+				subCtx, cancel := context.WithTimeout(ctx, handshakeTimeout)
+				defer cancel()
+
+				if err := r.processValidatorChallenge(subCtx, msg, envelope.From); err != nil {
+					r.logger.Error("cannot respond to peer challenge", "peer", envelope.From, "error", err)
+				}
+			}(ctx)
 
 		case *dashproto.ValidatorChallengeResponse:
 			r.logger.Debug("validator challenge response received", "peer", envelope.From)
@@ -323,12 +328,13 @@ func (r *Reactor) recvControlChannelRoutine(ctx context.Context) {
 
 // processValidatorChallenge processes validator challenges received on the control channel.
 func (r *Reactor) processValidatorChallenge(ctx context.Context, challenge *dashproto.ValidatorChallenge, senderID types.NodeID) error {
-	if err := r.checkChallenge(ctx, challenge, senderID); err != nil {
-		if err2 := r.punishPeer(senderID, err); err2 != nil {
-			return err
-		}
-		return err
-	}
+	// TODO restore once we fix the issue with auth during state sync
+	// if err := r.checkChallenge(ctx, challenge, senderID); err != nil {
+	// 	if err2 := r.punishPeer(senderID, err); err2 != nil {
+	// 		return err
+	// 	}
+	// 	return err
+	// }
 
 	if err := r.respondToChallenge(ctx, challenge, senderID); err != nil {
 		return fmt.Errorf("cannot respond to challenge: %w", err)
@@ -337,6 +343,7 @@ func (r *Reactor) processValidatorChallenge(ctx context.Context, challenge *dash
 	r.logger.Debug("challenge response sent", "peer", senderID)
 	return nil
 }
+
 func (r *Reactor) findValidator(ctx context.Context, protxhash tmcrypto.ProTxHash) (*types.Validator, error) {
 	_, val := r.getValidatorSet().GetByProTxHash(protxhash)
 	if val == nil || val.PubKey == nil {

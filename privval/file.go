@@ -491,7 +491,7 @@ func (pv *FilePV) GetPrivateKey(context context.Context, quorumHash crypto.Quoru
 }
 
 func (pv *FilePV) getPrivateKey(context context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
-	if keys, ok := pv.Key.PrivateKeys[quorumHash.String()]; ok {
+	if keys, ok := pv.Key.PrivateKeys[quorumHash.String()]; ok && keys.PrivKey != nil {
 		return keys.PrivKey, nil
 	}
 	hashes := make([]string, 0, len(pv.Key.PrivateKeys))

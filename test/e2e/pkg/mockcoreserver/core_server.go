@@ -104,6 +104,9 @@ func (c *MockCoreServer) QuorumSign(_ context.Context, cmd btcjson.QuorumCmd) bt
 	if err != nil {
 		panic(err)
 	}
+	if privateKey == nil {
+		panic("private key is nil")
+	}
 
 	sign, err := privateKey.SignDigest(signID)
 	if err != nil {

@@ -320,6 +320,25 @@ func makeNode(
 	node.rpcEnv.Mempool = mp
 	node.services = append(node.services, mpReactor)
 
+	if cfg.Mode == config.ModeValidator {
+		// Start dash Proof-of-Possession reactor
+		node.proofOfPossessionReactor, err = pop.NewReactor(
+			logger.With("module", "dash_pop"),
+			peerManager.Subscribe,
+			eventBus,
+			node.router.OpenChannel,
+			node.nodeKey.ID,
+			privValidator,
+			state.Validators,
+			peerManager,
+			nodeIDResolvers,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("cannot create Dash Proof of Possession Reactor: %w", err)
+		}
+		node.services = append(node.services, node.proofOfPossessionReactor)
+	}
+
 	nextCoreChainLock, err := types.CoreChainLockFromProto(genDoc.InitialProposalCoreChainLock)
 	if err != nil {
 		return nil, combineCloseError(err, makeCloser(closers))
@@ -452,23 +471,6 @@ func makeNode(
 			csState.SetPrivValidator(ctx, privValidator)
 		}
 		node.rpcEnv.ProTxHash = proTxHash
-
-		// Start dash Proof-of-Possession reactor
-		node.proofOfPossessionReactor, err = pop.NewReactor(
-			logger.With("module", "dash_pop"),
-			peerManager.Subscribe,
-			eventBus,
-			node.router.OpenChannel,
-			node.nodeKey.ID,
-			privValidator,
-			state.Validators,
-			peerManager,
-			nodeIDResolvers,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("cannot create Dash Proof of Possession Reactor: %w", err)
-		}
-		node.services = append(node.services, node.proofOfPossessionReactor)
 	}
 
 	node.BaseService = *service.NewBaseService(logger, "Node", node)
