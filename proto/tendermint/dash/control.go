@@ -14,7 +14,7 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// Wrap implements the p2p Wrapper interface and wraps a blockchain message.
+// Wrap implements the p2p Wrapper interface and wraps a message.
 func (m *ControlMessage) Wrap(pb proto.Message) error {
 	switch msg := pb.(type) {
 	case *ValidatorChallenge:
@@ -30,8 +30,7 @@ func (m *ControlMessage) Wrap(pb proto.Message) error {
 	return nil
 }
 
-// Unwrap implements the p2p Wrapper interface and unwraps a wrapped blockchain
-// message.
+// Unwrap implements the p2p Wrapper interface and unwraps a wrapped message.
 func (m *ControlMessage) Unwrap() (proto.Message, error) {
 	switch msg := m.Sum.(type) {
 	case *ControlMessage_ValidatorChallenge:
@@ -46,14 +45,14 @@ func (m *ControlMessage) Unwrap() (proto.Message, error) {
 }
 
 // Validate validates the message returning an error upon failure.
-func (m *ControlMessage) Validate(nodeID, peerID types.NodeID, nodeProTxHash, peerProTxHash types.ProTxHash, token tmbytes.HexBytes) error {
+func (m *ControlMessage) Validate(senderID, recipientID types.NodeID, senderProTxHash, recipientProTxHash types.ProTxHash) error {
 	if m == nil {
 		return errors.New("message cannot be nil")
 	}
 
 	switch msg := m.Sum.(type) {
 	case *ControlMessage_ValidatorChallenge:
-		return msg.ValidatorChallenge.Validate(nodeID, peerID, nodeProTxHash, peerProTxHash, token)
+		return msg.ValidatorChallenge.Validate(senderID, recipientID, senderProTxHash, recipientProTxHash)
 
 	case *ControlMessage_ValidatorChallengeResponse:
 		return msg.ValidatorChallengeResponse.Validate()
@@ -66,6 +65,7 @@ func (m *ControlMessage) Validate(nodeID, peerID types.NodeID, nodeProTxHash, pe
 func NewValidatorChallenge(
 	senderNodeID, recipientNodeID types.NodeID,
 	senderProTxHash, recipientProTxHash types.ProTxHash,
+	quorumHash crypto.QuorumHash,
 ) ValidatorChallenge {
 	token := make([]byte, 12)
 	now := time.Now().UnixNano()
@@ -77,6 +77,7 @@ func NewValidatorChallenge(
 		SenderProtxhash:    senderProTxHash,
 		RecipientProtxhash: recipientProTxHash,
 		Token:              token,
+		QuorumHash:         quorumHash,
 	}
 
 	return challenge
@@ -87,7 +88,6 @@ func NewValidatorChallenge(
 func (challenge ValidatorChallenge) Validate(
 	senderNodeID, recipientNodeID types.NodeID,
 	senderProTxHash, recipientProTxHash types.ProTxHash,
-	token tmbytes.HexBytes,
 ) error {
 	if !senderNodeID.Equal(types.NodeID(challenge.GetSenderNodeId())) {
 		return fmt.Errorf("invalid sender node ID - got: %s, expected: %s", challenge.GetSenderNodeId(), senderNodeID)
@@ -110,11 +110,8 @@ func (challenge ValidatorChallenge) Validate(
 			recipientProTxHash.ShortString())
 	}
 
-	if token != nil && !token.Equal(challenge.GetToken()) {
-		return fmt.Errorf(
-			"invalid token - got: %s, expected: %s",
-			tmbytes.HexBytes(challenge.GetToken()).String(),
-			token.String())
+	if len(challenge.QuorumHash) != crypto.QuorumHashSize {
+		return fmt.Errorf("invalid quorum hash length: is: %d, expected: %d", len(challenge.QuorumHash), crypto.QuorumHashSize)
 	}
 
 	signLen := len(challenge.Signature)
@@ -133,7 +130,7 @@ func (challenge ValidatorChallenge) Digest() (tmbytes.HexBytes, error) {
 		return nil, fmt.Errorf("cannot prepare challenge bytes to sign: %w", err)
 	}
 	checksum := crypto.Checksum(signBytes)
-	// fmt.Printf("checksum: %X\n", checksum)
+
 	return checksum, nil
 }
 
@@ -184,9 +181,10 @@ func signChallenge(challenge ValidatorChallenge, privkey crypto.PrivKey) (tmbyte
 	if err != nil {
 		return nil, fmt.Errorf("cannot sign challenge: %w", err)
 	}
-	fmt.Printf("signed challenge, hash=%X, signature=%X, privkey=%X, pubkey=%X\n",
-		digest, signature, privkey, privkey.PubKey().Bytes(),
-	)
+	if len(signature) != bls12381.SignatureSize {
+		return nil, fmt.Errorf("invalid signature size (%X)", signature)
+	}
+
 	return signature, nil
 }
 

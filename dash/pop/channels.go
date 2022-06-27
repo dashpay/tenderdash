@@ -9,8 +9,6 @@ const (
 	// Dash control channel that is used to exchange dash-specific messages, like challenge-response when
 	// verifying peer validator keys
 	DashControlChannel = p2p.ChannelID(0xd0)
-
-	maxMsgSize = 1024
 )
 
 func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
@@ -20,10 +18,10 @@ func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
 		DashControlChannel: {
 			ID:                  DashControlChannel,
 			MessageType:         new(dashproto.ControlMessage),
-			Priority:            8,
+			Priority:            2,
 			SendQueueCapacity:   64,
-			RecvMessageCapacity: maxMsgSize,
-			RecvBufferCapacity:  128,
+			RecvMessageCapacity: 4096,
+			RecvBufferCapacity:  256,
 			Name:                "dash_control",
 		},
 	}

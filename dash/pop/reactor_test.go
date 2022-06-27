@@ -27,7 +27,7 @@ import (
 
 const (
 	llmqType    = btcjson.LLMQType_100_67
-	testTimeout = handshakeTimeout + 100*time.Millisecond //+ 130*time.Second
+	testTimeout = handshakeTimeout + challengeDelay + 100*time.Millisecond //+ 130*time.Second
 )
 
 func TestReactorPositive(t *testing.T) {
@@ -106,19 +106,15 @@ func TestReactorWrongBobSig(t *testing.T) {
 }
 
 func executePoP(ctx context.Context, t *testing.T, alice, bob *securityReactorInstance, expectAliceFail, expectBobFail bool) {
-	quorumHash := alice.reactor.getQuorumHash(ctx)
-	// quorumHash, err := alice.privValidator.GetFirstQuorumHash(ctx)
-	// require.NoError(t, err)
+	quorumHash := alice.reactor.getValidatorSet().QuorumHash
 
 	alicePubkey, err := alice.privValidator.GetPubKey(ctx, quorumHash)
 	require.NoError(t, err)
 	bobPubkey, err := bob.privValidator.GetPubKey(ctx, quorumHash)
 	require.NoError(t, err)
 
-	aliceProTxHash, err := alice.reactor.getProTxHash(ctx)
-	require.NoError(t, err)
-	bobProTxHash, err := bob.reactor.getProTxHash(ctx)
-	require.NoError(t, err)
+	aliceProTxHash := alice.reactor.proTxHash
+	bobProTxHash := bob.reactor.proTxHash
 
 	thresholdPublicKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(
 		[]tmcrypto.PubKey{alicePubkey, bobPubkey},
@@ -146,19 +142,6 @@ func executePoP(ctx context.Context, t *testing.T, alice, bob *securityReactorIn
 	err = bob.reactor.peerManager.Accepted(alice.nodeID(), p2p.SetProTxHashToPeerInfo(aliceProTxHash))
 	require.NoError(t, err)
 	bob.reactor.peerManager.Ready(ctx, alice.nodeID(), p2p.ChannelIDSet{})
-
-	// alice.peerUpdatesCh <- p2p.PeerUpdate{
-	// 	NodeID:    bob.nodeID(),
-	// 	Status:    p2p.PeerStatusUp,
-	// 	ProTxHash: bob.reactor.getQuorumHash(ctx),
-	// }
-
-	// ...what means that Alice also connected to Bob
-	// bob.peerUpdatesCh <- p2p.PeerUpdate{
-	// 	NodeID:    alice.nodeID(),
-	// 	Status:    p2p.PeerStatusUp,
-	// 	ProTxHash: alice.reactor.getQuorumHash(ctx),
-	// }
 
 	aliceFailed := false
 	bobFailed := false
@@ -217,12 +200,6 @@ type securityReactorInstance struct {
 	// keys
 	p2pPrivKey    tmcrypto.PrivKey
 	privValidator types.PrivValidator
-	// proTxHash     tmcrypto.ProTxHash
-
-	// channels
-
-	// peerUpdatesCh chan p2p.PeerUpdate
-	// peerUpdates   *p2p.PeerUpdates
 
 	controlInCh  chan p2p.Envelope
 	controlOutCh chan p2p.Envelope
@@ -312,7 +289,7 @@ func newSecurityReactorInstance(
 
 // Validator creates a mock validator
 func (p securityReactorInstance) Validator(ctx context.Context, t *testing.T) *types.Validator {
-	quorumHash := p.reactor.getQuorumHash(ctx)
+	quorumHash := p.reactor.getValidatorSet().QuorumHash
 	assert.NotEmpty(t, quorumHash)
 
 	validator := p.privValidator.ExtractIntoValidator(ctx, quorumHash)

@@ -320,6 +320,24 @@ func makeNode(
 	node.rpcEnv.Mempool = mp
 	node.services = append(node.services, mpReactor)
 
+	nextCoreChainLock, err := types.CoreChainLockFromProto(genDoc.InitialProposalCoreChainLock)
+	if err != nil {
+		return nil, combineCloseError(err, makeCloser(closers))
+	}
+
+	// make block executor for consensus and blockchain reactors to execute blocks
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		logger.With("module", "state"),
+		proxyApp,
+		mp,
+		evPool,
+		blockStore,
+		eventBus,
+		nodeMetrics.state,
+	)
+	blockExec.SetNextCoreChainLock(nextCoreChainLock)
+
 	if cfg.Mode == config.ModeValidator {
 		// Start dash Proof-of-Possession reactor
 		node.proofOfPossessionReactor, err = pop.NewReactor(
@@ -338,24 +356,6 @@ func makeNode(
 		}
 		node.services = append(node.services, node.proofOfPossessionReactor)
 	}
-
-	nextCoreChainLock, err := types.CoreChainLockFromProto(genDoc.InitialProposalCoreChainLock)
-	if err != nil {
-		return nil, combineCloseError(err, makeCloser(closers))
-	}
-
-	// make block executor for consensus and blockchain reactors to execute blocks
-	blockExec := sm.NewBlockExecutor(
-		stateStore,
-		logger.With("module", "state"),
-		proxyApp,
-		mp,
-		evPool,
-		blockStore,
-		eventBus,
-		nodeMetrics.state,
-	)
-	blockExec.SetNextCoreChainLock(nextCoreChainLock)
 
 	// Determine whether we should attempt state sync.
 	stateSync := cfg.StateSync.Enable && !weAreOnlyValidator

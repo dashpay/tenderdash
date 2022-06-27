@@ -15,8 +15,9 @@ message ValidatorChallenge {
   bytes  recipient_protxhash = 2;
   string sender_node_id      = 3;
   string recipient_node_id   = 4;
-  bytes  token               = 5;
-  bytes  signature           = 6;
+  bytes  quorum_hash         = 5;
+  bytes  token               = 6;
+  bytes  signature           = 7;
 }
 
 message ValidatorChallengeResponse {
