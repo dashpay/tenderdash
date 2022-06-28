@@ -26,7 +26,8 @@ type DashPrivValidator interface {
 	// QuorumSign executes quorum signature process and returns signature and signHash
 	QuorumSign(
 		ctx context.Context,
-		signItem types.SignItem,
+		msgHash []byte,
+		requestIDHash []byte,
 		quorumType btcjson.LLMQType,
 		quorumHash crypto.QuorumHash,
 	) (signature []byte, signHash []byte, err error)
@@ -252,7 +253,7 @@ func (sc *DashCoreSignerClient) SignVote(
 	}
 	blockQS := quorumSigns.Block
 
-	qs, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, blockQS)
+	qs, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, blockQS.ReqID, blockQS.Hash())
 	if err != nil {
 		return err
 	}
@@ -270,7 +271,8 @@ func (sc *DashCoreSignerClient) SignVote(
 
 	// Only sign the state when voting for the block
 	if protoVote.BlockID.Hash != nil {
-		resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, quorumSigns.State)
+		signItem := quorumSigns.State
+		resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem.ReqID, signItem.Hash())
 		if err != nil {
 			return err
 		}
@@ -291,7 +293,7 @@ func (sc *DashCoreSignerClient) SignProposal(
 		ReqID: types.ProposalRequestIDProto(proposalProto),
 		Raw:   types.ProposalBlockSignBytes(chainID, proposalProto),
 	}
-	resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
+	resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem.ReqID, signItem.Hash())
 	if err != nil {
 		return nil, err
 	}
@@ -302,11 +304,12 @@ func (sc *DashCoreSignerClient) SignProposal(
 // QuorumSign implements DashPrivValidator
 func (sc *DashCoreSignerClient) QuorumSign(
 	ctx context.Context,
-	signItem types.SignItem,
+	msgHash []byte,
+	requestIDHash []byte,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 ) ([]byte, []byte, error) {
-	qs, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
+	qs, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, requestIDHash, msgHash)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -367,7 +370,8 @@ func (sc *DashCoreSignerClient) signVoteExtensions(
 	}
 	for et, extensions := range protoVote.VoteExtensionsToMap() {
 		for i, ext := range extensions {
-			resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, quorumSignData.Extensions[et][i])
+			signItem := quorumSignData.Extensions[et][i]
+			resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem.ReqID, signItem.Hash())
 			if err != nil {
 				return err
 			}
@@ -381,9 +385,9 @@ func (sc *DashCoreSignerClient) quorumSignAndVerify(
 	ctx context.Context,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
-	signItem types.SignItem,
+	reqID, msgHash []byte,
 ) (*quorumSignResult, error) {
-	qs, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
+	qs, err := sc.quorumSign(quorumType, quorumHash, reqID, msgHash)
 	if err != nil {
 		return nil, err
 	}
@@ -391,7 +395,7 @@ func (sc *DashCoreSignerClient) quorumSignAndVerify(
 	if err != nil {
 		return nil, &RemoteSignerError{Code: 500, Description: err.Error()}
 	}
-	verified := pubKey.VerifySignatureDigest(signItem.ID, qs.sign)
+	verified := pubKey.VerifySignatureDigest(reqID, qs.sign)
 	if !verified {
 		return nil, fmt.Errorf("unable to verify signature with pubkey %s", pubKey.String())
 	}
@@ -401,9 +405,9 @@ func (sc *DashCoreSignerClient) quorumSignAndVerify(
 func (sc *DashCoreSignerClient) quorumSign(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
-	signItem types.SignItem,
+	reqID, msgHash []byte,
 ) (*quorumSignResult, error) {
-	resp, err := sc.dashCoreRPCClient.QuorumSign(quorumType, signItem.ReqID, signItem.Hash(), quorumHash)
+	resp, err := sc.dashCoreRPCClient.QuorumSign(quorumType, reqID, msgHash, quorumHash)
 	if err != nil {
 		return nil, &RemoteSignerError{Code: 500, Description: "cannot sign vote: " + err.Error()}
 	}
