@@ -727,10 +727,10 @@ func TestRecoverThresholdSignatureFromSharesCaseStudy(t *testing.T) {
 			msg:             "c9b30a2519a019ec7527e42975cbf6bbf1006a1898243230ccf5e65fbc2ede2e",
 		},
 	}
-	var err error
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
 			t.Parallel()
+			var err error
 			proTxHashes := make([][]byte, len(tc.proTxHashes))
 			sigShares := make([][]byte, len(tc.sigShares))
 			pubKeyShares := make([][]byte, len(tc.pubKeyShares))
