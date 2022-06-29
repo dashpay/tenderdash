@@ -245,7 +245,6 @@ func mustGenerateLLMQData(proTxHashes []crypto.ProTxHash, m int, sigHash bls.Has
 	llmqData, err := Generate(
 		proTxHashes,
 		WithThreshold(m),
-		WithSignHash(sigHash),
 		WithSeed(defaultSeedSource),
 	)
 	if err != nil {
@@ -257,8 +256,10 @@ func mustGenerateLLMQData(proTxHashes []crypto.ProTxHash, m int, sigHash bls.Has
 func llmqTestDataGetter(n, m int, sigHash bls.Hash) func() llmqTestCaseData {
 	return func() llmqTestCaseData {
 		llmqData := mustGenerateLLMQData(crypto.RandProTxHashes(n), m, sigHash)
-		sigShares := make([]*bls.G2Element, len(llmqData.SigShares))
-		for i, sigShare := range llmqData.SigShares {
+		signs := mustThresholdSigns(llmqData.PrivKeys, sigHash)
+		thresholdSig, blsSigShares := mustSignShares(llmqData.ProTxHashes, signs)
+		sigShares := make([]*bls.G2Element, len(blsSigShares))
+		for i, sigShare := range blsSigShares {
 			sigShares[i] = mustG2ElementFromBytes(sigShare)
 		}
 		return llmqTestCaseData{
@@ -267,7 +268,7 @@ func llmqTestDataGetter(n, m int, sigHash bls.Hash) func() llmqTestCaseData {
 			ids:              proTxHashes2BLSHashes(llmqData.ProTxHashes),
 			proTxHashes:      llmqData.ProTxHashes,
 			signHash:         sigHash,
-			wantThresholdSig: mustG2ElementFromBytes(llmqData.ThresholdSig),
+			wantThresholdSig: mustG2ElementFromBytes(thresholdSig),
 			sigShares:        sigShares,
 			pkThreshold:      mustG1ElementFromBytes(llmqData.ThresholdPubKey.Bytes()),
 		}
