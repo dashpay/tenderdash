@@ -44,9 +44,6 @@ jobs:
         run: sudo apt-get -qq --yes gcc-10-arm-linux-gnueabi g++-10-arm-linux-gnueabi
         if: "matrix.goarch == 'arm'"
       - name: install
-        env:
-          CGO_LDFLAGS: "-L/usr/local/lib -lbls-dash -lrelic_s -lgmp"
-          CGO_CXXFLAGS: "-I/usr/local/include"
         run: |
           GOOS=${{ matrix.goos }} GOARCH=${{ matrix.goarch }} make build-binary
         if: "env.GIT_DIFF != ''"
