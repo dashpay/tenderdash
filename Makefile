@@ -168,11 +168,11 @@ proto-check-breaking: check-proto-deps
 ###############################################################################
 
 build_abci:
-	CGO_ENABLED=$(CGO_ENABLED) @go build -mod=readonly -i ./abci/cmd/...
+	CGO_ENABLED=$(CGO_ENABLED) go build -mod=readonly -i ./abci/cmd/...
 .PHONY: build_abci
 
 install_abci:
-	CGO_ENABLED=$(CGO_ENABLED) @go install -mod=readonly ./abci/cmd/...
+	CGO_ENABLED=$(CGO_ENABLED) go install -mod=readonly ./abci/cmd/...
 .PHONY: install_abci
 
 
@@ -181,11 +181,11 @@ install_abci:
 ##################################################################################
 
 build_abcidump:
-	@go build -o build/abcidump ./cmd/abcidump
+	go build -o build/abcidump ./cmd/abcidump
 .PHONY: build_abcidump
 
 install_abcidump:
-	@go install ./cmd/abcidump
+	go install ./cmd/abcidump
 .PHONY: install_abcidump
 
 ###############################################################################
