@@ -19,6 +19,8 @@ jobs:
     timeout-minutes: 25
     env:
       FULLNODE_PUBKEY_KEEP: false
+      CGO_LDFLAGS: "-L/usr/local/lib -lbls-dash -lrelic_s -lgmp"
+      CGO_CXXFLAGS: "-I/usr/local/include"
     steps:
       - uses: actions/setup-go@v3.2.0
         with:

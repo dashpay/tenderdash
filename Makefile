@@ -22,12 +22,12 @@ MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURR_DIR := $(dir $(MAKEFILE_PATH))
 
 BLS_DIR="$(CURR_DIR)/third_party/bls-signatures"
-TD_CGO_LDFLAGS="-L$(BLS_DIR)/build/_deps/sodium-build \
+CGO_LDFLAGS ?= "-L$(BLS_DIR)/build/_deps/sodium-build \
 -L$(BLS_DIR)/build/_deps/relic-build/lib \
 -L$(BLS_DIR)/build/src \
 -lbls-dash -lrelic_s -lgmp"
 
-TD_CGO_CXXFLAGS="-I$(BLS_DIR)/build/_deps/relic-src/include \
+CGO_CXXFLAGS ?= "-I$(BLS_DIR)/build/_deps/relic-src/include \
 -I$(BLS_DIR)/build/_deps/relic-build/include \
 -I$(BLS_DIR)/src/src"
 

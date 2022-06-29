@@ -29,16 +29,23 @@ runs:
       with:
         path: ~/bls-cache
         key: ${{ runner.os }}-${{ inputs.arch }}-bls-${{ steps.bls-revision.outputs.hash }}
+    - name: install bls deps
+      run: sudo apt-get update -qq && sudo apt-get install -qq --yes libgmp-dev libsodium-dev
+      shell: bash
     - name: Build BLS library
-      run: make install-bls
+      run: make build-bls
       if: steps.bls-cache.outputs.cache-hit != 'true'
       shell: bash
     - name: Save BLS library
       run: |
-        mkdir -p ~/bls-cache/include
-        cp -vr /usr/local/include/bls-dash ~/bls-cache/include
-        cp -vr /usr/local/include/relic* ~/bls-cache/include
-        cp -v /usr/local/lib/libbls-dash.a ~/bls-cache/
+        mkdir -p ~/bls-cache/include/bls-dash
+        mkdir -p ~/bls-cache/lib
+        cp -r ./third_party/bls-signatures/build/_deps/sodium-build/libsodium.a ~/bls-cache/lib
+        cp -r ./third_party/bls-signatures/build/_deps/relic-build/lib/librelic_s.a ~/bls-cache/lib
+        cp -r ./third_party/bls-signatures/build/src/libbls-dash.a ~/bls-cache/lib
+        cp -rv ./third_party/bls-signatures/build/_deps/relic-src/include/* ~/bls-cache/include
+        cp -rv ./third_party/bls-signatures/build/_deps/relic-build/include/* ~/bls-cache/include
+        cp -rv ./third_party/bls-signatures/src/src/* ~/bls-cache/include/bls-dash
       if: steps.bls-cache.outputs.cache-hit != 'true'
       shell: bash
     - uses: actions/cache@v2.1.2
@@ -49,5 +56,5 @@ runs:
     - name: Install BLS library
       run: |
         sudo cp -vr ~/bls-cache/include/* /usr/local/include/
-        sudo cp -vr ~/bls-cache/libbls-dash.a /usr/local/lib/
+        sudo cp -vr ~/bls-cache/lib/* /usr/local/lib/
       shell: bash
