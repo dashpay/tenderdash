@@ -29,7 +29,7 @@ CGO_LDFLAGS ?= "-L$(BLS_DIR)/build/_deps/sodium-build \
 
 CGO_CXXFLAGS ?= "-I$(BLS_DIR)/build/_deps/relic-src/include \
 -I$(BLS_DIR)/build/_deps/relic-build/include \
--I$(BLS_DIR)/src/src"
+-I$(BLS_DIR)/build/src"
 
 # handle ARM builds
 ifeq (arm,$(GOARCH))
