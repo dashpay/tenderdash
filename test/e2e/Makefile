@@ -9,7 +9,7 @@ node:
 	GOTRACEBACK=crash go build -gcflags="all=-N -l" -o build/node -tags badgerdb,boltdb,cleveldb,rocksdb ./node
 
 e2e/app/compile:
-	docker run --rm -it --entrypoint "/src/tenderdash/test/e2e/entrypoint.sh" -w "/src/tenderdash/test/e2e" -v $(ROOT_PATH):/src/tenderdash tenderdash/e2e-node
+	docker run --rm -it --entrypoint "/src/tenderdash/test/e2e/entrypoint.sh" -w "/src/tenderdash/test/e2e" -v $(ROOT_PATH)/test/e2e:/src/tenderdash/test/e2e tenderdash/e2e-node
 
 runner/simple: runner tests e2e/app/compile
 	./build/runner -f networks/simple.toml
