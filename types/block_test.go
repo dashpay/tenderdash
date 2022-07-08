@@ -56,7 +56,8 @@ func TestBlockAddEvidence(t *testing.T) {
 	require.NoError(t, err)
 	evList := []Evidence{ev}
 
-	block := MakeBlock(h, coreChainLock.CoreBlockHeight, &coreChainLock, txs, commit, evList, 0)
+	block := MakeBlock(h, txs, commit, evList)
+	block.SetDashParams(coreChainLock.CoreBlockHeight, &coreChainLock, 0)
 	require.NotNil(t, block)
 	require.Equal(t, 1, len(block.Evidence))
 	require.NotNil(t, block.EvidenceHash)
@@ -131,7 +132,7 @@ func TestBlockValidateBasic(t *testing.T) {
 		tcRun := tc
 		j := i
 		t.Run(tcRun.testName, func(t *testing.T) {
-			block := MakeBlock(h, 0, nil, txs, commit, evList, 0)
+			block := MakeBlock(h, txs, commit, evList)
 			block.ProposerProTxHash = valSet.GetProposer().ProTxHash
 			tcRun.malleateBlock(block)
 			err = block.ValidateBasic()
@@ -142,7 +143,7 @@ func TestBlockValidateBasic(t *testing.T) {
 
 func TestBlockHash(t *testing.T) {
 	assert.Nil(t, (*Block)(nil).Hash())
-	assert.Nil(t, MakeBlock(int64(3), 0, nil, []Tx{Tx("Hello World")}, nil, nil, 0).Hash())
+	assert.Nil(t, MakeBlock(int64(3), []Tx{Tx("Hello World")}, nil, nil).Hash())
 }
 
 func TestBlockMakePartSet(t *testing.T) {
@@ -150,7 +151,7 @@ func TestBlockMakePartSet(t *testing.T) {
 	assert.Error(t, err)
 	assert.Nil(t, bps)
 
-	partSet, err := MakeBlock(int64(3), 0, nil, []Tx{Tx("Hello World")}, nil, nil, 0).MakePartSet(1024)
+	partSet, err := MakeBlock(int64(3), []Tx{Tx("Hello World")}, nil, nil).MakePartSet(1024)
 	require.NoError(t, err)
 
 	assert.NotNil(t, partSet)
@@ -178,7 +179,7 @@ func TestBlockMakePartSetWithEvidence(t *testing.T) {
 	require.NoError(t, err)
 	evList := []Evidence{ev}
 
-	partSet, err := MakeBlock(h, 0, nil, []Tx{Tx("Hello World")}, commit, evList, 0).MakePartSet(512)
+	partSet, err := MakeBlock(h, []Tx{Tx("Hello World")}, commit, evList).MakePartSet(512)
 	require.NoError(t, err)
 
 	// The part set can be either 3 or 4 parts, this is because of variance in sizes due to the non second part of
@@ -205,7 +206,7 @@ func TestBlockHashesTo(t *testing.T) {
 	require.NoError(t, err)
 	evList := []Evidence{ev}
 
-	block := MakeBlock(h, 0, nil, []Tx{Tx("Hello World")}, commit, evList, 0)
+	block := MakeBlock(h, []Tx{Tx("Hello World")}, commit, evList)
 	block.ValidatorsHash = valSet.Hash()
 	assert.False(t, block.HashesTo([]byte{}))
 	assert.False(t, block.HashesTo([]byte("something else")))
@@ -213,7 +214,7 @@ func TestBlockHashesTo(t *testing.T) {
 }
 
 func TestBlockSize(t *testing.T) {
-	size := MakeBlock(int64(3), 0, nil, []Tx{Tx("Hello World")}, nil, nil, 0).Size()
+	size := MakeBlock(int64(3), []Tx{Tx("Hello World")}, nil, nil).Size()
 	if size <= 0 {
 		t.Fatal("Size of the block is zero or negative")
 	}
@@ -224,7 +225,7 @@ func TestBlockString(t *testing.T) {
 	assert.Equal(t, "nil-Block", (*Block)(nil).StringIndented(""))
 	assert.Equal(t, "nil-Block", (*Block)(nil).StringShort())
 
-	block := MakeBlock(int64(3), 0, nil, []Tx{Tx("Hello World")}, nil, nil, 0)
+	block := MakeBlock(int64(3), []Tx{Tx("Hello World")}, nil, nil)
 	assert.NotEqual(t, "nil-Block", block.String())
 	assert.NotEqual(t, "nil-Block", block.StringIndented(""))
 	assert.NotEqual(t, "nil-Block", block.StringShort())
@@ -683,10 +684,10 @@ func TestBlockProtoBuf(t *testing.T) {
 	h := mrand.Int63()
 	stateID := RandStateID().WithHeight(h - 1)
 	c1 := randCommit(ctx, t, stateID)
-	b1 := MakeBlock(h, 0, nil, []Tx{Tx([]byte{1})}, &Commit{}, []Evidence{}, 0)
+	b1 := MakeBlock(h, []Tx{Tx([]byte{1})}, &Commit{}, []Evidence{})
 	b1.ProposerProTxHash = tmrand.Bytes(crypto.DefaultHashSize)
 
-	b2 := MakeBlock(h, 0, nil, []Tx{Tx([]byte{1})}, c1, []Evidence{}, 0)
+	b2 := MakeBlock(h, []Tx{Tx([]byte{1})}, c1, []Evidence{})
 	b2.ProposerProTxHash = tmrand.Bytes(crypto.DefaultHashSize)
 	evidenceTime := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
 	evi, err := NewMockDuplicateVoteEvidence(
@@ -701,7 +702,7 @@ func TestBlockProtoBuf(t *testing.T) {
 	b2.Evidence = EvidenceList{evi}
 	b2.EvidenceHash = b2.Evidence.Hash()
 
-	b3 := MakeBlock(h, 0, nil, []Tx{}, c1, []Evidence{}, 0)
+	b3 := MakeBlock(h, []Tx{}, c1, []Evidence{})
 	b3.ProposerProTxHash = tmrand.Bytes(crypto.DefaultHashSize)
 	testCases := []struct {
 		msg      string

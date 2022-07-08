@@ -64,7 +64,8 @@ func makeAndApplyGoodBlock(
 	proposedAppVersion uint64,
 ) (sm.State, types.BlockID) {
 	t.Helper()
-	block := state.MakeBlock(height, nil, factory.MakeNTxs(height, 10), lastCommit, evidence, proposerProTxHash, proposedAppVersion)
+	block := state.MakeBlock(height, factory.MakeNTxs(height, 10), lastCommit, evidence, proposerProTxHash)
+	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nil, proposedAppVersion)
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 
@@ -145,7 +146,7 @@ func makeHeaderPartsResponsesValPowerChange(
 ) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
 	t.Helper()
 
-	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), nil, 0)
+	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
 	require.NoError(t, err)
 
 	abciResponses := &tmstate.ABCIResponses{}
@@ -174,7 +175,7 @@ func makeHeaderPartsResponsesValPowerChange(
 }
 
 func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, regenerate bool) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
-	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), nil, 0)
+	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
 	if err != nil {
 		t.Error(err)
 	}
@@ -198,7 +199,7 @@ func makeHeaderPartsResponsesParams(
 ) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
 	t.Helper()
 
-	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), nil, 0)
+	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
 	require.NoError(t, err)
 	pbParams := params.ToProto()
 	abciResponses := &tmstate.ABCIResponses{

@@ -81,7 +81,8 @@ func TestEventBusPublishEventNewBlock(t *testing.T) {
 	err := eventBus.Start(ctx)
 	require.NoError(t, err)
 
-	block := types.MakeBlock(0, 0, nil, []types.Tx{}, nil, []types.Evidence{}, 1)
+	block := types.MakeBlock(0, []types.Tx{}, nil, []types.Evidence{})
+	block.SetDashParams(0, nil, 1)
 	bps, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
@@ -253,7 +254,8 @@ func TestEventBusPublishEventNewBlockHeader(t *testing.T) {
 	err := eventBus.Start(ctx)
 	require.NoError(t, err)
 
-	block := types.MakeBlock(0, 0, nil, []types.Tx{}, nil, []types.Evidence{}, 1)
+	block := types.MakeBlock(0, []types.Tx{}, nil, []types.Evidence{})
+	block.SetDashParams(0, nil, 1)
 	resultFinalizeBlock := abci.ResponseFinalizeBlock{
 		Events: []abci.Event{
 			{Type: "testType", Attributes: []abci.EventAttribute{

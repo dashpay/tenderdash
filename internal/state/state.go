@@ -302,23 +302,14 @@ func FromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 // track rounds, and hence does not know the correct proposer. TODO: fix this!
 func (state State) MakeBlock(
 	height int64,
-	coreChainLock *types.CoreChainLock,
 	txs []types.Tx,
 	commit *types.Commit,
 	evidence []types.Evidence,
 	proposerProTxHash types.ProTxHash,
-	proposedAppVersion uint64,
 ) *types.Block {
 
-	var coreChainLockHeight uint32
-	if coreChainLock == nil {
-		coreChainLockHeight = state.LastCoreChainLockedBlockHeight
-	} else {
-		coreChainLockHeight = coreChainLock.CoreBlockHeight
-	}
-
 	// Build base block with block data.
-	block := types.MakeBlock(height, coreChainLockHeight, coreChainLock, txs, commit, evidence, proposedAppVersion)
+	block := types.MakeBlock(height, txs, commit, evidence)
 
 	// Fill rest of header with state data.
 	block.Header.Populate(

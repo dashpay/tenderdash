@@ -640,8 +640,8 @@ func makeState(nVals int, height int64) (sm.State, dbm.DB, map[string]types.Priv
 
 func makeBlock(state sm.State, height int64, commit *types.Commit) *types.Block {
 	return state.MakeBlock(
-		height, nil, makeTxs(state.LastBlockHeight),
-		commit, nil, state.Validators.GetProposer().ProTxHash, 0,
+		height, makeTxs(state.LastBlockHeight),
+		commit, nil, state.Validators.GetProposer().ProTxHash,
 	)
 }
 

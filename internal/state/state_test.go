@@ -113,7 +113,7 @@ func TestABCIResponsesSaveLoad1(t *testing.T) {
 	state.LastBlockHeight++
 
 	// Build mock responses.
-	block, err := statefactory.MakeBlock(state, 2, new(types.Commit), nil, 0)
+	block, err := statefactory.MakeBlock(state, 2, new(types.Commit))
 	require.NoError(t, err)
 
 	abciResponses := new(tmstate.ABCIResponses)
@@ -461,7 +461,7 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	// NewValidatorSet calls IncrementProposerPriority but uses on a copy of val1
 	assert.EqualValues(t, 0, val1.ProposerPriority)
 
-	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), nil, 0)
+	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
 	require.NoError(t, err)
 	blockID, err := block.BlockID()
 	require.NoError(t, err)
@@ -599,7 +599,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	// we only have one validator:
 	assert.Equal(t, val1ProTxHash, state.Validators.Proposer.ProTxHash)
 
-	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), nil, 0)
+	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
 	require.NoError(t, err)
 	blockID, err := block.BlockID()
 	require.NoError(t, err)
@@ -974,7 +974,7 @@ func TestStateMakeBlock(t *testing.T) {
 	stateVersion := state.Version.Consensus
 	var height int64 = 2
 	state.LastBlockHeight = height - 1
-	block, err := statefactory.MakeBlock(state, height, new(types.Commit), nil, 0)
+	block, err := statefactory.MakeBlock(state, height, new(types.Commit))
 	require.NoError(t, err)
 
 	// test we set some fields
@@ -1119,7 +1119,7 @@ func blockExecutorFunc(t *testing.T, firstProTxHash crypto.ProTxHash) func(prevS
 		validatorUpdates, thresholdPubKey, quorumHash, err :=
 			types.PB2TM.ValidatorUpdatesFromValidatorSet(resp.FinalizeBlock.ValidatorSetUpdate)
 		require.NoError(t, err)
-		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit), nil, 0)
+		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit))
 		require.NoError(t, err)
 		blockID, err := block.BlockID()
 		require.NoError(t, err)

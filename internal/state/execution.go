@@ -121,7 +121,8 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 
 	txs := blockExec.mempool.ReapMaxBytesMaxGas(maxDataBytes, maxGas)
-	block := state.MakeBlock(height, nextCoreChainLock, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
+	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash)
+	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion)
 
 	localLastCommit := buildLastCommitInfo(block, blockExec.store, state.InitialHeight)
 	rpp, err := blockExec.appClient.PrepareProposal(
@@ -164,16 +165,15 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		}
 	}
 	itxs := txrSet.IncludedTxs()
-
-	return state.MakeBlock(
+	block = state.MakeBlock(
 		height,
-		nextCoreChainLock,
 		itxs,
 		commit,
 		evidence,
 		proposerProTxHash,
-		proposedAppVersion,
-	), nil
+	)
+	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion)
+	return block, nil
 }
 
 func (blockExec *BlockExecutor) ProcessProposal(
