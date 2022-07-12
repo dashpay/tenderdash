@@ -125,6 +125,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion)
 
 	localLastCommit := buildLastCommitInfo(block, blockExec.store, state.InitialHeight)
+	version := block.Version.ToProto()
 	rpp, err := blockExec.appClient.PrepareProposal(
 		ctx,
 		&abci.RequestPrepareProposal{
@@ -140,6 +141,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 			CoreChainLockedHeight: block.CoreChainLockedHeight,
 			ProposerProTxHash:     block.ProposerProTxHash,
 			ProposedAppVersion:    block.ProposedAppVersion,
+			Version:               &version,
 		},
 	)
 	if err != nil {
@@ -264,6 +266,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	}
 	startTime := time.Now().UnixNano()
 	txs := block.Txs.ToSliceOfBytes()
+	version := block.Header.Version.ToProto()
 	finalizeBlockResponse, err := blockExec.appClient.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
@@ -279,6 +282,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 			ProposerProTxHash:     block.ProposerProTxHash,
 			CoreChainLockedHeight: block.CoreChainLockedHeight,
 			ProposedAppVersion:    block.ProposedAppVersion,
+			Version:               &version,
 		},
 	)
 	endTime := time.Now().UnixNano()
@@ -726,6 +730,7 @@ func ExecCommitBlock(
 	initialHeight int64,
 	s State,
 ) ([]byte, error) {
+	version := block.Header.Version.ToProto()
 	finalizeBlockResponse, err := appConn.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
@@ -735,6 +740,12 @@ func ExecCommitBlock(
 			Txs:                 block.Txs.ToSliceOfBytes(),
 			DecidedLastCommit:   buildLastCommitInfo(block, store, initialHeight),
 			ByzantineValidators: block.Evidence.ToABCI(),
+
+			// Dash's fields
+			CoreChainLockedHeight: block.CoreChainLockedHeight,
+			ProposerProTxHash:     block.ProposerProTxHash,
+			ProposedAppVersion:    block.ProposedAppVersion,
+			Version:               &version,
 		},
 	)
 
