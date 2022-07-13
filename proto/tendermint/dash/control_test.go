@@ -34,7 +34,7 @@ func TestControlChallengeResponse(t *testing.T) {
 	// host B: validate and verify challenge, sign and send response
 	assert.NoError(t, hostAChallenge.Validate(hostANodeID, hostBNodeID, hostAProTXHash, hostBProTXHash))
 	assert.NoError(t, hostAChallenge.Verify(hostAPubkey))
-	response, err := hostAChallenge.Response(hostBPrivkey)
+	response, err := NewResponse(hostAChallenge, hostBPrivkey)
 	assert.NoError(t, err)
 
 	// host A: verify response
@@ -58,10 +58,10 @@ func TestControlValidate(t *testing.T) {
 			Description: "ValidatorChallenge valid",
 			Sum: &ControlMessage_ValidatorChallenge{
 				ValidatorChallenge: &ValidatorChallenge{
-					SenderProtxhash:    senderProTxHash,
-					RecipientProtxhash: recipientProTxHash,
-					SenderNodeId:       senderID,
-					RecipientNodeId:    recipientID,
+					SenderProTxHash:    senderProTxHash,
+					RecipientProTxHash: recipientProTxHash,
+					SenderNodeID:       senderID,
+					RecipientNodeID:    recipientID,
 					QuorumHash:         quorumHash,
 					Token:              token,
 					Signature:          nil,
@@ -72,10 +72,10 @@ func TestControlValidate(t *testing.T) {
 			Description: "ValidatorChallenge+sig valid",
 			Sum: &ControlMessage_ValidatorChallenge{
 				ValidatorChallenge: &ValidatorChallenge{
-					SenderProtxhash:    senderProTxHash,
-					RecipientProtxhash: recipientProTxHash,
-					SenderNodeId:       senderID,
-					RecipientNodeId:    recipientID,
+					SenderProTxHash:    senderProTxHash,
+					RecipientProTxHash: recipientProTxHash,
+					SenderNodeID:       senderID,
+					RecipientNodeID:    recipientID,
 					QuorumHash:         quorumHash,
 					Token:              token,
 					Signature:          rand.Bytes(bls12381.SignatureSize),
@@ -86,10 +86,10 @@ func TestControlValidate(t *testing.T) {
 			Description: "ValidatorChallenge+sig wrong recipient hash",
 			Sum: &ControlMessage_ValidatorChallenge{
 				ValidatorChallenge: &ValidatorChallenge{
-					SenderProtxhash:    senderProTxHash,
-					RecipientProtxhash: crypto.RandProTxHash(),
-					SenderNodeId:       senderID,
-					RecipientNodeId:    recipientID,
+					SenderProTxHash:    senderProTxHash,
+					RecipientProTxHash: crypto.RandProTxHash(),
+					SenderNodeID:       senderID,
+					RecipientNodeID:    recipientID,
 					QuorumHash:         quorumHash,
 					Token:              []byte{0x1, 0x2, 0x3, 0x4},
 					Signature:          rand.Bytes(bls12381.SignatureSize),
@@ -101,10 +101,10 @@ func TestControlValidate(t *testing.T) {
 			Description: "ValidatorChallenge+sig wrong sig",
 			Sum: &ControlMessage_ValidatorChallenge{
 				ValidatorChallenge: &ValidatorChallenge{
-					SenderProtxhash:    senderProTxHash,
-					RecipientProtxhash: recipientProTxHash,
-					SenderNodeId:       senderID,
-					RecipientNodeId:    recipientID,
+					SenderProTxHash:    senderProTxHash,
+					RecipientProTxHash: recipientProTxHash,
+					SenderNodeID:       senderID,
+					RecipientNodeID:    recipientID,
 					QuorumHash:         quorumHash,
 					Token:              token,
 					Signature:          rand.Bytes(bls12381.SignatureSize - 1),

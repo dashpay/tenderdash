@@ -141,20 +141,41 @@ func (resolver peerManagerResolver) Resolve(ctx context.Context, va types.Valida
 	return nodeAddress, err
 }
 
+// lookupIPPort searches through peer manager to determine which peer has given ip and port and returns its NodeAddress
 func (resolver peerManagerResolver) lookupIPPort(ctx context.Context, ip net.IP, port uint16) (p2p.NodeAddress, error) {
 	peers := resolver.peerManager.Peers()
 	for _, nodeID := range peers {
 		addresses := resolver.peerManager.Addresses(nodeID)
-		for _, addr := range addresses {
-			if endpoints, err := addr.Resolve(ctx); err != nil {
-				for _, item := range endpoints {
-					if item.IP.Equal(ip) && item.Port == port {
-						return item.NodeAddress(nodeID), nil
-					}
-				}
-			}
+		if endpoint := findEndpointInAddresses(ctx, addresses, ip, port); endpoint != nil {
+			return endpoint.NodeAddress(nodeID), nil
 		}
 	}
 
 	return p2p.NodeAddress{}, p2p.ErrPeerNotFound(fmt.Errorf("peer %s:%d not found in the address book", ip, port))
+}
+
+// findEndpointInAddresses returns endpoint with provided ip and port from the list of addresses, or nil if not found
+func findEndpointInAddresses(ctx context.Context, addresses []p2p.NodeAddress, ip net.IP, port uint16) *p2p.Endpoint {
+	for _, addr := range addresses {
+		endpoints, err := addr.Resolve(ctx)
+		if err != nil {
+			continue // ignore invalid address
+		}
+		if endpoint := findEndpoint(endpoints, ip, port); endpoint != nil {
+			return endpoint
+		}
+	}
+
+	return nil
+}
+
+// findEndpoint returns endpoint with provided ip and port in the list of endpoints, or nil if not found
+func findEndpoint(endpoints []*p2p.Endpoint, ip net.IP, port uint16) *p2p.Endpoint {
+	for _, item := range endpoints {
+		if item.IP.Equal(ip) && item.Port == port {
+			return item
+		}
+	}
+
+	return nil
 }

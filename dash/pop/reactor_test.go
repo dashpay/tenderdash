@@ -9,7 +9,6 @@ import (
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
 	db "github.com/tendermint/tm-db"
 
 	tmcrypto "github.com/tendermint/tendermint/crypto"

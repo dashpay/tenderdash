@@ -72,10 +72,10 @@ func NewValidatorChallenge(
 	binary.LittleEndian.PutUint64(token, uint64(now))
 
 	challenge := ValidatorChallenge{
-		SenderNodeId:       string(senderNodeID),
-		RecipientNodeId:    string(recipientNodeID),
-		SenderProtxhash:    senderProTxHash,
-		RecipientProtxhash: recipientProTxHash,
+		SenderNodeID:       string(senderNodeID),
+		RecipientNodeID:    string(recipientNodeID),
+		SenderProTxHash:    senderProTxHash,
+		RecipientProTxHash: recipientProTxHash,
 		Token:              token,
 		QuorumHash:         quorumHash,
 	}
@@ -89,24 +89,24 @@ func (challenge ValidatorChallenge) Validate(
 	senderNodeID, recipientNodeID types.NodeID,
 	senderProTxHash, recipientProTxHash types.ProTxHash,
 ) error {
-	if !senderNodeID.Equal(types.NodeID(challenge.GetSenderNodeId())) {
-		return fmt.Errorf("invalid sender node ID - got: %s, expected: %s", challenge.GetSenderNodeId(), senderNodeID)
+	if !senderNodeID.Equal(types.NodeID(challenge.GetSenderNodeID())) {
+		return fmt.Errorf("invalid sender node ID - got: %s, expected: %s", challenge.GetSenderNodeID(), senderNodeID)
 	}
-	if !recipientNodeID.Equal(types.NodeID(challenge.GetRecipientNodeId())) {
-		return fmt.Errorf("invalid recipient node ID - got: %s, expected: %s", challenge.GetRecipientNodeId(), recipientNodeID)
+	if !recipientNodeID.Equal(types.NodeID(challenge.GetRecipientNodeID())) {
+		return fmt.Errorf("invalid recipient node ID - got: %s, expected: %s", challenge.GetRecipientNodeID(), recipientNodeID)
 	}
 
-	if !senderProTxHash.Equal(challenge.GetSenderProtxhash()) {
+	if !senderProTxHash.Equal(challenge.GetSenderProTxHash()) {
 		return fmt.Errorf(
 			"invalid sender node proTxHash - got: %s, expected: %s",
-			tmbytes.HexBytes(challenge.GetSenderProtxhash()).ShortString(),
+			tmbytes.HexBytes(challenge.GetSenderProTxHash()).ShortString(),
 			senderProTxHash.ShortString())
 	}
 
-	if !recipientProTxHash.Equal(challenge.GetRecipientProtxhash()) {
+	if !recipientProTxHash.Equal(challenge.GetRecipientProTxHash()) {
 		return fmt.Errorf(
 			"invalid recipient node proTxHash - got: %s, expected: %s",
-			tmbytes.HexBytes(challenge.GetRecipientProtxhash()).ShortString(),
+			tmbytes.HexBytes(challenge.GetRecipientProTxHash()).ShortString(),
 			recipientProTxHash.ShortString())
 	}
 
@@ -150,8 +150,8 @@ func (challenge ValidatorChallenge) Verify(pubkey crypto.PubKey) error {
 	return verifyChallengeSignature(challenge, challenge.GetSignature(), pubkey)
 }
 
-// Response generates a response for a given challenge.
-func (challenge ValidatorChallenge) Response(privKey crypto.PrivKey) (ValidatorChallengeResponse, error) {
+// NewResponse generates a response for a given challenge.
+func NewResponse(challenge ValidatorChallenge, privKey crypto.PrivKey) (ValidatorChallengeResponse, error) {
 	signature, err := signChallenge(challenge, privKey)
 	if err != nil {
 		return ValidatorChallengeResponse{}, err
@@ -180,9 +180,6 @@ func signChallenge(challenge ValidatorChallenge, privkey crypto.PrivKey) (tmbyte
 	signature, err := privkey.SignDigest(digest)
 	if err != nil {
 		return nil, fmt.Errorf("cannot sign challenge: %w", err)
-	}
-	if len(signature) != bls12381.SignatureSize {
-		return nil, fmt.Errorf("invalid signature size (%X)", signature)
 	}
 
 	return signature, nil

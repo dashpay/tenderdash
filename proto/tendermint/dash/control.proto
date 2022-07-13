@@ -1,6 +1,8 @@
 syntax = "proto3";
 package tendermint.dash;
 
+import "gogoproto/gogo.proto";
+
 option go_package = "github.com/tendermint/tendermint/proto/tendermint/dash";
 
 message ControlMessage {
@@ -11,10 +13,10 @@ message ControlMessage {
 }
 
 message ValidatorChallenge {
-  bytes  sender_protxhash    = 1;
-  bytes  recipient_protxhash = 2;
-  string sender_node_id      = 3;
-  string recipient_node_id   = 4;
+  bytes  sender_protxhash    = 1 [(gogoproto.customname) = "SenderProTxHash"];
+  bytes  recipient_protxhash = 2 [(gogoproto.customname) = "RecipientProTxHash"];
+  string sender_node_id      = 3 [(gogoproto.customname) = "SenderNodeID"];
+  string recipient_node_id   = 4 [(gogoproto.customname) = "RecipientNodeID"];
   bytes  quorum_hash         = 5;
   bytes  token               = 6;
   bytes  signature           = 7;
