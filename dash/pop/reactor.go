@@ -12,6 +12,7 @@ import (
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/p2p"
 	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
+	"github.com/tendermint/tendermint/internal/state"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -34,7 +35,7 @@ const (
 	// challengeDelay defines time we wait before sending challenge to let connection fully set up
 	challengeDelay = 1000 * time.Millisecond
 
-	serviceName = "dash_proof-of-possession"
+	serviceName = "dash_pop"
 )
 
 var (
@@ -57,11 +58,11 @@ type Reactor struct {
 	peerEvents     p2p.PeerEventSubscriber // peerEvents is a subscription for peer up/down notifications
 	eventBus       *eventbus.EventBus      // eventBus propagates validator set updates
 	peerManager    *p2p.PeerManager        // peerManager allows interaction with peers
+	stateStore     state.Store
 
 	nodeID        types.NodeID
 	proTxHash     tmcrypto.ProTxHash // proTxHash is cached, use getProTxHash() to retrieve
 	privValidator types.PrivValidator
-	validators    *types.ValidatorSet
 
 	challenges         map[types.NodeID]dashproto.ValidatorChallenge
 	timers             map[types.NodeID]*time.Timer
@@ -80,6 +81,7 @@ func NewReactor(
 	privval types.PrivValidator,
 	validatorSet *types.ValidatorSet,
 	peerManager *p2p.PeerManager,
+	stateStore state.Store,
 	resolvers []p2p.NodeIDResolver,
 ) (*Reactor, error) {
 	if peerManager == nil {
@@ -93,10 +95,10 @@ func NewReactor(
 		peerEvents:  peerEvents,
 		eventBus:    eventBus,
 		peerManager: peerManager,
+		stateStore:  stateStore,
 
 		nodeID:        myNodeID,
 		privValidator: privval,
-		validators:    validatorSet,
 
 		challenges:         map[types.NodeID]dashproto.ValidatorChallenge{},
 		timers:             map[types.NodeID]*time.Timer{},
@@ -134,6 +136,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	}
 	go r.valUpdatesRoutine(ctx, valUpdateSub)
 
+	r.logger.Debug("dash proof of possession started", "node_id", r.nodeID)
 	return nil
 }
 
@@ -185,19 +188,12 @@ func (r *Reactor) valUpdatesRoutine(ctx context.Context, validatorUpdatesSub eve
 		}
 		r.logger.Debug("received validator set update", "quorum", event.QuorumHash)
 
-		r.setValidatorSet(types.NewValidatorSet(
-			event.ValidatorSetUpdates,
-			event.ThresholdPublicKey,
-			event.QuorumType,
-			event.QuorumHash,
-			true,
-		))
-		r.updateValidators(ctx, event.ValidatorSetUpdates, event.QuorumHash)
+		r.updateValidators(ctx, event.ValidatorSetUpdates)
 	}
 }
 
 // updateValidators executes proof-of-possession for new, not yet verified, validators
-func (r *Reactor) updateValidators(ctx context.Context, validators []*types.Validator, quorumHash tmcrypto.QuorumHash) {
+func (r *Reactor) updateValidators(ctx context.Context, validators []*types.Validator) {
 	for _, validator := range validators {
 		peerID := validator.NodeAddress.NodeID
 		if peerID == "" {
@@ -206,7 +202,7 @@ func (r *Reactor) updateValidators(ctx context.Context, validators []*types.Vali
 				continue
 			}
 		}
-		go r.proofOfPossessionRoutine(ctx, peerID, validator.ProTxHash, quorumHash)
+		go r.proofOfPossessionRoutine(ctx, peerID, validator.ProTxHash)
 	}
 }
 
@@ -221,27 +217,26 @@ func (r *Reactor) peerUpdatesRoutine(ctx context.Context, peerUpdates *p2p.PeerU
 			r.logger.Debug("received peer update", "peer", peerUpdate.NodeID, "update", peerUpdate)
 
 			if peerUpdate.Status == p2p.PeerStatusUp {
-				quorumHash := r.getValidatorSet().QuorumHash
-				go r.proofOfPossessionRoutine(ctx, peerUpdate.NodeID, peerUpdate.ProTxHash, quorumHash)
+				go r.proofOfPossessionRoutine(ctx, peerUpdate.NodeID, peerUpdate.ProTxHash)
 			}
 		}
 	}
 }
 
-func (r *Reactor) proofOfPossessionRoutine(ctx context.Context, peerID types.NodeID, peerProTxHash tmcrypto.ProTxHash, quorumHash tmcrypto.QuorumHash) {
+func (r *Reactor) proofOfPossessionRoutine(ctx context.Context, peerID types.NodeID, peerProTxHash tmcrypto.ProTxHash) {
 	select {
 	case <-ctx.Done():
 		r.logger.Debug("executeProofOfPossession: ctx done", "peer", peerID, "peer_protxhash", peerProTxHash, "error", ctx.Err())
 		return
 	case <-time.After(challengeDelay):
-		if err := r.doProofOfPossession(ctx, peerID, peerProTxHash, quorumHash); err != nil {
+		if err := r.doProofOfPossession(ctx, peerID, peerProTxHash); err != nil {
 			r.logger.Error("cannot execute peer update", "peer", peerID, "peer_protxhash", peerProTxHash, "error", err)
 		}
 	}
 }
 
 // executeProofOfPossession starts proof-of-possession protocol for peers that need it.
-func (r *Reactor) doProofOfPossession(ctx context.Context, peerID types.NodeID, peerProTxHash tmcrypto.ProTxHash, quorumHash tmcrypto.QuorumHash) error {
+func (r *Reactor) doProofOfPossession(ctx context.Context, peerID types.NodeID, peerProTxHash tmcrypto.ProTxHash) error {
 	if err := r.needsProofOfPossession(ctx, peerID, peerProTxHash); err != nil {
 		r.logger.Debug("proof-of-possession not needed", "peer", peerID, "peer_protxhash", peerProTxHash, "reason", err)
 		return nil // not an error
@@ -250,7 +245,7 @@ func (r *Reactor) doProofOfPossession(ctx context.Context, peerID types.NodeID, 
 
 	subctx, cancel := context.WithTimeout(ctx, challengeProcessingTimeout)
 	defer cancel()
-	if err := r.sendChallenge(subctx, peerID, peerProTxHash, quorumHash); err != nil {
+	if err := r.sendChallenge(subctx, peerID, peerProTxHash); err != nil {
 		return fmt.Errorf("cannot send challenge to peer: %w", err)
 	}
 
@@ -299,8 +294,8 @@ func (r *Reactor) unscheduleTimeout(peerID types.NodeID) error {
 }
 
 // sendChallenge prepares and sends a challenge to peer
-func (r *Reactor) sendChallenge(ctx context.Context, peerID types.NodeID, peerProTxHash tmcrypto.ProTxHash, quorumHash tmcrypto.QuorumHash) error {
-	challenge, err := r.newPeerChallenge(ctx, peerID, peerProTxHash, quorumHash)
+func (r *Reactor) sendChallenge(ctx context.Context, peerID types.NodeID, peerProTxHash tmcrypto.ProTxHash) error {
+	challenge, err := r.newPeerChallenge(ctx, peerID, peerProTxHash)
 	if err != nil {
 		return err
 	}
@@ -366,7 +361,7 @@ func (r *Reactor) recvControlChannelRoutine(ctx context.Context) {
 func (r *Reactor) processValidatorChallenge(ctx context.Context, challenge *dashproto.ValidatorChallenge, senderID types.NodeID) error {
 	if err := r.checkChallenge(ctx, challenge, senderID); err != nil {
 		if err2 := r.punishPeer(ctx, senderID, err); err2 != nil {
-			return err
+			return err2
 		}
 		return err
 	}
@@ -379,12 +374,20 @@ func (r *Reactor) processValidatorChallenge(ctx context.Context, challenge *dash
 	return nil
 }
 
-func (r *Reactor) findValidator(ctx context.Context, protxhash tmcrypto.ProTxHash) (*types.Validator, error) {
+func (r *Reactor) findValidator(ctx context.Context, protxhash tmcrypto.ProTxHash, height int64) (*types.Validator, error) {
 	// FIXME: this only finds current validators, we should also be able to check historical validators
 	// (maybe using state.Store?)
-	_, val := r.getValidatorSet().GetByProTxHash(protxhash)
-	if val == nil || val.PubKey == nil {
+	valset, err := r.stateStore.LoadValidators(height)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load validator set at height %d: %w", height, err)
+	}
+
+	_, val := valset.GetByProTxHash(protxhash)
+	if val == nil {
 		return nil, fmt.Errorf("validator with proTxHash %X not found", protxhash)
+	}
+	if val.PubKey == nil {
+		return nil, fmt.Errorf("validator with proTxHash %X has nil public key", protxhash)
 	}
 
 	return val, nil
@@ -398,25 +401,41 @@ func (r *Reactor) checkChallenge(ctx context.Context, challenge *dashproto.Valid
 		return errors.New("challenge is nil")
 	}
 	senderProTxHash := challenge.GetSenderProTxHash()
-	val, err := r.findValidator(ctx, senderProTxHash)
-	// FIXME: this is a way to avoid challenge checks
-	if err != nil {
-		r.logger.Debug("warning: skipping challenge validation - peer validator not found", "peer", senderID, "error", err)
-		return nil
-	}
 
-	if err := challenge.Validate(senderID, r.nodeID, val.ProTxHash, r.proTxHash); err != nil {
+	if err := challenge.Validate(senderID, r.nodeID, senderProTxHash, r.proTxHash); err != nil {
 		r.logger.Debug("invalid challenge", "challenge", challenge, "peer", senderID)
 		return fmt.Errorf("challenge validation failed: %w", err)
 	}
 
-	pubkey := privval.NewDashConsensusPublicKey(val.PubKey, challenge.QuorumHash, r.getValidatorSet().QuorumType)
+	pubkey, err := r.getValidatorPublicKey(challenge.SenderHeight, senderProTxHash)
+	if err != nil {
+		r.logger.Debug("cannot load peer public key", "challenge", challenge, "peer", senderID, "error", err)
+		return nil // we just abort the checks here
+	}
+
 	if err := challenge.Verify(pubkey); err != nil {
-		r.logger.Debug("challenge signature verification failed", "validator", val, "pubkey", val.PubKey, "error", err)
+		r.logger.Debug("challenge signature verification failed", "validator", senderProTxHash, "pubkey", pubkey, "error", err)
 		return fmt.Errorf("challenge signature verification failed: %w", err)
 	}
 
 	return nil
+}
+
+func (r *Reactor) getValidatorPublicKey(height int64, proTxHash tmcrypto.ProTxHash) (tmcrypto.PubKey, error) {
+
+	valset, err := r.stateStore.LoadValidators(height)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load validator set at height %d: %w", height, err)
+	}
+	quorumHash := valset.QuorumHash
+	quorumType := valset.QuorumType
+
+	_, val := valset.GetByProTxHash(proTxHash)
+	if val == nil {
+		return nil, fmt.Errorf("validator %X not found", proTxHash)
+	}
+
+	return privval.NewDashConsensusPublicKey(val.PubKey, quorumHash, quorumType), nil
 }
 
 // respondToChallenge signs response and sends it to the peer
@@ -493,17 +512,17 @@ func (r *Reactor) checkChallengeResponse(ctx context.Context, response *dashprot
 	}
 
 	peerProTxHash := challenge.GetRecipientProTxHash()
-	val, err := r.findValidator(ctx, peerProTxHash)
-	if err != nil {
-		return nil, err
-	}
 
-	if err := challenge.Validate(r.nodeID, peerID, r.proTxHash, val.ProTxHash); err != nil {
+	if err := challenge.Validate(r.nodeID, peerID, r.proTxHash, peerProTxHash); err != nil {
 		r.logger.Debug("invalid challenge", "challenge", challenge, "peer", peerID)
 		return nil, fmt.Errorf("challenge validation failed: %w", err)
 	}
 
-	pubkey := privval.NewDashConsensusPublicKey(val.PubKey, challenge.QuorumHash, r.getValidatorSet().QuorumType)
+	pubkey, err := r.getValidatorPublicKey(challenge.SenderHeight, peerProTxHash)
+	if err != nil {
+		return nil, fmt.Errorf("cannot load peer public key: %w", err)
+	}
+
 	if err := response.Verify(challenge, pubkey); err != nil {
 		return nil, fmt.Errorf("cannot verify challenge response sig for peer %s: %w", peerID, err)
 	}
@@ -520,20 +539,36 @@ func (r *Reactor) punishPeer(ctx context.Context, nodeID types.NodeID, reason er
 		return fmt.Errorf("cannot punish peer %s with reason %s: %w", nodeID, reason, err)
 	}
 
+	r.logger.Debug("peer punished", "peer", nodeID, "reason", reason)
 	return nil
 }
 
 // newPeerChallenge generates and saves a new challenge for a peer.
 // Challenge consists of:
 // sha256(our proTxHash + peer proTxHash + our nodeID + peer nodeID + some hard-to-predict bytes)
-func (r *Reactor) newPeerChallenge(ctx context.Context, peerNodeID types.NodeID, peerProTxHash tmcrypto.ProTxHash, quorumHash tmcrypto.QuorumHash) (dashproto.ValidatorChallenge, error) {
-	challenge := dashproto.NewValidatorChallenge(r.nodeID, peerNodeID, r.proTxHash, peerProTxHash, quorumHash)
+func (r *Reactor) newPeerChallenge(ctx context.Context, peerNodeID types.NodeID, peerProTxHash tmcrypto.ProTxHash) (dashproto.ValidatorChallenge, error) {
+	challenge := dashproto.ValidatorChallenge{}
+	height, quorumHash, err := r.quorumInfo()
+	if err != nil {
+		return challenge, fmt.Errorf("cannot determine current height: %w", err)
+	}
+	challenge = dashproto.NewValidatorChallenge(r.nodeID, peerNodeID, r.proTxHash, peerProTxHash, height, quorumHash)
 
 	r.mtx.Lock()
 	r.challenges[peerNodeID] = challenge
 	r.mtx.Unlock()
 
 	return challenge, nil
+}
+
+// quorumInfo returns last block height for current node
+func (r *Reactor) quorumInfo() (int64, tmcrypto.QuorumHash, error) {
+	state, err := r.stateStore.Load()
+	if err != nil {
+		return -1, nil, fmt.Errorf("cannot load current state from state store: %w", err)
+	}
+
+	return state.LastBlockHeight, state.Validators.QuorumHash, nil
 }
 
 // retrievePeerChallenge reads peer challenge for a peer, returns it and removes
@@ -572,31 +607,20 @@ func (r *Reactor) needsProofOfPossession(ctx context.Context, peerID types.NodeI
 		return errors.New("peer is not connected")
 	}
 
-	valSet := r.getValidatorSet()
-
-	if _, validator := valSet.GetByProTxHash(peerProTxHash); validator == nil {
-		return fmt.Errorf("peer is not an active validator")
+	height, _, err := r.quorumInfo()
+	if err != nil {
+		return fmt.Errorf("cannot load current quorum state: %w", err)
 	}
 
-	if _, validator := valSet.GetByProTxHash(r.proTxHash); validator == nil {
+	if _, err := r.findValidator(ctx, peerProTxHash, height); err != nil {
+		return fmt.Errorf("peer is not an active validator: %w", err)
+	}
+
+	if _, err := r.findValidator(ctx, r.proTxHash, height); err != nil {
 		return fmt.Errorf("this node is not an active validator")
 	}
 
 	return nil
-}
-
-// getValidatorSet returns current validator set in a thread-safe manner
-func (r *Reactor) getValidatorSet() *types.ValidatorSet {
-	r.mtx.RLock()
-	defer r.mtx.RUnlock()
-	return r.validators
-}
-
-// setValidatorSet replaces current validator set in a thread-safe manner
-func (r *Reactor) setValidatorSet(vset *types.ValidatorSet) {
-	r.mtx.Lock()
-	defer r.mtx.Unlock()
-	r.validators = vset
 }
 
 // getConsensusPrivKey returns a private key which can be used to sign consensus messages (Validator key, bls12381)

@@ -65,6 +65,7 @@ func (m *ControlMessage) Validate(senderID, recipientID types.NodeID, senderProT
 func NewValidatorChallenge(
 	senderNodeID, recipientNodeID types.NodeID,
 	senderProTxHash, recipientProTxHash types.ProTxHash,
+	senderHeight int64,
 	quorumHash crypto.QuorumHash,
 ) ValidatorChallenge {
 	token := make([]byte, 12)
@@ -76,6 +77,7 @@ func NewValidatorChallenge(
 		RecipientNodeID:    string(recipientNodeID),
 		SenderProTxHash:    senderProTxHash,
 		RecipientProTxHash: recipientProTxHash,
+		SenderHeight:       senderHeight,
 		Token:              token,
 		QuorumHash:         quorumHash,
 	}
@@ -108,6 +110,10 @@ func (challenge ValidatorChallenge) Validate(
 			"invalid recipient node proTxHash - got: %s, expected: %s",
 			tmbytes.HexBytes(challenge.GetRecipientProTxHash()).ShortString(),
 			recipientProTxHash.ShortString())
+	}
+
+	if challenge.SenderHeight < 0 {
+		return fmt.Errorf("invalid sender height: %d", challenge.SenderHeight)
 	}
 
 	if len(challenge.QuorumHash) != crypto.QuorumHashSize {

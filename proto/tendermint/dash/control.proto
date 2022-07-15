@@ -17,9 +17,10 @@ message ValidatorChallenge {
   bytes  recipient_protxhash = 2 [(gogoproto.customname) = "RecipientProTxHash"];
   string sender_node_id      = 3 [(gogoproto.customname) = "SenderNodeID"];
   string recipient_node_id   = 4 [(gogoproto.customname) = "RecipientNodeID"];
-  bytes  quorum_hash         = 5;
-  bytes  token               = 6;
-  bytes  signature           = 7;
+  int64  sender_height       = 5;
+  bytes  quorum_hash         = 6;
+  bytes  token               = 7;
+  bytes  signature           = 8;
 }
 
 message ValidatorChallengeResponse {

@@ -26,7 +26,7 @@ func TestControlChallengeResponse(t *testing.T) {
 
 	quorumHash := crypto.RandQuorumHash()
 
-	hostAChallenge := NewValidatorChallenge(hostANodeID, hostBNodeID, hostAProTXHash, hostBProTXHash, quorumHash)
+	hostAChallenge := NewValidatorChallenge(hostANodeID, hostBNodeID, hostAProTXHash, hostBProTXHash, 0, quorumHash)
 
 	// host A: sign and send challenge
 	assert.NoError(t, hostAChallenge.Sign(hostAPrivkey))

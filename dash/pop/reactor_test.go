@@ -18,6 +18,8 @@ import (
 	"github.com/tendermint/tendermint/dash/quorum"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/p2p"
+	"github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/internal/state/mocks"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	dashproto "github.com/tendermint/tendermint/proto/tendermint/dash"
@@ -105,7 +107,8 @@ func TestReactorWrongBobSig(t *testing.T) {
 }
 
 func executePoP(ctx context.Context, t *testing.T, alice, bob *securityReactorInstance, expectAliceFail, expectBobFail bool) {
-	quorumHash := alice.reactor.getValidatorSet().QuorumHash
+	_, quorumHash, err := alice.reactor.quorumInfo()
+	require.NoError(t, err)
 
 	alicePubkey, err := alice.privValidator.GetPubKey(ctx, quorumHash)
 	require.NoError(t, err)
@@ -121,13 +124,16 @@ func executePoP(ctx context.Context, t *testing.T, alice, bob *securityReactorIn
 	)
 	require.NoError(t, err)
 
+	validators := []*types.Validator{alice.Validator(ctx, t), bob.Validator(ctx, t)}
 	valsetUpdate := types.EventDataValidatorSetUpdate{
-		ValidatorSetUpdates: []*types.Validator{alice.Validator(ctx, t), bob.Validator(ctx, t)},
+		ValidatorSetUpdates: validators,
 		ThresholdPublicKey:  thresholdPublicKey,
 		QuorumHash:          quorumHash,
 		QuorumType:          llmqType,
 	}
 
+	stateStore := alice.reactor.stateStore.(*mocks.Store)
+	configureStateStore(t, stateStore, 1, validators, quorumHash, llmqType)
 	// logger.Debug("publishing validator set updates", "event", valsetUpdate)
 	assert.NoError(t, alice.eventBus.PublishEventValidatorSetUpdates(valsetUpdate))
 	assert.NoError(t, bob.eventBus.PublishEventValidatorSetUpdates(valsetUpdate))
@@ -184,8 +190,11 @@ func newAliceAndBob(ctx context.Context, t *testing.T) (securityReactorInstance,
 	)
 	require.NoError(t, err)
 
-	alice := newSecurityReactorInstance(ctx, t, "alice", aliceProTxHash, quorumHash, aliceConsensusPrivKey, thresholdPubkey)
-	bob := newSecurityReactorInstance(ctx, t, "bob", bobProTxHash, quorumHash, bobConsensusPrivKey, thresholdPubkey)
+	stateStore := mocks.NewStore(t)
+	configureStateStore(t, stateStore, 0, []*types.Validator{}, quorumHash, llmqType)
+
+	alice := newSecurityReactorInstance(ctx, t, "alice", aliceProTxHash, quorumHash, aliceConsensusPrivKey, thresholdPubkey, stateStore)
+	bob := newSecurityReactorInstance(ctx, t, "bob", bobProTxHash, quorumHash, bobConsensusPrivKey, thresholdPubkey, stateStore)
 
 	return alice, bob
 }
@@ -218,6 +227,7 @@ func newSecurityReactorInstance(
 	quorumHash tmcrypto.QuorumHash,
 	privKey bls12381.PrivKey,
 	thresholdPublicKey tmcrypto.PubKey,
+	stateStore state.Store,
 ) securityReactorInstance {
 	logger := log.NewTestingLogger(t).With("label", label)
 	instance := securityReactorInstance{
@@ -275,6 +285,7 @@ func newSecurityReactorInstance(
 		instance.privValidator,
 		vs,
 		peerManager,
+		stateStore,
 		[]p2p.NodeIDResolver{quorum.NewTCPNodeIDResolver()},
 	)
 	require.NoError(t, err)
@@ -286,9 +297,32 @@ func newSecurityReactorInstance(
 	return instance
 }
 
+func configureStateStore(t *testing.T, stateStore *mocks.Store, height int64, vals []*types.Validator, quorumHash tmcrypto.QuorumHash, quorumType btcjson.LLMQType) {
+	vset := &types.ValidatorSet{
+		Validators: vals,
+		QuorumHash: quorumHash,
+		QuorumType: quorumType,
+	}
+
+	stateStore.On("LoadValidators", height).Maybe().Return(vset, nil)
+
+	if height > 0 {
+		state, _ := stateStore.Load()
+		if state.LastBlockHeight > height {
+			return // old height
+		}
+	}
+
+	stateStore.On("Load").Return(state.State{
+		LastBlockHeight: 1,
+		Validators:      vset,
+	}, nil)
+}
+
 // Validator creates a mock validator
 func (p securityReactorInstance) Validator(ctx context.Context, t *testing.T) *types.Validator {
-	quorumHash := p.reactor.getValidatorSet().QuorumHash
+	_, quorumHash, err := p.reactor.quorumInfo()
+	require.NoError(t, err)
 	assert.NotEmpty(t, quorumHash)
 
 	validator := p.privValidator.ExtractIntoValidator(ctx, quorumHash)

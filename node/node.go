@@ -349,6 +349,7 @@ func makeNode(
 			privValidator,
 			state.Validators,
 			peerManager,
+			stateStore,
 			nodeIDResolvers,
 		)
 		if err != nil {
