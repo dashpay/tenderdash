@@ -33,7 +33,7 @@ const (
 	challengeProcessingTimeout = handshakeTimeout
 
 	// challengeDelay defines time we wait before sending challenge to let connection fully set up
-	challengeDelay = 1000 * time.Millisecond
+	challengeDelay = 5 * time.Second
 
 	serviceName = "dash_pop"
 )
@@ -355,6 +355,8 @@ func (r *Reactor) recvControlChannelRoutine(ctx context.Context) {
 			r.logger.Error("invalid message type received in DashControlChannel", "type", fmt.Sprintf("%T", msg))
 		}
 	}
+
+	r.logger.Debug("recvControlChannelRoutine finished")
 }
 
 // processValidatorChallenge processes validator challenges received on the control channel.
@@ -409,7 +411,7 @@ func (r *Reactor) checkChallenge(ctx context.Context, challenge *dashproto.Valid
 
 	pubkey, err := r.getValidatorPublicKey(challenge.SenderHeight, senderProTxHash)
 	if err != nil {
-		r.logger.Debug("cannot load peer public key", "challenge", challenge, "peer", senderID, "error", err)
+		r.logger.Debug("warning: cannot load peer public key, skipping verification", "challenge", challenge, "peer", senderID, "error", err)
 		return nil // we just abort the checks here
 	}
 
