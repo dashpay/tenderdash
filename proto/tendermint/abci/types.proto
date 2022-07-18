@@ -4,9 +4,11 @@ package tendermint.abci;
 option go_package = "github.com/tendermint/tendermint/abci/types";
 
 import "tendermint/crypto/proof.proto";
+import "tendermint/types/dash.proto";
 import "tendermint/types/types.proto";
 import "tendermint/crypto/keys.proto";
 import "tendermint/types/params.proto";
+import "tendermint/version/types.proto";
 import "google/protobuf/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -134,7 +136,11 @@ message RequestPrepareProposal {
   google.protobuf.Timestamp time                 = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   bytes                     next_validators_hash = 7;
 
-  bytes proposer_pro_tx_hash = 8;
+  // Dash's fields
+  uint32 core_chain_locked_height      = 100;
+  bytes  proposer_pro_tx_hash          = 101; // original proposer of the block
+  uint64 proposed_app_version          = 102; // proposer's latest available app protocol version
+  tendermint.version.Consensus version = 103;
 }
 
 message RequestProcessProposal {
@@ -161,7 +167,8 @@ message RequestVerifyVoteExtension {
   bytes hash                  = 1;
   bytes validator_pro_tx_hash = 2;
   int64 height                = 3;
-  bytes vote_extension        = 4;
+
+  repeated ExtendVoteExtension vote_extensions = 4;
 }
 
 message RequestFinalizeBlock {
@@ -174,7 +181,11 @@ message RequestFinalizeBlock {
   google.protobuf.Timestamp time                 = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   bytes                     next_validators_hash = 7;
 
-  bytes proposer_pro_tx_hash = 8;
+  // Dash's fields
+  uint32 core_chain_locked_height      = 100;
+  bytes  proposer_pro_tx_hash          = 101; // original proposer of the block
+  uint64 proposed_app_version          = 102; // proposer's latest available app protocol version
+  tendermint.version.Consensus version = 103;
 }
 
 //----------------------------------------
@@ -357,8 +368,13 @@ message ResponseProcessProposal {
   }
 }
 
+message ExtendVoteExtension {
+  tendermint.types.VoteExtensionType type = 1;
+  bytes extension                         = 2;
+}
+
 message ResponseExtendVote {
-  bytes vote_extension = 1;
+  repeated ExtendVoteExtension vote_extensions = 1;
 }
 
 message ResponseVerifyVoteExtension {
@@ -391,6 +407,8 @@ message CommitInfo {
   bytes quorum_hash     = 3;
   bytes block_signature = 4;
   bytes state_signature = 5;
+
+  repeated tendermint.types.VoteExtension threshold_vote_extensions = 6;
 }
 
 // ExtendedCommitInfo is similar to CommitInfo except that it is only used in
@@ -401,7 +419,11 @@ message ExtendedCommitInfo {
   int32 round = 1;
   // List of validators' addresses in the last validator set with their voting
   // information, including vote extensions.
-  repeated ExtendedVoteInfo votes = 2 [(gogoproto.nullable) = false];
+  bytes quorum_hash     = 3;
+  bytes block_signature = 4;
+  bytes state_signature = 5;
+
+  repeated tendermint.types.VoteExtension threshold_vote_extensions = 6;
 }
 
 // Event allows application developers to attach additional information to

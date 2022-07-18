@@ -99,7 +99,6 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	commit *types.Commit,
 	proposerProTxHash []byte,
 	proposedAppVersion uint64,
-	votes []*types.Vote,
 ) (*types.Block, error) {
 
 	maxBytes := state.ConsensusParams.Block.MaxBytes
@@ -125,17 +124,23 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	block := state.MakeBlock(height, nextCoreChainLock, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 
 	localLastCommit := buildLastCommitInfo(block, blockExec.store, state.InitialHeight)
+	version := block.Version.ToProto()
 	rpp, err := blockExec.appClient.PrepareProposal(
 		ctx,
 		&abci.RequestPrepareProposal{
 			MaxTxBytes:          maxDataBytes,
 			Txs:                 block.Txs.ToSliceOfBytes(),
-			LocalLastCommit:     extendedCommitInfo(localLastCommit, votes),
+			LocalLastCommit:     abci.ExtendedCommitInfo(localLastCommit),
 			ByzantineValidators: block.Evidence.ToABCI(),
 			Height:              block.Height,
 			Time:                block.Time,
 			NextValidatorsHash:  block.NextValidatorsHash,
-			ProposerProTxHash:   block.ProposerProTxHash,
+
+			// Dash's fields
+			CoreChainLockedHeight: block.CoreChainLockedHeight,
+			ProposerProTxHash:     block.ProposerProTxHash,
+			ProposedAppVersion:    block.ProposedAppVersion,
+			Version:               &version,
 		},
 	)
 	if err != nil {
@@ -261,6 +266,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	}
 	startTime := time.Now().UnixNano()
 	txs := block.Txs.ToSliceOfBytes()
+	version := block.Header.Version.ToProto()
 	finalizeBlockResponse, err := blockExec.appClient.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
@@ -270,8 +276,13 @@ func (blockExec *BlockExecutor) ApplyBlock(
 			Txs:                 txs,
 			DecidedLastCommit:   buildLastCommitInfo(block, blockExec.store, state.InitialHeight),
 			ByzantineValidators: block.Evidence.ToABCI(),
-			ProposerProTxHash:   block.ProposerProTxHash,
 			NextValidatorsHash:  block.NextValidatorsHash,
+
+			// Dash's fields
+			ProposerProTxHash:     block.ProposerProTxHash,
+			CoreChainLockedHeight: block.CoreChainLockedHeight,
+			ProposedAppVersion:    block.ProposedAppVersion,
+			Version:               &version,
 		},
 	)
 	endTime := time.Now().UnixNano()
@@ -367,7 +378,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	return state, nil
 }
 
-func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote) ([]byte, error) {
+func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote) ([]*abci.ExtendVoteExtension, error) {
 	resp, err := blockExec.appClient.ExtendVote(ctx, &abci.RequestExtendVote{
 		Hash:   vote.BlockID.Hash,
 		Height: vote.Height,
@@ -375,15 +386,20 @@ func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote
 	if err != nil {
 		panic(fmt.Errorf("ExtendVote call failed: %w", err))
 	}
-	return resp.VoteExtension, nil
+	return resp.VoteExtensions, nil
 }
 
 func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {
+	var extensions []*abci.ExtendVoteExtension
+	if vote.VoteExtensions != nil {
+		extensions = vote.VoteExtensions.ToExtendProto()
+	}
+
 	resp, err := blockExec.appClient.VerifyVoteExtension(ctx, &abci.RequestVerifyVoteExtension{
 		Hash:               vote.BlockID.Hash,
 		Height:             vote.Height,
 		ValidatorProTxHash: vote.ValidatorProTxHash,
-		VoteExtension:      vote.Extension,
+		VoteExtensions:     extensions,
 	})
 	if err != nil {
 		panic(fmt.Errorf("VerifyVoteExtension call failed: %w", err))
@@ -458,68 +474,16 @@ func (blockExec *BlockExecutor) Commit(
 
 func buildLastCommitInfo(block *types.Block, store Store, initialHeight int64) abci.CommitInfo {
 	if block.Height == initialHeight {
-		// there is no last commmit for the initial height.
+		// there is no last commit for the initial height.
 		// return an empty value.
 		return abci.CommitInfo{}
 	}
 	return abci.CommitInfo{
-		Round:          block.LastCommit.Round,
-		QuorumHash:     block.LastCommit.QuorumHash,
-		BlockSignature: block.LastCommit.ThresholdBlockSignature,
-		StateSignature: block.LastCommit.ThresholdStateSignature,
-	}
-}
-
-// extendedCommitInfo expects a CommitInfo struct along with all of the
-// original votes relating to that commit, including their vote extensions. The
-// order of votes does not matter.
-func extendedCommitInfo(c abci.CommitInfo, votes []*types.Vote) abci.ExtendedCommitInfo {
-	// TODO this function must be adopted for using the dash approach with BLS signature
-
-	//if len(c.Votes) != len(votes) {
-	//	panic(fmt.Sprintf("extendedCommitInfo: number of votes from commit differ from the number of votes supplied (%d != %d)", len(c.Votes), len(votes)))
-	//}
-	//votesByVal := make(map[string]*types.Vote)
-	//for _, vote := range votes {
-	//	if vote != nil {
-	//		valProTxHash := vote.ValidatorProTxHash
-	//		if _, ok := votesByVal[valProTxHash.String()]; ok {
-	//			panic(fmt.Sprintf("extendedCommitInfo: found duplicate vote for validator with address %s", valProTxHash.ShortString()))
-	//		}
-	//		votesByVal[valProTxHash.String()] = vote
-	//	}
-	//}
-	//vs := make([]abci.ExtendedVoteInfo, len(c.Votes))
-	//for i := range vs {
-	//	var ext []byte
-	//	// votes[i] will be nil if c.Votes[i].SignedLastBlock is false
-	//	if c.Votes[i].SignedLastBlock {
-	//		valAddr := crypto.Address(c.Votes[i].Validator.Address).String()
-	//		vote, ok := votesByVal[valAddr]
-	//		if !ok || vote == nil {
-	//			panic(fmt.Sprintf("extendedCommitInfo: validator with address %s signed last block, but could not find vote for it", valAddr))
-	//		}
-	//		ext = vote.Extension
-	//	}
-	//	vs[i] = abci.ExtendedVoteInfo{
-	//		Validator:       c.Votes[i].Validator,
-	//		SignedLastBlock: c.Votes[i].SignedLastBlock,
-	//		VoteExtension:   ext,
-	//	}
-	//}
-	//return abci.ExtendedCommitInfo{
-	//	Round: c.Round,
-	//	Votes: vs,
-	//}
-	vs := make([]abci.ExtendedVoteInfo, len(votes))
-	for i, vote := range votes {
-		if vote != nil {
-			vs[i].VoteExtension = vote.Extension
-		}
-	}
-	return abci.ExtendedCommitInfo{
-		Round: c.Round,
-		Votes: vs,
+		Round:                   block.LastCommit.Round,
+		QuorumHash:              block.LastCommit.QuorumHash,
+		BlockSignature:          block.LastCommit.ThresholdBlockSignature,
+		StateSignature:          block.LastCommit.ThresholdStateSignature,
+		ThresholdVoteExtensions: types.ThresholdExtensionSignToProto(block.LastCommit.ThresholdVoteExtensions),
 	}
 }
 
@@ -767,6 +731,7 @@ func ExecCommitBlock(
 	initialHeight int64,
 	s State,
 ) ([]byte, error) {
+	version := block.Header.Version.ToProto()
 	finalizeBlockResponse, err := appConn.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
@@ -776,6 +741,12 @@ func ExecCommitBlock(
 			Txs:                 block.Txs.ToSliceOfBytes(),
 			DecidedLastCommit:   buildLastCommitInfo(block, store, initialHeight),
 			ByzantineValidators: block.Evidence.ToABCI(),
+
+			// Dash's fields
+			CoreChainLockedHeight: block.CoreChainLockedHeight,
+			ProposerProTxHash:     block.ProposerProTxHash,
+			ProposedAppVersion:    block.ProposedAppVersion,
+			Version:               &version,
 		},
 	)
 
