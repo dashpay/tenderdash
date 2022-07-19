@@ -690,6 +690,25 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 	)
 	t.Cleanup(cleanup)
 
+	// Setup test scenario
+
+	valsUpdater, err := newValidatorUpdater(states, nVals)
+	require.NoError(t, err)
+
+	// add one validator to a validator set
+	addOneVal, err := valsUpdater.addValidatorsAt(ctx, 5, 1)
+	require.NoError(t, err)
+
+	// add two validators to the validator set
+	addTwoVals, err := valsUpdater.addValidatorsAt(ctx, 10, 2)
+	require.NoError(t, err)
+
+	// remove two validators from the validator set
+	removeTwoVals, err := valsUpdater.removeValidatorsAt(ctx, 15, 2)
+	require.NoError(t, err)
+
+	// Start the network
+
 	rts := setup(ctx, t, nPeers, states, 100) // buffer must be large enough to not deadlock
 
 	for _, reactor := range rts.reactors {
@@ -731,21 +750,6 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		blocksSubs = append(blocksSubs, sub)
 	}
 
-	valsUpdater, err := newValidatorUpdater(states, nVals)
-	require.NoError(t, err)
-
-	// add one validator to a validator set
-	addOneVal, err := valsUpdater.addValidatorsAt(ctx, 5, 1)
-	require.NoError(t, err)
-
-	// add two validators to the validator set
-	addTwoVals, err := valsUpdater.addValidatorsAt(ctx, 10, 2)
-	require.NoError(t, err)
-
-	// remove two validators from the validator set
-	removeTwoVals, err := valsUpdater.removeValidatorsAt(ctx, 15, 2)
-	require.NoError(t, err)
-
 	// wait till everyone makes block 2
 	// ensure the commit includes all validators
 	// send newValTx to change vals in block 3
@@ -786,6 +790,9 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 	waitForBlockWithUpdatedValsAndValidateIt(ctx, t, nPeers, removeTwoVals.quorumHash, blocksSubs, states)
 
 	validate(t, states)
+
+	cancel()
+	time.Sleep(100 * time.Millisecond)
 }
 
 func makeProTxHashMap(proTxHashes []crypto.ProTxHash) map[string]struct{} {
