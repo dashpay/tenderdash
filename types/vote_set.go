@@ -55,7 +55,6 @@ const (
 type VoteSet struct {
 	chainID       string
 	height        int64
-	stateID       StateID // ID of state for which this voting is executed
 	round         int32
 	signedMsgType tmproto.SignedMsgType
 	valSet        *ValidatorSet
@@ -76,7 +75,7 @@ type VoteSet struct {
 
 // NewVoteSet constructs a new VoteSet struct used to accumulate votes for given height/round.
 func NewVoteSet(chainID string, height int64, round int32,
-	signedMsgType tmproto.SignedMsgType, valSet *ValidatorSet, stateID StateID) *VoteSet {
+	signedMsgType tmproto.SignedMsgType, valSet *ValidatorSet) *VoteSet {
 	if height == 0 {
 		panic("Cannot make VoteSet for height == 0, doesn't make sense.")
 	}
@@ -87,7 +86,6 @@ func NewVoteSet(chainID string, height int64, round int32,
 	return &VoteSet{
 		chainID:       chainID,
 		height:        height,
-		stateID:       stateID,
 		round:         round,
 		signedMsgType: signedMsgType,
 		valSet:        valSet,
@@ -215,7 +213,7 @@ func (voteSet *VoteSet) addVote(vote *Vote) (added bool, err error) {
 		voteSet.valSet.QuorumHash,
 		val.PubKey,
 		val.ProTxHash,
-		voteSet.stateID,
+		StateID{LastAppHash: vote.AppHash, Height: vote.Height},
 	)
 	if err != nil {
 		return false, ErrInvalidVoteSignature(
@@ -722,11 +720,24 @@ func (voteSet *VoteSet) MakeCommit() *Commit {
 		panic("Cannot MakeCommit() unless a thresholdStateSig has been created")
 	}
 
+	// find a first vote to take height and app-hash for stateID
+	stateID := StateID{}
+	if len(voteSet.votes) > 0 {
+		for _, vote := range voteSet.votes {
+			if vote == nil {
+				continue
+			}
+			stateID.Height = vote.Height
+			stateID.LastAppHash = vote.AppHash
+			break
+		}
+	}
+
 	return NewCommit(
 		voteSet.GetHeight(),
 		voteSet.GetRound(),
 		*voteSet.maj23,
-		voteSet.stateID,
+		stateID,
 		voteSet.makeCommitSigns(),
 	)
 }

@@ -1414,7 +1414,7 @@ func BenchmarkValidatorSet_VerifyCommit_Ed25519(b *testing.B) {
 			b.ReportAllocs()
 			// generate n validators
 			stateID := RandStateID()
-			voteSet, valSet, vals := randVoteSet(ctx, b, h, 0, tmproto.PrecommitType, n, stateID)
+			voteSet, valSet, vals := randVoteSet(ctx, b, h, 0, tmproto.PrecommitType, n)
 			// create a commit with n validators
 			commit, err := makeCommit(ctx, blockID, stateID, h, 0, voteSet, vals)
 			require.NoError(b, err)

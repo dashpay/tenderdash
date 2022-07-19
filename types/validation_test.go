@@ -123,7 +123,7 @@ func TestValidatorSet_VerifyCommit_CheckThresholdSignatures(t *testing.T) {
 	blockID := makeBlockIDRandom()
 	stateID := RandStateID().WithHeight(h - 1)
 
-	voteSet, valSet, vals := randVoteSet(ctx, t, h, 0, tmproto.PrecommitType, 4, stateID)
+	voteSet, valSet, vals := randVoteSet(ctx, t, h, 0, tmproto.PrecommitType, 4)
 	commit, err := makeCommit(ctx, blockID, stateID, h, 0, voteSet, vals)
 	require.NoError(t, err)
 

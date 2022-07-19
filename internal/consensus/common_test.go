@@ -120,10 +120,11 @@ func (vs *validatorStub) signVote(
 		ValidatorProTxHash: proTxHash,
 		ValidatorIndex:     vs.Index,
 		VoteExtensions:     voteExtensions,
+		AppHash:            lastAppHash,
 	}
 
 	stateID := types.StateID{
-		Height:      vote.Height - 1,
+		Height:      vote.Height,
 		LastAppHash: lastAppHash,
 	}
 	v := vote.ToProto()

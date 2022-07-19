@@ -23,8 +23,7 @@ func TestVoteSet_AddVote_Good(t *testing.T) {
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10)
 	val0 := privValidators[0]
 
 	val0ProTxHash, err := val0.GetProTxHash(ctx)
@@ -57,8 +56,7 @@ func TestVoteSet_AddVote_Bad(t *testing.T) {
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10)
 
 	voteProto := &Vote{
 		ValidatorProTxHash: nil,
@@ -150,8 +148,7 @@ func TestVoteSet_AddVote_StateID(t *testing.T) {
 	//nolint:scopelint
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10,
-				tc.voteSetStateID)
+			voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10)
 
 			val0 := privValidators[0]
 			val0ProTxHash, err := val0.GetProTxHash(ctx)
@@ -206,8 +203,7 @@ func TestVoteSet_2_3Majority(t *testing.T) {
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10)
 
 	voteProto := &Vote{
 		ValidatorProTxHash: nil, // NOTE: must fill in
@@ -256,8 +252,7 @@ func TestVoteSet_2_3MajorityRedux(t *testing.T) {
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 100,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 100)
 
 	blockHash := crypto.CRandBytes(32)
 	blockPartsTotal := uint32(123)
@@ -352,8 +347,7 @@ func TestVoteSet_Conflicts(t *testing.T) {
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 4,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 4)
 	blockHash1 := tmrand.Bytes(32)
 	blockHash2 := tmrand.Bytes(32)
 
@@ -480,8 +474,7 @@ func TestVoteSet_MakeCommit(t *testing.T) {
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, 10,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, 10)
 	blockHash, blockPartSetHeader := crypto.CRandBytes(32), PartSetHeader{123, crypto.CRandBytes(32)}
 
 	voteProto := &Vote{
@@ -587,7 +580,6 @@ func TestVoteSet_LLMQType_50_60(t *testing.T) {
 				round,
 				tmproto.PrevoteType,
 				tt.numValidators,
-				RandStateID().WithHeight(height-1),
 				tt.llmqType,
 				tt.threshold,
 			)
@@ -662,11 +654,10 @@ func randVoteSet(
 	round int32,
 	signedMsgType tmproto.SignedMsgType,
 	numValidators int,
-	stateID StateID,
 ) (*VoteSet, *ValidatorSet, []PrivValidator) {
 	t.Helper()
 	valSet, mockPVs := RandValidatorSet(numValidators)
-	return NewVoteSet("test_chain_id", height, round, signedMsgType, valSet, stateID),
+	return NewVoteSet("test_chain_id", height, round, signedMsgType, valSet),
 		valSet,
 		append([]PrivValidator(nil), mockPVs...)
 }
@@ -676,7 +667,6 @@ func randVoteSetWithLLMQType(
 	round int32,
 	signedMsgType tmproto.SignedMsgType,
 	numValidators int,
-	stateID StateID,
 	llmqType btcjson.LLMQType,
 	threshold int,
 ) (*VoteSet, *ValidatorSet, []PrivValidator) {
@@ -701,8 +691,7 @@ func randVoteSetWithLLMQType(
 	sort.Sort(PrivValidatorsByProTxHash(privValidators))
 
 	valSet := NewValidatorSet(valz, ld.ThresholdPubKey, llmqType, quorumHash, true)
-	voteSet := NewVoteSet("test_chain_id", height, round, signedMsgType,
-		valSet, stateID)
+	voteSet := NewVoteSet("test_chain_id", height, round, signedMsgType, valSet)
 
 	return voteSet, valSet, privValidators
 }

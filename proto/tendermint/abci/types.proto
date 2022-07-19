@@ -153,7 +153,11 @@ message RequestProcessProposal {
   google.protobuf.Timestamp time                 = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   bytes                     next_validators_hash = 7;
 
-  bytes proposer_pro_tx_hash = 8;
+  // Dash's fields
+  uint32 core_chain_locked_height      = 100;
+  bytes  proposer_pro_tx_hash          = 101; // original proposer of the block
+  uint64 proposed_app_version          = 102; // proposer's latest available app protocol version
+  tendermint.version.Consensus version = 103;
 }
 
 // Extends a vote with application-side injection
@@ -350,15 +354,16 @@ message ResponsePrepareProposal {
   repeated TxRecord                tx_records              = 1;
   bytes                            app_hash                = 2;
   repeated ExecTxResult            tx_results              = 3;
-  repeated ValidatorUpdate         validator_updates       = 4;
   tendermint.types.ConsensusParams consensus_param_updates = 5;
+
+  tendermint.types.CoreChainLock next_core_chain_lock_update = 100;
+  ValidatorSetUpdate             validator_set_update        = 101 [(gogoproto.nullable) = true];
 }
 
 message ResponseProcessProposal {
   ProposalStatus                   status                  = 1;
   bytes                            app_hash                = 2;
   repeated ExecTxResult            tx_results              = 3;
-  repeated ValidatorUpdate         validator_updates       = 4;
   tendermint.types.ConsensusParams consensus_param_updates = 5;
 
   enum ProposalStatus {
@@ -366,6 +371,9 @@ message ResponseProcessProposal {
     ACCEPT  = 1;
     REJECT  = 2;
   }
+
+  tendermint.types.CoreChainLock next_core_chain_lock_update = 100;
+  ValidatorSetUpdate             validator_set_update        = 101 [(gogoproto.nullable) = true];
 }
 
 message ExtendVoteExtension {
@@ -576,7 +584,7 @@ service ABCIApplication {
   rpc LoadSnapshotChunk(RequestLoadSnapshotChunk) returns (ResponseLoadSnapshotChunk);
   rpc ApplySnapshotChunk(RequestApplySnapshotChunk) returns (ResponseApplySnapshotChunk);
   rpc PrepareProposal(RequestPrepareProposal) returns (ResponsePrepareProposal);
-  rpc ProcessProposal(RequestProcessProposal) returns (ResponseProcessProposal);
+  rpc ProcessProposal(RequestProcessProposal  ) returns (ResponseProcessProposal);
   rpc ExtendVote(RequestExtendVote) returns (ResponseExtendVote);
   rpc VerifyVoteExtension(RequestVerifyVoteExtension) returns (ResponseVerifyVoteExtension);
   rpc FinalizeBlock(RequestFinalizeBlock) returns (ResponseFinalizeBlock);

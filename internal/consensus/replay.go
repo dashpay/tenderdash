@@ -14,6 +14,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
+	types2 "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/proxy"
 	sm "github.com/tendermint/tendermint/internal/state"
@@ -631,7 +632,7 @@ func (h *Handshaker) replayBlock(
 	blockExec.SetAppHashSize(h.appHashSize)
 
 	var err error
-	state, err = blockExec.ApplyBlock(ctx, state, h.nodeProTxHash, meta.BlockID, block)
+	state, err = blockExec.ApplyBlock(ctx, state, types2.UncommittedState{}, h.nodeProTxHash, meta.BlockID, block)
 	if err != nil {
 		return sm.State{}, err
 	}

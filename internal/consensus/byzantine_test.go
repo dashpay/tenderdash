@@ -203,6 +203,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			ctx,
 			lazyNodeState.Height,
 			lazyNodeState.state,
+			nil,
 			commit,
 			proposerProTxHash,
 			0,

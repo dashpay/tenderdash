@@ -789,7 +789,7 @@ func (cs *State) updateToState(state sm.State, commit *types.Commit) {
 		// We don't want to reset e.g. the Votes, but we still want to
 		// signal the new round step, because other services (eg. txNotifier)
 		// depend on having an up-to-date peer state!
-		if state.LastBlockHeight <= cs.state.LastBlockHeight {
+		if state.LastBlockHeight < cs.state.LastBlockHeight {
 			cs.logger.Debug(
 				"ignoring updateToState()",
 				"new_height", state.LastBlockHeight+1,
@@ -860,8 +860,6 @@ func (cs *State) updateToState(state sm.State, commit *types.Commit) {
 			"to", validators.BasicInfoString())
 	}
 
-	stateID := state.StateID()
-
 	cs.Validators = validators
 	cs.Proposal = nil
 	cs.ProposalReceiveTime = time.Time{}
@@ -874,7 +872,7 @@ func (cs *State) updateToState(state sm.State, commit *types.Commit) {
 	cs.ValidBlock = nil
 	cs.ValidBlockParts = nil
 	cs.Commit = nil
-	cs.Votes = cstypes.NewHeightVoteSet(state.ChainID, height, stateID, validators)
+	cs.Votes = cstypes.NewHeightVoteSet(state.ChainID, height, validators)
 	cs.CommitRound = -1
 	cs.LastValidators = state.LastValidators
 	cs.TriggeredTimeoutPrecommit = false
@@ -1112,16 +1110,18 @@ func (cs *State) handleMsg(ctx context.Context, mi msgInfo, fromReplay bool) {
 		// TODO: If rs.Height == vote.Height && rs.Round < vote.Round,
 		// the peer is sending us CatchupCommit precommits.
 		// We could make note of this and help filter in broadcastHasVoteMessage().
-		cs.logger.Debug(
-			"received vote",
+		keyVals := []interface{}{
 			"height", cs.Height,
 			"cs_round", cs.Round,
 			"vote_height", msg.Vote.Height,
 			"vote_round", msg.Vote.Round,
 			"added", added,
 			"peer", peerID,
-			"error", err,
-		)
+		}
+		if err != nil {
+			keyVals = append(keyVals, "error", err)
+		}
+		cs.logger.Debug("received vote", keyVals...)
 	case *CommitMessage:
 		// attempt to add the commit and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
@@ -1604,7 +1604,7 @@ func (cs *State) createProposalBlock(ctx context.Context) (*types.Block, error) 
 	}
 	proposerProTxHash := cs.privValidatorProTxHash
 
-	ret, err := cs.blockExec.CreateProposalBlock(ctx, cs.Height, cs.state, commit, proposerProTxHash, cs.proposedAppVersion)
+	ret, err := cs.blockExec.CreateProposalBlock(ctx, cs.Height, cs.state, &cs.RoundState, commit, proposerProTxHash, cs.proposedAppVersion)
 	if err != nil {
 		panic(err)
 	}
@@ -1686,16 +1686,6 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		return
 	}
 
-	// Validate proposal block, from Tendermint's perspective
-	err := cs.blockExec.ValidateBlock(ctx, cs.state, cs.ProposalBlock)
-	if err != nil {
-		// ProposalBlock is invalid, prevote nil.
-		logger.Error("prevote step: consensus deems this block invalid; prevoting nil",
-			"err", err)
-		cs.signAddVote(ctx, tmproto.PrevoteType, nil, types.PartSetHeader{})
-		return
-	}
-
 	/*
 		The block has now passed Tendermint's validation rules.
 		Before prevoting the block received from the proposer for the current round and height,
@@ -1706,9 +1696,18 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	isAppValid, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state)
+	isAppValid, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state, &cs.RoundState)
 	if err != nil {
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
+	}
+
+	// Validate proposal block, from Tendermint's perspective
+	err = cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.UncommittedState, cs.ProposalBlock)
+	if err != nil {
+		// ProposalBlock is invalid, prevote nil.
+		logger.Error("prevote step: consensus deems this block invalid; prevoting nil", "err", err)
+		cs.signAddVote(ctx, tmproto.PrevoteType, nil, types.PartSetHeader{})
+		return
 	}
 
 	// Vote nil if the Application rejected the block
@@ -1926,7 +1925,7 @@ func (cs *State) enterPrecommit(ctx context.Context, height int64, round int32) 
 		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
 
 		// Validate the block.
-		if err := cs.blockExec.ValidateBlock(ctx, cs.state, cs.ProposalBlock); err != nil {
+		if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.UncommittedState, cs.ProposalBlock); err != nil {
 			panic(fmt.Sprintf("precommit step: +2/3 prevoted for an invalid block %v; relocking", err))
 		}
 
@@ -2108,7 +2107,7 @@ func (cs *State) finalizeCommit(ctx context.Context, height int64) {
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlock(ctx, cs.state, block); err != nil {
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.UncommittedState, block); err != nil {
 		panic(fmt.Errorf("+2/3 committed an invalid block: %w", err))
 	}
 
@@ -2218,14 +2217,7 @@ func (cs *State) verifyCommit(ctx context.Context, commit *types.Commit, peerID 
 		return false, nil
 	}
 
-	if commit.BlockID.Hash != nil && !bytes.Equal(commit.StateID.LastAppHash, cs.state.AppHash) {
-		err = errors.New("commit state last app hash does not match the known state app hash")
-		cs.logger.Error("commit ignored because sending wrong app hash", "voteHeight", commit.Height,
-			"csHeight", cs.Height, "peerID", peerID)
-		return false, err
-	}
-
-	stateID := cs.state.StateID()
+	stateID := commit.StateID
 
 	if rs.Proposal == nil || ignoreProposalBlock {
 		if ignoreProposalBlock {
@@ -2276,7 +2268,7 @@ func (cs *State) verifyCommit(ctx context.Context, commit *types.Commit, peerID 
 		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlock(ctx, cs.state, block); err != nil {
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.UncommittedState, block); err != nil {
 		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
 	return true, nil
@@ -2353,12 +2345,14 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 
 	// Create a copy of the state for staging and an event cache for txs.
 	stateCopy := cs.state.Copy()
+	rs := cs.RoundState
 
 	// Execute and commit the block, update and save the state, and update the mempool.
 	// NOTE The block.AppHash wont reflect these txs until the next block.
 	stateCopy, err := cs.blockExec.ApplyBlock(
 		ctx,
 		stateCopy,
+		rs.UncommittedState,
 		cs.privValidatorProTxHash,
 		types.BlockID{
 			Hash:          block.Hash(),
@@ -2967,9 +2961,8 @@ func (cs *State) signVote(
 		Round:              cs.Round,
 		Type:               msgType,
 		BlockID:            types.BlockID{Hash: hash, PartSetHeader: header},
+		AppHash:            cs.RoundState.AppHash,
 	}
-
-	stateID := cs.state.StateID()
 
 	// If the signedMessageType is for precommit,
 	// use our local precommit Timeout as the max wait time for getting a singed commit. The same goes for prevote.
@@ -2991,6 +2984,11 @@ func (cs *State) signVote(
 
 	ctxto, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+
+	stateID := types.StateID{
+		Height:      cs.RoundState.Height,
+		LastAppHash: cs.RoundState.AppHash,
+	}
 
 	err := cs.privValidator.SignVote(ctxto, cs.state.ChainID, cs.state.Validators.QuorumType, cs.state.Validators.QuorumHash,
 		v, stateID, cs.logger)

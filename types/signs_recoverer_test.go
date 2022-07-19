@@ -120,7 +120,7 @@ func TestSigsRecoverer_UsingVoteSet(t *testing.T) {
 		err = votes[i].PopulateSignsFromProto(vpb)
 		require.NoError(t, err)
 	}
-	voteSet := NewVoteSet(chainID, height, 0, tmproto.PrecommitType, vals, stateID)
+	voteSet := NewVoteSet(chainID, height, 0, tmproto.PrecommitType, vals)
 	for _, vote := range votes {
 		added, err := voteSet.AddVote(vote)
 		require.NoError(t, err)

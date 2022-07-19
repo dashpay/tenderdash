@@ -889,7 +889,7 @@ func mockLB(ctx context.Context, t *testing.T, height int64, time time.Time, las
 		Height:      height - 1,
 		LastAppHash: header.AppHash,
 	}
-	voteSet := types.NewVoteSet(factory.DefaultTestChainID, height, 0, tmproto.PrecommitType, currentVals, stateID)
+	voteSet := types.NewVoteSet(factory.DefaultTestChainID, height, 0, tmproto.PrecommitType, currentVals)
 	commit, err := factory.MakeCommit(ctx, lastBlockID, height, 0, voteSet, currentVals, currentPrivVals, stateID)
 	require.NoError(t, err)
 	return nextVals, nextPrivVals, &types.LightBlock{

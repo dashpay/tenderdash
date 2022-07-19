@@ -23,6 +23,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
+	types2 "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/internal/proxy"
@@ -1099,7 +1100,7 @@ func applyBlock(
 	bps, err := blk.MakePartSet(testPartSize)
 	require.NoError(t, err)
 	blkID := types.BlockID{Hash: blk.Hash(), PartSetHeader: bps.Header()}
-	newState, err := blockExec.ApplyBlock(ctx, st, nodeProTxHash, blkID, blk)
+	newState, err := blockExec.ApplyBlock(ctx, st, types2.UncommittedState{}, nodeProTxHash, blkID, blk)
 	require.NoError(t, err)
 	return newState
 }

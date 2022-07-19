@@ -89,6 +89,7 @@ type Vote struct {
 	BlockSignature     tmbytes.HexBytes      `json:"block_signature"`
 	StateSignature     tmbytes.HexBytes      `json:"state_signature"`
 	VoteExtensions     VoteExtensions        `json:"vote_extensions"`
+	AppHash            []byte                `json:"app_hash"`
 }
 
 // VoteFromProto attempts to convert the given serialization (Protobuf) type to
@@ -110,6 +111,7 @@ func VoteFromProto(pv *tmproto.Vote) (*Vote, error) {
 		BlockSignature:     pv.BlockSignature,
 		StateSignature:     pv.StateSignature,
 		VoteExtensions:     VoteExtensionsFromProto(pv.VoteExtensions),
+		AppHash:            pv.AppHash,
 	}, nil
 }
 
@@ -382,6 +384,7 @@ func (vote *Vote) ToProto() *tmproto.Vote {
 		BlockSignature:     vote.BlockSignature,
 		StateSignature:     vote.StateSignature,
 		VoteExtensions:     voteExtensions,
+		AppHash:            vote.AppHash,
 	}
 }
 

@@ -8,7 +8,6 @@ import (
 
 	"github.com/tendermint/tendermint/libs/bytes"
 	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
-
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -106,6 +105,8 @@ type RoundState struct {
 	LastCommit                *types.Commit       `json:"last_commit"`
 	LastValidators            *types.ValidatorSet `json:"last_validators"`
 	TriggeredTimeoutPrecommit bool                `json:"triggered_timeout_precommit"`
+
+	UncommittedState `json:"uncommitted_state"`
 }
 
 // RoundStateSimple is a compressed version of the RoundState for use in RPC

@@ -80,6 +80,8 @@ type Application struct {
 	RetainBlocks int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
 	logger       log.Logger
 
+	roundAppHash []byte
+
 	// validator set update
 	valUpdatesRepo *repository
 	valSetUpdate   types.ValidatorSetUpdate
@@ -175,31 +177,13 @@ func (app *Application) FinalizeBlock(_ context.Context, req *types.RequestFinal
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	// reset valset changes
-	app.valSetUpdate = types.ValidatorSetUpdate{}
-	app.valSetUpdate.ValidatorUpdates = make([]types.ValidatorUpdate, 0)
-
-	// Punish validators who committed equivocation.
-	for _, ev := range req.ByzantineValidators {
-		// TODO it seems this code is not needed to keep here
-		if ev.Type == types.MisbehaviorType_DUPLICATE_VOTE {
-			proTxHash := crypto.ProTxHash(ev.Validator.ProTxHash)
-			v, ok := app.valsIndex[proTxHash.String()]
-			if !ok {
-				return nil, fmt.Errorf("wanted to punish val %q but can't find it", proTxHash.ShortString())
-			}
-			v.Power = ev.Validator.Power - 1
-		}
-	}
-
 	respTxs := make([]*types.ExecTxResult, len(req.Txs))
-	for i, tx := range req.Txs {
-		respTxs[i] = app.handleTx(tx)
+	for i := range req.Txs {
+		respTxs[i] = &types.ExecTxResult{Code: code.CodeTypeOK}
 	}
 
 	return &types.ResponseFinalizeBlock{
-		TxResults:          respTxs,
-		ValidatorSetUpdate: proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
+		TxResults: respTxs,
 	}, nil
 }
 
@@ -211,14 +195,11 @@ func (app *Application) Commit(_ context.Context) (*types.ResponseCommit, error)
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	// Using a memdb - just return the big endian size of the db
-	appHash := make([]byte, 32)
-	binary.PutVarint(appHash, app.state.Size)
-	app.state.AppHash = appHash
+	app.state.AppHash = app.roundAppHash
 	app.state.Height++
 	saveState(app.state)
 
-	resp := &types.ResponseCommit{Data: appHash}
+	resp := &types.ResponseCommit{Data: app.state.AppHash}
 	if app.RetainBlocks > 0 && app.state.Height >= app.RetainBlocks {
 		resp.RetainHeight = app.state.Height - app.RetainBlocks + 1
 	}
@@ -321,18 +302,57 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
+	// execute block
+	txResults := make([]*types.ExecTxResult, len(req.Txs))
+	for i, tx := range req.Txs {
+		txResults[i] = app.handleTx(tx)
+	}
+
+	// Using a memdb - just return the big endian size of the db
+	appHash := make([]byte, 32)
+	binary.PutVarint(appHash, app.state.Size)
+	app.roundAppHash = appHash
 	return &types.ResponsePrepareProposal{
-		TxRecords: app.substPrepareTx(req.Txs, req.MaxTxBytes),
+		TxRecords:               app.substPrepareTx(req.Txs, req.MaxTxBytes),
+		AppHash:                 appHash,
+		TxResults:               txResults,
+		ConsensusParamUpdates:   nil,
+		NextCoreChainLockUpdate: nil,
+		ValidatorSetUpdate:      proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
 	}, nil
 }
 
-func (*Application) ProcessProposal(_ context.Context, req *types.RequestProcessProposal) (*types.ResponseProcessProposal, error) {
-	for _, tx := range req.Txs {
+func (app *Application) ProcessProposal(_ context.Context, req *types.RequestProcessProposal) (*types.ResponseProcessProposal, error) {
+	// Using a memdb - just return the big endian size of the db
+	appHash := make([]byte, 32)
+	binary.PutVarint(appHash, app.state.Size)
+	txResults := make([]*types.ExecTxResult, len(req.Txs))
+
+	if !bytes.Equal(app.state.AppHash, app.roundAppHash) {
+		for i := range req.Txs {
+			txResults[i] = &types.ExecTxResult{Code: code.CodeTypeOK}
+		}
+		return &types.ResponseProcessProposal{
+			Status:             types.ResponseProcessProposal_ACCEPT,
+			AppHash:            app.roundAppHash,
+			TxResults:          txResults,
+			ValidatorSetUpdate: proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
+		}, nil
+	}
+	// execute block
+	for i, tx := range req.Txs {
 		if len(tx) == 0 {
 			return &types.ResponseProcessProposal{Status: types.ResponseProcessProposal_REJECT}, nil
 		}
+		txResults[i] = app.handleTx(tx)
 	}
-	return &types.ResponseProcessProposal{Status: types.ResponseProcessProposal_ACCEPT}, nil
+	app.roundAppHash = appHash
+	return &types.ResponseProcessProposal{
+		Status:             types.ResponseProcessProposal_ACCEPT,
+		AppHash:            app.roundAppHash,
+		TxResults:          txResults,
+		ValidatorSetUpdate: proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
+	}, nil
 }
 
 //---------------------------------------------
