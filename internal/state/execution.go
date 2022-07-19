@@ -202,7 +202,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	ctx context.Context,
 	block *types.Block,
 	state State,
-	roundState *types2.RoundState,
+	uncommittedState *types2.UncommittedState,
 ) (bool, error) {
 	version := block.Version.ToProto()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
@@ -245,12 +245,12 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		return false, err
 	}
 	// update some round state data
-	roundState.ConsensusParamUpdates = resp.ConsensusParamUpdates
-	roundState.AppHash = state.AppHash
-	roundState.ValidatorSetUpdate = resp.ValidatorSetUpdate
-	roundState.LastResultsHash = state.LastResultsHash
-	roundState.TxResults = resp.TxResults
-	roundState.NextValidators = state.NextValidators
+	uncommittedState.ConsensusParamUpdates = resp.ConsensusParamUpdates
+	uncommittedState.AppHash = state.AppHash
+	uncommittedState.ValidatorSetUpdate = resp.ValidatorSetUpdate
+	uncommittedState.LastResultsHash = state.LastResultsHash
+	uncommittedState.TxResults = resp.TxResults
+	uncommittedState.NextValidators = state.NextValidators
 	return resp.IsAccepted(), nil
 }
 
