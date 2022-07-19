@@ -257,7 +257,7 @@ func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL
 
 	// NOTE: The line below causes broadcastNewRoundStepRoutine() to broadcast a
 	// NewRoundStepMessage.
-	r.state.updateToState(state, nil)
+	r.state.UpdateToState(state, nil)
 	if err := r.state.Start(ctx); err != nil {
 		panic(fmt.Sprintf(`failed to start consensus state: %v
 

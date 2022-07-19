@@ -758,6 +758,13 @@ func (cs *State) reconstructLastCommit(state sm.State) {
 	cs.LastCommit = seenCommit
 }
 
+// UpdateToState thread-safe way for updating the state
+func (cs *State) UpdateToState(state sm.State, commit *types.Commit) {
+	cs.mtx.Lock()
+	cs.updateToState(state, commit)
+	cs.mtx.Unlock()
+}
+
 // Updates State and increments height to match that of state.
 // The round becomes 0 and cs.Step becomes cstypes.RoundStepNewHeight.
 func (cs *State) updateToState(state sm.State, commit *types.Commit) {
@@ -1604,7 +1611,7 @@ func (cs *State) createProposalBlock(ctx context.Context) (*types.Block, error) 
 	}
 	proposerProTxHash := cs.privValidatorProTxHash
 
-	ret, err := cs.blockExec.CreateProposalBlock(ctx, cs.Height, cs.state, &cs.RoundState, commit, proposerProTxHash, cs.proposedAppVersion)
+	ret, err := cs.blockExec.CreateProposalBlock(ctx, cs.Height, cs.state, &cs.RoundState.UncommittedState, commit, proposerProTxHash, cs.proposedAppVersion)
 	if err != nil {
 		panic(err)
 	}

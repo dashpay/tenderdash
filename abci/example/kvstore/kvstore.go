@@ -178,12 +178,20 @@ func (app *Application) FinalizeBlock(_ context.Context, req *types.RequestFinal
 	defer app.mu.Unlock()
 
 	respTxs := make([]*types.ExecTxResult, len(req.Txs))
-	for i := range req.Txs {
-		respTxs[i] = &types.ExecTxResult{Code: code.CodeTypeOK}
+	if !bytes.Equal(app.state.AppHash, app.roundAppHash) {
+		for i := range req.Txs {
+			respTxs[i] = &types.ExecTxResult{Code: code.CodeTypeOK}
+		}
+	} else {
+		for i, tx := range req.Txs {
+			respTxs[i] = app.handleTx(tx)
+		}
 	}
 
 	return &types.ResponseFinalizeBlock{
-		TxResults: respTxs,
+		AppHash:            app.roundAppHash,
+		TxResults:          respTxs,
+		ValidatorSetUpdate: proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
 	}, nil
 }
 

@@ -15,6 +15,7 @@ import (
 	types2 "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
@@ -95,7 +96,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	ctx context.Context,
 	height int64,
 	state State,
-	roundState *types2.RoundState,
+	uncommittedState *types2.UncommittedState,
 	commit *types.Commit,
 	proposerProTxHash []byte,
 	proposedAppVersion uint64,
@@ -170,6 +171,11 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	if err != nil {
 		return nil, err
 	}
+
+	// @TODO needs to figure out how to use next-validators from a response
+	// store next validators hash to assign it to a new block
+	nextValidatorsHash := state.NextValidators.Hash()
+
 	// Update the next core chain lock that we can propose
 	blockExec.NextCoreChainLock = nextCoreChainLock
 	stateUpdates, err := prepareStateUpdates(proposerProTxHash, height, rpp, state)
@@ -188,13 +194,17 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		proposerProTxHash,
 	)
 	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion)
+
+	// set state next-validators-hash
+	block.NextValidatorsHash = nextValidatorsHash
+
 	// update some round state data
-	roundState.AppHash = block.AppHash
-	roundState.LastResultsHash = block.LastResultsHash
-	roundState.ValidatorSetUpdate = rpp.ValidatorSetUpdate
-	roundState.ConsensusParamUpdates = rpp.ConsensusParamUpdates
-	roundState.TxResults = rpp.TxResults
-	roundState.NextValidators = state.NextValidators
+	uncommittedState.AppHash = block.AppHash
+	uncommittedState.LastResultsHash = block.LastResultsHash
+	uncommittedState.ValidatorSetUpdate = rpp.ValidatorSetUpdate
+	uncommittedState.ConsensusParamUpdates = rpp.ConsensusParamUpdates
+	uncommittedState.TxResults = rpp.TxResults
+	uncommittedState.NextValidators = state.NextValidators
 	return block, nil
 }
 
@@ -304,7 +314,7 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	}
 
 	// @TODO the condition should be changed
-	if uncommittedState.NextValidators != nil && !bytes.Equal(block.NextValidatorsHash, uncommittedState.NextValidators.Hash()) {
+	if !bytes.Equal(block.NextValidatorsHash, state.NextValidators.Hash()) {
 		return fmt.Errorf("wrong Block.Header.NextValidatorsHash. Expected %X, got %v",
 			state.NextValidators.Hash(),
 			block.NextValidatorsHash,
@@ -386,7 +396,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 		return state, err
 	}
 
-	stateUpdates, err := prepareStateUpdates(proTxHash, block.Height, uncommittedState, state)
+	stateUpdates, err := prepareStateUpdates(proTxHash, block.Height, finalizeBlockResponse, state)
 	if err != nil {
 		return State{}, err
 	}

@@ -7,7 +7,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
-	types2 "github.com/tendermint/tendermint/internal/consensus/types"
 	tmtypes "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
@@ -23,7 +22,6 @@ func prepareStateUpdates(
 		validatorSetUpdate    *abci.ValidatorSetUpdate
 		consensusParamUpdates *tmtypes.ConsensusParams
 		txResults             []*abci.ExecTxResult
-		//nextCoreChainLockUpdate *tmtypes.CoreChainLock
 	)
 	switch t := resp.(type) {
 	case *abci.ResponsePrepareProposal:
@@ -36,7 +34,7 @@ func prepareStateUpdates(
 		validatorSetUpdate = t.ValidatorSetUpdate
 		consensusParamUpdates = t.ConsensusParamUpdates
 		txResults = t.TxResults
-	case types2.UncommittedState:
+	case *abci.ResponseFinalizeBlock:
 		appHash = t.AppHash
 		validatorSetUpdate = t.ValidatorSetUpdate
 		consensusParamUpdates = t.ConsensusParamUpdates
