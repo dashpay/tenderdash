@@ -172,10 +172,6 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		return nil, err
 	}
 
-	// @TODO needs to figure out how to use next-validators from a response
-	// store next validators hash to assign it to a new block
-	nextValidatorsHash := state.NextValidators.Hash()
-
 	// Update the next core chain lock that we can propose
 	blockExec.NextCoreChainLock = nextCoreChainLock
 	stateUpdates, err := prepareStateUpdates(proposerProTxHash, height, rpp, state)
@@ -194,9 +190,6 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		proposerProTxHash,
 	)
 	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion)
-
-	// set state next-validators-hash
-	block.NextValidatorsHash = nextValidatorsHash
 
 	// update some round state data
 	uncommittedState.AppHash = block.AppHash
@@ -313,8 +306,7 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 		)
 	}
 
-	// @TODO the condition should be changed
-	if !bytes.Equal(block.NextValidatorsHash, state.NextValidators.Hash()) {
+	if uncommittedState.NextValidators != nil && !bytes.Equal(block.NextValidatorsHash, uncommittedState.NextValidators.Hash()) {
 		return fmt.Errorf("wrong Block.Header.NextValidatorsHash. Expected %X, got %v",
 			state.NextValidators.Hash(),
 			block.NextValidatorsHash,
