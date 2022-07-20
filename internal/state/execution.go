@@ -15,7 +15,6 @@ import (
 	types2 "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
@@ -109,12 +108,6 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	// Fetch a limited amount of valid txs
 	maxDataBytes := types.MaxDataBytes(maxBytes, crypto.BLS12381, evSize, state.Validators.Size())
 
-	nextCoreChainLock := blockExec.NextCoreChainLock
-	if nextCoreChainLock != nil &&
-		nextCoreChainLock.CoreBlockHeight <= state.LastCoreChainLockedBlockHeight {
-		nextCoreChainLock = nil
-	}
-
 	// Pass proposed app version only if it's higher than current network app version
 	if proposedAppVersion <= state.Version.Consensus.App {
 		proposedAppVersion = 0
@@ -122,7 +115,6 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 
 	txs := blockExec.mempool.ReapMaxBytesMaxGas(maxDataBytes, maxGas)
 	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash)
-	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion)
 
 	localLastCommit := buildLastCommitInfo(block, blockExec.store, state.InitialHeight)
 	version := block.Version.ToProto()
@@ -167,13 +159,15 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		}
 	}
 	itxs := txrSet.IncludedTxs()
-	nextCoreChainLock, err = types.CoreChainLockFromProto(rpp.NextCoreChainLockUpdate)
+	nextCoreChainLock, err := types.CoreChainLockFromProto(rpp.NextCoreChainLockUpdate)
 	if err != nil {
 		return nil, err
 	}
+	if nextCoreChainLock != nil &&
+		nextCoreChainLock.CoreBlockHeight <= state.LastCoreChainLockedBlockHeight {
+		nextCoreChainLock = nil
+	}
 
-	// Update the next core chain lock that we can propose
-	blockExec.NextCoreChainLock = nextCoreChainLock
 	stateUpdates, err := prepareStateUpdates(proposerProTxHash, height, rpp, state)
 	if err != nil {
 		return nil, err
@@ -198,6 +192,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	uncommittedState.ConsensusParamUpdates = rpp.ConsensusParamUpdates
 	uncommittedState.TxResults = rpp.TxResults
 	uncommittedState.NextValidators = state.NextValidators
+	uncommittedState.CoreChainLockedBlockHeight = nextCoreChainLock.CoreBlockHeight
 	return block, nil
 }
 
@@ -254,6 +249,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	uncommittedState.LastResultsHash = state.LastResultsHash
 	uncommittedState.TxResults = resp.TxResults
 	uncommittedState.NextValidators = state.NextValidators
+	uncommittedState.CoreChainLockedBlockHeight = nextCoreChainLock.CoreBlockHeight
 	return resp.IsAccepted(), nil
 }
 
@@ -308,7 +304,7 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 
 	if uncommittedState.NextValidators != nil && !bytes.Equal(block.NextValidatorsHash, uncommittedState.NextValidators.Hash()) {
 		return fmt.Errorf("wrong Block.Header.NextValidatorsHash. Expected %X, got %v",
-			state.NextValidators.Hash(),
+			uncommittedState.NextValidators.Hash(),
 			block.NextValidatorsHash,
 		)
 	}
@@ -319,7 +315,8 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 			return fmt.Errorf("error validating block: %w", err)
 		}
 	}
-	return nil
+
+	return validateCoreChainLock(block, state)
 }
 
 // ValidateBlockChainLock validates the given block chain lock against the given state.

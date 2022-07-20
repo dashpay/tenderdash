@@ -16,6 +16,7 @@ import (
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/example/kvstore"
 	abci "github.com/tendermint/tendermint/abci/types"
+	types2 "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/evidence"
 	"github.com/tendermint/tendermint/internal/mempool"
@@ -199,11 +200,12 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 		proposerProTxHash := lazyNodeState.privValidatorProTxHash
 
+		uncommittedState := types2.UncommittedState{}
 		block, err := lazyNodeState.blockExec.CreateProposalBlock(
 			ctx,
 			lazyNodeState.Height,
 			lazyNodeState.state,
-			nil,
+			&uncommittedState,
 			commit,
 			proposerProTxHash,
 			0,
@@ -252,9 +254,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 	}
 
-	for _, reactor := range rts.reactors {
-		reactor.SwitchToConsensus(ctx, reactor.state.GetState(), false)
-	}
+	rts.switchToConsensus(ctx)
 
 	// Evidence should be submitted and committed at the third height but
 	// we will check the first six just in case

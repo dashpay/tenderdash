@@ -14,4 +14,6 @@ type UncommittedState struct {
 	ConsensusParamUpdates *types2.ConsensusParams  `json:"consensus_param_updates"`
 	TxResults             []*abci.ExecTxResult     `json:"tx_results"`
 	NextValidators        *types.ValidatorSet      `json:"next_validators"`
+
+	CoreChainLockedBlockHeight uint32 `json:"chain_locked_block_height"`
 }

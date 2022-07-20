@@ -1495,7 +1495,7 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 
 	// Make proposal
 	propBlockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
-	proposedChainLockHeight := cs.state.LastCoreChainLockedBlockHeight
+	proposedChainLockHeight := cs.UncommittedState.CoreChainLockedBlockHeight
 	if cs.blockExec.NextCoreChainLock != nil && cs.blockExec.NextCoreChainLock.CoreBlockHeight > proposedChainLockHeight {
 		proposedChainLockHeight = cs.blockExec.NextCoreChainLock.CoreBlockHeight
 	}

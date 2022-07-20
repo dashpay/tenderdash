@@ -137,30 +137,6 @@ func validateBlock(state State, block *types.Block) error {
 			block.Height, state.InitialHeight)
 	}
 
-	if block.CoreChainLock != nil {
-		// If there is a new Chain Lock we need to make sure the height in the header is the same as the chain lock
-		if block.Header.CoreChainLockedHeight != block.CoreChainLock.CoreBlockHeight {
-			return fmt.Errorf("wrong Block.Header.CoreChainLockedHeight. CoreChainLock CoreBlockHeight %d, got %d",
-				block.CoreChainLock.CoreBlockHeight,
-				block.Header.CoreChainLockedHeight,
-			)
-		}
-
-		// We also need to make sure that the new height is superior to the old height
-		if block.Header.CoreChainLockedHeight <= state.LastCoreChainLockedBlockHeight {
-			return fmt.Errorf("wrong Block.Header.CoreChainLockedHeight. Previous CoreChainLockedHeight %d, got %d",
-				state.LastCoreChainLockedBlockHeight,
-				block.Header.CoreChainLockedHeight,
-			)
-		}
-
-		// If there is no new Chain Lock we need to make sure the height has stayed the same
-	} else if block.Header.CoreChainLockedHeight != state.LastCoreChainLockedBlockHeight {
-		return fmt.Errorf("wrong Block.Header.CoreChainLockedHeight when no new Chain Lock. "+
-			"Previous CoreChainLockedHeight %d, got %d",
-			state.LastCoreChainLockedBlockHeight, block.Header.CoreChainLockedHeight)
-	}
-
 	// Check evidence doesn't exceed the limit amount of bytes.
 	if max, got := state.ConsensusParams.Evidence.MaxBytes, block.Evidence.ByteSize(); got > max {
 		return types.NewErrEvidenceOverflow(max, got)
@@ -234,5 +210,32 @@ func validateBlockChainLock(ctx context.Context, client abci.Application, state 
 			state.LastCoreChainLockedBlockHeight, block.Header.CoreChainLockedHeight)
 	}
 
+	return nil
+}
+
+func validateCoreChainLock(block *types.Block, state State) error {
+	if block.CoreChainLock == nil {
+		// If there is no new Chain Lock we need to make sure the height has stayed the same
+		if block.Header.CoreChainLockedHeight != state.LastCoreChainLockedBlockHeight {
+			return fmt.Errorf("wrong Block.Header.CoreChainLockedHeight when no new Chain Lock. "+
+				"Previous CoreChainLockedHeight %d, got %d",
+				state.LastCoreChainLockedBlockHeight, block.Header.CoreChainLockedHeight)
+		}
+		return nil
+	}
+	// If there is a new Chain Lock we need to make sure the height in the header is the same as the chain lock
+	if block.Header.CoreChainLockedHeight != block.CoreChainLock.CoreBlockHeight {
+		return fmt.Errorf("wrong Block.Header.CoreChainLockedHeight. CoreChainLock CoreBlockHeight %d, got %d",
+			block.CoreChainLock.CoreBlockHeight,
+			block.Header.CoreChainLockedHeight,
+		)
+	}
+	// We also need to make sure that the new height is superior to the old height
+	if block.Header.CoreChainLockedHeight <= state.LastCoreChainLockedBlockHeight {
+		return fmt.Errorf("wrong Block.Header.CoreChainLockedHeight. Previous CoreChainLockedHeight %d, got %d",
+			state.LastCoreChainLockedBlockHeight,
+			block.Header.CoreChainLockedHeight,
+		)
+	}
 	return nil
 }
