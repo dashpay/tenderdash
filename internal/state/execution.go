@@ -168,7 +168,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		nextCoreChainLock = nil
 	}
 
-	stateUpdates, err := prepareStateUpdates(proposerProTxHash, height, rpp, state)
+	stateUpdates, err := PrepareStateUpdates(proposerProTxHash, height, rpp, state)
 	if err != nil {
 		return nil, err
 	}
@@ -192,7 +192,9 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	uncommittedState.ConsensusParamUpdates = rpp.ConsensusParamUpdates
 	uncommittedState.TxResults = rpp.TxResults
 	uncommittedState.NextValidators = state.NextValidators
-	uncommittedState.CoreChainLockedBlockHeight = nextCoreChainLock.CoreBlockHeight
+	if nextCoreChainLock != nil {
+		uncommittedState.CoreChainLockedBlockHeight = nextCoreChainLock.CoreBlockHeight
+	}
 	return block, nil
 }
 
@@ -234,11 +236,11 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	}
 	// Update the next core chain lock that we can propose
 	blockExec.NextCoreChainLock = nextCoreChainLock
-	stateUpdates, err := prepareStateUpdates(nodeProTxHash, block.Height, resp, state)
+	stateUpdates, err := PrepareStateUpdates(nodeProTxHash, block.Height, resp, state)
 	if err != nil {
 		return false, err
 	}
-	state, err = state.Update(block.LastBlockID, &block.Header, block.LastResultsHash, stateUpdates...)
+	state, err = state.Update(block.LastBlockID, &block.Header, stateUpdates...)
 	if err != nil {
 		return false, err
 	}
@@ -385,11 +387,11 @@ func (blockExec *BlockExecutor) ApplyBlock(
 		return state, err
 	}
 
-	stateUpdates, err := prepareStateUpdates(proTxHash, block.Height, finalizeBlockResponse, state)
+	stateUpdates, err := PrepareStateUpdates(proTxHash, block.Height, finalizeBlockResponse, state)
 	if err != nil {
 		return State{}, err
 	}
-	state, err = state.Update(blockID, &block.Header, nil, stateUpdates...)
+	state, err = state.Update(blockID, &block.Header, stateUpdates...)
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
 	}
@@ -608,8 +610,7 @@ func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate, params types.V
 func (state State) Update(
 	blockID types.BlockID,
 	header *types.Header,
-	resultsHash []byte,
-	stateUpdates ...func(State) (State, error),
+	stateUpdates ...UpdateFunc,
 ) (State, error) {
 
 	nextVersion := state.Version
@@ -631,7 +632,7 @@ func (state State) Update(
 		LastHeightValidatorsChanged:      state.LastHeightValidatorsChanged,
 		ConsensusParams:                  state.ConsensusParams,
 		LastHeightConsensusParamsChanged: state.LastHeightConsensusParamsChanged,
-		LastResultsHash:                  resultsHash,
+		LastResultsHash:                  nil,
 		AppHash:                          nil,
 	}
 	var err error

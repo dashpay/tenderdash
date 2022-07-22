@@ -288,14 +288,12 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 			changeIndex++
 		}
 		header, _, blockID, responses := makeHeaderPartsResponsesValPowerChange(t, state, types.DefaultDashVotingPower)
-		validatorUpdates, thresholdPubKey, quorumHash, err := types.PB2TM.ValidatorUpdatesFromValidatorSet(responses.FinalizeBlock.ValidatorSetUpdate)
-		require.NoError(t, err)
-		rs, err := abci.MarshalTxResults(responses.FinalizeBlock.TxResults)
-		require.NoError(t, err)
 		// Any node pro tx hash should do
 		firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
-		h := merkle.HashFromByteSlices(rs)
-		state, err = state.Update(firstNodeProTxHash, blockID, &header, h, responses.FinalizeBlock.ConsensusParamUpdates, validatorUpdates, thresholdPubKey, quorumHash)
+		su, err := sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, responses.FinalizeBlock, state)
+		require.NoError(t, err)
+		state, err = state.Update(blockID, &header, su...)
+
 		require.NoError(t, err)
 		validator := state.Validators.Validators[0]
 		testCases[i-1] = validator.PubKey
@@ -468,15 +466,12 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	fb := &abci.ResponseFinalizeBlock{
 		ValidatorSetUpdate: nil,
 	}
-	validatorUpdates, thresholdPublicKeyUpdate, _, err :=
-		types.PB2TM.ValidatorUpdatesFromValidatorSet(nil)
-	require.NoError(t, err)
+
 	// Any node pro tx hash should do
 	firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
-	rs, err := abci.MarshalTxResults(fb.TxResults)
+	su, err := sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, state)
 	require.NoError(t, err)
-	h := merkle.HashFromByteSlices(rs)
-	updatedState, err := state.Update(firstNodeProTxHash, blockID, &block.Header, h, fb.ConsensusParamUpdates, validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
+	updatedState, err := state.Update(blockID, &block.Header, su...)
 	assert.NoError(t, err)
 	curTotal := val1VotingPower
 	// one increment step and one validator: 0 + power - total_power == 0
@@ -490,12 +485,14 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	require.NoError(t, err)
 
 	updateAddVal := abci.ValidatorUpdate{ProTxHash: val2ProTxHash, PubKey: &fvp, Power: val2VotingPower}
-	validatorUpdates, err = types.PB2TM.ValidatorUpdates([]abci.ValidatorUpdate{updateAddVal})
-	assert.NoError(t, err)
-	rs, err = abci.MarshalTxResults(fb.TxResults)
+	fb.ValidatorSetUpdate = &abci.ValidatorSetUpdate{
+		ValidatorUpdates:   []abci.ValidatorUpdate{updateAddVal},
+		ThresholdPublicKey: fvp,
+		QuorumHash:         quorumHash,
+	}
+	su, err = sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, updatedState)
 	require.NoError(t, err)
-	h = merkle.HashFromByteSlices(rs)
-	updatedState2, err := updatedState.Update(firstNodeProTxHash, blockID, &block.Header, h, fb.ConsensusParamUpdates, validatorUpdates, ld.ThresholdPubKey, quorumHash)
+	updatedState2, err := updatedState.Update(blockID, &block.Header, su...)
 	assert.NoError(t, err)
 
 	require.Equal(t, len(updatedState2.NextValidators.Validators), 2)
@@ -529,15 +526,15 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	// If we change quorums it will!
 	// 1. Add - Val2 VotingPower change to 1 =>
 	abciValidatorUpdates := types.ValidatorUpdatesRegenerateOnProTxHashes(ld.ProTxHashes)
-	validatorUpdates, thresholdPubKey, _, err := types.PB2TM.ValidatorUpdatesFromValidatorSet(&abciValidatorUpdates)
-	require.NoError(t, err)
 
 	// this will cause the diff of priorities (77)
 	// to be larger than threshold == 2*totalVotingPower (22):
-	rs, err = abci.MarshalTxResults(fb.TxResults)
+	fb.ValidatorSetUpdate = &abciValidatorUpdates
+	fb.ValidatorSetUpdate.QuorumHash = quorumHash
+	su, err = sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, updatedState2)
 	require.NoError(t, err)
-	h = merkle.HashFromByteSlices(rs)
-	updatedState3, err := updatedState2.Update(firstNodeProTxHash, blockID, &block.Header, h, fb.ConsensusParamUpdates, validatorUpdates, thresholdPubKey, quorumHash)
+
+	updatedState3, err := updatedState2.Update(blockID, &block.Header, su...)
 	assert.NoError(t, err)
 
 	require.Equal(t, len(updatedState3.NextValidators.Validators), 2)
@@ -546,6 +543,8 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	_, updatedVal1 = updatedState3.NextValidators.GetByProTxHash(val1ProTxHash)
 	_, updatedVal2 := updatedState3.NextValidators.GetByProTxHash(val2ProTxHash)
 
+	assert.NotZero(t, updatedVal1)
+	assert.NotZero(t, updatedVal2)
 	// 2. Scale
 	// old prios: v1(100):13, v2(100):-12
 	wantVal1Prio = prevVal1.ProposerPriority
@@ -586,6 +585,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	defer tearDown(t)
 
 	ld := llmq.MustGenerate(crypto.RandProTxHashes(2))
+	thresholdPublicKey := cryptoenc.MustPubKeyToProto(ld.ThresholdPubKey)
 
 	val1VotingPower := types.DefaultDashVotingPower
 	val1ProTxHash := ld.ProTxHashes[0]
@@ -607,18 +607,13 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	fb := &abci.ResponseFinalizeBlock{
 		ValidatorSetUpdate: nil,
 	}
-	validatorUpdates, thresholdPublicKeyUpdate, _, err :=
-		types.PB2TM.ValidatorUpdatesFromValidatorSet(nil)
-	require.NoError(t, err)
-
-	rs, err := abci.MarshalTxResults(fb.TxResults)
-	require.NoError(t, err)
-	h := merkle.HashFromByteSlices(rs)
 
 	// Any node pro tx hash should do
 	firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
 
-	updatedState, err := state.Update(firstNodeProTxHash, blockID, &block.Header, h, fb.ConsensusParamUpdates, validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
+	su, err := sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, state)
+	require.NoError(t, err)
+	updatedState, err := state.Update(blockID, &block.Header, su...)
 	assert.NoError(t, err)
 
 	// 0 + 10 (initial prio) - 10 (avg) - 10 (mostest - total) = -10
@@ -633,13 +628,15 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	fvp, err := cryptoenc.PubKeyToProto(val2PubKey)
 	require.NoError(t, err)
 	updateAddVal := abci.ValidatorUpdate{ProTxHash: val2ProTxHash, PubKey: &fvp, Power: val1VotingPower}
-	validatorUpdates, err = types.PB2TM.ValidatorUpdates([]abci.ValidatorUpdate{updateAddVal})
-	assert.NoError(t, err)
+	fb.ValidatorSetUpdate = &abci.ValidatorSetUpdate{
+		ValidatorUpdates:   []abci.ValidatorUpdate{updateAddVal},
+		ThresholdPublicKey: thresholdPublicKey,
+		QuorumHash:         quorumHash,
+	}
 
-	rs, err = abci.MarshalTxResults(fb.TxResults)
+	su, err = sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, state)
 	require.NoError(t, err)
-	h = merkle.HashFromByteSlices(rs)
-	updatedState2, err := updatedState.Update(firstNodeProTxHash, blockID, &block.Header, h, fb.ConsensusParamUpdates, validatorUpdates, ld.ThresholdPubKey, quorumHash)
+	updatedState2, err := updatedState.Update(blockID, &block.Header, su...)
 	assert.NoError(t, err)
 
 	require.Equal(t, len(updatedState2.NextValidators.Validators), 2)
@@ -679,14 +676,9 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 		updatedVal2,
 	)
 
-	validatorUpdates, thresholdPublicKeyUpdate, quorumHash, err =
-		types.PB2TM.ValidatorUpdatesFromValidatorSet(fb.ValidatorSetUpdate)
+	su, err = sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, state)
 	require.NoError(t, err)
-
-	rs, err = abci.MarshalTxResults(fb.TxResults)
-	require.NoError(t, err)
-	h = merkle.HashFromByteSlices(rs)
-	updatedState3, err := updatedState2.Update(firstNodeProTxHash, blockID, &block.Header, h, fb.ConsensusParamUpdates, validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
+	updatedState3, err := updatedState2.Update(blockID, &block.Header, su...)
 	assert.NoError(t, err)
 
 	assert.Equal(t, updatedState3.Validators.Proposer.ProTxHash, updatedState3.NextValidators.Proposer.ProTxHash)
@@ -725,14 +717,9 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	fb = &abci.ResponseFinalizeBlock{
 		ValidatorSetUpdate: nil,
 	}
-	validatorUpdates, thresholdPublicKeyUpdate, quorumHash, err =
-		types.PB2TM.ValidatorUpdatesFromValidatorSet(fb.ValidatorSetUpdate)
+	su, err = sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, state)
 	require.NoError(t, err)
-
-	rs, err = abci.MarshalTxResults(fb.TxResults)
-	require.NoError(t, err)
-	h = merkle.HashFromByteSlices(rs)
-	oldState, err = oldState.Update(firstNodeProTxHash, blockID, &block.Header, h, fb.ConsensusParamUpdates, validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
+	oldState, err = oldState.Update(blockID, &block.Header, su...)
 	assert.NoError(t, err)
 	expectedVal1Prio2 = 13
 	expectedVal2Prio2 = -12
@@ -744,14 +731,9 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 		fb := &abci.ResponseFinalizeBlock{
 			ValidatorSetUpdate: nil,
 		}
-		validatorUpdates, thresholdPublicKeyUpdate, quorumHash, err =
-			types.PB2TM.ValidatorUpdatesFromValidatorSet(fb.ValidatorSetUpdate)
+		su, err = sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, state)
 		require.NoError(t, err)
-
-		rs, err := abci.MarshalTxResults(fb.TxResults)
-		require.NoError(t, err)
-		h := merkle.HashFromByteSlices(rs)
-		updatedState, err := oldState.Update(firstNodeProTxHash, blockID, &block.Header, h, fb.ConsensusParamUpdates, validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
+		updatedState, err := oldState.Update(blockID, &block.Header, su...)
 		assert.NoError(t, err)
 		// alternate (and cyclic priorities):
 		assert.NotEqual(
@@ -923,14 +905,14 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 
 	// Save state etc.
 	var validatorUpdates []*types.Validator
-	validatorUpdates, thresholdPublicKeyUpdate, quorumHash, err :=
+	validatorUpdates, _, _, err =
 		types.PB2TM.ValidatorUpdatesFromValidatorSet(responses.FinalizeBlock.ValidatorSetUpdate)
 	require.NoError(t, err)
-	rs, err := abci.MarshalTxResults(responses.FinalizeBlock.TxResults)
+
+	su, err := sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, responses.FinalizeBlock, state)
 	require.NoError(t, err)
-	h := merkle.HashFromByteSlices(rs)
-	state, err = state.Update(firstNodeProTxHash, blockID, &header, h, responses.FinalizeBlock.ConsensusParamUpdates, validatorUpdates,
-		thresholdPublicKeyUpdate, quorumHash)
+
+	state, err = state.Update(blockID, &header, su...)
 	require.NoError(t, err)
 	nextHeight := state.LastBlockHeight + 1
 	err = stateStore.Save(state)
@@ -1009,10 +991,7 @@ func TestConsensusParamsChangesSaveLoad(t *testing.T) {
 	changeIndex := 0
 	cp := params[changeIndex]
 	var (
-		validatorUpdates         []*types.Validator
-		thresholdPublicKeyUpdate crypto.PubKey
-		quorumHash               crypto.QuorumHash
-		err                      error
+		err error
 	)
 	for i := int64(1); i < highestHeight; i++ {
 		// When we get to a change height, use the next params.
@@ -1021,15 +1000,14 @@ func TestConsensusParamsChangesSaveLoad(t *testing.T) {
 			cp = params[changeIndex]
 		}
 		header, _, blockID, responses := makeHeaderPartsResponsesParams(t, state, &cp)
-		validatorUpdates, thresholdPublicKeyUpdate, quorumHash, err = types.PB2TM.ValidatorUpdatesFromValidatorSet(responses.FinalizeBlock.ValidatorSetUpdate)
 		require.NoError(t, err)
-		rs, err := abci.MarshalTxResults(responses.FinalizeBlock.TxResults)
-		require.NoError(t, err)
-		h := merkle.HashFromByteSlices(rs)
 
 		// Any node pro tx hash should do
 		firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
-		state, err = state.Update(firstNodeProTxHash, blockID, &header, h, responses.FinalizeBlock.ConsensusParamUpdates, validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
+
+		su, err := sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, responses.FinalizeBlock, state)
+		require.NoError(t, err)
+		state, err = state.Update(blockID, &header, su...)
 
 		require.NoError(t, err)
 		err = stateStore.Save(state)
@@ -1116,18 +1094,15 @@ func blockExecutorFunc(t *testing.T, firstProTxHash crypto.ProTxHash) func(prevS
 		resp := &tmstate.ABCIResponses{
 			FinalizeBlock: &abci.ResponseFinalizeBlock{ValidatorSetUpdate: vsu},
 		}
-		validatorUpdates, thresholdPubKey, quorumHash, err :=
-			types.PB2TM.ValidatorUpdatesFromValidatorSet(resp.FinalizeBlock.ValidatorSetUpdate)
-		require.NoError(t, err)
 		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit))
 		require.NoError(t, err)
 		blockID, err := block.BlockID()
 		require.NoError(t, err)
-		rs, err := abci.MarshalTxResults(resp.FinalizeBlock.TxResults)
+
+		su, err := sm.PrepareStateUpdates(firstProTxHash, state.LastBlockHeight, resp.FinalizeBlock, state)
 		require.NoError(t, err)
-		h := merkle.HashFromByteSlices(rs)
-		state, err = state.Update(firstProTxHash, blockID, &block.Header, h, resp.FinalizeBlock.ConsensusParamUpdates,
-			validatorUpdates, thresholdPubKey, quorumHash)
+
+		state, err = state.Update(blockID, &block.Header, su...)
 		require.NoError(t, err)
 		return state
 	}

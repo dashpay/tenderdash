@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
+
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
@@ -11,12 +13,17 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-func prepareStateUpdates(
+// UpdateFunc is a function that can be used to update state
+type UpdateFunc func(State) (State, error)
+
+// PrepareStateUpdates generates state updates that will set Dash-related state fields.
+// resp can be one of: *abci.ResponsePrepareProposal, *abci.ResponseProcessProposal,  *abci.ResponseFinalizeBlock.
+func PrepareStateUpdates(
 	nodeProTxHash crypto.ProTxHash,
 	lastHeight int64,
-	resp interface{},
+	resp proto.Message,
 	state State,
-) ([]func(State) (State, error), error) {
+) ([]UpdateFunc, error) {
 	var (
 		appHash               []byte
 		validatorSetUpdate    *abci.ValidatorSetUpdate
@@ -39,15 +46,17 @@ func prepareStateUpdates(
 		validatorSetUpdate = t.ValidatorSetUpdate
 		consensusParamUpdates = t.ConsensusParamUpdates
 		txResults = t.TxResults
+	default:
+		return nil, fmt.Errorf("unsupported response type %T", t)
 	}
 	err := validateValidatorSetUpdate(validatorSetUpdate, state.ConsensusParams.Validator)
 	if err != nil {
 		return nil, err
 	}
-	updates := []func(State) (State, error){
+	updates := []UpdateFunc{
 		updateAppHash(appHash),
 		updateResultHash(txResults),
-		updateStatConsensusParams(lastHeight, consensusParamUpdates),
+		updateStateConsensusParams(lastHeight, consensusParamUpdates),
 		updateStateValidator(
 			nodeProTxHash,
 			lastHeight,
@@ -58,7 +67,7 @@ func prepareStateUpdates(
 	return updates, nil
 }
 
-func executeStateUpdates(state State, updates ...func(State) (State, error)) (State, error) {
+func executeStateUpdates(state State, updates ...UpdateFunc) (State, error) {
 	var err error
 	for _, update := range updates {
 		state, err = update(state)
@@ -69,7 +78,7 @@ func executeStateUpdates(state State, updates ...func(State) (State, error)) (St
 	return state, nil
 }
 
-func updateResultHash(txResults []*abci.ExecTxResult) func(State) (State, error) {
+func updateResultHash(txResults []*abci.ExecTxResult) UpdateFunc {
 	return func(state State) (State, error) {
 		// Update the state with the block and responses.
 		rs, err := abci.MarshalTxResults(txResults)
@@ -88,10 +97,10 @@ func updateAppHash(appHash []byte) func(State) (State, error) {
 	}
 }
 
-func updateStatConsensusParams(
+func updateStateConsensusParams(
 	lastHeight int64,
 	consensusParamUpdates *tmtypes.ConsensusParams,
-) func(State) (State, error) {
+) UpdateFunc {
 	return func(state State) (State, error) {
 		// Update the params with the latest abciResponses.
 		nextParams := state.ConsensusParams

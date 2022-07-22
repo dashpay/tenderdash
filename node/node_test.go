@@ -22,6 +22,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/dash/quorum"
+	ctypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/evidence"
 	"github.com/tendermint/tendermint/internal/mempool"
@@ -372,7 +373,9 @@ func TestCreateProposalBlock(t *testing.T) {
 	block, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
-		state, commit,
+		state,
+		&ctypes.UncommittedState{},
+		commit,
 		proposerProTxHash,
 		proposedAppVersion,
 	)
@@ -454,7 +457,9 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 	block, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
-		state, commit,
+		state,
+		&ctypes.UncommittedState{},
+		commit,
 		proposerProTxHash,
 		0,
 	)
@@ -582,7 +587,9 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	block, err := blockExec.CreateProposalBlock(
 		ctx,
 		math.MaxInt64,
-		state, commit,
+		state,
+		&ctypes.UncommittedState{},
+		commit,
 		proposerProTxHash,
 		0,
 	)

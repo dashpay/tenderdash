@@ -16,6 +16,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/quorum/mock"
 	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
+	ctypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool/mocks"
 	"github.com/tendermint/tendermint/internal/p2p"
@@ -425,7 +426,7 @@ func TestFinalizeBlock(t *testing.T) {
 
 	app.ValidatorSetUpdates[1] = newVals.ABCIEquivalentValidatorUpdates()
 
-	state, err = blockExec.ApplyBlock(ctx, state, nodeProTxHash, blockID, block)
+	state, err = blockExec.ApplyBlock(ctx, state, ctypes.UncommittedState{}, nodeProTxHash, blockID, block)
 	require.Nil(t, err)
 	// test new validator was added to NextValidators
 	require.Equal(t, state.Validators.Size()+100, state.NextValidators.Size())
