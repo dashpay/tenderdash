@@ -610,7 +610,7 @@ func (store dbStore) LoadConsensusParams(height int64) (types.ConsensusParams, e
 
 	if paramsInfo.ConsensusParams.Equal(&emptypb) {
 		paramsInfo2, err := store.loadConsensusParamsInfo(paramsInfo.LastHeightChanged)
-		if err != nil {
+		if err != nil || paramsInfo2.ConsensusParams.Equal(&emptypb) {
 			return empty, fmt.Errorf(
 				"couldn't find consensus params at height %d (height %d was originally requested): %w",
 				paramsInfo.LastHeightChanged,
