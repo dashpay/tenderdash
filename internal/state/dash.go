@@ -115,7 +115,7 @@ func updateStateConsensusParams(
 			state.Version.Consensus.App = nextParams.Version.AppVersion
 
 			// Change results from this height but only applies to the next height.
-			state.LastHeightConsensusParamsChanged = lastHeight + 1
+			state.LastHeightConsensusParamsChanged = lastHeight + 1 + 1
 		}
 		state.ConsensusParams = nextParams
 		return state, nil
@@ -153,11 +153,11 @@ func updateStateNextValidators(
 					state.Validators.QuorumType, quorumHash, nodeProTxHash)
 			}
 			// Change results from this height but only applies to the next height.
-			state.LastHeightValidatorsChanged = lastHeight + 1 + 1
+			state.LastHeightValidatorsChanged = lastHeight + 1
 		}
 		// Update validator proposer priority and set state variables.
 		nValSet.IncrementProposerPriority(1)
-		state.NextValidators = nValSet
+		state.Validators = nValSet
 		return state, nil
 	}
 }

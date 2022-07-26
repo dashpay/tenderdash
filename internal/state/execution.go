@@ -191,7 +191,6 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	uncommittedState.ValidatorSetUpdate = rpp.ValidatorSetUpdate
 	uncommittedState.ConsensusParamUpdates = rpp.ConsensusParamUpdates
 	uncommittedState.TxResults = rpp.TxResults
-	uncommittedState.NextValidators = state.NextValidators
 	if nextCoreChainLock != nil {
 		uncommittedState.CoreChainLockedBlockHeight = nextCoreChainLock.CoreBlockHeight
 	}
@@ -250,7 +249,6 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	uncommittedState.ValidatorSetUpdate = resp.ValidatorSetUpdate
 	uncommittedState.LastResultsHash = state.LastResultsHash
 	uncommittedState.TxResults = resp.TxResults
-	uncommittedState.NextValidators = state.NextValidators
 	uncommittedState.CoreChainLockedBlockHeight = nextCoreChainLock.CoreBlockHeight
 	return resp.IsAccepted(), nil
 }
@@ -301,13 +299,6 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 		return fmt.Errorf("wrong Block.Header.LastResultsHash.  Expected %X, got %v",
 			uncommittedState.LastResultsHash,
 			block.LastResultsHash,
-		)
-	}
-
-	if uncommittedState.NextValidators != nil && !bytes.Equal(block.NextValidatorsHash, uncommittedState.NextValidators.Hash()) {
-		return fmt.Errorf("wrong Block.Header.NextValidatorsHash. Expected %X, got %v",
-			uncommittedState.NextValidators.Hash(),
-			block.NextValidatorsHash,
 		)
 	}
 
@@ -424,7 +415,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
-	fireEvents(blockExec.logger, blockExec.eventBus, block, blockID, finalizeBlockResponse, state.NextValidators)
+	fireEvents(blockExec.logger, blockExec.eventBus, block, blockID, finalizeBlockResponse, state.Validators)
 
 	return state, nil
 }
@@ -626,8 +617,7 @@ func (state State) Update(
 		LastStateID:                      types.StateID{Height: header.Height, LastAppHash: header.AppHash},
 		LastBlockTime:                    header.Time,
 		LastCoreChainLockedBlockHeight:   header.CoreChainLockedHeight,
-		NextValidators:                   state.NextValidators.Copy(),
-		Validators:                       state.NextValidators.Copy(),
+		Validators:                       state.Validators.Copy(),
 		LastValidators:                   state.Validators.Copy(),
 		LastHeightValidatorsChanged:      state.LastHeightValidatorsChanged,
 		ConsensusParams:                  state.ConsensusParams,

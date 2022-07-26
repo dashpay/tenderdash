@@ -630,7 +630,7 @@ func (n *nodeImpl) OnStop() {
 			n.logger.Error("problem closing blockstore", "err", err)
 		}
 	}
-	if n.stateStore != nil {
+	if n.stateStore != sm.Store(nil) {
 		if err := n.stateStore.Close(); err != nil {
 			n.logger.Error("problem closing statestore", "err", err)
 		}

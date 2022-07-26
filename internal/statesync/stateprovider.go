@@ -147,18 +147,11 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	// height: last block, i.e. the snapshotted height
 	// height+1: current block, i.e. the first block we'll process after the snapshot
 	// height+2: next block, i.e. the second block after the snapshot
-	//
-	// We need to fetch the NextValidators from height+2 because if the application changed
-	// the validator set at the snapshot height then this only takes effect at height+2.
 	lastLightBlock, err := s.verifyLightBlockAtHeight(ctx, height, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
 	currentLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+1, time.Now())
-	if err != nil {
-		return sm.State{}, err
-	}
-	nextLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+2, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
@@ -176,8 +169,8 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastResultsHash = currentLightBlock.LastResultsHash
 	state.LastValidators = lastLightBlock.ValidatorSet
 	state.Validators = currentLightBlock.ValidatorSet
-	state.NextValidators = nextLightBlock.ValidatorSet
-	state.LastHeightValidatorsChanged = nextLightBlock.Height
+	// FIXME: not sure if the one below is correct
+	state.LastHeightValidatorsChanged = currentLightBlock.Height
 
 	// We'll also need to fetch consensus params via RPC, using light client verification.
 	primaryURL, ok := s.providers[s.lc.Primary()]
@@ -192,7 +185,7 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	result, err := rpcclient.ConsensusParams(ctx, &currentLightBlock.Height)
 	if err != nil {
 		return sm.State{}, fmt.Errorf("unable to fetch consensus parameters for height %v: %w",
-			nextLightBlock.Height, err)
+			currentLightBlock.Height, err)
 	}
 	state.ConsensusParams = result.ConsensusParams
 	state.LastHeightConsensusParamsChanged = currentLightBlock.Height
@@ -302,18 +295,11 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	// height: last block, i.e. the snapshotted height
 	// height+1: current block, i.e. the first block we'll process after the snapshot
 	// height+2: next block, i.e. the second block after the snapshot
-	//
-	// We need to fetch the NextValidators from height+2 because if the application changed
-	// the validator set at the snapshot height then this only takes effect at height+2.
 	lastLightBlock, err := s.verifyLightBlockAtHeight(ctx, height, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
 	currentLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+1, time.Now())
-	if err != nil {
-		return sm.State{}, err
-	}
-	nextLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+2, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
@@ -331,8 +317,8 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastResultsHash = currentLightBlock.LastResultsHash
 	state.LastValidators = lastLightBlock.ValidatorSet
 	state.Validators = currentLightBlock.ValidatorSet
-	state.NextValidators = nextLightBlock.ValidatorSet
-	state.LastHeightValidatorsChanged = nextLightBlock.Height
+	// FIXME: not sure if the line below is correct, was nextLightBlock.Height for next-block-execution
+	state.LastHeightValidatorsChanged = currentLightBlock.Height
 
 	// We'll also need to fetch consensus params via P2P.
 	state.ConsensusParams, err = s.consensusParams(ctx, currentLightBlock.Height)
@@ -340,9 +326,9 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 		return sm.State{}, fmt.Errorf("fetching consensus params: %w", err)
 	}
 	// validate the consensus params
-	if !bytes.Equal(nextLightBlock.ConsensusHash, state.ConsensusParams.HashConsensusParams()) {
+	if !bytes.Equal(currentLightBlock.ConsensusHash, state.ConsensusParams.HashConsensusParams()) {
 		return sm.State{}, fmt.Errorf("consensus params hash mismatch at height %d. Expected %v, got %v",
-			currentLightBlock.Height, nextLightBlock.ConsensusHash, state.ConsensusParams.HashConsensusParams())
+			currentLightBlock.Height, currentLightBlock.ConsensusHash, state.ConsensusParams.HashConsensusParams())
 	}
 	// set the last height changed to the current height
 	state.LastHeightConsensusParamsChanged = currentLightBlock.Height

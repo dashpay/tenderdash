@@ -86,7 +86,6 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		LastBlockID:     rollbackBlock.BlockID,
 		LastBlockTime:   rollbackBlock.Header.Time,
 
-		NextValidators:              invalidState.Validators,
 		Validators:                  invalidState.LastValidators,
 		LastValidators:              previousLastValidatorSet,
 		LastHeightValidatorsChanged: valChangeHeight,

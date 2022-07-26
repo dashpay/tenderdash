@@ -91,7 +91,6 @@ type State struct {
 	// Note that if s.LastBlockHeight causes a valset change,
 	// we set s.LastHeightValidatorsChanged = s.LastBlockHeight + 1 + 1
 	// Extra +1 due to nextValSet delay.
-	NextValidators              *types.ValidatorSet
 	Validators                  *types.ValidatorSet
 	LastValidators              *types.ValidatorSet
 	LastHeightValidatorsChanged int64
@@ -106,7 +105,20 @@ type State struct {
 
 	// the latest AppHash we've received from calling abci.Commit()
 	AppHash []byte
+
+	// NextBlockSettings NextBlockSettings
 }
+
+//  NewRound changes the State to apply settings new round and height to it.
+// func (state *State) NewRound(ctx context.Context, height int64, round int32, lastBockHeader types.Header) error {
+// 	if state.LastBlockHeight+1 != height {
+// 		return fmt.Errorf("New height %d is in future, last block height was %d", height, state.LastBlockHeight)
+// 	}
+
+// 	if height == state.NextBlockSettings.Height {
+// 		state.NextBlockSettings.Apply(height, state)
+// 	}
+// }
 
 // Copy makes a copy of the State for mutating.
 func (state State) Copy() State {
@@ -124,7 +136,6 @@ func (state State) Copy() State {
 
 		LastCoreChainLockedBlockHeight: state.LastCoreChainLockedBlockHeight,
 
-		NextValidators:              state.NextValidators.Copy(),
 		Validators:                  state.Validators.Copy(),
 		LastValidators:              state.LastValidators.Copy(),
 		LastHeightValidatorsChanged: state.LastHeightValidatorsChanged,
@@ -211,12 +222,6 @@ func (state *State) ToProto() (*tmstate.State, error) {
 
 	sm.LastStateID = state.LastStateID.ToProto()
 
-	nVals, err := state.NextValidators.ToProto()
-	if err != nil {
-		return nil, err
-	}
-	sm.NextValidators = nVals
-
 	if state.LastBlockHeight >= 1 { // At Block 1 LastValidators is nil
 		lVals, err := state.LastValidators.ToProto()
 		if err != nil {
@@ -269,12 +274,6 @@ func FromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 	}
 	state.Validators = vals
 
-	nVals, err := types.ValidatorSetFromProto(pb.NextValidators)
-	if err != nil {
-		return nil, err
-	}
-	state.NextValidators = nVals
-
 	if state.LastBlockHeight >= 1 { // At Block 1 LastValidators is nil
 		lVals, err := types.ValidatorSetFromProto(pb.LastValidators)
 		if err != nil {
@@ -315,7 +314,7 @@ func (state State) MakeBlock(
 	block.Header.Populate(
 		state.Version.Consensus, state.ChainID,
 		tmtime.Now(), state.LastBlockID,
-		state.Validators.Hash(), state.NextValidators.Hash(),
+		state.LastValidators.Hash(), state.Validators.Hash(),
 		state.ConsensusParams.HashConsensusParams(), state.AppHash, state.LastResultsHash,
 		proposerProTxHash,
 	)
@@ -327,8 +326,6 @@ func (state State) ValidatorsAtHeight(height int64) *types.ValidatorSet {
 	switch {
 	case state.LastBlockHeight == height:
 		return state.LastValidators
-	case state.LastBlockHeight+2 == height:
-		return state.NextValidators
 	default:
 		return state.Validators
 	}
@@ -369,10 +366,9 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 		return State{}, fmt.Errorf("error in genesis doc: %w", err)
 	}
 
-	var validatorSet, nextValidatorSet *types.ValidatorSet
+	var validatorSet *types.ValidatorSet
 	if genDoc.Validators == nil || len(genDoc.Validators) == 0 {
 		validatorSet = types.NewValidatorSet(nil, nil, genDoc.QuorumType, nil, false)
-		nextValidatorSet = types.NewValidatorSet(nil, nil, genDoc.QuorumType, nil, false)
 	} else {
 		validators := make([]*types.Validator, len(genDoc.Validators))
 		hasAllPublicKeys := true
@@ -385,9 +381,6 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 		validatorSet = types.NewValidatorSet(
 			validators, genDoc.ThresholdPublicKey, genDoc.QuorumType, genDoc.QuorumHash, hasAllPublicKeys,
 		)
-		nextValidatorSet = types.NewValidatorSet(
-			validators, genDoc.ThresholdPublicKey, genDoc.QuorumType, genDoc.QuorumHash, hasAllPublicKeys,
-		).CopyIncrementProposerPriority(1)
 	}
 
 	stateID := types.StateID{
@@ -407,8 +400,7 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 
 		LastCoreChainLockedBlockHeight: genDoc.InitialCoreChainLockedHeight,
 
-		NextValidators: nextValidatorSet,
-		Validators:     validatorSet,
+		Validators: validatorSet,
 		// The quorum type must be 0 on an empty validator set
 		LastValidators:              types.NewEmptyValidatorSet(),
 		LastHeightValidatorsChanged: genDoc.InitialHeight,

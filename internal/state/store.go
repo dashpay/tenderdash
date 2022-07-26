@@ -159,13 +159,13 @@ func (store dbStore) save(state State, key []byte) error {
 		}
 	}
 	// Save next validators.
-	err := store.saveValidatorsInfo(currentHeight+1, state.LastHeightValidatorsChanged, state.NextValidators, batch)
+	err := store.saveValidatorsInfo(currentHeight, state.LastHeightValidatorsChanged, state.Validators, batch)
 	if err != nil {
 		return err
 	}
 
 	// Save next consensus params.
-	if err := store.saveConsensusParamsInfo(currentHeight,
+	if err := store.saveConsensusParamsInfo(currentHeight+1,
 		state.LastHeightConsensusParamsChanged, state.ConsensusParams, batch); err != nil {
 		return err
 	}
@@ -199,10 +199,6 @@ func (store dbStore) Bootstrap(state State) error {
 	}
 
 	if err := store.saveValidatorsInfo(height, height, state.Validators, batch); err != nil {
-		return err
-	}
-
-	if err := store.saveValidatorsInfo(height+1, height+1, state.NextValidators, batch); err != nil {
 		return err
 	}
 

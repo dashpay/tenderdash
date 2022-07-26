@@ -17261,7 +17261,7 @@ func (m *ResponseEndBlock) Unmarshal(dAtA []byte) error {
 		switch fieldNum {
 		case 2:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ConsensusParams", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ConsensusParamUpdates", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -18072,7 +18072,7 @@ func (m *ResponsePrepareProposal) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ConsensusParams", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ConsensusParamUpdates", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -18317,7 +18317,7 @@ func (m *ResponseProcessProposal) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 5:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ConsensusParams", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ConsensusParamUpdates", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {
@@ -18799,7 +18799,7 @@ func (m *ResponseFinalizeBlock) Unmarshal(dAtA []byte) error {
 			iNdEx = postIndex
 		case 4:
 			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field ConsensusParams", wireType)
+				return fmt.Errorf("proto: wrong wireType = %d for field ConsensusParamUpdates", wireType)
 			}
 			var msglen int
 			for shift := uint(0); ; shift += 7 {

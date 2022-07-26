@@ -395,13 +395,6 @@ func (h *Handshaker) ReplayBlocks(
 					newValidatorSet,
 				)
 				state.Validators = newValidatorSet
-				state.NextValidators = types.NewValidatorSetWithLocalNodeProTxHash(
-					vals,
-					thresholdPublicKey,
-					h.genDoc.QuorumType,
-					quorumHash,
-					h.nodeProTxHash,
-				).CopyIncrementProposerPriority(1)
 			} else if len(h.genDoc.Validators) == 0 {
 				// If validator set is not set in genesis and still empty after InitChain, exit.
 				h.logger.Debug("Validator set is nil in genesis and still empty after InitChain")
