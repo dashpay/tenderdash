@@ -2,7 +2,6 @@
 package state_test
 
 import (
-	"bytes"
 	"fmt"
 	"math/big"
 	"os"
@@ -887,6 +886,9 @@ func TestStoreLoadValidatorsIncrementsProposerPriority(t *testing.T) {
 // changes.
 func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	const valSetSize = 7
+
+	// ====== GENESIS STATE, height 1 ====== //
+
 	tearDown, stateDB, state := setupTestCase(t)
 	defer tearDown(t)
 	stateStore := sm.NewStore(stateDB)
@@ -896,37 +898,42 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	err := stateStore.Save(state)
 	require.NoError(t, err)
 
+	// ====== HEIGHT 2 ====== //
+
+	// We receive new validator set, which will be used at height 3
+
+	// First, we create proposal...
 	firstNodeProTxHash, val0 := state.Validators.GetByIndex(0)
 	proTxHash := val0.ProTxHash // this is not really old, as it stays the same
 	oldPubkey := val0.PubKey
 
 	// Swap the first validator with a new one (validator set size stays the same).
 	header, _, blockID, responses := makeHeaderPartsResponsesValKeysRegenerate(t, state, true)
+	currentHeight := header.Height + 1
+	assert.Equal(t, int64(2), currentHeight)
 
-	// Save state etc.
-	var validatorUpdates []*types.Validator
-	validatorUpdates, _, _, err =
-		types.PB2TM.ValidatorUpdatesFromValidatorSet(responses.FinalizeBlock.ValidatorSetUpdate)
-	require.NoError(t, err)
+	// retrieve pubKey to use in assertions below
+	var newPubkey crypto.PubKey
+	for _, valUpdate := range responses.FinalizeBlock.ValidatorSetUpdate.ValidatorUpdates {
+		if proTxHash.Equal(valUpdate.ProTxHash) {
+			newPubkey, err = cryptoenc.PubKeyFromProto(*valUpdate.PubKey)
+			require.NoError(t, err)
+		}
+	}
 
-	su, err := sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, responses.FinalizeBlock, state)
+	// Prepare state to generate height 2
+	su, err := sm.PrepareStateUpdates(firstNodeProTxHash, currentHeight-1, responses.FinalizeBlock, state)
 	require.NoError(t, err)
 
 	state, err = state.Update(blockID, &header, su...)
 	require.NoError(t, err)
-	nextHeight := state.LastBlockHeight + 1
+	assert.Equal(t, currentHeight-1, state.LastBlockHeight)
+
 	err = stateStore.Save(state)
 	require.NoError(t, err)
 
-	var newPubkey crypto.PubKey
-	for _, valUpdate := range validatorUpdates {
-		if bytes.Equal(valUpdate.ProTxHash.Bytes(), proTxHash.Bytes()) {
-			newPubkey = valUpdate.PubKey
-		}
-	}
-
-	// Load nextheight, it should be the oldpubkey.
-	v0, err := stateStore.LoadValidators(nextHeight)
+	// Load height, it should be the oldpubkey.
+	v0, err := stateStore.LoadValidators(currentHeight)
 	assert.NoError(t, err)
 	assert.Equal(t, valSetSize, v0.Size())
 	index, val := v0.GetByProTxHash(proTxHash)
@@ -937,11 +944,12 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	}
 
 	// Load nextheight+1, it should be the new pubkey.
-	v1, err := stateStore.LoadValidators(nextHeight + 1)
-	assert.NoError(t, err)
+	v1, err := stateStore.LoadValidators(currentHeight + 1)
+	require.NoError(t, err)
 	assert.Equal(t, valSetSize, v1.Size())
 	index, val = v1.GetByProTxHash(proTxHash)
 	assert.NotNil(t, val)
+	assert.NotEqual(t, val.PubKey, oldPubkey, "regenerated public key expected")
 	assert.Equal(t, val.PubKey, newPubkey, "the public key should match the regenerated public key")
 	if index < 0 {
 		t.Fatal("expected to find same validator by new address")

@@ -57,7 +57,7 @@ func PrepareStateUpdates(
 		updateAppHash(appHash),
 		updateResultHash(txResults),
 		updateStateConsensusParams(lastHeight, consensusParamUpdates),
-		updateStateValidator(
+		updateStateNextValidators(
 			nodeProTxHash,
 			lastHeight,
 			validatorSetUpdate,
@@ -104,7 +104,6 @@ func updateStateConsensusParams(
 	return func(state State) (State, error) {
 		// Update the params with the latest abciResponses.
 		nextParams := state.ConsensusParams
-		lastHeightParamsChanged := state.LastHeightConsensusParamsChanged
 		if consensusParamUpdates != nil {
 			// NOTE: must not mutate state.ConsensusParams
 			nextParams = state.ConsensusParams.UpdateConsensusParams(consensusParamUpdates)
@@ -116,20 +115,19 @@ func updateStateConsensusParams(
 			state.Version.Consensus.App = nextParams.Version.AppVersion
 
 			// Change results from this height but only applies to the next height.
-			lastHeightParamsChanged = lastHeight + 1
+			state.LastHeightConsensusParamsChanged = lastHeight + 1
 		}
-		state.LastHeightValidatorsChanged = lastHeightParamsChanged
 		state.ConsensusParams = nextParams
 		return state, nil
 	}
 }
 
-func updateStateValidator(
+func updateStateNextValidators(
 	nodeProTxHash crypto.ProTxHash,
 	lastHeight int64,
 	validatorSetUpdate *abci.ValidatorSetUpdate,
 	params types.ValidatorParams,
-) func(state State) (State, error) {
+) UpdateFunc {
 	return func(state State) (State, error) {
 		err := validateValidatorSetUpdate(validatorSetUpdate, params)
 		if err != nil {
@@ -144,7 +142,6 @@ func updateStateValidator(
 		// and update s.LastValidators and s.Validators.
 		nValSet := state.Validators.Copy()
 		// Update the validator set with the latest abciResponses.
-		lastHeightValsChanged := state.LastHeightValidatorsChanged
 		if len(validatorUpdates) > 0 {
 			if bytes.Equal(nValSet.QuorumHash, quorumHash) {
 				err := nValSet.UpdateWithChangeSet(validatorUpdates, thresholdPubKey, quorumHash)
@@ -156,11 +153,10 @@ func updateStateValidator(
 					state.Validators.QuorumType, quorumHash, nodeProTxHash)
 			}
 			// Change results from this height but only applies to the next height.
-			lastHeightValsChanged = lastHeight + 1 // +1
+			state.LastHeightValidatorsChanged = lastHeight + 1 + 1
 		}
 		// Update validator proposer priority and set state variables.
 		nValSet.IncrementProposerPriority(1)
-		state.LastHeightValidatorsChanged = lastHeightValsChanged
 		state.NextValidators = nValSet
 		return state, nil
 	}

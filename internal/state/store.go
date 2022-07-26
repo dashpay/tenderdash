@@ -148,24 +148,24 @@ func (store dbStore) save(state State, key []byte) error {
 	batch := store.db.NewBatch()
 	defer batch.Close()
 
-	nextHeight := state.LastBlockHeight + 1
+	currentHeight := state.LastBlockHeight + 1
 	// If first block, save validators for the block.
-	if nextHeight == 1 {
-		nextHeight = state.InitialHeight
+	if currentHeight == 1 {
+		currentHeight = state.InitialHeight
 		// This extra logic due to Tendermint validator set changes being delayed 1 block.
 		// It may get overwritten due to InitChain validator updates.
-		if err := store.saveValidatorsInfo(nextHeight, nextHeight, state.Validators, batch); err != nil {
+		if err := store.saveValidatorsInfo(currentHeight, currentHeight, state.Validators, batch); err != nil {
 			return err
 		}
 	}
 	// Save next validators.
-	err := store.saveValidatorsInfo(nextHeight+1, state.LastHeightValidatorsChanged, state.NextValidators, batch)
+	err := store.saveValidatorsInfo(currentHeight+1, state.LastHeightValidatorsChanged, state.NextValidators, batch)
 	if err != nil {
 		return err
 	}
 
 	// Save next consensus params.
-	if err := store.saveConsensusParamsInfo(nextHeight,
+	if err := store.saveConsensusParamsInfo(currentHeight,
 		state.LastHeightConsensusParamsChanged, state.ConsensusParams, batch); err != nil {
 		return err
 	}
