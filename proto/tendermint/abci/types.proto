@@ -137,10 +137,17 @@ message RequestPrepareProposal {
   bytes                     next_validators_hash = 7;
 
   // Dash's fields
-  uint32 core_chain_locked_height      = 100;
-  bytes  proposer_pro_tx_hash          = 101; // original proposer of the block
-  uint64 proposed_app_version          = 102; // proposer's latest available app protocol version
-  tendermint.version.Consensus version = 103;
+  uint32                       core_chain_locked_height = 100;
+  bytes                        proposer_pro_tx_hash     = 101;  // original proposer of the block
+  uint64                       proposed_app_version     = 102;  // proposer's latest available app protocol version
+  tendermint.version.Consensus version                  = 103;
+
+  repeated ExecTxResult            tx_results              = 104;
+  tendermint.types.ConsensusParams consensus_param_updates = 105;
+  bytes                            app_hash                = 106;
+
+  tendermint.types.CoreChainLock next_core_chain_lock_update = 107;
+  ValidatorSetUpdate             validator_set_update        = 108 [(gogoproto.nullable) = true];
 }
 
 message RequestProcessProposal {
@@ -154,10 +161,10 @@ message RequestProcessProposal {
   bytes                     next_validators_hash = 7;
 
   // Dash's fields
-  uint32 core_chain_locked_height      = 100;
-  bytes  proposer_pro_tx_hash          = 101; // original proposer of the block
-  uint64 proposed_app_version          = 102; // proposer's latest available app protocol version
-  tendermint.version.Consensus version = 103;
+  uint32                       core_chain_locked_height = 100;
+  bytes                        proposer_pro_tx_hash     = 101;  // original proposer of the block
+  uint64                       proposed_app_version     = 102;  // proposer's latest available app protocol version
+  tendermint.version.Consensus version                  = 103;
 }
 
 // Extends a vote with application-side injection
@@ -186,10 +193,10 @@ message RequestFinalizeBlock {
   bytes                     next_validators_hash = 7;
 
   // Dash's fields
-  uint32 core_chain_locked_height      = 100;
-  bytes  proposer_pro_tx_hash          = 101; // original proposer of the block
-  uint64 proposed_app_version          = 102; // proposer's latest available app protocol version
-  tendermint.version.Consensus version = 103;
+  uint32                       core_chain_locked_height = 100;
+  bytes                        proposer_pro_tx_hash     = 101;  // original proposer of the block
+  uint64                       proposed_app_version     = 102;  // proposer's latest available app protocol version
+  tendermint.version.Consensus version                  = 103;
 }
 
 //----------------------------------------
@@ -377,8 +384,8 @@ message ResponseProcessProposal {
 }
 
 message ExtendVoteExtension {
-  tendermint.types.VoteExtensionType type = 1;
-  bytes extension                         = 2;
+  tendermint.types.VoteExtensionType type      = 1;
+  bytes                              extension = 2;
 }
 
 message ResponseExtendVote {
@@ -395,16 +402,13 @@ message ResponseVerifyVoteExtension {
   }
 }
 
+// In same-block execution mode, Tendermint will log an error and ignore values for ResponseFinalizeBlock.app_hash,
+// ResponseFinalizeBlock.tx_results, ResponseFinalizeBlock.validator_updates, and ResponsePrepareProposal.consensus_param_updates,
+// as those must have been provided by PrepareProposal.
 message ResponseFinalizeBlock {
   repeated Event events = 1
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
-  repeated ExecTxResult            tx_results              = 2;
-  tendermint.types.ConsensusParams consensus_param_updates = 4;
-  bytes                            app_hash                = 5;
-  int64                            retain_height           = 6;
-
-  tendermint.types.CoreChainLock next_core_chain_lock_update = 100;
-  ValidatorSetUpdate             validator_set_update        = 101 [(gogoproto.nullable) = true];
+  int64 retain_height = 6;
 }
 
 //----------------------------------------
@@ -584,7 +588,7 @@ service ABCIApplication {
   rpc LoadSnapshotChunk(RequestLoadSnapshotChunk) returns (ResponseLoadSnapshotChunk);
   rpc ApplySnapshotChunk(RequestApplySnapshotChunk) returns (ResponseApplySnapshotChunk);
   rpc PrepareProposal(RequestPrepareProposal) returns (ResponsePrepareProposal);
-  rpc ProcessProposal(RequestProcessProposal  ) returns (ResponseProcessProposal);
+  rpc ProcessProposal(RequestProcessProposal) returns (ResponseProcessProposal);
   rpc ExtendVote(RequestExtendVote) returns (ResponseExtendVote);
   rpc VerifyVoteExtension(RequestVerifyVoteExtension) returns (ResponseVerifyVoteExtension);
   rpc FinalizeBlock(RequestFinalizeBlock) returns (ResponseFinalizeBlock);

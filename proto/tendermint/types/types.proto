@@ -36,7 +36,7 @@ enum SignedMsgType {
       [(gogoproto.enumvalue_customname) = "PrevoteType"];
   SIGNED_MSG_TYPE_PRECOMMIT = 2
       [(gogoproto.enumvalue_customname) = "PrecommitType"];
-  SIGNED_MSG_TYPE_COMMIT    = 3
+  SIGNED_MSG_TYPE_COMMIT = 3
       [(gogoproto.enumvalue_customname) = "CommitType"];
 
   // Proposals
@@ -73,11 +73,11 @@ message StateID {
 // Header defines the structure of a Tendermint block header.
 message Header {
   // basic block info
-  tendermint.version.Consensus version  = 1 [(gogoproto.nullable) = false];
-  string                       chain_id = 2 [(gogoproto.customname) = "ChainID"];
-  int64                        height   = 3;
+  tendermint.version.Consensus version                  = 1 [(gogoproto.nullable) = false];
+  string                       chain_id                 = 2 [(gogoproto.customname) = "ChainID"];
+  int64                        height                   = 3;
   uint32                       core_chain_locked_height = 100;
-  google.protobuf.Timestamp    time     = 4
+  google.protobuf.Timestamp    time                     = 4
       [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 
   // prev block info
@@ -150,16 +150,16 @@ message Commit {
 }
 
 message Proposal {
-  SignedMsgType             type                     = 1;
-  int64                     height                   = 2;
-  uint32                    core_chain_locked_height = 100;
-  int32                     round                    = 3;
-  int32                     pol_round                = 4;
-  BlockID                   block_id                 = 5
+  SignedMsgType type                     = 1;
+  int64         height                   = 2;
+  uint32        core_chain_locked_height = 100;
+  int32         round                    = 3;
+  int32         pol_round                = 4;
+  BlockID       block_id                 = 5
       [(gogoproto.customname) = "BlockID", (gogoproto.nullable) = false];
-  google.protobuf.Timestamp timestamp                = 6
+  google.protobuf.Timestamp timestamp = 6
       [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-  bytes                     signature                = 7;
+  bytes signature = 7;
 }
 
 message SignedHeader {
@@ -179,7 +179,7 @@ message BlockMeta {
   Header header     = 3 [(gogoproto.nullable) = false];
   int64  num_txs    = 4;
 
-  bool    has_core_chain_lock = 100;
+  bool has_core_chain_lock = 100;
 }
 
 // TxProof represents a Merkle proof of the presence of a transaction in the
