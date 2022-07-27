@@ -4,11 +4,9 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
-
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/merkle"
+	ctypes "github.com/tendermint/tendermint/internal/consensus/types"
 	tmtypes "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
@@ -20,47 +18,23 @@ type UpdateFunc func(State) (State, error)
 // resp can be one of: *abci.ResponsePrepareProposal, *abci.ResponseProcessProposal,  *abci.ResponseFinalizeBlock.
 func PrepareStateUpdates(
 	nodeProTxHash crypto.ProTxHash,
-	lastHeight int64,
-	resp proto.Message,
+	changes ctypes.UncommittedState,
+	blockHeader types.Header,
 	state State,
 ) ([]UpdateFunc, error) {
-	var (
-		appHash               []byte
-		validatorSetUpdate    *abci.ValidatorSetUpdate
-		consensusParamUpdates *tmtypes.ConsensusParams
-		txResults             []*abci.ExecTxResult
-	)
-	switch t := resp.(type) {
-	case *abci.ResponsePrepareProposal:
-		appHash = t.AppHash
-		validatorSetUpdate = t.ValidatorSetUpdate
-		consensusParamUpdates = t.ConsensusParamUpdates
-		txResults = t.TxResults
-	case *abci.ResponseProcessProposal:
-		appHash = t.AppHash
-		validatorSetUpdate = t.ValidatorSetUpdate
-		consensusParamUpdates = t.ConsensusParamUpdates
-		txResults = t.TxResults
-	case *abci.ResponseFinalizeBlock:
-		appHash = t.AppHash
-		validatorSetUpdate = t.ValidatorSetUpdate
-		consensusParamUpdates = t.ConsensusParamUpdates
-		txResults = t.TxResults
-	default:
-		return nil, fmt.Errorf("unsupported response type %T", t)
-	}
-	err := validateValidatorSetUpdate(validatorSetUpdate, state.ConsensusParams.Validator)
+
+	err := validateValidatorSetUpdate(changes.ValidatorSetUpdate, state.ConsensusParams.Validator)
 	if err != nil {
 		return nil, err
 	}
 	updates := []UpdateFunc{
-		updateAppHash(appHash),
-		updateResultHash(txResults),
-		updateStateConsensusParams(lastHeight, consensusParamUpdates),
+		updateAppHash(changes.AppHash),
+		updateResultHash(changes.TxResults),
+		updateStateConsensusParams(blockHeader.Height, changes.ConsensusParamUpdates),
 		updateStateNextValidators(
 			nodeProTxHash,
-			lastHeight,
-			validatorSetUpdate,
+			blockHeader.Height,
+			changes.ValidatorSetUpdate,
 			state.ConsensusParams.Validator,
 		),
 	}
@@ -80,12 +54,12 @@ func executeStateUpdates(state State, updates ...UpdateFunc) (State, error) {
 
 func updateResultHash(txResults []*abci.ExecTxResult) UpdateFunc {
 	return func(state State) (State, error) {
-		// Update the state with the block and responses.
-		rs, err := abci.MarshalTxResults(txResults)
+		hash, err := abci.TxResultsHash(txResults)
 		if err != nil {
 			return state, fmt.Errorf("marshaling TxResults: %w", err)
 		}
-		state.LastResultsHash = merkle.HashFromByteSlices(rs)
+
+		state.LastResultsHash = hash
 		return state, nil
 	}
 }
@@ -98,7 +72,7 @@ func updateAppHash(appHash []byte) func(State) (State, error) {
 }
 
 func updateStateConsensusParams(
-	lastHeight int64,
+	height int64,
 	consensusParamUpdates *tmtypes.ConsensusParams,
 ) UpdateFunc {
 	return func(state State) (State, error) {
@@ -115,7 +89,7 @@ func updateStateConsensusParams(
 			state.Version.Consensus.App = nextParams.Version.AppVersion
 
 			// Change results from this height but only applies to the next height.
-			state.LastHeightConsensusParamsChanged = lastHeight + 1 + 1
+			state.LastHeightConsensusParamsChanged = height + 1
 		}
 		state.ConsensusParams = nextParams
 		return state, nil
@@ -124,7 +98,7 @@ func updateStateConsensusParams(
 
 func updateStateNextValidators(
 	nodeProTxHash crypto.ProTxHash,
-	lastHeight int64,
+	height int64,
 	validatorSetUpdate *abci.ValidatorSetUpdate,
 	params types.ValidatorParams,
 ) UpdateFunc {
@@ -153,7 +127,7 @@ func updateStateNextValidators(
 					state.Validators.QuorumType, quorumHash, nodeProTxHash)
 			}
 			// Change results from this height but only applies to the next height.
-			state.LastHeightValidatorsChanged = lastHeight + 1
+			state.LastHeightValidatorsChanged = height + 1
 		}
 		// Update validator proposer priority and set state variables.
 		nValSet.IncrementProposerPriority(1)

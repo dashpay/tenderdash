@@ -393,6 +393,7 @@ type Header struct {
 	AppHash            tmbytes.HexBytes `json:"app_hash"`             // state after txs from the previous block
 	// root hash of all results from the txs from the previous block
 	// see `deterministicResponseDeliverTx` to understand which parts of a tx is hashed into here
+	// TODO: change to ResultsHash and point to current block
 	LastResultsHash tmbytes.HexBytes `json:"last_results_hash"`
 
 	// consensus info

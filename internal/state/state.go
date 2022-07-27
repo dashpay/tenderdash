@@ -9,6 +9,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	tmversion "github.com/tendermint/tendermint/proto/tendermint/version"
@@ -101,12 +102,11 @@ type State struct {
 	LastHeightConsensusParamsChanged int64
 
 	// Merkle root of the results from executing prev block
-	LastResultsHash []byte
+	LastResultsHash tmbytes.HexBytes
 
 	// the latest AppHash we've received from calling abci.Commit()
-	AppHash []byte
-
-	// NextBlockSettings NextBlockSettings
+	// TODO: Rename to LastAppHash
+	AppHash tmbytes.HexBytes
 }
 
 //  NewRound changes the State to apply settings new round and height to it.

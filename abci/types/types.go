@@ -3,8 +3,12 @@ package types
 import (
 	"bytes"
 	"encoding/json"
+	fmt "fmt"
 
 	"github.com/gogo/protobuf/jsonpb"
+
+	"github.com/tendermint/tendermint/crypto/merkle"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 )
 
 const (
@@ -191,4 +195,14 @@ func MarshalTxResults(r []*ExecTxResult) ([][]byte, error) {
 		s[i] = b
 	}
 	return s, nil
+}
+
+// TxResultsHash determines hash of transaction execution results.
+// TODO: light client seems to also include events into LastResultsHash, need to investigate
+func TxResultsHash(txResults []*ExecTxResult) (tmbytes.HexBytes, error) {
+	rs, err := MarshalTxResults(txResults)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling TxResults: %w", err)
+	}
+	return merkle.HashFromByteSlices(rs), nil
 }
