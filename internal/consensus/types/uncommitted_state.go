@@ -70,7 +70,10 @@ func (uncommittedState *UncommittedState) populateChainlock(chainlock *types2.Co
 	if err != nil {
 		return err
 	}
-	if nextCoreChainLock != nil && nextCoreChainLock.CoreBlockHeight <= uncommittedState.CoreChainLockedBlockHeight {
+	if nextCoreChainLock == nil {
+		return nil
+	}
+	if nextCoreChainLock.CoreBlockHeight <= uncommittedState.CoreChainLockedBlockHeight {
 		return nil // noop
 	}
 	uncommittedState.CoreChainLockedBlockHeight = nextCoreChainLock.CoreBlockHeight

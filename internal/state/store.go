@@ -148,24 +148,26 @@ func (store dbStore) save(state State, key []byte) error {
 	batch := store.db.NewBatch()
 	defer batch.Close()
 
-	currentHeight := state.LastBlockHeight + 1
+	// We assume that the state was already updated, so state.LastBlockHeight represents height of already generated
+	// block.
+	nextBlockHeight := state.LastBlockHeight + 1
 	// If first block, save validators for the block.
-	if currentHeight == 1 {
-		currentHeight = state.InitialHeight
+	if nextBlockHeight == 1 {
+		nextBlockHeight = state.InitialHeight
 		// This extra logic due to Tendermint validator set changes being delayed 1 block.
 		// It may get overwritten due to InitChain validator updates.
-		if err := store.saveValidatorsInfo(currentHeight, currentHeight, state.Validators, batch); err != nil {
+		if err := store.saveValidatorsInfo(nextBlockHeight, nextBlockHeight, state.Validators, batch); err != nil {
 			return err
 		}
 	}
 	// Save next validators.
-	err := store.saveValidatorsInfo(currentHeight, state.LastHeightValidatorsChanged, state.Validators, batch)
+	err := store.saveValidatorsInfo(nextBlockHeight, state.LastHeightValidatorsChanged, state.Validators, batch)
 	if err != nil {
 		return err
 	}
 
 	// Save next consensus params.
-	if err := store.saveConsensusParamsInfo(currentHeight+1,
+	if err := store.saveConsensusParamsInfo(nextBlockHeight,
 		state.LastHeightConsensusParamsChanged, state.ConsensusParams, batch); err != nil {
 		return err
 	}
@@ -645,7 +647,7 @@ func (store dbStore) loadConsensusParamsInfo(height int64) (*tmstate.ConsensusPa
 // If the consensus params did not change after processing the latest block,
 // only the last height for which they changed is persisted.
 func (store dbStore) saveConsensusParamsInfo(
-	nextHeight, changeHeight int64,
+	height, changeHeight int64,
 	params types.ConsensusParams,
 	batch dbm.Batch,
 ) error {
@@ -653,7 +655,7 @@ func (store dbStore) saveConsensusParamsInfo(
 		LastHeightChanged: changeHeight,
 	}
 
-	if changeHeight == nextHeight {
+	if changeHeight == height {
 		paramsInfo.ConsensusParams = params.ToProto()
 	}
 	bz, err := paramsInfo.Marshal()
@@ -661,7 +663,7 @@ func (store dbStore) saveConsensusParamsInfo(
 		return err
 	}
 
-	return batch.Set(consensusParamsKey(nextHeight), bz)
+	return batch.Set(consensusParamsKey(height), bz)
 }
 
 func (store dbStore) Close() error {

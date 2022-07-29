@@ -24,6 +24,7 @@ import (
 	ctypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
+	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
 )
@@ -303,9 +304,9 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 			assert.Empty(t, responses.ProcessProposal.ValidatorSetUpdate)
 		}
 
-		changes := ctypes.UncommittedState{
-			ValidatorSetUpdate: responses.ProcessProposal.ValidatorSetUpdate,
-		}
+		changes := ctypes.UncommittedState{}
+		require.NoError(t, changes.Populate(responses.ProcessProposal))
+
 		if chainlock != nil {
 			changes.CoreChainLockedBlockHeight = chainlock.CoreBlockHeight
 		}
@@ -486,9 +487,8 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	// Any node pro tx hash should do
 	firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
 	ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
-	changes := ctypes.UncommittedState{
-		ValidatorSetUpdate: nil,
-	}
+	changes := ctypes.UncommittedState{}
+
 	su, err := sm.PrepareStateUpdates(ctx, changes, block.Header, state)
 	require.NoError(t, err)
 	updatedState, err := state.Update(blockID, &block.Header, su...)
@@ -1014,6 +1014,11 @@ func TestConsensusParamsChangesSaveLoad(t *testing.T) {
 	changeHeights := []int64{1, 2, 4, 5, 10, 15, 16, 17, 20}
 	N := len(changeHeights)
 
+	// Build the params history by running updateState
+	// with the right params set for each height.
+	highestHeight := changeHeights[N-1] + 5
+	changeIndex := 0
+
 	// Each valset is just one validator.
 	// create list of them.
 	params := make([]types.ConsensusParams, N+1)
@@ -1023,27 +1028,23 @@ func TestConsensusParamsChangesSaveLoad(t *testing.T) {
 		params[i].Block.MaxBytes += int64(i)
 	}
 
-	// Build the params history by running updateState
-	// with the right params set for each height.
-	highestHeight := changeHeights[N-1] + 5
-	changeIndex := 0
 	cp := params[changeIndex]
-	var (
-		err error
-	)
-	for i := int64(1); i < highestHeight; i++ {
+	for height := int64(1); height < highestHeight; height++ {
 		// When we get to a change height, use the next params.
-		if changeIndex < len(changeHeights) && i == changeHeights[changeIndex] {
+		if changeIndex < len(changeHeights) && height == changeHeights[changeIndex] {
 			changeIndex++
 			cp = params[changeIndex]
 		}
+
 		header, _, blockID, responses := makeHeaderPartsResponsesParams(t, state, &cp)
-		require.NoError(t, err)
 
 		// Any node pro tx hash should do
 		firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
+		ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
+		changes := ctypes.UncommittedState{}
+		require.NoError(t, changes.Populate(responses.ProcessProposal))
 
-		su, err := sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, responses.FinalizeBlock, state)
+		su, err := sm.PrepareStateUpdates(ctx, changes, header, state)
 		require.NoError(t, err)
 		state, err = state.Update(blockID, &header, su...)
 
@@ -1125,7 +1126,7 @@ func TestState_StateID(t *testing.T) {
 	err := stateID.ValidateBasic()
 	assert.NoError(t, err, "StateID validation failed")
 }
-*/
+
 func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState ctypes.UncommittedState) sm.State {
 	return func(prevState, state sm.State, ucState ctypes.UncommittedState) sm.State {
 		t.Helper()
