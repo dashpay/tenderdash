@@ -23,6 +23,10 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
+const (
+	chainID = "execution_chain"
+)
+
 type paramsChangeTestCase struct {
 	height int64
 	params types.ConsensusParams
@@ -150,24 +154,26 @@ func makeHeaderPartsResponsesValPowerChange(
 	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
 	require.NoError(t, err)
 
-	abciResponses := &tmstate.ABCIResponses{}
+	abciResponses := &tmstate.ABCIResponses{
+		FinalizeBlock:   &abci.ResponseFinalizeBlock{},
+		ProcessProposal: &abci.ResponseProcessProposal{},
+	}
 
-	abciResponses.FinalizeBlock = &abci.ResponseFinalizeBlock{}
 	// If the pubkey is new, remove the old and add the new.
-	_, val := state.NextValidators.GetByIndex(0)
+	_, val := state.Validators.GetByIndex(0)
 	if val.VotingPower != power {
 		vPbPk, err := encoding.PubKeyToProto(val.PubKey)
 		require.NoError(t, err)
-		thresholdPubKey, err := encoding.PubKeyToProto(state.NextValidators.ThresholdPublicKey)
+		thresholdPubKey, err := encoding.PubKeyToProto(state.Validators.ThresholdPublicKey)
 		require.NoError(t, err)
 
-		abciResponses.FinalizeBlock = &abci.ResponseFinalizeBlock{
+		abciResponses.ProcessProposal = &abci.ResponseProcessProposal{
 			ValidatorSetUpdate: &abci.ValidatorSetUpdate{
 				ValidatorUpdates: []abci.ValidatorUpdate{
 					{PubKey: &vPbPk, Power: power},
 				},
 				ThresholdPublicKey: thresholdPubKey,
-				QuorumHash:         state.NextValidators.QuorumHash,
+				QuorumHash:         state.Validators.QuorumHash,
 			},
 		}
 	}
@@ -181,12 +187,12 @@ func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, reg
 		t.Error(err)
 	}
 	abciResponses := &tmstate.ABCIResponses{
-		FinalizeBlock: &abci.ResponseFinalizeBlock{ValidatorSetUpdate: nil},
+		ProcessProposal: &abci.ResponseProcessProposal{ValidatorSetUpdate: nil},
 	}
 	if regenerate == true {
 		proTxHashes := state.Validators.GetProTxHashes()
 		valUpdates := types.ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes)
-		abciResponses.FinalizeBlock = &abci.ResponseFinalizeBlock{
+		abciResponses.ProcessProposal = &abci.ResponseProcessProposal{
 			ValidatorSetUpdate: &valUpdates,
 		}
 	}
@@ -204,7 +210,7 @@ func makeHeaderPartsResponsesParams(
 	require.NoError(t, err)
 	pbParams := params.ToProto()
 	abciResponses := &tmstate.ABCIResponses{
-		FinalizeBlock: &abci.ResponseFinalizeBlock{ConsensusParamUpdates: &pbParams},
+		ProcessProposal: &abci.ResponseProcessProposal{ConsensusParamUpdates: &pbParams},
 	}
 	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
 }
@@ -235,7 +241,6 @@ func makeRandomStateFromValidatorSet(
 ) sm.State {
 	return sm.State{
 		LastBlockHeight:                  height - 1,
-		NextValidators:                   lastValSet.CopyIncrementProposerPriority(2),
 		Validators:                       lastValSet.CopyIncrementProposerPriority(1),
 		LastValidators:                   lastValSet.Copy(),
 		LastHeightConsensusParamsChanged: height,
@@ -257,7 +262,6 @@ func makeRandomStateFromConsensusParams(
 		LastBlockHeight:                  height - 1,
 		ConsensusParams:                  *consensusParams,
 		LastHeightConsensusParamsChanged: lastHeightConsensusParamsChanged,
-		NextValidators:                   valSet.CopyIncrementProposerPriority(2),
 		Validators:                       valSet.CopyIncrementProposerPriority(1),
 		LastValidators:                   valSet.Copy(),
 		LastHeightValidatorsChanged:      height,
@@ -283,24 +287,8 @@ func (app *testApp) Info(_ context.Context, req *abci.RequestInfo) (*abci.Respon
 func (app *testApp) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	app.ByzantineValidators = req.ByzantineValidators
 
-	resTxs := make([]*abci.ExecTxResult, len(req.Txs))
-	for i, tx := range req.Txs {
-		if len(tx) > 0 {
-			resTxs[i] = &abci.ExecTxResult{Code: abci.CodeTypeOK}
-		} else {
-			resTxs[i] = &abci.ExecTxResult{Code: abci.CodeTypeOK + 10} // error
-		}
-	}
-
 	return &abci.ResponseFinalizeBlock{
-		ValidatorSetUpdate: app.ValidatorSetUpdate,
-		ConsensusParamUpdates: &tmproto.ConsensusParams{
-			Version: &tmproto.VersionParams{
-				AppVersion: 1,
-			},
-		},
-		Events:    []abci.Event{},
-		TxResults: resTxs,
+		Events: []abci.Event{},
 	}, nil
 }
 
@@ -322,5 +310,25 @@ func (app *testApp) ProcessProposal(_ context.Context, req *abci.RequestProcessP
 			return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
 		}
 	}
-	return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT}, nil
+
+	resTxs := make([]*abci.ExecTxResult, len(req.Txs))
+	for i, tx := range req.Txs {
+		if len(tx) > 0 {
+			resTxs[i] = &abci.ExecTxResult{Code: abci.CodeTypeOK}
+		} else {
+			resTxs[i] = &abci.ExecTxResult{Code: abci.CodeTypeOK + 10} // error
+		}
+	}
+
+	return &abci.ResponseProcessProposal{
+		ValidatorSetUpdate: app.ValidatorSetUpdate,
+		ConsensusParamUpdates: &tmproto.ConsensusParams{
+			Version: &tmproto.VersionParams{
+				AppVersion: 1,
+			},
+		},
+		TxResults: resTxs,
+
+		Status: abci.ResponseProcessProposal_ACCEPT,
+	}, nil
 }

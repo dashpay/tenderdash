@@ -35,7 +35,6 @@ import (
 )
 
 var (
-	chainID             = "execution_chain"
 	testPartSize uint32 = 65536
 )
 
@@ -232,6 +231,7 @@ func TestProcessProposal(t *testing.T) {
 	block1, err := sf.MakeBlock(state, height, lastCommit)
 	require.NoError(t, err)
 	block1.Txs = txs
+	version := block1.Version.ToProto()
 
 	expectedRpp := &abci.RequestProcessProposal{
 		Txs:                 block1.Txs.ToSliceOfBytes(),
@@ -247,6 +247,7 @@ func TestProcessProposal(t *testing.T) {
 		},
 		NextValidatorsHash: block1.NextValidatorsHash,
 		ProposerProTxHash:  block1.ProposerProTxHash,
+		Version:            &version,
 	}
 
 	app.On("ProcessProposal", mock.Anything, mock.Anything).Return(&abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT}, nil)
@@ -591,7 +592,7 @@ func TestFinalizeBlockValidatorUpdatesResultingInEmptySet(t *testing.T) {
 		state, err = blockExec.ApplyBlock(ctx, state, ctypes.UncommittedState{}, nodeProTxHash, blockID, block)
 	})
 	assert.NotNil(t, err)
-	assert.NotEmpty(t, state.NextValidators.Validators)
+	assert.NotEmpty(t, state.Validators.Validators)
 }
 
 func TestEmptyPrepareProposal(t *testing.T) {
