@@ -911,7 +911,6 @@ func TestStoreLoadValidatorsIncrementsProposerPriority(t *testing.T) {
 	assert.NotEqual(t, acc1, acc0, "expected ProposerPriority value to change between heights")
 }
 
-/*
 // TestValidatorChangesSaveLoad tests saving and loading a validator set with
 // changes.
 func TestManyValidatorChangesSaveLoad(t *testing.T) {
@@ -924,7 +923,6 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	stateStore := sm.NewStore(stateDB)
 	require.Equal(t, int64(0), state.LastBlockHeight)
 	state.Validators, _ = types.RandValidatorSet(valSetSize)
-	state.NextValidators = state.Validators.CopyIncrementProposerPriority(1)
 	err := stateStore.Save(state)
 	require.NoError(t, err)
 
@@ -934,6 +932,7 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 
 	// First, we create proposal...
 	firstNodeProTxHash, val0 := state.Validators.GetByIndex(0)
+	ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
 	proTxHash := val0.ProTxHash // this is not really old, as it stays the same
 	oldPubkey := val0.PubKey
 
@@ -944,7 +943,7 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 
 	// retrieve pubKey to use in assertions below
 	var newPubkey crypto.PubKey
-	for _, valUpdate := range responses.FinalizeBlock.ValidatorSetUpdate.ValidatorUpdates {
+	for _, valUpdate := range responses.ProcessProposal.ValidatorSetUpdate.ValidatorUpdates {
 		if proTxHash.Equal(valUpdate.ProTxHash) {
 			newPubkey, err = cryptoenc.PubKeyFromProto(*valUpdate.PubKey)
 			require.NoError(t, err)
@@ -952,7 +951,8 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	}
 
 	// Prepare state to generate height 2
-	su, err := sm.PrepareStateUpdates(firstNodeProTxHash, currentHeight-1, responses.FinalizeBlock, state)
+	changes := ctypes.UncommittedState{ValidatorSetUpdate: responses.ProcessProposal.ValidatorSetUpdate}
+	su, err := sm.PrepareStateUpdates(ctx, changes, header, state)
 	require.NoError(t, err)
 
 	state, err = state.Update(blockID, &header, su...)
@@ -963,7 +963,7 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	require.NoError(t, err)
 
 	// Load height, it should be the oldpubkey.
-	v0, err := stateStore.LoadValidators(currentHeight)
+	v0, err := stateStore.LoadValidators(currentHeight - 1)
 	assert.NoError(t, err)
 	assert.Equal(t, valSetSize, v0.Size())
 	index, val := v0.GetByProTxHash(proTxHash)
@@ -974,7 +974,7 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	}
 
 	// Load nextheight+1, it should be the new pubkey.
-	v1, err := stateStore.LoadValidators(currentHeight + 1)
+	v1, err := stateStore.LoadValidators(currentHeight)
 	require.NoError(t, err)
 	assert.Equal(t, valSetSize, v1.Size())
 	index, val = v1.GetByProTxHash(proTxHash)
