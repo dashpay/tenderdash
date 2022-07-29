@@ -569,13 +569,13 @@ func (h *Handshaker) replayBlocks(
 			// We emit events for the index services at the final block due to the sync issue when
 			// the node shutdown during the block committing status.
 			blockExec := sm.NewBlockExecutor(h.stateStore, h.logger, appClient, emptyMempool{}, sm.EmptyEvidencePool{}, h.store, h.eventBus, sm.NopMetrics())
-			appHash, err = sm.ExecCommitBlock(ctx,
+			appHash, _, err = sm.ExecCommitBlock(ctx,
 				blockExec, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state)
 			if err != nil {
 				return nil, err
 			}
 		} else {
-			appHash, err = sm.ExecCommitBlock(ctx,
+			appHash, _, err = sm.ExecCommitBlock(ctx,
 				nil, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state)
 			if err != nil {
 				return nil, err

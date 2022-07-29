@@ -704,6 +704,8 @@ func execBlock(
 	lastCommit := buildLastCommitInfo(block, store, initialHeight)
 	evidence := block.Evidence.ToABCI()
 
+	// FIXME: This is WRONG, we should not process proposal again, as it's executed in a different part of the code.
+	// However, we don't have new validators, so we need to do it here until we find a way to provide UncommittedState.
 	processProposalResponse, err := appConn.ProcessProposal(
 		ctx,
 		&abci.RequestProcessProposal{

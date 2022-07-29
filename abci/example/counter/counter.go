@@ -107,10 +107,7 @@ func (app *Application) ProcessProposal(_ context.Context, req *types.RequestPro
 
 func (app *Application) FinalizeBlock(_ context.Context, req *types.RequestFinalizeBlock) (*types.ResponseFinalizeBlock, error) {
 	app.handleRequest(req.Height, req.Txs)
-	resp := types.ResponseFinalizeBlock{
-		NextCoreChainLockUpdate: app.lastCoreChainLock.ToProto(),
-		TxResults:               app.lastTxResults,
-	}
+	resp := types.ResponseFinalizeBlock{}
 	app.updateCoreChainLock()
 	return &resp, nil
 }

@@ -188,11 +188,7 @@ func (app *Application) FinalizeBlock(_ context.Context, req *types.RequestFinal
 		}
 	}
 
-	return &types.ResponseFinalizeBlock{
-		AppHash:            app.roundAppHash,
-		TxResults:          respTxs,
-		ValidatorSetUpdate: proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
-	}, nil
+	return &types.ResponseFinalizeBlock{}, nil
 }
 
 func (*Application) CheckTx(_ context.Context, req *types.RequestCheckTx) (*types.ResponseCheckTx, error) {

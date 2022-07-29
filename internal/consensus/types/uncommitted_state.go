@@ -28,22 +28,29 @@ func (uncommittedState *UncommittedState) Populate(proposalResponse proto.Messag
 		uncommittedState.ValidatorSetUpdate = resp.ValidatorSetUpdate
 		uncommittedState.ConsensusParamUpdates = resp.ConsensusParamUpdates
 
-		uncommittedState.populateChainlock(resp.NextCoreChainLockUpdate)
-		uncommittedState.populateTxResults(resp.TxResults)
+		if err := uncommittedState.populateChainlock(resp.NextCoreChainLockUpdate); err != nil {
+			return err
+		}
+		if err := uncommittedState.populateTxResults(resp.TxResults); err != nil {
+			return err
+		}
 
 	case *abci.ResponseProcessProposal:
 		uncommittedState.AppHash = resp.AppHash
 		uncommittedState.ValidatorSetUpdate = resp.ValidatorSetUpdate
 		uncommittedState.ConsensusParamUpdates = resp.ConsensusParamUpdates
 
-		uncommittedState.populateChainlock(resp.NextCoreChainLockUpdate)
-		uncommittedState.populateTxResults(resp.TxResults)
+		if err := uncommittedState.populateChainlock(resp.NextCoreChainLockUpdate); err != nil {
+			return err
+		}
+		if err := uncommittedState.populateTxResults(resp.TxResults); err != nil {
+			return err
+		}
 
 	default:
 		return fmt.Errorf("unsupported response type %T", resp)
 	}
 
-	// update some round state data
 	return nil
 }
 

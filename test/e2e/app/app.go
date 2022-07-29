@@ -47,6 +47,8 @@ type Application struct {
 	cfg             *Config
 	restoreSnapshot *abci.Snapshot
 	restoreChunks   [][]byte
+
+	valUpdates *abci.ValidatorSetUpdate
 }
 
 // Config allows for the setting of high level parameters for running the e2e Application
@@ -190,6 +192,15 @@ func (app *Application) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*a
 	return &abci.ResponseCheckTx{Code: code.CodeTypeOK, GasWanted: 1}, nil
 }
 
+func (app *Application) txResults(transactions [][]byte) (txs []*abci.ExecTxResult) {
+
+	for i := range transactions {
+		txs[i] = &abci.ExecTxResult{Code: code.CodeTypeOK}
+	}
+
+	return txs
+}
+
 // FinalizeBlock implements ABCI.
 func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	var txs = make([]*abci.ExecTxResult, len(req.Txs))
@@ -207,25 +218,15 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		txs[i] = &abci.ExecTxResult{Code: code.CodeTypeOK}
 	}
 
-	var err error
-	resp := abci.ResponseFinalizeBlock{
-		TxResults: txs,
-	}
-	resp.ValidatorSetUpdate, err = app.validatorSetUpdates(uint64(req.Height))
-	if err != nil {
-		panic(err)
-	}
-	resp.NextCoreChainLockUpdate, err = app.chainLockUpdate(uint64(req.Height))
-	if err != nil {
-		panic(err)
-	}
+	resp := abci.ResponseFinalizeBlock{}
+
 	resp.Events = []abci.Event{
 		{
 			Type: "val_updates",
 			Attributes: []abci.EventAttribute{
 				{
 					Key:   "size",
-					Value: strconv.Itoa(len(resp.ValidatorSetUpdate.ValidatorUpdates)),
+					Value: strconv.Itoa(len(app.valUpdates.ValidatorUpdates)),
 				},
 				{
 					Key:   "height",
@@ -352,6 +353,17 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 // total number of transaction bytes to exceed `req.MaxTxBytes`, we will not
 // append our special vote extension transaction.
 func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
+	validatorSetUpdate, err := app.validatorSetUpdates(uint64(req.Height))
+	if err != nil {
+		panic(err)
+	}
+	app.valUpdates = validatorSetUpdate
+
+	nextCoreChainLockUpdate, err := app.chainLockUpdate(uint64(req.Height))
+	if err != nil {
+		panic(err)
+	}
+
 	extCount := len(req.LocalLastCommit.ThresholdVoteExtensions)
 	// We only generate our special transaction if we have vote extensions
 	if extCount > 0 {
@@ -391,7 +403,10 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 			)
 		}
 		return &abci.ResponsePrepareProposal{
-			TxRecords: txRecords,
+			TxRecords:               txRecords,
+			TxResults:               app.txResults(req.Txs),
+			ValidatorSetUpdate:      validatorSetUpdate,
+			NextCoreChainLockUpdate: nextCoreChainLockUpdate,
 		}, nil
 	}
 	// None of the transactions are modified by this application.
@@ -407,7 +422,12 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 			Tx:     tx,
 		})
 	}
-	return &abci.ResponsePrepareProposal{TxRecords: trs}, nil
+	return &abci.ResponsePrepareProposal{
+		TxRecords:               trs,
+		TxResults:               app.txResults(req.Txs),
+		ValidatorSetUpdate:      validatorSetUpdate,
+		NextCoreChainLockUpdate: nextCoreChainLockUpdate,
+	}, nil
 }
 
 // ProcessProposal implements part of the Application interface.
@@ -428,7 +448,24 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 			}
 		}
 	}
-	return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT}, nil
+
+	validatorSetUpdate, err := app.validatorSetUpdates(uint64(req.Height))
+	if err != nil {
+		panic(err)
+	}
+	nextCoreChainLockUpdate, err := app.chainLockUpdate(uint64(req.Height))
+	if err != nil {
+		panic(err)
+	}
+
+	app.valUpdates = validatorSetUpdate
+
+	return &abci.ResponseProcessProposal{
+		Status:                  abci.ResponseProcessProposal_ACCEPT,
+		TxResults:               app.txResults(req.Txs),
+		ValidatorSetUpdate:      validatorSetUpdate,
+		NextCoreChainLockUpdate: nextCoreChainLockUpdate,
+	}, nil
 }
 
 // ExtendVote will produce vote extensions in the form of random numbers to

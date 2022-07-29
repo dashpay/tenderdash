@@ -76,7 +76,7 @@ func init() {
 type Store interface {
 	// Load loads the current state of the blockchain
 	Load() (State, error)
-	// LoadValidators loads the validator set at a given height
+	// LoadValidators loads the validator set that is used to validate the given height
 	LoadValidators(int64) (*types.ValidatorSet, error)
 	// LoadABCIResponses loads the abciResponse for a given height
 	LoadABCIResponses(int64) (*tmstate.ABCIResponses, error)
@@ -442,13 +442,13 @@ func (store dbStore) SaveABCIResponses(height int64, abciResponses *tmstate.ABCI
 func (store dbStore) saveABCIResponses(height int64, abciResponses *tmstate.ABCIResponses) error {
 	var dtxs []*abci.ExecTxResult
 	// strip nil values,
-	for _, tx := range abciResponses.FinalizeBlock.TxResults {
+	for _, tx := range abciResponses.ProcessProposal.TxResults {
 		if tx != nil {
 			dtxs = append(dtxs, tx)
 		}
 	}
 
-	abciResponses.FinalizeBlock.TxResults = dtxs
+	abciResponses.ProcessProposal.TxResults = dtxs
 
 	bz, err := abciResponses.Marshal()
 	if err != nil {

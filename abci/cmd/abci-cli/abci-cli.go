@@ -523,14 +523,10 @@ func cmdFinalizeBlock(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	for _, tx := range res.TxResults {
-		printResponse(cmd, args, response{
-			Code: tx.Code,
-			Data: tx.Data,
-			Info: tx.Info,
-			Log:  tx.Log,
-		})
-	}
+
+	printResponse(cmd, args, response{
+		Data: []byte(res.String()),
+	})
 	return nil
 }
 
