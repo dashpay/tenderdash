@@ -786,12 +786,12 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	originalValidatorSet, _ := types.RandValidatorSet(4)
 	// reset state validators to above validator
 	state.Validators = originalValidatorSet
-	state.NextValidators = originalValidatorSet
 
 	// Any node pro tx hash should do
 	firstProTxHash, _ := state.Validators.GetByIndex(0)
+	ctx := dash.ContextWithProTxHash(context.Background(), firstProTxHash)
 
-	execute := blockExecutorFunc(t, firstProTxHash)
+	execute := blockExecutorFunc(ctx, t)
 
 	// All operations will be on same quorum hash
 	quorumHash := crypto.RandQuorumHash()
@@ -802,22 +802,25 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	oldState := state
 	for i := 0; i < 10; i++ {
 		// no updates:
-		updatedState := execute(oldState, oldState, nil)
+		updatedState := execute(oldState, oldState, ctypes.UncommittedState{})
 		// no changes in voting power (ProposerPrio += VotingPower == Voting in 1st round; than shiftByAvg == 0,
 		// than -Total == -Voting)
 		// -> no change in ProposerPrio (stays zero):
-		assert.EqualValues(t, oldState.NextValidators.GetProTxHashesOrdered(), updatedState.NextValidators.GetProTxHashesOrdered())
+		assert.EqualValues(t, oldState.Validators.GetProTxHashesOrdered(), updatedState.Validators.GetProTxHashesOrdered())
 		oldState = updatedState
 	}
 
 	addedProTxHashes := crypto.RandProTxHashes(4)
 	proTxHashes := append(originalValidatorSet.GetProTxHashes(), addedProTxHashes...)
 	abciValidatorUpdates0 := types.ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes)
-	updatedState := execute(state, state, &abciValidatorUpdates0)
+	ucState := ctypes.UncommittedState{
+		ValidatorSetUpdate: &abciValidatorUpdates0,
+	}
+	updatedState := execute(state, state, ucState)
 
 	lastState := updatedState
 	for i := 0; i < 200; i++ {
-		lastState = execute(lastState, lastState, nil)
+		lastState = execute(lastState, lastState, ucState)
 	}
 	// set state to last state of above iteration
 	state = lastState
@@ -832,51 +835,54 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	for i := 0; i < 5; i++ {
 		ld := llmq.MustGenerate(append(proTxHashes, crypto.RandProTxHash()))
 		abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
+		ucState = ctypes.UncommittedState{ValidatorSetUpdate: abciValidatorSetUpdate}
 		require.NoError(t, err)
-		state = execute(oldState, state, abciValidatorSetUpdate)
-		assertLLMQDataWithValidatorSet(t, ld, state.NextValidators)
+		state = execute(oldState, state, ucState)
+		assertLLMQDataWithValidatorSet(t, ld, state.Validators)
 		proTxHashes = ld.ProTxHashes
 	}
 
 	ld := llmq.MustGenerate(append(proTxHashes, crypto.RandProTxHashes(5)...))
 	abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
+	ucState = ctypes.UncommittedState{ValidatorSetUpdate: abciValidatorSetUpdate}
 	require.NoError(t, err)
-	state = execute(oldState, state, abciValidatorSetUpdate)
-	assertLLMQDataWithValidatorSet(t, ld, state.NextValidators)
+	state = execute(oldState, state, ucState)
+	assertLLMQDataWithValidatorSet(t, ld, state.Validators)
 
 	abciValidatorSetUpdate.ValidatorUpdates[0] = abci.ValidatorUpdate{ProTxHash: ld.ProTxHashes[0]}
-	updatedState = execute(oldState, state, abciValidatorSetUpdate)
+	updatedState = execute(oldState, state, ucState)
 
 	// only the first added val (not the genesis val) should be left
 	ld.ProTxHashes = ld.ProTxHashes[1:]
-	assertLLMQDataWithValidatorSet(t, ld, updatedState.NextValidators)
+	assertLLMQDataWithValidatorSet(t, ld, updatedState.Validators)
 
 	abciValidatorSetUpdate.ValidatorUpdates = []abci.ValidatorUpdate{
 		{ProTxHash: ld.ProTxHashes[0]},
 		{ProTxHash: ld.ProTxHashes[1]},
 	}
-	updatedState = execute(state, updatedState, abciValidatorSetUpdate)
+	updatedState = execute(state, updatedState, ucState)
 
 	// the second and third should be left
 	ld.ProTxHashes = ld.ProTxHashes[2:]
-	assertLLMQDataWithValidatorSet(t, ld, updatedState.NextValidators)
+	assertLLMQDataWithValidatorSet(t, ld, updatedState.Validators)
 
-	updatedState = execute(updatedState, updatedState, nil)
+	updatedState = execute(updatedState, updatedState, ctypes.UncommittedState{})
 	// store proposers here to see if we see them again in the same order:
 	numVals := len(updatedState.Validators.Validators)
 	proposers := make([]*types.Validator, numVals)
 	for i := 0; i < 100; i++ {
-		updatedState = execute(state, updatedState, nil)
+		updatedState = execute(state, updatedState, ctypes.UncommittedState{})
 		if i > numVals { // expect proposers to cycle through after the first iteration (of numVals blocks):
 			if proposers[i%numVals] == nil {
-				proposers[i%numVals] = updatedState.NextValidators.Proposer
+				proposers[i%numVals] = updatedState.Validators.Proposer
 			} else {
-				assert.Equal(t, proposers[i%numVals], updatedState.NextValidators.Proposer)
+				assert.Equal(t, proposers[i%numVals], updatedState.Validators.Proposer)
 			}
 		}
 	}
 }
 
+/*
 func TestStoreLoadValidatorsIncrementsProposerPriority(t *testing.T) {
 	const valSetSize = 2
 	tearDown, stateDB, state := setupTestCase(t)
@@ -1113,19 +1119,16 @@ func TestState_StateID(t *testing.T) {
 	err := stateID.ValidateBasic()
 	assert.NoError(t, err, "StateID validation failed")
 }
-
-func blockExecutorFunc(t *testing.T, firstProTxHash crypto.ProTxHash) func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
-	return func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
+*/
+func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState ctypes.UncommittedState) sm.State {
+	return func(prevState, state sm.State, ucState ctypes.UncommittedState) sm.State {
 		t.Helper()
-		resp := &tmstate.ABCIResponses{
-			FinalizeBlock: &abci.ResponseFinalizeBlock{ValidatorSetUpdate: vsu},
-		}
+
 		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit))
 		require.NoError(t, err)
 		blockID, err := block.BlockID()
 		require.NoError(t, err)
-
-		su, err := sm.PrepareStateUpdates(firstProTxHash, state.LastBlockHeight, resp.FinalizeBlock, state)
+		su, err := sm.PrepareStateUpdates(ctx, ucState, block.Header, state)
 		require.NoError(t, err)
 
 		state, err = state.Update(blockID, &block.Header, su...)
