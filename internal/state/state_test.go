@@ -882,15 +882,20 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	}
 }
 
-/*
 func TestStoreLoadValidatorsIncrementsProposerPriority(t *testing.T) {
 	const valSetSize = 2
 	tearDown, stateDB, state := setupTestCase(t)
 	t.Cleanup(func() { tearDown(t) })
 	stateStore := sm.NewStore(stateDB)
 	state.Validators, _ = types.RandValidatorSet(valSetSize)
-	state.NextValidators = state.Validators.CopyIncrementProposerPriority(1)
 	err := stateStore.Save(state)
+	require.NoError(t, err)
+
+	state2 := state.Copy()
+	state2.LastBlockHeight++
+	state2.Validators = state.Validators.CopyIncrementProposerPriority(1)
+	state2.LastHeightValidatorsChanged = state2.LastBlockHeight + 1
+	err = stateStore.Save(state2)
 	require.NoError(t, err)
 
 	nextHeight := state.LastBlockHeight + 1
@@ -906,6 +911,7 @@ func TestStoreLoadValidatorsIncrementsProposerPriority(t *testing.T) {
 	assert.NotEqual(t, acc1, acc0, "expected ProposerPriority value to change between heights")
 }
 
+/*
 // TestValidatorChangesSaveLoad tests saving and loading a validator set with
 // changes.
 func TestManyValidatorChangesSaveLoad(t *testing.T) {
