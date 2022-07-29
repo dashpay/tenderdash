@@ -11,6 +11,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/tendermint/tendermint/dash"
 	types2 "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
@@ -325,35 +326,22 @@ func (blockExec *BlockExecutor) ApplyBlock(
 		return state, ErrInvalidBlock(err)
 	}
 	startTime := time.Now().UnixNano()
-	txs := block.Txs.ToSliceOfBytes()
-	finalizeBlockResponse, err := blockExec.appClient.FinalizeBlock(
-		ctx,
-		&abci.RequestFinalizeBlock{
-			Hash:                block.Hash(),
-			Height:              block.Header.Height,
-			Time:                block.Header.Time,
-			Txs:                 txs,
-			DecidedLastCommit:   buildLastCommitInfo(block, blockExec.store, state.InitialHeight),
-			ByzantineValidators: block.Evidence.ToABCI(),
-			NextValidatorsHash:  block.NextValidatorsHash,
-		},
-	)
+	_, abciResponses, err := ExecCommitBlock(ctx, blockExec, blockExec.appClient, block, blockExec.logger, blockExec.store, -1, state)
+	if err != nil {
+		return state, ErrInvalidBlock(err)
+	}
 	endTime := time.Now().UnixNano()
 	blockExec.metrics.BlockProcessingTime.Observe(float64(endTime-startTime) / 1000000)
 	if err != nil {
 		return state, ErrProxyAppConn(err)
 	}
-
-	abciResponses := &tmstate.ABCIResponses{
-		FinalizeBlock: finalizeBlockResponse,
-	}
-
+	//////////////////////
 	// Save the results before we commit.
-	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
+	if err := blockExec.store.SaveABCIResponses(block.Height, &abciResponses); err != nil {
 		return state, err
 	}
 
-	stateUpdates, err := PrepareStateUpdates(proTxHash, uncommittedState, block.Header, state)
+	stateUpdates, err := PrepareStateUpdates(ctx, uncommittedState, block.Header, state)
 	if err != nil {
 		return State{}, err
 	}
@@ -397,7 +385,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 		blockID,
 		state.LastResultsHash,
 		uncommittedState.TxResults,
-		finalizeBlockResponse,
+		abciResponses.FinalizeBlock,
 		state.Validators)
 
 	return state, nil
@@ -697,12 +685,7 @@ func fireEvents(
 	}
 }
 
-//----------------------------------------------------------------------------------------------------
-// Execute block without state. TODO: eliminate
-
-// ExecCommitBlock executes and commits a block on the proxyApp without validating or mutating the state.
-// It returns the application root hash (result of abci.Commit).
-func ExecCommitBlock(
+func execBlock(
 	ctx context.Context,
 	be *BlockExecutor,
 	appConn abciclient.Client,
@@ -711,7 +694,9 @@ func ExecCommitBlock(
 	store Store,
 	initialHeight int64,
 	s State,
-) ([]byte, error) {
+) (tmstate.ABCIResponses, error) {
+	var abciResponses tmstate.ABCIResponses
+
 	version := block.Header.Version.ToProto()
 
 	blockHash := block.Hash()
@@ -737,12 +722,15 @@ func ExecCommitBlock(
 
 			NextValidatorsHash: block.NextValidatorsHash,
 		})
-
+	if err != nil {
+		logger.Error("processing proposal", "err", err)
+		return abciResponses, err
+	}
 	if !processProposalResponse.IsAccepted() {
-		return nil, fmt.Errorf("abci app did not accept proposal at height %d", block.Height)
+		return abciResponses, fmt.Errorf("abci app did not accept proposal at height %d", block.Height)
 	}
 
-	finalizeBlockResponse, err := appConn.FinalizeBlock(
+	abciResponses.FinalizeBlock, err = appConn.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
 			Hash:                blockHash,
@@ -759,37 +747,82 @@ func ExecCommitBlock(
 			Version:               &version,
 		},
 	)
-
 	if err != nil {
 		logger.Error("executing block", "err", err)
-		return nil, err
+		return abciResponses, err
 	}
 	logger.Info("executed block", "height", block.Height)
 
+	return abciResponses, nil
+}
+
+// valsetUpdate processes validator set updates received from ABCI app.
+func valsetUpdate(
+	ctx context.Context,
+	vu *abci.ValidatorSetUpdate,
+	currentVals *types.ValidatorSet,
+	params types.ValidatorParams,
+) (*types.ValidatorSet, error) {
+	err := validateValidatorSetUpdate(vu, params)
+	if err != nil {
+
+		return nil, fmt.Errorf("validating validator updates: %w", err)
+	}
+
+	validatorUpdates, thresholdPubKey, quorumHash, err := types.PB2TM.ValidatorUpdatesFromValidatorSet(vu)
+	if err != nil {
+		return nil, fmt.Errorf("converting validator updates to native types: %w", err)
+	}
+	// Copy the valset so we can apply changes from FinalizeBlock
+	// and update s.LastValidators and s.Validators.
+	nValSet := currentVals.Copy()
+	// Update the validator set with the latest abciResponses.
+	if len(validatorUpdates) > 0 {
+		if bytes.Equal(nValSet.QuorumHash, quorumHash) {
+			err = nValSet.UpdateWithChangeSet(validatorUpdates, thresholdPubKey, quorumHash)
+			if err != nil {
+				return nil, err
+			}
+		} else {
+			nodeProTxHash, _ := dash.ProTxHashFromContext(ctx)
+			// if we don't have proTxHash, NewValidatorSetWithLocalNodeProTxHash behaves like NewValidatorSet
+			nValSet = types.NewValidatorSetWithLocalNodeProTxHash(validatorUpdates, thresholdPubKey,
+				currentVals.QuorumType, quorumHash, nodeProTxHash)
+		}
+	}
+	return nValSet, nil
+}
+
+//----------------------------------------------------------------------------------------------------
+// Execute block without state. TODO: eliminate
+// ExecCommitBlock executes and commits a block on the proxyApp without validating or mutating the state.
+// It returns the application root hash (apphash - result of abci.Commit).
+func ExecCommitBlock(
+	ctx context.Context,
+	be *BlockExecutor,
+	appConn abciclient.Client,
+	block *types.Block,
+	logger log.Logger,
+	store Store,
+	initialHeight int64,
+	s State,
+) ([]byte, tmstate.ABCIResponses, error) {
+	abciResponses, err := execBlock(ctx, be, appConn, block, logger, store, initialHeight, s)
+	if err != nil {
+		logger.Error("executing block", "err", err)
+		return nil, abciResponses, err
+	}
+
 	// the BlockExecutor condition is using for the final block replay process.
 	if be != nil {
-		err = validateValidatorSetUpdate(processProposalResponse.ValidatorSetUpdate, s.ConsensusParams.Validator)
+		vsetUpdate, err := valsetUpdate(ctx, abciResponses.ProcessProposal.ValidatorSetUpdate, s.Validators, s.ConsensusParams.Validator)
 		if err != nil {
-			logger.Error("validating validator updates", "err", err)
-			return nil, err
-		}
-
-		validatorUpdates, thresholdPublicKeyUpdate, quorumHash, err :=
-			types.PB2TM.ValidatorUpdatesFromValidatorSet(processProposalResponse.ValidatorSetUpdate)
-		if err != nil {
-			logger.Error("converting validator updates to native types", "err", err)
-			return nil, err
-		}
-
-		validatorSetUpdate := s.Validators.Copy()
-		err = validatorSetUpdate.UpdateWithChangeSet(validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
-		if err != nil {
-			return nil, err
+			return nil, abciResponses, err
 		}
 
 		bps, err := block.MakePartSet(types.BlockPartSizeBytes)
 		if err != nil {
-			return nil, err
+			return nil, abciResponses, err
 		}
 
 		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
@@ -799,9 +832,9 @@ func ExecCommitBlock(
 			block,
 			blockID,
 			block.LastResultsHash,
-			processProposalResponse.TxResults,
-			finalizeBlockResponse,
-			validatorSetUpdate,
+			abciResponses.ProcessProposal.TxResults,
+			abciResponses.FinalizeBlock,
+			vsetUpdate,
 		)
 	}
 
@@ -809,11 +842,11 @@ func ExecCommitBlock(
 	res, err := appConn.Commit(ctx)
 	if err != nil {
 		logger.Error("client error during proxyAppConn.Commit", "err", res)
-		return nil, err
+		return nil, abciResponses, err
 	}
 
 	// ResponseCommit has no error or log, just data
-	return res.Data, nil
+	return res.Data, abciResponses, nil
 }
 
 func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64) (uint64, error) {
