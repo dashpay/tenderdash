@@ -620,7 +620,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	// reset state validators to above validator, the threshold key is just the validator key since there is only 1 validator
 	quorumHash := crypto.RandQuorumHash()
 	state.Validators = types.NewValidatorSet([]*types.Validator{val1}, val1PubKey, btcjson.LLMQType_5_60, quorumHash, true)
-	state.NextValidators = state.Validators
+
 	// we only have one validator:
 	assert.Equal(t, val1ProTxHash, state.Validators.Proposer.ProTxHash)
 
@@ -629,14 +629,11 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	blockID, err := block.BlockID()
 	require.NoError(t, err)
 	// no updates:
-	fb := &abci.ResponseFinalizeBlock{
-		ValidatorSetUpdate: nil,
-	}
-
+	changes := ctypes.UncommittedState{ValidatorSetUpdate: nil}
 	// Any node pro tx hash should do
 	firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
-
-	su, err := sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, state)
+	ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
+	su, err := sm.PrepareStateUpdates(ctx, changes, block.Header, state)
 	require.NoError(t, err)
 	updatedState, err := state.Update(blockID, &block.Header, su...)
 	assert.NoError(t, err)
@@ -644,8 +641,8 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	// 0 + 10 (initial prio) - 10 (avg) - 10 (mostest - total) = -10
 	totalPower := val1VotingPower
 	wantVal1Prio := 0 + val1VotingPower - totalPower
-	assert.Equal(t, wantVal1Prio, updatedState.NextValidators.Validators[0].ProposerPriority)
-	assert.Equal(t, val1ProTxHash, updatedState.NextValidators.Proposer.ProTxHash)
+	assert.Equal(t, wantVal1Prio, updatedState.Validators.Validators[0].ProposerPriority)
+	assert.Equal(t, val1ProTxHash, updatedState.Validators.Proposer.ProTxHash)
 
 	// add a validator with the same voting power as the first
 	val2ProTxHash := ld.ProTxHashes[1]
@@ -653,29 +650,28 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	fvp, err := cryptoenc.PubKeyToProto(val2PubKey)
 	require.NoError(t, err)
 	updateAddVal := abci.ValidatorUpdate{ProTxHash: val2ProTxHash, PubKey: &fvp, Power: val1VotingPower}
-	fb.ValidatorSetUpdate = &abci.ValidatorSetUpdate{
+	changes.ValidatorSetUpdate = &abci.ValidatorSetUpdate{
 		ValidatorUpdates:   []abci.ValidatorUpdate{updateAddVal},
 		ThresholdPublicKey: thresholdPublicKey,
 		QuorumHash:         quorumHash,
 	}
 
-	su, err = sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, state)
+	su, err = sm.PrepareStateUpdates(ctx, changes, block.Header, state)
 	require.NoError(t, err)
 	updatedState2, err := updatedState.Update(blockID, &block.Header, su...)
 	assert.NoError(t, err)
 
-	require.Equal(t, len(updatedState2.NextValidators.Validators), 2)
-	assert.Equal(t, updatedState2.Validators, updatedState.NextValidators)
+	require.Equal(t, len(updatedState2.Validators.Validators), 2)
 
 	// val1 will still be proposer as val2 just got added:
-	assert.Equal(t, val1ProTxHash, updatedState.NextValidators.Proposer.ProTxHash)
-	assert.Equal(t, updatedState2.Validators.Proposer.ProTxHash, updatedState2.NextValidators.Proposer.ProTxHash)
+	assert.Equal(t, val1ProTxHash, updatedState.Validators.Proposer.ProTxHash)
+	assert.Equal(t, updatedState2.Validators.Proposer.ProTxHash, updatedState2.Validators.Proposer.ProTxHash)
+	assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val1ProTxHash)
 	assert.Equal(t, updatedState2.Validators.Proposer.ProTxHash, val1ProTxHash)
-	assert.Equal(t, updatedState2.NextValidators.Proposer.ProTxHash, val1ProTxHash)
 
-	_, updatedVal1 := updatedState2.NextValidators.GetByProTxHash(val1ProTxHash)
-	_, oldVal1 := updatedState2.Validators.GetByProTxHash(val1ProTxHash)
-	_, updatedVal2 := updatedState2.NextValidators.GetByProTxHash(val2ProTxHash)
+	_, updatedVal1 := updatedState2.Validators.GetByProTxHash(val1ProTxHash)
+	_, oldVal1 := updatedState.Validators.GetByProTxHash(val1ProTxHash)
+	_, updatedVal2 := updatedState2.Validators.GetByProTxHash(val2ProTxHash)
 
 	// 1. Add
 	val2VotingPower := val1VotingPower
@@ -701,19 +697,19 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 		updatedVal2,
 	)
 
-	su, err = sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, state)
+	su, err = sm.PrepareStateUpdates(ctx, changes, block.Header, updatedState2)
 	require.NoError(t, err)
 	updatedState3, err := updatedState2.Update(blockID, &block.Header, su...)
 	assert.NoError(t, err)
 
-	assert.Equal(t, updatedState3.Validators.Proposer.ProTxHash, updatedState3.NextValidators.Proposer.ProTxHash)
+	assert.Equal(t, updatedState3.Validators.Proposer.ProTxHash, updatedState3.Validators.Proposer.ProTxHash)
 
-	assert.Equal(t, updatedState3.Validators, updatedState2.NextValidators)
-	_, updatedVal1 = updatedState3.NextValidators.GetByProTxHash(val1ProTxHash)
-	_, updatedVal2 = updatedState3.NextValidators.GetByProTxHash(val2ProTxHash)
+	// assert.Equal(t, updatedState3.Validators, updatedState2.Validators)
+	_, updatedVal1 = updatedState3.Validators.GetByProTxHash(val1ProTxHash)
+	_, updatedVal2 = updatedState3.Validators.GetByProTxHash(val2ProTxHash)
 
 	// val1 will still be proposer:
-	assert.Equal(t, val1ProTxHash, updatedState3.NextValidators.Proposer.ProTxHash)
+	assert.Equal(t, val1ProTxHash, updatedState3.Validators.Proposer.ProTxHash)
 
 	// check if expected proposer prio is matched:
 	// Increment
@@ -739,10 +735,8 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	// no changes in voting power and both validators have same voting power
 	// -> proposers should alternate:
 	oldState := updatedState3
-	fb = &abci.ResponseFinalizeBlock{
-		ValidatorSetUpdate: nil,
-	}
-	su, err = sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, state)
+	changes = ctypes.UncommittedState{}
+	su, err = sm.PrepareStateUpdates(ctx, changes, block.Header, state)
 	require.NoError(t, err)
 	oldState, err = oldState.Update(blockID, &block.Header, su...)
 	assert.NoError(t, err)
@@ -753,10 +747,8 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		// no validator updates:
-		fb := &abci.ResponseFinalizeBlock{
-			ValidatorSetUpdate: nil,
-		}
-		su, err = sm.PrepareStateUpdates(firstNodeProTxHash, state.LastBlockHeight, fb, state)
+		changes = ctypes.UncommittedState{ValidatorSetUpdate: nil}
+		su, err = sm.PrepareStateUpdates(ctx, changes, block.Header, oldState)
 		require.NoError(t, err)
 		updatedState, err := oldState.Update(blockID, &block.Header, su...)
 		assert.NoError(t, err)
@@ -764,21 +756,21 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 		assert.NotEqual(
 			t,
 			updatedState.Validators.Proposer.ProTxHash,
-			updatedState.NextValidators.Proposer.ProTxHash,
+			oldState.Validators.Proposer.ProTxHash,
 			"iter: %v",
 			i,
 		)
-		assert.Equal(t, oldState.Validators.Proposer.ProTxHash, updatedState.NextValidators.Proposer.ProTxHash, "iter: %v", i)
+		assert.Equal(t, oldState.LastValidators.Proposer.ProTxHash, updatedState.Validators.Proposer.ProTxHash, "iter: %v", i)
 
-		_, updatedVal1 = updatedState.NextValidators.GetByProTxHash(val1ProTxHash)
-		_, updatedVal2 = updatedState.NextValidators.GetByProTxHash(val2ProTxHash)
+		_, updatedVal1 = updatedState.Validators.GetByProTxHash(val1ProTxHash)
+		_, updatedVal2 = updatedState.Validators.GetByProTxHash(val2ProTxHash)
 
 		if i%2 == 0 {
-			assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val2ProTxHash)
+			assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val1ProTxHash)
 			assert.Equal(t, expectedVal1Prio, updatedVal1.ProposerPriority) // -19
 			assert.Equal(t, expectedVal2Prio, updatedVal2.ProposerPriority) // 0
 		} else {
-			assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val1ProTxHash)
+			assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val2ProTxHash)
 			assert.Equal(t, expectedVal1Prio2, updatedVal1.ProposerPriority) // -9
 			assert.Equal(t, expectedVal2Prio2, updatedVal2.ProposerPriority) // -10
 		}
