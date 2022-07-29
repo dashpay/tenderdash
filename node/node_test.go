@@ -22,7 +22,6 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/dash/quorum"
-	ctypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/evidence"
 	"github.com/tendermint/tendermint/internal/mempool"
@@ -370,11 +369,10 @@ func TestCreateProposalBlock(t *testing.T) {
 
 	proposedAppVersion := uint64(1)
 	commit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil)
-	block, err := blockExec.CreateProposalBlock(
+	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
 		state,
-		&ctypes.UncommittedState{},
 		commit,
 		proposerProTxHash,
 		proposedAppVersion,
@@ -454,11 +452,10 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 	)
 
 	commit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil)
-	block, err := blockExec.CreateProposalBlock(
+	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
 		state,
-		&ctypes.UncommittedState{},
 		commit,
 		proposerProTxHash,
 		0,
@@ -551,7 +548,6 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	// save the updated validator set for use by the block executor.
 	state.LastBlockHeight = math.MaxInt64 - 3
 	state.LastHeightValidatorsChanged = math.MaxInt64 - 1
-	state.NextValidators = state.Validators.Copy()
 	require.NoError(t, stateStore.Save(state))
 
 	stateID := types.StateID{
@@ -584,11 +580,10 @@ func TestMaxProposalBlockSize(t *testing.T) {
 		ThresholdStateSignature: crypto.CRandBytes(bls12381.SignatureSize),
 	}
 
-	block, err := blockExec.CreateProposalBlock(
+	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		math.MaxInt64,
 		state,
-		&ctypes.UncommittedState{},
 		commit,
 		proposerProTxHash,
 		0,

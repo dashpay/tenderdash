@@ -15,7 +15,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/internal/consensus"
-	ctypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	mpmocks "github.com/tendermint/tendermint/internal/mempool/mocks"
 	"github.com/tendermint/tendermint/internal/p2p"
@@ -187,7 +186,7 @@ func (rts *reactorTestSuite) addNode(
 		thisParts, err := thisBlock.MakePartSet(types.BlockPartSizeBytes)
 		require.NoError(t, err)
 		blockID := types.BlockID{Hash: thisBlock.Hash(), PartSetHeader: thisParts.Header()}
-		state, err = blockExec.ApplyBlock(ctx, state, ctypes.UncommittedState{}, proTxHash, blockID, thisBlock)
+		state, err = blockExec.ApplyBlock(ctx, state, blockID, thisBlock)
 		require.NoError(t, err)
 
 		blockStore.SaveBlock(thisBlock, thisParts, lastCommit)

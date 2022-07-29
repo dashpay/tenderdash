@@ -10,7 +10,6 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/consensus"
-	ctypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/internal/p2p/conn"
@@ -566,7 +565,7 @@ func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh
 
 				// TODO: Same thing for app - but we would need a way to get the hash
 				// without persisting the state.
-				state, err = r.blockExec.ApplyBlock(ctx, state, ctypes.UncommittedState{}, r.nodeProTxHash, firstID, first)
+				state, err = r.blockExec.ApplyBlock(ctx, state, firstID, first)
 				if err != nil {
 					// TODO: This is bad, are we zombie?
 					panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", first.Height, first.Hash(), err))

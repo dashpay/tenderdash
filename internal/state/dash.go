@@ -14,7 +14,6 @@ import (
 type UpdateFunc func(State) (State, error)
 
 // PrepareStateUpdates generates state updates that will set Dash-related state fields.
-// resp can be one of: *abci.ResponsePrepareProposal, *abci.ResponseProcessProposal,  *abci.ResponseFinalizeBlock.
 func PrepareStateUpdates(
 	ctx context.Context,
 	changes ctypes.UncommittedState,

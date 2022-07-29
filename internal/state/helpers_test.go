@@ -13,7 +13,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/encoding"
-	ctypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	sf "github.com/tendermint/tendermint/internal/state/test/factory"
 	"github.com/tendermint/tendermint/internal/test/factory"
@@ -77,7 +76,7 @@ func makeAndApplyGoodBlock(
 	require.NoError(t, blockExec.ValidateBlock(ctx, state, block))
 	blockID := types.BlockID{Hash: block.Hash(),
 		PartSetHeader: partSet.Header()}
-	state, err = blockExec.ApplyBlock(ctx, state, ctypes.UncommittedState{}, nodeProTxHash, blockID, block)
+	state, err = blockExec.ApplyBlock(ctx, state, blockID, block)
 	require.NoError(t, err)
 
 	return state, blockID

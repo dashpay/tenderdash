@@ -16,7 +16,6 @@ import (
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/example/kvstore"
 	abci "github.com/tendermint/tendermint/abci/types"
-	types2 "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/evidence"
 	"github.com/tendermint/tendermint/internal/mempool"
@@ -200,17 +199,16 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 		proposerProTxHash := lazyNodeState.privValidatorProTxHash
 
-		uncommittedState := types2.UncommittedState{}
-		block, err := lazyNodeState.blockExec.CreateProposalBlock(
+		block, uncommittedState, err := lazyNodeState.blockExec.CreateProposalBlock(
 			ctx,
 			lazyNodeState.Height,
 			lazyNodeState.state,
-			&uncommittedState,
 			commit,
 			proposerProTxHash,
 			0,
 		)
 		require.NoError(t, err)
+		assert.NotZero(t, uncommittedState)
 		blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 		require.NoError(t, err)
 

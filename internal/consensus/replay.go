@@ -14,7 +14,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
-	types2 "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/proxy"
 	sm "github.com/tendermint/tendermint/internal/state"
@@ -565,21 +564,24 @@ func (h *Handshaker) replayBlocks(
 			}
 		}
 
+		var blockExec *sm.BlockExecutor = nil
 		if i == finalBlock && !mutateState {
 			// We emit events for the index services at the final block due to the sync issue when
 			// the node shutdown during the block committing status.
-			blockExec := sm.NewBlockExecutor(h.stateStore, h.logger, appClient, emptyMempool{}, sm.EmptyEvidencePool{}, h.store, h.eventBus, sm.NopMetrics())
-			appHash, _, err = sm.ExecCommitBlock(ctx,
-				blockExec, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			appHash, _, err = sm.ExecCommitBlock(ctx,
-				nil, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state)
-			if err != nil {
-				return nil, err
-			}
+			blockExec = sm.NewBlockExecutor(h.stateStore, h.logger, appClient, emptyMempool{}, sm.EmptyEvidencePool{}, h.store, h.eventBus, sm.NopMetrics())
+		}
+
+		accepted, uncommittedState, err := blockExec.ProcessProposal(ctx, block, state)
+		if err != nil {
+			return nil, fmt.Errorf("replay process proposal: %w", err)
+		}
+		if !accepted {
+			return nil, fmt.Errorf("replay process proposal: block %d rejected by ABCI app", block.Height)
+		}
+
+		appHash, _, err = sm.ExecCommitBlock(ctx, blockExec, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state, uncommittedState)
+		if err != nil {
+			return nil, err
 		}
 
 		h.nBlocks++
@@ -625,7 +627,7 @@ func (h *Handshaker) replayBlock(
 	blockExec.SetAppHashSize(h.appHashSize)
 
 	var err error
-	state, err = blockExec.ApplyBlock(ctx, state, types2.UncommittedState{}, h.nodeProTxHash, meta.BlockID, block)
+	state, err = blockExec.ApplyBlock(ctx, state, meta.BlockID, block)
 	if err != nil {
 		return sm.State{}, err
 	}

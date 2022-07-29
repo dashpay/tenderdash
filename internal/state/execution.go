@@ -12,12 +12,11 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/dash"
-	types2 "github.com/tendermint/tendermint/internal/consensus/types"
+	ctypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
-	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -96,13 +95,14 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	ctx context.Context,
 	height int64,
 	state State,
-	uncommittedState *types2.UncommittedState,
 	commit *types.Commit,
 	proposerProTxHash []byte,
 	proposedAppVersion uint64,
-) (*types.Block, error) {
+) (*types.Block, ctypes.UncommittedState, error) {
 	maxBytes := state.ConsensusParams.Block.MaxBytes
 	maxGas := state.ConsensusParams.Block.MaxGas
+
+	stateChanges := ctypes.UncommittedState{}
 
 	evidence, evSize := blockExec.evpool.PendingEvidence(state.ConsensusParams.Evidence.MaxBytes)
 
@@ -146,12 +146,12 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		// Either way, we cannot recover in a meaningful way, unless we skip proposing
 		// this block, repair what caused the error and try again. Hence, we return an
 		// error for now (the production code calling this function is expected to panic).
-		return nil, err
+		return nil, stateChanges, err
 	}
 	txrSet := types.NewTxRecordSet(rpp.TxRecords)
 
 	if err := txrSet.Validate(maxDataBytes, block.Txs); err != nil {
-		return nil, err
+		return nil, stateChanges, err
 	}
 
 	for _, rtx := range txrSet.RemovedTxs() {
@@ -162,7 +162,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	itxs := txrSet.IncludedTxs()
 	nextCoreChainLock, err := types.CoreChainLockFromProto(rpp.NextCoreChainLockUpdate)
 	if err != nil {
-		return nil, err
+		return nil, stateChanges, err
 	}
 	if nextCoreChainLock != nil &&
 		nextCoreChainLock.CoreBlockHeight <= state.LastCoreChainLockedBlockHeight {
@@ -179,19 +179,19 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion)
 
 	// update some round state data
-	err = uncommittedState.Populate(rpp)
+	err = stateChanges.Populate(rpp)
 	if err != nil {
-		return nil, err
+		return nil, stateChanges, err
 	}
-	return block, nil
+	return block, stateChanges, nil
 }
 
 func (blockExec *BlockExecutor) ProcessProposal(
 	ctx context.Context,
 	block *types.Block,
 	state State,
-	uncommittedState *types2.UncommittedState,
-) (bool, error) {
+) (bool, ctypes.UncommittedState, error) {
+	stateChanges := ctypes.UncommittedState{}
 	version := block.Version.ToProto()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Hash:                block.Header.Hash(),
@@ -209,24 +209,24 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		Version:               &version,
 	})
 	if err != nil {
-		return false, ErrInvalidBlock(err)
+		return false, stateChanges, ErrInvalidBlock(err)
 	}
 	if resp.IsStatusUnknown() {
 		panic(fmt.Sprintf("ProcessProposal responded with status %s", resp.Status.String()))
 	}
 	nextCoreChainLock, err := types.CoreChainLockFromProto(resp.NextCoreChainLockUpdate)
 	if err != nil {
-		return false, err
+		return false, stateChanges, err
 	}
 	// Update the next core chain lock that we can propose
 	blockExec.NextCoreChainLock = nextCoreChainLock
 
 	// update some round state data
-	err = uncommittedState.Populate(resp)
+	err = stateChanges.Populate(resp)
 	if err != nil {
-		return false, err
+		return false, stateChanges, err
 	}
-	return resp.IsAccepted(), nil
+	return resp.IsAccepted(), stateChanges, nil
 }
 
 // ValidateBlock validates the given block against the given state.
@@ -256,7 +256,7 @@ func (blockExec *BlockExecutor) ValidateBlock(ctx context.Context, state State, 
 func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	ctx context.Context,
 	state State,
-	uncommittedState types2.UncommittedState,
+	uncommittedState ctypes.UncommittedState,
 	block *types.Block,
 ) error {
 	err := blockExec.ValidateBlock(ctx, state, block)
@@ -308,25 +308,28 @@ func (blockExec *BlockExecutor) ValidateBlockTime(
 	return validateBlockTime(allowedTimeWindow, state, block)
 }
 
-// ApplyBlock validates the block against the state, executes it against the app,
-// fires the relevant events, commits the app, and saves the new state and responses.
+// FinalizeBlock validates the block against the state, fires the relevant events,
+// calls FinalizeBlock ABCI endpoint, and saves the new state and responses.
 // It returns the new state.
-// It's the only function that needs to be called
-// from outside this package to process and commit an entire block.
+//
 // It takes a blockID to avoid recomputing the parts hash.
-func (blockExec *BlockExecutor) ApplyBlock(
+//
+// CONTRACT: The block was already delivered to the ABCI app using either PrepareProposal or ProcessProposal.
+// See also ApplyBlock() to deliver proposal and finalize it in one step.
+
+func (blockExec *BlockExecutor) FinalizeBlock(
 	ctx context.Context,
 	state State,
-	uncommittedState types2.UncommittedState,
-	proTxHash crypto.ProTxHash,
-	blockID types.BlockID, block *types.Block,
+	uncommittedState ctypes.UncommittedState,
+	blockID types.BlockID,
+	block *types.Block,
 ) (State, error) {
 	// validate the block if we haven't already
 	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
 		return state, ErrInvalidBlock(err)
 	}
 	startTime := time.Now().UnixNano()
-	_, abciResponses, err := ExecCommitBlock(ctx, blockExec, blockExec.appClient, block, blockExec.logger, blockExec.store, -1, state)
+	_, finalizeBlockResponses, err := ExecCommitBlock(ctx, blockExec, blockExec.appClient, block, blockExec.logger, blockExec.store, -1, state, uncommittedState)
 	if err != nil {
 		return state, ErrInvalidBlock(err)
 	}
@@ -337,9 +340,12 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	}
 	//////////////////////
 	// Save the results before we commit.
-	if err := blockExec.store.SaveABCIResponses(block.Height, &abciResponses); err != nil {
-		return state, err
-	}
+	// TODO: upgrade for Same-Block-Execution. Right now, it just saves Finalize response, while we need
+	// to find a way to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
+	// in FinalizeResponse.
+	// if err := blockExec.store.SaveABCIResponses(block.Height, &abciResponses); err != nil {
+	// 	return state, err
+	// }
 
 	stateUpdates, err := PrepareStateUpdates(ctx, uncommittedState, block.Header, state)
 	if err != nil {
@@ -385,10 +391,32 @@ func (blockExec *BlockExecutor) ApplyBlock(
 		blockID,
 		state.LastResultsHash,
 		uncommittedState.TxResults,
-		abciResponses.FinalizeBlock,
+		finalizeBlockResponses,
 		state.Validators)
 
 	return state, nil
+}
+
+// ApplyBlock validates the block against the state, executes it against the app using ProcessProposal ABCI request,
+// fires the relevant events, finalizes with FinalizeBlock, and saves the new state and responses.
+// It returns the new state.
+// It's the only function that needs to be called
+// from outside this package to process and commit an entire block.
+// It takes a blockID to avoid recomputing the parts hash.
+func (blockExec *BlockExecutor) ApplyBlock(
+	ctx context.Context,
+	state State,
+	blockID types.BlockID, block *types.Block,
+) (State, error) {
+	accepted, uncommittedState, err := blockExec.ProcessProposal(ctx, block, state)
+	if err != nil {
+		return state, ErrInvalidBlock(err)
+	}
+	if !accepted {
+		return state, ErrInvalidBlock(errors.New("block not accepted by abci app"))
+	}
+
+	return blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block)
 }
 
 func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote) ([]*abci.ExtendVoteExtension, error) {
@@ -694,9 +722,7 @@ func execBlock(
 	store Store,
 	initialHeight int64,
 	s State,
-) (tmstate.ABCIResponses, error) {
-	var abciResponses tmstate.ABCIResponses
-
+) (*abci.ResponseFinalizeBlock, error) {
 	version := block.Header.Version.ToProto()
 
 	blockHash := block.Hash()
@@ -704,35 +730,8 @@ func execBlock(
 	lastCommit := buildLastCommitInfo(block, store, initialHeight)
 	evidence := block.Evidence.ToABCI()
 
-	// FIXME: This is WRONG, we should not process proposal again, as it's executed in a different part of the code.
-	// However, we don't have new validators, so we need to do it here until we find a way to provide UncommittedState.
-	processProposalResponse, err := appConn.ProcessProposal(
-		ctx,
-		&abci.RequestProcessProposal{
-			Hash:                blockHash,
-			Height:              block.Height,
-			Time:                block.Time,
-			Txs:                 txs,
-			ProposedLastCommit:  lastCommit,
-			ByzantineValidators: evidence,
-
-			// Dash's fields
-			CoreChainLockedHeight: block.CoreChainLockedHeight,
-			ProposerProTxHash:     block.ProposerProTxHash,
-			ProposedAppVersion:    block.ProposedAppVersion,
-			Version:               &version,
-
-			NextValidatorsHash: block.NextValidatorsHash,
-		})
-	if err != nil {
-		logger.Error("processing proposal", "err", err)
-		return abciResponses, err
-	}
-	if !processProposalResponse.IsAccepted() {
-		return abciResponses, fmt.Errorf("abci app did not accept proposal at height %d", block.Height)
-	}
-
-	abciResponses.FinalizeBlock, err = appConn.FinalizeBlock(
+	var err error
+	responseFinalizeBlock, err := appConn.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
 			Hash:                blockHash,
@@ -751,11 +750,11 @@ func execBlock(
 	)
 	if err != nil {
 		logger.Error("executing block", "err", err)
-		return abciResponses, err
+		return responseFinalizeBlock, err
 	}
 	logger.Info("executed block", "height", block.Height)
 
-	return abciResponses, nil
+	return responseFinalizeBlock, nil
 }
 
 // valsetUpdate processes validator set updates received from ABCI app.
@@ -799,6 +798,8 @@ func valsetUpdate(
 // Execute block without state. TODO: eliminate
 // ExecCommitBlock executes and commits a block on the proxyApp without validating or mutating the state.
 // It returns the application root hash (apphash - result of abci.Commit).
+//
+// CONTRACT: Block should already be delivered to the app with PrepareProposal or ProcessProposal
 func ExecCommitBlock(
 	ctx context.Context,
 	be *BlockExecutor,
@@ -808,23 +809,24 @@ func ExecCommitBlock(
 	store Store,
 	initialHeight int64,
 	s State,
-) ([]byte, tmstate.ABCIResponses, error) {
-	abciResponses, err := execBlock(ctx, be, appConn, block, logger, store, initialHeight, s)
+	ucState ctypes.UncommittedState,
+) ([]byte, *abci.ResponseFinalizeBlock, error) {
+	respFinalizeBlock, err := execBlock(ctx, be, appConn, block, logger, store, initialHeight, s)
 	if err != nil {
 		logger.Error("executing block", "err", err)
-		return nil, abciResponses, err
+		return nil, respFinalizeBlock, err
 	}
 
 	// the BlockExecutor condition is using for the final block replay process.
 	if be != nil {
-		vsetUpdate, err := valsetUpdate(ctx, abciResponses.ProcessProposal.ValidatorSetUpdate, s.Validators, s.ConsensusParams.Validator)
+		vsetUpdate, err := valsetUpdate(ctx, ucState.ValidatorSetUpdate, s.Validators, s.ConsensusParams.Validator)
 		if err != nil {
-			return nil, abciResponses, err
+			return nil, respFinalizeBlock, err
 		}
 
 		bps, err := block.MakePartSet(types.BlockPartSizeBytes)
 		if err != nil {
-			return nil, abciResponses, err
+			return nil, respFinalizeBlock, err
 		}
 
 		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
@@ -834,8 +836,8 @@ func ExecCommitBlock(
 			block,
 			blockID,
 			block.LastResultsHash,
-			abciResponses.ProcessProposal.TxResults,
-			abciResponses.FinalizeBlock,
+			ucState.TxResults,
+			respFinalizeBlock,
 			vsetUpdate,
 		)
 	}
@@ -844,11 +846,11 @@ func ExecCommitBlock(
 	res, err := appConn.Commit(ctx)
 	if err != nil {
 		logger.Error("client error during proxyAppConn.Commit", "err", res)
-		return nil, abciResponses, err
+		return nil, respFinalizeBlock, err
 	}
 
 	// ResponseCommit has no error or log, just data
-	return res.Data, abciResponses, nil
+	return res.Data, respFinalizeBlock, nil
 }
 
 func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64) (uint64, error) {

@@ -20,7 +20,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/encoding"
-	ctypes "github.com/tendermint/tendermint/internal/consensus/types"
+	"github.com/tendermint/tendermint/dash"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	mpmocks "github.com/tendermint/tendermint/internal/mempool/mocks"
 	"github.com/tendermint/tendermint/internal/proxy"
@@ -57,6 +57,7 @@ func TestApplyBlock(t *testing.T) {
 	// The state is local, so we just take the first proTxHash
 	nodeProTxHash := state.Validators.Validators[0].ProTxHash
 	app.ValidatorSetUpdate = state.Validators.ABCIEquivalentValidatorUpdates()
+	ctx = dash.ContextWithProTxHash(ctx, nodeProTxHash)
 
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
 	mp := &mpmocks.Mempool{}
@@ -87,7 +88,7 @@ func TestApplyBlock(t *testing.T) {
 	require.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
 
-	state, err = blockExec.ApplyBlock(ctx, state, ctypes.UncommittedState{}, nodeProTxHash, blockID, block)
+	state, err = blockExec.ApplyBlock(ctx, state, blockID, block)
 	require.NoError(t, err)
 
 	// TODO check state and mempool
@@ -109,6 +110,7 @@ func TestFinalizeBlockByzantineValidators(t *testing.T) {
 	state, stateDB, privVals := makeState(t, 1, 1)
 	stateStore := sm.NewStore(stateDB)
 	nodeProTxHash := state.Validators.Validators[0].ProTxHash
+	ctx = dash.ContextWithProTxHash(ctx, nodeProTxHash)
 	app.ValidatorSetUpdate = state.Validators.ABCIEquivalentValidatorUpdates()
 
 	defaultEvidenceTime := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -171,7 +173,7 @@ func TestFinalizeBlockByzantineValidators(t *testing.T) {
 
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
 
-	_, err = blockExec.ApplyBlock(ctx, state, ctypes.UncommittedState{}, nodeProTxHash, blockID, block)
+	_, err = blockExec.ApplyBlock(ctx, state, blockID, block)
 	require.NoError(t, err)
 
 	// TODO check state and mempool
@@ -251,9 +253,10 @@ func TestProcessProposal(t *testing.T) {
 	}
 
 	app.On("ProcessProposal", mock.Anything, mock.Anything).Return(&abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT}, nil)
-	acceptBlock, err := blockExec.ProcessProposal(ctx, block1, state, &ctypes.UncommittedState{})
+	acceptBlock, uncommittedState, err := blockExec.ProcessProposal(ctx, block1, state)
 	require.NoError(t, err)
 	require.True(t, acceptBlock)
+	assert.NotZero(t, uncommittedState)
 	app.AssertExpectations(t)
 	app.AssertCalled(t, "ProcessProposal", ctx, expectedRpp)
 }
@@ -443,6 +446,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 	stateStore := sm.NewStore(stateDB)
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
 	nodeProTxHash := state.Validators.Validators[0].ProTxHash
+	ctx = dash.ContextWithProTxHash(ctx, nodeProTxHash)
 
 	mp := &mpmocks.Mempool{}
 	mp.On("Lock").Return()
@@ -508,13 +512,13 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 
 	app.ValidatorSetUpdate = newVals.ABCIEquivalentValidatorUpdates()
 
-	state, err = blockExec.ApplyBlock(ctx, state, ctypes.UncommittedState{}, nodeProTxHash, blockID, block)
+	state, err = blockExec.ApplyBlock(ctx, state, blockID, block)
 	require.Nil(t, err)
 	// test new validator was added to NextValidators
-	if assert.Equal(t, state.Validators.Size()+1, state.NextValidators.Size()) {
-		idx, _ := state.NextValidators.GetByProTxHash(addProTxHash)
+	if assert.Equal(t, state.LastValidators.Size()+1, state.Validators.Size()) {
+		idx, _ := state.Validators.GetByProTxHash(addProTxHash)
 		if idx < 0 {
-			t.Fatalf("can't find proTxHash %v in the set %v", addProTxHash, state.NextValidators)
+			t.Fatalf("can't find proTxHash %v in the set %v", addProTxHash, state.Validators)
 		}
 	}
 
@@ -554,6 +558,7 @@ func TestFinalizeBlockValidatorUpdatesResultingInEmptySet(t *testing.T) {
 
 	state, stateDB, _ := makeState(t, 1, 1)
 	nodeProTxHash := state.Validators.Validators[0].ProTxHash
+	ctx = dash.ContextWithProTxHash(ctx, nodeProTxHash)
 	stateStore := sm.NewStore(stateDB)
 	proTxHash := state.Validators.Validators[0].ProTxHash
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
@@ -589,7 +594,7 @@ func TestFinalizeBlockValidatorUpdatesResultingInEmptySet(t *testing.T) {
 	}
 
 	assert.NotPanics(t, func() {
-		state, err = blockExec.ApplyBlock(ctx, state, ctypes.UncommittedState{}, nodeProTxHash, blockID, block)
+		state, err = blockExec.ApplyBlock(ctx, state, blockID, block)
 	})
 	assert.NotNil(t, err)
 	assert.NotEmpty(t, state.Validators.Validators)
@@ -639,7 +644,7 @@ func TestEmptyPrepareProposal(t *testing.T) {
 	)
 	proposerProTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
-	_, err = blockExec.CreateProposalBlock(ctx, height, state, &ctypes.UncommittedState{}, commit, proposerProTxHash, 0)
+	_, _, err = blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
 	require.NoError(t, err)
 }
 
@@ -694,7 +699,7 @@ func TestPrepareProposalErrorOnNonExistingRemoved(t *testing.T) {
 	)
 	proposerProTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
-	block, err := blockExec.CreateProposalBlock(ctx, height, state, &ctypes.UncommittedState{}, commit, proposerProTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
 	require.ErrorContains(t, err, "new transaction incorrectly marked as removed")
 	require.Nil(t, block)
 
@@ -750,7 +755,7 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 	)
 	proposerProTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
-	block, err := blockExec.CreateProposalBlock(ctx, height, state, &ctypes.UncommittedState{}, commit, proposerProTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
 	require.NoError(t, err)
 	require.Len(t, block.Data.Txs.ToSliceOfBytes(), len(trs)-2)
 
@@ -809,7 +814,7 @@ func TestPrepareProposalAddedTxsIncluded(t *testing.T) {
 	)
 	proposerProTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
-	block, err := blockExec.CreateProposalBlock(ctx, height, state, &ctypes.UncommittedState{}, commit, proposerProTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
 	require.NoError(t, err)
 
 	require.Equal(t, txs[0], block.Data.Txs[0])
@@ -865,7 +870,7 @@ func TestPrepareProposalReorderTxs(t *testing.T) {
 	)
 	proposerProTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
-	block, err := blockExec.CreateProposalBlock(ctx, height, state, &ctypes.UncommittedState{}, commit, proposerProTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
 	require.NoError(t, err)
 	for i, tx := range block.Data.Txs {
 		require.Equal(t, types.Tx(trs[i].Tx), tx)
@@ -926,7 +931,7 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 	proposerProTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
 
-	block, err := blockExec.CreateProposalBlock(ctx, height, state, &ctypes.UncommittedState{}, commit, proposerProTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
 	require.ErrorContains(t, err, "transaction data size exceeds maximum")
 	require.Nil(t, block, "")
 
@@ -978,7 +983,7 @@ func TestPrepareProposalErrorOnPrepareProposalError(t *testing.T) {
 	proTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
 
-	block, err := blockExec.CreateProposalBlock(ctx, height, state, &ctypes.UncommittedState{}, commit, proTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proTxHash, 0)
 	require.Nil(t, block)
 	require.ErrorContains(t, err, "an injected error")
 

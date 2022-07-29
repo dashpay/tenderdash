@@ -1611,10 +1611,11 @@ func (cs *State) createProposalBlock(ctx context.Context) (*types.Block, error) 
 	}
 	proposerProTxHash := cs.privValidatorProTxHash
 
-	ret, err := cs.blockExec.CreateProposalBlock(ctx, cs.Height, cs.state, &cs.RoundState.UncommittedState, commit, proposerProTxHash, cs.proposedAppVersion)
+	ret, uncommittedState, err := cs.blockExec.CreateProposalBlock(ctx, cs.Height, cs.state, commit, proposerProTxHash, cs.proposedAppVersion)
 	if err != nil {
 		panic(err)
 	}
+	cs.RoundState.UncommittedState = uncommittedState
 	return ret, nil
 }
 
@@ -1703,10 +1704,11 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	isAppValid, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state, &cs.RoundState.UncommittedState)
+	isAppValid, uncommittedState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state)
 	if err != nil {
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
+	cs.RoundState.UncommittedState = uncommittedState
 
 	// Validate proposal block, from Tendermint's perspective
 	err = cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.UncommittedState, cs.ProposalBlock)
@@ -2356,11 +2358,10 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 
 	// Execute and commit the block, update and save the state, and update the mempool.
 	// NOTE The block.AppHash wont reflect these txs until the next block.
-	stateCopy, err := cs.blockExec.ApplyBlock(
+	stateCopy, err := cs.blockExec.FinalizeBlock(
 		ctx,
 		stateCopy,
 		rs.UncommittedState,
-		cs.privValidatorProTxHash,
 		types.BlockID{
 			Hash:          block.Hash(),
 			PartSetHeader: blockParts.Header(),
