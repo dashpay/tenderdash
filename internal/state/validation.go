@@ -9,6 +9,8 @@ import (
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
+	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
 )
@@ -236,6 +238,74 @@ func validateCoreChainLock(block *types.Block, state State) error {
 			state.LastCoreChainLockedBlockHeight,
 			block.Header.CoreChainLockedHeight,
 		)
+	}
+	return nil
+}
+
+func validateValidatorSetUpdate(
+	abciValidatorSetUpdate *abci.ValidatorSetUpdate,
+	params types.ValidatorParams,
+) error {
+	// if there was no update return no error
+	if abciValidatorSetUpdate == nil {
+		return nil
+	}
+	if len(abciValidatorSetUpdate.ValidatorUpdates) != 0 &&
+		abciValidatorSetUpdate.ThresholdPublicKey.Sum == nil {
+		return fmt.Errorf("received validator updates without a threshold public key")
+	}
+	return validateValidatorUpdates(abciValidatorSetUpdate.ValidatorUpdates, params)
+}
+
+func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate, params types.ValidatorParams) error {
+	for _, valUpdate := range abciUpdates {
+		if valUpdate.GetPower() < 0 {
+			return fmt.Errorf("voting power can't be negative %v", valUpdate)
+		} else if valUpdate.GetPower() == 0 {
+			// continue, since this is deleting the validator, and thus there is no
+			// pubkey to check
+			continue
+		}
+
+		// Check if validator's pubkey matches an ABCI type in the consensus params
+		if valUpdate.PubKey != nil {
+			pk, err := cryptoenc.PubKeyFromProto(*valUpdate.PubKey)
+			if err != nil {
+				return err
+			}
+			if !params.IsValidPubkeyType(pk.Type()) {
+				return fmt.Errorf(
+					"validator %v is using pubkey %s, which is unsupported for consensus",
+					valUpdate,
+					pk.Type(),
+				)
+			}
+			if err := validatePubKey(pk); err != nil {
+				return fmt.Errorf("public key in validator %X is invalid: %w", valUpdate.ProTxHash, err)
+			}
+		}
+
+		if valUpdate.ProTxHash == nil {
+			return fmt.Errorf(
+				"validator %v does not have a protxhash, which is needed for consensus",
+				valUpdate,
+			)
+		}
+
+		if len(valUpdate.ProTxHash) != crypto.ProTxHashSize {
+			return fmt.Errorf(
+				"validator %v is using protxhash %s, which is not the required length",
+				valUpdate,
+				valUpdate.ProTxHash,
+			)
+		}
+
+		if valUpdate.NodeAddress != "" {
+			_, err := types.ParseValidatorAddress(valUpdate.NodeAddress)
+			if err != nil {
+				return fmt.Errorf("cannot parse validator address %s: %w", valUpdate.NodeAddress, err)
+			}
+		}
 	}
 	return nil
 }

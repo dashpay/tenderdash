@@ -139,7 +139,7 @@ func TestValidateBlockHeader(t *testing.T) {
 		for _, tc := range testCases {
 			block, err := statefactory.MakeBlock(state, height, lastCommit)
 			require.NoError(t, err)
-			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0)
+			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0, nil)
 			tc.malleateBlock(block)
 			err = blockExec.ValidateBlock(ctx, state, block)
 			t.Logf("%s: %v", tc.name, err)
@@ -156,7 +156,7 @@ func TestValidateBlockHeader(t *testing.T) {
 	nextHeight := validationTestsStopHeight
 	block, err := statefactory.MakeBlock(state, nextHeight, lastCommit)
 	require.NoError(t, err)
-	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0)
+	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0, nil)
 	state.InitialHeight = nextHeight + 1
 	err = blockExec.ValidateBlock(ctx, state, block)
 	require.Error(t, err, "expected an error when state is ahead of block")
@@ -245,7 +245,7 @@ func TestValidateBlockCommit(t *testing.T) {
 				},
 			)
 			block, err := statefactory.MakeBlock(state, height, wrongHeightCommit)
-			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0)
+			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0, nil)
 			require.NoError(t, err)
 			err = blockExec.ValidateBlock(ctx, state, block)
 			var wantErr types.ErrInvalidCommitHeight
@@ -255,7 +255,7 @@ func TestValidateBlockCommit(t *testing.T) {
 				Test that the threshold block signatures are good
 			*/
 			block, err = statefactory.MakeBlock(state, height, wrongVoteMessageSignedCommit)
-			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0)
+			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0, nil)
 			require.NoError(t, err)
 			err = blockExec.ValidateBlock(ctx, state, block)
 			require.True(
@@ -425,7 +425,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 				evidence,
 				proposerProTxHash,
 			)
-			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nil, 0)
+			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nil, 0, nil)
 			err := blockExec.ValidateBlock(ctx, state, block)
 			if assert.Error(t, err) {
 				_, ok := err.(*types.ErrEvidenceOverflow)

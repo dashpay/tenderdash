@@ -48,9 +48,6 @@ func TestSyncer_SyncAny(t *testing.T) {
 		Validators: &types.ValidatorSet{
 			Proposer: &types.Validator{ProTxHash: crypto.Checksum([]byte("val2"))},
 		},
-		NextValidators: &types.ValidatorSet{
-			Proposer: &types.Validator{ProTxHash: crypto.Checksum([]byte("val3"))},
-		},
 
 		ConsensusParams:                  *types.DefaultConsensusParams(),
 		LastHeightConsensusParamsChanged: 1,

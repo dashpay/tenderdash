@@ -69,7 +69,7 @@ func makeAndApplyGoodBlock(
 ) (sm.State, types.BlockID) {
 	t.Helper()
 	block := state.MakeBlock(height, factory.MakeNTxs(height, 10), lastCommit, evidence, proposerProTxHash)
-	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nil, proposedAppVersion)
+	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nil, proposedAppVersion, nil)
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 

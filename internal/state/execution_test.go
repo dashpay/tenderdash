@@ -56,8 +56,9 @@ func TestApplyBlock(t *testing.T) {
 	stateStore := sm.NewStore(stateDB)
 	// The state is local, so we just take the first proTxHash
 	nodeProTxHash := state.Validators.Validators[0].ProTxHash
-	app.ValidatorSetUpdate = state.Validators.ABCIEquivalentValidatorUpdates()
 	ctx = dash.ContextWithProTxHash(ctx, nodeProTxHash)
+
+	app.ValidatorSetUpdate = state.Validators.ABCIEquivalentValidatorUpdates()
 
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
 	mp := &mpmocks.Mempool{}

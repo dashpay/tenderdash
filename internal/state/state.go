@@ -311,10 +311,11 @@ func (state State) MakeBlock(
 	block := types.MakeBlock(height, txs, commit, evidence)
 
 	// Fill rest of header with state data.
+	validatorsHash := state.Validators.Hash()
 	block.Header.Populate(
 		state.Version.Consensus, state.ChainID,
 		tmtime.Now(), state.LastBlockID,
-		state.LastValidators.Hash(), state.Validators.Hash(),
+		validatorsHash, validatorsHash,
 		state.ConsensusParams.HashConsensusParams(), state.AppHash, state.LastResultsHash,
 		proposerProTxHash,
 	)

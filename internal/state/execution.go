@@ -10,9 +10,6 @@ import (
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-	"github.com/tendermint/tendermint/dash"
-	ctypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
@@ -98,11 +95,9 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	commit *types.Commit,
 	proposerProTxHash []byte,
 	proposedAppVersion uint64,
-) (*types.Block, ctypes.UncommittedState, error) {
+) (*types.Block, UncommittedState, error) {
 	maxBytes := state.ConsensusParams.Block.MaxBytes
 	maxGas := state.ConsensusParams.Block.MaxGas
-
-	stateChanges := ctypes.UncommittedState{}
 
 	evidence, evSize := blockExec.evpool.PendingEvidence(state.ConsensusParams.Evidence.MaxBytes)
 
@@ -146,12 +141,12 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		// Either way, we cannot recover in a meaningful way, unless we skip proposing
 		// this block, repair what caused the error and try again. Hence, we return an
 		// error for now (the production code calling this function is expected to panic).
-		return nil, stateChanges, err
+		return nil, UncommittedState{}, err
 	}
 	txrSet := types.NewTxRecordSet(rpp.TxRecords)
 
 	if err := txrSet.Validate(maxDataBytes, block.Txs); err != nil {
-		return nil, stateChanges, err
+		return nil, UncommittedState{}, err
 	}
 
 	for _, rtx := range txrSet.RemovedTxs() {
@@ -162,7 +157,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	itxs := txrSet.IncludedTxs()
 	nextCoreChainLock, err := types.CoreChainLockFromProto(rpp.NextCoreChainLockUpdate)
 	if err != nil {
-		return nil, stateChanges, err
+		return nil, UncommittedState{}, err
 	}
 	if nextCoreChainLock != nil &&
 		nextCoreChainLock.CoreBlockHeight <= state.LastCoreChainLockedBlockHeight {
@@ -176,13 +171,16 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		evidence,
 		proposerProTxHash,
 	)
-	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion)
 
 	// update some round state data
-	err = stateChanges.Populate(rpp)
+	stateChanges, err := NewUncommittedState(ctx, rpp, state)
 	if err != nil {
-		return nil, stateChanges, err
+		return nil, UncommittedState{}, err
 	}
+
+	nextValsHash := stateChanges.Validators.Hash()
+	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion, nextValsHash)
+
 	return block, stateChanges, nil
 }
 
@@ -190,8 +188,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	ctx context.Context,
 	block *types.Block,
 	state State,
-) (bool, ctypes.UncommittedState, error) {
-	stateChanges := ctypes.UncommittedState{}
+) (bool, UncommittedState, error) {
 	version := block.Version.ToProto()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Hash:                block.Header.Hash(),
@@ -209,20 +206,20 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		Version:               &version,
 	})
 	if err != nil {
-		return false, stateChanges, ErrInvalidBlock(err)
+		return false, UncommittedState{}, ErrInvalidBlock(err)
 	}
 	if resp.IsStatusUnknown() {
 		panic(fmt.Sprintf("ProcessProposal responded with status %s", resp.Status.String()))
 	}
 	nextCoreChainLock, err := types.CoreChainLockFromProto(resp.NextCoreChainLockUpdate)
 	if err != nil {
-		return false, stateChanges, err
+		return false, UncommittedState{}, err
 	}
 	// Update the next core chain lock that we can propose
 	blockExec.NextCoreChainLock = nextCoreChainLock
 
 	// update some round state data
-	err = stateChanges.Populate(resp)
+	stateChanges, err := NewUncommittedState(ctx, resp, state)
 	if err != nil {
 		return false, stateChanges, err
 	}
@@ -256,7 +253,7 @@ func (blockExec *BlockExecutor) ValidateBlock(ctx context.Context, state State, 
 func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	ctx context.Context,
 	state State,
-	uncommittedState ctypes.UncommittedState,
+	uncommittedState UncommittedState,
 	block *types.Block,
 ) error {
 	err := blockExec.ValidateBlock(ctx, state, block)
@@ -320,7 +317,7 @@ func (blockExec *BlockExecutor) ValidateBlockTime(
 func (blockExec *BlockExecutor) FinalizeBlock(
 	ctx context.Context,
 	state State,
-	uncommittedState ctypes.UncommittedState,
+	uncommittedState UncommittedState,
 	blockID types.BlockID,
 	block *types.Block,
 ) (State, error) {
@@ -347,11 +344,11 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// 	return state, err
 	// }
 
-	stateUpdates, err := PrepareStateUpdates(ctx, uncommittedState, block.Header, state)
+	stateUpdates, err := PrepareStateUpdates(ctx, block.Header, state, uncommittedState)
 	if err != nil {
 		return State{}, err
 	}
-	state, err = state.Update(blockID, &block.Header, stateUpdates...)
+	state, err = state.Update(ctx, blockID, &block.Header, stateUpdates...)
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
 	}
@@ -528,76 +525,9 @@ func buildLastCommitInfo(block *types.Block, store Store, initialHeight int64) a
 	}
 }
 
-func validateValidatorSetUpdate(
-	abciValidatorSetUpdate *abci.ValidatorSetUpdate,
-	params types.ValidatorParams,
-) error {
-	// if there was no update return no error
-	if abciValidatorSetUpdate == nil {
-		return nil
-	}
-	if len(abciValidatorSetUpdate.ValidatorUpdates) != 0 &&
-		abciValidatorSetUpdate.ThresholdPublicKey.Sum == nil {
-		return fmt.Errorf("received validator updates without a threshold public key")
-	}
-	return validateValidatorUpdates(abciValidatorSetUpdate.ValidatorUpdates, params)
-}
-
-func validateValidatorUpdates(abciUpdates []abci.ValidatorUpdate, params types.ValidatorParams) error {
-	for _, valUpdate := range abciUpdates {
-		if valUpdate.GetPower() < 0 {
-			return fmt.Errorf("voting power can't be negative %v", valUpdate)
-		} else if valUpdate.GetPower() == 0 {
-			// continue, since this is deleting the validator, and thus there is no
-			// pubkey to check
-			continue
-		}
-
-		// Check if validator's pubkey matches an ABCI type in the consensus params
-		if valUpdate.PubKey != nil {
-			pk, err := cryptoenc.PubKeyFromProto(*valUpdate.PubKey)
-			if err != nil {
-				return err
-			}
-			if !params.IsValidPubkeyType(pk.Type()) {
-				return fmt.Errorf(
-					"validator %v is using pubkey %s, which is unsupported for consensus",
-					valUpdate,
-					pk.Type(),
-				)
-			}
-			if err := validatePubKey(pk); err != nil {
-				return fmt.Errorf("public key in validator %X is invalid: %w", valUpdate.ProTxHash, err)
-			}
-		}
-
-		if valUpdate.ProTxHash == nil {
-			return fmt.Errorf(
-				"validator %v does not have a protxhash, which is needed for consensus",
-				valUpdate,
-			)
-		}
-
-		if len(valUpdate.ProTxHash) != crypto.ProTxHashSize {
-			return fmt.Errorf(
-				"validator %v is using protxhash %s, which is not the required length",
-				valUpdate,
-				valUpdate.ProTxHash,
-			)
-		}
-
-		if valUpdate.NodeAddress != "" {
-			_, err := types.ParseValidatorAddress(valUpdate.NodeAddress)
-			if err != nil {
-				return fmt.Errorf("cannot parse validator address %s: %w", valUpdate.NodeAddress, err)
-			}
-		}
-	}
-	return nil
-}
-
 // Update returns a copy of state with the fields set using the arguments passed in.
 func (state State) Update(
+	ctx context.Context,
 	blockID types.BlockID,
 	header *types.Header,
 	stateUpdates ...UpdateFunc,
@@ -625,7 +555,7 @@ func (state State) Update(
 		AppHash:                          nil,
 	}
 	var err error
-	newState, err = executeStateUpdates(newState, stateUpdates...)
+	newState, err = executeStateUpdates(ctx, newState, stateUpdates...)
 	if err != nil {
 		return State{}, err
 	}
@@ -757,43 +687,6 @@ func execBlock(
 	return responseFinalizeBlock, nil
 }
 
-// valsetUpdate processes validator set updates received from ABCI app.
-func valsetUpdate(
-	ctx context.Context,
-	vu *abci.ValidatorSetUpdate,
-	currentVals *types.ValidatorSet,
-	params types.ValidatorParams,
-) (*types.ValidatorSet, error) {
-	err := validateValidatorSetUpdate(vu, params)
-	if err != nil {
-
-		return nil, fmt.Errorf("validating validator updates: %w", err)
-	}
-
-	validatorUpdates, thresholdPubKey, quorumHash, err := types.PB2TM.ValidatorUpdatesFromValidatorSet(vu)
-	if err != nil {
-		return nil, fmt.Errorf("converting validator updates to native types: %w", err)
-	}
-	// Copy the valset so we can apply changes from FinalizeBlock
-	// and update s.LastValidators and s.Validators.
-	nValSet := currentVals.Copy()
-	// Update the validator set with the latest abciResponses.
-	if len(validatorUpdates) > 0 {
-		if bytes.Equal(nValSet.QuorumHash, quorumHash) {
-			err = nValSet.UpdateWithChangeSet(validatorUpdates, thresholdPubKey, quorumHash)
-			if err != nil {
-				return nil, err
-			}
-		} else {
-			nodeProTxHash, _ := dash.ProTxHashFromContext(ctx)
-			// if we don't have proTxHash, NewValidatorSetWithLocalNodeProTxHash behaves like NewValidatorSet
-			nValSet = types.NewValidatorSetWithLocalNodeProTxHash(validatorUpdates, thresholdPubKey,
-				currentVals.QuorumType, quorumHash, nodeProTxHash)
-		}
-	}
-	return nValSet, nil
-}
-
 //----------------------------------------------------------------------------------------------------
 // Execute block without state. TODO: eliminate
 // ExecCommitBlock executes and commits a block on the proxyApp without validating or mutating the state.
@@ -809,7 +702,7 @@ func ExecCommitBlock(
 	store Store,
 	initialHeight int64,
 	s State,
-	ucState ctypes.UncommittedState,
+	ucState UncommittedState,
 ) ([]byte, *abci.ResponseFinalizeBlock, error) {
 	respFinalizeBlock, err := execBlock(ctx, be, appConn, block, logger, store, initialHeight, s)
 	if err != nil {
@@ -819,10 +712,7 @@ func ExecCommitBlock(
 
 	// the BlockExecutor condition is using for the final block replay process.
 	if be != nil {
-		vsetUpdate, err := valsetUpdate(ctx, ucState.ValidatorSetUpdate, s.Validators, s.ConsensusParams.Validator)
-		if err != nil {
-			return nil, respFinalizeBlock, err
-		}
+		vsetUpdate := ucState.Validators
 
 		bps, err := block.MakePartSet(types.BlockPartSizeBytes)
 		if err != nil {
