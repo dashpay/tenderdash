@@ -2,6 +2,7 @@ package state
 
 import (
 	"bytes"
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -330,6 +331,13 @@ func (state State) ValidatorsAtHeight(height int64) *types.ValidatorSet {
 	default:
 		return state.Validators
 	}
+}
+
+// NewRoundState returns a structure that will hold new changes to the state, that can be applied once the block is finalized
+func (state State) NewStateChangeset(ctx context.Context, proposalResponse proto.Message) (Changeset, error) {
+	ret := Changeset{}
+	err := ret.populate(ctx, proposalResponse, state)
+	return ret, err
 }
 
 //------------------------------------------------------------------------

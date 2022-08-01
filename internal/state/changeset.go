@@ -15,8 +15,8 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// UncommittedState ... ; TODO rename to CandidateState
-type UncommittedState struct {
+// Changeset ...
+type Changeset struct {
 	// Base state for the changes
 	Base    State
 	AppHash []byte `json:"app_hash"`
@@ -34,14 +34,8 @@ type UncommittedState struct {
 	CoreChainLockedBlockHeight uint32 `json:"chain_locked_block_height"`
 }
 
-func NewUncommittedState(ctx context.Context, proposalResponse proto.Message, baseState State) (UncommittedState, error) {
-	ret := UncommittedState{}
-	err := ret.populate(ctx, proposalResponse, baseState)
-	return ret, err
-}
-
 // UpdateState applies changes from the candidate state on a final state
-func (candidate UncommittedState) UpdateState(ctx context.Context, target *State) error {
+func (candidate Changeset) UpdateState(ctx context.Context, target *State) error {
 	target.AppHash = candidate.AppHash
 
 	target.ConsensusParams = candidate.ConsensusParams
@@ -56,12 +50,12 @@ func (candidate UncommittedState) UpdateState(ctx context.Context, target *State
 }
 
 // UpdateFunc implements UpdateFunc
-func (candidate UncommittedState) UpdateFunc(ctx context.Context, state State) (State, error) {
+func (candidate Changeset) UpdateFunc(ctx context.Context, state State) (State, error) {
 	err := candidate.UpdateState(ctx, &state)
 	return state, err
 }
 
-func (candidate *UncommittedState) populate(ctx context.Context, proposalResponse proto.Message, baseState State) error {
+func (candidate *Changeset) populate(ctx context.Context, proposalResponse proto.Message, baseState State) error {
 	switch resp := proposalResponse.(type) {
 	case *abci.ResponsePrepareProposal:
 		return candidate.update(
@@ -92,7 +86,7 @@ func (candidate *UncommittedState) populate(ctx context.Context, proposalRespons
 	}
 }
 
-func (candidate *UncommittedState) update(
+func (candidate *Changeset) update(
 	ctx context.Context,
 	baseState State,
 	appHash tmbytes.HexBytes,
@@ -122,11 +116,11 @@ func (candidate *UncommittedState) update(
 }
 
 // Height returns height of current block
-func (candidate *UncommittedState) Height() int64 {
+func (candidate *Changeset) Height() int64 {
 	return candidate.Base.LastBlockHeight + 1
 }
 
-func (candidate *UncommittedState) populateTxResults(txResults []*abci.ExecTxResult) error {
+func (candidate *Changeset) populateTxResults(txResults []*abci.ExecTxResult) error {
 	hash, err := abci.TxResultsHash(txResults)
 	if err != nil {
 		return fmt.Errorf("marshaling TxResults: %w", err)
@@ -137,7 +131,7 @@ func (candidate *UncommittedState) populateTxResults(txResults []*abci.ExecTxRes
 	return nil
 }
 
-func (candidate *UncommittedState) populateChainlock(chainlock *types2.CoreChainLock) error {
+func (candidate *Changeset) populateChainlock(chainlock *types2.CoreChainLock) error {
 	nextCoreChainLock, err := types.CoreChainLockFromProto(chainlock)
 	if err != nil {
 		return err
@@ -152,7 +146,7 @@ func (candidate *UncommittedState) populateChainlock(chainlock *types2.CoreChain
 }
 
 // populateConsensusParams updates ConsensusParams, Version and LastHeightConsensusParamsChanged
-func (candidate *UncommittedState) populateConsensusParams(updates *tmtypes.ConsensusParams) error {
+func (candidate *Changeset) populateConsensusParams(updates *tmtypes.ConsensusParams) error {
 	base := candidate.Base
 
 	if updates == nil {
@@ -181,7 +175,7 @@ func (candidate *UncommittedState) populateConsensusParams(updates *tmtypes.Cons
 
 // populateValsetUpdates calculates and populates Validators and LastHeightValidatorsChanged
 // CONTRACT: candidate.ConsensusParams were already populated
-func (candidate *UncommittedState) populateValsetUpdates(ctx context.Context, update *abci.ValidatorSetUpdate) error {
+func (candidate *Changeset) populateValsetUpdates(ctx context.Context, update *abci.ValidatorSetUpdate) error {
 	base := candidate.Base
 
 	newValSet, err := valsetUpdate(ctx, update, base.Validators, candidate.ConsensusParams.Validator)

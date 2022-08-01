@@ -95,7 +95,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	commit *types.Commit,
 	proposerProTxHash []byte,
 	proposedAppVersion uint64,
-) (*types.Block, UncommittedState, error) {
+) (*types.Block, Changeset, error) {
 	maxBytes := state.ConsensusParams.Block.MaxBytes
 	maxGas := state.ConsensusParams.Block.MaxGas
 
@@ -141,12 +141,12 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		// Either way, we cannot recover in a meaningful way, unless we skip proposing
 		// this block, repair what caused the error and try again. Hence, we return an
 		// error for now (the production code calling this function is expected to panic).
-		return nil, UncommittedState{}, err
+		return nil, Changeset{}, err
 	}
 	txrSet := types.NewTxRecordSet(rpp.TxRecords)
 
 	if err := txrSet.Validate(maxDataBytes, block.Txs); err != nil {
-		return nil, UncommittedState{}, err
+		return nil, Changeset{}, err
 	}
 
 	for _, rtx := range txrSet.RemovedTxs() {
@@ -157,7 +157,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	itxs := txrSet.IncludedTxs()
 	nextCoreChainLock, err := types.CoreChainLockFromProto(rpp.NextCoreChainLockUpdate)
 	if err != nil {
-		return nil, UncommittedState{}, err
+		return nil, Changeset{}, err
 	}
 	if nextCoreChainLock != nil &&
 		nextCoreChainLock.CoreBlockHeight <= state.LastCoreChainLockedBlockHeight {
@@ -173,9 +173,9 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	)
 
 	// update some round state data
-	stateChanges, err := NewUncommittedState(ctx, rpp, state)
+	stateChanges, err := state.NewStateChangeset(ctx, rpp)
 	if err != nil {
-		return nil, UncommittedState{}, err
+		return nil, Changeset{}, err
 	}
 
 	nextValsHash := stateChanges.Validators.Hash()
@@ -188,7 +188,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	ctx context.Context,
 	block *types.Block,
 	state State,
-) (bool, UncommittedState, error) {
+) (bool, Changeset, error) {
 	version := block.Version.ToProto()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Hash:                block.Header.Hash(),
@@ -206,20 +206,20 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		Version:               &version,
 	})
 	if err != nil {
-		return false, UncommittedState{}, ErrInvalidBlock(err)
+		return false, Changeset{}, ErrInvalidBlock(err)
 	}
 	if resp.IsStatusUnknown() {
 		panic(fmt.Sprintf("ProcessProposal responded with status %s", resp.Status.String()))
 	}
 	nextCoreChainLock, err := types.CoreChainLockFromProto(resp.NextCoreChainLockUpdate)
 	if err != nil {
-		return false, UncommittedState{}, err
+		return false, Changeset{}, err
 	}
 	// Update the next core chain lock that we can propose
 	blockExec.NextCoreChainLock = nextCoreChainLock
 
 	// update some round state data
-	stateChanges, err := NewUncommittedState(ctx, resp, state)
+	stateChanges, err := state.NewStateChangeset(ctx, resp)
 	if err != nil {
 		return false, stateChanges, err
 	}
@@ -253,7 +253,7 @@ func (blockExec *BlockExecutor) ValidateBlock(ctx context.Context, state State, 
 func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	ctx context.Context,
 	state State,
-	uncommittedState UncommittedState,
+	uncommittedState Changeset,
 	block *types.Block,
 ) error {
 	err := blockExec.ValidateBlock(ctx, state, block)
@@ -317,7 +317,7 @@ func (blockExec *BlockExecutor) ValidateBlockTime(
 func (blockExec *BlockExecutor) FinalizeBlock(
 	ctx context.Context,
 	state State,
-	uncommittedState UncommittedState,
+	uncommittedState Changeset,
 	blockID types.BlockID,
 	block *types.Block,
 ) (State, error) {
@@ -702,7 +702,7 @@ func ExecCommitBlock(
 	store Store,
 	initialHeight int64,
 	s State,
-	ucState UncommittedState,
+	ucState Changeset,
 ) ([]byte, *abci.ResponseFinalizeBlock, error) {
 	respFinalizeBlock, err := execBlock(ctx, be, appConn, block, logger, store, initialHeight, s)
 	if err != nil {
