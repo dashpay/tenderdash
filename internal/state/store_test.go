@@ -6,6 +6,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
@@ -39,7 +40,7 @@ func TestStoreBootstrap(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = stateStore.LoadValidators(101)
-	require.NoError(t, err)
+	require.Error(t, err)
 
 	state, err := stateStore.Load()
 	require.NoError(t, err)
@@ -52,12 +53,16 @@ func TestStoreLoadValidators(t *testing.T) {
 	vals, _ := types.RandValidatorSet(3)
 
 	// 1) LoadValidators loads validators using a height where they were last changed
-	// Note that only the next validators at height h + 1 are saved
+	// Note that only the next validators at height h are saved
 	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals, 1, 1)))
 	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals.CopyIncrementProposerPriority(1), 2, 1)))
-	loadedVals, err := stateStore.LoadValidators(3)
+	loadedVals, err := stateStore.LoadValidators(2)
 	require.NoError(t, err)
-	require.Equal(t, vals.CopyIncrementProposerPriority(3), loadedVals)
+
+	_, err = stateStore.LoadValidators(3)
+	assert.Error(t, err, "no validator expected at this height")
+
+	require.Equal(t, vals.CopyIncrementProposerPriority(2), loadedVals)
 
 	// 2) LoadValidators loads validators using a checkpoint height
 
@@ -66,7 +71,7 @@ func TestStoreLoadValidators(t *testing.T) {
 	require.NoError(t, err)
 
 	// check that a request will go back to the last checkpoint
-	_, err = stateStore.LoadValidators(valSetCheckpointInterval + 1)
+	_, err = stateStore.LoadValidators(valSetCheckpointInterval + 2)
 	require.Error(t, err)
 	require.Equal(t, fmt.Sprintf("couldn't find validators at height %d (height %d was originally requested): "+
 		"value retrieved from db is empty",
@@ -105,7 +110,6 @@ func BenchmarkLoadValidators(b *testing.B) {
 	}
 
 	state.Validators, _ = types.RandValidatorSet(valSetSize)
-	state.NextValidators = state.Validators.CopyIncrementProposerPriority(1)
 	err = stateStore.Save(state)
 	require.NoError(b, err)
 
@@ -113,7 +117,7 @@ func BenchmarkLoadValidators(b *testing.B) {
 
 	for i := 10; i < 10000000000; i *= 10 { // 10, 100, 1000, ...
 		i := i
-		err = stateStore.Save(makeRandomStateFromValidatorSet(state.NextValidators,
+		err = stateStore.Save(makeRandomStateFromValidatorSet(state.Validators,
 			int64(i)-1, state.LastHeightValidatorsChanged))
 		if err != nil {
 			b.Fatalf("error saving store: %v", err)
@@ -207,7 +211,6 @@ func TestPruneStates(t *testing.T) {
 					InitialHeight:   1,
 					LastBlockHeight: h - 1,
 					Validators:      validatorSet,
-					NextValidators:  validatorSet,
 					ConsensusParams: types.ConsensusParams{
 						Block: types.BlockParams{MaxBytes: 10e6},
 					},
@@ -221,15 +224,9 @@ func TestPruneStates(t *testing.T) {
 
 				err := stateStore.Save(state)
 				require.NoError(t, err)
-
+				// TODO: Rewrite, as we need to save Response*Proposal to keep TxResults
 				err = stateStore.SaveABCIResponses(h, &tmstate.ABCIResponses{
-					FinalizeBlock: &abci.ResponseFinalizeBlock{
-						TxResults: []*abci.ExecTxResult{
-							{Data: []byte{1}},
-							{Data: []byte{2}},
-							{Data: []byte{3}},
-						},
-					},
+					FinalizeBlock: &abci.ResponseFinalizeBlock{},
 				})
 				require.NoError(t, err)
 			}

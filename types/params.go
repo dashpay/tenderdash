@@ -9,6 +9,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/crypto/secp256k1"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmstrings "github.com/tendermint/tendermint/libs/strings"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
@@ -236,6 +237,10 @@ func (params *ConsensusParams) Complete() {
 	}
 }
 
+func (cp ConsensusParams) IsZero() bool {
+	return cp.Equals(&ConsensusParams{})
+}
+
 // Validate validates the ConsensusParams to ensure all values are within their
 // allowed limits, and returns an error if they are not.
 func (params ConsensusParams) ValidateConsensusParams() error {
@@ -323,7 +328,7 @@ func (params ConsensusParams) ValidateConsensusParams() error {
 // Only the Block.MaxBytes and Block.MaxGas are included in the hash.
 // This allows the ConsensusParams to evolve more without breaking the block
 // protocol. No need for a Merkle tree here, just a small struct to hash.
-func (params ConsensusParams) HashConsensusParams() []byte {
+func (params ConsensusParams) HashConsensusParams() tmbytes.HexBytes {
 	hp := tmproto.HashedParams{
 		BlockMaxBytes: params.Block.MaxBytes,
 		BlockMaxGas:   params.Block.MaxGas,

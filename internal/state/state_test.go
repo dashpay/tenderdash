@@ -623,14 +623,13 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	// we only have one validator:
 	assert.Equal(t, val1ProTxHash, state.Validators.Proposer.ProTxHash)
 
+	firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
+	ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
+
 	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
 	require.NoError(t, err)
 	blockID, err := block.BlockID()
 	require.NoError(t, err)
-
-	// Any node pro tx hash should do
-	firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
-	ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
 
 	// no updates:
 	changes, err := state.NewStateChangeset(ctx, nil)

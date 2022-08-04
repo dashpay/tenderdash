@@ -26,7 +26,6 @@ type Changeset struct {
 
 	ConsensusParams                  types.ConsensusParams
 	LastHeightConsensusParamsChanged int64
-	Version                          Version
 
 	Validators                  *types.ValidatorSet
 	LastHeightValidatorsChanged int64
@@ -34,13 +33,28 @@ type Changeset struct {
 	CoreChainLockedBlockHeight uint32 `json:"chain_locked_block_height"`
 }
 
-// UpdateState applies changes from the candidate state on a final state
+// UpdateBlock changes block fields to reflect the ones returned in PrepareProposal / ProcessProposal
+func (candidate Changeset) UpdateBlock(target *types.Block) error {
+	target.AppHash = candidate.AppHash
+	target.LastResultsHash = candidate.ResultsHash
+
+	target.ConsensusHash = candidate.ConsensusParams.HashConsensusParams()
+	target.ProposedAppVersion = candidate.ConsensusParams.Version.AppVersion
+
+	target.NextValidatorsHash = candidate.Validators.Hash()
+
+	return nil
+}
+
+// UpdateState updates state when the block is committed. State will contain data needed by next block.
 func (candidate Changeset) UpdateState(ctx context.Context, target *State) error {
 	target.AppHash = candidate.AppHash
 
+	target.LastResultsHash = candidate.ResultsHash
+
 	target.ConsensusParams = candidate.ConsensusParams
 	target.LastHeightConsensusParamsChanged = candidate.LastHeightConsensusParamsChanged
-	target.Version = candidate.Version
+	target.Version.Consensus.App = candidate.ConsensusParams.Version.AppVersion
 
 	target.Validators = candidate.Validators
 	target.LastHeightValidatorsChanged = candidate.LastHeightValidatorsChanged
@@ -147,28 +161,24 @@ func (candidate *Changeset) populateChainlock(chainlock *types2.CoreChainLock) e
 
 // populateConsensusParams updates ConsensusParams, Version and LastHeightConsensusParamsChanged
 func (candidate *Changeset) populateConsensusParams(updates *tmtypes.ConsensusParams) error {
-	base := candidate.Base
-
-	if updates == nil {
-		candidate.ConsensusParams = base.ConsensusParams
-		candidate.Version = base.Version
-		candidate.LastHeightConsensusParamsChanged = base.LastHeightConsensusParamsChanged
-
-		return nil
+	current := candidate.ConsensusParams
+	if current.IsZero() {
+		current = candidate.Base.ConsensusParams
 	}
 
 	// NOTE: must not mutate state.ConsensusParams
-	nextParams := candidate.ConsensusParams.UpdateConsensusParams(updates)
+	nextParams := current.UpdateConsensusParams(updates)
 	err := nextParams.ValidateConsensusParams()
 	if err != nil {
 		return fmt.Errorf("error updating consensus params: %w", err)
 	}
 
 	candidate.ConsensusParams = nextParams
-	candidate.Version.Consensus.App = nextParams.Version.AppVersion
 
-	// Change results from this height but only applies to the next height.
-	candidate.LastHeightConsensusParamsChanged = candidate.Height() + 1
+	if updates != nil {
+		// Change results from this height but only applies to the next height.
+		candidate.LastHeightConsensusParamsChanged = candidate.Height() + 1
+	}
 
 	return nil
 }

@@ -177,6 +177,10 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	if err != nil {
 		return nil, Changeset{}, err
 	}
+	err = stateChanges.UpdateBlock(block)
+	if err != nil {
+		return nil, Changeset{}, err
+	}
 
 	nextValsHash := stateChanges.Validators.Hash()
 	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion, nextValsHash)
@@ -223,6 +227,11 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	if err != nil {
 		return false, stateChanges, err
 	}
+	err = stateChanges.UpdateBlock(block)
+	if err != nil {
+		return false, stateChanges, err
+	}
+
 	return resp.IsAccepted(), stateChanges, nil
 }
 

@@ -1495,7 +1495,7 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 
 	// Make proposal
 	propBlockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
-	proposedChainLockHeight := cs.UncommittedState.CoreChainLockedBlockHeight
+	proposedChainLockHeight := cs.Changeset.CoreChainLockedBlockHeight
 	if cs.blockExec.NextCoreChainLock != nil && cs.blockExec.NextCoreChainLock.CoreBlockHeight > proposedChainLockHeight {
 		proposedChainLockHeight = cs.blockExec.NextCoreChainLock.CoreBlockHeight
 	}
@@ -1615,7 +1615,7 @@ func (cs *State) createProposalBlock(ctx context.Context) (*types.Block, error) 
 	if err != nil {
 		panic(err)
 	}
-	cs.RoundState.UncommittedState = uncommittedState
+	cs.RoundState.Changeset = uncommittedState
 	return ret, nil
 }
 
@@ -1708,10 +1708,10 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 	if err != nil {
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
-	cs.RoundState.UncommittedState = uncommittedState
+	cs.RoundState.Changeset = uncommittedState
 
 	// Validate proposal block, from Tendermint's perspective
-	err = cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.UncommittedState, cs.ProposalBlock)
+	err = cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.Changeset, cs.ProposalBlock)
 	if err != nil {
 		// ProposalBlock is invalid, prevote nil.
 		logger.Error("prevote step: consensus deems this block invalid; prevoting nil", "err", err)
@@ -1934,7 +1934,7 @@ func (cs *State) enterPrecommit(ctx context.Context, height int64, round int32) 
 		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
 
 		// Validate the block.
-		if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.UncommittedState, cs.ProposalBlock); err != nil {
+		if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.Changeset, cs.ProposalBlock); err != nil {
 			panic(fmt.Sprintf("precommit step: +2/3 prevoted for an invalid block %v; relocking", err))
 		}
 
@@ -2116,7 +2116,7 @@ func (cs *State) finalizeCommit(ctx context.Context, height int64) {
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.UncommittedState, block); err != nil {
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.Changeset, block); err != nil {
 		panic(fmt.Errorf("+2/3 committed an invalid block: %w", err))
 	}
 
@@ -2277,7 +2277,7 @@ func (cs *State) verifyCommit(ctx context.Context, commit *types.Commit, peerID 
 		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.UncommittedState, block); err != nil {
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.Changeset, block); err != nil {
 		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
 	return true, nil
@@ -2361,7 +2361,7 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	stateCopy, err := cs.blockExec.FinalizeBlock(
 		ctx,
 		stateCopy,
-		rs.UncommittedState,
+		rs.Changeset,
 		types.BlockID{
 			Hash:          block.Hash(),
 			PartSetHeader: blockParts.Header(),
