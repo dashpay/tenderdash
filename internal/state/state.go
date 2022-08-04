@@ -184,9 +184,6 @@ func (state State) IsEmpty() bool {
 
 // StateID generates new state ID based on current `state`
 func (state State) StateID() types.StateID {
-	lastAppHash := make([]byte, len(state.AppHash))
-	copy(lastAppHash, state.AppHash)
-
 	height := state.LastBlockHeight
 	if height == 0 {
 		height = state.InitialHeight - 1
@@ -194,7 +191,7 @@ func (state State) StateID() types.StateID {
 
 	return types.StateID{
 		Height:      height,
-		LastAppHash: lastAppHash,
+		LastAppHash: state.AppHash.Copy(),
 	}
 }
 

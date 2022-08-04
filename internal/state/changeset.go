@@ -19,7 +19,7 @@ import (
 type Changeset struct {
 	// Base state for the changes
 	Base    State
-	AppHash []byte `json:"app_hash"`
+	AppHash tmbytes.HexBytes `json:"app_hash"`
 
 	TxResults   []*abci.ExecTxResult `json:"tx_results"`
 	ResultsHash []byte               `json:"last_results_hash"`
