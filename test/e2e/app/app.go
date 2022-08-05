@@ -403,10 +403,10 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 			)
 		}
 		return &abci.ResponsePrepareProposal{
-			TxRecords:               txRecords,
-			TxResults:               app.txResults(req.Txs),
-			ValidatorSetUpdate:      validatorSetUpdate,
-			NextCoreChainLockUpdate: nextCoreChainLockUpdate,
+			TxRecords:           txRecords,
+			TxResults:           app.txResults(req.Txs),
+			ValidatorSetUpdate:  validatorSetUpdate,
+			CoreChainLockUpdate: nextCoreChainLockUpdate,
 		}, nil
 	}
 	// None of the transactions are modified by this application.
@@ -423,10 +423,10 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 		})
 	}
 	return &abci.ResponsePrepareProposal{
-		TxRecords:               trs,
-		TxResults:               app.txResults(req.Txs),
-		ValidatorSetUpdate:      validatorSetUpdate,
-		NextCoreChainLockUpdate: nextCoreChainLockUpdate,
+		TxRecords:           trs,
+		TxResults:           app.txResults(req.Txs),
+		ValidatorSetUpdate:  validatorSetUpdate,
+		CoreChainLockUpdate: nextCoreChainLockUpdate,
 	}, nil
 }
 
@@ -461,10 +461,10 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 	app.valUpdates = validatorSetUpdate
 
 	return &abci.ResponseProcessProposal{
-		Status:                  abci.ResponseProcessProposal_ACCEPT,
-		TxResults:               app.txResults(req.Txs),
-		ValidatorSetUpdate:      validatorSetUpdate,
-		NextCoreChainLockUpdate: nextCoreChainLockUpdate,
+		Status:              abci.ResponseProcessProposal_ACCEPT,
+		TxResults:           app.txResults(req.Txs),
+		ValidatorSetUpdate:  validatorSetUpdate,
+		CoreChainLockUpdate: nextCoreChainLockUpdate,
 	}, nil
 }
 

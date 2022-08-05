@@ -107,7 +107,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 
 	txs := blockExec.mempool.ReapMaxBytesMaxGas(maxDataBytes, maxGas)
-	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash)
+	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 
 	localLastCommit := buildLastCommitInfo(block, blockExec.store, state.InitialHeight)
 	version := block.Version.ToProto()
@@ -152,14 +152,6 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		}
 	}
 	itxs := txrSet.IncludedTxs()
-	nextCoreChainLock, err := types.CoreChainLockFromProto(rpp.NextCoreChainLockUpdate)
-	if err != nil {
-		return nil, CurentRoundState{}, err
-	}
-	if nextCoreChainLock != nil &&
-		nextCoreChainLock.CoreBlockHeight <= state.LastCoreChainLockedBlockHeight {
-		nextCoreChainLock = nil
-	}
 
 	block = state.MakeBlock(
 		height,
@@ -167,6 +159,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		commit,
 		evidence,
 		proposerProTxHash,
+		proposedAppVersion,
 	)
 
 	// update some round state data
@@ -178,9 +171,6 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	if err != nil {
 		return nil, CurentRoundState{}, err
 	}
-
-	nextValsHash := stateChanges.NextValidators.Hash()
-	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion, nextValsHash)
 
 	return block, stateChanges, nil
 }
@@ -552,7 +542,7 @@ func (state State) Update(
 		LastBlockID:                      blockID,
 		LastStateID:                      types.StateID{Height: header.Height, LastAppHash: header.AppHash},
 		LastBlockTime:                    header.Time,
-		LastCoreChainLockedBlockHeight:   header.CoreChainLockedHeight,
+		LastCoreChainLockedBlockHeight:   state.LastCoreChainLockedBlockHeight,
 		Validators:                       state.Validators.Copy(),
 		LastValidators:                   state.Validators.Copy(),
 		LastHeightValidatorsChanged:      state.LastHeightValidatorsChanged,

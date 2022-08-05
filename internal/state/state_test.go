@@ -114,7 +114,7 @@ func TestABCIResponsesSaveLoad1(t *testing.T) {
 	state.LastBlockHeight++
 
 	// Build mock responses.
-	block, err := statefactory.MakeBlock(state, 2, new(types.Commit))
+	block, err := statefactory.MakeBlock(state, 2, new(types.Commit), 0)
 	require.NoError(t, err)
 
 	abciResponses := new(tmstate.ABCIResponses)
@@ -299,7 +299,7 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 			changeIndex++
 			regenerate = true
 		}
-		header, chainlock, blockID, responses := makeHeaderPartsResponsesValKeysRegenerate(t, state, regenerate)
+		header, _, blockID, responses := makeHeaderPartsResponsesValKeysRegenerate(t, state, regenerate, 0)
 		assert.EqualValues(t, height, header.Height)
 		if regenerate {
 			assert.NotEmpty(t, responses.ProcessProposal.ValidatorSetUpdate.ValidatorUpdates)
@@ -309,10 +309,6 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 
 		changes, err := state.NewStateChangeset(ctx, responses.ProcessProposal)
 		require.NoError(t, err)
-
-		if chainlock != nil {
-			changes.CoreChainLockedBlockHeight = chainlock.CoreBlockHeight
-		}
 
 		su, err := sm.PrepareStateUpdates(ctx, header, state, changes)
 		require.NoError(t, err)
@@ -482,7 +478,7 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	// NewValidatorSet calls IncrementProposerPriority but uses on a copy of val1
 	assert.EqualValues(t, 0, val1.ProposerPriority)
 
-	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
+	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), 0)
 	require.NoError(t, err)
 	blockID, err := block.BlockID()
 	require.NoError(t, err)
@@ -630,7 +626,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
 	ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
 
-	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
+	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), 0)
 	require.NoError(t, err)
 	blockID, err := block.BlockID()
 	require.NoError(t, err)
@@ -966,7 +962,7 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	oldPubkey := val0.PubKey
 
 	// Swap the first validator with a new one (validator set size stays the same).
-	header, _, blockID, responses := makeHeaderPartsResponsesValKeysRegenerate(t, state, true)
+	header, _, blockID, responses := makeHeaderPartsResponsesValKeysRegenerate(t, state, true, 0)
 	currentHeight := header.Height + 1
 	assert.Equal(t, int64(2), currentHeight)
 
@@ -1024,7 +1020,7 @@ func TestStateMakeBlock(t *testing.T) {
 	stateVersion := state.Version.Consensus
 	var height int64 = 2
 	state.LastBlockHeight = height - 1
-	block, err := statefactory.MakeBlock(state, height, new(types.Commit))
+	block, err := statefactory.MakeBlock(state, height, new(types.Commit), 0)
 	require.NoError(t, err)
 
 	// test we set some fields
@@ -1066,7 +1062,7 @@ func TestConsensusParamsChangesSaveLoad(t *testing.T) {
 			cp = params[changeIndex]
 		}
 
-		header, _, blockID, responses := makeHeaderPartsResponsesParams(t, state, &cp)
+		header, _, blockID, responses := makeHeaderPartsResponsesParams(t, state, &cp, 0)
 
 		// Any node pro tx hash should do
 		firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
@@ -1169,7 +1165,7 @@ func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state 
 	return func(prevState, state sm.State, ucState sm.CurentRoundState) sm.State {
 		t.Helper()
 
-		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit))
+		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit), 0)
 		require.NoError(t, err)
 		blockID, err := block.BlockID()
 		require.NoError(t, err)

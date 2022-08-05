@@ -75,8 +75,8 @@ func TestValidateBlockHeader(t *testing.T) {
 	)
 
 	changes, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{
-		NextCoreChainLockUpdate: nextChainLock.ToProto(),
-		AppHash:                 tmrand.Bytes(crypto.DefaultAppHashSize),
+		CoreChainLockUpdate: nextChainLock.ToProto(),
+		AppHash:             tmrand.Bytes(crypto.DefaultAppHashSize),
 	})
 	require.NoError(t, err)
 
@@ -91,8 +91,8 @@ func TestValidateBlockHeader(t *testing.T) {
 
 	// Manipulation of any header field causes failure.
 	testCases := []struct {
-		name          string                   `json:"name,omitempty"`
-		malleateBlock func(block *types.Block) `json:"malleate_block,omitempty"`
+		name          string
+		malleateBlock func(block *types.Block)
 	}{
 		{"Version wrong1", func(block *types.Block) { block.Version = wrongVersion1 }},
 		{"Version wrong2", func(block *types.Block) { block.Version = wrongVersion2 }},
@@ -144,9 +144,8 @@ func TestValidateBlockHeader(t *testing.T) {
 			Invalid blocks don't pass
 		*/
 		for _, tc := range testCases {
-			block, err := statefactory.MakeBlock(state, height, lastCommit)
+			block, err := statefactory.MakeBlock(state, height, lastCommit, 0)
 			require.NoError(t, err)
-			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0, nil)
 			err = changes.UpdateBlock(block)
 			assert.NoError(t, err)
 
@@ -165,9 +164,8 @@ func TestValidateBlockHeader(t *testing.T) {
 	}
 
 	nextHeight := validationTestsStopHeight
-	block, err := statefactory.MakeBlock(state, nextHeight, lastCommit)
+	block, err := statefactory.MakeBlock(state, nextHeight, lastCommit, 0)
 	require.NoError(t, err)
-	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0, nil)
 	state.InitialHeight = nextHeight + 1
 	err = blockExec.ValidateBlock(ctx, state, block)
 	require.Error(t, err, "expected an error when state is ahead of block")
@@ -217,7 +215,6 @@ func TestValidateBlockCommit(t *testing.T) {
 		eventBus,
 		sm.NopMetrics(),
 	)
-	blockExec.SetNextCoreChainLock(nextChainLock)
 	lastCommit := types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil)
 	wrongVoteMessageSignedCommit := types.NewCommit(1, 0, types.BlockID{}, types.StateID{}, nil)
 	badPrivValQuorumHash := crypto.RandQuorumHash()
@@ -225,7 +222,9 @@ func TestValidateBlockCommit(t *testing.T) {
 
 	for height := int64(1); height < validationTestsStopHeight; height++ {
 
-		changes, err := state.NewStateChangeset(ctx, nil)
+		changes, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{
+			CoreChainLockUpdate: nextChainLock.ToProto(),
+		})
 		require.NoError(t, err)
 		stateID := changes.StateID()
 		proTxHash := state.Validators.GetProposer().ProTxHash
@@ -258,8 +257,7 @@ func TestValidateBlockCommit(t *testing.T) {
 					QuorumHash:  state.Validators.QuorumHash,
 				},
 			)
-			block, err := statefactory.MakeBlock(state, height, wrongHeightCommit)
-			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0, nil)
+			block, err := statefactory.MakeBlock(state, height, wrongHeightCommit, 0)
 			require.NoError(t, err)
 			err = blockExec.ValidateBlock(ctx, state, block)
 			var wantErr types.ErrInvalidCommitHeight
@@ -268,8 +266,7 @@ func TestValidateBlockCommit(t *testing.T) {
 			/*
 				Test that the threshold block signatures are good
 			*/
-			block, err = statefactory.MakeBlock(state, height, wrongVoteMessageSignedCommit)
-			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0, nil)
+			block, err = statefactory.MakeBlock(state, height, wrongVoteMessageSignedCommit, 0)
 			require.NoError(t, err)
 			err = blockExec.ValidateBlock(ctx, state, block)
 			require.True(
@@ -438,9 +435,14 @@ func TestValidateBlockEvidence(t *testing.T) {
 				lastCommit,
 				evidence,
 				proposerProTxHash,
+				0,
 			)
-			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nil, 0, nil)
-			err := blockExec.ValidateBlock(ctx, state, block)
+			changes, err := state.NewStateChangeset(ctx, nil)
+			assert.NoError(t, err)
+			err = changes.UpdateBlock(block)
+			assert.NoError(t, err, "update block")
+
+			err = blockExec.ValidateBlock(ctx, state, block)
 			if assert.Error(t, err) {
 				_, ok := err.(*types.ErrEvidenceOverflow)
 				require.True(

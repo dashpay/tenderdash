@@ -68,8 +68,7 @@ func makeAndApplyGoodBlock(
 	proposedAppVersion uint64,
 ) (sm.State, types.BlockID) {
 	t.Helper()
-	block := state.MakeBlock(height, factory.MakeNTxs(height, 10), lastCommit, evidence, proposerProTxHash)
-	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nil, proposedAppVersion, nil)
+	block := state.MakeBlock(height, factory.MakeNTxs(height, 10), lastCommit, evidence, proposerProTxHash, proposedAppVersion)
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 
@@ -147,10 +146,11 @@ func makeHeaderPartsResponsesValPowerChange(
 	t *testing.T,
 	state sm.State,
 	power int64,
+	proposedAppVersion uint64,
 ) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
 	t.Helper()
 
-	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
+	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), proposedAppVersion)
 	require.NoError(t, err)
 
 	abciResponses := &tmstate.ABCIResponses{
@@ -180,21 +180,22 @@ func makeHeaderPartsResponsesValPowerChange(
 	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
 }
 
-func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, regenerate bool) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
-	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
+func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, regenerate bool, proposedAppVersion uint64) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
+	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), proposedAppVersion)
 	if err != nil {
 		t.Error(err)
 	}
 	abciResponses := &tmstate.ABCIResponses{
-		ProcessProposal: &abci.ResponseProcessProposal{ValidatorSetUpdate: nil, Status: abci.ResponseProcessProposal_ACCEPT},
+		ProcessProposal: &abci.ResponseProcessProposal{
+			ValidatorSetUpdate:  nil,
+			CoreChainLockUpdate: block.CoreChainLock.ToProto(),
+			Status:              abci.ResponseProcessProposal_ACCEPT,
+		},
 	}
 	if regenerate == true {
 		proTxHashes := state.Validators.GetProTxHashes()
 		valUpdates := types.ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes)
-		abciResponses.ProcessProposal = &abci.ResponseProcessProposal{
-			ValidatorSetUpdate: &valUpdates,
-			Status:             abci.ResponseProcessProposal_ACCEPT,
-		}
+		abciResponses.ProcessProposal.ValidatorSetUpdate = &valUpdates
 	}
 	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
 }
@@ -203,10 +204,11 @@ func makeHeaderPartsResponsesParams(
 	t *testing.T,
 	state sm.State,
 	params *types.ConsensusParams,
+	proposedAppVersion uint64,
 ) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
 	t.Helper()
 
-	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit))
+	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), proposedAppVersion)
 	require.NoError(t, err)
 	pbParams := params.ToProto()
 	abciResponses := &tmstate.ABCIResponses{
@@ -330,7 +332,6 @@ func (app *testApp) ProcessProposal(_ context.Context, req *abci.RequestProcessP
 			},
 		},
 		TxResults: resTxs,
-
-		Status: abci.ResponseProcessProposal_ACCEPT,
+		Status:    abci.ResponseProcessProposal_ACCEPT,
 	}, nil
 }

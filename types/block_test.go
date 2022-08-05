@@ -57,7 +57,8 @@ func TestBlockAddEvidence(t *testing.T) {
 	evList := []Evidence{ev}
 
 	block := MakeBlock(h, txs, commit, evList)
-	block.SetDashParams(coreChainLock.CoreBlockHeight, &coreChainLock, 0)
+	block.SetCoreChainLock(&coreChainLock)
+
 	require.NotNil(t, block)
 	require.Equal(t, 1, len(block.Evidence))
 	require.NotNil(t, block.EvidenceHash)

@@ -1495,7 +1495,7 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 
 	// Make proposal
 	propBlockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
-	proposedChainLockHeight := cs.CurentRoundState.CoreChainLockedBlockHeight
+	proposedChainLockHeight := cs.state.LastCoreChainLockedBlockHeight
 	proposal := types.NewProposal(height, proposedChainLockHeight, round, cs.ValidRound, propBlockID, block.Header.Time)
 	p := proposal.ToProto()
 	validatorsAtProposalHeight := cs.state.ValidatorsAtHeight(p.Height)
@@ -1613,7 +1613,6 @@ func (cs *State) createProposalBlock(ctx context.Context) (*types.Block, error) 
 		panic(err)
 	}
 	cs.RoundState.CurentRoundState = uncommittedState
-	cs.SetProposedAppVersion(ret.ProposedAppVersion)
 	return ret, nil
 }
 

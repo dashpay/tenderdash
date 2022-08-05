@@ -151,6 +151,17 @@ func (b *Block) Hash() tmbytes.HexBytes {
 	return b.Header.Hash()
 }
 
+func (b *Block) SetCoreChainLock(chainlock *CoreChainLock) {
+	if chainlock == nil {
+		return //noop
+	}
+
+	if b.CoreChainLockedHeight < chainlock.CoreBlockHeight {
+		b.CoreChainLock = chainlock
+		b.CoreChainLockedHeight = chainlock.CoreBlockHeight
+	}
+}
+
 // MakePartSet returns a PartSet containing parts of a serialized block.
 // This is the form in which the block is gossipped to peers.
 // CONTRACT: partSize is greater than zero.
@@ -410,6 +421,7 @@ func (h *Header) Populate(
 	valHash, nextValHash []byte,
 	consensusHash, appHash, lastResultsHash []byte,
 	proposerProTxHash ProTxHash,
+	proposedAppVersion uint64,
 ) {
 	h.Version = version
 	h.ChainID = chainID
@@ -421,6 +433,7 @@ func (h *Header) Populate(
 	h.AppHash = appHash
 	h.ResultsHash = lastResultsHash
 	h.ProposerProTxHash = proposerProTxHash
+	h.ProposedAppVersion = proposedAppVersion
 }
 
 // ValidateBasic performs stateless validation on a Header returning an error

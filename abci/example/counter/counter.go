@@ -89,8 +89,8 @@ func (app *Application) Query(_ context.Context, reqQuery *types.RequestQuery) (
 func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error) {
 	app.handleRequest(req.Height, req.Txs)
 	resp := types.ResponsePrepareProposal{
-		NextCoreChainLockUpdate: app.lastCoreChainLock.ToProto(),
-		TxResults:               app.lastTxResults,
+		CoreChainLockUpdate: app.lastCoreChainLock.ToProto(),
+		TxResults:           app.lastTxResults,
 	}
 	return &resp, nil
 }
@@ -98,9 +98,9 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 func (app *Application) ProcessProposal(_ context.Context, req *types.RequestProcessProposal) (*types.ResponseProcessProposal, error) {
 	app.handleRequest(req.Height, req.Txs)
 	resp := types.ResponseProcessProposal{
-		Status:                  types.ResponseProcessProposal_ACCEPT,
-		NextCoreChainLockUpdate: app.lastCoreChainLock.ToProto(),
-		TxResults:               app.lastTxResults,
+		Status:              types.ResponseProcessProposal_ACCEPT,
+		CoreChainLockUpdate: app.lastCoreChainLock.ToProto(),
+		TxResults:           app.lastTxResults,
 	}
 	return &resp, nil
 }

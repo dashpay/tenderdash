@@ -123,7 +123,6 @@ type State struct {
 
 // Copy makes a copy of the State for mutating.
 func (state State) Copy() State {
-
 	return State{
 		Version:       state.Version,
 		ChainID:       state.ChainID,
@@ -290,11 +289,11 @@ func (state State) MakeBlock(
 	commit *types.Commit,
 	evidence []types.Evidence,
 	proposerProTxHash types.ProTxHash,
+	proposedAppVersion uint64,
 ) *types.Block {
 
 	// Build base block with block data.
 	block := types.MakeBlock(height, txs, commit, evidence)
-	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nil, state.Version.Consensus.App, state.Validators.Hash())
 
 	// Fill rest of header with state data.
 	validatorsHash := state.Validators.Hash()
@@ -304,6 +303,7 @@ func (state State) MakeBlock(
 		validatorsHash, validatorsHash,
 		state.ConsensusParams.HashConsensusParams(), state.AppHash, state.LastResultsHash,
 		proposerProTxHash,
+		proposedAppVersion,
 	)
 
 	return block

@@ -28,10 +28,7 @@ type CurentRoundState struct {
 	// ResultsHash of current block
 	ResultsHash []byte `json:"results_hash"`
 
-	// ProposedAppVersion received from the node; informational
-	ProposedAppVersion uint64
-
-	CoreChainLockedBlockHeight uint32 `json:"chain_locked_block_height"`
+	CoreChainLock *types.CoreChainLock
 
 	// Items changed in next block
 
@@ -47,11 +44,12 @@ func (candidate CurentRoundState) UpdateBlock(target *types.Block) error {
 	target.AppHash = candidate.AppHash
 	target.ResultsHash = candidate.ResultsHash
 
-	if candidate.ProposedAppVersion != 0 {
-		target.ProposedAppVersion = candidate.ProposedAppVersion
-	}
-
 	target.NextValidatorsHash = candidate.NextValidators.Hash()
+
+	target.CoreChainLock = candidate.CoreChainLock
+	if candidate.CoreChainLock != nil {
+		target.CoreChainLockedHeight = candidate.CoreChainLock.CoreBlockHeight
+	}
 
 	return nil
 }
@@ -70,7 +68,10 @@ func (candidate CurentRoundState) UpdateState(ctx context.Context, target *State
 	target.Validators = candidate.NextValidators
 	target.LastHeightValidatorsChanged = candidate.LastHeightValidatorsChanged
 
-	target.LastCoreChainLockedBlockHeight = candidate.CoreChainLockedBlockHeight
+	if candidate.CoreChainLock != nil {
+		target.LastCoreChainLockedBlockHeight = candidate.CoreChainLock.CoreBlockHeight
+	}
+
 	return nil
 }
 
@@ -90,8 +91,7 @@ func (candidate *CurentRoundState) populate(ctx context.Context, proposalRespons
 			resp.TxResults,
 			resp.ConsensusParamUpdates,
 			resp.ValidatorSetUpdate,
-			resp.NextCoreChainLockUpdate,
-			resp.ProposedAppVersion,
+			resp.CoreChainLockUpdate,
 		)
 
 	case *abci.ResponseProcessProposal:
@@ -105,12 +105,11 @@ func (candidate *CurentRoundState) populate(ctx context.Context, proposalRespons
 			resp.TxResults,
 			resp.ConsensusParamUpdates,
 			resp.ValidatorSetUpdate,
-			resp.NextCoreChainLockUpdate,
-			0,
+			resp.CoreChainLockUpdate,
 		)
 
 	case nil: // Assuming no changes
-		return candidate.update(ctx, baseState, nil, nil, nil, nil, nil, 0)
+		return candidate.update(ctx, baseState, nil, nil, nil, nil, nil)
 
 	default:
 		return fmt.Errorf("unsupported response type %T", resp)
@@ -125,11 +124,9 @@ func (candidate *CurentRoundState) update(
 	consensusParamUpdates *types2.ConsensusParams,
 	validatorSetUpdate *abci.ValidatorSetUpdate,
 	coreChainLockUpdate *types2.CoreChainLock,
-	proposedAppVersion uint64,
 ) error {
 	candidate.Base = baseState
 	candidate.AppHash = appHash
-	candidate.ProposedAppVersion = proposedAppVersion
 
 	if err := candidate.populateTxResults(txResults); err != nil {
 		return err
@@ -172,17 +169,19 @@ func (candidate *CurentRoundState) populateTxResults(txResults []*abci.ExecTxRes
 	return nil
 }
 
-func (candidate *CurentRoundState) populateChainlock(chainlock *types2.CoreChainLock) error {
-	nextCoreChainLock, err := types.CoreChainLockFromProto(chainlock)
+func (candidate *CurentRoundState) populateChainlock(chainlockProto *types2.CoreChainLock) error {
+	chainlock, err := types.CoreChainLockFromProto(chainlockProto)
 	if err != nil {
 		return err
 	}
-	if nextCoreChainLock == nil || (nextCoreChainLock.CoreBlockHeight <= candidate.CoreChainLockedBlockHeight) {
-		candidate.CoreChainLockedBlockHeight = candidate.Base.LastCoreChainLockedBlockHeight
+	lastChainlockHeight := candidate.Base.LastCoreChainLockedBlockHeight
+
+	if chainlock == nil || (chainlock.CoreBlockHeight <= lastChainlockHeight) {
+		candidate.CoreChainLock = nil
 		return nil
 	}
 
-	candidate.CoreChainLockedBlockHeight = nextCoreChainLock.CoreBlockHeight
+	candidate.CoreChainLock = chainlock
 	return nil
 }
 

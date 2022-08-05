@@ -317,12 +317,12 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 	binary.PutVarint(appHash, app.state.Size)
 	app.roundAppHash = appHash
 	return &types.ResponsePrepareProposal{
-		TxRecords:               app.substPrepareTx(req.Txs, req.MaxTxBytes),
-		AppHash:                 appHash,
-		TxResults:               txResults,
-		ConsensusParamUpdates:   nil,
-		NextCoreChainLockUpdate: nil,
-		ValidatorSetUpdate:      proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
+		TxRecords:             app.substPrepareTx(req.Txs, req.MaxTxBytes),
+		AppHash:               appHash,
+		TxResults:             txResults,
+		ConsensusParamUpdates: nil,
+		CoreChainLockUpdate:   nil,
+		ValidatorSetUpdate:    proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
 	}, nil
 }
 

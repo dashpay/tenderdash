@@ -87,8 +87,7 @@ func TestApplyBlock(t *testing.T) {
 	consensusParamsBefore := state.ConsensusParams
 	validatorsBefore := state.Validators.Hash()
 
-	block, err := sf.MakeBlock(state, 1, new(types.Commit))
-	block.SetDashParams(0, nil, 1, nil)
+	block, err := sf.MakeBlock(state, 1, new(types.Commit), 1)
 	require.NoError(t, err)
 	bps, err := block.MakePartSet(testPartSize)
 	require.NoError(t, err)
@@ -179,7 +178,7 @@ func TestFinalizeBlockByzantineValidators(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(stateStore, log.NewNopLogger(), proxyApp, mp, evpool, blockStore, eventBus, sm.NopMetrics())
 
-	block, err := sf.MakeBlock(state, 1, new(types.Commit))
+	block, err := sf.MakeBlock(state, 1, new(types.Commit), 1)
 	block.SetDashParams(0, nil, block.ProposedAppVersion, nil)
 	require.NoError(t, err)
 	block.Evidence = ev
@@ -246,7 +245,7 @@ func TestProcessProposal(t *testing.T) {
 	//}
 
 	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil)
-	block1, err := sf.MakeBlock(state, height, lastCommit)
+	block1, err := sf.MakeBlock(state, height, lastCommit, 1)
 	require.NoError(t, err)
 	block1.Txs = txs
 	version := block1.Version.ToProto()
@@ -266,6 +265,7 @@ func TestProcessProposal(t *testing.T) {
 		NextValidatorsHash: block1.NextValidatorsHash,
 		ProposerProTxHash:  block1.ProposerProTxHash,
 		Version:            &version,
+		ProposedAppVersion: 1,
 	}
 
 	app.On("ProcessProposal", mock.Anything, mock.Anything).Return(&abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT}, nil)
@@ -497,7 +497,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	block, err := sf.MakeBlock(state, 1, new(types.Commit))
+	block, err := sf.MakeBlock(state, 1, new(types.Commit), 1)
 	require.NoError(t, err)
 	bps, err := block.MakePartSet(testPartSize)
 	require.NoError(t, err)
@@ -589,7 +589,7 @@ func TestFinalizeBlockValidatorUpdatesResultingInEmptySet(t *testing.T) {
 		sm.NopMetrics(),
 	)
 
-	block, err := sf.MakeBlock(state, 1, new(types.Commit))
+	block, err := sf.MakeBlock(state, 1, new(types.Commit), 1)
 	require.NoError(t, err)
 	bps, err := block.MakePartSet(testPartSize)
 	require.NoError(t, err)
