@@ -182,19 +182,6 @@ func (state State) IsEmpty() bool {
 	return state.Validators == nil // XXX can't compare to Empty
 }
 
-// StateID generates new state ID based on current `state`
-func (state State) StateID() types.StateID {
-	height := state.LastBlockHeight
-	if height == 0 {
-		height = state.InitialHeight - 1
-	}
-
-	return types.StateID{
-		Height:      height,
-		LastAppHash: state.AppHash.Copy(),
-	}
-}
-
 // ToProto takes the local state type and returns the equivalent proto type
 func (state *State) ToProto() (*tmstate.State, error) {
 	if state == nil {
@@ -307,6 +294,7 @@ func (state State) MakeBlock(
 
 	// Build base block with block data.
 	block := types.MakeBlock(height, txs, commit, evidence)
+	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nil, state.Version.Consensus.App, state.Validators.Hash())
 
 	// Fill rest of header with state data.
 	validatorsHash := state.Validators.Hash()
@@ -331,8 +319,8 @@ func (state State) ValidatorsAtHeight(height int64) *types.ValidatorSet {
 }
 
 // NewRoundState returns a structure that will hold new changes to the state, that can be applied once the block is finalized
-func (state State) NewStateChangeset(ctx context.Context, proposalResponse proto.Message) (Changeset, error) {
-	ret := Changeset{}
+func (state State) NewStateChangeset(ctx context.Context, proposalResponse proto.Message) (CurentRoundState, error) {
+	ret := CurentRoundState{}
 	err := ret.populate(ctx, proposalResponse, state)
 	return ret, err
 }

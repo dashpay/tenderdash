@@ -166,7 +166,7 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastStateID = lastLightBlock.Commit.StateID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
 	state.AppHash = currentLightBlock.AppHash
-	state.LastResultsHash = currentLightBlock.LastResultsHash
+	state.LastResultsHash = currentLightBlock.ResultsHash
 	state.LastValidators = lastLightBlock.ValidatorSet
 	state.Validators = currentLightBlock.ValidatorSet
 	// FIXME: not sure if the one below is correct
@@ -314,7 +314,7 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastStateID = lastLightBlock.Commit.StateID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
 	state.AppHash = currentLightBlock.AppHash
-	state.LastResultsHash = currentLightBlock.LastResultsHash
+	state.LastResultsHash = currentLightBlock.ResultsHash
 	state.LastValidators = lastLightBlock.ValidatorSet
 	state.Validators = currentLightBlock.ValidatorSet
 	// FIXME: not sure if the line below is correct, was nextLightBlock.Height for next-block-execution

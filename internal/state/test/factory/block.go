@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/test/factory"
@@ -35,9 +37,14 @@ func MakeBlocks(ctx context.Context, t *testing.T, n int, state *sm.State, privV
 		prevBlockMeta = types.NewBlockMeta(block, parts)
 
 		// update state
-		state.LastStateID = state.StateID()
-		state.AppHash = make([]byte, crypto.DefaultAppHashSize)
-		binary.BigEndian.PutUint64(state.AppHash, uint64(height))
+		appHash := make([]byte, crypto.DefaultAppHashSize)
+		binary.BigEndian.PutUint64(appHash, uint64(height))
+		changes, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{
+			AppHash: appHash,
+		})
+		require.NoError(t, err)
+		err = changes.UpdateState(ctx, state)
+		assert.NoError(t, err)
 		appHeight++
 		state.LastBlockHeight = height
 	}
@@ -49,13 +56,14 @@ func MakeBlock(state sm.State, height int64, c *types.Commit) (*types.Block, err
 	if state.LastBlockHeight != (height - 1) {
 		return nil, fmt.Errorf("requested height %d should be 1 more than last block height %d", height, state.LastBlockHeight)
 	}
-	return state.MakeBlock(
+	block := state.MakeBlock(
 		height,
 		factory.MakeNTxs(state.LastBlockHeight, 10),
 		c,
 		nil,
 		state.Validators.GetProposer().ProTxHash,
-	), nil
+	)
+	return block, nil
 }
 
 func makeBlockAndPartSet(
@@ -70,7 +78,7 @@ func makeBlockAndPartSet(
 	t.Helper()
 
 	quorumSigns := &types.CommitSigns{QuorumHash: state.LastValidators.QuorumHash}
-	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, state.StateID(), quorumSigns)
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, state.LastStateID, quorumSigns)
 	if height > 1 {
 		vote, err := factory.MakeVote(
 			ctx,
@@ -88,7 +96,7 @@ func makeBlockAndPartSet(
 			vote.Height,
 			vote.Round,
 			lastBlockMeta.BlockID,
-			state.StateID(),
+			state.LastStateID,
 			&types.CommitSigns{
 				QuorumSigns: *thresholdSigns,
 				QuorumHash:  state.LastValidators.QuorumHash,

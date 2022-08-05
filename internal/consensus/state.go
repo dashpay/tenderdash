@@ -1495,10 +1495,7 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 
 	// Make proposal
 	propBlockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
-	proposedChainLockHeight := cs.Changeset.CoreChainLockedBlockHeight
-	if cs.blockExec.NextCoreChainLock != nil && cs.blockExec.NextCoreChainLock.CoreBlockHeight > proposedChainLockHeight {
-		proposedChainLockHeight = cs.blockExec.NextCoreChainLock.CoreBlockHeight
-	}
+	proposedChainLockHeight := cs.CurentRoundState.CoreChainLockedBlockHeight
 	proposal := types.NewProposal(height, proposedChainLockHeight, round, cs.ValidRound, propBlockID, block.Header.Time)
 	p := proposal.ToProto()
 	validatorsAtProposalHeight := cs.state.ValidatorsAtHeight(p.Height)
@@ -1593,7 +1590,7 @@ func (cs *State) createProposalBlock(ctx context.Context) (*types.Block, error) 
 	case cs.Height == cs.state.InitialHeight:
 		// We're creating a proposal for the first block.
 		// The commit is empty, but not nil.
-		commit = types.NewCommit(0, 0, types.BlockID{}, cs.state.StateID(), nil)
+		commit = types.NewCommit(0, 0, types.BlockID{}, cs.StateID(), nil)
 	case cs.LastCommit != nil:
 		// Make the commit from LastPrecommits
 		commit = cs.LastCommit
@@ -1615,7 +1612,8 @@ func (cs *State) createProposalBlock(ctx context.Context) (*types.Block, error) 
 	if err != nil {
 		panic(err)
 	}
-	cs.RoundState.Changeset = uncommittedState
+	cs.RoundState.CurentRoundState = uncommittedState
+	cs.SetProposedAppVersion(ret.ProposedAppVersion)
 	return ret, nil
 }
 
@@ -1708,10 +1706,10 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 	if err != nil {
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
-	cs.RoundState.Changeset = uncommittedState
+	cs.RoundState.CurentRoundState = uncommittedState
 
 	// Validate proposal block, from Tendermint's perspective
-	err = cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.Changeset, cs.ProposalBlock)
+	err = cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurentRoundState, cs.ProposalBlock)
 	if err != nil {
 		// ProposalBlock is invalid, prevote nil.
 		logger.Error("prevote step: consensus deems this block invalid; prevoting nil", "err", err)
@@ -1934,7 +1932,7 @@ func (cs *State) enterPrecommit(ctx context.Context, height int64, round int32) 
 		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
 
 		// Validate the block.
-		if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.Changeset, cs.ProposalBlock); err != nil {
+		if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurentRoundState, cs.ProposalBlock); err != nil {
 			panic(fmt.Sprintf("precommit step: +2/3 prevoted for an invalid block %v; relocking", err))
 		}
 
@@ -2116,7 +2114,7 @@ func (cs *State) finalizeCommit(ctx context.Context, height int64) {
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.Changeset, block); err != nil {
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurentRoundState, block); err != nil {
 		panic(fmt.Errorf("+2/3 committed an invalid block: %w", err))
 	}
 
@@ -2277,7 +2275,7 @@ func (cs *State) verifyCommit(ctx context.Context, commit *types.Commit, peerID 
 		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.Changeset, block); err != nil {
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurentRoundState, block); err != nil {
 		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
 	return true, nil
@@ -2361,7 +2359,7 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	stateCopy, err := cs.blockExec.FinalizeBlock(
 		ctx,
 		stateCopy,
-		rs.Changeset,
+		rs.CurentRoundState,
 		types.BlockID{
 			Hash:          block.Hash(),
 			PartSetHeader: blockParts.Header(),

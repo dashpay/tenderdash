@@ -48,9 +48,6 @@ type BlockExecutor struct {
 
 	// cache the verification results over a single height
 	cache map[string]struct{}
-
-	// the next core chain lock that we can propose
-	NextCoreChainLock *types.CoreChainLock
 }
 
 // NewBlockExecutor returns a new BlockExecutor with the passed-in EventBus.
@@ -95,7 +92,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	commit *types.Commit,
 	proposerProTxHash []byte,
 	proposedAppVersion uint64,
-) (*types.Block, Changeset, error) {
+) (*types.Block, CurentRoundState, error) {
 	maxBytes := state.ConsensusParams.Block.MaxBytes
 	maxGas := state.ConsensusParams.Block.MaxGas
 
@@ -141,12 +138,12 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		// Either way, we cannot recover in a meaningful way, unless we skip proposing
 		// this block, repair what caused the error and try again. Hence, we return an
 		// error for now (the production code calling this function is expected to panic).
-		return nil, Changeset{}, err
+		return nil, CurentRoundState{}, err
 	}
 	txrSet := types.NewTxRecordSet(rpp.TxRecords)
 
 	if err := txrSet.Validate(maxDataBytes, block.Txs); err != nil {
-		return nil, Changeset{}, err
+		return nil, CurentRoundState{}, err
 	}
 
 	for _, rtx := range txrSet.RemovedTxs() {
@@ -157,7 +154,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	itxs := txrSet.IncludedTxs()
 	nextCoreChainLock, err := types.CoreChainLockFromProto(rpp.NextCoreChainLockUpdate)
 	if err != nil {
-		return nil, Changeset{}, err
+		return nil, CurentRoundState{}, err
 	}
 	if nextCoreChainLock != nil &&
 		nextCoreChainLock.CoreBlockHeight <= state.LastCoreChainLockedBlockHeight {
@@ -175,14 +172,14 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	// update some round state data
 	stateChanges, err := state.NewStateChangeset(ctx, rpp)
 	if err != nil {
-		return nil, Changeset{}, err
+		return nil, CurentRoundState{}, err
 	}
 	err = stateChanges.UpdateBlock(block)
 	if err != nil {
-		return nil, Changeset{}, err
+		return nil, CurentRoundState{}, err
 	}
 
-	nextValsHash := stateChanges.Validators.Hash()
+	nextValsHash := stateChanges.NextValidators.Hash()
 	block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextCoreChainLock, proposedAppVersion, nextValsHash)
 
 	return block, stateChanges, nil
@@ -192,7 +189,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	ctx context.Context,
 	block *types.Block,
 	state State,
-) (bool, Changeset, error) {
+) (bool, CurentRoundState, error) {
 	version := block.Version.ToProto()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Hash:                block.Header.Hash(),
@@ -210,17 +207,11 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		Version:               &version,
 	})
 	if err != nil {
-		return false, Changeset{}, ErrInvalidBlock(err)
+		return false, CurentRoundState{}, ErrInvalidBlock(err)
 	}
 	if resp.IsStatusUnknown() {
 		panic(fmt.Sprintf("ProcessProposal responded with status %s", resp.Status.String()))
 	}
-	nextCoreChainLock, err := types.CoreChainLockFromProto(resp.NextCoreChainLockUpdate)
-	if err != nil {
-		return false, Changeset{}, err
-	}
-	// Update the next core chain lock that we can propose
-	blockExec.NextCoreChainLock = nextCoreChainLock
 
 	// update some round state data
 	stateChanges, err := state.NewStateChangeset(ctx, resp)
@@ -262,7 +253,7 @@ func (blockExec *BlockExecutor) ValidateBlock(ctx context.Context, state State, 
 func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	ctx context.Context,
 	state State,
-	uncommittedState Changeset,
+	uncommittedState CurentRoundState,
 	block *types.Block,
 ) error {
 	err := blockExec.ValidateBlock(ctx, state, block)
@@ -277,10 +268,10 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 			block.AppHash,
 		)
 	}
-	if uncommittedState.ResultsHash != nil && !bytes.Equal(block.LastResultsHash, uncommittedState.ResultsHash) {
+	if uncommittedState.ResultsHash != nil && !bytes.Equal(block.ResultsHash, uncommittedState.ResultsHash) {
 		return fmt.Errorf("wrong Block.Header.LastResultsHash.  Expected %X, got %v",
 			uncommittedState.ResultsHash,
-			block.LastResultsHash,
+			block.ResultsHash,
 		)
 	}
 
@@ -289,6 +280,13 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 			state.ChainID, state.LastBlockID, state.LastStateID, block.Height-1, block.LastCommit); err != nil {
 			return fmt.Errorf("error validating block: %w", err)
 		}
+	}
+
+	if !bytes.Equal(block.NextValidatorsHash, uncommittedState.NextValidators.Hash()) {
+		return fmt.Errorf("wrong Block.Header.NextValidatorsHash.  Expected %X, got %v",
+			uncommittedState.NextValidators.Hash(),
+			block.NextValidatorsHash,
+		)
 	}
 
 	return validateCoreChainLock(block, state)
@@ -326,7 +324,7 @@ func (blockExec *BlockExecutor) ValidateBlockTime(
 func (blockExec *BlockExecutor) FinalizeBlock(
 	ctx context.Context,
 	state State,
-	uncommittedState Changeset,
+	uncommittedState CurentRoundState,
 	blockID types.BlockID,
 	block *types.Block,
 ) (State, error) {
@@ -571,11 +569,6 @@ func (state State) Update(
 	return newState, nil
 }
 
-// SetNextCoreChainLock ...
-func (blockExec *BlockExecutor) SetNextCoreChainLock(coreChainLock *types.CoreChainLock) {
-	blockExec.NextCoreChainLock = coreChainLock
-}
-
 // SetAppHashSize ...
 func (blockExec *BlockExecutor) SetAppHashSize(size int) {
 	blockExec.appHashSize = size
@@ -711,7 +704,7 @@ func ExecCommitBlock(
 	store Store,
 	initialHeight int64,
 	s State,
-	ucState Changeset,
+	ucState CurentRoundState,
 ) ([]byte, *abci.ResponseFinalizeBlock, error) {
 	respFinalizeBlock, err := execBlock(ctx, be, appConn, block, logger, store, initialHeight, s)
 	if err != nil {
@@ -721,7 +714,7 @@ func ExecCommitBlock(
 
 	// the BlockExecutor condition is using for the final block replay process.
 	if be != nil {
-		vsetUpdate := ucState.Validators
+		vsetUpdate := ucState.NextValidators
 
 		bps, err := block.MakePartSet(types.BlockPartSizeBytes)
 		if err != nil {
@@ -734,7 +727,7 @@ func ExecCommitBlock(
 			be.eventBus,
 			block,
 			blockID,
-			block.LastResultsHash,
+			block.ResultsHash,
 			ucState.TxResults,
 			respFinalizeBlock,
 			vsetUpdate,

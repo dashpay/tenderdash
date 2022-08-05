@@ -15,48 +15,59 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// Changeset ...
-type Changeset struct {
+// CurentRoundState ...
+type CurentRoundState struct {
 	// Base state for the changes
-	Base    State
+	Base State
+
+	// AppHash of current block
 	AppHash tmbytes.HexBytes `json:"app_hash"`
 
-	TxResults   []*abci.ExecTxResult `json:"tx_results"`
-	ResultsHash []byte               `json:"last_results_hash"`
+	// TxResults for current block
+	TxResults []*abci.ExecTxResult `json:"tx_results"`
+	// ResultsHash of current block
+	ResultsHash []byte `json:"results_hash"`
 
-	ConsensusParams                  types.ConsensusParams
-	LastHeightConsensusParamsChanged int64
-
-	Validators                  *types.ValidatorSet
-	LastHeightValidatorsChanged int64
+	// ProposedAppVersion received from the node; informational
+	ProposedAppVersion uint64
 
 	CoreChainLockedBlockHeight uint32 `json:"chain_locked_block_height"`
+
+	// Items changed in next block
+
+	NextConsensusParams              types.ConsensusParams
+	LastHeightConsensusParamsChanged int64
+
+	NextValidators              *types.ValidatorSet
+	LastHeightValidatorsChanged int64
 }
 
 // UpdateBlock changes block fields to reflect the ones returned in PrepareProposal / ProcessProposal
-func (candidate Changeset) UpdateBlock(target *types.Block) error {
+func (candidate CurentRoundState) UpdateBlock(target *types.Block) error {
 	target.AppHash = candidate.AppHash
-	target.LastResultsHash = candidate.ResultsHash
+	target.ResultsHash = candidate.ResultsHash
 
-	target.ConsensusHash = candidate.ConsensusParams.HashConsensusParams()
-	target.ProposedAppVersion = candidate.ConsensusParams.Version.AppVersion
+	if candidate.ProposedAppVersion != 0 {
+		target.ProposedAppVersion = candidate.ProposedAppVersion
+	}
 
-	target.NextValidatorsHash = candidate.Validators.Hash()
+	target.NextValidatorsHash = candidate.NextValidators.Hash()
 
 	return nil
 }
 
 // UpdateState updates state when the block is committed. State will contain data needed by next block.
-func (candidate Changeset) UpdateState(ctx context.Context, target *State) error {
+func (candidate CurentRoundState) UpdateState(ctx context.Context, target *State) error {
 	target.AppHash = candidate.AppHash
+	target.LastStateID = candidate.StateID()
 
 	target.LastResultsHash = candidate.ResultsHash
 
-	target.ConsensusParams = candidate.ConsensusParams
+	target.ConsensusParams = candidate.NextConsensusParams
 	target.LastHeightConsensusParamsChanged = candidate.LastHeightConsensusParamsChanged
-	target.Version.Consensus.App = candidate.ConsensusParams.Version.AppVersion
+	target.Version.Consensus.App = candidate.NextConsensusParams.Version.AppVersion
 
-	target.Validators = candidate.Validators
+	target.Validators = candidate.NextValidators
 	target.LastHeightValidatorsChanged = candidate.LastHeightValidatorsChanged
 
 	target.LastCoreChainLockedBlockHeight = candidate.CoreChainLockedBlockHeight
@@ -64,12 +75,12 @@ func (candidate Changeset) UpdateState(ctx context.Context, target *State) error
 }
 
 // UpdateFunc implements UpdateFunc
-func (candidate Changeset) UpdateFunc(ctx context.Context, state State) (State, error) {
+func (candidate CurentRoundState) UpdateFunc(ctx context.Context, state State) (State, error) {
 	err := candidate.UpdateState(ctx, &state)
 	return state, err
 }
 
-func (candidate *Changeset) populate(ctx context.Context, proposalResponse proto.Message, baseState State) error {
+func (candidate *CurentRoundState) populate(ctx context.Context, proposalResponse proto.Message, baseState State) error {
 	switch resp := proposalResponse.(type) {
 	case *abci.ResponsePrepareProposal:
 		return candidate.update(
@@ -80,9 +91,13 @@ func (candidate *Changeset) populate(ctx context.Context, proposalResponse proto
 			resp.ConsensusParamUpdates,
 			resp.ValidatorSetUpdate,
 			resp.NextCoreChainLockUpdate,
+			resp.ProposedAppVersion,
 		)
 
 	case *abci.ResponseProcessProposal:
+		if !resp.IsAccepted() {
+			return fmt.Errorf("proposal not accepted by abci app: %s", resp.Status)
+		}
 		return candidate.update(
 			ctx,
 			baseState,
@@ -91,16 +106,18 @@ func (candidate *Changeset) populate(ctx context.Context, proposalResponse proto
 			resp.ConsensusParamUpdates,
 			resp.ValidatorSetUpdate,
 			resp.NextCoreChainLockUpdate,
+			0,
 		)
+
 	case nil: // Assuming no changes
-		return candidate.update(ctx, baseState, nil, nil, nil, nil, nil)
+		return candidate.update(ctx, baseState, nil, nil, nil, nil, nil, 0)
 
 	default:
 		return fmt.Errorf("unsupported response type %T", resp)
 	}
 }
 
-func (candidate *Changeset) update(
+func (candidate *CurentRoundState) update(
 	ctx context.Context,
 	baseState State,
 	appHash tmbytes.HexBytes,
@@ -108,9 +125,11 @@ func (candidate *Changeset) update(
 	consensusParamUpdates *types2.ConsensusParams,
 	validatorSetUpdate *abci.ValidatorSetUpdate,
 	coreChainLockUpdate *types2.CoreChainLock,
+	proposedAppVersion uint64,
 ) error {
 	candidate.Base = baseState
 	candidate.AppHash = appHash
+	candidate.ProposedAppVersion = proposedAppVersion
 
 	if err := candidate.populateTxResults(txResults); err != nil {
 		return err
@@ -130,11 +149,19 @@ func (candidate *Changeset) update(
 }
 
 // Height returns height of current block
-func (candidate *Changeset) Height() int64 {
+func (candidate CurentRoundState) StateID() types.StateID {
+	return types.StateID{
+		Height:      candidate.Height(),
+		LastAppHash: candidate.AppHash.Copy(),
+	}
+}
+
+// Height returns height of current block
+func (candidate CurentRoundState) Height() int64 {
 	return candidate.Base.LastBlockHeight + 1
 }
 
-func (candidate *Changeset) populateTxResults(txResults []*abci.ExecTxResult) error {
+func (candidate *CurentRoundState) populateTxResults(txResults []*abci.ExecTxResult) error {
 	hash, err := abci.TxResultsHash(txResults)
 	if err != nil {
 		return fmt.Errorf("marshaling TxResults: %w", err)
@@ -145,7 +172,7 @@ func (candidate *Changeset) populateTxResults(txResults []*abci.ExecTxResult) er
 	return nil
 }
 
-func (candidate *Changeset) populateChainlock(chainlock *types2.CoreChainLock) error {
+func (candidate *CurentRoundState) populateChainlock(chainlock *types2.CoreChainLock) error {
 	nextCoreChainLock, err := types.CoreChainLockFromProto(chainlock)
 	if err != nil {
 		return err
@@ -160,8 +187,15 @@ func (candidate *Changeset) populateChainlock(chainlock *types2.CoreChainLock) e
 }
 
 // populateConsensusParams updates ConsensusParams, Version and LastHeightConsensusParamsChanged
-func (candidate *Changeset) populateConsensusParams(updates *tmtypes.ConsensusParams) error {
-	current := candidate.ConsensusParams
+func (candidate *CurentRoundState) populateConsensusParams(updates *tmtypes.ConsensusParams) error {
+
+	if updates == nil || updates.Equal(&tmtypes.ConsensusParams{}) {
+		candidate.NextConsensusParams = candidate.Base.ConsensusParams
+		candidate.LastHeightConsensusParamsChanged = candidate.Base.LastHeightConsensusParamsChanged
+		return nil
+	}
+
+	current := candidate.NextConsensusParams
 	if current.IsZero() {
 		current = candidate.Base.ConsensusParams
 	}
@@ -172,28 +206,25 @@ func (candidate *Changeset) populateConsensusParams(updates *tmtypes.ConsensusPa
 	if err != nil {
 		return fmt.Errorf("error updating consensus params: %w", err)
 	}
+	candidate.NextConsensusParams = nextParams
 
-	candidate.ConsensusParams = nextParams
-
-	if updates != nil {
-		// Change results from this height but only applies to the next height.
-		candidate.LastHeightConsensusParamsChanged = candidate.Height() + 1
-	}
+	// Change results from this height but only applies to the next height.
+	candidate.LastHeightConsensusParamsChanged = candidate.Height() + 1
 
 	return nil
 }
 
 // populateValsetUpdates calculates and populates Validators and LastHeightValidatorsChanged
 // CONTRACT: candidate.ConsensusParams were already populated
-func (candidate *Changeset) populateValsetUpdates(ctx context.Context, update *abci.ValidatorSetUpdate) error {
+func (candidate *CurentRoundState) populateValsetUpdates(ctx context.Context, update *abci.ValidatorSetUpdate) error {
 	base := candidate.Base
 
-	newValSet, err := valsetUpdate(ctx, update, base.Validators, candidate.ConsensusParams.Validator)
+	newValSet, err := valsetUpdate(ctx, update, base.Validators, candidate.NextConsensusParams.Validator)
 	if err != nil {
 		return fmt.Errorf("validator set updates: %w", err)
 	}
 	newValSet.IncrementProposerPriority(1)
-	candidate.Validators = newValSet
+	candidate.NextValidators = newValSet
 
 	if update != nil && len(update.ValidatorUpdates) > 0 {
 		// Change results from this height but only applies to the next height.

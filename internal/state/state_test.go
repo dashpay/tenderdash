@@ -23,6 +23,7 @@ import (
 	"github.com/tendermint/tendermint/dash/llmq"
 	sm "github.com/tendermint/tendermint/internal/state"
 	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
@@ -118,8 +119,10 @@ func TestABCIResponsesSaveLoad1(t *testing.T) {
 
 	abciResponses := new(tmstate.ABCIResponses)
 	dtxs := make([]*abci.ExecTxResult, 2)
-	abciResponses.ProcessProposal = new(abci.ResponseProcessProposal)
-	abciResponses.ProcessProposal.TxResults = dtxs
+	abciResponses.ProcessProposal = &abci.ResponseProcessProposal{
+		Status:    abci.ResponseProcessProposal_ACCEPT,
+		TxResults: dtxs,
+	}
 
 	abciResponses.ProcessProposal.TxResults[0] = &abci.ExecTxResult{Data: []byte("foo"), Events: nil}
 	abciResponses.ProcessProposal.TxResults[1] = &abci.ExecTxResult{Data: []byte("bar"), Log: "ok", Events: nil}
@@ -209,6 +212,7 @@ func TestABCIResponsesSaveLoad2(t *testing.T) {
 		responses := &tmstate.ABCIResponses{
 			ProcessProposal: &abci.ResponseProcessProposal{
 				TxResults: tc.added,
+				Status:    abci.ResponseProcessProposal_ACCEPT,
 			},
 		}
 		err := stateStore.SaveABCIResponses(h, responses)
@@ -510,7 +514,7 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 		QuorumHash:         quorumHash,
 	}
 
-	changes, err = updatedState.NewStateChangeset(ctx, &abci.ResponseProcessProposal{ValidatorSetUpdate: validatorSetUpdate})
+	changes, err = updatedState.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: validatorSetUpdate})
 	assert.NoError(t, err)
 	su, err = sm.PrepareStateUpdates(ctx, block.Header, updatedState, changes)
 	require.NoError(t, err)
@@ -552,7 +556,7 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	// this will cause the diff of priorities (77)
 	// to be larger than threshold == 2*totalVotingPower (22):
 	abciValidatorUpdates.QuorumHash = quorumHash
-	changes, err = updatedState2.NewStateChangeset(ctx, &abci.ResponseProcessProposal{ValidatorSetUpdate: validatorSetUpdate})
+	changes, err = updatedState2.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: validatorSetUpdate})
 	require.NoError(t, err)
 
 	su, err = sm.PrepareStateUpdates(ctx, block.Header, updatedState2, changes)
@@ -657,7 +661,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 		ThresholdPublicKey: thresholdPublicKey,
 		QuorumHash:         quorumHash,
 	}
-	changes, err = updatedState.NewStateChangeset(ctx, &abci.ResponseProcessProposal{ValidatorSetUpdate: valsetUpdate})
+	changes, err = updatedState.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: valsetUpdate})
 	assert.NoError(t, err)
 
 	su, err = sm.PrepareStateUpdates(ctx, block.Header, updatedState, changes)
@@ -701,7 +705,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 		updatedVal2,
 	)
 
-	changes, err = updatedState2.NewStateChangeset(ctx, &abci.ResponseProcessProposal{ValidatorSetUpdate: valsetUpdate})
+	changes, err = updatedState2.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: valsetUpdate})
 	assert.NoError(t, err)
 	su, err = sm.PrepareStateUpdates(ctx, block.Header, updatedState2, changes)
 	require.NoError(t, err)
@@ -754,7 +758,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		// no validator updates:
-		changes, err = oldState.NewStateChangeset(ctx, &abci.ResponseProcessProposal{})
+		changes, err = oldState.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{})
 		require.NoError(t, err)
 
 		su, err = sm.PrepareStateUpdates(ctx, block.Header, oldState, changes)
@@ -826,13 +830,13 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	addedProTxHashes := crypto.RandProTxHashes(4)
 	proTxHashes := append(originalValidatorSet.GetProTxHashes(), addedProTxHashes...)
 	abciValidatorUpdates0 := types.ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes)
-	ucState, err := state.NewStateChangeset(ctx, &abci.ResponseProcessProposal{ValidatorSetUpdate: &abciValidatorUpdates0})
+	ucState, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: &abciValidatorUpdates0})
 	assert.NoError(t, err)
 	updatedState := execute(state, state, ucState)
 
 	lastState := updatedState
 	for i := 0; i < 200; i++ {
-		ucState, err = lastState.NewStateChangeset(ctx, &abci.ResponseProcessProposal{ValidatorSetUpdate: &abciValidatorUpdates0})
+		ucState, err = lastState.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: &abciValidatorUpdates0})
 		assert.NoError(t, err)
 		lastState = execute(lastState, lastState, ucState)
 	}
@@ -851,7 +855,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 		abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
 		require.NoError(t, err)
 
-		ucState, err := state.NewStateChangeset(ctx, &abci.ResponseProcessProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
+		ucState, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
 		assert.NoError(t, err)
 		state = execute(oldState, state, ucState)
 		assertLLMQDataWithValidatorSet(t, ld, state.Validators)
@@ -862,13 +866,13 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
 	require.NoError(t, err)
 
-	ucState, err = state.NewStateChangeset(ctx, &abci.ResponseProcessProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
+	ucState, err = state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
 	require.NoError(t, err)
 	state = execute(oldState, state, ucState)
 	assertLLMQDataWithValidatorSet(t, ld, state.Validators)
 
 	abciValidatorSetUpdate.ValidatorUpdates[0] = abci.ValidatorUpdate{ProTxHash: ld.ProTxHashes[0]}
-	ucState, err = state.NewStateChangeset(ctx, &abci.ResponseProcessProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
+	ucState, err = state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
 	require.NoError(t, err)
 	updatedState = execute(oldState, state, ucState)
 
@@ -880,7 +884,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 		{ProTxHash: ld.ProTxHashes[0]},
 		{ProTxHash: ld.ProTxHashes[1]},
 	}
-	ucState, err = updatedState.NewStateChangeset(ctx, &abci.ResponseProcessProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
+	ucState, err = updatedState.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
 	require.NoError(t, err)
 	updatedState = execute(state, updatedState, ucState)
 
@@ -1137,24 +1141,32 @@ func TestStateProto(t *testing.T) {
 }
 
 func TestState_StateID(t *testing.T) {
+	vset, _ := types.RandValidatorSet(1)
 
 	state := sm.State{
 		LastBlockHeight: 2,
+		Validators:      vset,
 	}
-	state.AppHash = make([]byte, crypto.DefaultAppHashSize)
-	want := tmrand.Bytes(32)
-	copy(state.AppHash, want)
 
-	stateID := state.StateID()
-	assert.Equal(t, int64(2), stateID.Height)
+	want := tmbytes.HexBytes(tmrand.Bytes(32))
+	changes, err := state.NewStateChangeset(context.TODO(), &abci.ResponsePrepareProposal{AppHash: want.Copy()})
+	require.NoError(t, err)
+
+	stateID := changes.StateID()
+	assert.Equal(t, int64(3), stateID.Height)
 	assert.EqualValues(t, want, stateID.LastAppHash)
 
-	err := stateID.ValidateBasic()
+	err = stateID.ValidateBasic()
 	assert.NoError(t, err, "StateID validation failed")
+
+	err = changes.UpdateState(context.TODO(), &state)
+	assert.NoError(t, err)
+	assert.Equal(t, stateID, state.LastStateID)
+
 }
 
-func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.Changeset) sm.State {
-	return func(prevState, state sm.State, ucState sm.Changeset) sm.State {
+func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.CurentRoundState) sm.State {
+	return func(prevState, state sm.State, ucState sm.CurentRoundState) sm.State {
 		t.Helper()
 
 		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit))

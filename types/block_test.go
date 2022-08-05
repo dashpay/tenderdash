@@ -372,7 +372,7 @@ func TestHeaderHash(t *testing.T) {
 			NextValidatorsHash:    crypto.Checksum([]byte("next_validators_hash")),
 			ConsensusHash:         crypto.Checksum([]byte("consensus_hash")),
 			AppHash:               crypto.Checksum([]byte("app_hash")),
-			LastResultsHash:       crypto.Checksum([]byte("last_results_hash")),
+			ResultsHash:           crypto.Checksum([]byte("results_hash")),
 			EvidenceHash:          crypto.Checksum([]byte("evidence_hash")),
 			ProposerProTxHash:     crypto.ProTxHashFromSeedBytes([]byte("proposer_pro_tx_hash")),
 			ProposedAppVersion:    1,
@@ -391,7 +391,7 @@ func TestHeaderHash(t *testing.T) {
 			NextValidatorsHash:    crypto.Checksum([]byte("next_validators_hash")),
 			ConsensusHash:         crypto.Checksum([]byte("consensus_hash")),
 			AppHash:               crypto.Checksum([]byte("app_hash")),
-			LastResultsHash:       crypto.Checksum([]byte("last_results_hash")),
+			ResultsHash:           crypto.Checksum([]byte("results_hash")),
 			EvidenceHash:          crypto.Checksum([]byte("evidence_hash")),
 			ProposerProTxHash:     crypto.ProTxHashFromSeedBytes([]byte("proposer_pro_tx_hash")),
 			ProposedAppVersion:    1,
@@ -471,7 +471,7 @@ func TestMaxHeaderBytes(t *testing.T) {
 		NextValidatorsHash: crypto.Checksum([]byte("next_validators_hash")),
 		ConsensusHash:      crypto.Checksum([]byte("consensus_hash")),
 		AppHash:            crypto.Checksum([]byte("app_hash")),
-		LastResultsHash:    crypto.Checksum([]byte("last_results_hash")),
+		ResultsHash:        crypto.Checksum([]byte("results_hash")),
 		EvidenceHash:       crypto.Checksum([]byte("evidence_hash")),
 
 		CoreChainLockedHeight: math.MaxUint32,
@@ -779,7 +779,7 @@ func MakeRandHeader() Header {
 		ConsensusHash:      randBytes,
 		AppHash:            randBytes,
 
-		LastResultsHash: randBytes,
+		ResultsHash: randBytes,
 
 		EvidenceHash:      randBytes,
 		ProposerProTxHash: randProTxHash,
@@ -1151,7 +1151,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 				ValidatorsHash:     make([]byte, crypto.HashSize),
 				NextValidatorsHash: make([]byte, crypto.HashSize),
 				ConsensusHash:      make([]byte, crypto.HashSize),
-				LastResultsHash:    make([]byte, crypto.HashSize+1),
+				ResultsHash:        make([]byte, crypto.HashSize+1),
 			},
 			true, "wrong LastResultsHash",
 		},
@@ -1175,7 +1175,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 				ValidatorsHash:     make([]byte, crypto.HashSize),
 				NextValidatorsHash: make([]byte, crypto.HashSize),
 				ConsensusHash:      make([]byte, crypto.HashSize),
-				LastResultsHash:    make([]byte, crypto.HashSize),
+				ResultsHash:        make([]byte, crypto.HashSize),
 			},
 			false, "",
 		},
@@ -1345,7 +1345,7 @@ func TestHeaderHashVector(t *testing.T) {
 		ConsensusHash:      []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 		AppHash:            []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 
-		LastResultsHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+		ResultsHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 
 		EvidenceHash:      []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 		ProposerProTxHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),

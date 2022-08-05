@@ -93,7 +93,7 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		ConsensusParams:                  previousParams,
 		LastHeightConsensusParamsChanged: paramsChangeHeight,
 
-		LastResultsHash: latestBlock.Header.LastResultsHash,
+		LastResultsHash: latestBlock.Header.ResultsHash,
 		AppHash:         latestBlock.Header.AppHash,
 	}
 

@@ -35,7 +35,8 @@ func TestValidateBlockHeader(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	logger := log.NewNopLogger()
-	proxyApp := proxy.New(abciclient.NewLocalClient(logger, &testApp{}), logger, proxy.NopMetrics())
+	testApplication := &testApp{}
+	proxyApp := proxy.New(abciclient.NewLocalClient(logger, testApplication), logger, proxy.NopMetrics())
 	require.NoError(t, proxyApp.Start(ctx))
 
 	eventBus := eventbus.NewDefault(logger)
@@ -72,8 +73,14 @@ func TestValidateBlockHeader(t *testing.T) {
 		eventBus,
 		sm.NopMetrics(),
 	)
-	blockExec.SetNextCoreChainLock(nextChainLock)
-	lastCommit := types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil)
+
+	changes, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{
+		NextCoreChainLockUpdate: nextChainLock.ToProto(),
+		AppHash:                 tmrand.Bytes(crypto.DefaultAppHashSize),
+	})
+	require.NoError(t, err)
+
+	lastCommit := types.NewCommit(0, 0, types.BlockID{}, changes.StateID(), nil)
 
 	// some bad values
 	wrongHash := crypto.Checksum([]byte("this hash is wrong"))
@@ -84,8 +91,8 @@ func TestValidateBlockHeader(t *testing.T) {
 
 	// Manipulation of any header field causes failure.
 	testCases := []struct {
-		name          string
-		malleateBlock func(block *types.Block)
+		name          string                   `json:"name,omitempty"`
+		malleateBlock func(block *types.Block) `json:"malleate_block,omitempty"`
 	}{
 		{"Version wrong1", func(block *types.Block) { block.Version = wrongVersion1 }},
 		{"Version wrong2", func(block *types.Block) { block.Version = wrongVersion2 }},
@@ -110,7 +117,7 @@ func TestValidateBlockHeader(t *testing.T) {
 		},
 		{"ConsensusHash wrong", func(block *types.Block) { block.ConsensusHash = wrongHash }},
 		{"AppHash wrong", func(block *types.Block) { block.AppHash = wrongHash }},
-		{"LastResultsHash wrong", func(block *types.Block) { block.LastResultsHash = wrongHash }},
+		{"LastResultsHash wrong", func(block *types.Block) { block.ResultsHash = wrongHash }},
 
 		{"EvidenceHash wrong", func(block *types.Block) { block.EvidenceHash = wrongHash }},
 		{
@@ -140,8 +147,12 @@ func TestValidateBlockHeader(t *testing.T) {
 			block, err := statefactory.MakeBlock(state, height, lastCommit)
 			require.NoError(t, err)
 			block.SetDashParams(state.LastCoreChainLockedBlockHeight, nextChainLock, 0, nil)
+			err = changes.UpdateBlock(block)
+			assert.NoError(t, err)
+
 			tc.malleateBlock(block)
-			err = blockExec.ValidateBlock(ctx, state, block)
+
+			err = blockExec.ValidateBlockWithRoundState(ctx, state, changes, block)
 			t.Logf("%s: %v", tc.name, err)
 			require.Error(t, err, tc.name)
 		}
@@ -213,7 +224,10 @@ func TestValidateBlockCommit(t *testing.T) {
 	badPrivVal := types.NewMockPVForQuorum(badPrivValQuorumHash)
 
 	for height := int64(1); height < validationTestsStopHeight; height++ {
-		stateID := state.StateID()
+
+		changes, err := state.NewStateChangeset(ctx, nil)
+		require.NoError(t, err)
+		stateID := changes.StateID()
 		proTxHash := state.Validators.GetProposer().ProTxHash
 		if height > 1 {
 			/*

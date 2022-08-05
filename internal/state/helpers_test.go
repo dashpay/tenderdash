@@ -186,13 +186,14 @@ func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, reg
 		t.Error(err)
 	}
 	abciResponses := &tmstate.ABCIResponses{
-		ProcessProposal: &abci.ResponseProcessProposal{ValidatorSetUpdate: nil},
+		ProcessProposal: &abci.ResponseProcessProposal{ValidatorSetUpdate: nil, Status: abci.ResponseProcessProposal_ACCEPT},
 	}
 	if regenerate == true {
 		proTxHashes := state.Validators.GetProTxHashes()
 		valUpdates := types.ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes)
 		abciResponses.ProcessProposal = &abci.ResponseProcessProposal{
 			ValidatorSetUpdate: &valUpdates,
+			Status:             abci.ResponseProcessProposal_ACCEPT,
 		}
 	}
 	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
@@ -209,8 +210,10 @@ func makeHeaderPartsResponsesParams(
 	require.NoError(t, err)
 	pbParams := params.ToProto()
 	abciResponses := &tmstate.ABCIResponses{
-		ProcessProposal: &abci.ResponseProcessProposal{ConsensusParamUpdates: &pbParams},
-	}
+		ProcessProposal: &abci.ResponseProcessProposal{
+			ConsensusParamUpdates: &pbParams,
+			Status:                abci.ResponseProcessProposal_ACCEPT,
+		}}
 	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
 }
 

@@ -391,10 +391,9 @@ type Header struct {
 	NextValidatorsHash tmbytes.HexBytes `json:"next_validators_hash"` // validators for the next block
 	ConsensusHash      tmbytes.HexBytes `json:"consensus_hash"`       // consensus params for current block
 	AppHash            tmbytes.HexBytes `json:"app_hash"`             // state after txs from the previous block
-	// root hash of all results from the txs from the previous block
+	// ResultsHash is  the root hash of all results from the txs from the current block
 	// see `deterministicResponseDeliverTx` to understand which parts of a tx is hashed into here
-	// TODO: change to ResultsHash and point to current block
-	LastResultsHash tmbytes.HexBytes `json:"last_results_hash"`
+	ResultsHash tmbytes.HexBytes `json:"results_hash"`
 
 	// consensus info
 	EvidenceHash      tmbytes.HexBytes `json:"evidence_hash"`        // evidence included in the block
@@ -420,7 +419,7 @@ func (h *Header) Populate(
 	h.NextValidatorsHash = nextValHash
 	h.ConsensusHash = consensusHash
 	h.AppHash = appHash
-	h.LastResultsHash = lastResultsHash
+	h.ResultsHash = lastResultsHash
 	h.ProposerProTxHash = proposerProTxHash
 }
 
@@ -477,7 +476,7 @@ func (h Header) ValidateBasic() error {
 		return fmt.Errorf("wrong ConsensusHash: %w", err)
 	}
 	// NOTE: AppHash is arbitrary length
-	if err := ValidateHash(h.LastResultsHash); err != nil {
+	if err := ValidateHash(h.ResultsHash); err != nil {
 		return fmt.Errorf("wrong LastResultsHash: %w", err)
 	}
 
@@ -523,7 +522,7 @@ func (h *Header) Hash() tmbytes.HexBytes {
 		cdcEncode(h.NextValidatorsHash),
 		cdcEncode(h.ConsensusHash),
 		cdcEncode(h.AppHash),
-		cdcEncode(h.LastResultsHash),
+		cdcEncode(h.ResultsHash),
 		cdcEncode(h.EvidenceHash),
 		cdcEncode(h.ProposerProTxHash),
 		cdcEncode(h.ProposedAppVersion),
@@ -565,7 +564,7 @@ func (h *Header) StringIndented(indent string) string {
 		indent, h.NextValidatorsHash,
 		indent, h.AppHash,
 		indent, h.ConsensusHash,
-		indent, h.LastResultsHash,
+		indent, h.ResultsHash,
 		indent, h.EvidenceHash,
 		indent, h.ProposerProTxHash,
 		indent, h.ProposedAppVersion,
@@ -592,7 +591,7 @@ func (h *Header) ToProto() *tmproto.Header {
 		AppHash:               h.AppHash,
 		DataHash:              h.DataHash,
 		EvidenceHash:          h.EvidenceHash,
-		LastResultsHash:       h.LastResultsHash,
+		ResultsHash:           h.ResultsHash,
 		LastCommitHash:        h.LastCommitHash,
 		ProposerProTxHash:     h.ProposerProTxHash,
 		ProposedAppVersion:    h.ProposedAppVersion,
@@ -626,7 +625,7 @@ func HeaderFromProto(ph *tmproto.Header) (Header, error) {
 	h.AppHash = ph.AppHash
 	h.DataHash = ph.DataHash
 	h.EvidenceHash = ph.EvidenceHash
-	h.LastResultsHash = ph.LastResultsHash
+	h.ResultsHash = ph.ResultsHash
 	h.LastCommitHash = ph.LastCommitHash
 	h.ProposerProTxHash = ph.ProposerProTxHash
 	h.ProposedAppVersion = ph.ProposedAppVersion
