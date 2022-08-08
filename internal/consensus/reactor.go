@@ -12,6 +12,7 @@ import (
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
+	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	"github.com/tendermint/tendermint/internal/p2p"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/bits"
@@ -162,10 +163,10 @@ func NewReactor(
 }
 
 type channelBundle struct {
-	state  *p2p.Channel
-	data   *p2p.Channel
-	vote   *p2p.Channel
-	votSet *p2p.Channel
+	state  p2p.Channel
+	data   p2p.Channel
+	vote   p2p.Channel
+	votSet p2p.Channel
 }
 
 // OnStart starts separate go routines for each p2p Channel and listens for
@@ -213,6 +214,8 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		if err := r.state.Start(ctx); err != nil {
 			return err
 		}
+	} else if err := r.state.updateStateFromStore(); err != nil {
+		return err
 	}
 
 	go r.updateRoundStateRoutine(ctx)
@@ -308,7 +311,7 @@ func (r *Reactor) GetPeerState(peerID types.NodeID) (*PeerState, bool) {
 // subscribeToBroadcastEvents subscribes for new round steps and votes using the
 // internal pubsub defined in the consensus state to broadcast them to peers
 // upon receiving.
-func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh *p2p.Channel) {
+func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Channel) {
 	onStopCh := r.state.getOnStopCh()
 
 	err := r.state.evsw.AddListenerForEvent(
@@ -471,10 +474,12 @@ OUTER_LOOP:
 			return
 		}
 
+		timer.Reset(r.state.config.PeerGossipSleepDuration)
+
 		select {
 		case <-ctx.Done():
 			return
-		default:
+		case <-timer.C:
 		}
 
 		rs := r.getRoundState()
@@ -518,13 +523,6 @@ OUTER_LOOP:
 						"blockstoreBase", blockStoreBase,
 						"blockstoreHeight", r.state.blockStore.Height(),
 					)
-
-					timer.Reset(r.state.config.PeerGossipSleepDuration)
-					select {
-					case <-timer.C:
-					case <-ctx.Done():
-						return
-					}
 				} else {
 					ps.InitProposalBlockParts(blockMeta.BlockID.PartSetHeader)
 				}
@@ -540,12 +538,6 @@ OUTER_LOOP:
 
 		// if height and round don't match, sleep
 		if (rs.Height != prs.Height) || (rs.Round != prs.Round) {
-			timer.Reset(r.state.config.PeerGossipSleepDuration)
-			select {
-			case <-timer.C:
-			case <-ctx.Done():
-				return
-			}
 			continue OUTER_LOOP
 		}
 
@@ -584,18 +576,7 @@ OUTER_LOOP:
 				})
 				r.logResult(err, logger, "sending POL", "height", prs.Height, "round", prs.Round)
 			}
-
-			continue OUTER_LOOP
 		}
-
-		// nothing to do -- sleep
-		timer.Reset(r.state.config.PeerGossipSleepDuration)
-		select {
-		case <-timer.C:
-		case <-ctx.Done():
-			return
-		}
-		continue OUTER_LOOP
 	}
 }
 
@@ -620,7 +601,7 @@ func (r *Reactor) sendProposalBlockPart(ctx context.Context, dataCh *p2p.Channel
 
 // pickSendVote picks a vote and sends it to the peer. It will return true if
 // there is a vote to send and false otherwise.
-func (r *Reactor) pickSendVote(ctx context.Context, ps *PeerState, votes types.VoteSetReader, voteCh *p2p.Channel) (bool, error) {
+func (r *Reactor) pickSendVote(ctx context.Context, ps *PeerState, votes types.VoteSetReader, voteCh p2p.Channel) (bool, error) {
 	vote, ok := ps.PickVoteToSend(votes)
 	if !ok {
 		return false, nil
@@ -712,7 +693,7 @@ func (r *Reactor) gossipVotesForHeight(
 	rs *cstypes.RoundState,
 	prs *cstypes.PeerRoundState,
 	ps *PeerState,
-	voteCh *p2p.Channel,
+	voteCh p2p.Channel,
 ) (bool, error) {
 	logger := r.logger.With("height", prs.Height).With("peer", ps.peerID)
 
@@ -1130,7 +1111,7 @@ func (r *Reactor) peerDown(ctx context.Context, peerUpdate p2p.PeerUpdate, chans
 // If we fail to find the peer state for the envelope sender, we perform a no-op
 // and return. This can happen when we process the envelope after the peer is
 // removed.
-func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope, msgI Message, voteSetCh *p2p.Channel) error {
+func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope, msgI Message, voteSetCh p2p.Channel) error {
 	ps, ok := r.GetPeerState(envelope.From)
 	if !ok || ps == nil {
 		r.logger.Debug("failed to find peer state", "peer", envelope.From, "ch_id", "StateChannel")
@@ -1228,7 +1209,7 @@ func (r *Reactor) handleDataMessage(ctx context.Context, envelope *p2p.Envelope,
 	}
 
 	if r.WaitSync() {
-		logger.Info("ignoring message received during sync", "msg", fmt.Sprintf("%T", msgI))
+		logger.Info("ignoring message received during sync", "msg", tmstrings.LazySprintf("%T", msgI))
 		return nil
 	}
 

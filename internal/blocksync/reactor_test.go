@@ -37,11 +37,9 @@ type reactorTestSuite struct {
 	reactors map[types.NodeID]*Reactor
 	app      map[types.NodeID]abciclient.Client
 
-	blockSyncChannels map[types.NodeID]*p2p.Channel
+	blockSyncChannels map[types.NodeID]p2p.Channel
 	peerChans         map[types.NodeID]chan p2p.PeerUpdate
 	peerUpdates       map[types.NodeID]*p2p.PeerUpdates
-
-	blockSync bool
 }
 
 func setup(
@@ -65,10 +63,9 @@ func setup(
 		nodes:             make([]types.NodeID, 0, numNodes),
 		reactors:          make(map[types.NodeID]*Reactor, numNodes),
 		app:               make(map[types.NodeID]abciclient.Client, numNodes),
-		blockSyncChannels: make(map[types.NodeID]*p2p.Channel, numNodes),
+		blockSyncChannels: make(map[types.NodeID]p2p.Channel, numNodes),
 		peerChans:         make(map[types.NodeID]chan p2p.PeerUpdate, numNodes),
 		peerUpdates:       make(map[types.NodeID]*p2p.PeerUpdates, numNodes),
-		blockSync:         true,
 	}
 
 	chDesc := &p2p.ChannelDescriptor{ID: BlockSyncChannel, MessageType: new(bcproto.Message)}
@@ -96,21 +93,19 @@ func setup(
 	return rts
 }
 
-func (rts *reactorTestSuite) addNode(
+func makeReactor(
 	ctx context.Context,
 	t *testing.T,
 	nodeID types.NodeID,
 	genDoc *types.GenesisDoc,
 	privVal types.PrivValidator,
-	maxBlockHeight int64,
-) {
-	t.Helper()
+	channelCreator p2p.ChannelCreator,
+	peerEvents p2p.PeerEventSubscriber) *Reactor {
 
 	logger := log.NewNopLogger()
 
-	rts.nodes = append(rts.nodes, nodeID)
-	rts.app[nodeID] = proxy.New(abciclient.NewLocalClient(logger, &abci.BaseApplication{}), logger, proxy.NopMetrics())
-	require.NoError(t, rts.app[nodeID].Start(ctx))
+	app := proxy.New(abciclient.NewLocalClient(logger, &abci.BaseApplication{}), logger, proxy.NopMetrics())
+	require.NoError(t, app.Start(ctx))
 
 	blockDB := dbm.NewMemDB()
 	stateDB := dbm.NewMemDB()
@@ -131,6 +126,7 @@ func (rts *reactorTestSuite) addNode(
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		mock.Anything,
 		mock.Anything).Return(nil)
 
 	eventBus := eventbus.NewDefault(logger)
@@ -138,7 +134,7 @@ func (rts *reactorTestSuite) addNode(
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
+		log.NewNopLogger(),
 		rts.app[nodeID],
 		mp,
 		sm.EmptyEvidencePool{},
@@ -147,74 +143,102 @@ func (rts *reactorTestSuite) addNode(
 		sm.NopMetrics(),
 	)
 
-	for blockHeight := int64(1); blockHeight <= maxBlockHeight; blockHeight++ {
-		lastCommit := types.NewCommit(blockHeight-1, 0, types.BlockID{}, types.StateID{}, nil)
-
-		if blockHeight > 1 {
-			lastBlockMeta := blockStore.LoadBlockMeta(blockHeight - 1)
-			lastBlock := blockStore.LoadBlock(blockHeight - 1)
-
-			vote, err := factory.MakeVote(
-				ctx,
-				privVal,
-				state.Validators,
-				lastBlock.Header.ChainID, 0,
-				lastBlock.Header.Height, 0, 2,
-				lastBlockMeta.BlockID,
-				state.LastStateID,
-			)
-			require.NoError(t, err)
-			lastCommit = types.NewCommit(
-				vote.Height,
-				vote.Round,
-				lastBlockMeta.BlockID,
-				state.LastStateID,
-				&types.CommitSigns{
-					QuorumSigns: types.QuorumSigns{
-						BlockSign:      vote.BlockSignature,
-						StateSign:      vote.StateSignature,
-						ExtensionSigns: types.MakeThresholdExtensionSigns(vote.VoteExtensions),
-					},
-					QuorumHash: state.Validators.QuorumHash,
-				},
-			)
-		}
-
-		thisBlock, err := sf.MakeBlock(state, blockHeight, lastCommit, nil, 0)
-		require.NoError(t, err)
-		thisParts, err := thisBlock.MakePartSet(types.BlockPartSizeBytes)
-		require.NoError(t, err)
-		blockID := types.BlockID{Hash: thisBlock.Hash(), PartSetHeader: thisParts.Header()}
-
-		state, err = blockExec.ApplyBlock(ctx, state, proTxHash, blockID, thisBlock)
-		require.NoError(t, err)
-
-		blockStore.SaveBlock(thisBlock, thisParts, lastCommit)
-	}
-
-	rts.peerChans[nodeID] = make(chan p2p.PeerUpdate)
-	rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], 1)
-	rts.network.Nodes[nodeID].PeerManager.Register(ctx, rts.peerUpdates[nodeID])
-
-	chCreator := func(ctx context.Context, chdesc *p2p.ChannelDescriptor) (*p2p.Channel, error) {
-		return rts.blockSyncChannels[nodeID], nil
-	}
-	rts.reactors[nodeID] = NewReactor(
-		rts.logger.With("nodeID", nodeID),
+	return NewReactor(
+		logger,
 		stateStore,
 		blockExec,
 		blockStore,
 		proTxHash,
 		nil,
-		chCreator,
-		func(ctx context.Context) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] },
-		rts.blockSync,
+		channelCreator,
+		peerEvents,
+		true,
 		consensus.NopMetrics(),
 		nil, // eventbus, can be nil
 	)
+}
 
-	require.NoError(t, rts.reactors[nodeID].Start(ctx))
-	require.True(t, rts.reactors[nodeID].IsRunning())
+func (rts *reactorTestSuite) addNode(
+	ctx context.Context,
+	t *testing.T,
+	nodeID types.NodeID,
+	genDoc *types.GenesisDoc,
+	privVal types.PrivValidator,
+	maxBlockHeight int64,
+) {
+	t.Helper()
+
+	logger := log.NewNopLogger()
+
+	rts.nodes = append(rts.nodes, nodeID)
+	rts.app[nodeID] = proxy.New(abciclient.NewLocalClient(logger, &abci.BaseApplication{}), logger, proxy.NopMetrics())
+	require.NoError(t, rts.app[nodeID].Start(ctx))
+
+	rts.peerChans[nodeID] = make(chan p2p.PeerUpdate)
+	rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], 1)
+	rts.network.Nodes[nodeID].PeerManager.Register(ctx, rts.peerUpdates[nodeID])
+
+	chCreator := func(ctx context.Context, chdesc *p2p.ChannelDescriptor) (p2p.Channel, error) {
+		return rts.blockSyncChannels[nodeID], nil
+	}
+
+	peerEvents := func(ctx context.Context) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] }
+	reactor := makeReactor(ctx, t, nodeID, genDoc, privVal, chCreator, peerEvents)
+
+	lastExtCommit := &types.ExtendedCommit{}
+
+	state, err := reactor.stateStore.Load()
+	require.NoError(t, err)
+	for blockHeight := int64(1); blockHeight <= maxBlockHeight; blockHeight++ {
+		block, blockID, partSet, seenExtCommit := makeNextBlock(ctx, t, state, privVal, blockHeight, lastExtCommit)
+
+		state, err = reactor.blockExec.ApplyBlock(ctx, state, blockID, block)
+		require.NoError(t, err)
+
+		reactor.store.SaveBlockWithExtendedCommit(block, partSet, seenExtCommit)
+		lastExtCommit = seenExtCommit
+	}
+
+	rts.reactors[nodeID] = reactor
+	require.NoError(t, reactor.Start(ctx))
+	require.True(t, reactor.IsRunning())
+}
+
+func makeNextBlock(ctx context.Context,
+	t *testing.T,
+	state sm.State,
+	signer types.PrivValidator,
+	height int64,
+	lc *types.ExtendedCommit) (*types.Block, types.BlockID, *types.PartSet, *types.ExtendedCommit) {
+
+	lastExtCommit := lc.Clone()
+
+	block := sf.MakeBlock(state, height, lastExtCommit.ToCommit())
+	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: partSet.Header()}
+
+	// Simulate a commit for the current height
+	vote, err := factory.MakeVote(
+		ctx,
+		signer,
+		block.Header.ChainID,
+		0,
+		block.Header.Height,
+		0,
+		2,
+		blockID,
+		time.Now(),
+	)
+	require.NoError(t, err)
+	seenExtCommit := &types.ExtendedCommit{
+		Height:             vote.Height,
+		Round:              vote.Round,
+		BlockID:            blockID,
+		ExtendedSignatures: []types.ExtendedCommitSig{vote.ExtendedCommitSig()},
+	}
+	return block, blockID, partSet, seenExtCommit
+
 }
 
 func (rts *reactorTestSuite) start(ctx context.Context, t *testing.T) {
@@ -417,3 +441,35 @@ func TestReactor_BadBlockStopsPeer(t *testing.T) {
 		len(rts.reactors[newNode.NodeID].pool.peers),
 	)
 }
+
+/*
+func TestReactorReceivesNoExtendedCommit(t *testing.T) {
+	blockDB := dbm.NewMemDB()
+	stateDB := dbm.NewMemDB()
+	stateStore := sm.NewStore(stateDB)
+	blockStore := store.NewBlockStore(blockDB)
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		log.NewNopLogger(),
+		rts.app[nodeID],
+		mp,
+		sm.EmptyEvidencePool{},
+		blockStore,
+		eventbus,
+		sm.NopMetrics(),
+	)
+	NewReactor(
+		log.NewNopLogger(),
+		stateStore,
+		blockExec,
+		blockStore,
+		nil,
+		chCreator,
+		func(ctx context.Context) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] },
+		rts.blockSync,
+		consensus.NopMetrics(),
+		nil, // eventbus, can be nil
+	)
+
+}
+*/

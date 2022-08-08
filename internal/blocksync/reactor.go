@@ -77,7 +77,7 @@ type Reactor struct {
 	stateStore sm.Store
 
 	blockExec   *sm.BlockExecutor
-	store       *store.BlockStore
+	store       sm.BlockStore
 	pool        *BlockPool
 	consReactor consensusReactor
 	blockSync   *atomicBool
@@ -140,7 +140,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	r.chCreator = func(context.Context, *conn.ChannelDescriptor) (*p2p.Channel, error) { return blockSyncCh, nil }
+	r.chCreator = func(context.Context, *conn.ChannelDescriptor) (p2p.Channel, error) { return blockSyncCh, nil }
 
 	state, err := r.stateStore.Load()
 	if err != nil {
@@ -188,33 +188,47 @@ func (r *Reactor) OnStop() {
 
 // respondToPeer loads a block and sends it to the requesting peer, if we have it.
 // Otherwise, we'll respond saying we do not have it.
-func (r *Reactor) respondToPeer(ctx context.Context, msg *bcproto.BlockRequest, peerID types.NodeID, blockSyncCh *p2p.Channel) error {
+func (r *Reactor) respondToPeer(ctx context.Context, msg *bcproto.BlockRequest, peerID types.NodeID, blockSyncCh p2p.Channel) error {
 	block := r.store.LoadBlock(msg.Height)
-	if block != nil {
-		blockProto, err := block.ToProto()
-		if err != nil {
-			r.logger.Error("failed to convert msg to protobuf", "err", err)
-			return err
-		}
-
+	if block == nil {
+		r.logger.Info("peer requesting a block we do not have", "peer", peerID, "height", msg.Height)
 		return blockSyncCh.Send(ctx, p2p.Envelope{
 			To:      peerID,
-			Message: &bcproto.BlockResponse{Block: blockProto},
+			Message: &bcproto.NoBlockResponse{Height: msg.Height},
 		})
 	}
 
-	r.logger.Info("peer requesting a block we do not have", "peer", peerID, "height", msg.Height)
+	state, err := r.stateStore.Load()
+	if err != nil {
+		return fmt.Errorf("loading state: %w", err)
+	}
+	var extCommit *types.ExtendedCommit
+	if state.ConsensusParams.ABCI.VoteExtensionsEnabled(msg.Height) {
+		extCommit = r.store.LoadBlockExtendedCommit(msg.Height)
+		if extCommit == nil {
+			return fmt.Errorf("found block in store with no extended commit: %v", block)
+		}
+	}
+
+	blockProto, err := block.ToProto()
+	if err != nil {
+		return fmt.Errorf("failed to convert block to protobuf: %w", err)
+	}
 
 	return blockSyncCh.Send(ctx, p2p.Envelope{
-		To:      peerID,
-		Message: &bcproto.NoBlockResponse{Height: msg.Height},
+		To: peerID,
+		Message: &bcproto.BlockResponse{
+			Block:     blockProto,
+			ExtCommit: extCommit.ToProto(),
+		},
 	})
+
 }
 
 // handleMessage handles an Envelope sent from a peer on a specific p2p Channel.
 // It will handle errors and any possible panics gracefully. A caller can handle
 // any error returned by sending a PeerError on the respective channel.
-func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, blockSyncCh *p2p.Channel) (err error) {
+func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, blockSyncCh p2p.Channel) (err error) {
 	defer func() {
 		if e := recover(); e != nil {
 			err = fmt.Errorf("panic in processing message: %v", e)
@@ -241,8 +255,21 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, blo
 					"err", err)
 				return err
 			}
+			var extCommit *types.ExtendedCommit
+			if msg.ExtCommit != nil {
+				var err error
+				extCommit, err = types.ExtendedCommitFromProto(msg.ExtCommit)
+				if err != nil {
+					r.logger.Error("failed to convert extended commit from proto",
+						"peer", envelope.From,
+						"err", err)
+					return err
+				}
+			}
 
-			r.pool.AddBlock(envelope.From, block, block.Size())
+			if err := r.pool.AddBlock(envelope.From, block, extCommit, block.Size()); err != nil {
+				r.logger.Error("failed to add block", "err", err)
+			}
 
 		case *bcproto.StatusRequest:
 			return blockSyncCh.Send(ctx, p2p.Envelope{
@@ -276,7 +303,7 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, blo
 // message execution will result in a PeerError being sent on the BlockSyncChannel.
 // When the reactor is stopped, we will catch the signal and close the p2p Channel
 // gracefully.
-func (r *Reactor) processBlockSyncCh(ctx context.Context, blockSyncCh *p2p.Channel) {
+func (r *Reactor) processBlockSyncCh(ctx context.Context, blockSyncCh p2p.Channel) {
 	iter := blockSyncCh.Receive(ctx)
 	for iter.Next(ctx) {
 		envelope := iter.Envelope()
@@ -297,7 +324,7 @@ func (r *Reactor) processBlockSyncCh(ctx context.Context, blockSyncCh *p2p.Chann
 }
 
 // processPeerUpdate processes a PeerUpdate.
-func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpdate, blockSyncCh *p2p.Channel) {
+func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpdate, blockSyncCh p2p.Channel) {
 	r.logger.Debug("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 
 	// XXX: Pool#RedoRequest can sometimes give us an empty peer.
@@ -332,7 +359,7 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 // processPeerUpdates initiates a blocking process where we listen for and handle
 // PeerUpdate messages. When the reactor is stopped, we will catch the signal and
 // close the p2p PeerUpdatesCh gracefully.
-func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerUpdates, blockSyncCh *p2p.Channel) {
+func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerUpdates, blockSyncCh p2p.Channel) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -374,7 +401,7 @@ func (r *Reactor) SwitchToBlockSync(ctx context.Context, state sm.State) error {
 	return nil
 }
 
-func (r *Reactor) requestRoutine(ctx context.Context, blockSyncCh *p2p.Channel) {
+func (r *Reactor) requestRoutine(ctx context.Context, blockSyncCh p2p.Channel) {
 	statusUpdateTicker := time.NewTicker(statusUpdateIntervalSeconds * time.Second)
 	defer statusUpdateTicker.Stop()
 
@@ -416,7 +443,7 @@ func (r *Reactor) requestRoutine(ctx context.Context, blockSyncCh *p2p.Channel) 
 // do.
 //
 // NOTE: Don't sleep in the FOR_LOOP or otherwise slow it down!
-func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh *p2p.Channel) {
+func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh p2p.Channel) {
 	var (
 		trySyncTicker           = time.NewTicker(trySyncIntervalMS * time.Millisecond)
 		switchToConsensusTicker = time.NewTicker(switchToConsensusIntervalSeconds * time.Second)
@@ -430,6 +457,8 @@ func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh
 		lastRate    = 0.0
 
 		didProcessCh = make(chan struct{}, 1)
+
+		initialCommitHasExtensions = (r.initialState.LastBlockHeight > 0 && r.store.LoadBlockExtendedCommit(r.initialState.LastBlockHeight) != nil)
 	)
 
 	defer trySyncTicker.Stop()
@@ -445,14 +474,41 @@ func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh
 				lastAdvance                       = r.pool.LastAdvance()
 			)
 
-			r.logger.Debug(
-				"consensus ticker",
+			r.logger.Debug("consensus ticker",
 				"num_pending", numPending,
 				"total", lenRequesters,
-				"height", height,
-			)
+				"height", height)
 
 			switch {
+
+			// The case statement below is a bit confusing, so here is a breakdown
+			// of its logic and purpose:
+			//
+			// If VoteExtensions are enabled we cannot switch to consensus without
+			// the vote extension data for the previous height, i.e. state.LastBlockHeight.
+			//
+			// If extensions were required during state.LastBlockHeight and we have
+			// sync'd at least one block, then we are guaranteed to have extensions.
+			// BlockSync requires that the blocks it fetches have extensions if
+			// extensions were enabled during the height.
+			//
+			// If extensions were required during state.LastBlockHeight and we have
+			// not sync'd any blocks, then we can only transition to Consensus
+			// if we already had extensions for the initial height.
+			// If any of these conditions is not met, we continue the loop, looking
+			// for extensions.
+			case state.ConsensusParams.ABCI.VoteExtensionsEnabled(state.LastBlockHeight) &&
+				(blocksSynced == 0 && !initialCommitHasExtensions):
+				r.logger.Info(
+					"no extended commit yet",
+					"height", height,
+					"last_block_height", state.LastBlockHeight,
+					"initial_height", state.InitialHeight,
+					"max_peer_height", r.pool.MaxPeerHeight(),
+					"timeout_in", syncTimeout-time.Since(lastAdvance),
+				)
+				continue
+
 			case r.pool.IsCaughtUp():
 				r.logger.Info("switching to consensus reactor", "height", height)
 
@@ -495,14 +551,19 @@ func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh
 			// TODO: Uncouple from request routine.
 
 			// see if there are any blocks to sync
-			first, second := r.pool.PeekTwoBlocks()
-			if first == nil || second == nil {
-				// we need both to sync the first block
+			first, second, extCommit := r.pool.PeekTwoBlocks()
+			if first != nil && extCommit == nil &&
+				state.ConsensusParams.ABCI.VoteExtensionsEnabled(first.Height) {
+				// See https://github.com/tendermint/tendermint/pull/8433#discussion_r866790631
+				panic(fmt.Errorf("peeked first block without extended commit at height %d - possible node store corruption", first.Height))
+			} else if first == nil || second == nil {
+				// we need to have fetched two consecutive blocks in order to
+				// perform blocksync verification
 				continue
-			} else {
-				// try again quickly next loop
-				didProcessCh <- struct{}{}
 			}
+
+			// try again quickly next loop
+			didProcessCh <- struct{}{}
 
 			firstParts, err := first.MakePartSet(types.BlockPartSizeBytes)
 			if err != nil {
@@ -526,7 +587,19 @@ func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh
 			// NOTE: We can probably make this more efficient, but note that calling
 			// first.Hash() doesn't verify the tx contents, so MakePartSet() is
 			// currently necessary.
+			// TODO(sergio): Should we also validate against the extended commit?
 			err = state.Validators.VerifyCommit(chainID, firstID, stateID, first.Height, second.LastCommit)
+
+			if err == nil {
+				// validate the block before we persist it
+				err = r.blockExec.ValidateBlock(ctx, state, first)
+			}
+			if err == nil && state.ConsensusParams.ABCI.VoteExtensionsEnabled(first.Height) {
+				// if vote extensions were required at this height, ensure they exist.
+				err = extCommit.EnsureExtensions()
+			}
+			// If either of the checks failed we log the error and request for a new block
+			// at that height
 			if err != nil {
 				err = fmt.Errorf("invalid last commit: %w", err)
 				r.logger.Error(
@@ -555,37 +628,43 @@ func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh
 						return
 					}
 				}
+				return
+			}
+
+			r.pool.PopRequest()
+
+			// TODO: batch saves so we do not persist to disk every block
+			if state.ConsensusParams.ABCI.VoteExtensionsEnabled(first.Height) {
+				r.store.SaveBlockWithExtendedCommit(first, firstParts, extCommit)
 			} else {
-				r.pool.PopRequest()
-
-				// TODO: batch saves so we do not persist to disk every block
+				// We use LastCommit here instead of extCommit. extCommit is not
+				// guaranteed to be populated by the peer if extensions are not enabled.
+				// Currently, the peer should provide an extCommit even if the vote extension data are absent
+				// but this may change so using second.LastCommit is safer.
 				r.store.SaveBlock(first, firstParts, second.LastCommit)
-
-				var err error
+			}
 
 				// TODO: Same thing for app - but we would need a way to get the hash
 				// without persisting the state.
 				state, err = r.blockExec.ApplyBlock(ctx, state, r.nodeProTxHash, firstID, first)
 				if err != nil {
-					// TODO: This is bad, are we zombie?
 					panic(fmt.Sprintf("failed to process committed block (%d:%X): %v", first.Height, first.Hash(), err))
 				}
 
-				r.metrics.RecordConsMetrics(first)
+			r.metrics.RecordConsMetrics(first)
 
-				blocksSynced++
+			blocksSynced++
 
-				if blocksSynced%100 == 0 {
-					lastRate = 0.9*lastRate + 0.1*(100/time.Since(lastHundred).Seconds())
-					r.logger.Info(
-						"block sync rate",
-						"height", r.pool.height,
-						"max_peer_height", r.pool.MaxPeerHeight(),
-						"blocks/s", lastRate,
-					)
+			if blocksSynced%100 == 0 {
+				lastRate = 0.9*lastRate + 0.1*(100/time.Since(lastHundred).Seconds())
+				r.logger.Info(
+					"block sync rate",
+					"height", r.pool.height,
+					"max_peer_height", r.pool.MaxPeerHeight(),
+					"blocks/s", lastRate,
+				)
 
-					lastHundred = time.Now()
-				}
+				lastHundred = time.Now()
 			}
 		}
 	}

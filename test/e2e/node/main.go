@@ -87,14 +87,6 @@ func run(ctx context.Context, configFile string) error {
 		return err
 	}
 
-	// Start remote signer (must start before node if running builtin).
-	if cfg.PrivValServer != "" {
-		err := startRemoteSigner(ctx, cfg, logger)
-		if err != nil {
-			return err
-		}
-	}
-
 	// Start app server.
 	err = startAppServer(ctx, cfg, logger)
 	if err != nil {
@@ -112,16 +104,23 @@ func run(ctx context.Context, configFile string) error {
 }
 
 func startAppServer(ctx context.Context, cfg *Config, logger log.Logger) error {
+	if cfg.Mode == string(e2e.ModeLight) {
+		return startLightNode(ctx, logger, cfg)
+	}
+	// Start remote signer (must start before node if running builtin).
+	if cfg.PrivValServer != "" {
+		err := startRemoteSigner(ctx, cfg, logger)
+		if err != nil {
+			return err
+		}
+	}
 	switch cfg.Protocol {
 	case "socket", "grpc":
 		return startApp(ctx, logger, cfg)
 	case "builtin":
-		switch cfg.Mode {
-		case string(e2e.ModeLight):
-			return startLightNode(ctx, logger, cfg)
-		case string(e2e.ModeSeed):
+		if cfg.Mode == string(e2e.ModeSeed) {
 			return startSeedNode(ctx)
-		default:
+		} else {
 			return startNode(ctx, cfg)
 		}
 	}
@@ -263,7 +262,8 @@ func startLightNode(ctx context.Context, logger log.Logger, cfg *Config) error {
 	// If necessary adjust global WriteTimeout to ensure it's greater than
 	// TimeoutBroadcastTxCommit.
 	// See https://github.com/tendermint/tendermint/issues/3435
-	if rpccfg.WriteTimeout <= tmcfg.RPC.TimeoutBroadcastTxCommit {
+	// Note we don't need to adjust anything if the timeout is already unlimited.
+	if rpccfg.WriteTimeout > 0 && rpccfg.WriteTimeout <= tmcfg.RPC.TimeoutBroadcastTxCommit {
 		rpccfg.WriteTimeout = tmcfg.RPC.TimeoutBroadcastTxCommit + 1*time.Second
 	}
 

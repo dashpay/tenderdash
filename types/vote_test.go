@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/dashevo/dashd-go/btcjson"
@@ -14,6 +15,22 @@ import (
 	"github.com/tendermint/tendermint/internal/libs/protoio"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+)
+
+const (
+	//nolint: lll
+	preCommitTestStr = `Vote{56789:6AF1F4111082 12345/2 Precommit 8B01023386C3 000000000000 0 @ 2017-12-25T03:00:01.234Z}`
+	//nolint: lll
+	preVoteTestStr = `Vote{56789:6AF1F4111082 12345/2 Prevote 8B01023386C3 000000000000 0 @ 2017-12-25T03:00:01.234Z}`
+)
+
+var (
+	// nolint: lll
+	nilVoteTestStr                = fmt.Sprintf(`Vote{56789:6AF1F4111082 12345/2 Precommit %s 000000000000 0 @ 2017-12-25T03:00:01.234Z}`, nilVoteStr)
+	formatNonEmptyVoteExtensionFn = func(voteExtensionLength int) string {
+		// nolint: lll
+		return fmt.Sprintf(`Vote{56789:6AF1F4111082 12345/2 Precommit 8B01023386C3 000000000000 %d @ 2017-12-25T03:00:01.234Z}`, voteExtensionLength)
+	}
 )
 
 func examplePrevote(t *testing.T) *Vote {
@@ -254,26 +271,22 @@ func TestVoteExtension(t *testing.T) {
 			includeSignature: true,
 			expectError:      false,
 		},
-		// TODO(thane): Re-enable once
-		// https://github.com/tendermint/tendermint/issues/8272 is resolved
-		//{
-		//	name:             "no extension signature",
-		//	extension:        []byte("extension"),
-		//	includeSignature: false,
-		//	expectError:      true,
-		//},
+		{
+			name:             "no extension signature",
+			extension:        []byte("extension"),
+			includeSignature: false,
+			expectError:      true,
+		},
 		{
 			name:             "empty extension",
 			includeSignature: true,
 			expectError:      false,
 		},
-		// TODO: Re-enable once
-		// https://github.com/tendermint/tendermint/issues/8272 is resolved.
-		//{
-		//	name:             "no extension and no signature",
-		//	includeSignature: false,
-		//	expectError:      true,
-		//},
+		{
+			name:             "no extension and no signature",
+			includeSignature: false,
+			expectError:      true,
+		},
 	}
 
 	logger := log.NewTestingLogger(t)
@@ -377,16 +390,35 @@ func TestVoteVerify(t *testing.T) {
 }
 
 func TestVoteString(t *testing.T) {
-	str := examplePrecommit(t).String()
-	expected := `Vote{56789:959A8F5EF2BE 12345/02/SIGNED_MSG_TYPE_PRECOMMIT(Precommit) 8B01023386C3 000000000000 000000000000 000000000000}`
-	if str != expected {
-		t.Errorf("got unexpected string for Vote. Expected:\n%v\nGot:\n%v", expected, str)
+	testcases := map[string]struct {
+		vote           *Vote
+		expectedResult string
+	}{
+		"pre-commit": {
+			vote:           examplePrecommit(t),
+			expectedResult: preCommitTestStr,
+		},
+		"pre-vote": {
+			vote:           examplePrevote(t),
+			expectedResult: preVoteTestStr,
+		},
+		"absent vote": {
+			expectedResult: absentVoteStr,
+		},
+		"nil vote": {
+			vote: func() *Vote {
+				v := examplePrecommit(t)
+				v.BlockID.Hash = nil
+				return v
+			}(),
+			expectedResult: nilVoteTestStr,
+		},
 	}
 
-	str2 := examplePrevote(t).String()
-	expected = `Vote{56789:959A8F5EF2BE 12345/02/SIGNED_MSG_TYPE_PREVOTE(Prevote) 8B01023386C3 000000000000 000000000000 000000000000}`
-	if str2 != expected {
-		t.Errorf("got unexpected string for Vote. Expected:\n%v\nGot:\n%v", expected, str2)
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expectedResult, tc.vote.String())
+		})
 	}
 }
 
@@ -436,7 +468,7 @@ func TestValidVotes(t *testing.T) {
 		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, tc.vote, stateID, nil)
 		tc.malleateVote(tc.vote)
 		require.NoError(t, tc.vote.ValidateBasic(), "ValidateBasic for %s", tc.name)
-		require.NoError(t, tc.vote.ValidateWithExtension(), "ValidateWithExtension for %s", tc.name)
+		require.NoError(t, tc.vote.EnsureExtension(), "EnsureExtension for %s", tc.name)
 	}
 }
 
@@ -465,13 +497,13 @@ func TestInvalidVotes(t *testing.T) {
 		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, stateID, nil)
 		tc.malleateVote(prevote)
 		require.Error(t, prevote.ValidateBasic(), "ValidateBasic for %s in invalid prevote", tc.name)
-		require.Error(t, prevote.ValidateWithExtension(), "ValidateWithExtension for %s in invalid prevote", tc.name)
+		require.NoError(t, prevote.EnsureExtension(), "EnsureExtension for %s in invalid prevote", tc.name)
 
 		precommit := examplePrecommit(t)
 		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, stateID, nil)
 		tc.malleateVote(precommit)
 		require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s in invalid precommit", tc.name)
-		require.Error(t, precommit.ValidateWithExtension(), "ValidateWithExtension for %s in invalid precommit", tc.name)
+		require.NoError(t, precommit.EnsureExtension(), "EnsureExtension for %s in invalid precommit", tc.name)
 	}
 }
 
@@ -506,7 +538,7 @@ func TestInvalidPrevotes(t *testing.T) {
 		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, stateID, nil)
 		tc.malleateVote(prevote)
 		require.Error(t, prevote.ValidateBasic(), "ValidateBasic for %s", tc.name)
-		require.Error(t, prevote.ValidateWithExtension(), "ValidateWithExtension for %s", tc.name)
+		require.NoError(t, prevote.EnsureExtension(), "EnsureExtension for %s", tc.name)
 	}
 }
 
@@ -526,7 +558,8 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 				v.VoteExtensions = VoteExtensions{
 					tmproto.VoteExtensionType_DEFAULT: {{Extension: []byte("extension")}},
 				}
-			}},
+			},
+		},
 		// TODO(thane): Re-enable once https://github.com/tendermint/tendermint/issues/8272 is resolved
 		//{"missing vote extension signature", func(v *Vote) { v.ExtensionSignature = nil }},
 		{
@@ -535,7 +568,8 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 				v.VoteExtensions = VoteExtensions{
 					tmproto.VoteExtensionType_DEFAULT: []VoteExtension{{Signature: make([]byte, SignatureSize+1)}},
 				}
-			}},
+			},
+		},
 	}
 	for _, tc := range testCases {
 		precommit := examplePrecommit(t)
@@ -543,10 +577,38 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 		stateID := RandStateID().WithHeight(v.Height - 1)
 		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, stateID, nil)
 		tc.malleateVote(precommit)
-		// We don't expect an error from ValidateBasic, because it doesn't
-		// handle vote extensions.
-		require.NoError(t, precommit.ValidateBasic(), "ValidateBasic for %s", tc.name)
-		require.Error(t, precommit.ValidateWithExtension(), "ValidateWithExtension for %s", tc.name)
+		// ValidateBasic ensures that vote extensions, if present, are well formed
+		require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s", tc.name)
+	}
+}
+
+func TestEnsureVoteExtension(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	privVal := NewMockPV()
+
+	testCases := []struct {
+		name         string
+		malleateVote func(*Vote)
+		expectError  bool
+	}{
+		{"vote extension signature absent", func(v *Vote) {
+			v.Extension = nil
+			v.ExtensionSignature = nil
+		}, true},
+		{"vote extension signature present", func(v *Vote) {
+			v.ExtensionSignature = []byte("extension signature")
+		}, false},
+	}
+	for _, tc := range testCases {
+		precommit := examplePrecommit(t)
+		signVote(ctx, t, privVal, "test_chain_id", precommit)
+		tc.malleateVote(precommit)
+		if tc.expectError {
+			require.Error(t, precommit.EnsureExtension(), "EnsureExtension for %s", tc.name)
+		} else {
+			require.NoError(t, precommit.EnsureExtension(), "EnsureExtension for %s", tc.name)
+		}
 	}
 }
 

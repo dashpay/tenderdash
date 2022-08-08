@@ -33,6 +33,10 @@ import (
 // Byzantine node sends two different prevotes (nil and blockID) to the same
 // validator.
 func TestByzantinePrevoteEquivocation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// empirically, this test either passes in <1s or hits some
 	// kind of deadlock and hit the larger timeout. This timeout
 	// can be extended a bunch if needed, but it's good to avoid
@@ -184,8 +188,9 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			// We're creating a proposal for the first block.
 			// The commit is empty, but not nil.
 			commit = types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil)
-		case lazyNodeState.LastCommit != nil:
-			commit = lazyNodeState.LastCommit
+		case lazyNodeState.LastCommit.HasTwoThirdsMajority():
+			// Make the commit from LastCommit
+			commit = lazyNodeState.LastCommit.MakeCommit()
 		default: // This shouldn't happen.
 			lazyNodeState.logger.Error("enterPropose: Cannot propose anything: No commit for the previous block")
 			return

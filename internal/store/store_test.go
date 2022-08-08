@@ -156,9 +156,10 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 		},
 
 		{
-			block:     newBlock(header1, commitAtH10),
-			parts:     incompletePartSet,
-			wantPanic: "only save complete block", // incomplete parts
+			block:      newBlock(header1, commitAtH10),
+			parts:      incompletePartSet,
+			wantPanic:  "only save complete block", // incomplete parts
+			seenCommit: makeTestExtCommit(10, tmtime.Now()),
 		},
 
 		{
@@ -187,7 +188,7 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 		},
 
 		{
-			block:      newBlock(header1, commitAtH10),
+			block:      block,
 			parts:      validPartSet,
 			seenCommit: seenCommit,
 
@@ -196,7 +197,7 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 		},
 
 		{
-			block:      newBlock(header1, commitAtH10),
+			block:      block,
 			parts:      validPartSet,
 			seenCommit: seenCommit,
 
@@ -218,7 +219,7 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 		bs, db := newInMemoryBlockStore()
 		// SaveBlock
 		res, err, panicErr := doFn(func() (interface{}, error) {
-			bs.SaveBlock(tuple.block, tuple.parts, tuple.seenCommit)
+			bs.SaveBlockWithExtendedCommit(tuple.block, tuple.parts, tuple.seenCommit)
 			if tuple.block == nil {
 				return nil, nil
 			}
@@ -288,6 +289,90 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 	}
 }
 
+// TestSaveBlockWithExtendedCommitPanicOnAbsentExtension tests that saving a
+// block with an extended commit panics when the extension data is absent.
+func TestSaveBlockWithExtendedCommitPanicOnAbsentExtension(t *testing.T) {
+	for _, testCase := range []struct {
+		name           string
+		malleateCommit func(*types.ExtendedCommit)
+		shouldPanic    bool
+	}{
+		{
+			name:           "basic save",
+			malleateCommit: func(_ *types.ExtendedCommit) {},
+			shouldPanic:    false,
+		},
+		{
+			name: "save commit with no extensions",
+			malleateCommit: func(c *types.ExtendedCommit) {
+				c.StripExtensions()
+			},
+			shouldPanic: true,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			state, bs, cleanup, err := makeStateAndBlockStore(t.TempDir())
+			require.NoError(t, err)
+			defer cleanup()
+			block := factory.MakeBlock(state, bs.Height()+1, new(types.Commit))
+			seenCommit := makeTestExtCommit(block.Header.Height, tmtime.Now())
+			ps, err := block.MakePartSet(2)
+			require.NoError(t, err)
+			testCase.malleateCommit(seenCommit)
+			if testCase.shouldPanic {
+				require.Panics(t, func() {
+					bs.SaveBlockWithExtendedCommit(block, ps, seenCommit)
+				})
+			} else {
+				bs.SaveBlockWithExtendedCommit(block, ps, seenCommit)
+			}
+		})
+	}
+}
+
+// TestLoadBlockExtendedCommit tests loading the extended commit for a previously
+// saved block. The load method should return nil when only a commit was saved and
+// return the extended commit otherwise.
+func TestLoadBlockExtendedCommit(t *testing.T) {
+	for _, testCase := range []struct {
+		name         string
+		saveExtended bool
+		expectResult bool
+	}{
+		{
+			name:         "save commit",
+			saveExtended: false,
+			expectResult: false,
+		},
+		{
+			name:         "save extended commit",
+			saveExtended: true,
+			expectResult: true,
+		},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			state, bs, cleanup, err := makeStateAndBlockStore(t.TempDir())
+			require.NoError(t, err)
+			defer cleanup()
+			block := factory.MakeBlock(state, bs.Height()+1, new(types.Commit))
+			seenCommit := makeTestExtCommit(block.Header.Height, tmtime.Now())
+			ps, err := block.MakePartSet(2)
+			require.NoError(t, err)
+			if testCase.saveExtended {
+				bs.SaveBlockWithExtendedCommit(block, ps, seenCommit)
+			} else {
+				bs.SaveBlock(block, ps, seenCommit.ToCommit())
+			}
+			res := bs.LoadBlockExtendedCommit(block.Height)
+			if testCase.expectResult {
+				require.Equal(t, seenCommit, res)
+			} else {
+				require.Nil(t, res)
+			}
+		})
+	}
+}
+
 func TestLoadBaseMeta(t *testing.T) {
 	cfg, err := config.ResetTestRoot(t.TempDir(), "blockchain_reactor_test")
 	require.NoError(t, err)
@@ -347,7 +432,6 @@ func TestLoadBlockPart(t *testing.T) {
 	block, err := factory.MakeBlock(state, 1, new(types.Commit), nil, 0)
 	require.NoError(t, err)
 	partSet, err := block.MakePartSet(2)
-	require.NoError(t, err)
 	require.NoError(t, err)
 	part1 := partSet.GetPart(0)
 
@@ -514,7 +598,10 @@ func TestBlockFetchAtHeight(t *testing.T) {
 }
 
 func TestSeenAndCanonicalCommit(t *testing.T) {
-	state, store := makeStateAndBlockStore(t, t.TempDir())
+	state, store, cleanup, err := makeStateAndBlockStore(t.TempDir())
+	defer cleanup()
+	require.NoError(t, err)
+
 	loadCommit := func() (interface{}, error) {
 		meta := store.LoadSeenCommit()
 		return meta, nil

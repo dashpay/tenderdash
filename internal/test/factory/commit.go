@@ -48,5 +48,5 @@ func MakeCommit(
 		}
 	}
 
-	return voteSet.MakeCommit(), nil
+	return voteSet.MakeExtendedCommit(), nil
 }

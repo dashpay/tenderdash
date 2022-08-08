@@ -52,7 +52,7 @@ func makeCommit(
 		}
 	}
 
-	return voteSet.MakeCommit(), nil
+	return voteSet.MakeExtendedCommit(), nil
 }
 
 // signAddVote signs a vote using StateID configured inside voteSet, and adds it to that voteSet

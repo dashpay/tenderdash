@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -55,8 +56,8 @@ const (
 type VoteSet struct {
 	chainID       string
 	height        int64
-	stateID       StateID // ID of state for which this voting is executed
 	round         int32
+	stateID       StateID // ID of state for which this voting is executed
 	signedMsgType tmproto.SignedMsgType
 	valSet        *ValidatorSet
 
@@ -74,7 +75,8 @@ type VoteSet struct {
 	thresholdVoteExtSigs []ThresholdExtensionSign // If a 2/3 majority is seen, recover the vote extension sigs
 }
 
-// NewVoteSet constructs a new VoteSet struct used to accumulate votes for given height/round.
+// NewVoteSet instantiates all fields of a new vote set. This constructor requires
+// that no vote extension data be present on the votes that are added to the set.
 func NewVoteSet(chainID string, height int64, round int32,
 	signedMsgType tmproto.SignedMsgType, valSet *ValidatorSet, stateID StateID) *VoteSet {
 	if height == 0 {
@@ -98,6 +100,16 @@ func NewVoteSet(chainID string, height int64, round int32,
 		votesByBlock:  make(map[string]*blockVotes, valSet.Size()),
 		peerMaj23s:    make(map[string]BlockID),
 	}
+}
+
+// NewExtendedVoteSet constructs a vote set with additional vote verification logic.
+// The VoteSet constructed with NewExtendedVoteSet verifies the vote extension
+// data for every vote added to the set.
+func NewExtendedVoteSet(chainID string, height int64, round int32,
+	signedMsgType tmproto.SignedMsgType, valSet *ValidatorSet) *VoteSet {
+	vs := NewVoteSet(chainID, height, round, signedMsgType, valSet)
+	vs.extensionsEnabled = true
+	return vs
 }
 
 func (voteSet *VoteSet) ChainID() string {
@@ -248,13 +260,6 @@ func (voteSet *VoteSet) getVote(valIndex int32, blockKey string) (vote *Vote, ok
 		return existing, true
 	}
 	return nil, false
-}
-
-func (voteSet *VoteSet) GetVotes() []*Vote {
-	if voteSet == nil {
-		return nil
-	}
-	return voteSet.votes
 }
 
 // Assumes signature is valid.
@@ -578,7 +583,7 @@ func (voteSet *VoteSet) StringIndented(indent string) string {
 	voteStrings := make([]string, len(voteSet.votes))
 	for i, vote := range voteSet.votes {
 		if vote == nil {
-			voteStrings[i] = nilVoteStr
+			voteStrings[i] = absentVoteStr
 		} else {
 			voteStrings[i] = vote.String()
 		}
@@ -643,7 +648,7 @@ func (voteSet *VoteSet) voteStrings() []string {
 	voteStrings := make([]string, len(voteSet.votes))
 	for i, vote := range voteSet.votes {
 		if vote == nil {
-			voteStrings[i] = nilVoteStr
+			voteStrings[i] = absentVoteStr
 		} else {
 			voteStrings[i] = vote.String()
 		}
@@ -697,21 +702,21 @@ func (voteSet *VoteSet) sumTotalFrac() (int64, int64, float64) {
 //--------------------------------------------------------------------------------
 // Commit
 
-// MakeCommit constructs a Commit from the VoteSet. It only includes precommits
-// for the block, which has 2/3+ majority, and nil.
+// MakeExtendedCommit constructs a Commit from the VoteSet. It only includes
+// precommits for the block, which has 2/3+ majority, and nil.
 //
 // Panics if the vote type is not PrecommitType or if there's no +2/3 votes for
 // a single block.
-func (voteSet *VoteSet) MakeCommit() *Commit {
+func (voteSet *VoteSet) MakeExtendedCommit() *Commit {
 	if voteSet.signedMsgType != tmproto.PrecommitType {
-		panic("Cannot MakeCommit() unless VoteSet.Type is PrecommitType")
+		panic("Cannot MakeExtendCommit() unless VoteSet.Type is PrecommitType")
 	}
 	voteSet.mtx.Lock()
 	defer voteSet.mtx.Unlock()
 
 	// Make sure we have a 2/3 majority
 	if voteSet.maj23 == nil {
-		panic("Cannot MakeCommit() unless a blockhash has +2/3")
+		panic("Cannot MakeExtendCommit() unless a blockhash has +2/3")
 	}
 
 	if voteSet.thresholdBlockSig == nil {

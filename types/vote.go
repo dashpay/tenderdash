@@ -1,7 +1,6 @@
 package types
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -18,7 +17,8 @@ import (
 )
 
 const (
-	nilVoteStr string = "nil-Vote"
+	absentVoteStr string = "Vote{absent}"
+	nilVoteStr    string = "nil-Vote"
 	// MaxVoteBytes is a maximum vote size (including amino overhead).
 	MaxVoteBytesBLS12381 int64 = 241
 	MaxVoteBytesEd25519  int64 = 209
@@ -175,7 +175,7 @@ func (vote *Vote) Copy() *Vote {
 // 10. timestamp
 func (vote *Vote) String() string {
 	if vote == nil {
-		return nilVoteStr
+		return absentVoteStr
 	}
 
 	var typeString string
@@ -188,21 +188,25 @@ func (vote *Vote) String() string {
 		panic("Unknown vote type")
 	}
 
-	return fmt.Sprintf("Vote{%v:%X %v/%02d/%v(%v) %X %X %X %X}",
+	blockHashString := nilVoteStr
+	if len(vote.BlockID.Hash) > 0 {
+		blockHashString = fmt.Sprintf("%X", tmbytes.Fingerprint(vote.BlockID.Hash))
+	}
+
+	return fmt.Sprintf("Vote{%v:%X %v/%02d/%v(%s) %X %X %X}",
 		vote.ValidatorIndex,
 		tmbytes.Fingerprint(vote.ValidatorProTxHash),
 		vote.Height,
 		vote.Round,
-		vote.Type,
 		typeString,
-		tmbytes.Fingerprint(vote.BlockID.Hash),
+		blockHashString,
 		tmbytes.Fingerprint(vote.BlockSignature),
 		tmbytes.Fingerprint(vote.StateSignature),
 		vote.VoteExtensions.Fingerprint(),
 	)
 }
 
-// VerifyWithExtension performs the same verification as Verify, but
+// VerifyVoteAndExtension performs the same verification as Verify, but
 // additionally checks whether the vote extension signature corresponds to the
 // given chain ID and public key. We only verify vote extension signatures for
 // precommits.
@@ -255,6 +259,20 @@ func (vote *Vote) verifyBasic(proTxHash ProTxHash, pubKey crypto.PubKey) error {
 	// we must verify the stateID but only if the blockID isn't nil
 	if vote.BlockID.Hash == nil && vote.StateSignature != nil {
 		return ErrVoteStateSignatureShouldBeNil
+	}
+	return nil
+}
+
+// VerifyExtension checks whether the vote extension signature corresponds to the
+// given chain ID and public key.
+func (vote *Vote) VerifyExtension(chainID string, pubKey crypto.PubKey) error {
+	if vote.Type != tmproto.PrecommitType || vote.BlockID.IsNil() {
+		return nil
+	}
+	v := vote.ToProto()
+	extSignBytes := VoteExtensionSignBytes(chainID, v)
+	if !pubKey.VerifySignature(extSignBytes, vote.ExtensionSignature) {
+		return ErrVoteInvalidSignature
 	}
 	return nil
 }
@@ -360,6 +378,22 @@ func (vote *Vote) ValidateWithExtension() error {
 	}
 
 	return nil
+}
+
+// EnsureExtension checks for the presence of extensions signature data
+// on precommit vote types.
+func (vote *Vote) EnsureExtension() error {
+	// We should always see vote extension signatures in non-nil precommits
+	if vote.Type != tmproto.PrecommitType {
+		return nil
+	}
+	if vote.BlockID.IsNil() {
+		return nil
+	}
+	if len(vote.ExtensionSignature) > 0 {
+		return nil
+	}
+	return ErrVoteExtensionAbsent
 }
 
 // ToProto converts the handwritten type to proto generated type
