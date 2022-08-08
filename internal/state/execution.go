@@ -179,7 +179,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	ctx context.Context,
 	block *types.Block,
 	state State,
-) (bool, CurentRoundState, error) {
+) (CurentRoundState, error) {
 	version := block.Version.ToProto()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Hash:                block.Header.Hash(),
@@ -197,23 +197,29 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		Version:               &version,
 	})
 	if err != nil {
-		return false, CurentRoundState{}, ErrInvalidBlock(err)
+		return CurentRoundState{}, err
 	}
 	if resp.IsStatusUnknown() {
 		panic(fmt.Sprintf("ProcessProposal responded with status %s", resp.Status.String()))
 	}
 
+	accepted := resp.IsAccepted()
+	if !accepted {
+		return CurentRoundState{}, ErrBlockRejected
+	}
+
 	// update some round state data
 	stateChanges, err := state.NewStateChangeset(ctx, resp)
 	if err != nil {
-		return false, stateChanges, err
-	}
-	err = stateChanges.UpdateBlock(block)
-	if err != nil {
-		return false, stateChanges, err
+		return stateChanges, err
 	}
 
-	return resp.IsAccepted(), stateChanges, nil
+	err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block)
+	if err != nil {
+		return stateChanges, ErrInvalidBlock{err}
+	}
+
+	return stateChanges, nil
 }
 
 // ValidateBlock validates the given block against the given state.
@@ -259,7 +265,7 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 		)
 	}
 	if uncommittedState.ResultsHash != nil && !bytes.Equal(block.ResultsHash, uncommittedState.ResultsHash) {
-		return fmt.Errorf("wrong Block.Header.LastResultsHash.  Expected %X, got %v",
+		return fmt.Errorf("wrong Block.Header.ResultsHash.  Expected %X, got %v",
 			uncommittedState.ResultsHash,
 			block.ResultsHash,
 		)
@@ -320,12 +326,12 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 ) (State, error) {
 	// validate the block if we haven't already
 	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
-		return state, ErrInvalidBlock(err)
+		return state, ErrInvalidBlock{err}
 	}
 	startTime := time.Now().UnixNano()
 	_, finalizeBlockResponses, err := ExecCommitBlock(ctx, blockExec, blockExec.appClient, block, blockExec.logger, blockExec.store, -1, state, uncommittedState)
 	if err != nil {
-		return state, ErrInvalidBlock(err)
+		return state, ErrInvalidBlock{err}
 	}
 	endTime := time.Now().UnixNano()
 	blockExec.metrics.BlockProcessingTime.Observe(float64(endTime-startTime) / 1000000)
@@ -402,12 +408,9 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	state State,
 	blockID types.BlockID, block *types.Block,
 ) (State, error) {
-	accepted, uncommittedState, err := blockExec.ProcessProposal(ctx, block, state)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block, state)
 	if err != nil {
-		return state, ErrInvalidBlock(err)
-	}
-	if !accepted {
-		return state, ErrInvalidBlock(errors.New("block not accepted by abci app"))
+		return state, err
 	}
 
 	return blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block)

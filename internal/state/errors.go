@@ -1,10 +1,17 @@
 package state
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var (
+	ErrBlockRejected = errors.New("block not accepted by abci app")
+)
 
 type (
-	ErrInvalidBlock error
 	ErrProxyAppConn error
+	ErrInvalidBlock struct{ error }
 
 	ErrUnknownBlock struct {
 		Height int64

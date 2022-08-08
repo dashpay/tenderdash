@@ -15,6 +15,11 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
+const (
+	prepareProposal = "ResponsePrepareProposal"
+	processProposal = "ResponseProcessProposal"
+)
+
 // CurentRoundState ...
 type CurentRoundState struct {
 	// Base state for the changes
@@ -37,10 +42,16 @@ type CurentRoundState struct {
 
 	NextValidators              *types.ValidatorSet
 	LastHeightValidatorsChanged int64
+
+	// responseType points to responseType of state changes - prepareProposal, processProposal or empty string for nil
+	responseType string
 }
 
 // UpdateBlock changes block fields to reflect the ones returned in PrepareProposal / ProcessProposal
 func (candidate CurentRoundState) UpdateBlock(target *types.Block) error {
+	if candidate.responseType != prepareProposal {
+		return fmt.Errorf("block can be updated only based on '%s' response, got '%s'", processProposal, candidate.responseType)
+	}
 	target.AppHash = candidate.AppHash
 	target.ResultsHash = candidate.ResultsHash
 
@@ -49,6 +60,8 @@ func (candidate CurentRoundState) UpdateBlock(target *types.Block) error {
 	target.CoreChainLock = candidate.CoreChainLock
 	if candidate.CoreChainLock != nil {
 		target.CoreChainLockedHeight = candidate.CoreChainLock.CoreBlockHeight
+	} else {
+		target.CoreChainLockedHeight = candidate.Base.LastCoreChainLockedBlockHeight
 	}
 
 	return nil
@@ -84,6 +97,7 @@ func (candidate CurentRoundState) UpdateFunc(ctx context.Context, state State) (
 func (candidate *CurentRoundState) populate(ctx context.Context, proposalResponse proto.Message, baseState State) error {
 	switch resp := proposalResponse.(type) {
 	case *abci.ResponsePrepareProposal:
+		candidate.responseType = prepareProposal
 		return candidate.update(
 			ctx,
 			baseState,
@@ -95,6 +109,7 @@ func (candidate *CurentRoundState) populate(ctx context.Context, proposalRespons
 		)
 
 	case *abci.ResponseProcessProposal:
+		candidate.responseType = processProposal
 		if !resp.IsAccepted() {
 			return fmt.Errorf("proposal not accepted by abci app: %s", resp.Status)
 		}
@@ -126,7 +141,7 @@ func (candidate *CurentRoundState) update(
 	coreChainLockUpdate *types2.CoreChainLock,
 ) error {
 	candidate.Base = baseState
-	candidate.AppHash = appHash
+	candidate.AppHash = appHash.Copy()
 
 	if err := candidate.populateTxResults(txResults); err != nil {
 		return err

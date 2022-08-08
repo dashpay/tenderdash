@@ -196,7 +196,7 @@ func TestFinalizeBlockByzantineValidators(t *testing.T) {
 }
 
 func TestProcessProposal(t *testing.T) {
-	const height = 2
+	const height = 1
 	txs := factory.MakeNTxs(height, 10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -248,6 +248,10 @@ func TestProcessProposal(t *testing.T) {
 	block1, err := sf.MakeBlock(state, height, lastCommit, 1)
 	require.NoError(t, err)
 	block1.Txs = txs
+	txResults := factory.ExecTxResults(txs.ToSliceOfBytes())
+	block1.ResultsHash, err = abci.TxResultsHash(txResults)
+	require.NoError(t, err)
+
 	version := block1.Version.ToProto()
 
 	expectedRpp := &abci.RequestProcessProposal{
@@ -268,10 +272,13 @@ func TestProcessProposal(t *testing.T) {
 		ProposedAppVersion: 1,
 	}
 
-	app.On("ProcessProposal", mock.Anything, mock.Anything).Return(&abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT}, nil)
-	acceptBlock, uncommittedState, err := blockExec.ProcessProposal(ctx, block1, state)
+	app.On("ProcessProposal", mock.Anything, mock.Anything).Return(&abci.ResponseProcessProposal{
+		AppHash:   block1.AppHash,
+		TxResults: txResults,
+		Status:    abci.ResponseProcessProposal_ACCEPT,
+	}, nil)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, state)
 	require.NoError(t, err)
-	require.True(t, acceptBlock)
 	assert.NotZero(t, uncommittedState)
 	app.AssertExpectations(t)
 	app.AssertCalled(t, "ProcessProposal", ctx, expectedRpp)
@@ -497,12 +504,6 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	block, err := sf.MakeBlock(state, 1, new(types.Commit), 1)
-	require.NoError(t, err)
-	bps, err := block.MakePartSet(testPartSize)
-	require.NoError(t, err)
-	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
-
 	vals := state.Validators
 	proTxHashes := vals.GetProTxHashes()
 
@@ -528,7 +529,22 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 
 	app.ValidatorSetUpdate = newVals.ABCIEquivalentValidatorUpdates()
 
-	state, err = blockExec.ApplyBlock(ctx, state, blockID, block)
+	// state, err = blockExec.ApplyBlock(ctx, state, blockID, block)
+
+	block, uncommittedState, err := blockExec.CreateProposalBlock(
+		ctx,
+		1,
+		state,
+		types.NewCommit(state.LastBlockHeight, 0, state.LastBlockID, state.LastStateID, nil),
+		proTxHashes[0],
+		1,
+	)
+	require.NoError(t, err)
+	blockID, err := block.BlockID()
+	require.NoError(t, err)
+	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block)
+	require.NoError(t, err)
+
 	require.Nil(t, err)
 	// test new validator was added to NextValidators
 	if assert.Equal(t, state.LastValidators.Size()+1, state.Validators.Size()) {

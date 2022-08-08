@@ -75,6 +75,10 @@ func makeAndApplyGoodBlock(
 	require.NoError(t, blockExec.ValidateBlock(ctx, state, block))
 	blockID := types.BlockID{Hash: block.Hash(),
 		PartSetHeader: partSet.Header()}
+	txResults := factory.ExecTxResults(block.Txs.ToSliceOfBytes())
+	block.ResultsHash, err = abci.TxResultsHash(txResults)
+	require.NoError(t, err)
+
 	state, err = blockExec.ApplyBlock(ctx, state, blockID, block)
 	require.NoError(t, err)
 
@@ -308,22 +312,27 @@ func (app *testApp) Query(_ context.Context, req *abci.RequestQuery) (*abci.Resp
 	return &abci.ResponseQuery{}, nil
 }
 
+func (app *testApp) PrepareProposal(_ context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
+	resTxs := factory.ExecTxResults(req.Txs)
+	if resTxs == nil {
+		return &abci.ResponsePrepareProposal{}, nil
+	}
+	return &abci.ResponsePrepareProposal{
+		ValidatorSetUpdate: app.ValidatorSetUpdate,
+		ConsensusParamUpdates: &tmproto.ConsensusParams{
+			Version: &tmproto.VersionParams{
+				AppVersion: 1,
+			},
+		},
+		TxResults: resTxs,
+	}, nil
+}
+
 func (app *testApp) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
-	for _, tx := range req.Txs {
-		if len(tx) == 0 {
-			return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
-		}
+	resTxs := factory.ExecTxResults(req.Txs)
+	if resTxs == nil {
+		return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
 	}
-
-	resTxs := make([]*abci.ExecTxResult, len(req.Txs))
-	for i, tx := range req.Txs {
-		if len(tx) > 0 {
-			resTxs[i] = &abci.ExecTxResult{Code: abci.CodeTypeOK}
-		} else {
-			resTxs[i] = &abci.ExecTxResult{Code: abci.CodeTypeOK + 10} // error
-		}
-	}
-
 	return &abci.ResponseProcessProposal{
 		ValidatorSetUpdate: app.ValidatorSetUpdate,
 		ConsensusParamUpdates: &tmproto.ConsensusParams{

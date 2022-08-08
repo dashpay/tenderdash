@@ -437,12 +437,8 @@ func TestValidateBlockEvidence(t *testing.T) {
 				proposerProTxHash,
 				0,
 			)
-			changes, err := state.NewStateChangeset(ctx, nil)
-			assert.NoError(t, err)
-			err = changes.UpdateBlock(block)
-			assert.NoError(t, err, "update block")
 
-			err = blockExec.ValidateBlock(ctx, state, block)
+			err := blockExec.ValidateBlock(ctx, state, block)
 			if assert.Error(t, err) {
 				_, ok := err.(*types.ErrEvidenceOverflow)
 				require.True(

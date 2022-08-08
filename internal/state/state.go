@@ -301,7 +301,9 @@ func (state State) MakeBlock(
 		state.Version.Consensus, state.ChainID,
 		tmtime.Now(), state.LastBlockID,
 		validatorsHash, validatorsHash,
-		state.ConsensusParams.HashConsensusParams(), state.AppHash, state.LastResultsHash,
+		state.ConsensusParams.HashConsensusParams(),
+		state.AppHash,
+		state.LastResultsHash,
 		proposerProTxHash,
 		proposedAppVersion,
 	)

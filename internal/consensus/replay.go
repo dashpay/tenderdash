@@ -571,12 +571,9 @@ func (h *Handshaker) replayBlocks(
 			blockExec = sm.NewBlockExecutor(h.stateStore, h.logger, appClient, emptyMempool{}, sm.EmptyEvidencePool{}, h.store, h.eventBus, sm.NopMetrics())
 		}
 
-		accepted, uncommittedState, err := blockExec.ProcessProposal(ctx, block, state)
+		uncommittedState, err := blockExec.ProcessProposal(ctx, block, state)
 		if err != nil {
 			return nil, fmt.Errorf("replay process proposal: %w", err)
-		}
-		if !accepted {
-			return nil, fmt.Errorf("replay process proposal: block %d rejected by ABCI app", block.Height)
 		}
 
 		appHash, _, err = sm.ExecCommitBlock(ctx, blockExec, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state, uncommittedState)

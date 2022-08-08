@@ -1701,28 +1701,25 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	isAppValid, uncommittedState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state)
+	uncommittedState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state)
 	if err != nil {
+		if errors.Is(err, sm.ErrBlockRejected) {
+			logger.Error("prevote step: state machine rejected a proposed block; this should not happen:"+
+				"the proposer may be misbehaving; prevoting nil", "err", err)
+			cs.signAddVote(ctx, tmproto.PrevoteType, nil, types.PartSetHeader{})
+			return
+		}
+
+		if errors.As(err, &sm.ErrInvalidBlock{}) {
+			logger.Error("prevote step: consensus deems this block invalid; prevoting nil", "err", err)
+			cs.signAddVote(ctx, tmproto.PrevoteType, nil, types.PartSetHeader{})
+			return
+		}
+
+		// Unknown error, so we panic
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
 	cs.RoundState.CurentRoundState = uncommittedState
-
-	// Validate proposal block, from Tendermint's perspective
-	err = cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurentRoundState, cs.ProposalBlock)
-	if err != nil {
-		// ProposalBlock is invalid, prevote nil.
-		logger.Error("prevote step: consensus deems this block invalid; prevoting nil", "err", err)
-		cs.signAddVote(ctx, tmproto.PrevoteType, nil, types.PartSetHeader{})
-		return
-	}
-
-	// Vote nil if the Application rejected the block
-	if !isAppValid {
-		logger.Error("prevote step: state machine rejected a proposed block; this should not happen:"+
-			"the proposer may be misbehaving; prevoting nil", "err", err)
-		cs.signAddVote(ctx, tmproto.PrevoteType, nil, types.PartSetHeader{})
-		return
-	}
 
 	/*
 		22: upon <PROPOSAL, h_p, round_p, v, −1> from proposer(h_p, round_p) while step_p = propose do

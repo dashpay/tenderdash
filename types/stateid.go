@@ -9,6 +9,7 @@ import (
 	"strconv"
 
 	"github.com/dashevo/dashd-go/btcjson"
+
 	"github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -24,7 +25,7 @@ type StateID struct {
 
 	// Height of last committed block
 	Height int64 `json:"height"`
-	// LastAppHash used in last committed block
+	// LastAppHash used in current block
 	LastAppHash tmbytes.HexBytes `json:"last_app_hash"`
 }
 

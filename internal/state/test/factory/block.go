@@ -64,13 +64,8 @@ func MakeBlock(state sm.State, height int64, c *types.Commit, proposedAppVersion
 		state.Validators.GetProposer().ProTxHash,
 		proposedAppVersion,
 	)
-
-	updates, err := state.NewStateChangeset(context.TODO(), nil)
-	if err != nil {
-		return nil, err
-	}
-	err = updates.UpdateBlock(block)
-	if err != nil {
+	var err error
+	if block.ResultsHash, err = abci.TxResultsHash(factory.ExecTxResults(block.Txs.ToSliceOfBytes())); err != nil {
 		return nil, err
 	}
 
