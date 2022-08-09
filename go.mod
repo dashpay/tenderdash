@@ -6,10 +6,10 @@ require (
 	github.com/BurntSushi/toml v1.0.0
 	github.com/Microsoft/go-winio v0.5.2 // indirect
 	github.com/Workiva/go-datastructures v1.0.53
-	github.com/adlio/schema v1.3.0
+	github.com/adlio/schema v1.3.3
 	github.com/btcsuite/btcd v0.22.0-beta
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
-	github.com/containerd/continuity v0.2.2 // indirect
+	github.com/containerd/continuity v0.3.0 // indirect
 	github.com/dashevo/dashd-go v0.23.4
 	github.com/dashevo/dashd-go/btcec/v2 v2.0.6 // indirect
 	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20201127091120-745324b80143
@@ -46,7 +46,7 @@ require (
 	github.com/minio/highwayhash v1.0.2
 	github.com/mroth/weightedrand v0.4.1
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20220328075252-7dd334e3daae
-	github.com/opencontainers/runc v1.1.1 // indirect
+	github.com/opencontainers/runc v1.1.3 // indirect
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/petermattis/goid v0.0.0-20220302125637-5f11c28912df // indirect
 	github.com/prometheus/client_golang v1.12.1
@@ -64,9 +64,9 @@ require (
 	github.com/tendermint/tm-db v0.6.6
 	github.com/vektra/mockery/v2 v2.10.0
 	golang.org/x/crypto v0.0.0-20220321153916-2c7772ba3064
-	golang.org/x/net v0.0.0-20220325170049-de3da57026de
+	golang.org/x/net v0.0.0-20220617184016-355a448f1bc9
 	golang.org/x/sync v0.0.0-20210220032951-036812b2e83c
-	golang.org/x/sys v0.0.0-20220330033206-e17cdc41300f // indirect
+	golang.org/x/sys v0.0.0-20220615213510-4f61da869c0c // indirect
 	golang.org/x/time v0.0.0-20220224211638-0e9765cccd65 // indirect
 	google.golang.org/genproto v0.0.0-20220329172620-7be39ac1afc7 // indirect
 	google.golang.org/grpc v1.45.0
@@ -144,6 +144,7 @@ require (
 	github.com/gostaticanalysis/comment v1.4.2 // indirect
 	github.com/gostaticanalysis/forcetypeassert v0.1.0 // indirect
 	github.com/gostaticanalysis/nilerr v0.1.1 // indirect
+	github.com/gotestyourself/gotestyourself v2.2.0+incompatible // indirect
 	github.com/hashicorp/hcl v1.0.0 // indirect
 	github.com/hexops/gotextdiff v1.0.3 // indirect
 	github.com/inconshreveable/mousetrap v1.0.0 // indirect
@@ -170,7 +171,7 @@ require (
 	github.com/mgechev/dots v0.0.0-20210922191527-e955255bf517 // indirect
 	github.com/mgechev/revive v1.1.4 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
-	github.com/mitchellh/mapstructure v1.4.3 // indirect
+	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/moricho/tparallel v0.2.1 // indirect
 	github.com/nakabonne/nestif v0.3.1 // indirect
 	github.com/nbutton23/zxcvbn-go v0.0.0-20210217022336-fa2cb2858354 // indirect
@@ -226,7 +227,8 @@ require (
 	golang.org/x/xerrors v0.0.0-20200804184101-5ec99f83aff1 // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gopkg.in/yaml.v3 v3.0.0-20210107192922-496545a6307b // indirect
+	gopkg.in/yaml.v3 v3.0.0 // indirect
+	gotest.tools v2.2.0+incompatible // indirect
 	honnef.co/go/tools v0.2.2 // indirect
 	mvdan.cc/gofumpt v0.2.1 // indirect
 	mvdan.cc/interfacer v0.0.0-20180901003855-c20040233aed // indirect
