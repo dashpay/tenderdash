@@ -89,7 +89,7 @@ type Vote struct {
 	BlockSignature     tmbytes.HexBytes      `json:"block_signature"`
 	StateSignature     tmbytes.HexBytes      `json:"state_signature"`
 	VoteExtensions     VoteExtensions        `json:"vote_extensions"`
-	AppHash            []byte                `json:"app_hash"`
+	AppHash            tmbytes.HexBytes      `json:"app_hash"`
 }
 
 // VoteFromProto attempts to convert the given serialization (Protobuf) type to

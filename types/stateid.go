@@ -73,9 +73,12 @@ func (stateID StateID) SignBytes(chainID string) []byte {
 	bz := make([]byte, 8)
 	binary.LittleEndian.PutUint64(bz, uint64(stateID.Height))
 
-	lastAppHash := make([]byte, len(stateID.LastAppHash))
-	copy(lastAppHash, stateID.LastAppHash)
-	bz = append(bz, lastAppHash...)
+	appHash := stateID.LastAppHash
+	if len(appHash) == 0 {
+		appHash = make([]byte, crypto.DefaultAppHashSize)
+	}
+
+	bz = append(bz, appHash...)
 	return bz
 }
 

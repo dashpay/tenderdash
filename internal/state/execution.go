@@ -266,13 +266,13 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 
 	// Validate app info
 	if uncommittedState.AppHash != nil && !bytes.Equal(block.AppHash, uncommittedState.AppHash) {
-		return fmt.Errorf("wrong Block.Header.AppHash.  Expected %X, got %v",
+		return fmt.Errorf("wrong Block.Header.AppHash.  Expected %X, got %X",
 			uncommittedState.AppHash,
 			block.AppHash,
 		)
 	}
 	if uncommittedState.ResultsHash != nil && !bytes.Equal(block.ResultsHash, uncommittedState.ResultsHash) {
-		return fmt.Errorf("wrong Block.Header.ResultsHash.  Expected %X, got %v",
+		return fmt.Errorf("wrong Block.Header.ResultsHash.  Expected %X, got %X",
 			uncommittedState.ResultsHash,
 			block.ResultsHash,
 		)

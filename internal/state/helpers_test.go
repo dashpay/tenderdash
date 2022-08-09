@@ -129,7 +129,7 @@ func makeState(t *testing.T, nVals, height int) (sm.State, dbm.DB, map[string]ty
 		Validators:         genVals,
 		ThresholdPublicKey: vals.ThresholdPublicKey,
 		QuorumHash:         vals.QuorumHash,
-		AppHash:            nil,
+		AppHash:            make([]byte, crypto.DefaultAppHashSize),
 	})
 
 	stateDB := dbm.NewMemDB()
