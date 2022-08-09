@@ -7,6 +7,7 @@ import (
 
 	"github.com/gogo/protobuf/jsonpb"
 
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 )
@@ -205,4 +206,26 @@ func TxResultsHash(txResults []*ExecTxResult) (tmbytes.HexBytes, error) {
 		return nil, fmt.Errorf("marshaling TxResults: %w", err)
 	}
 	return merkle.HashFromByteSlices(rs), nil
+}
+
+func (r ResponsePrepareProposal) Validate() error {
+	if !isValidApphash(r.AppHash) {
+		return fmt.Errorf("apphash (%X) of size %d is invalid", r.AppHash, len(r.AppHash))
+	}
+	if len(r.TxRecords) != len(r.TxResults) {
+		return fmt.Errorf("tx records len %d does not match tx results len %d", len(r.TxRecords), len(r.TxResults))
+	}
+
+	return nil
+}
+func isValidApphash(apphash tmbytes.HexBytes) bool {
+	return len(apphash) >= crypto.SmallAppHashSize && len(apphash) <= crypto.LargeAppHashSize
+}
+
+func (r ResponseProcessProposal) Validate() error {
+	if !isValidApphash(r.AppHash) {
+		return fmt.Errorf("apphash (%X) has wrong size %d, expected: %d", r.AppHash, len(r.AppHash), crypto.DefaultAppHashSize)
+	}
+
+	return nil
 }

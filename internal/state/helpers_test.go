@@ -75,7 +75,7 @@ func makeAndApplyGoodBlock(
 	require.NoError(t, blockExec.ValidateBlock(ctx, state, block))
 	blockID := types.BlockID{Hash: block.Hash(),
 		PartSetHeader: partSet.Header()}
-	txResults := factory.ExecTxResults(block.Txs.ToSliceOfBytes())
+	txResults := factory.ExecTxResults(block.Txs)
 	block.ResultsHash, err = abci.TxResultsHash(txResults)
 	require.NoError(t, err)
 
@@ -313,11 +313,12 @@ func (app *testApp) Query(_ context.Context, req *abci.RequestQuery) (*abci.Resp
 }
 
 func (app *testApp) PrepareProposal(_ context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
-	resTxs := factory.ExecTxResults(req.Txs)
+	resTxs := factory.ExecTxResults(types.NewTxs(req.Txs))
 	if resTxs == nil {
 		return &abci.ResponsePrepareProposal{}, nil
 	}
 	return &abci.ResponsePrepareProposal{
+		AppHash:            make([]byte, crypto.DefaultAppHashSize),
 		ValidatorSetUpdate: app.ValidatorSetUpdate,
 		ConsensusParamUpdates: &tmproto.ConsensusParams{
 			Version: &tmproto.VersionParams{
@@ -329,11 +330,12 @@ func (app *testApp) PrepareProposal(_ context.Context, req *abci.RequestPrepareP
 }
 
 func (app *testApp) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
-	resTxs := factory.ExecTxResults(req.Txs)
+	resTxs := factory.ExecTxResults(types.NewTxs(req.Txs))
 	if resTxs == nil {
 		return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_REJECT}, nil
 	}
 	return &abci.ResponseProcessProposal{
+		AppHash:            make([]byte, crypto.DefaultAppHashSize),
 		ValidatorSetUpdate: app.ValidatorSetUpdate,
 		ConsensusParamUpdates: &tmproto.ConsensusParams{
 			Version: &tmproto.VersionParams{

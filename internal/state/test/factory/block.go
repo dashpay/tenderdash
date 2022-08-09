@@ -65,7 +65,8 @@ func MakeBlock(state sm.State, height int64, c *types.Commit, proposedAppVersion
 		proposedAppVersion,
 	)
 	var err error
-	if block.ResultsHash, err = abci.TxResultsHash(factory.ExecTxResults(block.Txs.ToSliceOfBytes())); err != nil {
+	block.AppHash = make([]byte, crypto.DefaultAppHashSize)
+	if block.ResultsHash, err = abci.TxResultsHash(factory.ExecTxResults(block.Txs)); err != nil {
 		return nil, err
 	}
 

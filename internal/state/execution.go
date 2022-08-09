@@ -140,6 +140,11 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		// error for now (the production code calling this function is expected to panic).
 		return nil, CurentRoundState{}, err
 	}
+
+	if err := rpp.Validate(); err != nil {
+		return nil, CurentRoundState{}, fmt.Errorf("PrepareProposal responded with invalid response: %w", err)
+	}
+
 	txrSet := types.NewTxRecordSet(rpp.TxRecords)
 
 	if err := txrSet.Validate(maxDataBytes, block.Txs); err != nil {
@@ -200,9 +205,11 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		return CurentRoundState{}, err
 	}
 	if resp.IsStatusUnknown() {
-		panic(fmt.Sprintf("ProcessProposal responded with status %s", resp.Status.String()))
+		return CurentRoundState{}, fmt.Errorf("ProcessProposal responded with status %s", resp.Status.String())
 	}
-
+	if err := resp.Validate(); err != nil {
+		return CurentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
+	}
 	accepted := resp.IsAccepted()
 	if !accepted {
 		return CurentRoundState{}, ErrBlockRejected
@@ -277,7 +284,6 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 			return fmt.Errorf("error validating block: %w", err)
 		}
 	}
-
 	if !bytes.Equal(block.NextValidatorsHash, uncommittedState.NextValidators.Hash()) {
 		return fmt.Errorf("wrong Block.Header.NextValidatorsHash.  Expected %X, got %v",
 			uncommittedState.NextValidators.Hash(),

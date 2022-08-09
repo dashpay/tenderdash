@@ -13,7 +13,7 @@ func MakeNTxs(height, n int64) types.Txs {
 	return txs
 }
 
-func ExecTxResults(txs [][]byte) []*abci.ExecTxResult {
+func ExecTxResults(txs types.Txs) []*abci.ExecTxResult {
 	resTxs := make([]*abci.ExecTxResult, len(txs))
 
 	for i, tx := range txs {
