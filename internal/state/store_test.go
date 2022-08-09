@@ -53,7 +53,7 @@ func TestStoreLoadValidators(t *testing.T) {
 	vals, _ := types.RandValidatorSet(3)
 
 	// 1) LoadValidators loads validators using a height where they were last changed
-	// Note that only the next validators at height h are saved
+	// Note that only the current validators at height h are saved
 	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals, 1, 1)))
 	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals.CopyIncrementProposerPriority(1), 2, 1)))
 	loadedVals, err := stateStore.LoadValidators(2)
@@ -66,27 +66,27 @@ func TestStoreLoadValidators(t *testing.T) {
 
 	// 2) LoadValidators loads validators using a checkpoint height
 
-	// add a validator set at the checkpoint
-	err = stateStore.Save(makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval, 1))
+	// add a validator set after the checkpoint
+	state := makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval+1, 1)
+	err = stateStore.Save(state)
 	require.NoError(t, err)
 
 	// check that a request will go back to the last checkpoint
-	_, err = stateStore.LoadValidators(valSetCheckpointInterval + 2)
+	_, err = stateStore.LoadValidators(valSetCheckpointInterval + 1)
 	require.Error(t, err)
 	require.Equal(t, fmt.Sprintf("couldn't find validators at height %d (height %d was originally requested): "+
 		"value retrieved from db is empty",
 		valSetCheckpointInterval, valSetCheckpointInterval+1), err.Error())
 
 	// now save a validator set at that checkpoint
-	err = stateStore.Save(makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval-1, 1))
+	err = stateStore.Save(makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval, 1))
 	require.NoError(t, err)
 
 	loadedVals, err = stateStore.LoadValidators(valSetCheckpointInterval)
 	require.NoError(t, err)
-	// validator set gets updated with the one given hence we expect it to equal next validators (with an increment of one)
-	// as opposed to being equal to an increment of 100000 - 1 (if we didn't save at the checkpoint)
-	require.Equal(t, vals.CopyIncrementProposerPriority(2), loadedVals)
-	require.NotEqual(t, vals.CopyIncrementProposerPriority(valSetCheckpointInterval), loadedVals)
+	// ensure we have correct validator set loaded
+	require.Equal(t, vals.CopyIncrementProposerPriority(valSetCheckpointInterval), loadedVals)
+	require.NotEqual(t, vals.CopyIncrementProposerPriority(valSetCheckpointInterval-1), loadedVals)
 }
 
 // This benchmarks the speed of loading validators from different heights if there is no validator set change.

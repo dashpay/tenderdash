@@ -161,7 +161,6 @@ func (candidate *CurentRoundState) update(
 	return nil
 }
 
-// Height returns height of current block
 func (candidate CurentRoundState) StateID() types.StateID {
 	var appHash tmbytes.HexBytes
 	if len(candidate.AppHash) > 0 {
