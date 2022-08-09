@@ -7,6 +7,7 @@ import (
 
 	"github.com/tendermint/tendermint/abci/example/code"
 	"github.com/tendermint/tendermint/abci/types"
+	tmcrypto "github.com/tendermint/tendermint/crypto"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
@@ -89,6 +90,7 @@ func (app *Application) Query(_ context.Context, reqQuery *types.RequestQuery) (
 func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error) {
 	app.handleRequest(req.Height, req.Txs)
 	resp := types.ResponsePrepareProposal{
+		AppHash:             make([]byte, tmcrypto.DefaultAppHashSize),
 		CoreChainLockUpdate: app.lastCoreChainLock.ToProto(),
 		TxResults:           app.lastTxResults,
 	}
@@ -98,6 +100,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 func (app *Application) ProcessProposal(_ context.Context, req *types.RequestProcessProposal) (*types.ResponseProcessProposal, error) {
 	app.handleRequest(req.Height, req.Txs)
 	resp := types.ResponseProcessProposal{
+		AppHash:             make([]byte, tmcrypto.DefaultAppHashSize),
 		Status:              types.ResponseProcessProposal_ACCEPT,
 		CoreChainLockUpdate: app.lastCoreChainLock.ToProto(),
 		TxResults:           app.lastTxResults,

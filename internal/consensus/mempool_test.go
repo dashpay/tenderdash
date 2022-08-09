@@ -14,6 +14,7 @@ import (
 
 	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/mempool"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/store"
@@ -346,9 +347,17 @@ func (app *CounterApplication) PrepareProposal(_ context.Context, req *abci.Requ
 			Tx:     tx,
 		})
 	}
-	return &abci.ResponsePrepareProposal{TxRecords: trs, TxResults: app.txResults(req.Txs)}, nil
+	return &abci.ResponsePrepareProposal{
+		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+		TxRecords: trs,
+		TxResults: app.txResults(req.Txs),
+	}, nil
 }
 
 func (app *CounterApplication) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
-	return &abci.ResponseProcessProposal{Status: abci.ResponseProcessProposal_ACCEPT, TxResults: app.txResults(req.Txs)}, nil
+	return &abci.ResponseProcessProposal{
+		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+		Status:    abci.ResponseProcessProposal_ACCEPT,
+		TxResults: app.txResults(req.Txs),
+	}, nil
 }
