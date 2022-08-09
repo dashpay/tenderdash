@@ -57,7 +57,7 @@ require (
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/snikch/goodman v0.0.0-20171125024755-10e37e294daa
 	github.com/spf13/afero v1.8.2 // indirect
-	github.com/spf13/cobra v1.4.0
+	github.com/spf13/cobra v1.5.0
 	github.com/spf13/viper v1.10.1
 	github.com/stretchr/objx v0.3.0 // indirect
 	github.com/stretchr/testify v1.7.1
