@@ -1,3 +1,12 @@
+## [0.8.0-dev.7] - 2022-08-10
+
+### Bug Fixes
+
+- A block with a height is equal initial-height uses current time instead of genesis last-block-time
+- Update block time validation
+- Change validateBlockTime function
+- Update evidence_test.go
+
 ## [0.8.0-dev.4] - 2022-05-03
 
 ### Bug Fixes
