@@ -190,11 +190,9 @@ func validateBlock(state State, block *types.Block) error {
 
 func validateBlockTime(allowedTimeWindow time.Duration, state State, block *types.Block) error {
 	if block.Height == state.InitialHeight {
-		afterLast := state.LastBlockTime.Add(5 * time.Second)
-		beforeLast := state.LastBlockTime.Add(-5 * time.Second)
-		if block.Time.After(afterLast) || block.Time.Before(beforeLast) {
-			return fmt.Errorf("block time %v is out of window [%v, %v]",
-				block.Time, afterLast, beforeLast)
+		if block.Time.Before(state.LastBlockTime) {
+			return fmt.Errorf("block time %v is before last-block-time %v",
+				block.Time, state.LastBlockTime)
 		}
 	} else {
 		// Validate block Time is within a range of current time
