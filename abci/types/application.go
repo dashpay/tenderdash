@@ -1,6 +1,10 @@
 package types
 
-import "context"
+import (
+	"context"
+
+	"github.com/tendermint/tendermint/crypto"
+)
 
 //go:generate ../../scripts/mockery_generate.sh Application
 // Application is an interface that enables any finite, deterministic state machine
@@ -104,6 +108,7 @@ func (BaseApplication) PrepareProposal(_ context.Context, req *RequestPreparePro
 		})
 	}
 	return &ResponsePrepareProposal{TxRecords: trs,
+		AppHash:   make([]byte, crypto.DefaultAppHashSize),
 		TxResults: txResults(req.Txs),
 	}, nil
 }
@@ -118,6 +123,7 @@ func txResults(txs [][]byte) []*ExecTxResult {
 
 func (BaseApplication) ProcessProposal(_ context.Context, req *RequestProcessProposal) (*ResponseProcessProposal, error) {
 	return &ResponseProcessProposal{
+		AppHash:   make([]byte, crypto.DefaultAppHashSize),
 		Status:    ResponseProcessProposal_ACCEPT,
 		TxResults: txResults(req.Txs),
 	}, nil
