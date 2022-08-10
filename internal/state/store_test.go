@@ -200,8 +200,8 @@ func TestPruneStates(t *testing.T) {
 			paramsChanged := int64(0)
 
 			for h := tc.startHeight; h <= tc.endHeight; h++ {
-				if valsChanged == 0 || h%10 == 2 {
-					valsChanged = h + 1 // Have to add 1, since NextValidators is what's stored
+				if valsChanged == 0 || h%10 == 3 {
+					valsChanged = h
 				}
 				if paramsChanged == 0 || h%10 == 5 {
 					paramsChanged = h

@@ -444,13 +444,15 @@ func (store dbStore) SaveABCIResponses(height int64, abciResponses *tmstate.ABCI
 func (store dbStore) saveABCIResponses(height int64, abciResponses *tmstate.ABCIResponses) error {
 	var dtxs []*abci.ExecTxResult
 	// strip nil values,
-	for _, tx := range abciResponses.ProcessProposal.TxResults {
-		if tx != nil {
-			dtxs = append(dtxs, tx)
+	if abciResponses.ProcessProposal != nil {
+		for _, tx := range abciResponses.ProcessProposal.TxResults {
+			if tx != nil {
+				dtxs = append(dtxs, tx)
+			}
 		}
-	}
 
-	abciResponses.ProcessProposal.TxResults = dtxs
+		abciResponses.ProcessProposal.TxResults = dtxs
+	}
 
 	bz, err := abciResponses.Marshal()
 	if err != nil {
