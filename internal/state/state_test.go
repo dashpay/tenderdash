@@ -1154,11 +1154,6 @@ func TestState_StateID(t *testing.T) {
 
 	err = stateID.ValidateBasic()
 	assert.NoError(t, err, "StateID validation failed")
-
-	err = changes.UpdateState(context.TODO(), &state)
-	assert.NoError(t, err)
-	assert.Equal(t, stateID, state.LastStateID)
-
 }
 
 func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.CurentRoundState) sm.State {

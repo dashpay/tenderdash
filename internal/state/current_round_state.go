@@ -71,7 +71,6 @@ func (candidate CurentRoundState) UpdateBlock(target *types.Block) error {
 // UpdateState updates state when the block is committed. State will contain data needed by next block.
 func (candidate CurentRoundState) UpdateState(ctx context.Context, target *State) error {
 	target.AppHash = candidate.AppHash
-	target.LastStateID = candidate.StateID()
 
 	target.LastResultsHash = candidate.ResultsHash
 
