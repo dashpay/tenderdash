@@ -23,16 +23,13 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// For some reason the empty node used in tests has a time of
-// 2018-10-10 08:20:13.695936996 +0000 UTC
-// this is because the test genesis time is set here
-// so in order to validate evidence we need evidence to be the same time
-var defaultTestTime = time.Date(2018, 10, 10, 8, 20, 13, 695936996, time.UTC)
-
 func newEvidence(t *testing.T, val *privval.FilePV,
 	vote *types.Vote, vote2 *types.Vote,
 	chainID string, stateID types.StateID,
-	quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash) *types.DuplicateVoteEvidence {
+	quorumType btcjson.LLMQType,
+	quorumHash crypto.QuorumHash,
+	timestamp time.Time,
+) *types.DuplicateVoteEvidence {
 	t.Helper()
 	var err error
 
@@ -57,7 +54,7 @@ func newEvidence(t *testing.T, val *privval.FilePV,
 	validator := types.NewValidator(privKey.PubKey(), types.DefaultDashVotingPower, val.Key.ProTxHash, "")
 	valSet := types.NewValidatorSet([]*types.Validator{validator}, validator.PubKey, quorumType, quorumHash, true)
 
-	ev, err := types.NewDuplicateVoteEvidence(vote, vote2, defaultTestTime, valSet)
+	ev, err := types.NewDuplicateVoteEvidence(vote, vote2, timestamp, valSet)
 	require.NoError(t, err)
 	return ev
 }
@@ -68,6 +65,7 @@ func makeEvidences(
 	chainID string,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
+	timestamp time.Time,
 ) (correct *types.DuplicateVoteEvidence, fakes []*types.DuplicateVoteEvidence) {
 	vote := types.Vote{
 		ValidatorProTxHash: val.Key.ProTxHash,
@@ -88,7 +86,7 @@ func makeEvidences(
 
 	vote2 := vote
 	vote2.BlockID.Hash = tmhash.Sum([]byte("blockhash2"))
-	correct = newEvidence(t, val, &vote, &vote2, chainID, stateID, quorumType, quorumHash)
+	correct = newEvidence(t, val, &vote, &vote2, chainID, stateID, quorumType, quorumHash, timestamp)
 
 	fakes = make([]*types.DuplicateVoteEvidence, 0)
 
@@ -96,34 +94,34 @@ func makeEvidences(
 	{
 		v := vote2
 		v.ValidatorProTxHash = []byte("some_pro_tx_hash")
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash, timestamp))
 	}
 
 	// different height
 	{
 		v := vote2
 		v.Height = vote.Height + 1
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash, timestamp))
 	}
 
 	// different round
 	{
 		v := vote2
 		v.Round = vote.Round + 1
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash, timestamp))
 	}
 
 	// different type
 	{
 		v := vote2
 		v.Type = tmproto.PrecommitType
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash, timestamp))
 	}
 
 	// exactly same vote
 	{
 		v := vote
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash, timestamp))
 	}
 
 	return correct, fakes
@@ -142,11 +140,15 @@ func TestBroadcastEvidence_DuplicateVoteEvidence(t *testing.T) {
 	for i, c := range GetClients(t, n, config) {
 		vals, err := c.Validators(ctx, libs.Int64Ptr(1), nil, nil, libs.BoolPtr(true))
 		require.NoError(t, err)
-		correct, fakes := makeEvidences(t, pv, chainID, vals.QuorumType, *vals.QuorumHash)
-		t.Logf("client %d", i)
 
 		// make sure that the node has produced enough blocks
 		waitForBlock(ctx, t, c, 2)
+
+		evidenceHeight := int64(1)
+		block, _ := c.Block(ctx, &evidenceHeight)
+		ts := block.Block.Time
+		correct, fakes := makeEvidences(t, pv, chainID, vals.QuorumType, *vals.QuorumHash, ts)
+		t.Logf("client %d", i)
 
 		result, err := c.BroadcastEvidence(ctx, correct)
 		require.NoError(t, err, "BroadcastEvidence(%s) failed", correct)
