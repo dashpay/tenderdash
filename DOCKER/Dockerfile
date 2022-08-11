@@ -13,7 +13,7 @@ RUN make install-bls
 RUN make build-linux
 
 # stage 2
-FROM alpine:3.9
+FROM alpine:3.15
 LABEL maintainer="developers@dash.org"
 
 # Tenderdash will be looking for the genesis file in /tenderdash/config/genesis.json
