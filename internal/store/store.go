@@ -528,6 +528,11 @@ func (bs *BlockStore) saveBlockToBatch(batch dbm.Batch, block *types.Block, bloc
 		return err
 	}
 
+	// stores seen-commit with a height, because tendermint does the same but only for extended commit
+	if err := batch.Set(blockCommitKey(height), seenCommitBytes); err != nil {
+		return err
+	}
+
 	return nil
 }
 
