@@ -346,7 +346,7 @@ func (app *CounterApplication) Commit(context.Context) (*abci.ResponseCommit, er
 	}
 	hash := make([]byte, 32)
 	binary.BigEndian.PutUint64(hash, uint64(app.txCount))
-	return &abci.ResponseCommit{Data: hash}, nil
+	return &abci.ResponseCommit{}, nil
 }
 
 func (app *CounterApplication) PrepareProposal(_ context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {

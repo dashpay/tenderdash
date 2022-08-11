@@ -43,7 +43,7 @@ func (p testPeer) runInputRoutine() {
 // Request desired, pretend like we got the block immediately.
 func (p testPeer) simulateInput(input inputData) {
 	block := &types.Block{Header: types.Header{Height: input.request.Height}}
-	extCommit := &types.ExtendedCommit{
+	extCommit := &types.Commit{
 		Height: input.request.Height,
 	}
 	_ = input.pool.AddBlock(input.request.PeerID, block, extCommit, 123)

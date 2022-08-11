@@ -148,7 +148,10 @@ type validatorUpdateJSON struct {
 }
 
 func (v *ValidatorUpdate) MarshalJSON() ([]byte, error) {
-	key, err := encoding.PubKeyFromProto(v.PubKey)
+	if v.PubKey == nil {
+		return nil, nil
+	}
+	key, err := encoding.PubKeyFromProto(*v.PubKey)
 	if err != nil {
 		return nil, err
 	}
@@ -175,7 +178,7 @@ func (v *ValidatorUpdate) UnmarshalJSON(data []byte) error {
 	if err != nil {
 		return err
 	}
-	v.PubKey = pkey
+	v.PubKey = &pkey
 	v.Power = vu.Power
 	return nil
 }

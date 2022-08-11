@@ -1715,5 +1715,13 @@ func (m *PeerManager) UpdatePeerInfo(nodeID types.NodeID, modifier func(peerInfo
 func (m *PeerManager) IsDialingOrConnected(nodeID types.NodeID) bool {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
-	return m.dialing[nodeID] || m.connected[nodeID]
+	_, ok := m.connected[nodeID]
+	return m.dialing[nodeID] || ok
+}
+
+// SetProTxHashToPeerInfo sets a proTxHash in peerInfo.proTxHash to keep this value in a store
+func SetProTxHashToPeerInfo(proTxHash types.ProTxHash) func(info *peerInfo) {
+	return func(info *peerInfo) {
+		info.ProTxHash = proTxHash.Copy()
+	}
 }

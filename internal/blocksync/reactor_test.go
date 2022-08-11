@@ -96,6 +96,7 @@ func setup(
 func makeReactor(
 	ctx context.Context,
 	t *testing.T,
+	proTxHash types.ProTxHash,
 	nodeID types.NodeID,
 	genDoc *types.GenesisDoc,
 	privVal types.PrivValidator,
@@ -111,7 +112,6 @@ func makeReactor(
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
 	blockStore := store.NewBlockStore(blockDB)
-	proTxHash := rts.network.Nodes[nodeID].NodeInfo.ProTxHash
 
 	state, err := sm.MakeGenesisState(genDoc)
 	require.NoError(t, err)
@@ -135,7 +135,7 @@ func makeReactor(
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
 		log.NewNopLogger(),
-		rts.app[nodeID],
+		app,
 		mp,
 		sm.EmptyEvidencePool{},
 		blockStore,
@@ -182,21 +182,22 @@ func (rts *reactorTestSuite) addNode(
 		return rts.blockSyncChannels[nodeID], nil
 	}
 
+	proTxHash := rts.network.Nodes[nodeID].NodeInfo.ProTxHash
 	peerEvents := func(ctx context.Context) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] }
-	reactor := makeReactor(ctx, t, nodeID, genDoc, privVal, chCreator, peerEvents)
+	reactor := makeReactor(ctx, t, proTxHash, nodeID, genDoc, privVal, chCreator, peerEvents)
 
-	lastExtCommit := &types.ExtendedCommit{}
+	commit := types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil)
 
 	state, err := reactor.stateStore.Load()
 	require.NoError(t, err)
 	for blockHeight := int64(1); blockHeight <= maxBlockHeight; blockHeight++ {
-		block, blockID, partSet, seenExtCommit := makeNextBlock(ctx, t, state, privVal, blockHeight, lastExtCommit)
+		block, blockID, partSet, seenCommit := makeNextBlock(ctx, t, state, privVal, blockHeight, commit)
 
-		state, err = reactor.blockExec.ApplyBlock(ctx, state, blockID, block)
+		state, err = reactor.blockExec.ApplyBlock(ctx, state, proTxHash, blockID, block)
 		require.NoError(t, err)
 
-		reactor.store.SaveBlockWithExtendedCommit(block, partSet, seenExtCommit)
-		lastExtCommit = seenExtCommit
+		reactor.store.SaveBlock(block, partSet, seenCommit)
+		commit = seenCommit
 	}
 
 	rts.reactors[nodeID] = reactor
@@ -209,11 +210,10 @@ func makeNextBlock(ctx context.Context,
 	state sm.State,
 	signer types.PrivValidator,
 	height int64,
-	lc *types.ExtendedCommit) (*types.Block, types.BlockID, *types.PartSet, *types.ExtendedCommit) {
+	commit *types.Commit) (*types.Block, types.BlockID, *types.PartSet, *types.Commit) {
 
-	lastExtCommit := lc.Clone()
-
-	block := sf.MakeBlock(state, height, lastExtCommit.ToCommit())
+	block, err := sf.MakeBlock(state, height, commit, nil, 0)
+	require.NoError(t, err)
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: partSet.Header()}
@@ -222,23 +222,31 @@ func makeNextBlock(ctx context.Context,
 	vote, err := factory.MakeVote(
 		ctx,
 		signer,
+		state.Validators,
 		block.Header.ChainID,
 		0,
 		block.Header.Height,
 		0,
 		2,
 		blockID,
-		time.Now(),
+		state.StateID(),
 	)
 	require.NoError(t, err)
-	seenExtCommit := &types.ExtendedCommit{
-		Height:             vote.Height,
-		Round:              vote.Round,
-		BlockID:            blockID,
-		ExtendedSignatures: []types.ExtendedCommitSig{vote.ExtendedCommitSig()},
-	}
-	return block, blockID, partSet, seenExtCommit
-
+	seenCommit := types.NewCommit(
+		vote.Height,
+		vote.Round,
+		blockID,
+		state.StateID(),
+		&types.CommitSigns{
+			QuorumSigns: types.QuorumSigns{
+				BlockSign:      vote.BlockSignature,
+				StateSign:      vote.StateSignature,
+				ExtensionSigns: types.MakeThresholdExtensionSigns(vote.VoteExtensions),
+			},
+			QuorumHash: state.Validators.QuorumHash,
+		},
+	)
+	return block, blockID, partSet, seenCommit
 }
 
 func (rts *reactorTestSuite) start(ctx context.Context, t *testing.T) {

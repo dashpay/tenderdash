@@ -188,9 +188,9 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			// We're creating a proposal for the first block.
 			// The commit is empty, but not nil.
 			commit = types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil)
-		case lazyNodeState.LastCommit.HasTwoThirdsMajority():
+		case lazyNodeState.LastCommit != nil:
 			// Make the commit from LastCommit
-			commit = lazyNodeState.LastCommit.MakeCommit()
+			commit = lazyNodeState.LastCommit
 		default: // This shouldn't happen.
 			lazyNodeState.logger.Error("enterPropose: Cannot propose anything: No commit for the previous block")
 			return

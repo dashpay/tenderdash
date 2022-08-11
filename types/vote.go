@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -270,9 +271,11 @@ func (vote *Vote) VerifyExtension(chainID string, pubKey crypto.PubKey) error {
 		return nil
 	}
 	v := vote.ToProto()
-	extSignBytes := VoteExtensionSignBytes(chainID, v)
-	if !pubKey.VerifySignature(extSignBytes, vote.ExtensionSignature) {
-		return ErrVoteInvalidSignature
+	for _, ve := range v.VoteExtensions {
+		extSignBytes := VoteExtensionSignBytes(chainID, vote.Height, vote.Round, ve)
+		if !pubKey.VerifySignature(extSignBytes, ve.Signature) {
+			return ErrVoteInvalidSignature
+		}
 	}
 	return nil
 }
@@ -378,22 +381,6 @@ func (vote *Vote) ValidateWithExtension() error {
 	}
 
 	return nil
-}
-
-// EnsureExtension checks for the presence of extensions signature data
-// on precommit vote types.
-func (vote *Vote) EnsureExtension() error {
-	// We should always see vote extension signatures in non-nil precommits
-	if vote.Type != tmproto.PrecommitType {
-		return nil
-	}
-	if vote.BlockID.IsNil() {
-		return nil
-	}
-	if len(vote.ExtensionSignature) > 0 {
-		return nil
-	}
-	return ErrVoteExtensionAbsent
 }
 
 // ToProto converts the handwritten type to proto generated type

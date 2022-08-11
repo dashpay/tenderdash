@@ -748,9 +748,9 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 		eventBus,
 		sm.NopMetrics(),
 	)
-	pa, _ := state.Validators.GetByIndex(0)
-	commit, votes := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
-	block, err := blockExec.CreateProposalBlock(ctx, height, state, commit, pa, votes)
+	proTxHash, _ := state.Validators.GetByIndex(0)
+	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
+	block, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proTxHash, 0)
 	require.NoError(t, err)
 	require.Len(t, block.Data.Txs.ToSliceOfBytes(), len(trs)-2)
 

@@ -6,8 +6,6 @@ import (
 
 	"github.com/go-kit/kit/metrics"
 
-	"github.com/go-kit/kit/metrics/prometheus"
-	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"

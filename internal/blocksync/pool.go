@@ -207,13 +207,13 @@ func (pool *BlockPool) IsCaughtUp() bool {
 // as we switch from block sync to consensus mode.
 //
 // The caller will verify the commit.
-func (pool *BlockPool) PeekTwoBlocks() (first, second *types.Block, firstExtCommit *types.ExtendedCommit) {
+func (pool *BlockPool) PeekTwoBlocks() (first, second *types.Block, firstExtCommit *types.Commit) {
 	pool.mtx.RLock()
 	defer pool.mtx.RUnlock()
 
 	if r := pool.requesters[pool.height]; r != nil {
 		first = r.getBlock()
-		firstExtCommit = r.getExtendedCommit()
+		firstExtCommit = r.getCommit()
 	}
 	if r := pool.requesters[pool.height+1]; r != nil {
 		second = r.getBlock()
@@ -223,7 +223,7 @@ func (pool *BlockPool) PeekTwoBlocks() (first, second *types.Block, firstExtComm
 
 // PopRequest pops the first block at pool.height.
 // It must have been validated by the second Commit from PeekTwoBlocks.
-// TODO(thane): (?) and its corresponding ExtendedCommit.
+// TODO(thane): (?) and its corresponding Commit.
 func (pool *BlockPool) PopRequest() {
 	pool.mtx.Lock()
 	defer pool.mtx.Unlock()
@@ -276,7 +276,7 @@ func (pool *BlockPool) RedoRequest(height int64) types.NodeID {
 // height of the extended commit and the height of the block do not match, we
 // do not add the block and return an error.
 // TODO: ensure that blocks come in order for each peer.
-func (pool *BlockPool) AddBlock(peerID types.NodeID, block *types.Block, extCommit *types.ExtendedCommit, blockSize int) error {
+func (pool *BlockPool) AddBlock(peerID types.NodeID, block *types.Block, extCommit *types.Commit, blockSize int) error {
 	pool.mtx.Lock()
 	defer pool.mtx.Unlock()
 
@@ -564,7 +564,7 @@ type bpRequester struct {
 	mtx       sync.Mutex
 	peerID    types.NodeID
 	block     *types.Block
-	extCommit *types.ExtendedCommit
+	extCommit *types.Commit
 }
 
 func newBPRequester(logger log.Logger, pool *BlockPool, height int64) *bpRequester {
@@ -590,7 +590,7 @@ func (bpr *bpRequester) OnStart(ctx context.Context) error {
 func (*bpRequester) OnStop() {}
 
 // Returns true if the peer matches and block doesn't already exist.
-func (bpr *bpRequester) setBlock(block *types.Block, extCommit *types.ExtendedCommit, peerID types.NodeID) bool {
+func (bpr *bpRequester) setBlock(block *types.Block, extCommit *types.Commit, peerID types.NodeID) bool {
 	bpr.mtx.Lock()
 	if bpr.block != nil || bpr.peerID != peerID {
 		bpr.mtx.Unlock()
@@ -615,7 +615,7 @@ func (bpr *bpRequester) getBlock() *types.Block {
 	return bpr.block
 }
 
-func (bpr *bpRequester) getExtendedCommit() *types.ExtendedCommit {
+func (bpr *bpRequester) getCommit() *types.Commit {
 	bpr.mtx.Lock()
 	defer bpr.mtx.Unlock()
 	return bpr.extCommit

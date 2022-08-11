@@ -492,7 +492,7 @@ func randCommit(ctx context.Context, t *testing.T, stateID StateID) *Commit {
 
 	require.NoError(t, err)
 
-	return commit.ToCommit()
+	return commit
 }
 
 func hexBytesFromString(t *testing.T, s string) tmbytes.HexBytes {
@@ -631,7 +631,7 @@ func TestCommitToVoteSetWithVotesForNilBlock(t *testing.T) {
 			err := valSet.VerifyCommit(voteSet.ChainID(), blockID, stateID, height-1, commit)
 			assert.NoError(t, err)
 		} else {
-			assert.Panics(t, func() { voteSet.MakeExtendedCommit() })
+			assert.Panics(t, func() { voteSet.MakeCommit() })
 		}
 	}
 }

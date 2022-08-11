@@ -35,7 +35,6 @@ func (app *Application) CheckTx(_ context.Context, req *types.RequestCheckTx) (*
 		if len(req.Tx) > 8 {
 			return &types.ResponseCheckTx{
 				Code: code.CodeTypeEncodingError,
-				Log:  fmt.Sprintf("Max tx size is 8 bytes, got %d", len(req.Tx)),
 			}, nil
 		}
 		tx8 := make([]byte, 8)
@@ -44,7 +43,6 @@ func (app *Application) CheckTx(_ context.Context, req *types.RequestCheckTx) (*
 		if txValue < uint64(app.txCount) {
 			return &types.ResponseCheckTx{
 				Code: code.CodeTypeBadNonce,
-				Log:  fmt.Sprintf("Invalid nonce. Expected >= %v, got %v", app.txCount, txValue),
 			}, nil
 		}
 	}
@@ -60,7 +58,7 @@ func (app *Application) Commit(_ context.Context) (*types.ResponseCommit, error)
 	endHash := make([]byte, 8)
 	binary.BigEndian.PutUint64(endHash, uint64(app.txCount))
 	hash = append(hash, endHash...)
-	return &types.ResponseCommit{Data: hash}, nil
+	return &types.ResponseCommit{}, nil
 }
 
 func (app *Application) Query(_ context.Context, reqQuery *types.RequestQuery) (*types.ResponseQuery, error) {

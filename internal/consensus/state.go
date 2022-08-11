@@ -750,15 +750,15 @@ func (cs *State) sendInternalMessage(ctx context.Context, mi msgInfo) {
 // the method will panic on an absent ExtendedCommit or an ExtendedCommit without
 // extension data.
 func (cs *State) reconstructLastCommit(state sm.State) {
-	votes, err := cs.votesFromSeenCommit(state)
+	commit, err := cs.votesFromSeenCommit(state)
 	if err != nil {
 		panic(fmt.Sprintf("failed to reconstruct last commit; %s", err))
 	}
-	cs.LastCommit = votes
+	cs.LastCommit = commit
 	return
 }
 
-func (cs *State) votesFromSeenCommit(state sm.State) (*types.VoteSet, error) {
+func (cs *State) votesFromSeenCommit(state sm.State) (*types.Commit, error) {
 	commit := cs.blockStore.LoadSeenCommit()
 	if commit == nil || commit.Height != state.LastBlockHeight {
 		commit = cs.blockStore.LoadBlockCommit(state.LastBlockHeight)
@@ -766,12 +766,7 @@ func (cs *State) votesFromSeenCommit(state sm.State) (*types.VoteSet, error) {
 	if commit == nil {
 		return nil, fmt.Errorf("commit for height %v not found", state.LastBlockHeight)
 	}
-
-	vs := commit.ToVoteSet(state.ChainID, state.LastValidators)
-	if !vs.HasTwoThirdsMajority() {
-		return nil, errors.New("commit does not have +2/3 majority")
-	}
-	return vs, nil
+	return commit, nil
 }
 
 // Updates State and increments height to match that of state.
@@ -888,7 +883,7 @@ func (cs *State) updateToState(state sm.State, commit *types.Commit) {
 	cs.ValidBlock = nil
 	cs.ValidBlockParts = nil
 	cs.Commit = nil
-	cs.Votes = cstypes.NewHeightVoteSet(state.ChainID, height, validators)
+	cs.Votes = cstypes.NewHeightVoteSet(state.ChainID, height, stateID, validators)
 	cs.CommitRound = -1
 	cs.LastValidators = state.LastValidators
 	cs.TriggeredTimeoutPrecommit = false
@@ -2826,45 +2821,24 @@ func (cs *State) addVote(
 		return
 	}
 
-	// Check to see if the chain is configured to extend votes.
-	if cs.state.ConsensusParams.ABCI.VoteExtensionsEnabled(cs.Height) {
-		// The chain is configured to extend votes, check that the vote is
-		// not for a nil block and verify the extensions signature against the
-		// corresponding public key.
+	// Verify VoteExtension if precommit and not nil
+	// https://github.com/tendermint/tendermint/issues/8487
+	if vote.Type == tmproto.PrecommitType && !vote.BlockID.IsNil() &&
+		!bytes.Equal(vote.ValidatorProTxHash, cs.privValidatorProTxHash) { // Skip the VerifyVoteExtension call if the vote was issued by this validator.
 
-		var myAddr []byte
-		if cs.privValidatorPubKey != nil {
-			myAddr = cs.privValidatorPubKey.Address()
+		// The core fields of the vote message were already validated in the
+		// consensus reactor when the vote was received.
+		// Here, we verify the signature of the vote extension included in the vote
+		// message.
+		_, val := cs.state.Validators.GetByIndex(vote.ValidatorIndex)
+		if err := vote.VerifyExtension(cs.state.ChainID, val.PubKey); err != nil {
+			return false, err
 		}
-		// Verify VoteExtension if precommit and not nil
-		// https://github.com/tendermint/tendermint/issues/8487
-		if vote.Type == tmproto.PrecommitType && !vote.BlockID.IsNil() &&
-			!bytes.Equal(vote.ValidatorAddress, myAddr) { // Skip the VerifyVoteExtension call if the vote was issued by this validator.
 
-			// The core fields of the vote message were already validated in the
-			// consensus reactor when the vote was received.
-			// Here, we verify the signature of the vote extension included in the vote
-			// message.
-			_, val := cs.state.Validators.GetByIndex(vote.ValidatorIndex)
-			if err := vote.VerifyExtension(cs.state.ChainID, val.PubKey); err != nil {
-				return false, err
-			}
-
-			err := cs.blockExec.VerifyVoteExtension(ctx, vote)
-			cs.metrics.MarkVoteExtensionReceived(err == nil)
-			if err != nil {
-				return false, err
-			}
-		}
-	} else {
-		// Vote extensions are not enabled on the network.
-		// strip the extension data from the vote in case any is present.
-		//
-		// TODO punish a peer if it sent a vote with an extension when the feature
-		// is disabled on the network.
-		// https://github.com/tendermint/tendermint/issues/8565
-		if stripped := vote.StripExtension(); stripped {
-			cs.logger.Error("vote included extension data but vote extensions are not enabled", "peer", peerID)
+		err := cs.blockExec.VerifyVoteExtension(ctx, vote)
+		cs.metrics.MarkVoteExtensionReceived(err == nil)
+		if err != nil {
+			return false, err
 		}
 	}
 

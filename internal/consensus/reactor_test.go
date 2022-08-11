@@ -613,42 +613,36 @@ func TestSwitchToConsensusVoteExtensions(t *testing.T) {
 		name                  string
 		storedHeight          int64
 		initialRequiredHeight int64
-		includeExtensions     bool
 		shouldPanic           bool
 	}{
 		{
 			name:                  "no vote extensions but not required",
 			initialRequiredHeight: 0,
 			storedHeight:          2,
-			includeExtensions:     false,
 			shouldPanic:           false,
 		},
 		{
 			name:                  "no vote extensions but required this height",
 			initialRequiredHeight: 2,
 			storedHeight:          2,
-			includeExtensions:     false,
 			shouldPanic:           true,
 		},
 		{
 			name:                  "no vote extensions and required in future",
 			initialRequiredHeight: 3,
 			storedHeight:          2,
-			includeExtensions:     false,
 			shouldPanic:           false,
 		},
 		{
 			name:                  "no vote extensions and required previous height",
 			initialRequiredHeight: 1,
 			storedHeight:          2,
-			includeExtensions:     false,
 			shouldPanic:           true,
 		},
 		{
 			name:                  "vote extensions and required previous height",
 			initialRequiredHeight: 1,
 			storedHeight:          2,
-			includeExtensions:     true,
 			shouldPanic:           false,
 		},
 	} {
@@ -672,31 +666,21 @@ func TestSwitchToConsensusVoteExtensions(t *testing.T) {
 			blockParts, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
 			require.NoError(t, err)
 
-			var voteSet *types.VoteSet
-			if testCase.includeExtensions {
-				voteSet = types.NewExtendedVoteSet(cs.state.ChainID, testCase.storedHeight, 0, tmproto.PrecommitType, cs.state.Validators)
-			} else {
-				voteSet = types.NewVoteSet(cs.state.ChainID, testCase.storedHeight, 0, tmproto.PrecommitType, cs.state.Validators)
-			}
+			voteSet := types.NewVoteSet(cs.state.ChainID, testCase.storedHeight, 0, tmproto.PrecommitType, cs.state.Validators, cs.state.StateID())
 			signedVote := signVote(ctx, t, validator, tmproto.PrecommitType, cs.state.ChainID, types.BlockID{
 				Hash:          propBlock.Hash(),
 				PartSetHeader: blockParts.Header(),
-			})
-
-			if !testCase.includeExtensions {
-				signedVote.Extension = nil
-				signedVote.ExtensionSignature = nil
-			}
+			},
+				cs.state.AppHash,
+				cs.Validators.QuorumType,
+				cs.Validators.QuorumHash,
+			)
 
 			added, err := voteSet.AddVote(signedVote)
 			require.NoError(t, err)
 			require.True(t, added)
 
-			if testCase.includeExtensions {
-				cs.blockStore.SaveBlockWithExtendedCommit(propBlock, blockParts, voteSet.MakeExtendedCommit())
-			} else {
-				cs.blockStore.SaveBlock(propBlock, blockParts, voteSet.MakeExtendedCommit().ToCommit())
-			}
+			cs.blockStore.SaveBlock(propBlock, blockParts, voteSet.MakeCommit())
 			reactor := NewReactor(
 				log.NewNopLogger(),
 				cs,

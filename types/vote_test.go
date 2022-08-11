@@ -272,8 +272,15 @@ func TestVoteExtension(t *testing.T) {
 			expectError:      false,
 		},
 		{
-			name:             "no extension signature",
-			extension:        []byte("extension"),
+			name: "no extension signature",
+			extensions: VoteExtensions{
+				tmproto.VoteExtensionType_DEFAULT: []VoteExtension{
+					{
+						Extension: []byte("extension"),
+						Signature: nil,
+					},
+				},
+			},
 			includeSignature: false,
 			expectError:      true,
 		},
@@ -468,7 +475,6 @@ func TestValidVotes(t *testing.T) {
 		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, tc.vote, stateID, nil)
 		tc.malleateVote(tc.vote)
 		require.NoError(t, tc.vote.ValidateBasic(), "ValidateBasic for %s", tc.name)
-		require.NoError(t, tc.vote.EnsureExtension(), "EnsureExtension for %s", tc.name)
 	}
 }
 
@@ -497,13 +503,11 @@ func TestInvalidVotes(t *testing.T) {
 		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, stateID, nil)
 		tc.malleateVote(prevote)
 		require.Error(t, prevote.ValidateBasic(), "ValidateBasic for %s in invalid prevote", tc.name)
-		require.NoError(t, prevote.EnsureExtension(), "EnsureExtension for %s in invalid prevote", tc.name)
 
 		precommit := examplePrecommit(t)
 		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, stateID, nil)
 		tc.malleateVote(precommit)
 		require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s in invalid precommit", tc.name)
-		require.NoError(t, precommit.EnsureExtension(), "EnsureExtension for %s in invalid precommit", tc.name)
 	}
 }
 
@@ -538,7 +542,6 @@ func TestInvalidPrevotes(t *testing.T) {
 		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, stateID, nil)
 		tc.malleateVote(prevote)
 		require.Error(t, prevote.ValidateBasic(), "ValidateBasic for %s", tc.name)
-		require.NoError(t, prevote.EnsureExtension(), "EnsureExtension for %s", tc.name)
 	}
 }
 
@@ -579,36 +582,6 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 		tc.malleateVote(precommit)
 		// ValidateBasic ensures that vote extensions, if present, are well formed
 		require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s", tc.name)
-	}
-}
-
-func TestEnsureVoteExtension(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	privVal := NewMockPV()
-
-	testCases := []struct {
-		name         string
-		malleateVote func(*Vote)
-		expectError  bool
-	}{
-		{"vote extension signature absent", func(v *Vote) {
-			v.Extension = nil
-			v.ExtensionSignature = nil
-		}, true},
-		{"vote extension signature present", func(v *Vote) {
-			v.ExtensionSignature = []byte("extension signature")
-		}, false},
-	}
-	for _, tc := range testCases {
-		precommit := examplePrecommit(t)
-		signVote(ctx, t, privVal, "test_chain_id", precommit)
-		tc.malleateVote(precommit)
-		if tc.expectError {
-			require.Error(t, precommit.EnsureExtension(), "EnsureExtension for %s", tc.name)
-		} else {
-			require.NoError(t, precommit.EnsureExtension(), "EnsureExtension for %s", tc.name)
-		}
 	}
 }
 

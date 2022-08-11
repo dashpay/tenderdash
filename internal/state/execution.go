@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"time"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
@@ -15,6 +14,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -127,13 +127,13 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	rpp, err := blockExec.appClient.PrepareProposal(
 		ctx,
 		&abci.RequestPrepareProposal{
-			MaxTxBytes:          maxDataBytes,
-			Txs:                 block.Txs.ToSliceOfBytes(),
-			LocalLastCommit:     abci.ExtendedCommitInfo(localLastCommit),
-			ByzantineValidators: block.Evidence.ToABCI(),
-			Height:              block.Height,
-			Time:                block.Time,
-			NextValidatorsHash:  block.NextValidatorsHash,
+			MaxTxBytes:         maxDataBytes,
+			Txs:                block.Txs.ToSliceOfBytes(),
+			LocalLastCommit:    abci.ExtendedCommitInfo(localLastCommit),
+			Misbehavior:        block.Evidence.ToABCI(),
+			Height:             block.Height,
+			Time:               block.Time,
+			NextValidatorsHash: block.NextValidatorsHash,
 
 			// Dash's fields
 			CoreChainLockedHeight: block.CoreChainLockedHeight,
@@ -197,6 +197,13 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	}
 	if resp.IsStatusUnknown() {
 		panic(fmt.Sprintf("ProcessProposal responded with status %s", resp.Status.String()))
+	}
+	// we force the abci app to return only 32 byte app hashes (set to 20 temporarily)
+	if resp.AppHash != nil && len(resp.AppHash) != blockExec.appHashSize {
+		blockExec.logger.Error(
+			"Client returned invalid app hash size", "bytesLength", len(resp.AppHash),
+		)
+		return false, errors.New("invalid App Hash size")
 	}
 
 	return resp.IsAccepted(), nil
@@ -290,11 +297,16 @@ func (blockExec *BlockExecutor) ApplyBlock(
 		return state, ErrProxyAppConn(err)
 	}
 
+	numValUpdates := 0
+	if fBlockRes.ValidatorSetUpdate != nil {
+		numValUpdates = len(fBlockRes.ValidatorSetUpdate.ValidatorUpdates)
+	}
+
 	blockExec.logger.Info(
 		"finalized block",
 		"height", block.Height,
 		"num_txs_res", len(fBlockRes.TxResults),
-		"num_val_updates", len(fBlockRes.ValidatorUpdates),
+		"num_val_updates", numValUpdates,
 		"block_app_hash", fmt.Sprintf("%X", fBlockRes.AppHash),
 	)
 
@@ -320,12 +332,12 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	}
 
 	// The quorum type should not even matter here
-	validators, thresholdPublicKey, quorumHash, err := types.PB2TM.ValidatorUpdatesFromValidatorSet(finalizeBlockResponse.ValidatorSetUpdate)
+	validators, thresholdPublicKey, quorumHash, err := types.PB2TM.ValidatorUpdatesFromValidatorSet(fBlockRes.ValidatorSetUpdate)
 	if err != nil {
 		return state, fmt.Errorf("error in chain lock from proto: %v", err)
 	}
 	if len(validators) > 0 {
-		blockExec.logger.Debug("updates to validators", "updates", types.ValidatorListString(validatorUpdates))
+		blockExec.logger.Debug("updates to validators", "updates", types.ValidatorListString(validators))
 		blockExec.metrics.ValidatorSetUpdates.Add(1)
 	}
 	if fBlockRes.ConsensusParamUpdates != nil {
@@ -453,14 +465,6 @@ func (blockExec *BlockExecutor) Commit(
 	if err != nil {
 		blockExec.logger.Error("client error during proxyAppConn.Commit", "err", err)
 		return 0, err
-	}
-
-	// we force the abci app to return only 32 byte app hashes (set to 20 temporarily)
-	if res.Data != nil && len(res.Data) != blockExec.appHashSize {
-		blockExec.logger.Error(
-			"Client returned invalid app hash size", "bytesLength", len(res.Data),
-		)
-		return nil, 0, errors.New("invalid App Hash size")
 	}
 
 	// ResponseCommit has no error code - just data

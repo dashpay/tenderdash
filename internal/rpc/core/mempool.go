@@ -58,13 +58,10 @@ func (env *Environment) BroadcastTx(ctx context.Context, req *coretypes.RequestB
 		return nil, fmt.Errorf("broadcast confirmation not received: %w", ctx.Err())
 	case r := <-resCh:
 		return &coretypes.ResultBroadcastTx{
-			Code:         r.Code,
-			Data:         r.Data,
-			Log:          r.Log,
-			Codespace:    r.Codespace,
-			MempoolError: r.MempoolError,
-			Info:         r.Info,
-			Hash:         req.Tx.Hash(),
+			Code:      r.Code,
+			Data:      r.Data,
+			Codespace: r.Codespace,
+			Hash:      req.Tx.Hash(),
 		}, nil
 	}
 }

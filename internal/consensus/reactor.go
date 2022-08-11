@@ -462,7 +462,7 @@ func (r *Reactor) gossipDataForCatchup(ctx context.Context, rs *cstypes.RoundSta
 	time.Sleep(r.state.config.PeerGossipSleepDuration)
 }
 
-func (r *Reactor) gossipDataRoutine(ctx context.Context, ps *PeerState, dataCh *p2p.Channel, chans channelBundle) {
+func (r *Reactor) gossipDataRoutine(ctx context.Context, ps *PeerState, dataCh p2p.Channel, chans channelBundle) {
 	logger := r.logger.With("peer", ps.peerID)
 
 	timer := time.NewTimer(0)
@@ -580,7 +580,7 @@ OUTER_LOOP:
 	}
 }
 
-func (r *Reactor) sendProposalBlockPart(ctx context.Context, dataCh *p2p.Channel, ps *PeerState, part *types.Part, height int64, round int32) error {
+func (r *Reactor) sendProposalBlockPart(ctx context.Context, dataCh p2p.Channel, ps *PeerState, part *types.Part, height int64, round int32) error {
 	partProto, err := part.ToProto()
 	if err != nil {
 		return fmt.Errorf("failed to convert block part to proto, error: %w", err)
@@ -636,7 +636,7 @@ func (r *Reactor) pickSendVote(ctx context.Context, ps *PeerState, votes types.V
 	return true, nil
 }
 
-func (r *Reactor) sendCommit(ctx context.Context, ps *PeerState, commit *types.Commit, voteCh *p2p.Channel) error {
+func (r *Reactor) sendCommit(ctx context.Context, ps *PeerState, commit *types.Commit, voteCh p2p.Channel) error {
 	if commit == nil {
 		return fmt.Errorf("attempt to send nil commit to peer %s", ps.peerID)
 	}
@@ -651,7 +651,7 @@ func (r *Reactor) sendCommit(ctx context.Context, ps *PeerState, commit *types.C
 
 // send sends a message to provided channel.
 // If to is nil, message will be broadcasted.
-func (r *Reactor) send(ctx context.Context, ps *PeerState, channel *p2p.Channel, msg proto.Message) error {
+func (r *Reactor) send(ctx context.Context, ps *PeerState, channel p2p.Channel, msg proto.Message) error {
 	select {
 	case <-ctx.Done():
 		return errReactorClosed
@@ -664,7 +664,7 @@ func (r *Reactor) send(ctx context.Context, ps *PeerState, channel *p2p.Channel,
 }
 
 // broadcast sends a broadcast message to all peers connected to the `channel`.
-func (r *Reactor) broadcast(ctx context.Context, channel *p2p.Channel, msg proto.Message) error {
+func (r *Reactor) broadcast(ctx context.Context, channel p2p.Channel, msg proto.Message) error {
 	select {
 	case <-ctx.Done():
 		return errReactorClosed
@@ -766,7 +766,7 @@ func (r *Reactor) gossipVotesForHeight(
 }
 
 // gossipCommit sends a commit to the peer
-func (r *Reactor) gossipCommit(ctx context.Context, voteCh *p2p.Channel, rs *cstypes.RoundState, ps *PeerState, prs *cstypes.PeerRoundState) error {
+func (r *Reactor) gossipCommit(ctx context.Context, voteCh p2p.Channel, rs *cstypes.RoundState, ps *PeerState, prs *cstypes.PeerRoundState) error {
 	// logger := r.Logger.With("height", rs.Height, "peer_height", prs.Height, "peer", ps.peerID)
 	var commit *types.Commit
 	blockStoreBase := r.state.blockStore.Base()
@@ -797,7 +797,7 @@ func (r *Reactor) gossipCommit(ctx context.Context, voteCh *p2p.Channel, rs *cst
 	return nil // success
 }
 
-func (r *Reactor) gossipVotesAndCommitRoutine(ctx context.Context, voteCh *p2p.Channel, ps *PeerState) {
+func (r *Reactor) gossipVotesAndCommitRoutine(ctx context.Context, voteCh p2p.Channel, ps *PeerState) {
 	logger := r.logger.With("peer", ps.peerID)
 
 	timer := time.NewTimer(0)
@@ -860,7 +860,7 @@ func (r *Reactor) gossipVotesAndCommitRoutine(ctx context.Context, voteCh *p2p.C
 
 // NOTE: `queryMaj23Routine` has a simple crude design since it only comes
 // into play for liveness when there's a signature DDoS attack happening.
-func (r *Reactor) queryMaj23Routine(ctx context.Context, stateCh *p2p.Channel, ps *PeerState) {
+func (r *Reactor) queryMaj23Routine(ctx context.Context, stateCh p2p.Channel, ps *PeerState) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 
@@ -1418,7 +1418,7 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 // Any error encountered during message execution will result in a PeerError being sent
 // on the StateChannel or DataChannel or VoteChannel or VoteSetBitsChannel.
 // When the reactor is stopped, we will catch the signal and close the p2p Channel gracefully.
-func (r *Reactor) processMsgCh(ctx context.Context, msgCh *p2p.Channel, chBundle channelBundle) {
+func (r *Reactor) processMsgCh(ctx context.Context, msgCh p2p.Channel, chBundle channelBundle) {
 	iter := msgCh.Receive(ctx)
 	for iter.Next(ctx) {
 		envelope := iter.Envelope()

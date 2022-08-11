@@ -170,6 +170,20 @@ func makeHeaderPartsResponsesValPowerChange(
 	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, finalizeBlockResponses
 }
 
+func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, regenerate bool) (types.Header, *types.CoreChainLock, types.BlockID, *abci.ResponseFinalizeBlock) {
+	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), nil, 0)
+	if err != nil {
+		t.Error(err)
+	}
+	fbResp := &abci.ResponseFinalizeBlock{}
+	if regenerate == true {
+		proTxHashes := state.Validators.GetProTxHashes()
+		valUpdates := types.ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes)
+		fbResp.ValidatorSetUpdate = &valUpdates
+	}
+	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, fbResp
+}
+
 func makeHeaderPartsResponsesParams(
 	t *testing.T,
 	state sm.State,
@@ -256,7 +270,7 @@ func (app *testApp) Info(_ context.Context, req *abci.RequestInfo) (*abci.Respon
 }
 
 func (app *testApp) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
-	app.Misbehavior = req.ByzantineValidators
+	app.Misbehavior = req.Misbehavior
 
 	resTxs := make([]*abci.ExecTxResult, len(req.Txs))
 	for i, tx := range req.Txs {

@@ -305,7 +305,7 @@ type simulatorTestSuite struct {
 	GenesisState sm.State
 	Config       *config.Config
 	Chain        []*types.Block
-	ExtCommits   []*types.ExtendedCommit
+	Commits      []*types.Commit
 	CleanupFunc  cleanupFunc
 
 	Mempool mempool.Mempool
@@ -803,10 +803,10 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 	ensureNewRound(t, newRoundCh, height+1, 0)
 
 	sim.Chain = []*types.Block{}
-	sim.ExtCommits = []*types.ExtendedCommit{}
+	sim.Commits = []*types.Commit{}
 	for i := 1; i <= numBlocks; i++ {
 		sim.Chain = append(sim.Chain, css[0].blockStore.LoadBlock(int64(i)))
-		sim.ExtCommits = append(sim.ExtCommits, css[0].blockStore.LoadBlockExtendedCommit(int64(i)))
+		sim.Commits = append(sim.Commits, css[0].blockStore.LoadBlockCommit(int64(i)))
 	}
 
 	return sim
@@ -950,7 +950,7 @@ func testHandshakeReplay(
 		err = wal.Start(ctx)
 		require.NoError(t, err)
 		t.Cleanup(func() { cancel(); wal.Wait() })
-		chain, commits = makeBlockchainFromWAL(t, wal)
+		chain, commits = makeBlockchainFromWAL(t, wal, gdoc)
 		pubKey, err := privVal.GetPubKey(ctx, gdoc.QuorumHash)
 		require.NoError(t, err)
 		stateDB, genesisState, store = stateAndStore(t, cfg, pubKey, kvstore.ProtocolVersion)
@@ -1345,10 +1345,10 @@ func makeBlockchainFromWAL(t *testing.T, wal WAL, genDoc *types.GenesisDoc) ([]*
 	// log.Notice("Build a blockchain by reading from the WAL")
 
 	var (
-		blocks             []*types.Block
-		extCommits         []*types.ExtendedCommit
-		thisBlockParts     *types.PartSet
-		thisBlockExtCommit *types.ExtendedCommit
+		blocks          []*types.Block
+		commits         []*types.Commit
+		thisBlockParts  *types.PartSet
+		thisBlockCommit *types.Commit
 	)
 
 	dec := NewWALDecoder(gr)
@@ -1380,12 +1380,12 @@ func makeBlockchainFromWAL(t *testing.T, wal WAL, genDoc *types.GenesisDoc) ([]*
 				require.Equal(t, block.Height, height+1,
 					"read bad block from wal. got height %d, expected %d", block.Height, height+1)
 
-				commitHeight := thisBlockExtCommit.Height
+				commitHeight := thisBlockCommit.Height
 				require.Equal(t, commitHeight, height+1,
 					"commit doesnt match. got height %d, expected %d", commitHeight, height+1)
 
 				blocks = append(blocks, block)
-				extCommits = append(extCommits, thisBlockExtCommit)
+				commits = append(commits, thisBlockCommit)
 				height++
 			}
 		case *types.PartSetHeader:
@@ -1429,12 +1429,12 @@ func makeBlockchainFromWAL(t *testing.T, wal WAL, genDoc *types.GenesisDoc) ([]*
 	require.NoError(t, err)
 
 	require.Equal(t, block.Height, height+1, "read bad block from wal. got height %d, expected %d", block.Height, height+1)
-	commitHeight := thisBlockExtCommit.Height
+	commitHeight := thisBlockCommit.Height
 	require.Equal(t, commitHeight, height+1, "commit does not match. got height %d, expected %d", commitHeight, height+1)
 
 	blocks = append(blocks, block)
-	extCommits = append(extCommits, thisBlockExtCommit)
-	return blocks, extCommits
+	commits = append(commits, thisBlockCommit)
+	return blocks, commits
 }
 
 func readPieceFromWAL(msg *TimedWALMessage) interface{} {
@@ -1522,7 +1522,7 @@ func (bs *mockBlockStore) LoadBlockMeta(height int64) *types.BlockMeta {
 	}
 }
 func (bs *mockBlockStore) LoadBlockPart(height int64, index int) *types.Part { return nil }
-func (bs *mockBlockStore) SaveBlockWithExtendedCommit(block *types.Block, blockParts *types.PartSet, seenCommit *types.ExtendedCommit) {
+func (bs *mockBlockStore) SaveBlockWithExtendedCommit(block *types.Block, blockParts *types.PartSet, seenCommit *types.Commit) {
 }
 func (bs *mockBlockStore) SaveBlock(
 	block *types.Block,
@@ -1532,20 +1532,20 @@ func (bs *mockBlockStore) SaveBlock(
 }
 
 func (bs *mockBlockStore) LoadBlockCommit(height int64) *types.Commit {
-	return bs.extCommits[height-1].ToCommit()
+	return bs.commits[height-1]
 }
 func (bs *mockBlockStore) LoadSeenCommit() *types.Commit {
-	return bs.extCommits[len(bs.extCommits)-1].ToCommit()
+	return bs.commits[len(bs.commits)-1]
 }
-func (bs *mockBlockStore) LoadBlockExtendedCommit(height int64) *types.ExtendedCommit {
-	return bs.extCommits[height-1]
+func (bs *mockBlockStore) LoadBlockExtendedCommit(height int64) *types.Commit {
+	return bs.commits[height-1]
 }
 
 func (bs *mockBlockStore) PruneBlocks(height int64) (uint64, error) {
 	pruned := uint64(0)
 	for i := int64(0); i < height-1; i++ {
 		bs.chain[i] = nil
-		bs.extCommits[i] = nil
+		bs.commits[i] = nil
 		pruned++
 	}
 	bs.base = height
