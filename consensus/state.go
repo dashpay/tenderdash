@@ -1052,6 +1052,12 @@ func (cs *State) enterNewRound(height int64, round int32) {
 		cs.Proposal = nil
 		cs.ProposalBlock = nil
 		cs.ProposalBlockParts = nil
+
+		// Unlock blocks locked at previous round
+		// FIXME: this is just a workaround, find a proper solution
+		cs.LockedRound = -1
+		cs.LockedBlock = nil
+		cs.LockedBlockParts = nil
 	}
 
 	cs.Votes.SetRound(tmmath.SafeAddInt32(round, 1)) // also track next round (round+1) to allow round-skipping
