@@ -39,11 +39,10 @@ We let each peer provide us with up to 2 unexpected "catchup" rounds.
 One for their LastPrecommits round, and another for the official commit round.
 */
 type HeightVoteSet struct {
-	chainID           string
-	height            int64
-	valSet            *types.ValidatorSet
-	stateID           types.StateID // State ID describing current state (eg. previous height and previous app hash)
-	extensionsEnabled bool
+	chainID string
+	height  int64
+	valSet  *types.ValidatorSet
+	stateID types.StateID // State ID describing current state (eg. previous height and previous app hash)
 
 	mtx               sync.Mutex
 	round             int32                    // max tracked round
@@ -53,19 +52,8 @@ type HeightVoteSet struct {
 
 func NewHeightVoteSet(chainID string, height int64, stateID types.StateID, valSet *types.ValidatorSet) *HeightVoteSet {
 	hvs := &HeightVoteSet{
-		chainID:           chainID,
-		stateID:           stateID,
-		extensionsEnabled: false,
-	}
-	hvs.Reset(height, valSet)
-	return hvs
-}
-
-func NewExtendedHeightVoteSet(chainID string, height int64, stateID types.StateID, valSet *types.ValidatorSet) *HeightVoteSet {
-	hvs := &HeightVoteSet{
-		chainID:           chainID,
-		stateID:           stateID,
-		extensionsEnabled: true,
+		chainID: chainID,
+		stateID: stateID,
 	}
 	hvs.Reset(height, valSet)
 	return hvs

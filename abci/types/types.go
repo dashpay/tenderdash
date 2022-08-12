@@ -183,6 +183,47 @@ func (v *ValidatorUpdate) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
+type validatorSetUpdateJSON struct {
+	ValidatorUpdates []ValidatorUpdate `json:"validator_updates"`
+	ThresholdPubKey  json.RawMessage   `json:"threshold_public_key"`
+	QuorumHash       []byte            `json:"quorum_hash,omitempty"`
+}
+
+func (m *ValidatorSetUpdate) MarshalJSON() ([]byte, error) {
+	key, err := encoding.PubKeyFromProto(m.ThresholdPublicKey)
+	if err != nil {
+		return nil, err
+	}
+	jkey, err := jsontypes.Marshal(key)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(validatorSetUpdateJSON{
+		ValidatorUpdates: m.ValidatorUpdates,
+		ThresholdPubKey:  jkey,
+		QuorumHash:       m.QuorumHash,
+	})
+}
+
+func (m *ValidatorSetUpdate) UnmarshalJSON(data []byte) error {
+	var vsu validatorSetUpdateJSON
+	if err := json.Unmarshal(data, &vsu); err != nil {
+		return err
+	}
+	var key crypto.PubKey
+	if err := jsontypes.Unmarshal(vsu.ThresholdPubKey, &key); err != nil {
+		return err
+	}
+	pkey, err := encoding.PubKeyToProto(key)
+	if err != nil {
+		return err
+	}
+	m.ValidatorUpdates = vsu.ValidatorUpdates
+	m.ThresholdPublicKey = pkey
+	m.QuorumHash = vsu.QuorumHash
+	return nil
+}
+
 // Some compile time assertions to ensure we don't
 // have accidental runtime surprises later on.
 

@@ -355,9 +355,16 @@ func (vote *Vote) ValidateBasic() error {
 	}
 
 	// We should only ever see vote extensions in precommits.
-	if vote.Type != tmproto.PrecommitType {
+	if vote.Type != tmproto.PrecommitType || (vote.Type == tmproto.PrecommitType && vote.BlockID.IsNil()) {
 		if !vote.VoteExtensions.IsEmpty() {
 			return errors.New("unexpected vote extensions")
+		}
+	}
+
+	if vote.Type == tmproto.PrecommitType && !vote.BlockID.IsNil() {
+		err := vote.VoteExtensions.Validate()
+		if err != nil {
+			return err
 		}
 	}
 

@@ -268,23 +268,19 @@ func (bs *BlockStore) LoadBlockMeta(height int64) *types.BlockMeta {
 // and it comes from the block.LastCommit for `height+1`.
 // If no commit is found for the given height, it returns nil.
 func (bs *BlockStore) LoadBlockCommit(height int64) *types.Commit {
-	var pbc = new(tmproto.Commit)
 	bz, err := bs.db.Get(blockCommitKey(height))
 	if err != nil {
 		panic(err)
 	}
-	if len(bz) == 0 {
-		return nil
-	}
-	err = proto.Unmarshal(bz, pbc)
+	return mustDecodeCommit(bz)
+}
+
+func (bs *BlockStore) LoadSeenCommitAt(height int64) *types.Commit {
+	bz, err := bs.db.Get(seenCommitAtKey(height))
 	if err != nil {
-		panic(fmt.Errorf("error reading block commit: %w", err))
+		panic(err)
 	}
-	commit, err := types.CommitFromProto(pbc)
-	if err != nil {
-		panic(fmt.Errorf("converting commit to proto: %w", err))
-	}
-	return commit
+	return mustDecodeCommit(bz)
 }
 
 // LoadSeenCommit returns the last locally seen Commit before being
@@ -528,8 +524,8 @@ func (bs *BlockStore) saveBlockToBatch(batch dbm.Batch, block *types.Block, bloc
 		return err
 	}
 
-	// stores seen-commit with a height, because tendermint does the same but only for extended commit
-	if err := batch.Set(blockCommitKey(height), seenCommitBytes); err != nil {
+	// stores seen-commit at height, because tendermint does the same but only for extended commit
+	if err := batch.Set(seenCommitAtKey(height), seenCommitBytes); err != nil {
 		return err
 	}
 
@@ -617,12 +613,12 @@ func (bs *BlockStore) Close() error {
 // * internal/p2p/peermanager.go  [1]
 const (
 	// prefixes are unique across all tm db's
-	prefixBlockMeta   = int64(0)
-	prefixBlockPart   = int64(1)
-	prefixBlockCommit = int64(2)
-	prefixSeenCommit  = int64(3)
-	prefixBlockHash   = int64(4)
-	prefixExtCommit   = int64(13)
+	prefixBlockMeta    = int64(0)
+	prefixBlockPart    = int64(1)
+	prefixBlockCommit  = int64(2)
+	prefixSeenCommit   = int64(3)
+	prefixBlockHash    = int64(4)
+	prefixSeenCommitAt = int64(13)
 )
 
 func blockMetaKey(height int64) []byte {
@@ -672,8 +668,8 @@ func seenCommitKey() []byte {
 	return key
 }
 
-func extCommitKey(height int64) []byte {
-	key, err := orderedcode.Append(nil, prefixExtCommit, height)
+func seenCommitAtKey(height int64) []byte {
+	key, err := orderedcode.Append(nil, prefixSeenCommitAt, height)
 	if err != nil {
 		panic(err)
 	}
@@ -697,4 +693,20 @@ func mustEncode(pb proto.Message) []byte {
 		panic(fmt.Errorf("unable to marshal: %w", err))
 	}
 	return bz
+}
+
+func mustDecodeCommit(bz []byte) *types.Commit {
+	if len(bz) == 0 {
+		return nil
+	}
+	var pbc = new(tmproto.Commit)
+	err := proto.Unmarshal(bz, pbc)
+	if err != nil {
+		panic(fmt.Errorf("error reading block commit: %w", err))
+	}
+	commit, err := types.CommitFromProto(pbc)
+	if err != nil {
+		panic(fmt.Errorf("converting commit to proto: %w", err))
+	}
+	return commit
 }

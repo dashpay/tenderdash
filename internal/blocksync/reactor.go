@@ -198,7 +198,7 @@ func (r *Reactor) respondToPeer(ctx context.Context, msg *bcproto.BlockRequest, 
 		})
 	}
 
-	commit := r.store.LoadBlockSeenCommitAt(msg.Height)
+	commit := r.store.LoadSeenCommitAt(msg.Height)
 	if commit == nil {
 		return fmt.Errorf("found block in store with no commit: %v", block)
 	}

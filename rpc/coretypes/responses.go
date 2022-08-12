@@ -70,7 +70,6 @@ type ResultBlockResults struct {
 	TxsResults            []*abci.ExecTxResult     `json:"txs_results"`
 	TotalGasUsed          int64                    `json:"total_gas_used,string"`
 	FinalizeBlockEvents   []abci.Event             `json:"finalize_block_events"`
-	ValidatorUpdates      []abci.ValidatorUpdate   `json:"validator_updates"`
 	ValidatorSetUpdate    *abci.ValidatorSetUpdate `json:"validator_set_updates"`
 	ConsensusParamUpdates *types.ConsensusParams   `json:"consensus_param_updates"`
 }
@@ -268,7 +267,7 @@ type ResultBroadcastTx struct {
 	Codespace string         `json:"codespace"`
 	Hash      bytes.HexBytes `json:"hash"`
 
-	Info         string         `json:"info"`
+	Info string `json:"info"`
 }
 
 // CheckTx and DeliverTx results

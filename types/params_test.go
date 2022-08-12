@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -189,8 +187,6 @@ type makeParamsArgs struct {
 	vote         *time.Duration
 	voteDelta    *time.Duration
 	commit       *time.Duration
-
-	abciExtensionHeight int64
 }
 
 func makeParams(args makeParamsArgs) ConsensusParams {
@@ -238,8 +234,7 @@ func makeParams(args makeParamsArgs) ConsensusParams {
 			BypassCommitTimeout: args.bypassCommitTimeout,
 		},
 		ABCI: ABCIParams{
-			VoteExtensionsEnableHeight: args.abciExtensionHeight,
-			RecheckTx:                  args.recheck,
+			RecheckTx: args.recheck,
 		},
 	}
 }
@@ -293,20 +288,6 @@ func TestConsensusParamsUpdate(t *testing.T) {
 				},
 			},
 			updatedParams: makeParams(makeParamsArgs{evidenceAge: 3, precision: 2 * time.Second, messageDelay: 4 * time.Second}),
-		},
-		{
-			// update timeout params
-			initialParams: makeParams(makeParamsArgs{
-				abciExtensionHeight: 1,
-			}),
-			updates: &tmproto.ConsensusParams{
-				Abci: &tmproto.ABCIParams{
-					VoteExtensionsEnableHeight: 10,
-				},
-			},
-			updatedParams: makeParams(makeParamsArgs{
-				abciExtensionHeight: 10,
-			}),
 		},
 		{
 			// update timeout params
@@ -401,78 +382,6 @@ func TestConsensusParamsUpdate_AppVersion(t *testing.T) {
 	assert.EqualValues(t, 1, updated.Version.AppVersion)
 }
 
-func TestConsensusParamsUpdate_VoteExtensionsEnableHeight(t *testing.T) {
-	t.Run("set to height but initial height already run", func(*testing.T) {
-		initialParams := makeParams(makeParamsArgs{
-			abciExtensionHeight: 1,
-		})
-		update := &tmproto.ConsensusParams{
-			Abci: &tmproto.ABCIParams{
-				VoteExtensionsEnableHeight: 10,
-			},
-		}
-		require.Error(t, initialParams.ValidateUpdate(update, 1))
-		require.Error(t, initialParams.ValidateUpdate(update, 5))
-	})
-	t.Run("reset to 0", func(t *testing.T) {
-		initialParams := makeParams(makeParamsArgs{
-			abciExtensionHeight: 1,
-		})
-		update := &tmproto.ConsensusParams{
-			Abci: &tmproto.ABCIParams{
-				VoteExtensionsEnableHeight: 0,
-			},
-		}
-		require.Error(t, initialParams.ValidateUpdate(update, 1))
-	})
-	t.Run("set to height before current height run", func(*testing.T) {
-		initialParams := makeParams(makeParamsArgs{
-			abciExtensionHeight: 100,
-		})
-		update := &tmproto.ConsensusParams{
-			Abci: &tmproto.ABCIParams{
-				VoteExtensionsEnableHeight: 10,
-			},
-		}
-		require.Error(t, initialParams.ValidateUpdate(update, 11))
-		require.Error(t, initialParams.ValidateUpdate(update, 99))
-	})
-	t.Run("set to height after current height run", func(*testing.T) {
-		initialParams := makeParams(makeParamsArgs{
-			abciExtensionHeight: 300,
-		})
-		update := &tmproto.ConsensusParams{
-			Abci: &tmproto.ABCIParams{
-				VoteExtensionsEnableHeight: 99,
-			},
-		}
-		require.NoError(t, initialParams.ValidateUpdate(update, 11))
-		require.NoError(t, initialParams.ValidateUpdate(update, 98))
-	})
-	t.Run("no error when unchanged", func(*testing.T) {
-		initialParams := makeParams(makeParamsArgs{
-			abciExtensionHeight: 100,
-		})
-		update := &tmproto.ConsensusParams{
-			Abci: &tmproto.ABCIParams{
-				VoteExtensionsEnableHeight: 100,
-			},
-		}
-		require.NoError(t, initialParams.ValidateUpdate(update, 500))
-	})
-	t.Run("updated from 0 to 0", func(t *testing.T) {
-		initialParams := makeParams(makeParamsArgs{
-			abciExtensionHeight: 0,
-		})
-		update := &tmproto.ConsensusParams{
-			Abci: &tmproto.ABCIParams{
-				VoteExtensionsEnableHeight: 0,
-			},
-		}
-		require.NoError(t, initialParams.ValidateUpdate(update, 100))
-	})
-}
-
 func TestProto(t *testing.T) {
 	params := []ConsensusParams{
 		makeParams(makeParamsArgs{blockBytes: 4, blockGas: 2, evidenceAge: 3, maxEvidenceBytes: 1}),
@@ -485,8 +394,6 @@ func TestProto(t *testing.T) {
 		makeParams(makeParamsArgs{blockBytes: 4, blockGas: 6, evidenceAge: 5, maxEvidenceBytes: 1}),
 		makeParams(makeParamsArgs{precision: time.Second, messageDelay: time.Minute}),
 		makeParams(makeParamsArgs{precision: time.Nanosecond, messageDelay: time.Millisecond}),
-		makeParams(makeParamsArgs{abciExtensionHeight: 100}),
-		makeParams(makeParamsArgs{abciExtensionHeight: 100}),
 		makeParams(makeParamsArgs{
 			propose:             durationPtr(2 * time.Second),
 			proposeDelta:        durationPtr(400 * time.Millisecond),

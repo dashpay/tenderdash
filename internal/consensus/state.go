@@ -2152,10 +2152,12 @@ func (cs *State) finalizeCommit(ctx context.Context, height int64) {
 		// but may differ from the LastPrecommits included in the next block
 		precommits := cs.Votes.Precommits(cs.CommitRound)
 		seenCommit := precommits.MakeCommit()
-		cs.blockStore.SaveBlock(block, blockParts, seenCommit)
+		cs.applyCommit(ctx, seenCommit, logger)
 	} else {
 		// Happens during replay if we already saved the block but didn't commit
 		logger.Debug("calling finalizeCommit on already stored block", "height", block.Height)
+		// Todo: do we need this?
+		cs.applyCommit(ctx, nil, logger)
 	}
 }
 

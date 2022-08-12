@@ -206,6 +206,7 @@ func (app *Application) FinalizeBlock(_ context.Context, req *types.RequestFinal
 	return &types.ResponseFinalizeBlock{
 		TxResults:          respTxs,
 		ValidatorSetUpdate: proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
+		AppHash:            appHash,
 	}, nil
 }
 

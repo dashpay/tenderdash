@@ -253,7 +253,7 @@ func (r *Reactor) WaitSync() bool {
 func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool) {
 	r.logger.Info("switching to consensus")
 
-	// We have no votes, so reconstruct LastPrecommits from SeenCommit.
+	// we have no votes, so reconstruct LastCommit from SeenCommit
 	if state.LastBlockHeight > 0 {
 		r.state.reconstructLastCommit(state)
 	}
@@ -697,7 +697,7 @@ func (r *Reactor) gossipVotesForHeight(
 ) (bool, error) {
 	logger := r.logger.With("height", prs.Height).With("peer", ps.peerID)
 
-	// If there are lastPrecommits to send...
+	// if there are lastPrecommits to send...
 	if prs.Step == cstypes.RoundStepNewHeight {
 		if ok, err := r.pickSendVote(ctx, ps, rs.LastPrecommits, voteCh); err != nil {
 			logger.Debug("picked previous precommit vote to send")

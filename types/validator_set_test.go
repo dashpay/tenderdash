@@ -1422,8 +1422,6 @@ func BenchmarkValidatorSet_VerifyCommit_Ed25519(b *testing.B) {
 			// create a commit with n validators
 			commit, err := makeCommit(ctx, blockID, stateID, h, 0, voteSet, vals)
 			require.NoError(b, err)
-			commit := extCommit.ToCommit()
-
 			for i := 0; i < b.N/n; i++ {
 				err = valSet.VerifyCommit(chainID, blockID, stateID, h, commit)
 				assert.NoError(b, err)

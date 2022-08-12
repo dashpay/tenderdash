@@ -23,7 +23,6 @@ import (
 	sm "github.com/tendermint/tendermint/internal/state"
 	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
-	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -1018,16 +1017,16 @@ func TestConsensusParamsChangesSaveLoad(t *testing.T) {
 			changeIndex++
 			cp = params[changeIndex]
 		}
-		header, _, blockID, responses := makeHeaderPartsResponsesParams(t, state, &cp)
-		validatorUpdates, thresholdPublicKeyUpdate, quorumHash, err = types.PB2TM.ValidatorUpdatesFromValidatorSet(responses.FinalizeBlock.ValidatorSetUpdate)
+		header, _, blockID, fpResp := makeHeaderPartsResponsesParams(t, state, &cp)
+		validatorUpdates, thresholdPublicKeyUpdate, quorumHash, err = types.PB2TM.ValidatorUpdatesFromValidatorSet(fpResp.ValidatorSetUpdate)
 		require.NoError(t, err)
-		rs, err := abci.MarshalTxResults(responses.TxResults)
+		rs, err := abci.MarshalTxResults(fpResp.TxResults)
 		require.NoError(t, err)
 		h := merkle.HashFromByteSlices(rs)
 
 		// Any node pro tx hash should do
 		firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
-		state, err = state.Update(firstNodeProTxHash, blockID, &header, h, responses.ConsensusParamUpdates, validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
+		state, err = state.Update(firstNodeProTxHash, blockID, &header, h, fpResp.ConsensusParamUpdates, validatorUpdates, thresholdPublicKeyUpdate, quorumHash)
 
 		require.NoError(t, err)
 		err = stateStore.Save(state)
@@ -1111,20 +1110,18 @@ func TestState_StateID(t *testing.T) {
 func blockExecutorFunc(t *testing.T, firstProTxHash crypto.ProTxHash) func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
 	return func(prevState, state sm.State, vsu *abci.ValidatorSetUpdate) sm.State {
 		t.Helper()
-		resp := &tmstate.ABCIResponses{
-			FinalizeBlock: &abci.ResponseFinalizeBlock{ValidatorSetUpdate: vsu},
-		}
+		fpResp := &abci.ResponseFinalizeBlock{ValidatorSetUpdate: vsu}
 		validatorUpdates, thresholdPubKey, quorumHash, err :=
-			types.PB2TM.ValidatorUpdatesFromValidatorSet(resp.FinalizeBlock.ValidatorSetUpdate)
+			types.PB2TM.ValidatorUpdatesFromValidatorSet(fpResp.ValidatorSetUpdate)
 		require.NoError(t, err)
 		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit), nil, 0)
 		require.NoError(t, err)
 		blockID, err := block.BlockID()
 		require.NoError(t, err)
-		rs, err := abci.MarshalTxResults(resp.FinalizeBlock.TxResults)
+		rs, err := abci.MarshalTxResults(fpResp.TxResults)
 		require.NoError(t, err)
 		h := merkle.HashFromByteSlices(rs)
-		state, err = state.Update(firstProTxHash, blockID, &block.Header, h, resp.FinalizeBlock.ConsensusParamUpdates,
+		state, err = state.Update(firstProTxHash, blockID, &block.Header, h, fpResp.ConsensusParamUpdates,
 			validatorUpdates, thresholdPubKey, quorumHash)
 		require.NoError(t, err)
 		return state

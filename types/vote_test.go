@@ -19,14 +19,14 @@ import (
 
 const (
 	//nolint: lll
-	preCommitTestStr = `Vote{56789:6AF1F4111082 12345/2 Precommit 8B01023386C3 000000000000 0 @ 2017-12-25T03:00:01.234Z}`
+	preCommitTestStr = `Vote{56789:959A8F5EF2BE 12345/02/Precommit(8B01023386C3) 000000000000 000000000000 000000000000}`
 	//nolint: lll
-	preVoteTestStr = `Vote{56789:6AF1F4111082 12345/2 Prevote 8B01023386C3 000000000000 0 @ 2017-12-25T03:00:01.234Z}`
+	preVoteTestStr = `Vote{56789:959A8F5EF2BE 12345/02/Prevote(8B01023386C3) 000000000000 000000000000 000000000000}`
 )
 
 var (
 	// nolint: lll
-	nilVoteTestStr                = fmt.Sprintf(`Vote{56789:6AF1F4111082 12345/2 Precommit %s 000000000000 0 @ 2017-12-25T03:00:01.234Z}`, nilVoteStr)
+	nilVoteTestStr                = fmt.Sprintf(`Vote{56789:959A8F5EF2BE 12345/02/Precommit(%s) 000000000000 000000000000 000000000000}`, nilVoteStr)
 	formatNonEmptyVoteExtensionFn = func(voteExtensionLength int) string {
 		// nolint: lll
 		return fmt.Sprintf(`Vote{56789:6AF1F4111082 12345/2 Precommit 8B01023386C3 000000000000 %d @ 2017-12-25T03:00:01.234Z}`, voteExtensionLength)
@@ -266,7 +266,7 @@ func TestVoteExtension(t *testing.T) {
 		{
 			name: "all fields present",
 			extensions: VoteExtensions{
-				tmproto.VoteExtensionType_DEFAULT: []VoteExtension{{Extension: []byte("extension")}},
+				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Extension: []byte("extension")}},
 			},
 			includeSignature: true,
 			expectError:      false,
@@ -274,12 +274,7 @@ func TestVoteExtension(t *testing.T) {
 		{
 			name: "no extension signature",
 			extensions: VoteExtensions{
-				tmproto.VoteExtensionType_DEFAULT: []VoteExtension{
-					{
-						Extension: []byte("extension"),
-						Signature: nil,
-					},
-				},
+				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Extension: []byte("extension")}},
 			},
 			includeSignature: false,
 			expectError:      true,
@@ -288,11 +283,6 @@ func TestVoteExtension(t *testing.T) {
 			name:             "empty extension",
 			includeSignature: true,
 			expectError:      false,
-		},
-		{
-			name:             "no extension and no signature",
-			includeSignature: false,
-			expectError:      true,
 		},
 	}
 
@@ -320,7 +310,6 @@ func TestVoteExtension(t *testing.T) {
 				BlockID:            blockID,
 				VoteExtensions:     tc.extensions,
 			}
-
 			v := vote.ToProto()
 			err = privVal.SignVote(ctx, "test_chain_id", btcjson.LLMQType_5_60, quorumHash, v, stateID, logger)
 			require.NoError(t, err)
@@ -559,7 +548,7 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 		{
 			"vote extension present without signature", func(v *Vote) {
 				v.VoteExtensions = VoteExtensions{
-					tmproto.VoteExtensionType_DEFAULT: {{Extension: []byte("extension")}},
+					tmproto.VoteExtensionType_THRESHOLD_RECOVER: {{Extension: []byte("extension")}},
 				}
 			},
 		},
@@ -569,19 +558,22 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 			"oversized vote extension signature",
 			func(v *Vote) {
 				v.VoteExtensions = VoteExtensions{
-					tmproto.VoteExtensionType_DEFAULT: []VoteExtension{{Signature: make([]byte, SignatureSize+1)}},
+					tmproto.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Signature: make([]byte, SignatureSize+1)}},
 				}
 			},
 		},
 	}
-	for _, tc := range testCases {
-		precommit := examplePrecommit(t)
-		v := precommit.ToProto()
-		stateID := RandStateID().WithHeight(v.Height - 1)
-		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, stateID, nil)
-		tc.malleateVote(precommit)
-		// ValidateBasic ensures that vote extensions, if present, are well formed
-		require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s", tc.name)
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			precommit := examplePrecommit(t)
+			v := precommit.ToProto()
+			stateID := RandStateID().WithHeight(v.Height - 1)
+			signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, stateID, nil)
+			tc.malleateVote(precommit)
+			// ValidateBasic ensures that vote extensions, if present, are well formed
+			require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s", tc.name)
+			require.Error(t, precommit.ValidateWithExtension(), "ValidateWithExtension for %s", tc.name)
+		})
 	}
 }
 

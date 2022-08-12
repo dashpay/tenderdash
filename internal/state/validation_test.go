@@ -465,7 +465,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 			evidence = append(evidence, newEv)
 		}
 
-		state, _, lastExtCommit = makeAndCommitGoodBlock(
+		state, _, lastCommit = makeAndCommitGoodBlock(
 			ctx,
 			t,
 			state,
@@ -478,7 +478,5 @@ func TestValidateBlockEvidence(t *testing.T) {
 			evidence,
 			0,
 		)
-		lastCommit = lastExtCommit.ToCommit()
-
 	}
 }

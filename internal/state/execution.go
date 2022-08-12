@@ -624,11 +624,6 @@ func (state State) Update(
 			return state, fmt.Errorf("updating consensus params: %w", err)
 		}
 
-		err = state.ConsensusParams.ValidateUpdate(consensusParamUpdates, header.Height)
-		if err != nil {
-			return state, fmt.Errorf("updating consensus params: %w", err)
-		}
-
 		state.Version.Consensus.App = nextParams.Version.AppVersion
 
 		// Change results from this height but only applies to the next height.
