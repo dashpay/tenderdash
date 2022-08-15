@@ -34,7 +34,7 @@ jobs:
       - name: Set suffix to Docker tags
         uses: actions/github-script@v6
         id: suffix
-        if: ${{ context.payload.release != null }}
+        if: ${{ github.event.release != null }}
         with:
           result-encoding: string
           script: |
