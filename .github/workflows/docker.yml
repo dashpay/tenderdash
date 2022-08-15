@@ -45,17 +45,28 @@ jobs:
       - name: Set Docker tags and labels
         id: docker_meta
         uses: docker/metadata-action@v3
+        if: ${{ context.payload.release }}
         with:
           images: dashpay/tenderdash
           tags: |
             type=match,pattern=v(\d+),group=1
             type=match,pattern=v(\d+.\d+),group=1
-            type=match,pattern=v(\d+.\d+\-dev),group=1
             type=match,pattern=v(\d+.\d+.\d+),group=1
             type=match,pattern=v(\d+.\d+.\d+),group=1
             type=match,pattern=v(.*),group=1,suffix=,enable=${{ contains(github.event.release.tag_name, '-dev') }}
           flavor: |
             latest=${{ !contains(github.event.release.tag_name, '-dev') }}
+            suffix=${{ steps.suffix.outputs.result }}
+
+      - name: Set Docker tags and labels
+        id: docker_meta
+        uses: docker/metadata-action@v3
+        if: ${{ !context.payload.release }}
+        with:
+          images: dashpay/tenderdash
+          tags: |
+            type=raw,value={{branch}}
+          flavor: |
             suffix=${{ steps.suffix.outputs.result }}
 
       - name: Publish to Docker Hub
