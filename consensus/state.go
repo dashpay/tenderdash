@@ -1052,6 +1052,11 @@ func (cs *State) enterNewRound(height int64, round int32) {
 		// Unlock blocks locked at previous round
 		// FIXME: this is just a workaround, find a proper solution
 		if cs.ProposalBlock != nil && !cs.LockedBlock.HashesTo(cs.ProposalBlock.Hash()) {
+			cs.Logger.Debug(
+				"reset locked block",
+				"locked_round", cs.LockedRound,
+				"locked_block_hash", cs.LockedBlock.Hash(),
+			)
 			cs.LockedRound = -1
 			cs.LockedBlock = nil
 			cs.LockedBlockParts = nil
