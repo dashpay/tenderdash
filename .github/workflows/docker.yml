@@ -45,7 +45,7 @@ jobs:
       - name: Set Docker tags and labels
         id: docker_meta
         uses: docker/metadata-action@v3
-        if: ${{ context.payload.release }}
+        if: ${{ github.event.release }}
         with:
           images: dashpay/tenderdash
           tags: |
@@ -61,7 +61,7 @@ jobs:
       - name: Set Docker tags and labels
         id: docker_meta
         uses: docker/metadata-action@v3
-        if: ${{ !context.payload.release }}
+        if: ${{ !github.event.release }}
         with:
           images: dashpay/tenderdash
           tags: |
