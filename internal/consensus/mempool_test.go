@@ -27,7 +27,7 @@ func assertMempool(txn txNotifier) mempool.Mempool {
 
 func TestMempoolNoProgressUntilTxsAvailable(t *testing.T) {
 	baseConfig := configSetup(t)
-	for proofBlockRange := int64(1); proofBlockRange <= 3; proofBlockRange++ {
+	for proofBlockRange := int64(0); proofBlockRange <= 3; proofBlockRange++ {
 		t.Logf("Checking proof block range %d", proofBlockRange)
 		config, err := ResetConfig("consensus_mempool_txs_available_test")
 		require.NoError(t, err)
