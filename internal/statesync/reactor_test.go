@@ -877,6 +877,7 @@ func mockLB(ctx context.Context, t *testing.T, height int64, time time.Time, las
 		Height:      height,
 		LastBlockID: lastBlockID,
 		Time:        time,
+		AppHash:     make([]byte, crypto.DefaultHashSize),
 	})
 	header.Version.App = testAppVersion
 

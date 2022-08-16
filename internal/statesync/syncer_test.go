@@ -17,6 +17,7 @@ import (
 	"github.com/tendermint/tendermint/internal/proxy"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/statesync/mocks"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	ssproto "github.com/tendermint/tendermint/proto/tendermint/statesync"
 	"github.com/tendermint/tendermint/types"
 	"github.com/tendermint/tendermint/version"
@@ -63,7 +64,7 @@ func TestSyncer_SyncAny(t *testing.T) {
 
 	stateProvider := &mocks.StateProvider{}
 	stateProvider.On("AppHash", mock.Anything, uint64(1)).Return(state.AppHash, nil)
-	stateProvider.On("AppHash", mock.Anything, uint64(2)).Return([]byte("app_hash_2"), nil)
+	stateProvider.On("AppHash", mock.Anything, uint64(2)).Return(tmbytes.HexBytes("app_hash_2"), nil)
 	stateProvider.On("Commit", mock.Anything, uint64(1)).Return(commit, nil)
 	stateProvider.On("State", mock.Anything, uint64(1)).Return(state, nil)
 	conn := &clientmocks.Client{}
@@ -225,7 +226,7 @@ func TestSyncer_SyncAny(t *testing.T) {
 
 func TestSyncer_SyncAny_noSnapshots(t *testing.T) {
 	stateProvider := &mocks.StateProvider{}
-	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return([]byte("app_hash"), nil)
+	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return(tmbytes.HexBytes("app_hash"), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -238,7 +239,7 @@ func TestSyncer_SyncAny_noSnapshots(t *testing.T) {
 
 func TestSyncer_SyncAny_abort(t *testing.T) {
 	stateProvider := &mocks.StateProvider{}
-	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return([]byte("app_hash"), nil)
+	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return(tmbytes.HexBytes("app_hash"), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -262,7 +263,7 @@ func TestSyncer_SyncAny_abort(t *testing.T) {
 
 func TestSyncer_SyncAny_reject(t *testing.T) {
 	stateProvider := &mocks.StateProvider{}
-	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return([]byte("app_hash"), nil)
+	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return(tmbytes.HexBytes("app_hash"), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -304,7 +305,7 @@ func TestSyncer_SyncAny_reject(t *testing.T) {
 
 func TestSyncer_SyncAny_reject_format(t *testing.T) {
 	stateProvider := &mocks.StateProvider{}
-	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return([]byte("app_hash"), nil)
+	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return(tmbytes.HexBytes("app_hash"), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -342,7 +343,7 @@ func TestSyncer_SyncAny_reject_format(t *testing.T) {
 
 func TestSyncer_SyncAny_reject_sender(t *testing.T) {
 	stateProvider := &mocks.StateProvider{}
-	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return([]byte("app_hash"), nil)
+	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return(tmbytes.HexBytes("app_hash"), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -391,7 +392,7 @@ func TestSyncer_SyncAny_reject_sender(t *testing.T) {
 
 func TestSyncer_SyncAny_abciError(t *testing.T) {
 	stateProvider := &mocks.StateProvider{}
-	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return([]byte("app_hash"), nil)
+	stateProvider.On("AppHash", mock.Anything, mock.Anything).Return(tmbytes.HexBytes("app_hash"), nil)
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -444,7 +445,7 @@ func TestSyncer_offerSnapshot(t *testing.T) {
 			defer cancel()
 
 			stateProvider := &mocks.StateProvider{}
-			stateProvider.On("AppHash", mock.Anything, mock.Anything).Return([]byte("app_hash"), nil)
+			stateProvider.On("AppHash", mock.Anything, mock.Anything).Return(tmbytes.HexBytes("app_hash"), nil)
 
 			rts := setup(ctx, t, nil, stateProvider, 2)
 
@@ -497,7 +498,7 @@ func TestSyncer_applyChunks_Results(t *testing.T) {
 			defer cancel()
 
 			stateProvider := &mocks.StateProvider{}
-			stateProvider.On("AppHash", mock.Anything, mock.Anything).Return([]byte("app_hash"), nil)
+			stateProvider.On("AppHash", mock.Anything, mock.Anything).Return(tmbytes.HexBytes("app_hash"), nil)
 
 			rts := setup(ctx, t, nil, stateProvider, 2)
 
@@ -557,7 +558,7 @@ func TestSyncer_applyChunks_RefetchChunks(t *testing.T) {
 			defer cancel()
 
 			stateProvider := &mocks.StateProvider{}
-			stateProvider.On("AppHash", mock.Anything, mock.Anything).Return([]byte("app_hash"), nil)
+			stateProvider.On("AppHash", mock.Anything, mock.Anything).Return(tmbytes.HexBytes("app_hash"), nil)
 
 			rts := setup(ctx, t, nil, stateProvider, 2)
 
@@ -628,7 +629,7 @@ func TestSyncer_applyChunks_RejectSenders(t *testing.T) {
 			defer cancel()
 
 			stateProvider := &mocks.StateProvider{}
-			stateProvider.On("AppHash", mock.Anything, mock.Anything).Return([]byte("app_hash"), nil)
+			stateProvider.On("AppHash", mock.Anything, mock.Anything).Return(tmbytes.HexBytes("app_hash"), nil)
 
 			rts := setup(ctx, t, nil, stateProvider, 2)
 
