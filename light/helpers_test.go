@@ -64,8 +64,8 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 	}
 
 	stateID := types.StateID{
-		Height:      header.Height - 1,
-		LastAppHash: header.AppHash,
+		Height:  header.Height,
+		AppHash: header.AppHash,
 	}
 
 	votes := make([]*types.Vote, len(pkz))

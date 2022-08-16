@@ -1150,7 +1150,7 @@ func TestState_StateID(t *testing.T) {
 
 	stateID := changes.StateID()
 	assert.Equal(t, int64(3), stateID.Height)
-	assert.EqualValues(t, want, stateID.LastAppHash)
+	assert.EqualValues(t, want, stateID.AppHash)
 
 	err = stateID.ValidateBasic()
 	assert.NoError(t, err, "StateID validation failed")

@@ -339,7 +339,7 @@ func TestMaxCommitBytes(t *testing.T) {
 			},
 		},
 		StateID: StateID{
-			LastAppHash: crypto.Checksum([]byte("stateID_hash")),
+			AppHash: crypto.Checksum([]byte("stateID_hash")),
 		},
 		ThresholdBlockSignature: crypto.CRandBytes(SignatureSize),
 		ThresholdStateSignature: crypto.CRandBytes(SignatureSize),
@@ -373,7 +373,7 @@ func TestHeaderHash(t *testing.T) {
 			NextValidatorsHash:    crypto.Checksum([]byte("next_validators_hash")),
 			ConsensusHash:         crypto.Checksum([]byte("consensus_hash")),
 			AppHash:               crypto.Checksum([]byte("app_hash")),
-			ResultsHash:           crypto.Checksum([]byte("results_hash")),
+			ResultsHash:           crypto.Checksum([]byte("last_results_hash")),
 			EvidenceHash:          crypto.Checksum([]byte("evidence_hash")),
 			ProposerProTxHash:     crypto.ProTxHashFromSeedBytes([]byte("proposer_pro_tx_hash")),
 			ProposedAppVersion:    1,
@@ -488,7 +488,7 @@ func TestMaxHeaderBytes(t *testing.T) {
 func randCommit(ctx context.Context, t *testing.T, stateID StateID) *Commit {
 	t.Helper()
 	lastID := makeBlockIDRandom()
-	height := stateID.Height + 1
+	height := stateID.Height
 	voteSet, _, vals := randVoteSet(ctx, t, height, 1, tmproto.PrecommitType, 10)
 	commit, err := makeCommit(ctx, lastID, stateID, height, 1, voteSet, vals)
 
@@ -588,8 +588,8 @@ func TestCommitToVoteSetWithVotesForNilBlock(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// all votes below use height - 1, so state is at height - 2
-	stateID := RandStateID().WithHeight(height - 2)
+	// all votes below use height - 1
+	stateID := RandStateID().WithHeight(height - 1)
 
 	type commitVoteTest struct {
 		blockIDs      []BlockID
@@ -617,6 +617,7 @@ func TestCommitToVoteSetWithVotesForNilBlock(t *testing.T) {
 					Round:              round,
 					Type:               tmproto.PrecommitType,
 					BlockID:            tc.blockIDs[n],
+					AppHash:            stateID.AppHash.Copy(),
 				}
 
 				added, err := signAddVote(ctx, vals[vi], vote, voteSet)
@@ -899,7 +900,7 @@ func TestStateID_Copy(t *testing.T) {
 	state2 := state1.Copy()
 	assert.Equal(t, state1, state2)
 
-	state2.LastAppHash[5] = 0x12
+	state2.AppHash[5] = 0x12
 	assert.NotEqual(t, state1, state2)
 }
 
@@ -1222,8 +1223,8 @@ func TestStateID_ValidateBasic(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			stateID := StateID{
-				Height:      tt.fields.Height,
-				LastAppHash: tt.fields.LastAppHash,
+				Height:  tt.fields.Height,
+				AppHash: tt.fields.LastAppHash,
 			}
 			if err := stateID.ValidateBasic(); (err != nil) != tt.wantErr {
 				t.Errorf("StateID.ValidateBasic() error = %v, wantErr %v", err, tt.wantErr)

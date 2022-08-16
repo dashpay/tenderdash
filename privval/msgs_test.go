@@ -71,8 +71,8 @@ func TestPrivvalVectors(t *testing.T) {
 	proposal := exampleProposal()
 	proposalpb := proposal.ToProto()
 
-	// Previous state ID
-	stateID := types.StateID{Height: vote.Height - 1, LastAppHash: []byte("12345678901234567890123456789012")}
+	// State ID
+	stateID := vote.StateID()
 	stateIDpb := stateID.ToProto()
 
 	// Create a Reuseable remote error

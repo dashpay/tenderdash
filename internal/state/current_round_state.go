@@ -169,8 +169,8 @@ func (candidate CurentRoundState) StateID() types.StateID {
 	}
 
 	return types.StateID{
-		Height:      candidate.Height(),
-		LastAppHash: appHash,
+		Height:  candidate.Height(),
+		AppHash: appHash,
 	}
 }
 

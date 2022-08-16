@@ -170,7 +170,7 @@ func TestWALWriteCommit(t *testing.T) {
 	}
 	msg := &CommitMessage{
 		Commit: &tmtypes.Commit{
-			Height:                  stateID.Height + 1,
+			Height:                  stateID.Height,
 			StateID:                 stateID,
 			BlockID:                 blockID,
 			ThresholdBlockSignature: crypto.CRandBytes(96),

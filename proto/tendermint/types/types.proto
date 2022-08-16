@@ -64,8 +64,8 @@ message BlockID {
 
 // StateID
 message StateID {
-  bytes last_app_hash = 1;
-  int64 height        = 2;
+  bytes app_hash = 1;
+  int64 height   = 2;
 }
 
 // --------------------------------

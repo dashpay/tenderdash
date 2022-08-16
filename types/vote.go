@@ -163,6 +163,14 @@ func (vote *Vote) Copy() *Vote {
 	return &voteCopy
 }
 
+// StateID generates state ID for this vote
+func (vote *Vote) StateID() StateID {
+	return StateID{
+		Height:  vote.Height,
+		AppHash: vote.AppHash,
+	}
+}
+
 // String returns a string representation of Vote.
 //
 // 1. validator index

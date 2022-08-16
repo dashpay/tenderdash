@@ -169,8 +169,8 @@ func TestVoteStateSignBytesTestVectors(t *testing.T) {
 	}
 	for i, tc := range tests {
 		sid := StateID{
-			Height:      tc.height,
-			LastAppHash: tc.apphash,
+			Height:  tc.height,
+			AppHash: tc.apphash,
 		}
 		got := sid.SignBytes(tc.chainID)
 		assert.Equal(t, len(tc.want), len(got), "test case #%v: got unexpected sign bytes length for Vote.", i)

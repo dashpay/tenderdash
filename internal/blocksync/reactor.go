@@ -515,10 +515,7 @@ func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh
 			var (
 				firstPartSetHeader = firstParts.Header()
 				firstID            = types.BlockID{Hash: first.Hash(), PartSetHeader: firstPartSetHeader}
-				stateID            = types.StateID{
-					Height:      first.Height - 1,
-					LastAppHash: first.AppHash,
-				}
+				stateID            = first.StateID()
 			)
 
 			// Finally, verify the first block using the second's commit.

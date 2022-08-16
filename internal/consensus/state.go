@@ -2987,10 +2987,7 @@ func (cs *State) signVote(
 	ctxto, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	stateID := types.StateID{
-		Height:      cs.RoundState.Height,
-		LastAppHash: cs.RoundState.AppHash,
-	}
+	stateID := cs.StateID()
 
 	err := cs.privValidator.SignVote(ctxto, cs.state.ChainID, cs.state.Validators.QuorumType, cs.state.Validators.QuorumHash,
 		v, stateID, cs.logger)

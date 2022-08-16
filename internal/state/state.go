@@ -380,8 +380,8 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 	}
 
 	stateID := types.StateID{
-		Height:      genDoc.InitialHeight - 1,
-		LastAppHash: genDoc.AppHash,
+		Height:  genDoc.InitialHeight,
+		AppHash: genDoc.AppHash,
 	}
 
 	return State{

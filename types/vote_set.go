@@ -213,7 +213,7 @@ func (voteSet *VoteSet) addVote(vote *Vote) (added bool, err error) {
 		voteSet.valSet.QuorumHash,
 		val.PubKey,
 		val.ProTxHash,
-		StateID{LastAppHash: vote.AppHash, Height: vote.Height},
+		vote.StateID(),
 	)
 	if err != nil {
 		return false, ErrInvalidVoteSignature(
@@ -727,8 +727,7 @@ func (voteSet *VoteSet) MakeCommit() *Commit {
 			if vote == nil {
 				continue
 			}
-			stateID.Height = vote.Height
-			stateID.LastAppHash = vote.AppHash
+			stateID = vote.StateID()
 			break
 		}
 	}

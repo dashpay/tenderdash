@@ -51,8 +51,8 @@ func MakeQuorumSignsWithVoteSet(voteSet *VoteSet, vote *types.Vote) (QuorumSignD
 		voteSet.valSet.QuorumHash,
 		vote,
 		StateID{
-			Height:      vote.Height,
-			LastAppHash: vote.AppHash,
+			Height:  vote.Height,
+			AppHash: vote.AppHash,
 		},
 	)
 }

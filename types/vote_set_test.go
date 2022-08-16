@@ -131,8 +131,12 @@ func TestVoteSet_AddVote_StateID(t *testing.T) {
 
 	height, round := int64(10), int32(0)
 
-	randStateID1 := RandStateID().WithHeight(height - 1)
-	randStateID2 := RandStateID().WithHeight(height - 1)
+	appHash := tmrand.Bytes(crypto.DefaultAppHashSize)
+	correctStateID := StateID{
+		Height:  height,
+		AppHash: appHash,
+	}
+	wrongStateID := RandStateID().WithHeight(height)
 
 	testCases := []struct {
 		name           string
@@ -140,10 +144,10 @@ func TestVoteSet_AddVote_StateID(t *testing.T) {
 		wrongStateID   StateID
 		shouldFail     bool
 	}{
-		{"correct", randStateID1, randStateID1, false},
-		{"wrong apphash", randStateID1, randStateID2, true},
-		{"too low height", randStateID1, randStateID1.WithHeight(height - 5), true},
-		{"too high height", randStateID1, randStateID1.WithHeight(height + 5), true},
+		{"correct", correctStateID, correctStateID, false},
+		{"wrong apphash", correctStateID, wrongStateID, true},
+		{"too low height", correctStateID, correctStateID.WithHeight(height - 5), true},
+		{"too high height", correctStateID, correctStateID.WithHeight(height + 5), true},
 	}
 	//nolint:scopelint
 	for _, tc := range testCases {
@@ -170,6 +174,7 @@ func TestVoteSet_AddVote_StateID(t *testing.T) {
 				Round:              round,
 				Type:               tmproto.PrevoteType,
 				BlockID:            blockID,
+				AppHash:            appHash,
 			}
 			_, err = signAddVote(ctx, val0, vote1, voteSet)
 			require.NoError(t, err)
@@ -181,6 +186,7 @@ func TestVoteSet_AddVote_StateID(t *testing.T) {
 				Round:              round,
 				Type:               tmproto.PrevoteType,
 				BlockID:            blockID,
+				AppHash:            appHash,
 			}
 			_, err = signAddVoteForStateID(ctx, val1, vote2, voteSet, tc.wrongStateID)
 			if tc.shouldFail {

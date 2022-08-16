@@ -1391,17 +1391,8 @@ func makeBlockchainFromWAL(t *testing.T, wal WAL, genDoc *types.GenesisDoc) ([]*
 			require.NoError(t, err)
 		case *types.Vote:
 			if p.Type == tmproto.PrecommitType {
-				// previous block, needed to detemine StateID
-				var stateID types.StateID
-				if len(blocks) >= 1 {
-					prevBlock := blocks[len(blocks)-1]
-					stateID = types.StateID{Height: prevBlock.Height, LastAppHash: prevBlock.AppHash}
-				} else {
-					stateID = types.StateID{Height: genDoc.InitialHeight, LastAppHash: genDoc.AppHash}
-				}
-
 				thisBlockCommit = types.NewCommit(p.Height, p.Round,
-					p.BlockID, stateID,
+					p.BlockID, p.StateID(),
 					&types.CommitSigns{
 						QuorumSigns: types.QuorumSigns{
 							BlockSign:      p.BlockSignature,

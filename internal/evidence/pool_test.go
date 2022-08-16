@@ -564,7 +564,7 @@ func makeCommit(height int64, quorumHash []byte, valProTxHash []byte) *types.Com
 		height,
 		0,
 		types.BlockID{},
-		types.StateID{Height: height - 1},
+		types.StateID{Height: height},
 		&types.CommitSigns{
 			QuorumSigns: types.QuorumSigns{
 				BlockSign: crypto.CRandBytes(types.SignatureSize),

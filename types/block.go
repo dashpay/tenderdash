@@ -58,7 +58,7 @@ type Block struct {
 
 // StateID returns a state ID of this block
 func (b *Block) StateID() StateID {
-	return StateID{Height: b.Height, LastAppHash: b.AppHash}
+	return StateID{Height: b.Height, AppHash: b.AppHash}
 }
 
 // BlockID returns a block ID of this block

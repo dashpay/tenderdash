@@ -123,10 +123,7 @@ func (vs *validatorStub) signVote(
 		AppHash:            lastAppHash,
 	}
 
-	stateID := types.StateID{
-		Height:      vote.Height,
-		LastAppHash: lastAppHash,
-	}
+	stateID := vote.StateID()
 	v := vote.ToProto()
 
 	if err := vs.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, v, stateID, nil); err != nil {

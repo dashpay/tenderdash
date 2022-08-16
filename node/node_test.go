@@ -551,8 +551,8 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	require.NoError(t, stateStore.Save(state))
 
 	stateID := types.StateID{
-		Height:      math.MaxInt64 - 1,
-		LastAppHash: crypto.Checksum([]byte("app_hash")),
+		Height:  math.MaxInt64 - 1,
+		AppHash: crypto.Checksum([]byte("app_hash")),
 	}
 
 	timestamp := time.Date(math.MaxInt64, 0, 0, 0, 0, 0, math.MaxInt64, time.UTC)

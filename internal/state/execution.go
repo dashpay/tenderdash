@@ -549,7 +549,7 @@ func (state State) Update(
 		InitialHeight:                    state.InitialHeight,
 		LastBlockHeight:                  header.Height,
 		LastBlockID:                      blockID,
-		LastStateID:                      types.StateID{Height: header.Height, LastAppHash: header.AppHash},
+		LastStateID:                      types.StateID{Height: header.Height, AppHash: header.AppHash},
 		LastBlockTime:                    header.Time,
 		LastCoreChainLockedBlockHeight:   state.LastCoreChainLockedBlockHeight,
 		Validators:                       state.Validators.Copy(),
