@@ -1,3 +1,10 @@
+## [0.8.0-dev.10] - 2022-08-16
+
+### Refactor
+
+- Allow set 0 for 'create-proof-block-range' to ignore proof block app hash
+- Start test of proof-block range from 0 height
+
 ## [0.8.0-dev.7] - 2022-08-10
 
 ### Bug Fixes
