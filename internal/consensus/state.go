@@ -2963,7 +2963,7 @@ func (cs *State) signVote(
 		Round:              cs.Round,
 		Type:               msgType,
 		BlockID:            types.BlockID{Hash: hash, PartSetHeader: header},
-		AppHash:            cs.RoundState.AppHash,
+		AppHash:            cs.RoundState.CurentRoundState.AppHash,
 	}
 
 	// If the signedMessageType is for precommit,
