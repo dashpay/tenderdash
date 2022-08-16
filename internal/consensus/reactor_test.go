@@ -464,7 +464,7 @@ func TestReactorWithEvidence(t *testing.T) {
 
 	genDoc, privVals := factory.RandGenesisDoc(cfg, n, 1, consParams)
 	states := make([]*State, n)
-	logger := consensusLogger()
+	logger := consensusLogger(t)
 
 	for i := 0; i < n; i++ {
 		stateDB := dbm.NewMemDB() // each state needs its own db

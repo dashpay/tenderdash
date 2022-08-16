@@ -52,7 +52,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 
 	for i := 0; i < nValidators; i++ {
 		func() {
-			logger := consensusLogger().With("test", "byzantine", "validator", i)
+			logger := consensusLogger(t).With("test", "byzantine", "validator", i)
 			stateDB := dbm.NewMemDB() // each state needs its own db
 			stateStore := sm.NewStore(stateDB)
 			state, err := sm.MakeGenesisState(genDoc)

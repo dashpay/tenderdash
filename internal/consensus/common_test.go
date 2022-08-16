@@ -782,8 +782,11 @@ func ensureMessageBeforeTimeout(t *testing.T, ch <-chan tmpubsub.Message, to tim
 
 // consensusLogger is a TestingLogger which uses a different
 // color for each validator ("validator" key must exist).
-func consensusLogger() log.Logger {
-	return log.NewNopLogger().With("module", "consensus")
+func consensusLogger(t *testing.T) log.Logger {
+	if t == nil {
+		return log.NewNopLogger().With("module", "consensus")
+	}
+	return log.NewTestingLogger(t).With("module", "consensus")
 }
 
 func makeConsensusState(
@@ -800,7 +803,7 @@ func makeConsensusState(
 
 	genDoc, privVals := factory.RandGenesisDoc(cfg, nValidators, 1, factory.ConsensusParams())
 	css := make([]*State, nValidators)
-	logger := consensusLogger()
+	logger := consensusLogger(t)
 
 	closeFuncs := make([]func() error, 0, nValidators)
 	configRootDirs := make([]string, 0, nValidators)
@@ -865,7 +868,7 @@ func randConsensusNetWithPeers(
 	genDoc, privVals := factory.RandGenesisDoc(cfg, nValidators, 1, consParams)
 	css := make([]*State, nPeers)
 	t.Helper()
-	logger := consensusLogger()
+	logger := consensusLogger(t)
 	var peer0Config *config.Config
 	closeFuncs := make([]func() error, 0, nValidators)
 	configRootDirs := make([]string, 0, nPeers)
