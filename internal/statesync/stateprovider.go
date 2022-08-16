@@ -14,6 +14,7 @@ import (
 	dashcore "github.com/tendermint/tendermint/dash/core"
 	"github.com/tendermint/tendermint/internal/p2p"
 	sm "github.com/tendermint/tendermint/internal/state"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/light"
 	lightprovider "github.com/tendermint/tendermint/light/provider"
@@ -33,7 +34,7 @@ import (
 // uses the P2P layer and the other uses the RPC layer. Both use light client verification.
 type StateProvider interface {
 	// AppHash returns the app hash after the given height has been committed.
-	AppHash(ctx context.Context, height uint64) ([]byte, error)
+	AppHash(ctx context.Context, height uint64) (tmbytes.HexBytes, error)
 	// Commit returns the commit at the given height.
 	Commit(ctx context.Context, height uint64) (*types.Commit, error)
 	// State returns a state object at the given height.
@@ -98,7 +99,7 @@ func (s *stateProviderRPC) verifyLightBlockAtHeight(ctx context.Context, height 
 // AppHash implements part of StateProvider. It calls the application to verify the
 // light blocks at heights h+1 and h+2 and, if verification succeeds, reports the app
 // hash for the block at height h+1 which correlates to the state at height h.
-func (s *stateProviderRPC) AppHash(ctx context.Context, height uint64) ([]byte, error) {
+func (s *stateProviderRPC) AppHash(ctx context.Context, height uint64) (tmbytes.HexBytes, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -246,7 +247,7 @@ func (s *stateProviderP2P) verifyLightBlockAtHeight(ctx context.Context, height 
 }
 
 // AppHash implements StateProvider.
-func (s *stateProviderP2P) AppHash(ctx context.Context, height uint64) ([]byte, error) {
+func (s *stateProviderP2P) AppHash(ctx context.Context, height uint64) (tmbytes.HexBytes, error) {
 	s.Lock()
 	defer s.Unlock()
 
