@@ -180,9 +180,9 @@ func (rts *reactorTestSuite) addNode(
 			)
 		}
 
-		thisBlock, err := sf.MakeBlock(state, blockHeight, lastCommit)
+		thisBlock, err := sf.MakeBlock(state, blockHeight, lastCommit, 0)
 		require.NoError(t, err)
-		thisBlock.SetDashParams(state.LastCoreChainLockedBlockHeight, nil, 0)
+		thisBlock.CoreChainLockedHeight = state.LastCoreChainLockedBlockHeight
 		thisParts, err := thisBlock.MakePartSet(types.BlockPartSizeBytes)
 		require.NoError(t, err)
 		blockID := types.BlockID{Hash: thisBlock.Hash(), PartSetHeader: thisParts.Header()}
