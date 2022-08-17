@@ -579,7 +579,8 @@ func ensureNoMessageBeforeTimeout(t *testing.T, ch <-chan tmpubsub.Message, time
 	select {
 	case <-time.After(timeout):
 		break
-	case <-ch:
+	case e := <-ch:
+		t.Logf("received unexpected event of type %T: %+v", e.Data(), e)
 		t.Fatal(errorMessage)
 	}
 }

@@ -198,7 +198,7 @@ func (vote *Vote) String() string {
 		panic("Unknown vote type")
 	}
 
-	return fmt.Sprintf("Vote{%v:%X %v/%02d/%v(%v) %X %X %X %X}",
+	return fmt.Sprintf("Vote{%v:%X %v/%02d/%v(%v) %X %X %X %X %X}",
 		vote.ValidatorIndex,
 		tmbytes.Fingerprint(vote.ValidatorProTxHash),
 		vote.Height,
@@ -209,6 +209,7 @@ func (vote *Vote) String() string {
 		tmbytes.Fingerprint(vote.BlockSignature),
 		tmbytes.Fingerprint(vote.StateSignature),
 		vote.VoteExtensions.Fingerprint(),
+		vote.AppHash.ShortString(),
 	)
 }
 
@@ -401,13 +402,13 @@ func (vote *Vote) MarshalZerologObject(e *zerolog.Event) {
 	if vote == nil {
 		return
 	}
-	e.Str("vote", vote.String())
 	e.Int64("height", vote.Height)
 	e.Int32("round", vote.Round)
 	e.Str("type", vote.Type.String())
-	e.Str("block_key", vote.BlockID.String())
+	e.Str("block_id", vote.BlockID.String())
 	e.Str("block_signature", vote.BlockSignature.ShortString())
 	e.Str("state_signature", vote.StateSignature.ShortString())
+	e.Str("apphash", vote.AppHash.ShortString())
 	e.Str("val_proTxHash", vote.ValidatorProTxHash.ShortString())
 	e.Int32("val_index", vote.ValidatorIndex)
 	e.Bool("nil", vote.BlockID.IsNil())
