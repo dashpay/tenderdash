@@ -576,7 +576,7 @@ func (h *Handshaker) replayBlocks(
 			return nil, fmt.Errorf("replay process proposal: %w", err)
 		}
 
-		appHash, _, err = sm.ExecCommitBlock(ctx, blockExec, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state, uncommittedState)
+		appHash, _, err = sm.ExecReplayedCommitBlock(ctx, blockExec, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state, uncommittedState)
 		if err != nil {
 			return nil, err
 		}

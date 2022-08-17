@@ -335,7 +335,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		return state, ErrInvalidBlock{err}
 	}
 	startTime := time.Now().UnixNano()
-	_, finalizeBlockResponses, err := ExecCommitBlock(ctx, blockExec, blockExec.appClient, block, blockExec.logger, blockExec.store, -1, state, uncommittedState)
+	_, finalizeBlockResponses, err := execBlockWithoutState(ctx, blockExec, blockExec.appClient, block, blockExec.logger, blockExec.store, -1, state, uncommittedState)
 	if err != nil {
 		return state, ErrInvalidBlock{err}
 	}
@@ -690,11 +690,11 @@ func execBlock(
 
 //----------------------------------------------------------------------------------------------------
 // Execute block without state. TODO: eliminate
-// ExecCommitBlock executes and commits a block on the proxyApp without validating or mutating the state.
+// ExecReplayedCommitBlock executes and commits a block on the proxyApp without validating or mutating the state.
 // It returns the application root hash (apphash - result of abci.Commit).
 //
 // CONTRACT: Block should already be delivered to the app with PrepareProposal or ProcessProposal
-func ExecCommitBlock(
+func ExecReplayedCommitBlock(
 	ctx context.Context,
 	be *BlockExecutor,
 	appConn abciclient.Client,
@@ -705,10 +705,9 @@ func ExecCommitBlock(
 	s State,
 	ucState CurentRoundState,
 ) ([]byte, *abci.ResponseFinalizeBlock, error) {
-	respFinalizeBlock, err := execBlock(ctx, be, appConn, block, logger, store, initialHeight, s)
+	data, respFinalizeBlock, err := execBlockWithoutState(ctx, be, appConn, block, logger, store, initialHeight, s, ucState)
 	if err != nil {
-		logger.Error("executing block", "err", err)
-		return nil, respFinalizeBlock, err
+		return nil, nil, err
 	}
 
 	// the BlockExecutor condition is using for the final block replay process.
@@ -731,6 +730,25 @@ func ExecCommitBlock(
 			respFinalizeBlock,
 			vsetUpdate,
 		)
+	}
+
+	return data, respFinalizeBlock, nil
+}
+func execBlockWithoutState(
+	ctx context.Context,
+	be *BlockExecutor,
+	appConn abciclient.Client,
+	block *types.Block,
+	logger log.Logger,
+	store Store,
+	initialHeight int64,
+	s State,
+	ucState CurentRoundState,
+) ([]byte, *abci.ResponseFinalizeBlock, error) {
+	respFinalizeBlock, err := execBlock(ctx, be, appConn, block, logger, store, initialHeight, s)
+	if err != nil {
+		logger.Error("executing block", "err", err)
+		return nil, respFinalizeBlock, err
 	}
 
 	// Commit block, get hash back
