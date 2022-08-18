@@ -111,6 +111,8 @@ func (vs *validatorStub) signVote(
 		return nil, fmt.Errorf("can't get proTxHash: %w", err)
 	}
 
+	fmt.Printf("proTxHash = = %s\n", proTxHash.ShortString())
+
 	vote := &types.Vote{
 		Type:               voteType,
 		Height:             vs.Height,

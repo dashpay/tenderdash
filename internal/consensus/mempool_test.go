@@ -309,8 +309,8 @@ func (app *CounterApplication) FinalizeBlock(_ context.Context, req *abci.Reques
 	res := &abci.ResponseFinalizeBlock{TxResults: respTxs}
 
 	if app.txCount > 0 {
-		res.AppHash = make([]byte, 8)
-		binary.BigEndian.PutUint64(res.AppHash, uint64(app.txCount))
+		res.AppHash = make([]byte, 32)
+		binary.BigEndian.PutUint64(res.AppHash[24:], uint64(app.txCount))
 	}
 
 	return res, nil
