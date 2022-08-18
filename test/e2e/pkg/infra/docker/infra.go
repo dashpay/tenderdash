@@ -131,7 +131,7 @@ func (ti *testnetInfra) Cleanup(ctx context.Context) error {
 		return err
 	}
 	err = execDocker(ctx, "run", "--rm", "--entrypoint", "", "-v", fmt.Sprintf("%v:/network", absDir),
-		"tendermint/e2e-node", "sh", "-c", "rm -rf /network/*/")
+		"tenderdash/e2e-node", "sh", "-c", "rm -rf /network/*/")
 	if err != nil {
 		return err
 	}

@@ -190,36 +190,40 @@ type validatorSetUpdateJSON struct {
 }
 
 func (m *ValidatorSetUpdate) MarshalJSON() ([]byte, error) {
-	key, err := encoding.PubKeyFromProto(m.ThresholdPublicKey)
-	if err != nil {
-		return nil, err
-	}
-	jkey, err := jsontypes.Marshal(key)
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(validatorSetUpdateJSON{
+	ret := validatorSetUpdateJSON{
 		ValidatorUpdates: m.ValidatorUpdates,
-		ThresholdPubKey:  jkey,
 		QuorumHash:       m.QuorumHash,
-	})
+	}
+	if m.ThresholdPublicKey.Sum != nil {
+		key, err := encoding.PubKeyFromProto(m.ThresholdPublicKey)
+		if err != nil {
+			return nil, err
+		}
+		ret.ThresholdPubKey, err = jsontypes.Marshal(key)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(ret)
 }
 
 func (m *ValidatorSetUpdate) UnmarshalJSON(data []byte) error {
 	var vsu validatorSetUpdateJSON
-	if err := json.Unmarshal(data, &vsu); err != nil {
+	err := json.Unmarshal(data, &vsu)
+	if err != nil {
 		return err
 	}
 	var key crypto.PubKey
 	if err := jsontypes.Unmarshal(vsu.ThresholdPubKey, &key); err != nil {
 		return err
 	}
-	pkey, err := encoding.PubKeyToProto(key)
-	if err != nil {
-		return err
+	if key != nil {
+		m.ThresholdPublicKey, err = encoding.PubKeyToProto(key)
+		if err != nil {
+			return err
+		}
 	}
 	m.ValidatorUpdates = vsu.ValidatorUpdates
-	m.ThresholdPublicKey = pkey
 	m.QuorumHash = vsu.QuorumHash
 	return nil
 }

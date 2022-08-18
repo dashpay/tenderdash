@@ -104,15 +104,15 @@ func run(ctx context.Context, configFile string) error {
 }
 
 func startAppServer(ctx context.Context, cfg *Config, logger log.Logger) error {
-	if cfg.Mode == string(e2e.ModeLight) {
-		return startLightNode(ctx, logger, cfg)
-	}
 	// Start remote signer (must start before node if running builtin).
 	if cfg.PrivValServer != "" {
 		err := startRemoteSigner(ctx, cfg, logger)
 		if err != nil {
 			return err
 		}
+	}
+	if cfg.Mode == string(e2e.ModeLight) {
+		return startLightNode(ctx, logger, cfg)
 	}
 	switch cfg.Protocol {
 	case "socket", "grpc":

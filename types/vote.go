@@ -266,18 +266,20 @@ func (vote *Vote) verifyBasic(proTxHash ProTxHash, pubKey crypto.PubKey) error {
 
 // VerifyExtension checks whether the vote extension signature corresponds to the
 // given chain ID and public key.
-func (vote *Vote) VerifyExtension(chainID string, pubKey crypto.PubKey) error {
+func (vote *Vote) VerifyExtension(chainID string, pubKey crypto.PubKey, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash) error {
 	if vote.Type != tmproto.PrecommitType || vote.BlockID.IsNil() {
 		return nil
 	}
-	v := vote.ToProto()
-	for _, ve := range v.VoteExtensions {
-		extSignBytes := VoteExtensionSignBytes(chainID, vote.Height, vote.Round, ve)
-		if !pubKey.VerifySignature(extSignBytes, ve.Signature) {
-			return ErrVoteInvalidSignature
-		}
+	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto(), StateID{})
+	if err != nil {
+		return err
 	}
-	return nil
+	verifier := NewQuorumSingsVerifier(
+		quorumSignData,
+		WithVerifyBlock(false),
+		WithVerifyState(false),
+	)
+	return verifier.Verify(pubKey, vote.makeQuorumSigns())
 }
 
 func (vote *Vote) verifySign(

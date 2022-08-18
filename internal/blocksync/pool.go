@@ -207,13 +207,13 @@ func (pool *BlockPool) IsCaughtUp() bool {
 // as we switch from block sync to consensus mode.
 //
 // The caller will verify the commit.
-func (pool *BlockPool) PeekTwoBlocks() (first, second *types.Block, firstExtCommit *types.Commit) {
+func (pool *BlockPool) PeekTwoBlocks() (first, second *types.Block, firstCommit *types.Commit) {
 	pool.mtx.RLock()
 	defer pool.mtx.RUnlock()
 
 	if r := pool.requesters[pool.height]; r != nil {
 		first = r.getBlock()
-		firstExtCommit = r.getCommit()
+		firstCommit = r.getCommit()
 	}
 	if r := pool.requesters[pool.height+1]; r != nil {
 		second = r.getBlock()
@@ -276,12 +276,12 @@ func (pool *BlockPool) RedoRequest(height int64) types.NodeID {
 // height of the extended commit and the height of the block do not match, we
 // do not add the block and return an error.
 // TODO: ensure that blocks come in order for each peer.
-func (pool *BlockPool) AddBlock(peerID types.NodeID, block *types.Block, extCommit *types.Commit, blockSize int) error {
+func (pool *BlockPool) AddBlock(peerID types.NodeID, block *types.Block, commit *types.Commit, blockSize int) error {
 	pool.mtx.Lock()
 	defer pool.mtx.Unlock()
 
-	if extCommit != nil && block.Height != extCommit.Height {
-		return fmt.Errorf("heights don't match, not adding block (block height: %d, commit height: %d)", block.Height, extCommit.Height)
+	if commit != nil && block.Height != commit.Height {
+		return fmt.Errorf("heights don't match, not adding block (block height: %d, commit height: %d)", block.Height, commit.Height)
 	}
 
 	requester := pool.requesters[block.Height]
@@ -296,7 +296,7 @@ func (pool *BlockPool) AddBlock(peerID types.NodeID, block *types.Block, extComm
 		return fmt.Errorf("peer sent us a block we didn't expect (peer: %s, current height: %d, block height: %d)", peerID, pool.height, block.Height)
 	}
 
-	if requester.setBlock(block, extCommit, peerID) {
+	if requester.setBlock(block, commit, peerID) {
 		atomic.AddInt32(&pool.numPending, -1)
 		peer := pool.peers[peerID]
 		if peer != nil {
@@ -472,7 +472,7 @@ func (pool *BlockPool) debug() string {
 		} else {
 			str += fmt.Sprintf("H(%v):", h)
 			str += fmt.Sprintf("B?(%v) ", pool.requesters[h].block != nil)
-			str += fmt.Sprintf("C?(%v) ", pool.requesters[h].extCommit != nil)
+			str += fmt.Sprintf("C?(%v) ", pool.requesters[h].commit != nil)
 		}
 	}
 	return str
@@ -561,10 +561,10 @@ type bpRequester struct {
 	gotBlockCh chan struct{}
 	redoCh     chan types.NodeID // redo may send multitime, add peerId to identify repeat
 
-	mtx       sync.Mutex
-	peerID    types.NodeID
-	block     *types.Block
-	extCommit *types.Commit
+	mtx    sync.Mutex
+	peerID types.NodeID
+	block  *types.Block
+	commit *types.Commit
 }
 
 func newBPRequester(logger log.Logger, pool *BlockPool, height int64) *bpRequester {
@@ -590,15 +590,15 @@ func (bpr *bpRequester) OnStart(ctx context.Context) error {
 func (*bpRequester) OnStop() {}
 
 // Returns true if the peer matches and block doesn't already exist.
-func (bpr *bpRequester) setBlock(block *types.Block, extCommit *types.Commit, peerID types.NodeID) bool {
+func (bpr *bpRequester) setBlock(block *types.Block, commit *types.Commit, peerID types.NodeID) bool {
 	bpr.mtx.Lock()
 	if bpr.block != nil || bpr.peerID != peerID {
 		bpr.mtx.Unlock()
 		return false
 	}
 	bpr.block = block
-	if extCommit != nil {
-		bpr.extCommit = extCommit
+	if commit != nil {
+		bpr.commit = commit
 	}
 	bpr.mtx.Unlock()
 
@@ -618,7 +618,7 @@ func (bpr *bpRequester) getBlock() *types.Block {
 func (bpr *bpRequester) getCommit() *types.Commit {
 	bpr.mtx.Lock()
 	defer bpr.mtx.Unlock()
-	return bpr.extCommit
+	return bpr.commit
 }
 
 func (bpr *bpRequester) getPeerID() types.NodeID {
@@ -638,7 +638,7 @@ func (bpr *bpRequester) reset() {
 
 	bpr.peerID = ""
 	bpr.block = nil
-	bpr.extCommit = nil
+	bpr.commit = nil
 }
 
 // Tells bpRequester to pick another peer and try again.

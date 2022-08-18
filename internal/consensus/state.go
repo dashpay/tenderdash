@@ -2833,7 +2833,8 @@ func (cs *State) addVote(
 		// Here, we verify the signature of the vote extension included in the vote
 		// message.
 		_, val := cs.state.Validators.GetByIndex(vote.ValidatorIndex)
-		if err := vote.VerifyExtension(cs.state.ChainID, val.PubKey); err != nil {
+		qt, qh := cs.state.Validators.QuorumType, cs.state.Validators.QuorumHash
+		if err := vote.VerifyExtension(cs.state.ChainID, val.PubKey, qt, qh); err != nil {
 			return false, err
 		}
 
