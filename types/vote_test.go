@@ -26,11 +26,7 @@ const (
 
 var (
 	// nolint: lll
-	nilVoteTestStr                = fmt.Sprintf(`Vote{56789:959A8F5EF2BE 12345/02/Precommit(%s) 000000000000 000000000000 000000000000}`, nilVoteStr)
-	formatNonEmptyVoteExtensionFn = func(voteExtensionLength int) string {
-		// nolint: lll
-		return fmt.Sprintf(`Vote{56789:6AF1F4111082 12345/2 Precommit 8B01023386C3 000000000000 %d @ 2017-12-25T03:00:01.234Z}`, voteExtensionLength)
-	}
+	nilVoteTestStr = fmt.Sprintf(`Vote{56789:959A8F5EF2BE 12345/02/Precommit(%s) 000000000000 000000000000 000000000000}`, nilVoteStr)
 )
 
 func examplePrevote(t *testing.T) *Vote {

@@ -755,7 +755,6 @@ func (cs *State) reconstructLastCommit(state sm.State) {
 		panic(fmt.Sprintf("failed to reconstruct last commit; %s", err))
 	}
 	cs.LastCommit = commit
-	return
 }
 
 func (cs *State) votesFromSeenCommit(state sm.State) (*types.Commit, error) {

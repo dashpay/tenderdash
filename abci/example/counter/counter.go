@@ -54,10 +54,8 @@ func (app *Application) Commit(_ context.Context) (*types.ResponseCommit, error)
 	if app.txCount == 0 {
 		return &types.ResponseCommit{}, nil
 	}
-	hash := make([]byte, 24)
-	endHash := make([]byte, 8)
-	binary.BigEndian.PutUint64(endHash, uint64(app.txCount))
-	hash = append(hash, endHash...)
+	hash := make([]byte, 32)
+	binary.BigEndian.PutUint64(hash[24:], uint64(app.txCount))
 	return &types.ResponseCommit{}, nil
 }
 

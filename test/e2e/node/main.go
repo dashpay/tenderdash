@@ -120,9 +120,8 @@ func startAppServer(ctx context.Context, cfg *Config, logger log.Logger) error {
 	case "builtin":
 		if cfg.Mode == string(e2e.ModeSeed) {
 			return startSeedNode(ctx)
-		} else {
-			return startNode(ctx, cfg)
 		}
+		return startNode(ctx, cfg)
 	}
 	return fmt.Errorf("invalid protocol %q", cfg.Protocol)
 }

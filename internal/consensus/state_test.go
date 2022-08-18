@@ -2215,7 +2215,6 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 	m.On("FinalizeBlock", mock.Anything, mock.Anything).Return(&abci.ResponseFinalizeBlock{}, nil).Maybe()
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, application: m})
 	height, round := cs1.Height, cs1.Round
-	cs1.state.ConsensusParams.ABCI.VoteExtensionsEnableHeight = cs1.Height
 
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
