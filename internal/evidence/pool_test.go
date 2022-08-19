@@ -263,7 +263,7 @@ func TestEvidencePoolUpdate(t *testing.T) {
 
 	coreChainLockHeight := state.LastCoreChainLockedBlockHeight
 	block := types.MakeBlock(height+1, []types.Tx{}, lastCommit, []types.Evidence{ev})
-	block.SetDashParams(coreChainLockHeight, nil, 0)
+	block.SetDashParams(coreChainLockHeight, nil, 0, nil)
 
 	// update state (partially)
 	state.LastBlockHeight = height + 1
@@ -484,7 +484,6 @@ func initializeStateFromValidatorSet(t *testing.T, valSet *types.ValidatorSet, h
 		LastBlockHeight:             height,
 		LastBlockTime:               defaultEvidenceTime,
 		Validators:                  valSet,
-		NextValidators:              valSet.CopyIncrementProposerPriority(1),
 		LastValidators:              valSet,
 		LastHeightValidatorsChanged: 1,
 		ConsensusParams: types.ConsensusParams{
@@ -542,7 +541,7 @@ func initializeBlockStore(db dbm.DB, state sm.State, valProTxHash []byte) (*stor
 
 	for i := int64(1); i <= state.LastBlockHeight; i++ {
 		lastCommit := makeCommit(i-1, state.Validators.QuorumHash, valProTxHash)
-		block := state.MakeBlock(i, []types.Tx{}, lastCommit, nil, state.Validators.GetProposer().ProTxHash)
+		block := state.MakeBlock(i, []types.Tx{}, lastCommit, nil, state.Validators.GetProposer().ProTxHash, 0)
 
 		block.Header.Time = defaultEvidenceTime.Add(time.Duration(i) * time.Minute)
 		block.Header.Version = version.Consensus{Block: version.BlockProtocol, App: 1}
