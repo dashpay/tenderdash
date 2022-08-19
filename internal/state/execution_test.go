@@ -277,7 +277,7 @@ func TestProcessProposal(t *testing.T) {
 		TxResults: txResults,
 		Status:    abci.ResponseProcessProposal_ACCEPT,
 	}, nil)
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, state)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, state, true)
 	require.NoError(t, err)
 	assert.NotZero(t, uncommittedState)
 	app.AssertExpectations(t)

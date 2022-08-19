@@ -169,13 +169,13 @@ func (candidate CurentRoundState) StateID() types.StateID {
 	}
 
 	return types.StateID{
-		Height:  candidate.Height(),
+		Height:  candidate.GetHeight(),
 		AppHash: appHash,
 	}
 }
 
-// Height returns height of current block
-func (candidate CurentRoundState) Height() int64 {
+// GetHeight returns height of current block
+func (candidate CurentRoundState) GetHeight() int64 {
 	return candidate.Base.LastBlockHeight + 1
 }
 
@@ -229,7 +229,7 @@ func (candidate *CurentRoundState) populateConsensusParams(updates *tmtypes.Cons
 	candidate.NextConsensusParams = nextParams
 
 	// Change results from this height but only applies to the next height.
-	candidate.LastHeightConsensusParamsChanged = candidate.Height() + 1
+	candidate.LastHeightConsensusParamsChanged = candidate.GetHeight() + 1
 
 	return nil
 }
@@ -248,7 +248,7 @@ func (candidate *CurentRoundState) populateValsetUpdates(ctx context.Context, up
 
 	if update != nil && len(update.ValidatorUpdates) > 0 {
 		// Change results from this height but only applies to the next height.
-		candidate.LastHeightValidatorsChanged = candidate.Height() + 1
+		candidate.LastHeightValidatorsChanged = candidate.GetHeight() + 1
 	} else {
 		candidate.LastHeightValidatorsChanged = base.LastHeightValidatorsChanged
 	}

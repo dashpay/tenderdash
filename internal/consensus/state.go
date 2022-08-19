@@ -1553,6 +1553,14 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 		cs.logger.Debug("signed proposal", "height", height, "round", round, "proposal", proposal, "pubKey", pubKey.HexString())
 	} else if !cs.replayMode {
 		cs.logger.Error("propose step; failed signing proposal", "height", height, "round", round, "err", err)
+	} else {
+		cs.logger.Debug("replay; failed signing proposal",
+			"height", height,
+			"round", round,
+			"proposal", proposal,
+			"pubKey", pubKey.HexString(),
+			"error", err)
+
 	}
 }
 
@@ -1700,7 +1708,7 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	uncommittedState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state)
+	uncommittedState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state, true)
 	if err != nil {
 		if errors.Is(err, sm.ErrBlockRejected) {
 			logger.Error("prevote step: state machine rejected a proposed block; this should not happen:"+
