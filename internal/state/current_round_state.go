@@ -46,6 +46,9 @@ type CurentRoundState struct {
 
 	// responseType points to responseType of state changes - prepareProposal, processProposal or empty string for nil
 	responseType string
+
+	// response stores process proposal response, received from ABCI app or converted from PrepareProposal
+	response abci.ResponseProcessProposal
 }
 
 // UpdateBlock changes block fields to reflect the ones returned in PrepareProposal / ProcessProposal
@@ -98,30 +101,14 @@ func (candidate *CurentRoundState) populate(ctx context.Context, proposalRespons
 	switch resp := proposalResponse.(type) {
 	case *abci.ResponsePrepareProposal:
 		candidate.responseType = prepareProposal
-		return candidate.update(
-			ctx,
-			baseState,
-			resp.AppHash,
-			resp.TxResults,
-			resp.ConsensusParamUpdates,
-			resp.ValidatorSetUpdate,
-			resp.CoreChainLockUpdate,
-		)
+		candidate.response = resp.ToResponseProcessProposal()
 
 	case *abci.ResponseProcessProposal:
-		candidate.responseType = processProposal
 		if !resp.IsAccepted() {
 			return fmt.Errorf("proposal not accepted by abci app: %s", resp.Status)
 		}
-		return candidate.update(
-			ctx,
-			baseState,
-			resp.AppHash,
-			resp.TxResults,
-			resp.ConsensusParamUpdates,
-			resp.ValidatorSetUpdate,
-			resp.CoreChainLockUpdate,
-		)
+		candidate.responseType = processProposal
+		candidate.response = *resp
 
 	case nil: // Assuming no changes
 		return candidate.update(ctx, baseState, nil, nil, nil, nil, nil)
@@ -129,6 +116,16 @@ func (candidate *CurentRoundState) populate(ctx context.Context, proposalRespons
 	default:
 		return fmt.Errorf("unsupported response type %T", resp)
 	}
+
+	return candidate.update(
+		ctx,
+		baseState,
+		candidate.response.AppHash,
+		candidate.response.TxResults,
+		candidate.response.ConsensusParamUpdates,
+		candidate.response.ValidatorSetUpdate,
+		candidate.response.CoreChainLockUpdate,
+	)
 }
 
 func (candidate *CurentRoundState) update(
@@ -177,6 +174,10 @@ func (candidate CurentRoundState) StateID() types.StateID {
 // GetHeight returns height of current block
 func (candidate CurentRoundState) GetHeight() int64 {
 	return candidate.Base.LastBlockHeight + 1
+}
+
+func (candidate CurentRoundState) GetProcessProposalResponse() abci.ResponseProcessProposal {
+	return candidate.response
 }
 
 func (candidate *CurentRoundState) populateTxResults(txResults []*abci.ExecTxResult) error {

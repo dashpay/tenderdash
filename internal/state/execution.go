@@ -14,6 +14,7 @@ import (
 	"github.com/tendermint/tendermint/internal/mempool"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
+	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -342,7 +343,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		return state, ErrInvalidBlock{err}
 	}
 	startTime := time.Now().UnixNano()
-	finalizeBlockResponses, err := execBlockWithoutState(ctx, blockExec.appClient, block, blockExec.logger, blockExec.store, -1, state, uncommittedState)
+	finalizeBlockResponse, err := execBlockWithoutState(ctx, blockExec.appClient, block, blockExec.logger, blockExec.store, -1, state, uncommittedState)
 	if err != nil {
 		return state, ErrInvalidBlock{err}
 	}
@@ -356,9 +357,13 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// TODO: upgrade for Same-Block-Execution. Right now, it just saves Finalize response, while we need
 	// to find a way to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
 	// in FinalizeResponse.
-	// if err := blockExec.store.SaveABCIResponses(block.Height, &abciResponses); err != nil {
-	// 	return state, err
-	// }
+	abciResponses := tmstate.ABCIResponses{
+		ProcessProposal: &uncommittedState.response,
+		FinalizeBlock:   finalizeBlockResponse,
+	}
+	if err := blockExec.store.SaveABCIResponses(block.Height, &abciResponses); err != nil {
+		return state, err
+	}
 
 	stateUpdates, err := PrepareStateUpdates(ctx, block.Header, state, uncommittedState)
 	if err != nil {
@@ -404,7 +409,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		blockID,
 		state.LastResultsHash,
 		uncommittedState.TxResults,
-		finalizeBlockResponses,
+		finalizeBlockResponse,
 		state.Validators)
 
 	return state, nil

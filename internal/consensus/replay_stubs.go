@@ -75,6 +75,15 @@ type mockProxyApp struct {
 	abciResponses *tmstate.ABCIResponses
 }
 
+func (mock *mockProxyApp) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+	r := mock.abciResponses.ProcessProposal
+	if r == nil {
+		return &abci.ResponseProcessProposal{}, nil
+	}
+
+	return r, nil
+}
+
 func (mock *mockProxyApp) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	r := mock.abciResponses.FinalizeBlock
 	mock.txCount++
