@@ -328,7 +328,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 
 func (app *Application) ProcessProposal(_ context.Context, req *types.RequestProcessProposal) (*types.ResponseProcessProposal, error) {
 	// Using a memdb - just return the big endian size of the db
-	appHash := make([]byte, 32)
+	appHash := make([]byte, crypto.DefaultAppHashSize)
 	binary.PutVarint(appHash, app.state.Size)
 	txResults := make([]*types.ExecTxResult, len(req.Txs))
 
