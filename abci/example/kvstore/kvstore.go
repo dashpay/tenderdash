@@ -313,7 +313,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 	}
 
 	// Using a memdb - just return the big endian size of the db
-	appHash := make([]byte, 32)
+	appHash := make([]byte, crypto.DefaultAppHashSize)
 	binary.PutVarint(appHash, app.state.Size)
 	app.roundAppHash = appHash
 	return &types.ResponsePrepareProposal{
