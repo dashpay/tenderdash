@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	mrand "math/rand"
+	"strings"
 	"testing"
 	"time"
 
@@ -165,7 +166,8 @@ func makeAddrs() (p2pAddr, rpcAddr string) {
 
 // getConfig returns a config for test cases
 func getConfig(t *testing.T) *config.Config {
-	c, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	testName := strings.ReplaceAll(t.Name(), "/", "_")
+	c, err := config.ResetTestRoot(t.TempDir(), testName)
 	require.NoError(t, err)
 
 	p2pAddr, rpcAddr := makeAddrs()

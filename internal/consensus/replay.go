@@ -565,15 +565,18 @@ func (h *Handshaker) replayBlocks(
 		}
 
 		var blockExec *sm.BlockExecutor = nil
-		if i == finalBlock && !mutateState {
-			// We emit events for the index services at the final block due to the sync issue when
-			// the node shutdown during the block committing status.
-			blockExec = sm.NewBlockExecutor(h.stateStore, h.logger, appClient, emptyMempool{}, sm.EmptyEvidencePool{}, h.store, h.eventBus, sm.NopMetrics())
-		}
+		blockExec = sm.NewBlockExecutor(h.stateStore, h.logger, appClient, emptyMempool{}, sm.EmptyEvidencePool{}, h.store, h.eventBus, sm.NopMetrics())
 
-		uncommittedState, err := blockExec.ProcessProposal(ctx, block, state)
+		uncommittedState, err := blockExec.ProcessProposal(ctx, block, state, false)
 		if err != nil {
 			return nil, fmt.Errorf("replay process proposal: %w", err)
+		}
+
+		// We emit events for the index services at the final block due to the sync issue when
+		// the node shutdown during the block committing status.
+		// For all other cases, we disable emitting events by providing blockExec=nil in ExecReplayedCommitBlock
+		if !(i == finalBlock && !mutateState) {
+			blockExec = nil
 		}
 
 		appHash, _, err = sm.ExecReplayedCommitBlock(ctx, blockExec, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state, uncommittedState)

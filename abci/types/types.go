@@ -218,6 +218,18 @@ func (r ResponsePrepareProposal) Validate() error {
 
 	return nil
 }
+
+func (r ResponsePrepareProposal) ToResponseProcessProposal() ResponseProcessProposal {
+	return ResponseProcessProposal{
+		Status:                ResponseProcessProposal_ACCEPT,
+		AppHash:               r.AppHash,
+		TxResults:             r.TxResults,
+		ConsensusParamUpdates: r.ConsensusParamUpdates,
+		CoreChainLockUpdate:   r.CoreChainLockUpdate,
+		ValidatorSetUpdate:    r.ValidatorSetUpdate,
+	}
+}
+
 func isValidApphash(apphash tmbytes.HexBytes) bool {
 	return len(apphash) >= crypto.SmallAppHashSize && len(apphash) <= crypto.LargeAppHashSize
 }

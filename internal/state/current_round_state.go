@@ -46,6 +46,9 @@ type CurentRoundState struct {
 
 	// responseType points to responseType of state changes - prepareProposal, processProposal or empty string for nil
 	responseType string
+
+	// response stores process proposal response, received from ABCI app or converted from PrepareProposal
+	response abci.ResponseProcessProposal
 }
 
 // UpdateBlock changes block fields to reflect the ones returned in PrepareProposal / ProcessProposal
@@ -98,30 +101,14 @@ func (candidate *CurentRoundState) populate(ctx context.Context, proposalRespons
 	switch resp := proposalResponse.(type) {
 	case *abci.ResponsePrepareProposal:
 		candidate.responseType = prepareProposal
-		return candidate.update(
-			ctx,
-			baseState,
-			resp.AppHash,
-			resp.TxResults,
-			resp.ConsensusParamUpdates,
-			resp.ValidatorSetUpdate,
-			resp.CoreChainLockUpdate,
-		)
+		candidate.response = resp.ToResponseProcessProposal()
 
 	case *abci.ResponseProcessProposal:
-		candidate.responseType = processProposal
 		if !resp.IsAccepted() {
 			return fmt.Errorf("proposal not accepted by abci app: %s", resp.Status)
 		}
-		return candidate.update(
-			ctx,
-			baseState,
-			resp.AppHash,
-			resp.TxResults,
-			resp.ConsensusParamUpdates,
-			resp.ValidatorSetUpdate,
-			resp.CoreChainLockUpdate,
-		)
+		candidate.responseType = processProposal
+		candidate.response = *resp
 
 	case nil: // Assuming no changes
 		return candidate.update(ctx, baseState, nil, nil, nil, nil, nil)
@@ -129,6 +116,16 @@ func (candidate *CurentRoundState) populate(ctx context.Context, proposalRespons
 	default:
 		return fmt.Errorf("unsupported response type %T", resp)
 	}
+
+	return candidate.update(
+		ctx,
+		baseState,
+		candidate.response.AppHash,
+		candidate.response.TxResults,
+		candidate.response.ConsensusParamUpdates,
+		candidate.response.ValidatorSetUpdate,
+		candidate.response.CoreChainLockUpdate,
+	)
 }
 
 func (candidate *CurentRoundState) update(
@@ -169,14 +166,18 @@ func (candidate CurentRoundState) StateID() types.StateID {
 	}
 
 	return types.StateID{
-		Height:  candidate.Height(),
+		Height:  candidate.GetHeight(),
 		AppHash: appHash,
 	}
 }
 
-// Height returns height of current block
-func (candidate CurentRoundState) Height() int64 {
+// GetHeight returns height of current block
+func (candidate CurentRoundState) GetHeight() int64 {
 	return candidate.Base.LastBlockHeight + 1
+}
+
+func (candidate CurentRoundState) GetProcessProposalResponse() abci.ResponseProcessProposal {
+	return candidate.response
 }
 
 func (candidate *CurentRoundState) populateTxResults(txResults []*abci.ExecTxResult) error {
@@ -229,7 +230,7 @@ func (candidate *CurentRoundState) populateConsensusParams(updates *tmtypes.Cons
 	candidate.NextConsensusParams = nextParams
 
 	// Change results from this height but only applies to the next height.
-	candidate.LastHeightConsensusParamsChanged = candidate.Height() + 1
+	candidate.LastHeightConsensusParamsChanged = candidate.GetHeight() + 1
 
 	return nil
 }
@@ -248,7 +249,7 @@ func (candidate *CurentRoundState) populateValsetUpdates(ctx context.Context, up
 
 	if update != nil && len(update.ValidatorUpdates) > 0 {
 		// Change results from this height but only applies to the next height.
-		candidate.LastHeightValidatorsChanged = candidate.Height() + 1
+		candidate.LastHeightValidatorsChanged = candidate.GetHeight() + 1
 	} else {
 		candidate.LastHeightValidatorsChanged = base.LastHeightValidatorsChanged
 	}

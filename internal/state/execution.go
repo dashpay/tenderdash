@@ -14,6 +14,7 @@ import (
 	"github.com/tendermint/tendermint/internal/mempool"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
+	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -109,7 +110,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	txs := blockExec.mempool.ReapMaxBytesMaxGas(maxDataBytes, maxGas)
 	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 
-	localLastCommit := buildLastCommitInfo(block, blockExec.store, state.InitialHeight)
+	localLastCommit := buildLastCommitInfo(block, state.InitialHeight)
 	version := block.Version.ToProto()
 	rpp, err := blockExec.appClient.PrepareProposal(
 		ctx,
@@ -180,10 +181,12 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	return block, stateChanges, nil
 }
 
+// ProcessProposal sends the proposal to ABCI App and verifies the response
 func (blockExec *BlockExecutor) ProcessProposal(
 	ctx context.Context,
 	block *types.Block,
 	state State,
+	verify bool,
 ) (CurentRoundState, error) {
 	version := block.Version.ToProto()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
@@ -191,7 +194,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		Height:              block.Header.Height,
 		Time:                block.Header.Time,
 		Txs:                 block.Data.Txs.ToSliceOfBytes(),
-		ProposedLastCommit:  buildLastCommitInfo(block, blockExec.store, state.InitialHeight),
+		ProposedLastCommit:  buildLastCommitInfo(block, state.InitialHeight),
 		ByzantineValidators: block.Evidence.ToABCI(),
 		NextValidatorsHash:  block.NextValidatorsHash,
 
@@ -221,9 +224,14 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		return stateChanges, err
 	}
 
-	err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block)
-	if err != nil {
-		return stateChanges, ErrInvalidBlock{err}
+	if verify {
+		// Here we check if the ProcessProposal response matches
+		// block received from proposer, eg. if `uncommittedState`
+		// fields are the same as `block` fields
+		err = blockExec.ValidateBlockWithRoundState(ctx, state, stateChanges, block)
+		if err != nil {
+			return stateChanges, ErrInvalidBlock{err}
+		}
 	}
 
 	return stateChanges, nil
@@ -335,7 +343,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		return state, ErrInvalidBlock{err}
 	}
 	startTime := time.Now().UnixNano()
-	_, finalizeBlockResponses, err := execBlockWithoutState(ctx, blockExec, blockExec.appClient, block, blockExec.logger, blockExec.store, -1, state, uncommittedState)
+	finalizeBlockResponse, err := execBlockWithoutState(ctx, blockExec.appClient, block, blockExec.logger, blockExec.store, -1, state, uncommittedState)
 	if err != nil {
 		return state, ErrInvalidBlock{err}
 	}
@@ -349,9 +357,13 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// TODO: upgrade for Same-Block-Execution. Right now, it just saves Finalize response, while we need
 	// to find a way to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
 	// in FinalizeResponse.
-	// if err := blockExec.store.SaveABCIResponses(block.Height, &abciResponses); err != nil {
-	// 	return state, err
-	// }
+	abciResponses := tmstate.ABCIResponses{
+		ProcessProposal: &uncommittedState.response,
+		FinalizeBlock:   finalizeBlockResponse,
+	}
+	if err := blockExec.store.SaveABCIResponses(block.Height, &abciResponses); err != nil {
+		return state, err
+	}
 
 	stateUpdates, err := PrepareStateUpdates(ctx, block.Header, state, uncommittedState)
 	if err != nil {
@@ -397,7 +409,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		blockID,
 		state.LastResultsHash,
 		uncommittedState.TxResults,
-		finalizeBlockResponses,
+		finalizeBlockResponse,
 		state.Validators)
 
 	return state, nil
@@ -414,7 +426,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	state State,
 	blockID types.BlockID, block *types.Block,
 ) (State, error) {
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block, state)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block, state, true)
 	if err != nil {
 		return state, err
 	}
@@ -516,7 +528,7 @@ func (blockExec *BlockExecutor) Commit(
 	return res.Data, res.RetainHeight, err
 }
 
-func buildLastCommitInfo(block *types.Block, store Store, initialHeight int64) abci.CommitInfo {
+func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInfo {
 	if block.Height == initialHeight {
 		// there is no last commit for the initial height.
 		// return an empty value.
@@ -646,7 +658,6 @@ func fireEvents(
 
 func execBlock(
 	ctx context.Context,
-	be *BlockExecutor,
 	appConn abciclient.Client,
 	block *types.Block,
 	logger log.Logger,
@@ -658,7 +669,7 @@ func execBlock(
 
 	blockHash := block.Hash()
 	txs := block.Txs.ToSliceOfBytes()
-	lastCommit := buildLastCommitInfo(block, store, initialHeight)
+	lastCommit := buildLastCommitInfo(block, initialHeight)
 	evidence := block.Evidence.ToABCI()
 
 	var err error
@@ -705,10 +716,18 @@ func ExecReplayedCommitBlock(
 	s State,
 	ucState CurentRoundState,
 ) ([]byte, *abci.ResponseFinalizeBlock, error) {
-	data, respFinalizeBlock, err := execBlockWithoutState(ctx, be, appConn, block, logger, store, initialHeight, s, ucState)
+	respFinalizeBlock, err := execBlockWithoutState(ctx, appConn, block, logger, store, initialHeight, s, ucState)
 	if err != nil {
 		return nil, nil, err
 	}
+
+	// Commit block, get hash back
+	res, err := appConn.Commit(ctx)
+	if err != nil {
+		logger.Error("client error during proxyAppConn.Commit", "err", res)
+		return nil, respFinalizeBlock, err
+	}
+	data := res.Data
 
 	// the BlockExecutor condition is using for the final block replay process.
 	if be != nil {
@@ -736,7 +755,6 @@ func ExecReplayedCommitBlock(
 }
 func execBlockWithoutState(
 	ctx context.Context,
-	be *BlockExecutor,
 	appConn abciclient.Client,
 	block *types.Block,
 	logger log.Logger,
@@ -744,22 +762,15 @@ func execBlockWithoutState(
 	initialHeight int64,
 	s State,
 	ucState CurentRoundState,
-) ([]byte, *abci.ResponseFinalizeBlock, error) {
-	respFinalizeBlock, err := execBlock(ctx, be, appConn, block, logger, store, initialHeight, s)
+) (*abci.ResponseFinalizeBlock, error) {
+	respFinalizeBlock, err := execBlock(ctx, appConn, block, logger, store, initialHeight, s)
 	if err != nil {
 		logger.Error("executing block", "err", err)
-		return nil, respFinalizeBlock, err
-	}
-
-	// Commit block, get hash back
-	res, err := appConn.Commit(ctx)
-	if err != nil {
-		logger.Error("client error during proxyAppConn.Commit", "err", res)
-		return nil, respFinalizeBlock, err
+		return respFinalizeBlock, err
 	}
 
 	// ResponseCommit has no error or log, just data
-	return res.Data, respFinalizeBlock, nil
+	return respFinalizeBlock, nil
 }
 
 func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64) (uint64, error) {
