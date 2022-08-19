@@ -10,6 +10,7 @@ on:
     types:
       - labeled
   push:
+    branches: [*]
 
 jobs:
   build:
@@ -48,6 +49,7 @@ jobs:
           images: dashpay/tenderdash
           tags: |
             type=ref,event=branch
+            type=ref,event=pr
             type=match,pattern=v(\d+),group=1
             type=match,pattern=v(\d+.\d+),group=1
             type=match,pattern=v(\d+.\d+.\d+),group=1
