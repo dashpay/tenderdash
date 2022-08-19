@@ -28,10 +28,6 @@ func init() {
 	rand.Seed(time.Now().UnixNano())
 }
 
-func TestPop(t *testing.T) {
-
-}
-
 func TestKVStore(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
