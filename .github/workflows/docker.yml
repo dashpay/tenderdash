@@ -6,9 +6,9 @@ on:
   release:
     types:
       - published
-  push:
-    branches:
-      - v0.*-dev
+  pull_request:
+    types:
+      - labeled
 
 jobs:
   build:
@@ -47,7 +47,7 @@ jobs:
           tags: |
             type=match,pattern=v(\d+),group=1
             type=match,pattern=v(\d+.\d+),group=1
-            type=ref,event=branch,suffix=,enable=${{ github.event.release == null }}
+            type=ref,event=branch,suffix=,enable=${{ github.event.label.name == 'docker:build' }}
             type=match,pattern=v(\d+.\d+.\d+),group=1
             type=match,pattern=v(.*),group=1,suffix=,enable=${{ contains(github.event.release.tag_name, '-dev') }}
           flavor: |
@@ -60,7 +60,7 @@ jobs:
           context: .
           file: ./DOCKER/Dockerfile
           platforms: linux/amd64,linux/arm64
-          push: ${{ github.event_name != 'pull_request' }}
+          push: ${{ github.event_name != 'pull_request' || github.event.label.name == 'docker:build' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
           cache-from: type=gha
