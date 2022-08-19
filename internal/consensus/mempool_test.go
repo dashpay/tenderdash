@@ -338,14 +338,6 @@ func txAsUint64(tx []byte) uint64 {
 }
 
 func (app *CounterApplication) Commit(context.Context) (*abci.ResponseCommit, error) {
-	app.mu.Lock()
-	defer app.mu.Unlock()
-	app.mempoolTxCount = app.txCount
-	if app.txCount == 0 {
-		return &abci.ResponseCommit{}, nil
-	}
-	hash := make([]byte, 32)
-	binary.BigEndian.PutUint64(hash, uint64(app.txCount))
 	return &abci.ResponseCommit{}, nil
 }
 
