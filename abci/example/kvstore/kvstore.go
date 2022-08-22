@@ -183,6 +183,7 @@ func (app *Application) FinalizeBlock(_ context.Context, req *types.RequestFinal
 			respTxs[i] = &types.ExecTxResult{Code: code.CodeTypeOK}
 		}
 	} else {
+		app.executeTxs(req.Txs)
 		for i, tx := range req.Txs {
 			respTxs[i] = app.handleTx(tx)
 		}
@@ -319,7 +320,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 	return &types.ResponsePrepareProposal{
 		TxRecords:             app.substPrepareTx(req.Txs, req.MaxTxBytes),
 		AppHash:               appHash,
-		TxResults:             txResults,
+		TxResults:             app.executeTxs(req.Txs),
 		ConsensusParamUpdates: nil,
 		CoreChainLockUpdate:   nil,
 		ValidatorSetUpdate:    proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
