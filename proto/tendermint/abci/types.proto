@@ -197,6 +197,7 @@ message RequestFinalizeBlock {
   bytes                        proposer_pro_tx_hash     = 101;  // original proposer of the block
   uint64                       proposed_app_version     = 102;  // proposer's latest available app protocol version
   tendermint.version.Consensus version                  = 103;
+  bytes                        app_hash                 = 104;
 }
 
 //----------------------------------------

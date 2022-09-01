@@ -688,6 +688,7 @@ func execBlock(
 			ProposerProTxHash:     block.ProposerProTxHash,
 			ProposedAppVersion:    block.ProposedAppVersion,
 			Version:               &version,
+			AppHash:               block.AppHash.Copy(),
 		},
 	)
 	if err != nil {
