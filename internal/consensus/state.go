@@ -16,6 +16,7 @@ import (
 
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/dash"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/jsontypes"
@@ -1045,6 +1046,14 @@ func (cs *State) handleMsg(ctx context.Context, mi msgInfo, fromReplay bool) {
 		// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
 		added, err = cs.addProposalBlockPart(ctx, msg, peerID)
 
+		if added && cs.ProposalBlockParts != nil && cs.ProposalBlockParts.IsComplete() && fromReplay {
+			candidateState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state, true)
+			if err != nil {
+				panic(err)
+			}
+			cs.RoundState.CurentRoundState = candidateState
+		}
+
 		// We unlock here to yield to any routines that need to read the the RoundState.
 		// Previously, this code held the lock from the point at which the final block
 		// part was received until the block executed against the application.
@@ -1228,7 +1237,7 @@ func (cs *State) handleTxsAvailable(ctx context.Context) {
 
 	switch cs.Step {
 	case cstypes.RoundStepNewHeight: // timeoutCommit phase
-		if cs.needProofBlock(cs.Height) {
+		if cs.state.InitialHeight == cs.Height {
 			// enterPropose will be called by enterNewRound
 			return
 		}
@@ -1313,8 +1322,7 @@ func (cs *State) enterNewRound(ctx context.Context, height int64, round int32) {
 	}
 	// Wait for txs to be available in the mempool
 	// before we enterPropose in round 0. If the last block changed the app hash,
-	// we may need an empty "proof" block, and enterPropose immediately.
-	waitForTxs := cs.config.WaitForTxs() && round == 0 && !cs.needProofBlock(height)
+	waitForTxs := cs.config.WaitForTxs() && round == 0 && cs.state.InitialHeight != cs.Height
 	if waitForTxs {
 		if cs.config.CreateEmptyBlocksInterval > 0 {
 			cs.scheduleTimeout(cs.config.CreateEmptyBlocksInterval, height, round,
@@ -1325,37 +1333,6 @@ func (cs *State) enterNewRound(ctx context.Context, height int64, round int32) {
 		// specific tests where proposals are created manually
 		cs.enterPropose(ctx, height, round)
 	}
-}
-
-// needProofBlock returns true if additional proof block needs to be created.
-// It happens on the first height (so the genesis app hash is signed right away) and
-// where at least one of the last `proofBlockRange` blocks caused the app hash to change.
-func (cs *State) needProofBlock(height int64) bool {
-	if height == cs.state.InitialHeight {
-		return true
-	}
-
-	proofBlockRange := cs.config.CreateProofBlockRange
-
-	for blockHeight := height - 1; blockHeight >= height-proofBlockRange; blockHeight-- {
-		if blockHeight >= cs.state.InitialHeight {
-			blockMeta := cs.blockStore.LoadBlockMeta(blockHeight)
-			if blockMeta == nil {
-				panic(fmt.Sprintf("needProofBlock (height=%d): last block meta for height %d not found", height, blockHeight))
-			}
-			if !bytes.Equal(cs.state.AppHash, blockMeta.Header.AppHash) {
-				cs.logger.Debug(
-					"needProofBlock: proof block needed",
-					"height", height,
-					"modified_height", blockHeight,
-					"range", proofBlockRange,
-				)
-				return true
-			}
-		}
-	}
-
-	return false
 }
 
 // Enter (CreateEmptyBlocks): from enterNewRound(height,round)
@@ -1376,7 +1353,7 @@ func (cs *State) enterPropose(ctx context.Context, height int64, round int32) {
 
 	// If this validator is the proposer of this round, and the previous block time is later than
 	// our local clock time, wait to propose until our local clock time has passed the block time.
-	if cs.privValidatorProTxHash != nil && cs.isProposer(cs.privValidatorProTxHash) {
+	if cs.isProposer() {
 		proposerWaitTime := proposerWaitTime(tmtime.DefaultSource{}, cs.state.LastBlockTime)
 		if proposerWaitTime > 0 {
 			cs.scheduleTimeout(proposerWaitTime, height, round, cstypes.RoundStepNewRound)
@@ -1424,7 +1401,7 @@ func (cs *State) enterPropose(ctx context.Context, height int64, round int32) {
 		return
 	}
 
-	if cs.isProposer(proTxHash) {
+	if cs.isProposer() {
 		logger.Debug("propose step; our turn to propose",
 			"proposer", proTxHash.ShortString(),
 			"privValidator", cs.privValidator,
@@ -1439,8 +1416,9 @@ func (cs *State) enterPropose(ctx context.Context, height int64, round int32) {
 	}
 }
 
-func (cs *State) isProposer(proTxHash crypto.ProTxHash) bool {
-	return bytes.Equal(cs.Validators.GetProposer().ProTxHash.Bytes(), proTxHash.Bytes())
+func (cs *State) isProposer() bool {
+	proTxHash := cs.privValidatorProTxHash
+	return proTxHash != nil && bytes.Equal(cs.Validators.GetProposer().ProTxHash.Bytes(), proTxHash.Bytes())
 }
 
 // checkValidBlock returns true if cs.ValidBlock is set and still valid (not expired)
@@ -2078,6 +2056,14 @@ func (cs *State) tryFinalizeCommit(ctx context.Context, height int64) {
 		return
 	}
 
+	if cs.CurentRoundState.IsEmpty() {
+		var err error
+		cs.CurentRoundState, err = cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state, true)
+		if err != nil {
+			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
+		}
+	}
+
 	if !cs.ProposalBlock.HashesTo(blockID.Hash) {
 		// TODO: this happens every time if we're not a validator (ugly logs)
 		// TODO: ^^ wait, why does it matter that we're a validator?
@@ -2118,7 +2104,7 @@ func (cs *State) finalizeCommit(ctx context.Context, height int64) {
 	}
 
 	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurentRoundState, block); err != nil {
-		panic(fmt.Errorf("+2/3 committed an invalid block: %w", err))
+		panic(fmt.Errorf("+2/3 committed an invalid block %X: %w", cs.CurentRoundState.AppHash, err))
 	}
 
 	logger.Info(
@@ -2266,11 +2252,18 @@ func (cs *State) verifyCommit(ctx context.Context, commit *types.Commit, peerID 
 
 	block, blockParts := cs.ProposalBlock, cs.ProposalBlockParts
 
+	if block == nil {
+		return false, nil
+	}
+
 	if !blockParts.HasHeader(commit.BlockID.PartSetHeader) {
 		return false, fmt.Errorf("expected ProposalBlockParts header to be commit header")
 	}
+	proTxHash, _ := dash.ProTxHashFromContext(ctx)
 	if !block.HashesTo(commit.BlockID.Hash) {
 		cs.logger.Error("proposal block does not hash to commit hash",
+			"height", commit.Height,
+			"node_proTxHash", proTxHash.ShortString(),
 			"block", block,
 			"commit", commit,
 			"complete_proposal", cs.isProposalComplete(),
@@ -2356,6 +2349,14 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	// Create a copy of the state for staging and an event cache for txs.
 	stateCopy := cs.state.Copy()
 	rs := cs.RoundState
+
+	if rs.CurentRoundState.IsEmpty() {
+		var err error
+		rs.CurentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, stateCopy, true)
+		if err != nil {
+			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
+		}
+	}
 
 	// Execute and commit the block, update and save the state, and update the mempool.
 	// NOTE The block.AppHash wont reflect these txs until the next block.
@@ -2553,6 +2554,14 @@ func (cs *State) addProposalBlockPart(
 	peerID types.NodeID,
 ) (added bool, err error) {
 	height, round, part := msg.Height, msg.Round, msg.Part
+
+	cs.logger.Info(
+		"addProposalBlockPart",
+		"height", cs.Height,
+		"round", cs.Round,
+		"msg_height", height,
+		"msg_round", round,
+	)
 
 	// Blocks might be reused, so round mismatch is OK
 	if cs.Height != height {

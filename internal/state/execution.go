@@ -12,7 +12,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
@@ -293,7 +292,7 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 		}
 	}
 	if !bytes.Equal(block.NextValidatorsHash, uncommittedState.NextValidators.Hash()) {
-		return fmt.Errorf("wrong Block.Header.NextValidatorsHash.  Expected %X, got %v",
+		return fmt.Errorf("wrong Block.Header.NextValidatorsHash. Expected %X, got %v",
 			uncommittedState.NextValidators.Hash(),
 			block.NextValidatorsHash,
 		)
@@ -407,9 +406,9 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		blockExec.eventBus,
 		block,
 		blockID,
-		state.LastResultsHash,
 		uncommittedState.TxResults,
 		finalizeBlockResponse,
+		&uncommittedState.response,
 		state.Validators)
 
 	return state, nil
@@ -593,9 +592,9 @@ func fireEvents(
 	eventBus types.BlockEventPublisher,
 	block *types.Block,
 	blockID types.BlockID,
-	lastResultsHash tmbytes.HexBytes,
 	txResults []*abci.ExecTxResult,
 	finalizeBlockResponse *abci.ResponseFinalizeBlock,
+	processProposalResponse *abci.ResponseProcessProposal,
 	validatorSetUpdate *types.ValidatorSet,
 ) {
 	if err := eventBus.PublishEventNewBlock(types.EventDataNewBlock{
@@ -607,9 +606,10 @@ func fireEvents(
 	}
 
 	if err := eventBus.PublishEventNewBlockHeader(types.EventDataNewBlockHeader{
-		Header:              block.Header,
-		NumTxs:              int64(len(block.Txs)),
-		ResultFinalizeBlock: *finalizeBlockResponse,
+		Header:                block.Header,
+		NumTxs:                int64(len(block.Txs)),
+		ResultProcessProposal: *processProposalResponse,
+		ResultFinalizeBlock:   *finalizeBlockResponse,
 	}); err != nil {
 		logger.Error("failed publishing new block header", "err", err)
 	}
@@ -744,9 +744,9 @@ func ExecReplayedCommitBlock(
 			be.eventBus,
 			block,
 			blockID,
-			block.ResultsHash,
 			ucState.TxResults,
 			respFinalizeBlock,
+			&ucState.response,
 			vsetUpdate,
 		)
 	}

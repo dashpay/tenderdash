@@ -24,16 +24,21 @@ const (
 )
 
 func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []byte, key, value string) {
-	req := &types.RequestFinalizeBlock{Txs: [][]byte{tx}}
-	ar, err := app.FinalizeBlock(ctx, req)
+	txs := [][]byte{tx}
+	req := &types.RequestProcessProposal{Txs: txs}
+	ar, err := app.ProcessProposal(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(ar.TxResults))
 	require.False(t, ar.TxResults[0].IsErr())
+	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txs})
+	require.NoError(t, err)
 	// repeating tx doesn't raise error
-	ar, err = app.FinalizeBlock(ctx, req)
+	ar, err = app.ProcessProposal(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(ar.TxResults))
 	require.False(t, ar.TxResults[0].IsErr())
+	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txs})
+	require.NoError(t, err)
 	// commit
 	_, err = app.Commit(ctx)
 	require.NoError(t, err)
@@ -189,7 +194,13 @@ func makeApplyBlock(
 	// make and apply block
 	height := int64(heightInt)
 	hash := []byte("foo")
-	resFinalizeBlock, err := kvstore.FinalizeBlock(ctx, &types.RequestFinalizeBlock{
+	resProcessProposal, err := kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{
+		Hash:   hash,
+		Height: height,
+		Txs:    txs,
+	})
+	require.NoError(t, err)
+	_, err = kvstore.FinalizeBlock(ctx, &types.RequestFinalizeBlock{
 		Hash:   hash,
 		Height: height,
 		Txs:    txs,
@@ -199,7 +210,7 @@ func makeApplyBlock(
 	_, err = kvstore.Commit(ctx)
 	require.NoError(t, err)
 
-	valSetEqualTest(t, &diff, resFinalizeBlock.ValidatorSetUpdate)
+	valSetEqualTest(t, &diff, resProcessProposal.ValidatorSetUpdate)
 }
 
 // order doesn't matter
@@ -334,15 +345,19 @@ func runClientTests(ctx context.Context, t *testing.T, client abciclient.Client)
 }
 
 func testClient(ctx context.Context, t *testing.T, app abciclient.Client, tx []byte, key, value string) {
-	ar, err := app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: [][]byte{tx}})
+	pp, err := app.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: [][]byte{tx}})
 	require.NoError(t, err)
-	require.Equal(t, 1, len(ar.TxResults))
-	require.False(t, ar.TxResults[0].IsErr())
+	require.Equal(t, 1, len(pp.TxResults))
+	require.False(t, pp.TxResults[0].IsErr())
+	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: [][]byte{tx}})
+	require.NoError(t, err)
 	// repeating FinalizeBlock doesn't raise error
-	ar, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: [][]byte{tx}})
+	pp, err = app.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: [][]byte{tx}})
 	require.NoError(t, err)
-	require.Equal(t, 1, len(ar.TxResults))
-	require.False(t, ar.TxResults[0].IsErr())
+	require.Equal(t, 1, len(pp.TxResults))
+	require.False(t, pp.TxResults[0].IsErr())
+	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: [][]byte{tx}})
+	require.NoError(t, err)
 	// commit
 	_, err = app.Commit(ctx)
 	require.NoError(t, err)

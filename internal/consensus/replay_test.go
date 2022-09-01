@@ -68,7 +68,7 @@ func startNewStateAndWaitForBlock(ctx context.Context, t *testing.T, consensusRe
 		consensusReplayConfig,
 		state,
 		privValidator,
-		kvstore.NewApplication(),
+		kvstore.New(),
 		blockStore,
 	)
 
@@ -176,7 +176,7 @@ LOOP:
 			consensusReplayConfig,
 			state,
 			privValidator,
-			kvstore.NewApplication(),
+			kvstore.New(),
 			blockStore,
 		)
 
@@ -308,6 +308,9 @@ type simulatorTestSuite struct {
 
 	Mempool mempool.Mempool
 	Evpool  sm.EvidencePool
+
+	ValidatorSetUpdates map[int64]abci.ValidatorSetUpdate
+	HeightTxs           []types.Txs
 }
 
 const (
@@ -351,24 +354,32 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 	cfg := configSetup(t)
 
 	sim := &simulatorTestSuite{
-		Mempool: emptyMempool{},
-		Evpool:  sm.EmptyEvidencePool{},
+		Mempool:   emptyMempool{},
+		Evpool:    sm.EmptyEvidencePool{},
+		HeightTxs: []types.Txs{{}, {types.Tx("key1=val")}, {}, {types.Tx("key2=val")}, {}, {types.Tx("key3=val")}, {}},
 	}
 
 	nPeers := 7
 	nVals := 4
-	css, genDoc, cfg, cleanup := randConsensusNetWithPeers(
-		ctx,
-		t,
-		cfg,
-		nVals,
-		nPeers,
-		"replay_test",
-		newMockTickerFunc(true),
-		newEpehemeralKVStore)
+
+	gen := consensusNetGen{
+		cfg:       cfg,
+		nPeers:    nPeers,
+		nVals:     nVals,
+		testName:  "replay_test",
+		tickerFun: newMockTickerFunc(true),
+		appFunc:   newKVStoreFunc(),
+		validatorUpdates: []validatorUpdate{
+			{height: 2, count: 1, operation: "add"},
+			{height: 4, count: 2, operation: "add"},
+			{height: 6, count: 1, operation: "remove"},
+		},
+	}
+	css, genDoc, cfg, valSetUpdates := gen.generate(t, ctx)
+	sim.ValidatorSetUpdates = valSetUpdates
+
 	t.Logf("genesis quorum hash is %X\n", genDoc.QuorumHash)
 	sim.Config = cfg
-	defer func() { t.Cleanup(cleanup) }()
 
 	var err error
 	sim.GenesisState, err = sm.MakeGenesisState(genDoc)
@@ -400,197 +411,61 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 
 	ensureNewRound(t, newRoundCh, height+1, 0)
 
-	sqm, err := newStateQuorumManager(css)
-	require.NoError(t, err)
-
-	// HEIGHT 2
-	height++
-	incrementHeight(vss...)
-	css0protx := css[0].privValidatorProTxHash
-	hvsu2, err := sqm.addValidator(height, 1)
-	require.NoError(t, err)
-
-	err = assertMempool(t, css[0].txNotifier).CheckTx(ctx, hvsu2.tx, nil, mempool.TxInfo{})
-	assert.Nil(t, err)
-
-	vssForSigning := determineActiveValidators(ctx, t, vss[:nVals], css[0].privValidatorProTxHash)
-
-	blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), [][]byte{hvsu2.tx})
-
-	ensureNewProposal(t, proposalCh, height, round)
-	rs = css[0].GetRoundState()
-	require.True(t, css[0].Validators.HasPublicKeys)
-
-	signAddVotes(ctx, t, css[0], tmproto.PrecommitType, sim.Config.ChainID(), blockID, vssForSigning...)
-	ensureNewRound(t, newRoundCh, height+1, 0)
-
-	// HEIGHT 3
-	height++
-	incrementHeight(vss...)
-	// 1 new validator comes in here from block 2
-	nVals++
-	vssForSigning = determineActiveValidators(ctx, t, vss[:nVals], css[0].privValidatorProTxHash)
-
-	blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), nil)
-	ensureNewProposal(t, proposalCh, height, round)
-	rs = css[0].GetRoundState()
-
-	assert.Equal(t, css0protx, css[0].privValidatorProTxHash)
-	require.True(t, css[0].Validators.HasPublicKeys)
-
-	signAddVotes(ctx, t, css[0], tmproto.PrecommitType, sim.Config.ChainID(),
-		blockID, vssForSigning...)
-	ensureNewRound(t, newRoundCh, height+1, 0)
-
-	// HEIGHT 4
-	height++
-	incrementHeight(vss...)
-
-	hvsu4, err := sqm.addValidator(height, 2)
-	require.NoError(t, err)
-
-	err = assertMempool(t, css[0].txNotifier).CheckTx(ctx, hvsu4.tx, nil, mempool.TxInfo{})
-	assert.Nil(t, err)
-
-	blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), [][]byte{hvsu4.tx})
-
-	ensureNewProposal(t, proposalCh, height, round)
-
-	signAddVotes(
-		ctx, t,
-		css[0],
-		tmproto.PrecommitType,
-		sim.Config.ChainID(),
-		blockID,
-		vssForSigning...,
-	)
-
-	ensureNewRound(t, newRoundCh, height+1, 0)
-
-	// HEIGHT 5
-	height++
-	incrementHeight(vss...)
-
-	// 2 new validator comes in here from block 4
-	nVals += 2
-	vssForSigning = determineActiveValidators(ctx, t, vss[:nVals], css[0].privValidatorProTxHash)
-
-	blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), nil)
-
-	ensureNewProposal(t, proposalCh, height, round)
-
-	signAddVotes(
-		ctx, t,
-		css[0],
-		tmproto.PrecommitType,
-		sim.Config.ChainID(),
-		blockID,
-		vssForSigning...,
-	)
-	ensureNewRound(t, newRoundCh, height+1, 0)
-
-	// HEIGHT 6
-	hvsu6, err := sqm.remValidators(height, 1)
-	require.NoError(t, err)
-	height++
-	incrementHeight(vss...)
-
-	err = assertMempool(t, css[0].txNotifier).CheckTx(ctx, hvsu6.tx, nil, mempool.TxInfo{})
-	require.NoError(t, err)
-
-	blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), [][]byte{hvsu6.tx})
-
-	ensureNewProposal(t, proposalCh, height, round)
-
-	signAddVotes(
-		ctx, t,
-		css[0],
-		tmproto.PrecommitType,
-		sim.Config.ChainID(),
-		blockID,
-		vssForSigning...,
-	)
-
-	ensureNewRound(t, newRoundCh, height+1, 0)
-
-	// HEIGHT 7
-	height++
-	incrementHeight(vss...)
-
-	// 1 validator removed from block 6
-	nVals--
-	assert.EqualValues(t, 6, nVals, "we should have 6 validators")
-	assert.Len(t, css[0].Validators.Validators, nVals)
-
-	vssForSigning = determineActiveValidators(ctx, t, vss[:nVals], css[0].privValidatorProTxHash)
-
-	blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), nil)
-
-	ensureNewProposal(t, proposalCh, height, round)
-
-	signAddVotes(
-		ctx, t,
-		css[0],
-		tmproto.PrecommitType,
-		sim.Config.ChainID(),
-		blockID,
-		vssForSigning...,
-	)
-	ensureNewRound(t, newRoundCh, height+1, 0)
-
-	// HEIGHT 8
-	proTxHashToRemove := hvsu6.ProTxHashes[len(hvsu6.ProTxHashes)-1]
-	hvsu8, err := sqm.remValidatorsByProTxHash(height, []crypto.ProTxHash{proTxHashToRemove})
-	require.NoError(t, err)
-	height++
-	incrementHeight(vss...)
-
-	err = assertMempool(t, css[0].txNotifier).CheckTx(context.Background(), hvsu8.tx, nil, mempool.TxInfo{})
-	assert.Nil(t, err)
-
-	blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), [][]byte{hvsu8.tx})
-
-	ensureNewProposal(t, proposalCh, height, round)
-
-	signAddVotes(
-		ctx, t,
-		css[0],
-		tmproto.PrecommitType,
-		sim.Config.ChainID(),
-		blockID,
-		vssForSigning...,
-	)
-	ensureNewRound(t, newRoundCh, height+1, 0)
-
+	var vssForSigning []*validatorStub
+	for _, txs := range sim.HeightTxs[1:] {
+		height++
+		incrementHeight(vss...)
+		vals := findSuitableValidatorSetUpdates(height, valSetUpdates).ValidatorUpdates
+		require.Len(t, css[0].Validators.Validators, len(vals))
+		for _, tx := range txs {
+			err = assertMempool(t, css[0].txNotifier).CheckTx(ctx, tx, nil, mempool.TxInfo{})
+			assert.Nil(t, err)
+		}
+		vssForSigning = determineActiveValidators(ctx, t, vss, css[0].Validators)
+		blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), txs.ToSliceOfBytes())
+		ensureNewProposal(t, proposalCh, height, round)
+		rs = css[0].GetRoundState()
+		require.True(t, css[0].Validators.HasPublicKeys)
+		signAddVotes(ctx, t, css[0], tmproto.PrecommitType, sim.Config.ChainID(), blockID, vssForSigning...)
+		ensureNewRound(t, newRoundCh, height+1, 0)
+	}
 	sim.Chain = make([]*types.Block, 0)
 	sim.Commits = make([]*types.Commit, 0)
 	for i := 1; i <= numBlocks; i++ {
 		sim.Chain = append(sim.Chain, css[0].blockStore.LoadBlock(int64(i)))
 		sim.Commits = append(sim.Commits, css[0].blockStore.LoadBlockCommit(int64(i)))
 	}
-
 	return sim
+}
+
+func findSuitableValidatorSetUpdates(height int64, validatorSetUpdates map[int64]abci.ValidatorSetUpdate) abci.ValidatorSetUpdate {
+	var closestHeight int64
+	for h := range validatorSetUpdates {
+		if h < height && h >= closestHeight {
+			closestHeight = h
+		}
+	}
+	return validatorSetUpdates[closestHeight]
 }
 
 func determineActiveValidators(ctx context.Context,
 	t *testing.T,
 	vss []*validatorStub,
-	excludeProTxHash tmbytes.HexBytes,
+	validatorSet *types.ValidatorSet,
 ) []*validatorStub {
-	vssForSigning := make([]*validatorStub, 0, len(vss))
-	vss = sortVValidatorStubsByPower(ctx, t, vss)
-
-	for _, validator := range vss {
-		proTxHash, err := validator.GetProTxHash(ctx)
-		require.NoError(t, err)
-		if proTxHash.Equal(excludeProTxHash) {
-			continue
-		}
-
-		vssForSigning = append(vssForSigning, validator)
+	proTxHashMap := make(map[string]struct{})
+	for _, v := range validatorSet.Validators {
+		proTxHashMap[v.ProTxHash.String()] = struct{}{}
 	}
-
-	return vssForSigning
+	vssForSigning := make([]*validatorStub, 0, len(proTxHashMap))
+	for _, v := range vss {
+		proTxHash, _ := v.GetProTxHash(ctx)
+		_, ok := proTxHashMap[proTxHash.String()]
+		if ok {
+			vssForSigning = append(vssForSigning, v)
+		}
+	}
+	return sortVValidatorStubsByPower(ctx, t, vssForSigning)
 }
 
 func createSignSendProposal(ctx context.Context,
@@ -780,6 +655,7 @@ func testHandshakeReplay(
 	var stateDB dbm.DB
 	var genesisState sm.State
 	var privVal types.PrivValidator
+	var app abci.Application
 
 	ctx, cancel := context.WithCancel(rctx)
 	t.Cleanup(cancel)
@@ -794,7 +670,7 @@ func testHandshakeReplay(
 		require.NoError(t, err)
 		defer func() { _ = os.RemoveAll(testConfig.RootDir) }()
 		stateDB = dbm.NewMemDB()
-
+		app = kvstore.New(kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates))
 		genesisState = sim.GenesisState
 		cfg = sim.Config
 		chain = append([]*types.Block{}, sim.Chain...) // copy chain
@@ -803,10 +679,17 @@ func testHandshakeReplay(
 		privVal, err = privval.LoadFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
 		require.NoError(t, err)
 	} else { // test single node
+		ng := nodeGen{
+			cfg:     getConfig(t),
+			logger:  logger,
+			mempool: &mockMempool{calls: sim.HeightTxs},
+		}
+		node := ng.Generate(t, ctx)
+
 		testConfig, err := ResetConfig(t.TempDir(), fmt.Sprintf("%s_s", testName))
 		require.NoError(t, err)
 		defer func() { _ = os.RemoveAll(testConfig.RootDir) }()
-		walBody, err := WALWithNBlocks(ctx, t, logger, numBlocks)
+		walBody, err := WALWithNBlocks(ctx, t, logger, node, numBlocks)
 		require.NoError(t, err)
 		walFile := tempWALWithData(t, walBody)
 		cfg.Consensus.SetWalFile(walFile)
@@ -815,9 +698,7 @@ func testHandshakeReplay(
 		require.NoError(t, err)
 
 		gdoc, err := sm.MakeGenesisDocFromFile(cfg.GenesisFile())
-		if err != nil {
-			t.Error(err)
-		}
+		require.NoError(t, err)
 
 		wal, err := NewWAL(ctx, logger, walFile)
 		require.NoError(t, err)
@@ -842,15 +723,14 @@ func testHandshakeReplay(
 	state = buildTMStateFromChain(
 		ctx,
 		t,
-		cfg,
 		logger,
 		sim.Mempool,
 		sim.Evpool,
+		app,
 		stateStore,
 		firstValidatorProTxHash,
 		state,
 		chain,
-		nBlocks,
 		mode,
 		store,
 	)
@@ -859,13 +739,17 @@ func testHandshakeReplay(
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
-	client := abciclient.NewLocalClient(logger, kvstore.NewApplication())
+	var opts []func(application *kvstore.App)
+	if testValidatorsChange {
+		opts = append(opts, kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates))
+	}
+
+	client := abciclient.NewLocalClient(logger, kvstore.New(opts...))
 	if nBlocks > 0 {
 		// run nBlocks against a new client to build up the app state.
 		// use a throwaway tendermint state
 		proxyApp := proxy.New(client, logger, proxy.NopMetrics())
-		stateDB1 := dbm.NewMemDB()
-		stateStore := sm.NewStore(stateDB1)
+		stateStore := sm.NewStore(dbm.NewMemDB())
 		err := stateStore.Save(genesisState)
 		require.NoError(t, err)
 		buildAppStateFromChain(
@@ -921,9 +805,7 @@ func testHandshakeReplay(
 
 	// get the latest app hash from the app
 	res, err := proxyApp.Info(ctx, &abci.RequestInfo{Version: ""})
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// the app hash should be synced up
 	if !bytes.Equal(latestAppHash, res.LastBlockAppHash) {
@@ -934,9 +816,7 @@ func testHandshakeReplay(
 	}
 
 	expectedBlocksToSync := numBlocks - nBlocks
-	if nBlocks == numBlocks && mode > 0 {
-		expectedBlocksToSync++
-	} else if nBlocks > 0 && mode == 1 {
+	if (nBlocks == numBlocks && mode > 0) || (nBlocks > 0 && mode == 1) {
 		expectedBlocksToSync++
 	}
 
@@ -952,28 +832,11 @@ func testHandshakeReplay(
 func applyBlock(
 	ctx context.Context,
 	t *testing.T,
-	stateStore sm.Store,
-	mempool mempool.Mempool,
-	evpool sm.EvidencePool,
+	blockExec *sm.BlockExecutor,
 	st sm.State,
-	nodeProTxHash crypto.ProTxHash,
 	blk *types.Block,
-	appClient abciclient.Client,
-	blockStore *mockBlockStore,
-	eventBus *eventbus.EventBus,
 ) sm.State {
 	testPartSize := types.BlockPartSizeBytes
-	blockExec := sm.NewBlockExecutor(
-		stateStore,
-		log.NewNopLogger(),
-		appClient,
-		mempool,
-		evpool,
-		blockStore,
-		eventBus,
-		sm.NopMetrics(),
-	)
-
 	bps, err := blk.MakePartSet(testPartSize)
 	require.NoError(t, err)
 	blkID := types.BlockID{Hash: blk.Hash(), PartSetHeader: bps.Header()}
@@ -1010,22 +873,31 @@ func buildAppStateFromChain(
 
 	require.NoError(t, stateStore.Save(state)) // save height 1's validatorsInfo
 
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		log.NewNopLogger(),
+		appClient,
+		mempool,
+		evpool,
+		blockStore,
+		eventBus,
+		sm.NopMetrics(),
+	)
+
 	switch mode {
 	case 0:
 		for i := 0; i < nBlocks; i++ {
-			block := chain[i]
-			state = applyBlock(ctx, t, stateStore, mempool, evpool, state, nodeProTxHash, block, appClient, blockStore, eventBus)
+			state = applyBlock(ctx, t, blockExec, state, chain[i])
 		}
 	case 1, 2, 3:
 		for i := 0; i < nBlocks-1; i++ {
-			block := chain[i]
-			state = applyBlock(ctx, t, stateStore, mempool, evpool, state, nodeProTxHash, block, appClient, blockStore, eventBus)
+			state = applyBlock(ctx, t, blockExec, state, chain[i])
 		}
 
 		if mode == 2 || mode == 3 {
 			// update the kvstore height and apphash
 			// as if we ran commit but not
-			state = applyBlock(ctx, t, stateStore, mempool, evpool, state, nodeProTxHash, chain[nBlocks-1], appClient, blockStore, eventBus)
+			state = applyBlock(ctx, t, blockExec, state, chain[nBlocks-1])
 		}
 	default:
 		require.Fail(t, "unknown mode %v", mode)
@@ -1036,22 +908,25 @@ func buildAppStateFromChain(
 func buildTMStateFromChain(
 	ctx context.Context,
 	t *testing.T,
-	cfg *config.Config,
 	logger log.Logger,
 	mempool mempool.Mempool,
 	evpool sm.EvidencePool,
+	app abci.Application,
 	stateStore sm.Store,
 	nodeProTxHash crypto.ProTxHash,
 	state sm.State,
 	chain []*types.Block,
-	nBlocks int,
 	mode uint,
 	blockStore *mockBlockStore,
 ) sm.State {
 	t.Helper()
 
+	if app == nil {
+		app = kvstore.New()
+	}
+
 	// run the whole chain against this client to build up the tendermint state
-	client := abciclient.NewLocalClient(logger, kvstore.NewApplication())
+	client := abciclient.NewLocalClient(logger, app)
 
 	proxyApp := proxy.New(client, logger, proxy.NopMetrics())
 	require.NoError(t, proxyApp.Start(ctx))
@@ -1068,23 +943,34 @@ func buildTMStateFromChain(
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		log.NewNopLogger(),
+		proxyApp,
+		mempool,
+		evpool,
+		blockStore,
+		eventBus,
+		sm.NopMetrics(),
+	)
+
 	switch mode {
 	case 0:
 		// sync right up
 		for _, block := range chain {
-			state = applyBlock(ctx, t, stateStore, mempool, evpool, state, nodeProTxHash, block, proxyApp, blockStore, eventBus)
+			state = applyBlock(ctx, t, blockExec, state, block)
 		}
 
 	case 1, 2, 3:
 		// sync up to the penultimate as if we stored the block.
 		// whether we commit or not depends on the appHash
 		for _, block := range chain[:len(chain)-1] {
-			state = applyBlock(ctx, t, stateStore, mempool, evpool, state, nodeProTxHash, block, proxyApp, blockStore, eventBus)
+			state = applyBlock(ctx, t, blockExec, state, block)
 		}
 
 		// apply the final block to a state copy so we can
 		// get the right next appHash but keep the state back
-		applyBlock(ctx, t, stateStore, mempool, evpool, state, nodeProTxHash, chain[len(chain)-1], proxyApp, blockStore, eventBus)
+		state = applyBlock(ctx, t, blockExec, state, chain[len(chain)-1])
 	default:
 		require.Fail(t, "unknown mode %v", mode)
 	}

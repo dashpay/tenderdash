@@ -65,12 +65,14 @@ func (a ABCIApp) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*coretypes
 		return res, nil
 	}
 
-	fb, err := a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Txs: [][]byte{tx}})
+	_, err = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Txs: [][]byte{tx}})
 	if err != nil {
 		return nil, err
 	}
 
-	res.TxResult = *fb.TxResults[0]
+	res.TxResult = abci.ExecTxResult{
+		Code: abci.CodeTypeOK,
+	}
 	res.Height = -1 // TODO
 	return res, nil
 }

@@ -303,7 +303,7 @@ func (state State) MakeBlock(
 		validatorsHash, validatorsHash,
 		state.ConsensusParams.HashConsensusParams(),
 		state.AppHash,
-		state.LastResultsHash,
+		state.LastResultsHash, // TODO need to pass current result-hash
 		proposerProTxHash,
 		proposedAppVersion,
 	)
@@ -320,7 +320,7 @@ func (state State) ValidatorsAtHeight(height int64) *types.ValidatorSet {
 	}
 }
 
-// NewRoundState returns a structure that will hold new changes to the state, that can be applied once the block is finalized
+// NewStateChangeset returns a structure that will hold new changes to the state, that can be applied once the block is finalized
 func (state State) NewStateChangeset(ctx context.Context, proposalResponse proto.Message) (CurentRoundState, error) {
 	ret := CurentRoundState{}
 	err := ret.populate(ctx, proposalResponse, state)

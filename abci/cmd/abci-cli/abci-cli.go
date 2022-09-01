@@ -300,19 +300,25 @@ func cmdTest(cmd *cobra.Command, args []string) error {
 			func() error { return servertest.InitChain(ctx, client) },
 			func() error { return servertest.Commit(ctx, client, nil) },
 			func() error {
-				return servertest.FinalizeBlock(ctx, client, [][]byte{
+				return servertest.ProcessProposal(ctx, client, [][]byte{
 					[]byte("abc"),
 				}, []uint32{
 					code.CodeTypeBadNonce,
 				}, nil)
 			},
+			func() error {
+				return servertest.FinalizeBlock(ctx, client, [][]byte{[]byte("abc")})
+			},
 			func() error { return servertest.Commit(ctx, client, nil) },
 			func() error {
-				return servertest.FinalizeBlock(ctx, client, [][]byte{
+				return servertest.ProcessProposal(ctx, client, [][]byte{
 					{0x00},
 				}, []uint32{
 					code.CodeTypeOK,
 				}, nil)
+			},
+			func() error {
+				return servertest.FinalizeBlock(ctx, client, [][]byte{{0x00}})
 			},
 			func() error {
 				return servertest.Commit(ctx, client, []byte{
@@ -321,7 +327,7 @@ func cmdTest(cmd *cobra.Command, args []string) error {
 				})
 			},
 			func() error {
-				return servertest.FinalizeBlock(ctx, client, [][]byte{
+				return servertest.ProcessProposal(ctx, client, [][]byte{
 					{0x00},
 					{0x01},
 					{0x00, 0x02},
@@ -339,6 +345,9 @@ func cmdTest(cmd *cobra.Command, args []string) error {
 					code.CodeTypeOK,
 					code.CodeTypeBadNonce,
 				}, nil)
+			},
+			func() error {
+				return servertest.FinalizeBlock(ctx, client, nil)
 			},
 			func() error { return servertest.Commit(ctx, client, []byte{0, 0, 0, 0, 0, 0, 0, 5}) },
 		})

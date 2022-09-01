@@ -51,6 +51,10 @@ type CurentRoundState struct {
 	response abci.ResponseProcessProposal
 }
 
+func (candidate CurentRoundState) IsEmpty() bool {
+	return candidate.AppHash == nil
+}
+
 // UpdateBlock changes block fields to reflect the ones returned in PrepareProposal / ProcessProposal
 func (candidate CurentRoundState) UpdateBlock(target *types.Block) error {
 	if candidate.responseType != prepareProposal {
@@ -59,7 +63,9 @@ func (candidate CurentRoundState) UpdateBlock(target *types.Block) error {
 	target.AppHash = candidate.AppHash
 	target.ResultsHash = candidate.ResultsHash
 
-	target.NextValidatorsHash = candidate.NextValidators.Hash()
+	if candidate.NextValidators != nil {
+		target.NextValidatorsHash = candidate.NextValidators.Hash()
+	}
 
 	target.CoreChainLock = candidate.CoreChainLock
 	if candidate.CoreChainLock != nil {
@@ -77,11 +83,16 @@ func (candidate CurentRoundState) UpdateState(ctx context.Context, target *State
 
 	target.LastResultsHash = candidate.ResultsHash
 
-	target.ConsensusParams = candidate.NextConsensusParams
+	if !candidate.NextConsensusParams.IsZero() {
+		target.ConsensusParams = candidate.NextConsensusParams
+	}
+
 	target.LastHeightConsensusParamsChanged = candidate.LastHeightConsensusParamsChanged
 	target.Version.Consensus.App = candidate.NextConsensusParams.Version.AppVersion
 
-	target.Validators = candidate.NextValidators
+	if candidate.NextValidators != nil {
+		target.Validators = candidate.NextValidators
+	}
 	target.LastHeightValidatorsChanged = candidate.LastHeightValidatorsChanged
 
 	if candidate.CoreChainLock != nil {
@@ -266,7 +277,6 @@ func valsetUpdate(
 ) (*types.ValidatorSet, error) {
 	err := validateValidatorSetUpdate(vu, params)
 	if err != nil {
-
 		return nil, fmt.Errorf("validating validator updates: %w", err)
 	}
 

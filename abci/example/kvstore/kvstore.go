@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -35,6 +36,17 @@ type State struct {
 	Size    int64  `json:"size"`
 	Height  int64  `json:"height"`
 	AppHash []byte `json:"app_hash"`
+}
+
+func (s *State) appHash() []byte {
+	stats := s.db.Stats()
+	appHash := make([]byte, crypto.DefaultAppHashSize)
+	size, err := strconv.Atoi(stats["database.size"])
+	if err != nil {
+		panic(err)
+	}
+	binary.PutVarint(appHash, int64(size))
+	return appHash
 }
 
 func loadState(db dbm.DB) State {
@@ -120,52 +132,6 @@ func (app *Application) Info(_ context.Context, req *types.RequestInfo) (*types.
 	}, nil
 }
 
-// tx is either "val:pubkey!power" or "key=value" or just arbitrary bytes
-func (app *Application) handleTx(tx []byte) *types.ExecTxResult {
-	if isValidatorSetUpdateTx(tx) {
-		err := app.execValidatorSetTx(tx)
-		if err != nil {
-			return &types.ExecTxResult{
-				Code: code.CodeTypeUnknownError,
-				Log:  err.Error(),
-			}
-		}
-		return &types.ExecTxResult{Code: code.CodeTypeOK}
-	}
-
-	if isPrepareTx(tx) {
-		return app.execPrepareTx(tx)
-	}
-
-	var key, value string
-	parts := bytes.Split(tx, []byte("="))
-	if len(parts) == 2 {
-		key, value = string(parts[0]), string(parts[1])
-	} else {
-		key, value = string(tx), string(tx)
-	}
-
-	err := app.state.db.Set(prefixKey([]byte(key)), []byte(value))
-	if err != nil {
-		panic(err)
-	}
-	app.state.Size++
-
-	events := []types.Event{
-		{
-			Type: "app",
-			Attributes: []types.EventAttribute{
-				{Key: "creator", Value: "Cosmoshi Netowoko", Index: true},
-				{Key: "key", Value: key, Index: true},
-				{Key: "index_key", Value: "index is working", Index: true},
-				{Key: "noindex_key", Value: "index is working", Index: false},
-			},
-		},
-	}
-
-	return &types.ExecTxResult{Code: code.CodeTypeOK, Events: events}
-}
-
 func (app *Application) Close() error {
 	app.mu.Lock()
 	defer app.mu.Unlock()
@@ -202,7 +168,7 @@ func (app *Application) Commit(_ context.Context) (*types.ResponseCommit, error)
 
 	app.state.AppHash = app.roundAppHash
 	app.state.Height++
-	saveState(app.state)
+	//saveState(app.state)
 
 	resp := &types.ResponseCommit{Data: app.state.AppHash}
 	if app.RetainBlocks > 0 && app.state.Height >= app.RetainBlocks {
@@ -335,7 +301,8 @@ func (app *Application) ProcessProposal(_ context.Context, req *types.RequestPro
 
 	if !bytes.Equal(app.state.AppHash, app.roundAppHash) {
 		for i := range req.Txs {
-			txResults[i] = &types.ExecTxResult{Code: code.CodeTypeOK}
+			key, _ := parseTx(req.Txs[i])
+			txResults[i] = normalTxResult(key)
 		}
 		return &types.ResponseProcessProposal{
 			Status:             types.ResponseProcessProposal_ACCEPT,
@@ -358,6 +325,64 @@ func (app *Application) ProcessProposal(_ context.Context, req *types.RequestPro
 		TxResults:          txResults,
 		ValidatorSetUpdate: proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
 	}, nil
+}
+
+func (app *Application) executeTxs(txs [][]byte) []*types.ExecTxResult {
+	txResults := make([]*types.ExecTxResult, len(txs))
+	for i, tx := range txs {
+		txResults[i] = app.handleTx(tx)
+	}
+	return txResults
+}
+
+// tx is either "val:pubkey!power" or "key=value" or just arbitrary bytes
+func (app *Application) handleTx(tx []byte) *types.ExecTxResult {
+	if isValidatorSetUpdateTx(tx) {
+		err := app.execValidatorSetTx(tx)
+		if err != nil {
+			return &types.ExecTxResult{
+				Code: code.CodeTypeUnknownError,
+				Log:  err.Error(),
+			}
+		}
+		return &types.ExecTxResult{Code: code.CodeTypeOK}
+	}
+
+	if isPrepareTx(tx) {
+		return app.execPrepareTx(tx)
+	}
+
+	key, value := parseTx(tx)
+	err := app.state.db.Set(prefixKey([]byte(key)), []byte(value))
+	if err != nil {
+		panic(err)
+	}
+	app.state.Size++
+	return normalTxResult(key)
+}
+
+func normalTxResult(key string) *types.ExecTxResult {
+	events := []types.Event{
+		{
+			Type: "app",
+			Attributes: []types.EventAttribute{
+				{Key: "creator", Value: "Cosmoshi Netowoko", Index: true},
+				{Key: "key", Value: key, Index: true},
+				{Key: "index_key", Value: "index is working", Index: true},
+				{Key: "noindex_key", Value: "index is working", Index: false},
+			},
+		},
+	}
+
+	return &types.ExecTxResult{Code: code.CodeTypeOK, Events: events}
+}
+
+func parseTx(tx []byte) (string, string) {
+	parts := bytes.Split(tx, []byte("="))
+	if len(parts) == 2 {
+		return string(parts[0]), string(parts[1])
+	}
+	return string(tx), string(tx)
 }
 
 //---------------------------------------------

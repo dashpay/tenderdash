@@ -516,12 +516,6 @@ func TestMaxProposalBlockSize(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	coreChainLock := types.CoreChainLock{
-		CoreBlockHeight: math.MaxUint32,
-		CoreBlockHash:   crypto.CRandBytes(32),
-		Signature:       crypto.CRandBytes(96),
-	}
-
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
@@ -535,7 +529,6 @@ func TestMaxProposalBlockSize(t *testing.T) {
 		eventBus,
 		sm.NopMetrics(),
 	)
-	blockExec.SetNextCoreChainLock(&coreChainLock)
 
 	blockID := types.BlockID{
 		Hash: crypto.Checksum([]byte("blockID_hash")),
@@ -546,7 +539,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	}
 
 	// save the updated validator set for use by the block executor.
-	state.LastBlockHeight = math.MaxInt64 - 3
+	state.LastBlockHeight = math.MaxInt64 - 2
 	state.LastHeightValidatorsChanged = math.MaxInt64 - 1
 	require.NoError(t, stateStore.Save(state))
 
@@ -602,7 +595,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	require.Equal(t, types.MaxHeaderBytes, int64(pb.Header.Size()))
 	require.Equal(t, types.MaxCommitSize, int64(pb.LastCommit.Size()))
 	// make sure that the block is less than the max possible size
-	assert.Equal(t, int64(1292+cfg.Mempool.MaxTxBytes), int64(pb.Size()))
+	assert.Equal(t, int64(1150+cfg.Mempool.MaxTxBytes), int64(pb.Size()))
 	// because of the proto overhead we expect the part set bytes to be equal or
 	// less than the pb block size
 	assert.LessOrEqual(t, partSet.ByteSize(), int64(pb.Size()))

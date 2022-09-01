@@ -50,8 +50,8 @@ func Commit(ctx context.Context, client abciclient.Client, hashExp []byte) error
 	return nil
 }
 
-func FinalizeBlock(ctx context.Context, client abciclient.Client, txBytes [][]byte, codeExp []uint32, dataExp []byte) error {
-	res, _ := client.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txBytes})
+func ProcessProposal(ctx context.Context, client abciclient.Client, txBytes [][]byte, codeExp []uint32, dataExp []byte) error {
+	res, _ := client.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: txBytes})
 	for i, tx := range res.TxResults {
 		code, data, log := tx.Code, tx.Data, tx.Log
 		if code != codeExp[i] {
@@ -66,6 +66,15 @@ func FinalizeBlock(ctx context.Context, client abciclient.Client, txBytes [][]by
 				data, dataExp)
 			return errors.New("FinalizeBlock  error")
 		}
+	}
+	fmt.Println("Passed test: FinalizeBlock")
+	return nil
+}
+
+func FinalizeBlock(ctx context.Context, client abciclient.Client, txBytes [][]byte) error {
+	_, err := client.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txBytes})
+	if err != nil {
+		return err
 	}
 	fmt.Println("Passed test: FinalizeBlock")
 	return nil

@@ -241,3 +241,11 @@ func (r ResponseProcessProposal) Validate() error {
 
 	return nil
 }
+
+func (m *ValidatorSetUpdate) ProTxHashes() []crypto.ProTxHash {
+	ret := make([]crypto.ProTxHash, len(m.ValidatorUpdates))
+	for i, v := range m.ValidatorUpdates {
+		ret[i] = v.ProTxHash
+	}
+	return ret
+}

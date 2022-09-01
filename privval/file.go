@@ -13,6 +13,7 @@ import (
 
 	"github.com/dashevo/dashd-go/btcjson"
 
+	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/internal/libs/tempfile"
@@ -400,6 +401,15 @@ func loadFilePV(keyFilePath, stateFilePath string, loadState bool) (*FilePV, err
 		Key:           pvKey,
 		LastSignState: pvState,
 	}, nil
+}
+
+// MustLoadOrGenFilePVFromConfig calls LoadOrGenFilePV if gets an error then panic
+func MustLoadOrGenFilePVFromConfig(cfg *config.Config) *FilePV {
+	pv, err := LoadOrGenFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
+	if err != nil {
+		panic(err)
+	}
+	return pv
 }
 
 // LoadOrGenFilePV loads a FilePV from the given filePaths
