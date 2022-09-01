@@ -98,6 +98,8 @@ func (s State) Copy(dst *State) error {
 	if err != nil {
 		return fmt.Errorf("cannot create dest db iterator: %w", err)
 	}
+	defer dstIter.Close()
+
 	keys := make([][]byte, 0, s.Size())
 	for dstIter.Valid() {
 		keys = append(keys, dstIter.Key())
