@@ -7,6 +7,7 @@ import (
 	"encoding/binary"
 	"encoding/json"
 	"fmt"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -17,6 +18,7 @@ import (
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/libs/protoio"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/version"
 )
@@ -32,9 +34,8 @@ var (
 
 type State struct {
 	db      dbm.DB
-	Size    int64  `json:"size"`
-	Height  int64  `json:"height"`
-	AppHash []byte `json:"app_hash"`
+	Height  int64            `json:"height"`
+	AppHash tmbytes.HexBytes `json:"app_hash"`
 }
 
 func loadState(db dbm.DB) State {
@@ -69,18 +70,90 @@ func prefixKey(key []byte) []byte {
 	return append(kvPairPrefixKey, key...)
 }
 
+func (s State) Size() int64 {
+	stats := s.db.Stats()
+	size, err := strconv.ParseInt(stats["database.size"], 10, 64)
+	if err != nil {
+		panic("database size error: " + err.Error())
+	}
+	return size
+}
+
+// Copy copies the state. It ensures copy is a valid, initialized state.
+// Caller should close the state once it's not needed anymore
+// newDBfunc can be provided to define DB that will be used for this copy.
+func (s State) Copy(dst *State) error {
+	dst.Height = s.Height
+	dst.AppHash = s.AppHash.Copy()
+	// apphash is required, and should never be nil,zero-length
+	if len(dst.AppHash) == 0 {
+		dst.AppHash = make(tmbytes.HexBytes, crypto.DefaultAppHashSize)
+	}
+
+	dstBatch := dst.db.NewBatch()
+	defer dstBatch.Close()
+
+	// cleanup dest DB first
+	dstIter, err := dst.db.Iterator(nil, nil)
+	if err != nil {
+		return fmt.Errorf("cannot create dest db iterator: %w", err)
+	}
+	defer dstIter.Close()
+
+	keys := make([][]byte, 0, s.Size())
+	for dstIter.Valid() {
+		keys = append(keys, dstIter.Key())
+		dstIter.Next()
+	}
+	for _, key := range keys {
+		dstBatch.Delete(key)
+	}
+
+	// write source to dest
+	if s.db != nil {
+		srcIter, err := s.db.Iterator(nil, nil)
+		if err != nil {
+			return fmt.Errorf("cannot copy current DB: %w", err)
+		}
+		defer srcIter.Close()
+
+		for srcIter.Valid() {
+			if err = dstBatch.Set(srcIter.Key(), srcIter.Value()); err != nil {
+				return err
+			}
+			srcIter.Next()
+		}
+
+		if err = dstBatch.Write(); err != nil {
+			return fmt.Errorf("cannot close dest batch: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (s *State) Close() error {
+	if s.db != nil {
+		return s.db.Close()
+	}
+	return nil
+}
+
 //---------------------------------------------------
 
 var _ types.Application = (*Application)(nil)
 
 type Application struct {
 	types.BaseApplication
-	mu           sync.Mutex
-	state        State
+	mu sync.Mutex
+
+	lastCommittedState State
+	// roundStates contains state for each round, indexed by AppHash.String()
+	roundStates  map[string]State
 	RetainBlocks int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
 	logger       log.Logger
 
-	roundAppHash []byte
+	finalizedAppHash []byte
 
 	// validator set update
 	valUpdatesRepo *repository
@@ -90,12 +163,20 @@ type Application struct {
 
 func NewApplication() *Application {
 	db := dbm.NewMemDB()
-	return &Application{
-		logger:         log.NewNopLogger(),
-		state:          loadState(db),
-		valsIndex:      make(map[string]*types.ValidatorUpdate),
-		valUpdatesRepo: &repository{db},
+	logger, err := log.NewDefaultLogger(log.LogFormatJSON, log.LogLevelDebug)
+	if err != nil {
+		panic("cannot create logger: " + err.Error())
 	}
+	app := &Application{
+		logger:             logger.With("module", "kvstore"),
+		lastCommittedState: loadState(db),
+		roundStates:        map[string]State{},
+		valsIndex:          make(map[string]*types.ValidatorUpdate),
+		valUpdatesRepo:     &repository{db},
+	}
+
+	app.newHeight(0, make([]byte, crypto.DefaultAppHashSize))
+	return app
 }
 
 func (app *Application) InitChain(_ context.Context, req *types.RequestInitChain) (*types.ResponseInitChain, error) {
@@ -112,16 +193,16 @@ func (app *Application) Info(_ context.Context, req *types.RequestInfo) (*types.
 	app.mu.Lock()
 	defer app.mu.Unlock()
 	return &types.ResponseInfo{
-		Data:             fmt.Sprintf("{\"size\":%v}", app.state.Size),
+		Data:             fmt.Sprintf("{\"size\":%v}", app.lastCommittedState.Size()),
 		Version:          version.ABCIVersion,
 		AppVersion:       ProtocolVersion,
-		LastBlockHeight:  app.state.Height,
-		LastBlockAppHash: app.state.AppHash,
+		LastBlockHeight:  app.lastCommittedState.Height,
+		LastBlockAppHash: app.lastCommittedState.AppHash,
 	}, nil
 }
 
 // tx is either "val:pubkey!power" or "key=value" or just arbitrary bytes
-func (app *Application) handleTx(tx []byte) *types.ExecTxResult {
+func (app *Application) handleTx(roundState *State, tx []byte) *types.ExecTxResult {
 	if isValidatorSetUpdateTx(tx) {
 		err := app.execValidatorSetTx(tx)
 		if err != nil {
@@ -145,11 +226,10 @@ func (app *Application) handleTx(tx []byte) *types.ExecTxResult {
 		key, value = string(tx), string(tx)
 	}
 
-	err := app.state.db.Set(prefixKey([]byte(key)), []byte(value))
+	err := roundState.db.Set(prefixKey([]byte(key)), []byte(value))
 	if err != nil {
 		panic(err)
 	}
-	app.state.Size++
 
 	events := []types.Event{
 		{
@@ -170,24 +250,22 @@ func (app *Application) Close() error {
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	return app.state.db.Close()
+	app.resetRoundStates()
+	return app.lastCommittedState.Close()
 }
 
 func (app *Application) FinalizeBlock(_ context.Context, req *types.RequestFinalizeBlock) (*types.ResponseFinalizeBlock, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	respTxs := make([]*types.ExecTxResult, len(req.Txs))
-	if !bytes.Equal(app.state.AppHash, app.roundAppHash) {
-		for i := range req.Txs {
-			respTxs[i] = &types.ExecTxResult{Code: code.CodeTypeOK}
-		}
-	} else {
-		app.executeTxs(req.Txs)
-		for i, tx := range req.Txs {
-			respTxs[i] = app.handleTx(tx)
-		}
+	app.logger.Debug("finalize block", "req", req)
+
+	_, ok := app.roundStates[tmbytes.HexBytes(req.AppHash).String()]
+	if !ok {
+		return &types.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s not found", req.AppHash)
 	}
+
+	app.finalizedAppHash = req.AppHash
 
 	return &types.ResponseFinalizeBlock{}, nil
 }
@@ -200,13 +278,11 @@ func (app *Application) Commit(_ context.Context) (*types.ResponseCommit, error)
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	app.state.AppHash = app.roundAppHash
-	app.state.Height++
-	saveState(app.state)
+	app.newHeight(app.lastCommittedState.Height+1, app.finalizedAppHash)
 
-	resp := &types.ResponseCommit{Data: app.state.AppHash}
-	if app.RetainBlocks > 0 && app.state.Height >= app.RetainBlocks {
-		resp.RetainHeight = app.state.Height - app.RetainBlocks + 1
+	resp := &types.ResponseCommit{Data: app.lastCommittedState.AppHash}
+	if app.RetainBlocks > 0 && app.lastCommittedState.Height >= app.RetainBlocks {
+		resp.RetainHeight = app.lastCommittedState.Height - app.RetainBlocks + 1
 	}
 	return resp, nil
 }
@@ -262,7 +338,7 @@ func (app *Application) Query(_ context.Context, reqQuery *types.RequestQuery) (
 	}
 
 	if reqQuery.Prove {
-		value, err := app.state.db.Get(prefixKey(reqQuery.Data))
+		value, err := app.lastCommittedState.db.Get(prefixKey(reqQuery.Data))
 		if err != nil {
 			panic(err)
 		}
@@ -271,7 +347,7 @@ func (app *Application) Query(_ context.Context, reqQuery *types.RequestQuery) (
 			Index:  -1,
 			Key:    reqQuery.Data,
 			Value:  value,
-			Height: app.state.Height,
+			Height: app.lastCommittedState.Height,
 		}
 
 		if value == nil {
@@ -283,7 +359,7 @@ func (app *Application) Query(_ context.Context, reqQuery *types.RequestQuery) (
 		return &resQuery, nil
 	}
 
-	value, err := app.state.db.Get(prefixKey(reqQuery.Data))
+	value, err := app.lastCommittedState.db.Get(prefixKey(reqQuery.Data))
 	if err != nil {
 		panic(err)
 	}
@@ -291,7 +367,7 @@ func (app *Application) Query(_ context.Context, reqQuery *types.RequestQuery) (
 	resQuery := types.ResponseQuery{
 		Key:    reqQuery.Data,
 		Value:  value,
-		Height: app.state.Height,
+		Height: app.lastCommittedState.Height,
 	}
 
 	if value == nil {
@@ -303,24 +379,87 @@ func (app *Application) Query(_ context.Context, reqQuery *types.RequestQuery) (
 	return &resQuery, nil
 }
 
+// appHash returns app hash of current app state.
+// As we are using a memdb - just return the big endian size of the db
+func (s *State) updateAppHash() {
+	appHash := make([]byte, crypto.DefaultAppHashSize)
+	binary.PutVarint(appHash, s.Size())
+
+	s.AppHash = appHash
+}
+
+func (app *Application) newRound(height int64) (State, error) {
+	roundState := State{db: dbm.NewMemDB()}
+	err := app.lastCommittedState.Copy(&roundState)
+	if err != nil {
+		return State{}, fmt.Errorf("cannot copy current state: %w", err)
+	}
+
+	return roundState, nil
+}
+
+// newHeight frees resources from previous height and starts new height.
+// `height` shall be new height, and `committedRound` shall be round from previous commit
+// Caller should lock the Application.
+func (app *Application) newHeight(height int64, committedRound tmbytes.HexBytes) error {
+	if height != app.lastCommittedState.Height+1 {
+		return fmt.Errorf("invalid height: expected: %d, got: %d", app.lastCommittedState.Height+1, height)
+	}
+
+	// Committed round becomes new state
+	// Note it can be empty (eg. on initial height), but State.Copy() should handle it
+	roundState, _ := app.roundStates[committedRound.String()]
+	err := roundState.Copy(&app.lastCommittedState)
+	if err != nil {
+		return err
+	}
+
+	app.resetRoundStates()
+	saveState(app.lastCommittedState)
+
+	return nil
+}
+
+func (app *Application) resetRoundStates() {
+	for _, state := range app.roundStates {
+		state.Close()
+	}
+	app.roundStates = map[string]State{}
+}
+
+func (app *Application) handleProposal(txs [][]byte) (State, []*types.ExecTxResult, error) {
+
+	roundState, err := app.newRound(app.lastCommittedState.Height + 1)
+	if err != nil {
+		return State{}, nil, err
+	}
+
+	// execute block
+	txResults := make([]*types.ExecTxResult, len(txs))
+	for i, tx := range txs {
+		txResults[i] = app.handleTx(&roundState, tx)
+	}
+	roundState.updateAppHash()
+	app.roundStates[roundState.AppHash.String()] = roundState
+
+	return roundState, txResults, nil
+}
 func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	// execute block
-	txResults := make([]*types.ExecTxResult, len(req.Txs))
-	for i, tx := range req.Txs {
-		txResults[i] = app.handleTx(tx)
-	}
+	app.logger.Debug("prepare proposal", "req", req)
 
-	// Using a memdb - just return the big endian size of the db
-	appHash := make([]byte, crypto.DefaultAppHashSize)
-	binary.PutVarint(appHash, app.state.Size)
-	app.roundAppHash = appHash
+	roundState, txResults, err := app.handleProposal(req.Txs)
+	if err != nil {
+		return &types.ResponsePrepareProposal{}, err
+	}
+	app.logger.Debug("end of prepare proposal", "app_hash", roundState.AppHash)
+
 	return &types.ResponsePrepareProposal{
 		TxRecords:             app.substPrepareTx(req.Txs, req.MaxTxBytes),
-		AppHash:               appHash,
-		TxResults:             app.executeTxs(req.Txs),
+		AppHash:               roundState.AppHash,
+		TxResults:             txResults,
 		ConsensusParamUpdates: nil,
 		CoreChainLockUpdate:   nil,
 		ValidatorSetUpdate:    proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
@@ -328,33 +467,18 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 }
 
 func (app *Application) ProcessProposal(_ context.Context, req *types.RequestProcessProposal) (*types.ResponseProcessProposal, error) {
-	// Using a memdb - just return the big endian size of the db
-	appHash := make([]byte, crypto.DefaultAppHashSize)
-	binary.PutVarint(appHash, app.state.Size)
-	txResults := make([]*types.ExecTxResult, len(req.Txs))
+	app.logger.Debug("process proposal", "req", req)
 
-	if !bytes.Equal(app.state.AppHash, app.roundAppHash) {
-		for i := range req.Txs {
-			txResults[i] = &types.ExecTxResult{Code: code.CodeTypeOK}
-		}
+	roundState, txResults, err := app.handleProposal(req.Txs)
+	if err != nil {
 		return &types.ResponseProcessProposal{
-			Status:             types.ResponseProcessProposal_ACCEPT,
-			AppHash:            app.roundAppHash,
-			TxResults:          txResults,
-			ValidatorSetUpdate: proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
-		}, nil
+			Status: types.ResponseProcessProposal_REJECT,
+		}, err
 	}
-	// execute block
-	for i, tx := range req.Txs {
-		if len(tx) == 0 {
-			return &types.ResponseProcessProposal{Status: types.ResponseProcessProposal_REJECT}, nil
-		}
-		txResults[i] = app.handleTx(tx)
-	}
-	app.roundAppHash = appHash
+
 	return &types.ResponseProcessProposal{
 		Status:             types.ResponseProcessProposal_ACCEPT,
-		AppHash:            app.roundAppHash,
+		AppHash:            roundState.AppHash,
 		TxResults:          txResults,
 		ValidatorSetUpdate: proto.Clone(&app.valSetUpdate).(*types.ValidatorSetUpdate),
 	}, nil
