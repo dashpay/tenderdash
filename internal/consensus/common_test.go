@@ -891,8 +891,6 @@ func (g *consensusNetGen) newApp(logger log.Logger, state *sm.State, confName st
 		state.Version.Consensus.App = kvstore.ProtocolVersion
 	case *kvstore.Application:
 		state.Version.Consensus.App = kvstore.ProtocolVersion
-	case *kvstore.App:
-		state.Version.Consensus.App = kvstore.ProtocolVersion
 	}
 	return app, func() error {
 		if appCloser, ok := app.(io.Closer); ok {
@@ -1063,9 +1061,9 @@ func (m *mockTicker) Chan() <-chan timeoutInfo {
 	return m.c
 }
 
-func newKVStoreFunc(opts ...func(*kvstore.App)) func(_ log.Logger, _ string) abci.Application {
+func newKVStoreFunc(opts ...func(*kvstore.Application)) func(_ log.Logger, _ string) abci.Application {
 	return func(_ log.Logger, _ string) abci.Application {
-		return kvstore.New(opts...)
+		return kvstore.NewApplication(opts...)
 	}
 }
 

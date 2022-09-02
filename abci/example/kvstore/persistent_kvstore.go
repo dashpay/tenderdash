@@ -25,10 +25,10 @@ func NewPersistentKVStoreApplication(logger log.Logger, dbDir string) *Persisten
 
 	return &PersistentKVStoreApplication{
 		Application: &Application{
-			lastCommittedState: loadState(db),
-			logger:             logger,
-			valsIndex:          make(map[string]*types.ValidatorUpdate),
-			valUpdatesRepo:     &repository{db},
+			lastCommittedState:  loadState(db),
+			roundStates:         make(map[string]State),
+			logger:              logger,
+			validatorSetUpdates: make(map[int64]types.ValidatorSetUpdate),
 		},
 	}
 }

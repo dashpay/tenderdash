@@ -68,7 +68,7 @@ func startNewStateAndWaitForBlock(ctx context.Context, t *testing.T, consensusRe
 		consensusReplayConfig,
 		state,
 		privValidator,
-		kvstore.New(),
+		kvstore.NewApplication(),
 		blockStore,
 	)
 
@@ -176,7 +176,7 @@ LOOP:
 			consensusReplayConfig,
 			state,
 			privValidator,
-			kvstore.New(),
+			kvstore.NewApplication(),
 			blockStore,
 		)
 
@@ -670,7 +670,7 @@ func testHandshakeReplay(
 		require.NoError(t, err)
 		defer func() { _ = os.RemoveAll(testConfig.RootDir) }()
 		stateDB = dbm.NewMemDB()
-		app = kvstore.New(kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates))
+		app = kvstore.NewApplication(kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates))
 		genesisState = sim.GenesisState
 		cfg = sim.Config
 		chain = append([]*types.Block{}, sim.Chain...) // copy chain
@@ -739,12 +739,12 @@ func testHandshakeReplay(
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
-	var opts []func(application *kvstore.App)
+	var opts []func(application *kvstore.Application)
 	if testValidatorsChange {
 		opts = append(opts, kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates))
 	}
 
-	client := abciclient.NewLocalClient(logger, kvstore.New(opts...))
+	client := abciclient.NewLocalClient(logger, kvstore.NewApplication(opts...))
 	if nBlocks > 0 {
 		// run nBlocks against a new client to build up the app state.
 		// use a throwaway tendermint state
@@ -922,7 +922,7 @@ func buildTMStateFromChain(
 	t.Helper()
 
 	if app == nil {
-		app = kvstore.New()
+		app = kvstore.NewApplication()
 	}
 
 	// run the whole chain against this client to build up the tendermint state
