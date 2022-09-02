@@ -25,19 +25,19 @@ const (
 
 func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []byte, key, value string) {
 	txs := [][]byte{tx}
-	req := &types.RequestProcessProposal{Txs: txs}
+	req := &types.RequestProcessProposal{Height: 1, Txs: txs}
 	ar, err := app.ProcessProposal(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(ar.TxResults))
 	require.False(t, ar.TxResults[0].IsErr())
-	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txs})
+	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Height: 1, Txs: txs, AppHash: ar.AppHash})
 	require.NoError(t, err)
 	// repeating tx doesn't raise error
 	ar, err = app.ProcessProposal(ctx, req)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(ar.TxResults))
 	require.False(t, ar.TxResults[0].IsErr())
-	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txs})
+	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Height: 1, Txs: txs, AppHash: ar.AppHash})
 	require.NoError(t, err)
 	// commit
 	_, err = app.Commit(ctx)
@@ -128,24 +128,19 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 
 	// make and apply block
 	height = int64(1)
+	resp, err := kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{Height: height})
+	require.NoError(t, err)
+
 	hash := []byte("foo")
-	if _, err := kvstore.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Hash: hash, Height: height}); err != nil {
-		t.Fatal(err)
-	}
+	_, err = kvstore.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Hash: hash, Height: height, AppHash: resp.AppHash})
+	require.NoError(t, err)
 
-	if _, err := kvstore.Commit(ctx); err != nil {
-		t.Fatal(err)
-
-	}
+	_, err = kvstore.Commit(ctx)
+	require.NoError(t, err)
 
 	resInfo, err = kvstore.Info(ctx, &types.RequestInfo{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resInfo.LastBlockHeight != height {
-		t.Fatalf("expected height of %d, got %d", height, resInfo.LastBlockHeight)
-	}
-
+	require.NoError(t, err)
+	require.Equal(t, resInfo.LastBlockHeight, height, "expected height of %d, got %d", height, resInfo.LastBlockHeight)
 }
 
 // add a validator, remove a validator, update a validator
@@ -156,61 +151,16 @@ func TestValUpdates(t *testing.T) {
 	kvstore := NewApplication()
 
 	// init with some validators
-	total := 10
+	//total := 10
 	nInit := 5
-	fullVals := RandValidatorSetUpdate(total)
+	//fullVals := RandValidatorSetUpdate(total)
 	initVals := RandValidatorSetUpdate(nInit)
 
 	// initialize with the first nInit
 	_, err := kvstore.InitChain(ctx, &types.RequestInitChain{
 		ValidatorSet: &initVals,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	kvVals, err := kvstore.ValidatorSet()
 	require.NoError(t, err)
-	valSetEqualTest(t, kvVals, &initVals)
-
-	tx, err := MarshalValidatorSetUpdate(&fullVals)
-	require.NoError(t, err)
-
-	// change the validator set to the full validator set
-	makeApplyBlock(ctx, t, kvstore, 1, fullVals, tx)
-
-	kvVals, err = kvstore.ValidatorSet()
-	require.NoError(t, err)
-	valSetEqualTest(t, kvVals, &fullVals)
-}
-
-func makeApplyBlock(
-	ctx context.Context,
-	t *testing.T,
-	kvstore types.Application,
-	heightInt int,
-	diff types.ValidatorSetUpdate,
-	txs ...[]byte) {
-	// make and apply block
-	height := int64(heightInt)
-	hash := []byte("foo")
-	resProcessProposal, err := kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{
-		Hash:   hash,
-		Height: height,
-		Txs:    txs,
-	})
-	require.NoError(t, err)
-	_, err = kvstore.FinalizeBlock(ctx, &types.RequestFinalizeBlock{
-		Hash:   hash,
-		Height: height,
-		Txs:    txs,
-	})
-	require.NoError(t, err)
-
-	_, err = kvstore.Commit(ctx)
-	require.NoError(t, err)
-
-	valSetEqualTest(t, &diff, resProcessProposal.ValidatorSetUpdate)
 }
 
 // order doesn't matter
@@ -345,18 +295,18 @@ func runClientTests(ctx context.Context, t *testing.T, client abciclient.Client)
 }
 
 func testClient(ctx context.Context, t *testing.T, app abciclient.Client, tx []byte, key, value string) {
-	pp, err := app.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: [][]byte{tx}})
+	pp, err := app.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: [][]byte{tx}, Height: 1})
 	require.NoError(t, err)
 	require.Equal(t, 1, len(pp.TxResults))
 	require.False(t, pp.TxResults[0].IsErr())
-	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: [][]byte{tx}})
+	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: [][]byte{tx}, Height: 1, AppHash: pp.AppHash})
 	require.NoError(t, err)
 	// repeating FinalizeBlock doesn't raise error
-	pp, err = app.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: [][]byte{tx}})
+	pp, err = app.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: [][]byte{tx}, Height: 1})
 	require.NoError(t, err)
 	require.Equal(t, 1, len(pp.TxResults))
 	require.False(t, pp.TxResults[0].IsErr())
-	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: [][]byte{tx}})
+	_, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: [][]byte{tx}, Height: 1, AppHash: pp.AppHash})
 	require.NoError(t, err)
 	// commit
 	_, err = app.Commit(ctx)
