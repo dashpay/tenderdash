@@ -750,14 +750,14 @@ func (cs *State) sendInternalMessage(ctx context.Context, mi msgInfo) {
 // the method will panic on an absent ExtendedCommit or an ExtendedCommit without
 // extension data.
 func (cs *State) reconstructLastCommit(state sm.State) {
-	commit, err := cs.votesFromSeenCommit(state)
+	commit, err := cs.loadLastCommit(state)
 	if err != nil {
 		panic(fmt.Sprintf("failed to reconstruct last commit; %s", err))
 	}
 	cs.LastCommit = commit
 }
 
-func (cs *State) votesFromSeenCommit(state sm.State) (*types.Commit, error) {
+func (cs *State) loadLastCommit(state sm.State) (*types.Commit, error) {
 	commit := cs.blockStore.LoadSeenCommit()
 	if commit == nil || commit.Height != state.LastBlockHeight {
 		commit = cs.blockStore.LoadBlockCommit(state.LastBlockHeight)
@@ -2833,7 +2833,7 @@ func (cs *State) addVote(
 		// message.
 		_, val := cs.state.Validators.GetByIndex(vote.ValidatorIndex)
 		qt, qh := cs.state.Validators.QuorumType, cs.state.Validators.QuorumHash
-		if err := vote.VerifyExtension(cs.state.ChainID, val.PubKey, qt, qh); err != nil {
+		if err := vote.VerifyExtensionSign(cs.state.ChainID, val.PubKey, qt, qh); err != nil {
 			return false, err
 		}
 

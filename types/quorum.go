@@ -145,9 +145,9 @@ func WithVerifyReachedQuorum(quorumReached bool) func(*QuorumSingsVerifier) {
 	}
 }
 
-// NewQuorumSingsVerifier creates and returns an instance of QuorumSingsVerifier that is used for verification
+// NewQuorumSignsVerifier creates and returns an instance of QuorumSingsVerifier that is used for verification
 // quorum signatures
-func NewQuorumSingsVerifier(quorumData QuorumSignData, opts ...func(*QuorumSingsVerifier)) *QuorumSingsVerifier {
+func NewQuorumSignsVerifier(quorumData QuorumSignData, opts ...func(*QuorumSingsVerifier)) *QuorumSingsVerifier {
 	verifier := &QuorumSingsVerifier{
 		QuorumSignData:             quorumData,
 		shouldVerifyBlock:          true,

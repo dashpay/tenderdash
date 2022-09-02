@@ -355,7 +355,7 @@ func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes, q
 	if err != nil {
 		return err
 	}
-	verifier := NewQuorumSingsVerifier(
+	verifier := NewQuorumSignsVerifier(
 		quorumDataSigns,
 		WithVerifyReachedQuorum(voteSet.IsQuorumReached()),
 	)
