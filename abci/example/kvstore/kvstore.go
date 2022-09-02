@@ -147,6 +147,8 @@ type Application struct {
 	types.BaseApplication
 	mu sync.Mutex
 
+	initialHeight int64
+
 	lastCommittedState State
 	// roundStates contains state for each round, indexed by AppHash.String()
 	roundStates  map[string]State
@@ -173,6 +175,7 @@ func NewApplication() *Application {
 		roundStates:        map[string]State{},
 		valsIndex:          make(map[string]*types.ValidatorUpdate),
 		valUpdatesRepo:     &repository{db},
+		initialHeight:      1,
 	}
 
 	app.newHeight(0, make([]byte, crypto.DefaultAppHashSize))
@@ -186,6 +189,10 @@ func (app *Application) InitChain(_ context.Context, req *types.RequestInitChain
 	if err != nil {
 		return nil, err
 	}
+	if req.InitialHeight != 0 {
+		app.initialHeight = req.InitialHeight
+	}
+
 	return &types.ResponseInitChain{}, nil
 }
 
@@ -260,9 +267,10 @@ func (app *Application) FinalizeBlock(_ context.Context, req *types.RequestFinal
 
 	app.logger.Debug("finalize block", "req", req)
 
-	_, ok := app.roundStates[tmbytes.HexBytes(req.AppHash).String()]
+	appHash := tmbytes.HexBytes(req.AppHash)
+	_, ok := app.roundStates[appHash.String()]
 	if !ok {
-		return &types.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s not found", req.AppHash)
+		return &types.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s not found", appHash)
 	}
 
 	app.finalizedAppHash = req.AppHash
@@ -382,18 +390,21 @@ func (app *Application) Query(_ context.Context, reqQuery *types.RequestQuery) (
 // appHash returns app hash of current app state.
 // As we are using a memdb - just return the big endian size of the db
 func (s *State) updateAppHash() {
-	appHash := make([]byte, crypto.DefaultAppHashSize)
-	binary.PutVarint(appHash, s.Size())
-
-	s.AppHash = appHash
+	s.AppHash = make([]byte, crypto.DefaultAppHashSize)
+	binary.PutVarint(s.AppHash, s.Size())
 }
 
 func (app *Application) newRound(height int64) (State, error) {
+	if height != app.lastCommittedState.Height+1 {
+		return State{}, fmt.Errorf("invalid height: expected: %d, got: %d", app.lastCommittedState.Height+1, height)
+	}
+
 	roundState := State{db: dbm.NewMemDB()}
 	err := app.lastCommittedState.Copy(&roundState)
 	if err != nil {
 		return State{}, fmt.Errorf("cannot copy current state: %w", err)
 	}
+	roundState.Height = height
 
 	return roundState, nil
 }
@@ -401,14 +412,14 @@ func (app *Application) newRound(height int64) (State, error) {
 // newHeight frees resources from previous height and starts new height.
 // `height` shall be new height, and `committedRound` shall be round from previous commit
 // Caller should lock the Application.
-func (app *Application) newHeight(height int64, committedRound tmbytes.HexBytes) error {
+func (app *Application) newHeight(height int64, committedAppHash tmbytes.HexBytes) error {
 	if height != app.lastCommittedState.Height+1 {
 		return fmt.Errorf("invalid height: expected: %d, got: %d", app.lastCommittedState.Height+1, height)
 	}
 
 	// Committed round becomes new state
 	// Note it can be empty (eg. on initial height), but State.Copy() should handle it
-	roundState, _ := app.roundStates[committedRound.String()]
+	roundState, _ := app.roundStates[committedAppHash.String()]
 	err := roundState.Copy(&app.lastCommittedState)
 	if err != nil {
 		return err
@@ -427,9 +438,8 @@ func (app *Application) resetRoundStates() {
 	app.roundStates = map[string]State{}
 }
 
-func (app *Application) handleProposal(txs [][]byte) (State, []*types.ExecTxResult, error) {
-
-	roundState, err := app.newRound(app.lastCommittedState.Height + 1)
+func (app *Application) handleProposal(height int64, txs [][]byte) (State, []*types.ExecTxResult, error) {
+	roundState, err := app.newRound(height)
 	if err != nil {
 		return State{}, nil, err
 	}
@@ -439,7 +449,11 @@ func (app *Application) handleProposal(txs [][]byte) (State, []*types.ExecTxResu
 	for i, tx := range txs {
 		txResults[i] = app.handleTx(&roundState, tx)
 	}
-	roundState.updateAppHash()
+
+	// Don't update AppHash at genesis height
+	if roundState.Height != app.initialHeight {
+		roundState.updateAppHash()
+	}
 	app.roundStates[roundState.AppHash.String()] = roundState
 
 	return roundState, txResults, nil
@@ -450,7 +464,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 
 	app.logger.Debug("prepare proposal", "req", req)
 
-	roundState, txResults, err := app.handleProposal(req.Txs)
+	roundState, txResults, err := app.handleProposal(req.Height, req.Txs)
 	if err != nil {
 		return &types.ResponsePrepareProposal{}, err
 	}
@@ -469,7 +483,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 func (app *Application) ProcessProposal(_ context.Context, req *types.RequestProcessProposal) (*types.ResponseProcessProposal, error) {
 	app.logger.Debug("process proposal", "req", req)
 
-	roundState, txResults, err := app.handleProposal(req.Txs)
+	roundState, txResults, err := app.handleProposal(req.Height, req.Txs)
 	if err != nil {
 		return &types.ResponseProcessProposal{
 			Status: types.ResponseProcessProposal_REJECT,
