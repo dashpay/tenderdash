@@ -151,16 +151,25 @@ func TestValUpdates(t *testing.T) {
 	kvstore := NewApplication()
 
 	// init with some validators
-	//total := 10
+	total := 10
 	nInit := 5
-	//fullVals := RandValidatorSetUpdate(total)
+	fullVals := RandValidatorSetUpdate(total)
 	initVals := RandValidatorSetUpdate(nInit)
+
+	require.NotEqual(t, fullVals.QuorumHash, initVals.QuorumHash)
 
 	// initialize with the first nInit
 	_, err := kvstore.InitChain(ctx, &types.RequestInitChain{
 		ValidatorSet: &initVals,
 	})
 	require.NoError(t, err)
+	kvstore.AddValidatorSetUpdate(fullVals, 2)
+	resp, err := kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{Height: 1})
+	require.NoError(t, err)
+	require.Equal(t, initVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
+	resp, err = kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{Height: 2})
+	require.NoError(t, err)
+	require.Equal(t, fullVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
 }
 
 // order doesn't matter
