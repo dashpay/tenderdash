@@ -2636,6 +2636,12 @@ func (cs *State) addProposalBlockPart(
 		// NOTE: it's possible to receive complete proposal blocks for future rounds without having the proposal
 		cs.logger.Info("received complete proposal block", "height", cs.ProposalBlock.Height, "hash", cs.ProposalBlock.Hash())
 
+		if cs.ProposalBlock.Height != cs.RoundState.GetHeight() {
+			cs.RoundState.CurentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, cs.state, true)
+			if err != nil {
+				return false, err
+			}
+		}
 		if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
 			cs.logger.Error("failed publishing event complete proposal", "err", err)
 		}
