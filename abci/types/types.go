@@ -3,12 +3,14 @@ package types
 import (
 	"bytes"
 	"encoding/json"
-	fmt "fmt"
+	"fmt"
 
 	"github.com/gogo/protobuf/jsonpb"
 
 	"github.com/tendermint/tendermint/crypto"
+	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/crypto/merkle"
+	"github.com/tendermint/tendermint/internal/jsontypes"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 )
 
@@ -157,18 +159,95 @@ var _ jsonRoundTripper = (*ResponseCheckTx)(nil)
 
 var _ jsonRoundTripper = (*EventAttribute)(nil)
 
+type validatorSetUpdateJSON struct {
+	ValidatorUpdates   []ValidatorUpdate `protobuf:"bytes,1,rep,name=validator_updates,json=validatorUpdates,proto3" json:"validator_updates"`
+	ThresholdPublicKey json.RawMessage   `json:"threshold_public_key"`
+	QuorumHash         []byte            `protobuf:"bytes,3,opt,name=quorum_hash,json=quorumHash,proto3" json:"quorum_hash,omitempty"`
+}
+
+func (m *ValidatorSetUpdate) MarshalJSON() ([]byte, error) {
+	var err error
+	res := validatorSetUpdateJSON{
+		ValidatorUpdates: m.ValidatorUpdates,
+		QuorumHash:       m.QuorumHash,
+	}
+	thresholdPubKey, err := cryptoenc.PubKeyFromProto(m.ThresholdPublicKey)
+	if err != nil {
+		return nil, err
+	}
+	res.ThresholdPublicKey, err = jsontypes.Marshal(thresholdPubKey)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(res)
+}
+
+func (m *ValidatorSetUpdate) UnmarshalJSON(b []byte) error {
+	var res validatorSetUpdateJSON
+	err := json.Unmarshal(b, &res)
+	if err != nil {
+		return err
+	}
+	m.ValidatorUpdates = res.ValidatorUpdates
+	m.QuorumHash = res.QuorumHash
+	var thresholdPubKey crypto.PubKey
+	err = jsontypes.Unmarshal(res.ThresholdPublicKey, &thresholdPubKey)
+	if err != nil {
+		return err
+	}
+	m.ThresholdPublicKey, err = cryptoenc.PubKeyToProto(thresholdPubKey)
+	return err
+}
+
+type validatorUpdateJSON struct {
+	PubKey      json.RawMessage `json:"pub_key"`
+	Power       int64           `json:"power"`
+	ProTxHash   []byte          `json:"pro_tx_hash"`
+	NodeAddress string          `json:"node_address"`
+}
+
+func (m *ValidatorUpdate) MarshalJSON() ([]byte, error) {
+	var err error
+	res := validatorUpdateJSON{
+		Power:       m.Power,
+		ProTxHash:   m.ProTxHash,
+		NodeAddress: m.NodeAddress,
+	}
+	pubKey, err := cryptoenc.PubKeyFromProto(*m.PubKey)
+	if err != nil {
+		return nil, err
+	}
+	res.PubKey, err = jsontypes.Marshal(pubKey)
+	if err != nil {
+		return nil, err
+	}
+	return json.Marshal(res)
+}
+
+func (m *ValidatorUpdate) UnmarshalJSON(b []byte) error {
+	var res validatorUpdateJSON
+	err := json.Unmarshal(b, &res)
+	if err != nil {
+		return err
+	}
+	m.Power = res.Power
+	m.NodeAddress = res.NodeAddress
+	m.ProTxHash = res.ProTxHash
+	var pubKey crypto.PubKey
+	err = jsontypes.Unmarshal(res.PubKey, &pubKey)
+	if err != nil {
+		return err
+	}
+	protoPubKey, err := cryptoenc.PubKeyToProto(pubKey)
+	if err != nil {
+		return err
+	}
+	m.PubKey = &protoPubKey
+	return nil
+}
+
 // -----------------------------------------------
 // construct Result data
-
-func RespondVerifyVoteExtension(ok bool) ResponseVerifyVoteExtension {
-	status := ResponseVerifyVoteExtension_REJECT
-	if ok {
-		status = ResponseVerifyVoteExtension_ACCEPT
-	}
-	return ResponseVerifyVoteExtension{
-		Status: status,
-	}
-}
 
 // deterministicExecTxResult constructs a copy of response that omits
 // non-deterministic fields. The input response is not modified.

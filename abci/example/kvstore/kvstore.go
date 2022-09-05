@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -15,6 +16,7 @@ import (
 	"github.com/tendermint/tendermint/abci/example/code"
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/internal/libs/protoio"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/version"
@@ -296,7 +298,7 @@ func (app *Application) Info(_ context.Context, req *types.RequestInfo) (*types.
 	app.mu.Lock()
 	defer app.mu.Unlock()
 	return &types.ResponseInfo{
-		Data:             fmt.Sprintf("{\"appHash\":%v}", app.lastCommittedState.AppHash.String()),
+		Data:             fmt.Sprintf(`{"appHash":"%s"}`, app.lastCommittedState.AppHash.String()),
 		Version:          version.ABCIVersion,
 		AppVersion:       ProtocolVersion,
 		LastBlockHeight:  app.lastCommittedState.Height,
@@ -317,6 +319,25 @@ func (app *Application) Query(_ context.Context, reqQuery *types.RequestQuery) (
 	case "/verify-chainlock":
 		return &types.ResponseQuery{
 			Code: 0,
+		}, nil
+	case "/val":
+		vu, err := app.findValidatorUpdate(reqQuery.Data)
+		if err != nil {
+			return &types.ResponseQuery{
+				Code: code.CodeTypeUnknownError,
+				Log:  err.Error(),
+			}, nil
+		}
+		value, err := encodeMsg(&vu)
+		if err != nil {
+			return &types.ResponseQuery{
+				Code: code.CodeTypeEncodingError,
+				Log:  err.Error(),
+			}, nil
+		}
+		return &types.ResponseQuery{
+			Key:   reqQuery.Data,
+			Value: value,
 		}, nil
 	}
 
@@ -554,10 +575,32 @@ func (app *Application) handleTx(roundState *State, tx []byte) *types.ExecTxResu
 	return &types.ExecTxResult{Code: code.CodeTypeOK, Events: events}
 }
 
-func parseTx(tx []byte) (string, string) {
-	parts := bytes.Split(tx, []byte("="))
-	if len(parts) == 2 {
-		return string(parts[0]), string(parts[1])
+func (app *Application) getActiveValidatorSetUpdates() types.ValidatorSetUpdate {
+	var closestHeight int64
+	for height := range app.validatorSetUpdates {
+		if height > closestHeight && height <= app.lastCommittedState.Height {
+			closestHeight = height
+		}
 	}
-	return string(tx), string(tx)
+	return app.validatorSetUpdates[closestHeight]
+}
+
+func (app *Application) findValidatorUpdate(proTxHash crypto.ProTxHash) (types.ValidatorUpdate, error) {
+	vsu := app.getActiveValidatorSetUpdates()
+	for _, vu := range vsu.ValidatorUpdates {
+		if proTxHash.Equal(vu.ProTxHash) {
+			return vu, nil
+		}
+	}
+	return types.ValidatorUpdate{}, errors.New("validator-update not found")
+}
+
+func encodeMsg(data proto.Message) ([]byte, error) {
+	buf := bytes.NewBufferString("")
+	w := protoio.NewDelimitedWriter(buf)
+	_, err := w.WriteMsg(data)
+	if err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }

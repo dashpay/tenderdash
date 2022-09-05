@@ -2,7 +2,6 @@ package mock
 
 import (
 	"context"
-
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/internal/proxy"
 	"github.com/tendermint/tendermint/libs/bytes"
@@ -64,8 +63,16 @@ func (a ABCIApp) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*coretypes
 	if res.CheckTx.IsErr() {
 		return res, nil
 	}
+	propResp, err := a.App.ProcessProposal(ctx, &abci.RequestProcessProposal{Height: 1, Txs: [][]byte{tx}})
+	if err != nil {
+		return nil, err
+	}
+	_, err = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{AppHash: propResp.AppHash, Txs: [][]byte{tx}})
+	if err != nil {
+		return nil, err
+	}
 
-	_, err = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Txs: [][]byte{tx}})
+	_, err = a.App.Commit(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -73,7 +80,6 @@ func (a ABCIApp) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*coretypes
 	res.TxResult = abci.ExecTxResult{
 		Code: abci.CodeTypeOK,
 	}
-	res.Height = -1 // TODO
 	return res, nil
 }
 
