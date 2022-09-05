@@ -34,7 +34,7 @@ func TestKVStore(t *testing.T) {
 	logger := log.NewNopLogger()
 
 	t.Log("### Testing KVStore")
-	testBulk(ctx, t, logger, kvstore.NewApplication())
+	testBulk(ctx, t, logger, kvstore.NewApplication(kvstore.WithLogger(logger)))
 }
 
 func TestBaseApp(t *testing.T) {
@@ -77,7 +77,7 @@ func testBulk(ctx context.Context, t *testing.T, logger log.Logger, app types.Ap
 	require.NoError(t, err)
 
 	// Construct request
-	rpp := &types.RequestProcessProposal{Txs: make([][]byte, numDeliverTxs)}
+	rpp := &types.RequestProcessProposal{Height: 1, Txs: make([][]byte, numDeliverTxs)}
 	for counter := 0; counter < numDeliverTxs; counter++ {
 		rpp.Txs[counter] = []byte("test")
 	}

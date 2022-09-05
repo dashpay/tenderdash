@@ -171,6 +171,12 @@ func WithValidatorSetUpdates(validatorSetUpdates map[int64]types.ValidatorSetUpd
 	}
 }
 
+func WithLogger(logger log.Logger) func(app *Application) {
+	return func(app *Application) {
+		app.logger = logger
+	}
+}
+
 func NewApplication(opts ...func(app *Application)) *Application {
 	db := dbm.NewMemDB()
 	logger, err := log.NewDefaultLogger(log.LogFormatJSON, log.LogLevelDebug)
