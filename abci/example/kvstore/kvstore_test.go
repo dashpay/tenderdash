@@ -3,7 +3,6 @@ package kvstore
 import (
 	"context"
 	"fmt"
-	"sort"
 	"testing"
 
 	"github.com/fortytw2/leaktest"
@@ -135,7 +134,7 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 
 	// make and apply block
 	height = int64(1)
-	makeApplyBlock(ctx, t, kvstore, int(height), types.ValidatorSetUpdate{})
+	makeApplyBlock(ctx, t, kvstore, int(height))
 
 	resInfo, err = kvstore.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
@@ -166,6 +165,10 @@ func TestValUpdates(t *testing.T) {
 	resp, err := kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{Height: 1})
 	require.NoError(t, err)
 	require.Equal(t, initVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
+	_, err = kvstore.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Height: 1, AppHash: resp.AppHash})
+	require.NoError(t, err)
+	_, err = kvstore.Commit(ctx)
+	require.NoError(t, err)
 	resp, err = kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{Height: 2})
 	require.NoError(t, err)
 	require.Equal(t, fullVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
@@ -176,7 +179,6 @@ func makeApplyBlock(
 	t *testing.T,
 	kvstore types.Application,
 	heightInt int,
-	diff types.ValidatorSetUpdate,
 	txs ...[]byte) {
 	// make and apply block
 	height := int64(heightInt)
@@ -202,22 +204,6 @@ func makeApplyBlock(
 
 	_, err = kvstore.Commit(ctx)
 	require.NoError(t, err)
-}
-
-// order doesn't matter
-func valsEqualTest(t *testing.T, vals1, vals2 []types.ValidatorUpdate) {
-	t.Helper()
-
-	require.Equal(t, len(vals1), len(vals2), "vals dont match in len. got %d, expected %d", len(vals2), len(vals1))
-	sort.Sort(types.ValidatorUpdates(vals1))
-	sort.Sort(types.ValidatorUpdates(vals2))
-	for i, v1 := range vals1 {
-		v2 := vals2[i]
-		if !v1.PubKey.Equal(v2.PubKey) ||
-			v1.Power != v2.Power {
-			t.Fatalf("vals dont match at index %d. got %X/%d , expected %X/%d", i, v2.PubKey, v2.Power, v1.PubKey, v1.Power)
-		}
-	}
 }
 
 func makeSocketClientServer(
