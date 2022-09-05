@@ -76,19 +76,6 @@ func prefixKey(key []byte) []byte {
 	return append(kvPairPrefixKey, key...)
 }
 
-func (s State) Size() int64 {
-	stats := s.db.Stats()
-	sizeStr, ok := stats["database.size"]
-	if !ok {
-		return 0
-	}
-	size, err := strconv.ParseInt(sizeStr, 10, 64)
-	if err != nil {
-		panic("database size error: " + err.Error())
-	}
-	return size
-}
-
 // Copy copies the state. It ensures copy is a valid, initialized state.
 // Caller should close the state once it's not needed anymore
 // newDBfunc can be provided to define DB that will be used for this copy.
@@ -99,29 +86,36 @@ func (s State) Copy(dst *State) error {
 	if len(dst.AppHash) == 0 {
 		dst.AppHash = make(tmbytes.HexBytes, crypto.DefaultAppHashSize)
 	}
+	if err := copyDB(s.db, dst.db); err != nil {
+		return fmt.Errorf("copy state db: %w", err)
+	}
+	return nil
+}
 
-	dstBatch := dst.db.NewBatch()
+func copyDB(src dbm.DB, dst dbm.DB) error {
+	dstBatch := dst.NewBatch()
 	defer dstBatch.Close()
 
 	// cleanup dest DB first
-	dstIter, err := dst.db.Iterator(nil, nil)
+	dstIter, err := dst.Iterator(nil, nil)
 	if err != nil {
 		return fmt.Errorf("cannot create dest db iterator: %w", err)
 	}
 	defer dstIter.Close()
 
-	keys := make([][]byte, 0, s.Size())
+	// Delete content of dst, to be sure that it will not contain any unexpected data.
+	keys := make([][]byte, 0)
 	for dstIter.Valid() {
 		keys = append(keys, dstIter.Key())
 		dstIter.Next()
 	}
 	for _, key := range keys {
-		dstBatch.Delete(key)
+		_ = dstBatch.Delete(key) // ignore errors
 	}
 
 	// write source to dest
-	if s.db != nil {
-		srcIter, err := s.db.Iterator(nil, nil)
+	if src != nil {
+		srcIter, err := src.Iterator(nil, nil)
 		if err != nil {
 			return fmt.Errorf("cannot copy current DB: %w", err)
 		}
@@ -157,6 +151,8 @@ type Application struct {
 	types.BaseApplication
 	mu sync.Mutex
 
+	initialHeight int64
+
 	lastCommittedState State
 	// roundStates contains state for each round, indexed by AppHash.String()
 	roundStates  map[string]State
@@ -186,6 +182,7 @@ func NewApplication(opts ...func(app *Application)) *Application {
 		lastCommittedState:  loadState(db),
 		roundStates:         map[string]State{},
 		validatorSetUpdates: make(map[int64]types.ValidatorSetUpdate),
+		initialHeight:       1,
 	}
 
 	app.newHeight(0, make([]byte, crypto.DefaultAppHashSize))
@@ -198,8 +195,14 @@ func NewApplication(opts ...func(app *Application)) *Application {
 func (app *Application) InitChain(_ context.Context, req *types.RequestInitChain) (*types.ResponseInitChain, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
+	if req.InitialHeight != 0 {
+		app.initialHeight = req.InitialHeight
+	}
 	if req.ValidatorSet != nil {
 		app.validatorSetUpdates[req.InitialHeight] = *req.ValidatorSet
+	}
+	if err := app.newHeight(app.initialHeight, make([]byte, crypto.DefaultAppHashSize)); err != nil {
+		panic(err)
 	}
 	return &types.ResponseInitChain{}, nil
 }
@@ -248,14 +251,14 @@ func (app *Application) FinalizeBlock(_ context.Context, req *types.RequestFinal
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	app.logger.Debug("finalize block", "req", req)
-
-	_, ok := app.roundStates[tmbytes.HexBytes(req.AppHash).String()]
+	appHash := tmbytes.HexBytes(req.AppHash)
+	_, ok := app.roundStates[appHash.String()]
 	if !ok {
-		return &types.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s not found", req.AppHash)
+		return &types.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s not found", appHash)
 	}
+	app.finalizedAppHash = appHash
 
-	app.finalizedAppHash = req.AppHash
+	app.logger.Debug("finalized block", "req", req)
 
 	return &types.ResponseFinalizeBlock{}, nil
 }
@@ -264,15 +267,22 @@ func (app *Application) Commit(_ context.Context) (*types.ResponseCommit, error)
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
+	if len(app.finalizedAppHash) == 0 {
+		return &types.ResponseCommit{}, fmt.Errorf("no uncommitted finalized block")
+	}
+
 	err := app.newHeight(app.lastCommittedState.Height+1, app.finalizedAppHash)
 	if err != nil {
-		panic(err)
+		return &types.ResponseCommit{}, err
 	}
 
 	resp := &types.ResponseCommit{Data: app.lastCommittedState.AppHash}
 	if app.RetainBlocks > 0 && app.lastCommittedState.Height >= app.RetainBlocks {
 		resp.RetainHeight = app.lastCommittedState.Height - app.RetainBlocks + 1
 	}
+
+	app.logger.Debug("commit", "resp", resp)
+
 	return resp, nil
 }
 
@@ -280,7 +290,7 @@ func (app *Application) Info(_ context.Context, req *types.RequestInfo) (*types.
 	app.mu.Lock()
 	defer app.mu.Unlock()
 	return &types.ResponseInfo{
-		Data:             fmt.Sprintf("{\"size\":%v}", app.lastCommittedState.Size()),
+		Data:             fmt.Sprintf("{\"appHash\":%v}", app.lastCommittedState.AppHash.String()),
 		Version:          version.ABCIVersion,
 		AppVersion:       ProtocolVersion,
 		LastBlockHeight:  app.lastCommittedState.Height,
@@ -361,64 +371,43 @@ func (app *Application) Close() error {
 	return app.lastCommittedState.Close()
 }
 
-// tx is either "val:pubkey!power" or "key=value" or just arbitrary bytes
-func (app *Application) handleTx(roundState *State, tx []byte) *types.ExecTxResult {
-	if isPrepareTx(tx) {
-		return app.execPrepareTx(tx)
-	}
-
-	key, value := parseTx(tx)
-	err := roundState.db.Set(prefixKey([]byte(key)), []byte(value))
+// appHash updates app hash for the current app state.
+func (s *State) updateAppHash(lastAppHash tmbytes.HexBytes, txResults []*types.ExecTxResult) error {
+	txResultsHash, err := types.TxResultsHash(txResults)
 	if err != nil {
-		panic(err)
+		return err
 	}
+	s.AppHash = crypto.Checksum(append(lastAppHash, txResultsHash...))
 
-	events := []types.Event{
-		{
-			Type: "app",
-			Attributes: []types.EventAttribute{
-				{Key: "creator", Value: "Cosmoshi Netowoko", Index: true},
-				{Key: "key", Value: key, Index: true},
-				{Key: "index_key", Value: "index is working", Index: true},
-				{Key: "noindex_key", Value: "index is working", Index: false},
-			},
-		},
-	}
-
-	return &types.ExecTxResult{Code: code.CodeTypeOK, Events: events}
-}
-
-// appHash returns app hash of current app state.
-// As we are using a memdb - just return the big endian size of the db
-func (s *State) updateAppHash() {
-	appHash := make([]byte, crypto.DefaultAppHashSize)
-	binary.PutVarint(appHash, s.Size())
-
-	s.AppHash = appHash
+	return nil
 }
 
 func (app *Application) newRound(height int64) (State, error) {
-	roundState := State{db: dbm.NewMemDB(), Height: height}
+	if height != app.lastCommittedState.Height+1 {
+		return State{}, fmt.Errorf("invalid height: expected: %d, got: %d", app.lastCommittedState.Height+1, height)
+	}
+	roundState := State{db: dbm.NewMemDB()}
 	err := app.lastCommittedState.Copy(&roundState)
 	roundState.Height = height
 	if err != nil {
 		return State{}, fmt.Errorf("cannot copy current state: %w", err)
 	}
-
+	// overwrite what was set in Copy, as we are at new height
+	roundState.Height = height
 	return roundState, nil
 }
 
 // newHeight frees resources from previous height and starts new height.
 // `height` shall be new height, and `committedRound` shall be round from previous commit
 // Caller should lock the Application.
-func (app *Application) newHeight(height int64, committedRound tmbytes.HexBytes) error {
+func (app *Application) newHeight(height int64, committedAppHash tmbytes.HexBytes) error {
 	if height != app.lastCommittedState.Height+1 {
 		return fmt.Errorf("invalid height: expected: %d, got: %d", app.lastCommittedState.Height+1, height)
 	}
 
 	// Committed round becomes new state
 	// Note it can be empty (eg. on initial height), but State.Copy() should handle it
-	roundState, _ := app.roundStates[committedRound.String()]
+	roundState, _ := app.roundStates[committedAppHash.String()]
 	err := roundState.Copy(&app.lastCommittedState)
 	if err != nil {
 		return err
@@ -426,6 +415,7 @@ func (app *Application) newHeight(height int64, committedRound tmbytes.HexBytes)
 
 	app.resetRoundStates()
 	saveState(app.lastCommittedState)
+	app.finalizedAppHash = nil
 
 	return nil
 }
@@ -448,18 +438,16 @@ func (app *Application) handleProposal(height int64, txs [][]byte) (State, []*ty
 	for i, tx := range txs {
 		txResults[i] = app.handleTx(&roundState, tx)
 	}
-	roundState.updateAppHash()
+
+	// Don't update AppHash at genesis height
+	if roundState.Height != app.initialHeight {
+		if err = roundState.updateAppHash(app.lastCommittedState.AppHash, txResults); err != nil {
+			return State{}, nil, fmt.Errorf("update apphash: %w", err)
+		}
+	}
 	app.roundStates[roundState.AppHash.String()] = roundState
 
 	return roundState, txResults, nil
-}
-
-func parseTx(tx []byte) (string, string) {
-	parts := bytes.Split(tx, []byte("="))
-	if len(parts) == 2 {
-		return string(parts[0]), string(parts[1])
-	}
-	return string(tx), string(tx)
 }
 
 //---------------------------------------------
@@ -524,4 +512,46 @@ func (app *Application) substPrepareTx(blockData [][]byte, maxTxBytes int64) []*
 	}
 
 	return append(trs, removed...)
+}
+
+// tx is either "val:pubkey!power" or "key=value" or just arbitrary bytes
+func (app *Application) handleTx(roundState *State, tx []byte) *types.ExecTxResult {
+	if isPrepareTx(tx) {
+		return app.execPrepareTx(tx)
+	}
+
+	var key, value string
+	parts := bytes.Split(tx, []byte("="))
+	if len(parts) == 2 {
+		key, value = string(parts[0]), string(parts[1])
+	} else {
+		key, value = string(tx), string(tx)
+	}
+
+	err := roundState.db.Set(prefixKey([]byte(key)), []byte(value))
+	if err != nil {
+		panic(err)
+	}
+
+	events := []types.Event{
+		{
+			Type: "app",
+			Attributes: []types.EventAttribute{
+				{Key: "creator", Value: "Cosmoshi Netowoko", Index: true},
+				{Key: "key", Value: key, Index: true},
+				{Key: "index_key", Value: "index is working", Index: true},
+				{Key: "noindex_key", Value: "index is working", Index: false},
+			},
+		},
+	}
+
+	return &types.ExecTxResult{Code: code.CodeTypeOK, Events: events}
+}
+
+func parseTx(tx []byte) (string, string) {
+	parts := bytes.Split(tx, []byte("="))
+	if len(parts) == 2 {
+		return string(parts[0]), string(parts[1])
+	}
+	return string(tx), string(tx)
 }
