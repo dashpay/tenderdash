@@ -192,9 +192,9 @@ func (app *Application) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*a
 	return &abci.ResponseCheckTx{Code: code.CodeTypeOK, GasWanted: 1}, nil
 }
 
-func (app *Application) txResults(transactions [][]byte) (txs []*abci.ExecTxResult) {
-
-	for i := range transactions {
+func (app *Application) txResults(nTransactions int) (txs []*abci.ExecTxResult) {
+	txs = make([]*abci.ExecTxResult, nTransactions)
+	for i := 0; i < nTransactions; i++ {
 		txs[i] = &abci.ExecTxResult{Code: code.CodeTypeOK}
 	}
 
@@ -365,69 +365,69 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 	}
 
 	extCount := len(req.LocalLastCommit.ThresholdVoteExtensions)
-	// We only generate our special transaction if we have vote extensions
-	if extCount > 0 {
-		var totalBytes int64
-		extTxPrefix := fmt.Sprintf("%s=", voteExtensionKey)
-		extTx := []byte(fmt.Sprintf("%s%d", extTxPrefix, extCount))
-		app.logger.Info("preparing proposal with custom transaction from vote extensions", "tx", extTx)
-		// Our generated transaction takes precedence over any supplied
-		// transaction that attempts to modify the "extensionSum" value.
-		txRecords := make([]*abci.TxRecord, len(req.Txs)+1)
-		for i, tx := range req.Txs {
-			if strings.HasPrefix(string(tx), extTxPrefix) {
-				txRecords[i] = &abci.TxRecord{
-					Action: abci.TxRecord_REMOVED,
-					Tx:     tx,
-				}
-			} else {
-				txRecords[i] = &abci.TxRecord{
-					Action: abci.TxRecord_UNMODIFIED,
-					Tx:     tx,
-				}
-				totalBytes += int64(len(tx))
-			}
-		}
-		if totalBytes+int64(len(extTx)) < req.MaxTxBytes {
-			txRecords[len(req.Txs)] = &abci.TxRecord{
-				Action: abci.TxRecord_ADDED,
-				Tx:     extTx,
-			}
-		} else {
-			app.logger.Info(
-				"too many txs to include special vote extension-generated tx",
-				"totalBytes", totalBytes,
-				"MaxTxBytes", req.MaxTxBytes,
-				"extTx", extTx,
-				"extTxLen", len(extTx),
-			)
-		}
-		return &abci.ResponsePrepareProposal{
-			TxRecords:           txRecords,
-			TxResults:           app.txResults(req.Txs),
-			ValidatorSetUpdate:  validatorSetUpdate,
-			CoreChainLockUpdate: nextCoreChainLockUpdate,
-		}, nil
+	txRecords, err := app.processTxs(req.Txs, req.MaxTxBytes, extCount)
+	if err != nil {
+		return &abci.ResponsePrepareProposal{}, err
 	}
-	// None of the transactions are modified by this application.
-	trs := make([]*abci.TxRecord, 0, len(req.Txs))
-	var totalBytes int64
-	for _, tx := range req.Txs {
-		totalBytes += int64(len(tx))
-		if totalBytes > req.MaxTxBytes {
-			break
-		}
-		trs = append(trs, &abci.TxRecord{
-			Action: abci.TxRecord_UNMODIFIED,
-			Tx:     tx,
-		})
-	}
+
 	return &abci.ResponsePrepareProposal{
-		TxRecords:           trs,
-		TxResults:           app.txResults(req.Txs),
+		TxRecords:           txRecords,
+		TxResults:           app.txResults(len(txRecords)),
 		ValidatorSetUpdate:  validatorSetUpdate,
 		CoreChainLockUpdate: nextCoreChainLockUpdate,
+		AppHash:             app.state.Hash,
 	}, nil
+}
+
+func (app *Application) processTxs(txs [][]byte, maxTxBytes int64, extCount int) ([]*abci.TxRecord, error) {
+	var (
+		totalBytes int64
+		txRecords  []*abci.TxRecord
+	)
+
+	txRecords = make([]*abci.TxRecord, 0, len(txs)+1)
+	extTxPrefix := voteExtensionKey + "="
+	extTx := []byte(fmt.Sprintf("%s%d", extTxPrefix, extCount))
+
+	app.logger.Info("preparing proposal with custom transaction from vote extensions", "tx", extTx)
+
+	// Our generated transaction takes precedence over any supplied
+	// transaction that attempts to modify the "extensionSum" value.
+	for _, tx := range txs {
+		// we only modify transactions if there is at least 1 extension, eg. extCount > 0
+		if extCount > 0 && strings.HasPrefix(string(tx), extTxPrefix) {
+			txRecords = append(txRecords, &abci.TxRecord{
+				Action: abci.TxRecord_REMOVED,
+				Tx:     tx,
+			})
+			totalBytes -= int64(len(tx))
+		} else {
+			txRecords = append(txRecords, &abci.TxRecord{
+				Action: abci.TxRecord_UNMODIFIED,
+				Tx:     tx,
+			})
+			totalBytes += int64(len(tx))
+		}
+	}
+	// we only modify transactions if there is at least 1 extension, eg. extCount > 0
+	if extCount > 0 {
+		if totalBytes+int64(len(extTx)) < maxTxBytes {
+			txRecords = append(txRecords, &abci.TxRecord{
+				Action: abci.TxRecord_ADDED,
+				Tx:     extTx,
+			})
+		}
+	} else {
+		app.logger.Info(
+			"too many txs to include special vote extension-generated tx",
+			"totalBytes", totalBytes,
+			"MaxTxBytes", maxTxBytes,
+			"extTx", extTx,
+			"extTxLen", len(extTx),
+		)
+	}
+
+	return txRecords, nil
 }
 
 // ProcessProposal implements part of the Application interface.
@@ -462,9 +462,10 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 
 	return &abci.ResponseProcessProposal{
 		Status:              abci.ResponseProcessProposal_ACCEPT,
-		TxResults:           app.txResults(req.Txs),
+		TxResults:           app.txResults(len(req.Txs)),
 		ValidatorSetUpdate:  validatorSetUpdate,
 		CoreChainLockUpdate: nextCoreChainLockUpdate,
+		AppHash:             app.state.Hash,
 	}, nil
 }
 
