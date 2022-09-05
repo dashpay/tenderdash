@@ -179,6 +179,14 @@ func WithLogger(logger log.Logger) func(app *Application) {
 	}
 }
 
+func WithState(height int64) func(app *Application) {
+	return func(app *Application) {
+		app.lastCommittedState = State{
+			Height: height,
+		}
+	}
+}
+
 func NewApplication(opts ...func(app *Application)) *Application {
 	db := dbm.NewMemDB()
 	logger, err := log.NewDefaultLogger(log.LogFormatJSON, log.LogLevelDebug)
