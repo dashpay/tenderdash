@@ -213,7 +213,7 @@ func (app *Application) Info(_ context.Context, req *types.RequestInfo) (*types.
 	app.mu.Lock()
 	defer app.mu.Unlock()
 	return &types.ResponseInfo{
-		Data:             fmt.Sprintf("{\"appHash\":%v}", app.lastCommittedState.AppHash.String()),
+		Data:             fmt.Sprintf("{\"appHash\":\"%s\"}", app.lastCommittedState.AppHash.String()),
 		Version:          version.ABCIVersion,
 		AppVersion:       ProtocolVersion,
 		LastBlockHeight:  app.lastCommittedState.Height,

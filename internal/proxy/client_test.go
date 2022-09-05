@@ -167,7 +167,7 @@ func TestInfo(t *testing.T) {
 	resInfo, err := proxy.Info(ctx, &RequestInfo)
 	require.NoError(t, err)
 
-	if resInfo.Data != "{\"size\":0}" {
+	if resInfo.Data != "{\"appHash\":\"\"}" {
 		t.Error("Expected ResponseInfo with one element '{\"size\":0}' but got something else")
 	}
 }
