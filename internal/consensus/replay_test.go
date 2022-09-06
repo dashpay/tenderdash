@@ -874,7 +874,7 @@ func buildAppStateFromChain(
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		log.NewNopLogger(),
+		consensusLogger(t),
 		appClient,
 		mempool,
 		evpool,
