@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"strconv"
 	"strings"
 	"syscall"
 
@@ -125,6 +126,7 @@ func addCommands(cmd *cobra.Command, logger log.Logger) {
 	cmd.AddCommand(consoleCmd)
 	cmd.AddCommand(echoCmd)
 	cmd.AddCommand(infoCmd)
+	cmd.AddCommand(prepareBlockCmd)
 	cmd.AddCommand(finalizeBlockCmd)
 	cmd.AddCommand(checkTxCmd)
 	cmd.AddCommand(commitCmd)
@@ -185,6 +187,14 @@ var infoCmd = &cobra.Command{
 	Long:  "get some info about the application",
 	Args:  cobra.ExactArgs(0),
 	RunE:  cmdInfo,
+}
+
+var prepareBlockCmd = &cobra.Command{
+	Use:   "prepare_block",
+	Short: "deliver a block of transactions to the application and get app-hash of a new state",
+	Long:  "deliver a block of transactions to the application and get app-hash of a new state",
+	Args:  cobra.MinimumNArgs(2),
+	RunE:  cmdPrepareBlock,
 }
 
 var finalizeBlockCmd = &cobra.Command{
@@ -442,6 +452,8 @@ func muxOnCommands(cmd *cobra.Command, pArgs []string) error {
 		return cmdCheckTx(cmd, actualArgs)
 	case "commit":
 		return cmdCommit(cmd, actualArgs)
+	case "prepare_block":
+		return cmdPrepareBlock(cmd, actualArgs)
 	case "finalize_block":
 		return cmdFinalizeBlock(cmd, actualArgs)
 	case "echo":
@@ -511,6 +523,37 @@ func cmdInfo(cmd *cobra.Command, args []string) error {
 
 const codeBad uint32 = 10
 
+// Prepare a new block
+func cmdPrepareBlock(cmd *cobra.Command, args []string) error {
+	if len(args) == 0 {
+		printResponse(cmd, args, response{
+			Code: codeBad,
+			Log:  "Must provide at least one transaction",
+		})
+		return nil
+	}
+	height, err := strconv.Atoi(args[0])
+	if err != nil {
+		return err
+	}
+	txs := make([][]byte, len(args)-1)
+	for i, arg := range args[1:] {
+		txBytes, err := stringOrHexToBytes(arg)
+		if err != nil {
+			return err
+		}
+		txs[i] = txBytes
+	}
+	res, err := client.PrepareProposal(cmd.Context(), &types.RequestPrepareProposal{Height: int64(height), Txs: txs})
+	if err != nil {
+		return err
+	}
+	printResponse(cmd, args, response{
+		Data: []byte(fmt.Sprintf(`{"appHash":"%X"}`, res.AppHash)),
+	})
+	return nil
+}
+
 // Append a new tx to application
 func cmdFinalizeBlock(cmd *cobra.Command, args []string) error {
 	if len(args) == 0 {
@@ -520,15 +563,23 @@ func cmdFinalizeBlock(cmd *cobra.Command, args []string) error {
 		})
 		return nil
 	}
-	txs := make([][]byte, len(args))
-	for i, arg := range args {
+	height, err := strconv.Atoi(args[0])
+	if err != nil {
+		return err
+	}
+	appHash, err := hex.DecodeString(args[1])
+	if err != nil {
+		return err
+	}
+	txs := make([][]byte, len(args)-2)
+	for i, arg := range args[2:] {
 		txBytes, err := stringOrHexToBytes(arg)
 		if err != nil {
 			return err
 		}
 		txs[i] = txBytes
 	}
-	res, err := client.FinalizeBlock(cmd.Context(), &types.RequestFinalizeBlock{Txs: txs})
+	res, err := client.FinalizeBlock(cmd.Context(), &types.RequestFinalizeBlock{Height: int64(height), Txs: txs, AppHash: appHash})
 	if err != nil {
 		return err
 	}
