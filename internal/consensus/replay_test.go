@@ -490,7 +490,7 @@ func createSignSendProposal(ctx context.Context,
 
 	// _, propCS := findConsensusStateByProTxHash(ctx, t, css, proposer.ProTxHash)
 	// We create proposal block on css[0] because we use it there when pushing TXs
-	propBlock, _ := css[0].createProposalBlock(ctx)
+	propBlock, _ := css[0].CreateProposalBlock(ctx)
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
 	blockID := types.BlockID{Hash: propBlock.Hash(), PartSetHeader: propBlockParts.Header()}

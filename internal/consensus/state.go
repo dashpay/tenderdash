@@ -1558,6 +1558,13 @@ func (cs *State) isProposalComplete() bool {
 
 }
 
+// CreateProposalBlock safely creates a proposal block
+func (cs *State) CreateProposalBlock(ctx context.Context) (*types.Block, error) {
+	cs.mtx.Lock()
+	defer cs.mtx.Unlock()
+	return cs.createProposalBlock(ctx)
+}
+
 // Create the next block to propose and return it. Returns nil block upon error.
 //
 // We really only need to return the parts, but the block is returned for
