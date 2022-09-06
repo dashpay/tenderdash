@@ -162,15 +162,9 @@ func TestValUpdates(t *testing.T) {
 	})
 	require.NoError(t, err)
 	kvstore.AddValidatorSetUpdate(fullVals, 2)
-	resp, err := kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{Height: 1})
-	require.NoError(t, err)
+	resp, _ := makeApplyBlock(ctx, t, kvstore, 1)
 	require.Equal(t, initVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
-	_, err = kvstore.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Height: 1, AppHash: resp.AppHash})
-	require.NoError(t, err)
-	_, err = kvstore.Commit(ctx)
-	require.NoError(t, err)
-	resp, err = kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{Height: 2})
-	require.NoError(t, err)
+	resp, _ = makeApplyBlock(ctx, t, kvstore, 2)
 	require.Equal(t, fullVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
 }
 
@@ -179,7 +173,8 @@ func makeApplyBlock(
 	t *testing.T,
 	kvstore types.Application,
 	heightInt int,
-	txs ...[]byte) {
+	txs ...[]byte,
+) (*types.ResponseProcessProposal, *types.ResponseFinalizeBlock) {
 	// make and apply block
 	height := int64(heightInt)
 	hash := []byte("foo")
@@ -204,6 +199,7 @@ func makeApplyBlock(
 
 	_, err = kvstore.Commit(ctx)
 	require.NoError(t, err)
+	return respProcessProposal, resFinalizeBlock
 }
 
 func makeSocketClientServer(

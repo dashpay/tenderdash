@@ -366,7 +366,6 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 		cfg:       cfg,
 		nPeers:    nPeers,
 		nVals:     nVals,
-		testName:  "replay_test",
 		tickerFun: newMockTickerFunc(true),
 		appFunc:   newKVStoreFunc(),
 		validatorUpdates: []validatorUpdate{

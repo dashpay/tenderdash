@@ -303,7 +303,7 @@ func (state State) MakeBlock(
 		validatorsHash, validatorsHash,
 		state.ConsensusParams.HashConsensusParams(),
 		state.AppHash,
-		state.LastResultsHash, // TODO need to pass current result-hash
+		state.LastResultsHash,
 		proposerProTxHash,
 		proposedAppVersion,
 	)

@@ -544,15 +544,14 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 	nVals := 4
 
 	updates := []validatorUpdate{
-		{height: 5, count: 1, operation: "add"},
-		{height: 10, count: 2, operation: "add"},
-		{height: 17, count: 2, operation: "remove"},
+		{height: 5, count: 1, operation: addValsOp},
+		{height: 10, count: 2, operation: addValsOp},
+		{height: 17, count: 2, operation: removeValsOp},
 	}
 	gen := consensusNetGen{
 		cfg:              cfg,
 		nPeers:           nPeers,
 		nVals:            nVals,
-		testName:         "consensus_val_set_changes_test",
 		appFunc:          newKVStoreFunc(),
 		validatorUpdates: updates,
 	}
@@ -598,7 +597,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 
 	wg.Wait()
 
-	var blocksSubs []eventbus.Subscription
+	blocksSubs := make([]eventbus.Subscription, 0, len(rts.subs))
 	for _, sub := range rts.subs {
 		blocksSubs = append(blocksSubs, sub)
 	}
@@ -649,6 +648,11 @@ type validatorSetUpdateStore interface {
 	AddValidatorSetUpdate(vsu abci.ValidatorSetUpdate, height int64)
 }
 
+const (
+	addValsOp    = "add"
+	removeValsOp = "remove"
+)
+
 type validatorUpdater struct {
 	lastProTxHashes []crypto.ProTxHash
 	stateIndexMap   map[string]int
@@ -690,9 +694,9 @@ func (u *validatorUpdater) execOperation(
 	count int,
 ) (*quorumData, error) {
 	switch operation {
-	case "add":
+	case addValsOp:
 		return u.addValidatorsAt(ctx, height, count)
-	case "remove":
+	case removeValsOp:
 		return u.removeValidatorsAt(ctx, height, count)
 	}
 	return nil, fmt.Errorf("unknown operation %s", operation)

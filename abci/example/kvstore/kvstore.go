@@ -3,11 +3,9 @@ package kvstore
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"strconv"
 	"sync"
 
 	"github.com/gogo/protobuf/proto"
@@ -33,17 +31,6 @@ type State struct {
 	db      dbm.DB
 	Height  int64            `json:"height"`
 	AppHash tmbytes.HexBytes `json:"app_hash"`
-}
-
-func (s *State) appHash() []byte {
-	stats := s.db.Stats()
-	appHash := make([]byte, crypto.DefaultAppHashSize)
-	size, err := strconv.Atoi(stats["database.size"])
-	if err != nil {
-		panic(err)
-	}
-	binary.PutVarint(appHash, int64(size))
-	return appHash
 }
 
 func loadState(db dbm.DB) State {
@@ -201,7 +188,6 @@ func NewApplication(opts ...func(app *Application)) *Application {
 		initialHeight:       1,
 	}
 
-	app.newHeight(0, make([]byte, crypto.DefaultAppHashSize))
 	for _, opt := range opts {
 		opt(app)
 	}
@@ -406,7 +392,7 @@ func (app *Application) Close() error {
 	return app.lastCommittedState.Close()
 }
 
-// appHash updates app hash for the current app state.
+// updateAppHash updates app hash for the current app state.
 func (s *State) updateAppHash(lastAppHash tmbytes.HexBytes, txResults []*types.ExecTxResult) error {
 	txResultsHash, err := types.TxResultsHash(txResults)
 	if err != nil {

@@ -2099,9 +2099,9 @@ func TestFinalizeBlockCalled(t *testing.T) {
 			m.AssertExpectations(t)
 
 			if !testCase.expectCalled {
-				m.AssertNotCalled(t, "FinalizeBlock", ctx, mock.Anything)
+				m.AssertNotCalled(t, "FinalizeBlock", mock.Anything, mock.Anything)
 			} else {
-				m.AssertCalled(t, "FinalizeBlock", ctx, mock.Anything)
+				m.AssertCalled(t, "FinalizeBlock", mock.Anything, mock.Anything)
 			}
 		})
 	}
@@ -2161,12 +2161,12 @@ func TestExtendVoteCalled(t *testing.T) {
 
 	ensurePrecommit(t, voteCh, height, round)
 
-	m.AssertCalled(t, "ExtendVote", ctx, &abci.RequestExtendVote{
+	m.AssertCalled(t, "ExtendVote", mock.Anything, &abci.RequestExtendVote{
 		Height: height,
 		Hash:   blockID.Hash,
 	})
 
-	m.AssertCalled(t, "VerifyVoteExtension", ctx, &abci.RequestVerifyVoteExtension{
+	m.AssertCalled(t, "VerifyVoteExtension", mock.Anything, &abci.RequestVerifyVoteExtension{
 		Hash:               blockID.Hash,
 		ValidatorProTxHash: proTxHash,
 		Height:             height,
@@ -2186,7 +2186,7 @@ func TestExtendVoteCalled(t *testing.T) {
 	for _, pv := range vss[:3] {
 		proTxHash, err := pv.GetProTxHash(ctx)
 		require.NoError(t, err)
-		m.AssertCalled(t, "VerifyVoteExtension", ctx, &abci.RequestVerifyVoteExtension{
+		m.AssertCalled(t, "VerifyVoteExtension", mock.Anything, &abci.RequestVerifyVoteExtension{
 			Hash:               blockID.Hash,
 			ValidatorProTxHash: proTxHash,
 			Height:             height,

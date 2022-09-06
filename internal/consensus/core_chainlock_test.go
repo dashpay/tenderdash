@@ -227,10 +227,9 @@ func capture() {
 func genConsStates(t *testing.T, ctx context.Context, nVals int, initCoreChainHeight uint32, step int32) []*State {
 	conf := configSetup(t)
 	gen := consensusNetGen{
-		cfg:      conf,
-		nVals:    nVals,
-		testName: "consensus_chainlocks_test",
-		appFunc:  newCounterWithCoreChainLocks(initCoreChainHeight, step),
+		cfg:     conf,
+		nVals:   nVals,
+		appFunc: newCounterWithCoreChainLocks(initCoreChainHeight, step),
 	}
 	states, _, _, _ := gen.generate(t, ctx)
 	return states

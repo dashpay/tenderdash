@@ -31,7 +31,6 @@ type nodeGen struct {
 	mempool  mempool.Mempool
 	proxyApp abciclient.Client
 	eventBus *eventbus.EventBus
-	runFunc  []func()
 }
 
 func (g *nodeGen) initState(t *testing.T) {
@@ -46,9 +45,9 @@ func (g *nodeGen) initState(t *testing.T) {
 	g.state = &state
 }
 
-func (g *nodeGen) initApp(t *testing.T, ctx context.Context) {
+func (g *nodeGen) initApp(ctx context.Context, t *testing.T) {
 	if g.app == nil {
-		g.app = kvstore.NewApplication()
+		g.app = kvstore.NewApplication(kvstore.WithLogger(log.NewNopLogger()))
 	}
 	proxyLogger := g.logger.With("module", "proxy")
 	proxyApp := proxy.New(abciclient.NewLocalClient(g.logger, g.app), proxyLogger, proxy.NopMetrics())
@@ -85,9 +84,8 @@ func (g *nodeGen) Generate(t *testing.T, ctx context.Context) *fakeNode {
 	// COPY PASTE FROM node.go WITH A FEW MODIFICATIONS
 	// NOTE: we can't import node package because of circular dependency.
 	// NOTE: we don't do handshake so need to set state.Version.Consensus.App directly.
-	g.runFunc = nil
 	g.initStores()
-	g.initApp(t, ctx)
+	g.initApp(ctx, t)
 	g.initState(t)
 	g.initEventbus(t, ctx)
 	g.initMempool()
@@ -112,7 +110,7 @@ func (g *nodeGen) Generate(t *testing.T, ctx context.Context) *fakeNode {
 	require.NoError(t, err)
 
 	privValidator := privval.MustLoadOrGenFilePVFromConfig(g.cfg)
-	if privValidator != nil && privValidator != (*privval.FilePV)(nil) {
+	if privValidator != nil {
 		csState.SetPrivValidator(ctx, privValidator)
 	}
 

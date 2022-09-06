@@ -900,7 +900,7 @@ func (g *consensusNetGen) newApp(logger log.Logger, state *sm.State, confName st
 	}
 }
 
-func (g *consensusNetGen) execValidatorSetUpdater(t *testing.T, ctx context.Context, states []*State, apps []abci.Application, n int) map[int64]abci.ValidatorSetUpdate {
+func (g *consensusNetGen) execValidatorSetUpdater(ctx context.Context, t *testing.T, states []*State, apps []abci.Application, n int) map[int64]abci.ValidatorSetUpdate {
 	t.Helper()
 	ret := make(map[int64]abci.ValidatorSetUpdate)
 	ret[0] = types.TM2PB.ValidatorUpdates(states[0].Validators)
@@ -947,7 +947,7 @@ func (g *consensusNetGen) generate(
 		tickerFunc = newTickerFunc()
 	}
 	for i := 0; i < g.nPeers; i++ {
-		confName := fmt.Sprintf("%s_%d", g.testName, i)
+		confName := fmt.Sprintf("%s_%d", t.Name(), i)
 		state, _ := sm.MakeGenesisState(genDoc)
 		thisConfig, err := ResetConfig(t.TempDir(), confName)
 		require.NoError(t, err)
@@ -977,7 +977,7 @@ func (g *consensusNetGen) generate(
 		css[i].SetTimeoutTicker(tickerFunc())
 	}
 
-	validatorSetUpdates := g.execValidatorSetUpdater(t, ctx, css, apps, g.nVals)
+	validatorSetUpdates := g.execValidatorSetUpdater(ctx, t, css, apps, g.nVals)
 
 	t.Cleanup(func() {
 		for _, closer := range closeFuncs {
