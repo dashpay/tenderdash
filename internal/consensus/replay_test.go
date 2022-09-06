@@ -374,7 +374,7 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 			{height: 6, count: 1, operation: "remove"},
 		},
 	}
-	css, genDoc, cfg, valSetUpdates := gen.generate(t, ctx)
+	css, genDoc, cfg, valSetUpdates := gen.generate(ctx, t)
 	sim.ValidatorSetUpdates = valSetUpdates
 
 	t.Logf("genesis quorum hash is %X\n", genDoc.QuorumHash)
@@ -423,7 +423,6 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 		vssForSigning = determineActiveValidators(ctx, t, vss, css[0].Validators)
 		blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), txs.ToSliceOfBytes())
 		ensureNewProposal(t, proposalCh, height, round)
-		rs = css[0].GetRoundState()
 		require.True(t, css[0].Validators.HasPublicKeys)
 		signAddVotes(ctx, t, css[0], tmproto.PrecommitType, sim.Config.ChainID(), blockID, vssForSigning...)
 		ensureNewRound(t, newRoundCh, height+1, 0)
@@ -543,6 +542,7 @@ func assertProposerState(ctx context.Context, t *testing.T, csProposer *State, v
 	assert.NoError(t, err, "read vsProposer proTxHash")
 
 	csProposerPubKey, err := csProposer.privValidator.GetPubKey(ctx, quorumHash)
+	require.NoError(t, err)
 
 	assert.True(t, csProposer.privValidatorProTxHash.Equal(vsProposerProTxHash), "proTxHash match")
 

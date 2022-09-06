@@ -63,7 +63,7 @@ func (g *nodeGen) initStores() {
 	g.storeDB = dbm.NewMemDB()
 }
 
-func (g *nodeGen) initEventbus(t *testing.T, ctx context.Context) {
+func (g *nodeGen) initEventbus(ctx context.Context, t *testing.T) {
 	g.eventBus = eventbus.NewDefault(g.logger.With("module", "events"))
 	err := g.eventBus.Start(ctx)
 	require.NoError(t, err, "failed to start event bus")
@@ -84,7 +84,7 @@ func (g *nodeGen) Generate(ctx context.Context, t *testing.T) *fakeNode {
 	g.initStores()
 	g.initApp(ctx, t)
 	g.initState(t)
-	g.initEventbus(t, ctx)
+	g.initEventbus(ctx, t)
 	g.initMempool()
 	stateStore := sm.NewStore(g.storeDB)
 	blockStore := store.NewBlockStore(g.storeDB)
@@ -129,7 +129,7 @@ func newDefaultFakeNode(ctx context.Context, t *testing.T, logger log.Logger) *f
 	return ng.Generate(ctx, t)
 }
 
-func (n *fakeNode) start(t *testing.T, ctx context.Context) {
+func (n *fakeNode) start(ctx context.Context, t *testing.T) {
 	require.NoError(t, n.csState.Start(ctx))
 	t.Cleanup(n.csState.Wait)
 }

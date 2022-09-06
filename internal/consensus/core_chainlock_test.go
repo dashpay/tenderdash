@@ -27,7 +27,7 @@ func TestValidProposalChainLocks(t *testing.T) {
 
 	const nVals = 4
 	var initChainLockHeight uint32 = 2
-	states := genConsStates(t, ctx, nVals, initChainLockHeight, 1)
+	states := genConsStates(ctx, t, nVals, initChainLockHeight, 1)
 	rts := setupReactor(ctx, t, nVals, states, 100)
 
 	for i := 0; i < 3; i++ {
@@ -50,7 +50,7 @@ func TestReactorInvalidProposalHeightForChainLocks(t *testing.T) {
 
 	const nVals = 4
 	var initChainLockHeight uint32 = 2
-	states := genConsStates(t, ctx, nVals, initChainLockHeight, 1)
+	states := genConsStates(ctx, t, nVals, initChainLockHeight, 1)
 
 	// this proposer sends a chain lock at each height
 	byzProposerID := 0
@@ -83,7 +83,7 @@ func TestReactorInvalidBlockChainLock(t *testing.T) {
 	defer cancel()
 
 	const nVals = 4
-	states := genConsStates(t, ctx, nVals, 100, -1)
+	states := genConsStates(ctx, t, nVals, 100, -1)
 	rts := setupReactor(ctx, t, nVals, states, 100)
 
 	for i := 0; i < 10; i++ {
@@ -224,13 +224,13 @@ func capture() {
 	fmt.Printf("Stack of %d bytes: %s\n", count, trace)
 }
 
-func genConsStates(t *testing.T, ctx context.Context, nVals int, initCoreChainHeight uint32, step int32) []*State {
+func genConsStates(ctx context.Context, t *testing.T, nVals int, initCoreChainHeight uint32, step int32) []*State {
 	conf := configSetup(t)
 	gen := consensusNetGen{
 		cfg:     conf,
 		nVals:   nVals,
 		appFunc: newCounterWithCoreChainLocks(initCoreChainHeight, step),
 	}
-	states, _, _, _ := gen.generate(t, ctx)
+	states, _, _, _ := gen.generate(ctx, t)
 	return states
 }

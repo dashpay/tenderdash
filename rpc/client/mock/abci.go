@@ -2,6 +2,7 @@ package mock
 
 import (
 	"context"
+
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/internal/proxy"
 	"github.com/tendermint/tendermint/libs/bytes"

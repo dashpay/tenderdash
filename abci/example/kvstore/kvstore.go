@@ -428,8 +428,7 @@ func (app *Application) newHeight(height int64, committedAppHash tmbytes.HexByte
 
 	// Committed round becomes new state
 	// Note it can be empty (eg. on initial height), but State.Copy() should handle it
-	roundState, _ := app.roundStates[committedAppHash.String()]
-	err := roundState.Copy(&app.lastCommittedState)
+	err := app.roundStates[committedAppHash.String()].Copy(&app.lastCommittedState)
 	if err != nil {
 		return err
 	}

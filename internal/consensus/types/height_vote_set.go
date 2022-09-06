@@ -41,7 +41,6 @@ One for their LastPrecommits round, and another for the official commit round.
 type HeightVoteSet struct {
 	chainID string
 	height  int64
-	stateID types.StateID // State ID describing current state (eg. previous height and previous app hash)
 	valSet  *types.ValidatorSet
 
 	mtx               sync.Mutex

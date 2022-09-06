@@ -559,7 +559,7 @@ func (h *Handshaker) replayBlocks(
 		block := h.store.LoadBlock(i)
 		// Extra check to ensure the app was not changed in a way it shouldn't have.
 
-		var blockExec *sm.BlockExecutor = nil
+		var blockExec *sm.BlockExecutor
 		blockExec = sm.NewBlockExecutor(h.stateStore, h.logger, appClient, emptyMempool{}, sm.EmptyEvidencePool{}, h.store, h.eventBus, sm.NopMetrics())
 
 		uncommittedState, err := blockExec.ProcessProposal(ctx, block, state, false)

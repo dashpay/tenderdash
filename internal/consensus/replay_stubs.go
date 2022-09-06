@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/internal/libs/clist"

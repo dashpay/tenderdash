@@ -36,7 +36,7 @@ func WALGenerateNBlocks(ctx context.Context, t *testing.T, logger log.Logger, wr
 
 	node.csState.wal = wal
 
-	node.start(t, ctx)
+	node.start(ctx, t)
 	defer node.stop()
 
 	timer := time.NewTimer(time.Minute)
@@ -63,7 +63,6 @@ func WALWithNBlocks(ctx context.Context, t *testing.T, logger log.Logger, node *
 func randPort() int {
 	// returns between base and base + spread
 	base, spread := 20000, 20000
-	// nolint:gosec // G404: Use of weak random number generator
 	return base + mrand.Intn(spread)
 }
 

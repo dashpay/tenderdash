@@ -763,9 +763,9 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 	txs := factory.MakeNTxs(height, 10)
 	txResults := factory.ExecTxResults(txs)
 	mp := &mpmocks.Mempool{}
-	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(types.Txs(txs))
+	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs)
 
-	trs := txsToTxRecords(types.Txs(txs))
+	trs := txsToTxRecords(txs)
 	trs[0].Action = abci.TxRecord_REMOVED
 	trs[1].Action = abci.TxRecord_REMOVED
 	mp.On("RemoveTxByKey", mock.Anything).Return(nil).Twice()
@@ -825,9 +825,9 @@ func TestPrepareProposalAddedTxsIncluded(t *testing.T) {
 
 	txs := factory.MakeNTxs(height, 10)
 	mp := &mpmocks.Mempool{}
-	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(types.Txs(txs[2:]))
+	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs[2:])
 
-	trs := txsToTxRecords(types.Txs(txs))
+	trs := txsToTxRecords(txs)
 	trs[0].Action = abci.TxRecord_ADDED
 	trs[1].Action = abci.TxRecord_ADDED
 
@@ -885,9 +885,9 @@ func TestPrepareProposalReorderTxs(t *testing.T) {
 
 	txs := factory.MakeNTxs(height, 10)
 	mp := &mpmocks.Mempool{}
-	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(types.Txs(txs))
+	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs)
 
-	trs := txsToTxRecords(types.Txs(txs))
+	trs := txsToTxRecords(txs)
 	trs = trs[2:]
 	trs = append(trs[len(trs)/2:], trs[:len(trs)/2]...)
 
@@ -953,9 +953,9 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 	maxDataBytes := types.MaxDataBytes(state.ConsensusParams.Block.MaxBytes, crypto.BLS12381, 0, nValidators)
 	txs := factory.MakeNTxs(height, maxDataBytes/bytesPerTx+2) // +2 so that tx don't fit
 	mp := &mpmocks.Mempool{}
-	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(types.Txs(txs))
+	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs)
 
-	trs := txsToTxRecords(types.Txs(txs))
+	trs := txsToTxRecords(txs)
 
 	app := abcimocks.NewApplication(t)
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
@@ -1008,7 +1008,7 @@ func TestPrepareProposalErrorOnPrepareProposalError(t *testing.T) {
 
 	txs := factory.MakeNTxs(height, 10)
 	mp := &mpmocks.Mempool{}
-	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(types.Txs(txs))
+	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs)
 
 	cm := &abciclientmocks.Client{}
 	cm.On("IsRunning").Return(true)

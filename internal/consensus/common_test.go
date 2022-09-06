@@ -855,7 +855,6 @@ type consensusNetGen struct {
 	cfg              *config.Config
 	nPeers           int
 	nVals            int
-	testName         string
 	tickerFun        func() TimeoutTicker
 	appFunc          func(log.Logger, string) abci.Application
 	validatorUpdates []validatorUpdate
@@ -925,10 +924,7 @@ func (g *consensusNetGen) execValidatorSetUpdater(ctx context.Context, t *testin
 }
 
 // nPeers = nValidators + nNotValidator
-func (g *consensusNetGen) generate(
-	t *testing.T,
-	ctx context.Context,
-) ([]*State, *types.GenesisDoc, *config.Config, map[int64]abci.ValidatorSetUpdate) {
+func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State, *types.GenesisDoc, *config.Config, map[int64]abci.ValidatorSetUpdate) {
 	t.Helper()
 	consParams := factory.ConsensusParams()
 	consParams.Timeout.Propose = 1 * time.Second

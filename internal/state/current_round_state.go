@@ -12,7 +12,6 @@ import (
 	"github.com/tendermint/tendermint/dash"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmtypes "github.com/tendermint/tendermint/proto/tendermint/types"
-	types2 "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -144,9 +143,9 @@ func (candidate *CurentRoundState) update(
 	baseState State,
 	appHash tmbytes.HexBytes,
 	txResults []*abci.ExecTxResult,
-	consensusParamUpdates *types2.ConsensusParams,
+	consensusParamUpdates *tmtypes.ConsensusParams,
 	validatorSetUpdate *abci.ValidatorSetUpdate,
-	coreChainLockUpdate *types2.CoreChainLock,
+	coreChainLockUpdate *tmtypes.CoreChainLock,
 ) error {
 	candidate.Base = baseState
 	candidate.AppHash = appHash.Copy()
@@ -202,7 +201,7 @@ func (candidate *CurentRoundState) populateTxResults(txResults []*abci.ExecTxRes
 	return nil
 }
 
-func (candidate *CurentRoundState) populateChainlock(chainlockProto *types2.CoreChainLock) error {
+func (candidate *CurentRoundState) populateChainlock(chainlockProto *tmtypes.CoreChainLock) error {
 	chainlock, err := types.CoreChainLockFromProto(chainlockProto)
 	if err != nil {
 		return err

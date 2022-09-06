@@ -202,6 +202,7 @@ func TestMempoolRmBadTx(t *testing.T) {
 	resProcess, err := app.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Txs: [][]byte{txBytes},
 	})
+	require.NoError(t, err)
 	resFinalize, err := app.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Txs: [][]byte{txBytes}})
 	require.NoError(t, err)
 	assert.False(t, resProcess.TxResults[0].IsErr(), fmt.Sprintf("expected no error. got %v", resFinalize))

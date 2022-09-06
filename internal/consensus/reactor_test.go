@@ -555,7 +555,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		appFunc:          newKVStoreFunc(),
 		validatorUpdates: updates,
 	}
-	states, _, _, validatorSetUpdates := gen.generate(t, ctx)
+	states, _, _, validatorSetUpdates := gen.generate(ctx, t)
 
 	var (
 		endHeight         int64

@@ -12,7 +12,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/crypto/encoding"
 	sm "github.com/tendermint/tendermint/internal/state"
 	sf "github.com/tendermint/tendermint/internal/state/test/factory"
 	"github.com/tendermint/tendermint/internal/test/factory"
@@ -144,44 +143,6 @@ func makeState(t *testing.T, nVals, height int) (sm.State, dbm.DB, map[string]ty
 	}
 
 	return s, stateDB, privValsByProTxHash
-}
-
-func makeHeaderPartsResponsesValPowerChange(
-	t *testing.T,
-	state sm.State,
-	power int64,
-	proposedAppVersion uint64,
-) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
-	t.Helper()
-
-	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), proposedAppVersion)
-	require.NoError(t, err)
-
-	abciResponses := &tmstate.ABCIResponses{
-		FinalizeBlock:   &abci.ResponseFinalizeBlock{},
-		ProcessProposal: &abci.ResponseProcessProposal{},
-	}
-
-	// If the pubkey is new, remove the old and add the new.
-	_, val := state.Validators.GetByIndex(0)
-	if val.VotingPower != power {
-		vPbPk, err := encoding.PubKeyToProto(val.PubKey)
-		require.NoError(t, err)
-		thresholdPubKey, err := encoding.PubKeyToProto(state.Validators.ThresholdPublicKey)
-		require.NoError(t, err)
-
-		abciResponses.ProcessProposal = &abci.ResponseProcessProposal{
-			ValidatorSetUpdate: &abci.ValidatorSetUpdate{
-				ValidatorUpdates: []abci.ValidatorUpdate{
-					{PubKey: &vPbPk, Power: power},
-				},
-				ThresholdPublicKey: thresholdPubKey,
-				QuorumHash:         state.Validators.QuorumHash,
-			},
-		}
-	}
-
-	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
 }
 
 func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, regenerate bool, proposedAppVersion uint64) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
