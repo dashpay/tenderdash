@@ -683,7 +683,7 @@ func testHandshakeReplay(
 			logger:  logger,
 			mempool: &mockMempool{calls: sim.HeightTxs},
 		}
-		node := ng.Generate(t, ctx)
+		node := ng.Generate(ctx, t)
 
 		testConfig, err := ResetConfig(t.TempDir(), fmt.Sprintf("%s_s", testName))
 		require.NoError(t, err)

@@ -2,7 +2,6 @@ package consensus
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -80,10 +79,8 @@ func (g *nodeGen) initMempool() {
 	}
 }
 
-func (g *nodeGen) Generate(t *testing.T, ctx context.Context) *fakeNode {
-	// COPY PASTE FROM node.go WITH A FEW MODIFICATIONS
-	// NOTE: we can't import node package because of circular dependency.
-	// NOTE: we don't do handshake so need to set state.Version.Consensus.App directly.
+func (g *nodeGen) Generate(ctx context.Context, t *testing.T) *fakeNode {
+	t.Helper()
 	g.initStores()
 	g.initApp(ctx, t)
 	g.initState(t)
@@ -127,15 +124,13 @@ type fakeNode struct {
 	csState *State
 }
 
-func newDefaultFakeNode(t *testing.T, logger log.Logger) *fakeNode {
+func newDefaultFakeNode(ctx context.Context, t *testing.T, logger log.Logger) *fakeNode {
 	ng := nodeGen{cfg: getConfig(t), logger: logger}
-	return ng.Generate(t, context.Background())
+	return ng.Generate(ctx, t)
 }
 
 func (n *fakeNode) start(t *testing.T, ctx context.Context) {
-	if err := n.csState.Start(ctx); err != nil {
-		t.Fatal(fmt.Errorf("failed to start consensus state: %w", err))
-	}
+	require.NoError(t, n.csState.Start(ctx))
 	t.Cleanup(n.csState.Wait)
 }
 
