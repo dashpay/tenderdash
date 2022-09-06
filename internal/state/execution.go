@@ -92,7 +92,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	commit *types.Commit,
 	proposerProTxHash []byte,
 	proposedAppVersion uint64,
-) (*types.Block, CurentRoundState, error) {
+) (*types.Block, CurrentRoundState, error) {
 	maxBytes := state.ConsensusParams.Block.MaxBytes
 	maxGas := state.ConsensusParams.Block.MaxGas
 
@@ -138,17 +138,17 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		// Either way, we cannot recover in a meaningful way, unless we skip proposing
 		// this block, repair what caused the error and try again. Hence, we return an
 		// error for now (the production code calling this function is expected to panic).
-		return nil, CurentRoundState{}, err
+		return nil, CurrentRoundState{}, err
 	}
 
 	if err := rpp.Validate(); err != nil {
-		return nil, CurentRoundState{}, fmt.Errorf("PrepareProposal responded with invalid response: %w", err)
+		return nil, CurrentRoundState{}, fmt.Errorf("PrepareProposal responded with invalid response: %w", err)
 	}
 
 	txrSet := types.NewTxRecordSet(rpp.TxRecords)
 
 	if err := txrSet.Validate(maxDataBytes, block.Txs); err != nil {
-		return nil, CurentRoundState{}, err
+		return nil, CurrentRoundState{}, err
 	}
 
 	for _, rtx := range txrSet.RemovedTxs() {
@@ -170,11 +170,11 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	// update some round state data
 	stateChanges, err := state.NewStateChangeset(ctx, rpp)
 	if err != nil {
-		return nil, CurentRoundState{}, err
+		return nil, CurrentRoundState{}, err
 	}
 	err = stateChanges.UpdateBlock(block)
 	if err != nil {
-		return nil, CurentRoundState{}, err
+		return nil, CurrentRoundState{}, err
 	}
 
 	return block, stateChanges, nil
@@ -186,7 +186,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	block *types.Block,
 	state State,
 	verify bool,
-) (CurentRoundState, error) {
+) (CurrentRoundState, error) {
 	version := block.Version.ToProto()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Hash:                block.Header.Hash(),
@@ -204,17 +204,17 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		Version:               &version,
 	})
 	if err != nil {
-		return CurentRoundState{}, err
+		return CurrentRoundState{}, err
 	}
 	if resp.IsStatusUnknown() {
-		return CurentRoundState{}, fmt.Errorf("ProcessProposal responded with status %s", resp.Status.String())
+		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with status %s", resp.Status.String())
 	}
 	if err := resp.Validate(); err != nil {
-		return CurentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
+		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
 	}
 	accepted := resp.IsAccepted()
 	if !accepted {
-		return CurentRoundState{}, ErrBlockRejected
+		return CurrentRoundState{}, ErrBlockRejected
 	}
 
 	// update some round state data
@@ -263,7 +263,7 @@ func (blockExec *BlockExecutor) ValidateBlock(ctx context.Context, state State, 
 func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	ctx context.Context,
 	state State,
-	uncommittedState CurentRoundState,
+	uncommittedState CurrentRoundState,
 	block *types.Block,
 ) error {
 	err := blockExec.ValidateBlock(ctx, state, block)
@@ -333,7 +333,7 @@ func (blockExec *BlockExecutor) ValidateBlockTime(
 func (blockExec *BlockExecutor) FinalizeBlock(
 	ctx context.Context,
 	state State,
-	uncommittedState CurentRoundState,
+	uncommittedState CurrentRoundState,
 	blockID types.BlockID,
 	block *types.Block,
 ) (State, error) {
@@ -715,7 +715,7 @@ func ExecReplayedCommitBlock(
 	store Store,
 	initialHeight int64,
 	s State,
-	ucState CurentRoundState,
+	ucState CurrentRoundState,
 ) ([]byte, *abci.ResponseFinalizeBlock, error) {
 	respFinalizeBlock, err := execBlockWithoutState(ctx, appConn, block, logger, store, initialHeight, s, ucState)
 	if err != nil {
@@ -762,7 +762,7 @@ func execBlockWithoutState(
 	store Store,
 	initialHeight int64,
 	s State,
-	ucState CurentRoundState,
+	ucState CurrentRoundState,
 ) (*abci.ResponseFinalizeBlock, error) {
 	respFinalizeBlock, err := execBlock(ctx, appConn, block, logger, store, initialHeight, s)
 	if err != nil {

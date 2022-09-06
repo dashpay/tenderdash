@@ -1156,8 +1156,8 @@ func TestState_StateID(t *testing.T) {
 	assert.NoError(t, err, "StateID validation failed")
 }
 
-func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.CurentRoundState) sm.State {
-	return func(prevState, state sm.State, ucState sm.CurentRoundState) sm.State {
+func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
+	return func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
 		t.Helper()
 
 		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit), 0)

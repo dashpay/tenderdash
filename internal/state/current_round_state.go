@@ -20,8 +20,8 @@ const (
 	processProposal = "ResponseProcessProposal"
 )
 
-// CurentRoundState ...
-type CurentRoundState struct {
+// CurrentRoundState ...
+type CurrentRoundState struct {
 	// Base state for the changes
 	Base State
 
@@ -50,12 +50,12 @@ type CurentRoundState struct {
 	response abci.ResponseProcessProposal
 }
 
-func (candidate CurentRoundState) IsEmpty() bool {
+func (candidate CurrentRoundState) IsEmpty() bool {
 	return candidate.AppHash == nil
 }
 
 // UpdateBlock changes block fields to reflect the ones returned in PrepareProposal / ProcessProposal
-func (candidate CurentRoundState) UpdateBlock(target *types.Block) error {
+func (candidate CurrentRoundState) UpdateBlock(target *types.Block) error {
 	if candidate.responseType != prepareProposal {
 		return fmt.Errorf("block can be updated only based on '%s' response, got '%s'", processProposal, candidate.responseType)
 	}
@@ -77,7 +77,7 @@ func (candidate CurentRoundState) UpdateBlock(target *types.Block) error {
 }
 
 // UpdateState updates state when the block is committed. State will contain data needed by next block.
-func (candidate CurentRoundState) UpdateState(ctx context.Context, target *State) error {
+func (candidate CurrentRoundState) UpdateState(ctx context.Context, target *State) error {
 	target.AppHash = candidate.AppHash
 
 	target.LastResultsHash = candidate.ResultsHash
@@ -102,12 +102,12 @@ func (candidate CurentRoundState) UpdateState(ctx context.Context, target *State
 }
 
 // UpdateFunc implements UpdateFunc
-func (candidate CurentRoundState) UpdateFunc(ctx context.Context, state State) (State, error) {
+func (candidate CurrentRoundState) UpdateFunc(ctx context.Context, state State) (State, error) {
 	err := candidate.UpdateState(ctx, &state)
 	return state, err
 }
 
-func (candidate *CurentRoundState) populate(ctx context.Context, proposalResponse proto.Message, baseState State) error {
+func (candidate *CurrentRoundState) populate(ctx context.Context, proposalResponse proto.Message, baseState State) error {
 	switch resp := proposalResponse.(type) {
 	case *abci.ResponsePrepareProposal:
 		candidate.responseType = prepareProposal
@@ -138,7 +138,7 @@ func (candidate *CurentRoundState) populate(ctx context.Context, proposalRespons
 	)
 }
 
-func (candidate *CurentRoundState) update(
+func (candidate *CurrentRoundState) update(
 	ctx context.Context,
 	baseState State,
 	appHash tmbytes.HexBytes,
@@ -167,7 +167,7 @@ func (candidate *CurentRoundState) update(
 	return nil
 }
 
-func (candidate CurentRoundState) StateID() types.StateID {
+func (candidate CurrentRoundState) StateID() types.StateID {
 	var appHash tmbytes.HexBytes
 	if len(candidate.AppHash) > 0 {
 		appHash = candidate.AppHash.Copy()
@@ -182,15 +182,15 @@ func (candidate CurentRoundState) StateID() types.StateID {
 }
 
 // GetHeight returns height of current block
-func (candidate CurentRoundState) GetHeight() int64 {
+func (candidate CurrentRoundState) GetHeight() int64 {
 	return candidate.Base.LastBlockHeight + 1
 }
 
-func (candidate CurentRoundState) GetProcessProposalResponse() abci.ResponseProcessProposal {
+func (candidate CurrentRoundState) GetProcessProposalResponse() abci.ResponseProcessProposal {
 	return candidate.response
 }
 
-func (candidate *CurentRoundState) populateTxResults(txResults []*abci.ExecTxResult) error {
+func (candidate *CurrentRoundState) populateTxResults(txResults []*abci.ExecTxResult) error {
 	hash, err := abci.TxResultsHash(txResults)
 	if err != nil {
 		return fmt.Errorf("marshaling TxResults: %w", err)
@@ -201,7 +201,7 @@ func (candidate *CurentRoundState) populateTxResults(txResults []*abci.ExecTxRes
 	return nil
 }
 
-func (candidate *CurentRoundState) populateChainlock(chainlockProto *tmtypes.CoreChainLock) error {
+func (candidate *CurrentRoundState) populateChainlock(chainlockProto *tmtypes.CoreChainLock) error {
 	chainlock, err := types.CoreChainLockFromProto(chainlockProto)
 	if err != nil {
 		return err
@@ -218,7 +218,7 @@ func (candidate *CurentRoundState) populateChainlock(chainlockProto *tmtypes.Cor
 }
 
 // populateConsensusParams updates ConsensusParams, Version and LastHeightConsensusParamsChanged
-func (candidate *CurentRoundState) populateConsensusParams(updates *tmtypes.ConsensusParams) error {
+func (candidate *CurrentRoundState) populateConsensusParams(updates *tmtypes.ConsensusParams) error {
 
 	if updates == nil || updates.Equal(&tmtypes.ConsensusParams{}) {
 		candidate.NextConsensusParams = candidate.Base.ConsensusParams
@@ -247,7 +247,7 @@ func (candidate *CurentRoundState) populateConsensusParams(updates *tmtypes.Cons
 
 // populateValsetUpdates calculates and populates Validators and LastHeightValidatorsChanged
 // CONTRACT: candidate.ConsensusParams were already populated
-func (candidate *CurentRoundState) populateValsetUpdates(ctx context.Context, update *abci.ValidatorSetUpdate) error {
+func (candidate *CurrentRoundState) populateValsetUpdates(ctx context.Context, update *abci.ValidatorSetUpdate) error {
 	base := candidate.Base
 
 	newValSet, err := valsetUpdate(ctx, update, base.Validators, candidate.NextConsensusParams.Validator)

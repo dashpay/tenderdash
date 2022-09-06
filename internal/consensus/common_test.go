@@ -290,7 +290,7 @@ func signAddVotes(
 	blockID types.BlockID,
 	vss ...*validatorStub,
 ) {
-	addVotes(to, signVotes(ctx, t, voteType, chainID, blockID, to.CurentRoundState.AppHash, to.Validators.QuorumType, to.Validators.QuorumHash, vss...)...)
+	addVotes(to, signVotes(ctx, t, voteType, chainID, blockID, to.CurrentRoundState.AppHash, to.Validators.QuorumType, to.Validators.QuorumHash, vss...)...)
 }
 
 func validatePrevote(

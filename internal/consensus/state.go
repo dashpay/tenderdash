@@ -1051,7 +1051,7 @@ func (cs *State) handleMsg(ctx context.Context, mi msgInfo, fromReplay bool) {
 			if err != nil {
 				panic(err)
 			}
-			cs.RoundState.CurentRoundState = candidateState
+			cs.RoundState.CurrentRoundState = candidateState
 		}
 
 		// We unlock here to yield to any routines that need to read the the RoundState.
@@ -1597,7 +1597,7 @@ func (cs *State) createProposalBlock(ctx context.Context) (*types.Block, error) 
 	if err != nil {
 		panic(err)
 	}
-	cs.RoundState.CurentRoundState = uncommittedState
+	cs.RoundState.CurrentRoundState = uncommittedState
 	return ret, nil
 }
 
@@ -1704,7 +1704,7 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		// Unknown error, so we panic
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
-	cs.RoundState.CurentRoundState = uncommittedState
+	cs.RoundState.CurrentRoundState = uncommittedState
 
 	/*
 		22: upon <PROPOSAL, h_p, round_p, v, −1> from proposer(h_p, round_p) while step_p = propose do
@@ -1913,7 +1913,7 @@ func (cs *State) enterPrecommit(ctx context.Context, height int64, round int32) 
 		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
 
 		// Validate the block.
-		if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurentRoundState, cs.ProposalBlock); err != nil {
+		if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, cs.ProposalBlock); err != nil {
 			panic(fmt.Sprintf("precommit step: +2/3 prevoted for an invalid block %v; relocking", err))
 		}
 
@@ -2056,9 +2056,9 @@ func (cs *State) tryFinalizeCommit(ctx context.Context, height int64) {
 		return
 	}
 
-	if cs.CurentRoundState.IsEmpty() {
+	if cs.CurrentRoundState.IsEmpty() {
 		var err error
-		cs.CurentRoundState, err = cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state, true)
+		cs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state, true)
 		if err != nil {
 			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
 		}
@@ -2103,8 +2103,8 @@ func (cs *State) finalizeCommit(ctx context.Context, height int64) {
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurentRoundState, block); err != nil {
-		panic(fmt.Errorf("+2/3 committed an invalid block %X: %w", cs.CurentRoundState.AppHash, err))
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, block); err != nil {
+		panic(fmt.Errorf("+2/3 committed an invalid block %X: %w", cs.CurrentRoundState.AppHash, err))
 	}
 
 	logger.Info(
@@ -2271,7 +2271,7 @@ func (cs *State) verifyCommit(ctx context.Context, commit *types.Commit, peerID 
 		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurentRoundState, block); err != nil {
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, block); err != nil {
 		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
 	return true, nil
@@ -2350,9 +2350,9 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	stateCopy := cs.state.Copy()
 	rs := cs.RoundState
 
-	if rs.CurentRoundState.IsEmpty() {
+	if rs.CurrentRoundState.IsEmpty() {
 		var err error
-		rs.CurentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, stateCopy, true)
+		rs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, stateCopy, true)
 		if err != nil {
 			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
 		}
@@ -2363,7 +2363,7 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	stateCopy, err := cs.blockExec.FinalizeBlock(
 		ctx,
 		stateCopy,
-		rs.CurentRoundState,
+		rs.CurrentRoundState,
 		types.BlockID{
 			Hash:          block.Hash(),
 			PartSetHeader: blockParts.Header(),
@@ -2637,7 +2637,7 @@ func (cs *State) addProposalBlockPart(
 		cs.logger.Info("received complete proposal block", "height", cs.ProposalBlock.Height, "hash", cs.ProposalBlock.Hash())
 
 		if cs.ProposalBlock.Height != cs.RoundState.GetHeight() {
-			cs.RoundState.CurentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, cs.state, true)
+			cs.RoundState.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, cs.state, true)
 			if err != nil {
 				return false, err
 			}
@@ -2985,7 +2985,7 @@ func (cs *State) signVote(
 		Round:              cs.Round,
 		Type:               msgType,
 		BlockID:            types.BlockID{Hash: hash, PartSetHeader: header},
-		AppHash:            cs.RoundState.CurentRoundState.AppHash,
+		AppHash:            cs.RoundState.CurrentRoundState.AppHash,
 	}
 
 	// If the signedMessageType is for precommit,
