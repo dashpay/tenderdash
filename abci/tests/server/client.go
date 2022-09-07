@@ -56,7 +56,7 @@ func ProcessProposal(ctx context.Context, client abciclient.Client, txBytes [][]
 		code, data, log := tx.Code, tx.Data, tx.Log
 		if code != codeExp[i] {
 			fmt.Println("Failed test: ProcessProposal")
-			fmt.Printf("FinalizeBlock response code was unexpected. Got %v expected %v. Log: %v\n",
+			fmt.Printf("ProcessProposal response code was unexpected. Got %v expected %v. Log: %v\n",
 				code, codeExp, log)
 			return errors.New("ProcessProposal error")
 		}
