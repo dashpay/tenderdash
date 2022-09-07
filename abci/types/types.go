@@ -234,16 +234,18 @@ func (m *ValidatorUpdate) UnmarshalJSON(b []byte) error {
 	m.Power = res.Power
 	m.NodeAddress = res.NodeAddress
 	m.ProTxHash = res.ProTxHash
-	var pubKey crypto.PubKey
-	err = jsontypes.Unmarshal(res.PubKey, &pubKey)
-	if err != nil {
-		return err
+	if res.PubKey != nil {
+		var pubKey crypto.PubKey
+		err = jsontypes.Unmarshal(res.PubKey, &pubKey)
+		if err != nil {
+			return err
+		}
+		protoPubKey, err := cryptoenc.PubKeyToProto(pubKey)
+		if err != nil {
+			return err
+		}
+		m.PubKey = &protoPubKey
 	}
-	protoPubKey, err := cryptoenc.PubKeyToProto(pubKey)
-	if err != nil {
-		return err
-	}
-	m.PubKey = &protoPubKey
 	return nil
 }
 
