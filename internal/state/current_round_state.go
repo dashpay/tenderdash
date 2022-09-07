@@ -61,43 +61,28 @@ func (candidate CurrentRoundState) UpdateBlock(target *types.Block) error {
 	}
 	target.AppHash = candidate.AppHash
 	target.ResultsHash = candidate.ResultsHash
-
-	if candidate.NextValidators != nil {
-		target.NextValidatorsHash = candidate.NextValidators.Hash()
-	}
-
+	target.NextValidatorsHash = candidate.NextValidators.Hash()
 	target.CoreChainLock = candidate.CoreChainLock
 	if candidate.CoreChainLock != nil {
 		target.CoreChainLockedHeight = candidate.CoreChainLock.CoreBlockHeight
 	} else {
 		target.CoreChainLockedHeight = candidate.Base.LastCoreChainLockedBlockHeight
 	}
-
 	return nil
 }
 
 // UpdateState updates state when the block is committed. State will contain data needed by next block.
 func (candidate CurrentRoundState) UpdateState(ctx context.Context, target *State) error {
 	target.AppHash = candidate.AppHash
-
 	target.LastResultsHash = candidate.ResultsHash
-
-	if !candidate.NextConsensusParams.IsZero() {
-		target.ConsensusParams = candidate.NextConsensusParams
-	}
-
+	target.ConsensusParams = candidate.NextConsensusParams
 	target.LastHeightConsensusParamsChanged = candidate.LastHeightConsensusParamsChanged
 	target.Version.Consensus.App = candidate.NextConsensusParams.Version.AppVersion
-
-	if candidate.NextValidators != nil {
-		target.Validators = candidate.NextValidators
-	}
+	target.Validators = candidate.NextValidators
 	target.LastHeightValidatorsChanged = candidate.LastHeightValidatorsChanged
-
 	if candidate.CoreChainLock != nil {
 		target.LastCoreChainLockedBlockHeight = candidate.CoreChainLock.CoreBlockHeight
 	}
-
 	return nil
 }
 

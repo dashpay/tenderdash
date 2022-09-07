@@ -176,12 +176,8 @@ func WithState(height int64) func(app *Application) {
 
 func NewApplication(opts ...func(app *Application)) *Application {
 	db := dbm.NewMemDB()
-	logger, err := log.NewDefaultLogger(log.LogFormatJSON, log.LogLevelDebug)
-	if err != nil {
-		panic("cannot create logger: " + err.Error())
-	}
 	app := &Application{
-		logger:              logger.With("module", "kvstore"),
+		logger:              log.NewNopLogger(),
 		lastCommittedState:  loadState(db),
 		roundStates:         map[string]State{},
 		validatorSetUpdates: make(map[int64]types.ValidatorSetUpdate),
