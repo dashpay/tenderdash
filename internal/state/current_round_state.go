@@ -183,6 +183,10 @@ func (candidate CurrentRoundState) StateID() types.StateID {
 
 // GetHeight returns height of current block
 func (candidate CurrentRoundState) GetHeight() int64 {
+	if candidate.Base.LastBlockHeight == 0 {
+		return candidate.Base.InitialHeight
+	}
+
 	return candidate.Base.LastBlockHeight + 1
 }
 
