@@ -648,13 +648,10 @@ func testHandshakeReplay(
 	mode uint,
 	testValidatorsChange bool,
 ) {
-	var chain []*types.Block
-	var commits []*types.Commit
 	var store *mockBlockStore
 	var stateDB dbm.DB
 	var genesisState sm.State
 	var privVal types.PrivValidator
-	var app abci.Application
 
 	ctx, cancel := context.WithCancel(rctx)
 	t.Cleanup(cancel)
@@ -664,20 +661,25 @@ func testHandshakeReplay(
 
 	logger := log.NewNopLogger()
 
-	if testValidatorsChange {
-		testConfig, err := ResetConfig(t.TempDir(), fmt.Sprintf("%s_m", testName))
-		require.NoError(t, err)
-		defer func() { _ = os.RemoveAll(testConfig.RootDir) }()
-		stateDB = dbm.NewMemDB()
-		app = kvstore.NewApplication(kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates))
-		genesisState = sim.GenesisState
-		cfg = sim.Config
-		chain = append([]*types.Block{}, sim.Chain...) // copy chain
-		commits = sim.Commits
-		store = newMockBlockStore(t, cfg, genesisState.ConsensusParams)
-		privVal, err = privval.LoadFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
-		require.NoError(t, err)
-	} else { // test single node
+	privVal = privval.MustLoadOrGenFilePVFromConfig(cfg)
+
+	testConfig, err := ResetConfig(t.TempDir(), fmt.Sprintf("%s_s", testName))
+	require.NoError(t, err)
+	defer func() { _ = os.RemoveAll(testConfig.RootDir) }()
+
+	genesisState = sim.GenesisState
+	stateDB = dbm.NewMemDB()
+	chain := append([]*types.Block{}, sim.Chain...) // copy chain
+	commits := sim.Commits
+	store = newMockBlockStore(t, cfg, genesisState.ConsensusParams)
+
+	opts := []func(app *kvstore.Application){
+		kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates),
+	}
+
+	if !testValidatorsChange {
+		// test single node
+		opts = nil
 		ng := nodeGen{
 			cfg:     getConfig(t),
 			logger:  logger,
@@ -685,16 +687,10 @@ func testHandshakeReplay(
 		}
 		node := ng.Generate(ctx, t)
 
-		testConfig, err := ResetConfig(t.TempDir(), fmt.Sprintf("%s_s", testName))
-		require.NoError(t, err)
-		defer func() { _ = os.RemoveAll(testConfig.RootDir) }()
 		walBody, err := WALWithNBlocks(ctx, t, logger, node, numBlocks)
 		require.NoError(t, err)
 		walFile := tempWALWithData(t, walBody)
 		cfg.Consensus.SetWalFile(walFile)
-
-		privVal, err = privval.LoadFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
-		require.NoError(t, err)
 
 		gdoc, err := sm.MakeGenesisDocFromFile(cfg.GenesisFile())
 		require.NoError(t, err)
@@ -717,7 +713,6 @@ func testHandshakeReplay(
 	store.commits = commits
 
 	state := genesisState.Copy()
-	firstValidatorProTxHash, _ := state.Validators.GetByIndex(0)
 	// run the chain through state.ApplyBlock to build up the tendermint state
 	state = buildTMStateFromChain(
 		ctx,
@@ -725,9 +720,8 @@ func testHandshakeReplay(
 		logger,
 		sim.Mempool,
 		sim.Evpool,
-		app,
+		kvstore.NewApplication(opts...),
 		stateStore,
-		firstValidatorProTxHash,
 		state,
 		chain,
 		mode,
@@ -737,11 +731,6 @@ func testHandshakeReplay(
 
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
-
-	var opts []func(application *kvstore.Application)
-	if testValidatorsChange {
-		opts = append(opts, kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates))
-	}
 
 	client := abciclient.NewLocalClient(logger, kvstore.NewApplication(opts...))
 	if nBlocks > 0 {
@@ -755,7 +744,6 @@ func testHandshakeReplay(
 			ctx, t,
 			proxyApp,
 			stateStore,
-			firstValidatorProTxHash,
 			sim.Mempool,
 			sim.Evpool,
 			genesisState,
@@ -807,15 +795,14 @@ func testHandshakeReplay(
 	require.NoError(t, err)
 
 	// the app hash should be synced up
-	if !bytes.Equal(latestAppHash, res.LastBlockAppHash) {
-		t.Fatalf(
-			"Expected app hashes to match after handshake/replay. got %X, expected %X",
-			res.LastBlockAppHash,
-			latestAppHash)
-	}
+	require.Equalf(t, latestAppHash.Bytes(), res.LastBlockAppHash,
+		"Expected app hashes to match after handshake/replay. got %X, expected %X",
+		res.LastBlockAppHash,
+		latestAppHash,
+	)
 
 	expectedBlocksToSync := numBlocks - nBlocks
-	if (nBlocks == numBlocks && mode > 0) || (nBlocks > 0 && mode == 1) {
+	if nBlocks > 0 && mode == 1 {
 		expectedBlocksToSync++
 	}
 
@@ -849,7 +836,6 @@ func buildAppStateFromChain(
 	t *testing.T,
 	appClient abciclient.Client,
 	stateStore sm.Store,
-	nodeProTxHash crypto.ProTxHash,
 	mempool mempool.Mempool,
 	evpool sm.EvidencePool,
 	state sm.State,
@@ -912,17 +898,12 @@ func buildTMStateFromChain(
 	evpool sm.EvidencePool,
 	app abci.Application,
 	stateStore sm.Store,
-	nodeProTxHash crypto.ProTxHash,
 	state sm.State,
 	chain []*types.Block,
 	mode uint,
 	blockStore *mockBlockStore,
 ) sm.State {
 	t.Helper()
-
-	if app == nil {
-		app = kvstore.NewApplication()
-	}
 
 	// run the whole chain against this client to build up the tendermint state
 	client := abciclient.NewLocalClient(logger, app)
