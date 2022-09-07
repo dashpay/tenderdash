@@ -213,12 +213,18 @@ func NewState(
 	eventBus *eventbus.EventBus,
 	options ...StateOption,
 ) (*State, error) {
+	initialState, err := store.Load()
+	if err != nil {
+		return nil, err
+	}
+
 	cs := &State{
 		eventBus:         eventBus,
 		logger:           logger,
 		config:           cfg,
 		blockExec:        blockExec,
 		blockStore:       blockStore,
+		state:            initialState,
 		stateStore:       store,
 		txNotifier:       txNotifier,
 		peerMsgQueue:     make(chan msgInfo, msgQueueSize),
@@ -2756,7 +2762,7 @@ func (cs *State) tryAddVote(ctx context.Context, vote *types.Vote, peerID types.
 			// 2) not a bad peer? this can also err sometimes with "Unexpected step" OR
 			// 3) tmkms use with multiple validators connecting to a single tmkms instance
 			//		(https://github.com/tendermint/tendermint/issues/3839).
-			cs.logger.Info("failed attempting to add vote", "err", err)
+			cs.logger.Info("failed attempting to add vote", "quorum_hash", cs.Validators.QuorumHash, "err", err)
 			return added, ErrAddingVote
 		}
 	}
@@ -3059,7 +3065,13 @@ func (cs *State) signAddVote(
 	vote, err := cs.signVote(ctx, msgType, hash, header)
 	if err == nil {
 		cs.sendInternalMessage(ctx, msgInfo{&VoteMessage{vote}, "", tmtime.Now()})
-		cs.logger.Debug("signed and pushed vote", "height", cs.Height, "round", cs.Round, "vote", vote, "took", time.Since(start).String())
+		cs.logger.Debug("signed and pushed vote",
+			"height", cs.Height,
+			"round", cs.Round,
+			"vote", vote,
+			"state_id", vote.StateID(),
+			"quorum_hash", cs.Validators.QuorumHash,
+			"took", time.Since(start).String())
 		return vote
 	}
 
