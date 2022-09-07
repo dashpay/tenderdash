@@ -217,8 +217,8 @@ func (voteSet *VoteSet) addVote(vote *Vote) (added bool, err error) {
 	)
 	if err != nil {
 		return false, ErrInvalidVoteSignature(
-			fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s ProTxHash %s: %w",
-				voteSet.chainID, val.PubKey, val.ProTxHash, err))
+			fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s ProTxHash %s StateID %s: %w",
+				voteSet.chainID, val.PubKey, val.ProTxHash, vote.StateID(), err))
 	}
 
 	quorumSigns, err := MakeQuorumSignsWithVoteSet(voteSet, vote.ToProto())
