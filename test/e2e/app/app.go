@@ -117,13 +117,13 @@ func NewApplication(cfg *Config) (*Application, error) {
 	if err != nil {
 		return nil, err
 	}
-	logger, err := log.NewDefaultLogger(log.LogFormatPlain, log.LogLevelInfo)
+	logger, err := log.NewDefaultLogger(log.LogFormatPlain, log.LogLevelDebug)
 	if err != nil {
 		return nil, err
 	}
 
 	return &Application{
-		logger:    logger,
+		logger:    logger.With("module", "abci_app"),
 		state:     state,
 		snapshots: snapshots,
 		cfg:       cfg,
@@ -174,6 +174,8 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	if resp.NextCoreChainLockUpdate, err = app.chainLockUpdate(0); err != nil {
 		panic(err)
 	}
+	app.logger.Debug("InitChain", "req", req, "resp", resp)
+
 	return resp, nil
 }
 

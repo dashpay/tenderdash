@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -112,6 +113,7 @@ type QuorumSingsVerifier struct {
 	QuorumSignData
 	shouldVerifyState          bool
 	shouldVerifyVoteExtensions bool
+	logger                     log.Logger
 }
 
 // WithVerifyExtensions sets a flag that tells QuorumSingsVerifier to verify vote-extension signatures or not
@@ -137,6 +139,13 @@ func WithVerifyReachedQuorum(quorumReached bool) func(*QuorumSingsVerifier) {
 	}
 }
 
+// WithLogger sets a logger
+func WithLogger(logger log.Logger) func(*QuorumSingsVerifier) {
+	return func(verifier *QuorumSingsVerifier) {
+		verifier.logger = logger
+	}
+}
+
 // NewQuorumSingsVerifier creates and returns an instance of QuorumSingsVerifier that is used for verification
 // quorum signatures
 func NewQuorumSingsVerifier(quorumData QuorumSignData, opts ...func(*QuorumSingsVerifier)) *QuorumSingsVerifier {
@@ -144,6 +153,7 @@ func NewQuorumSingsVerifier(quorumData QuorumSignData, opts ...func(*QuorumSings
 		QuorumSignData:             quorumData,
 		shouldVerifyState:          true,
 		shouldVerifyVoteExtensions: true,
+		logger:                     log.NewNopLogger(),
 	}
 	for _, opt := range opts {
 		opt(verifier)
@@ -182,9 +192,10 @@ func (q *QuorumSingsVerifier) verifyState(pubKey crypto.PubKey, signs QuorumSign
 	}
 	if !pubKey.VerifySignatureDigest(q.State.ID, signs.StateSign) {
 		return fmt.Errorf(
-			"threshold state signature is invalid: (%X) signID=%X: %w",
+			"threshold state signature is invalid: (raw=%X, signID=%X, pubkey=%s): %w",
 			q.State.Raw,
 			q.State.ID,
+			pubKey.HexString(),
 			ErrVoteInvalidStateSignature,
 		)
 	}
