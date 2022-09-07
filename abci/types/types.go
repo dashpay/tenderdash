@@ -207,19 +207,20 @@ type validatorUpdateJSON struct {
 }
 
 func (m *ValidatorUpdate) MarshalJSON() ([]byte, error) {
-	var err error
 	res := validatorUpdateJSON{
 		Power:       m.Power,
 		ProTxHash:   m.ProTxHash,
 		NodeAddress: m.NodeAddress,
 	}
-	pubKey, err := cryptoenc.PubKeyFromProto(*m.PubKey)
-	if err != nil {
-		return nil, err
-	}
-	res.PubKey, err = jsontypes.Marshal(pubKey)
-	if err != nil {
-		return nil, err
+	if m.PubKey != nil {
+		pubKey, err := cryptoenc.PubKeyFromProto(*m.PubKey)
+		if err != nil {
+			return nil, err
+		}
+		res.PubKey, err = jsontypes.Marshal(pubKey)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return json.Marshal(res)
 }
