@@ -62,7 +62,7 @@ func ProcessProposal(ctx context.Context, client abciclient.Client, txBytes [][]
 		}
 		if !bytes.Equal(data, dataExp) {
 			fmt.Println("Failed test:  ProcessProposal")
-			fmt.Printf("FinalizeBlock response data was unexpected. Got %X expected %X\n",
+			fmt.Printf("ProcessProposal response data was unexpected. Got %X expected %X\n",
 				data, dataExp)
 			return errors.New("ProcessProposal  error")
 		}
