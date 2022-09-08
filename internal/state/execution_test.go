@@ -71,6 +71,7 @@ func TestApplyBlock(t *testing.T) {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		mock.Anything,
 		mock.Anything).Return(nil)
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
@@ -169,6 +170,7 @@ func TestFinalizeBlockByzantineValidators(t *testing.T) {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		mock.Anything,
 		mock.Anything).Return(nil)
 
 	eventBus := eventbus.NewDefault(logger)
@@ -192,7 +194,7 @@ func TestFinalizeBlockByzantineValidators(t *testing.T) {
 	require.NoError(t, err)
 
 	// TODO check state and mempool
-	assert.Equal(t, abciMb, app.ByzantineValidators)
+	assert.Equal(t, abciMb, app.Misbehavior)
 }
 
 func TestProcessProposal(t *testing.T) {
@@ -255,11 +257,11 @@ func TestProcessProposal(t *testing.T) {
 	version := block1.Version.ToProto()
 
 	expectedRpp := &abci.RequestProcessProposal{
-		Txs:                 block1.Txs.ToSliceOfBytes(),
-		Hash:                block1.Hash(),
-		Height:              block1.Header.Height,
-		Time:                block1.Header.Time,
-		ByzantineValidators: block1.Evidence.ToABCI(),
+		Txs:         block1.Txs.ToSliceOfBytes(),
+		Hash:        block1.Hash(),
+		Height:      block1.Header.Height,
+		Time:        block1.Header.Time,
+		Misbehavior: block1.Evidence.ToABCI(),
 		ProposedLastCommit: abci.CommitInfo{
 			Round: 0,
 			//QuorumHash:
@@ -481,6 +483,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		mock.Anything,
 		mock.Anything).Return(nil)
 	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(types.Txs{})
 
@@ -663,6 +666,7 @@ func TestEmptyPrepareProposal(t *testing.T) {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		mock.Anything,
 		mock.Anything).Return(nil)
 	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(types.Txs{})
 
@@ -792,9 +796,9 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 		eventBus,
 		sm.NopMetrics(),
 	)
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
-	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proTxHash, 0)
 	require.NoError(t, err)
 	require.Len(t, block.Data.Txs.ToSliceOfBytes(), len(trs)-2)
 

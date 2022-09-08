@@ -15,7 +15,6 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	sm "github.com/tendermint/tendermint/internal/state"
-	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -226,7 +225,13 @@ func TestPruneStates(t *testing.T) {
 				require.NoError(t, err)
 				// TODO: Rewrite, as we need to save Response*Proposal to keep TxResults
 				err = stateStore.SaveABCIResponses(h, &tmstate.ABCIResponses{
-					FinalizeBlock: &abci.ResponseFinalizeBlock{},
+					FinalizeBlock: &abci.ResponseFinalizeBlock{
+						TxResults: []*abci.ExecTxResult{
+							{Data: []byte{1}},
+							{Data: []byte{2}},
+							{Data: []byte{3}},
+						},
+					},
 				})
 				require.NoError(t, err)
 			}
@@ -248,9 +253,9 @@ func TestPruneStates(t *testing.T) {
 				require.NoError(t, err, h)
 				require.NotNil(t, params, h)
 
-				abci, err := stateStore.LoadABCIResponses(h)
+				finRes, err := stateStore.LoadFinalizeBlockResponses(h)
 				require.NoError(t, err, h)
-				require.NotNil(t, abci, h)
+				require.NotNil(t, finRes, h)
 			}
 
 			emptyParams := types.ConsensusParams{}
@@ -274,9 +279,9 @@ func TestPruneStates(t *testing.T) {
 					require.Equal(t, emptyParams, params, h)
 				}
 
-				abci, err := stateStore.LoadABCIResponses(h)
+				finRes, err := stateStore.LoadFinalizeBlockResponses(h)
 				require.Error(t, err, h)
-				require.Nil(t, abci, h)
+				require.Nil(t, finRes, h)
 			}
 		})
 	}

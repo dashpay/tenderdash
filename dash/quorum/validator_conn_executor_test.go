@@ -377,6 +377,7 @@ func TestFinalizeBlock(t *testing.T) {
 		testifymock.Anything,
 		testifymock.Anything,
 		testifymock.Anything,
+		testifymock.Anything,
 		testifymock.Anything).Return(nil)
 
 	blockExec := sm.NewBlockExecutor(

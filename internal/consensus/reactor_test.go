@@ -46,10 +46,18 @@ type reactorTestSuite struct {
 	reactors            map[types.NodeID]*Reactor
 	subs                map[types.NodeID]eventbus.Subscription
 	blocksyncSubs       map[types.NodeID]eventbus.Subscription
-	stateChannels       map[types.NodeID]*p2p.Channel
-	dataChannels        map[types.NodeID]*p2p.Channel
-	voteChannels        map[types.NodeID]*p2p.Channel
-	voteSetBitsChannels map[types.NodeID]*p2p.Channel
+	stateChannels       map[types.NodeID]p2p.Channel
+	dataChannels        map[types.NodeID]p2p.Channel
+	voteChannels        map[types.NodeID]p2p.Channel
+	voteSetBitsChannels map[types.NodeID]p2p.Channel
+}
+
+func (rts *reactorTestSuite) switchToConsensus(ctx context.Context) {
+	for nodeID, reactor := range rts.reactors {
+		state := reactor.state.GetState()
+		sCtx := dash.ContextWithProTxHash(ctx, rts.states[nodeID].privValidatorProTxHash)
+		reactor.SwitchToConsensus(sCtx, state, false)
+	}
 }
 
 func (rts *reactorTestSuite) switchToConsensus(ctx context.Context) {
@@ -98,7 +106,7 @@ func setup(
 	t.Cleanup(cancel)
 
 	chCreator := func(nodeID types.NodeID) p2p.ChannelCreator {
-		return func(ctx context.Context, desc *p2p.ChannelDescriptor) (*p2p.Channel, error) {
+		return func(ctx context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
 			switch desc.ID {
 			case StateChannel:
 				return rts.stateChannels[nodeID], nil
@@ -535,6 +543,10 @@ func TestReactorRecordsVotesAndBlockParts(t *testing.T) {
 }
 
 func TestReactorValidatorSetChanges(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 

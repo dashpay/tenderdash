@@ -9,7 +9,6 @@ import (
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/internal/proxy"
 	"github.com/tendermint/tendermint/libs/log"
-	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -35,6 +34,7 @@ func (emptyMempool) Update(
 	_ []*abci.ExecTxResult,
 	_ mempool.PreCheckFunc,
 	_ mempool.PostCheckFunc,
+	_ bool,
 ) error {
 	return nil
 }
@@ -78,7 +78,7 @@ func (m *mockMempool) Update(
 }
 
 //-----------------------------------------------------------------------------
-// mockProxyApp uses ABCIResponses to give the right results.
+// mockProxyApp uses Responses to FinalizeBlock to give the right results.
 //
 // Useful because we don't want to call Commit() twice for the same block on
 // the real app.
@@ -86,20 +86,20 @@ func (m *mockMempool) Update(
 func newMockProxyApp(
 	logger log.Logger,
 	appHash []byte,
-	abciResponses *tmstate.ABCIResponses,
+	finalizeBlockResponses *abci.ResponseFinalizeBlock,
 ) (abciclient.Client, error) {
 	return proxy.New(abciclient.NewLocalClient(logger, &mockProxyApp{
-		appHash:       appHash,
-		abciResponses: abciResponses,
+		appHash:                appHash,
+		finalizeBlockResponses: finalizeBlockResponses,
 	}), logger, proxy.NopMetrics()), nil
 }
 
 type mockProxyApp struct {
 	abci.BaseApplication
 
-	appHash       []byte
-	txCount       int
-	abciResponses *tmstate.ABCIResponses
+	appHash                []byte
+	txCount                int
+	finalizeBlockResponses *abci.ResponseFinalizeBlock
 }
 
 func (mock *mockProxyApp) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
@@ -112,7 +112,7 @@ func (mock *mockProxyApp) ProcessProposal(_ context.Context, req *abci.RequestPr
 }
 
 func (mock *mockProxyApp) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
-	r := mock.abciResponses.FinalizeBlock
+	r := mock.finalizeBlockResponses
 	mock.txCount++
 	if r == nil {
 		return &abci.ResponseFinalizeBlock{}, nil
@@ -121,5 +121,5 @@ func (mock *mockProxyApp) FinalizeBlock(_ context.Context, req *abci.RequestFina
 }
 
 func (mock *mockProxyApp) Commit(context.Context) (*abci.ResponseCommit, error) {
-	return &abci.ResponseCommit{Data: mock.appHash}, nil
+	return &abci.ResponseCommit{}, nil
 }

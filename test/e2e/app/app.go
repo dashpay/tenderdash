@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -24,6 +25,7 @@ import (
 
 	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
+	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	"github.com/tendermint/tendermint/libs/log"
 	types1 "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -90,6 +92,14 @@ type Config struct {
 	//
 	// height <-> pubkey <-> voting power
 	ValidatorUpdates map[string]map[string]string `toml:"validator_update"`
+
+	// Add artificial delays to each of the main ABCI calls to mimic computation time
+	// of the application
+	PrepareProposalDelayMS uint64 `toml:"prepare_proposal_delay_ms"`
+	ProcessProposalDelayMS uint64 `toml:"process_proposal_delay_ms"`
+	CheckTxDelayMS         uint64 `toml:"check_tx_delay_ms"`
+	VoteExtensionDelayMS   uint64 `toml:"vote_extension_delay_ms"`
+	FinalizeBlockDelayMS   uint64 `toml:"finalize_block_delay_ms"`
 
 	// dash parameters
 	ThesholdPublicKeyUpdate  map[string]string `toml:"threshold_public_key_update"`
@@ -188,9 +198,13 @@ func (app *Application) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*a
 	if err != nil {
 		return &abci.ResponseCheckTx{
 			Code: code.CodeTypeEncodingError,
-			Log:  err.Error(),
 		}, nil
 	}
+
+	if app.cfg.CheckTxDelayMS != 0 {
+		time.Sleep(time.Duration(app.cfg.CheckTxDelayMS) * time.Millisecond)
+	}
+
 	return &abci.ResponseCheckTx{Code: code.CodeTypeOK, GasWanted: 1}, nil
 }
 
@@ -222,6 +236,10 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 
 	resp := abci.ResponseFinalizeBlock{}
 
+	if app.cfg.FinalizeBlockDelayMS != 0 {
+		time.Sleep(time.Duration(app.cfg.FinalizeBlockDelayMS) * time.Millisecond)
+	}
+
 	resp.Events = []abci.Event{
 		{
 			Type: "val_updates",
@@ -246,7 +264,7 @@ func (app *Application) Commit(_ context.Context) (*abci.ResponseCommit, error) 
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	height, hash, err := app.state.Commit()
+	height, err := app.state.Commit()
 	if err != nil {
 		panic(err)
 	}
@@ -266,7 +284,6 @@ func (app *Application) Commit(_ context.Context) (*abci.ResponseCommit, error) 
 		retainHeight = int64(height - app.cfg.RetainBlocks + 1)
 	}
 	return &abci.ResponseCommit{
-		Data:         hash,
 		RetainHeight: retainHeight,
 	}, nil
 }
@@ -355,6 +372,9 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 // total number of transaction bytes to exceed `req.MaxTxBytes`, we will not
 // append our special vote extension transaction.
 func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+
 	validatorSetUpdate, err := app.validatorSetUpdates(uint64(req.Height))
 	if err != nil {
 		panic(err)
@@ -370,6 +390,10 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 	txRecords, err := app.processTxs(req.Txs, req.MaxTxBytes, extCount)
 	if err != nil {
 		return &abci.ResponsePrepareProposal{}, err
+	}
+
+	if app.cfg.PrepareProposalDelayMS != 0 {
+		time.Sleep(time.Duration(app.cfg.PrepareProposalDelayMS) * time.Millisecond)
 	}
 
 	return &abci.ResponsePrepareProposal{
@@ -435,6 +459,9 @@ func (app *Application) processTxs(txs [][]byte, maxTxBytes int64, extCount int)
 // ProcessProposal implements part of the Application interface.
 // It accepts any proposal that does not contain a malformed transaction.
 func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+
 	for _, tx := range req.Txs {
 		k, v, err := parseTx(tx)
 		if err != nil {
@@ -462,6 +489,10 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 
 	app.valUpdates = validatorSetUpdate
 
+	if app.cfg.ProcessProposalDelayMS != 0 {
+		time.Sleep(time.Duration(app.cfg.ProcessProposalDelayMS) * time.Millisecond)
+	}
+
 	return &abci.ResponseProcessProposal{
 		Status:              abci.ResponseProcessProposal_ACCEPT,
 		TxResults:           app.txResults(len(req.Txs)),
@@ -479,6 +510,9 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 // key/value store ("extensionSum") with the sum of all of the numbers collected
 // from the vote extensions.
 func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVote) (*abci.ResponseExtendVote, error) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+
 	// We ignore any requests for vote extensions that don't match our expected
 	// next height.
 	currentHeight := app.state.Height
@@ -499,7 +533,15 @@ func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVot
 	// nolint:gosec // G404: Use of weak random number generator
 	num := rand.Int63n(voteExtensionMaxVal)
 	extLen := binary.PutVarint(ext, num)
-	app.logger.Info("generated vote extension", "num", num, "ext", fmt.Sprintf("%x", ext[:extLen]), "state.Height", app.state.Height)
+
+	if app.cfg.VoteExtensionDelayMS != 0 {
+		time.Sleep(time.Duration(app.cfg.VoteExtensionDelayMS) * time.Millisecond)
+	}
+
+	app.logger.Info("generated vote extension",
+		"num", num,
+		"ext", tmstrings.LazySprintf("%x", ext[:extLen]),
+		"state.Height", app.state.Height)
 	return &abci.ResponseExtendVote{
 		VoteExtensions: []*abci.ExtendVoteExtension{
 			{
@@ -518,6 +560,9 @@ func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVot
 // without doing anything about them. In this case, it just makes sure that the
 // vote extension is a well-formed integer value.
 func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.RequestVerifyVoteExtension) (*abci.ResponseVerifyVoteExtension, error) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+
 	// We allow vote extensions to be optional
 	if len(req.VoteExtensions) == 0 {
 		return &abci.ResponseVerifyVoteExtension{
@@ -545,6 +590,10 @@ func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.Request
 			}, nil
 		}
 		nums = append(nums, num)
+	}
+
+	if app.cfg.VoteExtensionDelayMS != 0 {
+		time.Sleep(time.Duration(app.cfg.VoteExtensionDelayMS) * time.Millisecond)
 	}
 
 	app.logger.Info("verified vote extension value", "req", req, "nums", nums)

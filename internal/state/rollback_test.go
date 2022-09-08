@@ -50,6 +50,7 @@ func TestRollback(t *testing.T) {
 			ResultsHash: initialState.LastResultsHash,
 		},
 	}
+	commit := &types.Commit{}
 	nextBlock := &types.BlockMeta{
 		BlockID: initialState.LastBlockID,
 		Header: types.Header{
@@ -60,6 +61,7 @@ func TestRollback(t *testing.T) {
 		},
 	}
 	blockStore.On("LoadBlockMeta", height).Return(block)
+	blockStore.On("LoadBlockCommit", height).Return(commit)
 	blockStore.On("LoadBlockMeta", nextHeight).Return(nextBlock)
 	blockStore.On("Height").Return(nextHeight)
 
@@ -92,6 +94,7 @@ func TestRollbackNoBlocks(t *testing.T) {
 	blockStore := &mocks.BlockStore{}
 	blockStore.On("Height").Return(height)
 	blockStore.On("LoadBlockMeta", height).Return(nil)
+	blockStore.On("LoadBlockCommit", height-1).Return(&types.Commit{})
 	blockStore.On("LoadBlockMeta", height-1).Return(nil)
 
 	_, _, err := state.Rollback(blockStore, stateStore)

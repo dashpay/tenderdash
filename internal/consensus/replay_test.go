@@ -118,6 +118,10 @@ func sendTxs(ctx context.Context, t *testing.T, cs *State) {
 
 // TestWALCrash uses crashing WAL to test we can recover from any WAL failure.
 func TestWALCrash(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	testCases := []struct {
 		name         string
 		initFn       func(dbm.DB, *State, context.Context)
@@ -1055,16 +1059,16 @@ type badApp struct {
 	onlyLastHashIsWrong bool
 }
 
-func (app *badApp) Commit(context.Context) (*abci.ResponseCommit, error) {
+func (app *badApp) FinalizeBlock(_ context.Context, _ *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	app.height++
 	if app.onlyLastHashIsWrong {
 		if app.height == app.numBlocks {
-			return &abci.ResponseCommit{Data: tmrand.Bytes(32)}, nil
+			return &abci.ResponseFinalizeBlock{AppHash: tmrand.Bytes(32)}, nil
 		}
-		return &abci.ResponseCommit{Data: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+		return &abci.ResponseFinalizeBlock{AppHash: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 			0, 0, 0, 0, 0, 0, 0, 0, app.height}}, nil
 	} else if app.allHashesAreWrong {
-		return &abci.ResponseCommit{Data: tmrand.Bytes(32)}, nil
+		return &abci.ResponseFinalizeBlock{AppHash: tmrand.Bytes(32)}, nil
 	}
 
 	panic("either allHashesAreWrong or onlyLastHashIsWrong must be set")
@@ -1220,6 +1224,8 @@ type mockBlockStore struct {
 	coreChainLockedHeight uint32
 }
 
+var _ sm.BlockStore = &mockBlockStore{}
+
 // TODO: NewBlockStore(db.NewMemDB) ...
 func newMockBlockStore(t *testing.T, cfg *config.Config, params types.ConsensusParams) *mockBlockStore {
 	return &mockBlockStore{
@@ -1252,18 +1258,21 @@ func (bs *mockBlockStore) LoadBlockMeta(height int64) *types.BlockMeta {
 	}
 }
 func (bs *mockBlockStore) LoadBlockPart(height int64, index int) *types.Part { return nil }
-
 func (bs *mockBlockStore) SaveBlock(
 	block *types.Block,
 	blockParts *types.PartSet,
 	seenCommit *types.Commit,
 ) {
 }
+
 func (bs *mockBlockStore) LoadBlockCommit(height int64) *types.Commit {
 	return bs.commits[height-1]
 }
 func (bs *mockBlockStore) LoadSeenCommit() *types.Commit {
 	return bs.commits[len(bs.commits)-1]
+}
+func (bs *mockBlockStore) LoadSeenCommitAt(height int64) *types.Commit {
+	return bs.commits[height-1]
 }
 
 func (bs *mockBlockStore) PruneBlocks(height int64) (uint64, error) {

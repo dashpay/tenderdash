@@ -23,7 +23,6 @@ import (
 	indexermocks "github.com/tendermint/tendermint/internal/state/indexer/mocks"
 	statemocks "github.com/tendermint/tendermint/internal/state/mocks"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/proto/tendermint/state"
 	httpclient "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/types"
 )

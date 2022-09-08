@@ -16,7 +16,6 @@ import (
 	sf "github.com/tendermint/tendermint/internal/state/test/factory"
 	"github.com/tendermint/tendermint/internal/test/factory"
 	tmtime "github.com/tendermint/tendermint/libs/time"
-	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
@@ -157,12 +156,13 @@ func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, reg
 			Status:              abci.ResponseProcessProposal_ACCEPT,
 		},
 	}
+
 	if regenerate == true {
 		proTxHashes := state.Validators.GetProTxHashes()
 		valUpdates := types.ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes)
 		abciResponses.ProcessProposal.ValidatorSetUpdate = &valUpdates
 	}
-	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
+	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, fbResp
 }
 
 func makeHeaderPartsResponsesParams(
@@ -243,8 +243,8 @@ func makeRandomStateFromConsensusParams(
 type testApp struct {
 	abci.BaseApplication
 
-	ByzantineValidators []abci.Misbehavior
-	ValidatorSetUpdate  *abci.ValidatorSetUpdate
+	Misbehavior        []abci.Misbehavior
+	ValidatorSetUpdate *abci.ValidatorSetUpdate
 }
 
 var _ abci.Application = (*testApp)(nil)
@@ -254,7 +254,7 @@ func (app *testApp) Info(_ context.Context, req *abci.RequestInfo) (*abci.Respon
 }
 
 func (app *testApp) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
-	app.ByzantineValidators = req.ByzantineValidators
+	app.Misbehavior = req.Misbehavior
 
 	return &abci.ResponseFinalizeBlock{
 		Events: []abci.Event{},

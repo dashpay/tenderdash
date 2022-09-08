@@ -60,6 +60,7 @@ func TestValidateBlockHeader(t *testing.T) {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		mock.Anything,
 		mock.Anything).Return(nil)
 
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
@@ -197,6 +198,7 @@ func TestValidateBlockCommit(t *testing.T) {
 	mp.On("Unlock").Return()
 	mp.On("FlushAppConn", mock.Anything).Return(nil)
 	mp.On("Update",
+		mock.Anything,
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
@@ -396,6 +398,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 		mock.Anything,
 		mock.Anything,
 		mock.Anything,
+		mock.Anything,
 		mock.Anything).Return(nil)
 
 	state.ConsensusParams.Evidence.MaxBytes = 1000
@@ -489,6 +492,5 @@ func TestValidateBlockEvidence(t *testing.T) {
 			evidence,
 			0,
 		)
-
 	}
 }

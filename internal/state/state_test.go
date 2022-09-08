@@ -25,7 +25,6 @@ import (
 	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
-	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -105,8 +104,8 @@ func TestStateSaveLoad(t *testing.T) {
 		loadedState, state)
 }
 
-// TestABCIResponsesSaveLoad tests saving and loading ABCIResponses.
-func TestABCIResponsesSaveLoad1(t *testing.T) {
+// TestFinalizeBlockResponsesSaveLoad1 tests saving and loading responses to FinalizeBlock.
+func TestFinalizeBlockResponsesSaveLoad1(t *testing.T) {
 	tearDown, stateDB, state := setupTestCase(t)
 	defer tearDown(t)
 	stateStore := sm.NewStore(stateDB)
@@ -117,7 +116,6 @@ func TestABCIResponsesSaveLoad1(t *testing.T) {
 	block, err := statefactory.MakeBlock(state, 2, new(types.Commit), 0)
 	require.NoError(t, err)
 
-	abciResponses := new(tmstate.ABCIResponses)
 	dtxs := make([]*abci.ExecTxResult, 2)
 	abciResponses.ProcessProposal = &abci.ResponseProcessProposal{
 		Status:    abci.ResponseProcessProposal_ACCEPT,
@@ -136,17 +134,17 @@ func TestABCIResponsesSaveLoad1(t *testing.T) {
 		ThresholdPublicKey: abciPubKey,
 	}
 
-	err = stateStore.SaveABCIResponses(block.Height, abciResponses)
+	err = stateStore.SaveFinalizeBlockResponses(block.Height, finalizeBlockResponses)
 	require.NoError(t, err)
-	loadedABCIResponses, err := stateStore.LoadABCIResponses(block.Height)
+	loadedFinalizeBlockResponses, err := stateStore.LoadFinalizeBlockResponses(block.Height)
 	require.NoError(t, err)
-	assert.Equal(t, abciResponses, loadedABCIResponses,
-		"ABCIResponses don't match:\ngot:       %v\nexpected: %v\n",
-		loadedABCIResponses, abciResponses)
+	assert.Equal(t, finalizeBlockResponses, loadedFinalizeBlockResponses,
+		"FinalizeBlockResponses don't match:\ngot:       %v\nexpected: %v\n",
+		loadedFinalizeBlockResponses, finalizeBlockResponses)
 }
 
-// TestResultsSaveLoad tests saving and loading ABCI results.
-func TestABCIResponsesSaveLoad2(t *testing.T) {
+// TestFinalizeBlockResponsesSaveLoad2 tests saving and loading responses to FinalizeBlock.
+func TestFinalizeBlockResponsesSaveLoad2(t *testing.T) {
 	tearDown, stateDB, _ := setupTestCase(t)
 	defer tearDown(t)
 
@@ -202,7 +200,7 @@ func TestABCIResponsesSaveLoad2(t *testing.T) {
 	// Query all before, this should return error.
 	for i := range cases {
 		h := int64(i + 1)
-		res, err := stateStore.LoadABCIResponses(h)
+		res, err := stateStore.LoadFinalizeBlockResponses(h)
 		assert.Error(t, err, "%d: %#v", i, res)
 	}
 
@@ -212,17 +210,18 @@ func TestABCIResponsesSaveLoad2(t *testing.T) {
 		responses := &tmstate.ABCIResponses{
 			ProcessProposal: &abci.ResponseProcessProposal{
 				TxResults: tc.added,
+				AppHash:   []byte("a_hash"),
 				Status:    abci.ResponseProcessProposal_ACCEPT,
 			},
 		}
-		err := stateStore.SaveABCIResponses(h, responses)
+		err := stateStore.SaveFinalizeBlockResponses(h, responses)
 		require.NoError(t, err)
 	}
 
-	// Query all before, should return expected value.
+	// Query all after, should return expected value.
 	for i, tc := range cases {
 		h := int64(i + 1)
-		res, err := stateStore.LoadABCIResponses(h)
+		res, err := stateStore.LoadFinalizeBlockResponses(h)
 		if assert.NoError(t, err, "%d", i) {
 			t.Log(res)
 			e, err := abci.MarshalTxResults(tc.expected)

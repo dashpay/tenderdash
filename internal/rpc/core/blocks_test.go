@@ -13,7 +13,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
-	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/rpc/coretypes"
 )
 
@@ -83,7 +82,7 @@ func TestBlockResults(t *testing.T) {
 
 	env := &Environment{}
 	env.StateStore = sm.NewStore(dbm.NewMemDB())
-	err := env.StateStore.SaveABCIResponses(100, results)
+	err := env.StateStore.SaveFinalizeBlockResponses(100, results)
 	require.NoError(t, err)
 	mockstore := &mocks.BlockStore{}
 	mockstore.On("Height").Return(int64(100))
