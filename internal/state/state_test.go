@@ -253,7 +253,7 @@ func TestValidatorSimpleSaveLoad(t *testing.T) {
 	assert.Equal(t, v.Hash(), state.Validators.Hash(), "expected validator hashes to match")
 
 	// Should NOT be able to load for height 2.
-	v, err = statestore.LoadValidators(2)
+	_, err = statestore.LoadValidators(2)
 	require.Error(t, err, "expected no err at height 2")
 
 	// Increment height, save; should be able to load for next height.
@@ -1156,8 +1156,8 @@ func TestState_StateID(t *testing.T) {
 	assert.NoError(t, err, "StateID validation failed")
 }
 
-func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.CurentRoundState) sm.State {
-	return func(prevState, state sm.State, ucState sm.CurentRoundState) sm.State {
+func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
+	return func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
 		t.Helper()
 
 		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit), 0)

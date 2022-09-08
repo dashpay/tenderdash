@@ -131,7 +131,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		uncommittedState, err := bzNodeState.blockExec.ProcessProposal(ctx, bzNodeState.ProposalBlock, bzNodeState.state, true)
 		assert.NoError(t, err)
 		assert.NotZero(t, uncommittedState)
-		bzNodeState.CurentRoundState = uncommittedState
+		bzNodeState.CurrentRoundState = uncommittedState
 
 		if height == prevoteHeight {
 			prevote1, err := bzNodeState.signVote(ctx,

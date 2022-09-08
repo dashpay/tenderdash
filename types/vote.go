@@ -198,7 +198,7 @@ func (vote *Vote) String() string {
 		panic("Unknown vote type")
 	}
 
-	return fmt.Sprintf("Vote{%v:%X %v/%02d/%v(%v) %X %X %X %X %X}",
+	return fmt.Sprintf("Vote{%v:%X %v/%02d/%v(%v) %X %X %X %X %s}",
 		vote.ValidatorIndex,
 		tmbytes.Fingerprint(vote.ValidatorProTxHash),
 		vote.Height,

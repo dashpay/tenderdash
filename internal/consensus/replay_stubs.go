@@ -50,6 +50,33 @@ func (emptyMempool) TxsWaitChan() <-chan struct{} { return nil }
 func (emptyMempool) InitWAL() error { return nil }
 func (emptyMempool) CloseWAL()      {}
 
+type mockMempool struct {
+	emptyMempool
+	calls []types.Txs
+}
+
+func (m *mockMempool) ReapMaxBytesMaxGas(_, _ int64) types.Txs {
+	if len(m.calls) == 0 {
+		return types.Txs{}
+	}
+	txs := m.calls[0]
+	return txs
+}
+
+func (m *mockMempool) Update(
+	_ context.Context,
+	_ int64,
+	_ types.Txs,
+	_ []*abci.ExecTxResult,
+	_ mempool.PreCheckFunc,
+	_ mempool.PostCheckFunc,
+) error {
+	if len(m.calls) > 0 {
+		m.calls = m.calls[1:]
+	}
+	return nil
+}
+
 //-----------------------------------------------------------------------------
 // mockProxyApp uses ABCIResponses to give the right results.
 //

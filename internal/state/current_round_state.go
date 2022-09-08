@@ -12,7 +12,6 @@ import (
 	"github.com/tendermint/tendermint/dash"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmtypes "github.com/tendermint/tendermint/proto/tendermint/types"
-	types2 "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -21,8 +20,8 @@ const (
 	processProposal = "ResponseProcessProposal"
 )
 
-// CurentRoundState ...
-type CurentRoundState struct {
+// CurrentRoundState ...
+type CurrentRoundState struct {
 	// Base state for the changes
 	Base State
 
@@ -51,53 +50,49 @@ type CurentRoundState struct {
 	response abci.ResponseProcessProposal
 }
 
+func (candidate CurrentRoundState) IsEmpty() bool {
+	return candidate.AppHash == nil
+}
+
 // UpdateBlock changes block fields to reflect the ones returned in PrepareProposal / ProcessProposal
-func (candidate CurentRoundState) UpdateBlock(target *types.Block) error {
+func (candidate CurrentRoundState) UpdateBlock(target *types.Block) error {
 	if candidate.responseType != prepareProposal {
 		return fmt.Errorf("block can be updated only based on '%s' response, got '%s'", processProposal, candidate.responseType)
 	}
 	target.AppHash = candidate.AppHash
 	target.ResultsHash = candidate.ResultsHash
-
 	target.NextValidatorsHash = candidate.NextValidators.Hash()
-
 	target.CoreChainLock = candidate.CoreChainLock
 	if candidate.CoreChainLock != nil {
 		target.CoreChainLockedHeight = candidate.CoreChainLock.CoreBlockHeight
 	} else {
 		target.CoreChainLockedHeight = candidate.Base.LastCoreChainLockedBlockHeight
 	}
-
 	return nil
 }
 
 // UpdateState updates state when the block is committed. State will contain data needed by next block.
-func (candidate CurentRoundState) UpdateState(ctx context.Context, target *State) error {
+func (candidate CurrentRoundState) UpdateState(ctx context.Context, target *State) error {
 	target.AppHash = candidate.AppHash
-
 	target.LastResultsHash = candidate.ResultsHash
-
 	target.ConsensusParams = candidate.NextConsensusParams
 	target.LastHeightConsensusParamsChanged = candidate.LastHeightConsensusParamsChanged
 	target.Version.Consensus.App = candidate.NextConsensusParams.Version.AppVersion
-
 	target.Validators = candidate.NextValidators
 	target.LastHeightValidatorsChanged = candidate.LastHeightValidatorsChanged
-
 	if candidate.CoreChainLock != nil {
 		target.LastCoreChainLockedBlockHeight = candidate.CoreChainLock.CoreBlockHeight
 	}
-
 	return nil
 }
 
 // UpdateFunc implements UpdateFunc
-func (candidate CurentRoundState) UpdateFunc(ctx context.Context, state State) (State, error) {
+func (candidate CurrentRoundState) UpdateFunc(ctx context.Context, state State) (State, error) {
 	err := candidate.UpdateState(ctx, &state)
 	return state, err
 }
 
-func (candidate *CurentRoundState) populate(ctx context.Context, proposalResponse proto.Message, baseState State) error {
+func (candidate *CurrentRoundState) populate(ctx context.Context, proposalResponse proto.Message, baseState State) error {
 	switch resp := proposalResponse.(type) {
 	case *abci.ResponsePrepareProposal:
 		candidate.responseType = prepareProposal
@@ -128,14 +123,14 @@ func (candidate *CurentRoundState) populate(ctx context.Context, proposalRespons
 	)
 }
 
-func (candidate *CurentRoundState) update(
+func (candidate *CurrentRoundState) update(
 	ctx context.Context,
 	baseState State,
 	appHash tmbytes.HexBytes,
 	txResults []*abci.ExecTxResult,
-	consensusParamUpdates *types2.ConsensusParams,
+	consensusParamUpdates *tmtypes.ConsensusParams,
 	validatorSetUpdate *abci.ValidatorSetUpdate,
-	coreChainLockUpdate *types2.CoreChainLock,
+	coreChainLockUpdate *tmtypes.CoreChainLock,
 ) error {
 	candidate.Base = baseState
 	candidate.AppHash = appHash.Copy()
@@ -157,7 +152,7 @@ func (candidate *CurentRoundState) update(
 	return nil
 }
 
-func (candidate CurentRoundState) StateID() types.StateID {
+func (candidate CurrentRoundState) StateID() types.StateID {
 	var appHash tmbytes.HexBytes
 	if len(candidate.AppHash) > 0 {
 		appHash = candidate.AppHash.Copy()
@@ -172,15 +167,19 @@ func (candidate CurentRoundState) StateID() types.StateID {
 }
 
 // GetHeight returns height of current block
-func (candidate CurentRoundState) GetHeight() int64 {
+func (candidate CurrentRoundState) GetHeight() int64 {
+	if candidate.Base.LastBlockHeight == 0 {
+		return candidate.Base.InitialHeight
+	}
+
 	return candidate.Base.LastBlockHeight + 1
 }
 
-func (candidate CurentRoundState) GetProcessProposalResponse() abci.ResponseProcessProposal {
+func (candidate CurrentRoundState) GetProcessProposalResponse() abci.ResponseProcessProposal {
 	return candidate.response
 }
 
-func (candidate *CurentRoundState) populateTxResults(txResults []*abci.ExecTxResult) error {
+func (candidate *CurrentRoundState) populateTxResults(txResults []*abci.ExecTxResult) error {
 	hash, err := abci.TxResultsHash(txResults)
 	if err != nil {
 		return fmt.Errorf("marshaling TxResults: %w", err)
@@ -191,7 +190,7 @@ func (candidate *CurentRoundState) populateTxResults(txResults []*abci.ExecTxRes
 	return nil
 }
 
-func (candidate *CurentRoundState) populateChainlock(chainlockProto *types2.CoreChainLock) error {
+func (candidate *CurrentRoundState) populateChainlock(chainlockProto *tmtypes.CoreChainLock) error {
 	chainlock, err := types.CoreChainLockFromProto(chainlockProto)
 	if err != nil {
 		return err
@@ -208,7 +207,7 @@ func (candidate *CurentRoundState) populateChainlock(chainlockProto *types2.Core
 }
 
 // populateConsensusParams updates ConsensusParams, Version and LastHeightConsensusParamsChanged
-func (candidate *CurentRoundState) populateConsensusParams(updates *tmtypes.ConsensusParams) error {
+func (candidate *CurrentRoundState) populateConsensusParams(updates *tmtypes.ConsensusParams) error {
 
 	if updates == nil || updates.Equal(&tmtypes.ConsensusParams{}) {
 		candidate.NextConsensusParams = candidate.Base.ConsensusParams
@@ -237,7 +236,7 @@ func (candidate *CurentRoundState) populateConsensusParams(updates *tmtypes.Cons
 
 // populateValsetUpdates calculates and populates Validators and LastHeightValidatorsChanged
 // CONTRACT: candidate.ConsensusParams were already populated
-func (candidate *CurentRoundState) populateValsetUpdates(ctx context.Context, update *abci.ValidatorSetUpdate) error {
+func (candidate *CurrentRoundState) populateValsetUpdates(ctx context.Context, update *abci.ValidatorSetUpdate) error {
 	base := candidate.Base
 
 	newValSet, err := valsetUpdate(ctx, update, base.Validators, candidate.NextConsensusParams.Validator)
@@ -266,7 +265,6 @@ func valsetUpdate(
 ) (*types.ValidatorSet, error) {
 	err := validateValidatorSetUpdate(vu, params)
 	if err != nil {
-
 		return nil, fmt.Errorf("validating validator updates: %w", err)
 	}
 

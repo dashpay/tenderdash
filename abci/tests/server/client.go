@@ -50,22 +50,31 @@ func Commit(ctx context.Context, client abciclient.Client, hashExp []byte) error
 	return nil
 }
 
-func FinalizeBlock(ctx context.Context, client abciclient.Client, txBytes [][]byte, codeExp []uint32, dataExp []byte) error {
-	res, _ := client.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txBytes})
+func ProcessProposal(ctx context.Context, client abciclient.Client, txBytes [][]byte, codeExp []uint32, dataExp []byte) error {
+	res, _ := client.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: txBytes})
 	for i, tx := range res.TxResults {
 		code, data, log := tx.Code, tx.Data, tx.Log
 		if code != codeExp[i] {
-			fmt.Println("Failed test: FinalizeBlock")
-			fmt.Printf("FinalizeBlock response code was unexpected. Got %v expected %v. Log: %v\n",
+			fmt.Println("Failed test: ProcessProposal")
+			fmt.Printf("ProcessProposal response code was unexpected. Got %v expected %v. Log: %v\n",
 				code, codeExp, log)
-			return errors.New("FinalizeBlock error")
+			return errors.New("ProcessProposal error")
 		}
 		if !bytes.Equal(data, dataExp) {
-			fmt.Println("Failed test:  FinalizeBlock")
-			fmt.Printf("FinalizeBlock response data was unexpected. Got %X expected %X\n",
+			fmt.Println("Failed test:  ProcessProposal")
+			fmt.Printf("ProcessProposal response data was unexpected. Got %X expected %X\n",
 				data, dataExp)
-			return errors.New("FinalizeBlock  error")
+			return errors.New("ProcessProposal  error")
 		}
+	}
+	fmt.Println("Passed test: ProcessProposal")
+	return nil
+}
+
+func FinalizeBlock(ctx context.Context, client abciclient.Client, txBytes [][]byte) error {
+	_, err := client.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txBytes})
+	if err != nil {
+		return err
 	}
 	fmt.Println("Passed test: FinalizeBlock")
 	return nil

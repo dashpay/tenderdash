@@ -799,12 +799,9 @@ func (r *Reactor) gossipCommit(ctx context.Context, voteCh *p2p.Channel, rs *cst
 	}
 
 	if commit == nil {
-		//r.logger.Debug("cannot find a block",
-		//	"prs.Height", prs.Height,
-		//	"rs.Height", rs.Height,
-		//	"blockStoreBase", blockStoreBase,
-		//	"stack", string(debug.Stack()),
-		//)
+		if prs.Height == 0 {
+			return nil // not an error when we are at genesis
+		}
 		return fmt.Errorf("commit at height %d not found", prs.Height)
 	}
 

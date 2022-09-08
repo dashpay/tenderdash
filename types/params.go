@@ -237,8 +237,8 @@ func (params *ConsensusParams) Complete() {
 	}
 }
 
-func (cp ConsensusParams) IsZero() bool {
-	return cp.Equals(&ConsensusParams{})
+func (params ConsensusParams) IsZero() bool {
+	return params.Equals(&ConsensusParams{})
 }
 
 // Validate validates the ConsensusParams to ensure all values are within their

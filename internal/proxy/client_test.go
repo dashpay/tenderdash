@@ -149,9 +149,7 @@ func TestInfo(t *testing.T) {
 	sockPath := fmt.Sprintf("unix:///tmp/echo_%v.sock", tmrand.Str(6))
 	logger := log.NewNopLogger()
 	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Start server
 	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, kvstore.NewApplication())
@@ -167,9 +165,7 @@ func TestInfo(t *testing.T) {
 	resInfo, err := proxy.Info(ctx, &RequestInfo)
 	require.NoError(t, err)
 
-	if resInfo.Data != "{\"appHash\":\"\"}" {
-		t.Error("Expected ResponseInfo with one element '{\"size\":0}' but got something else")
-	}
+	require.Equal(t, `{"appHash":""}`, resInfo.Data, "Expected ResponseInfo with one element {\"appHash\":\"\"} but got something else")
 }
 
 type noopStoppableClientImpl struct {

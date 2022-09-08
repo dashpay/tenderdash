@@ -558,13 +558,8 @@ func (h *Handshaker) replayBlocks(
 		h.logger.Info("Applying block", "height", i)
 		block := h.store.LoadBlock(i)
 		// Extra check to ensure the app was not changed in a way it shouldn't have.
-		if len(appHash) > 0 {
-			if err := checkAppHashEqualsOneFromBlock(appHash, block); err != nil {
-				return nil, err
-			}
-		}
 
-		var blockExec *sm.BlockExecutor = nil
+		var blockExec *sm.BlockExecutor
 		blockExec = sm.NewBlockExecutor(h.stateStore, h.logger, appClient, emptyMempool{}, sm.EmptyEvidencePool{}, h.store, h.eventBus, sm.NopMetrics())
 
 		uncommittedState, err := blockExec.ProcessProposal(ctx, block, state, false)
@@ -582,6 +577,13 @@ func (h *Handshaker) replayBlocks(
 		appHash, _, err = sm.ExecReplayedCommitBlock(ctx, blockExec, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state, uncommittedState)
 		if err != nil {
 			return nil, err
+		}
+
+		// Extra check to ensure the app was not changed in a way it shouldn't have.
+		if len(appHash) > 0 {
+			if err := checkAppHashEqualsOneFromBlock(appHash, block); err != nil {
+				return nil, err
+			}
 		}
 
 		h.nBlocks++

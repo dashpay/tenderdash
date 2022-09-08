@@ -22,25 +22,12 @@ import (
 )
 
 func TestValidProposalChainLocks(t *testing.T) {
-	const (
-		nVals  = 4
-		nPeers = nVals
-	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	const nVals = 4
 	var initChainLockHeight uint32 = 2
-	conf := configSetup(t)
-	states, _, _, cleanup := randConsensusNetWithPeers(ctx, t,
-		conf,
-		nVals,
-		nPeers,
-		"consensus_chainlocks_test",
-		newTickerFunc(),
-		newCounterWithCoreChainLocks(initChainLockHeight, 1),
-	)
-	t.Cleanup(cleanup)
-
+	states := genConsStates(ctx, t, nVals, initChainLockHeight, 1)
 	rts := setupReactor(ctx, t, nVals, states, 100)
 
 	for i := 0; i < 3; i++ {
@@ -58,24 +45,12 @@ func TestValidProposalChainLocks(t *testing.T) {
 
 // one byz val sends a proposal for a height 1 less than it should, but then sends the correct block after it
 func TestReactorInvalidProposalHeightForChainLocks(t *testing.T) {
-	const (
-		nVals  = 4
-		nPeers = nVals
-	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	const nVals = 4
 	var initChainLockHeight uint32 = 2
-	conf := configSetup(t)
-	states, _, _, cleanup := randConsensusNetWithPeers(ctx, t,
-		conf,
-		nVals,
-		nPeers,
-		"consensus_chainlocks_test",
-		newTickerFunc(),
-		newCounterWithCoreChainLocks(initChainLockHeight, 1),
-	)
-	t.Cleanup(cleanup)
+	states := genConsStates(ctx, t, nVals, initChainLockHeight, 1)
 
 	// this proposer sends a chain lock at each height
 	byzProposerID := 0
@@ -104,25 +79,11 @@ func TestReactorInvalidProposalHeightForChainLocks(t *testing.T) {
 }
 
 func TestReactorInvalidBlockChainLock(t *testing.T) {
-	// TODO: Leads to race, explore
-	const (
-		nVals  = 4
-		nPeers = nVals
-	)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	conf := configSetup(t)
-	states, _, _, cleanup := randConsensusNetWithPeers(ctx, t,
-		conf,
-		nVals,
-		nPeers,
-		"consensus_chainlocks_test",
-		newTickerFunc(),
-		newCounterWithCoreChainLocks(100, -1),
-	)
-	t.Cleanup(cleanup)
-
+	const nVals = 4
+	states := genConsStates(ctx, t, nVals, 100, -1)
 	rts := setupReactor(ctx, t, nVals, states, 100)
 
 	for i := 0; i < 10; i++ {
@@ -261,4 +222,15 @@ func capture() {
 	trace := make([]byte, 10240000)
 	count := runtime.Stack(trace, true)
 	fmt.Printf("Stack of %d bytes: %s\n", count, trace)
+}
+
+func genConsStates(ctx context.Context, t *testing.T, nVals int, initCoreChainHeight uint32, step int32) []*State {
+	conf := configSetup(t)
+	gen := consensusNetGen{
+		cfg:     conf,
+		nVals:   nVals,
+		appFunc: newCounterWithCoreChainLocks(initCoreChainHeight, step),
+	}
+	states, _, _, _ := gen.generate(ctx, t)
+	return states
 }

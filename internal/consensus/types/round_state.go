@@ -107,7 +107,7 @@ type RoundState struct {
 	LastValidators            *types.ValidatorSet `json:"last_validators"`
 	TriggeredTimeoutPrecommit bool                `json:"triggered_timeout_precommit"`
 
-	sm.CurentRoundState `json:"uncommitted_state"`
+	sm.CurrentRoundState `json:"uncommitted_state"`
 }
 
 // RoundStateSimple is a compressed version of the RoundState for use in RPC

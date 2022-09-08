@@ -1,10 +1,8 @@
 package kvstore
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"sort"
 	"testing"
 
 	"github.com/fortytw2/leaktest"
@@ -136,16 +134,11 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 
 	// make and apply block
 	height = int64(1)
-	makeApplyBlock(ctx, t, kvstore, int(height), types.ValidatorSetUpdate{})
+	makeApplyBlock(ctx, t, kvstore, int(height))
 
 	resInfo, err = kvstore.Info(ctx, &types.RequestInfo{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if resInfo.LastBlockHeight != height {
-		t.Fatalf("expected height of %d, got %d", height, resInfo.LastBlockHeight)
-	}
-
+	require.NoError(t, err)
+	require.Equal(t, resInfo.LastBlockHeight, height, "expected height of %d, got %d", height, resInfo.LastBlockHeight)
 }
 
 // add a validator, remove a validator, update a validator
@@ -161,27 +154,18 @@ func TestValUpdates(t *testing.T) {
 	fullVals := RandValidatorSetUpdate(total)
 	initVals := RandValidatorSetUpdate(nInit)
 
+	require.NotEqual(t, fullVals.QuorumHash, initVals.QuorumHash)
+
 	// initialize with the first nInit
 	_, err := kvstore.InitChain(ctx, &types.RequestInitChain{
 		ValidatorSet: &initVals,
 	})
-	if err != nil {
-		t.Fatal(err)
-	}
-
-	kvVals, err := kvstore.ValidatorSet()
 	require.NoError(t, err)
-	valSetEqualTest(t, kvVals, &initVals)
-
-	tx, err := MarshalValidatorSetUpdate(&fullVals)
-	require.NoError(t, err)
-
-	// change the validator set to the full validator set
-	makeApplyBlock(ctx, t, kvstore, 1, fullVals, tx)
-
-	kvVals, err = kvstore.ValidatorSet()
-	require.NoError(t, err)
-	valSetEqualTest(t, &fullVals, kvVals)
+	kvstore.AddValidatorSetUpdate(fullVals, 2)
+	resp, _ := makeApplyBlock(ctx, t, kvstore, 1)
+	require.Equal(t, initVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
+	resp, _ = makeApplyBlock(ctx, t, kvstore, 2)
+	require.Equal(t, fullVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
 }
 
 func makeApplyBlock(
@@ -189,8 +173,8 @@ func makeApplyBlock(
 	t *testing.T,
 	kvstore types.Application,
 	heightInt int,
-	diff types.ValidatorSetUpdate,
-	txs ...[]byte) {
+	txs ...[]byte,
+) (*types.ResponseProcessProposal, *types.ResponseFinalizeBlock) {
 	// make and apply block
 	height := int64(heightInt)
 	hash := []byte("foo")
@@ -215,40 +199,7 @@ func makeApplyBlock(
 
 	_, err = kvstore.Commit(ctx)
 	require.NoError(t, err)
-
-	valSetEqualTest(t, &diff, respProcessProposal.ValidatorSetUpdate)
-}
-
-// order doesn't matter
-func valsEqualTest(t *testing.T, vals1, vals2 []types.ValidatorUpdate) {
-	t.Helper()
-
-	require.Equal(t, len(vals1), len(vals2), "vals dont match in len. got %d, expected %d", len(vals2), len(vals1))
-	sort.Sort(types.ValidatorUpdates(vals1))
-	sort.Sort(types.ValidatorUpdates(vals2))
-	for i, v1 := range vals1 {
-		v2 := vals2[i]
-		if !v1.PubKey.Equal(v2.PubKey) ||
-			v1.Power != v2.Power {
-			t.Fatalf("vals dont match at index %d. got %X/%d , expected %X/%d", i, v2.PubKey, v2.Power, v1.PubKey, v1.Power)
-		}
-	}
-}
-
-func valSetEqualTest(t *testing.T, vals1, vals2 *types.ValidatorSetUpdate) {
-	t.Helper()
-
-	valsEqualTest(t, vals1.ValidatorUpdates, vals2.ValidatorUpdates)
-	require.True(t,
-		vals1.ThresholdPublicKey.Equal(vals2.ThresholdPublicKey),
-		"val set threshold public key did not match. got %X, expected %X",
-		vals1.ThresholdPublicKey, vals2.ThresholdPublicKey,
-	)
-	require.True(t,
-		bytes.Equal(vals1.QuorumHash, vals2.QuorumHash),
-		"val set quorum hash did not match. got %X, expected %X",
-		vals1.QuorumHash, vals2.QuorumHash,
-	)
+	return respProcessProposal, resFinalizeBlock
 }
 
 func makeSocketClientServer(

@@ -36,34 +36,27 @@ func TestMempoolNoProgressUntilTxsAvailable(t *testing.T) {
 	defer cancel()
 
 	baseConfig := configSetup(t)
-	for proofBlockRange := int64(1); proofBlockRange <= 3; proofBlockRange++ {
-		t.Logf("Checking proof block range %d", proofBlockRange)
-		config, err := ResetConfig(t.TempDir(), "consensus_mempool_txs_available_test")
-		require.NoError(t, err)
-		t.Cleanup(func() { _ = os.RemoveAll(config.RootDir) })
+	config, err := ResetConfig(t.TempDir(), "consensus_mempool_txs_available_test")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = os.RemoveAll(config.RootDir) })
 
-		config.Consensus.CreateEmptyBlocks = false
-		config.Consensus.CreateProofBlockRange = proofBlockRange
+	config.Consensus.CreateEmptyBlocks = false
 
-		state, privVals := makeGenesisState(ctx, t, baseConfig, genesisStateArgs{
-			Validators: 1,
-			Power:      types.DefaultDashVotingPower,
-			Params:     factory.ConsensusParams()})
-		cs := newStateWithConfig(ctx, t, log.NewNopLogger(), config, state, privVals[0], NewCounterApplication())
-		assertMempool(t, cs.txNotifier).EnableTxsAvailable()
-		height, round := cs.Height, cs.Round
-		newBlockCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
-		startTestRound(ctx, cs, height, round)
+	state, privVals := makeGenesisState(ctx, t, baseConfig, genesisStateArgs{
+		Validators: 1,
+		Power:      types.DefaultDashVotingPower,
+		Params:     factory.ConsensusParams()})
+	cs := newStateWithConfig(ctx, t, log.NewNopLogger(), config, state, privVals[0], NewCounterApplication())
+	assertMempool(t, cs.txNotifier).EnableTxsAvailable()
+	height, round := cs.Height, cs.Round
+	newBlockCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
+	startTestRound(ctx, cs, height, round)
 
-		ensureNewEventOnChannel(t, newBlockCh) // first block gets committed
-		ensureNoNewEventOnChannel(t, newBlockCh)
-		checkTxsRange(ctx, t, cs, 0, 1)
-		ensureNewEventOnChannel(t, newBlockCh) // commit txs
-		for i := int64(0); i < proofBlockRange; i++ {
-			ensureNewEventOnChannel(t, newBlockCh) // commit updated app hash
-		}
-		ensureNoNewEventOnChannel(t, newBlockCh)
-	}
+	ensureNewEventOnChannel(t, newBlockCh) // first block gets committed
+	ensureNoNewEventOnChannel(t, newBlockCh)
+	checkTxsRange(ctx, t, cs, 0, 1)
+	ensureNewEventOnChannel(t, newBlockCh) // commit txs
+	ensureNoNewEventOnChannel(t, newBlockCh)
 }
 
 func TestMempoolProgressAfterCreateEmptyBlocksInterval(t *testing.T) {
@@ -209,6 +202,7 @@ func TestMempoolRmBadTx(t *testing.T) {
 	resProcess, err := app.ProcessProposal(ctx, &abci.RequestProcessProposal{
 		Txs: [][]byte{txBytes},
 	})
+	require.NoError(t, err)
 	resFinalize, err := app.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Txs: [][]byte{txBytes}})
 	require.NoError(t, err)
 	assert.False(t, resProcess.TxResults[0].IsErr(), fmt.Sprintf("expected no error. got %v", resFinalize))
