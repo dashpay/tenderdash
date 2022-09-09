@@ -4,18 +4,23 @@ title: Overview and basic concepts
 ---
 
 ## Outline
-- [ABCI++ vs. ABCI](#abci-vs-abci)
-- [Methods overview](#methods-overview)
-  - [Consensus methods](#consensus-methods)
-  - [Mempool methods](#mempool-methods)
-  - [Info methods](#info-methods)
-  - [State-sync methods](#state-sync-methods)
-- [Next-block execution vs. same-block execution](#next-block-execution-vs-same-block-execution)
-  - [Tendermint timeouts](#tendermint-timeouts-in-same-block-execution)
-- [Determinism](#determinism)
-- [Errors](#errors)
-- [Events](#events)
-- [Evidence](#evidence)
+1. [Outline](#outline)
+2. [ABCI++ vs. ABCI](#abci-vs-abci)
+3. [Methods overview](#methods-overview)
+   1. [Consensus/block execution methods](#consensusblock-execution-methods)
+   2. [Mempool methods](#mempool-methods)
+   3. [Info methods](#info-methods)
+   4. [State-sync methods](#state-sync-methods)
+   5. [Other methods](#other-methods)
+4. [Next-block execution vs. same-block execution](#next-block-execution-vs-same-block-execution)
+   1. [Tendermint timeouts in same-block execution](#tendermint-timeouts-in-same-block-execution)
+5. [Determinism](#determinism)
+6. [Errors](#errors)
+   1. [`CheckTx`](#checktx)
+   2. [`TxResult` (as part of `FinalizeBlock`)](#txresult-as-part-of-finalizeblock)
+   3. [`Query`](#query)
+7. [Events](#events)
+8. [Evidence](#evidence)
 
 # Overview and basic concepts
 
@@ -61,11 +66,10 @@ SHOULD accept a prepared proposal passed via `ProcessProposal`, even if a part o
 the proposal is invalid (e.g., an invalid transaction); the Application can
 ignore the invalid part of the prepared proposal at block execution time.
 
-* [**ExtendVote:**](./abci++_methods_002_draft.md#extendvote) It allows applications to force their validators to do more than just validate within consensus. `ExtendVote` allows applications to include deterministic and non-deterministic data, opaque to Tendermint, to precommit messages (the final round of voting).
+* [**ExtendVote:**](./abci++_methods_002_draft.md#extendvote) It allows applications to force their validators to do more than just validate within consensus. `ExtendVote` allows applications to include deterministic and non-deterministic data, opaque to Tendermint, to precommit messages (the final round of voting.
 The data, called _vote extensions_, will also be made available to the
 application in the next height, along with the vote it is extending, in the rounds
 where the local process is the proposer.
-Instead of Tendermint where the vote extensions are `ExtendVoteExtension` array.
 ExtendVote call should return the `ExtendVoteExtension` list, where each element is an object with two attributes: a type and
 bytes array.
 If the Application does not have vote extensions to provide, it returns an empty array as its vote extensions.
@@ -74,7 +78,7 @@ Tendermint calls `ExtendVote` when is about to send a non-`nil` precommit messag
 by Tendermint. This has a negative impact on Tendermint's liveness, i.e., if vote extensions repeatedly cannot be verified by correct validators, Tendermint may not be able to finalize a block even if sufficiently many (+2/3) of the validators send precommit votes for that block. Thus, `VerifyVoteExtension` should be used with special care.
 As a general rule, an Application that detects an invalid vote extension SHOULD
 accept it in `ResponseVerifyVoteExtension` and ignore it in its own logic. Tendermint calls it when
-a process receives a precommit message with a (possibly empty) vote extensions.
+a process receives a precommit message with a (possibly empty) vote extension.
 
 * [**FinalizeBlock:**](./abci++_methods_002_draft.md#finalizeblock) It delivers a decided block to the Application. The Application must execute the transactions in the block in order and update its state accordingly. Cryptographic commitments to the block and transaction results, via the corresponding
 parameters in `ResponseFinalizeBlock`, are included in the header of the next block. Tendermint calls it when a new block is decided.
@@ -131,6 +135,7 @@ More details on managing state across connections can be found in the section on
 [ABCI Applications](../abci/apps.md).
 
 ## Next-block execution vs. same-block execution
+
 [&uparrow; Back to Outline](#outline)
 
 In the original ABCI protocol, the only moment when the Application had access to a
@@ -143,8 +148,7 @@ previous block, namely:
 * the consensus parameter updates
 * the validator updates
 
-With ABCI++, an Application may decide to keep using the next-block execution model, by doing all its processing in `FinalizeBlock`;
-however the new methods introduced, `PrepareProposal` and `ProcessProposal` allow
+With ABCI++, new methods introduced, `PrepareProposal` and `ProcessProposal` allow
 for a new execution model, called _same-block execution_. An Application implementing
 this execution model, upon receiving a raw proposal via `RequestPrepareProposal`
 and potentially modifying its transaction list,
@@ -163,20 +167,6 @@ The results of the block execution are used as follows:
   `ResponsePrepareProposal` and reflect the result of the prepared proposal's
   execution. They come into force in height H+1 (as opposed to the H+2 rule
   in next-block execution model).
-
-If the Application decides to keep the next-block execution model, it will not
-provide any data in `ResponsePrepareProposal`, other than an optionally modified
-transaction list.
-
-In the long term, the execution model will be set in a new boolean parameter
-*same_block* in `ConsensusParams`.
-It **must not** be changed once the blockchain has started unless the Application
-developers _really_ know what they are doing.
-However, modifying `ConsensusParams` structure cannot be done lightly if we are to
-preserve blockchain compatibility. Therefore we need an interim solution until
-soft upgrades are specified and implemented in Tendermint. This somewhat _unsafe_
-solution consists in Tendermint assuming same-block execution if the Application
-fills the above mentioned fields in `ResponsePrepareProposal`.
 
 ### Tendermint timeouts in same-block execution
 
@@ -197,6 +187,7 @@ Currently, the Application can override the value of _TimeoutPropose_ via the
 with the current _TimeoutPropose_ value so that the Application can adapt it at every height.
 
 ## Determinism
+
 [&uparrow; Back to Outline](#outline)
 
 ABCI++ applications must implement deterministic finite-state machines to be
@@ -217,7 +208,7 @@ transactions and compute the same results.
 Some Applications may choose to execute the blocks that are about to be proposed
 (via `PrepareProposal`), or those that the Application is asked to validate
 (via `ProcessProposal`). However, the state changes caused by processing those
-proposed blocks must never replace the previous state until `FinalizeBlock` confirms
+proposed blocks must never replace the previous state until `FinalizeBlock` and `Commit` confirms
 the block decided.
 
 Additionally, vote extensions or the validation thereof (via `ExtendVote` or
@@ -255,6 +246,7 @@ that are not included in block header computations, so we don't need agreement
 on them. All other fields in the `Response*` must be strictly deterministic.
 
 ## Errors
+
 [&uparrow; Back to Outline](#outline)
 
 The `Query`, and `CheckTx` methods include a `Code` field in their `Response*`.
@@ -303,6 +295,7 @@ When Tendermint receives a `ResponseQuery` with a non-zero `Code`, this code is
 returned directly to the client that initiated the query.
 
 ## Events
+
 [&uparrow; Back to Outline](#outline)
 
 Method `CheckTx` includes an `Events` field in its `Response*`.
@@ -380,6 +373,7 @@ Example:
 ```
 
 ## Evidence
+
 [&uparrow; Back to Outline](#outline)
 
 Tendermint's security model relies on the use of "evidence". Evidence is proof of
