@@ -139,7 +139,7 @@ title: Methods
     | info       | string                                                      | Additional information. **May be non-deterministic.**                 | 4            |
     | gas_wanted | int64                                                       | Amount of gas requested for transaction.                              | 5            |
     | gas_used   | int64                                                       | Amount of gas consumed by transaction.                                | 6            |
-    | events     | repeated [Event](abci++_basic_concepts_002_draft.md#events) | Type & Key-Value events for indexing transactions (eg. by account).   | 7            |
+    | events     | repeated [Event](abci++_basic_concepts.md#events) | Type & Key-Value events for indexing transactions (eg. by account).   | 7            |
     | codespace  | string                                                      | Namespace for the `code`.                                             | 8            |
     | sender     | string                                                      | The transaction's sender (e.g. the signer)                            | 9            |
     | priority   | int64                                                       | The transaction's priority (for mempool ordering)                     | 10           |
@@ -393,7 +393,7 @@ Note that, if _p_ has a non-`nil` _validValue_, Tendermint will use it as propos
     * The implementation of `ProcessProposal` MUST be deterministic. Moreover, the value of
       `ResponseProcessProposal.status` MUST **exclusively** depend on the parameters passed in
       the call to `RequestProcessProposal`, and the last committed Application state
-      (see [Requirements](abci++_app_requirements_002_draft.md) section).
+      (see [Requirements](abci++_app_requirements.md) section).
     * Moreover, application implementors SHOULD always set `ResponseProcessProposal.status` to `ACCEPT`,
       unless they _really_ know what the potential liveness implications of returning `REJECT` are.
 
@@ -491,12 +491,12 @@ a [CanonicalVoteExtension](#canonicalvoteextension) field in the `precommit nil`
       that the Application running at the process that sent the vote chose not to extend it.
       Tendermint will always call `RequestVerifyVoteExtension`, even for 0 length vote extensions.
     * If `ResponseVerifyVoteExtension.status` is `REJECT`, Tendermint will reject the whole received vote.
-      See the [Requirements](abci++_app_requirements_002_draft.md) section to understand the potential
+      See the [Requirements](abci++_app_requirements.md) section to understand the potential
       liveness implications of this.
     * The implementation of `VerifyVoteExtension` MUST be deterministic. Moreover, the value of
       `ResponseVerifyVoteExtension.status` MUST **exclusively** depend on the parameters passed in
       the call to `RequestVerifyVoteExtension`, and the last committed Application state
-      (see [Requirements](abci++_app_requirements_002_draft.md) section).
+      (see [Requirements](abci++_app_requirements.md) section).
     * Moreover, application implementers SHOULD always set `ResponseVerifyVoteExtension.status` to `ACCEPT`,
       unless they _really_ know what the potential liveness implications of returning `REJECT` are.
 
@@ -762,7 +762,7 @@ enum VoteExtensionType {
     | info       | string                                                      | Additional information. **May be non-deterministic.**                 | 4            |
     | gas_wanted | int64                                                       | Amount of gas requested for transaction.                              | 5            |
     | gas_used   | int64                                                       | Amount of gas consumed by transaction.                                | 6            |
-    | events     | repeated [Event](abci++_basic_concepts_002_draft.md#events) | Type & Key-Value events for indexing transactions (e.g. by account).  | 7            |
+    | events     | repeated [Event](abci++_basic_concepts.md#events) | Type & Key-Value events for indexing transactions (e.g. by account).  | 7            |
     | codespace  | string                                                      | Namespace for the `code`.                                             | 8            |
 
 ### TxAction

@@ -126,7 +126,7 @@ as a general rule, `VerifyVoteExtension` _should_ always accept the vote extensi
   not modify $s_{p,h-1}$.
 
 * Requirement 11 [`ExtendVote`, `FinalizeBlock`, non-dependency]: for any correct process $p$,
-and any vote extension $e$ that $p$ received at height $h$, the computation of
+and any vote extensions $e$ that $p$ received at height $h$, the computation of
 $s_{p,h}$ does not depend on $e$.
 
 The call to correct process $p$'s `RequestFinalizeBlock` at height $h$, with block $v_{p,h}$

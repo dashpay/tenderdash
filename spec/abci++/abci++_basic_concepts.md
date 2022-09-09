@@ -44,12 +44,12 @@ block, resulting in an updated Application state.
 During consensus execution of a block height, before method `FinalizeBlock` is
 called, methods `PrepareProposal`, `ProcessProposal`, `ExtendVote`, and
 `VerifyVoteExtension` may be called several times.
-See [Tendermint's expected behavior](abci++_tmint_expected_behavior_002_draft.md)
+See [Tendermint's expected behavior](abci++_tmint_expected_behavior.md)
 for details on the possible call sequences of these methods.
 
-* [**InitChain:**](./abci++_methods_002_draft.md#initchain) This method initializes the blockchain. Tendermint calls it once upon genesis.
+* [**InitChain:**](./abci++_methods.md#initchain) This method initializes the blockchain. Tendermint calls it once upon genesis.
 
-* [**PrepareProposal:**](./abci++_methods_002_draft.md#prepareproposal) It allows the block proposer to perform application-dependent work in a block before using it as its proposal. This enables, for instance, batch optimizations to a block, which has been empirically demonstrated to be a key component for scaling. Method `PrepareProposal` is called every time Tendermint is about to send
+* [**PrepareProposal:**](./abci++_methods.md#prepareproposal) It allows the block proposer to perform application-dependent work in a block before using it as its proposal. This enables, for instance, batch optimizations to a block, which has been empirically demonstrated to be a key component for scaling. Method `PrepareProposal` is called every time Tendermint is about to send
 a proposal message, but no previous proposal has been locked at Tendermint level.
 Tendermint gathers outstanding transactions from the mempool, generates a block header, and uses
 them to create a block to propose. Then, it calls `RequestPrepareProposal`
@@ -58,7 +58,7 @@ make changes to the raw proposal, such as modifying transactions, and returns
 the (potentially) modified proposal, called _prepared proposal_ in the
 `Response*` call. The logic modifying the raw proposal can be non-deterministic.
 
-* [**ProcessProposal:**](./abci++_methods_002_draft.md#processproposal) It allows a validator to perform application-dependent work in a proposed block. This enables features such as allowing validators to reject a block according to whether the state machine deems it valid, and changing the block execution pipeline. Tendermint calls it when it receives a proposal and it is not locked on a block. The Application cannot
+* [**ProcessProposal:**](./abci++_methods.md#processproposal) It allows a validator to perform application-dependent work in a proposed block. This enables features such as allowing validators to reject a block according to whether the state machine deems it valid, and changing the block execution pipeline. Tendermint calls it when it receives a proposal and it is not locked on a block. The Application cannot
 modify the proposal at this point but can reject it if it realizes it is invalid.
 If that is the case, Tendermint will prevote `nil` on the proposal, which has
 strong liveness implications for Tendermint. As a general rule, the Application
@@ -66,7 +66,7 @@ SHOULD accept a prepared proposal passed via `ProcessProposal`, even if a part o
 the proposal is invalid (e.g., an invalid transaction); the Application can
 ignore the invalid part of the prepared proposal at block execution time.
 
-* [**ExtendVote:**](./abci++_methods_002_draft.md#extendvote) It allows applications to force their validators to do more than just validate within consensus. `ExtendVote` allows applications to include deterministic and non-deterministic data, opaque to Tendermint, to precommit messages (the final round of voting.
+* [**ExtendVote:**](./abci++_methods.md#extendvote) It allows applications to force their validators to do more than just validate within consensus. `ExtendVote` allows applications to include deterministic and non-deterministic data, opaque to Tendermint, to precommit messages (the final round of voting.
 The data, called _vote extensions_, will also be made available to the
 application in the next height, along with the vote it is extending, in the rounds
 where the local process is the proposer.
@@ -74,24 +74,24 @@ ExtendVote call should return the `ExtendVoteExtension` list, where each element
 bytes array.
 If the Application does not have vote extensions to provide, it returns an empty array as its vote extensions.
 Tendermint calls `ExtendVote` when is about to send a non-`nil` precommit message.
-* [**VerifyVoteExtension:**](./abci++_methods_002_draft.md#verifyvoteextension) It allows validators to validate the vote extensions data attached to a precommit message. If the validation fails, the precommit message will be deemed invalid and ignored
+* [**VerifyVoteExtension:**](./abci++_methods.md#verifyvoteextension) It allows validators to validate the vote extensions data attached to a precommit message. If the validation fails, the precommit message will be deemed invalid and ignored
 by Tendermint. This has a negative impact on Tendermint's liveness, i.e., if vote extensions repeatedly cannot be verified by correct validators, Tendermint may not be able to finalize a block even if sufficiently many (+2/3) of the validators send precommit votes for that block. Thus, `VerifyVoteExtension` should be used with special care.
 As a general rule, an Application that detects an invalid vote extension SHOULD
 accept it in `ResponseVerifyVoteExtension` and ignore it in its own logic. Tendermint calls it when
-a process receives a precommit message with a (possibly empty) vote extension.
+a process receives a precommit message with a (possibly empty) vote extensions.
 
-* [**FinalizeBlock:**](./abci++_methods_002_draft.md#finalizeblock) It delivers a decided block to the Application. The Application must execute the transactions in the block in order and update its state accordingly. Cryptographic commitments to the block and transaction results, via the corresponding
+* [**FinalizeBlock:**](./abci++_methods.md#finalizeblock) It delivers a decided block to the Application. The Application must execute the transactions in the block in order and update its state accordingly. Cryptographic commitments to the block and transaction results, via the corresponding
 parameters in `ResponseFinalizeBlock`, are included in the header of the next block. Tendermint calls it when a new block is decided.
 
 ### Mempool methods
 
-* [**CheckTx:**](./abci++_methods_002_draft.md#checktx) This method allows the Application to validate transactions against its current state, e.g., checking signatures and account balances. If a transaction passes the validation, then tendermint adds it to its local mempool, discarding it otherwise. Tendermint calls it when it receives a new transaction either coming from an external user or another node. Furthermore, Tendermint can be configured to re-call `CheckTx` on any decided transaction (after `FinalizeBlock`).
+* [**CheckTx:**](./abci++_methods.md#checktx) This method allows the Application to validate transactions against its current state, e.g., checking signatures and account balances. If a transaction passes the validation, then tendermint adds it to its local mempool, discarding it otherwise. Tendermint calls it when it receives a new transaction either coming from an external user or another node. Furthermore, Tendermint can be configured to re-call `CheckTx` on any decided transaction (after `FinalizeBlock`).
 
 ### Info methods
 
-* [**Info:**](./abci++_methods_002_draft.md#info) Used to sync Tendermint with the Application during a handshake that happens on startup.
+* [**Info:**](./abci++_methods.md#info) Used to sync Tendermint with the Application during a handshake that happens on startup.
 
-* [**Query:**](./abci++_methods_002_draft.md#query) Clients can use this method to query the Application for information about the application state.
+* [**Query:**](./abci++_methods.md#query) Clients can use this method to query the Application for information about the application state.
 
 ### State-sync methods
 
@@ -102,7 +102,7 @@ state machine snapshots instead of replaying historical blocks. For more details
 New nodes will discover and request snapshots from other nodes in the P2P network.
 A Tendermint node that receives a request for snapshots from a peer will call
 `ListSnapshots` on its Application. The Application returns the list of locally avaiable snapshots.
-Note that the list does not contain the actual snapshot but metadata about it: height at which the snapshot was taken, application-specific verification data and more (see [snapshot data type](./abci++_methods_002_draft.md#snapshot) for more details). After receiving a list of available snapshots from a peer, the new node can offer any of the snapshots in the list to its local Application via the `OfferSnapshot` method. The Application can check at this point the validity of the snapshot metadata.
+Note that the list does not contain the actual snapshot but metadata about it: height at which the snapshot was taken, application-specific verification data and more (see [snapshot data type](./abci++_methods.md#snapshot) for more details). After receiving a list of available snapshots from a peer, the new node can offer any of the snapshots in the list to its local Application via the `OfferSnapshot` method. The Application can check at this point the validity of the snapshot metadata.
 
 Snapshots may be quite large and are thus broken into smaller "chunks" that can be
 assembled into the whole snapshot. Once the Application accepts a snapshot and
@@ -118,18 +118,18 @@ To ensure that the sync proceeded correctly, Tendermint compares the local Appli
 
 In summary:
 
-* [**ListSnapshots:**](./abci++_methods_002_draft.md#listsnapshots) Used by nodes to discover available snapshots on peers.
+* [**ListSnapshots:**](./abci++_methods.md#listsnapshots) Used by nodes to discover available snapshots on peers.
 
-* [**LoadSnapshotChunk:**](./abci++_methods_002_draft.md#loadsnapshotchunk) Used by Tendermint to retrieve snapshot chunks from the application to send to peers.
+* [**LoadSnapshotChunk:**](./abci++_methods.md#loadsnapshotchunk) Used by Tendermint to retrieve snapshot chunks from the application to send to peers.
 
-* [**OfferSnapshot:**](./abci++_methods_002_draft.md#offersnapshot) When a node receives a snapshot from a peer, Tendermint uses this method to offer the snapshot to the Application.
+* [**OfferSnapshot:**](./abci++_methods.md#offersnapshot) When a node receives a snapshot from a peer, Tendermint uses this method to offer the snapshot to the Application.
 
-* [**ApplySnapshotChunk:**](./abci++_methods_002_draft.md#applysnapshotchunk) Used by Tendermint to hand snapshot chunks to the Application.
+* [**ApplySnapshotChunk:**](./abci++_methods.md#applysnapshotchunk) Used by Tendermint to hand snapshot chunks to the Application.
 
 ### Other methods
 
-Additionally, there is a [**Flush**](./abci++_methods_002_draft.md#flush) method that is called on every connection,
-and an [**Echo**](./abci++_methods_002_draft.md#echo) method that is just for debugging.
+Additionally, there is a [**Flush**](./abci++_methods.md#flush) method that is called on every connection,
+and an [**Echo**](./abci++_methods.md#echo) method that is just for debugging.
 
 More details on managing state across connections can be found in the section on
 [ABCI Applications](../abci/apps.md).
