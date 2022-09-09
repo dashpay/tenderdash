@@ -1059,18 +1059,18 @@ type badApp struct {
 	onlyLastHashIsWrong bool
 }
 
-func (app *badApp) FinalizeBlock(_ context.Context, _ *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
+func (app *badApp) ProcessProposal(_ context.Context, _ *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
 	app.height++
 	if app.onlyLastHashIsWrong {
 		if app.height == app.numBlocks {
-			return &abci.ResponseFinalizeBlock{AppHash: tmrand.Bytes(32)}, nil
+			return &abci.ResponseProcessProposal{AppHash: tmrand.Bytes(32)}, nil
 		}
-		return &abci.ResponseFinalizeBlock{AppHash: []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-			0, 0, 0, 0, 0, 0, 0, 0, app.height}}, nil
+		appHash := make([]byte, crypto.DefaultAppHashSize)
+		appHash[crypto.DefaultAppHashSize-1] = app.height
+		return &abci.ResponseProcessProposal{AppHash: appHash}, nil
 	} else if app.allHashesAreWrong {
-		return &abci.ResponseFinalizeBlock{AppHash: tmrand.Bytes(32)}, nil
+		return &abci.ResponseProcessProposal{AppHash: tmrand.Bytes(32)}, nil
 	}
-
 	panic("either allHashesAreWrong or onlyLastHashIsWrong must be set")
 }
 

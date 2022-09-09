@@ -13,6 +13,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
+	"github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/rpc/coretypes"
 )
 
@@ -69,7 +70,7 @@ func TestBlockchainInfo(t *testing.T) {
 }
 
 func TestBlockResults(t *testing.T) {
-	results := &tmstate.ABCIResponses{
+	results := state.ABCIResponses{
 		FinalizeBlock: &abci.ResponseFinalizeBlock{},
 		ProcessProposal: &abci.ResponseProcessProposal{
 			TxResults: []*abci.ExecTxResult{
@@ -82,7 +83,7 @@ func TestBlockResults(t *testing.T) {
 
 	env := &Environment{}
 	env.StateStore = sm.NewStore(dbm.NewMemDB())
-	err := env.StateStore.SaveFinalizeBlockResponses(100, results)
+	err := env.StateStore.SaveABCIResponses(100, results)
 	require.NoError(t, err)
 	mockstore := &mocks.BlockStore{}
 	mockstore.On("Height").Return(int64(100))

@@ -196,11 +196,11 @@ var infoCmd = &cobra.Command{
 }
 
 var prepareBlockCmd = &cobra.Command{
-	Use:   "prepare_block",
+	Use:   "prepare_proposal",
 	Short: "deliver a block of transactions to the application and get app-hash of a new state",
 	Long:  "deliver a block of transactions to the application and get app-hash of a new state",
 	Args:  cobra.MinimumNArgs(2),
-	RunE:  cmdPrepareBlock,
+	RunE:  cmdPrepareProposal,
 }
 
 var finalizeBlockCmd = &cobra.Command{
@@ -332,7 +332,7 @@ func cmdTest(cmd *cobra.Command, args []string) error {
 			func() error { return servertest.InitChain(ctx, client) },
 			func() error { return servertest.Commit(ctx, client) },
 			func() error {
-				return servertest.ProcessProposal(ctx, client, [][]byte{
+				return servertest.ProcessProposal(ctx, client, types.ResponseProcessProposal_ACCEPT, [][]byte{
 					[]byte("abc"),
 				}, []uint32{
 					code.CodeTypeBadNonce,
@@ -343,7 +343,7 @@ func cmdTest(cmd *cobra.Command, args []string) error {
 			},
 			func() error { return servertest.Commit(ctx, client) },
 			func() error {
-				return servertest.ProcessProposal(ctx, client, [][]byte{
+				return servertest.ProcessProposal(ctx, client, types.ResponseProcessProposal_ACCEPT, [][]byte{
 					{0x00},
 				}, []uint32{
 					code.CodeTypeOK,
@@ -356,7 +356,7 @@ func cmdTest(cmd *cobra.Command, args []string) error {
 				return servertest.Commit(ctx, client)
 			},
 			func() error {
-				return servertest.ProcessProposal(ctx, client, [][]byte{
+				return servertest.ProcessProposal(ctx, client, types.ResponseProcessProposal_ACCEPT, [][]byte{
 					{0x00},
 					{0x01},
 					{0x00, 0x02},
@@ -384,14 +384,14 @@ func cmdTest(cmd *cobra.Command, args []string) error {
 				}, nil)
 			},
 			func() error {
-				return servertest.ProcessProposal(ctx, client, [][]byte{
+				return servertest.ProcessProposal(ctx, client, types.ResponseProcessProposal_ACCEPT, [][]byte{
 					{0x01},
-				}, types.ResponseProcessProposal_ACCEPT)
+				}, []uint32{}, nil, nil)
 			},
 			func() error {
 				return servertest.FinalizeBlock(ctx, client, nil)
 			},
-			func() error { return servertest.Commit(ctx, client, []byte{0, 0, 0, 0, 0, 0, 0, 5}) },
+			func() error { return servertest.Commit(ctx, client) },
 		})
 }
 
@@ -484,8 +484,10 @@ func muxOnCommands(cmd *cobra.Command, pArgs []string) error {
 		return cmdCheckTx(cmd, actualArgs)
 	case "commit":
 		return cmdCommit(cmd, actualArgs)
-	case "prepare_block":
-		return cmdPrepareBlock(cmd, actualArgs)
+	case "prepare_proposal":
+		return cmdPrepareProposal(cmd, actualArgs)
+	case "process_proposal":
+		return cmdProcessProposal(cmd, actualArgs)
 	case "finalize_block":
 		return cmdFinalizeBlock(cmd, actualArgs)
 	case "echo":
@@ -494,10 +496,6 @@ func muxOnCommands(cmd *cobra.Command, pArgs []string) error {
 		return cmdInfo(cmd, actualArgs)
 	case "query":
 		return cmdQuery(cmd, actualArgs)
-	case "prepare_proposal":
-		return cmdPrepareProposal(cmd, actualArgs)
-	case "process_proposal":
-		return cmdProcessProposal(cmd, actualArgs)
 	default:
 		return cmdUnimplemented(cmd, pArgs)
 	}
@@ -588,19 +586,9 @@ func cmdFinalizeBlock(cmd *cobra.Command, args []string) error {
 	if err != nil {
 		return err
 	}
-	resps := make([]response, 0, len(res.TxResults)+1)
-	for _, tx := range res.TxResults {
-		resps = append(resps, response{
-			Code: tx.Code,
-			Data: tx.Data,
-			Info: tx.Info,
-			Log:  tx.Log,
-		})
-	}
-	resps = append(resps, response{
-		Data: res.AppHash,
+	printResponse(cmd, args, response{
+		Data: []byte(res.String()),
 	})
-	printResponse(cmd, args, resps...)
 	return nil
 }
 
@@ -687,30 +675,13 @@ func inTxArray(txByteArray [][]byte, tx []byte) bool {
 }
 
 func cmdPrepareProposal(cmd *cobra.Command, args []string) error {
-	if len(args) == 0 {
-		printResponse(cmd, args, response{
-			Code: codeBad,
-			Log:  "Must provide at least one transaction",
-		})
-		return nil
-	}
-	height, err := strconv.Atoi(args[0])
+	height, txsBytesArray, err := processProposalArgs(args)
 	if err != nil {
-		return err
+		panic(err)
 	}
-
-	txsBytesArray := make([][]byte, len(args)-1)
-
-	for i, arg := range args[1:] {
-		txBytes, err := stringOrHexToBytes(arg)
-		if err != nil {
-			return err
-		}
-		txsBytesArray[i] = txBytes
-	}
-
 	res, err := client.PrepareProposal(cmd.Context(), &types.RequestPrepareProposal{
-		Txs: txsBytesArray,
+		Height: height,
+		Txs:    txsBytesArray,
 		// kvstore has to have this parameter in order not to reject a tx as the default value is 0
 		MaxTxBytes: 65536,
 	})
@@ -718,6 +689,9 @@ func cmdPrepareProposal(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	resps := make([]response, 0, len(res.TxResults)+1)
+	resps = append(resps, response{
+		Data: []byte(fmt.Sprintf(`{"appHash":"%X"}`, res.AppHash)),
+	})
 	for _, tx := range res.TxRecords {
 		existingTx := inTxArray(txsBytesArray, tx.Tx)
 		if tx.Action == types.TxRecord_UNKNOWN ||
@@ -740,24 +714,19 @@ func cmdPrepareProposal(cmd *cobra.Command, args []string) error {
 }
 
 func cmdProcessProposal(cmd *cobra.Command, args []string) error {
-	txsBytesArray := make([][]byte, len(args))
-
-	for i, arg := range args {
-		txBytes, err := stringOrHexToBytes(arg)
-		if err != nil {
-			return err
-		}
-		txsBytesArray[i] = txBytes
+	height, txsBytesArray, err := processProposalArgs(args)
+	if err != nil {
+		panic(err)
 	}
-
 	res, err := client.ProcessProposal(cmd.Context(), &types.RequestProcessProposal{
-		Txs: txsBytesArray,
+		Height: height,
+		Txs:    txsBytesArray,
 	})
 	if err != nil {
 		return err
 	}
-
 	printResponse(cmd, args, response{
+		Data:   []byte(fmt.Sprintf(`{"appHash":"%X"}`, res.AppHash)),
 		Status: int32(res.Status),
 	})
 	return nil
@@ -858,4 +827,23 @@ func stringOrHexToBytes(s string) ([]byte, error) {
 	}
 
 	return []byte(s[1 : len(s)-1]), nil
+}
+
+func processProposalArgs(args []string) (int64, [][]byte, error) {
+	if len(args) == 0 {
+		return 0, nil, errors.New("must provide a block height and at least one transaction")
+	}
+	height, err := strconv.Atoi(args[0])
+	if err != nil {
+		return 0, nil, err
+	}
+	txsBytesArray := make([][]byte, len(args)-1)
+	for i, arg := range args[1:] {
+		txBytes, err := stringOrHexToBytes(arg)
+		if err != nil {
+			return 0, nil, err
+		}
+		txsBytesArray[i] = txBytes
+	}
+	return int64(height), txsBytesArray, nil
 }

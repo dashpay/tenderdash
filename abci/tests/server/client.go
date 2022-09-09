@@ -44,8 +44,31 @@ func Commit(ctx context.Context, client abciclient.Client) error {
 	return nil
 }
 
-func ProcessProposal(ctx context.Context, client abciclient.Client, txBytes [][]byte, codeExp []uint32, dataExp []byte) error {
-	res, _ := client.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: txBytes})
+func ProcessProposal(
+	ctx context.Context,
+	client abciclient.Client,
+	statusExp types.ResponseProcessProposal_ProposalStatus,
+	txBytes [][]byte,
+	codeExp []uint32,
+	dataExp []byte,
+	hashExp []byte,
+) error {
+	res, err := client.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: txBytes})
+	if err != nil {
+		return err
+	}
+	appHash := res.AppHash
+	if !bytes.Equal(appHash, hashExp) {
+		fmt.Println("Failed test: ProcessProposal")
+		fmt.Printf("Application hash was unexpected. Got %X expected %X\n", appHash, hashExp)
+		return errors.New("FinalizeBlock  error")
+	}
+	if res.Status != statusExp {
+		fmt.Println("Failed test: ProcessProposal")
+		fmt.Printf("ProcessProposal response status was unexpected. Got %v expected %v.",
+			res.Status, statusExp)
+		return errors.New("ProcessProposal error")
+	}
 	for i, tx := range res.TxResults {
 		code, data, log := tx.Code, tx.Data, tx.Log
 		if code != codeExp[i] {
@@ -66,15 +89,9 @@ func ProcessProposal(ctx context.Context, client abciclient.Client, txBytes [][]
 }
 
 func FinalizeBlock(ctx context.Context, client abciclient.Client, txBytes [][]byte) error {
-	res, err := client.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txBytes})
+	_, err := client.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txBytes})
 	if err != nil {
 		return err
-	}
-	appHash := res.AppHash
-	if !bytes.Equal(appHash, hashExp) {
-		fmt.Println("Failed test: FinalizeBlock")
-		fmt.Printf("Application hash was unexpected. Got %X expected %X\n", appHash, hashExp)
-		return errors.New("FinalizeBlock  error")
 	}
 	fmt.Println("Passed test: FinalizeBlock")
 	return nil

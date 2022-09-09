@@ -907,7 +907,7 @@ func (g *consensusNetGen) newApp(logger log.Logger, state *sm.State, confName st
 func (g *consensusNetGen) execValidatorSetUpdater(ctx context.Context, t *testing.T, states []*State, apps []abci.Application, n int) map[int64]abci.ValidatorSetUpdate {
 	t.Helper()
 	ret := make(map[int64]abci.ValidatorSetUpdate)
-	ret[0] = types.TM2PB.ValidatorUpdates(states[0].Validators)
+	ret[0] = types.TM2PB.ValidatorUpdates(states[0].state.Validators)
 	if g.validatorUpdates == nil {
 		return ret
 	}

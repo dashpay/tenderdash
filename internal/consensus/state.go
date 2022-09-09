@@ -213,18 +213,12 @@ func NewState(
 	eventBus *eventbus.EventBus,
 	options ...StateOption,
 ) (*State, error) {
-	initialState, err := store.Load()
-	if err != nil {
-		return nil, err
-	}
-
 	cs := &State{
 		eventBus:         eventBus,
 		logger:           logger,
 		config:           cfg,
 		blockExec:        blockExec,
 		blockStore:       blockStore,
-		state:            initialState,
 		stateStore:       store,
 		txNotifier:       txNotifier,
 		peerMsgQueue:     make(chan msgInfo, msgQueueSize),
@@ -1717,6 +1711,7 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 	*/
 	uncommittedState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state, true)
 	if err != nil {
+		cs.metrics.MarkProposalProcessed(false)
 		if errors.Is(err, sm.ErrBlockRejected) {
 			logger.Error("prevote step: state machine rejected a proposed block; this should not happen:"+
 				"the proposer may be misbehaving; prevoting nil", "err", err)
@@ -1734,8 +1729,7 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
 	cs.RoundState.CurrentRoundState = uncommittedState
-
-	cs.metrics.MarkProposalProcessed(isAppValid)
+	cs.metrics.MarkProposalProcessed(true)
 
 	/*
 		22: upon <PROPOSAL, h_p, round_p, v, −1> from proposer(h_p, round_p) while step_p = propose do

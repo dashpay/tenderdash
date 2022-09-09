@@ -25,6 +25,7 @@ import (
 	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
+	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -116,6 +117,7 @@ func TestFinalizeBlockResponsesSaveLoad1(t *testing.T) {
 	block, err := statefactory.MakeBlock(state, 2, new(types.Commit), 0)
 	require.NoError(t, err)
 
+	var abciResponses tmstate.ABCIResponses
 	dtxs := make([]*abci.ExecTxResult, 2)
 	abciResponses.ProcessProposal = &abci.ResponseProcessProposal{
 		Status:    abci.ResponseProcessProposal_ACCEPT,
@@ -134,13 +136,13 @@ func TestFinalizeBlockResponsesSaveLoad1(t *testing.T) {
 		ThresholdPublicKey: abciPubKey,
 	}
 
-	err = stateStore.SaveFinalizeBlockResponses(block.Height, finalizeBlockResponses)
+	err = stateStore.SaveABCIResponses(block.Height, abciResponses)
 	require.NoError(t, err)
-	loadedFinalizeBlockResponses, err := stateStore.LoadFinalizeBlockResponses(block.Height)
+	loadedABCIResponses, err := stateStore.LoadABCIResponses(block.Height)
 	require.NoError(t, err)
-	assert.Equal(t, finalizeBlockResponses, loadedFinalizeBlockResponses,
-		"FinalizeBlockResponses don't match:\ngot:       %v\nexpected: %v\n",
-		loadedFinalizeBlockResponses, finalizeBlockResponses)
+	assert.Equal(t, abciResponses, *loadedABCIResponses,
+		"ABCIResponses don't match:\ngot:       %v\nexpected: %v\n",
+		loadedABCIResponses, abciResponses)
 }
 
 // TestFinalizeBlockResponsesSaveLoad2 tests saving and loading responses to FinalizeBlock.
@@ -200,28 +202,28 @@ func TestFinalizeBlockResponsesSaveLoad2(t *testing.T) {
 	// Query all before, this should return error.
 	for i := range cases {
 		h := int64(i + 1)
-		res, err := stateStore.LoadFinalizeBlockResponses(h)
+		res, err := stateStore.LoadABCIResponses(h)
 		assert.Error(t, err, "%d: %#v", i, res)
 	}
 
 	// Add all cases.
 	for i, tc := range cases {
 		h := int64(i + 1) // last block height, one below what we save
-		responses := &tmstate.ABCIResponses{
+		responses := tmstate.ABCIResponses{
 			ProcessProposal: &abci.ResponseProcessProposal{
 				TxResults: tc.added,
 				AppHash:   []byte("a_hash"),
 				Status:    abci.ResponseProcessProposal_ACCEPT,
 			},
 		}
-		err := stateStore.SaveFinalizeBlockResponses(h, responses)
+		err := stateStore.SaveABCIResponses(h, responses)
 		require.NoError(t, err)
 	}
 
 	// Query all after, should return expected value.
 	for i, tc := range cases {
 		h := int64(i + 1)
-		res, err := stateStore.LoadFinalizeBlockResponses(h)
+		res, err := stateStore.LoadABCIResponses(h)
 		if assert.NoError(t, err, "%d", i) {
 			t.Log(res)
 			e, err := abci.MarshalTxResults(tc.expected)

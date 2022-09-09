@@ -56,6 +56,10 @@ type (
 	ErrNoFinalizeBlockResponsesForHeight struct {
 		Height int64
 	}
+
+	ErrNoABCIResponsesForHeight struct {
+		Height int64
+	}
 )
 
 func (e ErrUnknownBlock) Error() string {
@@ -111,4 +115,8 @@ func (e ErrNoConsensusParamsForHeight) Error() string {
 
 func (e ErrNoFinalizeBlockResponsesForHeight) Error() string {
 	return fmt.Sprintf("could not find FinalizeBlock responses for height #%d", e.Height)
+}
+
+func (e ErrNoABCIResponsesForHeight) Error() string {
+	return fmt.Sprintf("could not find results for height #%d", e.Height)
 }

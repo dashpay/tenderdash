@@ -142,96 +142,6 @@ func (r *EventAttribute) UnmarshalJSON(b []byte) error {
 	return jsonpbUnmarshaller.Unmarshal(reader, r)
 }
 
-// validatorUpdateJSON is the JSON encoding of a validator update.
-//
-// It handles translation of public keys from the protobuf representation to
-// the legacy Amino-compatible format expected by RPC clients.
-type validatorUpdateJSON struct {
-	PubKey json.RawMessage `json:"pub_key,omitempty"`
-	Power  int64           `json:"power,string"`
-}
-
-func (v *ValidatorUpdate) MarshalJSON() ([]byte, error) {
-	if v.PubKey == nil {
-		return nil, nil
-	}
-	key, err := encoding.PubKeyFromProto(*v.PubKey)
-	if err != nil {
-		return nil, err
-	}
-	jkey, err := jsontypes.Marshal(key)
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(validatorUpdateJSON{
-		PubKey: jkey,
-		Power:  v.GetPower(),
-	})
-}
-
-func (v *ValidatorUpdate) UnmarshalJSON(data []byte) error {
-	var vu validatorUpdateJSON
-	if err := json.Unmarshal(data, &vu); err != nil {
-		return err
-	}
-	var key crypto.PubKey
-	if err := jsontypes.Unmarshal(vu.PubKey, &key); err != nil {
-		return err
-	}
-	pkey, err := encoding.PubKeyToProto(key)
-	if err != nil {
-		return err
-	}
-	v.PubKey = &pkey
-	v.Power = vu.Power
-	return nil
-}
-
-type validatorSetUpdateJSON struct {
-	ValidatorUpdates []ValidatorUpdate `json:"validator_updates"`
-	ThresholdPubKey  json.RawMessage   `json:"threshold_public_key"`
-	QuorumHash       []byte            `json:"quorum_hash,omitempty"`
-}
-
-func (m *ValidatorSetUpdate) MarshalJSON() ([]byte, error) {
-	ret := validatorSetUpdateJSON{
-		ValidatorUpdates: m.ValidatorUpdates,
-		QuorumHash:       m.QuorumHash,
-	}
-	if m.ThresholdPublicKey.Sum != nil {
-		key, err := encoding.PubKeyFromProto(m.ThresholdPublicKey)
-		if err != nil {
-			return nil, err
-		}
-		ret.ThresholdPubKey, err = jsontypes.Marshal(key)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return json.Marshal(ret)
-}
-
-func (m *ValidatorSetUpdate) UnmarshalJSON(data []byte) error {
-	var vsu validatorSetUpdateJSON
-	err := json.Unmarshal(data, &vsu)
-	if err != nil {
-		return err
-	}
-	var key crypto.PubKey
-	if err := jsontypes.Unmarshal(vsu.ThresholdPubKey, &key); err != nil {
-		return err
-	}
-	if key != nil {
-		m.ThresholdPublicKey, err = encoding.PubKeyToProto(key)
-		if err != nil {
-			return err
-		}
-	}
-	m.ValidatorUpdates = vsu.ValidatorUpdates
-	m.QuorumHash = vsu.QuorumHash
-	return nil
-}
-
 // Some compile time assertions to ensure we don't
 // have accidental runtime surprises later on.
 
@@ -250,43 +160,49 @@ var _ jsonRoundTripper = (*ResponseCheckTx)(nil)
 var _ jsonRoundTripper = (*EventAttribute)(nil)
 
 type validatorSetUpdateJSON struct {
-	ValidatorUpdates   []ValidatorUpdate `protobuf:"bytes,1,rep,name=validator_updates,json=validatorUpdates,proto3" json:"validator_updates"`
-	ThresholdPublicKey json.RawMessage   `json:"threshold_public_key"`
-	QuorumHash         []byte            `protobuf:"bytes,3,opt,name=quorum_hash,json=quorumHash,proto3" json:"quorum_hash,omitempty"`
+	ValidatorUpdates []ValidatorUpdate `json:"validator_updates"`
+	ThresholdPubKey  json.RawMessage   `json:"threshold_public_key"`
+	QuorumHash       []byte            `json:"quorum_hash,omitempty"`
 }
 
 func (m *ValidatorSetUpdate) MarshalJSON() ([]byte, error) {
-	var err error
-	res := validatorSetUpdateJSON{
+	ret := validatorSetUpdateJSON{
 		ValidatorUpdates: m.ValidatorUpdates,
 		QuorumHash:       m.QuorumHash,
 	}
-	thresholdPubKey, err := cryptoenc.PubKeyFromProto(m.ThresholdPublicKey)
-	if err != nil {
-		return nil, err
+	if m.ThresholdPublicKey.Sum != nil {
+		key, err := cryptoenc.PubKeyFromProto(m.ThresholdPublicKey)
+		if err != nil {
+			return nil, err
+		}
+		ret.ThresholdPubKey, err = jsontypes.Marshal(key)
+		if err != nil {
+			return nil, err
+		}
 	}
-	res.ThresholdPublicKey, err = jsontypes.Marshal(thresholdPubKey)
-	if err != nil {
-		return nil, err
-	}
-	return json.Marshal(res)
+	return json.Marshal(ret)
 }
 
-func (m *ValidatorSetUpdate) UnmarshalJSON(b []byte) error {
-	var res validatorSetUpdateJSON
-	err := json.Unmarshal(b, &res)
+func (m *ValidatorSetUpdate) UnmarshalJSON(data []byte) error {
+	var vsu validatorSetUpdateJSON
+	err := json.Unmarshal(data, &vsu)
 	if err != nil {
 		return err
 	}
-	m.ValidatorUpdates = res.ValidatorUpdates
-	m.QuorumHash = res.QuorumHash
-	var thresholdPubKey crypto.PubKey
-	err = jsontypes.Unmarshal(res.ThresholdPublicKey, &thresholdPubKey)
-	if err != nil {
-		return err
+	if vsu.ThresholdPubKey != nil {
+		var key crypto.PubKey
+		err = jsontypes.Unmarshal(vsu.ThresholdPubKey, &key)
+		if err != nil {
+			return err
+		}
+		m.ThresholdPublicKey, err = cryptoenc.PubKeyToProto(key)
+		if err != nil {
+			return err
+		}
 	}
-	m.ThresholdPublicKey, err = cryptoenc.PubKeyToProto(thresholdPubKey)
-	return err
+	m.ValidatorUpdates = vsu.ValidatorUpdates
+	m.QuorumHash = vsu.QuorumHash
+	return nil
 }
 
 type validatorUpdateJSON struct {

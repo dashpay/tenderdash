@@ -14,6 +14,7 @@ import (
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/consensus"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	mpmocks "github.com/tendermint/tendermint/internal/mempool/mocks"
@@ -192,10 +193,8 @@ func (rts *reactorTestSuite) addNode(
 	require.NoError(t, err)
 	for blockHeight := int64(1); blockHeight <= maxBlockHeight; blockHeight++ {
 		block, blockID, partSet, seenCommit := makeNextBlock(ctx, t, state, privVal, blockHeight, commit)
-
-		state, err = reactor.blockExec.ApplyBlock(ctx, state, proTxHash, blockID, block)
+		state, err = reactor.blockExec.ApplyBlock(ctx, state, blockID, block)
 		require.NoError(t, err)
-
 		reactor.store.SaveBlock(block, partSet, seenCommit)
 		commit = seenCommit
 	}
@@ -211,64 +210,44 @@ func makeNextBlock(ctx context.Context,
 	signer types.PrivValidator,
 	height int64,
 	commit *types.Commit) (*types.Block, types.BlockID, *types.PartSet, *types.Commit) {
-
-			vote, err := factory.MakeVote(
-				ctx,
-				privVal,
-				state.Validators,
-				lastBlock.Header.ChainID, 0,
-				lastBlock.Header.Height, 0, 2,
-				lastBlockMeta.BlockID,
-				state.LastStateID,
-			)
-			require.NoError(t, err)
-			lastCommit = types.NewCommit(
-				vote.Height,
-				vote.Round,
-				lastBlockMeta.BlockID,
-				state.LastStateID,
-				&types.CommitSigns{
-					QuorumSigns: types.QuorumSigns{
-						BlockSign:      vote.BlockSignature,
-						StateSign:      vote.StateSignature,
-						ExtensionSigns: types.MakeThresholdExtensionSigns(vote.VoteExtensions),
-					},
-					QuorumHash: state.Validators.QuorumHash,
-				},
-			)
-		}
-
-		thisBlock, err := sf.MakeBlock(state, blockHeight, lastCommit, 0)
-		require.NoError(t, err)
-		thisBlock.CoreChainLockedHeight = state.LastCoreChainLockedBlockHeight
-		thisParts, err := thisBlock.MakePartSet(types.BlockPartSizeBytes)
-		require.NoError(t, err)
-		blockID := types.BlockID{Hash: thisBlock.Hash(), PartSetHeader: thisParts.Header()}
-		state, err = blockExec.ApplyBlock(ctx, state, blockID, thisBlock)
-		require.NoError(t, err)
-
-		blockStore.SaveBlock(thisBlock, thisParts, lastCommit)
+	block, err := sf.MakeBlock(state, height, commit, 0)
+	require.NoError(t, err)
+	block.CoreChainLockedHeight = state.LastCoreChainLockedBlockHeight
+	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: partSet.Header()}
+	stateID := types.StateID{
+		Height:  block.Header.Height,
+		AppHash: make([]byte, crypto.DefaultAppHashSize),
 	}
 
-	rts.peerChans[nodeID] = make(chan p2p.PeerUpdate)
-	rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], 1)
-	rts.network.Nodes[nodeID].PeerManager.Register(ctx, rts.peerUpdates[nodeID])
-
-	chCreator := func(ctx context.Context, chdesc *p2p.ChannelDescriptor) (*p2p.Channel, error) {
-		return rts.blockSyncChannels[nodeID], nil
-	}
-	rts.reactors[nodeID] = NewReactor(
-		rts.logger.With("nodeID", nodeID),
-		stateStore,
-		blockExec,
-		blockStore,
-		proTxHash,
-		nil,
-		chCreator,
-		func(ctx context.Context) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] },
-		rts.blockSync,
-		consensus.NopMetrics(),
-		nil, // eventbus, can be nil
+	// Simulate a commit for the current height
+	vote, err := factory.MakeVote(
+		ctx,
+		signer,
+		state.Validators,
+		block.Header.ChainID,
+		0,
+		block.Header.Height,
+		0,
+		2,
+		blockID,
+		stateID,
+	)
+	require.NoError(t, err)
+	seenCommit := types.NewCommit(
+		vote.Height,
+		vote.Round,
+		blockID,
+		stateID,
+		&types.CommitSigns{
+			QuorumSigns: types.QuorumSigns{
+				BlockSign:      vote.BlockSignature,
+				StateSign:      vote.StateSignature,
+				ExtensionSigns: types.MakeThresholdExtensionSigns(vote.VoteExtensions),
+			},
+			QuorumHash: state.Validators.QuorumHash,
+		},
 	)
 	return block, blockID, partSet, seenCommit
 }

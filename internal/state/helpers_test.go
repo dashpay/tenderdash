@@ -16,6 +16,7 @@ import (
 	sf "github.com/tendermint/tendermint/internal/state/test/factory"
 	"github.com/tendermint/tendermint/internal/test/factory"
 	tmtime "github.com/tendermint/tendermint/libs/time"
+	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
@@ -144,12 +145,12 @@ func makeState(t *testing.T, nVals, height int) (sm.State, dbm.DB, map[string]ty
 	return s, stateDB, privValsByProTxHash
 }
 
-func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, regenerate bool, proposedAppVersion uint64) (types.Header, *types.CoreChainLock, types.BlockID, *tmstate.ABCIResponses) {
+func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, regenerate bool, proposedAppVersion uint64) (types.Header, *types.CoreChainLock, types.BlockID, tmstate.ABCIResponses) {
 	block, err := sf.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), proposedAppVersion)
 	if err != nil {
 		t.Error(err)
 	}
-	abciResponses := &tmstate.ABCIResponses{
+	abciResponses := tmstate.ABCIResponses{
 		ProcessProposal: &abci.ResponseProcessProposal{
 			ValidatorSetUpdate:  nil,
 			CoreChainLockUpdate: block.CoreChainLock.ToProto(),
@@ -162,7 +163,7 @@ func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, reg
 		valUpdates := types.ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes)
 		abciResponses.ProcessProposal.ValidatorSetUpdate = &valUpdates
 	}
-	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, fbResp
+	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
 }
 
 func makeHeaderPartsResponsesParams(

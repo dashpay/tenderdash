@@ -13,7 +13,6 @@ import (
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/libs/log"
-	tmtypes "github.com/tendermint/tendermint/proto/tendermint/types"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
 )
@@ -190,13 +189,13 @@ func (blockExec *BlockExecutor) ProcessProposal(
 ) (CurrentRoundState, error) {
 	version := block.Version.ToProto()
 	resp, err := blockExec.appClient.ProcessProposal(ctx, &abci.RequestProcessProposal{
-		Hash:                block.Header.Hash(),
-		Height:              block.Header.Height,
-		Time:                block.Header.Time,
-		Txs:                 block.Data.Txs.ToSliceOfBytes(),
-		ProposedLastCommit:  buildLastCommitInfo(block, state.InitialHeight),
+		Hash:               block.Header.Hash(),
+		Height:             block.Header.Height,
+		Time:               block.Header.Time,
+		Txs:                block.Data.Txs.ToSliceOfBytes(),
+		ProposedLastCommit: buildLastCommitInfo(block, state.InitialHeight),
 		Misbehavior:        block.Evidence.ToABCI(),
-		NextValidatorsHash:  block.NextValidatorsHash,
+		NextValidatorsHash: block.NextValidatorsHash,
 
 		// Dash's fields
 		ProposerProTxHash:     block.ProposerProTxHash,
@@ -228,7 +227,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		blockExec.logger.Error(
 			"Client returned invalid app hash size", "bytesLength", len(resp.AppHash),
 		)
-		return false, errors.New("invalid App Hash size")
+		return stateChanges, errors.New("invalid App Hash size")
 	}
 
 	if verify {
@@ -382,7 +381,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	}
 
 	// Lock mempool, commit app state, update mempoool.
-	_, retainHeight, err := blockExec.Commit(ctx, state, block, uncommittedState.TxResults)
+	retainHeight, err := blockExec.Commit(ctx, state, block, uncommittedState.TxResults)
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
 	}
@@ -677,12 +676,12 @@ func execBlock(
 	responseFinalizeBlock, err := appConn.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
-			Hash:                blockHash,
-			Height:              block.Height,
-			Time:                block.Time,
-			Txs:                 txs,
-			DecidedLastCommit:   lastCommit,
-			Misbehavior: evidence,
+			Hash:              blockHash,
+			Height:            block.Height,
+			Time:              block.Time,
+			Txs:               txs,
+			DecidedLastCommit: lastCommit,
+			Misbehavior:       evidence,
 
 			// Dash's fields
 			CoreChainLockedHeight: block.CoreChainLockedHeight,
@@ -717,19 +716,18 @@ func ExecReplayedCommitBlock(
 	initialHeight int64,
 	s State,
 	ucState CurrentRoundState,
-) ([]byte, *abci.ResponseFinalizeBlock, error) {
+) (*abci.ResponseFinalizeBlock, error) {
 	respFinalizeBlock, err := execBlockWithoutState(ctx, appConn, block, logger, store, initialHeight, s, ucState)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	// Commit block, get hash back
 	res, err := appConn.Commit(ctx)
 	if err != nil {
 		logger.Error("client error during proxyAppConn.Commit", "err", res)
-		return nil, respFinalizeBlock, err
+		return respFinalizeBlock, err
 	}
-	data := res.Data
 
 	// the BlockExecutor condition is using for the final block replay process.
 	if be != nil {
@@ -737,7 +735,7 @@ func ExecReplayedCommitBlock(
 
 		bps, err := block.MakePartSet(types.BlockPartSizeBytes)
 		if err != nil {
-			return nil, respFinalizeBlock, err
+			return respFinalizeBlock, err
 		}
 
 		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
@@ -753,7 +751,7 @@ func ExecReplayedCommitBlock(
 		)
 	}
 
-	return data, respFinalizeBlock, nil
+	return respFinalizeBlock, nil
 }
 func execBlockWithoutState(
 	ctx context.Context,

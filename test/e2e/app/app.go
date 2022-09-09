@@ -25,7 +25,6 @@ import (
 
 	"github.com/tendermint/tendermint/abci/example/code"
 	abci "github.com/tendermint/tendermint/abci/types"
-	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	"github.com/tendermint/tendermint/libs/log"
 	types1 "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -264,7 +263,7 @@ func (app *Application) Commit(_ context.Context) (*abci.ResponseCommit, error) 
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	height, err := app.state.Commit()
+	height, hash, err := app.state.Commit()
 	if err != nil {
 		panic(err)
 	}
@@ -284,6 +283,7 @@ func (app *Application) Commit(_ context.Context) (*abci.ResponseCommit, error) 
 		retainHeight = int64(height - app.cfg.RetainBlocks + 1)
 	}
 	return &abci.ResponseCommit{
+		Data:         hash,
 		RetainHeight: retainHeight,
 	}, nil
 }
@@ -533,15 +533,11 @@ func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVot
 	// nolint:gosec // G404: Use of weak random number generator
 	num := rand.Int63n(voteExtensionMaxVal)
 	extLen := binary.PutVarint(ext, num)
-
-	if app.cfg.VoteExtensionDelayMS != 0 {
-		time.Sleep(time.Duration(app.cfg.VoteExtensionDelayMS) * time.Millisecond)
-	}
-
 	app.logger.Info("generated vote extension",
 		"num", num,
-		"ext", tmstrings.LazySprintf("%x", ext[:extLen]),
-		"state.Height", app.state.Height)
+		"ext", fmt.Sprintf("%x", ext[:extLen]),
+		"state.Height", app.state.Height,
+	)
 	return &abci.ResponseExtendVote{
 		VoteExtensions: []*abci.ExtendVoteExtension{
 			{
@@ -560,9 +556,6 @@ func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVot
 // without doing anything about them. In this case, it just makes sure that the
 // vote extension is a well-formed integer value.
 func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.RequestVerifyVoteExtension) (*abci.ResponseVerifyVoteExtension, error) {
-	app.mu.Lock()
-	defer app.mu.Unlock()
-
 	// We allow vote extensions to be optional
 	if len(req.VoteExtensions) == 0 {
 		return &abci.ResponseVerifyVoteExtension{

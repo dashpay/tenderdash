@@ -60,14 +60,6 @@ func (rts *reactorTestSuite) switchToConsensus(ctx context.Context) {
 	}
 }
 
-func (rts *reactorTestSuite) switchToConsensus(ctx context.Context) {
-	for nodeID, reactor := range rts.reactors {
-		state := reactor.state.GetState()
-		sCtx := dash.ContextWithProTxHash(ctx, rts.states[nodeID].privValidatorProTxHash)
-		reactor.SwitchToConsensus(sCtx, state, false)
-	}
-}
-
 func chDesc(chID p2p.ChannelID, size int) *p2p.ChannelDescriptor {
 	return &p2p.ChannelDescriptor{
 		ID:                 chID,

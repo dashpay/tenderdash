@@ -498,11 +498,11 @@ func (h *Handshaker) ReplayBlocks(
 
 		case appBlockHeight == storeBlockHeight:
 			// We ran Commit, but didn't save the state, so replayBlock with mock app.
-			finalizeBlockResponses, err := h.stateStore.LoadFinalizeBlockResponses(storeBlockHeight)
+			abciResponses, err := h.stateStore.LoadABCIResponses(storeBlockHeight)
 			if err != nil {
 				return nil, err
 			}
-			mockApp, err := newMockProxyApp(h.logger, appHash, finalizeBlockResponses)
+			mockApp, err := newMockProxyApp(h.logger, appHash, abciResponses)
 			if err != nil {
 				return nil, err
 			}
@@ -566,6 +566,7 @@ func (h *Handshaker) replayBlocks(
 		if err != nil {
 			return nil, fmt.Errorf("replay process proposal: %w", err)
 		}
+		appHash = uncommittedState.AppHash
 
 		// We emit events for the index services at the final block due to the sync issue when
 		// the node shutdown during the block committing status.
@@ -574,7 +575,7 @@ func (h *Handshaker) replayBlocks(
 			blockExec = nil
 		}
 
-		appHash, _, err = sm.ExecReplayedCommitBlock(ctx, blockExec, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state, uncommittedState)
+		_, err = sm.ExecReplayedCommitBlock(ctx, blockExec, appClient, block, h.logger, h.stateStore, h.genDoc.InitialHeight, state, uncommittedState)
 		if err != nil {
 			return nil, err
 		}

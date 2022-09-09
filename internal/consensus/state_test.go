@@ -2064,8 +2064,9 @@ func TestFinalizeBlockCalled(t *testing.T) {
 					Status: abci.ResponseVerifyVoteExtension_ACCEPT,
 				}, nil)
 			}
-			r := &abci.ResponseFinalizeBlock{AppHash: []byte("the_hash")}
-			m.On("FinalizeBlock", mock.Anything, mock.Anything).Return(r, nil).Maybe()
+			r := &abci.ResponseProcessProposal{AppHash: []byte("the_hash")}
+			m.On("ProcessProposal", mock.Anything, mock.Anything).Return(r, nil).Maybe()
+			m.On("FinalizeBlock", mock.Anything, mock.Anything).Return(&abci.ResponseFinalizeBlock{}, nil).Maybe()
 			m.On("Commit", mock.Anything).Return(&abci.ResponseCommit{}, nil).Maybe()
 
 			cs1, vss := makeState(ctx, t, makeStateArgs{config: config, application: m})
@@ -2193,44 +2194,9 @@ func TestExtendVote(t *testing.T) {
 	ensurePrevoteMatch(t, voteCh, height, round, blockID.Hash)
 
 	ensurePrecommit(t, voteCh, height, round)
-
-	m.AssertCalled(t, "ExtendVote", mock.Anything, &abci.RequestExtendVote{
-		Height: height,
-		Hash:   blockID.Hash,
-	})
-
-	m.AssertCalled(t, "VerifyVoteExtension", mock.Anything, &abci.RequestVerifyVoteExtension{
-		Hash:               blockID.Hash,
-		ValidatorProTxHash: proTxHash,
-		Height:             height,
-		VoteExtensions: []*abci.ExtendVoteExtension{
-			{
-				Type:      tmproto.VoteExtensionType_DEFAULT,
-				Extension: []byte("extension"),
-			},
-		},
-	})
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), blockID, vss[1:]...)
 	ensureNewRound(t, newRoundCh, height+1, 0)
 	m.AssertExpectations(t)
-
-	// Only 3 of the vote extensions are seen, as consensus proceeds as soon as the +2/3 threshold
-	// is observed by the consensus engine.
-	for _, pv := range vss[:3] {
-		proTxHash, err := pv.GetProTxHash(ctx)
-		require.NoError(t, err)
-		m.AssertCalled(t, "VerifyVoteExtension", mock.Anything, &abci.RequestVerifyVoteExtension{
-			Hash:               blockID.Hash,
-			ValidatorProTxHash: proTxHash,
-			Height:             height,
-			VoteExtensions: []*abci.ExtendVoteExtension{
-				{
-					Type:      tmproto.VoteExtensionType_DEFAULT,
-					Extension: []byte("extension"),
-				},
-			},
-		})
-	}
 	mock.AssertExpectationsForObjects(t, m)
 }
 
