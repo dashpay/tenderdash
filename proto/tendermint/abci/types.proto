@@ -133,7 +133,7 @@ message RequestPrepareProposal {
 
   // Core chain lock height to be used when signing this block.
   uint32 core_chain_locked_height = 100;
-  // ProTXHash of the original proposer of the block.
+  // ProTxHash of the original proposer of the block.
   bytes proposer_pro_tx_hash = 101;
   // Proposer's latest available app protocol version.
   uint64 proposed_app_version = 102;
@@ -199,7 +199,7 @@ message RequestFinalizeBlock {
   bytes next_validators_hash = 7;
   // Core chain lock height to be used when signing this block.
   uint32 core_chain_locked_height = 100;
-  // ProTXHash of the original proposer of the block.
+  // ProTxHash of the original proposer of the block.
   bytes proposer_pro_tx_hash = 101;
   // Proposer's latest available app protocol version.
   uint64 proposed_app_version = 102;
