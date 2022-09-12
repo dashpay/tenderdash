@@ -1,13 +1,12 @@
 package kvstore
 
 import (
-	"bytes"
 	"context"
 	"fmt"
-	"io/ioutil"
-	"sort"
 	"testing"
 
+	"github.com/fortytw2/leaktest"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
@@ -16,7 +15,6 @@ import (
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 const (
@@ -24,38 +22,54 @@ const (
 	testValue = "def"
 )
 
-var ctx = context.Background()
+func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []byte, key, value string, height int64) {
+	reqPrep := types.RequestPrepareProposal{
+		Txs:    [][]byte{tx},
+		Height: height,
+	}
 
-func testKVStore(t *testing.T, app types.Application, tx []byte, key, value string) {
-	req := types.RequestDeliverTx{Tx: tx}
-	ar := app.DeliverTx(req)
-	require.False(t, ar.IsErr(), ar)
+	respPrep, err := app.PrepareProposal(ctx, &reqPrep)
+	require.NoError(t, err)
+	require.Equal(t, 1, len(respPrep.TxResults))
+	require.False(t, respPrep.TxResults[0].IsErr())
+
+	reqFin := &types.RequestFinalizeBlock{Txs: [][]byte{tx}, AppHash: respPrep.AppHash}
+	respFin, err := app.FinalizeBlock(ctx, reqFin)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(respFin.Events))
+
 	// repeating tx doesn't raise error
-	ar = app.DeliverTx(req)
-	require.False(t, ar.IsErr(), ar)
-	// commit
-	app.Commit()
+	respFin, err = app.FinalizeBlock(ctx, reqFin)
+	require.NoError(t, err)
+	require.Equal(t, 0, len(respFin.Events))
 
-	info := app.Info(types.RequestInfo{})
+	// commit
+	_, err = app.Commit(ctx)
+	require.NoError(t, err)
+
+	info, err := app.Info(ctx, &types.RequestInfo{})
+	require.NoError(t, err)
 	require.NotZero(t, info.LastBlockHeight)
 
 	// make sure query is fine
-	resQuery := app.Query(types.RequestQuery{
+	resQuery, err := app.Query(ctx, &types.RequestQuery{
 		Path: "/store",
 		Data: []byte(key),
 	})
 
+	require.NoError(t, err)
 	require.Equal(t, code.CodeTypeOK, resQuery.Code)
 	require.Equal(t, key, string(resQuery.Key))
 	require.Equal(t, value, string(resQuery.Value))
 	require.EqualValues(t, info.LastBlockHeight, resQuery.Height)
 
 	// make sure proof is fine
-	resQuery = app.Query(types.RequestQuery{
+	resQuery, err = app.Query(ctx, &types.RequestQuery{
 		Path:  "/store",
 		Data:  []byte(key),
 		Prove: true,
 	})
+	require.NoError(t, err)
 	require.EqualValues(t, code.CodeTypeOK, resQuery.Code)
 	require.Equal(t, key, string(resQuery.Key))
 	require.Equal(t, value, string(resQuery.Value))
@@ -63,71 +77,74 @@ func testKVStore(t *testing.T, app types.Application, tx []byte, key, value stri
 }
 
 func TestKVStoreKV(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	kvstore := NewApplication()
 	key := testKey
 	value := key
 	tx := []byte(key)
-	testKVStore(t, kvstore, tx, key, value)
+	testKVStore(ctx, t, kvstore, tx, key, value, 1)
 
 	value = testValue
 	tx = []byte(key + "=" + value)
-	testKVStore(t, kvstore, tx, key, value)
+	testKVStore(ctx, t, kvstore, tx, key, value, 2)
 }
 
 func TestPersistentKVStoreKV(t *testing.T) {
-	dir, err := ioutil.TempDir("/tmp", "abci-kvstore-test") // TODO
-	if err != nil {
-		t.Fatal(err)
-	}
-	kvstore := NewPersistentKVStoreApplication(dir)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dir := t.TempDir()
+	logger := log.NewNopLogger()
+
+	kvstore := NewPersistentKVStoreApplication(logger, dir)
 	key := testKey
 	value := key
 	tx := []byte(key)
-	testKVStore(t, kvstore, tx, key, value)
+	testKVStore(ctx, t, kvstore, tx, key, value, 1)
 
 	value = testValue
 	tx = []byte(key + "=" + value)
-	testKVStore(t, kvstore, tx, key, value)
+	testKVStore(ctx, t, kvstore, tx, key, value, 2)
 }
 
 func TestPersistentKVStoreInfo(t *testing.T) {
-	dir, err := ioutil.TempDir("/tmp", "abci-kvstore-test") // TODO
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	dir := t.TempDir()
+	logger := log.NewNopLogger()
+
+	kvstore := NewPersistentKVStoreApplication(logger, dir)
+	if err := InitKVStore(ctx, kvstore); err != nil {
+		t.Fatal(err)
+	}
+	height := int64(0)
+
+	resInfo, err := kvstore.Info(ctx, &types.RequestInfo{})
 	if err != nil {
 		t.Fatal(err)
 	}
-	kvstore := NewPersistentKVStoreApplication(dir)
-	InitKVStore(kvstore)
-	height := int64(0)
 
-	resInfo := kvstore.Info(types.RequestInfo{})
 	if resInfo.LastBlockHeight != height {
 		t.Fatalf("expected height of %d, got %d", height, resInfo.LastBlockHeight)
 	}
 
 	// make and apply block
 	height = int64(1)
-	hash := []byte("foo")
-	header := tmproto.Header{
-		Height: height,
-	}
-	kvstore.BeginBlock(types.RequestBeginBlock{Hash: hash, Header: header})
-	kvstore.EndBlock(types.RequestEndBlock{Height: header.Height})
-	kvstore.Commit()
+	makeApplyBlock(ctx, t, kvstore, int(height))
 
-	resInfo = kvstore.Info(types.RequestInfo{})
-	if resInfo.LastBlockHeight != height {
-		t.Fatalf("expected height of %d, got %d", height, resInfo.LastBlockHeight)
-	}
-
+	resInfo, err = kvstore.Info(ctx, &types.RequestInfo{})
+	require.NoError(t, err)
+	require.Equal(t, resInfo.LastBlockHeight, height, "expected height of %d, got %d", height, resInfo.LastBlockHeight)
 }
 
 // add a validator, remove a validator, update a validator
 func TestValUpdates(t *testing.T) {
-	dir, err := ioutil.TempDir("/tmp", "abci-kvstore-test") // TODO
-	if err != nil {
-		t.Fatal(err)
-	}
-	kvstore := NewPersistentKVStoreApplication(dir)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kvstore := NewApplication()
 
 	// init with some validators
 	total := 10
@@ -135,207 +152,206 @@ func TestValUpdates(t *testing.T) {
 	fullVals := RandValidatorSetUpdate(total)
 	initVals := RandValidatorSetUpdate(nInit)
 
+	require.NotEqual(t, fullVals.QuorumHash, initVals.QuorumHash)
+
 	// initialize with the first nInit
-	kvstore.InitChain(types.RequestInitChain{
+	_, err := kvstore.InitChain(ctx, &types.RequestInitChain{
 		ValidatorSet: &initVals,
 	})
-
-	kvVals, err := kvstore.ValidatorSet()
 	require.NoError(t, err)
-	valSetEqualTest(t, *kvVals, initVals)
-
-	tx, err := MarshalValidatorSetUpdate(&fullVals)
-	require.NoError(t, err)
-
-	// change the validator set to the full validator set
-	makeApplyBlock(t, kvstore, 1, fullVals, tx)
-
-	kvVals, err = kvstore.ValidatorSet()
-	require.NoError(t, err)
-	valSetEqualTest(t, *kvVals, fullVals)
+	kvstore.AddValidatorSetUpdate(fullVals, 2)
+	resp, _ := makeApplyBlock(ctx, t, kvstore, 1)
+	require.Equal(t, initVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
+	resp, _ = makeApplyBlock(ctx, t, kvstore, 2)
+	require.Equal(t, fullVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
 }
 
 func makeApplyBlock(
+	ctx context.Context,
 	t *testing.T,
 	kvstore types.Application,
 	heightInt int,
-	diff types.ValidatorSetUpdate,
-	txs ...[]byte) {
+	txs ...[]byte,
+) (*types.ResponseProcessProposal, *types.ResponseFinalizeBlock) {
 	// make and apply block
 	height := int64(heightInt)
 	hash := []byte("foo")
-	header := tmproto.Header{
+
+	respProcessProposal, err := kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{
+		Hash:   hash,
 		Height: height,
-	}
+		Txs:    txs,
+	})
+	require.NoError(t, err)
+	require.NotZero(t, respProcessProposal)
+	require.Equal(t, types.ResponseProcessProposal_ACCEPT, respProcessProposal.Status)
 
-	kvstore.BeginBlock(types.RequestBeginBlock{Hash: hash, Header: header})
-	for i, tx := range txs {
-		r := kvstore.DeliverTx(types.RequestDeliverTx{Tx: tx})
-		require.False(t, r.IsErr(), "i=%d, tx=%s, err=%s", i, tx, r.String())
-	}
-	resEndBlock := kvstore.EndBlock(types.RequestEndBlock{Height: header.Height})
-	kvstore.Commit()
+	resFinalizeBlock, err := kvstore.FinalizeBlock(ctx, &types.RequestFinalizeBlock{
+		Hash:    hash,
+		Height:  height,
+		Txs:     txs,
+		AppHash: respProcessProposal.AppHash,
+	})
+	require.NoError(t, err)
+	require.Len(t, resFinalizeBlock.Events, 0)
 
-	valSetEqualTest(t, diff, *resEndBlock.ValidatorSetUpdate)
-
+	_, err = kvstore.Commit(ctx)
+	require.NoError(t, err)
+	return respProcessProposal, resFinalizeBlock
 }
 
-// order doesn't matter
-func valsEqualTest(t *testing.T, vals1, vals2 []types.ValidatorUpdate) {
-	require.Equal(t, len(vals1), len(vals2), "vals dont match in len. got %d, expected %d", len(vals2), len(vals1))
-	sort.Sort(types.ValidatorUpdates(vals1))
-	sort.Sort(types.ValidatorUpdates(vals2))
-	for i, v1 := range vals1 {
-		v2 := vals2[i]
-		if !v1.PubKey.Equal(v2.PubKey) ||
-			v1.Power != v2.Power {
-			t.Fatalf("vals dont match at index %d. got %X/%d , expected %X/%d", i, *v2.PubKey, v2.Power, *v1.PubKey, v1.Power)
-		}
-	}
-}
+func makeSocketClientServer(
+	ctx context.Context,
+	t *testing.T,
+	logger log.Logger,
+	app types.Application,
+	name string,
+) (abciclient.Client, service.Service, error) {
+	t.Helper()
 
-func valSetEqualTest(t *testing.T, vals1, vals2 types.ValidatorSetUpdate) {
-	valsEqualTest(t, vals1.ValidatorUpdates, vals2.ValidatorUpdates)
-	if !vals1.ThresholdPublicKey.Equal(vals2.ThresholdPublicKey) {
-		t.Fatalf("val set threshold public key did not match. got %X, expected %X",
-			vals1.ThresholdPublicKey, vals2.ThresholdPublicKey)
-	}
-	if !bytes.Equal(vals1.QuorumHash, vals2.QuorumHash) {
-		t.Fatalf("val set quorum hash did not match. got %X, expected %X",
-			vals1.QuorumHash, vals2.QuorumHash)
-	}
-}
+	ctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	t.Cleanup(leaktest.Check(t))
 
-func makeSocketClientServer(app types.Application, name string) (abciclient.Client, service.Service, error) {
 	// Start the listener
 	socket := fmt.Sprintf("unix://%s.sock", name)
-	logger := log.TestingLogger()
 
-	server := abciserver.NewSocketServer(socket, app)
-	server.SetLogger(logger.With("module", "abci-server"))
-	if err := server.Start(); err != nil {
+	server := abciserver.NewSocketServer(logger.With("module", "abci-server"), socket, app)
+	if err := server.Start(ctx); err != nil {
+		cancel()
 		return nil, nil, err
 	}
 
 	// Connect to the socket
-	client := abciclient.NewSocketClient(socket, false)
-	client.SetLogger(logger.With("module", "abci-client"))
-	if err := client.Start(); err != nil {
-		if err = server.Stop(); err != nil {
-			return nil, nil, err
-		}
+	client := abciclient.NewSocketClient(logger.With("module", "abci-client"), socket, false)
+	if err := client.Start(ctx); err != nil {
+		cancel()
 		return nil, nil, err
 	}
 
 	return client, server, nil
 }
 
-func makeGRPCClientServer(app types.Application, name string) (abciclient.Client, service.Service, error) {
+func makeGRPCClientServer(
+	ctx context.Context,
+	t *testing.T,
+	logger log.Logger,
+	app types.Application,
+	name string,
+) (abciclient.Client, service.Service, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+	t.Cleanup(leaktest.Check(t))
+
 	// Start the listener
 	socket := fmt.Sprintf("unix://%s.sock", name)
-	logger := log.TestingLogger()
 
-	gapp := types.NewGRPCApplication(app)
-	server := abciserver.NewGRPCServer(socket, gapp)
-	server.SetLogger(logger.With("module", "abci-server"))
-	if err := server.Start(); err != nil {
+	server := abciserver.NewGRPCServer(logger.With("module", "abci-server"), socket, app)
+
+	if err := server.Start(ctx); err != nil {
+		cancel()
 		return nil, nil, err
 	}
 
-	client := abciclient.NewGRPCClient(socket, true)
-	client.SetLogger(logger.With("module", "abci-client"))
-	if err := client.Start(); err != nil {
-		if err := server.Stop(); err != nil {
-			return nil, nil, err
-		}
+	client := abciclient.NewGRPCClient(logger.With("module", "abci-client"), socket, true)
+
+	if err := client.Start(ctx); err != nil {
+		cancel()
 		return nil, nil, err
 	}
 	return client, server, nil
 }
 
 func TestClientServer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	logger := log.NewTestingLogger(t)
+
 	// set up socket app
 	kvstore := NewApplication()
-	client, server, err := makeSocketClientServer(kvstore, "kvstore-socket")
+	client, server, err := makeSocketClientServer(ctx, t, logger, kvstore, "kvstore-socket")
 	require.NoError(t, err)
-	t.Cleanup(func() {
-		if err := server.Stop(); err != nil {
-			t.Error(err)
-		}
-	})
-	t.Cleanup(func() {
-		if err := client.Stop(); err != nil {
-			t.Error(err)
-		}
-	})
+	t.Cleanup(func() { cancel(); server.Wait() })
+	t.Cleanup(func() { cancel(); client.Wait() })
 
-	runClientTests(t, client)
+	runClientTests(ctx, t, client)
 
 	// set up grpc app
 	kvstore = NewApplication()
-	gclient, gserver, err := makeGRPCClientServer(kvstore, "/tmp/kvstore-grpc")
+	gclient, gserver, err := makeGRPCClientServer(ctx, t, logger, kvstore, "/tmp/kvstore-grpc")
 	require.NoError(t, err)
 
-	t.Cleanup(func() {
-		if err := gserver.Stop(); err != nil {
-			t.Error(err)
-		}
-	})
-	t.Cleanup(func() {
-		if err := gclient.Stop(); err != nil {
-			t.Error(err)
-		}
-	})
+	t.Cleanup(func() { cancel(); gserver.Wait() })
+	t.Cleanup(func() { cancel(); gclient.Wait() })
 
-	runClientTests(t, gclient)
+	runClientTests(ctx, t, gclient)
 }
 
-func runClientTests(t *testing.T, client abciclient.Client) {
+func runClientTests(ctx context.Context, t *testing.T, client abciclient.Client) {
 	// run some tests....
 	key := testKey
 	value := key
 	tx := []byte(key)
-	testClient(t, client, tx, key, value)
+	testClient(ctx, t, client, 1, tx, key, value)
 
 	value = testValue
 	tx = []byte(key + "=" + value)
-	testClient(t, client, tx, key, value)
+	testClient(ctx, t, client, 2, tx, key, value)
 }
 
-func testClient(t *testing.T, app abciclient.Client, tx []byte, key, value string) {
-	ar, err := app.DeliverTxSync(ctx, types.RequestDeliverTx{Tx: tx})
+func testClient(ctx context.Context, t *testing.T, app abciclient.Client, height int64, tx []byte, key, value string) {
+	rpp, err := app.ProcessProposal(ctx, &types.RequestProcessProposal{
+		Txs:    [][]byte{tx},
+		Height: height,
+	})
 	require.NoError(t, err)
-	require.False(t, ar.IsErr(), ar)
-	// repeating tx doesn't raise error
-	ar, err = app.DeliverTxSync(ctx, types.RequestDeliverTx{Tx: tx})
+	require.NotZero(t, rpp)
+	require.Equal(t, 1, len(rpp.TxResults))
+	require.False(t, rpp.TxResults[0].IsErr())
+
+	ar, err := app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{
+		Txs:     [][]byte{tx},
+		AppHash: rpp.AppHash,
+	})
 	require.NoError(t, err)
-	require.False(t, ar.IsErr(), ar)
+	require.Zero(t, ar.RetainHeight)
+	require.Empty(t, ar.Events)
+
+	// repeating FinalizeBlock doesn't raise error
+	ar, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{
+		Txs:     [][]byte{tx},
+		AppHash: rpp.AppHash,
+	})
+	require.NoError(t, err)
+	assert.Zero(t, ar.RetainHeight)
+	assert.Empty(t, ar.Events)
+
 	// commit
-	_, err = app.CommitSync(ctx)
+	_, err = app.Commit(ctx)
 	require.NoError(t, err)
 
-	info, err := app.InfoSync(ctx, types.RequestInfo{})
+	info, err := app.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
 	require.NotZero(t, info.LastBlockHeight)
 
 	// make sure query is fine
-	resQuery, err := app.QuerySync(ctx, types.RequestQuery{
+	resQuery, err := app.Query(ctx, &types.RequestQuery{
 		Path: "/store",
 		Data: []byte(key),
 	})
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, code.CodeTypeOK, resQuery.Code)
 	require.Equal(t, key, string(resQuery.Key))
 	require.Equal(t, value, string(resQuery.Value))
 	require.EqualValues(t, info.LastBlockHeight, resQuery.Height)
 
 	// make sure proof is fine
-	resQuery, err = app.QuerySync(ctx, types.RequestQuery{
+	resQuery, err = app.Query(ctx, &types.RequestQuery{
 		Path:  "/store",
 		Data:  []byte(key),
 		Prove: true,
 	})
-	require.Nil(t, err)
+	require.NoError(t, err)
 	require.Equal(t, code.CodeTypeOK, resQuery.Code)
 	require.Equal(t, key, string(resQuery.Key))
 	require.Equal(t, value, string(resQuery.Value))

@@ -47,9 +47,9 @@ definition](https://github.com/tenderdash/tenderdash/blob/master/types/genesis.g
 - `chain_id`: ID of the blockchain. **This must be unique for
   every blockchain.** If your testnet blockchains do not have unique
   chain IDs, you will have a bad time. The ChainID must be less than 50 symbols.
-- `initial_height`: Height at which Tenderdash should begin at. If a blockchain is conducting a network upgrade,
+- `initial_height`: Height at which Tenderdash should begin. If a blockchain is conducting a network upgrade,
     starting from the stopped height brings uniqueness to previous heights.
-- `consensus_params` [spec](https://github.com/tenderdash/spec/blob/master/spec/core/state.md#consensusparams)
+- `consensus_params` [spec](https://github.com/tendermint/tendermint/blob/master/spec/core/state.md#consensusparams)
     - `block`
         - `max_bytes`: Max block size, in bytes.
         - `max_gas`: Max gas per block.
@@ -261,7 +261,7 @@ afford to lose all blockchain data!
 To reset a blockchain, stop the node and run:
 
 ```sh
-tenderdash unsafe_reset_all
+tendermint unsafe-reset-all
 ```
 
 This command will remove the data directory and reset private validator and

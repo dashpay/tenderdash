@@ -1,6 +1,8 @@
 package state
 
 import (
+	"context"
+
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -35,6 +37,7 @@ type BlockStore interface {
 
 	LoadBlockCommit(height int64) *types.Commit
 	LoadSeenCommit() *types.Commit
+	LoadSeenCommitAt(height int64) *types.Commit
 }
 
 //-----------------------------------------------------------------------------
@@ -45,9 +48,9 @@ type BlockStore interface {
 // EvidencePool defines the EvidencePool interface used by State.
 type EvidencePool interface {
 	PendingEvidence(maxBytes int64) (ev []types.Evidence, size int64)
-	AddEvidence(types.Evidence) error
-	Update(State, types.EvidenceList)
-	CheckEvidence(types.EvidenceList) error
+	AddEvidence(context.Context, types.Evidence) error
+	Update(context.Context, State, types.EvidenceList)
+	CheckEvidence(context.Context, types.EvidenceList) error
 }
 
 // EmptyEvidencePool is an empty implementation of EvidencePool, useful for testing. It also complies
@@ -57,7 +60,9 @@ type EmptyEvidencePool struct{}
 func (EmptyEvidencePool) PendingEvidence(maxBytes int64) (ev []types.Evidence, size int64) {
 	return nil, 0
 }
-func (EmptyEvidencePool) AddEvidence(types.Evidence) error                { return nil }
-func (EmptyEvidencePool) Update(State, types.EvidenceList)                {}
-func (EmptyEvidencePool) CheckEvidence(evList types.EvidenceList) error   { return nil }
+func (EmptyEvidencePool) AddEvidence(context.Context, types.Evidence) error { return nil }
+func (EmptyEvidencePool) Update(context.Context, State, types.EvidenceList) {}
+func (EmptyEvidencePool) CheckEvidence(ctx context.Context, evList types.EvidenceList) error {
+	return nil
+}
 func (EmptyEvidencePool) ReportConflictingVotes(voteA, voteB *types.Vote) {}

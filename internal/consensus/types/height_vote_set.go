@@ -1,12 +1,12 @@
 package types
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"sync"
 
-	tmjson "github.com/tendermint/tendermint/libs/json"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -41,7 +41,6 @@ One for their LastPrecommits round, and another for the official commit round.
 type HeightVoteSet struct {
 	chainID string
 	height  int64
-	stateID types.StateID // State ID describing current state (eg. previous height and previous app hash)
 	valSet  *types.ValidatorSet
 
 	mtx               sync.Mutex
@@ -53,12 +52,8 @@ type HeightVoteSet struct {
 func NewHeightVoteSet(
 	chainID string,
 	height int64,
-	stateID types.StateID,
 	valSet *types.ValidatorSet) *HeightVoteSet {
-	hvs := &HeightVoteSet{
-		chainID: chainID,
-		stateID: stateID,
-	}
+	hvs := &HeightVoteSet{chainID: chainID}
 	hvs.Reset(height, valSet)
 	return hvs
 }
@@ -92,7 +87,11 @@ func (hvs *HeightVoteSet) Round() int32 {
 func (hvs *HeightVoteSet) SetRound(round int32) {
 	hvs.mtx.Lock()
 	defer hvs.mtx.Unlock()
-	newRound := tmmath.SafeSubInt32(hvs.round, 1)
+	newRound, err := tmmath.SafeSubInt32(hvs.round, 1)
+	if err != nil {
+		panic(err)
+	}
+
 	if hvs.round != 0 && (round < newRound) {
 		panic("SetRound() must increment hvs.round")
 	}
@@ -111,8 +110,8 @@ func (hvs *HeightVoteSet) addRound(round int32) {
 	}
 	// log.Debug("addRound(round)", "round", round)
 	if hvs.valSet.HasPublicKeys {
-		prevotes := types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet, hvs.stateID)
-		precommits := types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrecommitType, hvs.valSet, hvs.stateID)
+		prevotes := types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet)
+		precommits := types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrecommitType, hvs.valSet)
 		hvs.roundVoteSets[round] = RoundVoteSet{
 			Prevotes:   prevotes,
 			Precommits: precommits,
@@ -210,7 +209,7 @@ func (hvs *HeightVoteSet) SetPeerMaj23(
 	if voteSet == nil {
 		return nil // something we don't know about yet
 	}
-	return voteSet.SetPeerMaj23(types.P2PID(peerID), blockID)
+	return voteSet.SetPeerMaj23(string(peerID), blockID)
 }
 
 //---------------------------------------------------------
@@ -252,7 +251,7 @@ func (hvs *HeightVoteSet) StringIndented(indent string) string {
 func (hvs *HeightVoteSet) MarshalJSON() ([]byte, error) {
 	hvs.mtx.Lock()
 	defer hvs.mtx.Unlock()
-	return tmjson.Marshal(hvs.toAllRoundVotes())
+	return json.Marshal(hvs.toAllRoundVotes())
 }
 
 func (hvs *HeightVoteSet) toAllRoundVotes() []roundVotes {

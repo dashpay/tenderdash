@@ -6,6 +6,7 @@ option go_package = "github.com/tendermint/tendermint/proto/tendermint/state";
 import "gogoproto/gogo.proto";
 import "tendermint/abci/types.proto";
 import "tendermint/types/types.proto";
+import "tendermint/types/dash.proto";
 import "tendermint/types/validator.proto";
 import "tendermint/types/params.proto";
 import "tendermint/version/types.proto";
@@ -15,9 +16,8 @@ import "google/protobuf/timestamp.proto";
 // of the various ABCI calls during block processing.
 // It is persisted to disk for each height before calling Commit.
 message ABCIResponses {
-  repeated tendermint.abci.ResponseDeliverTx deliver_txs = 1;
-  tendermint.abci.ResponseEndBlock           end_block   = 2;
-  tendermint.abci.ResponseBeginBlock         begin_block = 3;
+  tendermint.abci.ResponseFinalizeBlock   finalize_block   = 2;
+  tendermint.abci.ResponseProcessProposal process_proposal = 3;
 }
 
 // ValidatorsInfo represents the latest validator set, or the last height it changed
@@ -60,9 +60,7 @@ message State {
   // Validators are persisted to the database separately every time they change,
   // so we can query for historical validator sets.
   // Note that if s.LastBlockHeight causes a valset change,
-  // we set s.LastHeightValidatorsChanged = s.LastBlockHeight + 1 + 1
-  // Extra +1 due to nextValSet delay.
-  tendermint.types.ValidatorSet next_validators                = 6;
+  // we set s.LastHeightValidatorsChanged = s.LastBlockHeight + 1
   tendermint.types.ValidatorSet validators                     = 7;
   tendermint.types.ValidatorSet last_validators                = 8;
   int64                         last_height_validators_changed = 9;

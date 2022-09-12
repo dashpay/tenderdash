@@ -5,7 +5,10 @@ package mocks
 import (
 	context "context"
 
+	bytes "github.com/tendermint/tendermint/libs/bytes"
+
 	mock "github.com/stretchr/testify/mock"
+
 	state "github.com/tendermint/tendermint/internal/state"
 
 	types "github.com/tendermint/tendermint/types"
@@ -17,15 +20,15 @@ type StateProvider struct {
 }
 
 // AppHash provides a mock function with given fields: ctx, height
-func (_m *StateProvider) AppHash(ctx context.Context, height uint64) ([]byte, error) {
+func (_m *StateProvider) AppHash(ctx context.Context, height uint64) (bytes.HexBytes, error) {
 	ret := _m.Called(ctx, height)
 
-	var r0 []byte
-	if rf, ok := ret.Get(0).(func(context.Context, uint64) []byte); ok {
+	var r0 bytes.HexBytes
+	if rf, ok := ret.Get(0).(func(context.Context, uint64) bytes.HexBytes); ok {
 		r0 = rf(ctx, height)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]byte)
+			r0 = ret.Get(0).(bytes.HexBytes)
 		}
 	}
 
@@ -81,4 +84,19 @@ func (_m *StateProvider) State(ctx context.Context, height uint64) (state.State,
 	}
 
 	return r0, r1
+}
+
+type mockConstructorTestingTNewStateProvider interface {
+	mock.TestingT
+	Cleanup(func())
+}
+
+// NewStateProvider creates a new instance of StateProvider. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewStateProvider(t mockConstructorTestingTNewStateProvider) *StateProvider {
+	mock := &StateProvider{}
+	mock.Mock.Test(t)
+
+	t.Cleanup(func() { mock.AssertExpectations(t) })
+
+	return mock
 }

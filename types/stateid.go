@@ -2,12 +2,14 @@ package types
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"strconv"
 
 	"github.com/dashevo/dashd-go/btcjson"
+
 	"github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -20,41 +22,40 @@ import (
 // StateID
 // TODO: Move to separate file
 type StateID struct {
-
-	// Height of last committed block
+	// Height of current block (the one containing state ID signature)
 	Height int64 `json:"height"`
-	// LastAppHash used in last committed block
-	LastAppHash tmbytes.HexBytes `json:"last_app_hash"`
+	// AppHash used in current block (the one containing state ID signature)
+	AppHash tmbytes.HexBytes `json:"last_app_hash"`
 }
 
 // Copy returns new StateID that is equal to this one
 func (stateID StateID) Copy() StateID {
-	appHash := make([]byte, len(stateID.LastAppHash))
-	if copy(appHash, stateID.LastAppHash) != len(stateID.LastAppHash) {
+	appHash := make([]byte, len(stateID.AppHash))
+	if copy(appHash, stateID.AppHash) != len(stateID.AppHash) {
 		panic("Cannot copy LastAppHash, this should never happen. Out of memory???")
 	}
 
 	return StateID{
-		Height:      stateID.Height,
-		LastAppHash: appHash,
+		Height:  stateID.Height,
+		AppHash: appHash,
 	}
 }
 
 // Equals returns true if the StateID matches the given StateID
 func (stateID StateID) Equals(other StateID) bool {
 	return stateID.Height == other.Height &&
-		bytes.Equal(stateID.LastAppHash, other.LastAppHash)
+		bytes.Equal(stateID.AppHash, other.AppHash)
 }
 
 // Key returns a machine-readable string representation of the StateID
 func (stateID StateID) Key() string {
-	return strconv.FormatInt(stateID.Height, 36) + string(stateID.LastAppHash)
+	return strconv.FormatInt(stateID.Height, 36) + string(stateID.AppHash)
 }
 
 // ValidateBasic performs basic validation.
 func (stateID StateID) ValidateBasic() error {
 	// LastAppHash can be empty in case of genesis block.
-	if err := ValidateAppHash(stateID.LastAppHash); err != nil {
+	if err := ValidateAppHash(stateID.AppHash); err != nil {
 		return fmt.Errorf("wrong app Hash")
 	}
 
@@ -65,19 +66,18 @@ func (stateID StateID) ValidateBasic() error {
 	return nil
 }
 
-func (stateID StateID) Signable() Signable {
-	return stateID
-}
-
 // SignBytes returns bytes that should be signed
 // TODO why we don't simply use stateID.Marshal() ?
 func (stateID StateID) SignBytes(chainID string) []byte {
 	bz := make([]byte, 8)
 	binary.LittleEndian.PutUint64(bz, uint64(stateID.Height))
 
-	lastAppHash := make([]byte, len(stateID.LastAppHash))
-	copy(lastAppHash, stateID.LastAppHash)
-	bz = append(bz, lastAppHash...)
+	appHash := stateID.AppHash
+	if len(appHash) == 0 {
+		appHash = make([]byte, crypto.DefaultAppHashSize)
+	}
+
+	bz = append(bz, appHash...)
 	return bz
 }
 
@@ -91,7 +91,7 @@ func (stateID StateID) SignID(chainID string, quorumType btcjson.LLMQType, quoru
 		return nil
 	}
 
-	stateMessageHash := crypto.Sha256(stateSignBytes)
+	stateMessageHash := sha256.Sum256(stateSignBytes)
 
 	stateRequestID := stateID.SignRequestID()
 
@@ -99,7 +99,7 @@ func (stateID StateID) SignID(chainID string, quorumType btcjson.LLMQType, quoru
 		quorumType,
 		tmbytes.Reverse(quorumHash),
 		tmbytes.Reverse(stateRequestID),
-		tmbytes.Reverse(stateMessageHash),
+		tmbytes.Reverse(stateMessageHash[:]),
 	)
 
 	return stateSignID
@@ -114,7 +114,8 @@ func (stateID StateID) SignRequestID() []byte {
 
 	requestIDMessage = append(requestIDMessage, heightByteArray...)
 
-	return crypto.Sha256(requestIDMessage)
+	hash := sha256.Sum256(requestIDMessage)
+	return hash[:]
 }
 
 // String returns a human readable string representation of the StateID.
@@ -122,14 +123,14 @@ func (stateID StateID) SignRequestID() []byte {
 // 1. hash
 //
 func (stateID StateID) String() string {
-	return fmt.Sprintf(`%d:%v`, stateID.Height, stateID.LastAppHash)
+	return fmt.Sprintf(`%d:%v`, stateID.Height, stateID.AppHash)
 }
 
 // ToProto converts StateID to protobuf
 func (stateID StateID) ToProto() tmproto.StateID {
 	return tmproto.StateID{
-		LastAppHash: stateID.LastAppHash,
-		Height:      stateID.Height,
+		AppHash: stateID.AppHash,
+		Height:  stateID.Height,
 	}
 }
 
@@ -152,7 +153,7 @@ func StateIDFromProto(sID *tmproto.StateID) (*StateID, error) {
 
 	stateID := new(StateID)
 
-	stateID.LastAppHash = sID.LastAppHash
+	stateID.AppHash = sID.AppHash
 	stateID.Height = sID.Height
 
 	return stateID, stateID.ValidateBasic()

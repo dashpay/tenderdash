@@ -3,16 +3,26 @@ package db
 import (
 	"encoding/binary"
 	"fmt"
+	"sync"
 
 	"github.com/google/orderedcode"
 	dbm "github.com/tendermint/tm-db"
 
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
 	"github.com/tendermint/tendermint/light/store"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
 
+// key prefixes
+// NB: Before modifying these, cross-check them with those in
+// * internal/store/store.go    [0..4, 13]
+// * internal/state/store.go    [5..8, 14]
+// * internal/evidence/pool.go  [9..10]
+// * light/store/db/db.go       [11..12]
+// TODO(sergio): Move all these to their own package.
+// TODO: what about these (they already collide):
+// * scripts/scmigrate/migrate.go [3]
+// * internal/p2p/peermanager.go  [1]
 const (
 	prefixLightBlock = int64(11)
 	prefixSize       = int64(12)
@@ -21,7 +31,7 @@ const (
 type dbs struct {
 	db dbm.DB
 
-	mtx  tmsync.RWMutex
+	mtx  sync.RWMutex
 	size uint16
 }
 

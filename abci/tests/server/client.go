@@ -6,15 +6,13 @@ import (
 	"errors"
 	"fmt"
 
-	abcicli "github.com/tendermint/tendermint/abci/client"
+	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/llmq"
 )
 
-var ctx = context.Background()
-
-func InitChain(client abcicli.Client) error {
+func InitChain(ctx context.Context, client abciclient.Client) error {
 	const total = 10
 	ld, err := llmq.Generate(crypto.RandProTxHashes(total))
 	if err != nil {
@@ -24,7 +22,7 @@ func InitChain(client abcicli.Client) error {
 	if err != nil {
 		return err
 	}
-	_, err = client.InitChainSync(context.Background(), types.RequestInitChain{
+	_, err = client.InitChain(ctx, &types.RequestInitChain{
 		ValidatorSet: validatorSet,
 	})
 	if err != nil {
@@ -35,49 +33,91 @@ func InitChain(client abcicli.Client) error {
 	return nil
 }
 
-func Commit(client abcicli.Client, hashExp []byte) error {
-	res, err := client.CommitSync(ctx)
-	data := res.Data
+func Commit(ctx context.Context, client abciclient.Client) error {
+	_, err := client.Commit(ctx)
 	if err != nil {
 		fmt.Println("Failed test: Commit")
 		fmt.Printf("error while committing: %v\n", err)
 		return err
 	}
-	if !bytes.Equal(data, hashExp) {
-		fmt.Println("Failed test: Commit")
-		fmt.Printf("Commit hash was unexpected. Got %X expected %X\n", data, hashExp)
-		return errors.New("commitTx failed")
-	}
 	fmt.Println("Passed test: Commit")
 	return nil
 }
 
-func DeliverTx(client abcicli.Client, txBytes []byte, codeExp uint32, dataExp []byte) error {
-	res, _ := client.DeliverTxSync(ctx, types.RequestDeliverTx{Tx: txBytes})
-	code, data, log := res.Code, res.Data, res.Log
-	if code != codeExp {
-		fmt.Println("Failed test: DeliverTx")
-		fmt.Printf("DeliverTx response code was unexpected. Got %v expected %v. Log: %v\n",
-			code, codeExp, log)
-		return errors.New("deliverTx error")
+func ProcessProposal(
+	ctx context.Context,
+	client abciclient.Client,
+	statusExp types.ResponseProcessProposal_ProposalStatus,
+	txBytes [][]byte,
+	codeExp []uint32,
+	dataExp []byte,
+	hashExp []byte,
+) error {
+	res, err := client.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: txBytes})
+	if err != nil {
+		return err
 	}
-	if !bytes.Equal(data, dataExp) {
-		fmt.Println("Failed test: DeliverTx")
-		fmt.Printf("DeliverTx response data was unexpected. Got %X expected %X\n",
-			data, dataExp)
-		return errors.New("deliverTx error")
+	appHash := res.AppHash
+	if !bytes.Equal(appHash, hashExp) {
+		fmt.Println("Failed test: ProcessProposal")
+		fmt.Printf("Application hash was unexpected. Got %X expected %X\n", appHash, hashExp)
+		return errors.New("FinalizeBlock  error")
 	}
-	fmt.Println("Passed test: DeliverTx")
+	if res.Status != statusExp {
+		fmt.Println("Failed test: ProcessProposal")
+		fmt.Printf("ProcessProposal response status was unexpected. Got %v expected %v.",
+			res.Status, statusExp)
+		return errors.New("ProcessProposal error")
+	}
+	for i, tx := range res.TxResults {
+		code, data, log := tx.Code, tx.Data, tx.Log
+		if code != codeExp[i] {
+			fmt.Println("Failed test: ProcessProposal")
+			fmt.Printf("ProcessProposal response code was unexpected. Got %v expected %v. Log: %v\n",
+				code, codeExp, log)
+			return errors.New("ProcessProposal error")
+		}
+		if !bytes.Equal(data, dataExp) {
+			fmt.Println("Failed test:  ProcessProposal")
+			fmt.Printf("ProcessProposal response data was unexpected. Got %X expected %X\n",
+				data, dataExp)
+			return errors.New("ProcessProposal  error")
+		}
+	}
+	fmt.Println("Passed test: ProcessProposal")
 	return nil
 }
 
-func CheckTx(client abcicli.Client, txBytes []byte, codeExp uint32, dataExp []byte) error {
-	res, _ := client.CheckTxSync(ctx, types.RequestCheckTx{Tx: txBytes})
-	code, data, log := res.Code, res.Data, res.Log
+func FinalizeBlock(ctx context.Context, client abciclient.Client, txBytes [][]byte) error {
+	_, err := client.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txBytes})
+	if err != nil {
+		return err
+	}
+	fmt.Println("Passed test: FinalizeBlock")
+	return nil
+}
+
+func PrepareProposal(ctx context.Context, client abciclient.Client, txBytes [][]byte, codeExp []types.TxRecord_TxAction, dataExp []byte) error {
+	res, _ := client.PrepareProposal(ctx, &types.RequestPrepareProposal{Txs: txBytes})
+	for i, tx := range res.TxRecords {
+		if tx.Action != codeExp[i] {
+			fmt.Println("Failed test: PrepareProposal")
+			fmt.Printf("PrepareProposal response code was unexpected. Got %v expected %v.",
+				tx.Action, codeExp)
+			return errors.New("PrepareProposal error")
+		}
+	}
+	fmt.Println("Passed test: PrepareProposal")
+	return nil
+}
+
+func CheckTx(ctx context.Context, client abciclient.Client, txBytes []byte, codeExp uint32, dataExp []byte) error {
+	res, _ := client.CheckTx(ctx, &types.RequestCheckTx{Tx: txBytes})
+	code, data := res.Code, res.Data
 	if code != codeExp {
 		fmt.Println("Failed test: CheckTx")
-		fmt.Printf("CheckTx response code was unexpected. Got %v expected %v. Log: %v\n",
-			code, codeExp, log)
+		fmt.Printf("CheckTx response code was unexpected. Got %v expected %v.,",
+			code, codeExp)
 		return errors.New("checkTx")
 	}
 	if !bytes.Equal(data, dataExp) {

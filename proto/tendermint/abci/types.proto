@@ -3,12 +3,11 @@ package tendermint.abci;
 
 option go_package = "github.com/tendermint/tendermint/abci/types";
 
-// For more information on gogo.proto, see:
-// https://github.com/gogo/protobuf/blob/master/extensions.md
 import "tendermint/crypto/proof.proto";
-import "tendermint/types/types.proto";
+import "tendermint/types/dash.proto";
 import "tendermint/crypto/keys.proto";
 import "tendermint/types/params.proto";
+import "tendermint/version/types.proto";
 import "google/protobuf/timestamp.proto";
 import "gogoproto/gogo.proto";
 
@@ -21,25 +20,28 @@ import "gogoproto/gogo.proto";
 
 message Request {
   oneof value {
-    RequestEcho               echo                 = 1;
-    RequestFlush              flush                = 2;
-    RequestInfo               info                 = 3;
-    RequestInitChain          init_chain           = 4;
-    RequestQuery              query                = 5;
-    RequestBeginBlock         begin_block          = 6;
-    RequestCheckTx            check_tx             = 7;
-    RequestDeliverTx          deliver_tx           = 8;
-    RequestEndBlock           end_block            = 9;
-    RequestCommit             commit               = 10;
-    RequestListSnapshots      list_snapshots       = 11;
-    RequestOfferSnapshot      offer_snapshot       = 12;
-    RequestLoadSnapshotChunk  load_snapshot_chunk  = 13;
-    RequestApplySnapshotChunk apply_snapshot_chunk = 14;
+    RequestEcho                echo                  = 1;
+    RequestFlush               flush                 = 2;
+    RequestInfo                info                  = 3;
+    RequestInitChain           init_chain            = 4;
+    RequestQuery               query                 = 5;
+    RequestCheckTx             check_tx              = 7;
+    RequestCommit              commit                = 10;
+    RequestListSnapshots       list_snapshots        = 11;
+    RequestOfferSnapshot       offer_snapshot        = 12;
+    RequestLoadSnapshotChunk   load_snapshot_chunk   = 13;
+    RequestApplySnapshotChunk  apply_snapshot_chunk  = 14;
+    RequestPrepareProposal     prepare_proposal      = 15;
+    RequestProcessProposal     process_proposal      = 16;
+    RequestExtendVote          extend_vote           = 17;
+    RequestVerifyVoteExtension verify_vote_extension = 18;
+    RequestFinalizeBlock       finalize_block        = 19;
   }
+  reserved 6, 8, 9;  // RequestBeginBlock, RequestDeliverTx, RequestEndBlock
 }
 
 message RequestEcho {
-  string message = 1;
+  string message = 1;  // A string to echo back
 }
 
 message RequestFlush {}
@@ -52,14 +54,21 @@ message RequestInfo {
 }
 
 message RequestInitChain {
+  // Genesis time
   google.protobuf.Timestamp time = 1
       [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-  string                           chain_id            = 2;
-  tendermint.types.ConsensusParams consensus_params    = 3;
-  ValidatorSetUpdate               validator_set       = 4 [(gogoproto.nullable) = true];
-  bytes                            app_state_bytes     = 5;
-  int64                            initial_height      = 6;
-  uint32                           initial_core_height = 7;
+  // ID of the blockchain.
+  string chain_id = 2;
+  // Initial consensus-critical parameters.
+  tendermint.types.ConsensusParams consensus_params = 3;
+  // Initial genesis validators, sorted by voting power.
+  ValidatorSetUpdate validator_set = 4 [(gogoproto.nullable) = true];
+  // Serialized initial application state. JSON bytes.
+  bytes app_state_bytes = 5;
+  // Height of the initial block (typically `1`).
+  int64 initial_height = 6;
+  // Initial core chain lock height.
+  uint32 initial_core_height = 7;
 }
 
 message RequestQuery {
@@ -67,13 +76,6 @@ message RequestQuery {
   string path   = 2;
   int64  height = 3;
   bool   prove  = 4;
-}
-
-message RequestBeginBlock {
-  bytes                   hash                 = 1;
-  tendermint.types.Header header               = 2 [(gogoproto.nullable) = false];
-  LastCommitInfo          last_commit_info     = 3 [(gogoproto.nullable) = false];
-  repeated Evidence       byzantine_validators = 4 [(gogoproto.nullable) = false];
 }
 
 enum CheckTxType {
@@ -84,14 +86,6 @@ enum CheckTxType {
 message RequestCheckTx {
   bytes       tx   = 1;
   CheckTxType type = 2;
-}
-
-message RequestDeliverTx {
-  bytes tx = 1;
-}
-
-message RequestEndBlock {
-  int64 height = 1;
 }
 
 message RequestCommit {}
@@ -119,27 +113,126 @@ message RequestApplySnapshotChunk {
   string sender = 3;
 }
 
+message RequestPrepareProposal {
+  // Currently configured maximum size in bytes taken by the modified transactions.
+  // The modified transactions cannot exceed this size.
+  int64 max_tx_bytes = 1;
+  // Preliminary list of transactions that have been picked as part of the block to propose.
+  // Sent to the app for possible modifications.
+  repeated bytes txs = 2;
+  // Info about the last commit, obtained locally from Tendermint's data structures.
+  ExtendedCommitInfo local_last_commit = 3 [(gogoproto.nullable) = false];
+  // List of information about validators that acted incorrectly.
+  repeated Misbehavior misbehavior = 4 [(gogoproto.nullable) = false];
+  // The height of the block that will be proposed.
+  int64 height = 5;
+  // Timestamp of the block that that will be proposed.
+  google.protobuf.Timestamp time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  // Merkle root of the next validator set.
+  bytes next_validators_hash = 7;
+
+  // Core chain lock height to be used when signing this block.
+  uint32 core_chain_locked_height = 100;
+  // ProTxHash of the original proposer of the block.
+  bytes proposer_pro_tx_hash = 101;
+  // Proposer's latest available app protocol version.
+  uint64 proposed_app_version = 102;
+  // App and block version used to generate the block.
+  tendermint.version.Consensus version = 103;
+}
+
+message RequestProcessProposal {
+  // List of transactions that have been picked as part of the proposed
+  repeated bytes txs = 1;
+  // Info about the last commit, obtained from the information in the proposed block.
+  CommitInfo proposed_last_commit = 2 [(gogoproto.nullable) = false];
+  // List of information about validators that acted incorrectly.
+  repeated Misbehavior misbehavior = 3 [(gogoproto.nullable) = false];
+  // The block header's hash of the proposed block.
+  bytes hash = 4;
+  // The height of the proposed block.
+  int64 height = 5;
+  // Timestamp included in the proposed block.
+  google.protobuf.Timestamp time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  // Merkle root of the next validator set.
+  bytes next_validators_hash = 7;
+
+  // Core chain lock height to be used when signing this block.
+  uint32 core_chain_locked_height = 100;
+  // ProTXHash of the original proposer of the block.
+  bytes proposer_pro_tx_hash = 101;
+  // Proposer's latest available app protocol version.
+  uint64 proposed_app_version = 102;
+  // App and block version used to generate the block.
+  tendermint.version.Consensus version = 103;
+}
+
+// Extends a vote with application-side injection
+message RequestExtendVote {
+  bytes hash   = 1;
+  int64 height = 2;
+}
+
+// Verify the vote extension
+message RequestVerifyVoteExtension {
+  bytes hash                  = 1;
+  bytes validator_pro_tx_hash = 2;
+  int64 height                = 3;
+
+  repeated ExtendVoteExtension vote_extensions = 4;
+}
+
+message RequestFinalizeBlock {
+  // List of transactions committed as part of the block.
+  repeated bytes txs = 1;
+  // Info about the last commit, obtained from the block that was just decided.
+  CommitInfo decided_last_commit = 2 [(gogoproto.nullable) = false];
+  // List of information about validators that acted incorrectly.
+  repeated Misbehavior misbehavior = 3 [(gogoproto.nullable) = false];
+  // The block header's hash. Present for convenience (can be derived from the block header).
+  bytes hash = 4;
+  // The height of the finalized block.
+  int64 height = 5;
+  // Timestamp included in the finalized block.
+  google.protobuf.Timestamp time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  // Merkle root of the next validator set.
+  bytes next_validators_hash = 7;
+  // Core chain lock height to be used when signing this block.
+  uint32 core_chain_locked_height = 100;
+  // ProTxHash of the original proposer of the block.
+  bytes proposer_pro_tx_hash = 101;
+  // Proposer's latest available app protocol version.
+  uint64 proposed_app_version = 102;
+  // App and block version used to generate the block.
+  tendermint.version.Consensus version = 103;
+  // The Merkle root hash of the application state after committing the block.
+  bytes app_hash = 104;
+}
+
 //----------------------------------------
 // Response types
 
 message Response {
   oneof value {
-    ResponseException          exception            = 1;
-    ResponseEcho               echo                 = 2;
-    ResponseFlush              flush                = 3;
-    ResponseInfo               info                 = 4;
-    ResponseInitChain          init_chain           = 5;
-    ResponseQuery              query                = 6;
-    ResponseBeginBlock         begin_block          = 7;
-    ResponseCheckTx            check_tx             = 8;
-    ResponseDeliverTx          deliver_tx           = 9;
-    ResponseEndBlock           end_block            = 10;
-    ResponseCommit             commit               = 11;
-    ResponseListSnapshots      list_snapshots       = 12;
-    ResponseOfferSnapshot      offer_snapshot       = 13;
-    ResponseLoadSnapshotChunk  load_snapshot_chunk  = 14;
-    ResponseApplySnapshotChunk apply_snapshot_chunk = 15;
+    ResponseException           exception             = 1;
+    ResponseEcho                echo                  = 2;
+    ResponseFlush               flush                 = 3;
+    ResponseInfo                info                  = 4;
+    ResponseInitChain           init_chain            = 5;
+    ResponseQuery               query                 = 6;
+    ResponseCheckTx             check_tx              = 8;
+    ResponseCommit              commit                = 11;
+    ResponseListSnapshots       list_snapshots        = 12;
+    ResponseOfferSnapshot       offer_snapshot        = 13;
+    ResponseLoadSnapshotChunk   load_snapshot_chunk   = 14;
+    ResponseApplySnapshotChunk  apply_snapshot_chunk  = 15;
+    ResponsePrepareProposal     prepare_proposal      = 16;
+    ResponseProcessProposal     process_proposal      = 17;
+    ResponseExtendVote          extend_vote           = 18;
+    ResponseVerifyVoteExtension verify_vote_extension = 19;
+    ResponseFinalizeBlock       finalize_block        = 20;
   }
+  reserved 7, 9, 10;  // ResponseBeginBlock, ResponseDeliverTx, ResponseEndBlock
 }
 
 // nondeterministic
@@ -168,11 +261,16 @@ message ResponseInfo {
 }
 
 message ResponseInitChain {
-  tendermint.types.ConsensusParams consensus_params            = 1;
-  bytes                            app_hash                    = 3;
-  ValidatorSetUpdate               validator_set_update        = 100 [(gogoproto.nullable) = false];
-  tendermint.types.CoreChainLock   next_core_chain_lock_update = 101;
-  uint32                           initial_core_height         = 102;
+  // Initial consensus-critical parameters (optional).
+  tendermint.types.ConsensusParams consensus_params = 1;
+  // Initial application hash.
+  bytes app_hash = 3;
+  // Initial validator set (optional).
+  ValidatorSetUpdate validator_set_update = 100 [(gogoproto.nullable) = false];
+  // Initial core chain lock update.
+  tendermint.types.CoreChainLock next_core_chain_lock_update = 101;
+  // Initial height of core lock.
+  uint32 initial_core_height = 102;
 }
 
 message ResponseQuery {
@@ -188,50 +286,22 @@ message ResponseQuery {
   string                     codespace = 10;
 }
 
-message ResponseBeginBlock {
-  repeated Event events = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
-}
-
 message ResponseCheckTx {
-  uint32         code       = 1;
-  bytes          data       = 2;
-  string         log        = 3;  // nondeterministic
-  string         info       = 4;  // nondeterministic
-  int64          gas_wanted = 5 [json_name = "gas_wanted"];
-  int64          gas_used   = 6 [json_name = "gas_used"];
-  repeated Event events     = 7 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
-  string         codespace  = 8;
-  string         sender     = 9;
-  int64          priority   = 10;
+  uint32 code       = 1;
+  bytes  data       = 2;
+  int64  gas_wanted = 5;
+  string codespace  = 8;
+  string sender     = 9;
+  int64  priority   = 10;
 
   // mempool_error is set by Tendermint.
-  // ABCI applictions creating a ResponseCheckTX should not set mempool_error.
+
+  // ABCI applications creating a ResponseCheckTX should not set mempool_error.
   string mempool_error = 11;
 }
 
-message ResponseDeliverTx {
-  uint32         code       = 1;
-  bytes          data       = 2;
-  string         log        = 3;  // nondeterministic
-  string         info       = 4;  // nondeterministic
-  int64          gas_wanted = 5 [json_name = "gas_wanted"];
-  int64          gas_used   = 6 [json_name = "gas_used"];
-  repeated Event events     = 7
-      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];  // nondeterministic
-  string codespace = 8;
-}
-
-message ResponseEndBlock {
-  tendermint.types.ConsensusParams consensus_param_updates = 2;
-  repeated Event                   events                  = 3
-      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
-  tendermint.types.CoreChainLock next_core_chain_lock_update = 100;
-  ValidatorSetUpdate             validator_set_update        = 101 [(gogoproto.nullable) = true];
-}
-
 message ResponseCommit {
-  // reserve 1
-  bytes data          = 2;
+  reserved 1, 2;
   int64 retain_height = 3;
 }
 
@@ -271,18 +341,105 @@ message ResponseApplySnapshotChunk {
   }
 }
 
+message ResponsePrepareProposal {
+  // Possibly modified list of transactions that have been picked as part of the proposed block.
+  repeated TxRecord tx_records = 1;
+  // The Merkle root hash of the application state.
+  bytes app_hash = 2;
+  // List of structures containing the data resulting from executing the transactions.
+  repeated ExecTxResult tx_results = 3;
+  // Changes to consensus-critical gas, size, and other parameters that will be applied at next height.
+  tendermint.types.ConsensusParams consensus_param_updates = 5;
+  // Core chain lock that will be used for generated block.
+  tendermint.types.CoreChainLock core_chain_lock_update = 100;
+  // Changes to validator set that will be applied at next height.
+  ValidatorSetUpdate validator_set_update = 101 [(gogoproto.nullable) = true];
+}
+
+message ResponseProcessProposal {
+  // `enum` that signals if the application finds the proposal valid.
+  ProposalStatus status = 1;
+
+  enum ProposalStatus {
+    UNKNOWN = 0;  // Unspecified error occurred
+    ACCEPT  = 1;  // Proposal accepted
+    REJECT  = 2;  // Proposal is not valid; prevoting `nil`
+  }
+
+  // The Merkle root hash of the application state.
+  bytes app_hash = 2;
+  // List of structures containing the data resulting from executing the transactions.
+  repeated ExecTxResult tx_results = 3;
+  // Changes to consensus-critical gas, size, and other parameters.
+  tendermint.types.ConsensusParams consensus_param_updates = 5;
+
+  // Core chain lock that will be used for generated block.
+  tendermint.types.CoreChainLock core_chain_lock_update = 100;
+  // Changes to validator set (set voting power to 0 to remove).
+  ValidatorSetUpdate validator_set_update = 101 [(gogoproto.nullable) = true];
+}
+
+message ExtendVoteExtension {
+  tendermint.types.VoteExtensionType type      = 1;
+  bytes                              extension = 2;
+}
+
+message ResponseExtendVote {
+  repeated ExtendVoteExtension vote_extensions = 1;
+}
+
+message ResponseVerifyVoteExtension {
+  VerifyStatus status = 1;
+
+  enum VerifyStatus {
+    UNKNOWN = 0;
+    ACCEPT  = 1;
+    REJECT  = 2;
+  }
+}
+
+// In same-block execution mode, Tendermint will log an error and ignore values for ResponseFinalizeBlock.app_hash,
+// ResponseFinalizeBlock.tx_results, ResponseFinalizeBlock.validator_updates, and ResponsePrepareProposal.consensus_param_updates,
+// as those must have been provided by PrepareProposal.
+message ResponseFinalizeBlock {
+  // Type & Key-Value events for indexing
+  repeated Event events = 1
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
+  // Blocks below this height may be removed. Defaults to `0` (retain all).
+  int64 retain_height = 6;
+}
+
 //----------------------------------------
 // Misc.
 
-message LastCommitInfo {
+message CommitInfo {
   int32 round           = 1;
   bytes quorum_hash     = 3;
   bytes block_signature = 4;
   bytes state_signature = 5;
+
+  repeated tendermint.types.VoteExtension threshold_vote_extensions = 6;
+}
+
+// ExtendedCommitInfo is similar to CommitInfo except that it is only used in
+// the PrepareProposal request such that Tendermint can provide vote extensions
+// to the application.
+message ExtendedCommitInfo {
+  // The round at which the block proposer decided in the previous height.
+  int32 round = 1;
+  // List of validators' addresses in the last validator set with their voting
+  // information, including vote extensions.
+  bytes quorum_hash     = 3;
+  bytes block_signature = 4;
+  bytes state_signature = 5;
+
+  repeated tendermint.types.VoteExtension threshold_vote_extensions = 6;
 }
 
 // Event allows application developers to attach additional information to
-// ResponseBeginBlock, ResponseEndBlock, ResponseCheckTx and ResponseDeliverTx.
+// ResponseCheckTx, ResponsePrepareProposal, ResponseProcessProposal
+// and ResponseFinalizeBlock.
+//
 // Later, transactions may be queried using these events.
 message Event {
   string                  type       = 1;
@@ -296,14 +453,40 @@ message EventAttribute {
   bool   index = 3;  // nondeterministic
 }
 
+// ExecTxResult contains results of executing one individual transaction.
+message ExecTxResult {
+  uint32         code       = 1;
+  bytes          data       = 2;
+  string         log        = 3;  // nondeterministic
+  string         info       = 4;  // nondeterministic
+  int64          gas_wanted = 5;
+  int64          gas_used   = 6;
+  repeated Event events     = 7
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];  // nondeterministic
+  string codespace = 8;
+}
+
 // TxResult contains results of executing the transaction.
 //
 // One usage is indexing transaction results.
 message TxResult {
-  int64             height = 1;
-  uint32            index  = 2;
-  bytes             tx     = 3;
-  ResponseDeliverTx result = 4 [(gogoproto.nullable) = false];
+  int64        height = 1;
+  uint32       index  = 2;
+  bytes        tx     = 3;
+  ExecTxResult result = 4 [(gogoproto.nullable) = false];
+}
+
+message TxRecord {
+  TxAction action = 1;
+  bytes    tx     = 2;
+
+  // TxAction contains App-provided information on what to do with a transaction that is part of a raw proposal
+  enum TxAction {
+    UNKNOWN    = 0;  // Unknown action
+    UNMODIFIED = 1;  // The Application did not modify this transaction.
+    ADDED      = 2;  // The Application added this transaction.
+    REMOVED    = 3;  // The Application wants this transaction removed from the proposal and the mempool.
+  }
 }
 
 //----------------------------------------
@@ -345,14 +528,24 @@ message VoteInfo {
   bool      signed_last_block = 2;
 }
 
-enum EvidenceType {
+// ExtendedVoteInfo
+message ExtendedVoteInfo {
+  // The validator that sent the vote.
+  Validator validator = 1 [(gogoproto.nullable) = false];
+  // Indicates whether the validator signed the last block, allowing for rewards based on validator availability.
+  bool signed_last_block = 2;
+  // Non-deterministic extension provided by the sending validator's application.
+  bytes vote_extension = 3;
+}
+
+enum MisbehaviorType {
   UNKNOWN             = 0;
   DUPLICATE_VOTE      = 1;
   LIGHT_CLIENT_ATTACK = 2;
 }
 
-message Evidence {
-  EvidenceType type = 1;
+message Misbehavior {
+  MisbehaviorType type = 1;
   // The offending validator
   Validator validator = 2 [(gogoproto.nullable) = false];
   // The height when the offense occurred
@@ -381,18 +574,21 @@ message Snapshot {
 // Service Definition
 
 service ABCIApplication {
+  // Echo a string to test an abci client/server implementation
   rpc Echo(RequestEcho) returns (ResponseEcho);
   rpc Flush(RequestFlush) returns (ResponseFlush);
   rpc Info(RequestInfo) returns (ResponseInfo);
-  rpc DeliverTx(RequestDeliverTx) returns (ResponseDeliverTx);
   rpc CheckTx(RequestCheckTx) returns (ResponseCheckTx);
   rpc Query(RequestQuery) returns (ResponseQuery);
   rpc Commit(RequestCommit) returns (ResponseCommit);
   rpc InitChain(RequestInitChain) returns (ResponseInitChain);
-  rpc BeginBlock(RequestBeginBlock) returns (ResponseBeginBlock);
-  rpc EndBlock(RequestEndBlock) returns (ResponseEndBlock);
   rpc ListSnapshots(RequestListSnapshots) returns (ResponseListSnapshots);
   rpc OfferSnapshot(RequestOfferSnapshot) returns (ResponseOfferSnapshot);
   rpc LoadSnapshotChunk(RequestLoadSnapshotChunk) returns (ResponseLoadSnapshotChunk);
   rpc ApplySnapshotChunk(RequestApplySnapshotChunk) returns (ResponseApplySnapshotChunk);
+  rpc PrepareProposal(RequestPrepareProposal) returns (ResponsePrepareProposal);
+  rpc ProcessProposal(RequestProcessProposal) returns (ResponseProcessProposal);
+  rpc ExtendVote(RequestExtendVote) returns (ResponseExtendVote);
+  rpc VerifyVoteExtension(RequestVerifyVoteExtension) returns (ResponseVerifyVoteExtension);
+  rpc FinalizeBlock(RequestFinalizeBlock) returns (ResponseFinalizeBlock);
 }

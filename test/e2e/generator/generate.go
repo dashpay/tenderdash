@@ -15,10 +15,7 @@ var (
 	// testnetCombinations defines global testnet options, where we generate a
 	// separate testnet for each combination (Cartesian product) of options.
 	testnetCombinations = map[string][]interface{}{
-		"topology":      {"single", "quad", "large"},
-		"p2p":           {NewP2PMode, LegacyP2PMode, HybridP2PMode},
-		"queueType":     {"priority"}, // "fifo", "wdrr"
-		"initialHeight": {0, 1000},
+		"topology": {"single", "quad", "large"},
 		"initialState": {
 			map[string]string{},
 			map[string]string{"initial01": "a", "initial02": "b", "initial03": "c"},
@@ -27,6 +24,8 @@ var (
 		// Tenderdash-specific
 		"initialCoreChainLockedHeight": {0},
 		"initAppCoreChainLockedHeight": {0},
+		"abci":                         {"builtin", "outofprocess"},
+		"txSize":                       {1024, 2048, 4096, 8192},
 	}
 
 	// The following specify randomly chosen values for testnet nodes.
@@ -37,11 +36,10 @@ var (
 		"rocksdb":   10,
 		"cleveldb":  5,
 	}
-	nodeABCIProtocols = weightedChoice{
-		"builtin": 50,
-		"tcp":     20,
-		"grpc":    20,
-		"unix":    10,
+	ABCIProtocols = weightedChoice{
+		"tcp":  20,
+		"grpc": 20,
+		"unix": 10,
 	}
 	nodePrivvalProtocols = weightedChoice{
 		"file": 50,
@@ -49,9 +47,6 @@ var (
 		"tcp":  20,
 		"unix": 10,
 	}
-	// FIXME: v2 disabled due to flake
-	nodeBlockSyncs = uniformChoice{"v0"} // "v2"
-	nodeMempools   = uniformChoice{"v0", "v1"}
 	nodeStateSyncs = weightedChoice{
 		e2e.StateSyncDisabled: 10,
 		e2e.StateSyncP2P:      45,
@@ -59,35 +54,32 @@ var (
 	}
 	nodePersistIntervals  = uniformChoice{0, 1, 5}
 	nodeSnapshotIntervals = uniformChoice{0, 5}
-	nodeRetainBlocks      = uniformChoice{0, 2 * int(e2e.EvidenceAgeHeight), 4 * int(e2e.EvidenceAgeHeight)}
-	nodePerturbations     = probSetChoice{
+	nodeRetainBlocks      = uniformChoice{
+		0,
+		2 * int(e2e.EvidenceAgeHeight),
+		4 * int(e2e.EvidenceAgeHeight),
+	}
+	nodePerturbations = probSetChoice{
 		"disconnect": 0.1,
 		"pause":      0.1,
 		"kill":       0.1,
 		"restart":    0.1,
 	}
-	evidence = uniformChoice{0, 1, 10}
-	txSize   = uniformChoice{1024, 4096} // either 1kb or 4kb
-	ipv6     = uniformChoice{false, true}
-	keyType  = uniformChoice{types.ABCIPubKeyTypeEd25519, types.ABCIPubKeyTypeSecp256k1}
+
+	// the following specify random chosen values for the entire testnet
+	initialHeight = uniformChoice{0, 1000}
+	evidence      = uniformChoice{0, 1, 10}
+	ipv6          = uniformChoice{false, true}
+	keyType       = uniformChoice{types.ABCIPubKeyTypeEd25519, types.ABCIPubKeyTypeSecp256k1}
+	abciDelays    = uniformChoice{"none", "small", "large"}
+
+	voteExtensionEnableHeightOffset = uniformChoice{int64(0), int64(10), int64(100)}
+	voteExtensionEnabled            = uniformChoice{true, false}
 )
 
 // Generate generates random testnets using the given RNG.
 func Generate(r *rand.Rand, opts Options) ([]e2e.Manifest, error) {
 	manifests := []e2e.Manifest{}
-	switch opts.P2P {
-	case NewP2PMode, LegacyP2PMode, HybridP2PMode:
-		defer func() {
-			// avoid modifying the global state.
-			original := make([]interface{}, len(testnetCombinations["p2p"]))
-			copy(original, testnetCombinations["p2p"])
-			testnetCombinations["p2p"] = original
-		}()
-
-		testnetCombinations["p2p"] = []interface{}{opts.P2P}
-	case MixedP2PMode:
-		testnetCombinations["p2p"] = []interface{}{NewP2PMode, LegacyP2PMode, HybridP2PMode}
-	}
 
 	for _, opt := range combinations(testnetCombinations) {
 		manifest, err := generateTestnet(r, opt)
@@ -97,12 +89,6 @@ func Generate(r *rand.Rand, opts Options) ([]e2e.Manifest, error) {
 
 		if len(manifest.Nodes) < opts.MinNetworkSize {
 			continue
-		}
-
-		if len(manifest.Nodes) == 1 {
-			if opt["p2p"] == HybridP2PMode {
-				continue
-			}
 		}
 
 		if opts.MaxNetworkSize > 0 && len(manifest.Nodes) >= opts.MaxNetworkSize {
@@ -120,34 +106,21 @@ type Options struct {
 	MaxNetworkSize int
 	NumGroups      int
 	Directory      string
-	P2P            P2PMode
 	Reverse        bool
 }
-
-type P2PMode string
-
-const (
-	NewP2PMode    P2PMode = "new"
-	LegacyP2PMode P2PMode = "legacy"
-	HybridP2PMode P2PMode = "hybrid"
-	// mixed means that all combination are generated
-	MixedP2PMode P2PMode = "mixed"
-)
 
 // generateTestnet generates a single testnet with the given options.
 func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, error) {
 	manifest := e2e.Manifest{
 		IPv6:             ipv6.Choose(r).(bool),
-		ABCIProtocol:     nodeABCIProtocols.Choose(r),
-		InitialHeight:    int64(opt["initialHeight"].(int)),
 		InitialState:     opt["initialState"].(map[string]string),
 		Validators:       map[string]int64{},
 		ValidatorUpdates: map[string]map[string]int64{},
 		Nodes:            map[string]*e2e.ManifestNode{},
 		KeyType:          keyType.Choose(r).(string),
 		Evidence:         evidence.Choose(r).(int),
-		QueueType:        opt["queueType"].(string),
-		TxSize:           txSize.Choose(r).(int),
+		QueueType:        "simple-priority",
+		TxSize:           opt["txSize"].(int),
 
 		// Tenderdash specific settings
 		GenesisCoreChainLockedHeight: uint32(opt["initialCoreChainLockedHeight"].(int)),
@@ -155,11 +128,31 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 		ChainLockUpdates:             map[string]int64{},
 	}
 
-	p2pMode := opt["p2p"].(P2PMode)
-	switch p2pMode {
-	case NewP2PMode, LegacyP2PMode, HybridP2PMode:
-	default:
-		return manifest, fmt.Errorf("unknown p2p mode %s", p2pMode)
+	manifest.InitialHeight = int64(initialHeight.Choose(r).(int))
+
+	if voteExtensionEnabled.Choose(r).(bool) {
+		manifest.VoteExtensionsEnableHeight = manifest.InitialHeight + voteExtensionEnableHeightOffset.Choose(r).(int64)
+	}
+
+	if opt["abci"] == "builtin" {
+		manifest.ABCIProtocol = string(e2e.ProtocolBuiltin)
+	} else {
+		manifest.ABCIProtocol = ABCIProtocols.Choose(r)
+	}
+
+	switch abciDelays.Choose(r).(string) {
+	case "none":
+	case "small":
+		manifest.PrepareProposalDelayMS = 100
+		manifest.ProcessProposalDelayMS = 100
+		manifest.VoteExtensionDelayMS = 20
+		manifest.FinalizeBlockDelayMS = 200
+	case "large":
+		manifest.PrepareProposalDelayMS = 200
+		manifest.ProcessProposalDelayMS = 200
+		manifest.CheckTxDelayMS = 20
+		manifest.VoteExtensionDelayMS = 100
+		manifest.FinalizeBlockDelayMS = 500
 	}
 
 	topology, ok := topologies[opt["topology"].(string)]
@@ -220,6 +213,7 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 			nextStartAt += 5
 		}
 		node := generateNode(r, manifest, e2e.ModeFull, startAt, false)
+
 		manifest.Nodes[fmt.Sprintf("full%02d", i)] = node
 	}
 
@@ -281,13 +275,9 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 
 			// choose one of the seeds
 			manifest.Nodes[name].Seeds = uniformSetChoice(seedNames).Choose(r)
-		} else if i > 0 {
+		} else if i > 1 && r.Float64() >= 0.5 {
 			peers := uniformSetChoice(peerNames[:i])
-			if manifest.Nodes[name].StateSync == e2e.StateSyncP2P {
-				manifest.Nodes[name].PersistentPeers = peers.ChooseAtLeast(r, 2)
-			} else {
-				manifest.Nodes[name].PersistentPeers = peers.Choose(r)
-			}
+			manifest.Nodes[name].PersistentPeers = peers.ChooseAtLeast(r, 2)
 		}
 	}
 
@@ -319,8 +309,6 @@ func generateNode(
 		StartAt:          startAt,
 		Database:         nodeDatabases.Choose(r),
 		PrivvalProtocol:  nodePrivvalProtocols.Choose(r),
-		BlockSync:        nodeBlockSyncs.Choose(r).(string),
-		Mempool:          nodeMempools.Choose(r).(string),
 		StateSync:        e2e.StateSyncDisabled,
 		PersistInterval:  ptrUint64(uint64(nodePersistIntervals.Choose(r).(int))),
 		SnapshotInterval: uint64(nodeSnapshotIntervals.Choose(r).(int)),
@@ -365,10 +353,6 @@ func generateNode(
 		if node.RetainBlocks < node.SnapshotInterval {
 			node.RetainBlocks = node.SnapshotInterval
 		}
-	}
-
-	if node.StateSync != e2e.StateSyncDisabled {
-		node.BlockSync = "v0"
 	}
 
 	return &node

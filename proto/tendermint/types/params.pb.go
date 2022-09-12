@@ -34,6 +34,9 @@ type ConsensusParams struct {
 	Evidence  *EvidenceParams  `protobuf:"bytes,2,opt,name=evidence,proto3" json:"evidence,omitempty"`
 	Validator *ValidatorParams `protobuf:"bytes,3,opt,name=validator,proto3" json:"validator,omitempty"`
 	Version   *VersionParams   `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
+	Synchrony *SynchronyParams `protobuf:"bytes,5,opt,name=synchrony,proto3" json:"synchrony,omitempty"`
+	Timeout   *TimeoutParams   `protobuf:"bytes,6,opt,name=timeout,proto3" json:"timeout,omitempty"`
+	Abci      *ABCIParams      `protobuf:"bytes,7,opt,name=abci,proto3" json:"abci,omitempty"`
 }
 
 func (m *ConsensusParams) Reset()         { *m = ConsensusParams{} }
@@ -93,6 +96,27 @@ func (m *ConsensusParams) GetValidator() *ValidatorParams {
 func (m *ConsensusParams) GetVersion() *VersionParams {
 	if m != nil {
 		return m.Version
+	}
+	return nil
+}
+
+func (m *ConsensusParams) GetSynchrony() *SynchronyParams {
+	if m != nil {
+		return m.Synchrony
+	}
+	return nil
+}
+
+func (m *ConsensusParams) GetTimeout() *TimeoutParams {
+	if m != nil {
+		return m.Timeout
+	}
+	return nil
+}
+
+func (m *ConsensusParams) GetAbci() *ABCIParams {
+	if m != nil {
+		return m.Abci
 	}
 	return nil
 }
@@ -167,8 +191,8 @@ type EvidenceParams struct {
 	// mechanism for handling [Nothing-At-Stake
 	// attacks](https://github.com/ethereum/wiki/wiki/Proof-of-Stake-FAQ#what-is-the-nothing-at-stake-problem-and-how-can-it-be-fixed).
 	MaxAgeDuration time.Duration `protobuf:"bytes,2,opt,name=max_age_duration,json=maxAgeDuration,proto3,stdduration" json:"max_age_duration"`
-	// This sets the maximum size of total evidence in bytes that can be committed in a single block.
-	// and should fall comfortably under the max block bytes.
+	// This sets the maximum size of total evidence in bytes that can be committed
+	// in a single block. and should fall comfortably under the max block bytes.
 	// Default is 1048576 or 1MB
 	MaxBytes int64 `protobuf:"varint,3,opt,name=max_bytes,json=maxBytes,proto3" json:"max_bytes,omitempty"`
 }
@@ -373,6 +397,230 @@ func (m *HashedParams) GetBlockMaxGas() int64 {
 	return 0
 }
 
+// SynchronyParams configure the bounds under which a proposed block's timestamp is considered valid.
+// These parameters are part of the proposer-based timestamps algorithm. For more information,
+// see the specification of proposer-based timestamps:
+// https://github.com/tendermint/tendermint/tree/master/spec/consensus/proposer-based-timestamp
+type SynchronyParams struct {
+	// message_delay bounds how long a proposal message may take to reach all validators on a network
+	// and still be considered valid.
+	MessageDelay *time.Duration `protobuf:"bytes,1,opt,name=message_delay,json=messageDelay,proto3,stdduration" json:"message_delay,omitempty"`
+	// precision bounds how skewed a proposer's clock may be from any validator
+	// on the network while still producing valid proposals.
+	Precision *time.Duration `protobuf:"bytes,2,opt,name=precision,proto3,stdduration" json:"precision,omitempty"`
+}
+
+func (m *SynchronyParams) Reset()         { *m = SynchronyParams{} }
+func (m *SynchronyParams) String() string { return proto.CompactTextString(m) }
+func (*SynchronyParams) ProtoMessage()    {}
+func (*SynchronyParams) Descriptor() ([]byte, []int) {
+	return fileDescriptor_e12598271a686f57, []int{6}
+}
+func (m *SynchronyParams) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *SynchronyParams) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_SynchronyParams.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *SynchronyParams) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_SynchronyParams.Merge(m, src)
+}
+func (m *SynchronyParams) XXX_Size() int {
+	return m.Size()
+}
+func (m *SynchronyParams) XXX_DiscardUnknown() {
+	xxx_messageInfo_SynchronyParams.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_SynchronyParams proto.InternalMessageInfo
+
+func (m *SynchronyParams) GetMessageDelay() *time.Duration {
+	if m != nil {
+		return m.MessageDelay
+	}
+	return nil
+}
+
+func (m *SynchronyParams) GetPrecision() *time.Duration {
+	if m != nil {
+		return m.Precision
+	}
+	return nil
+}
+
+// TimeoutParams configure the timeouts for the steps of the Tendermint consensus algorithm.
+type TimeoutParams struct {
+	// These fields configure the timeouts for the propose step of the Tendermint
+	// consensus algorithm: propose is the initial timeout and propose_delta
+	// determines how much the timeout grows in subsequent rounds.
+	// For the first round, this propose timeout is used and for every subsequent
+	// round, the timeout grows by propose_delta.
+	//
+	// For example:
+	// With propose = 10ms, propose_delta = 5ms, the first round's propose phase
+	// timeout would be 10ms, the second round's would be 15ms, the third 20ms and so on.
+	//
+	// If a node waiting for a proposal message does not receive one matching its
+	// current height and round before this timeout, the node will issue a
+	// nil prevote for the round and advance to the next step.
+	Propose      *time.Duration `protobuf:"bytes,1,opt,name=propose,proto3,stdduration" json:"propose,omitempty"`
+	ProposeDelta *time.Duration `protobuf:"bytes,2,opt,name=propose_delta,json=proposeDelta,proto3,stdduration" json:"propose_delta,omitempty"`
+	// vote along with vote_delta configure the timeout for both of the prevote and
+	// precommit steps of the Tendermint consensus algorithm.
+	//
+	// These parameters influence the vote step timeouts in the the same way that
+	// the propose and propose_delta parameters do to the proposal step.
+	//
+	// The vote timeout does not begin until a quorum of votes has been received. Once
+	// a quorum of votes has been seen and this timeout elapses, Tendermint will
+	// procced to the next step of the consensus algorithm. If Tendermint receives
+	// all of the remaining votes before the end of the timeout, it will proceed
+	// to the next step immediately.
+	Vote      *time.Duration `protobuf:"bytes,3,opt,name=vote,proto3,stdduration" json:"vote,omitempty"`
+	VoteDelta *time.Duration `protobuf:"bytes,4,opt,name=vote_delta,json=voteDelta,proto3,stdduration" json:"vote_delta,omitempty"`
+	// commit configures how long Tendermint will wait after receiving a quorum of
+	// precommits before beginning consensus for the next height. This can be
+	// used to allow slow precommits to arrive for inclusion in the next height before progressing.
+	Commit *time.Duration `protobuf:"bytes,5,opt,name=commit,proto3,stdduration" json:"commit,omitempty"`
+	// bypass_commit_timeout configures the node to proceed immediately to
+	// the next height once the node has received all precommits for a block, forgoing
+	// the remaining commit timeout.
+	// Setting bypass_commit_timeout false (the default) causes Tendermint to wait
+	// for the full commit timeout.
+	BypassCommitTimeout bool `protobuf:"varint,6,opt,name=bypass_commit_timeout,json=bypassCommitTimeout,proto3" json:"bypass_commit_timeout,omitempty"`
+}
+
+func (m *TimeoutParams) Reset()         { *m = TimeoutParams{} }
+func (m *TimeoutParams) String() string { return proto.CompactTextString(m) }
+func (*TimeoutParams) ProtoMessage()    {}
+func (*TimeoutParams) Descriptor() ([]byte, []int) {
+	return fileDescriptor_e12598271a686f57, []int{7}
+}
+func (m *TimeoutParams) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *TimeoutParams) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_TimeoutParams.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *TimeoutParams) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_TimeoutParams.Merge(m, src)
+}
+func (m *TimeoutParams) XXX_Size() int {
+	return m.Size()
+}
+func (m *TimeoutParams) XXX_DiscardUnknown() {
+	xxx_messageInfo_TimeoutParams.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_TimeoutParams proto.InternalMessageInfo
+
+func (m *TimeoutParams) GetPropose() *time.Duration {
+	if m != nil {
+		return m.Propose
+	}
+	return nil
+}
+
+func (m *TimeoutParams) GetProposeDelta() *time.Duration {
+	if m != nil {
+		return m.ProposeDelta
+	}
+	return nil
+}
+
+func (m *TimeoutParams) GetVote() *time.Duration {
+	if m != nil {
+		return m.Vote
+	}
+	return nil
+}
+
+func (m *TimeoutParams) GetVoteDelta() *time.Duration {
+	if m != nil {
+		return m.VoteDelta
+	}
+	return nil
+}
+
+func (m *TimeoutParams) GetCommit() *time.Duration {
+	if m != nil {
+		return m.Commit
+	}
+	return nil
+}
+
+func (m *TimeoutParams) GetBypassCommitTimeout() bool {
+	if m != nil {
+		return m.BypassCommitTimeout
+	}
+	return false
+}
+
+// ABCIParams configure functionality specific to the Application Blockchain Interface.
+type ABCIParams struct {
+	// Indicates if CheckTx should be called on all the transactions
+	// remaining in the mempool after a block is executed.
+	RecheckTx bool `protobuf:"varint,2,opt,name=recheck_tx,json=recheckTx,proto3" json:"recheck_tx,omitempty"`
+}
+
+func (m *ABCIParams) Reset()         { *m = ABCIParams{} }
+func (m *ABCIParams) String() string { return proto.CompactTextString(m) }
+func (*ABCIParams) ProtoMessage()    {}
+func (*ABCIParams) Descriptor() ([]byte, []int) {
+	return fileDescriptor_e12598271a686f57, []int{8}
+}
+func (m *ABCIParams) XXX_Unmarshal(b []byte) error {
+	return m.Unmarshal(b)
+}
+func (m *ABCIParams) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
+	if deterministic {
+		return xxx_messageInfo_ABCIParams.Marshal(b, m, deterministic)
+	} else {
+		b = b[:cap(b)]
+		n, err := m.MarshalToSizedBuffer(b)
+		if err != nil {
+			return nil, err
+		}
+		return b[:n], nil
+	}
+}
+func (m *ABCIParams) XXX_Merge(src proto.Message) {
+	xxx_messageInfo_ABCIParams.Merge(m, src)
+}
+func (m *ABCIParams) XXX_Size() int {
+	return m.Size()
+}
+func (m *ABCIParams) XXX_DiscardUnknown() {
+	xxx_messageInfo_ABCIParams.DiscardUnknown(m)
+}
+
+var xxx_messageInfo_ABCIParams proto.InternalMessageInfo
+
+func (m *ABCIParams) GetRecheckTx() bool {
+	if m != nil {
+		return m.RecheckTx
+	}
+	return false
+}
+
 func init() {
 	proto.RegisterType((*ConsensusParams)(nil), "tendermint.types.ConsensusParams")
 	proto.RegisterType((*BlockParams)(nil), "tendermint.types.BlockParams")
@@ -380,44 +628,61 @@ func init() {
 	proto.RegisterType((*ValidatorParams)(nil), "tendermint.types.ValidatorParams")
 	proto.RegisterType((*VersionParams)(nil), "tendermint.types.VersionParams")
 	proto.RegisterType((*HashedParams)(nil), "tendermint.types.HashedParams")
+	proto.RegisterType((*SynchronyParams)(nil), "tendermint.types.SynchronyParams")
+	proto.RegisterType((*TimeoutParams)(nil), "tendermint.types.TimeoutParams")
+	proto.RegisterType((*ABCIParams)(nil), "tendermint.types.ABCIParams")
 }
 
 func init() { proto.RegisterFile("tendermint/types/params.proto", fileDescriptor_e12598271a686f57) }
 
 var fileDescriptor_e12598271a686f57 = []byte{
-	// 498 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x6c, 0x93, 0xc1, 0x6a, 0xd4, 0x40,
-	0x1c, 0xc6, 0x77, 0x9a, 0xda, 0xee, 0xfe, 0xe3, 0x76, 0xcb, 0x20, 0x18, 0x2b, 0xcd, 0xae, 0x39,
-	0x48, 0x41, 0x48, 0xc4, 0x22, 0x22, 0x08, 0xe2, 0x56, 0xa9, 0x20, 0x15, 0x09, 0xea, 0xa1, 0x97,
-	0x30, 0xd9, 0x8c, 0x69, 0xe8, 0x4e, 0x66, 0xc8, 0x24, 0xcb, 0xee, 0xcd, 0x47, 0xf0, 0xe8, 0x23,
-	0xe8, 0x9b, 0xf4, 0xd8, 0xa3, 0x27, 0x95, 0xdd, 0x17, 0x91, 0x4c, 0x32, 0xa6, 0x9b, 0xf6, 0x36,
-	0x33, 0xdf, 0xef, 0x9b, 0xe1, 0xfb, 0x86, 0x3f, 0xec, 0xe7, 0x34, 0x8d, 0x68, 0xc6, 0x92, 0x34,
-	0xf7, 0xf2, 0x85, 0xa0, 0xd2, 0x13, 0x24, 0x23, 0x4c, 0xba, 0x22, 0xe3, 0x39, 0xc7, 0xbb, 0x8d,
-	0xec, 0x2a, 0x79, 0xef, 0x4e, 0xcc, 0x63, 0xae, 0x44, 0xaf, 0x5c, 0x55, 0xdc, 0x9e, 0x1d, 0x73,
-	0x1e, 0x4f, 0xa9, 0xa7, 0x76, 0x61, 0xf1, 0xc5, 0x8b, 0x8a, 0x8c, 0xe4, 0x09, 0x4f, 0x2b, 0xdd,
-	0xf9, 0xba, 0x01, 0x83, 0x23, 0x9e, 0x4a, 0x9a, 0xca, 0x42, 0x7e, 0x50, 0x2f, 0xe0, 0x43, 0xb8,
-	0x15, 0x4e, 0xf9, 0xe4, 0xdc, 0x42, 0x23, 0x74, 0x60, 0x3e, 0xd9, 0x77, 0xdb, 0x6f, 0xb9, 0xe3,
-	0x52, 0xae, 0x68, 0xbf, 0x62, 0xf1, 0x0b, 0xe8, 0xd2, 0x59, 0x12, 0xd1, 0x74, 0x42, 0xad, 0x0d,
-	0xe5, 0x1b, 0x5d, 0xf7, 0xbd, 0xa9, 0x89, 0xda, 0xfa, 0xdf, 0x81, 0x5f, 0x42, 0x6f, 0x46, 0xa6,
-	0x49, 0x44, 0x72, 0x9e, 0x59, 0x86, 0xb2, 0x3f, 0xb8, 0x6e, 0xff, 0xac, 0x91, 0xda, 0xdf, 0x78,
-	0xf0, 0x73, 0xd8, 0x9e, 0xd1, 0x4c, 0x26, 0x3c, 0xb5, 0x36, 0x95, 0x7d, 0x78, 0x83, 0xbd, 0x02,
-	0x6a, 0xb3, 0xe6, 0x9d, 0x23, 0x30, 0xaf, 0xe4, 0xc1, 0xf7, 0xa1, 0xc7, 0xc8, 0x3c, 0x08, 0x17,
-	0x39, 0x95, 0xaa, 0x01, 0xc3, 0xef, 0x32, 0x32, 0x1f, 0x97, 0x7b, 0x7c, 0x17, 0xb6, 0x4b, 0x31,
-	0x26, 0x52, 0x85, 0x34, 0xfc, 0x2d, 0x46, 0xe6, 0xc7, 0x44, 0x3a, 0x3f, 0x11, 0xec, 0xac, 0xa7,
-	0xc3, 0x8f, 0x00, 0x97, 0x2c, 0x89, 0x69, 0x90, 0x16, 0x2c, 0x50, 0x35, 0xe9, 0x1b, 0x07, 0x8c,
-	0xcc, 0x5f, 0xc5, 0xf4, 0x7d, 0xc1, 0xd4, 0xd3, 0x12, 0x9f, 0xc0, 0xae, 0x86, 0xf5, 0x0f, 0xd5,
-	0x35, 0xde, 0x73, 0xab, 0x2f, 0x74, 0xf5, 0x17, 0xba, 0xaf, 0x6b, 0x60, 0xdc, 0xbd, 0xf8, 0x3d,
-	0xec, 0x7c, 0xff, 0x33, 0x44, 0xfe, 0x4e, 0x75, 0x9f, 0x56, 0xd6, 0x43, 0x18, 0xeb, 0x21, 0x9c,
-	0xa7, 0x30, 0x68, 0x35, 0x89, 0x1d, 0xe8, 0x8b, 0x22, 0x0c, 0xce, 0xe9, 0x22, 0x50, 0x5d, 0x59,
-	0x68, 0x64, 0x1c, 0xf4, 0x7c, 0x53, 0x14, 0xe1, 0x3b, 0xba, 0xf8, 0x58, 0x1e, 0x39, 0x8f, 0xa1,
-	0xbf, 0xd6, 0x20, 0x1e, 0x82, 0x49, 0x84, 0x08, 0x74, 0xef, 0x65, 0xb2, 0x4d, 0x1f, 0x88, 0x10,
-	0x35, 0xe6, 0x9c, 0xc2, 0xed, 0xb7, 0x44, 0x9e, 0xd1, 0xa8, 0x36, 0x3c, 0x84, 0x81, 0x6a, 0x21,
-	0x68, 0x17, 0xdc, 0x57, 0xc7, 0x27, 0xba, 0x65, 0x07, 0xfa, 0x0d, 0xd7, 0x74, 0x6d, 0x6a, 0xea,
-	0x98, 0xc8, 0xf1, 0xa7, 0x1f, 0x4b, 0x1b, 0x5d, 0x2c, 0x6d, 0x74, 0xb9, 0xb4, 0xd1, 0xdf, 0xa5,
-	0x8d, 0xbe, 0xad, 0xec, 0xce, 0xe5, 0xca, 0xee, 0xfc, 0x5a, 0xd9, 0x9d, 0xd3, 0x67, 0x71, 0x92,
-	0x9f, 0x15, 0xa1, 0x3b, 0xe1, 0xcc, 0xbb, 0x3a, 0x48, 0xcd, 0xb2, 0x9a, 0x94, 0xf6, 0x90, 0x85,
-	0x5b, 0xea, 0xfc, 0xf0, 0x5f, 0x00, 0x00, 0x00, 0xff, 0xff, 0x18, 0x54, 0x4f, 0xe1, 0x7f, 0x03,
-	0x00, 0x00,
+	// 723 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x8c, 0x95, 0xdf, 0x6e, 0xd3, 0x30,
+	0x14, 0xc6, 0x9b, 0xb5, 0xeb, 0xda, 0xd3, 0x75, 0x9d, 0x0c, 0x88, 0x30, 0x58, 0x3a, 0x72, 0x81,
+	0x26, 0x4d, 0x4a, 0xa7, 0x4d, 0x68, 0x42, 0xe2, 0x8f, 0xd6, 0x16, 0x01, 0x42, 0x43, 0x28, 0x0c,
+	0x2e, 0x76, 0x13, 0x39, 0xa9, 0x49, 0xa3, 0x35, 0x71, 0x14, 0x27, 0x55, 0xf3, 0x16, 0x5c, 0x21,
+	0x1e, 0x01, 0x6e, 0x78, 0x8e, 0x5d, 0xee, 0x92, 0x2b, 0x40, 0xdd, 0x1b, 0xf0, 0x04, 0xc8, 0x8e,
+	0xb3, 0xae, 0x1d, 0x63, 0xbd, 0x8a, 0xe3, 0xf3, 0xfd, 0x7c, 0xe2, 0xef, 0x9c, 0xd8, 0xb0, 0x1e,
+	0x93, 0xa0, 0x47, 0x22, 0xdf, 0x0b, 0xe2, 0x56, 0x9c, 0x86, 0x84, 0xb5, 0x42, 0x1c, 0x61, 0x9f,
+	0x19, 0x61, 0x44, 0x63, 0x8a, 0x56, 0x27, 0x61, 0x43, 0x84, 0xd7, 0x6e, 0xba, 0xd4, 0xa5, 0x22,
+	0xd8, 0xe2, 0xa3, 0x4c, 0xb7, 0xa6, 0xb9, 0x94, 0xba, 0x03, 0xd2, 0x12, 0x6f, 0x76, 0xf2, 0xb1,
+	0xd5, 0x4b, 0x22, 0x1c, 0x7b, 0x34, 0xc8, 0xe2, 0xfa, 0xf7, 0x22, 0x34, 0x3a, 0x34, 0x60, 0x24,
+	0x60, 0x09, 0x7b, 0x2b, 0x32, 0xa0, 0x5d, 0x58, 0xb4, 0x07, 0xd4, 0x39, 0x56, 0x95, 0x0d, 0x65,
+	0xb3, 0xb6, 0xb3, 0x6e, 0xcc, 0xe6, 0x32, 0xda, 0x3c, 0x9c, 0xa9, 0xcd, 0x4c, 0x8b, 0x1e, 0x43,
+	0x85, 0x0c, 0xbd, 0x1e, 0x09, 0x1c, 0xa2, 0x2e, 0x08, 0x6e, 0xe3, 0x32, 0xf7, 0x5c, 0x2a, 0x24,
+	0x7a, 0x4e, 0xa0, 0x67, 0x50, 0x1d, 0xe2, 0x81, 0xd7, 0xc3, 0x31, 0x8d, 0xd4, 0xa2, 0xc0, 0xef,
+	0x5f, 0xc6, 0x3f, 0xe4, 0x12, 0xc9, 0x4f, 0x18, 0xf4, 0x08, 0x96, 0x86, 0x24, 0x62, 0x1e, 0x0d,
+	0xd4, 0x92, 0xc0, 0x9b, 0xff, 0xc0, 0x33, 0x81, 0x84, 0x73, 0x3d, 0xcf, 0xcd, 0xd2, 0xc0, 0xe9,
+	0x47, 0x34, 0x48, 0xd5, 0xc5, 0xab, 0x72, 0xbf, 0xcb, 0x25, 0x79, 0xee, 0x73, 0x86, 0xe7, 0x8e,
+	0x3d, 0x9f, 0xd0, 0x24, 0x56, 0xcb, 0x57, 0xe5, 0x3e, 0xcc, 0x04, 0x79, 0x6e, 0xa9, 0x47, 0xdb,
+	0x50, 0xc2, 0xb6, 0xe3, 0xa9, 0x4b, 0x82, 0xbb, 0x77, 0x99, 0xdb, 0x6f, 0x77, 0x5e, 0x49, 0x48,
+	0x28, 0xf5, 0x0e, 0xd4, 0x2e, 0xb8, 0x8f, 0xee, 0x42, 0xd5, 0xc7, 0x23, 0xcb, 0x4e, 0x63, 0xc2,
+	0x44, 0xbd, 0x8a, 0x66, 0xc5, 0xc7, 0xa3, 0x36, 0x7f, 0x47, 0xb7, 0x61, 0x89, 0x07, 0x5d, 0xcc,
+	0x44, 0x49, 0x8a, 0x66, 0xd9, 0xc7, 0xa3, 0x17, 0x98, 0xe9, 0xdf, 0x14, 0x58, 0x99, 0xae, 0x05,
+	0xda, 0x02, 0xc4, 0xb5, 0xd8, 0x25, 0x56, 0x90, 0xf8, 0x96, 0x28, 0x6a, 0xbe, 0x62, 0xc3, 0xc7,
+	0xa3, 0x7d, 0x97, 0xbc, 0x49, 0x7c, 0x91, 0x9a, 0xa1, 0x03, 0x58, 0xcd, 0xc5, 0x79, 0x3f, 0xc9,
+	0xa2, 0xdf, 0x31, 0xb2, 0x86, 0x33, 0xf2, 0x86, 0x33, 0xba, 0x52, 0xd0, 0xae, 0x9c, 0xfc, 0x6c,
+	0x16, 0xbe, 0xfc, 0x6a, 0x2a, 0xe6, 0x4a, 0xb6, 0x5e, 0x1e, 0x99, 0xde, 0x44, 0x71, 0x7a, 0x13,
+	0xfa, 0x43, 0x68, 0xcc, 0xd4, 0x1d, 0xe9, 0x50, 0x0f, 0x13, 0xdb, 0x3a, 0x26, 0xa9, 0x25, 0x5c,
+	0x52, 0x95, 0x8d, 0xe2, 0x66, 0xd5, 0xac, 0x85, 0x89, 0xfd, 0x9a, 0xa4, 0x87, 0x7c, 0x4a, 0xdf,
+	0x86, 0xfa, 0x54, 0xbd, 0x51, 0x13, 0x6a, 0x38, 0x0c, 0xad, 0xbc, 0x4b, 0xf8, 0xce, 0x4a, 0x26,
+	0xe0, 0x30, 0x94, 0x32, 0xfd, 0x08, 0x96, 0x5f, 0x62, 0xd6, 0x27, 0x3d, 0x09, 0x3c, 0x80, 0x86,
+	0x70, 0xc1, 0x9a, 0x35, 0xb8, 0x2e, 0xa6, 0x0f, 0x72, 0x97, 0x75, 0xa8, 0x4f, 0x74, 0x13, 0xaf,
+	0x6b, 0xb9, 0x8a, 0x1b, 0xfe, 0x59, 0x81, 0xc6, 0x4c, 0x07, 0xa1, 0x2e, 0xd4, 0x7d, 0xc2, 0x98,
+	0x30, 0x91, 0x0c, 0x70, 0x2a, 0x7f, 0xb7, 0xff, 0x38, 0x58, 0x12, 0xee, 0x2d, 0x4b, 0xaa, 0xcb,
+	0x21, 0xf4, 0x04, 0xaa, 0x61, 0x44, 0x1c, 0x8f, 0xcd, 0x55, 0x83, 0x6c, 0x85, 0x09, 0xa1, 0xff,
+	0x59, 0x80, 0xfa, 0x54, 0x6f, 0xf2, 0x6e, 0x0e, 0x23, 0x1a, 0x52, 0x46, 0xe6, 0xfd, 0xa0, 0x5c,
+	0xcf, 0x77, 0x24, 0x87, 0x7c, 0x47, 0x31, 0x9e, 0xf7, 0x7b, 0x96, 0x25, 0xd5, 0xe5, 0x10, 0xda,
+	0x85, 0xd2, 0x90, 0xc6, 0x44, 0x1e, 0x03, 0xd7, 0xc2, 0x42, 0x8c, 0x9e, 0x02, 0xf0, 0xa7, 0xcc,
+	0x5b, 0x9a, 0xd3, 0x07, 0x8e, 0x64, 0x49, 0xf7, 0xa0, 0xec, 0x50, 0xdf, 0xf7, 0x62, 0x79, 0x02,
+	0x5c, 0xcb, 0x4a, 0x39, 0xda, 0x81, 0x5b, 0x76, 0x1a, 0x62, 0xc6, 0xac, 0x6c, 0xc2, 0xba, 0x78,
+	0x14, 0x54, 0xcc, 0x1b, 0x59, 0xb0, 0x23, 0x62, 0xd2, 0x68, 0x7d, 0x0b, 0x60, 0xf2, 0x5f, 0xa3,
+	0x75, 0x80, 0x88, 0x38, 0x7d, 0xe2, 0x1c, 0x5b, 0xf1, 0x48, 0x58, 0x56, 0x31, 0xab, 0x72, 0xe6,
+	0x70, 0xd4, 0x7e, 0xff, 0x75, 0xac, 0x29, 0x27, 0x63, 0x4d, 0x39, 0x1d, 0x6b, 0xca, 0xef, 0xb1,
+	0xa6, 0x7c, 0x3a, 0xd3, 0x0a, 0xa7, 0x67, 0x5a, 0xe1, 0xc7, 0x99, 0x56, 0x38, 0xda, 0x73, 0xbd,
+	0xb8, 0x9f, 0xd8, 0x86, 0x43, 0xfd, 0xd6, 0xc5, 0x1b, 0x63, 0x32, 0xcc, 0xae, 0x84, 0xd9, 0xdb,
+	0xc4, 0x2e, 0x8b, 0xf9, 0xdd, 0xbf, 0x01, 0x00, 0x00, 0xff, 0xff, 0x62, 0x18, 0xb7, 0x2e, 0x68,
+	0x06, 0x00, 0x00,
 }
 
 func (this *ConsensusParams) Equal(that interface{}) bool {
@@ -449,6 +714,15 @@ func (this *ConsensusParams) Equal(that interface{}) bool {
 		return false
 	}
 	if !this.Version.Equal(that1.Version) {
+		return false
+	}
+	if !this.Synchrony.Equal(that1.Synchrony) {
+		return false
+	}
+	if !this.Timeout.Equal(that1.Timeout) {
+		return false
+	}
+	if !this.Abci.Equal(that1.Abci) {
 		return false
 	}
 	return true
@@ -590,6 +864,138 @@ func (this *HashedParams) Equal(that interface{}) bool {
 	}
 	return true
 }
+func (this *SynchronyParams) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*SynchronyParams)
+	if !ok {
+		that2, ok := that.(SynchronyParams)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.MessageDelay != nil && that1.MessageDelay != nil {
+		if *this.MessageDelay != *that1.MessageDelay {
+			return false
+		}
+	} else if this.MessageDelay != nil {
+		return false
+	} else if that1.MessageDelay != nil {
+		return false
+	}
+	if this.Precision != nil && that1.Precision != nil {
+		if *this.Precision != *that1.Precision {
+			return false
+		}
+	} else if this.Precision != nil {
+		return false
+	} else if that1.Precision != nil {
+		return false
+	}
+	return true
+}
+func (this *TimeoutParams) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*TimeoutParams)
+	if !ok {
+		that2, ok := that.(TimeoutParams)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.Propose != nil && that1.Propose != nil {
+		if *this.Propose != *that1.Propose {
+			return false
+		}
+	} else if this.Propose != nil {
+		return false
+	} else if that1.Propose != nil {
+		return false
+	}
+	if this.ProposeDelta != nil && that1.ProposeDelta != nil {
+		if *this.ProposeDelta != *that1.ProposeDelta {
+			return false
+		}
+	} else if this.ProposeDelta != nil {
+		return false
+	} else if that1.ProposeDelta != nil {
+		return false
+	}
+	if this.Vote != nil && that1.Vote != nil {
+		if *this.Vote != *that1.Vote {
+			return false
+		}
+	} else if this.Vote != nil {
+		return false
+	} else if that1.Vote != nil {
+		return false
+	}
+	if this.VoteDelta != nil && that1.VoteDelta != nil {
+		if *this.VoteDelta != *that1.VoteDelta {
+			return false
+		}
+	} else if this.VoteDelta != nil {
+		return false
+	} else if that1.VoteDelta != nil {
+		return false
+	}
+	if this.Commit != nil && that1.Commit != nil {
+		if *this.Commit != *that1.Commit {
+			return false
+		}
+	} else if this.Commit != nil {
+		return false
+	} else if that1.Commit != nil {
+		return false
+	}
+	if this.BypassCommitTimeout != that1.BypassCommitTimeout {
+		return false
+	}
+	return true
+}
+func (this *ABCIParams) Equal(that interface{}) bool {
+	if that == nil {
+		return this == nil
+	}
+
+	that1, ok := that.(*ABCIParams)
+	if !ok {
+		that2, ok := that.(ABCIParams)
+		if ok {
+			that1 = &that2
+		} else {
+			return false
+		}
+	}
+	if that1 == nil {
+		return this == nil
+	} else if this == nil {
+		return false
+	}
+	if this.RecheckTx != that1.RecheckTx {
+		return false
+	}
+	return true
+}
 func (m *ConsensusParams) Marshal() (dAtA []byte, err error) {
 	size := m.Size()
 	dAtA = make([]byte, size)
@@ -610,6 +1016,42 @@ func (m *ConsensusParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.Abci != nil {
+		{
+			size, err := m.Abci.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintParams(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x3a
+	}
+	if m.Timeout != nil {
+		{
+			size, err := m.Timeout.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintParams(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x32
+	}
+	if m.Synchrony != nil {
+		{
+			size, err := m.Synchrony.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintParams(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x2a
+	}
 	if m.Version != nil {
 		{
 			size, err := m.Version.MarshalToSizedBuffer(dAtA[:i])
@@ -719,12 +1161,12 @@ func (m *EvidenceParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x18
 	}
-	n5, err5 := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.MaxAgeDuration, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(m.MaxAgeDuration):])
-	if err5 != nil {
-		return 0, err5
+	n8, err8 := github_com_gogo_protobuf_types.StdDurationMarshalTo(m.MaxAgeDuration, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(m.MaxAgeDuration):])
+	if err8 != nil {
+		return 0, err8
 	}
-	i -= n5
-	i = encodeVarintParams(dAtA, i, uint64(n5))
+	i -= n8
+	i = encodeVarintParams(dAtA, i, uint64(n8))
 	i--
 	dAtA[i] = 0x12
 	if m.MaxAgeNumBlocks != 0 {
@@ -828,6 +1270,165 @@ func (m *HashedParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
+func (m *SynchronyParams) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *SynchronyParams) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *SynchronyParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.Precision != nil {
+		n9, err9 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.Precision, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.Precision):])
+		if err9 != nil {
+			return 0, err9
+		}
+		i -= n9
+		i = encodeVarintParams(dAtA, i, uint64(n9))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.MessageDelay != nil {
+		n10, err10 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.MessageDelay, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.MessageDelay):])
+		if err10 != nil {
+			return 0, err10
+		}
+		i -= n10
+		i = encodeVarintParams(dAtA, i, uint64(n10))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *TimeoutParams) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *TimeoutParams) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *TimeoutParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.BypassCommitTimeout {
+		i--
+		if m.BypassCommitTimeout {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x30
+	}
+	if m.Commit != nil {
+		n11, err11 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.Commit, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.Commit):])
+		if err11 != nil {
+			return 0, err11
+		}
+		i -= n11
+		i = encodeVarintParams(dAtA, i, uint64(n11))
+		i--
+		dAtA[i] = 0x2a
+	}
+	if m.VoteDelta != nil {
+		n12, err12 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.VoteDelta, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.VoteDelta):])
+		if err12 != nil {
+			return 0, err12
+		}
+		i -= n12
+		i = encodeVarintParams(dAtA, i, uint64(n12))
+		i--
+		dAtA[i] = 0x22
+	}
+	if m.Vote != nil {
+		n13, err13 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.Vote, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.Vote):])
+		if err13 != nil {
+			return 0, err13
+		}
+		i -= n13
+		i = encodeVarintParams(dAtA, i, uint64(n13))
+		i--
+		dAtA[i] = 0x1a
+	}
+	if m.ProposeDelta != nil {
+		n14, err14 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.ProposeDelta, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.ProposeDelta):])
+		if err14 != nil {
+			return 0, err14
+		}
+		i -= n14
+		i = encodeVarintParams(dAtA, i, uint64(n14))
+		i--
+		dAtA[i] = 0x12
+	}
+	if m.Propose != nil {
+		n15, err15 := github_com_gogo_protobuf_types.StdDurationMarshalTo(*m.Propose, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdDuration(*m.Propose):])
+		if err15 != nil {
+			return 0, err15
+		}
+		i -= n15
+		i = encodeVarintParams(dAtA, i, uint64(n15))
+		i--
+		dAtA[i] = 0xa
+	}
+	return len(dAtA) - i, nil
+}
+
+func (m *ABCIParams) Marshal() (dAtA []byte, err error) {
+	size := m.Size()
+	dAtA = make([]byte, size)
+	n, err := m.MarshalToSizedBuffer(dAtA[:size])
+	if err != nil {
+		return nil, err
+	}
+	return dAtA[:n], nil
+}
+
+func (m *ABCIParams) MarshalTo(dAtA []byte) (int, error) {
+	size := m.Size()
+	return m.MarshalToSizedBuffer(dAtA[:size])
+}
+
+func (m *ABCIParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	i := len(dAtA)
+	_ = i
+	var l int
+	_ = l
+	if m.RecheckTx {
+		i--
+		if m.RecheckTx {
+			dAtA[i] = 1
+		} else {
+			dAtA[i] = 0
+		}
+		i--
+		dAtA[i] = 0x10
+	}
+	return len(dAtA) - i, nil
+}
+
 func encodeVarintParams(dAtA []byte, offset int, v uint64) int {
 	offset -= sovParams(v)
 	base := offset
@@ -859,6 +1460,18 @@ func (m *ConsensusParams) Size() (n int) {
 	}
 	if m.Version != nil {
 		l = m.Version.Size()
+		n += 1 + l + sovParams(uint64(l))
+	}
+	if m.Synchrony != nil {
+		l = m.Synchrony.Size()
+		n += 1 + l + sovParams(uint64(l))
+	}
+	if m.Timeout != nil {
+		l = m.Timeout.Size()
+		n += 1 + l + sovParams(uint64(l))
+	}
+	if m.Abci != nil {
+		l = m.Abci.Size()
 		n += 1 + l + sovParams(uint64(l))
 	}
 	return n
@@ -934,6 +1547,67 @@ func (m *HashedParams) Size() (n int) {
 	}
 	if m.BlockMaxGas != 0 {
 		n += 1 + sovParams(uint64(m.BlockMaxGas))
+	}
+	return n
+}
+
+func (m *SynchronyParams) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.MessageDelay != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.MessageDelay)
+		n += 1 + l + sovParams(uint64(l))
+	}
+	if m.Precision != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.Precision)
+		n += 1 + l + sovParams(uint64(l))
+	}
+	return n
+}
+
+func (m *TimeoutParams) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.Propose != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.Propose)
+		n += 1 + l + sovParams(uint64(l))
+	}
+	if m.ProposeDelta != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.ProposeDelta)
+		n += 1 + l + sovParams(uint64(l))
+	}
+	if m.Vote != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.Vote)
+		n += 1 + l + sovParams(uint64(l))
+	}
+	if m.VoteDelta != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.VoteDelta)
+		n += 1 + l + sovParams(uint64(l))
+	}
+	if m.Commit != nil {
+		l = github_com_gogo_protobuf_types.SizeOfStdDuration(*m.Commit)
+		n += 1 + l + sovParams(uint64(l))
+	}
+	if m.BypassCommitTimeout {
+		n += 2
+	}
+	return n
+}
+
+func (m *ABCIParams) Size() (n int) {
+	if m == nil {
+		return 0
+	}
+	var l int
+	_ = l
+	if m.RecheckTx {
+		n += 2
 	}
 	return n
 }
@@ -1114,6 +1788,114 @@ func (m *ConsensusParams) Unmarshal(dAtA []byte) error {
 				m.Version = &VersionParams{}
 			}
 			if err := m.Version.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Synchrony", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Synchrony == nil {
+				m.Synchrony = &SynchronyParams{}
+			}
+			if err := m.Synchrony.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Timeout", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Timeout == nil {
+				m.Timeout = &TimeoutParams{}
+			}
+			if err := m.Timeout.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 7:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Abci", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Abci == nil {
+				m.Abci = &ABCIParams{}
+			}
+			if err := m.Abci.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -1565,6 +2347,448 @@ func (m *HashedParams) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
+		default:
+			iNdEx = preIndex
+			skippy, err := skipParams(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthParams
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *SynchronyParams) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowParams
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: SynchronyParams: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: SynchronyParams: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field MessageDelay", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.MessageDelay == nil {
+				m.MessageDelay = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.MessageDelay, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Precision", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Precision == nil {
+				m.Precision = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.Precision, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		default:
+			iNdEx = preIndex
+			skippy, err := skipParams(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthParams
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *TimeoutParams) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowParams
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: TimeoutParams: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: TimeoutParams: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 1:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Propose", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Propose == nil {
+				m.Propose = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.Propose, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field ProposeDelta", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.ProposeDelta == nil {
+				m.ProposeDelta = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.ProposeDelta, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 3:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Vote", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Vote == nil {
+				m.Vote = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.Vote, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 4:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field VoteDelta", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.VoteDelta == nil {
+				m.VoteDelta = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.VoteDelta, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 5:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Commit", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthParams
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthParams
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Commit == nil {
+				m.Commit = new(time.Duration)
+			}
+			if err := github_com_gogo_protobuf_types.StdDurationUnmarshal(m.Commit, dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
+		case 6:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field BypassCommitTimeout", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.BypassCommitTimeout = bool(v != 0)
+		default:
+			iNdEx = preIndex
+			skippy, err := skipParams(dAtA[iNdEx:])
+			if err != nil {
+				return err
+			}
+			if (skippy < 0) || (iNdEx+skippy) < 0 {
+				return ErrInvalidLengthParams
+			}
+			if (iNdEx + skippy) > l {
+				return io.ErrUnexpectedEOF
+			}
+			iNdEx += skippy
+		}
+	}
+
+	if iNdEx > l {
+		return io.ErrUnexpectedEOF
+	}
+	return nil
+}
+func (m *ABCIParams) Unmarshal(dAtA []byte) error {
+	l := len(dAtA)
+	iNdEx := 0
+	for iNdEx < l {
+		preIndex := iNdEx
+		var wire uint64
+		for shift := uint(0); ; shift += 7 {
+			if shift >= 64 {
+				return ErrIntOverflowParams
+			}
+			if iNdEx >= l {
+				return io.ErrUnexpectedEOF
+			}
+			b := dAtA[iNdEx]
+			iNdEx++
+			wire |= uint64(b&0x7F) << shift
+			if b < 0x80 {
+				break
+			}
+		}
+		fieldNum := int32(wire >> 3)
+		wireType := int(wire & 0x7)
+		if wireType == 4 {
+			return fmt.Errorf("proto: ABCIParams: wiretype end group for non-group")
+		}
+		if fieldNum <= 0 {
+			return fmt.Errorf("proto: ABCIParams: illegal tag %d (wire type %d)", fieldNum, wire)
+		}
+		switch fieldNum {
+		case 2:
+			if wireType != 0 {
+				return fmt.Errorf("proto: wrong wireType = %d for field RecheckTx", wireType)
+			}
+			var v int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowParams
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				v |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			m.RecheckTx = bool(v != 0)
 		default:
 			iNdEx = preIndex
 			skippy, err := skipParams(dAtA[iNdEx:])

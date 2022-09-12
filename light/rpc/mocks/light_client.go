@@ -31,6 +31,22 @@ func (_m *LightClient) ChainID() string {
 	return r0
 }
 
+// Status provides a mock function with given fields: ctx
+func (_m *LightClient) Status(ctx context.Context) *types.LightClientInfo {
+	ret := _m.Called(ctx)
+
+	var r0 *types.LightClientInfo
+	if rf, ok := ret.Get(0).(func(context.Context) *types.LightClientInfo); ok {
+		r0 = rf(ctx)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*types.LightClientInfo)
+		}
+	}
+
+	return r0
+}
+
 // TrustedLightBlock provides a mock function with given fields: height
 func (_m *LightClient) TrustedLightBlock(height int64) (*types.LightBlock, error) {
 	ret := _m.Called(height)
@@ -98,4 +114,19 @@ func (_m *LightClient) VerifyLightBlockAtHeight(ctx context.Context, height int6
 	}
 
 	return r0, r1
+}
+
+type mockConstructorTestingTNewLightClient interface {
+	mock.TestingT
+	Cleanup(func())
+}
+
+// NewLightClient creates a new instance of LightClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewLightClient(t mockConstructorTestingTNewLightClient) *LightClient {
+	mock := &LightClient{}
+	mock.Mock.Test(t)
+
+	t.Cleanup(func() { mock.AssertExpectations(t) })
+
+	return mock
 }

@@ -17,6 +17,7 @@ BUILD_IMAGE := ghcr.io/tendermint/docker-build-proto
 BASE_BRANCH ?= v0.8-dev
 DOCKER_PROTO := docker run -v $(shell pwd):/workspace --workdir /workspace $(BUILD_IMAGE)
 CGO_ENABLED ?= 1
+GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}' github.com/gogo/protobuf)
 
 # handle ARM builds
 ifeq (arm,$(GOARCH))
@@ -109,45 +110,80 @@ $(BUILDDIR)/:
 ###                                Protobuf                                 ###
 ###############################################################################
 
-proto-all: proto-gen proto-lint proto-check-breaking
-.PHONY: proto-all
+proto: proto-format proto-lint proto-doc proto-gen
+.PHONY: proto
 
-proto-gen:
-	@echo "Generating Go packages for .proto files"
-	@$(DOCKER_PROTO) sh ./scripts/protocgen.sh
+check-proto-deps:
+ifeq (,$(shell which protoc-gen-gogofaster))
+	$(error "gogofaster plugin for protoc is required. Run 'go install github.com/gogo/protobuf/protoc-gen-gogofaster@latest' to install")
+endif
+.PHONY: check-proto-deps
+
+check-proto-format-deps:
+ifeq (,$(shell which clang-format))
+	$(error "clang-format is required for Protobuf formatting. See instructions for your platform on how to install it.")
+endif
+.PHONY: check-proto-format-deps
+
+proto-gen: check-proto-deps
+	@echo "Generating Protobuf files"
+	@go run github.com/bufbuild/buf/cmd/buf generate
+	@mv ./proto/tendermint/abci/types.pb.go ./abci/types/
 .PHONY: proto-gen
 
-proto-lint:
-	@echo "Running lint checks for .proto files"
-	@$(DOCKER_PROTO) buf lint --error-format=json
+# These targets are provided for convenience and are intended for local
+# execution only.
+proto-lint: check-proto-deps
+	@echo "Linting Protobuf files"
+	@go run github.com/bufbuild/buf/cmd/buf lint
 .PHONY: proto-lint
 
-proto-format:
-	@echo "Formatting .proto files"
-	@$(DOCKER_PROTO) find ./ -not -path "./third_party/*" -name '*.proto' -exec clang-format -i {} \;
+proto-format: check-proto-format-deps
+	@echo "Formatting Protobuf files"
+	@find . -name '*.proto' -path "./proto/*" -exec clang-format -i {} \;
 .PHONY: proto-format
 
-proto-check-breaking:
-	@echo "Checking for breaking changes in .proto files"
-	@$(DOCKER_PROTO) buf breaking --against .git#branch=$(BASE_BRANCH)
+proto-check-breaking: check-proto-deps
+	@echo "Checking for breaking changes in Protobuf files against local branch"
+	@echo "Note: This is only useful if your changes have not yet been committed."
+	@echo "      Otherwise read up on buf's \"breaking\" command usage:"
+	@echo "      https://docs.buf.build/breaking/usage"
+	@go run github.com/bufbuild/buf/cmd/buf breaking --against ".git"
 .PHONY: proto-check-breaking
 
-proto-check-breaking-ci:
-	@echo "Checking for breaking changes in .proto files"
-	$(DOCKER_PROTO) buf breaking --against $(HTTPS_GIT)#branch=$(BASE_BRANCH)
-.PHONY: proto-check-breaking-ci
+proto-doc:
+	@echo Generating Protobuf API specification: spec/abci++/api.md 
+	@protoc \
+		-I $(realpath .)/proto \
+		-I "$(GOGOPROTO_PATH)" \
+		--doc_opt=markdown,api.md \
+		--doc_out=spec/abci++ \
+		tendermint/abci/types.proto
 
 ###############################################################################
 ###                              Build ABCI                                 ###
 ###############################################################################
 
 build_abci:
-	@go build -mod=readonly -i ./abci/cmd/...
+	@go build -mod=readonly ./abci/cmd/...
 .PHONY: build_abci
 
 install_abci:
 	@go install -mod=readonly ./abci/cmd/...
 .PHONY: install_abci
+
+
+##################################################################################
+###                              Build ABCI Dump                               ###
+##################################################################################
+
+build_abcidump:
+	@go build -o build/abcidump ./cmd/abcidump
+.PHONY: build_abcidump
+
+install_abcidump:
+	@go install ./cmd/abcidump
+.PHONY: install_abcidump
 
 ###############################################################################
 ###				Privval Server                              ###
@@ -192,7 +228,7 @@ go.sum: go.mod
 
 draw_deps:
 	@# requires brew install graphviz or apt-get install graphviz
-	go get github.com/RobotsAndPencils/goviz
+	go install github.com/RobotsAndPencils/goviz@latest
 	@goviz -i ${REPO_NAME}/cmd/tendermint -d 3 | dot -Tpng -o dependency-graph.png
 .PHONY: draw_deps
 
@@ -247,7 +283,8 @@ DESTINATION = ./index.html.md
 build-docs:
 	@cd docs && \
 	while read -r branch path_prefix; do \
-		(git checkout $${branch} && npm ci && VUEPRESS_BASE="/$${path_prefix}/" npm run build) ; \
+		( git checkout $${branch} && npm ci --quiet && \
+			VUEPRESS_BASE="/$${path_prefix}/" npm run build --quiet ) ; \
 		mkdir -p ~/output/$${path_prefix} ; \
 		cp -r .vuepress/dist/* ~/output/$${path_prefix}/ ; \
 		cp ~/output/$${path_prefix}/index.html ~/output ; \
@@ -274,6 +311,21 @@ build-docker: build-linux
 mockery:
 	go generate -run="./scripts/mockery_generate.sh" ./...
 .PHONY: mockery
+
+###############################################################################
+###                               Metrics                                   ###
+###############################################################################
+
+metrics: testdata-metrics
+	go generate -run="scripts/metricsgen" ./...
+.PHONY: metrics
+
+	# By convention, the go tool ignores subdirectories of directories named
+	# 'testdata'. This command invokes the generate command on the folder directly
+	# to avoid this.
+testdata-metrics:
+	ls ./scripts/metricsgen/testdata | xargs -I{} go generate -run="scripts/metricsgen" ./scripts/metricsgen/testdata/{}
+.PHONY: testdata-metrics
 
 ###############################################################################
 ###                       Local testnet using docker                        ###
@@ -359,4 +411,4 @@ $(BUILDDIR)/packages.txt:$(GO_TEST_FILES) $(BUILDDIR)
 split-test-packages:$(BUILDDIR)/packages.txt
 	split -d -n l/$(NUM_SPLIT) $< $<.
 test-group-%:split-test-packages
-	cat $(BUILDDIR)/packages.txt.$* | xargs go test -mod=readonly -timeout=15m -race -coverprofile=$(BUILDDIR)/$*.profile.out
+	cat $(BUILDDIR)/packages.txt.$* | xargs go test -mod=readonly -timeout=5m -race -coverprofile=$(BUILDDIR)/$*.profile.out

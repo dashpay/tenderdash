@@ -11,10 +11,10 @@ import (
 
 	dbm "github.com/tendermint/tm-db"
 
-	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
+	dashcore "github.com/tendermint/tendermint/dash/core"
 	"github.com/tendermint/tendermint/internal/p2p"
 	sm "github.com/tendermint/tendermint/internal/state"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/light"
 	lightprovider "github.com/tendermint/tendermint/light/provider"
@@ -34,7 +34,7 @@ import (
 // uses the P2P layer and the other uses the RPC layer. Both use light client verification.
 type StateProvider interface {
 	// AppHash returns the app hash after the given height has been committed.
-	AppHash(ctx context.Context, height uint64) ([]byte, error)
+	AppHash(ctx context.Context, height uint64) (tmbytes.HexBytes, error)
 	// Commit returns the commit at the given height.
 	Commit(ctx context.Context, height uint64) (*types.Commit, error)
 	// State returns a state object at the given height.
@@ -42,10 +42,11 @@ type StateProvider interface {
 }
 
 type stateProviderRPC struct {
-	tmsync.Mutex  // light.Client is not concurrency-safe
+	sync.Mutex    // light.Client is not concurrency-safe
 	lc            *light.Client
 	initialHeight int64
 	providers     map[lightprovider.Provider]string
+	logger        log.Logger
 }
 
 // NewRPCStateProvider creates a new StateProvider using a light client and RPC clients.
@@ -82,6 +83,7 @@ func NewRPCStateProvider(
 		return nil, err
 	}
 	return &stateProviderRPC{
+		logger:        logger,
 		lc:            lc,
 		initialHeight: initialHeight,
 		providers:     providerRemotes,
@@ -89,7 +91,7 @@ func NewRPCStateProvider(
 }
 
 func (s *stateProviderRPC) verifyLightBlockAtHeight(ctx context.Context, height uint64, ts time.Time) (*types.LightBlock, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	return s.lc.VerifyLightBlockAtHeight(ctx, int64(height), ts)
 }
@@ -97,7 +99,7 @@ func (s *stateProviderRPC) verifyLightBlockAtHeight(ctx context.Context, height 
 // AppHash implements part of StateProvider. It calls the application to verify the
 // light blocks at heights h+1 and h+2 and, if verification succeeds, reports the app
 // hash for the block at height h+1 which correlates to the state at height h.
-func (s *stateProviderRPC) AppHash(ctx context.Context, height uint64) ([]byte, error) {
+func (s *stateProviderRPC) AppHash(ctx context.Context, height uint64) (tmbytes.HexBytes, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -146,18 +148,11 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	// height: last block, i.e. the snapshotted height
 	// height+1: current block, i.e. the first block we'll process after the snapshot
 	// height+2: next block, i.e. the second block after the snapshot
-	//
-	// We need to fetch the NextValidators from height+2 because if the application changed
-	// the validator set at the snapshot height then this only takes effect at height+2.
 	lastLightBlock, err := s.verifyLightBlockAtHeight(ctx, height, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
 	currentLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+1, time.Now())
-	if err != nil {
-		return sm.State{}, err
-	}
-	nextLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+2, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
@@ -172,11 +167,11 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastStateID = lastLightBlock.Commit.StateID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
 	state.AppHash = currentLightBlock.AppHash
-	state.LastResultsHash = currentLightBlock.LastResultsHash
+	state.LastResultsHash = currentLightBlock.ResultsHash
 	state.LastValidators = lastLightBlock.ValidatorSet
 	state.Validators = currentLightBlock.ValidatorSet
-	state.NextValidators = nextLightBlock.ValidatorSet
-	state.LastHeightValidatorsChanged = nextLightBlock.Height
+	// FIXME: not sure if the one below is correct
+	state.LastHeightValidatorsChanged = currentLightBlock.Height
 
 	// We'll also need to fetch consensus params via RPC, using light client verification.
 	primaryURL, ok := s.providers[s.lc.Primary()]
@@ -187,11 +182,11 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	if err != nil {
 		return sm.State{}, fmt.Errorf("unable to create RPC client: %w", err)
 	}
-	rpcclient := lightrpc.NewClient(primaryRPC, s.lc)
+	rpcclient := lightrpc.NewClient(s.logger, primaryRPC, s.lc)
 	result, err := rpcclient.ConsensusParams(ctx, &currentLightBlock.Height)
 	if err != nil {
 		return sm.State{}, fmt.Errorf("unable to fetch consensus parameters for height %v: %w",
-			nextLightBlock.Height, err)
+			currentLightBlock.Height, err)
 	}
 	state.ConsensusParams = result.ConsensusParams
 	state.LastHeightConsensusParamsChanged = currentLightBlock.Height
@@ -208,10 +203,10 @@ func rpcClient(server string) (*rpchttp.HTTP, error) {
 }
 
 type stateProviderP2P struct {
-	tmsync.Mutex  // light.Client is not concurrency-safe
+	sync.Mutex    // light.Client is not concurrency-safe
 	lc            *light.Client
 	initialHeight int64
-	paramsSendCh  chan<- p2p.Envelope
+	paramsSendCh  p2p.Channel
 	paramsRecvCh  chan types.ConsensusParams
 }
 
@@ -223,7 +218,7 @@ func NewP2PStateProvider(
 	initialHeight int64,
 	trustHeight int64,
 	providers []lightprovider.Provider,
-	paramsSendCh chan<- p2p.Envelope,
+	paramsSendCh p2p.Channel,
 	logger log.Logger,
 	dashCoreClient dashcore.Client,
 ) (StateProvider, error) {
@@ -246,13 +241,13 @@ func NewP2PStateProvider(
 }
 
 func (s *stateProviderP2P) verifyLightBlockAtHeight(ctx context.Context, height uint64, ts time.Time) (*types.LightBlock, error) {
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	return s.lc.VerifyLightBlockAtHeight(ctx, int64(height), ts)
 }
 
 // AppHash implements StateProvider.
-func (s *stateProviderP2P) AppHash(ctx context.Context, height uint64) ([]byte, error) {
+func (s *stateProviderP2P) AppHash(ctx context.Context, height uint64) (tmbytes.HexBytes, error) {
 	s.Lock()
 	defer s.Unlock()
 
@@ -301,18 +296,11 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	// height: last block, i.e. the snapshotted height
 	// height+1: current block, i.e. the first block we'll process after the snapshot
 	// height+2: next block, i.e. the second block after the snapshot
-	//
-	// We need to fetch the NextValidators from height+2 because if the application changed
-	// the validator set at the snapshot height then this only takes effect at height+2.
 	lastLightBlock, err := s.verifyLightBlockAtHeight(ctx, height, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
 	currentLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+1, time.Now())
-	if err != nil {
-		return sm.State{}, err
-	}
-	nextLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+2, time.Now())
 	if err != nil {
 		return sm.State{}, err
 	}
@@ -327,11 +315,11 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastStateID = lastLightBlock.Commit.StateID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
 	state.AppHash = currentLightBlock.AppHash
-	state.LastResultsHash = currentLightBlock.LastResultsHash
+	state.LastResultsHash = currentLightBlock.ResultsHash
 	state.LastValidators = lastLightBlock.ValidatorSet
 	state.Validators = currentLightBlock.ValidatorSet
-	state.NextValidators = nextLightBlock.ValidatorSet
-	state.LastHeightValidatorsChanged = nextLightBlock.Height
+	// FIXME: not sure if the line below is correct, was nextLightBlock.Height for next-block-execution
+	state.LastHeightValidatorsChanged = currentLightBlock.Height
 
 	// We'll also need to fetch consensus params via P2P.
 	state.ConsensusParams, err = s.consensusParams(ctx, currentLightBlock.Height)
@@ -339,9 +327,9 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 		return sm.State{}, fmt.Errorf("fetching consensus params: %w", err)
 	}
 	// validate the consensus params
-	if !bytes.Equal(nextLightBlock.ConsensusHash, state.ConsensusParams.HashConsensusParams()) {
+	if !bytes.Equal(currentLightBlock.ConsensusHash, state.ConsensusParams.HashConsensusParams()) {
 		return sm.State{}, fmt.Errorf("consensus params hash mismatch at height %d. Expected %v, got %v",
-			currentLightBlock.Height, nextLightBlock.ConsensusHash, state.ConsensusParams.HashConsensusParams())
+			currentLightBlock.Height, currentLightBlock.ConsensusHash, state.ConsensusParams.HashConsensusParams())
 	}
 	// set the last height changed to the current height
 	state.LastHeightConsensusParamsChanged = currentLightBlock.Height
@@ -385,7 +373,7 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 			}
 
 			wg.Add(1)
-			go func(p *BlockProvider, peer types.NodeID, requestCh chan<- p2p.Envelope, responseCh <-chan types.ConsensusParams) {
+			go func(peer types.NodeID) {
 				defer wg.Done()
 
 				timer := time.NewTimer(0)
@@ -394,14 +382,17 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 
 				for {
 					iterCount++
-					select {
-					case s.paramsSendCh <- p2p.Envelope{
+					if err := s.paramsSendCh.Send(ctx, p2p.Envelope{
 						To: peer,
 						Message: &ssproto.ParamsRequest{
 							Height: uint64(height),
 						},
-					}:
-					case <-ctx.Done():
+					}); err != nil {
+						// this only errors if
+						// the context is
+						// canceled which we
+						// don't need to
+						// propagate here
 						return
 					}
 
@@ -414,7 +405,7 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 						continue
 					case <-ctx.Done():
 						return
-					case params, ok := <-responseCh:
+					case params, ok := <-s.paramsRecvCh:
 						if !ok {
 							return
 						}
@@ -427,7 +418,7 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 					}
 				}
 
-			}(p, peer, s.paramsSendCh, s.paramsRecvCh)
+			}(peer)
 		}
 		sig := make(chan struct{})
 		go func() { wg.Wait(); close(sig) }()
@@ -462,4 +453,5 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 			return param, nil
 		}
 	}
+
 }

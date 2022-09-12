@@ -38,6 +38,8 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 	// state store height is equal to blockstore height. We're good to proceed with rolling back state
 	rollbackHeight := invalidState.LastBlockHeight - 1
 	rollbackBlock := bs.LoadBlockMeta(rollbackHeight)
+	commit := bs.LoadBlockCommit(rollbackHeight)
+
 	if rollbackBlock == nil {
 		return -1, nil, fmt.Errorf("block at height %d not found", rollbackHeight)
 	}
@@ -85,8 +87,10 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		LastBlockHeight: rollbackBlock.Header.Height,
 		LastBlockID:     rollbackBlock.BlockID,
 		LastBlockTime:   rollbackBlock.Header.Time,
+		LastStateID:     commit.StateID,
 
-		NextValidators:              invalidState.Validators,
+		LastCoreChainLockedBlockHeight: rollbackBlock.Header.CoreChainLockedHeight,
+
 		Validators:                  invalidState.LastValidators,
 		LastValidators:              previousLastValidatorSet,
 		LastHeightValidatorsChanged: valChangeHeight,
@@ -94,7 +98,7 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		ConsensusParams:                  previousParams,
 		LastHeightConsensusParamsChanged: paramsChangeHeight,
 
-		LastResultsHash: latestBlock.Header.LastResultsHash,
+		LastResultsHash: latestBlock.Header.ResultsHash,
 		AppHash:         latestBlock.Header.AppHash,
 	}
 

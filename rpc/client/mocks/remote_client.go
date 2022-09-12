@@ -227,6 +227,29 @@ func (_m *RemoteClient) BroadcastEvidence(_a0 context.Context, _a1 types.Evidenc
 	return r0, r1
 }
 
+// BroadcastTx provides a mock function with given fields: _a0, _a1
+func (_m *RemoteClient) BroadcastTx(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTx, error) {
+	ret := _m.Called(_a0, _a1)
+
+	var r0 *coretypes.ResultBroadcastTx
+	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) *coretypes.ResultBroadcastTx); ok {
+		r0 = rf(_a0, _a1)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*coretypes.ResultBroadcastTx)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, types.Tx) error); ok {
+		r1 = rf(_a0, _a1)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // BroadcastTxAsync provides a mock function with given fields: _a0, _a1
 func (_m *RemoteClient) BroadcastTxAsync(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	ret := _m.Called(_a0, _a1)
@@ -411,6 +434,29 @@ func (_m *RemoteClient) DumpConsensusState(_a0 context.Context) (*coretypes.Resu
 	return r0, r1
 }
 
+// Events provides a mock function with given fields: ctx, req
+func (_m *RemoteClient) Events(ctx context.Context, req *coretypes.RequestEvents) (*coretypes.ResultEvents, error) {
+	ret := _m.Called(ctx, req)
+
+	var r0 *coretypes.ResultEvents
+	if rf, ok := ret.Get(0).(func(context.Context, *coretypes.RequestEvents) *coretypes.ResultEvents); ok {
+		r0 = rf(ctx, req)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*coretypes.ResultEvents)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(context.Context, *coretypes.RequestEvents) error); ok {
+		r1 = rf(ctx, req)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
 // Genesis provides a mock function with given fields: _a0
 func (_m *RemoteClient) Genesis(_a0 context.Context) (*coretypes.ResultGenesis, error) {
 	ret := _m.Called(_a0)
@@ -526,20 +572,6 @@ func (_m *RemoteClient) Health(_a0 context.Context) (*coretypes.ResultHealth, er
 	return r0, r1
 }
 
-// IsRunning provides a mock function with given fields:
-func (_m *RemoteClient) IsRunning() bool {
-	ret := _m.Called()
-
-	var r0 bool
-	if rf, ok := ret.Get(0).(func() bool); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-
-	return r0
-}
-
 // NetInfo provides a mock function with given fields: _a0
 func (_m *RemoteClient) NetInfo(_a0 context.Context) (*coretypes.ResultNetInfo, error) {
 	ret := _m.Called(_a0)
@@ -614,13 +646,13 @@ func (_m *RemoteClient) RemoveTx(_a0 context.Context, _a1 types.TxKey) error {
 	return r0
 }
 
-// Start provides a mock function with given fields:
-func (_m *RemoteClient) Start() error {
-	ret := _m.Called()
+// Start provides a mock function with given fields: _a0
+func (_m *RemoteClient) Start(_a0 context.Context) error {
+	ret := _m.Called(_a0)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func() error); ok {
-		r0 = rf()
+	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
+		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
 	}
@@ -649,20 +681,6 @@ func (_m *RemoteClient) Status(_a0 context.Context) (*coretypes.ResultStatus, er
 	}
 
 	return r0, r1
-}
-
-// Stop provides a mock function with given fields:
-func (_m *RemoteClient) Stop() error {
-	ret := _m.Called()
-
-	var r0 error
-	if rf, ok := ret.Get(0).(func() error); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Error(0)
-	}
-
-	return r0
 }
 
 // Subscribe provides a mock function with given fields: ctx, subscriber, query, outCapacity
@@ -741,13 +759,13 @@ func (_m *RemoteClient) TxSearch(ctx context.Context, query string, prove bool, 
 	return r0, r1
 }
 
-// UnconfirmedTxs provides a mock function with given fields: ctx, limit
-func (_m *RemoteClient) UnconfirmedTxs(ctx context.Context, limit *int) (*coretypes.ResultUnconfirmedTxs, error) {
-	ret := _m.Called(ctx, limit)
+// UnconfirmedTxs provides a mock function with given fields: ctx, page, perPage
+func (_m *RemoteClient) UnconfirmedTxs(ctx context.Context, page *int, perPage *int) (*coretypes.ResultUnconfirmedTxs, error) {
+	ret := _m.Called(ctx, page, perPage)
 
 	var r0 *coretypes.ResultUnconfirmedTxs
-	if rf, ok := ret.Get(0).(func(context.Context, *int) *coretypes.ResultUnconfirmedTxs); ok {
-		r0 = rf(ctx, limit)
+	if rf, ok := ret.Get(0).(func(context.Context, *int, *int) *coretypes.ResultUnconfirmedTxs); ok {
+		r0 = rf(ctx, page, perPage)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*coretypes.ResultUnconfirmedTxs)
@@ -755,8 +773,8 @@ func (_m *RemoteClient) UnconfirmedTxs(ctx context.Context, limit *int) (*corety
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(context.Context, *int) error); ok {
-		r1 = rf(ctx, limit)
+	if rf, ok := ret.Get(1).(func(context.Context, *int, *int) error); ok {
+		r1 = rf(ctx, page, perPage)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -813,4 +831,19 @@ func (_m *RemoteClient) Validators(ctx context.Context, height *int64, page *int
 	}
 
 	return r0, r1
+}
+
+type mockConstructorTestingTNewRemoteClient interface {
+	mock.TestingT
+	Cleanup(func())
+}
+
+// NewRemoteClient creates a new instance of RemoteClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewRemoteClient(t mockConstructorTestingTNewRemoteClient) *RemoteClient {
+	mock := &RemoteClient{}
+	mock.Mock.Test(t)
+
+	t.Cleanup(func() { mock.AssertExpectations(t) })
+
+	return mock
 }

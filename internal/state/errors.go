@@ -1,10 +1,17 @@
 package state
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
+
+var (
+	ErrBlockRejected = errors.New("block not accepted by abci app")
+)
 
 type (
-	ErrInvalidBlock error
 	ErrProxyAppConn error
+	ErrInvalidBlock struct{ error }
 
 	ErrUnknownBlock struct {
 		Height int64
@@ -39,9 +46,14 @@ type (
 
 	ErrNoValSetForHeight struct {
 		Height int64
+		Err    error
 	}
 
 	ErrNoConsensusParamsForHeight struct {
+		Height int64
+	}
+
+	ErrNoFinalizeBlockResponsesForHeight struct {
 		Height int64
 	}
 
@@ -89,11 +101,20 @@ func (e ErrStateMismatch) Error() string {
 }
 
 func (e ErrNoValSetForHeight) Error() string {
-	return fmt.Sprintf("could not find validator set for height #%d", e.Height)
+	if e.Err == nil {
+		return fmt.Sprintf("could not find validator set for height #%d", e.Height)
+	}
+	return fmt.Sprintf("could not find validator set for height #%d: %s", e.Height, e.Err.Error())
 }
+
+func (e ErrNoValSetForHeight) Unwrap() error { return e.Err }
 
 func (e ErrNoConsensusParamsForHeight) Error() string {
 	return fmt.Sprintf("could not find consensus params for height #%d", e.Height)
+}
+
+func (e ErrNoFinalizeBlockResponsesForHeight) Error() string {
+	return fmt.Sprintf("could not find FinalizeBlock responses for height #%d", e.Height)
 }
 
 func (e ErrNoABCIResponsesForHeight) Error() string {

@@ -5,6 +5,7 @@ option go_package = "github.com/tendermint/tendermint/proto/tendermint/types";
 
 import "gogoproto/gogo.proto";
 import "tendermint/types/types.proto";
+import "tendermint/types/dash.proto";
 import "google/protobuf/timestamp.proto";
 
 message CanonicalBlockID {
@@ -33,4 +34,15 @@ message CanonicalVote {
   sfixed64         round    = 3;  // canonicalization requires fixed size encoding here
   CanonicalBlockID block_id = 4 [(gogoproto.customname) = "BlockID"];
   string           chain_id = 6 [(gogoproto.customname) = "ChainID"];
+}
+
+// CanonicalVoteExtension provides us a way to serialize a vote extension from
+// a particular validator such that we can sign over those serialized bytes.
+message CanonicalVoteExtension {
+  bytes    extension = 1;
+  sfixed64 height    = 2;
+  sfixed64 round     = 3;
+  string   chain_id  = 4;
+
+  tendermint.types.VoteExtensionType type = 100;
 }

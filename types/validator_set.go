@@ -18,6 +18,7 @@ import (
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/dash/llmq"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -68,6 +69,12 @@ type ValidatorSet struct {
 
 	// cached (unexported)
 	totalVotingPower int64
+}
+
+type ValidatorSetUpdate struct {
+	Validators         []*Validator
+	ThresholdPublicKey crypto.PubKey
+	QuorumHash         crypto.QuorumHash
 }
 
 // NewValidatorSet initializes a ValidatorSet by copying over the values from
@@ -156,6 +163,12 @@ func (vals *ValidatorSet) ValidateBasic() error {
 }
 
 func (vals *ValidatorSet) Equals(other *ValidatorSet) bool {
+	if vals == nil && other == nil {
+		return true
+	}
+	if vals == nil || other == nil {
+		return false
+	}
 	if !vals.ThresholdPublicKey.Equals(other.ThresholdPublicKey) {
 		return false
 	}
@@ -358,7 +371,7 @@ func (vals *ValidatorSet) shiftByAvgProposerPriority() {
 
 // Makes a copy of the validator list.
 func validatorListCopy(valsList []*Validator) []*Validator {
-	if valsList == nil {
+	if len(valsList) == 0 {
 		return nil
 	}
 	valsCopy := make([]*Validator, len(valsList))
@@ -370,6 +383,9 @@ func validatorListCopy(valsList []*Validator) []*Validator {
 
 // Copy each validator into a new ValidatorSet.
 func (vals *ValidatorSet) Copy() *ValidatorSet {
+	if vals == nil {
+		return nil
+	}
 	return &ValidatorSet{
 		Validators:         validatorListCopy(vals.Validators),
 		Proposer:           vals.Proposer,
@@ -384,6 +400,9 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 // HasProTxHash returns true if proTxHash given is in the validator set, false -
 // otherwise.
 func (vals *ValidatorSet) HasProTxHash(proTxHash crypto.ProTxHash) bool {
+	if len(proTxHash) == 0 {
+		return false
+	}
 	for _, val := range vals.Validators {
 		if bytes.Equal(val.ProTxHash, proTxHash) {
 			return true
@@ -570,8 +589,8 @@ func (vals *ValidatorSet) findProposer() *Validator {
 }
 
 // Hash returns the Quorum Hash.
-func (vals *ValidatorSet) Hash() []byte {
-	if vals.QuorumHash == nil || vals.ThresholdPublicKey == nil {
+func (vals *ValidatorSet) Hash() tmbytes.HexBytes {
+	if vals == nil || vals.QuorumHash == nil || vals.ThresholdPublicKey == nil {
 		return []byte(nil)
 	}
 	bzs := make([][]byte, 2)
@@ -902,15 +921,6 @@ func (vals *ValidatorSet) UpdateWithChangeSet(
 	return vals.updateWithChangeSet(changes, true, newThresholdPublicKey, newQuorumHash)
 }
 
-func (vals *ValidatorSet) CommitSignIds(chainID string, commit *Commit) ([]byte, []byte) {
-
-	blockSignID := commit.CanonicalVoteVerifySignID(chainID, vals.QuorumType, vals.QuorumHash)
-
-	stateSignID := commit.StateID.SignID(chainID, vals.QuorumType, vals.QuorumHash)
-
-	return blockSignID, stateSignID
-}
-
 // VerifyCommit verifies +2/3 of the set had signed the given commit.
 //
 // It checks all the signatures! While it's safe to exit as soon as we have
@@ -935,24 +945,16 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID, stateID 
 			stateID, commit.StateID)
 	}
 
-	blockSignID := commit.CanonicalVoteVerifySignID(chainID, vals.QuorumType, vals.QuorumHash)
-
-	if !vals.ThresholdPublicKey.VerifySignatureDigest(blockSignID, commit.ThresholdBlockSignature) {
-		canonicalVoteBlockSignBytes := commit.CanonicalVoteVerifySignBytes(chainID)
-		return fmt.Errorf(
-			"incorrect threshold block signature bytes: %X signId %X commit: %v valQuorumType %d valQuorumHash %X valThresholdPublicKey %X", // nolint:lll
-			canonicalVoteBlockSignBytes, blockSignID, commit, vals.QuorumType, vals.QuorumHash, vals.ThresholdPublicKey)
+	canonVote := commit.GetCanonicalVote()
+	quorumSigns, err := MakeQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto(), stateID)
+	if err != nil {
+		return err
 	}
-
-	stateSignID := commit.StateID.SignID(chainID, vals.QuorumType, vals.QuorumHash)
-
-	if !vals.ThresholdPublicKey.VerifySignatureDigest(stateSignID, commit.ThresholdStateSignature) {
-		commit.StateID.SignBytes(chainID)
-		stateSignBytes := commit.StateID.SignBytes(chainID)
-		return fmt.Errorf("incorrect threshold state signature bytes: %X commit: %v valQuorumHash %X",
-			stateSignBytes, commit, vals.QuorumHash)
+	err = quorumSigns.Verify(vals.ThresholdPublicKey, NewQuorumSignsFromCommit(commit))
+	if err != nil {
+		return fmt.Errorf("invalid commit signatures for quorum(type=%v, hash=%X), thresholdPubKey=%X: %w",
+			vals.QuorumType, vals.QuorumHash, vals.ThresholdPublicKey, err)
 	}
-
 	return nil
 }
 
@@ -1075,6 +1077,9 @@ func (vals *ValidatorSet) StringIndentedBasic(indent string) string {
 
 // MarshalZerologObject implements zerolog.LogObjectMarshaler
 func (vals *ValidatorSet) MarshalZerologObject(e *zerolog.Event) {
+	if vals == nil {
+		return
+	}
 	e.Str("proposer", vals.GetProposer().ProTxHash.ShortString())
 	e.Str("quorum_hash", vals.QuorumHash.ShortString())
 	validators := zerolog.Arr()
