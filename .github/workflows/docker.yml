@@ -3,6 +3,10 @@ name: Docker
 # and pushes the image to https://hub.docker.com/r/dashpay/tenderdash/tags
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Docker tag'
+        required: true
   release:
     types:
       - published
@@ -46,6 +50,7 @@ jobs:
         with:
           images: dashpay/tenderdash
           tags: |
+            type=semver,pattern={{version}},value=${{ github.event.inputs.tag }}
             type=ref,event=branch
             type=ref,event=pr
             type=match,pattern=v(\d+),group=1
