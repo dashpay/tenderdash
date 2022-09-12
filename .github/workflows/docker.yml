@@ -5,6 +5,7 @@ on:
   workflow_dispatch:
     inputs:
       tag:
+        type: string
         description: 'Docker tag'
         required: true
   release:
