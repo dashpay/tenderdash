@@ -1,6 +1,7 @@
 package state
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/stretchr/testify/mock"
@@ -10,6 +11,8 @@ import (
 	"github.com/tendermint/tendermint/types/mocks"
 )
 
+type mockEvidence struct{ types.Evidence }
+
 func TestEmptyEventSet(t *testing.T) {
 	publisher := &mocks.BlockEventPublisher{}
 	es := EventSet{}
@@ -17,8 +20,51 @@ func TestEmptyEventSet(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestEventSetError(t *testing.T) {
+	block := &types.Block{
+		Header:   types.Header{Height: 1000},
+		Evidence: types.EvidenceList{mockEvidence{}},
+		Data:     types.Data{Txs: types.Txs{types.Tx{}}},
+	}
+	blockID := types.BlockID{}
+	ucs := CurrentRoundState{
+		response:  abci.ResponseProcessProposal{},
+		TxResults: []*abci.ExecTxResult{{}},
+	}
+	fbResp := abci.ResponseFinalizeBlock{}
+	validatorSet := &types.ValidatorSet{}
+	es := NewFullEventSet(block, blockID, ucs, &fbResp, validatorSet)
+	publisher := &mocks.BlockEventPublisher{}
+	publisher.
+		On("PublishEventNewBlock", mock.Anything).
+		Once().
+		Return(errors.New("PublishEventNewBlock error"))
+	publisher.
+		On("PublishEventNewBlockHeader", mock.Anything).
+		Once().
+		Return(errors.New("PublishEventNewBlockHeader error"))
+	publisher.
+		On("PublishEventNewEvidence", mock.Anything).
+		Once().
+		Return(errors.New("PublishEventNewEvidence error"))
+	publisher.
+		On("PublishEventTx", mock.Anything).
+		Once().
+		Return(errors.New("PublishEventTx error"))
+	publisher.
+		On("PublishEventValidatorSetUpdates", mock.Anything).
+		Once().
+		Return(errors.New("PublishEventValidatorSetUpdates error"))
+	err := es.Publish(publisher)
+	require.Contains(t, err.Error(), "PublishEventNewBlock error")
+	require.Contains(t, err.Error(), "PublishEventNewBlockHeader error")
+	require.Contains(t, err.Error(), "PublishEventNewEvidence error")
+	require.Contains(t, err.Error(), "PublishEventTx error")
+	require.Contains(t, err.Error(), "PublishEventValidatorSetUpdates error")
+	mock.AssertExpectationsForObjects(t, publisher)
+}
+
 func TestEventSet(t *testing.T) {
-	type mockEvidence struct{ types.Evidence }
 	block := &types.Block{
 		Header:   types.Header{Height: 1000},
 		Evidence: types.EvidenceList{mockEvidence{}, mockEvidence{}},
