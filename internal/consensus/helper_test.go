@@ -94,15 +94,12 @@ func (g *nodeGen) Generate(ctx context.Context, t *testing.T) *fakeNode {
 	evpool := sm.EmptyEvidencePool{}
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		log.NewNopLogger(),
 		g.proxyApp,
 		g.mempool,
 		evpool,
 		blockStore,
 		g.eventBus,
-		sm.NopMetrics(),
 	)
-	blockExec.SetAppHashSize(g.cfg.Consensus.AppHashSize)
 	csState, err := NewState(g.logger, g.cfg.Consensus, stateStore, blockExec, blockStore, g.mempool, evpool, g.eventBus)
 	require.NoError(t, err)
 

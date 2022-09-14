@@ -75,13 +75,11 @@ func TestApplyBlock(t *testing.T) {
 		mock.Anything).Return(nil)
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		sm.EmptyEvidencePool{},
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
 
 	// Consensus params, version and validators shall be applied in next block.
@@ -178,7 +176,7 @@ func TestFinalizeBlockByzantineValidators(t *testing.T) {
 
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
 
-	blockExec := sm.NewBlockExecutor(stateStore, log.NewNopLogger(), proxyApp, mp, evpool, blockStore, eventBus, sm.NopMetrics())
+	blockExec := sm.NewBlockExecutor(stateStore, proxyApp, mp, evpool, blockStore, eventBus)
 
 	block, err := sf.MakeBlock(state, 1, new(types.Commit), 1)
 	block.SetDashParams(0, nil, block.ProposedAppVersion, nil)
@@ -219,13 +217,11 @@ func TestProcessProposal(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		new(mpmocks.Mempool),
 		sm.EmptyEvidencePool{},
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
 
 	//block0 := sf.MakeBlock(t, state, height-1, new(types.Commit), nil, 0)
@@ -492,13 +488,11 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		sm.EmptyEvidencePool{},
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
 
 	updatesSub, err := eventBus.SubscribeWithArgs(ctx, pubsub.SubscribeArgs{
@@ -599,13 +593,11 @@ func TestFinalizeBlockValidatorUpdatesResultingInEmptySet(t *testing.T) {
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		log.NewNopLogger(),
 		proxyApp,
 		new(mpmocks.Mempool),
 		sm.EmptyEvidencePool{},
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
 
 	block, err := sf.MakeBlock(state, 1, new(types.Commit), 1)
@@ -672,13 +664,11 @@ func TestEmptyPrepareProposal(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		sm.EmptyEvidencePool{},
 		nil,
 		eventBus,
-		sm.NopMetrics(),
 	)
 	proposerProTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
@@ -729,13 +719,11 @@ func TestPrepareProposalErrorOnNonExistingRemoved(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		evpool,
 		nil,
 		eventBus,
-		sm.NopMetrics(),
 	)
 	proposerProTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
@@ -788,13 +776,11 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		evpool,
 		nil,
 		eventBus,
-		sm.NopMetrics(),
 	)
 	proTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
@@ -851,13 +837,11 @@ func TestPrepareProposalAddedTxsIncluded(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		evpool,
 		nil,
 		eventBus,
-		sm.NopMetrics(),
 	)
 	proposerProTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
@@ -913,13 +897,11 @@ func TestPrepareProposalReorderTxs(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		evpool,
 		nil,
 		eventBus,
-		sm.NopMetrics(),
 	)
 	proposerProTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
@@ -975,13 +957,11 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		evpool,
 		nil,
 		eventBus,
-		sm.NopMetrics(),
 	)
 	proposerProTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
@@ -1027,13 +1007,11 @@ func TestPrepareProposalErrorOnPrepareProposalError(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		evpool,
 		nil,
 		eventBus,
-		sm.NopMetrics(),
 	)
 	proTxHash, _ := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)

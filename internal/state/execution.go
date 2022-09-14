@@ -50,29 +50,53 @@ type BlockExecutor struct {
 	cache map[string]struct{}
 }
 
+// BlockExecWithLogger is an option function to set a logger to BlockExecutor
+func BlockExecWithLogger(logger log.Logger) func(e *BlockExecutor) {
+	return func(e *BlockExecutor) {
+		e.logger = logger
+	}
+}
+
+// BockExecWithMetrics is an option function to set a metrics to BlockExecutor
+func BockExecWithMetrics(metrics *Metrics) func(e *BlockExecutor) {
+	return func(e *BlockExecutor) {
+		e.metrics = metrics
+	}
+}
+
+// BlockExecWithAppHashSize is an option function to set an app-hash size to BlockExecutor
+func BlockExecWithAppHashSize(size int) func(e *BlockExecutor) {
+	return func(e *BlockExecutor) {
+		e.appHashSize = size
+	}
+}
+
 // NewBlockExecutor returns a new BlockExecutor with the passed-in EventBus.
 func NewBlockExecutor(
 	stateStore Store,
-	logger log.Logger,
 	appClient abciclient.Client,
 	pool mempool.Mempool,
 	evpool EvidencePool,
 	blockStore BlockStore,
 	eventBus *eventbus.EventBus,
-	metrics *Metrics,
+	opts ...func(e *BlockExecutor),
 ) *BlockExecutor {
-	return &BlockExecutor{
+	blockExec := &BlockExecutor{
 		eventPublisher: eventBus,
 		store:          stateStore,
 		appClient:      appClient,
 		mempool:        pool,
 		evpool:         evpool,
-		logger:         logger,
-		metrics:        metrics,
-		cache:          make(map[string]struct{}),
 		blockStore:     blockStore,
-		appHashSize:    32, // TODO change on constant
+		cache:          make(map[string]struct{}),
+		logger:         log.NewNopLogger(),
+		metrics:        NopMetrics(),
+		appHashSize:    crypto.DefaultAppHashSize,
 	}
+	for _, opt := range opts {
+		opt(blockExec)
+	}
+	return blockExec
 }
 
 func (blockExec *BlockExecutor) Store() Store {
@@ -629,43 +653,22 @@ func execBlock(
 // CONTRACT: Block should already be delivered to the app with PrepareProposal or ProcessProposal
 func ExecReplayedCommitBlock(
 	ctx context.Context,
-	be *BlockExecutor,
 	appConn abciclient.Client,
 	block *types.Block,
 	logger log.Logger,
 	initialHeight int64,
-	ucState CurrentRoundState,
 ) (*abci.ResponseFinalizeBlock, error) {
-	respFinalizeBlock, err := execBlockWithoutState(ctx, appConn, block, logger, initialHeight)
+	fbResp, err := execBlockWithoutState(ctx, appConn, block, logger, initialHeight)
 	if err != nil {
 		return nil, err
 	}
-
 	// Commit block, get hash back
-	res, err := appConn.Commit(ctx)
+	_, err = appConn.Commit(ctx)
 	if err != nil {
-		logger.Error("client error during proxyAppConn.Commit", "err", res)
-		return respFinalizeBlock, err
+		logger.Error("client error during proxyAppConn.Commit", "err", err)
+		return fbResp, err
 	}
-
-	// the BlockExecutor condition is using for the final block replay process.
-	if be != nil {
-		vsetUpdate := ucState.NextValidators
-
-		bps, err := block.MakePartSet(types.BlockPartSizeBytes)
-		if err != nil {
-			return respFinalizeBlock, err
-		}
-
-		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
-		es := NewFullEventSet(block, blockID, ucState, respFinalizeBlock, vsetUpdate)
-		err = es.Publish(be.eventPublisher)
-		if err != nil {
-			be.logger.Error("failed publishing event", "err", err)
-		}
-	}
-
-	return respFinalizeBlock, nil
+	return fbResp, nil
 }
 func execBlockWithoutState(
 	ctx context.Context,
