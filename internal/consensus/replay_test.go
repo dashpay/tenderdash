@@ -675,7 +675,7 @@ func testHandshakeReplay(
 	stateDB = dbm.NewMemDB()
 	chain := append([]*types.Block{}, sim.Chain...) // copy chain
 	commits := sim.Commits
-	store = newMockBlockStore(t, cfg, genesisState.ConsensusParams)
+	store = newMockBlockStore(t)
 
 	opts := []func(app *kvstore.Application){
 		kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates),
@@ -705,9 +705,7 @@ func testHandshakeReplay(
 		require.NoError(t, err)
 		t.Cleanup(func() { cancel(); wal.Wait() })
 		chain, commits = makeBlockchainFromWAL(t, wal, gdoc)
-		pubKey, err := privVal.GetPubKey(ctx, gdoc.QuorumHash)
-		require.NoError(t, err)
-		stateDB, genesisState, store = stateAndStore(t, cfg, pubKey, kvstore.ProtocolVersion)
+		stateDB, genesisState, store = stateAndStore(t, cfg, kvstore.ProtocolVersion)
 	}
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
@@ -965,13 +963,9 @@ func TestHandshakeErrorsIfAppReturnsWrongAppHash(t *testing.T) {
 	privVal, err := privval.LoadFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
 	require.NoError(t, err)
 	const appVersion = 0x0
-	quorumHash, err := privVal.GetFirstQuorumHash(ctx)
-	require.NoError(t, err)
-	pubKey, err := privVal.GetPubKey(ctx, quorumHash)
-	require.NoError(t, err)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
-	stateDB, state, store := stateAndStore(t, cfg, pubKey, appVersion)
+	stateDB, state, store := stateAndStore(t, cfg, appVersion)
 	stateStore := sm.NewStore(stateDB)
 	genDoc, err := sm.MakeGenesisDocFromFile(cfg.GenesisFile())
 	require.NoError(t, err)
@@ -1166,18 +1160,13 @@ func readPieceFromWAL(msg *TimedWALMessage) interface{} {
 }
 
 // fresh state and mock store
-func stateAndStore(
-	t *testing.T,
-	cfg *config.Config,
-	pubKey crypto.PubKey,
-	appVersion uint64,
-) (dbm.DB, sm.State, *mockBlockStore) {
+func stateAndStore(t *testing.T, cfg *config.Config, appVersion uint64) (dbm.DB, sm.State, *mockBlockStore) {
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
 	state, err := sm.MakeGenesisStateFromFile(cfg.GenesisFile())
 	require.NoError(t, err)
 	state.Version.Consensus.App = appVersion
-	store := newMockBlockStore(t, cfg, state.ConsensusParams)
+	store := newMockBlockStore(t)
 	require.NoError(t, stateStore.Save(state))
 
 	return stateDB, state, store
@@ -1200,12 +1189,9 @@ type mockBlockStore struct {
 var _ sm.BlockStore = &mockBlockStore{}
 
 // TODO: NewBlockStore(db.NewMemDB) ...
-func newMockBlockStore(t *testing.T, cfg *config.Config, params types.ConsensusParams) *mockBlockStore {
+func newMockBlockStore(t *testing.T) *mockBlockStore {
 	return &mockBlockStore{
-		cfg:    cfg,
-		params: params,
-		t:      t,
-
+		t:                     t,
 		coreChainLockedHeight: 1,
 	}
 }
@@ -1291,11 +1277,9 @@ func TestHandshakeUpdatesValidators(t *testing.T) {
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
-	pubKey, err := privVal.GetPubKey(ctx, randQuorumHash)
-	require.NoError(t, err)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
-	stateDB, state, store := stateAndStore(t, cfg, pubKey, 0x0)
+	stateDB, state, store := stateAndStore(t, cfg, 0x0)
 	stateStore := sm.NewStore(stateDB)
 
 	oldValProTxHash := state.Validators.Validators[0].ProTxHash
@@ -1338,17 +1322,12 @@ func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
-	randQuorumHash, err := privVal.GetFirstQuorumHash(ctx)
-	require.NoError(t, err)
-
 	app := &initChainApp{initialCoreHeight: InitialCoreHeight}
 	client := abciclient.NewLocalClient(logger, app)
 
-	pubKey, err := privVal.GetPubKey(ctx, randQuorumHash)
-	require.NoError(t, err)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
-	stateDB, state, store := stateAndStore(t, conf, pubKey, 0x0)
+	stateDB, state, store := stateAndStore(t, conf, 0x0)
 	stateStore := sm.NewStore(stateDB)
 	proxyApp := proxy.New(client, logger, proxy.NopMetrics())
 	require.NoError(t, proxyApp.Start(ctx), "Error starting proxy app connections")
