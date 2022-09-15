@@ -166,10 +166,12 @@ func WithLogger(logger log.Logger) func(app *Application) {
 	}
 }
 
-func WithState(height int64) func(app *Application) {
+func WithState(height int64, appHash []byte) func(app *Application) {
 	return func(app *Application) {
 		app.lastCommittedState = State{
-			Height: height,
+			db:      dbm.NewMemDB(),
+			AppHash: appHash,
+			Height:  height,
 		}
 	}
 }

@@ -71,6 +71,13 @@ func BlockExecWithAppHashSize(size int) func(e *BlockExecutor) {
 	}
 }
 
+// BlockExecWithAppClient sets application client to BlockExecutor
+func BlockExecWithAppClient(appClient abciclient.Client) func(e *BlockExecutor) {
+	return func(e *BlockExecutor) {
+		e.appClient = appClient
+	}
+}
+
 // NewBlockExecutor returns a new BlockExecutor with the passed-in EventBus.
 func NewBlockExecutor(
 	stateStore Store,
@@ -97,6 +104,26 @@ func NewBlockExecutor(
 		opt(blockExec)
 	}
 	return blockExec
+}
+
+// Copy returns a new instance of BlockExecutor and applies option functions
+func (blockExec *BlockExecutor) Copy(opts ...func(e *BlockExecutor)) *BlockExecutor {
+	copied := &BlockExecutor{
+		eventPublisher: blockExec.eventPublisher,
+		store:          blockExec.store,
+		appClient:      blockExec.appClient,
+		mempool:        blockExec.mempool,
+		evpool:         blockExec.evpool,
+		blockStore:     blockExec.blockStore,
+		cache:          blockExec.cache,
+		logger:         blockExec.logger,
+		metrics:        blockExec.metrics,
+		appHashSize:    blockExec.appHashSize,
+	}
+	for _, opt := range opts {
+		opt(copied)
+	}
+	return copied
 }
 
 func (blockExec *BlockExecutor) Store() Store {

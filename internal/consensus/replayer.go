@@ -26,6 +26,7 @@ type replayState struct {
 	appHash     []byte
 }
 
+// NewReplayBlockExecutor returns a new instance of state.BlockExecutor configured for BlockReplayer
 func NewReplayBlockExecutor(
 	appClient abciclient.Client,
 	stateStore sm.Store,
@@ -120,15 +121,11 @@ func (r *BlockReplayer) Replay(
 		"storeCoreChainLockedHeight", r.store.CoreChainLockedHeight(),
 		"stateCoreChainLockedHeight", state.LastCoreChainLockedBlockHeight,
 	)
-	// If appHeight == 0 it means that we are at genesis and hence should send InitChain.
-	if appHeight == 0 {
-		var err error
-		appHash, err = r.execInitChain(ctx, &state)
-		if err != nil {
-			return nil, err
-		}
+	appHash, err := r.execInitChain(ctx, rs, &state)
+	if err != nil {
+		return nil, err
 	}
-	err := r.validate(rs, state)
+	err = r.validate(rs, state)
 	if err != nil {
 		return appHash, err
 	}
@@ -218,7 +215,7 @@ func (r *BlockReplayer) stateIsOneAheadOfStore(ctx context.Context, rs replaySta
 	// We saved the block in the store but haven't updated the state,
 	// so we'll need to blockReplayer a block using the WAL.
 	if rs.appHeight < rs.stateHeight {
-		// the app is further behind than it should be, so blockReplayer blocks
+		// the app is further behind than it should be, so replay blocks
 		// but leave the last block to go through the WAL
 		return r.replayBlocks(ctx, rs, state, true)
 	}
@@ -228,14 +225,14 @@ func (r *BlockReplayer) stateIsOneAheadOfStore(ctx context.Context, rs replaySta
 		// NOTE: We could instead use the cs.WAL on cs.Start,
 		// but we'd have to allow the WAL to block a block that wrote it's #ENDHEIGHT
 		r.logger.Info("Replay last block using real app")
-		state, err = r.replayBlock(ctx, state, rs.storeHeight)
+		state, err = r.replayBlock(ctx, state, rs.storeHeight, r.blockExec)
 		if err != nil {
 			return nil, err
 		}
 		return state.AppHash, nil
 	}
 	if rs.appHeight == rs.storeHeight {
-		// We ran Commit, but didn't save the state, so replayBlock with mock app.
+		// We ran Commit, but didn't save the state, so replay with mock app.
 		abciResponses, err := r.stateStore.LoadABCIResponses(rs.storeHeight)
 		if err != nil {
 			return nil, err
@@ -249,7 +246,8 @@ func (r *BlockReplayer) stateIsOneAheadOfStore(ctx context.Context, rs replaySta
 		}
 		r.logger.Info("Replay last block using mock app")
 		//ToDo: we could optimize by passing a mockValidationApp since all signatures were already verified
-		state, err = r.replayBlock(ctx, state, rs.storeHeight)
+		blockExec := r.blockExec.Copy(sm.BlockExecWithAppClient(mockApp))
+		state, err = r.replayBlock(ctx, state, rs.storeHeight, blockExec)
 		if err != nil {
 			return nil, err
 		}
@@ -303,7 +301,7 @@ func (r *BlockReplayer) replayBlocks(
 	appHash := ucState.AppHash
 	if mutateState {
 		// sync the final block
-		state, err = r.replayBlock(ctx, state, rs.storeHeight)
+		state, err = r.replayBlock(ctx, state, rs.storeHeight, r.blockExec)
 		if err != nil {
 			return nil, err
 		}
@@ -350,12 +348,13 @@ func (r *BlockReplayer) replayBlock(
 	ctx context.Context,
 	state sm.State,
 	height int64,
+	blockExec *sm.BlockExecutor,
 ) (sm.State, error) {
 	block := r.store.LoadBlock(height)
 	meta := r.store.LoadBlockMeta(height)
 	// Use stubs for both mempool and evidence pool since no transactions nor
 	// evidence are needed here - block already exists.
-	state, err := r.blockExec.ApplyBlock(ctx, state, meta.BlockID, block)
+	state, err := blockExec.ApplyBlock(ctx, state, meta.BlockID, block)
 	if err != nil {
 		return sm.State{}, err
 	}
@@ -363,7 +362,11 @@ func (r *BlockReplayer) replayBlock(
 	return state, nil
 }
 
-func (r *BlockReplayer) execInitChain(ctx context.Context, state *sm.State) ([]byte, error) {
+func (r *BlockReplayer) execInitChain(ctx context.Context, rs replayState, state *sm.State) ([]byte, error) {
+	if rs.appHeight != 0 {
+		return rs.appHash, nil
+	}
+	// If appHeight == 0 it means that we are at genesis and hence should send InitChain.
 	if r.genDoc.InitialCoreChainLockedHeight == 0 {
 		return nil, errCoreChainLockedHeightCantBeZero
 	}
