@@ -46,35 +46,34 @@ func NewReplayBlockExecutor(
 	return blockExec
 }
 
-// BlockReplayer ...
+// BlockReplayer replays persisted blocks for ABCI application
 type BlockReplayer struct {
 	stateStore    sm.Store
 	store         sm.BlockStore
 	genDoc        *types.GenesisDoc
 	logger        log.Logger
 	nodeProTxHash crypto.ProTxHash
-	// new
-	appClient abciclient.Client
-	blockExec *sm.BlockExecutor
-	publisher types.BlockEventPublisher
-	nBlocks   int // number of blocks applied to the state
+	appClient     abciclient.Client
+	blockExec     *sm.BlockExecutor
+	publisher     types.BlockEventPublisher
+	nBlocks       int // number of blocks applied to the state
 }
 
-// ReplayerWithLogger ...
+// ReplayerWithLogger sets logger to BlockReplayer
 func ReplayerWithLogger(logger log.Logger) func(r *BlockReplayer) {
 	return func(r *BlockReplayer) {
 		r.logger = logger
 	}
 }
 
-// ReplayerWithProTxHash ...
+// ReplayerWithProTxHash sets node's pro-tx hash to BlockReplayer
 func ReplayerWithProTxHash(proTxHash types.ProTxHash) func(r *BlockReplayer) {
 	return func(r *BlockReplayer) {
 		r.nodeProTxHash = proTxHash
 	}
 }
 
-// NewBlockReplayer ...
+// NewBlockReplayer creates and returns an instance of BlockReplayer
 func NewBlockReplayer(
 	appClient abciclient.Client,
 	stateStore sm.Store,
@@ -100,7 +99,7 @@ func NewBlockReplayer(
 	return replayer
 }
 
-// Replay ...
+// Replay syncs persisted blocks with ABCI application
 func (r *BlockReplayer) Replay(
 	ctx context.Context,
 	state sm.State,
@@ -121,16 +120,16 @@ func (r *BlockReplayer) Replay(
 		"storeCoreChainLockedHeight", r.store.CoreChainLockedHeight(),
 		"stateCoreChainLockedHeight", state.LastCoreChainLockedBlockHeight,
 	)
-	appHash, err := r.execInitChain(ctx, rs, &state)
+	err := r.execInitChain(ctx, &rs, &state)
 	if err != nil {
 		return nil, err
 	}
 	err = r.validate(rs, state)
 	if err != nil {
-		return appHash, err
+		return rs.appHash, err
 	}
 	if rs.storeHeight == 0 {
-		return appHash, nil
+		return rs.appHash, nil
 	}
 	// Now either store is equal to state, or one ahead.
 	// For each, consider all cases of where the app could be, given app <= store
@@ -362,48 +361,48 @@ func (r *BlockReplayer) replayBlock(
 	return state, nil
 }
 
-func (r *BlockReplayer) execInitChain(ctx context.Context, rs replayState, state *sm.State) ([]byte, error) {
+func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, state *sm.State) error {
 	if rs.appHeight != 0 {
-		return rs.appHash, nil
+		return nil
 	}
 	// If appHeight == 0 it means that we are at genesis and hence should send InitChain.
 	if r.genDoc.InitialCoreChainLockedHeight == 0 {
-		return nil, errCoreChainLockedHeightCantBeZero
+		return errCoreChainLockedHeightCantBeZero
 	}
 	stateBlockHeight := state.LastBlockHeight
 	nextVals, err := validatorSetUpdateFromGenesis(r.genDoc, r.nodeProTxHash)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	pbParams := r.genDoc.ConsensusParams.ToProto()
 	res, err := r.appClient.InitChain(ctx, newInitChainRequest(r.genDoc, &pbParams, nextVals))
 	if err != nil {
-		return nil, fmt.Errorf("execInitChain error from abci: %v", err)
+		return fmt.Errorf("execInitChain error from abci: %v", err)
 	}
 	r.logger.Debug("Response from Init Chain", "res", res.String())
+	rs.appHash = res.AppHash
 
-	if stateBlockHeight == 0 { // we only update state when we are in initial state
-		// If the app did not return an app hash, we keep the one set from the genesis doc in
-		// the state. We don't set appHash since we don't want the genesis doc app hash
-		// recorded in the genesis block. We should probably just remove GenesisDoc.AppHasr.
-		err = applyUpdate(
-			res,
-			state,
-			updateAppHash(),
-			updateValidatorSetUpdate(r.genDoc, r.logger, r.nodeProTxHash),
-			updateConsensusParams(),
-			updateCoreChainLock(r.genDoc),
-		)
-		if err != nil {
-			return nil, err
-		}
-		// We update the last results hash with the empty hash, to conform with RFC-6962.
-		state.LastResultsHash = merkle.HashFromByteSlices(nil)
-		if err := r.stateStore.Save(*state); err != nil {
-			return nil, err
-		}
+	if stateBlockHeight != 0 {
+		return nil
 	}
-	return res.AppHash, nil
+	// we only update state when we are in initial state
+	// If the app did not return an app hash, we keep the one set from the genesis doc in
+	// the state. We don't set appHash since we don't want the genesis doc app hash
+	// recorded in the genesis block. We should probably just remove GenesisDoc.AppHasr.
+	err = applyUpdate(
+		res,
+		state,
+		updateAppHash(),
+		updateValidatorSetUpdate(r.genDoc, r.logger, r.nodeProTxHash),
+		updateConsensusParams(),
+		updateCoreChainLock(r.genDoc),
+	)
+	if err != nil {
+		return err
+	}
+	// We update the last results hash with the empty hash, to conform with RFC-6962.
+	state.LastResultsHash = merkle.HashFromByteSlices(nil)
+	return r.stateStore.Save(*state)
 }
 
 func (r *BlockReplayer) publishEvents(
