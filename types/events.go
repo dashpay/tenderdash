@@ -323,12 +323,14 @@ func QueryForEvent(eventValue string) *tmquery.Query {
 	return tmquery.MustCompile(fmt.Sprintf("%s='%s'", EventTypeKey, eventValue))
 }
 
+//go:generate ../scripts/mockery_generate.sh BlockEventPublisher
+
 // BlockEventPublisher publishes all block related events
 type BlockEventPublisher interface {
+	TxEventPublisher
 	PublishEventNewBlock(EventDataNewBlock) error
 	PublishEventNewBlockHeader(EventDataNewBlockHeader) error
 	PublishEventNewEvidence(EventDataNewEvidence) error
-	PublishEventTx(EventDataTx) error
 	PublishEventValidatorSetUpdates(EventDataValidatorSetUpdate) error
 }
 
