@@ -49,10 +49,6 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 	require.NoError(t, err)
 	require.Equal(t, 1, len(respFin.Events))
 
-	// commit
-	_, err = app.Commit(ctx)
-	require.NoError(t, err)
-
 	info, err := app.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
 	require.NotZero(t, info.LastBlockHeight)
@@ -201,8 +197,6 @@ func makeApplyBlock(
 	require.NoError(t, err)
 	require.Len(t, resFinalizeBlock.Events, 1)
 
-	_, err = kvstore.Commit(ctx)
-	require.NoError(t, err)
 	return respProcessProposal, resFinalizeBlock
 }
 
@@ -333,10 +327,6 @@ func testClient(ctx context.Context, t *testing.T, app abciclient.Client, height
 	require.NoError(t, err)
 	assert.Zero(t, ar.RetainHeight)
 	assert.Len(t, ar.Events, 1)
-
-	// commit
-	_, err = app.Commit(ctx)
-	require.NoError(t, err)
 
 	info, err := app.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)

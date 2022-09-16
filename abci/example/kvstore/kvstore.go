@@ -304,7 +304,21 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		time.Sleep(time.Duration(app.cfg.FinalizeBlockDelayMS) * time.Millisecond)
 	}
 
-	app.logger.Debug("FinalizeBlock", "req", req, "resp", resp)
+	err := app.newHeight(app.lastCommittedState.GetHeight()+1, app.finalizedAppHash)
+	if err != nil {
+		return &abci.ResponseFinalizeBlock{}, err
+	}
+
+	if err := app.createSnapshot(); err != nil {
+		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("create snapshot: %w", err)
+	}
+
+	if app.RetainBlocks > 0 && app.lastCommittedState.GetHeight() >= app.RetainBlocks {
+		resp.RetainHeight = app.lastCommittedState.GetHeight() - app.RetainBlocks + 1
+	}
+
+	app.logger.Debug("finalized block", "req", req)
+
 	return resp, nil
 }
 
@@ -326,33 +340,6 @@ func (app *Application) eventValUpdate(height int64) abci.Event {
 	}
 
 	return event
-}
-
-// Commit implements ABCI; DEPRECATED
-func (app *Application) Commit(_ context.Context) (*abci.ResponseCommit, error) {
-	app.mu.Lock()
-	defer app.mu.Unlock()
-
-	if len(app.finalizedAppHash) == 0 {
-		return &abci.ResponseCommit{}, fmt.Errorf("no uncommitted finalized block")
-	}
-
-	err := app.newHeight(app.lastCommittedState.GetHeight()+1, app.finalizedAppHash)
-	if err != nil {
-		return &abci.ResponseCommit{}, err
-	}
-
-	if err := app.createSnapshot(); err != nil {
-		return &abci.ResponseCommit{}, fmt.Errorf("create snapshot: %w", err)
-	}
-
-	resp := &abci.ResponseCommit{}
-	if app.RetainBlocks > 0 && app.lastCommittedState.GetHeight() >= app.RetainBlocks {
-		resp.RetainHeight = app.lastCommittedState.GetHeight() - app.RetainBlocks + 1
-	}
-
-	app.logger.Debug("commit", "resp", resp)
-	return resp, nil
 }
 
 // ListSnapshots implements ABCI.
