@@ -312,7 +312,7 @@ func (r *BlockReplayer) replayBlocks(
 	return appHash, nil
 }
 
-func (r *BlockReplayer) repayCommitBlock(
+func (r *BlockReplayer) replayCommitBlock(
 	ctx context.Context,
 	block *types.Block,
 	state sm.State,
