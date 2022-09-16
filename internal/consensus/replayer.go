@@ -286,7 +286,7 @@ func (r *BlockReplayer) replayBlocks(
 	)
 	for i := firstBlock; i <= finalBlock; i++ {
 		block = r.store.LoadBlock(i)
-		ucState, fbResp, err = r.repayCommitBlock(ctx, block, state, i)
+		ucState, fbResp, err = r.replayCommitBlock(ctx, block, state, i)
 		if err != nil {
 			return nil, err
 		}
