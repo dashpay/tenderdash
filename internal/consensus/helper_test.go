@@ -200,6 +200,7 @@ func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []
 	return states
 }
 
+// Generate generates and returns blockchain data for a first validator in a set
 func (c *ChainGenerator) Generate(ctx context.Context) Chain {
 	gen := consensusNetGen{
 		cfg:       c.cfg,
