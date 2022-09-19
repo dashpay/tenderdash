@@ -3525,7 +3525,7 @@
 - Only run when applicable (#4752)
 - Check git diff on each job (#4770)
 - Checkout code before git diff check (#4779)
-- Add paths 
+- Add paths
 - Bump the timeout for test_coverage (#4864)
 - Migrate localnet to github actions (#4878)
 - Add timeouts (#4912)
@@ -4774,7 +4774,7 @@
 ### Swagger
 
 - Update swagger port (#4498)
-- Remove duplicate blockID 
+- Remove duplicate blockID
 - Define version (#4952)
 - Update (#5257)
 
