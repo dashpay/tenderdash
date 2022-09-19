@@ -137,6 +137,7 @@ func (n *fakeNode) stop() {
 	n.csState.Stop()
 }
 
+// Chain is generated blockchain data for the first validator in a set.
 type Chain struct {
 	Config       *config.Config
 	GenesisDoc   *types.GenesisDoc
@@ -147,6 +148,7 @@ type Chain struct {
 	ProTxHash    crypto.ProTxHash
 }
 
+// ChainGenerator generates blockchain data with N validators to M depth
 type ChainGenerator struct {
 	t     *testing.T
 	nVals int
@@ -154,6 +156,7 @@ type ChainGenerator struct {
 	len   int
 }
 
+// NewChainGenerator creates and returns ChainGenerator for N validators to M depth
 func NewChainGenerator(t *testing.T, nVals int, len int) ChainGenerator {
 	return ChainGenerator{
 		t:     t,
