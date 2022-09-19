@@ -1,4 +1,4 @@
-//nolint: lll
+// nolint: lll
 package consensus
 
 import (
@@ -291,7 +291,8 @@ func signAddVotes(
 	vss ...*validatorStub,
 ) {
 	rs := to.GetRoundState()
-	addVotes(to, signVotes(ctx, t, voteType, chainID, blockID, rs.AppHash, to.Validators.QuorumType, to.Validators.QuorumHash, vss...)...)
+	_, valSet := to.GetValidatorSet()
+	addVotes(to, signVotes(ctx, t, voteType, chainID, blockID, rs.AppHash, valSet.QuorumType, valSet.QuorumHash, vss...)...)
 }
 
 func validatePrevote(
