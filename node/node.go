@@ -474,7 +474,7 @@ func (n *nodeImpl) OnStart(ctx context.Context) error {
 	// Create the handshaker, which calls RequestInfo, sets the AppVersion on the state,
 	// and replays any blocks as necessary to sync tendermint with the app.
 	handshaker := consensus.NewHandshaker(
-		newBlockReplayer(n),
+		createBlockReplayer(n),
 		n.logger.With("module", "handshaker"),
 		n.initialState,
 	)
@@ -823,27 +823,5 @@ func DefaultDashCoreRPCClient(cfg *config.Config, logger log.Logger) (core.Clien
 		cfg.PrivValidator.CoreRPCUsername,
 		cfg.PrivValidator.CoreRPCPassword,
 		logger,
-	)
-}
-
-func newBlockReplayer(n *nodeImpl) *consensus.BlockReplayer {
-	logger := n.logger.With("module", "replayer")
-	blockExec := consensus.NewReplayBlockExecutor(
-		n.rpcEnv.ProxyApp,
-		n.stateStore,
-		n.blockStore,
-		n.rpcEnv.EventBus,
-		sm.BlockExecWithLogger(logger),
-		sm.BlockExecWithAppHashSize(n.config.Consensus.AppHashSize),
-	)
-	return consensus.NewBlockReplayer(
-		n.rpcEnv.ProxyApp,
-		n.stateStore,
-		n.blockStore,
-		n.genesisDoc,
-		n.rpcEnv.EventBus,
-		blockExec,
-		consensus.ReplayerWithLogger(logger),
-		consensus.ReplayerWithProTxHash(n.rpcEnv.ProTxHash),
 	)
 }

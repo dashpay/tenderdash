@@ -134,8 +134,8 @@ func (r *BlockReplayer) Replay(
 	// Now either store is equal to state, or one ahead.
 	// For each, consider all cases of where the app could be, given app <= store
 	funcs := []func(context.Context, replayState, sm.State) ([]byte, error){
-		r.stateIsEqualStore,
-		r.stateIsOneAheadOfStore,
+		r.syncStateIfItIsEqualStore,
+		r.syncStateIfItIsOneAheadOfStore,
 	}
 	for _, fn := range funcs {
 		appHash, err = fn(ctx, rs, state)
@@ -161,7 +161,7 @@ func (r *BlockReplayer) validate(rs replayState, state sm.State) error {
 		}
 
 	case rs.appHeight > 0 && rs.appHeight < rs.storeBase-1:
-		// the app is too far behind truncated store (can be 1 behind since we blockReplayer the next)
+		// the app is too far behind truncated store (can be 1 behind since we replay the next)
 		return sm.ErrAppBlockHeightTooLow{
 			AppHeight: rs.appHeight,
 			StoreBase: rs.storeBase,
@@ -185,7 +185,7 @@ func (r *BlockReplayer) validate(rs replayState, state sm.State) error {
 	return nil
 }
 
-func (r *BlockReplayer) stateIsEqualStore(ctx context.Context, rs replayState, state sm.State) ([]byte, error) {
+func (r *BlockReplayer) syncStateIfItIsEqualStore(ctx context.Context, rs replayState, state sm.State) ([]byte, error) {
 	if rs.storeHeight != rs.stateHeight {
 		return nil, nil
 	}
@@ -206,13 +206,13 @@ func (r *BlockReplayer) stateIsEqualStore(ctx context.Context, rs replayState, s
 	return nil, nil
 }
 
-func (r *BlockReplayer) stateIsOneAheadOfStore(ctx context.Context, rs replayState, state sm.State) ([]byte, error) {
+func (r *BlockReplayer) syncStateIfItIsOneAheadOfStore(ctx context.Context, rs replayState, state sm.State) ([]byte, error) {
 	if rs.storeHeight != rs.stateHeight+1 {
 		return nil, nil
 	}
 	var err error
 	// We saved the block in the store but haven't updated the state,
-	// so we'll need to blockReplayer a block using the WAL.
+	// so we'll need to replay a block using the WAL.
 	if rs.appHeight < rs.stateHeight {
 		// the app is further behind than it should be, so replay blocks
 		// but leave the last block to go through the WAL
@@ -224,7 +224,7 @@ func (r *BlockReplayer) stateIsOneAheadOfStore(ctx context.Context, rs replaySta
 		// NOTE: We could instead use the cs.WAL on cs.Start,
 		// but we'd have to allow the WAL to block a block that wrote its #ENDHEIGHT
 		r.logger.Info("Replay last block using real app")
-		state, err = r.replayBlock(ctx, state, rs.storeHeight, r.blockExec)
+		state, err = r.syncStateAt(ctx, state, rs.storeHeight, r.blockExec)
 		if err != nil {
 			return nil, err
 		}
@@ -244,9 +244,8 @@ func (r *BlockReplayer) stateIsOneAheadOfStore(ctx context.Context, rs replaySta
 			return nil, err
 		}
 		r.logger.Info("Replay last block using mock app")
-		//ToDo: we could optimize by passing a mockValidationApp since all signatures were already verified
 		blockExec := r.blockExec.Copy(sm.BlockExecWithAppClient(mockApp))
-		state, err = r.replayBlock(ctx, state, rs.storeHeight, blockExec)
+		state, err = r.syncStateAt(ctx, state, rs.storeHeight, blockExec)
 		if err != nil {
 			return nil, err
 		}
@@ -269,7 +268,7 @@ func (r *BlockReplayer) replayBlocks(
 	// This also means we won't be saving validator sets if they change during this period.
 	// TODO: Load the historical information to fix this and just use state.ApplyBlock
 	//
-	// If mutateState == true, the final block is replayed with r.replayBlock()
+	// If mutateState == true, the final block is replayed with r.syncStateAt()
 	var err error
 	finalBlock := rs.storeHeight
 	if mutateState {
@@ -286,7 +285,7 @@ func (r *BlockReplayer) replayBlocks(
 	)
 	for i := firstBlock; i <= finalBlock; i++ {
 		block = r.store.LoadBlock(i)
-		ucState, fbResp, err = r.replayCommitBlock(ctx, block, state, i)
+		ucState, fbResp, err = r.replayBlock(ctx, block, state, i)
 		if err != nil {
 			return nil, err
 		}
@@ -300,7 +299,7 @@ func (r *BlockReplayer) replayBlocks(
 	appHash := ucState.AppHash
 	if mutateState {
 		// sync the final block
-		state, err = r.replayBlock(ctx, state, rs.storeHeight, r.blockExec)
+		state, err = r.syncStateAt(ctx, state, rs.storeHeight, r.blockExec)
 		if err != nil {
 			return nil, err
 		}
@@ -312,7 +311,8 @@ func (r *BlockReplayer) replayBlocks(
 	return appHash, nil
 }
 
-func (r *BlockReplayer) replayCommitBlock(
+// replayBlock adds block at height H to the application
+func (r *BlockReplayer) replayBlock(
 	ctx context.Context,
 	block *types.Block,
 	state sm.State,
@@ -333,17 +333,16 @@ func (r *BlockReplayer) replayCommitBlock(
 		return sm.CurrentRoundState{}, nil, err
 	}
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
-	if len(ucState.AppHash) > 0 {
-		if err := checkAppHashEqualsOneFromBlock(ucState.AppHash, block); err != nil {
-			return sm.CurrentRoundState{}, nil, err
-		}
+	if err := checkAppHashEqualsOneFromBlock(ucState.AppHash, block); err != nil {
+		return sm.CurrentRoundState{}, nil, err
 	}
 	r.nBlocks++
 	return ucState, fbResp, nil
 }
 
-// ApplyBlock on the proxyApp with the last block.
-func (r *BlockReplayer) replayBlock(
+// syncStateAt loads block's data for a height H to sync it with the application.
+// In order to sync block is used BlockExecutor.ApplyBlock method
+func (r *BlockReplayer) syncStateAt(
 	ctx context.Context,
 	state sm.State,
 	height int64,
@@ -388,15 +387,12 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	// we only update state when we are in initial state
 	// If the app did not return an app hash, we keep the one set from the genesis doc in
 	// the state. We don't set appHash since we don't want the genesis doc app hash
-	// recorded in the genesis block. We should probably just remove GenesisDoc.AppHasr.
-	err = applyUpdate(
-		res,
-		state,
-		updateAppHash(),
-		updateValidatorSetUpdate(r.genDoc, r.logger, r.nodeProTxHash),
-		updateConsensusParams(),
-		updateCoreChainLock(r.genDoc),
-	)
+	// recorded in the genesis block. We should probably just remove GenesisDoc.AppHash.
+	candidateState, err := state.NewStateChangeset(ctx, res)
+	if err != nil {
+		return err
+	}
+	err = candidateState.UpdateState(ctx, state)
 	if err != nil {
 		return err
 	}
@@ -434,63 +430,6 @@ func applyUpdate(
 		}
 	}
 	return nil
-}
-
-func updateAppHash() func(resp *abci.ResponseInitChain, state *sm.State) error {
-	return func(resp *abci.ResponseInitChain, state *sm.State) error {
-		if len(resp.AppHash) > 0 {
-			state.AppHash = resp.AppHash
-		}
-		return nil
-	}
-}
-
-func updateValidatorSetUpdate(genDoc *types.GenesisDoc, logger log.Logger, nodeProTxHash crypto.ProTxHash) func(resp *abci.ResponseInitChain, state *sm.State) error {
-	return func(resp *abci.ResponseInitChain, state *sm.State) error {
-		if len(resp.ValidatorSetUpdate.ValidatorUpdates) == 0 && len(genDoc.Validators) == 0 {
-			// If validator set is not set in genesis and still empty after InitChain, exit.
-			logger.Debug("Validator set is nil in genesis and still empty after InitChain")
-			return fmt.Errorf("validator set is nil in genesis and still empty after InitChain")
-		}
-		if len(resp.ValidatorSetUpdate.ValidatorUpdates) == 0 {
-			return nil
-		}
-		vals, thresholdPublicKey, quorumHash, err := types.PB2TM.ValidatorUpdatesFromValidatorSet(
-			&resp.ValidatorSetUpdate,
-		)
-		if err != nil {
-			return err
-		}
-		newValidatorSet := types.NewValidatorSetWithLocalNodeProTxHash(
-			vals, thresholdPublicKey, genDoc.QuorumType, quorumHash, nodeProTxHash,
-		)
-		logger.Debug("Updating validator set",
-			"old", state.Validators,
-			"new", newValidatorSet,
-		)
-		state.Validators = newValidatorSet
-		return nil
-	}
-}
-
-func updateConsensusParams() func(resp *abci.ResponseInitChain, state *sm.State) error {
-	return func(resp *abci.ResponseInitChain, state *sm.State) error {
-		if resp.ConsensusParams != nil {
-			state.ConsensusParams = state.ConsensusParams.UpdateConsensusParams(resp.ConsensusParams)
-			state.Version.Consensus.App = state.ConsensusParams.Version.AppVersion
-		}
-		return nil
-	}
-}
-
-func updateCoreChainLock(genDoc *types.GenesisDoc) func(resp *abci.ResponseInitChain, state *sm.State) error {
-	return func(resp *abci.ResponseInitChain, state *sm.State) error {
-		// If we received non-zero initial core height, we set it here
-		if resp.InitialCoreHeight > 0 && int64(resp.InitialCoreHeight) != genDoc.InitialHeight {
-			state.LastCoreChainLockedBlockHeight = resp.InitialCoreHeight
-		}
-		return nil
-	}
 }
 
 func validatorSetUpdateFromGenesis(genDoc *types.GenesisDoc, nodeProTxHash types.ProTxHash) (*abci.ValidatorSetUpdate, error) {

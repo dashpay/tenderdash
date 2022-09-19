@@ -4,9 +4,12 @@ import (
 	"context"
 	"encoding/hex"
 	"fmt"
+
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	dbm "github.com/tendermint/tm-db"
+
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/example/kvstore"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -14,6 +17,7 @@ import (
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/proxy"
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/internal/store"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
@@ -102,6 +106,16 @@ func TestBlockReplayerReplay(t *testing.T) {
 			appAppHash:  chain.States[chainLen-1].AppHash,
 			wantAppHash: lastAppHash,
 			wantNBlocks: 1,
+		},
+		{
+			// tenderdash state at the initial height, replayer does InitChain call to get initial-state form the app
+			state:       chain.GenesisState,
+			stateStore:  sm.NewStore(dbm.NewMemDB()),
+			blockStore:  store.NewBlockStore(dbm.NewMemDB()),
+			appHeight:   0,
+			appAppHash:  make([]byte, crypto.DefaultAppHashSize),
+			wantAppHash: nil, // nil expects because of kvstore app returns nil appHash
+			wantNBlocks: 0,
 		},
 	}
 
