@@ -3,11 +3,9 @@ package kvstore
 import (
 	"bytes"
 	"context"
-	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math/rand"
 	"path"
 	"strconv"
 	"sync"
@@ -30,8 +28,6 @@ const (
 	storeKey        = "stateStoreKey"
 	kvPairPrefixKey = "kvPairKey:"
 
-	voteExtensionMaxVal int64 = 128
-
 	ProtocolVersion uint64 = 0x1
 )
 
@@ -47,7 +43,7 @@ type Application struct {
 	abci.BaseApplication
 	mu sync.Mutex
 
-	lastCommittedState State
+	LastCommittedState State
 	// roundStates contains state for each round, indexed by AppHash.String()
 	roundStates  map[string]State
 	RetainBlocks int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
@@ -55,16 +51,23 @@ type Application struct {
 
 	validatorSetUpdates map[int64]abci.ValidatorSetUpdate
 
-	store     Store
-	processor TxProcessor
+	store Store
 
 	// Genesis configuration
 
 	cfg Config
 
-	initialHeight         int64
+	initialHeight         int64 // height of the first minted block
 	initialCoreLockHeight uint32
 
+	// Transaction handlers
+
+	// prepareTxs prepares transactions, possibly adding and/or removing some of them
+	prepareTxs PrepareTxsFunc
+	// verifyTx checks if transaction is correct
+	verifyTx VerifyTxFunc
+	// execTx executes the transaction against some state
+	execTx ExecTxFunc
 	// Snapshots
 
 	snapshots       *SnapshotStore
@@ -88,11 +91,12 @@ func WithLogger(logger log.Logger) func(app *Application) {
 	}
 }
 
-// WithHeight sets last committed height when creating Application
+// WithHeight creates initial state with a given height.
+// Note the `height` should be `genesis.InitialHeight - 1`
+// DEPRECATED - only for testing, as it is overwritten in InitChain.
 func WithHeight(height int64) func(app *Application) {
 	return func(app *Application) {
-		state := app.lastCommittedState.(*kvState)
-		state.Height = height
+		app.LastCommittedState = NewKvState(dbm.NewMemDB(), height)
 	}
 }
 
@@ -113,10 +117,24 @@ func WithConfig(config Config) func(app *Application) {
 	}
 }
 
-// WithTxProcessor provides custom transaction processing engine to the Application
-func WithTxProcessor(txProcessor TxProcessor) func(app *Application) {
+// WithExecTx provides custom transaction executing function to the Application
+func WithExecTx(execTx ExecTxFunc) func(app *Application) {
 	return func(app *Application) {
-		app.processor = txProcessor
+		app.execTx = execTx
+	}
+}
+
+// WithVerifyTxFunc provides custom transaction verification function to the Application
+func WithVerifyTxFunc(verifyTx VerifyTxFunc) func(app *Application) {
+	return func(app *Application) {
+		app.verifyTx = verifyTx
+	}
+}
+
+// WithPrepareTxsFunc provides custom transaction modification function to the Application
+func WithPrepareTxsFunc(prepareTxs PrepareTxsFunc) func(app *Application) {
+	return func(app *Application) {
+		app.prepareTxs = prepareTxs
 	}
 }
 
@@ -135,25 +153,23 @@ func NewApplication(opts ...func(app *Application)) *Application {
 	var err error
 
 	db := dbm.NewMemDB()
-	state := NewKvState(db)
 	stateStore := NewDBStateStore(db)
 
 	app := &Application{
 		logger:              log.NewNopLogger(),
-		lastCommittedState:  state,
+		LastCommittedState:  NewKvState(dbm.NewMemDB(), 0), // initial state to avoid InitChain() in unit tests
 		roundStates:         map[string]State{},
 		validatorSetUpdates: make(map[int64]abci.ValidatorSetUpdate),
 		initialHeight:       1,
 		store:               stateStore,
-		processor:           &txProcessor{},
+
+		prepareTxs: prepareTxs,
+		verifyTx:   verifyTx,
+		execTx:     execTx,
 	}
 
 	for _, opt := range opts {
 		opt(app)
-	}
-
-	if err := state.Load(stateStore); err != nil {
-		panic(fmt.Errorf("load state: %w", err))
 	}
 
 	app.snapshots, err = NewSnapshotStore(path.Join(app.cfg.Dir, "snapshots"))
@@ -177,8 +193,16 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 		app.initialCoreLockHeight = req.InitialCoreHeight
 	}
 
+	// Loading state.
+	// We start with default, empty state at (initialHeight-1) to show that no block was approved yet.
+	app.LastCommittedState = NewKvState(dbm.NewMemDB(), app.initialHeight-1)
+	// Then, we load state from store if it's available.
+	if err := app.LastCommittedState.Load(app.store); err != nil {
+		return &abci.ResponseInitChain{}, fmt.Errorf("load state: %w", err)
+	}
+	// Then, we allow overwriting of some state fields based on AppStateBytes
 	if len(req.AppStateBytes) > 0 {
-		err := json.Unmarshal(req.AppStateBytes, &app.lastCommittedState)
+		err := json.Unmarshal(req.AppStateBytes, &app.LastCommittedState)
 		if err != nil {
 			return &abci.ResponseInitChain{}, err
 		}
@@ -189,18 +213,8 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 		app.validatorSetUpdates[app.initialHeight] = *req.ValidatorSet
 	}
 
-	height := app.initialHeight
-	if app.lastCommittedState.GetHeight() >= height {
-		// We already have some committed state retrieved from req.AppStateBytes
-		height = app.lastCommittedState.GetHeight() + 1
-	}
-
-	if err := app.newHeight(height, make([]byte, crypto.DefaultAppHashSize)); err != nil {
-		return &abci.ResponseInitChain{}, err
-	}
-
 	resp := &abci.ResponseInitChain{
-		AppHash: app.lastCommittedState.GetAppHash(),
+		AppHash: app.LastCommittedState.GetAppHash(),
 		ConsensusParams: &types1.ConsensusParams{
 			Version: &types1.VersionParams{
 				AppVersion: ProtocolVersion,
@@ -225,7 +239,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 		return &abci.ResponsePrepareProposal{}, fmt.Errorf("MaxTxBytes must be positive, got: %d", req.MaxTxBytes)
 	}
 
-	txRecords, err := app.processor.PrepareTxs(*req)
+	txRecords, err := app.prepareTxs(*req)
 	if err != nil {
 		return &abci.ResponsePrepareProposal{}, err
 	}
@@ -294,15 +308,15 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	resp := &abci.ResponseFinalizeBlock{
 		Events: events,
 	}
-	if app.RetainBlocks > 0 && app.lastCommittedState.GetHeight() >= app.RetainBlocks {
-		resp.RetainHeight = app.lastCommittedState.GetHeight() - app.RetainBlocks + 1
+	if app.RetainBlocks > 0 && app.LastCommittedState.GetHeight() >= app.RetainBlocks {
+		resp.RetainHeight = app.LastCommittedState.GetHeight() - app.RetainBlocks + 1
 	}
 
 	if app.cfg.FinalizeBlockDelayMS != 0 {
 		time.Sleep(time.Duration(app.cfg.FinalizeBlockDelayMS) * time.Millisecond)
 	}
 
-	err := app.newHeight(app.lastCommittedState.GetHeight()+1, appHash)
+	err := app.newHeight(appHash)
 	if err != nil {
 		return &abci.ResponseFinalizeBlock{}, err
 	}
@@ -311,8 +325,8 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("create snapshot: %w", err)
 	}
 
-	if app.RetainBlocks > 0 && app.lastCommittedState.GetHeight() >= app.RetainBlocks {
-		resp.RetainHeight = app.lastCommittedState.GetHeight() - app.RetainBlocks + 1
+	if app.RetainBlocks > 0 && app.LastCommittedState.GetHeight() >= app.RetainBlocks {
+		resp.RetainHeight = app.LastCommittedState.GetHeight() - app.RetainBlocks + 1
 	}
 
 	app.logger.Debug("finalized block", "req", req)
@@ -400,7 +414,7 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 		for _, chunk := range app.restoreChunks {
 			bz = append(bz, chunk...)
 		}
-		if err := json.Unmarshal(bz, &app.lastCommittedState); err != nil {
+		if err := json.Unmarshal(bz, &app.LastCommittedState); err != nil {
 			panic(err)
 		}
 
@@ -415,9 +429,9 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 }
 
 func (app *Application) createSnapshot() error {
-	height := app.lastCommittedState.GetHeight()
+	height := app.LastCommittedState.GetHeight()
 	if app.cfg.SnapshotInterval > 0 && uint64(height)%app.cfg.SnapshotInterval == 0 {
-		if _, err := app.snapshots.Create(app.lastCommittedState); err != nil {
+		if _, err := app.snapshots.Create(app.LastCommittedState); err != nil {
 			return fmt.Errorf("create snapshot: %w", err)
 		}
 		app.logger.Info("created state sync snapshot", "height", height)
@@ -430,133 +444,25 @@ func (app *Application) createSnapshot() error {
 	return nil
 }
 
-// ExtendVote will produce vote extensions in the form of random numbers to
-// demonstrate vote extension nondeterminism.
-//
-// In the next block, if there are any vote extensions from the previous block,
-// a new transaction will be proposed that updates a special value in the
-// key/value store ("extensionSum") with the sum of all of the numbers collected
-// from the vote extensions.
-func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVote) (*abci.ResponseExtendVote, error) {
-	app.mu.Lock()
-	defer app.mu.Unlock()
-
-	// We ignore any requests for vote extensions that don't match our expected
-	// next height.
-	lastHeight := app.lastCommittedState.GetHeight()
-	if lastHeight == 0 {
-		lastHeight = app.initialHeight - 1
-	}
-	if req.Height != lastHeight+1 {
-		app.logger.Error(
-			"got unexpected height in ExtendVote request",
-			"expectedHeight", lastHeight+1,
-			"requestHeight", req.Height,
-		)
-		return &abci.ResponseExtendVote{}, nil
-	}
-	ext := make([]byte, binary.MaxVarintLen64)
-	// We don't care that these values are generated by a weak random number
-	// generator. It's just for test purposes.
-	// nolint:gosec // G404: Use of weak random number generator
-	num := rand.Int63n(voteExtensionMaxVal)
-	extLen := binary.PutVarint(ext, num)
-	app.logger.Info("generated vote extension",
-		"num", num,
-		"ext", fmt.Sprintf("%x", ext[:extLen]),
-		"state.Height", lastHeight,
-	)
-	return &abci.ResponseExtendVote{
-		VoteExtensions: []*abci.ExtendVoteExtension{
-			{
-				Type:      types1.VoteExtensionType_DEFAULT,
-				Extension: ext[:extLen],
-			},
-			{
-				Type:      types1.VoteExtensionType_THRESHOLD_RECOVER,
-				Extension: []byte(fmt.Sprintf("threshold-%d", lastHeight+1)),
-			},
-		},
-	}, nil
-}
-
-// VerifyVoteExtension simply validates vote extensions from other validators
-// without doing anything about them. In this case, it just makes sure that the
-// vote extension is a well-formed integer value.
-func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.RequestVerifyVoteExtension) (*abci.ResponseVerifyVoteExtension, error) {
-	// We allow vote extensions to be optional
-	if len(req.VoteExtensions) == 0 {
-		return &abci.ResponseVerifyVoteExtension{
-			Status: abci.ResponseVerifyVoteExtension_ACCEPT,
-		}, nil
-	}
-	lastHeight := app.lastCommittedState.GetHeight()
-	if req.Height != lastHeight+1 {
-		app.logger.Error(
-			"got unexpected height in VerifyVoteExtension request",
-			"expectedHeight", lastHeight+1,
-			"requestHeight", req.Height,
-		)
-		return &abci.ResponseVerifyVoteExtension{
-			Status: abci.ResponseVerifyVoteExtension_REJECT,
-		}, nil
-	}
-
-	nums := make([]int64, 0, len(req.VoteExtensions))
-	for _, ext := range req.VoteExtensions {
-		num, err := parseVoteExtension(ext.Extension)
-		if err != nil {
-			app.logger.Error("failed to verify vote extension", "req", req, "err", err)
-			return &abci.ResponseVerifyVoteExtension{
-				Status: abci.ResponseVerifyVoteExtension_REJECT,
-			}, nil
-		}
-		nums = append(nums, num)
-	}
-
-	if app.cfg.VoteExtensionDelayMS != 0 {
-		time.Sleep(time.Duration(app.cfg.VoteExtensionDelayMS) * time.Millisecond)
-	}
-
-	app.logger.Info("verified vote extension value", "req", req, "nums", nums)
-	return &abci.ResponseVerifyVoteExtension{
-		Status: abci.ResponseVerifyVoteExtension_ACCEPT,
-	}, nil
-}
-
-// parseVoteExtension attempts to parse the given extension data into a positive
-// integer value.
-func parseVoteExtension(ext []byte) (int64, error) {
-	num, errVal := binary.Varint(ext)
-	if errVal == 0 {
-		return 0, errors.New("vote extension is too small to parse")
-	}
-	if errVal < 0 {
-		return 0, errors.New("vote extension value is too large")
-	}
-	if num >= voteExtensionMaxVal {
-		return 0, fmt.Errorf("vote extension value must be smaller than %d (was %d)", voteExtensionMaxVal, num)
-	}
-	return num, nil
-}
-
 // Info implements ABCI
 func (app *Application) Info(_ context.Context, req *abci.RequestInfo) (*abci.ResponseInfo, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-	appHash := app.lastCommittedState.GetAppHash()
-	return &abci.ResponseInfo{
+	appHash := app.LastCommittedState.GetAppHash()
+	resp := &abci.ResponseInfo{
 		Data:             fmt.Sprintf("{\"appHash\":\"%s\"}", appHash.String()),
 		Version:          version.ABCIVersion,
 		AppVersion:       ProtocolVersion,
-		LastBlockHeight:  app.lastCommittedState.GetHeight(),
-		LastBlockAppHash: app.lastCommittedState.GetAppHash(),
-	}, nil
+		LastBlockHeight:  app.LastCommittedState.GetHeight(),
+		LastBlockAppHash: app.LastCommittedState.GetAppHash(),
+	}
+	app.logger.Debug("Info", "req", req, "resp", resp)
+	return resp, nil
 }
 
 // CheckTX implements ABCI
 func (app *Application) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*abci.ResponseCheckTx, error) {
-	resp, err := app.processor.VerifyTx(req.Tx, req.Type)
+	resp, err := app.verifyTx(req.Tx, req.Type)
 	if app.cfg.CheckTxDelayMS != 0 {
 		time.Sleep(time.Duration(app.cfg.CheckTxDelayMS) * time.Millisecond)
 	}
@@ -596,7 +502,7 @@ func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*
 	}
 
 	if reqQuery.Prove {
-		value, err := app.lastCommittedState.Get(prefixKey(reqQuery.Data))
+		value, err := app.LastCommittedState.Get(prefixKey(reqQuery.Data))
 		if err != nil {
 			panic(err)
 		}
@@ -605,7 +511,7 @@ func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*
 			Index:  -1,
 			Key:    reqQuery.Data,
 			Value:  value,
-			Height: app.lastCommittedState.GetHeight(),
+			Height: app.LastCommittedState.GetHeight(),
 		}
 
 		if value == nil {
@@ -618,7 +524,7 @@ func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*
 		return &resQuery, nil
 	}
 
-	value, err := app.lastCommittedState.Get(prefixKey(reqQuery.Data))
+	value, err := app.LastCommittedState.Get(prefixKey(reqQuery.Data))
 	if err != nil {
 		panic(err)
 	}
@@ -626,7 +532,7 @@ func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*
 	resQuery := abci.ResponseQuery{
 		Key:    reqQuery.Data,
 		Value:  value,
-		Height: app.lastCommittedState.GetHeight(),
+		Height: app.LastCommittedState.GetHeight(),
 	}
 
 	if value == nil {
@@ -652,26 +558,21 @@ func (app *Application) Close() error {
 	defer app.mu.Unlock()
 
 	app.resetRoundStates()
-	app.lastCommittedState.Close()
+	app.LastCommittedState.Close()
 	app.store.Close()
 
 	return nil
 }
 
 // newHeight frees resources from previous height and starts new height.
-// `height` shall be new height, and `committedRound` shall be round from previous commit
 // Caller should lock the Application.
-func (app *Application) newHeight(height int64, committedAppHash tmbytes.HexBytes) error {
-	if height != app.lastCommittedState.GetHeight()+1 {
-		return fmt.Errorf("invalid height: expected: %d, got: %d", app.lastCommittedState.GetHeight()+1, height)
-	}
-
+func (app *Application) newHeight(committedAppHash tmbytes.HexBytes) error {
 	// Committed round becomes new state
 	committedState := app.roundStates[committedAppHash.String()]
 	if committedState == nil {
-		committedState = NewKvState(dbm.NewMemDB())
+		return fmt.Errorf("round state with apphash %s not found", committedAppHash.String())
 	}
-	err := committedState.Copy(app.lastCommittedState)
+	err := committedState.Copy(app.LastCommittedState)
 	if err != nil {
 		return err
 	}
@@ -694,7 +595,11 @@ func (app *Application) resetRoundStates() {
 
 // executeProposal executes transactions and creates new candidate state
 func (app *Application) executeProposal(height int64, txs []*abci.TxRecord) (State, []*abci.ExecTxResult, error) {
-	roundState, err := app.lastCommittedState.NextHeightState(dbm.NewMemDB())
+	if height != app.LastCommittedState.GetHeight()+1 {
+		return nil, nil, fmt.Errorf("height mismatch, expected: %d, got: %d", app.LastCommittedState.GetHeight()+1, height)
+	}
+
+	roundState, err := app.LastCommittedState.NextHeightState(dbm.NewMemDB())
 	if err != nil {
 		return nil, nil, err
 	}
@@ -704,7 +609,7 @@ func (app *Application) executeProposal(height int64, txs []*abci.TxRecord) (Sta
 		if tx.Action == abci.TxRecord_REMOVED {
 			continue // we don't execute removed tx records
 		}
-		result, err := app.processor.ExecTx(tx.Tx, roundState)
+		result, err := app.execTx(tx.Tx, roundState)
 		if err != nil && result.Code == 0 {
 			result = abci.ExecTxResult{Code: code.CodeTypeUnknownError, Log: err.Error()}
 		}
@@ -713,7 +618,7 @@ func (app *Application) executeProposal(height int64, txs []*abci.TxRecord) (Sta
 
 	// Don't update AppHash at genesis height
 	if roundState.GetHeight() != app.initialHeight {
-		if err = roundState.UpdateAppHash(app.lastCommittedState, txs, txResults); err != nil {
+		if err = roundState.UpdateAppHash(app.LastCommittedState, txs, txResults); err != nil {
 			return nil, nil, fmt.Errorf("update apphash: %w", err)
 		}
 	}
@@ -744,7 +649,7 @@ func (app *Application) getValidatorSetUpdate(height int64) *abci.ValidatorSetUp
 func (app *Application) getActiveValidatorSetUpdates() abci.ValidatorSetUpdate {
 	var closestHeight int64
 	for height := range app.validatorSetUpdates {
-		if height > closestHeight && height <= app.lastCommittedState.GetHeight() {
+		if height > closestHeight && height <= app.LastCommittedState.GetHeight() {
 			closestHeight = height
 		}
 	}
@@ -773,8 +678,8 @@ func encodeMsg(data proto.Message) ([]byte, error) {
 
 // persist persists application state according to the config
 func (app *Application) persist() error {
-	if app.cfg.PersistInterval > 0 && app.lastCommittedState.GetHeight()%int64(app.cfg.PersistInterval) == 0 {
-		return app.lastCommittedState.Save(app.store)
+	if app.cfg.PersistInterval > 0 && app.LastCommittedState.GetHeight()%int64(app.cfg.PersistInterval) == 0 {
+		return app.LastCommittedState.Save(app.store)
 	}
 	return nil
 }
