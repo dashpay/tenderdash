@@ -222,7 +222,7 @@ func (r *BlockReplayer) stateIsOneAheadOfStore(ctx context.Context, rs replaySta
 		// We haven't run Commit (both the state and app are one block behind),
 		// so replay with the real app.
 		// NOTE: We could instead use the cs.WAL on cs.Start,
-		// but we'd have to allow the WAL to block a block that wrote it's #ENDHEIGHT
+		// but we'd have to allow the WAL to block a block that wrote its #ENDHEIGHT
 		r.logger.Info("Replay last block using real app")
 		state, err = r.replayBlock(ctx, state, rs.storeHeight, r.blockExec)
 		if err != nil {
