@@ -418,20 +418,6 @@ func (r *BlockReplayer) publishEvents(
 	return nil
 }
 
-func applyUpdate(
-	resp *abci.ResponseInitChain,
-	state *sm.State,
-	updates ...func(resp *abci.ResponseInitChain, state *sm.State) error,
-) error {
-	for _, update := range updates {
-		err := update(resp, state)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
 func validatorSetUpdateFromGenesis(genDoc *types.GenesisDoc, nodeProTxHash types.ProTxHash) (*abci.ValidatorSetUpdate, error) {
 	if len(genDoc.QuorumHash) != crypto.DefaultHashSize {
 		return nil, nil

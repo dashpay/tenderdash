@@ -302,7 +302,7 @@ func (w *crashingWAL) Start(ctx context.Context) error { return w.next.Start(ctx
 func (w *crashingWAL) Stop()                           { w.next.Stop() }
 func (w *crashingWAL) Wait()                           { w.next.Wait() }
 
-//------------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------
 type simulatorTestSuite struct {
 	GenesisState sm.State
 	Config       *config.Config
@@ -1176,8 +1176,6 @@ func stateAndStore(t *testing.T, cfg *config.Config, appVersion uint64) (dbm.DB,
 // mock block store
 
 type mockBlockStore struct {
-	cfg     *config.Config
-	params  types.ConsensusParams
 	chain   []*types.Block
 	commits []*types.Commit
 	base    int64
