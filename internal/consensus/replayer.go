@@ -18,14 +18,6 @@ import (
 
 var errCoreChainLockedHeightCantBeZero = errors.New("the initial core chain locked height in genesis can not be 0")
 
-type replayState struct {
-	storeHeight int64
-	storeBase   int64
-	stateHeight int64
-	appHeight   int64
-	appHash     []byte
-}
-
 // NewReplayBlockExecutor returns a new instance of state.BlockExecutor configured for BlockReplayer
 func NewReplayBlockExecutor(
 	appClient abciclient.Client,
@@ -124,7 +116,7 @@ func (r *BlockReplayer) Replay(
 	if err != nil {
 		return nil, err
 	}
-	err = r.validate(rs, state)
+	err = rs.validate(state)
 	if err != nil {
 		return rs.appHash, err
 	}
@@ -145,44 +137,6 @@ func (r *BlockReplayer) Replay(
 	}
 	return nil, fmt.Errorf("uncovered case! appHeight: %d, storeHeight: %d, stateHeight: %d",
 		rs.appHeight, rs.storeHeight, rs.stateHeight)
-}
-
-func (r *BlockReplayer) validate(rs replayState, state sm.State) error {
-	switch {
-	case rs.storeHeight == 0:
-		if err := checkAppHashEqualsOneFromState(rs.appHash, state); err != nil {
-			return err
-		}
-	case rs.appHeight == 0 && state.InitialHeight < rs.storeBase:
-		// the app has no state, and the block store is truncated above the initial height
-		return sm.ErrAppBlockHeightTooLow{
-			AppHeight: rs.appHeight,
-			StoreBase: rs.storeBase,
-		}
-
-	case rs.appHeight > 0 && rs.appHeight < rs.storeBase-1:
-		// the app is too far behind truncated store (can be 1 behind since we replay the next)
-		return sm.ErrAppBlockHeightTooLow{
-			AppHeight: rs.appHeight,
-			StoreBase: rs.storeBase,
-		}
-
-	case rs.storeHeight < rs.appHeight:
-		// the app should never be ahead of the store (but this is under app's control)
-		return sm.ErrAppBlockHeightTooHigh{
-			CoreHeight: rs.storeHeight,
-			AppHeight:  rs.appHeight,
-		}
-
-	case rs.storeHeight < rs.stateHeight:
-		// the state should never be ahead of the store (this is under tendermint's control)
-		return fmt.Errorf("StateBlockHeight (%d) > StoreBlockHeight (%d)", rs.stateHeight, rs.storeHeight)
-
-	case rs.storeHeight > rs.stateHeight+1:
-		// store should be at most one ahead of the state (this is under tendermint's control)
-		return fmt.Errorf("StoreBlockHeight (%d) > StateBlockHeight + 1 (%d)", rs.storeHeight, rs.stateHeight+1)
-	}
-	return nil
 }
 
 func (r *BlockReplayer) syncStateIfItIsEqualStore(ctx context.Context, rs replayState, state sm.State) ([]byte, error) {
@@ -459,4 +413,50 @@ func newInitChainRequest(
 		AppStateBytes:     genDoc.AppState,
 		InitialCoreHeight: genDoc.InitialCoreChainLockedHeight,
 	}
+}
+
+type replayState struct {
+	storeHeight int64
+	storeBase   int64
+	stateHeight int64
+	appHeight   int64
+	appHash     []byte
+}
+
+func (rs *replayState) validate(state sm.State) error {
+	switch {
+	case rs.storeHeight == 0:
+		if err := checkAppHashEqualsOneFromState(rs.appHash, state); err != nil {
+			return err
+		}
+	case rs.appHeight == 0 && state.InitialHeight < rs.storeBase:
+		// the app has no state, and the block store is truncated above the initial height
+		return sm.ErrAppBlockHeightTooLow{
+			AppHeight: rs.appHeight,
+			StoreBase: rs.storeBase,
+		}
+
+	case rs.appHeight > 0 && rs.appHeight < rs.storeBase-1:
+		// the app is too far behind truncated store (can be 1 behind since we replay the next)
+		return sm.ErrAppBlockHeightTooLow{
+			AppHeight: rs.appHeight,
+			StoreBase: rs.storeBase,
+		}
+
+	case rs.storeHeight < rs.appHeight:
+		// the app should never be ahead of the store (but this is under app's control)
+		return sm.ErrAppBlockHeightTooHigh{
+			CoreHeight: rs.storeHeight,
+			AppHeight:  rs.appHeight,
+		}
+
+	case rs.storeHeight < rs.stateHeight:
+		// the state should never be ahead of the store (this is under tendermint's control)
+		return fmt.Errorf("StateBlockHeight (%d) > StoreBlockHeight (%d)", rs.stateHeight, rs.storeHeight)
+
+	case rs.storeHeight > rs.stateHeight+1:
+		// store should be at most one ahead of the state (this is under tendermint's control)
+		return fmt.Errorf("StoreBlockHeight (%d) > StateBlockHeight + 1 (%d)", rs.storeHeight, rs.stateHeight+1)
+	}
+	return nil
 }

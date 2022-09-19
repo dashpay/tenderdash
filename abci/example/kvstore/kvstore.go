@@ -17,6 +17,7 @@ import (
 	"github.com/tendermint/tendermint/internal/libs/protoio"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/version"
 )
 
@@ -204,7 +205,13 @@ func (app *Application) InitChain(_ context.Context, req *types.RequestInitChain
 	if err := app.newHeight(app.initialHeight, make([]byte, crypto.DefaultAppHashSize)); err != nil {
 		panic(err)
 	}
-	return &types.ResponseInitChain{}, nil
+	return &types.ResponseInitChain{
+		ConsensusParams: &tmproto.ConsensusParams{
+			Version: &tmproto.VersionParams{
+				AppVersion: ProtocolVersion,
+			},
+		},
+	}, nil
 }
 
 func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error) {
