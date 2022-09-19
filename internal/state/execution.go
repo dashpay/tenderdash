@@ -383,7 +383,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	}
 
 	// Lock mempool, commit app state, update mempoool.
-	err = blockExec.Commit(ctx, state, block, uncommittedState.TxResults)
+	err = blockExec.flushMempool(ctx, state, block, uncommittedState.TxResults)
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
 	}
@@ -402,7 +402,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	blockExec.cache = make(map[string]struct{})
 
 	// Events are fired after everything else.
-	// NOTE: if we crash between Commit and Save, events wont be fired during replay
+	// NOTE: if we crash between flushMempool and Save, events wont be fired during replay
 	fireEvents(
 		blockExec.logger,
 		blockExec.eventBus,
@@ -469,13 +469,13 @@ func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *t
 	return nil
 }
 
-// Commit locks the mempool, runs the ABCI Commit message, and updates the
+// flushMempool locks the mempool, runs the ABCI flushMempool message, and updates the
 // mempool.
-// It returns the result of calling abci.Commit (the AppHash) and the height to retain (if any).
+// It returns the result of calling abci.flushMempool (the AppHash) and the height to retain (if any).
 // The Mempool must be locked during commit and update because state is
-// typically reset on Commit and old txs must be replayed against committed
+// typically reset on flushMempool and old txs must be replayed against committed
 // state before new txs are run in the mempool, lest they be invalid.
-func (blockExec *BlockExecutor) Commit(
+func (blockExec *BlockExecutor) flushMempool(
 	ctx context.Context,
 	state State,
 	block *types.Block,
@@ -485,7 +485,7 @@ func (blockExec *BlockExecutor) Commit(
 	defer blockExec.mempool.Unlock()
 
 	// while mempool is Locked, flush to ensure all async requests have completed
-	// in the ABCI app before Commit.
+	// in the ABCI app before flushMempool.
 	err := blockExec.mempool.FlushAppConn(ctx)
 	if err != nil {
 		blockExec.logger.Error("client error during mempool.FlushAppConn", "err", err)
@@ -687,10 +687,10 @@ func execBlock(
 	return responseFinalizeBlock, nil
 }
 
-//----------------------------------------------------------------------------------------------------
+// ----------------------------------------------------------------------------------------------------
 // Execute block without state. TODO: eliminate
 // ExecReplayedCommitBlock executes and commits a block on the proxyApp without validating or mutating the state.
-// It returns the application root hash (apphash - result of abci.Commit).
+// It returns the application root hash (apphash - result of abci.flushMempool).
 //
 // CONTRACT: Block should already be delivered to the app with PrepareProposal or ProcessProposal
 func ExecReplayedCommitBlock(

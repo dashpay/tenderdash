@@ -53,7 +53,6 @@ type Application struct {
 	RetainBlocks int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
 	logger       log.Logger
 
-	finalizedAppHash    []byte
 	validatorSetUpdates map[int64]abci.ValidatorSetUpdate
 
 	store     Store
@@ -121,7 +120,7 @@ func WithTxProcessor(txProcessor TxProcessor) func(app *Application) {
 	}
 }
 
-// WithStateStore provides Store to persist state every `Config.PersistInterval`` blocks
+// WithStateStore provides Store to persist state every `Config.PersistInterval“ blocks
 func WithStateStore(stateStore Store) func(app *Application) {
 	return func(app *Application) {
 		app.store = stateStore
@@ -290,7 +289,6 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		return &abci.ResponseFinalizeBlock{},
 			fmt.Errorf("height mismatch: expected %d, got %d", roundState.GetHeight(), req.Height)
 	}
-	app.finalizedAppHash = appHash
 
 	events := []abci.Event{app.eventValUpdate(req.Height)}
 	resp := &abci.ResponseFinalizeBlock{
@@ -304,7 +302,7 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		time.Sleep(time.Duration(app.cfg.FinalizeBlockDelayMS) * time.Millisecond)
 	}
 
-	err := app.newHeight(app.lastCommittedState.GetHeight()+1, app.finalizedAppHash)
+	err := app.newHeight(app.lastCommittedState.GetHeight()+1, appHash)
 	if err != nil {
 		return &abci.ResponseFinalizeBlock{}, err
 	}
@@ -682,7 +680,6 @@ func (app *Application) newHeight(height int64, committedAppHash tmbytes.HexByte
 	if err := app.persist(); err != nil {
 		return err
 	}
-	app.finalizedAppHash = nil
 
 	return nil
 }
@@ -725,8 +722,8 @@ func (app *Application) executeProposal(height int64, txs []*abci.TxRecord) (Sta
 	return roundState, txResults, nil
 }
 
-//---------------------------------------------
-// getValidatorSetUpdate returns validator update at some `height`` that will be applied at `height+1`.
+// ---------------------------------------------
+// getValidatorSetUpdate returns validator update at some `height` that will be applied at `height+1`.
 func (app *Application) getValidatorSetUpdate(height int64) *abci.ValidatorSetUpdate {
 	vsu, ok := app.validatorSetUpdates[height]
 	if !ok {
