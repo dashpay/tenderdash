@@ -27,8 +27,9 @@ func TestBlockReplayerReplay(t *testing.T) {
 	defer cancel()
 
 	const (
-		chainLen = 6
-		nVals    = 1
+		chainSize     = 6
+		nVals         = 1
+		lastHeightIDx = chainSize - 1
 	)
 
 	logger := log.NewNopLogger()
@@ -36,7 +37,7 @@ func TestBlockReplayerReplay(t *testing.T) {
 	eventBus := eventbus.NewDefault(log.NewNopLogger())
 	require.NoError(t, eventBus.Start(ctx))
 
-	gen := NewChainGenerator(t, nVals, chainLen)
+	gen := NewChainGenerator(t, nVals, chainSize)
 	chain := gen.Generate(ctx)
 
 	lastAppHash := mustHexToBytes("434BB5713255371561623E144D06F3056A65FD66AF40207FBA4451DA5A6A4025")
@@ -52,63 +53,69 @@ func TestBlockReplayerReplay(t *testing.T) {
 		appOpts     []func(app *kvstore.Application)
 	}{
 		{
-			// state-height is equal to store-height and app-height is less store-height
-			state:       chain.States[len(chain.States)-1],
+			// state-height is equal to block-height and app-height is less block-height
+			// state-height = H, block-height == H, app-height == 0
+			state:       chain.States[lastHeightIDx],
 			stateStore:  chain.StateStore,
 			blockStore:  chain.BlockStore,
 			appHeight:   0,
 			appAppHash:  make([]byte, crypto.DefaultAppHashSize),
 			wantAppHash: lastAppHash,
-			wantNBlocks: chainLen,
+			wantNBlocks: chainSize, // sync the whole chain
 		},
 		{
-			// state-height is equal to store-height and app-height is equal to store-height
-			state:       chain.States[chainLen-1],
+			// state-height is equal to block-height and app-height is equal to block-height
+			// state-height == H, block-height == H, app-height == H
+			state:       chain.States[lastHeightIDx],
 			stateStore:  chain.StateStore,
 			blockStore:  chain.BlockStore,
-			appHeight:   chainLen,
+			appHeight:   chainSize,
 			appAppHash:  lastAppHash,
 			wantAppHash: lastAppHash,
-			wantNBlocks: 0,
+			wantNBlocks: 0, // the chain is already synced
 		},
 		{
-			// state-height is one ahead of store-height and app-height is less state-height
-			state:       chain.States[chainLen-2],
-			stateStore:  updateStateStoreWithState(chain.States[len(chain.States)-2], chain.StateStore),
+			// state-height is one ahead of block-height and app-height is less state-height
+			// state-height == H-1, block-height == H, app-height == 0
+			state:       chain.States[lastHeightIDx-1],
+			stateStore:  updateStateStoreWithState(chain.States[lastHeightIDx-1], chain.StateStore),
 			blockStore:  chain.BlockStore,
 			appHeight:   0,
 			appAppHash:  make([]byte, crypto.DefaultAppHashSize),
 			wantAppHash: lastAppHash,
-			wantNBlocks: chainLen,
+			wantNBlocks: chainSize, // sync the whole chain
 		},
 		{
-			// state-height is one ahead of store-height and app-height is equal to state-height
-			state:       chain.States[len(chain.States)-2],
-			stateStore:  updateStateStoreWithState(chain.States[len(chain.States)-2], chain.StateStore),
+			// state-height is one ahead of block-height and app-height is equal to state-height
+			// state-height == H-1, block-height == H, app-height == H-1
+			state:       chain.States[lastHeightIDx-1],
+			stateStore:  updateStateStoreWithState(chain.States[lastHeightIDx-1], chain.StateStore),
 			blockStore:  chain.BlockStore,
-			appHeight:   chainLen - 1,
-			appAppHash:  chain.States[chainLen-2].AppHash,
+			appHeight:   chainSize - 1,
+			appAppHash:  chain.States[lastHeightIDx-1].AppHash,
 			wantAppHash: lastAppHash,
-			wantNBlocks: 1,
+			wantNBlocks: 1, // sync only last block
 			appOpts: []func(application *kvstore.Application){
-				kvstore.WithState(chainLen-1, chain.States[chainLen-2].AppHash),
+				kvstore.WithState(chainSize-1, chain.States[lastHeightIDx-1].AppHash),
 				kvstore.WithValidatorSetUpdates(map[int64]abci.ValidatorSetUpdate{
 					0: tmtypes.TM2PB.ValidatorUpdates(chain.GenesisState.Validators),
 				}),
 			},
 		},
 		{
-			// state-height is one ahead of store-height and app-height is equal to store-height
-			state:       chain.States[len(chain.States)-2],
-			stateStore:  updateStateStoreWithState(chain.States[len(chain.States)-2], chain.StateStore),
+			// state-height is one ahead of block-height and app-height is equal to block-height
+			// state-height == H-1, block-height == H, app-height == H
+			state:       chain.States[lastHeightIDx-1],
+			stateStore:  updateStateStoreWithState(chain.States[lastHeightIDx-1], chain.StateStore),
 			blockStore:  chain.BlockStore,
-			appHeight:   chainLen,
-			appAppHash:  chain.States[chainLen-1].AppHash,
+			appHeight:   chainSize,
+			appAppHash:  chain.States[lastHeightIDx].AppHash,
 			wantAppHash: lastAppHash,
 			wantNBlocks: 1,
 		},
 		{
 			// tenderdash state at the initial height, replayer does InitChain call to get initial-state form the app
+			// state-height == 0, block-height == 0, app-height == 0
 			state:       chain.GenesisState,
 			stateStore:  sm.NewStore(dbm.NewMemDB()),
 			blockStore:  store.NewBlockStore(dbm.NewMemDB()),
