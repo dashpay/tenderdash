@@ -573,3 +573,25 @@ func createAndStartPrivValidatorDashCoreClient(
 
 	return pvsc, nil
 }
+
+func createBlockReplayer(n *nodeImpl) *consensus.BlockReplayer {
+	logger := n.logger.With("module", "replayer")
+	blockExec := consensus.NewReplayBlockExecutor(
+		n.rpcEnv.ProxyApp,
+		n.stateStore,
+		n.blockStore,
+		n.rpcEnv.EventBus,
+		sm.BlockExecWithLogger(logger),
+		sm.BlockExecWithAppHashSize(n.config.Consensus.AppHashSize),
+	)
+	return consensus.NewBlockReplayer(
+		n.rpcEnv.ProxyApp,
+		n.stateStore,
+		n.blockStore,
+		n.genesisDoc,
+		n.rpcEnv.EventBus,
+		blockExec,
+		consensus.ReplayerWithLogger(logger),
+		consensus.ReplayerWithProTxHash(n.rpcEnv.ProTxHash),
+	)
+}

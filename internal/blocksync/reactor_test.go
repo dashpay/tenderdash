@@ -135,13 +135,11 @@ func makeReactor(
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		log.NewNopLogger(),
 		app,
 		mp,
 		sm.EmptyEvidencePool{},
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
 
 	return NewReactor(

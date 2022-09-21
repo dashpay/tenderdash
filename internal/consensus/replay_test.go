@@ -302,7 +302,7 @@ func (w *crashingWAL) Start(ctx context.Context) error { return w.next.Start(ctx
 func (w *crashingWAL) Stop()                           { w.next.Stop() }
 func (w *crashingWAL) Wait()                           { w.next.Wait() }
 
-//------------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------
 type simulatorTestSuite struct {
 	GenesisState sm.State
 	Config       *config.Config
@@ -675,7 +675,7 @@ func testHandshakeReplay(
 	stateDB = dbm.NewMemDB()
 	chain := append([]*types.Block{}, sim.Chain...) // copy chain
 	commits := sim.Commits
-	store = newMockBlockStore(t, cfg, genesisState.ConsensusParams)
+	store = newMockBlockStore(t)
 
 	opts := []func(app *kvstore.Application){
 		kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates),
@@ -705,9 +705,7 @@ func testHandshakeReplay(
 		require.NoError(t, err)
 		t.Cleanup(func() { cancel(); wal.Wait() })
 		chain, commits = makeBlockchainFromWAL(t, wal, gdoc)
-		pubKey, err := privVal.GetPubKey(ctx, gdoc.QuorumHash)
-		require.NoError(t, err)
-		stateDB, genesisState, store = stateAndStore(t, cfg, pubKey, kvstore.ProtocolVersion)
+		stateDB, genesisState, store = stateAndStore(t, cfg, kvstore.ProtocolVersion)
 	}
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
@@ -771,22 +769,13 @@ func testHandshakeReplay(
 	// now start the app using the handshake - it should sync
 	genDoc, err := sm.MakeGenesisDocFromFile(cfg.GenesisFile())
 	require.NoError(t, err)
-	handshaker := NewHandshaker(
-		logger,
-		stateStore,
-		state,
-		store,
-		eventBus,
-		genDoc,
-		proTxHash,
-		cfg.Consensus.AppHashSize,
-	)
 	proxyApp := proxy.New(client, logger, proxy.NopMetrics())
 	require.NoError(t, proxyApp.Start(ctx), "Error starting proxy app connections")
 	require.True(t, proxyApp.IsRunning())
 	require.NotNil(t, proxyApp)
 	t.Cleanup(func() { cancel(); proxyApp.Wait() })
-
+	replayer := newBlockReplayer(stateStore, store, genDoc, eventBus, proxyApp, proTxHash)
+	handshaker := NewHandshaker(replayer, logger, state)
 	_, err = handshaker.Handshake(ctx, proxyApp)
 	if expectError {
 		require.Error(t, err)
@@ -864,13 +853,12 @@ func buildAppStateFromChain(
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		consensusLogger(t),
 		appClient,
 		mempool,
 		evpool,
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
+		sm.BlockExecWithLogger(consensusLogger(t)),
 	)
 
 	switch mode {
@@ -929,13 +917,11 @@ func buildTMStateFromChain(
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		log.NewNopLogger(),
 		proxyApp,
 		mempool,
 		evpool,
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
 
 	switch mode {
@@ -977,13 +963,9 @@ func TestHandshakeErrorsIfAppReturnsWrongAppHash(t *testing.T) {
 	privVal, err := privval.LoadFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
 	require.NoError(t, err)
 	const appVersion = 0x0
-	quorumHash, err := privVal.GetFirstQuorumHash(ctx)
-	require.NoError(t, err)
-	pubKey, err := privVal.GetPubKey(ctx, quorumHash)
-	require.NoError(t, err)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
-	stateDB, state, store := stateAndStore(t, cfg, pubKey, appVersion)
+	stateDB, state, store := stateAndStore(t, cfg, appVersion)
 	stateStore := sm.NewStore(stateDB)
 	genDoc, err := sm.MakeGenesisDocFromFile(cfg.GenesisFile())
 	require.NoError(t, err)
@@ -1010,16 +992,8 @@ func TestHandshakeErrorsIfAppReturnsWrongAppHash(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { cancel(); proxyApp.Wait() })
 
-		h := NewHandshaker(
-			logger,
-			stateStore,
-			state,
-			store,
-			eventBus,
-			genDoc,
-			proTxHash,
-			cfg.Consensus.AppHashSize,
-		)
+		replayer := newBlockReplayer(stateStore, store, genDoc, eventBus, proxyApp, proTxHash)
+		h := NewHandshaker(replayer, logger, state)
 		_, err = h.Handshake(ctx, proxyApp)
 		assert.Error(t, err)
 		t.Log(err)
@@ -1037,15 +1011,8 @@ func TestHandshakeErrorsIfAppReturnsWrongAppHash(t *testing.T) {
 		require.NoError(t, err)
 		t.Cleanup(func() { cancel(); proxyApp.Wait() })
 
-		h := NewHandshaker(
-			logger,
-			stateStore,
-			state, store,
-			eventBus,
-			genDoc,
-			proTxHash,
-			cfg.Consensus.AppHashSize,
-		)
+		replayer := newBlockReplayer(stateStore, store, genDoc, eventBus, proxyApp, proTxHash)
+		h := NewHandshaker(replayer, logger, state)
 		_, err = h.Handshake(ctx, proxyApp)
 		require.Error(t, err)
 	}
@@ -1111,7 +1078,7 @@ func makeBlockchainFromWAL(t *testing.T, wal WAL, genDoc *types.GenesisDoc) ([]*
 
 		switch p := piece.(type) {
 		case EndHeightMessage:
-			// if its not the first one, we have a full block
+			// if its not the storeIsEqualState one, we have a full block
 			if thisBlockParts != nil {
 				var pbb = new(tmproto.Block)
 				bz, err := io.ReadAll(thisBlockParts.GetReader())
@@ -1193,18 +1160,13 @@ func readPieceFromWAL(msg *TimedWALMessage) interface{} {
 }
 
 // fresh state and mock store
-func stateAndStore(
-	t *testing.T,
-	cfg *config.Config,
-	pubKey crypto.PubKey,
-	appVersion uint64,
-) (dbm.DB, sm.State, *mockBlockStore) {
+func stateAndStore(t *testing.T, cfg *config.Config, appVersion uint64) (dbm.DB, sm.State, *mockBlockStore) {
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
 	state, err := sm.MakeGenesisStateFromFile(cfg.GenesisFile())
 	require.NoError(t, err)
 	state.Version.Consensus.App = appVersion
-	store := newMockBlockStore(t, cfg, state.ConsensusParams)
+	store := newMockBlockStore(t)
 	require.NoError(t, stateStore.Save(state))
 
 	return stateDB, state, store
@@ -1214,8 +1176,6 @@ func stateAndStore(
 // mock block store
 
 type mockBlockStore struct {
-	cfg     *config.Config
-	params  types.ConsensusParams
 	chain   []*types.Block
 	commits []*types.Commit
 	base    int64
@@ -1227,12 +1187,9 @@ type mockBlockStore struct {
 var _ sm.BlockStore = &mockBlockStore{}
 
 // TODO: NewBlockStore(db.NewMemDB) ...
-func newMockBlockStore(t *testing.T, cfg *config.Config, params types.ConsensusParams) *mockBlockStore {
+func newMockBlockStore(t *testing.T) *mockBlockStore {
 	return &mockBlockStore{
-		cfg:    cfg,
-		params: params,
-		t:      t,
-
+		t:                     t,
 		coreChainLockedHeight: 1,
 	}
 }
@@ -1318,11 +1275,9 @@ func TestHandshakeUpdatesValidators(t *testing.T) {
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
-	pubKey, err := privVal.GetPubKey(ctx, randQuorumHash)
-	require.NoError(t, err)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
-	stateDB, state, store := stateAndStore(t, cfg, pubKey, 0x0)
+	stateDB, state, store := stateAndStore(t, cfg, 0x0)
 	stateStore := sm.NewStore(stateDB)
 
 	oldValProTxHash := state.Validators.Validators[0].ProTxHash
@@ -1330,19 +1285,11 @@ func TestHandshakeUpdatesValidators(t *testing.T) {
 	// now start the app using the handshake - it should sync
 	genDoc, err := sm.MakeGenesisDocFromFile(cfg.GenesisFile())
 	require.NoError(t, err)
-
-	handshaker := NewHandshaker(
-		logger,
-		stateStore,
-		state,
-		store,
-		eventBus,
-		genDoc,
-		proTxHash,
-		cfg.Consensus.AppHashSize,
-	)
 	proxyApp := proxy.New(client, logger, proxy.NopMetrics())
 	require.NoError(t, proxyApp.Start(ctx), "Error starting proxy app connections")
+
+	replayer := newBlockReplayer(stateStore, store, genDoc, eventBus, proxyApp, proTxHash)
+	handshaker := NewHandshaker(replayer, logger, state)
 
 	_, err = handshaker.Handshake(ctx, proxyApp)
 	require.NoError(t, err, "error on abci handshake")
@@ -1373,34 +1320,21 @@ func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
-	randQuorumHash, err := privVal.GetFirstQuorumHash(ctx)
-	require.NoError(t, err)
-
 	app := &initChainApp{initialCoreHeight: InitialCoreHeight}
 	client := abciclient.NewLocalClient(logger, app)
 
-	pubKey, err := privVal.GetPubKey(ctx, randQuorumHash)
-	require.NoError(t, err)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
-	stateDB, state, store := stateAndStore(t, conf, pubKey, 0x0)
+	stateDB, state, store := stateAndStore(t, conf, 0x0)
 	stateStore := sm.NewStore(stateDB)
+	proxyApp := proxy.New(client, logger, proxy.NopMetrics())
+	require.NoError(t, proxyApp.Start(ctx), "Error starting proxy app connections")
 
 	// now start the app using the handshake - it should sync
 	genDoc, _ := sm.MakeGenesisDocFromFile(conf.GenesisFile())
-	handshaker := NewHandshaker(
-		logger,
-		stateStore,
-		state,
-		store,
-		eventBus,
-		genDoc,
-		proTxHash,
-		conf.Consensus.AppHashSize,
-	)
+	replayer := newBlockReplayer(stateStore, store, genDoc, eventBus, proxyApp, proTxHash)
+	handshaker := NewHandshaker(replayer, logger, state)
 
-	proxyApp := proxy.New(client, logger, proxy.NopMetrics())
-	require.NoError(t, proxyApp.Start(ctx), "Error starting proxy app connections")
 	_, err = handshaker.Handshake(ctx, proxyApp)
 	require.NoError(t, err, "error on abci handshake")
 
@@ -1408,7 +1342,6 @@ func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 	state, err = stateStore.Load()
 	require.NoError(t, err)
 	assert.Equal(t, InitialCoreHeight, state.LastCoreChainLockedBlockHeight)
-	assert.Equal(t, InitialCoreHeight, handshaker.initialState.LastCoreChainLockedBlockHeight)
 }
 
 // returns the vals on InitChain
@@ -1435,4 +1368,23 @@ func randValidator() (*types.Validator, types.PrivValidator) {
 	pubKey, _ := privVal.GetPubKey(context.Background(), quorumHash)
 	val := types.NewValidatorDefaultVotingPower(pubKey, proTxHash)
 	return val, privVal
+}
+
+func newBlockReplayer(
+	stateStore sm.Store,
+	blockStore sm.BlockStore,
+	genDoc *types.GenesisDoc,
+	eventBus *eventbus.EventBus,
+	proxyApp abciclient.Client,
+	proTxHash types.ProTxHash,
+) *BlockReplayer {
+	return NewBlockReplayer(
+		proxyApp,
+		stateStore,
+		blockStore,
+		genDoc,
+		eventBus,
+		NewReplayBlockExecutor(proxyApp, stateStore, blockStore, eventBus),
+		ReplayerWithProTxHash(proTxHash),
+	)
 }

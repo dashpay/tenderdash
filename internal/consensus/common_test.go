@@ -1,4 +1,4 @@
-//nolint: lll
+// nolint: lll
 package consensus
 
 import (
@@ -291,7 +291,8 @@ func signAddVotes(
 	vss ...*validatorStub,
 ) {
 	rs := to.GetRoundState()
-	addVotes(to, signVotes(ctx, t, voteType, chainID, blockID, rs.AppHash, to.Validators.QuorumType, to.Validators.QuorumHash, vss...)...)
+	_, valSet := to.GetValidatorSet()
+	addVotes(to, signVotes(ctx, t, voteType, chainID, blockID, rs.AppHash, valSet.QuorumType, valSet.QuorumHash, vss...)...)
 }
 
 func validatePrevote(
@@ -494,7 +495,7 @@ func newStateWithConfigAndBlockStore(
 	eventBus := eventbus.NewDefault(logger.With("module", "events"))
 	require.NoError(t, eventBus.Start(ctx))
 
-	blockExec := sm.NewBlockExecutor(stateStore, logger, proxyAppConnCon, mempool, evpool, blockStore, eventBus, sm.NopMetrics())
+	blockExec := sm.NewBlockExecutor(stateStore, proxyAppConnCon, mempool, evpool, blockStore, eventBus)
 	cs, err := NewState(logger.With("module", "consensus"),
 		thisConfig.Consensus,
 		stateStore,

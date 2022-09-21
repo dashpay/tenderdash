@@ -17,6 +17,7 @@ import (
 	"github.com/tendermint/tendermint/internal/libs/protoio"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/version"
 )
 
@@ -166,10 +167,12 @@ func WithLogger(logger log.Logger) func(app *Application) {
 	}
 }
 
-func WithState(height int64) func(app *Application) {
+func WithState(height int64, appHash []byte) func(app *Application) {
 	return func(app *Application) {
 		app.lastCommittedState = State{
-			Height: height,
+			db:      dbm.NewMemDB(),
+			AppHash: appHash,
+			Height:  height,
 		}
 	}
 }
@@ -202,7 +205,13 @@ func (app *Application) InitChain(_ context.Context, req *types.RequestInitChain
 	if err := app.newHeight(app.initialHeight, make([]byte, crypto.DefaultAppHashSize)); err != nil {
 		panic(err)
 	}
-	return &types.ResponseInitChain{}, nil
+	return &types.ResponseInitChain{
+		ConsensusParams: &tmproto.ConsensusParams{
+			Version: &tmproto.VersionParams{
+				AppVersion: ProtocolVersion,
+			},
+		},
+	}, nil
 }
 
 func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error) {
