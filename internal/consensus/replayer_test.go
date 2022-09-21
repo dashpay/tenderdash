@@ -75,7 +75,7 @@ func TestBlockReplayerReplay(t *testing.T) {
 			wantNBlocks: 0, // the chain is already synced
 		},
 		{
-			// state-height is one ahead of block-height and app-height is less state-height
+			// state-height is one behind of block-height and app-height is less state-height
 			// state-height == H-1, block-height == H, app-height == 0
 			state:       chain.States[lastHeightIDx-1],
 			stateStore:  updateStateStoreWithState(chain.States[lastHeightIDx-1], chain.StateStore),
@@ -86,7 +86,7 @@ func TestBlockReplayerReplay(t *testing.T) {
 			wantNBlocks: chainSize, // sync the whole chain
 		},
 		{
-			// state-height is one ahead of block-height and app-height is equal to state-height
+			// state-height is one behind of block-height and app-height is equal to state-height
 			// state-height == H-1, block-height == H, app-height == H-1
 			state:       chain.States[lastHeightIDx-1],
 			stateStore:  updateStateStoreWithState(chain.States[lastHeightIDx-1], chain.StateStore),
@@ -103,7 +103,7 @@ func TestBlockReplayerReplay(t *testing.T) {
 			},
 		},
 		{
-			// state-height is one ahead of block-height and app-height is equal to block-height
+			// state-height is one behind of block-height and app-height is equal to block-height
 			// state-height == H-1, block-height == H, app-height == H
 			state:       chain.States[lastHeightIDx-1],
 			stateStore:  updateStateStoreWithState(chain.States[lastHeightIDx-1], chain.StateStore),
