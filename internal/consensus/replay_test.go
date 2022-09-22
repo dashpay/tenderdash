@@ -61,6 +61,7 @@ func startNewStateAndWaitForBlock(ctx context.Context, t *testing.T, consensusRe
 	require.NoError(t, err)
 	privValidator := loadPrivValidator(t, consensusReplayConfig)
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
+
 	cs := newStateWithConfigAndBlockStore(
 		ctx,
 		t,
@@ -68,7 +69,7 @@ func startNewStateAndWaitForBlock(ctx context.Context, t *testing.T, consensusRe
 		consensusReplayConfig,
 		state,
 		privValidator,
-		kvstore.NewApplication(),
+		newKVStoreFunc(t)(logger, ""),
 		blockStore,
 	)
 
@@ -180,7 +181,7 @@ LOOP:
 			consensusReplayConfig,
 			state,
 			privValidator,
-			kvstore.NewApplication(),
+			newKVStoreFunc(t)(logger, ""),
 			blockStore,
 		)
 
@@ -371,7 +372,7 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 		nPeers:    nPeers,
 		nVals:     nVals,
 		tickerFun: newMockTickerFunc(true),
-		appFunc:   newKVStoreFunc(),
+		appFunc:   newKVStoreFunc(t),
 		validatorUpdates: []validatorUpdate{
 			{height: 2, count: 1, operation: "add"},
 			{height: 4, count: 2, operation: "add"},
@@ -677,7 +678,7 @@ func testHandshakeReplay(
 	commits := sim.Commits
 	store = newMockBlockStore(t, cfg, genesisState.ConsensusParams)
 
-	opts := []func(app *kvstore.Application){
+	opts := []kvstore.OptFunc{
 		kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates),
 	}
 
@@ -724,7 +725,7 @@ func testHandshakeReplay(
 		logger,
 		sim.Mempool,
 		sim.Evpool,
-		kvstore.NewApplication(opts...),
+		newKVStoreFunc(t, opts...)(logger, ""),
 		stateStore,
 		state,
 		chain,
@@ -736,7 +737,7 @@ func testHandshakeReplay(
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
-	client := abciclient.NewLocalClient(logger, kvstore.NewApplication(opts...))
+	client := abciclient.NewLocalClient(logger, newKVStoreFunc(t, opts...)(logger, ""))
 	if nBlocks > 0 {
 		// run nBlocks against a new client to build up the app state.
 		// use a throwaway tendermint state

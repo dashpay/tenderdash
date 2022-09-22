@@ -18,7 +18,9 @@ func BenchmarkTxMempool_CheckTx(b *testing.B) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), kvstore.NewApplication())
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(b, err)
+	client := abciclient.NewLocalClient(log.NewNopLogger(), app)
 	if err := client.Start(ctx); err != nil {
 		b.Fatal(err)
 	}

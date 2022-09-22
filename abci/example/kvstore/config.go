@@ -19,7 +19,7 @@ import (
 // Config allows for the setting of high level parameters for running the e2e Application
 // KeyType and ValidatorUpdates must be the same for all nodes running the same application.
 type Config struct {
-	// The directory with which state.json will be persisted in. Usually $HOME/.tendermint/data
+	// The directory with which state will be persisted in. Usually $HOME/.tendermint/data
 	Dir string `toml:"dir"`
 
 	// SnapshotInterval specifies the height interval at which the application

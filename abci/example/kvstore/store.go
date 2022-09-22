@@ -2,52 +2,70 @@ package kvstore
 
 import (
 	"bytes"
+	"errors"
 	"io"
+	"os"
 
 	dbm "github.com/tendermint/tm-db"
 )
 
-type Store interface {
-	io.ReadWriteCloser
+// StoreFactory is a factory that offers a reader to read data from, or writer to write data to it.
+// Not thread-safe - the caller should control concurrency.
+type StoreFactory interface {
+	// Reader returns new io.ReadCloser to be used to read data from
+	Reader() (io.ReadCloser, error)
+	// Writer returns new io.WriteCloser to be used to write data to
+	Writer() (io.WriteCloser, error)
 }
 
-// dbStore is a wrapper around dbm.DB that provides io.Reader to read a state.
-// Note that you should create a new StateReaderWriter each time you use it.
-type dbStore struct {
+// memStore stores state in memory.
+type memStore struct {
 	dbm.DB
-	buf *bytes.Buffer
+	buf bytes.Buffer
 }
 
-func NewDBStateStore(db dbm.DB) Store {
-	return &dbStore{DB: db}
+func NewMemStateStore(db dbm.DB) StoreFactory {
+	return &memStore{
+		buf: bytes.Buffer{},
+	}
 }
 
-func (w *dbStore) key() []byte {
-	return []byte(storeKey)
+func (w *memStore) Reader() (io.ReadCloser, error) {
+	reader := bytes.Buffer{}
+	if _, err := io.Copy(&reader, &w.buf); err != nil {
+		return nil, err
+	}
+	return io.NopCloser(&reader), nil
 }
 
-// Read implements io.Reader
-func (w *dbStore) Read(p []byte) (n int, err error) {
-	if w.buf == nil {
-		data, err := w.DB.Get(w.key())
-		if err != nil {
-			return 0, err
+func (w *memStore) Writer() (io.WriteCloser, error) {
+	return &writerNopCloser{&w.buf}, nil
+}
+
+type writerNopCloser struct{ io.Writer }
+
+func (writerNopCloser) Close() error { return nil }
+
+type fileStore struct {
+	path string
+}
+
+func NewFileStore(path string) StoreFactory {
+	return &fileStore{path}
+}
+
+func (store *fileStore) Reader() (io.ReadCloser, error) {
+	f, err := os.Open(store.path)
+	if err != nil {
+		// When file doesn't exist, we assume it's an empty (0 byte) file
+		if errors.Is(err, os.ErrNotExist) {
+			return io.NopCloser(&bytes.Buffer{}), nil
 		}
-		w.buf = bytes.NewBuffer(data)
+		return nil, err
 	}
-
-	return w.buf.Read(p)
+	return f, nil
 }
 
-// Write implements io.Writer
-func (w *dbStore) Write(p []byte) (int, error) {
-	if err := w.DB.Set(w.key(), p); err != nil {
-		return 0, err
-	}
-	return len(p), nil
-}
-
-// Close implements io.Closer
-func (w *dbStore) Close() error {
-	return w.DB.Close()
+func (store *fileStore) Writer() (io.WriteCloser, error) {
+	return os.OpenFile(store.path, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0600)
 }

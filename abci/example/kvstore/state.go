@@ -15,6 +15,9 @@ import (
 	types1 "github.com/tendermint/tendermint/types"
 )
 
+// State represents kvstore app state at some height.
+// State can be committed or uncommitted.
+// Caller of State methods should do proper concurrency locking (eg. mutexes)
 type State interface {
 	dbm.DB
 	json.Marshaler
@@ -214,12 +217,12 @@ func (state kvState) MarshalJSON() ([]byte, error) {
 		Items:   nil,
 	}
 
-	for iter.Valid() {
+	for ; iter.Valid(); iter.Next() {
 		if export.Items == nil {
 			export.Items = map[string]string{}
 		}
 		export.Items[string(iter.Key())] = string(iter.Value())
-		iter.Next()
+
 	}
 
 	return json.Marshal(&export)

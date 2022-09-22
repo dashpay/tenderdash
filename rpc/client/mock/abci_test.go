@@ -162,7 +162,7 @@ func TestABCIRecorder(t *testing.T) {
 }
 
 func TestABCIApp(t *testing.T) {
-	app := kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
 	m := mock.ABCIApp{app}
 
 	ctx, cancel := context.WithCancel(context.Background())

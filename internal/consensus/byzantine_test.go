@@ -69,7 +69,8 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			defer os.RemoveAll(thisConfig.RootDir)
 
 			ensureDir(t, path.Dir(thisConfig.Consensus.WalFile()), 0700) // dir for wal
-			app := kvstore.NewApplication()
+			app, err := kvstore.NewMemoryApp()
+			require.NoError(t, err)
 			vals := types.TM2PB.ValidatorUpdates(state.Validators)
 			_, err = app.InitChain(ctx, &abci.RequestInitChain{ValidatorSet: &vals})
 			require.NoError(t, err)

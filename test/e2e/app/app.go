@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
-	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -48,22 +47,19 @@ func NewApplication(cfg kvstore.Config) (*Application, error) {
 		return nil, err
 	}
 
-	db, err := db.NewGoLevelDB("app_state", filepath.Join(cfg.Dir, "app_state"))
-	if err != nil {
-		return nil, err
-	}
-
 	app := Application{
-		logger: logger.With("module", "abci_app"),
+		logger: logger.With("module", "kvstore"),
 		cfg:    &cfg,
 	}
-	app.Application = kvstore.NewApplication(
-		kvstore.WithLogger(logger),
-		kvstore.WithConfig(cfg),
-		kvstore.WithStateStore(kvstore.NewDBStateStore(db)),
+	app.Application, err = kvstore.NewPersistentApp(
+		cfg,
+		kvstore.WithLogger(logger.With("module", "kvstore")),
 		kvstore.WithVerifyTxFunc(verifyTx),
 		kvstore.WithPrepareTxsFunc(prepareTxs),
 	)
+	if err != nil {
+		return nil, err
+	}
 
 	return &app, nil
 }

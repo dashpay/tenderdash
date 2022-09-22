@@ -3,6 +3,8 @@ package kvstore
 import (
 	"context"
 	"fmt"
+	"os"
+	"path"
 	"testing"
 
 	"github.com/fortytw2/leaktest"
@@ -45,10 +47,9 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 	require.NoError(t, err)
 	require.Equal(t, 1, len(respFin.Events))
 
-	// repeating tx doesn't raise error
+	// repeating tx raises an error
 	respFin, err = app.FinalizeBlock(ctx, reqFin)
-	require.NoError(t, err)
-	require.Equal(t, 1, len(respFin.Events))
+	require.Error(t, err)
 
 	info, err := app.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
@@ -83,7 +84,7 @@ func TestKVStoreKV(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	kvstore := NewApplication()
+	kvstore := newKvApp(ctx, t, 1)
 	key := testKey
 	value := key
 	tx := []byte(key)
@@ -101,7 +102,9 @@ func TestPersistentKVStoreKV(t *testing.T) {
 	dir := t.TempDir()
 	logger := log.NewNopLogger()
 
-	kvstore := NewPersistentKVStoreApplication(logger, dir)
+	kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger.With("module", "kvstore")))
+	require.NoError(t, err)
+
 	key := testKey
 	value := key
 	tx := []byte(key)
@@ -110,6 +113,10 @@ func TestPersistentKVStoreKV(t *testing.T) {
 	value = testValue
 	tx = []byte(key + "=" + value)
 	testKVStore(ctx, t, kvstore, tx, key, value, 2)
+
+	data, err := os.ReadFile(path.Join(dir, "state.json"))
+	require.NoError(t, err)
+	assert.Contains(t, string(data), fmt.Sprintf(`"%s%s":"%s"`, kvPairPrefixKey, key, value))
 }
 
 func TestPersistentKVStoreInfo(t *testing.T) {
@@ -118,10 +125,12 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 	dir := t.TempDir()
 	logger := log.NewNopLogger()
 
-	kvstore := NewPersistentKVStoreApplication(logger, dir)
-	if err := InitKVStore(ctx, kvstore); err != nil {
-		t.Fatal(err)
-	}
+	kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger.With("module", "kvstore")))
+	require.NoError(t, err)
+
+	err = InitKVStore(ctx, kvstore)
+	require.NoError(t, err)
+
 	height := int64(0)
 
 	resInfo, err := kvstore.Info(ctx, &types.RequestInfo{})
@@ -147,7 +156,8 @@ func TestValUpdates(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	kvstore := NewApplication()
+	kvstore, err := NewMemoryApp()
+	require.NoError(t, err)
 
 	// init with some validators
 	total := 10
@@ -158,10 +168,11 @@ func TestValUpdates(t *testing.T) {
 	require.NotEqual(t, fullVals.QuorumHash, initVals.QuorumHash)
 
 	// initialize with the first nInit
-	_, err := kvstore.InitChain(ctx, &types.RequestInitChain{
+	_, err = kvstore.InitChain(ctx, &types.RequestInitChain{
 		ValidatorSet: &initVals,
 	})
 	require.NoError(t, err)
+
 	kvstore.AddValidatorSetUpdate(fullVals, 2)
 	resp, _ := makeApplyBlock(ctx, t, kvstore, 1)
 	require.Equal(t, initVals.QuorumHash, resp.ValidatorSetUpdate.QuorumHash)
@@ -275,16 +286,21 @@ func TestClientServer(t *testing.T) {
 	logger := log.NewTestingLogger(t)
 
 	// set up socket app
-	kvstore := NewApplication(WithLogger(logger.With("module", "app")))
+	kvstore, err := NewMemoryApp(WithLogger(logger.With("module", "app")))
+	require.NoError(t, err)
+
 	client, server, err := makeSocketClientServer(ctx, t, logger, kvstore, "kvstore-socket")
 	require.NoError(t, err)
+
 	t.Cleanup(func() { cancel(); server.Wait() })
 	t.Cleanup(func() { cancel(); client.Wait() })
 
 	runClientTests(ctx, t, client)
 
 	// set up grpc app
-	kvstore = NewApplication()
+	kvstore, err = NewMemoryApp()
+	require.NoError(t, err)
+
 	gclient, gserver, err := makeGRPCClientServer(ctx, t, logger, kvstore, "/tmp/kvstore-grpc")
 	require.NoError(t, err)
 
@@ -324,16 +340,6 @@ func testClient(ctx context.Context, t *testing.T, app abciclient.Client, height
 	require.NoError(t, err)
 	require.Zero(t, ar.RetainHeight)
 	require.Len(t, ar.Events, 1)
-
-	// repeating FinalizeBlock doesn't raise error
-	ar, err = app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{
-		Txs:     [][]byte{tx},
-		AppHash: rpp.AppHash,
-		Height:  height,
-	})
-	require.NoError(t, err)
-	assert.Zero(t, ar.RetainHeight)
-	assert.Len(t, ar.Events, 1)
 
 	info, err := app.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
@@ -377,7 +383,7 @@ func TestSnapshots(t *testing.T) {
 
 	cfg := DefaultConfig(t.TempDir())
 	cfg.SnapshotInterval = snapshotInterval
-	app := newApp(ctx, t, genesisHeight, WithConfig(cfg))
+	app := newKvApp(ctx, t, genesisHeight, WithConfig(cfg))
 
 	for height := genesisHeight; height <= maxHeight; height++ {
 		txs := [][]byte{
@@ -393,14 +399,13 @@ func TestSnapshots(t *testing.T) {
 	snapshots, err := app.ListSnapshots(ctx, &types.RequestListSnapshots{})
 	require.NoError(t, err)
 	assert.Len(t, snapshots.Snapshots, nSnapshots)
-	t.Logf("snapshots: %+v", snapshots.Snapshots)
 
 	recentSnapshot := snapshots.Snapshots[len(snapshots.Snapshots)-1]
 	snapshotHeight := int64(recentSnapshot.Height)
 	assert.Equal(t, maxHeight-(maxHeight%snapshotInterval), snapshotHeight)
 
-	// Now, let's emulate state sync withg the most recent snapshot
-	dstApp := newApp(ctx, t, genesisHeight)
+	// Now, let's emulate state sync with the most recent snapshot
+	dstApp := newKvApp(ctx, t, genesisHeight)
 
 	respOffer, err := dstApp.OfferSnapshot(ctx, &types.RequestOfferSnapshot{
 		Snapshot: recentSnapshot,
@@ -436,13 +441,15 @@ func TestSnapshots(t *testing.T) {
 	assert.Equal(t, fmt.Sprintf("%d", recentSnapshot.Height), string(respQuery.Value))
 }
 
-func newApp(ctx context.Context, t *testing.T, genesisHeight int64, opts ...func(*Application)) *Application {
-	app := NewApplication(opts...)
+func newKvApp(ctx context.Context, t *testing.T, genesisHeight int64, opts ...OptFunc) *Application {
+	app, err := NewMemoryApp(opts...)
+	require.NoError(t, err)
 	t.Cleanup(func() { app.Close() })
+
 	reqInitChain := &types.RequestInitChain{
 		InitialHeight: genesisHeight,
 	}
-	_, err := app.InitChain(ctx, reqInitChain)
+	_, err = app.InitChain(ctx, reqInitChain)
 	require.NoError(t, err)
 
 	return app

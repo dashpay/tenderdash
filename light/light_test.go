@@ -9,6 +9,7 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/dashevo/dashd-go/btcjson"
+
 	"github.com/tendermint/tendermint/abci/example/kvstore"
 	dashcore "github.com/tendermint/tendermint/dash/core"
 	"github.com/tendermint/tendermint/libs/log"
@@ -40,7 +41,7 @@ func TestClientIntegration_Update(t *testing.T) {
 	logger := log.NewNopLogger()
 
 	// Start a test application
-	app := kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
 
 	filePV, err := privval.LoadOrGenFilePV(conf.PrivValidator.KeyFile(), conf.PrivValidator.StateFile())
 	require.NoError(t, err)
@@ -105,7 +106,7 @@ func TestClientIntegration_VerifyLightBlockAtHeight(t *testing.T) {
 	logger := log.NewNopLogger()
 
 	// Start a test application
-	app := kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
 
 	filePV, err := privval.LoadOrGenFilePV(conf.PrivValidator.KeyFile(), conf.PrivValidator.StateFile())
 	require.NoError(t, err)
@@ -183,7 +184,7 @@ func TestClientStatusRPC(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start a test application
-	app := kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
 
 	_, closer, err := rpctest.StartTendermint(ctx, conf, app, rpctest.SuppressStdout)
 	require.NoError(t, err)

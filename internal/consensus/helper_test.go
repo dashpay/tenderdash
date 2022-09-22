@@ -46,7 +46,9 @@ func (g *nodeGen) initState(t *testing.T) {
 
 func (g *nodeGen) initApp(ctx context.Context, t *testing.T) {
 	if g.app == nil {
-		g.app = kvstore.NewApplication()
+		app, err := kvstore.NewMemoryApp()
+		require.NoError(t, err)
+		g.app = app
 	}
 	proxyLogger := g.logger.With("module", "proxy")
 	proxyApp := proxy.New(abciclient.NewLocalClient(g.logger, g.app), proxyLogger, proxy.NopMetrics())

@@ -343,7 +343,7 @@ func TestReactorWithEvidence(t *testing.T) {
 
 		defer os.RemoveAll(thisConfig.RootDir)
 
-		app := kvstore.NewApplication()
+		app, err := kvstore.NewMemoryApp()
 		vals := types.TM2PB.ValidatorUpdates(state.Validators)
 		_, err = app.InitChain(ctx, &abci.RequestInitChain{ValidatorSet: &vals})
 		require.NoError(t, err)
@@ -556,7 +556,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		cfg:              cfg,
 		nPeers:           nPeers,
 		nVals:            nVals,
-		appFunc:          newKVStoreFunc(),
+		appFunc:          newKVStoreFunc(t),
 		validatorUpdates: updates,
 	}
 	states, _, _, validatorSetUpdates := gen.generate(ctx, t)

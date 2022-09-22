@@ -540,7 +540,8 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 		validators = args.validators
 	}
 	var app abci.Application
-	app = kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
 	if args.application != nil {
 		app = args.application
 	}
@@ -831,7 +832,8 @@ func makeConsensusState(
 		walDir := filepath.Dir(thisConfig.Consensus.WalFile())
 		ensureDir(t, walDir, 0700)
 
-		app := kvstore.NewApplication()
+		app, err := kvstore.NewMemoryApp()
+		require.NoError(t, err)
 		closeFuncs = append(closeFuncs, app.Close)
 
 		vals := types.TM2PB.ValidatorUpdates(state.Validators)
@@ -891,8 +893,6 @@ func (g *consensusNetGen) newApp(logger log.Logger, state *sm.State, confName st
 	app := g.appFunc(logger, filepath.Join(g.cfg.DBDir(), confName))
 	switch app.(type) {
 	// simulate handshake, receive app version. If don't do this, replay test will fail
-	case *kvstore.PersistentKVStoreApplication:
-		state.Version.Consensus.App = kvstore.ProtocolVersion
 	case *kvstore.Application:
 		state.Version.Consensus.App = kvstore.ProtocolVersion
 	}
@@ -1062,9 +1062,13 @@ func (m *mockTicker) Chan() <-chan timeoutInfo {
 	return m.c
 }
 
-func newKVStoreFunc(opts ...func(*kvstore.Application)) func(_ log.Logger, _ string) abci.Application {
-	return func(_ log.Logger, _ string) abci.Application {
-		return kvstore.NewApplication(opts...)
+func newKVStoreFunc(t *testing.T, opts ...kvstore.OptFunc) func(_ log.Logger, _ string) abci.Application {
+	return func(logger log.Logger, _ string) abci.Application {
+		opts = append(opts, kvstore.WithLogger(logger))
+		app, err := kvstore.NewMemoryApp(opts...)
+		require.NoError(t, err)
+
+		return app
 	}
 }
 
