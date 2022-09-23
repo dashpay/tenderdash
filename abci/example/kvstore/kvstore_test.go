@@ -48,7 +48,7 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 	require.Equal(t, 1, len(respFin.Events))
 
 	// repeating tx raises an error
-	respFin, err = app.FinalizeBlock(ctx, reqFin)
+	_, err = app.FinalizeBlock(ctx, reqFin)
 	require.Error(t, err)
 
 	info, err := app.Info(ctx, &types.RequestInfo{})

@@ -23,6 +23,7 @@ func NodeSuite(ctx context.Context, t *testing.T, logger log.Logger) (service.Se
 	require.NoError(t, err)
 
 	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
 
 	// start a tendermint node in the background to test against.
 	node, closer, err := rpctest.StartTendermint(ctx, conf, app, rpctest.SuppressStdout)

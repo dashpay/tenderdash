@@ -27,6 +27,8 @@ func TestHTTPSimple(t *testing.T) {
 
 	// Start a tendermint node (and kvstore) in the background to test against
 	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+
 	conf, err := rpctest.CreateConfig(t, "ExampleHTTP_simple")
 	require.NoError(t, err)
 
@@ -81,6 +83,8 @@ func TestHTTPBatching(t *testing.T) {
 
 	// Start a tendermint node (and kvstore) in the background to test against
 	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+
 	conf, err := rpctest.CreateConfig(t, "ExampleHTTP_batching")
 	require.NoError(t, err)
 

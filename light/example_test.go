@@ -40,6 +40,7 @@ func TestExampleClient(t *testing.T) {
 
 	// Start a test application
 	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
 
 	_, closer, err := rpctest.StartTendermint(ctx, conf, app, rpctest.SuppressStdout)
 	if err != nil {
