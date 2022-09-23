@@ -173,11 +173,12 @@ func (store dbStore) save(state State, key []byte) error {
 		if err := store.saveValidatorsInfo(nextBlockHeight, nextBlockHeight, state.Validators, batch); err != nil {
 			return err
 		}
-	}
-	// Save next validators.
-	err := store.saveValidatorsInfo(nextBlockHeight, state.LastHeightValidatorsChanged, state.Validators, batch)
-	if err != nil {
-		return err
+	} else {
+		// Save next validators.
+		err := store.saveValidatorsInfo(nextBlockHeight, state.LastHeightValidatorsChanged, state.Validators, batch)
+		if err != nil {
+			return err
+		}
 	}
 
 	// Save next consensus params.
