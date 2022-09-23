@@ -16,6 +16,7 @@ import (
 )
 
 const (
+	initChain       = "ResponseInitChain"
 	prepareProposal = "ResponsePrepareProposal"
 	processProposal = "ResponseProcessProposal"
 )
@@ -104,6 +105,15 @@ func (candidate *CurrentRoundState) populate(ctx context.Context, proposalRespon
 		}
 		candidate.responseType = processProposal
 		candidate.response = *resp
+
+	case *abci.ResponseInitChain:
+		candidate.responseType = initChain
+		candidate.response = abci.ResponseProcessProposal{
+			AppHash:               resp.AppHash,
+			ConsensusParamUpdates: resp.ConsensusParams,
+			CoreChainLockUpdate:   resp.NextCoreChainLockUpdate,
+			ValidatorSetUpdate:    &resp.ValidatorSetUpdate,
+		}
 
 	case nil: // Assuming no changes
 		return candidate.update(ctx, baseState, nil, nil, nil, nil, nil)

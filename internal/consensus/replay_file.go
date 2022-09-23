@@ -340,9 +340,17 @@ func newConsensusStateForReplay(
 	if err := eventBus.Start(ctx); err != nil {
 		return nil, fmt.Errorf("failed to start event bus: %w", err)
 	}
-
+	replayer := NewBlockReplayer(
+		proxyApp,
+		stateStore,
+		blockStore,
+		gdoc,
+		eventBus,
+		NewReplayBlockExecutor(proxyApp, stateStore, blockStore, eventBus),
+		ReplayerWithLogger(logger),
+	)
 	// We should be able to just pass nil here for the node pro tx hash
-	handshaker := NewHandshaker(logger, stateStore, state, blockStore, eventBus, gdoc, nil, csConfig.AppHashSize)
+	handshaker := NewHandshaker(replayer, logger, state)
 	_, err = handshaker.Handshake(ctx, proxyApp)
 	if err != nil {
 		return nil, err
@@ -351,15 +359,13 @@ func newConsensusStateForReplay(
 	mempool, evpool := emptyMempool{}, sm.EmptyEvidencePool{}
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mempool,
 		evpool,
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
+		sm.BlockExecWithLogger(logger),
 	)
-	blockExec.SetAppHashSize(csConfig.AppHashSize)
 
 	consensusState, err := NewState(logger, csConfig, stateStore, blockExec,
 		blockStore, mempool, evpool, eventBus)

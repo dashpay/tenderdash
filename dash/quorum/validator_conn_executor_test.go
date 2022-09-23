@@ -382,13 +382,12 @@ func TestFinalizeBlock(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		sm.EmptyEvidencePool{},
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
+		sm.BlockExecWithLogger(logger),
 	)
 
 	updatesSub, err := eventBus.SubscribeWithArgs(

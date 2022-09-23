@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"github.com/tendermint/tendermint/crypto"
 	dbm "github.com/tendermint/tm-db"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
@@ -18,6 +19,7 @@ import (
 	"github.com/tendermint/tendermint/internal/store"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -96,15 +98,12 @@ func (g *nodeGen) Generate(ctx context.Context, t *testing.T) *fakeNode {
 	evpool := sm.EmptyEvidencePool{}
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		log.NewNopLogger(),
 		g.proxyApp,
 		g.mempool,
 		evpool,
 		blockStore,
 		g.eventBus,
-		sm.NopMetrics(),
 	)
-	blockExec.SetAppHashSize(g.cfg.Consensus.AppHashSize)
 	csState, err := NewState(g.logger, g.cfg.Consensus, stateStore, blockExec, blockStore, g.mempool, evpool, g.eventBus)
 	require.NoError(t, err)
 
@@ -138,4 +137,104 @@ func (n *fakeNode) start(ctx context.Context, t *testing.T) {
 
 func (n *fakeNode) stop() {
 	n.csState.Stop()
+}
+
+// Chain is generated blockchain data for the first validator in a set.
+type Chain struct {
+	Config       *config.Config
+	GenesisDoc   *types.GenesisDoc
+	GenesisState sm.State
+	States       []sm.State
+	StateStore   sm.Store
+	BlockStore   sm.BlockStore
+	ProTxHash    crypto.ProTxHash
+}
+
+// ChainGenerator generates blockchain data with N validators to M depth
+type ChainGenerator struct {
+	t     *testing.T
+	nVals int
+	cfg   *config.Config
+	len   int
+}
+
+// NewChainGenerator creates and returns ChainGenerator for N validators to M depth
+func NewChainGenerator(t *testing.T, nVals int, len int) ChainGenerator {
+	return ChainGenerator{
+		t:     t,
+		cfg:   configSetup(t),
+		nVals: nVals,
+		len:   len,
+	}
+}
+
+func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []*validatorStub) []sm.State {
+	height, round := css[0].Height, css[0].Round
+	newRoundCh := subscribe(ctx, c.t, css[0].eventBus, types.EventQueryNewRound)
+	proposalCh := subscribe(ctx, c.t, css[0].eventBus, types.EventQueryCompleteProposal)
+	// start the machine; note height should be equal to InitialHeight here,
+	// so we don't need to increment it
+	startTestRound(ctx, css[0], height, round)
+	incrementHeight(vss...)
+	ensureNewRound(c.t, newRoundCh, height, 0)
+	ensureNewProposal(c.t, proposalCh, height, round)
+	rs := css[0].GetRoundState()
+
+	css[0].config.DontAutoPropose = true
+
+	blockID, err := rs.ProposalBlock.BlockID()
+	require.NoError(c.t, err)
+	signAddVotes(ctx, c.t, css[0], tmproto.PrecommitType, c.cfg.ChainID(), blockID, vss[1:c.nVals]...)
+
+	ensureNewRound(c.t, newRoundCh, height+1, 0)
+
+	states := make([]sm.State, 0, c.len)
+	states = append(states, css[0].state)
+	height++
+	for ; height <= int64(c.len); height++ {
+		incrementHeight(vss...)
+		blockID = createSignSendProposal(ctx, c.t, css, vss, c.cfg.ChainID(), nil)
+		ensureNewProposal(c.t, proposalCh, height, round)
+		signAddVotes(ctx, c.t, css[0], tmproto.PrecommitType, c.cfg.ChainID(), blockID, vss[1:c.nVals]...)
+		ensureNewRound(c.t, newRoundCh, height+1, 0)
+		states = append(states, css[0].state)
+	}
+	return states
+}
+
+// Generate generates and returns blockchain data for a first validator in a set
+func (c *ChainGenerator) Generate(ctx context.Context) Chain {
+	gen := consensusNetGen{
+		cfg:       c.cfg,
+		nPeers:    c.nVals,
+		nVals:     c.nVals,
+		tickerFun: newMockTickerFunc(true),
+		appFunc:   newKVStoreFunc(),
+	}
+	css, genDoc, _, validatorSetUpdate := gen.generate(ctx, c.t)
+
+	pp := validatorSetUpdate[0]
+	valSet, err := types.PB2TM.ValidatorSetFromProtoUpdate(genDoc.QuorumType, &pp)
+	require.NoError(c.t, err)
+
+	vss := make([]*validatorStub, c.nVals)
+	for i := 0; i < c.nVals; i++ {
+		vss[i] = newValidatorStub(css[i].privValidator, int32(i), 0)
+	}
+
+	proTxHash, err := css[0].PrivValidator().GetProTxHash(ctx)
+	require.NoError(c.t, err)
+
+	chain := Chain{
+		Config:     c.cfg,
+		GenesisDoc: genDoc,
+		States:     c.generateChain(ctx, css, vss),
+		StateStore: css[0].stateStore,
+		BlockStore: css[0].blockStore,
+		ProTxHash:  proTxHash,
+	}
+	chain.GenesisState, err = sm.MakeGenesisState(genDoc)
+	require.NoError(c.t, err)
+	chain.GenesisState.Validators = valSet
+	return chain
 }

@@ -99,12 +99,17 @@ func WithLogger(logger log.Logger) OptFunc {
 	}
 }
 
-// WithHeight creates initial state with a given height.
-// Note the `height` should be `genesis.InitialHeight - 1`
-// DEPRECATED - only for testing, as it is overwritten in InitChain.
-func WithHeight(height int64) OptFunc {
+// WithState defines last committed state height and apphash of the Application
+func WithState(height int64, appHash []byte) OptFunc {
 	return func(app *Application) error {
-		app.LastCommittedState = NewKvState(dbm.NewMemDB(), height)
+		if len(appHash) == 0 {
+			appHash = make([]byte, crypto.DefaultAppHashSize)
+		}
+		app.LastCommittedState = &kvState{
+			DB:      dbm.NewMemDB(),
+			AppHash: appHash,
+			Height:  height,
+		}
 		return nil
 	}
 }

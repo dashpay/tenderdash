@@ -314,13 +314,13 @@ func makeNode(
 	// make block executor for consensus and blockchain reactors to execute blocks
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger.With("module", "state"),
 		proxyApp,
 		mp,
 		evPool,
 		blockStore,
 		eventBus,
-		nodeMetrics.state,
+		sm.BlockExecWithLogger(logger.With("module", "state")),
+		sm.BockExecWithMetrics(nodeMetrics.state),
 	)
 
 	// Determine whether we should attempt state sync.
@@ -473,9 +473,10 @@ func (n *nodeImpl) OnStart(ctx context.Context) error {
 
 	// Create the handshaker, which calls RequestInfo, sets the AppVersion on the state,
 	// and replays any blocks as necessary to sync tendermint with the app.
-	handshaker := consensus.NewHandshaker(n.logger.With("module", "handshaker"),
-		n.stateStore, n.initialState, n.blockStore, n.rpcEnv.EventBus, n.genesisDoc,
-		proTxHash, n.config.Consensus.AppHashSize,
+	handshaker := consensus.NewHandshaker(
+		createBlockReplayer(n),
+		n.logger.With("module", "handshaker"),
+		n.initialState,
 	)
 	proposedVersion, err := handshaker.Handshake(ctx, n.rpcEnv.ProxyApp)
 	if err != nil {
