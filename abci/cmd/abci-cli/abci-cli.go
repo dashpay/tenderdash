@@ -707,11 +707,17 @@ func cmdProcessProposal(cmd *cobra.Command, args []string) error {
 func makeKVStoreCmd(logger log.Logger) func(*cobra.Command, []string) error {
 	return func(cmd *cobra.Command, args []string) error {
 		// Create the application - in memory or persisted to disk
-		var app types.Application
+		var (
+			app types.Application
+			err error
+		)
 		if flagPersist == "" {
-			app = kvstore.NewApplication()
+			app, err = kvstore.NewMemoryApp()
 		} else {
-			app = kvstore.NewPersistentKVStoreApplication(logger, flagPersist)
+			app, err = kvstore.NewPersistentApp(kvstore.DefaultConfig(flagPersist), kvstore.WithLogger(logger.With("module", "kvstore")))
+		}
+		if err != nil {
+			return err
 		}
 
 		// Start the listener

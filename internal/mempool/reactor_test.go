@@ -62,7 +62,7 @@ func setupReactors(ctx context.Context, t *testing.T, logger log.Logger, numNode
 	rts.mempoolChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc)
 
 	for nodeID := range rts.network.Nodes {
-		rts.kvstores[nodeID] = kvstore.NewApplication(kvstore.WithLogger(logger.With("module", "kvstore")))
+		rts.kvstores[nodeID] = mustKvStore(t)
 
 		client := abciclient.NewLocalClient(logger, rts.kvstores[nodeID])
 		require.NoError(t, client.Start(ctx))

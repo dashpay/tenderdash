@@ -117,7 +117,9 @@ func newPBTSTestHarness(ctx context.Context, t *testing.T, tc pbtsTestConfigurat
 		Validators: validators,
 	})
 	logger := log.NewTestingLogger(t)
-	kvApp := kvstore.NewApplication(kvstore.WithLogger(logger))
+	kvApp, err := kvstore.NewMemoryApp(kvstore.WithLogger(logger))
+	require.NoError(t, err)
+
 	cs := newState(ctx, t, log.NewNopLogger(), state, privVals[0], kvApp)
 	vss := make([]*validatorStub, validators)
 	for i := 0; i < validators; i++ {

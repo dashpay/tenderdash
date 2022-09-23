@@ -11,7 +11,6 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/abci/example/kvstore"
 	abci "github.com/tendermint/tendermint/abci/types"
 	abcimocks "github.com/tendermint/tendermint/abci/types/mocks"
 	"github.com/tendermint/tendermint/crypto"
@@ -782,7 +781,7 @@ func TestStateLock_POLUpdateLock(t *testing.T) {
 	round++
 
 	// Generate a new proposal block.
-	cs2 := newState(ctx, t, logger, cs1.state, vs2, kvstore.NewApplication())
+	cs2 := newState(ctx, t, logger, cs1.state, vs2, newKVStoreFunc(t)(logger, ""))
 	require.NoError(t, err)
 	propR1, propBlockR1 := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	propBlockR1Parts, err := propBlockR1.MakePartSet(partSize)
@@ -1066,7 +1065,7 @@ func TestStateLock_PrevoteNilWhenLockedAndDifferentProposal(t *testing.T) {
 	*/
 	incrementRound(vs2, vs3, vs4)
 	round++
-	cs2 := newState(ctx, t, logger, cs1.state, vs2, kvstore.NewApplication())
+	cs2 := newState(ctx, t, logger, cs1.state, vs2, newKVStoreFunc(t)(logger, ""))
 	propR1, propBlockR1 := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	propBlockR1Parts, err := propBlockR1.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
@@ -1170,7 +1169,7 @@ func TestStateLock_POLDoesNotUnlock(t *testing.T) {
 	*/
 	round++
 	incrementRound(vs2, vs3, vs4)
-	cs2 := newState(ctx, t, logger, cs1.state, vs2, kvstore.NewApplication())
+	cs2 := newState(ctx, t, logger, cs1.state, vs2, newKVStoreFunc(t)(logger, ""))
 	prop, propBlock := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	propBlockParts, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
@@ -1204,7 +1203,7 @@ func TestStateLock_POLDoesNotUnlock(t *testing.T) {
 	*/
 	round++
 	incrementRound(vs2, vs3, vs4)
-	cs3 := newState(ctx, t, logger, cs1.state, vs2, kvstore.NewApplication())
+	cs3 := newState(ctx, t, logger, cs1.state, vs2, newKVStoreFunc(t)(logger, ""))
 	prop, propBlock = decideProposal(ctx, t, cs3, vs3, vs3.Height, vs3.Round)
 	propBlockParts, err = propBlock.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
@@ -1290,7 +1289,7 @@ func TestStateLock_MissingProposalWhenPOLSeenDoesNotUpdateLock(t *testing.T) {
 	*/
 	incrementRound(vs2, vs3, vs4)
 	round++
-	cs2 := newState(ctx, t, logger, cs1.state, vs2, kvstore.NewApplication())
+	cs2 := newState(ctx, t, logger, cs1.state, vs2, newKVStoreFunc(t)(logger, ""))
 	require.NoError(t, err)
 	prop, propBlock := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	require.NotNil(t, propBlock, "Failed to create proposal block with vs2")
@@ -1439,7 +1438,7 @@ func TestStateLock_POLSafety1(t *testing.T) {
 
 	incrementRound(vs2, vs3, vs4)
 	round++ // moving to the next round
-	cs2 := newState(ctx, t, logger, cs1.state, vs2, kvstore.NewApplication())
+	cs2 := newState(ctx, t, logger, cs1.state, vs2, newKVStoreFunc(t)(logger, ""))
 	prop, propBlock := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
@@ -1675,7 +1674,7 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	incrementRound(vs2, vs3, vs4)
 	round++
 	// Generate a new proposal block.
-	cs2 := newState(ctx, t, logger, cs1.state, vs2, kvstore.NewApplication())
+	cs2 := newState(ctx, t, logger, cs1.state, vs2, newKVStoreFunc(t)(logger, ""))
 	cs2.ValidRound = 1
 	propR1, propBlockR1 := decideProposal(ctx, t, cs2, vs2, vs2.Height, round)
 

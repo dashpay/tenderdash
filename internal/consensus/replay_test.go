@@ -61,6 +61,7 @@ func startNewStateAndWaitForBlock(ctx context.Context, t *testing.T, consensusRe
 	require.NoError(t, err)
 	privValidator := loadPrivValidator(t, consensusReplayConfig)
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
+
 	cs := newStateWithConfigAndBlockStore(
 		ctx,
 		t,
@@ -68,7 +69,7 @@ func startNewStateAndWaitForBlock(ctx context.Context, t *testing.T, consensusRe
 		consensusReplayConfig,
 		state,
 		privValidator,
-		kvstore.NewApplication(),
+		newKVStoreFunc(t)(logger, ""),
 		blockStore,
 	)
 
@@ -143,7 +144,7 @@ func TestWALCrash(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			consensusReplayConfig, err := ResetConfig(t.TempDir(), tc.name)
+			consensusReplayConfig, err := ResetConfig(t, t.TempDir(), tc.name)
 			require.NoError(t, err)
 			crashWALandCheckLiveness(ctx, t, consensusReplayConfig, tc.initFn, tc.heightToStop)
 		})
@@ -180,7 +181,7 @@ LOOP:
 			consensusReplayConfig,
 			state,
 			privValidator,
-			kvstore.NewApplication(),
+			newKVStoreFunc(t)(logger, ""),
 			blockStore,
 		)
 
@@ -371,7 +372,7 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 		nPeers:    nPeers,
 		nVals:     nVals,
 		tickerFun: newMockTickerFunc(true),
-		appFunc:   newKVStoreFunc(),
+		appFunc:   newKVStoreFunc(t),
 		validatorUpdates: []validatorUpdate{
 			{height: 2, count: 1, operation: "add"},
 			{height: 4, count: 2, operation: "add"},
@@ -667,9 +668,8 @@ func testHandshakeReplay(
 
 	privVal = privval.MustLoadOrGenFilePVFromConfig(cfg)
 
-	testConfig, err := ResetConfig(t.TempDir(), fmt.Sprintf("%s_s", testName))
+	_, err := ResetConfig(t, t.TempDir(), fmt.Sprintf("%s_s", testName))
 	require.NoError(t, err)
-	defer func() { _ = os.RemoveAll(testConfig.RootDir) }()
 
 	genesisState = sim.GenesisState
 	stateDB = dbm.NewMemDB()
@@ -677,7 +677,7 @@ func testHandshakeReplay(
 	commits := sim.Commits
 	store = newMockBlockStore(t, cfg, genesisState.ConsensusParams)
 
-	opts := []func(app *kvstore.Application){
+	opts := []kvstore.OptFunc{
 		kvstore.WithValidatorSetUpdates(sim.ValidatorSetUpdates),
 	}
 
@@ -724,7 +724,7 @@ func testHandshakeReplay(
 		logger,
 		sim.Mempool,
 		sim.Evpool,
-		kvstore.NewApplication(opts...),
+		newKVStoreFunc(t, opts...)(logger, ""),
 		stateStore,
 		state,
 		chain,
@@ -736,7 +736,7 @@ func testHandshakeReplay(
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
-	client := abciclient.NewLocalClient(logger, kvstore.NewApplication(opts...))
+	client := abciclient.NewLocalClient(logger, newKVStoreFunc(t, opts...)(logger, ""))
 	if nBlocks > 0 {
 		// run nBlocks against a new client to build up the app state.
 		// use a throwaway tendermint state
@@ -971,9 +971,9 @@ func TestHandshakeErrorsIfAppReturnsWrongAppHash(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := ResetConfig(t.TempDir(), "handshake_test_")
+	cfg, err := ResetConfig(t, t.TempDir(), "handshake_test_")
 	require.NoError(t, err)
-	t.Cleanup(func() { os.RemoveAll(cfg.RootDir) })
+
 	privVal, err := privval.LoadFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
 	require.NoError(t, err)
 	const appVersion = 0x0
@@ -1293,9 +1293,8 @@ func TestHandshakeUpdatesValidators(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := ResetConfig(t.TempDir(), "handshake_test_")
+	cfg, err := ResetConfig(t, t.TempDir(), "handshake_test_")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(cfg.RootDir) })
 
 	privVal, err := privval.LoadFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
 	require.NoError(t, err)
@@ -1363,9 +1362,8 @@ func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 
 	const InitialCoreHeight uint32 = 12345
 	logger := log.NewNopLogger()
-	conf, err := ResetConfig(t.TempDir(), "handshake_test_initial_core_lock_height")
+	conf, err := ResetConfig(t, t.TempDir(), "handshake_test_initial_core_lock_height")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(conf.RootDir) })
 
 	privVal, err := privval.LoadFilePV(conf.PrivValidator.KeyFile(), conf.PrivValidator.StateFile())
 	require.NoError(t, err)

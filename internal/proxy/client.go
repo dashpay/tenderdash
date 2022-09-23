@@ -26,9 +26,21 @@ import (
 func ClientFactory(logger log.Logger, addr, transport, dbDir string) (abciclient.Client, io.Closer, error) {
 	switch addr {
 	case "kvstore":
-		return abciclient.NewLocalClient(logger, kvstore.NewApplication()), noopCloser{}, nil
+		app, err := kvstore.NewMemoryApp(
+			kvstore.WithLogger(logger.With("module", "kvstore")),
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		return abciclient.NewLocalClient(logger, app), noopCloser{}, nil
 	case "persistent_kvstore":
-		app := kvstore.NewPersistentKVStoreApplication(logger, dbDir)
+		app, err := kvstore.NewPersistentApp(
+			kvstore.DefaultConfig(dbDir),
+			kvstore.WithLogger(logger.With("module", "kvstore")),
+		)
+		if err != nil {
+			return nil, nil, err
+		}
 		return abciclient.NewLocalClient(logger, app), app, nil
 	case "e2e":
 		app, err := e2e.NewApplication(kvstore.DefaultConfig(dbDir))

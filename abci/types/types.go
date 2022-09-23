@@ -135,7 +135,7 @@ type validatorSetUpdateJSON struct {
 
 func (m *ValidatorSetUpdate) MarshalJSON() ([]byte, error) {
 	if m == nil {
-		return json.Marshal(nil)
+		return nil, nil
 	}
 	ret := validatorSetUpdateJSON{
 		ValidatorUpdates: m.ValidatorUpdates,

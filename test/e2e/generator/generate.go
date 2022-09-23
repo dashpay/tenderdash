@@ -20,7 +20,7 @@ var (
 		"topology": {"single", "quad", "large"},
 		"initialState": {
 			"{}",
-			"{\"items\": {\"initial01\": \"a\", \"initial02\": \"b\", \"initial03\": \"c\"}}",
+			`{"items": {"initial01": "a", "initial02": "b", "initial03": "c"}}`,
 		},
 
 		"validators": {"genesis", "initchain"},
@@ -114,7 +114,6 @@ type Options struct {
 
 // generateTestnet generates a single testnet with the given options.
 func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, error) {
-
 	initialState := kvstore.StateExport{}
 	if opt["initialState"] != nil {
 		data := opt["initialState"].(string)

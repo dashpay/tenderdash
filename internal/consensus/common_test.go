@@ -54,9 +54,8 @@ type cleanupFunc func()
 func configSetup(t *testing.T) *config.Config {
 	t.Helper()
 
-	cfg, err := ResetConfig(t.TempDir(), "consensus_reactor_test")
+	cfg, err := ResetConfig(t, t.TempDir(), "consensus_reactor_test")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(cfg.RootDir) })
 	walDir := filepath.Dir(cfg.Consensus.WalFile())
 	ensureDir(t, walDir, 0700)
 
@@ -68,8 +67,15 @@ func ensureDir(t *testing.T, dir string, mode os.FileMode) {
 	require.NoError(t, tmos.EnsureDir(dir, mode))
 }
 
-func ResetConfig(dir, name string) (*config.Config, error) {
-	return config.ResetTestRoot(dir, name)
+func ResetConfig(t *testing.T, dir, name string) (*config.Config, error) {
+	testConfig, err := config.ResetTestRoot(dir, name)
+	if err != nil {
+		return nil, err
+	}
+	if t != nil {
+		t.Cleanup(func() { _ = os.RemoveAll(testConfig.RootDir) })
+	}
+	return testConfig, nil
 }
 
 //-------------------------------------------------------------------------------
@@ -540,7 +546,8 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 		validators = args.validators
 	}
 	var app abci.Application
-	app = kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
 	if args.application != nil {
 		app = args.application
 	}
@@ -804,7 +811,7 @@ func makeConsensusState(
 	testName string,
 	tickerFunc func() TimeoutTicker,
 	configOpts ...func(*config.Config),
-) ([]*State, cleanupFunc) {
+) []*State {
 	t.Helper()
 	tempDir := t.TempDir()
 
@@ -812,17 +819,12 @@ func makeConsensusState(
 	css := make([]*State, nValidators)
 	logger := consensusLogger(t)
 
-	closeFuncs := make([]func() error, 0, nValidators)
-	configRootDirs := make([]string, 0, nValidators)
-
 	for i := 0; i < nValidators; i++ {
 		blockStore := store.NewBlockStore(dbm.NewMemDB()) // each state needs its own db
 		state, err := sm.MakeGenesisState(genDoc)
 		require.NoError(t, err)
-		thisConfig, err := ResetConfig(tempDir, fmt.Sprintf("%s_%d", testName, i))
+		thisConfig, err := ResetConfig(t, tempDir, fmt.Sprintf("%s_%d", testName, i))
 		require.NoError(t, err)
-
-		configRootDirs = append(configRootDirs, thisConfig.RootDir)
 
 		for _, opt := range configOpts {
 			opt(thisConfig)
@@ -831,8 +833,9 @@ func makeConsensusState(
 		walDir := filepath.Dir(thisConfig.Consensus.WalFile())
 		ensureDir(t, walDir, 0700)
 
-		app := kvstore.NewApplication()
-		closeFuncs = append(closeFuncs, app.Close)
+		app, err := kvstore.NewMemoryApp()
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = app.Close() })
 
 		vals := types.TM2PB.ValidatorUpdates(state.Validators)
 		_, err = app.InitChain(ctx, &abci.RequestInitChain{ValidatorSet: &vals})
@@ -846,14 +849,7 @@ func makeConsensusState(
 		css[i].SetTimeoutTicker(tickerFunc())
 	}
 
-	return css, func() {
-		for _, closer := range closeFuncs {
-			_ = closer()
-		}
-		for _, dir := range configRootDirs {
-			os.RemoveAll(dir)
-		}
-	}
+	return css
 }
 
 type consensusNetGen struct {
@@ -891,8 +887,6 @@ func (g *consensusNetGen) newApp(logger log.Logger, state *sm.State, confName st
 	app := g.appFunc(logger, filepath.Join(g.cfg.DBDir(), confName))
 	switch app.(type) {
 	// simulate handshake, receive app version. If don't do this, replay test will fail
-	case *kvstore.PersistentKVStoreApplication:
-		state.Version.Consensus.App = kvstore.ProtocolVersion
 	case *kvstore.Application:
 		state.Version.Consensus.App = kvstore.ProtocolVersion
 	}
@@ -941,8 +935,6 @@ func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State,
 	genDoc, privVals := factory.RandGenesisDoc(g.cfg, g.nVals, 1, consParams)
 	logger := consensusLogger(t)
 	var peer0Config *config.Config
-	closeFuncs := make([]func() error, g.nPeers)
-	configRootDirs := make([]string, 0, g.nPeers)
 	tickerFunc := g.tickerFun
 	if tickerFunc == nil {
 		tickerFunc = newTickerFunc()
@@ -950,10 +942,9 @@ func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State,
 	for i := 0; i < g.nPeers; i++ {
 		confName := fmt.Sprintf("%s_%d", t.Name(), i)
 		state, _ := sm.MakeGenesisState(genDoc)
-		thisConfig, err := ResetConfig(t.TempDir(), confName)
+		thisConfig, err := ResetConfig(t, t.TempDir(), confName)
 		require.NoError(t, err)
 
-		configRootDirs = append(configRootDirs, thisConfig.RootDir)
 		ensureDir(t, filepath.Dir(thisConfig.Consensus.WalFile()), 0700) // dir for wal
 		if i == 0 {
 			peer0Config = thisConfig
@@ -965,7 +956,9 @@ func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State,
 			// These validator might not have the public keys, for testing purposes let's assume they don't
 			state.Validators.HasPublicKeys = false
 		}
-		apps[i], closeFuncs[i] = g.newApp(logger, &state, confName)
+		var closeFunc func() error
+		apps[i], closeFunc = g.newApp(logger, &state, confName)
+		t.Cleanup(func() { _ = closeFunc() })
 
 		vals := types.TM2PB.ValidatorUpdates(state.Validators)
 		_, err = apps[i].InitChain(ctx, &abci.RequestInitChain{ValidatorSet: &vals})
@@ -980,14 +973,6 @@ func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State,
 
 	validatorSetUpdates := g.execValidatorSetUpdater(ctx, t, css, apps, g.nVals)
 
-	t.Cleanup(func() {
-		for _, closer := range closeFuncs {
-			_ = closer()
-		}
-		for _, dir := range configRootDirs {
-			os.RemoveAll(dir)
-		}
-	})
 	return css, genDoc, peer0Config, validatorSetUpdates
 }
 
@@ -1062,9 +1047,13 @@ func (m *mockTicker) Chan() <-chan timeoutInfo {
 	return m.c
 }
 
-func newKVStoreFunc(opts ...func(*kvstore.Application)) func(_ log.Logger, _ string) abci.Application {
-	return func(_ log.Logger, _ string) abci.Application {
-		return kvstore.NewApplication(opts...)
+func newKVStoreFunc(t *testing.T, opts ...kvstore.OptFunc) func(_ log.Logger, _ string) abci.Application {
+	return func(logger log.Logger, _ string) abci.Application {
+		opts = append(opts, kvstore.WithLogger(logger))
+		app, err := kvstore.NewMemoryApp(opts...)
+		require.NoError(t, err)
+
+		return app
 	}
 }
 

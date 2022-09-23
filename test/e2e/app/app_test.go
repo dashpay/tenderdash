@@ -1,6 +1,7 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"os"
@@ -45,13 +46,14 @@ func TestPrepareFinalize(t *testing.T) {
 	const (
 		key   = "my-tx"
 		value = "abc"
+		tx    = key + "=" + value
 	)
 
 	reqPrep := &abci.RequestPrepareProposal{
 		MaxTxBytes: 1024000,
 		Height:     height,
 		Txs: [][]byte{
-			[]byte(key + "=" + value),
+			[]byte(tx),
 		},
 		Time: now,
 	}
@@ -59,16 +61,19 @@ func TestPrepareFinalize(t *testing.T) {
 	require.NoError(t, err)
 
 	txs := make([][]byte, 0, len(respPrep.TxRecords))
-	bz := []byte{}
+	bz := &bytes.Buffer{}
 	for _, tx := range respPrep.TxRecords {
 		if tx.Action != abci.TxRecord_REMOVED {
 			txs = append(txs, tx.Tx)
-			bz = append(bz, tx.Tx...)
+			n, err := bz.Write(tx.Tx)
+			assert.NoError(t, err)
+			assert.Len(t, tx.Tx, n)
 		}
 	}
+	_, err = bz.Write([]byte(strconv.FormatInt(height, 10)))
+	assert.NoError(t, err)
 
-	bz = append(bz, []byte(strconv.FormatInt(height, 10))...)
-	hash := crypto.Checksum(bz)
+	hash := crypto.Checksum(bz.Bytes())
 	reqFinalized := abci.RequestFinalizeBlock{
 		Txs:     txs,
 		AppHash: respPrep.AppHash,
@@ -81,10 +86,11 @@ func TestPrepareFinalize(t *testing.T) {
 	require.NoError(t, err)
 
 	respQuery, err := app.Query(ctx, &abci.RequestQuery{
-		Data: []byte("my-tx"),
+		Data: []byte(key),
 	})
 	require.NoError(t, err)
 	assert.Equal(t, code.CodeTypeOK, respQuery.Code, respQuery.Log)
+	assert.EqualValues(t, []byte(value), respQuery.Value)
 }
 
 func TestPrepareProposal(t *testing.T) {
@@ -120,13 +126,11 @@ Ym1saWRueGJDSmpZdXBUTkNNdFpMcUdC`)},
 			},
 		},
 	}
+	ctx := context.TODO()
 
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			ctx := context.TODO()
-
 			app := newApp(t)
-
 			respPrep, err := app.PrepareProposal(ctx, &tc.request)
 			require.NoError(t, err)
 			assert.NotEmpty(t, respPrep.AppHash)

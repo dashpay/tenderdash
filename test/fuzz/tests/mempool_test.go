@@ -6,6 +6,8 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/example/kvstore"
 	"github.com/tendermint/tendermint/config"
@@ -14,10 +16,12 @@ import (
 )
 
 func FuzzMempool(f *testing.F) {
-	app := kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(f, err)
+
 	logger := log.NewNopLogger()
 	conn := abciclient.NewLocalClient(logger, app)
-	err := conn.Start(context.TODO())
+	err = conn.Start(context.TODO())
 	if err != nil {
 		panic(err)
 	}

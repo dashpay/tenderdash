@@ -26,7 +26,6 @@ import (
 )
 
 const (
-	storeKey        = "stateStoreKey"
 	kvPairPrefixKey = "kvPairKey:"
 
 	ProtocolVersion uint64 = 0x1
@@ -40,10 +39,15 @@ func prefixKey(key []byte) []byte {
 
 var _ abci.Application = (*Application)(nil)
 
+// OptFunc is a function that can modify application configuration. Used when creating new application.
+type OptFunc func(app *Application) error
+
+// Application is an example implementation of abci.Application.
 type Application struct {
 	abci.BaseApplication
 	mu sync.Mutex
 
+	// LastCommittedState is last state that was committed by Tenderdash and finalized with abci.FinalizeBlock()
 	LastCommittedState State
 	// roundStates contains state for each round, indexed by AppHash.String()
 	roundStates  map[string]State
@@ -52,7 +56,7 @@ type Application struct {
 
 	validatorSetUpdates map[int64]abci.ValidatorSetUpdate
 
-	store Store
+	store StoreFactory
 
 	// Genesis configuration
 
@@ -78,40 +82,45 @@ type Application struct {
 }
 
 // WithValidatorSetUpdates defines initial validator set when creating Application
-func WithValidatorSetUpdates(validatorSetUpdates map[int64]abci.ValidatorSetUpdate) func(app *Application) {
-	return func(app *Application) {
+func WithValidatorSetUpdates(validatorSetUpdates map[int64]abci.ValidatorSetUpdate) OptFunc {
+	return func(app *Application) error {
 		for height, vsu := range validatorSetUpdates {
 			app.AddValidatorSetUpdate(vsu, height)
 		}
+		return nil
 	}
 }
 
 // WithLogger sets logger when creating Application
-func WithLogger(logger log.Logger) func(app *Application) {
-	return func(app *Application) {
+func WithLogger(logger log.Logger) OptFunc {
+	return func(app *Application) error {
 		app.logger = logger
+		return nil
 	}
 }
 
 // WithHeight creates initial state with a given height.
 // Note the `height` should be `genesis.InitialHeight - 1`
 // DEPRECATED - only for testing, as it is overwritten in InitChain.
-func WithHeight(height int64) func(app *Application) {
-	return func(app *Application) {
+func WithHeight(height int64) OptFunc {
+	return func(app *Application) error {
 		app.LastCommittedState = NewKvState(dbm.NewMemDB(), height)
+		return nil
 	}
 }
 
 // WithConfig provides Config to new Application
-func WithConfig(config Config) func(app *Application) {
-	return func(app *Application) {
+func WithConfig(config Config) OptFunc {
+	return func(app *Application) error {
 		app.cfg = config
 		if config.ValidatorUpdates != nil {
 			vsu, err := config.validatorSetUpdates()
 			if err != nil {
-				panic(err)
+				return err
 			}
-			WithValidatorSetUpdates(vsu)(app)
+			if err := WithValidatorSetUpdates(vsu)(app); err != nil {
+				return err
+			}
 		}
 		if config.InitAppInitialCoreHeight != 0 {
 			app.initialCoreLockHeight = config.InitAppInitialCoreHeight
@@ -119,46 +128,45 @@ func WithConfig(config Config) func(app *Application) {
 		if config.RetainBlocks != 0 {
 			app.RetainBlocks = config.RetainBlocks
 		}
+		return nil
 	}
 }
 
 // WithExecTx provides custom transaction executing function to the Application
-func WithExecTx(execTx ExecTxFunc) func(app *Application) {
-	return func(app *Application) {
+func WithExecTx(execTx ExecTxFunc) OptFunc {
+	return func(app *Application) error {
 		app.execTx = execTx
+		return nil
 	}
 }
 
 // WithVerifyTxFunc provides custom transaction verification function to the Application
-func WithVerifyTxFunc(verifyTx VerifyTxFunc) func(app *Application) {
-	return func(app *Application) {
+func WithVerifyTxFunc(verifyTx VerifyTxFunc) OptFunc {
+	return func(app *Application) error {
 		app.verifyTx = verifyTx
+		return nil
 	}
 }
 
 // WithPrepareTxsFunc provides custom transaction modification function to the Application
-func WithPrepareTxsFunc(prepareTxs PrepareTxsFunc) func(app *Application) {
-	return func(app *Application) {
+func WithPrepareTxsFunc(prepareTxs PrepareTxsFunc) OptFunc {
+	return func(app *Application) error {
 		app.prepareTxs = prepareTxs
+		return nil
 	}
 }
 
-// WithStateStore provides Store to persist state every `Config.PersistInterval“ blocks
-func WithStateStore(stateStore Store) func(app *Application) {
-	return func(app *Application) {
-		app.store = stateStore
-	}
-}
-
-// NewApplication creates new Key/value store application.
+// NewMemoryApp creates new Key/value store application that stores data to memory.
+// Data is lost when the app stops.
 // The application can be used for testing or as an example of ABCI
 // implementation.
-// It is possible to alter initial application confis with option funcs
-func NewApplication(opts ...func(app *Application)) *Application {
-	var err error
+// It is possible to alter initial application configs with option functions.
+func NewMemoryApp(opts ...OptFunc) (*Application, error) {
+	return newApplication(NewMemStateStore(dbm.NewMemDB()), opts...)
+}
 
-	db := dbm.NewMemDB()
-	stateStore := NewDBStateStore(db)
+func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, error) {
+	var err error
 
 	app := &Application{
 		logger:              log.NewNopLogger(),
@@ -167,22 +175,42 @@ func NewApplication(opts ...func(app *Application)) *Application {
 		validatorSetUpdates: make(map[int64]abci.ValidatorSetUpdate),
 		initialHeight:       1,
 		store:               stateStore,
-
-		prepareTxs: prepareTxs,
-		verifyTx:   verifyTx,
-		execTx:     execTx,
+		prepareTxs:          prepareTxs,
+		verifyTx:            verifyTx,
+		execTx:              execTx,
 	}
 
 	for _, opt := range opts {
-		opt(app)
+		if err := opt(app); err != nil {
+			return nil, err
+		}
+	}
+
+	// Load state from store if it's available.
+	in, err := app.store.Reader()
+	if err != nil {
+		return nil, fmt.Errorf("open state: %w", err)
+	}
+	defer in.Close()
+
+	if err := app.LastCommittedState.Load(in); err != nil {
+		return nil, fmt.Errorf("load state: %w", err)
 	}
 
 	app.snapshots, err = NewSnapshotStore(path.Join(app.cfg.Dir, "snapshots"))
 	if err != nil {
-		panic(fmt.Errorf("init snapshot store: %w", err))
+		return nil, fmt.Errorf("init snapshot store: %w", err)
 	}
 
-	return app
+	return app, nil
+}
+
+// NewPersistentApp creates a new kvstore application that uses json file as persistent storage
+// to store state.
+func NewPersistentApp(cfg Config, opts ...OptFunc) (*Application, error) {
+	options := append([]OptFunc{WithConfig(cfg)}, opts...)
+	stateStore := NewFileStore(path.Join(cfg.Dir, "state.json"))
+	return newApplication(stateStore, options...)
 }
 
 // InitChain implements ABCI
@@ -192,20 +220,16 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 
 	if req.InitialHeight != 0 {
 		app.initialHeight = req.InitialHeight
+		if app.LastCommittedState.GetHeight() == 0 {
+			app.LastCommittedState = NewKvState(dbm.NewMemDB(), app.initialHeight-1)
+		}
 	}
 
 	if req.InitialCoreHeight != 0 {
 		app.initialCoreLockHeight = req.InitialCoreHeight
 	}
 
-	// Loading state.
-	// We start with default, empty state at (initialHeight-1) to show that no block was approved yet.
-	app.LastCommittedState = NewKvState(dbm.NewMemDB(), app.initialHeight-1)
-	// Then, we load state from store if it's available.
-	if err := app.LastCommittedState.Load(app.store); err != nil {
-		return &abci.ResponseInitChain{}, fmt.Errorf("load state: %w", err)
-	}
-	// Then, we allow overwriting of some state fields based on AppStateBytes
+	// Overwrite state based on AppStateBytes
 	if len(req.AppStateBytes) > 0 {
 		err := json.Unmarshal(req.AppStateBytes, &app.LastCommittedState)
 		if err != nil {
@@ -308,6 +332,11 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
+	if app.LastCommittedState.GetHeight()+1 != req.Height {
+		return &abci.ResponseFinalizeBlock{},
+			fmt.Errorf("block at height %d (apphash: %s) already finalized", req.Height, app.LastCommittedState.GetAppHash().String())
+	}
+
 	appHash := tmbytes.HexBytes(req.AppHash)
 	roundState, ok := app.roundStates[appHash.String()]
 	if !ok {
@@ -389,7 +418,7 @@ func (app *Application) LoadSnapshotChunk(_ context.Context, req *abci.RequestLo
 
 	chunk, err := app.snapshots.LoadChunk(req.Height, req.Format, req.Chunk)
 	if err != nil {
-		panic(err)
+		return &abci.ResponseLoadSnapshotChunk{}, err
 	}
 	resp := &abci.ResponseLoadSnapshotChunk{Chunk: chunk}
 
@@ -403,7 +432,7 @@ func (app *Application) OfferSnapshot(_ context.Context, req *abci.RequestOfferS
 	defer app.mu.Unlock()
 
 	if app.restoreSnapshot != nil {
-		panic("A snapshot is already being restored")
+		return &abci.ResponseOfferSnapshot{}, errors.New("a snapshot is already being restored")
 	}
 	app.restoreSnapshot = req.Snapshot
 	app.restoreAppHash = req.AppHash
@@ -582,7 +611,6 @@ func (app *Application) Close() error {
 
 	app.resetRoundStates()
 	app.LastCommittedState.Close()
-	app.store.Close()
 
 	return nil
 }
@@ -716,7 +744,12 @@ func encodeMsg(data proto.Message) ([]byte, error) {
 // persist persists application state according to the config
 func (app *Application) persist() error {
 	if app.cfg.PersistInterval > 0 && app.LastCommittedState.GetHeight()%int64(app.cfg.PersistInterval) == 0 {
-		return app.LastCommittedState.Save(app.store)
+		out, err := app.store.Writer()
+		if err != nil {
+			return err
+		}
+		defer out.Close()
+		return app.LastCommittedState.Save(out)
 	}
 	return nil
 }
