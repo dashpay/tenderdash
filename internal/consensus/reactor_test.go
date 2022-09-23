@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -232,10 +231,9 @@ func TestReactorBasic(t *testing.T) {
 	cfg := configSetup(t)
 
 	n := 2
-	states, cleanup := makeConsensusState(ctx, t,
+	states := makeConsensusState(ctx, t,
 		cfg, n, "consensus_reactor_test",
 		newMockTickerFunc(true))
-	t.Cleanup(cleanup)
 
 	rts := setup(ctx, t, n, states, 100) // buffer must be large enough to not deadlock
 
@@ -338,12 +336,11 @@ func TestReactorWithEvidence(t *testing.T) {
 		state, err := sm.MakeGenesisState(genDoc)
 		require.NoError(t, err)
 		require.NoError(t, stateStore.Save(state))
-		thisConfig, err := ResetConfig(t.TempDir(), fmt.Sprintf("%s_%d", testName, i))
+		thisConfig, err := ResetConfig(t, t.TempDir(), fmt.Sprintf("%s_%d", testName, i))
 		require.NoError(t, err)
 
-		defer os.RemoveAll(thisConfig.RootDir)
-
 		app, err := kvstore.NewMemoryApp()
+		require.NoError(t, err)
 		vals := types.TM2PB.ValidatorUpdates(state.Validators)
 		_, err = app.InitChain(ctx, &abci.RequestInitChain{ValidatorSet: &vals})
 		require.NoError(t, err)
@@ -428,7 +425,7 @@ func TestReactorCreatesBlockWhenEmptyBlocksFalse(t *testing.T) {
 	cfg := configSetup(t)
 
 	n := 2
-	states, cleanup := makeConsensusState(ctx,
+	states := makeConsensusState(ctx,
 		t,
 		cfg,
 		n,
@@ -438,7 +435,6 @@ func TestReactorCreatesBlockWhenEmptyBlocksFalse(t *testing.T) {
 			c.Consensus.CreateEmptyBlocks = false
 		},
 	)
-	t.Cleanup(cleanup)
 
 	rts := setup(ctx, t, n, states, 100) // buffer must be large enough to not deadlock
 
@@ -479,10 +475,9 @@ func TestReactorRecordsVotesAndBlockParts(t *testing.T) {
 	cfg := configSetup(t)
 
 	n := 2
-	states, cleanup := makeConsensusState(ctx, t,
+	states := makeConsensusState(ctx, t,
 		cfg, n, "consensus_reactor_test",
 		newMockTickerFunc(true))
-	t.Cleanup(cleanup)
 
 	rts := setup(ctx, t, n, states, 100) // buffer must be large enough to not deadlock
 

@@ -3,7 +3,6 @@ package consensus
 import (
 	"context"
 	"fmt"
-	"os"
 	"path"
 	"sync"
 	"testing"
@@ -63,10 +62,8 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, stateStore.Save(state))
 
-			thisConfig, err := ResetConfig(t.TempDir(), fmt.Sprintf("%s_%d", testName, i))
+			thisConfig, err := ResetConfig(t, t.TempDir(), fmt.Sprintf("%s_%d", testName, i))
 			require.NoError(t, err)
-
-			defer os.RemoveAll(thisConfig.RootDir)
 
 			ensureDir(t, path.Dir(thisConfig.Consensus.WalFile()), 0700) // dir for wal
 			app, err := kvstore.NewMemoryApp()

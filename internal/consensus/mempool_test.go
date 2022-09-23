@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -37,9 +36,8 @@ func TestMempoolNoProgressUntilTxsAvailable(t *testing.T) {
 	defer cancel()
 
 	baseConfig := configSetup(t)
-	config, err := ResetConfig(t.TempDir(), "consensus_mempool_txs_available_test")
+	config, err := ResetConfig(t, t.TempDir(), "consensus_mempool_txs_available_test")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(config.RootDir) })
 
 	config.Consensus.CreateEmptyBlocks = false
 
@@ -65,9 +63,8 @@ func TestMempoolProgressAfterCreateEmptyBlocksInterval(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	config, err := ResetConfig(t.TempDir(), "consensus_mempool_txs_available_test")
+	config, err := ResetConfig(t, t.TempDir(), "consensus_mempool_txs_available_test")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(config.RootDir) })
 
 	config.Consensus.CreateEmptyBlocksInterval = ensureTimeout
 	state, privVals := makeGenesisState(ctx, t, baseConfig, genesisStateArgs{
@@ -91,9 +88,8 @@ func TestMempoolProgressInHigherRound(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	config, err := ResetConfig(t.TempDir(), "consensus_mempool_txs_available_test")
+	config, err := ResetConfig(t, t.TempDir(), "consensus_mempool_txs_available_test")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(config.RootDir) })
 
 	config.Consensus.CreateEmptyBlocks = false
 	state, privVals := makeGenesisState(ctx, t, baseConfig, genesisStateArgs{
