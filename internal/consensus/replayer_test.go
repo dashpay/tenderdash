@@ -121,13 +121,13 @@ func TestBlockReplayerReplay(t *testing.T) {
 			blockStore:  store.NewBlockStore(dbm.NewMemDB()),
 			appHeight:   0,
 			appAppHash:  make([]byte, crypto.DefaultAppHashSize),
-			wantAppHash: nil, // nil expects because of kvstore app returns nil appHash
+			wantAppHash: make([]byte, crypto.DefaultAppHashSize),
 			wantNBlocks: 0,
 		},
 	}
 
 	for i, tc := range testCases {
-		t.Run(fmt.Sprintf("text-case #%d", i+1), func(t *testing.T) {
+		t.Run(fmt.Sprintf("test-case-%d", i+1), func(t *testing.T) {
 			app, err := kvstore.NewMemoryApp(tc.appOpts...)
 			require.NoError(t, err)
 			client := abciclient.NewLocalClient(logger, app)
