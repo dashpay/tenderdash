@@ -1,6 +1,7 @@
 package types_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,6 +9,7 @@ import (
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto/merkle"
+	"github.com/tendermint/tendermint/types"
 )
 
 func TestHashAndProveResults(t *testing.T) {
@@ -75,20 +77,33 @@ func TestHashDeterministicFieldsOnly(t *testing.T) {
 
 func TestValidatorSetUpdateMarshalJSON_Nil(t *testing.T) {
 	type testCase struct {
-		vsu *abci.ValidatorSetUpdate
+		vsu      *abci.ValidatorSetUpdate
+		contains string
 	}
+	vset3, _ := types.RandValidatorSet(3)
+	vsu3 := types.TM2PB.ValidatorUpdates(vset3)
 	testCases := []testCase{
-		{vsu: nil},
-		{vsu: &abci.ValidatorSetUpdate{}},
+		{
+			vsu:      nil,
+			contains: "null",
+		},
+		{
+			vsu:      &abci.ValidatorSetUpdate{},
+			contains: `{"validator_updates":null,"threshold_public_key":null}`,
+		},
+		{
+			vsu:      &vsu3,
+			contains: `[{"pub_key":{"type":"tendermint/PubKeyBLS12381","value":"` + vset3.Validators[0].PubKey.String() + `"`,
+		},
 	}
+
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			vsu := tc.vsu
-			json, err := vsu.MarshalJSON()
+			json, err := json.Marshal(vsu)
 
 			assert.NoError(t, err)
 			assert.NotEmpty(t, json)
-
 		})
 	}
 }
