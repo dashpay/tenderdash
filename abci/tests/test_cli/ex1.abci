@@ -4,7 +4,6 @@ prepare_proposal 1 "abc"
 process_proposal 1 "abc"
 finalize_block 1 0000000000000000000000000000000000000000000000000000000000000000 "abc"
 info
-info
 query "abc"
 prepare_proposal 2 "def=xyz" "ghi=123"
 process_proposal 2 "def=xyz" "ghi=123"
