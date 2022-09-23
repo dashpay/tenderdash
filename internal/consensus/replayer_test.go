@@ -38,7 +38,7 @@ func TestBlockReplayerReplay(t *testing.T) {
 	require.NoError(t, eventBus.Start(ctx))
 
 	gen := NewChainGenerator(t, nVals, chainSize)
-	chain := gen.Generate(ctx)
+	chain := gen.Generate(ctx, t)
 
 	lastAppHash := mustHexToBytes("434BB5713255371561623E144D06F3056A65FD66AF40207FBA4451DA5A6A4025")
 
@@ -50,7 +50,7 @@ func TestBlockReplayerReplay(t *testing.T) {
 		appHeight   int64
 		wantAppHash []byte
 		wantNBlocks int
-		appOpts     []func(app *kvstore.Application)
+		appOpts     []kvstore.OptFunc
 	}{
 		{
 			// state-height is equal to block-height and app-height is less block-height
@@ -95,7 +95,7 @@ func TestBlockReplayerReplay(t *testing.T) {
 			appAppHash:  chain.States[lastHeightIDx-1].AppHash,
 			wantAppHash: lastAppHash,
 			wantNBlocks: 1, // sync only last block
-			appOpts: []func(application *kvstore.Application){
+			appOpts: []kvstore.OptFunc{
 				kvstore.WithState(chainSize-1, chain.States[lastHeightIDx-1].AppHash),
 				kvstore.WithValidatorSetUpdates(map[int64]abci.ValidatorSetUpdate{
 					0: tmtypes.TM2PB.ValidatorUpdates(chain.GenesisState.Validators),
@@ -128,7 +128,9 @@ func TestBlockReplayerReplay(t *testing.T) {
 
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("text-case #%d", i+1), func(t *testing.T) {
-			client := abciclient.NewLocalClient(logger, kvstore.NewApplication(tc.appOpts...))
+			app, err := kvstore.NewMemoryApp(tc.appOpts...)
+			require.NoError(t, err)
+			client := abciclient.NewLocalClient(logger, app)
 			proxyApp := proxy.New(client, logger, proxy.NopMetrics())
 			replayer := newBlockReplayer(tc.stateStore, tc.blockStore, chain.GenesisDoc, eventBus, proxyApp, chain.ProTxHash)
 			appHash, err := replayer.Replay(ctx, tc.state, tc.appAppHash, tc.appHeight)

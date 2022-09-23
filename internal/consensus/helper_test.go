@@ -5,8 +5,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto"
 	dbm "github.com/tendermint/tm-db"
+
+	"github.com/tendermint/tendermint/crypto"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/example/kvstore"
@@ -203,13 +204,13 @@ func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []
 }
 
 // Generate generates and returns blockchain data for a first validator in a set
-func (c *ChainGenerator) Generate(ctx context.Context) Chain {
+func (c *ChainGenerator) Generate(ctx context.Context, t *testing.T) Chain {
 	gen := consensusNetGen{
 		cfg:       c.cfg,
 		nPeers:    c.nVals,
 		nVals:     c.nVals,
 		tickerFun: newMockTickerFunc(true),
-		appFunc:   newKVStoreFunc(),
+		appFunc:   newKVStoreFunc(t),
 	}
 	css, genDoc, _, validatorSetUpdate := gen.generate(ctx, c.t)
 
