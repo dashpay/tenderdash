@@ -21,25 +21,25 @@ type StoreFactory interface {
 // memStore stores state in memory.
 type memStore struct {
 	dbm.DB
-	buf bytes.Buffer
+	buf *bytes.Buffer
 }
 
 func NewMemStateStore(db dbm.DB) StoreFactory {
 	return &memStore{
-		buf: bytes.Buffer{},
+		buf: &bytes.Buffer{},
 	}
 }
 
 func (w *memStore) Reader() (io.ReadCloser, error) {
 	reader := bytes.Buffer{}
-	if _, err := io.Copy(&reader, &w.buf); err != nil {
+	if _, err := io.Copy(&reader, w.buf); err != nil {
 		return nil, err
 	}
 	return io.NopCloser(&reader), nil
 }
 
 func (w *memStore) Writer() (io.WriteCloser, error) {
-	return &writerNopCloser{&w.buf}, nil
+	return &writerNopCloser{w.buf}, nil
 }
 
 type writerNopCloser struct{ io.Writer }
