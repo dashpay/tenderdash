@@ -20,7 +20,6 @@ type VerifyTxFunc func(tx types.Tx, typ abci.CheckTxType) (abci.ResponseCheckTx,
 type ExecTxFunc func(tx types.Tx, roundState State) (abci.ExecTxResult, error)
 
 func prepareTxs(req abci.RequestPrepareProposal) ([]*abci.TxRecord, error) {
-
 	return substPrepareTx(req.Txs, req.MaxTxBytes), nil
 }
 
@@ -88,18 +87,16 @@ func substPrepareTx(txs [][]byte, maxTxBytes int64) []*abci.TxRecord {
 	trs := make([]*abci.TxRecord, 0, len(txs))
 	var removed []*abci.TxRecord
 	var totalBytes int64
-	for _, item := range txs {
-		tx := item
+	for _, tx := range txs {
 		action := abci.TxRecord_UNMODIFIED
 		if isPrepareTx(tx) {
 			// replace tx and add it as REMOVED
-			if action != abci.TxRecord_ADDED {
-				removed = append(removed, &abci.TxRecord{
-					Tx:     tx,
-					Action: abci.TxRecord_REMOVED,
-				})
-				totalBytes -= int64(len(tx))
-			}
+			removed = append(removed, &abci.TxRecord{
+				Tx:     tx,
+				Action: abci.TxRecord_REMOVED,
+			})
+			totalBytes -= int64(len(tx))
+
 			tx = bytes.TrimPrefix(tx, []byte(PreparePrefix))
 			action = abci.TxRecord_ADDED
 		}
