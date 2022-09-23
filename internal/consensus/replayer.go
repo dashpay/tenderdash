@@ -338,6 +338,12 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	if stateBlockHeight != 0 {
 		return nil
 	}
+
+	if len(res.ValidatorSetUpdate.ValidatorUpdates) != 0 {
+		// we replace existing validator with the one from InitChain instead of applying it as a diff
+		state.Validators = types.NewEmptyValidatorSet()
+	}
+
 	// we only update state when we are in initial state
 	// If the app did not return an app hash, we keep the one set from the genesis doc in
 	// the state. We don't set appHash since we don't want the genesis doc app hash
