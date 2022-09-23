@@ -217,7 +217,10 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 		// FIXME: should we move validatorSetUpdates to State?
 		app.validatorSetUpdates[app.initialHeight] = *req.ValidatorSet
 	}
-
+	coreChainLock, err := app.chainLockUpdate(req.InitialHeight)
+	if err != nil {
+		return nil, err
+	}
 	resp := &abci.ResponseInitChain{
 		AppHash: app.LastCommittedState.GetAppHash(),
 		ConsensusParams: &types1.ConsensusParams{
@@ -225,10 +228,9 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 				AppVersion: ProtocolVersion,
 			},
 		},
-		ValidatorSetUpdate: app.validatorSetUpdates[app.initialHeight],
-		InitialCoreHeight:  app.initialCoreLockHeight,
-		// TODO Implement core chainlock updates logic
-		NextCoreChainLockUpdate: nil,
+		ValidatorSetUpdate:      app.validatorSetUpdates[app.initialHeight],
+		InitialCoreHeight:       app.initialCoreLockHeight,
+		NextCoreChainLockUpdate: coreChainLock,
 	}
 
 	app.logger.Debug("InitChain", "req", req, "resp", resp)
@@ -253,13 +255,16 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 	if err != nil {
 		return &abci.ResponsePrepareProposal{}, err
 	}
-
+	coreChainLock, err := app.chainLockUpdate(req.Height)
+	if err != nil {
+		return nil, err
+	}
 	resp := &abci.ResponsePrepareProposal{
 		TxRecords:             txRecords,
 		AppHash:               roundState.GetAppHash(),
 		TxResults:             txResults,
 		ConsensusParamUpdates: nil, // TODO: implement
-		CoreChainLockUpdate:   nil, // TODO: implement
+		CoreChainLockUpdate:   coreChainLock,
 		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
 	}
 
@@ -278,12 +283,16 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 			Status: abci.ResponseProcessProposal_REJECT,
 		}, err
 	}
-
+	coreChainLock, err := app.chainLockUpdate(req.Height)
+	if err != nil {
+		return nil, err
+	}
 	resp := &abci.ResponseProcessProposal{
-		Status:             abci.ResponseProcessProposal_ACCEPT,
-		AppHash:            roundState.GetAppHash(),
-		TxResults:          txResults,
-		ValidatorSetUpdate: app.getValidatorSetUpdate(req.Height),
+		Status:              abci.ResponseProcessProposal_ACCEPT,
+		AppHash:             roundState.GetAppHash(),
+		TxResults:           txResults,
+		ValidatorSetUpdate:  app.getValidatorSetUpdate(req.Height),
+		CoreChainLockUpdate: coreChainLock,
 	}
 
 	if app.cfg.ProcessProposalDelayMS != 0 {
@@ -308,7 +317,6 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		return &abci.ResponseFinalizeBlock{},
 			fmt.Errorf("height mismatch: expected %d, got %d", roundState.GetHeight(), req.Height)
 	}
-
 	events := []abci.Event{app.eventValUpdate(req.Height)}
 	resp := &abci.ResponseFinalizeBlock{
 		Events: events,
@@ -657,6 +665,19 @@ func (app *Application) getValidatorSetUpdate(height int64) *abci.ValidatorSetUp
 		}
 	}
 	return proto.Clone(&vsu).(*abci.ValidatorSetUpdate)
+}
+
+func (app *Application) chainLockUpdate(height int64) (*types1.CoreChainLock, error) {
+	chainLockUpdateStr, ok := app.cfg.ChainLockUpdates[strconv.FormatInt(height, 10)]
+	if !ok {
+		return nil, nil
+	}
+	chainLockUpdate, err := strconv.Atoi(chainLockUpdateStr)
+	if err != nil {
+		return nil, fmt.Errorf("invalid number chainLockUpdate value %q: %w", chainLockUpdateStr, err)
+	}
+	chainLock := types.NewMockChainLock(uint32(chainLockUpdate))
+	return chainLock.ToProto(), nil
 }
 
 // -----------------------------
