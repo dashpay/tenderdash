@@ -66,13 +66,11 @@ func TestValidateBlockHeader(t *testing.T) {
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		sm.EmptyEvidencePool{},
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
 
 	changes, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{
@@ -209,13 +207,11 @@ func TestValidateBlockCommit(t *testing.T) {
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		sm.EmptyEvidencePool{},
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
 	lastCommit := types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil)
 	wrongVoteMessageSignedCommit := types.NewCommit(1, 0, types.BlockID{}, types.StateID{}, nil)
@@ -404,13 +400,11 @@ func TestValidateBlockEvidence(t *testing.T) {
 	state.ConsensusParams.Evidence.MaxBytes = 1000
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		log.NewNopLogger(),
 		proxyApp,
 		mp,
 		evpool,
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
 	lastCommit := types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil)
 
