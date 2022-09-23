@@ -82,7 +82,7 @@ func TestStateUnmarshal(t *testing.T) {
 		},
 		{
 			name:          "only height",
-			encoded:       []byte("{\"height\":1234}"),
+			encoded:       []byte(`{"height":1234}`),
 			expectHeight:  1234,
 			expectAppHash: zeroAppHash,
 		},
