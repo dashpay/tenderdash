@@ -34,7 +34,7 @@ type BlockExecutor struct {
 	appClient abciclient.Client
 
 	// events
-	eventBus types.BlockEventPublisher
+	eventPublisher types.BlockEventPublisher
 
 	// manage the mempool lock during commit
 	// and update both with block results after commit.
@@ -62,16 +62,16 @@ func NewBlockExecutor(
 	metrics *Metrics,
 ) *BlockExecutor {
 	return &BlockExecutor{
-		eventBus:    eventBus,
-		store:       stateStore,
-		appClient:   appClient,
-		mempool:     pool,
-		evpool:      evpool,
-		logger:      logger,
-		metrics:     metrics,
-		cache:       make(map[string]struct{}),
-		blockStore:  blockStore,
-		appHashSize: 32, // TODO change on constant
+		eventPublisher: eventBus,
+		store:          stateStore,
+		appClient:      appClient,
+		mempool:        pool,
+		evpool:         evpool,
+		logger:         logger,
+		metrics:        metrics,
+		cache:          make(map[string]struct{}),
+		blockStore:     blockStore,
+		appHashSize:    32, // TODO change on constant
 	}
 }
 
@@ -351,7 +351,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		return state, ErrInvalidBlock{err}
 	}
 	startTime := time.Now().UnixNano()
-	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, blockExec.logger, blockExec.store, -1, state)
+	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, blockExec.logger, -1)
 	if err != nil {
 		return state, ErrInvalidBlock{err}
 	}
@@ -402,16 +402,12 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	blockExec.cache = make(map[string]struct{})
 
 	// Events are fired after everything else.
-	// NOTE: if we crash between flushMempool and Save, events wont be fired during replay
-	fireEvents(
-		blockExec.logger,
-		blockExec.eventBus,
-		block,
-		blockID,
-		uncommittedState.TxResults,
-		fbResp,
-		&uncommittedState.response,
-		state.Validators)
+	// NOTE: if we crash between Commit and Save, events wont be fired during replay
+	es := NewFullEventSet(block, blockID, uncommittedState, fbResp, state.Validators)
+	err = es.Publish(blockExec.eventPublisher)
+	if err != nil {
+		blockExec.logger.Error("failed publishing event", "err", err)
+	}
 
 	return state, nil
 }
@@ -571,86 +567,12 @@ func (blockExec *BlockExecutor) SetAppHashSize(size int) {
 	blockExec.appHashSize = size
 }
 
-// Fire NewBlock, NewBlockHeader.
-// Fire TxEvent for every tx.
-// NOTE: if Tendermint crashes before commit, some or all of these events may be published again.
-func fireEvents(
-	logger log.Logger,
-	eventBus types.BlockEventPublisher,
-	block *types.Block,
-	blockID types.BlockID,
-	txResults []*abci.ExecTxResult,
-	finalizeBlockResponse *abci.ResponseFinalizeBlock,
-	processProposalResponse *abci.ResponseProcessProposal,
-	validatorSetUpdate *types.ValidatorSet,
-) {
-	if err := eventBus.PublishEventNewBlock(types.EventDataNewBlock{
-		Block:               block,
-		BlockID:             blockID,
-		ResultFinalizeBlock: *finalizeBlockResponse,
-	}); err != nil {
-		logger.Error("failed publishing new block", "err", err)
-	}
-
-	if err := eventBus.PublishEventNewBlockHeader(types.EventDataNewBlockHeader{
-		Header:                block.Header,
-		NumTxs:                int64(len(block.Txs)),
-		ResultProcessProposal: *processProposalResponse,
-		ResultFinalizeBlock:   *finalizeBlockResponse,
-	}); err != nil {
-		logger.Error("failed publishing new block header", "err", err)
-	}
-
-	if len(block.Evidence) != 0 {
-		for _, ev := range block.Evidence {
-			if err := eventBus.PublishEventNewEvidence(types.EventDataNewEvidence{
-				Evidence: ev,
-				Height:   block.Height,
-			}); err != nil {
-				logger.Error("failed publishing new evidence", "err", err)
-			}
-		}
-	}
-
-	// sanity check
-	if len(txResults) != len(block.Data.Txs) {
-		panic(fmt.Sprintf("number of TXs (%d) and ABCI TX responses (%d) do not match",
-			len(block.Data.Txs), len(txResults)))
-	}
-
-	for i, tx := range block.Data.Txs {
-		if err := eventBus.PublishEventTx(types.EventDataTx{
-			TxResult: abci.TxResult{
-				Height: block.Height,
-				Index:  uint32(i),
-				Tx:     tx,
-				Result: *(txResults[i]),
-			},
-		}); err != nil {
-			logger.Error("failed publishing event TX", "err", err)
-		}
-	}
-
-	if validatorSetUpdate != nil {
-		if err := eventBus.PublishEventValidatorSetUpdates(
-			types.EventDataValidatorSetUpdate{
-				ValidatorSetUpdates: validatorSetUpdate.Validators,
-				ThresholdPublicKey:  validatorSetUpdate.ThresholdPublicKey,
-				QuorumHash:          validatorSetUpdate.QuorumHash,
-			}); err != nil {
-			logger.Error("failed publishing event validator-set update", "err", err)
-		}
-	}
-}
-
 func execBlock(
 	ctx context.Context,
 	appConn abciclient.Client,
 	block *types.Block,
 	logger log.Logger,
-	store Store,
 	initialHeight int64,
-	s State,
 ) (*abci.ResponseFinalizeBlock, error) {
 	version := block.Header.Version.ToProto()
 
@@ -659,7 +581,6 @@ func execBlock(
 	lastCommit := buildLastCommitInfo(block, initialHeight)
 	evidence := block.Evidence.ToABCI()
 
-	var err error
 	responseFinalizeBlock, err := appConn.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
@@ -699,12 +620,10 @@ func ExecReplayedCommitBlock(
 	appConn abciclient.Client,
 	block *types.Block,
 	logger log.Logger,
-	store Store,
 	initialHeight int64,
-	s State,
 	ucState CurrentRoundState,
 ) (*abci.ResponseFinalizeBlock, error) {
-	respFinalizeBlock, err := execBlockWithoutState(ctx, appConn, block, logger, store, initialHeight, s)
+	respFinalizeBlock, err := execBlockWithoutState(ctx, appConn, block, logger, initialHeight)
 	if err != nil {
 		return nil, err
 	}
@@ -719,16 +638,11 @@ func ExecReplayedCommitBlock(
 		}
 
 		blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
-		fireEvents(
-			be.logger,
-			be.eventBus,
-			block,
-			blockID,
-			ucState.TxResults,
-			respFinalizeBlock,
-			&ucState.response,
-			vsetUpdate,
-		)
+		es := NewFullEventSet(block, blockID, ucState, respFinalizeBlock, vsetUpdate)
+		err = es.Publish(be.eventPublisher)
+		if err != nil {
+			be.logger.Error("failed publishing event", "err", err)
+		}
 	}
 
 	return respFinalizeBlock, nil
@@ -738,11 +652,9 @@ func execBlockWithoutState(
 	appConn abciclient.Client,
 	block *types.Block,
 	logger log.Logger,
-	store Store,
 	initialHeight int64,
-	s State,
 ) (*abci.ResponseFinalizeBlock, error) {
-	respFinalizeBlock, err := execBlock(ctx, appConn, block, logger, store, initialHeight, s)
+	respFinalizeBlock, err := execBlock(ctx, appConn, block, logger, initialHeight)
 	if err != nil {
 		logger.Error("executing block", "err", err)
 		return respFinalizeBlock, err
