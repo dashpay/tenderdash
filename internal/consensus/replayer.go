@@ -356,6 +356,7 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	if err != nil {
 		return err
 	}
+	state.LastCoreChainLockedBlockHeight = res.InitialCoreHeight
 	// We update the last results hash with the empty hash, to conform with RFC-6962.
 	state.LastResultsHash = merkle.HashFromByteSlices(nil)
 	return r.stateStore.Save(*state)
