@@ -42,6 +42,7 @@ func TestClientIntegration_Update(t *testing.T) {
 
 	// Start a test application
 	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
 
 	filePV, err := privval.LoadOrGenFilePV(conf.PrivValidator.KeyFile(), conf.PrivValidator.StateFile())
 	require.NoError(t, err)
@@ -107,6 +108,7 @@ func TestClientIntegration_VerifyLightBlockAtHeight(t *testing.T) {
 
 	// Start a test application
 	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
 
 	filePV, err := privval.LoadOrGenFilePV(conf.PrivValidator.KeyFile(), conf.PrivValidator.StateFile())
 	require.NoError(t, err)
@@ -185,6 +187,7 @@ func TestClientStatusRPC(t *testing.T) {
 
 	// Start a test application
 	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
 
 	_, closer, err := rpctest.StartTendermint(ctx, conf, app, rpctest.SuppressStdout)
 	require.NoError(t, err)

@@ -47,6 +47,8 @@ func TestProvider(t *testing.T) {
 
 	// start a tendermint node in the background to test against
 	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+
 	app.RetainBlocks = 9
 	_, closer, err := rpctest.StartTendermint(ctx, cfg, app)
 	require.NoError(t, err)
