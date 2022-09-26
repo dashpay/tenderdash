@@ -341,7 +341,7 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 
 	if len(res.ValidatorSetUpdate.ValidatorUpdates) != 0 {
 		// we replace existing validator with the one from InitChain instead of applying it as a diff
-		state.Validators = types.NewEmptyValidatorSet()
+		state.Validators = types.NewValidatorSet(nil, nil, state.Validators.QuorumType, nil, false)
 	}
 
 	// we only update state when we are in initial state
