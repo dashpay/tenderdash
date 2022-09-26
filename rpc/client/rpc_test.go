@@ -554,10 +554,11 @@ func TestClientMethodCalls(t *testing.T) {
 					defer cancel()
 
 					chainID := conf.ChainID()
+					evidenceHeight := int64(1)
 
 					// make sure that the node has produced enough blocks
-					waitForBlock(ctx, t, c, 2)
-					evidenceHeight := int64(1)
+					waitForBlock(ctx, t, c, evidenceHeight)
+
 					block, _ := c.Block(ctx, &evidenceHeight)
 					ts := block.Block.Time
 					correct, fakes := makeEvidences(t, pv, chainID, btcjson.LLMQType_5_60, quorumHash, ts)
