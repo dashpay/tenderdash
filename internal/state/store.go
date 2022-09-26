@@ -165,17 +165,16 @@ func (store dbStore) save(state State, key []byte) error {
 	// We assume that the state was already updated, so state.LastBlockHeight represents height of already generated
 	// block.
 	nextBlockHeight := state.LastBlockHeight + 1
+	lastHeightValidatorsChanged := state.LastHeightValidatorsChanged
 	// If first block, save validators for the block.
 	if nextBlockHeight == 1 {
-		nextBlockHeight = state.InitialHeight
 		// This extra logic due to Tendermint validator set changes being delayed 1 block.
 		// It may get overwritten due to InitChain validator updates.
-		if err := store.saveValidatorsInfo(nextBlockHeight, nextBlockHeight, state.Validators, batch); err != nil {
-			return err
-		}
+		nextBlockHeight = state.InitialHeight
+		lastHeightValidatorsChanged = nextBlockHeight
 	}
 	// Save next validators.
-	err := store.saveValidatorsInfo(nextBlockHeight, state.LastHeightValidatorsChanged, state.Validators, batch)
+	err := store.saveValidatorsInfo(nextBlockHeight, lastHeightValidatorsChanged, state.Validators, batch)
 	if err != nil {
 		return err
 	}
