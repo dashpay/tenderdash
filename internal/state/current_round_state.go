@@ -257,8 +257,12 @@ func (candidate *CurrentRoundState) populateValsetUpdates(ctx context.Context, u
 	candidate.NextValidators = newValSet
 
 	if update != nil && len(update.ValidatorUpdates) > 0 {
-		// Change results from this height but only applies to the next height.
-		candidate.LastHeightValidatorsChanged = candidate.GetHeight() + 1
+		// Change results from this height but only applies to the next height (except for genesis)
+		if candidate.GetHeight() == candidate.Base.InitialHeight {
+			candidate.LastHeightValidatorsChanged = candidate.Base.InitialHeight
+		} else {
+			candidate.LastHeightValidatorsChanged = candidate.GetHeight() + 1
+		}
 	} else {
 		candidate.LastHeightValidatorsChanged = base.LastHeightValidatorsChanged
 	}
