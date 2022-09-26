@@ -187,10 +187,6 @@ func (candidate CurrentRoundState) GetHeight() int64 {
 	return candidate.Base.LastBlockHeight + 1
 }
 
-func (candidate CurrentRoundState) GetProcessProposalResponse() abci.ResponseProcessProposal {
-	return candidate.response
-}
-
 func (candidate *CurrentRoundState) populateTxResults(txResults []*abci.ExecTxResult) error {
 	hash, err := abci.TxResultsHash(txResults)
 	if err != nil {
