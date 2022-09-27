@@ -860,6 +860,7 @@ type consensusNetGen struct {
 	tickerFun        func() TimeoutTicker
 	appFunc          func(log.Logger, string) abci.Application
 	validatorUpdates []validatorUpdate
+	consensusParams  *types.ConsensusParams
 }
 
 type validatorUpdate struct {
@@ -926,14 +927,17 @@ func (g *consensusNetGen) execValidatorSetUpdater(ctx context.Context, t *testin
 // nPeers = nValidators + nNotValidator
 func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State, *types.GenesisDoc, *config.Config, map[int64]abci.ValidatorSetUpdate) {
 	t.Helper()
-	consParams := factory.ConsensusParams()
-	consParams.Timeout.Propose = 1 * time.Second
+	if g.consensusParams == nil {
+		g.consensusParams = factory.ConsensusParams()
+		g.consensusParams.Timeout.Propose = 1 * time.Second
+	}
+
 	if g.nPeers == 0 {
 		g.nPeers = g.nVals
 	}
 	css := make([]*State, g.nPeers)
 	apps := make([]abci.Application, g.nPeers)
-	genDoc, privVals := factory.RandGenesisDoc(g.cfg, g.nVals, 1, consParams)
+	genDoc, privVals := factory.RandGenesisDoc(g.cfg, g.nVals, 1, g.consensusParams)
 	logger := consensusLogger(t)
 	var peer0Config *config.Config
 	tickerFunc := g.tickerFun

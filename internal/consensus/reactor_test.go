@@ -555,6 +555,11 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		nVals:            nVals,
 		appFunc:          newKVStoreFunc(t),
 		validatorUpdates: updates,
+		consensusParams: factory.ConsensusParams(func(cp *types.ConsensusParams) {
+			cp.Timeout.Propose = 2 * time.Second
+			cp.Timeout.Commit = 1 * time.Second
+			cp.Timeout.Vote = 1 * time.Second
+		}),
 	}
 	states, _, _, validatorSetUpdates := gen.generate(ctx, t)
 
