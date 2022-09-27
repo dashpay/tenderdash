@@ -688,6 +688,9 @@ func (pv *FilePV) signVote(
 		if stateID.Height != height {
 			return fmt.Errorf("invalid height in StateID: is %d, should be %d", stateID.Height, height)
 		}
+		if !stateID.AppHash.Equal(vote.AppHash) {
+			return fmt.Errorf("invalid AppHash in StateID: is %x, vote contains %x", stateID.AppHash, vote.AppHash)
+		}
 	}
 
 	quorumSigns, err := types.MakeQuorumSigns(chainID, quorumType, quorumHash, vote, stateID)
