@@ -456,13 +456,10 @@ func TestReactor_LightBlockResponse(t *testing.T) {
 	h := factory.MakeHeader(t, &types.Header{})
 	h.Height = height
 	blockID := factory.MakeBlockIDWithHash(h.Hash())
-	stateID := types.StateID{
-		Height:  height,
-		AppHash: h.AppHash,
-	}
+
 	vals, pv := types.RandValidatorSet(1)
 	vote, err := factory.MakeVote(ctx, pv[0], vals, h.ChainID, 0, h.Height, 0, 2,
-		blockID, stateID)
+		blockID, h.AppHash)
 	require.NoError(t, err)
 
 	sh := &types.SignedHeader{
@@ -470,7 +467,7 @@ func TestReactor_LightBlockResponse(t *testing.T) {
 		Commit: &types.Commit{
 			Height:                  h.Height,
 			BlockID:                 blockID,
-			StateID:                 stateID,
+			StateID:                 vote.StateID(),
 			QuorumHash:              crypto.RandQuorumHash(),
 			ThresholdBlockSignature: vote.BlockSignature,
 			ThresholdStateSignature: vote.StateSignature,

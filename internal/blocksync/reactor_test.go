@@ -230,7 +230,7 @@ func makeNextBlock(ctx context.Context,
 		0,
 		2,
 		blockID,
-		stateID,
+		block.AppHash,
 	)
 	require.NoError(t, err)
 	seenCommit := types.NewCommit(

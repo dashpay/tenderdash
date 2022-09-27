@@ -3,6 +3,7 @@ package factory
 import (
 	"context"
 
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
@@ -17,7 +18,7 @@ func MakeVote(
 	round int32,
 	step int,
 	blockID types.BlockID,
-	stateID types.StateID,
+	appHash tmbytes.HexBytes,
 ) (*types.Vote, error) {
 	proTxHash, err := val.GetProTxHash(ctx)
 	if err != nil {
@@ -31,11 +32,12 @@ func MakeVote(
 		Round:              round,
 		Type:               tmproto.SignedMsgType(step),
 		BlockID:            blockID,
+		AppHash:            appHash,
 	}
 
 	vpb := v.ToProto()
 
-	if err := val.SignVote(ctx, chainID, valSet.QuorumType, valSet.QuorumHash, vpb, stateID, nil); err != nil {
+	if err := val.SignVote(ctx, chainID, valSet.QuorumType, valSet.QuorumHash, vpb, v.StateID(), nil); err != nil {
 		return nil, err
 	}
 

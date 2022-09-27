@@ -240,7 +240,7 @@ func TestValidateBlockCommit(t *testing.T) {
 				0,
 				2,
 				state.LastBlockID,
-				stateID,
+				changes.AppHash,
 			)
 			require.NoError(t, err)
 			thresholdSigns, err := types.NewSignsRecoverer([]*types.Vote{wrongHeightVote}).Recover()
@@ -309,7 +309,7 @@ func TestValidateBlockCommit(t *testing.T) {
 			0,
 			2,
 			blockID,
-			stateID,
+			state.AppHash,
 		)
 		require.NoError(t, err, "height %d", height)
 

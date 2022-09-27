@@ -683,7 +683,7 @@ func (pv *FilePV) signVote(
 		return err
 	}
 
-	if vote.BlockID.Hash != nil {
+	if len(vote.BlockID.Hash) != 0 {
 		// StateID should refer to previous height in order to be valid
 		if stateID.Height != height {
 			return fmt.Errorf("invalid height in StateID: is %d, should be %d", stateID.Height, height)

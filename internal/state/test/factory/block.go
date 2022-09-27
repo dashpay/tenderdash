@@ -95,7 +95,7 @@ func makeBlockAndPartSet(
 			lastBlock.Header.ChainID,
 			1, lastBlock.Header.Height, 0, 2,
 			lastBlockMeta.BlockID,
-			lastBlock.StateID(),
+			lastBlock.AppHash,
 		)
 		require.NoError(t, err)
 		thresholdSigns, err := types.NewSignsRecoverer([]*types.Vote{vote}).Recover()
