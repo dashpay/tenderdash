@@ -683,9 +683,11 @@ func (pv *FilePV) signVote(
 		return err
 	}
 
-	// StateID should refer to previous height in order to be valid
-	if stateID.Height != height {
-		return fmt.Errorf("invalid height in StateID: is %d, should be %d", stateID.Height, height)
+	if vote.BlockID.Hash != nil {
+		// StateID should refer to previous height in order to be valid
+		if stateID.Height != height {
+			return fmt.Errorf("invalid height in StateID: is %d, should be %d", stateID.Height, height)
+		}
 	}
 
 	quorumSigns, err := types.MakeQuorumSigns(chainID, quorumType, quorumHash, vote, stateID)
