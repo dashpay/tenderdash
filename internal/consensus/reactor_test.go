@@ -189,6 +189,8 @@ func waitForAndValidateBlock(
 			return
 		case errors.Is(err, context.Canceled):
 			return
+		case errors.Is(err, tmpubsub.ErrTerminated):
+			return
 		case err != nil:
 			cancel() // terminate other workers
 			require.NoError(t, err)
@@ -633,6 +635,8 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		}
 		vh = h
 	}
+	cancel()
+	time.Sleep(100 * time.Microsecond)
 }
 
 func makeProTxHashMap(proTxHashes []crypto.ProTxHash) map[string]struct{} {
