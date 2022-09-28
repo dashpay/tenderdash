@@ -167,7 +167,7 @@ func WithPrepareTxsFunc(prepareTxs PrepareTxsFunc) OptFunc {
 // implementation.
 // It is possible to alter initial application configs with option functions.
 func NewMemoryApp(opts ...OptFunc) (*Application, error) {
-	return newApplication(NewMemStateStore(dbm.NewMemDB()), opts...)
+	return newApplication(NewMemStateStore(), opts...)
 }
 
 func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, error) {

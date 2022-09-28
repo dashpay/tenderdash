@@ -144,7 +144,7 @@ func TestWALCrash(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			consensusReplayConfig, err := ResetConfig(t, t.TempDir(), tc.name)
+			consensusReplayConfig, err := ResetConfig(t, tc.name)
 			require.NoError(t, err)
 			crashWALandCheckLiveness(ctx, t, consensusReplayConfig, tc.initFn, tc.heightToStop)
 		})
@@ -668,7 +668,7 @@ func testHandshakeReplay(
 
 	privVal = privval.MustLoadOrGenFilePVFromConfig(cfg)
 
-	_, err := ResetConfig(t, t.TempDir(), fmt.Sprintf("%s_s", testName))
+	_, err := ResetConfig(t, fmt.Sprintf("%s_s", testName))
 	require.NoError(t, err)
 
 	genesisState = sim.GenesisState
@@ -957,7 +957,7 @@ func TestHandshakeErrorsIfAppReturnsWrongAppHash(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := ResetConfig(t, t.TempDir(), "handshake_test_")
+	cfg, err := ResetConfig(t, "handshake_test_")
 	require.NoError(t, err)
 
 	privVal, err := privval.LoadFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
@@ -1250,7 +1250,7 @@ func TestHandshakeUpdatesValidators(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := ResetConfig(t, t.TempDir(), "handshake_test_")
+	cfg, err := ResetConfig(t, "handshake_test_")
 	require.NoError(t, err)
 
 	privVal, err := privval.LoadFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
@@ -1309,7 +1309,7 @@ func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 
 	const InitialCoreHeight uint32 = 12345
 	logger := log.NewNopLogger()
-	conf, err := ResetConfig(t, t.TempDir(), "handshake_test_initial_core_lock_height")
+	conf, err := ResetConfig(t, "handshake_test_initial_core_lock_height")
 	require.NoError(t, err)
 
 	privVal, err := privval.LoadFilePV(conf.PrivValidator.KeyFile(), conf.PrivValidator.StateFile())

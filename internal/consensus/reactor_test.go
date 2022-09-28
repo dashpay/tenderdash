@@ -336,7 +336,7 @@ func TestReactorWithEvidence(t *testing.T) {
 		state, err := sm.MakeGenesisState(genDoc)
 		require.NoError(t, err)
 		require.NoError(t, stateStore.Save(state))
-		thisConfig, err := ResetConfig(t, t.TempDir(), fmt.Sprintf("%s_%d", testName, i))
+		thisConfig, err := ResetConfig(t, fmt.Sprintf("%s_%d", testName, i))
 		require.NoError(t, err)
 
 		app, err := kvstore.NewMemoryApp()
