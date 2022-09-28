@@ -1,4 +1,4 @@
-//nolint: lll
+// nolint: lll
 package types
 
 import (
@@ -38,14 +38,14 @@ func TestValidatorSetBasic(t *testing.T) {
 	idx, val := vset.GetByProTxHash([]byte("some val"))
 	assert.EqualValues(t, -1, idx)
 	assert.Nil(t, val)
-	proTxHash, val := vset.GetByIndex(-100)
-	assert.Nil(t, proTxHash)
+	val = vset.GetByIndex(-100)
+	assert.Nil(t, val.ProTxHash)
 	assert.Nil(t, val)
-	proTxHash, val = vset.GetByIndex(0)
-	assert.Nil(t, proTxHash)
+	val = vset.GetByIndex(0)
+	assert.Nil(t, val.ProTxHash)
 	assert.Nil(t, val)
-	proTxHash, val = vset.GetByIndex(100)
-	assert.Nil(t, proTxHash)
+	val = vset.GetByIndex(100)
+	assert.Nil(t, val.ProTxHash)
 	assert.Nil(t, val)
 	assert.Zero(t, vset.Size())
 	assert.Equal(t, int64(0), vset.TotalVotingPower())
@@ -58,8 +58,8 @@ func TestValidatorSetBasic(t *testing.T) {
 	assert.True(t, vset.HasProTxHash(val.ProTxHash))
 	idx, _ = vset.GetByProTxHash(val.ProTxHash)
 	assert.EqualValues(t, 0, idx)
-	proTxHash, _ = vset.GetByIndex(0)
-	assert.Equal(t, val.ProTxHash, proTxHash)
+	val0 := vset.GetByIndex(0)
+	assert.Equal(t, val.ProTxHash, val0.ProTxHash)
 	assert.Equal(t, 1, vset.Size())
 	assert.Equal(t, val.VotingPower, vset.TotalVotingPower())
 	assert.NotNil(t, vset.Hash())
@@ -1327,7 +1327,7 @@ func TestValidatorSetProtoBuf(t *testing.T) {
 	}
 }
 
-//---------------------
+// ---------------------
 // Sort validators by priority and address
 type validatorsByPriority []*Validator
 
@@ -1358,7 +1358,8 @@ func (tvals testValsByVotingPower) Len() int {
 }
 
 // Here we need to sort by the pro_tx_hash and not the name if the power is equal, in the test the pro_tx_hash is derived
-//  from the name by applying a single SHA256
+//
+//	from the name by applying a single SHA256
 func (tvals testValsByVotingPower) Less(i, j int) bool {
 	if tvals[i].power == tvals[j].power {
 		return bytes.Compare(crypto.Checksum([]byte(tvals[i].name)), crypto.Checksum([]byte(tvals[j].name))) == -1
@@ -1370,9 +1371,8 @@ func (tvals testValsByVotingPower) Swap(i, j int) {
 	tvals[i], tvals[j] = tvals[j], tvals[i]
 }
 
-//-------------------------------------
+// -------------------------------------
 // Benchmark tests
-//
 func BenchmarkUpdates(b *testing.B) {
 	const (
 		n = 100

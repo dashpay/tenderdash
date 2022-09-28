@@ -1264,7 +1264,9 @@ func (cs *State) handleTxsAvailable(ctx context.Context) {
 // Used internally by handleTimeout and handleMsg to make state transitions
 
 // Enter: `timeoutNewHeight` by startTime (commitTime+timeoutCommit),
+//
 //	or, if SkipTimeoutCommit==true, after receiving all precommits from (height,round-1)
+//
 // Enter: `timeoutPrecommits` after any +2/3 precommits from (height,round-1)
 // Enter: +2/3 precommits for nil at (height,round-1)
 // Enter: +2/3 prevotes any or +2/3 precommits for block or any from (height, round)
@@ -1348,7 +1350,7 @@ func (cs *State) enterNewRound(ctx context.Context, height int64, round int32) {
 
 // Enter (CreateEmptyBlocks): from enterNewRound(height,round)
 // Enter (CreateEmptyBlocks, CreateEmptyBlocksInterval > 0 ):
-//		after enterNewRound(height,round), after timeout of CreateEmptyBlocksInterval
+// after enterNewRound(height,round), after timeout of CreateEmptyBlocksInterval
 // Enter (!CreateEmptyBlocks) : after enterNewRound(height,round), once txs are in the mempool
 // Caller should hold cs.mtx lock
 func (cs *State) enterPropose(ctx context.Context, height int64, round int32) {
@@ -2858,7 +2860,7 @@ func (cs *State) addVote(
 		// consensus reactor when the vote was received.
 		// Here, we verify the signature of the vote extension included in the vote
 		// message.
-		_, val := cs.state.Validators.GetByIndex(vote.ValidatorIndex)
+		val := cs.state.Validators.GetByIndex(vote.ValidatorIndex)
 		qt, qh := cs.state.Validators.QuorumType, cs.state.Validators.QuorumHash
 		if err := vote.VerifyExtensionSign(cs.state.ChainID, val.PubKey, qt, qh); err != nil {
 			return false, err
@@ -2902,7 +2904,7 @@ func (cs *State) addVote(
 	}
 	if vote.Round == cs.Round {
 		vals := cs.state.Validators
-		_, val := vals.GetByIndex(vote.ValidatorIndex)
+		val := vals.GetByIndex(vote.ValidatorIndex)
 		cs.metrics.MarkVoteReceived(vote.Type, val.VotingPower, vals.TotalVotingPower())
 	}
 

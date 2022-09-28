@@ -73,7 +73,7 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 	for i := first; i < last && i < len(pkz); i++ {
 		// Verify that the private key matches the validator proTxHash
 		privateKey := pkz[i]
-		proTxHash, val := valSet.GetByIndex(int32(i))
+		val := valSet.GetByIndex(int32(i))
 		if val == nil {
 			panic("no val")
 		}
@@ -83,7 +83,7 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 		if !privateKey.PubKey().Equals(val.PubKey) {
 			panic("light client keys do not match")
 		}
-		votes[i] = makeVote(t, header, valSet, proTxHash, pkz[i], blockID, stateID)
+		votes[i] = makeVote(t, header, valSet, val.ProTxHash, pkz[i], blockID, stateID)
 	}
 	thresholdSigns, err := types.NewSignsRecoverer(votes).Recover()
 	require.NoError(t, err)

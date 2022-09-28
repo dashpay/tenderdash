@@ -1,4 +1,4 @@
-//nolint: lll
+// nolint: lll
 package state_test
 
 import (
@@ -96,7 +96,7 @@ func makeValidCommit(
 	t.Helper()
 	votes := make([]*types.Vote, vals.Size())
 	for i := 0; i < vals.Size(); i++ {
-		_, val := vals.GetByIndex(int32(i))
+		val := vals.GetByIndex(int32(i))
 		vote, err := factory.MakeVote(ctx, privVals[val.ProTxHash.String()], vals, chainID, int32(i), height, 0, 2, blockID, stateID.AppHash)
 		require.NoError(t, err)
 		votes[i] = vote
