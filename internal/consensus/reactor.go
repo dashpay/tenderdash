@@ -896,7 +896,8 @@ func (r *Reactor) queryMaj23Routine(ctx context.Context, stateCh p2p.Channel, ps
 			wg.Add(1)
 			go func(rs *cstypes.RoundState, prs *cstypes.PeerRoundState) {
 				defer wg.Done()
-
+				r.mtx.Lock()
+				defer r.mtx.Unlock()
 				// maybe send Height/Round/Prevotes
 				if maj23, ok := rs.Votes.Prevotes(prs.Round).TwoThirdsMajority(); ok {
 					err := r.send(ctx, ps, stateCh, &tmcons.VoteSetMaj23{
