@@ -306,6 +306,9 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 }
 
 func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+
 	roundState, txResults, err := app.executeProposal(req.Height, types.NewTxs(req.Txs))
 	if err != nil {
 		return &abci.ResponseProcessProposal{
