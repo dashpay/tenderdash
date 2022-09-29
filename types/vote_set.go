@@ -65,12 +65,18 @@ type VoteSet struct {
 	sum           int64                  // Sum of voting power for seen votes, discounting conflicts
 	maj23         *BlockID               // First 2/3 majority seen
 	votesByBlock  map[string]*blockVotes // string(blockHash|blockParts) -> blockVotes
-	peerMaj23s    map[string]BlockID     // Maj23 for each peer
+	peerMaj23s    map[string]maj23Info   // Maj23 for each peer
 
 	// dash fields
 	thresholdBlockSig    []byte                   // If a 2/3 majority is seen, recover the block sig
 	thresholdStateSig    []byte                   // If a 2/3 majority is seen, recover the state sig
 	thresholdVoteExtSigs []ThresholdExtensionSign // If a 2/3 majority is seen, recover the vote extension sigs
+}
+
+type maj23Info struct {
+	BlockID
+	Height int64
+	Round  int32
 }
 
 // NewVoteSet instantiates all fields of a new vote set. This constructor requires
@@ -95,7 +101,7 @@ func NewVoteSet(chainID string, height int64, round int32,
 		sum:           0,
 		maj23:         nil,
 		votesByBlock:  make(map[string]*blockVotes, valSet.Size()),
-		peerMaj23s:    make(map[string]BlockID),
+		peerMaj23s:    make(map[string]maj23Info),
 	}
 }
 
@@ -381,12 +387,16 @@ func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) error {
 // this can cause memory issues.
 // TODO: implement ability to remove peers too
 // NOTE: VoteSet must not be nil
-func (voteSet *VoteSet) SetPeerMaj23(peerID string, blockID BlockID) error {
+func (voteSet *VoteSet) SetPeerMaj23(peerID string, blockID BlockID, height int64, round int32) error {
 	if voteSet == nil {
 		panic("SetPeerMaj23() on nil VoteSet")
 	}
 	voteSet.mtx.Lock()
 	defer voteSet.mtx.Unlock()
+
+	if voteSet.height != height {
+		return fmt.Errorf("voteSet height mismatch: %d != %d", voteSet.height, height)
+	}
 
 	blockKey := blockID.Key()
 
@@ -395,10 +405,10 @@ func (voteSet *VoteSet) SetPeerMaj23(peerID string, blockID BlockID) error {
 		if existing.Equals(blockID) {
 			return nil // Nothing to do
 		}
-		return fmt.Errorf("setPeerMaj23: Received conflicting blockID from peer %v. Got %v, expected %v",
-			peerID, blockID, existing)
+		return fmt.Errorf("setPeerMaj23: Received conflicting blockID from peer %v. Got %s (h:%d r:%d), expected %s (h:%d r:%d)",
+			peerID, blockID, height, round, existing.BlockID, existing.Height, existing.Round)
 	}
-	voteSet.peerMaj23s[peerID] = blockID
+	voteSet.peerMaj23s[peerID] = maj23Info{blockID, height, round}
 
 	// Create .votesByBlock entry if needed.
 	votesByBlock, ok := voteSet.votesByBlock[blockKey]
@@ -604,9 +614,9 @@ func (voteSet *VoteSet) MarshalJSON() ([]byte, error) {
 // NOTE: insufficient for unmarshaling from (compressed votes)
 // TODO: make the peerMaj23s nicer to read (eg just the block hash)
 type VoteSetJSON struct {
-	Votes         []string           `json:"votes"`
-	VotesBitArray string             `json:"votes_bit_array"`
-	PeerMaj23s    map[string]BlockID `json:"peer_maj_23s"`
+	Votes         []string             `json:"votes"`
+	VotesBitArray string               `json:"votes_bit_array"`
+	PeerMaj23s    map[string]maj23Info `json:"peer_maj_23s"`
 }
 
 // Return the bit-array of votes including

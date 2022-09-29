@@ -1139,17 +1139,25 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 			return err
 		}
 	case *tmcons.VoteSetMaj23:
-		height := r.state.CurrentHeight()
-		votes := r.state.HeightVoteSet()
+		r.mtx.RLock()
+		state := r.state
+		r.mtx.RUnlock()
+
+		votes := state.HeightVoteSet()
+		height := votes.Height()
 
 		if height != msg.Height {
+			r.logger.Debug("vote set height does not match msg height", "height", height, "msg", msg)
 			return nil
 		}
-
+		if state.CurrentHeight() != height {
+			r.logger.Debug("state height does not match msg height", "height", height, "cs_height", r.state.CurrentHeight())
+			return nil
+		}
 		vsmMsg := msgI.(*VoteSetMaj23Message)
 
 		// peer claims to have a maj23 for some BlockID at <H,R,S>
-		err := votes.SetPeerMaj23(msg.Round, msg.Type, ps.peerID, vsmMsg.BlockID)
+		err := votes.SetPeerMaj23(msg.Height, msg.Round, msg.Type, ps.peerID, vsmMsg.BlockID)
 		if err != nil {
 			return err
 		}
