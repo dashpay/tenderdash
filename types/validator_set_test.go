@@ -39,7 +39,6 @@ func TestValidatorSetBasic(t *testing.T) {
 	assert.EqualValues(t, -1, idx)
 	assert.Nil(t, val)
 	val = vset.GetByIndex(-100)
-	assert.Nil(t, val.ProTxHash)
 	assert.Nil(t, val)
 	val = vset.GetByIndex(0)
 	assert.Nil(t, val.ProTxHash)
