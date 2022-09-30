@@ -289,7 +289,9 @@ func (n *Network) MakeNode(ctx context.Context, t *testing.T, proTxHash crypto.P
 		func() *types.NodeInfo { return &nodeInfo },
 		transport,
 		ep,
-		p2p.RouterOptions{},
+		p2p.RouterOptions{
+			NumConcurrentDials: func() int { return 4 },
+		},
 	)
 
 	require.NoError(t, err)

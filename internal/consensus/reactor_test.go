@@ -185,14 +185,14 @@ func waitForAndValidateBlock(
 	fn := func(j int) {
 		msg, err := blocksSubs[j].Next(ctx)
 		switch {
-		case errors.Is(err, context.DeadlineExceeded):
-			return
-		case errors.Is(err, context.Canceled):
-			return
-		case errors.Is(err, tmpubsub.ErrTerminated):
+		case errors.Is(err, context.DeadlineExceeded),
+			errors.Is(err, context.Canceled),
+			errors.Is(err, tmpubsub.ErrTerminated):
+			t.Logf("waitForAndValidateBlock deadline for node %d: %s", j, err)
 			return
 		case err != nil:
 			cancel() // terminate other workers
+			t.Logf("waitForAndValidateBlock error for node %d: %s", j, err)
 			require.NoError(t, err)
 			return
 		}
@@ -795,7 +795,8 @@ func validate(t *testing.T, states []*State) {
 	currValidatorCount := currValidators.Size()
 	for validatorID, state := range states {
 		height, validators := state.GetValidatorSet()
-		assert.Equal(t, currHeight, height, "validator_id=%d", validatorID)
+		assert.Equal(t, currHeight, height,
+			"height mistmatch, validator_id=%d, time=%s", validatorID, time.Now().Format(time.RFC3339Nano))
 		assert.Equal(t, currValidatorCount, len(validators.Validators), "validator_id=%d", validatorID)
 		assert.True(t, currValidators.Equals(validators), "validator_id=%d", validatorID)
 	}

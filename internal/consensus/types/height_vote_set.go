@@ -191,6 +191,7 @@ func (hvs *HeightVoteSet) getVoteSet(round int32, voteType tmproto.SignedMsgType
 // this can cause memory issues.
 // TODO: implement ability to remove peers too
 func (hvs *HeightVoteSet) SetPeerMaj23(
+	height int64,
 	round int32,
 	voteType tmproto.SignedMsgType,
 	peerID types.NodeID,
@@ -204,7 +205,8 @@ func (hvs *HeightVoteSet) SetPeerMaj23(
 	if voteSet == nil {
 		return nil // something we don't know about yet
 	}
-	return voteSet.SetPeerMaj23(string(peerID), blockID)
+
+	return voteSet.SetPeerMaj23(string(peerID), blockID, height, round)
 }
 
 //---------------------------------------------------------

@@ -897,7 +897,8 @@ func (r *Reactor) queryMaj23Routine(ctx context.Context, stateCh p2p.Channel, ps
 			wg.Add(1)
 			go func(rs *cstypes.RoundState, prs *cstypes.PeerRoundState) {
 				defer wg.Done()
-
+				r.mtx.Lock()
+				defer r.mtx.Unlock()
 				// maybe send Height/Round/Prevotes
 				if maj23, ok := rs.Votes.Prevotes(prs.Round).TwoThirdsMajority(); ok {
 					err := r.send(ctx, ps, stateCh, &tmcons.VoteSetMaj23{
@@ -1142,13 +1143,13 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 		height, votes := r.state.HeightVoteSet()
 
 		if height != msg.Height {
+			r.logger.Debug("vote set height does not match msg height", "height", height, "msg", msg)
 			return nil
 		}
-
 		vsmMsg := msgI.(*VoteSetMaj23Message)
 
 		// peer claims to have a maj23 for some BlockID at <H,R,S>
-		err := votes.SetPeerMaj23(msg.Round, msg.Type, ps.peerID, vsmMsg.BlockID)
+		err := votes.SetPeerMaj23(msg.Height, msg.Round, msg.Type, ps.peerID, vsmMsg.BlockID)
 		if err != nil {
 			return err
 		}
