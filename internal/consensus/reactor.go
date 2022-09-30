@@ -396,8 +396,9 @@ func (r *Reactor) updateRoundStateRoutine(ctx context.Context) {
 
 func (r *Reactor) getRoundState() *cstypes.RoundState {
 	r.mtx.RLock()
-	defer r.mtx.RUnlock()
-	return r.rs
+	rs := *r.rs
+	r.mtx.RUnlock()
+	return &rs
 }
 
 func (r *Reactor) gossipDataForCatchup(ctx context.Context, rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState, chans channelBundle) {
@@ -1138,8 +1139,7 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 			return err
 		}
 	case *tmcons.VoteSetMaj23:
-		height := r.state.CurrentHeight()
-		votes := r.state.HeightVoteSet()
+		height, votes := r.state.HeightVoteSet()
 
 		if height != msg.Height {
 			return nil

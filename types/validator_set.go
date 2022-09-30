@@ -469,40 +469,6 @@ func (vals *ValidatorSet) Size() int {
 	return len(vals.Validators)
 }
 
-func (vals *ValidatorSet) RegenerateWithNewKeys() (*ValidatorSet, []PrivValidator) {
-	var (
-		numValidators  = len(vals.Validators)
-		valz           = make([]*Validator, 0, numValidators)
-		privValidators = make([]PrivValidator, 0, numValidators)
-	)
-	ld := llmq.MustGenerate(vals.GetProTxHashes())
-	quorumHash := crypto.RandQuorumHash()
-	iter := ld.Iter()
-	for iter.Next() {
-		proTxHash, qks := iter.Value()
-		privValidators = append(privValidators, NewMockPVWithParams(
-			qks.PrivKey,
-			proTxHash,
-			quorumHash,
-			ld.ThresholdPubKey,
-			false,
-			false,
-		))
-		valz = append(valz, NewValidatorDefaultVotingPower(qks.PubKey, proTxHash))
-	}
-
-	// Just to make sure
-	sort.Sort(PrivValidatorsByProTxHash(privValidators))
-
-	return NewValidatorSet(
-		valz,
-		ld.ThresholdPubKey,
-		vals.QuorumType,
-		crypto.RandQuorumHash(),
-		vals.HasPublicKeys,
-	), privValidators
-}
-
 // Forces recalculation of the set's total voting power.
 // Panics if total voting power is bigger than MaxTotalVotingPower.
 func (vals *ValidatorSet) updateTotalVotingPower() {

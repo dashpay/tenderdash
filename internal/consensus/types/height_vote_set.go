@@ -108,17 +108,12 @@ func (hvs *HeightVoteSet) addRound(round int32) {
 	if _, ok := hvs.roundVoteSets[round]; ok {
 		panic("addRound() for an existing round")
 	}
-	// log.Debug("addRound(round)", "round", round)
+	rvs := RoundVoteSet{}
 	if hvs.valSet.HasPublicKeys {
-		prevotes := types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet)
-		precommits := types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrecommitType, hvs.valSet)
-		hvs.roundVoteSets[round] = RoundVoteSet{
-			Prevotes:   prevotes,
-			Precommits: precommits,
-		}
-	} else {
-		hvs.roundVoteSets[round] = RoundVoteSet{}
+		rvs.Prevotes = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet)
+		rvs.Precommits = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrecommitType, hvs.valSet)
 	}
+	hvs.roundVoteSets[round] = rvs
 }
 
 // AddVote adds a vote of a specific type to the round

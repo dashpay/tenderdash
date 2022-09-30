@@ -672,18 +672,11 @@ func (cs *State) InitialHeight() int64 {
 	return cs.state.InitialHeight
 }
 
-// CurrentHeight returns a current/last height
-func (cs *State) CurrentHeight() int64 {
+func (cs *State) HeightVoteSet() (int64, *cstypes.HeightVoteSet) {
 	cs.mtx.RLock()
-	defer cs.mtx.RUnlock()
-	return cs.Height
-}
-
-// HeightVoteSet returns a height-vote-set manager
-func (cs *State) HeightVoteSet() *cstypes.HeightVoteSet {
-	cs.mtx.RLock()
-	defer cs.mtx.RUnlock()
-	return cs.Votes
+	height, votes := cs.Height, cs.Votes
+	cs.mtx.RUnlock()
+	return height, votes
 }
 
 // PrivValidator returns safely a PrivValidator
