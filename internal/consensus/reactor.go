@@ -5,10 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"runtime/debug"
-	"sync"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	sync "github.com/sasha-s/go-deadlock"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"

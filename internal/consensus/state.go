@@ -9,10 +9,10 @@ import (
 	"io/ioutil"
 	"os"
 	"runtime/debug"
-	"sync"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
