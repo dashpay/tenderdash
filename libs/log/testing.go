@@ -2,6 +2,7 @@ package log
 
 import (
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -36,8 +37,13 @@ func NewTestingLoggerWithLevel(t testing.TB, level string) Logger {
 		t.Fatalf("failed to parse log level (%s): %v", level, err)
 	}
 
+	logger := zerolog.New(newSyncWriter(testingWriter{t})).Level(logLevel)
+	logger = logger.With().Timestamp().Logger()
+	zerolog.TimeFieldFormat = time.RFC3339Nano
+	zerolog.TimestampFieldName = "timestamp"
+
 	return defaultLogger{
-		Logger: zerolog.New(newSyncWriter(testingWriter{t})).Level(logLevel),
+		Logger: logger,
 	}
 }
 
