@@ -290,7 +290,7 @@ func (n *Network) MakeNode(ctx context.Context, t *testing.T, proTxHash crypto.P
 		transport,
 		ep,
 		p2p.RouterOptions{
-			NumConcurrentDials: func() int { return 4 },
+			NumConcurrentDials: func() int { return 16 },
 		},
 	)
 

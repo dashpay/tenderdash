@@ -173,6 +173,7 @@ func waitForAndValidateBlock(
 	t *testing.T,
 	n int,
 	blocksSubs []eventbus.Subscription,
+	expectHeight int64,
 
 ) []*types.Block {
 	t.Helper()
@@ -199,6 +200,9 @@ func waitForAndValidateBlock(
 		newBlock := msg.Data().(types.EventDataNewBlock).Block
 		require.NoError(t, newBlock.ValidateBasic())
 		blocks[j] = newBlock
+		if expectHeight > 0 && newBlock.Height != expectHeight {
+			t.Errorf("waitForAndValidateBlock wrong height for validator %d, expected: %d, got: %d", j, expectHeight, newBlock.Height)
+		}
 	}
 
 	var wg sync.WaitGroup
@@ -541,7 +545,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 
 	cfg := configSetup(t)
 
-	nPeers := 7
+	nPeers := 9
 	nVals := 4
 
 	updates := []validatorUpdate{
@@ -610,7 +614,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 	var height int64 = 2
 	blocksByHeights := make(map[int64][]*types.Block)
 	for ; height <= endHeight; height++ {
-		blocks := waitForAndValidateBlock(ctx, t, nPeers, blocksSubs)
+		blocks := waitForAndValidateBlock(ctx, t, nPeers, blocksSubs, height)
 		blocksByHeights[height] = blocks
 		validate(t, states)
 	}

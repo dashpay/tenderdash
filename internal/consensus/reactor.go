@@ -896,20 +896,23 @@ func (r *Reactor) queryMaj23Routine(ctx context.Context, stateCh p2p.Channel, ps
 			wg.Add(1)
 			go func(rs *cstypes.RoundState, prs *cstypes.PeerRoundState) {
 				defer wg.Done()
-				r.mtx.Lock()
-				defer r.mtx.Unlock()
+				r.mtx.RLock()
+				maj23, ok := rs.Votes.Prevotes(prs.Round).TwoThirdsMajority()
+				height := prs.Height
+				round := prs.Round
+				r.mtx.RUnlock()
 				// maybe send Height/Round/Prevotes
-				if maj23, ok := rs.Votes.Prevotes(prs.Round).TwoThirdsMajority(); ok {
+				if ok {
 					err := r.send(ctx, ps, stateCh, &tmcons.VoteSetMaj23{
-						Height:  prs.Height,
-						Round:   prs.Round,
+						Height:  height,
+						Round:   round,
 						Type:    tmproto.PrevoteType,
 						BlockID: maj23.ToProto(),
 					})
 					if err != nil {
 						cancel()
 					}
-					r.logResult(err, r.logger, "sending prevotes", "height", prs.Height, "round", prs.Round)
+					r.logResult(err, r.logger, "sending prevotes", "height", height, "round", round)
 				}
 			}(rs, prs)
 
