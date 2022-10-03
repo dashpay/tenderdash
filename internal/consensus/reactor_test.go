@@ -545,7 +545,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 
 	cfg := configSetup(t)
 
-	nPeers := 9
+	nPeers := 7
 	nVals := 4
 
 	updates := []validatorUpdate{
