@@ -674,9 +674,8 @@ func (cs *State) InitialHeight() int64 {
 
 func (cs *State) HeightVoteSet() (int64, *cstypes.HeightVoteSet) {
 	cs.mtx.RLock()
-	height, votes := cs.Height, cs.Votes
-	cs.mtx.RUnlock()
-	return height, votes
+	defer cs.mtx.RUnlock()
+	return cs.Height, cs.Votes
 }
 
 // PrivValidator returns safely a PrivValidator

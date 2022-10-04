@@ -396,9 +396,8 @@ func (r *Reactor) updateRoundStateRoutine(ctx context.Context) {
 
 func (r *Reactor) getRoundState() *cstypes.RoundState {
 	r.mtx.RLock()
-	rs := *r.rs
-	r.mtx.RUnlock()
-	return &rs
+	defer r.mtx.RUnlock()
+	return r.rs
 }
 
 func (r *Reactor) gossipDataForCatchup(ctx context.Context, rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState, chans channelBundle) {
