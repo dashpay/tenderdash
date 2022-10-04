@@ -251,7 +251,12 @@ func (candidate *CurrentRoundState) populateValsetUpdates(ctx context.Context, u
 	if err != nil {
 		return fmt.Errorf("validator set updates: %w", err)
 	}
-	newValSet.IncrementProposerPriority(1)
+
+	if updateSource != initChain {
+		// we take validator sets as they arrive from initChain response
+		newValSet.IncrementProposerPriority(1)
+	}
+
 	candidate.NextValidators = newValSet
 
 	if updateSource != initChain && update != nil && len(update.ValidatorUpdates) > 0 {
