@@ -26,12 +26,24 @@ import (
 func ClientFactory(logger log.Logger, addr, transport, dbDir string) (abciclient.Client, io.Closer, error) {
 	switch addr {
 	case "kvstore":
-		return abciclient.NewLocalClient(logger, kvstore.NewApplication()), noopCloser{}, nil
+		app, err := kvstore.NewMemoryApp(
+			kvstore.WithLogger(logger.With("module", "kvstore")),
+		)
+		if err != nil {
+			return nil, nil, err
+		}
+		return abciclient.NewLocalClient(logger, app), noopCloser{}, nil
 	case "persistent_kvstore":
-		app := kvstore.NewPersistentKVStoreApplication(logger, dbDir)
+		app, err := kvstore.NewPersistentApp(
+			kvstore.DefaultConfig(dbDir),
+			kvstore.WithLogger(logger.With("module", "kvstore")),
+		)
+		if err != nil {
+			return nil, nil, err
+		}
 		return abciclient.NewLocalClient(logger, app), app, nil
 	case "e2e":
-		app, err := e2e.NewApplication(e2e.DefaultConfig(dbDir))
+		app, err := e2e.NewApplication(kvstore.DefaultConfig(dbDir))
 		if err != nil {
 			return nil, noopCloser{}, err
 		}
@@ -152,11 +164,6 @@ func (app *proxyClient) VerifyVoteExtension(ctx context.Context, req *types.Requ
 func (app *proxyClient) FinalizeBlock(ctx context.Context, req *types.RequestFinalizeBlock) (*types.ResponseFinalizeBlock, error) {
 	defer addTimeSample(app.metrics.MethodTiming.With("method", "finalize_block", "type", "sync"))()
 	return app.client.FinalizeBlock(ctx, req)
-}
-
-func (app *proxyClient) Commit(ctx context.Context) (*types.ResponseCommit, error) {
-	defer addTimeSample(app.metrics.MethodTiming.With("method", "commit", "type", "sync"))()
-	return app.client.Commit(ctx)
 }
 
 func (app *proxyClient) Flush(ctx context.Context) error {

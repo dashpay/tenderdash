@@ -27,10 +27,9 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 	config := configSetup(t)
 
 	const n = 2
-	states, cleanup := makeConsensusState(ctx, t,
+	states := makeConsensusState(ctx, t,
 		config, n, "consensus_reactor_test",
 		newMockTickerFunc(true))
-	t.Cleanup(cleanup)
 
 	for i := 0; i < n; i++ {
 		ticker := NewTimeoutTicker(states[i].logger)

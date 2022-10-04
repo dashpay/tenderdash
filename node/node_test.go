@@ -305,7 +305,11 @@ func TestCreateProposalBlock(t *testing.T) {
 
 	logger := log.NewNopLogger()
 
-	cc := abciclient.NewLocalClient(logger, kvstore.NewApplication())
+	app, err := kvstore.NewMemoryApp(
+		kvstore.WithLogger(logger.With("module", "kvstore")),
+	)
+	require.NoError(t, err)
+	cc := abciclient.NewLocalClient(logger, app)
 	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
 	err = proxyApp.Start(ctx)
 	require.NoError(t, err)
@@ -415,7 +419,11 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 
 	logger := log.NewNopLogger()
 
-	cc := abciclient.NewLocalClient(logger, kvstore.NewApplication())
+	app, err := kvstore.NewMemoryApp(
+		kvstore.WithLogger(logger.With("module", "kvstore")),
+	)
+	require.NoError(t, err)
+	cc := abciclient.NewLocalClient(logger, app)
 	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
 	err = proxyApp.Start(ctx)
 	require.NoError(t, err)
@@ -490,7 +498,13 @@ func TestMaxProposalBlockSize(t *testing.T) {
 
 	logger := log.NewNopLogger()
 
-	cc := abciclient.NewLocalClient(logger, kvstore.NewApplication(kvstore.WithLogger(logger), kvstore.WithState(math.MaxInt64-1, nil)))
+	app, err := kvstore.NewMemoryApp(
+		kvstore.WithLogger(logger.With("module", "kvstore")),
+		kvstore.WithState(math.MaxInt64-1, nil),
+	)
+	require.NoError(t, err)
+
+	cc := abciclient.NewLocalClient(logger, app)
 	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
 	err = proxyApp.Start(ctx)
 	require.NoError(t, err)

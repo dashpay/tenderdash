@@ -16,6 +16,7 @@ import (
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/tendermint/tendermint/privval"
 
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -343,7 +344,7 @@ func TestClientMethodCalls(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, bres.TxResult.IsOK())
 				txh := bres.Height
-				apph := txh + 1 // this is where the tx will be applied to the state
+				apph := txh // this is where the tx will be applied to the state
 
 				// wait before querying
 				err = client.WaitForHeight(ctx, c, apph, nil)
@@ -367,7 +368,8 @@ func TestClientMethodCalls(t *testing.T) {
 				block, err := c.Block(ctx, &apph)
 				require.NoError(t, err)
 				appHash := block.Block.Header.AppHash
-				assert.True(t, len(appHash) > 0)
+				assert.NotEmpty(t, appHash)
+				assert.EqualValues(t, block.Block.Txs[0], types.Tx(tx))
 				assert.EqualValues(t, apph, block.Block.Header.Height)
 
 				blockByHash, err := c.BlockByHash(ctx, block.BlockID.Hash)
@@ -552,10 +554,11 @@ func TestClientMethodCalls(t *testing.T) {
 					defer cancel()
 
 					chainID := conf.ChainID()
+					evidenceHeight := int64(1)
 
 					// make sure that the node has produced enough blocks
-					waitForBlock(ctx, t, c, 2)
-					evidenceHeight := int64(1)
+					waitForBlock(ctx, t, c, evidenceHeight)
+
 					block, _ := c.Block(ctx, &evidenceHeight)
 					ts := block.Block.Time
 					correct, fakes := makeEvidences(t, pv, chainID, btcjson.LLMQType_5_60, quorumHash, ts)

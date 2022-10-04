@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/binary"
 	"fmt"
-	"os"
 	"sync"
 	"testing"
 	"time"
@@ -37,9 +36,8 @@ func TestMempoolNoProgressUntilTxsAvailable(t *testing.T) {
 	defer cancel()
 
 	baseConfig := configSetup(t)
-	config, err := ResetConfig(t.TempDir(), "consensus_mempool_txs_available_test")
+	config, err := ResetConfig(t, "consensus_mempool_txs_available_test")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(config.RootDir) })
 
 	config.Consensus.CreateEmptyBlocks = false
 
@@ -65,9 +63,8 @@ func TestMempoolProgressAfterCreateEmptyBlocksInterval(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	config, err := ResetConfig(t.TempDir(), "consensus_mempool_txs_available_test")
+	config, err := ResetConfig(t, "consensus_mempool_txs_available_test")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(config.RootDir) })
 
 	config.Consensus.CreateEmptyBlocksInterval = ensureTimeout
 	state, privVals := makeGenesisState(ctx, t, baseConfig, genesisStateArgs{
@@ -91,9 +88,8 @@ func TestMempoolProgressInHigherRound(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	config, err := ResetConfig(t.TempDir(), "consensus_mempool_txs_available_test")
+	config, err := ResetConfig(t, "consensus_mempool_txs_available_test")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(config.RootDir) })
 
 	config.Consensus.CreateEmptyBlocks = false
 	state, privVals := makeGenesisState(ctx, t, baseConfig, genesisStateArgs{
@@ -211,9 +207,6 @@ func TestMempoolRmBadTx(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, resProcess.TxResults[0].IsErr(), fmt.Sprintf("expected no error. got %v", resFinalize))
 
-	_, err = app.Commit(ctx)
-	require.NoError(t, err)
-
 	emptyMempoolCh := make(chan struct{})
 	checkTxRespCh := make(chan struct{})
 	go func() {
@@ -326,10 +319,6 @@ func txAsUint64(tx []byte) uint64 {
 	tx8 := make([]byte, 8)
 	copy(tx8[len(tx8)-len(tx):], tx)
 	return binary.BigEndian.Uint64(tx8)
-}
-
-func (app *CounterApplication) Commit(context.Context) (*abci.ResponseCommit, error) {
-	return &abci.ResponseCommit{}, nil
 }
 
 func (app *CounterApplication) PrepareProposal(_ context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {

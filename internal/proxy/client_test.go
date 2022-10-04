@@ -69,7 +69,11 @@ func TestEcho(t *testing.T) {
 	defer cancel()
 
 	// Start server
-	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, kvstore.NewApplication())
+
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+
+	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, app)
 	require.NoError(t, s.Start(ctx), "error starting socket server")
 	t.Cleanup(func() { cancel(); s.Wait() })
 
@@ -109,7 +113,10 @@ func BenchmarkEcho(b *testing.B) {
 	defer cancel()
 
 	// Start server
-	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, kvstore.NewApplication())
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(b, err)
+
+	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, app)
 	require.NoError(b, s.Start(ctx), "Error starting socket server")
 	b.Cleanup(func() { cancel(); s.Wait() })
 
@@ -152,7 +159,10 @@ func TestInfo(t *testing.T) {
 	require.NoError(t, err)
 
 	// Start server
-	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, kvstore.NewApplication())
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+
+	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, app)
 	require.NoError(t, s.Start(ctx), "Error starting socket server")
 	t.Cleanup(func() { cancel(); s.Wait() })
 
@@ -165,7 +175,7 @@ func TestInfo(t *testing.T) {
 	resInfo, err := proxy.Info(ctx, &RequestInfo)
 	require.NoError(t, err)
 
-	require.Equal(t, `{"appHash":""}`, resInfo.Data, "Expected ResponseInfo with one element {\"appHash\":\"\"} but got something else")
+	require.Equal(t, `{"appHash":"0000000000000000000000000000000000000000000000000000000000000000"}`, resInfo.Data, "Expected ResponseInfo with one element {\"appHash\":\"\"} but got something else")
 }
 
 type noopStoppableClientImpl struct {

@@ -162,7 +162,9 @@ func TestABCIRecorder(t *testing.T) {
 }
 
 func TestABCIApp(t *testing.T) {
-	app := kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+
 	m := mock.ABCIApp{app}
 
 	ctx, cancel := context.WithCancel(context.Background())
@@ -171,7 +173,7 @@ func TestABCIApp(t *testing.T) {
 	// get some info
 	info, err := m.ABCIInfo(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, `{"appHash":""}`, info.Response.GetData())
+	assert.Equal(t, `{"appHash":"0000000000000000000000000000000000000000000000000000000000000000"}`, info.Response.GetData())
 
 	// add a key
 	key, value := "foo", "bar"

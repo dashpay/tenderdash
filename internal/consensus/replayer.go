@@ -338,6 +338,12 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	if stateBlockHeight != 0 {
 		return nil
 	}
+
+	if len(res.ValidatorSetUpdate.ValidatorUpdates) != 0 {
+		// we replace existing validator with the one from InitChain instead of applying it as a diff
+		state.Validators = types.NewValidatorSet(nil, nil, state.Validators.QuorumType, nil, false)
+	}
+
 	// we only update state when we are in initial state
 	// If the app did not return an app hash, we keep the one set from the genesis doc in
 	// the state. We don't set appHash since we don't want the genesis doc app hash
@@ -350,6 +356,7 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	if err != nil {
 		return err
 	}
+	state.LastCoreChainLockedBlockHeight = res.InitialCoreHeight
 	// We update the last results hash with the empty hash, to conform with RFC-6962.
 	state.LastResultsHash = merkle.HashFromByteSlices(nil)
 	return r.stateStore.Save(*state)

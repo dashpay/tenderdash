@@ -66,7 +66,7 @@ title: Methods
     | time                | [google.protobuf.Timestamp](https://developers.google.com/protocol-buffers/docs/reference/google.protobuf#google.protobuf.Timestamp)   | Genesis time                                                  | 1            |
     | chain_id            | string                                                                                                                                 | ID of the blockchain.                                         | 2            |
     | consensus_params    | [ConsensusParams](#consensusparams)                                                                                                    | Initial consensus-critical parameters.                        | 3            |
-    | validator_set       | [ValidatorSetUpdate](#validatorsetupdate)                                                                                              | Initial genesis validator set update, sorted by voting power. | 4            |
+    | validator_set       | [ValidatorSetUpdate](#validatorsetupdate)                                                                                              | Initial genesis validator set, sorted by voting power. | 4            |
     | app_state_bytes     | bytes                                                                                                                                  | Serialized initial application state. JSON bytes.             | 5            |
     | initial_height      | int64                                                                                                                                  | Height of the initial block (typically `1`).                  | 6            |
     | initial_core_height | int64                                                                                                                                  | Height of the initial core chainlock.                            | 7            |
@@ -330,6 +330,8 @@ title: Methods
         * A new or modified transaction is marked as `UNMODIFIED` or `REMOVED`.
         * An unmodified transaction is marked as `ADDED`.
         * A transaction is marked as `UNKNOWN`.
+    * `ResponsePrepareProposal.tx_results` contains only results of  `UNMODIFIED` and `ADDED` transactions.
+    `REMOVED` transactions are omitted. The length of `tx_results` can be different than the length of `tx_records`.
     * If Tendermint fails to validate the `ResponsePrepareProposal`, Tendermint will assume the application is faulty and crash.
     * The implementation of `PrepareProposal` can be non-deterministic.
 
@@ -608,7 +610,7 @@ Most of the data structures used in ABCI are shared [common data structures](../
 
     | Name                 | Type                                                                       | Description                    | Field Number |
     |----------------------|----------------------------------------------------------------------------|--------------------------------|--------------|
-    | validator_updates    | repeated [ValidatorUpdate Key](../core/data_structures.md#validatorupdate) | Public key of the validator    | 1            |
+    | validator_updates    | repeated [ValidatorUpdate](#validatorupdate) | List of validator updates    | 1            |
     | threshold_public_key | bytes                                                                      | Threshold public key of quorum | 2            |
     | quorum_hash          | bytes                                                                      | Quorum hash                    | 3            |
 

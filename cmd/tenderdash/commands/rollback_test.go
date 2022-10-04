@@ -7,6 +7,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/tendermint/tendermint/abci/example/kvstore"
 	"github.com/tendermint/tendermint/cmd/tenderdash/commands"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/rpc/client/local"
@@ -27,7 +28,7 @@ func TestRollbackIntegration(t *testing.T) {
 	require.NoError(t, err)
 	cfg.BaseConfig.DBBackend = "goleveldb"
 
-	app, err := e2e.NewApplication(e2e.DefaultConfig(dir))
+	app, err := e2e.NewApplication(kvstore.DefaultConfig(dir))
 	require.NoError(t, err)
 
 	t.Run("First run", func(t *testing.T) {

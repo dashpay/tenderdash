@@ -7,8 +7,9 @@ import (
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/privval"
 	dbm "github.com/tendermint/tm-db"
+
+	"github.com/tendermint/tendermint/privval"
 
 	"github.com/tendermint/tendermint/abci/example/kvstore"
 	dashcore "github.com/tendermint/tendermint/dash/core"
@@ -38,7 +39,8 @@ func TestExampleClient(t *testing.T) {
 	}
 
 	// Start a test application
-	app := kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
 
 	_, closer, err := rpctest.StartTendermint(ctx, conf, app, rpctest.SuppressStdout)
 	if err != nil {

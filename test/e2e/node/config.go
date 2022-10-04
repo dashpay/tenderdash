@@ -7,7 +7,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/tendermint/tendermint/test/e2e/app"
+	"github.com/tendermint/tendermint/abci/example/kvstore"
 )
 
 // Config is the application configuration.
@@ -19,7 +19,7 @@ type Config struct {
 	Mode             string                       `toml:"mode"`
 	PersistInterval  uint64                       `toml:"persist_interval"`
 	SnapshotInterval uint64                       `toml:"snapshot_interval"`
-	RetainBlocks     uint64                       `toml:"retain_blocks"`
+	RetainBlocks     int64                        `toml:"retain_blocks"`
 	ValidatorUpdates map[string]map[string]string `toml:"validator_update"`
 	PrivValServer    string                       `toml:"privval_server"`
 	PrivValKey       string                       `toml:"privval_key"`
@@ -34,8 +34,8 @@ type Config struct {
 }
 
 // App extracts out the application specific configuration parameters
-func (cfg *Config) App() *app.Config {
-	return &app.Config{
+func (cfg *Config) App() *kvstore.Config {
+	return &kvstore.Config{
 		Dir:              cfg.Dir,
 		SnapshotInterval: cfg.SnapshotInterval,
 		RetainBlocks:     cfg.RetainBlocks,

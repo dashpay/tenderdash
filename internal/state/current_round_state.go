@@ -116,7 +116,7 @@ func (candidate *CurrentRoundState) populate(ctx context.Context, proposalRespon
 		}
 
 	case nil: // Assuming no changes
-		return candidate.update(ctx, baseState, nil, nil, nil, nil, nil)
+		candidate.response = abci.ResponseProcessProposal{}
 
 	default:
 		return fmt.Errorf("unsupported response type %T", resp)
@@ -130,6 +130,7 @@ func (candidate *CurrentRoundState) populate(ctx context.Context, proposalRespon
 		candidate.response.ConsensusParamUpdates,
 		candidate.response.ValidatorSetUpdate,
 		candidate.response.CoreChainLockUpdate,
+		candidate.responseType,
 	)
 }
 
@@ -141,6 +142,7 @@ func (candidate *CurrentRoundState) update(
 	consensusParamUpdates *tmtypes.ConsensusParams,
 	validatorSetUpdate *abci.ValidatorSetUpdate,
 	coreChainLockUpdate *tmtypes.CoreChainLock,
+	updateSource string,
 ) error {
 	candidate.Base = baseState
 	candidate.AppHash = appHash.Copy()
@@ -152,7 +154,7 @@ func (candidate *CurrentRoundState) update(
 	if err := candidate.populateConsensusParams(consensusParamUpdates); err != nil {
 		return err
 	}
-	if err := candidate.populateValsetUpdates(ctx, validatorSetUpdate); err != nil {
+	if err := candidate.populateValsetUpdates(ctx, validatorSetUpdate, updateSource); err != nil {
 		return err
 	}
 	if err := candidate.populateChainlock(coreChainLockUpdate); err != nil {
@@ -183,10 +185,6 @@ func (candidate CurrentRoundState) GetHeight() int64 {
 	}
 
 	return candidate.Base.LastBlockHeight + 1
-}
-
-func (candidate CurrentRoundState) GetProcessProposalResponse() abci.ResponseProcessProposal {
-	return candidate.response
 }
 
 func (candidate *CurrentRoundState) populateTxResults(txResults []*abci.ExecTxResult) error {
@@ -246,7 +244,7 @@ func (candidate *CurrentRoundState) populateConsensusParams(updates *tmtypes.Con
 
 // populateValsetUpdates calculates and populates Validators and LastHeightValidatorsChanged
 // CONTRACT: candidate.ConsensusParams were already populated
-func (candidate *CurrentRoundState) populateValsetUpdates(ctx context.Context, update *abci.ValidatorSetUpdate) error {
+func (candidate *CurrentRoundState) populateValsetUpdates(ctx context.Context, update *abci.ValidatorSetUpdate, updateSource string) error {
 	base := candidate.Base
 
 	newValSet, err := valsetUpdate(ctx, update, base.Validators, candidate.NextConsensusParams.Validator)
@@ -256,8 +254,7 @@ func (candidate *CurrentRoundState) populateValsetUpdates(ctx context.Context, u
 	newValSet.IncrementProposerPriority(1)
 	candidate.NextValidators = newValSet
 
-	if update != nil && len(update.ValidatorUpdates) > 0 {
-		// Change results from this height but only applies to the next height.
+	if updateSource != initChain && update != nil && len(update.ValidatorUpdates) > 0 {
 		candidate.LastHeightValidatorsChanged = candidate.GetHeight() + 1
 	} else {
 		candidate.LastHeightValidatorsChanged = base.LastHeightValidatorsChanged

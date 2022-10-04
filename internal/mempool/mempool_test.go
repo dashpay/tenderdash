@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
@@ -99,6 +100,11 @@ func mustCheckTx(ctx context.Context, t *testing.T, txmp *TxMempool, spec string
 }
 
 func checkTxs(ctx context.Context, t *testing.T, txmp *TxMempool, numTxs int, peerID uint16) []testTx {
+	checkTxCallback := func(resp *abci.ResponseCheckTx) {
+		require.NotNil(t, resp)
+		assert.Equal(t, abci.CodeTypeOK, resp.Code, string(resp.Data))
+	}
+
 	txs := make([]testTx, numTxs)
 	txInfo := TxInfo{SenderID: peerID}
 
@@ -115,7 +121,7 @@ func checkTxs(ctx context.Context, t *testing.T, txmp *TxMempool, numTxs int, pe
 			tx:       []byte(fmt.Sprintf("sender-%d-%d=%X=%d", i, peerID, prefix, priority)),
 			priority: priority,
 		}
-		require.NoError(t, txmp.CheckTx(ctx, txs[i].tx, nil, txInfo))
+		require.NoError(t, txmp.CheckTx(ctx, txs[i].tx, checkTxCallback, txInfo))
 	}
 
 	return txs
@@ -139,7 +145,7 @@ func TestTxMempool_TxsAvailable(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 	if err := client.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -202,7 +208,7 @@ func TestTxMempool_Size(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 	if err := client.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -235,7 +241,7 @@ func TestTxMempool_Eviction(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 	if err := client.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -316,7 +322,7 @@ func TestTxMempool_Flush(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 	if err := client.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -350,7 +356,7 @@ func TestTxMempool_ReapMaxBytesMaxGas(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 	if err := client.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -409,7 +415,7 @@ func TestTxMempool_ReapMaxTxs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 	if err := client.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -467,7 +473,7 @@ func TestTxMempool_CheckTxExceedsMaxSize(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 	if err := client.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -492,7 +498,7 @@ func TestTxMempool_CheckTxSamePeer(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 	if err := client.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -516,7 +522,7 @@ func TestTxMempool_CheckTxSameSender(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 	if err := client.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -551,7 +557,7 @@ func TestTxMempool_ConcurrentTxs(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 	if err := client.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -624,7 +630,7 @@ func TestTxMempool_ExpiredTxs_NumBlocks(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 	if err := client.Start(ctx); err != nil {
 		t.Fatal(err)
 	}
@@ -698,7 +704,7 @@ func TestTxMempool_CheckTxPostCheckError(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
-			client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: kvstore.NewApplication()})
+			client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
 			if err := client.Start(ctx); err != nil {
 				t.Fatal(err)
 			}
@@ -730,4 +736,11 @@ func TestTxMempool_CheckTxPostCheckError(t *testing.T) {
 			}
 		})
 	}
+}
+
+func mustKvStore(t *testing.T, opts ...kvstore.OptFunc) *kvstore.Application {
+	opts = append(opts, kvstore.WithLogger(log.NewTestingLogger(t).With("module", "kvstore")))
+	app, err := kvstore.NewMemoryApp(opts...)
+	require.NoError(t, err)
+	return app
 }

@@ -68,12 +68,7 @@ func (a ABCIApp) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*coretypes
 	if err != nil {
 		return nil, err
 	}
-	_, err = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{AppHash: propResp.AppHash, Txs: [][]byte{tx}})
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = a.App.Commit(ctx)
+	_, err = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Height: 1, AppHash: propResp.AppHash, Txs: [][]byte{tx}})
 	if err != nil {
 		return nil, err
 	}
