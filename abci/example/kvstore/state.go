@@ -161,7 +161,7 @@ func (state *kvState) Load(from io.Reader) error {
 		return errors.New("cannot load into nil state")
 	}
 
-	stateBytes, err := ioutil.ReadAll(from)
+	stateBytes, err := io.ReadAll(from)
 	if err != nil {
 		return fmt.Errorf("kvState read: %w", err)
 	}

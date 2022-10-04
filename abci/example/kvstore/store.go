@@ -24,7 +24,7 @@ type memStore struct {
 	buf *bytes.Buffer
 }
 
-func NewMemStateStore(db dbm.DB) StoreFactory {
+func NewMemStateStore() StoreFactory {
 	return &memStore{
 		buf: &bytes.Buffer{},
 	}

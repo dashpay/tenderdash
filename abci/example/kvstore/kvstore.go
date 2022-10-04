@@ -167,7 +167,7 @@ func WithPrepareTxsFunc(prepareTxs PrepareTxsFunc) OptFunc {
 // implementation.
 // It is possible to alter initial application configs with option functions.
 func NewMemoryApp(opts ...OptFunc) (*Application, error) {
-	return newApplication(NewMemStateStore(dbm.NewMemDB()), opts...)
+	return newApplication(NewMemStateStore(), opts...)
 }
 
 func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, error) {
@@ -306,9 +306,6 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 }
 
 func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
-	app.mu.Lock()
-	defer app.mu.Unlock()
-
 	roundState, txResults, err := app.executeProposal(req.Height, types.NewTxs(req.Txs))
 	if err != nil {
 		return &abci.ResponseProcessProposal{
@@ -522,9 +519,6 @@ func (app *Application) Info(_ context.Context, req *abci.RequestInfo) (*abci.Re
 
 // CheckTX implements ABCI
 func (app *Application) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*abci.ResponseCheckTx, error) {
-	app.mu.Lock()
-	defer app.mu.Unlock()
-
 	resp, err := app.verifyTx(req.Tx, req.Type)
 	if app.cfg.CheckTxDelayMS != 0 {
 		time.Sleep(time.Duration(app.cfg.CheckTxDelayMS) * time.Millisecond)

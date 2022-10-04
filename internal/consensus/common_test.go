@@ -54,7 +54,7 @@ type cleanupFunc func()
 func configSetup(t *testing.T) *config.Config {
 	t.Helper()
 
-	cfg, err := ResetConfig(t, t.TempDir(), "consensus_reactor_test")
+	cfg, err := ResetConfig(t, "consensus_reactor_test")
 	require.NoError(t, err)
 	walDir := filepath.Dir(cfg.Consensus.WalFile())
 	ensureDir(t, walDir, 0700)
@@ -67,7 +67,8 @@ func ensureDir(t *testing.T, dir string, mode os.FileMode) {
 	require.NoError(t, tmos.EnsureDir(dir, mode))
 }
 
-func ResetConfig(t *testing.T, dir, name string) (*config.Config, error) {
+func ResetConfig(t *testing.T, name string) (*config.Config, error) {
+	dir := t.TempDir()
 	testConfig, err := config.ResetTestRoot(dir, name)
 	if err != nil {
 		return nil, err
@@ -814,7 +815,6 @@ func makeConsensusState(
 	configOpts ...func(*config.Config),
 ) []*State {
 	t.Helper()
-	tempDir := t.TempDir()
 
 	genDoc, privVals := factory.RandGenesisDoc(cfg, nValidators, 1, factory.ConsensusParams())
 	css := make([]*State, nValidators)
@@ -824,7 +824,7 @@ func makeConsensusState(
 		blockStore := store.NewBlockStore(dbm.NewMemDB()) // each state needs its own db
 		state, err := sm.MakeGenesisState(genDoc)
 		require.NoError(t, err)
-		thisConfig, err := ResetConfig(t, tempDir, fmt.Sprintf("%s_%d", testName, i))
+		thisConfig, err := ResetConfig(t, fmt.Sprintf("%s_%d", testName, i))
 		require.NoError(t, err)
 
 		for _, opt := range configOpts {
@@ -947,7 +947,7 @@ func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State,
 	for i := 0; i < g.nPeers; i++ {
 		confName := fmt.Sprintf("%s_%d", t.Name(), i)
 		state, _ := sm.MakeGenesisState(genDoc)
-		thisConfig, err := ResetConfig(t, t.TempDir(), confName)
+		thisConfig, err := ResetConfig(t, confName)
 		require.NoError(t, err)
 
 		ensureDir(t, filepath.Dir(thisConfig.Consensus.WalFile()), 0700) // dir for wal
