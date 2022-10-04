@@ -166,6 +166,10 @@ func (vote *Vote) Copy() *Vote {
 
 // StateID generates state ID for this vote
 func (vote *Vote) StateID() StateID {
+	if len(vote.BlockID.Hash) == 0 {
+		return StateID{}
+	}
+
 	return StateID{
 		Height:  vote.Height,
 		AppHash: vote.AppHash,

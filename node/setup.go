@@ -137,8 +137,8 @@ func onlyValidatorIsUs(state sm.State, proTxHash types.ProTxHash) bool {
 	if state.Validators.Size() > 1 {
 		return false
 	}
-	validatorProTxHash, _ := state.Validators.GetByIndex(0)
-	return bytes.Equal(validatorProTxHash, proTxHash)
+	val := state.Validators.GetByIndex(0)
+	return bytes.Equal(val.ProTxHash, proTxHash)
 }
 
 func createMempoolReactor(

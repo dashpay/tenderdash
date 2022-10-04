@@ -185,12 +185,14 @@ func waitForAndValidateBlock(
 	fn := func(j int) {
 		msg, err := blocksSubs[j].Next(ctx)
 		switch {
-		case errors.Is(err, context.DeadlineExceeded):
-			return
-		case errors.Is(err, context.Canceled):
+		case errors.Is(err, context.DeadlineExceeded),
+			errors.Is(err, context.Canceled),
+			errors.Is(err, tmpubsub.ErrTerminated):
+			t.Logf("waitForAndValidateBlock deadline for node %d: %s", j, err)
 			return
 		case err != nil:
 			cancel() // terminate other workers
+			t.Logf("waitForAndValidateBlock error for node %d: %s", j, err)
 			require.NoError(t, err)
 			return
 		}
@@ -553,6 +555,11 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		nVals:            nVals,
 		appFunc:          newKVStoreFunc(t),
 		validatorUpdates: updates,
+		consensusParams: factory.ConsensusParams(func(cp *types.ConsensusParams) {
+			cp.Timeout.Propose = 2 * time.Second
+			cp.Timeout.Commit = 1 * time.Second
+			cp.Timeout.Vote = 1 * time.Second
+		}),
 	}
 	states, _, _, validatorSetUpdates := gen.generate(ctx, t)
 
@@ -633,6 +640,8 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		}
 		vh = h
 	}
+	cancel()
+	time.Sleep(100 * time.Microsecond)
 }
 
 func makeProTxHashMap(proTxHashes []crypto.ProTxHash) map[string]struct{} {
@@ -786,7 +795,8 @@ func validate(t *testing.T, states []*State) {
 	currValidatorCount := currValidators.Size()
 	for validatorID, state := range states {
 		height, validators := state.GetValidatorSet()
-		assert.Equal(t, currHeight, height, "validator_id=%d", validatorID)
+		assert.Equal(t, currHeight, height,
+			"height mistmatch, validator_id=%d, time=%s", validatorID, time.Now().Format(time.RFC3339Nano))
 		assert.Equal(t, currValidatorCount, len(validators.Validators), "validator_id=%d", validatorID)
 		assert.True(t, currValidators.Equals(validators), "validator_id=%d", validatorID)
 	}

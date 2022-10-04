@@ -670,15 +670,16 @@ func TestEmptyPrepareProposal(t *testing.T) {
 		nil,
 		eventBus,
 	)
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proposer := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
-	_, _, err = blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
+	_, _, err = blockExec.CreateProposalBlock(ctx, height, state, commit, proposer.ProTxHash, 0)
 	require.NoError(t, err)
 }
 
 // TestPrepareProposalErrorOnNonExistingRemoved tests that the block creation logic returns
 // an error if the ResponsePrepareProposal returned from the application marks
-//  a transaction as REMOVED that was not present in the original proposal.
+//
+//	a transaction as REMOVED that was not present in the original proposal.
 func TestPrepareProposalErrorOnNonExistingRemoved(t *testing.T) {
 	const height = 2
 	ctx, cancel := context.WithCancel(context.Background())
@@ -725,9 +726,9 @@ func TestPrepareProposalErrorOnNonExistingRemoved(t *testing.T) {
 		nil,
 		eventBus,
 	)
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proposer := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
-	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposer.ProTxHash, 0)
 	require.ErrorContains(t, err, "new transaction incorrectly marked as removed")
 	require.Nil(t, block)
 
@@ -782,9 +783,9 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 		nil,
 		eventBus,
 	)
-	proTxHash, _ := state.Validators.GetByIndex(0)
+	val := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
-	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, val.ProTxHash, 0)
 	require.NoError(t, err)
 	require.Len(t, block.Data.Txs.ToSliceOfBytes(), len(trs)-2)
 
@@ -843,9 +844,9 @@ func TestPrepareProposalAddedTxsIncluded(t *testing.T) {
 		nil,
 		eventBus,
 	)
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proposer := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
-	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposer.ProTxHash, 0)
 	require.NoError(t, err)
 
 	require.Equal(t, txs[0], block.Data.Txs[0])
@@ -903,9 +904,9 @@ func TestPrepareProposalReorderTxs(t *testing.T) {
 		nil,
 		eventBus,
 	)
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proposer := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
-	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposer.ProTxHash, 0)
 	require.NoError(t, err)
 	for i, tx := range block.Data.Txs {
 		require.Equal(t, types.Tx(trs[i].Tx), tx)
@@ -963,10 +964,10 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 		nil,
 		eventBus,
 	)
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proposer := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
 
-	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposerProTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposer.ProTxHash, 0)
 	require.ErrorContains(t, err, "transaction data size exceeds maximum")
 	require.Nil(t, block, "")
 
@@ -1013,10 +1014,10 @@ func TestPrepareProposalErrorOnPrepareProposalError(t *testing.T) {
 		nil,
 		eventBus,
 	)
-	proTxHash, _ := state.Validators.GetByIndex(0)
+	val := state.Validators.GetByIndex(0)
 	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
 
-	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proTxHash, 0)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, val.ProTxHash, 0)
 	require.Nil(t, block)
 	require.ErrorContains(t, err, "an injected error")
 

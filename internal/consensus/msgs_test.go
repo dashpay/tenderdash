@@ -82,7 +82,7 @@ func TestMsgToProto(t *testing.T) {
 		1,
 		2,
 		bi,
-		types.StateID{},
+		make(bytes.HexBytes, crypto.DefaultAppHashSize),
 	)
 	require.NoError(t, err)
 	pbVote := vote.ToProto()

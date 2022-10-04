@@ -65,7 +65,7 @@ func TestResetValidator(t *testing.T) {
 
 	stateID := types.RandStateID().WithHeight(height)
 
-	vote := newVote(privVal.Key.ProTxHash, 0, height, round, voteType, blockID, nil)
+	vote := newVote(privVal.Key.ProTxHash, 0, height, round, voteType, blockID, stateID, nil)
 	err = privVal.SignVote(ctx, "mychainid", 0, quorumHash, vote.ToProto(), stateID, nil)
 	assert.NoError(t, err, "expected no error signing vote")
 
@@ -209,7 +209,7 @@ func TestSignVote(t *testing.T) {
 	stateID := types.RandStateID().WithHeight(height)
 
 	// sign a vote for first time
-	vote := newVote(privVal.Key.ProTxHash, 0, height, round, voteType, block1, nil)
+	vote := newVote(privVal.Key.ProTxHash, 0, height, round, voteType, block1, stateID, nil)
 	v := vote.ToProto()
 
 	quorumHash, err := privVal.GetFirstQuorumHash(ctx)
@@ -224,10 +224,10 @@ func TestSignVote(t *testing.T) {
 
 	// now try some bad votes
 	cases := []*types.Vote{
-		newVote(privVal.Key.ProTxHash, 0, height, round-1, voteType, block1, nil),   // round regression
-		newVote(privVal.Key.ProTxHash, 0, height-1, round, voteType, block1, nil),   // height regression
-		newVote(privVal.Key.ProTxHash, 0, height-2, round+4, voteType, block1, nil), // height regression and different round
-		newVote(privVal.Key.ProTxHash, 0, height, round, voteType, block2, nil),     // different block
+		newVote(privVal.Key.ProTxHash, 0, height, round-1, voteType, block1, stateID, nil),   // round regression
+		newVote(privVal.Key.ProTxHash, 0, height-1, round, voteType, block1, stateID, nil),   // height regression
+		newVote(privVal.Key.ProTxHash, 0, height-2, round+4, voteType, block1, stateID, nil), // height regression and different round
+		newVote(privVal.Key.ProTxHash, 0, height, round, voteType, block2, stateID, nil),     // different block
 	}
 
 	for _, c := range cases {
@@ -355,7 +355,7 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 		tmproto.VoteExtensionType_DEFAULT: []types.VoteExtension{{Extension: []byte("extension")}},
 	}
 	// We initially sign this vote without an extension
-	vote1 := newVote(proTxHash, 0, height, round, voteType, blockID, exts)
+	vote1 := newVote(proTxHash, 0, height, round, voteType, blockID, stateID, exts)
 	vpb1 := vote1.ToProto()
 
 	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, vpb1, stateID, logger)
@@ -400,7 +400,7 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 }
 
 func newVote(proTxHash types.ProTxHash, idx int32, height int64, round int32,
-	typ tmproto.SignedMsgType, blockID types.BlockID, exts types.VoteExtensions) *types.Vote {
+	typ tmproto.SignedMsgType, blockID types.BlockID, stateID types.StateID, exts types.VoteExtensions) *types.Vote {
 	return &types.Vote{
 		ValidatorProTxHash: proTxHash,
 		ValidatorIndex:     idx,
@@ -409,6 +409,7 @@ func newVote(proTxHash types.ProTxHash, idx int32, height int64, round int32,
 		Type:               typ,
 		BlockID:            blockID,
 		VoteExtensions:     exts,
+		AppHash:            stateID.AppHash,
 	}
 }
 

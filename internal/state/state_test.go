@@ -1,4 +1,4 @@
-//nolint: lll
+// nolint: lll
 package state_test
 
 import (
@@ -286,10 +286,10 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 	highestHeight := changeHeights[N-1] + 5
 	changeIndex := 0
 
-	firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
-	require.NotZero(t, firstNodeProTxHash)
+	firstNode := state.Validators.GetByIndex(0)
+	require.NotZero(t, firstNode.ProTxHash)
 
-	ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
+	ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
 	keys := make([]crypto.PubKey, highestHeight+1)
 
 	for height := int64(1); height < highestHeight; height++ {
@@ -327,7 +327,7 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 		v, err := stateStore.LoadValidators(height) // load validators that validate block at `height``
 		require.NoError(t, err, fmt.Sprintf("expected no err at height %d", height))
 		assert.Equal(t, 1, v.Size(), "validator set size is greater than 1: %d", v.Size())
-		_, val := v.GetByIndex(0)
+		val := v.GetByIndex(0)
 
 		assert.Equal(t, pubKey, val.PubKey, fmt.Sprintf(`unexpected pubKey at height %d`, height))
 	}
@@ -485,8 +485,8 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	require.NoError(t, err)
 
 	// Any node pro tx hash should do
-	firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
-	ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
+	firstNode := state.Validators.GetByIndex(0)
+	ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
 	changes, err := state.NewStateChangeset(ctx, nil)
 	assert.NoError(t, err)
 	su, err := sm.PrepareStateUpdates(ctx, block.Header, state, changes)
@@ -624,8 +624,8 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	// we only have one validator:
 	assert.Equal(t, val1ProTxHash, state.Validators.Proposer.ProTxHash)
 
-	firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
-	ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
+	firstNode := state.Validators.GetByIndex(0)
+	ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
 
 	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), 0)
 	require.NoError(t, err)
@@ -800,8 +800,8 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	state.Validators = originalValidatorSet
 
 	// Any node pro tx hash should do
-	firstProTxHash, _ := state.Validators.GetByIndex(0)
-	ctx := dash.ContextWithProTxHash(context.Background(), firstProTxHash)
+	val0 := state.Validators.GetByIndex(0)
+	ctx := dash.ContextWithProTxHash(context.Background(), val0.ProTxHash)
 
 	execute := blockExecutorFunc(ctx, t)
 
@@ -957,8 +957,8 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	// We receive new validator set, which will be used at height 3
 
 	// First, we create proposal...
-	firstNodeProTxHash, val0 := state.Validators.GetByIndex(0)
-	ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
+	val0 := state.Validators.GetByIndex(0)
+	ctx := dash.ContextWithProTxHash(context.Background(), val0.ProTxHash)
 	proTxHash := val0.ProTxHash // this is not really old, as it stays the same
 	oldPubkey := val0.PubKey
 
@@ -1066,8 +1066,8 @@ func TestConsensusParamsChangesSaveLoad(t *testing.T) {
 		header, _, blockID, responses := makeHeaderPartsResponsesParams(t, state, &cp, 0)
 
 		// Any node pro tx hash should do
-		firstNodeProTxHash, _ := state.Validators.GetByIndex(0)
-		ctx := dash.ContextWithProTxHash(context.Background(), firstNodeProTxHash)
+		firstNode := state.Validators.GetByIndex(0)
+		ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
 
 		changes, err := state.NewStateChangeset(ctx, responses.ProcessProposal)
 		require.NoError(t, err)

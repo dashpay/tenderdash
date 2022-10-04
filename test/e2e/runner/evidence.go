@@ -160,11 +160,11 @@ func generateDuplicateVoteEvidence(
 		return nil, err
 	}
 	stateID := types.RandStateID()
-	voteA, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID(), stateID)
+	voteA, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID(), stateID.AppHash)
 	if err != nil {
 		return nil, err
 	}
-	voteB, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID(), stateID)
+	voteB, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID(), stateID.AppHash)
 	if err != nil {
 		return nil, err
 	}

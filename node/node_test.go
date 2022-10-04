@@ -322,7 +322,7 @@ func TestCreateProposalBlock(t *testing.T) {
 	maxEvidenceBytes := int64(maxBytes / 2)
 	state.ConsensusParams.Block.MaxBytes = int64(maxBytes)
 	state.ConsensusParams.Evidence.MaxBytes = maxEvidenceBytes
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proposer := state.Validators.GetByIndex(0)
 
 	mp := mempool.NewTxMempool(
 		logger.With("module", "mempool"),
@@ -384,7 +384,7 @@ func TestCreateProposalBlock(t *testing.T) {
 		height,
 		state,
 		commit,
-		proposerProTxHash,
+		proposer.ProTxHash,
 		proposedAppVersion,
 	)
 	require.NoError(t, err)
@@ -435,7 +435,7 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 	const maxBytes int64 = 16384
 	const partSize uint32 = 256
 	state.ConsensusParams.Block.MaxBytes = maxBytes
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proposer := state.Validators.GetByIndex(0)
 
 	// Make Mempool
 
@@ -469,7 +469,7 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 		height,
 		state,
 		commit,
-		proposerProTxHash,
+		proposer.ProTxHash,
 		0,
 	)
 	require.NoError(t, err)
@@ -516,7 +516,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	const maxBytes int64 = 1024 * 1024 * 2
 	state.ConsensusParams.Block.MaxBytes = maxBytes
 	state.LastCoreChainLockedBlockHeight = math.MaxUint32 - 1
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proposer := state.Validators.GetByIndex(0)
 
 	// Make Mempool
 	mp := mempool.NewTxMempool(
@@ -598,7 +598,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 		math.MaxInt64,
 		state,
 		commit,
-		proposerProTxHash,
+		proposer.ProTxHash,
 		0,
 	)
 	require.NoError(t, err)
