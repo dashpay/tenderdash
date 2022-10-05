@@ -4,12 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/fortytw2/leaktest"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	"os"
 	"path"
 	"testing"
+
+	"github.com/fortytw2/leaktest"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/example/code"
@@ -218,7 +219,7 @@ func makeApplyBlock(
 	return respProcessProposal, resFinalizeBlock
 }
 
-func TestInitChain(t *testing.T) {
+func TestInitChainImportAppState(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
