@@ -7,8 +7,9 @@ import (
 	"io"
 	"net"
 	"runtime"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/gogo/protobuf/proto"
 

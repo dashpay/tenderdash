@@ -6,8 +6,9 @@ import (
 	"errors"
 	"fmt"
 	"sort"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/crypto"
 	dashcore "github.com/tendermint/tendermint/dash/core"

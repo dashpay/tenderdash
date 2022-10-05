@@ -11,8 +11,9 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
 )

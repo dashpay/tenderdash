@@ -6,8 +6,9 @@ import (
 	"fmt"
 	"math/rand"
 	"strings"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	dbm "github.com/tendermint/tm-db"
 

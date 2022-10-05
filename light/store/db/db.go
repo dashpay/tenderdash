@@ -3,7 +3,8 @@ package db
 import (
 	"encoding/binary"
 	"fmt"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/google/orderedcode"
 	dbm "github.com/tendermint/tm-db"

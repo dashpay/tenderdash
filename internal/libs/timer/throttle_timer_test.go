@@ -1,9 +1,10 @@
 package timer
 
 import (
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	// make govet noshadow happy...
 

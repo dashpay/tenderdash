@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/fortytw2/leaktest"
 	"github.com/google/go-cmp/cmp"

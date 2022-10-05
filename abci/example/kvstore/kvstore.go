@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"path"
 	"strconv"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/gogo/protobuf/proto"
 	dbm "github.com/tendermint/tm-db"

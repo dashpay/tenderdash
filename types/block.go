@@ -9,8 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"

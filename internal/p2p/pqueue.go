@@ -5,8 +5,9 @@ import (
 	"context"
 	"sort"
 	"strconv"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/gogo/protobuf/proto"
 

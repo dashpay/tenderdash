@@ -9,8 +9,9 @@ import (
 	"math/rand"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	db "github.com/tendermint/tm-db"
 

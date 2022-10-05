@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync"
+	sync "github.com/sasha-s/go-deadlock"
 	"time"
 
 	"github.com/tendermint/tendermint/abci/types"

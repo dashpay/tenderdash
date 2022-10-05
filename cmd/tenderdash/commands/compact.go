@@ -3,7 +3,7 @@ package commands
 import (
 	"errors"
 	"path/filepath"
-	"sync"
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/spf13/cobra"
 	"github.com/syndtr/goleveldb/leveldb"

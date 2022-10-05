@@ -8,7 +8,7 @@ package flowrate
 
 import (
 	"math"
-	"sync"
+	sync "github.com/sasha-s/go-deadlock"
 	"time"
 )
 

@@ -4,7 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/gogo/protobuf/proto"
 

@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
+	sync "github.com/sasha-s/go-deadlock"
 	"testing"
 	"time"
 

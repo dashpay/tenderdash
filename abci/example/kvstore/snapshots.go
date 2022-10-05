@@ -8,7 +8,8 @@ import (
 	"math"
 	"os"
 	"path/filepath"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"

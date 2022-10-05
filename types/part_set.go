@@ -6,7 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/libs/bits"

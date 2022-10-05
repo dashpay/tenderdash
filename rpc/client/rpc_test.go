@@ -9,7 +9,7 @@ import (
 	"math"
 	"net/http"
 	"strings"
-	"sync"
+	sync "github.com/sasha-s/go-deadlock"
 	"testing"
 	"time"
 
@@ -541,7 +541,7 @@ func TestClientMethodCalls(t *testing.T) {
 					testTxEventsSent(ctx, t, "async", c)
 				})
 				t.Run("BroadcastTxSync", func(t *testing.T) {
-					testTxEventsSent(ctx, t, "sync", c)
+					testTxEventsSent(ctx, t, sync "github.com/sasha-s/go-deadlock", c)
 				})
 			})
 			t.Run("Evidence", func(t *testing.T) {
