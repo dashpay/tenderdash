@@ -236,7 +236,7 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 
 	// Overwrite state based on AppStateBytes
 	if len(req.AppStateBytes) > 0 {
-		err := json.Unmarshal(req.AppStateBytes, &app.LastCommittedState)
+		err := app.LastCommittedState.Import(req.AppStateBytes)
 		if err != nil {
 			return &abci.ResponseInitChain{}, err
 		}
@@ -640,7 +640,7 @@ func (app *Application) newHeight(committedAppHash tmbytes.HexBytes) error {
 	}
 
 	app.resetRoundStates()
-	if err := app.persist(); err != nil {
+	if err := app.persistInterval(); err != nil {
 		return err
 	}
 
@@ -754,13 +754,18 @@ func encodeMsg(data proto.Message) ([]byte, error) {
 
 // persist persists application state according to the config
 func (app *Application) persist() error {
-	if app.cfg.PersistInterval > 0 && app.LastCommittedState.GetHeight()%int64(app.cfg.PersistInterval) == 0 {
-		out, err := app.store.Writer()
-		if err != nil {
-			return err
-		}
-		defer out.Close()
-		return app.LastCommittedState.Save(out)
+	out, err := app.store.Writer()
+	if err != nil {
+		return err
 	}
-	return nil
+	defer out.Close()
+	return app.LastCommittedState.Save(out)
+}
+
+// persistInterval persists application state according to persist-interval parameter
+func (app *Application) persistInterval() error {
+	if app.cfg.PersistInterval == 0 || app.LastCommittedState.GetHeight()%int64(app.cfg.PersistInterval) != 0 {
+		return nil
+	}
+	return app.persist()
 }

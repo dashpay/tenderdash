@@ -2,14 +2,14 @@ package kvstore
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
-	"os"
-	"path"
-	"testing"
-
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"os"
+	"path"
+	"testing"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/example/code"
@@ -216,6 +216,49 @@ func makeApplyBlock(
 	require.Len(t, resFinalizeBlock.Events, 1)
 
 	return respProcessProposal, resFinalizeBlock
+}
+
+func TestInitChain(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	dir := t.TempDir()
+	logger := log.NewNopLogger()
+
+	testCases := []struct {
+		values map[string]string
+	}{
+		{
+			values: nil,
+		},
+		{
+			values: map[string]string{
+				"init0": "a",
+				"init1": "b",
+				"init2": "c",
+			},
+		},
+	}
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
+			kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger))
+			require.NoError(t, err)
+			req := &types.RequestInitChain{InitialHeight: 1}
+			req.AppStateBytes, err = json.Marshal(StateExport{
+				Items: tc.values,
+			})
+			require.NoError(t, err)
+			_, err = kvstore.InitChain(ctx, req)
+			require.NoError(t, err)
+			for k, v := range tc.values {
+				res, err := kvstore.Query(ctx, &types.RequestQuery{
+					Data: []byte(k),
+				})
+				require.NoError(t, err)
+				require.Equal(t, v, string(res.Value))
+			}
+		})
+	}
 }
 
 func makeSocketClientServer(
