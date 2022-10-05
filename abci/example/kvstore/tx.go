@@ -52,7 +52,7 @@ func execTx(tx types.Tx, roundState State) (abci.ExecTxResult, error) {
 		return abci.ExecTxResult{Code: code.CodeTypeUnknownError, Log: err.Error()}, err
 	}
 
-	err = roundState.Set(prefixKey([]byte(key)), []byte(value))
+	err = roundState.Set([]byte(key), []byte(value))
 	if err != nil {
 		return abci.ExecTxResult{Code: code.CodeTypeUnknownError, Log: err.Error()}, err
 	}

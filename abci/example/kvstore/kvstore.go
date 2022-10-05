@@ -25,15 +25,7 @@ import (
 	"github.com/tendermint/tendermint/version"
 )
 
-const (
-	kvPairPrefixKey = "kvPairKey:"
-
-	ProtocolVersion uint64 = 0x1
-)
-
-func prefixKey(key []byte) []byte {
-	return append([]byte(kvPairPrefixKey), key...)
-}
+const ProtocolVersion uint64 = 0x1
 
 //---------------------------------------------------
 
@@ -236,7 +228,7 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 
 	// Overwrite state based on AppStateBytes
 	if len(req.AppStateBytes) > 0 {
-		err := app.LastCommittedState.Import(req.AppStateBytes)
+		err := json.Unmarshal(req.AppStateBytes, &app.LastCommittedState)
 		if err != nil {
 			return &abci.ResponseInitChain{}, err
 		}
@@ -565,7 +557,7 @@ func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*
 	}
 
 	if reqQuery.Prove {
-		value, err := app.LastCommittedState.Get(prefixKey(reqQuery.Data))
+		value, err := app.LastCommittedState.Get(reqQuery.Data)
 		if err != nil {
 			panic(err)
 		}
@@ -587,7 +579,7 @@ func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*
 		return &resQuery, nil
 	}
 
-	value, err := app.LastCommittedState.Get(prefixKey(reqQuery.Data))
+	value, err := app.LastCommittedState.Get(reqQuery.Data)
 	if err != nil {
 		panic(err)
 	}

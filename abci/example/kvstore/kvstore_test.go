@@ -2,7 +2,6 @@ package kvstore
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path"
@@ -117,7 +116,7 @@ func TestPersistentKVStoreKV(t *testing.T) {
 
 	data, err := os.ReadFile(path.Join(dir, "state.json"))
 	require.NoError(t, err)
-	assert.Contains(t, string(data), fmt.Sprintf(`"%s%s":"%s"`, kvPairPrefixKey, key, value))
+	assert.Contains(t, string(data), fmt.Sprintf(`"%s":"%s"`, key, value))
 }
 
 func TestPersistentKVStoreInfo(t *testing.T) {
@@ -217,49 +216,6 @@ func makeApplyBlock(
 	require.Len(t, resFinalizeBlock.Events, 1)
 
 	return respProcessProposal, resFinalizeBlock
-}
-
-func TestInitChainImportAppState(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	dir := t.TempDir()
-	logger := log.NewNopLogger()
-
-	testCases := []struct {
-		values map[string]string
-	}{
-		{
-			values: nil,
-		},
-		{
-			values: map[string]string{
-				"init0": "a",
-				"init1": "b",
-				"init2": "c",
-			},
-		},
-	}
-	for i, tc := range testCases {
-		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
-			kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger))
-			require.NoError(t, err)
-			req := &types.RequestInitChain{InitialHeight: 1}
-			req.AppStateBytes, err = json.Marshal(StateExport{
-				Items: tc.values,
-			})
-			require.NoError(t, err)
-			_, err = kvstore.InitChain(ctx, req)
-			require.NoError(t, err)
-			for k, v := range tc.values {
-				res, err := kvstore.Query(ctx, &types.RequestQuery{
-					Data: []byte(k),
-				})
-				require.NoError(t, err)
-				require.Equal(t, v, string(res.Value))
-			}
-		})
-	}
 }
 
 func makeSocketClientServer(

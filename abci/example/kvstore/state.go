@@ -42,8 +42,6 @@ type State interface {
 	// UpdateAppHash regenerates apphash for the state. It accepts transactions and tx results from current round.
 	// It is deterministic for a given state, txs and txResults.
 	UpdateAppHash(lastCommittedState State, txs types1.Txs, txResults []*types.ExecTxResult) error
-
-	Import(data []byte) error
 }
 
 type kvState struct {
@@ -190,27 +188,6 @@ func (state kvState) Save(to io.Writer) error {
 	}
 
 	return nil
-}
-
-// Import imports initial state to an application state
-func (state *kvState) Import(data []byte) error {
-	export := StateExport{}
-	err := json.Unmarshal(data, &export)
-	if err != nil {
-		return err
-	}
-	txs := make([]*types.ExecTxResult, 0, len(export.Items))
-	values := make(map[string]string, len(export.Items))
-	for k, v := range export.Items {
-		pk := string(prefixKey([]byte(k)))
-		values[pk] = v
-		txs = append(txs, &types.ExecTxResult{Data: []byte(v)})
-	}
-	state.AppHash, err = types.TxResultsHash(txs)
-	if err != nil {
-		return err
-	}
-	return state.persistItems(values)
 }
 
 type StateExport struct {
