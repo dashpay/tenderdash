@@ -482,17 +482,18 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 
 func (app *Application) createSnapshot() error {
 	height := app.LastCommittedState.GetHeight()
-	if app.cfg.SnapshotInterval > 0 && uint64(height)%app.cfg.SnapshotInterval == 0 {
-		if _, err := app.snapshots.Create(app.LastCommittedState); err != nil {
-			return fmt.Errorf("create snapshot: %w", err)
-		}
-		app.logger.Info("created state sync snapshot", "height", height, "apphash", app.LastCommittedState.GetAppHash())
+	if app.cfg.SnapshotInterval == 0 || uint64(height)%app.cfg.SnapshotInterval != 0 {
+		return nil
 	}
-
-	if err := app.snapshots.Prune(maxSnapshotCount); err != nil {
+	_, err := app.snapshots.Create(app.LastCommittedState)
+	if err != nil {
+		return fmt.Errorf("create snapshot: %w", err)
+	}
+	app.logger.Info("created state sync snapshot", "height", height, "apphash", app.LastCommittedState.GetAppHash())
+	err = app.snapshots.Prune(maxSnapshotCount)
+	if err != nil {
 		return fmt.Errorf("prune snapshots: %w", err)
 	}
-
 	return nil
 }
 
