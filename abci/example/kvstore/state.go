@@ -189,9 +189,6 @@ func (state kvState) Save(to io.Writer) error {
 
 	return nil
 }
-func (state kvState) Import(height uint64, jsonBytes []byte) error {
-	return fmt.Errorf("not implemented")
-}
 
 type StateExport struct {
 	Height  *int64            `json:"height,omitempty"`
@@ -221,7 +218,6 @@ func (state kvState) MarshalJSON() ([]byte, error) {
 			export.Items = map[string]string{}
 		}
 		export.Items[string(iter.Key())] = string(iter.Value())
-
 	}
 
 	return json.Marshal(&export)
@@ -244,26 +240,7 @@ func (state *kvState) UnmarshalJSON(data []byte) error {
 		state.AppHash = export.AppHash
 	}
 
-	if export.Items != nil {
-		batch := state.DB.NewBatch()
-		defer batch.Close()
-
-		if len(export.Items) > 0 {
-			if err := resetDB(state.DB, batch); err != nil {
-				return err
-			}
-			for key, value := range export.Items {
-				if err := batch.Set([]byte(key), []byte(value)); err != nil {
-					return err
-				}
-			}
-		}
-		if err := batch.Write(); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return state.persistItems(export.Items)
 }
 
 func (state *kvState) Close() error {
@@ -271,4 +248,24 @@ func (state *kvState) Close() error {
 		return state.DB.Close()
 	}
 	return nil
+}
+
+func (state *kvState) persistItems(items map[string]string) error {
+	if items == nil {
+		return nil
+	}
+	batch := state.DB.NewBatch()
+	defer batch.Close()
+
+	if len(items) > 0 {
+		if err := resetDB(state.DB, batch); err != nil {
+			return err
+		}
+		for key, value := range items {
+			if err := batch.Set([]byte(key), []byte(value)); err != nil {
+				return err
+			}
+		}
+	}
+	return batch.Write()
 }

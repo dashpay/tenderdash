@@ -116,7 +116,7 @@ func TestPersistentKVStoreKV(t *testing.T) {
 
 	data, err := os.ReadFile(path.Join(dir, "state.json"))
 	require.NoError(t, err)
-	assert.Contains(t, string(data), fmt.Sprintf(`"%s%s":"%s"`, kvPairPrefixKey, key, value))
+	assert.Contains(t, string(data), fmt.Sprintf(`"%s":"%s"`, key, value))
 }
 
 func TestPersistentKVStoreInfo(t *testing.T) {
