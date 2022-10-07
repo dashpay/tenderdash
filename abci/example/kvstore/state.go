@@ -33,7 +33,7 @@ type State interface {
 
 	// GetHeight returns height of the state
 	GetHeight() int64
-	// IncrementHeight increments height by 1
+	// IncrementHeight increments height by 1, but not lower than initial height.
 	IncrementHeight()
 
 	// GetAppHash returns app hash for the state. You need to call UpdateAppHash() beforehand.
@@ -46,17 +46,20 @@ type State interface {
 
 type kvState struct {
 	dbm.DB
-	Height  int64            `json:"height"`
-	AppHash tmbytes.HexBytes `json:"app_hash"`
+	// Height of the state. Special value of 0 means zero state.
+	Height        int64            `json:"height"`
+	InitialHeight int64            `json:"initial_height,omitempty"`
+	AppHash       tmbytes.HexBytes `json:"app_hash"`
 }
 
 // NewKvState creates new, empty, uninitialized kvstore State.
 // Use Copy() to populate.
-func NewKvState(db dbm.DB, height int64) State {
+func NewKvState(db dbm.DB, initialHeight int64) State {
 	return &kvState{
-		DB:      db,
-		AppHash: make([]byte, crypto.DefaultAppHashSize),
-		Height:  height,
+		DB:            db,
+		AppHash:       make([]byte, crypto.DefaultAppHashSize),
+		Height:        0,
+		InitialHeight: initialHeight,
 	}
 }
 
@@ -70,6 +73,7 @@ func (state kvState) Copy(destination State) error {
 	}
 
 	dst.Height = state.Height
+	dst.InitialHeight = state.InitialHeight
 	dst.AppHash = state.AppHash.Copy()
 	// apphash is required, and should never be nil,zero-length
 	if len(dst.AppHash) == 0 {
@@ -136,8 +140,15 @@ func (state kvState) GetHeight() int64 {
 	return state.Height
 }
 
+// IncrementHeight increments the height of the state.
+// If state height is 0 (initial state), it sets the height
+// to state.InitialHeight.
 func (state *kvState) IncrementHeight() {
-	state.Height++
+	if state.Height == 0 {
+		state.Height = state.InitialHeight
+	} else {
+		state.Height = state.GetHeight() + 1
+	}
 }
 
 func (state kvState) GetAppHash() tmbytes.HexBytes {
@@ -191,9 +202,10 @@ func (state kvState) Save(to io.Writer) error {
 }
 
 type StateExport struct {
-	Height  *int64            `json:"height,omitempty"`
-	AppHash tmbytes.HexBytes  `json:"app_hash,omitempty"`
-	Items   map[string]string `json:"items,omitempty"` // we store items as string-encoded values
+	Height        *int64            `json:"height,omitempty"`
+	InitialHeight *int64            `json:"initial_height,omitempty"`
+	AppHash       tmbytes.HexBytes  `json:"app_hash,omitempty"`
+	Items         map[string]string `json:"items,omitempty"` // we store items as string-encoded values
 }
 
 // MarshalJSON implements json.Marshaler
@@ -204,13 +216,15 @@ func (state kvState) MarshalJSON() ([]byte, error) {
 	}
 	defer iter.Close()
 
-	height := state.GetHeight()
+	height := state.Height
+	initialHeight := state.InitialHeight
 	apphash := state.GetAppHash()
 
 	export := StateExport{
-		Height:  &height,
-		AppHash: apphash,
-		Items:   nil,
+		Height:        &height,
+		InitialHeight: &initialHeight,
+		AppHash:       apphash,
+		Items:         nil,
 	}
 
 	for ; iter.Valid(); iter.Next() {
@@ -235,6 +249,9 @@ func (state *kvState) UnmarshalJSON(data []byte) error {
 
 	if export.Height != nil {
 		state.Height = *export.Height
+	}
+	if export.InitialHeight != nil {
+		state.InitialHeight = *export.InitialHeight
 	}
 	if export.AppHash != nil {
 		state.AppHash = export.AppHash

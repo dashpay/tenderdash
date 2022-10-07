@@ -156,7 +156,7 @@ func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.Request
 }
 
 func (app *Application) FinalizeBlock(ctx context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
-	prevState := kvstore.NewKvState(db.NewMemDB(), app.LastCommittedState.GetHeight())
+	prevState := kvstore.NewKvState(db.NewMemDB(), 0)
 	if err := app.LastCommittedState.Copy(prevState); err != nil {
 		return &abci.ResponseFinalizeBlock{}, err
 	}
