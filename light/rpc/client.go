@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
-	"github.com/gogo/protobuf/proto"
 
 	"github.com/tendermint/tendermint/libs"
 
@@ -451,21 +450,10 @@ func (c *Client) BlockResults(ctx context.Context, height *int64) (*coretypes.Re
 	if err != nil {
 		return nil, err
 	}
-
-	// proto-encode FinalizeBlock events
-	bbeBytes, err := proto.Marshal(&abci.ResponseFinalizeBlock{
-		Events: res.FinalizeBlockEvents,
-	})
+	mh, err := abci.TxResultsHash(res.TxsResults)
 	if err != nil {
 		return nil, err
 	}
-
-	// Build a Merkle tree out of the slice.
-	rs, err := abci.MarshalTxResults(res.TxsResults)
-	if err != nil {
-		return nil, err
-	}
-	mh := merkle.HashFromByteSlices(append([][]byte{bbeBytes}, rs...))
 
 	// Verify block results.
 	if !bytes.Equal(mh, trustedBlock.ResultsHash) {
