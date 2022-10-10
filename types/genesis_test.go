@@ -4,6 +4,7 @@ package types
 import (
 	"encoding/json"
 	"os"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -15,60 +16,98 @@ import (
 )
 
 func TestGenesisBad(t *testing.T) {
+	type testCase struct {
+		jsonBlob            []byte
+		expectErrorContains string
+	}
 	// test some bad ones from raw json
-	testCases := [][]byte{
-		{},              // empty
-		{1, 1, 1, 1, 1}, // junk
-		[]byte(`{}`),    // empty
-		[]byte(`{"chain_id":"mychain","validators":[{}]}`),   // invalid validator
-		[]byte(`{"chain_id":"chain","initial_height":"-1"}`), // negative initial height
-		// missing pub_key type
-		[]byte(
-			`{"threshold_public_key": {"type": "tendermint/PubKeyBLS12381","value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},"validators":[{"pub_key":{"value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},"power":"10","name":"","pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"}]}`,
-		),
-		// missing threshold_public_key
-		[]byte(
-			`{"validators":[{"pub_key":{"value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},"power":"10","name":"","pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"}]}`,
-		),
-		// missing threshold_public_key key type
-		[]byte(
-			`{"threshold_public_key": {"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},"validators":[{"pub_key":{"value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},"power":"10","name":"","pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"}]}`,
-		),
-		// missing chain_id
-		[]byte(
-			`{"validators":[` +
-				`{"pub_key":{` +
-				`"type": "tendermint/PubKeyBLS12381","value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"` +
-				`},"power":"10","name":"","pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"}` +
-				`]}`,
-		),
-		// too big chain_id
-		[]byte(
-			`{"chain_id": "Lorem ipsum dolor sit amet, consectetuer adipiscing", "validators": [` +
-				`{"pub_key":{` +
-				`"type": "tendermint/PubKeyBLS12381","value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"` +
-				`},"power":"10","name":"","pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"}` +
-				`]}`,
-		),
-		// wrong address
-		[]byte(
-			`{"chain_id":"mychain", "validators":[` +
-				`{"address": "A", "pub_key":{` +
-				`"type": "tendermint/PubKeyBLS12381","value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"` +
-				`},"power":"10","name":"","pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"}` +
-				`]}`,
-		),
-		// missing pro_tx_hash
-		[]byte(
-			`{"chain_id":"mychain", "validators":[` +
-				`{"address": "A", "pub_key":{` +
-				`"type":"tendermint/PubKeyEd25519","value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="` +
-				`},"power":"10","name":""}` +
-				`]}`,
-		),
-		// missing quorum_hash
-		[]byte(
-			`{
+	testCases := []testCase{
+		{ // empty
+			nil,
+			"unexpected end of JSON input",
+		},
+		{ // junk
+			[]byte{1, 1, 1, 1, 1},
+			"invalid character '\\x01' looking for beginning of value",
+		},
+		{ // empty
+			[]byte(`{}`),
+			"genesis doc must include non-empty chain_id",
+		},
+		{ // invalid validator
+			[]byte(`{"chain_id":"mychain","validators":[{}]}`),
+			"the genesis file cannot contain validators with no voting power",
+		},
+		{ // negative initial height
+			[]byte(`{"chain_id":"chain","initial_height":"-1"}`),
+			"initial_height cannot be negative (got -1)",
+		},
+		{ // missing pub_key type
+			[]byte(`{
+			"threshold_public_key": {
+				"type": "tendermint/PubKeyBLS12381",
+				"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+			},
+			"validators":[
+				{"pub_key":{"value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},
+				"power":10,
+				"name":"",
+				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
+			}]}`,
+			), "unknown type tag for *crypto.PubKey: \"\""},
+		{ // missing threshold_public_key
+			[]byte(`{
+			"chain_id":"test",
+			"validators":[{
+				"pub_key":{"type": "tendermint/PubKeyBLS12381","value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},
+				"power":10,
+				"name":"",
+				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
+			}]}`,
+			), "the threshold public key must be set if there are validators"},
+		{ // missing threshold_public_key key type
+			[]byte(`{
+				"threshold_public_key": {"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
+				"validators":[
+					{"pub_key":{"value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},
+					"power":10,
+					"name":"",
+					"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
+				}]}`,
+			), "unknown type tag for *crypto.PubKey: \"\""},
+		{ // missing chain_id
+			[]byte(`{
+				"validators":[{
+					"pub_key":{"type": "tendermint/PubKeyBLS12381","value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
+					"power":10,
+					"name":"",
+					"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
+				}]}`,
+			), "genesis doc must include non-empty chain_id"},
+		{ // too big chain_id
+			[]byte(
+				`{"chain_id": "Lorem ipsum dolor sit amet, consectetuer adipiscing", 
+				"validators": [
+					{"pub_key":{"type": "tendermint/PubKeyBLS12381","value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
+					"power":10,
+					"name":"",
+					"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
+				}]}`,
+			), "chain_id in genesis doc is too long"},
+		{ // missing pro_tx_hash
+			[]byte(`{
+				"chain_id":"mychain",
+				"threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
+				"quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
+				"validators":[{
+					"address": "A",
+					"pub_key":{"type":"tendermint/PubKeyEd25519","value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},
+					"power":10,
+					"name":""
+				}]}`,
+			), "validators must all contain a pro_tx_hash"},
+		{ // missing quorum_hash
+			[]byte(`{
 			"genesis_time": "0001-01-01T00:00:00Z",
 			"chain_id": "test-chain-QDKdJr",
 			"initial_height": "1000",
@@ -76,20 +115,36 @@ func TestGenesisBad(t *testing.T) {
 			"consensus_params": null,
 			"validators": [{
 				"pub_key":{"type": "tendermint/PubKeyBLS12381","value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
-				"power":"100",
+				"power":100,
 				"name":"",
 				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
 			}],
+			"threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"}
+			}`), "the quorum hash must be at least 20 bytes long"},
+		{ // validator power is not an int
+			jsonBlob: []byte(`{
+			"chain_id":"mychain", 
+			"validators":[{
+				"address": "A", 
+				"pub_key":{"type":"tendermint/PubKeyEd25519","value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},
+				"power":"10",
+				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F",
+				"name":""
+			}],
+			"quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
 			"threshold_public_key": {
 				"type": "tendermint/PubKeyBLS12381",
 				"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
-			}
-		}`),
+			}}`,
+			), expectErrorContains: "cannot unmarshal string into Go struct field genesisValidatorJSON.power of type int64"},
 	}
 
-	for _, testCase := range testCases {
-		_, err := GenesisDocFromJSON(testCase)
-		assert.Error(t, err, "expected error for empty genDoc json")
+	for tcID, testCase := range testCases {
+		t.Run(strconv.Itoa(tcID)+": "+testCase.expectErrorContains, func(t *testing.T) {
+			_, err := GenesisDocFromJSON(testCase.jsonBlob)
+			assert.ErrorContains(t, err, testCase.expectErrorContains)
+		})
+
 	}
 }
 
