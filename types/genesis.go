@@ -57,7 +57,6 @@ func (g *GenesisValidator) UnmarshalJSON(data []byte) error {
 	var gv genesisValidatorJSON
 	if err := json.Unmarshal(data, &gv); err != nil {
 		return fmt.Errorf("unmarshal validator: %w", err)
-
 	}
 	if err := jsontypes.Unmarshal(gv.PubKey, &g.PubKey); err != nil {
 		return fmt.Errorf("unmarshal validator %s key: %w", gv.ProTxHash.ShortString(), err)
