@@ -626,7 +626,7 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 
 	state, err := rts.reactor.stateProvider.State(actx, 5)
 	require.NoError(t, err)
-	require.Equal(t, appHash, state.AppHash)
+	require.Equal(t, appHash, state.LastAppHash)
 	require.Equal(t, types.DefaultConsensusParams(), &state.ConsensusParams)
 
 	commit, err := rts.reactor.stateProvider.Commit(actx, 5)

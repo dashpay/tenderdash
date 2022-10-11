@@ -574,7 +574,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	state.LastBlockHeight = math.MaxInt64 - 2
 	state.LastBlockTime = timestamp
 	state.LastResultsHash = crypto.Checksum([]byte("last_results_hash"))
-	state.AppHash = crypto.Checksum([]byte("app_hash"))
+	state.LastAppHash = crypto.Checksum([]byte("app_hash"))
 	state.Version.Consensus.Block = math.MaxInt64
 	state.Version.Consensus.App = math.MaxInt64
 	maxChainID := ""

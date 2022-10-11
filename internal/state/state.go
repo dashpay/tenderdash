@@ -105,9 +105,8 @@ type State struct {
 	// Merkle root of the results from executing prev block
 	LastResultsHash tmbytes.HexBytes
 
-	// the latest AppHash we've received from calling abci.Commit()
-	// TODO: Rename to LastAppHash
-	AppHash tmbytes.HexBytes
+	// the latest LastAppHash we've received from calling abci.Commit()
+	LastAppHash tmbytes.HexBytes
 }
 
 //  NewRound changes the State to apply settings new round and height to it.
@@ -143,7 +142,7 @@ func (state State) Copy() State {
 		ConsensusParams:                  state.ConsensusParams,
 		LastHeightConsensusParamsChanged: state.LastHeightConsensusParamsChanged,
 
-		AppHash: state.AppHash,
+		LastAppHash: state.LastAppHash,
 
 		LastResultsHash: state.LastResultsHash,
 	}
@@ -218,7 +217,7 @@ func (state *State) ToProto() (*tmstate.State, error) {
 	sm.ConsensusParams = state.ConsensusParams.ToProto()
 	sm.LastHeightConsensusParamsChanged = state.LastHeightConsensusParamsChanged
 	sm.LastResultsHash = state.LastResultsHash
-	sm.AppHash = state.AppHash
+	sm.AppHash = state.LastAppHash
 
 	return sm, nil
 }
@@ -272,7 +271,7 @@ func FromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 	state.ConsensusParams = types.ConsensusParamsFromProto(pb.ConsensusParams)
 	state.LastHeightConsensusParamsChanged = pb.LastHeightConsensusParamsChanged
 	state.LastResultsHash = pb.LastResultsHash
-	state.AppHash = pb.AppHash
+	state.LastAppHash = pb.AppHash
 
 	return state, nil
 }
@@ -302,7 +301,7 @@ func (state State) MakeBlock(
 		tmtime.Now(), state.LastBlockID,
 		validatorsHash, validatorsHash,
 		state.ConsensusParams.HashConsensusParams(),
-		state.AppHash,
+		state.LastAppHash,
 		state.LastResultsHash,
 		proposerProTxHash,
 		proposedAppVersion,
@@ -404,6 +403,6 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 		ConsensusParams:                  *genDoc.ConsensusParams,
 		LastHeightConsensusParamsChanged: genDoc.InitialHeight,
 
-		AppHash: genDoc.AppHash,
+		LastAppHash: genDoc.AppHash,
 	}, nil
 }

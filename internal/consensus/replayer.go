@@ -182,7 +182,7 @@ func (r *BlockReplayer) syncStateIfItIsOneAheadOfStore(ctx context.Context, rs r
 		if err != nil {
 			return nil, err
 		}
-		return state.AppHash, nil
+		return state.LastAppHash, nil
 	}
 	if rs.appHeight == rs.storeHeight {
 		// We ran Commit, but didn't save the state, so replay with mock app.
@@ -203,7 +203,7 @@ func (r *BlockReplayer) syncStateIfItIsOneAheadOfStore(ctx context.Context, rs r
 		if err != nil {
 			return nil, err
 		}
-		return state.AppHash, nil
+		return state.LastAppHash, nil
 	}
 	return nil, nil
 }
@@ -257,7 +257,7 @@ func (r *BlockReplayer) replayBlocks(
 		if err != nil {
 			return nil, err
 		}
-		appHash = state.AppHash
+		appHash = state.LastAppHash
 	}
 	if err := checkAppHashEqualsOneFromState(appHash, state); err != nil {
 		return nil, err

@@ -224,7 +224,7 @@ func TestPruneStates(t *testing.T) {
 
 				err := stateStore.Save(state)
 				require.NoError(t, err)
-				// TODO: Rewrite, as we need to save Response*Proposal to keep TxResults
+
 				err = stateStore.SaveABCIResponses(h, tmstate.ABCIResponses{
 					ProcessProposal: &abci.ResponseProcessProposal{
 						TxResults: []*abci.ExecTxResult{

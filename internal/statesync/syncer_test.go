@@ -45,7 +45,7 @@ func TestSyncer_SyncAny(t *testing.T) {
 		LastBlockID:     types.BlockID{Hash: []byte("blockhash")},
 		LastBlockTime:   time.Now(),
 		LastResultsHash: []byte("last_results_hash"),
-		AppHash:         []byte("app_hash"),
+		LastAppHash:     []byte("app_hash"),
 
 		LastValidators: &types.ValidatorSet{
 			Proposer: &types.Validator{ProTxHash: crypto.Checksum([]byte("val1"))},
@@ -67,7 +67,7 @@ func TestSyncer_SyncAny(t *testing.T) {
 	s := &snapshot{Height: 1, Format: 1, Chunks: 3, Hash: []byte{1, 2, 3}}
 
 	stateProvider := &mocks.StateProvider{}
-	stateProvider.On("AppHash", mock.Anything, uint64(1)).Return(state.AppHash, nil)
+	stateProvider.On("AppHash", mock.Anything, uint64(1)).Return(state.LastAppHash, nil)
 	stateProvider.On("AppHash", mock.Anything, uint64(2)).Return(tmbytes.HexBytes("app_hash_2"), nil)
 	stateProvider.On("Commit", mock.Anything, uint64(1)).Return(commit, nil)
 	stateProvider.On("State", mock.Anything, uint64(1)).Return(state, nil)

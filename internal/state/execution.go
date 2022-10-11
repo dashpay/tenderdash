@@ -413,8 +413,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	}
 
 	// Save the results before we commit.
-	// TODO: upgrade for Same-Block-Execution. Right now, it just saves Finalize response, while we need
-	// to find a way to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
+	// We need to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
 	// in FinalizeResponse.
 	abciResponses := tmstate.ABCIResponses{
 		ProcessProposal: &uncommittedState.response,
@@ -603,7 +602,7 @@ func (state State) Update(
 		ConsensusParams:                  state.ConsensusParams,
 		LastHeightConsensusParamsChanged: state.LastHeightConsensusParamsChanged,
 		LastResultsHash:                  nil,
-		AppHash:                          nil,
+		LastAppHash:                      nil,
 	}
 	var err error
 	newState, err = executeStateUpdates(ctx, newState, stateUpdates...)
