@@ -209,7 +209,9 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 	itxs := txrSet.IncludedTxs()
 
-	// TODO: validate rpp.TxResults
+	if err := validateExecTxResults(rpp.TxResults, itxs); err != nil {
+		return nil, CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
+	}
 
 	block = state.MakeBlock(
 		height,
@@ -265,9 +267,11 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	if err := resp.Validate(); err != nil {
 		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
 	}
-	accepted := resp.IsAccepted()
-	if !accepted {
+	if !resp.IsAccepted() {
 		return CurrentRoundState{}, ErrBlockRejected
+	}
+	if err := validateExecTxResults(resp.TxResults, block.Data.Txs); err != nil {
+		return CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
 	}
 
 	// update some round state data
@@ -723,6 +727,14 @@ func validatePubKey(pk crypto.PubKey) error {
 	}
 	if err := v.Validate(); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateExecTxResults ensures that tx results are correct.
+func validateExecTxResults(txResults []*abci.ExecTxResult, acceptedTxs []types.Tx) error {
+	if len(txResults) != len(acceptedTxs) {
+		return fmt.Errorf("got %d tx results when there are %d accepted transactions", len(txResults), len(acceptedTxs))
 	}
 	return nil
 }
