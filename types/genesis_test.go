@@ -164,6 +164,30 @@ func TestGenesisBad(t *testing.T) {
 	}
 }
 
+func TestGenesisCorrect(t *testing.T) {
+	type testCase struct {
+		name   string
+		genDoc string
+	}
+
+	testCases := []testCase{
+		{
+			"minimal genesis file",
+			`{
+				"chain_id": "test-chain-QDKdJr"
+			}`,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			_, err := GenesisDocFromJSON([]byte(tc.genDoc))
+			assert.NoError(t, err, "test %s failed for json: %s", tc.name, tc.genDoc)
+
+		})
+	}
+}
+
 func TestBasicGenesisDoc(t *testing.T) {
 	// test a good one by raw json
 	genDocBytes := []byte(
