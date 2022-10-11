@@ -120,7 +120,23 @@ func TestGenesisBad(t *testing.T) {
 				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
 			}],
 			"threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"}
-			}`), "the quorum hash must be at least 20 bytes long"},
+			}`), "the quorum hash must be base64-encoded and at least 20 bytes long"},
+		{ // quorum_hash too short
+			[]byte(`{
+				"genesis_time": "0001-01-01T00:00:00Z",
+				"chain_id": "test-chain-QDKdJr",
+				"initial_height": "1000",
+				"initial_core_chain_locked_height": 3000,
+				"consensus_params": null,
+				"validators": [{
+					"pub_key":{"type": "tendermint/PubKeyBLS12381","value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
+					"power":100,
+					"name":"",
+					"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
+				}],
+				"threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
+				"quorum_hash": "MDEyMzQ1Njc4OTAxMjM0NTY3OA=="
+				}`), "the quorum hash must be base64-encoded and at least 20 bytes long, is 19 byte"},
 		{ // validator power is not an int
 			jsonBlob: []byte(`{
 			"chain_id":"mychain", 
@@ -141,8 +157,8 @@ func TestGenesisBad(t *testing.T) {
 
 	for tcID, testCase := range testCases {
 		t.Run(strconv.Itoa(tcID)+": "+testCase.expectErrorContains, func(t *testing.T) {
-			_, err := GenesisDocFromJSON(testCase.jsonBlob)
-			assert.ErrorContains(t, err, testCase.expectErrorContains)
+			gdoc, err := GenesisDocFromJSON(testCase.jsonBlob)
+			assert.ErrorContains(t, err, testCase.expectErrorContains, "%+v", gdoc)
 		})
 
 	}
