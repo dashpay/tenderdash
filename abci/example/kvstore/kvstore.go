@@ -46,7 +46,8 @@ type Application struct {
 	RetainBlocks int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
 	logger       log.Logger
 
-	validatorSetUpdates map[int64]abci.ValidatorSetUpdate
+	validatorSetUpdates    map[int64]abci.ValidatorSetUpdate
+	consensusParamsUpdates map[int64]types1.ConsensusParams
 
 	store StoreFactory
 
@@ -166,15 +167,16 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 	var err error
 
 	app := &Application{
-		logger:              log.NewNopLogger(),
-		LastCommittedState:  NewKvState(dbm.NewMemDB(), 0), // initial state to avoid InitChain() in unit tests
-		roundStates:         map[string]State{},
-		validatorSetUpdates: make(map[int64]abci.ValidatorSetUpdate),
-		initialHeight:       1,
-		store:               stateStore,
-		prepareTxs:          prepareTxs,
-		verifyTx:            verifyTx,
-		execTx:              execTx,
+		logger:                 log.NewNopLogger(),
+		LastCommittedState:     NewKvState(dbm.NewMemDB(), 0), // initial state to avoid InitChain() in unit tests
+		roundStates:            map[string]State{},
+		validatorSetUpdates:    map[int64]abci.ValidatorSetUpdate{},
+		consensusParamsUpdates: map[int64]types1.ConsensusParams{},
+		initialHeight:          1,
+		store:                  stateStore,
+		prepareTxs:             prepareTxs,
+		verifyTx:               verifyTx,
+		execTx:                 execTx,
 	}
 
 	for _, opt := range opts {
@@ -235,20 +237,23 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	}
 
 	if req.ValidatorSet != nil {
-		// FIXME: should we move validatorSetUpdates to State?
 		app.validatorSetUpdates[app.initialHeight] = *req.ValidatorSet
 	}
 	coreChainLock, err := app.chainLockUpdate(req.InitialHeight)
 	if err != nil {
 		return nil, err
 	}
-	resp := &abci.ResponseInitChain{
-		AppHash: app.LastCommittedState.GetAppHash(),
-		ConsensusParams: &types1.ConsensusParams{
+	consensusParams, ok := app.consensusParamsUpdates[app.initialHeight]
+	if !ok {
+		consensusParams = types1.ConsensusParams{
 			Version: &types1.VersionParams{
 				AppVersion: ProtocolVersion,
 			},
-		},
+		}
+	}
+	resp := &abci.ResponseInitChain{
+		AppHash:                 app.LastCommittedState.GetAppHash(),
+		ConsensusParams:         &consensusParams,
 		ValidatorSetUpdate:      app.validatorSetUpdates[app.initialHeight],
 		InitialCoreHeight:       app.initialCoreLockHeight,
 		NextCoreChainLockUpdate: coreChainLock,
@@ -284,7 +289,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 		TxRecords:             txRecords,
 		AppHash:               roundState.GetAppHash(),
 		TxResults:             txResults,
-		ConsensusParamUpdates: nil, // TODO: implement
+		ConsensusParamUpdates: app.getConsensusParamsUpdate(req.Height),
 		CoreChainLockUpdate:   coreChainLock,
 		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
 	}
@@ -312,11 +317,12 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 		return nil, err
 	}
 	resp := &abci.ResponseProcessProposal{
-		Status:              abci.ResponseProcessProposal_ACCEPT,
-		AppHash:             roundState.GetAppHash(),
-		TxResults:           txResults,
-		ValidatorSetUpdate:  app.getValidatorSetUpdate(req.Height),
-		CoreChainLockUpdate: coreChainLock,
+		Status:                abci.ResponseProcessProposal_ACCEPT,
+		AppHash:               roundState.GetAppHash(),
+		TxResults:             txResults,
+		ConsensusParamUpdates: app.getConsensusParamsUpdate(req.Height),
+		CoreChainLockUpdate:   coreChainLock,
+		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
 	}
 
 	if app.cfg.ProcessProposalDelayMS != 0 {
@@ -600,6 +606,14 @@ func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*
 	return &resQuery, nil
 }
 
+// AddConsensusParamsUpdate schedules new consensus params update to be returned at `height` and used at `height+1`.
+// `params` must be a final struct that should be passed to Tenderdash in ResponsePrepare/ProcessProposal at `height`.
+func (app *Application) AddConsensusParamsUpdate(params types1.ConsensusParams, height int64) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+	app.consensusParamsUpdates[height] = params
+}
+
 // AddValidatorSetUpdate schedules new valiudator set update at some height
 func (app *Application) AddValidatorSetUpdate(vsu abci.ValidatorSetUpdate, height int64) {
 	app.mu.Lock()
@@ -680,6 +694,16 @@ func (app *Application) executeProposal(height int64, txs types.Txs) (State, []*
 	app.roundStates[roundState.GetAppHash().String()] = roundState
 
 	return roundState, txResults, nil
+}
+
+// getConsensusParamsUpdate returns consensus params update to be returned at given `height`
+// and applied at `height+1`
+func (app *Application) getConsensusParamsUpdate(height int64) *types1.ConsensusParams {
+	if cp, ok := app.consensusParamsUpdates[height]; ok {
+		return &cp
+	}
+
+	return nil
 }
 
 // ---------------------------------------------
