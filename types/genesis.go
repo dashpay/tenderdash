@@ -56,10 +56,10 @@ func (g GenesisValidator) MarshalJSON() ([]byte, error) {
 func (g *GenesisValidator) UnmarshalJSON(data []byte) error {
 	var gv genesisValidatorJSON
 	if err := json.Unmarshal(data, &gv); err != nil {
-		return err
+		return fmt.Errorf("unmarshal validator: %w", err)
 	}
 	if err := jsontypes.Unmarshal(gv.PubKey, &g.PubKey); err != nil {
-		return err
+		return fmt.Errorf("unmarshal validator %s key: %w", gv.ProTxHash.ShortString(), err)
 	}
 	g.Power = gv.Power
 	g.Name = gv.Name
@@ -219,8 +219,9 @@ func (genDoc *GenesisDoc) ValidateAndComplete() error {
 		return fmt.Errorf("the threshold public key must be 48 bytes for BLS")
 	}
 	if lenVals > 0 && len(genDoc.QuorumHash.Bytes()) < crypto.SmallAppHashSize {
-		return fmt.Errorf("the quorum hash must be at least %d bytes long (%d Validator(s))",
+		return fmt.Errorf("the quorum hash must be base64-encoded and at least %d bytes long, is %d bytes (%d Validator(s))",
 			crypto.SmallAppHashSize,
+			len(genDoc.QuorumHash.Bytes()),
 			len(genDoc.Validators))
 	}
 
