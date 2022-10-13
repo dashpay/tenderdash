@@ -378,13 +378,17 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 
 // eventValUpdate generates an event that contains info about current validator set
 func (app *Application) eventValUpdate(height int64) abci.Event {
-	vu := app.getValidatorSetUpdate(height)
+	size := 0
+	vsu := app.getValidatorSetUpdate(height)
+	if vsu != nil {
+		size = len(vsu.ValidatorUpdates)
+	}
 	event := abci.Event{
 		Type: "val_updates",
 		Attributes: []abci.EventAttribute{
 			{
 				Key:   "size",
-				Value: strconv.Itoa(len(vu.ValidatorUpdates)),
+				Value: strconv.Itoa(size),
 			},
 			{
 				Key:   "height",
@@ -688,13 +692,7 @@ func (app *Application) executeProposal(height int64, txs types.Txs) (State, []*
 func (app *Application) getValidatorSetUpdate(height int64) *abci.ValidatorSetUpdate {
 	vsu, ok := app.validatorSetUpdates[height]
 	if !ok {
-		var prev int64
-		for h, v := range app.validatorSetUpdates {
-			if h < height && prev <= h {
-				vsu = v
-				prev = h
-			}
-		}
+		return nil
 	}
 	return proto.Clone(&vsu).(*abci.ValidatorSetUpdate)
 }
