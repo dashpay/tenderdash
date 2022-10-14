@@ -435,9 +435,6 @@ func (app *Application) OfferSnapshot(_ context.Context, req *abci.RequestOfferS
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	if app.restoreSnapshot != nil {
-		return &abci.ResponseOfferSnapshot{}, errors.New("a snapshot is already being restored")
-	}
 	app.restoreSnapshot = req.Snapshot
 	app.restoreAppHash = req.AppHash
 	app.restoreChunks = [][]byte{}
