@@ -174,7 +174,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 			NextValidatorsHash: block.NextValidatorsHash,
 
 			// Dash's fields
-			CoreChainLockedHeight: block.CoreChainLockedHeight,
+			CoreChainLockedHeight: state.LastCoreChainLockedBlockHeight,
 			ProposerProTxHash:     block.ProposerProTxHash,
 			ProposedAppVersion:    block.ProposedAppVersion,
 			Version:               &version,
