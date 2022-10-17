@@ -537,10 +537,6 @@ func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*
 	defer app.mu.Unlock()
 
 	switch reqQuery.Path {
-	case "/verify-chainlock":
-		return &abci.ResponseQuery{
-			Code: 0,
-		}, nil
 	case "/val":
 		vu, err := app.findValidatorUpdate(reqQuery.Data)
 		if err != nil {
