@@ -208,19 +208,8 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		}
 	}
 	itxs := txrSet.IncludedTxs()
-
 	// TODO: validate rpp.TxResults
-
-	tmpTime := block.Time
-	block = state.MakeBlock(
-		height,
-		itxs,
-		commit,
-		evidence,
-		proposerProTxHash,
-		proposedAppVersion,
-	)
-	block.Time = tmpTime
+	block.SetTxs(itxs)
 
 	rp, err := RoundParamsFromPrepareProposal(rpp)
 	if err != nil {
