@@ -119,7 +119,6 @@ func TestSignerClient_SignVote(t *testing.T) {
 
 	require.NoError(t, mockPV.SignVote(ctx, chainID, btcjson.LLMQType_5_60, quorumHash, pbWant, stateID, logger))
 
-	assert.Equal(t, pbWant.StateSignature, pbHave.StateSignature)
 	assert.Equal(t, pbWant.BlockSignature, pbHave.BlockSignature)
 }
 

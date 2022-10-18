@@ -1,16 +1,20 @@
 syntax = "proto3";
 package tendermint.types;
 
-option go_package = "github.com/tendermint/tendermint/proto/tendermint/types";
+option go_package                       = "github.com/tendermint/tendermint/proto/tendermint/types";
+option (gogoproto.stable_marshaler_all) = true;
 
 import "gogoproto/gogo.proto";
 import "tendermint/types/types.proto";
 import "tendermint/types/dash.proto";
 import "google/protobuf/timestamp.proto";
 
+// CanonicalBlockID is a BlockID in a canonical form, for cryptographic purposes.
+// See BlockID for more specific documentation.
 message CanonicalBlockID {
   bytes                  hash            = 1;
   CanonicalPartSetHeader part_set_header = 2 [(gogoproto.nullable) = false];
+  bytes state_id = 3;
 }
 
 message CanonicalPartSetHeader {

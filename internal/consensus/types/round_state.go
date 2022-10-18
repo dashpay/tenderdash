@@ -168,6 +168,7 @@ func (rs *RoundState) CompleteProposalEvent() types.EventDataCompleteProposal {
 	blockID := types.BlockID{
 		Hash:          rs.ProposalBlock.Hash(),
 		PartSetHeader: rs.ProposalBlockParts.Header(),
+		StateID:       rs.ProposalBlock.Header.StateID().Hash(),
 	}
 
 	return types.EventDataCompleteProposal{

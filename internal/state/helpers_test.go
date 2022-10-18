@@ -1,4 +1,3 @@
-// nolint: lll
 package state_test
 
 import (
@@ -49,7 +48,7 @@ func makeAndCommitGoodBlock(
 	state, blockID := makeAndApplyGoodBlock(ctx, t, state, nodeProTxHash, height, lastCommit, proposerProTxHash, blockExec, evidence, proposedAppVersion)
 
 	// Simulate a lastCommit for this block from all validators for the next height
-	commit, _ := makeValidCommit(ctx, t, height, blockID, state.LastStateID, state.Validators, privVals)
+	commit, _ := makeValidCommit(ctx, t, height, blockID, state.Validators, privVals)
 
 	return state, blockID, commit
 }
@@ -89,7 +88,6 @@ func makeValidCommit(
 	t *testing.T,
 	height int64,
 	blockID types.BlockID,
-	stateID types.StateID,
 	vals *types.ValidatorSet,
 	privVals map[string]types.PrivValidator,
 ) (*types.Commit, []*types.Vote) {
@@ -106,7 +104,6 @@ func makeValidCommit(
 	return types.NewCommit(
 		height, 0,
 		blockID,
-		stateID,
 		&types.CommitSigns{
 			QuorumSigns: *thresholdSigns,
 			QuorumHash:  vals.QuorumHash,

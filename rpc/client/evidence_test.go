@@ -38,12 +38,6 @@ func newEvidence(t *testing.T, val *privval.FilePV,
 	vote2.BlockSignature, err = privKey.SignDigest(types.VoteBlockSignID(chainID, v2, quorumType, quorumHash))
 	require.NoError(t, err)
 
-	vote.StateSignature, err = privKey.SignDigest(stateID.SignID(chainID, quorumType, quorumHash))
-	require.NoError(t, err)
-
-	vote2.StateSignature, err = privKey.SignDigest(stateID.SignID(chainID, quorumType, quorumHash))
-	require.NoError(t, err)
-
 	validator := types.NewValidator(privKey.PubKey(), types.DefaultDashVotingPower, val.Key.ProTxHash, "")
 	valSet := types.NewValidatorSet([]*types.Validator{validator}, validator.PubKey, quorumType, quorumHash, true)
 

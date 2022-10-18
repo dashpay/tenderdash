@@ -217,8 +217,6 @@ func TestSignerVote(t *testing.T) {
 			require.NoError(t, tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), stateID, nil))
 
 			assert.Equal(t, want.BlockSignature, have.BlockSignature)
-			assert.Equal(t, want.StateSignature, have.StateSignature)
-
 		})
 	}
 }
@@ -262,7 +260,6 @@ func TestSignerVoteResetDeadline(t *testing.T) {
 			require.NoError(t,
 				tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), stateID, nil))
 			assert.Equal(t, want.BlockSignature, have.BlockSignature)
-			assert.Equal(t, want.StateSignature, have.StateSignature)
 
 			// TODO(jleni): Clarify what is actually being tested
 
@@ -274,7 +271,6 @@ func TestSignerVoteResetDeadline(t *testing.T) {
 			require.NoError(t,
 				tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), stateID, nil))
 			assert.Equal(t, want.BlockSignature, have.BlockSignature)
-			assert.Equal(t, want.StateSignature, have.StateSignature)
 		})
 	}
 }
@@ -326,7 +322,6 @@ func TestSignerVoteKeepAlive(t *testing.T) {
 				tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), stateID, nil))
 
 			assert.Equal(t, want.BlockSignature, have.BlockSignature)
-			assert.Equal(t, want.StateSignature, have.StateSignature)
 		})
 	}
 }
@@ -393,7 +388,6 @@ func TestSignerSignVoteErrors(t *testing.T) {
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
 				BlockSignature:     []byte("signature"),
-				StateSignature:     []byte("stateSignature"),
 			}
 
 			stateID := types.RandStateID().WithHeight(vote.Height - 1)

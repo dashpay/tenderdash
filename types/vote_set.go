@@ -69,7 +69,6 @@ type VoteSet struct {
 
 	// dash fields
 	thresholdBlockSig    []byte                   // If a 2/3 majority is seen, recover the block sig
-	thresholdStateSig    []byte                   // If a 2/3 majority is seen, recover the state sig
 	thresholdVoteExtSigs []ThresholdExtensionSign // If a 2/3 majority is seen, recover the vote extension sigs
 }
 
@@ -206,8 +205,7 @@ func (voteSet *VoteSet) addVote(vote *Vote) (added bool, err error) {
 
 	// If we already know of this vote, return false.
 	if existing, ok := voteSet.getVote(valIndex, blockKey); ok {
-		if bytes.Equal(existing.BlockSignature, vote.BlockSignature) &&
-			bytes.Equal(existing.StateSignature, vote.StateSignature) {
+		if bytes.Equal(existing.BlockSignature, vote.BlockSignature) {
 			return false, nil // duplicate
 		}
 		return false, fmt.Errorf(
@@ -222,12 +220,11 @@ func (voteSet *VoteSet) addVote(vote *Vote) (added bool, err error) {
 		voteSet.valSet.QuorumHash,
 		val.PubKey,
 		val.ProTxHash,
-		vote.StateID(),
 	)
 	if err != nil {
 		return false, ErrInvalidVoteSignature(
-			fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s ProTxHash %s StateID %s: %w",
-				voteSet.chainID, val.PubKey, val.ProTxHash, vote.StateID(), err))
+			fmt.Errorf("failed to verify vote with ChainID %s and PubKey %s ProTxHash %s: %w",
+				voteSet.chainID, val.PubKey, val.ProTxHash, err))
 	}
 
 	quorumSigns, err := MakeQuorumSignsWithVoteSet(voteSet, vote.ToProto())
@@ -350,7 +347,6 @@ func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes, q
 		// there is only 1 validator
 		vote := blockVotes.votes[0]
 		voteSet.thresholdBlockSig = vote.BlockSignature
-		voteSet.thresholdStateSig = vote.StateSignature
 		voteSet.thresholdVoteExtSigs = MakeThresholdVoteExtensions(
 			vote.VoteExtensions[tmproto.VoteExtensionType_THRESHOLD_RECOVER],
 			vote.GetVoteExtensionsSigns(tmproto.VoteExtensionType_THRESHOLD_RECOVER),
@@ -379,7 +375,6 @@ func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) error {
 		return err
 	}
 	voteSet.thresholdBlockSig = thresholdSigns.BlockSign
-	voteSet.thresholdStateSig = thresholdSigns.StateSign
 	voteSet.thresholdVoteExtSigs = thresholdSigns.ExtensionSigns
 	return nil
 }
@@ -722,27 +717,10 @@ func (voteSet *VoteSet) MakeCommit() *Commit {
 		panic("Cannot MakeCommit() unless a thresholdBlockSig has been created")
 	}
 
-	if voteSet.thresholdStateSig == nil {
-		panic("Cannot MakeCommit() unless a thresholdStateSig has been created")
-	}
-
-	// find a first vote to take height and app-hash for stateID
-	stateID := StateID{}
-	if len(voteSet.votes) > 0 {
-		for _, vote := range voteSet.votes {
-			if vote == nil {
-				continue
-			}
-			stateID = vote.StateID()
-			break
-		}
-	}
-
 	return NewCommit(
 		voteSet.GetHeight(),
 		voteSet.GetRound(),
 		*voteSet.maj23,
-		stateID,
 		voteSet.makeCommitSigns(),
 	)
 }
@@ -751,7 +729,6 @@ func (voteSet *VoteSet) makeCommitSigns() *CommitSigns {
 	return &CommitSigns{
 		QuorumSigns: QuorumSigns{
 			BlockSign:      voteSet.thresholdBlockSig,
-			StateSign:      voteSet.thresholdStateSig,
 			ExtensionSigns: voteSet.thresholdVoteExtSigs,
 		},
 		QuorumHash: voteSet.valSet.QuorumHash,
@@ -761,7 +738,6 @@ func (voteSet *VoteSet) makeCommitSigns() *CommitSigns {
 func (voteSet *VoteSet) makeQuorumSigns() QuorumSigns {
 	return QuorumSigns{
 		BlockSign:      voteSet.thresholdBlockSig,
-		StateSign:      voteSet.thresholdStateSig,
 		ExtensionSigns: voteSet.thresholdVoteExtSigs,
 	}
 }

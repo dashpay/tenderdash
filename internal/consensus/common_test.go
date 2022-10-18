@@ -1,4 +1,3 @@
-// nolint: lll
 package consensus
 
 import (
@@ -127,13 +126,11 @@ func (vs *validatorStub) signVote(
 		ValidatorProTxHash: proTxHash,
 		ValidatorIndex:     vs.Index,
 		VoteExtensions:     voteExtensions,
-		AppHash:            appHash,
 	}
 
-	stateID := vote.StateID()
 	v := vote.ToProto()
 
-	if err := vs.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, v, stateID, nil); err != nil {
+	if err := vs.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, v,  nil); err != nil {
 		return nil, fmt.Errorf("sign vote failed: %w", err)
 	}
 

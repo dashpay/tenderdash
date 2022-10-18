@@ -260,7 +260,7 @@ func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte) BlockID {
 
 var nilBytes []byte
 
-// This follows RFC-6962, i.e. `echo -n '' | sha256sum`
+// This follows RFC-6962, i.e. `echo -n ” | sha256sum`
 var emptyBytes = []byte{0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8,
 	0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b,
 	0x78, 0x52, 0xb8, 0x55}
@@ -292,7 +292,6 @@ func TestCommit(t *testing.T) {
 	assert.Equal(t, tmproto.PrecommitType, tmproto.SignedMsgType(commit.Type()))
 
 	require.NotNil(t, commit.ThresholdBlockSignature)
-	require.NotNil(t, commit.ThresholdStateSignature)
 	// TODO replace an assertion with a correct one
 	//assert.Equal(t, voteWithoutExtension(voteSet.GetByIndex(0)), commit.GetByIndex(0))
 	assert.True(t, commit.IsCommit())
@@ -307,7 +306,6 @@ func TestCommitValidateBasic(t *testing.T) {
 	}{
 		{"Random Commit", func(com *Commit) {}, false},
 		{"Incorrect block signature", func(com *Commit) { com.ThresholdBlockSignature = []byte{0} }, true},
-		{"Incorrect state signature", func(com *Commit) { com.ThresholdStateSignature = []byte{0} }, true},
 		{"Incorrect height", func(com *Commit) { com.Height = int64(-100) }, true},
 		{"Incorrect round", func(com *Commit) { com.Round = -100 }, true},
 	}
@@ -342,7 +340,6 @@ func TestMaxCommitBytes(t *testing.T) {
 			AppHash: crypto.Checksum([]byte("stateID_hash")),
 		},
 		ThresholdBlockSignature: crypto.CRandBytes(SignatureSize),
-		ThresholdStateSignature: crypto.CRandBytes(SignatureSize),
 	}
 
 	pb := commit.ToProto()
@@ -930,7 +927,7 @@ func TestStateID_Equals(t *testing.T) {
 	//nolint:scopelint
 	for tcID, tc := range tests {
 		t.Run(strconv.Itoa(tcID), func(t *testing.T) {
-			assert.Equal(t, tc.equal, tc.state1.Equals(tc.state2))
+			assert.Equal(t, tc.equal, tc.state1.Equal(tc.state2))
 		})
 	}
 }
@@ -1271,7 +1268,6 @@ func TestCommit_ValidateBasic(t *testing.T) {
 					},
 				},
 				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize+1),
-				ThresholdStateSignature: make([]byte, bls12381.SignatureSize),
 			},
 			true, "block threshold signature is wrong size",
 		},
@@ -1287,7 +1283,6 @@ func TestCommit_ValidateBasic(t *testing.T) {
 					},
 				},
 				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize),
-				ThresholdStateSignature: make([]byte, bls12381.SignatureSize+1),
 			},
 			true, "state threshold signature is wrong size",
 		},
@@ -1303,7 +1298,6 @@ func TestCommit_ValidateBasic(t *testing.T) {
 					},
 				},
 				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize),
-				ThresholdStateSignature: make([]byte, bls12381.SignatureSize),
 			},
 			false, "",
 		},

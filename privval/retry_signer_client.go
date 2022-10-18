@@ -139,10 +139,10 @@ func (sc *RetrySignerClient) GetHeight(ctx context.Context, quorumHash crypto.Qu
 
 func (sc *RetrySignerClient) SignVote(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
-	vote *tmproto.Vote, stateID types.StateID, logger log.Logger) error {
+	vote *tmproto.Vote, logger log.Logger) error {
 	var err error
 	for i := 0; i < sc.retries || sc.retries == 0; i++ {
-		err = sc.next.SignVote(ctx, chainID, quorumType, quorumHash, vote, stateID, nil)
+		err = sc.next.SignVote(ctx, chainID, quorumType, quorumHash, vote, nil)
 		if err == nil {
 			return nil
 		}

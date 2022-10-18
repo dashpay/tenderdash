@@ -159,12 +159,11 @@ func generateDuplicateVoteEvidence(
 	if err != nil {
 		return nil, err
 	}
-	stateID := types.RandStateID()
-	voteA, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID(), stateID.AppHash)
+	voteA, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID())
 	if err != nil {
 		return nil, err
 	}
-	voteB, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID(), stateID.AppHash)
+	voteB, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID())
 	if err != nil {
 		return nil, err
 	}
@@ -203,10 +202,14 @@ func readPrivKey(keyFilePath string, quorumHash crypto.QuorumHash) (crypto.PrivK
 }
 
 func makeRandomBlockID() types.BlockID {
-	return makeBlockID(crypto.CRandBytes(crypto.HashSize), 100, crypto.CRandBytes(crypto.HashSize))
+	return makeBlockID(
+		crypto.CRandBytes(crypto.HashSize),
+		100, crypto.CRandBytes(crypto.HashSize),
+		types.RandStateID().Hash(),
+	)
 }
 
-func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte) types.BlockID {
+func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte, stateIDHash []byte) types.BlockID {
 	var (
 		h   = make([]byte, crypto.HashSize)
 		psH = make([]byte, crypto.HashSize)
@@ -219,5 +222,6 @@ func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte) types.Bloc
 			Total: partSetSize,
 			Hash:  psH,
 		},
+		StateID: stateIDHash,
 	}
 }

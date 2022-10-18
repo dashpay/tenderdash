@@ -88,9 +88,7 @@ type Vote struct {
 	ValidatorProTxHash ProTxHash             `json:"validator_pro_tx_hash"`
 	ValidatorIndex     int32                 `json:"validator_index"`
 	BlockSignature     tmbytes.HexBytes      `json:"block_signature"`
-	StateSignature     tmbytes.HexBytes      `json:"state_signature"`
 	VoteExtensions     VoteExtensions        `json:"vote_extensions"`
-	AppHash            tmbytes.HexBytes      `json:"app_hash"`
 }
 
 // VoteFromProto attempts to convert the given serialization (Protobuf) type to
@@ -110,28 +108,8 @@ func VoteFromProto(pv *tmproto.Vote) (*Vote, error) {
 		ValidatorProTxHash: pv.ValidatorProTxHash,
 		ValidatorIndex:     pv.ValidatorIndex,
 		BlockSignature:     pv.BlockSignature,
-		StateSignature:     pv.StateSignature,
 		VoteExtensions:     VoteExtensionsFromProto(pv.VoteExtensions),
-		AppHash:            pv.AppHash,
 	}, nil
-}
-
-// VoteBlockSignBytes returns the proto-encoding of the canonicalized Vote, for
-// signing. Panics is the marshaling fails.
-//
-// The encoded Protobuf message is varint length-prefixed (using MarshalDelimited)
-// for backwards-compatibility with the Amino encoding, due to e.g. hardware
-// devices that rely on this encoding.
-//
-// See CanonicalizeVote
-func VoteBlockSignBytes(chainID string, vote *tmproto.Vote) []byte {
-	pb := CanonicalizeVote(chainID, vote)
-	bz, err := protoio.MarshalDelimited(&pb)
-	if err != nil {
-		panic(err)
-	}
-
-	return bz
 }
 
 // VoteExtensionSignBytes returns the proto-encoding of the canonicalized vote
@@ -162,18 +140,6 @@ func VoteBlockSignID(chainID string, vote *tmproto.Vote, quorumType btcjson.LLMQ
 func (vote *Vote) Copy() *Vote {
 	voteCopy := *vote
 	return &voteCopy
-}
-
-// StateID generates state ID for this vote
-func (vote *Vote) StateID() StateID {
-	if len(vote.BlockID.Hash) == 0 {
-		return StateID{}
-	}
-
-	return StateID{
-		Height:  vote.Height,
-		AppHash: vote.AppHash,
-	}
 }
 
 // String returns a string representation of Vote.
@@ -208,7 +174,7 @@ func (vote *Vote) String() string {
 		blockHashString = fmt.Sprintf("%X", tmbytes.Fingerprint(vote.BlockID.Hash))
 	}
 
-	return fmt.Sprintf("Vote{%v:%X %v/%02d/%v(%s) %X %X %X %s}",
+	return fmt.Sprintf("Vote{%v:%X %v/%02d/%v(%s) %X %X}",
 		vote.ValidatorIndex,
 		tmbytes.Fingerprint(vote.ValidatorProTxHash),
 		vote.Height,
@@ -216,9 +182,7 @@ func (vote *Vote) String() string {
 		typeString,
 		blockHashString,
 		tmbytes.Fingerprint(vote.BlockSignature),
-		tmbytes.Fingerprint(vote.StateSignature),
 		vote.VoteExtensions.Fingerprint(),
-		vote.AppHash.ShortString(),
 	)
 }
 
@@ -232,9 +196,8 @@ func (vote *Vote) VerifyWithExtension(
 	quorumHash crypto.QuorumHash,
 	pubKey crypto.PubKey,
 	proTxHash ProTxHash,
-	stateID StateID,
 ) error {
-	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto(), stateID)
+	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto())
 	if err != nil {
 		return err
 	}
@@ -257,7 +220,7 @@ func (vote *Vote) Verify(
 	if err != nil {
 		return err
 	}
-	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto(), stateID)
+	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto())
 	if err != nil {
 		return err
 	}
@@ -272,10 +235,6 @@ func (vote *Vote) verifyBasic(proTxHash ProTxHash, pubKey crypto.PubKey) error {
 		return ErrVoteInvalidValidatorPubKeySize
 	}
 
-	// we must verify the stateID but only if the blockID isn't nil
-	if vote.BlockID.Hash == nil && vote.StateSignature != nil {
-		return ErrVoteStateSignatureShouldBeNil
-	}
 	return nil
 }
 
@@ -285,7 +244,7 @@ func (vote *Vote) VerifyExtensionSign(chainID string, pubKey crypto.PubKey, quor
 	if vote.Type != tmproto.PrecommitType || vote.BlockID.IsNil() {
 		return nil
 	}
-	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto(), StateID{})
+	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto())
 	if err != nil {
 		return err
 	}
@@ -312,7 +271,6 @@ func (vote *Vote) verifySign(
 func (vote *Vote) makeQuorumSigns() QuorumSigns {
 	return QuorumSigns{
 		BlockSign:      vote.BlockSignature,
-		StateSign:      vote.StateSignature,
 		ExtensionSigns: MakeThresholdExtensionSigns(vote.VoteExtensions),
 	}
 }
@@ -361,14 +319,6 @@ func (vote *Vote) ValidateBasic() error {
 
 	if len(vote.BlockSignature) > SignatureSize {
 		return fmt.Errorf("block signature is too big (max: %d)", SignatureSize)
-	}
-
-	if vote.BlockID.Hash != nil && len(vote.StateSignature) == 0 {
-		return errors.New("state signature is missing for a block not voting nil")
-	}
-
-	if len(vote.StateSignature) > SignatureSize {
-		return fmt.Errorf("state signature is too big (max: %d)", SignatureSize)
 	}
 
 	// We should only ever see vote extensions in precommits.
@@ -425,9 +375,7 @@ func (vote *Vote) ToProto() *tmproto.Vote {
 		ValidatorProTxHash: vote.ValidatorProTxHash,
 		ValidatorIndex:     vote.ValidatorIndex,
 		BlockSignature:     vote.BlockSignature,
-		StateSignature:     vote.StateSignature,
 		VoteExtensions:     voteExtensions,
-		AppHash:            vote.AppHash,
 	}
 }
 
@@ -441,8 +389,6 @@ func (vote *Vote) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("type", vote.Type.String())
 	e.Str("block_id", vote.BlockID.String())
 	e.Str("block_signature", vote.BlockSignature.ShortString())
-	e.Str("state_signature", vote.StateSignature.ShortString())
-	e.Str("apphash", vote.AppHash.ShortString())
 	e.Str("val_proTxHash", vote.ValidatorProTxHash.ShortString())
 	e.Int32("val_index", vote.ValidatorIndex)
 	e.Bool("nil", vote.BlockID.IsNil())

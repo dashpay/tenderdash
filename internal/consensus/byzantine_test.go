@@ -137,12 +137,14 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		if height == prevoteHeight {
 			prevote1, err := bzNodeState.signVote(ctx,
 				tmproto.PrevoteType,
-				bzNodeState.ProposalBlock.Hash(),
-				bzNodeState.ProposalBlockParts.Header(),
-			)
+				types.BlockID{
+					bzNodeState.ProposalBlock.Hash(),
+					bzNodeState.ProposalBlockParts.Header(),
+					bzNodeState.ProposalBlock.StateID().Hash(),
+				})
 			require.NoError(t, err)
 
-			prevote2, err := bzNodeState.signVote(ctx, tmproto.PrevoteType, nil, types.PartSetHeader{})
+			prevote2, err := bzNodeState.signVote(ctx, tmproto.PrevoteType, types.BlockID{})
 			require.NoError(t, err)
 
 			// send two votes to all peers (1st to one half, 2nd to another half)
@@ -189,7 +191,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		case lazyNodeState.Height == lazyNodeState.state.InitialHeight:
 			// We're creating a proposal for the first block.
 			// The commit is empty, but not nil.
-			commit = types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil)
+			commit = types.NewCommit(0, 0, types.BlockID{}, nil)
 		case lazyNodeState.LastCommit != nil:
 			// Make the commit from LastCommit
 			commit = lazyNodeState.LastCommit

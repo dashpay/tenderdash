@@ -196,7 +196,6 @@ func makeVote(
 	err = val.SignVote(ctx, chainID, quorumType, quorumHash, vpb, stateID, nil)
 	require.NoError(t, err)
 	v.BlockSignature = vpb.BlockSignature
-	v.StateSignature = vpb.StateSignature
 	return v
 }
 

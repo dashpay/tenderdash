@@ -237,12 +237,10 @@ func TestSignVote(t *testing.T) {
 
 	// try signing a vote with a different time stamp
 	blockSignature := vote.BlockSignature
-	stateSignature := vote.StateSignature
 
 	err = privVal.SignVote(ctx, "mychainid", 0, quorumHash, v, stateID, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, blockSignature, vote.BlockSignature)
-	assert.Equal(t, stateSignature, vote.StateSignature)
 }
 
 func TestSignProposal(t *testing.T) {
@@ -387,7 +385,6 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 	assert.False(t, pubKey.VerifySignatureDigest(extSignItem1[tmproto.VoteExtensionType_DEFAULT][0].ID, vpb2.VoteExtensions[0].Signature))
 
 	vpb2.BlockSignature = nil
-	vpb2.StateSignature = nil
 	vpb2.VoteExtensions[0].Signature = nil
 
 	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, vpb2, stateID, logger)

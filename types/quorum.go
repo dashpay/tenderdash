@@ -18,14 +18,12 @@ type CommitSigns struct {
 func (c *CommitSigns) CopyToCommit(commit *Commit) {
 	commit.QuorumHash = c.QuorumHash
 	commit.ThresholdBlockSignature = c.BlockSign
-	commit.ThresholdStateSignature = c.StateSign
 	commit.ThresholdVoteExtensions = c.ExtensionSigns
 }
 
 // QuorumSigns holds all created signatures, block, state and for each recovered vote-extensions
 type QuorumSigns struct {
 	BlockSign      []byte
-	StateSign      []byte
 	ExtensionSigns []ThresholdExtensionSign
 }
 
@@ -33,7 +31,6 @@ type QuorumSigns struct {
 func NewQuorumSignsFromCommit(commit *Commit) QuorumSigns {
 	return QuorumSigns{
 		BlockSign:      commit.ThresholdBlockSignature,
-		StateSign:      commit.ThresholdStateSignature,
 		ExtensionSigns: commit.ThresholdVoteExtensions,
 	}
 }
@@ -176,10 +173,6 @@ func (q *QuorumSingsVerifier) Verify(pubKey crypto.PubKey, signs QuorumSigns) er
 	if err != nil {
 		return err
 	}
-	err = q.verifyState(pubKey, signs)
-	if err != nil {
-		return err
-	}
 	return q.verifyVoteExtensions(pubKey, signs)
 }
 
@@ -193,22 +186,6 @@ func (q *QuorumSingsVerifier) verifyBlock(pubKey crypto.PubKey, signs QuorumSign
 			q.Block.Raw,
 			q.Block.ID,
 			ErrVoteInvalidBlockSignature,
-		)
-	}
-	return nil
-}
-
-func (q *QuorumSingsVerifier) verifyState(pubKey crypto.PubKey, signs QuorumSigns) error {
-	if !q.shouldVerifyState {
-		return nil
-	}
-	if !pubKey.VerifySignatureDigest(q.State.ID, signs.StateSign) {
-		return fmt.Errorf(
-			"threshold state signature is invalid: (raw=%X, signID=%X, pubkey=%s): %w",
-			q.State.Raw,
-			q.State.ID,
-			pubKey.HexString(),
-			ErrVoteInvalidStateSignature,
 		)
 	}
 	return nil

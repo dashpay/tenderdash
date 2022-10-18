@@ -38,10 +38,7 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 
 	blockSig, err := privKey.SignDigest(quorumSigns.Block.ID)
 	require.NoError(t, err)
-	stateSig, err := privKey.SignDigest(quorumSigns.State.ID)
-	require.NoError(t, err)
 	vote.BlockSignature = blockSig
-	vote.StateSignature = stateSig
 
 	commit := NewCommit(vote.Height,
 		vote.Round,
@@ -50,7 +47,6 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 		&CommitSigns{
 			QuorumSigns: QuorumSigns{
 				BlockSign: blockSig,
-				StateSign: stateSig,
 			},
 			QuorumHash: quorumHash,
 		},
@@ -59,10 +55,7 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 	vote2 := *vote
 	blockSig2, err := privKey.SignDigest(VoteBlockSignBytes("EpsilonEridani", v))
 	require.NoError(t, err)
-	stateSig2, err := privKey.SignDigest(stateID.SignBytes("EpsilonEridani"))
-	require.NoError(t, err)
 	vote2.BlockSignature = blockSig2
-	vote2.StateSignature = stateSig2
 
 	testCases := []struct {
 		description string
@@ -82,15 +75,11 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 		{"threshold block signature is invalid", chainID, vote.BlockID, stateID, vote.Height,
 			NewCommit(vote.Height, vote.Round, vote.BlockID, stateID, &CommitSigns{QuorumHash: quorumHash}), true},
 
-		{"threshold state signature is invalid", chainID, vote.BlockID, stateID, vote.Height,
-			NewCommit(vote.Height, vote.Round, vote.BlockID, stateID,
-				&CommitSigns{QuorumHash: quorumHash, QuorumSigns: QuorumSigns{BlockSign: vote.BlockSignature}}), true},
-
 		{"threshold block signature is invalid", chainID, vote.BlockID, stateID, vote.Height,
 			NewCommit(vote.Height, vote.Round, vote.BlockID, stateID,
 				&CommitSigns{
 					QuorumHash:  quorumHash,
-					QuorumSigns: QuorumSigns{BlockSign: vote2.BlockSignature, StateSign: vote2.StateSignature},
+					QuorumSigns: QuorumSigns{BlockSign: vote2.BlockSignature},
 				},
 			), true},
 	}
@@ -133,7 +122,6 @@ func TestValidatorSet_VerifyCommit_CheckThresholdSignatures(t *testing.T) {
 	err = vals[3].SignVote(ctx, "CentaurusA", valSet.QuorumType, valSet.QuorumHash, v, stateID, nil)
 	require.NoError(t, err)
 	commit.ThresholdBlockSignature = v.BlockSignature
-	commit.ThresholdStateSignature = v.StateSignature
 	err = valSet.VerifyCommit(chainID, blockID, stateID, h, commit)
 	if assert.Error(t, err) {
 		assert.Contains(t, err.Error(), "threshold block signature is invalid")
@@ -143,7 +131,6 @@ func TestValidatorSet_VerifyCommit_CheckThresholdSignatures(t *testing.T) {
 	thresholdSigns, err := recoverer.Recover()
 	require.NoError(t, err)
 	commit.ThresholdBlockSignature = thresholdSigns.BlockSign
-	commit.ThresholdStateSignature = thresholdSigns.StateSign
 	commit.ThresholdVoteExtensions = thresholdSigns.ExtensionSigns
 	err = valSet.VerifyCommit(chainID, blockID, stateID, h, commit)
 	require.NoError(t, err)

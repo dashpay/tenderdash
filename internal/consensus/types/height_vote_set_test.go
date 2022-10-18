@@ -85,11 +85,10 @@ func makeVoteHR(
 	}
 
 	v := vote.ToProto()
-	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, v, stateID, nil)
+	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, v,  nil)
 	require.NoError(t, err, "Error signing vote")
 
 	vote.BlockSignature = v.BlockSignature
-	vote.StateSignature = v.StateSignature
 	err = vote.VoteExtensions.CopySignsFromProto(v.VoteExtensionsToMap())
 	require.NoError(t, err)
 

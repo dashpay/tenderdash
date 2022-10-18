@@ -44,7 +44,6 @@ func (v *SignsRecoverer) Recover() (*QuorumSigns, error) {
 	thresholdSigns := &QuorumSigns{}
 	recoverFuncs := []func(signs *QuorumSigns) error{
 		v.recoverBlockSig,
-		v.recoverStateSig,
 		v.recoverVoteExtensionSigs,
 	}
 	for _, fn := range recoverFuncs {
@@ -71,7 +70,6 @@ func (v *SignsRecoverer) addVoteSigs(vote *Vote) {
 		return
 	}
 	v.blockSigs = append(v.blockSigs, vote.BlockSignature)
-	v.stateSigs = append(v.stateSigs, vote.StateSignature)
 	v.validatorProTxHashes = append(v.validatorProTxHashes, vote.ValidatorProTxHash)
 	v.addVoteExtensions(vote.VoteExtensions)
 }
@@ -85,18 +83,6 @@ func (v *SignsRecoverer) addVoteExtensions(voteExtensions VoteExtensions) {
 		}
 		v.voteExtSigs[i] = append(v.voteExtSigs[i], ext.Signature)
 	}
-}
-
-func (v *SignsRecoverer) recoverStateSig(thresholdSigns *QuorumSigns) error {
-	if !v.quorumReached {
-		return nil
-	}
-	var err error
-	thresholdSigns.StateSign, err = bls12381.RecoverThresholdSignatureFromShares(v.stateSigs, v.validatorProTxHashes)
-	if err != nil {
-		return fmt.Errorf("error recovering threshold state sig: %w", err)
-	}
-	return nil
 }
 
 func (v *SignsRecoverer) recoverBlockSig(thresholdSigns *QuorumSigns) error {

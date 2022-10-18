@@ -173,7 +173,8 @@ func (candidate CurrentRoundState) StateID() types.StateID {
 	}
 
 	return types.StateID{
-		Height:  candidate.GetHeight(),
+		Version: types.StateIDVersion,
+		Height:  uint64(candidate.GetHeight()),
 		AppHash: appHash,
 	}
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
+	"time"
 
 	"github.com/tendermint/tendermint/crypto"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
@@ -12,8 +13,11 @@ import (
 
 func RandStateID() StateID {
 	return StateID{
-		Height:  rand.Int63(), // nolint:gosec
-		AppHash: tmrand.Bytes(crypto.HashSize),
+		Height:                uint64(rand.Int63()), //nolint:gosec
+		AppHash:               tmrand.Bytes(crypto.HashSize),
+		Version:               StateIDVersion,
+		CoreChainLockedHeight: rand.Uint32(),
+		Time:                  time.Now(),
 	}
 }
 
@@ -40,7 +44,6 @@ func makeCommit(
 			Round:              round,
 			Type:               tmproto.PrecommitType,
 			BlockID:            blockID,
-			AppHash:            stateID.AppHash,
 			VoteExtensions: VoteExtensions{
 				tmproto.VoteExtensionType_DEFAULT:           []VoteExtension{{Extension: []byte("default")}},
 				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Extension: []byte("threshold")}},
@@ -58,15 +61,9 @@ func makeCommit(
 
 // signAddVote signs a vote using StateID configured inside voteSet, and adds it to that voteSet
 func signAddVote(ctx context.Context, privVal PrivValidator, vote *Vote, voteSet *VoteSet) (signed bool, err error) {
-	stateID := vote.StateID()
-	return signAddVoteForStateID(ctx, privVal, vote, voteSet, stateID)
-}
-
-func signAddVoteForStateID(ctx context.Context, privVal PrivValidator, vote *Vote, voteSet *VoteSet,
-	stateID StateID) (signed bool, err error) {
 	v := vote.ToProto()
 	err = privVal.SignVote(ctx, voteSet.ChainID(), voteSet.valSet.QuorumType, voteSet.valSet.QuorumHash,
-		v, stateID, nil)
+		v, nil)
 	if err != nil {
 		return false, err
 	}

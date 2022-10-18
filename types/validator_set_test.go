@@ -1,4 +1,3 @@
-// nolint: lll
 package types
 
 import (
@@ -696,7 +695,7 @@ func addValidatorsToValidatorSet(vals *ValidatorSet, testValList []testVal) ([]*
 	combinedProTxHashes = append(combinedProTxHashes, addedProTxHashes...)
 	if len(combinedProTxHashes) > 0 {
 		rVals, _ := GenerateValidatorSet(NewValSetParam(combinedProTxHashes))
-		rValidators := append(rVals.Validators, removedVals...) // nolint:gocritic
+		rValidators := append(rVals.Validators, removedVals...) //nolint:gocritic
 		return rValidators, rVals.ThresholdPublicKey
 	}
 	return removedVals, nil

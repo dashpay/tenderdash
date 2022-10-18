@@ -142,12 +142,10 @@ func invalidDoPrevoteFunc(
 			cs.Validators.QuorumType,
 			cs.Validators.QuorumHash,
 			p,
-			cs.StateID(),
 			log.NewNopLogger(),
 		)
 		require.NoError(t, err)
 
-		precommit.StateSignature = p.StateSignature
 		precommit.BlockSignature = p.BlockSignature
 		cs.privValidator = nil // disable priv val so we don't do normal votes
 		cs.mtx.Unlock()

@@ -347,7 +347,6 @@ func TestValidateBlockCommit(t *testing.T) {
 		require.NoError(t, err, "height %d", height)
 
 		goodVote.BlockSignature, badVote.BlockSignature = g.BlockSignature, b.BlockSignature
-		goodVote.StateSignature, badVote.StateSignature = g.StateSignature, b.StateSignature
 		goodVote.VoteExtensions = types.VoteExtensionsFromProto(g.VoteExtensions)
 		badVote.VoteExtensions = types.VoteExtensionsFromProto(b.VoteExtensions)
 

@@ -19,14 +19,14 @@ import (
 
 const (
 	//nolint: lll
-	preCommitTestStr = `Vote{56789:959A8F5EF2BE 12345/02/Precommit(8B01023386C3) 000000000000 000000000000 000000000000 000000}`
+	preCommitTestStr = `Vote{56789:959A8F5EF2BE 12345/02/Precommit(8B01023386C3) 000000000000 000000000000 000000}`
 	//nolint: lll
-	preVoteTestStr = `Vote{56789:959A8F5EF2BE 12345/02/Prevote(8B01023386C3) 000000000000 000000000000 000000000000 000000}`
+	preVoteTestStr = `Vote{56789:959A8F5EF2BE 12345/02/Prevote(8B01023386C3) 000000000000 000000000000 000000}`
 )
 
 var (
-	// nolint: lll
-	nilVoteTestStr = fmt.Sprintf(`Vote{56789:959A8F5EF2BE 12345/02/Precommit(%s) 000000000000 000000000000 000000000000 000000}`, nilVoteStr)
+	//nolint: lll
+	nilVoteTestStr = fmt.Sprintf(`Vote{56789:959A8F5EF2BE 12345/02/Precommit(%s) 000000000000 000000000000 000000}`, nilVoteStr)
 )
 
 func examplePrevote(t *testing.T) *Vote {
@@ -59,7 +59,6 @@ func exampleVote(tb testing.TB, t byte) *Vote {
 		},
 		ValidatorProTxHash: crypto.ProTxHashFromSeedBytes([]byte("validator_pro_tx_hash")),
 		ValidatorIndex:     56789,
-		AppHash:            make([]byte, crypto.DefaultAppHashSize),
 	}
 }
 
@@ -159,10 +158,12 @@ func TestVoteSignBytesTestVectors(t *testing.T) {
 		},
 	}
 	for i, tc := range tests {
-		v := tc.vote.ToProto()
-		got := VoteBlockSignBytes(tc.chainID, v)
-		assert.Equal(t, len(tc.want), len(got), "test case #%v: got unexpected sign bytes length for Vote.", i)
-		assert.Equal(t, tc.want, got, "test case #%v: got unexpected sign bytes for Vote.", i)
+		t.Run("", func(t *testing.T) {
+			v := tc.vote.ToProto()
+			got := VoteBlockSignBytes(tc.chainID, v)
+			assert.Equal(t, len(tc.want), len(got), "test case #%v: got unexpected sign bytes length for Vote.", i)
+			assert.Equal(t, tc.want, got, "test case #%v: got unexpected sign bytes for Vote.", i)
+		})
 	}
 }
 
@@ -226,10 +227,6 @@ func TestVoteVerifySignature(t *testing.T) {
 	valid := pubkey.VerifySignatureDigest(signID, v.BlockSignature)
 	require.True(t, valid)
 
-	// verify the same vote
-	valid = pubkey.VerifySignatureDigest(signStateID, v.StateSignature)
-	require.True(t, valid)
-
 	// serialize, deserialize and verify again....
 	precommit := new(tmproto.Vote)
 	bs, err := proto.Marshal(v)
@@ -243,8 +240,6 @@ func TestVoteVerifySignature(t *testing.T) {
 	require.Equal(t, string(signID), string(newSignID))
 	require.Equal(t, string(signStateID), string(newSignStateID))
 	valid = pubkey.VerifySignatureDigest(newSignID, precommit.BlockSignature)
-	require.True(t, valid)
-	valid = pubkey.VerifySignatureDigest(newSignStateID, precommit.StateSignature)
 	require.True(t, valid)
 }
 
@@ -311,7 +306,6 @@ func TestVoteExtension(t *testing.T) {
 			err = privVal.SignVote(ctx, "test_chain_id", btcjson.LLMQType_5_60, quorumHash, v, stateID, logger)
 			require.NoError(t, err)
 			vote.BlockSignature = v.BlockSignature
-			vote.StateSignature = v.StateSignature
 			if tc.includeSignature {
 				protoExtensionsMap := v.VoteExtensionsToMap()
 				for et, extensions := range protoExtensionsMap {
@@ -585,7 +579,6 @@ func TestVoteProtobuf(t *testing.T) {
 	stateID := RandStateID().WithHeight(v.Height - 1)
 	err := privVal.SignVote(ctx, "test_chain_id", 0, quorumHash, v, stateID, nil)
 	vote.BlockSignature = v.BlockSignature
-	vote.StateSignature = v.StateSignature
 	require.NoError(t, err)
 
 	testCases := []struct {

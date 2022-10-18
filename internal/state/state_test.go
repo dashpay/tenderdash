@@ -1,4 +1,3 @@
-// nolint: lll
 package state_test
 
 import (

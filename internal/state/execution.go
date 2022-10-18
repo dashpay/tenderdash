@@ -347,7 +347,7 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 
 	if block.Height > state.InitialHeight {
 		if err := state.LastValidators.VerifyCommit(
-			state.ChainID, state.LastBlockID, state.LastStateID, block.Height-1, block.LastCommit); err != nil {
+			state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit); err != nil {
 			return fmt.Errorf("error validating block: %w", err)
 		}
 	}
@@ -571,7 +571,6 @@ func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInf
 		Round:                   block.LastCommit.Round,
 		QuorumHash:              block.LastCommit.QuorumHash,
 		BlockSignature:          block.LastCommit.ThresholdBlockSignature,
-		StateSignature:          block.LastCommit.ThresholdStateSignature,
 		ThresholdVoteExtensions: types.ThresholdExtensionSignToProto(block.LastCommit.ThresholdVoteExtensions),
 	}
 }
@@ -586,7 +585,7 @@ func (state State) Update(
 
 	nextVersion := state.Version
 
-	// NOTE: the AppHash and the VoteExtension has not been populated.
+	// NOTE: LastStateIDHash, AppHash and VoteExtension has not been populated.
 	// It will be filled on state.Save.
 	newState := State{
 		Version:                          nextVersion,
@@ -594,7 +593,6 @@ func (state State) Update(
 		InitialHeight:                    state.InitialHeight,
 		LastBlockHeight:                  header.Height,
 		LastBlockID:                      blockID,
-		LastStateID:                      types.StateID{Height: header.Height, AppHash: header.AppHash},
 		LastBlockTime:                    header.Time,
 		LastCoreChainLockedBlockHeight:   state.LastCoreChainLockedBlockHeight,
 		Validators:                       state.Validators.Copy(),

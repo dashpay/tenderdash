@@ -14,7 +14,6 @@ import (
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/consensus"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	mpmocks "github.com/tendermint/tendermint/internal/mempool/mocks"
@@ -185,7 +184,7 @@ func (rts *reactorTestSuite) addNode(
 	peerEvents := func(ctx context.Context) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] }
 	reactor := makeReactor(ctx, t, proTxHash, nodeID, genDoc, privVal, chCreator, peerEvents)
 
-	commit := types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil)
+	commit := types.NewCommit(0, 0, types.BlockID{}, nil)
 
 	state, err := reactor.stateStore.Load()
 	require.NoError(t, err)
@@ -214,11 +213,7 @@ func makeNextBlock(ctx context.Context,
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: partSet.Header()}
-	stateID := types.StateID{
-		Height:  block.Header.Height,
-		AppHash: make([]byte, crypto.DefaultAppHashSize),
-	}
-
+	
 	// Simulate a commit for the current height
 	vote, err := factory.MakeVote(
 		ctx,
@@ -237,11 +232,9 @@ func makeNextBlock(ctx context.Context,
 		vote.Height,
 		vote.Round,
 		blockID,
-		stateID,
 		&types.CommitSigns{
 			QuorumSigns: types.QuorumSigns{
 				BlockSign:      vote.BlockSignature,
-				StateSign:      vote.StateSignature,
 				ExtensionSigns: types.MakeThresholdExtensionSigns(vote.VoteExtensions),
 			},
 			QuorumHash: state.Validators.QuorumHash,

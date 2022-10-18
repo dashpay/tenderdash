@@ -22,7 +22,7 @@ type BlockMeta struct {
 // NewBlockMeta returns a new BlockMeta.
 func NewBlockMeta(block *Block, blockParts *PartSet) *BlockMeta {
 	return &BlockMeta{
-		BlockID:          BlockID{block.Hash(), blockParts.Header()},
+		BlockID:          BlockID{block.Hash(), blockParts.Header(), block.StateID().Hash()},
 		BlockSize:        block.Size(),
 		Header:           block.Header,
 		HasCoreChainLock: block.CoreChainLock != nil,

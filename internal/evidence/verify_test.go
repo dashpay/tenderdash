@@ -51,17 +51,15 @@ func TestVerifyDuplicateVoteEvidence(t *testing.T) {
 
 	vote1 := makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID, quorumType, quorumHash, stateID)
 	v1 := vote1.ToProto()
-	err := val.SignVote(ctx, chainID, quorumType, quorumHash, v1, stateID, nil)
+	err := val.SignVote(ctx, chainID, quorumType, quorumHash, v1, nil)
 	require.NoError(t, err)
 	badVote := makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID, quorumType, quorumHash, stateID)
 	bv := badVote.ToProto()
-	err = val2.SignVote(ctx, chainID, crypto.SmallQuorumType(), quorumHash, bv, stateID, nil)
+	err = val2.SignVote(ctx, chainID, crypto.SmallQuorumType(), quorumHash, bv, nil)
 	require.NoError(t, err)
 
 	vote1.BlockSignature = v1.BlockSignature
-	vote1.StateSignature = v1.StateSignature
 	badVote.BlockSignature = bv.BlockSignature
-	badVote.StateSignature = bv.StateSignature
 
 	cases := []voteData{
 		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID2, quorumType, quorumHash, stateID), true}, // different block ids
@@ -156,7 +154,7 @@ func makeVote(
 	}
 
 	vpb := v.ToProto()
-	err = val.SignVote(ctx, chainID, quorumType, quorumHash, vpb, stateID, nil)
+	err = val.SignVote(ctx, chainID, quorumType, quorumHash, vpb, nil)
 	require.NoError(t, err)
 	v.BlockSignature = vpb.BlockSignature
 	return v
