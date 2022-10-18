@@ -211,6 +211,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 
 	// TODO: validate rpp.TxResults
 
+	tmpTime := block.Time
 	block = state.MakeBlock(
 		height,
 		itxs,
@@ -219,6 +220,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		proposerProTxHash,
 		proposedAppVersion,
 	)
+	block.Time = tmpTime
 
 	// update some round state data
 	stateChanges, err := state.NewStateChangeset(ctx, rpp)
