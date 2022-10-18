@@ -64,7 +64,7 @@ func (candidate *CurrentRoundState) IsEmpty() bool {
 	return candidate.AppHash == nil
 }
 
-// UpdateBlock changes block fields to reflect the ones returned in PrepareProposalSource / ProcessProposalSource
+// UpdateBlock changes block fields to reflect the ones returned in PrepareProposal
 func (candidate *CurrentRoundState) UpdateBlock(target *types.Block) error {
 	if candidate.Params.Source != PrepareProposalSource {
 		return fmt.Errorf("block can be updated only based on '%s' response, got '%s'", ProcessProposalSource, candidate.Params.Source)

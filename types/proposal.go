@@ -173,7 +173,7 @@ func (p *Proposal) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("timestamp", CanonicalTime(p.Timestamp))
 }
 
-// SetCoreChainLockUpdate ...
+// SetCoreChainLockUpdate sets CoreChainLock to Proposal.CoreChainLockUpdate field
 func (p *Proposal) SetCoreChainLockUpdate(coreChainLock *CoreChainLock) {
 	p.CoreChainLockUpdate = coreChainLock
 }
