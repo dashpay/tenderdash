@@ -25,10 +25,11 @@ func NewFullEventSet(
 	fbResp *abci.ResponseFinalizeBlock,
 	validatorsSet *types.ValidatorSet,
 ) EventSet {
+	rpp := uncommittedState.Params.ToProcessProposal()
 	es := EventSet{}
 	es.
 		WithNewBlock(block, blockID, *fbResp).
-		WthNewBlockHeader(block, uncommittedState.response, *fbResp).
+		WthNewBlockHeader(block, *rpp, *fbResp).
 		WithNewEvidences(block).
 		WithTxs(block, uncommittedState.TxResults).
 		WithValidatorSetUpdate(validatorsSet)

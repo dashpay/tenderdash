@@ -72,10 +72,10 @@ func TestValidateBlockHeader(t *testing.T) {
 		blockStore,
 		eventBus,
 	)
-
-	changes, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{
-		CoreChainLockUpdate: nextChainLock.ToProto(),
-		AppHash:             tmrand.Bytes(crypto.DefaultAppHashSize),
+	changes, err := state.NewStateChangeset(ctx, sm.RoundParams{
+		CoreChainLock: nextChainLock,
+		AppHash:       tmrand.Bytes(crypto.DefaultAppHashSize),
+		Source:        sm.ProcessProposalSource,
 	})
 	require.NoError(t, err)
 
@@ -219,10 +219,7 @@ func TestValidateBlockCommit(t *testing.T) {
 	badPrivVal := types.NewMockPVForQuorum(badPrivValQuorumHash)
 
 	for height := int64(1); height < validationTestsStopHeight; height++ {
-
-		changes, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{
-			CoreChainLockUpdate: nextChainLock.ToProto(),
-		})
+		changes, err := state.NewStateChangeset(ctx, sm.RoundParams{CoreChainLock: nextChainLock})
 		require.NoError(t, err)
 		stateID := changes.StateID()
 		proTxHash := state.Validators.GetProposer().ProTxHash

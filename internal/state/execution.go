@@ -222,8 +222,12 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	)
 	block.Time = tmpTime
 
+	rp, err := RoundParamsFromPrepareProposal(rpp)
+	if err != nil {
+		return nil, CurrentRoundState{}, err
+	}
 	// update some round state data
-	stateChanges, err := state.NewStateChangeset(ctx, rpp)
+	stateChanges, err := state.NewStateChangeset(ctx, rp)
 	if err != nil {
 		return nil, CurrentRoundState{}, err
 	}
@@ -272,8 +276,10 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		return CurrentRoundState{}, ErrBlockRejected
 	}
 
+	rp := RoundParamsFromProcessProposal(resp, block.CoreChainLock)
+
 	// update some round state data
-	stateChanges, err := state.NewStateChangeset(ctx, resp)
+	stateChanges, err := state.NewStateChangeset(ctx, rp)
 	if err != nil {
 		return stateChanges, err
 	}
@@ -419,14 +425,14 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// to find a way to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
 	// in FinalizeResponse.
 	abciResponses := tmstate.ABCIResponses{
-		ProcessProposal: &uncommittedState.response,
+		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
 		FinalizeBlock:   fbResp,
 	}
 	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
 		return state, err
 	}
 
-	stateUpdates, err := PrepareStateUpdates(ctx, block.Header, state, uncommittedState)
+	stateUpdates, err := PrepareStateUpdates(&uncommittedState)
 	if err != nil {
 		return State{}, err
 	}
@@ -608,7 +614,7 @@ func (state State) Update(
 		AppHash:                          nil,
 	}
 	var err error
-	newState, err = executeStateUpdates(ctx, newState, stateUpdates...)
+	newState, err = executeStateUpdates(newState, stateUpdates...)
 	if err != nil {
 		return State{}, err
 	}

@@ -86,10 +86,9 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 func (app *Application) ProcessProposal(_ context.Context, req *types.RequestProcessProposal) (*types.ResponseProcessProposal, error) {
 	app.handleRequest(req.Height, req.Txs)
 	resp := types.ResponseProcessProposal{
-		AppHash:             make([]byte, tmcrypto.DefaultAppHashSize),
-		Status:              types.ResponseProcessProposal_ACCEPT,
-		CoreChainLockUpdate: app.lastCoreChainLock.ToProto(),
-		TxResults:           app.lastTxResults,
+		AppHash:   make([]byte, tmcrypto.DefaultAppHashSize),
+		Status:    types.ResponseProcessProposal_ACCEPT,
+		TxResults: app.lastTxResults,
 	}
 	return &resp, nil
 }

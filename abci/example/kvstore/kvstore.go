@@ -312,16 +312,11 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 			Status: abci.ResponseProcessProposal_REJECT,
 		}, err
 	}
-	coreChainLock, err := app.chainLockUpdate(req.Height)
-	if err != nil {
-		return nil, err
-	}
 	resp := &abci.ResponseProcessProposal{
 		Status:                abci.ResponseProcessProposal_ACCEPT,
 		AppHash:               roundState.GetAppHash(),
 		TxResults:             txResults,
 		ConsensusParamUpdates: app.getConsensusParamsUpdate(req.Height),
-		CoreChainLockUpdate:   coreChainLock,
 		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
 	}
 

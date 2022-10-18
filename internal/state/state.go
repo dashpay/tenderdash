@@ -10,6 +10,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
+	"github.com/tendermint/tendermint/dash"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
@@ -321,10 +322,12 @@ func (state State) ValidatorsAtHeight(height int64) *types.ValidatorSet {
 }
 
 // NewStateChangeset returns a structure that will hold new changes to the state, that can be applied once the block is finalized
-func (state State) NewStateChangeset(ctx context.Context, proposalResponse proto.Message) (CurrentRoundState, error) {
-	ret := CurrentRoundState{}
-	err := ret.populate(ctx, proposalResponse, state)
-	return ret, err
+func (state State) NewStateChangeset(ctx context.Context, rp RoundParams) (CurrentRoundState, error) {
+	proTxHash, _ := dash.ProTxHashFromContext(ctx)
+	//if err != nil {
+	//	return CurrentRoundState{}, err
+	//}
+	return NewCurrentRoundState(proTxHash, rp, state)
 }
 
 //------------------------------------------------------------------------
