@@ -421,11 +421,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		return state, err
 	}
 
-	stateUpdates, err := PrepareStateUpdates(&uncommittedState)
-	if err != nil {
-		return State{}, err
-	}
-	state, err = state.Update(ctx, blockID, &block.Header, stateUpdates...)
+	state, err = state.Update(blockID, &block.Header, &uncommittedState)
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
 	}
@@ -575,10 +571,9 @@ func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInf
 
 // Update returns a copy of state with the fields set using the arguments passed in.
 func (state State) Update(
-	ctx context.Context,
 	blockID types.BlockID,
 	header *types.Header,
-	stateUpdates ...UpdateFunc,
+	candidateState *CurrentRoundState,
 ) (State, error) {
 
 	nextVersion := state.Version
@@ -602,8 +597,7 @@ func (state State) Update(
 		LastResultsHash:                  nil,
 		AppHash:                          nil,
 	}
-	var err error
-	newState, err = executeStateUpdates(newState, stateUpdates...)
+	err := candidateState.UpdateState(&newState)
 	if err != nil {
 		return State{}, err
 	}

@@ -75,7 +75,7 @@ func TestValidateBlockHeader(t *testing.T) {
 	changes, err := state.NewStateChangeset(ctx, sm.RoundParams{
 		CoreChainLock: nextChainLock,
 		AppHash:       tmrand.Bytes(crypto.DefaultAppHashSize),
-		Source:        sm.ProcessProposalSource,
+		Source:        sm.PrepareProposalSource,
 	})
 	require.NoError(t, err)
 

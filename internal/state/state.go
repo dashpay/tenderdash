@@ -324,9 +324,6 @@ func (state State) ValidatorsAtHeight(height int64) *types.ValidatorSet {
 // NewStateChangeset returns a structure that will hold new changes to the state, that can be applied once the block is finalized
 func (state State) NewStateChangeset(ctx context.Context, rp RoundParams) (CurrentRoundState, error) {
 	proTxHash, _ := dash.ProTxHashFromContext(ctx)
-	//if err != nil {
-	//	return CurrentRoundState{}, err
-	//}
 	return NewCurrentRoundState(proTxHash, rp, state)
 }
 
