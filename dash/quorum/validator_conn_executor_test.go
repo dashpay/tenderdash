@@ -681,7 +681,6 @@ func (app *testApp) ProcessProposal(_ context.Context, req *abci.RequestProcessP
 		AppHash:               make([]byte, 32),
 		TxResults:             txs,
 		ConsensusParamUpdates: nil,
-		CoreChainLockUpdate:   nil,
 		ValidatorSetUpdate:    app.ValidatorSetUpdates[req.Height],
 	}, nil
 }

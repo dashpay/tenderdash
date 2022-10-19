@@ -366,10 +366,8 @@ message ResponseProcessProposal {
   // Changes to consensus-critical gas, size, and other parameters.
   tendermint.types.ConsensusParams consensus_param_updates = 5;
 
-  // Core chain lock that will be used for generated block.
-  tendermint.types.CoreChainLock core_chain_lock_update = 100;
   // Changes to validator set (set voting power to 0 to remove).
-  ValidatorSetUpdate validator_set_update = 101 [(gogoproto.nullable) = true];
+  ValidatorSetUpdate validator_set_update = 100 [(gogoproto.nullable) = true];
 }
 
 message ExtendVoteExtension {
