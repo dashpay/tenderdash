@@ -182,13 +182,6 @@ func newOfferSnapshot(snapshot *abci.Snapshot, appHash tmbytes.HexBytes) *offerS
 	}
 }
 
-func (s *offerSnapshot) reset() {
-	s.snapshot = nil
-	s.chunks = nil
-	s.appHash = nil
-	s.chunkCnt = 0
-}
-
 func (s *offerSnapshot) addChunk(index int, chunk []byte) {
 	if s.chunks[index] != nil {
 		return
