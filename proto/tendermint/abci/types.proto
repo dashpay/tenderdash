@@ -287,6 +287,7 @@ message ResponseQuery {
 message ResponseCheckTx {
   uint32 code       = 1;
   bytes  data       = 2;
+  string info       = 4; // nondeterministic
   int64  gas_wanted = 5;
   string codespace  = 8;
   string sender     = 9;
