@@ -183,26 +183,6 @@ func validateBlockChainLock(ctx context.Context, client abci.Application, state 
 				block.Header.CoreChainLockedHeight,
 			)
 		}
-		coreChainLocksBytes, err := block.CoreChainLock.ToProto().Marshal()
-		if err != nil {
-			panic(err)
-		}
-
-		verifySignatureQueryRequest := &abci.RequestQuery{
-			Data: coreChainLocksBytes,
-			Path: "/verify-chainlock",
-		}
-
-		// We need to query our abci application to make sure the chain lock signature is valid
-
-		checkQuorumSignatureResponse, err := client.Query(ctx, verifySignatureQueryRequest)
-		if err != nil {
-			return err
-		}
-
-		if checkQuorumSignatureResponse.Code != 0 {
-			return fmt.Errorf("chain Lock signature deemed invalid by abci application")
-		}
 
 		// If there is no new Chain Lock we need to make sure the height has stayed the same
 	} else if block.Header.CoreChainLockedHeight != state.LastCoreChainLockedBlockHeight {

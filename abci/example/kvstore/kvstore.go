@@ -312,16 +312,11 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 			Status: abci.ResponseProcessProposal_REJECT,
 		}, err
 	}
-	coreChainLock, err := app.chainLockUpdate(req.Height)
-	if err != nil {
-		return nil, err
-	}
 	resp := &abci.ResponseProcessProposal{
 		Status:                abci.ResponseProcessProposal_ACCEPT,
 		AppHash:               roundState.GetAppHash(),
 		TxResults:             txResults,
 		ConsensusParamUpdates: app.getConsensusParamsUpdate(req.Height),
-		CoreChainLockUpdate:   coreChainLock,
 		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
 	}
 
@@ -537,10 +532,6 @@ func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*
 	defer app.mu.Unlock()
 
 	switch reqQuery.Path {
-	case "/verify-chainlock":
-		return &abci.ResponseQuery{
-			Code: 0,
-		}, nil
 	case "/val":
 		vu, err := app.findValidatorUpdate(reqQuery.Data)
 		if err != nil {

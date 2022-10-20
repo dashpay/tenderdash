@@ -16,7 +16,6 @@
     - [Request](#tendermint-abci-Request)
     - [RequestApplySnapshotChunk](#tendermint-abci-RequestApplySnapshotChunk)
     - [RequestCheckTx](#tendermint-abci-RequestCheckTx)
-    - [RequestCommit](#tendermint-abci-RequestCommit)
     - [RequestEcho](#tendermint-abci-RequestEcho)
     - [RequestExtendVote](#tendermint-abci-RequestExtendVote)
     - [RequestFinalizeBlock](#tendermint-abci-RequestFinalizeBlock)
@@ -33,7 +32,6 @@
     - [Response](#tendermint-abci-Response)
     - [ResponseApplySnapshotChunk](#tendermint-abci-ResponseApplySnapshotChunk)
     - [ResponseCheckTx](#tendermint-abci-ResponseCheckTx)
-    - [ResponseCommit](#tendermint-abci-ResponseCommit)
     - [ResponseEcho](#tendermint-abci-ResponseEcho)
     - [ResponseException](#tendermint-abci-ResponseException)
     - [ResponseExtendVote](#tendermint-abci-ResponseExtendVote)
@@ -258,7 +256,6 @@ ExtendedVoteInfo
 | init_chain | [RequestInitChain](#tendermint-abci-RequestInitChain) |  |  |
 | query | [RequestQuery](#tendermint-abci-RequestQuery) |  |  |
 | check_tx | [RequestCheckTx](#tendermint-abci-RequestCheckTx) |  |  |
-| commit | [RequestCommit](#tendermint-abci-RequestCommit) |  |  |
 | list_snapshots | [RequestListSnapshots](#tendermint-abci-RequestListSnapshots) |  |  |
 | offer_snapshot | [RequestOfferSnapshot](#tendermint-abci-RequestOfferSnapshot) |  |  |
 | load_snapshot_chunk | [RequestLoadSnapshotChunk](#tendermint-abci-RequestLoadSnapshotChunk) |  |  |
@@ -301,16 +298,6 @@ Applies a snapshot chunk
 | ----- | ---- | ----- | ----------- |
 | tx | [bytes](#bytes) |  |  |
 | type | [CheckTxType](#tendermint-abci-CheckTxType) |  |  |
-
-
-
-
-
-
-<a name="tendermint-abci-RequestCommit"></a>
-
-### RequestCommit
-
 
 
 
@@ -364,7 +351,7 @@ Extends a vote with application-side injection
 | time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp included in the finalized block. |
 | next_validators_hash | [bytes](#bytes) |  | Merkle root of the next validator set. |
 | core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
-| proposer_pro_tx_hash | [bytes](#bytes) |  | ProTXHash of the original proposer of the block. |
+| proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
 | version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
 | app_hash | [bytes](#bytes) |  | The Merkle root hash of the application state after committing the block. |
@@ -458,8 +445,8 @@ offers a snapshot to the application
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| snapshot | [Snapshot](#tendermint-abci-Snapshot) |  | snapshot offered by peers |
-| app_hash | [bytes](#bytes) |  | light client-verified app hash for snapshot height |
+| snapshot | [Snapshot](#tendermint-abci-Snapshot) |  | The snapshot offered for restoration. |
+| app_hash | [bytes](#bytes) |  | The light client-verified app hash for this height, from the blockchain. |
 
 
 
@@ -482,7 +469,7 @@ offers a snapshot to the application
 | time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp of the block that that will be proposed. |
 | next_validators_hash | [bytes](#bytes) |  | Merkle root of the next validator set. |
 | core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
-| proposer_pro_tx_hash | [bytes](#bytes) |  | ProTXHash of the original proposer of the block. |
+| proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
 | version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
 
@@ -567,7 +554,6 @@ Verify the vote extension
 | init_chain | [ResponseInitChain](#tendermint-abci-ResponseInitChain) |  |  |
 | query | [ResponseQuery](#tendermint-abci-ResponseQuery) |  |  |
 | check_tx | [ResponseCheckTx](#tendermint-abci-ResponseCheckTx) |  |  |
-| commit | [ResponseCommit](#tendermint-abci-ResponseCommit) |  |  |
 | list_snapshots | [ResponseListSnapshots](#tendermint-abci-ResponseListSnapshots) |  |  |
 | offer_snapshot | [ResponseOfferSnapshot](#tendermint-abci-ResponseOfferSnapshot) |  |  |
 | load_snapshot_chunk | [ResponseLoadSnapshotChunk](#tendermint-abci-ResponseLoadSnapshotChunk) |  |  |
@@ -615,21 +601,6 @@ Verify the vote extension
 | sender | [string](#string) |  |  |
 | priority | [int64](#int64) |  |  |
 | mempool_error | [string](#string) |  | ABCI applications creating a ResponseCheckTX should not set mempool_error. |
-
-
-
-
-
-
-<a name="tendermint-abci-ResponseCommit"></a>
-
-### ResponseCommit
-
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| retain_height | [int64](#int64) |  |  |
 
 
 
@@ -824,7 +795,6 @@ as those must have been provided by PrepareProposal.
 | app_hash | [bytes](#bytes) |  | The Merkle root hash of the application state. |
 | tx_results | [ExecTxResult](#tendermint-abci-ExecTxResult) | repeated | List of structures containing the data resulting from executing the transactions. |
 | consensus_param_updates | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Changes to consensus-critical gas, size, and other parameters. |
-| core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Core chain lock that will be used for generated block. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Changes to validator set (set voting power to 0 to remove). |
 
 
@@ -1127,7 +1097,6 @@ TxAction contains App-provided information on what to do with a transaction that
 | Info | [RequestInfo](#tendermint-abci-RequestInfo) | [ResponseInfo](#tendermint-abci-ResponseInfo) |  |
 | CheckTx | [RequestCheckTx](#tendermint-abci-RequestCheckTx) | [ResponseCheckTx](#tendermint-abci-ResponseCheckTx) |  |
 | Query | [RequestQuery](#tendermint-abci-RequestQuery) | [ResponseQuery](#tendermint-abci-ResponseQuery) |  |
-| Commit | [RequestCommit](#tendermint-abci-RequestCommit) | [ResponseCommit](#tendermint-abci-ResponseCommit) |  |
 | InitChain | [RequestInitChain](#tendermint-abci-RequestInitChain) | [ResponseInitChain](#tendermint-abci-ResponseInitChain) |  |
 | ListSnapshots | [RequestListSnapshots](#tendermint-abci-RequestListSnapshots) | [ResponseListSnapshots](#tendermint-abci-ResponseListSnapshots) |  |
 | OfferSnapshot | [RequestOfferSnapshot](#tendermint-abci-RequestOfferSnapshot) | [ResponseOfferSnapshot](#tendermint-abci-ResponseOfferSnapshot) |  |
