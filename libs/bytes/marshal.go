@@ -4,63 +4,88 @@ import (
 	"bytes"
 	"encoding/binary"
 	"fmt"
+	"io"
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 )
+
+func newTimestamp(t time.Time) int64 {
+	return t.UnixNano()
+}
 
 // MarshalFixed marshals provided struct as a fixed-size buffer.
 // It processes exported struct fields in the order of their declaration.
 // At this point, it only supports the following data types:
 // * uint16
 // * int64
-// * byte slice
+// * slices
 // It also supports "tmbytes" tag with the following comma-separated attributes:
 // size=N - provide size of slice (only for slices)
 // Example:
-//    Field []byte `tmbytes:"size=123"`
-
+//
+//	Field []byte `tmbytes:"length=123"`
 func MarshalFixedSize(data interface{}) ([]byte, error) {
 	structure := reflect.Indirect(reflect.ValueOf(data))
 	typ := structure.Type()
 	out := bytes.NewBuffer(make([]byte, 0, typ.Size()))
 
 	for i := 0; i < typ.NumField(); i++ {
-		var encoded []byte
-		var typeOfBytes = reflect.TypeOf([]byte(nil))
-
 		field := structure.Field(i)
+		field = reflect.Indirect(field)
 		fieldType := typ.Field(i)
-		kind := field.Kind()
 
 		if !fieldType.IsExported() {
 			continue
 		}
+		kind := field.Kind()
+		if kind == reflect.Slice || kind == reflect.Array || kind == reflect.Map {
+			if err := marshalVarSizedField(out, field, fieldType); err != nil {
+				return nil, fmt.Errorf("field %s of type %s: cannot write: %w", fieldType.Name, field.Type(), err)
+			}
+			continue
+		}
 
-		switch kind {
-		case reflect.Uint16:
-			encoded = binary.LittleEndian.AppendUint16([]byte{}, uint16(field.Uint()))
-		case reflect.Int64:
-			encoded = binary.LittleEndian.AppendUint64([]byte{}, uint64(field.Int()))
-		case reflect.Slice:
-			if field.Type() != typeOfBytes {
-				return nil, fmt.Errorf("field %s: unsupported slice type %s", fieldType.Name, field.Type().String())
-			}
-			tags, err := getTags(fieldType)
-			if err != nil {
-				return nil, err
-			}
-			encoded = field.Bytes()
-			if len(encoded) != tags.size {
-				return nil, fmt.Errorf("size of %s MUST be %d bytes, is %d", fieldType.Name, tags.size, len(encoded))
+		switch v := field.Interface().(type) {
+		case time.Time:
+			// A Timestamp represents a point in time independent of any time zone or calendar, represented as
+			// seconds and fractions of seconds at nanosecond resolution in UTC Epoch time. It is encoded using
+			// the Proleptic Gregorian Calendar which extends the Gregorian calendar backwards to year one.
+			// It is encoded assuming all minutes are 60 seconds long, i.e. leap seconds are "smeared" so that no
+			// leap second table is needed for interpretation. Range is from 0001-01-01T00:00:00Z to
+			// 9999-12-31T23:59:59.999999999Z. By restricting to that range, we ensure that we can convert to and
+			// from RFC 3339 date strings. See https://www.ietf.org/rfc/rfc3339.txt.
+			timestamp := newTimestamp(v)
+			if err := binary.Write(out, binary.LittleEndian, timestamp); err != nil {
+				return nil, fmt.Errorf("field %s of type %s: cannot write: %w", fieldType.Name, field.Type(), err)
 			}
 		default:
-			return nil, fmt.Errorf("unsupported kind %s", kind)
+			if err := binary.Write(out, binary.LittleEndian, field.Interface()); err != nil {
+				return nil, fmt.Errorf("field %s of type %s: cannot write: %w", fieldType.Name, field.Type(), err)
+			}
 		}
-		out.Write(encoded)
 	}
 
 	return out.Bytes(), nil
+}
+
+// marshalVarSizedField marshals a field of a type with hard-to-determine size
+func marshalVarSizedField(out io.Writer, field reflect.Value, structField reflect.StructField) error {
+	// Variable-length objects MUST have size defined
+	tags, err := getTags(structField)
+	if err != nil {
+		return err
+	}
+	if field.Len() != tags.length {
+		return fmt.Errorf("size of %s MUST be %d bytes, is %d",
+			structField.Name, tags.length, field.Len())
+	}
+	if err := binary.Write(out, binary.LittleEndian, field.Interface()); err != nil {
+		return fmt.Errorf("field %s of type %s: cannot write: %w", structField.Name, field.Type(), err)
+	}
+
+	return nil
 }
 
 func getTags(structField reflect.StructField) (tags, error) {
@@ -83,8 +108,8 @@ func getTags(structField reflect.StructField) (tags, error) {
 		value := kv[1]
 
 		switch key {
-		case "size":
-			ret.size, err = strconv.Atoi(value)
+		case "length":
+			ret.length, err = strconv.Atoi(value)
 			if err != nil {
 				return tags{}, fmt.Errorf("field %s tag size:\"%s\": %w", structField.Name, structTag, err)
 			}
@@ -97,5 +122,9 @@ func getTags(structField reflect.StructField) (tags, error) {
 }
 
 type tags struct {
-	size int // size=N
+	// length represents fixed number of elements in a variable-length data type like slice.
+	// Examples:
+	// * Field1 []byte `tmbytes:"length=123"` - means Field1 should contain exactly 123 bytes
+	// * Field2 []int16 `tmbytes:"length=12"` - means Field1 should contain exactly 12 int16 elements, that is 24 bytes
+	length int
 }

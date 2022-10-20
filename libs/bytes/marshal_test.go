@@ -4,6 +4,7 @@ import (
 	"math"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 )
@@ -16,25 +17,44 @@ func TestMarshalFixed(t *testing.T) {
 	}
 	testCases := []testCase{
 		{
+			Data:      struct{ T time.Time }{time.Now()},
+			expectLen: 8,
+		},
+		{
 			Data: struct {
-				Field1 int64
-				Field2 []byte `tmbytes:"size=12"`
+				Field1 uint64
+				Field2 []byte `tmbytes:"length=12"`
+				Field3 uint32
+			}{0x1234567890abcdef, []byte("1234567890ab"), math.MaxUint32},
+			expectLen:   8 + 12 + 4,
+			expectError: "",
+		},
+		{ // HexBytes
+			Data: struct {
+				Field1 uint64
+				Field2 HexBytes `tmbytes:"length=12"`
 			}{0x1234567890abcdef, []byte("1234567890ab")},
 			expectLen:   8 + 12,
 			expectError: "",
 		},
 		{
 			Data: struct {
-				Field1 int64
-				Field2 []byte `tmbytes:"size=12"`
+				Field1 uint64
+				Field2 []byte `tmbytes:"length=12"`
 			}{0x1234567890abcdef, []byte("1234567890")},
 			expectError: "size of Field2 MUST be 12 bytes, is 10",
-		}, {
+		}, { // marshal []uint64
 			Data: struct {
-				Field1 int64
-				Field2 []int64 `tmbytes:"size=12"`
-			}{0x1234567890abcdef, []int64{math.MaxInt64}},
-			expectError: "field Field2: unsupported slice type []int64",
+				Field1 uint64
+				Field2 []uint64 `tmbytes:"length=3"`
+			}{0x1234567890abcdef, []uint64{math.MaxInt64, 0, math.MaxInt64}},
+			expectLen: 8 + 3*8,
+		},
+		{
+			Data: struct {
+				Field1 string
+			}{"tst\x00\x00"},
+			expectError: "field Field1 of type string: cannot write: binary.Write: invalid type string",
 		},
 	}
 	for _, tc := range testCases {
@@ -45,15 +65,14 @@ func TestMarshalFixed(t *testing.T) {
 				return
 			}
 			assert.NoError(t, err)
-
 			assert.Len(t, marshaled, tc.expectLen)
-			t.Logf("Marshaled: %+v", marshaled)
+			// t.Logf("Marshaled: %+v", marshaled)
 		})
 	}
 }
 func TestMarshalTags(t *testing.T) {
 	type testCase struct {
-		Field1     []byte `tmbytes:"size=12"`
+		Field1     []byte `tmbytes:"length=12"`
 		Field2     int64
 		Field3     string
 		expectSize map[string]int
@@ -77,7 +96,7 @@ func TestMarshalTags(t *testing.T) {
 				name := structField.Name
 				tags, err := getTags(structField)
 				assert.NoError(t, err, structField.Name)
-				assert.Equal(t, tc.expectSize[name], tags.size, name)
+				assert.Equal(t, tc.expectSize[name], tags.length, name)
 			}
 		})
 	}
