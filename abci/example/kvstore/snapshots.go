@@ -2,6 +2,7 @@
 package kvstore
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 )
 
 const (
@@ -119,7 +121,13 @@ func (s *SnapshotStore) Prune(n int) error {
 	i := 0
 	for ; i < len(s.metadata)-n; i++ {
 		h := s.metadata[i].Height
-		if err := os.Remove(filepath.Join(s.dir, fmt.Sprintf("%v.json", h))); err != nil {
+		path := filepath.Join(s.dir, fmt.Sprintf("%v.json", h))
+		_, err := os.Stat(path)
+		if errors.Is(err, os.ErrNotExist) {
+			continue
+		}
+		err = os.Remove(path)
+		if err != nil {
 			return err
 		}
 	}
@@ -156,6 +164,42 @@ func (s *SnapshotStore) LoadChunk(height uint64, format uint32, chunk uint32) ([
 		}
 	}
 	return nil, nil
+}
+
+type offerSnapshot struct {
+	snapshot *abci.Snapshot
+	appHash  tmbytes.HexBytes
+	chunks   [][]byte
+	chunkCnt int
+}
+
+func newOfferSnapshot(snapshot *abci.Snapshot, appHash tmbytes.HexBytes) *offerSnapshot {
+	return &offerSnapshot{
+		snapshot: snapshot,
+		appHash:  appHash,
+		chunks:   make([][]byte, snapshot.Chunks),
+		chunkCnt: 0,
+	}
+}
+
+func (s *offerSnapshot) addChunk(index int, chunk []byte) {
+	if s.chunks[index] != nil {
+		return
+	}
+	s.chunks[index] = chunk
+	s.chunkCnt++
+}
+
+func (s *offerSnapshot) isFull() bool {
+	return s.chunkCnt == int(s.snapshot.Chunks)
+}
+
+func (s *offerSnapshot) bytes() []byte {
+	buf := bytes.NewBuffer(nil)
+	for _, chunk := range s.chunks {
+		buf.Write(chunk)
+	}
+	return buf.Bytes()
 }
 
 // byteChunk returns the chunk at a given index from the full byte slice.
