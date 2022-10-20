@@ -61,6 +61,7 @@ func (env *Environment) BroadcastTx(ctx context.Context, req *coretypes.RequestB
 			Code:      r.Code,
 			Data:      r.Data,
 			Codespace: r.Codespace,
+			Info:      r.Info,
 			Hash:      req.Tx.Hash(),
 		}, nil
 	}
