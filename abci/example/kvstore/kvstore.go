@@ -46,7 +46,8 @@ type Application struct {
 	RetainBlocks int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
 	logger       log.Logger
 
-	validatorSetUpdates map[int64]abci.ValidatorSetUpdate
+	validatorSetUpdates    map[int64]abci.ValidatorSetUpdate
+	consensusParamsUpdates map[int64]types1.ConsensusParams
 
 	store StoreFactory
 
@@ -67,10 +68,8 @@ type Application struct {
 	execTx ExecTxFunc
 	// Snapshots
 
-	snapshots       *SnapshotStore
-	restoreSnapshot *abci.Snapshot
-	restoreAppHash  tmbytes.HexBytes
-	restoreChunks   [][]byte
+	snapshots     *SnapshotStore
+	offerSnapshot *offerSnapshot
 }
 
 // WithValidatorSetUpdates defines initial validator set when creating Application
@@ -168,15 +167,16 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 	var err error
 
 	app := &Application{
-		logger:              log.NewNopLogger(),
-		LastCommittedState:  NewKvState(dbm.NewMemDB(), initialHeight), // initial state to avoid InitChain() in unit tests
-		roundStates:         map[string]State{},
-		validatorSetUpdates: make(map[int64]abci.ValidatorSetUpdate),
-		initialHeight:       initialHeight,
-		store:               stateStore,
-		prepareTxs:          prepareTxs,
-		verifyTx:            verifyTx,
-		execTx:              execTx,
+		logger:                 log.NewNopLogger(),
+		LastCommittedState:     NewKvState(dbm.NewMemDB(), initialHeight), // initial state to avoid InitChain() in unit tests
+		roundStates:            map[string]State{},
+		validatorSetUpdates:    map[int64]abci.ValidatorSetUpdate{},
+		consensusParamsUpdates: map[int64]types1.ConsensusParams{},
+		initialHeight:          initialHeight,
+		store:                  stateStore,
+		prepareTxs:             prepareTxs,
+		verifyTx:               verifyTx,
+		execTx:                 execTx,
 	}
 
 	for _, opt := range opts {
@@ -237,20 +237,23 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	}
 
 	if req.ValidatorSet != nil {
-		// FIXME: should we move validatorSetUpdates to State?
 		app.validatorSetUpdates[app.initialHeight] = *req.ValidatorSet
 	}
 	coreChainLock, err := app.chainLockUpdate(req.InitialHeight)
 	if err != nil {
 		return nil, err
 	}
-	resp := &abci.ResponseInitChain{
-		AppHash: app.LastCommittedState.GetAppHash(),
-		ConsensusParams: &types1.ConsensusParams{
+	consensusParams, ok := app.consensusParamsUpdates[app.initialHeight]
+	if !ok {
+		consensusParams = types1.ConsensusParams{
 			Version: &types1.VersionParams{
 				AppVersion: ProtocolVersion,
 			},
-		},
+		}
+	}
+	resp := &abci.ResponseInitChain{
+		AppHash:                 app.LastCommittedState.GetAppHash(),
+		ConsensusParams:         &consensusParams,
 		ValidatorSetUpdate:      app.validatorSetUpdates[app.initialHeight],
 		InitialCoreHeight:       app.initialCoreLockHeight,
 		NextCoreChainLockUpdate: coreChainLock,
@@ -286,7 +289,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 		TxRecords:             txRecords,
 		AppHash:               roundState.GetAppHash(),
 		TxResults:             txResults,
-		ConsensusParamUpdates: nil, // TODO: implement
+		ConsensusParamUpdates: app.getConsensusParamsUpdate(req.Height),
 		CoreChainLockUpdate:   coreChainLock,
 		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
 	}
@@ -309,16 +312,12 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 			Status: abci.ResponseProcessProposal_REJECT,
 		}, err
 	}
-	coreChainLock, err := app.chainLockUpdate(req.Height)
-	if err != nil {
-		return nil, err
-	}
 	resp := &abci.ResponseProcessProposal{
-		Status:              abci.ResponseProcessProposal_ACCEPT,
-		AppHash:             roundState.GetAppHash(),
-		TxResults:           txResults,
-		ValidatorSetUpdate:  app.getValidatorSetUpdate(req.Height),
-		CoreChainLockUpdate: coreChainLock,
+		Status:                abci.ResponseProcessProposal_ACCEPT,
+		AppHash:               roundState.GetAppHash(),
+		TxResults:             txResults,
+		ConsensusParamUpdates: app.getConsensusParamsUpdate(req.Height),
+		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
 	}
 
 	if app.cfg.ProcessProposalDelayMS != 0 {
@@ -381,13 +380,17 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 
 // eventValUpdate generates an event that contains info about current validator set
 func (app *Application) eventValUpdate(height int64) abci.Event {
-	vu := app.getValidatorSetUpdate(height)
+	size := 0
+	vsu := app.getValidatorSetUpdate(height)
+	if vsu != nil {
+		size = len(vsu.ValidatorUpdates)
+	}
 	event := abci.Event{
 		Type: "val_updates",
 		Attributes: []abci.EventAttribute{
 			{
 				Key:   "size",
-				Value: strconv.Itoa(len(vu.ValidatorUpdates)),
+				Value: strconv.Itoa(size),
 			},
 			{
 				Key:   "height",
@@ -434,12 +437,7 @@ func (app *Application) OfferSnapshot(_ context.Context, req *abci.RequestOfferS
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	if app.restoreSnapshot != nil {
-		return &abci.ResponseOfferSnapshot{}, errors.New("a snapshot is already being restored")
-	}
-	app.restoreSnapshot = req.Snapshot
-	app.restoreAppHash = req.AppHash
-	app.restoreChunks = [][]byte{}
+	app.offerSnapshot = newOfferSnapshot(req.Snapshot, req.AppHash)
 	resp := &abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ACCEPT}
 
 	app.logger.Debug("OfferSnapshot", "req", req, "resp", resp)
@@ -451,30 +449,25 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	if app.restoreSnapshot == nil {
+	if app.offerSnapshot == nil {
 		return &abci.ResponseApplySnapshotChunk{}, fmt.Errorf("no restore in progress")
 	}
+	app.offerSnapshot.addChunk(int(req.Index), req.Chunk)
 
-	app.restoreChunks = append(app.restoreChunks, req.Chunk)
-	if len(app.restoreChunks) == int(app.restoreSnapshot.Chunks) {
-		bz := []byte{}
-		for _, chunk := range app.restoreChunks {
-			bz = append(bz, chunk...)
-		}
-		if err := json.Unmarshal(bz, &app.LastCommittedState); err != nil {
+	if app.offerSnapshot.isFull() {
+		chunks := app.offerSnapshot.bytes()
+		err := json.Unmarshal(chunks, &app.LastCommittedState)
+		if err != nil {
 			return &abci.ResponseApplySnapshotChunk{}, fmt.Errorf("cannot unmarshal state: %w", err)
 		}
-
 		app.logger.Info("restored state snapshot",
 			"height", app.LastCommittedState.GetHeight(),
-			"json", string(bz),
+			"json", string(chunks),
 			"apphash", app.LastCommittedState.GetAppHash(),
-			"snapshot_height", app.restoreSnapshot.Height,
-			"snapshot_apphash", app.restoreAppHash,
+			"snapshot_height", app.offerSnapshot.snapshot.Height,
+			"snapshot_apphash", app.offerSnapshot.appHash,
 		)
-		app.restoreSnapshot = nil
-		app.restoreChunks = nil
-		app.restoreAppHash = nil
+		app.offerSnapshot = nil
 	}
 
 	resp := &abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}
@@ -485,17 +478,18 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 
 func (app *Application) createSnapshot() error {
 	height := app.LastCommittedState.GetHeight()
-	if app.cfg.SnapshotInterval > 0 && uint64(height)%app.cfg.SnapshotInterval == 0 {
-		if _, err := app.snapshots.Create(app.LastCommittedState); err != nil {
-			return fmt.Errorf("create snapshot: %w", err)
-		}
-		app.logger.Info("created state sync snapshot", "height", height, "apphash", app.LastCommittedState.GetAppHash())
+	if app.cfg.SnapshotInterval == 0 || uint64(height)%app.cfg.SnapshotInterval != 0 {
+		return nil
 	}
-
-	if err := app.snapshots.Prune(maxSnapshotCount); err != nil {
+	_, err := app.snapshots.Create(app.LastCommittedState)
+	if err != nil {
+		return fmt.Errorf("create snapshot: %w", err)
+	}
+	app.logger.Info("created state sync snapshot", "height", height, "apphash", app.LastCommittedState.GetAppHash())
+	err = app.snapshots.Prune(maxSnapshotCount)
+	if err != nil {
 		return fmt.Errorf("prune snapshots: %w", err)
 	}
-
 	return nil
 }
 
@@ -534,10 +528,6 @@ func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*
 	defer app.mu.Unlock()
 
 	switch reqQuery.Path {
-	case "/verify-chainlock":
-		return &abci.ResponseQuery{
-			Code: 0,
-		}, nil
 	case "/val":
 		vu, err := app.findValidatorUpdate(reqQuery.Data)
 		if err != nil {
@@ -601,6 +591,14 @@ func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*
 	}
 
 	return &resQuery, nil
+}
+
+// AddConsensusParamsUpdate schedules new consensus params update to be returned at `height` and used at `height+1`.
+// `params` must be a final struct that should be passed to Tenderdash in ResponsePrepare/ProcessProposal at `height`.
+func (app *Application) AddConsensusParamsUpdate(params types1.ConsensusParams, height int64) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+	app.consensusParamsUpdates[height] = params
 }
 
 // AddValidatorSetUpdate schedules new valiudator set update at some height
@@ -685,18 +683,22 @@ func (app *Application) executeProposal(height int64, txs types.Txs) (State, []*
 	return roundState, txResults, nil
 }
 
+// getConsensusParamsUpdate returns consensus params update to be returned at given `height`
+// and applied at `height+1`
+func (app *Application) getConsensusParamsUpdate(height int64) *types1.ConsensusParams {
+	if cp, ok := app.consensusParamsUpdates[height]; ok {
+		return &cp
+	}
+
+	return nil
+}
+
 // ---------------------------------------------
 // getValidatorSetUpdate returns validator update at some `height` that will be applied at `height+1`.
 func (app *Application) getValidatorSetUpdate(height int64) *abci.ValidatorSetUpdate {
 	vsu, ok := app.validatorSetUpdates[height]
 	if !ok {
-		var prev int64
-		for h, v := range app.validatorSetUpdates {
-			if h < height && prev <= h {
-				vsu = v
-				prev = h
-			}
-		}
+		return nil
 	}
 	return proto.Clone(&vsu).(*abci.ValidatorSetUpdate)
 }

@@ -28,7 +28,7 @@ func TestEventSetError(t *testing.T) {
 	}
 	blockID := types.BlockID{}
 	ucs := CurrentRoundState{
-		response:  abci.ResponseProcessProposal{},
+		Params:    RoundParams{},
 		TxResults: []*abci.ExecTxResult{{}},
 	}
 	fbResp := abci.ResponseFinalizeBlock{}

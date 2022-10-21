@@ -20,6 +20,7 @@ import (
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
+	types1 "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/version"
 )
 
@@ -171,6 +172,51 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 
 			assert.Equal(t, respInfo.LastBlockHeight, height, "expected height of %d, got %d", height, respInfo.LastBlockHeight)
 		})
+	}
+}
+
+// TestConsensusParamsUpdate checks if consensus params are updated correctly
+func TestConsensusParamsUpdate(t *testing.T) {
+	const genesisHeight = int64(100)
+	type testCase struct {
+		ConsParamUpdates *types1.ConsensusParams
+	}
+	testCases := map[int64]testCase{
+		genesisHeight: {
+			ConsParamUpdates: &types1.ConsensusParams{
+				Abci: &types1.ABCIParams{RecheckTx: true},
+			},
+		},
+		genesisHeight + 3: {
+			ConsParamUpdates: &types1.ConsensusParams{
+				Abci: &types1.ABCIParams{RecheckTx: false},
+			},
+		},
+		genesisHeight + 4: {
+			ConsParamUpdates: &types1.ConsensusParams{
+				Version: &types1.VersionParams{
+					AppVersion: 123,
+				},
+			},
+		},
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	kvstore := newKvApp(ctx, t, genesisHeight)
+
+	maxHeight := genesisHeight
+	for height, tc := range testCases {
+		kvstore.AddConsensusParamsUpdate(*tc.ConsParamUpdates, height)
+		if height > maxHeight {
+			maxHeight = height
+		}
+	}
+
+	for height := genesisHeight; height <= maxHeight; height++ {
+		respProcess, _ := makeApplyBlock(ctx, t, kvstore, int(height))
+		assert.EqualValues(t, testCases[height].ConsParamUpdates, respProcess.ConsensusParamUpdates)
 	}
 }
 

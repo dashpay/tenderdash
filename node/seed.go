@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"net/http"
 	"strings"
@@ -45,10 +44,6 @@ func makeSeedNode(
 	nodeKey types.NodeKey,
 	genesisDocProvider genesisDocProvider,
 ) (service.Service, error) {
-	if !cfg.P2P.PexReactor {
-		return nil, errors.New("cannot run seed nodes with PEX disabled")
-	}
-
 	genDoc, err := genesisDocProvider()
 	if err != nil {
 		return nil, err
@@ -137,13 +132,7 @@ func (n *seedNodeImpl) OnStart(ctx context.Context) error {
 	}
 	n.isListening = true
 
-	if n.config.P2P.PexReactor {
-		if err := n.pexReactor.Start(ctx); err != nil {
-			return err
-		}
-	}
-
-	return nil
+	return n.pexReactor.Start(ctx)
 }
 
 // OnStop stops the Seed Node. It implements service.Service.

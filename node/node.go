@@ -390,9 +390,7 @@ func makeNode(
 		nodeMetrics.consensus.BlockSyncing.Set(1)
 	}
 
-	if cfg.P2P.PexReactor {
-		node.services = append(node.services, pex.NewReactor(logger, peerManager, node.router.OpenChannel, peerManager.Subscribe))
-	}
+	node.services = append(node.services, pex.NewReactor(logger, peerManager, node.router.OpenChannel, peerManager.Subscribe))
 
 	// Set up state sync reactor, and schedule a sync if requested.
 	// FIXME The way we do phased startups (e.g. replay -> block sync -> consensus) is very messy,

@@ -2,29 +2,27 @@ package state
 
 import (
 	"bytes"
-	"context"
 	"fmt"
-
-	"github.com/gogo/protobuf/proto"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmtypes "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
 
 const (
-	initChain       = "ResponseInitChain"
-	prepareProposal = "ResponsePrepareProposal"
-	processProposal = "ResponseProcessProposal"
+	InitChainSource       = "ResponseInitChain"
+	PrepareProposalSource = "ResponsePrepareProposal"
+	ProcessProposalSource = "ResponseProcessProposal"
 )
 
 // CurrentRoundState ...
 type CurrentRoundState struct {
 	// Base state for the changes
 	Base State
+
+	ProTxHash types.ProTxHash
 
 	// AppHash of current block
 	AppHash tmbytes.HexBytes `json:"app_hash"`
@@ -44,21 +42,32 @@ type CurrentRoundState struct {
 	NextValidators              *types.ValidatorSet
 	LastHeightValidatorsChanged int64
 
-	// responseType points to responseType of state changes - prepareProposal, processProposal or empty string for nil
-	responseType string
-
-	// response stores process proposal response, received from ABCI app or converted from PrepareProposal
-	response abci.ResponseProcessProposal
+	Params RoundParams
 }
 
-func (candidate CurrentRoundState) IsEmpty() bool {
+// NewCurrentRoundState returns a new instance of CurrentRoundState
+func NewCurrentRoundState(proTxHash types.ProTxHash, rp RoundParams, baseState State) (CurrentRoundState, error) {
+	candidate := CurrentRoundState{
+		Base:      baseState,
+		ProTxHash: proTxHash,
+		AppHash:   rp.AppHash.Copy(),
+		Params:    rp,
+	}
+	err := candidate.populate()
+	if err != nil {
+		return CurrentRoundState{}, err
+	}
+	return candidate, nil
+}
+
+func (candidate *CurrentRoundState) IsEmpty() bool {
 	return candidate.AppHash == nil
 }
 
-// UpdateBlock changes block fields to reflect the ones returned in PrepareProposal / ProcessProposal
-func (candidate CurrentRoundState) UpdateBlock(target *types.Block) error {
-	if candidate.responseType != prepareProposal {
-		return fmt.Errorf("block can be updated only based on '%s' response, got '%s'", processProposal, candidate.responseType)
+// UpdateBlock changes block fields to reflect the ones returned in PrepareProposal
+func (candidate *CurrentRoundState) UpdateBlock(target *types.Block) error {
+	if candidate.Params.Source != PrepareProposalSource {
+		return fmt.Errorf("block can be updated only based on '%s' response, got '%s'", ProcessProposalSource, candidate.Params.Source)
 	}
 	target.AppHash = candidate.AppHash
 	target.ResultsHash = candidate.ResultsHash
@@ -73,7 +82,7 @@ func (candidate CurrentRoundState) UpdateBlock(target *types.Block) error {
 }
 
 // UpdateState updates state when the block is committed. State will contain data needed by next block.
-func (candidate CurrentRoundState) UpdateState(ctx context.Context, target *State) error {
+func (candidate *CurrentRoundState) UpdateState(target *State) error {
 	target.AppHash = candidate.AppHash
 	target.LastResultsHash = candidate.ResultsHash
 	target.ConsensusParams = candidate.NextConsensusParams
@@ -88,90 +97,18 @@ func (candidate CurrentRoundState) UpdateState(ctx context.Context, target *Stat
 }
 
 // UpdateFunc implements UpdateFunc
-func (candidate CurrentRoundState) UpdateFunc(ctx context.Context, state State) (State, error) {
-	err := candidate.UpdateState(ctx, &state)
+func (candidate *CurrentRoundState) UpdateFunc(state State) (State, error) {
+	err := candidate.UpdateState(&state)
 	return state, err
 }
 
-func (candidate *CurrentRoundState) populate(ctx context.Context, proposalResponse proto.Message, baseState State) error {
-	switch resp := proposalResponse.(type) {
-	case *abci.ResponsePrepareProposal:
-		candidate.responseType = prepareProposal
-		candidate.response = resp.ToResponseProcessProposal()
-
-	case *abci.ResponseProcessProposal:
-		if !resp.IsAccepted() {
-			return fmt.Errorf("proposal not accepted by abci app: %s", resp.Status)
-		}
-		candidate.responseType = processProposal
-		candidate.response = *resp
-
-	case *abci.ResponseInitChain:
-		candidate.responseType = initChain
-		candidate.response = abci.ResponseProcessProposal{
-			AppHash:               resp.AppHash,
-			ConsensusParamUpdates: resp.ConsensusParams,
-			CoreChainLockUpdate:   resp.NextCoreChainLockUpdate,
-			ValidatorSetUpdate:    &resp.ValidatorSetUpdate,
-		}
-
-	case nil: // Assuming no changes
-		candidate.response = abci.ResponseProcessProposal{}
-
-	default:
-		return fmt.Errorf("unsupported response type %T", resp)
-	}
-
-	return candidate.update(
-		ctx,
-		baseState,
-		candidate.response.AppHash,
-		candidate.response.TxResults,
-		candidate.response.ConsensusParamUpdates,
-		candidate.response.ValidatorSetUpdate,
-		candidate.response.CoreChainLockUpdate,
-		candidate.responseType,
-	)
-}
-
-func (candidate *CurrentRoundState) update(
-	ctx context.Context,
-	baseState State,
-	appHash tmbytes.HexBytes,
-	txResults []*abci.ExecTxResult,
-	consensusParamUpdates *tmtypes.ConsensusParams,
-	validatorSetUpdate *abci.ValidatorSetUpdate,
-	coreChainLockUpdate *tmtypes.CoreChainLock,
-	updateSource string,
-) error {
-	candidate.Base = baseState
-	candidate.AppHash = appHash.Copy()
-
-	if err := candidate.populateTxResults(txResults); err != nil {
-		return err
-	}
-	// Consensus params need to be populated before validators
-	if err := candidate.populateConsensusParams(consensusParamUpdates); err != nil {
-		return err
-	}
-	if err := candidate.populateValsetUpdates(ctx, validatorSetUpdate, updateSource); err != nil {
-		return err
-	}
-	if err := candidate.populateChainlock(coreChainLockUpdate); err != nil {
-		return err
-	}
-
-	return nil
-}
-
-func (candidate CurrentRoundState) StateID() types.StateID {
+func (candidate *CurrentRoundState) StateID() types.StateID {
 	var appHash tmbytes.HexBytes
 	if len(candidate.AppHash) > 0 {
 		appHash = candidate.AppHash.Copy()
 	} else {
 		appHash = make([]byte, crypto.DefaultAppHashSize)
 	}
-
 	return types.StateID{
 		Height:  candidate.GetHeight(),
 		AppHash: appHash,
@@ -179,7 +116,7 @@ func (candidate CurrentRoundState) StateID() types.StateID {
 }
 
 // GetHeight returns height of current block
-func (candidate CurrentRoundState) GetHeight() int64 {
+func (candidate *CurrentRoundState) GetHeight() int64 {
 	if candidate.Base.LastBlockHeight == 0 {
 		return candidate.Base.InitialHeight
 	}
@@ -187,36 +124,48 @@ func (candidate CurrentRoundState) GetHeight() int64 {
 	return candidate.Base.LastBlockHeight + 1
 }
 
-func (candidate *CurrentRoundState) populateTxResults(txResults []*abci.ExecTxResult) error {
-	hash, err := abci.TxResultsHash(txResults)
+func (candidate *CurrentRoundState) populate() error {
+	populates := []func() error{
+		candidate.populateTxResults,
+		// Consensus params need to be populated before validators
+		candidate.populateConsensusParams,
+		candidate.populateValsetUpdates,
+		candidate.populateChainlock,
+	}
+	for _, populate := range populates {
+		err := populate()
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (candidate *CurrentRoundState) populateTxResults() error {
+	hash, err := abci.TxResultsHash(candidate.Params.TxResults)
 	if err != nil {
 		return fmt.Errorf("marshaling TxResults: %w", err)
 	}
 	candidate.ResultsHash = hash
-	candidate.TxResults = txResults
-
+	candidate.TxResults = candidate.Params.TxResults
 	return nil
 }
 
-func (candidate *CurrentRoundState) populateChainlock(chainlockProto *tmtypes.CoreChainLock) error {
-	chainlock, err := types.CoreChainLockFromProto(chainlockProto)
-	if err != nil {
-		return err
-	}
-	lastChainlockHeight := candidate.Base.LastCoreChainLockedBlockHeight
+func (candidate *CurrentRoundState) populateChainlock() error {
+	chainLock := candidate.Params.CoreChainLock
 
-	if chainlock == nil || (chainlock.CoreBlockHeight <= lastChainlockHeight) {
+	lastChainLockHeight := candidate.Base.LastCoreChainLockedBlockHeight
+	if chainLock == nil || (chainLock.CoreBlockHeight <= lastChainLockHeight) {
 		candidate.CoreChainLock = nil
 		return nil
 	}
-
-	candidate.CoreChainLock = chainlock
+	candidate.CoreChainLock = chainLock
 	return nil
 }
 
 // populateConsensusParams updates ConsensusParams, Version and LastHeightConsensusParamsChanged
-func (candidate *CurrentRoundState) populateConsensusParams(updates *tmtypes.ConsensusParams) error {
-
+func (candidate *CurrentRoundState) populateConsensusParams() error {
+	updates := candidate.Params.ConsensusParamUpdates
 	if updates == nil || updates.Equal(&tmtypes.ConsensusParams{}) {
 		candidate.NextConsensusParams = candidate.Base.ConsensusParams
 		candidate.LastHeightConsensusParamsChanged = candidate.Base.LastHeightConsensusParamsChanged
@@ -244,22 +193,25 @@ func (candidate *CurrentRoundState) populateConsensusParams(updates *tmtypes.Con
 
 // populateValsetUpdates calculates and populates Validators and LastHeightValidatorsChanged
 // CONTRACT: candidate.ConsensusParams were already populated
-func (candidate *CurrentRoundState) populateValsetUpdates(ctx context.Context, update *abci.ValidatorSetUpdate, updateSource string) error {
+func (candidate *CurrentRoundState) populateValsetUpdates() error {
+	update := candidate.Params.ValidatorSetUpdate
+	updateSource := candidate.Params.Source
+
 	base := candidate.Base
 
-	newValSet, err := valsetUpdate(ctx, update, base.Validators, candidate.NextConsensusParams.Validator)
+	newValSet, err := valsetUpdate(candidate.ProTxHash, update, base.Validators, candidate.NextConsensusParams.Validator)
 	if err != nil {
 		return fmt.Errorf("validator set updates: %w", err)
 	}
 
-	if updateSource != initChain {
-		// we take validator sets as they arrive from initChain response
+	if updateSource != InitChainSource {
+		// we take validator sets as they arrive from InitChainSource response
 		newValSet.IncrementProposerPriority(1)
 	}
 
 	candidate.NextValidators = newValSet
 
-	if updateSource != initChain && update != nil && len(update.ValidatorUpdates) > 0 {
+	if updateSource != InitChainSource && update != nil && len(update.ValidatorUpdates) > 0 {
 		candidate.LastHeightValidatorsChanged = candidate.GetHeight() + 1
 	} else {
 		candidate.LastHeightValidatorsChanged = base.LastHeightValidatorsChanged
@@ -268,9 +220,76 @@ func (candidate *CurrentRoundState) populateValsetUpdates(ctx context.Context, u
 	return nil
 }
 
+// RoundParams contains parameters received from ABCI which are necessary for reaching a consensus
+type RoundParams struct {
+	AppHash               tmbytes.HexBytes
+	TxResults             []*abci.ExecTxResult
+	ConsensusParamUpdates *tmtypes.ConsensusParams
+	ValidatorSetUpdate    *abci.ValidatorSetUpdate
+	CoreChainLock         *types.CoreChainLock
+	Source                string
+}
+
+// ToProcessProposal reconstructs ResponseProcessProposal structure from a current state of RoundParams
+func (rp RoundParams) ToProcessProposal() *abci.ResponseProcessProposal {
+	return &abci.ResponseProcessProposal{
+		Status:                abci.ResponseProcessProposal_ACCEPT,
+		AppHash:               rp.AppHash,
+		TxResults:             rp.TxResults,
+		ConsensusParamUpdates: rp.ConsensusParamUpdates,
+		ValidatorSetUpdate:    rp.ValidatorSetUpdate,
+	}
+}
+
+// RoundParamsFromPrepareProposal creates RoundParams from ResponsePrepareProposal
+func RoundParamsFromPrepareProposal(resp *abci.ResponsePrepareProposal) (RoundParams, error) {
+	rp := RoundParams{
+		AppHash:               resp.AppHash,
+		TxResults:             resp.TxResults,
+		ConsensusParamUpdates: resp.ConsensusParamUpdates,
+		ValidatorSetUpdate:    resp.ValidatorSetUpdate,
+		Source:                PrepareProposalSource,
+	}
+	ccl, err := types.CoreChainLockFromProto(resp.CoreChainLockUpdate)
+	if err != nil {
+		return RoundParams{}, fmt.Errorf("core-chain-lock proto couldn't convert into domain entity: %w", err)
+	}
+	rp.CoreChainLock = ccl
+	return rp, nil
+}
+
+// RoundParamsFromProcessProposal creates RoundParams from ResponseProcessProposal
+func RoundParamsFromProcessProposal(resp *abci.ResponseProcessProposal, coreChainLock *types.CoreChainLock) RoundParams {
+	rp := RoundParams{
+		AppHash:               resp.AppHash,
+		TxResults:             resp.TxResults,
+		ConsensusParamUpdates: resp.ConsensusParamUpdates,
+		ValidatorSetUpdate:    resp.ValidatorSetUpdate,
+		Source:                ProcessProposalSource,
+	}
+	rp.CoreChainLock = coreChainLock
+	return rp
+}
+
+// RoundParamsFromInitChain creates RoundParams from ResponseInitChain
+func RoundParamsFromInitChain(resp *abci.ResponseInitChain) (RoundParams, error) {
+	rp := RoundParams{
+		AppHash:               resp.AppHash,
+		ConsensusParamUpdates: resp.ConsensusParams,
+		ValidatorSetUpdate:    &resp.ValidatorSetUpdate,
+		Source:                InitChainSource,
+	}
+	ccl, err := types.CoreChainLockFromProto(resp.NextCoreChainLockUpdate)
+	if err != nil {
+		return RoundParams{}, err
+	}
+	rp.CoreChainLock = ccl
+	return rp, nil
+}
+
 // valsetUpdate processes validator set updates received from ABCI app.
 func valsetUpdate(
-	ctx context.Context,
+	nodeProTxHash types.ProTxHash,
 	vu *abci.ValidatorSetUpdate,
 	currentVals *types.ValidatorSet,
 	params types.ValidatorParams,
@@ -295,7 +314,6 @@ func valsetUpdate(
 				return nil, err
 			}
 		} else {
-			nodeProTxHash, _ := dash.ProTxHashFromContext(ctx)
 			// if we don't have proTxHash, NewValidatorSetWithLocalNodeProTxHash behaves like NewValidatorSet
 			nValSet = types.NewValidatorSetWithLocalNodeProTxHash(validatorUpdates, thresholdPubKey,
 				currentVals.QuorumType, quorumHash, nodeProTxHash)
