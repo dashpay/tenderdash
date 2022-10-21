@@ -158,11 +158,10 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastBlockID = lastLightBlock.Commit.BlockID
 	state.LastStateID = lastLightBlock.Commit.StateID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
-	state.AppHash = currentLightBlock.AppHash
+	state.LastAppHash = currentLightBlock.AppHash
 	state.LastResultsHash = currentLightBlock.ResultsHash
 	state.LastValidators = lastLightBlock.ValidatorSet
 	state.Validators = currentLightBlock.ValidatorSet
-	// FIXME: not sure if the one below is correct
 	state.LastHeightValidatorsChanged = currentLightBlock.Height
 
 	// We'll also need to fetch consensus params via RPC, using light client verification.
@@ -301,11 +300,10 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastBlockID = lastLightBlock.Commit.BlockID
 	state.LastStateID = lastLightBlock.Commit.StateID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
-	state.AppHash = currentLightBlock.AppHash
+	state.LastAppHash = currentLightBlock.AppHash
 	state.LastResultsHash = currentLightBlock.ResultsHash
 	state.LastValidators = lastLightBlock.ValidatorSet
 	state.Validators = currentLightBlock.ValidatorSet
-	// FIXME: not sure if the line below is correct, was nextLightBlock.Height for next-block-execution
 	state.LastHeightValidatorsChanged = currentLightBlock.Height
 
 	// We'll also need to fetch consensus params via P2P.

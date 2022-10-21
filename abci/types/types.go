@@ -271,9 +271,7 @@ func (m *ResponsePrepareProposal) Validate() error {
 	if !isValidApphash(m.AppHash) {
 		return fmt.Errorf("apphash (%X) of size %d is invalid", m.AppHash, len(m.AppHash))
 	}
-	if len(m.TxRecords) != len(m.TxResults) {
-		return fmt.Errorf("tx records len %d does not match tx results len %d", len(m.TxRecords), len(m.TxResults))
-	}
+
 	return nil
 }
 

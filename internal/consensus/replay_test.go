@@ -729,7 +729,7 @@ func testHandshakeReplay(
 		mode,
 		store,
 	)
-	latestAppHash := state.AppHash
+	latestAppHash := state.LastAppHash
 
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))

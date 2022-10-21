@@ -83,7 +83,7 @@ func (candidate *CurrentRoundState) UpdateBlock(target *types.Block) error {
 
 // UpdateState updates state when the block is committed. State will contain data needed by next block.
 func (candidate *CurrentRoundState) UpdateState(target *State) error {
-	target.AppHash = candidate.AppHash
+	target.LastAppHash = candidate.AppHash
 	target.LastResultsHash = candidate.ResultsHash
 	target.ConsensusParams = candidate.NextConsensusParams
 	target.LastHeightConsensusParamsChanged = candidate.LastHeightConsensusParamsChanged

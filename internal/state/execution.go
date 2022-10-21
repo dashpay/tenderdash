@@ -208,7 +208,11 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		}
 	}
 	itxs := txrSet.IncludedTxs()
-	// TODO: validate rpp.TxResults
+
+	if err := validateExecTxResults(rpp.TxResults, itxs); err != nil {
+		return nil, CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
+	}
+
 	block.SetTxs(itxs)
 
 	rp, err := RoundParamsFromPrepareProposal(rpp)
@@ -260,9 +264,11 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	if err := resp.Validate(); err != nil {
 		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
 	}
-	accepted := resp.IsAccepted()
-	if !accepted {
+	if !resp.IsAccepted() {
 		return CurrentRoundState{}, ErrBlockRejected
+	}
+	if err := validateExecTxResults(resp.TxResults, block.Data.Txs); err != nil {
+		return CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
 	}
 
 	rp := RoundParamsFromProcessProposal(resp, block.CoreChainLock)
@@ -410,8 +416,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	}
 
 	// Save the results before we commit.
-	// TODO: upgrade for Same-Block-Execution. Right now, it just saves Finalize response, while we need
-	// to find a way to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
+	// We need to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
 	// in FinalizeResponse.
 	abciResponses := tmstate.ABCIResponses{
 		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
@@ -595,7 +600,7 @@ func (state State) Update(
 		ConsensusParams:                  state.ConsensusParams,
 		LastHeightConsensusParamsChanged: state.LastHeightConsensusParamsChanged,
 		LastResultsHash:                  nil,
-		AppHash:                          nil,
+		LastAppHash:                      nil,
 	}
 	err := candidateState.UpdateState(&newState)
 	if err != nil {
@@ -715,6 +720,14 @@ func validatePubKey(pk crypto.PubKey) error {
 	}
 	if err := v.Validate(); err != nil {
 		return err
+	}
+	return nil
+}
+
+// validateExecTxResults ensures that tx results are correct.
+func validateExecTxResults(txResults []*abci.ExecTxResult, acceptedTxs []types.Tx) error {
+	if len(txResults) != len(acceptedTxs) {
+		return fmt.Errorf("got %d tx results when there are %d accepted transactions", len(txResults), len(acceptedTxs))
 	}
 	return nil
 }
