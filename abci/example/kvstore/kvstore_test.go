@@ -535,7 +535,7 @@ func assertRespInfo(t *testing.T, expectHeight int64, expectAppHash tmbytes.HexB
 		LastBlockAppHash: expectAppHash,
 		Version:          version.ABCIVersion,
 		AppVersion:       ProtocolVersion,
-		Data:             fmt.Sprintf("{\"appHash\":\"%s\"}", expectAppHash.String()),
+		Data:             fmt.Sprintf(`{"appHash":"%s"}`, expectAppHash.String()),
 	}
 
 	assert.Equal(t, expected, actual, msgs...)
