@@ -41,6 +41,7 @@ type Proposal struct {
 
 	// dash fields
 	CoreChainLockedHeight uint32 `json:"core_height"`
+	CoreChainLockUpdate   *CoreChainLock
 }
 
 // NewProposal returns a new Proposal.
@@ -82,9 +83,12 @@ func (p *Proposal) ValidateBasic() error {
 	if !p.BlockID.IsComplete() {
 		return fmt.Errorf("expected a complete, non-empty BlockID, got: %v", p.BlockID)
 	}
-
-	// NOTE: Timestamp validation is subtle and handled elsewhere.
-
+	if p.CoreChainLockUpdate != nil {
+		err := p.CoreChainLockUpdate.ValidateBasic()
+		if err != nil {
+			return err
+		}
+	}
 	if len(p.Signature) == 0 {
 		return errors.New("signature is missing")
 	}
@@ -169,6 +173,11 @@ func (p *Proposal) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("timestamp", CanonicalTime(p.Timestamp))
 }
 
+// SetCoreChainLockUpdate sets CoreChainLock to Proposal.CoreChainLockUpdate field
+func (p *Proposal) SetCoreChainLockUpdate(coreChainLock *CoreChainLock) {
+	p.CoreChainLockUpdate = coreChainLock
+}
+
 // ProposalBlockSignBytes returns the proto-encoding of the canonicalized Proposal,
 // for signing. Panics if the marshaling fails.
 //
@@ -244,6 +253,7 @@ func (p *Proposal) ToProto() *tmproto.Proposal {
 	pb.Type = p.Type
 	pb.Height = p.Height
 	pb.CoreChainLockedHeight = p.CoreChainLockedHeight
+	pb.CoreChainLockUpdate = p.CoreChainLockUpdate.ToProto()
 	pb.Round = p.Round
 	pb.PolRound = p.POLRound
 	pb.Timestamp = p.Timestamp

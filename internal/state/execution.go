@@ -174,7 +174,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 			NextValidatorsHash: block.NextValidatorsHash,
 
 			// Dash's fields
-			CoreChainLockedHeight: block.CoreChainLockedHeight,
+			CoreChainLockedHeight: state.LastCoreChainLockedBlockHeight,
 			ProposerProTxHash:     block.ProposerProTxHash,
 			ProposedAppVersion:    block.ProposedAppVersion,
 			Version:               &version,
@@ -213,17 +213,14 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		return nil, CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
 	}
 
-	block = state.MakeBlock(
-		height,
-		itxs,
-		commit,
-		evidence,
-		proposerProTxHash,
-		proposedAppVersion,
-	)
+	block.SetTxs(itxs)
 
+	rp, err := RoundParamsFromPrepareProposal(rpp)
+	if err != nil {
+		return nil, CurrentRoundState{}, err
+	}
 	// update some round state data
-	stateChanges, err := state.NewStateChangeset(ctx, rpp)
+	stateChanges, err := state.NewStateChangeset(ctx, rp)
 	if err != nil {
 		return nil, CurrentRoundState{}, err
 	}
@@ -254,7 +251,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 
 		// Dash's fields
 		ProposerProTxHash:     block.ProposerProTxHash,
-		CoreChainLockedHeight: block.CoreChainLockedHeight,
+		CoreChainLockedHeight: state.LastCoreChainLockedBlockHeight,
 		ProposedAppVersion:    block.ProposedAppVersion,
 		Version:               &version,
 	})
@@ -274,8 +271,10 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		return CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
 	}
 
+	rp := RoundParamsFromProcessProposal(resp, block.CoreChainLock)
+
 	// update some round state data
-	stateChanges, err := state.NewStateChangeset(ctx, resp)
+	stateChanges, err := state.NewStateChangeset(ctx, rp)
 	if err != nil {
 		return stateChanges, err
 	}
@@ -420,18 +419,14 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// We need to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
 	// in FinalizeResponse.
 	abciResponses := tmstate.ABCIResponses{
-		ProcessProposal: &uncommittedState.response,
+		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
 		FinalizeBlock:   fbResp,
 	}
 	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
 		return state, err
 	}
 
-	stateUpdates, err := PrepareStateUpdates(ctx, block.Header, state, uncommittedState)
-	if err != nil {
-		return State{}, err
-	}
-	state, err = state.Update(ctx, blockID, &block.Header, stateUpdates...)
+	state, err = state.Update(blockID, &block.Header, &uncommittedState)
 	if err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
 	}
@@ -581,10 +576,9 @@ func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInf
 
 // Update returns a copy of state with the fields set using the arguments passed in.
 func (state State) Update(
-	ctx context.Context,
 	blockID types.BlockID,
 	header *types.Header,
-	stateUpdates ...UpdateFunc,
+	candidateState *CurrentRoundState,
 ) (State, error) {
 
 	nextVersion := state.Version
@@ -608,8 +602,7 @@ func (state State) Update(
 		LastResultsHash:                  nil,
 		LastAppHash:                      nil,
 	}
-	var err error
-	newState, err = executeStateUpdates(ctx, newState, stateUpdates...)
+	err := candidateState.UpdateState(&newState)
 	if err != nil {
 		return State{}, err
 	}

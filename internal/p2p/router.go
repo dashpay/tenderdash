@@ -515,8 +515,8 @@ func (r *Router) openConnection(ctx context.Context, conn Connection) {
 		return
 	}
 
-	proTxHashSetter := SetProTxHashToPeerInfo(peerInfo.ProTxHash)
-	if err := r.runWithPeerMutex(func() error { return r.peerManager.Accepted(peerInfo.NodeID, proTxHashSetter) }); err != nil {
+	err = r.peerManager.Accepted(peerInfo.NodeID, SetProTxHashToPeerInfo(peerInfo.ProTxHash))
+	if err != nil {
 		r.logger.Error("failed to accept connection",
 			"op", "incoming/accepted", "peer", peerInfo.NodeID, "err", err)
 		return
@@ -601,8 +601,8 @@ func (r *Router) connectPeer(ctx context.Context, address NodeAddress) {
 		return
 	}
 
-	proTxHashSetter := SetProTxHashToPeerInfo(peerInfo.ProTxHash)
-	if err := r.runWithPeerMutex(func() error { return r.peerManager.Dialed(address, proTxHashSetter) }); err != nil {
+	err = r.peerManager.Dialed(address, SetProTxHashToPeerInfo(peerInfo.ProTxHash))
+	if err != nil {
 		r.logger.Error("failed to dial peer", "op", "outgoing/dialing", "peer", address.NodeID, "err", err)
 		r.peerManager.dialWaker.Wake()
 		conn.Close()
@@ -710,12 +710,6 @@ func (r *Router) handshakePeer(
 		}
 	}
 	return peerInfo, nil
-}
-
-func (r *Router) runWithPeerMutex(fn func() error) error {
-	r.peerMtx.Lock()
-	defer r.peerMtx.Unlock()
-	return fn()
 }
 
 // routePeer routes inbound and outbound messages between a peer and the reactor

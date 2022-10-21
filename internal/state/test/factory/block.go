@@ -39,11 +39,9 @@ func MakeBlocks(ctx context.Context, t *testing.T, n int, state *sm.State, privV
 		// update state
 		appHash := make([]byte, crypto.DefaultAppHashSize)
 		binary.BigEndian.PutUint64(appHash, uint64(height))
-		changes, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{
-			AppHash: appHash,
-		})
+		changes, err := state.NewStateChangeset(ctx, sm.RoundParams{AppHash: appHash})
 		require.NoError(t, err)
-		err = changes.UpdateState(ctx, state)
+		err = changes.UpdateState(state)
 		assert.NoError(t, err)
 		appHeight++
 		state.LastBlockHeight = height

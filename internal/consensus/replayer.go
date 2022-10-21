@@ -348,11 +348,15 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	// If the app did not return an app hash, we keep the one set from the genesis doc in
 	// the state. We don't set appHash since we don't want the genesis doc app hash
 	// recorded in the genesis block. We should probably just remove GenesisDoc.AppHash.
-	candidateState, err := state.NewStateChangeset(ctx, res)
+	rp, err := sm.RoundParamsFromInitChain(res)
 	if err != nil {
 		return err
 	}
-	err = candidateState.UpdateState(ctx, state)
+	candidateState, err := state.NewStateChangeset(ctx, rp)
+	if err != nil {
+		return err
+	}
+	err = candidateState.UpdateState(state)
 	if err != nil {
 		return err
 	}

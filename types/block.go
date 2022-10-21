@@ -61,6 +61,13 @@ func (b *Block) StateID() StateID {
 	return StateID{Height: b.Height, AppHash: b.AppHash}
 }
 
+// SetTxs updates Data (in particular the transactions) and DataHash
+func (b *Block) SetTxs(txs []Tx) {
+	b.Data = Data{Txs: txs}
+	b.DataHash = nil
+	b.fillHeader()
+}
+
 // BlockID returns a block ID of this block
 func (b *Block) BlockID() (BlockID, error) {
 	parSet, err := b.MakePartSet(BlockPartSizeBytes)

@@ -1,7 +1,6 @@
 package node
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -131,14 +130,7 @@ func logNodeStartupInfo(state sm.State, proTxHash crypto.ProTxHash, logger log.L
 }
 
 func onlyValidatorIsUs(state sm.State, proTxHash types.ProTxHash) bool {
-	if proTxHash == nil {
-		return false
-	}
-	if state.Validators.Size() > 1 {
-		return false
-	}
-	val := state.Validators.GetByIndex(0)
-	return bytes.Equal(val.ProTxHash, proTxHash)
+	return state.Validators.Size() == 1 && state.Validators.HasProTxHash(proTxHash)
 }
 
 func createMempoolReactor(
@@ -366,6 +358,7 @@ func makeNodeInfo(
 			byte(statesync.ChunkChannel),
 			byte(statesync.LightBlockChannel),
 			byte(statesync.ParamsChannel),
+			byte(pex.PexChannel),
 		},
 		Moniker: cfg.Moniker,
 		Other: types.NodeInfoOther{
@@ -373,10 +366,6 @@ func makeNodeInfo(
 			RPCAddress: cfg.RPC.ListenAddress,
 		},
 		ProTxHash: proTxHash.Copy(),
-	}
-
-	if cfg.P2P.PexReactor {
-		nodeInfo.Channels = append(nodeInfo.Channels, pex.PexChannel)
 	}
 
 	nodeInfo.ListenAddr = cfg.P2P.ExternalAddress

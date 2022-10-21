@@ -1,8 +1,13 @@
-## [0.10.0-dev.1] - 2022-09-09
+## [0.10.0-dev.2] - 2022-10-20
 
 ### Bug Fixes
 
 - Go lint issues (#455)
+- TestReactorValidatorSetChanges (#468)
+- Don't inc proposer prio when processing InitChain response (#470)
+- Invalid error msg when verifying val power in genesis doc (#476)
+- Revert ResponseCheckTx.info field and pass it to ResultBroadcastTx (#488)
+- Fix p2p deadlock (#473)
 
 ### Documentation
 
@@ -12,6 +17,21 @@
 
 - Add node's pro-tx-hash into a context (#416)
 - Same-block execution (#418)
+- Implement import app-state in init-chain request (#472)
+- Consensus params updates support (#475)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.10.0-dev.1 (#456)
+- Revert `validateBlockTime` (#458)
+
+### Refactor
+
+- Enable building docker for develop branch (#443)
+- Publish block events after block commit (#459)
+- Handshake block-replay mechanism (#460)
+- Merge e2e app with kvstore and support same-block execution (#457)
+- Change a logic of usage CoreChainLockHeight (#485)
 
 ### Backport
 
@@ -3525,7 +3545,7 @@
 - Only run when applicable (#4752)
 - Check git diff on each job (#4770)
 - Checkout code before git diff check (#4779)
-- Add paths
+- Add paths 
 - Bump the timeout for test_coverage (#4864)
 - Migrate localnet to github actions (#4878)
 - Add timeouts (#4912)
@@ -4774,7 +4794,7 @@
 ### Swagger
 
 - Update swagger port (#4498)
-- Remove duplicate blockID
+- Remove duplicate blockID 
 - Define version (#4952)
 - Update (#5257)
 
