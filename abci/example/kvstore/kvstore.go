@@ -97,9 +97,10 @@ func WithState(height int64, appHash []byte) OptFunc {
 			appHash = make([]byte, crypto.DefaultAppHashSize)
 		}
 		app.LastCommittedState = &kvState{
-			DB:      dbm.NewMemDB(),
-			AppHash: appHash,
-			Height:  height,
+			DB:            dbm.NewMemDB(),
+			AppHash:       appHash,
+			Height:        height,
+			InitialHeight: app.initialHeight,
 		}
 		return nil
 	}
@@ -162,15 +163,16 @@ func NewMemoryApp(opts ...OptFunc) (*Application, error) {
 }
 
 func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, error) {
+	const initialHeight int64 = 1
 	var err error
 
 	app := &Application{
 		logger:                 log.NewNopLogger(),
-		LastCommittedState:     NewKvState(dbm.NewMemDB(), 0), // initial state to avoid InitChain() in unit tests
+		LastCommittedState:     NewKvState(dbm.NewMemDB(), initialHeight), // initial state to avoid InitChain() in unit tests
 		roundStates:            map[string]State{},
 		validatorSetUpdates:    map[int64]abci.ValidatorSetUpdate{},
 		consensusParamsUpdates: map[int64]types1.ConsensusParams{},
-		initialHeight:          1,
+		initialHeight:          initialHeight,
 		store:                  stateStore,
 		prepareTxs:             prepareTxs,
 		verifyTx:               verifyTx,
@@ -218,7 +220,7 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	if req.InitialHeight != 0 {
 		app.initialHeight = req.InitialHeight
 		if app.LastCommittedState.GetHeight() == 0 {
-			app.LastCommittedState = NewKvState(dbm.NewMemDB(), app.initialHeight-1)
+			app.LastCommittedState = NewKvState(dbm.NewMemDB(), app.initialHeight)
 		}
 	}
 
@@ -331,9 +333,10 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	if app.LastCommittedState.GetHeight()+1 != req.Height {
-		return &abci.ResponseFinalizeBlock{},
-			fmt.Errorf("block at height %d (apphash: %s) already finalized", req.Height, app.LastCommittedState.GetAppHash().String())
+	blockHash := tmbytes.HexBytes(req.Hash)
+
+	if err := app.validateHeight(req.Height); err != nil {
+		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("finalize block (hash: %s): %w", blockHash, err)
 	}
 
 	appHash := tmbytes.HexBytes(req.AppHash)
@@ -647,13 +650,13 @@ func (app *Application) resetRoundStates() {
 
 // executeProposal executes transactions and creates new candidate state
 func (app *Application) executeProposal(height int64, txs types.Txs) (State, []*abci.ExecTxResult, error) {
-	if height != app.LastCommittedState.GetHeight()+1 {
-		return nil, nil, fmt.Errorf("height mismatch, expected: %d, got: %d", app.LastCommittedState.GetHeight()+1, height)
+	if err := app.validateHeight(height); err != nil {
+		return nil, nil, err
 	}
 
 	// Create new round state based on last committed state, with incremented height
 
-	roundState := NewKvState(dbm.NewMemDB(), 0) // height will be overwritten in Copy()
+	roundState := NewKvState(dbm.NewMemDB(), app.initialHeight) // height will be overwritten in Copy()
 	if err := app.LastCommittedState.Copy(roundState); err != nil {
 		return nil, nil, fmt.Errorf("cannot copy current state: %w", err)
 	}
@@ -670,7 +673,7 @@ func (app *Application) executeProposal(height int64, txs types.Txs) (State, []*
 	}
 
 	// Don't update AppHash at genesis height
-	if roundState.GetHeight() != app.initialHeight {
+	if roundState.GetHeight() > app.initialHeight {
 		if err := roundState.UpdateAppHash(app.LastCommittedState, txs, txResults); err != nil {
 			return nil, nil, fmt.Errorf("update apphash: %w", err)
 		}
@@ -762,4 +765,18 @@ func (app *Application) persistInterval() error {
 		return nil
 	}
 	return app.persist()
+}
+
+// validateHeight ensures that provided height is valid for new block
+func (app *Application) validateHeight(height int64) error {
+	lastHeight := app.LastCommittedState.GetHeight()
+	if lastHeight == 0 && height != app.initialHeight {
+		return fmt.Errorf("unexpected height %d, expected initial height %d", height, app.initialHeight)
+	}
+	if lastHeight > 0 && height != lastHeight+1 {
+		return fmt.Errorf("unexpected height %d, last committed height: %d, last apphash: %s",
+			height, lastHeight, app.LastCommittedState.GetAppHash().String())
+	}
+
+	return nil
 }

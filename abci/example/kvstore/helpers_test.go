@@ -1,8 +1,6 @@
 package kvstore
 
 import (
-	"context"
-
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/llmq"
@@ -23,17 +21,6 @@ func RandValidatorSetUpdate(cnt int) types.ValidatorSetUpdate {
 		panic(err)
 	}
 	return *vsu
-}
-
-// InitKVStore initializes the kvstore app with some data,
-// which allows tests to pass and is fine as long as you
-// don't make any tx that modify the validator state
-func InitKVStore(ctx context.Context, app types.Application) error {
-	val := RandValidatorSetUpdate(1)
-	_, err := app.InitChain(ctx, &types.RequestInitChain{
-		ValidatorSet: &val,
-	})
-	return err
 }
 
 func randNodeAddrs(n int) []string {
