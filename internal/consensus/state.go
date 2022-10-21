@@ -403,8 +403,8 @@ func (cs *State) SetTimeoutTicker(timeoutTicker TimeoutTicker) {
 
 // LoadCommit loads the commit for a given height.
 func (cs *State) LoadCommit(height int64) *types.Commit {
-	cs.mtx.RLock()
-	defer cs.mtx.RUnlock()
+	//cs.mtx.RLock()
+	//defer cs.mtx.RUnlock()
 
 	if height == cs.blockStore.Height() {
 		commit := cs.blockStore.LoadSeenCommit()
@@ -580,66 +580,17 @@ func (cs *State) OpenWAL(ctx context.Context, walFile string) (WAL, error) {
 
 // AddVote inputs a vote.
 func (cs *State) AddVote(ctx context.Context, vote *types.Vote, peerID types.NodeID) error {
-	if peerID == "" {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case cs.internalMsgQueue <- msgInfo{&VoteMessage{vote}, "", tmtime.Now()}:
-			return nil
-		}
-	} else {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case cs.peerMsgQueue <- msgInfo{&VoteMessage{vote}, peerID, tmtime.Now()}:
-			return nil
-		}
-	}
-
-	// TODO: wait for event?!
+	return cs.sendMessage(ctx, &VoteMessage{vote}, peerID)
 }
 
 // SetProposal inputs a proposal.
 func (cs *State) SetProposal(ctx context.Context, proposal *types.Proposal, peerID types.NodeID) error {
-
-	if peerID == "" {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case cs.internalMsgQueue <- msgInfo{&ProposalMessage{proposal}, "", tmtime.Now()}:
-			return nil
-		}
-	} else {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case cs.peerMsgQueue <- msgInfo{&ProposalMessage{proposal}, peerID, tmtime.Now()}:
-			return nil
-		}
-	}
-
-	// TODO: wait for event?!
+	return cs.sendMessage(ctx, &ProposalMessage{proposal}, peerID)
 }
 
 // AddProposalBlockPart inputs a part of the proposal block.
 func (cs *State) AddProposalBlockPart(ctx context.Context, height int64, round int32, part *types.Part, peerID types.NodeID) error {
-	if peerID == "" {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case cs.internalMsgQueue <- msgInfo{&BlockPartMessage{height, round, part}, "", tmtime.Now()}:
-			return nil
-		}
-	} else {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case cs.peerMsgQueue <- msgInfo{&BlockPartMessage{height, round, part}, peerID, tmtime.Now()}:
-			return nil
-		}
-	}
-
-	// TODO: wait for event?!
+	return cs.sendMessage(ctx, &BlockPartMessage{height, round, part}, peerID)
 }
 
 // SetProposalAndBlock inputs the proposal and all block parts.
@@ -687,6 +638,29 @@ func (cs *State) PrivValidator() types.PrivValidator {
 
 //------------------------------------------------------------
 // internal functions for managing the state
+
+func (cs *State) sendMessage(ctx context.Context, msg Message, peerID types.NodeID) error {
+	ch := cs.peerMsgQueue
+	if peerID == "" {
+		ch = cs.internalMsgQueue
+	}
+	mi := msgInfo{msg, peerID, tmtime.Now()}
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case ch <- mi:
+		return nil
+	default:
+		cs.logger.Debug("msg queue is full; using a go-routine")
+		go func() {
+			select {
+			case <-ctx.Done():
+			case ch <- mi:
+			}
+		}()
+		return nil
+	}
+}
 
 func (cs *State) updateHeight(height int64) {
 	cs.metrics.Height.Set(float64(height))
