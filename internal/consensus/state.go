@@ -1487,6 +1487,7 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 		StateID:       block.StateID().Hash(),
 	}
 	proposal := types.NewProposal(height, block.CoreChainLockedHeight, round, cs.ValidRound, propBlockID, block.Header.Time)
+	proposal.SetCoreChainLockUpdate(block.CoreChainLock)
 	p := proposal.ToProto()
 	validatorsAtProposalHeight := cs.state.ValidatorsAtHeight(p.Height)
 	quorumHash := validatorsAtProposalHeight.QuorumHash

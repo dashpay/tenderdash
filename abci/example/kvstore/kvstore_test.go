@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path"
+	"strconv"
 	"testing"
 
 	"github.com/fortytw2/leaktest"
@@ -15,10 +16,12 @@ import (
 	"github.com/tendermint/tendermint/abci/example/code"
 	abciserver "github.com/tendermint/tendermint/abci/server"
 	"github.com/tendermint/tendermint/abci/types"
+	tmcrypto "github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
 	types1 "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/tendermint/tendermint/version"
 )
 
 const (
@@ -55,6 +58,7 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 	info, err := app.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
 	require.NotZero(t, info.LastBlockHeight)
+	assertRespInfo(t, height, respPrep.AppHash, *info)
 
 	// make sure query is fine
 	resQuery, err := app.Query(ctx, &types.RequestQuery{
@@ -121,35 +125,54 @@ func TestPersistentKVStoreKV(t *testing.T) {
 }
 
 func TestPersistentKVStoreInfo(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	dir := t.TempDir()
-	logger := log.NewNopLogger()
-
-	kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger.With("module", "kvstore")))
-	require.NoError(t, err)
-
-	err = InitKVStore(ctx, kvstore)
-	require.NoError(t, err)
-
-	height := int64(0)
-
-	resInfo, err := kvstore.Info(ctx, &types.RequestInfo{})
-	if err != nil {
-		t.Fatal(err)
+	type testCase struct {
+		InitialHeight int64
+	}
+	testCases := []testCase{
+		{InitialHeight: 0},
+		{InitialHeight: 1},
+		{InitialHeight: 1000},
 	}
 
-	if resInfo.LastBlockHeight != height {
-		t.Fatalf("expected height of %d, got %d", height, resInfo.LastBlockHeight)
+	for _, tc := range testCases {
+		t.Run(strconv.Itoa(int(tc.InitialHeight)), func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			dir := t.TempDir()
+			logger := log.NewTestingLogger(t).With("module", "kvstore")
+
+			kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger))
+			require.NoError(t, err)
+			defer kvstore.Close()
+
+			// Initialize the blockchain
+			vset := RandValidatorSetUpdate(1)
+			reqInitChain := types.RequestInitChain{
+				ValidatorSet:  &vset,
+				InitialHeight: tc.InitialHeight,
+			}
+			_, err = kvstore.InitChain(ctx, &reqInitChain)
+			require.NoError(t, err, "InitChain()")
+
+			respInfo, err := kvstore.Info(ctx, &types.RequestInfo{})
+			require.NoError(t, err, "Info()")
+			// we are at genesis, so the height should always be 0
+			assertRespInfo(t, 0, nil, *respInfo)
+
+			// make and apply block
+			height := tc.InitialHeight
+			if height == 0 {
+				height = 1
+			}
+			rpp, _ := makeApplyBlock(ctx, t, kvstore, int(height))
+
+			respInfo, err = kvstore.Info(ctx, &types.RequestInfo{})
+			require.NoError(t, err)
+			assertRespInfo(t, height, rpp.AppHash, *respInfo)
+
+			assert.Equal(t, respInfo.LastBlockHeight, height, "expected height of %d, got %d", height, respInfo.LastBlockHeight)
+		})
 	}
-
-	// make and apply block
-	height = int64(1)
-	makeApplyBlock(ctx, t, kvstore, int(height))
-
-	resInfo, err = kvstore.Info(ctx, &types.RequestInfo{})
-	require.NoError(t, err)
-	require.Equal(t, resInfo.LastBlockHeight, height, "expected height of %d, got %d", height, resInfo.LastBlockHeight)
 }
 
 // TestConsensusParamsUpdate checks if consensus params are updated correctly
@@ -390,6 +413,7 @@ func testClient(ctx context.Context, t *testing.T, app abciclient.Client, height
 	info, err := app.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
 	require.NotZero(t, info.LastBlockHeight)
+	assertRespInfo(t, height, rpp.AppHash, *info)
 
 	// make sure query is fine
 	resQuery, err := app.Query(ctx, &types.RequestQuery{
@@ -479,8 +503,7 @@ func TestSnapshots(t *testing.T) {
 
 	infoResp, err := dstApp.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
-	assert.EqualValues(t, appHashes[snapshotHeight], infoResp.LastBlockAppHash)
-	assert.EqualValues(t, recentSnapshot.Height, infoResp.LastBlockHeight)
+	assertRespInfo(t, int64(recentSnapshot.Height), appHashes[snapshotHeight], *infoResp)
 
 	respQuery, err := dstApp.Query(ctx, &types.RequestQuery{Data: []byte("lastHeight")})
 	require.NoError(t, err)
@@ -499,4 +522,21 @@ func newKvApp(ctx context.Context, t *testing.T, genesisHeight int64, opts ...Op
 	require.NoError(t, err)
 
 	return app
+}
+
+func assertRespInfo(t *testing.T, expectHeight int64, expectAppHash tmbytes.HexBytes, actual types.ResponseInfo, msgs ...interface{}) {
+	t.Helper()
+
+	if expectAppHash == nil {
+		expectAppHash = make(tmbytes.HexBytes, tmcrypto.DefaultAppHashSize)
+	}
+	expected := types.ResponseInfo{
+		LastBlockHeight:  expectHeight,
+		LastBlockAppHash: expectAppHash,
+		Version:          version.ABCIVersion,
+		AppVersion:       ProtocolVersion,
+		Data:             fmt.Sprintf(`{"appHash":"%s"}`, expectAppHash.String()),
+	}
+
+	assert.Equal(t, expected, actual, msgs...)
 }

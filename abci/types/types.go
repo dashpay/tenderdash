@@ -267,26 +267,12 @@ func TxResultsHash(txResults []*ExecTxResult) (tmbytes.HexBytes, error) {
 	return merkle.HashFromByteSlices(rs), nil
 }
 
-func (r ResponsePrepareProposal) Validate() error {
-	if !isValidApphash(r.AppHash) {
-		return fmt.Errorf("apphash (%X) of size %d is invalid", r.AppHash, len(r.AppHash))
-	}
-	if len(r.TxRecords) != len(r.TxResults) {
-		return fmt.Errorf("tx records len %d does not match tx results len %d", len(r.TxRecords), len(r.TxResults))
+func (m *ResponsePrepareProposal) Validate() error {
+	if !isValidApphash(m.AppHash) {
+		return fmt.Errorf("apphash (%X) of size %d is invalid", m.AppHash, len(m.AppHash))
 	}
 
 	return nil
-}
-
-func (r ResponsePrepareProposal) ToResponseProcessProposal() ResponseProcessProposal {
-	return ResponseProcessProposal{
-		Status:                ResponseProcessProposal_ACCEPT,
-		AppHash:               r.AppHash,
-		TxResults:             r.TxResults,
-		ConsensusParamUpdates: r.ConsensusParamUpdates,
-		CoreChainLockUpdate:   r.CoreChainLockUpdate,
-		ValidatorSetUpdate:    r.ValidatorSetUpdate,
-	}
 }
 
 func isValidApphash(apphash tmbytes.HexBytes) bool {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
+	"github.com/tendermint/tendermint/dash"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
@@ -102,9 +103,8 @@ type State struct {
 	// Merkle root of the results from executing prev block
 	LastResultsHash tmbytes.HexBytes
 
-	// the latest AppHash we've received from calling abci.Commit()
-	// TODO: Rename to LastAppHash
-	AppHash tmbytes.HexBytes
+	// the latest LastAppHash we've received from calling abci.Commit()
+	LastAppHash tmbytes.HexBytes
 }
 
 //  NewRound changes the State to apply settings new round and height to it.
@@ -138,7 +138,7 @@ func (state State) Copy() State {
 		ConsensusParams:                  state.ConsensusParams,
 		LastHeightConsensusParamsChanged: state.LastHeightConsensusParamsChanged,
 
-		AppHash: state.AppHash,
+		LastAppHash: state.LastAppHash,
 
 		LastResultsHash: state.LastResultsHash,
 	}
@@ -211,7 +211,7 @@ func (state *State) ToProto() (*tmstate.State, error) {
 	sm.ConsensusParams = state.ConsensusParams.ToProto()
 	sm.LastHeightConsensusParamsChanged = state.LastHeightConsensusParamsChanged
 	sm.LastResultsHash = state.LastResultsHash
-	sm.AppHash = state.AppHash
+	sm.AppHash = state.LastAppHash
 
 	return sm, nil
 }
@@ -258,7 +258,7 @@ func FromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 	state.ConsensusParams = types.ConsensusParamsFromProto(pb.ConsensusParams)
 	state.LastHeightConsensusParamsChanged = pb.LastHeightConsensusParamsChanged
 	state.LastResultsHash = pb.LastResultsHash
-	state.AppHash = pb.AppHash
+	state.LastAppHash = pb.AppHash
 
 	return state, nil
 }
@@ -288,7 +288,7 @@ func (state State) MakeBlock(
 		tmtime.Now(), state.LastBlockID,
 		validatorsHash, validatorsHash,
 		state.ConsensusParams.HashConsensusParams(),
-		state.AppHash,
+		state.LastAppHash,
 		state.LastResultsHash,
 		proposerProTxHash,
 		proposedAppVersion,
@@ -307,10 +307,9 @@ func (state State) ValidatorsAtHeight(height int64) *types.ValidatorSet {
 }
 
 // NewStateChangeset returns a structure that will hold new changes to the state, that can be applied once the block is finalized
-func (state State) NewStateChangeset(ctx context.Context, proposalResponse proto.Message) (CurrentRoundState, error) {
-	ret := CurrentRoundState{}
-	err := ret.populate(ctx, proposalResponse, state)
-	return ret, err
+func (state State) NewStateChangeset(ctx context.Context, rp RoundParams) (CurrentRoundState, error) {
+	proTxHash, _ := dash.ProTxHashFromContext(ctx)
+	return NewCurrentRoundState(proTxHash, rp, state)
 }
 
 //------------------------------------------------------------------------
@@ -384,6 +383,6 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 		ConsensusParams:                  *genDoc.ConsensusParams,
 		LastHeightConsensusParamsChanged: genDoc.InitialHeight,
 
-		AppHash: genDoc.AppHash,
+		LastAppHash: genDoc.AppHash,
 	}, nil
 }

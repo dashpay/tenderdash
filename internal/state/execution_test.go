@@ -754,7 +754,8 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 	evpool.On("PendingEvidence", mock.Anything).Return([]types.Evidence{}, int64(0))
 
 	txs := factory.MakeNTxs(height, 10)
-	txResults := factory.ExecTxResults(txs)
+	// 2 first transactions will be removed, so results only contain info about 8 txs
+	txResults := factory.ExecTxResults(txs[2:])
 	mp := &mpmocks.Mempool{}
 	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs)
 

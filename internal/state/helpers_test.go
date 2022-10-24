@@ -149,9 +149,8 @@ func makeHeaderPartsResponsesValKeysRegenerate(t *testing.T, state sm.State, reg
 	}
 	abciResponses := tmstate.ABCIResponses{
 		ProcessProposal: &abci.ResponseProcessProposal{
-			ValidatorSetUpdate:  nil,
-			CoreChainLockUpdate: block.CoreChainLock.ToProto(),
-			Status:              abci.ResponseProcessProposal_ACCEPT,
+			ValidatorSetUpdate: nil,
+			Status:             abci.ResponseProcessProposal_ACCEPT,
 		},
 	}
 

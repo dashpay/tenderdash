@@ -1419,7 +1419,7 @@ func TestStateLock_POLSafety1(t *testing.T) {
 	blockID, err := propBlock.BlockID(partSet)
 	require.NoError(t, err)
 	// the others sign a polka but we don't see it
-	prevotes := signVotes(ctx, t, tmproto.PrevoteType, config.ChainID(), blockID, cs1.state.AppHash,
+	prevotes := signVotes(ctx, t, tmproto.PrevoteType, config.ChainID(), blockID, cs1.state.LastAppHash,
 		cs1.Validators.QuorumType, cs1.Validators.QuorumHash,
 		vs2, vs3, vs4)
 
@@ -1527,7 +1527,7 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	require.NoError(t, err)
 
 	// the others sign a polka but we don't see it
-	prevotes := signVotes(ctx, t, tmproto.PrevoteType, config.ChainID(), propBlockID0, cs1.state.AppHash,
+	prevotes := signVotes(ctx, t, tmproto.PrevoteType, config.ChainID(), propBlockID0, cs1.state.LastAppHash,
 		cs1.Validators.QuorumType, cs1.Validators.QuorumHash,
 		vs2, vs3, vs4)
 
@@ -2765,7 +2765,7 @@ func TestStateHalt1(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), blockID, vs3)
 	// we receive this later, but vs3 might receive it earlier and with ours will go to commit!
 	precommit4 := signVote(ctx, t, vs4, tmproto.PrecommitType, config.ChainID(), blockID,
-		cs1.state.AppHash, cs1.state.Validators.QuorumType,
+		cs1.state.LastAppHash, cs1.state.Validators.QuorumType,
 		cs1.state.Validators.QuorumHash,
 	)
 
@@ -2855,7 +2855,7 @@ func TestStateOutputVoteStats(t *testing.T) {
 
 	blockID := cs.BlockID()
 
-	vote := signVote(ctx, t, vss[1], tmproto.PrecommitType, config.ChainID(), blockID, cs.state.AppHash,
+	vote := signVote(ctx, t, vss[1], tmproto.PrecommitType, config.ChainID(), blockID, cs.state.LastAppHash,
 		cs.state.Validators.QuorumType, cs.state.Validators.QuorumHash,
 	)
 
@@ -2871,7 +2871,7 @@ func TestStateOutputVoteStats(t *testing.T) {
 
 	// sending the vote for the bigger height
 	incrementHeight(vss[1])
-	vote = signVote(ctx, t, vss[1], tmproto.PrecommitType, config.ChainID(), blockID, cs.state.AppHash,
+	vote = signVote(ctx, t, vss[1], tmproto.PrecommitType, config.ChainID(), blockID, cs.state.LastAppHash,
 		cs.state.Validators.QuorumType, cs.state.Validators.QuorumHash,
 	)
 
@@ -2905,7 +2905,7 @@ func TestSignSameVoteTwice(t *testing.T) {
 			PartSetHeader: types.PartSetHeader{Total: 10, Hash: randBytes},
 			StateID:       randBytes,
 		},
-		cs.state.AppHash,
+		cs.state.LastAppHash,
 		cs.state.Validators.QuorumType,
 		cs.state.Validators.QuorumHash,
 	)
@@ -2920,7 +2920,7 @@ func TestSignSameVoteTwice(t *testing.T) {
 			PartSetHeader: types.PartSetHeader{Total: 10, Hash: randBytes},
 			StateID:       randBytes,
 		},
-		cs.state.AppHash,
+		cs.state.LastAppHash,
 		cs.state.Validators.QuorumType,
 		cs.state.Validators.QuorumHash,
 	)
@@ -3068,7 +3068,7 @@ func signAddPrecommitWithExtension(ctx context.Context,
 	extensions types.VoteExtensions,
 	stub *validatorStub) {
 	_, valSet := cs.GetValidatorSet()
-	v, err := stub.signVote(ctx, tmproto.PrecommitType, chainID, blockID, cs.state.AppHash, valSet.QuorumType,
+	v, err := stub.signVote(ctx, tmproto.PrecommitType, chainID, blockID, cs.state.LastAppHash, valSet.QuorumType,
 		valSet.QuorumHash, extensions)
 	require.NoError(t, err, "failed to sign vote")
 	addVotes(cs, v)

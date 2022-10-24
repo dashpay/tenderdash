@@ -25,7 +25,7 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 	// when the user stopped the node the state wasn't updated but the blockstore was. In this situation
 	// we don't need to rollback any state and can just return early
 	if height == invalidState.LastBlockHeight+1 {
-		return invalidState.LastBlockHeight, invalidState.AppHash, nil
+		return invalidState.LastBlockHeight, invalidState.LastAppHash, nil
 	}
 
 	// If the state store isn't one below nor equal to the blockstore height than this violates the
@@ -97,7 +97,7 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		LastHeightConsensusParamsChanged: paramsChangeHeight,
 
 		LastResultsHash: latestBlock.Header.ResultsHash,
-		AppHash:         latestBlock.Header.AppHash,
+		LastAppHash:     latestBlock.Header.AppHash,
 	}
 
 	// persist the new state. This overrides the invalid one. NOTE: this will also
@@ -107,5 +107,5 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		return -1, nil, fmt.Errorf("failed to save rolled back state: %w", err)
 	}
 
-	return rolledBackState.LastBlockHeight, rolledBackState.AppHash, nil
+	return rolledBackState.LastBlockHeight, rolledBackState.LastAppHash, nil
 }

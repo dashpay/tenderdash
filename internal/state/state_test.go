@@ -305,12 +305,10 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 			assert.Empty(t, responses.ProcessProposal.ValidatorSetUpdate)
 		}
 
-		changes, err := state.NewStateChangeset(ctx, responses.ProcessProposal)
+		changes, err := state.NewStateChangeset(ctx, sm.RoundParamsFromProcessProposal(responses.ProcessProposal, nil))
 		require.NoError(t, err)
 
-		su, err := sm.PrepareStateUpdates(ctx, header, state, changes)
-		require.NoError(t, err)
-		state, err = state.Update(ctx, blockID, &header, su...)
+		state, err = state.Update(blockID, &header, &changes)
 
 		require.NoError(t, err)
 		validator := state.Validators.Validators[0]
@@ -484,11 +482,9 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	// Any node pro tx hash should do
 	firstNode := state.Validators.GetByIndex(0)
 	ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
-	changes, err := state.NewStateChangeset(ctx, nil)
+	changes, err := state.NewStateChangeset(ctx, sm.RoundParams{})
 	assert.NoError(t, err)
-	su, err := sm.PrepareStateUpdates(ctx, block.Header, state, changes)
-	require.NoError(t, err)
-	updatedState, err := state.Update(ctx, blockID, &block.Header, su...)
+	updatedState, err := state.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
 	curTotal := val1VotingPower
 	// one increment step and one validator: 0 + power - total_power == 0
@@ -508,11 +504,10 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 		QuorumHash:         quorumHash,
 	}
 
-	changes, err = updatedState.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: validatorSetUpdate})
+	changes, err = updatedState.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: validatorSetUpdate})
 	assert.NoError(t, err)
-	su, err = sm.PrepareStateUpdates(ctx, block.Header, updatedState, changes)
-	require.NoError(t, err)
-	updatedState2, err := updatedState.Update(ctx, blockID, &block.Header, su...)
+
+	updatedState2, err := updatedState.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
 
 	require.Equal(t, len(updatedState2.Validators.Validators), 2)
@@ -550,13 +545,10 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	// this will cause the diff of priorities (77)
 	// to be larger than threshold == 2*totalVotingPower (22):
 	abciValidatorUpdates.QuorumHash = quorumHash
-	changes, err = updatedState2.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: validatorSetUpdate})
+	changes, err = updatedState2.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: validatorSetUpdate})
 	require.NoError(t, err)
 
-	su, err = sm.PrepareStateUpdates(ctx, block.Header, updatedState2, changes)
-	require.NoError(t, err)
-
-	updatedState3, err := updatedState2.Update(ctx, blockID, &block.Header, su...)
+	updatedState3, err := updatedState2.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
 
 	require.Equal(t, len(updatedState3.Validators.Validators), 2)
@@ -630,12 +622,10 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	require.NoError(t, err)
 
 	// no updates:
-	changes, err := state.NewStateChangeset(ctx, nil)
+	changes, err := state.NewStateChangeset(ctx, sm.RoundParams{})
 	assert.NoError(t, err)
 
-	su, err := sm.PrepareStateUpdates(ctx, block.Header, state, changes)
-	require.NoError(t, err)
-	updatedState, err := state.Update(ctx, blockID, &block.Header, su...)
+	updatedState, err := state.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
 
 	// 0 + 10 (initial prio) - 10 (avg) - 10 (mostest - total) = -10
@@ -655,12 +645,10 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 		ThresholdPublicKey: thresholdPublicKey,
 		QuorumHash:         quorumHash,
 	}
-	changes, err = updatedState.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: valsetUpdate})
+	changes, err = updatedState.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: valsetUpdate})
 	assert.NoError(t, err)
 
-	su, err = sm.PrepareStateUpdates(ctx, block.Header, updatedState, changes)
-	require.NoError(t, err)
-	updatedState2, err := updatedState.Update(ctx, blockID, &block.Header, su...)
+	updatedState2, err := updatedState.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
 
 	require.Equal(t, len(updatedState2.Validators.Validators), 2)
@@ -699,11 +687,9 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 		updatedVal2,
 	)
 
-	changes, err = updatedState2.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: valsetUpdate})
+	changes, err = updatedState2.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: valsetUpdate})
 	assert.NoError(t, err)
-	su, err = sm.PrepareStateUpdates(ctx, block.Header, updatedState2, changes)
-	require.NoError(t, err)
-	updatedState3, err := updatedState2.Update(ctx, blockID, &block.Header, su...)
+	updatedState3, err := updatedState2.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
 
 	assert.Equal(t, updatedState3.Validators.Proposer.ProTxHash, updatedState3.Validators.Proposer.ProTxHash)
@@ -739,11 +725,9 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	// no changes in voting power and both validators have same voting power
 	// -> proposers should alternate:
 	oldState := updatedState3
-	changes, err = oldState.NewStateChangeset(ctx, nil)
+	changes, err = oldState.NewStateChangeset(ctx, sm.RoundParams{})
 	assert.NoError(t, err)
-	su, err = sm.PrepareStateUpdates(ctx, block.Header, oldState, changes)
-	require.NoError(t, err)
-	oldState, err = oldState.Update(ctx, blockID, &block.Header, su...)
+	oldState, err = oldState.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
 	expectedVal1Prio2 = 13
 	expectedVal2Prio2 = -12
@@ -752,12 +736,10 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 	for i := 0; i < 1000; i++ {
 		// no validator updates:
-		changes, err = oldState.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{})
+		changes, err = oldState.NewStateChangeset(ctx, sm.RoundParams{})
 		require.NoError(t, err)
 
-		su, err = sm.PrepareStateUpdates(ctx, block.Header, oldState, changes)
-		require.NoError(t, err)
-		updatedState, err := oldState.Update(ctx, blockID, &block.Header, su...)
+		updatedState, err := oldState.Update(blockID, &block.Header, &changes)
 		assert.NoError(t, err)
 		// alternate (and cyclic priorities):
 		assert.NotEqual(
@@ -811,7 +793,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	oldState := state
 	for i := 0; i < 10; i++ {
 		// no updates:
-		changes, err := oldState.NewStateChangeset(ctx, nil)
+		changes, err := oldState.NewStateChangeset(ctx, sm.RoundParams{})
 		assert.NoError(t, err)
 		updatedState := execute(oldState, oldState, changes)
 		// no changes in voting power (ProposerPrio += VotingPower == Voting in 1st round; than shiftByAvg == 0,
@@ -824,13 +806,13 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	addedProTxHashes := crypto.RandProTxHashes(4)
 	proTxHashes := append(originalValidatorSet.GetProTxHashes(), addedProTxHashes...)
 	abciValidatorUpdates0 := types.ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes)
-	ucState, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: &abciValidatorUpdates0})
+	ucState, err := state.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: &abciValidatorUpdates0})
 	assert.NoError(t, err)
 	updatedState := execute(state, state, ucState)
 
 	lastState := updatedState
 	for i := 0; i < 200; i++ {
-		ucState, err = lastState.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: &abciValidatorUpdates0})
+		ucState, err = lastState.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: &abciValidatorUpdates0})
 		assert.NoError(t, err)
 		lastState = execute(lastState, lastState, ucState)
 	}
@@ -849,7 +831,7 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 		abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
 		require.NoError(t, err)
 
-		ucState, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
+		ucState, err := state.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: abciValidatorSetUpdate})
 		assert.NoError(t, err)
 		state = execute(oldState, state, ucState)
 		assertLLMQDataWithValidatorSet(t, ld, state.Validators)
@@ -860,13 +842,13 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 	abciValidatorSetUpdate, err := abci.LLMQToValidatorSetProto(*ld, quorumHashOpt)
 	require.NoError(t, err)
 
-	ucState, err = state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
+	ucState, err = state.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: abciValidatorSetUpdate})
 	require.NoError(t, err)
 	state = execute(oldState, state, ucState)
 	assertLLMQDataWithValidatorSet(t, ld, state.Validators)
 
 	abciValidatorSetUpdate.ValidatorUpdates[0] = abci.ValidatorUpdate{ProTxHash: ld.ProTxHashes[0]}
-	ucState, err = state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
+	ucState, err = state.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: abciValidatorSetUpdate})
 	require.NoError(t, err)
 	updatedState = execute(oldState, state, ucState)
 
@@ -878,21 +860,21 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 		{ProTxHash: ld.ProTxHashes[0]},
 		{ProTxHash: ld.ProTxHashes[1]},
 	}
-	ucState, err = updatedState.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{ValidatorSetUpdate: abciValidatorSetUpdate})
+	ucState, err = updatedState.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: abciValidatorSetUpdate})
 	require.NoError(t, err)
 	updatedState = execute(state, updatedState, ucState)
 
 	// the second and third should be left
 	ld.ProTxHashes = ld.ProTxHashes[2:]
 	assertLLMQDataWithValidatorSet(t, ld, updatedState.Validators)
-	changes, err := updatedState.NewStateChangeset(ctx, nil)
+	changes, err := updatedState.NewStateChangeset(ctx, sm.RoundParams{})
 	require.NoError(t, err)
 	updatedState = execute(updatedState, updatedState, changes)
 	// store proposers here to see if we see them again in the same order:
 	numVals := len(updatedState.Validators.Validators)
 	proposers := make([]*types.Validator, numVals)
 	for i := 0; i < 100; i++ {
-		changes, err = updatedState.NewStateChangeset(ctx, nil)
+		changes, err = updatedState.NewStateChangeset(ctx, sm.RoundParams{})
 		assert.NoError(t, err)
 		updatedState = execute(state, updatedState, changes)
 		if i > numVals { // expect proposers to cycle through after the first iteration (of numVals blocks):
@@ -960,7 +942,7 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	oldPubkey := val0.PubKey
 
 	// Swap the first validator with a new one (validator set size stays the same).
-	header, _, blockID, responses := makeHeaderPartsResponsesValKeysRegenerate(t, state, true, 0)
+	header, coreChainLock, blockID, responses := makeHeaderPartsResponsesValKeysRegenerate(t, state, true, 0)
 	currentHeight := header.Height + 1
 	assert.Equal(t, int64(2), currentHeight)
 
@@ -972,14 +954,12 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
-
+	rp := sm.RoundParamsFromProcessProposal(responses.ProcessProposal, coreChainLock)
 	// Prepare state to generate height 2
-	changes, err := state.NewStateChangeset(ctx, responses.ProcessProposal)
-	require.NoError(t, err)
-	su, err := sm.PrepareStateUpdates(ctx, header, state, changes)
+	changes, err := state.NewStateChangeset(ctx, rp)
 	require.NoError(t, err)
 
-	state, err = state.Update(ctx, blockID, &header, su...)
+	state, err = state.Update(blockID, &header, &changes)
 	require.NoError(t, err)
 	assert.Equal(t, currentHeight-1, state.LastBlockHeight)
 
@@ -1060,17 +1040,16 @@ func TestConsensusParamsChangesSaveLoad(t *testing.T) {
 			cp = params[changeIndex]
 		}
 
-		header, _, blockID, responses := makeHeaderPartsResponsesParams(t, state, &cp, 0)
+		header, coreChainLock, blockID, responses := makeHeaderPartsResponsesParams(t, state, &cp, 0)
 
 		// Any node pro tx hash should do
 		firstNode := state.Validators.GetByIndex(0)
 		ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
 
-		changes, err := state.NewStateChangeset(ctx, responses.ProcessProposal)
+		rp := sm.RoundParamsFromProcessProposal(responses.ProcessProposal, coreChainLock)
+		changes, err := state.NewStateChangeset(ctx, rp)
 		require.NoError(t, err)
-		su, err := sm.PrepareStateUpdates(ctx, header, state, changes)
-		require.NoError(t, err)
-		state, err = state.Update(ctx, blockID, &header, su...)
+		state, err = state.Update(blockID, &header, &changes)
 
 		require.NoError(t, err)
 		err = stateStore.Save(state)
@@ -1142,10 +1121,8 @@ func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state 
 		require.NoError(t, err)
 		blockID, err := block.BlockID(nil)
 		require.NoError(t, err)
-		su, err := sm.PrepareStateUpdates(ctx, block.Header, state, ucState)
-		require.NoError(t, err)
 
-		state, err = state.Update(ctx, blockID, &block.Header, su...)
+		state, err = state.Update(blockID, &block.Header, &ucState)
 		require.NoError(t, err)
 		return state
 	}

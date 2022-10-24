@@ -77,7 +77,7 @@ func TestStateUnmarshal(t *testing.T) {
 		{
 			name:          "empty json",
 			encoded:       []byte{'{', '}'},
-			expectHeight:  initialHeight,
+			expectHeight:  0,
 			expectAppHash: zeroAppHash,
 		},
 		{

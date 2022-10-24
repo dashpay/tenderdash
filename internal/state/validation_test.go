@@ -72,10 +72,10 @@ func TestValidateBlockHeader(t *testing.T) {
 		blockStore,
 		eventBus,
 	)
-
-	changes, err := state.NewStateChangeset(ctx, &abci.ResponsePrepareProposal{
-		CoreChainLockUpdate: nextChainLock.ToProto(),
-		AppHash:             tmrand.Bytes(crypto.DefaultAppHashSize),
+	changes, err := state.NewStateChangeset(ctx, sm.RoundParams{
+		CoreChainLock: nextChainLock,
+		AppHash:       tmrand.Bytes(crypto.DefaultAppHashSize),
+		Source:        sm.PrepareProposalSource,
 	})
 	require.NoError(t, err)
 
@@ -185,7 +185,7 @@ func TestValidateBlockCommit(t *testing.T) {
 	state, stateDB, privVals := makeState(t, 1, 1)
 	nodeProTxHash := state.Validators.Validators[0].ProTxHash
 	stateStore := sm.NewStore(stateDB)
-	
+
 	mp := &mpmocks.Mempool{}
 	mp.On("Lock").Return()
 	mp.On("Unlock").Return()
@@ -341,7 +341,7 @@ func TestValidateBlockCommit(t *testing.T) {
 			QuorumHash:  state.Validators.QuorumHash,
 		}
 		wrongVoteMessageSignedCommit = types.NewCommit(goodVote.Height, goodVote.Round,
-			blockID,  quorumSigns)
+			blockID, quorumSigns)
 	}
 }
 
@@ -389,7 +389,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 		blockStore,
 		eventBus,
 	)
-	lastCommit := types.NewCommit(0, 0, types.BlockID{},  nil)
+	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil)
 
 	for height := int64(1); height < validationTestsStopHeight; height++ {
 		proposerProTxHash := state.Validators.GetProposer().ProTxHash

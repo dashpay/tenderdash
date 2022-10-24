@@ -81,6 +81,13 @@ func (b *Block) BlockID(partSet *PartSet) (BlockID, error) {
 	return blockID, nil
 }
 
+// SetTxs updates Data (in particular the transactions) and DataHash
+func (b *Block) SetTxs(txs []Tx) {
+	b.Data = Data{Txs: txs}
+	b.DataHash = nil
+	b.fillHeader()
+}
+
 // ValidateBasic performs basic validation that doesn't involve state data.
 // It checks the internal consistency of the block.
 // Further validation is done using state#ValidateBlock.

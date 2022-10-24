@@ -281,13 +281,13 @@ Block: %v`,
 }
 
 func checkAppHashEqualsOneFromState(appHash []byte, state sm.State) error {
-	if !bytes.Equal(appHash, state.AppHash) {
+	if !bytes.Equal(appHash, state.LastAppHash) {
 		return fmt.Errorf(`state.AppHash does not match AppHash after replay. Got '%X', expected '%X'.
 
 State: %v
 
 Did you reset Tendermint without resetting your application's data?`,
-			appHash, state.AppHash, state)
+			appHash, state.LastAppHash, state)
 	}
 
 	return nil
