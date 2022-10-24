@@ -651,14 +651,7 @@ func (cs *State) sendMessage(ctx context.Context, msg Message, peerID types.Node
 	case ch <- mi:
 		return nil
 	default:
-		cs.logger.Debug("msg queue is full; using a go-routine")
-		go func() {
-			select {
-			case <-ctx.Done():
-			case ch <- mi:
-			}
-		}()
-		return nil
+		return fmt.Errorf("msg queue is full")
 	}
 }
 

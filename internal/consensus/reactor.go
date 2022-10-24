@@ -1217,11 +1217,7 @@ func (r *Reactor) handleDataMessage(ctx context.Context, envelope *p2p.Envelope,
 		pMsg := msgI.(*ProposalMessage)
 
 		ps.SetHasProposal(pMsg.Proposal)
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case r.state.peerMsgQueue <- msgInfo{pMsg, envelope.From, tmtime.Now()}:
-		}
+		return r.state.sendMessage(ctx, pMsg, envelope.From)
 	case *tmcons.ProposalPOL:
 		ps.ApplyProposalPOLMessage(msgI.(*ProposalPOLMessage))
 	case *tmcons.BlockPart:
@@ -1229,13 +1225,7 @@ func (r *Reactor) handleDataMessage(ctx context.Context, envelope *p2p.Envelope,
 
 		ps.SetHasProposalBlockPart(bpMsg.Height, bpMsg.Round, int(bpMsg.Part.Index))
 		r.Metrics.BlockParts.With("peer_id", string(envelope.From)).Add(1)
-		select {
-		case r.state.peerMsgQueue <- msgInfo{bpMsg, envelope.From, tmtime.Now()}:
-			return nil
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-
+		return r.state.sendMessage(ctx, bpMsg, envelope.From)
 	default:
 		return fmt.Errorf("received unknown message on DataChannel: %T", msg)
 	}
@@ -1272,7 +1262,10 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 		ps.SetHasCommit(c)
 
 		cMsg := msgI.(*CommitMessage)
-		r.state.peerMsgQueue <- msgInfo{cMsg, envelope.From, tmtime.Now()}
+		err = r.state.sendMessage(ctx, cMsg, envelope.From)
+		if err != nil {
+			return err
+		}
 	case *tmcons.Vote:
 		r.state.mtx.RLock()
 		isValidator := r.state.Validators.HasProTxHash(r.state.privValidatorProTxHash)
@@ -1287,13 +1280,7 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 			if err := ps.SetHasVote(vMsg.Vote); err != nil {
 				return err
 			}
-
-			select {
-			case r.state.peerMsgQueue <- msgInfo{vMsg, envelope.From, tmtime.Now()}:
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
+			return r.state.sendMessage(ctx, vMsg, envelope.From)
 		}
 	default:
 		return fmt.Errorf("received unknown message on VoteChannel: %T", msg)
