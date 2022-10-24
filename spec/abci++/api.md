@@ -498,9 +498,10 @@ offers a snapshot to the application
 | time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp included in the proposed block. |
 | next_validators_hash | [bytes](#bytes) |  | Merkle root of the next validator set. |
 | core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
-| proposer_pro_tx_hash | [bytes](#bytes) |  | ProTXHash of the original proposer of the block. |
+| proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
 | version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
+| core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Next core-chain-lock-update for validation in ABCI. |
 
 
 
