@@ -158,12 +158,14 @@ message RequestProcessProposal {
 
   // Core chain lock height to be used when signing this block.
   uint32 core_chain_locked_height = 100;
-  // ProTXHash of the original proposer of the block.
+  // ProTxHash of the original proposer of the block.
   bytes proposer_pro_tx_hash = 101;
   // Proposer's latest available app protocol version.
   uint64 proposed_app_version = 102;
   // App and block version used to generate the block.
   tendermint.version.Consensus version = 103;
+  // Next core-chain-lock-update for validation in ABCI.
+  tendermint.types.CoreChainLock core_chain_lock_update = 104;
 }
 
 // Extends a vote with application-side injection
