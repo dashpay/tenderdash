@@ -160,7 +160,8 @@ func (p *pbtsTestHarness) observedValidatorProposerHeight(ctx context.Context, t
 	ensureProposalWithTimeout(t, p.ensureProposalCh, p.currentHeight, p.currentRound, nil, timeout)
 
 	rs := p.observedState.GetRoundState()
-	bid := types.BlockID{Hash: rs.ProposalBlock.Hash(), PartSetHeader: rs.ProposalBlockParts.Header()}
+	stateID := rs.ProposalBlock.Header.StateID()
+	bid := types.BlockID{Hash: rs.ProposalBlock.Hash(), PartSetHeader: rs.ProposalBlockParts.Header(), StateID: stateID.Hash()}
 	ensurePrevote(t, p.ensureVoteCh, p.currentHeight, p.currentRound)
 	signAddVotes(ctx, t, p.observedState, tmproto.PrevoteType, p.chainID, bid, p.otherValidators...)
 
@@ -223,7 +224,7 @@ func (p *pbtsTestHarness) nextHeight(ctx context.Context, t *testing.T, proposer
 	require.NoError(t, err)
 	ps, err := b.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
-	bid := types.BlockID{Hash: b.Hash(), PartSetHeader: ps.Header()}
+	bid := types.BlockID{Hash: b.Hash(), PartSetHeader: ps.Header(), StateID: b.StateID().Hash()}
 	coreChainLockedHeight := p.observedState.state.LastCoreChainLockedBlockHeight
 	prop := types.NewProposal(p.currentHeight, coreChainLockedHeight, 0, -1, bid, proposedTime)
 	tp := prop.ToProto()

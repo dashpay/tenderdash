@@ -95,7 +95,7 @@ func makeValidCommit(
 	votes := make([]*types.Vote, vals.Size())
 	for i := 0; i < vals.Size(); i++ {
 		val := vals.GetByIndex(int32(i))
-		vote, err := factory.MakeVote(ctx, privVals[val.ProTxHash.String()], vals, chainID, int32(i), height, 0, 2, blockID, stateID.AppHash)
+		vote, err := factory.MakeVote(ctx, privVals[val.ProTxHash.String()], vals, chainID, int32(i), height, 0, 2, blockID)
 		require.NoError(t, err)
 		votes[i] = vote
 	}

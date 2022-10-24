@@ -1414,13 +1414,12 @@ func BenchmarkValidatorSet_VerifyCommit_Ed25519(b *testing.B) {
 		b.Run(fmt.Sprintf("valset size %d", n), func(b *testing.B) {
 			b.ReportAllocs()
 			// generate n validators
-			stateID := RandStateID()
 			voteSet, valSet, vals := randVoteSet(ctx, b, h, 0, tmproto.PrecommitType, n)
 			// create a commit with n validators
-			commit, err := makeCommit(ctx, blockID, stateID, h, 0, voteSet, vals)
+			commit, err := makeCommit(ctx, blockID, h, 0, voteSet, vals)
 			require.NoError(b, err)
 			for i := 0; i < b.N/n; i++ {
-				err = valSet.VerifyCommit(chainID, blockID, stateID, h, commit)
+				err = valSet.VerifyCommit(chainID, blockID, h, commit)
 				assert.NoError(b, err)
 			}
 		})

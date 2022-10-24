@@ -110,14 +110,13 @@ func TestSignerClient_SignVote(t *testing.T) {
 	}
 
 	pbHave := have.ToProto()
-	stateID := have.StateID()
 
-	err = client.SignVote(ctx, chainID, btcjson.LLMQType_5_60, quorumHash, pbHave, stateID, logger)
+	err = client.SignVote(ctx, chainID, btcjson.LLMQType_5_60, quorumHash, pbHave,  logger)
 	require.NoError(t, err)
 
 	pbWant := want.ToProto()
 
-	require.NoError(t, mockPV.SignVote(ctx, chainID, btcjson.LLMQType_5_60, quorumHash, pbWant, stateID, logger))
+	require.NoError(t, mockPV.SignVote(ctx, chainID, btcjson.LLMQType_5_60, quorumHash, pbWant,  logger))
 
 	assert.Equal(t, pbWant.BlockSignature, pbHave.BlockSignature)
 }

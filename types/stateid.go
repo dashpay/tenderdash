@@ -19,22 +19,28 @@ import (
 
 const StateIDVersion = 1
 
-// StateID
+// StateID represents essential information required to verify state, document and transactions.
+// It is meant to be used by light clients (like mobile apps) to verify proofs.
+// For signing purposes it is marshaled as fixed-size slice of bytes, with no tags and
+// no delimiters. Numbers are represented as little-endian.
 type StateID struct {
-	// Version of StateID
+	// Version of StateID, 2
 	Version uint16 `json:"version"`
-	// Height of current block (the one containing state ID signature)
+	// Height of current block (the one containing state ID signature), 8 bytes
 	Height uint64 `json:"height"`
-	// AppHash used in current block (the one containing state ID signature)
-	AppHash tmbytes.HexBytes `json:"last_app_hash"`
-	// core_chain_locked_height is encoded as 32-bit little-endian unsigned  int, on 4 bytes.
-	CoreChainLockedHeight uint32    `json:"core_chain_locked_height"`
-	Time                  time.Time `json:"time"`
+	// AppHash used in current block (the one containing state ID signature), 32 bytes
+	AppHash tmbytes.HexBytes `json:"last_app_hash" tmbytes:"length=32"`
+	// core_chain_locked_height is encoded as 32-bit little-endian unsigned  int, 4 bytes
+	CoreChainLockedHeight uint32 `json:"core_chain_locked_height"`
+	// Time of the block (Unix time), encoded as the number of nanoseconds elapsed
+	// since January 1, 1970 UTC, on 8 bytes
+	Time time.Time `json:"time"`
 }
 
 // Copy returns new StateID that is equal to this one
 func (stateID StateID) Copy() StateID {
 	copied := stateID
+	time.Time{}.UnixNano()
 	copied.AppHash = make([]byte, len(stateID.AppHash))
 	if copy(copied.AppHash, stateID.AppHash) != len(stateID.AppHash) {
 		panic("Cannot copy LastAppHash, this should never happen. Out of memory???")
@@ -45,7 +51,7 @@ func (stateID StateID) Copy() StateID {
 
 // Equals returns true if the StateID matches the given StateID
 func (stateID StateID) Equal(other StateID) bool {
-	left, err := stateID.Marshal()
+	left, err := stateID.SignBytes()
 	if err != nil {
 		panic("cannot marshal stateID: " + err.Error())
 	}
@@ -64,9 +70,9 @@ func (stateID StateID) ValidateBasic() error {
 		return fmt.Errorf("wrong app Hash: %w", err)
 	}
 
-	if stateID.Height < 0 {
-		return fmt.Errorf("stateID height is not valid: %d < 0", stateID.Height)
-	}
+	// if stateID.Height < 0 {
+	// 	return fmt.Errorf("stateID height is not valid: %d < 0", stateID.Height)
+	// }
 
 	if stateID.Version == 0 {
 		return fmt.Errorf("invalid stateID version %d", stateID.Version)
@@ -78,20 +84,15 @@ func (stateID StateID) ValidateBasic() error {
 	return nil
 }
 
-// Marshal marshals the stateID to a fixed-size bytes buffer.
-func (stateID StateID) Marshal() ([]byte, error) {
+// SignBytes returns bytes that should be signed
+func (stateID StateID) SignBytes() ([]byte, error) {
 	return tmbytes.MarshalFixedSize(stateID)
 }
 
-// SignBytes returns bytes that should be signed
-func (stateID StateID) SignBytes() ([]byte, error) {
-	return stateID.Marshal()
-}
-
-func (stateID StateID) Hash() []byte {
+func (stateID StateID) Hash() tmbytes.HexBytes {
 	bz, err := stateID.SignBytes()
 	if err != nil {
-		panic("cannot hash StateID:" + err.Error())
+		panic("cannot hash StateID: " + err.Error())
 	}
 	return crypto.Checksum(bz)
 }

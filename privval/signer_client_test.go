@@ -13,6 +13,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/libs/rand"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	cryptoproto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	privvalproto "github.com/tendermint/tendermint/proto/tendermint/privval"
@@ -193,28 +194,24 @@ func TestSignerVote(t *testing.T) {
 
 			hash := tmrand.Bytes(crypto.HashSize)
 			valProTxHash := tmrand.Bytes(crypto.DefaultHashSize)
-			want := &types.Vote{
-				Type:               tmproto.PrecommitType,
-				Height:             1,
-				Round:              2,
-				BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+
+			want := types.Vote{
+				Type:   tmproto.PrecommitType,
+				Height: 1,
+				Round:  2,
+				BlockID: types.BlockID{
+					Hash:          hash,
+					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
+					StateID:       rand.Bytes(crypto.DefaultHashSize),
+				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
 			}
 
-			have := &types.Vote{
-				Type:               tmproto.PrecommitType,
-				Height:             1,
-				Round:              2,
-				BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
-				ValidatorProTxHash: valProTxHash,
-				ValidatorIndex:     1,
-			}
+			have := want.Copy()
 
-			stateID := types.RandStateID().WithHeight(want.Height - 1)
-
-			require.NoError(t, tc.mockPV.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, want.ToProto(), stateID, nil))
-			require.NoError(t, tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), stateID, nil))
+			require.NoError(t, tc.mockPV.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, want.ToProto(), nil))
+			require.NoError(t, tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), nil))
 
 			assert.Equal(t, want.BlockSignature, have.BlockSignature)
 		})
@@ -234,31 +231,25 @@ func TestSignerVoteResetDeadline(t *testing.T) {
 			hash := tmrand.Bytes(crypto.HashSize)
 			valProTxHash := tmrand.Bytes(crypto.DefaultHashSize)
 			want := &types.Vote{
-				Type:               tmproto.PrecommitType,
-				Height:             1,
-				Round:              2,
-				BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+				Type:   tmproto.PrecommitType,
+				Height: 1,
+				Round:  2,
+				BlockID: types.BlockID{
+					Hash:          hash,
+					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
+					StateID:       tmrand.Bytes(crypto.DefaultHashSize),
+				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
 			}
-
-			have := &types.Vote{
-				Type:               tmproto.PrecommitType,
-				Height:             1,
-				Round:              2,
-				BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
-				ValidatorProTxHash: valProTxHash,
-				ValidatorIndex:     1,
-			}
+			have := want.Copy()
 
 			time.Sleep(testTimeoutReadWrite2o3)
 
-			stateID := types.RandStateID().WithHeight(want.Height - 1)
-
 			require.NoError(t,
-				tc.mockPV.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, want.ToProto(), stateID, nil))
+				tc.mockPV.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, want.ToProto(), nil))
 			require.NoError(t,
-				tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), stateID, nil))
+				tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), nil))
 			assert.Equal(t, want.BlockSignature, have.BlockSignature)
 
 			// TODO(jleni): Clarify what is actually being tested
@@ -267,9 +258,9 @@ func TestSignerVoteResetDeadline(t *testing.T) {
 			time.Sleep(testTimeoutReadWrite2o3)
 
 			require.NoError(t,
-				tc.mockPV.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, want.ToProto(), stateID, nil))
+				tc.mockPV.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, want.ToProto(), nil))
 			require.NoError(t,
-				tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), stateID, nil))
+				tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), nil))
 			assert.Equal(t, want.BlockSignature, have.BlockSignature)
 		})
 	}
@@ -290,24 +281,18 @@ func TestSignerVoteKeepAlive(t *testing.T) {
 			hash := tmrand.Bytes(crypto.HashSize)
 			valProTxHash := tmrand.Bytes(crypto.DefaultHashSize)
 			want := &types.Vote{
-				Type:               tmproto.PrecommitType,
-				Height:             1,
-				Round:              2,
-				BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+				Type:   tmproto.PrecommitType,
+				Height: 1,
+				Round:  2,
+				BlockID: types.BlockID{
+					Hash:          hash,
+					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
+					StateID:       tmrand.Bytes(crypto.DefaultHashSize)},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
 			}
 
-			have := &types.Vote{
-				Type:               tmproto.PrecommitType,
-				Height:             1,
-				Round:              2,
-				BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
-				ValidatorProTxHash: valProTxHash,
-				ValidatorIndex:     1,
-			}
-
-			stateID := types.RandStateID().WithHeight(want.Height - 1)
+			have := want.Copy()
 
 			// Check that even if the client does not request a
 			// signature for a long time. The service is still available
@@ -317,9 +302,9 @@ func TestSignerVoteKeepAlive(t *testing.T) {
 			time.Sleep(testTimeoutReadWrite * 3)
 
 			require.NoError(t,
-				tc.mockPV.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, want.ToProto(), stateID, nil))
+				tc.mockPV.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, want.ToProto(), nil))
 			require.NoError(t,
-				tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), stateID, nil))
+				tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, have.ToProto(), nil))
 
 			assert.Equal(t, want.BlockSignature, have.BlockSignature)
 		})
@@ -381,30 +366,32 @@ func TestSignerSignVoteErrors(t *testing.T) {
 			hash := tmrand.Bytes(crypto.HashSize)
 			valProTxHash := tmrand.Bytes(crypto.DefaultHashSize)
 			vote := &types.Vote{
-				Type:               tmproto.PrecommitType,
-				Height:             1,
-				Round:              2,
-				BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+				Type:   tmproto.PrecommitType,
+				Height: 1,
+				Round:  2,
+				BlockID: types.BlockID{
+					Hash:          hash,
+					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
+					StateID:       tmrand.Bytes(crypto.HashSize),
+				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
 				BlockSignature:     []byte("signature"),
 			}
 
-			stateID := types.RandStateID().WithHeight(vote.Height - 1)
-
 			// Replace signer service privval with one that always fails
 			tc.signerServer.privVal = types.NewErroringMockPV()
 			tc.mockPV = types.NewErroringMockPV()
 
-			err := tc.signerClient.SignVote(context.Background(), tc.chainID, tc.quorumType, tc.quorumHash, vote.ToProto(), stateID, nil)
+			err := tc.signerClient.SignVote(context.Background(), tc.chainID, tc.quorumType, tc.quorumHash, vote.ToProto(), nil)
 			rserr, ok := err.(*RemoteSignerError)
 			require.True(t, ok, "%T", err)
 			require.Contains(t, rserr.Error(), types.ErroringMockPVErr.Error())
 
-			err = tc.mockPV.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, vote.ToProto(), stateID, nil)
+			err = tc.mockPV.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, vote.ToProto(), nil)
 			require.Error(t, err)
 
-			err = tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, vote.ToProto(), stateID, nil)
+			err = tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, vote.ToProto(), nil)
 			require.Error(t, err)
 		})
 	}
@@ -454,9 +441,7 @@ func TestSignerUnexpectedResponse(t *testing.T) {
 
 			want := &types.Vote{Type: tmproto.PrecommitType, Height: 1}
 
-			stateID := types.RandStateID().WithHeight(want.Height - 1)
-
-			e := tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, want.ToProto(), stateID, nil)
+			e := tc.signerClient.SignVote(ctx, tc.chainID, tc.quorumType, tc.quorumHash, want.ToProto(), nil)
 			assert.EqualError(t, e, "empty response")
 		})
 	}

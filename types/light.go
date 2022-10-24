@@ -50,11 +50,11 @@ func (lb LightBlock) ValidateBasic(chainID string) error {
 	}
 
 	// Validate StateID height
-	stateHash := lb.StateID().Hash()
+	stateID := lb.StateID()
 
-	if !lb.Commit.BlockID.StateID.Equal(stateHash) {
-		return fmt.Errorf("invalid commit state id %s for light block state id %+v",
-			lb.Commit.BlockID.StateID.String(), lb.StateID())
+	if !lb.Commit.BlockID.StateID.Equal(stateID.Hash()) {
+		return fmt.Errorf("invalid commit state id hash %X != %X for light block state id %+v",
+			lb.Commit.BlockID.StateID, stateID.Hash(), stateID)
 	}
 
 	// make sure the validator set is consistent with the header

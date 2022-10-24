@@ -22,8 +22,6 @@ import (
 	"github.com/tendermint/tendermint/dash/llmq"
 	sm "github.com/tendermint/tendermint/internal/state"
 	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/types"
 )
@@ -480,7 +478,7 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 
 	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), 0)
 	require.NoError(t, err)
-	blockID, err := block.BlockID()
+	blockID, err := block.BlockID(nil)
 	require.NoError(t, err)
 
 	// Any node pro tx hash should do
@@ -628,7 +626,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), 0)
 	require.NoError(t, err)
-	blockID, err := block.BlockID()
+	blockID, err := block.BlockID(nil)
 	require.NoError(t, err)
 
 	// no updates:
@@ -1136,33 +1134,13 @@ func TestStateProto(t *testing.T) {
 	}
 }
 
-func TestState_StateID(t *testing.T) {
-	vset, _ := types.RandValidatorSet(1)
-
-	state := sm.State{
-		LastBlockHeight: 2,
-		Validators:      vset,
-	}
-
-	want := tmbytes.HexBytes(tmrand.Bytes(32))
-	changes, err := state.NewStateChangeset(context.TODO(), &abci.ResponsePrepareProposal{AppHash: want.Copy()})
-	require.NoError(t, err)
-
-	stateID := changes.StateID()
-	assert.Equal(t, int64(3), stateID.Height)
-	assert.EqualValues(t, want, stateID.AppHash)
-
-	err = stateID.ValidateBasic()
-	assert.NoError(t, err, "StateID validation failed")
-}
-
 func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
 	return func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
 		t.Helper()
 
 		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit), 0)
 		require.NoError(t, err)
-		blockID, err := block.BlockID()
+		blockID, err := block.BlockID(nil)
 		require.NoError(t, err)
 		su, err := sm.PrepareStateUpdates(ctx, block.Header, state, ucState)
 		require.NoError(t, err)

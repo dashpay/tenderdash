@@ -18,9 +18,8 @@ func (m *BlockID) ToCanonicalBlockID() *CanonicalBlockID {
 	cbid := CanonicalBlockID{
 		Hash:          m.Hash,
 		PartSetHeader: m.PartSetHeader.ToCanonicalPartSetHeader(),
+		StateId:       m.StateId,
 	}
-	cbid.StateId = make([]byte, len(m.StateId))
-	copy(cbid.StateId, m.StateId)
 
 	return &cbid
 }

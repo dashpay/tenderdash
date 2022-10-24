@@ -61,11 +61,7 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 	blockID := types.BlockID{
 		Hash:          header.Hash(),
 		PartSetHeader: types.PartSetHeader{Total: 1, Hash: crypto.CRandBytes(32)},
-	}
-
-	stateID := types.StateID{
-		Height:  header.Height,
-		AppHash: header.AppHash,
+		StateID:       header.StateID().Hash(),
 	}
 
 	votes := make([]*types.Vote, len(pkz))
@@ -83,7 +79,7 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 		if !privateKey.PubKey().Equals(val.PubKey) {
 			panic("light client keys do not match")
 		}
-		votes[i] = makeVote(t, header, valSet, val.ProTxHash, pkz[i], blockID, stateID)
+		votes[i] = makeVote(t, header, valSet, val.ProTxHash, pkz[i], blockID)
 	}
 	thresholdSigns, err := types.NewSignsRecoverer(votes).Recover()
 	require.NoError(t, err)
@@ -91,11 +87,11 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 		QuorumSigns: *thresholdSigns,
 		QuorumHash:  valSet.QuorumHash,
 	}
-	return types.NewCommit(header.Height, 1, blockID, stateID, quorumSigns)
+	return types.NewCommit(header.Height, 1, blockID, quorumSigns)
 }
 
 func makeVote(t testing.TB, header *types.Header, valset *types.ValidatorSet, proTxHash crypto.ProTxHash,
-	key crypto.PrivKey, blockID types.BlockID, stateID types.StateID) *types.Vote {
+	key crypto.PrivKey, blockID types.BlockID) *types.Vote {
 	t.Helper()
 
 	idx, val := valset.GetByProTxHash(proTxHash)
@@ -119,15 +115,7 @@ func makeVote(t testing.TB, header *types.Header, valset *types.ValidatorSet, pr
 		panic(err)
 	}
 
-	// SignDigest the state
-	stateSignID := stateID.SignID(header.ChainID, valset.QuorumType, valset.QuorumHash)
-	sigState, err := key.SignDigest(stateSignID)
-	if err != nil {
-		panic(err)
-	}
-
 	vote.BlockSignature = sig
-	vote.StateSignature = sigState
 
 	return vote
 }

@@ -459,7 +459,7 @@ func TestReactor_LightBlockResponse(t *testing.T) {
 
 	vals, pv := types.RandValidatorSet(1)
 	vote, err := factory.MakeVote(ctx, pv[0], vals, h.ChainID, 0, h.Height, 0, 2,
-		blockID, h.AppHash)
+		blockID)
 	require.NoError(t, err)
 
 	sh := &types.SignedHeader{
@@ -467,10 +467,8 @@ func TestReactor_LightBlockResponse(t *testing.T) {
 		Commit: &types.Commit{
 			Height:                  h.Height,
 			BlockID:                 blockID,
-			StateID:                 vote.StateID(),
 			QuorumHash:              crypto.RandQuorumHash(),
 			ThresholdBlockSignature: vote.BlockSignature,
-			ThresholdStateSignature: vote.StateSignature,
 		},
 	}
 
@@ -872,7 +870,8 @@ func buildLightBlockChain(ctx context.Context, t *testing.T, fromHeight, toHeigh
 		pk, _ := pv[0].GetPrivateKey(context.Background(), vals.QuorumHash)
 		privVal.UpdatePrivateKey(context.Background(), pk, vals.QuorumHash, vals.ThresholdPublicKey, height)
 		vals, pv, chain[height] = mockLB(ctx, t, height, blockTime, lastBlockID, vals, pv)
-		lastBlockID = factory.MakeBlockIDWithHash(chain[height].Header.Hash())
+
+		lastBlockID = chain[height].Commit.BlockID
 		blockTime = blockTime.Add(1 * time.Minute)
 	}
 	return chain
@@ -894,10 +893,15 @@ func mockLB(ctx context.Context, t *testing.T, height int64, time time.Time, las
 	header.ValidatorsHash = currentVals.Hash()
 	header.NextValidatorsHash = nextVals.Hash()
 	header.ConsensusHash = types.DefaultConsensusParams().HashConsensusParams()
-	lastBlockID = factory.MakeBlockIDWithHash(header.Hash())
-	stateID := types.StateID{
-		Height:  height,
-		AppHash: header.AppHash,
+	// lastBlockID = factory.MakeBlockIDWithHash(header.Hash())
+	stateID := header.StateID()
+	lastBlockID = types.BlockID{
+		Hash: header.Hash(),
+		PartSetHeader: types.PartSetHeader{
+			Total: 100,
+			Hash:  factory.RandomHash(),
+		},
+		StateID: stateID.Hash(),
 	}
 	voteSet := types.NewVoteSet(factory.DefaultTestChainID, height, 0, tmproto.PrecommitType, currentVals)
 	commit, err := factory.MakeCommit(ctx, lastBlockID, height, 0, voteSet, currentVals, currentPrivVals, stateID)

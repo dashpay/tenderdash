@@ -537,7 +537,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 		1,
 	)
 	require.NoError(t, err)
-	blockID, err := block.BlockID()
+	blockID, err := block.BlockID(nil)
 	require.NoError(t, err)
 	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block)
 	require.NoError(t, err)
@@ -919,7 +919,11 @@ func TestPrepareProposalReorderTxs(t *testing.T) {
 // TestPrepareProposalErrorOnTooManyTxs tests that the block creation logic returns
 // an error if the ResponsePrepareProposal returned from the application is invalid.
 func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
-	const height = 2
+	const (
+		height           = 2
+		bytesPerTx int64 = 3
+	)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -935,9 +939,10 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 	evpool := &mocks.EvidencePool{}
 	evpool.On("PendingEvidence", mock.Anything).Return([]types.Evidence{}, int64(0))
 
-	const nValidators = 1
-	var bytesPerTx int64 = 3
-	maxDataBytes := types.MaxDataBytes(state.ConsensusParams.Block.MaxBytes, crypto.BLS12381, 0, nValidators)
+	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
+
+	maxDataBytes, err := types.MaxDataBytes(state.ConsensusParams.Block.MaxBytes, commit, 0)
+	require.NoError(t, err)
 	txs := factory.MakeNTxs(height, maxDataBytes/bytesPerTx+2) // +2 so that tx don't fit
 	mp := &mpmocks.Mempool{}
 	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs)
@@ -953,7 +958,7 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 
 	cc := abciclient.NewLocalClient(logger, app)
 	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
-	err := proxyApp.Start(ctx)
+	err = proxyApp.Start(ctx)
 	require.NoError(t, err)
 
 	blockExec := sm.NewBlockExecutor(
@@ -965,7 +970,6 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 		eventBus,
 	)
 	proposer := state.Validators.GetByIndex(0)
-	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
 
 	block, _, err := blockExec.CreateProposalBlock(ctx, height, state, commit, proposer.ProTxHash, 0)
 	require.ErrorContains(t, err, "transaction data size exceeds maximum")

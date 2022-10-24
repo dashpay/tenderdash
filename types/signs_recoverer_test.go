@@ -19,8 +19,7 @@ func TestSigsRecoverer(t *testing.T) {
 		height  = 1000
 		chainID = "dash-platform"
 	)
-	stateID := RandStateID().WithHeight(height - 1)
-	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"))
+	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), RandStateID().Hash())
 	quorumType := crypto.SmallQuorumType()
 	quorumHash := crypto.RandQuorumHash()
 	testCases := []struct {
@@ -59,7 +58,7 @@ func TestSigsRecoverer(t *testing.T) {
 			for i, vote := range tc.votes {
 				protoVote := vote.ToProto()
 				pvs[i] = NewMockPV(GenKeysForQuorumHash(quorumHash), UseProTxHash(vote.ValidatorProTxHash))
-				err := pvs[i].SignVote(ctx, chainID, quorumType, quorumHash, protoVote, stateID, nil)
+				err := pvs[i].SignVote(ctx, chainID, quorumType, quorumHash, protoVote, nil)
 				require.NoError(t, err)
 				err = vote.PopulateSignsFromProto(protoVote)
 				require.NoError(t, err)
@@ -69,7 +68,7 @@ func TestSigsRecoverer(t *testing.T) {
 				IDs = append(IDs, vote.ValidatorProTxHash)
 			}
 
-			quorumSigns, err := MakeQuorumSigns(chainID, quorumType, quorumHash, tc.votes[0].ToProto(), stateID)
+			quorumSigns, err := MakeQuorumSigns(chainID, quorumType, quorumHash, tc.votes[0].ToProto())
 			require.NoError(t, err)
 
 			thresholdPubKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(pubKeys, IDs)
@@ -92,8 +91,7 @@ func TestSigsRecoverer_UsingVoteSet(t *testing.T) {
 		height  = 1000
 		n       = 4
 	)
-	stateID := RandStateID().WithHeight(height)
-	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"))
+	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), RandStateID().Hash())
 	vals, pvs := RandValidatorSet(n)
 	quorumType := crypto.SmallQuorumType()
 	quorumHash, err := pvs[0].GetFirstQuorumHash(ctx)
@@ -109,14 +107,13 @@ func TestSigsRecoverer_UsingVoteSet(t *testing.T) {
 			Round:              0,
 			Type:               tmproto.PrecommitType,
 			BlockID:            blockID,
-			AppHash:            stateID.AppHash,
 			VoteExtensions: mockVoteExtensions(t,
 				tmproto.VoteExtensionType_DEFAULT, "default",
 				tmproto.VoteExtensionType_THRESHOLD_RECOVER, "threshold",
 			),
 		}
 		vpb := votes[i].ToProto()
-		err = pvs[i].SignVote(ctx, chainID, quorumType, quorumHash, vpb, stateID, nil)
+		err = pvs[i].SignVote(ctx, chainID, quorumType, quorumHash, vpb, nil)
 		require.NoError(t, err)
 		err = votes[i].PopulateSignsFromProto(vpb)
 		require.NoError(t, err)

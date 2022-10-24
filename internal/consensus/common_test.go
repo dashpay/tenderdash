@@ -130,7 +130,7 @@ func (vs *validatorStub) signVote(
 
 	v := vote.ToProto()
 
-	if err := vs.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, v,  nil); err != nil {
+	if err := vs.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, v, nil); err != nil {
 		return nil, fmt.Errorf("sign vote failed: %w", err)
 	}
 

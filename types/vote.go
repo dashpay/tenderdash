@@ -137,8 +137,19 @@ func VoteBlockSignID(chainID string, vote *tmproto.Vote, quorumType btcjson.LLMQ
 	return signID.ID
 }
 
+// Copy creates a deep copy of the vote
 func (vote *Vote) Copy() *Vote {
+	if vote == nil {
+		return nil
+	}
+
 	voteCopy := *vote
+
+	voteCopy.BlockID = vote.BlockID.Copy()
+	voteCopy.ValidatorProTxHash = vote.ValidatorProTxHash.Copy()
+	voteCopy.BlockSignature = vote.BlockSignature.Copy()
+	voteCopy.VoteExtensions = vote.VoteExtensions.Copy()
+
 	return &voteCopy
 }
 
@@ -220,6 +231,7 @@ func (vote *Vote) Verify(
 	if err != nil {
 		return err
 	}
+
 	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto())
 	if err != nil {
 		return err

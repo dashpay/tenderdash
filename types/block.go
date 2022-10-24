@@ -30,9 +30,8 @@ const (
 	// MaxHeaderBytes is a maximum header size.
 	// NOTE: Because app hash can be of arbitrary size, the header is therefore not
 	// capped in size and thus this number should be seen as a soft max
-	MaxHeaderBytes       int64 = 646
+	MaxHeaderBytes       int64 = 680
 	MaxCoreChainLockSize int64 = 132
-	MaxCommitSize        int64 = 374
 
 	// MaxOverheadForBlock - maximum overhead to encode a block (up to
 	// MaxBlockSizeBytes in size) not including it's parts except Data.
@@ -56,17 +55,23 @@ type Block struct {
 	LastCommit    *Commit        `json:"last_commit"`
 }
 
-// BlockID returns a block ID of this block
-func (b *Block) BlockID() (BlockID, error) {
-	parSet, err := b.MakePartSet(BlockPartSizeBytes)
-	if err != nil {
-		return BlockID{}, err
+// BlockID returns a block ID of this block.
+// If partSet is nil, new partSet will be created
+func (b *Block) BlockID(partSet *PartSet) (BlockID, error) {
+	var err error
+	if partSet == nil {
+		partSet, err = b.MakePartSet(BlockPartSizeBytes)
+		if err != nil {
+			return BlockID{}, err
+		}
 	}
+
 	blockID := BlockID{
 		Hash:          b.Hash(),
-		PartSetHeader: parSet.Header(),
+		PartSetHeader: partSet.Header(),
 		StateID:       b.Header.StateID().Hash(),
 	}
+
 	return blockID, nil
 }
 
@@ -311,49 +316,40 @@ func BlockFromProto(bp *tmproto.Block) (*Block, error) {
 //-----------------------------------------------------------------------------
 
 // MaxDataBytes returns the maximum size of block's data.
-//
-// XXX: Panics on negative result.
-
-func MaxDataBytes(maxBytes int64, keyType crypto.KeyType, evidenceBytes int64, valsCount int) int64 {
+// If `commit` is nil, it is assumed to use `MaxCommitOverheadBytes`
+func MaxDataBytes(maxBytes int64, commit *Commit, evidenceBytes int64) (int64, error) {
+	lastCommitSize := MaxCommitOverheadBytes
+	if commit != nil {
+		lastCommitSize = int64(commit.ToProto().Size())
+	}
 	maxDataBytes := maxBytes -
 		MaxOverheadForBlock -
 		MaxHeaderBytes -
 		MaxCoreChainLockSize -
-		MaxCommitOverheadBytes -
+		lastCommitSize -
 		evidenceBytes
 
 	if maxDataBytes < 0 {
-		panic(fmt.Sprintf(
-			"Negative MaxDataBytes. Block.MaxBytes=%d is too small to accommodate header&lastCommit&evidence=%d",
+		return maxDataBytes, fmt.Errorf(
+			"block MaxBytes (%d) is too small to accommodate "+
+				"header (%d) + lastCommit (%d) + core chain lock (%d) + evidence (%d), need %d more bytes",
 			maxBytes,
-			-(maxDataBytes - maxBytes),
-		))
+			MaxOverheadForBlock+MaxHeaderBytes,
+			lastCommitSize,
+			+MaxCoreChainLockSize,
+			evidenceBytes,
+			-maxDataBytes,
+		)
 	}
 
-	return maxDataBytes
+	return maxDataBytes, nil
 }
 
 // MaxDataBytesNoEvidence returns the maximum size of block's data when
-// evidence count is unknown. MaxEvidencePerBlock will be used for the size
-// of evidence.
-//
-// XXX: Panics on negative result.
-func MaxDataBytesNoEvidence(maxBytes int64) int64 {
-	maxDataBytes := maxBytes -
-		MaxOverheadForBlock -
-		MaxHeaderBytes -
-		MaxCoreChainLockSize -
-		MaxCommitOverheadBytes
+// no evidence is used.
+func MaxDataBytesNoEvidence(maxBytes int64) (int64, error) {
+	return MaxDataBytes(maxBytes, nil, 0)
 
-	if maxDataBytes < 0 {
-		panic(fmt.Sprintf(
-			"Negative MaxDataBytesUnknownEvidence. Block.MaxBytes=%d is too small to accommodate header&lastCommit&evidence=%d",
-			maxBytes,
-			-(maxDataBytes - maxBytes),
-		))
-	}
-
-	return maxDataBytes
 }
 
 // MakeBlock returns a new block with an empty header, except what can be
@@ -498,10 +494,14 @@ func (h Header) ValidateBasic() error {
 
 // StateID returns a state ID of this block
 func (h *Header) StateID() StateID {
+	appHash := h.AppHash
+	if len(appHash) == 0 {
+		appHash = make([]byte, crypto.DefaultAppHashSize)
+	}
 	return StateID{
 		Version:               StateIDVersion,
 		Height:                uint64(h.Height),
-		AppHash:               h.AppHash,
+		AppHash:               appHash,
 		CoreChainLockedHeight: h.CoreChainLockedHeight,
 		Time:                  h.Time,
 	}
@@ -672,9 +672,10 @@ const (
 )
 
 const (
-	// MaxCommitOverheadBytes is the max size of commit -> 82 for BlockID, 34 for StateID, 8 for Height, 4 for Round.
-	// 96 for Block signature, 96 for State Signature and -> 3 bytes overhead
-	MaxCommitOverheadBytes int64 = 329
+	// MaxCommitOverheadBytes is the max size of commit, with overhead but without vote extensions:
+	// (110+2) for BlockID,  (8+2) for Height, (4+2) for Round,
+	// (32+3) for QuorumHash, (96+3) for Block signature.
+	MaxCommitOverheadBytes int64 = (110 + 2) + (8 + 2) + (4 + 2) + (32 + 3) + (96 + 3) + 0
 )
 
 //-------------------------------------
@@ -1024,7 +1025,7 @@ func (blockID BlockID) Key() string {
 		panic(err)
 	}
 
-	return fmt.Sprint(string(blockID.Hash), string(bz), string(blockID.StateID))
+	return string(blockID.Hash) + string(bz) + string(blockID.StateID)
 }
 
 // ValidateBasic performs basic validation.
@@ -1040,6 +1041,17 @@ func (blockID BlockID) ValidateBasic() error {
 		return fmt.Errorf("wrong state ID: %w", err)
 	}
 	return nil
+}
+
+func (blockID BlockID) Copy() BlockID {
+	return BlockID{
+		PartSetHeader: PartSetHeader{
+			Total: blockID.PartSetHeader.Total,
+			Hash:  blockID.PartSetHeader.Hash.Copy(),
+		},
+		Hash:    blockID.Hash.Copy(),
+		StateID: blockID.StateID.Copy(),
+	}
 }
 
 // IsNil returns true if this is the BlockID of a nil block.
@@ -1063,7 +1075,7 @@ func (blockID BlockID) IsComplete() bool {
 //
 // See PartSetHeader#String
 func (blockID BlockID) String() string {
-	return fmt.Sprintf(`%v:%v:%v`, blockID.Hash, blockID.PartSetHeader, blockID.StateID)
+	return fmt.Sprintf(`%v:%v:%s`, blockID.Hash, blockID.PartSetHeader, blockID.StateID.ShortString())
 }
 
 // ToProto converts BlockID to protobuf

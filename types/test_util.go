@@ -14,9 +14,9 @@ import (
 func RandStateID() StateID {
 	return StateID{
 		Height:                uint64(rand.Int63()), //nolint:gosec
-		AppHash:               tmrand.Bytes(crypto.HashSize),
+		AppHash:               tmrand.Bytes(crypto.DefaultAppHashSize),
 		Version:               StateIDVersion,
-		CoreChainLockedHeight: rand.Uint32(),
+		CoreChainLockedHeight: rand.Uint32(), //nolint:gosec
 		Time:                  time.Now(),
 	}
 }
@@ -24,7 +24,6 @@ func RandStateID() StateID {
 func makeCommit(
 	ctx context.Context,
 	blockID BlockID,
-	stateID StateID,
 	height int64,
 	round int32,
 	voteSet *VoteSet,

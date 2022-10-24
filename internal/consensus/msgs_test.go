@@ -33,9 +33,11 @@ func TestMsgToProto(t *testing.T) {
 		Hash:  tmrand.Bytes(32),
 	}
 	pbPsh := psh.ToProto()
+	stateID := types.RandStateID()
 	bi := types.BlockID{
 		Hash:          tmrand.Bytes(32),
 		PartSetHeader: psh,
+		StateID:       stateID.Hash(),
 	}
 	pbBi := bi.ToProto()
 	bits := bits.NewBitArray(1)
@@ -82,7 +84,6 @@ func TestMsgToProto(t *testing.T) {
 		1,
 		2,
 		bi,
-		make(bytes.HexBytes, crypto.DefaultAppHashSize),
 	)
 	require.NoError(t, err)
 	pbVote := vote.ToProto()

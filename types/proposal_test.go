@@ -27,11 +27,22 @@ func getTestProposal(t testing.TB) *Proposal {
 	stamp, err := time.Parse(TimeFormat, "2018-02-11T07:09:22.765Z")
 	require.NoError(t, err)
 
+	stateID := StateID{
+		Version:               StateIDVersion,
+		Height:                12345,
+		AppHash:               []byte("12345678901234567890123456789012"),
+		CoreChainLockedHeight: math.MaxUint32,
+		Time:                  time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC),
+	}
+
 	return &Proposal{
 		Height: 12345,
 		Round:  23456,
-		BlockID: BlockID{Hash: []byte("--June_15_2020_amino_was_removed"),
-			PartSetHeader: PartSetHeader{Total: 111, Hash: []byte("--June_15_2020_amino_was_removed")}},
+		BlockID: BlockID{
+			Hash:          []byte("--June_15_2020_amino_was_removed"),
+			PartSetHeader: PartSetHeader{Total: 111, Hash: []byte("--June_15_2020_amino_was_removed")},
+			StateID:       stateID.Hash(),
+		},
 		POLRound:  -1,
 		Timestamp: stamp,
 
@@ -51,7 +62,7 @@ func TestProposalSignable(t *testing.T) {
 
 func TestProposalString(t *testing.T) {
 	str := getTestProposal(t).String()
-	expected := `Proposal{12345/23456 (2D2D4A756E655F31355F323032305F616D696E6F5F7761735F72656D6F766564:111:2D2D4A756E65, -1) 000000000000 @ 2018-02-11T07:09:22.765Z}`
+	expected := `Proposal{12345/23456 (2D2D4A756E655F31355F323032305F616D696E6F5F7761735F72656D6F766564:111:2D2D4A756E65:CED0CA, -1) 000000000000 @ 2018-02-11T07:09:22.765Z}`
 	if str != expected {
 		t.Errorf("got unexpected string for Proposal. Expected:\n%v\nGot:\n%v", expected, str)
 	}
@@ -68,7 +79,11 @@ func TestProposalVerifySignature(t *testing.T) {
 
 	prop := NewProposal(
 		4, 1, 2, 2,
-		BlockID{tmrand.Bytes(crypto.HashSize), PartSetHeader{777, tmrand.Bytes(crypto.HashSize)}},
+		BlockID{
+			tmrand.Bytes(crypto.HashSize),
+			PartSetHeader{777, tmrand.Bytes(crypto.HashSize)},
+			RandStateID().Hash(),
+		},
 		tmtime.Now(),
 	)
 	p := prop.ToProto()
@@ -211,7 +226,10 @@ func TestProposalValidateBasic(t *testing.T) {
 		{"Invalid Round", func(p *Proposal) { p.Round = -1 }, true},
 		{"Invalid POLRound", func(p *Proposal) { p.POLRound = -2 }, true},
 		{"Invalid BlockId", func(p *Proposal) {
-			p.BlockID = BlockID{[]byte{1, 2, 3}, PartSetHeader{111, []byte("blockparts")}}
+			p.BlockID = BlockID{
+				[]byte{1, 2, 3},
+				PartSetHeader{111, []byte("blockparts")},
+				RandStateID().Hash()}
 		}, true},
 		{"Invalid Signature", func(p *Proposal) {
 			p.Signature = make([]byte, 0)
@@ -220,7 +238,12 @@ func TestProposalValidateBasic(t *testing.T) {
 			p.Signature = make([]byte, SignatureSize+1)
 		}, true},
 	}
-	blockID := makeBlockID(crypto.Checksum([]byte("blockhash")), math.MaxInt32, crypto.Checksum([]byte("partshash")))
+	blockID := makeBlockID(
+		crypto.Checksum([]byte("blockhash")),
+		math.MaxInt32,
+		crypto.Checksum([]byte("partshash")),
+		RandStateID().Hash(),
+	)
 
 	for _, tc := range testCases {
 		tc := tc
@@ -242,7 +265,12 @@ func TestProposalValidateBasic(t *testing.T) {
 }
 
 func TestProposalProtoBuf(t *testing.T) {
-	proposal := NewProposal(1, 1, 2, 3, makeBlockID([]byte("hash"), 2, []byte("part_set_hash")), tmtime.Now())
+	proposal := NewProposal(
+		1,
+		1,
+		2,
+		3,
+		makeBlockID([]byte("hash"), 2, []byte("part_set_hash"), RandStateID().Hash()), tmtime.Now())
 	proposal.Signature = []byte("sig")
 	proposal2 := NewProposal(1, 1, 2, 3, BlockID{}, tmtime.Now())
 

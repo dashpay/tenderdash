@@ -8,7 +8,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmtypes "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -162,21 +161,6 @@ func (candidate *CurrentRoundState) update(
 	}
 
 	return nil
-}
-
-func (candidate CurrentRoundState) StateID() types.StateID {
-	var appHash tmbytes.HexBytes
-	if len(candidate.AppHash) > 0 {
-		appHash = candidate.AppHash.Copy()
-	} else {
-		appHash = make([]byte, crypto.DefaultAppHashSize)
-	}
-
-	return types.StateID{
-		Version: types.StateIDVersion,
-		Height:  uint64(candidate.GetHeight()),
-		AppHash: appHash,
-	}
 }
 
 // GetHeight returns height of current block

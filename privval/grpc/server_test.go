@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/log"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmgrpc "github.com/tendermint/tendermint/privval/grpc"
@@ -118,10 +117,6 @@ func TestSignVote(t *testing.T) {
 				ChainId:    ChainID,
 				QuorumType: int32(btcjson.LLMQType_5_60),
 				QuorumHash: quorumHash,
-				StateId: &tmproto.StateID{
-					Height:  tc.have.Height,
-					AppHash: factory.RandomHash(),
-				},
 			}
 			resp, err := s.SignVote(ctx, req)
 			if tc.err {
@@ -129,7 +124,7 @@ func TestSignVote(t *testing.T) {
 			} else {
 				pbVote := tc.want.ToProto()
 				require.NoError(t, tc.pv.SignVote(ctx, ChainID, btcjson.LLMQType_5_60, quorumHash,
-					pbVote, types.StateID{}, log.NewTestingLogger(t)))
+					pbVote, log.NewTestingLogger(t)))
 
 				assert.Equal(t, pbVote.BlockSignature, resp.Vote.BlockSignature)
 			}

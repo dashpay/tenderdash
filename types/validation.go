@@ -20,10 +20,9 @@ func ValidateHash(h []byte) error {
 	return nil
 }
 
-// ValidateAppHash returns an error if the hash is not empty, but its
-// size != tmhash.Size.
+// ValidateAppHash returns an error if the app hash size is invalid.
 func ValidateAppHash(h []byte) error {
-	if len(h) > 0 && (len(h) < crypto.SmallAppHashSize || len(h) > crypto.LargeAppHashSize) {
+	if len(h) < crypto.SmallAppHashSize || len(h) > crypto.LargeAppHashSize {
 		return fmt.Errorf("expected size to be at between %d and %d bytes, got %d bytes",
 			crypto.SmallAppHashSize,
 			crypto.LargeAppHashSize,

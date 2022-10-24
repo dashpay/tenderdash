@@ -11,14 +11,27 @@ import (
 
 func TestCanonicalizeBlockID(t *testing.T) {
 	randhash := tmrand.Bytes(crypto.HashSize)
-	block1 := tmproto.BlockID{Hash: randhash,
-		PartSetHeader: tmproto.PartSetHeader{Total: 5, Hash: randhash}}
-	block2 := tmproto.BlockID{Hash: randhash,
-		PartSetHeader: tmproto.PartSetHeader{Total: 10, Hash: randhash}}
-	cblock1 := tmproto.CanonicalBlockID{Hash: randhash,
-		PartSetHeader: tmproto.CanonicalPartSetHeader{Total: 5, Hash: randhash}}
-	cblock2 := tmproto.CanonicalBlockID{Hash: randhash,
-		PartSetHeader: tmproto.CanonicalPartSetHeader{Total: 10, Hash: randhash}}
+	stateID := RandStateID()
+	block1 := tmproto.BlockID{
+		Hash:          randhash,
+		PartSetHeader: tmproto.PartSetHeader{Total: 5, Hash: randhash},
+		StateId:       stateID.Hash(),
+	}
+	block2 := tmproto.BlockID{
+		Hash:          randhash,
+		PartSetHeader: tmproto.PartSetHeader{Total: 10, Hash: randhash},
+		StateId:       stateID.Hash(),
+	}
+	cblock1 := tmproto.CanonicalBlockID{
+		Hash:          randhash,
+		PartSetHeader: tmproto.CanonicalPartSetHeader{Total: 5, Hash: randhash},
+		StateId:       stateID.Hash(),
+	}
+	cblock2 := tmproto.CanonicalBlockID{
+		Hash:          randhash,
+		PartSetHeader: tmproto.CanonicalPartSetHeader{Total: 10, Hash: randhash},
+		StateId:       stateID.Hash(),
+	}
 
 	tests := []struct {
 		name string
@@ -31,7 +44,7 @@ func TestCanonicalizeBlockID(t *testing.T) {
 	for _, tt := range tests {
 		tt := tt
 		t.Run(tt.name, func(t *testing.T) {
-			if got := CanonicalizeBlockID(tt.args); !reflect.DeepEqual(got, tt.want) {
+			if got := tt.args.ToCanonicalBlockID(); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("CanonicalizeBlockID() = %v, want %v", got, tt.want)
 			}
 		})

@@ -367,7 +367,7 @@ func (r *BlockReplayer) publishEvents(
 	ucState sm.CurrentRoundState,
 	fbResp *abci.ResponseFinalizeBlock,
 ) error {
-	blockID, err := block.BlockID()
+	blockID, err := block.BlockID(nil)
 	if err != nil {
 		return err
 	}

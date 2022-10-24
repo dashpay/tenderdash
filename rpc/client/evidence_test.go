@@ -54,10 +54,13 @@ func makeEvidences(
 	quorumHash crypto.QuorumHash,
 	timestamp time.Time,
 ) (correct *types.DuplicateVoteEvidence, fakes []*types.DuplicateVoteEvidence) {
+	const height = int64(1)
+	stateID := types.RandStateID().WithHeight(height)
+
 	vote := types.Vote{
 		ValidatorProTxHash: val.Key.ProTxHash,
 		ValidatorIndex:     0,
-		Height:             1,
+		Height:             height,
 		Round:              0,
 		Type:               tmproto.PrevoteType,
 		BlockID: types.BlockID{
@@ -66,10 +69,9 @@ func makeEvidences(
 				Total: 1000,
 				Hash:  crypto.Checksum([]byte("partset")),
 			},
+			StateID: stateID.Hash(),
 		},
 	}
-
-	stateID := types.RandStateID().WithHeight(vote.Height - 1)
 
 	vote2 := vote
 	vote2.BlockID.Hash = crypto.Checksum([]byte("blockhash2"))

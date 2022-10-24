@@ -378,7 +378,7 @@ func TestCreateProposalBlock(t *testing.T) {
 	)
 
 	proposedAppVersion := uint64(1)
-	commit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil)
+	commit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
 	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
@@ -446,7 +446,9 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 	)
 
 	// fill the mempool with one txs just below the maximum size
-	txLength := int(types.MaxDataBytesNoEvidence(maxBytes))
+	maxDataBytes, err := types.MaxDataBytesNoEvidence(maxBytes)
+	require.NoError(t, err)
+	txLength := int(maxDataBytes)
 	tx := tmrand.Bytes(txLength - 4) // to account for the varint
 	err = mp.CheckTx(ctx, tx, nil, mempool.TxInfo{})
 	assert.NoError(t, err)
@@ -463,7 +465,7 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 		eventBus,
 	)
 
-	commit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil)
+	commit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
 	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
@@ -556,17 +558,13 @@ func TestMaxProposalBlockSize(t *testing.T) {
 			Total: math.MaxInt32,
 			Hash:  crypto.Checksum([]byte("blockID_part_set_header_hash")),
 		},
+		StateID: crypto.Checksum([]byte("stateID_hash")),
 	}
 
 	// save the updated validator set for use by the block executor.
 	state.LastBlockHeight = math.MaxInt64 - 2
 	state.LastHeightValidatorsChanged = math.MaxInt64 - 1
 	require.NoError(t, stateStore.Save(state))
-
-	stateID := types.StateID{
-		Height:  math.MaxInt64 - 1,
-		AppHash: crypto.Checksum([]byte("app_hash")),
-	}
 
 	timestamp := time.Date(math.MaxInt64, 0, 0, 0, 0, 0, math.MaxInt64, time.UTC)
 	// change state in order to produce the largest accepted header
@@ -587,10 +585,8 @@ func TestMaxProposalBlockSize(t *testing.T) {
 		Height:                  math.MaxInt64,
 		Round:                   math.MaxInt32,
 		BlockID:                 blockID,
-		StateID:                 stateID,
 		QuorumHash:              crypto.RandQuorumHash(),
 		ThresholdBlockSignature: crypto.CRandBytes(bls12381.SignatureSize),
-		ThresholdStateSignature: crypto.CRandBytes(bls12381.SignatureSize),
 	}
 
 	block, _, err := blockExec.CreateProposalBlock(
@@ -613,9 +609,9 @@ func TestMaxProposalBlockSize(t *testing.T) {
 
 	// require that the header and commit be the max possible size
 	require.Equal(t, types.MaxHeaderBytes, int64(pb.Header.Size()))
-	require.Equal(t, types.MaxCommitSize, int64(pb.LastCommit.Size()))
+	require.Equal(t, types.MaxCommitOverheadBytes, int64(pb.LastCommit.Size()))
 	// make sure that the block is less than the max possible size
-	assert.Equal(t, int64(1150+cfg.Mempool.MaxTxBytes), int64(pb.Size()))
+	assert.Equal(t, int64(1072+cfg.Mempool.MaxTxBytes), int64(pb.Size()))
 	// because of the proto overhead we expect the part set bytes to be equal or
 	// less than the pb block size
 	assert.LessOrEqual(t, partSet.ByteSize(), int64(pb.Size()))

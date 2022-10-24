@@ -138,9 +138,9 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			prevote1, err := bzNodeState.signVote(ctx,
 				tmproto.PrevoteType,
 				types.BlockID{
-					bzNodeState.ProposalBlock.Hash(),
-					bzNodeState.ProposalBlockParts.Header(),
-					bzNodeState.ProposalBlock.StateID().Hash(),
+					Hash:          bzNodeState.ProposalBlock.Hash(),
+					PartSetHeader: bzNodeState.ProposalBlockParts.Header(),
+					StateID:       bzNodeState.ProposalBlock.StateID().Hash(),
 				})
 			require.NoError(t, err)
 

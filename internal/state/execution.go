@@ -150,7 +150,10 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	evidence, evSize := blockExec.evpool.PendingEvidence(state.ConsensusParams.Evidence.MaxBytes)
 
 	// Fetch a limited amount of valid txs
-	maxDataBytes := types.MaxDataBytes(maxBytes, crypto.BLS12381, evSize, state.Validators.Size())
+	maxDataBytes, err := types.MaxDataBytes(maxBytes, commit, evSize)
+	if err != nil {
+		return nil, CurrentRoundState{}, fmt.Errorf("create proposal block: %w", err)
+	}
 
 	// Pass proposed app version only if it's higher than current network app version
 	if proposedAppVersion <= state.Version.Consensus.App {

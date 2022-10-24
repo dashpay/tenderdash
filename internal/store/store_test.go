@@ -28,7 +28,6 @@ import (
 // make a Commit with a single vote containing just the height and a timestamp
 func makeTestCommit(state sm.State, height int64, timestamp time.Time) *types.Commit {
 	blockID := types.BlockID{Hash: []byte(""), PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2}}
-	stateID := types.RandStateID().WithHeight(height - 1)
 	goodVote := &types.Vote{
 		ValidatorProTxHash: crypto.RandProTxHash(),
 		ValidatorIndex:     0,
@@ -44,16 +43,18 @@ func makeTestCommit(state sm.State, height int64, timestamp time.Time) *types.Co
 	privVal := types.NewMockPVWithParams(privKey, crypto.RandProTxHash(), state.Validators.QuorumHash,
 		state.Validators.ThresholdPublicKey, false, false)
 
-	_ = privVal.SignVote(context.Background(), "chainID", state.Validators.QuorumType, state.Validators.QuorumHash, g, stateID, nil)
+	_ = privVal.SignVote(context.Background(), "chainID", state.Validators.QuorumType, state.Validators.QuorumHash, g, nil)
 
 	goodVote.BlockSignature = g.BlockSignature
-	goodVote.StateSignature = g.StateSignature
 	goodVote.VoteExtensions = types.VoteExtensionsFromProto(g.VoteExtensions)
 	thresholdSigns, _ := types.NewSignsRecoverer([]*types.Vote{goodVote}).Recover()
 
 	return types.NewCommit(height, 0,
-		types.BlockID{Hash: []byte(""), PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2}},
-		types.StateID{AppHash: make([]byte, 32)},
+		types.BlockID{
+			Hash:          []byte(""),
+			PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2},
+			StateID:       types.RandStateID().Hash(),
+		},
 		&types.CommitSigns{
 			QuorumSigns: *thresholdSigns,
 			QuorumHash:  crypto.RandQuorumHash(),
