@@ -19,7 +19,6 @@ import (
 	tmevents "github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
-	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -686,8 +685,8 @@ func (r *Reactor) logResult(err error, logger log.Logger, message string, keyval
 	return true
 }
 
-//func (r *Reactor) gossipVotesForHeight(rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState) bool {
-//	logger := r.Logger.With("height", prs.Height).With("peer", ps.peerID)
+//	func (r *Reactor) gossipVotesForHeight(rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState) bool {
+//		logger := r.Logger.With("height", prs.Height).With("peer", ps.peerID)
 func (r *Reactor) gossipVotesForHeight(
 	ctx context.Context,
 	rs *cstypes.RoundState,
