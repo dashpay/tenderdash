@@ -410,7 +410,7 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 	// randomness of proposer selection
 	css[0].config.DontAutoPropose = true
 
-	blockID := types.BlockID{Hash: rs.ProposalBlock.Hash(), PartSetHeader: rs.ProposalBlockParts.Header()}
+	blockID := rs.BlockID()
 	signAddVotes(ctx, t, css[0], tmproto.PrecommitType, sim.Config.ChainID(), blockID, vss[1:nVals]...)
 
 	ensureNewRound(t, newRoundCh, height+1, 0)
@@ -498,7 +498,8 @@ func createSignSendProposal(ctx context.Context,
 	propBlock, _ := css[0].CreateProposalBlock(ctx)
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID := types.BlockID{Hash: propBlock.Hash(), PartSetHeader: propBlockParts.Header()}
+	blockID, err := propBlock.BlockID(propBlockParts)
+	require.NoError(t, err)
 	if assertTxs != nil {
 		require.Equal(t, len(assertTxs), len(propBlock.Txs), "height %d", height)
 		for _, tx := range assertTxs {
@@ -818,7 +819,8 @@ func applyBlock(
 	testPartSize := types.BlockPartSizeBytes
 	bps, err := blk.MakePartSet(testPartSize)
 	require.NoError(t, err)
-	blkID := types.BlockID{Hash: blk.Hash(), PartSetHeader: bps.Header()}
+	blkID, err := blk.BlockID(bps)
+	require.NoError(t, err)
 	newState, err := blockExec.ApplyBlock(ctx, st, blkID, blk)
 	require.NoError(t, err)
 	return newState
@@ -1208,8 +1210,10 @@ func (bs *mockBlockStore) LoadBlockMeta(height int64) *types.BlockMeta {
 	block := bs.chain[height-1]
 	bps, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(bs.t, err)
+	blockID, err := block.BlockID(bps)
+	require.NoError(bs.t, err)
 	return &types.BlockMeta{
-		BlockID: types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()},
+		BlockID: blockID,
 		Header:  block.Header,
 	}
 }

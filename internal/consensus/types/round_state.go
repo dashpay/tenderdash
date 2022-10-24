@@ -168,11 +168,11 @@ func (rs *RoundState) BlockID() types.BlockID {
 		return rs.Proposal.BlockID
 	}
 
-	return types.BlockID{
-		Hash:          rs.ProposalBlock.Hash(),
-		PartSetHeader: rs.ProposalBlockParts.Header(),
-		StateID:       rs.ProposalBlock.Header.StateID().Hash(),
+	blockID, err := rs.ProposalBlock.BlockID(rs.ProposalBlockParts)
+	if err != nil {
+		panic(err) // this should never happen
 	}
+	return blockID
 }
 
 // CompleteProposalEvent returns information about a proposed block as an event.

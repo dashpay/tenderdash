@@ -135,13 +135,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		bzNodeState.CurrentRoundState = uncommittedState
 
 		if height == prevoteHeight {
-			prevote1, err := bzNodeState.signVote(ctx,
-				tmproto.PrevoteType,
-				types.BlockID{
-					Hash:          bzNodeState.ProposalBlock.Hash(),
-					PartSetHeader: bzNodeState.ProposalBlockParts.Header(),
-					StateID:       bzNodeState.ProposalBlock.StateID().Hash(),
-				})
+			prevote1, err := bzNodeState.signVote(ctx, tmproto.PrevoteType, bzNodeState.BlockID())
 			require.NoError(t, err)
 
 			prevote2, err := bzNodeState.signVote(ctx, tmproto.PrevoteType, types.BlockID{})
@@ -228,7 +222,9 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 
 		// Make proposal
-		propBlockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
+		propBlockID, err := block.BlockID(blockParts)
+		assert.NoError(t, err)
+
 		proposal := types.NewProposal(
 			height,
 			lazyNodeState.state.LastCoreChainLockedBlockHeight,

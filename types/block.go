@@ -56,9 +56,15 @@ type Block struct {
 }
 
 // BlockID returns a block ID of this block.
+// BlockID of a nil block is zero-value (BlockID{})
 // If partSet is nil, new partSet will be created
 func (b *Block) BlockID(partSet *PartSet) (BlockID, error) {
 	var err error
+
+	if b == nil {
+		return BlockID{}, nil
+	}
+
 	if partSet == nil {
 		partSet, err = b.MakePartSet(BlockPartSizeBytes)
 		if err != nil {
