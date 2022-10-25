@@ -103,8 +103,18 @@ func TestDuplicateVoteEvidence(t *testing.T) {
 func TestDuplicateVoteEvidenceValidation(t *testing.T) {
 	quorumHash := crypto.RandQuorumHash()
 	val := NewMockPVForQuorum(quorumHash)
-	blockID := makeBlockID(crypto.Checksum([]byte("blockhash")), math.MaxInt32, crypto.Checksum([]byte("partshash")), []byte("statehash"))
-	blockID2 := makeBlockID(crypto.Checksum([]byte("blockhash2")), math.MaxInt32, crypto.Checksum([]byte("partshash")), []byte("statehash"))
+	blockID := makeBlockID(
+		crypto.Checksum([]byte("blockhash")),
+		math.MaxInt32,
+		crypto.Checksum([]byte("partshash")),
+		crypto.Checksum([]byte("statehash")),
+	)
+	blockID2 := makeBlockID(
+		crypto.Checksum([]byte("blockhash2")),
+		math.MaxInt32,
+		crypto.Checksum([]byte("partshash")),
+		crypto.Checksum([]byte("statehash")),
+	)
 	quorumType := btcjson.LLMQType_5_60
 	const chainID = "mychain"
 
@@ -149,7 +159,12 @@ func TestDuplicateVoteEvidenceValidation(t *testing.T) {
 			ev, err := NewDuplicateVoteEvidence(vote1, vote2, defaultVoteTime, valSet)
 			require.NoError(t, err)
 			tc.malleateEvidence(ev)
-			assert.Equal(t, tc.expectErr, ev.ValidateBasic() != nil, "Validate Basic had an unexpected result")
+			err = ev.ValidateBasic()
+			if tc.expectErr {
+				assert.Error(t, err, "Validate Basic had an unexpected result")
+			} else {
+				assert.NoError(t, err)
+			}
 		})
 	}
 }

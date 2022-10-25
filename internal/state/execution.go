@@ -64,13 +64,6 @@ func BockExecWithMetrics(metrics *Metrics) func(e *BlockExecutor) {
 	}
 }
 
-// BlockExecWithAppHashSize is an option function to set an app-hash size to BlockExecutor
-func BlockExecWithAppHashSize(size int) func(e *BlockExecutor) {
-	return func(e *BlockExecutor) {
-		e.appHashSize = size
-	}
-}
-
 // BlockExecWithAppClient sets application client to BlockExecutor
 func BlockExecWithAppClient(appClient abciclient.Client) func(e *BlockExecutor) {
 	return func(e *BlockExecutor) {

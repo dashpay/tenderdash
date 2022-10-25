@@ -830,7 +830,12 @@ func TestHeaderProto(t *testing.T) {
 }
 
 func TestBlockIDProtoBuf(t *testing.T) {
-	blockID := makeBlockID([]byte("hash"), 2, []byte("part_set_hash"), []byte("state_id"))
+	blockID := makeBlockID(
+		crypto.Checksum([]byte("hash")),
+		2,
+		crypto.Checksum([]byte("part_set_hash")),
+		crypto.Checksum([]byte("state_id")),
+	)
 	testCases := []struct {
 		msg     string
 		bid1    *BlockID
@@ -1271,7 +1276,7 @@ func TestStateID_ValidateBasic(t *testing.T) {
 				AppHash: nil,
 				Time:    time.Now(),
 			},
-			wantErr: "wrong app Hash: expected size to be at between 20 and 32 bytes, got 0 bytes",
+			wantErr: "wrong app Hash: expected size to be 32 bytes, got 0 bytes",
 		},
 		{
 			name: "empty apphash",
@@ -1281,7 +1286,7 @@ func TestStateID_ValidateBasic(t *testing.T) {
 				AppHash: []byte{},
 				Time:    time.Now(),
 			},
-			wantErr: "wrong app Hash: expected size to be at between 20 and 32 bytes, got 0 bytes"},
+			wantErr: "wrong app Hash: expected size to be 32 bytes, got 0 bytes"},
 		{
 			name: "apphash too short",
 			stateID: StateID{
@@ -1289,27 +1294,17 @@ func TestStateID_ValidateBasic(t *testing.T) {
 				Height:  12,
 				AppHash: []byte{0x1, 0x2, 0x3},
 				Time:    time.Now(),
-			}, wantErr: "wrong app Hash: expected size to be at between 20 and 32 bytes, got 3 bytes",
+			}, wantErr: "wrong app Hash: expected size to be 32 bytes, got 3 bytes",
 		},
 		{
 			name: "apphash too short 2",
 			stateID: StateID{
 				Version: StateIDVersion,
 				Height:  12,
-				AppHash: tmrand.Bytes(crypto.SmallAppHashSize - 1),
+				AppHash: tmrand.Bytes(crypto.DefaultAppHashSize - 1),
 				Time:    time.Now(),
 			},
-			wantErr: "wrong app Hash: expected size to be at between 20 and 32 bytes, got 19 bytes",
-		},
-		{
-			name: "apphash small",
-			stateID: StateID{
-				Version: StateIDVersion,
-				Height:  12,
-				AppHash: tmrand.Bytes(crypto.SmallAppHashSize),
-				Time:    time.Now(),
-			},
-			wantErr: "",
+			wantErr: "wrong app Hash: expected size to be 32 bytes, got 31 bytes",
 		},
 		{
 			name: "apphash default",
@@ -1322,22 +1317,13 @@ func TestStateID_ValidateBasic(t *testing.T) {
 			wantErr: "",
 		},
 		{
-			name: "apphash large",
-			stateID: StateID{
-				Version: StateIDVersion,
-				Height:  12,
-				AppHash: tmrand.Bytes(crypto.LargeAppHashSize),
-				Time:    time.Now(),
-			}, wantErr: "",
-		},
-		{
 			name: "apphash too large",
 			stateID: StateID{
 				Version: StateIDVersion,
 				Height:  12,
-				AppHash: tmrand.Bytes(crypto.LargeAppHashSize + 1),
+				AppHash: tmrand.Bytes(crypto.DefaultAppHashSize + 1),
 				Time:    time.Now(),
-			}, wantErr: "wrong app Hash: expected size to be at between 20 and 32 bytes, got 33 bytes"},
+			}, wantErr: "wrong app Hash: expected size to be 32 bytes, got 33 bytes"},
 	}
 
 	for _, tc := range tests {

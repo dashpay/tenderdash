@@ -437,7 +437,6 @@ func signVote(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	vote *Vote,
-	stateID StateID,
 	logger log.Logger,
 ) {
 	t.Helper()
@@ -469,10 +468,7 @@ func TestValidVotes(t *testing.T) {
 	for _, tc := range testCases {
 		quorumHash := crypto.RandQuorumHash()
 		privVal := NewMockPVForQuorum(quorumHash)
-
-		v := tc.vote.ToProto()
-		stateID := RandStateID().WithHeight(v.Height - 1)
-		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, tc.vote, stateID, nil)
+		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, tc.vote, nil)
 		tc.malleateVote(tc.vote)
 		require.NoError(t, tc.vote.ValidateBasic(), "ValidateBasic for %s", tc.name)
 	}
@@ -481,7 +477,6 @@ func TestValidVotes(t *testing.T) {
 func TestInvalidVotes(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	stateID := RandStateID()
 
 	testCases := []struct {
 		name         string
@@ -489,31 +484,30 @@ func TestInvalidVotes(t *testing.T) {
 	}{
 		{"negative height", func(v *Vote) { v.Height = -1 }},
 		{"negative round", func(v *Vote) { v.Round = -1 }},
-		{"invalid block hash", func(v *Vote) { v.BlockID.Hash[0] = ^v.BlockID.Hash[0] }},
-		{"invalid state ID", func(v *Vote) {
-			copied := stateID.Copy()
-			copied.Height++
-			v.BlockID.StateID = copied.Hash()
-		}},
-		{"invalid block parts hash", func(v *Vote) { v.BlockID.PartSetHeader.Hash[0] = ^v.BlockID.PartSetHeader.Hash[0] }},
-		{"invalid block parts total", func(v *Vote) { v.BlockID.PartSetHeader.Total = v.BlockID.PartSetHeader.Total + 1 }},
+		{"invalid block hash", func(v *Vote) { v.BlockID.Hash = v.BlockID.Hash[:crypto.DefaultHashSize-1] }},
+		{"invalid state ID", func(v *Vote) { v.BlockID.StateID = v.BlockID.StateID[:crypto.DefaultHashSize-1] }},
+		{"invalid block parts hash", func(v *Vote) { v.BlockID.PartSetHeader.Hash = v.BlockID.PartSetHeader.Hash[:crypto.DefaultHashSize-1] }},
+		{"invalid block parts total", func(v *Vote) { v.BlockID.PartSetHeader.Total = 0 }},
 		{"Invalid ProTxHash", func(v *Vote) { v.ValidatorProTxHash = make([]byte, 1) }},
 		{"Invalid ValidatorIndex", func(v *Vote) { v.ValidatorIndex = -1 }},
 		{"Invalid Signature", func(v *Vote) { v.BlockSignature = nil }},
 		{"Too big Signature", func(v *Vote) { v.BlockSignature = make([]byte, SignatureSize+1) }},
 	}
-	for _, tc := range testCases {
-		quorumHash := crypto.RandQuorumHash()
-		privVal := NewMockPVForQuorum(quorumHash)
-		prevote := examplePrevote(t)
-		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, stateID, nil)
-		tc.malleateVote(prevote)
-		require.Error(t, prevote.ValidateBasic(), "ValidateBasic for %s in invalid prevote", tc.name)
+	quorumHash := crypto.RandQuorumHash()
+	privVal := NewMockPVForQuorum(quorumHash)
 
-		precommit := examplePrecommit(t)
-		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, stateID, nil)
-		tc.malleateVote(precommit)
-		require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s in invalid precommit", tc.name)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			prevote := examplePrevote(t)
+			signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, nil)
+			tc.malleateVote(prevote)
+			require.Error(t, prevote.ValidateBasic(), "ValidateBasic for %s in invalid prevote", tc.name)
+
+			precommit := examplePrecommit(t)
+			signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, nil)
+			tc.malleateVote(precommit)
+			require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s in invalid precommit", tc.name)
+		})
 	}
 }
 
@@ -543,9 +537,7 @@ func TestInvalidPrevotes(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		prevote := examplePrevote(t)
-		v := prevote.ToProto()
-		stateID := RandStateID().WithHeight(v.Height - 1)
-		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, stateID, nil)
+		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, nil)
 		tc.malleateVote(prevote)
 		require.Error(t, prevote.ValidateBasic(), "ValidateBasic for %s", tc.name)
 	}
@@ -583,9 +575,7 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			precommit := examplePrecommit(t)
-			v := precommit.ToProto()
-			stateID := RandStateID().WithHeight(v.Height - 1)
-			signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, stateID, nil)
+			signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, nil)
 			tc.malleateVote(precommit)
 			// ValidateBasic ensures that vote extensions, if present, are well formed
 			require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s", tc.name)

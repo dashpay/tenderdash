@@ -270,7 +270,12 @@ func TestProposalProtoBuf(t *testing.T) {
 		1,
 		2,
 		3,
-		makeBlockID([]byte("hash"), 2, []byte("part_set_hash"), RandStateID().Hash()), tmtime.Now())
+		makeBlockID(
+			crypto.Checksum([]byte("hash")),
+			2,
+			crypto.Checksum([]byte("part_set_hash")),
+			RandStateID().Hash()), tmtime.Now(),
+	)
 	proposal.Signature = []byte("sig")
 	proposal2 := NewProposal(1, 1, 2, 3, BlockID{}, tmtime.Now())
 
