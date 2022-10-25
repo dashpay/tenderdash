@@ -4,7 +4,6 @@ import (
 	// it is ok to use math/rand here: we do not need a cryptographically secure random
 	// number generator here and we can run the tests a bit faster
 	"context"
-	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"math"
@@ -225,43 +224,22 @@ func TestBlockString(t *testing.T) {
 	assert.NotEqual(t, "nil-Block", block.StringShort())
 }
 
-func makeBlockIDRandom( /* height uint64 */ ) BlockID {
-	var (
-		blockHash   = make([]byte, crypto.HashSize)
-		partSetHash = make([]byte, crypto.HashSize)
-		// stateID     = StateID{
-		// 	Version: StateIDVersion,
-		// 	Height: height,
-		// 	AppHash: ,
-		// }
-		stateID = make([]byte, crypto.HashSize)
-	)
-	rand.Read(blockHash)   //nolint: errcheck // ignore errcheck for read
-	rand.Read(partSetHash) //nolint: errcheck // ignore errcheck for read
-	rand.Read(stateID)     //nolint: errcheck // ignore errcheck for read
+func makeBlockIDRandom() BlockID {
 	return BlockID{
-		Hash:          blockHash,
-		PartSetHeader: PartSetHeader{123, partSetHash},
-		StateID:       stateID,
+		Hash:          tmrand.Bytes(crypto.HashSize),
+		PartSetHeader: PartSetHeader{123, tmrand.Bytes(crypto.HashSize)},
+		StateID:       tmrand.Bytes(crypto.HashSize),
 	}
 }
 
-func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte, stateID []byte) BlockID {
-	var (
-		h   = make([]byte, crypto.HashSize)
-		psH = make([]byte, crypto.HashSize)
-		sH  = make([]byte, crypto.HashSize)
-	)
-	copy(h, hash)
-	copy(psH, partSetHash)
-	copy(sH, stateID)
+func makeBlockID(hash tmbytes.HexBytes, partSetSize uint32, partSetHash, stateID tmbytes.HexBytes) BlockID {
 	return BlockID{
-		Hash: h,
+		Hash: hash.Copy(),
 		PartSetHeader: PartSetHeader{
 			Total: partSetSize,
-			Hash:  psH,
+			Hash:  partSetHash.Copy(),
 		},
-		StateID: sH,
+		StateID: stateID.Copy(),
 	}
 }
 

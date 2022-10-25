@@ -8,9 +8,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/rand"
 )
 
+// TestStateIDSignBytes ensures that state ID is correctly encoded as bytes for signing.
 func TestStateIDSignBytes(t *testing.T) {
 	testCases := []StateID{
 		{
@@ -53,4 +55,17 @@ func TestStateIDSignBytes(t *testing.T) {
 			assert.Len(t, bz, pos)
 		})
 	}
+}
+
+// TestStateIDString checks if state ID is correctly converted to string
+func TestStateIDString(t *testing.T) {
+	stateID := StateID{
+		Version:               StateIDVersion,
+		Height:                1,
+		AppHash:               crypto.Checksum([]byte("apphash")),
+		CoreChainLockedHeight: 2,
+		Time:                  time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC),
+	}
+	assert.NoError(t, stateID.ValidateBasic())
+	assert.Equal(t, "v1:h=1,cl=2,ah=106901,t=2022-03-04T05:06:07Z", stateID.String())
 }

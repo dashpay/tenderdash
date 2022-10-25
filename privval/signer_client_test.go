@@ -13,7 +13,6 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/rand"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	cryptoproto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	privvalproto "github.com/tendermint/tendermint/proto/tendermint/privval"
@@ -202,7 +201,7 @@ func TestSignerVote(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       rand.Bytes(crypto.DefaultHashSize),
+					StateID:       hash,
 				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
@@ -237,7 +236,7 @@ func TestSignerVoteResetDeadline(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       tmrand.Bytes(crypto.DefaultHashSize),
+					StateID:       hash,
 				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
@@ -287,7 +286,8 @@ func TestSignerVoteKeepAlive(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       tmrand.Bytes(crypto.DefaultHashSize)},
+					StateID:       hash,
+				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
 			}
@@ -333,8 +333,12 @@ func TestSignerSignProposalErrors(t *testing.T) {
 				CoreChainLockedHeight: 1,
 				Round:                 2,
 				POLRound:              2,
-				BlockID:               types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
-				Signature:             []byte("signature"),
+				BlockID: types.BlockID{
+					Hash:          hash,
+					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
+					StateID:       hash,
+				},
+				Signature: []byte("signature"),
 			}
 
 			_, err := tc.signerClient.SignProposal(ctx, tc.chainID, tc.quorumType, tc.quorumHash, proposal.ToProto())

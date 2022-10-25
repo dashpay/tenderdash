@@ -54,7 +54,7 @@
     - [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate)
     - [ValidatorUpdate](#tendermint-abci-ValidatorUpdate)
     - [VoteInfo](#tendermint-abci-VoteInfo)
-
+  
     - [CheckTxType](#tendermint-abci-CheckTxType)
     - [MisbehaviorType](#tendermint-abci-MisbehaviorType)
     - [ResponseApplySnapshotChunk.Result](#tendermint-abci-ResponseApplySnapshotChunk-Result)
@@ -62,9 +62,9 @@
     - [ResponseProcessProposal.ProposalStatus](#tendermint-abci-ResponseProcessProposal-ProposalStatus)
     - [ResponseVerifyVoteExtension.VerifyStatus](#tendermint-abci-ResponseVerifyVoteExtension-VerifyStatus)
     - [TxRecord.TxAction](#tendermint-abci-TxRecord-TxAction)
-
+  
     - [ABCIApplication](#tendermint-abci-ABCIApplication)
-
+  
 - [Scalar Value Types](#scalar-value-types)
 
 
@@ -87,7 +87,6 @@
 | round | [int32](#int32) |  |  |
 | quorum_hash | [bytes](#bytes) |  |  |
 | block_signature | [bytes](#bytes) |  |  |
-| state_signature | [bytes](#bytes) |  |  |
 | threshold_vote_extensions | [tendermint.types.VoteExtension](#tendermint-types-VoteExtension) | repeated |  |
 
 
@@ -183,7 +182,6 @@ to the application.
 | round | [int32](#int32) |  | The round at which the block proposer decided in the previous height. |
 | quorum_hash | [bytes](#bytes) |  | List of validators&#39; addresses in the last validator set with their voting information, including vote extensions. |
 | block_signature | [bytes](#bytes) |  |  |
-| state_signature | [bytes](#bytes) |  |  |
 | threshold_vote_extensions | [tendermint.types.VoteExtension](#tendermint-types-VoteExtension) | repeated |  |
 
 
@@ -592,15 +590,15 @@ Verify the vote extension
 
 
 
-| Field         | Type | Label | Description |
-|---------------| ---- | ----- | ----------- |
-| code          | [uint32](#uint32) |  |  |
-| data          | [bytes](#bytes) |  |  |
-| info          | [bytes](#string) |  |  |
-| gas_wanted    | [int64](#int64) |  |  |
-| codespace     | [string](#string) |  |  |
-| sender        | [string](#string) |  |  |
-| priority      | [int64](#int64) |  |  |
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| code | [uint32](#uint32) |  |  |
+| data | [bytes](#bytes) |  |  |
+| info | [string](#string) |  | nondeterministic |
+| gas_wanted | [int64](#int64) |  |  |
+| codespace | [string](#string) |  |  |
+| sender | [string](#string) |  |  |
+| priority | [int64](#int64) |  |  |
 | mempool_error | [string](#string) |  | ABCI applications creating a ResponseCheckTX should not set mempool_error. |
 
 
@@ -982,7 +980,7 @@ VoteInfo
 
 
 
-
+ 
 
 
 <a name="tendermint-abci-CheckTxType"></a>
@@ -1081,9 +1079,9 @@ TxAction contains App-provided information on what to do with a transaction that
 | REMOVED | 3 | The Application wants this transaction removed from the proposal and the mempool. |
 
 
+ 
 
-
-
+ 
 
 
 <a name="tendermint-abci-ABCIApplication"></a>
@@ -1109,7 +1107,7 @@ TxAction contains App-provided information on what to do with a transaction that
 | VerifyVoteExtension | [RequestVerifyVoteExtension](#tendermint-abci-RequestVerifyVoteExtension) | [ResponseVerifyVoteExtension](#tendermint-abci-ResponseVerifyVoteExtension) |  |
 | FinalizeBlock | [RequestFinalizeBlock](#tendermint-abci-RequestFinalizeBlock) | [ResponseFinalizeBlock](#tendermint-abci-ResponseFinalizeBlock) |  |
 
-
+ 
 
 
 

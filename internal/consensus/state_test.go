@@ -320,11 +320,8 @@ func TestStateProposalTime(t *testing.T) {
 				propBlock.Time = tc.blockTimeFunc(cs)
 			}
 			parSet, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
-			blockID := types.BlockID{
-				Hash:          propBlock.Hash(),
-				PartSetHeader: parSet.Header(),
-				StateID:       propBlock.StateID().Hash(),
-			}
+			require.NoError(t, err)
+			blockID, err := propBlock.BlockID(parSet)
 			require.NoError(t, err)
 			cs.ValidBlock = propBlock
 			cs.ValidBlockParts = parSet
@@ -373,11 +370,8 @@ func TestStateOversizedBlock(t *testing.T) {
 
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID := types.BlockID{
-		Hash:          propBlock.Hash(),
-		PartSetHeader: propBlockParts.Header(),
-		StateID:       propBlock.StateID().Hash(),
-	}
+	blockID, err := propBlock.BlockID(propBlockParts)
+	require.NoError(t, err)
 	proposal := types.NewProposal(height, 1, round, -1, blockID, propBlock.Header.Time)
 	p := proposal.ToProto()
 	_, err = vs2.SignProposal(ctx, config.ChainID(), cs1.Validators.QuorumType,
@@ -675,11 +669,8 @@ func TestStateLock_NoPOL(t *testing.T) {
 	prop, propBlock := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round+1)
 	require.NotNil(t, propBlock, "Failed to create proposal block with vs2")
 	require.NotNil(t, prop, "Failed to create proposal block with vs2")
-	propBlockID := types.BlockID{
-		Hash:          propBlock.Hash(),
-		PartSetHeader: partSet.Header(),
-		StateID:       propBlock.StateID().Hash(),
-	}
+	propBlockID, err := propBlock.BlockID(partSet)
+	require.NoError(t, err)
 
 	incrementRound(vs2)
 
@@ -797,13 +788,9 @@ func TestStateLock_POLUpdateLock(t *testing.T) {
 	propR1, propBlockR1 := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	propBlockR1Parts, err := propBlockR1.MakePartSet(partSize)
 	require.NoError(t, err)
-	propBlockR1Hash := propBlockR1.Hash()
-	r1BlockID := types.BlockID{
-		Hash:          propBlockR1Hash,
-		PartSetHeader: propBlockR1Parts.Header(),
-		StateID:       propBlockR1.StateID().Hash(),
-	}
-	require.NotEqual(t, propBlockR1Hash, initialBlockID.Hash)
+	r1BlockID, err := propBlockR1.BlockID(propBlockR1Parts)
+	require.NoError(t, err)
+	require.NotEqual(t, r1BlockID.Hash, initialBlockID.Hash)
 	err = cs1.SetProposalAndBlock(ctx, propR1, propBlockR1, propBlockR1Parts, "some peer")
 	require.NoError(t, err)
 
@@ -825,7 +812,7 @@ func TestStateLock_POLUpdateLock(t *testing.T) {
 
 	// We should now be locked on the new block and prevote it since we saw a sufficient amount
 	// prevote for the block.
-	validatePrecommit(ctx, t, cs1, round, round, vss[0], propBlockR1Hash, propBlockR1Hash)
+	validatePrecommit(ctx, t, cs1, round, round, vss[0], r1BlockID.Hash, r1BlockID.Hash)
 }
 
 // TestStateLock_POLRelock tests that a validator updates its locked round if

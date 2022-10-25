@@ -180,39 +180,85 @@ func TestVoteProposalNotEq(t *testing.T) {
 }
 
 func TestVoteVerifySignature(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	type testCase struct {
+		name        string
+		modify      func(*tmproto.Vote)
+		expectValid bool
+	}
+	testCases := []testCase{
+		{
+			name:        "correct",
+			modify:      func(v *tmproto.Vote) {},
+			expectValid: true,
+		},
+		{
+			name: "wrong state id",
+			modify: func(v *tmproto.Vote) {
+				v.BlockID.StateID[0] = ^v.BlockID.StateID[0]
+			},
+			expectValid: false,
+		},
+		{
+			name: "wrong block hash",
+			modify: func(v *tmproto.Vote) {
+				v.BlockID.Hash[0] = ^v.BlockID.Hash[0]
+			},
+			expectValid: false,
+		},
+		{
+			name: "wrong block signature",
+			modify: func(v *tmproto.Vote) {
+				v.BlockSignature[0] = ^v.BlockSignature[0]
+			},
+			expectValid: false,
+		},
+	}
 
-	quorumHash := crypto.RandQuorumHash()
-	privVal := NewMockPVForQuorum(quorumHash)
-	pubkey, err := privVal.GetPubKey(context.Background(), quorumHash)
-	require.NoError(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	vote := examplePrecommit(t)
-	v := vote.ToProto()
-	quorumType := btcjson.LLMQType_5_60
-	signID := VoteBlockSignID("test_chain_id", v, quorumType, quorumHash)
+			quorumHash := crypto.RandQuorumHash()
+			privVal := NewMockPVForQuorum(quorumHash)
+			pubkey, err := privVal.GetPubKey(context.Background(), quorumHash)
+			require.NoError(t, err)
 
-	// sign it
-	err = privVal.SignVote(ctx, "test_chain_id", quorumType, quorumHash, v, nil)
-	require.NoError(t, err)
+			vote := examplePrecommit(t)
+			v := vote.ToProto()
+			quorumType := btcjson.LLMQType_5_60
+			signID := VoteBlockSignID("test_chain_id", v, quorumType, quorumHash)
 
-	// verify the same vote
-	valid := pubkey.VerifySignatureDigest(signID, v.BlockSignature)
-	require.True(t, valid)
+			// sign it
+			err = privVal.SignVote(ctx, "test_chain_id", quorumType, quorumHash, v, nil)
+			require.NoError(t, err)
 
-	// serialize, deserialize and verify again....
-	precommit := new(tmproto.Vote)
-	bs, err := proto.Marshal(v)
-	require.NoError(t, err)
-	err = proto.Unmarshal(bs, precommit)
-	require.NoError(t, err)
+			// verify the same vote
+			valid := pubkey.VerifySignatureDigest(signID, v.BlockSignature)
+			require.True(t, valid)
 
-	// verify the transmitted vote
-	newSignID := VoteBlockSignID("test_chain_id", precommit, quorumType, quorumHash)
-	require.Equal(t, string(signID), string(newSignID))
-	valid = pubkey.VerifySignatureDigest(newSignID, precommit.BlockSignature)
-	require.True(t, valid)
+			// serialize, deserialize and verify again....
+			precommit := new(tmproto.Vote)
+			bs, err := proto.Marshal(v)
+			require.NoError(t, err)
+			err = proto.Unmarshal(bs, precommit)
+			require.NoError(t, err)
+
+			// verify the transmitted vote
+			if tc.modify != nil {
+				tc.modify(precommit)
+			}
+			newSignID := VoteBlockSignID("test_chain_id", precommit, quorumType, quorumHash)
+			valid = pubkey.VerifySignatureDigest(newSignID, precommit.BlockSignature)
+
+			if tc.expectValid {
+				assert.True(t, valid)
+				assert.Equal(t, string(signID), string(newSignID))
+			} else {
+				assert.False(t, valid)
+			}
+		})
+	}
 }
 
 // TestVoteExtension tests that the vote verification behaves correctly in each case
@@ -435,6 +481,7 @@ func TestValidVotes(t *testing.T) {
 func TestInvalidVotes(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	stateID := RandStateID()
 
 	testCases := []struct {
 		name         string
@@ -442,13 +489,14 @@ func TestInvalidVotes(t *testing.T) {
 	}{
 		{"negative height", func(v *Vote) { v.Height = -1 }},
 		{"negative round", func(v *Vote) { v.Round = -1 }},
-		{"invalid block ID", func(v *Vote) {
-			v.BlockID = BlockID{
-				[]byte{1, 2, 3},
-				PartSetHeader{111, []byte("blockparts")},
-				RandStateID().Hash(),
-			}
+		{"invalid block hash", func(v *Vote) { v.BlockID.Hash[0] = ^v.BlockID.Hash[0] }},
+		{"invalid state ID", func(v *Vote) {
+			copied := stateID.Copy()
+			copied.Height++
+			v.BlockID.StateID = copied.Hash()
 		}},
+		{"invalid block parts hash", func(v *Vote) { v.BlockID.PartSetHeader.Hash[0] = ^v.BlockID.PartSetHeader.Hash[0] }},
+		{"invalid block parts total", func(v *Vote) { v.BlockID.PartSetHeader.Total = v.BlockID.PartSetHeader.Total + 1 }},
 		{"Invalid ProTxHash", func(v *Vote) { v.ValidatorProTxHash = make([]byte, 1) }},
 		{"Invalid ValidatorIndex", func(v *Vote) { v.ValidatorIndex = -1 }},
 		{"Invalid Signature", func(v *Vote) { v.BlockSignature = nil }},
@@ -458,8 +506,6 @@ func TestInvalidVotes(t *testing.T) {
 		quorumHash := crypto.RandQuorumHash()
 		privVal := NewMockPVForQuorum(quorumHash)
 		prevote := examplePrevote(t)
-		v := prevote.ToProto()
-		stateID := RandStateID().WithHeight(v.Height - 1)
 		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, stateID, nil)
 		tc.malleateVote(prevote)
 		require.Error(t, prevote.ValidateBasic(), "ValidateBasic for %s in invalid prevote", tc.name)

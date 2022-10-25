@@ -164,11 +164,6 @@ func (pvKey *QuorumKeys) UnmarshalJSON(data []byte) error {
 	return jsontypes.Unmarshal(keys.ThresholdPublicKey, &pvKey.ThresholdPublicKey)
 }
 
-// Signable represents an object that can be signed, eg. it generates bytes to sign
-type Signable interface {
-	SignBytes() ([]byte, error)
-}
-
 // Validator is a validator interface
 type Validator interface {
 	Validate() error

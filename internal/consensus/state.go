@@ -1481,10 +1481,9 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 	}
 
 	// Make proposal
-	propBlockID := types.BlockID{
-		Hash:          block.Hash(),
-		PartSetHeader: blockParts.Header(),
-		StateID:       block.StateID().Hash(),
+	propBlockID, err := block.BlockID(blockParts)
+	if err != nil {
+		panic("proposal block id: " + err.Error())
 	}
 	proposal := types.NewProposal(height, block.CoreChainLockedHeight, round, cs.ValidRound, propBlockID, block.Header.Time)
 	proposal.SetCoreChainLockUpdate(block.CoreChainLock)
@@ -1743,11 +1742,7 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		we prevote nil since we are locked on a different value. Otherwise, if we're not locked on a block
 		or the proposal matches our locked block, we prevote the proposal.
 	*/
-	blockID := types.BlockID{
-		Hash:          cs.ProposalBlock.Hash(),
-		PartSetHeader: cs.ProposalBlockParts.Header(),
-		StateID:       cs.ProposalBlock.StateID().Hash(),
-	}
+	blockID := cs.BlockID()
 	if cs.Proposal.POLRound == -1 {
 		if cs.LockedRound == -1 {
 			logger.Debug("prevote step: ProposalBlock is valid and there is no locked block; prevoting the proposal")

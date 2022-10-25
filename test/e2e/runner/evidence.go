@@ -12,6 +12,9 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/test/factory"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	tmrand "github.com/tendermint/tendermint/libs/rand"
+
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
 	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
@@ -202,26 +205,16 @@ func readPrivKey(keyFilePath string, quorumHash crypto.QuorumHash) (crypto.PrivK
 }
 
 func makeRandomBlockID() types.BlockID {
-	return makeBlockID(
-		crypto.CRandBytes(crypto.HashSize),
-		100, crypto.CRandBytes(crypto.HashSize),
-		types.RandStateID().Hash(),
-	)
+	return makeBlockID(tmrand.Bytes(crypto.HashSize), 100, tmrand.Bytes(crypto.HashSize), tmrand.Bytes(crypto.HashSize))
 }
 
-func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte, stateIDHash []byte) types.BlockID {
-	var (
-		h   = make([]byte, crypto.HashSize)
-		psH = make([]byte, crypto.HashSize)
-	)
-	copy(h, hash)
-	copy(psH, partSetHash)
+func makeBlockID(hash tmbytes.HexBytes, partSetSize uint32, partSetHash, stateIDHash tmbytes.HexBytes) types.BlockID {
 	return types.BlockID{
-		Hash: h,
+		Hash: hash.Copy(),
 		PartSetHeader: types.PartSetHeader{
 			Total: partSetSize,
-			Hash:  psH,
+			Hash:  partSetHash.Copy(),
 		},
-		StateID: stateIDHash,
+		StateID: stateIDHash.Copy(),
 	}
 }

@@ -55,6 +55,13 @@ type Block struct {
 	LastCommit    *Commit        `json:"last_commit"`
 }
 
+// SetTxs updates Data (in particular the transactions) and DataHash
+func (b *Block) SetTxs(txs []Tx) {
+	b.Data = Data{Txs: txs}
+	b.DataHash = nil
+	b.fillHeader()
+}
+
 // BlockID returns a block ID of this block.
 // BlockID of a nil block is zero-value (BlockID{})
 // If partSet is nil, new partSet will be created
@@ -79,13 +86,6 @@ func (b *Block) BlockID(partSet *PartSet) (BlockID, error) {
 	}
 
 	return blockID, nil
-}
-
-// SetTxs updates Data (in particular the transactions) and DataHash
-func (b *Block) SetTxs(txs []Tx) {
-	b.Data = Data{Txs: txs}
-	b.DataHash = nil
-	b.fillHeader()
 }
 
 // ValidateBasic performs basic validation that doesn't involve state data.
@@ -1100,7 +1100,7 @@ func (blockID *BlockID) ToProto() tmproto.BlockID {
 	return tmproto.BlockID{
 		Hash:          blockID.Hash,
 		PartSetHeader: blockID.PartSetHeader.ToProto(),
-		StateId:       blockID.StateID,
+		StateID:       blockID.StateID,
 	}
 }
 
@@ -1119,13 +1119,7 @@ func BlockIDFromProto(bID *tmproto.BlockID) (*BlockID, error) {
 
 	blockID.PartSetHeader = *ph
 	blockID.Hash = bID.Hash
-	blockID.StateID = bID.StateId
+	blockID.StateID = bID.StateID
 
 	return blockID, blockID.ValidateBasic()
-}
-
-// ProtoBlockIDIsNil is similar to the IsNil function on BlockID, but for the
-// Protobuf representation.
-func ProtoBlockIDIsNil(bID *tmproto.BlockID) bool {
-	return len(bID.Hash) == 0 && ProtoPartSetHeaderIsZero(&bID.PartSetHeader) && len(bID.StateId) == 0
 }

@@ -24,12 +24,12 @@ const StateIDVersion = 1
 // For signing purposes it is marshaled as fixed-size slice of bytes, with no tags and
 // no delimiters. Numbers are represented as little-endian.
 type StateID struct {
-	// Version of StateID, 2
+	// Version of StateID, 2 bytes
 	Version uint16 `json:"version"`
 	// Height of current block (the one containing state ID signature), 8 bytes
 	Height uint64 `json:"height"`
 	// AppHash used in current block (the one containing state ID signature), 32 bytes
-	AppHash tmbytes.HexBytes `json:"last_app_hash" tmbytes:"length=32"`
+	AppHash tmbytes.HexBytes `json:"app_hash" tmbytes:"length=32"`
 	// core_chain_locked_height is encoded as 32-bit little-endian unsigned  int, 4 bytes
 	CoreChainLockedHeight uint32 `json:"core_chain_locked_height"`
 	// Time of the block (Unix time), encoded as the number of nanoseconds elapsed
@@ -40,16 +40,12 @@ type StateID struct {
 // Copy returns new StateID that is equal to this one
 func (stateID StateID) Copy() StateID {
 	copied := stateID
-	time.Time{}.UnixNano()
-	copied.AppHash = make([]byte, len(stateID.AppHash))
-	if copy(copied.AppHash, stateID.AppHash) != len(stateID.AppHash) {
-		panic("Cannot copy LastAppHash, this should never happen. Out of memory???")
-	}
+	copied.AppHash = stateID.AppHash.Copy()
 
 	return copied
 }
 
-// Equals returns true if the StateID matches the given StateID
+// Equal returns true if the StateID matches the given StateID
 func (stateID StateID) Equal(other StateID) bool {
 	left, err := stateID.SignBytes()
 	if err != nil {
@@ -69,18 +65,13 @@ func (stateID StateID) ValidateBasic() error {
 	if err := ValidateAppHash(stateID.AppHash); err != nil {
 		return fmt.Errorf("wrong app Hash: %w", err)
 	}
-
-	// if stateID.Height < 0 {
-	// 	return fmt.Errorf("stateID height is not valid: %d < 0", stateID.Height)
-	// }
-
 	if stateID.Version == 0 {
 		return fmt.Errorf("invalid stateID version %d", stateID.Version)
 	}
-
 	if stateID.Time.IsZero() {
 		return fmt.Errorf("invalid stateID time %s", stateID.Time.String())
 	}
+
 	return nil
 }
 
@@ -99,8 +90,14 @@ func (stateID StateID) Hash() tmbytes.HexBytes {
 
 // String returns a human readable string representation of the StateID.
 func (stateID StateID) String() string {
-
-	return fmt.Sprintf(`%d:%v`, stateID.Height, stateID.AppHash)
+	return fmt.Sprintf(
+		`v%d:h=%d,cl=%d,ah=%s,t=%s`,
+		stateID.Version,
+		stateID.Height,
+		stateID.CoreChainLockedHeight,
+		stateID.AppHash.ShortString(),
+		stateID.Time.UTC().Format(time.RFC3339),
+	)
 }
 
 // ToProto converts StateID to protobuf

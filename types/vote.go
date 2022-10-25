@@ -231,11 +231,11 @@ func (vote *Vote) Verify(
 	if err != nil {
 		return err
 	}
-
 	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto())
 	if err != nil {
 		return err
 	}
+
 	return vote.verifySign(pubKey, quorumSignData, WithVerifyExtensions(false))
 }
 

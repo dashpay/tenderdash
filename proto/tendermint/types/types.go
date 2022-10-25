@@ -8,7 +8,7 @@ import (
 
 // IsZero returns true when the object is a zero-value or nil
 func (m *BlockID) IsZero() bool {
-	return m == nil || (len(m.Hash) == 0 && len(m.PartSetHeader.Hash) == 0)
+	return m == nil || (len(m.Hash) == 0 && m.PartSetHeader.IsZero() && len(m.StateID) == 0)
 }
 
 func (m *BlockID) ToCanonicalBlockID() *CanonicalBlockID {
@@ -18,7 +18,7 @@ func (m *BlockID) ToCanonicalBlockID() *CanonicalBlockID {
 	cbid := CanonicalBlockID{
 		Hash:          m.Hash,
 		PartSetHeader: m.PartSetHeader.ToCanonicalPartSetHeader(),
-		StateId:       m.StateId,
+		StateID:       m.StateID,
 	}
 
 	return &cbid
@@ -57,4 +57,16 @@ func (m Vote) SignBytes(chainID string) ([]byte, error) {
 	}
 
 	return bz, nil
+}
+
+// CanonicalizeVote transforms the given Vote to a CanonicalVote, which does
+// not contain ValidatorIndex and ValidatorProTxHash fields.
+func (m Vote) ToCanonicalVote(chainID string) CanonicalVote {
+	return CanonicalVote{
+		Type:    m.Type,
+		Height:  m.Height,       // encoded as sfixed64
+		Round:   int64(m.Round), // encoded as sfixed64
+		BlockID: m.BlockID.ToCanonicalBlockID(),
+		ChainID: chainID,
+	}
 }

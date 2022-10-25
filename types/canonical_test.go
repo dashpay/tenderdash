@@ -15,22 +15,22 @@ func TestCanonicalizeBlockID(t *testing.T) {
 	block1 := tmproto.BlockID{
 		Hash:          randhash,
 		PartSetHeader: tmproto.PartSetHeader{Total: 5, Hash: randhash},
-		StateId:       stateID.Hash(),
+		StateID:       stateID.Hash(),
 	}
 	block2 := tmproto.BlockID{
 		Hash:          randhash,
 		PartSetHeader: tmproto.PartSetHeader{Total: 10, Hash: randhash},
-		StateId:       stateID.Hash(),
+		StateID:       stateID.Hash(),
 	}
 	cblock1 := tmproto.CanonicalBlockID{
 		Hash:          randhash,
 		PartSetHeader: tmproto.CanonicalPartSetHeader{Total: 5, Hash: randhash},
-		StateId:       stateID.Hash(),
+		StateID:       stateID.Hash(),
 	}
 	cblock2 := tmproto.CanonicalBlockID{
 		Hash:          randhash,
 		PartSetHeader: tmproto.CanonicalPartSetHeader{Total: 10, Hash: randhash},
-		StateId:       stateID.Hash(),
+		StateID:       stateID.Hash(),
 	}
 
 	tests := []struct {
