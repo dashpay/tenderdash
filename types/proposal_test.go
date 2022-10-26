@@ -28,7 +28,7 @@ func getTestProposal(t testing.TB) *Proposal {
 	require.NoError(t, err)
 
 	stateID := StateID{
-		Version:               StateIDVersion,
+		AppVersion:            StateIDVersion,
 		Height:                12345,
 		AppHash:               []byte("12345678901234567890123456789012"),
 		CoreChainLockedHeight: math.MaxUint32,
@@ -62,10 +62,8 @@ func TestProposalSignable(t *testing.T) {
 
 func TestProposalString(t *testing.T) {
 	str := getTestProposal(t).String()
-	expected := `Proposal{12345/23456 (2D2D4A756E655F31355F323032305F616D696E6F5F7761735F72656D6F766564:111:2D2D4A756E65:CED0CA, -1) 000000000000 @ 2018-02-11T07:09:22.765Z}`
-	if str != expected {
-		t.Errorf("got unexpected string for Proposal. Expected:\n%v\nGot:\n%v", expected, str)
-	}
+	expected := `Proposal{12345/23456 (2D2D4A756E655F31355F323032305F616D696E6F5F7761735F72656D6F766564:111:2D2D4A756E65:1496E9, -1) 000000000000 @ 2018-02-11T07:09:22.765Z}`
+	assert.Equal(t, expected, str)
 }
 
 func TestProposalVerifySignature(t *testing.T) {

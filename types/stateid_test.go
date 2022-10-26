@@ -19,7 +19,7 @@ func TestStateIDSignBytes(t *testing.T) {
 			AppHash: rand.Bytes(32),
 		},
 		{
-			Version:               1234,
+			AppVersion:            1234,
 			Height:                1,
 			AppHash:               rand.Bytes(32),
 			CoreChainLockedHeight: 123,
@@ -33,8 +33,8 @@ func TestStateIDSignBytes(t *testing.T) {
 			require.NoError(t, err)
 			pos := 0
 			// Version, first two bytes
-			assert.EqualValues(t, tc.Version, binary.LittleEndian.Uint16(bz[pos:pos+2]))
-			pos += 2
+			assert.EqualValues(t, tc.AppVersion, binary.LittleEndian.Uint64(bz[pos:pos+8]))
+			pos += 8
 
 			// Height, next 8 bytes
 			assert.EqualValues(t, tc.Height, binary.LittleEndian.Uint64(bz[pos:pos+8]))
@@ -60,7 +60,7 @@ func TestStateIDSignBytes(t *testing.T) {
 // TestStateIDString checks if state ID is correctly converted to string
 func TestStateIDString(t *testing.T) {
 	stateID := StateID{
-		Version:               StateIDVersion,
+		AppVersion:            StateIDVersion,
 		Height:                1,
 		AppHash:               crypto.Checksum([]byte("apphash")),
 		CoreChainLockedHeight: 2,

@@ -25,7 +25,7 @@ import (
 	"github.com/tendermint/tendermint/version"
 )
 
-const ProtocolVersion uint64 = 0x1
+const ProtocolVersion uint64 = 0x12345678
 
 //---------------------------------------------------
 

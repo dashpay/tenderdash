@@ -2,38 +2,38 @@ package types
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"time"
 
-	typespb "github.com/gogo/protobuf/types"
-
 	"github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 // This file contains implementation of StateID logic.
 
 //--------------------------------------------------------------------------------
 
-const StateIDVersion = 1
-
 // StateID represents essential information required to verify state, document and transactions.
 // It is meant to be used by light clients (like mobile apps) to verify proofs.
 // For signing purposes it is marshaled as fixed-size slice of bytes, with no tags and
-// no delimiters. Numbers are represented as little-endian.
+// no delimiters. All integers are represented as little-endian.
 type StateID struct {
-	// Version of StateID, 2 bytes
-	Version uint16 `json:"version"`
-	// Height of current block (the one containing state ID signature), 8 bytes
+	// AppVersion used when generating the block, equals to Header.Version.App.
+	// 8 bytes
+	AppVersion uint64 `json:"app_version"`
+	// Height of block containing this state ID.
+	// 8 bytes
 	Height uint64 `json:"height"`
-	// AppHash used in current block (the one containing state ID signature), 32 bytes
+	// AppHash used in current block, equal to Header.AppHash.
+	// 32 bytes
 	AppHash tmbytes.HexBytes `json:"app_hash" tmbytes:"length=32"`
-	// core_chain_locked_height is encoded as 32-bit little-endian unsigned  int, 4 bytes
+	// CoreChainLockedHeight for the block, equal to Header.CoreChainLockedHeight.
+	// 4 bytes
 	CoreChainLockedHeight uint32 `json:"core_chain_locked_height"`
-	// Time of the block (Unix time), encoded as the number of nanoseconds elapsed
-	// since January 1, 1970 UTC, on 8 bytes
+	// Time of the block (Unix time), equal to Header.Time.
+	// Encoded as a 64-bit signed int representing number of nanoseconds elapsed since January 1, 1970 UTC,
+	// as specified in golang time.Time.UnixNano().
+	// 8 bytes
 	Time time.Time `json:"time"`
 }
 
@@ -65,8 +65,8 @@ func (stateID StateID) ValidateBasic() error {
 	if err := ValidateAppHash(stateID.AppHash); err != nil {
 		return fmt.Errorf("wrong app Hash: %w", err)
 	}
-	if stateID.Version == 0 {
-		return fmt.Errorf("invalid stateID version %d", stateID.Version)
+	if stateID.AppVersion == 0 {
+		return fmt.Errorf("invalid stateID version %d", stateID.AppVersion)
 	}
 	if stateID.Time.IsZero() {
 		return fmt.Errorf("invalid stateID time %s", stateID.Time.String())
@@ -92,27 +92,12 @@ func (stateID StateID) Hash() tmbytes.HexBytes {
 func (stateID StateID) String() string {
 	return fmt.Sprintf(
 		`v%d:h=%d,cl=%d,ah=%s,t=%s`,
-		stateID.Version,
+		stateID.AppVersion,
 		stateID.Height,
 		stateID.CoreChainLockedHeight,
 		stateID.AppHash.ShortString(),
 		stateID.Time.UTC().Format(time.RFC3339),
 	)
-}
-
-// ToProto converts StateID to protobuf
-func (stateID StateID) ToProto() tmproto.StateID {
-	pbTime, err := typespb.TimestampProto(stateID.Time)
-	if err != nil {
-		panic(fmt.Errorf("cannot convert time %s to protobuf: %w", stateID.Time.String(), err))
-	}
-	return tmproto.StateID{
-		Version:               uint32(stateID.Version),
-		AppHash:               stateID.AppHash,
-		CoreChainLockedHeight: 0,
-		Height:                stateID.Height,
-		Time:                  pbTime,
-	}
 }
 
 // WithHeight returns new copy of stateID with height set to provided value.
@@ -123,19 +108,4 @@ func (stateID StateID) WithHeight(height int64) StateID {
 	ret.Height = uint64(height)
 
 	return ret
-}
-
-// FromProto sets a protobuf BlockID to the given pointer.
-// It returns an error if the block id is invalid.
-func StateIDFromProto(sID *tmproto.StateID) (*StateID, error) {
-	if sID == nil {
-		return nil, errors.New("nil StateID")
-	}
-
-	stateID := new(StateID)
-
-	stateID.AppHash = sID.AppHash
-	stateID.Height = sID.Height
-
-	return stateID, stateID.ValidateBasic()
 }

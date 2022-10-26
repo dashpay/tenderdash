@@ -511,8 +511,9 @@ func (h *Header) StateID() StateID {
 	if len(appHash) == 0 {
 		appHash = make([]byte, crypto.DefaultAppHashSize)
 	}
+
 	return StateID{
-		Version:               StateIDVersion,
+		AppVersion:            h.Version.App,
 		Height:                uint64(h.Height),
 		AppHash:               appHash,
 		CoreChainLockedHeight: h.CoreChainLockedHeight,
