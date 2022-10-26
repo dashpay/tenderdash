@@ -239,7 +239,8 @@ func (r *BlockReplayer) replayBlocks(
 	)
 	for i := firstBlock; i <= finalBlock; i++ {
 		block = r.store.LoadBlock(i)
-		ucState, fbResp, err = r.replayBlock(ctx, block, state, i)
+		seenCommit := r.store.LoadSeenCommitAt(i)
+		ucState, fbResp, err = r.replayBlock(ctx, block, state, i, seenCommit.Round)
 		if err != nil {
 			return nil, err
 		}
@@ -271,10 +272,11 @@ func (r *BlockReplayer) replayBlock(
 	block *types.Block,
 	state sm.State,
 	height int64,
+	round int32,
 ) (sm.CurrentRoundState, *abci.ResponseFinalizeBlock, error) {
 	r.logger.Info("Applying block", "height", height)
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
-	ucState, err := r.blockExec.ProcessProposal(ctx, block, state, false)
+	ucState, err := r.blockExec.ProcessProposal(ctx, block, round, state, false)
 	if err != nil {
 		return sm.CurrentRoundState{}, nil, fmt.Errorf("blockReplayer process proposal: %w", err)
 	}
@@ -282,7 +284,7 @@ func (r *BlockReplayer) replayBlock(
 	// We emit events for the index services at the final block due to the sync issue when
 	// the node shutdown during the block committing status.
 	// For all other cases, we disable emitting events by providing blockExec=nil in ExecReplayedCommitBlock
-	fbResp, err := sm.ExecReplayedCommitBlock(ctx, r.appClient, block, r.logger, r.genDoc.InitialHeight)
+	fbResp, err := sm.ExecReplayedCommitBlock(ctx, r.appClient, block, round, r.logger, r.genDoc.InitialHeight)
 	if err != nil {
 		return sm.CurrentRoundState{}, nil, err
 	}
@@ -304,9 +306,10 @@ func (r *BlockReplayer) syncStateAt(
 ) (sm.State, error) {
 	block := r.store.LoadBlock(height)
 	meta := r.store.LoadBlockMeta(height)
+	seenCommit := r.store.LoadSeenCommitAt(height)
 	// Use stubs for both mempool and evidence pool since no transactions nor
 	// evidence are needed here - block already exists.
-	state, err := blockExec.ApplyBlock(ctx, state, meta.BlockID, block)
+	state, err := blockExec.ApplyBlock(ctx, seenCommit.Round, state, meta.BlockID, block)
 	if err != nil {
 		return sm.State{}, err
 	}
