@@ -54,7 +54,7 @@
     - [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate)
     - [ValidatorUpdate](#tendermint-abci-ValidatorUpdate)
     - [VoteInfo](#tendermint-abci-VoteInfo)
-
+  
     - [CheckTxType](#tendermint-abci-CheckTxType)
     - [MisbehaviorType](#tendermint-abci-MisbehaviorType)
     - [ResponseApplySnapshotChunk.Result](#tendermint-abci-ResponseApplySnapshotChunk-Result)
@@ -62,9 +62,9 @@
     - [ResponseProcessProposal.ProposalStatus](#tendermint-abci-ResponseProcessProposal-ProposalStatus)
     - [ResponseVerifyVoteExtension.VerifyStatus](#tendermint-abci-ResponseVerifyVoteExtension-VerifyStatus)
     - [TxRecord.TxAction](#tendermint-abci-TxRecord-TxAction)
-
+  
     - [ABCIApplication](#tendermint-abci-ABCIApplication)
-
+  
 - [Scalar Value Types](#scalar-value-types)
 
 
@@ -329,6 +329,7 @@ Extends a vote with application-side injection
 | ----- | ---- | ----- | ----------- |
 | hash | [bytes](#bytes) |  |  |
 | height | [int64](#int64) |  |  |
+| round | [int32](#int32) |  | Round number for the block |
 
 
 
@@ -348,6 +349,7 @@ Extends a vote with application-side injection
 | misbehavior | [Misbehavior](#tendermint-abci-Misbehavior) | repeated | List of information about validators that acted incorrectly. |
 | hash | [bytes](#bytes) |  | The block header&#39;s hash. Present for convenience (can be derived from the block header). |
 | height | [int64](#int64) |  | The height of the finalized block. |
+| round | [int32](#int32) |  | Round number for the block |
 | time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp included in the finalized block. |
 | next_validators_hash | [bytes](#bytes) |  | Merkle root of the next validator set. |
 | core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
@@ -468,6 +470,7 @@ offers a snapshot to the application
 | height | [int64](#int64) |  | The height of the block that will be proposed. |
 | time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp of the block that that will be proposed. |
 | next_validators_hash | [bytes](#bytes) |  | Merkle root of the next validator set. |
+| round | [int32](#int32) |  | Round number for the block. |
 | core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
@@ -491,6 +494,7 @@ offers a snapshot to the application
 | misbehavior | [Misbehavior](#tendermint-abci-Misbehavior) | repeated | List of information about validators that acted incorrectly. |
 | hash | [bytes](#bytes) |  | The block header&#39;s hash of the proposed block. |
 | height | [int64](#int64) |  | The height of the proposed block. |
+| round | [int32](#int32) |  | Round number for the block |
 | time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp included in the proposed block. |
 | next_validators_hash | [bytes](#bytes) |  | Merkle root of the next validator set. |
 | core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
@@ -532,6 +536,7 @@ Verify the vote extension
 | hash | [bytes](#bytes) |  |  |
 | validator_pro_tx_hash | [bytes](#bytes) |  |  |
 | height | [int64](#int64) |  |  |
+| round | [int32](#int32) |  | Round number for the block |
 | vote_extensions | [ExtendVoteExtension](#tendermint-abci-ExtendVoteExtension) | repeated |  |
 
 
@@ -592,15 +597,15 @@ Verify the vote extension
 
 
 
-| Field         | Type | Label | Description |
-|---------------| ---- | ----- | ----------- |
-| code          | [uint32](#uint32) |  |  |
-| data          | [bytes](#bytes) |  |  |
-| info          | [bytes](#string) |  |  |
-| gas_wanted    | [int64](#int64) |  |  |
-| codespace     | [string](#string) |  |  |
-| sender        | [string](#string) |  |  |
-| priority      | [int64](#int64) |  |  |
+| Field | Type | Label | Description |
+| ----- | ---- | ----- | ----------- |
+| code | [uint32](#uint32) |  |  |
+| data | [bytes](#bytes) |  |  |
+| info | [string](#string) |  | nondeterministic |
+| gas_wanted | [int64](#int64) |  |  |
+| codespace | [string](#string) |  |  |
+| sender | [string](#string) |  |  |
+| priority | [int64](#int64) |  |  |
 | mempool_error | [string](#string) |  | ABCI applications creating a ResponseCheckTX should not set mempool_error. |
 
 
@@ -982,7 +987,7 @@ VoteInfo
 
 
 
-
+ 
 
 
 <a name="tendermint-abci-CheckTxType"></a>
@@ -1081,9 +1086,9 @@ TxAction contains App-provided information on what to do with a transaction that
 | REMOVED | 3 | The Application wants this transaction removed from the proposal and the mempool. |
 
 
+ 
 
-
-
+ 
 
 
 <a name="tendermint-abci-ABCIApplication"></a>
@@ -1109,7 +1114,7 @@ TxAction contains App-provided information on what to do with a transaction that
 | VerifyVoteExtension | [RequestVerifyVoteExtension](#tendermint-abci-RequestVerifyVoteExtension) | [ResponseVerifyVoteExtension](#tendermint-abci-ResponseVerifyVoteExtension) |  |
 | FinalizeBlock | [RequestFinalizeBlock](#tendermint-abci-RequestFinalizeBlock) | [ResponseFinalizeBlock](#tendermint-abci-ResponseFinalizeBlock) |  |
 
-
+ 
 
 
 

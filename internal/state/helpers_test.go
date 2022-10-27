@@ -78,7 +78,7 @@ func makeAndApplyGoodBlock(
 	block.ResultsHash, err = abci.TxResultsHash(txResults)
 	require.NoError(t, err)
 
-	state, err = blockExec.ApplyBlock(ctx, state, blockID, block)
+	state, err = blockExec.ApplyBlock(ctx, 0, state, blockID, block)
 	require.NoError(t, err)
 
 	return state, blockID

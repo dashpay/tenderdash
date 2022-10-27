@@ -216,7 +216,7 @@ func TestStateBadProposal(t *testing.T) {
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
 	voteCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryVote)
 
-	propBlock, err := cs1.createProposalBlock(ctx) // changeProposer(t, cs1, vs2)
+	propBlock, err := cs1.createProposalBlock(ctx, round) // changeProposer(t, cs1, vs2)
 	require.NoError(t, err)
 
 	// make the second validator the proposer by incrementing round
@@ -315,7 +315,7 @@ func TestStateProposalTime(t *testing.T) {
 			cs := cs1
 			// Generate proposal block
 			cs.mtx.Lock()
-			propBlock, err := cs.createProposalBlock(ctx)
+			propBlock, err := cs.createProposalBlock(ctx, round)
 			require.NoError(t, err)
 			if tc.blockTimeFunc != nil {
 				propBlock.Time = tc.blockTimeFunc(cs)
@@ -359,7 +359,7 @@ func TestStateOversizedBlock(t *testing.T) {
 	timeoutProposeCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutPropose)
 	voteCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryVote)
 
-	propBlock, err := cs1.createProposalBlock(ctx)
+	propBlock, err := cs1.createProposalBlock(ctx, round)
 	require.NoError(t, err)
 	propBlock.Data.Txs = []types.Tx{tmrand.Bytes(2001)}
 	propBlock.Header.DataHash = propBlock.Data.Hash()
@@ -2984,7 +2984,7 @@ func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
 	require.NoError(t, err)
 	voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
 
-	propBlock, err := cs1.createProposalBlock(ctx)
+	propBlock, err := cs1.createProposalBlock(ctx, round)
 	require.NoError(t, err)
 	round++
 	incrementRound(vss[1:]...)
@@ -3032,7 +3032,7 @@ func TestStateTimestamp_ProposalMatch(t *testing.T) {
 	require.NoError(t, err)
 	voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
 
-	propBlock, err := cs1.createProposalBlock(ctx)
+	propBlock, err := cs1.createProposalBlock(ctx, round)
 	require.NoError(t, err)
 	round++
 	incrementRound(vss[1:]...)
