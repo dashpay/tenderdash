@@ -272,7 +272,7 @@ Where the `"value"` is the base64 encoding of the raw pubkey bytes, and the
 
 ### Signed Messages
 
-Signed messages (eg. votes, proposals) in the consensus are encoded using protobuf.
+Signed messages (eg. votes, proposals) in the consensus are encoded using protobuf, with an exception of `StateID`.
 
 When signing, the elements of a message are re-ordered so the fixed-length fields
 are first, making it easy to quickly check the type, height, and round.
@@ -298,3 +298,19 @@ in HSMs. It creates fixed offsets for relevant fields that need to be read in th
 For more details, see the [signing spec](../consensus/signing.md).
 Also, see the motivating discussion in
 [#1622](https://github.com/tendermint/tendermint/issues/1622).
+
+#### StateID encoding
+
+StateID is a subset of block header elements required to correctly prove some state on the light client.
+To verify block signature, light client needs BlockID hash and all elements of StateID mentioned below.
+
+As an exception to the overall protobuf approach, to make encoding easier on light clients, StateID is encoded as a set
+of constant-length elements, in the following order:
+
+* bytes 1-8: AppVersion, little-endian, unsigned int (uint64), 8 bytes
+* bytes 9-16: Height, little-endian, unsigned int (uint64), 8 bytes
+* bytes 17-48: AppHash, 32 bytes
+* bytes 49-52: CoreChainLockedHeight, little-endian, unsigned int (uint32), 4 bytes
+* bytes 53-60: Time, little-endian, signed int  (int64), 8 bytes
+
+For more details about time encoding see golang function [(time.Time).UnixNano()](https://pkg.go.dev/time#Time.UnixNano).

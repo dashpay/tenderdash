@@ -53,6 +53,8 @@ func TestStateIDSignBytes(t *testing.T) {
 			pos += 8
 
 			assert.Len(t, bz, pos)
+			// ensure the docs are still up to date; we write about 60-byte structure
+			assert.Equal(t, 60, pos, "Marshaling changed, ensure versioning is in place & update the docs")
 		})
 	}
 }
