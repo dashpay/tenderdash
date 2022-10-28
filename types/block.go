@@ -1071,7 +1071,8 @@ func (blockID BlockID) Copy() BlockID {
 // IsNil returns true if this is the BlockID of a nil block.
 func (blockID BlockID) IsNil() bool {
 	return len(blockID.Hash) == 0 &&
-		blockID.PartSetHeader.IsZero()
+		blockID.PartSetHeader.IsZero() &&
+		len(blockID.StateID) == 0
 }
 
 // IsComplete returns true if this is a valid BlockID of a non-nil block.
