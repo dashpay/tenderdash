@@ -1,3 +1,6 @@
+// TODO: remove nolint:unused once PBTS test is un-skipped
+//
+//nolint:unused
 package consensus
 
 import (

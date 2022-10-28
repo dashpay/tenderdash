@@ -400,6 +400,9 @@ func subscribeToVoter(ctx context.Context, t *testing.T, cs *State, proTxHash []
 	return ch
 }
 
+// TODO: used only in pbts_test.go, remove nolint:unused once pbts tests are un-skipped
+//
+//nolint:unused
 func subscribeToVoterBuffered(ctx context.Context, t *testing.T, cs *State, proTxHash []byte) <-chan tmpubsub.Message {
 	t.Helper()
 	votesSub, err := cs.eventBus.SubscribeWithArgs(ctx, tmpubsub.SubscribeArgs{
