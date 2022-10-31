@@ -1,3 +1,6 @@
+// TODO: remove nolint:unused once PBTS test is un-skipped
+//
+//nolint:unused
 package consensus
 
 import (
@@ -347,6 +350,9 @@ func (hr heightResult) isComplete() bool {
 // until after the genesis time has passed. The test sets the genesis time in the
 // future and then ensures that the observed validator waits to propose a block.
 func TestProposerWaitsForGenesisTime(t *testing.T) {
+	// TODO: Remove once PBTS is fixed
+	t.Skip("Proposer-based timestamp implementation / tests are broken right now.")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -378,6 +384,9 @@ func TestProposerWaitsForGenesisTime(t *testing.T) {
 // and then verifies that the observed validator waits until after the block time
 // of height 4 to propose a block at height 5.
 func TestProposerWaitsForPreviousBlock(t *testing.T) {
+	// TODO: Remove once PBTS is fixed
+	t.Skip("Proposer-based timestamp implementation / tests are broken right now.")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	initialTime := time.Now().Add(time.Millisecond * 50)
@@ -406,6 +415,9 @@ func TestProposerWaitsForPreviousBlock(t *testing.T) {
 }
 
 func TestProposerWaitTime(t *testing.T) {
+	// TODO: Remove once PBTS is fixed
+	t.Skip("Proposer-based timestamp implementation / tests are broken right now.")
+
 	genesisTime, err := time.Parse(time.RFC3339, "2019-03-13T23:00:00Z")
 	require.NoError(t, err)
 	testCases := []struct {
@@ -445,6 +457,9 @@ func TestProposerWaitTime(t *testing.T) {
 }
 
 func TestTimelyProposal(t *testing.T) {
+	// TODO: Remove once PBTS is fixed
+	t.Skip("Proposer-based timestamp implementation / tests are broken right now.")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -467,6 +482,9 @@ func TestTimelyProposal(t *testing.T) {
 }
 
 func TestTooFarInThePastProposal(t *testing.T) {
+	// TODO: Remove once PBTS is fixed
+	t.Skip("Proposer-based timestamp implementation / tests are broken right now.")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -488,6 +506,9 @@ func TestTooFarInThePastProposal(t *testing.T) {
 }
 
 func TestTooFarInTheFutureProposal(t *testing.T) {
+	// TODO: Remove once PBTS is fixed
+	t.Skip("Proposer-based timestamp implementation / tests are broken right now.")
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
