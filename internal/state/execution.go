@@ -491,6 +491,7 @@ func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote
 	resp, err := blockExec.appClient.ExtendVote(ctx, &abci.RequestExtendVote{
 		Hash:   vote.BlockID.Hash,
 		Height: vote.Height,
+		Round:  vote.Round,
 	})
 	if err != nil {
 		panic(fmt.Errorf("ExtendVote call failed: %w", err))
@@ -507,6 +508,7 @@ func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *t
 	resp, err := blockExec.appClient.VerifyVoteExtension(ctx, &abci.RequestVerifyVoteExtension{
 		Hash:               vote.BlockID.Hash,
 		Height:             vote.Height,
+		Round:              vote.Round,
 		ValidatorProTxHash: vote.ValidatorProTxHash,
 		VoteExtensions:     extensions,
 	})
