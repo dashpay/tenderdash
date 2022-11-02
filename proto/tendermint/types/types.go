@@ -1,10 +1,7 @@
 package types
 
 import (
-	"fmt"
-
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/internal/libs/protoio"
 	"github.com/tendermint/tendermint/libs/bytes"
 )
 
@@ -20,7 +17,6 @@ func (m *BlockID) ToCanonicalBlockID() *CanonicalBlockID {
 	cbid := CanonicalBlockID{
 		Hash:          m.Hash,
 		PartSetHeader: m.PartSetHeader.ToCanonicalPartSetHeader(),
-		StateID:       m.StateID,
 	}
 
 	return &cbid
@@ -51,44 +47,31 @@ func (m *Vote) VoteExtensionsToMap() VoteExtensions {
 	return res
 }
 
-type voteSignBytes struct {
-	// CanonicalVoteID is a crypto.Checksum of `CanonicalVote` encoded using protobuf encoding
-	CanonicalVoteID [crypto.HashSize]byte
-	// CanonicalVoteID is a crypto.Checksum of `StateID` encoded using raw fixed-length encoding.
-	// It's filled with 0s for NIL-votes
-	StateID [crypto.HashSize]byte
-}
-
 // SignBytes represent data to be signed for the given vote.
 // It's a 64-byte slice containing concatenation of:
 // * Checksum of CanonicalVote
 // * Checksum of StateID
 func (m Vote) SignBytes(chainID string) ([]byte, error) {
-	var signBytes voteSignBytes
-
-	pbVote := m.ToCanonicalVote(chainID)
-	marshaledVote, err := protoio.MarshalDelimited(&pbVote)
+	pbVote, err := m.ToCanonicalVote(chainID)
 	if err != nil {
-		return nil, fmt.Errorf("vote SignBytes: %w", err)
+		return nil, err
 	}
-	canonicalVoteID := crypto.Checksum(marshaledVote)
-	signBytes.CanonicalVoteID = *(*[crypto.HashSize]byte)(canonicalVoteID)
-
-	if !m.BlockID.IsZero() {
-		signBytes.StateID = *(*[crypto.HashSize]byte)(m.BlockID.StateID)
-	}
-
-	return bytes.MarshalFixedSize(signBytes)
+	return bytes.MarshalFixedSize(pbVote)
 }
 
 // CanonicalizeVote transforms the given Vote to a CanonicalVote, which does
 // not contain ValidatorIndex and ValidatorProTxHash fields.
-func (m Vote) ToCanonicalVote(chainID string) CanonicalVote {
+func (m Vote) ToCanonicalVote(chainID string) (CanonicalVote, error) {
+	blockIDBytes, err := m.BlockID.ToCanonicalBlockID().SignBytes()
+	if err != nil {
+		return CanonicalVote{}, err
+	}
 	return CanonicalVote{
 		Type:    m.Type,
 		Height:  m.Height,       // encoded as sfixed64
 		Round:   int64(m.Round), // encoded as sfixed64
-		BlockID: m.BlockID.ToCanonicalBlockID(),
+		BlockID: crypto.Checksum(blockIDBytes),
+		StateID: m.BlockID.StateID,
 		ChainID: chainID,
-	}
+	}, nil
 }

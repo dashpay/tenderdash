@@ -28,18 +28,6 @@ func CanonicalizeProposal(chainID string, proposal *tmproto.Proposal) tmproto.Ca
 	}
 }
 
-// CanonicalizeVote transforms the given Vote to a CanonicalVote, which does
-// not contain ValidatorIndex and ValidatorProTxHash fields.
-func CanonicalizeVote(chainID string, vote *tmproto.Vote) tmproto.CanonicalVote {
-	return tmproto.CanonicalVote{
-		Type:    vote.Type,
-		Height:  vote.Height,       // encoded as sfixed64
-		Round:   int64(vote.Round), // encoded as sfixed64
-		BlockID: vote.BlockID.ToCanonicalBlockID(),
-		ChainID: chainID,
-	}
-}
-
 // CanonicalizeVoteExtension extracts the vote extension from the given vote
 // and constructs a CanonicalizeVoteExtension struct, whose representation in
 // bytes is what is signed in order to produce the vote extension's signature.

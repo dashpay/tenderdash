@@ -23,17 +23,18 @@ func TestMarshalFixed(t *testing.T) {
 		{
 			Data: struct {
 				Field1 uint64
-				Field2 []byte `tmbytes:"length=12"`
+				Field2 []byte `tmbytes:"size=12"`
 				Field3 uint32
 				Field4 [4]byte
-			}{0x1234567890abcdef, []byte("1234567890ab"), math.MaxUint32, [4]byte{1, 2, 3, 4}},
-			expectLen:   8 + 12 + 4 + 4,
+				Field5 string
+			}{0x1234567890abcdef, []byte("1234567890ab"), math.MaxUint32, [4]byte{1, 2, 3, 4}, "str"},
+			expectLen:   8 + 12 + 4 + 4 + 3,
 			expectError: "",
 		},
 		{ // HexBytes
 			Data: struct {
 				Field1 uint64
-				Field2 HexBytes `tmbytes:"length=12"`
+				Field2 HexBytes `tmbytes:"size=12"`
 			}{0x1234567890abcdef, []byte("1234567890ab")},
 			expectLen:   8 + 12,
 			expectError: "",
@@ -41,13 +42,13 @@ func TestMarshalFixed(t *testing.T) {
 		{
 			Data: struct {
 				Field1 uint64
-				Field2 []byte `tmbytes:"length=12"`
+				Field2 []byte `tmbytes:"size=12"`
 			}{0x1234567890abcdef, []byte("1234567890")},
 			expectError: "size of Field2 MUST be 12 bytes, is 10",
 		}, { // marshal []uint64
 			Data: struct {
 				Field1 uint64
-				Field2 []uint64 `tmbytes:"length=3"`
+				Field2 []uint64 `tmbytes:"size=3"`
 			}{0x1234567890abcdef, []uint64{math.MaxInt64, 0, math.MaxInt64}},
 			expectLen: 8 + 3*8,
 		},
@@ -55,7 +56,22 @@ func TestMarshalFixed(t *testing.T) {
 			Data: struct {
 				Field1 string
 			}{"tst\x00\x00"},
-			expectError: "field Field1 of type string: cannot write: binary.Write: invalid type string",
+			expectLen:   5,
+			expectError: "",
+		},
+		{
+			Data: struct {
+				Field1 string `tmbytes:"size=2"`
+			}{"Wrong len"},
+			expectLen:   5,
+			expectError: "field Field1 of type string: cannot write: size of Field1 MUST be 2 bytes, is 9",
+		},
+		{
+			Data: struct {
+				Field1 string `tmbytes:"size=8"`
+			}{"Good len"},
+			expectLen:   8,
+			expectError: "",
 		},
 	}
 	for _, tc := range testCases {
@@ -73,7 +89,7 @@ func TestMarshalFixed(t *testing.T) {
 }
 func TestMarshalTags(t *testing.T) {
 	type testCase struct {
-		Field1     []byte `tmbytes:"length=12"`
+		Field1     []byte `tmbytes:"size=12"`
 		Field2     int64
 		Field3     string
 		expectSize map[string]int
@@ -97,7 +113,7 @@ func TestMarshalTags(t *testing.T) {
 				name := structField.Name
 				tags, err := getTags(structField)
 				assert.NoError(t, err, structField.Name)
-				assert.Equal(t, tc.expectSize[name], tags.length, name)
+				assert.Equal(t, tc.expectSize[name], tags.size, name)
 			}
 		})
 	}

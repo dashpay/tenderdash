@@ -170,7 +170,8 @@ func TestVoteSignBytesTestVectors(t *testing.T) {
 }
 
 func TestVoteProposalNotEq(t *testing.T) {
-	cv := CanonicalizeVote("", &tmproto.Vote{Height: 1, Round: 1})
+	cv, err := tmproto.Vote{Height: 1, Round: 1}.ToCanonicalVote("")
+	require.NoError(t, err)
 	p := CanonicalizeProposal("", &tmproto.Proposal{Height: 1, Round: 1})
 	vb, err := proto.Marshal(&cv)
 	require.NoError(t, err)

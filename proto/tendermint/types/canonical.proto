@@ -14,7 +14,6 @@ import "google/protobuf/timestamp.proto";
 message CanonicalBlockID {
   bytes                  hash            = 1;
   CanonicalPartSetHeader part_set_header = 2 [(gogoproto.nullable) = false];
-  bytes                  state_id        = 3 [(gogoproto.customname) = "StateID"];
 }
 
 message CanonicalPartSetHeader {
@@ -33,11 +32,14 @@ message CanonicalProposal {
 }
 
 message CanonicalVote {
-  SignedMsgType    type     = 1;  // type alias for byte
-  sfixed64         height   = 2;  // canonicalization requires fixed size encoding here
-  sfixed64         round    = 3;  // canonicalization requires fixed size encoding here
-  CanonicalBlockID block_id = 4 [(gogoproto.customname) = "BlockID"];
-  string           chain_id = 6 [(gogoproto.customname) = "ChainID"];
+  SignedMsgType type   = 1;  // type alias for byte
+  sfixed64      height = 2;  // canonicalization requires fixed size encoding here
+  sfixed64      round  = 3;  // canonicalization requires fixed size encoding here
+  // block_id is a checksum (sha256) of BlockID for the block being voted on
+  bytes block_id = 4 [(gogoproto.customname) = "BlockID"];
+  // state_id is a checksum  (sha256) of StateID for the block being voted on
+  bytes  state_id = 5 [(gogoproto.customname) = "StateID"];
+  string chain_id = 99 [(gogoproto.customname) = "ChainID"];
 }
 
 // CanonicalVoteExtension provides us a way to serialize a vote extension from
