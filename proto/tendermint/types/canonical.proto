@@ -15,7 +15,6 @@ message CanonicalBlockID {
   bytes                  hash            = 1;
   CanonicalPartSetHeader part_set_header = 2 [(gogoproto.nullable) = false];
   bytes                  state_id        = 3 [(gogoproto.customname) = "StateID"];
-  ;
 }
 
 message CanonicalPartSetHeader {

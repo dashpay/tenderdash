@@ -16,7 +16,7 @@ const StateIDVersion = 1
 func RandStateID() StateID {
 	return StateID{
 		Height:                uint64(rand.Int63()), //nolint:gosec
-		AppHash:               tmrand.Bytes(crypto.DefaultAppHashSize),
+		AppHash:               *(*[crypto.DefaultAppHashSize]byte)(tmrand.Bytes(crypto.DefaultAppHashSize)),
 		AppVersion:            StateIDVersion,
 		CoreChainLockedHeight: rand.Uint32(), //nolint:gosec
 		Time:                  time.Now(),

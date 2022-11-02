@@ -566,7 +566,11 @@ func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
 }
 
 func TestCommitToVoteSetWithVotesForNilBlock(t *testing.T) {
-	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), []byte("stateidhash"))
+	blockID := makeBlockID(
+		[]byte("blockhash"),
+		1000, []byte("partshash"),
+		crypto.Checksum([]byte("stateidhash")),
+	)
 
 	const (
 		height = int64(3)
@@ -932,14 +936,14 @@ func TestStateID_Equals(t *testing.T) {
 			StateID{
 				AppVersion:            12,
 				Height:                123,
-				AppHash:               []byte("12345678901234567890123456789012"),
+				AppHash:               *(*[crypto.DefaultAppHashSize]byte)([]byte("12345678901234567890123456789012")),
 				CoreChainLockedHeight: 12,
 				Time:                  time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC),
 			},
 			StateID{
 				AppVersion:            12,
 				Height:                123,
-				AppHash:               []byte("12345678901234567890123456789012"),
+				AppHash:               *(*[crypto.DefaultAppHashSize]byte)([]byte("12345678901234567890123456789012")),
 				CoreChainLockedHeight: 12,
 				Time:                  time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC),
 			},
@@ -949,14 +953,14 @@ func TestStateID_Equals(t *testing.T) {
 			StateID{
 				AppVersion:            12,
 				Height:                123,
-				AppHash:               []byte("12345678901234567890123456789012"),
+				AppHash:               *(*[crypto.DefaultAppHashSize]byte)([]byte("12345678901234567890123456789012")),
 				CoreChainLockedHeight: 12,
 				Time:                  time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC),
 			},
 			StateID{
 				AppVersion:            12,
 				Height:                124,
-				AppHash:               []byte("12345678901234567890123456789012"),
+				AppHash:               *(*[crypto.DefaultAppHashSize]byte)([]byte("12345678901234567890123456789012")),
 				CoreChainLockedHeight: 12,
 				Time:                  time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC),
 			},
@@ -966,14 +970,14 @@ func TestStateID_Equals(t *testing.T) {
 			StateID{
 				AppVersion:            12,
 				Height:                123,
-				AppHash:               []byte("12345678901234567890123456789012"),
+				AppHash:               *(*[crypto.DefaultAppHashSize]byte)([]byte("12345678901234567890123456789012")),
 				CoreChainLockedHeight: 12,
 				Time:                  time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC),
 			},
 			StateID{
 				AppVersion:            12,
 				Height:                123,
-				AppHash:               []byte("12345678901234567890123456789021"),
+				AppHash:               *(*[crypto.DefaultAppHashSize]byte)([]byte("12345678901234567890123456789021")),
 				CoreChainLockedHeight: 12,
 				Time:                  time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC),
 			},
@@ -1263,67 +1267,21 @@ func TestStateID_ValidateBasic(t *testing.T) {
 			stateID: StateID{
 				AppVersion: StateIDVersion,
 				Height:     0,
-				AppHash:    tmrand.Bytes(crypto.DefaultAppHashSize),
+				AppHash:    *(*[crypto.DefaultAppHashSize]byte)(tmrand.Bytes(crypto.DefaultAppHashSize)),
 				Time:       time.Now(),
 			},
 			wantErr: "",
-		},
-		{
-			name: "nil apphash",
-			stateID: StateID{
-				AppVersion: StateIDVersion,
-				Height:     12,
-				AppHash:    nil,
-				Time:       time.Now(),
-			},
-			wantErr: "wrong app Hash: expected size to be 32 bytes, got 0 bytes",
-		},
-		{
-			name: "empty apphash",
-			stateID: StateID{
-				AppVersion: StateIDVersion,
-				Height:     12,
-				AppHash:    []byte{},
-				Time:       time.Now(),
-			},
-			wantErr: "wrong app Hash: expected size to be 32 bytes, got 0 bytes"},
-		{
-			name: "apphash too short",
-			stateID: StateID{
-				AppVersion: StateIDVersion,
-				Height:     12,
-				AppHash:    []byte{0x1, 0x2, 0x3},
-				Time:       time.Now(),
-			}, wantErr: "wrong app Hash: expected size to be 32 bytes, got 3 bytes",
-		},
-		{
-			name: "apphash too short 2",
-			stateID: StateID{
-				AppVersion: StateIDVersion,
-				Height:     12,
-				AppHash:    tmrand.Bytes(crypto.DefaultAppHashSize - 1),
-				Time:       time.Now(),
-			},
-			wantErr: "wrong app Hash: expected size to be 32 bytes, got 31 bytes",
 		},
 		{
 			name: "apphash default",
 			stateID: StateID{
 				AppVersion: StateIDVersion,
 				Height:     12,
-				AppHash:    tmrand.Bytes(crypto.DefaultAppHashSize),
+				AppHash:    *(*[crypto.DefaultAppHashSize]byte)(tmrand.Bytes(crypto.DefaultAppHashSize)),
 				Time:       time.Now(),
 			},
 			wantErr: "",
 		},
-		{
-			name: "apphash too large",
-			stateID: StateID{
-				AppVersion: StateIDVersion,
-				Height:     12,
-				AppHash:    tmrand.Bytes(crypto.DefaultAppHashSize + 1),
-				Time:       time.Now(),
-			}, wantErr: "wrong app Hash: expected size to be 32 bytes, got 33 bytes"},
 	}
 
 	for _, tc := range tests {

@@ -25,8 +25,9 @@ func TestMarshalFixed(t *testing.T) {
 				Field1 uint64
 				Field2 []byte `tmbytes:"length=12"`
 				Field3 uint32
-			}{0x1234567890abcdef, []byte("1234567890ab"), math.MaxUint32},
-			expectLen:   8 + 12 + 4,
+				Field4 [4]byte
+			}{0x1234567890abcdef, []byte("1234567890ab"), math.MaxUint32, [4]byte{1, 2, 3, 4}},
+			expectLen:   8 + 12 + 4 + 4,
 			expectError: "",
 		},
 		{ // HexBytes

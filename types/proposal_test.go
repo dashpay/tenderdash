@@ -30,7 +30,7 @@ func getTestProposal(t testing.TB) *Proposal {
 	stateID := StateID{
 		AppVersion:            StateIDVersion,
 		Height:                12345,
-		AppHash:               []byte("12345678901234567890123456789012"),
+		AppHash:               *(*[crypto.DefaultAppHashSize]byte)([]byte("12345678901234567890123456789012")),
 		CoreChainLockedHeight: math.MaxUint32,
 		Time:                  time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC),
 	}

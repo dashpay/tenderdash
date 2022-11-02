@@ -260,7 +260,10 @@ func decideProposal(
 	require.NotNil(t, block, "Failed to createProposalBlock. Did you forget to add commit for previous block?")
 
 	// Make proposal
-	polRound, propBlockID := validRound, types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
+	polRound := validRound
+	propBlockID, err := block.BlockID(blockParts)
+	assert.NoError(t, err)
+
 	proposal = types.NewProposal(height, 1, round, polRound, propBlockID, block.Header.Time)
 	p := proposal.ToProto()
 

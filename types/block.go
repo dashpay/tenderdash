@@ -507,11 +507,10 @@ func (h Header) ValidateBasic() error {
 
 // StateID returns a state ID of this block
 func (h *Header) StateID() StateID {
-	appHash := h.AppHash
-	if len(appHash) == 0 {
-		appHash = make([]byte, crypto.DefaultAppHashSize)
+	var appHash [crypto.DefaultAppHashSize]byte
+	if len(h.AppHash) == crypto.DefaultAppHashSize {
+		appHash = *(*[crypto.DefaultAppHashSize]byte)(h.AppHash)
 	}
-
 	return StateID{
 		AppVersion:            h.Version.App,
 		Height:                uint64(h.Height),

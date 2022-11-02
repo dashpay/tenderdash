@@ -81,7 +81,11 @@ func makeVoteHR(
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrecommitType,
-		BlockID:            types.BlockID{Hash: randBytes, PartSetHeader: types.PartSetHeader{}},
+		BlockID: types.BlockID{
+			Hash:          randBytes,
+			PartSetHeader: types.PartSetHeader{},
+			StateID:       stateID.Hash(),
+		},
 	}
 
 	v := vote.ToProto()

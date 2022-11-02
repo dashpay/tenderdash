@@ -3,7 +3,9 @@ package types
 import (
 	"fmt"
 
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/libs/protoio"
+	"github.com/tendermint/tendermint/libs/bytes"
 )
 
 // IsZero returns true when the object is a zero-value or nil
@@ -49,14 +51,34 @@ func (m *Vote) VoteExtensionsToMap() VoteExtensions {
 	return res
 }
 
+type voteSignBytes struct {
+	// CanonicalVoteID is a crypto.Checksum of `CanonicalVote` encoded using protobuf encoding
+	CanonicalVoteID [crypto.HashSize]byte
+	// CanonicalVoteID is a crypto.Checksum of `StateID` encoded using raw fixed-length encoding.
+	// It's filled with 0s for NIL-votes
+	StateID [crypto.HashSize]byte
+}
+
+// SignBytes represent data to be signed for the given vote.
+// It's a 64-byte slice containing concatenation of:
+// * Checksum of CanonicalVote
+// * Checksum of StateID
 func (m Vote) SignBytes(chainID string) ([]byte, error) {
-	pb := m.ToCanonicalVote(chainID)
-	bz, err := protoio.MarshalDelimited(&pb)
+	var signBytes voteSignBytes
+
+	pbVote := m.ToCanonicalVote(chainID)
+	marshaledVote, err := protoio.MarshalDelimited(&pbVote)
 	if err != nil {
 		return nil, fmt.Errorf("vote SignBytes: %w", err)
 	}
+	canonicalVoteID := crypto.Checksum(marshaledVote)
+	signBytes.CanonicalVoteID = *(*[crypto.HashSize]byte)(canonicalVoteID)
 
-	return bz, nil
+	if !m.BlockID.IsZero() {
+		signBytes.StateID = *(*[crypto.HashSize]byte)(m.BlockID.StateID)
+	}
+
+	return bytes.MarshalFixedSize(signBytes)
 }
 
 // CanonicalizeVote transforms the given Vote to a CanonicalVote, which does

@@ -163,8 +163,8 @@ func TestVoteSignBytesTestVectors(t *testing.T) {
 			v := tc.vote.ToProto()
 			got, err := v.SignBytes(tc.chainID)
 			assert.NoError(t, err)
-			assert.Equal(t, len(tc.want), len(got), "test case #%v: got unexpected sign bytes length for Vote.", i)
-			assert.Equal(t, tc.want, got, "test case #%v: got unexpected sign bytes for Vote.", i)
+			assert.Len(t, got, len(tc.want), "test case #%v: got unexpected sign bytes length for Vote.", i)
+			assert.Equal(t, tc.want, got, "test case #%v: got unexpected sign bytes for Vote: %X", i, got)
 		})
 	}
 }

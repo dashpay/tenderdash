@@ -40,10 +40,10 @@ func TestVerifyDuplicateVoteEvidence(t *testing.T) {
 	validator1 := val.ExtractIntoValidator(context.Background(), quorumHash)
 	valSet := types.NewValidatorSet([]*types.Validator{validator1}, validator1.PubKey, quorumType, quorumHash, true)
 
-	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"))
-	blockID2 := makeBlockID([]byte("blockhash2"), 1000, []byte("partshash"))
-	blockID3 := makeBlockID([]byte("blockhash"), 10000, []byte("partshash"))
-	blockID4 := makeBlockID([]byte("blockhash"), 10000, []byte("partshash2"))
+	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), crypto.Checksum([]byte("statehash")))
+	blockID2 := makeBlockID([]byte("blockhash2"), 1000, []byte("partshash"), crypto.Checksum([]byte("statehash")))
+	blockID3 := makeBlockID([]byte("blockhash"), 10000, []byte("partshash"), crypto.Checksum([]byte("statehash")))
+	blockID4 := makeBlockID([]byte("blockhash"), 10000, []byte("partshash2"), crypto.Checksum([]byte("statehash")))
 
 	const chainID = "mychain"
 
@@ -160,7 +160,7 @@ func makeVote(
 	return v
 }
 
-func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte) types.BlockID {
+func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte, stateID []byte) types.BlockID {
 	var (
 		h   = make([]byte, crypto.HashSize)
 		psH = make([]byte, crypto.HashSize)
@@ -173,5 +173,6 @@ func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte) types.Bloc
 			Total: partSetSize,
 			Hash:  psH,
 		},
+		StateID: stateID,
 	}
 }

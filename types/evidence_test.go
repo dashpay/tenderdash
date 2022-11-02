@@ -73,8 +73,16 @@ func randomDuplicateVoteEvidence(ctx context.Context, t *testing.T) *DuplicateVo
 	t.Helper()
 	quorumHash := crypto.RandQuorumHash()
 	val := NewMockPVForQuorum(quorumHash)
-	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), []byte("statehash"))
-	blockID2 := makeBlockID([]byte("blockhash2"), 1000, []byte("partshash"), []byte("statehash"))
+	blockID := makeBlockID(
+		[]byte("blockhash"),
+		1000, []byte("partshash"),
+		crypto.Checksum([]byte("statehash")),
+	)
+	blockID2 := makeBlockID(
+		[]byte("blockhash2"),
+		1000, []byte("partshash"),
+		crypto.Checksum([]byte("statehash")),
+	)
 	quorumType := btcjson.LLMQType_5_60
 	const chainID = "mychain"
 	const height = int64(10)
@@ -285,7 +293,7 @@ func TestEvidenceVectors(t *testing.T) {
 	}{
 		{"duplicateVoteEvidence",
 			EvidenceList{&DuplicateVoteEvidence{VoteA: v2, VoteB: v}},
-			"36cfeeacaf22a0301cf2a00d6a96e837e1eecceebc3253185e94ced4a573f03a",
+			"7c009d61084bb497db8f0bf317c5dab669c13fee5d23198e001dac67c53229d1",
 		},
 	}
 

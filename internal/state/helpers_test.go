@@ -69,10 +69,9 @@ func makeAndApplyGoodBlock(
 	block := state.MakeBlock(height, factory.MakeNTxs(height, 10), lastCommit, evidence, proposerProTxHash, proposedAppVersion)
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
+	blockID, err := block.BlockID(partSet)
+	require.NoError(t, err)
 
-	require.NoError(t, blockExec.ValidateBlock(ctx, state, block))
-	blockID := types.BlockID{Hash: block.Hash(),
-		PartSetHeader: partSet.Header()}
 	txResults := factory.ExecTxResults(block.Txs)
 	block.ResultsHash, err = abci.TxResultsHash(txResults)
 	require.NoError(t, err)

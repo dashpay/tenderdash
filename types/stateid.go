@@ -26,7 +26,7 @@ type StateID struct {
 	Height uint64 `json:"height"`
 	// AppHash used in current block, equal to Header.AppHash.
 	// 32 bytes
-	AppHash tmbytes.HexBytes `json:"app_hash" tmbytes:"length=32"`
+	AppHash [crypto.DefaultAppHashSize]byte `json:"app_hash"`
 	// CoreChainLockedHeight for the block, equal to Header.CoreChainLockedHeight.
 	// 4 bytes
 	CoreChainLockedHeight uint32 `json:"core_chain_locked_height"`
@@ -40,7 +40,6 @@ type StateID struct {
 // Copy returns new StateID that is equal to this one
 func (stateID StateID) Copy() StateID {
 	copied := stateID
-	copied.AppHash = stateID.AppHash.Copy()
 
 	return copied
 }
@@ -62,7 +61,7 @@ func (stateID StateID) Equal(other StateID) bool {
 // ValidateBasic performs basic validation.
 func (stateID StateID) ValidateBasic() error {
 	// LastAppHash can be empty in case of genesis block.
-	if err := ValidateAppHash(stateID.AppHash); err != nil {
+	if err := ValidateAppHash(stateID.AppHash[:]); err != nil {
 		return fmt.Errorf("wrong app Hash: %w", err)
 	}
 	if stateID.AppVersion == 0 {
@@ -91,11 +90,11 @@ func (stateID StateID) Hash() tmbytes.HexBytes {
 // String returns a human readable string representation of the StateID.
 func (stateID StateID) String() string {
 	return fmt.Sprintf(
-		`v%d:h=%d,cl=%d,ah=%s,t=%s`,
+		`v%d:h=%d,cl=%d,ah=%x,t=%s`,
 		stateID.AppVersion,
 		stateID.Height,
 		stateID.CoreChainLockedHeight,
-		stateID.AppHash.ShortString(),
+		stateID.AppHash[:3],
 		stateID.Time.UTC().Format(time.RFC3339),
 	)
 }

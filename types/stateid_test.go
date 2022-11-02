@@ -16,12 +16,12 @@ import (
 func TestStateIDSignBytes(t *testing.T) {
 	testCases := []StateID{
 		{
-			AppHash: rand.Bytes(32),
+			AppHash: *(*[crypto.DefaultAppHashSize]byte)(rand.Bytes(32)),
 		},
 		{
 			AppVersion:            1234,
 			Height:                1,
-			AppHash:               rand.Bytes(32),
+			AppHash:               *(*[crypto.DefaultAppHashSize]byte)(rand.Bytes(32)),
 			CoreChainLockedHeight: 123,
 			Time:                  time.Date(2012, 3, 4, 5, 6, 7, 8, time.UTC),
 		},
@@ -41,7 +41,7 @@ func TestStateIDSignBytes(t *testing.T) {
 			pos += 8
 
 			// AppHash, next 32 bytes
-			assert.EqualValues(t, tc.AppHash, bz[pos:pos+32])
+			assert.EqualValues(t, tc.AppHash[:], bz[pos:pos+32])
 			pos += 32
 
 			// CoreChainLockedHeight, 4 bytes
@@ -64,7 +64,7 @@ func TestStateIDString(t *testing.T) {
 	stateID := StateID{
 		AppVersion:            StateIDVersion,
 		Height:                1,
-		AppHash:               crypto.Checksum([]byte("apphash")),
+		AppHash:               *(*[crypto.DefaultAppHashSize]byte)(crypto.Checksum([]byte("apphash"))),
 		CoreChainLockedHeight: 2,
 		Time:                  time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC),
 	}

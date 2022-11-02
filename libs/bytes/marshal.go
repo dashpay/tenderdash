@@ -36,7 +36,7 @@ func MarshalFixedSize(data interface{}) ([]byte, error) {
 			continue
 		}
 		kind := field.Kind()
-		if kind == reflect.Slice || kind == reflect.Array || kind == reflect.Map {
+		if kind == reflect.Slice || kind == reflect.Map {
 			if err := marshalVarSizedField(out, field, fieldType); err != nil {
 				return nil, fmt.Errorf("field %s of type %s: cannot write: %w", fieldType.Name, field.Type(), err)
 			}

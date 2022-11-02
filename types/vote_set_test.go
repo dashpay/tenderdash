@@ -64,7 +64,7 @@ func TestVoteSet_AddVote_Bad(t *testing.T) {
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrevoteType,
-		BlockID:            BlockID{nil, PartSetHeader{}, nil},
+		BlockID:            BlockID{nil, PartSetHeader{}, make([]byte, 32)},
 	}
 
 	// val0 votes for nil.
