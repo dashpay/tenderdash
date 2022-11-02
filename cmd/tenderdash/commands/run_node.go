@@ -65,7 +65,6 @@ func AddNodeFlags(cmd *cobra.Command, conf *cfg.Config) {
 		"node listen address. (0.0.0.0:0 means any interface, any port)")
 	cmd.Flags().String("p2p.persistent-peers", conf.P2P.PersistentPeers, "comma-delimited ID@host:port persistent peers")
 	cmd.Flags().Bool("p2p.upnp", conf.P2P.UPNP, "enable/disable UPNP port forwarding")
-	cmd.Flags().Bool("p2p.pex", conf.P2P.PexReactor, "enable/disable Peer-Exchange")
 	cmd.Flags().String("p2p.private-peer-ids", conf.P2P.PrivatePeerIDs, "comma-delimited private peer IDs")
 
 	// consensus flags
