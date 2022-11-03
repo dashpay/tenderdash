@@ -308,7 +308,7 @@ func TestVoteSet_Conflicts(t *testing.T) {
 	}
 
 	// start tracking blockHash1
-	err = voteSet.SetPeerMaj23("peerA", BlockID{Hash: blockHash1}, height, round)
+	err = voteSet.SetPeerMaj23("peerA", BlockID{Hash: blockHash1, StateID: blockHash1}, height, round)
 	require.NoError(t, err)
 
 	// val0 votes again for blockHash1.
@@ -658,6 +658,9 @@ func withType(vote *Vote, signedMsgType byte) *Vote {
 func withBlockHash(vote *Vote, blockHash []byte) *Vote {
 	vote = vote.Copy()
 	vote.BlockID.Hash = blockHash
+	if len(vote.BlockID.StateID) == 0 {
+		vote.BlockID.StateID = blockHash
+	}
 	return vote
 }
 

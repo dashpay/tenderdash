@@ -63,7 +63,7 @@ type ErrVoteConflictingVotes struct {
 }
 
 func (err *ErrVoteConflictingVotes) Error() string {
-	return fmt.Sprintf("conflicting votes from validator %X", err.VoteA.ValidatorProTxHash)
+	return fmt.Sprintf("conflicting votes from validator %X: \nA: %+v\nB: %+v", err.VoteA.ValidatorProTxHash, err.VoteA, err.VoteB)
 }
 
 func NewConflictingVoteError(vote1, vote2 *Vote) *ErrVoteConflictingVotes {

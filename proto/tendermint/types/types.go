@@ -1,6 +1,8 @@
 package types
 
 import (
+	"fmt"
+
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/bytes"
 )
@@ -62,16 +64,39 @@ func (m Vote) SignBytes(chainID string) ([]byte, error) {
 // CanonicalizeVote transforms the given Vote to a CanonicalVote, which does
 // not contain ValidatorIndex and ValidatorProTxHash fields.
 func (m Vote) ToCanonicalVote(chainID string) (CanonicalVote, error) {
-	blockIDBytes, err := m.BlockID.ToCanonicalBlockID().SignBytes()
-	if err != nil {
-		return CanonicalVote{}, err
+	var (
+		blockIDBytes []byte
+		stateIDBytes []byte
+		err          error
+	)
+	if !m.BlockID.IsZero() {
+		blockID := m.BlockID.ToCanonicalBlockID()
+		if blockID != nil {
+			if blockIDBytes, err = blockID.SignBytes(); err != nil {
+				return CanonicalVote{}, err
+			}
+		}
+		blockIDBytes = crypto.Checksum(blockIDBytes)
+		stateIDBytes = m.BlockID.StateID
+	} else {
+		blockIDBytes = crypto.Checksum([]byte{})
+		stateIDBytes = crypto.Checksum([]byte{})
 	}
+
+	// We must ensure length is correct before doing fixed-len marshalling
+	if len(blockIDBytes) != crypto.HashSize {
+		return CanonicalVote{}, fmt.Errorf("block ID hash %x invalid length", blockIDBytes)
+	}
+	if len(stateIDBytes) != crypto.HashSize {
+		return CanonicalVote{}, fmt.Errorf("state ID hash %x invalid length", stateIDBytes)
+	}
+
 	return CanonicalVote{
 		Type:    m.Type,
 		Height:  m.Height,       // encoded as sfixed64
 		Round:   int64(m.Round), // encoded as sfixed64
-		BlockID: crypto.Checksum(blockIDBytes),
-		StateID: m.BlockID.StateID,
+		BlockID: blockIDBytes,
+		StateID: stateIDBytes,
 		ChainID: chainID,
 	}, nil
 }
