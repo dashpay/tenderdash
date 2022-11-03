@@ -32,7 +32,7 @@ func TestRollback(t *testing.T) {
 	nextState.LastBlockHeight = nextHeight
 	nextState.Version.Consensus.App = 11
 	nextState.LastBlockID = factory.MakeBlockID()
-	nextState.AppHash = factory.RandomHash()
+	nextState.LastAppHash = factory.RandomHash()
 	nextState.LastValidators = initialState.Validators
 	nextState.ConsensusParams = *newParams
 	nextState.LastHeightConsensusParamsChanged = nextHeight + 1
@@ -55,7 +55,7 @@ func TestRollback(t *testing.T) {
 		BlockID: initialState.LastBlockID,
 		Header: types.Header{
 			Height:      nextState.LastBlockHeight,
-			AppHash:     initialState.AppHash,
+			AppHash:     initialState.LastAppHash,
 			LastBlockID: block.BlockID,
 			ResultsHash: nextState.LastResultsHash,
 		},
@@ -69,7 +69,7 @@ func TestRollback(t *testing.T) {
 	rollbackHeight, rollbackHash, err := state.Rollback(blockStore, stateStore)
 	require.NoError(t, err)
 	require.EqualValues(t, height, rollbackHeight)
-	require.EqualValues(t, initialState.AppHash, rollbackHash)
+	require.EqualValues(t, initialState.LastAppHash, rollbackHash)
 	blockStore.AssertExpectations(t)
 
 	// assert that we've recovered the prior state
@@ -131,7 +131,7 @@ func setupStateStore(t *testing.T, height int64) state.Store {
 		ChainID:                          factory.DefaultTestChainID,
 		InitialHeight:                    10,
 		LastBlockID:                      factory.MakeBlockID(),
-		AppHash:                          factory.RandomHash(),
+		LastAppHash:                      factory.RandomHash(),
 		LastResultsHash:                  factory.RandomHash(),
 		LastBlockHeight:                  height,
 		LastValidators:                   valSet,

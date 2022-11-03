@@ -92,11 +92,11 @@ func TestBlockReplayerReplay(t *testing.T) {
 			stateStore:  updateStateStoreWithState(chain.States[lastHeightIDx-1], chain.StateStore),
 			blockStore:  chain.BlockStore,
 			appHeight:   chainSize - 1,
-			appAppHash:  chain.States[lastHeightIDx-1].AppHash,
+			appAppHash:  chain.States[lastHeightIDx-1].LastAppHash,
 			wantAppHash: lastAppHash,
 			wantNBlocks: 1, // sync only last block
 			appOpts: []kvstore.OptFunc{
-				kvstore.WithState(chainSize-1, chain.States[lastHeightIDx-1].AppHash),
+				kvstore.WithState(chainSize-1, chain.States[lastHeightIDx-1].LastAppHash),
 				kvstore.WithValidatorSetUpdates(map[int64]abci.ValidatorSetUpdate{
 					0: tmtypes.TM2PB.ValidatorUpdates(chain.GenesisState.Validators),
 				}),
@@ -109,7 +109,7 @@ func TestBlockReplayerReplay(t *testing.T) {
 			stateStore:  updateStateStoreWithState(chain.States[lastHeightIDx-1], chain.StateStore),
 			blockStore:  chain.BlockStore,
 			appHeight:   chainSize,
-			appAppHash:  chain.States[lastHeightIDx].AppHash,
+			appAppHash:  chain.States[lastHeightIDx].LastAppHash,
 			wantAppHash: lastAppHash,
 			wantNBlocks: 1,
 		},

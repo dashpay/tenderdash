@@ -306,7 +306,7 @@ func TestValidateBlockCommit(t *testing.T) {
 			0,
 			2,
 			blockID,
-			state.AppHash,
+			state.LastAppHash,
 		)
 		require.NoError(t, err, "height %d", height)
 
