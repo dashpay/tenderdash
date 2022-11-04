@@ -218,7 +218,7 @@ type CanonicalVote struct {
 	Type   SignedMsgType `protobuf:"varint,1,opt,name=type,proto3,enum=tendermint.types.SignedMsgType" json:"type,omitempty"`
 	Height int64         `protobuf:"fixed64,2,opt,name=height,proto3" json:"height,omitempty"`
 	Round  int64         `protobuf:"fixed64,3,opt,name=round,proto3" json:"round,omitempty"`
-	// block_id is a checksum (sha256) of BlockID for the block being voted on
+	// block_id is a checksum (sha256) of CanonicalBlockID for the block being voted on
 	BlockID []byte `protobuf:"bytes,4,opt,name=block_id,json=blockId,proto3" json:"block_id,omitempty"`
 	// state_id is a checksum  (sha256) of StateID for the block being voted on
 	StateID []byte `protobuf:"bytes,5,opt,name=state_id,json=stateId,proto3" json:"state_id,omitempty"`

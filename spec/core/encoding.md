@@ -270,9 +270,9 @@ For instance, an ED25519 PubKey would look like:
 Where the `"value"` is the base64 encoding of the raw pubkey bytes, and the
 `"type"` is the type name for Ed25519 pubkeys.
 
-### Signed Messages
+## Protobuf
 
-Signed messages (eg. votes, proposals) in the consensus are encoded using protobuf, with an exception of `StateID`.
+Votes and proposals in the consensus are encoded using protobuf.
 
 When signing, the elements of a message are re-ordered so the fixed-length fields
 are first, making it easy to quickly check the type, height, and round.
@@ -299,18 +299,16 @@ For more details, see the [signing spec](../consensus/signing.md).
 Also, see the motivating discussion in
 [#1622](https://github.com/tendermint/tendermint/issues/1622).
 
-#### StateID encoding
+## Raw fixed-length encoding
 
-StateID is a subset of block header elements required to correctly prove some state on the light client.
-To verify block signature, light client needs BlockID hash and all elements of StateID mentioned below.
+Raw fixed-length encoding is a very simple encoding, implemented
+as a concatenation of little-endian, fixed-length byte representations
+of encoded data. Encoding of a struct is implemented as follows:
 
-As an exception to the overall protobuf approach, to make encoding easier on light clients, StateID is encoded as a set
-of constant-length elements, in the following order:
+1. Fields are processed in the order in which they are defined in the struct.
+2. Each field is converted into a fixed-size byte array representation, where:
+   * numeric types use little-endian representation
+   * date/time types use little-endian representation of int64, containing number of nanoseconds that passed since Epoch in UTC timezone, as defined for Golang [(time.Time).UnixNano()](https://pkg.go.dev/time#Time.UnixNano) function.
+3. Data is appended to output buffer without any tags or delimiters.
 
-* bytes 1-8: AppVersion, little-endian, unsigned int (uint64), 8 bytes
-* bytes 9-16: Height, little-endian, unsigned int (uint64), 8 bytes
-* bytes 17-48: AppHash, 32 bytes
-* bytes 49-52: CoreChainLockedHeight, little-endian, unsigned int (uint32), 4 bytes
-* bytes 53-60: Time, little-endian, signed int  (int64), 8 bytes
 
-For more details about time encoding see golang function [(time.Time).UnixNano()](https://pkg.go.dev/time#Time.UnixNano).

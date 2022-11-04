@@ -123,18 +123,70 @@ non-negative round, a POLRound not less than -1, and a complete BlockID.
 
 ## Votes
 
-The structure of a vote for signing looks like:
+Sign bytes for votes are defined as `CanonicalVote` struct, encoded using **raw fixed-length encoding**
+(see [Encoding](../core/encoding.md#raw-fixed-length-encoding)):
 
 ```go
-type CanonicalVote struct {
- Type      SignedMsgType // type alias for byte
- Height    int64         `binary:"fixed64"`
- Round     int64         `binary:"fixed64"`
- BlockID   BlockID
- Timestamp time.Time
- ChainID   string
+type voteSignBytes struct {
+	CanonicalVoteID  [crypto.HashSize]byte
+	StateID          [crypto.HashSize]byte
 }
 ```
+
+`CanonicalVoteID` is a sha256 checksum of `CanonicalVote` encoded using **protobuf encoding**:
+
+```go
+message CanonicalVote {
+  SignedMsgType type   = 1;  // type alias for byte
+  sfixed64      height = 2;
+  sfixed64      round  = 3;
+  // block_id is a checksum (sha256) of CanonicalBlockID for the block being voted on
+  bytes block_id = 4 [(gogoproto.customname) = "BlockID"];
+  // state_id is a checksum  (sha256) of StateID for the block being voted on
+  bytes  state_id = 5 [(gogoproto.customname) = "StateID"];
+  string chain_id = 99 [(gogoproto.customname) = "ChainID"];
+}
+```
+
+`block_id` is a sha256 checksum of [`CanonicalBlockID` message, encoded using **Protobuf encoding**:
+
+```go
+message CanonicalBlockID {
+  bytes                  hash            = 1;
+  CanonicalPartSetHeader part_set_header = 2 [(gogoproto.nullable) = false];
+}
+
+message CanonicalPartSetHeader {
+  uint32 total = 1;
+  bytes  hash  = 2;
+}
+```
+
+`state_id` is a sha256 checksum of [`StateID` struct](https://github.com/dashpay/tenderdash/blob/a3861a33cde79235404287488e35cd375fbc49e0/types/stateid.go#L20) encoded using **raw fixed-length encoding**:
+
+```go
+type StateID struct {
+	// AppVersion used when generating the block, equals to Header.Version.App.
+	// 8 bytes
+	AppVersion uint64 `json:"app_version"`
+	// Height of block containing this state ID.
+	// 8 bytes
+	Height uint64 `json:"height"`
+	// AppHash used in current block, equal to Header.AppHash.
+	// 32 bytes
+	AppHash [crypto.DefaultAppHashSize]byte `json:"app_hash"`
+	// CoreChainLockedHeight for the block, equal to Header.CoreChainLockedHeight.
+	// 4 bytes
+	CoreChainLockedHeight uint32 `json:"core_chain_locked_height"`
+	// Time of the block (Unix time), equal to Header.Time.
+	// Encoded as a 64-bit signed int representing number of nanoseconds elapsed since January 1, 1970 UTC,
+	// as specified in golang time.Time.UnixNano().
+	// 8 bytes
+	Time time.Time `json:"time"`
+}
+```
+
+`StateID.Time` is encoded as described on golang [(time.Time).UnixNano()](https://pkg.go.dev/time#Time.UnixNano).
 
 A vote is valid if each of the following lines evaluates to true for vote `v`:
 
@@ -148,6 +200,39 @@ v.BlockID.IsNil() || v.BlockID.IsComplete()
 In other words, a vote is valid for signing if it contains the type of a Prevote
 or Precommit (0x1 or 0x2, respectively), has a positive, non-zero height, a
 non-negative round, and an empty or valid BlockID.
+
+### Block signature verification on light client
+
+Block signature is threshold-recovered signature of commit votes.
+
+In a typical light client use case, light client wants to verify
+app state using vote signature. Data needed to do the verification is:
+
+* Chain ID
+* Commit information:
+    * Type (constant, always Commit)
+    * Height
+    * Round
+* Hash of CanonicalBlockID
+* State ID data:
+    * AppVersion
+    * Height
+    * AppHash
+    * CoreChainLockedHeight
+    * Time
+
+Verification algorithm can be described as follows:
+
+1. Calculate StateID as 32-byte SHA256 checksum of relevant data, using raw fixed-length encoding:
+
+	```go
+	StateID = SHA256( toBytes(AppVersion) + toBytes(Height) +AppHash + toBytes(CoreChainLockedHeight) + toBytes(Time) )
+	```
+
+	where `toBytes()` converts data into byte array, using little-endian encoding
+2. Retrieve or calculate 32 bytes long `CanonicalVoteID`
+3. Calculate signed bytes as `signedBytes = CanonicalVoteID + StateID`
+4. Verify block signature for digest `SHA256(signedBytes)`
 
 ## Invalid Votes and Proposals
 
@@ -208,10 +293,10 @@ v.Height == s.Height && v.Round == s.Round && v.Step == 0x2 && s.Step != 0x2
 
 In other words, a vote should only be signed if it's:
 
-- at a higher height
-- at a higher round for the same height
-- a prevote for the same height and round where we haven't signed a prevote or precommit (but have signed a proposal)
-- a precommit for the same height and round where we haven't signed a precommit (but have signed a proposal and/or a prevote)
+* at a higher height
+* at a higher round for the same height
+* a prevote for the same height and round where we haven't signed a prevote or precommit (but have signed a proposal)
+* a precommit for the same height and round where we haven't signed a precommit (but have signed a proposal and/or a prevote)
 
 This means that once a validator signs a prevote for a given height and round, the only other message it can sign for that height and round is a precommit.
 And once a validator signs a precommit for a given height and round, it must not sign any other message for that same height and round.
