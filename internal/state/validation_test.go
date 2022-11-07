@@ -44,7 +44,6 @@ func TestValidateBlockHeader(t *testing.T) {
 
 	state, stateDB, privVals := makeState(t, 3, 1)
 	stateStore := sm.NewStore(stateDB)
-	nodeProTxHash := state.Validators.Validators[0].ProTxHash
 	nextChainLock := &types.CoreChainLock{
 		CoreBlockHeight: 100,
 		CoreBlockHash:   tmrand.Bytes(32),
@@ -151,7 +150,7 @@ func TestValidateBlockHeader(t *testing.T) {
 			tc.malleateBlock(block)
 
 			err = blockExec.ValidateBlockWithRoundState(ctx, state, changes, block)
-			t.Logf("%s: %v", tc.name, err)
+			//t.Logf("%s: %v", tc.name, err)
 			require.Error(t, err, tc.name)
 		}
 
@@ -159,7 +158,7 @@ func TestValidateBlockHeader(t *testing.T) {
 			A good block passes
 		*/
 		state, _, lastCommit = makeAndCommitGoodBlock(ctx, t,
-			state, nodeProTxHash, height, lastCommit, proposerProTxHash, blockExec, privVals, nil, 3)
+			state, height, lastCommit, proposerProTxHash, blockExec, privVals, nil, 3)
 	}
 
 	nextHeight := validationTestsStopHeight
@@ -183,7 +182,6 @@ func TestValidateBlockCommit(t *testing.T) {
 	require.NoError(t, eventBus.Start(ctx))
 
 	state, stateDB, privVals := makeState(t, 1, 1)
-	nodeProTxHash := state.Validators.Validators[0].ProTxHash
 	stateStore := sm.NewStore(stateDB)
 	nextChainLock := &types.CoreChainLock{
 		CoreBlockHeight: 100,
@@ -282,7 +280,6 @@ func TestValidateBlockCommit(t *testing.T) {
 		var blockID types.BlockID
 		state, blockID, lastCommit = makeAndCommitGoodBlock(ctx, t,
 			state,
-			nodeProTxHash,
 			height,
 			lastCommit,
 			proTxHash,
@@ -368,7 +365,6 @@ func TestValidateBlockEvidence(t *testing.T) {
 	require.NoError(t, proxyApp.Start(ctx))
 
 	state, stateDB, privVals := makeState(t, 4, 1)
-	nodeProTxHash := state.Validators.Validators[0].ProTxHash
 	stateStore := sm.NewStore(stateDB)
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
 	defaultEvidenceTime := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -474,7 +470,6 @@ func TestValidateBlockEvidence(t *testing.T) {
 			ctx,
 			t,
 			state,
-			nodeProTxHash,
 			height,
 			lastCommit,
 			proposerProTxHash,

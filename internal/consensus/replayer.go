@@ -234,12 +234,14 @@ func (r *BlockReplayer) replayBlocks(
 	}
 	var (
 		block   *types.Block
+		commit  *types.Commit
 		fbResp  *abci.ResponseFinalizeBlock
 		ucState sm.CurrentRoundState
 	)
 	for i := firstBlock; i <= finalBlock; i++ {
 		block = r.store.LoadBlock(i)
-		ucState, fbResp, err = r.replayBlock(ctx, block, state, i)
+		commit = r.store.LoadSeenCommitAt(i)
+		ucState, fbResp, err = r.replayBlock(ctx, block, commit, state, i)
 		if err != nil {
 			return nil, err
 		}
@@ -269,6 +271,7 @@ func (r *BlockReplayer) replayBlocks(
 func (r *BlockReplayer) replayBlock(
 	ctx context.Context,
 	block *types.Block,
+	commit *types.Commit,
 	state sm.State,
 	height int64,
 ) (sm.CurrentRoundState, *abci.ResponseFinalizeBlock, error) {
@@ -282,7 +285,7 @@ func (r *BlockReplayer) replayBlock(
 	// We emit events for the index services at the final block due to the sync issue when
 	// the node shutdown during the block committing status.
 	// For all other cases, we disable emitting events by providing blockExec=nil in ExecReplayedCommitBlock
-	fbResp, err := sm.ExecReplayedCommitBlock(ctx, r.appClient, block, r.logger, r.genDoc.InitialHeight)
+	fbResp, err := sm.ExecReplayedCommitBlock(ctx, r.appClient, block, commit, r.logger)
 	if err != nil {
 		return sm.CurrentRoundState{}, nil, err
 	}
@@ -304,9 +307,10 @@ func (r *BlockReplayer) syncStateAt(
 ) (sm.State, error) {
 	block := r.store.LoadBlock(height)
 	meta := r.store.LoadBlockMeta(height)
+	seenCommit := r.store.LoadSeenCommitAt(height)
 	// Use stubs for both mempool and evidence pool since no transactions nor
 	// evidence are needed here - block already exists.
-	state, err := blockExec.ApplyBlock(ctx, state, meta.BlockID, block)
+	state, err := blockExec.ApplyBlock(ctx, state, meta.BlockID, block, seenCommit)
 	if err != nil {
 		return sm.State{}, err
 	}

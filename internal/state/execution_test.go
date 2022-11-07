@@ -92,7 +92,7 @@ func TestApplyBlock(t *testing.T) {
 	require.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
 
-	state, err = blockExec.ApplyBlock(ctx, state, blockID, block)
+	state, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit))
 	require.NoError(t, err)
 
 	// State for next block
@@ -188,7 +188,7 @@ func TestFinalizeBlockByzantineValidators(t *testing.T) {
 
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
 
-	_, err = blockExec.ApplyBlock(ctx, state, blockID, block)
+	_, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit))
 	require.NoError(t, err)
 
 	// TODO check state and mempool
@@ -539,7 +539,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 	require.NoError(t, err)
 	blockID, err := block.BlockID()
 	require.NoError(t, err)
-	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block)
+	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, new(types.Commit))
 	require.NoError(t, err)
 
 	require.Nil(t, err)
@@ -621,7 +621,7 @@ func TestFinalizeBlockValidatorUpdatesResultingInEmptySet(t *testing.T) {
 	}
 
 	assert.NotPanics(t, func() {
-		state, err = blockExec.ApplyBlock(ctx, state, blockID, block)
+		state, err = blockExec.ApplyBlock(ctx, state, blockID, block, new(types.Commit))
 	})
 	assert.NotNil(t, err)
 	assert.NotEmpty(t, state.Validators.Validators)

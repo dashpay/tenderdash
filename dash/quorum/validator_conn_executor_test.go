@@ -426,7 +426,7 @@ func TestFinalizeBlock(t *testing.T) {
 	candidateState, err := blockExec.ProcessProposal(ctx, block, state, true)
 	require.NoError(t, err)
 
-	state, err = blockExec.FinalizeBlock(ctx, state, candidateState, blockID, block)
+	state, err = blockExec.FinalizeBlock(ctx, state, candidateState, blockID, block, new(types.Commit))
 	require.NoError(t, err)
 
 	// test new validator was added to NextValidators
