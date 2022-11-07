@@ -150,7 +150,7 @@ func TestValidateBlockHeader(t *testing.T) {
 			tc.malleateBlock(block)
 
 			err = blockExec.ValidateBlockWithRoundState(ctx, state, changes, block)
-			//t.Logf("%s: %v", tc.name, err)
+			t.Logf("%s: %v", tc.name, err)
 			require.Error(t, err, tc.name)
 		}
 
