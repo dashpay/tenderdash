@@ -193,8 +193,8 @@ message RequestVerifyVoteExtension {
 message RequestFinalizeBlock {
   // List of transactions committed as part of the block.
   repeated bytes txs = 1;
-  // Info about the last commit, obtained from the block that was just decided.
-  CommitInfo decided_last_commit = 2 [(gogoproto.nullable) = false];
+  // Info about the current commit
+  CommitInfo commit = 2 [(gogoproto.nullable) = false];
   // List of information about validators that acted incorrectly.
   repeated Misbehavior misbehavior = 3 [(gogoproto.nullable) = false];
   // The block header's hash. Present for convenience (can be derived from the block header).

@@ -2405,7 +2405,8 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 			PartSetHeader: blockParts.Header(),
 		},
 		block,
-			)
+		commit,
+	)
 	if err != nil {
 		logger.Error("failed to apply block", "err", err)
 		return

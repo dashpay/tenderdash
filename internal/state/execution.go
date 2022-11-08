@@ -404,14 +404,14 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	uncommittedState CurrentRoundState,
 	blockID types.BlockID,
 	block *types.Block,
+	commit *types.Commit,
 ) (State, error) {
-	round := uncommittedState.Round
 	// validate the block if we haven't already
 	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
 		return state, ErrInvalidBlock{err}
 	}
 	startTime := time.Now().UnixNano()
-	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, round, blockExec.logger, -1)
+	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, commit, blockExec.logger)
 	if err != nil {
 		return state, ErrInvalidBlock{err}
 	}
@@ -475,16 +475,16 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 // It takes a blockID to avoid recomputing the parts hash.
 func (blockExec *BlockExecutor) ApplyBlock(
 	ctx context.Context,
-	round int32,
 	state State,
-	blockID types.BlockID, block *types.Block,
+	blockID types.BlockID,
+	block *types.Block,
+	commit *types.Commit,
 ) (State, error) {
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block, round, state, true)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block, commit.Round, state, true)
 	if err != nil {
 		return state, err
 	}
-
-	return blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block)
+	return blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit)
 }
 
 func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote) ([]*abci.ExtendVoteExtension, error) {
@@ -627,27 +627,25 @@ func execBlock(
 	ctx context.Context,
 	appConn abciclient.Client,
 	block *types.Block,
-	round int32,
+	commit *types.Commit,
 	logger log.Logger,
-	initialHeight int64,
 ) (*abci.ResponseFinalizeBlock, error) {
 	version := block.Header.Version.ToProto()
 
 	blockHash := block.Hash()
 	txs := block.Txs.ToSliceOfBytes()
-	lastCommit := buildLastCommitInfo(block, initialHeight)
 	evidence := block.Evidence.ToABCI()
 
 	responseFinalizeBlock, err := appConn.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
-			Hash:              blockHash,
-			Height:            block.Height,
-			Round:             round,
-			Time:              block.Time,
-			Txs:               txs,
-			DecidedLastCommit: lastCommit,
-			Misbehavior:       evidence,
+			Hash:        blockHash,
+			Height:      block.Height,
+			Round:       commit.Round,
+			Time:        block.Time,
+			Txs:         txs,
+			Commit:      commit.ToCommitInfo(),
+			Misbehavior: evidence,
 
 			// Dash's fields
 			CoreChainLockedHeight: block.CoreChainLockedHeight,
@@ -676,11 +674,10 @@ func ExecReplayedCommitBlock(
 	ctx context.Context,
 	appConn abciclient.Client,
 	block *types.Block,
-	round int32,
+	commit *types.Commit,
 	logger log.Logger,
-	initialHeight int64,
 ) (*abci.ResponseFinalizeBlock, error) {
-	fbResp, err := execBlockWithoutState(ctx, appConn, block, round, logger, initialHeight)
+	fbResp, err := execBlockWithoutState(ctx, appConn, block, commit, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -692,11 +689,10 @@ func execBlockWithoutState(
 	ctx context.Context,
 	appConn abciclient.Client,
 	block *types.Block,
-	round int32,
+	commit *types.Commit,
 	logger log.Logger,
-	initialHeight int64,
 ) (*abci.ResponseFinalizeBlock, error) {
-	respFinalizeBlock, err := execBlock(ctx, appConn, block, round, logger, initialHeight)
+	respFinalizeBlock, err := execBlock(ctx, appConn, block, commit, logger)
 	if err != nil {
 		logger.Error("executing block", "err", err)
 		return respFinalizeBlock, err
