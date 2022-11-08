@@ -133,7 +133,7 @@ func invalidProposeCoreChainLockFunc(ctx context.Context, t *testing.T, height i
 		block, blockParts = cs.ValidBlock, cs.ValidBlockParts
 	} else {
 		// Create a new proposal block from state/txs from the mempool.
-		block, err = cs.createProposalBlock(ctx)
+		block, err = cs.createProposalBlock(ctx, round)
 		require.NoError(t, err)
 		blockParts, err = block.MakePartSet(types.BlockPartSizeBytes)
 		require.NoError(t, err)

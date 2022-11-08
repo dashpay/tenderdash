@@ -868,10 +868,15 @@ func buildAppStateFromChain(
 	switch mode {
 	case 0:
 		for i := 0; i < nBlocks; i++ {
+			//round := int32(0)
+			//if i+1 < len(chain) {
+			//	round = chain[i+1].LastCommit.Round
+			//}
 			state = applyBlock(ctx, t, blockExec, state, chain[i], commits[i])
 		}
 	case 1, 2, 3:
 		for i := 0; i < nBlocks-1; i++ {
+			//round := chain[i+1].LastCommit.Round
 			state = applyBlock(ctx, t, blockExec, state, chain[i], commits[i])
 		}
 
@@ -933,6 +938,10 @@ func buildTMStateFromChain(
 	case 0:
 		// sync right up
 		for i, block := range chain {
+			//round := int32(0)
+			//if i+1 < len(chain) {
+			//	round = chain[i+1].LastCommit.Round
+			//}
 			state = applyBlock(ctx, t, blockExec, state, block, commits[i])
 		}
 
@@ -940,6 +949,7 @@ func buildTMStateFromChain(
 		// sync up to the penultimate as if we stored the block.
 		// whether we commit or not depends on the appHash
 		for i, block := range chain[:len(chain)-1] {
+			//round := chain[i+1].LastCommit.Round
 			state = applyBlock(ctx, t, blockExec, state, block, commits[i])
 		}
 

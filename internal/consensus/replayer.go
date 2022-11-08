@@ -241,7 +241,7 @@ func (r *BlockReplayer) replayBlocks(
 	for i := firstBlock; i <= finalBlock; i++ {
 		block = r.store.LoadBlock(i)
 		commit = r.store.LoadSeenCommitAt(i)
-		ucState, fbResp, err = r.replayBlock(ctx, block, commit, state, i)
+		ucState, fbResp, err = r.replayBlock(ctx, block, commit, state, i, commit.Round)
 		if err != nil {
 			return nil, err
 		}
@@ -274,10 +274,11 @@ func (r *BlockReplayer) replayBlock(
 	commit *types.Commit,
 	state sm.State,
 	height int64,
+	round int32,
 ) (sm.CurrentRoundState, *abci.ResponseFinalizeBlock, error) {
 	r.logger.Info("Applying block", "height", height)
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
-	ucState, err := r.blockExec.ProcessProposal(ctx, block, state, false)
+	ucState, err := r.blockExec.ProcessProposal(ctx, block, round, state, false)
 	if err != nil {
 		return sm.CurrentRoundState{}, nil, fmt.Errorf("blockReplayer process proposal: %w", err)
 	}
