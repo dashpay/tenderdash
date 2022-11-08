@@ -17,6 +17,7 @@ import (
 
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
 	"github.com/tendermint/tendermint/types"
 )
@@ -205,16 +206,16 @@ func readPrivKey(keyFilePath string, quorumHash crypto.QuorumHash) (crypto.PrivK
 }
 
 func makeRandomBlockID() types.BlockID {
-	return makeBlockID(tmrand.Bytes(crypto.HashSize), 100, tmrand.Bytes(crypto.HashSize), tmrand.Bytes(crypto.HashSize))
+	return makeBlockID(tmrand.Bytes(crypto.HashSize), 100, tmrand.Bytes(crypto.HashSize), types.RandStateID())
 }
 
-func makeBlockID(hash tmbytes.HexBytes, partSetSize uint32, partSetHash, stateIDHash tmbytes.HexBytes) types.BlockID {
+func makeBlockID(hash tmbytes.HexBytes, partSetSize uint32, partSetHash tmbytes.HexBytes, stateID tmproto.StateID) types.BlockID {
 	return types.BlockID{
 		Hash: hash.Copy(),
 		PartSetHeader: types.PartSetHeader{
 			Total: partSetSize,
 			Hash:  partSetHash.Copy(),
 		},
-		StateID: stateIDHash.Copy(),
+		StateID: stateID,
 	}
 }

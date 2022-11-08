@@ -550,6 +550,6 @@ func randBlockID() BlockID {
 			Total: 1,
 			Hash:  tmrand.Bytes(crypto.HashSize),
 		},
-		StateID: RandStateID().Hash(),
+		StateID: RandStateID(),
 	}
 }

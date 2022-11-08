@@ -4,7 +4,8 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"time"
+
+	gogotypes "github.com/gogo/protobuf/types"
 
 	"github.com/tendermint/tendermint/crypto"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
@@ -13,13 +14,13 @@ import (
 
 const StateIDVersion = 1
 
-func RandStateID() StateID {
-	return StateID{
+func RandStateID() tmproto.StateID {
+	return tmproto.StateID{
 		Height:                uint64(rand.Int63()), //nolint:gosec
-		AppHash:               *(*[crypto.DefaultAppHashSize]byte)(tmrand.Bytes(crypto.DefaultAppHashSize)),
+		AppHash:               tmrand.Bytes(crypto.DefaultAppHashSize),
 		AppVersion:            StateIDVersion,
 		CoreChainLockedHeight: rand.Uint32(), //nolint:gosec
-		Time:                  time.Now(),
+		Time:                  *gogotypes.TimestampNow(),
 	}
 }
 

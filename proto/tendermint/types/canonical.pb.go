@@ -220,7 +220,7 @@ type CanonicalVote struct {
 	Round  int64         `protobuf:"fixed64,3,opt,name=round,proto3" json:"round,omitempty"`
 	// block_id is a checksum (sha256) of CanonicalBlockID for the block being voted on
 	BlockID []byte `protobuf:"bytes,4,opt,name=block_id,json=blockId,proto3" json:"block_id,omitempty"`
-	// state_id is a checksum  (sha256) of StateID for the block being voted on
+	// state_id is a checksum  (sha256) of StateID message for the block being voted on
 	StateID []byte `protobuf:"bytes,5,opt,name=state_id,json=stateId,proto3" json:"state_id,omitempty"`
 	ChainID string `protobuf:"bytes,99,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
 }

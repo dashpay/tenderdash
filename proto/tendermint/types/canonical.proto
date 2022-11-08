@@ -37,7 +37,7 @@ message CanonicalVote {
   sfixed64      round  = 3;  // canonicalization requires fixed size encoding here
   // block_id is a checksum (sha256) of CanonicalBlockID for the block being voted on
   bytes block_id = 4 [(gogoproto.customname) = "BlockID"];
-  // state_id is a checksum  (sha256) of StateID for the block being voted on
+  // state_id is a checksum  (sha256) of StateID message for the block being voted on
   bytes  state_id = 5 [(gogoproto.customname) = "StateID"];
   string chain_id = 99 [(gogoproto.customname) = "ChainID"];
 }

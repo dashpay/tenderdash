@@ -62,8 +62,23 @@ message BlockID {
   PartSetHeader part_set_header = 2 [(gogoproto.nullable) = false];
   // state_id is a hash of fields required to validate state in light client.
   // See types/stateid.go for details.
-  bytes state_id = 3 [(gogoproto.customname) = "StateID"];
+  StateID state_id = 3 [(gogoproto.customname) = "StateID"];
   ;
+}
+
+// StateID represents essential information required to verify state, document and transactions.
+// It is meant to be used by light clients (like mobile apps) to verify proofs.
+message StateID {
+  // AppVersion used when generating the block, equals to Header.Version.App.
+  fixed64 app_version = 1 [(gogoproto.customname) = "AppVersion"];
+  // Height of block containing this state ID.
+  fixed64 height = 2;
+  // AppHash used in current block, equal to Header.AppHash. 32 bytes.
+  bytes app_hash = 3 [(gogoproto.customname) = "AppHash"];
+  // CoreChainLockedHeight for the block, equal to Header.CoreChainLockedHeight.
+  fixed32 core_chain_locked_height = 4 [(gogoproto.customname) = "CoreChainLockedHeight"];
+  // Time of the block.
+  google.protobuf.Timestamp time = 5 [(gogoproto.nullable) = false];
 }
 
 // --------------------------------

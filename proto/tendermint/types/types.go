@@ -1,15 +1,19 @@
 package types
 
 import (
+	bytes "bytes"
 	"fmt"
 
+	"github.com/gogo/protobuf/types"
+
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/internal/libs/protoio"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 )
 
 // IsZero returns true when the object is a zero-value or nil
 func (m *BlockID) IsZero() bool {
-	return m == nil || (len(m.Hash) == 0 && m.PartSetHeader.IsZero() && len(m.StateID) == 0)
+	return m == nil || (len(m.Hash) == 0 && m.PartSetHeader.IsZero() && m.StateID.IsZero())
 }
 
 func (m *BlockID) ToCanonicalBlockID() *CanonicalBlockID {
@@ -58,7 +62,7 @@ func (m Vote) SignBytes(chainID string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	return bytes.MarshalFixedSize(pbVote)
+	return tmbytes.MarshalFixedSize(pbVote)
 }
 
 // CanonicalizeVote transforms the given Vote to a CanonicalVote, which does
@@ -69,26 +73,17 @@ func (m Vote) ToCanonicalVote(chainID string) (CanonicalVote, error) {
 		stateIDBytes []byte
 		err          error
 	)
-	if !m.BlockID.IsZero() {
-		blockID := m.BlockID.ToCanonicalBlockID()
-		if blockID != nil {
-			if blockIDBytes, err = blockID.SignBytes(); err != nil {
-				return CanonicalVote{}, err
-			}
+	blockID := m.BlockID.ToCanonicalBlockID()
+	if blockID != nil {
+		if blockIDBytes, err = blockID.Checksum(); err != nil {
+			return CanonicalVote{}, err
 		}
-		blockIDBytes = crypto.Checksum(blockIDBytes)
-		stateIDBytes = m.BlockID.StateID
+		if stateIDBytes, err = m.BlockID.StateID.Hash(); err != nil {
+			return CanonicalVote{}, err
+		}
 	} else {
-		blockIDBytes = crypto.Checksum([]byte{})
-		stateIDBytes = crypto.Checksum([]byte{})
-	}
-
-	// We must ensure length is correct before doing fixed-len marshalling
-	if len(blockIDBytes) != crypto.HashSize {
-		return CanonicalVote{}, fmt.Errorf("block ID hash %x invalid length", blockIDBytes)
-	}
-	if len(stateIDBytes) != crypto.HashSize {
-		return CanonicalVote{}, fmt.Errorf("state ID hash %x invalid length", stateIDBytes)
+		blockIDBytes = make([]byte, crypto.HashSize)
+		stateIDBytes = make([]byte, crypto.HashSize)
 	}
 
 	return CanonicalVote{
@@ -99,4 +94,67 @@ func (m Vote) ToCanonicalVote(chainID string) (CanonicalVote, error) {
 		StateID: stateIDBytes,
 		ChainID: chainID,
 	}, nil
+}
+
+func (s StateID) signBytes() ([]byte, error) {
+	marshaled, err := protoio.MarshalDelimited(&s)
+	if err != nil {
+		return nil, err
+	}
+
+	return marshaled, nil
+}
+
+func (s StateID) Hash() (bz []byte, err error) {
+	if s.IsZero() {
+		return crypto.Checksum([]byte{}), nil
+	}
+	if bz, err = s.signBytes(); err != nil {
+		return nil, err
+	}
+	return crypto.Checksum(bz), nil
+}
+
+func (s *StateID) IsZero() bool {
+	return s == nil ||
+		(len(s.AppHash) == 0 &&
+			s.AppVersion == 0 &&
+			s.CoreChainLockedHeight == 0 &&
+			s.Height == 0 &&
+			s.Time.Equal(types.Timestamp{}))
+}
+
+// Copy returns new StateID that is equal to this one
+func (s StateID) Copy() StateID {
+	copied := s
+	copied.AppHash = make([]byte, len(s.AppHash))
+	copy(copied.AppHash, s.AppHash)
+
+	return copied
+}
+
+// Equal returns true if the StateID matches the given StateID
+func (s StateID) Equal(other StateID) bool {
+	left, err := s.signBytes()
+	if err != nil {
+		panic("cannot marshal stateID: " + err.Error())
+	}
+	right, err := other.signBytes()
+	if err != nil {
+		panic("cannot marshal stateID: " + err.Error())
+	}
+
+	return bytes.Equal(left, right)
+}
+
+// ValidateBasic performs basic validation.
+func (s StateID) ValidateBasic() error {
+	if s.AppVersion == 0 {
+		return fmt.Errorf("invalid stateID version %d", s.AppVersion)
+	}
+	if s.Time.Equal(types.Timestamp{}) {
+		return fmt.Errorf("invalid stateID time %s", s.Time.String())
+	}
+
+	return nil
 }

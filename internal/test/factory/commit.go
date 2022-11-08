@@ -15,7 +15,7 @@ func MakeCommit(
 	voteSet *types.VoteSet,
 	validatorSet *types.ValidatorSet,
 	validators []types.PrivValidator,
-	stateID types.StateID,
+	stateID tmproto.StateID,
 ) (*types.Commit, error) {
 	// all sign
 	for i := 0; i < len(validators); i++ {

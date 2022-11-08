@@ -540,7 +540,7 @@ func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh
 				firstID            = types.BlockID{
 					Hash:          first.Hash(),
 					PartSetHeader: firstPartSetHeader,
-					StateID:       first.StateID().Hash(),
+					StateID:       first.StateID(),
 				}
 			)
 
