@@ -348,6 +348,10 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		return &abci.ResponseFinalizeBlock{},
 			fmt.Errorf("height mismatch: expected %d, got %d", roundState.GetHeight(), req.Height)
 	}
+	if roundState.GetRound() != req.Commit.Round {
+		return &abci.ResponseFinalizeBlock{},
+			fmt.Errorf("commit round mismatch: expected %d, got %d", roundState.GetRound(), req.Commit.Round)
+	}
 	events := []abci.Event{app.eventValUpdate(req.Height)}
 	resp := &abci.ResponseFinalizeBlock{
 		Events: events,
