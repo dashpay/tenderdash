@@ -308,7 +308,10 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 			assert.Empty(t, responses.ProcessProposal.ValidatorSetUpdate)
 		}
 
-		changes, err := state.NewStateChangeset(ctx, sm.RoundParamsFromProcessProposal(responses.ProcessProposal, nil))
+		changes, err := state.NewStateChangeset(
+			ctx,
+			sm.RoundParamsFromProcessProposal(responses.ProcessProposal, nil, 0),
+		)
 		require.NoError(t, err)
 
 		state, err = state.Update(blockID, &header, &changes)
@@ -957,7 +960,7 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 			require.NoError(t, err)
 		}
 	}
-	rp := sm.RoundParamsFromProcessProposal(responses.ProcessProposal, coreChainLock)
+	rp := sm.RoundParamsFromProcessProposal(responses.ProcessProposal, coreChainLock, 0)
 	// Prepare state to generate height 2
 	changes, err := state.NewStateChangeset(ctx, rp)
 	require.NoError(t, err)
@@ -1049,7 +1052,7 @@ func TestConsensusParamsChangesSaveLoad(t *testing.T) {
 		firstNode := state.Validators.GetByIndex(0)
 		ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
 
-		rp := sm.RoundParamsFromProcessProposal(responses.ProcessProposal, coreChainLock)
+		rp := sm.RoundParamsFromProcessProposal(responses.ProcessProposal, coreChainLock, 0)
 		changes, err := state.NewStateChangeset(ctx, rp)
 		require.NoError(t, err)
 		state, err = state.Update(blockID, &header, &changes)

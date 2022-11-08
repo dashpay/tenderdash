@@ -783,5 +783,5 @@ func (app *Application) validateHeight(height int64) error {
 }
 
 func roundKey(appHash tmbytes.HexBytes, height int64, round int32) string {
-	return fmt.Sprintf("%d-%d-%x", height, round, appHash)
+	return strconv.FormatInt(height, 16) + strconv.FormatInt(int64(round), 16) + appHash.String()
 }

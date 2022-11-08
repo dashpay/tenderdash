@@ -196,7 +196,11 @@ func TestFinalizeBlockByzantineValidators(t *testing.T) {
 }
 
 func TestProcessProposal(t *testing.T) {
-	const height = 1
+	const (
+		height = 1
+		// just some arbitrary round, to ensure everything works correctly
+		round = int32(12)
+	)
 	txs := factory.MakeNTxs(height, 10)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -256,7 +260,7 @@ func TestProcessProposal(t *testing.T) {
 		Txs:         block1.Txs.ToSliceOfBytes(),
 		Hash:        block1.Hash(),
 		Height:      block1.Header.Height,
-		Round:       12,
+		Round:       round,
 		Time:        block1.Header.Time,
 		Misbehavior: block1.Evidence.ToABCI(),
 		ProposedLastCommit: abci.CommitInfo{
@@ -276,7 +280,7 @@ func TestProcessProposal(t *testing.T) {
 		TxResults: txResults,
 		Status:    abci.ResponseProcessProposal_ACCEPT,
 	}, nil)
-	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, 12, state, true)
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, round, state, true)
 	require.NoError(t, err)
 	assert.NotZero(t, uncommittedState)
 	app.AssertExpectations(t)
@@ -356,7 +360,7 @@ func TestUpdateValidators(t *testing.T) {
 	validatorSet, _ := types.RandValidatorSet(4)
 	originalProTxHashes := validatorSet.GetProTxHashes()
 	addedProTxHashes := crypto.RandProTxHashes(4)
-	combinedProTxHashes := append(originalProTxHashes, addedProTxHashes...) // nolint:gocritic
+	combinedProTxHashes := append(originalProTxHashes, addedProTxHashes...) //nolint:gocritic
 	combinedValidatorSet, _ := types.GenerateValidatorSet(types.NewValSetParam(combinedProTxHashes))
 	regeneratedValidatorSet, _ := types.GenerateValidatorSet(types.NewValSetParam(combinedProTxHashes))
 	abciRegeneratedValidatorUpdates := regeneratedValidatorSet.ABCIEquivalentValidatorUpdates()
@@ -541,7 +545,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 	require.NoError(t, err)
 	blockID, err := block.BlockID()
 	require.NoError(t, err)
-	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, round)
+	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block)
 	require.NoError(t, err)
 
 	require.Nil(t, err)

@@ -2224,7 +2224,6 @@ func TestCorrectABCIRound(t *testing.T) {
 	require.NoError(t, err)
 	voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
 
-	started := false
 	// Doing 4 empty rounds, to ensure round != 0 and cs1 is proposer
 	var round int32
 	for round = 0; round < 4; round++ {
@@ -2234,10 +2233,9 @@ func TestCorrectABCIRound(t *testing.T) {
 			mockProposerApplicationCalls(t, m, round, false)
 		}
 
-		// start the test
-		if started == false {
+		// start the test on round 0
+		if round == 0 {
 			startTestRound(ctx, cs1, cs1.Height, round)
-			started = true
 		}
 		ensureNewRound(t, newRoundCh, height, round)
 

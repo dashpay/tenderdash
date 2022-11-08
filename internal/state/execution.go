@@ -217,7 +217,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 
 	block.SetTxs(itxs)
 
-	rp, err := RoundParamsFromPrepareProposal(rpp)
+	rp, err := RoundParamsFromPrepareProposal(rpp, round)
 	if err != nil {
 		return nil, CurrentRoundState{}, err
 	}
@@ -276,7 +276,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		return CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
 	}
 
-	rp := RoundParamsFromProcessProposal(resp, block.CoreChainLock)
+	rp := RoundParamsFromProcessProposal(resp, block.CoreChainLock, round)
 
 	// update some round state data
 	stateChanges, err := state.NewStateChangeset(ctx, rp)
@@ -404,8 +404,8 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	uncommittedState CurrentRoundState,
 	blockID types.BlockID,
 	block *types.Block,
-	round int32,
 ) (State, error) {
+	round := uncommittedState.Round
 	// validate the block if we haven't already
 	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
 		return state, ErrInvalidBlock{err}
@@ -484,7 +484,7 @@ func (blockExec *BlockExecutor) ApplyBlock(
 		return state, err
 	}
 
-	return blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, round)
+	return blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block)
 }
 
 func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote) ([]*abci.ExtendVoteExtension, error) {
