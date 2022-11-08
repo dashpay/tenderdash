@@ -286,14 +286,14 @@ func FromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 func (state State) MakeBlock(
 	height int64,
 	txs []types.Tx,
-	commit *types.Commit,
+	lastCommit *types.Commit,
 	evidence []types.Evidence,
 	proposerProTxHash types.ProTxHash,
 	proposedAppVersion uint64,
 ) *types.Block {
 
 	// Build base block with block data.
-	block := types.MakeBlock(height, txs, commit, evidence)
+	block := types.MakeBlock(height, txs, lastCommit, evidence)
 
 	// Fill rest of header with state data.
 	validatorsHash := state.Validators.Hash()

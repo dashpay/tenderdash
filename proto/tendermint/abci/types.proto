@@ -129,6 +129,8 @@ message RequestPrepareProposal {
   google.protobuf.Timestamp time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   // Merkle root of the next validator set.
   bytes next_validators_hash = 7;
+  // Round number for the block.
+  int32 round = 8;
 
   // Core chain lock height to be used when signing this block.
   uint32 core_chain_locked_height = 100;
@@ -151,6 +153,8 @@ message RequestProcessProposal {
   bytes hash = 4;
   // The height of the proposed block.
   int64 height = 5;
+  // Round number for the block
+  int32 round = 8;
   // Timestamp included in the proposed block.
   google.protobuf.Timestamp time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   // Merkle root of the next validator set.
@@ -158,18 +162,22 @@ message RequestProcessProposal {
 
   // Core chain lock height to be used when signing this block.
   uint32 core_chain_locked_height = 100;
-  // ProTXHash of the original proposer of the block.
+  // ProTxHash of the original proposer of the block.
   bytes proposer_pro_tx_hash = 101;
   // Proposer's latest available app protocol version.
   uint64 proposed_app_version = 102;
   // App and block version used to generate the block.
   tendermint.version.Consensus version = 103;
+  // Next core-chain-lock-update for validation in ABCI.
+  tendermint.types.CoreChainLock core_chain_lock_update = 104;
 }
 
 // Extends a vote with application-side injection
 message RequestExtendVote {
   bytes hash   = 1;
   int64 height = 2;
+  // Round number for the block
+  int32 round = 3;
 }
 
 // Verify the vote extension
@@ -177,8 +185,9 @@ message RequestVerifyVoteExtension {
   bytes hash                  = 1;
   bytes validator_pro_tx_hash = 2;
   int64 height                = 3;
-
-  repeated ExtendVoteExtension vote_extensions = 4;
+  // Round number for the block
+  int32                        round           = 4;
+  repeated ExtendVoteExtension vote_extensions = 5;
 }
 
 message RequestFinalizeBlock {
@@ -192,6 +201,8 @@ message RequestFinalizeBlock {
   bytes hash = 4;
   // The height of the finalized block.
   int64 height = 5;
+  // Round number for the block
+  int32 round = 8;
   // Timestamp included in the finalized block.
   google.protobuf.Timestamp time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
   // Merkle root of the next validator set.
@@ -287,7 +298,7 @@ message ResponseQuery {
 message ResponseCheckTx {
   uint32 code       = 1;
   bytes  data       = 2;
-  string info       = 4; // nondeterministic
+  string info       = 4;  // nondeterministic
   int64  gas_wanted = 5;
   string codespace  = 8;
   string sender     = 9;

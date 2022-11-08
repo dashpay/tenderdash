@@ -3,6 +3,7 @@ package consensus
 import (
 	"bytes"
 	"context"
+	"reflect"
 	"strconv"
 	"testing"
 	"time"
@@ -216,7 +217,7 @@ func TestStateBadProposal(t *testing.T) {
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
 	voteCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryVote)
 
-	propBlock, err := cs1.createProposalBlock(ctx) // changeProposer(t, cs1, vs2)
+	propBlock, err := cs1.createProposalBlock(ctx, round) // changeProposer(t, cs1, vs2)
 	require.NoError(t, err)
 
 	// make the second validator the proposer by incrementing round
@@ -315,7 +316,7 @@ func TestStateProposalTime(t *testing.T) {
 			cs := cs1
 			// Generate proposal block
 			cs.mtx.Lock()
-			propBlock, err := cs.createProposalBlock(ctx)
+			propBlock, err := cs.createProposalBlock(ctx, round)
 			require.NoError(t, err)
 			if tc.blockTimeFunc != nil {
 				propBlock.Time = tc.blockTimeFunc(cs)
@@ -359,7 +360,7 @@ func TestStateOversizedBlock(t *testing.T) {
 	timeoutProposeCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutPropose)
 	voteCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryVote)
 
-	propBlock, err := cs1.createProposalBlock(ctx)
+	propBlock, err := cs1.createProposalBlock(ctx, round)
 	require.NoError(t, err)
 	propBlock.Data.Txs = []types.Tx{tmrand.Bytes(2001)}
 	propBlock.Header.DataHash = propBlock.Data.Hash()
@@ -2171,7 +2172,9 @@ func TestExtendVote(t *testing.T) {
 		PartSetHeader: rs.ProposalBlockParts.Header(),
 	}
 	reqExtendVoteFunc := mock.MatchedBy(func(req *abci.RequestExtendVote) bool {
-		return assert.Equal(t, req.Height, height) && assert.Equal(t, []byte(blockID.Hash), req.Hash)
+		return assert.Equal(t, req.Height, height) &&
+			assert.Equal(t, []byte(blockID.Hash), req.Hash) &&
+			assert.Equal(t, req.Round, round)
 	})
 	m.On("ExtendVote", mock.Anything, reqExtendVoteFunc).Return(&abci.ResponseExtendVote{
 		VoteExtensions: voteExtensions,
@@ -2180,6 +2183,7 @@ func TestExtendVote(t *testing.T) {
 		_, ok := proTxHashMap[types.ProTxHash(req.ValidatorProTxHash).String()]
 		return assert.Equal(t, req.Hash, blockID.Hash.Bytes()) &&
 			assert.Equal(t, req.Height, height) &&
+			assert.Equal(t, req.Round, round) &&
 			assert.Equal(t, req.VoteExtensions, voteExtensions) &&
 			assert.True(t, ok)
 	})
@@ -2193,6 +2197,77 @@ func TestExtendVote(t *testing.T) {
 	ensurePrecommit(t, voteCh, height, round)
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), blockID, vss[1:]...)
 	ensureNewRound(t, newRoundCh, height+1, 0)
+	m.AssertExpectations(t)
+	mock.AssertExpectationsForObjects(t, m)
+}
+
+// TestCorrectABCIRound checks if ABCI receives correct round number in requests.
+func TestCorrectABCIRound(t *testing.T) {
+	config := configSetup(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	m := abcimocks.NewApplication(t)
+
+	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, application: m})
+	height := cs1.Height
+
+	proTxHashMap := make(map[string]struct{})
+	for _, vs := range vss {
+		pth, _ := vs.GetProTxHash(ctx)
+		proTxHashMap[pth.String()] = struct{}{}
+	}
+
+	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
+	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
+	proTxHash, err := cs1.privValidator.GetProTxHash(ctx)
+	require.NoError(t, err)
+	voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
+
+	// Doing 4 empty rounds, to ensure round != 0 and cs1 is proposer
+	var round int32
+	for round = 0; round < 4; round++ {
+		t.Logf("Starting round %d", round)
+		// we are proposer, so expect proposal
+		if round%4 == 0 {
+			mockProposerApplicationCalls(t, m, round, false)
+		}
+
+		// start the test on round 0
+		if round == 0 {
+			startTestRound(ctx, cs1, cs1.Height, round)
+		}
+		ensureNewRound(t, newRoundCh, height, round)
+
+		if round%4 == 0 {
+			ensureNewProposal(t, proposalCh, height, round)
+		}
+
+		ensurePrevote(t, voteCh, height, round)
+		signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vss...)
+		ensurePrecommit(t, voteCh, height, round)
+		incrementRound(vss...)
+	}
+
+	// Now, at round 4, it's time to generate the block.
+	assert.EqualValues(t, 4, round)
+	mockProposerApplicationCalls(t, m, round, true)
+
+	ensureNewRound(t, newRoundCh, height, round)
+	ensureNewProposal(t, proposalCh, height, round)
+
+	rs := cs1.GetRoundState()
+	blockID, err := rs.ProposalBlock.BlockID()
+	require.NoError(t, err)
+
+	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), blockID, vss[1:]...)
+	ensurePrevoteMatch(t, voteCh, height, round, blockID.Hash)
+
+	ensurePrecommitMatch(t, voteCh, height, round, blockID.Hash)
+	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), blockID, vss[1:]...)
+
+	ensureNewRound(t, newRoundCh, height+1, 0)
+	time.Sleep(time.Second)
 	m.AssertExpectations(t)
 	mock.AssertExpectationsForObjects(t, m)
 }
@@ -2252,12 +2327,14 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 
 	m.AssertCalled(t, "ExtendVote", mock.Anything, &abci.RequestExtendVote{
 		Height: height,
+		Round:  round,
 		Hash:   blockID.Hash,
 	})
 	reqVerifyVoteExtFunc := mock.MatchedBy(func(req *abci.RequestVerifyVoteExtension) bool {
 		_, ok := proTxHashMap[types.ProTxHash(req.ValidatorProTxHash).String()]
 		return assert.Equal(t, req.Hash, blockID.Hash.Bytes()) &&
 			assert.Equal(t, req.Height, height) &&
+			assert.Equal(t, req.Round, round) &&
 			assert.Equal(t, req.VoteExtensions, voteExtensions) &&
 			assert.True(t, ok)
 	})
@@ -2278,6 +2355,7 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 		Hash:               blockID.Hash,
 		ValidatorProTxHash: proTxHash,
 		Height:             height,
+		Round:              round,
 		VoteExtensions: []*abci.ExtendVoteExtension{
 			{
 				Type:      tmproto.VoteExtensionType_DEFAULT,
@@ -2984,7 +3062,7 @@ func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
 	require.NoError(t, err)
 	voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
 
-	propBlock, err := cs1.createProposalBlock(ctx)
+	propBlock, err := cs1.createProposalBlock(ctx, round)
 	require.NoError(t, err)
 	round++
 	incrementRound(vss[1:]...)
@@ -3032,7 +3110,7 @@ func TestStateTimestamp_ProposalMatch(t *testing.T) {
 	require.NoError(t, err)
 	voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
 
-	propBlock, err := cs1.createProposalBlock(ctx)
+	propBlock, err := cs1.createProposalBlock(ctx, round)
 	require.NoError(t, err)
 	round++
 	incrementRound(vss[1:]...)
@@ -3109,4 +3187,46 @@ func signAddPrecommitWithExtension(ctx context.Context,
 		valSet.QuorumHash, extensions)
 	require.NoError(t, err, "failed to sign vote")
 	addVotes(cs, v)
+}
+
+// mockProposerApplicationCalls configures mock Application `m` to support calls executed for each round on the proposer.
+// If `final` is true, we assume correct votes are generated, so vote extensions shall be processed and block finalized.
+func mockProposerApplicationCalls(t *testing.T, m *abcimocks.Application, round int32, final bool) {
+	t.Helper()
+
+	roundMatcher := mock.MatchedBy(func(data interface{}) bool {
+		t.Helper()
+		value := reflect.Indirect(reflect.ValueOf(data))
+		roundField := value.FieldByName("Round")
+		reqRound := roundField.Int()
+		return int64(round) == reqRound
+	})
+
+	m.On("PrepareProposal", mock.Anything, roundMatcher).Return(&abci.ResponsePrepareProposal{
+		AppHash: make([]byte, crypto.DefaultAppHashSize),
+	}, nil).Once()
+
+	m.On("ProcessProposal", mock.Anything, roundMatcher).Return(&abci.ResponseProcessProposal{
+		AppHash: make([]byte, crypto.DefaultAppHashSize),
+		Status:  abci.ResponseProcessProposal_ACCEPT,
+	}, nil).Once()
+
+	if final {
+		m.On("ExtendVote", mock.Anything, roundMatcher).
+			Return(&abci.ResponseExtendVote{
+				VoteExtensions: []*abci.ExtendVoteExtension{{
+					Type:      tmproto.VoteExtensionType_DEFAULT,
+					Extension: []byte("extension"),
+				}},
+			}, nil).Once()
+
+		m.On("VerifyVoteExtension", mock.Anything, roundMatcher).
+			Return(&abci.ResponseVerifyVoteExtension{
+				Status: abci.ResponseVerifyVoteExtension_ACCEPT,
+			}, nil).Times(2) // we need 2/3 votes
+
+		m.On("FinalizeBlock", mock.Anything, roundMatcher).
+			Return(&abci.ResponseFinalizeBlock{}, nil).
+			Once()
+	}
 }
