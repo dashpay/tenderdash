@@ -328,9 +328,6 @@ max-outgoing-connections = {{ .P2P.MaxOutgoingConnections }}
 # Rate limits the number of incoming connection attempts per IP address.
 max-incoming-connection-attempts = {{ .P2P.MaxIncomingConnectionAttempts }}
 
-# Set true to enable the peer-exchange reactor
-pex = {{ .P2P.PexReactor }}
-
 # Comma separated list of peer IDs to keep private (will not be gossiped to other peers)
 # Warning: IPs will be exposed at /net_info, for more information https://github.com/tendermint/tendermint/issues/3055
 private-peer-ids = "{{ .P2P.PrivatePeerIDs }}"
