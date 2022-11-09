@@ -42,7 +42,7 @@ func exampleVote() *types.Vote {
 				AppHash:               crypto.Checksum([]byte("apphash")),
 				CoreChainLockedHeight: 12345,
 				Time:                  *ts,
-			},
+			}.Hash(),
 		},
 		ValidatorProTxHash: crypto.ProTxHashFromSeedBytes([]byte("validator_pro_tx_hash")),
 		ValidatorIndex:     56789,

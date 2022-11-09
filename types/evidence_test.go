@@ -78,12 +78,12 @@ func randomDuplicateVoteEvidence(ctx context.Context, t *testing.T) *DuplicateVo
 	blockID := makeBlockID(
 		[]byte("blockhash"),
 		1000, []byte("partshash"),
-		stateID,
+		stateID.Hash(),
 	)
 	blockID2 := makeBlockID(
 		[]byte("blockhash2"),
 		1000, []byte("partshash"),
-		stateID,
+		stateID.Hash(),
 	)
 	quorumType := btcjson.LLMQType_5_60
 	const chainID = "mychain"
@@ -118,13 +118,13 @@ func TestDuplicateVoteEvidenceValidation(t *testing.T) {
 		crypto.Checksum([]byte("blockhash")),
 		math.MaxInt32,
 		crypto.Checksum([]byte("partshash")),
-		stateID,
+		stateID.Hash(),
 	)
 	blockID2 := makeBlockID(
 		crypto.Checksum([]byte("blockhash2")),
 		math.MaxInt32,
 		crypto.Checksum([]byte("partshash")),
-		stateID,
+		stateID.Hash(),
 	)
 	quorumType := btcjson.LLMQType_5_60
 	const chainID = "mychain"
@@ -228,7 +228,7 @@ func TestEvidenceProto(t *testing.T) {
 	// -------- Votes --------
 	quorumHash := crypto.RandQuorumHash()
 	val := NewMockPVForQuorum(quorumHash)
-	stateID := RandStateID()
+	stateID := RandStateID().Hash()
 	blockID := makeBlockID(crypto.Checksum([]byte("blockhash")), math.MaxInt32, crypto.Checksum([]byte("partshash")), stateID)
 	blockID2 := makeBlockID(crypto.Checksum([]byte("blockhash2")), math.MaxInt32, crypto.Checksum([]byte("partshash")), stateID)
 	quorumType := btcjson.LLMQType_5_60
@@ -288,7 +288,7 @@ func TestEvidenceVectors(t *testing.T) {
 		AppHash:               make([]byte, crypto.DefaultAppHashSize),
 		CoreChainLockedHeight: 1,
 		Time:                  *ts,
-	}
+	}.Hash()
 	val.UpdatePrivateKey(context.Background(), key, quorumHash, key.PubKey(), 10)
 	blockID := makeBlockID(crypto.Checksum([]byte("blockhash")), math.MaxInt32, crypto.Checksum([]byte("partshash")), stateID)
 	blockID2 := makeBlockID(crypto.Checksum([]byte("blockhash2")), math.MaxInt32, crypto.Checksum([]byte("partshash")), stateID)

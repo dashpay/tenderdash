@@ -216,6 +216,6 @@ func makeBlockID(hash tmbytes.HexBytes, partSetSize uint32, partSetHash tmbytes.
 			Total: partSetSize,
 			Hash:  partSetHash.Copy(),
 		},
-		StateID: stateID,
+		StateID: stateID.Hash(),
 	}
 }

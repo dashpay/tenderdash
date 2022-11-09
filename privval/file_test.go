@@ -64,7 +64,7 @@ func TestResetValidator(t *testing.T) {
 	blockID := types.BlockID{
 		Hash:          randBytes,
 		PartSetHeader: types.PartSetHeader{},
-		StateID:       types.RandStateID(),
+		StateID:       types.RandStateID().Hash(),
 	}
 
 	vote := newVote(privVal.Key.ProTxHash, 0, height, round, voteType, blockID, nil)
@@ -203,12 +203,12 @@ func TestSignVote(t *testing.T) {
 	block1 := types.BlockID{
 		Hash:          randbytes,
 		PartSetHeader: types.PartSetHeader{Total: 5, Hash: randbytes},
-		StateID:       types.RandStateID(),
+		StateID:       types.RandStateID().Hash(),
 	}
 	block2 := types.BlockID{
 		Hash:          randbytes2,
 		PartSetHeader: types.PartSetHeader{Total: 10, Hash: randbytes2},
-		StateID:       types.RandStateID(),
+		StateID:       types.RandStateID().Hash(),
 	}
 
 	height, round := int64(10), int32(1)
@@ -354,7 +354,7 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 	blockID := types.BlockID{
 		Hash:          tmrand.Bytes(crypto.HashSize),
 		PartSetHeader: types.PartSetHeader{Total: 5, Hash: tmrand.Bytes(crypto.HashSize)},
-		StateID:       stateID,
+		StateID:       stateID.Hash(),
 	}
 
 	voteType := tmproto.PrecommitType

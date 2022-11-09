@@ -62,8 +62,7 @@ message BlockID {
   PartSetHeader part_set_header = 2 [(gogoproto.nullable) = false];
   // state_id is a hash of fields required to validate state in light client.
   // See types/stateid.go for details.
-  StateID state_id = 3 [(gogoproto.customname) = "StateID"];
-  ;
+  bytes state_id = 3 [(gogoproto.customname) = "StateID"];
 }
 
 // StateID represents essential information required to verify state, document and transactions.

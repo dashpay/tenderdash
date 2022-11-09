@@ -27,6 +27,7 @@ func TestVoteSignBytes(t *testing.T) {
 		CoreChainLockedHeight: 1,
 		Time:                  *gogotypes.TimestampNow(),
 	}
+	sidHash := stateID.Hash()
 	v := Vote{
 		Type:   PrecommitType,
 		Height: height,
@@ -34,7 +35,7 @@ func TestVoteSignBytes(t *testing.T) {
 		BlockID: BlockID{
 			Hash:          h,
 			PartSetHeader: PartSetHeader{Total: 1, Hash: h},
-			StateID:       &stateID,
+			StateID:       sidHash,
 		},
 	}
 	const chainID = "some-chain"

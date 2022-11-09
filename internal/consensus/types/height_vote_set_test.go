@@ -84,7 +84,7 @@ func makeVoteHR(
 		BlockID: types.BlockID{
 			Hash:          randBytes,
 			PartSetHeader: types.PartSetHeader{},
-			StateID:       stateID,
+			StateID:       stateID.Hash(),
 		},
 	}
 

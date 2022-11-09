@@ -88,7 +88,7 @@ func (b *Block) BlockID(partSet *PartSet) (BlockID, error) {
 	blockID := BlockID{
 		Hash:          blockHash,
 		PartSetHeader: partSet.Header(),
-		StateID:       b.Header.StateID(),
+		StateID:       b.Header.StateID().Hash(),
 	}
 
 	return blockID, nil
@@ -1034,7 +1034,7 @@ func DataFromProto(dp *tmproto.Data) (Data, error) {
 type BlockID struct {
 	Hash          tmbytes.HexBytes `json:"hash"`
 	PartSetHeader PartSetHeader    `json:"parts"`
-	StateID       tmproto.StateID  `json:"state_id"`
+	StateID       tmbytes.HexBytes `json:"state_id"`
 }
 
 // Equals returns true if the BlockID matches the given BlockID
@@ -1052,10 +1052,7 @@ func (blockID BlockID) Key() string {
 		panic(err)
 	}
 
-	stateID, err := blockID.StateID.Hash()
-	if err != nil {
-		panic(err)
-	}
+	stateID := blockID.StateID
 
 	return string(blockID.Hash) + string(bz) + string(stateID)
 }
@@ -1074,10 +1071,8 @@ func (blockID BlockID) ValidateBasic() error {
 	if len(blockID.Hash) == 0 && !blockID.StateID.IsZero() {
 		return fmt.Errorf("state ID is not zero for NIL blockID: %+v", blockID)
 	}
-	if len(blockID.Hash) != 0 {
-		if err := blockID.StateID.ValidateBasic(); err != nil {
-			return fmt.Errorf("wrong state ID: %w", err)
-		}
+	if len(blockID.Hash) != 0 && len(blockID.StateID) != crypto.HashSize {
+		return fmt.Errorf("expected state ID len: %d, actual: %d", crypto.HashSize, len(blockID.StateID))
 	}
 
 	return nil
@@ -1118,11 +1113,7 @@ func (blockID BlockID) IsComplete() bool {
 // See PartSetHeader#String
 func (blockID BlockID) String() string {
 
-	stateIDHash, err := blockID.StateID.Hash()
-	if err != nil {
-		stateIDHash = []byte("!ERR:" + err.Error() + "!")
-	}
-
+	stateIDHash := blockID.StateID
 	return fmt.Sprintf(`%v:%v:%X`, blockID.Hash, blockID.PartSetHeader, stateIDHash[:6])
 }
 
@@ -1135,7 +1126,7 @@ func (blockID *BlockID) ToProto() tmproto.BlockID {
 	return tmproto.BlockID{
 		Hash:          blockID.Hash,
 		PartSetHeader: blockID.PartSetHeader.ToProto(),
-		StateID:       &blockID.StateID,
+		StateID:       blockID.StateID,
 	}
 }
 
@@ -1155,7 +1146,7 @@ func BlockIDFromProto(bID *tmproto.BlockID) (*BlockID, error) {
 	blockID.PartSetHeader = *ph
 	blockID.Hash = bID.Hash
 	if bID.StateID != nil {
-		blockID.StateID = *bID.StateID
+		blockID.StateID = bID.StateID
 	}
 
 	return blockID, blockID.ValidateBasic()

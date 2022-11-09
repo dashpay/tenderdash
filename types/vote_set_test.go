@@ -66,7 +66,7 @@ func TestVoteSet_AddVote_Bad(t *testing.T) {
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrevoteType,
-		BlockID:            BlockID{nil, PartSetHeader{}, RandStateID()},
+		BlockID:            BlockID{nil, PartSetHeader{}, RandStateID().Hash()},
 	}
 
 	// val0 votes for nil.
@@ -193,7 +193,7 @@ func TestVoteSet_2_3MajorityRedux(t *testing.T) {
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrevoteType,
-		BlockID:            BlockID{blockHash, blockPartSetHeader, stateID},
+		BlockID:            BlockID{blockHash, blockPartSetHeader, stateID.Hash()},
 	}
 
 	// 66 out of 100 voted for nil.
@@ -266,7 +266,7 @@ func TestVoteSet_2_3MajorityRedux(t *testing.T) {
 		_, err = signAddVote(ctx, privValidators[70], vote, voteSet)
 		require.NoError(t, err)
 		blockID, ok = voteSet.TwoThirdsMajority()
-		assert.True(t, ok && blockID.Equals(BlockID{blockHash, blockPartSetHeader, stateID}),
+		assert.True(t, ok && blockID.Equals(BlockID{blockHash, blockPartSetHeader, stateID.Hash()}),
 			"there should be 2/3 majority")
 	}
 }
@@ -414,7 +414,7 @@ func TestVoteSet_MakeCommit(t *testing.T) {
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrecommitType,
-		BlockID:            BlockID{blockHash, blockPartSetHeader, stateID},
+		BlockID:            BlockID{blockHash, blockPartSetHeader, stateID.Hash()},
 	}
 
 	// 6 out of 10 voted for some block.
@@ -521,7 +521,7 @@ func TestVoteSet_LLMQType_50_60(t *testing.T) {
 			blockHash := crypto.CRandBytes(32)
 			stateID := RandStateID()
 			blockPartSetHeader := PartSetHeader{uint32(123), crypto.CRandBytes(32)}
-			votedBlock := BlockID{blockHash, blockPartSetHeader, stateID}
+			votedBlock := BlockID{blockHash, blockPartSetHeader, stateID.Hash()}
 
 			// below threshold
 			for i := 0; i < tt.threshold-1; i++ {
@@ -669,7 +669,7 @@ func withBlockHash(vote *Vote, blockHash []byte) *Vote {
 		AppHash:               blockHash,
 		CoreChainLockedHeight: 1,
 		Time:                  *ts,
-	}
+	}.Hash()
 	return vote
 }
 

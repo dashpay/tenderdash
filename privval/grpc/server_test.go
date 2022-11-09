@@ -74,7 +74,7 @@ func TestSignVote(t *testing.T) {
 			BlockID: types.BlockID{
 				Hash:          hash,
 				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-				StateID:       stateID,
+				StateID:       stateID.Hash(),
 			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
@@ -85,7 +85,7 @@ func TestSignVote(t *testing.T) {
 			BlockID: types.BlockID{
 				Hash:          hash,
 				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-				StateID:       stateID,
+				StateID:       stateID.Hash(),
 			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
@@ -98,7 +98,7 @@ func TestSignVote(t *testing.T) {
 			BlockID: types.BlockID{
 				Hash:          hash,
 				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-				StateID:       stateID,
+				StateID:       stateID.Hash(),
 			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
@@ -110,7 +110,7 @@ func TestSignVote(t *testing.T) {
 			BlockID: types.BlockID{
 				Hash:          hash,
 				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-				StateID:       stateID,
+				StateID:       stateID.Hash(),
 			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,

@@ -19,7 +19,7 @@ func TestSigsRecoverer(t *testing.T) {
 		height  = 1000
 		chainID = "dash-platform"
 	)
-	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), RandStateID())
+	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), nil)
 	quorumType := crypto.SmallQuorumType()
 	quorumHash := crypto.RandQuorumHash()
 	testCases := []struct {
@@ -91,7 +91,7 @@ func TestSigsRecoverer_UsingVoteSet(t *testing.T) {
 		height  = 1000
 		n       = 4
 	)
-	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), RandStateID())
+	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), nil)
 	vals, pvs := RandValidatorSet(n)
 	quorumType := crypto.SmallQuorumType()
 	quorumHash, err := pvs[0].GetFirstQuorumHash(ctx)

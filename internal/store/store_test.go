@@ -37,7 +37,7 @@ func makeTestCommit(state sm.State, height int64, timestamp time.Time) *types.Co
 			Hash:  []byte(""),
 			Total: 2,
 		},
-		StateID: tmproto.StateID{},
+		StateID: []byte{},
 	}
 	goodVote := &types.Vote{
 		ValidatorProTxHash: crypto.RandProTxHash(),
@@ -64,7 +64,7 @@ func makeTestCommit(state sm.State, height int64, timestamp time.Time) *types.Co
 		types.BlockID{
 			Hash:          []byte(""),
 			PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2},
-			StateID:       tmproto.StateID{},
+			StateID:       []byte{},
 		},
 		&types.CommitSigns{
 			QuorumSigns: *thresholdSigns,
@@ -230,15 +230,6 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 
 	for i, tuple := range tuples {
 		tuple := tuple
-		if tuple.block != nil &&
-			tuple.block.LastCommit != nil &&
-			len(tuple.block.LastCommit.BlockID.Hash) == 0 && !tuple.block.LastCommit.BlockID.StateID.IsZero() {
-			t.FailNow()
-		}
-		if tuple.seenCommit != nil &&
-			len(tuple.seenCommit.BlockID.Hash) == 0 && !tuple.seenCommit.BlockID.StateID.IsZero() {
-			t.FailNow()
-		}
 
 		bs, db := newInMemoryBlockStore()
 		// SaveBlock

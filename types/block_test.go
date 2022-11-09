@@ -22,7 +22,6 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/rand"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	tmversion "github.com/tendermint/tendermint/proto/tendermint/version"
@@ -228,11 +227,14 @@ func makeBlockIDRandom() BlockID {
 	return BlockID{
 		Hash:          tmrand.Bytes(crypto.HashSize),
 		PartSetHeader: PartSetHeader{123, tmrand.Bytes(crypto.HashSize)},
-		StateID:       RandStateID(),
+		StateID:       RandStateID().Hash(),
 	}
 }
 
-func makeBlockID(hash tmbytes.HexBytes, partSetSize uint32, partSetHash tmbytes.HexBytes, stateID tmproto.StateID) BlockID {
+func makeBlockID(hash tmbytes.HexBytes, partSetSize uint32, partSetHash tmbytes.HexBytes, stateID tmbytes.HexBytes) BlockID {
+	if stateID == nil {
+		stateID = RandStateID().Hash()
+	}
 	return BlockID{
 		Hash: hash.Copy(),
 		PartSetHeader: PartSetHeader{
@@ -320,7 +322,7 @@ func TestMaxCommitBytes(t *testing.T) {
 				Total: math.MaxInt32,
 				Hash:  crypto.Checksum([]byte("blockID_part_set_header_hash")),
 			},
-			StateID: RandStateID(),
+			StateID: RandStateID().Hash(),
 		},
 		QuorumHash:              crypto.Checksum([]byte("QuorumHash")),
 		ThresholdBlockSignature: crypto.CRandBytes(SignatureSize),
@@ -359,7 +361,7 @@ func TestHeaderHash(t *testing.T) {
 						AppHash:               crypto.Checksum([]byte("app_hash")),
 						CoreChainLockedHeight: 1,
 						Time:                  *ts,
-					},
+					}.Hash(),
 				),
 				LastCommitHash:     crypto.Checksum([]byte("last_commit_hash")),
 				DataHash:           crypto.Checksum([]byte("data_hash")),
@@ -387,7 +389,7 @@ func TestHeaderHash(t *testing.T) {
 				Height:                3,
 				CoreChainLockedHeight: 1,
 				Time:                  time.Date(2019, 10, 13, 16, 14, 44, 0, time.UTC),
-				LastBlockID:           makeBlockID(make([]byte, crypto.HashSize), 6, make([]byte, crypto.HashSize), RandStateID()),
+				LastBlockID:           makeBlockID(make([]byte, crypto.HashSize), 6, make([]byte, crypto.HashSize), RandStateID().Hash()),
 				LastCommitHash:        crypto.Checksum([]byte("last_commit_hash")),
 				DataHash:              crypto.Checksum([]byte("data_hash")),
 				ValidatorsHash:        nil,
@@ -469,7 +471,7 @@ func TestMaxHeaderBytes(t *testing.T) {
 		ChainID:            maxChainID,
 		Height:             math.MaxInt64,
 		Time:               timestamp,
-		LastBlockID:        makeBlockID(make([]byte, crypto.HashSize), math.MaxInt32, make([]byte, crypto.HashSize), RandStateID()),
+		LastBlockID:        makeBlockID(make([]byte, crypto.HashSize), math.MaxInt32, make([]byte, crypto.HashSize), RandStateID().Hash()),
 		LastCommitHash:     crypto.Checksum([]byte("last_commit_hash")),
 		DataHash:           crypto.Checksum([]byte("data_hash")),
 		ValidatorsHash:     crypto.Checksum([]byte("validators_hash")),
@@ -496,7 +498,7 @@ func randCommit(ctx context.Context, t *testing.T, height int64, stateID tmproto
 		tmrand.Bytes(crypto.HashSize),
 		123,
 		tmrand.Bytes(crypto.HashSize),
-		stateID,
+		stateID.Hash(),
 	)
 	voteSet, _, vals := randVoteSet(ctx, t, height, 1, tmproto.PrecommitType, 10)
 	commit, err := makeCommit(ctx, blockID, height, 1, voteSet, vals)
@@ -586,7 +588,7 @@ func TestCommitToVoteSetWithVotesForNilBlock(t *testing.T) {
 	blockID := makeBlockID(
 		[]byte("blockhash"),
 		1000, []byte("partshash"),
-		RandStateID(),
+		RandStateID().Hash(),
 	)
 
 	const (
@@ -647,12 +649,12 @@ func TestCommitToVoteSetWithVotesForNilBlock(t *testing.T) {
 
 func TestBlockIDValidateBasic(t *testing.T) {
 	validBlockID := BlockID{
-		Hash: rand.Bytes(crypto.HashSize),
+		Hash: tmrand.Bytes(crypto.HashSize),
 		PartSetHeader: PartSetHeader{
 			Total: 1,
-			Hash:  rand.Bytes(crypto.HashSize),
+			Hash:  tmrand.Bytes(crypto.HashSize),
 		},
-		StateID: RandStateID(),
+		StateID: RandStateID().Hash(),
 	}
 
 	invalidBlockID := BlockID{
@@ -661,14 +663,14 @@ func TestBlockIDValidateBasic(t *testing.T) {
 			Total: 1,
 			Hash:  []byte{0},
 		},
-		StateID: tmproto.StateID{Height: 2},
+		StateID: tmproto.StateID{Height: 2}.Hash(),
 	}
 
 	testCases := []struct {
 		testName             string
 		blockIDHash          tmbytes.HexBytes
 		blockIDPartSetHeader PartSetHeader
-		blockIDStateID       tmproto.StateID
+		blockIDStateID       tmbytes.HexBytes
 		expectErr            bool
 	}{
 		{
@@ -678,7 +680,7 @@ func TestBlockIDValidateBasic(t *testing.T) {
 				Total: 0,
 				Hash:  []byte{},
 			},
-			blockIDStateID: tmproto.StateID{},
+			blockIDStateID: tmproto.StateID{}.Hash(),
 			expectErr:      false,
 		},
 		{
@@ -872,7 +874,7 @@ func TestBlockIDProtoBuf(t *testing.T) {
 		crypto.Checksum([]byte("hash")),
 		2,
 		crypto.Checksum([]byte("part_set_hash")),
-		RandStateID(),
+		RandStateID().Hash(),
 	)
 	testCases := []struct {
 		msg     string
@@ -932,8 +934,8 @@ func TestSignedHeaderProtoBuf(t *testing.T) {
 
 func TestBlockIDEquals(t *testing.T) {
 	var (
-		stateID1                = RandStateID()
-		stateID2                = RandStateID()
+		stateID1                = RandStateID().Hash()
+		stateID2                = RandStateID().Hash()
 		blockID                 = makeBlockID([]byte("hash"), 2, []byte("part_set_hash"), stateID1)
 		blockIDDuplicate        = makeBlockID([]byte("hash"), 2, []byte("part_set_hash"), stateID1)
 		blockIDDifferentHash    = makeBlockID([]byte("different_hash"), 2, []byte("part_set_hash"), stateID1)
@@ -1039,7 +1041,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 					PartSetHeader: PartSetHeader{
 						Hash: make([]byte, crypto.HashSize),
 					},
-					StateID: RandStateID(),
+					StateID: RandStateID().Hash(),
 				},
 				LastCommitHash: make([]byte, crypto.HashSize+1),
 			},
@@ -1056,7 +1058,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 					PartSetHeader: PartSetHeader{
 						Hash: make([]byte, crypto.HashSize),
 					},
-					StateID: RandStateID(),
+					StateID: RandStateID().Hash(),
 				},
 				LastCommitHash: make([]byte, crypto.HashSize),
 				DataHash:       make([]byte, crypto.HashSize+1),
@@ -1074,7 +1076,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 					PartSetHeader: PartSetHeader{
 						Hash: make([]byte, crypto.HashSize),
 					},
-					StateID: RandStateID(),
+					StateID: RandStateID().Hash(),
 				},
 				LastCommitHash: make([]byte, crypto.HashSize),
 				DataHash:       make([]byte, crypto.HashSize),
@@ -1093,7 +1095,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 					PartSetHeader: PartSetHeader{
 						Hash: make([]byte, crypto.HashSize),
 					},
-					StateID: RandStateID(),
+					StateID: RandStateID().Hash(),
 				},
 				LastCommitHash: make([]byte, crypto.HashSize),
 				DataHash:       make([]byte, crypto.HashSize),
@@ -1114,7 +1116,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 					PartSetHeader: PartSetHeader{
 						Hash: make([]byte, crypto.HashSize),
 					},
-					StateID: RandStateID(),
+					StateID: RandStateID().Hash(),
 				},
 				LastCommitHash:    make([]byte, crypto.HashSize),
 				DataHash:          make([]byte, crypto.HashSize),
@@ -1135,7 +1137,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 					PartSetHeader: PartSetHeader{
 						Hash: make([]byte, crypto.HashSize),
 					},
-					StateID: RandStateID(),
+					StateID: RandStateID().Hash(),
 				},
 				LastCommitHash:     make([]byte, crypto.HashSize),
 				DataHash:           make([]byte, crypto.HashSize),
@@ -1157,7 +1159,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 					PartSetHeader: PartSetHeader{
 						Hash: make([]byte, crypto.HashSize),
 					},
-					StateID: RandStateID(),
+					StateID: RandStateID().Hash(),
 				},
 				LastCommitHash:     make([]byte, crypto.HashSize),
 				DataHash:           make([]byte, crypto.HashSize),
@@ -1180,7 +1182,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 					PartSetHeader: PartSetHeader{
 						Hash: make([]byte, crypto.HashSize),
 					},
-					StateID: RandStateID(),
+					StateID: RandStateID().Hash(),
 				},
 				LastCommitHash:     make([]byte, crypto.HashSize),
 				DataHash:           make([]byte, crypto.HashSize),
@@ -1205,7 +1207,7 @@ func TestHeader_ValidateBasic(t *testing.T) {
 					PartSetHeader: PartSetHeader{
 						Hash: make([]byte, crypto.HashSize),
 					},
-					StateID: RandStateID(),
+					StateID: RandStateID().Hash(),
 				},
 				LastCommitHash:     make([]byte, crypto.HashSize),
 				DataHash:           make([]byte, crypto.HashSize),

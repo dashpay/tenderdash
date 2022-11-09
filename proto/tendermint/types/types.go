@@ -13,7 +13,7 @@ import (
 
 // IsZero returns true when the object is a zero-value or nil
 func (m *BlockID) IsZero() bool {
-	return m == nil || (len(m.Hash) == 0 && m.PartSetHeader.IsZero() && m.StateID.IsZero())
+	return m == nil || (len(m.Hash) == 0 && m.PartSetHeader.IsZero() && len(m.StateID) == 0)
 }
 
 func (m *BlockID) ToCanonicalBlockID() *CanonicalBlockID {
@@ -78,9 +78,7 @@ func (m Vote) ToCanonicalVote(chainID string) (CanonicalVote, error) {
 		if blockIDBytes, err = blockID.Checksum(); err != nil {
 			return CanonicalVote{}, err
 		}
-		if stateIDBytes, err = m.BlockID.StateID.Hash(); err != nil {
-			return CanonicalVote{}, err
-		}
+		stateIDBytes = m.BlockID.StateID
 	} else {
 		blockIDBytes = crypto.Checksum(nil)
 		stateIDBytes = crypto.Checksum(nil)
@@ -105,14 +103,18 @@ func (s StateID) signBytes() ([]byte, error) {
 	return marshaled, nil
 }
 
-func (s StateID) Hash() (bz []byte, err error) {
+// Hash calculates hash of a StateID to be used in BlockID and other places.
+// It will panic() in (very unlikely) error.
+func (s StateID) Hash() (bz []byte) {
+	var err error
 	if s.IsZero() {
-		return crypto.Checksum([]byte{}), nil
+		return crypto.Checksum([]byte{})
 	}
 	if bz, err = s.signBytes(); err != nil {
-		return nil, err
+		panic("cannot marshal: " + err.Error())
 	}
-	return crypto.Checksum(bz), nil
+
+	return crypto.Checksum(bz)
 }
 
 var zeroAppHash = make([]byte, crypto.DefaultAppHashSize)

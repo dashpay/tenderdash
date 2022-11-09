@@ -589,7 +589,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	conflictingBlockID := types.BlockID{
 		Hash:          hash,
 		PartSetHeader: partSet.Header(),
-		StateID:       rs.LockedBlock.StateID(),
+		StateID:       rs.LockedBlock.StateID().Hash(),
 	}
 	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), conflictingBlockID, vs2)
 	ensurePrevote(t, voteCh, height, round)
@@ -634,7 +634,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	newBlockID := types.BlockID{
 		Hash:          hash,
 		PartSetHeader: partSet.Header(),
-		StateID:       rs.ProposalBlock.StateID(),
+		StateID:       rs.ProposalBlock.StateID().Hash(),
 	}
 	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), newBlockID, vs2)
 	ensurePrevote(t, voteCh, height, round)
@@ -2890,7 +2890,7 @@ func TestSignSameVoteTwice(t *testing.T) {
 		types.BlockID{
 			Hash:          randBytes,
 			PartSetHeader: types.PartSetHeader{Total: 10, Hash: randBytes},
-			StateID:       stateID,
+			StateID:       stateID.Hash(),
 		},
 		cs.state.LastAppHash,
 		cs.state.Validators.QuorumType,
@@ -2905,7 +2905,7 @@ func TestSignSameVoteTwice(t *testing.T) {
 		types.BlockID{
 			Hash:          randBytes,
 			PartSetHeader: types.PartSetHeader{Total: 10, Hash: randBytes},
-			StateID:       stateID,
+			StateID:       stateID.Hash(),
 		},
 		cs.state.LastAppHash,
 		cs.state.Validators.QuorumType,

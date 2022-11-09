@@ -61,7 +61,7 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 	blockID := types.BlockID{
 		Hash:          header.Hash(),
 		PartSetHeader: types.PartSetHeader{Total: 1, Hash: crypto.CRandBytes(32)},
-		StateID:       header.StateID(),
+		StateID:       header.StateID().Hash(),
 	}
 
 	votes := make([]*types.Vote, len(pkz))
@@ -218,7 +218,7 @@ func genLightBlocksWithValidatorsRotatingEveryBlock(
 			hash("results_hash"), 0, len(keys),
 			types.BlockID{
 				Hash:    lastHeader.Hash(),
-				StateID: lastHeader.StateID(),
+				StateID: lastHeader.StateID().Hash(),
 			})
 		headers[height] = currentHeader
 		valset[height] = vals

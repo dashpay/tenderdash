@@ -2399,7 +2399,7 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 		types.BlockID{
 			Hash:          block.Hash(),
 			PartSetHeader: blockParts.Header(),
-			StateID:       block.StateID(),
+			StateID:       block.StateID().Hash(),
 		},
 		block,
 	)

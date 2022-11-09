@@ -202,7 +202,7 @@ func TestSignerVote(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       stateID,
+					StateID:       stateID.Hash(),
 				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
@@ -239,7 +239,7 @@ func TestSignerVoteResetDeadline(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       stateID,
+					StateID:       stateID.Hash(),
 				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
@@ -291,7 +291,7 @@ func TestSignerVoteKeepAlive(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       stateID,
+					StateID:       stateID.Hash(),
 				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
@@ -343,7 +343,7 @@ func TestSignerSignProposalErrors(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       stateID,
+					StateID:       stateID.Hash(),
 				},
 				Signature: []byte("signature"),
 			}
@@ -383,7 +383,7 @@ func TestSignerSignVoteErrors(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       types.RandStateID(),
+					StateID:       types.RandStateID().Hash(),
 				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,

@@ -70,13 +70,13 @@ func makeEvidences(
 				Total: 1000,
 				Hash:  crypto.Checksum([]byte("partset")),
 			},
-			StateID: stateID,
+			StateID: stateID.Hash(),
 		},
 	}
 
 	vote2 := vote
 	vote2.BlockID.Hash = crypto.Checksum([]byte("blockhash2"))
-	correct = newEvidence(t, val, &vote, &vote2, chainID,  quorumType, quorumHash, timestamp)
+	correct = newEvidence(t, val, &vote, &vote2, chainID, quorumType, quorumHash, timestamp)
 
 	fakes = make([]*types.DuplicateVoteEvidence, 0)
 
@@ -84,7 +84,7 @@ func makeEvidences(
 	{
 		v := vote2
 		v.ValidatorProTxHash = []byte("some_pro_tx_hash")
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID,  quorumType, quorumHash, timestamp))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, quorumType, quorumHash, timestamp))
 	}
 
 	// different height
@@ -98,20 +98,20 @@ func makeEvidences(
 	{
 		v := vote2
 		v.Round = vote.Round + 1
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID,  quorumType, quorumHash, timestamp))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, quorumType, quorumHash, timestamp))
 	}
 
 	// different type
 	{
 		v := vote2
 		v.Type = tmproto.PrecommitType
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID,  quorumType, quorumHash, timestamp))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, quorumType, quorumHash, timestamp))
 	}
 
 	// exactly same vote
 	{
 		v := vote
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID,  quorumType, quorumHash, timestamp))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, quorumType, quorumHash, timestamp))
 	}
 
 	return correct, fakes

@@ -74,7 +74,7 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 			blockID: BlockID{
 				Hash:          vote.BlockID.Hash.Copy(),
 				PartSetHeader: vote.BlockID.PartSetHeader,
-				StateID:       RandStateID(),
+				StateID:       RandStateID().Hash(),
 			},
 			height: vote.Height,
 			commit: commit,

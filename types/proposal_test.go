@@ -45,7 +45,7 @@ func getTestProposal(t testing.TB) *Proposal {
 		BlockID: BlockID{
 			Hash:          []byte("--June_15_2020_amino_was_removed"),
 			PartSetHeader: PartSetHeader{Total: 111, Hash: []byte("--June_15_2020_amino_was_removed")},
-			StateID:       stateID,
+			StateID:       stateID.Hash(),
 		},
 		POLRound:  -1,
 		Timestamp: stamp,
@@ -84,7 +84,7 @@ func TestProposalVerifySignature(t *testing.T) {
 		BlockID{
 			tmrand.Bytes(crypto.HashSize),
 			PartSetHeader{777, tmrand.Bytes(crypto.HashSize)},
-			RandStateID(),
+			RandStateID().Hash(),
 		},
 		tmtime.Now(),
 	)
@@ -231,7 +231,7 @@ func TestProposalValidateBasic(t *testing.T) {
 			p.BlockID = BlockID{
 				[]byte{1, 2, 3},
 				PartSetHeader{111, []byte("blockparts")},
-				RandStateID()}
+				RandStateID().Hash()}
 		}, true},
 		{"Invalid Signature", func(p *Proposal) {
 			p.Signature = make([]byte, 0)
@@ -244,7 +244,7 @@ func TestProposalValidateBasic(t *testing.T) {
 		crypto.Checksum([]byte("blockhash")),
 		math.MaxInt32,
 		crypto.Checksum([]byte("partshash")),
-		RandStateID(),
+		nil,
 	)
 
 	for _, tc := range testCases {
@@ -276,7 +276,8 @@ func TestProposalProtoBuf(t *testing.T) {
 			crypto.Checksum([]byte("hash")),
 			2,
 			crypto.Checksum([]byte("part_set_hash")),
-			RandStateID()),
+			nil,
+		),
 		tmtime.Now(),
 	)
 	proposal.Signature = []byte("sig")
