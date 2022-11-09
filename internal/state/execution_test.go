@@ -246,9 +246,16 @@ func TestProcessProposal(t *testing.T) {
 	//
 	//}
 
+	coreChainLockUpdate := types.CoreChainLock{
+		CoreBlockHeight: 3000,
+		CoreBlockHash:   make([]byte, 32),
+		Signature:       make([]byte, bls12381.SignatureSize),
+	}
+
 	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil)
 	block1, err := sf.MakeBlock(state, height, lastCommit, 1)
 	require.NoError(t, err)
+	block1.SetCoreChainLock(&coreChainLockUpdate)
 	block1.Txs = txs
 	txResults := factory.ExecTxResults(txs)
 	block1.ResultsHash, err = abci.TxResultsHash(txResults)
@@ -269,10 +276,11 @@ func TestProcessProposal(t *testing.T) {
 			//BlockSignature:
 			//StateSignature:
 		},
-		NextValidatorsHash: block1.NextValidatorsHash,
-		ProposerProTxHash:  block1.ProposerProTxHash,
-		Version:            &version,
-		ProposedAppVersion: 1,
+		CoreChainLockUpdate: block1.CoreChainLock.ToProto(),
+		NextValidatorsHash:  block1.NextValidatorsHash,
+		ProposerProTxHash:   block1.ProposerProTxHash,
+		Version:             &version,
+		ProposedAppVersion:  1,
 	}
 
 	app.On("ProcessProposal", mock.Anything, mock.Anything).Return(&abci.ResponseProcessProposal{
