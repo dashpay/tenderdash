@@ -134,7 +134,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	height int64,
 	round int32,
 	state State,
-	lastCommit *types.Commit,
+	commit *types.Commit,
 	proposerProTxHash []byte,
 	proposedAppVersion uint64,
 ) (*types.Block, CurrentRoundState, error) {
@@ -155,7 +155,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 
 	txs := blockExec.mempool.ReapMaxBytesMaxGas(maxDataBytes, maxGas)
-	block := state.MakeBlock(height, txs, lastCommit, evidence, proposerProTxHash, proposedAppVersion)
+	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 
 	localLastCommit := buildLastCommitInfo(block, state.InitialHeight)
 	version := block.Version.ToProto()

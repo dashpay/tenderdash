@@ -2222,8 +2222,7 @@ func TestCorrectABCIRound(t *testing.T) {
 	ensureNewProposal(t, proposalCh, height, round)
 
 	rs := cs1.GetRoundState()
-	blockID, err := rs.ProposalBlock.BlockID()
-	require.NoError(t, err)
+	blockID := rs.BlockID()
 
 	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), blockID, vss[1:]...)
 	ensurePrevoteMatch(t, voteCh, height, round, blockID.Hash)

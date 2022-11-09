@@ -343,7 +343,7 @@ Extends a vote with application-side injection
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | txs | [bytes](#bytes) | repeated | List of transactions committed as part of the block. |
-| decided_last_commit | [CommitInfo](#tendermint-abci-CommitInfo) |  | Info about the last commit, obtained from the block that was just decided. |
+| commit | [CommitInfo](#tendermint-abci-CommitInfo) |  | Info about the current commit |
 | misbehavior | [Misbehavior](#tendermint-abci-Misbehavior) | repeated | List of information about validators that acted incorrectly. |
 | hash | [bytes](#bytes) |  | The block header&#39;s hash. Present for convenience (can be derived from the block header). |
 | height | [int64](#int64) |  | The height of the finalized block. |

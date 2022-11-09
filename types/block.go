@@ -748,7 +748,6 @@ func (commit *Commit) ToCommitInfo() types.CommitInfo {
 		Round:                   commit.Round,
 		QuorumHash:              commit.QuorumHash,
 		BlockSignature:          commit.ThresholdBlockSignature,
-		StateSignature:          commit.ThresholdStateSignature,
 		ThresholdVoteExtensions: ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions),
 	}
 }
