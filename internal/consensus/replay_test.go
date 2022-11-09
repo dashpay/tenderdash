@@ -726,6 +726,7 @@ func testHandshakeReplay(
 		stateStore,
 		state,
 		chain,
+		commits,
 		mode,
 		store,
 	)
@@ -750,6 +751,7 @@ func testHandshakeReplay(
 			sim.Evpool,
 			genesisState,
 			chain,
+			commits,
 			eventBus,
 			nBlocks,
 			mode,
@@ -814,12 +816,13 @@ func applyBlock(
 	blockExec *sm.BlockExecutor,
 	st sm.State,
 	blk *types.Block,
+	commit *types.Commit,
 ) sm.State {
 	testPartSize := types.BlockPartSizeBytes
 	bps, err := blk.MakePartSet(testPartSize)
 	require.NoError(t, err)
 	blkID := types.BlockID{Hash: blk.Hash(), PartSetHeader: bps.Header()}
-	newState, err := blockExec.ApplyBlock(ctx, st, blkID, blk)
+	newState, err := blockExec.ApplyBlock(ctx, st, blkID, blk, commit)
 	require.NoError(t, err)
 	return newState
 }
@@ -833,6 +836,7 @@ func buildAppStateFromChain(
 	evpool sm.EvidencePool,
 	state sm.State,
 	chain []*types.Block,
+	commits []*types.Commit,
 	eventBus *eventbus.EventBus,
 	nBlocks int,
 	mode uint,
@@ -864,17 +868,17 @@ func buildAppStateFromChain(
 	switch mode {
 	case 0:
 		for i := 0; i < nBlocks; i++ {
-			state = applyBlock(ctx, t, blockExec, state, chain[i])
+			state = applyBlock(ctx, t, blockExec, state, chain[i], commits[i])
 		}
 	case 1, 2, 3:
 		for i := 0; i < nBlocks-1; i++ {
-			state = applyBlock(ctx, t, blockExec, state, chain[i])
+			state = applyBlock(ctx, t, blockExec, state, chain[i], commits[i])
 		}
 
 		if mode == 2 || mode == 3 {
 			// update the kvstore height and apphash
 			// as if we ran commit but not
-			state = applyBlock(ctx, t, blockExec, state, chain[nBlocks-1])
+			state = applyBlock(ctx, t, blockExec, state, chain[nBlocks-1], commits[nBlocks-1])
 		}
 	default:
 		require.Fail(t, "unknown mode %v", mode)
@@ -892,6 +896,7 @@ func buildTMStateFromChain(
 	stateStore sm.Store,
 	state sm.State,
 	chain []*types.Block,
+	commits []*types.Commit,
 	mode uint,
 	blockStore *mockBlockStore,
 ) sm.State {
@@ -927,20 +932,20 @@ func buildTMStateFromChain(
 	switch mode {
 	case 0:
 		// sync right up
-		for _, block := range chain {
-			state = applyBlock(ctx, t, blockExec, state, block)
+		for i, block := range chain {
+			state = applyBlock(ctx, t, blockExec, state, block, commits[i])
 		}
 
 	case 1, 2, 3:
 		// sync up to the penultimate as if we stored the block.
 		// whether we commit or not depends on the appHash
-		for _, block := range chain[:len(chain)-1] {
-			state = applyBlock(ctx, t, blockExec, state, block)
+		for i, block := range chain[:len(chain)-1] {
+			state = applyBlock(ctx, t, blockExec, state, block, commits[i])
 		}
 
 		// apply the final block to a state copy so we can
 		// get the right next appHash but keep the state back
-		state = applyBlock(ctx, t, blockExec, state, chain[len(chain)-1])
+		state = applyBlock(ctx, t, blockExec, state, chain[len(chain)-1], commits[len(chain)-1])
 	default:
 		require.Fail(t, "unknown mode %v", mode)
 	}
