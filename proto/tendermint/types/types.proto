@@ -68,6 +68,8 @@ message BlockID {
 // StateID represents essential information required to verify state, document and transactions.
 // It is meant to be used by light clients (like mobile apps) to verify proofs.
 message StateID {
+  option (gogoproto.stable_marshaler) = true;
+  option (gogoproto.marshaler)        = true;
   // AppVersion used when generating the block, equals to Header.Version.App.
   fixed64 app_version = 1 [(gogoproto.customname) = "AppVersion"];
   // Height of block containing this state ID.

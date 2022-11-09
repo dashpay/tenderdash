@@ -1108,7 +1108,7 @@ func (blockID BlockID) IsComplete() bool {
 	return len(blockID.Hash) == crypto.HashSize &&
 		blockID.PartSetHeader.Total > 0 &&
 		len(blockID.PartSetHeader.Hash) == crypto.HashSize &&
-		!blockID.StateID.IsZero()
+		len(blockID.StateID) == crypto.HashSize
 }
 
 // String returns a human readable string representation of the BlockID.

@@ -154,31 +154,22 @@ message CanonicalPartSetHeader {
 }
 ```
 
-`state_id` is a sha256 checksum of Protobuf-encoded [`CanonicalStateID` message](https://github.com/dashpay/tenderdash/blob/a3861a33cde79235404287488e35cd375fbc49e0/types/stateid.go#L20):
+`state_id` is a sha256 checksum of Protobuf-encoded [`StateID` message](../../proto/tendermint/types/types.proto#L70-L80):
 
 ```go
-type StateID struct {
-	// AppVersion used when generating the block, equals to Header.Version.App.
-	// 8 bytes
-	AppVersion uint64 `json:"app_version"`
-	// Height of block containing this state ID.
-	// 8 bytes
-	Height uint64 `json:"height"`
-	// AppHash used in current block, equal to Header.AppHash.
-	// 32 bytes
-	AppHash [crypto.DefaultAppHashSize]byte `json:"app_hash"`
-	// CoreChainLockedHeight for the block, equal to Header.CoreChainLockedHeight.
-	// 4 bytes
-	CoreChainLockedHeight uint32 `json:"core_chain_locked_height"`
-	// Time of the block (Unix time), equal to Header.Time.
-	// Encoded as a 64-bit signed int representing number of nanoseconds elapsed since January 1, 1970 UTC,
-	// as specified in golang time.Time.UnixNano().
-	// 8 bytes
-	Time time.Time `json:"time"`
+message StateID {
+  // AppVersion used when generating the block, equals to Header.Version.App.
+  fixed64 app_version = 1 [(gogoproto.customname) = "AppVersion"];
+  // Height of block containing this state ID.
+  fixed64 height = 2;
+  // AppHash used in current block, equal to Header.AppHash. 32 bytes.
+  bytes app_hash = 3 [(gogoproto.customname) = "AppHash"];
+  // CoreChainLockedHeight for the block, equal to Header.CoreChainLockedHeight.
+  fixed32 core_chain_locked_height = 4 [(gogoproto.customname) = "CoreChainLockedHeight"];
+  // Time of the block.
+  google.protobuf.Timestamp time = 5 [(gogoproto.nullable) = false];
 }
 ```
-
-`StateID.Time` is encoded as described on golang [(time.Time).UnixNano()](https://pkg.go.dev/time#Time.UnixNano).
 
 A vote is valid if each of the following lines evaluates to true for vote `v`:
 
@@ -215,16 +206,12 @@ app state using vote signature. Data needed to do the verification is:
 
 Verification algorithm can be described as follows:
 
-1. Calculate StateID as 32-byte SHA256 checksum of relevant data, using raw fixed-length encoding:
-
-	```go
-	StateID = SHA256( toBytes(AppVersion) + toBytes(Height) +AppHash + toBytes(CoreChainLockedHeight) + toBytes(Time) )
-	```
-
-	where `toBytes()` converts data into byte array, using little-endian encoding
-2. Retrieve or calculate 32 bytes long `CanonicalVoteID`
-3. Calculate signed bytes as `signedBytes = CanonicalVoteID + StateID`
-4. Verify block signature for digest `SHA256(signedBytes)`
+1. Build `StateID` message and encode it using Protobuf encoding.
+2. Calculate checksum (SHA256) of encoded `StateID`.
+3. Retrieve or calculate SHA256 checksum of `CanonicalBlockID`
+4. Build `CanonicalVote` message and encode it using Protobuf.
+5. Calculate SHA256 checksum of encoded `CanonicalVote`.
+6. Verify that block signature matches calculated checksum.
 
 ## Invalid Votes and Proposals
 
