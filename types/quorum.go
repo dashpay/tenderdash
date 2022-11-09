@@ -109,7 +109,6 @@ func MakeThresholdVoteExtensions(extensions []VoteExtension, thresholdSigs [][]b
 type QuorumSingsVerifier struct {
 	QuorumSignData
 	shouldVerifyBlock          bool
-	shouldVerifyState          bool
 	shouldVerifyVoteExtensions bool
 	logger                     log.Logger
 }
@@ -128,18 +127,10 @@ func WithVerifyBlock(shouldVerify bool) func(*QuorumSingsVerifier) {
 	}
 }
 
-// WithVerifyState sets a flag that tells QuorumSingsVerifier to verify stateID signature or not
-func WithVerifyState(shouldVerify bool) func(*QuorumSingsVerifier) {
-	return func(verifier *QuorumSingsVerifier) {
-		verifier.shouldVerifyState = shouldVerify
-	}
-}
-
 // WithVerifyReachedQuorum sets a flag that tells QuorumSingsVerifier to verify
 // vote-extension and stateID signatures or not
 func WithVerifyReachedQuorum(quorumReached bool) func(*QuorumSingsVerifier) {
 	return func(verifier *QuorumSingsVerifier) {
-		verifier.shouldVerifyState = quorumReached
 		verifier.shouldVerifyVoteExtensions = quorumReached
 	}
 }
@@ -157,7 +148,6 @@ func NewQuorumSignsVerifier(quorumData QuorumSignData, opts ...func(*QuorumSings
 	verifier := &QuorumSingsVerifier{
 		QuorumSignData:             quorumData,
 		shouldVerifyBlock:          true,
-		shouldVerifyState:          true,
 		shouldVerifyVoteExtensions: true,
 		logger:                     log.NewNopLogger(),
 	}

@@ -263,7 +263,6 @@ func (vote *Vote) VerifyExtensionSign(chainID string, pubKey crypto.PubKey, quor
 	verifier := NewQuorumSignsVerifier(
 		quorumSignData,
 		WithVerifyBlock(false),
-		WithVerifyState(false),
 	)
 	return verifier.Verify(pubKey, vote.makeQuorumSigns())
 }
@@ -275,7 +274,7 @@ func (vote *Vote) verifySign(
 ) error {
 	verifier := NewQuorumSignsVerifier(
 		quorumSignData,
-		append(opts, WithVerifyState(vote.BlockID.Hash != nil))...,
+		opts...,
 	)
 	return verifier.Verify(pubKey, vote.makeQuorumSigns())
 }
