@@ -14,7 +14,6 @@ import (
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/rs/zerolog"
 
@@ -73,6 +72,12 @@ func (b *Block) BlockID(partSet *PartSet) (BlockID, error) {
 		return BlockID{}, nil
 	}
 
+	blockHash := b.Hash()
+	// cannot calculate block hash, so we return nil block ID
+	if len(blockHash) == 0 {
+		return BlockID{}, nil
+	}
+
 	if partSet == nil {
 		partSet, err = b.MakePartSet(BlockPartSizeBytes)
 		if err != nil {
@@ -81,7 +86,7 @@ func (b *Block) BlockID(partSet *PartSet) (BlockID, error) {
 	}
 
 	blockID := BlockID{
-		Hash:          b.Hash(),
+		Hash:          blockHash,
 		PartSetHeader: partSet.Header(),
 		StateID:       b.Header.StateID(),
 	}
@@ -515,7 +520,7 @@ func (h *Header) StateID() tmproto.StateID {
 		appHash = make([]byte, crypto.DefaultAppHashSize)
 	}
 
-	ts, err := types.TimestampProto(h.Time)
+	ts, err := gogotypes.TimestampProto(h.Time)
 	if err != nil || ts == nil {
 		panic("cannot convert time " + h.Time.String() + " to Timesstamp: " + err.Error())
 	}
@@ -1064,9 +1069,17 @@ func (blockID BlockID) ValidateBasic() error {
 	if err := blockID.PartSetHeader.ValidateBasic(); err != nil {
 		return fmt.Errorf("wrong PartSetHeader: %w", err)
 	}
-	if err := blockID.StateID.ValidateBasic(); err != nil {
-		return fmt.Errorf("wrong state ID: %w", err)
+
+	// only validate state-id for non-NIL blocks
+	if len(blockID.Hash) == 0 && !blockID.StateID.IsZero() {
+		return fmt.Errorf("state ID is not zero for NIL blockID: %+v", blockID)
 	}
+	if len(blockID.Hash) != 0 {
+		if err := blockID.StateID.ValidateBasic(); err != nil {
+			return fmt.Errorf("wrong state ID: %w", err)
+		}
+	}
+
 	return nil
 }
 
@@ -1110,7 +1123,7 @@ func (blockID BlockID) String() string {
 		stateIDHash = []byte("!ERR:" + err.Error() + "!")
 	}
 
-	return fmt.Sprintf(`%v:%v:%s`, blockID.Hash, blockID.PartSetHeader, stateIDHash)
+	return fmt.Sprintf(`%v:%v:%X`, blockID.Hash, blockID.PartSetHeader, stateIDHash[:6])
 }
 
 // ToProto converts BlockID to protobuf
@@ -1141,7 +1154,9 @@ func BlockIDFromProto(bID *tmproto.BlockID) (*BlockID, error) {
 
 	blockID.PartSetHeader = *ph
 	blockID.Hash = bID.Hash
-	blockID.StateID = *bID.StateID
+	if bID.StateID != nil {
+		blockID.StateID = *bID.StateID
+	}
 
 	return blockID, blockID.ValidateBasic()
 }

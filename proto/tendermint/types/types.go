@@ -115,9 +115,12 @@ func (s StateID) Hash() (bz []byte, err error) {
 	return crypto.Checksum(bz), nil
 }
 
+var zeroAppHash = make([]byte, crypto.DefaultAppHashSize)
+
 func (s *StateID) IsZero() bool {
+
 	return s == nil ||
-		(len(s.AppHash) == 0 &&
+		((len(s.AppHash) == 0 || bytes.Equal(s.AppHash, zeroAppHash)) &&
 			s.AppVersion == 0 &&
 			s.CoreChainLockedHeight == 0 &&
 			s.Height == 0 &&
@@ -149,11 +152,16 @@ func (s StateID) Equal(other StateID) bool {
 
 // ValidateBasic performs basic validation.
 func (s StateID) ValidateBasic() error {
-	if s.AppVersion == 0 {
-		return fmt.Errorf("invalid stateID version %d", s.AppVersion)
-	}
 	if s.Time.Equal(types.Timestamp{}) {
 		return fmt.Errorf("invalid stateID time %s", s.Time.String())
+	}
+	if len(s.AppHash) != crypto.DefaultAppHashSize {
+		return fmt.Errorf(
+			"invalid apphash %X len, expected: %d, got: %d",
+			s.AppHash,
+			crypto.DefaultAppHashSize,
+			len(s.AppHash),
+		)
 	}
 
 	return nil
