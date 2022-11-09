@@ -57,13 +57,28 @@ func init() {
 //--------------------------------------------------------
 // Simple write-ahead logger
 
+type WALWriter interface {
+	Write(WALMessage) error
+}
+
+type WALFlusher interface {
+	FlushAndSync() error
+}
+
+type WALWriteFlusher interface {
+	WALWriter
+	WALFlusher
+	WriteSync(WALMessage) error
+}
+
+type WALSearcher interface {
+	SearchForEndHeight(height int64, options *WALSearchOptions) (rd io.ReadCloser, found bool, err error)
+}
+
 // WAL is an interface for any write-ahead logger.
 type WAL interface {
-	Write(WALMessage) error
-	WriteSync(WALMessage) error
-	FlushAndSync() error
-
-	SearchForEndHeight(height int64, options *WALSearchOptions) (rd io.ReadCloser, found bool, err error)
+	WALWriteFlusher
+	WALSearcher
 
 	// service methods
 	Start(context.Context) error
