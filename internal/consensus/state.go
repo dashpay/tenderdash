@@ -1048,7 +1048,7 @@ func (cs *State) handleMsg(ctx context.Context, mi msgInfo, fromReplay bool) {
 		added, err = cs.addProposalBlockPart(ctx, msg, peerID)
 
 		if added && cs.ProposalBlockParts != nil && cs.ProposalBlockParts.IsComplete() && fromReplay {
-			candidateState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state, true)
+			candidateState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, msg.Round, cs.state, true)
 			if err != nil {
 				panic(err)
 			}
@@ -1459,7 +1459,7 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 	} else {
 		// Create a new proposal block from state/txs from the mempool.
 		var err error
-		block, err = cs.createProposalBlock(ctx)
+		block, err = cs.createProposalBlock(ctx, round)
 		if err != nil {
 			cs.logger.Error("unable to create proposal block", "error", err)
 			return
@@ -1571,11 +1571,12 @@ func (cs *State) isProposalComplete() bool {
 
 }
 
-// CreateProposalBlock safely creates a proposal block
+// CreateProposalBlock safely creates a proposal block.
+// Only used in tests.
 func (cs *State) CreateProposalBlock(ctx context.Context) (*types.Block, error) {
 	cs.mtx.Lock()
 	defer cs.mtx.Unlock()
-	return cs.createProposalBlock(ctx)
+	return cs.createProposalBlock(ctx, cs.Round)
 }
 
 // Create the next block to propose and return it. Returns nil block upon error.
@@ -1585,7 +1586,7 @@ func (cs *State) CreateProposalBlock(ctx context.Context) (*types.Block, error) 
 //
 // NOTE: keep it side-effect free for clarity.
 // CONTRACT: cs.privValidator is not nil.
-func (cs *State) createProposalBlock(ctx context.Context) (*types.Block, error) {
+func (cs *State) createProposalBlock(ctx context.Context, round int32) (*types.Block, error) {
 	if cs.privValidator == nil {
 		return nil, errors.New("entered createProposalBlock with privValidator being nil")
 	}
@@ -1614,7 +1615,7 @@ func (cs *State) createProposalBlock(ctx context.Context) (*types.Block, error) 
 	}
 	proposerProTxHash := cs.privValidatorProTxHash
 
-	ret, uncommittedState, err := cs.blockExec.CreateProposalBlock(ctx, cs.Height, cs.state, commit, proposerProTxHash, cs.proposedAppVersion)
+	ret, uncommittedState, err := cs.blockExec.CreateProposalBlock(ctx, cs.Height, round, cs.state, commit, proposerProTxHash, cs.proposedAppVersion)
 	if err != nil {
 		panic(err)
 	}
@@ -1707,7 +1708,7 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	uncommittedState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state, true)
+	uncommittedState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.Round, cs.state, true)
 	if err != nil {
 		cs.metrics.MarkProposalProcessed(false)
 		if errors.Is(err, sm.ErrBlockRejected) {
@@ -2094,7 +2095,8 @@ func (cs *State) tryFinalizeCommit(ctx context.Context, height int64) {
 
 	if cs.CurrentRoundState.IsEmpty() {
 		var err error
-		cs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.state, true)
+		// TODO: Check if using cs.Round here is correct
+		cs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.Round, cs.state, true)
 		if err != nil {
 			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
 		}
@@ -2346,15 +2348,20 @@ func (cs *State) PublishCommitEvent(commit *types.Commit) error {
 func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger log.Logger) {
 	logger.Info("applying commit", "commit", commit)
 
-	var height int64
+	var (
+		height int64
+		round  int32
+	)
 
 	block, blockParts := cs.ProposalBlock, cs.ProposalBlockParts
 	// Save to blockStore.
 	if commit != nil {
 		height = commit.Height
+		round = commit.Round
 		cs.blockStore.SaveBlock(block, blockParts, commit)
 	} else {
 		height = cs.Height
+		round = cs.Round
 	}
 
 	// Write EndHeightMessage{} for this height, implying that the blockstore
@@ -2384,7 +2391,7 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 
 	if rs.CurrentRoundState.IsEmpty() {
 		var err error
-		rs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, stateCopy, true)
+		rs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, round, stateCopy, true)
 		if err != nil {
 			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
 		}
@@ -2402,6 +2409,7 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 			StateID:       block.StateID().Hash(),
 		},
 		block,
+		commit,
 	)
 	if err != nil {
 		logger.Error("failed to apply block", "err", err)
@@ -2670,7 +2678,7 @@ func (cs *State) addProposalBlockPart(
 		cs.logger.Info("received complete proposal block", "height", cs.ProposalBlock.Height, "hash", cs.ProposalBlock.Hash())
 
 		if cs.ProposalBlock.Height != cs.RoundState.GetHeight() {
-			cs.RoundState.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, cs.state, true)
+			cs.RoundState.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, msg.Round, cs.state, true)
 			if err != nil {
 				return false, err
 			}

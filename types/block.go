@@ -17,6 +17,7 @@ import (
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/rs/zerolog"
 
+	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
@@ -739,6 +740,17 @@ func NewCommit(height int64, round int32, blockID BlockID, commitSigns *CommitSi
 		commitSigns.CopyToCommit(commit)
 	}
 	return commit
+}
+
+// ToCommitInfo convert and returns CommitInfo structure
+func (commit *Commit) ToCommitInfo() types.CommitInfo {
+	return types.CommitInfo{
+		Round:                   commit.Round,
+		QuorumHash:              commit.QuorumHash,
+		BlockSignature:          commit.ThresholdBlockSignature,
+		StateSignature:          commit.ThresholdStateSignature,
+		ThresholdVoteExtensions: ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions),
+	}
 }
 
 // GetCanonicalVote returns the message that is being voted on in the form of a vote without signatures.

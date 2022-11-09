@@ -36,6 +36,11 @@ type State interface {
 	// IncrementHeight increments height by 1, but not lower than initial height.
 	IncrementHeight()
 
+	// SetRound sets consensus round for the state
+	SetRound(int32)
+	// GetRound returns consensus round defined for the state
+	GetRound() int32
+
 	// GetAppHash returns app hash for the state. You need to call UpdateAppHash() beforehand.
 	GetAppHash() tmbytes.HexBytes
 
@@ -49,6 +54,7 @@ type kvState struct {
 	// Height of the state. Special value of 0 means zero state.
 	Height        int64            `json:"height"`
 	InitialHeight int64            `json:"initial_height,omitempty"`
+	Round         int32            `json:"round"`
 	AppHash       tmbytes.HexBytes `json:"app_hash"`
 }
 
@@ -138,6 +144,16 @@ func copyDB(src dbm.DB, dst dbm.DB) error {
 
 func (state kvState) GetHeight() int64 {
 	return state.Height
+}
+
+// GetRound implements State
+func (state kvState) GetRound() int32 {
+	return state.Round
+}
+
+// GetRound implements State
+func (state *kvState) SetRound(round int32) {
+	state.Round = round
 }
 
 // IncrementHeight increments the height of the state.

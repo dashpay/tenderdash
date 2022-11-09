@@ -33,7 +33,6 @@ func makeAndCommitGoodBlock(
 	ctx context.Context,
 	t *testing.T,
 	state sm.State,
-	nodeProTxHash crypto.ProTxHash,
 	height int64,
 	lastCommit *types.Commit,
 	proposerProTxHash crypto.ProTxHash,
@@ -43,43 +42,44 @@ func makeAndCommitGoodBlock(
 	proposedAppVersion uint64,
 ) (sm.State, types.BlockID, *types.Commit) {
 	t.Helper()
+	var err error
 
 	// A good block passes
-	state, blockID := makeAndApplyGoodBlock(ctx, t, state, nodeProTxHash, height, lastCommit, proposerProTxHash, blockExec, evidence, proposedAppVersion)
+	state, blockID, block := makeAndApplyGoodBlock(t, state, height, lastCommit, proposerProTxHash, evidence, proposedAppVersion)
 
+	require.NoError(t, blockExec.ValidateBlock(ctx, state, block))
+	txResults := factory.ExecTxResults(block.Txs)
+	block.ResultsHash, err = abci.TxResultsHash(txResults)
+	require.NoError(t, err)
+
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block, 0, state, true)
+	require.NoError(t, err)
 	// Simulate a lastCommit for this block from all validators for the next height
 	commit, _ := makeValidCommit(ctx, t, height, blockID, state.Validators, privVals)
+	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit)
+	require.NoError(t, err)
 
 	return state, blockID, commit
 }
 
 func makeAndApplyGoodBlock(
-	ctx context.Context,
 	t *testing.T,
 	state sm.State,
-	nodeProTxHash crypto.ProTxHash,
 	height int64,
 	lastCommit *types.Commit,
 	proposerProTxHash []byte,
-	blockExec *sm.BlockExecutor,
 	evidence []types.Evidence,
 	proposedAppVersion uint64,
-) (sm.State, types.BlockID) {
+) (sm.State, types.BlockID, *types.Block) {
 	t.Helper()
 	block := state.MakeBlock(height, factory.MakeNTxs(height, 10), lastCommit, evidence, proposerProTxHash, proposedAppVersion)
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
+
 	blockID, err := block.BlockID(partSet)
 	require.NoError(t, err)
 
-	txResults := factory.ExecTxResults(block.Txs)
-	block.ResultsHash, err = abci.TxResultsHash(txResults)
-	require.NoError(t, err)
-
-	state, err = blockExec.ApplyBlock(ctx, state, blockID, block)
-	require.NoError(t, err)
-
-	return state, blockID
+	return state, blockID, block
 }
 
 func makeValidCommit(

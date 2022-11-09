@@ -21,6 +21,9 @@ type CurrentRoundState struct {
 	// Base state for the changes
 	Base State
 
+	// Round at which we are right now
+	Round int32
+
 	ProTxHash types.ProTxHash
 
 	// AppHash of current block
@@ -51,6 +54,7 @@ func NewCurrentRoundState(proTxHash types.ProTxHash, rp RoundParams, baseState S
 		ProTxHash: proTxHash,
 		AppHash:   rp.AppHash.Copy(),
 		Params:    rp,
+		Round:     rp.Round,
 	}
 	err := candidate.populate()
 	if err != nil {
@@ -214,6 +218,7 @@ type RoundParams struct {
 	ValidatorSetUpdate    *abci.ValidatorSetUpdate
 	CoreChainLock         *types.CoreChainLock
 	Source                string
+	Round                 int32
 }
 
 // ToProcessProposal reconstructs ResponseProcessProposal structure from a current state of RoundParams
@@ -228,13 +233,14 @@ func (rp RoundParams) ToProcessProposal() *abci.ResponseProcessProposal {
 }
 
 // RoundParamsFromPrepareProposal creates RoundParams from ResponsePrepareProposal
-func RoundParamsFromPrepareProposal(resp *abci.ResponsePrepareProposal) (RoundParams, error) {
+func RoundParamsFromPrepareProposal(resp *abci.ResponsePrepareProposal, round int32) (RoundParams, error) {
 	rp := RoundParams{
 		AppHash:               resp.AppHash,
 		TxResults:             resp.TxResults,
 		ConsensusParamUpdates: resp.ConsensusParamUpdates,
 		ValidatorSetUpdate:    resp.ValidatorSetUpdate,
 		Source:                PrepareProposalSource,
+		Round:                 round,
 	}
 	ccl, err := types.CoreChainLockFromProto(resp.CoreChainLockUpdate)
 	if err != nil {
@@ -245,13 +251,14 @@ func RoundParamsFromPrepareProposal(resp *abci.ResponsePrepareProposal) (RoundPa
 }
 
 // RoundParamsFromProcessProposal creates RoundParams from ResponseProcessProposal
-func RoundParamsFromProcessProposal(resp *abci.ResponseProcessProposal, coreChainLock *types.CoreChainLock) RoundParams {
+func RoundParamsFromProcessProposal(resp *abci.ResponseProcessProposal, coreChainLock *types.CoreChainLock, round int32) RoundParams {
 	rp := RoundParams{
 		AppHash:               resp.AppHash,
 		TxResults:             resp.TxResults,
 		ConsensusParamUpdates: resp.ConsensusParamUpdates,
 		ValidatorSetUpdate:    resp.ValidatorSetUpdate,
 		Source:                ProcessProposalSource,
+		Round:                 round,
 	}
 	rp.CoreChainLock = coreChainLock
 	return rp
@@ -264,6 +271,7 @@ func RoundParamsFromInitChain(resp *abci.ResponseInitChain) (RoundParams, error)
 		ConsensusParamUpdates: resp.ConsensusParams,
 		ValidatorSetUpdate:    &resp.ValidatorSetUpdate,
 		Source:                InitChainSource,
+		Round:                 0,
 	}
 	ccl, err := types.CoreChainLockFromProto(resp.NextCoreChainLockUpdate)
 	if err != nil {

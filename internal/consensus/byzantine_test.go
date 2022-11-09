@@ -129,7 +129,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	// alter prevote so that the byzantine node double votes when height is 2
 	bzNodeState.doPrevote = func(ctx context.Context, height int64, round int32, allowOldBlocks bool) {
 		// allow first height to happen normally so that byzantine validator is no longer proposer
-		uncommittedState, err := bzNodeState.blockExec.ProcessProposal(ctx, bzNodeState.ProposalBlock, bzNodeState.state, true)
+		uncommittedState, err := bzNodeState.blockExec.ProcessProposal(ctx, bzNodeState.ProposalBlock, round, bzNodeState.state, true)
 		assert.NoError(t, err)
 		assert.NotZero(t, uncommittedState)
 		bzNodeState.CurrentRoundState = uncommittedState
@@ -205,6 +205,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		block, uncommittedState, err := lazyNodeState.blockExec.CreateProposalBlock(
 			ctx,
 			lazyNodeState.Height,
+			round,
 			lazyNodeState.state,
 			commit,
 			proposerProTxHash,

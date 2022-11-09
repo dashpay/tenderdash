@@ -382,6 +382,7 @@ func TestCreateProposalBlock(t *testing.T) {
 	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
+		0,
 		state,
 		commit,
 		proposer.ProTxHash,
@@ -469,6 +470,7 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
+		0,
 		state,
 		commit,
 		proposer.ProTxHash,
@@ -592,6 +594,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		math.MaxInt64,
+		0,
 		state,
 		commit,
 		proposer.ProTxHash,

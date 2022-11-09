@@ -41,7 +41,7 @@ type Application struct {
 
 	// LastCommittedState is last state that was committed by Tenderdash and finalized with abci.FinalizeBlock()
 	LastCommittedState State
-	// roundStates contains state for each round, indexed by AppHash.String()
+	// roundStates contains state for each round, indexed by roundKey()
 	roundStates  map[string]State
 	RetainBlocks int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
 	logger       log.Logger
@@ -277,7 +277,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 		return &abci.ResponsePrepareProposal{}, err
 	}
 	includedTxs := txRecords2Txs(txRecords)
-	roundState, txResults, err := app.executeProposal(req.Height, includedTxs)
+	roundState, txResults, err := app.executeProposal(req.Height, req.Round, includedTxs)
 	if err != nil {
 		return &abci.ResponsePrepareProposal{}, err
 	}
@@ -306,7 +306,7 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	roundState, txResults, err := app.executeProposal(req.Height, types.NewTxs(req.Txs))
+	roundState, txResults, err := app.executeProposal(req.Height, req.Round, types.NewTxs(req.Txs))
 	if err != nil {
 		return &abci.ResponseProcessProposal{
 			Status: abci.ResponseProcessProposal_REJECT,
@@ -340,13 +340,17 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	}
 
 	appHash := tmbytes.HexBytes(req.AppHash)
-	roundState, ok := app.roundStates[appHash.String()]
+	roundState, ok := app.roundStates[roundKey(appHash, req.Height, req.Round)]
 	if !ok {
 		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s not found", appHash)
 	}
 	if roundState.GetHeight() != req.Height {
 		return &abci.ResponseFinalizeBlock{},
 			fmt.Errorf("height mismatch: expected %d, got %d", roundState.GetHeight(), req.Height)
+	}
+	if roundState.GetRound() != req.Commit.Round {
+		return &abci.ResponseFinalizeBlock{},
+			fmt.Errorf("commit round mismatch: expected %d, got %d", roundState.GetRound(), req.Commit.Round)
 	}
 	events := []abci.Event{app.eventValUpdate(req.Height)}
 	resp := &abci.ResponseFinalizeBlock{
@@ -360,7 +364,7 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		time.Sleep(time.Duration(app.cfg.FinalizeBlockDelayMS) * time.Millisecond)
 	}
 
-	err := app.newHeight(appHash)
+	err := app.newHeight(appHash, req.Height, req.Round)
 	if err != nil {
 		return &abci.ResponseFinalizeBlock{}, err
 	}
@@ -621,9 +625,9 @@ func (app *Application) Close() error {
 
 // newHeight frees resources from previous height and starts new height.
 // Caller should lock the Application.
-func (app *Application) newHeight(committedAppHash tmbytes.HexBytes) error {
+func (app *Application) newHeight(committedAppHash tmbytes.HexBytes, height int64, round int32) error {
 	// Committed round becomes new state
-	committedState := app.roundStates[committedAppHash.String()]
+	committedState := app.roundStates[roundKey(committedAppHash, height, round)]
 	if committedState == nil {
 		return fmt.Errorf("round state with apphash %s not found", committedAppHash.String())
 	}
@@ -649,7 +653,7 @@ func (app *Application) resetRoundStates() {
 }
 
 // executeProposal executes transactions and creates new candidate state
-func (app *Application) executeProposal(height int64, txs types.Txs) (State, []*abci.ExecTxResult, error) {
+func (app *Application) executeProposal(height int64, round int32, txs types.Txs) (State, []*abci.ExecTxResult, error) {
 	if err := app.validateHeight(height); err != nil {
 		return nil, nil, err
 	}
@@ -661,6 +665,7 @@ func (app *Application) executeProposal(height int64, txs types.Txs) (State, []*
 		return nil, nil, fmt.Errorf("cannot copy current state: %w", err)
 	}
 	roundState.IncrementHeight()
+	roundState.SetRound(round)
 
 	// execute block
 	txResults := make([]*abci.ExecTxResult, 0, len(txs))
@@ -678,7 +683,7 @@ func (app *Application) executeProposal(height int64, txs types.Txs) (State, []*
 			return nil, nil, fmt.Errorf("update apphash: %w", err)
 		}
 	}
-	app.roundStates[roundState.GetAppHash().String()] = roundState
+	app.roundStates[roundKey(roundState.GetAppHash(), roundState.GetHeight(), roundState.GetRound())] = roundState
 
 	return roundState, txResults, nil
 }
@@ -779,4 +784,8 @@ func (app *Application) validateHeight(height int64) error {
 	}
 
 	return nil
+}
+
+func roundKey(appHash tmbytes.HexBytes, height int64, round int32) string {
+	return strconv.FormatInt(height, 16) + strconv.FormatInt(int64(round), 16) + appHash.String()
 }
