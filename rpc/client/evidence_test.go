@@ -18,7 +18,7 @@ import (
 
 func newEvidence(t *testing.T, val *privval.FilePV,
 	vote *types.Vote, vote2 *types.Vote,
-	chainID string, stateID types.StateID,
+	chainID string,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	timestamp time.Time,
@@ -55,7 +55,8 @@ func makeEvidences(
 	timestamp time.Time,
 ) (correct *types.DuplicateVoteEvidence, fakes []*types.DuplicateVoteEvidence) {
 	const height = int64(1)
-	stateID := types.RandStateID().WithHeight(height)
+	stateID := types.RandStateID()
+	stateID.Height = uint64(height)
 
 	vote := types.Vote{
 		ValidatorProTxHash: val.Key.ProTxHash,
@@ -69,13 +70,13 @@ func makeEvidences(
 				Total: 1000,
 				Hash:  crypto.Checksum([]byte("partset")),
 			},
-			StateID: stateID.Hash(),
+			StateID: stateID,
 		},
 	}
 
 	vote2 := vote
 	vote2.BlockID.Hash = crypto.Checksum([]byte("blockhash2"))
-	correct = newEvidence(t, val, &vote, &vote2, chainID, stateID, quorumType, quorumHash, timestamp)
+	correct = newEvidence(t, val, &vote, &vote2, chainID,  quorumType, quorumHash, timestamp)
 
 	fakes = make([]*types.DuplicateVoteEvidence, 0)
 
@@ -83,34 +84,34 @@ func makeEvidences(
 	{
 		v := vote2
 		v.ValidatorProTxHash = []byte("some_pro_tx_hash")
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash, timestamp))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID,  quorumType, quorumHash, timestamp))
 	}
 
 	// different height
 	{
 		v := vote2
 		v.Height = vote.Height + 1
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash, timestamp))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, quorumType, quorumHash, timestamp))
 	}
 
 	// different round
 	{
 		v := vote2
 		v.Round = vote.Round + 1
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash, timestamp))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID,  quorumType, quorumHash, timestamp))
 	}
 
 	// different type
 	{
 		v := vote2
 		v.Type = tmproto.PrecommitType
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash, timestamp))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID,  quorumType, quorumHash, timestamp))
 	}
 
 	// exactly same vote
 	{
 		v := vote
-		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID, stateID, quorumType, quorumHash, timestamp))
+		fakes = append(fakes, newEvidence(t, val, &vote, &v, chainID,  quorumType, quorumHash, timestamp))
 	}
 
 	return correct, fakes

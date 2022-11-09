@@ -88,7 +88,7 @@ func TestLightBlockProtobuf(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	header := MakeRandHeader()
-	commit := randCommit(ctx, t, header.Height, RandStateID().WithHeight(header.Height))
+	commit := randCommit(ctx, t, header.Height, RandStateID())
 	vals, _ := RandValidatorSet(5)
 	header.Height = commit.Height
 	header.LastBlockID = commit.BlockID
@@ -144,7 +144,7 @@ func TestSignedHeaderValidateBasic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	height := rand.Int63()
-	commit := randCommit(ctx, t, height, RandStateID().WithHeight(height))
+	commit := randCommit(ctx, t, height, RandStateID())
 
 	chainID := "𠜎"
 	timestamp := time.Date(math.MaxInt64, 0, 0, 0, 0, 0, math.MaxInt64, time.UTC)

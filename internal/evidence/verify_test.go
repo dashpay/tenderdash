@@ -39,21 +39,21 @@ func TestVerifyDuplicateVoteEvidence(t *testing.T) {
 	val2 := types.NewMockPVForQuorum(quorumHash)
 	validator1 := val.ExtractIntoValidator(context.Background(), quorumHash)
 	valSet := types.NewValidatorSet([]*types.Validator{validator1}, validator1.PubKey, quorumType, quorumHash, true)
-
-	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), crypto.Checksum([]byte("statehash")))
-	blockID2 := makeBlockID([]byte("blockhash2"), 1000, []byte("partshash"), crypto.Checksum([]byte("statehash")))
-	blockID3 := makeBlockID([]byte("blockhash"), 10000, []byte("partshash"), crypto.Checksum([]byte("statehash")))
-	blockID4 := makeBlockID([]byte("blockhash"), 10000, []byte("partshash2"), crypto.Checksum([]byte("statehash")))
+	stateID := types.RandStateID()
+	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), stateID)
+	blockID2 := makeBlockID([]byte("blockhash2"), 1000, []byte("partshash"), stateID)
+	blockID3 := makeBlockID([]byte("blockhash"), 10000, []byte("partshash"), stateID)
+	blockID4 := makeBlockID([]byte("blockhash"), 10000, []byte("partshash2"), stateID)
 
 	const chainID = "mychain"
 
-	stateID := types.RandStateID()
+	stateID = types.RandStateID()
 
-	vote1 := makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID, quorumType, quorumHash, stateID)
+	vote1 := makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID, quorumType, quorumHash, )
 	v1 := vote1.ToProto()
 	err := val.SignVote(ctx, chainID, quorumType, quorumHash, v1, nil)
 	require.NoError(t, err)
-	badVote := makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID, quorumType, quorumHash, stateID)
+	badVote := makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID, quorumType, quorumHash, )
 	bv := badVote.ToProto()
 	err = val2.SignVote(ctx, chainID, crypto.SmallQuorumType(), quorumHash, bv, nil)
 	require.NoError(t, err)
@@ -62,17 +62,17 @@ func TestVerifyDuplicateVoteEvidence(t *testing.T) {
 	badVote.BlockSignature = bv.BlockSignature
 
 	cases := []voteData{
-		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID2, quorumType, quorumHash, stateID), true}, // different block ids
-		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID3, quorumType, quorumHash, stateID), true},
-		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID4, quorumType, quorumHash, stateID), true},
-		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID, quorumType, quorumHash, stateID), false},     // wrong block id
-		{vote1, makeVote(ctx, t, val, "mychain2", 0, 10, 2, 1, blockID2, quorumType, quorumHash, stateID), false}, // wrong chain id
-		{vote1, makeVote(ctx, t, val, chainID, 0, 11, 2, 1, blockID2, quorumType, quorumHash, stateID), false},    // wrong height
-		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 3, 1, blockID2, quorumType, quorumHash, stateID), false},    // wrong round
-		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 2, blockID2, quorumType, quorumHash, stateID), false},    // wrong step
-		{vote1, makeVote(ctx, t, val2, chainID, 0, 10, 2, 1, blockID2, quorumType, quorumHash, stateID), false},   // wrong validator
+		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID2, quorumType, quorumHash, ), true}, // different block ids
+		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID3, quorumType, quorumHash, ), true},
+		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID4, quorumType, quorumHash, ), true},
+		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID, quorumType, quorumHash, ), false},     // wrong block id
+		{vote1, makeVote(ctx, t, val, "mychain2", 0, 10, 2, 1, blockID2, quorumType, quorumHash, ), false}, // wrong chain id
+		{vote1, makeVote(ctx, t, val, chainID, 0, 11, 2, 1, blockID2, quorumType, quorumHash, ), false},    // wrong height
+		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 3, 1, blockID2, quorumType, quorumHash, ), false},    // wrong round
+		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 2, blockID2, quorumType, quorumHash, ), false},    // wrong step
+		{vote1, makeVote(ctx, t, val2, chainID, 0, 10, 2, 1, blockID2, quorumType, quorumHash, ), false},   // wrong validator
 		// a different vote time doesn't matter
-		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID2, quorumType, quorumHash, stateID), true},
+		{vote1, makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID2, quorumType, quorumHash, ), true},
 		{vote1, badVote, false}, // signed by wrong key
 	}
 
@@ -141,7 +141,7 @@ func TestVerifyDuplicateVoteEvidence(t *testing.T) {
 func makeVote(
 	ctx context.Context,
 	t *testing.T, val types.PrivValidator, chainID string, valIndex int32, height int64,
-	round int32, step int, blockID types.BlockID, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, stateID types.StateID) *types.Vote {
+	round int32, step int, blockID types.BlockID, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash) *types.Vote {
 	proTxHash, err := val.GetProTxHash(ctx)
 	require.NoError(t, err)
 	v := &types.Vote{
@@ -160,7 +160,7 @@ func makeVote(
 	return v
 }
 
-func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte, stateID []byte) types.BlockID {
+func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte, stateID tmproto.StateID) types.BlockID {
 	var (
 		h   = make([]byte, crypto.HashSize)
 		psH = make([]byte, crypto.HashSize)

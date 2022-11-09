@@ -7,8 +7,10 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -64,7 +66,7 @@ func TestVoteSet_AddVote_Bad(t *testing.T) {
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrevoteType,
-		BlockID:            BlockID{nil, PartSetHeader{}, make([]byte, 32)},
+		BlockID:            BlockID{nil, PartSetHeader{}, RandStateID()},
 	}
 
 	// val0 votes for nil.
@@ -181,7 +183,7 @@ func TestVoteSet_2_3MajorityRedux(t *testing.T) {
 	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 100)
 
 	blockHash := crypto.CRandBytes(32)
-	stateID := crypto.CRandBytes(32)
+	stateID := RandStateID()
 	blockPartsTotal := uint32(123)
 	blockPartSetHeader := PartSetHeader{blockPartsTotal, crypto.CRandBytes(32)}
 
@@ -308,7 +310,8 @@ func TestVoteSet_Conflicts(t *testing.T) {
 	}
 
 	// start tracking blockHash1
-	err = voteSet.SetPeerMaj23("peerA", BlockID{Hash: blockHash1, StateID: blockHash1}, height, round)
+	blockID := withBlockHash(voteProto, blockHash1).BlockID
+	err = voteSet.SetPeerMaj23("peerA", blockID, height, round)
 	require.NoError(t, err)
 
 	// val0 votes again for blockHash1.
@@ -403,7 +406,7 @@ func TestVoteSet_MakeCommit(t *testing.T) {
 	height, round := int64(1), int32(0)
 	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, 10)
 	blockHash, blockPartSetHeader := crypto.CRandBytes(32), PartSetHeader{123, crypto.CRandBytes(32)}
-	stateID := crypto.CRandBytes(32)
+	stateID := RandStateID()
 
 	voteProto := &Vote{
 		ValidatorProTxHash: nil,
@@ -516,7 +519,7 @@ func TestVoteSet_LLMQType_50_60(t *testing.T) {
 				"need at least %d validators", tt.threshold+3)
 
 			blockHash := crypto.CRandBytes(32)
-			stateID := crypto.CRandBytes(32)
+			stateID := RandStateID()
 			blockPartSetHeader := PartSetHeader{uint32(123), crypto.CRandBytes(32)}
 			votedBlock := BlockID{blockHash, blockPartSetHeader, stateID}
 
@@ -654,12 +657,18 @@ func withType(vote *Vote, signedMsgType byte) *Vote {
 	return vote
 }
 
-// Convenience: Return new vote with different blockHash
+// Convenience: Return new vote with different blockHash and state ID
 func withBlockHash(vote *Vote, blockHash []byte) *Vote {
 	vote = vote.Copy()
 	vote.BlockID.Hash = blockHash
-	if len(vote.BlockID.StateID) == 0 {
-		vote.BlockID.StateID = blockHash
+
+	ts, _ := types.TimestampProto(time.Date(2022, 1, 2, 3, 4, 5, 6, time.UTC))
+	vote.BlockID.StateID = tmproto.StateID{
+		AppVersion:            StateIDVersion,
+		Height:                uint64(vote.Height),
+		AppHash:               blockHash,
+		CoreChainLockedHeight: 1,
+		Time:                  *ts,
 	}
 	return vote
 }

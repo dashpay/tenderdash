@@ -558,7 +558,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 			Total: math.MaxInt32,
 			Hash:  crypto.Checksum([]byte("blockID_part_set_header_hash")),
 		},
-		StateID: crypto.Checksum([]byte("stateID_hash")),
+		StateID: types.RandStateID(),
 	}
 
 	// save the updated validator set for use by the block executor.

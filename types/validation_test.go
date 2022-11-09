@@ -10,7 +10,6 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -75,7 +74,7 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 			blockID: BlockID{
 				Hash:          vote.BlockID.Hash.Copy(),
 				PartSetHeader: vote.BlockID.PartSetHeader,
-				StateID:       rand.Bytes(crypto.HashSize),
+				StateID:       RandStateID(),
 			},
 			height: vote.Height,
 			commit: commit,

@@ -56,7 +56,7 @@ func exampleVote(tb testing.TB, t byte) *Vote {
 				Total: 1000000,
 				Hash:  crypto.Checksum([]byte("blockID_part_set_header_hash")),
 			},
-			StateID: crypto.Checksum([]byte("stateID_hash")),
+			StateID: RandStateID(),
 		},
 		ValidatorProTxHash: crypto.ProTxHashFromSeedBytes([]byte("validator_pro_tx_hash")),
 		ValidatorIndex:     56789,
@@ -228,7 +228,7 @@ func TestVoteVerifySignature(t *testing.T) {
 		{
 			name: "wrong state id",
 			modify: func(v *tmproto.Vote) {
-				v.BlockID.StateID[0] = ^v.BlockID.StateID[0]
+				v.BlockID.StateID.AppHash[0] = ^v.BlockID.StateID.AppHash[0]
 			},
 			expectValid: false,
 		},
@@ -344,7 +344,7 @@ func TestVoteExtension(t *testing.T) {
 			blockID := makeBlockID(
 				rand.Bytes(crypto.HashSize),
 				1, rand.Bytes(crypto.HashSize),
-				rand.Bytes(crypto.HashSize),
+				RandStateID(),
 			)
 
 			vote := &Vote{
@@ -416,7 +416,8 @@ func TestVoteVerify(t *testing.T) {
 	vote := examplePrevote(t)
 	vote.ValidatorProTxHash = proTxHash
 
-	stateID := RandStateID().WithHeight(vote.Height - 1)
+	stateID := RandStateID()
+	stateID.Height = uint64(vote.Height - 1)
 	pubKey := bls12381.GenPrivKey().PubKey()
 	err = vote.Verify("test_chain_id", quorumType, quorumHash, pubKey, crypto.RandProTxHash(), stateID)
 
@@ -519,7 +520,7 @@ func TestInvalidVotes(t *testing.T) {
 		{"negative height", func(v *Vote) { v.Height = -1 }},
 		{"negative round", func(v *Vote) { v.Round = -1 }},
 		{"invalid block hash", func(v *Vote) { v.BlockID.Hash = v.BlockID.Hash[:crypto.DefaultHashSize-1] }},
-		{"invalid state ID", func(v *Vote) { v.BlockID.StateID = v.BlockID.StateID[:crypto.DefaultHashSize-1] }},
+		{"invalid state ID", func(v *Vote) { v.BlockID.StateID.AppHash = v.BlockID.StateID.AppHash[:crypto.DefaultAppHashSize-1] }},
 		{"invalid block parts hash", func(v *Vote) { v.BlockID.PartSetHeader.Hash = v.BlockID.PartSetHeader.Hash[:crypto.DefaultHashSize-1] }},
 		{"invalid block parts total", func(v *Vote) { v.BlockID.PartSetHeader.Total = 0 }},
 		{"Invalid ProTxHash", func(v *Vote) { v.ValidatorProTxHash = make([]byte, 1) }},

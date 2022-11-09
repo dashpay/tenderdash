@@ -59,6 +59,7 @@ func TestSignVote(t *testing.T) {
 
 	hash := tmrand.Bytes(crypto.HashSize)
 	proTxHash := crypto.RandProTxHash()
+	stateID := types.RandStateID()
 
 	testCases := []struct {
 		name       string
@@ -73,7 +74,7 @@ func TestSignVote(t *testing.T) {
 			BlockID: types.BlockID{
 				Hash:          hash,
 				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-				StateID:       hash,
+				StateID:       stateID,
 			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
@@ -84,7 +85,7 @@ func TestSignVote(t *testing.T) {
 			BlockID: types.BlockID{
 				Hash:          hash,
 				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-				StateID:       hash,
+				StateID:       stateID,
 			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
@@ -97,7 +98,7 @@ func TestSignVote(t *testing.T) {
 			BlockID: types.BlockID{
 				Hash:          hash,
 				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-				StateID:       hash,
+				StateID:       stateID,
 			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
@@ -109,7 +110,7 @@ func TestSignVote(t *testing.T) {
 			BlockID: types.BlockID{
 				Hash:          hash,
 				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-				StateID:       hash,
+				StateID:       stateID,
 			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,

@@ -90,6 +90,7 @@ func TestSignerClient_SignVote(t *testing.T) {
 
 	hash := tmrand.Bytes(crypto.HashSize)
 	proTxHash := crypto.RandProTxHash()
+	stateID := types.RandStateID()
 
 	want := &types.Vote{
 		Type:   tmproto.PrecommitType,
@@ -98,7 +99,7 @@ func TestSignerClient_SignVote(t *testing.T) {
 		BlockID: types.BlockID{
 			Hash:          hash,
 			PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-			StateID:       hash,
+			StateID:       stateID,
 		},
 		ValidatorProTxHash: proTxHash,
 		ValidatorIndex:     1,
@@ -111,7 +112,7 @@ func TestSignerClient_SignVote(t *testing.T) {
 		BlockID: types.BlockID{
 			Hash:          hash,
 			PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-			StateID:       hash,
+			StateID:       stateID,
 		},
 		ValidatorProTxHash: proTxHash,
 		ValidatorIndex:     1,

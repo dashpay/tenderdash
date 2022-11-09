@@ -901,7 +901,7 @@ func mockLB(ctx context.Context, t *testing.T, height int64, time time.Time, las
 			Total: 100,
 			Hash:  factory.RandomHash(),
 		},
-		StateID: stateID.Hash(),
+		StateID: stateID,
 	}
 	voteSet := types.NewVoteSet(factory.DefaultTestChainID, height, 0, tmproto.PrecommitType, currentVals)
 	commit, err := factory.MakeCommit(ctx, lastBlockID, height, 0, voteSet, currentVals, currentPrivVals, stateID)

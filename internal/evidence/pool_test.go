@@ -61,7 +61,7 @@ func TestEvidencePoolBasic(t *testing.T) {
 	stateStore.On("LoadValidators", mock.AnythingOfType("int64")).Return(valSet, nil)
 	stateStore.On("Load").Return(createState(height+1, valSet), nil)
 
-	logger := log.NewNopLogger()
+	logger := log.NewTestingLogger(t)
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
@@ -96,7 +96,7 @@ func TestEvidencePoolBasic(t *testing.T) {
 	next := pool.EvidenceFront()
 	require.Equal(t, ev, next.Value.(types.Evidence))
 
-	const evidenceBytes int64 = 512
+	const evidenceBytes int64 = 592
 	evs, size = pool.PendingEvidence(evidenceBytes)
 	require.Equal(t, 1, len(evs))
 	require.Equal(t, evidenceBytes, size) // check that the size of the single evidence in bytes is correct

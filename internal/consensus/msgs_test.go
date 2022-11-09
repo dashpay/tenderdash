@@ -37,7 +37,7 @@ func TestMsgToProto(t *testing.T) {
 	bi := types.BlockID{
 		Hash:          tmrand.Bytes(32),
 		PartSetHeader: psh,
-		StateID:       stateID.Hash(),
+		StateID:       stateID,
 	}
 	pbBi := bi.ToProto()
 	bits := bits.NewBitArray(1)

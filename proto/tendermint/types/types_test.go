@@ -1,15 +1,16 @@
 package types
 
 import (
+	"strconv"
 	"testing"
 	time "time"
 
-	"github.com/gogo/protobuf/proto"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/internal/libs/protoio"
 	"github.com/tendermint/tendermint/libs/rand"
 )
 
@@ -40,6 +41,72 @@ func TestVoteSignBytes(t *testing.T) {
 	sb, err := v.SignBytes(chainID)
 	require.NoError(t, err)
 	assert.Len(t, sb, 4+8+8+32+32+len(chainID)) // type(4) + height(8) + round(8) + blockID(32) + stateID(32)
+}
+
+func TestStateID_Equals(t *testing.T) {
+	tests := []struct {
+		state1 StateID
+		state2 StateID
+		equal  bool
+	}{
+		{
+			StateID{
+				AppVersion:            12,
+				Height:                123,
+				AppHash:               []byte("12345678901234567890123456789012"),
+				CoreChainLockedHeight: 12,
+				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+			},
+			StateID{
+				AppVersion:            12,
+				Height:                123,
+				AppHash:               []byte("12345678901234567890123456789012"),
+				CoreChainLockedHeight: 12,
+				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+			},
+			true,
+		},
+		{
+			StateID{
+				AppVersion:            12,
+				Height:                123,
+				AppHash:               []byte("12345678901234567890123456789012"),
+				CoreChainLockedHeight: 12,
+				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+			},
+			StateID{
+				AppVersion:            12,
+				Height:                124,
+				AppHash:               []byte("12345678901234567890123456789012"),
+				CoreChainLockedHeight: 12,
+				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+			},
+			false,
+		},
+		{
+			StateID{
+				AppVersion:            12,
+				Height:                123,
+				AppHash:               []byte("12345678901234567890123456789012"),
+				CoreChainLockedHeight: 12,
+				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+			},
+			StateID{
+				AppVersion:            12,
+				Height:                123,
+				AppHash:               []byte("12345678901234567890123456789021"),
+				CoreChainLockedHeight: 12,
+				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+			},
+			false,
+		},
+	}
+	//nolint:scopelint
+	for tcID, tc := range tests {
+		t.Run(strconv.Itoa(tcID), func(t *testing.T) {
+			assert.Equal(t, tc.equal, tc.state1.Equal(tc.state2))
+		})
+	}
 }
 
 func TestStateIDIsZero(t *testing.T) {
@@ -81,26 +148,13 @@ func TestStateIDSignBytes(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			bz, err := tc.signBytes()
+			require.NoError(t, err)
 			stateID := StateID{}
-			proto.Unmarshal(bz, &stateID)
+			err = protoio.UnmarshalDelimited(bz, &stateID)
 			require.NoError(t, err)
 			assert.Equal(t, tc, stateID)
 		})
 	}
-}
-
-// TestStateIDString checks if state ID is correctly converted to string
-func TestStateIDString(t *testing.T) {
-
-	stateID := StateID{
-		AppVersion:            123,
-		Height:                1,
-		AppHash:               crypto.Checksum([]byte("apphash")),
-		CoreChainLockedHeight: 2,
-		Time:                  *mustTimestamp(time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC)),
-	}
-	assert.NoError(t, stateID.ValidateBasic())
-	assert.Equal(t, "v1:h=1,cl=2,ah=106901,t=2022-03-04T05:06:07Z", stateID.String())
 }
 
 func mustTimestamp(t time.Time) *gogotypes.Timestamp {

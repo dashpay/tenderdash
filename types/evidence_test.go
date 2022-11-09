@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -73,15 +74,16 @@ func randomDuplicateVoteEvidence(ctx context.Context, t *testing.T) *DuplicateVo
 	t.Helper()
 	quorumHash := crypto.RandQuorumHash()
 	val := NewMockPVForQuorum(quorumHash)
+	stateID := RandStateID()
 	blockID := makeBlockID(
 		[]byte("blockhash"),
 		1000, []byte("partshash"),
-		crypto.Checksum([]byte("statehash")),
+		stateID,
 	)
 	blockID2 := makeBlockID(
 		[]byte("blockhash2"),
 		1000, []byte("partshash"),
-		crypto.Checksum([]byte("statehash")),
+		stateID,
 	)
 	quorumType := btcjson.LLMQType_5_60
 	const chainID = "mychain"
@@ -111,17 +113,18 @@ func TestDuplicateVoteEvidence(t *testing.T) {
 func TestDuplicateVoteEvidenceValidation(t *testing.T) {
 	quorumHash := crypto.RandQuorumHash()
 	val := NewMockPVForQuorum(quorumHash)
+	stateID := RandStateID()
 	blockID := makeBlockID(
 		crypto.Checksum([]byte("blockhash")),
 		math.MaxInt32,
 		crypto.Checksum([]byte("partshash")),
-		crypto.Checksum([]byte("statehash")),
+		stateID,
 	)
 	blockID2 := makeBlockID(
 		crypto.Checksum([]byte("blockhash2")),
 		math.MaxInt32,
 		crypto.Checksum([]byte("partshash")),
-		crypto.Checksum([]byte("statehash")),
+		stateID,
 	)
 	quorumType := btcjson.LLMQType_5_60
 	const chainID = "mychain"
@@ -225,7 +228,7 @@ func TestEvidenceProto(t *testing.T) {
 	// -------- Votes --------
 	quorumHash := crypto.RandQuorumHash()
 	val := NewMockPVForQuorum(quorumHash)
-	stateID := crypto.Checksum([]byte("statehash"))
+	stateID := RandStateID()
 	blockID := makeBlockID(crypto.Checksum([]byte("blockhash")), math.MaxInt32, crypto.Checksum([]byte("partshash")), stateID)
 	blockID2 := makeBlockID(crypto.Checksum([]byte("blockhash2")), math.MaxInt32, crypto.Checksum([]byte("partshash")), stateID)
 	quorumType := btcjson.LLMQType_5_60
@@ -277,7 +280,15 @@ func TestEvidenceVectors(t *testing.T) {
 	val := NewMockPVForQuorum(quorumHash)
 	val.ProTxHash = make([]byte, crypto.ProTxHashSize)
 	key := bls12381.GenPrivKeyFromSecret([]byte("it's a secret")) // deterministic key
-	stateID := crypto.Checksum([]byte("stateid"))
+	ts, err := types.TimestampProto(time.Date(2022, 1, 2, 3, 4, 5, 6, time.UTC))
+	require.NoError(t, err)
+	stateID := tmproto.StateID{
+		AppVersion:            StateIDVersion,
+		Height:                1,
+		AppHash:               make([]byte, crypto.DefaultAppHashSize),
+		CoreChainLockedHeight: 1,
+		Time:                  *ts,
+	}
 	val.UpdatePrivateKey(context.Background(), key, quorumHash, key.PubKey(), 10)
 	blockID := makeBlockID(crypto.Checksum([]byte("blockhash")), math.MaxInt32, crypto.Checksum([]byte("partshash")), stateID)
 	blockID2 := makeBlockID(crypto.Checksum([]byte("blockhash2")), math.MaxInt32, crypto.Checksum([]byte("partshash")), stateID)
@@ -293,7 +304,7 @@ func TestEvidenceVectors(t *testing.T) {
 	}{
 		{"duplicateVoteEvidence",
 			EvidenceList{&DuplicateVoteEvidence{VoteA: v2, VoteB: v}},
-			"52b60c304e08a679d095c597800048034b0ecdc45daddd6ba42d6627ad834d7e",
+			"777d56ecaf8eb5ad256eb6a23484b6cc73333b093904cc245019e4abca310a30",
 		},
 	}
 

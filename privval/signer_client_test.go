@@ -193,6 +193,7 @@ func TestSignerVote(t *testing.T) {
 
 			hash := tmrand.Bytes(crypto.HashSize)
 			valProTxHash := tmrand.Bytes(crypto.DefaultHashSize)
+			stateID := types.RandStateID()
 
 			want := types.Vote{
 				Type:   tmproto.PrecommitType,
@@ -201,7 +202,7 @@ func TestSignerVote(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       hash,
+					StateID:       stateID,
 				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
@@ -229,6 +230,8 @@ func TestSignerVoteResetDeadline(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			hash := tmrand.Bytes(crypto.HashSize)
 			valProTxHash := tmrand.Bytes(crypto.DefaultHashSize)
+			stateID := types.RandStateID()
+
 			want := &types.Vote{
 				Type:   tmproto.PrecommitType,
 				Height: 1,
@@ -236,7 +239,7 @@ func TestSignerVoteResetDeadline(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       hash,
+					StateID:       stateID,
 				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
@@ -279,6 +282,8 @@ func TestSignerVoteKeepAlive(t *testing.T) {
 
 			hash := tmrand.Bytes(crypto.HashSize)
 			valProTxHash := tmrand.Bytes(crypto.DefaultHashSize)
+			stateID := types.RandStateID()
+
 			want := &types.Vote{
 				Type:   tmproto.PrecommitType,
 				Height: 1,
@@ -286,7 +291,7 @@ func TestSignerVoteKeepAlive(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       hash,
+					StateID:       stateID,
 				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,
@@ -327,6 +332,8 @@ func TestSignerSignProposalErrors(t *testing.T) {
 			tc.mockPV = types.NewErroringMockPV()
 
 			hash := tmrand.Bytes(crypto.HashSize)
+			stateID := types.RandStateID()
+
 			proposal := &types.Proposal{
 				Type:                  tmproto.ProposalType,
 				Height:                1,
@@ -336,7 +343,7 @@ func TestSignerSignProposalErrors(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       hash,
+					StateID:       stateID,
 				},
 				Signature: []byte("signature"),
 			}
@@ -376,7 +383,7 @@ func TestSignerSignVoteErrors(t *testing.T) {
 				BlockID: types.BlockID{
 					Hash:          hash,
 					PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
-					StateID:       tmrand.Bytes(crypto.HashSize),
+					StateID:       types.RandStateID(),
 				},
 				ValidatorProTxHash: valProTxHash,
 				ValidatorIndex:     1,

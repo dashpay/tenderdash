@@ -560,7 +560,7 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 		args.config = configSetup(t)
 	}
 	if args.logger == nil {
-		args.logger = log.NewNopLogger()
+		args.logger = consensusLogger(t)
 	}
 	c := factory.ConsensusParams()
 	if args.consensusParams != nil {
@@ -647,11 +647,11 @@ func ensureNewRound(t *testing.T, roundCh <-chan tmpubsub.Message, height int64,
 	t.Helper()
 	msg := ensureMessageBeforeTimeout(t, roundCh, ensureTimeout)
 	newRoundEvent, ok := msg.Data().(types.EventDataNewRound)
-	require.True(t, ok, "expected a EventDataNewRound, got %T. Wrong subscription channel?",
+	assert.True(t, ok, "expected a EventDataNewRound, got %T. Wrong subscription channel?",
 		msg.Data())
 
-	require.Equal(t, height, newRoundEvent.Height)
-	require.Equal(t, round, newRoundEvent.Round)
+	assert.Equal(t, height, newRoundEvent.Height, "height")
+	assert.Equal(t, round, newRoundEvent.Round, "round")
 }
 
 func ensureNewTimeout(t *testing.T, timeoutCh <-chan tmpubsub.Message, height int64, round int32, timeout int64) {

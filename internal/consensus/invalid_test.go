@@ -133,7 +133,7 @@ func invalidDoPrevoteFunc(
 			BlockID: types.BlockID{
 				Hash:          blockHash,
 				PartSetHeader: types.PartSetHeader{Total: 1, Hash: tmrand.Bytes(32)},
-				StateID:       blockHash,
+				StateID:       types.RandStateID(),
 			},
 		}
 

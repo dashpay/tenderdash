@@ -25,7 +25,7 @@ func TestPeerCatchupRounds(t *testing.T) {
 
 	valSet, privVals := types.RandValidatorSet(10)
 
-	stateID := types.StateID{Height: 1}
+	stateID := tmproto.StateID{Height: 1}
 
 	chainID := cfg.ChainID()
 	hvs := NewHeightVoteSet(chainID, 1, valSet)
@@ -67,7 +67,7 @@ func makeVoteHR(
 	chainID string,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
-	stateID types.StateID,
+	stateID tmproto.StateID,
 ) *types.Vote {
 	privVal := privVals[valIndex]
 	proTxHash, err := privVal.GetProTxHash(ctx)
@@ -84,7 +84,7 @@ func makeVoteHR(
 		BlockID: types.BlockID{
 			Hash:          randBytes,
 			PartSetHeader: types.PartSetHeader{},
-			StateID:       stateID.Hash(),
+			StateID:       stateID,
 		},
 	}
 

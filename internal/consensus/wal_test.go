@@ -157,13 +157,14 @@ func TestWALWriteCommit(t *testing.T) {
 
 	// Prepare and write commit msg
 	height := rand.Int63()
-	stateID := tmtypes.RandStateID().WithHeight(height)
+	stateID := tmtypes.RandStateID()
+	stateID.Height = uint64(height)
 	blockID := tmtypes.BlockID{
 		Hash: crypto.CRandBytes(crypto.HashSize),
 		PartSetHeader: tmtypes.PartSetHeader{
 			Total: 0,
 			Hash:  crypto.CRandBytes(crypto.HashSize)},
-		StateID: stateID.Hash(),
+		StateID: stateID,
 	}
 	msg := &CommitMessage{
 		Commit: &tmtypes.Commit{
@@ -196,7 +197,7 @@ func TestWALWriteCommit(t *testing.T) {
 	require.True(t, ok, "expected message of type msgInfo, got %T", readMsg.Msg)
 	commitMsg, ok := msgInfo.Msg.(*CommitMessage)
 	require.True(t, ok, "expected message of type *CommitMessage, got %T", msgInfo.Msg)
-	assert.EqualValues(t, stateID.Hash(), commitMsg.Commit.BlockID.StateID)
+	assert.EqualValues(t, stateID, commitMsg.Commit.BlockID.StateID)
 }
 
 func TestWALSearchForEndHeight(t *testing.T) {

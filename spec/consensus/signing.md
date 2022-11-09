@@ -123,15 +123,7 @@ non-negative round, a POLRound not less than -1, and a complete BlockID.
 
 ## Votes
 
-Sign bytes for votes are defined as `CanonicalVote` struct, encoded using **raw fixed-length encoding**
-(see [Encoding](../core/encoding.md#raw-fixed-length-encoding)):
-
-```go
-type voteSignBytes struct {
-	CanonicalVoteID  [crypto.HashSize]byte
-	StateID          [crypto.HashSize]byte
-}
-```
+Sign bytes for votes are defined as `CanonicalVote` struct.
 
 `CanonicalVoteID` is a sha256 checksum of `CanonicalVote` encoded using **protobuf encoding**:
 
@@ -148,7 +140,7 @@ message CanonicalVote {
 }
 ```
 
-`block_id` is a sha256 checksum of [`CanonicalBlockID` message, encoded using **Protobuf encoding**:
+`block_id` is a sha256 checksum of Protobuf-encoded [`CanonicalBlockID` message:
 
 ```go
 message CanonicalBlockID {
@@ -162,7 +154,7 @@ message CanonicalPartSetHeader {
 }
 ```
 
-`state_id` is a sha256 checksum of [`StateID` struct](https://github.com/dashpay/tenderdash/blob/a3861a33cde79235404287488e35cd375fbc49e0/types/stateid.go#L20) encoded using **raw fixed-length encoding**:
+`state_id` is a sha256 checksum of Protobuf-encoded [`CanonicalStateID` message](https://github.com/dashpay/tenderdash/blob/a3861a33cde79235404287488e35cd375fbc49e0/types/stateid.go#L20):
 
 ```go
 type StateID struct {

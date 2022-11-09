@@ -82,8 +82,8 @@ func (m Vote) ToCanonicalVote(chainID string) (CanonicalVote, error) {
 			return CanonicalVote{}, err
 		}
 	} else {
-		blockIDBytes = make([]byte, crypto.HashSize)
-		stateIDBytes = make([]byte, crypto.HashSize)
+		blockIDBytes = crypto.Checksum(nil)
+		stateIDBytes = crypto.Checksum(nil)
 	}
 
 	return CanonicalVote{

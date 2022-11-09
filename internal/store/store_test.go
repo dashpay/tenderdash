@@ -27,7 +27,18 @@ import (
 
 // make a Commit with a single vote containing just the height and a timestamp
 func makeTestCommit(state sm.State, height int64, timestamp time.Time) *types.Commit {
-	blockID := types.BlockID{Hash: []byte(""), PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2}}
+	// ts, err := gogotypes.TimestampProto(timestamp)
+	// if err != nil {
+	// 	panic(err)
+	// }
+	blockID := types.BlockID{
+		Hash: []byte(""),
+		PartSetHeader: types.PartSetHeader{
+			Hash:  []byte(""),
+			Total: 2,
+		},
+		StateID: tmproto.StateID{},
+	}
 	goodVote := &types.Vote{
 		ValidatorProTxHash: crypto.RandProTxHash(),
 		ValidatorIndex:     0,
@@ -53,7 +64,7 @@ func makeTestCommit(state sm.State, height int64, timestamp time.Time) *types.Co
 		types.BlockID{
 			Hash:          []byte(""),
 			PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2},
-			StateID:       types.RandStateID().Hash(),
+			StateID:       tmproto.StateID{},
 		},
 		&types.CommitSigns{
 			QuorumSigns: *thresholdSigns,
@@ -114,6 +125,7 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 		ChainID:           "block_test",
 		Time:              tmtime.Now(),
 		ProposerProTxHash: tmrand.Bytes(crypto.DefaultHashSize),
+		ValidatorsHash:    tmrand.Bytes(crypto.HashSize),
 	}
 
 	// End of setup, test data
@@ -149,6 +161,7 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 					Height:            5,
 					ChainID:           "block_test",
 					Time:              tmtime.Now(),
+					ValidatorsHash:    tmrand.Bytes(crypto.DefaultHashSize),
 					ProposerProTxHash: tmrand.Bytes(crypto.DefaultHashSize)},
 				makeTestCommit(state, 5, tmtime.Now()),
 			),
@@ -217,6 +230,16 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 
 	for i, tuple := range tuples {
 		tuple := tuple
+		if tuple.block != nil &&
+			tuple.block.LastCommit != nil &&
+			len(tuple.block.LastCommit.BlockID.Hash) == 0 && !tuple.block.LastCommit.BlockID.StateID.IsZero() {
+			t.FailNow()
+		}
+		if tuple.seenCommit != nil &&
+			len(tuple.seenCommit.BlockID.Hash) == 0 && !tuple.seenCommit.BlockID.StateID.IsZero() {
+			t.FailNow()
+		}
+
 		bs, db := newInMemoryBlockStore()
 		// SaveBlock
 		res, err, panicErr := doFn(func() (interface{}, error) {
