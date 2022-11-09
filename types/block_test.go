@@ -374,7 +374,7 @@ func TestHeaderHash(t *testing.T) {
 				ProposerProTxHash:  crypto.ProTxHashFromSeedBytes([]byte("proposer_pro_tx_hash")),
 				ProposedAppVersion: 1,
 			},
-			expectHash: hexBytesFromString(t, "2247DC2E38A7B5ACCEC29C351A921B8FF77122783F8739CC519F41CE8BBEF43D"),
+			expectHash: hexBytesFromString(t, "891099982E9BC6035675DE94726BB0ADB8AE49E0277C67C7911BAC145119065A"),
 		},
 		{
 			"nil header yields nil",
@@ -654,7 +654,7 @@ func TestBlockIDValidateBasic(t *testing.T) {
 			Total: 1,
 			Hash:  tmrand.Bytes(crypto.HashSize),
 		},
-		StateID: RandStateID().Hash(),
+		StateID: tmproto.StateID{}.Hash(),
 	}
 
 	invalidBlockID := BlockID{
@@ -663,7 +663,7 @@ func TestBlockIDValidateBasic(t *testing.T) {
 			Total: 1,
 			Hash:  []byte{0},
 		},
-		StateID: tmproto.StateID{Height: 2}.Hash(),
+		StateID: []byte("too short"),
 	}
 
 	testCases := []struct {
@@ -1377,7 +1377,7 @@ func TestHeaderHashVector(t *testing.T) {
 		header   Header
 		expBytes string
 	}{
-		{header: h, expBytes: "967b7d03cc97fd9ed603f867ba33d7f4f8e3405fdd8a507316f98a21f1fd8e94"},
+		{header: h, expBytes: "8df5f303af2ae303adaaa56d8f5645247dd8fd12dc5ebdff55444649f653452f"},
 	}
 
 	for _, tc := range testCases {

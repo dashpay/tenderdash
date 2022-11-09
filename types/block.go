@@ -1067,10 +1067,6 @@ func (blockID BlockID) ValidateBasic() error {
 		return fmt.Errorf("wrong PartSetHeader: %w", err)
 	}
 
-	// only validate state-id for non-NIL blocks
-	if len(blockID.Hash) == 0 && !blockID.StateID.IsZero() {
-		return fmt.Errorf("state ID is not zero for NIL blockID: %+v", blockID)
-	}
 	if len(blockID.Hash) != 0 && len(blockID.StateID) != crypto.HashSize {
 		return fmt.Errorf("expected state ID len: %d, actual: %d", crypto.HashSize, len(blockID.StateID))
 	}
@@ -1114,7 +1110,10 @@ func (blockID BlockID) IsComplete() bool {
 func (blockID BlockID) String() string {
 
 	stateIDHash := blockID.StateID
-	return fmt.Sprintf(`%v:%v:%X`, blockID.Hash, blockID.PartSetHeader, stateIDHash[:6])
+	if len(stateIDHash) > 6 {
+		stateIDHash = stateIDHash[:6]
+	}
+	return fmt.Sprintf(`%v:%v:%X`, blockID.Hash, blockID.PartSetHeader, stateIDHash)
 }
 
 // ToProto converts BlockID to protobuf

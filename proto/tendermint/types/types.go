@@ -104,12 +104,10 @@ func (s StateID) signBytes() ([]byte, error) {
 }
 
 // Hash calculates hash of a StateID to be used in BlockID and other places.
-// It will panic() in (very unlikely) error.
+// It will panic() in case of (very unlikely) error.
 func (s StateID) Hash() (bz []byte) {
 	var err error
-	if s.IsZero() {
-		return crypto.Checksum([]byte{})
-	}
+
 	if bz, err = s.signBytes(); err != nil {
 		panic("cannot marshal: " + err.Error())
 	}
