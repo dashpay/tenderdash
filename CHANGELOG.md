@@ -1,4 +1,4 @@
-## [0.10.0-dev.2] - 2022-10-20
+## [0.10.0-dev.3] - 2022-11-09
 
 ### Bug Fixes
 
@@ -8,6 +8,7 @@
 - Invalid error msg when verifying val power in genesis doc (#476)
 - Revert ResponseCheckTx.info field and pass it to ResultBroadcastTx (#488)
 - Fix p2p deadlock (#473)
+- Abci Info() returns invalid height at genesis (#474)
 
 ### Documentation
 
@@ -19,11 +20,15 @@
 - Same-block execution (#418)
 - Implement import app-state in init-chain request (#472)
 - Consensus params updates support (#475)
+- Add round to Prepare/ProcessProposal,  FinalizeBlock (#498)
+- Add core_chain_lock_update to RequestProcessProposal (#492)
 
 ### Miscellaneous Tasks
 
 - Update changelog and version to 0.10.0-dev.1 (#456)
 - Revert `validateBlockTime` (#458)
+- Update changelog and version to 0.10.0-dev.2 (#489)
+- Improve validation of ResponsePrepare/ProcessProposal ExecTxResults (#477)
 
 ### Refactor
 
@@ -32,10 +37,25 @@
 - Handshake block-replay mechanism (#460)
 - Merge e2e app with kvstore and support same-block execution (#457)
 - Change a logic of usage CoreChainLockHeight (#485)
+- Remove unused P2P.PexReactor flag field in a config (#490)
+- Provide a current block commit with request finalize block request (#501)
+
+### Testing
+
+- Skip broken PBTS tests (#500)
 
 ### Backport
 
 - Tendermint v0.36 (#446)
+
+### Build
+
+- Bump actions/stale from 5 to 6
+- Bump actions/setup-go from 3.2.1 to 3.3.1
+- Bump bufbuild/buf-setup-action from 1.6.0 to 1.9.0
+- Bump docker/setup-buildx-action from 2.0.0 to 2.2.1
+- Bump golangci/golangci-lint-action from 3.2.0 to 3.3.0
+- Remove unused nightly test runs (#499)
 
 ## [0.9.0-dev.1] - 2022-09-01
 
