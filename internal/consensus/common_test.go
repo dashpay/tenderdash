@@ -248,7 +248,7 @@ func decideProposal(
 	t.Helper()
 
 	cs1.mtx.Lock()
-	block, err := cs1.createProposalBlock(ctx)
+	block, err := cs1.createProposalBlock(ctx, round)
 	require.NoError(t, err)
 	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
@@ -400,6 +400,9 @@ func subscribeToVoter(ctx context.Context, t *testing.T, cs *State, proTxHash []
 	return ch
 }
 
+// TODO: used only in pbts_test.go, remove nolint:unused once pbts tests are un-skipped
+//
+//nolint:unused
 func subscribeToVoterBuffered(ctx context.Context, t *testing.T, cs *State, proTxHash []byte) <-chan tmpubsub.Message {
 	t.Helper()
 	votesSub, err := cs.eventBus.SubscribeWithArgs(ctx, tmpubsub.SubscribeArgs{
@@ -647,8 +650,8 @@ func ensureNewRound(t *testing.T, roundCh <-chan tmpubsub.Message, height int64,
 	require.True(t, ok, "expected a EventDataNewRound, got %T. Wrong subscription channel?",
 		msg.Data())
 
-	require.Equal(t, height, newRoundEvent.Height)
-	require.Equal(t, round, newRoundEvent.Round)
+	assert.Equal(t, height, newRoundEvent.Height, "height")
+	assert.Equal(t, round, newRoundEvent.Round, "round")
 }
 
 func ensureNewTimeout(t *testing.T, timeoutCh <-chan tmpubsub.Message, height int64, round int32, timeout int64) {
