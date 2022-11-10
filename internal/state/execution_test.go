@@ -551,7 +551,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 		1,
 	)
 	require.NoError(t, err)
-	blockID, err := block.BlockID(nil)
+	blockID := block.BlockID(nil)
 	require.NoError(t, err)
 	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, new(types.Commit))
 	require.NoError(t, err)

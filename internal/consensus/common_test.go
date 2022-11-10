@@ -261,7 +261,7 @@ func decideProposal(
 
 	// Make proposal
 	polRound := validRound
-	propBlockID, err := block.BlockID(blockParts)
+	propBlockID := block.BlockID(blockParts)
 	assert.NoError(t, err)
 
 	proposal = types.NewProposal(height, 1, round, polRound, propBlockID, block.Header.Time)

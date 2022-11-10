@@ -227,7 +227,7 @@ func (p *pbtsTestHarness) nextHeight(ctx context.Context, t *testing.T, proposer
 	require.NoError(t, err)
 	ps, err := b.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
-	bid, err := b.BlockID(ps)
+	bid := b.BlockID(ps)
 	require.NoError(t, err)
 
 	coreChainLockedHeight := p.observedState.state.LastCoreChainLockedBlockHeight

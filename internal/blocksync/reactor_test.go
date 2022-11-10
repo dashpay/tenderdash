@@ -212,7 +212,7 @@ func makeNextBlock(ctx context.Context,
 	block.CoreChainLockedHeight = state.LastCoreChainLockedBlockHeight
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
-	blockID, err := block.BlockID(partSet)
+	blockID := block.BlockID(partSet)
 	require.NoError(t, err)
 
 	// Simulate a commit for the current height

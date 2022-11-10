@@ -76,7 +76,7 @@ func makeAndApplyGoodBlock(
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 
-	blockID, err := block.BlockID(partSet)
+	blockID := block.BlockID(partSet)
 	require.NoError(t, err)
 
 	return state, blockID, block

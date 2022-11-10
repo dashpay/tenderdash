@@ -231,9 +231,7 @@ func TestStateBadProposal(t *testing.T) {
 	propBlock.AppHash = stateHash
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(propBlockParts)
-	require.NoError(t, err)
-
+	blockID := propBlock.BlockID(propBlockParts)
 	proposal := types.NewProposal(vs2.Height, 1, round, -1, blockID, propBlock.Header.Time)
 	p := proposal.ToProto()
 	_, err = vs2.SignProposal(ctx, config.ChainID(), cs1.Validators.QuorumType, cs1.Validators.QuorumHash, p)
@@ -322,8 +320,7 @@ func TestStateProposalTime(t *testing.T) {
 			}
 			parSet, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
 			require.NoError(t, err)
-			blockID, err := propBlock.BlockID(parSet)
-			require.NoError(t, err)
+			blockID := propBlock.BlockID(parSet)
 			cs.ValidBlock = propBlock
 			cs.ValidBlockParts = parSet
 
@@ -371,8 +368,7 @@ func TestStateOversizedBlock(t *testing.T) {
 
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(propBlockParts)
-	require.NoError(t, err)
+	blockID := propBlock.BlockID(propBlockParts)
 	proposal := types.NewProposal(height, 1, round, -1, blockID, propBlock.Header.Time)
 	p := proposal.ToProto()
 	_, err = vs2.SignProposal(ctx, config.ChainID(), cs1.Validators.QuorumType,
@@ -670,8 +666,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	prop, propBlock := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round+1)
 	require.NotNil(t, propBlock, "Failed to create proposal block with vs2")
 	require.NotNil(t, prop, "Failed to create proposal block with vs2")
-	propBlockID, err := propBlock.BlockID(partSet)
-	require.NoError(t, err)
+	propBlockID := propBlock.BlockID(partSet)
 
 	incrementRound(vs2)
 
@@ -789,8 +784,7 @@ func TestStateLock_POLUpdateLock(t *testing.T) {
 	propR1, propBlockR1 := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	propBlockR1Parts, err := propBlockR1.MakePartSet(partSize)
 	require.NoError(t, err)
-	r1BlockID, err := propBlockR1.BlockID(propBlockR1Parts)
-	require.NoError(t, err)
+	r1BlockID := propBlockR1.BlockID(propBlockR1Parts)
 	require.NotEqual(t, r1BlockID.Hash, initialBlockID.Hash)
 	err = cs1.SetProposalAndBlock(ctx, propR1, propBlockR1, propBlockR1Parts, "some peer")
 	require.NoError(t, err)
@@ -1281,8 +1275,7 @@ func TestStateLock_MissingProposalWhenPOLSeenDoesNotUpdateLock(t *testing.T) {
 	require.NotNil(t, prop, "Failed to create proposal block with vs2")
 	partSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	secondBlockID, err := propBlock.BlockID(partSet)
-	require.NoError(t, err)
+	secondBlockID := propBlock.BlockID(partSet)
 
 	require.NotEqual(t, secondBlockID.Hash, firstBlockID.Hash)
 
@@ -1404,8 +1397,7 @@ func TestStateLock_POLSafety1(t *testing.T) {
 	ensurePrevoteMatch(t, voteCh, height, round, propBlock.Hash())
 	partSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(partSet)
-	require.NoError(t, err)
+	blockID := propBlock.BlockID(partSet)
 	// the others sign a polka but we don't see it
 	prevotes := signVotes(ctx, t, tmproto.PrevoteType, config.ChainID(), blockID, cs1.state.LastAppHash,
 		cs1.Validators.QuorumType, cs1.Validators.QuorumHash,
@@ -1424,8 +1416,7 @@ func TestStateLock_POLSafety1(t *testing.T) {
 	prop, propBlock := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	r2BlockID, err := propBlock.BlockID(propBlockParts)
-	require.NoError(t, err)
+	r2BlockID := propBlock.BlockID(propBlockParts)
 
 	ensureNewRound(t, newRoundCh, height, round)
 
@@ -1511,8 +1502,7 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	_, propBlock0 := decideProposal(ctx, t, cs1, vss[0], height, round)
 	propBlockParts0, err := propBlock0.MakePartSet(partSize)
 	require.NoError(t, err)
-	propBlockID0, err := propBlock0.BlockID(propBlockParts0)
-	require.NoError(t, err)
+	propBlockID0 := propBlock0.BlockID(propBlockParts0)
 
 	// the others sign a polka but we don't see it
 	prevotes := signVotes(ctx, t, tmproto.PrevoteType, config.ChainID(), propBlockID0, cs1.state.LastAppHash,
@@ -1523,8 +1513,7 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	prop1, propBlock1 := decideProposal(ctx, t, cs1, vs2, vs2.Height, vs2.Round+1)
 	propBlockParts1, err := propBlock1.MakePartSet(partSize)
 	require.NoError(t, err)
-	propBlockID1, err := propBlock1.BlockID(propBlockParts1)
-	require.NoError(t, err)
+	propBlockID1 := propBlock1.BlockID(propBlockParts1)
 
 	incrementRound(vs2, vs3, vs4)
 
@@ -1660,9 +1649,7 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 
 	propBlockR1Parts, err := propBlockR1.MakePartSet(partSize)
 	require.NoError(t, err)
-	r1BlockID, err := propBlockR1.BlockID(propBlockR1Parts)
-	require.NoError(t, err)
-
+	r1BlockID := propBlockR1.BlockID(propBlockR1Parts)
 	require.NotEqual(t, r1BlockID.Hash, r0BlockID.Hash)
 
 	ensureNewRound(t, newRoundCh, height, round)
@@ -1753,8 +1740,7 @@ func TestProposeValidBlock(t *testing.T) {
 	propBlock := rs.ProposalBlock
 	partSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(partSet)
-	require.NoError(t, err)
+	blockID := propBlock.BlockID(partSet)
 
 	ensurePrevoteMatch(t, voteCh, height, round, blockID.Hash)
 
@@ -1842,8 +1828,7 @@ func TestSetValidBlockOnDelayedPrevote(t *testing.T) {
 	propBlock := rs.ProposalBlock
 	partSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(partSet)
-	require.NoError(t, err)
+	blockID := propBlock.BlockID(partSet)
 
 	ensurePrevoteMatch(t, voteCh, height, round, blockID.Hash)
 
@@ -1913,8 +1898,7 @@ func TestSetValidBlockOnDelayedProposal(t *testing.T) {
 	prop, propBlock := decideProposal(ctx, t, cs1, vs2, vs2.Height, vs2.Round+1)
 	partSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(partSet)
-	require.NoError(t, err)
+	blockID := propBlock.BlockID(partSet)
 
 	// vs2, vs3 and vs4 send prevote for propBlock
 	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), blockID, vs2, vs3, vs4)
@@ -2578,8 +2562,7 @@ func TestEmitNewValidBlockEventOnCommitWithoutBlock(t *testing.T) {
 	_, propBlock := decideProposal(ctx, t, cs1, vs2, vs2.Height, vs2.Round)
 	partSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(partSet)
-	require.NoError(t, err)
+	blockID := propBlock.BlockID(partSet)
 
 	// start round in which PO is not proposer
 	startTestRound(ctx, cs1, height, round)
@@ -2617,8 +2600,7 @@ func TestCommitFromPreviousRound(t *testing.T) {
 	prop, propBlock := decideProposal(ctx, t, cs1, vs2, vs2.Height, vs2.Round)
 	partSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(partSet)
-	require.NoError(t, err)
+	blockID := propBlock.BlockID(partSet)
 
 	// start round in which PO is not proposer
 	startTestRound(ctx, cs1, height, round)
@@ -2813,8 +2795,7 @@ func TestStateHalt1(t *testing.T) {
 	propBlock := rs.ProposalBlock
 	partSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(partSet)
-	require.NoError(t, err)
+	blockID := propBlock.BlockID(partSet)
 
 	ensurePrevote(t, voteCh, height, round)
 
@@ -3016,8 +2997,7 @@ func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
 
 	propBlockParts, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(propBlockParts)
-	require.NoError(t, err)
+	blockID := propBlock.BlockID(propBlockParts)
 
 	// Create a proposal with a timestamp that does not match the timestamp of the block.
 	proposal := types.NewProposal(vs2.Height, 1, round, -1, blockID, propBlock.Header.Time.Add(time.Millisecond))
@@ -3065,8 +3045,7 @@ func TestStateTimestamp_ProposalMatch(t *testing.T) {
 
 	propBlockParts, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(propBlockParts)
-	require.NoError(t, err)
+	blockID := propBlock.BlockID(propBlockParts)
 
 	// Create a proposal with a timestamp that matches the timestamp of the block.
 	proposal := types.NewProposal(vs2.Height, 1, round, -1, blockID, propBlock.Header.Time)

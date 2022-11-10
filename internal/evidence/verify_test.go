@@ -47,8 +47,6 @@ func TestVerifyDuplicateVoteEvidence(t *testing.T) {
 
 	const chainID = "mychain"
 
-	stateID = types.RandStateID()
-
 	vote1 := makeVote(ctx, t, val, chainID, 0, 10, 2, 1, blockID, quorumType, quorumHash)
 	v1 := vote1.ToProto()
 	err := val.SignVote(ctx, chainID, quorumType, quorumHash, v1, nil)

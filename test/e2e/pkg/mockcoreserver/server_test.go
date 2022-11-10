@@ -3,7 +3,7 @@ package mockcoreserver
 import (
 	"context"
 	"encoding/hex"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"net/url"
 	"testing"
@@ -58,7 +58,7 @@ func TestServer(t *testing.T) {
 			Respond(JSONBody(tc.e), JSONContentType())
 		resp, err := http.Get(tc.url)
 		require.NoError(t, err)
-		data, err := ioutil.ReadAll(resp.Body)
+		data, err := io.ReadAll(resp.Body)
 		_ = resp.Body.Close()
 		assert.NoError(t, err)
 		s := ""

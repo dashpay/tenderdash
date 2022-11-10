@@ -66,23 +66,23 @@ func (b *Block) SetTxs(txs []Tx) {
 // BlockID returns a block ID of this block.
 // BlockID of a nil block is zero-value (BlockID{})
 // If partSet is nil, new partSet will be created
-func (b *Block) BlockID(partSet *PartSet) (BlockID, error) {
+func (b *Block) BlockID(partSet *PartSet) BlockID {
 	var err error
 
 	if b == nil {
-		return BlockID{}, nil
+		return BlockID{}
 	}
 
 	blockHash := b.Hash()
 	// cannot calculate block hash, so we return nil block ID
 	if len(blockHash) == 0 {
-		return BlockID{}, nil
+		return BlockID{}
 	}
 
 	if partSet == nil {
 		partSet, err = b.MakePartSet(BlockPartSizeBytes)
 		if err != nil {
-			return BlockID{}, err
+			panic("cannot make part set: " + err.Error())
 		}
 	}
 
@@ -92,7 +92,7 @@ func (b *Block) BlockID(partSet *PartSet) (BlockID, error) {
 		StateID:       b.Header.StateID().Hash(),
 	}
 
-	return blockID, nil
+	return blockID
 }
 
 // ValidateBasic performs basic validation that doesn't involve state data.

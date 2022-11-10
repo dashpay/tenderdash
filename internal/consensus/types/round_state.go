@@ -168,11 +168,7 @@ func (rs *RoundState) BlockID() types.BlockID {
 		return rs.Proposal.BlockID
 	}
 
-	blockID, err := rs.ProposalBlock.BlockID(rs.ProposalBlockParts)
-	if err != nil {
-		panic(err) // this should never happen
-	}
-	return blockID
+	return rs.ProposalBlock.BlockID(rs.ProposalBlockParts)
 }
 
 // CompleteProposalEvent returns information about a proposed block as an event.

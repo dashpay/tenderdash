@@ -1481,10 +1481,7 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 	}
 
 	// Make proposal
-	propBlockID, err := block.BlockID(blockParts)
-	if err != nil {
-		panic("proposal block id: " + err.Error())
-	}
+	propBlockID := block.BlockID(blockParts)
 	proposal := types.NewProposal(height, block.CoreChainLockedHeight, round, cs.ValidRound, propBlockID, block.Header.Time)
 	proposal.SetCoreChainLockUpdate(block.CoreChainLock)
 	p := proposal.ToProto()

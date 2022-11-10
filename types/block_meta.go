@@ -21,10 +21,8 @@ type BlockMeta struct {
 
 // NewBlockMeta returns a new BlockMeta.
 func NewBlockMeta(block *Block, blockParts *PartSet) *BlockMeta {
-	blockID, err := block.BlockID(blockParts)
-	if err != nil {
-		panic("new block meta: " + err.Error()) // should never happen
-	}
+	blockID := block.BlockID(blockParts)
+
 	return &BlockMeta{
 		BlockID:          blockID,
 		BlockSize:        block.Size(),

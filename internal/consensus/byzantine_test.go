@@ -223,7 +223,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 
 		// Make proposal
-		propBlockID, err := block.BlockID(blockParts)
+		propBlockID := block.BlockID(blockParts)
 		assert.NoError(t, err)
 
 		proposal := types.NewProposal(

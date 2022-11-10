@@ -479,7 +479,7 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 
 	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), 0)
 	require.NoError(t, err)
-	blockID, err := block.BlockID(nil)
+	blockID := block.BlockID(nil)
 	require.NoError(t, err)
 
 	// Any node pro tx hash should do
@@ -621,7 +621,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), 0)
 	require.NoError(t, err)
-	blockID, err := block.BlockID(nil)
+	blockID := block.BlockID(nil)
 	require.NoError(t, err)
 
 	// no updates:
@@ -1122,7 +1122,7 @@ func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state 
 
 		block, err := statefactory.MakeBlock(prevState, prevState.LastBlockHeight+1, new(types.Commit), 0)
 		require.NoError(t, err)
-		blockID, err := block.BlockID(nil)
+		blockID := block.BlockID(nil)
 		require.NoError(t, err)
 
 		state, err = state.Update(blockID, &block.Header, &ucState)

@@ -498,8 +498,7 @@ func createSignSendProposal(ctx context.Context,
 	propBlock, _ := css[0].CreateProposalBlock(ctx)
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID, err := propBlock.BlockID(propBlockParts)
-	require.NoError(t, err)
+	blockID := propBlock.BlockID(propBlockParts)
 	if assertTxs != nil {
 		require.Equal(t, len(assertTxs), len(propBlock.Txs), "height %d", height)
 		for _, tx := range assertTxs {
@@ -822,8 +821,7 @@ func applyBlock(
 	testPartSize := types.BlockPartSizeBytes
 	bps, err := blk.MakePartSet(testPartSize)
 	require.NoError(t, err)
-	blkID, err := blk.BlockID(bps)
-	require.NoError(t, err)
+	blkID := blk.BlockID(bps)
 	newState, err := blockExec.ApplyBlock(ctx, st, blkID, blk, commit)
 	require.NoError(t, err)
 	return newState
@@ -1215,7 +1213,7 @@ func (bs *mockBlockStore) LoadBlockMeta(height int64) *types.BlockMeta {
 	block := bs.chain[height-1]
 	bps, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(bs.t, err)
-	blockID, err := block.BlockID(bps)
+	blockID := block.BlockID(bps)
 	require.NoError(bs.t, err)
 	return &types.BlockMeta{
 		BlockID: blockID,

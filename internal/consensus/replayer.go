@@ -375,12 +375,9 @@ func (r *BlockReplayer) publishEvents(
 	ucState sm.CurrentRoundState,
 	fbResp *abci.ResponseFinalizeBlock,
 ) error {
-	blockID, err := block.BlockID(nil)
-	if err != nil {
-		return err
-	}
+	blockID := block.BlockID(nil)
 	es := sm.NewFullEventSet(block, blockID, ucState, fbResp, ucState.NextValidators)
-	err = es.Publish(r.publisher)
+	err := es.Publish(r.publisher)
 	if err != nil {
 		r.logger.Error("failed publishing event", "err", err)
 	}
