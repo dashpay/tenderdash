@@ -5,7 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -126,7 +126,7 @@ func (s *JRPCServer) Start() {
 		s.guard.Lock()
 		defer s.guard.Unlock()
 		jReq := btcjson.Request{}
-		buf, err := ioutil.ReadAll(req.Body)
+		buf, err := io.ReadAll(req.Body)
 		if err != nil {
 			return fmt.Errorf("unable to decode jRPC request: %v", err)
 		}
@@ -134,7 +134,7 @@ func (s *JRPCServer) Start() {
 		if err != nil {
 			return err
 		}
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
+		req.Body = io.NopCloser(bytes.NewBuffer(buf))
 		mustUnmarshal(buf, &jReq)
 		call, err := s.findCall(jReq)
 		if err != nil {
