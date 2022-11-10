@@ -136,6 +136,17 @@ func (s StateID) Copy() StateID {
 	return copied
 }
 
+func (stateID StateID) String() string {
+	return fmt.Sprintf(
+		`v%d:h=%d,cl=%d,ah=%s,t=%s`,
+		stateID.AppVersion,
+		stateID.Height,
+		stateID.CoreChainLockedHeight,
+		tmbytes.HexBytes(stateID.AppHash).ShortString(),
+		stateID.Time.String(),
+	)
+}
+
 // Equal returns true if the StateID matches the given StateID
 func (s StateID) Equal(other StateID) bool {
 	left, err := s.signBytes()

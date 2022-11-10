@@ -27,10 +27,6 @@ import (
 
 // make a Commit with a single vote containing just the height and a timestamp
 func makeTestCommit(state sm.State, height int64, timestamp time.Time) *types.Commit {
-	// ts, err := gogotypes.TimestampProto(timestamp)
-	// if err != nil {
-	// 	panic(err)
-	// }
 	blockID := types.BlockID{
 		Hash: []byte(""),
 		PartSetHeader: types.PartSetHeader{

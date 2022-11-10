@@ -1749,8 +1749,7 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		}
 		if cs.ProposalBlock.HashesTo(cs.LockedBlock.Hash()) {
 			logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
-			cs.signAddVote(
-				ctx, tmproto.PrevoteType, blockID)
+			cs.signAddVote(ctx, tmproto.PrevoteType, blockID)
 			return
 		}
 	}
