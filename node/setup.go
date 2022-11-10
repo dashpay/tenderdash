@@ -571,7 +571,6 @@ func createBlockReplayer(n *nodeImpl) *consensus.BlockReplayer {
 		n.blockStore,
 		n.rpcEnv.EventBus,
 		sm.BlockExecWithLogger(logger),
-		sm.BlockExecWithAppHashSize(n.config.Consensus.AppHashSize),
 	)
 	return consensus.NewBlockReplayer(
 		n.rpcEnv.ProxyApp,

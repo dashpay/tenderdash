@@ -6,9 +6,10 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 )
 
-//go:generate ../../scripts/mockery_generate.sh Application
 // Application is an interface that enables any finite, deterministic state machine
 // to be driven by a blockchain-based replication engine via the ABCI.
+//
+//go:generate ../../scripts/mockery_generate.sh Application
 type Application interface {
 	// Info/Query Connection
 	Info(context.Context, *RequestInfo) (*ResponseInfo, error)    // Return application info

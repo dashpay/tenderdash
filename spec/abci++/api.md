@@ -87,7 +87,6 @@
 | round | [int32](#int32) |  |  |
 | quorum_hash | [bytes](#bytes) |  |  |
 | block_signature | [bytes](#bytes) |  |  |
-| state_signature | [bytes](#bytes) |  |  |
 | threshold_vote_extensions | [tendermint.types.VoteExtension](#tendermint-types-VoteExtension) | repeated |  |
 
 
@@ -183,7 +182,6 @@ to the application.
 | round | [int32](#int32) |  | The round at which the block proposer decided in the previous height. |
 | quorum_hash | [bytes](#bytes) |  | List of validators&#39; addresses in the last validator set with their voting information, including vote extensions. |
 | block_signature | [bytes](#bytes) |  |  |
-| state_signature | [bytes](#bytes) |  |  |
 | threshold_vote_extensions | [tendermint.types.VoteExtension](#tendermint-types-VoteExtension) | repeated |  |
 
 
@@ -345,7 +343,7 @@ Extends a vote with application-side injection
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | txs | [bytes](#bytes) | repeated | List of transactions committed as part of the block. |
-| decided_last_commit | [CommitInfo](#tendermint-abci-CommitInfo) |  | Info about the last commit, obtained from the block that was just decided. |
+| commit | [CommitInfo](#tendermint-abci-CommitInfo) |  | Info about the current commit |
 | misbehavior | [Misbehavior](#tendermint-abci-Misbehavior) | repeated | List of information about validators that acted incorrectly. |
 | hash | [bytes](#bytes) |  | The block header&#39;s hash. Present for convenience (can be derived from the block header). |
 | height | [int64](#int64) |  | The height of the finalized block. |

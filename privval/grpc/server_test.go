@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/log"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmgrpc "github.com/tendermint/tendermint/privval/grpc"
@@ -60,6 +59,7 @@ func TestSignVote(t *testing.T) {
 
 	hash := tmrand.Bytes(crypto.HashSize)
 	proTxHash := crypto.RandProTxHash()
+	stateID := types.RandStateID()
 
 	testCases := []struct {
 		name       string
@@ -68,34 +68,50 @@ func TestSignVote(t *testing.T) {
 		err        bool
 	}{
 		{name: "valid", pv: types.NewMockPV(), have: &types.Vote{
-			Type:               tmproto.PrecommitType,
-			Height:             1,
-			Round:              2,
-			BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+			Type:   tmproto.PrecommitType,
+			Height: 1,
+			Round:  2,
+			BlockID: types.BlockID{
+				Hash:          hash,
+				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
+				StateID:       stateID.Hash(),
+			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
 		}, want: &types.Vote{
-			Type:               tmproto.PrecommitType,
-			Height:             1,
-			Round:              2,
-			BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+			Type:   tmproto.PrecommitType,
+			Height: 1,
+			Round:  2,
+			BlockID: types.BlockID{
+				Hash:          hash,
+				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
+				StateID:       stateID.Hash(),
+			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
 		},
 			err: false},
 		{name: "invalid vote", pv: types.NewErroringMockPV(), have: &types.Vote{
-			Type:               tmproto.PrecommitType,
-			Height:             1,
-			Round:              2,
-			BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+			Type:   tmproto.PrecommitType,
+			Height: 1,
+			Round:  2,
+			BlockID: types.BlockID{
+				Hash:          hash,
+				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
+				StateID:       stateID.Hash(),
+			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
 			BlockSignature:     []byte("signed"),
 		}, want: &types.Vote{
-			Type:               tmproto.PrecommitType,
-			Height:             1,
-			Round:              2,
-			BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+			Type:   tmproto.PrecommitType,
+			Height: 1,
+			Round:  2,
+			BlockID: types.BlockID{
+				Hash:          hash,
+				PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
+				StateID:       stateID.Hash(),
+			},
 			ValidatorProTxHash: proTxHash,
 			ValidatorIndex:     1,
 			BlockSignature:     []byte("signed"),
@@ -118,10 +134,6 @@ func TestSignVote(t *testing.T) {
 				ChainId:    ChainID,
 				QuorumType: int32(btcjson.LLMQType_5_60),
 				QuorumHash: quorumHash,
-				StateId: &tmproto.StateID{
-					Height:  tc.have.Height,
-					AppHash: factory.RandomHash(),
-				},
 			}
 			resp, err := s.SignVote(ctx, req)
 			if tc.err {
@@ -129,7 +141,7 @@ func TestSignVote(t *testing.T) {
 			} else {
 				pbVote := tc.want.ToProto()
 				require.NoError(t, tc.pv.SignVote(ctx, ChainID, btcjson.LLMQType_5_60, quorumHash,
-					pbVote, types.StateID{}, log.NewTestingLogger(t)))
+					pbVote, log.NewTestingLogger(t)))
 
 				assert.Equal(t, pbVote.BlockSignature, resp.Vote.BlockSignature)
 			}

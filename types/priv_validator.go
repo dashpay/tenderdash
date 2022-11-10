@@ -51,7 +51,7 @@ type PrivValidator interface {
 
 	SignVote(
 		ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
-		vote *tmproto.Vote, stateID StateID, logger log.Logger) error
+		vote *tmproto.Vote, logger log.Logger) error
 	SignProposal(
 		ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
 		proposal *tmproto.Proposal) (tmbytes.HexBytes, error)
@@ -249,7 +249,6 @@ func (pv *MockPV) SignVote(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	vote *tmproto.Vote,
-	stateID StateID,
 	logger log.Logger) error {
 	pv.mtx.Lock()
 	defer pv.mtx.Unlock()
@@ -271,15 +270,6 @@ func (pv *MockPV) SignVote(
 		return err
 	}
 	vote.BlockSignature = blockSignature
-
-	if vote.BlockID.Hash != nil {
-		stateSignID := stateID.SignID(useChainID, quorumType, quorumHash)
-		stateSignature, err := privKey.SignDigest(stateSignID)
-		if err != nil {
-			return err
-		}
-		vote.StateSignature = stateSignature
-	}
 
 	if vote.Type != tmproto.PrecommitType {
 		if len(vote.VoteExtensions) > 0 {
@@ -398,7 +388,7 @@ func (pv *ErroringMockPV) GetPubKey(ctx context.Context, quorumHash crypto.Quoru
 // SignVote Implements PrivValidator.
 func (pv *ErroringMockPV) SignVote(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
-	vote *tmproto.Vote, stateID StateID, logger log.Logger) error {
+	vote *tmproto.Vote, logger log.Logger) error {
 	return ErroringMockPVErr
 }
 

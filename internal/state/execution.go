@@ -64,13 +64,6 @@ func BockExecWithMetrics(metrics *Metrics) func(e *BlockExecutor) {
 	}
 }
 
-// BlockExecWithAppHashSize is an option function to set an app-hash size to BlockExecutor
-func BlockExecWithAppHashSize(size int) func(e *BlockExecutor) {
-	return func(e *BlockExecutor) {
-		e.appHashSize = size
-	}
-}
-
 // BlockExecWithAppClient sets application client to BlockExecutor
 func BlockExecWithAppClient(appClient abciclient.Client) func(e *BlockExecutor) {
 	return func(e *BlockExecutor) {
@@ -141,7 +134,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	height int64,
 	round int32,
 	state State,
-	lastCommit *types.Commit,
+	commit *types.Commit,
 	proposerProTxHash []byte,
 	proposedAppVersion uint64,
 ) (*types.Block, CurrentRoundState, error) {
@@ -151,7 +144,10 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	evidence, evSize := blockExec.evpool.PendingEvidence(state.ConsensusParams.Evidence.MaxBytes)
 
 	// Fetch a limited amount of valid txs
-	maxDataBytes := types.MaxDataBytes(maxBytes, crypto.BLS12381, evSize, state.Validators.Size())
+	maxDataBytes, err := types.MaxDataBytes(maxBytes, commit, evSize)
+	if err != nil {
+		return nil, CurrentRoundState{}, fmt.Errorf("create proposal block: %w", err)
+	}
 
 	// Pass proposed app version only if it's higher than current network app version
 	if proposedAppVersion <= state.Version.Consensus.App {
@@ -159,7 +155,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 
 	txs := blockExec.mempool.ReapMaxBytesMaxGas(maxDataBytes, maxGas)
-	block := state.MakeBlock(height, txs, lastCommit, evidence, proposerProTxHash, proposedAppVersion)
+	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 
 	localLastCommit := buildLastCommitInfo(block, state.InitialHeight)
 	version := block.Version.ToProto()
@@ -355,7 +351,7 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 
 	if block.Height > state.InitialHeight {
 		if err := state.LastValidators.VerifyCommit(
-			state.ChainID, state.LastBlockID, state.LastStateID, block.Height-1, block.LastCommit); err != nil {
+			state.ChainID, state.LastBlockID, block.Height-1, block.LastCommit); err != nil {
 			return fmt.Errorf("error validating block: %w", err)
 		}
 	}
@@ -578,7 +574,6 @@ func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInf
 		Round:                   block.LastCommit.Round,
 		QuorumHash:              block.LastCommit.QuorumHash,
 		BlockSignature:          block.LastCommit.ThresholdBlockSignature,
-		StateSignature:          block.LastCommit.ThresholdStateSignature,
 		ThresholdVoteExtensions: types.ThresholdExtensionSignToProto(block.LastCommit.ThresholdVoteExtensions),
 	}
 }
@@ -592,7 +587,7 @@ func (state State) Update(
 
 	nextVersion := state.Version
 
-	// NOTE: the AppHash and the VoteExtension has not been populated.
+	// NOTE: LastStateIDHash, AppHash and VoteExtension has not been populated.
 	// It will be filled on state.Save.
 	newState := State{
 		Version:                          nextVersion,
@@ -600,7 +595,6 @@ func (state State) Update(
 		InitialHeight:                    state.InitialHeight,
 		LastBlockHeight:                  header.Height,
 		LastBlockID:                      blockID,
-		LastStateID:                      types.StateID{Height: header.Height, AppHash: header.AppHash},
 		LastBlockTime:                    header.Time,
 		LastCoreChainLockedBlockHeight:   state.LastCoreChainLockedBlockHeight,
 		Validators:                       state.Validators.Copy(),

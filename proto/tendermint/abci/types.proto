@@ -419,7 +419,6 @@ message CommitInfo {
   int32 round           = 1;
   bytes quorum_hash     = 3;
   bytes block_signature = 4;
-  bytes state_signature = 5;
 
   repeated tendermint.types.VoteExtension threshold_vote_extensions = 6;
 }
@@ -434,7 +433,6 @@ message ExtendedCommitInfo {
   // information, including vote extensions.
   bytes quorum_hash     = 3;
   bytes block_signature = 4;
-  bytes state_signature = 5;
 
   repeated tendermint.types.VoteExtension threshold_vote_extensions = 6;
 }

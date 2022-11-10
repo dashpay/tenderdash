@@ -19,7 +19,6 @@ var (
 // QuorumSignData holds data which is necessary for signing and verification block, state, and each vote-extension in a list
 type QuorumSignData struct {
 	Block      SignItem
-	State      SignItem
 	Extensions map[types.VoteExtensionType][]SignItem
 }
 
@@ -58,10 +57,6 @@ func MakeQuorumSignsWithVoteSet(voteSet *VoteSet, vote *types.Vote) (QuorumSignD
 		voteSet.valSet.QuorumType,
 		voteSet.valSet.QuorumHash,
 		vote,
-		StateID{
-			Height:  vote.Height,
-			AppHash: vote.AppHash,
-		},
 	)
 }
 
@@ -72,11 +67,9 @@ func MakeQuorumSigns(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	protoVote *types.Vote,
-	stateID StateID,
 ) (QuorumSignData, error) {
 	quorumSign := QuorumSignData{
 		Block: MakeBlockSignItem(chainID, protoVote, quorumType, quorumHash),
-		State: MakeStateSignItem(chainID, stateID, quorumType, quorumHash),
 	}
 	var err error
 	quorumSign.Extensions, err = MakeVoteExtensionSignItems(chainID, protoVote, quorumType, quorumHash)
@@ -89,14 +82,10 @@ func MakeQuorumSigns(
 // MakeBlockSignItem creates SignItem struct for a block
 func MakeBlockSignItem(chainID string, vote *types.Vote, quorumType btcjson.LLMQType, quorumHash []byte) SignItem {
 	reqID := voteHeightRoundRequestID("dpbvote", vote.Height, vote.Round)
-	raw := VoteBlockSignBytes(chainID, vote)
-	return NewSignItem(quorumType, quorumHash, reqID, raw)
-}
-
-// MakeStateSignItem creates SignItem struct for a state
-func MakeStateSignItem(chainID string, stateID StateID, quorumType btcjson.LLMQType, quorumHash []byte) SignItem {
-	reqID := stateID.SignRequestID()
-	raw := stateID.SignBytes(chainID)
+	raw, err := vote.SignBytes(chainID)
+	if err != nil {
+		panic(fmt.Errorf("block sign item: %w", err))
+	}
 	return NewSignItem(quorumType, quorumHash, reqID, raw)
 }
 

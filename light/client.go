@@ -277,7 +277,7 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 
 	// 3) Ensure that the commit is valid based on validator set we got back.
 	// Todo: we will want to remove validator sets entirely from light blocks and just have quorum hashes
-	err = l.ValidatorSet.VerifyCommit(c.chainID, l.Commit.BlockID, l.Commit.StateID, l.Height, l.Commit)
+	err = l.ValidatorSet.VerifyCommit(c.chainID, l.Commit.BlockID, l.Height, l.Commit)
 	if err != nil {
 		return fmt.Errorf("invalid commit: %w", err)
 	}
@@ -300,10 +300,10 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 // TrustedLightBlock returns a trusted light block at the given height (0 - the latest).
 //
 // It returns an error if:
-//  - there are some issues with the trusted store, although that should not
-//  happen normally;
-//  - negative height is passed;
-//  - header has not been verified yet and is therefore not in the store
+//   - there are some issues with the trusted store, although that should not
+//     happen normally;
+//   - negative height is passed;
+//   - header has not been verified yet and is therefore not in the store
 //
 // Safe for concurrent use by multiple goroutines.
 func (c *Client) TrustedLightBlock(height int64) (*types.LightBlock, error) {
@@ -417,8 +417,9 @@ func (c *Client) VerifyLightBlockAtHeight(ctx context.Context, height int64, now
 //
 // If the header, which is older than the currently trusted header, is
 // requested and the light client does not have it, VerifyHeader will perform:
-//		a) verifySkipping verification if nearest trusted header is found & not expired
-//		b) backwards verification in all other cases
+//
+//	a) verifySkipping verification if nearest trusted header is found & not expired
+//	b) backwards verification in all other cases
 //
 // It returns ErrOldHeaderExpired if the latest trusted header expired.
 //
@@ -506,7 +507,7 @@ func (c *Client) verifyBlockWithDashCore(ctx context.Context, newLightBlock *typ
 	if err := c.verifyBlockSignatureWithDashCore(ctx, newLightBlock); err != nil {
 		return err
 	}
-	return c.verifyStateIDSignatureWithDashCore(ctx, newLightBlock)
+	return nil
 }
 
 func (c *Client) verifyBlockSignatureWithDashCore(ctx context.Context, newLightBlock *types.LightBlock) error {
@@ -515,8 +516,10 @@ func (c *Client) verifyBlockSignatureWithDashCore(ctx context.Context, newLightB
 	quorumType := newLightBlock.ValidatorSet.QuorumType
 
 	protoVote := newLightBlock.Commit.GetCanonicalVote().ToProto()
-
-	blockSignBytes := types.VoteBlockSignBytes(c.chainID, protoVote)
+	blockSignBytes, err := protoVote.SignBytes(c.chainID)
+	if err != nil {
+		return err
+	}
 
 	blockMessageHash := crypto.Checksum(blockSignBytes)
 	blockRequestID := types.VoteBlockRequestIDProto(protoVote)
@@ -535,39 +538,6 @@ func (c *Client) verifyBlockSignatureWithDashCore(ctx context.Context, newLightB
 
 	if !blockSignatureIsValid {
 		return fmt.Errorf("block signature is invalid")
-	}
-
-	return nil
-}
-
-// This method is called from verifyLightBlock if verification mode is dashcore,
-// verifyLightBlock in its turn is called by VerifyHeader.
-func (c *Client) verifyStateIDSignatureWithDashCore(ctx context.Context, newLightBlock *types.LightBlock) error {
-	quorumHash := newLightBlock.ValidatorSet.QuorumHash
-	quorumType := newLightBlock.ValidatorSet.QuorumType
-
-	stateID := newLightBlock.StateID()
-
-	stateSignBytes := stateID.SignBytes(c.chainID)
-
-	stateMessageHash := crypto.Checksum(stateSignBytes)
-	stateRequestID := stateID.SignRequestID()
-	stateSignature := newLightBlock.Commit.ThresholdStateSignature
-
-	stateSignatureIsValid, err := c.dashCoreRPCClient.QuorumVerify(
-		quorumType,
-		stateRequestID,
-		stateMessageHash,
-		stateSignature,
-		quorumHash,
-	)
-
-	if err != nil {
-		return err
-	}
-
-	if !stateSignatureIsValid {
-		return fmt.Errorf("state signature is invalid")
 	}
 
 	return nil
@@ -654,12 +624,12 @@ func (c *Client) updateTrustedLightBlock(l *types.LightBlock) error {
 // lightBlockFromPrimary retrieves the latest lightBlock from the primary provider.
 // This method also handles provider behavior as follows:
 //
-// 1. If the provider does not respond, it tries again
-//    with a different provider
-// 2. If all providers return the same error, the light client forwards the error to
-//    where the initial request came from
-// 3. If the provider provides an invalid light block, is deemed unreliable or returns
-//    any other error, the primary is permanently dropped and is replaced by a witness.
+//  1. If the provider does not respond, it tries again
+//     with a different provider
+//  2. If all providers return the same error, the light client forwards the error to
+//     where the initial request came from
+//  3. If the provider provides an invalid light block, is deemed unreliable or returns
+//     any other error, the primary is permanently dropped and is replaced by a witness.
 func (c *Client) lightBlockFromPrimary(ctx context.Context) (*types.LightBlock, error) {
 	return c.lightBlockFromPrimaryAtHeight(ctx, 0)
 }

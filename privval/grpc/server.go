@@ -95,11 +95,7 @@ func (ss *SignerServer) GetProTxHash(ctx context.Context, req *privvalproto.ProT
 func (ss *SignerServer) SignVote(ctx context.Context, req *privvalproto.SignVoteRequest) (*privvalproto.SignedVoteResponse, error) {
 	vote := req.Vote
 
-	stateID, err := types.StateIDFromProto(req.StateId)
-	if err != nil {
-		return nil, status.Errorf(codes.NotFound, "error converting stateId when signing vote: %v", err)
-	}
-	err = ss.privVal.SignVote(ctx, req.ChainId, btcjson.LLMQType(req.QuorumType), req.QuorumHash, vote, *stateID, nil)
+	err := ss.privVal.SignVote(ctx, req.ChainId, btcjson.LLMQType(req.QuorumType), req.QuorumHash, vote, nil)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "error signing vote: %v", err)
 	}

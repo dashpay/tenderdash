@@ -118,8 +118,6 @@ type FilePVLastSignState struct {
 	Step           int8             `json:"step"`
 	BlockSignature []byte           `json:"block_signature,omitempty"`
 	BlockSignBytes tmbytes.HexBytes `json:"block_sign_bytes,omitempty"`
-	StateSignature []byte           `json:"state_signature,omitempty"`
-	StateSignBytes tmbytes.HexBytes `json:"state_sign_bytes,omitempty"`
 
 	filePath string
 }
@@ -130,8 +128,6 @@ func (lss *FilePVLastSignState) reset() {
 	lss.Step = 0
 	lss.BlockSignature = nil
 	lss.BlockSignBytes = nil
-	lss.StateSignature = nil
-	lss.StateSignBytes = nil
 }
 
 // checkHRS checks the given height, round, step (HRS) against that of the
@@ -168,12 +164,7 @@ func (lss *FilePVLastSignState) checkHRS(height int64, round int32, step int8) (
 					}
 					return true, nil
 				}
-				if lss.StateSignBytes != nil {
-					if lss.StateSignature == nil {
-						panic("pv: StateID Signature is nil but StateSignBytes is not!")
-					}
-					return true, nil
-				}
+
 				return false, errors.New("no SignBytes found")
 			}
 		}
@@ -570,13 +561,12 @@ func (pv *FilePV) SignVote(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	vote *tmproto.Vote,
-	stateID types.StateID,
 	logger log.Logger,
 ) error {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
-	if err := pv.signVote(ctx, chainID, quorumType, quorumHash, vote, stateID); err != nil {
+	if err := pv.signVote(ctx, chainID, quorumType, quorumHash, vote); err != nil {
 		return fmt.Errorf("error signing vote: %v", err)
 	}
 	return nil
@@ -667,7 +657,6 @@ func (pv *FilePV) signVote(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	vote *tmproto.Vote,
-	stateID types.StateID,
 ) error {
 	step, err := voteToStep(vote)
 	if err != nil {
@@ -683,17 +672,7 @@ func (pv *FilePV) signVote(
 		return err
 	}
 
-	if len(vote.BlockID.Hash) != 0 {
-		// StateID should refer to previous height in order to be valid
-		if stateID.Height != height {
-			return fmt.Errorf("invalid height in StateID: is %d, should be %d", stateID.Height, height)
-		}
-		if !stateID.AppHash.Equal(vote.AppHash) {
-			return fmt.Errorf("invalid AppHash in StateID: is %x, vote contains %x", stateID.AppHash, vote.AppHash)
-		}
-	}
-
-	quorumSigns, err := types.MakeQuorumSigns(chainID, quorumType, quorumHash, vote, stateID)
+	quorumSigns, err := types.MakeQuorumSigns(chainID, quorumType, quorumHash, vote)
 	if err != nil {
 		return err
 	}
@@ -728,9 +707,8 @@ func (pv *FilePV) signVote(
 	// If they only differ by timestamp, use last timestamp and signature
 	// Otherwise, return error
 	if sameHRS {
-		if bytes.Equal(quorumSigns.Block.Raw, lss.BlockSignBytes) && bytes.Equal(quorumSigns.State.Raw, lss.StateSignBytes) {
+		if bytes.Equal(quorumSigns.Block.Raw, lss.BlockSignBytes) {
 			vote.BlockSignature = lss.BlockSignature
-			vote.StateSignature = lss.StateSignature
 		} else {
 			return errors.New("conflicting data")
 		}
@@ -743,14 +721,6 @@ func (pv *FilePV) signVote(
 		return err
 	}
 
-	var sigState []byte
-	if vote.BlockID.Hash != nil {
-		sigState, err = privKey.SignDigest(quorumSigns.State.ID)
-		if err != nil {
-			return err
-		}
-	}
-
 	//  if vote.BlockID.Hash == nil {
 	//	  fmt.Printf("***********we are signing NIL (%d/%d) %X signed (file) for vote %v blockSignBytes %X\n",
 	//	    vote.Height, vote.Round, sigBlock, vote, blockSignBytes)
@@ -759,13 +729,12 @@ func (pv *FilePV) signVote(
 	//	   sigBlock, vote)
 	//  }
 
-	err = pv.saveSigned(height, round, step, quorumSigns.Block.Raw, sigBlock, quorumSigns.State.Raw, sigState)
+	err = pv.saveSigned(height, round, step, quorumSigns.Block.Raw, sigBlock)
 	if err != nil {
 		return err
 	}
 
 	vote.BlockSignature = sigBlock
-	vote.StateSignature = sigState
 	fillProtoVoteExtensionSigns(vote.VoteExtensionsToMap(), extSigns)
 
 	return nil
@@ -820,7 +789,7 @@ func (pv *FilePV) signProposal(
 	// pv.Key.ProTxHash,
 	// proposal.Height, pv.Key.PrivKey.PubKey().Bytes(), blockSignID, blockSig)
 
-	err = pv.saveSigned(height, round, step, blockSignBytes, blockSig, nil, nil)
+	err = pv.saveSigned(height, round, step, blockSignBytes, blockSig)
 	if err != nil {
 		return nil, err
 	}
@@ -835,16 +804,13 @@ func (pv *FilePV) saveSigned(
 	step int8,
 	blockSignBytes []byte,
 	blockSig []byte,
-	stateSignBytes []byte,
-	stateSig []byte,
+
 ) error {
 	pv.LastSignState.Height = height
 	pv.LastSignState.Round = round
 	pv.LastSignState.Step = step
 	pv.LastSignState.BlockSignature = blockSig
 	pv.LastSignState.BlockSignBytes = blockSignBytes
-	pv.LastSignState.StateSignature = stateSig
-	pv.LastSignState.StateSignBytes = stateSignBytes
 	return pv.LastSignState.Save()
 }
 

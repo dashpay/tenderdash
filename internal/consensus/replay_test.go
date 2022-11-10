@@ -410,7 +410,7 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 	// randomness of proposer selection
 	css[0].config.DontAutoPropose = true
 
-	blockID := types.BlockID{Hash: rs.ProposalBlock.Hash(), PartSetHeader: rs.ProposalBlockParts.Header()}
+	blockID := rs.BlockID()
 	signAddVotes(ctx, t, css[0], tmproto.PrecommitType, sim.Config.ChainID(), blockID, vss[1:nVals]...)
 
 	ensureNewRound(t, newRoundCh, height+1, 0)
@@ -498,7 +498,7 @@ func createSignSendProposal(ctx context.Context,
 	propBlock, _ := css[0].CreateProposalBlock(ctx)
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
-	blockID := types.BlockID{Hash: propBlock.Hash(), PartSetHeader: propBlockParts.Header()}
+	blockID := propBlock.BlockID(propBlockParts)
 	if assertTxs != nil {
 		require.Equal(t, len(assertTxs), len(propBlock.Txs), "height %d", height)
 		for _, tx := range assertTxs {
@@ -821,7 +821,7 @@ func applyBlock(
 	testPartSize := types.BlockPartSizeBytes
 	bps, err := blk.MakePartSet(testPartSize)
 	require.NoError(t, err)
-	blkID := types.BlockID{Hash: blk.Hash(), PartSetHeader: bps.Header()}
+	blkID := blk.BlockID(bps)
 	newState, err := blockExec.ApplyBlock(ctx, st, blkID, blk, commit)
 	require.NoError(t, err)
 	return newState
@@ -1113,11 +1113,10 @@ func makeBlockchainFromWAL(t *testing.T, wal WAL, genDoc *types.GenesisDoc) ([]*
 		case *types.Vote:
 			if p.Type == tmproto.PrecommitType {
 				thisBlockCommit = types.NewCommit(p.Height, p.Round,
-					p.BlockID, p.StateID(),
+					p.BlockID,
 					&types.CommitSigns{
 						QuorumSigns: types.QuorumSigns{
 							BlockSign:      p.BlockSignature,
-							StateSign:      p.StateSignature,
 							ExtensionSigns: types.MakeThresholdExtensionSigns(p.VoteExtensions),
 						},
 						QuorumHash: crypto.RandQuorumHash(),
@@ -1214,8 +1213,10 @@ func (bs *mockBlockStore) LoadBlockMeta(height int64) *types.BlockMeta {
 	block := bs.chain[height-1]
 	bps, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(bs.t, err)
+	blockID := block.BlockID(bps)
+	require.NoError(bs.t, err)
 	return &types.BlockMeta{
-		BlockID: types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()},
+		BlockID: blockID,
 		Header:  block.Header,
 	}
 }

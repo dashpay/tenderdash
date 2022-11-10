@@ -90,36 +90,43 @@ func TestSignerClient_SignVote(t *testing.T) {
 
 	hash := tmrand.Bytes(crypto.HashSize)
 	proTxHash := crypto.RandProTxHash()
+	stateID := types.RandStateID()
 
 	want := &types.Vote{
-		Type:               tmproto.PrecommitType,
-		Height:             1,
-		Round:              2,
-		BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+		Type:   tmproto.PrecommitType,
+		Height: 1,
+		Round:  2,
+		BlockID: types.BlockID{
+			Hash:          hash,
+			PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
+			StateID:       stateID.Hash(),
+		},
 		ValidatorProTxHash: proTxHash,
 		ValidatorIndex:     1,
 	}
 
 	have := &types.Vote{
-		Type:               tmproto.PrecommitType,
-		Height:             1,
-		Round:              2,
-		BlockID:            types.BlockID{Hash: hash, PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2}},
+		Type:   tmproto.PrecommitType,
+		Height: 1,
+		Round:  2,
+		BlockID: types.BlockID{
+			Hash:          hash,
+			PartSetHeader: types.PartSetHeader{Hash: hash, Total: 2},
+			StateID:       stateID.Hash(),
+		},
 		ValidatorProTxHash: proTxHash,
 		ValidatorIndex:     1,
 	}
 
 	pbHave := have.ToProto()
-	stateID := have.StateID()
 
-	err = client.SignVote(ctx, chainID, btcjson.LLMQType_5_60, quorumHash, pbHave, stateID, logger)
+	err = client.SignVote(ctx, chainID, btcjson.LLMQType_5_60, quorumHash, pbHave, logger)
 	require.NoError(t, err)
 
 	pbWant := want.ToProto()
 
-	require.NoError(t, mockPV.SignVote(ctx, chainID, btcjson.LLMQType_5_60, quorumHash, pbWant, stateID, logger))
+	require.NoError(t, mockPV.SignVote(ctx, chainID, btcjson.LLMQType_5_60, quorumHash, pbWant, logger))
 
-	assert.Equal(t, pbWant.StateSignature, pbHave.StateSignature)
 	assert.Equal(t, pbWant.BlockSignature, pbHave.BlockSignature)
 }
 

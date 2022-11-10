@@ -1,4 +1,3 @@
-// nolint: lll
 package consensus
 
 import (
@@ -127,13 +126,11 @@ func (vs *validatorStub) signVote(
 		ValidatorProTxHash: proTxHash,
 		ValidatorIndex:     vs.Index,
 		VoteExtensions:     voteExtensions,
-		AppHash:            appHash,
 	}
 
-	stateID := vote.StateID()
 	v := vote.ToProto()
 
-	if err := vs.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, v, stateID, nil); err != nil {
+	if err := vs.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, v, nil); err != nil {
 		return nil, fmt.Errorf("sign vote failed: %w", err)
 	}
 
@@ -263,7 +260,10 @@ func decideProposal(
 	require.NotNil(t, block, "Failed to createProposalBlock. Did you forget to add commit for previous block?")
 
 	// Make proposal
-	polRound, propBlockID := validRound, types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
+	polRound := validRound
+	propBlockID := block.BlockID(blockParts)
+	assert.NoError(t, err)
+
 	proposal = types.NewProposal(height, 1, round, polRound, propBlockID, block.Header.Time)
 	p := proposal.ToProto()
 
@@ -560,7 +560,7 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 		args.config = configSetup(t)
 	}
 	if args.logger == nil {
-		args.logger = log.NewNopLogger()
+		args.logger = consensusLogger(t)
 	}
 	c := factory.ConsensusParams()
 	if args.consensusParams != nil {
@@ -647,7 +647,7 @@ func ensureNewRound(t *testing.T, roundCh <-chan tmpubsub.Message, height int64,
 	t.Helper()
 	msg := ensureMessageBeforeTimeout(t, roundCh, ensureTimeout)
 	newRoundEvent, ok := msg.Data().(types.EventDataNewRound)
-	require.True(t, ok, "expected a EventDataNewRound, got %T. Wrong subscription channel?",
+	assert.True(t, ok, "expected a EventDataNewRound, got %T. Wrong subscription channel?",
 		msg.Data())
 
 	assert.Equal(t, height, newRoundEvent.Height, "height")

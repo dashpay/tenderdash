@@ -892,7 +892,7 @@ func (vals *ValidatorSet) UpdateWithChangeSet(
 // application that depends on the LastCommitInfo sent in BeginBlock, which
 // includes which validators signed. For instance, Gaia incentivizes proposers
 // with a bonus for including more than +2/3 of the signatures.
-func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID, stateID StateID,
+func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 	height int64, commit *Commit) error {
 
 	// Validate Height and BlockID.
@@ -904,13 +904,8 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID, stateID 
 			blockID, commit.BlockID)
 	}
 
-	if !stateID.Equals(commit.StateID) {
-		return fmt.Errorf("invalid commit -- wrong state ID: want %v, got %v",
-			stateID, commit.StateID)
-	}
-
 	canonVote := commit.GetCanonicalVote()
-	quorumSigns, err := MakeQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto(), stateID)
+	quorumSigns, err := MakeQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto())
 	if err != nil {
 		return err
 	}

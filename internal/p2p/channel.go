@@ -160,11 +160,10 @@ type ChannelIterator struct {
 // it will never return true again.
 // in general, use Next, as in:
 //
-//     for iter.Next(ctx) {
-//          envelope := iter.Envelope()
-//          // ... do things ...
-//     }
-//
+//	for iter.Next(ctx) {
+//	     envelope := iter.Envelope()
+//	     // ... do things ...
+//	}
 func (iter *ChannelIterator) Next(ctx context.Context) bool {
 	select {
 	case <-ctx.Done():

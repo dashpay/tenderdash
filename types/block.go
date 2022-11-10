@@ -31,9 +31,8 @@ const (
 	// MaxHeaderBytes is a maximum header size.
 	// NOTE: Because app hash can be of arbitrary size, the header is therefore not
 	// capped in size and thus this number should be seen as a soft max
-	MaxHeaderBytes       int64 = 646
+	MaxHeaderBytes       int64 = 680
 	MaxCoreChainLockSize int64 = 132
-	MaxCommitSize        int64 = 374
 
 	// MaxOverheadForBlock - maximum overhead to encode a block (up to
 	// MaxBlockSizeBytes in size) not including it's parts except Data.
@@ -57,11 +56,6 @@ type Block struct {
 	LastCommit    *Commit        `json:"last_commit"`
 }
 
-// StateID returns a state ID of this block
-func (b *Block) StateID() StateID {
-	return StateID{Height: b.Height, AppHash: b.AppHash}
-}
-
 // SetTxs updates Data (in particular the transactions) and DataHash
 func (b *Block) SetTxs(txs []Tx) {
 	b.Data = Data{Txs: txs}
@@ -69,13 +63,36 @@ func (b *Block) SetTxs(txs []Tx) {
 	b.fillHeader()
 }
 
-// BlockID returns a block ID of this block
-func (b *Block) BlockID() (BlockID, error) {
-	parSet, err := b.MakePartSet(BlockPartSizeBytes)
-	if err != nil {
-		return BlockID{}, err
+// BlockID returns a block ID of this block.
+// BlockID of a nil block is zero-value (BlockID{})
+// If partSet is nil, new partSet will be created
+func (b *Block) BlockID(partSet *PartSet) BlockID {
+	var err error
+
+	if b == nil {
+		return BlockID{}
 	}
-	return BlockID{Hash: b.Hash(), PartSetHeader: parSet.Header()}, nil
+
+	blockHash := b.Hash()
+	// cannot calculate block hash, so we return nil block ID
+	if len(blockHash) == 0 {
+		return BlockID{}
+	}
+
+	if partSet == nil {
+		partSet, err = b.MakePartSet(BlockPartSizeBytes)
+		if err != nil {
+			panic("cannot make part set: " + err.Error())
+		}
+	}
+
+	blockID := BlockID{
+		Hash:          blockHash,
+		PartSetHeader: partSet.Header(),
+		StateID:       b.Header.StateID().Hash(),
+	}
+
+	return blockID
 }
 
 // ValidateBasic performs basic validation that doesn't involve state data.
@@ -319,49 +336,40 @@ func BlockFromProto(bp *tmproto.Block) (*Block, error) {
 //-----------------------------------------------------------------------------
 
 // MaxDataBytes returns the maximum size of block's data.
-//
-// XXX: Panics on negative result.
-
-func MaxDataBytes(maxBytes int64, keyType crypto.KeyType, evidenceBytes int64, valsCount int) int64 {
+// If `commit` is nil, it is assumed to use `MaxCommitOverheadBytes`
+func MaxDataBytes(maxBytes int64, commit *Commit, evidenceBytes int64) (int64, error) {
+	lastCommitSize := MaxCommitOverheadBytes
+	if commit != nil {
+		lastCommitSize = int64(commit.ToProto().Size())
+	}
 	maxDataBytes := maxBytes -
 		MaxOverheadForBlock -
 		MaxHeaderBytes -
 		MaxCoreChainLockSize -
-		MaxCommitOverheadBytes -
+		lastCommitSize -
 		evidenceBytes
 
 	if maxDataBytes < 0 {
-		panic(fmt.Sprintf(
-			"Negative MaxDataBytes. Block.MaxBytes=%d is too small to accommodate header&lastCommit&evidence=%d",
+		return maxDataBytes, fmt.Errorf(
+			"block MaxBytes (%d) is too small to accommodate "+
+				"header (%d) + lastCommit (%d) + core chain lock (%d) + evidence (%d), need %d more bytes",
 			maxBytes,
-			-(maxDataBytes - maxBytes),
-		))
+			MaxOverheadForBlock+MaxHeaderBytes,
+			lastCommitSize,
+			+MaxCoreChainLockSize,
+			evidenceBytes,
+			-maxDataBytes,
+		)
 	}
 
-	return maxDataBytes
+	return maxDataBytes, nil
 }
 
 // MaxDataBytesNoEvidence returns the maximum size of block's data when
-// evidence count is unknown. MaxEvidencePerBlock will be used for the size
-// of evidence.
-//
-// XXX: Panics on negative result.
-func MaxDataBytesNoEvidence(maxBytes int64) int64 {
-	maxDataBytes := maxBytes -
-		MaxOverheadForBlock -
-		MaxHeaderBytes -
-		MaxCoreChainLockSize -
-		MaxCommitOverheadBytes
+// no evidence is used.
+func MaxDataBytesNoEvidence(maxBytes int64) (int64, error) {
+	return MaxDataBytes(maxBytes, nil, 0)
 
-	if maxDataBytes < 0 {
-		panic(fmt.Sprintf(
-			"Negative MaxDataBytesUnknownEvidence. Block.MaxBytes=%d is too small to accommodate header&lastCommit&evidence=%d",
-			maxBytes,
-			-(maxDataBytes - maxBytes),
-		))
-	}
-
-	return maxDataBytes
 }
 
 // MakeBlock returns a new block with an empty header, except what can be
@@ -502,6 +510,29 @@ func (h Header) ValidateBasic() error {
 	}
 
 	return nil
+}
+
+// StateID returns a state ID of this block
+func (h *Header) StateID() tmproto.StateID {
+	var appHash []byte
+	if len(h.AppHash) != 0 {
+		appHash = h.AppHash.Copy()
+	} else {
+		appHash = make([]byte, crypto.DefaultAppHashSize)
+	}
+
+	ts, err := gogotypes.TimestampProto(h.Time)
+	if err != nil || ts == nil {
+		panic("cannot convert time " + h.Time.String() + " to Timesstamp: " + err.Error())
+	}
+
+	return tmproto.StateID{
+		AppVersion:            h.Version.App,
+		Height:                uint64(h.Height),
+		AppHash:               appHash,
+		CoreChainLockedHeight: h.CoreChainLockedHeight,
+		Time:                  *ts,
+	}
 }
 
 // Hash returns the hash of the header.
@@ -669,9 +700,10 @@ const (
 )
 
 const (
-	// MaxCommitOverheadBytes is the max size of commit -> 82 for BlockID, 34 for StateID, 8 for Height, 4 for Round.
-	// 96 for Block signature, 96 for State Signature and -> 3 bytes overhead
-	MaxCommitOverheadBytes int64 = 329
+	// MaxCommitOverheadBytes is the max size of commit, with overhead but without vote extensions:
+	// (110+2) for BlockID,  (8+2) for Height, (4+2) for Round,
+	// (32+3) for QuorumHash, (96+3) for Block signature.
+	MaxCommitOverheadBytes int64 = (110 + 2) + (8 + 2) + (4 + 2) + (32 + 3) + (96 + 3) + 0
 )
 
 //-------------------------------------
@@ -686,10 +718,8 @@ type Commit struct {
 	Height                  int64             `json:"height"`
 	Round                   int32             `json:"round"`
 	BlockID                 BlockID           `json:"block_id"`
-	StateID                 StateID           `json:"state_id"`
 	QuorumHash              crypto.QuorumHash `json:"quorum_hash"`
 	ThresholdBlockSignature []byte            `json:"threshold_block_signature"`
-	ThresholdStateSignature []byte            `json:"threshold_state_signature"`
 	// ThresholdVoteExtensions keeps the list of recovered threshold signatures for vote-extensions
 	ThresholdVoteExtensions []ThresholdExtensionSign `json:"threshold_vote_extensions"`
 
@@ -700,12 +730,11 @@ type Commit struct {
 }
 
 // NewCommit returns a new Commit.
-func NewCommit(height int64, round int32, blockID BlockID, stateID StateID, commitSigns *CommitSigns) *Commit {
+func NewCommit(height int64, round int32, blockID BlockID, commitSigns *CommitSigns) *Commit {
 	commit := &Commit{
 		Height:  height,
 		Round:   round,
 		BlockID: blockID,
-		StateID: stateID,
 	}
 	if commitSigns != nil {
 		commitSigns.CopyToCommit(commit)
@@ -719,7 +748,6 @@ func (commit *Commit) ToCommitInfo() types.CommitInfo {
 		Round:                   commit.Round,
 		QuorumHash:              commit.QuorumHash,
 		BlockSignature:          commit.ThresholdBlockSignature,
-		StateSignature:          commit.ThresholdStateSignature,
 		ThresholdVoteExtensions: ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions),
 	}
 }
@@ -756,7 +784,11 @@ func (commit *Commit) VoteBlockRequestID() []byte {
 func (commit *Commit) CanonicalVoteVerifySignBytes(chainID string) []byte {
 	voteCanonical := commit.GetCanonicalVote()
 	vCanonical := voteCanonical.ToProto()
-	return VoteBlockSignBytes(chainID, vCanonical)
+	bz, err := vCanonical.SignBytes(chainID)
+	if err != nil {
+		panic(fmt.Errorf("canonical vote sign bytes: %w", err))
+	}
+	return bz
 }
 
 // CanonicalVoteVerifySignID returns the signID bytes of the Canonical Vote that is threshold signed.
@@ -814,13 +846,6 @@ func (commit *Commit) ValidateBasic() error {
 				len(commit.ThresholdBlockSignature),
 			)
 		}
-		if len(commit.ThresholdStateSignature) != SignatureSize {
-			return fmt.Errorf(
-				"state threshold signature is wrong size (wanted: %d, received: %d)",
-				SignatureSize,
-				len(commit.ThresholdStateSignature),
-			)
-		}
 	}
 	return nil
 }
@@ -839,10 +864,7 @@ func (commit *Commit) Hash() tmbytes.HexBytes {
 		return nil
 	}
 	if commit.hash == nil {
-		bs := make([][]byte, 2)
-		bs[0] = commit.ThresholdBlockSignature
-		bs[1] = commit.ThresholdStateSignature
-		commit.hash = merkle.HashFromByteSlices(bs)
+		commit.hash = crypto.Checksum(commit.ThresholdBlockSignature)
 	}
 	return commit.hash
 }
@@ -855,14 +877,12 @@ func (commit *Commit) String() string {
 		return "nil-Commit"
 	}
 	return fmt.Sprintf(
-		`Commit{H: %d, R: %d, BlockID: %v, StateID: %v, QuorumHash %v, BlockSignature: %v, StateSignature: %v}#%v`,
+		`Commit{H: %d, R: %d, BlockID: %v, QuorumHash %v, BlockSignature: %v}#%v`,
 		commit.Height,
 		commit.Round,
 		commit.BlockID,
-		commit.StateID,
 		commit.QuorumHash,
 		base64.StdEncoding.EncodeToString(commit.ThresholdBlockSignature),
-		base64.StdEncoding.EncodeToString(commit.ThresholdStateSignature),
 		commit.hash)
 }
 
@@ -875,16 +895,12 @@ func (commit *Commit) StringIndented(indent string) string {
 %s  Height:     %d
 %s  Round:      %d
 %s  BlockID:    %v
-%s  StateID:    %v
 %s  BlockSignature: %v
-%s  StateSignature: %v
 %s}#%v`,
 		indent, commit.Height,
 		indent, commit.Round,
 		indent, commit.BlockID,
-		indent, commit.StateID,
 		indent, base64.StdEncoding.EncodeToString(commit.ThresholdBlockSignature),
-		indent, base64.StdEncoding.EncodeToString(commit.ThresholdStateSignature),
 		indent, commit.hash)
 }
 
@@ -894,9 +910,7 @@ func (commit *Commit) MarshalZerologObject(e *zerolog.Event) {
 		e.Int64("height", commit.Height)
 		e.Int32("round", commit.Round)
 		e.Str("BlockID.Hash", commit.BlockID.Hash.String())
-		e.Str("StateID", commit.StateID.String())
 		e.Str("BlockSignature", hex.EncodeToString(commit.ThresholdBlockSignature))
-		e.Str("StateSignature", hex.EncodeToString(commit.ThresholdStateSignature))
 	}
 }
 
@@ -911,9 +925,7 @@ func (commit *Commit) ToProto() *tmproto.Commit {
 	c.Height = commit.Height
 	c.Round = commit.Round
 	c.BlockID = commit.BlockID.ToProto()
-	c.StateID = commit.StateID.ToProto()
 
-	c.ThresholdStateSignature = commit.ThresholdStateSignature
 	c.ThresholdBlockSignature = commit.ThresholdBlockSignature
 	c.ThresholdVoteExtensions = ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions)
 	c.QuorumHash = commit.QuorumHash
@@ -937,20 +949,13 @@ func CommitFromProto(cp *tmproto.Commit) (*Commit, error) {
 		return nil, err
 	}
 
-	si, err := StateIDFromProto(&cp.StateID)
-	if err != nil {
-		return nil, err
-	}
-
 	commit.QuorumHash = cp.QuorumHash
 	commit.ThresholdBlockSignature = cp.ThresholdBlockSignature
-	commit.ThresholdStateSignature = cp.ThresholdStateSignature
 	commit.ThresholdVoteExtensions = ThresholdExtensionSignFromProto(cp.ThresholdVoteExtensions)
 
 	commit.Height = cp.Height
 	commit.Round = cp.Round
 	commit.BlockID = *bi
-	commit.StateID = *si
 
 	return commit, commit.ValidateBasic()
 }
@@ -1040,12 +1045,14 @@ func DataFromProto(dp *tmproto.Data) (Data, error) {
 type BlockID struct {
 	Hash          tmbytes.HexBytes `json:"hash"`
 	PartSetHeader PartSetHeader    `json:"parts"`
+	StateID       tmbytes.HexBytes `json:"state_id"`
 }
 
 // Equals returns true if the BlockID matches the given BlockID
 func (blockID BlockID) Equals(other BlockID) bool {
 	return bytes.Equal(blockID.Hash, other.Hash) &&
-		blockID.PartSetHeader.Equals(other.PartSetHeader)
+		blockID.PartSetHeader.Equals(other.PartSetHeader) &&
+		blockID.StateID.Equal(other.StateID)
 }
 
 // Key returns a machine-readable string representation of the BlockID
@@ -1056,7 +1063,9 @@ func (blockID BlockID) Key() string {
 		panic(err)
 	}
 
-	return fmt.Sprint(string(blockID.Hash), string(bz))
+	stateID := blockID.StateID
+
+	return string(blockID.Hash) + string(bz) + string(stateID)
 }
 
 // ValidateBasic performs basic validation.
@@ -1068,30 +1077,54 @@ func (blockID BlockID) ValidateBasic() error {
 	if err := blockID.PartSetHeader.ValidateBasic(); err != nil {
 		return fmt.Errorf("wrong PartSetHeader: %w", err)
 	}
+
+	if len(blockID.Hash) != 0 && len(blockID.StateID) != crypto.HashSize {
+		return fmt.Errorf("expected state ID len: %d, actual: %d", crypto.HashSize, len(blockID.StateID))
+	}
+
 	return nil
+}
+
+func (blockID BlockID) Copy() BlockID {
+	return BlockID{
+		PartSetHeader: PartSetHeader{
+			Total: blockID.PartSetHeader.Total,
+			Hash:  blockID.PartSetHeader.Hash.Copy(),
+		},
+		Hash:    blockID.Hash.Copy(),
+		StateID: blockID.StateID.Copy(),
+	}
 }
 
 // IsNil returns true if this is the BlockID of a nil block.
 func (blockID BlockID) IsNil() bool {
 	return len(blockID.Hash) == 0 &&
-		blockID.PartSetHeader.IsZero()
+		blockID.PartSetHeader.IsZero() &&
+		blockID.StateID.IsZero()
 }
 
 // IsComplete returns true if this is a valid BlockID of a non-nil block.
 func (blockID BlockID) IsComplete() bool {
 	return len(blockID.Hash) == crypto.HashSize &&
 		blockID.PartSetHeader.Total > 0 &&
-		len(blockID.PartSetHeader.Hash) == crypto.HashSize
+		len(blockID.PartSetHeader.Hash) == crypto.HashSize &&
+		len(blockID.StateID) == crypto.HashSize
 }
 
 // String returns a human readable string representation of the BlockID.
 //
 // 1. hash
 // 2. part set header
+// 3. state ID hash
 //
 // See PartSetHeader#String
 func (blockID BlockID) String() string {
-	return fmt.Sprintf(`%v:%v`, blockID.Hash, blockID.PartSetHeader)
+
+	stateIDHash := blockID.StateID
+	if len(stateIDHash) > 6 {
+		stateIDHash = stateIDHash[:6]
+	}
+	return fmt.Sprintf(`%v:%v:%X`, blockID.Hash, blockID.PartSetHeader, stateIDHash)
 }
 
 // ToProto converts BlockID to protobuf
@@ -1103,6 +1136,7 @@ func (blockID *BlockID) ToProto() tmproto.BlockID {
 	return tmproto.BlockID{
 		Hash:          blockID.Hash,
 		PartSetHeader: blockID.PartSetHeader.ToProto(),
+		StateID:       blockID.StateID,
 	}
 }
 
@@ -1121,12 +1155,9 @@ func BlockIDFromProto(bID *tmproto.BlockID) (*BlockID, error) {
 
 	blockID.PartSetHeader = *ph
 	blockID.Hash = bID.Hash
+	if bID.StateID != nil {
+		blockID.StateID = bID.StateID
+	}
 
 	return blockID, blockID.ValidateBasic()
-}
-
-// ProtoBlockIDIsNil is similar to the IsNil function on BlockID, but for the
-// Protobuf representation.
-func ProtoBlockIDIsNil(bID *tmproto.BlockID) bool {
-	return len(bID.Hash) == 0 && ProtoPartSetHeaderIsZero(&bID.PartSetHeader)
 }

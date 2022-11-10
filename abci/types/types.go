@@ -276,7 +276,7 @@ func (m *ResponsePrepareProposal) Validate() error {
 }
 
 func isValidApphash(apphash tmbytes.HexBytes) bool {
-	return len(apphash) >= crypto.SmallAppHashSize && len(apphash) <= crypto.LargeAppHashSize
+	return len(apphash) == crypto.DefaultAppHashSize
 }
 
 func (r ResponseProcessProposal) Validate() error {

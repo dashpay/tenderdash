@@ -495,21 +495,17 @@ func NewMockDuplicateVoteEvidenceWithValidator(
 		panic(err)
 	}
 
-	stateID := RandStateID().WithHeight(height - 1)
-
 	proTxHash, _ := pv.GetProTxHash(ctx)
 	val := NewValidator(pubKey, DefaultDashVotingPower, proTxHash, "")
 
 	voteA := makeMockVote(height, 0, 0, proTxHash, randBlockID())
 	vA := voteA.ToProto()
-	_ = pv.SignVote(context.Background(), chainID, quorumType, quorumHash, vA, stateID, nil)
+	_ = pv.SignVote(context.Background(), chainID, quorumType, quorumHash, vA, nil)
 	voteA.BlockSignature = vA.BlockSignature
-	voteA.StateSignature = vA.StateSignature
 	voteB := makeMockVote(height, 0, 0, proTxHash, randBlockID())
 	vB := voteB.ToProto()
-	_ = pv.SignVote(ctx, chainID, quorumType, quorumHash, vB, stateID, nil)
+	_ = pv.SignVote(ctx, chainID, quorumType, quorumHash, vB, nil)
 	voteB.BlockSignature = vB.BlockSignature
-	voteB.StateSignature = vB.StateSignature
 	return NewDuplicateVoteEvidence(
 		voteA,
 		voteB,
@@ -524,18 +520,14 @@ func NewMockDuplicateVoteEvidenceWithPrivValInValidatorSet(height int64, time ti
 	quorumHash crypto.QuorumHash) (*DuplicateVoteEvidence, error) {
 	proTxHash, _ := pv.GetProTxHash(context.Background())
 
-	stateID := RandStateID().WithHeight(height - 1)
-
 	voteA := makeMockVote(height, 0, 0, proTxHash, randBlockID())
 	vA := voteA.ToProto()
-	_ = pv.SignVote(context.Background(), chainID, quorumType, quorumHash, vA, stateID, nil)
+	_ = pv.SignVote(context.Background(), chainID, quorumType, quorumHash, vA, nil)
 	voteA.BlockSignature = vA.BlockSignature
-	voteA.StateSignature = vA.StateSignature
 	voteB := makeMockVote(height, 0, 0, proTxHash, randBlockID())
 	vB := voteB.ToProto()
-	_ = pv.SignVote(context.Background(), chainID, quorumType, quorumHash, vB, stateID, nil)
+	_ = pv.SignVote(context.Background(), chainID, quorumType, quorumHash, vB, nil)
 	voteB.BlockSignature = vB.BlockSignature
-	voteB.StateSignature = vB.StateSignature
 	return NewDuplicateVoteEvidence(voteA, voteB, time, valSet)
 }
 
@@ -558,5 +550,6 @@ func randBlockID() BlockID {
 			Total: 1,
 			Hash:  tmrand.Bytes(crypto.HashSize),
 		},
+		StateID: RandStateID().Hash(),
 	}
 }

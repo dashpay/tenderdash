@@ -1,6 +1,7 @@
 package state_test
 
 import (
+	"strconv"
 	"testing"
 
 	tmrand "github.com/tendermint/tendermint/libs/rand"
@@ -20,27 +21,29 @@ func TestTxFilter(t *testing.T) {
 	// Max size of Txs is much smaller than size of block,
 	// since we need to account for commits and evidence.
 	testCases := []struct {
-		tx    types.Tx
+		bytes int
 		isErr bool
 	}{
-		{types.Tx(tmrand.Bytes(2120)), false},
-		{types.Tx(tmrand.Bytes(2121)), true},
-		{types.Tx(tmrand.Bytes(3000)), true},
+		{0, false},
+		{2153, false},
+		{2154, true},
+		{3000, true},
 	}
-	// We get 2202 above as we have 80 more bytes in max bytes and we are using bls, so 2155 + 80 - 32 - 1 = 2202
-	// The 32 is the signature difference size between edwards and bls
-	// The 1 is the protobuf encoding difference because the sizes use signed integers and we are going from less
-	// than 128 to over 128
-
 	for i, tc := range testCases {
-		state, err := sm.MakeGenesisState(genDoc)
-		require.NoError(t, err)
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			state, err := sm.MakeGenesisState(genDoc)
+			require.NoError(t, err)
+			tx := types.Tx(tmrand.Bytes(tc.bytes))
+			// Read MaxDataBytes, for debugging/logging only
+			maxDataBytes, err := types.MaxDataBytes(state.ConsensusParams.Block.MaxBytes, nil, 0)
+			require.NoError(t, err)
 
-		f := sm.TxPreCheckForState(state)
-		if tc.isErr {
-			assert.NotNil(t, f(tc.tx), "#%v", i)
-		} else {
-			assert.Nil(t, f(tc.tx), "#%v", i)
-		}
+			f := sm.TxPreCheckForState(state)
+			if tc.isErr {
+				assert.NotNil(t, f(tx), "%+v, maxDataBytes:%d", tc, maxDataBytes)
+			} else {
+				assert.Nil(t, f(tx), "%+v, maxDataBytes:%d", tc, maxDataBytes)
+			}
+		})
 	}
 }

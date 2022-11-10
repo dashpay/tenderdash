@@ -252,7 +252,7 @@ func TestProcessProposal(t *testing.T) {
 		Signature:       make([]byte, bls12381.SignatureSize),
 	}
 
-	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil)
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
 	block1, err := sf.MakeBlock(state, height, lastCommit, 1)
 	require.NoError(t, err)
 	block1.SetCoreChainLock(&coreChainLockUpdate)
@@ -546,12 +546,12 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 		1,
 		round,
 		state,
-		types.NewCommit(state.LastBlockHeight, 0, state.LastBlockID, state.LastStateID, nil),
+		types.NewCommit(state.LastBlockHeight, 0, state.LastBlockID, nil),
 		proTxHashes[0],
 		1,
 	)
 	require.NoError(t, err)
-	blockID, err := block.BlockID()
+	blockID := block.BlockID(nil)
 	require.NoError(t, err)
 	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, new(types.Commit))
 	require.NoError(t, err)
@@ -685,7 +685,7 @@ func TestEmptyPrepareProposal(t *testing.T) {
 		eventBus,
 	)
 	proposer := state.Validators.GetByIndex(0)
-	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
+	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
 	_, _, err = blockExec.CreateProposalBlock(ctx, height, 0, state, commit, proposer.ProTxHash, 0)
 	require.NoError(t, err)
 }
@@ -741,7 +741,7 @@ func TestPrepareProposalErrorOnNonExistingRemoved(t *testing.T) {
 		eventBus,
 	)
 	proposer := state.Validators.GetByIndex(0)
-	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
+	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
 	block, _, err := blockExec.CreateProposalBlock(ctx, height, 0, state, commit, proposer.ProTxHash, 0)
 	require.ErrorContains(t, err, "new transaction incorrectly marked as removed")
 	require.Nil(t, block)
@@ -799,7 +799,7 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 		eventBus,
 	)
 	val := state.Validators.GetByIndex(0)
-	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
+	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
 	block, _, err := blockExec.CreateProposalBlock(ctx, height, 0, state, commit, val.ProTxHash, 0)
 	require.NoError(t, err)
 	require.Len(t, block.Data.Txs.ToSliceOfBytes(), len(trs)-2)
@@ -860,7 +860,7 @@ func TestPrepareProposalAddedTxsIncluded(t *testing.T) {
 		eventBus,
 	)
 	proposer := state.Validators.GetByIndex(0)
-	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
+	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
 	block, _, err := blockExec.CreateProposalBlock(ctx, height, 0, state, commit, proposer.ProTxHash, 0)
 	require.NoError(t, err)
 
@@ -920,7 +920,7 @@ func TestPrepareProposalReorderTxs(t *testing.T) {
 		eventBus,
 	)
 	proposer := state.Validators.GetByIndex(0)
-	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
+	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
 	block, _, err := blockExec.CreateProposalBlock(ctx, height, 0, state, commit, proposer.ProTxHash, 0)
 	require.NoError(t, err)
 	for i, tx := range block.Data.Txs {
@@ -934,7 +934,11 @@ func TestPrepareProposalReorderTxs(t *testing.T) {
 // TestPrepareProposalErrorOnTooManyTxs tests that the block creation logic returns
 // an error if the ResponsePrepareProposal returned from the application is invalid.
 func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
-	const height = 2
+	const (
+		height           = 2
+		bytesPerTx int64 = 3
+	)
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -950,9 +954,10 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 	evpool := &mocks.EvidencePool{}
 	evpool.On("PendingEvidence", mock.Anything).Return([]types.Evidence{}, int64(0))
 
-	const nValidators = 1
-	var bytesPerTx int64 = 3
-	maxDataBytes := types.MaxDataBytes(state.ConsensusParams.Block.MaxBytes, crypto.BLS12381, 0, nValidators)
+	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
+
+	maxDataBytes, err := types.MaxDataBytes(state.ConsensusParams.Block.MaxBytes, commit, 0)
+	require.NoError(t, err)
 	txs := factory.MakeNTxs(height, maxDataBytes/bytesPerTx+2) // +2 so that tx don't fit
 	mp := &mpmocks.Mempool{}
 	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs)
@@ -968,7 +973,7 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 
 	cc := abciclient.NewLocalClient(logger, app)
 	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
-	err := proxyApp.Start(ctx)
+	err = proxyApp.Start(ctx)
 	require.NoError(t, err)
 
 	blockExec := sm.NewBlockExecutor(
@@ -980,7 +985,6 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 		eventBus,
 	)
 	proposer := state.Validators.GetByIndex(0)
-	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
 
 	block, _, err := blockExec.CreateProposalBlock(ctx, height, 0, state, commit, proposer.ProTxHash, 0)
 	require.ErrorContains(t, err, "transaction data size exceeds maximum")
@@ -1030,7 +1034,7 @@ func TestPrepareProposalErrorOnPrepareProposalError(t *testing.T) {
 		eventBus,
 	)
 	val := state.Validators.GetByIndex(0)
-	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, types.StateID{}, state.Validators, privVals)
+	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
 
 	block, _, err := blockExec.CreateProposalBlock(ctx, height, 0, state, commit, val.ProTxHash, 0)
 	require.Nil(t, block)

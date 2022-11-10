@@ -81,9 +81,6 @@ type State struct {
 	LastBlockID     types.BlockID
 	LastBlockTime   time.Time
 
-	// LastStateID contains App Hash and Height from previous state (at height-1)
-	LastStateID types.StateID
-
 	// Last Chain Lock is the last known chain locked height in consensus
 	// It does not go to 0 if a block had no chain lock and should stay the same as the previous block
 	LastCoreChainLockedBlockHeight uint32
@@ -131,8 +128,6 @@ func (state State) Copy() State {
 		LastBlockHeight: state.LastBlockHeight,
 		LastBlockID:     state.LastBlockID,
 		LastBlockTime:   state.LastBlockTime,
-
-		LastStateID: state.LastStateID.Copy(),
 
 		LastCoreChainLockedBlockHeight: state.LastCoreChainLockedBlockHeight,
 
@@ -204,8 +199,6 @@ func (state *State) ToProto() (*tmstate.State, error) {
 	}
 	sm.Validators = vals
 
-	sm.LastStateID = state.LastStateID.ToProto()
-
 	if state.LastBlockHeight >= 1 { // At Block 1 LastValidators is nil
 		lVals, err := state.LastValidators.ToProto()
 		if err != nil {
@@ -242,13 +235,6 @@ func FromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 	state.LastBlockID = *bi
 	state.LastBlockHeight = pb.LastBlockHeight
 	state.LastBlockTime = pb.LastBlockTime
-
-	si, err := types.StateIDFromProto(&pb.LastStateID)
-	if err != nil {
-		return nil, err
-	}
-
-	state.LastStateID = *si
 
 	state.LastCoreChainLockedBlockHeight = pb.LastCoreChainLockedBlockHeight
 
@@ -378,11 +364,6 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 		)
 	}
 
-	stateID := types.StateID{
-		Height:  genDoc.InitialHeight,
-		AppHash: genDoc.AppHash,
-	}
-
 	return State{
 		Version:       InitStateVersion,
 		ChainID:       genDoc.ChainID,
@@ -390,7 +371,6 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 
 		LastBlockHeight: 0,
 		LastBlockID:     types.BlockID{},
-		LastStateID:     stateID,
 		LastBlockTime:   genDoc.GenesisTime,
 
 		LastCoreChainLockedBlockHeight: genDoc.InitialCoreChainLockedHeight,

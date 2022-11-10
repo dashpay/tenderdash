@@ -686,8 +686,8 @@ func (r *Reactor) logResult(err error, logger log.Logger, message string, keyval
 	return true
 }
 
-//func (r *Reactor) gossipVotesForHeight(rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState) bool {
-//	logger := r.Logger.With("height", prs.Height).With("peer", ps.peerID)
+//	func (r *Reactor) gossipVotesForHeight(rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState) bool {
+//		logger := r.Logger.With("height", prs.Height).With("peer", ps.peerID)
 func (r *Reactor) gossipVotesForHeight(
 	ctx context.Context,
 	rs *cstypes.RoundState,

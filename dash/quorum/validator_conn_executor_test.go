@@ -420,7 +420,7 @@ func TestFinalizeBlock(t *testing.T) {
 	require.NoError(t, err)
 
 	block := makeBlock(t, state, 1, new(types.Commit))
-	blockID, err := block.BlockID()
+	blockID := block.BlockID(nil)
 	require.NoError(t, err)
 	block.NextValidatorsHash = newVals.Hash()
 	const round = int32(0)

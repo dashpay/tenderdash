@@ -156,7 +156,6 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastBlockHeight = lastLightBlock.Height
 	state.LastBlockTime = lastLightBlock.Time
 	state.LastBlockID = lastLightBlock.Commit.BlockID
-	state.LastStateID = lastLightBlock.Commit.StateID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
 	state.LastAppHash = currentLightBlock.AppHash
 	state.LastResultsHash = currentLightBlock.ResultsHash
@@ -298,7 +297,6 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 	state.LastBlockHeight = lastLightBlock.Height
 	state.LastBlockTime = lastLightBlock.Time
 	state.LastBlockID = lastLightBlock.Commit.BlockID
-	state.LastStateID = lastLightBlock.Commit.StateID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
 	state.LastAppHash = currentLightBlock.AppHash
 	state.LastResultsHash = currentLightBlock.ResultsHash

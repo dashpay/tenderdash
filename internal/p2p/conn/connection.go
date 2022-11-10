@@ -64,6 +64,7 @@ The byte id and the relative priorities of each `Channel` are configured upon
 initialization of the connection.
 
 There are two methods for sending messages:
+
 	func (m MConnection) Send(chID byte, msgBytes []byte) bool {}
 
 `Send(chID, msgBytes)` is a blocking call that waits until `msg` is
@@ -601,7 +602,7 @@ type ChannelStatus struct {
 	RecentlySent      int64
 }
 
-//-----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // ChannelID is an arbitrary channel ID.
 type ChannelID uint16
 
