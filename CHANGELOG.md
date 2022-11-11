@@ -1,4 +1,4 @@
-## [0.10.0-dev.3] - 2022-11-09
+## [0.10.0-dev.4] - 2022-11-10
 
 ### Bug Fixes
 
@@ -22,6 +22,7 @@
 - Consensus params updates support (#475)
 - Add round to Prepare/ProcessProposal,  FinalizeBlock (#498)
 - Add core_chain_lock_update to RequestProcessProposal (#492)
+- [**breaking**] Include state id in block signature (#478)
 
 ### Miscellaneous Tasks
 
@@ -29,6 +30,7 @@
 - Revert `validateBlockTime` (#458)
 - Update changelog and version to 0.10.0-dev.2 (#489)
 - Improve validation of ResponsePrepare/ProcessProposal ExecTxResults (#477)
+- Update changelog and version to 0.10.0-dev.3 (#502)
 
 ### Refactor
 
