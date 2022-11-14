@@ -2930,26 +2930,31 @@ func TestStateOutputsBlockPartsStats(t *testing.T) {
 	}
 
 	cs.ProposalBlockParts = types.NewPartSetFromHeader(parts.Header())
-	cs.handleMsg(ctx, msgInfo{msg, peerID, tmtime.Now()}, false)
+	err = cs.msgDispatcher.dispatch(ctx, msgInfo{msg, peerID, tmtime.Now()})
+	require.NoError(t, err)
 
 	statsMessage := <-cs.statsMsgQueue
 	require.Equal(t, msg, statsMessage.Msg, "")
 	require.Equal(t, peerID, statsMessage.PeerID, "")
 
 	// sending the same part from different peer
-	cs.handleMsg(ctx, msgInfo{msg, "peer2", tmtime.Now()}, false)
+	err = cs.msgDispatcher.dispatch(ctx, msgInfo{msg, "peer2", tmtime.Now()})
+	require.NoError(t, err)
 
 	// sending the part with the same height, but different round
 	msg.Round = 1
-	cs.handleMsg(ctx, msgInfo{msg, peerID, tmtime.Now()}, false)
+	err = cs.msgDispatcher.dispatch(ctx, msgInfo{msg, peerID, tmtime.Now()})
+	require.NoError(t, err)
 
 	// sending the part from the smaller height
 	msg.Height = 0
-	cs.handleMsg(ctx, msgInfo{msg, peerID, tmtime.Now()}, false)
+	err = cs.msgDispatcher.dispatch(ctx, msgInfo{msg, peerID, tmtime.Now()})
+	require.NoError(t, err)
 
 	// sending the part from the bigger height
 	msg.Height = 3
-	cs.handleMsg(ctx, msgInfo{msg, peerID, tmtime.Now()}, false)
+	err = cs.msgDispatcher.dispatch(ctx, msgInfo{msg, peerID, tmtime.Now()})
+	require.NoError(t, err)
 
 	select {
 	case <-cs.statsMsgQueue:
@@ -2979,14 +2984,16 @@ func TestStateOutputVoteStats(t *testing.T) {
 	)
 
 	voteMessage := &VoteMessage{vote}
-	cs.handleMsg(ctx, msgInfo{voteMessage, peerID, tmtime.Now()}, false)
+	err = cs.msgDispatcher.dispatch(ctx, msgInfo{voteMessage, peerID, tmtime.Now()})
+	require.NoError(t, err)
 
 	statsMessage := <-cs.statsMsgQueue
 	require.Equal(t, voteMessage, statsMessage.Msg, "")
 	require.Equal(t, peerID, statsMessage.PeerID, "")
 
 	// sending the same part from different peer
-	cs.handleMsg(ctx, msgInfo{&VoteMessage{vote}, "peer2", tmtime.Now()}, false)
+	err = cs.msgDispatcher.dispatch(ctx, msgInfo{&VoteMessage{vote}, "peer2", tmtime.Now()})
+	require.NoError(t, err)
 
 	// sending the vote for the bigger height
 	incrementHeight(vss[1])
@@ -2994,7 +3001,8 @@ func TestStateOutputVoteStats(t *testing.T) {
 		cs.state.Validators.QuorumType, cs.state.Validators.QuorumHash,
 	)
 
-	cs.handleMsg(ctx, msgInfo{&VoteMessage{vote}, peerID, tmtime.Now()}, false)
+	err = cs.msgDispatcher.dispatch(ctx, msgInfo{&VoteMessage{vote}, peerID, tmtime.Now()})
+	require.NoError(t, err)
 
 	select {
 	case <-cs.statsMsgQueue:

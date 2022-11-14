@@ -61,6 +61,8 @@ type msgInfo struct {
 
 func (msgInfo) TypeTag() string { return "tendermint/wal/MsgInfo" }
 
+func (msgInfo) ValidateBasic() error { return nil }
+
 type msgInfoJSON struct {
 	Msg         json.RawMessage `json:"msg"`
 	PeerID      types.NodeID    `json:"peer_key"`
@@ -152,9 +154,7 @@ type State struct {
 
 	// state changes may be triggered by: msgs from peers,
 	// msgs from ourself, or by timeouts
-	peerMsgQueue     chan msgInfo
-	internalMsgQueue chan msgInfo
-	timeoutTicker    TimeoutTicker
+	timeoutTicker TimeoutTicker
 
 	// information about about added votes and block parts are written on this channel
 	// so statistics can be computed by reactor
@@ -190,6 +190,9 @@ type State struct {
 
 	// wait the channel event happening for shutting down the state gracefully
 	onStopCh chan *cstypes.RoundState
+
+	msgInfoQueue  *msgInfoQueue
+	msgDispatcher *msgInfoDispatcher
 }
 
 // StateOption sets an optional parameter on the State.
@@ -214,23 +217,21 @@ func NewState(
 	options ...StateOption,
 ) (*State, error) {
 	cs := &State{
-		eventBus:         eventBus,
-		logger:           logger,
-		config:           cfg,
-		blockExec:        blockExec,
-		blockStore:       blockStore,
-		stateStore:       store,
-		txNotifier:       txNotifier,
-		peerMsgQueue:     make(chan msgInfo, msgQueueSize),
-		internalMsgQueue: make(chan msgInfo, msgQueueSize),
-		timeoutTicker:    NewTimeoutTicker(logger),
-		statsMsgQueue:    make(chan msgInfo, msgQueueSize),
-		doWALCatchup:     true,
-		wal:              nilWAL{},
-		evpool:           evpool,
-		evsw:             tmevents.NewEventSwitch(),
-		metrics:          NopMetrics(),
-		onStopCh:         make(chan *cstypes.RoundState),
+		eventBus:      eventBus,
+		logger:        logger,
+		config:        cfg,
+		blockExec:     blockExec,
+		blockStore:    blockStore,
+		stateStore:    store,
+		txNotifier:    txNotifier,
+		timeoutTicker: NewTimeoutTicker(logger),
+		statsMsgQueue: make(chan msgInfo, msgQueueSize),
+		doWALCatchup:  true,
+		wal:           nilWAL{},
+		evpool:        evpool,
+		evsw:          tmevents.NewEventSwitch(),
+		metrics:       NopMetrics(),
+		onStopCh:      make(chan *cstypes.RoundState),
 	}
 
 	// set function defaults (may be overwritten before calling Start)
@@ -253,6 +254,8 @@ func NewState(
 		}
 	}
 
+	cs.msgInfoQueue = newMsgInfoQueue()
+	cs.msgDispatcher = newMsgInfoDispatcher(cs)
 	return cs, nil
 }
 
@@ -578,19 +581,14 @@ func (cs *State) OpenWAL(ctx context.Context, walFile string) (WAL, error) {
 // If the queue is full, the function may block.
 // TODO: should these return anything or let callers just use events?
 
-// AddVote inputs a vote.
-func (cs *State) AddVote(ctx context.Context, vote *types.Vote, peerID types.NodeID) error {
-	return cs.sendMessage(ctx, &VoteMessage{vote}, peerID)
-}
-
 // SetProposal inputs a proposal.
 func (cs *State) SetProposal(ctx context.Context, proposal *types.Proposal, peerID types.NodeID) error {
-	return cs.sendMessage(ctx, &ProposalMessage{proposal}, peerID)
+	return cs.msgInfoQueue.send(ctx, &ProposalMessage{proposal}, peerID)
 }
 
 // AddProposalBlockPart inputs a part of the proposal block.
 func (cs *State) AddProposalBlockPart(ctx context.Context, height int64, round int32, part *types.Part, peerID types.NodeID) error {
-	return cs.sendMessage(ctx, &BlockPartMessage{height, round, part}, peerID)
+	return cs.msgInfoQueue.send(ctx, &BlockPartMessage{height, round, part}, peerID)
 }
 
 // SetProposalAndBlock inputs the proposal and all block parts.
@@ -640,19 +638,7 @@ func (cs *State) PrivValidator() types.PrivValidator {
 // internal functions for managing the state
 
 func (cs *State) sendMessage(ctx context.Context, msg Message, peerID types.NodeID) error {
-	ch := cs.peerMsgQueue
-	if peerID == "" {
-		ch = cs.internalMsgQueue
-	}
-	mi := msgInfo{msg, peerID, tmtime.Now()}
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case ch <- mi:
-		return nil
-	default:
-		return fmt.Errorf("msg queue is full")
-	}
+	return cs.msgInfoQueue.send(ctx, msg, peerID)
 }
 
 func (cs *State) updateHeight(height int64) {
@@ -685,24 +671,9 @@ func (cs *State) scheduleTimeout(duration time.Duration, height int64, round int
 	cs.timeoutTicker.ScheduleTimeout(timeoutInfo{duration, height, round, step})
 }
 
-// send a msg into the receiveRoutine regarding our own proposal, block part, or vote
+// safeSend a msg into the receiveRoutine regarding our own proposal, block part, or vote
 func (cs *State) sendInternalMessage(ctx context.Context, mi msgInfo) {
-	select {
-	case <-ctx.Done():
-	case cs.internalMsgQueue <- mi:
-	default:
-		// NOTE: using the go-routine means our votes can
-		// be processed out of order.
-		// TODO: use CList here for strict determinism and
-		// attempt push to internalMsgQueue in receiveRoutine
-		cs.logger.Debug("internal msg queue is full; using a go-routine")
-		go func() {
-			select {
-			case <-ctx.Done():
-			case cs.internalMsgQueue <- mi:
-			}
-		}()
-	}
+	cs.msgInfoQueue.send(ctx, mi.Msg, "")
 }
 
 // Reconstruct the LastCommit from either SeenCommit or the ExtendedCommit. SeenCommit
@@ -887,6 +858,7 @@ func (cs *State) newStep() {
 // State must be locked before any internal state is updated.
 func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
 	onExit := func(cs *State) {
+		cs.msgInfoQueue.stop()
 		// NOTE: the internalMsgQueue may have signed messages from our
 		// priv_val that haven't hit the WAL, but its ok because
 		// priv_val tracks LastSig
@@ -939,6 +911,8 @@ func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
 		}
 	}()
 
+	go cs.msgInfoQueue.reader.readMessages(ctx)
+
 	for {
 		if maxSteps > 0 {
 			if cs.nSteps >= maxSteps {
@@ -948,37 +922,23 @@ func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
 			}
 		}
 
-		rs := cs.GetRoundState()
-
 		select {
 		case <-cs.txNotifier.TxsAvailable():
 			cs.handleTxsAvailable(ctx)
 
-		case mi := <-cs.peerMsgQueue:
-			if err := cs.wal.Write(mi); err != nil {
-				cs.logger.Error("failed writing to WAL", "err", err)
-			}
-			// handles proposals, block parts, votes
-			// may generate internal events (votes, complete proposals, 2/3 majorities)
-			cs.handleMsg(ctx, mi, false)
-
-		case mi := <-cs.internalMsgQueue:
-			err := cs.wal.WriteSync(mi) // NOTE: fsync
+		case mi := <-cs.msgInfoQueue.read():
+			//case mi := <-cs.msgReader.outCh:
+			//cs.handleMsg(ctx, mi, false)
+			//cs.handleMsg(ctx, mi, false)
+			err := cs.msgDispatcher.dispatch(ctx, mi)
 			if err != nil {
-				panic(fmt.Errorf(
-					"failed to write %v msg to consensus WAL due to %w; check your file system and restart the node",
-					mi, err,
-				))
+				return
 			}
-
-			// handles proposals, block parts, votes
-			cs.handleMsg(ctx, mi, false)
-
 		case ti := <-cs.timeoutTicker.Chan(): // tockChan:
 			if err := cs.wal.Write(ti); err != nil {
 				cs.logger.Error("failed writing to WAL", "err", err)
 			}
-
+			rs := cs.GetRoundState()
 			// if the timeout is relevant to the rs
 			// go to the next step
 			cs.handleTimeout(ctx, ti, *rs)
@@ -989,153 +949,6 @@ func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
 
 		}
 		// TODO should we handle context cancels here?
-	}
-}
-
-// state transitions on complete-proposal, 2/3-any, 2/3-one
-func (cs *State) handleMsg(ctx context.Context, mi msgInfo, fromReplay bool) {
-	cs.mtx.Lock()
-	defer cs.mtx.Unlock()
-	var (
-		added bool
-		err   error
-	)
-
-	msg, peerID := mi.Msg, mi.PeerID
-	switch msg := msg.(type) {
-	case *ProposalMessage:
-		// will not cause transition.
-		// once proposal is set, we can receive block parts
-		err = cs.setProposal(msg.Proposal, mi.ReceiveTime)
-
-	case *BlockPartMessage:
-		commitNotExist := cs.Commit == nil
-
-		// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
-		added, err = cs.addProposalBlockPart(ctx, msg, peerID)
-
-		if added && cs.ProposalBlockParts != nil && cs.ProposalBlockParts.IsComplete() && fromReplay {
-			candidateState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, msg.Round, cs.state, true)
-			if err != nil {
-				panic(err)
-			}
-			cs.RoundState.CurrentRoundState = candidateState
-		}
-
-		// We unlock here to yield to any routines that need to read the the RoundState.
-		// Previously, this code held the lock from the point at which the final block
-		// part was received until the block executed against the application.
-		// This prevented the reactor from being able to retrieve the most updated
-		// version of the RoundState. The reactor needs the updated RoundState to
-		// gossip the now completed block.
-		//
-		// This code can be further improved by either always operating on a copy
-		// of RoundState and only locking when switching out State's copy of
-		// RoundState with the updated copy or by emitting RoundState events in
-		// more places for routines depending on it to listen for.
-		cs.mtx.Unlock()
-
-		cs.mtx.Lock()
-		if added && commitNotExist && cs.ProposalBlockParts.IsComplete() {
-			cs.handleCompleteProposal(ctx, msg.Height, fromReplay)
-		}
-		if added {
-			select {
-			case cs.statsMsgQueue <- mi:
-			case <-ctx.Done():
-				return
-			}
-		}
-
-		if err != nil && msg.Round != cs.Round {
-			cs.logger.Debug("received block part from wrong round",
-				"height", cs.Height,
-				"cs_round", cs.Round,
-				"block_height", msg.Height,
-				"block_round", msg.Round,
-			)
-			err = nil
-		}
-
-		cs.logger.Debug(
-			"received block part",
-			"height", cs.Height,
-			"round", cs.Round,
-			"block_height", msg.Height,
-			"block_round", msg.Round,
-			"added", added,
-			"peer", peerID,
-			"index", msg.Part.Index,
-			"error", err,
-		)
-
-	case *VoteMessage:
-		// attempt to add the vote and dupeout the validator if its a duplicate signature
-		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		added, err = cs.tryAddVote(ctx, msg.Vote, peerID)
-		if added {
-			select {
-			case cs.statsMsgQueue <- mi:
-			case <-ctx.Done():
-				return
-			}
-		}
-
-		// TODO: punish peer
-		// We probably don't want to stop the peer here. The vote does not
-		// necessarily comes from a malicious peer but can be just broadcasted by
-		// a typical peer.
-		// https://github.com/tendermint/tendermint/issues/1281
-
-		// NOTE: the vote is broadcast to peers by the reactor listening
-		// for vote events
-
-		// TODO: If rs.Height == vote.Height && rs.Round < vote.Round,
-		// the peer is sending us CatchupCommit precommits.
-		// We could make note of this and help filter in broadcastHasVoteMessage().
-		keyVals := []interface{}{
-			"height", cs.Height,
-			"cs_round", cs.Round,
-			"vote_height", msg.Vote.Height,
-			"vote_round", msg.Vote.Round,
-			"added", added,
-			"peer", peerID,
-		}
-		if err != nil {
-			keyVals = append(keyVals, "error", err)
-		}
-		cs.logger.Debug("received vote", keyVals...)
-	case *CommitMessage:
-		// attempt to add the commit and dupeout the validator if its a duplicate signature
-		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		added, err = cs.tryAddCommit(ctx, msg.Commit, peerID)
-		if added {
-			cs.statsMsgQueue <- mi
-		}
-		cs.logger.Debug(
-			"received commit",
-			"height", cs.Height,
-			"cs_round", cs.Round,
-			"commit_height", msg.Commit.Height,
-			"commit_round", msg.Commit.Round,
-			"added", added,
-			"peer", peerID,
-			"error", err,
-		)
-	default:
-		cs.logger.Error("unknown msg type", "type", tmstrings.LazySprintf("%T", msg))
-		return
-	}
-
-	if err != nil {
-		cs.logger.Error(
-			"failed to process message",
-			"height", cs.Height,
-			"round", cs.Round,
-			"peer", peerID,
-			"msg_type", fmt.Sprintf("%T", msg),
-			"err", err,
-		)
 	}
 }
 

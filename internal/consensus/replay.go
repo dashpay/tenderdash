@@ -80,8 +80,7 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 			cs.logger.Info("Replay: Vote", "height", v.Height, "round", v.Round, "type", v.Type,
 				"blockID", v.BlockID, "peer", peerID)
 		}
-
-		cs.handleMsg(ctx, m, true)
+		_ = cs.msgDispatcher.dispatch(ctx, m, msgFromReplay())
 	case timeoutInfo:
 		cs.logger.Info("Replay: Timeout", "height", m.Height, "round", m.Round, "step", m.Step, "dur", m.Duration)
 		cs.handleTimeout(ctx, m, cs.RoundState)
