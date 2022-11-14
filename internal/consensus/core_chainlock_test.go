@@ -17,7 +17,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/libs/log"
-	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -165,10 +164,10 @@ func invalidProposeCoreChainLockFunc(ctx context.Context, t *testing.T, height i
 	proposal.Signature = p.Signature
 
 	// send proposal and block parts on internal msg queue
-	cs.sendInternalMessage(ctx, msgInfo{&ProposalMessage{proposal}, "", tmtime.Now()})
+	_ = cs.msgInfoQueue.send(ctx, &ProposalMessage{proposal}, "")
 	for i := 0; i < int(blockParts.Total()); i++ {
 		part := blockParts.GetPart(i)
-		cs.sendInternalMessage(ctx, msgInfo{&BlockPartMessage{cs.Height, cs.Round, part}, "", tmtime.Now()})
+		_ = cs.msgInfoQueue.send(ctx, &BlockPartMessage{cs.Height, cs.Round, part}, "")
 	}
 
 	cs.logger.Info("Signed proposal", "height", height, "round", round, "proposal", proposal)

@@ -671,11 +671,6 @@ func (cs *State) scheduleTimeout(duration time.Duration, height int64, round int
 	cs.timeoutTicker.ScheduleTimeout(timeoutInfo{duration, height, round, step})
 }
 
-// safeSend a msg into the receiveRoutine regarding our own proposal, block part, or vote
-func (cs *State) sendInternalMessage(ctx context.Context, mi msgInfo) {
-	cs.msgInfoQueue.send(ctx, mi.Msg, "")
-}
-
 // Reconstruct the LastCommit from either SeenCommit or the ExtendedCommit. SeenCommit
 // and ExtendedCommit are saved along with the block. If VoteExtensions are required
 // the method will panic on an absent ExtendedCommit or an ExtendedCommit without
@@ -858,7 +853,6 @@ func (cs *State) newStep() {
 // State must be locked before any internal state is updated.
 func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
 	onExit := func(cs *State) {
-		cs.msgInfoQueue.stop()
 		// NOTE: the internalMsgQueue may have signed messages from our
 		// priv_val that haven't hit the WAL, but its ok because
 		// priv_val tracks LastSig
@@ -866,6 +860,7 @@ func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
 		// close wal now that we're done writing to it
 		cs.wal.Stop()
 		cs.wal.Wait()
+		cs.msgInfoQueue.stop()
 	}
 
 	defer func() {
@@ -911,7 +906,7 @@ func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
 		}
 	}()
 
-	go cs.msgInfoQueue.reader.readMessages(ctx)
+	go cs.msgInfoQueue.readMessages(ctx)
 
 	for {
 		if maxSteps > 0 {
@@ -927,9 +922,6 @@ func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
 			cs.handleTxsAvailable(ctx)
 
 		case mi := <-cs.msgInfoQueue.read():
-			//case mi := <-cs.msgReader.outCh:
-			//cs.handleMsg(ctx, mi, false)
-			//cs.handleMsg(ctx, mi, false)
 			err := cs.msgDispatcher.dispatch(ctx, mi)
 			if err != nil {
 				return
@@ -1311,11 +1303,11 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 		proposal.Signature = p.Signature
 
 		// send proposal and block parts on internal msg queue
-		cs.sendInternalMessage(ctx, msgInfo{&ProposalMessage{proposal}, "", tmtime.Now()})
+		_ = cs.msgInfoQueue.send(ctx, &ProposalMessage{proposal}, "")
 
 		for i := 0; i < int(blockParts.Total()); i++ {
 			part := blockParts.GetPart(i)
-			cs.sendInternalMessage(ctx, msgInfo{&BlockPartMessage{cs.Height, cs.Round, part}, "", tmtime.Now()})
+			_ = cs.msgInfoQueue.send(ctx, &BlockPartMessage{cs.Height, cs.Round, part}, "")
 		}
 
 		cs.logger.Debug("signed proposal", "height", height, "round", round, "proposal", proposal, "pubKey", pubKey.HexString())
@@ -2884,7 +2876,7 @@ func (cs *State) signAddVote(
 		cs.logger.Error("failed signing vote", "height", cs.Height, "round", cs.Round, "vote", vote, "err", err)
 		return nil
 	}
-	cs.sendInternalMessage(ctx, msgInfo{&VoteMessage{vote}, "", tmtime.Now()})
+	_ = cs.msgInfoQueue.send(ctx, &VoteMessage{vote}, "")
 	cs.logger.Debug("signed and pushed vote",
 		"height", cs.Height,
 		"round", cs.Round,

@@ -47,23 +47,12 @@ func msgFromReplay() func(envelope *msgEnvelope) {
 }
 
 type chanQueue[T any] struct {
-	ch  chan T
-	wal WALWriter
+	ch chan T
 }
 
 func newChanQueue[T Message]() *chanQueue[T] {
 	return &chanQueue[T]{
 		ch: make(chan T, msgQueueSize),
-	}
-}
-
-func (q *chanQueue[T]) receive(ctx context.Context) (T, error) {
-	select {
-	case msg := <-q.ch:
-		return msg, nil
-	case <-ctx.Done():
-		var msg T
-		return msg, ctx.Err()
 	}
 }
 
@@ -87,7 +76,7 @@ func (s *chanMsgSender) send(ctx context.Context, msg Message, peerID types.Node
 	mi := msgInfo{msg, peerID, tmtime.Now()}
 	usePeerQueue := PeerQueueFromContext(ctx)
 	ch := s.peerQueue
-	if peerID == "" && usePeerQueue == false {
+	if peerID == "" && !usePeerQueue {
 		ch = s.internalQueue
 	}
 	return ch.send(ctx, mi)
@@ -109,49 +98,51 @@ func newChanMsgReader[T any](queues []*chanQueue[T]) *chanMsgReader[T] {
 	}
 }
 
-func (r *chanMsgReader[T]) stop() {
-	close(r.quitCh)
-	<-r.quitedCh
+func (q *chanMsgReader[T]) stop() {
+	close(q.quitCh)
+	<-q.quitedCh
 }
 
-func (r *chanMsgReader[T]) readQueueMessages(ctx context.Context, queue *chanQueue[T], quitCh chan struct{}) {
+func (q *chanMsgReader[T]) readQueueMessages(ctx context.Context, queue *chanQueue[T]) {
 	for {
 		select {
 		case msg := <-queue.ch:
-			r.safeSend(ctx, msg, quitCh)
-		case <-quitCh:
-			return
+			flag := q.safeSend(ctx, msg)
+			if !flag {
+				return
+			}
 		case <-ctx.Done():
 			return
 		}
 	}
 }
 
-func (r *chanMsgReader[T]) safeSend(ctx context.Context, msg T, quitCh <-chan struct{}) {
+func (q *chanMsgReader[T]) safeSend(ctx context.Context, msg T) (res bool) {
+	res = false
 	defer func() {
 		_ = recover()
 	}()
 	select {
-	case r.outCh <- msg:
-	case <-quitCh:
-		return
+	case q.outCh <- msg:
+		res = true
 	case <-ctx.Done():
 		return
 	}
+	return
 }
 
-func (r *chanMsgReader[T]) readMessages(ctx context.Context) {
-	quitChs := makeChs[struct{}](len(r.queues))
-	defer close(r.outCh)
+func (q *chanMsgReader[T]) readMessages(ctx context.Context) {
+	// temporary disabled due to race condition
+	//defer close(q.outCh)
 	ctx, cancel := context.WithCancel(ctx)
-	for i, queue := range r.queues {
-		go func(queue *chanQueue[T], quitCh chan struct{}, i int) {
-			r.readQueueMessages(ctx, queue, quitCh)
-		}(queue, quitChs[i], i)
+	for _, queue := range q.queues {
+		go func(queue *chanQueue[T]) {
+			q.readQueueMessages(ctx, queue)
+		}(queue)
 	}
-	<-r.quitCh
+	<-q.quitCh
 	cancel()
-	r.quitedCh <- struct{}{}
+	q.quitedCh <- struct{}{}
 }
 
 type msgInfoQueue struct {
@@ -179,6 +170,10 @@ func (q *msgInfoQueue) read() <-chan msgInfo {
 	return q.reader.outCh
 }
 
+func (q *msgInfoQueue) readMessages(ctx context.Context) {
+	q.reader.readMessages(ctx)
+}
+
 func (q *msgInfoQueue) stop() {
 	q.reader.stop()
 }
@@ -200,12 +195,4 @@ func (w *wrapWAL) WriteSync(msg WALMessage) error {
 
 func (w *wrapWAL) FlushAndSync() error {
 	return w.getter().FlushAndSync()
-}
-
-func makeChs[T any](n int) []chan T {
-	chs := make([]chan T, n)
-	for i := 0; i < n; i++ {
-		chs[i] = make(chan T)
-	}
-	return chs
 }
