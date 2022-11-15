@@ -650,7 +650,6 @@ func (cs *State) SetProposalAndBlock(
 	parts *types.PartSet,
 	peerID types.NodeID,
 ) error {
-
 	if err := cs.SetProposal(ctx, proposal, peerID); err != nil {
 		return err
 	}
@@ -694,6 +693,14 @@ func (cs *State) updateHeight(height int64) {
 }
 
 func (cs *State) updateRoundStep(round int32, step cstypes.RoundStepType) {
+	cs.logger.Debug(
+		"update round step",
+		"round", round,
+		"step", step.String(),
+		"old_round", cs.Round,
+		"old_step", cs.Step.String(),
+	)
+
 	if !cs.replayMode {
 		if round != cs.Round || round == 0 && step == cstypes.RoundStepNewRound {
 			cs.metrics.MarkRound(cs.Round, cs.StartTime)
@@ -701,6 +708,11 @@ func (cs *State) updateRoundStep(round int32, step cstypes.RoundStepType) {
 		if cs.Step != step {
 			cs.metrics.MarkStep(cs.Step)
 		}
+	}
+	// New round, so we reset current round state.
+	// It will be recreated with ProcessProposal request.
+	if round > cs.Round {
+		cs.CurrentRoundState = sm.CurrentRoundState{}
 	}
 	cs.Round = round
 	cs.Step = step
@@ -2387,6 +2399,7 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 
 	if rs.CurrentRoundState.IsEmpty() {
 		var err error
+		logger.Debug("CurrentRoundState is empty", "crs", rs.CurrentRoundState)
 		rs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, round, stateCopy, true)
 		if err != nil {
 			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
@@ -2671,7 +2684,12 @@ func (cs *State) addProposalBlockPart(
 		cs.ProposalBlock = block
 
 		// NOTE: it's possible to receive complete proposal blocks for future rounds without having the proposal
-		cs.logger.Info("received complete proposal block", "height", cs.ProposalBlock.Height, "hash", cs.ProposalBlock.Hash())
+		cs.logger.Info(
+			"received complete proposal block",
+			"height", cs.ProposalBlock.Height,
+			"hash", cs.ProposalBlock.Hash(),
+			"round_height", cs.RoundState.GetHeight(),
+		)
 
 		if cs.ProposalBlock.Height != cs.RoundState.GetHeight() {
 			cs.RoundState.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, msg.Round, cs.state, true)
