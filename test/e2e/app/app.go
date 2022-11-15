@@ -78,7 +78,7 @@ func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVot
 	// We ignore any requests for vote extensions that don't match our expected
 	// next height.
 	lastHeight := app.LastCommittedState.GetHeight()
-	if req.Height != lastHeight+1 {
+	if lastHeight != 0 && req.Height != lastHeight+1 {
 		app.logger.Error(
 			"got unexpected height in ExtendVote request",
 			"expectedHeight", lastHeight+1,
@@ -122,7 +122,7 @@ func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.Request
 		}, nil
 	}
 	lastHeight := app.LastCommittedState.GetHeight()
-	if req.Height != lastHeight+1 {
+	if lastHeight != 0 && req.Height != lastHeight+1 {
 		app.logger.Error(
 			"got unexpected height in VerifyVoteExtension request",
 			"expectedHeight", lastHeight+1,
