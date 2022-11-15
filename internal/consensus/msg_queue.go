@@ -103,7 +103,10 @@ func (q *chanMsgReader[T]) stop() {
 	<-q.quitedCh
 }
 
-func (q *chanMsgReader[T]) readQueueMessages(ctx context.Context, queue *chanQueue[T]) {
+func (q *chanMsgReader[T]) readQueueMessages(ctx context.Context, queue *chanQueue[T], quitedCh chan struct{}) {
+	defer func() {
+		quitedCh <- struct{}{}
+	}()
 	for {
 		select {
 		case msg := <-queue.ch:
@@ -132,16 +135,20 @@ func (q *chanMsgReader[T]) safeSend(ctx context.Context, msg T) (res bool) {
 }
 
 func (q *chanMsgReader[T]) readMessages(ctx context.Context) {
-	// temporary disabled due to race condition
-	//defer close(q.outCh)
+	defer close(q.outCh)
+	quitedChs := makeChs[struct{}](len(q.queues))
 	ctx, cancel := context.WithCancel(ctx)
-	for _, queue := range q.queues {
-		go func(queue *chanQueue[T]) {
-			q.readQueueMessages(ctx, queue)
-		}(queue)
+	for i, queue := range q.queues {
+		go func(queue *chanQueue[T], quitedCh chan struct{}) {
+			q.readQueueMessages(ctx, queue, quitedCh)
+		}(queue, quitedChs[i])
 	}
+	// graceful stop reading messages
 	<-q.quitCh
 	cancel()
+	for _, quitedCh := range quitedChs {
+		<-quitedCh
+	}
 	q.quitedCh <- struct{}{}
 }
 
@@ -195,4 +202,12 @@ func (w *wrapWAL) WriteSync(msg WALMessage) error {
 
 func (w *wrapWAL) FlushAndSync() error {
 	return w.getter().FlushAndSync()
+}
+
+func makeChs[T any](n int) []chan T {
+	chs := make([]chan T, n)
+	for i := 0; i < n; i++ {
+		chs[i] = make(chan T)
+	}
+	return chs
 }
