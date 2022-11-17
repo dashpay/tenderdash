@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
 	dbm "github.com/tendermint/tm-db"
 
@@ -70,6 +71,16 @@ type Application struct {
 
 	snapshots     *SnapshotStore
 	offerSnapshot *offerSnapshot
+
+	shouldCommitVerify bool
+}
+
+// WithCommitVerification enables commit verification
+func WithCommitVerification() OptFunc {
+	return func(app *Application) error {
+		app.shouldCommitVerify = true
+		return nil
+	}
 }
 
 // WithValidatorSetUpdates defines initial validator set when creating Application
@@ -177,6 +188,7 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 		prepareTxs:             prepareTxs,
 		verifyTx:               verifyTx,
 		execTx:                 execTx,
+		shouldCommitVerify:     false,
 	}
 
 	for _, opt := range opts {
@@ -351,6 +363,17 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	if roundState.GetRound() != req.Commit.Round {
 		return &abci.ResponseFinalizeBlock{},
 			fmt.Errorf("commit round mismatch: expected %d, got %d", roundState.GetRound(), req.Commit.Round)
+	}
+	if app.shouldCommitVerify {
+		vsu := app.getActiveValidatorSetUpdates()
+		qsd := types.QuorumSignData{
+			Block:      makeBlockSignItem(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
+			Extensions: makeVoteExtensionSignItems(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
+		}
+		err := app.verifyBlockCommit(qsd, req.Commit)
+		if err != nil {
+			return nil, err
+		}
 	}
 	events := []abci.Event{app.eventValUpdate(req.Height)}
 	resp := &abci.ResponseFinalizeBlock{
@@ -726,8 +749,12 @@ func (app *Application) chainLockUpdate(height int64) (*types1.CoreChainLock, er
 
 func (app *Application) getActiveValidatorSetUpdates() abci.ValidatorSetUpdate {
 	var closestHeight int64
+	lcsHeight := app.LastCommittedState.GetHeight()
+	if lcsHeight == 0 {
+		lcsHeight = app.initialHeight
+	}
 	for height := range app.validatorSetUpdates {
-		if height > closestHeight && height <= app.LastCommittedState.GetHeight() {
+		if height > closestHeight && height <= lcsHeight {
 			closestHeight = height
 		}
 	}

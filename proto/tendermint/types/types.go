@@ -1,9 +1,8 @@
 package types
 
 import (
-	bytes "bytes"
+	"bytes"
 	"fmt"
-
 	"github.com/gogo/protobuf/types"
 
 	"github.com/tendermint/tendermint/crypto"
@@ -46,11 +45,7 @@ func (m *Vote) VoteExtensionsToMap() VoteExtensions {
 	if m == nil {
 		return nil
 	}
-	res := make(map[VoteExtensionType][]*VoteExtension)
-	for _, ext := range m.VoteExtensions {
-		res[ext.Type] = append(res[ext.Type], ext)
-	}
-	return res
+	return VoteExtensionsToMap(m.VoteExtensions)
 }
 
 // SignBytes represent data to be signed for the given vote.
@@ -176,4 +171,12 @@ func (s StateID) ValidateBasic() error {
 	}
 
 	return nil
+}
+
+func VoteExtensionsToMap(voteExtensions []*VoteExtension) VoteExtensions {
+	res := make(map[VoteExtensionType][]*VoteExtension)
+	for _, ext := range voteExtensions {
+		res[ext.Type] = append(res[ext.Type], ext)
+	}
+	return res
 }
