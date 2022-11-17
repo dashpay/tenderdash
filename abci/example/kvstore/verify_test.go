@@ -31,6 +31,7 @@ func TestVerifyBlockCommit(t *testing.T) {
 	genDoc, privVals := factory.RandGenesisDoc(cfg, 4, 1, factory.ConsensusParams())
 	height := genDoc.InitialHeight
 	state, err := sm.MakeGenesisState(genDoc)
+	require.NoError(t, err)
 
 	kvstore := newKvApp(
 		ctx, t,

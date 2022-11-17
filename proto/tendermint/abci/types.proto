@@ -206,7 +206,7 @@ message RequestFinalizeBlock {
   // The block that was finalized
   tendermint.types.Block block = 6;
   // The block ID that was finalized
-  tendermint.types.BlockID blockID = 7;
+  tendermint.types.BlockID block_id = 7 [(gogoproto.customname) = "BlockID"];
 }
 
 //----------------------------------------

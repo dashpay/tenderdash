@@ -407,7 +407,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		return state, ErrInvalidBlock{err}
 	}
 	startTime := time.Now().UnixNano()
-	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, blockID, block, commit, blockExec.logger)
+	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, commit, blockExec.logger)
 	if err != nil {
 		return state, ErrInvalidBlock{err}
 	}
@@ -620,7 +620,6 @@ func (blockExec *BlockExecutor) SetAppHashSize(size int) {
 func execBlock(
 	ctx context.Context,
 	appConn abciclient.Client,
-	blockID types.BlockID,
 	block *types.Block,
 	commit *types.Commit,
 	logger log.Logger,
@@ -631,6 +630,7 @@ func execBlock(
 	if err != nil {
 		return nil, err
 	}
+	blockID := block.BlockID(nil)
 	protoBlockID := blockID.ToProto()
 	if err != nil {
 		return nil, err
@@ -669,8 +669,7 @@ func ExecReplayedCommitBlock(
 	commit *types.Commit,
 	logger log.Logger,
 ) (*abci.ResponseFinalizeBlock, error) {
-	blockID := block.BlockID(nil)
-	fbResp, err := execBlockWithoutState(ctx, appConn, blockID, block, commit, logger)
+	fbResp, err := execBlockWithoutState(ctx, appConn, block, commit, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -681,12 +680,11 @@ func ExecReplayedCommitBlock(
 func execBlockWithoutState(
 	ctx context.Context,
 	appConn abciclient.Client,
-	blockID types.BlockID,
 	block *types.Block,
 	commit *types.Commit,
 	logger log.Logger,
 ) (*abci.ResponseFinalizeBlock, error) {
-	respFinalizeBlock, err := execBlock(ctx, appConn, blockID, block, commit, logger)
+	respFinalizeBlock, err := execBlock(ctx, appConn, block, commit, logger)
 	if err != nil {
 		logger.Error("executing block", "err", err)
 		return respFinalizeBlock, err
