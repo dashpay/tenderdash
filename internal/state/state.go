@@ -238,11 +238,10 @@ func FromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 
 	state.LastCoreChainLockedBlockHeight = pb.LastCoreChainLockedBlockHeight
 
-	vals, err := types.ValidatorSetFromProto(pb.Validators)
-	if err != nil {
+	state.Validators, err = types.ValidatorSetFromProto(pb.Validators)
+	if err != nil && !errors.Is(err, types.ErrNilValidatorSet) {
 		return nil, err
 	}
-	state.Validators = vals
 
 	if state.LastBlockHeight >= 1 { // At Block 1 LastValidators is nil
 		lVals, err := types.ValidatorSetFromProto(pb.LastValidators)

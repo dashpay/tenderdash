@@ -42,8 +42,10 @@ const (
 
 // ErrTotalVotingPowerOverflow is returned if the total voting power of the
 // resulting validator set exceeds MaxTotalVotingPower.
-var ErrTotalVotingPowerOverflow = fmt.Errorf("total voting power of resulting valset exceeds max %d",
-	MaxTotalVotingPower)
+var (
+	ErrTotalVotingPowerOverflow = fmt.Errorf("total voting power of resulting valset exceeds max %d", MaxTotalVotingPower)
+	ErrNilValidatorSet          = errors.New("nil of empty validator set")
+)
 
 // ValidatorSet represent a set of *Validator at a given height.
 //
@@ -122,7 +124,7 @@ func NewEmptyValidatorSet() *ValidatorSet {
 
 func (vals *ValidatorSet) ValidateBasic() error {
 	if vals.IsNilOrEmpty() {
-		return errors.New("validator set is nil or empty")
+		return ErrNilValidatorSet
 	}
 
 	if vals.Proposer == nil {
@@ -1136,7 +1138,7 @@ func (vals *ValidatorSet) ToProto() (*tmproto.ValidatorSet, error) {
 // is invalid
 func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 	if vp == nil {
-		return nil, errors.New("nil validator set") // validator set should never be nil
+		return nil, ErrNilValidatorSet // validator set should never be nil
 		// bigger issues are at play if empty
 	}
 	vals := new(ValidatorSet)
