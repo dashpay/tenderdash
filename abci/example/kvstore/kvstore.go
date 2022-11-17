@@ -339,7 +339,7 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("finalize block (hash: %s): %w", blockHash, err)
 	}
 
-	appHash := tmbytes.HexBytes(req.AppHash)
+	appHash := tmbytes.HexBytes(req.Block.Header.AppHash)
 	roundState, ok := app.roundStates[roundKey(appHash, req.Height, req.Round)]
 	if !ok {
 		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s not found", appHash)
