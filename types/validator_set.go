@@ -1141,22 +1141,23 @@ func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 	}
 	vals := new(ValidatorSet)
 
-	valsProto := make([]*Validator, len(vp.Validators))
+	vals.Validators = make([]*Validator, len(vp.Validators))
 	for i := 0; i < len(vp.Validators); i++ {
 		v, err := ValidatorFromProto(vp.Validators[i])
 		if err != nil {
 			return nil, fmt.Errorf("fromProto: validatorSet validator error: %w", err)
 		}
-		valsProto[i] = v
-	}
-	vals.Validators = valsProto
-
-	p, err := ValidatorFromProto(vp.GetProposer())
-	if err != nil {
-		return nil, fmt.Errorf("fromProto: validatorSet proposer error: %w", err)
+		vals.Validators[i] = v
 	}
 
-	vals.Proposer = p
+	var err error
+	proposer := vp.GetProposer()
+	if proposer != nil {
+		vals.Proposer, err = ValidatorFromProto(vp.GetProposer())
+		if err != nil {
+			return nil, fmt.Errorf("fromProto: validatorSet proposer error: %w", err)
+		}
+	}
 
 	// NOTE: We can't trust the total voting power given to us by other peers. If someone were to
 	// inject a non-zeo value that wasn't the correct voting power we could assume a wrong total
@@ -1165,12 +1166,12 @@ func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 	// so we don't have to do this
 	vals.TotalVotingPower()
 
-	thresholdPublicKey, err := cryptoenc.PubKeyFromProto(vp.ThresholdPublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("fromProto: thresholdPublicKey error: %w", err)
+	if vp.ThresholdPublicKey.Size() > 0 {
+		vals.ThresholdPublicKey, err = cryptoenc.PubKeyFromProto(vp.ThresholdPublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("fromProto: thresholdPublicKey error: %w", err)
+		}
 	}
-
-	vals.ThresholdPublicKey = thresholdPublicKey
 
 	vals.QuorumType = btcjson.LLMQType(vp.QuorumType)
 
