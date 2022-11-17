@@ -497,7 +497,7 @@ func (bs *BlockStore) saveBlockToBatch(batch dbm.Batch, block *types.Block, bloc
 		bs.saveBlockPart(height, i, part, batch)
 	}
 
-	blockMeta := types.NewBlockMeta(block, blockParts)
+	blockMeta := types.NewBlockMeta(block, blockParts, seenCommit.Round)
 	pbm := blockMeta.ToProto()
 	if pbm == nil {
 		return errors.New("nil blockmeta")

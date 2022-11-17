@@ -14,13 +14,14 @@ type BlockMeta struct {
 	BlockSize int     `json:"block_size,string"`
 	Header    Header  `json:"header"`
 	NumTxs    int     `json:"num_txs,string"`
+	Round     int32   `json:"round,string"`
 
 	// dash fields
 	HasCoreChainLock bool `json:"has_core_chain_lock"`
 }
 
 // NewBlockMeta returns a new BlockMeta.
-func NewBlockMeta(block *Block, blockParts *PartSet) *BlockMeta {
+func NewBlockMeta(block *Block, blockParts *PartSet, round int32) *BlockMeta {
 	blockID := block.BlockID(blockParts)
 
 	return &BlockMeta{
@@ -29,6 +30,7 @@ func NewBlockMeta(block *Block, blockParts *PartSet) *BlockMeta {
 		Header:           block.Header,
 		HasCoreChainLock: block.CoreChainLock != nil,
 		NumTxs:           len(block.Data.Txs),
+		Round:            round,
 	}
 }
 
@@ -43,6 +45,7 @@ func (bm *BlockMeta) ToProto() *tmproto.BlockMeta {
 		Header:           *bm.Header.ToProto(),
 		HasCoreChainLock: bm.HasCoreChainLock,
 		NumTxs:           int64(bm.NumTxs),
+		Round:            bm.Round,
 	}
 	return pb
 }
@@ -69,6 +72,7 @@ func BlockMetaFromProto(pb *tmproto.BlockMeta) (*BlockMeta, error) {
 	bm.Header = h
 	bm.HasCoreChainLock = pb.HasCoreChainLock
 	bm.NumTxs = int(pb.NumTxs)
+	bm.Round = pb.Round
 
 	return bm, bm.ValidateBasic()
 }

@@ -34,7 +34,7 @@ func MakeBlocks(ctx context.Context, t *testing.T, n int, state *sm.State, privV
 		blocks = append(blocks, block)
 
 		prevBlock = block
-		prevBlockMeta = types.NewBlockMeta(block, parts)
+		prevBlockMeta = types.NewBlockMeta(block, parts, 0)
 
 		// update state
 		appHash := make([]byte, crypto.DefaultAppHashSize)
