@@ -513,7 +513,7 @@ OUTER_LOOP:
 					time.Sleep(r.state.config.PeerGossipSleepDuration)
 					return
 				}
-				if err := r.sendProposalBlockPart(ctx, chans.data, ps, part, prs.Height, prs.Round); err != nil {
+				if err := r.sendProposalBlockPart(ctx, chans.data, ps, part, rs.Height, rs.Round); err != nil {
 					logger.Error("cannot send proposal block part to the peer", "error", err)
 					time.Sleep(r.state.config.PeerGossipSleepDuration)
 				}
