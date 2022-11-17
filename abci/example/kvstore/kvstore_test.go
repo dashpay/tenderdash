@@ -20,7 +20,8 @@ import (
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
-	types1 "github.com/tendermint/tendermint/proto/tendermint/types"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	tmtypes "github.com/tendermint/tendermint/types"
 	"github.com/tendermint/tendermint/version"
 )
 
@@ -42,11 +43,8 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 	require.Equal(t, 1, len(respPrep.TxResults))
 	require.False(t, respPrep.TxResults[0].IsErr(), respPrep.TxResults[0].Log)
 
-	reqFin := &types.RequestFinalizeBlock{
-		Txs:     [][]byte{tx},
-		AppHash: respPrep.AppHash,
-		Height:  height,
-	}
+	reqFin := &types.RequestFinalizeBlock{Height: height}
+	reqFin.Block, reqFin.BlockID = makeBlock(t, height, [][]byte{tx}, respPrep.AppHash)
 	respFin, err := app.FinalizeBlock(ctx, reqFin)
 	require.NoError(t, err)
 	require.Equal(t, 1, len(respFin.Events))
@@ -179,22 +177,22 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 func TestConsensusParamsUpdate(t *testing.T) {
 	const genesisHeight = int64(100)
 	type testCase struct {
-		ConsParamUpdates *types1.ConsensusParams
+		ConsParamUpdates *tmproto.ConsensusParams
 	}
 	testCases := map[int64]testCase{
 		genesisHeight: {
-			ConsParamUpdates: &types1.ConsensusParams{
-				Abci: &types1.ABCIParams{RecheckTx: true},
+			ConsParamUpdates: &tmproto.ConsensusParams{
+				Abci: &tmproto.ABCIParams{RecheckTx: true},
 			},
 		},
 		genesisHeight + 3: {
-			ConsParamUpdates: &types1.ConsensusParams{
-				Abci: &types1.ABCIParams{RecheckTx: false},
+			ConsParamUpdates: &tmproto.ConsensusParams{
+				Abci: &tmproto.ABCIParams{RecheckTx: false},
 			},
 		},
 		genesisHeight + 4: {
-			ConsParamUpdates: &types1.ConsensusParams{
-				Version: &types1.VersionParams{
+			ConsParamUpdates: &tmproto.ConsensusParams{
+				Version: &tmproto.VersionParams{
 					AppVersion: 123,
 				},
 			},
@@ -275,12 +273,9 @@ func makeApplyBlock(
 	require.NotZero(t, respProcessProposal)
 	require.Equal(t, types.ResponseProcessProposal_ACCEPT, respProcessProposal.Status)
 
-	resFinalizeBlock, err := kvstore.FinalizeBlock(ctx, &types.RequestFinalizeBlock{
-		Hash:    hash,
-		Height:  height,
-		Txs:     txs,
-		AppHash: respProcessProposal.AppHash,
-	})
+	rfb := &types.RequestFinalizeBlock{Hash: hash, Height: height}
+	rfb.Block, rfb.BlockID = makeBlock(t, height, txs, respProcessProposal.AppHash)
+	resFinalizeBlock, err := kvstore.FinalizeBlock(ctx, rfb)
 	require.NoError(t, err)
 	require.Len(t, resFinalizeBlock.Events, 1)
 
@@ -401,11 +396,9 @@ func testClient(ctx context.Context, t *testing.T, app abciclient.Client, height
 	require.Equal(t, 1, len(rpp.TxResults))
 	require.False(t, rpp.TxResults[0].IsErr())
 
-	ar, err := app.FinalizeBlock(ctx, &types.RequestFinalizeBlock{
-		Txs:     [][]byte{tx},
-		AppHash: rpp.AppHash,
-		Height:  height,
-	})
+	rfb := &types.RequestFinalizeBlock{Height: height}
+	rfb.Block, rfb.BlockID = makeBlock(t, height, [][]byte{tx}, rpp.AppHash)
+	ar, err := app.FinalizeBlock(ctx, rfb)
 	require.NoError(t, err)
 	require.Zero(t, ar.RetainHeight)
 	require.Len(t, ar.Events, 1)
@@ -539,4 +532,22 @@ func assertRespInfo(t *testing.T, expectHeight int64, expectAppHash tmbytes.HexB
 	}
 
 	assert.Equal(t, expected, actual, msgs...)
+}
+
+func makeBlock(t *testing.T, height int64, txs [][]byte, appHash []byte) (*tmproto.Block, *tmproto.BlockID) {
+	block := tmtypes.MakeBlock(height, bytes2Txs(txs), &tmtypes.Commit{}, nil)
+	block.Header.AppHash = appHash
+	pbBlock, err := block.ToProto()
+	require.NoError(t, err)
+	blockID := block.BlockID(nil)
+	pbBlockID := blockID.ToProto()
+	return pbBlock, &pbBlockID
+}
+
+func bytes2Txs(items [][]byte) []tmtypes.Tx {
+	txs := make([]tmtypes.Tx, len(items))
+	for i, item := range items {
+		txs[i] = item
+	}
+	return txs
 }

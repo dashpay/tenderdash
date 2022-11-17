@@ -407,7 +407,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		return state, ErrInvalidBlock{err}
 	}
 	startTime := time.Now().UnixNano()
-	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, commit, blockExec.logger)
+	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, blockID, block, commit, blockExec.logger)
 	if err != nil {
 		return state, ErrInvalidBlock{err}
 	}
@@ -620,33 +620,31 @@ func (blockExec *BlockExecutor) SetAppHashSize(size int) {
 func execBlock(
 	ctx context.Context,
 	appConn abciclient.Client,
+	blockID types.BlockID,
 	block *types.Block,
 	commit *types.Commit,
 	logger log.Logger,
 ) (*abci.ResponseFinalizeBlock, error) {
-	version := block.Header.Version.ToProto()
-
 	blockHash := block.Hash()
-	txs := block.Txs.ToSliceOfBytes()
 	evidence := block.Evidence.ToABCI()
-
+	protoBlock, err := block.ToProto()
+	if err != nil {
+		return nil, err
+	}
+	protoBlockID := blockID.ToProto()
+	if err != nil {
+		return nil, err
+	}
 	responseFinalizeBlock, err := appConn.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
 			Hash:        blockHash,
 			Height:      block.Height,
 			Round:       commit.Round,
-			Time:        block.Time,
-			Txs:         txs,
 			Commit:      commit.ToCommitInfo(),
 			Misbehavior: evidence,
-
-			// Dash's fields
-			CoreChainLockedHeight: block.CoreChainLockedHeight,
-			ProposerProTxHash:     block.ProposerProTxHash,
-			ProposedAppVersion:    block.ProposedAppVersion,
-			Version:               &version,
-			AppHash:               block.AppHash.Copy(),
+			Block:       protoBlock,
+			BlockID:     &protoBlockID,
 		},
 	)
 	if err != nil {
@@ -671,7 +669,8 @@ func ExecReplayedCommitBlock(
 	commit *types.Commit,
 	logger log.Logger,
 ) (*abci.ResponseFinalizeBlock, error) {
-	fbResp, err := execBlockWithoutState(ctx, appConn, block, commit, logger)
+	blockID := block.BlockID(nil)
+	fbResp, err := execBlockWithoutState(ctx, appConn, blockID, block, commit, logger)
 	if err != nil {
 		return nil, err
 	}
@@ -682,11 +681,12 @@ func ExecReplayedCommitBlock(
 func execBlockWithoutState(
 	ctx context.Context,
 	appConn abciclient.Client,
+	blockID types.BlockID,
 	block *types.Block,
 	commit *types.Commit,
 	logger log.Logger,
 ) (*abci.ResponseFinalizeBlock, error) {
-	respFinalizeBlock, err := execBlock(ctx, appConn, block, commit, logger)
+	respFinalizeBlock, err := execBlock(ctx, appConn, blockID, block, commit, logger)
 	if err != nil {
 		logger.Error("executing block", "err", err)
 		return respFinalizeBlock, err
