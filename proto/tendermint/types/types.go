@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"fmt"
+
 	"github.com/gogo/protobuf/types"
 
 	"github.com/tendermint/tendermint/crypto"
@@ -131,14 +132,14 @@ func (s StateID) Copy() StateID {
 	return copied
 }
 
-func (stateID StateID) String() string {
+func (s StateID) String() string {
 	return fmt.Sprintf(
 		`v%d:h=%d,cl=%d,ah=%s,t=%s`,
-		stateID.AppVersion,
-		stateID.Height,
-		stateID.CoreChainLockedHeight,
-		tmbytes.HexBytes(stateID.AppHash).ShortString(),
-		stateID.Time.String(),
+		s.AppVersion,
+		s.Height,
+		s.CoreChainLockedHeight,
+		tmbytes.HexBytes(s.AppHash).ShortString(),
+		s.Time.String(),
 	)
 }
 
