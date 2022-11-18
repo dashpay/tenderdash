@@ -6,6 +6,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/internal/proxy"
 	"github.com/tendermint/tendermint/libs/bytes"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/coretypes"
 	"github.com/tendermint/tendermint/types"
@@ -68,7 +69,13 @@ func (a ABCIApp) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*coretypes
 	if err != nil {
 		return nil, err
 	}
-	_, err = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Height: 1, AppHash: propResp.AppHash, Txs: [][]byte{tx}})
+	_, err = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{
+		Height: 1,
+		Block: &tmproto.Block{
+			Header: tmproto.Header{AppHash: propResp.AppHash},
+			Data:   tmproto.Data{Txs: [][]byte{tx}},
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
@@ -87,7 +94,11 @@ func (a ABCIApp) BroadcastTxAsync(ctx context.Context, tx types.Tx) (*coretypes.
 
 	// and this gets written in a background thread...
 	if !c.IsErr() {
-		go func() { _, _ = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Txs: [][]byte{tx}}) }()
+		go func() {
+			_, _ = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{
+				Block: &tmproto.Block{Data: tmproto.Data{Txs: [][]byte{tx}}},
+			})
+		}()
 	}
 	return &coretypes.ResultBroadcastTx{
 		Code:      c.Code,
@@ -109,7 +120,13 @@ func (a ABCIApp) BroadcastTx(ctx context.Context, tx types.Tx) (*coretypes.Resul
 
 	// and this gets written in a background thread...
 	if !c.IsErr() {
-		go func() { _, _ = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Txs: [][]byte{tx}}) }()
+		go func() {
+			_, _ = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{
+				Block: &tmproto.Block{
+					Data: tmproto.Data{Txs: [][]byte{tx}},
+				},
+			})
+		}()
 	}
 	return &coretypes.ResultBroadcastTx{
 		Code:      c.Code,

@@ -10,6 +10,7 @@ import (
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/llmq"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 func InitChain(ctx context.Context, client abciclient.Client) error {
@@ -78,7 +79,11 @@ func ProcessProposal(
 }
 
 func FinalizeBlock(ctx context.Context, client abciclient.Client, txBytes [][]byte) error {
-	_, err := client.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txBytes})
+	_, err := client.FinalizeBlock(ctx, &types.RequestFinalizeBlock{
+		Block: &tmproto.Block{
+			Data: tmproto.Data{Txs: txBytes},
+		},
+	})
 	if err != nil {
 		return err
 	}

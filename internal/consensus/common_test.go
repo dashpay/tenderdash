@@ -108,7 +108,6 @@ func (vs *validatorStub) signVote(
 	voteType tmproto.SignedMsgType,
 	chainID string,
 	blockID types.BlockID,
-	appHash []byte,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	voteExtensions types.VoteExtensions) (*types.Vote, error) {
@@ -157,14 +156,13 @@ func signVote(
 	voteType tmproto.SignedMsgType,
 	chainID string,
 	blockID types.BlockID,
-	appHash []byte,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash) *types.Vote {
 	exts := make(types.VoteExtensions)
 	if voteType == tmproto.PrecommitType && !blockID.IsNil() {
 		exts.Add(tmproto.VoteExtensionType_DEFAULT, []byte("extension"))
 	}
-	v, err := vs.signVote(ctx, voteType, chainID, blockID, appHash, quorumType, quorumHash, exts)
+	v, err := vs.signVote(ctx, voteType, chainID, blockID, quorumType, quorumHash, exts)
 	require.NoError(t, err, "failed to sign vote")
 
 	vs.lastVote = v
@@ -185,7 +183,7 @@ func signVotes(
 ) []*types.Vote {
 	votes := make([]*types.Vote, len(vss))
 	for i, vs := range vss {
-		votes[i] = signVote(ctx, t, vs, voteType, chainID, blockID, appHash, quorumType, quorumHash)
+		votes[i] = signVote(ctx, t, vs, voteType, chainID, blockID, quorumType, quorumHash)
 	}
 	return votes
 }

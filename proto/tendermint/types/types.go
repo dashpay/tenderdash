@@ -1,7 +1,7 @@
 package types
 
 import (
-	bytes "bytes"
+	"bytes"
 	"fmt"
 
 	"github.com/gogo/protobuf/types"
@@ -46,11 +46,7 @@ func (m *Vote) VoteExtensionsToMap() VoteExtensions {
 	if m == nil {
 		return nil
 	}
-	res := make(map[VoteExtensionType][]*VoteExtension)
-	for _, ext := range m.VoteExtensions {
-		res[ext.Type] = append(res[ext.Type], ext)
-	}
-	return res
+	return VoteExtensionsToMap(m.VoteExtensions)
 }
 
 // SignBytes represent data to be signed for the given vote.
@@ -136,14 +132,14 @@ func (s StateID) Copy() StateID {
 	return copied
 }
 
-func (stateID StateID) String() string {
+func (s StateID) String() string {
 	return fmt.Sprintf(
 		`v%d:h=%d,cl=%d,ah=%s,t=%s`,
-		stateID.AppVersion,
-		stateID.Height,
-		stateID.CoreChainLockedHeight,
-		tmbytes.HexBytes(stateID.AppHash).ShortString(),
-		stateID.Time.String(),
+		s.AppVersion,
+		s.Height,
+		s.CoreChainLockedHeight,
+		tmbytes.HexBytes(s.AppHash).ShortString(),
+		s.Time.String(),
 	)
 }
 
@@ -176,4 +172,12 @@ func (s StateID) ValidateBasic() error {
 	}
 
 	return nil
+}
+
+func VoteExtensionsToMap(voteExtensions []*VoteExtension) VoteExtensions {
+	res := make(map[VoteExtensionType][]*VoteExtension)
+	for _, ext := range voteExtensions {
+		res[ext.Type] = append(res[ext.Type], ext)
+	}
+	return res
 }

@@ -81,12 +81,17 @@ func MakeQuorumSigns(
 
 // MakeBlockSignItem creates SignItem struct for a block
 func MakeBlockSignItem(chainID string, vote *types.Vote, quorumType btcjson.LLMQType, quorumHash []byte) SignItem {
-	reqID := voteHeightRoundRequestID("dpbvote", vote.Height, vote.Round)
+	reqID := BlockRequestID(vote.Height, vote.Round)
 	raw, err := vote.SignBytes(chainID)
 	if err != nil {
 		panic(fmt.Errorf("block sign item: %w", err))
 	}
 	return NewSignItem(quorumType, quorumHash, reqID, raw)
+}
+
+// BlockRequestID returns a block request ID
+func BlockRequestID(height int64, round int32) []byte {
+	return heightRoundRequestID("dpbvote", height, round)
 }
 
 // MakeVoteExtensionSignItems  creates a list SignItem structs for a vote extensions
@@ -104,7 +109,7 @@ func MakeVoteExtensionSignItems(
 		return nil, nil
 	}
 	items := make(map[types.VoteExtensionType][]SignItem)
-	reqID := VoteExtensionRequestID(protoVote)
+	reqID := VoteExtensionRequestID(protoVote.Height, protoVote.Round)
 	protoExtensionsMap := protoVote.VoteExtensionsToMap()
 	for t, exts := range protoExtensionsMap {
 		if items[t] == nil && len(exts) > 0 {
