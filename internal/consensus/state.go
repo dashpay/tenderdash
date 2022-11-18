@@ -2101,15 +2101,6 @@ func (cs *State) tryFinalizeCommit(ctx context.Context, height int64) {
 		return
 	}
 
-	if cs.CurrentRoundState.IsEmpty() {
-		var err error
-		// TODO: Check if using cs.Round here is correct
-		cs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.Round, cs.state, true)
-		if err != nil {
-			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
-		}
-	}
-
 	if !cs.ProposalBlock.HashesTo(blockID.Hash) {
 		// TODO: this happens every time if we're not a validator (ugly logs)
 		// TODO: ^^ wait, why does it matter that we're a validator?
@@ -2118,6 +2109,15 @@ func (cs *State) tryFinalizeCommit(ctx context.Context, height int64) {
 			"commit_block", blockID.Hash,
 		)
 		return
+	}
+
+	if cs.CurrentRoundState.IsEmpty() {
+		var err error
+		// TODO: Check if using cs.Round here is correct
+		cs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.Round, cs.state, true)
+		if err != nil {
+			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
+		}
 	}
 
 	cs.finalizeCommit(ctx, height)
