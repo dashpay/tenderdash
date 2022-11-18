@@ -251,10 +251,14 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 			},
 		}
 	}
+	vsu := app.getValidatorSetUpdate(app.initialHeight, 0)
+	if vsu == nil {
+		return nil, errors.New("validator-set update cannot be nil")
+	}
 	resp := &abci.ResponseInitChain{
 		AppHash:                 app.LastCommittedState.GetAppHash(),
 		ConsensusParams:         &consensusParams,
-		ValidatorSetUpdate:      app.validatorSetUpdates[app.initialHeight],
+		ValidatorSetUpdate:      *vsu,
 		InitialCoreHeight:       app.initialCoreLockHeight,
 		NextCoreChainLockUpdate: coreChainLock,
 	}
@@ -700,12 +704,16 @@ func (app *Application) getConsensusParamsUpdate(height int64) *types1.Consensus
 
 // ---------------------------------------------
 // getValidatorSetUpdate returns validator update at some `height` that will be applied at `height+1`.
-func (app *Application) getValidatorSetUpdate(height int64) *abci.ValidatorSetUpdate {
-	vsu, ok := app.validatorSetUpdates[height]
-	if !ok {
-		return nil
+func (app *Application) getValidatorSetUpdate(height int64, fallbacks ...int64) *abci.ValidatorSetUpdate {
+	heights := append([]int64{height}, fallbacks...)
+	for _, h := range heights {
+		vsu, ok := app.validatorSetUpdates[h]
+		if !ok {
+			continue
+		}
+		return proto.Clone(&vsu).(*abci.ValidatorSetUpdate)
 	}
-	return proto.Clone(&vsu).(*abci.ValidatorSetUpdate)
+	return nil
 }
 
 func (app *Application) chainLockUpdate(height int64) (*types1.CoreChainLock, error) {

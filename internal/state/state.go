@@ -239,18 +239,16 @@ func FromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 	state.LastCoreChainLockedBlockHeight = pb.LastCoreChainLockedBlockHeight
 
 	state.Validators, err = types.ValidatorSetFromProto(pb.Validators)
-	if err != nil && !errors.Is(err, types.ErrNilValidatorSet) {
+	if err != nil && (!state.IsInitialHeight() || err != types.ErrNilValidatorSet) {
 		return nil, err
 	}
 
-	if state.LastBlockHeight >= 1 { // At Block 1 LastValidators is nil
-		lVals, err := types.ValidatorSetFromProto(pb.LastValidators)
+	state.LastValidators = types.NewEmptyValidatorSet()
+	if !state.IsInitialHeight() { // At Block initial-height LastValidators is nil
+		state.LastValidators, err = types.ValidatorSetFromProto(pb.LastValidators)
 		if err != nil {
 			return nil, err
 		}
-		state.LastValidators = lVals
-	} else {
-		state.LastValidators = types.NewEmptyValidatorSet()
 	}
 
 	state.LastHeightValidatorsChanged = pb.LastHeightValidatorsChanged
@@ -309,6 +307,10 @@ func (state State) ValidatorsAtHeight(height int64) *types.ValidatorSet {
 func (state State) NewStateChangeset(ctx context.Context, rp RoundParams) (CurrentRoundState, error) {
 	proTxHash, _ := dash.ProTxHashFromContext(ctx)
 	return NewCurrentRoundState(proTxHash, rp, state)
+}
+
+func (state State) IsInitialHeight() bool {
+	return state.LastBlockHeight < state.InitialHeight
 }
 
 //------------------------------------------------------------------------
