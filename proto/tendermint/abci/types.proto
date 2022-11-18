@@ -5,6 +5,8 @@ option go_package = "github.com/tendermint/tendermint/abci/types";
 
 import "tendermint/crypto/proof.proto";
 import "tendermint/types/dash.proto";
+import "tendermint/types/block.proto";
+import "tendermint/types/types.proto";
 import "tendermint/crypto/keys.proto";
 import "tendermint/types/params.proto";
 import "tendermint/version/types.proto";
@@ -191,32 +193,20 @@ message RequestVerifyVoteExtension {
 }
 
 message RequestFinalizeBlock {
-  // List of transactions committed as part of the block.
-  repeated bytes txs = 1;
   // Info about the current commit
-  CommitInfo commit = 2 [(gogoproto.nullable) = false];
+  CommitInfo commit = 1 [(gogoproto.nullable) = false];
   // List of information about validators that acted incorrectly.
-  repeated Misbehavior misbehavior = 3 [(gogoproto.nullable) = false];
+  repeated Misbehavior misbehavior = 2 [(gogoproto.nullable) = false];
   // The block header's hash. Present for convenience (can be derived from the block header).
-  bytes hash = 4;
+  bytes hash = 3;
   // The height of the finalized block.
-  int64 height = 5;
+  int64 height = 4;
   // Round number for the block
-  int32 round = 8;
-  // Timestamp included in the finalized block.
-  google.protobuf.Timestamp time = 6 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-  // Merkle root of the next validator set.
-  bytes next_validators_hash = 7;
-  // Core chain lock height to be used when signing this block.
-  uint32 core_chain_locked_height = 100;
-  // ProTxHash of the original proposer of the block.
-  bytes proposer_pro_tx_hash = 101;
-  // Proposer's latest available app protocol version.
-  uint64 proposed_app_version = 102;
-  // App and block version used to generate the block.
-  tendermint.version.Consensus version = 103;
-  // The Merkle root hash of the application state after committing the block.
-  bytes app_hash = 104;
+  int32 round = 5;
+  // The block that was finalized
+  tendermint.types.Block block = 6;
+  // The block ID that was finalized
+  tendermint.types.BlockID block_id = 7 [(gogoproto.customname) = "BlockID"];
 }
 
 //----------------------------------------

@@ -624,29 +624,27 @@ func execBlock(
 	commit *types.Commit,
 	logger log.Logger,
 ) (*abci.ResponseFinalizeBlock, error) {
-	version := block.Header.Version.ToProto()
-
 	blockHash := block.Hash()
-	txs := block.Txs.ToSliceOfBytes()
 	evidence := block.Evidence.ToABCI()
-
+	protoBlock, err := block.ToProto()
+	if err != nil {
+		return nil, err
+	}
+	blockID := block.BlockID(nil)
+	protoBlockID := blockID.ToProto()
+	if err != nil {
+		return nil, err
+	}
 	responseFinalizeBlock, err := appConn.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
 			Hash:        blockHash,
 			Height:      block.Height,
 			Round:       commit.Round,
-			Time:        block.Time,
-			Txs:         txs,
 			Commit:      commit.ToCommitInfo(),
 			Misbehavior: evidence,
-
-			// Dash's fields
-			CoreChainLockedHeight: block.CoreChainLockedHeight,
-			ProposerProTxHash:     block.ProposerProTxHash,
-			ProposedAppVersion:    block.ProposedAppVersion,
-			Version:               &version,
-			AppHash:               block.AppHash.Copy(),
+			Block:       protoBlock,
+			BlockID:     &protoBlockID,
 		},
 	)
 	if err != nil {

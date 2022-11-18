@@ -41,22 +41,21 @@ type Application struct {
 }
 
 // NewApplication creates the application.
-func NewApplication(cfg kvstore.Config) (*Application, error) {
+func NewApplication(cfg kvstore.Config, opts ...kvstore.OptFunc) (*Application, error) {
 	logger, err := log.NewDefaultLogger(log.LogFormatPlain, log.LogLevelDebug)
 	if err != nil {
 		return nil, err
 	}
-
+	opts = append([]kvstore.OptFunc{
+		kvstore.WithLogger(logger.With("module", "kvstore")),
+		kvstore.WithVerifyTxFunc(verifyTx),
+		kvstore.WithPrepareTxsFunc(prepareTxs),
+	}, opts...)
 	app := Application{
 		logger: logger.With("module", "kvstore"),
 		cfg:    &cfg,
 	}
-	app.Application, err = kvstore.NewPersistentApp(
-		cfg,
-		kvstore.WithLogger(logger.With("module", "kvstore")),
-		kvstore.WithVerifyTxFunc(verifyTx),
-		kvstore.WithPrepareTxsFunc(prepareTxs),
-	)
+	app.Application, err = kvstore.NewPersistentApp(cfg, opts...)
 	if err != nil {
 		return nil, err
 	}

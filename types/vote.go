@@ -127,8 +127,8 @@ func VoteExtensionSignBytes(chainID string, height int64, round int32, ext *tmpr
 }
 
 // VoteExtensionRequestID returns vote extension request ID
-func VoteExtensionRequestID(vote *tmproto.Vote) []byte {
-	return voteHeightRoundRequestID("dpevote", vote.Height, vote.Round)
+func VoteExtensionRequestID(height int64, round int32) []byte {
+	return heightRoundRequestID("dpevote", height, round)
 }
 
 // VoteBlockSignID returns signID that should be signed for the block
@@ -415,10 +415,10 @@ func (vote *Vote) HasVoteMessage() *tmcons.HasVote {
 }
 
 func VoteBlockRequestIDProto(vote *tmproto.Vote) []byte {
-	return voteHeightRoundRequestID("dpbvote", vote.Height, vote.Round)
+	return heightRoundRequestID("dpbvote", vote.Height, vote.Round)
 }
 
-func voteHeightRoundRequestID(prefix string, height int64, round int32) []byte {
+func heightRoundRequestID(prefix string, height int64, round int32) []byte {
 	reqID := []byte(prefix)
 	heightBytes := make([]byte, 8)
 	binary.LittleEndian.PutUint64(heightBytes, uint64(height))

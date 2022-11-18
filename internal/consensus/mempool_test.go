@@ -20,6 +20,7 @@ import (
 	"github.com/tendermint/tendermint/internal/store"
 	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/log"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -203,7 +204,10 @@ func TestMempoolRmBadTx(t *testing.T) {
 		Txs: [][]byte{txBytes},
 	})
 	require.NoError(t, err)
-	resFinalize, err := app.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Txs: [][]byte{txBytes}})
+	pbBlock := &tmproto.Block{
+		Data: tmproto.Data{Txs: [][]byte{txBytes}},
+	}
+	resFinalize, err := app.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Block: pbBlock})
 	require.NoError(t, err)
 	assert.False(t, resProcess.TxResults[0].IsErr(), fmt.Sprintf("expected no error. got %v", resFinalize))
 
