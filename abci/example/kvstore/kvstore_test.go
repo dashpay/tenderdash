@@ -504,10 +504,12 @@ func TestSnapshots(t *testing.T) {
 }
 
 func newKvApp(ctx context.Context, t *testing.T, genesisHeight int64, opts ...OptFunc) *Application {
-	opts = append(opts, WithValidatorSetUpdates(map[int64]types.ValidatorSetUpdate{
-		genesisHeight: RandValidatorSetUpdate(1),
-	}))
-	app, err := NewMemoryApp(opts...)
+	defaultOpts := []OptFunc{
+		WithValidatorSetUpdates(map[int64]types.ValidatorSetUpdate{
+			genesisHeight: RandValidatorSetUpdate(1),
+		}),
+	}
+	app, err := NewMemoryApp(append(defaultOpts, opts...)...)
 	require.NoError(t, err)
 	t.Cleanup(func() { app.Close() })
 
