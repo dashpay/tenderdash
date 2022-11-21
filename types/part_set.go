@@ -8,6 +8,8 @@ import (
 	"io"
 	"sync"
 
+	"github.com/rs/zerolog"
+
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/libs/bits"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
@@ -56,6 +58,12 @@ func (part *Part) StringIndented(indent string) string {
 		indent, tmbytes.Fingerprint(part.Bytes),
 		indent, part.Proof.StringIndented(indent+"  "),
 		indent)
+}
+
+func (part *Part) MarshalZerologObject(e *zerolog.Event) {
+	e.Uint32("index", part.Index)
+	e.Str("bytes", part.Bytes.ShortString())
+	e.Str("proof", part.Proof.String())
 }
 
 func (part *Part) ToProto() (*tmproto.Part, error) {
