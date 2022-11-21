@@ -51,7 +51,15 @@ jobs:
       - name: Emit ${{ matrix.testnet }} logs on failure
         if: ${{ failure() }}
         working-directory: test/e2e
-        run: ./build/runner -f networks/${{ matrix.testnet }}.toml logs
+        run: ./build/runner -f networks/${{ matrix.testnet }}.toml logs > ${{ matrix.testnet }}.log
+
+      - name: Upload ${{ matrix.testnet }} logs
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v3
+        with:
+          name: ${{ matrix.testnet }}.log
+          path: test/e2e/${{ matrix.testnet }}.log
+          retention-days: 7
 
       - name: Cleanup ${{ matrix.testnet }} configuration
         working-directory: test/e2e
