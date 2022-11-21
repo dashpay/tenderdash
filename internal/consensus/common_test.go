@@ -707,6 +707,7 @@ func ensureRelock(t *testing.T, relockCh <-chan tmpubsub.Message, height int64, 
 }
 
 func ensureProposal(t *testing.T, proposalCh <-chan tmpubsub.Message, height int64, round int32, propID types.BlockID) {
+	t.Helper()
 	ensureProposalWithTimeout(t, proposalCh, height, round, &propID, ensureTimeout)
 }
 
