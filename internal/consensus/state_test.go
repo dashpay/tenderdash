@@ -647,12 +647,13 @@ func TestStateLock_NoPOL(t *testing.T) {
 
 	// cs1 is locked on a block at this point, so we must generate a new consensus
 	// state to force a new proposal block to be generated.
+	assert.NotNil(t, cs1.LockedBlock)
 	cs2, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 2})
-
 	// Since the quorum hash is also part of the sign ID we must make sure it's the same
-	cs2.LastValidators.QuorumHash = cs1.LastValidators.QuorumHash
-	_, valSet := cs1.GetValidatorSet()
-	cs2.Validators.QuorumHash = valSet.QuorumHash
+	cs2.state.Validators = cs1.state.Validators.Copy()
+	cs2.privValidator = vs2
+	cs2.privValidatorProTxHash, err = vs2.PrivValidator.GetProTxHash(ctx)
+	require.NoError(t, err)
 
 	// before we time out into new round, set next proposal block
 	prop, propBlock := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round+1)
@@ -667,7 +668,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	/*
 		Round4 (vs2, C) // B C // B C
 	*/
-
+	t.Logf("starting round %d/%d\n", height, round)
 	// now we're on a new round and not the proposer
 	// so set the proposal block
 	bps3, err := propBlock.MakePartSet(partSize)
