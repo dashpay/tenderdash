@@ -58,9 +58,6 @@ func init() {
 
 // main is the binary entrypoint.
 func main() {
-	// FIXME: just to test e2e
-	time.AfterFunc(time.Second*30, func() { os.Exit(1) })
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
