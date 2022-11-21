@@ -75,11 +75,15 @@ func TestPrepareFinalize(t *testing.T) {
 
 	hash := crypto.Checksum(bz.Bytes())
 	reqFinalized := abci.RequestFinalizeBlock{
-		Txs:     txs,
-		AppHash: respPrep.AppHash,
-		Height:  height,
-		Hash:    hash,
-		Time:    now,
+		Height: height,
+		Hash:   hash,
+		Block: &tmtypes.Block{
+			Header: tmtypes.Header{
+				AppHash: respPrep.AppHash,
+				Time:    now,
+			},
+			Data: tmtypes.Data{Txs: txs},
+		},
 	}
 
 	_, err = app.FinalizeBlock(ctx, &reqFinalized)
