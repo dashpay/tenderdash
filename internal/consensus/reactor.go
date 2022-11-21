@@ -402,7 +402,7 @@ func (r *Reactor) getRoundState() *cstypes.RoundState {
 
 func (r *Reactor) gossipDataForCatchup(ctx context.Context, rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState, chans channelBundle) {
 	height := prs.Height
-	logger := r.logger.With("height", height).With("peer", ps.peerID)
+	logger := r.logger.With("height", height, "peer", ps.peerID)
 
 	if index, ok := prs.ProposalBlockParts.Not().PickRandom(); ok {
 		// ensure that the peer's PartSetHeader is correct
@@ -410,7 +410,6 @@ func (r *Reactor) gossipDataForCatchup(ctx context.Context, rs *cstypes.RoundSta
 		if blockMeta == nil {
 			logger.Error(
 				"failed to load block meta",
-				"height", height,
 				"our_height", rs.Height,
 				"blockstore_base", r.state.blockStore.Base(),
 				"blockstore_height", r.state.blockStore.Height(),
