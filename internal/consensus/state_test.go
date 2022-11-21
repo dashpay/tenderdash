@@ -211,7 +211,6 @@ func TestStateBadProposal(t *testing.T) {
 
 	partSize := types.BlockPartSizeBytes
 
-	// proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
 	voteCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryVote)
 
 	propBlock, err := cs1.createProposalBlock(ctx, round) // changeProposer(t, cs1, vs2)
@@ -241,6 +240,7 @@ func TestStateBadProposal(t *testing.T) {
 	// start the machine
 	startTestRound(ctx, cs1, height, round)
 
+	// proposal will not make it through validation, so we don't ensureProposal() here
 	// wait for prevote
 	ensurePrevoteMatch(t, voteCh, height, round, nil)
 

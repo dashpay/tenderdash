@@ -402,7 +402,6 @@ func (r *Reactor) getRoundState() *cstypes.RoundState {
 
 func (r *Reactor) gossipDataForCatchup(ctx context.Context, rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState, chans channelBundle) {
 	height := prs.Height
-
 	logger := r.logger.With("height", height).With("peer", ps.peerID)
 
 	if index, ok := prs.ProposalBlockParts.Not().PickRandom(); ok {
@@ -439,12 +438,6 @@ func (r *Reactor) gossipDataForCatchup(ctx context.Context, rs *cstypes.RoundSta
 				"block_part_set_header", blockMeta.BlockID.PartSetHeader,
 				"peer_block_part_set_header", prs.ProposalBlockPartSetHeader,
 			)
-
-			time.Sleep(r.state.config.PeerGossipSleepDuration)
-			return
-		}
-		if err := part.Proof.Verify(prs.ProposalBlockPartSetHeader.Hash, part.Bytes); err != nil {
-			logger.Error("part proof verification failed when gossiping for catchup", "part", part, "partset_header", prs.ProposalBlockPartSetHeader, "error", err)
 			time.Sleep(r.state.config.PeerGossipSleepDuration)
 			return
 		}
@@ -507,12 +500,6 @@ OUTER_LOOP:
 			}
 			if index, ok := rs.ProposalBlockParts.BitArray().Sub(prs.ProposalBlockParts.Copy()).PickRandom(); ok {
 				part := rs.ProposalBlockParts.GetPart(index)
-
-				if err := part.Proof.Verify(rs.ProposalBlockParts.Hash(), part.Bytes); err != nil {
-					logger.Error("part proof verification failed when gossiping data", "part", part, "partset_header", prs.ProposalBlockPartSetHeader, "error", err)
-					time.Sleep(r.state.config.PeerGossipSleepDuration)
-					return
-				}
 				if err := r.sendProposalBlockPart(ctx, chans.data, ps, part, rs.Height, rs.Round); err != nil {
 					logger.Error("cannot send proposal block part to the peer", "error", err)
 					time.Sleep(r.state.config.PeerGossipSleepDuration)
