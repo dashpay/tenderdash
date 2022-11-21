@@ -1134,9 +1134,9 @@ func (blockID *BlockID) ToProto() tmproto.BlockID {
 	}
 
 	return tmproto.BlockID{
-		Hash:          blockID.Hash,
+		Hash:          blockID.Hash.Copy(),
 		PartSetHeader: blockID.PartSetHeader.ToProto(),
-		StateID:       blockID.StateID,
+		StateID:       blockID.StateID.Copy(),
 	}
 }
 

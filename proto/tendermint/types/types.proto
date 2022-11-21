@@ -193,6 +193,7 @@ message BlockMeta {
   int64  block_size = 2;
   Header header     = 3 [(gogoproto.nullable) = false];
   int64  num_txs    = 4;
+  int32  round      = 5;
 
   bool has_core_chain_lock = 100;
 }

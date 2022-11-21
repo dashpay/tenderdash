@@ -342,19 +342,13 @@ Extends a vote with application-side injection
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| txs | [bytes](#bytes) | repeated | List of transactions committed as part of the block. |
 | commit | [CommitInfo](#tendermint-abci-CommitInfo) |  | Info about the current commit |
 | misbehavior | [Misbehavior](#tendermint-abci-Misbehavior) | repeated | List of information about validators that acted incorrectly. |
 | hash | [bytes](#bytes) |  | The block header&#39;s hash. Present for convenience (can be derived from the block header). |
 | height | [int64](#int64) |  | The height of the finalized block. |
 | round | [int32](#int32) |  | Round number for the block |
-| time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp included in the finalized block. |
-| next_validators_hash | [bytes](#bytes) |  | Merkle root of the next validator set. |
-| core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
-| proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
-| proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
-| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
-| app_hash | [bytes](#bytes) |  | The Merkle root hash of the application state after committing the block. |
+| block | [tendermint.types.Block](#tendermint-types-Block) |  | The block that was finalized |
+| block_id | [tendermint.types.BlockID](#tendermint-types-BlockID) |  | The block ID that was finalized |
 
 
 
