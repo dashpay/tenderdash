@@ -703,7 +703,7 @@ func (cs *State) updateRoundStep(round int32, step cstypes.RoundStepType) {
 	}
 	// New round, so we reset current round state.
 	// It will be recreated with ProcessProposal request.
-	if round > cs.Round {
+	if round != cs.Round {
 		cs.CurrentRoundState = sm.CurrentRoundState{}
 	}
 	cs.Round = round
