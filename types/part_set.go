@@ -137,7 +137,7 @@ func (psh *PartSetHeader) ToProto() tmproto.PartSetHeader {
 
 	return tmproto.PartSetHeader{
 		Total: psh.Total,
-		Hash:  psh.Hash,
+		Hash:  psh.Hash.Copy(),
 	}
 }
 

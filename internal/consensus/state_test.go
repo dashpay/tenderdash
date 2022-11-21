@@ -211,7 +211,7 @@ func TestStateBadProposal(t *testing.T) {
 
 	partSize := types.BlockPartSizeBytes
 
-	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
+	// proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
 	voteCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryVote)
 
 	propBlock, err := cs1.createProposalBlock(ctx, round) // changeProposer(t, cs1, vs2)
@@ -221,19 +221,14 @@ func TestStateBadProposal(t *testing.T) {
 	round++
 	incrementRound(vss[1:]...)
 
-	stateHashSize := 32
-	if len(propBlock.AppHash) > 0 {
-		stateHashSize = len(propBlock.AppHash)
-	}
-	stateHash := make(tmbytes.HexBytes, stateHashSize)
-	copy(stateHash, propBlock.AppHash)
-	stateHash[0] = (stateHash[0] + 1) % 255
-	propBlock.AppHash = stateHash
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
 	blockID := propBlock.BlockID(propBlockParts)
 	proposal := types.NewProposal(vs2.Height, 1, round, -1, blockID, propBlock.Header.Time)
 	p := proposal.ToProto()
+
+	// Break the proposal
+	p.BlockID.Hash[0] = ^p.BlockID.Hash[0]
 	_, err = vs2.SignProposal(ctx, config.ChainID(), cs1.Validators.QuorumType, cs1.Validators.QuorumHash, p)
 	require.NoError(t, err)
 
@@ -245,9 +240,6 @@ func TestStateBadProposal(t *testing.T) {
 
 	// start the machine
 	startTestRound(ctx, cs1, height, round)
-
-	// wait for proposal
-	ensureProposal(t, proposalCh, height, round, blockID)
 
 	// wait for prevote
 	ensurePrevoteMatch(t, voteCh, height, round, nil)
