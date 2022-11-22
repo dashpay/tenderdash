@@ -172,7 +172,6 @@ type Reactor struct {
 	initSyncer        func() *syncer
 	requestSnaphot    func() error
 	syncer            *syncer
-	providers         map[types.NodeID]*BlockProvider
 	initStateProvider func(ctx context.Context, chainID string, initialHeight int64) error
 	stateProvider     StateProvider
 
@@ -220,7 +219,6 @@ func NewReactor(
 		stateStore:     stateStore,
 		blockStore:     blockStore,
 		peers:          newPeerList(),
-		providers:      make(map[types.NodeID]*BlockProvider),
 		metrics:        ssMetrics,
 		eventBus:       eventBus,
 		postSyncHook:   postSyncHook,
@@ -1007,9 +1005,6 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		r.peers.Remove(peerUpdate.NodeID)
 	}
 
-	r.mtx.Lock()
-	defer r.mtx.Unlock()
-
 	if r.syncer == nil {
 		return
 	}
@@ -1019,7 +1014,6 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 
 		newProvider := NewBlockProvider(peerUpdate.NodeID, r.chainID, r.dispatcher)
 
-		r.providers[peerUpdate.NodeID] = newProvider
 		err := r.syncer.AddPeer(ctx, peerUpdate.NodeID)
 		if err != nil {
 			r.logger.Error("error adding peer to syncer", "error", err)
@@ -1032,7 +1026,6 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		}
 
 	case p2p.PeerStatusDown:
-		delete(r.providers, peerUpdate.NodeID)
 		r.syncer.RemovePeer(peerUpdate.NodeID)
 	}
 	r.logger.Info("processed peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
