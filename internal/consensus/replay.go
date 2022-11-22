@@ -155,7 +155,7 @@ func (cs *State) catchupReplay(ctx context.Context, csHeight int64) error {
 
 	cs.logger.Info("Catchup by replaying consensus messages", "height", csHeight)
 
-	iter := newWalIter(&WALDecoder{gr})
+	iter := newWalIter(&WALDecoder{gr}, cs.config.WalSkipRoundsToLast)
 	for iter.Next() {
 		// NOTE: since the priv key is set when the msgs are received
 		// it will attempt to eg double sign but we can just ignore it

@@ -456,6 +456,7 @@ fetchers = "{{ .StateSync.Fetchers }}"
 [consensus]
 
 wal-file = "{{ js .Consensus.WalPath }}"
+wal-skip-rounds-to-last = "{{ .Consensus.WalSkipRoundsToLast }}"
 
 # How long is the window for the min proposed block time
 proposed-block-time-window = "{{ .Consensus.ProposedBlockTimeWindow }}"

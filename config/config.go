@@ -973,9 +973,10 @@ func (cfg *StateSyncConfig) ValidateBasic() error {
 // ConsensusConfig defines the configuration for the Tendermint consensus service,
 // including timeouts and details about the WAL and the block structure.
 type ConsensusConfig struct {
-	RootDir string `mapstructure:"home"`
-	WalPath string `mapstructure:"wal-file"`
-	walFile string // overrides WalPath if set
+	RootDir             string `mapstructure:"home"`
+	WalPath             string `mapstructure:"wal-file"`
+	walFile             string // overrides WalPath if set
+	WalSkipRoundsToLast bool   `mapstructure:"wal-skip-rounds-to-last"`
 
 	// EmptyBlocks mode and possible interval between empty blocks
 	CreateEmptyBlocks         bool          `mapstructure:"create-empty-blocks"`
@@ -1050,6 +1051,7 @@ type ConsensusConfig struct {
 func DefaultConsensusConfig() *ConsensusConfig {
 	return &ConsensusConfig{
 		WalPath:                     filepath.Join(defaultDataDir, "cs.wal", "wal"),
+		WalSkipRoundsToLast:         true,
 		CreateEmptyBlocks:           true,
 		CreateEmptyBlocksInterval:   0 * time.Second,
 		PeerGossipSleepDuration:     100 * time.Millisecond,
