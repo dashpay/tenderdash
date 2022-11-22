@@ -2,7 +2,8 @@ package mempool
 
 import (
 	"fmt"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/types"
 )

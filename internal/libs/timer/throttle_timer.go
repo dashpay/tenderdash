@@ -1,8 +1,9 @@
 package timer
 
 import (
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 )
 
 /*

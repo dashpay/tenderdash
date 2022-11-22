@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	// "sync"
+	// sync "github.com/sasha-s/go-deadlock"
 )
 
 var (

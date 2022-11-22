@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"strings"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/internal/pubsub"
 	"github.com/tendermint/tendermint/libs/log"

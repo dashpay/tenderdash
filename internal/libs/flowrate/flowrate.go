@@ -8,8 +8,9 @@ package flowrate
 
 import (
 	"math"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 )
 
 // Monitor monitors and limits the transfer rate of a data stream.

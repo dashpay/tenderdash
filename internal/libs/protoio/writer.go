@@ -34,6 +34,7 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
+
 	"sync"
 
 	"github.com/gogo/protobuf/proto"

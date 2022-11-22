@@ -4,8 +4,9 @@ import (
 	"context"
 	"errors"
 	"net"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"

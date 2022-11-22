@@ -68,6 +68,7 @@ require (
 	github.com/go-pkgz/expirable-cache v0.0.3 // indirect
 	github.com/go-pkgz/rest v1.5.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.2 // indirect
+	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
 )
 
@@ -265,6 +266,7 @@ require (
 
 require (
 	github.com/creachadair/tomledit v0.0.23
+	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca
 )
 

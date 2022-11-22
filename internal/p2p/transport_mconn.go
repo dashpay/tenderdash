@@ -8,8 +8,9 @@ import (
 	"math"
 	"net"
 	"strconv"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"golang.org/x/net/netutil"
 
