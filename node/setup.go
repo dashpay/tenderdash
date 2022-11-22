@@ -35,7 +35,7 @@ import (
 	"github.com/tendermint/tendermint/types"
 	"github.com/tendermint/tendermint/version"
 
-	_ "net/http/pprof" // nolint: gosec // securely exposed on separate, optional port
+	_ "net/http/pprof" //nolint: gosec // securely exposed on separate, optional port
 )
 
 type closer func() error
@@ -193,10 +193,12 @@ func createEvidenceReactor(
 }
 
 func createPeerManager(
+	ctx context.Context,
 	cfg *config.Config,
 	dbProvider config.DBProvider,
 	nodeID types.NodeID,
 	metrics *p2p.Metrics,
+	logger log.Logger,
 ) (*p2p.PeerManager, closer, error) {
 
 	selfAddr, err := p2p.ParseNodeAddress(nodeID.AddressString(cfg.P2P.ExternalAddress))
@@ -267,10 +269,11 @@ func createPeerManager(
 		return nil, func() error { return nil }, fmt.Errorf("unable to initialize peer store: %w", err)
 	}
 
-	peerManager, err := p2p.NewPeerManager(nodeID, peerDB, options)
+	peerManager, err := p2p.NewPeerManager(ctx, nodeID, peerDB, options)
 	if err != nil {
 		return nil, peerDB.Close, fmt.Errorf("failed to create peer manager: %w", err)
 	}
+	peerManager.SetLogger(logger.With("module", "peer_manager"))
 
 	for _, peer := range peers {
 		if _, err := peerManager.Add(peer); err != nil {

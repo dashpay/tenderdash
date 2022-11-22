@@ -111,7 +111,7 @@ func setup(
 	}
 
 	rts.peerUpdateCh = make(chan p2p.PeerUpdate, chBuf)
-	rts.peerUpdates = p2p.NewPeerUpdates(rts.peerUpdateCh, int(chBuf))
+	rts.peerUpdates = p2p.NewPeerUpdates(rts.peerUpdateCh, int(chBuf), "statesync")
 
 	rts.snapshotChannel = p2p.NewChannel(
 		SnapshotChannel,
@@ -177,7 +177,7 @@ func setup(
 		logger.With("component", "reactor"),
 		conn,
 		chCreator,
-		func(context.Context) *p2p.PeerUpdates { return rts.peerUpdates },
+		func(context.Context, string) *p2p.PeerUpdates { return rts.peerUpdates },
 		rts.stateStore,
 		rts.blockStore,
 		"",

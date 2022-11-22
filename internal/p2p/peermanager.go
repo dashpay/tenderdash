@@ -13,9 +13,11 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/orderedcode"
+	sync "github.com/sasha-s/go-deadlock"
 	dbm "github.com/tendermint/tm-db"
 
 	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
+	"github.com/tendermint/tendermint/libs/log"
 	p2pproto "github.com/tendermint/tendermint/proto/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
@@ -23,6 +25,10 @@ import (
 const (
 	// retryNever is returned by retryDelay() when retries are disabled.
 	retryNever time.Duration = math.MaxInt64
+	// broadcastChannelCapacity defines how many messages can be buffered for broadcast
+	broadcastChannelCapacity = 10
+	// broadcastTimeout defines how long we will wait when broadcast channel is full
+	broadcastTimeout time.Duration = 15 * time.Second
 )
 
 // PeerStatus is a peer status.
@@ -73,15 +79,18 @@ func (pu *PeerUpdate) SetProTxHash(proTxHash types.ProTxHash) {
 type PeerUpdates struct {
 	routerUpdatesCh  chan PeerUpdate
 	reactorUpdatesCh chan PeerUpdate
+	// subscriberName is a label used for debugging
+	subscriberName string
 }
 
 // NewPeerUpdates creates a new PeerUpdates subscription. It is primarily for
 // internal use, callers should typically use PeerManager.Subscribe(). The
 // subscriber must call Close() when done.
-func NewPeerUpdates(updatesCh chan PeerUpdate, buf int) *PeerUpdates {
+func NewPeerUpdates(updatesCh chan PeerUpdate, buf int, subscriberName string) *PeerUpdates {
 	return &PeerUpdates{
 		reactorUpdatesCh: updatesCh,
 		routerUpdatesCh:  make(chan PeerUpdate, buf),
+		subscriberName:   subscriberName,
 	}
 }
 
@@ -292,6 +301,7 @@ func (o *PeerManagerOptions) optimize() {
 //   - EvictNext: pick peer from evict, mark as evicting.
 //   - Disconnected: unmark connected, upgrading[from]=to, evict, evicting.
 type PeerManager struct {
+	logger     log.Logger
 	selfID     types.NodeID
 	options    PeerManagerOptions
 	metrics    *Metrics
@@ -308,10 +318,12 @@ type PeerManager struct {
 	ready         map[types.NodeID]bool                    // ready peers (Ready → Disconnected)
 	evict         map[types.NodeID]bool                    // peers scheduled for eviction (Connected → EvictNext)
 	evicting      map[types.NodeID]bool                    // peers being evicted (EvictNext → Disconnected)
+
+	broadcastBuf chan PeerUpdate
 }
 
 // NewPeerManager creates a new peer manager.
-func NewPeerManager(selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptions) (*PeerManager, error) {
+func NewPeerManager(ctx context.Context, selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptions) (*PeerManager, error) {
 	if selfID == "" {
 		return nil, errors.New("self ID not given")
 	}
@@ -327,9 +339,10 @@ func NewPeerManager(selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptio
 	}
 
 	peerManager := &PeerManager{
+		logger:     log.NewNopLogger(),
 		selfID:     selfID,
 		options:    options,
-		rand:       rand.New(rand.NewSource(time.Now().UnixNano())), // nolint:gosec
+		rand:       rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec
 		dialWaker:  tmsync.NewWaker(),
 		evictWaker: tmsync.NewWaker(),
 		metrics:    NopMetrics(),
@@ -342,6 +355,8 @@ func NewPeerManager(selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptio
 		evict:         map[types.NodeID]bool{},
 		evicting:      map[types.NodeID]bool{},
 		subscriptions: map[*PeerUpdates]*PeerUpdates{},
+
+		broadcastBuf: make(chan PeerUpdate, broadcastChannelCapacity),
 	}
 
 	if options.Metrics != nil {
@@ -354,7 +369,14 @@ func NewPeerManager(selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptio
 	if err = peerManager.prunePeers(); err != nil {
 		return nil, err
 	}
+
+	go peerManager.broadcastRoutine(ctx)
+
 	return peerManager, nil
+}
+
+func (m *PeerManager) SetLogger(logger log.Logger) {
+	m.logger = logger
 }
 
 // configurePeers configures peers in the peer store with ephemeral runtime
@@ -817,7 +839,9 @@ func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels C
 		if ok && len(peer.ProTxHash) > 0 {
 			pu.SetProTxHash(peer.ProTxHash)
 		}
-		m.broadcast(ctx, pu)
+		if err := m.broadcastAsync(ctx, pu); err != nil {
+			m.logger.Error("error during broadcast ready", "error", err)
+		}
 	}
 }
 
@@ -919,7 +943,9 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 		if ok && len(peer.ProTxHash) > 0 {
 			pu.SetProTxHash(peer.ProTxHash)
 		}
-		m.broadcast(ctx, pu)
+		if err := m.broadcastAsync(ctx, pu); err != nil {
+			m.logger.Error("error during broadcast disconnected", "error", err)
+		}
 	}
 
 	m.dialWaker.Wake()
@@ -1052,7 +1078,7 @@ func (m *PeerManager) Advertise(peerID types.NodeID, limit uint16) []NodeAddress
 					// 10% of the time we'll randomly insert a "loosing"
 					// peer.
 
-					// nolint:gosec // G404: Use of weak random number generator
+					//nolint:gosec // G404: Use of weak random number generator
 					if numAddresses <= int(limit) || rand.Intn((meanAbsScore*2)+1) <= scores[peer.ID]+1 || rand.Intn((idx+1)*10) <= idx+1 {
 						addresses = append(addresses, addressInfo.Address)
 						addedLastIteration = true
@@ -1079,19 +1105,19 @@ func (m *PeerManager) Advertise(peerID types.NodeID, limit uint16) []NodeAddress
 // PeerEventSubscriber describes the type of the subscription method, to assist
 // in isolating reactors specific construction and lifecycle from the
 // peer manager.
-type PeerEventSubscriber func(context.Context) *PeerUpdates
+type PeerEventSubscriber func(context.Context, string) *PeerUpdates
 
 // Subscribe subscribes to peer updates. The caller must consume the peer
 // updates in a timely fashion and close the subscription when done, otherwise
 // the PeerManager will halt.
-func (m *PeerManager) Subscribe(ctx context.Context) *PeerUpdates {
+func (m *PeerManager) Subscribe(ctx context.Context, subscriberName string) *PeerUpdates {
 	// FIXME: We use a size 1 buffer here. When we broadcast a peer update
 	// we have to loop over all of the subscriptions, and we want to avoid
 	// having to block and wait for a context switch before continuing on
 	// to the next subscriptions. This also prevents tail latencies from
 	// compounding. Limiting it to 1 means that the subscribers are still
 	// reasonably in sync. However, this should probably be benchmarked.
-	peerUpdates := NewPeerUpdates(make(chan PeerUpdate, 1), 1)
+	peerUpdates := NewPeerUpdates(make(chan PeerUpdate, 1), 1, subscriberName)
 	m.Register(ctx, peerUpdates)
 	return peerUpdates
 }
@@ -1154,22 +1180,51 @@ func (m *PeerManager) processPeerEvent(ctx context.Context, pu PeerUpdate) {
 	}
 }
 
-// broadcast broadcasts a peer update to all subscriptions. The caller must
+// broadcastAsync broadcasts a peer update to all subscriptions. The caller must
 // already hold the mutex lock, to make sure updates are sent in the same order
 // as the PeerManager processes them, but this means subscribers must be
 // responsive at all times or the entire PeerManager will halt.
-//
-// FIXME: Consider using an internal channel to buffer updates while also
-// maintaining order if this is a problem.
-func (m *PeerManager) broadcast(ctx context.Context, peerUpdate PeerUpdate) {
-	for _, sub := range m.subscriptions {
-		if ctx.Err() != nil {
-			return
+// broadcastAsync is asynchronous and it returns before the message is delivered.
+// Delivery is not guaranteed.
+func (m *PeerManager) broadcastAsync(ctx context.Context, peerUpdate PeerUpdate) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-time.After(broadcastTimeout):
+		return fmt.Errorf("peer update buffer capacity %d exceeded", cap(m.broadcastBuf))
+	case m.broadcastBuf <- peerUpdate:
+		return nil
+	}
+}
+
+// broadcastSync broadcasts a peer update to all subscriptions. The caller must
+// already hold the mutex lock, to make sure updates are sent in the same order
+// as the PeerManager processes them, but this means subscribers must be
+// responsive at all times or the entire PeerManager will halt.
+func (m *PeerManager) broadcastSync(ctx context.Context, peerUpdate PeerUpdate) error {
+	for key, sub := range m.subscriptions {
+		select {
+		case <-ctx.Done():
+			return fmt.Errorf("peer update %s: %w", key.subscriberName, ctx.Err())
+		case sub.reactorUpdatesCh <- peerUpdate:
 		}
+	}
+	return nil
+}
+
+func (m *PeerManager) broadcastRoutine(ctx context.Context) {
+	for {
 		select {
 		case <-ctx.Done():
 			return
-		case sub.reactorUpdatesCh <- peerUpdate:
+		case peerUpdate := <-m.broadcastBuf:
+			if err := m.broadcastSync(ctx, peerUpdate); err != nil {
+				m.logger.Error(
+					"peer update broadcast delivery failed",
+					"peer_update", peerUpdate,
+					"error", err,
+				)
+			}
 		}
 	}
 }

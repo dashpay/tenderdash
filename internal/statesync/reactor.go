@@ -319,7 +319,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		LightBlockChannel: blockCh,
 		ParamsChannel:     paramsCh,
 	})
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx))
+	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "statesync"))
 
 	if r.needsStateSync {
 		r.logger.Info("starting state sync")
