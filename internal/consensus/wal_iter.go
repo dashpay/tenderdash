@@ -30,10 +30,7 @@ func (i *simpleWalIter) Value() *TimedWALMessage {
 
 func (i *simpleWalIter) Next() bool {
 	i.value, i.err = i.reader.Decode()
-	if i.err != nil {
-		return false
-	}
-	return true
+	return i.err == nil
 }
 
 func (i *simpleWalIter) Err() error {
@@ -143,19 +140,6 @@ func (i *skipperWalIter) processTimedWALMessage(msg *TimedWALMessage) error {
 	}
 	i.hold = append(i.hold, i.msg)
 	return nil
-}
-
-func (i *skipperWalIter) processProposal(p *types.Proposal) {
-	if p.Height == i.curHeight && i.curRound < p.Round {
-		i.hold = nil
-		i.curRound = p.Round
-	}
-	if p.Height > i.curHeight {
-		i.curHeight = p.Height
-		i.curRound = p.Round
-		i.queue = i.hold
-		i.hold = nil
-	}
 }
 
 func walMsgHeight(msg WALMessage) (int64, int32, error) {
