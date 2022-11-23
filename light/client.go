@@ -853,11 +853,19 @@ func (c *Client) compareFirstHeaderWithWitnesses(ctx context.Context, h *types.S
 			witnessesToRemove = append(witnessesToRemove, e.WitnessIndex)
 		default: // benign errors can be ignored with the exception of context errors
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				c.logger.Error(
+					"compare first header with witness timed out",
+					"i", i,
+					"cap", cap(errc),
+					"error", err,
+				)
 				return err
 			}
 
 			// the witness either didn't respond or didn't have the block. We ignore it.
 			c.logger.Debug("unable to compare first header with witness, ignoring",
+				"i", i,
+				"cap", cap(errc),
 				"err", err)
 		}
 

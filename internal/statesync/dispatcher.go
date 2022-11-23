@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
 
@@ -62,11 +63,14 @@ func (d *Dispatcher) LightBlock(ctx context.Context, height int64, peer types.No
 	}()
 
 	// wait for a response, cancel or timeout
+	start := time.Now()
 	select {
 	case resp := <-callCh:
+		fmt.Printf("dispatcher LightBlock took %s\n", time.Since(start).String())
 		return resp, nil
 
 	case <-ctx.Done():
+		fmt.Printf("dispatcher LightBlock ctx done after %s\n", time.Since(start).String())
 		return nil, ctx.Err()
 	}
 }
