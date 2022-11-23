@@ -28,7 +28,7 @@ const (
 	// broadcastChannelCapacity defines how many messages can be buffered for broadcast
 	broadcastChannelCapacity = 10
 	// broadcastTimeout defines how long we will wait when broadcast channel is full
-	broadcastTimeout time.Duration = 15 * time.Second
+	broadcastTimeout time.Duration = 60 * time.Second
 )
 
 // PeerStatus is a peer status.
@@ -369,8 +369,6 @@ func NewPeerManager(ctx context.Context, selfID types.NodeID, peerDB dbm.DB, opt
 	if err = peerManager.prunePeers(); err != nil {
 		return nil, err
 	}
-
-	go peerManager.broadcastRoutine(ctx)
 
 	return peerManager, nil
 }
@@ -841,6 +839,7 @@ func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels C
 		}
 		if err := m.broadcastAsync(ctx, pu); err != nil {
 			m.logger.Error("error during broadcast ready", "error", err)
+			panic(err.Error()) // FIXME: remove this panic after tests
 		}
 	}
 }
@@ -945,6 +944,7 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 		}
 		if err := m.broadcastAsync(ctx, pu); err != nil {
 			m.logger.Error("error during broadcast disconnected", "error", err)
+			panic(err.Error()) // FIXME: remove this panic after tests
 		}
 	}
 
@@ -1117,7 +1117,7 @@ func (m *PeerManager) Subscribe(ctx context.Context, subscriberName string) *Pee
 	// to the next subscriptions. This also prevents tail latencies from
 	// compounding. Limiting it to 1 means that the subscribers are still
 	// reasonably in sync. However, this should probably be benchmarked.
-	peerUpdates := NewPeerUpdates(make(chan PeerUpdate, 1), 1, subscriberName)
+	peerUpdates := NewPeerUpdates(make(chan PeerUpdate, broadcastChannelCapacity), 1, subscriberName)
 	m.Register(ctx, peerUpdates)
 	return peerUpdates
 }
@@ -1184,49 +1184,20 @@ func (m *PeerManager) processPeerEvent(ctx context.Context, pu PeerUpdate) {
 // already hold the mutex lock, to make sure updates are sent in the same order
 // as the PeerManager processes them, but this means subscribers must be
 // responsive at all times or the entire PeerManager will halt.
-// broadcastAsync is asynchronous and it returns before the message is delivered.
-// Delivery is not guaranteed.
+//
+// Broadcast is asynchronous, what means that returning doesn't mean successful delivery
 func (m *PeerManager) broadcastAsync(ctx context.Context, peerUpdate PeerUpdate) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-time.After(broadcastTimeout):
-		return fmt.Errorf("peer update buffer capacity %d exceeded", cap(m.broadcastBuf))
-	case m.broadcastBuf <- peerUpdate:
-		return nil
-	}
-}
-
-// broadcastSync broadcasts a peer update to all subscriptions. The caller must
-// already hold the mutex lock, to make sure updates are sent in the same order
-// as the PeerManager processes them, but this means subscribers must be
-// responsive at all times or the entire PeerManager will halt.
-func (m *PeerManager) broadcastSync(ctx context.Context, peerUpdate PeerUpdate) error {
-	for key, sub := range m.subscriptions {
+	for pu, sub := range m.subscriptions {
 		select {
 		case <-ctx.Done():
-			return fmt.Errorf("peer update %s: %w", key.subscriberName, ctx.Err())
+			return ctx.Err()
+		case <-time.After(broadcastTimeout):
+			return fmt.Errorf("peer update %s capacity %d exceeded", pu.subscriberName, cap(m.broadcastBuf))
 		case sub.reactorUpdatesCh <- peerUpdate:
 		}
 	}
-	return nil
-}
 
-func (m *PeerManager) broadcastRoutine(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case peerUpdate := <-m.broadcastBuf:
-			if err := m.broadcastSync(ctx, peerUpdate); err != nil {
-				m.logger.Error(
-					"peer update broadcast delivery failed",
-					"peer_update", peerUpdate,
-					"error", err,
-				)
-			}
-		}
-	}
+	return nil
 }
 
 // Addresses returns all known addresses for a peer, primarily for testing.
