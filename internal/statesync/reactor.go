@@ -64,6 +64,9 @@ const (
 	// return a light block
 	lightBlockResponseTimeout = 10 * time.Second
 
+	// initStateProviderTimeout is how long state provider initialization (including trusted block fetch/verify) can take
+	initStateProviderTimeout = 2 * lightBlockResponseTimeout
+
 	// consensusParamsResponseTimeout is the time the p2p state provider waits
 	// before performing a secondary call
 	consensusParamsResponseTimeout = 5 * time.Second
@@ -368,7 +371,10 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 		return sm.State{}, errors.New("a state sync is already in progress")
 	}
 
-	if err := r.initStateProvider(ctx, r.chainID, r.initialHeight); err != nil {
+	// we need some timeout in case initialization takes too much time
+	initCtx, cancel := context.WithTimeout(ctx, initStateProviderTimeout)
+	defer cancel()
+	if err := r.initStateProvider(initCtx, r.chainID, r.initialHeight); err != nil {
 		r.mtx.Unlock()
 		return sm.State{}, err
 	}
