@@ -121,7 +121,6 @@ type Reactor struct {
 
 	mtx         sync.RWMutex
 	peers       map[types.NodeID]*PeerState
-	waitSync    bool
 	rs          *cstypes.RoundState
 	readySignal chan struct{} // closed when the node is ready to start consensus
 
@@ -145,7 +144,6 @@ func NewReactor(
 	r := &Reactor{
 		logger:      logger,
 		state:       cs,
-		waitSync:    waitSync,
 		rs:          cs.GetRoundState(),
 		peers:       make(map[types.NodeID]*PeerState),
 		eventBus:    eventBus,
@@ -156,7 +154,7 @@ func NewReactor(
 	}
 	r.BaseService = *service.NewBaseService(logger, "Consensus", r)
 
-	if !r.waitSync {
+	if !waitSync {
 		close(r.readySignal)
 	}
 
@@ -254,10 +252,14 @@ func (r *Reactor) OnStop() {
 
 // WaitSync returns whether the consensus reactor is waiting for state/block sync.
 func (r *Reactor) WaitSync() bool {
-	r.mtx.RLock()
-	defer r.mtx.RUnlock()
-
-	return r.waitSync
+	select {
+	case <-r.readySignal:
+		// channel closed
+		return false
+	default:
+		// channel is still open, so we still wait
+		return true
+	}
 }
 
 // SwitchToConsensus switches from block-sync mode to consensus mode. It resets
@@ -283,10 +285,7 @@ conR:
 %+v`, err, r.state, r))
 	}
 
-	r.mtx.Lock()
-	r.waitSync = false
 	close(r.readySignal)
-	r.mtx.Unlock()
 
 	r.Metrics.BlockSyncing.Set(0)
 	r.Metrics.StateSyncing.Set(0)
@@ -690,10 +689,10 @@ func (r *Reactor) broadcast(ctx context.Context, channel p2p.Channel, msg proto.
 // logResult creates a log that depends on value of err
 func (r *Reactor) logResult(err error, logger log.Logger, message string, keyvals ...interface{}) bool {
 	if err != nil {
-		logger.Debug("error "+message, append(keyvals, "error", err))
+		logger.Debug(message+" error", append(keyvals, "error", err))
 		return false
 	}
-	logger.Debug("success "+message, keyvals...)
+	logger.Debug(message+"success", keyvals...)
 	return true
 }
 
