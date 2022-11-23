@@ -1,4 +1,4 @@
-## [0.10.0-dev.4] - 2022-11-10
+## [0.10.0-dev.5] - 2022-11-21
 
 ### Bug Fixes
 
@@ -9,6 +9,7 @@
 - Revert ResponseCheckTx.info field and pass it to ResultBroadcastTx (#488)
 - Fix p2p deadlock (#473)
 - Abci Info() returns invalid height at genesis (#474)
+- Catchup round number is not correct (#507)
 
 ### Documentation
 
@@ -23,6 +24,7 @@
 - Add round to Prepare/ProcessProposal,  FinalizeBlock (#498)
 - Add core_chain_lock_update to RequestProcessProposal (#492)
 - [**breaking**] Include state id in block signature (#478)
+- [**breaking**] Put full block in RequestFinalizeBlock  (#505)
 
 ### Miscellaneous Tasks
 
@@ -31,6 +33,7 @@
 - Update changelog and version to 0.10.0-dev.2 (#489)
 - Improve validation of ResponsePrepare/ProcessProposal ExecTxResults (#477)
 - Update changelog and version to 0.10.0-dev.3 (#502)
+- Update changelog and version to 0.10.0-dev.4 (#503)
 
 ### Refactor
 
@@ -41,6 +44,7 @@
 - Change a logic of usage CoreChainLockHeight (#485)
 - Remove unused P2P.PexReactor flag field in a config (#490)
 - Provide a current block commit with request finalize block request (#501)
+- Make all genesis-doc fields (except chain_id) optional (#506)
 
 ### Testing
 
@@ -58,6 +62,8 @@
 - Bump docker/setup-buildx-action from 2.0.0 to 2.2.1
 - Bump golangci/golangci-lint-action from 3.2.0 to 3.3.0
 - Remove unused nightly test runs (#499)
+- Save e2e failure logs as artifact (#508)
+- Bump golangci/golangci-lint-action from 3.3.0 to 3.3.1 (#504)
 
 ## [0.9.0-dev.1] - 2022-09-01
 
