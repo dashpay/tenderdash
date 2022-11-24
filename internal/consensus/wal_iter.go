@@ -72,7 +72,7 @@ func (i *skipperWalIter) Next() bool {
 	}
 	if len(i.queue) == 0 {
 		i.queue = i.hold
-		i.hold = i.hold[0:0]
+		i.hold = nil
 	}
 	if len(i.queue) > 0 {
 		i.value = i.queue[0]

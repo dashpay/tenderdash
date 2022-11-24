@@ -1104,6 +1104,7 @@ func makeBlockchainFromWAL(t *testing.T, wal WAL, genDoc *types.GenesisDoc) ([]*
 				blocks = append(blocks, block)
 				commits = append(commits, thisBlockCommit)
 				height++
+				thisBlockParts = nil
 			}
 		case *types.PartSetHeader:
 			thisBlockParts = types.NewPartSetFromHeader(*p)
@@ -1226,6 +1227,8 @@ func (bs *mockBlockStore) SaveBlock(
 	blockParts *types.PartSet,
 	seenCommit *types.Commit,
 ) {
+	bs.chain = append(bs.chain, block)
+	bs.commits = append(bs.commits, seenCommit)
 }
 
 func (bs *mockBlockStore) LoadBlockCommit(height int64) *types.Commit {
@@ -1346,6 +1349,93 @@ func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 	state, err = stateStore.Load()
 	require.NoError(t, err)
 	assert.Equal(t, InitialCoreHeight, state.LastCoreChainLockedBlockHeight)
+}
+
+func TestWALRoundsSkipper(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	cfg := getConfig(t)
+	logger := log.NewNopLogger()
+	ng := nodeGen{cfg: cfg, logger: logger}
+	node := ng.Generate(ctx, t)
+	originDoPrevote := node.csState.doPrevote
+	node.csState.doPrevote = func(ctx context.Context, height int64, round int32, allowOldBlocks bool) {
+		if height >= 3 && round < 10 {
+			node.csState.signAddVote(ctx, tmproto.PrevoteType, types.BlockID{})
+			return
+		}
+		originDoPrevote(ctx, height, round, allowOldBlocks)
+	}
+	const (
+		chainLen int64 = 5
+		maxRound int32 = 10
+	)
+	walBody, err := WALWithNBlocks(ctx, t, logger, node, chainLen)
+	require.NoError(t, err)
+	walFile := tempWALWithData(t, walBody)
+
+	cfg.Consensus.SetWalFile(walFile)
+
+	gdoc, err := sm.MakeGenesisDocFromFile(cfg.GenesisFile())
+	require.NoError(t, err)
+
+	wal, err := NewWAL(ctx, logger, walFile)
+	require.NoError(t, err)
+	err = wal.Start(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { cancel(); wal.Wait() })
+	chain, commits := makeBlockchainFromWAL(t, wal, gdoc)
+
+	stateDB, state, blockStore := stateAndStore(t, cfg, kvstore.ProtocolVersion)
+
+	stateStore := sm.NewStore(stateDB)
+	blockStore.chain = chain[:chainLen-1]
+	blockStore.commits = commits[:chainLen-1]
+
+	privVal := privval.MustLoadOrGenFilePVFromConfig(cfg)
+
+	app := newKVStoreFunc(t)(logger, "")
+
+	// run the chain through state.ApplyBlock to build up the tendermint state
+	state = buildTMStateFromChain(
+		ctx,
+		t,
+		logger,
+		emptyMempool{},
+		sm.EmptyEvidencePool{},
+		app,
+		stateStore,
+		state,
+		chain[:chainLen-1],
+		commits[:chainLen-1],
+		0,
+		blockStore,
+	)
+
+	cs := newStateWithConfigAndBlockStore(ctx, t, logger, cfg, state, privVal, app, blockStore)
+
+	commit := blockStore.commits[len(blockStore.commits)-1]
+	require.Equal(t, int64(4), commit.Height)
+	require.Equal(t, int32(10), commit.Round)
+
+	require.NoError(t, cs.Start(ctx))
+	defer cs.Stop()
+	t.Cleanup(cs.Wait)
+
+	newBlockSub, err := cs.eventBus.SubscribeWithArgs(ctx, pubsub.SubscribeArgs{
+		ClientID: testSubscriber,
+		Query:    types.EventQueryNewBlock,
+	})
+	require.NoError(t, err)
+	ctxto, cancel := context.WithTimeout(ctx, 120*time.Second)
+	defer cancel()
+	msg, err := newBlockSub.Next(ctxto)
+	require.NoError(t, err)
+	eventNewBlock := msg.Data().(types.EventDataNewBlock)
+	require.Equal(t, chainLen+1, eventNewBlock.Block.Height)
+	commit = blockStore.commits[chainLen-1]
+	require.Equal(t, chainLen, commit.Height)
+	require.Equal(t, maxRound, commit.Round)
 }
 
 // returns the vals on InitChain
