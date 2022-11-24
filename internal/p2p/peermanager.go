@@ -839,7 +839,7 @@ func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels C
 		}
 		if err := m.broadcastAsync(ctx, pu); err != nil {
 			m.logger.Error("error during broadcast ready", "error", err)
-			panic(err.Error()) // FIXME: remove this panic after tests
+			// panic(err.Error()) // FIXME: remove this panic after tests
 		}
 	}
 }
@@ -944,7 +944,7 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 		}
 		if err := m.broadcastAsync(ctx, pu); err != nil {
 			m.logger.Error("error during broadcast disconnected", "error", err)
-			panic(err.Error()) // FIXME: remove this panic after tests
+			// panic(err.Error()) // FIXME: remove this panic after tests
 		}
 	}
 
