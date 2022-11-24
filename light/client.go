@@ -166,18 +166,18 @@ func NewClientAtHeight(
 ) (*Client, error) {
 	// Check that the witness list does not include duplicates or the primary
 	if err := validatePrimaryAndWitnesses(primary, witnesses); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate peers: %w", err)
 	}
 
 	c, err := NewClientFromTrustedStore(chainID, primary, witnesses, trustedStore, dashCoreRPCClient, options...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new client from store: %w", err)
 	}
 
 	if c.latestTrustedBlock == nil && height > 0 {
 		c.logger.Info("Downloading trusted light block")
 		if err := c.initializeAtHeight(ctx, height); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("initialize at height: %w", err)
 		}
 	}
 
@@ -261,14 +261,14 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 	// 1) Fetch and verify the light block.
 	l, err := c.lightBlockFromPrimaryAtHeight(ctx, height)
 	if err != nil {
-		return err
+		return fmt.Errorf("light block from primary: %w", err)
 	}
 
 	// NOTE: - Verify func will check if it's expired or not.
 	//       - h.Time is not being checked against time.Now() because we don't
 	//         want to add yet another argument to NewClient* functions.
 	if err := l.ValidateBasic(c.chainID); err != nil {
-		return err
+		return fmt.Errorf("validate light block: %w", err)
 	}
 
 	// 2) Ensure the commit height is correct
@@ -291,7 +291,7 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 
 	// 5) Cross-verify with witnesses to ensure everybody has the same state.
 	if err := c.compareFirstHeaderWithWitnesses(ctx, l.SignedHeader); err != nil {
-		return err
+		return fmt.Errorf("compare with witnesses: %w", err)
 	}
 
 	// 6) Persist both of them and continue.
@@ -688,6 +688,7 @@ func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64
 func (c *Client) getLightBlock(ctx context.Context, p provider.Provider, height int64) (*types.LightBlock, error) {
 	l, err := p.LightBlock(ctx, height)
 	if ctx.Err() != nil {
+		c.logger.Debug("get light block context timed out", "provider", p.ID(), "error", ctx.Err())
 		return nil, provider.ErrNoResponse
 	}
 	return l, err

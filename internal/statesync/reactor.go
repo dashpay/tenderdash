@@ -362,7 +362,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 	// We need at least two peers (for cross-referencing of light blocks) before we can
 	// begin state sync
 	if err := r.waitForEnoughPeers(ctx, 2); err != nil {
-		return sm.State{}, err
+		return sm.State{}, fmt.Errorf("wait for peers: %w", err)
 	}
 
 	r.mtx.Lock()
@@ -376,7 +376,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 	defer cancel()
 	if err := r.initStateProvider(initCtx, r.chainID, r.initialHeight); err != nil {
 		r.mtx.Unlock()
-		return sm.State{}, err
+		return sm.State{}, fmt.Errorf("init state provider: %w", err)
 	}
 
 	r.syncer = r.initSyncer()
@@ -392,12 +392,12 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 
 	state, commit, err := r.syncer.SyncAny(ctx, r.cfg.DiscoveryTime, r.requestSnaphot)
 	if err != nil {
-		return sm.State{}, err
+		return sm.State{}, fmt.Errorf("sync any: %w", err)
 	}
 
 	err = r.publishCommitEvent(commit)
 	if err != nil {
-		return state, err
+		return state, fmt.Errorf("publish commit: %w", err)
 	}
 
 	if err := r.stateStore.Bootstrap(state); err != nil {
@@ -417,13 +417,13 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 			Complete: true,
 			Height:   state.LastBlockHeight,
 		}); err != nil {
-			return sm.State{}, err
+			return sm.State{}, fmt.Errorf("publish state sync status event: %w", err)
 		}
 	}
 
 	if r.postSyncHook != nil {
 		if err := r.postSyncHook(ctx, state); err != nil {
-			return sm.State{}, err
+			return sm.State{}, fmt.Errorf("post sync: %w", err)
 		}
 	}
 

@@ -42,6 +42,8 @@ func New(
 		return nil, fmt.Errorf("failed to load or gen node key %s: %w", conf.NodeKeyFile(), err)
 	}
 
+	logger.Debug("initializing new node", "node_id", nodeKey.ID, "mode", conf.Mode)
+
 	var genProvider genesisDocProvider
 	switch gen {
 	case nil:
