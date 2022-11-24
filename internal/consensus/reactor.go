@@ -692,7 +692,7 @@ func (r *Reactor) logResult(err error, logger log.Logger, message string, keyval
 		logger.Debug(message+" error", append(keyvals, "error", err))
 		return false
 	}
-	logger.Debug(message+"success", keyvals...)
+	logger.Debug(message+" success", keyvals...)
 	return true
 }
 
