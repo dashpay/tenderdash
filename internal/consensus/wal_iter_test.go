@@ -126,17 +126,22 @@ func TestWalIter_Next(t *testing.T) {
 			},
 		},
 	}
+	testFunc := func(t *testing.T, it walIter, want []any) {
+		cnt := 0
+		for it.Next() {
+			msg := it.Value()
+			require.Equal(t, want[cnt], msg.Msg)
+			cnt++
+		}
+		require.NoError(t, it.Err())
+		require.Equal(t, len(want), cnt)
+	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
 			it := newWalIter(&mockWALReader{ret: tc.input}, true)
-			cnt := 0
-			for it.Next() {
-				msg := it.Value()
-				require.Equal(t, tc.want[cnt], msg.Msg)
-				cnt++
-			}
-			require.NoError(t, it.Err())
-			require.Equal(t, len(tc.want), cnt)
+			testFunc(t, it, tc.want)
+			it = newWalIter(&mockWALReader{ret: tc.input}, false)
+			testFunc(t, it, tc.input)
 		})
 	}
 }

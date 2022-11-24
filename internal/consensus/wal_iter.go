@@ -34,6 +34,9 @@ func (i *simpleWalIter) Next() bool {
 }
 
 func (i *simpleWalIter) Err() error {
+	if i.err == io.EOF {
+		return nil
+	}
 	return i.err
 }
 

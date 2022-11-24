@@ -1355,6 +1355,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cfg := getConfig(t)
+	cfg.Consensus.WalSkipRoundsToLast = true
 	logger := log.NewNopLogger()
 	ng := nodeGen{cfg: cfg, logger: logger}
 	node := ng.Generate(ctx, t)
