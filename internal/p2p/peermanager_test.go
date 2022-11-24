@@ -1698,6 +1698,7 @@ func TestPeerManager_Subscribe_Close(t *testing.T) {
 
 	// Closing the subscription should not send us the disconnected update.
 	cancel()
+	time.Sleep(50 * time.Millisecond)
 	peerManager.Disconnected(ctx, a.NodeID)
 	require.Empty(t, sub.Updates())
 }
