@@ -301,7 +301,6 @@ func (ci *CallInfo) RemoteAddr() string {
 //----------------------------------------
 // SOCKETS
 
-//
 // Determine if its a unix or tcp socket.
 // If tcp, must specify the port; `0.0.0.0` will return incorrectly as "unix" since there's no port
 // TODO: deprecate

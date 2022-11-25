@@ -132,7 +132,9 @@ func invalidDoPrevoteFunc(
 			Type:               tmproto.PrecommitType,
 			BlockID: types.BlockID{
 				Hash:          blockHash,
-				PartSetHeader: types.PartSetHeader{Total: 1, Hash: tmrand.Bytes(32)}},
+				PartSetHeader: types.PartSetHeader{Total: 1, Hash: tmrand.Bytes(32)},
+				StateID:       types.RandStateID().Hash(),
+			},
 		}
 
 		p := precommit.ToProto()
@@ -142,12 +144,10 @@ func invalidDoPrevoteFunc(
 			cs.Validators.QuorumType,
 			cs.Validators.QuorumHash,
 			p,
-			cs.StateID(),
 			log.NewNopLogger(),
 		)
 		require.NoError(t, err)
 
-		precommit.StateSignature = p.StateSignature
 		precommit.BlockSignature = p.BlockSignature
 		cs.privValidator = nil // disable priv val so we don't do normal votes
 		cs.mtx.Unlock()

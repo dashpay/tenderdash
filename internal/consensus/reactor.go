@@ -400,11 +400,12 @@ func (r *Reactor) getRoundState() *cstypes.RoundState {
 }
 
 func (r *Reactor) gossipDataForCatchup(ctx context.Context, rs *cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState, chans channelBundle) {
-	logger := r.logger.With("height", prs.Height).With("peer", ps.peerID)
+	height := prs.Height
+	logger := r.logger.With("height", height, "peer", ps.peerID)
 
 	if index, ok := prs.ProposalBlockParts.Not().PickRandom(); ok {
 		// ensure that the peer's PartSetHeader is correct
-		blockMeta := r.state.blockStore.LoadBlockMeta(prs.Height)
+		blockMeta := r.state.blockStore.LoadBlockMeta(height)
 		if blockMeta == nil {
 			logger.Error(
 				"failed to load block meta",
@@ -425,21 +426,20 @@ func (r *Reactor) gossipDataForCatchup(ctx context.Context, rs *cstypes.RoundSta
 			time.Sleep(r.state.config.PeerGossipSleepDuration)
 			return
 		}
-
-		part := r.state.blockStore.LoadBlockPart(prs.Height, index)
+		round := blockMeta.Round
+		part := r.state.blockStore.LoadBlockPart(height, index)
 		if part == nil {
 			logger.Error(
 				"failed to load block part",
+				"height", height,
 				"index", index,
 				"block_part_set_header", blockMeta.BlockID.PartSetHeader,
 				"peer_block_part_set_header", prs.ProposalBlockPartSetHeader,
 			)
-
 			time.Sleep(r.state.config.PeerGossipSleepDuration)
 			return
 		}
-
-		if err := r.sendProposalBlockPart(ctx, chans.data, ps, part, prs.Height, prs.Round); err != nil {
+		if err := r.sendProposalBlockPart(ctx, chans.data, ps, part, height, round); err != nil {
 			logger.Error("cannot send proposal block part to the peer", "error", err)
 			time.Sleep(r.state.config.PeerGossipSleepDuration)
 		}
@@ -498,8 +498,7 @@ OUTER_LOOP:
 			}
 			if index, ok := rs.ProposalBlockParts.BitArray().Sub(prs.ProposalBlockParts.Copy()).PickRandom(); ok {
 				part := rs.ProposalBlockParts.GetPart(index)
-
-				if err := r.sendProposalBlockPart(ctx, chans.data, ps, part, prs.Height, prs.Round); err != nil {
+				if err := r.sendProposalBlockPart(ctx, chans.data, ps, part, rs.Height, rs.Round); err != nil {
 					logger.Error("cannot send proposal block part to the peer", "error", err)
 					time.Sleep(r.state.config.PeerGossipSleepDuration)
 				}

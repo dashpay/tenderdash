@@ -53,10 +53,18 @@ func TestClient(t *testing.T) {
 			hash("app_hash"), hash("cons_hash"), hash("results_hash"), 0, len(keys))
 		// 3/3 signed
 		h2 = keys.GenSignedHeaderLastBlockID(t, chainID, 2, bTime.Add(30*time.Minute), nil, vals, vals,
-			hash("app_hash"), hash("cons_hash"), hash("results_hash"), 0, len(keys), types.BlockID{Hash: h1.Hash()})
+			hash("app_hash"), hash("cons_hash"), hash("results_hash"), 0, len(keys),
+			types.BlockID{
+				Hash:    h1.Hash(),
+				StateID: h1.StateID().Hash(),
+			})
 		// 3/3 signed
 		h3 = keys.GenSignedHeaderLastBlockID(t, chainID, 3, bTime.Add(1*time.Hour), nil, vals, vals,
-			hash("app_hash"), hash("cons_hash"), hash("results_hash"), 0, len(keys), types.BlockID{Hash: h2.Hash()})
+			hash("app_hash"), hash("cons_hash"), hash("results_hash"), 0, len(keys),
+			types.BlockID{
+				Hash:    h2.Hash(),
+				StateID: h2.StateID().Hash(),
+			})
 
 		headerSet = map[int64]*types.SignedHeader{
 			1: h1,
@@ -459,7 +467,11 @@ func TestClient(t *testing.T) {
 				// should be removed.
 				2: keys.GenSignedHeaderLastBlockID(t, chainID, 2, bTime.Add(30*time.Minute), nil, vals, vals,
 					hash("app_hash2"), hash("cons_hash"), hash("results_hash"),
-					0, len(keys), types.BlockID{Hash: h1.Hash()}),
+					0, len(keys),
+					types.BlockID{
+						Hash:    h1.Hash(),
+						StateID: h1.StateID().Hash(),
+					}),
 			},
 			map[int64]*types.ValidatorSet{
 				1: vals,

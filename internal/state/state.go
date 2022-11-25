@@ -81,9 +81,6 @@ type State struct {
 	LastBlockID     types.BlockID
 	LastBlockTime   time.Time
 
-	// LastStateID contains App Hash and Height from previous state (at height-1)
-	LastStateID types.StateID
-
 	// Last Chain Lock is the last known chain locked height in consensus
 	// It does not go to 0 if a block had no chain lock and should stay the same as the previous block
 	LastCoreChainLockedBlockHeight uint32
@@ -131,8 +128,6 @@ func (state State) Copy() State {
 		LastBlockHeight: state.LastBlockHeight,
 		LastBlockID:     state.LastBlockID,
 		LastBlockTime:   state.LastBlockTime,
-
-		LastStateID: state.LastStateID.Copy(),
 
 		LastCoreChainLockedBlockHeight: state.LastCoreChainLockedBlockHeight,
 
@@ -204,8 +199,6 @@ func (state *State) ToProto() (*tmstate.State, error) {
 	}
 	sm.Validators = vals
 
-	sm.LastStateID = state.LastStateID.ToProto()
-
 	if state.LastBlockHeight >= 1 { // At Block 1 LastValidators is nil
 		lVals, err := state.LastValidators.ToProto()
 		if err != nil {
@@ -243,29 +236,19 @@ func FromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 	state.LastBlockHeight = pb.LastBlockHeight
 	state.LastBlockTime = pb.LastBlockTime
 
-	si, err := types.StateIDFromProto(&pb.LastStateID)
-	if err != nil {
-		return nil, err
-	}
-
-	state.LastStateID = *si
-
 	state.LastCoreChainLockedBlockHeight = pb.LastCoreChainLockedBlockHeight
 
-	vals, err := types.ValidatorSetFromProto(pb.Validators)
-	if err != nil {
+	state.Validators, err = types.ValidatorSetFromProto(pb.Validators)
+	if err != nil && (!state.IsInitialHeight() || err != types.ErrValidatorSetNilOrEmpty) {
 		return nil, err
 	}
-	state.Validators = vals
 
-	if state.LastBlockHeight >= 1 { // At Block 1 LastValidators is nil
-		lVals, err := types.ValidatorSetFromProto(pb.LastValidators)
+	state.LastValidators = types.NewEmptyValidatorSet()
+	if !state.IsInitialHeight() { // At Block initial-height LastValidators is nil
+		state.LastValidators, err = types.ValidatorSetFromProto(pb.LastValidators)
 		if err != nil {
 			return nil, err
 		}
-		state.LastValidators = lVals
-	} else {
-		state.LastValidators = types.NewEmptyValidatorSet()
 	}
 
 	state.LastHeightValidatorsChanged = pb.LastHeightValidatorsChanged
@@ -326,6 +309,10 @@ func (state State) NewStateChangeset(ctx context.Context, rp RoundParams) (Curre
 	return NewCurrentRoundState(proTxHash, rp, state)
 }
 
+func (state State) IsInitialHeight() bool {
+	return state.LastBlockHeight < state.InitialHeight
+}
+
 //------------------------------------------------------------------------
 // Genesis
 
@@ -378,11 +365,6 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 		)
 	}
 
-	stateID := types.StateID{
-		Height:  genDoc.InitialHeight,
-		AppHash: genDoc.AppHash,
-	}
-
 	return State{
 		Version:       InitStateVersion,
 		ChainID:       genDoc.ChainID,
@@ -390,7 +372,6 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 
 		LastBlockHeight: 0,
 		LastBlockID:     types.BlockID{},
-		LastStateID:     stateID,
 		LastBlockTime:   genDoc.GenesisTime,
 
 		LastCoreChainLockedBlockHeight: genDoc.InitialCoreChainLockedHeight,

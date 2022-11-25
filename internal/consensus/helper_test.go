@@ -183,8 +183,7 @@ func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []
 
 	css[0].config.DontAutoPropose = true
 
-	blockID, err := rs.ProposalBlock.BlockID()
-	require.NoError(c.t, err)
+	blockID := rs.ProposalBlock.BlockID(nil)
 	signAddVotes(ctx, c.t, css[0], tmproto.PrecommitType, c.cfg.ChainID(), blockID, vss[1:c.nVals]...)
 
 	ensureNewRound(c.t, newRoundCh, height+1, 0)

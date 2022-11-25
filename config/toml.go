@@ -521,9 +521,6 @@ peer-query-maj23-sleep-duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 # Signing parameters
 quorum-type = "{{ .Consensus.QuorumType }}"
 
-# State parameters
-app-hash-size = "{{ .Consensus.AppHashSize }}"
-
 #######################################################
 ###   Transaction Indexer Configuration Options     ###
 #######################################################

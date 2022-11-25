@@ -94,7 +94,7 @@ func (app *Application) ProcessProposal(_ context.Context, req *types.RequestPro
 }
 
 func (app *Application) FinalizeBlock(_ context.Context, req *types.RequestFinalizeBlock) (*types.ResponseFinalizeBlock, error) {
-	app.handleRequest(req.Height, req.Txs)
+	app.handleRequest(req.Height, req.Block.Data.Txs)
 	resp := types.ResponseFinalizeBlock{}
 	app.updateCoreChainLock()
 	return &resp, nil

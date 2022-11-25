@@ -53,8 +53,8 @@ func TestBlock_Header(t *testing.T) {
 
 			// validate StateID from last commit
 			if prevBlock != nil {
-				assert.EqualValues(t, block.Height-1, block.LastCommit.StateID.Height)
-				assert.EqualValues(t, prevBlock.Header.AppHash, block.LastCommit.StateID.AppHash)
+				stateID := prevBlock.Header.StateID()
+				assert.EqualValues(t, stateID.Hash(), block.LastCommit.BlockID.StateID)
 			}
 
 			prevBlock = resp.Block

@@ -242,12 +242,12 @@ func (sc *DashCoreSignerClient) GetProTxHash(ctx context.Context) (crypto.ProTxH
 // SignVote requests a remote signer to sign a vote
 func (sc *DashCoreSignerClient) SignVote(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
-	protoVote *tmproto.Vote, stateID types.StateID, logger log.Logger) error {
+	protoVote *tmproto.Vote, logger log.Logger) error {
 	if len(quorumHash) != crypto.DefaultHashSize {
 		return fmt.Errorf("quorum hash is not the right length %s", quorumHash.String())
 	}
 
-	quorumSigns, err := types.MakeQuorumSigns(chainID, quorumType, quorumHash, protoVote, stateID)
+	quorumSigns, err := types.MakeQuorumSigns(chainID, quorumType, quorumHash, protoVote)
 	if err != nil {
 		return err
 	}
@@ -274,30 +274,6 @@ func (sc *DashCoreSignerClient) SignVote(
 	)
 
 	protoVote.BlockSignature = qs.sign
-
-	// Only sign the state when voting for the block
-	if protoVote.BlockID.Hash != nil {
-		signItem := quorumSigns.State
-		resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
-		if err != nil {
-			return err
-		}
-
-		logger.Debug("signed vote state ID",
-			"height", protoVote.Height,
-			"round", protoVote.Round,
-			"voteType", protoVote.Type,
-			"quorumType", quorumType,
-			"quorumHash", quorumHash,
-			"proTxHash", proTxHash,
-			"stateID", stateID,
-			"signItem", signItem,
-			"signResult", resp,
-		)
-
-		protoVote.StateSignature = resp.sign
-
-	}
 
 	return sc.signVoteExtensions(ctx, quorumType, quorumHash, protoVote, quorumSigns)
 }

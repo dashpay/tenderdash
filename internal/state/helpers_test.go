@@ -1,4 +1,3 @@
-// nolint: lll
 package state_test
 
 import (
@@ -56,7 +55,7 @@ func makeAndCommitGoodBlock(
 	uncommittedState, err := blockExec.ProcessProposal(ctx, block, 0, state, true)
 	require.NoError(t, err)
 	// Simulate a lastCommit for this block from all validators for the next height
-	commit, _ := makeValidCommit(ctx, t, height, blockID, uncommittedState.StateID(), state.Validators, privVals)
+	commit, _ := makeValidCommit(ctx, t, height, blockID, state.Validators, privVals)
 	state, err = blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit)
 	require.NoError(t, err)
 
@@ -76,7 +75,10 @@ func makeAndApplyGoodBlock(
 	block := state.MakeBlock(height, factory.MakeNTxs(height, 10), lastCommit, evidence, proposerProTxHash, proposedAppVersion)
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
-	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: partSet.Header()}
+
+	blockID := block.BlockID(partSet)
+	require.NoError(t, err)
+
 	return state, blockID, block
 }
 
@@ -85,7 +87,6 @@ func makeValidCommit(
 	t *testing.T,
 	height int64,
 	blockID types.BlockID,
-	stateID types.StateID,
 	vals *types.ValidatorSet,
 	privVals map[string]types.PrivValidator,
 ) (*types.Commit, []*types.Vote) {
@@ -93,7 +94,7 @@ func makeValidCommit(
 	votes := make([]*types.Vote, vals.Size())
 	for i := 0; i < vals.Size(); i++ {
 		val := vals.GetByIndex(int32(i))
-		vote, err := factory.MakeVote(ctx, privVals[val.ProTxHash.String()], vals, chainID, int32(i), height, 0, 2, blockID, stateID.AppHash)
+		vote, err := factory.MakeVote(ctx, privVals[val.ProTxHash.String()], vals, chainID, int32(i), height, 0, 2, blockID)
 		require.NoError(t, err)
 		votes[i] = vote
 	}
@@ -102,7 +103,6 @@ func makeValidCommit(
 	return types.NewCommit(
 		height, 0,
 		blockID,
-		stateID,
 		&types.CommitSigns{
 			QuorumSigns: *thresholdSigns,
 			QuorumHash:  vals.QuorumHash,

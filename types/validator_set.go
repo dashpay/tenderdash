@@ -42,8 +42,10 @@ const (
 
 // ErrTotalVotingPowerOverflow is returned if the total voting power of the
 // resulting validator set exceeds MaxTotalVotingPower.
-var ErrTotalVotingPowerOverflow = fmt.Errorf("total voting power of resulting valset exceeds max %d",
-	MaxTotalVotingPower)
+var (
+	ErrTotalVotingPowerOverflow = fmt.Errorf("total voting power of resulting valset exceeds max %d", MaxTotalVotingPower)
+	ErrValidatorSetNilOrEmpty   = errors.New("validator set is nil or empty")
+)
 
 // ValidatorSet represent a set of *Validator at a given height.
 //
@@ -122,7 +124,7 @@ func NewEmptyValidatorSet() *ValidatorSet {
 
 func (vals *ValidatorSet) ValidateBasic() error {
 	if vals.IsNilOrEmpty() {
-		return errors.New("validator set is nil or empty")
+		return ErrValidatorSetNilOrEmpty
 	}
 
 	if vals.Proposer == nil {
@@ -892,7 +894,7 @@ func (vals *ValidatorSet) UpdateWithChangeSet(
 // application that depends on the LastCommitInfo sent in BeginBlock, which
 // includes which validators signed. For instance, Gaia incentivizes proposers
 // with a bonus for including more than +2/3 of the signatures.
-func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID, stateID StateID,
+func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 	height int64, commit *Commit) error {
 
 	// Validate Height and BlockID.
@@ -904,13 +906,8 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID, stateID 
 			blockID, commit.BlockID)
 	}
 
-	if !stateID.Equals(commit.StateID) {
-		return fmt.Errorf("invalid commit -- wrong state ID: want %v, got %v",
-			stateID, commit.StateID)
-	}
-
 	canonVote := commit.GetCanonicalVote()
-	quorumSigns, err := MakeQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto(), stateID)
+	quorumSigns, err := MakeQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto())
 	if err != nil {
 		return err
 	}
@@ -1141,27 +1138,28 @@ func (vals *ValidatorSet) ToProto() (*tmproto.ValidatorSet, error) {
 // is invalid
 func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 	if vp == nil {
-		return nil, errors.New("nil validator set") // validator set should never be nil
+		return nil, ErrValidatorSetNilOrEmpty // validator set should never be nil
 		// bigger issues are at play if empty
 	}
 	vals := new(ValidatorSet)
 
-	valsProto := make([]*Validator, len(vp.Validators))
+	vals.Validators = make([]*Validator, len(vp.Validators))
 	for i := 0; i < len(vp.Validators); i++ {
 		v, err := ValidatorFromProto(vp.Validators[i])
 		if err != nil {
 			return nil, fmt.Errorf("fromProto: validatorSet validator error: %w", err)
 		}
-		valsProto[i] = v
-	}
-	vals.Validators = valsProto
-
-	p, err := ValidatorFromProto(vp.GetProposer())
-	if err != nil {
-		return nil, fmt.Errorf("fromProto: validatorSet proposer error: %w", err)
+		vals.Validators[i] = v
 	}
 
-	vals.Proposer = p
+	var err error
+	proposer := vp.GetProposer()
+	if proposer != nil {
+		vals.Proposer, err = ValidatorFromProto(vp.GetProposer())
+		if err != nil {
+			return nil, fmt.Errorf("fromProto: validatorSet proposer error: %w", err)
+		}
+	}
 
 	// NOTE: We can't trust the total voting power given to us by other peers. If someone were to
 	// inject a non-zeo value that wasn't the correct voting power we could assume a wrong total
@@ -1170,12 +1168,12 @@ func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 	// so we don't have to do this
 	vals.TotalVotingPower()
 
-	thresholdPublicKey, err := cryptoenc.PubKeyFromProto(vp.ThresholdPublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("fromProto: thresholdPublicKey error: %w", err)
+	if vp.ThresholdPublicKey.Size() > 0 {
+		vals.ThresholdPublicKey, err = cryptoenc.PubKeyFromProto(vp.ThresholdPublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("fromProto: thresholdPublicKey error: %w", err)
+		}
 	}
-
-	vals.ThresholdPublicKey = thresholdPublicKey
 
 	vals.QuorumType = btcjson.LLMQType(vp.QuorumType)
 

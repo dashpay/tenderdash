@@ -93,6 +93,10 @@ func (bz HexBytes) Copy() HexBytes {
 	return copied
 }
 
+func (bz HexBytes) IsZero() bool {
+	return len(bz) == 0
+}
+
 func (bz HexBytes) Equal(b []byte) bool {
 	return bytes.Equal(bz, b)
 }

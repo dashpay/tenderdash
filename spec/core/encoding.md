@@ -270,7 +270,7 @@ For instance, an ED25519 PubKey would look like:
 Where the `"value"` is the base64 encoding of the raw pubkey bytes, and the
 `"type"` is the type name for Ed25519 pubkeys.
 
-### Signed Messages
+## Signed Messages
 
 Signed messages (eg. votes, proposals) in the consensus are encoded using protobuf.
 

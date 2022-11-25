@@ -537,8 +537,11 @@ func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh
 
 			var (
 				firstPartSetHeader = firstParts.Header()
-				firstID            = types.BlockID{Hash: first.Hash(), PartSetHeader: firstPartSetHeader}
-				stateID            = first.StateID()
+				firstID            = types.BlockID{
+					Hash:          first.Hash(),
+					PartSetHeader: firstPartSetHeader,
+					StateID:       first.StateID().Hash(),
+				}
 			)
 
 			// Finally, verify the first block using the second's commit.
@@ -547,7 +550,7 @@ func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh
 			// first.Hash() doesn't verify the tx contents, so MakePartSet() is
 			// currently necessary.
 			// TODO(sergio): Should we also validate against the extended commit?
-			err = state.Validators.VerifyCommit(chainID, firstID, stateID, first.Height, second.LastCommit)
+			err = state.Validators.VerifyCommit(chainID, firstID, first.Height, second.LastCommit)
 
 			if err == nil {
 				// validate the block before we persist it

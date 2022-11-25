@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmtypes "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -104,19 +103,6 @@ func (candidate *CurrentRoundState) UpdateState(target *State) error {
 func (candidate *CurrentRoundState) UpdateFunc(state State) (State, error) {
 	err := candidate.UpdateState(&state)
 	return state, err
-}
-
-func (candidate *CurrentRoundState) StateID() types.StateID {
-	var appHash tmbytes.HexBytes
-	if len(candidate.AppHash) > 0 {
-		appHash = candidate.AppHash.Copy()
-	} else {
-		appHash = make([]byte, crypto.DefaultAppHashSize)
-	}
-	return types.StateID{
-		Height:  candidate.GetHeight(),
-		AppHash: appHash,
-	}
 }
 
 // GetHeight returns height of current block

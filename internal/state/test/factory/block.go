@@ -34,7 +34,7 @@ func MakeBlocks(ctx context.Context, t *testing.T, n int, state *sm.State, privV
 		blocks = append(blocks, block)
 
 		prevBlock = block
-		prevBlockMeta = types.NewBlockMeta(block, parts)
+		prevBlockMeta = types.NewBlockMeta(block, parts, 0)
 
 		// update state
 		appHash := make([]byte, crypto.DefaultAppHashSize)
@@ -84,7 +84,7 @@ func makeBlockAndPartSet(
 	t.Helper()
 
 	quorumSigns := &types.CommitSigns{QuorumHash: state.LastValidators.QuorumHash}
-	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, state.LastStateID, quorumSigns)
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, quorumSigns)
 	if height > 1 {
 		vote, err := factory.MakeVote(
 			ctx,
@@ -93,7 +93,6 @@ func makeBlockAndPartSet(
 			lastBlock.Header.ChainID,
 			1, lastBlock.Header.Height, 0, 2,
 			lastBlockMeta.BlockID,
-			lastBlock.AppHash,
 		)
 		require.NoError(t, err)
 		thresholdSigns, err := types.NewSignsRecoverer([]*types.Vote{vote}).Recover()
@@ -102,7 +101,6 @@ func makeBlockAndPartSet(
 			vote.Height,
 			vote.Round,
 			lastBlockMeta.BlockID,
-			state.LastStateID,
 			&types.CommitSigns{
 				QuorumSigns: *thresholdSigns,
 				QuorumHash:  state.LastValidators.QuorumHash,

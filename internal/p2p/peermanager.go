@@ -255,27 +255,27 @@ func (o *PeerManagerOptions) optimize() {
 // by the Router), only the peer lifecycle state.
 //
 // For an outbound connection, the flow is as follows:
-// - DialNext: return a peer address to dial, mark peer as dialing.
-// - DialFailed: report a dial failure, unmark as dialing.
-// - Dialed: report a dial success, unmark as dialing and mark as connected
-//   (errors if already connected, e.g. by Accepted).
-// - Ready: report routing is ready, mark as ready and broadcast PeerStatusUp.
-// - Disconnected: report peer disconnect, unmark as connected and broadcasts
-//   PeerStatusDown.
+//   - DialNext: return a peer address to dial, mark peer as dialing.
+//   - DialFailed: report a dial failure, unmark as dialing.
+//   - Dialed: report a dial success, unmark as dialing and mark as connected
+//     (errors if already connected, e.g. by Accepted).
+//   - Ready: report routing is ready, mark as ready and broadcast PeerStatusUp.
+//   - Disconnected: report peer disconnect, unmark as connected and broadcasts
+//     PeerStatusDown.
 //
 // For an inbound connection, the flow is as follows:
-// - Accepted: report inbound connection success, mark as connected (errors if
-//   already connected, e.g. by Dialed).
-// - Ready: report routing is ready, mark as ready and broadcast PeerStatusUp.
-// - Disconnected: report peer disconnect, unmark as connected and broadcasts
-//   PeerStatusDown.
+//   - Accepted: report inbound connection success, mark as connected (errors if
+//     already connected, e.g. by Dialed).
+//   - Ready: report routing is ready, mark as ready and broadcast PeerStatusUp.
+//   - Disconnected: report peer disconnect, unmark as connected and broadcasts
+//     PeerStatusDown.
 //
 // When evicting peers, either because peers are explicitly scheduled for
 // eviction or we are connected to too many peers, the flow is as follows:
-// - EvictNext: if marked evict and connected, unmark evict and mark evicting.
-//   If beyond MaxConnected, pick lowest-scored peer and mark evicting.
-// - Disconnected: unmark connected, evicting, evict, and broadcast a
-//   PeerStatusDown peer update.
+//   - EvictNext: if marked evict and connected, unmark evict and mark evicting.
+//     If beyond MaxConnected, pick lowest-scored peer and mark evicting.
+//   - Disconnected: unmark connected, evicting, evict, and broadcast a
+//     PeerStatusDown peer update.
 //
 // If all connection slots are full (at MaxConnections), we can use up to
 // MaxConnectionsUpgrade additional connections to probe any higher-scored
@@ -283,13 +283,13 @@ func (o *PeerManagerOptions) optimize() {
 // connection and evict a lower-scored peer. We mark the lower-scored peer as
 // upgrading[from]=to to make sure no other higher-scored peers can claim the
 // same one for an upgrade. The flow is as follows:
-// - Accepted: if upgrade is possible, mark connected and add lower-scored to evict.
-// - DialNext: if upgrade is possible, mark upgrading[from]=to and dialing.
-// - DialFailed: unmark upgrading[from]=to and dialing.
-// - Dialed: unmark upgrading[from]=to and dialing, mark as connected, add
-//   lower-scored to evict.
-// - EvictNext: pick peer from evict, mark as evicting.
-// - Disconnected: unmark connected, upgrading[from]=to, evict, evicting.
+//   - Accepted: if upgrade is possible, mark connected and add lower-scored to evict.
+//   - DialNext: if upgrade is possible, mark upgrading[from]=to and dialing.
+//   - DialFailed: unmark upgrading[from]=to and dialing.
+//   - Dialed: unmark upgrading[from]=to and dialing, mark as connected, add
+//     lower-scored to evict.
+//   - EvictNext: pick peer from evict, mark as evicting.
+//   - Disconnected: unmark connected, upgrading[from]=to, evict, evicting.
 type PeerManager struct {
 	selfID     types.NodeID
 	options    PeerManagerOptions

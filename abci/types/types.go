@@ -12,6 +12,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/internal/jsontypes"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 const (
@@ -276,7 +277,7 @@ func (m *ResponsePrepareProposal) Validate() error {
 }
 
 func isValidApphash(apphash tmbytes.HexBytes) bool {
-	return len(apphash) >= crypto.SmallAppHashSize && len(apphash) <= crypto.LargeAppHashSize
+	return len(apphash) == crypto.DefaultAppHashSize
 }
 
 func (r ResponseProcessProposal) Validate() error {
@@ -293,4 +294,20 @@ func (m *ValidatorSetUpdate) ProTxHashes() []crypto.ProTxHash {
 		ret[i] = v.ProTxHash
 	}
 	return ret
+}
+
+func (m *RequestFinalizeBlock) ToCanonicalVote() (types.CanonicalVote, error) {
+	cv := types.CanonicalVote{
+		Type:    types.PrecommitType,
+		Height:  m.Height,
+		Round:   int64(m.Round),
+		StateID: m.BlockID.StateID,
+		ChainID: m.Block.Header.ChainID,
+	}
+	var err error
+	cv.BlockID, err = m.BlockID.ToCanonicalBlockID().Checksum()
+	if err != nil {
+		return types.CanonicalVote{}, err
+	}
+	return cv, nil
 }

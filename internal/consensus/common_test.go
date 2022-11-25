@@ -1,4 +1,3 @@
-// nolint: lll
 package consensus
 
 import (
@@ -109,7 +108,6 @@ func (vs *validatorStub) signVote(
 	voteType tmproto.SignedMsgType,
 	chainID string,
 	blockID types.BlockID,
-	appHash []byte,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	voteExtensions types.VoteExtensions) (*types.Vote, error) {
@@ -127,13 +125,11 @@ func (vs *validatorStub) signVote(
 		ValidatorProTxHash: proTxHash,
 		ValidatorIndex:     vs.Index,
 		VoteExtensions:     voteExtensions,
-		AppHash:            appHash,
 	}
 
-	stateID := vote.StateID()
 	v := vote.ToProto()
 
-	if err := vs.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, v, stateID, nil); err != nil {
+	if err := vs.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, v, nil); err != nil {
 		return nil, fmt.Errorf("sign vote failed: %w", err)
 	}
 
@@ -160,14 +156,13 @@ func signVote(
 	voteType tmproto.SignedMsgType,
 	chainID string,
 	blockID types.BlockID,
-	appHash []byte,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash) *types.Vote {
 	exts := make(types.VoteExtensions)
 	if voteType == tmproto.PrecommitType && !blockID.IsNil() {
 		exts.Add(tmproto.VoteExtensionType_DEFAULT, []byte("extension"))
 	}
-	v, err := vs.signVote(ctx, voteType, chainID, blockID, appHash, quorumType, quorumHash, exts)
+	v, err := vs.signVote(ctx, voteType, chainID, blockID, quorumType, quorumHash, exts)
 	require.NoError(t, err, "failed to sign vote")
 
 	vs.lastVote = v
@@ -188,7 +183,7 @@ func signVotes(
 ) []*types.Vote {
 	votes := make([]*types.Vote, len(vss))
 	for i, vs := range vss {
-		votes[i] = signVote(ctx, t, vs, voteType, chainID, blockID, appHash, quorumType, quorumHash)
+		votes[i] = signVote(ctx, t, vs, voteType, chainID, blockID, quorumType, quorumHash)
 	}
 	return votes
 }
@@ -263,7 +258,10 @@ func decideProposal(
 	require.NotNil(t, block, "Failed to createProposalBlock. Did you forget to add commit for previous block?")
 
 	// Make proposal
-	polRound, propBlockID := validRound, types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
+	polRound := validRound
+	propBlockID := block.BlockID(blockParts)
+	assert.NoError(t, err)
+
 	proposal = types.NewProposal(height, 1, round, polRound, propBlockID, block.Header.Time)
 	p := proposal.ToProto()
 
@@ -561,7 +559,7 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 		args.config = configSetup(t)
 	}
 	if args.logger == nil {
-		args.logger = log.NewNopLogger()
+		args.logger = consensusLogger(t)
 	}
 	c := factory.ConsensusParams()
 	if args.consensusParams != nil {
@@ -648,7 +646,7 @@ func ensureNewRound(t *testing.T, roundCh <-chan tmpubsub.Message, height int64,
 	t.Helper()
 	msg := ensureMessageBeforeTimeout(t, roundCh, ensureTimeout)
 	newRoundEvent, ok := msg.Data().(types.EventDataNewRound)
-	require.True(t, ok, "expected a EventDataNewRound, got %T. Wrong subscription channel?",
+	assert.True(t, ok, "expected a EventDataNewRound, got %T. Wrong subscription channel?",
 		msg.Data())
 
 	assert.Equal(t, height, newRoundEvent.Height, "height")
@@ -708,6 +706,7 @@ func ensureRelock(t *testing.T, relockCh <-chan tmpubsub.Message, height int64, 
 }
 
 func ensureProposal(t *testing.T, proposalCh <-chan tmpubsub.Message, height int64, round int32, propID types.BlockID) {
+	t.Helper()
 	ensureProposalWithTimeout(t, proposalCh, height, round, &propID, ensureTimeout)
 }
 

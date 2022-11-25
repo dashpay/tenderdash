@@ -27,8 +27,14 @@ import (
 
 // make a Commit with a single vote containing just the height and a timestamp
 func makeTestCommit(state sm.State, height int64, timestamp time.Time) *types.Commit {
-	blockID := types.BlockID{Hash: []byte(""), PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2}}
-	stateID := types.RandStateID().WithHeight(height - 1)
+	blockID := types.BlockID{
+		Hash: []byte(""),
+		PartSetHeader: types.PartSetHeader{
+			Hash:  []byte(""),
+			Total: 2,
+		},
+		StateID: []byte{},
+	}
 	goodVote := &types.Vote{
 		ValidatorProTxHash: crypto.RandProTxHash(),
 		ValidatorIndex:     0,
@@ -44,16 +50,18 @@ func makeTestCommit(state sm.State, height int64, timestamp time.Time) *types.Co
 	privVal := types.NewMockPVWithParams(privKey, crypto.RandProTxHash(), state.Validators.QuorumHash,
 		state.Validators.ThresholdPublicKey, false, false)
 
-	_ = privVal.SignVote(context.Background(), "chainID", state.Validators.QuorumType, state.Validators.QuorumHash, g, stateID, nil)
+	_ = privVal.SignVote(context.Background(), "chainID", state.Validators.QuorumType, state.Validators.QuorumHash, g, nil)
 
 	goodVote.BlockSignature = g.BlockSignature
-	goodVote.StateSignature = g.StateSignature
 	goodVote.VoteExtensions = types.VoteExtensionsFromProto(g.VoteExtensions)
 	thresholdSigns, _ := types.NewSignsRecoverer([]*types.Vote{goodVote}).Recover()
 
 	return types.NewCommit(height, 0,
-		types.BlockID{Hash: []byte(""), PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2}},
-		types.StateID{AppHash: make([]byte, 32)},
+		types.BlockID{
+			Hash:          []byte(""),
+			PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2},
+			StateID:       []byte{},
+		},
 		&types.CommitSigns{
 			QuorumSigns: *thresholdSigns,
 			QuorumHash:  crypto.RandQuorumHash(),
@@ -113,6 +121,7 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 		ChainID:           "block_test",
 		Time:              tmtime.Now(),
 		ProposerProTxHash: tmrand.Bytes(crypto.DefaultHashSize),
+		ValidatorsHash:    tmrand.Bytes(crypto.HashSize),
 	}
 
 	// End of setup, test data
@@ -148,6 +157,7 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 					Height:            5,
 					ChainID:           "block_test",
 					Time:              tmtime.Now(),
+					ValidatorsHash:    tmrand.Bytes(crypto.DefaultHashSize),
 					ProposerProTxHash: tmrand.Bytes(crypto.DefaultHashSize)},
 				makeTestCommit(state, 5, tmtime.Now()),
 			),
@@ -216,6 +226,7 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 
 	for i, tuple := range tuples {
 		tuple := tuple
+
 		bs, db := newInMemoryBlockStore()
 		// SaveBlock
 		res, err, panicErr := doFn(func() (interface{}, error) {

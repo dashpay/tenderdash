@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
+	"github.com/tendermint/tendermint/abci/example/kvstore"
 	"github.com/tendermint/tendermint/abci/server"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -168,7 +169,7 @@ func startRemoteSigner(ctx context.Context, cfg *Config, logger log.Logger) erro
 
 // startApp starts the application server, listening for connections from Tendermint.
 func startApp(ctx context.Context, logger log.Logger, cfg *Config) error {
-	app, err := app.NewApplication(*cfg.App())
+	app, err := app.NewApplication(*cfg.App(), kvstore.WithCommitVerification())
 	if err != nil {
 		return err
 	}
@@ -189,7 +190,7 @@ func startApp(ctx context.Context, logger log.Logger, cfg *Config) error {
 //
 // FIXME There is no way to simply load the configuration from a file, so we need to pull in Viper.
 func startNode(ctx context.Context, cfg *Config) error {
-	app, err := app.NewApplication(*cfg.App())
+	app, err := app.NewApplication(*cfg.App(), kvstore.WithCommitVerification())
 	if err != nil {
 		return err
 	}

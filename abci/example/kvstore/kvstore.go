@@ -11,6 +11,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
 	dbm "github.com/tendermint/tm-db"
 
@@ -25,7 +26,7 @@ import (
 	"github.com/tendermint/tendermint/version"
 )
 
-const ProtocolVersion uint64 = 0x1
+const ProtocolVersion uint64 = 0x12345678
 
 //---------------------------------------------------
 
@@ -70,6 +71,16 @@ type Application struct {
 
 	snapshots     *SnapshotStore
 	offerSnapshot *offerSnapshot
+
+	shouldCommitVerify bool
+}
+
+// WithCommitVerification enables commit verification
+func WithCommitVerification() OptFunc {
+	return func(app *Application) error {
+		app.shouldCommitVerify = true
+		return nil
+	}
 }
 
 // WithValidatorSetUpdates defines initial validator set when creating Application
@@ -177,6 +188,7 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 		prepareTxs:             prepareTxs,
 		verifyTx:               verifyTx,
 		execTx:                 execTx,
+		shouldCommitVerify:     false,
 	}
 
 	for _, opt := range opts {
@@ -251,10 +263,14 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 			},
 		}
 	}
+	vsu := app.getValidatorSetUpdate(app.initialHeight, 0)
+	if vsu == nil {
+		return nil, errors.New("validator-set update cannot be nil")
+	}
 	resp := &abci.ResponseInitChain{
 		AppHash:                 app.LastCommittedState.GetAppHash(),
 		ConsensusParams:         &consensusParams,
-		ValidatorSetUpdate:      app.validatorSetUpdates[app.initialHeight],
+		ValidatorSetUpdate:      *vsu,
 		InitialCoreHeight:       app.initialCoreLockHeight,
 		NextCoreChainLockUpdate: coreChainLock,
 	}
@@ -339,7 +355,7 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("finalize block (hash: %s): %w", blockHash, err)
 	}
 
-	appHash := tmbytes.HexBytes(req.AppHash)
+	appHash := tmbytes.HexBytes(req.Block.Header.AppHash)
 	roundState, ok := app.roundStates[roundKey(appHash, req.Height, req.Round)]
 	if !ok {
 		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s not found", appHash)
@@ -351,6 +367,17 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	if roundState.GetRound() != req.Commit.Round {
 		return &abci.ResponseFinalizeBlock{},
 			fmt.Errorf("commit round mismatch: expected %d, got %d", roundState.GetRound(), req.Commit.Round)
+	}
+	if app.shouldCommitVerify {
+		vsu := app.getActiveValidatorSetUpdates()
+		qsd := types.QuorumSignData{
+			Block:      makeBlockSignItem(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
+			Extensions: makeVoteExtensionSignItems(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
+		}
+		err := app.verifyBlockCommit(qsd, req.Commit)
+		if err != nil {
+			return nil, err
+		}
 	}
 	events := []abci.Event{app.eventValUpdate(req.Height)}
 	resp := &abci.ResponseFinalizeBlock{
@@ -700,12 +727,16 @@ func (app *Application) getConsensusParamsUpdate(height int64) *types1.Consensus
 
 // ---------------------------------------------
 // getValidatorSetUpdate returns validator update at some `height` that will be applied at `height+1`.
-func (app *Application) getValidatorSetUpdate(height int64) *abci.ValidatorSetUpdate {
-	vsu, ok := app.validatorSetUpdates[height]
-	if !ok {
-		return nil
+func (app *Application) getValidatorSetUpdate(height int64, fallbacks ...int64) *abci.ValidatorSetUpdate {
+	heights := append([]int64{height}, fallbacks...)
+	for _, h := range heights {
+		vsu, ok := app.validatorSetUpdates[h]
+		if !ok {
+			continue
+		}
+		return proto.Clone(&vsu).(*abci.ValidatorSetUpdate)
 	}
-	return proto.Clone(&vsu).(*abci.ValidatorSetUpdate)
+	return nil
 }
 
 func (app *Application) chainLockUpdate(height int64) (*types1.CoreChainLock, error) {
@@ -726,8 +757,12 @@ func (app *Application) chainLockUpdate(height int64) (*types1.CoreChainLock, er
 
 func (app *Application) getActiveValidatorSetUpdates() abci.ValidatorSetUpdate {
 	var closestHeight int64
+	lcsHeight := app.LastCommittedState.GetHeight()
+	if lcsHeight == 0 {
+		lcsHeight = app.initialHeight
+	}
 	for height := range app.validatorSetUpdates {
-		if height > closestHeight && height <= app.LastCommittedState.GetHeight() {
+		if height > closestHeight && height <= lcsHeight {
 			closestHeight = height
 		}
 	}

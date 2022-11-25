@@ -18,14 +18,12 @@ type CommitSigns struct {
 func (c *CommitSigns) CopyToCommit(commit *Commit) {
 	commit.QuorumHash = c.QuorumHash
 	commit.ThresholdBlockSignature = c.BlockSign
-	commit.ThresholdStateSignature = c.StateSign
 	commit.ThresholdVoteExtensions = c.ExtensionSigns
 }
 
 // QuorumSigns holds all created signatures, block, state and for each recovered vote-extensions
 type QuorumSigns struct {
 	BlockSign      []byte
-	StateSign      []byte
 	ExtensionSigns []ThresholdExtensionSign
 }
 
@@ -33,7 +31,6 @@ type QuorumSigns struct {
 func NewQuorumSignsFromCommit(commit *Commit) QuorumSigns {
 	return QuorumSigns{
 		BlockSign:      commit.ThresholdBlockSignature,
-		StateSign:      commit.ThresholdStateSignature,
 		ExtensionSigns: commit.ThresholdVoteExtensions,
 	}
 }
@@ -112,7 +109,6 @@ func MakeThresholdVoteExtensions(extensions []VoteExtension, thresholdSigs [][]b
 type QuorumSingsVerifier struct {
 	QuorumSignData
 	shouldVerifyBlock          bool
-	shouldVerifyState          bool
 	shouldVerifyVoteExtensions bool
 	logger                     log.Logger
 }
@@ -131,18 +127,10 @@ func WithVerifyBlock(shouldVerify bool) func(*QuorumSingsVerifier) {
 	}
 }
 
-// WithVerifyState sets a flag that tells QuorumSingsVerifier to verify stateID signature or not
-func WithVerifyState(shouldVerify bool) func(*QuorumSingsVerifier) {
-	return func(verifier *QuorumSingsVerifier) {
-		verifier.shouldVerifyState = shouldVerify
-	}
-}
-
 // WithVerifyReachedQuorum sets a flag that tells QuorumSingsVerifier to verify
 // vote-extension and stateID signatures or not
 func WithVerifyReachedQuorum(quorumReached bool) func(*QuorumSingsVerifier) {
 	return func(verifier *QuorumSingsVerifier) {
-		verifier.shouldVerifyState = quorumReached
 		verifier.shouldVerifyVoteExtensions = quorumReached
 	}
 }
@@ -160,7 +148,6 @@ func NewQuorumSignsVerifier(quorumData QuorumSignData, opts ...func(*QuorumSings
 	verifier := &QuorumSingsVerifier{
 		QuorumSignData:             quorumData,
 		shouldVerifyBlock:          true,
-		shouldVerifyState:          true,
 		shouldVerifyVoteExtensions: true,
 		logger:                     log.NewNopLogger(),
 	}
@@ -173,10 +160,6 @@ func NewQuorumSignsVerifier(quorumData QuorumSignData, opts ...func(*QuorumSings
 // Verify verifies quorum data using public key and passed signatures
 func (q *QuorumSingsVerifier) Verify(pubKey crypto.PubKey, signs QuorumSigns) error {
 	err := q.verifyBlock(pubKey, signs)
-	if err != nil {
-		return err
-	}
-	err = q.verifyState(pubKey, signs)
 	if err != nil {
 		return err
 	}
@@ -193,22 +176,6 @@ func (q *QuorumSingsVerifier) verifyBlock(pubKey crypto.PubKey, signs QuorumSign
 			q.Block.Raw,
 			q.Block.ID,
 			ErrVoteInvalidBlockSignature,
-		)
-	}
-	return nil
-}
-
-func (q *QuorumSingsVerifier) verifyState(pubKey crypto.PubKey, signs QuorumSigns) error {
-	if !q.shouldVerifyState {
-		return nil
-	}
-	if !pubKey.VerifySignatureDigest(q.State.ID, signs.StateSign) {
-		return fmt.Errorf(
-			"threshold state signature is invalid: (raw=%X, signID=%X, pubkey=%s): %w",
-			q.State.Raw,
-			q.State.ID,
-			pubKey.HexString(),
-			ErrVoteInvalidStateSignature,
 		)
 	}
 	return nil

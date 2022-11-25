@@ -25,6 +25,7 @@ import (
 	servertest "github.com/tendermint/tendermint/abci/tests/server"
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/proto/tendermint/crypto"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 // client is a global variable so it can be reused by the console
@@ -564,7 +565,13 @@ func cmdFinalizeBlock(cmd *cobra.Command, args []string) error {
 		}
 		txs[i] = txBytes
 	}
-	res, err := client.FinalizeBlock(cmd.Context(), &types.RequestFinalizeBlock{Height: int64(height), Txs: txs, AppHash: appHash})
+	res, err := client.FinalizeBlock(cmd.Context(), &types.RequestFinalizeBlock{
+		Height: int64(height),
+		Block: &tmproto.Block{
+			Header: tmproto.Header{AppHash: appHash},
+			Data:   tmproto.Data{Txs: txs},
+		},
+	})
 	if err != nil {
 		return err
 	}

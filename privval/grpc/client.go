@@ -133,13 +133,12 @@ func (sc *SignerClient) GetHeight(ctx context.Context, quorumHash crypto.QuorumH
 // SignVote requests a remote signer to sign a vote
 func (sc *SignerClient) SignVote(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
-	vote *tmproto.Vote, stateID types.StateID, logger log.Logger) error {
+	vote *tmproto.Vote, logger log.Logger) error {
 	if len(quorumHash.Bytes()) != crypto.DefaultHashSize {
 		return fmt.Errorf("quorum hash must be 32 bytes long when signing vote")
 	}
-	protoStateID := stateID.ToProto()
 	resp, err := sc.client.SignVote(ctx, &privvalproto.SignVoteRequest{ChainId: sc.chainID, Vote: vote,
-		QuorumType: int32(quorumType), QuorumHash: quorumHash, StateId: &protoStateID})
+		QuorumType: int32(quorumType), QuorumHash: quorumHash})
 	if err != nil {
 		errStatus, _ := status.FromError(err)
 		sc.logger.Error("Client SignVote", "err", errStatus.Message())

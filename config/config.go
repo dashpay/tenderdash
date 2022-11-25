@@ -13,7 +13,6 @@ import (
 
 	"github.com/dashevo/dashd-go/btcjson"
 
-	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	"github.com/tendermint/tendermint/types"
@@ -999,8 +998,6 @@ type ConsensusConfig struct {
 
 	QuorumType btcjson.LLMQType `mapstructure:"quorum-type"`
 
-	AppHashSize int `mapstructure:"app-hash-size"`
-
 	// TODO: The following fields are all temporary overrides that should exist only
 	// for the duration of the v0.36 release. The below fields should be completely
 	// removed in the v0.37 release of Tendermint.
@@ -1058,7 +1055,6 @@ func DefaultConsensusConfig() *ConsensusConfig {
 		PeerGossipSleepDuration:     100 * time.Millisecond,
 		PeerQueryMaj23SleepDuration: 2000 * time.Millisecond,
 		DoubleSignCheckHeight:       int64(0),
-		AppHashSize:                 crypto.DefaultAppHashSize,
 		QuorumType:                  btcjson.LLMQType_5_60,
 		ProposedBlockTimeWindow:     10 * time.Second,
 		DontAutoPropose:             false,
@@ -1071,7 +1067,6 @@ func TestConsensusConfig() *ConsensusConfig {
 	cfg.PeerGossipSleepDuration = 5 * time.Millisecond
 	cfg.PeerQueryMaj23SleepDuration = 250 * time.Millisecond
 	cfg.DoubleSignCheckHeight = int64(0)
-	cfg.AppHashSize = crypto.DefaultAppHashSize
 	cfg.QuorumType = btcjson.LLMQType_5_60
 	return cfg
 }
@@ -1165,12 +1160,14 @@ func (cfg *ConsensusConfig) DeprecatedFieldWarning() error {
 	return nil
 }
 
-//-----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // TxIndexConfig
 // Remember that Event has the following structure:
 // type: [
-//  key: value,
-//  ...
+//
+//	key: value,
+//	...
+//
 // ]
 //
 // CompositeKeys are constructed by `type.key`

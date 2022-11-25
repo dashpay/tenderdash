@@ -38,6 +38,7 @@ func MakeBlockIDWithHash(hash []byte) types.BlockID {
 			Total: 100,
 			Hash:  RandomHash(),
 		},
+		StateID: types.RandStateID().Hash(),
 	}
 }
 

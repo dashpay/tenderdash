@@ -3,7 +3,7 @@ package consensus
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
@@ -142,10 +142,7 @@ func TestWALWriteCommit(t *testing.T) {
 
 	logger := log.NewTestingLogger(t)
 
-	walDir, err := ioutil.TempDir("", "wal")
-	require.NoError(t, err)
-	defer os.RemoveAll(walDir)
-	walFile := filepath.Join(walDir, "wal")
+	walFile := filepath.Join(t.TempDir(), "wal")
 
 	wal, err := NewWAL(ctx, logger, walFile)
 	require.NoError(t, err)
@@ -159,20 +156,21 @@ func TestWALWriteCommit(t *testing.T) {
 	}()
 
 	// Prepare and write commit msg
+	height := rand.Int63()
 	stateID := tmtypes.RandStateID()
+	stateID.Height = uint64(height)
 	blockID := tmtypes.BlockID{
 		Hash: crypto.CRandBytes(crypto.HashSize),
 		PartSetHeader: tmtypes.PartSetHeader{
 			Total: 0,
 			Hash:  crypto.CRandBytes(crypto.HashSize)},
+		StateID: stateID.Hash(),
 	}
 	msg := &CommitMessage{
 		Commit: &tmtypes.Commit{
-			Height:                  stateID.Height,
-			StateID:                 stateID,
+			Height:                  height,
 			BlockID:                 blockID,
 			ThresholdBlockSignature: crypto.CRandBytes(96),
-			ThresholdStateSignature: crypto.CRandBytes(96),
 		},
 	}
 	err = wal.Write(msgInfo{
@@ -199,7 +197,7 @@ func TestWALWriteCommit(t *testing.T) {
 	require.True(t, ok, "expected message of type msgInfo, got %T", readMsg.Msg)
 	commitMsg, ok := msgInfo.Msg.(*CommitMessage)
 	require.True(t, ok, "expected message of type *CommitMessage, got %T", msgInfo.Msg)
-	assert.EqualValues(t, stateID.Height, commitMsg.Commit.StateID.Height)
+	assert.EqualValues(t, stateID.Hash(), commitMsg.Commit.BlockID.StateID)
 }
 
 func TestWALSearchForEndHeight(t *testing.T) {

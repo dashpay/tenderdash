@@ -2,7 +2,6 @@ package consensus
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
@@ -15,8 +14,6 @@ import (
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
-
-var errCoreChainLockedHeightCantBeZero = errors.New("the initial core chain locked height in genesis can not be 0")
 
 // NewReplayBlockExecutor returns a new instance of state.BlockExecutor configured for BlockReplayer
 func NewReplayBlockExecutor(
@@ -322,10 +319,6 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	if rs.appHeight != 0 {
 		return nil
 	}
-	// If appHeight == 0 it means that we are at genesis and hence should send InitChain.
-	if r.genDoc.InitialCoreChainLockedHeight == 0 {
-		return errCoreChainLockedHeightCantBeZero
-	}
 	stateBlockHeight := state.LastBlockHeight
 	nextVals, err := validatorSetUpdateFromGenesis(r.genDoc, r.nodeProTxHash)
 	if err != nil {
@@ -375,12 +368,9 @@ func (r *BlockReplayer) publishEvents(
 	ucState sm.CurrentRoundState,
 	fbResp *abci.ResponseFinalizeBlock,
 ) error {
-	blockID, err := block.BlockID()
-	if err != nil {
-		return err
-	}
+	blockID := block.BlockID(nil)
 	es := sm.NewFullEventSet(block, blockID, ucState, fbResp, ucState.NextValidators)
-	err = es.Publish(r.publisher)
+	err := es.Publish(r.publisher)
 	if err != nil {
 		r.logger.Error("failed publishing event", "err", err)
 	}
