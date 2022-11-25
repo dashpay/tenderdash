@@ -194,13 +194,12 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			return
 		}
 
-		if lazyNodeState.privValidatorProTxHash == nil {
+		if lazyNodeState.privValidator == nil {
 			// If this node is a validator & proposer in the current round, it will
 			// miss the opportunity to create a block.
-			lazyNodeState.logger.Error("enterPropose", "err", errProTxHashIsNotSet)
+			lazyNodeState.logger.Error("enterPropose", "err", ErrPrivValidatorNotSet)
 			return
 		}
-		proposerProTxHash := lazyNodeState.privValidatorProTxHash
 
 		block, uncommittedState, err := lazyNodeState.blockExec.CreateProposalBlock(
 			ctx,
@@ -208,7 +207,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			round,
 			lazyNodeState.state,
 			commit,
-			proposerProTxHash,
+			lazyNodeState.privValidator.ProTxHash,
 			0,
 		)
 		require.NoError(t, err)
