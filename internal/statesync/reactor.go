@@ -64,9 +64,6 @@ const (
 	// return a light block
 	lightBlockResponseTimeout = 10 * time.Second
 
-	// initStateProviderTimeout is how long state provider initialization (including trusted block fetch/verify) can take
-	initStateProviderTimeout = 2 * lightBlockResponseTimeout
-
 	// consensusParamsResponseTimeout is the time the p2p state provider waits
 	// before performing a secondary call
 	consensusParamsResponseTimeout = 5 * time.Second
@@ -74,6 +71,9 @@ const (
 	// maxLightBlockRequestRetries is the amount of retries acceptable before
 	// the backfill process aborts
 	maxLightBlockRequestRetries = 20
+
+	// initStateProviderTimeout is how long state provider initialization (including trusted block fetch/verify) can take
+	initStateProviderTimeout = 2 * (maxLightBlockRequestRetries * lightBlockResponseTimeout)
 
 	// backfillSleepTime uses to sleep if no connected peers to fetch light blocks
 	backfillSleepTime = 1 * time.Second
