@@ -19,7 +19,6 @@ var (
 	errNoConnectedPeers    = errors.New("no available peers to dispatch request to")
 	errUnsolicitedResponse = errors.New("unsolicited light block response")
 	errPeerAlreadyBusy     = errors.New("peer is already processing a request")
-	errDisconnected        = errors.New("dispatcher disconnected")
 )
 
 // A Dispatcher multiplexes concurrent requests by multiple peers for light blocks.
@@ -103,7 +102,7 @@ func (d *Dispatcher) dispatch(ctx context.Context, peer types.NodeID, height int
 	defer d.mtx.Unlock()
 	select {
 	case <-ctx.Done():
-		return nil, errDisconnected
+		return nil, ctx.Err()
 	default:
 	}
 
