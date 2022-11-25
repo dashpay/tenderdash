@@ -56,11 +56,14 @@ func (d *Dispatcher) LightBlock(ctx context.Context, height int64, peer types.No
 		cancel()
 
 		if !errors.Is(err, context.DeadlineExceeded) {
-			break
+			return lb, err
+		}
+		if lbCtx.Err() != nil {
+			return nil, lbCtx.Err()
 		}
 	}
 
-	return lb, err
+	return nil, err
 }
 
 func (d *Dispatcher) lightBlock(ctx context.Context, height int64, peer types.NodeID) (*types.LightBlock, error) {
