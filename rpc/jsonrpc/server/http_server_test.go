@@ -8,10 +8,11 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/assert"

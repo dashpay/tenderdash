@@ -4,7 +4,8 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/go-kit/kit/metrics"
 )

@@ -3,7 +3,8 @@ package privval
 import (
 	"context"
 	"io"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/libs/service"
 	privvalproto "github.com/tendermint/tendermint/proto/tendermint/privval"

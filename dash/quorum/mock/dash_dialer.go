@@ -3,7 +3,8 @@ package mock
 import (
 	"encoding/binary"
 	"encoding/hex"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/types"

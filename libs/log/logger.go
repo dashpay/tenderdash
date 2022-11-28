@@ -2,7 +2,8 @@ package log
 
 import (
 	"io"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 )
 
 const (
