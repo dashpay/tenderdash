@@ -371,10 +371,20 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 		return sm.State{}, errors.New("a state sync is already in progress")
 	}
 
-	// we need some timeout in case initialization takes too much time
-	initCtx, cancel := context.WithTimeout(ctx, initStateProviderTimeout)
-	defer cancel()
-	if err := r.initStateProvider(initCtx, r.chainID, r.initialHeight); err != nil {
+	// run initialization in a retry loop
+	var err error
+	for retry := 0; retry < 3; retry++ {
+		// we need some timeout in case initialization takes too much time
+		initCtx, cancel := context.WithTimeout(ctx, initStateProviderTimeout)
+		err = r.initStateProvider(initCtx, r.chainID, r.initialHeight)
+		cancel()
+		if err == nil {
+			break
+		}
+		r.logger.Error("failed to init state provider, retrying", "retry", retry, "error", err)
+		time.Sleep(time.Second)
+	}
+	if err != nil {
 		r.mtx.Unlock()
 		return sm.State{}, fmt.Errorf("init state provider: %w", err)
 	}
