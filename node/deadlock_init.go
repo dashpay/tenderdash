@@ -13,5 +13,5 @@ func init() {
 		fmt.Println("POTENTIAL DEADLOCK DETECTED")
 		fmt.Println("===========================")
 	}
-	sync.Opts.DeadlockTimeout = 2 * time.Minute
+	sync.Opts.DeadlockTimeout = 1 * time.Minute
 }
