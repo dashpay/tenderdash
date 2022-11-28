@@ -45,27 +45,6 @@ func NewDispatcher(requestChannel p2p.Channel) *Dispatcher {
 // tracking, the call and waiting for the reactor to pass back the response. A nil
 // LightBlock response is used to signal that the peer doesn't have the requested LightBlock.
 func (d *Dispatcher) LightBlock(ctx context.Context, height int64, peer types.NodeID) (*types.LightBlock, error) {
-	var (
-		lb  *types.LightBlock
-		err error
-	)
-	for retry := 0; retry < maxLightBlockRequestRetries; retry++ {
-		lbCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
-		lb, err = d.lightBlock(lbCtx, height, peer)
-		cancel()
-
-		if !errors.Is(err, context.DeadlineExceeded) {
-			return lb, err
-		}
-		if lbCtx.Err() != nil {
-			return nil, lbCtx.Err()
-		}
-	}
-
-	return nil, err
-}
-
-func (d *Dispatcher) lightBlock(ctx context.Context, height int64, peer types.NodeID) (*types.LightBlock, error) {
 	// dispatch the request to the peer
 	callCh, err := d.dispatch(ctx, peer, height)
 	if err != nil {

@@ -382,7 +382,7 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 
 					// jitter+backoff the retry loop
 					timer.Reset(time.Duration(iterCount)*consensusParamsResponseTimeout +
-						time.Duration(100*rand.Int63n(iterCount))*time.Millisecond) //nolint:gosec
+						time.Duration(100*rand.Int63n(iterCount))*time.Millisecond) // nolint:gosec
 
 					select {
 					case <-timer.C:
@@ -423,7 +423,7 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 		case <-sig:
 			// jitter+backoff the retry loop
 			timer.Reset(time.Duration(iterCount)*consensusParamsResponseTimeout +
-				time.Duration(100*rand.Int63n(iterCount))*time.Millisecond) //nolint:gosec
+				time.Duration(100*rand.Int63n(iterCount))*time.Millisecond) // nolint:gosec
 			select {
 			case param := <-out:
 				return param, nil

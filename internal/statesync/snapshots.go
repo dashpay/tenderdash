@@ -140,7 +140,7 @@ func (p *snapshotPool) GetPeer(snapshot *snapshot) types.NodeID {
 	if len(peers) == 0 {
 		return ""
 	}
-	return peers[rand.Intn(len(peers))] //nolint:gosec // G404: Use of weak random number generator
+	return peers[rand.Intn(len(peers))] // nolint:gosec // G404: Use of weak random number generator
 }
 
 // GetPeers returns the peers for a snapshot.
