@@ -118,7 +118,7 @@ type State struct {
 
 	// config details
 	config        *config.ConsensusConfig
-	privValidator *privValidator
+	privValidator privValidator
 
 	// store blocks and commits
 	blockStore sm.BlockStore
@@ -351,10 +351,11 @@ func (cs *State) SetPrivValidator(ctx context.Context, priv types.PrivValidator)
 	cs.mtx.Lock()
 	defer cs.mtx.Unlock()
 	if priv == nil {
+		cs.privValidator = privValidator{}
 		cs.logger.Error("attempting to set private validator to nil")
 		return
 	}
-	cs.privValidator = &privValidator{PrivValidator: priv}
+	cs.privValidator = privValidator{PrivValidator: priv}
 	err := cs.privValidator.init(ctx)
 	if err != nil {
 		cs.logger.Error("failed to initialize private validator", "err", err)
@@ -1361,7 +1362,7 @@ func (cs *State) enterPropose(ctx context.Context, height int64, round int32) {
 	cs.scheduleTimeout(cs.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
 
 	// Nothing more to do if we're not a validator
-	if cs.privValidator == nil {
+	if cs.privValidator.IsZero() {
 		logger.Debug("propose step; not proposing since node is not a validator")
 		return
 	}
@@ -1550,7 +1551,7 @@ func (cs *State) CreateProposalBlock(ctx context.Context) (*types.Block, error) 
 // NOTE: keep it side-effect free for clarity.
 // CONTRACT: cs.privValidator is not nil.
 func (cs *State) createProposalBlock(ctx context.Context, round int32) (*types.Block, error) {
-	if cs.privValidator == nil {
+	if cs.privValidator.IsZero() {
 		return nil, errors.New("entered createProposalBlock with privValidator being nil")
 	}
 
@@ -2701,7 +2702,7 @@ func (cs *State) tryAddVote(ctx context.Context, vote *types.Vote, peerID types.
 		// But if it's a conflicting sig, add it to the cs.evpool.
 		// If it's otherwise invalid, punish peer.
 		if voteErr, ok := err.(*types.ErrVoteConflictingVotes); ok {
-			if cs.privValidator == nil {
+			if cs.privValidator.IsZero() {
 				return false, ErrPrivValidatorNotSet
 			}
 
@@ -2970,7 +2971,7 @@ func (cs *State) signVote(
 		return nil, err
 	}
 
-	if cs.privValidator == nil {
+	if cs.privValidator.IsZero() {
 		return nil, ErrPrivValidatorNotSet
 	}
 	proTxHash := cs.privValidator.ProTxHash
@@ -3023,7 +3024,7 @@ func (cs *State) signAddVote(
 	msgType tmproto.SignedMsgType,
 	blockID types.BlockID,
 ) *types.Vote {
-	if cs.privValidator == nil { // the node does not have a key
+	if cs.privValidator.IsZero() { // the node does not have a key
 		cs.logger.Error("signAddVote", "err", ErrPrivValidatorNotSet)
 		return nil
 	}
@@ -3183,6 +3184,10 @@ type privValidator struct {
 
 func (pv *privValidator) IsProTxHashEqual(proTxHash types.ProTxHash) bool {
 	return pv.ProTxHash.Equal(proTxHash)
+}
+
+func (pv *privValidator) IsZero() bool {
+	return pv.PrivValidator == nil
 }
 
 func (pv *privValidator) init(ctx context.Context) error {

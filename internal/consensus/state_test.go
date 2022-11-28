@@ -651,7 +651,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	cs2, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 2})
 	// Since the quorum hash is also part of the sign ID we must make sure it's the same
 	cs2.state.Validators = cs1.state.Validators.Copy()
-	cs2.privValidator = &privValidator{PrivValidator: vs2}
+	cs2.privValidator = privValidator{PrivValidator: vs2}
 	cs2.privValidator.ProTxHash, err = vs2.PrivValidator.GetProTxHash(ctx)
 	require.NoError(t, err)
 

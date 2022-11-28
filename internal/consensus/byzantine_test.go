@@ -178,7 +178,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	lazyNodeState := states[1]
 
 	lazyNodeState.decideProposal = func(ctx context.Context, height int64, round int32) {
-		require.NotNil(t, lazyNodeState.privValidator)
+		require.False(t, lazyNodeState.privValidator.IsZero())
 
 		var commit *types.Commit
 		switch {
@@ -194,7 +194,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			return
 		}
 
-		if lazyNodeState.privValidator == nil {
+		if lazyNodeState.privValidator.IsZero() {
 			// If this node is a validator & proposer in the current round, it will
 			// miss the opportunity to create a block.
 			lazyNodeState.logger.Error("enterPropose", "err", ErrPrivValidatorNotSet)
