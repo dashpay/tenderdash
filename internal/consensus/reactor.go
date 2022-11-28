@@ -1266,7 +1266,7 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 		}
 	case *tmcons.Vote:
 		r.state.mtx.RLock()
-		isValidator := r.state.Validators.HasProTxHash(r.state.privValidatorProTxHash)
+		isValidator := r.state.Validators.HasProTxHash(r.state.privValidator.ProTxHash)
 		height, valSize, lastCommitSize := r.state.Height, r.state.Validators.Size(), r.state.LastPrecommits.Size()
 		r.state.mtx.RUnlock()
 

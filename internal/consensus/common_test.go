@@ -226,7 +226,7 @@ func sortVValidatorStubsByPower(ctx context.Context, t *testing.T, vss []*valida
 // Functions for transitioning the consensus state
 
 func startTestRound(ctx context.Context, cs *State, height int64, round int32) {
-	ctx = dash.ContextWithProTxHash(ctx, cs.privValidatorProTxHash)
+	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
 	cs.enterNewRound(ctx, height, round)
 	cs.startRoutines(ctx, 0)
 }
