@@ -75,7 +75,7 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 				cs.Votes.SetRound(p.Round)
 				cs.Round = p.Round
 			}
-			cs.logger.Info("Replay: Proposal", "height", p.Height, "round", p.Round, "header", "cs.Round", cs.Round,
+			cs.logger.Info("Replay: Proposal", "height", p.Height, "round", p.Round,"cs.Round", cs.Round, "header", 
 				p.BlockID.PartSetHeader, "pol", p.POLRound, "peer", peerID)
 		case *BlockPartMessage:
 			cs.logger.Info("Replay: BlockPart", "height", msg.Height, "round", msg.Round, "peer", peerID)
