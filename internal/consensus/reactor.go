@@ -221,10 +221,21 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 
 	go r.updateRoundStateRoutine(ctx)
 
+	// Only state channel should be read during state sync.
+	// Data, vote and vote set must wait.
+	// We cannot skip waiting messages, as the peers might already have marked them as delivered.
+	// XXX: this can lead to a deadlock, if so - we need additional buffer for (at least) Commits.
 	go r.processMsgCh(ctx, chBundle.state, chBundle)
-	go r.processMsgCh(ctx, chBundle.data, chBundle)
-	go r.processMsgCh(ctx, chBundle.vote, chBundle)
-	go r.processMsgCh(ctx, chBundle.votSet, chBundle)
+	go func() {
+		select {
+		case <-r.readySignal:
+			go r.processMsgCh(ctx, chBundle.data, chBundle)
+			go r.processMsgCh(ctx, chBundle.vote, chBundle)
+			go r.processMsgCh(ctx, chBundle.votSet, chBundle)
+		case <-ctx.Done():
+		}
+	}()
+
 	go r.processPeerUpdates(ctx, peerUpdates, chBundle)
 
 	return nil
