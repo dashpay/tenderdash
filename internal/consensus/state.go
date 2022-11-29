@@ -16,7 +16,6 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
@@ -31,24 +30,21 @@ import (
 	tmos "github.com/tendermint/tendermint/libs/os"
 	"github.com/tendermint/tendermint/libs/service"
 	tmtime "github.com/tendermint/tendermint/libs/time"
-	"github.com/tendermint/tendermint/privval"
-	tmgrpc "github.com/tendermint/tendermint/privval/grpc"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
 
 // Consensus sentinel errors
 var (
-	ErrInvalidProposalNotSet      = errors.New("error invalid proposal not set")
-	ErrInvalidProposalForCommit   = errors.New("error invalid proposal for commit")
-	ErrUnableToVerifyProposal     = errors.New("error unable to verify proposal")
-	ErrInvalidProposalSignature   = errors.New("error invalid proposal signature")
-	ErrInvalidProposalCoreHeight  = errors.New("error invalid proposal core height")
-	ErrInvalidProposalPOLRound    = errors.New("error invalid proposal POL round")
-	ErrAddingVote                 = errors.New("error adding vote")
-	ErrSignatureFoundInPastBlocks = errors.New("found signature from the same key")
+	ErrInvalidProposalNotSet     = errors.New("error invalid proposal not set")
+	ErrInvalidProposalForCommit  = errors.New("error invalid proposal for commit")
+	ErrUnableToVerifyProposal    = errors.New("error unable to verify proposal")
+	ErrInvalidProposalSignature  = errors.New("error invalid proposal signature")
+	ErrInvalidProposalCoreHeight = errors.New("error invalid proposal core height")
+	ErrInvalidProposalPOLRound   = errors.New("error invalid proposal POL round")
+	ErrAddingVote                = errors.New("error adding vote")
 
-	errProTxHashIsNotSet = errors.New("protxhash is not set. Look for \"Can't get private validator protxhash\" errors")
+	ErrPrivValidatorNotSet = errors.New("priv-validator is not set")
 )
 
 var msgQueueSize = 1000
@@ -122,9 +118,8 @@ type State struct {
 	logger log.Logger
 
 	// config details
-	config            *config.ConsensusConfig
-	privValidator     types.PrivValidator // for signing votes
-	privValidatorType types.PrivValidatorType
+	config        *config.ConsensusConfig
+	privValidator privValidator
 
 	// store blocks and commits
 	blockStore sm.BlockStore
@@ -146,10 +141,6 @@ type State struct {
 	mtx sync.RWMutex
 	cstypes.RoundState
 	state sm.State // State until height-1.
-
-	// privValidator proTxHash, memoized for the duration of one block
-	// to avoid extra requests to HSM
-	privValidatorProTxHash crypto.ProTxHash
 
 	// state changes may be triggered by: msgs from peers,
 	// msgs from ourself, or by timeouts
@@ -360,37 +351,16 @@ func (cs *State) GetValidatorSet() (int64, *types.ValidatorSet) {
 func (cs *State) SetPrivValidator(ctx context.Context, priv types.PrivValidator) {
 	cs.mtx.Lock()
 	defer cs.mtx.Unlock()
-
 	if priv == nil {
+		cs.privValidator = privValidator{}
 		cs.logger.Error("attempting to set private validator to nil")
+		return
 	}
-
-	cs.privValidator = priv
-
-	if priv != nil {
-		switch t := priv.(type) {
-		case *privval.RetrySignerClient:
-			cs.privValidatorType = types.RetrySignerClient
-		case *privval.FilePV:
-			cs.privValidatorType = types.FileSignerClient
-		case *privval.SignerClient:
-			cs.privValidatorType = types.SignerSocketClient
-		case *tmgrpc.SignerClient:
-			cs.privValidatorType = types.SignerGRPCClient
-		case *types.MockPV:
-			cs.privValidatorType = types.MockSignerClient
-		case *types.ErroringMockPV:
-			cs.privValidatorType = types.ErrorMockSignerClient
-		case *privval.DashCoreSignerClient:
-			cs.privValidatorType = types.DashCoreRPCClient
-		default:
-			cs.logger.Error("unsupported priv validator type", "err",
-				fmt.Errorf("error privValidatorType %s", t))
-		}
-	}
-
-	if err := cs.updatePrivValidatorProTxHash(ctx); err != nil {
-		cs.logger.Error("failed to get private validator protxhash", "err", err)
+	cs.privValidator = privValidator{PrivValidator: priv}
+	err := cs.privValidator.init(ctx)
+	if err != nil {
+		cs.logger.Error("failed to initialize private validator", "err", err)
+		return
 	}
 }
 
@@ -1393,18 +1363,12 @@ func (cs *State) enterPropose(ctx context.Context, height int64, round int32) {
 	cs.scheduleTimeout(cs.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
 
 	// Nothing more to do if we're not a validator
-	if cs.privValidator == nil {
+	if cs.privValidator.IsZero() {
 		logger.Debug("propose step; not proposing since node is not a validator")
 		return
 	}
 
-	if cs.privValidatorProTxHash == nil {
-		// If this node is a validator & proposer in the current round, it will
-		// miss the opportunity to create a block.
-		logger.Error(fmt.Sprintf("enterPropose: %v", errProTxHashIsNotSet))
-		return
-	}
-	proTxHash := cs.privValidatorProTxHash
+	proTxHash := cs.privValidator.ProTxHash
 
 	// if not a validator, we're done
 	if !cs.Validators.HasProTxHash(proTxHash) {
@@ -1430,8 +1394,7 @@ func (cs *State) enterPropose(ctx context.Context, height int64, round int32) {
 }
 
 func (cs *State) isProposer() bool {
-	proTxHash := cs.privValidatorProTxHash
-	return proTxHash != nil && bytes.Equal(cs.Validators.GetProposer().ProTxHash.Bytes(), proTxHash.Bytes())
+	return cs.privValidator.IsProTxHashEqual(cs.Validators.GetProposer().ProTxHash)
 }
 
 // checkValidBlock returns true if cs.ValidBlock is set and still valid (not expired)
@@ -1589,7 +1552,7 @@ func (cs *State) CreateProposalBlock(ctx context.Context) (*types.Block, error) 
 // NOTE: keep it side-effect free for clarity.
 // CONTRACT: cs.privValidator is not nil.
 func (cs *State) createProposalBlock(ctx context.Context, round int32) (*types.Block, error) {
-	if cs.privValidator == nil {
+	if cs.privValidator.IsZero() {
 		return nil, errors.New("entered createProposalBlock with privValidator being nil")
 	}
 
@@ -1609,13 +1572,7 @@ func (cs *State) createProposalBlock(ctx context.Context, round int32) (*types.B
 		return nil, nil
 	}
 
-	if cs.privValidatorProTxHash == nil {
-		// If this node is a validator & proposer in the current round, it will
-		// miss the opportunity to create a block.
-		cs.logger.Error("propose step; empty priv validator pro tx hash", "err", errProTxHashIsNotSet)
-		return nil, nil
-	}
-	proposerProTxHash := cs.privValidatorProTxHash
+	proposerProTxHash := cs.privValidator.ProTxHash
 
 	ret, uncommittedState, err := cs.blockExec.CreateProposalBlock(ctx, cs.Height, round, cs.state, commit, proposerProTxHash, cs.proposedAppVersion)
 	if err != nil {
@@ -2424,11 +2381,6 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	// NewHeightStep!
 	cs.updateToState(stateCopy, commit)
 
-	// Private validator might have changed it's key pair => refetch pubkey.
-	if err := cs.updatePrivValidatorProTxHash(ctx); err != nil {
-		logger.Error("failed to get private validator pubkey", "err", err)
-	}
-
 	// cs.StartTime is already set.
 	// Schedule Round0 to start soon.
 	cs.scheduleRound0(&cs.RoundState)
@@ -2447,18 +2399,6 @@ func (cs *State) RecordMetrics(height int64, block *types.Block) {
 		missingValidators      int
 		missingValidatorsPower int64
 	)
-	// height=0 -> MissingValidators and MissingValidatorsPower are both 0.
-	// Remember that the first LastPrecommits is intentionally empty, so it's not
-	// fair to increment missing validators number.
-	if height > cs.state.InitialHeight {
-
-		if cs.privValidator != nil {
-			if cs.privValidatorProTxHash == nil {
-				// Metrics won't be updated, but it's not critical.
-				cs.logger.Error(fmt.Sprintf("recordMetrics: %v", errProTxHashIsNotSet))
-			}
-		}
-	}
 	cs.metrics.MissingValidators.Set(float64(missingValidators))
 	cs.metrics.MissingValidatorsPower.Set(float64(missingValidatorsPower))
 
@@ -2763,11 +2703,11 @@ func (cs *State) tryAddVote(ctx context.Context, vote *types.Vote, peerID types.
 		// But if it's a conflicting sig, add it to the cs.evpool.
 		// If it's otherwise invalid, punish peer.
 		if voteErr, ok := err.(*types.ErrVoteConflictingVotes); ok {
-			if cs.privValidatorProTxHash == nil {
-				return false, errProTxHashIsNotSet
+			if cs.privValidator.IsZero() {
+				return false, ErrPrivValidatorNotSet
 			}
 
-			if bytes.Equal(vote.ValidatorProTxHash, cs.privValidatorProTxHash) {
+			if cs.privValidator.IsProTxHashEqual(vote.ValidatorProTxHash) {
 				cs.logger.Error(
 					"found conflicting vote from ourselves; did you unsafe_reset a validator?",
 					"height", vote.Height,
@@ -2866,7 +2806,7 @@ func (cs *State) addVote(
 	// Verify VoteExtension if precommit and not nil
 	// https://github.com/tendermint/tendermint/issues/8487
 	if vote.Type == tmproto.PrecommitType && !vote.BlockID.IsNil() &&
-		!bytes.Equal(vote.ValidatorProTxHash, cs.privValidatorProTxHash) { // Skip the VerifyVoteExtension call if the vote was issued by this validator.
+		!cs.privValidator.IsProTxHashEqual(vote.ValidatorProTxHash) { // Skip the VerifyVoteExtension call if the vote was issued by this validator.
 
 		// The core fields of the vote message were already validated in the
 		// consensus reactor when the vote was received.
@@ -3032,10 +2972,10 @@ func (cs *State) signVote(
 		return nil, err
 	}
 
-	if cs.privValidatorProTxHash == nil {
-		return nil, errProTxHashIsNotSet
+	if cs.privValidator.IsZero() {
+		return nil, ErrPrivValidatorNotSet
 	}
-	proTxHash := cs.privValidatorProTxHash
+	proTxHash := cs.privValidator.ProTxHash
 	valIdx, _ := cs.Validators.GetByProTxHash(proTxHash)
 
 	// Since the block has already been validated the block.lastAppHash must be the state.AppHash
@@ -3085,18 +3025,13 @@ func (cs *State) signAddVote(
 	msgType tmproto.SignedMsgType,
 	blockID types.BlockID,
 ) *types.Vote {
-	if cs.privValidator == nil { // the node does not have a key
-		return nil
-	}
-
-	if cs.privValidatorProTxHash == nil {
-		// Vote won't be signed, but it's not critical.
-		cs.logger.Error("signAddVote", "err", errProTxHashIsNotSet)
+	if cs.privValidator.IsZero() { // the node does not have a key
+		cs.logger.Error("signAddVote", "err", ErrPrivValidatorNotSet)
 		return nil
 	}
 
 	// If the node not in the validator set, do nothing.
-	if !cs.Validators.HasProTxHash(cs.privValidatorProTxHash) {
+	if !cs.Validators.HasProTxHash(cs.privValidator.ProTxHash) {
 		cs.logger.Debug("do nothing, node is not a part of validator set")
 		return nil
 	}
@@ -3116,33 +3051,6 @@ func (cs *State) signAddVote(
 		"quorum_hash", cs.Validators.QuorumHash,
 		"took", time.Since(start).String())
 	return vote
-}
-
-// updatePrivValidatorPubKey get's the private validator public key and
-// memoizes it. This func returns an error if the private validator is not
-// responding or responds with an error.
-func (cs *State) updatePrivValidatorProTxHash(ctx context.Context) error {
-	if cs.privValidator == nil {
-		return nil
-	}
-
-	timeout := cs.voteTimeout(cs.Round)
-
-	// no GetPubKey retry beyond the proposal/voting in RetrySignerClient
-	if cs.Step >= cstypes.RoundStepPrecommit && cs.privValidatorType == types.RetrySignerClient {
-		timeout = 0
-	}
-
-	// set context timeout depending on the configuration and the State step,
-	// this helps in avoiding blocking of the remote signer connection.
-	ctxto, cancel := context.WithTimeout(ctx, timeout)
-	defer cancel()
-	proTxHash, err := cs.privValidator.GetProTxHash(ctxto)
-	if err != nil {
-		return err
-	}
-	cs.privValidatorProTxHash = proTxHash
-	return nil
 }
 
 //---------------------------------------------------------
@@ -3268,4 +3176,23 @@ func proposerWaitTime(lt tmtime.Source, bt time.Time) time.Duration {
 		return bt.Sub(t)
 	}
 	return 0
+}
+
+type privValidator struct {
+	types.PrivValidator
+	ProTxHash types.ProTxHash
+}
+
+func (pv *privValidator) IsProTxHashEqual(proTxHash types.ProTxHash) bool {
+	return pv.ProTxHash.Equal(proTxHash)
+}
+
+func (pv *privValidator) IsZero() bool {
+	return pv.PrivValidator == nil
+}
+
+func (pv *privValidator) init(ctx context.Context) error {
+	var err error
+	pv.ProTxHash, err = pv.GetProTxHash(ctx)
+	return err
 }

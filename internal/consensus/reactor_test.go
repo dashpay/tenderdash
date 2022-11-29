@@ -55,7 +55,7 @@ type reactorTestSuite struct {
 func (rts *reactorTestSuite) switchToConsensus(ctx context.Context) {
 	for nodeID, reactor := range rts.reactors {
 		state := reactor.state.GetState()
-		sCtx := dash.ContextWithProTxHash(ctx, rts.states[nodeID].privValidatorProTxHash)
+		sCtx := dash.ContextWithProTxHash(ctx, rts.states[nodeID].privValidator.ProTxHash)
 		reactor.SwitchToConsensus(sCtx, state, false)
 	}
 }
@@ -79,7 +79,7 @@ func setup(
 
 	privProTxHashes := make([]crypto.ProTxHash, len(states))
 	for i, state := range states {
-		privProTxHashes[i] = state.privValidatorProTxHash
+		privProTxHashes[i] = state.privValidator.ProTxHash
 	}
 	rts := &reactorTestSuite{
 		network:       p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: numNodes, ProTxHashes: privProTxHashes}),
@@ -116,8 +116,8 @@ func setup(
 
 	for i := 0; i < numNodes; i++ {
 		state := states[i]
-		sCtx := dash.ContextWithProTxHash(ctx, states[i].privValidatorProTxHash)
-		node := rts.network.NodeByProTxHash(state.privValidatorProTxHash)
+		sCtx := dash.ContextWithProTxHash(ctx, states[i].privValidator.ProTxHash)
+		node := rts.network.NodeByProTxHash(state.privValidator.ProTxHash)
 		require.NotNil(t, node)
 		nodeID := node.NodeID
 		reactor := NewReactor(
