@@ -9,8 +9,6 @@ import (
 	"sort"
 	"time"
 
-	sync "github.com/sasha-s/go-deadlock"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/orderedcode"
 	sync "github.com/sasha-s/go-deadlock"
