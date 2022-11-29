@@ -67,6 +67,9 @@ const (
 	// initStateProviderTimeout is how long state provider initialization (including trusted block fetch/verify) can take
 	initStateProviderTimeout = 2 * lightBlockResponseTimeout
 
+	// initStateProviderRetries defines how many times state provider initialization will be retried
+	initStateProviderRetries = 3
+
 	// consensusParamsResponseTimeout is the time the p2p state provider waits
 	// before performing a secondary call
 	consensusParamsResponseTimeout = 5 * time.Second
@@ -373,7 +376,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 
 	// run initialization in a retry loop
 	var err error
-	for retry := 0; retry < 3; retry++ {
+	for retry := 0; retry < initStateProviderRetries; retry++ {
 		// we need some timeout in case initialization takes too much time
 		initCtx, cancel := context.WithTimeout(ctx, initStateProviderTimeout)
 		err = r.initStateProvider(initCtx, r.chainID, r.initialHeight)
