@@ -121,7 +121,6 @@ type Reactor struct {
 
 	mtx         sync.RWMutex
 	peers       map[types.NodeID]*PeerState
-	waitSync    bool
 	rs          *cstypes.RoundState
 	readySignal chan struct{} // closed when the node is ready to start consensus
 
@@ -145,7 +144,6 @@ func NewReactor(
 	r := &Reactor{
 		logger:      logger,
 		state:       cs,
-		waitSync:    waitSync,
 		rs:          cs.GetRoundState(),
 		peers:       make(map[types.NodeID]*PeerState),
 		eventBus:    eventBus,
@@ -156,7 +154,7 @@ func NewReactor(
 	}
 	r.BaseService = *service.NewBaseService(logger, "Consensus", r)
 
-	if !r.waitSync {
+	if !waitSync {
 		close(r.readySignal)
 	}
 
@@ -221,10 +219,21 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 
 	go r.updateRoundStateRoutine(ctx)
 
+	// Only state channel should be read during state sync.
+	// Data, vote and vote set must wait.
+	// We cannot skip waiting messages, as the peers might already have marked them as delivered.
+	// XXX: this can lead to a deadlock, if so - we need additional buffer for (at least) Commits.
 	go r.processMsgCh(ctx, chBundle.state, chBundle)
-	go r.processMsgCh(ctx, chBundle.data, chBundle)
-	go r.processMsgCh(ctx, chBundle.vote, chBundle)
-	go r.processMsgCh(ctx, chBundle.votSet, chBundle)
+	go func() {
+		select {
+		case <-r.readySignal:
+			go r.processMsgCh(ctx, chBundle.data, chBundle)
+			go r.processMsgCh(ctx, chBundle.vote, chBundle)
+			go r.processMsgCh(ctx, chBundle.votSet, chBundle)
+		case <-ctx.Done():
+		}
+	}()
+
 	go r.processPeerUpdates(ctx, peerUpdates, chBundle)
 
 	return nil
@@ -243,10 +252,14 @@ func (r *Reactor) OnStop() {
 
 // WaitSync returns whether the consensus reactor is waiting for state/block sync.
 func (r *Reactor) WaitSync() bool {
-	r.mtx.RLock()
-	defer r.mtx.RUnlock()
-
-	return r.waitSync
+	select {
+	case <-r.readySignal:
+		// channel closed
+		return false
+	default:
+		// channel is still open, so we still wait
+		return true
+	}
 }
 
 // SwitchToConsensus switches from block-sync mode to consensus mode. It resets
@@ -272,10 +285,7 @@ conR:
 %+v`, err, r.state, r))
 	}
 
-	r.mtx.Lock()
-	r.waitSync = false
 	close(r.readySignal)
-	r.mtx.Unlock()
 
 	r.Metrics.BlockSyncing.Set(0)
 	r.Metrics.StateSyncing.Set(0)
@@ -679,10 +689,10 @@ func (r *Reactor) broadcast(ctx context.Context, channel p2p.Channel, msg proto.
 // logResult creates a log that depends on value of err
 func (r *Reactor) logResult(err error, logger log.Logger, message string, keyvals ...interface{}) bool {
 	if err != nil {
-		logger.Debug("error "+message, append(keyvals, "error", err))
+		logger.Debug(message+" error", append(keyvals, "error", err))
 		return false
 	}
-	logger.Debug("success "+message, keyvals...)
+	logger.Debug(message+" success", keyvals...)
 	return true
 }
 
