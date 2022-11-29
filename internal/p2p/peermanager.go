@@ -316,8 +316,6 @@ type PeerManager struct {
 	ready         map[types.NodeID]bool                    // ready peers (Ready → Disconnected)
 	evict         map[types.NodeID]bool                    // peers scheduled for eviction (Connected → EvictNext)
 	evicting      map[types.NodeID]bool                    // peers being evicted (EvictNext → Disconnected)
-
-	broadcastBuf chan PeerUpdate
 }
 
 // NewPeerManager creates a new peer manager.
@@ -353,8 +351,6 @@ func NewPeerManager(ctx context.Context, selfID types.NodeID, peerDB dbm.DB, opt
 		evict:         map[types.NodeID]bool{},
 		evicting:      map[types.NodeID]bool{},
 		subscriptions: map[*PeerUpdates]*PeerUpdates{},
-
-		broadcastBuf: make(chan PeerUpdate, broadcastChannelCapacity),
 	}
 
 	if options.Metrics != nil {
@@ -1188,7 +1184,7 @@ func (m *PeerManager) broadcastAsync(ctx context.Context, peerUpdate PeerUpdate)
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-time.After(broadcastTimeout):
-			return fmt.Errorf("peer update %s capacity %d exceeded", pu.subscriberName, cap(m.broadcastBuf))
+			return fmt.Errorf("peer update %s capacity %d exceeded", pu.subscriberName, cap(sub.reactorUpdatesCh))
 		case sub.reactorUpdatesCh <- peerUpdate:
 		}
 	}
