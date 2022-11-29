@@ -264,7 +264,7 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 	// 1) Fetch and verify the light block.
 	l, err := c.lightBlockFromPrimaryAtHeight(ctx, height)
 	if err != nil {
-		return fmt.Errorf("light block from primary: %w", err)
+		return fmt.Errorf("light block from primary %s: %w", c.primary.ID(), err)
 	}
 
 	// NOTE: - Verify func will check if it's expired or not.
@@ -661,8 +661,9 @@ func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64
 		// Otherwise we need to find a new primary
 		if c.latestTrustedBlock != nil && l.Height < c.latestTrustedBlock.Height {
 			l, err = c.findNewPrimary(ctx, height, false)
-		} else {
-			err = nil
+			if err != nil {
+				return l, fmt.Errorf("find new primary: %w", err)
+			}
 		}
 
 	case provider.ErrNoResponse, provider.ErrLightBlockNotFound, provider.ErrHeightTooHigh:
@@ -677,11 +678,6 @@ func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64
 		c.logger.Info("error from light block request from primary, removing...",
 			"error", err, "height", height, "primary", c.primary)
 		return c.findNewPrimary(ctx, height, true)
-	}
-
-	// err was re-evaluated inside switch statement above
-	if err != nil {
-		return l, err
 	}
 
 	if height != 0 && l.Height != height {
