@@ -1005,29 +1005,43 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		r.peers.Remove(peerUpdate.NodeID)
 	}
 
-	if r.syncer == nil {
-		return
-	}
-
 	switch peerUpdate.Status {
 	case p2p.PeerStatusUp:
 
 		newProvider := NewBlockProvider(peerUpdate.NodeID, r.chainID, r.dispatcher)
 
-		err := r.syncer.AddPeer(ctx, peerUpdate.NodeID)
-		if err != nil {
-			r.logger.Error("error adding peer to syncer", "error", err)
-			return
-		}
 		if sp, ok := r.stateProvider.(*stateProviderP2P); ok {
 			// we do this in a separate routine to not block whilst waiting for the light client to finish
 			// whatever call it's currently executing
 			go sp.addProvider(newProvider)
 		}
 
+		// FIXME: This goroutine is just a temporary workaround, we need to remove that mtx and ensure we can
+		// just r.syncer.AddPeer() and trust underlying channel to buffer data.
+		// Also, we should monitor ctx to close gracefully.
+		go func() {
+			// Wait until we are initialized
+			r.mtx.RLock()
+			defer r.mtx.RUnlock()
+
+			if r.syncer == nil {
+				return
+			}
+			if r.syncer != nil {
+				err := r.syncer.AddPeer(ctx, peerUpdate.NodeID)
+				if err != nil {
+					r.logger.Error("error adding peer to syncer", "error", err)
+					return
+				}
+			}
+		}()
+
 	case p2p.PeerStatusDown:
-		r.syncer.RemovePeer(peerUpdate.NodeID)
+		if r.syncer != nil {
+			r.syncer.RemovePeer(peerUpdate.NodeID)
+		}
 	}
+
 	r.logger.Info("processed peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 }
 
