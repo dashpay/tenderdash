@@ -40,6 +40,9 @@ const (
 
 	// 10s is sufficient for most networks.
 	defaultMaxBlockLag = 10 * time.Second
+
+	// lightBlockFromPrimaryResponseTimeout maximum time to wait for a light block from primary.
+	lightBlockFromPrimaryResponseTimeout = 5 * time.Second
 )
 
 // Option sets a parameter for the light client.
@@ -638,7 +641,10 @@ func (c *Client) lightBlockFromPrimary(ctx context.Context) (*types.LightBlock, 
 // lightBlockFromPrimaryAtHeight retrieves a light block from the primary provider
 func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64) (*types.LightBlock, error) {
 	c.providerMutex.Lock()
-	l, err := c.getLightBlock(ctx, c.primary, height)
+	// We need a timeout shorter than `ctx` to be able to find another primary if this one fails
+	lbCtx, lbCancel := context.WithTimeout(ctx, lightBlockFromPrimaryResponseTimeout)
+	l, err := c.getLightBlock(lbCtx, c.primary, height)
+	lbCancel()
 	c.providerMutex.Unlock()
 
 	switch err {
@@ -646,7 +652,7 @@ func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64
 
 	// catch canceled contexts or deadlines
 	case context.Canceled, context.DeadlineExceeded:
-		return l, err
+		return l, fmt.Errorf("height %d, primary %s: %w", height, c.primary, err)
 
 	case provider.ErrLightBlockTooOld:
 		// If the block is too old check to see if it the same as our current block
