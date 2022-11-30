@@ -1007,7 +1007,6 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 
 	switch peerUpdate.Status {
 	case p2p.PeerStatusUp:
-
 		newProvider := NewBlockProvider(peerUpdate.NodeID, r.chainID, r.dispatcher)
 
 		if sp, ok := r.stateProvider.(*stateProviderP2P); ok {
@@ -1024,9 +1023,6 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 			r.mtx.RLock()
 			defer r.mtx.RUnlock()
 
-			if r.syncer == nil {
-				return
-			}
 			if r.syncer != nil {
 				err := r.syncer.AddPeer(ctx, peerUpdate.NodeID)
 				if err != nil {
