@@ -2,6 +2,7 @@ package log
 
 import (
 	"testing"
+	"time"
 
 	"github.com/rs/zerolog"
 )
@@ -31,6 +32,10 @@ func NewTestingLogger(t testing.TB) Logger {
 // NewTestingLoggerWithLevel creates a testing logger instance at a
 // specific level that wraps the behavior of testing.T.Log().
 func NewTestingLoggerWithLevel(t testing.TB, level string) Logger {
+	t.Cleanup(func() {
+		// we need time to properly flush all logs, otherwise test can fail with race condition
+		time.Sleep(10 * time.Millisecond)
+	})
 	logLevel, err := zerolog.ParseLevel(level)
 	if err != nil {
 		t.Fatalf("failed to parse log level (%s): %v", level, err)
