@@ -168,8 +168,7 @@ type Reactor struct {
 	// These will only be set when a state sync is in progress. It is used to feed
 	// received snapshots and chunks into the syncer and manage incoming and outgoing
 	// providers.
-	mtx sync.RWMutex
-
+	mtx               sync.RWMutex
 	initSyncer        func() *syncer
 	requestSnaphot    func() error
 	syncer            *syncer // syncer is nil when sync is not in progress
@@ -996,17 +995,9 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 			peerUpdate.Channels.Contains(ParamsChannel) {
 
 			r.peers.Append(peerUpdate.NodeID)
-
 		} else {
 			r.logger.Error("could not use peer for statesync", "peer", peerUpdate.NodeID)
 		}
-
-	case p2p.PeerStatusDown:
-		r.peers.Remove(peerUpdate.NodeID)
-	}
-
-	switch peerUpdate.Status {
-	case p2p.PeerStatusUp:
 		newProvider := NewBlockProvider(peerUpdate.NodeID, r.chainID, r.dispatcher)
 
 		stateProvider := r.getStateProvider()
@@ -1027,6 +1018,7 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		}
 
 	case p2p.PeerStatusDown:
+		r.peers.Remove(peerUpdate.NodeID)
 		syncer := r.getSyncer()
 		if syncer != nil {
 			syncer.RemovePeer(peerUpdate.NodeID)
