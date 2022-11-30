@@ -168,10 +168,11 @@ type Reactor struct {
 	// These will only be set when a state sync is in progress. It is used to feed
 	// received snapshots and chunks into the syncer and manage incoming and outgoing
 	// providers.
-	mtx               sync.RWMutex
+	mtx sync.RWMutex
+
 	initSyncer        func() *syncer
 	requestSnaphot    func() error
-	syncer            *syncer
+	syncer            *syncer // syncer is nil when sync is not in progress
 	initStateProvider func(ctx context.Context, chainID string, initialHeight int64) error
 	stateProvider     StateProvider
 
@@ -306,7 +307,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 			if err != nil {
 				return fmt.Errorf("failed to initialize P2P state provider: %w", err)
 			}
-			r.stateProvider = stateProvider
+			r.setStateProvider(stateProvider)
 			return nil
 		}
 
@@ -315,7 +316,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		if err != nil {
 			return fmt.Errorf("failed to initialize RPC state provider: %w", err)
 		}
-		r.stateProvider = stateProvider
+		r.setStateProvider(stateProvider)
 		return nil
 	}
 
@@ -371,8 +372,12 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 		r.mtx.Unlock()
 		return sm.State{}, errors.New("a state sync is already in progress")
 	}
+	// We init syncer early so that it can be used as part of PeerUp and PeerDown logic.
+	// State provider initialization can take a few mins, risking loss of these events.
+	// We'll need to set r.syncer.stateProvider once it's also initialized
+	r.syncer = r.initSyncer()
+	r.mtx.Unlock()
 
-	// run initialization in a retry loop
 	var err error
 	for retry := 0; retry < initStateProviderRetries; retry++ {
 		// we need some timeout in case initialization takes too much time
@@ -386,20 +391,11 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 		time.Sleep(time.Second)
 	}
 	if err != nil {
-		r.mtx.Unlock()
 		return sm.State{}, fmt.Errorf("init state provider: %w", err)
 	}
+	r.getSyncer().SetStateProvider(r.stateProvider)
 
-	r.syncer = r.initSyncer()
-	r.mtx.Unlock()
-
-	defer func() {
-		r.mtx.Lock()
-		// reset syncing objects at the close of Sync
-		r.syncer = nil
-		r.stateProvider = nil
-		r.mtx.Unlock()
-	}()
+	defer r.syncComplete()
 
 	state, commit, err := r.syncer.SyncAny(ctx, r.cfg.DiscoveryTime, r.requestSnaphot)
 	if err != nil {
@@ -439,6 +435,14 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 	}
 
 	return state, nil
+}
+
+func (r *Reactor) syncComplete() {
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+	// reset syncing objects at the close of Sync
+	r.syncer = nil
+	r.stateProvider = nil
 }
 
 func (r *Reactor) publishCommitEvent(commit *types.Commit) error {
@@ -687,16 +691,14 @@ func (r *Reactor) handleSnapshotMessage(ctx context.Context, envelope *p2p.Envel
 		}
 
 	case *ssproto.SnapshotsResponse:
-		r.mtx.RLock()
-		defer r.mtx.RUnlock()
-
-		if r.syncer == nil {
+		syncer := r.getSyncer()
+		if syncer == nil {
 			logger.Debug("received unexpected snapshot; no state sync in progress")
 			return nil
 		}
 
 		logger.Info("received snapshot", "height", msg.Height, "format", msg.Format)
-		_, err := r.syncer.AddSnapshot(envelope.From, &snapshot{
+		_, err := syncer.AddSnapshot(envelope.From, &snapshot{
 			Height:   msg.Height,
 			Format:   msg.Format,
 			Chunks:   msg.Chunks,
@@ -767,10 +769,8 @@ func (r *Reactor) handleChunkMessage(ctx context.Context, envelope *p2p.Envelope
 		}
 
 	case *ssproto.ChunkResponse:
-		r.mtx.RLock()
-		defer r.mtx.RUnlock()
-
-		if r.syncer == nil {
+		syncer := r.getSyncer()
+		if syncer == nil {
 			r.logger.Debug("received unexpected chunk; no state sync in progress", "peer", envelope.From)
 			return nil
 		}
@@ -780,7 +780,7 @@ func (r *Reactor) handleChunkMessage(ctx context.Context, envelope *p2p.Envelope
 			"format", msg.Format,
 			"chunk", msg.Index,
 			"peer", envelope.From)
-		_, err := r.syncer.AddChunk(&chunk{
+		_, err := syncer.AddChunk(&chunk{
 			Height: msg.Height,
 			Format: msg.Format,
 			Index:  msg.Index,
@@ -1009,32 +1009,27 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 	case p2p.PeerStatusUp:
 		newProvider := NewBlockProvider(peerUpdate.NodeID, r.chainID, r.dispatcher)
 
-		if sp, ok := r.stateProvider.(*stateProviderP2P); ok {
-			// we do this in a separate routine to not block whilst waiting for the light client to finish
-			// whatever call it's currently executing
-			go sp.addProvider(newProvider)
+		stateProvider := r.getStateProvider()
+		if stateProvider != nil {
+			if sp, ok := stateProvider.(*stateProviderP2P); ok {
+				// we do this in a separate routine to not block whilst waiting for the light client to finish
+				// whatever call it's currently executing
+				go sp.addProvider(newProvider)
+			}
 		}
 
-		// FIXME: This goroutine is just a temporary workaround, we need to remove that mtx and ensure we can
-		// just r.syncer.AddPeer() and trust underlying channel to buffer data.
-		// Also, we should monitor ctx to close gracefully.
-		go func() {
-			// Wait until we are initialized
-			r.mtx.RLock()
-			defer r.mtx.RUnlock()
-
-			if r.syncer != nil {
-				err := r.syncer.AddPeer(ctx, peerUpdate.NodeID)
-				if err != nil {
-					r.logger.Error("error adding peer to syncer", "error", err)
-					return
-				}
+		syncer := r.getSyncer()
+		if syncer != nil {
+			if err := syncer.AddPeer(ctx, peerUpdate.NodeID); err != nil {
+				r.logger.Error("error adding peer to syncer", "error", err)
+				return
 			}
-		}()
+		}
 
 	case p2p.PeerStatusDown:
-		if r.syncer != nil {
-			r.syncer.RemovePeer(peerUpdate.NodeID)
+		syncer := r.getSyncer()
+		if syncer != nil {
+			syncer.RemovePeer(peerUpdate.NodeID)
 		}
 	}
 
@@ -1215,4 +1210,22 @@ func (r *Reactor) BackFillBlocksTotal() int64 {
 	defer r.mtx.RUnlock()
 
 	return r.backfillBlockTotal
+}
+
+func (r *Reactor) getSyncer() *syncer {
+	r.mtx.RLock()
+	defer r.mtx.RUnlock()
+	return r.syncer
+}
+
+func (r *Reactor) getStateProvider() StateProvider {
+	r.mtx.RLock()
+	defer r.mtx.RUnlock()
+	return r.stateProvider
+}
+
+func (r *Reactor) setStateProvider(sp StateProvider) {
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+	r.stateProvider = sp
 }
