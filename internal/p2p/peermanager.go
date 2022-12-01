@@ -23,8 +23,8 @@ import (
 const (
 	// retryNever is returned by retryDelay() when retries are disabled.
 	retryNever time.Duration = math.MaxInt64
-	// broadcastChannelCapacity defines how many messages can be buffered for broadcast
-	broadcastChannelCapacity = 10
+	// broadcastSubscriptionChannelCapacity defines how many messages can be buffered for each subscriber
+	broadcastSubscriptionChannelCapacity = 3
 	// broadcastTimeout defines how long we will wait when broadcast channel is full
 	broadcastTimeout time.Duration = 60 * time.Second
 )
@@ -84,10 +84,10 @@ type PeerUpdates struct {
 // NewPeerUpdates creates a new PeerUpdates subscription. It is primarily for
 // internal use, callers should typically use PeerManager.Subscribe(). The
 // subscriber must call Close() when done.
-func NewPeerUpdates(updatesCh chan PeerUpdate, buf int, subscriberName string) *PeerUpdates {
+func NewPeerUpdates(updatesCh chan PeerUpdate, routerUpdatesBufSize int, subscriberName string) *PeerUpdates {
 	return &PeerUpdates{
 		reactorUpdatesCh: updatesCh,
-		routerUpdatesCh:  make(chan PeerUpdate, buf),
+		routerUpdatesCh:  make(chan PeerUpdate, routerUpdatesBufSize),
 		subscriberName:   subscriberName,
 	}
 }
@@ -831,8 +831,10 @@ func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels C
 		if ok && len(peer.ProTxHash) > 0 {
 			pu.SetProTxHash(peer.ProTxHash)
 		}
-		if err := m.broadcastAsync(ctx, pu); err != nil {
+		if err := m.broadcast(ctx, pu); err != nil {
 			m.logger.Error("error during broadcast ready", "error", err)
+			// this implies deadlock condition which we really need to detect and fix
+			panic("possible deadlock when sending ready broadcast: " + err.Error())
 		}
 	}
 }
@@ -935,8 +937,10 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 		if ok && len(peer.ProTxHash) > 0 {
 			pu.SetProTxHash(peer.ProTxHash)
 		}
-		if err := m.broadcastAsync(ctx, pu); err != nil {
+		if err := m.broadcast(ctx, pu); err != nil {
 			m.logger.Error("error during broadcast disconnected", "error", err)
+			// this implies deadlock condition which we really need to detect and fix
+			panic("possible deadlock when sending disconnected broadcast: " + err.Error())
 		}
 	}
 
@@ -1103,13 +1107,13 @@ type PeerEventSubscriber func(context.Context, string) *PeerUpdates
 // updates in a timely fashion and close the subscription when done, otherwise
 // the PeerManager will halt.
 func (m *PeerManager) Subscribe(ctx context.Context, subscriberName string) *PeerUpdates {
-	// FIXME: We use a size 1 buffer here. When we broadcast a peer update
-	// we have to loop over all of the subscriptions, and we want to avoid
-	// having to block and wait for a context switch before continuing on
-	// to the next subscriptions. This also prevents tail latencies from
-	// compounding. Limiting it to 1 means that the subscribers are still
-	// reasonably in sync. However, this should probably be benchmarked.
-	peerUpdates := NewPeerUpdates(make(chan PeerUpdate, broadcastChannelCapacity), 1, subscriberName)
+	// Note: When we broadcast a peer update we have to loop over all of
+	// the subscriptions, and we want to avoid having to block and wait
+	// for a context switch before continuing on to the next subscriptions.
+	// This also prevents tail latencies from compounding.
+	// It should be limited to ensure that the subscribers are still
+	// reasonably in sync.
+	peerUpdates := NewPeerUpdates(make(chan PeerUpdate, broadcastSubscriptionChannelCapacity), 1, subscriberName)
 	m.Register(ctx, peerUpdates)
 	return peerUpdates
 }
@@ -1172,13 +1176,13 @@ func (m *PeerManager) processPeerEvent(ctx context.Context, pu PeerUpdate) {
 	}
 }
 
-// broadcastAsync broadcasts a peer update to all subscriptions. The caller must
+// broadcast broadcasts a peer update to all subscriptions. The caller must
 // already hold the mutex lock, to make sure updates are sent in the same order
 // as the PeerManager processes them, but this means subscribers must be
 // responsive at all times or the entire PeerManager will halt.
 //
 // Broadcast is asynchronous, what means that returning doesn't mean successful delivery
-func (m *PeerManager) broadcastAsync(ctx context.Context, peerUpdate PeerUpdate) error {
+func (m *PeerManager) broadcast(ctx context.Context, peerUpdate PeerUpdate) error {
 	for pu, sub := range m.subscriptions {
 		select {
 		case <-ctx.Done():
