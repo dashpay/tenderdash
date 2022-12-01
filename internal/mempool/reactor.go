@@ -105,7 +105,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	}
 
 	go r.processMempoolCh(ctx, ch)
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx), ch)
+	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "mempool"), ch)
 
 	return nil
 }

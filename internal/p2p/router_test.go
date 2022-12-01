@@ -107,7 +107,7 @@ func TestRouter_Channel_Basic(t *testing.T) {
 	defer cancel()
 
 	// Set up a router with no transports (so no peers).
-	peerManager, err := p2p.NewPeerManager(selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+	peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 	require.NoError(t, err)
 
 	testnet := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 1})
@@ -418,10 +418,10 @@ func TestRouter_AcceptPeers(t *testing.T) {
 			mockTransport.On("Listen", mock.Anything).Return(nil)
 
 			// Set up and start the router.
-			peerManager, err := p2p.NewPeerManager(selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+			peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 			require.NoError(t, err)
 
-			sub := peerManager.Subscribe(ctx)
+			sub := peerManager.Subscribe(ctx, "p2p")
 
 			router, err := p2p.NewRouter(
 				log.NewNopLogger(),
@@ -482,7 +482,7 @@ func TestRouter_AcceptPeers_Errors(t *testing.T) {
 			mockTransport.On("Listen", mock.Anything).Return(nil)
 
 			// Set up and start the router.
-			peerManager, err := p2p.NewPeerManager(selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+			peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 			require.NoError(t, err)
 
 			router, err := p2p.NewRouter(
@@ -535,7 +535,7 @@ func TestRouter_AcceptPeers_HeadOfLineBlocking(t *testing.T) {
 	mockTransport.On("Listen", mock.Anything).Return(nil)
 
 	// Set up and start the router.
-	peerManager, err := p2p.NewPeerManager(selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+	peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 	require.NoError(t, err)
 
 	router, err := p2p.NewRouter(
@@ -633,13 +633,13 @@ func TestRouter_DialPeers(t *testing.T) {
 			}
 
 			// Set up and start the router.
-			peerManager, err := p2p.NewPeerManager(selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+			peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 			require.NoError(t, err)
 
 			added, err := peerManager.Add(address)
 			require.NoError(t, err)
 			require.True(t, added)
-			sub := peerManager.Subscribe(ctx)
+			sub := peerManager.Subscribe(ctx, "p2p")
 
 			router, err := p2p.NewRouter(
 				log.NewNopLogger(),
@@ -711,7 +711,7 @@ func TestRouter_DialPeers_Parallel(t *testing.T) {
 	}
 
 	// Set up and start the router.
-	peerManager, err := p2p.NewPeerManager(selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+	peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 	require.NoError(t, err)
 
 	added, err := peerManager.Add(a)
@@ -794,10 +794,10 @@ func TestRouter_EvictPeers(t *testing.T) {
 	mockTransport.On("Listen", mock.Anything).Return(nil)
 
 	// Set up and start the router.
-	peerManager, err := p2p.NewPeerManager(selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+	peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 	require.NoError(t, err)
 
-	sub := peerManager.Subscribe(ctx)
+	sub := peerManager.Subscribe(ctx, "p2p")
 
 	router, err := p2p.NewRouter(
 		log.NewNopLogger(),
@@ -862,7 +862,7 @@ func TestRouter_ChannelCompatability(t *testing.T) {
 	mockTransport.On("Listen", mock.Anything).Return(nil)
 
 	// Set up and start the router.
-	peerManager, err := p2p.NewPeerManager(selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+	peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 	require.NoError(t, err)
 
 	router, err := p2p.NewRouter(
@@ -915,10 +915,10 @@ func TestRouter_DontSendOnInvalidChannel(t *testing.T) {
 	mockTransport.On("Listen", mock.Anything).Return(nil)
 
 	// Set up and start the router.
-	peerManager, err := p2p.NewPeerManager(selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+	peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 	require.NoError(t, err)
 
-	sub := peerManager.Subscribe(ctx)
+	sub := peerManager.Subscribe(ctx, "p2p")
 
 	router, err := p2p.NewRouter(
 		log.NewNopLogger(),

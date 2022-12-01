@@ -636,6 +636,7 @@ func TestNodeNewSeedNode(t *testing.T) {
 	logger := log.NewNopLogger()
 
 	ns, err := makeSeedNode(
+		ctx,
 		logger,
 		cfg,
 		config.DefaultDBProvider,
