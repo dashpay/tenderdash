@@ -285,7 +285,6 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	r.sendBlockError = blockCh.SendError
 
 	r.initStateProvider = func(ctx context.Context, chainID string, initialHeight int64) error {
-
 		spLogger := r.logger.With("module", "stateprovider")
 		spLogger.Info("initializing state provider",
 			"trustHeight", r.cfg.TrustHeight, "useP2P", r.cfg.UseP2P)
@@ -366,35 +365,19 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 		return sm.State{}, fmt.Errorf("wait for peers: %w", err)
 	}
 
-	r.mtx.Lock()
-	if r.syncer != nil {
-		r.mtx.Unlock()
-		return sm.State{}, errors.New("a state sync is already in progress")
-	}
 	// We init syncer early so that it can be used as part of PeerUp and PeerDown logic.
 	// State provider initialization can take a few mins, risking loss of these events.
 	// We'll need to set r.syncer.stateProvider once it's also initialized
-	r.syncer = r.initSyncer()
-	r.mtx.Unlock()
 
-	var err error
-	for retry := 0; retry < initStateProviderRetries; retry++ {
-		// we need some timeout in case initialization takes too much time
-		initCtx, cancel := context.WithTimeout(ctx, initStateProviderTimeout)
-		err = r.initStateProvider(initCtx, r.chainID, r.initialHeight)
-		cancel()
-		if err == nil {
-			break
-		}
-		r.logger.Error("failed to init state provider, retrying", "retry", retry, "error", err)
-		time.Sleep(time.Second)
+	if err := r.startSyncer(); err != nil {
+		return sm.State{}, err
 	}
-	if err != nil {
-		return sm.State{}, fmt.Errorf("init state provider: %w", err)
+	defer r.syncComplete()
+
+	if err := r.startStateProvider(ctx); err != nil {
+		return sm.State{}, err
 	}
 	r.getSyncer().SetStateProvider(r.stateProvider)
-
-	defer r.syncComplete()
 
 	state, commit, err := r.syncer.SyncAny(ctx, r.cfg.DiscoveryTime, r.requestSnaphot)
 	if err != nil {
@@ -434,6 +417,37 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 	}
 
 	return state, nil
+}
+
+func (r *Reactor) startSyncer() error {
+	r.mtx.Lock()
+	defer r.mtx.Unlock()
+
+	if r.syncer != nil {
+		return errors.New("a state sync is already in progress")
+	}
+	r.syncer = r.initSyncer()
+
+	return nil
+}
+
+func (r *Reactor) startStateProvider(ctx context.Context) error {
+
+	var err error
+	for retry := 0; retry < initStateProviderRetries; retry++ {
+		initCtx, cancel := context.WithTimeout(ctx, initStateProviderTimeout)
+		err = r.initStateProvider(initCtx, r.chainID, r.initialHeight)
+		cancel()
+
+		if err == nil { // success
+			return nil
+		}
+		r.logger.Error("failed to init state provider, retrying", "retry", retry, "error", err)
+		// let's wait before next attempt
+		time.Sleep(time.Second)
+	}
+
+	return fmt.Errorf("init state provider: %w", err)
 }
 
 func (r *Reactor) syncComplete() {
@@ -989,43 +1003,51 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 
 	switch peerUpdate.Status {
 	case p2p.PeerStatusUp:
-		if peerUpdate.Channels.Contains(SnapshotChannel) &&
-			peerUpdate.Channels.Contains(ChunkChannel) &&
-			peerUpdate.Channels.Contains(LightBlockChannel) &&
-			peerUpdate.Channels.Contains(ParamsChannel) {
-
-			r.peers.Append(peerUpdate.NodeID)
-		} else {
-			r.logger.Error("could not use peer for statesync", "peer", peerUpdate.NodeID)
-		}
-		newProvider := NewBlockProvider(peerUpdate.NodeID, r.chainID, r.dispatcher)
-
-		stateProvider := r.getStateProvider()
-		if stateProvider != nil {
-			if sp, ok := stateProvider.(*stateProviderP2P); ok {
-				// we do this in a separate routine to not block whilst waiting for the light client to finish
-				// whatever call it's currently executing
-				go sp.addProvider(newProvider)
-			}
-		}
-
-		syncer := r.getSyncer()
-		if syncer != nil {
-			if err := syncer.AddPeer(ctx, peerUpdate.NodeID); err != nil {
-				r.logger.Error("error adding peer to syncer", "error", err)
-				return
-			}
-		}
-
+		r.processPeerUp(ctx, peerUpdate)
 	case p2p.PeerStatusDown:
-		r.peers.Remove(peerUpdate.NodeID)
-		syncer := r.getSyncer()
-		if syncer != nil {
-			syncer.RemovePeer(peerUpdate.NodeID)
-		}
+		r.processPeerDown(ctx, peerUpdate)
 	}
 
 	r.logger.Info("processed peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
+}
+
+func (r *Reactor) processPeerUp(ctx context.Context, peerUpdate p2p.PeerUpdate) {
+
+	if peerUpdate.Channels.Contains(SnapshotChannel) &&
+		peerUpdate.Channels.Contains(ChunkChannel) &&
+		peerUpdate.Channels.Contains(LightBlockChannel) &&
+		peerUpdate.Channels.Contains(ParamsChannel) {
+
+		r.peers.Append(peerUpdate.NodeID)
+	} else {
+		r.logger.Error("could not use peer for statesync", "peer", peerUpdate.NodeID)
+	}
+	newProvider := NewBlockProvider(peerUpdate.NodeID, r.chainID, r.dispatcher)
+
+	stateProvider := r.getStateProvider()
+	if stateProvider != nil {
+		if sp, ok := stateProvider.(*stateProviderP2P); ok {
+			// we do this in a separate routine to not block whilst waiting for the light client to finish
+			// whatever call it's currently executing
+			go sp.addProvider(newProvider)
+		}
+	}
+
+	syncer := r.getSyncer()
+	if syncer != nil {
+		if err := syncer.AddPeer(ctx, peerUpdate.NodeID); err != nil {
+			r.logger.Error("error adding peer to syncer", "error", err)
+			return
+		}
+	}
+}
+
+func (r *Reactor) processPeerDown(ctx context.Context, peerUpdate p2p.PeerUpdate) {
+	r.peers.Remove(peerUpdate.NodeID)
+	syncer := r.getSyncer()
+	if syncer != nil {
+		syncer.RemovePeer(peerUpdate.NodeID)
+	}
 }
 
 // processPeerUpdates initiates a blocking process where we listen for and handle
