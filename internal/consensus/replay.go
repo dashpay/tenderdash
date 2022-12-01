@@ -72,6 +72,7 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 		case *ProposalMessage:
 			p := msg.Proposal
 			if cs.config.WalSkipRoundsToLast && p.Round > cs.Round {
+				cs.Validators.IncrementProposerPriority(p.Round - cs.Round)
 				cs.Votes.SetRound(p.Round)
 				cs.Round = p.Round
 			}
