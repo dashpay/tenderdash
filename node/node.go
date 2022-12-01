@@ -42,7 +42,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/types"
 
-	_ "net/http/pprof" // nolint: gosec // securely exposed on separate, optional port
+	_ "net/http/pprof" //nolint: gosec // securely exposed on separate, optional port
 
 	_ "github.com/lib/pq" // provide the psql db driver
 )

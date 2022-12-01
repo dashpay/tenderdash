@@ -40,6 +40,9 @@ const (
 
 	// 10s is sufficient for most networks.
 	defaultMaxBlockLag = 10 * time.Second
+
+	// lightBlockFromPrimaryResponseTimeout maximum time to wait for a light block from primary.
+	lightBlockFromPrimaryResponseTimeout = 5 * time.Second
 )
 
 // Option sets a parameter for the light client.
@@ -166,18 +169,18 @@ func NewClientAtHeight(
 ) (*Client, error) {
 	// Check that the witness list does not include duplicates or the primary
 	if err := validatePrimaryAndWitnesses(primary, witnesses); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("validate peers: %w", err)
 	}
 
 	c, err := NewClientFromTrustedStore(chainID, primary, witnesses, trustedStore, dashCoreRPCClient, options...)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("new client from store: %w", err)
 	}
 
 	if c.latestTrustedBlock == nil && height > 0 {
 		c.logger.Info("Downloading trusted light block")
 		if err := c.initializeAtHeight(ctx, height); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("initialize at height: %w", err)
 		}
 	}
 
@@ -261,14 +264,14 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 	// 1) Fetch and verify the light block.
 	l, err := c.lightBlockFromPrimaryAtHeight(ctx, height)
 	if err != nil {
-		return err
+		return fmt.Errorf("light block from primary %s: %w", c.primary.ID(), err)
 	}
 
 	// NOTE: - Verify func will check if it's expired or not.
 	//       - h.Time is not being checked against time.Now() because we don't
 	//         want to add yet another argument to NewClient* functions.
 	if err := l.ValidateBasic(c.chainID); err != nil {
-		return err
+		return fmt.Errorf("validate light block: %w", err)
 	}
 
 	// 2) Ensure the commit height is correct
@@ -291,7 +294,7 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 
 	// 5) Cross-verify with witnesses to ensure everybody has the same state.
 	if err := c.compareFirstHeaderWithWitnesses(ctx, l.SignedHeader); err != nil {
-		return err
+		return fmt.Errorf("compare with witnesses: %w", err)
 	}
 
 	// 6) Persist both of them and continue.
@@ -638,7 +641,10 @@ func (c *Client) lightBlockFromPrimary(ctx context.Context) (*types.LightBlock, 
 // lightBlockFromPrimaryAtHeight retrieves a light block from the primary provider
 func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64) (*types.LightBlock, error) {
 	c.providerMutex.Lock()
-	l, err := c.getLightBlock(ctx, c.primary, height)
+	// We need a timeout shorter than `ctx` to be able to find another primary if this one fails
+	lbCtx, lbCancel := context.WithTimeout(ctx, lightBlockFromPrimaryResponseTimeout)
+	l, err := c.getLightBlock(lbCtx, c.primary, height)
+	lbCancel()
 	c.providerMutex.Unlock()
 
 	switch err {
@@ -646,7 +652,7 @@ func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64
 
 	// catch canceled contexts or deadlines
 	case context.Canceled, context.DeadlineExceeded:
-		return l, err
+		return l, fmt.Errorf("height %d, primary %s: %w", height, c.primary, err)
 
 	case provider.ErrLightBlockTooOld:
 		// If the block is too old check to see if it the same as our current block
@@ -655,8 +661,9 @@ func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64
 		// Otherwise we need to find a new primary
 		if c.latestTrustedBlock != nil && l.Height < c.latestTrustedBlock.Height {
 			l, err = c.findNewPrimary(ctx, height, false)
-		} else {
-			err = nil
+			if err != nil {
+				return l, fmt.Errorf("find new primary: %w", err)
+			}
 		}
 
 	case provider.ErrNoResponse, provider.ErrLightBlockNotFound, provider.ErrHeightTooHigh:
@@ -673,11 +680,6 @@ func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64
 		return c.findNewPrimary(ctx, height, true)
 	}
 
-	// err was re-evaluated inside switch statement above
-	if err != nil {
-		return l, err
-	}
-
 	if height != 0 && l.Height != height {
 		return l, fmt.Errorf("invalid height received from primary: expected %d, got %d", height, l.Height)
 	}
@@ -688,6 +690,7 @@ func (c *Client) lightBlockFromPrimaryAtHeight(ctx context.Context, height int64
 func (c *Client) getLightBlock(ctx context.Context, p provider.Provider, height int64) (*types.LightBlock, error) {
 	l, err := p.LightBlock(ctx, height)
 	if ctx.Err() != nil {
+		c.logger.Debug("get light block context timed out", "provider", p.ID(), "error", ctx.Err())
 		return nil, provider.ErrNoResponse
 	}
 	return l, err
@@ -853,11 +856,19 @@ func (c *Client) compareFirstHeaderWithWitnesses(ctx context.Context, h *types.S
 			witnessesToRemove = append(witnessesToRemove, e.WitnessIndex)
 		default: // benign errors can be ignored with the exception of context errors
 			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+				c.logger.Error(
+					"compare first header with witness timed out",
+					"i", i,
+					"cap", cap(errc),
+					"error", err,
+				)
 				return err
 			}
 
 			// the witness either didn't respond or didn't have the block. We ignore it.
 			c.logger.Debug("unable to compare first header with witness, ignoring",
+				"i", i,
+				"cap", cap(errc),
 				"err", err)
 		}
 

@@ -13,5 +13,7 @@ func init() {
 		fmt.Println("POTENTIAL DEADLOCK DETECTED")
 		fmt.Println("===========================")
 	}
-	sync.Opts.DeadlockTimeout = 1 * time.Minute
+
+	// Set deadlock timeout to 5 minutes, to give enough time to state sync to execute and retry.
+	sync.Opts.DeadlockTimeout = 5 * time.Minute
 }
