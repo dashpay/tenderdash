@@ -833,8 +833,10 @@ func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels C
 		}
 		if err := m.broadcast(ctx, pu); err != nil {
 			m.logger.Error("error during broadcast ready", "error", err)
-			// this implies deadlock condition which we really need to detect and fix
-			panic("possible deadlock when sending ready broadcast: " + err.Error())
+			if errors.Is(err, context.DeadlineExceeded) {
+				// this implies deadlock condition which we really need to detect and fix
+				panic("possible deadlock when sending ready broadcast: " + err.Error())
+			}
 		}
 	}
 }
@@ -939,8 +941,10 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 		}
 		if err := m.broadcast(ctx, pu); err != nil {
 			m.logger.Error("error during broadcast disconnected", "error", err)
-			// this implies deadlock condition which we really need to detect and fix
-			panic("possible deadlock when sending disconnected broadcast: " + err.Error())
+			if errors.Is(err, context.DeadlineExceeded) {
+				// this implies deadlock condition which we really need to detect and fix
+				panic("possible deadlock when sending disconnected broadcast: " + err.Error())
+			}
 		}
 	}
 
