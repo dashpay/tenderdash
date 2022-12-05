@@ -7,7 +7,7 @@ inputs:
     default: amd64
     required: false
 outputs:
-  bls_cache_key: 
+  bls_cache_key:
     description: Key used by BLS cache
     value: ${{ runner.os }}-${{ inputs.arch }}-bls-${{ steps.bls-revision.outputs.hash }}
 runs:
