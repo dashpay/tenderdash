@@ -1902,6 +1902,15 @@ func (cs *State) enterPrecommit(ctx context.Context, height int64, round int32) 
 	if cs.ProposalBlock.HashesTo(blockID.Hash) {
 		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
 
+		// we got precommit but we didn't process proposal yet
+		if cs.CurrentRoundState.GetHeight() != height || cs.CurrentRoundState.Round != round {
+			var err error
+			cs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, round, cs.state, true)
+			if err != nil {
+				panic(fmt.Errorf("locking block %s: process proposal failed: %w", cs.ProposalBlock.Hash().ShortString(), err))
+			}
+		}
+
 		// Validate the block.
 		if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, cs.ProposalBlock); err != nil {
 			panic(fmt.Sprintf("precommit step: +2/3 prevoted for an invalid block %v; relocking", err))
@@ -2624,12 +2633,9 @@ func (cs *State) addProposalBlockPart(
 			"round_height", cs.RoundState.GetHeight(),
 		)
 
-		if cs.ProposalBlock.Height != cs.RoundState.GetHeight() {
-			cs.RoundState.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, msg.Round, cs.state, true)
-			if err != nil {
-				return false, err
-			}
-		}
+		// if cs.ProposalBlock.Height != cs.RoundState.CurrentRoundState.GetHeight() {
+		// 	cs.RoundState.CurrentRoundState = sm.CurrentRoundState{}
+		// }
 		if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
 			cs.logger.Error("failed publishing event complete proposal", "err", err)
 		}
