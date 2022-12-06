@@ -6,7 +6,8 @@ import (
 	"math/rand"
 	"sort"
 	"strings"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/types"
@@ -139,7 +140,7 @@ func (p *snapshotPool) GetPeer(snapshot *snapshot) types.NodeID {
 	if len(peers) == 0 {
 		return ""
 	}
-	return peers[rand.Intn(len(peers))] // nolint:gosec // G404: Use of weak random number generator
+	return peers[rand.Intn(len(peers))] //nolint:gosec // G404: Use of weak random number generator
 }
 
 // GetPeers returns the peers for a snapshot.

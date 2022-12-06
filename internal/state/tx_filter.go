@@ -1,8 +1,9 @@
 package state
 
 import (
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/internal/mempool"

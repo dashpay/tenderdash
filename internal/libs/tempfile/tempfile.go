@@ -7,8 +7,9 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 )
 
 const (

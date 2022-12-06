@@ -7,8 +7,9 @@ import (
 	mrand "math/rand"
 	"net"
 	"net/http"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/gorilla/websocket"
 

@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"runtime"
 	"sort"
-	"sync"
 	"sync/atomic"
 	"time"
 
+	sync "github.com/sasha-s/go-deadlock"
+
 	"github.com/creachadair/taskgroup"
+
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"

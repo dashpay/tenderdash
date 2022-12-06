@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
+	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/light/provider"
@@ -17,7 +19,6 @@ var (
 	errNoConnectedPeers    = errors.New("no available peers to dispatch request to")
 	errUnsolicitedResponse = errors.New("unsolicited light block response")
 	errPeerAlreadyBusy     = errors.New("peer is already processing a request")
-	errDisconnected        = errors.New("dispatcher disconnected")
 )
 
 // A Dispatcher multiplexes concurrent requests by multiple peers for light blocks.
@@ -61,11 +62,14 @@ func (d *Dispatcher) LightBlock(ctx context.Context, height int64, peer types.No
 	}()
 
 	// wait for a response, cancel or timeout
+	start := time.Now()
 	select {
 	case resp := <-callCh:
+		fmt.Printf("dispatcher LightBlock took %s\n", time.Since(start).String())
 		return resp, nil
 
 	case <-ctx.Done():
+		fmt.Printf("dispatcher LightBlock ctx done after %s\n", time.Since(start).String())
 		return nil, ctx.Err()
 	}
 }
@@ -77,7 +81,7 @@ func (d *Dispatcher) dispatch(ctx context.Context, peer types.NodeID, height int
 	defer d.mtx.Unlock()
 	select {
 	case <-ctx.Done():
-		return nil, errDisconnected
+		return nil, ctx.Err()
 	default:
 	}
 

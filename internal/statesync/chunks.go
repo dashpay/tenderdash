@@ -6,8 +6,9 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/types"
 )

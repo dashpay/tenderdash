@@ -2,7 +2,7 @@
 package events
 
 import (
-	"sync"
+	sync "github.com/sasha-s/go-deadlock"
 )
 
 // EventData is a generic event data can be typed and registered with

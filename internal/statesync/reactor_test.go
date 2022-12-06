@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/fortytw2/leaktest"
@@ -609,11 +610,10 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	ictx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
-	rts.reactor.mtx.Lock()
 	err := rts.reactor.initStateProvider(ictx, factory.DefaultTestChainID, 1)
-	rts.reactor.mtx.Unlock()
 	require.NoError(t, err)
-	rts.reactor.syncer.stateProvider = rts.reactor.stateProvider
+
+	rts.reactor.getSyncer().stateProvider = rts.reactor.stateProvider
 
 	actx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
@@ -631,7 +631,7 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, commit.BlockID, state.LastBlockID)
 
-	added, err := rts.reactor.syncer.AddSnapshot(peerA, &snapshot{
+	added, err := rts.reactor.getSyncer().AddSnapshot(peerA, &snapshot{
 		Height: 1, Format: 2, Chunks: 7, Hash: []byte{1, 2}, Metadata: []byte{1},
 	})
 	require.NoError(t, err)

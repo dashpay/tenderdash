@@ -5,9 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/internal/libs/flowrate"
 	"github.com/tendermint/tendermint/libs/log"

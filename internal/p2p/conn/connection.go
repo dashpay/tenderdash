@@ -10,9 +10,10 @@ import (
 	"net"
 	"reflect"
 	"runtime/debug"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/gogo/protobuf/proto"
 

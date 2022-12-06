@@ -7,7 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashevo/dashd-go/btcjson"
 

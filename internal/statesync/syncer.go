@@ -5,8 +5,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -267,7 +268,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, chunks *chunkQueu
 	defer hcancel()
 
 	// Fetch the app hash corresponding to the snapshot
-	appHash, err := s.stateProvider.AppHash(hctx, snapshot.Height)
+	appHash, err := s.getStateProvider().AppHash(hctx, snapshot.Height)
 	if err != nil {
 		// check if the main context was triggered
 		if ctx.Err() != nil {
@@ -302,7 +303,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, chunks *chunkQueu
 	defer pcancel()
 
 	// Optimistically build new state, so we don't discover any light client failures at the end.
-	state, err := s.stateProvider.State(pctx, snapshot.Height)
+	state, err := s.getStateProvider().State(pctx, snapshot.Height)
 	if err != nil {
 		// check if the main context was triggered
 		if ctx.Err() != nil {
@@ -316,7 +317,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, chunks *chunkQueu
 			"err", err, "height", snapshot.Height)
 		return sm.State{}, nil, errRejectSnapshot
 	}
-	commit, err := s.stateProvider.Commit(pctx, snapshot.Height)
+	commit, err := s.getStateProvider().Commit(pctx, snapshot.Height)
 	if err != nil {
 		// check if the provider context exceeded the 10 second deadline
 		if ctx.Err() != nil {
@@ -566,4 +567,16 @@ func (s *syncer) verifyApp(ctx context.Context, snapshot *snapshot, appVersion u
 
 	s.logger.Info("Verified ABCI app", "height", snapshot.Height, "appHash", snapshot.trustedAppHash)
 	return nil
+}
+
+func (s *syncer) getStateProvider() StateProvider {
+	s.mtx.RLock()
+	defer s.mtx.RUnlock()
+	return s.stateProvider
+}
+
+func (s *syncer) SetStateProvider(sp StateProvider) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	s.stateProvider = sp
 }

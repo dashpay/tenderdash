@@ -8,8 +8,9 @@ import (
 	"fmt"
 	"path"
 	"strconv"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
