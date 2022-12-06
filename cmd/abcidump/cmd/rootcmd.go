@@ -20,12 +20,10 @@ func MakeRootCmd() *cobra.Command {
 		Use:   "abcidump",
 		Short: "Parse dump of protobuf communication between two nodes",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			allowLevel, err := log.AllowLevel(logLevel)
+			logger, err = log.NewDefaultLogger(log.LogFormatText, logLevel, false)
 			if err != nil {
-				return fmt.Errorf("invalid log level %s: %w", logLevel, err)
+				return fmt.Errorf("log-level: %w", err)
 			}
-
-			logger = log.NewFilter(log.NewTMLogger(log.NewSyncWriter(cmd.ErrOrStderr())), allowLevel)
 			logger = logger.With("module", "main")
 			return nil
 		},
