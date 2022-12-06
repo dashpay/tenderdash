@@ -44,6 +44,8 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 		return nil
 	}
 
+	appState := cs.appStateStore.Get()
+
 	// for logging
 	switch m := msg.Msg.(type) {
 	case types.EventDataRoundState:
@@ -80,23 +82,31 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 			cs.logger.Info("Replay: Vote", "height", v.Height, "round", v.Round, "type", v.Type,
 				"blockID", v.BlockID, "peer", peerID)
 		}
-		_ = cs.msgDispatcher.dispatch(ctx, m, msgFromReplay())
+		_ = cs.msgDispatcher.dispatch(ctx, &appState, m, msgFromReplay())
 	case timeoutInfo:
 		cs.logger.Info("Replay: Timeout", "height", m.Height, "round", m.Round, "step", m.Step, "dur", m.Duration)
-		cs.handleTimeout(ctx, m, cs.RoundState)
+		cs.handleTimeout(ctx, m, &appState)
 	default:
 		return fmt.Errorf("replay: Unknown TimedWALMessage type: %v", reflect.TypeOf(msg.Msg))
+	}
+	err := appState.Save()
+	if err != nil {
+		return fmt.Errorf("failed to update app-state: %w", err)
 	}
 	return nil
 }
 
 // Replay only those messages since the last block.  `timeoutRoutine` should
 // run concurrently to read off tickChan.
-func (cs *State) catchupReplay(ctx context.Context, csHeight int64) error {
-
+func (cs *State) catchupReplay(ctx context.Context, appState AppState) error {
+	csHeight := appState.Height
 	// Set replayMode to true so we don't log signing errors.
 	cs.replayMode = true
-	defer func() { cs.replayMode = false }()
+	_ = cs.observer.Notify(SetReplayMode, cs.replayMode)
+	defer func() {
+		cs.replayMode = false
+		_ = cs.observer.Notify(SetReplayMode, cs.replayMode)
+	}()
 
 	// Ensure that #ENDHEIGHT for this height doesn't exist.
 	// NOTE: This is just a sanity check. As far as we know things work fine
@@ -123,15 +133,15 @@ func (cs *State) catchupReplay(ctx context.Context, csHeight int64) error {
 	// Search for last height marker.
 	//
 	// Ignore data corruption errors in previous heights because we only care about last height
-	if csHeight < cs.state.InitialHeight {
+	if csHeight < appState.state.InitialHeight {
 		return fmt.Errorf(
 			"cannot replay height %v, below initial height %v",
 			csHeight,
-			cs.state.InitialHeight,
+			appState.state.InitialHeight,
 		)
 	}
 	endHeight := csHeight - 1
-	if csHeight == cs.state.InitialHeight {
+	if csHeight == appState.state.InitialHeight {
 		endHeight = 0
 	}
 	gr, found, err = cs.wal.SearchForEndHeight(

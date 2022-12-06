@@ -7,12 +7,11 @@ import (
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
-	"github.com/tendermint/tendermint/crypto"
-
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/example/kvstore"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/internal/proxy"
@@ -170,7 +169,8 @@ func NewChainGenerator(t *testing.T, nVals int, len int) ChainGenerator {
 }
 
 func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []*validatorStub) []sm.State {
-	height, round := css[0].Height, css[0].Round
+	appState := css[0].GetAppState()
+	height, round := appState.Height, appState.Round
 	newRoundCh := subscribe(ctx, c.t, css[0].eventBus, types.EventQueryNewRound)
 	proposalCh := subscribe(ctx, c.t, css[0].eventBus, types.EventQueryCompleteProposal)
 	// start the machine; note height should be equal to InitialHeight here,
@@ -179,8 +179,8 @@ func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []
 	incrementHeight(vss...)
 	ensureNewRound(c.t, newRoundCh, height, 0)
 	ensureNewProposal(c.t, proposalCh, height, round)
-	rs := css[0].GetRoundState()
 
+	rs := css[0].GetAppState().RoundState
 	css[0].config.DontAutoPropose = true
 
 	blockID := rs.ProposalBlock.BlockID(nil)
@@ -189,7 +189,7 @@ func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []
 	ensureNewRound(c.t, newRoundCh, height+1, 0)
 
 	states := make([]sm.State, 0, c.len)
-	states = append(states, css[0].state)
+	states = append(states, css[0].GetAppState().state)
 	height++
 	for ; height <= int64(c.len); height++ {
 		incrementHeight(vss...)
@@ -197,7 +197,7 @@ func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []
 		ensureNewProposal(c.t, proposalCh, height, round)
 		signAddVotes(ctx, c.t, css[0], tmproto.PrecommitType, c.cfg.ChainID(), blockID, vss[1:c.nVals]...)
 		ensureNewRound(c.t, newRoundCh, height+1, 0)
-		states = append(states, css[0].state)
+		states = append(states, css[0].GetAppState().state)
 	}
 	return states
 }

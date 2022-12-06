@@ -209,7 +209,7 @@ func (p *pbtsTestHarness) height5(ctx context.Context, t *testing.T) (heightResu
 }
 
 func (p *pbtsTestHarness) nextHeight(ctx context.Context, t *testing.T, proposer types.PrivValidator, deliverTime, proposedTime, nextProposedTime time.Time) heightResult {
-	state := p.observedState.GetState()
+	state := p.observedState.GetAppState().state
 	quorumType := state.Validators.QuorumType
 	quorumHash := state.Validators.QuorumHash
 
@@ -230,17 +230,19 @@ func (p *pbtsTestHarness) nextHeight(ctx context.Context, t *testing.T, proposer
 	bid := b.BlockID(ps)
 	require.NoError(t, err)
 
-	coreChainLockedHeight := p.observedState.state.LastCoreChainLockedBlockHeight
+	appState := p.observedState.GetAppState()
+
+	coreChainLockedHeight := appState.state.LastCoreChainLockedBlockHeight
 	prop := types.NewProposal(p.currentHeight, coreChainLockedHeight, 0, -1, bid, proposedTime)
 	tp := prop.ToProto()
 
-	if _, err := proposer.SignProposal(ctx, p.observedState.state.ChainID, quorumType, quorumHash, tp); err != nil {
+	if _, err := proposer.SignProposal(ctx, appState.state.ChainID, quorumType, quorumHash, tp); err != nil {
 		t.Fatalf("error signing proposal: %s", err)
 	}
 
 	time.Sleep(time.Until(deliverTime))
 	prop.Signature = tp.Signature
-	if err := p.observedState.SetProposalAndBlock(ctx, prop, b, ps, "peerID"); err != nil {
+	if err := p.observedState.SetProposalAndBlock(ctx, prop, ps, "peerID"); err != nil {
 		t.Fatal(err)
 	}
 	ensureProposal(t, p.ensureProposalCh, p.currentHeight, 0, bid)

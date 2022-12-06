@@ -148,7 +148,7 @@ func validateBlock(state State, block *types.Block) error {
 	return nil
 }
 
-func validateBlockTime(allowedTimeWindow time.Duration, state State, block *types.Block) error {
+func ValidateBlockTime(allowedTimeWindow time.Duration, state State, block *types.Block) error {
 	if block.Height == state.InitialHeight {
 		if block.Time.Before(state.LastBlockTime) {
 			return fmt.Errorf("block time %v is before last-block-time %v",

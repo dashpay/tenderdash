@@ -124,51 +124,57 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	}
 
 	bzReactor := rts.reactors[bzNodeID]
-
+	doPrevoteOrigin := bzNodeState.behaviour.commander.commands[DoPrevoteType]
 	// alter prevote so that the byzantine node double votes when height is 2
-	bzNodeState.doPrevote = func(ctx context.Context, height int64, round int32, allowOldBlocks bool) {
+	doPrevoteCmd := newMockCommand(func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+		appState := stateEvent.AppState
+		event := stateEvent.Data.(DoPrevoteEvent)
+		height := event.Height
+		round := event.Round
 		// allow first height to happen normally so that byzantine validator is no longer proposer
-		uncommittedState, err := bzNodeState.blockExec.ProcessProposal(ctx, bzNodeState.ProposalBlock, round, bzNodeState.state, true)
+		uncommittedState, err := bzNodeState.blockExec.ProcessProposal(ctx, appState.ProposalBlock, round, appState.state, true)
 		assert.NoError(t, err)
 		assert.NotZero(t, uncommittedState)
-		bzNodeState.CurrentRoundState = uncommittedState
+		appState.CurrentRoundState = uncommittedState
 
-		if height == prevoteHeight {
-			prevote1, err := bzNodeState.signVote(ctx, tmproto.PrevoteType, bzNodeState.BlockID())
-			require.NoError(t, err)
-
-			prevote2, err := bzNodeState.signVote(ctx, tmproto.PrevoteType, types.BlockID{})
-			require.NoError(t, err)
-
-			// send two votes to all peers (1st to one half, 2nd to another half)
-			i := 0
-			for _, ps := range bzReactor.peers {
-				voteCh := rts.voteChannels[bzNodeID]
-				if i < len(bzReactor.peers)/2 {
-
-					require.NoError(t, voteCh.Send(ctx,
-						p2p.Envelope{
-							To: ps.peerID,
-							Message: &tmcons.Vote{
-								Vote: prevote1.ToProto(),
-							},
-						}))
-				} else {
-					require.NoError(t, voteCh.Send(ctx,
-						p2p.Envelope{
-							To: ps.peerID,
-							Message: &tmcons.Vote{
-								Vote: prevote2.ToProto(),
-							},
-						}))
-				}
-
-				i++
-			}
-		} else {
-			bzNodeState.defaultDoPrevote(ctx, height, round, false)
+		if height != prevoteHeight {
+			return doPrevoteOrigin.Execute(ctx, behaviour, stateEvent)
 		}
-	}
+		prevote1, err := bzNodeState.voteSigner.signVote(ctx, appState, tmproto.PrevoteType, appState.BlockID())
+		require.NoError(t, err)
+
+		prevote2, err := bzNodeState.voteSigner.signVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
+		require.NoError(t, err)
+
+		// send two votes to all peers (1st to one half, 2nd to another half)
+		i := 0
+		for _, ps := range bzReactor.peers {
+			voteCh := rts.voteChannels[bzNodeID]
+			if i < len(bzReactor.peers)/2 {
+
+				require.NoError(t, voteCh.Send(ctx,
+					p2p.Envelope{
+						To: ps.peerID,
+						Message: &tmcons.Vote{
+							Vote: prevote1.ToProto(),
+						},
+					}))
+			} else {
+				require.NoError(t, voteCh.Send(ctx,
+					p2p.Envelope{
+						To: ps.peerID,
+						Message: &tmcons.Vote{
+							Vote: prevote2.ToProto(),
+						},
+					}))
+			}
+
+			i++
+		}
+		return nil, nil
+	})
+
+	bzNodeState.behaviour.RegisterCommand(DoPrevoteType, doPrevoteCmd)
 
 	// Introducing a lazy proposer means that the time of the block committed is
 	// different to the timestamp that the other nodes have. This tests to ensure
@@ -176,35 +182,39 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	// lazyProposer := states[1]
 	lazyNodeState := states[1]
 
-	lazyNodeState.decideProposal = func(ctx context.Context, height int64, round int32) {
+	decideProposalCmd := newMockCommand(func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+		appState := stateEvent.AppState
+		event := stateEvent.Data.(DecideProposalEvent)
+		height := event.Height
+		round := event.Round
 		require.False(t, lazyNodeState.privValidator.IsZero())
 
 		var commit *types.Commit
 		switch {
-		case lazyNodeState.Height == lazyNodeState.state.InitialHeight:
+		case appState.Height == appState.state.InitialHeight:
 			// We're creating a proposal for the first block.
 			// The commit is empty, but not nil.
 			commit = types.NewCommit(0, 0, types.BlockID{}, nil)
-		case lazyNodeState.LastCommit != nil:
+		case appState.LastCommit != nil:
 			// Make the commit from LastCommit
-			commit = lazyNodeState.LastCommit
+			commit = appState.LastCommit
 		default: // This shouldn't happen.
 			lazyNodeState.logger.Error("enterPropose: Cannot propose anything: No commit for the previous block")
-			return
+			return nil, nil
 		}
 
 		if lazyNodeState.privValidator.IsZero() {
 			// If this node is a validator & proposer in the current round, it will
 			// miss the opportunity to create a block.
 			lazyNodeState.logger.Error("enterPropose", "err", ErrPrivValidatorNotSet)
-			return
+			return nil, nil
 		}
 
 		block, uncommittedState, err := lazyNodeState.blockExec.CreateProposalBlock(
 			ctx,
-			lazyNodeState.Height,
+			appState.Height,
 			round,
-			lazyNodeState.state,
+			appState.state,
 			commit,
 			lazyNodeState.privValidator.ProTxHash,
 			0,
@@ -226,18 +236,18 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 
 		proposal := types.NewProposal(
 			height,
-			lazyNodeState.state.LastCoreChainLockedBlockHeight,
+			appState.state.LastCoreChainLockedBlockHeight,
 			round,
-			lazyNodeState.ValidRound,
+			appState.ValidRound,
 			propBlockID,
 			block.Header.Time,
 		)
 		p := proposal.ToProto()
 		if _, err := lazyNodeState.privValidator.SignProposal(
 			ctx,
-			lazyNodeState.state.ChainID,
-			lazyNodeState.state.Validators.QuorumType,
-			lazyNodeState.state.Validators.QuorumHash,
+			appState.state.ChainID,
+			appState.state.Validators.QuorumType,
+			appState.state.Validators.QuorumHash,
 			p,
 		); err == nil {
 			proposal.Signature = p.Signature
@@ -247,14 +257,16 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			for i := 0; i < int(blockParts.Total()); i++ {
 				part := blockParts.GetPart(i)
 				_ = lazyNodeState.msgInfoQueue.send(ctx, &BlockPartMessage{
-					lazyNodeState.Height, lazyNodeState.Round, part,
+					appState.Height, appState.Round, part,
 				}, "")
 			}
 			lazyNodeState.logger.Debug("signed proposal block", "block", block)
 		} else if !lazyNodeState.replayMode {
 			lazyNodeState.logger.Error("enterPropose: Error signing proposal", "height", height, "round", round, "err", err)
 		}
-	}
+		return nil, nil
+	})
+	lazyNodeState.behaviour.RegisterCommand(DecideProposalType, decideProposalCmd)
 
 	rts.switchToConsensus(ctx)
 

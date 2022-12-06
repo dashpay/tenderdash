@@ -39,7 +39,7 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 	rts := setup(ctx, t, n, states, 100) // buffer must be large enough to not deadlock
 
 	for _, reactor := range rts.reactors {
-		state := reactor.state.GetState()
+		state := reactor.state.GetAppState().state
 		reactor.SwitchToConsensus(ctx, state, false)
 	}
 
@@ -54,10 +54,14 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 	// block and otherwise disable the priv validator.
 	byzState.mtx.Lock()
 	privVal := byzState.privValidator
-	byzState.doPrevote = func(ctx context.Context, height int64, round int32, _ bool) {
+	doPrevoteCmd := newMockCommand(func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+		appState := stateEvent.AppState
 		defer close(signal)
-		invalidDoPrevoteFunc(ctx, t, height, round, byzState, byzReactor, rts.voteChannels[node.NodeID], privVal)
-	}
+		invalidDoPrevoteFunc(ctx, t, appState, byzState, byzReactor, rts.voteChannels[node.NodeID], privVal)
+		return nil, nil
+	})
+	byzState.behaviour.RegisterCommand(DoPrevoteType, doPrevoteCmd)
+
 	byzState.mtx.Unlock()
 
 	// wait for a bunch of blocks
@@ -102,8 +106,7 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 func invalidDoPrevoteFunc(
 	ctx context.Context,
 	t *testing.T,
-	height int64,
-	round int32,
+	appState *AppState,
 	cs *State,
 	r *Reactor,
 	voteCh p2p.Channel,
@@ -120,15 +123,15 @@ func invalidDoPrevoteFunc(
 		err = cs.privValidator.init(ctx)
 		require.NoError(t, err)
 
-		valIndex, _ := cs.Validators.GetByProTxHash(cs.privValidator.ProTxHash)
+		valIndex, _ := appState.Validators.GetByProTxHash(cs.privValidator.ProTxHash)
 
 		// precommit a random block
 		blockHash := bytes.HexBytes(tmrand.Bytes(32))
 		precommit := &types.Vote{
 			ValidatorProTxHash: cs.privValidator.ProTxHash,
 			ValidatorIndex:     valIndex,
-			Height:             cs.Height,
-			Round:              cs.Round,
+			Height:             appState.Height,
+			Round:              appState.Round,
 			Type:               tmproto.PrecommitType,
 			BlockID: types.BlockID{
 				Hash:          blockHash,
@@ -140,9 +143,9 @@ func invalidDoPrevoteFunc(
 		p := precommit.ToProto()
 		err = cs.privValidator.SignVote(
 			ctx,
-			cs.state.ChainID,
-			cs.Validators.QuorumType,
-			cs.Validators.QuorumHash,
+			appState.state.ChainID,
+			appState.Validators.QuorumType,
+			appState.Validators.QuorumHash,
 			p,
 			log.NewNopLogger(),
 		)

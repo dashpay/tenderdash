@@ -28,7 +28,7 @@ func (c *msgInfoDispatcher) match(m Message) (msgHandlerFunc, error) {
 	return nil, fmt.Errorf("got unknown %T type", m)
 }
 
-func (c *msgInfoDispatcher) dispatch(ctx context.Context, msg Message, opts ...func(envelope *msgEnvelope)) error {
+func (c *msgInfoDispatcher) dispatch(ctx context.Context, appState *AppState, msg Message, opts ...func(envelope *msgEnvelope)) error {
 	var m any = msg
 	mi := m.(msgInfo)
 	if mi.Msg == nil {
@@ -45,19 +45,23 @@ func (c *msgInfoDispatcher) dispatch(ctx context.Context, msg Message, opts ...f
 	if err != nil {
 		return fmt.Errorf("message handler not found: %w", err)
 	}
-	return handler(ctx, envelope)
+	return handler(ctx, appState, envelope)
 }
 
-func newMsgInfoDispatcher(cs *State) *msgInfoDispatcher {
+func newMsgInfoDispatcher(
+	behaviour *Behaviour,
+	wal WALWriteFlusher,
+	logger log.Logger,
+	statsMsgQueue chan<- msgInfo,
+) *msgInfoDispatcher {
 	mws := []msgMiddlewareFunc{
-		errorMiddleware(cs, cs.logger),
-		walMiddleware(&wrapWAL{getter: func() WALWriteFlusher { return cs.wal }}, cs.logger),
-		globalLockMiddleware(cs),
+		errorMiddleware(logger),
+		walMiddleware(wal, logger),
 	}
-	proposalHandler := withMiddleware(proposalMessageHandler(cs), mws...)
-	blockPartHandler := withMiddleware(blockPartMessageHandler(cs), mws...)
-	voteHandler := withMiddleware(voteMessageHandler(cs), mws...)
-	commitHandler := withMiddleware(commitMessageHandler(cs), mws...)
+	proposalHandler := withMiddleware(proposalMessageHandler(behaviour), mws...)
+	blockPartHandler := withMiddleware(blockPartMessageHandler(behaviour, statsMsgQueue), mws...)
+	voteHandler := withMiddleware(voteMessageHandler(behaviour, statsMsgQueue), mws...)
+	commitHandler := withMiddleware(commitMessageHandler(behaviour, statsMsgQueue), mws...)
 	return &msgInfoDispatcher{
 		proposalHandler:  proposalHandler,
 		blockPartHandler: blockPartHandler,
@@ -66,68 +70,49 @@ func newMsgInfoDispatcher(cs *State) *msgInfoDispatcher {
 	}
 }
 
-func proposalMessageHandler(cs *State) msgHandlerFunc {
-	return func(ctx context.Context, envelope msgEnvelope) error {
+func proposalMessageHandler(b *Behaviour) msgHandlerFunc {
+	return func(ctx context.Context, appState *AppState, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*ProposalMessage)
-		return cs.setProposal(msg.Proposal, envelope.ReceiveTime)
+		return b.SetProposal(ctx, appState, SetProposalEvent{
+			Proposal: msg.Proposal,
+			RecvTime: envelope.ReceiveTime,
+		})
 	}
 }
 
-func blockPartMessageHandler(cs *State) msgHandlerFunc {
-	return func(ctx context.Context, envelope msgEnvelope) error {
+func blockPartMessageHandler(b *Behaviour, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
+	return func(ctx context.Context, appState *AppState, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*BlockPartMessage)
-		commitNotExist := cs.Commit == nil
 
 		// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
-		added, err := cs.addProposalBlockPart(ctx, msg, envelope.PeerID)
+		added, err := b.AddProposalBlockPart(
+			ctx,
+			appState,
+			AddProposalBlockPartEvent{Msg: msg, PeerID: envelope.PeerID},
+		)
 
-		if added && cs.ProposalBlockParts != nil && cs.ProposalBlockParts.IsComplete() && envelope.fromReplay {
-			candidateState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, msg.Round, cs.state, true)
-			if err != nil {
-				panic(err)
-			}
-			cs.RoundState.CurrentRoundState = candidateState
-		}
-
-		// We unlock here to yield to any routines that need to read the the RoundState.
-		// Previously, this code held the lock from the point at which the final block
-		// part was received until the block executed against the application.
-		// This prevented the reactor from being able to retrieve the most updated
-		// version of the RoundState. The reactor needs the updated RoundState to
-		// gossip the now completed block.
-		//
-		// This code can be further improved by either always operating on a copy
-		// of RoundState and only locking when switching out State's copy of
-		// RoundState with the updated copy or by emitting RoundState events in
-		// more places for routines depending on it to listen for.
-		cs.mtx.Unlock()
-
-		cs.mtx.Lock()
-		if added && commitNotExist && cs.ProposalBlockParts.IsComplete() {
-			cs.handleCompleteProposal(ctx, msg.Height, envelope.fromReplay)
-		}
 		if added {
 			select {
-			case cs.statsMsgQueue <- envelope.msgInfo:
+			case statsMsgQueue <- envelope.msgInfo:
 			case <-ctx.Done():
 				return nil
 			}
 		}
 
-		if err != nil && msg.Round != cs.Round {
-			cs.logger.Debug("received block part from wrong round",
-				"height", cs.Height,
-				"cs_round", cs.Round,
+		if err != nil && msg.Round != appState.Round {
+			b.logger.Debug("received block part from wrong round",
+				"height", appState.Height,
+				"cs_round", appState.Round,
 				"block_height", msg.Height,
 				"block_round", msg.Round,
 			)
 			err = nil
 		}
 
-		cs.logger.Debug(
+		b.logger.Debug(
 			"received block part",
-			"height", cs.Height,
-			"round", cs.Round,
+			"height", appState.Height,
+			"round", appState.Round,
 			"block_height", msg.Height,
 			"block_round", msg.Round,
 			"added", added,
@@ -139,15 +124,15 @@ func blockPartMessageHandler(cs *State) msgHandlerFunc {
 	}
 }
 
-func voteMessageHandler(cs *State) msgHandlerFunc {
-	return func(ctx context.Context, envelope msgEnvelope) error {
+func voteMessageHandler(b *Behaviour, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
+	return func(ctx context.Context, appState *AppState, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*VoteMessage)
 		// attempt to add the vote and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		added, err := cs.tryAddVote(ctx, msg.Vote, envelope.PeerID)
+		added, err := b.TryAddVote(ctx, appState, TryAddVoteEvent{Vote: msg.Vote, PeerID: envelope.PeerID})
 		if added {
 			select {
-			case cs.statsMsgQueue <- envelope.msgInfo:
+			case statsMsgQueue <- envelope.msgInfo:
 			case <-ctx.Done():
 				return nil
 			}
@@ -166,8 +151,8 @@ func voteMessageHandler(cs *State) msgHandlerFunc {
 		// the peer is sending us CatchupCommit precommits.
 		// We could make note of this and help filter in broadcastHasVoteMessage().
 		keyVals := []interface{}{
-			"height", cs.Height,
-			"cs_round", cs.Round,
+			"height", appState.Height,
+			"cs_round", appState.Round,
 			"vote_height", msg.Vote.Height,
 			"vote_round", msg.Vote.Round,
 			"added", added,
@@ -176,24 +161,31 @@ func voteMessageHandler(cs *State) msgHandlerFunc {
 		if err != nil {
 			keyVals = append(keyVals, "error", err)
 		}
-		cs.logger.Debug("received vote", keyVals...)
+		b.logger.Debug("received vote", keyVals...)
 		return nil
 	}
 }
 
-func commitMessageHandler(cs *State) msgHandlerFunc {
-	return func(ctx context.Context, envelope msgEnvelope) error {
+func commitMessageHandler(b *Behaviour, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
+	return func(ctx context.Context, appState *AppState, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*CommitMessage)
 		// attempt to add the commit and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		added, err := cs.tryAddCommit(ctx, msg.Commit, envelope.PeerID)
+		added, err := b.TryAddCommit(
+			ctx,
+			appState,
+			TryAddCommitEvent{
+				Commit: msg.Commit,
+				PeerID: envelope.PeerID,
+			},
+		)
 		if added {
-			cs.statsMsgQueue <- envelope.msgInfo
+			statsMsgQueue <- envelope.msgInfo
 		}
-		cs.logger.Debug(
+		b.logger.Debug(
 			"received commit",
-			"height", cs.Height,
-			"cs_round", cs.Round,
+			"height", appState.Height,
+			"cs_round", appState.Round,
 			"commit_height", msg.Commit.Height,
 			"commit_round", msg.Commit.Round,
 			"added", added,
@@ -206,7 +198,7 @@ func commitMessageHandler(cs *State) msgHandlerFunc {
 
 func walMiddleware(wal WALWriteFlusher, logger log.Logger) msgMiddlewareFunc {
 	return func(hd msgHandlerFunc) msgHandlerFunc {
-		return func(ctx context.Context, envelope msgEnvelope) error {
+		return func(ctx context.Context, appState *AppState, envelope msgEnvelope) error {
 			mi := envelope.msgInfo
 			if mi.PeerID != "" {
 				err := wal.Write(mi)
@@ -222,36 +214,26 @@ func walMiddleware(wal WALWriteFlusher, logger log.Logger) msgMiddlewareFunc {
 					))
 				}
 			}
-			return hd(ctx, envelope)
+			return hd(ctx, appState, envelope)
 		}
 	}
 }
 
-func errorMiddleware(cs *State, logger log.Logger) msgMiddlewareFunc {
+func errorMiddleware(logger log.Logger) msgMiddlewareFunc {
 	return func(hd msgHandlerFunc) msgHandlerFunc {
-		return func(ctx context.Context, envelope msgEnvelope) error {
-			err := hd(ctx, envelope)
+		return func(ctx context.Context, appState *AppState, envelope msgEnvelope) error {
+			err := hd(ctx, appState, envelope)
 			if err != nil {
 				logger.Error(
 					"failed to process message",
-					"height", cs.Height,
-					"round", cs.Round,
+					"height", appState.Height,
+					"round", appState.Round,
 					"peer", envelope.PeerID,
 					"msg_type", fmt.Sprintf("%T", envelope.Msg),
 					"err", err,
 				)
 			}
 			return nil
-		}
-	}
-}
-
-func globalLockMiddleware(cs *State) msgMiddlewareFunc {
-	return func(hd msgHandlerFunc) msgHandlerFunc {
-		return func(ctx context.Context, envelope msgEnvelope) error {
-			cs.mtx.Lock()
-			defer cs.mtx.Unlock()
-			return hd(ctx, envelope)
 		}
 	}
 }

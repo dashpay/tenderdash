@@ -385,7 +385,7 @@ func (blockExec *BlockExecutor) ValidateBlockTime(
 	state State,
 	block *types.Block,
 ) error {
-	return validateBlockTime(allowedTimeWindow, state, block)
+	return ValidateBlockTime(allowedTimeWindow, state, block)
 }
 
 // FinalizeBlock validates the block against the state, fires the relevant events,

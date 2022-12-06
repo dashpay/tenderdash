@@ -49,14 +49,6 @@ const (
 //----------------------------------------------
 // These interfaces are used by RPC and must be thread safe
 
-type consensusState interface {
-	GetState() sm.State
-	GetValidators() (int64, []*types.Validator)
-	GetLastHeight() int64
-	GetRoundStateJSON() ([]byte, error)
-	GetRoundStateSimpleJSON() ([]byte, error)
-}
-
 type peerManager interface {
 	Peers() []types.NodeID
 	Addresses(types.NodeID) []p2p.NodeAddress
@@ -73,7 +65,7 @@ type Environment struct {
 	StateStore       sm.Store
 	BlockStore       sm.BlockStore
 	EvidencePool     sm.EvidencePool
-	ConsensusState   consensusState
+	ConsensusState   *consensus.State
 	ConsensusReactor *consensus.Reactor
 	BlockSyncReactor *blocksync.Reactor
 

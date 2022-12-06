@@ -53,9 +53,9 @@ type reactorTestSuite struct {
 
 func (rts *reactorTestSuite) switchToConsensus(ctx context.Context) {
 	for nodeID, reactor := range rts.reactors {
-		state := reactor.state.GetState()
+		appState := reactor.state.GetAppState()
 		sCtx := dash.ContextWithProTxHash(ctx, rts.states[nodeID].privValidator.ProTxHash)
-		reactor.SwitchToConsensus(sCtx, state, false)
+		reactor.SwitchToConsensus(sCtx, appState.state, false)
 	}
 }
 
@@ -148,9 +148,11 @@ func setup(
 		rts.reactors[nodeID] = reactor
 		rts.blocksyncSubs[nodeID] = fsSub
 
+		appState := state.appStateStore.Get()
+
 		// simulate handle initChain in handshake
-		if state.state.LastBlockHeight == 0 {
-			require.NoError(t, state.blockExec.Store().Save(state.state))
+		if appState.state.LastBlockHeight == 0 {
+			require.NoError(t, state.blockExec.Store().Save(appState.state))
 		}
 
 		require.NoError(t, reactor.Start(sCtx))

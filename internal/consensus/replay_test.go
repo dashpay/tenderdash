@@ -212,8 +212,10 @@ LOOP:
 		case <-rctx.Done():
 			t.Fatal("context canceled before test completed")
 		case err := <-walPanicked:
+			appState := cs.GetAppState()
+
 			// make sure we can make blocks after a crash
-			startNewStateAndWaitForBlock(ctx, t, consensusReplayConfig, cs.Height, blockDB, stateStore)
+			startNewStateAndWaitForBlock(ctx, t, consensusReplayConfig, appState.Height, blockDB, stateStore)
 
 			// stop consensus state and transactions sender (initFn)
 			cs.Stop()
@@ -396,7 +398,8 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 	for i := 0; i < nPeers; i++ {
 		vss[i] = newValidatorStub(css[i].privValidator, int32(i), 0)
 	}
-	height, round := css[0].Height, css[0].Round
+	appState := css[0].GetAppState()
+	height, round := appState.Height, appState.Round
 
 	// start the machine; note height should be equal to InitialHeight here,
 	// so we don't need to increment it
@@ -420,15 +423,18 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 		height++
 		incrementHeight(vss...)
 		vals := findSuitableValidatorSetUpdates(height, valSetUpdates).ValidatorUpdates
-		require.Len(t, css[0].Validators.Validators, len(vals))
+		appState = css[0].GetAppState()
+		require.Len(t, appState.Validators.Validators, len(vals))
 		for _, tx := range txs {
 			err = assertMempool(t, css[0].txNotifier).CheckTx(ctx, tx, nil, mempool.TxInfo{})
 			assert.Nil(t, err)
 		}
-		vssForSigning = determineActiveValidators(ctx, t, vss, css[0].Validators)
+		vssForSigning = determineActiveValidators(ctx, t, vss, appState.Validators)
 		blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), txs.ToSliceOfBytes())
 		ensureNewProposal(t, proposalCh, height, round)
-		require.True(t, css[0].Validators.HasPublicKeys)
+
+		appState = css[0].GetAppState()
+		require.True(t, appState.Validators.HasPublicKeys)
 		signAddVotes(ctx, t, css[0], tmproto.PrecommitType, sim.Config.ChainID(), blockID, vssForSigning...)
 		ensureNewRound(t, newRoundCh, height+1, 0)
 	}
@@ -482,12 +488,14 @@ func createSignSendProposal(ctx context.Context,
 		partSize = types.BlockPartSizeBytes
 	)
 
-	quorumType := css[0].Validators.QuorumType
-	quorumHash := css[0].Validators.QuorumHash
-	height := css[0].RoundState.Height
-	round := css[0].RoundState.Round
+	appState := css[0].GetAppState()
 
-	proposer := css[0].Validators.GetProposer()
+	quorumType := appState.Validators.QuorumType
+	quorumHash := appState.Validators.QuorumHash
+	height := appState.RoundState.Height
+	round := appState.RoundState.Round
+
+	proposer := appState.Validators.GetProposer()
 	proposerVs := findValByProTxHash(ctx, t, vss, proposer.ProTxHash)
 	proposerCs := findStateByProTxHash(t, css, proposer.ProTxHash)
 
@@ -517,7 +525,7 @@ func createSignSendProposal(ctx context.Context,
 
 	// set the proposal block to state on node 0, this will result in a signed prevote,
 	// so we do not need to prevote with it again (hence the vss[1:nVals])
-	if err := css[0].SetProposalAndBlock(ctx, proposal, propBlock, propBlockParts, "some peer"); err != nil {
+	if err := css[0].SetProposalAndBlock(ctx, proposal, propBlockParts, "some peer"); err != nil {
 		t.Fatal(err)
 	}
 

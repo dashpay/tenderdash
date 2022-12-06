@@ -226,8 +226,9 @@ func sortVValidatorStubsByPower(ctx context.Context, t *testing.T, vss []*valida
 // Functions for transitioning the consensus state
 
 func startTestRound(ctx context.Context, cs *State, height int64, round int32) {
+	appState := cs.GetAppState()
 	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
-	cs.enterNewRound(ctx, height, round)
+	_ = cs.behaviour.EnterNewRound(ctx, &appState, EnterNewRoundEvent{Height: height, Round: round})
 	cs.startRoutines(ctx, 0)
 }
 
@@ -242,18 +243,18 @@ func decideProposal(
 ) (proposal *types.Proposal, block *types.Block) {
 	t.Helper()
 
-	cs1.mtx.Lock()
-	block, err := cs1.createProposalBlock(ctx, round)
+	appState := cs1.GetAppState()
+
+	block, err := cs1.proposalBlockCreator.Create(ctx, &appState, round)
 	require.NoError(t, err)
 	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
-	validRound := cs1.ValidRound
-	chainID := cs1.state.ChainID
+	validRound := appState.ValidRound
+	chainID := appState.state.ChainID
 
-	validatorsAtProposalHeight := cs1.state.ValidatorsAtHeight(height)
+	validatorsAtProposalHeight := appState.state.ValidatorsAtHeight(height)
 	quorumType := validatorsAtProposalHeight.QuorumType
 	quorumHash := validatorsAtProposalHeight.QuorumHash
-	cs1.mtx.Unlock()
 
 	require.NotNil(t, block, "Failed to createProposalBlock. Did you forget to add commit for previous block?")
 
@@ -296,8 +297,9 @@ func signAddVotes(
 	blockID types.BlockID,
 	vss ...*validatorStub,
 ) {
-	rs := to.GetRoundState()
-	_, valSet := to.GetValidatorSet()
+	appState := to.GetAppState()
+	rs := appState.RoundState
+	valSet := appState.Validators
 	addVotes(to, signVotes(ctx, t, voteType, chainID, blockID, rs.AppHash, valSet.QuorumType, valSet.QuorumHash, vss...)...)
 }
 
@@ -311,10 +313,9 @@ func validatePrevote(
 ) {
 	t.Helper()
 
-	cs.mtx.RLock()
-	defer cs.mtx.RUnlock()
+	appState := cs.GetAppState()
 
-	prevotes := cs.Votes.Prevotes(round)
+	prevotes := appState.Votes.Prevotes(round)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
 	var vote *types.Vote
@@ -331,7 +332,8 @@ func validatePrevote(
 func validateLastCommit(ctx context.Context, t *testing.T, cs *State, privVal *validatorStub, blockHash []byte) {
 	t.Helper()
 
-	commit := cs.LastCommit
+	appState := cs.GetAppState()
+	commit := appState.LastCommit
 	err := commit.ValidateBasic()
 	require.NoError(t, err, "Expected commit to be valid %v, %v", commit, err)
 	require.True(t, bytes.Equal(commit.BlockID.Hash, blockHash), "Expected commit to be for %X, got %X", blockHash, commit.BlockID.Hash)
@@ -349,7 +351,8 @@ func validatePrecommit(
 ) {
 	t.Helper()
 
-	precommits := cs.Votes.Precommits(thisRound)
+	appState := cs.GetAppState()
+	precommits := appState.Votes.Precommits(thisRound)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
 	vote := precommits.GetByProTxHash(proTxHash)
@@ -579,9 +582,10 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 	vss := make([]*validatorStub, validators)
 
 	cs := newState(ctx, t, args.logger, state, privVals[0], app)
+	appState := cs.GetAppState()
 
 	for i := 0; i < validators; i++ {
-		vss[i] = newValidatorStub(privVals[i], int32(i), cs.state.InitialHeight)
+		vss[i] = newValidatorStub(privVals[i], int32(i), appState.state.InitialHeight)
 	}
 
 	return cs, vss
@@ -906,7 +910,8 @@ func (g *consensusNetGen) newApp(logger log.Logger, state *sm.State, confName st
 func (g *consensusNetGen) execValidatorSetUpdater(ctx context.Context, t *testing.T, states []*State, apps []abci.Application, n int) map[int64]abci.ValidatorSetUpdate {
 	t.Helper()
 	ret := make(map[int64]abci.ValidatorSetUpdate)
-	ret[0] = types.TM2PB.ValidatorUpdates(states[0].state.Validators)
+	appState := states[0].GetAppState()
+	ret[0] = types.TM2PB.ValidatorUpdates(appState.state.Validators)
 	if g.validatorUpdates == nil {
 		return ret
 	}
@@ -1084,4 +1089,16 @@ type quorumData struct {
 	llmq.Data
 	quorumHash         crypto.QuorumHash
 	validatorSetUpdate abci.ValidatorSetUpdate
+}
+
+type mockCommand struct {
+	fn func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error)
+}
+
+func newMockCommand(fn func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error)) *mockCommand {
+	return &mockCommand{fn: fn}
+}
+
+func (c *mockCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+	return c.fn(ctx, behaviour, stateEvent)
 }
