@@ -35,6 +35,7 @@ type Logger interface {
 	Error(msg string, keyVals ...interface{})
 
 	With(keyVals ...interface{}) Logger
+	Output(w io.Writer) Logger
 }
 
 // syncWriter wraps an io.Writer that can be used in a Logger that is safe for

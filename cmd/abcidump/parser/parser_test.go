@@ -22,7 +22,7 @@ func TestParser(t *testing.T) {
 		typeName string
 	}{
 		{
-			in:       decodeHex(t, "4862221220d029205e1750bcadb32f1fece2276054a70f15aeefc55dc1348744769de66caa"),
+			in:       decodeHex(t, "2632240a0b626c6f636b20737461727412130a00220b088092b8c398feffffff012a0212001a00"),
 			typeName: "tendermint.abci.Request",
 		},
 	}

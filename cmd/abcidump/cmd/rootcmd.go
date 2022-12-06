@@ -24,6 +24,7 @@ func MakeRootCmd() *cobra.Command {
 			if err != nil {
 				return fmt.Errorf("log-level: %w", err)
 			}
+			logger = logger.Output(cmd.OutOrStderr())
 			logger = logger.With("module", "main")
 			return nil
 		},
