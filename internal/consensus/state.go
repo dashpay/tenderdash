@@ -9,11 +9,9 @@ import (
 	"runtime/debug"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/dash"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/jsontypes"
@@ -24,7 +22,6 @@ import (
 	tmos "github.com/tendermint/tendermint/libs/os"
 	"github.com/tendermint/tendermint/libs/service"
 	tmtime "github.com/tendermint/tendermint/libs/time"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
 
