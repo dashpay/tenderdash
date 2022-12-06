@@ -3,17 +3,17 @@
 set -e
 
 function success {
-    [ -t 1 ] && echo -e "\e[32mSUCCESS:\e[0m" "$@" || echo "SUCCESS:" "$@"
+    [[ -t 1 ]] && echo -e "\e[32mSUCCESS:\e[0m" "$@" || echo "SUCCESS:" "$@"
 }
 
 function debug {
-    [ -t 1 ] && echo -e "\e[93mDEBUG:\e[0m" "$@" || echo "DEBUG:" "$@"
+    [[ -t 1 ]] && echo -e "\e[93mDEBUG:\e[0m" "$@" || echo "DEBUG:" "$@"
 }
 
 function error {
     debug Error: "$@"
     cleanup
-    [ -t 1 ] && echo -e '\e[91mERROR:\e[0m' "$@" || echo "ERROR:" "$@"
+    [[ -t 1 ]] && echo -e '\e[91mERROR:\e[0m' "$@" || echo "ERROR:" "$@"
     exit 1
 }
 function displayHelp {
@@ -55,25 +55,17 @@ $0  --release=0.8.0-dev.3
 EOF
 }
 
-function detectVersion {
-    # @see https://tldp.org/LDP/abs/html/string-manipulation.html for bash syntax hints
-    CURRENT_VERSION="${LATEST_TAG#[vV]}" # 0.34.12-dev.589-g8acb1d0c8
-}
-
 function configureDefaults {
     debug Configuring default values
     REPO_DIR="$(realpath "$(dirname "${0}")/../..")"
-    CACHE_DIR="/tmp/tenderdash-changelog-cache"
-    mkdir -p "$CACHE_DIR"
-    LATEST_TAG="$(git describe --tags --abbrev=0)" # v0.34.12-dev.589-g8acb1d0c8
 }
 
 function parseArgs {
     debug Parsing command line
-    while [ "$#" -ge 1 ]; do
+    while [[ "$#" -ge 1 ]]; do
         # for arg in "$@"; do
         arg="$1"
-        case $arg in
+        case ${arg} in
         --cleanup)
             CLEANUP=yes
             shift
@@ -84,7 +76,7 @@ function parseArgs {
             ;;
         -r | --release)
             shift
-            if [ -n "$1" ]; then
+            if [[ -n "$1" ]]; then
                 NEW_PACKAGE_VERSION="${1#*=}"
             fi
             shift
@@ -104,7 +96,7 @@ function parseArgs {
             exit 0
             ;;
         *)
-            error "Unrecoginzed command line argument '$arg';  try '$0 --help'"
+            error "Unrecoginzed command line argument '${arg}';  try '$0 --help'"
             ;;
         esac
     done
@@ -114,7 +106,7 @@ function configureFinal() {
     debug Finalizing configuration
     VERSION_WITHOUT_PRERELEASE=${NEW_PACKAGE_VERSION%-*}
 
-    if [ "${VERSION_WITHOUT_PRERELEASE}" == "${NEW_PACKAGE_VERSION}" ]; then
+    if [[ "${VERSION_WITHOUT_PRERELEASE}" == "${NEW_PACKAGE_VERSION}" ]]; then
         ## Full release
         RELEASE_TYPE=release
     else
@@ -126,7 +118,7 @@ function configureFinal() {
     RELEASE_BRANCH="release_${NEW_PACKAGE_VERSION}"
     MILESTONE="v${VERSION_WITHOUT_PRERELEASE}"
 
-    if [[ $RELEASE_TYPE != "prerelease" ]]; then # full release
+    if [[ ${RELEASE_TYPE} != "prerelease" ]]; then # full release
         TARGET_BRANCH="master"
     else # prerelease
         TARGET_BRANCH="v${VERSION_WITHOUT_PRERELEASE%.*}-dev"
@@ -134,8 +126,6 @@ function configureFinal() {
 
     debug "Repository: ${REPO_DIR}"
     debug "Release type: ${RELEASE_TYPE}"
-    debug "Latest tag: ${LATEST_TAG}"
-    debug "Previous version: ${CURRENT_VERSION}"
     debug "New version: ${NEW_PACKAGE_VERSION}"
     debug "Source branch: ${SOURCE_BRANCH}"
     debug "Target branch: ${TARGET_BRANCH}"
@@ -143,7 +133,7 @@ function configureFinal() {
 
 function validate {
     debug Validating configuration
-    if [ -z "${NEW_PACKAGE_VERSION}" ]; then
+    if [[ -z "${NEW_PACKAGE_VERSION}" ]]; then
         error "You must provide new release version with --release=x.y.z; see '$0 --help' for more details"
     fi
 
@@ -153,7 +143,7 @@ function validate {
 
     local UNCOMMITTED_FILES
     UNCOMMITTED_FILES="$(git status -su)"
-    if [ -n "$UNCOMMITTED_FILES" ]; then
+    if [[ -n "${UNCOMMITTED_FILES}" ]]; then
         error "Commit or stash your changes before running this script"
     fi
 
@@ -166,22 +156,23 @@ function validate {
 function generateChangelog {
     debug Generating CHANGELOG
 
-    echo 2>"${REPO_DIR}/build/CHANGELOG_CURRENT.md"
+    CLIFF_CONFIG="${REPO_DIR}/scripts/release/cliff.toml"
+    if [[ "${RELEASE_TYPE}" = "prerelease" ]]; then
+        CLIFF_CONFIG="${REPO_DIR}/scripts/release/cliff-pre.toml"
+    fi
 
-    docker run -ti -u "$(id -u)" \
-        -v "${REPO_DIR}/.git":/app/:ro -v "${REPO_DIR}/scripts/release/cliff.toml":/cliff.toml:ro \
+    echo 2>"${REPO_DIR}/CHANGELOG.md"
+
+    docker run --rm -ti \
+        -v "${REPO_DIR}/.git":/app/.git:ro \
+        -v "${CLIFF_CONFIG}":/cliff.toml:ro \
         -v "${REPO_DIR}/CHANGELOG.md":/CHANGELOG.md \
-        -v "${REPO_DIR}/build/CHANGELOG_CURRENT.md":/CHANGELOG_CURRENT.md \
-        orhunp/git-cliff:latest \
+        orhunp/git-cliff:0.10.0 \
         --config /cliff.toml \
+        --output /CHANGELOG.md \
+        --tag "v${NEW_PACKAGE_VERSION}" \
         --strip all \
-        --tag "$NEW_PACKAGE_VERSION" \
-        --output /CHANGELOG_CURRENT.md \
-        --unreleased \
-        "${LATEST_TAG}..HEAD"
-
-    cat "${REPO_DIR}/build/CHANGELOG_CURRENT.md" "${REPO_DIR}/CHANGELOG.md" >"${REPO_DIR}/build/CHANGELOG_NEW.md"
-    mv -f "${REPO_DIR}/build/CHANGELOG_NEW.md" "${REPO_DIR}/CHANGELOG.md"
+        --verbose
 }
 
 function updateVersionGo {
@@ -194,34 +185,34 @@ function createReleasePR {
     git checkout -q -b "${RELEASE_BRANCH}"
 
     # commit changes
-    git commit -m "chore(release): update changelog and version to $NEW_PACKAGE_VERSION" \
-        "$REPO_DIR/CHANGELOG.md" \
-        "$REPO_DIR/version/version.go"
+    git commit -m "chore(release): update changelog and version to ${NEW_PACKAGE_VERSION}" \
+        "${REPO_DIR}/CHANGELOG.md" \
+        "${REPO_DIR}/version/version.go"
 
     # push changes
     git push --force -u origin "${RELEASE_BRANCH}"
 
-    debug "Creating milestone $MILESTONE if it doesn't exist yet"
+    debug "Creating milestone ${MILESTONE} if it doesn't exist yet"
     gh api --silent --method POST 'repos/dashevo/tenderdash/milestones' --field "title=${MILESTONE}" || true
 
     if [[ -n "$(getPrURL)" ]]; then
-        debug "PR for branch $TARGET_BRANCH already exists, skipping creation"
+        debug "PR for branch ${TARGET_BRANCH} already exists, skipping creation"
     else
-        debug "Creating PR for branch $TARGET_BRANCH"
-        gh pr create --base "$TARGET_BRANCH" \
+        debug "Creating PR for branch ${TARGET_BRANCH}"
+        gh pr create --base "${TARGET_BRANCH}" \
             --fill \
-            --title "chore(release): update changelog and bump version to $NEW_PACKAGE_VERSION" \
-            --body-file "$REPO_DIR/scripts/release/pr_description.md" \
-            --milestone "$MILESTONE"
+            --title "chore(release): update changelog and bump version to ${NEW_PACKAGE_VERSION}" \
+            --body-file "${REPO_DIR}/scripts/release/pr_description.md" \
+            --milestone "${MILESTONE}"
     fi
 }
 
 function getPrURL() {
-    gh pr list --json url --jq '.[0].url' -H "${RELEASE_BRANCH}" -B "$TARGET_BRANCH"
+    gh pr list --json url --jq '.[0].url' -H "${RELEASE_BRANCH}" -B "${TARGET_BRANCH}"
 }
 
 function getPrState() {
-    gh pr list --json state --jq .[0].state -H "${RELEASE_BRANCH}" -B "$TARGET_BRANCH" --state all
+    gh pr list --json state --jq .[0].state -H "${RELEASE_BRANCH}" -B "${TARGET_BRANCH}" --state all
 }
 
 function waitForMerge() {
@@ -234,14 +225,14 @@ function waitForMerge() {
 
 function createRelease() {
     gh_args=""
-    if [[ "$RELEASE_TYPE" = "prerelease" ]]; then
+    if [[ "${RELEASE_TYPE}" = "prerelease" ]]; then
         gh_args=--prerelease
     fi
 
     gh release create \
         --draft \
-        --notes-file "${REPO_DIR}/build/CHANGELOG_CURRENT.md" \
         --title "v${NEW_PACKAGE_VERSION}" \
+        --generate-notes \
         $gh_args \
         "v${NEW_PACKAGE_VERSION}"
 }
@@ -250,6 +241,9 @@ function deleteRelease() {
     if [[ "$(gh release view --json isDraft --jq .isDraft "v${NEW_PACKAGE_VERSION}")" == "true" ]]; then
         gh release delete "v${NEW_PACKAGE_VERSION}"
     fi
+
+    git tag --delete "v${NEW_PACKAGE_VERSION}" || true
+    git push --delete origin "v${NEW_PACKAGE_VERSION}" || true
 }
 
 function getReleaseUrl() {
@@ -269,10 +263,9 @@ function cleanup() {
 
 configureDefaults
 parseArgs "$@"
-detectVersion
 configureFinal
 
-if [ -n "$CLEANUP" ]; then
+if [[ -n "${CLEANUP}" ]]; then
     cleanup
     deleteRelease
 fi
