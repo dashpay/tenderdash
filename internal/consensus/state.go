@@ -2380,7 +2380,8 @@ func (cs *State) ensureProcessProposal(ctx context.Context, block *types.Block, 
 	// FIXME: refactor caller to not use cs.mtx and do proper critical section below
 	rs := &cs.RoundState
 
-	if !rs.CurrentRoundState.MatchesBlock(block.Header, round) {
+	if rs.CurrentRoundState.Params.Source != sm.ProcessProposalSource ||
+		!rs.CurrentRoundState.MatchesBlock(block.Header, round) {
 		var err error
 		cs.logger.Debug("CurrentRoundState is outdated", "crs", rs.CurrentRoundState)
 		rs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, round, state, true)
