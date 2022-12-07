@@ -1,10 +1,14 @@
 package types
 
 import (
+	// it is ok to use math/rand here: we do not need a cryptographically secure random
+	// number generator here and we can run the tests a bit faster
+	"context"
 	"crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"math"
+	mrand "math/rand"
 	"os"
 	"reflect"
 	"strconv"
@@ -15,10 +19,11 @@ import (
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/crypto/tmhash"
-
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -44,8 +49,9 @@ func TestBlockAddEvidence(t *testing.T) {
 	commit, err := MakeCommit(lastID, stateID, h-1, 1, voteSet, vals)
 	require.NoError(t, err)
 
-	ev := NewMockDuplicateVoteEvidenceWithValidator(h, time.Now(), vals[0], "block-test-chain", valSet.QuorumType,
+	ev, err := NewMockDuplicateVoteEvidenceWithValidator(h, time.Now(), vals[0], "block-test-chain", valSet.QuorumType,
 		valSet.QuorumHash)
+	require.NoError(t, err)
 	evList := []Evidence{ev}
 
 	block := MakeBlock(h, coreChainLock.CoreBlockHeight, &coreChainLock, txs, commit, evList, 0)
@@ -67,8 +73,9 @@ func TestBlockValidateBasic(t *testing.T) {
 	commit, err := MakeCommit(lastID, stateID, h-1, 1, voteSet, vals)
 	require.NoError(t, err)
 
-	ev := NewMockDuplicateVoteEvidenceWithValidator(h, time.Now(), vals[0], "block-test-chain", valSet.QuorumType,
+	ev, err := NewMockDuplicateVoteEvidenceWithValidator(h, time.Now(), vals[0], "block-test-chain", valSet.QuorumType,
 		valSet.QuorumHash)
+	require.NoError(t, err)
 	evList := []Evidence{ev}
 
 	testCases := []struct {
@@ -98,10 +105,20 @@ func TestBlockValidateBasic(t *testing.T) {
 			blk.DataHash = tmrand.Bytes(len(blk.DataHash))
 		}, true},
 		{"Tampered EvidenceHash", func(blk *Block) {
-			blk.EvidenceHash = []byte("something else")
+			blk.EvidenceHash = tmrand.Bytes(len(blk.EvidenceHash))
 		}, true},
 		{"Incorrect block protocol version", func(blk *Block) {
 			blk.Version.Block = 1
+		}, true},
+		{"Missing LastCommit", func(blk *Block) {
+			blk.LastCommit = nil
+		}, true},
+		{"Invalid LastCommit", func(blk *Block) {
+			blk.LastCommit = NewCommit(-1, 0, *voteSet.maj23, StateID{}, nil, nil, nil)
+		}, true},
+		{"Invalid Evidence", func(blk *Block) {
+			emptyEv := &DuplicateVoteEvidence{}
+			blk.Evidence = EvidenceData{Evidence: []Evidence{emptyEv}}
 		}, true},
 	}
 
@@ -142,15 +159,16 @@ func TestBlockMakePartSetWithEvidence(t *testing.T) {
 	commit, err := MakeCommit(lastID, stateID, h-1, 1, voteSet, vals)
 	require.NoError(t, err)
 
-	ev := NewMockDuplicateVoteEvidenceWithValidator(h, time.Now(), vals[0], "block-test-chain", valSet.QuorumType,
+	ev, err := NewMockDuplicateVoteEvidenceWithValidator(h, time.Now(), vals[0], "block-test-chain", valSet.QuorumType,
 		valSet.QuorumHash)
+	require.NoError(t, err)
 	evList := []Evidence{ev}
 
 	block := MakeBlock(h, 0, nil, []Tx{Tx("Hello World")}, commit, evList, 0)
 	partSet := block.MakePartSet(512)
 	assert.NotNil(t, partSet)
 	// The part set can be either 3 or 4 parts, this is because of variance in sizes due to the non second part of
-	//  timestamps marshalling to different sizes
+	// timestamps marshaling to different sizes
 	assert.True(t, partSet.Total() == 3)
 }
 
@@ -165,8 +183,9 @@ func TestBlockHashesTo(t *testing.T) {
 	commit, err := MakeCommit(lastID, stateID, h-1, 1, voteSet, vals)
 	require.NoError(t, err)
 
-	ev := NewMockDuplicateVoteEvidenceWithValidator(h, time.Now(), vals[0], "block-test-chain", valSet.QuorumType,
+	ev, err := NewMockDuplicateVoteEvidenceWithValidator(h, time.Now(), vals[0], "block-test-chain", valSet.QuorumType,
 		valSet.QuorumHash)
+	require.NoError(t, err)
 	evList := []Evidence{ev}
 
 	block := MakeBlock(h, 0, nil, []Tx{Tx("Hello World")}, commit, evList, 0)
@@ -279,7 +298,6 @@ func TestCommitValidateBasic(t *testing.T) {
 }
 
 func TestMaxCommitBytes(t *testing.T) {
-
 	// check size with a single commit
 	commit := &Commit{
 		Height: math.MaxInt64,
@@ -300,8 +318,7 @@ func TestMaxCommitBytes(t *testing.T) {
 
 	pb := commit.ToProto()
 	pbSize := int64(pb.Size())
-	maxCommitBytes := MaxCommitOverheadBytes
-	assert.EqualValues(t, maxCommitBytes, pbSize)
+	assert.EqualValues(t, MaxCommitOverheadBytes, pbSize)
 
 	pb = commit.ToProto()
 
@@ -315,7 +332,7 @@ func TestHeaderHash(t *testing.T) {
 		expectHash tmbytes.HexBytes
 	}{
 		{"Generates expected hash", &Header{
-			Version:               tmversion.Consensus{Block: 1, App: 2},
+			Version:               version.Consensus{Block: 1, App: 2},
 			ChainID:               "chainId",
 			Height:                3,
 			CoreChainLockedHeight: 1,
@@ -334,7 +351,7 @@ func TestHeaderHash(t *testing.T) {
 		}, hexBytesFromString("74EEFDA2F09ACE19D46DE191EC2745CE14B42F7DE48AF86E6D65B17939B08D3E")},
 		{"nil header yields nil", nil, nil},
 		{"nil ValidatorsHash yields nil", &Header{
-			Version:               tmversion.Consensus{Block: 1, App: 2},
+			Version:               version.Consensus{Block: 1, App: 2},
 			ChainID:               "chainId",
 			Height:                3,
 			CoreChainLockedHeight: 1,
@@ -376,8 +393,12 @@ func TestHeaderHash(t *testing.T) {
 						bz, err := gogotypes.StdTimeMarshal(f)
 						require.NoError(t, err)
 						byteSlices = append(byteSlices, bz)
-					case tmversion.Consensus:
-						bz, err := f.Marshal()
+					case version.Consensus:
+						pbc := tmversion.Consensus{
+							Block: f.Block,
+							App:   f.App,
+						}
+						bz, err := pbc.Marshal()
 						require.NoError(t, err)
 						byteSlices = append(byteSlices, bz)
 					case BlockID:
@@ -411,7 +432,7 @@ func TestMaxHeaderBytes(t *testing.T) {
 	timestamp := time.Date(math.MaxInt64, 0, 0, 0, 0, 0, math.MaxInt64, time.UTC)
 
 	h := Header{
-		Version:               tmversion.Consensus{Block: math.MaxInt64, App: math.MaxInt64},
+		Version:               version.Consensus{Block: math.MaxInt64, App: math.MaxInt64},
 		ChainID:               maxChainID,
 		Height:                math.MaxInt64,
 		CoreChainLockedHeight: math.MaxUint32,
@@ -466,10 +487,10 @@ func TestBlockMaxDataBytes(t *testing.T) {
 		0: {-10, crypto.BLS12381, 1, 0, true, 0},
 		1: {10, crypto.BLS12381, 1, 0, true, 0},
 		2: {1114, crypto.BLS12381, 1, 0, true, 0},
-		3: {1115, crypto.BLS12381, 1, 0, false, 0},
-		4: {1116, crypto.BLS12381, 1, 0, false, 1},
-		5: {1116, crypto.BLS12381, 2, 0, false, 1},
-		6: {1215, crypto.BLS12381, 2, 100, false, 0},
+		3: {1118, crypto.BLS12381, 1, 0, false, 0},
+		4: {1119, crypto.BLS12381, 1, 0, false, 1},
+		5: {1119, crypto.BLS12381, 2, 0, false, 1},
+		6: {1218, crypto.BLS12381, 2, 100, false, 0},
 	}
 	// An extra 33 bytes (32 for sig, 1 for proto encoding are needed for BLS compared to edwards per validator
 
@@ -503,8 +524,8 @@ func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
 		0: {-10, 1, crypto.BLS12381, 1, true, 0},
 		1: {10, 1, crypto.BLS12381, 1, true, 0},
 		2: {1114, 1, crypto.BLS12381, 1, true, 0},
-		3: {1115, 1, crypto.BLS12381, 1, false, 0},
-		4: {1116, 1, crypto.BLS12381, 1, false, 1},
+		3: {1118, 1, crypto.BLS12381, 1, false, 0},
+		4: {1119, 1, crypto.BLS12381, 1, false, 1},
 	}
 
 	for i, tc := range testCases {
@@ -513,12 +534,12 @@ func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", tcRun.maxBytes), func(t *testing.T) {
 			if tcRun.panics {
 				assert.Panics(t, func() {
-					MaxDataBytesNoEvidence(tcRun.maxBytes, tcRun.keyType, tcRun.valsCount)
+					MaxDataBytesNoEvidence(tcRun.maxBytes)
 				}, "#%v", j)
 			} else {
 				assert.Equal(t,
 					tcRun.result,
-					MaxDataBytesNoEvidence(tcRun.maxBytes, tcRun.keyType, tcRun.valsCount),
+					MaxDataBytesNoEvidence(tcRun.maxBytes),
 					"#%v", j)
 			}
 		})
@@ -553,7 +574,7 @@ func TestCommitToVoteSetWithVotesForNilBlock(t *testing.T) {
 		vi := int32(0)
 		for n := range tc.blockIDs {
 			for i := 0; i < tc.numVotes[n]; i++ {
-				proTxHash, err := vals[vi].GetProTxHash()
+				proTxHash, err := vals[vi].GetProTxHash(context.Background())
 				require.NoError(t, err)
 				vote := &Vote{
 					ValidatorProTxHash: proTxHash,
@@ -624,7 +645,7 @@ func TestBlockIDValidateBasic(t *testing.T) {
 }
 
 func TestBlockProtoBuf(t *testing.T) {
-	h := tmrand.Int63()
+	h := mrand.Int63()
 	stateID := RandStateID().WithHeight(h - 1)
 	c1 := randCommit(stateID)
 	b1 := MakeBlock(h, 0, nil, []Tx{Tx([]byte{1})}, &Commit{}, []Evidence{}, 0)
@@ -633,13 +654,14 @@ func TestBlockProtoBuf(t *testing.T) {
 	b2 := MakeBlock(h, 0, nil, []Tx{Tx([]byte{1})}, c1, []Evidence{}, 0)
 	b2.ProposerProTxHash = tmrand.Bytes(crypto.DefaultHashSize)
 	evidenceTime := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
-	evi := NewMockDuplicateVoteEvidence(
+	evi, err := NewMockDuplicateVoteEvidence(
 		h,
 		evidenceTime,
 		"block-test-chain",
 		btcjson.LLMQType_5_60,
 		crypto.RandQuorumHash(),
 	)
+	require.NoError(t, err)
 	b2.Evidence = EvidenceData{Evidence: EvidenceList{evi}}
 	b2.EvidenceHash = b2.Evidence.Hash()
 
@@ -703,7 +725,14 @@ func TestDataProtoBuf(t *testing.T) {
 // TestEvidenceDataProtoBuf ensures parity in converting to and from proto.
 func TestEvidenceDataProtoBuf(t *testing.T) {
 	const chainID = "mychain"
-	ev := NewMockDuplicateVoteEvidence(math.MaxInt64, time.Now(), chainID, btcjson.LLMQType_5_60, crypto.RandQuorumHash())
+	ev, err := NewMockDuplicateVoteEvidence(
+		math.MaxInt64,
+		time.Now(),
+		chainID,
+		btcjson.LLMQType_5_60,
+		crypto.RandQuorumHash(),
+	)
+	require.NoError(t, err)
 	data := &EvidenceData{Evidence: EvidenceList{ev}}
 	_ = data.ByteSize()
 	testCases := []struct {
@@ -736,14 +765,15 @@ func TestEvidenceDataProtoBuf(t *testing.T) {
 	}
 }
 
-func makeRandHeader() Header {
+// exposed for testing
+func MakeRandHeader() Header {
 	chainID := "test"
 	t := time.Now()
-	height := tmrand.Int63()
+	height := mrand.Int63()
 	randBytes := tmrand.Bytes(tmhash.Size)
 	randProTxHash := tmrand.Bytes(crypto.DefaultHashSize)
 	h := Header{
-		Version:            tmversion.Consensus{Block: version.BlockProtocol, App: 1},
+		Version:            version.Consensus{Block: version.BlockProtocol, App: 1},
 		ChainID:            chainID,
 		Height:             height,
 		Time:               t,
@@ -765,7 +795,7 @@ func makeRandHeader() Header {
 }
 
 func TestHeaderProto(t *testing.T) {
-	h1 := makeRandHeader()
+	h1 := MakeRandHeader()
 	tc := []struct {
 		msg     string
 		h1      *Header
@@ -819,7 +849,7 @@ func TestSignedHeaderProtoBuf(t *testing.T) {
 	stateID := RandStateID()
 
 	commit := randCommit(stateID)
-	h := makeRandHeader()
+	h := MakeRandHeader()
 
 	sh := SignedHeader{Header: &h, Commit: commit}
 
@@ -905,6 +935,268 @@ func TestStateID_Equals(t *testing.T) {
 	}
 }
 
+func TestHeader_ValidateBasic(t *testing.T) {
+	testCases := []struct {
+		name      string
+		header    Header
+		expectErr bool
+		errString string
+	}{
+		{
+			"invalid version block",
+			Header{Version: version.Consensus{Block: version.BlockProtocol + 1}},
+			true, "block protocol is incorrect",
+		},
+		{
+			"invalid chain ID length",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen+1)),
+			},
+			true, "chainID is too long",
+		},
+		{
+			"invalid height (negative)",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  -1,
+			},
+			true, "negative Height",
+		},
+		{
+			"invalid height (zero)",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  0,
+			},
+			true, "zero Height",
+		},
+		{
+			"invalid block ID hash",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  1,
+				LastBlockID: BlockID{
+					Hash: make([]byte, tmhash.Size+1),
+				},
+			},
+			true, "wrong Hash",
+		},
+		{
+			"invalid block ID parts header hash",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  1,
+				LastBlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size+1),
+					},
+				},
+			},
+			true, "wrong PartSetHeader",
+		},
+		{
+			"invalid last commit hash",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  1,
+				LastBlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				LastCommitHash: make([]byte, tmhash.Size+1),
+			},
+			true, "wrong LastCommitHash",
+		},
+		{
+			"invalid data hash",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  1,
+				LastBlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				LastCommitHash: make([]byte, tmhash.Size),
+				DataHash:       make([]byte, tmhash.Size+1),
+			},
+			true, "wrong DataHash",
+		},
+		{
+			"invalid evidence hash",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  1,
+				LastBlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				LastCommitHash: make([]byte, tmhash.Size),
+				DataHash:       make([]byte, tmhash.Size),
+				EvidenceHash:   make([]byte, tmhash.Size+1),
+			},
+			true, "wrong EvidenceHash",
+		},
+		{
+			"invalid proposer protxhash",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  1,
+				LastBlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				LastCommitHash:    make([]byte, tmhash.Size),
+				DataHash:          make([]byte, tmhash.Size),
+				EvidenceHash:      make([]byte, tmhash.Size),
+				ProposerProTxHash: make([]byte, crypto.ProTxHashSize+1),
+			},
+			true, "invalid ProposerProTxHash length; got: 33, expected: 32",
+		},
+		{
+			"invalid validator hash",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  1,
+				LastBlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				LastCommitHash:    make([]byte, tmhash.Size),
+				DataHash:          make([]byte, tmhash.Size),
+				EvidenceHash:      make([]byte, tmhash.Size),
+				ProposerProTxHash: make([]byte, crypto.ProTxHashSize),
+				ValidatorsHash:    make([]byte, tmhash.Size+1),
+			},
+			true, "wrong ValidatorsHash",
+		},
+		{
+			"invalid next validator hash",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  1,
+				LastBlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				LastCommitHash:     make([]byte, tmhash.Size),
+				DataHash:           make([]byte, tmhash.Size),
+				EvidenceHash:       make([]byte, tmhash.Size),
+				ProposerProTxHash:  make([]byte, crypto.ProTxHashSize),
+				ValidatorsHash:     make([]byte, tmhash.Size),
+				NextValidatorsHash: make([]byte, tmhash.Size+1),
+			},
+			true, "wrong NextValidatorsHash",
+		},
+		{
+			"invalid consensus hash",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  1,
+				LastBlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				LastCommitHash:     make([]byte, tmhash.Size),
+				DataHash:           make([]byte, tmhash.Size),
+				EvidenceHash:       make([]byte, tmhash.Size),
+				ProposerProTxHash:  make([]byte, crypto.ProTxHashSize),
+				ValidatorsHash:     make([]byte, tmhash.Size),
+				NextValidatorsHash: make([]byte, tmhash.Size),
+				ConsensusHash:      make([]byte, tmhash.Size+1),
+			},
+			true, "wrong ConsensusHash",
+		},
+		{
+			"invalid last results hash",
+			Header{
+				Version: version.Consensus{Block: version.BlockProtocol},
+				ChainID: string(make([]byte, MaxChainIDLen)),
+				Height:  1,
+				LastBlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				LastCommitHash:     make([]byte, tmhash.Size),
+				DataHash:           make([]byte, tmhash.Size),
+				EvidenceHash:       make([]byte, tmhash.Size),
+				ProposerProTxHash:  make([]byte, crypto.ProTxHashSize),
+				ValidatorsHash:     make([]byte, tmhash.Size),
+				NextValidatorsHash: make([]byte, tmhash.Size),
+				ConsensusHash:      make([]byte, tmhash.Size),
+				LastResultsHash:    make([]byte, tmhash.Size+1),
+			},
+			true, "wrong LastResultsHash",
+		},
+		{
+			"valid header",
+			Header{
+				Version:               version.Consensus{Block: version.BlockProtocol},
+				ChainID:               string(make([]byte, MaxChainIDLen)),
+				Height:                1,
+				CoreChainLockedHeight: 1,
+				LastBlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				LastCommitHash:     make([]byte, tmhash.Size),
+				DataHash:           make([]byte, tmhash.Size),
+				EvidenceHash:       make([]byte, tmhash.Size),
+				ProposerProTxHash:  make([]byte, crypto.ProTxHashSize),
+				ValidatorsHash:     make([]byte, tmhash.Size),
+				NextValidatorsHash: make([]byte, tmhash.Size),
+				ConsensusHash:      make([]byte, tmhash.Size),
+				LastResultsHash:    make([]byte, tmhash.Size),
+			},
+			false, "",
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.header.ValidateBasic()
+			if tc.expectErr {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.errString)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestStateID_ValidateBasic(t *testing.T) {
 	type fields struct {
 		Height      int64
@@ -940,10 +1232,135 @@ func TestStateID_ValidateBasic(t *testing.T) {
 	}
 }
 
+func TestCommit_ValidateBasic(t *testing.T) {
+	testCases := []struct {
+		name      string
+		commit    *Commit
+		expectErr bool
+		errString string
+	}{
+		{
+			"invalid height",
+			&Commit{Height: -1},
+			true, "negative Height",
+		},
+		{
+			"invalid round",
+			&Commit{Height: 1, Round: -1},
+			true, "negative Round",
+		},
+		{
+			"invalid block ID",
+			&Commit{
+				Height:  1,
+				Round:   1,
+				BlockID: BlockID{},
+			},
+			true, "commit cannot be for nil block",
+		},
+		{
+			"invalid block signature",
+			&Commit{
+				Height: 1,
+				Round:  1,
+				BlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize+1),
+				ThresholdStateSignature: make([]byte, bls12381.SignatureSize),
+			},
+			true, "block threshold signature is wrong size",
+		},
+		{
+			"invalid state signature",
+			&Commit{
+				Height: 1,
+				Round:  1,
+				BlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize),
+				ThresholdStateSignature: make([]byte, bls12381.SignatureSize+1),
+			},
+			true, "state threshold signature is wrong size",
+		},
+		{
+			"valid commit",
+			&Commit{
+				Height: 1,
+				Round:  1,
+				BlockID: BlockID{
+					Hash: make([]byte, tmhash.Size),
+					PartSetHeader: PartSetHeader{
+						Hash: make([]byte, tmhash.Size),
+					},
+				},
+				ThresholdBlockSignature: make([]byte, bls12381.SignatureSize),
+				ThresholdStateSignature: make([]byte, bls12381.SignatureSize),
+			},
+			false, "",
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.commit.ValidateBasic()
+			if tc.expectErr {
+				require.Error(t, err)
+				require.Contains(t, err.Error(), tc.errString)
+			} else {
+				require.NoError(t, err)
+			}
+		})
+	}
+}
+
 func TestStateID_WithHeight(t *testing.T) {
 	stateID := RandStateID()
 	height := stateID.Height
 	stateIDWithHeight := stateID.WithHeight(height + 1)
 
 	assert.Equal(t, height, stateIDWithHeight.Height-1)
+}
+
+func TestHeaderHashVector(t *testing.T) {
+	chainID := "test"
+	h := Header{
+		Version:            version.Consensus{Block: 1, App: 1},
+		ChainID:            chainID,
+		Height:             50,
+		Time:               time.Date(math.MaxInt64, 0, 0, 0, 0, 0, math.MaxInt64, time.UTC),
+		LastBlockID:        BlockID{},
+		LastCommitHash:     []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+		DataHash:           []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+		ValidatorsHash:     []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+		NextValidatorsHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+		ConsensusHash:      []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+		AppHash:            []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+
+		LastResultsHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+
+		EvidenceHash:      []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+		ProposerProTxHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+	}
+
+	testCases := []struct {
+		header   Header
+		expBytes string
+	}{
+		{header: h, expBytes: "8df5f303af2ae303adaaa56d8f5645247dd8fd12dc5ebdff55444649f653452f"},
+	}
+
+	for _, tc := range testCases {
+		hash := tc.header.Hash()
+		require.Equal(t, tc.expBytes, hex.EncodeToString(hash))
+	}
 }

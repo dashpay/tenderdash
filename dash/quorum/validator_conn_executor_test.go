@@ -2,27 +2,32 @@ package quorum
 
 import (
 	"context"
-	"encoding/hex"
-	"fmt"
+	"math"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	dbm "github.com/tendermint/tm-db"
+
+	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/quorum/mock"
 	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
+	mmock "github.com/tendermint/tendermint/internal/mempool/mock"
+	"github.com/tendermint/tendermint/internal/p2p"
+	"github.com/tendermint/tendermint/internal/proxy"
+	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/internal/store"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
-	mmock "github.com/tendermint/tendermint/mempool/mock"
-	"github.com/tendermint/tendermint/p2p"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/proxy"
-	sm "github.com/tendermint/tendermint/state"
 	"github.com/tendermint/tendermint/types"
-	dbm "github.com/tendermint/tm-db"
+)
+
+const (
+	mySeedID uint16 = math.MaxUint16 - 1
 )
 
 var (
@@ -33,7 +38,7 @@ var (
 
 type validatorUpdate struct {
 	validators      []*types.Validator
-	expectedHistory []mock.SwitchHistoryEvent
+	expectedHistory []mock.HistoryEvent
 }
 type testCase struct {
 	me               *types.Validator
@@ -44,7 +49,7 @@ type testCase struct {
 // Expected: nothing happens
 func TestValidatorConnExecutor_NotValidator(t *testing.T) {
 
-	me := mock.NewValidator(65535)
+	me := mock.NewValidator(mySeedID)
 	tc := testCase{
 		me: me,
 		validatorUpdates: []validatorUpdate{
@@ -54,7 +59,7 @@ func TestValidatorConnExecutor_NotValidator(t *testing.T) {
 					mock.NewValidator(2),
 					mock.NewValidator(3),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{},
+				expectedHistory: []mock.HistoryEvent{},
 			}},
 	}
 	executeTestCase(t, tc)
@@ -63,10 +68,9 @@ func TestValidatorConnExecutor_NotValidator(t *testing.T) {
 // TestValidatorConnExecutor_WrongAddress checks behavior in case of several issues in the address.
 // Expected behavior: invalid address is dialed. Previous addresses are disconnected.
 func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
-	me := mock.NewValidator(65535)
-	zeroBytes := make([]byte, p2p.IDByteLength)
-	nodeID := hex.EncodeToString(zeroBytes)
-	addr1, err := dashtypes.ParseValidatorAddress("http://" + nodeID + "@www.domain-that-does-not-exist.com:80")
+	me := mock.NewValidator(mySeedID)
+	nodeID := mock.NewNodeID(1000)
+	addr1, err := types.ParseValidatorAddress("http://" + nodeID + "@www.domain-that-does-not-exist.com:80")
 	require.NoError(t, err)
 
 	val1 := mock.NewValidator(100)
@@ -74,8 +78,8 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 
 	valsWithoutAddress := make([]*types.Validator, 5)
 	for i := 0; i < len(valsWithoutAddress); i++ {
-		valsWithoutAddress[i] = mock.NewValidator(uint64(200 + i))
-		valsWithoutAddress[i].NodeAddress = dashtypes.ValidatorAddress{}
+		valsWithoutAddress[i] = mock.NewValidator(uint16(200 + i))
+		valsWithoutAddress[i].NodeAddress = types.ValidatorAddress{}
 	}
 
 	tc := testCase{
@@ -89,20 +93,23 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 					mock.NewValidator(3),
 					mock.NewValidator(4),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{{Operation: mock.OpDialMany}}, // Params: []string{mockNodeAddress()},
+				expectedHistory: []mock.HistoryEvent{
+					{Operation: mock.OpDial},
+					{Operation: mock.OpDial},
+				},
 			},
-			1: {
+			1: { // val1 has invalid address, but we still pass it to dial, so it will be here
 				validators: []*types.Validator{
 					me,
 					val1,
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{
-					{Operation: mock.OpStopOne},
-					{Operation: mock.OpStopOne},
-					// {Operation: mock.OpStopOne},
+				expectedHistory: []mock.HistoryEvent{
+					{Operation: mock.OpStop},
+					{Operation: mock.OpStop},
+					{Operation: mock.OpDial, Params: []string{string(val1.NodeAddress.NodeID)}},
 				},
 			},
-			2: {
+			2: { // disconnect val1and dial 2 new validators (skipping invalid one)
 				validators: []*types.Validator{
 					me,
 					valsWithoutAddress[0],
@@ -112,22 +119,27 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 					mock.NewValidator(4),
 					mock.NewValidator(5),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{
-					{Operation: mock.OpDialMany, Params: []string{
-						mock.NewNodeAddress(2),
-						mock.NewNodeAddress(5),
+				expectedHistory: []mock.HistoryEvent{
+					{Operation: mock.OpStop, Params: []string{string(val1.NodeAddress.NodeID)}},
+					{Operation: mock.OpDial, Params: []string{
+						mock.NewNodeID(2),
+						mock.NewNodeID(5),
+					}},
+					{Operation: mock.OpDial, Params: []string{
+						mock.NewNodeID(2),
+						mock.NewNodeID(5),
 					}},
 				},
 			},
 			3: { // this should disconnect everyone because none of the validators has correct address
 				validators: append([]*types.Validator{me}, valsWithoutAddress...),
-				expectedHistory: []mock.SwitchHistoryEvent{
-					{Operation: mock.OpStopOne},
-					{Operation: mock.OpStopOne},
+				expectedHistory: []mock.HistoryEvent{
+					{Operation: mock.OpStop},
+					{Operation: mock.OpStop},
 				},
 			},
-		},
-	}
+		}}
+
 	executeTestCase(t, tc)
 }
 
@@ -135,24 +147,35 @@ func TestValidatorConnExecutor_WrongAddress(t *testing.T) {
 // Expected: connections from previous update are stopped, no new connection established.
 func TestValidatorConnExecutor_Myself(t *testing.T) {
 
-	me := mock.NewValidator(65535)
+	me := mock.NewValidator(mySeedID)
 
 	tc := testCase{
 		me: me,
 		validatorUpdates: []validatorUpdate{
 			0: {
-				validators: []*types.Validator{
+				validators: []*types.Validator{ // new set should have validator 1, 2 and 3
 					me,
 					mock.NewValidator(1),
 					mock.NewValidator(2),
 					mock.NewValidator(3),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{
-					{Operation: mock.OpDialMany},
+				expectedHistory: []mock.HistoryEvent{
+					{
+						Operation: mock.OpDial,
+						Params:    []string{mock.NewNodeID(1), mock.NewNodeID(2), mock.NewNodeID(3)},
+					},
+					{
+						Operation: mock.OpDial,
+						Params:    []string{mock.NewNodeID(1), mock.NewNodeID(2), mock.NewNodeID(3)},
+					},
+					{
+						Operation: mock.OpDial,
+						Params:    []string{mock.NewNodeID(1), mock.NewNodeID(2), mock.NewNodeID(3)},
+					},
 				},
 			},
 			1: {
-				validators: []*types.Validator{
+				validators: []*types.Validator{ // new set should have validator 2 and 5
 					me,
 					mock.NewValidator(1),
 					mock.NewValidator(2),
@@ -160,21 +183,23 @@ func TestValidatorConnExecutor_Myself(t *testing.T) {
 					mock.NewValidator(4),
 					mock.NewValidator(5),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{
-					{Operation: mock.OpStopOne},
-					{Operation: mock.OpStopOne},
-					{Operation: mock.OpDialMany},
+				expectedHistory: []mock.HistoryEvent{
+					{Operation: mock.OpStop, Params: []string{mock.NewNodeID(1), mock.NewNodeID(3), mock.NewNodeID(5)}},
+					{Operation: mock.OpStop, Params: []string{mock.NewNodeID(1), mock.NewNodeID(3), mock.NewNodeID(5)}},
+					{Operation: mock.OpDial, Params: []string{mock.NewNodeID(5)}},
+					// {Operation: mock.OpDial, Params: []string{mock.NewNodeID(2), mock.NewNodeID(5)}},
 				},
 			},
 			2: {
 				validators: []*types.Validator{me},
-				expectedHistory: []mock.SwitchHistoryEvent{{
-					Operation: mock.OpStopOne,
-					Params:    []string{mock.NewNodeAddress(2), mock.NewNodeAddress(5)},
-				},
+				expectedHistory: []mock.HistoryEvent{
 					{
-						Operation: mock.OpStopOne,
-						Params:    []string{mock.NewNodeAddress(2), mock.NewNodeAddress(5)},
+						Operation: mock.OpStop,
+						Params:    []string{mock.NewNodeID(2), mock.NewNodeID(5)},
+					},
+					{
+						Operation: mock.OpStop,
+						Params:    []string{mock.NewNodeID(2), mock.NewNodeID(5)},
 					},
 				},
 			},
@@ -186,7 +211,7 @@ func TestValidatorConnExecutor_Myself(t *testing.T) {
 // TestValidatorConnExecutor_EmptyVSet checks what will happen if the ABCI App provides an empty validator set.
 // Expected: nothing happens
 func TestValidatorConnExecutor_EmptyVSet(t *testing.T) {
-	me := mock.NewValidator(65535)
+	me := mock.NewValidator(mySeedID)
 	tc := testCase{
 		me: me,
 		validatorUpdates: []validatorUpdate{
@@ -198,11 +223,16 @@ func TestValidatorConnExecutor_EmptyVSet(t *testing.T) {
 					mock.NewValidator(4),
 					mock.NewValidator(5),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{{Operation: mock.OpDialMany,
-					Params: []string{
-						mock.NewNodeAddress(2),
-						mock.NewNodeAddress(5),
-					}}},
+				expectedHistory: []mock.HistoryEvent{
+					{
+						Operation: mock.OpDial,
+						Params:    []string{mock.NewNodeID(2), mock.NewNodeID(5)},
+					},
+					{
+						Operation: mock.OpDial,
+						Params:    []string{mock.NewNodeID(2), mock.NewNodeID(5)},
+					},
+				},
 			},
 			1: {},
 		},
@@ -212,7 +242,7 @@ func TestValidatorConnExecutor_EmptyVSet(t *testing.T) {
 
 // TestValidatorConnExecutor_ValidatorUpdatesSequence checks sequence of multiple validators switched
 func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
-	me := mock.NewValidator(65535)
+	me := mock.NewValidator(mySeedID)
 	tc := testCase{
 		me: me,
 		validatorUpdates: []validatorUpdate{
@@ -223,10 +253,10 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 					mock.NewValidator(3),
 					mock.NewValidator(4),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{{
-					Comment:   "dialing initial validators",
-					Operation: mock.OpDialMany,
-				}},
+				expectedHistory: []mock.HistoryEvent{
+					{Operation: mock.OpDial, Params: []string{mock.NewNodeID(1), mock.NewNodeID(2)}},
+					{Operation: mock.OpDial, Params: []string{mock.NewNodeID(1), mock.NewNodeID(2)}},
+				},
 			},
 			1: {
 				validators: []*types.Validator{
@@ -236,15 +266,14 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 					mock.NewValidator(4),
 					mock.NewValidator(5),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{
+				expectedHistory: []mock.HistoryEvent{
 					{
-						Comment:   "Stop old peers that are not part of new validator set",
-						Operation: mock.OpStopOne,
-						Params:    []string{mock.NewNodeAddress(1)},
+						Operation: mock.OpStop,
+						Params:    []string{mock.NewNodeID(1)},
 					},
 					{
-						Comment:   "Dial two members of current validator set",
-						Operation: mock.OpDialMany,
+						Operation: mock.OpDial,
+						Params:    []string{mock.NewNodeID(5)},
 					},
 				},
 			},
@@ -256,31 +285,53 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 					mock.NewValidator(4),
 					mock.NewValidator(5),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{},
+				expectedHistory: []mock.HistoryEvent{},
 			},
-			3: { // only 1 validator (except myself), we should stop existing validators and don't dial anyone
+			3: { // only 1 validator (except myself), we should stop other validators
 				validators: []*types.Validator{
 					me,
 					mock.NewValidator(1),
 				},
-				expectedHistory: []mock.SwitchHistoryEvent{
-					0: {Operation: mock.OpStopOne},
-					1: {Operation: mock.OpStopOne},
-					2: {Operation: mock.OpDialMany, Params: []string{mock.NewNodeAddress(1)}},
+				expectedHistory: []mock.HistoryEvent{
+					0: {
+						Operation: mock.OpStop,
+						Params:    []string{mock.NewNodeID(2), mock.NewNodeID(5)},
+					},
+					1: {
+						Operation: mock.OpStop,
+						Params:    []string{mock.NewNodeID(2), mock.NewNodeID(5)},
+					},
+					2: {
+						Operation: mock.OpDial,
+						Params:    []string{mock.NewNodeID(1)},
+					},
 				},
 			},
 			4: { // everything stops
 				validators: []*types.Validator{me},
-				expectedHistory: []mock.SwitchHistoryEvent{
-					0: {Operation: mock.OpStopOne},
+				expectedHistory: []mock.HistoryEvent{
+					0: {Operation: mock.OpStop, Params: []string{mock.NewNodeID(1)}},
 				},
 			},
-			5: { // 20 validators
+			5: { // 20 validators; nothing dialed in previous round, so we just dial new validators
 				validators: append(mock.NewValidators(20), me),
-				expectedHistory: []mock.SwitchHistoryEvent{
+				expectedHistory: []mock.HistoryEvent{
 					{
-						Comment:   "Nothing dialed in previous round, so we just dial new validators",
-						Operation: mock.OpDialMany},
+						Operation: mock.OpDial,
+						Params:    []string{mock.NewNodeID(2), mock.NewNodeID(6), mock.NewNodeID(14), mock.NewNodeID(16)},
+					},
+					{
+						Operation: mock.OpDial,
+						Params:    []string{mock.NewNodeID(2), mock.NewNodeID(6), mock.NewNodeID(14), mock.NewNodeID(16)},
+					},
+					{
+						Operation: mock.OpDial,
+						Params:    []string{mock.NewNodeID(2), mock.NewNodeID(6), mock.NewNodeID(14), mock.NewNodeID(16)},
+					},
+					{
+						Operation: mock.OpDial,
+						Params:    []string{mock.NewNodeID(2), mock.NewNodeID(6), mock.NewNodeID(14), mock.NewNodeID(16)},
+					},
 				},
 			},
 		},
@@ -294,15 +345,20 @@ func TestValidatorConnExecutor_ValidatorUpdatesSequence(t *testing.T) {
 func TestEndBlock(t *testing.T) {
 	const timeout = 3 * time.Second // how long we'll wait for connection
 	app := newTestApp()
-	cc := proxy.NewLocalClientCreator(app)
-	proxyApp := proxy.NewAppConns(cc)
+
+	clientCreator := abciclient.NewLocalCreator(app)
+	require.NotNil(t, clientCreator)
+	proxyApp := proxy.NewAppConns(clientCreator, proxy.NopMetrics())
+	require.NotNil(t, proxyApp)
+
 	err := proxyApp.Start()
 	require.Nil(t, err)
 	defer proxyApp.Stop() //nolint:errcheck // ignore for tests
 
 	state, stateDB, _ := makeState(3, 1)
-	nodeProTxHash := &state.Validators.Validators[0].ProTxHash
+	nodeProTxHash := state.Validators.Validators[0].ProTxHash
 	stateStore := sm.NewStore(stateDB)
+	blockStore := store.NewBlockStore(dbm.NewMemDB())
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
@@ -311,6 +367,7 @@ func TestEndBlock(t *testing.T) {
 		proxyApp.Query(),
 		mmock.Mempool{},
 		sm.EmptyEvidencePool{},
+		blockStore,
 		nil,
 	)
 
@@ -342,15 +399,15 @@ func TestEndBlock(t *testing.T) {
 		addProTxHashes = append(addProTxHashes, addProTxHash)
 	}
 	proTxHashes = append(proTxHashes, addProTxHashes...)
-	newVals, _ := types.GenerateValidatorSetUsingProTxHashes(proTxHashes)
+	newVals, _ := types.GenerateValidatorSet(types.NewValSetParam(proTxHashes))
 
 	// Ensure new validators have some IP addresses set
 	for _, validator := range newVals.Validators {
-		validator.NodeAddress = dashtypes.RandValidatorAddress()
+		validator.NodeAddress = types.RandValidatorAddress()
 	}
 
 	// setup ValidatorConnExecutor
-	sw := mock.NewMockSwitch()
+	sw := mock.NewDashDialer()
 	proTxHash := newVals.Validators[0].ProTxHash
 	vc, err := NewValidatorConnExecutor(proTxHash, eventBus, sw)
 	require.NoError(t, err)
@@ -360,7 +417,7 @@ func TestEndBlock(t *testing.T) {
 
 	app.ValidatorSetUpdates[1] = newVals.ABCIEquivalentValidatorUpdates()
 
-	state, _, err = blockExec.ApplyBlock(state, nodeProTxHash, blockID, block)
+	state, err = blockExec.ApplyBlock(state, nodeProTxHash, blockID, block)
 	require.Nil(t, err)
 	// test new validator was added to NextValidators
 	require.Equal(t, state.Validators.Size()+100, state.NextValidators.Size())
@@ -372,26 +429,26 @@ func TestEndBlock(t *testing.T) {
 	// test we threw an event
 	select {
 	case msg := <-updatesSub.Out():
-		event, ok := msg.Data().(types.EventDataValidatorSetUpdates)
+		event, ok := msg.Data().(types.EventDataValidatorSetUpdate)
 		require.True(
 			t,
 			ok,
 			"Expected event of type EventDataValidatorSetUpdates, got %T",
 			msg.Data(),
 		)
-		if assert.NotEmpty(t, event.ValidatorUpdates) {
+		if assert.NotEmpty(t, event.ValidatorSetUpdates) {
 			for _, addProTxHash := range addProTxHashes {
-				assert.Contains(t, mock.ValidatorsProTxHashes(event.ValidatorUpdates), addProTxHash)
+				assert.Contains(t, mock.ValidatorsProTxHashes(event.ValidatorSetUpdates), addProTxHash)
 			}
 			assert.EqualValues(
 				t,
 				types.DefaultDashVotingPower,
-				event.ValidatorUpdates[1].VotingPower,
+				event.ValidatorSetUpdates[1].VotingPower,
 			)
 			assert.NotEmpty(t, event.QuorumHash)
 		}
-	case <-updatesSub.Cancelled():
-		t.Fatalf("updatesSub was cancelled (reason: %v)", updatesSub.Err())
+	case <-updatesSub.Canceled():
+		t.Fatalf("updatesSub was canceled (reason: %v)", updatesSub.Err())
 	case <-time.After(1 * time.Second):
 		t.Fatal("Did not receive EventValidatorSetUpdates within 1 sec.")
 	}
@@ -400,9 +457,9 @@ func TestEndBlock(t *testing.T) {
 	select {
 	case msg := <-sw.HistoryChan:
 		t.Logf("Got message: %s %+v", msg.Operation, msg.Params)
-		assert.EqualValues(t, mock.OpDialMany, msg.Operation)
+		assert.EqualValues(t, mock.OpDial, msg.Operation)
 	case <-time.After(timeout):
-		t.Error("Timed out waiting for switch history message")
+		t.Error("Timed out waiting for a history message")
 		t.FailNow()
 	}
 }
@@ -410,7 +467,8 @@ func TestEndBlock(t *testing.T) {
 // ****** utility functions ****** //
 
 // executeTestCase feeds validator update messages into the event bus
-// and ensures operations executed on MockSwitch (history records) match `expectedHistory`, that is:
+// and ensures operations executed on mock Dash Connection Manager (history records)
+// match `expectedHistory`, that is:
 // * operation in history record is the same as in `expectedHistory`
 // * params in history record are a subset of params in `expectedHistory`
 func executeTestCase(t *testing.T, tc testCase) {
@@ -421,9 +479,9 @@ func executeTestCase(t *testing.T, tc testCase) {
 	defer cleanup(t, eventBus, sw, vc)
 
 	for updateID, update := range tc.validatorUpdates {
-		updateEvent := types.EventDataValidatorSetUpdates{
-			ValidatorUpdates: update.validators,
-			QuorumHash:       mock.NewQuorumHash(1000),
+		updateEvent := types.EventDataValidatorSetUpdate{
+			ValidatorSetUpdates: update.validators,
+			QuorumHash:          mock.NewQuorumHash(1000),
 		}
 		err := eventBus.PublishEventValidatorSetUpdates(updateEvent)
 		assert.NoError(t, err)
@@ -433,9 +491,11 @@ func executeTestCase(t *testing.T, tc testCase) {
 			select {
 			case msg := <-sw.HistoryChan:
 				// t.Logf("History event: %+v", msg)
-				assert.EqualValues(t, check.Operation, msg.Operation,
-					"Update %d: wrong operation %s in expected event %d, comment: %s",
-					updateID, check.Operation, checkID, check.Comment)
+				assert.EqualValues(
+					t, check.Operation, msg.Operation,
+					"Update %d: wrong operation %s in expected event %d",
+					updateID, check.Operation, checkID,
+				)
 				allowedParams := check.Params
 				// if params are nil, we default to all validator addresses; use []string{} to allow no addresses
 				if allowedParams == nil {
@@ -445,9 +505,11 @@ func executeTestCase(t *testing.T, tc testCase) {
 					// Params of the call need to "contains" only these values as:
 					// * we don't dial again already connected validators, and
 					// * we randomly select a few validators from new validator set
-					assert.Contains(t, allowedParams, param,
-						"Update %d: wrong params in expected event %d, op %s, comment: %s",
-						updateID, checkID, check.Operation, check.Comment)
+					assert.Contains(
+						t, allowedParams, param,
+						"Update %d: wrong params in expected event %d, op %s",
+						updateID, checkID, check.Operation,
+					)
 				}
 
 				// assert.EqualValues(t, check.Params, msg.Params, "check %d", i)
@@ -460,7 +522,7 @@ func executeTestCase(t *testing.T, tc testCase) {
 		// ensure no new history message arrives, eg. there are no additional operations done on the switch
 		select {
 		case msg := <-sw.HistoryChan:
-			t.Errorf("unexpected history event: %+v", msg)
+			t.Errorf("unexpected history event for update=%d: %+v", updateID, msg)
 		case <-time.After(50 * time.Millisecond):
 			// this is correct - we time out
 		}
@@ -472,7 +534,7 @@ func allowedParamsDefaults(
 	t *testing.T,
 	tc testCase,
 	updateID int,
-	check mock.SwitchHistoryEvent,
+	check mock.HistoryEvent,
 	quorumHash tmbytes.HexBytes) []string {
 
 	var (
@@ -480,9 +542,9 @@ func allowedParamsDefaults(
 	)
 
 	switch check.Operation {
-	case mock.OpDialMany:
+	case mock.OpDial:
 		validators = tc.validatorUpdates[updateID].validators
-	case mock.OpStopOne:
+	case mock.OpStop:
 		if updateID > 0 {
 			validators = tc.validatorUpdates[updateID-1].validators
 		}
@@ -491,7 +553,8 @@ func allowedParamsDefaults(
 	selector := selectpeers.NewDIP6ValidatorSelector(quorumHash)
 	allowedValidators, err := selector.SelectValidators(validators, tc.me)
 	require.NoError(t, err)
-	return newValidatorMap(allowedValidators).URIs()
+	nodeIDs := newValidatorMap(allowedValidators).NodeIDs()
+	return nodeIDs
 }
 
 // setup creates ValidatorConnExecutor and some dependencies.
@@ -499,15 +562,15 @@ func allowedParamsDefaults(
 func setup(
 	t *testing.T,
 	me *types.Validator,
-) (eventBus *types.EventBus, sw *mock.Switch, vc *ValidatorConnExecutor) {
+) (eventBus *types.EventBus, sw *mock.DashDialer, vc *ValidatorConnExecutor) {
 	eventBus = types.NewEventBus()
 	err := eventBus.Start()
 	require.NoError(t, err)
 
-	sw = mock.NewMockSwitch()
+	sw = mock.NewDashDialer()
 
 	proTxHash := me.ProTxHash
-	vc, err = NewValidatorConnExecutor(proTxHash, eventBus, sw)
+	vc, err = NewValidatorConnExecutor(proTxHash, eventBus, sw, WithLogger(log.TestingLogger()))
 	require.NoError(t, err)
 	err = vc.Start()
 	require.NoError(t, err)
@@ -516,7 +579,7 @@ func setup(
 }
 
 // cleanup frees some resources allocated for tests
-func cleanup(t *testing.T, bus *types.EventBus, sw Switch, vc *ValidatorConnExecutor) {
+func cleanup(t *testing.T, bus *types.EventBus, dialer p2p.DashDialer, vc *ValidatorConnExecutor) {
 	assert.NoError(t, bus.Stop())
 	assert.NoError(t, vc.Stop())
 }
@@ -533,18 +596,18 @@ func makeTxs(height int64) (txs []types.Tx) {
 
 func makeState(nVals int, height int64) (sm.State, dbm.DB, map[string]types.PrivValidator) {
 	privValsByProTxHash := make(map[string]types.PrivValidator, nVals)
-	vals, privVals, quorumHash, thresholdPublicKey := types.GenerateMockGenesisValidators(nVals)
-	// vals and privals are sorted
+	valSet, privVals := types.RandValidatorSet(nVals)
 	for i := 0; i < nVals; i++ {
-		vals[i].Name = fmt.Sprintf("test%d", i)
-		proTxHash := vals[i].ProTxHash
+		validator := valSet.Validators[i]
+		proTxHash := validator.ProTxHash
 		privValsByProTxHash[proTxHash.String()] = privVals[i]
 	}
+	genVals := types.MakeGenesisValsFromValidatorSet(valSet)
 	s, _ := sm.MakeGenesisState(&types.GenesisDoc{
 		ChainID:            chainID,
-		Validators:         vals,
-		ThresholdPublicKey: thresholdPublicKey,
-		QuorumHash:         quorumHash,
+		Validators:         genVals,
+		ThresholdPublicKey: valSet.ThresholdPublicKey,
+		QuorumHash:         valSet.QuorumHash,
 		AppHash:            nil,
 	})
 
@@ -602,7 +665,7 @@ func (app *testApp) BeginBlock(req abci.RequestBeginBlock) abci.ResponseBeginBlo
 func (app *testApp) EndBlock(req abci.RequestEndBlock) abci.ResponseEndBlock {
 	return abci.ResponseEndBlock{
 		ValidatorSetUpdate: app.ValidatorSetUpdates[req.Height],
-		ConsensusParamUpdates: &abci.ConsensusParams{
+		ConsensusParamUpdates: &tmproto.ConsensusParams{
 			Version: &tmproto.VersionParams{
 				AppVersion: 1}}}
 }

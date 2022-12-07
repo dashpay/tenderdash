@@ -5,12 +5,9 @@ import (
 	"testing"
 
 	"github.com/dashevo/dashd-go/btcjson"
-
-	"github.com/tendermint/tendermint/crypto"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
-
 	"github.com/stretchr/testify/require"
 
+	"github.com/tendermint/tendermint/crypto"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
 	"github.com/tendermint/tendermint/types"
@@ -20,16 +17,20 @@ import (
 // scheduled validator updates.
 func TestValidator_Sets(t *testing.T) {
 	testNode(t, func(t *testing.T, node e2e.Node) {
-		if node.Mode == e2e.ModeSeed {
-			return
-		}
-
 		client, err := node.Client()
 		require.NoError(t, err)
 		status, err := client.Status(ctx)
 		require.NoError(t, err)
 
 		first := status.SyncInfo.EarliestBlockHeight
+
+		// for nodes that have to catch up, we should only
+		// check the validator sets for nodes after this
+		// point, to avoid inconsistencies with backfill.
+		if node.StartAt > first {
+			first = node.StartAt
+		}
+
 		last := status.SyncInfo.LatestBlockHeight
 
 		// skip first block if node is pruning blocks, to avoid race conditions
@@ -38,7 +39,6 @@ func TestValidator_Sets(t *testing.T) {
 		}
 
 		valSchedule := newValidatorSchedule(*node.Testnet)
-		// fmt.Printf("node %s(%X) validator schedule is %v\n", node.Name, node.ProTxHash, valSchedule)
 		valSchedule.Increment(first - node.Testnet.InitialHeight)
 
 		for h := first; h <= last; h++ {
@@ -46,11 +46,11 @@ func TestValidator_Sets(t *testing.T) {
 			var thresholdPublicKey crypto.PubKey
 			perPage := 100
 			for page := 1; ; page++ {
-				requestThresholdPublicKey := page == 1
-				resp, err := client.Validators(ctx, &(h), &(page), &perPage, &requestThresholdPublicKey)
+				requestQuorumInfo := page == 1
+				resp, err := client.Validators(ctx, &(h), &(page), &perPage, &requestQuorumInfo)
 				require.NoError(t, err)
 				validators = append(validators, resp.Validators...)
-				if requestThresholdPublicKey {
+				if requestQuorumInfo {
 					thresholdPublicKey = *resp.ThresholdPublicKey
 				}
 				if len(validators) == resp.Total {
@@ -69,7 +69,7 @@ func TestValidator_Sets(t *testing.T) {
 					valScheduleValidator.ProTxHash, h, valScheduleValidator.PubKey.Bytes(), validator.PubKey.Bytes())
 
 				// Validators in the schedule don't contain addresses
-				validator.NodeAddress = dashtypes.ValidatorAddress{}
+				validator.NodeAddress = types.ValidatorAddress{}
 			}
 			require.Equal(t, valSchedule.Set.Validators, validators,
 				"incorrect validator set at height %v", h)

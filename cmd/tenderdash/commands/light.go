@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"bufio"
 	"context"
 	"errors"
 	"fmt"
@@ -14,7 +13,6 @@ import (
 	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
 
 	"github.com/spf13/cobra"
-
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -58,10 +56,11 @@ var (
 	primaryAddr        string
 	witnessAddrsJoined string
 	chainID            string
-	home               string
+	dir                string
 	maxOpenConnections int
 
-	verbose bool
+	logLevel  string
+	logFormat string
 
 	primaryKey   = []byte("primary")
 	witnessesKey = []byte("witnesses")
@@ -78,15 +77,15 @@ func init() {
 		"connect to a Tendermint node at this address")
 	LightCmd.Flags().StringVarP(&witnessAddrsJoined, "witnesses", "w", "",
 		"tendermint nodes to cross-check the primary node, comma-separated")
-	LightCmd.Flags().
-		StringVar(&home, "home-dir", os.ExpandEnv(filepath.Join("$HOME", ".tendermint-light")),
-			"specify the home directory")
+	LightCmd.Flags().StringVarP(&dir, "dir", "d", os.ExpandEnv(filepath.Join("$HOME", ".tendermint-light")),
+		"specify the directory")
 	LightCmd.Flags().IntVar(
 		&maxOpenConnections,
 		"max-open-connections",
 		900,
 		"maximum number of simultaneous connections (including WebSocket).")
-	LightCmd.Flags().BoolVar(&verbose, "verbose", false, "Verbose output")
+	LightCmd.Flags().StringVar(&logLevel, "log-level", log.LogLevelInfo, "The logging level (debug|info|warn|error|fatal)")
+	LightCmd.Flags().StringVar(&logFormat, "log-format", log.LogFormatPlain, "The logging format (text|json)")
 	LightCmd.Flags().StringVar(&dashCoreRPCHost, "dchost", "",
 		"host address of the Dash Core RPC node")
 	LightCmd.Flags().StringVar(&dashCoreRPCHost, "dcuser", "",
@@ -96,15 +95,10 @@ func init() {
 }
 
 func runProxy(cmd *cobra.Command, args []string) error {
-	// Initialise logger.
-	logger := log.NewTMLogger(log.NewSyncWriter(os.Stdout))
-	var option log.Option
-	if verbose {
-		option, _ = log.AllowLevel("debug")
-	} else {
-		option, _ = log.AllowLevel("info")
+	logger, err := log.NewDefaultLogger(logFormat, logLevel, false)
+	if err != nil {
+		return err
 	}
-	logger = log.NewFilter(logger, option)
 
 	chainID = args[0]
 	logger.Info("Creating client...", "chainID", chainID)
@@ -114,10 +108,12 @@ func runProxy(cmd *cobra.Command, args []string) error {
 		witnessesAddrs = strings.Split(witnessAddrsJoined, ",")
 	}
 
-	db, err := dbm.NewGoLevelDB("light-client-db", home)
+	lightDB, err := dbm.NewGoLevelDB("light-client-db", dir)
 	if err != nil {
 		return fmt.Errorf("can't create a db: %w", err)
 	}
+	// create a prefixed db on the chainID
+	db := dbm.NewPrefixDB(lightDB, []byte(chainID))
 
 	if primaryAddr == "" { // check to see if we can start from an existing state
 		var err error
@@ -140,33 +136,18 @@ func runProxy(cmd *cobra.Command, args []string) error {
 
 	options := []light.Option{
 		light.Logger(logger),
-		light.ConfirmationFunction(func(action string) bool {
-			fmt.Println(action)
-			scanner := bufio.NewScanner(os.Stdin)
-			for {
-				scanner.Scan()
-				response := scanner.Text()
-				switch response {
-				case "y", "Y":
-					return true
-				case "n", "N":
-					return false
-				default:
-					fmt.Println("please input 'Y' or 'n' and press ENTER")
-				}
-			}
-		}),
 		light.DashCoreVerification(),
 	}
 
-	dashCoreRPCClient, _ := dashcore.NewRPCClient(dashCoreRPCHost, dashCoreRPCUser, dashCoreRPCPass)
+	rpcLogger := logger.With("module", dashcore.ModuleName)
+	dashCoreRPCClient, _ := dashcore.NewRPCClient(dashCoreRPCHost, dashCoreRPCUser, dashCoreRPCPass, rpcLogger)
 
 	c, err := light.NewHTTPClient(
 		context.Background(),
 		chainID,
 		primaryAddr,
 		witnessesAddrs,
-		dbs.New(db, chainID),
+		dbs.New(db),
 		dashCoreRPCClient,
 		options...,
 	)
@@ -185,14 +166,7 @@ func runProxy(cmd *cobra.Command, args []string) error {
 		cfg.WriteTimeout = config.RPC.TimeoutBroadcastTxCommit + 1*time.Second
 	}
 
-	p, err := lproxy.NewProxy(
-		c,
-		listenAddr,
-		primaryAddr,
-		cfg,
-		logger,
-		lrpc.KeyPathFn(lrpc.DefaultMerkleKeyPathFn()),
-	)
+	p, err := lproxy.NewProxy(c, listenAddr, primaryAddr, cfg, logger, lrpc.KeyPathFn(lrpc.DefaultMerkleKeyPathFn()))
 	if err != nil {
 		return err
 	}

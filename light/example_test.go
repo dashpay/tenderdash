@@ -2,17 +2,13 @@ package light_test
 
 import (
 	"context"
-	"fmt"
 	"io/ioutil"
 	stdlog "log"
 	"os"
-	"testing"
 	"time"
 
 	dashcore "github.com/tendermint/tendermint/dashcore/rpc"
 	"github.com/tendermint/tendermint/light"
-	"github.com/tendermint/tendermint/types"
-
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/tendermint/tendermint/abci/example/kvstore"
@@ -23,14 +19,25 @@ import (
 	rpctest "github.com/tendermint/tendermint/rpc/test"
 )
 
-var (
-	privval types.PrivValidator
-)
+// Manually getting light blocks and verifying them.
+func ExampleClient() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	conf, err := rpctest.CreateConfig("ExampleClient_VerifyLightBlockAtHeight")
+	if err != nil {
+		stdlog.Fatal(err)
+	}
 
-// Automatically getting new headers and verifying them.
-func ExampleClient_Update() {
-	// give Tendermint time to generate some blocks
-	time.Sleep(5 * time.Second)
+	logger := log.TestingLogger()
+
+	// Start a test application
+	app := kvstore.NewApplication()
+
+	_, closer, err := rpctest.StartTendermint(ctx, conf, app, rpctest.SuppressStdout)
+	if err != nil {
+		stdlog.Fatal(err)
+	}
+	defer func() { _ = closer(ctx) }()
 
 	dbDir, err := ioutil.TempDir("", "light-client-example")
 	if err != nil {
@@ -38,17 +45,17 @@ func ExampleClient_Update() {
 	}
 	defer os.RemoveAll(dbDir)
 
-	var (
-		config  = rpctest.GetConfig()
-		chainID = config.ChainID()
-	)
+	chainID := conf.ChainID()
 
-	primary, err := httpp.New(chainID, config.RPC.ListenAddress)
+	primary, err := httpp.New(chainID, conf.RPC.ListenAddress)
 	if err != nil {
 		stdlog.Fatal(err)
 	}
 
-	_, err = primary.LightBlock(context.Background(), 2)
+	// give Tendermint time to generate some blocks
+	time.Sleep(5 * time.Second)
+
+	_, err = primary.LightBlock(ctx, 2)
 	if err != nil {
 		stdlog.Fatal(err)
 	}
@@ -58,17 +65,16 @@ func ExampleClient_Update() {
 		stdlog.Fatal(err)
 	}
 
-	dashCoreMockClient := dashcore.NewMockClient(chainID, 100, privval, false)
-
 	c, err := light.NewClient(
 		context.Background(),
 		chainID,
 		primary,
 		[]provider.Provider{primary}, // NOTE: primary should not be used here
-		dbs.New(db, chainID),
-		dashCoreMockClient,
+		dbs.New(db),
+		dashcore.NewMockClient(chainID, 100, nil, false),
 		light.Logger(log.TestingLogger()),
 	)
+
 	if err != nil {
 		stdlog.Fatal(err)
 	}
@@ -78,94 +84,26 @@ func ExampleClient_Update() {
 		}
 	}()
 
+	// wait for a few more blocks to be produced
 	time.Sleep(2 * time.Second)
 
-	h, err := c.Update(context.Background(), time.Now())
-	if err != nil {
-		stdlog.Fatal(err)
-	}
-
-	if h != nil && h.Height > 2 {
-		fmt.Println("successful update")
-	} else {
-		fmt.Println("update failed")
-	}
-	// Output: successful update
-}
-
-// Manually getting light blocks and verifying them.
-func ExampleClient_VerifyLightBlockAtHeight() {
-	// give Tendermint time to generate some blocks
-	time.Sleep(5 * time.Second)
-
-	dbDir, err := ioutil.TempDir("", "light-client-example")
-	if err != nil {
-		stdlog.Fatal(err)
-	}
-	defer os.RemoveAll(dbDir)
-
-	var (
-		config  = rpctest.GetConfig()
-		chainID = config.ChainID()
-	)
-
-	primary, err := httpp.New(chainID, config.RPC.ListenAddress)
-	if err != nil {
-		stdlog.Fatal(err)
-	}
-
-	_, err = primary.LightBlock(context.Background(), 2)
-	if err != nil {
-		stdlog.Fatal(err)
-	}
-
-	db, err := dbm.NewGoLevelDB("light-client-db", dbDir)
-	if err != nil {
-		stdlog.Fatal(err)
-	}
-
-	dashCoreMockClient := dashcore.NewMockClient(chainID, 100, privval, false)
-
-	c, err := light.NewClient(
-		context.Background(),
-		chainID,
-		primary,
-		[]provider.Provider{primary}, // NOTE: primary should not be used here
-		dbs.New(db, chainID),
-		dashCoreMockClient,
-		light.Logger(log.TestingLogger()),
-	)
-	if err != nil {
-		stdlog.Fatal(err)
-	}
-	defer func() {
-		if err := c.Cleanup(); err != nil {
-			stdlog.Fatal(err)
-		}
-	}()
-
+	// veify the block at height 3
 	_, err = c.VerifyLightBlockAtHeight(context.Background(), 3, time.Now())
 	if err != nil {
 		stdlog.Fatal(err)
 	}
 
-	h, err := c.TrustedLightBlock(3)
+	// retrieve light block at height 3
+	_, err = c.TrustedLightBlock(3)
 	if err != nil {
 		stdlog.Fatal(err)
 	}
 
-	fmt.Println("got header", h.Height)
-	// Output: got header 3
-}
+	// update to the latest height
+	lb, err := c.Update(ctx, time.Now())
+	if err != nil {
+		stdlog.Fatal(err)
+	}
 
-func TestMain(m *testing.M) {
-	// start a tendermint node (and kvstore) in the background to test against
-	app := kvstore.NewApplication()
-	node := rpctest.StartTendermint(app, rpctest.SuppressStdout)
-	privval = node.PrivValidator()
-	code := m.Run()
-
-	// and shut down proper at the end
-	rpctest.StopTendermint(node)
-	os.Exit(code)
+	logger.Info("verified light block", "light-block", lb)
 }

@@ -1,8 +1,9 @@
-PACKAGES=$(shell go list ./...)
-OUTPUT?=build/tenderdash
+#!/usr/bin/make -f
 
-REPO_NAME=github.com/dashevo/tenderdash
-BUILD_TAGS?=tenderdash
+OUTPUT ?= build/tenderdash
+BUILDDIR ?= $(CURDIR)/build
+REPO_NAME ?= github.com/dashevo/tenderdash
+BUILD_TAGS ?= tenderdash
 # If building a release, please checkout the version tag to get the correct version setting
 ifneq ($(shell git symbolic-ref -q --short HEAD),)
 VERSION := unreleased-$(shell git symbolic-ref -q --short HEAD)-$(shell git rev-parse HEAD)
@@ -12,8 +13,16 @@ endif
 LD_FLAGS = -X ${REPO_NAME}/version.TMCoreSemVer=$(VERSION)
 BUILD_FLAGS = -mod=readonly -ldflags "$(LD_FLAGS)"
 HTTPS_GIT := https://${REPO_NAME}.git
-DOCKER_BUF := docker run -v $(shell pwd):/workspace --workdir /workspace bufbuild/buf
+BUILD_IMAGE := ghcr.io/tendermint/docker-build-proto
+BASE_BRANCH ?= v0.8-dev
+DOCKER_PROTO := docker run -v $(shell pwd):/workspace --workdir /workspace $(BUILD_IMAGE)
 CGO_ENABLED ?= 1
+
+# handle ARM builds
+ifeq (arm,$(GOARCH))
+	export CC = arm-linux-gnueabi-gcc-10
+	export CXX = arm-linux-gnueabi-g++-10
+endif
 
 # handle nostrip
 ifeq (,$(findstring nostrip,$(TENDERMINT_BUILD_OPTIONS)))
@@ -52,16 +61,22 @@ ifeq (boltdb,$(findstring boltdb,$(TENDERMINT_BUILD_OPTIONS)))
   BUILD_TAGS += boltdb
 endif
 
+# handle deadlock
+ifeq (deadlock,$(findstring deadlock,$(TENDERMINT_BUILD_OPTIONS)))
+  BUILD_TAGS += deadlock
+endif
+
 # allow users to pass additional flags via the conventional LDFLAGS variable
 LD_FLAGS += $(LDFLAGS)
 
-all: check build test install
-build: build-bls
+all: build install
+build: build-bls build-binary
+.PHONY: build
 install: install-bls
 
 .PHONY: all
 
-include tests.mk
+include test/Makefile
 
 ###############################################################################
 ###                      Build/Install BLS library                          ###
@@ -79,13 +94,16 @@ install-bls: build-bls
 ###                                Build Tendermint                        ###
 ###############################################################################
 
-build:
+build-binary:
 	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_FLAGS) -tags '$(BUILD_TAGS)' -o $(OUTPUT) ./cmd/tenderdash/
-.PHONY: build
+.PHONY: build-binary
 
 install:
 	CGO_ENABLED=$(CGO_ENABLED) go install $(BUILD_FLAGS) -tags $(BUILD_TAGS) ./cmd/tenderdash
 .PHONY: install
+
+$(BUILDDIR)/:
+	mkdir -p $@
 
 ###############################################################################
 ###                                Protobuf                                 ###
@@ -95,26 +113,28 @@ proto-all: proto-gen proto-lint proto-check-breaking
 .PHONY: proto-all
 
 proto-gen:
-	@docker pull -q tendermintdev/docker-build-proto
-	@echo "Generating Protobuf files"
-	@docker run -v $(shell pwd):/workspace --workdir /workspace tendermintdev/docker-build-proto sh ./scripts/protocgen.sh
+	@echo "Generating Go packages for .proto files"
+	@$(DOCKER_PROTO) sh ./scripts/protocgen.sh
 .PHONY: proto-gen
 
 proto-lint:
-	@$(DOCKER_BUF) lint --error-format=json
+	@echo "Running lint checks for .proto files"
+	@$(DOCKER_PROTO) buf lint --error-format=json
 .PHONY: proto-lint
 
 proto-format:
-	@echo "Formatting Protobuf files"
-	docker run -v $(shell pwd):/workspace --workdir /workspace tendermintdev/docker-build-proto find ./ -not -path "./third_party/*" -name *.proto -exec clang-format -i {} \;
+	@echo "Formatting .proto files"
+	@$(DOCKER_PROTO) find ./ -not -path "./third_party/*" -name '*.proto' -exec clang-format -i {} \;
 .PHONY: proto-format
 
 proto-check-breaking:
-	@$(DOCKER_BUF) breaking --against ".git#branch=master"
+	@echo "Checking for breaking changes in .proto files"
+	@$(DOCKER_PROTO) buf breaking --against .git#branch=$(BASE_BRANCH)
 .PHONY: proto-check-breaking
 
 proto-check-breaking-ci:
-	$(DOCKER_BUF) breaking --against "$(HTTPS_GIT)#branch=master"
+	@echo "Checking for breaking changes in .proto files"
+	$(DOCKER_PROTO) buf breaking --against $(HTTPS_GIT)#branch=$(BASE_BRANCH)
 .PHONY: proto-check-breaking-ci
 
 ###############################################################################
@@ -128,6 +148,40 @@ build_abci:
 install_abci:
 	@go install -mod=readonly ./abci/cmd/...
 .PHONY: install_abci
+
+
+##################################################################################
+###                              Build ABCI Dump                               ###
+##################################################################################
+
+build_abcidump:
+	@go build -o build/abcidump ./cmd/abcidump
+.PHONY: build_abcidump
+
+install_abcidump:
+	@go install ./cmd/abcidump
+.PHONY: install_abcidump
+
+###############################################################################
+###				Privval Server                              ###
+###############################################################################
+
+build_privval_server:
+	@go build -mod=readonly -o $(BUILDDIR)/ -i ./cmd/priv_val_server/...
+.PHONY: build_privval_server
+
+generate_test_cert:
+	# generate self signing ceritificate authority
+	@certstrap init --common-name "root CA" --expires "20 years"
+	# generate server cerificate
+	@certstrap request-cert -cn server -ip 127.0.0.1
+	# self-sign server cerificate with rootCA
+	@certstrap sign server --CA "root CA"
+	# generate client cerificate
+	@certstrap request-cert -cn client -ip 127.0.0.1
+	# self-sign client cerificate with rootCA
+	@certstrap sign client --CA "root CA"
+.PHONY: generate_test_cert
 
 ###############################################################################
 ###                              Distribution                               ###
@@ -157,7 +211,7 @@ draw_deps:
 
 get_deps_bin_size:
 	@# Copy of build recipe with additional flags to perform binary size analysis
-	$(eval $(shell go build -work -a $(BUILD_FLAGS) -tags $(BUILD_TAGS) -o $(OUTPUT) ./cmd/tendermint/ 2>&1))
+	$(eval $(shell go build -work -a $(BUILD_FLAGS) -tags $(BUILD_TAGS) -o $(BUILDDIR)/ ./cmd/tendermint/ 2>&1))
 	@find $(WORK) -type f -name "*.a" | xargs -I{} du -hxs "{}" | sort -rh | sed -e s:${WORK}/::g > deps_bin_size.log
 	@echo "Results can be found here: $(CURDIR)/deps_bin_size.log"
 .PHONY: get_deps_bin_size
@@ -194,7 +248,7 @@ format:
 
 lint:
 	@echo "--> Running linter"
-	@golangci-lint run
+	go run github.com/golangci/golangci-lint/cmd/golangci-lint run
 .PHONY: lint
 
 DESTINATION = ./index.html.md
@@ -202,32 +256,37 @@ DESTINATION = ./index.html.md
 ###############################################################################
 ###                           Documentation                                 ###
 ###############################################################################
-
+# todo remove once tendermint.com DNS is solved
 build-docs:
-	cd docs && \
-	while read p; do \
-		(git checkout $${p} . && npm install && VUEPRESS_BASE="/$${p}/" npm run build) ; \
-		mkdir -p ~/output/$${p} ; \
-		cp -r .vuepress/dist/* ~/output/$${p}/ ; \
-		cp ~/output/$${p}/index.html ~/output ; \
-	done < versions ;
+	@cd docs && \
+	while read -r branch path_prefix; do \
+		(git checkout $${branch} && npm ci && VUEPRESS_BASE="/$${path_prefix}/" npm run build) ; \
+		mkdir -p ~/output/$${path_prefix} ; \
+		cp -r .vuepress/dist/* ~/output/$${path_prefix}/ ; \
+		cp ~/output/$${path_prefix}/index.html ~/output ; \
+	done < versions ; \
+	mkdir -p ~/output/master ; \
+	cp -r .vuepress/dist/* ~/output/master/
 .PHONY: build-docs
-
-sync-docs:
-	cd ~/output && \
-	echo "role_arn = ${DEPLOYMENT_ROLE_ARN}" >> /root/.aws/config ; \
-	echo "CI job = ${CIRCLE_BUILD_URL}" >> version.html ; \
-	aws s3 sync . s3://${WEBSITE_BUCKET} --profile terraform --delete ; \
-	aws cloudfront create-invalidation --distribution-id ${CF_DISTRIBUTION_ID} --profile terraform --path "/*" ;
-.PHONY: sync-docs
 
 ###############################################################################
 ###                            Docker image                                 ###
 ###############################################################################
 
-build-docker:
-	docker build --label=tenderdash --tag="dashpay/tenderdash" --file DOCKER/Dockerfile .
+build-docker: build-linux
+	cp $(BUILDDIR)/tenderdash DOCKER/tenderdash
+	docker build --label=tendermint --tag="dashpay/tenderdash" -f DOCKER/Dockerfile .
+	rm -rf DOCKER/tenderdash
 .PHONY: build-docker
+
+
+###############################################################################
+###                                Mocks                                    ###
+###############################################################################
+
+mockery:
+	go generate -run="./scripts/mockery_generate.sh" ./...
+.PHONY: mockery
 
 ###############################################################################
 ###                       Local testnet using docker                        ###
@@ -278,3 +337,39 @@ endif
 contract-tests:
 	dredd
 .PHONY: contract-tests
+
+clean:
+	rm -rf $(CURDIR)/artifacts/ $(BUILDDIR)/
+
+build-reproducible:
+	docker rm latest-build || true
+	docker run --volume=$(CURDIR):/sources:ro \
+		--env TARGET_PLATFORMS='linux/amd64 linux/arm64 darwin/amd64 windows/amd64' \
+		--env APP=tendermint \
+		--env COMMIT=$(shell git rev-parse --short=8 HEAD) \
+		--env VERSION=$(shell git describe --tags) \
+		--name latest-build cosmossdk/rbuilder:latest
+	docker cp -a latest-build:/home/builder/artifacts/ $(CURDIR)/
+.PHONY: build-reproducible
+
+# Implements test splitting and running. This is pulled directly from
+# the github action workflows for better local reproducibility.
+
+GO_TEST_FILES != find $(CURDIR) -name "*_test.go"
+
+# default to four splits by default
+NUM_SPLIT ?= 4
+
+$(BUILDDIR):
+	mkdir -p $@
+
+# The format statement filters out all packages that don't have tests.
+# Note we need to check for both in-package tests (.TestGoFiles) and
+# out-of-package tests (.XTestGoFiles).
+$(BUILDDIR)/packages.txt:$(GO_TEST_FILES) $(BUILDDIR)
+	go list -f "{{ if (or .TestGoFiles .XTestGoFiles) }}{{ .ImportPath }}{{ end }}" ./... | sort > $@
+
+split-test-packages:$(BUILDDIR)/packages.txt
+	split -d -n l/$(NUM_SPLIT) $< $<.
+test-group-%:split-test-packages
+	cat $(BUILDDIR)/packages.txt.$* | xargs go test -mod=readonly -timeout=15m -race -coverprofile=$(BUILDDIR)/$*.profile.out

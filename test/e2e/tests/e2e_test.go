@@ -3,14 +3,14 @@ package e2e_test
 import (
 	"context"
 	"os"
-	"path/filepath"
+	"sort"
 	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	rpctypes "github.com/tendermint/tendermint/rpc/core/types"
+	rpctypes "github.com/tendermint/tendermint/rpc/coretypes"
 	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
 	"github.com/tendermint/tendermint/types"
 )
@@ -30,8 +30,9 @@ var (
 	blocksCacheMtx  = sync.Mutex{}
 )
 
-// testNode runs tests for testnet nodes. The callback function is given a
-// single node to test, running as a subtest in parallel with other subtests.
+// testNode runs tests for testnet nodes. The callback function is
+// given a single stateful node to test, running as a subtest in
+// parallel with other subtests.
 //
 // The testnet manifest must be given as the envvar E2E_MANIFEST. If not set,
 // these tests are skipped so that they're not picked up during normal unit
@@ -47,12 +48,20 @@ func testNode(t *testing.T, testFunc func(*testing.T, e2e.Node)) {
 		node := testnet.LookupNode(name)
 		require.NotNil(t, node, "node %q not found in testnet %q", name, testnet.Name)
 		nodes = []*e2e.Node{node}
+	} else {
+		sort.Slice(nodes, func(i, j int) bool {
+			return nodes[i].Name < nodes[j].Name
+		})
 	}
 
 	for _, node := range nodes {
 		node := *node
+
+		if node.Stateless() {
+			continue
+		}
+
 		t.Run(node.Name, func(t *testing.T) {
-			t.Parallel()
 			testFunc(t, node)
 		})
 	}
@@ -65,9 +74,6 @@ func loadTestnet(t *testing.T) e2e.Testnet {
 	manifest := os.Getenv("E2E_MANIFEST")
 	if manifest == "" {
 		t.Skip("E2E_MANIFEST not set, not an end-to-end test run")
-	}
-	if !filepath.IsAbs(manifest) {
-		manifest = filepath.Join("..", manifest)
 	}
 
 	testnetCacheMtx.Lock()

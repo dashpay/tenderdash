@@ -44,6 +44,11 @@ This file creates a 4-node network using the localnode image.
 The nodes of the network expose their P2P and RPC endpoints to the host machine
 on ports 26656-26657, 26659-26660, 26661-26662, and 26663-26664 respectively.
 
+The first node (`node0`) exposes two additional ports: 6060 for profiling using
+[`pprof`](https://golang.org/pkg/net/http/pprof), and `9090` - for Prometheus
+server (if you don't know how to start one check out ["First steps |
+Prometheus"](https://prometheus.io/docs/introduction/first_steps/)).
+
 To update the binary, just rebuild it and restart the nodes:
 
 ```sh
@@ -96,7 +101,7 @@ rm -rf ./build/node*
 
 ## Configuring ABCI containers
 
-To use your own ABCI applications with 4-node setup edit the [docker-compose.yaml](https://github.com/tendermint/tendermint/blob/master/docker-compose.yml) file and add image to your ABCI application.
+To use your own ABCI applications with 4-node setup edit the [docker-compose.yaml](https://github.com/tendermint/tendermint/blob/v0.35.x/docker-compose.yml) file and add image to your ABCI application.
 
 ```yml
  abci0:
@@ -145,7 +150,7 @@ To use your own ABCI applications with 4-node setup edit the [docker-compose.yam
 
 ```
 
-Override the [command](https://github.com/tendermint/tendermint/blob/master/networks/local/localnode/Dockerfile#L12) in each node to connect to it's ABCI.
+Override the [command](https://github.com/tendermint/tendermint/blob/v0.35.x/networks/local/localnode/Dockerfile#L12) in each node to connect to it's ABCI.
 
 ```yml
   node0:
@@ -158,13 +163,13 @@ Override the [command](https://github.com/tendermint/tendermint/blob/master/netw
       - LOG=$${LOG:-tendermint.log}
     volumes:
       - ./build:/tendermint:Z
-    command: node --proxy_app=tcp://abci0:26658
+    command: node --proxy-app=tcp://abci0:26658
     networks:
       localnet:
         ipv4_address: 192.167.10.2
 ```
 
-Similarly do for node1, node2 and node3 then [run testnet](https://github.com/tendermint/tendermint/blob/master/docs/networks/docker-compose.md#run-a-testnet)
+Similarly do for node1, node2 and node3 then [run testnet](#run-a-testnet).
 
 ## Logging
 

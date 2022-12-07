@@ -9,6 +9,7 @@ import (
 
 // Test_sortableValidatorList_Index checks if the sortableValidatorList.Index() works correctly
 func Test_sortedValidatorList_Index(t *testing.T) {
+	quorumHash := mock.NewQuorumHash(100)
 	tests := []struct {
 		name   string
 		list   sortedValidatorList
@@ -17,20 +18,20 @@ func Test_sortedValidatorList_Index(t *testing.T) {
 	}{
 		{
 			name:   "miss",
-			list:   newSortedValidatorList(mock.NewValidators(5), mock.NewQuorumHash(0)),
-			search: newSortableValidator(*mock.NewValidator(10), mock.NewQuorumHash(0)),
+			list:   newSortedValidatorList(mock.NewValidators(5), quorumHash),
+			search: newSortableValidator(*mock.NewValidator(10), quorumHash),
 			want:   -1,
 		},
 		{
 			name:   "i=0",
-			list:   newSortedValidatorList(mock.NewValidators(500), mock.NewQuorumHash(0)),
-			search: newSortableValidator(*mock.NewValidator(0), mock.NewQuorumHash(0)),
+			list:   newSortedValidatorList(mock.NewValidators(500), quorumHash),
+			search: newSortableValidator(*mock.NewValidator(1), quorumHash),
 			want:   0,
 		},
 		{
 			name:   "i=4",
-			list:   newSortedValidatorList(mock.NewValidators(500), mock.NewQuorumHash(2054231)),
-			search: newSortableValidator(*mock.NewValidator(4), mock.NewQuorumHash(2054231)),
+			list:   newSortedValidatorList(mock.NewValidators(500), mock.NewQuorumHash(20531)),
+			search: newSortableValidator(*mock.NewValidator(4), mock.NewQuorumHash(20531)),
 			want:   4,
 		},
 	}

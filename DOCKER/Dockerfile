@@ -1,4 +1,5 @@
-FROM golang:1.15-alpine AS builder
+# stage 1 Generate Tenderdash Binary
+FROM golang:1.17.13-alpine3.15 AS builder
 
 RUN apk update && \
     apk upgrade && \
@@ -11,7 +12,8 @@ WORKDIR /go/src/github.com/dashevo/tenderdash
 RUN make install-bls
 RUN make build-linux
 
-FROM alpine:3.9
+# stage 2
+FROM alpine:3.15
 LABEL maintainer="developers@dash.org"
 
 # Tenderdash will be looking for the genesis file in /tenderdash/config/genesis.json
@@ -52,7 +54,7 @@ ENV PROXY_APP=kvstore MONIKER=dockernode CHAIN_ID=dockerchain
 COPY ./DOCKER/docker-entrypoint.sh /usr/local/bin/
 
 ENTRYPOINT ["docker-entrypoint.sh"]
-CMD ["node"]
+CMD ["start"]
 
 # Expose the data directory as a volume since there's mutable state in there
 VOLUME [ "$TMHOME" ]

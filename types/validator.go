@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rs/zerolog"
+
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	ce "github.com/tendermint/tendermint/crypto/encoding"
-	dashtypes "github.com/tendermint/tendermint/dash/types"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -18,10 +19,10 @@ import (
 // make sure to update that method if changes are made here
 // The ProTxHash is part of Dash additions required for BLS threshold signatures
 type Validator struct {
-	PubKey      crypto.PubKey              `json:"pub_key"`
-	VotingPower int64                      `json:"voting_power"`
-	ProTxHash   ProTxHash                  `json:"pro_tx_hash"`
-	NodeAddress dashtypes.ValidatorAddress `json:"address"`
+	PubKey      crypto.PubKey    `json:"pub_key"`
+	VotingPower int64            `json:"voting_power"`
+	ProTxHash   ProTxHash        `json:"pro_tx_hash"`
+	NodeAddress ValidatorAddress `json:"address"`
 
 	ProposerPriority int64 `json:"proposer_priority"`
 }
@@ -47,13 +48,13 @@ func NewValidatorDefaultVotingPower(pubKey crypto.PubKey, proTxHash []byte) *Val
 }
 
 // NewValidator returns a new validator with the given pubkey and voting power.
-func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash []byte, address string) *Validator {
+func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash ProTxHash, address string) *Validator {
 	var (
-		addr dashtypes.ValidatorAddress
+		addr ValidatorAddress
 		err  error
 	)
 	if address != "" {
-		addr, err = dashtypes.ParseValidatorAddress(address)
+		addr, err = ParseValidatorAddress(address)
 		if err != nil {
 			panic(err.Error())
 		}
@@ -164,6 +165,23 @@ func (v *Validator) ShortStringBasic() string {
 		v.PubKey)
 }
 
+// MarshalZerologObject implements zerolog.LogObjectMarshaler
+func (v *Validator) MarshalZerologObject(e *zerolog.Event) {
+	e.Str("protxhash", v.ProTxHash.ShortString())
+	e.Int64("voting_power", v.VotingPower)
+	e.Int64("proposer_priority", v.ProposerPriority)
+	e.Str("address", v.NodeAddress.String())
+
+	if v.PubKey != nil {
+		pubkey := v.PubKey.HexString()
+		if len(pubkey) > 8 {
+			pubkey = pubkey[:8]
+		}
+		e.Str("pub_key", pubkey)
+		e.Str("pub_key_type", v.PubKey.Type())
+	}
+}
+
 // ValidatorListString returns a prettified validator list for logging purposes.
 func ValidatorListString(vals []*Validator) string {
 	chunks := make([]string, len(vals))
@@ -179,10 +197,7 @@ func ValidatorListString(vals []*Validator) string {
 // as its redundant with the pubkey. This also excludes ProposerPriority
 // which changes every round.
 func (v *Validator) Bytes() []byte {
-	pk, err := ce.PubKeyToProto(v.PubKey)
-	if err != nil {
-		panic(err)
-	}
+	pk := ce.MustPubKeyToProto(v.PubKey)
 
 	pbv := tmproto.SimpleValidator{
 		PubKey:      &pk,
@@ -230,7 +245,6 @@ func ValidatorFromProto(vp *tmproto.Validator) (*Validator, error) {
 	if vp == nil {
 		return nil, errors.New("nil validator")
 	}
-
 	v := new(Validator)
 	v.VotingPower = vp.GetVotingPower()
 	v.ProposerPriority = vp.GetProposerPriority()
@@ -244,30 +258,10 @@ func ValidatorFromProto(vp *tmproto.Validator) (*Validator, error) {
 	}
 
 	if vp.NodeAddress != "" {
-		if v.NodeAddress, err = dashtypes.ParseValidatorAddress(vp.NodeAddress); err != nil {
+		if v.NodeAddress, err = ParseValidatorAddress(vp.NodeAddress); err != nil {
 			return nil, err
 		}
 	}
 
 	return v, nil
-}
-
-//----------------------------------------
-// RandValidator
-
-// RandValidator returns a randomized validator, useful for testing.
-// UNSTABLE
-func RandValidator() (*Validator, PrivValidator) {
-	quorumHash := crypto.RandQuorumHash()
-	privVal := NewMockPVForQuorum(quorumHash)
-	proTxHash, err := privVal.GetProTxHash()
-	if err != nil {
-		panic(fmt.Errorf("could not retrieve proTxHash %w", err))
-	}
-	pubKey, err := privVal.GetPubKey(quorumHash)
-	if err != nil {
-		panic(fmt.Errorf("could not retrieve pubkey %w", err))
-	}
-	val := NewValidatorDefaultVotingPower(pubKey, proTxHash)
-	return val, privVal
 }
