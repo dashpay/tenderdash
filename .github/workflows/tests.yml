@@ -1,3 +1,4 @@
+---
 name: Test
 on:
   pull_request:
@@ -7,7 +8,7 @@ on:
     branches:
       - master
       - release/**
-       - v0.*-dev
+      - v0.*-dev
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -28,6 +29,8 @@ jobs:
             go.mod
             go.sum
             Makefile
+      - name: Install libpcap
+        run: sudo apt-get install --yes libpcap-dev
       - uses: ./.github/actions/bls
         name: Install BLS library
         if: "env.GIT_DIFF != ''"

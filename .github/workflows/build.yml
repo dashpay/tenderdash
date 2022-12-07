@@ -18,7 +18,7 @@ jobs:
       fail-fast: false
       matrix:
         goarch:
-        - "amd64"
+          - "amd64"
         # - "arm"
         goos: ["linux"]
     timeout-minutes: 5
