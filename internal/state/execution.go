@@ -376,18 +376,6 @@ func (blockExec *BlockExecutor) ValidateBlockChainLock(ctx context.Context, stat
 	return validateBlockChainLock(ctx, blockExec.appClient, state, block)
 }
 
-// ValidateBlockTime validates the given block time against the given state.
-// If the block is invalid, it returns an error.
-// Validation does not mutate state, but does require historical information from the stateDB,
-// ie. to verify evidence from a validator at an old height.
-func (blockExec *BlockExecutor) ValidateBlockTime(
-	allowedTimeWindow time.Duration,
-	state State,
-	block *types.Block,
-) error {
-	return validateBlockTime(allowedTimeWindow, state, block)
-}
-
 // FinalizeBlock validates the block against the state, fires the relevant events,
 // calls FinalizeBlock ABCI endpoint, and saves the new state and responses.
 // It returns the new state.

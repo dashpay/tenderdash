@@ -1397,19 +1397,19 @@ func (cs *State) isProposer() bool {
 	return cs.privValidator.IsProTxHashEqual(cs.Validators.GetProposer().ProTxHash)
 }
 
-// checkValidBlock returns true if cs.ValidBlock is set and still valid (not expired)
+// checkValidBlock returns true if cs.ValidBlock is set and valid
 func (cs *State) checkValidBlock() bool {
 	if cs.ValidBlock == nil {
 		return false
 	}
-	if err := cs.blockExec.ValidateBlockTime(cs.config.ProposedBlockTimeWindow, cs.state, cs.ValidBlock); err != nil {
+	sp := cs.state.ConsensusParams.Synchrony
+	if !cs.ValidBlock.IsTimely(cs.ValidBlockRecvTime, sp, cs.ValidRound) {
 		cs.logger.Debug(
 			"proposal block is outdated",
 			"height", cs.Height,
-			"round", cs.Round,
-			"error", err,
+			"round", cs.ValidRound,
+			"received", cs.ValidBlockRecvTime,
 			"block", cs.ValidBlock)
-
 		return false
 	}
 
@@ -1450,7 +1450,14 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 
 	// Make proposal
 	propBlockID := block.BlockID(blockParts)
-	proposal := types.NewProposal(height, block.CoreChainLockedHeight, round, cs.ValidRound, propBlockID, block.Header.Time)
+	proposal := types.NewProposal(
+		height,
+		block.CoreChainLockedHeight,
+		round,
+		cs.ValidRound,
+		propBlockID,
+		block.Header.Time,
+	)
 	proposal.SetCoreChainLockUpdate(block.CoreChainLock)
 	p := proposal.ToProto()
 	validatorsAtProposalHeight := cs.state.ValidatorsAtHeight(p.Height)
@@ -1574,7 +1581,15 @@ func (cs *State) createProposalBlock(ctx context.Context, round int32) (*types.B
 
 	proposerProTxHash := cs.privValidator.ProTxHash
 
-	ret, uncommittedState, err := cs.blockExec.CreateProposalBlock(ctx, cs.Height, round, cs.state, commit, proposerProTxHash, cs.proposedAppVersion)
+	ret, uncommittedState, err := cs.blockExec.CreateProposalBlock(
+		ctx,
+		cs.Height,
+		round,
+		cs.state,
+		commit,
+		proposerProTxHash,
+		cs.proposedAppVersion,
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -1653,6 +1668,13 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 			"received", tmtime.Canonical(cs.ProposalReceiveTime).Format(time.RFC3339Nano),
 			"msg_delay", sp.MessageDelay,
 			"precision", sp.Precision)
+		cs.signAddVote(ctx, tmproto.PrevoteType, types.BlockID{})
+		return
+	}
+
+	// Validate proposal core chain lock
+	if err := cs.blockExec.ValidateBlockChainLock(ctx, cs.state, cs.ProposalBlock); err != nil {
+		logger.Error("enterPrevote: ProposalBlock chain lock is invalid, prevoting nil", "err", err)
 		cs.signAddVote(ctx, tmproto.PrevoteType, types.BlockID{})
 		return
 	}
@@ -1744,26 +1766,6 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		if cs.ProposalBlock.HashesTo(cs.LockedBlock.Hash()) {
 			logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
 			cs.signAddVote(ctx, tmproto.PrevoteType, blockID)
-			return
-		}
-	}
-
-	// Validate proposal block
-	err = cs.blockExec.ValidateBlockChainLock(ctx, cs.state, cs.ProposalBlock)
-	if err != nil {
-		// ProposalBlock is invalid, prevote nil.
-		logger.Error("enterPrevote: ProposalBlock chain lock is invalid", "err", err)
-		cs.signAddVote(ctx, tmproto.PrevoteType, types.BlockID{})
-		return
-	}
-
-	// Validate proposal block time
-	if !allowOldBlocks {
-		err = cs.blockExec.ValidateBlockTime(cs.config.ProposedBlockTimeWindow, cs.state, cs.ProposalBlock)
-		if err != nil {
-			// ProposalBlock is invalid, prevote nil.
-			logger.Error("enterPrevote: ProposalBlock time is invalid", "err", err)
-			cs.signAddVote(ctx, tmproto.PrevoteType, types.BlockID{})
 			return
 		}
 	}
@@ -2439,7 +2441,7 @@ func (cs *State) RecordMetrics(height int64, block *types.Block) {
 func (cs *State) defaultSetProposal(proposal *types.Proposal, recvTime time.Time) error {
 	// Already have one
 	// TODO: possibly catch double proposals
-	if cs.Proposal != nil || proposal == nil {
+	if cs.Proposal != nil {
 		return nil
 	}
 
@@ -2661,6 +2663,7 @@ func (cs *State) handleCompleteProposal(ctx context.Context, height int64, fromR
 
 			cs.ValidRound = cs.Round
 			cs.ValidBlock = cs.ProposalBlock
+			cs.ValidBlockRecvTime = cs.ProposalReceiveTime
 			cs.ValidBlockParts = cs.ProposalBlockParts
 		}
 		// TODO: In case there is +2/3 majority in Prevotes set for some
@@ -2881,6 +2884,7 @@ func (cs *State) addVote(
 					cs.logger.Debug("updating valid block because of POL", "valid_round", cs.ValidRound, "pol_round", vote.Round)
 					cs.ValidRound = vote.Round
 					cs.ValidBlock = cs.ProposalBlock
+					cs.ValidBlockRecvTime = cs.ProposalReceiveTime
 					cs.ValidBlockParts = cs.ProposalBlockParts
 				} else {
 					cs.logger.Debug("valid block we do not know about; set ProposalBlock=nil",

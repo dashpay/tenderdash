@@ -513,6 +513,10 @@ func (h Header) ValidateBasic() error {
 	return nil
 }
 
+func (h Header) IsTimely(recvTime time.Time, sp SynchronyParams, round int32) bool {
+	return isTimely(h.Time, recvTime, sp, round)
+}
+
 // StateID returns a state ID of this block
 func (h *Header) StateID() tmproto.StateID {
 	var appHash []byte
