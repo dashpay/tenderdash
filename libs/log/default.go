@@ -100,13 +100,6 @@ func OverrideWithNewLogger(logger Logger, format, level string) error {
 	return nil
 }
 
-func (l defaultLogger) Output(w io.Writer) Logger {
-	return defaultLogger{
-		Logger: l.Logger.Output(w),
-		trace:  l.trace,
-	}
-}
-
 func getLogFields(keyVals ...interface{}) map[string]interface{} {
 	if len(keyVals)%2 != 0 {
 		return nil
