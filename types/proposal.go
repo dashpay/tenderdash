@@ -108,6 +108,8 @@ func (p *Proposal) ValidateBasic() error {
 //
 // For more information on the meaning of 'timely', see the proposer-based timestamp specification:
 // https://github.com/tendermint/tendermint/tree/master/spec/consensus/proposer-based-timestamp
+//
+// NOTE: by definition, at initial height, recvTime MUST be genesis time.
 func (p *Proposal) IsTimely(recvTime time.Time, sp SynchronyParams, round int32) bool {
 	return isTimely(p.Timestamp, recvTime, sp, round)
 }

@@ -1402,7 +1402,12 @@ func (cs *State) checkValidBlock() bool {
 	if cs.ValidBlock == nil {
 		return false
 	}
-	sp := cs.state.ConsensusParams.Synchrony
+	sp := cs.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
+	if cs.Height == cs.state.InitialHeight {
+		// by definition, initial block must have genesis time
+		return cs.ValidBlock.Time.Equal(cs.state.LastBlockTime)
+	}
+
 	if !cs.ValidBlock.IsTimely(cs.ValidBlockRecvTime, sp, cs.ValidRound) {
 		cs.logger.Debug(
 			"proposal block is outdated",
@@ -1634,6 +1639,11 @@ func (cs *State) enterPrevote(ctx context.Context, height int64, round int32, al
 }
 
 func (cs *State) proposalIsTimely() bool {
+	if cs.Height == cs.state.InitialHeight {
+		// by definition, initial block must have genesis time
+		return cs.Proposal.Timestamp.Equal(cs.state.LastBlockTime)
+	}
+
 	sp := cs.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
 	return cs.Proposal.IsTimely(cs.ProposalReceiveTime, sp, cs.Round)
 }
@@ -2660,11 +2670,7 @@ func (cs *State) handleCompleteProposal(ctx context.Context, height int64, fromR
 			cs.logger.Debug("updating valid block to new proposal block",
 				"valid_round", cs.Round,
 				"valid_block_hash", tmstrings.LazyBlockHash(cs.ProposalBlock))
-
-			cs.ValidRound = cs.Round
-			cs.ValidBlock = cs.ProposalBlock
-			cs.ValidBlockRecvTime = cs.ProposalReceiveTime
-			cs.ValidBlockParts = cs.ProposalBlockParts
+			cs.updateValidBlock()
 		}
 		// TODO: In case there is +2/3 majority in Prevotes set for some
 		// block and cs.ProposalBlock contains different block, either
@@ -2696,6 +2702,13 @@ func (cs *State) handleCompleteProposal(ctx context.Context, height int64, fromR
 			"hash", cs.ProposalBlock.Hash())
 		cs.tryFinalizeCommit(ctx, height)
 	}
+}
+
+func (cs *State) updateValidBlock() {
+	cs.ValidRound = cs.Round
+	cs.ValidBlock = cs.ProposalBlock
+	cs.ValidBlockRecvTime = cs.ProposalReceiveTime
+	cs.ValidBlockParts = cs.ProposalBlockParts
 }
 
 // Attempt to add the vote. if its a duplicate signature, dupeout the validator
@@ -2882,10 +2895,7 @@ func (cs *State) addVote(
 			if cs.ValidRound < vote.Round && vote.Round == cs.Round {
 				if cs.ProposalBlock.HashesTo(blockID.Hash) {
 					cs.logger.Debug("updating valid block because of POL", "valid_round", cs.ValidRound, "pol_round", vote.Round)
-					cs.ValidRound = vote.Round
-					cs.ValidBlock = cs.ProposalBlock
-					cs.ValidBlockRecvTime = cs.ProposalReceiveTime
-					cs.ValidBlockParts = cs.ProposalBlockParts
+					cs.updateValidBlock()
 				} else {
 					cs.logger.Debug("valid block we do not know about; set ProposalBlock=nil",
 						"proposal", tmstrings.LazyBlockHash(cs.ProposalBlock),
@@ -3162,7 +3172,11 @@ func (cs *State) bypassCommitTimeout() bool {
 func (cs *State) calculateProposalTimestampDifferenceMetric() {
 	if cs.Proposal != nil && cs.Proposal.POLRound == -1 {
 		sp := cs.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
-		isTimely := cs.Proposal.IsTimely(cs.ProposalReceiveTime, sp, cs.Round)
+		recvTime := cs.ProposalReceiveTime
+		if cs.Height == cs.state.InitialHeight {
+			recvTime = cs.state.LastBlockTime // genesis time
+		}
+		isTimely := cs.Proposal.IsTimely(recvTime, sp, cs.Round)
 		cs.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", isTimely)).
 			Observe(cs.ProposalReceiveTime.Sub(cs.Proposal.Timestamp).Seconds())
 	}
