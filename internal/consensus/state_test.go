@@ -17,6 +17,7 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
+	"github.com/tendermint/tendermint/internal/mempool"
 	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
 	tmquery "github.com/tendermint/tendermint/internal/pubsub/query"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
@@ -1481,7 +1482,7 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
+	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, logger: consensusLogger(t)})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 	height, round := cs1.Height, cs1.Round
 
@@ -1507,6 +1508,12 @@ func TestStateLock_POLSafety2(t *testing.T) {
 		vs2, vs3, vs4)
 
 	// the block for round 1
+	// We add some tx so that the proposal will differ from the round 0 one
+	// We cannot rely on time because blocks at initial height have genesis time
+	mpool := (cs1.txNotifier).(mempool.Mempool)
+	err = mpool.CheckTx(ctx, types.Tx("round1"), nil, mempool.TxInfo{})
+	assert.NoError(t, err)
+
 	prop1, propBlock1 := decideProposal(ctx, t, cs1, vs2, vs2.Height, vs2.Round+1)
 	propBlockParts1, err := propBlock1.MakePartSet(partSize)
 	require.NoError(t, err)
@@ -1531,6 +1538,9 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	ensurePrecommit(t, voteCh, height, round)
 	// the proposed block should now be locked and our precommit added
 	validatePrecommit(ctx, t, cs1, round, round, vss[0], propBlockID1.Hash, propBlockID1.Hash)
+
+	assert.True(t, cs1.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
+	assert.Equal(t, round, cs1.LockedRound, "invalid round locked")
 
 	// add precommits from the rest
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs4)
@@ -1565,6 +1575,7 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	ensureNewProposal(t, proposalCh, height, round)
 
 	ensurePrevote(t, voteCh, height, round)
+	assert.True(t, cs1.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
 	validatePrevote(ctx, t, cs1, round, vss[0], nil)
 
 }
