@@ -262,10 +262,14 @@ func TestStateProposalTime(t *testing.T) {
 	config := configSetup(t)
 
 	cs1, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1})
-	height, round := cs1.Height, cs1.Round
-	cs1.config.ProposedBlockTimeWindow = 1 * time.Second
 	cs1.config.DontAutoPropose = true
 	cs1.config.CreateEmptyBlocksInterval = 0
+	cs1.state.ConsensusParams.Synchrony.MessageDelay = 5 * time.Millisecond
+	cs1.state.ConsensusParams.Synchrony.Precision = 10 * time.Millisecond
+
+	height, round := cs1.Height, cs1.Round
+	delay := cs1.state.ConsensusParams.Synchrony.MessageDelay
+	precision := cs1.state.ConsensusParams.Synchrony.Precision
 
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
 
@@ -285,7 +289,7 @@ func TestStateProposalTime(t *testing.T) {
 			expectNewBlock: false,
 		},
 		{ // TEST 1: BLOCK TIME IS IN FUTURE
-			blockTimeFunc:  func(s *State) time.Time { return time.Now().Add(s.config.ProposedBlockTimeWindow + 24*time.Hour) },
+			blockTimeFunc:  func(s *State) time.Time { return time.Now().Add(delay + precision + 24*time.Hour) },
 			expectNewBlock: true,
 		},
 		{ // TEST 2: BLOCK TIME IS OLDER THAN PREVIOUS BLOCK TIME
@@ -294,7 +298,7 @@ func TestStateProposalTime(t *testing.T) {
 		},
 		{ // TEST 3: BLOCK TIME IS IN THE PAST, PROPOSAL IS NEW
 			blockTimeFunc:  nil,
-			sleep:          cs1.config.ProposedBlockTimeWindow + 1*time.Millisecond,
+			sleep:          delay + precision + 1*time.Millisecond,
 			expectNewBlock: true,
 		},
 	}

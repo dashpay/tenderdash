@@ -634,8 +634,8 @@ const testGenesisFmt = `{
 			"time_iota_ms": "10"
 		},
 		"synchrony": {
-			"message_delay": "500000000",
-			"precision": "10000000"
+			"message_delay": "500000123",
+			"precision": "10000456"
 		},
 		"timeout": {
 			"propose": "30000000",
