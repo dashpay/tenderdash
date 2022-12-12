@@ -1324,18 +1324,20 @@ func (cs *State) enterPropose(ctx context.Context, height int64, round int32) {
 	logger := cs.logger.With("height", height, "round", round)
 
 	if cs.Height != height || round < cs.Round || (cs.Round == round && cstypes.RoundStepPropose <= cs.Step) {
-		logger.Debug("entering propose step with invalid args",
-			"height", cs.Height,
-			"round", cs.Round,
-			"step", cs.Step)
+		logger.Debug("entering propose step with invalid args", "step", cs.Step)
 		return
 	}
 
 	// If this validator is the proposer of this round, and the previous block time is later than
 	// our local clock time, wait to propose until our local clock time has passed the block time.
 	if cs.isProposer() {
-		proposerWaitTime := proposerWaitTime(tmtime.DefaultSource{}, cs.state.LastBlockTime)
+		proposerWaitTime := proposerWaitTime(tmtime.Now(), cs.state.LastBlockTime)
 		if proposerWaitTime > 0 {
+			cs.logger.Debug("enter propose: latest block is newer, sleeping",
+				"duration", proposerWaitTime.String(),
+				"last_block_time", cs.state.LastBlockTime,
+				"now", tmtime.Now(),
+			)
 			cs.scheduleTimeout(proposerWaitTime, height, round, cstypes.RoundStepNewRound)
 			return
 		}
@@ -3188,8 +3190,7 @@ func (cs *State) calculateProposalTimestampDifferenceMetric() {
 // Block times must be monotonically increasing, so if the block time of the previous
 // block is larger than the proposer's current time, then the proposer will sleep
 // until its local clock exceeds the previous block time.
-func proposerWaitTime(lt tmtime.Source, bt time.Time) time.Duration {
-	t := lt.Now()
+func proposerWaitTime(t time.Time, bt time.Time) time.Duration {
 	if bt.After(t) {
 		return bt.Sub(t)
 	}
