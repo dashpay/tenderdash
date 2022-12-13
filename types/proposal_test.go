@@ -2,7 +2,6 @@ package types
 
 import (
 	"context"
-	"encoding/hex"
 	"math"
 	"testing"
 	"time"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/libs/protoio"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -117,14 +115,6 @@ func TestProposalVerifySignature(t *testing.T) {
 	require.Equal(t, string(signID), string(newSignID))
 	valid = pubKey.VerifySignatureDigest(newSignID, np.Signature)
 	require.True(t, valid)
-}
-
-func decodeHex(s string) tmbytes.HexBytes {
-	decoded, err := hex.DecodeString(s)
-	if err != nil {
-		panic("cannot decode hex: " + err.Error())
-	}
-	return decoded
 }
 
 func BenchmarkProposalWriteSignBytes(b *testing.B) {
