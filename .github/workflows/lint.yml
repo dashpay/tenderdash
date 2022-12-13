@@ -1,3 +1,4 @@
+---
 name: Golang Linter
 # Lint runs golangci-lint over the entire Tendermint repository.
 #
