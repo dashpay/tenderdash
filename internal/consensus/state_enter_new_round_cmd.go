@@ -101,7 +101,10 @@ func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behaviour *Behaviou
 	} else if !cs.config.DontAutoPropose {
 		// DontAutoPropose should always be false, except for
 		// specific tests where proposals are created manually
-		_ = behaviour.EnterPropose(ctx, appState, EnterProposeEvent{Height: height, Round: round})
+		err = behaviour.EnterPropose(ctx, appState, EnterProposeEvent{Height: height, Round: round})
+		if err != nil {
+			return nil, err
+		}
 	}
 	return nil, nil
 }

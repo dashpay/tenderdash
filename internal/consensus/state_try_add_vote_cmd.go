@@ -240,7 +240,10 @@ func (cs *TryAddVoteCommand) addVote(
 					cs.metrics.MarkBlockGossipStarted()
 					appState.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
 				}
-
+				err = appState.Save()
+				if err != nil {
+					return false, err
+				}
 				cs.eventPublisher.PublishValidBlockEvent(appState.RoundState)
 			}
 		}

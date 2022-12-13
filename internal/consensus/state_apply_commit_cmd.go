@@ -100,8 +100,10 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behaviour *Behaviour,
 
 	// NewHeightStep!
 	appState.updateToState(stateCopy, commit)
-
-	appState.Save()
+	err = appState.Save()
+	if err != nil {
+		return nil, err
+	}
 
 	behaviour.newStep(appState.RoundState)
 

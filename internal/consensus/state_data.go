@@ -410,36 +410,20 @@ func (s *AppState) verifyCommit(ctx context.Context, commit *types.Commit, peerI
 	return true, nil
 }
 
-func (s *AppState) updateProposalBlockAndPartsBeforeCommit(blockID types.BlockID) {
+func (s *AppState) isLockedBlockEqual(blockID types.BlockID) bool {
+	return s.LockedBlock.HashesTo(blockID.Hash)
+}
+
+func (s *AppState) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 	// The Locked* fields no longer matter.
 	// Move them over to ProposalBlock if they match the commit hash,
 	// otherwise they'll be cleared in updateToState.
-	if s.LockedBlock.HashesTo(blockID.Hash) {
-		s.logger.Debug("commit is for a locked block; set ProposalBlock=LockedBlock", "block_hash", blockID.Hash)
-		s.ProposalBlock = s.LockedBlock
-		s.ProposalBlockParts = s.LockedBlockParts
+	if !s.isLockedBlockEqual(blockID) {
+		return
 	}
-
-	// If we don't have the block being committed, set up to get it.
-	if !s.ProposalBlock.HashesTo(blockID.Hash) && !s.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
-		s.logger.Info(
-			"commit is for a block we do not know about; set ProposalBlock=nil",
-			"proposal", s.ProposalBlock.Hash(),
-			"commit", blockID.Hash,
-		)
-
-		// We're getting the wrong block.
-		// Set up ProposalBlockParts and keep waiting.
-		s.ProposalBlock = nil
-		s.metrics.MarkBlockGossipStarted()
-		s.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
-
-		// TODO it looks a bug
-		//if err := cs.eventBus.PublishEventValidBlock(s.RoundStateEvent()); err != nil {
-		//	s.logger.Error("failed publishing valid block", "err", err)
-		//}
-		//cs.evsw.FireEvent(types.EventValidBlockValue, &s.RoundState)
-	}
+	s.ProposalBlock = s.LockedBlock
+	s.ProposalBlockParts = s.LockedBlockParts
+	s.logger.Debug("commit is for a locked block; set ProposalBlock=LockedBlock", "block_hash", blockID.Hash)
 }
 
 func (s *AppState) proposeTimeout(round int32) time.Duration {

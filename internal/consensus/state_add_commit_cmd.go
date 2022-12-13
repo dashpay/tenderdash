@@ -22,7 +22,10 @@ func (cs *AddCommitCommand) Execute(ctx context.Context, behaviour *Behaviour, s
 	commit := event.Commit
 	appState := stateEvent.AppState
 	// The commit is all good, let's apply it to the state
-	appState.updateProposalBlockAndPartsBeforeCommit(commit.BlockID)
+	err = behaviour.updateProposalBlockAndParts(appState, commit.BlockID)
+	if err != nil {
+		return nil, err
+	}
 
 	appState.updateRoundStep(appState.Round, cstypes.RoundStepApplyCommit)
 	appState.CommitRound = commit.Round

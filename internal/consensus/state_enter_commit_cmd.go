@@ -61,8 +61,8 @@ func (cs *EnterCommitCommand) Execute(ctx context.Context, behaviour *Behaviour,
 		panic("RunActionCommit() expects +2/3 precommits")
 	}
 
-	appState.updateProposalBlockAndPartsBeforeCommit(blockID)
-	return nil, nil
+	err := behaviour.updateProposalBlockAndParts(appState, blockID)
+	return nil, err
 }
 
 func (cs *EnterCommitCommand) Subscribe(observer *Observer) {

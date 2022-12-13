@@ -230,6 +230,7 @@ func startTestRound(ctx context.Context, cs *State, height int64, round int32) {
 	appState := cs.GetAppState()
 	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
 	_ = cs.behaviour.EnterNewRound(ctx, &appState, EnterNewRoundEvent{Height: height, Round: round})
+	_ = appState.Save()
 	cs.startRoutines(ctx, 0)
 }
 

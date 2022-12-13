@@ -117,6 +117,33 @@ func (b *Behaviour) execCommand(ctx context.Context, et EventType, appState *App
 	return b.commander.Execute(ctx, b, stateEvent)
 }
 
+func (b *Behaviour) updateProposalBlockAndParts(appState *AppState, blockID types.BlockID) error {
+	appState.replaceProposalBlockOnLockedBlock(blockID)
+	if appState.ProposalBlock.HashesTo(blockID.Hash) || appState.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
+		return nil
+	}
+	// If we don't have the block being committed, set up to get it.
+	b.logger.Info(
+		"commit is for a block we do not know about; set ProposalBlock=nil",
+		"proposal", appState.ProposalBlock.Hash(),
+		"commit", blockID.Hash,
+	)
+	// We're getting the wrong block.
+	// Set up ProposalBlockParts and keep waiting.
+	appState.ProposalBlock = nil
+	appState.metrics.MarkBlockGossipStarted()
+	appState.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
+	err := appState.Save()
+	if err != nil {
+		return err
+	}
+	if err := b.eventBus.PublishEventValidBlock(appState.RoundStateEvent()); err != nil {
+		b.logger.Error("failed publishing valid block", "err", err)
+	}
+	b.evsw.FireEvent(types.EventValidBlockValue, &appState.RoundState)
+	return nil
+}
+
 // ScheduleRound0 enterNewRoundCommand(height, 0) at cs.StartTime
 func (b *Behaviour) ScheduleRound0(rs cstypes.RoundState) {
 	// b.logger.Info("scheduleRound0", "now", tmtime.Now(), "startTime", b.StartTime)

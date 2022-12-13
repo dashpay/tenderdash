@@ -53,7 +53,10 @@ func (cs *AddProposalBlockPartCommand) Execute(ctx context.Context, behaviour *B
 	}
 
 	if added && commitNotExist && appState.ProposalBlockParts.IsComplete() {
-		cs.handleCompleteProposal(ctx, behaviour, appState, event.Msg.Height, event.FromReplay)
+		err = cs.handleCompleteProposal(ctx, behaviour, appState, event.Msg.Height, event.FromReplay)
+		if err != nil {
+			return nil, err
+		}
 	}
 	return added, nil
 }
@@ -189,7 +192,7 @@ func (cs *AddProposalBlockPartCommand) handleCompleteProposal(
 	appState *AppState,
 	height int64,
 	fromReplay bool,
-) {
+) error {
 	// Update Valid* if we can.
 	prevotes := appState.Votes.Prevotes(appState.Round)
 	blockID, hasTwoThirds := prevotes.TwoThirdsMajority()
@@ -202,6 +205,10 @@ func (cs *AddProposalBlockPartCommand) handleCompleteProposal(
 			appState.ValidRound = appState.Round
 			appState.ValidBlock = appState.ProposalBlock
 			appState.ValidBlockParts = appState.ProposalBlockParts
+			err := appState.Save()
+			if err != nil {
+				return err
+			}
 		}
 		// TODO: In case there is +2/3 majority in Prevotes set for some
 		// block and cs.ProposalBlock contains different block, either
@@ -242,6 +249,7 @@ func (cs *AddProposalBlockPartCommand) handleCompleteProposal(
 		)
 		behaviour.TryFinalizeCommit(ctx, appState, TryFinalizeCommitEvent{Height: height})
 	}
+	return nil
 }
 
 func (cs *AddProposalBlockPartCommand) Subscribe(observer *Observer) {
