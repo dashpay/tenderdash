@@ -59,7 +59,7 @@ type pbtsTestHarness struct {
 	currentHeight int64
 	currentRound  int32
 
-	logger log.TestingLogger
+	logger *log.TestingLogger
 }
 
 type pbtsTestHeightConfiguration struct {

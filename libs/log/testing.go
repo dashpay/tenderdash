@@ -9,16 +9,6 @@ import (
 	"github.com/rs/zerolog"
 )
 
-type TestingLogger interface {
-	Logger
-	// AssertContains definies assertions that will be applied to each subsequent log item.
-	// It must be called before the log is generated.
-	//
-	// Note that assertions are only executed on logs matching defined log level.
-	// Use NewTestingLoggerWithLevel(t, zerolog.LevelDebugValue) to control this.
-	AssertMatch(*regexp.Regexp)
-}
-
 // NewTestingLogger converts a testing.T into a logging interface to
 // make test failures and verbose provide better feedback associated
 // with test failures. This logging instance is safe for use from
@@ -32,7 +22,7 @@ type TestingLogger interface {
 // Users should be careful to ensure that no calls to this logger are
 // made in goroutines that are running after (which, by the rules of
 // testing.TB will panic.)
-func NewTestingLogger(t testing.TB) TestingLogger {
+func NewTestingLogger(t testing.TB) *TestingLogger {
 	t.Helper()
 	level := LogLevelError
 	if testing.Verbose() {
@@ -43,7 +33,7 @@ func NewTestingLogger(t testing.TB) TestingLogger {
 
 // NewTestingLoggerWithLevel creates a testing logger instance at a
 // specific level that wraps the behavior of testing.T.Log().
-func NewTestingLoggerWithLevel(t testing.TB, level string) TestingLogger {
+func NewTestingLoggerWithLevel(t testing.TB, level string) *TestingLogger {
 	t.Helper()
 	t.Cleanup(func() {
 		// we need time to properly flush all logs, otherwise test can fail with race condition
@@ -54,7 +44,7 @@ func NewTestingLoggerWithLevel(t testing.TB, level string) TestingLogger {
 		t.Fatalf("failed to parse log level (%s): %v", level, err)
 	}
 
-	logger := &testingLogger{
+	logger := &TestingLogger{
 		t:          t,
 		assertions: []assertion{},
 	}
@@ -72,7 +62,7 @@ func NewTestingLoggerWithLevel(t testing.TB, level string) TestingLogger {
 	return logger
 }
 
-type testingLogger struct {
+type TestingLogger struct {
 	defaultLogger
 
 	t          testing.TB
@@ -85,7 +75,7 @@ type assertion struct {
 	passed bool
 }
 
-func (tw *testingLogger) AssertionsPassed() bool {
+func (tw *TestingLogger) AssertionsPassed() bool {
 	tw.t.Helper()
 
 	tw.mtx.Lock()
@@ -101,7 +91,13 @@ func (tw *testingLogger) AssertionsPassed() bool {
 	return passed
 }
 
-func (tw *testingLogger) AssertMatch(re *regexp.Regexp) {
+// AssertMatch definies assertions to check for each subsequent
+// log item. It must be called before the log is generated.
+// Assertion will pass if at least one log matches regexp `re`.
+//
+// Note that assertions are only executed on logs matching defined log level.
+// Use NewTestingLoggerWithLevel(t, zerolog.LevelDebugValue) to control this.
+func (tw *TestingLogger) AssertMatch(re *regexp.Regexp) {
 	tw.mtx.Lock()
 	defer tw.mtx.Unlock()
 	tw.assertions = append(tw.assertions, assertion{match: *re})
@@ -110,7 +106,7 @@ func (tw *testingLogger) AssertMatch(re *regexp.Regexp) {
 
 // Run implements zerolog.Hook.
 // Execute all log assertions against a message.
-func (tw *testingLogger) checkAssertions(msg string) {
+func (tw *TestingLogger) checkAssertions(msg string) {
 	tw.mtx.Lock()
 	defer tw.mtx.Unlock()
 
@@ -121,7 +117,7 @@ func (tw *testingLogger) checkAssertions(msg string) {
 	}
 }
 
-func (tw *testingLogger) Write(in []byte) (int, error) {
+func (tw *TestingLogger) Write(in []byte) (int, error) {
 	s := string(in)
 	tw.t.Log(s)
 	tw.checkAssertions(s)
