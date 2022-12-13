@@ -274,17 +274,11 @@ func (state State) MakeBlock(
 	proposerProTxHash types.ProTxHash,
 	proposedAppVersion uint64,
 ) *types.Block {
-	var blockTime time.Time
-
 	// Build base block with block data.
 	block := types.MakeBlock(height, txs, lastCommit, evidence)
-	if height == state.InitialHeight {
-		blockTime = state.LastBlockTime // genesis time
-	} else {
-		blockTime = tmtime.Now()
-	}
 
 	// Fill rest of header with state data.
+	blockTime := state.makeBlockTime(height)
 	validatorsHash := state.Validators.Hash()
 	block.Header.Populate(
 		state.Version.Consensus,
@@ -395,4 +389,12 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 
 		LastAppHash: genDoc.AppHash,
 	}, nil
+}
+
+// makeBlockTime determines time for a new block
+func (state State) makeBlockTime(height int64) time.Time {
+	if height == state.InitialHeight {
+		return state.LastBlockTime // genesis time
+	}
+	return tmtime.Now()
 }
