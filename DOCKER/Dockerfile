@@ -1,5 +1,5 @@
 # stage 1 Generate Tenderdash Binary
-FROM golang:1.18-alpine3.15 AS builder
+FROM golang:1.19-alpine3.17 AS builder
 
 RUN apk update && \
     apk upgrade && \
@@ -13,7 +13,7 @@ RUN make install-bls
 RUN make build-linux
 
 # stage 2
-FROM alpine:3.15
+FROM alpine:3.17
 LABEL maintainer="developers@dash.org"
 
 # Tenderdash will be looking for the genesis file in /tenderdash/config/genesis.json
