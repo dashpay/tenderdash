@@ -296,7 +296,6 @@ func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
 	}
 	publicKey, err := bls.G1ElementFromBytes(pubKey)
 	if err != nil {
-		// fmt.Printf("bls verifying error (publicKey) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
 		return false
 	}
 	blsSignature, err := bls.G2ElementFromBytes(sig)
@@ -306,12 +305,7 @@ func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
 	}
 	var h bls.Hash
 	copy(h[:], hash)
-	verified := bls.ThresholdVerify(publicKey, h, blsSignature)
-	//  if !verified {
-	//	  fmt.Printf("bls verified (%t) sig %X from message %X with key %X\n", verified, sig, msg, pubKey.Bytes())
-	//	  debug.PrintStack()
-	//  }
-	return verified
+	return bls.ThresholdVerify(publicKey, h, blsSignature)
 }
 
 func (pubKey PubKey) VerifySignature(msg []byte, sig []byte) bool {
@@ -334,12 +328,7 @@ func (pubKey PubKey) VerifySignature(msg []byte, sig []byte) bool {
 		// fmt.Printf("bls verifying error (blsSignature) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
 		return false
 	}
-	verified := bls.NewAugSchemeMPL().Verify(publicKey, msg, sig1)
-	//  if !verified {
-	//	  fmt.Printf("bls verified (%t) sig %X from message %X with key %X\n", verified, sig, msg, pubKey.Bytes())
-	//	  debug.PrintStack()
-	//  }
-	return verified
+	return bls.NewAugSchemeMPL().Verify(publicKey, msg, sig1)
 }
 
 func (pubKey PubKey) String() string {
