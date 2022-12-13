@@ -164,6 +164,19 @@ func VoteExtensionsFromProto(pve []*tmproto.VoteExtension) VoteExtensions {
 	return voteExtensions
 }
 
+// Copy creates a deep copy of VoteExtensions
+func (e VoteExtensions) Copy() VoteExtensions {
+	copied := make(VoteExtensions, len(e))
+	for extType, extensions := range e {
+		copied[extType] = make([]VoteExtension, len(extensions))
+		for k, v := range extensions {
+			copied[extType][k] = v.Clone()
+		}
+	}
+
+	return copied
+}
+
 // CopySignsFromProto copies the signatures from VoteExtensions's protobuf into the current VoteExtension state
 func (e VoteExtensions) CopySignsFromProto(src tmproto.VoteExtensions) error {
 	return e.copySigns(src, func(a *tmproto.VoteExtension, b *VoteExtension) {

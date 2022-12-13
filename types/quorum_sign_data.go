@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/rs/zerolog"
 
 	"github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
@@ -18,21 +19,20 @@ var (
 // QuorumSignData holds data which is necessary for signing and verification block, state, and each vote-extension in a list
 type QuorumSignData struct {
 	Block      SignItem
-	State      SignItem
 	Extensions map[types.VoteExtensionType][]SignItem
 }
 
 // Verify verifies a quorum signatures: block, state and vote-extensions
 func (q QuorumSignData) Verify(pubKey crypto.PubKey, signs QuorumSigns) error {
-	return NewQuorumSingsVerifier(q).Verify(pubKey, signs)
+	return NewQuorumSignsVerifier(q).Verify(pubKey, signs)
 }
 
 // SignItem represents quorum sign data, like a request id, message bytes, sha256 hash of message and signID
 type SignItem struct {
-	ReqID []byte
-	ID    []byte
-	Raw   []byte
-	Hash  []byte
+	ReqID []byte // Request ID for quorum signing
+	ID    []byte // Signature ID
+	Raw   []byte // Raw data to be signed
+	Hash  []byte // Checksum of Raw
 }
 
 // Validate validates prepared data for signing
@@ -43,6 +43,13 @@ func (i *SignItem) Validate() error {
 	return nil
 }
 
+func (i SignItem) MarshalZerologObject(e *zerolog.Event) {
+	e.Hex("signBytes", i.Raw)
+	e.Hex("signRequestID", i.ReqID)
+	e.Hex("signID", i.ID)
+	e.Hex("signHash", i.Hash)
+}
+
 // MakeQuorumSignsWithVoteSet creates and returns QuorumSignData struct built with a vote-set and an added vote
 func MakeQuorumSignsWithVoteSet(voteSet *VoteSet, vote *types.Vote) (QuorumSignData, error) {
 	return MakeQuorumSigns(
@@ -50,7 +57,6 @@ func MakeQuorumSignsWithVoteSet(voteSet *VoteSet, vote *types.Vote) (QuorumSignD
 		voteSet.valSet.QuorumType,
 		voteSet.valSet.QuorumHash,
 		vote,
-		voteSet.stateID,
 	)
 }
 
@@ -61,11 +67,9 @@ func MakeQuorumSigns(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	protoVote *types.Vote,
-	stateID StateID,
 ) (QuorumSignData, error) {
 	quorumSign := QuorumSignData{
 		Block: MakeBlockSignItem(chainID, protoVote, quorumType, quorumHash),
-		State: MakeStateSignItem(chainID, stateID, quorumType, quorumHash),
 	}
 	var err error
 	quorumSign.Extensions, err = MakeVoteExtensionSignItems(chainID, protoVote, quorumType, quorumHash)
@@ -77,16 +81,17 @@ func MakeQuorumSigns(
 
 // MakeBlockSignItem creates SignItem struct for a block
 func MakeBlockSignItem(chainID string, vote *types.Vote, quorumType btcjson.LLMQType, quorumHash []byte) SignItem {
-	reqID := voteHeightRoundRequestID("dpbvote", vote.Height, vote.Round)
-	raw := VoteBlockSignBytes(chainID, vote)
+	reqID := BlockRequestID(vote.Height, vote.Round)
+	raw, err := vote.SignBytes(chainID)
+	if err != nil {
+		panic(fmt.Errorf("block sign item: %w", err))
+	}
 	return NewSignItem(quorumType, quorumHash, reqID, raw)
 }
 
-// MakeStateSignItem creates SignItem struct for a state
-func MakeStateSignItem(chainID string, stateID StateID, quorumType btcjson.LLMQType, quorumHash []byte) SignItem {
-	reqID := stateID.SignRequestID()
-	raw := stateID.SignBytes(chainID)
-	return NewSignItem(quorumType, quorumHash, reqID, raw)
+// BlockRequestID returns a block request ID
+func BlockRequestID(height int64, round int32) []byte {
+	return heightRoundRequestID("dpbvote", height, round)
 }
 
 // MakeVoteExtensionSignItems  creates a list SignItem structs for a vote extensions
@@ -104,7 +109,7 @@ func MakeVoteExtensionSignItems(
 		return nil, nil
 	}
 	items := make(map[types.VoteExtensionType][]SignItem)
-	reqID := VoteExtensionRequestID(protoVote)
+	reqID := VoteExtensionRequestID(protoVote.Height, protoVote.Round)
 	protoExtensionsMap := protoVote.VoteExtensionsToMap()
 	for t, exts := range protoExtensionsMap {
 		if items[t] == nil && len(exts) > 0 {

@@ -9,8 +9,9 @@ package eventlog
 import (
 	"context"
 	"errors"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/internal/eventlog/cursor"
 	"github.com/tendermint/tendermint/types"
@@ -24,9 +25,9 @@ import (
 // any number of readers.
 type Log struct {
 	// These values do not change after construction.
-	windowSize    time.Duration
-	maxItems      int
-	numItemsGauge gauge
+	windowSize time.Duration
+	maxItems   int
+	metrics    *Metrics
 
 	// Protects access to the fields below.  Lock to modify the values of these
 	// fields, or to read or snapshot the values.
@@ -45,14 +46,14 @@ func New(opts LogSettings) (*Log, error) {
 		return nil, errors.New("window size must be positive")
 	}
 	lg := &Log{
-		windowSize:    opts.WindowSize,
-		maxItems:      opts.MaxItems,
-		numItemsGauge: discard{},
-		ready:         make(chan struct{}),
-		source:        opts.Source,
+		windowSize: opts.WindowSize,
+		maxItems:   opts.MaxItems,
+		metrics:    NopMetrics(),
+		ready:      make(chan struct{}),
+		source:     opts.Source,
 	}
 	if opts.Metrics != nil {
-		lg.numItemsGauge = opts.Metrics.numItemsGauge
+		lg.metrics = opts.Metrics
 	}
 	return lg, nil
 }

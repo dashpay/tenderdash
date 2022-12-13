@@ -143,7 +143,7 @@ func (va ValidatorAddress) NetAddress() (*NetAddress, error) {
 // It will panic in (very unlikely) case of error.
 func RandValidatorAddress() ValidatorAddress {
 	nodeID := tmrand.Bytes(20)
-	port := rand.Int()%math.MaxUint16 + 1 // nolint
+	port := rand.Int()%math.MaxUint16 + 1 //nolint:gosec
 	addr, err := ParseValidatorAddress(fmt.Sprintf("tcp://%x@127.0.0.1:%d", nodeID, port))
 	if err != nil {
 		panic(fmt.Sprintf("cannot generate random validator address: %s", err))

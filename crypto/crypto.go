@@ -20,9 +20,7 @@ const (
 	// AddressSize is the size of a pubkey address.
 	AddressSize        = 20
 	DefaultHashSize    = 32
-	LargeAppHashSize   = DefaultHashSize
-	SmallAppHashSize   = 20
-	DefaultAppHashSize = LargeAppHashSize
+	DefaultAppHashSize = DefaultHashSize
 	ProTxHashSize      = DefaultHashSize
 	QuorumHashSize     = DefaultHashSize
 )

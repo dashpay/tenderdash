@@ -3,11 +3,11 @@ package consensus
 import (
 	"context"
 	"fmt"
-	"os"
 	"path"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -33,6 +33,10 @@ import (
 // Byzantine node sends two different prevotes (nil and blockID) to the same
 // validator.
 func TestByzantinePrevoteEquivocation(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// empirically, this test either passes in <1s or hits some
 	// kind of deadlock and hit the larger timeout. This timeout
 	// can be extended a bunch if needed, but it's good to avoid
@@ -52,20 +56,19 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 
 	for i := 0; i < nValidators; i++ {
 		func() {
-			logger := consensusLogger().With("test", "byzantine", "validator", i)
+			logger := consensusLogger(t).With("test", "byzantine", "validator", i)
 			stateDB := dbm.NewMemDB() // each state needs its own db
 			stateStore := sm.NewStore(stateDB)
 			state, err := sm.MakeGenesisState(genDoc)
 			require.NoError(t, err)
 			require.NoError(t, stateStore.Save(state))
 
-			thisConfig, err := ResetConfig(t.TempDir(), fmt.Sprintf("%s_%d", testName, i))
+			thisConfig, err := ResetConfig(t, fmt.Sprintf("%s_%d", testName, i))
 			require.NoError(t, err)
 
-			defer os.RemoveAll(thisConfig.RootDir)
-
 			ensureDir(t, path.Dir(thisConfig.Consensus.WalFile()), 0700) // dir for wal
-			app := kvstore.NewApplication()
+			app, err := kvstore.NewMemoryApp()
+			require.NoError(t, err)
 			vals := types.TM2PB.ValidatorUpdates(state.Validators)
 			_, err = app.InitChain(ctx, &abci.RequestInitChain{ValidatorSet: &vals})
 			require.NoError(t, err)
@@ -95,8 +98,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			evpool := evidence.NewPool(logger.With("module", "evidence"), evidenceDB, stateStore, blockStore, evidence.NopMetrics(), eventBus)
 
 			// Make State
-			blockExec := sm.NewBlockExecutor(stateStore, log.NewNopLogger(), proxyAppConnCon, mp, evpool,
-				blockStore, eventBus, sm.NopMetrics())
+			blockExec := sm.NewBlockExecutor(stateStore, proxyAppConnCon, mp, evpool, blockStore, eventBus)
 			cs, err := NewState(logger, thisConfig.Consensus, stateStore, blockExec, blockStore, mp, evpool, eventBus)
 			require.NoError(t, err)
 			// set private validator
@@ -128,15 +130,16 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	// alter prevote so that the byzantine node double votes when height is 2
 	bzNodeState.doPrevote = func(ctx context.Context, height int64, round int32, allowOldBlocks bool) {
 		// allow first height to happen normally so that byzantine validator is no longer proposer
+		uncommittedState, err := bzNodeState.blockExec.ProcessProposal(ctx, bzNodeState.ProposalBlock, round, bzNodeState.state, true)
+		assert.NoError(t, err)
+		assert.NotZero(t, uncommittedState)
+		bzNodeState.CurrentRoundState = uncommittedState
+
 		if height == prevoteHeight {
-			prevote1, err := bzNodeState.signVote(ctx,
-				tmproto.PrevoteType,
-				bzNodeState.ProposalBlock.Hash(),
-				bzNodeState.ProposalBlockParts.Header(),
-			)
+			prevote1, err := bzNodeState.signVote(ctx, tmproto.PrevoteType, bzNodeState.BlockID())
 			require.NoError(t, err)
 
-			prevote2, err := bzNodeState.signVote(ctx, tmproto.PrevoteType, nil, types.PartSetHeader{})
+			prevote2, err := bzNodeState.signVote(ctx, tmproto.PrevoteType, types.BlockID{})
 			require.NoError(t, err)
 
 			// send two votes to all peers (1st to one half, 2nd to another half)
@@ -176,38 +179,40 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	lazyNodeState := states[1]
 
 	lazyNodeState.decideProposal = func(ctx context.Context, height int64, round int32) {
-		require.NotNil(t, lazyNodeState.privValidator)
+		require.False(t, lazyNodeState.privValidator.IsZero())
 
 		var commit *types.Commit
 		switch {
 		case lazyNodeState.Height == lazyNodeState.state.InitialHeight:
 			// We're creating a proposal for the first block.
 			// The commit is empty, but not nil.
-			commit = types.NewCommit(0, 0, types.BlockID{}, types.StateID{}, nil)
+			commit = types.NewCommit(0, 0, types.BlockID{}, nil)
 		case lazyNodeState.LastCommit != nil:
+			// Make the commit from LastCommit
 			commit = lazyNodeState.LastCommit
 		default: // This shouldn't happen.
 			lazyNodeState.logger.Error("enterPropose: Cannot propose anything: No commit for the previous block")
 			return
 		}
 
-		if lazyNodeState.privValidatorProTxHash == nil {
+		if lazyNodeState.privValidator.IsZero() {
 			// If this node is a validator & proposer in the current round, it will
 			// miss the opportunity to create a block.
-			lazyNodeState.logger.Error("enterPropose", "err", errProTxHashIsNotSet)
+			lazyNodeState.logger.Error("enterPropose", "err", ErrPrivValidatorNotSet)
 			return
 		}
-		proposerProTxHash := lazyNodeState.privValidatorProTxHash
 
-		block, err := lazyNodeState.blockExec.CreateProposalBlock(
+		block, uncommittedState, err := lazyNodeState.blockExec.CreateProposalBlock(
 			ctx,
 			lazyNodeState.Height,
+			round,
 			lazyNodeState.state,
 			commit,
-			proposerProTxHash,
+			lazyNodeState.privValidator.ProTxHash,
 			0,
 		)
 		require.NoError(t, err)
+		assert.NotZero(t, uncommittedState)
 		blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 		require.NoError(t, err)
 
@@ -218,7 +223,9 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 
 		// Make proposal
-		propBlockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
+		propBlockID := block.BlockID(blockParts)
+		assert.NoError(t, err)
+
 		proposal := types.NewProposal(
 			height,
 			lazyNodeState.state.LastCoreChainLockedBlockHeight,
@@ -251,9 +258,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 	}
 
-	for _, reactor := range rts.reactors {
-		reactor.SwitchToConsensus(ctx, reactor.state.GetState(), false)
-	}
+	rts.switchToConsensus(ctx)
 
 	// Evidence should be submitted and committed at the third height but
 	// we will check the first six just in case

@@ -7,8 +7,8 @@ import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
 import "tendermint/crypto/proof.proto";
 import "tendermint/version/types.proto";
-import "tendermint/types/validator.proto";
 import "tendermint/types/dash.proto";
+import "tendermint/types/validator.proto";
 
 // BlockIdFlag indicates which BlockID the signature is for
 enum BlockIDFlag {
@@ -36,7 +36,7 @@ enum SignedMsgType {
       [(gogoproto.enumvalue_customname) = "PrevoteType"];
   SIGNED_MSG_TYPE_PRECOMMIT = 2
       [(gogoproto.enumvalue_customname) = "PrecommitType"];
-  SIGNED_MSG_TYPE_COMMIT    = 3
+  SIGNED_MSG_TYPE_COMMIT = 3
       [(gogoproto.enumvalue_customname) = "CommitType"];
 
   // Proposals
@@ -60,12 +60,29 @@ message Part {
 message BlockID {
   bytes         hash            = 1;
   PartSetHeader part_set_header = 2 [(gogoproto.nullable) = false];
+  // state_id is a hash of fields required to validate state in light client.
+  // See types/stateid.go for details.
+  bytes state_id = 3 [(gogoproto.customname) = "StateID"];
 }
 
-// StateID
+// StateID represents essential information required to verify state, document and transactions.
+// It is meant to be used by light clients (like mobile apps) to verify proofs.
 message StateID {
-  bytes last_app_hash = 1;
-  int64 height        = 2;
+  option (gogoproto.stable_marshaler) = true;
+  option (gogoproto.marshaler)        = true;
+  option (gogoproto.stringer)         = false;
+  option (gogoproto.goproto_stringer) = false;
+
+  // AppVersion used when generating the block, equals to Header.Version.App.
+  fixed64 app_version = 1 [(gogoproto.customname) = "AppVersion"];
+  // Height of block containing this state ID.
+  fixed64 height = 2;
+  // AppHash used in current block, equal to Header.AppHash. 32 bytes.
+  bytes app_hash = 3 [(gogoproto.customname) = "AppHash"];
+  // CoreChainLockedHeight for the block, equal to Header.CoreChainLockedHeight.
+  fixed32 core_chain_locked_height = 4 [(gogoproto.customname) = "CoreChainLockedHeight"];
+  // Time of the block.
+  google.protobuf.Timestamp time = 5 [(gogoproto.nullable) = false];
 }
 
 // --------------------------------
@@ -73,11 +90,11 @@ message StateID {
 // Header defines the structure of a Tendermint block header.
 message Header {
   // basic block info
-  tendermint.version.Consensus version  = 1 [(gogoproto.nullable) = false];
-  string                       chain_id = 2 [(gogoproto.customname) = "ChainID"];
-  int64                        height   = 3;
+  tendermint.version.Consensus version                  = 1 [(gogoproto.nullable) = false];
+  string                       chain_id                 = 2 [(gogoproto.customname) = "ChainID"];
+  int64                        height                   = 3;
   uint32                       core_chain_locked_height = 100;
-  google.protobuf.Timestamp    time     = 4
+  google.protobuf.Timestamp    time                     = 4
       [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 
   // prev block info
@@ -92,8 +109,8 @@ message Header {
   bytes next_validators_hash = 9;   // validators for the next block
   bytes consensus_hash       = 10;  // consensus params for current block
   bytes app_hash             = 11;  // state after txs from the previous block
-  bytes last_results_hash =
-      12;  // root hash of all results from the txs from the previous block
+  bytes results_hash =
+      12;  // root hash of all results from the txs from current block
 
   // consensus info
   bytes evidence_hash        = 13;   // evidence included in the block
@@ -124,7 +141,6 @@ message Vote {
   bytes validator_pro_tx_hash = 6;
   int32 validator_index       = 7;
   bytes block_signature       = 8;
-  bytes state_signature       = 10;
 
   // Vote extension provided by the application. Only valid for precommit
   // messages.
@@ -139,25 +155,26 @@ message Commit {
   int64   height                    = 1;
   int32   round                     = 2;
   BlockID block_id                  = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "BlockID"];
-  StateID state_id                  = 100 [(gogoproto.nullable) = false, (gogoproto.customname) = "StateID"];
   bytes   quorum_hash               = 101;
   bytes   threshold_block_signature = 102;
-  bytes   threshold_state_signature = 103;
 
   repeated VoteExtension threshold_vote_extensions = 104;
 }
 
 message Proposal {
-  SignedMsgType             type                     = 1;
-  int64                     height                   = 2;
-  uint32                    core_chain_locked_height = 100;
-  int32                     round                    = 3;
-  int32                     pol_round                = 4;
-  BlockID                   block_id                 = 5
+  SignedMsgType type      = 1;
+  int64         height    = 2;
+  int32         round     = 3;
+  int32         pol_round = 4;
+  BlockID       block_id  = 5
       [(gogoproto.customname) = "BlockID", (gogoproto.nullable) = false];
-  google.protobuf.Timestamp timestamp                = 6
+  google.protobuf.Timestamp timestamp = 6
       [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
-  bytes                     signature                = 7;
+  bytes signature = 7;
+
+  // dash's fields
+  uint32                         core_chain_locked_height = 100;
+  tendermint.types.CoreChainLock core_chain_lock_update   = 101;
 }
 
 message SignedHeader {
@@ -176,8 +193,9 @@ message BlockMeta {
   int64  block_size = 2;
   Header header     = 3 [(gogoproto.nullable) = false];
   int64  num_txs    = 4;
+  int32  round      = 5;
 
-  bool    has_core_chain_lock = 100;
+  bool has_core_chain_lock = 100;
 }
 
 // TxProof represents a Merkle proof of the presence of a transaction in the

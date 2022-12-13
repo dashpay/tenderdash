@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -17,14 +18,12 @@ type CommitSigns struct {
 func (c *CommitSigns) CopyToCommit(commit *Commit) {
 	commit.QuorumHash = c.QuorumHash
 	commit.ThresholdBlockSignature = c.BlockSign
-	commit.ThresholdStateSignature = c.StateSign
 	commit.ThresholdVoteExtensions = c.ExtensionSigns
 }
 
 // QuorumSigns holds all created signatures, block, state and for each recovered vote-extensions
 type QuorumSigns struct {
 	BlockSign      []byte
-	StateSign      []byte
 	ExtensionSigns []ThresholdExtensionSign
 }
 
@@ -32,7 +31,6 @@ type QuorumSigns struct {
 func NewQuorumSignsFromCommit(commit *Commit) QuorumSigns {
 	return QuorumSigns{
 		BlockSign:      commit.ThresholdBlockSignature,
-		StateSign:      commit.ThresholdStateSignature,
 		ExtensionSigns: commit.ThresholdVoteExtensions,
 	}
 }
@@ -110,8 +108,9 @@ func MakeThresholdVoteExtensions(extensions []VoteExtension, thresholdSigs [][]b
 // QuorumSingsVerifier ...
 type QuorumSingsVerifier struct {
 	QuorumSignData
-	shouldVerifyState          bool
+	shouldVerifyBlock          bool
 	shouldVerifyVoteExtensions bool
+	logger                     log.Logger
 }
 
 // WithVerifyExtensions sets a flag that tells QuorumSingsVerifier to verify vote-extension signatures or not
@@ -121,10 +120,10 @@ func WithVerifyExtensions(shouldVerify bool) func(*QuorumSingsVerifier) {
 	}
 }
 
-// WithVerifyState sets a flag that tells QuorumSingsVerifier to verify stateID signature or not
-func WithVerifyState(shouldVerify bool) func(*QuorumSingsVerifier) {
+// WithVerifyBlock sets a flag that tells QuorumSingsVerifier to verify block signature or not
+func WithVerifyBlock(shouldVerify bool) func(*QuorumSingsVerifier) {
 	return func(verifier *QuorumSingsVerifier) {
-		verifier.shouldVerifyState = shouldVerify
+		verifier.shouldVerifyBlock = shouldVerify
 	}
 }
 
@@ -132,18 +131,25 @@ func WithVerifyState(shouldVerify bool) func(*QuorumSingsVerifier) {
 // vote-extension and stateID signatures or not
 func WithVerifyReachedQuorum(quorumReached bool) func(*QuorumSingsVerifier) {
 	return func(verifier *QuorumSingsVerifier) {
-		verifier.shouldVerifyState = quorumReached
 		verifier.shouldVerifyVoteExtensions = quorumReached
 	}
 }
 
-// NewQuorumSingsVerifier creates and returns an instance of QuorumSingsVerifier that is used for verification
+// WithLogger sets a logger
+func WithLogger(logger log.Logger) func(*QuorumSingsVerifier) {
+	return func(verifier *QuorumSingsVerifier) {
+		verifier.logger = logger
+	}
+}
+
+// NewQuorumSignsVerifier creates and returns an instance of QuorumSingsVerifier that is used for verification
 // quorum signatures
-func NewQuorumSingsVerifier(quorumData QuorumSignData, opts ...func(*QuorumSingsVerifier)) *QuorumSingsVerifier {
+func NewQuorumSignsVerifier(quorumData QuorumSignData, opts ...func(*QuorumSingsVerifier)) *QuorumSingsVerifier {
 	verifier := &QuorumSingsVerifier{
 		QuorumSignData:             quorumData,
-		shouldVerifyState:          true,
+		shouldVerifyBlock:          true,
 		shouldVerifyVoteExtensions: true,
+		logger:                     log.NewNopLogger(),
 	}
 	for _, opt := range opts {
 		opt(verifier)
@@ -157,35 +163,19 @@ func (q *QuorumSingsVerifier) Verify(pubKey crypto.PubKey, signs QuorumSigns) er
 	if err != nil {
 		return err
 	}
-	err = q.verifyState(pubKey, signs)
-	if err != nil {
-		return err
-	}
 	return q.verifyVoteExtensions(pubKey, signs)
 }
 
 func (q *QuorumSingsVerifier) verifyBlock(pubKey crypto.PubKey, signs QuorumSigns) error {
+	if !q.shouldVerifyBlock {
+		return nil
+	}
 	if !pubKey.VerifySignatureDigest(q.Block.ID, signs.BlockSign) {
 		return fmt.Errorf(
 			"threshold block signature is invalid: (%X) signID=%X: %w",
 			q.Block.Raw,
 			q.Block.ID,
 			ErrVoteInvalidBlockSignature,
-		)
-	}
-	return nil
-}
-
-func (q *QuorumSingsVerifier) verifyState(pubKey crypto.PubKey, signs QuorumSigns) error {
-	if !q.shouldVerifyState {
-		return nil
-	}
-	if !pubKey.VerifySignatureDigest(q.State.ID, signs.StateSign) {
-		return fmt.Errorf(
-			"threshold state signature is invalid: (%X) signID=%X: %w",
-			q.State.Raw,
-			q.State.ID,
-			ErrVoteInvalidStateSignature,
 		)
 	}
 	return nil

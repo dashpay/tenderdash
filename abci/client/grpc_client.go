@@ -3,10 +3,10 @@ package abciclient
 import (
 	"context"
 	"errors"
-	"fmt"
 	"net"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -65,7 +65,7 @@ RETRY_LOOP:
 			if cli.mustConnect {
 				return err
 			}
-			cli.logger.Error(fmt.Sprintf("abci.grpcClient failed to connect to %v.  Retrying...\n", cli.addr), "err", err)
+			cli.logger.Error("abci.grpcClient failed to connect,  Retrying...", "addr", cli.addr, "err", err)
 			timer.Reset(time.Second * dialRetryIntervalSeconds)
 			select {
 			case <-ctx.Done():
@@ -138,10 +138,6 @@ func (cli *grpcClient) CheckTx(ctx context.Context, params *types.RequestCheckTx
 
 func (cli *grpcClient) Query(ctx context.Context, params *types.RequestQuery) (*types.ResponseQuery, error) {
 	return cli.client.Query(ctx, types.ToRequestQuery(params).GetQuery(), grpc.WaitForReady(true))
-}
-
-func (cli *grpcClient) Commit(ctx context.Context) (*types.ResponseCommit, error) {
-	return cli.client.Commit(ctx, types.ToRequestCommit().GetCommit(), grpc.WaitForReady(true))
 }
 
 func (cli *grpcClient) InitChain(ctx context.Context, params *types.RequestInitChain) (*types.ResponseInitChain, error) {

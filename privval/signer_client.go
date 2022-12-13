@@ -184,18 +184,14 @@ func (sc *SignerClient) SignVote(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	vote *tmproto.Vote,
-	stateID types.StateID,
 	logger log.Logger,
 ) error {
 	// fmt.Printf("--> sending request to sign vote (%d/%d) %v - %v", vote.Height, vote.Round, vote.BlockID, vote)
-	stateIDProto := stateID.ToProto()
-
 	voteRequest := privvalproto.SignVoteRequest{
 		Vote:       vote,
 		ChainId:    chainID,
 		QuorumType: int32(quorumType),
 		QuorumHash: quorumHash,
-		StateId:    &stateIDProto,
 	}
 
 	response, err := sc.endpoint.SendRequest(ctx, mustWrapMsg(&voteRequest))

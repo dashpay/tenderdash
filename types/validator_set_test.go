@@ -1,4 +1,3 @@
-//nolint: lll
 package types
 
 import (
@@ -18,6 +17,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -37,19 +37,16 @@ func TestValidatorSetBasic(t *testing.T) {
 	idx, val := vset.GetByProTxHash([]byte("some val"))
 	assert.EqualValues(t, -1, idx)
 	assert.Nil(t, val)
-	proTxHash, val := vset.GetByIndex(-100)
-	assert.Nil(t, proTxHash)
+	val = vset.GetByIndex(-100)
 	assert.Nil(t, val)
-	proTxHash, val = vset.GetByIndex(0)
-	assert.Nil(t, proTxHash)
+	val = vset.GetByIndex(0)
 	assert.Nil(t, val)
-	proTxHash, val = vset.GetByIndex(100)
-	assert.Nil(t, proTxHash)
+	val = vset.GetByIndex(100)
 	assert.Nil(t, val)
 	assert.Zero(t, vset.Size())
 	assert.Equal(t, int64(0), vset.TotalVotingPower())
 	assert.Nil(t, vset.GetProposer())
-	assert.Equal(t, []byte(nil), vset.Hash())
+	assert.Equal(t, tmbytes.HexBytes(nil), vset.Hash())
 	// add
 	val = randModuloValidator(vset.TotalVotingPower())
 	assert.NoError(t, vset.UpdateWithChangeSet([]*Validator{val}, val.PubKey, crypto.RandQuorumHash()))
@@ -57,8 +54,8 @@ func TestValidatorSetBasic(t *testing.T) {
 	assert.True(t, vset.HasProTxHash(val.ProTxHash))
 	idx, _ = vset.GetByProTxHash(val.ProTxHash)
 	assert.EqualValues(t, 0, idx)
-	proTxHash, _ = vset.GetByIndex(0)
-	assert.Equal(t, val.ProTxHash, proTxHash)
+	val0 := vset.GetByIndex(0)
+	assert.Equal(t, val.ProTxHash, val0.ProTxHash)
 	assert.Equal(t, 1, vset.Size())
 	assert.Equal(t, val.VotingPower, vset.TotalVotingPower())
 	assert.NotNil(t, vset.Hash())
@@ -698,7 +695,7 @@ func addValidatorsToValidatorSet(vals *ValidatorSet, testValList []testVal) ([]*
 	combinedProTxHashes = append(combinedProTxHashes, addedProTxHashes...)
 	if len(combinedProTxHashes) > 0 {
 		rVals, _ := GenerateValidatorSet(NewValSetParam(combinedProTxHashes))
-		rValidators := append(rVals.Validators, removedVals...) // nolint:gocritic
+		rValidators := append(rVals.Validators, removedVals...) //nolint:gocritic
 		return rValidators, rVals.ThresholdPublicKey
 	}
 	return removedVals, nil
@@ -1154,6 +1151,10 @@ func applyChangesToValSet(t *testing.T, expErr error, valSet *ValidatorSet, vals
 }
 
 func TestValSetUpdatePriorityOrderTests(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	const nMaxElections int32 = 5000
 
 	testCases := []testVSetCfg{
@@ -1322,7 +1323,7 @@ func TestValidatorSetProtoBuf(t *testing.T) {
 	}
 }
 
-//---------------------
+// ---------------------
 // Sort validators by priority and address
 type validatorsByPriority []*Validator
 
@@ -1353,7 +1354,8 @@ func (tvals testValsByVotingPower) Len() int {
 }
 
 // Here we need to sort by the pro_tx_hash and not the name if the power is equal, in the test the pro_tx_hash is derived
-//  from the name by applying a single SHA256
+//
+//	from the name by applying a single SHA256
 func (tvals testValsByVotingPower) Less(i, j int) bool {
 	if tvals[i].power == tvals[j].power {
 		return bytes.Compare(crypto.Checksum([]byte(tvals[i].name)), crypto.Checksum([]byte(tvals[j].name))) == -1
@@ -1365,9 +1367,8 @@ func (tvals testValsByVotingPower) Swap(i, j int) {
 	tvals[i], tvals[j] = tvals[j], tvals[i]
 }
 
-//-------------------------------------
+// -------------------------------------
 // Benchmark tests
-//
 func BenchmarkUpdates(b *testing.B) {
 	const (
 		n = 100
@@ -1413,14 +1414,12 @@ func BenchmarkValidatorSet_VerifyCommit_Ed25519(b *testing.B) {
 		b.Run(fmt.Sprintf("valset size %d", n), func(b *testing.B) {
 			b.ReportAllocs()
 			// generate n validators
-			stateID := RandStateID()
-			voteSet, valSet, vals := randVoteSet(ctx, b, h, 0, tmproto.PrecommitType, n, stateID)
+			voteSet, valSet, vals := randVoteSet(ctx, b, h, 0, tmproto.PrecommitType, n)
 			// create a commit with n validators
-			commit, err := makeCommit(ctx, blockID, stateID, h, 0, voteSet, vals)
+			commit, err := makeCommit(ctx, blockID, h, 0, voteSet, vals)
 			require.NoError(b, err)
-
 			for i := 0; i < b.N/n; i++ {
-				err = valSet.VerifyCommit(chainID, blockID, stateID, h, commit)
+				err = valSet.VerifyCommit(chainID, blockID, h, commit)
 				assert.NoError(b, err)
 			}
 		})

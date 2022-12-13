@@ -10,6 +10,7 @@ import (
 	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/llmq"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 func InitChain(ctx context.Context, client abciclient.Client) error {
@@ -33,51 +34,84 @@ func InitChain(ctx context.Context, client abciclient.Client) error {
 	return nil
 }
 
-func Commit(ctx context.Context, client abciclient.Client, hashExp []byte) error {
-	res, err := client.Commit(ctx)
-	data := res.Data
+func ProcessProposal(
+	ctx context.Context,
+	client abciclient.Client,
+	statusExp types.ResponseProcessProposal_ProposalStatus,
+	txBytes [][]byte,
+	codeExp []uint32,
+	dataExp []byte,
+	hashExp []byte,
+) error {
+	res, err := client.ProcessProposal(ctx, &types.RequestProcessProposal{Txs: txBytes})
 	if err != nil {
-		fmt.Println("Failed test: Commit")
-		fmt.Printf("error while committing: %v\n", err)
 		return err
 	}
-	if !bytes.Equal(data, hashExp) {
-		fmt.Println("Failed test: Commit")
-		fmt.Printf("Commit hash was unexpected. Got %X expected %X\n", data, hashExp)
-		return errors.New("commitTx failed")
+	appHash := res.AppHash
+	if !bytes.Equal(appHash, hashExp) {
+		fmt.Println("Failed test: ProcessProposal")
+		fmt.Printf("Application hash was unexpected. Got %X expected %X\n", appHash, hashExp)
+		return errors.New("FinalizeBlock  error")
 	}
-	fmt.Println("Passed test: Commit")
-	return nil
-}
-
-func FinalizeBlock(ctx context.Context, client abciclient.Client, txBytes [][]byte, codeExp []uint32, dataExp []byte) error {
-	res, _ := client.FinalizeBlock(ctx, &types.RequestFinalizeBlock{Txs: txBytes})
+	if res.Status != statusExp {
+		fmt.Println("Failed test: ProcessProposal")
+		fmt.Printf("ProcessProposal response status was unexpected. Got %v expected %v.",
+			res.Status, statusExp)
+		return errors.New("ProcessProposal error")
+	}
 	for i, tx := range res.TxResults {
 		code, data, log := tx.Code, tx.Data, tx.Log
 		if code != codeExp[i] {
-			fmt.Println("Failed test: FinalizeBlock")
-			fmt.Printf("FinalizeBlock response code was unexpected. Got %v expected %v. Log: %v\n",
+			fmt.Println("Failed test: ProcessProposal")
+			fmt.Printf("ProcessProposal response code was unexpected. Got %v expected %v. Log: %v\n",
 				code, codeExp, log)
-			return errors.New("FinalizeBlock error")
+			return errors.New("ProcessProposal error")
 		}
 		if !bytes.Equal(data, dataExp) {
-			fmt.Println("Failed test:  FinalizeBlock")
-			fmt.Printf("FinalizeBlock response data was unexpected. Got %X expected %X\n",
+			fmt.Println("Failed test:  ProcessProposal")
+			fmt.Printf("ProcessProposal response data was unexpected. Got %X expected %X\n",
 				data, dataExp)
-			return errors.New("FinalizeBlock  error")
+			return errors.New("ProcessProposal  error")
 		}
+	}
+	fmt.Println("Passed test: ProcessProposal")
+	return nil
+}
+
+func FinalizeBlock(ctx context.Context, client abciclient.Client, txBytes [][]byte) error {
+	_, err := client.FinalizeBlock(ctx, &types.RequestFinalizeBlock{
+		Block: &tmproto.Block{
+			Data: tmproto.Data{Txs: txBytes},
+		},
+	})
+	if err != nil {
+		return err
 	}
 	fmt.Println("Passed test: FinalizeBlock")
 	return nil
 }
 
+func PrepareProposal(ctx context.Context, client abciclient.Client, txBytes [][]byte, codeExp []types.TxRecord_TxAction, dataExp []byte) error {
+	res, _ := client.PrepareProposal(ctx, &types.RequestPrepareProposal{Txs: txBytes})
+	for i, tx := range res.TxRecords {
+		if tx.Action != codeExp[i] {
+			fmt.Println("Failed test: PrepareProposal")
+			fmt.Printf("PrepareProposal response code was unexpected. Got %v expected %v.",
+				tx.Action, codeExp)
+			return errors.New("PrepareProposal error")
+		}
+	}
+	fmt.Println("Passed test: PrepareProposal")
+	return nil
+}
+
 func CheckTx(ctx context.Context, client abciclient.Client, txBytes []byte, codeExp uint32, dataExp []byte) error {
 	res, _ := client.CheckTx(ctx, &types.RequestCheckTx{Tx: txBytes})
-	code, data, log := res.Code, res.Data, res.Log
+	code, data := res.Code, res.Data
 	if code != codeExp {
 		fmt.Println("Failed test: CheckTx")
-		fmt.Printf("CheckTx response code was unexpected. Got %v expected %v. Log: %v\n",
-			code, codeExp, log)
+		fmt.Printf("CheckTx response code was unexpected. Got %v expected %v.,",
+			code, codeExp)
 		return errors.New("checkTx")
 	}
 	if !bytes.Equal(data, dataExp) {

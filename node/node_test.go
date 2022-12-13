@@ -114,6 +114,10 @@ func getTestNode(ctx context.Context, t *testing.T, conf *config.Config, logger 
 }
 
 func TestNodeDelayedStart(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	cfg, err := config.ResetTestRoot(t.TempDir(), "node_delayed_start_test")
 	require.NoError(t, err)
 
@@ -209,6 +213,10 @@ func TestNodeSetPrivValTCP(t *testing.T) {
 
 // address without a protocol must result in error
 func TestPrivValidatorListenAddrNoProtocol(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -297,7 +305,11 @@ func TestCreateProposalBlock(t *testing.T) {
 
 	logger := log.NewNopLogger()
 
-	cc := abciclient.NewLocalClient(logger, kvstore.NewApplication())
+	app, err := kvstore.NewMemoryApp(
+		kvstore.WithLogger(logger.With("module", "kvstore")),
+	)
+	require.NoError(t, err)
+	cc := abciclient.NewLocalClient(logger, app)
 	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
 	err = proxyApp.Start(ctx)
 	require.NoError(t, err)
@@ -310,7 +322,7 @@ func TestCreateProposalBlock(t *testing.T) {
 	maxEvidenceBytes := int64(maxBytes / 2)
 	state.ConsensusParams.Block.MaxBytes = int64(maxBytes)
 	state.ConsensusParams.Evidence.MaxBytes = maxEvidenceBytes
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proposer := state.Validators.GetByIndex(0)
 
 	mp := mempool.NewTxMempool(
 		logger.With("module", "mempool"),
@@ -358,22 +370,22 @@ func TestCreateProposalBlock(t *testing.T) {
 	require.NoError(t, eventBus.Start(ctx))
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		evidencePool,
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
 
 	proposedAppVersion := uint64(1)
-	commit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil)
-	block, err := blockExec.CreateProposalBlock(
+	commit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
+	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
-		state, commit,
-		proposerProTxHash,
+		0,
+		state,
+		commit,
+		proposer.ProTxHash,
 		proposedAppVersion,
 	)
 	require.NoError(t, err)
@@ -408,7 +420,11 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 
 	logger := log.NewNopLogger()
 
-	cc := abciclient.NewLocalClient(logger, kvstore.NewApplication())
+	app, err := kvstore.NewMemoryApp(
+		kvstore.WithLogger(logger.With("module", "kvstore")),
+	)
+	require.NoError(t, err)
+	cc := abciclient.NewLocalClient(logger, app)
 	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
 	err = proxyApp.Start(ctx)
 	require.NoError(t, err)
@@ -420,7 +436,7 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 	const maxBytes int64 = 16384
 	const partSize uint32 = 256
 	state.ConsensusParams.Block.MaxBytes = maxBytes
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proposer := state.Validators.GetByIndex(0)
 
 	// Make Mempool
 
@@ -431,7 +447,9 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 	)
 
 	// fill the mempool with one txs just below the maximum size
-	txLength := int(types.MaxDataBytesNoEvidence(maxBytes))
+	maxDataBytes, err := types.MaxDataBytesNoEvidence(maxBytes)
+	require.NoError(t, err)
+	txLength := int(maxDataBytes)
 	tx := tmrand.Bytes(txLength - 4) // to account for the varint
 	err = mp.CheckTx(ctx, tx, nil, mempool.TxInfo{})
 	assert.NoError(t, err)
@@ -441,21 +459,21 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		sm.EmptyEvidencePool{},
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
 
-	commit := types.NewCommit(height-1, 0, types.BlockID{}, types.StateID{}, nil)
-	block, err := blockExec.CreateProposalBlock(
+	commit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
+	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
-		state, commit,
-		proposerProTxHash,
+		0,
+		state,
+		commit,
+		proposer.ProTxHash,
 		0,
 	)
 	require.NoError(t, err)
@@ -471,6 +489,10 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 }
 
 func TestMaxProposalBlockSize(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -480,19 +502,25 @@ func TestMaxProposalBlockSize(t *testing.T) {
 
 	logger := log.NewNopLogger()
 
-	cc := abciclient.NewLocalClient(logger, kvstore.NewApplication())
+	app, err := kvstore.NewMemoryApp(
+		kvstore.WithLogger(logger.With("module", "kvstore")),
+		kvstore.WithState(math.MaxInt64-1, nil),
+	)
+	require.NoError(t, err)
+
+	cc := abciclient.NewLocalClient(logger, app)
 	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
 	err = proxyApp.Start(ctx)
 	require.NoError(t, err)
 
-	state, stateDB, _ := state(t, 100, int64(1))
+	state, stateDB, _ := state(t, 100, 1)
 
 	stateStore := sm.NewStore(stateDB)
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
 	const maxBytes int64 = 1024 * 1024 * 2
 	state.ConsensusParams.Block.MaxBytes = maxBytes
 	state.LastCoreChainLockedBlockHeight = math.MaxUint32 - 1
-	proposerProTxHash, _ := state.Validators.GetByIndex(0)
+	proposer := state.Validators.GetByIndex(0)
 
 	// Make Mempool
 	mp := mempool.NewTxMempool(
@@ -514,26 +542,17 @@ func TestMaxProposalBlockSize(t *testing.T) {
 		assert.NoError(t, err)
 	}
 
-	coreChainLock := types.CoreChainLock{
-		CoreBlockHeight: math.MaxUint32,
-		CoreBlockHash:   crypto.CRandBytes(32),
-		Signature:       crypto.CRandBytes(96),
-	}
-
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger,
 		proxyApp,
 		mp,
 		sm.EmptyEvidencePool{},
 		blockStore,
 		eventBus,
-		sm.NopMetrics(),
 	)
-	blockExec.SetNextCoreChainLock(&coreChainLock)
 
 	blockID := types.BlockID{
 		Hash: crypto.Checksum([]byte("blockID_hash")),
@@ -541,18 +560,13 @@ func TestMaxProposalBlockSize(t *testing.T) {
 			Total: math.MaxInt32,
 			Hash:  crypto.Checksum([]byte("blockID_part_set_header_hash")),
 		},
+		StateID: types.RandStateID().Hash(),
 	}
 
 	// save the updated validator set for use by the block executor.
-	state.LastBlockHeight = math.MaxInt64 - 3
+	state.LastBlockHeight = math.MaxInt64 - 2
 	state.LastHeightValidatorsChanged = math.MaxInt64 - 1
-	state.NextValidators = state.Validators.Copy()
 	require.NoError(t, stateStore.Save(state))
-
-	stateID := types.StateID{
-		Height:      math.MaxInt64 - 1,
-		LastAppHash: crypto.Checksum([]byte("app_hash")),
-	}
 
 	timestamp := time.Date(math.MaxInt64, 0, 0, 0, 0, 0, math.MaxInt64, time.UTC)
 	// change state in order to produce the largest accepted header
@@ -560,7 +574,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	state.LastBlockHeight = math.MaxInt64 - 2
 	state.LastBlockTime = timestamp
 	state.LastResultsHash = crypto.Checksum([]byte("last_results_hash"))
-	state.AppHash = crypto.Checksum([]byte("app_hash"))
+	state.LastAppHash = crypto.Checksum([]byte("app_hash"))
 	state.Version.Consensus.Block = math.MaxInt64
 	state.Version.Consensus.App = math.MaxInt64
 	maxChainID := ""
@@ -573,17 +587,17 @@ func TestMaxProposalBlockSize(t *testing.T) {
 		Height:                  math.MaxInt64,
 		Round:                   math.MaxInt32,
 		BlockID:                 blockID,
-		StateID:                 stateID,
 		QuorumHash:              crypto.RandQuorumHash(),
 		ThresholdBlockSignature: crypto.CRandBytes(bls12381.SignatureSize),
-		ThresholdStateSignature: crypto.CRandBytes(bls12381.SignatureSize),
 	}
 
-	block, err := blockExec.CreateProposalBlock(
+	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		math.MaxInt64,
-		state, commit,
-		proposerProTxHash,
+		0,
+		state,
+		commit,
+		proposer.ProTxHash,
 		0,
 	)
 	require.NoError(t, err)
@@ -598,9 +612,9 @@ func TestMaxProposalBlockSize(t *testing.T) {
 
 	// require that the header and commit be the max possible size
 	require.Equal(t, types.MaxHeaderBytes, int64(pb.Header.Size()))
-	require.Equal(t, types.MaxCommitSize, int64(pb.LastCommit.Size()))
+	require.Equal(t, types.MaxCommitOverheadBytes, int64(pb.LastCommit.Size()))
 	// make sure that the block is less than the max possible size
-	assert.Equal(t, int64(1292+cfg.Mempool.MaxTxBytes), int64(pb.Size()))
+	assert.Equal(t, int64(1072+cfg.Mempool.MaxTxBytes), int64(pb.Size()))
 	// because of the proto overhead we expect the part set bytes to be equal or
 	// less than the pb block size
 	assert.LessOrEqual(t, partSet.ByteSize(), int64(pb.Size()))

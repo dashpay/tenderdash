@@ -2,6 +2,7 @@ package types
 
 import (
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/dashevo/dashd-go/btcjson"
@@ -11,9 +12,21 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/internal/libs/protoio"
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+)
+
+const (
+	//nolint: lll
+	preCommitTestStr = `Vote{56789:959A8F5EF2BE 12345/02/Precommit(8B01023386C3) 000000000000 000000000000}`
+	//nolint: lll
+	preVoteTestStr = `Vote{56789:959A8F5EF2BE 12345/02/Prevote(8B01023386C3) 000000000000 000000000000}`
+)
+
+var (
+	//nolint: lll
+	nilVoteTestStr = fmt.Sprintf(`Vote{56789:959A8F5EF2BE 12345/02/Precommit(%s) 000000000000 000000000000}`, nilVoteStr)
 )
 
 func examplePrevote(t *testing.T) *Vote {
@@ -43,6 +56,7 @@ func exampleVote(tb testing.TB, t byte) *Vote {
 				Total: 1000000,
 				Hash:  crypto.Checksum([]byte("blockID_part_set_header_hash")),
 			},
+			StateID: RandStateID().Hash(),
 		},
 		ValidatorProTxHash: crypto.ProTxHashFromSeedBytes([]byte("validator_pro_tx_hash")),
 		ValidatorIndex:     56789,
@@ -52,16 +66,15 @@ func exampleVote(tb testing.TB, t byte) *Vote {
 func TestVoteSignable(t *testing.T) {
 	vote := examplePrecommit(t)
 	v := vote.ToProto()
-	signBytes := VoteBlockSignBytes("test_chain_id", v)
-	pb := CanonicalizeVote("test_chain_id", v)
-	expected, err := protoio.MarshalDelimited(&pb)
+	signBytes, err := v.SignBytes("test_chain_id")
 	require.NoError(t, err)
+	assert.NotEmpty(t, signBytes)
 
-	require.Equal(t, expected, signBytes, "Got unexpected sign bytes for Vote.")
+	hash := crypto.Checksum(signBytes)
+	assert.Len(t, hash, crypto.DefaultHashSize)
 }
 
 func TestVoteSignBytesTestVectors(t *testing.T) {
-
 	tests := []struct {
 		chainID string
 		vote    *Vote
@@ -69,58 +82,85 @@ func TestVoteSignBytesTestVectors(t *testing.T) {
 	}{
 		0: {
 			"", &Vote{},
-			// NOTE: Height and Round are skipped here. This case needs to be considered while parsing.
-			[]byte{0x0},
+			[]byte{
+				0x0, 0x0, 0x0, 0x0, // Type, 4 bytes
+				0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // Height, 8 bytes
+				0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // Round, 8 bytes
+
+				0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, // BlockID, bytes 1-8
+				0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24, // BlockID, bytes 9-16
+				0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, // BlockID, bytes 16-24
+				0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55, // BlockID, bytes 25-32
+
+				0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, // StateID, bytes 1-8
+				0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24, // StateID, bytes 9-16
+				0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, // StateID, bytes 17-24
+				0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55, // StateID, bytes 25-32
+				// empty ChainID
+			},
 		},
 		// with proper (fixed size) height and round (PreCommit):
 		1: {
-			"", &Vote{Height: 1, Round: 1, Type: tmproto.PrecommitType},
+			"", &Vote{Height: 1, Round: 3, Type: tmproto.PrecommitType},
 			[]byte{
-				0x14,                                   // length
-				0x8,                                    // (field_number << 3) | wire_type
-				0x2,                                    // PrecommitType
-				0x11,                                   // (field_number << 3) | wire_type
-				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // height
-				0x19,                                   // (field_number << 3) | wire_type
-				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // round
+				0x2, 0x0, 0x0, 0x0, // Type, 4 bytes
+				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // Height, 8 bytes
+				0x3, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // Round, 8 bytes
+				// Block ID, 32 bytes
+				0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+				0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+				0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+				0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+				// State ID, 32 bytes
+				0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+				0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+				0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+				0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+				// Empty Chain ID
 			},
 		},
 		// with proper (fixed size) height and round (PreVote):
 		2: {
 			"", &Vote{Height: 1, Round: 1, Type: tmproto.PrevoteType},
 			[]byte{
-				0x14,                                   // length
-				0x8,                                    // (field_number << 3) | wire_type
-				0x1,                                    // PrevoteType
-				0x11,                                   // (field_number << 3) | wire_type
+				0x1, 0x0, 0x0, 0x0, // type
 				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // height
-				0x19,                                   // (field_number << 3) | wire_type
 				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // round
+				// block id
+				0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+				0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+				0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+				0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+				// state id
+				0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+				0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+				0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+				0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
 			},
 		},
 		3: {
 			"", &Vote{Height: 1, Round: 1},
 			[]byte{
-				0x12,                                   // length
-				0x11,                                   // (field_number << 3) | wire_type
+				0x0, 0x0, 0x0, 0x0, // type
 				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // height
-				0x19,                                   // (field_number << 3) | wire_type
-				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // round
+				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, //round
+				// block id
+				0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+				0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+				0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+				0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+				// state id
+				0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+				0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+				0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+				0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
 			},
 		},
 		// containing non-empty chain_id:
 		4: {
 			"test_chain_id", &Vote{Height: 1, Round: 1},
 			[]byte{
-				0x21,                                   // length
-				0x11,                                   // (field_number << 3) | wire_type
-				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // height
-				0x19,                                   // (field_number << 3) | wire_type
-				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // round
-				// remaining fields:
-				// (field_number << 3) | wire_type
-				0x32,
-				0xd, 0x74, 0x65, 0x73, 0x74, 0x5f, 0x63, 0x68, 0x61, 0x69, 0x6e, 0x5f, 0x69, 0x64}, // chainID
+				0x0, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55, 0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14, 0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24, 0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c, 0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55, 0x74, 0x65, 0x73, 0x74, 0x5f, 0x63, 0x68, 0x61, 0x69, 0x6e, 0x5f, 0x69, 0x64},
 		},
 		// containing vote extension
 		5: {
@@ -132,54 +172,39 @@ func TestVoteSignBytesTestVectors(t *testing.T) {
 				},
 			},
 			[]byte{
-				0x21,                                   // length
-				0x11,                                   // (field_number << 3) | wire_type
-				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // height
-				0x19,                                   // (field_number << 3) | wire_type
-				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, // round
-				// remaning fields:
-				// (field_number << 3) | wire_type
-				0x32,
-				0xd, 0x74, 0x65, 0x73, 0x74, 0x5f, 0x63, 0x68, 0x61, 0x69, 0x6e, 0x5f, 0x69, 0x64, // chainID
-			}, // chainID
+				0x0, 0x0, 0x0, 0x0, //type
+				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, //height
+				0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, //round
+				// block id
+				0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+				0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+				0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+				0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+				//state id
+				0xe3, 0xb0, 0xc4, 0x42, 0x98, 0xfc, 0x1c, 0x14,
+				0x9a, 0xfb, 0xf4, 0xc8, 0x99, 0x6f, 0xb9, 0x24,
+				0x27, 0xae, 0x41, 0xe4, 0x64, 0x9b, 0x93, 0x4c,
+				0xa4, 0x95, 0x99, 0x1b, 0x78, 0x52, 0xb8, 0x55,
+				// remaining 13 bytes are chain id
+				0x74, 0x65, 0x73, 0x74, 0x5f, 0x63, 0x68, 0x61,
+				0x69, 0x6e, 0x5f, 0x69, 0x64,
+			},
 		},
 	}
 	for i, tc := range tests {
-		v := tc.vote.ToProto()
-		got := VoteBlockSignBytes(tc.chainID, v)
-		assert.Equal(t, len(tc.want), len(got), "test case #%v: got unexpected sign bytes length for Vote.", i)
-		assert.Equal(t, tc.want, got, "test case #%v: got unexpected sign bytes for Vote.", i)
-	}
-}
-
-func TestVoteStateSignBytesTestVectors(t *testing.T) {
-	tests := []struct {
-		chainID string
-		height  int64
-		apphash []byte
-		want    []byte
-	}{
-		0: {
-			"", 1, []byte("12345678901234567890123456789012"),
-			// NOTE: Height and Round are skipped here. This case needs to be considered while parsing.
-			[]byte{0x1, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38,
-				0x39, 0x30, 0x31, 0x32, 0x33, 0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32, 0x33,
-				0x34, 0x35, 0x36, 0x37, 0x38, 0x39, 0x30, 0x31, 0x32},
-		},
-	}
-	for i, tc := range tests {
-		sid := StateID{
-			Height:      tc.height,
-			LastAppHash: tc.apphash,
-		}
-		got := sid.SignBytes(tc.chainID)
-		assert.Equal(t, len(tc.want), len(got), "test case #%v: got unexpected sign bytes length for Vote.", i)
-		assert.Equal(t, tc.want, got, "test case #%v: got unexpected sign bytes for Vote.", i)
+		t.Run("", func(t *testing.T) {
+			v := tc.vote.ToProto()
+			got, err := v.SignBytes(tc.chainID)
+			assert.NoError(t, err)
+			assert.Len(t, got, len(tc.want), "test case #%v: got unexpected sign bytes length for Vote.", i)
+			assert.Equal(t, tc.want, got, "test case #%v: got unexpected sign bytes for Vote: %X", i, got)
+		})
 	}
 }
 
 func TestVoteProposalNotEq(t *testing.T) {
-	cv := CanonicalizeVote("", &tmproto.Vote{Height: 1, Round: 1})
+	cv, err := tmproto.Vote{Height: 1, Round: 1}.ToCanonicalVote("")
+	require.NoError(t, err)
 	p := CanonicalizeProposal("", &tmproto.Proposal{Height: 1, Round: 1})
 	vb, err := proto.Marshal(&cv)
 	require.NoError(t, err)
@@ -189,49 +214,85 @@ func TestVoteProposalNotEq(t *testing.T) {
 }
 
 func TestVoteVerifySignature(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	type testCase struct {
+		name        string
+		modify      func(*tmproto.Vote)
+		expectValid bool
+	}
+	testCases := []testCase{
+		{
+			name:        "correct",
+			modify:      func(v *tmproto.Vote) {},
+			expectValid: true,
+		},
+		{
+			name: "wrong state id",
+			modify: func(v *tmproto.Vote) {
+				v.BlockID.StateID[0] = ^v.BlockID.StateID[0]
+			},
+			expectValid: false,
+		},
+		{
+			name: "wrong block hash",
+			modify: func(v *tmproto.Vote) {
+				v.BlockID.Hash[0] = ^v.BlockID.Hash[0]
+			},
+			expectValid: false,
+		},
+		{
+			name: "wrong block signature",
+			modify: func(v *tmproto.Vote) {
+				v.BlockSignature[0] = ^v.BlockSignature[0]
+			},
+			expectValid: false,
+		},
+	}
 
-	quorumHash := crypto.RandQuorumHash()
-	privVal := NewMockPVForQuorum(quorumHash)
-	pubkey, err := privVal.GetPubKey(context.Background(), quorumHash)
-	require.NoError(t, err)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
 
-	vote := examplePrecommit(t)
-	v := vote.ToProto()
-	stateID := RandStateID().WithHeight(vote.Height - 1)
-	quorumType := btcjson.LLMQType_5_60
-	signID := VoteBlockSignID("test_chain_id", v, quorumType, quorumHash)
-	signStateID := stateID.SignID("test_chain_id", quorumType, quorumHash)
+			quorumHash := crypto.RandQuorumHash()
+			privVal := NewMockPVForQuorum(quorumHash)
+			pubkey, err := privVal.GetPubKey(context.Background(), quorumHash)
+			require.NoError(t, err)
 
-	// sign it
-	err = privVal.SignVote(ctx, "test_chain_id", quorumType, quorumHash, v, stateID, nil)
-	require.NoError(t, err)
+			vote := examplePrecommit(t)
+			v := vote.ToProto()
+			quorumType := btcjson.LLMQType_5_60
+			signID := VoteBlockSignID("test_chain_id", v, quorumType, quorumHash)
 
-	// verify the same vote
-	valid := pubkey.VerifySignatureDigest(signID, v.BlockSignature)
-	require.True(t, valid)
+			// sign it
+			err = privVal.SignVote(ctx, "test_chain_id", quorumType, quorumHash, v, nil)
+			require.NoError(t, err)
 
-	// verify the same vote
-	valid = pubkey.VerifySignatureDigest(signStateID, v.StateSignature)
-	require.True(t, valid)
+			// verify the same vote
+			valid := pubkey.VerifySignatureDigest(signID, v.BlockSignature)
+			require.True(t, valid)
 
-	// serialize, deserialize and verify again....
-	precommit := new(tmproto.Vote)
-	bs, err := proto.Marshal(v)
-	require.NoError(t, err)
-	err = proto.Unmarshal(bs, precommit)
-	require.NoError(t, err)
+			// serialize, deserialize and verify again....
+			precommit := new(tmproto.Vote)
+			bs, err := proto.Marshal(v)
+			require.NoError(t, err)
+			err = proto.Unmarshal(bs, precommit)
+			require.NoError(t, err)
 
-	// verify the transmitted vote
-	newSignID := VoteBlockSignID("test_chain_id", precommit, quorumType, quorumHash)
-	newSignStateID := stateID.SignID("test_chain_id", quorumType, quorumHash)
-	require.Equal(t, string(signID), string(newSignID))
-	require.Equal(t, string(signStateID), string(newSignStateID))
-	valid = pubkey.VerifySignatureDigest(newSignID, precommit.BlockSignature)
-	require.True(t, valid)
-	valid = pubkey.VerifySignatureDigest(newSignStateID, precommit.StateSignature)
-	require.True(t, valid)
+			// verify the transmitted vote
+			if tc.modify != nil {
+				tc.modify(precommit)
+			}
+			newSignID := VoteBlockSignID("test_chain_id", precommit, quorumType, quorumHash)
+			valid = pubkey.VerifySignatureDigest(newSignID, precommit.BlockSignature)
+
+			if tc.expectValid {
+				assert.True(t, valid)
+				assert.Equal(t, string(signID), string(newSignID))
+			} else {
+				assert.False(t, valid)
+			}
+		})
+	}
 }
 
 // TestVoteExtension tests that the vote verification behaves correctly in each case
@@ -249,31 +310,24 @@ func TestVoteExtension(t *testing.T) {
 		{
 			name: "all fields present",
 			extensions: VoteExtensions{
-				tmproto.VoteExtensionType_DEFAULT: []VoteExtension{{Extension: []byte("extension")}},
+				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Extension: []byte("extension")}},
 			},
 			includeSignature: true,
 			expectError:      false,
 		},
-		// TODO(thane): Re-enable once
-		// https://github.com/tendermint/tendermint/issues/8272 is resolved
-		//{
-		//	name:             "no extension signature",
-		//	extension:        []byte("extension"),
-		//	includeSignature: false,
-		//	expectError:      true,
-		//},
+		{
+			name: "no extension signature",
+			extensions: VoteExtensions{
+				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Extension: []byte("extension")}},
+			},
+			includeSignature: false,
+			expectError:      true,
+		},
 		{
 			name:             "empty extension",
 			includeSignature: true,
 			expectError:      false,
 		},
-		// TODO: Re-enable once
-		// https://github.com/tendermint/tendermint/issues/8272 is resolved.
-		//{
-		//	name:             "no extension and no signature",
-		//	includeSignature: false,
-		//	expectError:      true,
-		//},
 	}
 
 	logger := log.NewTestingLogger(t)
@@ -287,10 +341,8 @@ func TestVoteExtension(t *testing.T) {
 			require.NoError(t, err)
 			pk, err := privVal.GetPubKey(ctx, quorumHash)
 			require.NoError(t, err)
-			blk := Block{}
-			blockID, err := blk.BlockID()
-			require.NoError(t, err)
-			stateID := RandStateID().WithHeight(height - 1)
+			blockID := makeBlockID(rand.Bytes(crypto.HashSize), 1, rand.Bytes(crypto.HashSize), nil)
+
 			vote := &Vote{
 				ValidatorProTxHash: proTxHash,
 				ValidatorIndex:     0,
@@ -300,12 +352,10 @@ func TestVoteExtension(t *testing.T) {
 				BlockID:            blockID,
 				VoteExtensions:     tc.extensions,
 			}
-
 			v := vote.ToProto()
-			err = privVal.SignVote(ctx, "test_chain_id", btcjson.LLMQType_5_60, quorumHash, v, stateID, logger)
+			err = privVal.SignVote(ctx, "test_chain_id", btcjson.LLMQType_5_60, quorumHash, v, logger)
 			require.NoError(t, err)
 			vote.BlockSignature = v.BlockSignature
-			vote.StateSignature = v.StateSignature
 			if tc.includeSignature {
 				protoExtensionsMap := v.VoteExtensionsToMap()
 				for et, extensions := range protoExtensionsMap {
@@ -314,7 +364,7 @@ func TestVoteExtension(t *testing.T) {
 					}
 				}
 			}
-			err = vote.VerifyWithExtension("test_chain_id", btcjson.LLMQType_5_60, quorumHash, pk, proTxHash, stateID)
+			err = vote.VerifyWithExtension("test_chain_id", btcjson.LLMQType_5_60, quorumHash, pk, proTxHash)
 			if tc.expectError {
 				require.Error(t, err)
 			} else {
@@ -362,7 +412,8 @@ func TestVoteVerify(t *testing.T) {
 	vote := examplePrevote(t)
 	vote.ValidatorProTxHash = proTxHash
 
-	stateID := RandStateID().WithHeight(vote.Height - 1)
+	stateID := RandStateID()
+	stateID.Height = uint64(vote.Height - 1)
 	pubKey := bls12381.GenPrivKey().PubKey()
 	err = vote.Verify("test_chain_id", quorumType, quorumHash, pubKey, crypto.RandProTxHash(), stateID)
 
@@ -377,16 +428,35 @@ func TestVoteVerify(t *testing.T) {
 }
 
 func TestVoteString(t *testing.T) {
-	str := examplePrecommit(t).String()
-	expected := `Vote{56789:959A8F5EF2BE 12345/02/SIGNED_MSG_TYPE_PRECOMMIT(Precommit) 8B01023386C3 000000000000 000000000000 000000000000}`
-	if str != expected {
-		t.Errorf("got unexpected string for Vote. Expected:\n%v\nGot:\n%v", expected, str)
+	testcases := map[string]struct {
+		vote           *Vote
+		expectedResult string
+	}{
+		"pre-commit": {
+			vote:           examplePrecommit(t),
+			expectedResult: preCommitTestStr,
+		},
+		"pre-vote": {
+			vote:           examplePrevote(t),
+			expectedResult: preVoteTestStr,
+		},
+		"absent vote": {
+			expectedResult: absentVoteStr,
+		},
+		"nil vote": {
+			vote: func() *Vote {
+				v := examplePrecommit(t)
+				v.BlockID.Hash = nil
+				return v
+			}(),
+			expectedResult: nilVoteTestStr,
+		},
 	}
 
-	str2 := examplePrevote(t).String()
-	expected = `Vote{56789:959A8F5EF2BE 12345/02/SIGNED_MSG_TYPE_PREVOTE(Prevote) 8B01023386C3 000000000000 000000000000 000000000000}`
-	if str2 != expected {
-		t.Errorf("got unexpected string for Vote. Expected:\n%v\nGot:\n%v", expected, str2)
+	for name, tc := range testcases {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.expectedResult, tc.vote.String())
+		})
 	}
 }
 
@@ -398,13 +468,12 @@ func signVote(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	vote *Vote,
-	stateID StateID,
 	logger log.Logger,
 ) {
 	t.Helper()
 
 	v := vote.ToProto()
-	require.NoError(t, pv.SignVote(ctx, chainID, quorumType, quorumHash, v, stateID, logger))
+	require.NoError(t, pv.SignVote(ctx, chainID, quorumType, quorumHash, v, logger))
 	err := vote.PopulateSignsFromProto(v)
 	require.NoError(t, err)
 }
@@ -430,13 +499,9 @@ func TestValidVotes(t *testing.T) {
 	for _, tc := range testCases {
 		quorumHash := crypto.RandQuorumHash()
 		privVal := NewMockPVForQuorum(quorumHash)
-
-		v := tc.vote.ToProto()
-		stateID := RandStateID().WithHeight(v.Height - 1)
-		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, tc.vote, stateID, nil)
+		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, tc.vote, nil)
 		tc.malleateVote(tc.vote)
 		require.NoError(t, tc.vote.ValidateBasic(), "ValidateBasic for %s", tc.name)
-		require.NoError(t, tc.vote.ValidateWithExtension(), "ValidateWithExtension for %s", tc.name)
 	}
 }
 
@@ -450,28 +515,30 @@ func TestInvalidVotes(t *testing.T) {
 	}{
 		{"negative height", func(v *Vote) { v.Height = -1 }},
 		{"negative round", func(v *Vote) { v.Round = -1 }},
-		{"invalid block ID", func(v *Vote) { v.BlockID = BlockID{[]byte{1, 2, 3}, PartSetHeader{111, []byte("blockparts")}} }},
+		{"invalid block hash", func(v *Vote) { v.BlockID.Hash = v.BlockID.Hash[:crypto.DefaultHashSize-1] }},
+		{"invalid state ID", func(v *Vote) { v.BlockID.StateID = v.BlockID.StateID[:crypto.DefaultAppHashSize-1] }},
+		{"invalid block parts hash", func(v *Vote) { v.BlockID.PartSetHeader.Hash = v.BlockID.PartSetHeader.Hash[:crypto.DefaultHashSize-1] }},
+		{"invalid block parts total", func(v *Vote) { v.BlockID.PartSetHeader.Total = 0 }},
 		{"Invalid ProTxHash", func(v *Vote) { v.ValidatorProTxHash = make([]byte, 1) }},
 		{"Invalid ValidatorIndex", func(v *Vote) { v.ValidatorIndex = -1 }},
 		{"Invalid Signature", func(v *Vote) { v.BlockSignature = nil }},
 		{"Too big Signature", func(v *Vote) { v.BlockSignature = make([]byte, SignatureSize+1) }},
 	}
-	for _, tc := range testCases {
-		quorumHash := crypto.RandQuorumHash()
-		privVal := NewMockPVForQuorum(quorumHash)
-		prevote := examplePrevote(t)
-		v := prevote.ToProto()
-		stateID := RandStateID().WithHeight(v.Height - 1)
-		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, stateID, nil)
-		tc.malleateVote(prevote)
-		require.Error(t, prevote.ValidateBasic(), "ValidateBasic for %s in invalid prevote", tc.name)
-		require.Error(t, prevote.ValidateWithExtension(), "ValidateWithExtension for %s in invalid prevote", tc.name)
+	quorumHash := crypto.RandQuorumHash()
+	privVal := NewMockPVForQuorum(quorumHash)
 
-		precommit := examplePrecommit(t)
-		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, stateID, nil)
-		tc.malleateVote(precommit)
-		require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s in invalid precommit", tc.name)
-		require.Error(t, precommit.ValidateWithExtension(), "ValidateWithExtension for %s in invalid precommit", tc.name)
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			prevote := examplePrevote(t)
+			signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, nil)
+			tc.malleateVote(prevote)
+			require.Error(t, prevote.ValidateBasic(), "ValidateBasic for %s in invalid prevote", tc.name)
+
+			precommit := examplePrecommit(t)
+			signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, nil)
+			tc.malleateVote(precommit)
+			require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s in invalid precommit", tc.name)
+		})
 	}
 }
 
@@ -501,12 +568,9 @@ func TestInvalidPrevotes(t *testing.T) {
 	}
 	for _, tc := range testCases {
 		prevote := examplePrevote(t)
-		v := prevote.ToProto()
-		stateID := RandStateID().WithHeight(v.Height - 1)
-		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, stateID, nil)
+		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, prevote, nil)
 		tc.malleateVote(prevote)
 		require.Error(t, prevote.ValidateBasic(), "ValidateBasic for %s", tc.name)
-		require.Error(t, prevote.ValidateWithExtension(), "ValidateWithExtension for %s", tc.name)
 	}
 }
 
@@ -524,29 +588,30 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 		{
 			"vote extension present without signature", func(v *Vote) {
 				v.VoteExtensions = VoteExtensions{
-					tmproto.VoteExtensionType_DEFAULT: {{Extension: []byte("extension")}},
+					tmproto.VoteExtensionType_THRESHOLD_RECOVER: {{Extension: []byte("extension")}},
 				}
-			}},
+			},
+		},
 		// TODO(thane): Re-enable once https://github.com/tendermint/tendermint/issues/8272 is resolved
 		//{"missing vote extension signature", func(v *Vote) { v.ExtensionSignature = nil }},
 		{
 			"oversized vote extension signature",
 			func(v *Vote) {
 				v.VoteExtensions = VoteExtensions{
-					tmproto.VoteExtensionType_DEFAULT: []VoteExtension{{Signature: make([]byte, SignatureSize+1)}},
+					tmproto.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Signature: make([]byte, SignatureSize+1)}},
 				}
-			}},
+			},
+		},
 	}
-	for _, tc := range testCases {
-		precommit := examplePrecommit(t)
-		v := precommit.ToProto()
-		stateID := RandStateID().WithHeight(v.Height - 1)
-		signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, stateID, nil)
-		tc.malleateVote(precommit)
-		// We don't expect an error from ValidateBasic, because it doesn't
-		// handle vote extensions.
-		require.NoError(t, precommit.ValidateBasic(), "ValidateBasic for %s", tc.name)
-		require.Error(t, precommit.ValidateWithExtension(), "ValidateWithExtension for %s", tc.name)
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			precommit := examplePrecommit(t)
+			signVote(ctx, t, privVal, "test_chain_id", 0, quorumHash, precommit, nil)
+			tc.malleateVote(precommit)
+			// ValidateBasic ensures that vote extensions, if present, are well formed
+			require.Error(t, precommit.ValidateBasic(), "ValidateBasic for %s", tc.name)
+			require.Error(t, precommit.ValidateWithExtension(), "ValidateWithExtension for %s", tc.name)
+		})
 	}
 }
 
@@ -558,10 +623,8 @@ func TestVoteProtobuf(t *testing.T) {
 	privVal := NewMockPVForQuorum(quorumHash)
 	vote := examplePrecommit(t)
 	v := vote.ToProto()
-	stateID := RandStateID().WithHeight(v.Height - 1)
-	err := privVal.SignVote(ctx, "test_chain_id", 0, quorumHash, v, stateID, nil)
+	err := privVal.SignVote(ctx, "test_chain_id", 0, quorumHash, v, nil)
 	vote.BlockSignature = v.BlockSignature
-	vote.StateSignature = v.StateSignature
 	require.NoError(t, err)
 
 	testCases := []struct {
@@ -602,7 +665,9 @@ func BenchmarkVoteSignBytes(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 0; i < b.N; i++ {
-		sink = VoteBlockSignBytes("test_chain_id", protoVote)
+		var err error
+		sink, err = protoVote.SignBytes("test_chain_id")
+		require.NoError(b, err)
 	}
 
 	if sink == nil {

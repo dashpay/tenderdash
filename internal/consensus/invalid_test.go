@@ -3,9 +3,10 @@ package consensus
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,10 +28,9 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 	config := configSetup(t)
 
 	const n = 2
-	states, cleanup := makeConsensusState(ctx, t,
+	states := makeConsensusState(ctx, t,
 		config, n, "consensus_reactor_test",
 		newMockTickerFunc(true))
-	t.Cleanup(cleanup)
 
 	for i := 0; i < n; i++ {
 		ticker := NewTimeoutTicker(states[i].logger)
@@ -107,7 +107,7 @@ func invalidDoPrevoteFunc(
 	round int32,
 	cs *State,
 	r *Reactor,
-	voteCh *p2p.Channel,
+	voteCh p2p.Channel,
 	pv types.PrivValidator,
 ) {
 	// routine to:
@@ -116,24 +116,26 @@ func invalidDoPrevoteFunc(
 	// - disable privValidator (so we don't do normal precommits)
 	go func() {
 		cs.mtx.Lock()
-		cs.privValidator = pv
-
-		proTxHash, err := cs.privValidator.GetProTxHash(ctx)
+		var err error
+		cs.privValidator.PrivValidator = pv
+		err = cs.privValidator.init(ctx)
 		require.NoError(t, err)
 
-		valIndex, _ := cs.Validators.GetByProTxHash(proTxHash)
+		valIndex, _ := cs.Validators.GetByProTxHash(cs.privValidator.ProTxHash)
 
 		// precommit a random block
 		blockHash := bytes.HexBytes(tmrand.Bytes(32))
 		precommit := &types.Vote{
-			ValidatorProTxHash: proTxHash,
+			ValidatorProTxHash: cs.privValidator.ProTxHash,
 			ValidatorIndex:     valIndex,
 			Height:             cs.Height,
 			Round:              cs.Round,
 			Type:               tmproto.PrecommitType,
 			BlockID: types.BlockID{
 				Hash:          blockHash,
-				PartSetHeader: types.PartSetHeader{Total: 1, Hash: tmrand.Bytes(32)}},
+				PartSetHeader: types.PartSetHeader{Total: 1, Hash: tmrand.Bytes(32)},
+				StateID:       types.RandStateID().Hash(),
+			},
 		}
 
 		p := precommit.ToProto()
@@ -143,14 +145,12 @@ func invalidDoPrevoteFunc(
 			cs.Validators.QuorumType,
 			cs.Validators.QuorumHash,
 			p,
-			cs.state.StateID(),
 			log.NewNopLogger(),
 		)
 		require.NoError(t, err)
 
-		precommit.StateSignature = p.StateSignature
 		precommit.BlockSignature = p.BlockSignature
-		cs.privValidator = nil // disable priv val so we don't do normal votes
+		cs.privValidator = privValidator{} // disable priv val so we don't do normal votes
 		cs.mtx.Unlock()
 
 		r.mtx.Lock()

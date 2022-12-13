@@ -133,20 +133,28 @@ type EventDataNewBlock struct {
 func (EventDataNewBlock) TypeTag() string { return "tendermint/event/NewBlock" }
 
 // ABCIEvents implements the eventlog.ABCIEventer interface.
-func (e EventDataNewBlock) ABCIEvents() []abci.Event { return e.ResultFinalizeBlock.Events }
+func (e EventDataNewBlock) ABCIEvents() []abci.Event {
+	base := []abci.Event{eventWithAttr(BlockHeightKey, fmt.Sprint(e.Block.Header.Height))}
+	return append(base, e.ResultFinalizeBlock.Events...)
+}
 
 type EventDataNewBlockHeader struct {
 	Header Header `json:"header"`
 
-	NumTxs              int64                      `json:"num_txs,string"` // Number of txs in a block
-	ResultFinalizeBlock abci.ResponseFinalizeBlock `json:"result_finalize_block"`
+	NumTxs int64 `json:"num_txs,string"` // Number of txs in a block
+
+	ResultProcessProposal abci.ResponseProcessProposal `json:"result_process_proposal"`
+	ResultFinalizeBlock   abci.ResponseFinalizeBlock   `json:"result_finalize_block"`
 }
 
 // TypeTag implements the required method of jsontypes.Tagged.
 func (EventDataNewBlockHeader) TypeTag() string { return "tendermint/event/NewBlockHeader" }
 
 // ABCIEvents implements the eventlog.ABCIEventer interface.
-func (e EventDataNewBlockHeader) ABCIEvents() []abci.Event { return e.ResultFinalizeBlock.Events }
+func (e EventDataNewBlockHeader) ABCIEvents() []abci.Event {
+	base := []abci.Event{eventWithAttr(BlockHeightKey, fmt.Sprint(e.Header.Height))}
+	return append(base, e.ResultFinalizeBlock.Events...)
+}
 
 type EventDataNewEvidence struct {
 	Evidence Evidence `json:"evidence"`
@@ -273,18 +281,17 @@ func (EventDataEvidenceValidated) TypeTag() string { return "tendermint/event/Ev
 const (
 	// EventTypeKey is a reserved composite key for event name.
 	EventTypeKey = "tm.event"
+
 	// TxHashKey is a reserved key, used to specify transaction's hash.
 	// see EventBus#PublishEventTx
 	TxHashKey = "tx.hash"
+
 	// TxHeightKey is a reserved key, used to specify transaction block's height.
 	// see EventBus#PublishEventTx
 	TxHeightKey = "tx.height"
 
 	// BlockHeightKey is a reserved key used for indexing FinalizeBlock events.
 	BlockHeightKey = "block.height"
-
-	// EventTypeFinalizeBlock is a reserved key used for indexing FinalizeBlock events.
-	EventTypeFinalizeBlock = "finalize_block"
 )
 
 var (
@@ -316,12 +323,14 @@ func QueryForEvent(eventValue string) *tmquery.Query {
 	return tmquery.MustCompile(fmt.Sprintf("%s='%s'", EventTypeKey, eventValue))
 }
 
+//go:generate ../scripts/mockery_generate.sh BlockEventPublisher
+
 // BlockEventPublisher publishes all block related events
 type BlockEventPublisher interface {
+	TxEventPublisher
 	PublishEventNewBlock(EventDataNewBlock) error
 	PublishEventNewBlockHeader(EventDataNewBlockHeader) error
 	PublishEventNewEvidence(EventDataNewEvidence) error
-	PublishEventTx(EventDataTx) error
 	PublishEventValidatorSetUpdates(EventDataValidatorSetUpdate) error
 }
 

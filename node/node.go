@@ -17,6 +17,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/dash"
 	"github.com/tendermint/tendermint/dash/core"
 	dashquorum "github.com/tendermint/tendermint/dash/quorum"
 	"github.com/tendermint/tendermint/internal/blocksync"
@@ -41,7 +42,7 @@ import (
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/types"
 
-	_ "net/http/pprof" // nolint: gosec // securely exposed on separate, optional port
+	_ "net/http/pprof" //nolint: gosec // securely exposed on separate, optional port
 
 	_ "github.com/lib/pq" // provide the psql db driver
 )
@@ -224,7 +225,7 @@ func makeNode(
 
 	weAreOnlyValidator := onlyValidatorIsUs(state, proTxHash)
 
-	peerManager, peerCloser, err := createPeerManager(cfg, dbProvider, nodeKey.ID)
+	peerManager, peerCloser, err := createPeerManager(cfg, dbProvider, nodeKey.ID, nodeMetrics.p2p)
 	closers = append(closers, peerCloser)
 	if err != nil {
 		return nil, combineCloseError(
@@ -306,27 +307,21 @@ func makeNode(
 	node.evPool = evPool
 
 	mpReactor, mp := createMempoolReactor(logger, cfg, proxyApp, stateStore, nodeMetrics.mempool,
-		peerManager.Subscribe, node.router.OpenChannel, peerManager.GetHeight)
+		peerManager.Subscribe, node.router.OpenChannel)
 	node.rpcEnv.Mempool = mp
 	node.services = append(node.services, mpReactor)
-
-	nextCoreChainLock, err := types.CoreChainLockFromProto(genDoc.InitialProposalCoreChainLock)
-	if err != nil {
-		return nil, combineCloseError(err, makeCloser(closers))
-	}
 
 	// make block executor for consensus and blockchain reactors to execute blocks
 	blockExec := sm.NewBlockExecutor(
 		stateStore,
-		logger.With("module", "state"),
 		proxyApp,
 		mp,
 		evPool,
 		blockStore,
 		eventBus,
-		nodeMetrics.state,
+		sm.BlockExecWithLogger(logger.With("module", "state")),
+		sm.BockExecWithMetrics(nodeMetrics.state),
 	)
-	blockExec.SetNextCoreChainLock(nextCoreChainLock)
 
 	// Determine whether we should attempt state sync.
 	stateSync := cfg.StateSync.Enable && !weAreOnlyValidator
@@ -395,9 +390,7 @@ func makeNode(
 		nodeMetrics.consensus.BlockSyncing.Set(1)
 	}
 
-	if cfg.P2P.PexReactor {
-		node.services = append(node.services, pex.NewReactor(logger, peerManager, node.router.OpenChannel, peerManager.Subscribe))
-	}
+	node.services = append(node.services, pex.NewReactor(logger, peerManager, node.router.OpenChannel, peerManager.Subscribe))
 
 	// Set up state sync reactor, and schedule a sync if requested.
 	// FIXME The way we do phased startups (e.g. replay -> block sync -> consensus) is very messy,
@@ -462,6 +455,7 @@ func (n *nodeImpl) OnStart(ctx context.Context) error {
 			return err
 		}
 	}
+	ctx = dash.ContextWithProTxHash(ctx, proTxHash)
 
 	// EventBus and IndexerService must be started before the handshake because
 	// we might need to index the txs of the replayed block as this might not have happened
@@ -477,9 +471,10 @@ func (n *nodeImpl) OnStart(ctx context.Context) error {
 
 	// Create the handshaker, which calls RequestInfo, sets the AppVersion on the state,
 	// and replays any blocks as necessary to sync tendermint with the app.
-	handshaker := consensus.NewHandshaker(n.logger.With("module", "handshaker"),
-		n.stateStore, n.initialState, n.blockStore, n.rpcEnv.EventBus, n.genesisDoc,
-		proTxHash, n.config.Consensus.AppHashSize,
+	handshaker := consensus.NewHandshaker(
+		createBlockReplayer(n),
+		n.logger.With("module", "handshaker"),
+		n.initialState,
 	)
 	proposedVersion, err := handshaker.Handshake(ctx, n.rpcEnv.ProxyApp)
 	if err != nil {
@@ -628,7 +623,7 @@ func (n *nodeImpl) OnStop() {
 			n.logger.Error("problem closing blockstore", "err", err)
 		}
 	}
-	if n.stateStore != nil {
+	if n.stateStore != sm.Store(nil) {
 		if err := n.stateStore.Close(); err != nil {
 			n.logger.Error("problem closing statestore", "err", err)
 		}
@@ -780,7 +775,9 @@ func loadStateFromDBOrGenesisDocProvider(stateStore sm.Store, genDoc *types.Gene
 
 func getRouterConfig(conf *config.Config, appClient abciclient.Client) p2p.RouterOptions {
 	opts := p2p.RouterOptions{
-		QueueType: conf.P2P.QueueType,
+		QueueType:        conf.P2P.QueueType,
+		HandshakeTimeout: conf.P2P.HandshakeTimeout,
+		DialTimeout:      conf.P2P.DialTimeout,
 	}
 
 	if conf.FilterPeers && appClient != nil {

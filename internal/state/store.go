@@ -26,12 +26,23 @@ const (
 
 //------------------------------------------------------------------------
 
+// key prefixes
+// NB: Before modifying these, cross-check them with those in
+// * internal/store/store.go    [0..4, 13]
+// * internal/state/store.go    [5..8, 14]
+// * internal/evidence/pool.go  [9..10]
+// * light/store/db/db.go       [11..12]
+// TODO(thane): Move all these to their own package.
+// TODO: what about these (they already collide):
+// * scripts/scmigrate/migrate.go [3]
+// * internal/p2p/peermanager.go  [1]
 const (
 	// prefixes are unique across all tm db's
-	prefixValidators      = int64(5)
-	prefixConsensusParams = int64(6)
-	prefixABCIResponses   = int64(7)
-	prefixState           = int64(8)
+	prefixValidators             = int64(5)
+	prefixConsensusParams        = int64(6)
+	prefixABCIResponses          = int64(7)
+	prefixState                  = int64(8)
+	prefixFinalizeBlockResponses = int64(14)
 )
 
 func encodeKey(prefix int64, height int64) []byte {
@@ -52,6 +63,10 @@ func consensusParamsKey(height int64) []byte {
 
 func abciResponsesKey(height int64) []byte {
 	return encodeKey(prefixABCIResponses, height)
+}
+
+func finalizeBlockResponsesKey(height int64) []byte {
+	return encodeKey(prefixFinalizeBlockResponses, height)
 }
 
 // stateKey should never change after being set in init()
@@ -76,7 +91,7 @@ func init() {
 type Store interface {
 	// Load loads the current state of the blockchain
 	Load() (State, error)
-	// LoadValidators loads the validator set at a given height
+	// LoadValidators loads the validator set that is used to validate the given height
 	LoadValidators(int64) (*types.ValidatorSet, error)
 	// LoadABCIResponses loads the abciResponse for a given height
 	LoadABCIResponses(int64) (*tmstate.ABCIResponses, error)
@@ -85,7 +100,7 @@ type Store interface {
 	// Save overwrites the previous state with the updated one
 	Save(State) error
 	// SaveABCIResponses saves ABCIResponses for a given height
-	SaveABCIResponses(int64, *tmstate.ABCIResponses) error
+	SaveABCIResponses(int64, tmstate.ABCIResponses) error
 	// SaveValidatorSet saves the validator set at a given height
 	SaveValidatorSets(int64, int64, *types.ValidatorSet) error
 	// Bootstrap is used for bootstrapping state when not starting from a initial height.
@@ -134,7 +149,6 @@ func (store dbStore) loadState(key []byte) (state State, err error) {
 	if err != nil {
 		return state, err
 	}
-
 	return *sm, nil
 }
 
@@ -148,24 +162,25 @@ func (store dbStore) save(state State, key []byte) error {
 	batch := store.db.NewBatch()
 	defer batch.Close()
 
-	nextHeight := state.LastBlockHeight + 1
+	// We assume that the state was already updated, so state.LastBlockHeight represents height of already generated
+	// block.
+	nextBlockHeight := state.LastBlockHeight + 1
+	lastHeightValidatorsChanged := state.LastHeightValidatorsChanged
 	// If first block, save validators for the block.
-	if nextHeight == 1 {
-		nextHeight = state.InitialHeight
+	if nextBlockHeight == 1 {
 		// This extra logic due to Tendermint validator set changes being delayed 1 block.
 		// It may get overwritten due to InitChain validator updates.
-		if err := store.saveValidatorsInfo(nextHeight, nextHeight, state.Validators, batch); err != nil {
-			return err
-		}
+		nextBlockHeight = state.InitialHeight
+		lastHeightValidatorsChanged = nextBlockHeight
 	}
 	// Save next validators.
-	err := store.saveValidatorsInfo(nextHeight+1, state.LastHeightValidatorsChanged, state.NextValidators, batch)
+	err := store.saveValidatorsInfo(nextBlockHeight, lastHeightValidatorsChanged, state.Validators, batch)
 	if err != nil {
 		return err
 	}
 
 	// Save next consensus params.
-	if err := store.saveConsensusParamsInfo(nextHeight,
+	if err := store.saveConsensusParamsInfo(nextBlockHeight,
 		state.LastHeightConsensusParamsChanged, state.ConsensusParams, batch); err != nil {
 		return err
 	}
@@ -199,10 +214,6 @@ func (store dbStore) Bootstrap(state State) error {
 	}
 
 	if err := store.saveValidatorsInfo(height, height, state.Validators, batch); err != nil {
-		return err
-	}
-
-	if err := store.saveValidatorsInfo(height+1, height+1, state.NextValidators, batch); err != nil {
 		return err
 	}
 
@@ -245,7 +256,7 @@ func (store dbStore) PruneStates(retainHeight int64) error {
 		return err
 	}
 
-	if err := store.pruneABCIResponses(retainHeight); err != nil {
+	if err := store.pruneFinalizeBlockResponses(retainHeight); err != nil {
 		return err
 	}
 
@@ -336,10 +347,15 @@ func (store dbStore) pruneConsensusParams(retainHeight int64) error {
 	)
 }
 
-// pruneABCIResponses calls a reverse iterator from base height to retain height batch deleting
-// all abci responses in between
-func (store dbStore) pruneABCIResponses(height int64) error {
-	return store.pruneRange(abciResponsesKey(1), abciResponsesKey(height))
+// pruneFinalizeBlockResponses calls a reverse iterator from base height to retain height
+// batch deleting all responses to FinalizeBlock, and legacy ABCI responses, in between
+func (store dbStore) pruneFinalizeBlockResponses(height int64) error {
+	err := store.pruneRange(finalizeBlockResponsesKey(1), finalizeBlockResponsesKey(height))
+	if err == nil {
+		// Remove any stale legacy ABCI responses
+		err = store.pruneRange(abciResponsesKey(1), abciResponsesKey(height))
+	}
+	return err
 }
 
 // pruneRange is a generic function for deleting a range of keys in reverse order.
@@ -439,26 +455,25 @@ func (store dbStore) LoadABCIResponses(height int64) (*tmstate.ABCIResponses, er
 // Merkle proofs.
 //
 // Exposed for testing.
-func (store dbStore) SaveABCIResponses(height int64, abciResponses *tmstate.ABCIResponses) error {
+func (store dbStore) SaveABCIResponses(height int64, abciResponses tmstate.ABCIResponses) error {
 	return store.saveABCIResponses(height, abciResponses)
 }
 
-func (store dbStore) saveABCIResponses(height int64, abciResponses *tmstate.ABCIResponses) error {
+func (store dbStore) saveABCIResponses(height int64, abciResponses tmstate.ABCIResponses) error {
 	var dtxs []*abci.ExecTxResult
 	// strip nil values,
-	for _, tx := range abciResponses.FinalizeBlock.TxResults {
-		if tx != nil {
-			dtxs = append(dtxs, tx)
+	if abciResponses.ProcessProposal != nil {
+		for _, tx := range abciResponses.ProcessProposal.TxResults {
+			if tx != nil {
+				dtxs = append(dtxs, tx)
+			}
 		}
+		abciResponses.ProcessProposal.TxResults = dtxs
 	}
-
-	abciResponses.FinalizeBlock.TxResults = dtxs
-
 	bz, err := abciResponses.Marshal()
 	if err != nil {
 		return err
 	}
-
 	return store.db.SetSync(abciResponsesKey(height), bz)
 }
 
@@ -610,7 +625,7 @@ func (store dbStore) LoadConsensusParams(height int64) (types.ConsensusParams, e
 
 	if paramsInfo.ConsensusParams.Equal(&emptypb) {
 		paramsInfo2, err := store.loadConsensusParamsInfo(paramsInfo.LastHeightChanged)
-		if err != nil {
+		if err != nil || paramsInfo2.ConsensusParams.Equal(&emptypb) {
 			return empty, fmt.Errorf(
 				"couldn't find consensus params at height %d (height %d was originally requested): %w",
 				paramsInfo.LastHeightChanged,
@@ -649,7 +664,7 @@ func (store dbStore) loadConsensusParamsInfo(height int64) (*tmstate.ConsensusPa
 // If the consensus params did not change after processing the latest block,
 // only the last height for which they changed is persisted.
 func (store dbStore) saveConsensusParamsInfo(
-	nextHeight, changeHeight int64,
+	height, changeHeight int64,
 	params types.ConsensusParams,
 	batch dbm.Batch,
 ) error {
@@ -657,7 +672,7 @@ func (store dbStore) saveConsensusParamsInfo(
 		LastHeightChanged: changeHeight,
 	}
 
-	if changeHeight == nextHeight {
+	if changeHeight == height {
 		paramsInfo.ConsensusParams = params.ToProto()
 	}
 	bz, err := paramsInfo.Marshal()
@@ -665,7 +680,7 @@ func (store dbStore) saveConsensusParamsInfo(
 		return err
 	}
 
-	return batch.Set(consensusParamsKey(nextHeight), bz)
+	return batch.Set(consensusParamsKey(height), bz)
 }
 
 func (store dbStore) Close() error {

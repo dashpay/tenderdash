@@ -1,10 +1,15 @@
 package types
 
-import "context"
+import (
+	"context"
 
-//go:generate ../../scripts/mockery_generate.sh Application
+	"github.com/tendermint/tendermint/crypto"
+)
+
 // Application is an interface that enables any finite, deterministic state machine
 // to be driven by a blockchain-based replication engine via the ABCI.
+//
+//go:generate ../../scripts/mockery_generate.sh Application
 type Application interface {
 	// Info/Query Connection
 	Info(context.Context, *RequestInfo) (*ResponseInfo, error)    // Return application info
@@ -17,8 +22,6 @@ type Application interface {
 	InitChain(context.Context, *RequestInitChain) (*ResponseInitChain, error) // Initialize blockchain w validators/other info from TendermintCore
 	PrepareProposal(context.Context, *RequestPrepareProposal) (*ResponsePrepareProposal, error)
 	ProcessProposal(context.Context, *RequestProcessProposal) (*ResponseProcessProposal, error)
-	// Commit the state and return the application Merkle root hash
-	Commit(context.Context) (*ResponseCommit, error)
 	// Create application specific vote extension
 	ExtendVote(context.Context, *RequestExtendVote) (*ResponseExtendVote, error)
 	// Verify application's vote extension data
@@ -50,10 +53,6 @@ func (BaseApplication) Info(_ context.Context, req *RequestInfo) (*ResponseInfo,
 
 func (BaseApplication) CheckTx(_ context.Context, req *RequestCheckTx) (*ResponseCheckTx, error) {
 	return &ResponseCheckTx{Code: CodeTypeOK}, nil
-}
-
-func (BaseApplication) Commit(_ context.Context) (*ResponseCommit, error) {
-	return &ResponseCommit{}, nil
 }
 
 func (BaseApplication) ExtendVote(_ context.Context, req *RequestExtendVote) (*ResponseExtendVote, error) {
@@ -103,19 +102,29 @@ func (BaseApplication) PrepareProposal(_ context.Context, req *RequestPreparePro
 			Tx:     tx,
 		})
 	}
-	return &ResponsePrepareProposal{TxRecords: trs}, nil
+	return &ResponsePrepareProposal{TxRecords: trs,
+		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+		TxResults: txResults(req.Txs),
+	}, nil
+}
+
+func txResults(txs [][]byte) []*ExecTxResult {
+	results := make([]*ExecTxResult, len(txs))
+	for i := range txs {
+		results[i] = &ExecTxResult{Code: CodeTypeOK}
+	}
+	return results
 }
 
 func (BaseApplication) ProcessProposal(_ context.Context, req *RequestProcessProposal) (*ResponseProcessProposal, error) {
-	return &ResponseProcessProposal{Status: ResponseProcessProposal_ACCEPT}, nil
+	return &ResponseProcessProposal{
+		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+		Status:    ResponseProcessProposal_ACCEPT,
+		TxResults: txResults(req.Txs),
+	}, nil
 }
 
 func (BaseApplication) FinalizeBlock(_ context.Context, req *RequestFinalizeBlock) (*ResponseFinalizeBlock, error) {
-	txs := make([]*ExecTxResult, len(req.Txs))
-	for i := range req.Txs {
-		txs[i] = &ExecTxResult{Code: CodeTypeOK}
-	}
-	return &ResponseFinalizeBlock{
-		TxResults: txs,
-	}, nil
+
+	return &ResponseFinalizeBlock{}, nil
 }

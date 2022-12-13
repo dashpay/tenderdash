@@ -170,13 +170,13 @@ func (p *http) validatorSet(ctx context.Context, height *int64) (*types.Validato
 	const maxPages = 100
 
 	var (
-		perPage            = 100
-		vals               []*types.Validator
-		thresholdPublicKey crypto.PubKey
-		quorumType         btcjson.LLMQType
-		quorumHash         crypto.QuorumHash
-		page               = 1
-		total              = -1
+		perPage         = 100
+		vals            []*types.Validator
+		thresholdPubKey crypto.PubKey
+		quorumType      btcjson.LLMQType
+		quorumHash      crypto.QuorumHash
+		page            = 1
+		total           = -1
 	)
 
 	for len(vals) != total && page <= maxPages {
@@ -184,8 +184,8 @@ func (p *http) validatorSet(ctx context.Context, height *int64) (*types.Validato
 		// is negative we will keep repeating.
 		attempt := uint16(0)
 		for {
-			requestThresholdPublicKey := attempt == 0
-			res, err := p.client.Validators(ctx, height, &page, &perPage, &requestThresholdPublicKey)
+			reqThresholdPubKey := attempt == 0
+			res, err := p.client.Validators(ctx, height, &page, &perPage, &reqThresholdPubKey)
 			switch e := err.(type) {
 			case nil: // success!! Now we validate the response
 				if len(res.Validators) == 0 {
@@ -227,13 +227,12 @@ func (p *http) validatorSet(ctx context.Context, height *int64) (*types.Validato
 				// terminate the connection with the peer.
 				return nil, provider.ErrUnreliableProvider{Reason: e}
 			}
-
 			// update the total and increment the page index so we can fetch the
 			// next page of validators if need be
 			total = res.Total
 			vals = append(vals, res.Validators...)
-			if requestThresholdPublicKey {
-				thresholdPublicKey = *res.ThresholdPublicKey
+			if reqThresholdPubKey {
+				thresholdPubKey = *res.ThresholdPublicKey
 				quorumHash = *res.QuorumHash
 				quorumType = res.QuorumType
 			}
@@ -241,7 +240,7 @@ func (p *http) validatorSet(ctx context.Context, height *int64) (*types.Validato
 		}
 	}
 
-	valSet, err := types.ValidatorSetFromExistingValidators(vals, thresholdPublicKey, quorumType, quorumHash)
+	valSet, err := types.ValidatorSetFromExistingValidators(vals, thresholdPubKey, quorumType, quorumHash)
 	if err != nil {
 		return nil, provider.ErrBadLightBlock{Reason: err}
 	}
@@ -349,6 +348,6 @@ func validateHeight(height int64) (*int64, error) {
 // exponential backoff (with jitter)
 // 0.5s -> 2s -> 4.5s -> 8s -> 12.5 with 1s variation
 func backoffTimeout(attempt uint16) time.Duration {
-	// nolint:gosec // G404: Use of weak random number generator
+	//nolint:gosec // G404: Use of weak random number generator
 	return time.Duration(500*attempt*attempt)*time.Millisecond + time.Duration(rand.Intn(1000))*time.Millisecond
 }

@@ -61,7 +61,7 @@ func TestEvidencePoolBasic(t *testing.T) {
 	stateStore.On("LoadValidators", mock.AnythingOfType("int64")).Return(valSet, nil)
 	stateStore.On("Load").Return(createState(height+1, valSet), nil)
 
-	logger := log.NewNopLogger()
+	logger := log.NewTestingLogger(t)
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
 
@@ -96,7 +96,7 @@ func TestEvidencePoolBasic(t *testing.T) {
 	next := pool.EvidenceFront()
 	require.Equal(t, ev, next.Value.(types.Evidence))
 
-	const evidenceBytes int64 = 640
+	const evidenceBytes int64 = 512
 	evs, size = pool.PendingEvidence(evidenceBytes)
 	require.Equal(t, 1, len(evs))
 	require.Equal(t, evidenceBytes, size) // check that the size of the single evidence in bytes is correct
@@ -262,7 +262,8 @@ func TestEvidencePoolUpdate(t *testing.T) {
 	lastCommit := makeCommit(height, state.Validators.QuorumHash, val.ProTxHash)
 
 	coreChainLockHeight := state.LastCoreChainLockedBlockHeight
-	block := types.MakeBlock(height+1, coreChainLockHeight, nil, []types.Tx{}, lastCommit, []types.Evidence{ev}, 0)
+	block := types.MakeBlock(height+1, []types.Tx{}, lastCommit, []types.Evidence{ev})
+	block.SetDashParams(coreChainLockHeight, nil, 0, nil)
 
 	// update state (partially)
 	state.LastBlockHeight = height + 1
@@ -483,7 +484,6 @@ func initializeStateFromValidatorSet(t *testing.T, valSet *types.ValidatorSet, h
 		LastBlockHeight:             height,
 		LastBlockTime:               defaultEvidenceTime,
 		Validators:                  valSet,
-		NextValidators:              valSet.CopyIncrementProposerPriority(1),
 		LastValidators:              valSet,
 		LastHeightValidatorsChanged: 1,
 		ConsensusParams: types.ConsensusParams{
@@ -541,7 +541,7 @@ func initializeBlockStore(db dbm.DB, state sm.State, valProTxHash []byte) (*stor
 
 	for i := int64(1); i <= state.LastBlockHeight; i++ {
 		lastCommit := makeCommit(i-1, state.Validators.QuorumHash, valProTxHash)
-		block := state.MakeBlock(i, nil, []types.Tx{}, lastCommit, nil, state.Validators.GetProposer().ProTxHash, 0)
+		block := state.MakeBlock(i, []types.Tx{}, lastCommit, nil, state.Validators.GetProposer().ProTxHash, 0)
 
 		block.Header.Time = defaultEvidenceTime.Add(time.Duration(i) * time.Minute)
 		block.Header.Version = version.Consensus{Block: version.BlockProtocol, App: 1}
@@ -563,11 +563,9 @@ func makeCommit(height int64, quorumHash []byte, valProTxHash []byte) *types.Com
 		height,
 		0,
 		types.BlockID{},
-		types.StateID{Height: height - 1},
 		&types.CommitSigns{
 			QuorumSigns: types.QuorumSigns{
 				BlockSign: crypto.CRandBytes(types.SignatureSize),
-				StateSign: crypto.CRandBytes(types.SignatureSize),
 			},
 			QuorumHash: quorumHash,
 		},

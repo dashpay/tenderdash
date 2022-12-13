@@ -16,6 +16,7 @@ import (
 	"google.golang.org/grpc"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
+	"github.com/tendermint/tendermint/abci/example/kvstore"
 	"github.com/tendermint/tendermint/abci/server"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto/ed25519"
@@ -87,14 +88,6 @@ func run(ctx context.Context, configFile string) error {
 		return err
 	}
 
-	// Start remote signer (must start before node if running builtin).
-	if cfg.PrivValServer != "" {
-		err := startRemoteSigner(ctx, cfg, logger)
-		if err != nil {
-			return err
-		}
-	}
-
 	// Start app server.
 	err = startAppServer(ctx, cfg, logger)
 	if err != nil {
@@ -112,18 +105,24 @@ func run(ctx context.Context, configFile string) error {
 }
 
 func startAppServer(ctx context.Context, cfg *Config, logger log.Logger) error {
+	// Start remote signer (must start before node if running builtin).
+	if cfg.PrivValServer != "" {
+		err := startRemoteSigner(ctx, cfg, logger)
+		if err != nil {
+			return err
+		}
+	}
+	if cfg.Mode == string(e2e.ModeLight) {
+		return startLightNode(ctx, logger, cfg)
+	}
 	switch cfg.Protocol {
 	case "socket", "grpc":
 		return startApp(ctx, logger, cfg)
 	case "builtin":
-		switch cfg.Mode {
-		case string(e2e.ModeLight):
-			return startLightNode(ctx, logger, cfg)
-		case string(e2e.ModeSeed):
+		if cfg.Mode == string(e2e.ModeSeed) {
 			return startSeedNode(ctx)
-		default:
-			return startNode(ctx, cfg)
 		}
+		return startNode(ctx, cfg)
 	}
 	return fmt.Errorf("invalid protocol %q", cfg.Protocol)
 }
@@ -170,7 +169,7 @@ func startRemoteSigner(ctx context.Context, cfg *Config, logger log.Logger) erro
 
 // startApp starts the application server, listening for connections from Tendermint.
 func startApp(ctx context.Context, logger log.Logger, cfg *Config) error {
-	app, err := app.NewApplication(cfg.App())
+	app, err := app.NewApplication(*cfg.App(), kvstore.WithCommitVerification())
 	if err != nil {
 		return err
 	}
@@ -191,7 +190,7 @@ func startApp(ctx context.Context, logger log.Logger, cfg *Config) error {
 //
 // FIXME There is no way to simply load the configuration from a file, so we need to pull in Viper.
 func startNode(ctx context.Context, cfg *Config) error {
-	app, err := app.NewApplication(cfg.App())
+	app, err := app.NewApplication(*cfg.App(), kvstore.WithCommitVerification())
 	if err != nil {
 		return err
 	}
@@ -263,7 +262,8 @@ func startLightNode(ctx context.Context, logger log.Logger, cfg *Config) error {
 	// If necessary adjust global WriteTimeout to ensure it's greater than
 	// TimeoutBroadcastTxCommit.
 	// See https://github.com/tendermint/tendermint/issues/3435
-	if rpccfg.WriteTimeout <= tmcfg.RPC.TimeoutBroadcastTxCommit {
+	// Note we don't need to adjust anything if the timeout is already unlimited.
+	if rpccfg.WriteTimeout > 0 && rpccfg.WriteTimeout <= tmcfg.RPC.TimeoutBroadcastTxCommit {
 		rpccfg.WriteTimeout = tmcfg.RPC.TimeoutBroadcastTxCommit + 1*time.Second
 	}
 

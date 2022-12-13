@@ -6,6 +6,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/internal/proxy"
 	"github.com/tendermint/tendermint/libs/bytes"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/coretypes"
 	"github.com/tendermint/tendermint/types"
@@ -64,14 +65,24 @@ func (a ABCIApp) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*coretypes
 	if res.CheckTx.IsErr() {
 		return res, nil
 	}
-
-	fb, err := a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Txs: [][]byte{tx}})
+	propResp, err := a.App.ProcessProposal(ctx, &abci.RequestProcessProposal{Height: 1, Txs: [][]byte{tx}})
+	if err != nil {
+		return nil, err
+	}
+	_, err = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{
+		Height: 1,
+		Block: &tmproto.Block{
+			Header: tmproto.Header{AppHash: propResp.AppHash},
+			Data:   tmproto.Data{Txs: [][]byte{tx}},
+		},
+	})
 	if err != nil {
 		return nil, err
 	}
 
-	res.TxResult = *fb.TxResults[0]
-	res.Height = -1 // TODO
+	res.TxResult = abci.ExecTxResult{
+		Code: abci.CodeTypeOK,
+	}
 	return res, nil
 }
 
@@ -83,18 +94,25 @@ func (a ABCIApp) BroadcastTxAsync(ctx context.Context, tx types.Tx) (*coretypes.
 
 	// and this gets written in a background thread...
 	if !c.IsErr() {
-		go func() { _, _ = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Txs: [][]byte{tx}}) }()
+		go func() {
+			_, _ = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{
+				Block: &tmproto.Block{Data: tmproto.Data{Txs: [][]byte{tx}}},
+			})
+		}()
 	}
 	return &coretypes.ResultBroadcastTx{
 		Code:      c.Code,
 		Data:      c.Data,
-		Log:       c.Log,
 		Codespace: c.Codespace,
 		Hash:      tx.Hash(),
 	}, nil
 }
 
 func (a ABCIApp) BroadcastTxSync(ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
+	return a.BroadcastTx(ctx, tx)
+}
+
+func (a ABCIApp) BroadcastTx(ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	c, err := a.App.CheckTx(ctx, &abci.RequestCheckTx{Tx: tx})
 	if err != nil {
 		return nil, err
@@ -102,12 +120,17 @@ func (a ABCIApp) BroadcastTxSync(ctx context.Context, tx types.Tx) (*coretypes.R
 
 	// and this gets written in a background thread...
 	if !c.IsErr() {
-		go func() { _, _ = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{Txs: [][]byte{tx}}) }()
+		go func() {
+			_, _ = a.App.FinalizeBlock(ctx, &abci.RequestFinalizeBlock{
+				Block: &tmproto.Block{
+					Data: tmproto.Data{Txs: [][]byte{tx}},
+				},
+			})
+		}()
 	}
 	return &coretypes.ResultBroadcastTx{
 		Code:      c.Code,
 		Data:      c.Data,
-		Log:       c.Log,
 		Codespace: c.Codespace,
 		Hash:      tx.Hash(),
 	}, nil
@@ -153,6 +176,14 @@ func (m ABCIMock) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*coretype
 }
 
 func (m ABCIMock) BroadcastTxAsync(ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
+	res, err := m.Broadcast.GetResponse(tx)
+	if err != nil {
+		return nil, err
+	}
+	return res.(*coretypes.ResultBroadcastTx), nil
+}
+
+func (m ABCIMock) BroadcastTx(ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	res, err := m.Broadcast.GetResponse(tx)
 	if err != nil {
 		return nil, err
@@ -248,6 +279,17 @@ func (r *ABCIRecorder) BroadcastTxSync(ctx context.Context, tx types.Tx) (*coret
 	res, err := r.Client.BroadcastTxSync(ctx, tx)
 	r.addCall(Call{
 		Name:     "broadcast_tx_sync",
+		Args:     tx,
+		Response: res,
+		Error:    err,
+	})
+	return res, err
+}
+
+func (r *ABCIRecorder) BroadcastTx(ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
+	res, err := r.Client.BroadcastTx(ctx, tx)
+	r.addCall(Call{
+		Name:     "broadcast_tx",
 		Args:     tx,
 		Response: res,
 		Error:    err,

@@ -31,6 +31,15 @@ func (tx Tx) String() string { return fmt.Sprintf("Tx{%X}", []byte(tx)) }
 // Txs is a slice of Tx.
 type Txs []Tx
 
+// NewTxs creates new transactions object based on raw transactions
+func NewTxs(in [][]byte) Txs {
+	ret := make(Txs, len(in))
+	for key, val := range in {
+		ret[key] = val
+	}
+	return ret
+}
+
 // Hash returns the Merkle root hash of the transaction hashes.
 // i.e. the leaves of the tree are the hashes of the txs.
 func (txs Txs) Hash() []byte {
@@ -214,7 +223,7 @@ func (t TxRecordSet) Validate(maxSizeBytes int64, otxs Txs) error {
 	otxsCopy := sortedCopy(otxs)
 
 	if ix, ok := containsAll(otxsCopy, unmodifiedCopy); !ok {
-		return fmt.Errorf("new transaction incorrectly marked as removed, transaction hash: %x", unmodifiedCopy[ix].Hash())
+		return fmt.Errorf("new transaction incorrectly marked as unmodified, transaction hash: %x", unmodifiedCopy[ix].Hash())
 	}
 
 	if ix, ok := containsAll(otxsCopy, removedCopy); !ok {

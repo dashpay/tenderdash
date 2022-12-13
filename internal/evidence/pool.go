@@ -5,9 +5,10 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/gogo/protobuf/proto"
 	gogotypes "github.com/gogo/protobuf/types"
@@ -22,6 +23,16 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
+// key prefixes
+// NB: Before modifying these, cross-check them with those in
+// * internal/store/store.go    [0..4, 13]
+// * internal/state/store.go    [5..8, 14]
+// * internal/evidence/pool.go  [9..10]
+// * light/store/db/db.go       [11..12]
+// TODO(sergio): Move all these to their own package.
+// TODO: what about these (they already collide):
+// * scripts/scmigrate/migrate.go [3]
+// * internal/p2p/peermanager.go  [1]
 const (
 	// prefixes are unique across all tm db's
 	prefixCommitted = int64(9)
@@ -92,11 +103,11 @@ func (evpool *Pool) PendingEvidence(maxBytes int64) ([]types.Evidence, int64) {
 
 // Update takes both the new state and the evidence committed at that height and performs
 // the following operations:
-// 1. Take any conflicting votes from consensus and use the state's LastBlockTime to form
-//    DuplicateVoteEvidence and add it to the pool.
-// 2. Update the pool's state which contains evidence params relating to expiry.
-// 3. Moves pending evidence that has now been committed into the committed pool.
-// 4. Removes any expired evidence based on both height and time.
+//  1. Take any conflicting votes from consensus and use the state's LastBlockTime to form
+//     DuplicateVoteEvidence and add it to the pool.
+//  2. Update the pool's state which contains evidence params relating to expiry.
+//  3. Moves pending evidence that has now been committed into the committed pool.
+//  4. Removes any expired evidence based on both height and time.
 func (evpool *Pool) Update(ctx context.Context, state sm.State, ev types.EvidenceList) {
 	// sanity check
 	if state.LastBlockHeight <= evpool.state.LastBlockHeight {

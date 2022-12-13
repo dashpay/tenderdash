@@ -242,18 +242,17 @@ func (sc *DashCoreSignerClient) GetProTxHash(ctx context.Context) (crypto.ProTxH
 // SignVote requests a remote signer to sign a vote
 func (sc *DashCoreSignerClient) SignVote(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
-	protoVote *tmproto.Vote, stateID types.StateID, logger log.Logger) error {
+	protoVote *tmproto.Vote, logger log.Logger) error {
 	if len(quorumHash) != crypto.DefaultHashSize {
 		return fmt.Errorf("quorum hash is not the right length %s", quorumHash.String())
 	}
 
-	quorumSigns, err := types.MakeQuorumSigns(chainID, quorumType, quorumHash, protoVote, stateID)
+	quorumSigns, err := types.MakeQuorumSigns(chainID, quorumType, quorumHash, protoVote)
 	if err != nil {
 		return err
 	}
-	blockQS := quorumSigns.Block
 
-	qs, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, blockQS)
+	qs, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, quorumSigns.Block)
 	if err != nil {
 		return err
 	}
@@ -261,23 +260,20 @@ func (sc *DashCoreSignerClient) SignVote(
 	// No need to check the error as this is only used for logging
 	proTxHash, _ := sc.GetProTxHash(ctx)
 
-	logger.Debug("signed vote", "height", protoVote.Height, "round", protoVote.Round, "voteType", protoVote.Type,
-		"quorumType", quorumType, "quorumHash", quorumHash, "signature", qs.sign, "signBytes", blockQS.Raw,
-		"proTxHash", proTxHash, "coreBlockRequestId", qs.ID, "blockRequestId",
-		hex.EncodeToString(blockQS.ReqID), "coreSignId", tmbytes.Reverse(qs.signHash),
-		"signId", hex.EncodeToString(blockQS.ID))
+	logger.Debug("signed vote", "height", protoVote.Height,
+		"round", protoVote.Round,
+		"voteType", protoVote.Type,
+		"quorumType", quorumType,
+		"quorumHash", quorumHash,
+		"signature", qs.sign,
+		"proTxHash", proTxHash,
+		"coreBlockRequestId", qs.ID,
+		"coreSignId", tmbytes.Reverse(qs.signHash),
+		"signItem", quorumSigns,
+		"signResult", qs,
+	)
 
 	protoVote.BlockSignature = qs.sign
-
-	// Only sign the state when voting for the block
-	if protoVote.BlockID.Hash != nil {
-		signItem := quorumSigns.State
-		resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
-		if err != nil {
-			return err
-		}
-		protoVote.StateSignature = resp.sign
-	}
 
 	return sc.signVoteExtensions(ctx, quorumType, quorumHash, protoVote, quorumSigns)
 }

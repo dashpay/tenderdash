@@ -6,7 +6,10 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
+
+	"github.com/rs/zerolog"
 
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/libs/bits"
@@ -56,6 +59,12 @@ func (part *Part) StringIndented(indent string) string {
 		indent, tmbytes.Fingerprint(part.Bytes),
 		indent, part.Proof.StringIndented(indent+"  "),
 		indent)
+}
+
+func (part *Part) MarshalZerologObject(e *zerolog.Event) {
+	e.Uint32("index", part.Index)
+	e.Str("bytes", part.Bytes.ShortString())
+	e.Str("proof", part.Proof.String())
 }
 
 func (part *Part) ToProto() (*tmproto.Part, error) {
@@ -129,7 +138,7 @@ func (psh *PartSetHeader) ToProto() tmproto.PartSetHeader {
 
 	return tmproto.PartSetHeader{
 		Total: psh.Total,
-		Hash:  psh.Hash,
+		Hash:  psh.Hash.Copy(),
 	}
 }
 

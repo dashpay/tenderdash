@@ -3,8 +3,9 @@ package p2p
 import (
 	"fmt"
 	"net"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 )
 
 type connectionTracker interface {

@@ -2,9 +2,10 @@ package db
 
 import (
 	"context"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -209,7 +210,7 @@ func randLightBlock(ctx context.Context, t *testing.T, height int64) *types.Ligh
 				NextValidatorsHash: crypto.CRandBytes(crypto.HashSize),
 				ConsensusHash:      crypto.CRandBytes(crypto.HashSize),
 				AppHash:            crypto.CRandBytes(crypto.HashSize),
-				LastResultsHash:    crypto.CRandBytes(crypto.HashSize),
+				ResultsHash:        crypto.CRandBytes(crypto.HashSize),
 				EvidenceHash:       crypto.CRandBytes(crypto.HashSize),
 				ProposerProTxHash:  crypto.CRandBytes(crypto.DefaultHashSize),
 			},

@@ -2,6 +2,7 @@ package store
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"strconv"
 
@@ -17,9 +18,9 @@ import (
 BlockStore is a simple low level store for blocks.
 
 There are three types of information stored:
- - BlockMeta:   Meta information about each block
- - Block part:  Parts of each block, aggregated w/ PartSet
- - Commit:      The commit part of each block, for gossiping precommit votes
+  - BlockMeta:   Meta information about each block
+  - Block part:  Parts of each block, aggregated w/ PartSet
+  - Commit:      The commit part of each block, for gossiping precommit votes
 
 Currently the precommit signatures are duplicated in the Block parts as
 well as the Commit.  In the future this may change, perhaps by moving
@@ -267,23 +268,19 @@ func (bs *BlockStore) LoadBlockMeta(height int64) *types.BlockMeta {
 // and it comes from the block.LastCommit for `height+1`.
 // If no commit is found for the given height, it returns nil.
 func (bs *BlockStore) LoadBlockCommit(height int64) *types.Commit {
-	var pbc = new(tmproto.Commit)
 	bz, err := bs.db.Get(blockCommitKey(height))
 	if err != nil {
 		panic(err)
 	}
-	if len(bz) == 0 {
-		return nil
-	}
-	err = proto.Unmarshal(bz, pbc)
+	return mustDecodeCommit(bz)
+}
+
+func (bs *BlockStore) LoadSeenCommitAt(height int64) *types.Commit {
+	bz, err := bs.db.Get(seenCommitAtKey(height))
 	if err != nil {
-		panic(fmt.Errorf("error reading block commit: %w", err))
+		panic(err)
 	}
-	commit, err := types.CommitFromProto(pbc)
-	if err != nil {
-		panic(fmt.Errorf("error reading block commit: %w", err))
-	}
-	return commit
+	return mustDecodeCommit(bz)
 }
 
 // LoadSeenCommit returns the last locally seen Commit before being
@@ -306,7 +303,7 @@ func (bs *BlockStore) LoadSeenCommit() *types.Commit {
 
 	commit, err := types.CommitFromProto(pbc)
 	if err != nil {
-		panic(fmt.Errorf("error from proto commit: %w", err))
+		panic(fmt.Errorf("converting seen commit: %w", err))
 	}
 	return commit
 }
@@ -451,24 +448,44 @@ func (bs *BlockStore) batchDelete(
 // SaveBlock persists the given block, blockParts, and seenCommit to the underlying db.
 // blockParts: Must be parts of the block
 // seenCommit: The +2/3 precommits that were seen which committed at height.
-//             If all the nodes restart after committing a block,
-//             we need this to reload the precommits to catch-up nodes to the
-//             most recent height.  Otherwise they'd stall at H-1.
+//
+//	If all the nodes restart after committing a block,
+//	we need this to reload the precommits to catch-up nodes to the
+//	most recent height.  Otherwise they'd stall at H-1.
 func (bs *BlockStore) SaveBlock(block *types.Block, blockParts *types.PartSet, seenCommit *types.Commit) {
 	if block == nil {
 		panic("BlockStore can only save a non-nil block")
 	}
-
 	batch := bs.db.NewBatch()
+	if err := bs.saveBlockToBatch(batch, block, blockParts, seenCommit); err != nil {
+		panic(err)
+	}
+
+	if err := batch.WriteSync(); err != nil {
+		panic(err)
+	}
+
+	if err := batch.Close(); err != nil {
+		panic(err)
+	}
+}
+
+func (bs *BlockStore) saveBlockToBatch(batch dbm.Batch, block *types.Block, blockParts *types.PartSet, seenCommit *types.Commit) error {
+	if block == nil {
+		panic("BlockStore can only save a non-nil block")
+	}
 
 	height := block.Height
 	hash := block.Hash()
 
 	if g, w := height, bs.Height()+1; bs.Base() > 0 && g != w {
-		panic(fmt.Sprintf("BlockStore can only save contiguous blocks. Wanted %v, got %v", w, g))
+		return fmt.Errorf("BlockStore can only save contiguous blocks. Wanted %v, got %v", w, g)
 	}
 	if !blockParts.IsComplete() {
-		panic("BlockStore can only save complete block part sets")
+		return errors.New("BlockStore can only save complete block part sets")
+	}
+	if height != seenCommit.Height {
+		return fmt.Errorf("BlockStore cannot save seen commit of a different height (block: %d, commit: %d)", height, seenCommit.Height)
 	}
 
 	// Save block parts. This must be done before the block meta, since callers
@@ -480,41 +497,40 @@ func (bs *BlockStore) SaveBlock(block *types.Block, blockParts *types.PartSet, s
 		bs.saveBlockPart(height, i, part, batch)
 	}
 
-	blockMeta := types.NewBlockMeta(block, blockParts)
+	blockMeta := types.NewBlockMeta(block, blockParts, seenCommit.Round)
 	pbm := blockMeta.ToProto()
 	if pbm == nil {
-		panic("nil blockmeta")
+		return errors.New("nil blockmeta")
 	}
 
 	metaBytes := mustEncode(pbm)
 	if err := batch.Set(blockMetaKey(height), metaBytes); err != nil {
-		panic(err)
+		return err
 	}
 
 	if err := batch.Set(blockHashKey(hash), []byte(fmt.Sprintf("%d", height))); err != nil {
-		panic(err)
+		return err
 	}
 
 	pbc := block.LastCommit.ToProto()
 	blockCommitBytes := mustEncode(pbc)
 	if err := batch.Set(blockCommitKey(height-1), blockCommitBytes); err != nil {
-		panic(err)
+		return err
 	}
 
 	// Save seen commit (seen +2/3 precommits for block)
 	pbsc := seenCommit.ToProto()
 	seenCommitBytes := mustEncode(pbsc)
 	if err := batch.Set(seenCommitKey(), seenCommitBytes); err != nil {
-		panic(err)
+		return err
 	}
 
-	if err := batch.WriteSync(); err != nil {
-		panic(err)
+	// stores seen-commit at height, because tendermint does the same but only for extended commit
+	if err := batch.Set(seenCommitAtKey(height), seenCommitBytes); err != nil {
+		return err
 	}
 
-	if err := batch.Close(); err != nil {
-		panic(err)
-	}
+	return nil
 }
 
 func (bs *BlockStore) saveBlockPart(height int64, index int, part *types.Part, batch dbm.Batch) {
@@ -587,13 +603,23 @@ func (bs *BlockStore) Close() error {
 //---------------------------------- KEY ENCODING -----------------------------------------
 
 // key prefixes
+// NB: Before modifying these, cross-check them with those in
+// * internal/store/store.go    [0..4, 13]
+// * internal/state/store.go    [5..8, 14]
+// * internal/evidence/pool.go  [9..10]
+// * light/store/db/db.go       [11..12]
+// TODO(thane): Move all these to their own package.
+// TODO: what about these (they already collide):
+// * scripts/scmigrate/migrate.go [3] --> Looks OK, as it is also called "SeenCommit"
+// * internal/p2p/peermanager.go  [1]
 const (
 	// prefixes are unique across all tm db's
-	prefixBlockMeta   = int64(0)
-	prefixBlockPart   = int64(1)
-	prefixBlockCommit = int64(2)
-	prefixSeenCommit  = int64(3)
-	prefixBlockHash   = int64(4)
+	prefixBlockMeta    = int64(0)
+	prefixBlockPart    = int64(1)
+	prefixBlockCommit  = int64(2)
+	prefixSeenCommit   = int64(3)
+	prefixBlockHash    = int64(4)
+	prefixSeenCommitAt = int64(13)
 )
 
 func blockMetaKey(height int64) []byte {
@@ -643,6 +669,14 @@ func seenCommitKey() []byte {
 	return key
 }
 
+func seenCommitAtKey(height int64) []byte {
+	key, err := orderedcode.Append(nil, prefixSeenCommitAt, height)
+	if err != nil {
+		panic(err)
+	}
+	return key
+}
+
 func blockHashKey(hash []byte) []byte {
 	key, err := orderedcode.Append(nil, prefixBlockHash, string(hash))
 	if err != nil {
@@ -660,4 +694,20 @@ func mustEncode(pb proto.Message) []byte {
 		panic(fmt.Errorf("unable to marshal: %w", err))
 	}
 	return bz
+}
+
+func mustDecodeCommit(bz []byte) *types.Commit {
+	if len(bz) == 0 {
+		return nil
+	}
+	var pbc = new(tmproto.Commit)
+	err := proto.Unmarshal(bz, pbc)
+	if err != nil {
+		panic(fmt.Errorf("error reading block commit: %w", err))
+	}
+	commit, err := types.CommitFromProto(pbc)
+	if err != nil {
+		panic(fmt.Errorf("converting commit to proto: %w", err))
+	}
+	return commit
 }

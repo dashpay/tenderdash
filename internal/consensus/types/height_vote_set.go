@@ -5,7 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -41,7 +42,6 @@ One for their LastPrecommits round, and another for the official commit round.
 type HeightVoteSet struct {
 	chainID string
 	height  int64
-	stateID types.StateID // State ID describing current state (eg. previous height and previous app hash)
 	valSet  *types.ValidatorSet
 
 	mtx               sync.Mutex
@@ -53,12 +53,8 @@ type HeightVoteSet struct {
 func NewHeightVoteSet(
 	chainID string,
 	height int64,
-	stateID types.StateID,
 	valSet *types.ValidatorSet) *HeightVoteSet {
-	hvs := &HeightVoteSet{
-		chainID: chainID,
-		stateID: stateID,
-	}
+	hvs := &HeightVoteSet{chainID: chainID}
 	hvs.Reset(height, valSet)
 	return hvs
 }
@@ -113,17 +109,12 @@ func (hvs *HeightVoteSet) addRound(round int32) {
 	if _, ok := hvs.roundVoteSets[round]; ok {
 		panic("addRound() for an existing round")
 	}
-	// log.Debug("addRound(round)", "round", round)
+	rvs := RoundVoteSet{}
 	if hvs.valSet.HasPublicKeys {
-		prevotes := types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet, hvs.stateID)
-		precommits := types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrecommitType, hvs.valSet, hvs.stateID)
-		hvs.roundVoteSets[round] = RoundVoteSet{
-			Prevotes:   prevotes,
-			Precommits: precommits,
-		}
-	} else {
-		hvs.roundVoteSets[round] = RoundVoteSet{}
+		rvs.Prevotes = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet)
+		rvs.Precommits = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrecommitType, hvs.valSet)
 	}
+	hvs.roundVoteSets[round] = rvs
 }
 
 // AddVote adds a vote of a specific type to the round
@@ -201,6 +192,7 @@ func (hvs *HeightVoteSet) getVoteSet(round int32, voteType tmproto.SignedMsgType
 // this can cause memory issues.
 // TODO: implement ability to remove peers too
 func (hvs *HeightVoteSet) SetPeerMaj23(
+	height int64,
 	round int32,
 	voteType tmproto.SignedMsgType,
 	peerID types.NodeID,
@@ -214,7 +206,8 @@ func (hvs *HeightVoteSet) SetPeerMaj23(
 	if voteSet == nil {
 		return nil // something we don't know about yet
 	}
-	return voteSet.SetPeerMaj23(string(peerID), blockID)
+
+	return voteSet.SetPeerMaj23(string(peerID), blockID, height, round)
 }
 
 //---------------------------------------------------------

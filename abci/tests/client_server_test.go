@@ -6,6 +6,7 @@ import (
 
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	abciclientent "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/example/kvstore"
@@ -23,7 +24,8 @@ func TestClientServerNoAddrPrefix(t *testing.T) {
 		addr      = "localhost:26658"
 		transport = "socket"
 	)
-	app := kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
 	logger := log.NewTestingLogger(t)
 
 	server, err := abciserver.NewServer(logger, addr, transport, app)

@@ -12,8 +12,12 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/test/factory"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	tmrand "github.com/tendermint/tendermint/libs/rand"
+
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/privval"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
 	"github.com/tendermint/tendermint/types"
 )
@@ -159,12 +163,11 @@ func generateDuplicateVoteEvidence(
 	if err != nil {
 		return nil, err
 	}
-	stateID := types.RandStateID()
-	voteA, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID(), stateID)
+	voteA, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID())
 	if err != nil {
 		return nil, err
 	}
-	voteB, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID(), stateID)
+	voteB, err := factory.MakeVote(ctx, privVal, vals, chainID, valIdx, height, 0, 2, makeRandomBlockID())
 	if err != nil {
 		return nil, err
 	}
@@ -203,21 +206,16 @@ func readPrivKey(keyFilePath string, quorumHash crypto.QuorumHash) (crypto.PrivK
 }
 
 func makeRandomBlockID() types.BlockID {
-	return makeBlockID(crypto.CRandBytes(crypto.HashSize), 100, crypto.CRandBytes(crypto.HashSize))
+	return makeBlockID(tmrand.Bytes(crypto.HashSize), 100, tmrand.Bytes(crypto.HashSize), types.RandStateID())
 }
 
-func makeBlockID(hash []byte, partSetSize uint32, partSetHash []byte) types.BlockID {
-	var (
-		h   = make([]byte, crypto.HashSize)
-		psH = make([]byte, crypto.HashSize)
-	)
-	copy(h, hash)
-	copy(psH, partSetHash)
+func makeBlockID(hash tmbytes.HexBytes, partSetSize uint32, partSetHash tmbytes.HexBytes, stateID tmproto.StateID) types.BlockID {
 	return types.BlockID{
-		Hash: h,
+		Hash: hash.Copy(),
 		PartSetHeader: types.PartSetHeader{
 			Total: partSetSize,
-			Hash:  psH,
+			Hash:  partSetHash.Copy(),
 		},
+		StateID: stateID.Hash(),
 	}
 }

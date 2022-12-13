@@ -58,7 +58,7 @@ func (app *appConnTest) Info(ctx context.Context, req *types.RequestInfo) (*type
 var SOCKET = "socket"
 
 func TestEcho(t *testing.T) {
-	sockPath := fmt.Sprintf("unix:///tmp/echo_%v.sock", tmrand.Str(6))
+	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", t.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
 	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true)
 	if err != nil {
@@ -69,7 +69,11 @@ func TestEcho(t *testing.T) {
 	defer cancel()
 
 	// Start server
-	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, kvstore.NewApplication())
+
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+
+	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, app)
 	require.NoError(t, s.Start(ctx), "error starting socket server")
 	t.Cleanup(func() { cancel(); s.Wait() })
 
@@ -98,7 +102,7 @@ func TestEcho(t *testing.T) {
 
 func BenchmarkEcho(b *testing.B) {
 	b.StopTimer() // Initialize
-	sockPath := fmt.Sprintf("unix:///tmp/echo_%v.sock", tmrand.Str(6))
+	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", b.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
 	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true)
 	if err != nil {
@@ -109,7 +113,10 @@ func BenchmarkEcho(b *testing.B) {
 	defer cancel()
 
 	// Start server
-	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, kvstore.NewApplication())
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(b, err)
+
+	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, app)
 	require.NoError(b, s.Start(ctx), "Error starting socket server")
 	b.Cleanup(func() { cancel(); s.Wait() })
 
@@ -146,15 +153,16 @@ func TestInfo(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	sockPath := fmt.Sprintf("unix:///tmp/echo_%v.sock", tmrand.Str(6))
+	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", t.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
 	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true)
-	if err != nil {
-		t.Fatal(err)
-	}
+	require.NoError(t, err)
 
 	// Start server
-	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, kvstore.NewApplication())
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+
+	s := server.NewSocketServer(logger.With("module", "abci-server"), sockPath, app)
 	require.NoError(t, s.Start(ctx), "Error starting socket server")
 	t.Cleanup(func() { cancel(); s.Wait() })
 
@@ -167,9 +175,7 @@ func TestInfo(t *testing.T) {
 	resInfo, err := proxy.Info(ctx, &RequestInfo)
 	require.NoError(t, err)
 
-	if resInfo.Data != "{\"size\":0}" {
-		t.Error("Expected ResponseInfo with one element '{\"size\":0}' but got something else")
-	}
+	require.Equal(t, `{"appHash":"0000000000000000000000000000000000000000000000000000000000000000"}`, resInfo.Data, "Expected ResponseInfo with one element {\"appHash\":\"\"} but got something else")
 }
 
 type noopStoppableClientImpl struct {

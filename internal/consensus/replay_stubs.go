@@ -35,6 +35,7 @@ func (emptyMempool) Update(
 	_ []*abci.ExecTxResult,
 	_ mempool.PreCheckFunc,
 	_ mempool.PostCheckFunc,
+	_ bool,
 ) error {
 	return nil
 }
@@ -50,8 +51,36 @@ func (emptyMempool) TxsWaitChan() <-chan struct{} { return nil }
 func (emptyMempool) InitWAL() error { return nil }
 func (emptyMempool) CloseWAL()      {}
 
+type mockMempool struct {
+	emptyMempool
+	calls []types.Txs
+}
+
+func (m *mockMempool) ReapMaxBytesMaxGas(_, _ int64) types.Txs {
+	if len(m.calls) == 0 {
+		return types.Txs{}
+	}
+	txs := m.calls[0]
+	return txs
+}
+
+func (m *mockMempool) Update(
+	_ context.Context,
+	_ int64,
+	_ types.Txs,
+	_ []*abci.ExecTxResult,
+	_ mempool.PreCheckFunc,
+	_ mempool.PostCheckFunc,
+	_ bool,
+) error {
+	if len(m.calls) > 0 {
+		m.calls = m.calls[1:]
+	}
+	return nil
+}
+
 //-----------------------------------------------------------------------------
-// mockProxyApp uses ABCIResponses to give the right results.
+// mockProxyApp uses Responses to FinalizeBlock to give the right results.
 //
 // Useful because we don't want to call Commit() twice for the same block on
 // the real app.
@@ -75,6 +104,14 @@ type mockProxyApp struct {
 	abciResponses *tmstate.ABCIResponses
 }
 
+func (mock *mockProxyApp) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+	r := mock.abciResponses.ProcessProposal
+	if r == nil {
+		return &abci.ResponseProcessProposal{}, nil
+	}
+	return r, nil
+}
+
 func (mock *mockProxyApp) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	r := mock.abciResponses.FinalizeBlock
 	mock.txCount++
@@ -82,8 +119,4 @@ func (mock *mockProxyApp) FinalizeBlock(_ context.Context, req *abci.RequestFina
 		return &abci.ResponseFinalizeBlock{}, nil
 	}
 	return r, nil
-}
-
-func (mock *mockProxyApp) Commit(context.Context) (*abci.ResponseCommit, error) {
-	return &abci.ResponseCommit{Data: mock.appHash}, nil
 }

@@ -7,8 +7,8 @@ import (
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto"
 
+	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -29,47 +29,19 @@ func TestMakeBlockSignID(t *testing.T) {
 			quorumHash: mustHexDecode("6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD"),
 			want: newSignItem(
 				"C8F2E1FE35DE03AC94F76191F59CAD1BA1F7A3C63742B7125990D996315001CC",
-				"CE3AA8C6C6E32F54430C703F198E7E810DFBC7680EBCB549D61B9EBE49530339",
-				"1A080211E903000000000000320D646173682D706C6174666F726D",
+				"DA25B746781DDF47B5D736F30B1D9D0CC86981EEC67CBE255265C4361DEF8C2E",
+				"02000000E9030000000000000000000000000000E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B"+
+					"7852B855E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855646173682D706C6174666F726D",
 			),
-			wantHash: mustHexDecode("4BEAC39C516BEB1FDEBC569C0468B91D999050CA47B4AA12AFA825CD4E7EDAB3"),
+			wantHash: mustHexDecode("0CA3D5F42BDFED0C4FDE7E6DE0F046CC76CDA6CEE734D65E8B2EE0E375D4C57D"),
 		},
 	}
 	for i, tc := range testCases {
-		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("test-case %d", i), func(t *testing.T) {
 			signItem := MakeBlockSignItem(chainID, tc.vote.ToProto(), btcjson.LLMQType_5_60, tc.quorumHash)
+			t.Logf("hash %X id %X raw %X reqID %X", signItem.Hash, signItem.ID, signItem.Raw, signItem.ReqID)
 			require.Equal(t, tc.want, signItem)
 			require.Equal(t, tc.wantHash, signItem.Hash)
-		})
-	}
-}
-
-func TestMakeStateSignID(t *testing.T) {
-	const chainID = "dash-platform"
-	testCases := []struct {
-		stateID    StateID
-		quorumHash []byte
-		want       SignItem
-		wantHash   []byte
-	}{
-		{
-			stateID: StateID{
-				Height:      1001,
-				LastAppHash: mustHexDecode("524F1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83B"),
-			},
-			quorumHash: mustHexDecode("6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD"),
-			want: newSignItem(
-				"76D44F9A90D4B7974B3F6CA1A36D203F5163BCDE4A62095E5A0BF65AC94C35C0",
-				"8DE1C69FE4F9E89E7BAB5329CF97BD109ECD4E2D04F0B1B41653B1F02A765BA8",
-				"E903000000000000524F1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83B",
-			),
-			wantHash: mustHexDecode("85944D1C7755EDCDA86815CC69CF3961E5AAC5F6CB214B256EA5907195603ED4"),
-		},
-	}
-	for i, tc := range testCases {
-		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
-			signItem := MakeStateSignItem(chainID, tc.stateID, btcjson.LLMQType_5_60, tc.quorumHash)
-			require.Equal(t, tc.want, signItem)
 		})
 	}
 }

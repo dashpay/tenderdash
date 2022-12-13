@@ -1,4 +1,3 @@
-//nolint: lll
 package consensus
 
 import (
@@ -10,9 +9,10 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
@@ -24,6 +24,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/dash"
 	"github.com/tendermint/tendermint/dash/llmq"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
@@ -53,9 +54,8 @@ type cleanupFunc func()
 func configSetup(t *testing.T) *config.Config {
 	t.Helper()
 
-	cfg, err := ResetConfig(t.TempDir(), "consensus_reactor_test")
+	cfg, err := ResetConfig(t, "consensus_reactor_test")
 	require.NoError(t, err)
-	t.Cleanup(func() { _ = os.RemoveAll(cfg.RootDir) })
 	walDir := filepath.Dir(cfg.Consensus.WalFile())
 	ensureDir(t, walDir, 0700)
 
@@ -67,8 +67,16 @@ func ensureDir(t *testing.T, dir string, mode os.FileMode) {
 	require.NoError(t, tmos.EnsureDir(dir, mode))
 }
 
-func ResetConfig(dir, name string) (*config.Config, error) {
-	return config.ResetTestRoot(dir, name)
+func ResetConfig(t *testing.T, name string) (*config.Config, error) {
+	dir := t.TempDir()
+	testConfig, err := config.ResetTestRoot(dir, name)
+	if err != nil {
+		return nil, err
+	}
+	if t != nil {
+		t.Cleanup(func() { _ = os.RemoveAll(testConfig.RootDir) })
+	}
+	return testConfig, nil
 }
 
 //-------------------------------------------------------------------------------
@@ -101,7 +109,6 @@ func (vs *validatorStub) signVote(
 	voteType tmproto.SignedMsgType,
 	chainID string,
 	blockID types.BlockID,
-	lastAppHash []byte,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	voteExtensions types.VoteExtensions) (*types.Vote, error) {
@@ -121,13 +128,9 @@ func (vs *validatorStub) signVote(
 		VoteExtensions:     voteExtensions,
 	}
 
-	stateID := types.StateID{
-		Height:      vote.Height - 1,
-		LastAppHash: lastAppHash,
-	}
 	v := vote.ToProto()
 
-	if err := vs.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, v, stateID, nil); err != nil {
+	if err := vs.PrivValidator.SignVote(ctx, chainID, quorumType, quorumHash, v, nil); err != nil {
 		return nil, fmt.Errorf("sign vote failed: %w", err)
 	}
 
@@ -154,15 +157,13 @@ func signVote(
 	voteType tmproto.SignedMsgType,
 	chainID string,
 	blockID types.BlockID,
-	lastAppHash []byte,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash) *types.Vote {
-
 	exts := make(types.VoteExtensions)
-	if voteType == tmproto.PrecommitType {
+	if voteType == tmproto.PrecommitType && !blockID.IsNil() {
 		exts.Add(tmproto.VoteExtensionType_DEFAULT, []byte("extension"))
 	}
-	v, err := vs.signVote(ctx, voteType, chainID, blockID, lastAppHash, quorumType, quorumHash, exts)
+	v, err := vs.signVote(ctx, voteType, chainID, blockID, quorumType, quorumHash, exts)
 	require.NoError(t, err, "failed to sign vote")
 
 	vs.lastVote = v
@@ -176,14 +177,14 @@ func signVotes(
 	voteType tmproto.SignedMsgType,
 	chainID string,
 	blockID types.BlockID,
-	lastAppHash []byte,
+	appHash []byte,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	vss ...*validatorStub,
 ) []*types.Vote {
 	votes := make([]*types.Vote, len(vss))
 	for i, vs := range vss {
-		votes[i] = signVote(ctx, t, vs, voteType, chainID, blockID, lastAppHash, quorumType, quorumHash)
+		votes[i] = signVote(ctx, t, vs, voteType, chainID, blockID, quorumType, quorumHash)
 	}
 	return votes
 }
@@ -226,6 +227,7 @@ func sortVValidatorStubsByPower(ctx context.Context, t *testing.T, vss []*valida
 // Functions for transitioning the consensus state
 
 func startTestRound(ctx context.Context, cs *State, height int64, round int32) {
+	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
 	cs.enterNewRound(ctx, height, round)
 	cs.startRoutines(ctx, 0)
 }
@@ -242,7 +244,7 @@ func decideProposal(
 	t.Helper()
 
 	cs1.mtx.Lock()
-	block, err := cs1.createProposalBlock(ctx)
+	block, err := cs1.createProposalBlock(ctx, round)
 	require.NoError(t, err)
 	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
@@ -257,7 +259,10 @@ func decideProposal(
 	require.NotNil(t, block, "Failed to createProposalBlock. Did you forget to add commit for previous block?")
 
 	// Make proposal
-	polRound, propBlockID := validRound, types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
+	polRound := validRound
+	propBlockID := block.BlockID(blockParts)
+	assert.NoError(t, err)
+
 	proposal = types.NewProposal(height, 1, round, polRound, propBlockID, block.Header.Time)
 	p := proposal.ToProto()
 
@@ -291,7 +296,9 @@ func signAddVotes(
 	blockID types.BlockID,
 	vss ...*validatorStub,
 ) {
-	addVotes(to, signVotes(ctx, t, voteType, chainID, blockID, to.state.AppHash, to.Validators.QuorumType, to.Validators.QuorumHash, vss...)...)
+	rs := to.GetRoundState()
+	_, valSet := to.GetValidatorSet()
+	addVotes(to, signVotes(ctx, t, voteType, chainID, blockID, rs.AppHash, valSet.QuorumType, valSet.QuorumHash, vss...)...)
 }
 
 func validatePrevote(
@@ -392,6 +399,9 @@ func subscribeToVoter(ctx context.Context, t *testing.T, cs *State, proTxHash []
 	return ch
 }
 
+// TODO: used only in pbts_test.go, remove nolint:unused once pbts tests are un-skipped
+//
+//nolint:unused
 func subscribeToVoterBuffered(ctx context.Context, t *testing.T, cs *State, proTxHash []byte) <-chan tmpubsub.Message {
 	t.Helper()
 	votesSub, err := cs.eventBus.SubscribeWithArgs(ctx, tmpubsub.SubscribeArgs{
@@ -494,7 +504,7 @@ func newStateWithConfigAndBlockStore(
 	eventBus := eventbus.NewDefault(logger.With("module", "events"))
 	require.NoError(t, eventBus.Start(ctx))
 
-	blockExec := sm.NewBlockExecutor(stateStore, logger, proxyAppConnCon, mempool, evpool, blockStore, eventBus, sm.NopMetrics())
+	blockExec := sm.NewBlockExecutor(stateStore, proxyAppConnCon, mempool, evpool, blockStore, eventBus)
 	cs, err := NewState(logger.With("module", "consensus"),
 		thisConfig.Consensus,
 		stateStore,
@@ -525,10 +535,11 @@ func loadPrivValidator(t *testing.T, cfg *config.Config) *privval.FilePV {
 }
 
 type makeStateArgs struct {
-	config      *config.Config
-	logger      log.Logger
-	validators  int
-	application abci.Application
+	config          *config.Config
+	consensusParams *types.ConsensusParams
+	logger          log.Logger
+	validators      int
+	application     abci.Application
 }
 
 func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, []*validatorStub) {
@@ -539,7 +550,8 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 		validators = args.validators
 	}
 	var app abci.Application
-	app = kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
 	if args.application != nil {
 		app = args.application
 	}
@@ -547,17 +559,20 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 		args.config = configSetup(t)
 	}
 	if args.logger == nil {
-		args.logger = log.NewNopLogger()
+		args.logger = consensusLogger(t)
+	}
+	c := factory.ConsensusParams()
+	if args.consensusParams != nil {
+		c = args.consensusParams
 	}
 
-	consensusParams := factory.ConsensusParams()
 	// vote timeout increased because of bls12381 signing/verifying operations are longer performed than ed25519
 	// and 10ms (previous value) is not enough
-	consensusParams.Timeout.Vote = 50 * time.Millisecond
-	consensusParams.Timeout.VoteDelta = 5 * time.Millisecond
+	c.Timeout.Vote = 50 * time.Millisecond
+	c.Timeout.VoteDelta = 5 * time.Millisecond
 
 	state, privVals := makeGenesisState(ctx, t, args.config, genesisStateArgs{
-		Params:     consensusParams,
+		Params:     c,
 		Validators: validators,
 	})
 
@@ -580,7 +595,8 @@ func ensureNoMessageBeforeTimeout(t *testing.T, ch <-chan tmpubsub.Message, time
 	select {
 	case <-time.After(timeout):
 		break
-	case <-ch:
+	case e := <-ch:
+		t.Logf("received unexpected event of type %T: %+v", e.Data(), e)
 		t.Fatal(errorMessage)
 	}
 }
@@ -630,11 +646,11 @@ func ensureNewRound(t *testing.T, roundCh <-chan tmpubsub.Message, height int64,
 	t.Helper()
 	msg := ensureMessageBeforeTimeout(t, roundCh, ensureTimeout)
 	newRoundEvent, ok := msg.Data().(types.EventDataNewRound)
-	require.True(t, ok, "expected a EventDataNewRound, got %T. Wrong subscription channel?",
+	assert.True(t, ok, "expected a EventDataNewRound, got %T. Wrong subscription channel?",
 		msg.Data())
 
-	require.Equal(t, height, newRoundEvent.Height)
-	require.Equal(t, round, newRoundEvent.Round)
+	assert.Equal(t, height, newRoundEvent.Height, "height")
+	assert.Equal(t, round, newRoundEvent.Round, "round")
 }
 
 func ensureNewTimeout(t *testing.T, timeoutCh <-chan tmpubsub.Message, height int64, round int32, timeout int64) {
@@ -690,6 +706,7 @@ func ensureRelock(t *testing.T, relockCh <-chan tmpubsub.Message, height int64, 
 }
 
 func ensureProposal(t *testing.T, proposalCh <-chan tmpubsub.Message, height int64, round int32, propID types.BlockID) {
+	t.Helper()
 	ensureProposalWithTimeout(t, proposalCh, height, round, &propID, ensureTimeout)
 }
 
@@ -783,8 +800,12 @@ func ensureMessageBeforeTimeout(t *testing.T, ch <-chan tmpubsub.Message, to tim
 
 // consensusLogger is a TestingLogger which uses a different
 // color for each validator ("validator" key must exist).
-func consensusLogger() log.Logger {
-	return log.NewNopLogger().With("module", "consensus")
+func consensusLogger(t *testing.T) log.Logger {
+	//return log.NewNopLogger().With("module", "consensus")
+	if t == nil {
+		return log.NewNopLogger().With("module", "consensus")
+	}
+	return log.NewTestingLogger(t).With("module", "consensus")
 }
 
 func makeConsensusState(
@@ -795,25 +816,19 @@ func makeConsensusState(
 	testName string,
 	tickerFunc func() TimeoutTicker,
 	configOpts ...func(*config.Config),
-) ([]*State, cleanupFunc) {
+) []*State {
 	t.Helper()
-	tempDir := t.TempDir()
 
 	genDoc, privVals := factory.RandGenesisDoc(cfg, nValidators, 1, factory.ConsensusParams())
 	css := make([]*State, nValidators)
-	logger := consensusLogger()
-
-	closeFuncs := make([]func() error, 0, nValidators)
-	configRootDirs := make([]string, 0, nValidators)
+	logger := consensusLogger(t)
 
 	for i := 0; i < nValidators; i++ {
 		blockStore := store.NewBlockStore(dbm.NewMemDB()) // each state needs its own db
 		state, err := sm.MakeGenesisState(genDoc)
 		require.NoError(t, err)
-		thisConfig, err := ResetConfig(tempDir, fmt.Sprintf("%s_%d", testName, i))
+		thisConfig, err := ResetConfig(t, fmt.Sprintf("%s_%d", testName, i))
 		require.NoError(t, err)
-
-		configRootDirs = append(configRootDirs, thisConfig.RootDir)
 
 		for _, opt := range configOpts {
 			opt(thisConfig)
@@ -822,109 +837,151 @@ func makeConsensusState(
 		walDir := filepath.Dir(thisConfig.Consensus.WalFile())
 		ensureDir(t, walDir, 0700)
 
-		app := kvstore.NewApplication()
-		closeFuncs = append(closeFuncs, app.Close)
+		app, err := kvstore.NewMemoryApp()
+		require.NoError(t, err)
+		t.Cleanup(func() { _ = app.Close() })
 
 		vals := types.TM2PB.ValidatorUpdates(state.Validators)
 		_, err = app.InitChain(ctx, &abci.RequestInitChain{ValidatorSet: &vals})
 		require.NoError(t, err)
 
+		proTxHash, _ := privVals[i].GetProTxHash(ctx)
+		sCtx := dash.ContextWithProTxHash(ctx, proTxHash)
+
 		l := logger.With("validator", i, "module", "consensus")
-		css[i] = newStateWithConfigAndBlockStore(ctx, t, l, thisConfig, state, privVals[i], app, blockStore)
+		css[i] = newStateWithConfigAndBlockStore(sCtx, t, l, thisConfig, state, privVals[i], app, blockStore)
 		css[i].SetTimeoutTicker(tickerFunc())
 	}
 
-	return css, func() {
-		for _, closer := range closeFuncs {
-			_ = closer()
+	return css
+}
+
+type consensusNetGen struct {
+	cfg              *config.Config
+	nPeers           int
+	nVals            int
+	tickerFun        func() TimeoutTicker
+	appFunc          func(log.Logger, string) abci.Application
+	validatorUpdates []validatorUpdate
+	consensusParams  *types.ConsensusParams
+}
+
+type validatorUpdate struct {
+	height    int64
+	count     int
+	operation string
+}
+
+func genFilePV(dir string) (types.PrivValidator, error) {
+	tempKeyFile, err := os.CreateTemp(dir, "priv_validator_key_")
+	if err != nil {
+		return nil, err
+	}
+	tempStateFile, err := os.CreateTemp(dir, "priv_validator_state_")
+	if err != nil {
+		return nil, err
+	}
+	privVal := privval.GenFilePV(tempKeyFile.Name(), tempStateFile.Name())
+	if err != nil {
+		return nil, err
+	}
+	return privVal, nil
+}
+
+func (g *consensusNetGen) newApp(logger log.Logger, state *sm.State, confName string) (abci.Application, func() error) {
+	app := g.appFunc(logger, filepath.Join(g.cfg.DBDir(), confName))
+	switch app.(type) {
+	// simulate handshake, receive app version. If don't do this, replay test will fail
+	case *kvstore.Application:
+		state.Version.Consensus.App = kvstore.ProtocolVersion
+	}
+	return app, func() error {
+		if appCloser, ok := app.(io.Closer); ok {
+			_ = appCloser.Close()
 		}
-		for _, dir := range configRootDirs {
-			os.RemoveAll(dir)
-		}
+		return nil
 	}
 }
 
+func (g *consensusNetGen) execValidatorSetUpdater(ctx context.Context, t *testing.T, states []*State, apps []abci.Application, n int) map[int64]abci.ValidatorSetUpdate {
+	t.Helper()
+	ret := make(map[int64]abci.ValidatorSetUpdate)
+	ret[0] = types.TM2PB.ValidatorUpdates(states[0].state.Validators)
+	if g.validatorUpdates == nil {
+		return ret
+	}
+	if _, ok := apps[0].(validatorSetUpdateStore); !ok || len(apps) == 0 {
+		return nil
+	}
+	stores := make([]validatorSetUpdateStore, len(apps))
+	for i, app := range apps {
+		stores[i] = app.(validatorSetUpdateStore)
+	}
+	valsUpdater, err := newValidatorUpdater(states, stores, n)
+	require.NoError(t, err)
+	for _, update := range g.validatorUpdates {
+		qd, err := valsUpdater.execOperation(ctx, update.operation, update.height, update.count)
+		require.NoError(t, err)
+		ret[update.height] = qd.validatorSetUpdate
+	}
+	return ret
+}
+
 // nPeers = nValidators + nNotValidator
-func randConsensusNetWithPeers(
-	ctx context.Context,
-	t *testing.T,
-	cfg *config.Config,
-	nValidators int,
-	nPeers int,
-	testName string,
-	tickerFunc func() TimeoutTicker,
-	appFunc func(log.Logger, string) abci.Application,
-) ([]*State, *types.GenesisDoc, *config.Config, cleanupFunc) {
+func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State, *types.GenesisDoc, *config.Config, map[int64]abci.ValidatorSetUpdate) {
 	t.Helper()
+	if g.consensusParams == nil {
+		g.consensusParams = factory.ConsensusParams()
+		g.consensusParams.Timeout.Propose = 1 * time.Second
+	}
 
-	consParams := factory.ConsensusParams()
-	consParams.Timeout.Propose = 1 * time.Second
-
-	genDoc, privVals := factory.RandGenesisDoc(cfg, nValidators, 1, consParams)
-	css := make([]*State, nPeers)
-	t.Helper()
-	logger := consensusLogger()
+	if g.nPeers == 0 {
+		g.nPeers = g.nVals
+	}
+	css := make([]*State, g.nPeers)
+	apps := make([]abci.Application, g.nPeers)
+	genDoc, privVals := factory.RandGenesisDoc(g.cfg, g.nVals, 1, g.consensusParams)
+	logger := consensusLogger(t)
 	var peer0Config *config.Config
-	closeFuncs := make([]func() error, 0, nValidators)
-	configRootDirs := make([]string, 0, nPeers)
-	for i := 0; i < nPeers; i++ {
+	tickerFunc := g.tickerFun
+	if tickerFunc == nil {
+		tickerFunc = newTickerFunc()
+	}
+	for i := 0; i < g.nPeers; i++ {
+		confName := fmt.Sprintf("%s_%d", t.Name(), i)
 		state, _ := sm.MakeGenesisState(genDoc)
-		thisConfig, err := ResetConfig(t.TempDir(), fmt.Sprintf("%s_%d", testName, i))
+		thisConfig, err := ResetConfig(t, confName)
 		require.NoError(t, err)
 
-		configRootDirs = append(configRootDirs, thisConfig.RootDir)
 		ensureDir(t, filepath.Dir(thisConfig.Consensus.WalFile()), 0700) // dir for wal
 		if i == 0 {
 			peer0Config = thisConfig
 		}
-		var privVal types.PrivValidator
-		if i < nValidators {
-			privVal = privVals[i]
-		} else {
-			tempKeyFile, err := os.CreateTemp(t.TempDir(), "priv_validator_key_")
+		if i >= len(privVals) {
+			privVal, err := genFilePV(t.TempDir())
 			require.NoError(t, err)
-
-			tempStateFile, err := os.CreateTemp(t.TempDir(), "priv_validator_state_")
-			require.NoError(t, err)
-
-			privVal = privval.GenFilePV(tempKeyFile.Name(), tempStateFile.Name())
-			require.NoError(t, err)
-
+			privVals = append(privVals, privVal)
 			// These validator might not have the public keys, for testing purposes let's assume they don't
 			state.Validators.HasPublicKeys = false
-			state.NextValidators.HasPublicKeys = false
 		}
+		var closeFunc func() error
+		apps[i], closeFunc = g.newApp(logger, &state, confName)
+		t.Cleanup(func() { _ = closeFunc() })
 
-		app := appFunc(logger, filepath.Join(cfg.DBDir(), fmt.Sprintf("%s_%d", testName, i)))
-		if appCloser, ok := app.(io.Closer); ok {
-			closeFuncs = append(closeFuncs, appCloser.Close)
-		}
 		vals := types.TM2PB.ValidatorUpdates(state.Validators)
-		switch app.(type) {
-		// simulate handshake, receive app version. If don't do this, replay test will fail
-		case *kvstore.PersistentKVStoreApplication:
-			state.Version.Consensus.App = kvstore.ProtocolVersion
-		case *kvstore.Application:
-			state.Version.Consensus.App = kvstore.ProtocolVersion
-		}
-		_, err = app.InitChain(ctx, &abci.RequestInitChain{ValidatorSet: &vals})
+		_, err = apps[i].InitChain(ctx, &abci.RequestInitChain{ValidatorSet: &vals})
 		require.NoError(t, err)
 		// sm.SaveState(stateDB,state)	//height 1's validatorsInfo already saved in LoadStateFromDBOrGenesisDoc above
-
-		proTxHash, _ := privVal.GetProTxHash(ctx)
+		proTxHash, _ := privVals[i].GetProTxHash(ctx)
 		css[i] = newStateWithConfig(ctx, t,
 			logger.With("validator", i, "node_proTxHash", proTxHash.ShortString(), "module", "consensus"),
-			thisConfig, state, privVal, app)
+			thisConfig, state, privVals[i], apps[i])
 		css[i].SetTimeoutTicker(tickerFunc())
 	}
-	return css, genDoc, peer0Config, func() {
-		for _, closer := range closeFuncs {
-			_ = closer()
-		}
-		for _, dir := range configRootDirs {
-			os.RemoveAll(dir)
-		}
-	}
+
+	validatorSetUpdates := g.execValidatorSetUpdater(ctx, t, css, apps, g.nVals)
+
+	return css, genDoc, peer0Config, validatorSetUpdates
 }
 
 type genesisStateArgs struct {
@@ -998,8 +1055,14 @@ func (m *mockTicker) Chan() <-chan timeoutInfo {
 	return m.c
 }
 
-func newEpehemeralKVStore(_ log.Logger, _ string) abci.Application {
-	return kvstore.NewApplication()
+func newKVStoreFunc(t *testing.T, opts ...kvstore.OptFunc) func(_ log.Logger, _ string) abci.Application {
+	return func(logger log.Logger, _ string) abci.Application {
+		opts = append(opts, kvstore.WithLogger(logger))
+		app, err := kvstore.NewMemoryApp(opts...)
+		require.NoError(t, err)
+
+		return app
+	}
 }
 
 func signDataIsEqual(v1 *types.Vote, v2 *tmproto.Vote) bool {
@@ -1017,128 +1080,8 @@ func signDataIsEqual(v1 *types.Vote, v2 *tmproto.Vote) bool {
 		v1.ValidatorIndex == v2.GetValidatorIndex()
 }
 
-type stateQuorumManager struct {
-	states   []*State
-	stateMap map[string]int
-}
-
-func newStateQuorumManager(states []*State) (*stateQuorumManager, error) {
-	manager := stateQuorumManager{
-		states:   states,
-		stateMap: make(map[string]int),
-	}
-	for i, state := range states {
-		proTxHash, err := state.privValidator.GetProTxHash(context.Background())
-		if err != nil {
-			return nil, err
-		}
-		manager.stateMap[proTxHash.String()] = i
-	}
-	return &manager, nil
-}
-
-func (s *stateQuorumManager) addValidator(height int64, cnt int) (*quorumData, error) {
-	currentValidators := s.validatorSet()
-	currentValidatorCount := len(currentValidators.Validators)
-	proTxHashes := currentValidators.GetProTxHashes()
-	for i := 0; i < cnt; i++ {
-		proTxHash, err := s.states[currentValidatorCount+i].privValidator.GetProTxHash(context.Background())
-		if err != nil {
-			panic(err)
-		}
-		proTxHashes = append(proTxHashes, proTxHash)
-	}
-	return s.generateKeysAndUpdateState(proTxHashes, height)
-}
-
-func (s *stateQuorumManager) remValidators(height int64, cnt int) (*quorumData, error) {
-	currentValidators := s.validatorSet()
-	currentValidatorCount := len(currentValidators.Validators)
-	if cnt >= currentValidatorCount {
-		return nil, fmt.Errorf("you can not remove all validators")
-	}
-	validatorProTxHashes := currentValidators.GetProTxHashes()
-	removedValidatorProTxHashes := validatorProTxHashes[len(validatorProTxHashes)-cnt:]
-	return s.remValidatorsByProTxHash(height, removedValidatorProTxHashes)
-}
-
-func (s *stateQuorumManager) remValidatorsByProTxHash(height int64, removal []crypto.ProTxHash) (*quorumData, error) {
-	currentValidators := s.validatorSet()
-	removalMap := make(map[string]struct{})
-	for _, proTxHash := range removal {
-		removalMap[proTxHash.String()] = struct{}{}
-	}
-	l := len(currentValidators.GetProTxHashes()) - len(removal)
-	validatorProTxHashes := make([]crypto.ProTxHash, 0, l)
-	for _, validatorProTxHash := range currentValidators.GetProTxHashes() {
-		if _, ok := removalMap[validatorProTxHash.String()]; !ok {
-			validatorProTxHashes = append(validatorProTxHashes, validatorProTxHash)
-		}
-	}
-	return s.generateKeysAndUpdateState(validatorProTxHashes, height)
-}
-
-func (s *stateQuorumManager) generateKeysAndUpdateState(
-	proTxHashes []crypto.ProTxHash,
-	height int64,
-) (*quorumData, error) {
-	// now that we have the list of all the protxhashes we need to regenerate the keys and the threshold public key
-	lq, err := llmq.Generate(proTxHashes)
-	if err != nil {
-		return nil, err
-	}
-	qd := quorumData{
-		Data:       *lq,
-		quorumHash: crypto.RandQuorumHash(),
-	}
-	vsu, err := abci.LLMQToValidatorSetProto(*lq, abci.WithQuorumHash(qd.quorumHash))
-	if err != nil {
-		return nil, err
-	}
-	qd.tx, err = kvstore.MarshalValidatorSetUpdate(vsu)
-	if err != nil {
-		return nil, err
-	}
-	iter := lq.Iter()
-	for iter.Next() {
-		proTxHash, qks := iter.Value()
-		_, err = s.updateState(
-			proTxHash,
-			qks.PrivKey,
-			qd.quorumHash,
-			lq.ThresholdPubKey,
-			height+3,
-		)
-		if err != nil {
-			return nil, err
-		}
-	}
-	return &qd, nil
-}
-
-func (s *stateQuorumManager) updateState(
-	proTxHash crypto.ProTxHash,
-	privKey crypto.PrivKey,
-	quorumHash crypto.QuorumHash,
-	thresholdPubKey crypto.PubKey,
-	height int64,
-) (*types.Validator, error) {
-	j, ok := s.stateMap[proTxHash.String()]
-	if !ok {
-		return nil, fmt.Errorf("a validator (%s) not found", proTxHash.ShortString())
-	}
-	privVal := s.states[j].privValidator
-	privVal.UpdatePrivateKey(context.Background(), privKey, quorumHash, thresholdPubKey, height)
-	return privVal.ExtractIntoValidator(context.Background(), quorumHash), nil
-}
-
-func (s *stateQuorumManager) validatorSet() *types.ValidatorSet {
-	_, vals := s.states[0].GetValidatorSet()
-	return vals
-}
-
 type quorumData struct {
 	llmq.Data
-	quorumHash crypto.QuorumHash
-	tx         []byte
+	quorumHash         crypto.QuorumHash
+	validatorSetUpdate abci.ValidatorSetUpdate
 }

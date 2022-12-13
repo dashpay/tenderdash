@@ -15,7 +15,7 @@ func MakeCommit(
 	voteSet *types.VoteSet,
 	validatorSet *types.ValidatorSet,
 	validators []types.PrivValidator,
-	stateID types.StateID,
+	stateID tmproto.StateID,
 ) (*types.Commit, error) {
 	// all sign
 	for i := 0; i < len(validators); i++ {
@@ -34,10 +34,9 @@ func MakeCommit(
 
 		v := vote.ToProto()
 
-		if err := validators[i].SignVote(ctx, voteSet.ChainID(), validatorSet.QuorumType, validatorSet.QuorumHash, v, stateID, nil); err != nil {
+		if err := validators[i].SignVote(ctx, voteSet.ChainID(), validatorSet.QuorumType, validatorSet.QuorumHash, v, nil); err != nil {
 			return nil, err
 		}
-		vote.StateSignature = v.StateSignature
 		vote.BlockSignature = v.BlockSignature
 		err = vote.VoteExtensions.CopySignsFromProto(v.VoteExtensionsToMap())
 		if err != nil {

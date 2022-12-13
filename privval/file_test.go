@@ -61,12 +61,14 @@ func TestResetValidator(t *testing.T) {
 	height, round := int64(10), int32(1)
 	voteType := tmproto.PrevoteType
 	randBytes := tmrand.Bytes(crypto.HashSize)
-	blockID := types.BlockID{Hash: randBytes, PartSetHeader: types.PartSetHeader{}}
-
-	stateID := types.RandStateID().WithHeight(height - 1)
+	blockID := types.BlockID{
+		Hash:          randBytes,
+		PartSetHeader: types.PartSetHeader{},
+		StateID:       types.RandStateID().Hash(),
+	}
 
 	vote := newVote(privVal.Key.ProTxHash, 0, height, round, voteType, blockID, nil)
-	err = privVal.SignVote(ctx, "mychainid", 0, quorumHash, vote.ToProto(), stateID, nil)
+	err = privVal.SignVote(ctx, "mychainid", 0, quorumHash, vote.ToProto(), nil)
 	assert.NoError(t, err, "expected no error signing vote")
 
 	// priv val after signing is not same as empty
@@ -198,15 +200,19 @@ func TestSignVote(t *testing.T) {
 	randbytes := tmrand.Bytes(crypto.HashSize)
 	randbytes2 := tmrand.Bytes(crypto.HashSize)
 
-	block1 := types.BlockID{Hash: randbytes,
-		PartSetHeader: types.PartSetHeader{Total: 5, Hash: randbytes}}
-	block2 := types.BlockID{Hash: randbytes2,
-		PartSetHeader: types.PartSetHeader{Total: 10, Hash: randbytes2}}
+	block1 := types.BlockID{
+		Hash:          randbytes,
+		PartSetHeader: types.PartSetHeader{Total: 5, Hash: randbytes},
+		StateID:       types.RandStateID().Hash(),
+	}
+	block2 := types.BlockID{
+		Hash:          randbytes2,
+		PartSetHeader: types.PartSetHeader{Total: 10, Hash: randbytes2},
+		StateID:       types.RandStateID().Hash(),
+	}
 
 	height, round := int64(10), int32(1)
 	voteType := tmproto.PrevoteType
-
-	stateID := types.RandStateID().WithHeight(height - 1)
 
 	// sign a vote for first time
 	vote := newVote(privVal.Key.ProTxHash, 0, height, round, voteType, block1, nil)
@@ -215,11 +221,11 @@ func TestSignVote(t *testing.T) {
 	quorumHash, err := privVal.GetFirstQuorumHash(ctx)
 	assert.NoError(t, err)
 
-	err = privVal.SignVote(ctx, "mychainid", 0, quorumHash, v, stateID, nil)
+	err = privVal.SignVote(ctx, "mychainid", 0, quorumHash, v, nil)
 	assert.NoError(t, err, "expected no error signing vote")
 
 	// try to sign the same vote again; should be fine
-	err = privVal.SignVote(ctx, "mychainid", 0, quorumHash, v, stateID, nil)
+	err = privVal.SignVote(ctx, "mychainid", 0, quorumHash, v, nil)
 	assert.NoError(t, err, "expected no error on signing same vote")
 
 	// now try some bad votes
@@ -231,18 +237,16 @@ func TestSignVote(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		assert.Error(t, privVal.SignVote(ctx, "mychainid", 0, crypto.QuorumHash{}, c.ToProto(), stateID, nil),
+		assert.Error(t, privVal.SignVote(ctx, "mychainid", 0, crypto.QuorumHash{}, c.ToProto(), nil),
 			"expected error on signing conflicting vote")
 	}
 
 	// try signing a vote with a different time stamp
 	blockSignature := vote.BlockSignature
-	stateSignature := vote.StateSignature
 
-	err = privVal.SignVote(ctx, "mychainid", 0, quorumHash, v, stateID, nil)
+	err = privVal.SignVote(ctx, "mychainid", 0, quorumHash, v, nil)
 	assert.NoError(t, err)
 	assert.Equal(t, blockSignature, vote.BlockSignature)
-	assert.Equal(t, stateSignature, vote.StateSignature)
 }
 
 func TestSignProposal(t *testing.T) {
@@ -343,14 +347,17 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 	pubKey, err := privVal.GetPubKey(ctx, quorumHash)
 	require.NoError(t, err)
 
+	height, round := int64(10), int32(1)
+
+	stateID := types.RandStateID()
+	stateID.Height = uint64(height)
 	blockID := types.BlockID{
 		Hash:          tmrand.Bytes(crypto.HashSize),
 		PartSetHeader: types.PartSetHeader{Total: 5, Hash: tmrand.Bytes(crypto.HashSize)},
+		StateID:       stateID.Hash(),
 	}
 
-	height, round := int64(10), int32(1)
 	voteType := tmproto.PrecommitType
-	stateID := types.RandStateID().WithHeight(height - 1)
 	exts := types.VoteExtensions{
 		tmproto.VoteExtensionType_DEFAULT: []types.VoteExtension{{Extension: []byte("extension")}},
 	}
@@ -358,7 +365,7 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 	vote1 := newVote(proTxHash, 0, height, round, voteType, blockID, exts)
 	vpb1 := vote1.ToProto()
 
-	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, vpb1, stateID, logger)
+	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, vpb1, logger)
 	assert.NoError(t, err, "expected no error signing vote")
 	assert.NotNil(t, vpb1.VoteExtensions[0].Signature)
 
@@ -374,7 +381,7 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 	}
 	vpb2 := vote2.ToProto()
 
-	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, vpb2, stateID, logger)
+	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, vpb2, logger)
 	assert.NoError(t, err, "expected no error signing same vote with manipulated vote extension")
 
 	// We need to ensure that a valid new extension signature has been created
@@ -387,10 +394,9 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 	assert.False(t, pubKey.VerifySignatureDigest(extSignItem1[tmproto.VoteExtensionType_DEFAULT][0].ID, vpb2.VoteExtensions[0].Signature))
 
 	vpb2.BlockSignature = nil
-	vpb2.StateSignature = nil
 	vpb2.VoteExtensions[0].Signature = nil
 
-	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, vpb2, stateID, logger)
+	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, vpb2, logger)
 	assert.NoError(t, err, "expected no error signing same vote with manipulated timestamp and vote extension")
 
 	extSignItem3, err := types.MakeVoteExtensionSignItems(chainID, vpb2, quorumType, quorumHash)

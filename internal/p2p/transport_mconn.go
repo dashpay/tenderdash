@@ -8,7 +8,9 @@ import (
 	"math"
 	"net"
 	"strconv"
-	"sync"
+	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"golang.org/x/net/netutil"
 
@@ -280,6 +282,7 @@ func newMConnConnection(
 // Handshake implements Connection.
 func (c *mConnConnection) Handshake(
 	ctx context.Context,
+	timeout time.Duration,
 	nodeInfo types.NodeInfo,
 	privKey crypto.PrivKey,
 ) (types.NodeInfo, crypto.PubKey, error) {
@@ -289,6 +292,12 @@ func (c *mConnConnection) Handshake(
 		peerKey  crypto.PubKey
 		errCh    = make(chan error, 1)
 	)
+	handshakeCtx := ctx
+	if timeout > 0 {
+		var cancel context.CancelFunc
+		handshakeCtx, cancel = context.WithTimeout(ctx, timeout)
+		defer cancel()
+	}
 	// To handle context cancellation, we need to do the handshake in a
 	// goroutine and abort the blocking network calls by closing the connection
 	// when the context is canceled.
@@ -301,25 +310,29 @@ func (c *mConnConnection) Handshake(
 			}
 		}()
 		var err error
-		mconn, peerInfo, peerKey, err = c.handshake(ctx, nodeInfo, privKey)
+		mconn, peerInfo, peerKey, err = c.handshake(handshakeCtx, nodeInfo, privKey)
 
 		select {
 		case errCh <- err:
-		case <-ctx.Done():
+		case <-handshakeCtx.Done():
 		}
 
 	}()
 
 	select {
-	case <-ctx.Done():
+	case <-handshakeCtx.Done():
 		_ = c.Close()
-		return types.NodeInfo{}, nil, ctx.Err()
+		return types.NodeInfo{}, nil, handshakeCtx.Err()
 
 	case err := <-errCh:
 		if err != nil {
 			return types.NodeInfo{}, nil, err
 		}
 		c.mconn = mconn
+		// Start must not use the handshakeCtx. The handshakeCtx may have a
+		// timeout set that is intended to terminate only the handshake procedure.
+		// The context passed to Start controls the entire lifecycle of the
+		// mconn.
 		if err = c.mconn.Start(ctx); err != nil {
 			return types.NodeInfo{}, nil, err
 		}

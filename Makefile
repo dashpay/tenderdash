@@ -17,6 +17,7 @@ BUILD_IMAGE := ghcr.io/tendermint/docker-build-proto
 BASE_BRANCH ?= v0.8-dev
 DOCKER_PROTO := docker run -v $(shell pwd):/workspace --workdir /workspace $(BUILD_IMAGE)
 CGO_ENABLED ?= 1
+GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}' github.com/gogo/protobuf)
 
 MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURR_DIR := $(dir $(MAKEFILE_PATH))
@@ -122,10 +123,10 @@ $(BUILDDIR)/:
 ###                                Protobuf                                 ###
 ###############################################################################
 
+proto: proto-format proto-lint proto-doc proto-gen
+.PHONY: proto
+
 check-proto-deps:
-ifeq (,$(shell which buf))
-	$(error "buf is required for Protobuf building, linting and breakage checking. See https://docs.buf.build/installation for installation instructions.")
-endif
 ifeq (,$(shell which protoc-gen-gogofaster))
 	$(error "gogofaster plugin for protoc is required. Run 'go install github.com/gogo/protobuf/protoc-gen-gogofaster@latest' to install")
 endif
@@ -139,7 +140,7 @@ endif
 
 proto-gen: check-proto-deps
 	@echo "Generating Protobuf files"
-	@buf generate
+	@go run github.com/bufbuild/buf/cmd/buf generate
 	@mv ./proto/tendermint/abci/types.pb.go ./abci/types/
 .PHONY: proto-gen
 
@@ -147,7 +148,7 @@ proto-gen: check-proto-deps
 # execution only.
 proto-lint: check-proto-deps
 	@echo "Linting Protobuf files"
-	@buf lint
+	@go run github.com/bufbuild/buf/cmd/buf lint
 .PHONY: proto-lint
 
 proto-format: check-proto-format-deps
@@ -160,15 +161,24 @@ proto-check-breaking: check-proto-deps
 	@echo "Note: This is only useful if your changes have not yet been committed."
 	@echo "      Otherwise read up on buf's \"breaking\" command usage:"
 	@echo "      https://docs.buf.build/breaking/usage"
-	@buf breaking --against ".git"
+	@go run github.com/bufbuild/buf/cmd/buf breaking --against ".git"
 .PHONY: proto-check-breaking
+
+proto-doc:
+	@echo Generating Protobuf API specification: spec/abci++/api.md
+	@protoc \
+		-I $(realpath .)/proto \
+		-I "$(GOGOPROTO_PATH)" \
+		--doc_opt=markdown,api.md \
+		--doc_out=spec/abci++ \
+		tendermint/abci/types.proto
 
 ###############################################################################
 ###                              Build ABCI                                 ###
 ###############################################################################
 
 build_abci:
-	CGO_ENABLED=$(CGO_ENABLED) go build -mod=readonly -i ./abci/cmd/...
+	CGO_ENABLED=$(CGO_ENABLED) go build -mod=readonly ./abci/cmd/...
 .PHONY: build_abci
 
 install_abci:
@@ -286,7 +296,8 @@ DESTINATION = ./index.html.md
 build-docs:
 	@cd docs && \
 	while read -r branch path_prefix; do \
-		(git checkout $${branch} && npm ci && VUEPRESS_BASE="/$${path_prefix}/" npm run build) ; \
+		( git checkout $${branch} && npm ci --quiet && \
+			VUEPRESS_BASE="/$${path_prefix}/" npm run build --quiet ) ; \
 		mkdir -p ~/output/$${path_prefix} ; \
 		cp -r .vuepress/dist/* ~/output/$${path_prefix}/ ; \
 		cp ~/output/$${path_prefix}/index.html ~/output ; \
@@ -313,6 +324,21 @@ build-docker: build-linux
 mockery:
 	go generate -run="./scripts/mockery_generate.sh" ./...
 .PHONY: mockery
+
+###############################################################################
+###                               Metrics                                   ###
+###############################################################################
+
+metrics: testdata-metrics
+	go generate -run="scripts/metricsgen" ./...
+.PHONY: metrics
+
+	# By convention, the go tool ignores subdirectories of directories named
+	# 'testdata'. This command invokes the generate command on the folder directly
+	# to avoid this.
+testdata-metrics:
+	ls ./scripts/metricsgen/testdata | xargs -I{} go generate -run="scripts/metricsgen" ./scripts/metricsgen/testdata/{}
+.PHONY: testdata-metrics
 
 ###############################################################################
 ###                       Local testnet using docker                        ###

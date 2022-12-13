@@ -61,11 +61,7 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 	blockID := types.BlockID{
 		Hash:          header.Hash(),
 		PartSetHeader: types.PartSetHeader{Total: 1, Hash: crypto.CRandBytes(32)},
-	}
-
-	stateID := types.StateID{
-		Height:      header.Height - 1,
-		LastAppHash: header.AppHash,
+		StateID:       header.StateID().Hash(),
 	}
 
 	votes := make([]*types.Vote, len(pkz))
@@ -73,7 +69,7 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 	for i := first; i < last && i < len(pkz); i++ {
 		// Verify that the private key matches the validator proTxHash
 		privateKey := pkz[i]
-		proTxHash, val := valSet.GetByIndex(int32(i))
+		val := valSet.GetByIndex(int32(i))
 		if val == nil {
 			panic("no val")
 		}
@@ -83,7 +79,7 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 		if !privateKey.PubKey().Equals(val.PubKey) {
 			panic("light client keys do not match")
 		}
-		votes[i] = makeVote(t, header, valSet, proTxHash, pkz[i], blockID, stateID)
+		votes[i] = makeVote(t, header, valSet, val.ProTxHash, pkz[i], blockID)
 	}
 	thresholdSigns, err := types.NewSignsRecoverer(votes).Recover()
 	require.NoError(t, err)
@@ -91,11 +87,11 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 		QuorumSigns: *thresholdSigns,
 		QuorumHash:  valSet.QuorumHash,
 	}
-	return types.NewCommit(header.Height, 1, blockID, stateID, quorumSigns)
+	return types.NewCommit(header.Height, 1, blockID, quorumSigns)
 }
 
 func makeVote(t testing.TB, header *types.Header, valset *types.ValidatorSet, proTxHash crypto.ProTxHash,
-	key crypto.PrivKey, blockID types.BlockID, stateID types.StateID) *types.Vote {
+	key crypto.PrivKey, blockID types.BlockID) *types.Vote {
 	t.Helper()
 
 	idx, val := valset.GetByProTxHash(proTxHash)
@@ -119,15 +115,7 @@ func makeVote(t testing.TB, header *types.Header, valset *types.ValidatorSet, pr
 		panic(err)
 	}
 
-	// SignDigest the state
-	stateSignID := stateID.SignID(header.ChainID, valset.QuorumType, valset.QuorumHash)
-	sigState, err := key.SignDigest(stateSignID)
-	if err != nil {
-		panic(err)
-	}
-
 	vote.BlockSignature = sig
-	vote.StateSignature = sigState
 
 	return vote
 }
@@ -136,7 +124,7 @@ func genHeader(chainID string, height int64, bTime time.Time, txs types.Txs,
 	valset, nextValset *types.ValidatorSet, appHash, consHash, resHash []byte) *types.Header {
 
 	return &types.Header{
-		Version: version.Consensus{Block: version.BlockProtocol, App: 0},
+		Version: version.Consensus{Block: version.BlockProtocol, App: 1},
 		ChainID: chainID,
 		Height:  height,
 		Time:    bTime,
@@ -147,7 +135,7 @@ func genHeader(chainID string, height int64, bTime time.Time, txs types.Txs,
 		DataHash:           txs.Hash(),
 		AppHash:            appHash,
 		ConsensusHash:      consHash,
-		LastResultsHash:    resHash,
+		ResultsHash:        resHash,
 		ProposerProTxHash:  valset.Validators[0].ProTxHash,
 	}
 }
@@ -227,7 +215,11 @@ func genLightBlocksWithValidatorsRotatingEveryBlock(
 		currentHeader = keys.GenSignedHeaderLastBlockID(t, chainID, height, bTime.Add(time.Duration(height)*time.Minute),
 			nil,
 			vals, newVals, hash("app_hash"), hash("cons_hash"),
-			hash("results_hash"), 0, len(keys), types.BlockID{Hash: lastHeader.Hash()})
+			hash("results_hash"), 0, len(keys),
+			types.BlockID{
+				Hash:    lastHeader.Hash(),
+				StateID: lastHeader.StateID().Hash(),
+			})
 		headers[height] = currentHeader
 		valset[height] = vals
 		lastHeader = currentHeader

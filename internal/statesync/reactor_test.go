@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/fortytw2/leaktest"
@@ -49,22 +50,22 @@ type reactorTestSuite struct {
 	conn          *clientmocks.Client
 	stateProvider *mocks.StateProvider
 
-	snapshotChannel   *p2p.Channel
+	snapshotChannel   p2p.Channel
 	snapshotInCh      chan p2p.Envelope
 	snapshotOutCh     chan p2p.Envelope
 	snapshotPeerErrCh chan p2p.PeerError
 
-	chunkChannel   *p2p.Channel
+	chunkChannel   p2p.Channel
 	chunkInCh      chan p2p.Envelope
 	chunkOutCh     chan p2p.Envelope
 	chunkPeerErrCh chan p2p.PeerError
 
-	blockChannel   *p2p.Channel
+	blockChannel   p2p.Channel
 	blockInCh      chan p2p.Envelope
 	blockOutCh     chan p2p.Envelope
 	blockPeerErrCh chan p2p.PeerError
 
-	paramsChannel   *p2p.Channel
+	paramsChannel   p2p.Channel
 	paramsInCh      chan p2p.Envelope
 	paramsOutCh     chan p2p.Envelope
 	paramsPeerErrCh chan p2p.PeerError
@@ -114,7 +115,7 @@ func setup(
 
 	rts.snapshotChannel = p2p.NewChannel(
 		SnapshotChannel,
-		new(ssproto.Message),
+		"snapshot",
 		rts.snapshotInCh,
 		rts.snapshotOutCh,
 		rts.snapshotPeerErrCh,
@@ -122,7 +123,7 @@ func setup(
 
 	rts.chunkChannel = p2p.NewChannel(
 		ChunkChannel,
-		new(ssproto.Message),
+		"chunk",
 		rts.chunkInCh,
 		rts.chunkOutCh,
 		rts.chunkPeerErrCh,
@@ -130,7 +131,7 @@ func setup(
 
 	rts.blockChannel = p2p.NewChannel(
 		LightBlockChannel,
-		new(ssproto.Message),
+		"lightblock",
 		rts.blockInCh,
 		rts.blockOutCh,
 		rts.blockPeerErrCh,
@@ -138,7 +139,7 @@ func setup(
 
 	rts.paramsChannel = p2p.NewChannel(
 		ParamsChannel,
-		new(ssproto.Message),
+		"params",
 		rts.paramsInCh,
 		rts.paramsOutCh,
 		rts.paramsPeerErrCh,
@@ -152,7 +153,7 @@ func setup(
 	rts.privVal = types.NewMockPV()
 	rts.dashcoreClient = dashcore.NewMockClient(chainID, llmqType, rts.privVal, false)
 
-	chCreator := func(ctx context.Context, desc *p2p.ChannelDescriptor) (*p2p.Channel, error) {
+	chCreator := func(ctx context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
 		switch desc.ID {
 		case SnapshotChannel:
 			return rts.snapshotChannel, nil
@@ -214,6 +215,10 @@ func setup(
 }
 
 func TestReactor_Sync(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
@@ -452,13 +457,10 @@ func TestReactor_LightBlockResponse(t *testing.T) {
 	h := factory.MakeHeader(t, &types.Header{})
 	h.Height = height
 	blockID := factory.MakeBlockIDWithHash(h.Hash())
-	stateID := types.StateID{
-		Height:      height,
-		LastAppHash: h.AppHash,
-	}
+
 	vals, pv := types.RandValidatorSet(1)
 	vote, err := factory.MakeVote(ctx, pv[0], vals, h.ChainID, 0, h.Height, 0, 2,
-		blockID, stateID)
+		blockID)
 	require.NoError(t, err)
 
 	sh := &types.SignedHeader{
@@ -466,10 +468,8 @@ func TestReactor_LightBlockResponse(t *testing.T) {
 		Commit: &types.Commit{
 			Height:                  h.Height,
 			BlockID:                 blockID,
-			StateID:                 stateID,
 			QuorumHash:              crypto.RandQuorumHash(),
 			ThresholdBlockSignature: vote.BlockSignature,
-			ThresholdStateSignature: vote.StateSignature,
 		},
 	}
 
@@ -610,11 +610,10 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	ictx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
-	rts.reactor.mtx.Lock()
 	err := rts.reactor.initStateProvider(ictx, factory.DefaultTestChainID, 1)
-	rts.reactor.mtx.Unlock()
 	require.NoError(t, err)
-	rts.reactor.syncer.stateProvider = rts.reactor.stateProvider
+
+	rts.reactor.getSyncer().stateProvider = rts.reactor.stateProvider
 
 	actx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
@@ -625,14 +624,14 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 
 	state, err := rts.reactor.stateProvider.State(actx, 5)
 	require.NoError(t, err)
-	require.Equal(t, appHash, state.AppHash)
+	require.Equal(t, appHash, state.LastAppHash)
 	require.Equal(t, types.DefaultConsensusParams(), &state.ConsensusParams)
 
 	commit, err := rts.reactor.stateProvider.Commit(actx, 5)
 	require.NoError(t, err)
 	require.Equal(t, commit.BlockID, state.LastBlockID)
 
-	added, err := rts.reactor.syncer.AddSnapshot(peerA, &snapshot{
+	added, err := rts.reactor.getSyncer().AddSnapshot(peerA, &snapshot{
 		Height: 1, Format: 2, Chunks: 7, Hash: []byte{1, 2}, Metadata: []byte{1},
 	})
 	require.NoError(t, err)
@@ -640,6 +639,10 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 }
 
 func TestReactor_Backfill(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -648,6 +651,10 @@ func TestReactor_Backfill(t *testing.T) {
 	for _, failureRate := range failureRates {
 		failureRate := failureRate
 		t.Run(fmt.Sprintf("failure rate: %d", failureRate), func(t *testing.T) {
+			if testing.Short() && failureRate > 0 {
+				t.Skip("skipping test in short mode")
+			}
+
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
@@ -863,7 +870,8 @@ func buildLightBlockChain(ctx context.Context, t *testing.T, fromHeight, toHeigh
 		pk, _ := pv[0].GetPrivateKey(context.Background(), vals.QuorumHash)
 		privVal.UpdatePrivateKey(context.Background(), pk, vals.QuorumHash, vals.ThresholdPublicKey, height)
 		vals, pv, chain[height] = mockLB(ctx, t, height, blockTime, lastBlockID, vals, pv)
-		lastBlockID = factory.MakeBlockIDWithHash(chain[height].Header.Hash())
+
+		lastBlockID = chain[height].Commit.BlockID
 		blockTime = blockTime.Add(1 * time.Minute)
 	}
 	return chain
@@ -877,6 +885,7 @@ func mockLB(ctx context.Context, t *testing.T, height int64, time time.Time, las
 		Height:      height,
 		LastBlockID: lastBlockID,
 		Time:        time,
+		AppHash:     make([]byte, crypto.DefaultHashSize),
 	})
 	header.Version.App = testAppVersion
 
@@ -884,12 +893,17 @@ func mockLB(ctx context.Context, t *testing.T, height int64, time time.Time, las
 	header.ValidatorsHash = currentVals.Hash()
 	header.NextValidatorsHash = nextVals.Hash()
 	header.ConsensusHash = types.DefaultConsensusParams().HashConsensusParams()
-	lastBlockID = factory.MakeBlockIDWithHash(header.Hash())
-	stateID := types.StateID{
-		Height:      height - 1,
-		LastAppHash: header.AppHash,
+	// lastBlockID = factory.MakeBlockIDWithHash(header.Hash())
+	stateID := header.StateID()
+	lastBlockID = types.BlockID{
+		Hash: header.Hash(),
+		PartSetHeader: types.PartSetHeader{
+			Total: 100,
+			Hash:  factory.RandomHash(),
+		},
+		StateID: stateID.Hash(),
 	}
-	voteSet := types.NewVoteSet(factory.DefaultTestChainID, height, 0, tmproto.PrecommitType, currentVals, stateID)
+	voteSet := types.NewVoteSet(factory.DefaultTestChainID, height, 0, tmproto.PrecommitType, currentVals)
 	commit, err := factory.MakeCommit(ctx, lastBlockID, height, 0, voteSet, currentVals, currentPrivVals, stateID)
 	require.NoError(t, err)
 	return nextVals, nextPrivVals, &types.LightBlock{

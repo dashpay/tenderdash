@@ -9,13 +9,16 @@ import (
 	"math"
 	"net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/tendermint/tendermint/privval"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
@@ -24,7 +27,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	"github.com/tendermint/tendermint/libs/service"
-	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/rpc/client"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	rpclocal "github.com/tendermint/tendermint/rpc/client/local"
@@ -132,6 +134,10 @@ func TestClientOperations(t *testing.T) {
 	})
 	t.Run("Batching", func(t *testing.T) {
 		t.Run("JSONRPCCalls", func(t *testing.T) {
+			if testing.Short() {
+				t.Skip("skipping test in short mode")
+			}
+
 			logger := log.NewTestingLogger(t)
 			c := getHTTPClient(t, logger, conf)
 			testBatchedJSONRPCCalls(ctx, t, c)
@@ -170,6 +176,10 @@ func TestClientOperations(t *testing.T) {
 			require.Zero(t, batch.Clear(), "clearing an empty batch of JSON RPC requests should result in a 0 result")
 		})
 		t.Run("ConcurrentJSONRPC", func(t *testing.T) {
+			if testing.Short() {
+				t.Skip("skipping test in short mode")
+			}
+
 			logger := log.NewTestingLogger(t)
 
 			var wg sync.WaitGroup
@@ -218,7 +228,7 @@ func TestClientMethodCalls(t *testing.T) {
 				require.NoError(t, err)
 
 				assert.GreaterOrEqual(t, status.SyncInfo.LatestBlockHeight, info.Response.LastBlockHeight)
-				assert.True(t, strings.Contains(info.Response.Data, "size"))
+				assert.True(t, strings.Contains(info.Response.Data, "appHash"))
 			})
 			t.Run("NetInfo", func(t *testing.T) {
 				nc, ok := c.(client.NetworkClient)
@@ -292,6 +302,10 @@ func TestClientMethodCalls(t *testing.T) {
 					"first: %+v, doc: %s", first, string(doc))
 			})
 			t.Run("ABCIQuery", func(t *testing.T) {
+				if testing.Short() {
+					t.Skip("skipping test in short mode")
+				}
+
 				// write something
 				k, v, tx := MakeTxKV()
 				status, err := c.Status(ctx)
@@ -310,6 +324,10 @@ func TestClientMethodCalls(t *testing.T) {
 				}
 			})
 			t.Run("AppCalls", func(t *testing.T) {
+				if testing.Short() {
+					t.Skip("skipping test in short mode")
+				}
+
 				// get an offset of height to avoid racing and guessing
 				s, err := c.Status(ctx)
 				require.NoError(t, err)
@@ -327,7 +345,7 @@ func TestClientMethodCalls(t *testing.T) {
 				require.NoError(t, err)
 				require.True(t, bres.TxResult.IsOK())
 				txh := bres.Height
-				apph := txh + 1 // this is where the tx will be applied to the state
+				apph := txh // this is where the tx will be applied to the state
 
 				// wait before querying
 				err = client.WaitForHeight(ctx, c, apph, nil)
@@ -351,7 +369,8 @@ func TestClientMethodCalls(t *testing.T) {
 				block, err := c.Block(ctx, &apph)
 				require.NoError(t, err)
 				appHash := block.Block.Header.AppHash
-				assert.True(t, len(appHash) > 0)
+				assert.NotEmpty(t, appHash)
+				assert.EqualValues(t, block.Block.Txs[0], types.Tx(tx))
 				assert.EqualValues(t, apph, block.Block.Header.Height)
 
 				blockByHash, err := c.BlockByHash(ctx, block.BlockID.Hash)
@@ -410,6 +429,10 @@ func TestClientMethodCalls(t *testing.T) {
 				// XXX Test proof
 			})
 			t.Run("BlockchainInfo", func(t *testing.T) {
+				if testing.Short() {
+					t.Skip("skipping test in short mode")
+				}
+
 				ctx, cancel := context.WithCancel(context.Background())
 				defer cancel()
 
@@ -440,6 +463,10 @@ func TestClientMethodCalls(t *testing.T) {
 				assert.Contains(t, err.Error(), "can't be greater than max")
 			})
 			t.Run("BroadcastTxCommit", func(t *testing.T) {
+				if testing.Short() {
+					t.Skip("skipping test in short mode")
+				}
+
 				_, _, tx := MakeTxKV()
 				bres, err := c.BroadcastTxCommit(ctx, tx)
 				require.NoError(t, err, "%d: %+v", i, err)
@@ -482,6 +509,10 @@ func TestClientMethodCalls(t *testing.T) {
 					// TODO: more checks...
 				})
 				t.Run("Block", func(t *testing.T) {
+					if testing.Short() {
+						t.Skip("skipping test in short mode")
+					}
+
 					const subscriber = "TestBlockEvents"
 
 					eventCh, err := c.Subscribe(ctx, subscriber, types.QueryForEvent(types.EventNewBlockValue).String())
@@ -516,14 +547,19 @@ func TestClientMethodCalls(t *testing.T) {
 			})
 			t.Run("Evidence", func(t *testing.T) {
 				t.Run("BroadcastDuplicateVote", func(t *testing.T) {
+					if testing.Short() {
+						t.Skip("skipping test in short mode")
+					}
+
 					ctx, cancel := context.WithCancel(context.Background())
 					defer cancel()
 
 					chainID := conf.ChainID()
+					evidenceHeight := int64(1)
 
 					// make sure that the node has produced enough blocks
-					waitForBlock(ctx, t, c, 2)
-					evidenceHeight := int64(1)
+					waitForBlock(ctx, t, c, evidenceHeight)
+
 					block, _ := c.Block(ctx, &evidenceHeight)
 					ts := block.Block.Time
 					correct, fakes := makeEvidences(t, pv, chainID, btcjson.LLMQType_5_60, quorumHash, ts)
@@ -718,6 +754,10 @@ func TestClientMethodCallsAdvanced(t *testing.T) {
 		}
 	})
 	t.Run("TxSearchWithTimeout", func(t *testing.T) {
+		if testing.Short() {
+			t.Skip("skipping test in short mode")
+		}
+
 		logger := log.NewTestingLogger(t)
 
 		timeoutClient := getHTTPClientWithTimeout(t, logger, conf, 10*time.Second)

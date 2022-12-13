@@ -181,7 +181,6 @@ func eventReIndex(cmd *cobra.Command, args eventReIndexArgs) error {
 	var bar progressbar.Bar
 	bar.NewOption(args.startHeight-1, args.endHeight)
 
-	fmt.Println("start re-indexing events:")
 	defer bar.Finish()
 	for i := args.startHeight; i <= args.endHeight; i++ {
 		select {
@@ -199,11 +198,13 @@ func eventReIndex(cmd *cobra.Command, args eventReIndexArgs) error {
 			}
 
 			e := types.EventDataNewBlockHeader{
-				Header:              b.Header,
-				NumTxs:              int64(len(b.Txs)),
-				ResultFinalizeBlock: *r.FinalizeBlock,
+				Header:                b.Header,
+				NumTxs:                int64(len(b.Txs)),
+				ResultProcessProposal: *r.ProcessProposal,
 			}
-
+			if r.FinalizeBlock != nil {
+				e.ResultFinalizeBlock = *r.FinalizeBlock
+			}
 			var batch *indexer.Batch
 			if e.NumTxs > 0 {
 				batch = indexer.NewBatch(e.NumTxs)
@@ -213,7 +214,7 @@ func eventReIndex(cmd *cobra.Command, args eventReIndexArgs) error {
 						Height: b.Height,
 						Index:  uint32(i),
 						Tx:     b.Data.Txs[i],
-						Result: *(r.FinalizeBlock.TxResults[i]),
+						Result: *(r.ProcessProposal.TxResults[i]),
 					}
 
 					_ = batch.Add(&tr)
@@ -249,7 +250,6 @@ func checkValidHeight(bs state.BlockStore, args checkValidHeightArgs) error {
 
 	if args.startHeight == 0 {
 		args.startHeight = base
-		fmt.Printf("set the start block height to the base height of the blockstore %d \n", base)
 	}
 
 	if args.startHeight < base {
@@ -266,7 +266,6 @@ func checkValidHeight(bs state.BlockStore, args checkValidHeightArgs) error {
 
 	if args.endHeight == 0 || args.endHeight > height {
 		args.endHeight = height
-		fmt.Printf("set the end block height to the latest height of the blockstore %d \n", height)
 	}
 
 	if args.endHeight < base {

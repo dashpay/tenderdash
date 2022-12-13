@@ -1,11 +1,17 @@
+---
 name: Docker
 # Build & Push rebuilds the Tenderdash docker image every time a release is published
 # and pushes the image to https://hub.docker.com/r/dashpay/tenderdash/tags
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        type: string
+        description: 'Docker tag'
+        required: true
   release:
     types:
-    - published
+      - published
 
 jobs:
   build:
@@ -19,7 +25,7 @@ jobs:
           platforms: all
 
       - name: Set up Docker Build
-        uses: docker/setup-buildx-action@v2.0.0
+        uses: docker/setup-buildx-action@v2.2.1
 
       - name: Login to DockerHub
         if: ${{ github.event_name != 'pull_request' }}
@@ -31,6 +37,7 @@ jobs:
       - name: Set suffix to Docker tags
         uses: actions/github-script@v6
         id: suffix
+        if: ${{ github.event.release != null }}
         with:
           result-encoding: string
           script: "return (context.payload.release.tag_name.includes('-dev') ? '-dev' : '');"
@@ -41,16 +48,19 @@ jobs:
         with:
           images: dashpay/tenderdash
           tags: |
+            type=semver,pattern={{version}},value=${{ github.event.inputs.tag }}
+            type=ref,event=branch
+            type=ref,event=pr
             type=match,pattern=v(\d+),group=1
             type=match,pattern=v(\d+.\d+),group=1
             type=match,pattern=v(\d+.\d+.\d+),group=1
             type=match,pattern=v(.*),group=1,suffix=,enable=${{ contains(github.event.release.tag_name, '-dev') }}
           flavor: |
-            latest=${{ !contains(github.event.release.tag_name, '-dev') }}
+            latest=${{ github.event.release != null && !contains(github.event.release.tag_name, '-dev') }}
             suffix=${{ steps.suffix.outputs.result }}
 
       - name: Publish to Docker Hub
-        uses: docker/build-push-action@v3.0.0
+        uses: docker/build-push-action@v3.1.0
         with:
           context: .
           file: ./DOCKER/Dockerfile

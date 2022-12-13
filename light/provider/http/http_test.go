@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	testify "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+
 	"github.com/tendermint/tendermint/abci/example/kvstore"
 	"github.com/tendermint/tendermint/light/provider"
 	lighthttp "github.com/tendermint/tendermint/light/provider/http"
@@ -35,13 +36,19 @@ func TestNewProvider(t *testing.T) {
 }
 
 func TestProvider(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cfg, err := rpctest.CreateConfig(t, t.Name())
 	require.NoError(t, err)
 
 	// start a tendermint node in the background to test against
-	app := kvstore.NewApplication()
+	app, err := kvstore.NewMemoryApp()
+	require.NoError(t, err)
+
 	app.RetainBlocks = 9
 	_, closer, err := rpctest.StartTendermint(ctx, cfg, app)
 	require.NoError(t, err)

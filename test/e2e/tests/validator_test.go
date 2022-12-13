@@ -108,7 +108,10 @@ func TestValidator_Propose(t *testing.T) {
 		}
 
 		require.False(t, proposeCount == 0 && expectCount > 0,
-			"node did not propose any blocks (expected %v)", expectCount)
+			"node with proTxHash %s did not propose any blocks (expected %v)",
+			proTxHash.ShortString(),
+			expectCount,
+		)
 		if expectCount > 5 {
 			require.GreaterOrEqual(t, proposeCount, 3, "validator didn't propose even 3 blocks")
 		}
@@ -157,12 +160,12 @@ func newValidatorSchedule(testnet e2e.Testnet) *validatorSchedule {
 func (s *validatorSchedule) Increment(heights int64) error {
 	for i := int64(0); i < heights; i++ {
 		s.height++
-		if s.height > 2 {
-			// validator set updates are offset by 2, since they only take effect
-			// two blocks after they're returned.
-			if update, ok := s.updates[s.height-2]; ok {
-				if thresholdPublicKeyUpdate, ok := s.thresholdPublicKeyUpdates[s.height-2]; ok {
-					if quorumHashUpdate, ok := s.quorumHashUpdates[s.height-2]; ok {
+		if s.height > 1 {
+			// validator set updates are offset by 1, since they only take effect
+			// 1 block after they're returned.
+			if update, ok := s.updates[s.height-1]; ok {
+				if thresholdPublicKeyUpdate, ok := s.thresholdPublicKeyUpdates[s.height-1]; ok {
+					if quorumHashUpdate, ok := s.quorumHashUpdates[s.height-1]; ok {
 						if bytes.Equal(quorumHashUpdate, s.Set.QuorumHash) {
 							if err := s.Set.UpdateWithChangeSet(makeVals(update), thresholdPublicKeyUpdate, quorumHashUpdate); err != nil {
 								return err

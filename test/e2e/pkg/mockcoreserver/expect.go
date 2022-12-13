@@ -5,7 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
 	"net/url"
@@ -25,7 +25,7 @@ func BodyShouldBeSame(v interface{}) ExpectFunc {
 		log.Panicf("unsupported type %q", t)
 	}
 	return func(req *http.Request) error {
-		buf, err := ioutil.ReadAll(req.Body)
+		buf, err := io.ReadAll(req.Body)
 		if err != nil {
 			return err
 		}
@@ -33,7 +33,7 @@ func BodyShouldBeSame(v interface{}) ExpectFunc {
 		if err != nil {
 			return err
 		}
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
+		req.Body = io.NopCloser(bytes.NewBuffer(buf))
 		if !bytes.Equal(body, buf) {
 			return fmt.Errorf(
 				"the request body retried by URL %s is not equal\nexpected: %s\nactual: %s",
@@ -113,12 +113,11 @@ func JRPCParamsEmpty() ExpectFunc {
 // Debug is a debug JRPC request handler
 func Debug() ExpectFunc {
 	return func(req *http.Request) error {
-		buf, err := ioutil.ReadAll(req.Body)
+		buf, err := io.ReadAll(req.Body)
 		if err != nil {
 			return err
 		}
-		req.Body = ioutil.NopCloser(bytes.NewBuffer(buf))
-		// log.Printf("[DEBUG] Request Body: %s\n", buf)
+		req.Body = io.NopCloser(bytes.NewBuffer(buf))
 		return nil
 	}
 }

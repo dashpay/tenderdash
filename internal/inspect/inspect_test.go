@@ -7,9 +7,10 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/mock"
@@ -262,9 +263,9 @@ func TestBlockResults(t *testing.T) {
 	testHeight := int64(1)
 	testGasUsed := int64(100)
 	stateStoreMock := &statemocks.Store{}
-	//	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	stateStoreMock.On("LoadABCIResponses", testHeight).Return(&state.ABCIResponses{
-		FinalizeBlock: &abcitypes.ResponseFinalizeBlock{
+		FinalizeBlock: &abcitypes.ResponseFinalizeBlock{},
+		ProcessProposal: &abcitypes.ResponseProcessProposal{
 			TxResults: []*abcitypes.ExecTxResult{
 				{
 					GasUsed: testGasUsed,

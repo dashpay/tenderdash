@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
-	"github.com/gogo/protobuf/proto"
 
 	"github.com/tendermint/tendermint/libs"
 
@@ -30,6 +29,7 @@ import (
 type KeyPathFunc func(path string, key []byte) (merkle.KeyPath, error)
 
 // LightClient is an interface that contains functionality needed by Client from the light client.
+//
 //go:generate ../../scripts/mockery_generate.sh LightClient
 type LightClient interface {
 	ChainID() string
@@ -231,6 +231,10 @@ func (c *Client) BroadcastTxAsync(ctx context.Context, tx types.Tx) (*coretypes.
 
 func (c *Client) BroadcastTxSync(ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	return c.next.BroadcastTxSync(ctx, tx)
+}
+
+func (c *Client) BroadcastTx(ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
+	return c.next.BroadcastTx(ctx, tx)
 }
 
 func (c *Client) UnconfirmedTxs(ctx context.Context, page, perPage *int) (*coretypes.ResultUnconfirmedTxs, error) {
@@ -447,26 +451,15 @@ func (c *Client) BlockResults(ctx context.Context, height *int64) (*coretypes.Re
 	if err != nil {
 		return nil, err
 	}
-
-	// proto-encode FinalizeBlock events
-	bbeBytes, err := proto.Marshal(&abci.ResponseFinalizeBlock{
-		Events: res.FinalizeBlockEvents,
-	})
+	mh, err := abci.TxResultsHash(res.TxsResults)
 	if err != nil {
 		return nil, err
 	}
-
-	// Build a Merkle tree out of the slice.
-	rs, err := abci.MarshalTxResults(res.TxsResults)
-	if err != nil {
-		return nil, err
-	}
-	mh := merkle.HashFromByteSlices(append([][]byte{bbeBytes}, rs...))
 
 	// Verify block results.
-	if !bytes.Equal(mh, trustedBlock.LastResultsHash) {
-		return nil, fmt.Errorf("last results %X does not match with trusted last results %X",
-			mh, trustedBlock.LastResultsHash)
+	if !bytes.Equal(mh, trustedBlock.ResultsHash) {
+		return nil, fmt.Errorf("results hash %X does not match with trusted last results %X",
+			mh, trustedBlock.ResultsHash)
 	}
 
 	return res, nil

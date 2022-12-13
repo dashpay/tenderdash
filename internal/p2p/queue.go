@@ -1,7 +1,7 @@
 package p2p
 
 import (
-	"sync"
+	sync "github.com/sasha-s/go-deadlock"
 )
 
 // default capacity for the size of a queue

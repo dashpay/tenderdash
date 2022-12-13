@@ -1,8 +1,9 @@
 package state
 
 import (
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/internal/mempool"
@@ -55,12 +56,12 @@ func TxPreCheckFromStore(store Store) mempool.PreCheckFunc {
 
 func TxPreCheckForState(state State) mempool.PreCheckFunc {
 	return func(tx types.Tx) error {
-		maxDataBytes := types.MaxDataBytesNoEvidence(
-			state.ConsensusParams.Block.MaxBytes,
-		)
+		maxDataBytes, err := types.MaxDataBytesNoEvidence(state.ConsensusParams.Block.MaxBytes)
+		if err != nil {
+			return err
+		}
 		return mempool.PreCheckMaxBytes(maxDataBytes)(tx)
 	}
-
 }
 
 // TxPostCheckFromStore returns a function to filter transactions after processing.

@@ -7,8 +7,6 @@ import (
 	state "github.com/tendermint/tendermint/internal/state"
 	tendermintstate "github.com/tendermint/tendermint/proto/tendermint/state"
 
-	testing "testing"
-
 	types "github.com/tendermint/tendermint/types"
 )
 
@@ -162,11 +160,11 @@ func (_m *Store) Save(_a0 state.State) error {
 }
 
 // SaveABCIResponses provides a mock function with given fields: _a0, _a1
-func (_m *Store) SaveABCIResponses(_a0 int64, _a1 *tendermintstate.ABCIResponses) error {
+func (_m *Store) SaveABCIResponses(_a0 int64, _a1 tendermintstate.ABCIResponses) error {
 	ret := _m.Called(_a0, _a1)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(int64, *tendermintstate.ABCIResponses) error); ok {
+	if rf, ok := ret.Get(0).(func(int64, tendermintstate.ABCIResponses) error); ok {
 		r0 = rf(_a0, _a1)
 	} else {
 		r0 = ret.Error(0)
@@ -189,8 +187,13 @@ func (_m *Store) SaveValidatorSets(_a0 int64, _a1 int64, _a2 *types.ValidatorSet
 	return r0
 }
 
-// NewStore creates a new instance of Store. It also registers the testing.TB interface on the mock and a cleanup function to assert the mocks expectations.
-func NewStore(t testing.TB) *Store {
+type mockConstructorTestingTNewStore interface {
+	mock.TestingT
+	Cleanup(func())
+}
+
+// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewStore(t mockConstructorTestingTNewStore) *Store {
 	mock := &Store{}
 	mock.Mock.Test(t)
 

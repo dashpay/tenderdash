@@ -87,10 +87,10 @@ func (evpool *Pool) verify(ctx context.Context, evidence types.Evidence) error {
 
 // VerifyDuplicateVote verifies DuplicateVoteEvidence against the state of full node. This involves the
 // following checks:
-//      - the validator is in the validator set at the height of the evidence
-//      - the height, round, type and validator address of the votes must be the same
-//      - the block ID's must be different
-//      - The signatures must both be valid
+//   - the validator is in the validator set at the height of the evidence
+//   - the height, round, type and validator address of the votes must be the same
+//   - the block ID's must be different
+//   - The signatures must both be valid
 func VerifyDuplicateVote(e *types.DuplicateVoteEvidence, chainID string, valSet *types.ValidatorSet) error {
 	_, val := valSet.GetByProTxHash(e.VoteA.ValidatorProTxHash)
 	if val == nil {

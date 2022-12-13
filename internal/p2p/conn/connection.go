@@ -10,9 +10,10 @@ import (
 	"net"
 	"reflect"
 	"runtime/debug"
-	"sync"
 	"sync/atomic"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -64,6 +65,7 @@ The byte id and the relative priorities of each `Channel` are configured upon
 initialization of the connection.
 
 There are two methods for sending messages:
+
 	func (m MConnection) Send(chID byte, msgBytes []byte) bool {}
 
 `Send(chID, msgBytes)` is a blocking call that waits until `msg` is
@@ -100,7 +102,8 @@ type MConnection struct {
 
 	// used to ensure FlushStop and OnStop
 	// are safe to call concurrently.
-	stopMtx sync.Mutex
+	stopMtx    sync.Mutex
+	stopSignal <-chan struct{}
 
 	cancel context.CancelFunc
 
@@ -207,6 +210,7 @@ func (c *MConnection) OnStart(ctx context.Context) error {
 	c.quitSendRoutine = make(chan struct{})
 	c.doneSendRoutine = make(chan struct{})
 	c.quitRecvRoutine = make(chan struct{})
+	c.stopSignal = ctx.Done()
 	c.setRecvLastMsgAt(time.Now())
 	go c.sendRoutine(ctx)
 	go c.recvRoutine(ctx)
@@ -311,7 +315,7 @@ func (c *MConnection) Send(chID ChannelID, msgBytes []byte) bool {
 	// Send message to channel.
 	channel, ok := c.channelsIdx[chID]
 	if !ok {
-		c.logger.Error(fmt.Sprintf("Cannot send bytes, unknown channel %X", chID))
+		c.logger.Error("Cannot send bytes to unknown channel", "channel", chID)
 		return false
 	}
 
@@ -599,7 +603,7 @@ type ChannelStatus struct {
 	RecentlySent      int64
 }
 
-//-----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // ChannelID is an arbitrary channel ID.
 type ChannelID uint16
 
@@ -680,6 +684,8 @@ func (ch *channel) sendBytes(bytes []byte) bool {
 		atomic.AddInt32(&ch.sendQueueSize, 1)
 		return true
 	case <-time.After(defaultSendTimeout):
+		return false
+	case <-ch.conn.stopSignal:
 		return false
 	}
 }

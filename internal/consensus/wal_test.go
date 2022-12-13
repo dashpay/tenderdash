@@ -3,7 +3,7 @@ package consensus
 import (
 	"bytes"
 	"context"
-	"io/ioutil"
+	"math/rand"
 	"os"
 	"path/filepath"
 	"testing"
@@ -48,7 +48,7 @@ func TestWALTruncate(t *testing.T) {
 	// 60 block's size nearly 70K, greater than group's headBuf size(4096 * 10),
 	// when headBuf is full, truncate content will Flush to the file. at this
 	// time, RotateFile is called, truncate content exist in each file.
-	WALGenerateNBlocks(ctx, t, logger, wal.Group(), 60)
+	WALGenerateNBlocks(ctx, t, logger, wal.Group(), newDefaultFakeNode(ctx, t, logger), 60)
 
 	// put the leakcheck here so it runs after other cleanup
 	// functions.
@@ -56,9 +56,7 @@ func TestWALTruncate(t *testing.T) {
 
 	time.Sleep(1 * time.Millisecond) // wait groupCheckDuration, make sure RotateFile run
 
-	if err := wal.FlushAndSync(); err != nil {
-		t.Error(err)
-	}
+	require.NoError(t, wal.FlushAndSync())
 
 	h := int64(50)
 	gr, found, err := wal.SearchForEndHeight(h, &WALSearchOptions{})
@@ -144,10 +142,7 @@ func TestWALWriteCommit(t *testing.T) {
 
 	logger := log.NewTestingLogger(t)
 
-	walDir, err := ioutil.TempDir("", "wal")
-	require.NoError(t, err)
-	defer os.RemoveAll(walDir)
-	walFile := filepath.Join(walDir, "wal")
+	walFile := filepath.Join(t.TempDir(), "wal")
 
 	wal, err := NewWAL(ctx, logger, walFile)
 	require.NoError(t, err)
@@ -161,20 +156,21 @@ func TestWALWriteCommit(t *testing.T) {
 	}()
 
 	// Prepare and write commit msg
+	height := rand.Int63()
 	stateID := tmtypes.RandStateID()
+	stateID.Height = uint64(height)
 	blockID := tmtypes.BlockID{
 		Hash: crypto.CRandBytes(crypto.HashSize),
 		PartSetHeader: tmtypes.PartSetHeader{
 			Total: 0,
 			Hash:  crypto.CRandBytes(crypto.HashSize)},
+		StateID: stateID.Hash(),
 	}
 	msg := &CommitMessage{
 		Commit: &tmtypes.Commit{
-			Height:                  stateID.Height + 1,
-			StateID:                 stateID,
+			Height:                  height,
 			BlockID:                 blockID,
 			ThresholdBlockSignature: crypto.CRandBytes(96),
-			ThresholdStateSignature: crypto.CRandBytes(96),
 		},
 	}
 	err = wal.Write(msgInfo{
@@ -201,7 +197,7 @@ func TestWALWriteCommit(t *testing.T) {
 	require.True(t, ok, "expected message of type msgInfo, got %T", readMsg.Msg)
 	commitMsg, ok := msgInfo.Msg.(*CommitMessage)
 	require.True(t, ok, "expected message of type *CommitMessage, got %T", msgInfo.Msg)
-	assert.EqualValues(t, stateID.Height, commitMsg.Commit.StateID.Height)
+	assert.EqualValues(t, stateID.Hash(), commitMsg.Commit.BlockID.StateID)
 }
 
 func TestWALSearchForEndHeight(t *testing.T) {
@@ -210,7 +206,7 @@ func TestWALSearchForEndHeight(t *testing.T) {
 
 	logger := log.NewNopLogger()
 
-	walBody, err := WALWithNBlocks(ctx, t, logger, 6)
+	walBody, err := WALWithNBlocks(ctx, t, logger, newDefaultFakeNode(ctx, t, logger), 6)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -251,7 +247,7 @@ func TestWALPeriodicSync(t *testing.T) {
 	logger := log.NewNopLogger()
 
 	// Generate some data
-	WALGenerateNBlocks(ctx, t, logger, wal.Group(), 5)
+	WALGenerateNBlocks(ctx, t, logger, wal.Group(), newDefaultFakeNode(ctx, t, logger), 5)
 
 	// We should have data in the buffer now
 	assert.NotZero(t, wal.Group().Buffered())

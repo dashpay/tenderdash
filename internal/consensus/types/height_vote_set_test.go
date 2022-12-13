@@ -25,10 +25,10 @@ func TestPeerCatchupRounds(t *testing.T) {
 
 	valSet, privVals := types.RandValidatorSet(10)
 
-	stateID := types.StateID{}
+	stateID := tmproto.StateID{Height: 1}
 
 	chainID := cfg.ChainID()
-	hvs := NewHeightVoteSet(chainID, 1, stateID, valSet)
+	hvs := NewHeightVoteSet(chainID, 1, valSet)
 
 	vote999_0 := makeVoteHR(ctx, t, 1, 0, 999, privVals, chainID, valSet.QuorumType, valSet.QuorumHash, stateID)
 	added, err := hvs.AddVote(vote999_0, "peer1")
@@ -67,7 +67,7 @@ func makeVoteHR(
 	chainID string,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
-	stateID types.StateID,
+	stateID tmproto.StateID,
 ) *types.Vote {
 	privVal := privVals[valIndex]
 	proTxHash, err := privVal.GetProTxHash(ctx)
@@ -81,15 +81,18 @@ func makeVoteHR(
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrecommitType,
-		BlockID:            types.BlockID{Hash: randBytes, PartSetHeader: types.PartSetHeader{}},
+		BlockID: types.BlockID{
+			Hash:          randBytes,
+			PartSetHeader: types.PartSetHeader{},
+			StateID:       stateID.Hash(),
+		},
 	}
 
 	v := vote.ToProto()
-	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, v, stateID, nil)
+	err = privVal.SignVote(ctx, chainID, quorumType, quorumHash, v, nil)
 	require.NoError(t, err, "Error signing vote")
 
 	vote.BlockSignature = v.BlockSignature
-	vote.StateSignature = v.StateSignature
 	err = vote.VoteExtensions.CopySignsFromProto(v.VoteExtensionsToMap())
 	require.NoError(t, err)
 

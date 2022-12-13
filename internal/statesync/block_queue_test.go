@@ -3,9 +3,10 @@ package statesync
 import (
 	"context"
 	"math/rand"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -126,6 +127,10 @@ func TestBlockQueueWithFailures(t *testing.T) {
 // Test that when all the blocks are retrieved that the queue still holds on to
 // it's workers and in the event of failure can still fetch the failed block
 func TestBlockQueueBlocks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	peerID, err := types.NewNodeID("0011223344556677889900112233445566778899")
 	require.NoError(t, err)
 	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 2)
@@ -176,6 +181,10 @@ loop:
 }
 
 func TestBlockQueueAcceptsNoMoreBlocks(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	peerID, err := types.NewNodeID("0011223344556677889900112233445566778899")
 	require.NoError(t, err)
 	queue := newBlockQueue(startHeight, stopHeight, 1, stopTime, 1)

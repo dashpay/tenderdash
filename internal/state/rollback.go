@@ -25,7 +25,7 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 	// when the user stopped the node the state wasn't updated but the blockstore was. In this situation
 	// we don't need to rollback any state and can just return early
 	if height == invalidState.LastBlockHeight+1 {
-		return invalidState.LastBlockHeight, invalidState.AppHash, nil
+		return invalidState.LastBlockHeight, invalidState.LastAppHash, nil
 	}
 
 	// If the state store isn't one below nor equal to the blockstore height than this violates the
@@ -38,6 +38,7 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 	// state store height is equal to blockstore height. We're good to proceed with rolling back state
 	rollbackHeight := invalidState.LastBlockHeight - 1
 	rollbackBlock := bs.LoadBlockMeta(rollbackHeight)
+
 	if rollbackBlock == nil {
 		return -1, nil, fmt.Errorf("block at height %d not found", rollbackHeight)
 	}
@@ -86,7 +87,8 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		LastBlockID:     rollbackBlock.BlockID,
 		LastBlockTime:   rollbackBlock.Header.Time,
 
-		NextValidators:              invalidState.Validators,
+		LastCoreChainLockedBlockHeight: rollbackBlock.Header.CoreChainLockedHeight,
+
 		Validators:                  invalidState.LastValidators,
 		LastValidators:              previousLastValidatorSet,
 		LastHeightValidatorsChanged: valChangeHeight,
@@ -94,8 +96,8 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		ConsensusParams:                  previousParams,
 		LastHeightConsensusParamsChanged: paramsChangeHeight,
 
-		LastResultsHash: latestBlock.Header.LastResultsHash,
-		AppHash:         latestBlock.Header.AppHash,
+		LastResultsHash: latestBlock.Header.ResultsHash,
+		LastAppHash:     latestBlock.Header.AppHash,
 	}
 
 	// persist the new state. This overrides the invalid one. NOTE: this will also
@@ -105,5 +107,5 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		return -1, nil, fmt.Errorf("failed to save rolled back state: %w", err)
 	}
 
-	return rolledBackState.LastBlockHeight, rolledBackState.AppHash, nil
+	return rolledBackState.LastBlockHeight, rolledBackState.LastAppHash, nil
 }

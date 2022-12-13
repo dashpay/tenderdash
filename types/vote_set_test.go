@@ -7,8 +7,10 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -23,8 +25,7 @@ func TestVoteSet_AddVote_Good(t *testing.T) {
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10)
 	val0 := privValidators[0]
 
 	val0ProTxHash, err := val0.GetProTxHash(ctx)
@@ -41,7 +42,7 @@ func TestVoteSet_AddVote_Good(t *testing.T) {
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrevoteType,
-		BlockID:            BlockID{nil, PartSetHeader{}},
+		BlockID:            BlockID{},
 	}
 	_, err = signAddVote(ctx, val0, vote, voteSet)
 	require.NoError(t, err)
@@ -57,8 +58,7 @@ func TestVoteSet_AddVote_Bad(t *testing.T) {
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10)
 
 	voteProto := &Vote{
 		ValidatorProTxHash: nil,
@@ -66,7 +66,7 @@ func TestVoteSet_AddVote_Bad(t *testing.T) {
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrevoteType,
-		BlockID:            BlockID{nil, PartSetHeader{}},
+		BlockID:            BlockID{nil, PartSetHeader{}, RandStateID().Hash()},
 	}
 
 	// val0 votes for nil.
@@ -126,88 +126,12 @@ func TestVoteSet_AddVote_Bad(t *testing.T) {
 
 }
 
-// TestVoteSet_AddVote_StateID checks if state signature is verified correctly when adding votes to voteSet
-func TestVoteSet_AddVote_StateID(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	height, round := int64(10), int32(0)
-
-	randStateID1 := RandStateID().WithHeight(height - 1)
-	randStateID2 := RandStateID().WithHeight(height - 1)
-
-	testCases := []struct {
-		name           string
-		voteSetStateID StateID
-		wrongStateID   StateID
-		shouldFail     bool
-	}{
-		{"correct", randStateID1, randStateID1, false},
-		{"wrong apphash", randStateID1, randStateID2, true},
-		{"too low height", randStateID1, randStateID1.WithHeight(height - 5), true},
-		{"too high height", randStateID1, randStateID1.WithHeight(height + 5), true},
-	}
-	//nolint:scopelint
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10,
-				tc.voteSetStateID)
-
-			val0 := privValidators[0]
-			val0ProTxHash, err := val0.GetProTxHash(ctx)
-			require.NoError(t, err)
-
-			val1 := privValidators[1]
-			val1ProTxHash, err := val1.GetProTxHash(ctx)
-			require.NoError(t, err)
-
-			assert.Nil(t, voteSet.GetByProTxHash(val0ProTxHash))
-			assert.False(t, voteSet.BitArray().GetIndex(0))
-			majorityBlockID, ok := voteSet.TwoThirdsMajority()
-			assert.False(t, ok || !majorityBlockID.IsNil(), "there should be no 2/3 majority")
-			blockID := randBlockID()
-			vote1 := &Vote{
-				ValidatorProTxHash: val0ProTxHash,
-				ValidatorIndex:     0, // since privValidators are in order
-				Height:             height,
-				Round:              round,
-				Type:               tmproto.PrevoteType,
-				BlockID:            blockID,
-			}
-			_, err = signAddVote(ctx, val0, vote1, voteSet)
-			require.NoError(t, err)
-
-			vote2 := &Vote{
-				ValidatorProTxHash: val1ProTxHash,
-				ValidatorIndex:     1, // since privValidators are in order
-				Height:             height,
-				Round:              round,
-				Type:               tmproto.PrevoteType,
-				BlockID:            blockID,
-			}
-			_, err = signAddVoteForStateID(ctx, val1, vote2, voteSet, tc.wrongStateID)
-			if tc.shouldFail {
-				require.Error(t, err)
-				assert.Contains(t, err.Error(), "threshold state signature is invalid")
-			} else {
-				require.NoError(t, err)
-			}
-
-			assert.NotNil(t, voteSet.GetByProTxHash(val0ProTxHash))
-			assert.True(t, voteSet.BitArray().GetIndex(0))
-			majorityBlockID, ok = voteSet.TwoThirdsMajority()
-			assert.False(t, ok || !majorityBlockID.IsNil(), "there should be no 2/3 majority")
-		})
-	}
-}
-
 func TestVoteSet_2_3Majority(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 10)
 
 	voteProto := &Vote{
 		ValidatorProTxHash: nil, // NOTE: must fill in
@@ -215,7 +139,7 @@ func TestVoteSet_2_3Majority(t *testing.T) {
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrevoteType,
-		BlockID:            BlockID{nil, PartSetHeader{}},
+		BlockID:            BlockID{},
 	}
 	// 6 out of 10 voted for nil.
 	for i := int32(0); i < 6; i++ {
@@ -256,10 +180,10 @@ func TestVoteSet_2_3MajorityRedux(t *testing.T) {
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 100,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 100)
 
 	blockHash := crypto.CRandBytes(32)
+	stateID := RandStateID()
 	blockPartsTotal := uint32(123)
 	blockPartSetHeader := PartSetHeader{blockPartsTotal, crypto.CRandBytes(32)}
 
@@ -269,7 +193,7 @@ func TestVoteSet_2_3MajorityRedux(t *testing.T) {
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrevoteType,
-		BlockID:            BlockID{blockHash, blockPartSetHeader},
+		BlockID:            BlockID{blockHash, blockPartSetHeader, stateID.Hash()},
 	}
 
 	// 66 out of 100 voted for nil.
@@ -342,7 +266,7 @@ func TestVoteSet_2_3MajorityRedux(t *testing.T) {
 		_, err = signAddVote(ctx, privValidators[70], vote, voteSet)
 		require.NoError(t, err)
 		blockID, ok = voteSet.TwoThirdsMajority()
-		assert.True(t, ok && blockID.Equals(BlockID{blockHash, blockPartSetHeader}),
+		assert.True(t, ok && blockID.Equals(BlockID{blockHash, blockPartSetHeader, stateID.Hash()}),
 			"there should be 2/3 majority")
 	}
 }
@@ -352,8 +276,7 @@ func TestVoteSet_Conflicts(t *testing.T) {
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 4,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrevoteType, 4)
 	blockHash1 := tmrand.Bytes(32)
 	blockHash2 := tmrand.Bytes(32)
 
@@ -363,7 +286,7 @@ func TestVoteSet_Conflicts(t *testing.T) {
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrevoteType,
-		BlockID:            BlockID{nil, PartSetHeader{}},
+		BlockID:            BlockID{},
 	}
 
 	val0ProTxHash, err := privValidators[0].GetProTxHash(ctx)
@@ -387,19 +310,20 @@ func TestVoteSet_Conflicts(t *testing.T) {
 	}
 
 	// start tracking blockHash1
-	err = voteSet.SetPeerMaj23("peerA", BlockID{blockHash1, PartSetHeader{}})
+	blockID := withBlockHash(voteProto, blockHash1).BlockID
+	err = voteSet.SetPeerMaj23("peerA", blockID, height, round)
 	require.NoError(t, err)
 
 	// val0 votes again for blockHash1.
 	{
 		vote := withValidator(voteProto, val0ProTxHash, 0)
 		added, err := signAddVote(ctx, privValidators[0], withBlockHash(vote, blockHash1), voteSet)
-		assert.True(t, added, "called SetPeerMaj23()")
+		assert.True(t, added, "called SetPeerMaj23(), err=%s", err)
 		assert.Error(t, err, "conflicting vote")
 	}
 
 	// attempt tracking blockHash2, should fail because already set for peerA.
-	err = voteSet.SetPeerMaj23("peerA", BlockID{blockHash2, PartSetHeader{}})
+	err = voteSet.SetPeerMaj23("peerA", BlockID{Hash: blockHash2, PartSetHeader: PartSetHeader{}}, height, round)
 	require.Error(t, err)
 
 	// val0 votes again for blockHash1.
@@ -449,7 +373,7 @@ func TestVoteSet_Conflicts(t *testing.T) {
 	}
 
 	// now attempt tracking blockHash1
-	err = voteSet.SetPeerMaj23("peerB", BlockID{blockHash1, PartSetHeader{}})
+	err = voteSet.SetPeerMaj23("peerB", BlockID{Hash: blockHash1, PartSetHeader: PartSetHeader{}}, height, round)
 	require.NoError(t, err)
 
 	// val2 votes for blockHash1.
@@ -480,9 +404,9 @@ func TestVoteSet_MakeCommit(t *testing.T) {
 	defer cancel()
 
 	height, round := int64(1), int32(0)
-	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, 10,
-		RandStateID().WithHeight(height-1))
+	voteSet, _, privValidators := randVoteSet(ctx, t, height, round, tmproto.PrecommitType, 10)
 	blockHash, blockPartSetHeader := crypto.CRandBytes(32), PartSetHeader{123, crypto.CRandBytes(32)}
+	stateID := RandStateID()
 
 	voteProto := &Vote{
 		ValidatorProTxHash: nil,
@@ -490,7 +414,7 @@ func TestVoteSet_MakeCommit(t *testing.T) {
 		Height:             height,
 		Round:              round,
 		Type:               tmproto.PrecommitType,
-		BlockID:            BlockID{blockHash, blockPartSetHeader},
+		BlockID:            BlockID{blockHash, blockPartSetHeader, stateID.Hash()},
 	}
 
 	// 6 out of 10 voted for some block.
@@ -587,7 +511,6 @@ func TestVoteSet_LLMQType_50_60(t *testing.T) {
 				round,
 				tmproto.PrevoteType,
 				tt.numValidators,
-				RandStateID().WithHeight(height-1),
 				tt.llmqType,
 				tt.threshold,
 			)
@@ -596,8 +519,9 @@ func TestVoteSet_LLMQType_50_60(t *testing.T) {
 				"need at least %d validators", tt.threshold+3)
 
 			blockHash := crypto.CRandBytes(32)
+			stateID := RandStateID()
 			blockPartSetHeader := PartSetHeader{uint32(123), crypto.CRandBytes(32)}
-			votedBlock := BlockID{blockHash, blockPartSetHeader}
+			votedBlock := BlockID{blockHash, blockPartSetHeader, stateID.Hash()}
 
 			// below threshold
 			for i := 0; i < tt.threshold-1; i++ {
@@ -662,11 +586,10 @@ func randVoteSet(
 	round int32,
 	signedMsgType tmproto.SignedMsgType,
 	numValidators int,
-	stateID StateID,
 ) (*VoteSet, *ValidatorSet, []PrivValidator) {
 	t.Helper()
 	valSet, mockPVs := RandValidatorSet(numValidators)
-	return NewVoteSet("test_chain_id", height, round, signedMsgType, valSet, stateID),
+	return NewVoteSet("test_chain_id", height, round, signedMsgType, valSet),
 		valSet,
 		append([]PrivValidator(nil), mockPVs...)
 }
@@ -676,7 +599,6 @@ func randVoteSetWithLLMQType(
 	round int32,
 	signedMsgType tmproto.SignedMsgType,
 	numValidators int,
-	stateID StateID,
 	llmqType btcjson.LLMQType,
 	threshold int,
 ) (*VoteSet, *ValidatorSet, []PrivValidator) {
@@ -701,8 +623,7 @@ func randVoteSetWithLLMQType(
 	sort.Sort(PrivValidatorsByProTxHash(privValidators))
 
 	valSet := NewValidatorSet(valz, ld.ThresholdPubKey, llmqType, quorumHash, true)
-	voteSet := NewVoteSet("test_chain_id", height, round, signedMsgType,
-		valSet, stateID)
+	voteSet := NewVoteSet("test_chain_id", height, round, signedMsgType, valSet)
 
 	return voteSet, valSet, privValidators
 }
@@ -736,10 +657,19 @@ func withType(vote *Vote, signedMsgType byte) *Vote {
 	return vote
 }
 
-// Convenience: Return new vote with different blockHash
+// Convenience: Return new vote with different blockHash and state ID
 func withBlockHash(vote *Vote, blockHash []byte) *Vote {
 	vote = vote.Copy()
 	vote.BlockID.Hash = blockHash
+
+	ts, _ := types.TimestampProto(time.Date(2022, 1, 2, 3, 4, 5, 6, time.UTC))
+	vote.BlockID.StateID = tmproto.StateID{
+		AppVersion:            StateIDVersion,
+		Height:                uint64(vote.Height),
+		AppHash:               blockHash,
+		CoreChainLockedHeight: 1,
+		Time:                  *ts,
+	}.Hash()
 	return vote
 }
 

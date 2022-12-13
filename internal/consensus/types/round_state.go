@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
+	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/bytes"
 	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
-
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -106,6 +106,8 @@ type RoundState struct {
 	LastCommit                *types.Commit       `json:"last_commit"`
 	LastValidators            *types.ValidatorSet `json:"last_validators"`
 	TriggeredTimeoutPrecommit bool                `json:"triggered_timeout_precommit"`
+
+	sm.CurrentRoundState `json:"uncommitted_state"`
 }
 
 // RoundStateSimple is a compressed version of the RoundState for use in RPC
@@ -159,20 +161,23 @@ func (rs *RoundState) NewRoundEvent() types.EventDataNewRound {
 	}
 }
 
-// CompleteProposalEvent returns information about a proposed block as an event.
-func (rs *RoundState) CompleteProposalEvent() types.EventDataCompleteProposal {
-	// We must construct BlockID from ProposalBlock and ProposalBlockParts
-	// cs.Proposal is not guaranteed to be set when this function is called
-	blockID := types.BlockID{
-		Hash:          rs.ProposalBlock.Hash(),
-		PartSetHeader: rs.ProposalBlockParts.Header(),
+// BlockID returns block ID from proposal or constructs new block ID from ProposalBlock and ProposalBlockParts.
+// cs.Proposal is not guaranteed to be set when this function is called
+func (rs *RoundState) BlockID() types.BlockID {
+	if rs.Proposal != nil && rs.Height == rs.Proposal.Height && rs.Round == rs.Proposal.Round {
+		return rs.Proposal.BlockID
 	}
 
+	return rs.ProposalBlock.BlockID(rs.ProposalBlockParts)
+}
+
+// CompleteProposalEvent returns information about a proposed block as an event.
+func (rs *RoundState) CompleteProposalEvent() types.EventDataCompleteProposal {
 	return types.EventDataCompleteProposal{
 		Height:  rs.Height,
 		Round:   rs.Round,
 		Step:    rs.Step.String(),
-		BlockID: blockID,
+		BlockID: rs.BlockID(),
 	}
 }
 

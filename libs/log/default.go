@@ -31,7 +31,7 @@ func NewDefaultLogger(format, level string) (Logger, error) {
 		logWriter = zerolog.ConsoleWriter{
 			Out:        os.Stderr,
 			NoColor:    true,
-			TimeFormat: time.RFC3339,
+			TimeFormat: time.RFC3339Nano,
 			FormatLevel: func(i interface{}) string {
 				if ll, ok := i.(string); ok {
 					return strings.ToUpper(ll)
@@ -59,9 +59,7 @@ func NewLogger(level string, logWriter io.Writer) (Logger, error) {
 	// make the writer thread-safe
 	logWriter = newSyncWriter(logWriter)
 
-	return &defaultLogger{
-		Logger: zerolog.New(logWriter).Level(logLevel).With().Timestamp().Logger(),
-	}, nil
+	return &defaultLogger{Logger: zerolog.New(logWriter).Level(logLevel).With().Timestamp().Logger()}, nil
 }
 
 func (l defaultLogger) Info(msg string, keyVals ...interface{}) {
@@ -77,9 +75,7 @@ func (l defaultLogger) Debug(msg string, keyVals ...interface{}) {
 }
 
 func (l defaultLogger) With(keyVals ...interface{}) Logger {
-	return &defaultLogger{
-		Logger: l.Logger.With().Fields(getLogFields(keyVals...)).Logger(),
-	}
+	return &defaultLogger{Logger: l.Logger.With().Fields(getLogFields(keyVals...)).Logger()}
 }
 
 // OverrideWithNewLogger replaces an existing logger's internal with
@@ -121,4 +117,8 @@ func getLogFields(keyVals ...interface{}) map[string]interface{} {
 	}
 
 	return fields
+}
+
+func init() {
+	zerolog.TimeFieldFormat = time.RFC3339Nano
 }

@@ -13,7 +13,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
-	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
+	"github.com/tendermint/tendermint/proto/tendermint/state"
 	"github.com/tendermint/tendermint/rpc/coretypes"
 )
 
@@ -70,8 +70,9 @@ func TestBlockchainInfo(t *testing.T) {
 }
 
 func TestBlockResults(t *testing.T) {
-	results := &tmstate.ABCIResponses{
-		FinalizeBlock: &abci.ResponseFinalizeBlock{
+	results := state.ABCIResponses{
+		FinalizeBlock: &abci.ResponseFinalizeBlock{},
+		ProcessProposal: &abci.ResponseProcessProposal{
 			TxResults: []*abci.ExecTxResult{
 				{Code: 0, Data: []byte{0x01}, Log: "ok", GasUsed: 10},
 				{Code: 0, Data: []byte{0x02}, Log: "ok", GasUsed: 5},
@@ -99,11 +100,11 @@ func TestBlockResults(t *testing.T) {
 		{101, true, nil},
 		{100, false, &coretypes.ResultBlockResults{
 			Height:                100,
-			TxsResults:            results.FinalizeBlock.TxResults,
+			TxsResults:            results.ProcessProposal.TxResults,
 			TotalGasUsed:          15,
 			FinalizeBlockEvents:   results.FinalizeBlock.Events,
-			ValidatorSetUpdate:    results.FinalizeBlock.ValidatorSetUpdate,
-			ConsensusParamUpdates: consensusParamsPtrFromProtoPtr(results.FinalizeBlock.ConsensusParamUpdates),
+			ValidatorSetUpdate:    results.ProcessProposal.ValidatorSetUpdate,
+			ConsensusParamUpdates: consensusParamsPtrFromProtoPtr(results.ProcessProposal.ConsensusParamUpdates),
 		}},
 	}
 

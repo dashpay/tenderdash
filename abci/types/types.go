@@ -3,8 +3,16 @@ package types
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 
 	"github.com/gogo/protobuf/jsonpb"
+
+	"github.com/tendermint/tendermint/crypto"
+	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
+	"github.com/tendermint/tendermint/crypto/merkle"
+	"github.com/tendermint/tendermint/internal/jsontypes"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
 const (
@@ -18,16 +26,6 @@ func (r ResponseCheckTx) IsOK() bool {
 
 // IsErr returns true if Code is something other than OK.
 func (r ResponseCheckTx) IsErr() bool {
-	return r.Code != CodeTypeOK
-}
-
-// IsOK returns true if Code is OK.
-func (r ResponseDeliverTx) IsOK() bool {
-	return r.Code == CodeTypeOK
-}
-
-// IsErr returns true if Code is something other than OK.
-func (r ResponseDeliverTx) IsErr() bool {
 	return r.Code != CodeTypeOK
 }
 
@@ -95,32 +93,12 @@ func (r *ResponseCheckTx) UnmarshalJSON(b []byte) error {
 	return jsonpbUnmarshaller.Unmarshal(reader, r)
 }
 
-func (r *ResponseDeliverTx) MarshalJSON() ([]byte, error) {
-	s, err := jsonpbMarshaller.MarshalToString(r)
-	return []byte(s), err
-}
-
-func (r *ResponseDeliverTx) UnmarshalJSON(b []byte) error {
-	reader := bytes.NewBuffer(b)
-	return jsonpbUnmarshaller.Unmarshal(reader, r)
-}
-
 func (r *ResponseQuery) MarshalJSON() ([]byte, error) {
 	s, err := jsonpbMarshaller.MarshalToString(r)
 	return []byte(s), err
 }
 
 func (r *ResponseQuery) UnmarshalJSON(b []byte) error {
-	reader := bytes.NewBuffer(b)
-	return jsonpbUnmarshaller.Unmarshal(reader, r)
-}
-
-func (r *ResponseCommit) MarshalJSON() ([]byte, error) {
-	s, err := jsonpbMarshaller.MarshalToString(r)
-	return []byte(s), err
-}
-
-func (r *ResponseCommit) UnmarshalJSON(b []byte) error {
 	reader := bytes.NewBuffer(b)
 	return jsonpbUnmarshaller.Unmarshal(reader, r)
 }
@@ -145,25 +123,112 @@ type jsonRoundTripper interface {
 	json.Unmarshaler
 }
 
-var _ jsonRoundTripper = (*ResponseCommit)(nil)
 var _ jsonRoundTripper = (*ResponseQuery)(nil)
-var _ jsonRoundTripper = (*ResponseDeliverTx)(nil)
 var _ jsonRoundTripper = (*ResponseCheckTx)(nil)
 
 var _ jsonRoundTripper = (*EventAttribute)(nil)
 
+type validatorSetUpdateJSON struct {
+	ValidatorUpdates []ValidatorUpdate `json:"validator_updates"`
+	ThresholdPubKey  json.RawMessage   `json:"threshold_public_key"`
+	QuorumHash       []byte            `json:"quorum_hash,omitempty"`
+}
+
+func (m *ValidatorSetUpdate) MarshalJSON() ([]byte, error) {
+	if m == nil {
+		return nil, nil
+	}
+	ret := validatorSetUpdateJSON{
+		ValidatorUpdates: m.ValidatorUpdates,
+		QuorumHash:       m.QuorumHash,
+	}
+	if m.ThresholdPublicKey.Sum != nil {
+		key, err := cryptoenc.PubKeyFromProto(m.ThresholdPublicKey)
+		if err != nil {
+			return nil, err
+		}
+		ret.ThresholdPubKey, err = jsontypes.Marshal(key)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(ret)
+}
+
+func (m *ValidatorSetUpdate) UnmarshalJSON(data []byte) error {
+	var vsu validatorSetUpdateJSON
+	err := json.Unmarshal(data, &vsu)
+	if err != nil {
+		return err
+	}
+	if vsu.ThresholdPubKey != nil {
+		var key crypto.PubKey
+		err = jsontypes.Unmarshal(vsu.ThresholdPubKey, &key)
+		if err != nil {
+			return err
+		}
+		m.ThresholdPublicKey, err = cryptoenc.PubKeyToProto(key)
+		if err != nil {
+			return err
+		}
+	}
+	m.ValidatorUpdates = vsu.ValidatorUpdates
+	m.QuorumHash = vsu.QuorumHash
+	return nil
+}
+
+type validatorUpdateJSON struct {
+	PubKey      json.RawMessage `json:"pub_key"`
+	Power       int64           `json:"power"`
+	ProTxHash   []byte          `json:"pro_tx_hash"`
+	NodeAddress string          `json:"node_address"`
+}
+
+func (m *ValidatorUpdate) MarshalJSON() ([]byte, error) {
+	res := validatorUpdateJSON{
+		Power:       m.Power,
+		ProTxHash:   m.ProTxHash,
+		NodeAddress: m.NodeAddress,
+	}
+	if m.PubKey != nil {
+		pubKey, err := cryptoenc.PubKeyFromProto(*m.PubKey)
+		if err != nil {
+			return nil, err
+		}
+		res.PubKey, err = jsontypes.Marshal(pubKey)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return json.Marshal(res)
+}
+
+func (m *ValidatorUpdate) UnmarshalJSON(b []byte) error {
+	var res validatorUpdateJSON
+	err := json.Unmarshal(b, &res)
+	if err != nil {
+		return err
+	}
+	m.Power = res.Power
+	m.NodeAddress = res.NodeAddress
+	m.ProTxHash = res.ProTxHash
+	if res.PubKey != nil {
+		var pubKey crypto.PubKey
+		err = jsontypes.Unmarshal(res.PubKey, &pubKey)
+		if err != nil {
+			return err
+		}
+		protoPubKey, err := cryptoenc.PubKeyToProto(pubKey)
+		if err != nil {
+			return err
+		}
+		m.PubKey = &protoPubKey
+	}
+	return nil
+}
+
 // -----------------------------------------------
 // construct Result data
-
-func RespondVerifyVoteExtension(ok bool) ResponseVerifyVoteExtension {
-	status := ResponseVerifyVoteExtension_REJECT
-	if ok {
-		status = ResponseVerifyVoteExtension_ACCEPT
-	}
-	return ResponseVerifyVoteExtension{
-		Status: status,
-	}
-}
 
 // deterministicExecTxResult constructs a copy of response that omits
 // non-deterministic fields. The input response is not modified.
@@ -191,4 +256,58 @@ func MarshalTxResults(r []*ExecTxResult) ([][]byte, error) {
 		s[i] = b
 	}
 	return s, nil
+}
+
+// TxResultsHash determines hash of transaction execution results.
+// TODO: light client seems to also include events into LastResultsHash, need to investigate
+func TxResultsHash(txResults []*ExecTxResult) (tmbytes.HexBytes, error) {
+	rs, err := MarshalTxResults(txResults)
+	if err != nil {
+		return nil, fmt.Errorf("marshaling TxResults: %w", err)
+	}
+	return merkle.HashFromByteSlices(rs), nil
+}
+
+func (m *ResponsePrepareProposal) Validate() error {
+	if !isValidApphash(m.AppHash) {
+		return fmt.Errorf("apphash (%X) of size %d is invalid", m.AppHash, len(m.AppHash))
+	}
+
+	return nil
+}
+
+func isValidApphash(apphash tmbytes.HexBytes) bool {
+	return len(apphash) == crypto.DefaultAppHashSize
+}
+
+func (r ResponseProcessProposal) Validate() error {
+	if !isValidApphash(r.AppHash) {
+		return fmt.Errorf("apphash (%X) has wrong size %d, expected: %d", r.AppHash, len(r.AppHash), crypto.DefaultAppHashSize)
+	}
+
+	return nil
+}
+
+func (m *ValidatorSetUpdate) ProTxHashes() []crypto.ProTxHash {
+	ret := make([]crypto.ProTxHash, len(m.ValidatorUpdates))
+	for i, v := range m.ValidatorUpdates {
+		ret[i] = v.ProTxHash
+	}
+	return ret
+}
+
+func (m *RequestFinalizeBlock) ToCanonicalVote() (types.CanonicalVote, error) {
+	cv := types.CanonicalVote{
+		Type:    types.PrecommitType,
+		Height:  m.Height,
+		Round:   int64(m.Round),
+		StateID: m.BlockID.StateID,
+		ChainID: m.Block.Header.ChainID,
+	}
+	var err error
+	cv.BlockID, err = m.BlockID.ToCanonicalBlockID().Checksum()
+	if err != nil {
+		return types.CanonicalVote{}, err
+	}
+	return cv, nil
 }

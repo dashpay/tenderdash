@@ -38,6 +38,7 @@ func MakeBlockIDWithHash(hash []byte) types.BlockID {
 			Total: 100,
 			Hash:  RandomHash(),
 		},
+		StateID: types.RandStateID().Hash(),
 	}
 }
 
@@ -75,8 +76,8 @@ func MakeHeader(t *testing.T, h *types.Header) *types.Header {
 	if len(h.AppHash) == 0 {
 		h.AppHash = RandomHash()
 	}
-	if len(h.LastResultsHash) == 0 {
-		h.LastResultsHash = RandomHash()
+	if len(h.ResultsHash) == 0 {
+		h.ResultsHash = RandomHash()
 	}
 	if len(h.EvidenceHash) == 0 {
 		h.EvidenceHash = RandomHash()

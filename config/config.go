@@ -13,7 +13,6 @@ import (
 
 	"github.com/dashevo/dashd-go/btcjson"
 
-	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	"github.com/tendermint/tendermint/types"
@@ -557,7 +556,7 @@ func DefaultRPCConfig() *RPCConfig {
 		MaxSubscriptionClients:       100,
 		MaxSubscriptionsPerClient:    5,
 		ExperimentalDisableWebsocket: false, // compatible with TM v0.35 and earlier
-		EventLogWindowSize:           0,     // disables /events RPC by default
+		EventLogWindowSize:           30 * time.Second,
 		EventLogMaxItems:             0,
 
 		TimeoutBroadcastTxCommit: 10 * time.Second,
@@ -646,15 +645,6 @@ type P2PConfig struct { //nolint: maligned
 	// Address to advertise to peers for them to dial
 	ExternalAddress string `mapstructure:"external-address"`
 
-	// Comma separated list of seed nodes to connect to
-	// We only use these if we can’t connect to peers in the addrbook
-	//
-	// Deprecated: This value is not used by the new PEX reactor. Use
-	// BootstrapPeers instead.
-	//
-	// TODO(#5670): Remove once the p2p refactor is complete.
-	Seeds string `mapstructure:"seeds"`
-
 	// Comma separated list of peers to be added to the peer store
 	// on startup. Either BootstrapPeers or PersistentPeers are
 	// needed for peer discovery
@@ -670,19 +660,17 @@ type P2PConfig struct { //nolint: maligned
 	// outbound).
 	MaxConnections uint16 `mapstructure:"max-connections"`
 
+	// MaxOutgoingConnections defines the maximum number of connected peers (inbound and
+	// outbound).
+	MaxOutgoingConnections uint16 `mapstructure:"max-outgoing-connections"`
+
 	// MaxIncomingConnectionAttempts rate limits the number of incoming connection
 	// attempts per IP address.
 	MaxIncomingConnectionAttempts uint `mapstructure:"max-incoming-connection-attempts"`
 
-	// Set true to enable the peer-exchange reactor
-	PexReactor bool `mapstructure:"pex"`
-
 	// Comma separated list of peer IDs to keep private (will not be gossiped to
 	// other peers)
 	PrivatePeerIDs string `mapstructure:"private-peer-ids"`
-
-	// Toggle to disable guard against peers connecting from the same ip.
-	AllowDuplicateIP bool `mapstructure:"allow-duplicate-ip"`
 
 	// Time to wait before flushing messages out on the connection
 	FlushThrottleTimeout time.Duration `mapstructure:"flush-throttle-timeout"`
@@ -700,13 +688,9 @@ type P2PConfig struct { //nolint: maligned
 	HandshakeTimeout time.Duration `mapstructure:"handshake-timeout"`
 	DialTimeout      time.Duration `mapstructure:"dial-timeout"`
 
-	// Testing params.
-	// Force dial to fail
-	TestDialFail bool `mapstructure:"test-dial-fail"`
-
 	// Makes it possible to configure which queue backend the p2p
-	// layer uses. Options are: "fifo" and "priority",
-	// with the default being "priority".
+	// layer uses. Options are: "fifo" and "simple-priority", and "priority",
+	// with the default being "simple-priority".
 	QueueType string `mapstructure:"queue-type"`
 }
 
@@ -717,6 +701,7 @@ func DefaultP2PConfig() *P2PConfig {
 		ExternalAddress:               "",
 		UPNP:                          false,
 		MaxConnections:                64,
+		MaxOutgoingConnections:        12,
 		MaxIncomingConnectionAttempts: 100,
 		FlushThrottleTimeout:          100 * time.Millisecond,
 		// The MTU (Maximum Transmission Unit) for Ethernet is 1500 bytes.
@@ -727,12 +712,9 @@ func DefaultP2PConfig() *P2PConfig {
 		MaxPacketMsgPayloadSize: 1400,
 		SendRate:                5120000, // 5 mB/s
 		RecvRate:                5120000, // 5 mB/s
-		PexReactor:              true,
-		AllowDuplicateIP:        false,
 		HandshakeTimeout:        20 * time.Second,
 		DialTimeout:             3 * time.Second,
-		TestDialFail:            false,
-		QueueType:               "priority",
+		QueueType:               "simple-priority",
 	}
 }
 
@@ -751,6 +733,9 @@ func (cfg *P2PConfig) ValidateBasic() error {
 	if cfg.RecvRate < 0 {
 		return errors.New("recv-rate can't be negative")
 	}
+	if cfg.MaxOutgoingConnections > cfg.MaxConnections {
+		return errors.New("max-outgoing-connections cannot be larger than max-connections")
+	}
 	return nil
 }
 
@@ -758,7 +743,6 @@ func (cfg *P2PConfig) ValidateBasic() error {
 func TestP2PConfig() *P2PConfig {
 	cfg := DefaultP2PConfig()
 	cfg.ListenAddress = "tcp://127.0.0.1:36656"
-	cfg.AllowDuplicateIP = true
 	cfg.FlushThrottleTimeout = 10 * time.Millisecond
 	return cfg
 }
@@ -768,9 +752,10 @@ func TestP2PConfig() *P2PConfig {
 
 // MempoolConfig defines the configuration options for the Tendermint mempool.
 type MempoolConfig struct {
-	RootDir   string `mapstructure:"home"`
-	Recheck   bool   `mapstructure:"recheck"`
-	Broadcast bool   `mapstructure:"broadcast"`
+	RootDir string `mapstructure:"home"`
+
+	// Whether to broadcast transactions to other nodes
+	Broadcast bool `mapstructure:"broadcast"`
 
 	// Maximum number of transactions in the mempool
 	Size int `mapstructure:"size"`
@@ -817,7 +802,6 @@ type MempoolConfig struct {
 // DefaultMempoolConfig returns a default configuration for the Tendermint mempool.
 func DefaultMempoolConfig() *MempoolConfig {
 	return &MempoolConfig{
-		Recheck:   true,
 		Broadcast: true,
 		// Each signature verification takes .5ms, Size reduced until we implement
 		// ABCI Recheck
@@ -996,9 +980,6 @@ type ConsensusConfig struct {
 	// EmptyBlocks mode and possible interval between empty blocks
 	CreateEmptyBlocks         bool          `mapstructure:"create-empty-blocks"`
 	CreateEmptyBlocksInterval time.Duration `mapstructure:"create-empty-blocks-interval"`
-	// CreateProofBlockRange determines how many past blocks are inspected in order to determine if we need to create
-	// additional proof block.
-	CreateProofBlockRange int64 `mapstructure:"create-proof-block-range"`
 
 	// The proposed block time window is doubling of the value in twice
 	// that means for 10 sec the window will be 20 sec, 10 sec before NOW and 10 sec after
@@ -1016,8 +997,6 @@ type ConsensusConfig struct {
 	DoubleSignCheckHeight int64 `mapstructure:"double-sign-check-height"`
 
 	QuorumType btcjson.LLMQType `mapstructure:"quorum-type"`
-
-	AppHashSize int `mapstructure:"app-hash-size"`
 
 	// TODO: The following fields are all temporary overrides that should exist only
 	// for the duration of the v0.36 release. The below fields should be completely
@@ -1073,11 +1052,9 @@ func DefaultConsensusConfig() *ConsensusConfig {
 		WalPath:                     filepath.Join(defaultDataDir, "cs.wal", "wal"),
 		CreateEmptyBlocks:           true,
 		CreateEmptyBlocksInterval:   0 * time.Second,
-		CreateProofBlockRange:       1,
 		PeerGossipSleepDuration:     100 * time.Millisecond,
 		PeerQueryMaj23SleepDuration: 2000 * time.Millisecond,
 		DoubleSignCheckHeight:       int64(0),
-		AppHashSize:                 crypto.DefaultAppHashSize,
 		QuorumType:                  btcjson.LLMQType_5_60,
 		ProposedBlockTimeWindow:     10 * time.Second,
 		DontAutoPropose:             false,
@@ -1090,7 +1067,6 @@ func TestConsensusConfig() *ConsensusConfig {
 	cfg.PeerGossipSleepDuration = 5 * time.Millisecond
 	cfg.PeerQueryMaj23SleepDuration = 250 * time.Millisecond
 	cfg.DoubleSignCheckHeight = int64(0)
-	cfg.AppHashSize = crypto.DefaultAppHashSize
 	cfg.QuorumType = btcjson.LLMQType_5_60
 	return cfg
 }
@@ -1136,9 +1112,6 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 	}
 	if cfg.CreateEmptyBlocksInterval < 0 {
 		return errors.New("create-empty-blocks-interval can't be negative")
-	}
-	if cfg.CreateProofBlockRange < 1 {
-		return errors.New("create-proof-block-range must be greater or equal to 1")
 	}
 	if cfg.PeerGossipSleepDuration < 0 {
 		return errors.New("peer-gossip-sleep-duration can't be negative")
@@ -1187,12 +1160,14 @@ func (cfg *ConsensusConfig) DeprecatedFieldWarning() error {
 	return nil
 }
 
-//-----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 // TxIndexConfig
 // Remember that Event has the following structure:
 // type: [
-//  key: value,
-//  ...
+//
+//	key: value,
+//	...
+//
 // ]
 //
 // CompositeKeys are constructed by `type.key`

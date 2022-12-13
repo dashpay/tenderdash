@@ -56,10 +56,10 @@ func (g GenesisValidator) MarshalJSON() ([]byte, error) {
 func (g *GenesisValidator) UnmarshalJSON(data []byte) error {
 	var gv genesisValidatorJSON
 	if err := json.Unmarshal(data, &gv); err != nil {
-		return err
+		return fmt.Errorf("unmarshal validator: %w", err)
 	}
 	if err := jsontypes.Unmarshal(gv.PubKey, &g.PubKey); err != nil {
-		return err
+		return fmt.Errorf("unmarshal validator %s key: %w", gv.ProTxHash.ShortString(), err)
 	}
 	g.Power = gv.Power
 	g.Name = gv.Name
@@ -69,13 +69,13 @@ func (g *GenesisValidator) UnmarshalJSON(data []byte) error {
 
 // GenesisDoc defines the initial conditions for a tendermint blockchain, in particular its validator set.
 type GenesisDoc struct {
-	GenesisTime     time.Time          `json:"genesis_time"`
-	ChainID         string             `json:"chain_id"`
-	InitialHeight   int64              `json:"initial_height,string"`
-	ConsensusParams *ConsensusParams   `json:"consensus_params,omitempty"`
-	Validators      []GenesisValidator `json:"validators,omitempty"`
-	AppHash         tmbytes.HexBytes   `json:"app_hash"`
-	AppState        json.RawMessage    `json:"app_state,omitempty"`
+	GenesisTime     time.Time
+	ChainID         string
+	InitialHeight   int64
+	ConsensusParams *ConsensusParams
+	Validators      []GenesisValidator
+	AppHash         tmbytes.HexBytes
+	AppState        json.RawMessage
 
 	// dash fields
 	InitialCoreChainLockedHeight uint32                 `json:"initial_core_chain_locked_height"`
@@ -86,20 +86,20 @@ type GenesisDoc struct {
 }
 
 type genesisDocJSON struct {
-	GenesisTime     time.Time          `json:"genesis_time"`
+	GenesisTime     time.Time          `json:"genesis_time,omitempty"`
 	ChainID         string             `json:"chain_id"`
-	InitialHeight   int64              `json:"initial_height,string"`
+	InitialHeight   int64              `json:"initial_height,string,omitempty"`
 	ConsensusParams *ConsensusParams   `json:"consensus_params,omitempty"`
 	Validators      []GenesisValidator `json:"validators,omitempty"`
-	AppHash         tmbytes.HexBytes   `json:"app_hash"`
+	AppHash         tmbytes.HexBytes   `json:"app_hash,omitempty"`
 	AppState        json.RawMessage    `json:"app_state,omitempty"`
 
 	// dash fields
-	InitialCoreChainLockedHeight uint32                 `json:"initial_core_chain_locked_height"`
-	InitialProposalCoreChainLock *tmproto.CoreChainLock `json:"initial_proposal_core_chain_lock"`
-	ThresholdPublicKey           json.RawMessage        `json:"threshold_public_key"`
-	QuorumType                   btcjson.LLMQType       `json:"quorum_type"`
-	QuorumHash                   crypto.QuorumHash      `json:"quorum_hash"`
+	InitialCoreChainLockedHeight uint32                 `json:"initial_core_chain_locked_height,omitempty"`
+	InitialProposalCoreChainLock *tmproto.CoreChainLock `json:"initial_proposal_core_chain_lock,omitempty"`
+	ThresholdPublicKey           json.RawMessage        `json:"threshold_public_key,omitempty"`
+	QuorumType                   btcjson.LLMQType       `json:"quorum_type,omitempty"`
+	QuorumHash                   crypto.QuorumHash      `json:"quorum_hash,omitempty"`
 }
 
 func (genDoc GenesisDoc) MarshalJSON() ([]byte, error) {
@@ -153,7 +153,7 @@ func (genDoc *GenesisDoc) SaveAs(file string) error {
 		return err
 	}
 
-	return os.WriteFile(file, genDocBytes, 0644) // nolint:gosec
+	return os.WriteFile(file, genDocBytes, 0644) //nolint:gosec
 }
 
 // ValidatorHash returns the hash of the validator set contained in the GenesisDoc
@@ -218,9 +218,10 @@ func (genDoc *GenesisDoc) ValidateAndComplete() error {
 	if lenVals > 0 && len(genDoc.ThresholdPublicKey.Bytes()) != bls12381.PubKeySize {
 		return fmt.Errorf("the threshold public key must be 48 bytes for BLS")
 	}
-	if lenVals > 0 && len(genDoc.QuorumHash.Bytes()) < crypto.SmallAppHashSize {
-		return fmt.Errorf("the quorum hash must be at least %d bytes long (%d Validator(s))",
-			crypto.SmallAppHashSize,
+	if lenVals > 0 && len(genDoc.QuorumHash.Bytes()) != crypto.QuorumHashSize {
+		return fmt.Errorf("the quorum hash must be base64-encoded and %d bytes long, is %d bytes (%d Validator(s))",
+			crypto.QuorumHashSize,
+			len(genDoc.QuorumHash.Bytes()),
 			len(genDoc.Validators))
 	}
 
