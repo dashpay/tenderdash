@@ -16,8 +16,8 @@ jobs:
   golangci:
     name: golangci-lint
     runs-on: ubuntu-latest
-    timeout-minutes: 80
-    environment:
+    timeout-minutes: 30
+    env:
       CGO_LDFLAGS: "-L/usr/local/lib -lbls-dash -lrelic_s -lgmp"
       CGO_CXXFLAGS: "-I/usr/local/include"
     steps:
