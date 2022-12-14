@@ -22,6 +22,9 @@ mkdir -p $BUILD_PATH
 cmake -B $BUILD_PATH -S $SRC_PATH
 
 # Build the library
-make -C $BUILD_PATH chiabls
+cmake --build $BUILD_PATH -- -j 6
+
+mkdir -p $BUILD_PATH/src/bls-dash
+cp -r $SRC_PATH/src/* $BUILD_PATH/src/bls-dash
 
 exit 0

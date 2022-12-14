@@ -10,6 +10,10 @@ on:
       - release/**
       - v0.*-dev
 
+env:
+  CGO_LDFLAGS: "-L/usr/local/lib -lbls-dash -lrelic_s -lgmp"
+  CGO_CXXFLAGS: "-I/usr/local/include"
+
 jobs:
   build:
     name: Build
@@ -21,7 +25,7 @@ jobs:
           - "amd64"
         # - "arm"
         goos: ["linux"]
-    timeout-minutes: 5
+    timeout-minutes: 55
     steps:
       - uses: actions/setup-go@v3.3.1
         with:
@@ -41,7 +45,7 @@ jobs:
         with:
           arch: ${{ matrix.goarch }}
       - name: install-gcc
-        run: sudo apt-get update -qq && sudo apt-get install -qq --yes gcc-10-arm-linux-gnueabi g++-10-arm-linux-gnueabi
+        run: sudo apt-get -qq --yes gcc-10-arm-linux-gnueabi g++-10-arm-linux-gnueabi
         if: "matrix.goarch == 'arm'"
       - name: install
         run: |

@@ -210,6 +210,8 @@ github.com/dashevo/dashd-go/btcutil v1.1.1 h1:BLjyMXXNQNyt4316qBo6yjsi/EufQvYfBx
 github.com/dashevo/dashd-go/btcutil v1.1.1/go.mod h1:BFNwyGUxqY1rJR6Mrxyw6dyHmyykKK7jIZu/ZdrTXXA=
 github.com/dashpay/bls-signatures/go-bindings v0.0.0-20201127091120-745324b80143 h1:Q13WvpP9zZTmQy7O3q2tCXHXOB+dM0nnvPu7TuSieQQ=
 github.com/dashpay/bls-signatures/go-bindings v0.0.0-20201127091120-745324b80143/go.mod h1:wO0DBQIumICIPq4cWwH3LTxdD6gnHrX2XkUpah5Lj1o=
+github.com/dashpay/bls-signatures/go-bindings v0.0.0-20220324185745-cc53ca3c3a43 h1:Xov8Q6ig10jzQ5X7LaWJ36zTYOAQtnAu+2sbY9lSn1U=
+github.com/dashpay/bls-signatures/go-bindings v0.0.0-20220324185745-cc53ca3c3a43/go.mod h1:auvGS60NBZ+a21aCCQh366PdsjDvHinsCvl28VrYPu4=
 github.com/davecgh/go-spew v0.0.0-20161028175848-04cdfd42973b/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v0.0.0-20171005155431-ecdeabc65495/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

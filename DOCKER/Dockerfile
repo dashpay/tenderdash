@@ -1,9 +1,9 @@
 # stage 1 Generate Tenderdash Binary
-FROM golang:1.18-alpine3.15 AS builder
+FROM golang:1.19-alpine3.17 AS builder
 
 RUN apk update && \
     apk upgrade && \
-    apk add bash git gmp-dev sudo cmake build-base
+    apk add bash git gmp-dev sudo cmake build-base python3-dev libsodium-dev
 
 COPY . /go/src/github.com/dashevo/tenderdash
 
@@ -13,7 +13,7 @@ RUN make install-bls
 RUN make build-linux
 
 # stage 2
-FROM alpine:3.15
+FROM alpine:3.17
 LABEL maintainer="developers@dash.org"
 
 # Tenderdash will be looking for the genesis file in /tenderdash/config/genesis.json
@@ -30,7 +30,7 @@ ENV TMHOME /tenderdash
 # could execute bash commands.
 RUN apk update && \
     apk upgrade && \
-    apk --no-cache add curl jq bash gmp libstdc++ && \
+    apk --no-cache add curl jq bash gmp libsodium-dev libstdc++ && \
     addgroup tmuser && \
     adduser -S -G tmuser tmuser -h "$TMHOME"
 

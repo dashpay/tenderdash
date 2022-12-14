@@ -63,7 +63,7 @@ vagrant_test:
 ### go tests
 test:
 	@echo "--> Running go test"
-	@go test -p 1 $(PACKAGES) -tags deadlock
+	CGO_ENABLED=$(CGO_ENABLED) go test -p 1 $(PACKAGES) -tags deadlock
 .PHONY: test
 
 test_verbose:

@@ -19,6 +19,19 @@ DOCKER_PROTO := docker run -v $(shell pwd):/workspace --workdir /workspace $(BUI
 CGO_ENABLED ?= 1
 GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}' github.com/gogo/protobuf)
 
+MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+CURR_DIR := $(dir $(MAKEFILE_PATH))
+
+BLS_DIR="$(CURR_DIR)/third_party/bls-signatures"
+CGO_LDFLAGS ?= "-L$(BLS_DIR)/build/_deps/sodium-build \
+-L$(BLS_DIR)/build/_deps/relic-build/lib \
+-L$(BLS_DIR)/build/src \
+-lbls-dash -lrelic_s -lgmp"
+
+CGO_CXXFLAGS ?= "-I$(BLS_DIR)/build/_deps/relic-src/include \
+-I$(BLS_DIR)/build/_deps/relic-build/include \
+-I$(BLS_DIR)/build/src"
+
 # handle ARM builds
 ifeq (arm,$(GOARCH))
 	export CC = arm-linux-gnueabi-gcc-10
@@ -152,7 +165,7 @@ proto-check-breaking: check-proto-deps
 .PHONY: proto-check-breaking
 
 proto-doc:
-	@echo Generating Protobuf API specification: spec/abci++/api.md 
+	@echo Generating Protobuf API specification: spec/abci++/api.md
 	@protoc \
 		-I $(realpath .)/proto \
 		-I "$(GOGOPROTO_PATH)" \
@@ -165,11 +178,11 @@ proto-doc:
 ###############################################################################
 
 build_abci:
-	@go build -mod=readonly ./abci/cmd/...
+	CGO_ENABLED=$(CGO_ENABLED) go build -mod=readonly ./abci/cmd/...
 .PHONY: build_abci
 
 install_abci:
-	@go install -mod=readonly ./abci/cmd/...
+	CGO_ENABLED=$(CGO_ENABLED) go install -mod=readonly ./abci/cmd/...
 .PHONY: install_abci
 
 
@@ -178,11 +191,11 @@ install_abci:
 ##################################################################################
 
 build_abcidump:
-	@go build -o build/abcidump ./cmd/abcidump
+	go build -o build/abcidump ./cmd/abcidump
 .PHONY: build_abcidump
 
 install_abcidump:
-	@go install ./cmd/abcidump
+	go install ./cmd/abcidump
 .PHONY: install_abcidump
 
 ###############################################################################

@@ -4,7 +4,7 @@
 FROM golang:1.18-bullseye
 
 RUN apt-get -qq update -y && apt-get -qq upgrade -y >/dev/null
-RUN apt-get -qq install -y cmake sudo libgmp-dev libleveldb-dev librocksdb-dev >/dev/null
+RUN apt-get -qq install -y cmake sudo libsodium-dev libgmp-dev libleveldb-dev librocksdb-dev python3-dev >/dev/null
 
 # Set up build directory /src/tenderdash
 WORKDIR /src/tenderdash
@@ -21,7 +21,18 @@ RUN go mod download
 COPY third_party ./third_party
 COPY test/Makefile ./test/Makefile
 COPY Makefile ./
-RUN make install-bls
+RUN make build-bls
+
+ENV CGO_ENABLE=1
+
+ENV CGO_LDFLAGS="-L/src/tenderdash/third_party/bls-signatures/build/_deps/sodium-build \
+-L/src/tenderdash/third_party/bls-signatures/build/_deps/relic-build/lib \
+-L/src/tenderdash/third_party/bls-signatures/build/src \
+-lbls-dash -lrelic_s -lgmp"
+
+ENV CGO_CXXFLAGS="-I/src/tenderdash/third_party/bls-signatures/build/_deps/relic-src/include \
+-I/src/tenderdash/third_party/bls-signatures/build/_deps/relic-build/include \
+-I/src/tenderdash/third_party/bls-signatures/build/src"
 
 # Copy Tenderdash source
 COPY . .

@@ -95,7 +95,7 @@ func TestPrivvalVectors(t *testing.T) {
 		{"ping request", &privproto.PingRequest{}, "3a00"},
 		{"ping response", &privproto.PingResponse{}, "4200"},
 		{"pubKey request", &privproto.PubKeyRequest{}, "0a00"},
-		{"pubKey response", &privproto.PubKeyResponse{PubKey: ppk, Error: nil}, "12340a32223011c7f5ac5a6d01fd9dde3840f7ebbb6a20deed6fba72a347dd66da2f8c9c977c6604b2cd2e0148206c2add9a8f5ddd74"},
+		{"pubKey response", &privproto.PubKeyResponse{PubKey: ppk, Error: nil}, "12340a322230991a1c4f159f8e4730bf897e97e27c11f27ba0c1337111a3c102e1081a19372832b596623b1a248a0e00b156d80690cf"},
 		{"pubKey response with error", &privproto.PubKeyResponse{PubKey: cryptoproto.PublicKey{}, Error: remoteError}, "12140a0012100801120c697427732061206572726f72"},
 		{"Vote Request", &privproto.SignVoteRequest{Vote: votepb}, "1aaa010aa701080210031802226c0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a1a2071aa7631e86d2b19d27f0c63e41ed08e5f8d43cfbb69d35913a7731b61bbdc623220959a8f5ef2be68d0ed3a07ed8cff85991ee7995c2ac17030f742c135f9729fbe38d5bb035a0b1209657874656e73696f6e"},
 		{"Vote Response", &privproto.SignedVoteResponse{Vote: *votepb, Error: nil}, "22aa010aa701080210031802226c0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a1a2071aa7631e86d2b19d27f0c63e41ed08e5f8d43cfbb69d35913a7731b61bbdc623220959a8f5ef2be68d0ed3a07ed8cff85991ee7995c2ac17030f742c135f9729fbe38d5bb035a0b1209657874656e73696f6e"},

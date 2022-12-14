@@ -664,7 +664,7 @@ const testGenesisFmt = `{
     {
       "pub_key": {
         "type": "tendermint/PubKeyBLS12381",
-        "value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+        "value":"rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
       },
       "power": 100,
       "name": "",
@@ -674,7 +674,7 @@ const testGenesisFmt = `{
   "quorum_hash": "28405D978AE15B97876411212E3ABD66515A285D901ACE06758DC1012030DA07",
   "threshold_public_key": {
     "type": "tendermint/PubKeyBLS12381",
-	"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+	"value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
   },
   "app_hash": ""
 }`
@@ -684,15 +684,15 @@ var testPrivValidatorKey = `{
 		"28405D978AE15B97876411212E3ABD66515A285D901ACE06758DC1012030DA07" : {
 		  "pub_key": {
 			"type": "tendermint/PubKeyBLS12381",
-			"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+			"value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
 		  },
 		  "priv_key": {
 			"type": "tendermint/PrivKeyBLS12381",
-			"value": "RokcLOxJWTyBkh5HPbdIACng/B65M8a5PYH1Nw6xn70="
+			"value": "Oq97Zo3vcR/rpVC/ain9UaqK38CL1+1utuJ9svs+PHA="
 		  },
 		  "threshold_public_key": {
 			"type": "tendermint/PubKeyBLS12381",
-			"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+			"value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
 		  }
 		}
     },

@@ -32,16 +32,15 @@ type Data struct {
 	PubKeyShares     []crypto.PubKey
 	ThresholdPrivKey crypto.PrivKey
 	ThresholdPubKey  crypto.PubKey
-	ThresholdSig     []byte
 }
 
 // blsLLMQData is an intermediate structure that contains the BLS keys/shares/signatures
 type blsLLMQData struct {
 	proTxHashes []crypto.ProTxHash
 	sks         []*bls.PrivateKey
-	pks         []*bls.PublicKey
+	pks         []*bls.G1Element
 	skShares    []*bls.PrivateKey
-	pkShares    []*bls.PublicKey
+	pkShares    []*bls.G1Element
 }
 
 // QuorumProps returns corresponding LLMQ parameters
@@ -62,19 +61,6 @@ func QuorumProps(quorumType btcjson.LLMQType) (int, int, error) {
 		return 10, 6, nil
 	}
 	return 0, 0, fmt.Errorf("quorumType '%d' doesn't match with available", quorumType)
-}
-
-// MustGenerateForQuorum takes a passed quorum-type to derive a quorum size and threshold value
-// quorum-size is used to generate a list of pro-tx hashes
-func MustGenerateForQuorum(quorumType btcjson.LLMQType) *Data {
-	size, threshold, err := QuorumProps(quorumType)
-	if err != nil {
-		panic(err)
-	}
-	return MustGenerate(
-		crypto.RandProTxHashes(size),
-		WithThreshold(threshold),
-	)
 }
 
 // MustGenerate generates long-living master node quorum, but panics if a got error
@@ -165,7 +151,7 @@ func blsPrivKeys2CPrivKeys(sks []*bls.PrivateKey) []crypto.PrivKey {
 	return out
 }
 
-func blsPubKeys2CPubKeys(pks []*bls.PublicKey) []crypto.PubKey {
+func blsPubKeys2CPubKeys(pks []*bls.G1Element) []crypto.PubKey {
 	out := make([]crypto.PubKey, len(pks))
 	for i, pk := range pks {
 		out[i] = bls12381.PubKey(pk.Serialize())
@@ -173,19 +159,31 @@ func blsPubKeys2CPubKeys(pks []*bls.PublicKey) []crypto.PubKey {
 	return out
 }
 
+func blsSigs2CSigs(sigs []*bls.G2Element) [][]byte {
+	out := make([][]byte, len(sigs))
+	for i, sig := range sigs {
+		out[i] = sig.Serialize()
+	}
+	return out
+}
+
 func initKeys(seed io.Reader) func(ld *blsLLMQData) error {
 	return func(ld *blsLLMQData) error {
+		scheme := bls.NewAugSchemeMPL()
 		for i := 0; i < len(ld.sks); i++ {
 			createdSeed := make([]byte, bls12381.SeedSize)
 			_, err := io.ReadFull(seed, createdSeed)
 			if err != nil {
 				return err
 			}
-			ld.sks[i], err = bls.PrivateKeyFromSeed(createdSeed)
+			ld.sks[i], err = scheme.KeyGen(createdSeed)
 			if err != nil {
 				return err
 			}
-			ld.pks[i] = ld.sks[i].PublicKey()
+			ld.pks[i], err = ld.sks[i].G1Element()
+			if err != nil {
+				return err
+			}
 		}
 		return nil
 	}
@@ -205,15 +203,16 @@ func initShares() func(ld *blsLLMQData) error {
 		var id bls.Hash
 		for i := 0; i < len(ld.proTxHashes); i++ {
 			copy(id[:], ld.proTxHashes[i].Bytes())
-			skShare, err := bls.PrivateKeyShare(ld.sks, id)
+			skShare, err := bls.ThresholdPrivateKeyShare(ld.sks, id)
 			ld.skShares = append(ld.skShares, skShare)
 			if err != nil {
 				return err
 			}
-			ld.pkShares = append(ld.pkShares, skShare.PublicKey())
+			pkShare, err := skShare.G1Element()
 			if err != nil {
 				return err
 			}
+			ld.pkShares = append(ld.pkShares, pkShare)
 		}
 		return nil
 	}
@@ -254,8 +253,8 @@ func initLLMQData(conf llmqConfig, inits ...func(ld *blsLLMQData) error) (blsLLM
 		proTxHashes: conf.proTxHashes,
 		sks:         make([]*bls.PrivateKey, conf.threshold),
 		skShares:    make([]*bls.PrivateKey, 0, n),
-		pks:         make([]*bls.PublicKey, conf.threshold),
-		pkShares:    make([]*bls.PublicKey, 0, n),
+		pks:         make([]*bls.G1Element, conf.threshold),
+		pkShares:    make([]*bls.G1Element, 0, n),
 	}
 	for _, init := range inits {
 		err := init(&ld)
@@ -278,4 +277,38 @@ func newLLMQDataFromBLSData(ld blsLLMQData, threshold int) *Data {
 	llmqData.ThresholdPrivKey = llmqData.PrivKeys[0]
 	llmqData.ThresholdPubKey = llmqData.PubKeys[0]
 	return &llmqData
+}
+
+func mustSignShares(proTxHashes []crypto.ProTxHash, signs []*bls.G2Element) ([]byte, [][]byte) {
+	if len(proTxHashes) == 0 {
+		return nil, nil
+	}
+	if len(proTxHashes) == 1 {
+		blsSigs := blsSigs2CSigs(signs)
+		return blsSigs[0], blsSigs
+	}
+	proTxHashes = bls12381.ReverseProTxHashes(proTxHashes)
+	sigShares := make([]*bls.G2Element, len(proTxHashes))
+	var id bls.Hash
+	for i := 0; i < len(proTxHashes); i++ {
+		copy(id[:], proTxHashes[i].Bytes())
+		sigShare, err := bls.ThresholdSignatureShare(signs, id)
+		sigShares[i] = sigShare
+		if err != nil {
+			panic(err)
+		}
+	}
+	return signs[0].Serialize(), blsSigs2CSigs(sigShares)
+}
+
+func mustThresholdSigns(privKeys []crypto.PrivKey, hash bls.Hash) []*bls.G2Element {
+	sigs := make([]*bls.G2Element, len(privKeys))
+	for i := 0; i < len(privKeys); i++ {
+		sk, err := bls.PrivateKeyFromBytes(privKeys[i].Bytes(), true)
+		if err != nil {
+			panic(err)
+		}
+		sigs[i] = bls.ThresholdSign(sk, hash)
+	}
+	return sigs
 }
