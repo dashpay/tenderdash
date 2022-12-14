@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
