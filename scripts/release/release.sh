@@ -3,17 +3,17 @@
 set -e
 
 function success {
-    [ -t 1 ] && echo -e "\e[32mSUCCESS:\e[0m" "$@" || echo "SUCCESS:" "$@"
+    [[ -t 1 ]] && echo -e "\e[32mSUCCESS:\e[0m" "$@" || echo "SUCCESS:" "$@"
 }
 
 function debug {
-    [ -t 1 ] && echo -e "\e[93mDEBUG:\e[0m" "$@" || echo "DEBUG:" "$@"
+    [[ -t 1 ]] && echo -e "\e[93mDEBUG:\e[0m" "$@" || echo "DEBUG:" "$@"
 }
 
 function error {
     debug Error: "$@"
     cleanup
-    [ -t 1 ] && echo -e '\e[91mERROR:\e[0m' "$@" || echo "ERROR:" "$@"
+    [[ -t 1 ]] && echo -e '\e[91mERROR:\e[0m' "$@" || echo "ERROR:" "$@"
     exit 1
 }
 function displayHelp {
@@ -62,10 +62,10 @@ function configureDefaults {
 
 function parseArgs {
     debug Parsing command line
-    while [ "$#" -ge 1 ]; do
+    while [[ "$#" -ge 1 ]]; do
         # for arg in "$@"; do
         arg="$1"
-        case $arg in
+        case ${arg} in
         --cleanup)
             CLEANUP=yes
             shift
@@ -76,7 +76,7 @@ function parseArgs {
             ;;
         -r | --release)
             shift
-            if [ -n "$1" ]; then
+            if [[ -n "$1" ]]; then
                 NEW_PACKAGE_VERSION="${1#*=}"
             fi
             shift
@@ -96,7 +96,7 @@ function parseArgs {
             exit 0
             ;;
         *)
-            error "Unrecoginzed command line argument '$arg';  try '$0 --help'"
+            error "Unrecoginzed command line argument '${arg}';  try '$0 --help'"
             ;;
         esac
     done
@@ -106,7 +106,7 @@ function configureFinal() {
     debug Finalizing configuration
     VERSION_WITHOUT_PRERELEASE=${NEW_PACKAGE_VERSION%-*}
 
-    if [ "${VERSION_WITHOUT_PRERELEASE}" == "${NEW_PACKAGE_VERSION}" ]; then
+    if [[ "${VERSION_WITHOUT_PRERELEASE}" == "${NEW_PACKAGE_VERSION}" ]]; then
         ## Full release
         RELEASE_TYPE=release
     else
@@ -118,7 +118,7 @@ function configureFinal() {
     RELEASE_BRANCH="release_${NEW_PACKAGE_VERSION}"
     MILESTONE="v${VERSION_WITHOUT_PRERELEASE}"
 
-    if [[ $RELEASE_TYPE != "prerelease" ]]; then # full release
+    if [[ ${RELEASE_TYPE} != "prerelease" ]]; then # full release
         TARGET_BRANCH="master"
     else # prerelease
         TARGET_BRANCH="v${VERSION_WITHOUT_PRERELEASE%.*}-dev"
@@ -133,7 +133,7 @@ function configureFinal() {
 
 function validate {
     debug Validating configuration
-    if [ -z "${NEW_PACKAGE_VERSION}" ]; then
+    if [[ -z "${NEW_PACKAGE_VERSION}" ]]; then
         error "You must provide new release version with --release=x.y.z; see '$0 --help' for more details"
     fi
 
@@ -143,7 +143,7 @@ function validate {
 
     local UNCOMMITTED_FILES
     UNCOMMITTED_FILES="$(git status -su)"
-    if [ -n "$UNCOMMITTED_FILES" ]; then
+    if [[ -n "${UNCOMMITTED_FILES}" ]]; then
         error "Commit or stash your changes before running this script"
     fi
 
@@ -163,17 +163,16 @@ function generateChangelog {
 
     echo 2>"${REPO_DIR}/CHANGELOG.md"
 
-    docker run --rm -ti -u "$(id -u)" \
-        -v "${REPO_DIR}/.git":/app/:ro \
+    docker run --rm -ti \
+        -v "${REPO_DIR}/.git":/app/.git:ro \
         -v "${CLIFF_CONFIG}":/cliff.toml:ro \
         -v "${REPO_DIR}/CHANGELOG.md":/CHANGELOG.md \
-        orhunp/git-cliff:latest \
+        orhunp/git-cliff:0.10.0 \
         --config /cliff.toml \
-        --strip all \
-        --tag "$NEW_PACKAGE_VERSION" \
         --output /CHANGELOG.md \
-        --unreleased \
-        "v0.7.0..HEAD"
+        --tag "v${NEW_PACKAGE_VERSION}" \
+        --strip all \
+        --verbose
 }
 
 function updateVersionGo {
@@ -186,34 +185,34 @@ function createReleasePR {
     git checkout -q -b "${RELEASE_BRANCH}"
 
     # commit changes
-    git commit -m "chore(release): update changelog and version to $NEW_PACKAGE_VERSION" \
-        "$REPO_DIR/CHANGELOG.md" \
-        "$REPO_DIR/version/version.go"
+    git commit -m "chore(release): update changelog and version to ${NEW_PACKAGE_VERSION}" \
+        "${REPO_DIR}/CHANGELOG.md" \
+        "${REPO_DIR}/version/version.go"
 
     # push changes
     git push --force -u origin "${RELEASE_BRANCH}"
 
-    debug "Creating milestone $MILESTONE if it doesn't exist yet"
+    debug "Creating milestone ${MILESTONE} if it doesn't exist yet"
     gh api --silent --method POST 'repos/dashevo/tenderdash/milestones' --field "title=${MILESTONE}" || true
 
     if [[ -n "$(getPrURL)" ]]; then
-        debug "PR for branch $TARGET_BRANCH already exists, skipping creation"
+        debug "PR for branch ${TARGET_BRANCH} already exists, skipping creation"
     else
-        debug "Creating PR for branch $TARGET_BRANCH"
-        gh pr create --base "$TARGET_BRANCH" \
+        debug "Creating PR for branch ${TARGET_BRANCH}"
+        gh pr create --base "${TARGET_BRANCH}" \
             --fill \
-            --title "chore(release): update changelog and bump version to $NEW_PACKAGE_VERSION" \
-            --body-file "$REPO_DIR/scripts/release/pr_description.md" \
-            --milestone "$MILESTONE"
+            --title "chore(release): update changelog and bump version to ${NEW_PACKAGE_VERSION}" \
+            --body-file "${REPO_DIR}/scripts/release/pr_description.md" \
+            --milestone "${MILESTONE}"
     fi
 }
 
 function getPrURL() {
-    gh pr list --json url --jq '.[0].url' -H "${RELEASE_BRANCH}" -B "$TARGET_BRANCH"
+    gh pr list --json url --jq '.[0].url' -H "${RELEASE_BRANCH}" -B "${TARGET_BRANCH}"
 }
 
 function getPrState() {
-    gh pr list --json state --jq .[0].state -H "${RELEASE_BRANCH}" -B "$TARGET_BRANCH" --state all
+    gh pr list --json state --jq .[0].state -H "${RELEASE_BRANCH}" -B "${TARGET_BRANCH}" --state all
 }
 
 function waitForMerge() {
@@ -226,7 +225,7 @@ function waitForMerge() {
 
 function createRelease() {
     gh_args=""
-    if [[ "$RELEASE_TYPE" = "prerelease" ]]; then
+    if [[ "${RELEASE_TYPE}" = "prerelease" ]]; then
         gh_args=--prerelease
     fi
 
@@ -266,7 +265,7 @@ configureDefaults
 parseArgs "$@"
 configureFinal
 
-if [ -n "$CLEANUP" ]; then
+if [[ -n "${CLEANUP}" ]]; then
     cleanup
     deleteRelease
 fi

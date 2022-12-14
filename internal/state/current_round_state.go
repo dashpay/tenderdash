@@ -63,8 +63,11 @@ func NewCurrentRoundState(proTxHash types.ProTxHash, rp RoundParams, baseState S
 	return candidate, nil
 }
 
-func (candidate *CurrentRoundState) IsEmpty() bool {
-	return candidate.AppHash == nil
+func (candidate *CurrentRoundState) MatchesBlock(blockHeader types.Header, round int32) bool {
+	return candidate.GetHeight() == blockHeader.Height &&
+		candidate.Round == round &&
+		candidate.AppHash.Equal(blockHeader.AppHash) &&
+		bytes.Equal(candidate.ResultsHash, blockHeader.ResultsHash)
 }
 
 // UpdateBlock changes block fields to reflect the ones returned in PrepareProposal

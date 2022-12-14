@@ -672,11 +672,6 @@ func (cs *State) updateRoundStep(round int32, step cstypes.RoundStepType) {
 			cs.metrics.MarkStep(cs.Step)
 		}
 	}
-	// New round, so we reset current round state.
-	// It will be recreated with ProcessProposal request.
-	if round != cs.Round {
-		cs.CurrentRoundState = sm.CurrentRoundState{}
-	}
 	cs.Round = round
 	cs.Step = step
 }
@@ -1023,11 +1018,9 @@ func (cs *State) handleMsg(ctx context.Context, mi msgInfo, fromReplay bool) {
 		added, err = cs.addProposalBlockPart(ctx, msg, peerID)
 
 		if added && cs.ProposalBlockParts != nil && cs.ProposalBlockParts.IsComplete() && fromReplay {
-			candidateState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, msg.Round, cs.state, true)
-			if err != nil {
+			if err := cs.ensureProcessProposal(ctx, cs.ProposalBlock, msg.Round, cs.state); err != nil {
 				panic(err)
 			}
-			cs.RoundState.CurrentRoundState = candidateState
 		}
 
 		// We unlock here to yield to any routines that need to read the the RoundState.
@@ -1701,8 +1694,7 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	uncommittedState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.Round, cs.state, true)
-	if err != nil {
+	if err := cs.ensureProcessProposal(ctx, cs.ProposalBlock, cs.Round, cs.state); err != nil {
 		cs.metrics.MarkProposalProcessed(false)
 		if errors.Is(err, sm.ErrBlockRejected) {
 			logger.Error("prevote step: state machine rejected a proposed block; this should not happen:"+
@@ -1720,7 +1712,6 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		// Unknown error, so we panic
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
-	cs.RoundState.CurrentRoundState = uncommittedState
 	cs.metrics.MarkProposalProcessed(true)
 
 	/*
@@ -1916,6 +1907,11 @@ func (cs *State) enterPrecommit(ctx context.Context, height int64, round int32) 
 	if cs.ProposalBlock.HashesTo(blockID.Hash) {
 		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
 
+		// we got precommit but we didn't process proposal yet
+		if err := cs.ensureProcessProposal(ctx, cs.ProposalBlock, round, cs.state); err != nil {
+			panic(fmt.Errorf("enter precommit: %w", err))
+		}
+
 		// Validate the block.
 		if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, cs.ProposalBlock); err != nil {
 			panic(fmt.Sprintf("precommit step: +2/3 prevoted for an invalid block %v; relocking", err))
@@ -2073,15 +2069,6 @@ func (cs *State) tryFinalizeCommit(ctx context.Context, height int64) {
 			"commit_block", blockID.Hash,
 		)
 		return
-	}
-
-	if cs.CurrentRoundState.IsEmpty() {
-		var err error
-		// TODO: Check if using cs.Round here is correct
-		cs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.Round, cs.state, true)
-		if err != nil {
-			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
-		}
 	}
 
 	cs.finalizeCommit(ctx, height)
@@ -2357,21 +2344,17 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 		))
 	}
 
+	// Execute and commit the block, update and save the state, and update the mempool.
+	// NOTE The block.AppHash wont reflect these txs until the next block.
+	if err := cs.ensureProcessProposal(ctx, block, round, cs.state); err != nil {
+		logger.Error("cannot apply commit", "error", err)
+		return
+	}
+
 	// Create a copy of the state for staging and an event cache for txs.
 	stateCopy := cs.state.Copy()
 	rs := cs.RoundState
 
-	if rs.CurrentRoundState.IsEmpty() {
-		var err error
-		logger.Debug("CurrentRoundState is empty", "crs", rs.CurrentRoundState)
-		rs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, round, stateCopy, true)
-		if err != nil {
-			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
-		}
-	}
-
-	// Execute and commit the block, update and save the state, and update the mempool.
-	// NOTE The block.AppHash wont reflect these txs until the next block.
 	stateCopy, err := cs.blockExec.FinalizeBlock(
 		ctx,
 		stateCopy,
@@ -2403,6 +2386,24 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	// * cs.Height has been increment to height+1
 	// * cs.Step is now cstypes.RoundStepNewHeight
 	// * cs.StartTime is set to when we will start round0.
+}
+
+// ensureProcessProposal ensures that process proposal was run for the block.
+// The caller should hold cs.mtx
+func (cs *State) ensureProcessProposal(ctx context.Context, block *types.Block, round int32, state sm.State) error {
+	// FIXME: refactor caller to not use cs.mtx and do proper critical section below
+	rs := &cs.RoundState
+
+	if rs.CurrentRoundState.Params.Source != sm.ProcessProposalSource ||
+		!rs.CurrentRoundState.MatchesBlock(block.Header, round) {
+		var err error
+		cs.logger.Debug("CurrentRoundState is outdated", "crs", rs.CurrentRoundState)
+		rs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, round, state, true)
+		if err != nil {
+			return fmt.Errorf("ProcessProposal abci method: %w", err)
+		}
+	}
+	return nil
 }
 
 func (cs *State) RecordMetrics(height int64, block *types.Block) {
@@ -2638,12 +2639,6 @@ func (cs *State) addProposalBlockPart(
 			"round_height", cs.RoundState.GetHeight(),
 		)
 
-		if cs.ProposalBlock.Height != cs.RoundState.GetHeight() {
-			cs.RoundState.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, msg.Round, cs.state, true)
-			if err != nil {
-				return false, err
-			}
-		}
 		if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
 			cs.logger.Error("failed publishing event complete proposal", "err", err)
 		}

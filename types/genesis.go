@@ -80,9 +80,9 @@ type GenesisDoc struct {
 	// dash fields
 	InitialCoreChainLockedHeight uint32                 `json:"initial_core_chain_locked_height"`
 	InitialProposalCoreChainLock *tmproto.CoreChainLock `json:"initial_proposal_core_chain_lock"`
-	ThresholdPublicKey           crypto.PubKey          `json:"threshold_public_key"`
-	QuorumType                   btcjson.LLMQType       `json:"quorum_type"`
-	QuorumHash                   crypto.QuorumHash      `json:"quorum_hash"`
+	ThresholdPublicKey           crypto.PubKey          `json:"validator_quorum_threshold_public_key"`
+	QuorumType                   btcjson.LLMQType       `json:"validator_quorum_type"`
+	QuorumHash                   crypto.QuorumHash      `json:"validator_quorum_hash"`
 }
 
 type genesisDocJSON struct {
@@ -97,9 +97,15 @@ type genesisDocJSON struct {
 	// dash fields
 	InitialCoreChainLockedHeight uint32                 `json:"initial_core_chain_locked_height,omitempty"`
 	InitialProposalCoreChainLock *tmproto.CoreChainLock `json:"initial_proposal_core_chain_lock,omitempty"`
-	ThresholdPublicKey           json.RawMessage        `json:"threshold_public_key,omitempty"`
-	QuorumType                   btcjson.LLMQType       `json:"quorum_type,omitempty"`
-	QuorumHash                   crypto.QuorumHash      `json:"quorum_hash,omitempty"`
+	ThresholdPublicKey           json.RawMessage        `json:"validator_quorum_threshold_public_key,omitempty"`
+	QuorumType                   btcjson.LLMQType       `json:"validator_quorum_type,omitempty"`
+	QuorumHash                   crypto.QuorumHash      `json:"validator_quorum_hash,omitempty"`
+
+	// Deprecated fields, to be removed
+
+	DeprecatedThresholdPublicKey json.RawMessage   `json:"threshold_public_key,omitempty"`
+	DeprecatedQuorumType         btcjson.LLMQType  `json:"quorum_type,omitempty"`
+	DeprecatedQuorumHash         crypto.QuorumHash `json:"quorum_hash,omitempty"`
 }
 
 func (genDoc GenesisDoc) MarshalJSON() ([]byte, error) {
@@ -132,6 +138,17 @@ func (genDoc *GenesisDoc) UnmarshalJSON(data []byte) error {
 	if err := jsontypes.Unmarshal(g.ThresholdPublicKey, &genDoc.ThresholdPublicKey); err != nil {
 		return err
 	}
+
+	if len(g.DeprecatedQuorumHash) != 0 {
+		return fmt.Errorf("genesis.json: replace quorum_hash with validator_quorum_hash")
+	}
+	if g.DeprecatedQuorumType != 0 {
+		return fmt.Errorf("genesis.json: replace quorum_type with validator_quorum_type")
+	}
+	if len(g.DeprecatedThresholdPublicKey) != 0 {
+		return fmt.Errorf("genesis.json: replace threshold_public_key with validator_quorum_threshold_public_key")
+	}
+
 	genDoc.GenesisTime = g.GenesisTime
 	genDoc.ChainID = g.ChainID
 	genDoc.InitialHeight = g.InitialHeight
