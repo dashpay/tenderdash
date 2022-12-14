@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	// "sync"
 )
 
 var (

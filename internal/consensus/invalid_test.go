@@ -3,9 +3,10 @@ package consensus
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -115,17 +116,17 @@ func invalidDoPrevoteFunc(
 	// - disable privValidator (so we don't do normal precommits)
 	go func() {
 		cs.mtx.Lock()
-		cs.privValidator = pv
-
-		proTxHash, err := cs.privValidator.GetProTxHash(ctx)
+		var err error
+		cs.privValidator.PrivValidator = pv
+		err = cs.privValidator.init(ctx)
 		require.NoError(t, err)
 
-		valIndex, _ := cs.Validators.GetByProTxHash(proTxHash)
+		valIndex, _ := cs.Validators.GetByProTxHash(cs.privValidator.ProTxHash)
 
 		// precommit a random block
 		blockHash := bytes.HexBytes(tmrand.Bytes(32))
 		precommit := &types.Vote{
-			ValidatorProTxHash: proTxHash,
+			ValidatorProTxHash: cs.privValidator.ProTxHash,
 			ValidatorIndex:     valIndex,
 			Height:             cs.Height,
 			Round:              cs.Round,
@@ -149,7 +150,7 @@ func invalidDoPrevoteFunc(
 		require.NoError(t, err)
 
 		precommit.BlockSignature = p.BlockSignature
-		cs.privValidator = nil // disable priv val so we don't do normal votes
+		cs.privValidator = privValidator{} // disable priv val so we don't do normal votes
 		cs.mtx.Unlock()
 
 		r.mtx.Lock()

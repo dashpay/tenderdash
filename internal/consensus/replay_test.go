@@ -345,7 +345,7 @@ func findValByProTxHash(ctx context.Context, t *testing.T, validatorStubs []*val
 
 func findStateByProTxHash(t *testing.T, css []*State, proTxHash crypto.ProTxHash) *State {
 	for _, consensusState := range css {
-		if proTxHash.Equal(consensusState.privValidatorProTxHash) {
+		if consensusState.privValidator.IsProTxHashEqual(proTxHash) {
 			return consensusState
 		}
 	}
@@ -549,7 +549,7 @@ func assertProposerState(ctx context.Context, t *testing.T, csProposer *State, v
 	csProposerPubKey, err := csProposer.privValidator.GetPubKey(ctx, quorumHash)
 	require.NoError(t, err)
 
-	assert.True(t, csProposer.privValidatorProTxHash.Equal(vsProposerProTxHash), "proTxHash match")
+	assert.True(t, csProposer.privValidator.IsProTxHashEqual(vsProposerProTxHash), "proTxHash match")
 
 	assert.Equal(t, vsProposerPubKey.Bytes(), csProposerPubKey.Bytes(), "pubkey match")
 

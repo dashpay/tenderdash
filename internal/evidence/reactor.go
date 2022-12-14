@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"runtime/debug"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	clist "github.com/tendermint/tendermint/internal/libs/clist"
 	"github.com/tendermint/tendermint/internal/p2p"

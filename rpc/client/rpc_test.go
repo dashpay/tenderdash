@@ -9,9 +9,10 @@ import (
 	"math"
 	"net/http"
 	"strings"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"

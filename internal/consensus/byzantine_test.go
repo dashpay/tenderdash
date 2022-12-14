@@ -4,9 +4,10 @@ import (
 	"context"
 	"fmt"
 	"path"
-	"sync"
 	"testing"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -178,7 +179,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	lazyNodeState := states[1]
 
 	lazyNodeState.decideProposal = func(ctx context.Context, height int64, round int32) {
-		require.NotNil(t, lazyNodeState.privValidator)
+		require.False(t, lazyNodeState.privValidator.IsZero())
 
 		var commit *types.Commit
 		switch {
@@ -194,13 +195,12 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			return
 		}
 
-		if lazyNodeState.privValidatorProTxHash == nil {
+		if lazyNodeState.privValidator.IsZero() {
 			// If this node is a validator & proposer in the current round, it will
 			// miss the opportunity to create a block.
-			lazyNodeState.logger.Error("enterPropose", "err", errProTxHashIsNotSet)
+			lazyNodeState.logger.Error("enterPropose", "err", ErrPrivValidatorNotSet)
 			return
 		}
-		proposerProTxHash := lazyNodeState.privValidatorProTxHash
 
 		block, uncommittedState, err := lazyNodeState.blockExec.CreateProposalBlock(
 			ctx,
@@ -208,7 +208,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			round,
 			lazyNodeState.state,
 			commit,
-			proposerProTxHash,
+			lazyNodeState.privValidator.ProTxHash,
 			0,
 		)
 		require.NoError(t, err)

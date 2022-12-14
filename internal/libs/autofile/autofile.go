@@ -7,9 +7,10 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sync"
 	"syscall"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 )

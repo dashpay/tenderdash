@@ -4,8 +4,9 @@ import (
 	"context"
 	"fmt"
 	"net"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"

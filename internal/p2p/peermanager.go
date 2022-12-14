@@ -7,8 +7,9 @@ import (
 	"math"
 	"math/rand"
 	"sort"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/orderedcode"

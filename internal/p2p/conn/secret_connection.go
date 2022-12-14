@@ -11,8 +11,9 @@ import (
 	"io"
 	"math"
 	"net"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	gogotypes "github.com/gogo/protobuf/types"
 	pool "github.com/libp2p/go-buffer-pool"

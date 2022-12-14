@@ -105,7 +105,7 @@ func TestApp_Tx(t *testing.T) {
 		ShouldSkip  bool
 	}{
 		{
-			Name:     "Sync",
+			Name:     "sync",
 			WaitTime: time.Minute,
 			BroadcastTx: func(client *http.HTTP) broadcastFunc {
 				return func(ctx context.Context, tx types.Tx) error {

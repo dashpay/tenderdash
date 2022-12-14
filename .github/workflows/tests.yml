@@ -1,3 +1,4 @@
+---
 name: Test
 on:
   pull_request:
@@ -7,7 +8,7 @@ on:
     branches:
       - master
       - release/**
-       - v0.*-dev
+      - v0.*-dev
 jobs:
   tests:
     runs-on: ubuntu-latest
@@ -16,9 +17,9 @@ jobs:
       matrix:
         part: ["00", "01", "02", "03", "04", "05"]
     steps:
-      - uses: actions/setup-go@v3.3.1
+      - uses: actions/setup-go@v3.4.0
         with:
-          go-version: "1.18"
+          go-version: "1.19"
       - uses: actions/checkout@v3
       - uses: technote-space/get-diff-action@v6
         with:
@@ -28,6 +29,8 @@ jobs:
             go.mod
             go.sum
             Makefile
+      - name: Install libpcap
+        run: sudo apt-get install --yes libpcap-dev
       - uses: ./.github/actions/bls
         name: Install BLS library
         if: "env.GIT_DIFF != ''"

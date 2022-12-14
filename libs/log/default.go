@@ -31,7 +31,7 @@ func NewDefaultLogger(format, level string) (Logger, error) {
 		logWriter = zerolog.ConsoleWriter{
 			Out:        os.Stderr,
 			NoColor:    true,
-			TimeFormat: time.RFC3339,
+			TimeFormat: time.RFC3339Nano,
 			FormatLevel: func(i interface{}) string {
 				if ll, ok := i.(string); ok {
 					return strings.ToUpper(ll)
@@ -117,4 +117,8 @@ func getLogFields(keyVals ...interface{}) map[string]interface{} {
 	}
 
 	return fields
+}
+
+func init() {
+	zerolog.TimeFieldFormat = time.RFC3339Nano
 }
