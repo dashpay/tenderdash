@@ -38,9 +38,6 @@ jobs:
         name: Install BLS library
         if: "env.GIT_DIFF != ''"
 
-      - name: Setup upterm session
-        uses: lhotari/action-upterm@v1
-
       - uses: golangci/golangci-lint-action@v3.3.1
         with:
           # Required: the version of golangci-lint is required and
@@ -50,3 +47,6 @@ jobs:
           args: --timeout 10m
           github-token: ${{ secrets.github_token }}
         if: env.GIT_DIFF
+
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
