@@ -16,7 +16,7 @@ jobs:
   golangci:
     name: golangci-lint
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 15
     env:
       CGO_LDFLAGS: "-L/usr/local/lib -lbls-dash -lrelic_s -lgmp"
       CGO_CXXFLAGS: "-I/usr/local/include"
@@ -40,9 +40,6 @@ jobs:
       - uses: ./.github/actions/bls
         name: Install BLS library
         if: "env.GIT_DIFF != ''"
-
-#      - name: Setup upterm session
-#        uses: lhotari/action-upterm@v1
 
       - uses: golangci/golangci-lint-action@v3.3.1
         with:
