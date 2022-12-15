@@ -43,7 +43,7 @@ Verify that you have the latest version of Go installed:
 
 ```sh
 $ go version
-go version go1.18.x darwin/amd64
+go version go1.19.x darwin/amd64
 ```
 
 ## 1.2 Creating a new Go project
@@ -454,7 +454,7 @@ This will populate the `go.mod` with a release number followed by a hash for Ten
 ```go
 module github.com/<username>/kvstore
 
-go 1.18
+go 1.19
 
 require (
  github.com/dgraph-io/badger/v3 v3.2103.2

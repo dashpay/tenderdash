@@ -5,13 +5,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 
-	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -145,24 +143,6 @@ func validateBlock(state State, block *types.Block) error {
 		return types.NewErrEvidenceOverflow(max, got)
 	}
 
-	return nil
-}
-
-func validateBlockTime(allowedTimeWindow time.Duration, state State, block *types.Block) error {
-	if block.Height == state.InitialHeight {
-		if block.Time.Before(state.LastBlockTime) {
-			return fmt.Errorf("block time %v is before last-block-time %v",
-				block.Time, state.LastBlockTime)
-		}
-	} else {
-		// Validate block Time is within a range of current time
-		after := tmtime.Now().Add(allowedTimeWindow)
-		before := tmtime.Now().Add(-allowedTimeWindow)
-		if block.Time.After(after) || block.Time.Before(before) {
-			return fmt.Errorf("block time %v is out of window [%v, %v]",
-				block.Time, before, after)
-		}
-	}
 	return nil
 }
 
