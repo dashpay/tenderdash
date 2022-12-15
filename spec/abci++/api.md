@@ -854,7 +854,6 @@ nondeterministic |
 | chunks | [uint32](#uint32) |  | Number of chunks in the snapshot |
 | hash | [bytes](#bytes) |  | Arbitrary snapshot hash, equal only if identical |
 | metadata | [bytes](#bytes) |  | Arbitrary application metadata |
-| core_chain_locked_height | [uint32](#uint32) |  | The core chain locked height |
 
 
 
