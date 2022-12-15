@@ -456,6 +456,10 @@ fetchers = "{{ .StateSync.Fetchers }}"
 [consensus]
 
 wal-file = "{{ js .Consensus.WalPath }}"
+# wal-skip-rounds-to-last set to true will skip replaying all non-committed rounds stored in 
+# WAL, increasing performance in a significant way. It should be set to false by default, as it
+# can have security side-effects.
+wal-skip-rounds-to-last = "{{ .Consensus.WalSkipRoundsToLast }}"
 
 # How many blocks to look back to check existence of the node's consensus votes before joining consensus
 # When non-zero, the node will panic upon restart

@@ -2110,19 +2110,9 @@ func (cs *State) finalizeCommit(ctx context.Context, height int64) {
 		"num_txs", len(block.Txs),
 	)
 
-	// Save to blockStore.
-	if cs.blockStore.Height() < block.Height {
-		// NOTE: the seenCommit is local justification to commit this block,
-		// but may differ from the LastPrecommits included in the next block
-		precommits := cs.Votes.Precommits(cs.CommitRound)
-		seenCommit := precommits.MakeCommit()
-		cs.applyCommit(ctx, seenCommit, logger)
-	} else {
-		// Happens during replay if we already saved the block but didn't commit
-		logger.Debug("calling finalizeCommit on already stored block", "height", block.Height)
-		// Todo: do we need this?
-		cs.applyCommit(ctx, nil, logger)
-	}
+	precommits := cs.Votes.Precommits(cs.CommitRound)
+	seenCommit := precommits.MakeCommit()
+	cs.applyCommit(ctx, seenCommit, logger)
 }
 
 // If we received a commit message from an external source try to add it then finalize it.

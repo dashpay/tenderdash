@@ -469,7 +469,7 @@ func newStateWithConfigAndBlockStore(
 	state sm.State,
 	pv types.PrivValidator,
 	app abci.Application,
-	blockStore *store.BlockStore,
+	blockStore sm.BlockStore,
 ) *State {
 	t.Helper()
 
