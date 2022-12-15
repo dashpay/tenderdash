@@ -71,8 +71,13 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 		switch msg := m.Msg.(type) {
 		case *ProposalMessage:
 			p := msg.Proposal
-			cs.logger.Info("Replay: Proposal", "height", p.Height, "round", p.Round, "header",
-				p.BlockID.PartSetHeader, "pol", p.POLRound, "peer", peerID)
+			if cs.config.WalSkipRoundsToLast && p.Round > cs.Round {
+				cs.Validators.IncrementProposerPriority(p.Round - cs.Round)
+				cs.Votes.SetRound(p.Round)
+				cs.Round = p.Round
+			}
+			cs.logger.Info("Replay: Proposal", "height", p.Height, "round", p.Round, "cs.Round", cs.Round,
+				"header", p.BlockID.PartSetHeader, "pol", p.POLRound, "peer", peerID)
 		case *BlockPartMessage:
 			cs.logger.Info("Replay: BlockPart", "height", msg.Height, "round", msg.Round, "peer", peerID)
 		case *VoteMessage:
@@ -155,7 +160,7 @@ func (cs *State) catchupReplay(ctx context.Context, csHeight int64) error {
 
 	cs.logger.Info("Catchup by replaying consensus messages", "height", csHeight)
 
-	iter := newWalIter(&WALDecoder{gr})
+	iter := newWalIter(&WALDecoder{gr}, cs.config.WalSkipRoundsToLast)
 	for iter.Next() {
 		// NOTE: since the priv key is set when the msgs are received
 		// it will attempt to eg double sign but we can just ignore it

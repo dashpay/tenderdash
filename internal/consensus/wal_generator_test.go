@@ -21,14 +21,14 @@ import (
 // consensus state) with a kvstore application and special consensus
 // wal instance (byteBufferWAL) and waits until numBlocks are created.
 // If the node fails to produce given numBlocks, it fails the test.
-func WALGenerateNBlocks(ctx context.Context, t *testing.T, logger log.Logger, wr io.Writer, node *fakeNode, numBlocks int) {
+func WALGenerateNBlocks(ctx context.Context, t *testing.T, logger log.Logger, wr io.Writer, node *fakeNode, numBlocks int64) {
 	t.Helper()
 
 	logger.Info("generating WAL (last height msg excluded)", "numBlocks", numBlocks)
 
 	// set consensus wal to buffered WAL, which will write all incoming msgs to buffer
 	numBlocksWritten := make(chan struct{})
-	wal := newByteBufferWAL(logger, NewWALEncoder(wr), int64(numBlocks), numBlocksWritten)
+	wal := newByteBufferWAL(logger, NewWALEncoder(wr), numBlocks, numBlocksWritten)
 	// see wal.go#103
 	if err := wal.Write(EndHeightMessage{0}); err != nil {
 		t.Fatal(err)
@@ -50,7 +50,7 @@ func WALGenerateNBlocks(ctx context.Context, t *testing.T, logger log.Logger, wr
 }
 
 // WALWithNBlocks returns a WAL content with numBlocks.
-func WALWithNBlocks(ctx context.Context, t *testing.T, logger log.Logger, node *fakeNode, numBlocks int) (data []byte, err error) {
+func WALWithNBlocks(ctx context.Context, t *testing.T, logger log.Logger, node *fakeNode, numBlocks int64) (data []byte, err error) {
 	var b bytes.Buffer
 	wr := bufio.NewWriter(&b)
 
