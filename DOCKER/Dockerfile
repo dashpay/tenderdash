@@ -1,5 +1,5 @@
 # stage 1 Generate Tenderdash Binary
-FROM golang:1.18-alpine3.15 AS builder
+FROM golang:1.19-alpine3.15 AS builder
 
 RUN apk update && \
     apk upgrade && \
