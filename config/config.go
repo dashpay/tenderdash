@@ -981,11 +981,6 @@ type ConsensusConfig struct {
 	CreateEmptyBlocks         bool          `mapstructure:"create-empty-blocks"`
 	CreateEmptyBlocksInterval time.Duration `mapstructure:"create-empty-blocks-interval"`
 
-	// The proposed block time window is doubling of the value in twice
-	// that means for 10 sec the window will be 20 sec, 10 sec before NOW and 10 sec after
-	// this value is used to validate a block time
-	ProposedBlockTimeWindow time.Duration `mapstructure:"proposed-block-time-window"`
-
 	// Don't propose a block if the node is set to the proposer, the block proposal instead
 	// has to be manual (useful for tests)
 	DontAutoPropose bool `mapstructure:"dont-auto-propose'"`
@@ -1056,7 +1051,6 @@ func DefaultConsensusConfig() *ConsensusConfig {
 		PeerQueryMaj23SleepDuration: 2000 * time.Millisecond,
 		DoubleSignCheckHeight:       int64(0),
 		QuorumType:                  btcjson.LLMQType_5_60,
-		ProposedBlockTimeWindow:     10 * time.Second,
 		DontAutoPropose:             false,
 	}
 }
@@ -1106,9 +1100,6 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 	}
 	if cfg.UnsafeCommitTimeoutOverride < 0 {
 		return errors.New("unsafe-commit-timeout-override can't be negative")
-	}
-	if cfg.ProposedBlockTimeWindow < 0 {
-		return errors.New("proposed-block-time can't be negative")
 	}
 	if cfg.CreateEmptyBlocksInterval < 0 {
 		return errors.New("create-empty-blocks-interval can't be negative")

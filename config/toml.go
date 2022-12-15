@@ -457,9 +457,6 @@ fetchers = "{{ .StateSync.Fetchers }}"
 
 wal-file = "{{ js .Consensus.WalPath }}"
 
-# How long is the window for the min proposed block time
-proposed-block-time-window = "{{ .Consensus.ProposedBlockTimeWindow }}"
-
 # How many blocks to look back to check existence of the node's consensus votes before joining consensus
 # When non-zero, the node will panic upon restart
 # if the same consensus key was used to sign {double-sign-check-height} last blocks.
@@ -637,8 +634,8 @@ const testGenesisFmt = `{
 			"time_iota_ms": "10"
 		},
 		"synchrony": {
-			"message_delay": "500000000",
-			"precision": "10000000"
+			"message_delay": "500000123",
+			"precision": "10000456"
 		},
 		"timeout": {
 			"propose": "30000000",
