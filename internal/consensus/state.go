@@ -1020,8 +1020,7 @@ func repairWalFile(src, dst string) error {
 // Block times must be monotonically increasing, so if the block time of the previous
 // block is larger than the proposer's current time, then the proposer will sleep
 // until its local clock exceeds the previous block time.
-func proposerWaitTime(lt tmtime.Source, bt time.Time) time.Duration {
-	t := lt.Now()
+func proposerWaitTime(t time.Time, bt time.Time) time.Duration {
 	if bt.After(t) {
 		return bt.Sub(t)
 	}

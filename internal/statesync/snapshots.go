@@ -2,7 +2,7 @@ package statesync
 
 import (
 	"crypto/sha256"
-	"fmt"
+	"encoding/binary"
 	"math/rand"
 	"sort"
 	"strings"
@@ -18,12 +18,11 @@ type snapshotKey [sha256.Size]byte
 
 // snapshot contains data about a snapshot.
 type snapshot struct {
-	Height                uint64
-	CoreChainLockedHeight uint32
-	Format                uint32
-	Chunks                uint32
-	Hash                  tmbytes.HexBytes
-	Metadata              []byte
+	Height   uint64
+	Format   uint32
+	Chunks   uint32
+	Hash     tmbytes.HexBytes
+	Metadata []byte
 
 	trustedAppHash tmbytes.HexBytes // populated by light client
 }
@@ -34,10 +33,12 @@ type snapshot struct {
 func (s *snapshot) Key() snapshotKey {
 	// Hash.Write() never returns an error.
 	hasher := sha256.New()
-	hasher.Write(
-		[]byte(fmt.Sprintf("%v:%v:%v:%v", s.Height, s.CoreChainLockedHeight, // ignore error
-			s.Format, s.Chunks)),
-	)
+
+	bz := make([]byte, 0, (64+32+32)/8)
+	bz = binary.LittleEndian.AppendUint64(bz, s.Height)
+	bz = binary.LittleEndian.AppendUint32(bz, s.Format)
+	bz = binary.LittleEndian.AppendUint32(bz, s.Chunks)
+	hasher.Write(bz)
 	hasher.Write(s.Hash)
 	hasher.Write(s.Metadata)
 	var key snapshotKey
