@@ -19,7 +19,7 @@ type TryFinalizeCommitEvent struct {
 type TryFinalizeCommitCommand struct {
 	logger log.Logger
 	// create and execute blocks
-	blockExec  *sm.BlockExecutor
+	blockExec  *blockExecutor
 	blockStore sm.BlockStore
 }
 
@@ -47,15 +47,6 @@ func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, behaviour *Beha
 			"commit_block", blockID.Hash,
 		)
 		return nil, nil
-	}
-
-	if appState.CurrentRoundState.IsEmpty() {
-		var err error
-		// TODO: Check if using cs.Round here is correct
-		appState.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, appState.ProposalBlock, appState.Round, appState.state, true)
-		if err != nil {
-			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
-		}
 	}
 
 	cs.finalizeCommit(ctx, behaviour, appState, event.Height)
@@ -87,9 +78,7 @@ func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, behaviou
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, appState.state, appState.CurrentRoundState, block); err != nil {
-		panic(fmt.Errorf("+2/3 committed an invalid block %X: %w", appState.CurrentRoundState.AppHash, err))
-	}
+	cs.blockExec.validateOrPanic(ctx, appState)
 
 	logger.Info(
 		"finalizing commit of block",

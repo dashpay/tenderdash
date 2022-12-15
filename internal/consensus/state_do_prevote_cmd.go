@@ -22,7 +22,7 @@ type DoPrevoteEvent struct {
 type DoPrevoteCommand struct {
 	logger                  log.Logger
 	voteSigner              *VoteSigner
-	blockExec               *sm.BlockExecutor
+	blockExec               *blockExecutor
 	metrics                 *Metrics
 	proposedBlockTimeWindow time.Duration
 	replayMode              bool
@@ -76,7 +76,7 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour, s
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	uncommittedState, err := cs.blockExec.ProcessProposal(ctx, appState.ProposalBlock, appState.Round, appState.state, true)
+	err := cs.blockExec.process(ctx, appState, appState.Round)
 	if err != nil {
 		cs.metrics.MarkProposalProcessed(false)
 		if errors.Is(err, sm.ErrBlockRejected) {
@@ -95,7 +95,6 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour, s
 		// Unknown error, so we panic
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
-	appState.RoundState.CurrentRoundState = uncommittedState
 	cs.metrics.MarkProposalProcessed(true)
 
 	/*
@@ -158,7 +157,7 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour, s
 	}
 
 	// Validate proposal block
-	err = cs.blockExec.ValidateBlockChainLock(ctx, appState.state, appState.ProposalBlock)
+	err = sm.ValidateBlockChainLock(appState.state, appState.ProposalBlock)
 	if err != nil {
 		// ProposalBlock is invalid, prevote nil.
 		logger.Error("enterPrevote: ProposalBlock chain lock is invalid", "err", err)

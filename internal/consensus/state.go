@@ -165,12 +165,12 @@ type State struct {
 	// wait the channel event happening for shutting down the state gracefully
 	onStopCh chan *cstypes.RoundState
 
-	msgInfoQueue         *msgInfoQueue
-	msgDispatcher        *msgInfoDispatcher
-	observer             *Observer
-	behaviour            *Behaviour
-	proposalBlockCreator *ProposalBlockCreator
-	voteSigner           *VoteSigner
+	msgInfoQueue  *msgInfoQueue
+	msgDispatcher *msgInfoDispatcher
+	observer      *Observer
+	behaviour     *Behaviour
+	blockExecutor *blockExecutor
+	voteSigner    *VoteSigner
 }
 
 // StateOption sets an optional parameter on the State.
@@ -235,7 +235,7 @@ func NewState(
 		wal:           wal,
 		blockExec:     cs.blockExec,
 	}
-	cs.proposalBlockCreator = &ProposalBlockCreator{
+	cs.blockExecutor = &blockExecutor{
 		logger:             cs.logger,
 		privValidator:      cs.privValidator,
 		blockExec:          cs.blockExec,
@@ -254,37 +254,37 @@ func NewState(
 				eventPublisher: eventPublisher,
 			},
 			EnterProposeType: &EnterProposeCommand{
-				logger:           cs.logger,
-				privValidator:    cs.privValidator,
-				msgInfoQueue:     cs.msgInfoQueue,
-				wal:              cs.wal,
-				replayMode:       cs.replayMode,
-				metrics:          cs.metrics,
-				propBlockCreator: cs.proposalBlockCreator,
+				logger:        cs.logger,
+				privValidator: cs.privValidator,
+				msgInfoQueue:  cs.msgInfoQueue,
+				wal:           cs.wal,
+				replayMode:    cs.replayMode,
+				metrics:       cs.metrics,
+				blockExec:     cs.blockExecutor,
 			},
 			SetProposalType: &SetProposalCommand{
 				logger:  cs.logger,
 				metrics: cs.metrics,
 			},
 			DecideProposalType: &DecideProposalCommand{
-				logger:           cs.logger,
-				privValidator:    cs.privValidator,
-				msgInfoQueue:     cs.msgInfoQueue,
-				wal:              cs.wal,
-				metrics:          cs.metrics,
-				propBlockCreator: cs.proposalBlockCreator,
-				replayMode:       cs.replayMode,
+				logger:        cs.logger,
+				privValidator: cs.privValidator,
+				msgInfoQueue:  cs.msgInfoQueue,
+				wal:           cs.wal,
+				metrics:       cs.metrics,
+				blockExec:     cs.blockExecutor,
+				replayMode:    cs.replayMode,
 			},
 			AddProposalBlockPartType: &AddProposalBlockPartCommand{
 				logger:         cs.logger,
 				metrics:        cs.metrics,
-				blockExec:      cs.blockExec,
+				blockExec:      cs.blockExecutor,
 				eventPublisher: eventPublisher,
 			},
 			DoPrevoteType: &DoPrevoteCommand{
 				logger:                  cs.logger,
 				voteSigner:              cs.voteSigner,
-				blockExec:               cs.blockExec,
+				blockExec:               cs.blockExecutor,
 				metrics:                 cs.metrics,
 				proposedBlockTimeWindow: cs.config.ProposedBlockTimeWindow,
 				replayMode:              cs.replayMode,
@@ -309,12 +309,12 @@ func NewState(
 			EnterPrecommitType: &EnterPrecommitCommand{
 				logger:         cs.logger,
 				eventPublisher: eventPublisher,
-				blockExec:      cs.blockExec,
+				blockExec:      cs.blockExecutor,
 				voteSigner:     cs.voteSigner,
 			},
 			TryAddCommitType: &TryAddCommitCommand{
 				logger:         cs.logger,
-				blockExec:      cs.blockExec,
+				validator:      cs.blockExecutor,
 				eventPublisher: eventPublisher,
 			},
 			AddCommitType: &AddCommitCommand{
@@ -323,12 +323,12 @@ func NewState(
 			ApplyCommitType: &ApplyCommitCommand{
 				logger:     cs.logger,
 				blockStore: cs.blockStore,
-				blockExec:  cs.blockExec,
+				blockExec:  cs.blockExecutor,
 				wal:        wal,
 			},
 			TryFinalizeCommitType: &TryFinalizeCommitCommand{
 				logger:     cs.logger,
-				blockExec:  cs.blockExec,
+				blockExec:  cs.blockExecutor,
 				blockStore: cs.blockStore,
 			},
 			EnterPrevoteWaitType: &EnterPrevoteWaitCommand{
@@ -353,13 +353,13 @@ func NewState(
 	cs.msgDispatcher = newMsgInfoDispatcher(behaviour, wal, cs.logger, cs.statsMsgQueue)
 	cs.observer.Subscribe(SetProposedAppVersion, func(obj any) error {
 		ver := obj.(uint64)
-		cs.proposalBlockCreator.proposedAppVersion = ver
+		cs.blockExecutor.proposedAppVersion = ver
 		return nil
 	})
 	cs.observer.Subscribe(SetPrivValidator, func(obj any) error {
 		pv := obj.(privValidator)
 		cs.voteSigner.privValidator = pv
-		cs.proposalBlockCreator.privValidator = pv
+		cs.blockExecutor.privValidator = pv
 		tryAddVoteCmd := executor.commands[TryAddVoteType].(*TryAddVoteCommand)
 		tryAddVoteCmd.privValidator = pv
 		enterProposeCmd := executor.commands[EnterProposeType].(*EnterProposeCommand)
@@ -944,7 +944,7 @@ func (cs *State) handleTxsAvailable(ctx context.Context, appState *AppState) {
 // Only used in tests.
 func (cs *State) CreateProposalBlock(ctx context.Context) (*types.Block, error) {
 	appState := cs.GetAppState()
-	return cs.proposalBlockCreator.Create(ctx, &appState, appState.Round)
+	return cs.blockExecutor.create(ctx, &appState, appState.Round)
 }
 
 // PublishCommitEvent ...

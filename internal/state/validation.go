@@ -2,7 +2,6 @@ package state
 
 import (
 	"bytes"
-	"context"
 	"errors"
 	"fmt"
 	"time"
@@ -148,6 +147,10 @@ func validateBlock(state State, block *types.Block) error {
 	return nil
 }
 
+// ValidateBlockTime validates the given block time against the given state.
+// If the block is invalid, it returns an error.
+// Validation does not mutate state, but does require historical information from the stateDB,
+// ie. to verify evidence from a validator at an old height.
 func ValidateBlockTime(allowedTimeWindow time.Duration, state State, block *types.Block) error {
 	if block.Height == state.InitialHeight {
 		if block.Time.Before(state.LastBlockTime) {
@@ -166,7 +169,11 @@ func ValidateBlockTime(allowedTimeWindow time.Duration, state State, block *type
 	return nil
 }
 
-func validateBlockChainLock(ctx context.Context, client abci.Application, state State, block *types.Block) error {
+// ValidateBlockChainLock validates the given block chain lock against the given state.
+// If the block is invalid, it returns an error.
+// Validation does not mutate state, but does require historical information from the stateDB,
+// ie. to verify evidence from a validator at an old height.
+func ValidateBlockChainLock(state State, block *types.Block) error {
 	if block.CoreChainLock != nil {
 		// If there is a new Chain Lock we need to make sure the height in the header is the same as the chain lock
 		if block.Header.CoreChainLockedHeight != block.CoreChainLock.CoreBlockHeight {

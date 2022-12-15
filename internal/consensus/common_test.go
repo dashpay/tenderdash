@@ -247,7 +247,7 @@ func decideProposal(
 
 	appState := cs1.GetAppState()
 
-	block, err := cs1.proposalBlockCreator.Create(ctx, &appState, round)
+	block, err := cs1.blockExecutor.create(ctx, &appState, round)
 	require.NoError(t, err)
 	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)

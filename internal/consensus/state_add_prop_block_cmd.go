@@ -10,7 +10,6 @@ import (
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
-	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -29,7 +28,7 @@ type AddProposalBlockPartEvent struct {
 type AddProposalBlockPartCommand struct {
 	logger         log.Logger
 	metrics        *Metrics
-	blockExec      *sm.BlockExecutor
+	blockExec      *blockExecutor
 	eventPublisher *EventPublisher
 }
 
@@ -45,11 +44,7 @@ func (cs *AddProposalBlockPartCommand) Execute(ctx context.Context, behaviour *B
 	}
 
 	if added && appState.ProposalBlockParts != nil && appState.ProposalBlockParts.IsComplete() && event.FromReplay {
-		candidateState, err := cs.blockExec.ProcessProposal(ctx, appState.ProposalBlock, event.Msg.Round, appState.state, true)
-		if err != nil {
-			panic(err)
-		}
-		appState.RoundState.CurrentRoundState = candidateState
+		cs.blockExec.processOrPanic(ctx, appState, event.Msg.Round)
 	}
 
 	if added && commitNotExist && appState.ProposalBlockParts.IsComplete() {
@@ -156,7 +151,7 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 		)
 
 		if appState.ProposalBlock.Height != appState.RoundState.GetHeight() {
-			appState.RoundState.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, round, appState.state, true)
+			err = cs.blockExec.process(ctx, appState, round)
 			if err != nil {
 				return false, err
 			}

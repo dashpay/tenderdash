@@ -20,13 +20,13 @@ type EnterProposeEvent struct {
 // Enter (!CreateEmptyBlocks) : after enterNewRoundCommand(height,round), once txs are in the mempool
 // Caller should hold cs.mtx lock
 type EnterProposeCommand struct {
-	logger           log.Logger
-	privValidator    privValidator
-	msgInfoQueue     *msgInfoQueue
-	wal              WALWriteFlusher
-	replayMode       bool
-	metrics          *Metrics
-	propBlockCreator *ProposalBlockCreator
+	logger        log.Logger
+	privValidator privValidator
+	msgInfoQueue  *msgInfoQueue
+	wal           WALWriteFlusher
+	replayMode    bool
+	metrics       *Metrics
+	blockExec     *blockExecutor
 }
 
 func (cs *EnterProposeCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {

@@ -14,13 +14,13 @@ type DecideProposalEvent struct {
 }
 
 type DecideProposalCommand struct {
-	logger           log.Logger
-	privValidator    privValidator
-	msgInfoQueue     *msgInfoQueue
-	wal              WALWriteFlusher
-	metrics          *Metrics
-	propBlockCreator *ProposalBlockCreator
-	replayMode       bool
+	logger        log.Logger
+	privValidator privValidator
+	msgInfoQueue  *msgInfoQueue
+	wal           WALWriteFlusher
+	metrics       *Metrics
+	blockExec     *blockExecutor
+	replayMode    bool
 }
 
 func (cs *DecideProposalCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
@@ -38,7 +38,7 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, behaviour *Behavio
 	} else {
 		// Create a new proposal block from state/txs from the mempool.
 		var err error
-		block, err = cs.propBlockCreator.Create(ctx, appState, round)
+		block, err = cs.blockExec.create(ctx, appState, round)
 		if err != nil {
 			cs.logger.Error("unable to create proposal block", "error", err)
 			return nil, nil

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -20,7 +19,7 @@ type TryAddCommitEvent struct {
 type TryAddCommitCommand struct {
 	logger log.Logger
 	// create and execute blocks
-	blockExec      *sm.BlockExecutor
+	validator      validator
 	eventPublisher *EventPublisher
 }
 
@@ -83,7 +82,7 @@ func (cs *TryAddCommitCommand) verifyCommit(ctx context.Context, appState *AppSt
 	if !verified || err != nil {
 		return verified, err
 	}
-	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, appState.state, appState.CurrentRoundState, appState.ProposalBlock); err != nil {
+	if err := cs.validator.validate(ctx, appState); err != nil {
 		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
 	return true, nil

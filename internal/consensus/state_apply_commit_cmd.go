@@ -18,7 +18,7 @@ type ApplyCommitCommand struct {
 	// store blocks and commits
 	blockStore sm.BlockStore
 	// create and execute blocks
-	blockExec *sm.BlockExecutor
+	blockExec *blockExecutor
 	wal       WALWriteFlusher
 }
 
@@ -61,33 +61,14 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behaviour *Behaviour,
 		))
 	}
 
-	// Create a copy of the state for staging and an event cache for txs.
-	stateCopy := appState.state.Copy()
-	rs := appState.RoundState
-
-	if rs.CurrentRoundState.IsEmpty() {
-		var err error
-		cs.logger.Debug("CurrentRoundState is empty", "crs", rs.CurrentRoundState)
-		rs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, round, stateCopy, true)
-		if err != nil {
-			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
-		}
+	err := cs.blockExec.process(ctx, appState, round)
+	if err != nil {
+		cs.logger.Error("cannot apply commit", "error", err)
+		return nil, nil
 	}
 
-	// Execute and commit the block, update and save the state, and update the mempool.
-	// NOTE The block.AppHash wont reflect these txs until the next block.
-	stateCopy, err := cs.blockExec.FinalizeBlock(
-		ctx,
-		stateCopy,
-		rs.CurrentRoundState,
-		types.BlockID{
-			Hash:          block.Hash(),
-			PartSetHeader: blockParts.Header(),
-			StateID:       block.StateID().Hash(),
-		},
-		block,
-		commit,
-	)
+	// Create a copy of the state for staging and an event cache for txs.
+	stateCopy, err := cs.blockExec.finalize(ctx, appState, commit)
 	if err != nil {
 		cs.logger.Error("failed to apply block", "err", err)
 		return nil, nil

@@ -5,7 +5,6 @@ import (
 	"fmt"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -25,7 +24,7 @@ type EnterPrecommitEvent struct {
 type EnterPrecommitCommand struct {
 	logger         log.Logger
 	eventPublisher *EventPublisher
-	blockExec      *sm.BlockExecutor
+	blockExec      *blockExecutor
 	voteSigner     *VoteSigner
 }
 
@@ -124,10 +123,11 @@ func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behaviour *Behavio
 	if appState.ProposalBlock.HashesTo(blockID.Hash) {
 		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
 
+		// we got precommit but we didn't process proposal yet
+		cs.blockExec.processOrPanic(ctx, appState, round)
+
 		// Validate the block.
-		if err := cs.blockExec.ValidateBlockWithRoundState(ctx, appState.state, appState.CurrentRoundState, appState.ProposalBlock); err != nil {
-			panic(fmt.Sprintf("precommit step: +2/3 prevoted for an invalid block %v; relocking", err))
-		}
+		cs.blockExec.validateOrPanic(ctx, appState)
 
 		appState.LockedRound = round
 		appState.LockedBlock = appState.ProposalBlock
