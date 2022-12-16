@@ -10,10 +10,6 @@ on:
       - release/**
       - v0.*-dev
 
-env:
-  CGO_LDFLAGS: "-L/usr/local/lib -lbls-dash -lrelic_s -lgmp"
-  CGO_CXXFLAGS: "-I/usr/local/include"
-
 jobs:
   build:
     name: Build
