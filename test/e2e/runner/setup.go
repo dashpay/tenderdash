@@ -296,17 +296,30 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 		}
 	}
 
-	cfg.P2P.PersistentPeers = ""
-	for _, peer := range node.PersistentPeers {
-		if len(cfg.P2P.PersistentPeers) > 0 {
-			cfg.P2P.PersistentPeers += ","
-		}
-		cfg.P2P.PersistentPeers += peer.AddressP2P(true)
+	cfg.P2P.PersistentPeers = joinNodeP2PAddresses(node.PersistentPeers, true, ",")
+	cfg.P2P.BootstrapPeers = joinNodeP2PAddresses(node.Seeds, true, ",")
+
+	if node.P2PMaxConnections > 0 {
+		cfg.P2P.MaxConnections = node.P2PMaxConnections
+	}
+	if node.P2PMaxOutgoingConnections > 0 {
+		cfg.P2P.MaxOutgoingConnections = node.P2PMaxOutgoingConnections
+	}
+	if node.P2PMaxIncomingConnectionTime > 0 {
+		cfg.P2P.MaxIncomingConnectionTime = node.P2PMaxIncomingConnectionTime
 	}
 
 	cfg.Instrumentation.Prometheus = true
 
 	return cfg, nil
+}
+
+func joinNodeP2PAddresses(nodes []*e2e.Node, withID bool, sep string) string {
+	addresses := []string{}
+	for _, node := range nodes {
+		addresses = append(addresses, node.AddressP2P(withID))
+	}
+	return strings.Join(addresses, sep)
 }
 
 // MakeAppConfig generates an ABCI application config for a node.
