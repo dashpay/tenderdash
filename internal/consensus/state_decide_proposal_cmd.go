@@ -61,7 +61,14 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, behaviour *Behavio
 
 	// Make proposal
 	propBlockID := block.BlockID(blockParts)
-	proposal := types.NewProposal(height, block.CoreChainLockedHeight, round, appState.ValidRound, propBlockID, block.Header.Time)
+	proposal := types.NewProposal(
+		height,
+		block.CoreChainLockedHeight,
+		round,
+		appState.ValidRound,
+		propBlockID,
+		block.Header.Time,
+	)
 	proposal.SetCoreChainLockUpdate(block.CoreChainLock)
 	p := proposal.ToProto()
 	validatorsAtProposalHeight := appState.state.ValidatorsAtHeight(p.Height)

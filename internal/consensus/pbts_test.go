@@ -135,12 +135,10 @@ func newPBTSTestHarness(ctx context.Context, t *testing.T, tc pbtsTestConfigurat
 }
 
 func (p *pbtsTestHarness) newProposal(ctx context.Context, t *testing.T) (types.Proposal, *types.Block, *types.PartSet) {
-	state := p.observedState.GetState()
-
-	proposer := p.pickProposer(p.currentHeight)
-
-	quorumType := state.Validators.QuorumType
-	quorumHash := state.Validators.QuorumHash
+	appState := p.observedState.GetAppState()
+	proposer := p.pickProposer()
+	quorumType := appState.state.Validators.QuorumType
+	quorumHash := appState.state.Validators.QuorumHash
 
 	b, err := p.observedState.CreateProposalBlock(ctx)
 	require.NoError(t, err)
@@ -152,7 +150,7 @@ func (p *pbtsTestHarness) newProposal(ctx context.Context, t *testing.T) (types.
 	bid := b.BlockID(ps)
 	require.NoError(t, err)
 
-	appState := p.observedState.GetAppState()
+	appState = p.observedState.GetAppState()
 	coreChainLockedHeight := appState.state.LastCoreChainLockedBlockHeight
 	prop := types.NewProposal(p.currentHeight, coreChainLockedHeight, 0, -1, bid, b.Time)
 	tp := prop.ToProto()
@@ -178,13 +176,19 @@ func (p *pbtsTestHarness) nextHeight(
 
 	bid := types.BlockID{}
 
+	appState := p.observedState.GetAppState()
+	proTxHash, err := p.observedState.privValidator.GetProTxHash(ctx)
+	require.NoError(t, err)
+
 	ensureNewRound(t, p.roundCh, p.currentHeight, p.currentRound)
-	if !p.observedState.isProposer() {
+	appState = p.observedState.GetAppState()
+
+	if !appState.isProposer(proTxHash) {
 		time.Sleep(proposalDelay)
-		prop, b, ps := p.newProposal(ctx, t)
+		prop, _, ps := p.newProposal(ctx, t)
 
 		time.Sleep(deliveryDelay)
-		if err := p.observedState.SetProposalAndBlock(ctx, &prop, b, ps, "peerID"); err != nil {
+		if err := p.observedState.SetProposalAndBlock(ctx, &prop, ps, "peerID"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -197,8 +201,6 @@ func (p *pbtsTestHarness) nextHeight(
 	signAddVotes(ctx, t, p.observedState, tmproto.PrecommitType, p.chainID, bid, p.otherValidators...)
 	ensurePrecommit(t, p.ensureVoteCh, p.currentHeight, p.currentRound)
 
-	proTxHash, err := p.observedValidator.GetProTxHash(ctx)
-	require.NoError(t, err)
 	res := collectHeightResults(ctx, t, p.eventCh, p.currentHeight, proTxHash)
 	ensureNewBlock(t, p.blockCh, p.currentHeight)
 
@@ -276,8 +278,9 @@ type timestampedEvent struct {
 	m  tmpubsub.Message
 }
 
-func (p *pbtsTestHarness) pickProposer(height int64) types.PrivValidator {
-	proposer := p.observedState.Validators.GetProposer()
+func (p *pbtsTestHarness) pickProposer() types.PrivValidator {
+	appState := p.observedState.GetAppState()
+	proposer := appState.Validators.GetProposer()
 	p.observedState.logger.Debug("picking proposer", "protxhash", proposer.ProTxHash)
 
 	allVals := append(p.otherValidators, p.observedValidator)

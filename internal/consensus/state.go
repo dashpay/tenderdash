@@ -282,12 +282,11 @@ func NewState(
 				eventPublisher: eventPublisher,
 			},
 			DoPrevoteType: &DoPrevoteCommand{
-				logger:                  cs.logger,
-				voteSigner:              cs.voteSigner,
-				blockExec:               cs.blockExecutor,
-				metrics:                 cs.metrics,
-				proposedBlockTimeWindow: cs.config.ProposedBlockTimeWindow,
-				replayMode:              cs.replayMode,
+				logger:     cs.logger,
+				voteSigner: cs.voteSigner,
+				blockExec:  cs.blockExecutor,
+				metrics:    cs.metrics,
+				replayMode: cs.replayMode,
 			},
 			TryAddVoteType: &TryAddVoteCommand{
 				evpool:         cs.evpool,

@@ -197,9 +197,7 @@ func (cs *AddProposalBlockPartCommand) handleCompleteProposal(
 				"valid_round", appState.Round,
 				"valid_block_hash", tmstrings.LazyBlockHash(appState.ProposalBlock))
 
-			appState.ValidRound = appState.Round
-			appState.ValidBlock = appState.ProposalBlock
-			appState.ValidBlockParts = appState.ProposalBlockParts
+			appState.updateValidBlock()
 			err := appState.Save()
 			if err != nil {
 				return err

@@ -104,7 +104,6 @@ func (s *AppState) Save() error {
 }
 
 func (s *AppState) isProposer(proTxHash types.ProTxHash) bool {
-	//proTxHash := s.ProTxHash
 	return proTxHash != nil && bytes.Equal(s.Validators.GetProposer().ProTxHash.Bytes(), proTxHash.Bytes())
 }
 
@@ -285,15 +284,18 @@ func (s *AppState) checkValidBlock() bool {
 	if s.ValidBlock == nil {
 		return false
 	}
-	err := sm.ValidateBlockTime(s.config.ProposedBlockTimeWindow, s.state, s.ValidBlock)
-	if err != nil {
+	sp := s.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
+	if s.Height == s.state.InitialHeight {
+		// by definition, initial block must have genesis time
+		return s.ValidBlock.Time.Equal(s.state.LastBlockTime)
+	}
+	if !s.ValidBlock.IsTimely(s.ValidBlockRecvTime, sp, s.ValidRound) {
 		s.logger.Debug(
 			"proposal block is outdated",
 			"height", s.Height,
-			"round", s.Round,
-			"error", err,
-			"block", s.ValidBlock,
-		)
+			"round", s.ValidRound,
+			"received", s.ValidBlockRecvTime,
+			"block", s.ValidBlock)
 		return false
 	}
 	return true
@@ -308,11 +310,20 @@ func (s *AppState) commitTime(t time.Time) time.Time {
 }
 
 func (s *AppState) proposalIsTimely() bool {
+	if s.Height == s.state.InitialHeight {
+		// by definition, initial block must have genesis time
+		return s.Proposal.Timestamp.Equal(s.state.LastBlockTime)
+	}
 	sp := s.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
 	return s.Proposal.IsTimely(s.ProposalReceiveTime, sp, s.Round)
 }
 
-//
+func (s *AppState) updateValidBlock() {
+	s.ValidRound = s.Round
+	s.ValidBlock = s.ProposalBlock
+	s.ValidBlockRecvTime = s.ProposalReceiveTime
+	s.ValidBlockParts = s.ProposalBlockParts
+}
 
 func (s *AppState) verifyCommit(ctx context.Context, commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
 	// Lets first do some basic commit validation before more complicated commit verification
@@ -466,7 +477,11 @@ func (s *AppState) bypassCommitTimeout() bool {
 func (s *AppState) calculateProposalTimestampDifferenceMetric() {
 	if s.Proposal != nil && s.Proposal.POLRound == -1 {
 		sp := s.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
-		isTimely := s.Proposal.IsTimely(s.ProposalReceiveTime, sp, s.Round)
+		recvTime := s.ProposalReceiveTime
+		if s.Height == s.state.InitialHeight {
+			recvTime = s.state.LastBlockTime // genesis time
+		}
+		isTimely := s.Proposal.IsTimely(recvTime, sp, s.Round)
 		s.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", isTimely)).
 			Observe(s.ProposalReceiveTime.Sub(s.Proposal.Timestamp).Seconds())
 	}

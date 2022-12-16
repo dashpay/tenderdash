@@ -20,12 +20,11 @@ type DoPrevoteEvent struct {
 }
 
 type DoPrevoteCommand struct {
-	logger                  log.Logger
-	voteSigner              *VoteSigner
-	blockExec               *blockExecutor
-	metrics                 *Metrics
-	proposedBlockTimeWindow time.Duration
-	replayMode              bool
+	logger     log.Logger
+	voteSigner *VoteSigner
+	blockExec  *blockExecutor
+	metrics    *Metrics
+	replayMode bool
 }
 
 func (cs *DoPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
@@ -66,6 +65,14 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour, s
 		return nil, nil
 	}
 
+	// Validate proposal core chain lock
+	err := sm.ValidateBlockChainLock(appState.state, appState.ProposalBlock)
+	if err != nil {
+		logger.Error("enterPrevote: ProposalBlock chain lock is invalid, prevoting nil", "err", err)
+		cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
+		return nil, nil
+	}
+
 	/*
 		The block has now passed Tendermint's validation rules.
 		Before prevoting the block received from the proposer for the current round and height,
@@ -76,7 +83,7 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour, s
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	err := cs.blockExec.process(ctx, appState, appState.Round)
+	err = cs.blockExec.process(ctx, appState, appState.Round)
 	if err != nil {
 		cs.metrics.MarkProposalProcessed(false)
 		if errors.Is(err, sm.ErrBlockRejected) {
@@ -152,26 +159,6 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour, s
 		if appState.ProposalBlock.HashesTo(appState.LockedBlock.Hash()) {
 			logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
 			cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, blockID)
-			return nil, nil
-		}
-	}
-
-	// Validate proposal block
-	err = sm.ValidateBlockChainLock(appState.state, appState.ProposalBlock)
-	if err != nil {
-		// ProposalBlock is invalid, prevote nil.
-		logger.Error("enterPrevote: ProposalBlock chain lock is invalid", "err", err)
-		cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
-		return nil, nil
-	}
-
-	// Validate proposal block time
-	if !event.AllowOldBlocks {
-		err = sm.ValidateBlockTime(cs.proposedBlockTimeWindow, appState.state, appState.ProposalBlock)
-		if err != nil {
-			// ProposalBlock is invalid, prevote nil.
-			logger.Error("enterPrevote: ProposalBlock time is invalid", "err", err)
-			cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
 			return nil, nil
 		}
 	}

@@ -1585,8 +1585,9 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	// the proposed block should now be locked and our precommit added
 	validatePrecommit(ctx, t, cs1, round, round, vss[0], propBlockID1.Hash, propBlockID1.Hash)
 
-	assert.True(t, cs1.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
-	assert.Equal(t, round, cs1.LockedRound, "invalid round locked")
+	appState = cs1.GetAppState()
+	assert.True(t, appState.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
+	assert.Equal(t, round, appState.LockedRound, "invalid round locked")
 
 	// add precommits from the rest
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs4)
@@ -1621,7 +1622,8 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	ensureNewProposal(t, proposalCh, height, round)
 
 	ensurePrevote(t, voteCh, height, round)
-	assert.True(t, cs1.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
+	appState = cs1.GetAppState()
+	assert.True(t, appState.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
 	validatePrevote(ctx, t, cs1, round, vss[0], nil)
 
 }

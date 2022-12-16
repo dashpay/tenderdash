@@ -26,7 +26,7 @@ func (cs *SetProposalCommand) Execute(ctx context.Context, behaviour *Behaviour,
 	recvTime := event.RecvTime
 	// Already have one
 	// TODO: possibly catch double proposals
-	if appState.Proposal != nil || proposal == nil {
+	if appState.Proposal != nil {
 		return nil, nil
 	}
 

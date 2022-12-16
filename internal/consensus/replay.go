@@ -73,12 +73,12 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 		switch msg := m.Msg.(type) {
 		case *ProposalMessage:
 			p := msg.Proposal
-			if cs.config.WalSkipRoundsToLast && p.Round > cs.Round {
-				cs.Validators.IncrementProposerPriority(p.Round - cs.Round)
-				cs.Votes.SetRound(p.Round)
-				cs.Round = p.Round
+			if cs.config.WalSkipRoundsToLast && p.Round > appState.Round {
+				appState.Validators.IncrementProposerPriority(p.Round - appState.Round)
+				appState.Votes.SetRound(p.Round)
+				appState.Round = p.Round
 			}
-			cs.logger.Info("Replay: Proposal", "height", p.Height, "round", p.Round, "cs.Round", cs.Round,
+			cs.logger.Info("Replay: Proposal", "height", p.Height, "round", p.Round, "cs.Round", appState.Round,
 				"header", p.BlockID.PartSetHeader, "pol", p.POLRound, "peer", peerID)
 		case *BlockPartMessage:
 			cs.logger.Info("Replay: BlockPart", "height", msg.Height, "round", msg.Round, "peer", peerID)

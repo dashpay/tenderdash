@@ -224,9 +224,7 @@ func (cs *TryAddVoteCommand) addVote(
 			if appState.ValidRound < vote.Round && vote.Round == appState.Round {
 				if appState.ProposalBlock.HashesTo(blockID.Hash) {
 					cs.logger.Debug("updating valid block because of POL", "valid_round", appState.ValidRound, "pol_round", vote.Round)
-					appState.ValidRound = vote.Round
-					appState.ValidBlock = appState.ProposalBlock
-					appState.ValidBlockParts = appState.ProposalBlockParts
+					appState.updateValidBlock()
 				} else {
 					cs.logger.Debug("valid block we do not know about; set ProposalBlock=nil",
 						"proposal", tmstrings.LazyBlockHash(appState.ProposalBlock),

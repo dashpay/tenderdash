@@ -704,15 +704,12 @@ func testHandshakeReplay(
 		walFile := tempWALWithData(t, walBody)
 		cfg.Consensus.SetWalFile(walFile)
 
-		gdoc, err := sm.MakeGenesisDocFromFile(cfg.GenesisFile())
-		require.NoError(t, err)
-
 		wal, err := NewWAL(ctx, logger, walFile)
 		require.NoError(t, err)
 		err = wal.Start(ctx)
 		require.NoError(t, err)
 		t.Cleanup(func() { cancel(); wal.Wait() })
-		chain, commits = makeBlockchainFromWAL(t, wal, gdoc)
+		chain, commits = makeBlockchainFromWAL(t, wal)
 		stateDB, genesisState, store = stateAndStore(t, cfg, kvstore.ProtocolVersion)
 	}
 	proTxHash, err := privVal.GetProTxHash(ctx)
@@ -1057,7 +1054,7 @@ func (app *badApp) ProcessProposal(_ context.Context, _ *abci.RequestProcessProp
 //--------------------------
 // utils for making blocks
 
-func makeBlockchainFromWAL(t *testing.T, wal WAL, genDoc *types.GenesisDoc) ([]*types.Block, []*types.Commit) {
+func makeBlockchainFromWAL(t *testing.T, wal WAL) ([]*types.Block, []*types.Commit) {
 	t.Helper()
 	var height int64
 
@@ -1367,14 +1364,19 @@ func TestWALRoundsSkipper(t *testing.T) {
 	logger := log.NewNopLogger()
 	ng := nodeGen{cfg: cfg, logger: logger}
 	node := ng.Generate(ctx, t)
-	originDoPrevote := node.csState.doPrevote
-	node.csState.doPrevote = func(ctx context.Context, height int64, round int32, allowOldBlocks bool) {
+	doPrevoteOrigin := node.csState.behaviour.commander.commands[DoPrevoteType]
+	doPrevoteCmd := newMockCommand(func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+		event := stateEvent.Data.(DoPrevoteEvent)
+		height := event.Height
+		round := event.Round
 		if height >= 3 && round < 10 {
-			node.csState.signAddVote(ctx, tmproto.PrevoteType, types.BlockID{})
-			return
+			node.csState.voteSigner.signAddVote(ctx, stateEvent.AppState, tmproto.PrevoteType, types.BlockID{})
+			return nil, nil
 		}
-		originDoPrevote(ctx, height, round, allowOldBlocks)
-	}
+		return doPrevoteOrigin.Execute(ctx, behaviour, stateEvent)
+	})
+	node.csState.behaviour.RegisterCommand(DoPrevoteType, doPrevoteCmd)
+
 	const (
 		chainLen int64 = 5
 		maxRound int32 = 10
@@ -1385,15 +1387,12 @@ func TestWALRoundsSkipper(t *testing.T) {
 
 	cfg.Consensus.SetWalFile(walFile)
 
-	gdoc, err := sm.MakeGenesisDocFromFile(cfg.GenesisFile())
-	require.NoError(t, err)
-
 	wal, err := NewWAL(ctx, logger, walFile)
 	require.NoError(t, err)
 	err = wal.Start(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { cancel(); wal.Wait() })
-	chain, commits := makeBlockchainFromWAL(t, wal, gdoc)
+	chain, commits := makeBlockchainFromWAL(t, wal)
 
 	stateDB, state, blockStore := stateAndStore(t, cfg, kvstore.ProtocolVersion)
 
@@ -1436,7 +1435,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 		Query:    types.EventQueryNewBlock,
 	})
 	require.NoError(t, err)
-	ctxto, cancel := context.WithTimeout(ctx, 120*time.Second)
+	ctxto, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	msg, err := newBlockSub.Next(ctxto)
 	require.NoError(t, err)

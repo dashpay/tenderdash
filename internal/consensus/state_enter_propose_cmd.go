@@ -38,18 +38,20 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behaviour *Behaviour
 	logger := cs.logger.With("height", height, "round", round)
 
 	if appState.Height != height || round < appState.Round || (appState.Round == round && cstypes.RoundStepPropose <= appState.Step) {
-		logger.Debug("entering propose step with invalid args",
-			"height", appState.Height,
-			"round", appState.Round,
-			"step", appState.Step)
+		logger.Debug("entering propose step with invalid args", "step", appState.Step)
 		return nil, nil
 	}
 
 	// If this validator is the proposer of this round, and the previous block time is later than
 	// our local clock time, wait to propose until our local clock time has passed the block time.
 	if appState.isProposer(cs.privValidator.ProTxHash) {
-		pwt := proposerWaitTime(tmtime.DefaultSource{}, appState.state.LastBlockTime)
+		pwt := proposerWaitTime(tmtime.Now(), appState.state.LastBlockTime)
 		if pwt > 0 {
+			cs.logger.Debug("enter propose: latest block is newer, sleeping",
+				"duration", pwt.String(),
+				"last_block_time", appState.state.LastBlockTime,
+				"now", tmtime.Now(),
+			)
 			behaviour.ScheduleTimeout(pwt, height, round, cstypes.RoundStepNewRound)
 			return nil, nil
 		}

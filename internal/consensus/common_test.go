@@ -484,14 +484,14 @@ func newStateWithConfigAndBlockStore(
 
 	// Make Mempool
 
-	mempool := mempool.NewTxMempool(
+	mpool := mempool.NewTxMempool(
 		logger.With("module", "mempool"),
 		thisConfig.Mempool,
 		proxyAppConnMem,
 	)
 
 	if thisConfig.Consensus.WaitForTxs() {
-		mempool.EnableTxsAvailable()
+		mpool.EnableTxsAvailable()
 	}
 
 	evpool := sm.EmptyEvidencePool{}
@@ -504,13 +504,13 @@ func newStateWithConfigAndBlockStore(
 	eventBus := eventbus.NewDefault(logger.With("module", "events"))
 	require.NoError(t, eventBus.Start(ctx))
 
-	blockExec := sm.NewBlockExecutor(stateStore, proxyAppConnCon, mempool, evpool, blockStore, eventBus)
+	blockExec := sm.NewBlockExecutor(stateStore, proxyAppConnCon, mpool, evpool, blockStore, eventBus)
 	cs, err := NewState(logger.With("module", "consensus"),
 		thisConfig.Consensus,
 		stateStore,
 		blockExec,
 		blockStore,
-		mempool,
+		mpool,
 		evpool,
 		eventBus,
 	)
