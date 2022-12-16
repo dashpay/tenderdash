@@ -9,17 +9,6 @@ COPY . /src
 
 WORKDIR /src
 
-ENV CGO_ENABLE=1
-
-ENV CGO_LDFLAGS="-L/src/third_party/bls-signatures/build/_deps/sodium-build \
--L/src/third_party/bls-signatures/build/_deps/relic-build/lib \
--L/src/third_party/bls-signatures/build/src \
--lbls-dash -lrelic_s -lgmp"
-
-ENV CGO_CXXFLAGS="-I/src/third_party/bls-signatures/build/_deps/relic-src/include \
--I/src/third_party/bls-signatures/build/_deps/relic-build/include \
--I/src/third_party/bls-signatures/build/src"
-
 RUN make build-bls
 RUN make build-linux
 
