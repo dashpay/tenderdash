@@ -1261,6 +1261,40 @@ func TestPeerManager_Accepted_UpgradeDialing(t *testing.T) {
 	require.Error(t, peerManager.Dialed(b))
 }
 
+// TestPeerManager_Accepted_Timeout ensures that an incoming peer will be evicted after some timeout
+func TestPeerManager_Accepted_Timeout(t *testing.T) {
+	const maxIncomingTime = 5 * time.Millisecond
+	a := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("a", 40))}
+	// b := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("b", 40))}
+	// c := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("c", 40))}
+	// d := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("d", 40))}
+
+	peerManager, err := p2p.NewPeerManager(selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{
+		MaxIncomingConnectionTime: maxIncomingTime,
+	})
+
+	require.NoError(t, err)
+
+	// Accepting a connection from a known peer should work.
+	added, err := peerManager.Add(a)
+	require.NoError(t, err)
+	require.True(t, added)
+	require.NoError(t, peerManager.Accepted(a.NodeID))
+
+	// Initially, no peers are marked for eviction
+	evict, err := peerManager.TryEvictNext()
+	assert.NoError(t, err)
+	assert.Zero(t, evict, "No peer should be evicted")
+
+	// However, after `maxIncomingTime` plus 10% for processing time, we expect eviction of the peer
+	timeout := time.Duration(float64(maxIncomingTime) * 1.1)
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
+	evict, err = peerManager.EvictNext(ctx)
+	assert.NoError(t, err)
+	assert.Equal(t, a.NodeID, evict, "No peer should be evicted")
+}
+
 func TestPeerManager_Ready(t *testing.T) {
 	a := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("a", 40))}
 	b := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("b", 40))}

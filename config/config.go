@@ -668,6 +668,11 @@ type P2PConfig struct { //nolint: maligned
 	// attempts per IP address.
 	MaxIncomingConnectionAttempts uint `mapstructure:"max-incoming-connection-attempts"`
 
+	// MaxIncomingConnectionTime limits maximum duration after which incoming peer will be evicted.
+	// Defaults to 0 which disables this mechanism.
+	// Used on seed nodes to evict peers and make space for others.
+	MaxIncomingConnectionTime time.Duration `mapstructure:"max-incoming-connection-time"`
+
 	// Comma separated list of peer IDs to keep private (will not be gossiped to
 	// other peers)
 	PrivatePeerIDs string `mapstructure:"private-peer-ids"`
@@ -703,6 +708,7 @@ func DefaultP2PConfig() *P2PConfig {
 		MaxConnections:                64,
 		MaxOutgoingConnections:        12,
 		MaxIncomingConnectionAttempts: 100,
+		MaxIncomingConnectionTime:     0,
 		FlushThrottleTimeout:          100 * time.Millisecond,
 		// The MTU (Maximum Transmission Unit) for Ethernet is 1500 bytes.
 		// The IP header and the TCP header take up 20 bytes each at least (unless
@@ -735,6 +741,9 @@ func (cfg *P2PConfig) ValidateBasic() error {
 	}
 	if cfg.MaxOutgoingConnections > cfg.MaxConnections {
 		return errors.New("max-outgoing-connections cannot be larger than max-connections")
+	}
+	if cfg.MaxIncomingConnectionTime < 0 {
+		return errors.New("max-incoming-connection-time can't be negative")
 	}
 	return nil
 }

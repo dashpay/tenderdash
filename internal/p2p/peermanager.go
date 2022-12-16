@@ -136,6 +136,11 @@ type PeerManagerOptions struct {
 	// the connection and evict a lower-scored peer.
 	MaxConnectedUpgrade uint16
 
+	// MaxIncomingConnectionTime limits maximum duration after which incoming peer will be evicted.
+	// Defaults to 0 which disables this mechanism.
+	// Used on seed nodes to evict peers and make space for others.
+	MaxIncomingConnectionTime time.Duration
+
 	// MinRetryTime is the minimum time to wait between retries. Retry times
 	// double for each retry, up to MaxRetryTime. 0 disables retries.
 	MinRetryTime time.Duration
@@ -791,6 +796,11 @@ func (m *PeerManager) Accepted(peerID types.NodeID, peerOpts ...func(*peerInfo))
 	if upgradeFromPeer != "" {
 		m.evict[upgradeFromPeer] = true
 	}
+
+	if m.options.MaxIncomingConnectionTime > 0 {
+		evictPeerAfterTimeout(m, peerID, peerConnectionIncoming, m.options.MaxIncomingConnectionTime)
+	}
+
 	m.evictWaker.Wake()
 	return nil
 }
@@ -1724,5 +1734,23 @@ func (m *PeerManager) IsDialingOrConnected(nodeID types.NodeID) bool {
 func SetProTxHashToPeerInfo(proTxHash types.ProTxHash) func(info *peerInfo) {
 	return func(info *peerInfo) {
 		info.ProTxHash = proTxHash.Copy()
+	}
+}
+
+// evictPeerAfterTimeout evicts incoming peer for which the timeout expired.
+func evictPeerAfterTimeout(m *PeerManager, peerID types.NodeID, direction peerConnectionDirection, timeout time.Duration) {
+	if timeout > 0 {
+		time.AfterFunc(timeout, func() {
+			olderThan := time.Now().Add(-timeout)
+
+			m.mtx.Lock()
+			p, ok := m.store.Get(peerID)
+			connType := m.connected[peerID]
+			m.mtx.Unlock()
+
+			if ok && connType == direction && !p.Persistent && p.LastConnected.Before(olderThan) {
+				m.EvictPeer(peerID)
+			}
+		})
 	}
 }
