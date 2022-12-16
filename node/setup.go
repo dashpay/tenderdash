@@ -234,7 +234,7 @@ func createPeerManager(
 		MaxOutgoingConnections:    maxOutgoingConns,
 		MaxIncomingConnectionTime: cfg.P2P.MaxIncomingConnectionTime,
 		MaxConnectedUpgrade:       maxUpgradeConns,
-		DisconnectCooldownPeriod:  2 * time.Second,
+		DisconnectCooldownPeriod:  cfg.P2P.DisconnectCooldownPeriod,
 		MaxPeers:                  maxUpgradeConns + 4*maxConns,
 		MinRetryTime:              250 * time.Millisecond,
 		MaxRetryTime:              30 * time.Minute,

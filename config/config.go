@@ -673,6 +673,9 @@ type P2PConfig struct { //nolint: maligned
 	// Used on seed nodes to evict peers and make space for others.
 	MaxIncomingConnectionTime time.Duration `mapstructure:"max-incoming-connection-time"`
 
+	// DisconnectCooldownPeriod determines how long a node must wait before it can connect again
+	DisconnectCooldownPeriod time.Duration `mapstructure:"disconnect-cooldown-period"`
+
 	// Comma separated list of peer IDs to keep private (will not be gossiped to
 	// other peers)
 	PrivatePeerIDs string `mapstructure:"private-peer-ids"`
@@ -709,6 +712,7 @@ func DefaultP2PConfig() *P2PConfig {
 		MaxOutgoingConnections:        12,
 		MaxIncomingConnectionAttempts: 100,
 		MaxIncomingConnectionTime:     0,
+		DisconnectCooldownPeriod:      2 * time.Second,
 		FlushThrottleTimeout:          100 * time.Millisecond,
 		// The MTU (Maximum Transmission Unit) for Ethernet is 1500 bytes.
 		// The IP header and the TCP header take up 20 bytes each at least (unless
@@ -744,6 +748,9 @@ func (cfg *P2PConfig) ValidateBasic() error {
 	}
 	if cfg.MaxIncomingConnectionTime < 0 {
 		return errors.New("max-incoming-connection-time can't be negative")
+	}
+	if cfg.DisconnectCooldownPeriod < 2*time.Second {
+		return errors.New("disconnect-cooldown-period must be set to at least 2s")
 	}
 	return nil
 }
