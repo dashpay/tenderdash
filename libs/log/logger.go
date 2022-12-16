@@ -23,6 +23,7 @@ const (
 	LogFormatJSON string = "json"
 
 	// Supported loging levels
+	LogLevelTrace = "trace"
 	LogLevelDebug = "debug"
 	LogLevelInfo  = "info"
 	LogLevelWarn  = "warn"
@@ -31,6 +32,7 @@ const (
 
 // Logger defines a generic logging interface compatible with Tendermint.
 type Logger interface {
+	Trace(msg string, keyVals ...interface{})
 	Debug(msg string, keyVals ...interface{})
 	Info(msg string, keyVals ...interface{})
 	Error(msg string, keyVals ...interface{})
