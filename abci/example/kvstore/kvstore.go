@@ -180,14 +180,7 @@ func WithPrepareTxsFunc(prepareTxs PrepareTxsFunc) OptFunc {
 // (enabled by default)
 func WithDuplicateRequestDetection(enabled bool) OptFunc {
 	return func(app *Application) error {
-		if enabled {
-			app.processedProposals = map[int32]bool{}
-			app.preparedProposals = map[int32]bool{}
-		} else {
-			app.processedProposals = nil
-			app.preparedProposals = nil
-		}
-
+		app.resetDuplicateDetection(enabled)
 		return nil
 	}
 }
@@ -297,6 +290,9 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	if vsu == nil {
 		return nil, errors.New("validator-set update cannot be nil")
 	}
+
+	app.resetDuplicateDetection(app.preparedProposals != nil && app.processedProposals != nil)
+
 	resp := &abci.ResponseInitChain{
 		AppHash:                 app.LastCommittedState.GetAppHash(),
 		ConsensusParams:         &consensusParams,
@@ -707,12 +703,7 @@ func (app *Application) newHeight(committedAppHash tmbytes.HexBytes, height int6
 		return err
 	}
 
-	if app.preparedProposals != nil {
-		app.preparedProposals = map[int32]bool{}
-	}
-	if app.processedProposals != nil {
-		app.processedProposals = map[int32]bool{}
-	}
+	app.resetDuplicateDetection(app.preparedProposals != nil && app.processedProposals != nil)
 
 	app.resetRoundStates()
 	if err := app.persistInterval(); err != nil {
@@ -720,6 +711,16 @@ func (app *Application) newHeight(committedAppHash tmbytes.HexBytes, height int6
 	}
 
 	return nil
+}
+
+func (app *Application) resetDuplicateDetection(enabled bool) {
+	if enabled {
+		app.preparedProposals = map[int32]bool{}
+		app.processedProposals = map[int32]bool{}
+	} else {
+		app.preparedProposals = nil
+		app.processedProposals = nil
+	}
 }
 
 // resetRoundStates closes and cleans up uncommitted round states
