@@ -150,18 +150,6 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 			"round_height", appState.RoundState.GetHeight(),
 		)
 
-		if appState.ProposalBlock.Height != appState.RoundState.GetHeight() {
-			err = cs.blockExec.process(ctx, appState, round)
-			if err != nil {
-				return false, err
-			}
-		}
-
-		err = appState.Save()
-		if err != nil {
-			return false, err
-		}
-
 		cs.eventPublisher.PublishCompleteProposalEvent(appState.CompleteProposalEvent())
 
 		if appState.Commit != nil {

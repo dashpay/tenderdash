@@ -54,8 +54,7 @@ import (
 // and which ones we need the wal for - then we'd also be able to only flush the
 // wal writer when we need to, instead of with every message.
 
-func startNewStateAndWaitForBlock(ctx context.Context, t *testing.T, consensusReplayConfig *config.Config,
-	lastBlockHeight int64, blockDB dbm.DB, stateStore sm.Store) {
+func startNewStateAndWaitForBlock(ctx context.Context, t *testing.T, consensusReplayConfig *config.Config) {
 	logger := log.NewNopLogger()
 	state, err := sm.MakeGenesisStateFromFile(consensusReplayConfig.GenesisFile())
 	require.NoError(t, err)
@@ -163,7 +162,6 @@ LOOP:
 		logger := log.NewTestingLogger(t)
 		blockDB := dbm.NewMemDB()
 		stateDB := dbm.NewMemDB()
-		stateStore := sm.NewStore(stateDB)
 		blockStore := store.NewBlockStore(blockDB)
 		state, err := sm.MakeGenesisStateFromFile(consensusReplayConfig.GenesisFile())
 		require.NoError(t, err)
@@ -212,10 +210,8 @@ LOOP:
 		case <-rctx.Done():
 			t.Fatal("context canceled before test completed")
 		case err := <-walPanicked:
-			appState := cs.GetAppState()
-
 			// make sure we can make blocks after a crash
-			startNewStateAndWaitForBlock(ctx, t, consensusReplayConfig, appState.Height, blockDB, stateStore)
+			startNewStateAndWaitForBlock(ctx, t, consensusReplayConfig)
 
 			// stop consensus state and transactions sender (initFn)
 			cs.Stop()
@@ -1400,6 +1396,8 @@ func TestWALRoundsSkipper(t *testing.T) {
 	blockStore.chain = chain[:chainLen-1]
 	blockStore.commits = commits[:chainLen-1]
 
+	cfg = getConfig(t)
+	cfg.Consensus.SetWalFile(walFile)
 	privVal := privval.MustLoadOrGenFilePVFromConfig(cfg)
 
 	app := newKVStoreFunc(t)(logger, "")

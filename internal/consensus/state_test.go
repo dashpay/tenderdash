@@ -194,15 +194,8 @@ func TestStateEnterProposeYesPrivValidator(t *testing.T) {
 
 	// Check that Proposal, ProposalBlock, ProposalBlockParts are set.
 	rs := cs.GetRoundState()
-	if rs.Proposal == nil {
-		t.Error("rs.Proposal should be set")
-	}
-	if rs.ProposalBlock == nil {
-		t.Error("rs.ProposalBlock should be set")
-	}
-	if rs.ProposalBlockParts.Total() == 0 {
-		t.Error("rs.ProposalBlockParts should be set")
-	}
+	require.NotNil(t, rs.Proposal, "rs.Proposal should be set")
+	require.NotZero(t, rs.ProposalBlockParts.Total(), "rs.ProposalBlockParts should be set")
 
 	// if we're a validator, enterPropose should not timeout
 	ensureNoNewTimeout(t, timeoutCh, appState.state.ConsensusParams.Timeout.ProposeTimeout(round).Nanoseconds())
@@ -881,8 +874,6 @@ func TestStateLock_POLRelock(t *testing.T) {
 	ensureNewRound(t, newRoundCh, height, round)
 	ensureNewProposal(t, proposalCh, height, round)
 	rs := cs1.GetRoundState()
-	theBlock := rs.ProposalBlock
-	theBlockParts := rs.ProposalBlockParts
 	blockID := rs.BlockID()
 
 	ensurePrevote(t, voteCh, height, round)
@@ -901,6 +892,10 @@ func TestStateLock_POLRelock(t *testing.T) {
 
 	// timeout to new round.
 	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+
+	rs = cs1.GetRoundState()
+	theBlock := rs.ProposalBlock
+	theBlockParts := rs.ProposalBlockParts
 
 	/*
 		Round 1:
@@ -2687,9 +2682,9 @@ func TestCommitFromPreviousRound(t *testing.T) {
 	ensureNewValidBlock(t, validBlockCh, height, round)
 
 	rs := cs1.GetRoundState()
-	assert.True(t, rs.Step == cstypes.RoundStepPropose)
-	assert.True(t, rs.CommitRound == -1)
-	assert.True(t, rs.ProposalBlock == nil)
+	assert.Equal(t, rs.Step, cstypes.RoundStepPropose)
+	assert.Equal(t, rs.CommitRound, int32(-1))
+	assert.Nil(t, rs.ProposalBlock)
 	assert.True(t, rs.ProposalBlockParts.Header().Equals(blockID.PartSetHeader))
 	partSet, err = propBlock.MakePartSet(partSize)
 	require.NoError(t, err)

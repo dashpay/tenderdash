@@ -88,7 +88,7 @@ func blockPartMessageHandler(b *Behaviour, statsMsgQueue chan<- msgInfo) msgHand
 		added, err := b.AddProposalBlockPart(
 			ctx,
 			appState,
-			AddProposalBlockPartEvent{Msg: msg, PeerID: envelope.PeerID},
+			AddProposalBlockPartEvent{Msg: msg, PeerID: envelope.PeerID, FromReplay: envelope.fromReplay},
 		)
 
 		if added {
@@ -200,18 +200,20 @@ func walMiddleware(wal WALWriteFlusher, logger log.Logger) msgMiddlewareFunc {
 	return func(hd msgHandlerFunc) msgHandlerFunc {
 		return func(ctx context.Context, appState *AppState, envelope msgEnvelope) error {
 			mi := envelope.msgInfo
-			if mi.PeerID != "" {
-				err := wal.Write(mi)
-				if err != nil {
-					logger.Error("failed writing to WAL", "err", err)
-				}
-			} else {
-				err := wal.WriteSync(mi) // NOTE: fsync
-				if err != nil {
-					panic(fmt.Errorf(
-						"failed to write %v msg to consensus WAL due to %w; check your file system and restart the node",
-						mi, err,
-					))
+			if !envelope.fromReplay {
+				if mi.PeerID != "" {
+					err := wal.Write(mi)
+					if err != nil {
+						logger.Error("failed writing to WAL", "err", err)
+					}
+				} else {
+					err := wal.WriteSync(mi) // NOTE: fsync
+					if err != nil {
+						panic(fmt.Errorf(
+							"failed to write %v msg to consensus WAL due to %w; check your file system and restart the node",
+							mi, err,
+						))
+					}
 				}
 			}
 			return hd(ctx, appState, envelope)
