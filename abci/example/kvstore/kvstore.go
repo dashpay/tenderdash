@@ -48,11 +48,13 @@ type Application struct {
 	RetainBlocks int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
 
 	// preparedProposals stores info about all rounds that got PrepareProposal executed, used to detect
-	// duplicate PrepareProposal calls
+	// duplicate PrepareProposal calls.
+	// If `nil`, duplicate call detection is disabled.
 	preparedProposals map[int32]bool
 
 	// processedProposals stores info about all rounds that got ProcessProposal executed, used to detect
-	// duplicate ProcessProposal calls
+	// duplicate ProcessProposal calls.
+	// If `nil`, duplicate call detection is disabled.
 	processedProposals map[int32]bool
 
 	logger log.Logger
@@ -170,6 +172,22 @@ func WithVerifyTxFunc(verifyTx VerifyTxFunc) OptFunc {
 func WithPrepareTxsFunc(prepareTxs PrepareTxsFunc) OptFunc {
 	return func(app *Application) error {
 		app.prepareTxs = prepareTxs
+		return nil
+	}
+}
+
+// WithDuplicateRequestDetection makes it possible to disable duplicate request detection.
+// (enabled by default)
+func WithDuplicateRequestDetection(enabled bool) OptFunc {
+	return func(app *Application) error {
+		if enabled {
+			app.processedProposals = map[int32]bool{}
+			app.preparedProposals = map[int32]bool{}
+		} else {
+			app.processedProposals = nil
+			app.preparedProposals = nil
+		}
+
 		return nil
 	}
 }
@@ -300,10 +318,12 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 		return &abci.ResponsePrepareProposal{}, fmt.Errorf("MaxTxBytes must be positive, got: %d", req.MaxTxBytes)
 	}
 
-	if app.preparedProposals[req.Round] {
-		return &abci.ResponsePrepareProposal{}, fmt.Errorf("duplicate PrepareProposal call at height %d, round %d", req.Height, req.Round)
+	if app.preparedProposals != nil {
+		if app.preparedProposals[req.Round] {
+			return &abci.ResponsePrepareProposal{}, fmt.Errorf("duplicate PrepareProposal call at height %d, round %d", req.Height, req.Round)
+		}
+		app.preparedProposals[req.Round] = true
 	}
-	app.preparedProposals[req.Round] = true
 
 	txRecords, err := app.prepareTxs(*req)
 	if err != nil {
@@ -339,10 +359,12 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	if app.processedProposals[req.Round] {
-		return &abci.ResponseProcessProposal{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d", req.Height, req.Round)
+	if app.processedProposals != nil {
+		if app.processedProposals[req.Round] {
+			return &abci.ResponseProcessProposal{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d", req.Height, req.Round)
+		}
+		app.processedProposals[req.Round] = true
 	}
-	app.processedProposals[req.Round] = true
 
 	roundState, txResults, err := app.executeProposal(req.Height, req.Round, types.NewTxs(req.Txs))
 	if err != nil {
@@ -685,8 +707,12 @@ func (app *Application) newHeight(committedAppHash tmbytes.HexBytes, height int6
 		return err
 	}
 
-	app.preparedProposals = map[int32]bool{}
-	app.processedProposals = map[int32]bool{}
+	if app.preparedProposals != nil {
+		app.preparedProposals = map[int32]bool{}
+	}
+	if app.processedProposals != nil {
+		app.processedProposals = map[int32]bool{}
+	}
 
 	app.resetRoundStates()
 	if err := app.persistInterval(); err != nil {

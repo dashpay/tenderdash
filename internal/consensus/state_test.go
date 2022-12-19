@@ -266,7 +266,9 @@ func TestStateProposalTime(t *testing.T) {
 
 	config := configSetup(t)
 
-	cs1, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1})
+	app, err := kvstore.NewMemoryApp(kvstore.WithDuplicateRequestDetection(false))
+	require.NoError(t, err)
+	cs1, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1, application: app})
 	cs1.config.DontAutoPropose = true
 	cs1.config.CreateEmptyBlocksInterval = 0
 	cs1.state.ConsensusParams.Synchrony.MessageDelay = 5 * time.Millisecond
