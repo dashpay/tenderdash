@@ -10,7 +10,7 @@ require (
 	github.com/containerd/continuity v0.3.0 // indirect
 	github.com/dashevo/dashd-go v0.23.4
 	github.com/dashevo/dashd-go/btcec/v2 v2.0.6 // indirect
-	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20220324185745-cc53ca3c3a43 // indirect
+	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20221214161719-85b7e61b5573 // indirect
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fxamacker/cbor/v2 v2.4.0
 	github.com/go-chi/chi v4.1.2+incompatible // indirect

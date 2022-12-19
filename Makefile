@@ -22,15 +22,17 @@ GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}' github.com/gogo/protobuf)
 MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURR_DIR := $(dir $(MAKEFILE_PATH))
 
-BLS_DIR="$(CURR_DIR)third_party/bls-signatures/build"
-CGO_LDFLAGS ?= "-L$(BLS_DIR)/_deps/sodium-build \
--L$(BLS_DIR)/_deps/relic-build/lib \
--L$(BLS_DIR)/src \
--lbls-dash -lrelic_s -lgmp"
+BLS_DIR="$(CURR_DIR)third_party/bls-signatures"
 
-CGO_CXXFLAGS ?= "-I$(BLS_DIR)/_deps/relic-src/include \
--I$(BLS_DIR)/_deps/relic-build/include \
--I$(BLS_DIR)/src"
+CGO_LDFLAGS := "-L$(BLS_DIR)/build/depends/minialloc \
+-L$(BLS_DIR)/build/depends/relic/lib \
+-L$(BLS_DIR)/build/src \
+-ldashbls -lrelic_s -lgmp -lminialloc"
+
+CGO_CXXFLAGS := "-I$(BLS_DIR)/build/depends/relic/include \
+-I$(BLS_DIR)/src/depends/minialloc/include \
+-I$(BLS_DIR)/src/depends/relic/include \
+-I$(BLS_DIR)/src/include"
 
 GO := CGO_ENABLED=$(CGO_ENABLED) CGO_CXXFLAGS=$(CGO_CXXFLAGS) CGO_LDFLAGS=$(CGO_LDFLAGS) go
 
