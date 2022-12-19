@@ -22,15 +22,17 @@ GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}' github.com/gogo/protobuf)
 MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURR_DIR := $(dir $(MAKEFILE_PATH))
 
-BLS_DIR="$(CURR_DIR)/third_party/bls-signatures"
-CGO_LDFLAGS ?= "-L$(BLS_DIR)/build/_deps/sodium-build \
--L$(BLS_DIR)/build/_deps/relic-build/lib \
--L$(BLS_DIR)/build/src \
+BLS_DIR="$(CURR_DIR)third_party/bls-signatures/build"
+CGO_LDFLAGS ?= "-L$(BLS_DIR)/_deps/sodium-build \
+-L$(BLS_DIR)/_deps/relic-build/lib \
+-L$(BLS_DIR)/src \
 -lbls-dash -lrelic_s -lgmp"
 
-CGO_CXXFLAGS ?= "-I$(BLS_DIR)/build/_deps/relic-src/include \
--I$(BLS_DIR)/build/_deps/relic-build/include \
--I$(BLS_DIR)/build/src"
+CGO_CXXFLAGS ?= "-I$(BLS_DIR)/_deps/relic-src/include \
+-I$(BLS_DIR)/_deps/relic-build/include \
+-I$(BLS_DIR)/src"
+
+GO := CGO_ENABLED=$(CGO_ENABLED) CGO_CXXFLAGS=$(CGO_CXXFLAGS) CGO_LDFLAGS=$(CGO_LDFLAGS) go
 
 # handle ARM builds
 ifeq (arm,$(GOARCH))
@@ -109,11 +111,11 @@ install-bls: build-bls
 ###############################################################################
 
 build-binary:
-	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_FLAGS) -tags '$(BUILD_TAGS)' -o $(OUTPUT) ./cmd/tenderdash/
+	$(GO) build $(BUILD_FLAGS) -tags '$(BUILD_TAGS)' -o $(OUTPUT) ./cmd/tenderdash/
 .PHONY: build-binary
 
 install:
-	CGO_ENABLED=$(CGO_ENABLED) go install $(BUILD_FLAGS) -tags $(BUILD_TAGS) ./cmd/tenderdash
+	$(GO) install $(BUILD_FLAGS) -tags $(BUILD_TAGS) ./cmd/tenderdash
 .PHONY: install
 
 $(BUILDDIR)/:
@@ -178,11 +180,11 @@ proto-doc:
 ###############################################################################
 
 build_abci:
-	CGO_ENABLED=$(CGO_ENABLED) go build -mod=readonly ./abci/cmd/...
+	$(GO) go build -mod=readonly ./abci/cmd/...
 .PHONY: build_abci
 
 install_abci:
-	CGO_ENABLED=$(CGO_ENABLED) go install -mod=readonly ./abci/cmd/...
+	$(GO) go install -mod=readonly ./abci/cmd/...
 .PHONY: install_abci
 
 
