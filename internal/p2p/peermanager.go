@@ -42,7 +42,8 @@ const (
 type peerConnectionDirection int
 
 const (
-	peerConnectionIncoming peerConnectionDirection = iota + 1
+	peerConnectionNone peerConnectionDirection = iota
+	peerConnectionIncoming
 	peerConnectionOutgoing
 )
 
@@ -797,9 +798,7 @@ func (m *PeerManager) Accepted(peerID types.NodeID, peerOpts ...func(*peerInfo))
 		m.evict[upgradeFromPeer] = true
 	}
 
-	if m.options.MaxIncomingConnectionTime > 0 {
-		evictPeerAfterTimeout(m, peerID, peerConnectionIncoming, m.options.MaxIncomingConnectionTime)
-	}
+	evictPeerAfterTimeout(m, peerID, peerConnectionIncoming, m.options.MaxIncomingConnectionTime)
 
 	m.evictWaker.Wake()
 	return nil
@@ -1619,6 +1618,10 @@ func (p *peerInfo) Validate() error {
 	return nil
 }
 
+func (p *peerInfo) IsZero() bool {
+	return p == nil || len(p.ID) == 0
+}
+
 // peerAddressInfo contains information and statistics about a peer address.
 type peerAddressInfo struct {
 	Address         NodeAddress
@@ -1722,6 +1725,20 @@ func (m *PeerManager) UpdatePeerInfo(nodeID types.NodeID, modifier func(peerInfo
 	return m.store.Set(peer)
 }
 
+// getPeer() loads and returns peer from store, together with last connection direction, if any
+func (m *PeerManager) getPeer(peerID types.NodeID) (peerInfo, peerConnectionDirection) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	p, ok := m.store.Get(peerID)
+	if !ok {
+		return peerInfo{}, peerConnectionNone
+	}
+
+	connType := m.connected[peerID]
+	return p, connType
+}
+
 // IsDialingOrConnected returns true if dialing to a peer at the moment or already connected otherwise false
 func (m *PeerManager) IsDialingOrConnected(nodeID types.NodeID) bool {
 	m.mtx.Lock()
@@ -1742,13 +1759,8 @@ func evictPeerAfterTimeout(m *PeerManager, peerID types.NodeID, direction peerCo
 	if timeout > 0 {
 		time.AfterFunc(timeout, func() {
 			olderThan := time.Now().Add(-timeout)
-
-			m.mtx.Lock()
-			p, ok := m.store.Get(peerID)
-			connType := m.connected[peerID]
-			m.mtx.Unlock()
-
-			if ok && connType == direction && !p.Persistent && p.LastConnected.Before(olderThan) {
+			p, connType := m.getPeer(peerID)
+			if !p.IsZero() && connType == direction && !p.Persistent && p.LastConnected.Before(olderThan) {
 				m.EvictPeer(peerID)
 			}
 		})
