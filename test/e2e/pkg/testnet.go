@@ -125,7 +125,7 @@ type Node struct {
 	P2PMaxConnections            uint16
 	P2PMaxOutgoingConnections    uint16
 	P2PMaxIncomingConnectionTime time.Duration
-	P2PDisconnectCooldownPeriod  time.Duration
+	P2PIncomingConnectionWindow  time.Duration
 	Seeds                        []*Node
 	PersistentPeers              []*Node
 	Perturbations                []Perturbation
@@ -287,8 +287,8 @@ func LoadTestnet(file string) (*Testnet, error) {
 		if nodeManifest.P2PMaxIncomingConnectionTime > 0 {
 			node.P2PMaxIncomingConnectionTime = nodeManifest.P2PMaxIncomingConnectionTime
 		}
-		if nodeManifest.P2PDisconnectCooldownPeriod > 0 {
-			node.P2PDisconnectCooldownPeriod = nodeManifest.P2PDisconnectCooldownPeriod
+		if nodeManifest.P2PIncomingConnectionWindow > 0 {
+			node.P2PIncomingConnectionWindow = nodeManifest.P2PIncomingConnectionWindow
 		}
 
 		for _, p := range nodeManifest.Perturb {

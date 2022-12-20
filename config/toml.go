@@ -333,9 +333,10 @@ max-incoming-connection-attempts = {{ .P2P.MaxIncomingConnectionAttempts }}
 # Used on seed nodes to evict peers and make space for others.
 max-incoming-connection-time = "{{ .P2P.MaxIncomingConnectionTime }}"
 
-# disconnect-cooldown-period determines how long a node must wait before it can connect again.
-# Must be at least "2s".
-disconnect-cooldown-period = "{{ .P2P.DisconnectCooldownPeriod }}"
+# incoming-connection-window describes how often an IP address
+# can attempt to create a new connection. Defaults to 10
+# milliseconds, and cannot be less than 1 millisecond.
+incoming-connection-window = "{{ .P2P.IncomingConnectionWindow }}"
 
 # Comma separated list of peer IDs to keep private (will not be gossiped to other peers)
 # Warning: IPs will be exposed at /net_info, for more information https://github.com/tendermint/tendermint/issues/3055

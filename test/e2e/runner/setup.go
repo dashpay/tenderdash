@@ -308,8 +308,8 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 	if node.P2PMaxIncomingConnectionTime > 0 {
 		cfg.P2P.MaxIncomingConnectionTime = node.P2PMaxIncomingConnectionTime
 	}
-	if node.P2PDisconnectCooldownPeriod > 0 {
-		cfg.P2P.DisconnectCooldownPeriod = node.P2PDisconnectCooldownPeriod
+	if node.P2PIncomingConnectionWindow > 0 {
+		cfg.P2P.IncomingConnectionWindow = node.P2PIncomingConnectionWindow
 	}
 
 	cfg.Instrumentation.Prometheus = true

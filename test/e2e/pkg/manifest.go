@@ -169,7 +169,7 @@ type ManifestNode struct {
 	P2PMaxConnections            uint16        `toml:"p2p_max_connections"`
 	P2PMaxOutgoingConnections    uint16        `toml:"p2p_max_outgoing_connections"`
 	P2PMaxIncomingConnectionTime time.Duration `toml:"p2p_max_incoming_connection_time"`
-	P2PDisconnectCooldownPeriod  time.Duration `toml:"p2p_disconnect_cooldown_period"`
+	P2PIncomingConnectionWindow  time.Duration `toml:"p2p_incoming_connection_window"`
 
 	// Perturb lists perturbations to apply to the node after it has been
 	// started and synced with the network:
