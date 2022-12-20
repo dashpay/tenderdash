@@ -2254,6 +2254,11 @@ func (cs *State) verifyCommit(ctx context.Context, commit *types.Commit, peerID 
 		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
+	// We have a correct block, let's process it before applying the commit
+	if err := cs.ensureProcessProposal(ctx, block, commit.Round, cs.state); err != nil {
+		return false, fmt.Errorf("unable to process proposal: %w", err)
+	}
+
 	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, block); err != nil {
 		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}

@@ -719,9 +719,13 @@ func makeKVStoreCmd(logger log.Logger) func(*cobra.Command, []string) error {
 			err error
 		)
 		if flagPersist == "" {
-			app, err = kvstore.NewMemoryApp()
+			app, err = kvstore.NewMemoryApp(kvstore.WithDuplicateRequestDetection(false))
 		} else {
-			app, err = kvstore.NewPersistentApp(kvstore.DefaultConfig(flagPersist), kvstore.WithLogger(logger.With("module", "kvstore")))
+			app, err = kvstore.NewPersistentApp(
+				kvstore.DefaultConfig(flagPersist),
+				kvstore.WithLogger(logger.With("module", "kvstore")),
+				kvstore.WithDuplicateRequestDetection(false),
+			)
 		}
 		if err != nil {
 			return err
