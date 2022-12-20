@@ -38,6 +38,7 @@ func CommandVerbose(ctx context.Context, args ...string) error {
 }
 
 // tsWriter prepends each item in written data with current timestamp.
+// It is used mainly to add info about execution time to output of `e2e runner test`
 type tsWriter struct {
 	out     io.Writer
 	start   time.Time

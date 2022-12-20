@@ -545,17 +545,15 @@ func (m *PeerManager) HasDialedMaxPeers() bool {
 // becomes available. The caller must call Dialed() or DialFailed() for the
 // returned peer.
 func (m *PeerManager) DialNext(ctx context.Context) (NodeAddress, error) {
-	notFoundCounter := uint32(0)
-	for {
+	for counter := uint32(0); ; counter++ {
 		if address := m.TryDialNext(); (address != NodeAddress{}) {
 			return address, nil
 		}
 
-		notFoundCounter++
 		// If we have zero peers connected, we need to schedule a retry.
 		// This can happen, for example, when some retry delay is not fulfilled
 		if m.numDialingOrConnected() == 0 {
-			m.scheduleDial(ctx, m.retryDelay(notFoundCounter, false))
+			m.scheduleDial(ctx, m.retryDelay(counter+1, false))
 		}
 
 		select {
