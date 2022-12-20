@@ -1,10 +1,17 @@
 package sync
 
+import (
+	"sync"
+	"time"
+)
+
 // Waker is used to wake up a sleeper when some event occurs. It debounces
 // multiple wakeup calls occurring between each sleep, and wakeups are
 // non-blocking to avoid having to coordinate goroutines.
 type Waker struct {
 	wakeCh chan struct{}
+	mtx    sync.Mutex
+	timers []*time.Timer
 }
 
 // NewWaker creates a new Waker.
@@ -27,4 +34,25 @@ func (w *Waker) Wake() {
 	case w.wakeCh <- struct{}{}:
 	default:
 	}
+}
+
+// WakeAfter wakes up the sleeper after some delay.
+func (w *Waker) WakeAfter(delay time.Duration) {
+	w.mtx.Lock()
+	defer w.mtx.Unlock()
+
+	w.timers = append(w.timers, time.AfterFunc(delay, w.Wake))
+}
+
+// Close closes the waker and cleans up its resources
+func (w *Waker) Close() error {
+	w.mtx.Lock()
+	defer w.mtx.Unlock()
+
+	for _, timer := range w.timers {
+		if timer != nil {
+			timer.Stop()
+		}
+	}
+	return nil
 }

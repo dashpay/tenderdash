@@ -370,6 +370,14 @@ func NewPeerManager(selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptio
 func (m *PeerManager) SetLogger(logger log.Logger) {
 	m.logger = logger
 }
+
+// Close closes peer manager and frees up all resources
+func (m *PeerManager) Close() error {
+	m.evictWaker.Close()
+	m.dialWaker.Close()
+	return nil
+}
+
 // configurePeers configures peers in the peer store with ephemeral runtime
 // configuration, e.g. PersistentPeers. It also removes ourself, if we're in the
 // peer store. The caller must hold the mutex lock.
@@ -639,27 +647,19 @@ func (m *PeerManager) DialFailed(ctx context.Context, address NodeAddress) error
 		return err
 	}
 
-	// We spawn a goroutine that notifies DialNext() again when the retry
-	// timeout has elapsed, so that we can consider dialing it again. We
-	// calculate the retry delay outside the goroutine, since it must hold
-	// the mutex lock.
-	if d := m.retryDelay(addressInfo.DialFailures, peer.Persistent); d != 0 && d != retryNever {
-		go func() {
-			// Use an explicit timer with deferred cleanup instead of
-			// time.After(), to avoid leaking goroutines on PeerManager.Close().
-			timer := time.NewTimer(d)
-			defer timer.Stop()
-			select {
-			case <-timer.C:
-				m.dialWaker.Wake()
-			case <-ctx.Done():
-			}
-		}()
+	delay := m.retryDelay(addressInfo.DialFailures, peer.Persistent)
+	m.scheduleDial(ctx, delay)
+
+	return nil
+}
+
+// scheduleDial will dial peers after some delay
+func (m *PeerManager) scheduleDial(ctx context.Context, delay time.Duration) {
+	if delay > 0 && delay != retryNever {
+		m.dialWaker.WakeAfter(delay)
 	} else {
 		m.dialWaker.Wake()
 	}
-
-	return nil
 }
 
 // Dialed marks a peer as successfully dialed. Any further connections will be

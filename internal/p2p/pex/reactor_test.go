@@ -301,6 +301,7 @@ func setupSingle(ctx context.Context, t *testing.T) *singleTestReactor {
 	peerUpdates := p2p.NewPeerUpdates(peerCh, chBuf)
 	peerManager, err := p2p.NewPeerManager(nodeID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 	require.NoError(t, err)
+	defer peerManager.Close()
 
 	chCreator := func(context.Context, *p2p.ChannelDescriptor) (p2p.Channel, error) {
 		return pexCh, nil

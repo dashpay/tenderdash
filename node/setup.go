@@ -274,13 +274,17 @@ func createPeerManager(
 		return nil, peerDB.Close, fmt.Errorf("failed to create peer manager: %w", err)
 	}
 	peerManager.SetLogger(logger)
+	closer := func() error {
+		peerManager.Close()
+		return peerDB.Close()
+	}
 	for _, peer := range peers {
 		if _, err := peerManager.Add(peer); err != nil {
-			return nil, peerDB.Close, fmt.Errorf("failed to add peer %q: %w", peer, err)
+			return nil, closer, fmt.Errorf("failed to add peer %q: %w", peer, err)
 		}
 	}
 
-	return peerManager, peerDB.Close, nil
+	return peerManager, closer, nil
 }
 
 func createRouter(
