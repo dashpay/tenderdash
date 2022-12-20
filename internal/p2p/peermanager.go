@@ -337,7 +337,7 @@ func NewPeerManager(selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptio
 	peerManager := &PeerManager{
 		selfID:     selfID,
 		options:    options,
-		rand:       rand.New(rand.NewSource(time.Now().UnixNano())), // nolint:gosec
+		rand:       rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec
 		dialWaker:  tmsync.NewWaker(),
 		evictWaker: tmsync.NewWaker(),
 		logger:     log.NewNopLogger(),
@@ -554,7 +554,7 @@ func (m *PeerManager) DialNext(ctx context.Context) (NodeAddress, error) {
 		notFoundCounter++
 		// If we have zero peers connected, we need to schedule a retry.
 		// This can happen, for example, when some retry delay is not fulfilled
-		if len(m.connected)+len(m.dialing) == 0 {
+		if m.numDialingOrConnected() == 0 {
 			m.scheduleDial(ctx, m.retryDelay(notFoundCounter, false))
 		}
 
@@ -1089,7 +1089,7 @@ func (m *PeerManager) Advertise(peerID types.NodeID, limit uint16) []NodeAddress
 					// 10% of the time we'll randomly insert a "loosing"
 					// peer.
 
-					// nolint:gosec // G404: Use of weak random number generator
+					//nolint:gosec // G404: Use of weak random number generator
 					if numAddresses <= int(limit) || rand.Intn((meanAbsScore*2)+1) <= scores[peer.ID]+1 || rand.Intn((idx+1)*10) <= idx+1 {
 						addresses = append(addresses, addressInfo.Address)
 						addedLastIteration = true
@@ -1800,6 +1800,12 @@ func (m *PeerManager) IsDialingOrConnected(nodeID types.NodeID) bool {
 	defer m.mtx.Unlock()
 	_, ok := m.connected[nodeID]
 	return m.dialing[nodeID] || ok
+}
+
+func (m *PeerManager) numDialingOrConnected() int {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	return len(m.connected) + len(m.dialing)
 }
 
 // SetProTxHashToPeerInfo sets a proTxHash in peerInfo.proTxHash to keep this value in a store
