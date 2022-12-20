@@ -225,7 +225,13 @@ func makeNode(
 
 	weAreOnlyValidator := onlyValidatorIsUs(state, proTxHash)
 
-	peerManager, peerCloser, err := createPeerManager(cfg, dbProvider, nodeKey.ID, nodeMetrics.p2p)
+	peerManager, peerCloser, err := createPeerManager(
+		cfg,
+		dbProvider,
+		nodeKey.ID,
+		nodeMetrics.p2p,
+		logger.With("module", "peermanager"),
+	)
 	closers = append(closers, peerCloser)
 	if err != nil {
 		return nil, combineCloseError(
@@ -390,7 +396,12 @@ func makeNode(
 		nodeMetrics.consensus.BlockSyncing.Set(1)
 	}
 
-	node.services = append(node.services, pex.NewReactor(logger, peerManager, node.router.OpenChannel, peerManager.Subscribe))
+	node.services = append(node.services, pex.NewReactor(
+		logger.With("module", "pex"),
+		peerManager,
+		node.router.OpenChannel,
+		peerManager.Subscribe),
+	)
 
 	// Set up state sync reactor, and schedule a sync if requested.
 	// FIXME The way we do phased startups (e.g. replay -> block sync -> consensus) is very messy,

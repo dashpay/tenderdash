@@ -9,13 +9,14 @@ import (
 	"sort"
 	"time"
 
-	sync "github.com/sasha-s/go-deadlock"
-
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/orderedcode"
+	"github.com/rs/zerolog"
+	sync "github.com/sasha-s/go-deadlock"
 	dbm "github.com/tendermint/tm-db"
 
 	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
+	"github.com/tendermint/tendermint/libs/log"
 	p2pproto "github.com/tendermint/tendermint/proto/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
@@ -304,6 +305,7 @@ type PeerManager struct {
 	rand       *rand.Rand
 	dialWaker  *tmsync.Waker // wakes up DialNext() on relevant peer changes
 	evictWaker *tmsync.Waker // wakes up EvictNext() on relevant peer changes
+	logger     log.Logger
 
 	mtx           sync.Mutex
 	store         *peerStore
@@ -338,6 +340,7 @@ func NewPeerManager(selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptio
 		rand:       rand.New(rand.NewSource(time.Now().UnixNano())), // nolint:gosec
 		dialWaker:  tmsync.NewWaker(),
 		evictWaker: tmsync.NewWaker(),
+		logger:     log.NewNopLogger(),
 		metrics:    NopMetrics(),
 
 		store:         store,
@@ -363,6 +366,10 @@ func NewPeerManager(selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptio
 	return peerManager, nil
 }
 
+// SetLogger sets a logger for the PeerManager
+func (m *PeerManager) SetLogger(logger log.Logger) {
+	m.logger = logger
+}
 // configurePeers configures peers in the peer store with ephemeral runtime
 // configuration, e.g. PersistentPeers. It also removes ourself, if we're in the
 // peer store. The caller must hold the mutex lock.

@@ -197,6 +197,7 @@ func createPeerManager(
 	dbProvider config.DBProvider,
 	nodeID types.NodeID,
 	metrics *p2p.Metrics,
+	logger log.Logger,
 ) (*p2p.PeerManager, closer, error) {
 
 	selfAddr, err := p2p.ParseNodeAddress(nodeID.AddressString(cfg.P2P.ExternalAddress))
@@ -272,7 +273,7 @@ func createPeerManager(
 	if err != nil {
 		return nil, peerDB.Close, fmt.Errorf("failed to create peer manager: %w", err)
 	}
-
+	peerManager.SetLogger(logger)
 	for _, peer := range peers {
 		if _, err := peerManager.Add(peer); err != nil {
 			return nil, peerDB.Close, fmt.Errorf("failed to add peer %q: %w", peer, err)
