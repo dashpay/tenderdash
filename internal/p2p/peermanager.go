@@ -779,14 +779,6 @@ func (m *PeerManager) Accepted(peerID types.NodeID, peerOpts ...func(*peerInfo))
 		peer = m.newPeerInfo(peerID)
 	}
 
-	if !peer.LastDisconnected.IsZero() && time.Since(peer.LastDisconnected) < m.options.DisconnectCooldownPeriod {
-		return fmt.Errorf(
-			"peer in disconnect cooldown period %s, last disconnect %s",
-			m.options.DisconnectCooldownPeriod.String(),
-			peer.LastDisconnected.String(),
-		)
-	}
-
 	// reset this to avoid penalizing peers for their past transgressions
 	for _, addr := range peer.AddressInfo {
 		addr.DialFailures = 0
