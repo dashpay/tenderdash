@@ -577,29 +577,36 @@ func (m *PeerManager) TryDialNext() NodeAddress {
 	// MaxConnectedUpgrade allows us to probe additional peers that have a
 	// higher score than any other peers, and if successful evict it.
 	if m.options.MaxConnected > 0 && len(m.connected)+len(m.dialing) >= int(m.options.MaxConnected)+int(m.options.MaxConnectedUpgrade) {
+		m.logger.Trace("max connected reached, skipping dial attempt")
 		return NodeAddress{}
 	}
 
 	cinfo := m.getConnectedInfo()
 	if m.options.MaxOutgoingConnections > 0 && cinfo.outgoing >= m.options.MaxOutgoingConnections {
+		m.logger.Trace("max outgoing connections reached, skipping dial attempt")
 		return NodeAddress{}
 	}
 
 	for _, peer := range m.store.Ranked() {
 		if m.dialing[peer.ID] || m.isConnected(peer.ID) {
+			m.logger.Trace("peer dialing or connected, skipping", "peer", peer)
 			continue
 		}
 
 		if !peer.LastDisconnected.IsZero() && time.Since(peer.LastDisconnected) < m.options.DisconnectCooldownPeriod {
+			m.logger.Trace("peer within disconnect cooldown period, skipping", "peer", peer, "cooldown_period", m.options.DisconnectCooldownPeriod)
 			continue
 		}
 
 		for _, addressInfo := range peer.AddressInfo {
-			if time.Since(addressInfo.LastDialFailure) < m.retryDelay(addressInfo.DialFailures, peer.Persistent) {
+			delay := m.retryDelay(addressInfo.DialFailures, peer.Persistent)
+			if time.Since(addressInfo.LastDialFailure) < delay {
+				m.logger.Trace("not dialing peer due to retry delay", "peer", peer, "delay", delay, "last_failure", addressInfo.LastDialFailure)
 				continue
 			}
 
 			if id, ok := m.store.Resolve(addressInfo.Address); ok && (m.isConnected(id) || m.dialing[id]) {
+				m.logger.Trace("peer address already dialing", "peer", peer, "address", addressInfo.Address.String())
 				continue
 			}
 
@@ -612,6 +619,12 @@ func (m *PeerManager) TryDialNext() NodeAddress {
 			// peer (since they're ordered by score via peerStore.Ranked).
 			if m.options.MaxConnected > 0 && len(m.connected) >= int(m.options.MaxConnected) {
 				upgradeFromPeer := m.findUpgradeCandidate(peer.ID, peer.Score())
+				m.logger.Trace("max connected reached, checking upgrade candidate",
+					"peer", peer,
+					"max_connected", m.options.MaxConnected,
+					"connected", len(m.connected),
+					"upgrade_candidate", upgradeFromPeer,
+				)
 				if upgradeFromPeer == "" {
 					return NodeAddress{}
 				}
@@ -1635,6 +1648,33 @@ func (p *peerInfo) Validate() error {
 
 func (p *peerInfo) IsZero() bool {
 	return p == nil || len(p.ID) == 0
+}
+
+func (p *peerInfo) MarshalZerologObject(e *zerolog.Event) {
+	if p == nil {
+		return
+	}
+
+	e.Str("node_id", string(p.ID))
+	if len(p.ProTxHash) != 0 {
+		e.Str("protxhash", p.ProTxHash.ShortString())
+	}
+	e.Time("last_connected", p.LastConnected)
+	e.Time("last_disconnected", p.LastDisconnected)
+	if p.Persistent {
+		e.Bool("persistent", p.Persistent)
+	}
+	e.Int64("height", p.Height)
+	if p.FixedScore != 0 {
+		e.Int16("fixed_score", int16(p.FixedScore))
+	}
+	if p.MutableScore != 0 {
+		e.Int64("mutable_score", p.MutableScore)
+	}
+	if p.Inactive {
+		e.Bool("inactive", p.Inactive)
+	}
+	e.Int16("score", int16(p.Score()))
 }
 
 // peerAddressInfo contains information and statistics about a peer address.
