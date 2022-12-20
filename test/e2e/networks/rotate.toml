@@ -49,6 +49,12 @@ validator09 = 100
 [node.seed01]
 mode = "seed"
 perturb = ["restart"]
+persistent_peers = ["validator01"]
+
+p2p_max_connections = 4
+p2p_max_outgoing_connections = 2
+p2p_max_incoming_connection_time = "5s"
+p2p_incoming_connection_window = "10s"
 
 [node.validator01]
 seeds = ["seed01"]
