@@ -15,10 +15,7 @@ CGO_CXXFLAGS ?= "-I$(BLS_DIR)/build/depends/relic/include \
 -I$(BLS_DIR)/src/depends/relic/include \
 -I$(BLS_DIR)/src/include"
 
-GO := CGO_ENABLED=$(CGO_ENABLED) CGO_CXXFLAGS=$(CGO_CXXFLAGS) CGO_LDFLAGS=$(CGO_LDFLAGS) go
-
-print_var:
-	@echo $(GO)
+GO := CGO_ENABLED=$(CGO_ENABLED) CGO_CXXFLAGS="$(CGO_CXXFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go
 
 docker:
 	docker build --tag tenderdash/e2e-node -f docker/Dockerfile ../..
@@ -44,7 +41,7 @@ runner/rotate: runner tests e2e/app/compile
 generator:
 	$(GO) build -o build/generator ./generator
 
-runner: print_var
+runner:
 	$(GO) build -o build/runner ./runner
 
 tests:
