@@ -54,6 +54,7 @@ func TestTSWriterMultiline(t *testing.T) {
 		[]byte("My name is "),
 		[]byte("John Doe."),
 		[]byte("\n"),
+		[]byte("\n"),
 		[]byte("I like drinking coffee.\n"),
 		[]byte("\n"),
 		{},
@@ -80,6 +81,6 @@ func TestTSWriterMultiline(t *testing.T) {
 	}
 	out := buf.Bytes()
 
-	// t.Log(fmt.Sprintf("%x", tc.input[len(tc.input)-1]))
+	t.Log("\n" + string(out))
 	assert.Len(t, out, length+newlines*TimePrefixLen, "new lines: %d", newlines)
 }
