@@ -40,6 +40,9 @@ jobs:
         name: Install BLS library
         if: "env.GIT_DIFF != ''"
 
+      - name: Setup upterm session
+        uses: lhotari/action-upterm@v1
+
       - name: Build
         working-directory: test/e2e
         # Run two make jobs in parallel, since we can't run steps in parallel.
