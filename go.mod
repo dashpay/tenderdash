@@ -10,7 +10,7 @@ require (
 	github.com/containerd/continuity v0.3.0 // indirect
 	github.com/dashevo/dashd-go v0.23.4
 	github.com/dashevo/dashd-go/btcec/v2 v2.0.6 // indirect
-	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20221214161719-85b7e61b5573 // indirect
+	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20221214161719-85b7e61b5573
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fxamacker/cbor/v2 v2.4.0
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
@@ -69,6 +69,7 @@ require (
 	github.com/go-pkgz/rest v1.5.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.2 // indirect
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
+	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c // indirect
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
 )
 
@@ -229,7 +230,6 @@ require (
 	github.com/subosito/gotenv v1.4.0 // indirect
 	github.com/sylvia7788/contextcheck v1.0.4 // indirect
 	github.com/tdakkota/asciicheck v0.1.1 // indirect
-	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c // indirect
 	github.com/tetafro/godot v1.4.11 // indirect
 	github.com/timakin/bodyclose v0.0.0-20210704033933-f49887972144 // indirect
 	github.com/tomarrell/wrapcheck/v2 v2.6.2 // indirect

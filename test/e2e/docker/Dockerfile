@@ -1,10 +1,11 @@
 # We need to build in a Linux environment to support C libraries, e.g. RocksDB.
 # We use Debian instead of Alpine, so that we can use binary database packages
 # instead of spending time compiling them.
-FROM golang:1.19-bullseye
+FROM golang:1.19-alpine3.17
 
-RUN apt-get -qq update -y && apt-get -qq upgrade -y >/dev/null
-RUN apt-get -qq install -y cmake sudo libsodium-dev libgmp-dev libleveldb-dev librocksdb-dev python3-dev >/dev/null
+RUN apk update && \
+    apk upgrade && \
+    apk add bash git gmp-dev sudo cmake build-base python3-dev leveldb-dev
 
 # Set up build directory /src/tenderdash
 WORKDIR /src/tenderdash
@@ -17,25 +18,25 @@ RUN go install github.com/go-delve/delve/cmd/dlv@latest
 COPY go.mod go.sum ./
 RUN go mod download
 
+# Copy Tenderdash source
+COPY . .
+
 # Install BLS library
-COPY third_party ./third_party
-COPY test/Makefile ./test/Makefile
-COPY Makefile ./
 RUN make build-bls
 
 ENV CGO_ENABLE=1
 
-ENV CGO_LDFLAGS="-L/src/tenderdash/third_party/bls-signatures/build/_deps/sodium-build \
--L/src/tenderdash/third_party/bls-signatures/build/_deps/relic-build/lib \
+ENV CGO_LDFLAGS="\
+-L/src/tenderdash/third_party/bls-signatures/build/depends/minialloc \
+-L/src/tenderdash/third_party/bls-signatures/build/depends/relic/lib \
 -L/src/tenderdash/third_party/bls-signatures/build/src \
--lbls-dash -lrelic_s -lgmp"
+-ldashbls -lrelic_s -lgmp -lminialloc"
 
-ENV CGO_CXXFLAGS="-I/src/tenderdash/third_party/bls-signatures/build/_deps/relic-src/include \
--I/src/tenderdash/third_party/bls-signatures/build/_deps/relic-build/include \
--I/src/tenderdash/third_party/bls-signatures/build/src"
-
-# Copy Tenderdash source
-COPY . .
+ENV CGO_CXXFLAGS="\
+-I/src/tenderdash/third_party/bls-signatures/build/depends/relic/include \
+-I/src/tenderdash/third_party/bls-signatures/src/depends/minialloc/include \
+-I/src/tenderdash/third_party/bls-signatures/src/depends/relic/include \
+-I/src/tenderdash/third_party/bls-signatures/src/include"
 
 COPY test/e2e/docker/entrypoint* /usr/bin/
 
