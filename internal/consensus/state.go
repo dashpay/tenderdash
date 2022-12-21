@@ -1017,12 +1017,6 @@ func (cs *State) handleMsg(ctx context.Context, mi msgInfo, fromReplay bool) {
 		// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
 		added, err = cs.addProposalBlockPart(ctx, msg, peerID)
 
-		if added && cs.ProposalBlockParts != nil && cs.ProposalBlockParts.IsComplete() && fromReplay {
-			if err := cs.ensureProcessProposal(ctx, cs.ProposalBlock, msg.Round, cs.state); err != nil {
-				panic(err)
-			}
-		}
-
 		// We unlock here to yield to any routines that need to read the the RoundState.
 		// Previously, this code held the lock from the point at which the final block
 		// part was received until the block executed against the application.
@@ -1712,6 +1706,12 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		// Unknown error, so we panic
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
+
+	// Validate the block.
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, cs.ProposalBlock); err != nil {
+		panic(fmt.Sprintf("prevote on invalid block: %v", err))
+	}
+
 	cs.metrics.MarkProposalProcessed(true)
 
 	/*
@@ -2099,10 +2099,6 @@ func (cs *State) finalizeCommit(ctx context.Context, height int64) {
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, block); err != nil {
-		panic(fmt.Errorf("+2/3 committed an invalid block %X: %w", cs.CurrentRoundState.AppHash, err))
-	}
-
 	logger.Info(
 		"finalizing commit of block",
 		"hash", tmstrings.LazyBlockHash(block),
@@ -2308,14 +2304,26 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	)
 
 	block, blockParts := cs.ProposalBlock, cs.ProposalBlockParts
-	// Save to blockStore.
+
 	if commit != nil {
 		height = commit.Height
 		round = commit.Round
-		cs.blockStore.SaveBlock(block, blockParts, commit)
 	} else {
 		height = cs.Height
 		round = cs.Round
+	}
+
+	if err := cs.ensureProcessProposal(ctx, block, round, cs.state); err != nil {
+		panic("cannot finalize commit; cannot process proposal block: " + err.Error())
+	}
+
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, block); err != nil {
+		panic(fmt.Errorf("+2/3 committed an invalid block %X: %w", cs.CurrentRoundState.AppHash, err))
+	}
+
+	// Save to blockStore.
+	if commit != nil {
+		cs.blockStore.SaveBlock(block, blockParts, commit)
 	}
 
 	// Write EndHeightMessage{} for this height, implying that the blockstore
@@ -2337,13 +2345,6 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 			"failed to write %v msg to consensus WAL due to %w; check your file system and restart the node",
 			endMsg, err,
 		))
-	}
-
-	// Execute and commit the block, update and save the state, and update the mempool.
-	// NOTE The block.AppHash wont reflect these txs until the next block.
-	if err := cs.ensureProcessProposal(ctx, block, round, cs.state); err != nil {
-		logger.Error("cannot apply commit", "error", err)
-		return
 	}
 
 	// Create a copy of the state for staging and an event cache for txs.
