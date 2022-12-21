@@ -3144,7 +3144,10 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 	proposer := css[0]
 	otherNode := css[1]
 
-	block, err := sf.MakeBlock(proposer.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
+	css0AppState := proposer.GetAppState()
+	css1AppState := otherNode.GetAppState()
+
+	block, err := sf.MakeBlock(css0AppState.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
 	require.NoError(t, err)
 	block.CoreChainLockedHeight = 1
 
@@ -3153,8 +3156,8 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 		block.BlockID(nil),
 		block.Height,
 		0,
-		proposer.Votes.Precommits(0),
-		proposer.Validators,
+		css0AppState.Votes.Precommits(0),
+		css0AppState.Validators,
 		privvals,
 		block.StateID(),
 	)
@@ -3171,14 +3174,14 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 	parts, err := block.MakePartSet(999999999)
 	require.NoError(t, err)
 
-	peerID := proposer.Validators.Proposer.NodeAddress.NodeID
-	otherNode.Proposal = proposal
-	otherNode.ProposalBlock = block
-	otherNode.ProposalBlockParts = parts
-	otherNode.updateRoundStep(commit.Round, cstypes.RoundStepPrevote)
+	peerID := css0AppState.Validators.Proposer.NodeAddress.NodeID
+	css1AppState.Proposal = proposal
+	css1AppState.ProposalBlock = block
+	css1AppState.ProposalBlockParts = parts
+	css1AppState.updateRoundStep(commit.Round, cstypes.RoundStepPrevote)
 
 	// This is where error "2/3 committed an invalid block" occurred before
-	added, err := otherNode.tryAddCommit(ctx, commit, peerID)
+	added, err := otherNode.behaviour.TryAddCommit(ctx, &css1AppState, TryAddCommitEvent{Commit: commit, PeerID: peerID})
 	assert.True(t, added)
 	assert.NoError(t, err)
 }

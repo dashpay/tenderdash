@@ -314,6 +314,7 @@ func NewState(
 			TryAddCommitType: &TryAddCommitCommand{
 				logger:         cs.logger,
 				validator:      cs.blockExecutor,
+				blockExec:      cs.blockExecutor,
 				eventPublisher: eventPublisher,
 			},
 			AddCommitType: &AddCommitCommand{

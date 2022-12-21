@@ -21,6 +21,7 @@ type TryAddCommitCommand struct {
 	// create and execute blocks
 	validator      validator
 	eventPublisher *EventPublisher
+	blockExec      *blockExecutor
 }
 
 // Execute ...
@@ -81,6 +82,15 @@ func (cs *TryAddCommitCommand) verifyCommit(ctx context.Context, appState *AppSt
 	verified, err = appState.verifyCommit(ctx, commit, peerID, ignoreProposalBlock)
 	if !verified || err != nil {
 		return verified, err
+	}
+	// We have a correct block, let's process it before applying the commit
+	err = cs.blockExec.process(ctx, appState, commit.Round)
+	if err != nil {
+		return false, fmt.Errorf("unable to process proposal: %w", err)
+	}
+	err = cs.blockExec.validate(ctx, appState)
+	if err != nil {
+		return false, err
 	}
 	if err := cs.validator.validate(ctx, appState); err != nil {
 		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
