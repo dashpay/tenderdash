@@ -1,4 +1,4 @@
-# We need to build in a Linux environment to support C libraries, e.g. RocksDB.
+# We need to build in a Linux environment to support C libraries
 # We use Debian instead of Alpine, so that we can use binary database packages
 # instead of spending time compiling them.
 FROM golang:1.19-alpine3.17
@@ -18,25 +18,16 @@ RUN go install github.com/go-delve/delve/cmd/dlv@latest
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Copy Tenderdash source
-COPY . .
+COPY third_party ./third_party
+COPY test/Makefile ./test/Makefile
+COPY Makefile ./
+COPY .git ./.git
 
 # Install BLS library
 RUN make build-bls
 
-ENV CGO_ENABLE=1
-
-ENV CGO_LDFLAGS="\
--L/src/tenderdash/third_party/bls-signatures/build/depends/minialloc \
--L/src/tenderdash/third_party/bls-signatures/build/depends/relic/lib \
--L/src/tenderdash/third_party/bls-signatures/build/src \
--ldashbls -lrelic_s -lgmp -lminialloc"
-
-ENV CGO_CXXFLAGS="\
--I/src/tenderdash/third_party/bls-signatures/build/depends/relic/include \
--I/src/tenderdash/third_party/bls-signatures/src/depends/minialloc/include \
--I/src/tenderdash/third_party/bls-signatures/src/depends/relic/include \
--I/src/tenderdash/third_party/bls-signatures/src/include"
+# Copy Tenderdash source
+COPY . .
 
 COPY test/e2e/docker/entrypoint* /usr/bin/
 
