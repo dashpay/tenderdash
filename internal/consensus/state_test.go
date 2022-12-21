@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tendermint/tendermint/abci/example/kvstore"
 	abci "github.com/tendermint/tendermint/abci/types"
 	abcimocks "github.com/tendermint/tendermint/abci/types/mocks"
 	"github.com/tendermint/tendermint/crypto"
@@ -20,6 +21,9 @@ import (
 	"github.com/tendermint/tendermint/internal/mempool"
 	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
 	tmquery "github.com/tendermint/tendermint/internal/pubsub/query"
+	sf "github.com/tendermint/tendermint/internal/state/test/factory"
+	"github.com/tendermint/tendermint/internal/test/factory"
+
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
@@ -265,7 +269,9 @@ func TestStateProposalTime(t *testing.T) {
 
 	config := configSetup(t)
 
-	cs1, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1})
+	app, err := kvstore.NewMemoryApp(kvstore.WithDuplicateRequestDetection(false))
+	require.NoError(t, err)
+	cs1, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1, application: app})
 	appState := cs1.GetAppState()
 	height, round := appState.Height, appState.Round
 	cs1.config.DontAutoPropose = true
@@ -3110,6 +3116,71 @@ func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
 
 	ensurePrecommit(t, voteCh, height, round)
 	validatePrecommit(ctx, t, cs1, round, -1, vss[0], nil, nil)
+}
+
+// TestStateTryAddCommitCallsProcessProposal ensures that CurrentRoundState is updated by calling Process Proposal
+// before commit received from peer is verified.
+//
+// Proposer generates a proposal, creates a commit and sends it to otherNode. OtherNode correctly verifies the commit.
+//
+// This test ensures that a bug "2/3 committed an invalid block" when processing received commits will not reappear.
+func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	config := configSetup(t)
+
+	css := makeConsensusState(
+		ctx,
+		t,
+		config,
+		2,
+		t.Name(),
+		newTickerFunc(),
+	)
+	privvals := []types.PrivValidator{}
+	for _, c := range css {
+		privvals = append(privvals, c.privValidator.PrivValidator)
+	}
+	proposer := css[0]
+	otherNode := css[1]
+
+	block, err := sf.MakeBlock(proposer.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
+	require.NoError(t, err)
+	block.CoreChainLockedHeight = 1
+
+	commit, err := factory.MakeCommit(
+		ctx,
+		block.BlockID(nil),
+		block.Height,
+		0,
+		proposer.Votes.Precommits(0),
+		proposer.Validators,
+		privvals,
+		block.StateID(),
+	)
+	require.NoError(t, err)
+
+	proposal := types.NewProposal(
+		block.Height,
+		block.CoreChainLockedHeight,
+		0,
+		-1,
+		commit.BlockID,
+		block.Time)
+
+	parts, err := block.MakePartSet(999999999)
+	require.NoError(t, err)
+
+	peerID := proposer.Validators.Proposer.NodeAddress.NodeID
+	otherNode.Proposal = proposal
+	otherNode.ProposalBlock = block
+	otherNode.ProposalBlockParts = parts
+	otherNode.updateRoundStep(commit.Round, cstypes.RoundStepPrevote)
+
+	// This is where error "2/3 committed an invalid block" occurred before
+	added, err := otherNode.tryAddCommit(ctx, commit, peerID)
+	assert.True(t, added)
+	assert.NoError(t, err)
 }
 
 // TestStateTimestamp_ProposalMatch tests that a validator prevotes a
