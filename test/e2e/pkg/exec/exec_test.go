@@ -8,20 +8,22 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
+const timePrefixLen = 11
+
 func TestTSWriter(t *testing.T) {
 	// length of time added to output
-	const TimePrefixLen = 11
 	type testCase struct {
-		input []byte
+		input     []byte
+		expectLen int
 	}
 
 	testCases := []testCase{
-		{nil},
-		{[]byte{}},
-		{[]byte{'\n'}},
-		{[]byte("hi")},
-		{[]byte("hi\n")},
-		{[]byte("test\nnew\nlines\n\n\nWonder if it will work")},
+		{nil, 0},
+		{[]byte{}, 0},
+		{[]byte{'\n'}, 1},
+		{[]byte("hi"), timePrefixLen + 2},
+		{[]byte("hi\n"), timePrefixLen + 3},
+		{[]byte("test\nnew\nlines\n\n\nWonder if it will work"), timePrefixLen * 6},
 	}
 
 	for _, tc := range testCases {
@@ -39,15 +41,12 @@ func TestTSWriter(t *testing.T) {
 				// We don't add it if last char is a new line, as it will only switch the flag to add prefix in next Write()
 				newlines++
 			}
-			assert.Len(t, out, len(tc.input)+newlines*TimePrefixLen, "new lines: %d", newlines)
+			assert.Len(t, out, len(tc.input)+newlines*timePrefixLen, "new lines: %d", newlines)
 		})
 	}
 }
 
 func TestTSWriterMultiline(t *testing.T) {
-	// length of time added to output
-	const TimePrefixLen = 11
-
 	tc := [][]byte{
 		[]byte("Hi\n"),
 		[]byte("My name is "),
@@ -66,19 +65,16 @@ func TestTSWriterMultiline(t *testing.T) {
 		nil,
 		{},
 	}
+	expectLen := 76 + 10*timePrefixLen
 
 	buf := bytes.Buffer{}
 
 	writer := &tsWriter{out: &buf, start: time.Now()}
-	newlines := 1
-	length := 0
 	for _, item := range tc {
 		_, err := writer.Write(item)
 		assert.NoError(t, err)
-		length += len(item)
-		newlines += bytes.Count(item, []byte{'\n'})
 	}
 	out := buf.Bytes()
-	assert.Len(t, out, length+newlines*TimePrefixLen, "new lines: %d", newlines)
+	assert.Len(t, out, expectLen)
 	t.Log("\n" + string(out))
 }
