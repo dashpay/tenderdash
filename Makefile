@@ -182,11 +182,11 @@ proto-doc:
 ###############################################################################
 
 build_abci:
-	$(GO) go build -mod=readonly ./abci/cmd/...
+	$(GO) build -mod=readonly ./abci/cmd/...
 .PHONY: build_abci
 
 install_abci:
-	$(GO) go install -mod=readonly ./abci/cmd/...
+	$(GO) install -mod=readonly ./abci/cmd/...
 .PHONY: install_abci
 
 
