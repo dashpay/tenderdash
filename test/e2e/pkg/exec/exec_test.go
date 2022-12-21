@@ -39,7 +39,6 @@ func TestTSWriter(t *testing.T) {
 				// We don't add it if last char is a new line, as it will only switch the flag to add prefix in next Write()
 				newlines++
 			}
-			// t.Log(fmt.Sprintf("%x", tc.input[len(tc.input)-1]))
 			assert.Len(t, out, len(tc.input)+newlines*TimePrefixLen, "new lines: %d", newlines)
 		})
 	}
@@ -80,7 +79,6 @@ func TestTSWriterMultiline(t *testing.T) {
 		newlines += bytes.Count(item, []byte{'\n'})
 	}
 	out := buf.Bytes()
-
-	t.Log("\n" + string(out))
 	assert.Len(t, out, length+newlines*TimePrefixLen, "new lines: %d", newlines)
+	t.Log("\n" + string(out))
 }
