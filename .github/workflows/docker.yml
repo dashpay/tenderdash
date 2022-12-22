@@ -82,6 +82,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            TENDERMINT_BUILD_OPTIONS="${{ steps.suffix.TENDERMINT_BUILD_OPTIONS.result }}"
+            TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
       - name: Show Docker image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
