@@ -3,7 +3,7 @@ FROM golang:1.19-alpine3.17 AS builder
 
 RUN apk update && \
     apk upgrade && \
-    apk add bash git gmp-dev sudo cmake build-base python3-dev libsodium-dev
+    apk add bash git gmp-dev sudo cmake build-base python3-dev
 
 COPY . /src
 

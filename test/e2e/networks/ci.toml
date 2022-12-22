@@ -59,7 +59,7 @@ retain_blocks = 10
 
 [node.validator04]
 snapshot_interval = 5
-database = "rocksdb"
+database = "badgerdb"
 persistent_peers = ["validator01"]
 perturb = ["pause"]
 block_sync = "v0"

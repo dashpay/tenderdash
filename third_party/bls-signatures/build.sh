@@ -7,7 +7,7 @@ SRC_PATH="$SCRIPT_PATH/src"
 BUILD_PATH="$SCRIPT_PATH/build"
 BLS_SM_PATH="third_party/bls-signatures/src"
 BLS_GIT_REPO="https://github.com/dashpay/bls-signatures.git"
-BLS_GIT_BRANCH="develop_0.1"
+BLS_GIT_BRANCH="develop"
 
 git submodule update --init $BLS_SM_PATH
 if [ $? -ne 0 ]; then

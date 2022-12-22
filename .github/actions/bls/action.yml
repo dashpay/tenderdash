@@ -30,7 +30,7 @@ runs:
         path: ~/bls-cache
         key: ${{ runner.os }}-${{ inputs.arch }}-bls-${{ steps.bls-revision.outputs.hash }}
     - name: install bls deps
-      run: sudo apt-get update -qq && sudo apt-get install -qq --yes libgmp-dev libsodium-dev
+      run: sudo apt-get update -qq && sudo apt-get install -qq --yes libgmp-dev
       shell: bash
     - name: Build BLS library
       run: make build-bls
@@ -40,12 +40,13 @@ runs:
       run: |
         mkdir -p ~/bls-cache/include/bls-dash
         mkdir -p ~/bls-cache/lib
-        cp -r ./third_party/bls-signatures/build/_deps/sodium-build/libsodium.a ~/bls-cache/lib
-        cp -r ./third_party/bls-signatures/build/_deps/relic-build/lib/librelic_s.a ~/bls-cache/lib
-        cp -r ./third_party/bls-signatures/build/src/libbls-dash.a ~/bls-cache/lib
-        cp -rv ./third_party/bls-signatures/build/_deps/relic-src/include/* ~/bls-cache/include
-        cp -rv ./third_party/bls-signatures/build/_deps/relic-build/include/* ~/bls-cache/include
-        cp -rv ./third_party/bls-signatures/src/src/* ~/bls-cache/include/bls-dash
+        cp -r ./third_party/bls-signatures/build/depends/minialloc/libminialloc.a ~/bls-cache/lib
+        cp -r ./third_party/bls-signatures/build/depends/relic/lib/librelic_s.a ~/bls-cache/lib
+        cp -r ./third_party/bls-signatures/build/src/libdashbls.a ~/bls-cache/lib
+        cp -rv ./third_party/bls-signatures/build/depends/relic/include/* ~/bls-cache/include
+        cp -rv ./third_party/bls-signatures/src/depends/minialloc/include/* ~/bls-cache/include
+        cp -rv ./third_party/bls-signatures/src/depends/relic/include/* ~/bls-cache/include
+        cp -rv ./third_party/bls-signatures/src/include/* ~/bls-cache/include
       if: steps.bls-cache.outputs.cache-hit != 'true'
       shell: bash
     - uses: actions/cache@v2.1.2
