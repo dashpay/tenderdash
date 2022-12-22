@@ -49,9 +49,9 @@ jobs:
           result-encoding: string
           script: |
             if (github.ref_type == 'tag' && !contains(github.ref_name,'-dev')) {
-              return 'tenderdash'
+              return 'tenderdash,stable'
             }
-            return 'tenderdash,deadlock'
+            return 'tenderdash,dev,deadlock'
 
       - name: Set Docker tags and labels
         id: docker_meta
