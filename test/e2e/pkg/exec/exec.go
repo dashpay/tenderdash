@@ -50,8 +50,7 @@ func (w *tsWriter) Write(p []byte) (n int, err error) {
 	for n = 0; n < len(p); {
 		if !w.tsAdded {
 			took := time.Since(w.start)
-
-			ts := fmt.Sprintf("%3.5fs ", took.Seconds())
+			ts := fmt.Sprintf("%09.5fs ", took.Seconds())
 			if _, err := w.out.Write([]byte(ts)); err != nil {
 				return n, err
 			}
@@ -61,7 +60,7 @@ func (w *tsWriter) Write(p []byte) (n int, err error) {
 		index := bytes.IndexByte(p[n:], '\n')
 		if index < 0 {
 			// not found
-			index = len(p) - 1
+			index = len(p) - 1 - n
 		} else {
 			// we have \n, let's add timestamp in next loop
 			w.tsAdded = false
