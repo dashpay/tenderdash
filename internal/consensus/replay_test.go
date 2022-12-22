@@ -1417,7 +1417,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 
 	commit := blockStore.commits[len(blockStore.commits)-1]
 	require.Equal(t, int64(4), commit.Height)
-	require.Equal(t, int32(10), commit.Round)
+	require.GreaterOrEqual(t, maxRound, commit.Round)
 
 	require.NoError(t, cs.Start(ctx))
 	defer cs.Stop()
@@ -1436,7 +1436,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 	require.Equal(t, chainLen+1, eventNewBlock.Block.Height)
 	commit = blockStore.commits[chainLen-1]
 	require.Equal(t, chainLen, commit.Height)
-	require.Equal(t, maxRound, commit.Round)
+	require.GreaterOrEqual(t, maxRound, commit.Round)
 }
 
 // returns the vals on InitChain
