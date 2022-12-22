@@ -1354,10 +1354,18 @@ func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 func TestWALRoundsSkipper(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	const (
+		chainLen int64 = 5
+		maxRound int32 = 10
+	)
 	cfg := getConfig(t)
 	cfg.Consensus.WalSkipRoundsToLast = true
 	logger := log.NewNopLogger()
-	ng := nodeGen{cfg: cfg, logger: logger}
+	ng := nodeGen{
+		cfg:       cfg,
+		logger:    logger,
+		stateOpts: []StateOption{WithStopFunc(stopConsensusAtHeight(chainLen + 1))},
+	}
 	node := ng.Generate(ctx, t)
 	originDoPrevote := node.csState.doPrevote
 	node.csState.doPrevote = func(ctx context.Context, height int64, round int32, allowOldBlocks bool) {
@@ -1367,10 +1375,6 @@ func TestWALRoundsSkipper(t *testing.T) {
 		}
 		originDoPrevote(ctx, height, round, allowOldBlocks)
 	}
-	const (
-		chainLen int64 = 5
-		maxRound int32 = 10
-	)
 	walBody, err := WALWithNBlocks(ctx, t, logger, node, chainLen)
 	require.NoError(t, err)
 	walFile := tempWALWithData(t, walBody)
@@ -1413,7 +1417,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 		blockStore,
 	)
 
-	cs := newStateWithConfigAndBlockStore(ctx, t, logger, cfg, state, privVal, app, blockStore)
+	cs := newStateWithConfigAndBlockStore(ctx, t, log.NewTestingLogger(t), cfg, state, privVal, app, blockStore)
 
 	commit := blockStore.commits[len(blockStore.commits)-1]
 	require.Equal(t, int64(4), commit.Height)
@@ -1428,7 +1432,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 		Query:    types.EventQueryNewBlock,
 	})
 	require.NoError(t, err)
-	ctxto, cancel := context.WithTimeout(ctx, 120*time.Second)
+	ctxto, cancel := context.WithTimeout(ctx, 30*time.Second)
 	defer cancel()
 	msg, err := newBlockSub.Next(ctxto)
 	require.NoError(t, err)

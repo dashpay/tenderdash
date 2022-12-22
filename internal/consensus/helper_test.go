@@ -25,14 +25,15 @@ import (
 )
 
 type nodeGen struct {
-	cfg      *config.Config
-	app      abci.Application
-	logger   log.Logger
-	state    *sm.State
-	storeDB  dbm.DB
-	mempool  mempool.Mempool
-	proxyApp abciclient.Client
-	eventBus *eventbus.EventBus
+	cfg       *config.Config
+	app       abci.Application
+	logger    log.Logger
+	state     *sm.State
+	storeDB   dbm.DB
+	mempool   mempool.Mempool
+	proxyApp  abciclient.Client
+	eventBus  *eventbus.EventBus
+	stateOpts []StateOption
 }
 
 func (g *nodeGen) initState(t *testing.T) {
@@ -105,7 +106,7 @@ func (g *nodeGen) Generate(ctx context.Context, t *testing.T) *fakeNode {
 		blockStore,
 		g.eventBus,
 	)
-	csState, err := NewState(g.logger, g.cfg.Consensus, stateStore, blockExec, blockStore, g.mempool, evpool, g.eventBus)
+	csState, err := NewState(g.logger, g.cfg.Consensus, stateStore, blockExec, blockStore, g.mempool, evpool, g.eventBus, g.stateOpts...)
 	require.NoError(t, err)
 
 	privValidator := privval.MustLoadOrGenFilePVFromConfig(g.cfg)
@@ -237,4 +238,10 @@ func (c *ChainGenerator) Generate(ctx context.Context, t *testing.T) Chain {
 	require.NoError(c.t, err)
 	chain.GenesisState.Validators = valSet
 	return chain
+}
+
+func stopConsensusAtHeight(height int64) func(cs *State) bool {
+	return func(cs *State) bool {
+		return cs.Height == height
+	}
 }
