@@ -10,6 +10,7 @@ COPY . /go/src/github.com/dashevo/tenderdash
 WORKDIR /go/src/github.com/dashevo/tenderdash
 
 RUN make install-bls
+ARG TENDERMINT_BUILD_OPTIONS=tenderdash
 RUN make build-linux
 
 # stage 2
