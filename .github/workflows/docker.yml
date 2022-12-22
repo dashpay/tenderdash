@@ -42,16 +42,16 @@ jobs:
           result-encoding: string
           script: "return (context.payload.release.tag_name.includes('-dev') ? '-dev' : '');"
 
-      - name: Determine release type
+      - name: Determine TENDERMINT_BUILD_OPTIONS
         uses: actions/github-script@v6
-        id: reltype
+        id: TENDERMINT_BUILD_OPTIONS
         with:
           result-encoding: string
           script: |
             if (github.ref_type == 'tag' && !contains(github.ref_name,'-dev')) {
-              return 'final'
+              return 'tenderdash'
             }
-            return 'dev'
+            return 'tenderdash,deadlock'
 
       - name: Set Docker tags and labels
         id: docker_meta
@@ -82,6 +82,6 @@ jobs:
           cache-from: type=gha
           cache-to: type=gha,mode=max
           build-args: |
-            TENDERMINT_BUILD_OPTIONS="tenderdash${{ steps.suffix.reltype.result == 'dev' && ',deadlock' }}"
+            TENDERMINT_BUILD_OPTIONS="${{ steps.suffix.TENDERMINT_BUILD_OPTIONS.result }}"
       - name: Show Docker image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
