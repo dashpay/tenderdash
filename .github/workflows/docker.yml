@@ -81,7 +81,7 @@ jobs:
           labels: ${{ steps.docker_meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-          build-args:
-            TENDERMINT_BUILD_OPTIONS="${{ steps.suffix.reltype.result == 'dev' && ',deadlock' }}"
+          build-args: |
+            TENDERMINT_BUILD_OPTIONS="tenderdash${{ steps.suffix.reltype.result == 'dev' && ',deadlock' }}"
       - name: Show Docker image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
