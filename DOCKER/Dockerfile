@@ -5,11 +5,22 @@ RUN apk update && \
     apk upgrade && \
     apk add bash git gmp-dev sudo cmake build-base
 
-COPY . /go/src/github.com/dashevo/tenderdash
+WORKDIR /src/tenderdash
 
-WORKDIR /go/src/github.com/dashevo/tenderdash
+# Fetch dependencies separately (for layer caching)
+COPY go.mod go.sum ./
+RUN go mod download
 
+# Install BLS library
+COPY third_party ./third_party
+COPY test/Makefile ./test/Makefile
+COPY Makefile ./
+COPY .git ./.git
 RUN make install-bls
+
+# Copy Tenderdash source
+COPY . .
+
 ARG TENDERMINT_BUILD_OPTIONS=tenderdash
 RUN make build-linux
 
@@ -45,7 +56,7 @@ EXPOSE 26656 26657 26660
 
 STOPSIGNAL SIGTERM
 
-COPY --from=builder /go/src/github.com/dashevo/tenderdash/build/tenderdash /usr/bin/tenderdash
+COPY --from=builder /src/tenderdash/build/tenderdash /usr/bin/tenderdash
 
 # You can overwrite these before the first run to influence
 # config.json and genesis.json. Additionally, you can override
