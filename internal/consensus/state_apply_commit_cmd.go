@@ -33,10 +33,16 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behaviour *Behaviour,
 	height := appState.Height
 	round := appState.Round
 
-	// Save to blockStore.
 	if commit != nil {
 		height = commit.Height
 		round = commit.Round
+	}
+
+	cs.blockExec.processOrPanic(ctx, appState, round)
+	cs.blockExec.validateOrPanic(ctx, appState)
+
+	// Save to blockStore
+	if commit != nil {
 		cs.blockStore.SaveBlock(block, blockParts, commit)
 	}
 
@@ -59,12 +65,6 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behaviour *Behaviour,
 			"failed to write %v msg to consensus WAL due to %w; check your file system and restart the node",
 			endMsg, err,
 		))
-	}
-
-	err := cs.blockExec.process(ctx, appState, round)
-	if err != nil {
-		cs.logger.Error("cannot apply commit", "error", err)
-		return nil, nil
 	}
 
 	// Create a copy of the state for staging and an event cache for txs.

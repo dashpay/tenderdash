@@ -102,6 +102,10 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour, s
 		// Unknown error, so we panic
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
+
+	// Validate the block
+	cs.blockExec.validateOrPanic(ctx, appState)
+
 	cs.metrics.MarkProposalProcessed(true)
 
 	/*
