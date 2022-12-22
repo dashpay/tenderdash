@@ -92,7 +92,7 @@ func StartTendermint(
 		logger = log.NewNopLogger()
 	} else {
 		var err error
-		logger, err = log.NewDefaultLogger(log.LogFormatPlain, log.LogLevelInfo)
+		logger, err = log.NewDefaultLogger(log.LogFormatPlain, log.LogLevelDebug)
 		if err != nil {
 			return nil, func(_ context.Context) error { cancel(); return nil }, err
 		}

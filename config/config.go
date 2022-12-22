@@ -668,6 +668,16 @@ type P2PConfig struct { //nolint: maligned
 	// attempts per IP address.
 	MaxIncomingConnectionAttempts uint `mapstructure:"max-incoming-connection-attempts"`
 
+	// MaxIncomingConnectionTime limits maximum duration after which incoming peer will be evicted.
+	// Defaults to 0 which disables this mechanism.
+	// Used on seed nodes to evict peers and make space for others.
+	MaxIncomingConnectionTime time.Duration `mapstructure:"max-incoming-connection-time"`
+
+	// IncomingConnectionWindow describes how often an IP address
+	// can attempt to create a new connection. Defaults to 10
+	// milliseconds, and cannot be less than 1 millisecond.
+	IncomingConnectionWindow time.Duration `mapstructure:"incoming-connection-window"`
+
 	// Comma separated list of peer IDs to keep private (will not be gossiped to
 	// other peers)
 	PrivatePeerIDs string `mapstructure:"private-peer-ids"`
@@ -703,6 +713,8 @@ func DefaultP2PConfig() *P2PConfig {
 		MaxConnections:                64,
 		MaxOutgoingConnections:        12,
 		MaxIncomingConnectionAttempts: 100,
+		MaxIncomingConnectionTime:     0,
+		IncomingConnectionWindow:      10 * time.Millisecond,
 		FlushThrottleTimeout:          100 * time.Millisecond,
 		// The MTU (Maximum Transmission Unit) for Ethernet is 1500 bytes.
 		// The IP header and the TCP header take up 20 bytes each at least (unless
@@ -735,6 +747,12 @@ func (cfg *P2PConfig) ValidateBasic() error {
 	}
 	if cfg.MaxOutgoingConnections > cfg.MaxConnections {
 		return errors.New("max-outgoing-connections cannot be larger than max-connections")
+	}
+	if cfg.MaxIncomingConnectionTime < 0 {
+		return errors.New("max-incoming-connection-time can't be negative")
+	}
+	if cfg.IncomingConnectionWindow < 1*time.Millisecond {
+		return errors.New("incoming-connection-window must be set to at least 1ms")
 	}
 	return nil
 }
@@ -976,15 +994,12 @@ type ConsensusConfig struct {
 	RootDir string `mapstructure:"home"`
 	WalPath string `mapstructure:"wal-file"`
 	walFile string // overrides WalPath if set
+	// Use "true" to skip the rounds to the last during WAL replay messages
+	WalSkipRoundsToLast bool `mapstructure:"wal-skip-rounds-to-last"`
 
 	// EmptyBlocks mode and possible interval between empty blocks
 	CreateEmptyBlocks         bool          `mapstructure:"create-empty-blocks"`
 	CreateEmptyBlocksInterval time.Duration `mapstructure:"create-empty-blocks-interval"`
-
-	// The proposed block time window is doubling of the value in twice
-	// that means for 10 sec the window will be 20 sec, 10 sec before NOW and 10 sec after
-	// this value is used to validate a block time
-	ProposedBlockTimeWindow time.Duration `mapstructure:"proposed-block-time-window"`
 
 	// Don't propose a block if the node is set to the proposer, the block proposal instead
 	// has to be manual (useful for tests)
@@ -1050,13 +1065,13 @@ type ConsensusConfig struct {
 func DefaultConsensusConfig() *ConsensusConfig {
 	return &ConsensusConfig{
 		WalPath:                     filepath.Join(defaultDataDir, "cs.wal", "wal"),
+		WalSkipRoundsToLast:         false,
 		CreateEmptyBlocks:           true,
 		CreateEmptyBlocksInterval:   0 * time.Second,
 		PeerGossipSleepDuration:     100 * time.Millisecond,
 		PeerQueryMaj23SleepDuration: 2000 * time.Millisecond,
 		DoubleSignCheckHeight:       int64(0),
 		QuorumType:                  btcjson.LLMQType_5_60,
-		ProposedBlockTimeWindow:     10 * time.Second,
 		DontAutoPropose:             false,
 	}
 }
@@ -1106,9 +1121,6 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 	}
 	if cfg.UnsafeCommitTimeoutOverride < 0 {
 		return errors.New("unsafe-commit-timeout-override can't be negative")
-	}
-	if cfg.ProposedBlockTimeWindow < 0 {
-		return errors.New("proposed-block-time can't be negative")
 	}
 	if cfg.CreateEmptyBlocksInterval < 0 {
 		return errors.New("create-empty-blocks-interval can't be negative")

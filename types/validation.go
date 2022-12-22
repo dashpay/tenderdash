@@ -2,6 +2,8 @@ package types
 
 import (
 	"fmt"
+	"math/bits"
+	"time"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
@@ -47,4 +49,31 @@ func ValidateSignatureSize(keyType crypto.KeyType, h []byte) error {
 		)
 	}
 	return nil
+}
+
+func isTimely(timestamp time.Time, recvTime time.Time, sp SynchronyParams, round int32) bool {
+	// The message delay values are scaled as rounds progress.
+	// Every 10 rounds, the message delay is doubled to allow consensus to
+	// proceed in the case that the chosen value was too small for the given network conditions.
+	// For more information and discussion on this mechanism, see the relevant github issue:
+	// https://github.com/tendermint/spec/issues/371
+	maxShift := bits.LeadingZeros64(uint64(sp.MessageDelay)) - 1
+	nShift := int((round / 10))
+
+	if nShift > maxShift {
+		// if the number of 'doublings' would would overflow the size of the int, use the
+		// maximum instead.
+		nShift = maxShift
+	}
+	msgDelay := sp.MessageDelay * time.Duration(1<<nShift)
+
+	// lhs is `proposedBlockTime - Precision` in the first inequality
+	lhs := timestamp.Add(-sp.Precision)
+	// rhs is `proposedBlockTime + MsgDelay + Precision` in the second inequality
+	rhs := timestamp.Add(msgDelay).Add(sp.Precision)
+
+	if recvTime.Before(lhs) || recvTime.After(rhs) {
+		return false
+	}
+	return true
 }

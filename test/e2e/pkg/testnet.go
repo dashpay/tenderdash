@@ -105,29 +105,33 @@ type Testnet struct {
 
 // Node represents a Tenderdash node in a testnet.
 type Node struct {
-	Name                 string
-	Testnet              *Testnet
-	Mode                 Mode
-	PrivvalKeys          map[string]crypto.QuorumKeys
-	PrivvalUpdateHeights map[string]crypto.QuorumHash
-	NodeKey              crypto.PrivKey
-	ProTxHash            crypto.ProTxHash
-	IP                   net.IP
-	ProxyPort            uint32
-	StartAt              int64
-	Mempool              string
-	StateSync            string
-	Database             string
-	PrivvalProtocol      Protocol
-	PersistInterval      uint64
-	SnapshotInterval     uint64
-	RetainBlocks         uint64
-	Seeds                []*Node
-	PersistentPeers      []*Node
-	Perturbations        []Perturbation
-	LogLevel             string
-	QueueType            string
-	HasStarted           bool
+	Name                         string
+	Testnet                      *Testnet
+	Mode                         Mode
+	PrivvalKeys                  map[string]crypto.QuorumKeys
+	PrivvalUpdateHeights         map[string]crypto.QuorumHash
+	NodeKey                      crypto.PrivKey
+	ProTxHash                    crypto.ProTxHash
+	IP                           net.IP
+	ProxyPort                    uint32
+	StartAt                      int64
+	Mempool                      string
+	StateSync                    string
+	Database                     string
+	PrivvalProtocol              Protocol
+	PersistInterval              uint64
+	SnapshotInterval             uint64
+	RetainBlocks                 uint64
+	P2PMaxConnections            uint16
+	P2PMaxOutgoingConnections    uint16
+	P2PMaxIncomingConnectionTime time.Duration
+	P2PIncomingConnectionWindow  time.Duration
+	Seeds                        []*Node
+	PersistentPeers              []*Node
+	Perturbations                []Perturbation
+	LogLevel                     string
+	QueueType                    string
+	HasStarted                   bool
 }
 
 // LoadTestnet loads a testnet from a manifest file, using the filename to
@@ -274,6 +278,19 @@ func LoadTestnet(file string) (*Testnet, error) {
 		if nodeManifest.PersistInterval != nil {
 			node.PersistInterval = *nodeManifest.PersistInterval
 		}
+		if nodeManifest.P2PMaxConnections > 0 {
+			node.P2PMaxConnections = nodeManifest.P2PMaxConnections
+		}
+		if nodeManifest.P2PMaxOutgoingConnections > 0 {
+			node.P2PMaxOutgoingConnections = nodeManifest.P2PMaxOutgoingConnections
+		}
+		if nodeManifest.P2PMaxIncomingConnectionTime > 0 {
+			node.P2PMaxIncomingConnectionTime = nodeManifest.P2PMaxIncomingConnectionTime
+		}
+		if nodeManifest.P2PIncomingConnectionWindow > 0 {
+			node.P2PIncomingConnectionWindow = nodeManifest.P2PIncomingConnectionWindow
+		}
+
 		for _, p := range nodeManifest.Perturb {
 			node.Perturbations = append(node.Perturbations, Perturbation(p))
 		}
@@ -504,7 +521,7 @@ func (n Node) Validate(testnet Testnet) error {
 		return fmt.Errorf("unsupported p2p queue type: %s", n.QueueType)
 	}
 	switch n.Database {
-	case "goleveldb", "cleveldb", "boltdb", "rocksdb", "badgerdb":
+	case "goleveldb", "cleveldb", "boltdb", "rocksdb", "badgerdb", "memdb":
 	default:
 		return fmt.Errorf("invalid database setting %q", n.Database)
 	}

@@ -44,7 +44,7 @@ func TestGenesisBad(t *testing.T) {
 		},
 		{ // missing pub_key type
 			[]byte(`{
-			"threshold_public_key": {
+			"validator_quorum_threshold_public_key": {
 				"type": "tendermint/PubKeyBLS12381",
 				"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
 			},
@@ -67,7 +67,7 @@ func TestGenesisBad(t *testing.T) {
 			), "the threshold public key must be set if there are validators"},
 		{ // missing threshold_public_key key type
 			[]byte(`{
-				"threshold_public_key": {"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
+				"validator_quorum_threshold_public_key": {"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
 				"validators":[
 					{"pub_key":{"value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},
 					"power":10,
@@ -97,8 +97,8 @@ func TestGenesisBad(t *testing.T) {
 		{ // missing pro_tx_hash
 			[]byte(`{
 				"chain_id":"mychain",
-				"threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
-				"quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
+				"validator_quorum_threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
+				"validator_quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
 				"validators":[{
 					"address": "A",
 					"pub_key":{"type":"tendermint/PubKeyEd25519","value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},
@@ -119,8 +119,10 @@ func TestGenesisBad(t *testing.T) {
 				"name":"",
 				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
 			}],
-			"threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"}
-			}`), "the quorum hash must be base64-encoded and 32 bytes long"},
+			"validator_quorum_threshold_public_key":{
+				"type": "tendermint/PubKeyBLS12381",
+				"value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+			}}`), "the quorum hash must be base64-encoded and 32 bytes long"},
 		{ // quorum_hash too short
 			[]byte(`{
 				"genesis_time": "0001-01-01T00:00:00Z",
@@ -134,8 +136,8 @@ func TestGenesisBad(t *testing.T) {
 					"name":"",
 					"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
 				}],
-				"threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
-				"quorum_hash": "MDEyMzQ1Njc4OTAxMjM0NTY3OA=="
+				"validator_quorum_threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
+				"validator_quorum_hash": "MDEyMzQ1Njc4OTAxMjM0NTY3OA=="
 				}`), "the quorum hash must be base64-encoded and 32 bytes long, is 19 byte"},
 		{ // validator power is not an int
 			jsonBlob: []byte(`{
@@ -147,8 +149,8 @@ func TestGenesisBad(t *testing.T) {
 				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F",
 				"name":""
 			}],
-			"quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
-			"threshold_public_key": {
+			"validator_quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
+			"validator_quorum_threshold_public_key": {
 				"type": "tendermint/PubKeyBLS12381",
 				"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
 			}}`,
@@ -203,11 +205,11 @@ func TestBasicGenesisDoc(t *testing.T) {
 				"name":"",
 				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
 			}],
-			"threshold_public_key": {
+			"validator_quorum_threshold_public_key": {
 				"type": "tendermint/PubKeyBLS12381",
 				"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
 			},
-			"quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
+			"validator_quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
 			"app_hash":"",
 			"app_state":{"account_owner": "Bob"},
 			"consensus_params": {

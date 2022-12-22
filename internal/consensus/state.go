@@ -672,11 +672,6 @@ func (cs *State) updateRoundStep(round int32, step cstypes.RoundStepType) {
 			cs.metrics.MarkStep(cs.Step)
 		}
 	}
-	// New round, so we reset current round state.
-	// It will be recreated with ProcessProposal request.
-	if round != cs.Round {
-		cs.CurrentRoundState = sm.CurrentRoundState{}
-	}
 	cs.Round = round
 	cs.Step = step
 }
@@ -1022,14 +1017,6 @@ func (cs *State) handleMsg(ctx context.Context, mi msgInfo, fromReplay bool) {
 		// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
 		added, err = cs.addProposalBlockPart(ctx, msg, peerID)
 
-		if added && cs.ProposalBlockParts != nil && cs.ProposalBlockParts.IsComplete() && fromReplay {
-			candidateState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, msg.Round, cs.state, true)
-			if err != nil {
-				panic(err)
-			}
-			cs.RoundState.CurrentRoundState = candidateState
-		}
-
 		// We unlock here to yield to any routines that need to read the the RoundState.
 		// Previously, this code held the lock from the point at which the final block
 		// part was received until the block executed against the application.
@@ -1324,18 +1311,20 @@ func (cs *State) enterPropose(ctx context.Context, height int64, round int32) {
 	logger := cs.logger.With("height", height, "round", round)
 
 	if cs.Height != height || round < cs.Round || (cs.Round == round && cstypes.RoundStepPropose <= cs.Step) {
-		logger.Debug("entering propose step with invalid args",
-			"height", cs.Height,
-			"round", cs.Round,
-			"step", cs.Step)
+		logger.Debug("entering propose step with invalid args", "step", cs.Step)
 		return
 	}
 
 	// If this validator is the proposer of this round, and the previous block time is later than
 	// our local clock time, wait to propose until our local clock time has passed the block time.
 	if cs.isProposer() {
-		proposerWaitTime := proposerWaitTime(tmtime.DefaultSource{}, cs.state.LastBlockTime)
+		proposerWaitTime := proposerWaitTime(tmtime.Now(), cs.state.LastBlockTime)
 		if proposerWaitTime > 0 {
+			cs.logger.Debug("enter propose: latest block is newer, sleeping",
+				"duration", proposerWaitTime.String(),
+				"last_block_time", cs.state.LastBlockTime,
+				"now", tmtime.Now(),
+			)
 			cs.scheduleTimeout(proposerWaitTime, height, round, cstypes.RoundStepNewRound)
 			return
 		}
@@ -1397,19 +1386,24 @@ func (cs *State) isProposer() bool {
 	return cs.privValidator.IsProTxHashEqual(cs.Validators.GetProposer().ProTxHash)
 }
 
-// checkValidBlock returns true if cs.ValidBlock is set and still valid (not expired)
+// checkValidBlock returns true if cs.ValidBlock is set and valid
 func (cs *State) checkValidBlock() bool {
 	if cs.ValidBlock == nil {
 		return false
 	}
-	if err := cs.blockExec.ValidateBlockTime(cs.config.ProposedBlockTimeWindow, cs.state, cs.ValidBlock); err != nil {
+	sp := cs.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
+	if cs.Height == cs.state.InitialHeight {
+		// by definition, initial block must have genesis time
+		return cs.ValidBlock.Time.Equal(cs.state.LastBlockTime)
+	}
+
+	if !cs.ValidBlock.IsTimely(cs.ValidBlockRecvTime, sp, cs.ValidRound) {
 		cs.logger.Debug(
 			"proposal block is outdated",
 			"height", cs.Height,
-			"round", cs.Round,
-			"error", err,
+			"round", cs.ValidRound,
+			"received", cs.ValidBlockRecvTime,
 			"block", cs.ValidBlock)
-
 		return false
 	}
 
@@ -1450,7 +1444,14 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 
 	// Make proposal
 	propBlockID := block.BlockID(blockParts)
-	proposal := types.NewProposal(height, block.CoreChainLockedHeight, round, cs.ValidRound, propBlockID, block.Header.Time)
+	proposal := types.NewProposal(
+		height,
+		block.CoreChainLockedHeight,
+		round,
+		cs.ValidRound,
+		propBlockID,
+		block.Header.Time,
+	)
 	proposal.SetCoreChainLockUpdate(block.CoreChainLock)
 	p := proposal.ToProto()
 	validatorsAtProposalHeight := cs.state.ValidatorsAtHeight(p.Height)
@@ -1574,7 +1575,15 @@ func (cs *State) createProposalBlock(ctx context.Context, round int32) (*types.B
 
 	proposerProTxHash := cs.privValidator.ProTxHash
 
-	ret, uncommittedState, err := cs.blockExec.CreateProposalBlock(ctx, cs.Height, round, cs.state, commit, proposerProTxHash, cs.proposedAppVersion)
+	ret, uncommittedState, err := cs.blockExec.CreateProposalBlock(
+		ctx,
+		cs.Height,
+		round,
+		cs.state,
+		commit,
+		proposerProTxHash,
+		cs.proposedAppVersion,
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -1619,6 +1628,11 @@ func (cs *State) enterPrevote(ctx context.Context, height int64, round int32, al
 }
 
 func (cs *State) proposalIsTimely() bool {
+	if cs.Height == cs.state.InitialHeight {
+		// by definition, initial block must have genesis time
+		return cs.Proposal.Timestamp.Equal(cs.state.LastBlockTime)
+	}
+
 	sp := cs.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
 	return cs.Proposal.IsTimely(cs.ProposalReceiveTime, sp, cs.Round)
 }
@@ -1657,6 +1671,13 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		return
 	}
 
+	// Validate proposal core chain lock
+	if err := cs.blockExec.ValidateBlockChainLock(ctx, cs.state, cs.ProposalBlock); err != nil {
+		logger.Error("enterPrevote: ProposalBlock chain lock is invalid, prevoting nil", "err", err)
+		cs.signAddVote(ctx, tmproto.PrevoteType, types.BlockID{})
+		return
+	}
+
 	/*
 		The block has now passed Tendermint's validation rules.
 		Before prevoting the block received from the proposer for the current round and height,
@@ -1667,8 +1688,7 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	uncommittedState, err := cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.Round, cs.state, true)
-	if err != nil {
+	if err := cs.ensureProcessProposal(ctx, cs.ProposalBlock, cs.Round, cs.state); err != nil {
 		cs.metrics.MarkProposalProcessed(false)
 		if errors.Is(err, sm.ErrBlockRejected) {
 			logger.Error("prevote step: state machine rejected a proposed block; this should not happen:"+
@@ -1686,7 +1706,12 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		// Unknown error, so we panic
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
-	cs.RoundState.CurrentRoundState = uncommittedState
+
+	// Validate the block.
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, cs.ProposalBlock); err != nil {
+		panic(fmt.Sprintf("prevote on invalid block: %v", err))
+	}
+
 	cs.metrics.MarkProposalProcessed(true)
 
 	/*
@@ -1744,26 +1769,6 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		if cs.ProposalBlock.HashesTo(cs.LockedBlock.Hash()) {
 			logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
 			cs.signAddVote(ctx, tmproto.PrevoteType, blockID)
-			return
-		}
-	}
-
-	// Validate proposal block
-	err = cs.blockExec.ValidateBlockChainLock(ctx, cs.state, cs.ProposalBlock)
-	if err != nil {
-		// ProposalBlock is invalid, prevote nil.
-		logger.Error("enterPrevote: ProposalBlock chain lock is invalid", "err", err)
-		cs.signAddVote(ctx, tmproto.PrevoteType, types.BlockID{})
-		return
-	}
-
-	// Validate proposal block time
-	if !allowOldBlocks {
-		err = cs.blockExec.ValidateBlockTime(cs.config.ProposedBlockTimeWindow, cs.state, cs.ProposalBlock)
-		if err != nil {
-			// ProposalBlock is invalid, prevote nil.
-			logger.Error("enterPrevote: ProposalBlock time is invalid", "err", err)
-			cs.signAddVote(ctx, tmproto.PrevoteType, types.BlockID{})
 			return
 		}
 	}
@@ -1901,6 +1906,11 @@ func (cs *State) enterPrecommit(ctx context.Context, height int64, round int32) 
 	// precommit vote for it.
 	if cs.ProposalBlock.HashesTo(blockID.Hash) {
 		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
+
+		// we got precommit but we didn't process proposal yet
+		if err := cs.ensureProcessProposal(ctx, cs.ProposalBlock, round, cs.state); err != nil {
+			panic(fmt.Errorf("enter precommit: %w", err))
+		}
 
 		// Validate the block.
 		if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, cs.ProposalBlock); err != nil {
@@ -2061,15 +2071,6 @@ func (cs *State) tryFinalizeCommit(ctx context.Context, height int64) {
 		return
 	}
 
-	if cs.CurrentRoundState.IsEmpty() {
-		var err error
-		// TODO: Check if using cs.Round here is correct
-		cs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, cs.ProposalBlock, cs.Round, cs.state, true)
-		if err != nil {
-			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
-		}
-	}
-
 	cs.finalizeCommit(ctx, height)
 }
 
@@ -2098,10 +2099,6 @@ func (cs *State) finalizeCommit(ctx context.Context, height int64) {
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, block); err != nil {
-		panic(fmt.Errorf("+2/3 committed an invalid block %X: %w", cs.CurrentRoundState.AppHash, err))
-	}
-
 	logger.Info(
 		"finalizing commit of block",
 		"hash", tmstrings.LazyBlockHash(block),
@@ -2109,19 +2106,9 @@ func (cs *State) finalizeCommit(ctx context.Context, height int64) {
 		"num_txs", len(block.Txs),
 	)
 
-	// Save to blockStore.
-	if cs.blockStore.Height() < block.Height {
-		// NOTE: the seenCommit is local justification to commit this block,
-		// but may differ from the LastPrecommits included in the next block
-		precommits := cs.Votes.Precommits(cs.CommitRound)
-		seenCommit := precommits.MakeCommit()
-		cs.applyCommit(ctx, seenCommit, logger)
-	} else {
-		// Happens during replay if we already saved the block but didn't commit
-		logger.Debug("calling finalizeCommit on already stored block", "height", block.Height)
-		// Todo: do we need this?
-		cs.applyCommit(ctx, nil, logger)
-	}
+	precommits := cs.Votes.Precommits(cs.CommitRound)
+	seenCommit := precommits.MakeCommit()
+	cs.applyCommit(ctx, seenCommit, logger)
 }
 
 // If we received a commit message from an external source try to add it then finalize it.
@@ -2263,6 +2250,11 @@ func (cs *State) verifyCommit(ctx context.Context, commit *types.Commit, peerID 
 		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
+	// We have a correct block, let's process it before applying the commit
+	if err := cs.ensureProcessProposal(ctx, block, commit.Round, cs.state); err != nil {
+		return false, fmt.Errorf("unable to process proposal: %w", err)
+	}
+
 	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, block); err != nil {
 		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
@@ -2312,14 +2304,26 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	)
 
 	block, blockParts := cs.ProposalBlock, cs.ProposalBlockParts
-	// Save to blockStore.
+
 	if commit != nil {
 		height = commit.Height
 		round = commit.Round
-		cs.blockStore.SaveBlock(block, blockParts, commit)
 	} else {
 		height = cs.Height
 		round = cs.Round
+	}
+
+	if err := cs.ensureProcessProposal(ctx, block, round, cs.state); err != nil {
+		panic("cannot finalize commit; cannot process proposal block: " + err.Error())
+	}
+
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, block); err != nil {
+		panic(fmt.Errorf("+2/3 committed an invalid block %X: %w", cs.CurrentRoundState.AppHash, err))
+	}
+
+	// Save to blockStore.
+	if commit != nil {
+		cs.blockStore.SaveBlock(block, blockParts, commit)
 	}
 
 	// Write EndHeightMessage{} for this height, implying that the blockstore
@@ -2347,17 +2351,6 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	stateCopy := cs.state.Copy()
 	rs := cs.RoundState
 
-	if rs.CurrentRoundState.IsEmpty() {
-		var err error
-		logger.Debug("CurrentRoundState is empty", "crs", rs.CurrentRoundState)
-		rs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, round, stateCopy, true)
-		if err != nil {
-			panic(fmt.Errorf("couldn't call ProcessProposal abci method: %w", err))
-		}
-	}
-
-	// Execute and commit the block, update and save the state, and update the mempool.
-	// NOTE The block.AppHash wont reflect these txs until the next block.
 	stateCopy, err := cs.blockExec.FinalizeBlock(
 		ctx,
 		stateCopy,
@@ -2389,6 +2382,24 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	// * cs.Height has been increment to height+1
 	// * cs.Step is now cstypes.RoundStepNewHeight
 	// * cs.StartTime is set to when we will start round0.
+}
+
+// ensureProcessProposal ensures that process proposal was run for the block.
+// The caller should hold cs.mtx
+func (cs *State) ensureProcessProposal(ctx context.Context, block *types.Block, round int32, state sm.State) error {
+	// FIXME: refactor caller to not use cs.mtx and do proper critical section below
+	rs := &cs.RoundState
+
+	if rs.CurrentRoundState.Params.Source != sm.ProcessProposalSource ||
+		!rs.CurrentRoundState.MatchesBlock(block.Header, round) {
+		var err error
+		cs.logger.Debug("CurrentRoundState is outdated", "crs", rs.CurrentRoundState)
+		rs.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, round, state, true)
+		if err != nil {
+			return fmt.Errorf("ProcessProposal abci method: %w", err)
+		}
+	}
+	return nil
 }
 
 func (cs *State) RecordMetrics(height int64, block *types.Block) {
@@ -2439,7 +2450,7 @@ func (cs *State) RecordMetrics(height int64, block *types.Block) {
 func (cs *State) defaultSetProposal(proposal *types.Proposal, recvTime time.Time) error {
 	// Already have one
 	// TODO: possibly catch double proposals
-	if cs.Proposal != nil || proposal == nil {
+	if cs.Proposal != nil {
 		return nil
 	}
 
@@ -2624,12 +2635,6 @@ func (cs *State) addProposalBlockPart(
 			"round_height", cs.RoundState.GetHeight(),
 		)
 
-		if cs.ProposalBlock.Height != cs.RoundState.GetHeight() {
-			cs.RoundState.CurrentRoundState, err = cs.blockExec.ProcessProposal(ctx, block, msg.Round, cs.state, true)
-			if err != nil {
-				return false, err
-			}
-		}
 		if err := cs.eventBus.PublishEventCompleteProposal(cs.CompleteProposalEvent()); err != nil {
 			cs.logger.Error("failed publishing event complete proposal", "err", err)
 		}
@@ -2658,10 +2663,7 @@ func (cs *State) handleCompleteProposal(ctx context.Context, height int64, fromR
 			cs.logger.Debug("updating valid block to new proposal block",
 				"valid_round", cs.Round,
 				"valid_block_hash", tmstrings.LazyBlockHash(cs.ProposalBlock))
-
-			cs.ValidRound = cs.Round
-			cs.ValidBlock = cs.ProposalBlock
-			cs.ValidBlockParts = cs.ProposalBlockParts
+			cs.updateValidBlock()
 		}
 		// TODO: In case there is +2/3 majority in Prevotes set for some
 		// block and cs.ProposalBlock contains different block, either
@@ -2693,6 +2695,13 @@ func (cs *State) handleCompleteProposal(ctx context.Context, height int64, fromR
 			"hash", cs.ProposalBlock.Hash())
 		cs.tryFinalizeCommit(ctx, height)
 	}
+}
+
+func (cs *State) updateValidBlock() {
+	cs.ValidRound = cs.Round
+	cs.ValidBlock = cs.ProposalBlock
+	cs.ValidBlockRecvTime = cs.ProposalReceiveTime
+	cs.ValidBlockParts = cs.ProposalBlockParts
 }
 
 // Attempt to add the vote. if its a duplicate signature, dupeout the validator
@@ -2879,9 +2888,7 @@ func (cs *State) addVote(
 			if cs.ValidRound < vote.Round && vote.Round == cs.Round {
 				if cs.ProposalBlock.HashesTo(blockID.Hash) {
 					cs.logger.Debug("updating valid block because of POL", "valid_round", cs.ValidRound, "pol_round", vote.Round)
-					cs.ValidRound = vote.Round
-					cs.ValidBlock = cs.ProposalBlock
-					cs.ValidBlockParts = cs.ProposalBlockParts
+					cs.updateValidBlock()
 				} else {
 					cs.logger.Debug("valid block we do not know about; set ProposalBlock=nil",
 						"proposal", tmstrings.LazyBlockHash(cs.ProposalBlock),
@@ -3158,7 +3165,11 @@ func (cs *State) bypassCommitTimeout() bool {
 func (cs *State) calculateProposalTimestampDifferenceMetric() {
 	if cs.Proposal != nil && cs.Proposal.POLRound == -1 {
 		sp := cs.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
-		isTimely := cs.Proposal.IsTimely(cs.ProposalReceiveTime, sp, cs.Round)
+		recvTime := cs.ProposalReceiveTime
+		if cs.Height == cs.state.InitialHeight {
+			recvTime = cs.state.LastBlockTime // genesis time
+		}
+		isTimely := cs.Proposal.IsTimely(recvTime, sp, cs.Round)
 		cs.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", isTimely)).
 			Observe(cs.ProposalReceiveTime.Sub(cs.Proposal.Timestamp).Seconds())
 	}
@@ -3170,8 +3181,7 @@ func (cs *State) calculateProposalTimestampDifferenceMetric() {
 // Block times must be monotonically increasing, so if the block time of the previous
 // block is larger than the proposer's current time, then the proposer will sleep
 // until its local clock exceeds the previous block time.
-func proposerWaitTime(lt tmtime.Source, bt time.Time) time.Duration {
-	t := lt.Now()
+func proposerWaitTime(t time.Time, bt time.Time) time.Duration {
 	if bt.After(t) {
 		return bt.Sub(t)
 	}

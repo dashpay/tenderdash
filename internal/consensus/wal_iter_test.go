@@ -9,105 +9,139 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/tendermint/tendermint/internal/consensus/types"
+	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
 
 func TestWalIter_Next(t *testing.T) {
 	testCases := []struct {
-		input []interface{}
-		want  []Message
+		input []any
+		want  []any
 	}{
-		{},
 		{
-			input: []interface{}{
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1000, Round: 0}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1001, Round: 0}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1002, Round: 0}},
+			input: []any{
+				newEventDataRoundState(1000, 0, types.RoundStepNewHeight),
+				newProposalMessage(1000, 0),
+				EndHeightMessage{Height: 1000},
+				newEventDataRoundState(1001, 0, types.RoundStepNewHeight),
+				newProposalMessage(1001, 0),
+				EndHeightMessage{Height: 1001},
+				newEventDataRoundState(1002, 0, types.RoundStepNewHeight),
+				newProposalMessage(1002, 0),
+				EndHeightMessage{Height: 1002},
 			},
-			want: []Message{
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1000, Round: 0}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1001, Round: 0}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1002, Round: 0}},
+			want: []any{
+				newEventDataRoundState(1000, 0, types.RoundStepNewHeight),
+				newProposalMessage(1000, 0),
+				EndHeightMessage{Height: 1000},
+				newEventDataRoundState(1001, 0, types.RoundStepNewHeight),
+				newProposalMessage(1001, 0),
+				EndHeightMessage{Height: 1001},
+				newEventDataRoundState(1002, 0, types.RoundStepNewHeight),
+				newProposalMessage(1002, 0),
+				EndHeightMessage{Height: 1002},
 			},
 		},
 		{
-			input: []interface{}{
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 0, Round: 0}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1000, Round: 0}},
-				&BlockPartMessage{Height: 1000, Round: 0},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1000, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1000, Round: 0}},
+			input: []any{
+				newEventDataRoundState(0, 0, types.RoundStepNewHeight),
+				newVoteMessage(0, 0),
+				EndHeightMessage{Height: 0},
+				newEventDataRoundState(1000, 0, types.RoundStepNewHeight),
+				newProposalMessage(1000, 0),
+				newBlockPartMessage(1000, 0),
+				newVoteMessage(1000, 0),
+				newVoteMessage(1000, 0),
+				EndHeightMessage{Height: 1000},
 			},
-			want: []Message{
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 0, Round: 0}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1000, Round: 0}},
-				&BlockPartMessage{Height: 1000, Round: 0},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1000, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1000, Round: 0}},
-			},
-		},
-		{
-			input: []interface{}{
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 0, Round: 0}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1000, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1000, Round: 0}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1001, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1000, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1000, Round: 1}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1001, Round: 1}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1001, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1001, Round: 1}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1001, Round: 2}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1001, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1001, Round: 1}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1001, Round: 3}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1001, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1001, Round: 1}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1001, Round: 2}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1002, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1002, Round: 0}},
-			},
-			want: []Message{
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 0, Round: 0}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1000, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1000, Round: 0}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1001, Round: 3}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1001, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1001, Round: 1}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1001, Round: 2}},
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1002, Round: 0}},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1002, Round: 0}},
+			want: []any{
+				newEventDataRoundState(0, 0, types.RoundStepNewHeight),
+				newVoteMessage(0, 0),
+				EndHeightMessage{Height: 0},
+				newEventDataRoundState(1000, 0, types.RoundStepNewHeight),
+				newProposalMessage(1000, 0),
+				newBlockPartMessage(1000, 0),
+				newVoteMessage(1000, 0),
+				newVoteMessage(1000, 0),
+				EndHeightMessage{Height: 1000},
 			},
 		},
 		{
-			input: generateMessageSequence(1000, 1002, 1000),
-			want: []Message{
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1000, Round: 1000}},
-				&BlockPartMessage{Height: 1000, Round: 1000},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1000, Round: 1000}},
+			input: []any{
+				newEventDataRoundState(0, 0, types.RoundStepNewHeight),
+				newVoteMessage(0, 0),
+				EndHeightMessage{Height: 0},
 
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1001, Round: 1000}},
-				&BlockPartMessage{Height: 1001, Round: 1000},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1001, Round: 1000}},
+				newEventDataRoundState(1000, 0, types.RoundStepNewHeight),
+				newProposalMessage(1000, 0),
+				newVoteMessage(1000, 0),
+				EndHeightMessage{Height: 1000},
 
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: 1002, Round: 1000}},
-				&BlockPartMessage{Height: 1002, Round: 1000},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: 1002, Round: 1000}},
+				newEventDataRoundState(1001, 0, types.RoundStepNewHeight),
+				newProposalMessage(1001, 0),
+				newVoteMessage(1001, 0),
+				// new round 1
+				newEventDataRoundState(1001, 1, types.RoundStepPropose),
+				newProposalMessage(1001, 1),
+				newVoteMessage(1001, 1),
+				newVoteMessage(1001, 0),
+				newVoteMessage(1001, 1),
+				// new round 2
+				newEventDataRoundState(1001, 2, types.RoundStepPropose),
+				newProposalMessage(1001, 2),
+				newVoteMessage(1001, 0),
+				newVoteMessage(1001, 1),
+				// new round 3
+				newEventDataRoundState(1001, 3, types.RoundStepPropose),
+				newProposalMessage(1001, 3),
+				newVoteMessage(1001, 0),
+				newVoteMessage(1001, 1),
+				newVoteMessage(1001, 2),
+				EndHeightMessage{Height: 1001},
+
+				newEventDataRoundState(1002, 0, types.RoundStepNewHeight),
+				newProposalMessage(1002, 0),
+				newVoteMessage(1002, 0),
+				EndHeightMessage{Height: 1002},
+			},
+			want: []any{
+				newEventDataRoundState(0, 0, types.RoundStepNewHeight),
+				newVoteMessage(0, 0),
+				EndHeightMessage{Height: 0},
+
+				newEventDataRoundState(1000, 0, types.RoundStepNewHeight),
+				newProposalMessage(1000, 0),
+				newVoteMessage(1000, 0),
+				EndHeightMessage{Height: 1000},
+
+				newEventDataRoundState(1001, 3, types.RoundStepPropose),
+				newProposalMessage(1001, 3),
+				EndHeightMessage{Height: 1001},
+
+				newEventDataRoundState(1002, 0, types.RoundStepNewHeight),
+				newProposalMessage(1002, 0),
+				newVoteMessage(1002, 0),
+				EndHeightMessage{Height: 1002},
 			},
 		},
 	}
+	testFunc := func(t *testing.T, it walIter, want []any) {
+		cnt := 0
+		for it.Next() {
+			msg := it.Value()
+			require.Equal(t, want[cnt], msg.Msg)
+			cnt++
+		}
+		require.NoError(t, it.Err())
+		require.Equal(t, len(want), cnt)
+	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
-			it := newWalIter(&mockWALReader{ret: tc.input})
-			cnt := 0
-			for it.Next() {
-				msg := it.Value()
-				mi := msg.Msg.(msgInfo)
-				require.Equal(t, tc.want[cnt], mi.Msg)
-				cnt++
-			}
-			require.NoError(t, it.Err())
-			require.Equal(t, len(tc.want), cnt)
+			it := newWalIter(&mockWALReader{ret: tc.input}, true)
+			testFunc(t, it, tc.want)
+			it = newWalIter(&mockWALReader{ret: tc.input}, false)
+			testFunc(t, it, tc.input)
 		})
 	}
 }
@@ -127,9 +161,7 @@ func TestWalIter_Err(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
-			it := newWalIter(&mockWALReader{ret: []interface{}{
-				tc.err,
-			}})
+			it := newWalIter(&mockWALReader{ret: []any{tc.err}}, true)
 			require.False(t, it.Next())
 			requireError(t, tc.want, it.Err())
 		})
@@ -145,7 +177,7 @@ func requireError(t *testing.T, want string, err error) {
 }
 
 type mockWALReader struct {
-	ret []interface{}
+	ret []any
 	pos int
 }
 
@@ -155,35 +187,48 @@ func (w *mockWALReader) Decode() (*TimedWALMessage, error) {
 		return nil, io.EOF
 	}
 	r := w.ret[w.pos]
-	var (
-		twm *TimedWALMessage
-		err error
-	)
-	switch val := r.(type) {
-	case Message:
-		twm = &TimedWALMessage{
-			Msg: msgInfo{Msg: val},
-		}
-	case error:
-		err = val
-	default:
-		err = fmt.Errorf("unsupported a type, allowed [Message, error]; given %T", r)
-	}
 	w.pos++
-	return twm, err
+	if err, ok := r.(error); ok {
+		return nil, err
+	}
+	return &TimedWALMessage{Msg: r}, nil
 }
 
-func generateMessageSequence(heightStart, heightEnd int64, roundEnd int32) []interface{} {
-	var msgs []interface{}
-	for h := heightStart; h <= heightEnd; h++ {
-		for r := int32(0); r <= roundEnd; r++ {
-			msgs = append(
-				msgs,
-				&ProposalMessage{Proposal: &tmtypes.Proposal{Height: h, Round: r}},
-				&BlockPartMessage{Height: h, Round: r},
-				&VoteMessage{Vote: &tmtypes.Vote{Height: h, Round: r}},
-			)
-		}
+func newEventDataRoundState(height int64, round int32, step types.RoundStepType) tmtypes.EventDataRoundState {
+	return tmtypes.EventDataRoundState{
+		Height: height,
+		Round:  round,
+		Step:   step.String(),
 	}
-	return msgs
+}
+
+func newProposalMessage(height int64, round int32) msgInfo {
+	return msgInfo{
+		Msg: &ProposalMessage{
+			Proposal: &tmtypes.Proposal{
+				Height: height,
+				Round:  round,
+			},
+		},
+	}
+}
+
+func newBlockPartMessage(height int64, round int32) msgInfo {
+	return msgInfo{
+		Msg: &BlockPartMessage{
+			Height: height,
+			Round:  round,
+			Part:   nil,
+		},
+	}
+}
+
+func newVoteMessage(height int64, round int32) msgInfo {
+	return msgInfo{
+		Msg: &VoteMessage{Vote: &tmtypes.Vote{
+			Type:   tmproto.PrecommitType,
+			Height: height,
+			Round:  round,
+		}},
+	}
 }

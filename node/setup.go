@@ -231,18 +231,19 @@ func createPeerManager(
 	maxUpgradeConns := uint16(4)
 
 	options := p2p.PeerManagerOptions{
-		SelfAddress:              selfAddr,
-		MaxConnected:             maxConns,
-		MaxOutgoingConnections:   maxOutgoingConns,
-		MaxConnectedUpgrade:      maxUpgradeConns,
-		DisconnectCooldownPeriod: 2 * time.Second,
-		MaxPeers:                 maxUpgradeConns + 4*maxConns,
-		MinRetryTime:             250 * time.Millisecond,
-		MaxRetryTime:             30 * time.Minute,
-		MaxRetryTimePersistent:   5 * time.Minute,
-		RetryTimeJitter:          5 * time.Second,
-		PrivatePeers:             privatePeerIDs,
-		Metrics:                  metrics,
+		SelfAddress:               selfAddr,
+		MaxConnected:              maxConns,
+		MaxOutgoingConnections:    maxOutgoingConns,
+		MaxIncomingConnectionTime: cfg.P2P.MaxIncomingConnectionTime,
+		MaxConnectedUpgrade:       maxUpgradeConns,
+		DisconnectCooldownPeriod:  2 * time.Second,
+		MaxPeers:                  maxUpgradeConns + 4*maxConns,
+		MinRetryTime:              250 * time.Millisecond,
+		MaxRetryTime:              30 * time.Minute,
+		MaxRetryTimePersistent:    5 * time.Minute,
+		RetryTimeJitter:           5 * time.Second,
+		PrivatePeers:              privatePeerIDs,
+		Metrics:                   metrics,
 	}
 
 	peers := []p2p.NodeAddress{}
@@ -273,15 +274,18 @@ func createPeerManager(
 	if err != nil {
 		return nil, peerDB.Close, fmt.Errorf("failed to create peer manager: %w", err)
 	}
-	peerManager.SetLogger(logger.With("module", "peer_manager"))
-
+	peerManager.SetLogger(logger.With("module", "peermanager"))
+	closer := func() error {
+		peerManager.Close()
+		return peerDB.Close()
+	}
 	for _, peer := range peers {
 		if _, err := peerManager.Add(peer); err != nil {
-			return nil, peerDB.Close, fmt.Errorf("failed to add peer %q: %w", peer, err)
+			return nil, closer, fmt.Errorf("failed to add peer %q: %w", peer, err)
 		}
 	}
 
-	return peerManager, peerDB.Close, nil
+	return peerManager, closer, nil
 }
 
 func createRouter(

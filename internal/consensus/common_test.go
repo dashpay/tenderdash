@@ -86,7 +86,6 @@ type validatorStub struct {
 	Index  int32 // Validator index. NOTE: we don't assume validator set changes.
 	Height int64
 	Round  int32
-	clock  tmtime.Source
 	types.PrivValidator
 	VotingPower int64
 	lastVote    *types.Vote
@@ -99,7 +98,6 @@ func newValidatorStub(privValidator types.PrivValidator, valIndex int32, initial
 		Index:         valIndex,
 		PrivValidator: privValidator,
 		VotingPower:   testMinPower,
-		clock:         tmtime.DefaultSource{},
 		Height:        initialHeight,
 	}
 }
@@ -399,9 +397,6 @@ func subscribeToVoter(ctx context.Context, t *testing.T, cs *State, proTxHash []
 	return ch
 }
 
-// TODO: used only in pbts_test.go, remove nolint:unused once pbts tests are un-skipped
-//
-//nolint:unused
 func subscribeToVoterBuffered(ctx context.Context, t *testing.T, cs *State, proTxHash []byte) <-chan tmpubsub.Message {
 	t.Helper()
 	votesSub, err := cs.eventBus.SubscribeWithArgs(ctx, tmpubsub.SubscribeArgs{
@@ -474,7 +469,7 @@ func newStateWithConfigAndBlockStore(
 	state sm.State,
 	pv types.PrivValidator,
 	app abci.Application,
-	blockStore *store.BlockStore,
+	blockStore sm.BlockStore,
 ) *State {
 	t.Helper()
 
@@ -550,9 +545,11 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 		validators = args.validators
 	}
 	var app abci.Application
-	app, err := kvstore.NewMemoryApp()
-	require.NoError(t, err)
-	if args.application != nil {
+	if args.application == nil {
+		var err error
+		app, err = kvstore.NewMemoryApp()
+		require.NoError(t, err)
+	} else {
 		app = args.application
 	}
 	if args.config == nil {
@@ -705,12 +702,12 @@ func ensureRelock(t *testing.T, relockCh <-chan tmpubsub.Message, height int64, 
 	ensureNewEvent(t, relockCh, height, round, ensureTimeout)
 }
 
-func ensureProposal(t *testing.T, proposalCh <-chan tmpubsub.Message, height int64, round int32, propID types.BlockID) {
+func ensureProposal(t *testing.T, proposalCh <-chan tmpubsub.Message, height int64, round int32, propID types.BlockID) types.BlockID {
 	t.Helper()
-	ensureProposalWithTimeout(t, proposalCh, height, round, &propID, ensureTimeout)
+	return ensureProposalWithTimeout(t, proposalCh, height, round, &propID, ensureTimeout)
 }
 
-func ensureProposalWithTimeout(t *testing.T, proposalCh <-chan tmpubsub.Message, height int64, round int32, propID *types.BlockID, timeout time.Duration) {
+func ensureProposalWithTimeout(t *testing.T, proposalCh <-chan tmpubsub.Message, height int64, round int32, propID *types.BlockID, timeout time.Duration) types.BlockID {
 	t.Helper()
 	msg := ensureMessageBeforeTimeout(t, proposalCh, timeout)
 	proposalEvent, ok := msg.Data().(types.EventDataCompleteProposal)
@@ -718,10 +715,12 @@ func ensureProposalWithTimeout(t *testing.T, proposalCh <-chan tmpubsub.Message,
 		msg.Data())
 	require.Equal(t, height, proposalEvent.Height)
 	require.Equal(t, round, proposalEvent.Round)
-	if propID != nil {
+	if propID != nil && !propID.IsNil() {
 		require.True(t, proposalEvent.BlockID.Equals(*propID),
 			"Proposed block does not match expected block (%v != %v)", proposalEvent.BlockID, propID)
 	}
+
+	return proposalEvent.BlockID
 }
 
 func ensurePrecommit(t *testing.T, voteCh <-chan tmpubsub.Message, height int64, round int32) {
@@ -1003,7 +1002,7 @@ func makeGenesisState(ctx context.Context, t *testing.T, cfg *config.Config, arg
 		args.Params = types.DefaultConsensusParams()
 	}
 	if args.Time.IsZero() {
-		args.Time = time.Now()
+		args.Time = tmtime.Now()
 	}
 	genDoc, privVals := factory.RandGenesisDoc(cfg, args.Validators, 1, args.Params)
 	genDoc.GenesisTime = args.Time

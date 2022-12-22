@@ -12,13 +12,18 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tendermint/tendermint/abci/example/kvstore"
 	abci "github.com/tendermint/tendermint/abci/types"
 	abcimocks "github.com/tendermint/tendermint/abci/types/mocks"
 	"github.com/tendermint/tendermint/crypto"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
+	"github.com/tendermint/tendermint/internal/mempool"
 	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
 	tmquery "github.com/tendermint/tendermint/internal/pubsub/query"
+	sf "github.com/tendermint/tendermint/internal/state/test/factory"
+	"github.com/tendermint/tendermint/internal/test/factory"
+
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
@@ -261,11 +266,17 @@ func TestStateProposalTime(t *testing.T) {
 
 	config := configSetup(t)
 
-	cs1, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1})
-	height, round := cs1.Height, cs1.Round
-	cs1.config.ProposedBlockTimeWindow = 1 * time.Second
+	app, err := kvstore.NewMemoryApp(kvstore.WithDuplicateRequestDetection(false))
+	require.NoError(t, err)
+	cs1, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1, application: app})
 	cs1.config.DontAutoPropose = true
 	cs1.config.CreateEmptyBlocksInterval = 0
+	cs1.state.ConsensusParams.Synchrony.MessageDelay = 5 * time.Millisecond
+	cs1.state.ConsensusParams.Synchrony.Precision = 10 * time.Millisecond
+
+	height, round := cs1.Height, cs1.Round
+	delay := cs1.state.ConsensusParams.Synchrony.MessageDelay
+	precision := cs1.state.ConsensusParams.Synchrony.Precision
 
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
 
@@ -285,7 +296,7 @@ func TestStateProposalTime(t *testing.T) {
 			expectNewBlock: false,
 		},
 		{ // TEST 1: BLOCK TIME IS IN FUTURE
-			blockTimeFunc:  func(s *State) time.Time { return time.Now().Add(s.config.ProposedBlockTimeWindow + 24*time.Hour) },
+			blockTimeFunc:  func(s *State) time.Time { return time.Now().Add(delay + precision + 24*time.Hour) },
 			expectNewBlock: true,
 		},
 		{ // TEST 2: BLOCK TIME IS OLDER THAN PREVIOUS BLOCK TIME
@@ -294,7 +305,7 @@ func TestStateProposalTime(t *testing.T) {
 		},
 		{ // TEST 3: BLOCK TIME IS IN THE PAST, PROPOSAL IS NEW
 			blockTimeFunc:  nil,
-			sleep:          cs1.config.ProposedBlockTimeWindow + 1*time.Millisecond,
+			sleep:          delay + precision + 1*time.Millisecond,
 			expectNewBlock: true,
 		},
 	}
@@ -1477,7 +1488,7 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
+	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, logger: consensusLogger(t)})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 	height, round := cs1.Height, cs1.Round
 
@@ -1503,6 +1514,12 @@ func TestStateLock_POLSafety2(t *testing.T) {
 		vs2, vs3, vs4)
 
 	// the block for round 1
+	// We add some tx so that the proposal will differ from the round 0 one
+	// We cannot rely on time because blocks at initial height have genesis time
+	mpool := (cs1.txNotifier).(mempool.Mempool)
+	err = mpool.CheckTx(ctx, types.Tx("round1"), nil, mempool.TxInfo{})
+	assert.NoError(t, err)
+
 	prop1, propBlock1 := decideProposal(ctx, t, cs1, vs2, vs2.Height, vs2.Round+1)
 	propBlockParts1, err := propBlock1.MakePartSet(partSize)
 	require.NoError(t, err)
@@ -1527,6 +1544,9 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	ensurePrecommit(t, voteCh, height, round)
 	// the proposed block should now be locked and our precommit added
 	validatePrecommit(ctx, t, cs1, round, round, vss[0], propBlockID1.Hash, propBlockID1.Hash)
+
+	assert.True(t, cs1.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
+	assert.Equal(t, round, cs1.LockedRound, "invalid round locked")
 
 	// add precommits from the rest
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs4)
@@ -1561,6 +1581,7 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	ensureNewProposal(t, proposalCh, height, round)
 
 	ensurePrevote(t, voteCh, height, round)
+	assert.True(t, cs1.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
 	validatePrevote(ctx, t, cs1, round, vss[0], nil)
 
 }
@@ -3010,6 +3031,71 @@ func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
 
 	ensurePrecommit(t, voteCh, height, round)
 	validatePrecommit(ctx, t, cs1, round, -1, vss[0], nil, nil)
+}
+
+// TestStateTryAddCommitCallsProcessProposal ensures that CurrentRoundState is updated by calling Process Proposal
+// before commit received from peer is verified.
+//
+// Proposer generates a proposal, creates a commit and sends it to otherNode. OtherNode correctly verifies the commit.
+//
+// This test ensures that a bug "2/3 committed an invalid block" when processing received commits will not reappear.
+func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	config := configSetup(t)
+
+	css := makeConsensusState(
+		ctx,
+		t,
+		config,
+		2,
+		t.Name(),
+		newTickerFunc(),
+	)
+	privvals := []types.PrivValidator{}
+	for _, c := range css {
+		privvals = append(privvals, c.privValidator.PrivValidator)
+	}
+	proposer := css[0]
+	otherNode := css[1]
+
+	block, err := sf.MakeBlock(proposer.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
+	require.NoError(t, err)
+	block.CoreChainLockedHeight = 1
+
+	commit, err := factory.MakeCommit(
+		ctx,
+		block.BlockID(nil),
+		block.Height,
+		0,
+		proposer.Votes.Precommits(0),
+		proposer.Validators,
+		privvals,
+		block.StateID(),
+	)
+	require.NoError(t, err)
+
+	proposal := types.NewProposal(
+		block.Height,
+		block.CoreChainLockedHeight,
+		0,
+		-1,
+		commit.BlockID,
+		block.Time)
+
+	parts, err := block.MakePartSet(999999999)
+	require.NoError(t, err)
+
+	peerID := proposer.Validators.Proposer.NodeAddress.NodeID
+	otherNode.Proposal = proposal
+	otherNode.ProposalBlock = block
+	otherNode.ProposalBlockParts = parts
+	otherNode.updateRoundStep(commit.Round, cstypes.RoundStepPrevote)
+
+	// This is where error "2/3 committed an invalid block" occurred before
+	added, err := otherNode.tryAddCommit(ctx, commit, peerID)
+	assert.True(t, added)
+	assert.NoError(t, err)
 }
 
 // TestStateTimestamp_ProposalMatch tests that a validator prevotes a
