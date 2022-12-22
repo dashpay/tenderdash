@@ -171,6 +171,8 @@ type State struct {
 	behaviour     *Behaviour
 	blockExecutor *blockExecutor
 	voteSigner    *VoteSigner
+
+	stopFn func(cs *State) bool
 }
 
 // StateOption sets an optional parameter on the State.
@@ -180,6 +182,12 @@ type StateOption func(*State)
 // skip state bootstrapping during construction.
 func SkipStateStoreBootstrap(sm *State) {
 	sm.skipBootstrapping = true
+}
+
+func WithStopFunc(stopFn func(cs *State) bool) func(cs *State) {
+	return func(cs *State) {
+		cs.stopFn = stopFn
+	}
 }
 
 // NewState returns a new State.
@@ -607,7 +615,7 @@ func (cs *State) OnStart(ctx context.Context) error {
 	}
 
 	// now start the receiveRoutine
-	go cs.receiveRoutine(ctx, 0)
+	go cs.receiveRoutine(ctx, cs.stopFn)
 
 	// schedule the first round!
 	// use GetRoundState so we don't race the receiveRoutine for access
@@ -627,7 +635,7 @@ func (cs *State) startRoutines(ctx context.Context, maxSteps int) {
 		return
 	}
 
-	go cs.receiveRoutine(ctx, maxSteps)
+	go cs.receiveRoutine(ctx, stopStateByMaxStepFunc(maxSteps))
 }
 
 // loadWalFile loads WAL data from file. It overwrites cs.wal.
@@ -759,7 +767,7 @@ func (cs *State) loadLastCommit(lastBlockHeight int64) (*types.Commit, error) {
 // It keeps the RoundState and is the only thing that updates it.
 // Updates (state transitions) happen on timeouts, complete proposals, and 2/3 majorities.
 // State must be locked before any internal state is updated.
-func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
+func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 	onExit := func(cs *State) {
 		// NOTE: the internalMsgQueue may have signed messages from our
 		// priv_val that haven't hit the WAL, but its ok because
@@ -817,12 +825,8 @@ func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
 	go cs.msgInfoQueue.readMessages(ctx)
 
 	for {
-		if maxSteps > 0 {
-			if cs.behaviour.nSteps >= maxSteps {
-				cs.logger.Debug("reached max steps; exiting receive routine")
-				cs.behaviour.nSteps = 0
-				return
-			}
+		if stopFn != nil && stopFn(cs) {
+			return
 		}
 
 		select {
@@ -1044,4 +1048,15 @@ func (pv *privValidator) init(ctx context.Context) error {
 	var err error
 	pv.ProTxHash, err = pv.GetProTxHash(ctx)
 	return err
+}
+
+func stopStateByMaxStepFunc(maxSteps int) func(cs *State) bool {
+	return func(cs *State) bool {
+		if maxSteps > 0 && cs.nSteps >= maxSteps {
+			cs.logger.Debug("reached max steps; exiting receive routine")
+			cs.nSteps = 0
+			return true
+		}
+		return false
+	}
 }

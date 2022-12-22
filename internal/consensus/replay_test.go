@@ -1355,10 +1355,18 @@ func TestHandshakeInitialCoreLockHeight(t *testing.T) {
 func TestWALRoundsSkipper(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	const (
+		chainLen int64 = 5
+		maxRound int32 = 10
+	)
 	cfg := getConfig(t)
 	cfg.Consensus.WalSkipRoundsToLast = true
 	logger := log.NewNopLogger()
-	ng := nodeGen{cfg: cfg, logger: logger}
+	ng := nodeGen{
+		cfg:       cfg,
+		logger:    logger,
+		stateOpts: []StateOption{WithStopFunc(stopConsensusAtHeight(chainLen + 1))},
+	}
 	node := ng.Generate(ctx, t)
 	doPrevoteOrigin := node.csState.behaviour.commander.commands[DoPrevoteType]
 	doPrevoteCmd := newMockCommand(func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
@@ -1372,11 +1380,6 @@ func TestWALRoundsSkipper(t *testing.T) {
 		return doPrevoteOrigin.Execute(ctx, behaviour, stateEvent)
 	})
 	node.csState.behaviour.RegisterCommand(DoPrevoteType, doPrevoteCmd)
-
-	const (
-		chainLen int64 = 5
-		maxRound int32 = 10
-	)
 	walBody, err := WALWithNBlocks(ctx, t, logger, node, chainLen)
 	require.NoError(t, err)
 	walFile := tempWALWithData(t, walBody)
@@ -1418,11 +1421,11 @@ func TestWALRoundsSkipper(t *testing.T) {
 		blockStore,
 	)
 
-	cs := newStateWithConfigAndBlockStore(ctx, t, logger, cfg, state, privVal, app, blockStore)
+	cs := newStateWithConfigAndBlockStore(ctx, t, log.NewTestingLogger(t), cfg, state, privVal, app, blockStore)
 
 	commit := blockStore.commits[len(blockStore.commits)-1]
 	require.Equal(t, int64(4), commit.Height)
-	require.Equal(t, int32(10), commit.Round)
+	require.GreaterOrEqual(t, maxRound, commit.Round)
 
 	require.NoError(t, cs.Start(ctx))
 	defer cs.Stop()
@@ -1441,7 +1444,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 	require.Equal(t, chainLen+1, eventNewBlock.Block.Height)
 	commit = blockStore.commits[chainLen-1]
 	require.Equal(t, chainLen, commit.Height)
-	require.Equal(t, maxRound, commit.Round)
+	require.GreaterOrEqual(t, maxRound, commit.Round)
 }
 
 // returns the vals on InitChain
