@@ -48,12 +48,10 @@ jobs:
         with:
           result-encoding: string
           script: |
-            if ( github.event.release != null &&
-              !context.payload.release.tag_name.includes('-dev') ) {
+            if (github.ref_type == 'tag' && !contains(github.ref_name,'-dev')) {
               return 'final'
             }
-            return dev
-
+            return 'dev'
 
       - name: Set Docker tags and labels
         id: docker_meta
