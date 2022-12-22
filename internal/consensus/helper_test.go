@@ -242,6 +242,7 @@ func (c *ChainGenerator) Generate(ctx context.Context, t *testing.T) Chain {
 
 func stopConsensusAtHeight(height int64) func(cs *State) bool {
 	return func(cs *State) bool {
-		return cs.Height == height
+		appState := cs.GetAppState()
+		return appState.Height == height
 	}
 }
