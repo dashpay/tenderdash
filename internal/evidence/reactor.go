@@ -90,7 +90,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	}
 
 	go r.processEvidenceCh(ctx, ch)
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx), ch)
+	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "evidence"), ch)
 
 	return nil
 }
