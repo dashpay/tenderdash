@@ -138,6 +138,10 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 		}
 
 		appState.ProposalBlock = block
+		err = appState.Save()
+		if err != nil {
+			return false, err
+		}
 
 		// NOTE: it's possible to receive complete proposal blocks for future rounds without having the proposal
 		cs.logger.Info(
