@@ -2,13 +2,11 @@ package consensus
 
 import (
 	"bytes"
-	"context"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/dash"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	sm "github.com/tendermint/tendermint/internal/state"
@@ -130,11 +128,6 @@ func (s *AppState) updateRoundStep(round int32, step cstypes.RoundStepType) {
 		if s.Step != step {
 			s.metrics.MarkStep(s.Step)
 		}
-	}
-	// New round, so we reset current round state.
-	// It will be recreated with ProcessProposal request.
-	if round != s.Round {
-		s.CurrentRoundState = sm.CurrentRoundState{}
 	}
 	s.Round = round
 	s.Step = step
@@ -325,7 +318,7 @@ func (s *AppState) updateValidBlock() {
 	s.ValidBlockParts = s.ProposalBlockParts
 }
 
-func (s *AppState) verifyCommit(ctx context.Context, commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
+func (s *AppState) verifyCommit(commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
 	// Lets first do some basic commit validation before more complicated commit verification
 	if err := commit.ValidateBasic(); err != nil {
 		return false, fmt.Errorf("error validating commit: %v", err)
@@ -372,7 +365,7 @@ func (s *AppState) verifyCommit(ctx context.Context, commit *types.Commit, peerI
 		// We need to verify that it was properly signed
 		// This generally proves that the commit is correct
 		if err := s.Validators.VerifyCommit(s.state.ChainID, commit.BlockID, s.Height, commit); err != nil {
-			return false, fmt.Errorf("error verifying commit: %v", err)
+			return false, fmt.Errorf("error verifying commit: %w", err)
 		}
 
 		if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
@@ -394,28 +387,7 @@ func (s *AppState) verifyCommit(ctx context.Context, commit *types.Commit, peerI
 
 	// Lets verify that the threshold signature matches the current validator set
 	if err := s.Validators.VerifyCommit(s.state.ChainID, rs.Proposal.BlockID, s.Height, commit); err != nil {
-		return false, fmt.Errorf("error verifying commit: %v", err)
-	}
-
-	block, blockParts := s.ProposalBlock, s.ProposalBlockParts
-
-	if block == nil {
-		return false, nil
-	}
-
-	if !blockParts.HasHeader(commit.BlockID.PartSetHeader) {
-		return false, fmt.Errorf("expected ProposalBlockParts header to be commit header")
-	}
-	proTxHash, _ := dash.ProTxHashFromContext(ctx)
-	if !block.HashesTo(commit.BlockID.Hash) {
-		s.logger.Error("proposal block does not hash to commit hash",
-			"height", commit.Height,
-			"node_proTxHash", proTxHash.ShortString(),
-			"block", block,
-			"commit", commit,
-			"complete_proposal", s.isProposalComplete(),
-		)
-		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
+		return false, fmt.Errorf("error verifying commit: %w", err)
 	}
 
 	return true, nil

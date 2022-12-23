@@ -321,7 +321,6 @@ func NewState(
 			},
 			TryAddCommitType: &TryAddCommitCommand{
 				logger:         cs.logger,
-				validator:      cs.blockExecutor,
 				blockExec:      cs.blockExecutor,
 				eventPublisher: eventPublisher,
 			},
@@ -1052,7 +1051,7 @@ func (pv *privValidator) init(ctx context.Context) error {
 
 func stopStateByMaxStepFunc(maxSteps int) func(cs *State) bool {
 	return func(cs *State) bool {
-		if cs.behaviour.nSteps >= maxSteps {
+		if maxSteps > 0 && cs.behaviour.nSteps >= maxSteps {
 			cs.logger.Debug("reached max steps; exiting receive routine")
 			cs.behaviour.nSteps = 0
 			return true

@@ -244,6 +244,7 @@ func decideProposal(
 	t.Helper()
 
 	appState := cs1.GetAppState()
+	defer appState.Save()
 
 	block, err := cs1.blockExecutor.create(ctx, &appState, round)
 	require.NoError(t, err)

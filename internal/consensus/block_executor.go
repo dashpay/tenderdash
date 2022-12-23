@@ -63,9 +63,9 @@ func (c *blockExecutor) create(ctx context.Context, appState *AppState, round in
 
 func (c *blockExecutor) process(ctx context.Context, appState *AppState, round int32) error {
 	block := appState.ProposalBlock
-	if appState.CurrentRoundState.Params.Source != sm.ProcessProposalSource ||
-		!appState.CurrentRoundState.MatchesBlock(block.Header, round) {
-		c.logger.Debug("CurrentRoundState is outdated", "crs", appState.CurrentRoundState)
+	crs := appState.CurrentRoundState
+	if crs.Params.Source != sm.ProcessProposalSource || !crs.MatchesBlock(block.Header, round) {
+		c.logger.Debug("CurrentRoundState is outdated", "crs", crs)
 		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, appState.state, true)
 		if err != nil {
 			return fmt.Errorf("ProcessProposal abci method: %w", err)

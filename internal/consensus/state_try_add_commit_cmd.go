@@ -79,9 +79,30 @@ func (cs *TryAddCommitCommand) Execute(ctx context.Context, behaviour *Behaviour
 }
 
 func (cs *TryAddCommitCommand) verifyCommit(ctx context.Context, appState *AppState, commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
-	verified, err = appState.verifyCommit(ctx, commit, peerID, ignoreProposalBlock)
+	verified, err = appState.verifyCommit(commit, peerID, ignoreProposalBlock)
 	if !verified || err != nil {
 		return verified, err
+	}
+	if ignoreProposalBlock {
+		return true, nil
+	}
+	block, blockParts := appState.ProposalBlock, appState.ProposalBlockParts
+	if block == nil {
+		return false, nil
+	}
+	if !blockParts.HasHeader(commit.BlockID.PartSetHeader) {
+		return false, fmt.Errorf("expected ProposalBlockParts header to be commit header")
+	}
+	proTxHash, _ := dash.ProTxHashFromContext(ctx)
+	if !block.HashesTo(commit.BlockID.Hash) {
+		cs.logger.Error("proposal block does not hash to commit hash",
+			"height", commit.Height,
+			"node_proTxHash", proTxHash.ShortString(),
+			"block", block,
+			"commit", commit,
+			"complete_proposal", appState.isProposalComplete(),
+		)
+		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 	// We have a correct block, let's process it before applying the commit
 	err = cs.blockExec.process(ctx, appState, commit.Round)
@@ -90,9 +111,6 @@ func (cs *TryAddCommitCommand) verifyCommit(ctx context.Context, appState *AppSt
 	}
 	err = cs.blockExec.validate(ctx, appState)
 	if err != nil {
-		return false, err
-	}
-	if err := cs.validator.validate(ctx, appState); err != nil {
 		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
 	return true, nil
