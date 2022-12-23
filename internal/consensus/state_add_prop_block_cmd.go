@@ -40,9 +40,13 @@ func (cs *AddProposalBlockPartCommand) Execute(ctx context.Context, behaviour *B
 
 	// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
 	added, err := cs.addProposalBlockPart(ctx, behaviour, appState, event.Msg, event.PeerID)
-	if added && appState.ProposalBlockParts != nil && appState.ProposalBlockParts.IsComplete() && event.FromReplay {
-		cs.blockExec.processOrPanic(ctx, appState, event.Msg.Round)
+	if err != nil {
+		return added, err
 	}
+
+	//if added && appState.ProposalBlockParts != nil && appState.ProposalBlockParts.IsComplete() && event.FromReplay {
+	//	cs.blockExec.processOrPanic(ctx, appState, event.Msg.Round)
+	//}
 
 	if added && commitNotExist && appState.ProposalBlockParts.IsComplete() {
 		err = cs.handleCompleteProposal(ctx, behaviour, appState, event.Msg.Height, event.FromReplay)
