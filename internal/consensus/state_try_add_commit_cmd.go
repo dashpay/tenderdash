@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/tendermint/tendermint/dash"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
@@ -19,7 +20,6 @@ type TryAddCommitEvent struct {
 type TryAddCommitCommand struct {
 	logger log.Logger
 	// create and execute blocks
-	validator      validator
 	eventPublisher *EventPublisher
 	blockExec      *blockExecutor
 }
