@@ -55,13 +55,13 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 	// block and otherwise disable the priv validator.
 	byzState.mtx.Lock()
 	privVal := byzState.privValidator
-	doPrevoteCmd := newMockCommand(func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+	doPrevoteCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 		appState := stateEvent.AppState
 		defer close(signal)
 		invalidDoPrevoteFunc(ctx, t, appState, byzState, byzReactor, rts.voteChannels[node.NodeID], privVal)
 		return nil, nil
 	})
-	byzState.behaviour.RegisterCommand(DoPrevoteType, doPrevoteCmd)
+	byzState.behavior.RegisterCommand(DoPrevoteType, doPrevoteCmd)
 
 	byzState.mtx.Unlock()
 

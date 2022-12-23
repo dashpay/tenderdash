@@ -32,7 +32,7 @@ type StateEvent struct {
 }
 
 type CommandHandler interface {
-	Execute(ctx context.Context, behaviour *Behaviour, event StateEvent) (any, error)
+	Execute(ctx context.Context, behavior *Behavior, event StateEvent) (any, error)
 }
 
 type CommandExecutor struct {
@@ -43,10 +43,10 @@ func (c *CommandExecutor) Register(eventType EventType, handler CommandHandler) 
 	c.commands[eventType] = handler
 }
 
-func (c *CommandExecutor) Execute(ctx context.Context, behaviour *Behaviour, event StateEvent) (any, error) {
+func (c *CommandExecutor) Execute(ctx context.Context, behavior *Behavior, event StateEvent) (any, error) {
 	command, ok := c.commands[event.EventType]
 	if !ok {
 		panic("unknown command")
 	}
-	return command.Execute(ctx, behaviour, event)
+	return command.Execute(ctx, behavior, event)
 }

@@ -1368,8 +1368,8 @@ func TestWALRoundsSkipper(t *testing.T) {
 		stateOpts: []StateOption{WithStopFunc(stopConsensusAtHeight(chainLen + 1))},
 	}
 	node := ng.Generate(ctx, t)
-	doPrevoteOrigin := node.csState.behaviour.commander.commands[DoPrevoteType]
-	doPrevoteCmd := newMockCommand(func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+	doPrevoteOrigin := node.csState.behavior.commander.commands[DoPrevoteType]
+	doPrevoteCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 		event := stateEvent.Data.(DoPrevoteEvent)
 		height := event.Height
 		round := event.Round
@@ -1377,9 +1377,9 @@ func TestWALRoundsSkipper(t *testing.T) {
 			node.csState.voteSigner.signAddVote(ctx, stateEvent.AppState, tmproto.PrevoteType, types.BlockID{})
 			return nil, nil
 		}
-		return doPrevoteOrigin.Execute(ctx, behaviour, stateEvent)
+		return doPrevoteOrigin.Execute(ctx, behavior, stateEvent)
 	})
-	node.csState.behaviour.RegisterCommand(DoPrevoteType, doPrevoteCmd)
+	node.csState.behavior.RegisterCommand(DoPrevoteType, doPrevoteCmd)
 	walBody, err := WALWithNBlocks(ctx, t, logger, node, chainLen)
 	require.NoError(t, err)
 	walFile := tempWALWithData(t, walBody)

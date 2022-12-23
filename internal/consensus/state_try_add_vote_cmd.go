@@ -32,11 +32,11 @@ type TryAddVoteCommand struct {
 }
 
 // Execute ...
-func (cs *TryAddVoteCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *TryAddVoteCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	appState := stateEvent.AppState
 	event := stateEvent.Data.(TryAddVoteEvent)
 	vote, peerID := event.Vote, event.PeerID
-	added, err := cs.addVote(ctx, behaviour, appState, vote, peerID)
+	added, err := cs.addVote(ctx, behavior, appState, vote, peerID)
 	if err != nil {
 		// If the vote height is off, we'll just ignore it,
 		// But if it's a conflicting sig, add it to the cs.evpool.
@@ -81,7 +81,7 @@ func (cs *TryAddVoteCommand) Execute(ctx context.Context, behaviour *Behaviour, 
 
 func (cs *TryAddVoteCommand) addVote(
 	ctx context.Context,
-	behaviour *Behaviour,
+	behavior *Behavior,
 	appState *AppState,
 	vote *types.Vote,
 	peerID types.NodeID,
@@ -130,7 +130,7 @@ func (cs *TryAddVoteCommand) addVote(
 		if appState.bypassCommitTimeout() && appState.LastPrecommits.HasAll() {
 			// go straight to new round (skip timeout commit)
 			// cs.scheduleTimeout(time.Duration(0), cs.Height, 0, cstypes.RoundStepNewHeight)
-			_ = behaviour.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: appState.Height})
+			_ = behavior.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: appState.Height})
 		}
 
 		return
@@ -250,20 +250,20 @@ func (cs *TryAddVoteCommand) addVote(
 		switch {
 		case appState.Round < vote.Round && prevotes.HasTwoThirdsAny():
 			// Round-skip if there is any 2/3+ of votes ahead of us
-			_ = behaviour.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: height, Round: vote.Round})
+			_ = behavior.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: height, Round: vote.Round})
 
 		case appState.Round == vote.Round && cstypes.RoundStepPrevote <= appState.Step: // current round
 			blockID, ok := prevotes.TwoThirdsMajority()
 			if ok && (appState.isProposalComplete() || blockID.IsNil()) {
-				_ = behaviour.EnterPrecommit(ctx, appState, EnterPrecommitEvent{Height: height, Round: vote.Round})
+				_ = behavior.EnterPrecommit(ctx, appState, EnterPrecommitEvent{Height: height, Round: vote.Round})
 			} else if prevotes.HasTwoThirdsAny() {
-				behaviour.EnterPrevoteWait(ctx, appState, EnterPrevoteWaitEvent{Height: height, Round: vote.Round})
+				behavior.EnterPrevoteWait(ctx, appState, EnterPrevoteWaitEvent{Height: height, Round: vote.Round})
 			}
 
 		case appState.Proposal != nil && 0 <= appState.Proposal.POLRound && appState.Proposal.POLRound == vote.Round:
 			// If the proposal is now complete, enter prevote of cs.Round.
 			if appState.isProposalComplete() {
-				_ = behaviour.EnterPrevote(ctx, appState, EnterPrevoteEvent{Height: height, Round: appState.Round})
+				_ = behavior.EnterPrevote(ctx, appState, EnterPrevoteEvent{Height: height, Round: appState.Round})
 			}
 		}
 
@@ -279,20 +279,20 @@ func (cs *TryAddVoteCommand) addVote(
 		blockID, ok := precommits.TwoThirdsMajority()
 		if ok {
 			// Executed as TwoThirdsMajority could be from a higher round
-			_ = behaviour.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: height, Round: vote.Round})
-			_ = behaviour.EnterPrecommit(ctx, appState, EnterPrecommitEvent{Height: height, Round: vote.Round})
+			_ = behavior.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: height, Round: vote.Round})
+			_ = behavior.EnterPrecommit(ctx, appState, EnterPrecommitEvent{Height: height, Round: vote.Round})
 
 			if !blockID.IsNil() {
-				_ = behaviour.EnterCommit(ctx, appState, EnterCommitEvent{Height: height, CommitRound: vote.Round})
+				_ = behavior.EnterCommit(ctx, appState, EnterCommitEvent{Height: height, CommitRound: vote.Round})
 				if appState.bypassCommitTimeout() && precommits.HasAll() {
-					_ = behaviour.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: appState.Height})
+					_ = behavior.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: appState.Height})
 				}
 			} else {
-				behaviour.EnterPrecommitWait(ctx, appState, EnterPrecommitWaitEvent{Height: height, Round: vote.Round})
+				behavior.EnterPrecommitWait(ctx, appState, EnterPrecommitWaitEvent{Height: height, Round: vote.Round})
 			}
 		} else if appState.Round <= vote.Round && precommits.HasTwoThirdsAny() {
-			_ = behaviour.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: height, Round: vote.Round})
-			behaviour.EnterPrecommitWait(ctx, appState, EnterPrecommitWaitEvent{Height: height, Round: vote.Round})
+			_ = behavior.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: height, Round: vote.Round})
+			behavior.EnterPrecommitWait(ctx, appState, EnterPrecommitWaitEvent{Height: height, Round: vote.Round})
 		}
 
 	default:

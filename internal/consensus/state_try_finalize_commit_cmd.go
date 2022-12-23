@@ -24,7 +24,7 @@ type TryFinalizeCommitCommand struct {
 }
 
 // Execute ...
-func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(TryFinalizeCommitEvent)
 	appState := stateEvent.AppState
 	if appState.Height != event.Height {
@@ -49,12 +49,12 @@ func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, behaviour *Beha
 		return nil, nil
 	}
 
-	cs.finalizeCommit(ctx, behaviour, appState, event.Height)
+	cs.finalizeCommit(ctx, behavior, appState, event.Height)
 	return nil, nil
 }
 
 // Increment height and goto cstypes.RoundStepNewHeight
-func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, behaviour *Behaviour, appState *AppState, height int64) {
+func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, behavior *Behavior, appState *AppState, height int64) {
 	logger := cs.logger.With("height", height)
 
 	if appState.Height != height || appState.Step != cstypes.RoundStepApplyCommit {
@@ -93,11 +93,11 @@ func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, behaviou
 		// but may differ from the LastPrecommits included in the next block
 		precommits := appState.Votes.Precommits(appState.CommitRound)
 		seenCommit := precommits.MakeCommit()
-		behaviour.ApplyCommit(ctx, appState, ApplyCommitEvent{Commit: seenCommit})
+		behavior.ApplyCommit(ctx, appState, ApplyCommitEvent{Commit: seenCommit})
 		return
 	}
 	// Happens during replay if we already saved the block but didn't commit
 	logger.Debug("calling tryFinalizeCommit on already stored block", "height", block.Height)
 	// Todo: do we need this?
-	behaviour.ApplyCommit(ctx, appState, ApplyCommitEvent{})
+	behavior.ApplyCommit(ctx, appState, ApplyCommitEvent{})
 }

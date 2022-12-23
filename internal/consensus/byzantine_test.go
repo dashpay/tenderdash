@@ -125,9 +125,9 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	}
 
 	bzReactor := rts.reactors[bzNodeID]
-	doPrevoteOrigin := bzNodeState.behaviour.commander.commands[DoPrevoteType]
+	doPrevoteOrigin := bzNodeState.behavior.commander.commands[DoPrevoteType]
 	// alter prevote so that the byzantine node double votes when height is 2
-	doPrevoteCmd := newMockCommand(func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+	doPrevoteCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 		appState := stateEvent.AppState
 		event := stateEvent.Data.(DoPrevoteEvent)
 		height := event.Height
@@ -139,7 +139,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		appState.CurrentRoundState = uncommittedState
 
 		if height != prevoteHeight {
-			return doPrevoteOrigin.Execute(ctx, behaviour, stateEvent)
+			return doPrevoteOrigin.Execute(ctx, behavior, stateEvent)
 		}
 		prevote1, err := bzNodeState.voteSigner.signVote(ctx, appState, tmproto.PrevoteType, appState.BlockID())
 		require.NoError(t, err)
@@ -175,7 +175,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		return nil, nil
 	})
 
-	bzNodeState.behaviour.RegisterCommand(DoPrevoteType, doPrevoteCmd)
+	bzNodeState.behavior.RegisterCommand(DoPrevoteType, doPrevoteCmd)
 
 	// Introducing a lazy proposer means that the time of the block committed is
 	// different to the timestamp that the other nodes have. This tests to ensure
@@ -183,7 +183,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	// lazyProposer := states[1]
 	lazyNodeState := states[1]
 
-	decideProposalCmd := newMockCommand(func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+	decideProposalCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 		appState := stateEvent.AppState
 		event := stateEvent.Data.(DecideProposalEvent)
 		height := event.Height
@@ -267,7 +267,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 		return nil, nil
 	})
-	lazyNodeState.behaviour.RegisterCommand(DecideProposalType, decideProposalCmd)
+	lazyNodeState.behavior.RegisterCommand(DecideProposalType, decideProposalCmd)
 
 	rts.switchToConsensus(ctx)
 

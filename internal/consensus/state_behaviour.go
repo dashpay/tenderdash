@@ -12,7 +12,7 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-type Behaviour struct {
+type Behavior struct {
 	wal       WALWriter
 	eventBus  *eventbus.EventBus
 	evsw      tmevents.EventSwitch
@@ -28,87 +28,87 @@ type Behaviour struct {
 	nSteps int
 }
 
-func (b *Behaviour) EnterNewRound(ctx context.Context, appState *AppState, event EnterNewRoundEvent) error {
+func (b *Behavior) EnterNewRound(ctx context.Context, appState *AppState, event EnterNewRoundEvent) error {
 	_, err := b.execCommand(ctx, EnterNewRoundType, appState, event)
 	return err
 }
 
-func (b *Behaviour) EnterPropose(ctx context.Context, appState *AppState, event EnterProposeEvent) error {
+func (b *Behavior) EnterPropose(ctx context.Context, appState *AppState, event EnterProposeEvent) error {
 	_, err := b.execCommand(ctx, EnterProposeType, appState, event)
 	return err
 }
 
-func (b *Behaviour) SetProposal(ctx context.Context, appState *AppState, event SetProposalEvent) error {
+func (b *Behavior) SetProposal(ctx context.Context, appState *AppState, event SetProposalEvent) error {
 	_, err := b.execCommand(ctx, SetProposalType, appState, event)
 	return err
 }
 
-func (b *Behaviour) TryAddVote(ctx context.Context, appState *AppState, event TryAddVoteEvent) (bool, error) {
+func (b *Behavior) TryAddVote(ctx context.Context, appState *AppState, event TryAddVoteEvent) (bool, error) {
 	res, err := b.execCommand(ctx, TryAddVoteType, appState, event)
 	return res.(bool), err
 }
 
-func (b *Behaviour) EnterPrevote(ctx context.Context, appState *AppState, event EnterPrevoteEvent) error {
+func (b *Behavior) EnterPrevote(ctx context.Context, appState *AppState, event EnterPrevoteEvent) error {
 	_, err := b.execCommand(ctx, EnterPrevoteType, appState, event)
 	return err
 }
 
-func (b *Behaviour) EnterPrecommit(ctx context.Context, appState *AppState, event EnterPrecommitEvent) error {
+func (b *Behavior) EnterPrecommit(ctx context.Context, appState *AppState, event EnterPrecommitEvent) error {
 	_, err := b.execCommand(ctx, EnterPrecommitType, appState, event)
 	return err
 }
 
-func (b *Behaviour) EnterCommit(ctx context.Context, appState *AppState, event EnterCommitEvent) error {
+func (b *Behavior) EnterCommit(ctx context.Context, appState *AppState, event EnterCommitEvent) error {
 	_, err := b.execCommand(ctx, EnterCommitType, appState, event)
 	return err
 }
 
-func (b *Behaviour) TryAddCommit(ctx context.Context, appState *AppState, event TryAddCommitEvent) (bool, error) {
+func (b *Behavior) TryAddCommit(ctx context.Context, appState *AppState, event TryAddCommitEvent) (bool, error) {
 	res, err := b.execCommand(ctx, TryAddCommitType, appState, event)
 	return res.(bool), err
 }
 
-func (b *Behaviour) AddCommit(ctx context.Context, appState *AppState, event AddCommitEvent) (bool, error) {
+func (b *Behavior) AddCommit(ctx context.Context, appState *AppState, event AddCommitEvent) (bool, error) {
 	res, err := b.execCommand(ctx, AddCommitType, appState, event)
 	return res.(bool), err
 }
 
-func (b *Behaviour) AddProposalBlockPart(ctx context.Context, appState *AppState, event AddProposalBlockPartEvent) (bool, error) {
+func (b *Behavior) AddProposalBlockPart(ctx context.Context, appState *AppState, event AddProposalBlockPartEvent) (bool, error) {
 	res, err := b.execCommand(ctx, AddProposalBlockPartType, appState, event)
 	return res.(bool), err
 }
 
-func (b *Behaviour) TryFinalizeCommit(ctx context.Context, appState *AppState, event TryFinalizeCommitEvent) {
+func (b *Behavior) TryFinalizeCommit(ctx context.Context, appState *AppState, event TryFinalizeCommitEvent) {
 	_, _ = b.execCommand(ctx, TryFinalizeCommitType, appState, event)
 }
 
-func (b *Behaviour) ApplyCommit(ctx context.Context, appState *AppState, event ApplyCommitEvent) {
+func (b *Behavior) ApplyCommit(ctx context.Context, appState *AppState, event ApplyCommitEvent) {
 	_, _ = b.execCommand(ctx, ApplyCommitType, appState, event)
 }
 
-func (b *Behaviour) EnterPrevoteWait(ctx context.Context, appState *AppState, event EnterPrevoteWaitEvent) {
+func (b *Behavior) EnterPrevoteWait(ctx context.Context, appState *AppState, event EnterPrevoteWaitEvent) {
 	_, _ = b.execCommand(ctx, EnterPrevoteWaitType, appState, event)
 }
 
-func (b *Behaviour) EnterPrecommitWait(ctx context.Context, appState *AppState, event EnterPrecommitWaitEvent) {
+func (b *Behavior) EnterPrecommitWait(ctx context.Context, appState *AppState, event EnterPrecommitWaitEvent) {
 	_, _ = b.execCommand(ctx, EnterPrecommitWaitType, appState, event)
 }
 
-func (b *Behaviour) DecideProposal(ctx context.Context, appState *AppState, event DecideProposalEvent) error {
+func (b *Behavior) DecideProposal(ctx context.Context, appState *AppState, event DecideProposalEvent) error {
 	_, err := b.execCommand(ctx, DecideProposalType, appState, event)
 	return err
 }
 
-func (b *Behaviour) DoPrevote(ctx context.Context, appState *AppState, event DoPrevoteEvent) error {
+func (b *Behavior) DoPrevote(ctx context.Context, appState *AppState, event DoPrevoteEvent) error {
 	_, err := b.execCommand(ctx, DoPrevoteType, appState, event)
 	return err
 }
 
-func (b *Behaviour) RegisterCommand(eventType EventType, handler CommandHandler) {
+func (b *Behavior) RegisterCommand(eventType EventType, handler CommandHandler) {
 	b.commander.Register(eventType, handler)
 }
 
-func (b *Behaviour) execCommand(ctx context.Context, et EventType, appState *AppState, event any) (any, error) {
+func (b *Behavior) execCommand(ctx context.Context, et EventType, appState *AppState, event any) (any, error) {
 	stateEvent := StateEvent{
 		EventType: et,
 		AppState:  appState,
@@ -117,7 +117,7 @@ func (b *Behaviour) execCommand(ctx context.Context, et EventType, appState *App
 	return b.commander.Execute(ctx, b, stateEvent)
 }
 
-func (b *Behaviour) updateProposalBlockAndParts(appState *AppState, blockID types.BlockID) error {
+func (b *Behavior) updateProposalBlockAndParts(appState *AppState, blockID types.BlockID) error {
 	appState.replaceProposalBlockOnLockedBlock(blockID)
 	if appState.ProposalBlock.HashesTo(blockID.Hash) || appState.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
 		return nil
@@ -145,18 +145,18 @@ func (b *Behaviour) updateProposalBlockAndParts(appState *AppState, blockID type
 }
 
 // ScheduleRound0 enterNewRoundCommand(height, 0) at cs.StartTime
-func (b *Behaviour) ScheduleRound0(rs cstypes.RoundState) {
+func (b *Behavior) ScheduleRound0(rs cstypes.RoundState) {
 	// b.logger.Info("scheduleRound0", "now", tmtime.Now(), "startTime", b.StartTime)
 	sleepDuration := rs.StartTime.Sub(tmtime.Now())
 	b.ScheduleTimeout(sleepDuration, rs.Height, 0, cstypes.RoundStepNewHeight)
 }
 
 // ScheduleTimeout attempts to schedule a timeout (by sending timeoutInfo on the tickChan)
-func (b *Behaviour) ScheduleTimeout(duration time.Duration, height int64, round int32, step cstypes.RoundStepType) {
+func (b *Behavior) ScheduleTimeout(duration time.Duration, height int64, round int32, step cstypes.RoundStepType) {
 	b.timeoutTicker.ScheduleTimeout(timeoutInfo{duration, height, round, step})
 }
 
-func (b *Behaviour) RecordMetrics(appState *AppState, height int64, block *types.Block, lastBlockMeta *types.BlockMeta) {
+func (b *Behavior) RecordMetrics(appState *AppState, height int64, block *types.Block, lastBlockMeta *types.BlockMeta) {
 	b.metrics.Validators.Set(float64(appState.Validators.Size()))
 	b.metrics.ValidatorsPower.Set(float64(appState.Validators.TotalVotingPower()))
 
@@ -196,7 +196,7 @@ func (b *Behaviour) RecordMetrics(appState *AppState, height int64, block *types
 	b.metrics.CommittedHeight.Set(float64(block.Height))
 }
 
-func (b *Behaviour) newStep(rs cstypes.RoundState) {
+func (b *Behavior) newStep(rs cstypes.RoundState) {
 	event := rs.RoundStateEvent()
 	if err := b.wal.Write(event); err != nil {
 		b.logger.Error("failed writing to WAL", "err", err)

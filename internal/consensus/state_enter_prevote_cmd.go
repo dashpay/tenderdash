@@ -27,7 +27,7 @@ type EnterPrevoteCommand struct {
 }
 
 // Execute ...
-func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour, event StateEvent) (any, error) {
+func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, event StateEvent) (any, error) {
 	epe := event.Data.(EnterPrevoteEvent)
 	appState := event.AppState
 	height := epe.Height
@@ -46,7 +46,7 @@ func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour
 	defer func() {
 		// Done enterPrevote:
 		appState.updateRoundStep(round, cstypes.RoundStepPrevote)
-		behaviour.newStep(appState.RoundState)
+		behavior.newStep(appState.RoundState)
 	}()
 
 	logger.Debug("entering prevote step",
@@ -60,7 +60,7 @@ func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour
 		Round:          round,
 		AllowOldBlocks: epe.AllowOldBlocks,
 	}
-	err := behaviour.DoPrevote(ctx, appState, prevoteEvent)
+	err := behavior.DoPrevote(ctx, appState, prevoteEvent)
 	if err != nil {
 		return nil, err
 	}

@@ -21,7 +21,7 @@ type EnterPrecommitWaitCommand struct {
 
 // Execute ...
 // Enter: any +2/3 precommits for next round.
-func (cs *EnterPrecommitWaitCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *EnterPrecommitWaitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	appState := stateEvent.AppState
 	event := stateEvent.Data.(EnterPrecommitWaitEvent)
 	height, round := event.Height, event.Round
@@ -50,12 +50,12 @@ func (cs *EnterPrecommitWaitCommand) Execute(ctx context.Context, behaviour *Beh
 	defer func() {
 		// Done enterPrecommitWait:
 		appState.TriggeredTimeoutPrecommit = true
-		behaviour.newStep(appState.RoundState)
+		behavior.newStep(appState.RoundState)
 		// TODO PERSIST AppState
 	}()
 
 	// wait for some more precommits; enterNewRoundCommand
-	behaviour.ScheduleTimeout(appState.voteTimeout(round), height, round, cstypes.RoundStepPrecommitWait)
+	behavior.ScheduleTimeout(appState.voteTimeout(round), height, round, cstypes.RoundStepPrecommitWait)
 	return nil, nil
 }
 
@@ -72,7 +72,7 @@ type EnterPrevoteWaitCommand struct {
 
 // Execute ...
 // Enter: any +2/3 prevotes at next round.
-func (cs *EnterPrevoteWaitCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *EnterPrevoteWaitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	appState := stateEvent.AppState
 	event := stateEvent.Data.(EnterPrevoteWaitEvent)
 	height, round := event.Height, event.Round
@@ -102,10 +102,10 @@ func (cs *EnterPrevoteWaitCommand) Execute(ctx context.Context, behaviour *Behav
 	defer func() {
 		// Done enterPrevoteWait:
 		appState.updateRoundStep(round, cstypes.RoundStepPrevoteWait)
-		behaviour.newStep(appState.RoundState)
+		behavior.newStep(appState.RoundState)
 	}()
 
 	// Wait for some more prevotes; enterPrecommit
-	behaviour.ScheduleTimeout(appState.voteTimeout(round), height, round, cstypes.RoundStepPrevoteWait)
+	behavior.ScheduleTimeout(appState.voteTimeout(round), height, round, cstypes.RoundStepPrevoteWait)
 	return nil, nil
 }

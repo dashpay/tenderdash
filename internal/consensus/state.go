@@ -168,7 +168,7 @@ type State struct {
 	msgInfoQueue  *msgInfoQueue
 	msgDispatcher *msgInfoDispatcher
 	observer      *Observer
-	behaviour     *Behaviour
+	behavior      *Behavior
 	blockExecutor *blockExecutor
 	voteSigner    *VoteSigner
 
@@ -346,7 +346,7 @@ func NewState(
 			},
 		},
 	}
-	behaviour := &Behaviour{
+	behavior := &Behavior{
 		wal:           wal,
 		eventBus:      eventBus,
 		evsw:          cs.evsw,
@@ -356,8 +356,8 @@ func NewState(
 		commander:     executor,
 		nSteps:        0,
 	}
-	cs.behaviour = behaviour
-	cs.msgDispatcher = newMsgInfoDispatcher(behaviour, wal, cs.logger, cs.statsMsgQueue)
+	cs.behavior = behavior
+	cs.msgDispatcher = newMsgInfoDispatcher(behavior, wal, cs.logger, cs.statsMsgQueue)
 	cs.observer.Subscribe(SetProposedAppVersion, func(obj any) error {
 		ver := obj.(uint64)
 		cs.blockExecutor.proposedAppVersion = ver
@@ -377,7 +377,7 @@ func NewState(
 	})
 	cs.observer.Subscribe(SetTimeoutTicker, func(obj any) error {
 		tt := obj.(TimeoutTicker)
-		cs.behaviour.timeoutTicker = tt
+		cs.behavior.timeoutTicker = tt
 		return nil
 	})
 	for _, command := range executor.commands {
@@ -387,7 +387,7 @@ func NewState(
 		}
 	}
 	cs.observer.Subscribe(SetMetrics, func(obj any) error {
-		cs.behaviour.metrics = obj.(*Metrics)
+		cs.behavior.metrics = obj.(*Metrics)
 		return nil
 	})
 	cs.observer.Subscribe(SetReplayMode, func(obj any) error {
@@ -444,7 +444,7 @@ func (cs *State) updateStateFromStore() error {
 	if err != nil {
 		return err
 	}
-	cs.behaviour.newStep(appState.RoundState)
+	cs.behavior.newStep(appState.RoundState)
 	return nil
 }
 
@@ -618,7 +618,7 @@ func (cs *State) OnStart(ctx context.Context) error {
 
 	// schedule the first round!
 	// use GetRoundState so we don't race the receiveRoutine for access
-	cs.behaviour.ScheduleRound0(cs.GetRoundState())
+	cs.behavior.ScheduleRound0(cs.GetRoundState())
 
 	return nil
 }
@@ -893,25 +893,25 @@ func (cs *State) handleTimeout(
 	case cstypes.RoundStepNewHeight:
 		// NewRound event fired from enterNewRoundCommand.
 		// XXX: should we fire timeout here (for timeout commit)?
-		_ = cs.behaviour.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: ti.Height})
+		_ = cs.behavior.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: ti.Height})
 	case cstypes.RoundStepNewRound:
-		_ = cs.behaviour.EnterPropose(ctx, appState, EnterProposeEvent{Height: ti.Height})
+		_ = cs.behavior.EnterPropose(ctx, appState, EnterProposeEvent{Height: ti.Height})
 	case cstypes.RoundStepPropose:
 		if err := cs.eventBus.PublishEventTimeoutPropose(appState.RoundStateEvent()); err != nil {
 			cs.logger.Error("failed publishing timeout propose", "err", err)
 		}
-		_ = cs.behaviour.EnterPrevote(ctx, appState, EnterPrevoteEvent{Height: ti.Height, Round: ti.Round})
+		_ = cs.behavior.EnterPrevote(ctx, appState, EnterPrevoteEvent{Height: ti.Height, Round: ti.Round})
 	case cstypes.RoundStepPrevoteWait:
 		if err := cs.eventBus.PublishEventTimeoutWait(appState.RoundStateEvent()); err != nil {
 			cs.logger.Error("failed publishing timeout wait", "err", err)
 		}
-		_ = cs.behaviour.EnterPrecommit(ctx, appState, EnterPrecommitEvent{Height: ti.Height, Round: ti.Round})
+		_ = cs.behavior.EnterPrecommit(ctx, appState, EnterPrecommitEvent{Height: ti.Height, Round: ti.Round})
 	case cstypes.RoundStepPrecommitWait:
 		if err := cs.eventBus.PublishEventTimeoutWait(appState.RoundStateEvent()); err != nil {
 			cs.logger.Error("failed publishing timeout wait", "err", err)
 		}
-		_ = cs.behaviour.EnterPrecommit(ctx, appState, EnterPrecommitEvent{Height: ti.Height, Round: ti.Round})
-		_ = cs.behaviour.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: ti.Height, Round: ti.Round + 1})
+		_ = cs.behavior.EnterPrecommit(ctx, appState, EnterPrecommitEvent{Height: ti.Height, Round: ti.Round})
+		_ = cs.behavior.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: ti.Height, Round: ti.Round + 1})
 	default:
 		panic(fmt.Sprintf("invalid timeout step: %v", ti.Step))
 	}
@@ -932,10 +932,10 @@ func (cs *State) handleTxsAvailable(ctx context.Context, appState *AppState) {
 
 		// +1ms to ensure RoundStepNewRound timeout always happens after RoundStepNewHeight
 		timeoutCommit := appState.StartTime.Sub(tmtime.Now()) + 1*time.Millisecond
-		cs.behaviour.ScheduleTimeout(timeoutCommit, appState.Height, 0, cstypes.RoundStepNewRound)
+		cs.behavior.ScheduleTimeout(timeoutCommit, appState.Height, 0, cstypes.RoundStepNewRound)
 
 	case cstypes.RoundStepNewRound: // after timeoutCommit
-		_ = cs.behaviour.EnterPropose(ctx, appState, EnterProposeEvent{Height: appState.Height})
+		_ = cs.behavior.EnterPropose(ctx, appState, EnterProposeEvent{Height: appState.Height})
 	}
 }
 
@@ -1051,9 +1051,9 @@ func (pv *privValidator) init(ctx context.Context) error {
 
 func stopStateByMaxStepFunc(maxSteps int) func(cs *State) bool {
 	return func(cs *State) bool {
-		if maxSteps > 0 && cs.behaviour.nSteps >= maxSteps {
+		if maxSteps > 0 && cs.behavior.nSteps >= maxSteps {
 			cs.logger.Debug("reached max steps; exiting receive routine")
-			cs.behaviour.nSteps = 0
+			cs.behavior.nSteps = 0
 			return true
 		}
 		return false

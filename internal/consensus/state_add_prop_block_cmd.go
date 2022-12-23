@@ -33,19 +33,19 @@ type AddProposalBlockPartCommand struct {
 }
 
 // Execute ...
-func (cs *AddProposalBlockPartCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *AddProposalBlockPartCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(AddProposalBlockPartEvent)
 	appState := stateEvent.AppState
 	commitNotExist := appState.Commit == nil
 
 	// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
-	added, err := cs.addProposalBlockPart(ctx, behaviour, appState, event.Msg, event.PeerID)
+	added, err := cs.addProposalBlockPart(ctx, behavior, appState, event.Msg, event.PeerID)
 	if err != nil {
 		return added, err
 	}
 
 	if added && commitNotExist && appState.ProposalBlockParts.IsComplete() {
-		err = cs.handleCompleteProposal(ctx, behaviour, appState, event.Msg.Height, event.FromReplay)
+		err = cs.handleCompleteProposal(ctx, behavior, appState, event.Msg.Height, event.FromReplay)
 		if err != nil {
 			return nil, err
 		}
@@ -55,7 +55,7 @@ func (cs *AddProposalBlockPartCommand) Execute(ctx context.Context, behaviour *B
 
 func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 	ctx context.Context,
-	behaviour *Behaviour,
+	behavior *Behavior,
 	appState *AppState,
 	msg *BlockPartMessage,
 	peerID types.NodeID,
@@ -157,7 +157,7 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 				"hash", appState.ProposalBlock.Hash(),
 			)
 			// We received a commit before the block
-			return behaviour.AddCommit(ctx, appState, AddCommitEvent{Commit: appState.Commit})
+			return behavior.AddCommit(ctx, appState, AddCommitEvent{Commit: appState.Commit})
 		}
 
 		return added, nil
@@ -168,7 +168,7 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 
 func (cs *AddProposalBlockPartCommand) handleCompleteProposal(
 	ctx context.Context,
-	behaviour *Behaviour,
+	behavior *Behavior,
 	appState *AppState,
 	height int64,
 	fromReplay bool,
@@ -203,7 +203,7 @@ func (cs *AddProposalBlockPartCommand) handleCompleteProposal(
 			"height", appState.ProposalBlock.Height,
 			"hash", appState.ProposalBlock.Hash(),
 		)
-		_ = behaviour.EnterPrevote(ctx, appState, EnterPrevoteEvent{
+		_ = behavior.EnterPrevote(ctx, appState, EnterPrevoteEvent{
 			Height:         height,
 			Round:          appState.Round,
 			AllowOldBlocks: allowOldBlocks,
@@ -214,7 +214,7 @@ func (cs *AddProposalBlockPartCommand) handleCompleteProposal(
 				"height", appState.ProposalBlock.Height,
 				"hash", appState.ProposalBlock.Hash(),
 			)
-			_ = behaviour.EnterPrecommit(ctx, appState, EnterPrecommitEvent{
+			_ = behavior.EnterPrecommit(ctx, appState, EnterPrecommitEvent{
 				Height: height,
 				Round:  appState.Round,
 			})
@@ -225,7 +225,7 @@ func (cs *AddProposalBlockPartCommand) handleCompleteProposal(
 			"height", appState.ProposalBlock.Height,
 			"hash", appState.ProposalBlock.Hash(),
 		)
-		behaviour.TryFinalizeCommit(ctx, appState, TryFinalizeCommitEvent{Height: height})
+		behavior.TryFinalizeCommit(ctx, appState, TryFinalizeCommitEvent{Height: height})
 	}
 	return nil
 }

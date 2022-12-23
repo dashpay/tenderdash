@@ -25,7 +25,7 @@ type TryAddCommitCommand struct {
 }
 
 // Execute ...
-func (cs *TryAddCommitCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *TryAddCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(TryAddCommitEvent)
 	appState := stateEvent.AppState
 	commit := event.Commit
@@ -48,7 +48,7 @@ func (cs *TryAddCommitCommand) Execute(ctx context.Context, behaviour *Behaviour
 			return false, err
 		}
 		if verified {
-			_ = behaviour.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: appState.Height, Round: commit.Round})
+			_ = behavior.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: appState.Height, Round: commit.Round})
 			//cs.enterNewRoundCommand(ctx, appState, appState.Height, commit.Round)
 			// We are now going to receive the block, so initialize the block parts.
 			if appState.ProposalBlockParts == nil {
@@ -75,7 +75,7 @@ func (cs *TryAddCommitCommand) Execute(ctx context.Context, behaviour *Behaviour
 
 	// TODO figure out how to return a result of operation
 	// for this transition it should be (bool, error)
-	return behaviour.AddCommit(ctx, appState, AddCommitEvent{Commit: commit})
+	return behavior.AddCommit(ctx, appState, AddCommitEvent{Commit: commit})
 }
 
 func (cs *TryAddCommitCommand) verifyCommit(ctx context.Context, appState *AppState, commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {

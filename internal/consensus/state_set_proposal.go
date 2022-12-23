@@ -19,7 +19,7 @@ type SetProposalCommand struct {
 	metrics *Metrics
 }
 
-func (cs *SetProposalCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) (any, error) {
 	appState := stateEvent.AppState
 	event := stateEvent.Data.(SetProposalEvent)
 	proposal := event.Proposal

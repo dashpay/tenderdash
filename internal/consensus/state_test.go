@@ -188,7 +188,7 @@ func TestStateEnterProposeYesPrivValidator(t *testing.T) {
 	timeoutCh := subscribe(ctx, t, cs.eventBus, types.EventQueryTimeoutPropose)
 	proposalCh := subscribe(ctx, t, cs.eventBus, types.EventQueryCompleteProposal)
 
-	err := cs.behaviour.EnterNewRound(ctx, &appState, EnterNewRoundEvent{Height: height, Round: round})
+	err := cs.behavior.EnterNewRound(ctx, &appState, EnterNewRoundEvent{Height: height, Round: round})
 	require.NoError(t, err)
 	err = appState.Save()
 	require.NoError(t, err)
@@ -336,7 +336,7 @@ func TestStateProposalTime(t *testing.T) {
 			time.Sleep(tc.sleep)
 
 			// Wait for complete proposal.
-			err = cs.behaviour.EnterPropose(ctx, &appState, EnterProposeEvent{
+			err = cs.behavior.EnterPropose(ctx, &appState, EnterProposeEvent{
 				Height: height,
 				Round:  round,
 			})
@@ -463,7 +463,7 @@ func TestStateFullRoundNil(t *testing.T) {
 
 	voteCh := subscribe(ctx, t, cs.eventBus, types.EventQueryVote)
 
-	err := cs.behaviour.EnterPrevote(ctx, &appState, EnterPrevoteEvent{Height: height, Round: round})
+	err := cs.behavior.EnterPrevote(ctx, &appState, EnterPrevoteEvent{Height: height, Round: round})
 	require.NoError(t, err)
 	err = appState.Save()
 	require.NoError(t, err)
@@ -544,7 +544,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	*/
 
 	// start round and wait for prevote
-	err := cs1.behaviour.EnterNewRound(ctx, &appState, EnterNewRoundEvent{Height: height, Round: round})
+	err := cs1.behavior.EnterNewRound(ctx, &appState, EnterNewRoundEvent{Height: height, Round: round})
 	require.NoError(t, err)
 
 	err = appState.Save()
@@ -2662,7 +2662,7 @@ func TestCommitFromPreviousRound(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
+	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, logger: log.NewTestingLogger(t)})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 	appState := cs1.GetAppState()
 	height, round := appState.Height, int32(1)
@@ -2677,7 +2677,6 @@ func TestCommitFromPreviousRound(t *testing.T) {
 	partSet, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
 	blockID := propBlock.BlockID(partSet)
-
 	// start round in which PO is not proposer
 	startTestRound(ctx, cs1, height, round)
 	ensureNewRound(t, newRoundCh, height, round)
@@ -3181,7 +3180,7 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 	css1AppState.updateRoundStep(commit.Round, cstypes.RoundStepPrevote)
 
 	// This is where error "2/3 committed an invalid block" occurred before
-	added, err := otherNode.behaviour.TryAddCommit(ctx, &css1AppState, TryAddCommitEvent{Commit: commit, PeerID: peerID})
+	added, err := otherNode.behavior.TryAddCommit(ctx, &css1AppState, TryAddCommitEvent{Commit: commit, PeerID: peerID})
 	assert.True(t, added)
 	assert.NoError(t, err)
 }

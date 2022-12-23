@@ -27,7 +27,7 @@ type DoPrevoteCommand struct {
 	replayMode bool
 }
 
-func (cs *DoPrevoteCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) (any, error) {
 	appState := stateEvent.AppState
 	event := stateEvent.Data.(DoPrevoteEvent)
 	height := event.Height

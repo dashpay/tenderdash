@@ -33,7 +33,7 @@ type EnterNewRoundCommand struct {
 }
 
 // Execute ...
-func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(EnterNewRoundEvent)
 	appState := stateEvent.AppState
 	height := event.Height
@@ -96,12 +96,12 @@ func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behaviour *Behaviou
 	waitForTxs := cs.config.WaitForTxs() && round == 0 && appState.state.InitialHeight != appState.Height
 	if waitForTxs {
 		if cs.config.CreateEmptyBlocksInterval > 0 {
-			behaviour.ScheduleTimeout(cs.config.CreateEmptyBlocksInterval, height, round, cstypes.RoundStepNewRound)
+			behavior.ScheduleTimeout(cs.config.CreateEmptyBlocksInterval, height, round, cstypes.RoundStepNewRound)
 		}
 	} else if !cs.config.DontAutoPropose {
 		// DontAutoPropose should always be false, except for
 		// specific tests where proposals are created manually
-		err = behaviour.EnterPropose(ctx, appState, EnterProposeEvent{Height: height, Round: round})
+		err = behavior.EnterPropose(ctx, appState, EnterProposeEvent{Height: height, Round: round})
 		if err != nil {
 			return nil, err
 		}

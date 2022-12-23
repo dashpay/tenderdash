@@ -22,7 +22,7 @@ type ApplyCommitCommand struct {
 	wal       WALWriteFlusher
 }
 
-func (cs *ApplyCommitCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(ApplyCommitEvent)
 	appState := stateEvent.AppState
 	commit := event.Commit
@@ -77,7 +77,7 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behaviour *Behaviour,
 	lastBlockMeta := cs.blockStore.LoadBlockMeta(height - 1)
 
 	// must be called before we update state
-	behaviour.RecordMetrics(appState, height, block, lastBlockMeta)
+	behavior.RecordMetrics(appState, height, block, lastBlockMeta)
 
 	// NewHeightStep!
 	appState.updateToState(stateCopy, commit)
@@ -86,11 +86,11 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behaviour *Behaviour,
 		return nil, err
 	}
 
-	behaviour.newStep(appState.RoundState)
+	behavior.newStep(appState.RoundState)
 
 	// cs.StartTime is already set.
 	// Schedule Round0 to start soon.
-	behaviour.ScheduleRound0(appState.RoundState)
+	behavior.ScheduleRound0(appState.RoundState)
 
 	// By here,
 	// * cs.Height has been increment to height+1

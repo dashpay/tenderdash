@@ -49,7 +49,7 @@ func (c *msgInfoDispatcher) dispatch(ctx context.Context, appState *AppState, ms
 }
 
 func newMsgInfoDispatcher(
-	behaviour *Behaviour,
+	behavior *Behavior,
 	wal WALWriteFlusher,
 	logger log.Logger,
 	statsMsgQueue chan<- msgInfo,
@@ -58,10 +58,10 @@ func newMsgInfoDispatcher(
 		errorMiddleware(logger),
 		walMiddleware(wal, logger),
 	}
-	proposalHandler := withMiddleware(proposalMessageHandler(behaviour), mws...)
-	blockPartHandler := withMiddleware(blockPartMessageHandler(behaviour, statsMsgQueue), mws...)
-	voteHandler := withMiddleware(voteMessageHandler(behaviour, statsMsgQueue), mws...)
-	commitHandler := withMiddleware(commitMessageHandler(behaviour, statsMsgQueue), mws...)
+	proposalHandler := withMiddleware(proposalMessageHandler(behavior), mws...)
+	blockPartHandler := withMiddleware(blockPartMessageHandler(behavior, statsMsgQueue), mws...)
+	voteHandler := withMiddleware(voteMessageHandler(behavior, statsMsgQueue), mws...)
+	commitHandler := withMiddleware(commitMessageHandler(behavior, statsMsgQueue), mws...)
 	return &msgInfoDispatcher{
 		proposalHandler:  proposalHandler,
 		blockPartHandler: blockPartHandler,
@@ -70,7 +70,7 @@ func newMsgInfoDispatcher(
 	}
 }
 
-func proposalMessageHandler(b *Behaviour) msgHandlerFunc {
+func proposalMessageHandler(b *Behavior) msgHandlerFunc {
 	return func(ctx context.Context, appState *AppState, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*ProposalMessage)
 		return b.SetProposal(ctx, appState, SetProposalEvent{
@@ -80,7 +80,7 @@ func proposalMessageHandler(b *Behaviour) msgHandlerFunc {
 	}
 }
 
-func blockPartMessageHandler(b *Behaviour, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
+func blockPartMessageHandler(b *Behavior, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
 	return func(ctx context.Context, appState *AppState, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*BlockPartMessage)
 
@@ -124,7 +124,7 @@ func blockPartMessageHandler(b *Behaviour, statsMsgQueue chan<- msgInfo) msgHand
 	}
 }
 
-func voteMessageHandler(b *Behaviour, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
+func voteMessageHandler(b *Behavior, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
 	return func(ctx context.Context, appState *AppState, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*VoteMessage)
 		// attempt to add the vote and dupeout the validator if its a duplicate signature
@@ -166,7 +166,7 @@ func voteMessageHandler(b *Behaviour, statsMsgQueue chan<- msgInfo) msgHandlerFu
 	}
 }
 
-func commitMessageHandler(b *Behaviour, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
+func commitMessageHandler(b *Behavior, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
 	return func(ctx context.Context, appState *AppState, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*CommitMessage)
 		// attempt to add the commit and dupeout the validator if its a duplicate signature

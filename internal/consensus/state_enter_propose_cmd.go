@@ -29,7 +29,7 @@ type EnterProposeCommand struct {
 	blockExec     *blockExecutor
 }
 
-func (cs *EnterProposeCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(EnterProposeEvent)
 	appState := stateEvent.AppState
 	height := event.Height
@@ -52,7 +52,7 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behaviour *Behaviour
 				"last_block_time", appState.state.LastBlockTime,
 				"now", tmtime.Now(),
 			)
-			behaviour.ScheduleTimeout(pwt, height, round, cstypes.RoundStepNewRound)
+			behavior.ScheduleTimeout(pwt, height, round, cstypes.RoundStepNewRound)
 			return nil, nil
 		}
 	}
@@ -65,18 +65,18 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behaviour *Behaviour
 	defer func() {
 		// Done enterPropose:
 		appState.updateRoundStep(round, cstypes.RoundStepPropose)
-		behaviour.newStep(appState.RoundState)
+		behavior.newStep(appState.RoundState)
 
 		// If we have the whole proposal + POL, then goto Prevote now.
 		// else, we'll enterPrevote when the rest of the proposal is received (in AddProposalBlockPart),
 		// or else after timeoutPropose
 		if appState.isProposalComplete() {
-			_ = behaviour.EnterPrevote(ctx, appState, EnterPrevoteEvent{Height: height, Round: round})
+			_ = behavior.EnterPrevote(ctx, appState, EnterPrevoteEvent{Height: height, Round: round})
 		}
 	}()
 
 	// If we don't get the proposal and all block parts quick enough, enterPrevote
-	behaviour.ScheduleTimeout(appState.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
+	behavior.ScheduleTimeout(appState.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
 
 	// Nothing more to do if we're not a validator
 	if cs.privValidator.IsZero() {
@@ -99,7 +99,7 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behaviour *Behaviour
 			"proposer", proTxHash.ShortString(),
 			"privValidator", cs.privValidator,
 		)
-		_ = behaviour.DecideProposal(ctx, appState, DecideProposalEvent{Height: height, Round: round})
+		_ = behavior.DecideProposal(ctx, appState, DecideProposalEvent{Height: height, Round: round})
 	} else {
 		logger.Debug("propose step; not our turn to propose",
 			"proposer",

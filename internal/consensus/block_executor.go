@@ -11,11 +11,6 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-type validator interface {
-	validate(ctx context.Context, appState *AppState) error
-	validateOrPanic(ctx context.Context, appState *AppState)
-}
-
 type blockExecutor struct {
 	logger             log.Logger
 	privValidator      privValidator

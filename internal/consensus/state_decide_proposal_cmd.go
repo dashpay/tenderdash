@@ -23,7 +23,7 @@ type DecideProposalCommand struct {
 	replayMode    bool
 }
 
-func (cs *DecideProposalCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(DecideProposalEvent)
 	height := event.Height
 	round := event.Round

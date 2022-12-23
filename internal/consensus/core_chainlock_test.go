@@ -57,9 +57,9 @@ func TestReactorInvalidProposalHeightForChainLocks(t *testing.T) {
 	byzProposer := states[byzProposerID]
 
 	// update the decide proposal to propose the incorrect height
-	byzProposer.behaviour.RegisterCommand(
+	byzProposer.behavior.RegisterCommand(
 		DecideProposalType,
-		newMockCommand(func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+		newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 			event := stateEvent.Data.(DecideProposalEvent)
 			invalidProposeCoreChainLockFunc(ctx, t, event.Height, event.Round, states[byzProposerID])
 			return nil, nil

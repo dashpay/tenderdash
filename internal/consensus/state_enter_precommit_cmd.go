@@ -34,7 +34,7 @@ type EnterPrecommitCommand struct {
 // Enter: +2/3 precomits for block or nil.
 // Lock & precommit the ProposalBlock if we have enough prevotes for it (a POL in this round)
 // else, precommit nil otherwise.
-func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
+func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(EnterPrecommitEvent)
 	appState := stateEvent.AppState
 	height := event.Height
@@ -57,7 +57,7 @@ func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behaviour *Behavio
 	defer func() {
 		// Done enterPrecommit:
 		appState.updateRoundStep(round, cstypes.RoundStepPrecommit)
-		behaviour.newStep(appState.RoundState)
+		behavior.newStep(appState.RoundState)
 		// TODO PERSIST AppState
 	}()
 

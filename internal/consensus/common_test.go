@@ -227,7 +227,7 @@ func sortVValidatorStubsByPower(ctx context.Context, t *testing.T, vss []*valida
 func startTestRound(ctx context.Context, cs *State, height int64, round int32) {
 	appState := cs.GetAppState()
 	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
-	_ = cs.behaviour.EnterNewRound(ctx, &appState, EnterNewRoundEvent{Height: height, Round: round})
+	_ = cs.behavior.EnterNewRound(ctx, &appState, EnterNewRoundEvent{Height: height, Round: round})
 	_ = appState.Save()
 	cs.startRoutines(ctx, 0)
 }
@@ -244,7 +244,9 @@ func decideProposal(
 	t.Helper()
 
 	appState := cs1.GetAppState()
-	defer appState.Save()
+	defer func() {
+		_ = appState.Save()
+	}()
 
 	block, err := cs1.blockExecutor.create(ctx, &appState, round)
 	require.NoError(t, err)
@@ -1094,13 +1096,13 @@ type quorumData struct {
 }
 
 type mockCommand struct {
-	fn func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error)
+	fn func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error)
 }
 
-func newMockCommand(fn func(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error)) *mockCommand {
+func newMockCommand(fn func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error)) *mockCommand {
 	return &mockCommand{fn: fn}
 }
 
-func (c *mockCommand) Execute(ctx context.Context, behaviour *Behaviour, stateEvent StateEvent) (any, error) {
-	return c.fn(ctx, behaviour, stateEvent)
+func (c *mockCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+	return c.fn(ctx, behavior, stateEvent)
 }
