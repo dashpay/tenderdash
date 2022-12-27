@@ -281,6 +281,9 @@ func TestStateProposalTime(t *testing.T) {
 	delay := appState.state.ConsensusParams.Synchrony.MessageDelay
 	precision := appState.state.ConsensusParams.Synchrony.Precision
 
+	err = appState.Save()
+	require.NoError(t, err)
+
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
 
 	startTestRound(ctx, cs1, height, round)
