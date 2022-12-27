@@ -176,12 +176,11 @@ func (p *pbtsTestHarness) nextHeight(
 
 	bid := types.BlockID{}
 
-	appState := p.observedState.GetAppState()
 	proTxHash, err := p.observedState.privValidator.GetProTxHash(ctx)
 	require.NoError(t, err)
 
 	ensureNewRound(t, p.roundCh, p.currentHeight, p.currentRound)
-	appState = p.observedState.GetAppState()
+	appState := p.observedState.GetAppState()
 
 	if !appState.isProposer(proTxHash) {
 		time.Sleep(proposalDelay)
