@@ -7,14 +7,14 @@ import (
 	"testing"
 	"time"
 
-	sync "github.com/sasha-s/go-deadlock"
-
 	"github.com/fortytw2/leaktest"
+	sync "github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/internal/test/factory"
+	"github.com/tendermint/tendermint/libs/log"
 	ssproto "github.com/tendermint/tendermint/proto/tendermint/statesync"
 	"github.com/tendermint/tendermint/types"
 )
@@ -43,7 +43,7 @@ func TestDispatcherBasic(t *testing.T) {
 
 	chans, ch := testChannel(100)
 
-	d := NewDispatcher(ch)
+	d := NewDispatcher(ch, log.NewNopLogger())
 	go handleRequests(ctx, t, d, chans.Out)
 
 	peers := createPeerSet(numPeers)
@@ -75,7 +75,7 @@ func TestDispatcherReturnsNoBlock(t *testing.T) {
 
 	chans, ch := testChannel(100)
 
-	d := NewDispatcher(ch)
+	d := NewDispatcher(ch, log.NewNopLogger())
 
 	peer := factory.NodeID(t, "a")
 
@@ -99,7 +99,7 @@ func TestDispatcherTimeOutWaitingOnLightBlock(t *testing.T) {
 	defer cancel()
 
 	_, ch := testChannel(100)
-	d := NewDispatcher(ch)
+	d := NewDispatcher(ch, log.NewNopLogger())
 	peer := factory.NodeID(t, "a")
 
 	ctx, cancelFunc := context.WithTimeout(ctx, 10*time.Millisecond)
@@ -122,7 +122,7 @@ func TestDispatcherProviders(t *testing.T) {
 
 	chans, ch := testChannel(100)
 
-	d := NewDispatcher(ch)
+	d := NewDispatcher(ch, log.NewNopLogger())
 	go handleRequests(ctx, t, d, chans.Out)
 
 	peers := createPeerSet(5)
