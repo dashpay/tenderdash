@@ -3,7 +3,6 @@ package p2ptest
 import (
 	"bytes"
 	"context"
-	"math/rand"
 	"testing"
 	"time"
 
@@ -189,11 +188,10 @@ func (n *Network) MakeChannelsNoCleanup(
 
 // RandomNode returns a random node.
 func (n *Network) RandomNode() *Node {
-	nodes := make([]*Node, 0, len(n.Nodes))
 	for _, node := range n.Nodes {
-		nodes = append(nodes, node)
+		return node
 	}
-	return nodes[rand.Intn(len(nodes))] //nolint:gosec
+	panic("failed to get random node")
 }
 
 // Peers returns a node's peers (i.e. everyone except itself).
