@@ -882,8 +882,8 @@ func TestStateLock_POLRelock(t *testing.T) {
 
 	ensureNewRound(t, newRoundCh, height, round)
 	ensureNewProposal(t, proposalCh, height, round)
-	rs := cs1.GetRoundState()
-	blockID := rs.BlockID()
+	appState = cs1.GetAppState()
+	blockID := appState.BlockID()
 
 	ensurePrevote(t, voteCh, height, round)
 
@@ -899,12 +899,12 @@ func TestStateLock_POLRelock(t *testing.T) {
 	// add precommits from the rest of the validators.
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 
+	appState = cs1.GetAppState()
+	theBlock := appState.ProposalBlock
+	theBlockParts := appState.ProposalBlockParts
+
 	// timeout to new round.
 	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
-
-	rs = cs1.GetRoundState()
-	theBlock := rs.ProposalBlock
-	theBlockParts := rs.ProposalBlockParts
 
 	/*
 		Round 1:
