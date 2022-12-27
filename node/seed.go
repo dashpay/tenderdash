@@ -38,6 +38,7 @@ type seedNodeImpl struct {
 
 // makeSeedNode returns a new seed node, containing only p2p, pex reactor
 func makeSeedNode(
+	ctx context.Context,
 	logger log.Logger,
 	cfg *config.Config,
 	dbProvider config.DBProvider,
@@ -62,7 +63,7 @@ func makeSeedNode(
 	// Setup Transport and Switch.
 	p2pMetrics := p2p.PrometheusMetrics(cfg.Instrumentation.Namespace, "chain_id", genDoc.ChainID)
 
-	peerManager, closer, err := createPeerManager(cfg, dbProvider, nodeKey.ID, p2pMetrics, logger)
+	peerManager, closer, err := createPeerManager(ctx, cfg, dbProvider, nodeKey.ID, p2pMetrics, logger)
 	if err != nil {
 		return nil, combineCloseError(
 			fmt.Errorf("failed to create peer manager: %w", err),

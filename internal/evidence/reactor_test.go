@@ -93,7 +93,7 @@ func setup(ctx context.Context, t *testing.T, stateStores []sm.Store) *reactorTe
 		require.NoError(t, err)
 
 		rts.peerChans[nodeID] = make(chan p2p.PeerUpdate)
-		pu := p2p.NewPeerUpdates(rts.peerChans[nodeID], 1)
+		pu := p2p.NewPeerUpdates(rts.peerChans[nodeID], 1, "evidence")
 		rts.peerUpdates[nodeID] = pu
 		rts.network.Nodes[nodeID].PeerManager.Register(ctx, pu)
 		rts.nodes = append(rts.nodes, rts.network.Nodes[nodeID])
@@ -105,7 +105,7 @@ func setup(ctx context.Context, t *testing.T, stateStores []sm.Store) *reactorTe
 		rts.reactors[nodeID] = evidence.NewReactor(
 			logger,
 			chCreator,
-			func(ctx context.Context) *p2p.PeerUpdates { return pu },
+			func(ctx context.Context, _ string) *p2p.PeerUpdates { return pu },
 			rts.pools[nodeID])
 
 		require.NoError(t, rts.reactors[nodeID].Start(ctx))

@@ -86,7 +86,7 @@ func (n *Network) Start(ctx context.Context, t *testing.T) {
 	defer subcancel()
 	for _, node := range n.Nodes {
 		dialQueue = append(dialQueue, node.NodeAddress)
-		subs[node.NodeID] = node.PeerManager.Subscribe(subctx)
+		subs[node.NodeID] = node.PeerManager.Subscribe(subctx, "p2ptest")
 	}
 
 	// For each node, dial the nodes that it still doesn't have a connection to
@@ -193,7 +193,7 @@ func (n *Network) RandomNode() *Node {
 	for _, node := range n.Nodes {
 		nodes = append(nodes, node)
 	}
-	return nodes[rand.Intn(len(nodes))] // nolint:gosec
+	return nodes[rand.Intn(len(nodes))] //nolint:gosec
 }
 
 // Peers returns a node's peers (i.e. everyone except itself).
@@ -218,7 +218,7 @@ func (n *Network) Remove(ctx context.Context, t *testing.T, id types.NodeID) {
 	subctx, subcancel := context.WithCancel(ctx)
 	defer subcancel()
 	for _, peer := range n.Nodes {
-		sub := peer.PeerManager.Subscribe(subctx)
+		sub := peer.PeerManager.Subscribe(subctx, "p2ptest")
 		subs = append(subs, sub)
 	}
 
@@ -270,7 +270,7 @@ func (n *Network) MakeNode(ctx context.Context, t *testing.T, proTxHash crypto.P
 	require.NoError(t, err)
 	require.NotNil(t, ep, "transport not listening an endpoint")
 
-	peerManager, err := p2p.NewPeerManager(nodeID, dbm.NewMemDB(), p2p.PeerManagerOptions{
+	peerManager, err := p2p.NewPeerManager(ctx, nodeID, dbm.NewMemDB(), p2p.PeerManagerOptions{
 		MinRetryTime:             10 * time.Millisecond,
 		DisconnectCooldownPeriod: 10 * time.Millisecond,
 		MaxRetryTime:             100 * time.Millisecond,
@@ -280,6 +280,7 @@ func (n *Network) MakeNode(ctx context.Context, t *testing.T, proTxHash crypto.P
 		Metrics:                  p2p.NopMetrics(),
 	})
 	require.NoError(t, err)
+	peerManager.SetLogger(n.logger.With("module", "peer_manager"))
 
 	router, err := p2p.NewRouter(
 		n.logger.With(deriveLoggerAttrsFromCtx(ctx)),
@@ -352,7 +353,7 @@ func (n *Node) MakeChannelNoCleanup(
 // It checks that all updates have been consumed during cleanup.
 func (n *Node) MakePeerUpdates(ctx context.Context, t *testing.T) *p2p.PeerUpdates {
 	t.Helper()
-	sub := n.PeerManager.Subscribe(ctx)
+	sub := n.PeerManager.Subscribe(ctx, "p2ptest")
 	t.Cleanup(func() {
 		RequireNoUpdates(ctx, t, sub)
 	})
@@ -364,7 +365,7 @@ func (n *Node) MakePeerUpdates(ctx context.Context, t *testing.T) *p2p.PeerUpdat
 // It does *not* check that all updates have been consumed, but will
 // close the update channel.
 func (n *Node) MakePeerUpdatesNoRequireEmpty(ctx context.Context, t *testing.T) *p2p.PeerUpdates {
-	return n.PeerManager.Subscribe(ctx)
+	return n.PeerManager.Subscribe(ctx, "p2ptest")
 }
 
 func MakeChannelDesc(chID p2p.ChannelID) *p2p.ChannelDescriptor {

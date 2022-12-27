@@ -73,7 +73,7 @@ func setupReactors(ctx context.Context, t *testing.T, logger log.Logger, numNode
 		rts.mempools[nodeID] = mempool
 
 		rts.peerChans[nodeID] = make(chan p2p.PeerUpdate, chBuf)
-		rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], 1)
+		rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], 1, "mempool")
 		rts.network.Nodes[nodeID].PeerManager.Register(ctx, rts.peerUpdates[nodeID])
 
 		chCreator := func(ctx context.Context, chDesc *p2p.ChannelDescriptor) (p2p.Channel, error) {
@@ -85,7 +85,7 @@ func setupReactors(ctx context.Context, t *testing.T, logger log.Logger, numNode
 			cfg.Mempool,
 			mempool,
 			chCreator,
-			func(ctx context.Context) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] },
+			func(ctx context.Context, n string) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] },
 		)
 		rts.nodes = append(rts.nodes, nodeID)
 

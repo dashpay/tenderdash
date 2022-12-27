@@ -174,7 +174,7 @@ type channelBundle struct {
 func (r *Reactor) OnStart(ctx context.Context) error {
 	r.logger.Debug("consensus wait sync", "wait_sync", r.WaitSync())
 
-	peerUpdates := r.peerEvents(ctx)
+	peerUpdates := r.peerEvents(ctx, "consensus")
 
 	var chBundle channelBundle
 	var err error

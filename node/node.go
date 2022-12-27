@@ -95,6 +95,7 @@ func newDefaultNode(
 	}
 	if cfg.Mode == config.ModeSeed {
 		return makeSeedNode(
+			ctx,
 			logger,
 			cfg,
 			config.DefaultDBProvider,
@@ -226,6 +227,7 @@ func makeNode(
 	weAreOnlyValidator := onlyValidatorIsUs(state, proTxHash)
 
 	peerManager, peerCloser, err := createPeerManager(
+		ctx,
 		cfg,
 		dbProvider,
 		nodeKey.ID,

@@ -173,7 +173,7 @@ func (rts *reactorTestSuite) addNode(
 	require.NoError(t, rts.app[nodeID].Start(ctx))
 
 	rts.peerChans[nodeID] = make(chan p2p.PeerUpdate)
-	rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], 1)
+	rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], 1, "blocksync")
 	rts.network.Nodes[nodeID].PeerManager.Register(ctx, rts.peerUpdates[nodeID])
 
 	chCreator := func(ctx context.Context, chdesc *p2p.ChannelDescriptor) (p2p.Channel, error) {
@@ -181,7 +181,7 @@ func (rts *reactorTestSuite) addNode(
 	}
 
 	proTxHash := rts.network.Nodes[nodeID].NodeInfo.ProTxHash
-	peerEvents := func(ctx context.Context) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] }
+	peerEvents := func(ctx context.Context, _ string) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] }
 	reactor := makeReactor(ctx, t, proTxHash, nodeID, genDoc, privVal, chCreator, peerEvents)
 
 	commit := types.NewCommit(0, 0, types.BlockID{}, nil)
