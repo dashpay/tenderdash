@@ -347,14 +347,13 @@ func NewState(
 		},
 	}
 	behavior := &Behavior{
-		wal:           wal,
-		eventBus:      eventBus,
-		evsw:          cs.evsw,
-		logger:        cs.logger,
-		timeoutTicker: cs.timeoutTicker,
-		metrics:       cs.metrics,
-		commander:     executor,
-		nSteps:        0,
+		wal:            wal,
+		eventPublisher: eventPublisher,
+		logger:         cs.logger,
+		timeoutTicker:  cs.timeoutTicker,
+		metrics:        cs.metrics,
+		commander:      executor,
+		nSteps:         0,
 	}
 	cs.behavior = behavior
 	cs.msgDispatcher = newMsgInfoDispatcher(behavior, wal, cs.logger, cs.statsMsgQueue)

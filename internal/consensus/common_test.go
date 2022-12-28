@@ -637,7 +637,7 @@ func ensureNoNewTimeout(t *testing.T, stepCh <-chan tmpubsub.Message, timeout in
 
 func ensureNewEvent(t *testing.T, ch <-chan tmpubsub.Message, height int64, round int32, timeout time.Duration) {
 	t.Helper()
-	msg := ensureMessageBeforeTimeout(t, ch, ensureTimeout)
+	msg := ensureMessageBeforeTimeout(t, ch, timeout)
 	roundStateEvent, ok := msg.Data().(types.EventDataRoundState)
 	require.True(t, ok,
 		"expected a EventDataRoundState, got %T. Wrong subscription channel?",

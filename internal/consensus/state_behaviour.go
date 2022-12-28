@@ -5,19 +5,16 @@ import (
 	"time"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/internal/eventbus"
-	tmevents "github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
 )
 
 type Behavior struct {
-	wal       WALWriter
-	eventBus  *eventbus.EventBus
-	evsw      tmevents.EventSwitch
-	commander *CommandExecutor
-	logger    log.Logger
+	wal            WALWriter
+	eventPublisher *EventPublisher
+	commander      *CommandExecutor
+	logger         log.Logger
 
 	// state changes may be triggered by: msgs from peers,
 	// msgs from ourself, or by timeouts
@@ -137,10 +134,7 @@ func (b *Behavior) updateProposalBlockAndParts(appState *AppState, blockID types
 	if err != nil {
 		return err
 	}
-	if err := b.eventBus.PublishEventValidBlock(appState.RoundStateEvent()); err != nil {
-		b.logger.Error("failed publishing valid block", "err", err)
-	}
-	b.evsw.FireEvent(types.EventValidBlockValue, &appState.RoundState)
+	b.eventPublisher.PublishValidBlockEvent(appState.RoundState)
 	return nil
 }
 
@@ -205,10 +199,5 @@ func (b *Behavior) newStep(rs cstypes.RoundState) {
 	b.nSteps++
 
 	// newStep is called by updateToState in NewState before the eventBus is set!
-	if b.eventBus != nil {
-		if err := b.eventBus.PublishEventNewRoundStep(event); err != nil {
-			b.logger.Error("failed publishing new round step", "err", err)
-		}
-		b.evsw.FireEvent(types.EventNewRoundStepValue, &rs)
-	}
+	b.eventPublisher.PublishNewRoundStepEvent(rs)
 }

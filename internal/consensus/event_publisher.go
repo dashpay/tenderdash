@@ -85,3 +85,10 @@ func (p *EventPublisher) PublishVoteEvent(vote *types.Vote) error {
 	p.evsw.FireEvent(types.EventVoteValue, vote)
 	return nil
 }
+
+func (p *EventPublisher) PublishNewRoundStepEvent(rs cstypes.RoundState) {
+	if err := p.eventBus.PublishEventNewRoundStep(rs.RoundStateEvent()); err != nil {
+		p.logger.Error("failed publishing new round step", "err", err)
+	}
+	p.evsw.FireEvent(types.EventNewRoundStepValue, &rs)
+}
