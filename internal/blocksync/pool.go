@@ -674,9 +674,8 @@ func (bpr *bpRequester) requestRoutine(ctx context.Context) {
 		bpr.updatePeerID(peer)
 		// Send request and wait.
 
-		fmt.Printf("_debug send req %s %d\n", peer.id, bpr.height)
 		bpr.pool.sendRequest(bpr.height, peer.id)
-		stop = bpr.waitFor(ctx, bpr.height)
+		stop = bpr.waitFor(ctx)
 		if stop {
 			return
 		}
@@ -711,7 +710,7 @@ func (bpr *bpRequester) findPeer(ctx context.Context) (*bpPeer, bool) {
 	return nil, true
 }
 
-func (bpr *bpRequester) waitFor(ctx context.Context, height int64) bool {
+func (bpr *bpRequester) waitFor(ctx context.Context) bool {
 	for {
 		select {
 		case <-ctx.Done():
