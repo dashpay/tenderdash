@@ -674,7 +674,6 @@ func (bpr *bpRequester) requestRoutine(ctx context.Context) {
 		bpr.updatePeerID(peer)
 		// Send request and wait.
 
-		fmt.Printf("_debug send req %s %d\n", peer.id, bpr.height)
 		bpr.pool.sendRequest(bpr.height, peer.id)
 		stop = bpr.waitFor(ctx)
 		if stop {
