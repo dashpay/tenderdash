@@ -2,6 +2,7 @@ package blocksync
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -354,13 +355,12 @@ func TestReactor_NoBlockResponse(t *testing.T) {
 		"expected node to be fully synced",
 	)
 
-	for _, tc := range testCases {
-		block := rts.reactors[rts.nodes[1]].store.LoadBlock(tc.height)
-		if tc.existent {
-			require.True(t, block != nil)
-		} else {
-			require.Nil(t, block)
-		}
+	reactor := rts.reactors[rts.nodes[1]]
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
+			block := reactor.store.LoadBlock(tc.height)
+			require.Equal(t, tc.existent, block != nil)
+		})
 	}
 }
 
