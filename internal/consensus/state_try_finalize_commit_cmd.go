@@ -78,8 +78,6 @@ func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, behavior
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	cs.blockExec.validateOrPanic(ctx, appState)
-
 	logger.Info(
 		"finalizing commit of block",
 		"hash", tmstrings.LazyBlockHash(block),
