@@ -8,6 +8,7 @@ RUN apk update && \
 WORKDIR /src/tenderdash
 
 # Fetch dependencies separately (for layer caching)
+# TODO: move below BLS install once on new BLS version
 COPY go.mod go.sum ./
 RUN go mod download
 
@@ -18,7 +19,10 @@ COPY Makefile ./
 RUN make install-bls
 
 # Copy Tenderdash source
+# Avoid overwriting third-party libs
+RUN mv third_party third_party.bak
 COPY . .
+RUN rm -r third_party && mv third_party.bak third_party
 
 ARG TENDERMINT_BUILD_OPTIONS=tenderdash
 RUN make build-linux

@@ -18,7 +18,6 @@ if ! git submodule update --init "${BLS_SM_PATH}" ; then
 	echo "We would recommend to clone of this project rather than using a release archive."
 	rm -r  "${BLS_SM_PATH}" || true
 	git clone --single-branch --branch "${BLS_GIT_BRANCH}" "${BLS_GIT_REPO}" "${BLS_SM_PATH}" 
-	rm -r "${BLS_SM_PATH}/.git"
 fi
 
 # Create folders for source and build data
