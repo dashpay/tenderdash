@@ -12,19 +12,12 @@ BLS_GIT_BRANCH="develop_0.1"
 
 set -ex
 
-## Autodetect git submodule head to get rid od dependency on whole .git dir
-## This is needed to correctly use layered caching in Docker builder on Github
-if [[ -f ".git/modules/third_party/bls-signatures/src/HEAD" ]] ; then
-	BLS_GIT_BRANCH="$(cat ".git/modules/third_party/bls-signatures/src/HEAD")"
-fi
-
 if ! git submodule update --init "${BLS_SM_PATH}" ; then
 	echo "It looks like this source code is not tracked by git."
 	echo "As a fallback scenario we will fetch \"${BLS_GIT_BRANCH}\" branch \"${BLS_GIT_REPO}\" library."
 	echo "We would recommend to clone of this project rather than using a release archive."
 	rm -r  "${BLS_SM_PATH}" || true
-	git clone --no-checkout "${BLS_GIT_REPO}" "${BLS_SM_PATH}" 
-	git -C "${BLS_SM_PATH}" checkout "${BLS_GIT_BRANCH}"
+	git clone --single-branch --branch "${BLS_GIT_BRANCH}" "${BLS_GIT_REPO}" "${BLS_SM_PATH}" 
 	rm -r "${BLS_SM_PATH}/.git"
 fi
 
