@@ -21,7 +21,6 @@ RUN make install-bls
 COPY . .
 
 ARG TENDERMINT_BUILD_OPTIONS=tenderdash
-RUN echo $TENDERMINT_BUILD_OPTIONS
 RUN make build-linux
 
 # stage 2
