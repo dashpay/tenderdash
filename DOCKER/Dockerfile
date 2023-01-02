@@ -15,7 +15,7 @@ RUN go mod download
 COPY third_party ./third_party
 COPY test/Makefile ./test/Makefile
 COPY Makefile ./
-COPY .git ./.git
+COPY .git/modules/third_party/bls-signatures/src/HEAD ./.git/modules/third_party/bls-signatures/src/HEAD
 RUN make install-bls
 
 # Copy Tenderdash source
