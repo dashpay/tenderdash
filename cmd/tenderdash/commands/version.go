@@ -1,7 +1,6 @@
 package commands
 
 import (
-	"fmt"
 	"runtime"
 
 	"github.com/sasha-s/go-deadlock"
@@ -18,13 +17,13 @@ var VersionCmd *cobra.Command = func() *cobra.Command {
 		Short: "Show version info",
 
 		Run: func(cmd *cobra.Command, args []string) {
-			fmt.Println(version.TMCoreSemVer)
+			cmd.Println(version.TMCoreSemVer)
 			if verbose {
-				fmt.Println("Go version: " + runtime.Version())
+				cmd.Println("Go version: " + runtime.Version())
 				if deadlock.Opts.Disable {
-					fmt.Println("Deadlock detection: disabled")
+					cmd.Println("Deadlock detection: disabled")
 				} else {
-					fmt.Println("Deadlock detection: enabled, timeout: ", deadlock.Opts.DeadlockTimeout.String())
+					cmd.Println("Deadlock detection: enabled, timeout: ", deadlock.Opts.DeadlockTimeout.String())
 				}
 			}
 		},
