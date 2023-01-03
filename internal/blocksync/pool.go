@@ -710,7 +710,7 @@ func (bpr *bpRequester) findPeer(ctx context.Context) (*bpPeer, bool) {
 	return nil, true
 }
 
-func (bpr *bpRequester) waitFor(ctx context.Context) bool {
+func (bpr *bpRequester) waitForResponse(ctx context.Context) bool {
 	for {
 		select {
 		case <-ctx.Done():
