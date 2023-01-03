@@ -274,7 +274,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 			metrics:       r.metrics,
 		}
 	}
-	r.dispatcher = NewDispatcher(blockCh)
+	r.dispatcher = NewDispatcher(blockCh, r.logger)
 	r.requestSnaphot = func() error {
 		// request snapshots from all currently connected peers
 		return snapshotCh.Send(ctx, p2p.Envelope{
