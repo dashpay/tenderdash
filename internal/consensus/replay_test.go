@@ -1360,11 +1360,14 @@ func TestWALRoundsSkipper(t *testing.T) {
 	)
 	cfg := getConfig(t)
 	cfg.Consensus.WalSkipRoundsToLast = true
-	logger := log.NewNopLogger()
+	logger := log.NewTestingLogger(t)
 	ng := nodeGen{
-		cfg:       cfg,
-		logger:    logger,
-		stateOpts: []StateOption{WithStopFunc(stopConsensusAtHeight(chainLen + 1))},
+		cfg:    cfg,
+		logger: logger,
+		stateOpts: []StateOption{WithStopFunc(
+			stopConsensusAtHeight(chainLen+1, 0),
+			stopConsensusAtHeight(chainLen, maxRound+1),
+		)},
 	}
 	node := ng.Generate(ctx, t)
 	originDoPrevote := node.csState.doPrevote
@@ -1421,7 +1424,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 
 	commit := blockStore.commits[len(blockStore.commits)-1]
 	require.Equal(t, int64(4), commit.Height)
-	require.GreaterOrEqual(t, maxRound, commit.Round)
+	require.Equal(t, maxRound, commit.Round)
 
 	require.NoError(t, cs.Start(ctx))
 	defer cs.Stop()
@@ -1440,7 +1443,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 	require.Equal(t, chainLen+1, eventNewBlock.Block.Height)
 	commit = blockStore.commits[chainLen-1]
 	require.Equal(t, chainLen, commit.Height)
-	require.GreaterOrEqual(t, maxRound, commit.Round)
+	require.Equal(t, maxRound, commit.Round)
 }
 
 // returns the vals on InitChain
