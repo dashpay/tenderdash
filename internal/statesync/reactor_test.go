@@ -168,7 +168,7 @@ func setup(
 		}
 	}
 
-	logger := log.NewNopLogger()
+	logger := log.NewTestingLogger(t)
 
 	rts.reactor = NewReactor(
 		factory.DefaultTestChainID,
@@ -646,28 +646,41 @@ func TestReactor_Backfill(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// test backfill algorithm with varying failure rates [0, 10]
-	failureRates := []int{0, 2, 9}
-	for _, failureRate := range failureRates {
-		failureRate := failureRate
-		t.Run(fmt.Sprintf("failure rate: %d", failureRate), func(t *testing.T) {
-			if testing.Short() && failureRate > 0 {
-				t.Skip("skipping test in short mode")
-			}
+	const (
+		startHeight int64 = 20
+		stopHeight  int64 = 10
+	)
+	stopTime := time.Date(2020, 1, 1, 0, 100, 0, 0, time.UTC)
 
+	// test backfill algorithm with varying failure rates [0, 10]
+
+	testCases := []struct {
+		failureRate int
+		numPeers    int
+	}{
+		{
+			failureRate: 0,
+			numPeers:    4,
+		},
+		{
+			failureRate: 2,
+			numPeers:    4,
+		},
+		{
+			failureRate: 9,
+			numPeers:    20,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("failure rate: %d", tc.failureRate), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
 			t.Cleanup(leaktest.CheckTimeout(t, 1*time.Minute))
 			rts := setup(ctx, t, nil, nil, 21)
 
-			var (
-				startHeight int64 = 20
-				stopHeight  int64 = 10
-				stopTime          = time.Date(2020, 1, 1, 0, 100, 0, 0, time.UTC)
-			)
-
-			peers := []string{"a", "b", "c", "d"}
+			peers := genPeerIDs(tc.numPeers)
 			for _, peer := range peers {
 				rts.peerUpdateCh <- p2p.PeerUpdate{
 					NodeID: types.NodeID(peer),
@@ -695,8 +708,7 @@ func TestReactor_Backfill(t *testing.T) {
 
 			closeCh := make(chan struct{})
 			defer close(closeCh)
-			go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh,
-				rts.blockInCh, closeCh, failureRate)
+			go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, tc.failureRate)
 
 			err := rts.reactor.backfill(
 				ctx,
@@ -709,27 +721,22 @@ func TestReactor_Backfill(t *testing.T) {
 				10*time.Millisecond,
 				100*time.Millisecond,
 			)
-			if failureRate > 3 {
-				require.Error(t, err)
-
-				require.NotEqual(t, rts.reactor.backfilledBlocks, rts.reactor.backfillBlockTotal)
-				require.Equal(t, startHeight-stopHeight+1, rts.reactor.backfillBlockTotal)
-			} else {
-				require.NoError(t, err)
-
-				for height := startHeight; height <= stopHeight; height++ {
-					blockMeta := rts.blockStore.LoadBlockMeta(height)
-					require.NotNil(t, blockMeta)
-				}
-
-				require.Nil(t, rts.blockStore.LoadBlockMeta(stopHeight-1))
-				require.Nil(t, rts.blockStore.LoadBlockMeta(startHeight+1))
-
-				require.Equal(t, startHeight-stopHeight+1, rts.reactor.backfilledBlocks)
-				require.Equal(t, startHeight-stopHeight+1, rts.reactor.backfillBlockTotal)
-			}
+			require.Equal(t, startHeight-stopHeight+1, rts.reactor.backfillBlockTotal)
 			require.Equal(t, rts.reactor.backfilledBlocks, rts.reactor.BackFilledBlocks())
 			require.Equal(t, rts.reactor.backfillBlockTotal, rts.reactor.BackFillBlocksTotal())
+			if tc.failureRate > 3 {
+				require.Error(t, err)
+				require.NotEqual(t, rts.reactor.backfilledBlocks, rts.reactor.backfillBlockTotal)
+				return
+			}
+			require.NoError(t, err)
+			for height := startHeight; height <= stopHeight; height++ {
+				blockMeta := rts.blockStore.LoadBlockMeta(height)
+				require.NotNil(t, blockMeta)
+			}
+			require.Nil(t, rts.blockStore.LoadBlockMeta(stopHeight-1))
+			require.Nil(t, rts.blockStore.LoadBlockMeta(startHeight+1))
+			require.Equal(t, startHeight-stopHeight+1, rts.reactor.backfilledBlocks)
 		})
 	}
 }
@@ -767,47 +774,17 @@ func handleLightBlockRequests(
 				if requests%10 >= failureRate {
 					lb, err := chain[int64(msg.Height)].ToProto()
 					require.NoError(t, err)
-					select {
-					case sending <- p2p.Envelope{
-						From:      envelope.To,
-						ChannelID: LightBlockChannel,
-						Message: &ssproto.LightBlockResponse{
-							LightBlock: lb,
-						},
-					}:
-					case <-ctx.Done():
-						return
-					}
+					sendMsgToChan(ctx, sending, newLBMessage(envelope.To, lb))
 				} else {
 					switch errorCount % 3 {
 					case 0: // send a different block
 						vals, pv := types.RandValidatorSet(3)
 						_, _, lb := mockLB(ctx, t, int64(msg.Height), factory.DefaultTestTime, factory.MakeBlockID(), vals, pv)
-						differntLB, err := lb.ToProto()
+						badLB, err := lb.ToProto()
 						require.NoError(t, err)
-						select {
-						case sending <- p2p.Envelope{
-							From:      envelope.To,
-							ChannelID: LightBlockChannel,
-							Message: &ssproto.LightBlockResponse{
-								LightBlock: differntLB,
-							},
-						}:
-						case <-ctx.Done():
-							return
-						}
+						sendMsgToChan(ctx, sending, newLBMessage(envelope.To, badLB))
 					case 1: // send nil block i.e. pretend we don't have it
-						select {
-						case sending <- p2p.Envelope{
-							From:      envelope.To,
-							ChannelID: LightBlockChannel,
-							Message: &ssproto.LightBlockResponse{
-								LightBlock: nil,
-							},
-						}:
-						case <-ctx.Done():
-							return
-						}
+						sendMsgToChan(ctx, sending, newLBMessage(envelope.To, nil))
 					case 2: // don't do anything
 					}
 					errorCount++
@@ -867,8 +844,8 @@ func buildLightBlockChain(ctx context.Context, t *testing.T, fromHeight, toHeigh
 	blockTime := startTime.Add(time.Duration(fromHeight-toHeight) * time.Minute)
 	vals, pv := types.RandValidatorSet(3)
 	for height := fromHeight; height < toHeight; height++ {
-		pk, _ := pv[0].GetPrivateKey(context.Background(), vals.QuorumHash)
-		privVal.UpdatePrivateKey(context.Background(), pk, vals.QuorumHash, vals.ThresholdPublicKey, height)
+		pk, _ := pv[0].GetPrivateKey(ctx, vals.QuorumHash)
+		privVal.UpdatePrivateKey(ctx, pk, vals.QuorumHash, vals.ThresholdPublicKey, height)
 		vals, pv, chain[height] = mockLB(ctx, t, height, blockTime, lastBlockID, vals, pv)
 
 		lastBlockID = chain[height].Commit.BlockID
@@ -1013,4 +990,41 @@ func handleChunkRequests(
 
 		}
 	}
+}
+
+func newLBMessage(peerID types.NodeID, lb *tmproto.LightBlock) p2p.Envelope {
+	return p2p.Envelope{
+		From:      peerID,
+		ChannelID: LightBlockChannel,
+		Message: &ssproto.LightBlockResponse{
+			LightBlock: lb,
+		},
+	}
+}
+
+func sendMsgToChan(ctx context.Context, ch chan p2p.Envelope, msg p2p.Envelope) {
+	select {
+	case ch <- msg:
+	case <-ctx.Done():
+		return
+	}
+}
+
+func numbToPeerID(numb int) string {
+	prefix := ""
+	if numb/26 > 0 {
+		prefix = numbToPeerID(numb / 26)
+	}
+	return prefix + string(rune('a'+numb%26))
+}
+
+func genPeerIDs(num int) []string {
+	if num == 0 {
+		return nil
+	}
+	peers := make([]string, num)
+	for i := 0; i < num; i++ {
+		peers[i] = numbToPeerID(i)
+	}
+	return peers
 }
