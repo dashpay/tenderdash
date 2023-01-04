@@ -508,6 +508,9 @@ func (h Header) ValidateBasic() error {
 	if err := ValidateHash(h.ConsensusHash); err != nil {
 		return fmt.Errorf("wrong ConsensusHash: %w", err)
 	}
+	if err := ValidateHash(h.NextConsensusHash); err != nil {
+		return fmt.Errorf("wrong NextConsensusHash: %w", err)
+	}
 	// NOTE: AppHash is arbitrary length
 	if err := ValidateHash(h.ResultsHash); err != nil {
 		return fmt.Errorf("wrong LastResultsHash: %w", err)
@@ -610,6 +613,7 @@ func (h *Header) StringIndented(indent string) string {
 %s  NextValidators:          %v
 %s  App:                     %v
 %s  Consensus:               %v
+%s  NextConsensus:           %v
 %s  Results:                 %v
 %s  Evidence:                %v
 %s  Proposer:                %v
@@ -627,6 +631,7 @@ func (h *Header) StringIndented(indent string) string {
 		indent, h.NextValidatorsHash,
 		indent, h.AppHash,
 		indent, h.ConsensusHash,
+		indent, h.NextConsensusHash,
 		indent, h.ResultsHash,
 		indent, h.EvidenceHash,
 		indent, h.ProposerProTxHash,
