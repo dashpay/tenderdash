@@ -124,56 +124,10 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 	}
 
-	bzReactor := rts.reactors[bzNodeID]
-	doPrevoteOrigin := bzNodeState.behavior.commander.commands[DoPrevoteType]
+	doPrevoteOrigin := bzNodeState.behavior.GetCommand(DoPrevoteType)
+	require.NotNil(t, doPrevoteOrigin)
 	// alter prevote so that the byzantine node double votes when height is 2
-	doPrevoteCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
-		appState := stateEvent.AppState
-		event := stateEvent.Data.(DoPrevoteEvent)
-		height := event.Height
-		round := event.Round
-		// allow first height to happen normally so that byzantine validator is no longer proposer
-		uncommittedState, err := bzNodeState.blockExec.ProcessProposal(ctx, appState.ProposalBlock, round, appState.state, true)
-		assert.NoError(t, err)
-		assert.NotZero(t, uncommittedState)
-		appState.CurrentRoundState = uncommittedState
-
-		if height != prevoteHeight {
-			return doPrevoteOrigin.Execute(ctx, behavior, stateEvent)
-		}
-		prevote1, err := bzNodeState.voteSigner.signVote(ctx, appState, tmproto.PrevoteType, appState.BlockID())
-		require.NoError(t, err)
-
-		prevote2, err := bzNodeState.voteSigner.signVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
-		require.NoError(t, err)
-
-		// send two votes to all peers (1st to one half, 2nd to another half)
-		i := 0
-		for _, ps := range bzReactor.peers {
-			voteCh := rts.voteChannels[bzNodeID]
-			if i < len(bzReactor.peers)/2 {
-
-				require.NoError(t, voteCh.Send(ctx,
-					p2p.Envelope{
-						To: ps.peerID,
-						Message: &tmcons.Vote{
-							Vote: prevote1.ToProto(),
-						},
-					}))
-			} else {
-				require.NoError(t, voteCh.Send(ctx,
-					p2p.Envelope{
-						To: ps.peerID,
-						Message: &tmcons.Vote{
-							Vote: prevote2.ToProto(),
-						},
-					}))
-			}
-
-			i++
-		}
-		return nil, nil
-	})
+	doPrevoteCmd := newDoPrevoteByzantine(t, rts, bzNodeID, doPrevoteOrigin, prevoteHeight)
 
 	bzNodeState.behavior.RegisterCommand(DoPrevoteType, doPrevoteCmd)
 
@@ -330,4 +284,67 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		assert.Equal(t, proTxHash, ev.VoteA.ValidatorProTxHash)
 		assert.Equal(t, prevoteHeight, ev.Height())
 	}
+}
+
+func newDoPrevoteByzantine(
+	t *testing.T,
+	rts *reactorTestSuite,
+	bzNodeID types.NodeID,
+	doPrevoteOrigin CommandHandler,
+	prevoteHeight int64,
+) CommandHandler {
+	return newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+		appState := stateEvent.AppState
+		event := stateEvent.Data.(DoPrevoteEvent)
+		bzNodeState := rts.states[bzNodeID]
+		// allow first height to happen normally so that byzantine validator is no longer proposer
+		uncommittedState, err := bzNodeState.blockExec.ProcessProposal(
+			ctx,
+			appState.ProposalBlock,
+			event.Round,
+			appState.state,
+			true,
+		)
+		assert.NoError(t, err)
+		assert.NotZero(t, uncommittedState)
+		appState.CurrentRoundState = uncommittedState
+
+		if event.Height != prevoteHeight {
+			return doPrevoteOrigin.Execute(ctx, behavior, stateEvent)
+		}
+		prevote1, err := bzNodeState.voteSigner.signVote(ctx, appState, tmproto.PrevoteType, appState.BlockID())
+		require.NoError(t, err)
+
+		prevote2, err := bzNodeState.voteSigner.signVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
+		require.NoError(t, err)
+
+		bzReactor := rts.reactors[bzNodeID]
+		// send two votes to all peers (1st to one half, 2nd to another half)
+		i := 0
+		voteCh := rts.voteChannels[bzNodeID]
+		for _, ps := range bzReactor.peers {
+			var msg p2p.Envelope
+			if i < len(bzReactor.peers)/2 {
+				msg = newP2PMessage(ps.peerID, prevote1)
+			} else {
+				msg = newP2PMessage(ps.peerID, prevote2)
+			}
+			require.NoError(t, voteCh.Send(ctx, msg))
+			i++
+		}
+		return nil, nil
+	})
+}
+
+func newP2PMessage(peerID types.NodeID, obj any) p2p.Envelope {
+	envelope := p2p.Envelope{
+		To: peerID,
+	}
+	switch t := obj.(type) {
+	case *types.Vote:
+		envelope.Message = &tmcons.Vote{
+			Vote: t.ToProto(),
+		}
+	}
+	return envelope
 }
