@@ -368,13 +368,14 @@ func TestHeaderHash(t *testing.T) {
 				ValidatorsHash:     crypto.Checksum([]byte("validators_hash")),
 				NextValidatorsHash: crypto.Checksum([]byte("next_validators_hash")),
 				ConsensusHash:      crypto.Checksum([]byte("consensus_hash")),
+				NextConsensusHash:  crypto.Checksum([]byte("next_consensus_hash")),
 				AppHash:            crypto.Checksum([]byte("app_hash")),
 				ResultsHash:        crypto.Checksum([]byte("last_results_hash")),
 				EvidenceHash:       crypto.Checksum([]byte("evidence_hash")),
 				ProposerProTxHash:  crypto.ProTxHashFromSeedBytes([]byte("proposer_pro_tx_hash")),
 				ProposedAppVersion: 1,
 			},
-			expectHash: hexBytesFromString(t, "891099982E9BC6035675DE94726BB0ADB8AE49E0277C67C7911BAC145119065A"),
+			expectHash: hexBytesFromString(t, "5CF83D17EEC01506B3F1EA0596B49CD21B7DEBDCB18E3204A99E6BDC5C470B9B"),
 		},
 		{
 			"nil header yields nil",
@@ -1365,6 +1366,7 @@ func TestHeaderHashVector(t *testing.T) {
 		ValidatorsHash:     []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 		NextValidatorsHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 		ConsensusHash:      []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+		NextConsensusHash:  []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 		AppHash:            []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 
 		ResultsHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
@@ -1377,7 +1379,7 @@ func TestHeaderHashVector(t *testing.T) {
 		header   Header
 		expBytes string
 	}{
-		{header: h, expBytes: "8df5f303af2ae303adaaa56d8f5645247dd8fd12dc5ebdff55444649f653452f"},
+		{header: h, expBytes: "1476e858bfe231d7cd767a9693f63fe6a8757e8c07aba432f338a5ecba2b0342"},
 	}
 
 	for _, tc := range testCases {
