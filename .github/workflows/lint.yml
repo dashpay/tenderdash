@@ -15,13 +15,13 @@ on:
 jobs:
   golangci:
     name: golangci-lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     timeout-minutes: 8
     steps:
       - uses: actions/checkout@v3
         with:
           submodules: true
-      - uses: actions/setup-go@v3.4.0
+      - uses: actions/setup-go@v3.5.0
         with:
           go-version: '^1.19'
       - uses: technote-space/get-diff-action@v6

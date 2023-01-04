@@ -5,9 +5,9 @@ on:
 
 jobs:
   stale:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
-      - uses: actions/stale@v6
+      - uses: actions/stale@v7
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           stale-pr-message: "This pull request has been automatically marked as stale because it has not had

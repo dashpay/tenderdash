@@ -240,9 +240,9 @@ func (c *ChainGenerator) Generate(ctx context.Context, t *testing.T) Chain {
 	return chain
 }
 
-func stopConsensusAtHeight(height int64) func(cs *State) bool {
+func stopConsensusAtHeight(height int64, round int32) func(cs *State) bool {
 	return func(cs *State) bool {
 		appState := cs.GetAppState()
-		return appState.Height == height
+		return appState.Height == height && appState.Round == round
 	}
 }

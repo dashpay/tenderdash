@@ -1361,11 +1361,14 @@ func TestWALRoundsSkipper(t *testing.T) {
 	)
 	cfg := getConfig(t)
 	cfg.Consensus.WalSkipRoundsToLast = true
-	logger := log.NewNopLogger()
+	logger := log.NewTestingLogger(t)
 	ng := nodeGen{
-		cfg:       cfg,
-		logger:    logger,
-		stateOpts: []StateOption{WithStopFunc(stopConsensusAtHeight(chainLen + 1))},
+		cfg:    cfg,
+		logger: logger,
+		stateOpts: []StateOption{WithStopFunc(
+			stopConsensusAtHeight(chainLen+1, 0),
+			stopConsensusAtHeight(chainLen, maxRound+1),
+		)},
 	}
 	node := ng.Generate(ctx, t)
 	doPrevoteOrigin := node.csState.behavior.commander.commands[DoPrevoteType]

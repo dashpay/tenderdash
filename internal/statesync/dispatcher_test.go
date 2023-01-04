@@ -43,7 +43,7 @@ func TestDispatcherBasic(t *testing.T) {
 
 	chans, ch := testChannel(100)
 
-	d := NewDispatcher(ch, log.NewNopLogger())
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
 	go handleRequests(ctx, t, d, chans.Out)
 
 	peers := createPeerSet(numPeers)
@@ -75,7 +75,7 @@ func TestDispatcherReturnsNoBlock(t *testing.T) {
 
 	chans, ch := testChannel(100)
 
-	d := NewDispatcher(ch, log.NewNopLogger())
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
 
 	peer := factory.NodeID(t, "a")
 
@@ -99,7 +99,7 @@ func TestDispatcherTimeOutWaitingOnLightBlock(t *testing.T) {
 	defer cancel()
 
 	_, ch := testChannel(100)
-	d := NewDispatcher(ch, log.NewNopLogger())
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
 	peer := factory.NodeID(t, "a")
 
 	ctx, cancelFunc := context.WithTimeout(ctx, 10*time.Millisecond)
@@ -122,7 +122,7 @@ func TestDispatcherProviders(t *testing.T) {
 
 	chans, ch := testChannel(100)
 
-	d := NewDispatcher(ch, log.NewNopLogger())
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
 	go handleRequests(ctx, t, d, chans.Out)
 
 	peers := createPeerSet(5)

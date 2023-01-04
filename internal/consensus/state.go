@@ -184,9 +184,18 @@ func SkipStateStoreBootstrap(sm *State) {
 	sm.skipBootstrapping = true
 }
 
-func WithStopFunc(stopFn func(cs *State) bool) func(cs *State) {
+func WithStopFunc(stopFns ...func(cs *State) bool) func(cs *State) {
 	return func(cs *State) {
-		cs.stopFn = stopFn
+		// we assume that even if one function returns true, then the consensus must be stopped
+		cs.stopFn = func(cs *State) bool {
+			for _, fn := range stopFns {
+				ret := fn(cs)
+				if ret {
+					return true
+				}
+			}
+			return false
+		}
 	}
 }
 
