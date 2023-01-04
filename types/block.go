@@ -418,6 +418,7 @@ type Header struct {
 	ValidatorsHash     tmbytes.HexBytes `json:"validators_hash"`      // validators for the current block
 	NextValidatorsHash tmbytes.HexBytes `json:"next_validators_hash"` // validators for the next block
 	ConsensusHash      tmbytes.HexBytes `json:"consensus_hash"`       // consensus params for current block
+	NextConsensusHash  tmbytes.HexBytes `json:"next_consensus_hash"`  // consensus params for next block
 	AppHash            tmbytes.HexBytes `json:"app_hash"`             // state after txs from current block
 	// ResultsHash is  the root hash of all results from the txs from the current block
 	// see `deterministicResponseDeliverTx` to understand which parts of a tx is hashed into here
@@ -436,7 +437,8 @@ func (h *Header) Populate(
 	version version.Consensus, chainID string,
 	timestamp time.Time, lastBlockID BlockID,
 	valHash, nextValHash []byte,
-	consensusHash, appHash, resultsHash []byte,
+	consensusHash, nextConsensusHash []byte,
+	appHash, resultsHash []byte,
 	proposerProTxHash ProTxHash,
 	proposedAppVersion uint64,
 ) {
@@ -447,6 +449,7 @@ func (h *Header) Populate(
 	h.ValidatorsHash = valHash
 	h.NextValidatorsHash = nextValHash
 	h.ConsensusHash = consensusHash
+	h.NextConsensusHash = nextConsensusHash
 	h.AppHash = appHash
 	h.ResultsHash = resultsHash
 	h.ProposerProTxHash = proposerProTxHash
@@ -580,6 +583,7 @@ func (h *Header) Hash() tmbytes.HexBytes {
 		cdcEncode(h.ValidatorsHash),
 		cdcEncode(h.NextValidatorsHash),
 		cdcEncode(h.ConsensusHash),
+		cdcEncode(h.NextConsensusHash),
 		cdcEncode(h.AppHash),
 		cdcEncode(h.ResultsHash),
 		cdcEncode(h.EvidenceHash),
@@ -647,6 +651,7 @@ func (h *Header) ToProto() *tmproto.Header {
 		ValidatorsHash:        h.ValidatorsHash,
 		NextValidatorsHash:    h.NextValidatorsHash,
 		ConsensusHash:         h.ConsensusHash,
+		NextConsensusHash:     h.NextConsensusHash,
 		AppHash:               h.AppHash,
 		DataHash:              h.DataHash,
 		EvidenceHash:          h.EvidenceHash,
@@ -681,6 +686,7 @@ func HeaderFromProto(ph *tmproto.Header) (Header, error) {
 	h.ValidatorsHash = ph.ValidatorsHash
 	h.NextValidatorsHash = ph.NextValidatorsHash
 	h.ConsensusHash = ph.ConsensusHash
+	h.NextConsensusHash = ph.NextConsensusHash
 	h.AppHash = ph.AppHash
 	h.DataHash = ph.DataHash
 	h.EvidenceHash = ph.EvidenceHash
