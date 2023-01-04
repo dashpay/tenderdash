@@ -51,6 +51,7 @@ var peerTimeout = 15 * time.Second // not const so we can override with tests
 
 var (
 	errPeerNotResponded = errors.New("peer did not send us anything")
+	errUnableToFindPeer = errors.New("unable to find a peer, a requester is stopped")
 )
 
 /*
@@ -667,16 +668,15 @@ func (bpr *bpRequester) redo(peerID types.NodeID) {
 func (bpr *bpRequester) requestRoutine(ctx context.Context) {
 	for bpr.isReqRoutineRunning() {
 		// Pick a peer to send request to.
-		peer, stop := bpr.findPeer(ctx)
-		if stop {
+		peer, err := bpr.findPeer(ctx)
+		if err != nil {
 			return
 		}
 		bpr.updatePeerID(peer)
 		// Send request and wait.
-
 		bpr.pool.sendRequest(bpr.height, peer.id)
-		stop = bpr.waitFor(ctx)
-		if stop {
+		shouldStop := bpr.waitForResponse(ctx)
+		if shouldStop {
 			return
 		}
 	}
@@ -692,25 +692,25 @@ func (bpr *bpRequester) updatePeerID(peer *bpPeer) {
 	bpr.peerID = peer.id
 }
 
-func (bpr *bpRequester) findPeer(ctx context.Context) (*bpPeer, bool) {
+func (bpr *bpRequester) findPeer(ctx context.Context) (*bpPeer, error) {
 	var peer *bpPeer
 	for bpr.isReqRoutineRunning() {
 		if ctx.Err() != nil {
-			return nil, true
+			return nil, ctx.Err()
 		}
 		peer = bpr.pool.pickIncrAvailablePeer(bpr.height)
 		if peer != nil {
-			return peer, false
+			return peer, nil
 		}
 		// This is preferable to using a timer because the request
 		// interval is so small. Larger request intervals may
 		// necessitate using a timer/ticker.
 		time.Sleep(requestInterval)
 	}
-	return nil, true
+	return nil, errUnableToFindPeer
 }
 
-func (bpr *bpRequester) waitFor(ctx context.Context) bool {
+func (bpr *bpRequester) waitForResponse(ctx context.Context) bool {
 	for {
 		select {
 		case <-ctx.Done():
