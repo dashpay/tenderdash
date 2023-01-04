@@ -43,6 +43,23 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 	require.Equal(t, 1, len(respPrep.TxResults))
 	require.False(t, respPrep.TxResults[0].IsErr(), respPrep.TxResults[0].Log)
 
+	// Duplicate PrepareProposal should return error
+	_, err = app.PrepareProposal(ctx, &reqPrep)
+	require.ErrorContains(t, err, "duplicate PrepareProposal call")
+
+	reqProcess := &types.RequestProcessProposal{
+		Txs:    [][]byte{tx},
+		Height: height,
+	}
+	respProcess, err := app.ProcessProposal(ctx, reqProcess)
+	require.NoError(t, err)
+	require.Len(t, respProcess.TxResults, 1)
+	require.False(t, respProcess.TxResults[0].IsErr(), respProcess.TxResults[0].Log)
+
+	// Duplicate ProcessProposal calls should return error
+	_, err = app.ProcessProposal(ctx, reqProcess)
+	require.ErrorContains(t, err, "duplicate ProcessProposal call")
+
 	reqFin := &types.RequestFinalizeBlock{Height: height}
 	reqFin.Block, reqFin.BlockID = makeBlock(t, height, [][]byte{tx}, respPrep.AppHash)
 	respFin, err := app.FinalizeBlock(ctx, reqFin)

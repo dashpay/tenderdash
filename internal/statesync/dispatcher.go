@@ -9,6 +9,7 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/internal/p2p"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/light/provider"
 	ssproto "github.com/tendermint/tendermint/proto/tendermint/statesync"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -28,14 +29,15 @@ var (
 type Dispatcher struct {
 	// the channel with which to send light block requests on
 	requestCh p2p.Channel
-
-	mtx sync.Mutex
+	logger    log.Logger
+	mtx       sync.Mutex
 	// all pending calls that have been dispatched and are awaiting an answer
 	calls map[types.NodeID]chan *types.LightBlock
 }
 
-func NewDispatcher(requestChannel p2p.Channel) *Dispatcher {
+func NewDispatcher(requestChannel p2p.Channel, logger log.Logger) *Dispatcher {
 	return &Dispatcher{
+		logger:    logger.With("module", "lb-dispatcher"),
 		requestCh: requestChannel,
 		calls:     make(map[types.NodeID]chan *types.LightBlock),
 	}
@@ -65,11 +67,17 @@ func (d *Dispatcher) LightBlock(ctx context.Context, height int64, peer types.No
 	start := time.Now()
 	select {
 	case resp := <-callCh:
-		fmt.Printf("dispatcher LightBlock took %s\n", time.Since(start).String())
+		d.logger.Debug("received light-block",
+			"height", height,
+			"took", time.Since(start).String(),
+		)
 		return resp, nil
 
 	case <-ctx.Done():
-		fmt.Printf("dispatcher LightBlock ctx done after %s\n", time.Since(start).String())
+		d.logger.Debug("failed to get a light-block",
+			"height", height,
+			"took", time.Since(start).String(),
+		)
 		return nil, ctx.Err()
 	}
 }

@@ -134,7 +134,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		return err
 	}
 
-	peerUpdates := r.peerEvents(ctx)
+	peerUpdates := r.peerEvents(ctx, "pex")
 	go r.processPexCh(ctx, channel)
 	go r.processPeerUpdates(ctx, peerUpdates)
 	return nil

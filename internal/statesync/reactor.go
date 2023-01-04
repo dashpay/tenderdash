@@ -274,7 +274,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 			metrics:       r.metrics,
 		}
 	}
-	r.dispatcher = NewDispatcher(blockCh)
+	r.dispatcher = NewDispatcher(blockCh, r.logger)
 	r.requestSnaphot = func() error {
 		// request snapshots from all currently connected peers
 		return snapshotCh.Send(ctx, p2p.Envelope{
@@ -324,7 +324,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		LightBlockChannel: blockCh,
 		ParamsChannel:     paramsCh,
 	})
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx))
+	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "statesync"))
 
 	if r.needsStateSync {
 		r.logger.Info("starting state sync")

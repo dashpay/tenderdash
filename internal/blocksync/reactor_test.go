@@ -2,6 +2,7 @@ package blocksync
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"testing"
 	"time"
@@ -173,7 +174,7 @@ func (rts *reactorTestSuite) addNode(
 	require.NoError(t, rts.app[nodeID].Start(ctx))
 
 	rts.peerChans[nodeID] = make(chan p2p.PeerUpdate)
-	rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], 1)
+	rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], 1, "blocksync")
 	rts.network.Nodes[nodeID].PeerManager.Register(ctx, rts.peerUpdates[nodeID])
 
 	chCreator := func(ctx context.Context, chdesc *p2p.ChannelDescriptor) (p2p.Channel, error) {
@@ -181,7 +182,7 @@ func (rts *reactorTestSuite) addNode(
 	}
 
 	proTxHash := rts.network.Nodes[nodeID].NodeInfo.ProTxHash
-	peerEvents := func(ctx context.Context) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] }
+	peerEvents := func(ctx context.Context, _ string) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] }
 	reactor := makeReactor(ctx, t, proTxHash, nodeID, genDoc, privVal, chCreator, peerEvents)
 
 	commit := types.NewCommit(0, 0, types.BlockID{}, nil)
@@ -354,13 +355,12 @@ func TestReactor_NoBlockResponse(t *testing.T) {
 		"expected node to be fully synced",
 	)
 
-	for _, tc := range testCases {
-		block := rts.reactors[rts.nodes[1]].store.LoadBlock(tc.height)
-		if tc.existent {
-			require.True(t, block != nil)
-		} else {
-			require.Nil(t, block)
-		}
+	reactor := rts.reactors[rts.nodes[1]]
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
+			block := reactor.store.LoadBlock(tc.height)
+			require.Equal(t, tc.existent, block != nil)
+		})
 	}
 }
 

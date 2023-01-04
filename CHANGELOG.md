@@ -1,5 +1,41 @@
 ## [0.11.0-dev.1] - 2022-12-15
 
+## [0.10.0-dev.7] - 2022-12-20
+
+### Bug Fixes
+
+- Decrease log verbosity by logging send/recv logs on trace level (#533)
+- Ensure process proposal was called on commit processing (#534)
+
+### Features
+
+- Seed connectivity tuning options (max-incoming-connection-time,incoming-connection-window) (#532)
+
+### Build
+
+- Improve release script (#522)
+
+## [0.10.0-dev.6] - 2022-12-15
+
+### Bug Fixes
+
+- ProcessProposal executed twice for a block (#516)
+- Proposer-based timestamp broken during backport (#523)
+- Improve wal replay mechanism (#510)
+
+### Miscellaneous Tasks
+
+- [**breaking**] Rename genesis.json quorum fields (#515)
+- [**breaking**] Remove Snapshot.core_chain_locked_height (#527)
+- Update changelog and version to 0.10.0-dev.6 (#526)
+
+### Build
+
+- Bump actions/setup-go from 3.3.1 to 3.4.0 (#524)
+- Bump bufbuild/buf-setup-action from 1.9.0 to 1.10.0 (#525)
+
+## [0.8.0] - 2022-12-07
+
 ### Bug Fixes
 
 - Commits received during state sync are lost (#513)

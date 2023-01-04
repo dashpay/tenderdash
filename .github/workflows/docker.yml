@@ -1,7 +1,7 @@
 ---
 name: Docker
-# Build & Push rebuilds the Tenderdash docker image every time a release is published
-# and pushes the image to https://hub.docker.com/r/dashpay/tenderdash/tags
+# Build & Push rebuilds the Tenderdash docker image every time a release is
+# published and pushes the image to https://hub.docker.com/r/dashpay/tenderdash
 on:
   workflow_dispatch:
     inputs:
@@ -15,7 +15,7 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v2.3.4
 
@@ -41,6 +41,17 @@ jobs:
         with:
           result-encoding: string
           script: "return (context.payload.release.tag_name.includes('-dev') ? '-dev' : '');"
+
+      - name: Determine TENDERMINT_BUILD_OPTIONS
+        uses: actions/github-script@v6
+        id: TENDERMINT_BUILD_OPTIONS
+        with:
+          result-encoding: string
+          script: |
+            if (github.ref_type == 'tag' && !contains(github.ref_name,'-dev')) {
+              return 'tenderdash,stable'
+            }
+            return 'tenderdash,dev,deadlock'
 
       - name: Set Docker tags and labels
         id: docker_meta
@@ -70,6 +81,7 @@ jobs:
           labels: ${{ steps.docker_meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
+          build-args: |
+            TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
       - name: Show Docker image digest
         run: echo ${{ steps.docker_build.outputs.digest }}

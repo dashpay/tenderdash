@@ -209,7 +209,7 @@ func TestReactorSmallPeerStoreInALargeNetwork(t *testing.T) {
 	// test that all nodes reach full capacity
 	for _, nodeID := range testNet.nodes {
 		require.Eventually(t, func() bool {
-			// nolint:scopelint
+			//nolint:scopelint
 			return testNet.network.Nodes[nodeID].PeerManager.PeerRatio() >= 0.9
 		}, longWait, checkFrequency,
 			"peer ratio is: %f", testNet.network.Nodes[nodeID].PeerManager.PeerRatio())
@@ -298,15 +298,16 @@ func setupSingle(ctx context.Context, t *testing.T) *singleTestReactor {
 	)
 
 	peerCh := make(chan p2p.PeerUpdate, chBuf)
-	peerUpdates := p2p.NewPeerUpdates(peerCh, chBuf)
-	peerManager, err := p2p.NewPeerManager(nodeID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+	peerUpdates := p2p.NewPeerUpdates(peerCh, chBuf, "")
+	peerManager, err := p2p.NewPeerManager(ctx, nodeID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 	require.NoError(t, err)
+	defer peerManager.Close()
 
 	chCreator := func(context.Context, *p2p.ChannelDescriptor) (p2p.Channel, error) {
 		return pexCh, nil
 	}
 
-	reactor := pex.NewReactor(log.NewNopLogger(), peerManager, chCreator, func(_ context.Context) *p2p.PeerUpdates { return peerUpdates })
+	reactor := pex.NewReactor(log.NewNopLogger(), peerManager, chCreator, func(context.Context, string) *p2p.PeerUpdates { return peerUpdates })
 
 	require.NoError(t, reactor.Start(ctx))
 	t.Cleanup(reactor.Wait)
@@ -388,7 +389,7 @@ func setupNetwork(ctx context.Context, t *testing.T, opts testOptions) *reactorT
 		nodeID := nodeID
 
 		rts.peerChans[nodeID] = make(chan p2p.PeerUpdate, chBuf)
-		rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], chBuf)
+		rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], chBuf, "pex")
 		rts.network.Nodes[nodeID].PeerManager.Register(ctx, rts.peerUpdates[nodeID])
 
 		chCreator := func(context.Context, *p2p.ChannelDescriptor) (p2p.Channel, error) {
@@ -403,7 +404,7 @@ func setupNetwork(ctx context.Context, t *testing.T, opts testOptions) *reactorT
 				rts.logger.With("nodeID", nodeID),
 				rts.network.Nodes[nodeID].PeerManager,
 				chCreator,
-				func(_ context.Context) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] },
+				func(context.Context, string) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] },
 			)
 		}
 		rts.nodes = append(rts.nodes, nodeID)
@@ -449,7 +450,7 @@ func (r *reactorTestSuite) addNodes(ctx context.Context, t *testing.T, nodes int
 		nodeID := node.NodeID
 		r.pexChannels[nodeID] = node.MakeChannelNoCleanup(ctx, t, pex.ChannelDescriptor())
 		r.peerChans[nodeID] = make(chan p2p.PeerUpdate, r.opts.BufferSize)
-		r.peerUpdates[nodeID] = p2p.NewPeerUpdates(r.peerChans[nodeID], r.opts.BufferSize)
+		r.peerUpdates[nodeID] = p2p.NewPeerUpdates(r.peerChans[nodeID], r.opts.BufferSize, "pex")
 		r.network.Nodes[nodeID].PeerManager.Register(ctx, r.peerUpdates[nodeID])
 
 		chCreator := func(context.Context, *p2p.ChannelDescriptor) (p2p.Channel, error) {
@@ -460,7 +461,7 @@ func (r *reactorTestSuite) addNodes(ctx context.Context, t *testing.T, nodes int
 			r.logger.With("nodeID", nodeID),
 			r.network.Nodes[nodeID].PeerManager,
 			chCreator,
-			func(_ context.Context) *p2p.PeerUpdates { return r.peerUpdates[nodeID] },
+			func(context.Context, string) *p2p.PeerUpdates { return r.peerUpdates[nodeID] },
 		)
 		r.nodes = append(r.nodes, nodeID)
 		r.total++
@@ -566,7 +567,7 @@ func (r *reactorTestSuite) listenForPeerUpdate(
 	waitPeriod time.Duration,
 ) {
 	on, with := r.checkNodePair(t, onNode, withNode)
-	sub := r.network.Nodes[on].PeerManager.Subscribe(ctx)
+	sub := r.network.Nodes[on].PeerManager.Subscribe(ctx, "pex")
 	timesUp := time.After(waitPeriod)
 	for {
 		select {
@@ -674,8 +675,8 @@ func (r *reactorTestSuite) connectPeers(ctx context.Context, t *testing.T, sourc
 		return
 	}
 
-	sourceSub := n1.PeerManager.Subscribe(ctx)
-	targetSub := n2.PeerManager.Subscribe(ctx)
+	sourceSub := n1.PeerManager.Subscribe(ctx, "pex")
+	targetSub := n2.PeerManager.Subscribe(ctx, "pex")
 
 	sourceAddress := n1.NodeAddress
 	targetAddress := n2.NodeAddress

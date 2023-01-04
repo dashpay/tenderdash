@@ -19,7 +19,7 @@ jobs:
   # whole workflow read-only.
   build:
     name: VuePress build
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     container:
       image: alpine:latest
     permissions:
@@ -44,7 +44,7 @@ jobs:
 
   deploy:
     name: Deploy to GitHub Pages
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     needs: build
     permissions:
       contents: write

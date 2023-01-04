@@ -14,9 +14,9 @@ permissions:
 
 jobs:
   check-mocks:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
-      - uses: actions/setup-go@v3.4.0
+      - uses: actions/setup-go@v3.5.0
         with:
           go-version: '1.19'
 
@@ -40,9 +40,9 @@ jobs:
           fi
 
   check-proto:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-20.04
     steps:
-      - uses: actions/setup-go@v3.4.0
+      - uses: actions/setup-go@v3.5.0
         with:
           go-version: '1.19'
 

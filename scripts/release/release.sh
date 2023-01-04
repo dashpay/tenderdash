@@ -233,8 +233,9 @@ function createRelease() {
         --draft \
         --title "v${NEW_PACKAGE_VERSION}" \
         --generate-notes \
-        $gh_args \
-        "v${NEW_PACKAGE_VERSION}"
+        --target "${TARGET_BRANCH}" \
+        ${gh_args} \
+       "v${NEW_PACKAGE_VERSION}"
 }
 
 function deleteRelease() {
@@ -279,7 +280,14 @@ PR_URL="$(getPrURL)"
 
 success "New release branch ${RELEASE_BRANCH} for ${NEW_PACKAGE_VERSION} prepared successfully."
 success "Release PR: ${PR_URL}"
-success "Please review it, merge and create a release in Github."
+
+success "Please review it and merge."
+
+if [[ "${RELEASE_TYPE}" = "prerelease" ]] ; then
+    success "NOTE: Use 'squash and merge' approach."
+else 
+    success "NOTE: Use 'create merge commit' approach."
+fi 
 
 waitForMerge
 

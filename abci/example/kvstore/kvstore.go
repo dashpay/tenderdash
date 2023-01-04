@@ -46,7 +46,18 @@ type Application struct {
 	// roundStates contains state for each round, indexed by roundKey()
 	roundStates  map[string]State
 	RetainBlocks int64 // blocks to retain after commit (via ResponseCommit.RetainHeight)
-	logger       log.Logger
+
+	// preparedProposals stores info about all rounds that got PrepareProposal executed, used to detect
+	// duplicate PrepareProposal calls.
+	// If `nil`, duplicate call detection is disabled.
+	preparedProposals map[int32]bool
+
+	// processedProposals stores info about all rounds that got ProcessProposal executed, used to detect
+	// duplicate ProcessProposal calls.
+	// If `nil`, duplicate call detection is disabled.
+	processedProposals map[int32]bool
+
+	logger log.Logger
 
 	validatorSetUpdates    map[int64]abci.ValidatorSetUpdate
 	consensusParamsUpdates map[int64]types1.ConsensusParams
@@ -165,6 +176,15 @@ func WithPrepareTxsFunc(prepareTxs PrepareTxsFunc) OptFunc {
 	}
 }
 
+// WithDuplicateRequestDetection makes it possible to disable duplicate request detection.
+// (enabled by default)
+func WithDuplicateRequestDetection(enabled bool) OptFunc {
+	return func(app *Application) error {
+		app.resetDuplicateDetection(enabled)
+		return nil
+	}
+}
+
 // NewMemoryApp creates new Key/value store application that stores data to memory.
 // Data is lost when the app stops.
 // The application can be used for testing or as an example of ABCI
@@ -182,6 +202,8 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 		logger:                 log.NewNopLogger(),
 		LastCommittedState:     NewKvState(dbm.NewMemDB(), initialHeight), // initial state to avoid InitChain() in unit tests
 		roundStates:            map[string]State{},
+		preparedProposals:      map[int32]bool{},
+		processedProposals:     map[int32]bool{},
 		validatorSetUpdates:    map[int64]abci.ValidatorSetUpdate{},
 		consensusParamsUpdates: map[int64]types1.ConsensusParams{},
 		initialHeight:          initialHeight,
@@ -268,6 +290,9 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	if vsu == nil {
 		return nil, errors.New("validator-set update cannot be nil")
 	}
+
+	app.resetDuplicateDetection(app.preparedProposals != nil && app.processedProposals != nil)
+
 	resp := &abci.ResponseInitChain{
 		AppHash:                 app.LastCommittedState.GetAppHash(),
 		ConsensusParams:         &consensusParams,
@@ -287,6 +312,13 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 
 	if req.MaxTxBytes <= 0 {
 		return &abci.ResponsePrepareProposal{}, fmt.Errorf("MaxTxBytes must be positive, got: %d", req.MaxTxBytes)
+	}
+
+	if app.preparedProposals != nil {
+		if app.preparedProposals[req.Round] {
+			return &abci.ResponsePrepareProposal{}, fmt.Errorf("duplicate PrepareProposal call at height %d, round %d", req.Height, req.Round)
+		}
+		app.preparedProposals[req.Round] = true
 	}
 
 	txRecords, err := app.prepareTxs(*req)
@@ -322,6 +354,13 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
+
+	if app.processedProposals != nil {
+		if app.processedProposals[req.Round] {
+			return &abci.ResponseProcessProposal{}, fmt.Errorf("duplicate ProcessProposal call at height %d, round %d", req.Height, req.Round)
+		}
+		app.processedProposals[req.Round] = true
+	}
 
 	roundState, txResults, err := app.executeProposal(req.Height, req.Round, types.NewTxs(req.Txs))
 	if err != nil {
@@ -664,12 +703,24 @@ func (app *Application) newHeight(committedAppHash tmbytes.HexBytes, height int6
 		return err
 	}
 
+	app.resetDuplicateDetection(app.preparedProposals != nil && app.processedProposals != nil)
+
 	app.resetRoundStates()
 	if err := app.persistInterval(); err != nil {
 		return err
 	}
 
 	return nil
+}
+
+func (app *Application) resetDuplicateDetection(enabled bool) {
+	if enabled {
+		app.preparedProposals = map[int32]bool{}
+		app.processedProposals = map[int32]bool{}
+	} else {
+		app.preparedProposals = nil
+		app.processedProposals = nil
+	}
 }
 
 // resetRoundStates closes and cleans up uncommitted round states

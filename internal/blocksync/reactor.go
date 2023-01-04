@@ -173,7 +173,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	}
 
 	go r.processBlockSyncCh(ctx, blockSyncCh)
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx), blockSyncCh)
+	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "blocksync"), blockSyncCh)
 
 	return nil
 }
