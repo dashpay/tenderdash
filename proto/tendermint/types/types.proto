@@ -105,12 +105,12 @@ message Header {
   bytes data_hash        = 7;  // transactions
 
   // hashes from the app output from the prev block
-  bytes validators_hash      = 8;   // validators for the current block
-  bytes next_validators_hash = 9;   // validators for the next block
-  bytes consensus_hash       = 10;  // consensus params for current block
-  bytes app_hash             = 11;  // state after txs from the previous block
-  bytes results_hash =
-      12;  // root hash of all results from the txs from current block
+  bytes validators_hash      = 8;    // validators for the current block
+  bytes next_validators_hash = 9;    // validators for the next block
+  bytes consensus_hash       = 10;   // consensus params for current block
+  bytes next_consensus_hash  = 103;  // consensus params for next block
+  bytes app_hash             = 11;   // state after txs from the previous block
+  bytes results_hash         = 12;   // root hash of all results from the txs from current block
 
   // consensus info
   bytes evidence_hash        = 13;   // evidence included in the block

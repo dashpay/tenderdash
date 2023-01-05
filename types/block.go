@@ -32,7 +32,7 @@ const (
 	// MaxHeaderBytes is a maximum header size.
 	// NOTE: Because app hash can be of arbitrary size, the header is therefore not
 	// capped in size and thus this number should be seen as a soft max
-	MaxHeaderBytes       int64 = 680
+	MaxHeaderBytes       int64 = 727
 	MaxCoreChainLockSize int64 = 132
 
 	// MaxOverheadForBlock - maximum overhead to encode a block (up to
@@ -418,6 +418,7 @@ type Header struct {
 	ValidatorsHash     tmbytes.HexBytes `json:"validators_hash"`      // validators for the current block
 	NextValidatorsHash tmbytes.HexBytes `json:"next_validators_hash"` // validators for the next block
 	ConsensusHash      tmbytes.HexBytes `json:"consensus_hash"`       // consensus params for current block
+	NextConsensusHash  tmbytes.HexBytes `json:"next_consensus_hash"`  // consensus params for next block
 	AppHash            tmbytes.HexBytes `json:"app_hash"`             // state after txs from current block
 	// ResultsHash is  the root hash of all results from the txs from the current block
 	// see `deterministicResponseDeliverTx` to understand which parts of a tx is hashed into here
@@ -436,7 +437,8 @@ func (h *Header) Populate(
 	version version.Consensus, chainID string,
 	timestamp time.Time, lastBlockID BlockID,
 	valHash, nextValHash []byte,
-	consensusHash, appHash, resultsHash []byte,
+	consensusHash, nextConsensusHash []byte,
+	appHash, resultsHash []byte,
 	proposerProTxHash ProTxHash,
 	proposedAppVersion uint64,
 ) {
@@ -447,6 +449,7 @@ func (h *Header) Populate(
 	h.ValidatorsHash = valHash
 	h.NextValidatorsHash = nextValHash
 	h.ConsensusHash = consensusHash
+	h.NextConsensusHash = nextConsensusHash
 	h.AppHash = appHash
 	h.ResultsHash = resultsHash
 	h.ProposerProTxHash = proposerProTxHash
@@ -505,6 +508,9 @@ func (h Header) ValidateBasic() error {
 	if err := ValidateHash(h.ConsensusHash); err != nil {
 		return fmt.Errorf("wrong ConsensusHash: %w", err)
 	}
+	if err := ValidateHash(h.NextConsensusHash); err != nil {
+		return fmt.Errorf("wrong NextConsensusHash: %w", err)
+	}
 	// NOTE: AppHash is arbitrary length
 	if err := ValidateHash(h.ResultsHash); err != nil {
 		return fmt.Errorf("wrong LastResultsHash: %w", err)
@@ -552,34 +558,36 @@ func (h *Header) Hash() tmbytes.HexBytes {
 	if h == nil || len(h.ValidatorsHash) == 0 {
 		return nil
 	}
-	hpb := h.Version.ToProto()
-	hbz, err := hpb.Marshal()
+	pbVersion := h.Version.ToProto()
+	version, err := pbVersion.Marshal()
 	if err != nil {
 		return nil
 	}
 
-	pbt, err := gogotypes.StdTimeMarshal(h.Time)
+	blockTime, err := gogotypes.StdTimeMarshal(h.Time)
 	if err != nil {
 		return nil
 	}
 
-	pbbi := h.LastBlockID.ToProto()
-	bzbi, err := pbbi.Marshal()
+	pbLastBlockID := h.LastBlockID.ToProto()
+	lastBlockID, err := pbLastBlockID.Marshal()
 	if err != nil {
 		return nil
 	}
+
 	return merkle.HashFromByteSlices([][]byte{
-		hbz,
+		version,
 		cdcEncode(h.ChainID),
 		cdcEncode(h.Height),
 		cdcEncode(h.CoreChainLockedHeight),
-		pbt,
-		bzbi,
+		blockTime,
+		lastBlockID,
 		cdcEncode(h.LastCommitHash),
 		cdcEncode(h.DataHash),
 		cdcEncode(h.ValidatorsHash),
 		cdcEncode(h.NextValidatorsHash),
 		cdcEncode(h.ConsensusHash),
+		cdcEncode(h.NextConsensusHash),
 		cdcEncode(h.AppHash),
 		cdcEncode(h.ResultsHash),
 		cdcEncode(h.EvidenceHash),
@@ -606,6 +614,7 @@ func (h *Header) StringIndented(indent string) string {
 %s  NextValidators:          %v
 %s  App:                     %v
 %s  Consensus:               %v
+%s  NextConsensus:           %v
 %s  Results:                 %v
 %s  Evidence:                %v
 %s  Proposer:                %v
@@ -623,6 +632,7 @@ func (h *Header) StringIndented(indent string) string {
 		indent, h.NextValidatorsHash,
 		indent, h.AppHash,
 		indent, h.ConsensusHash,
+		indent, h.NextConsensusHash,
 		indent, h.ResultsHash,
 		indent, h.EvidenceHash,
 		indent, h.ProposerProTxHash,
@@ -647,6 +657,7 @@ func (h *Header) ToProto() *tmproto.Header {
 		ValidatorsHash:        h.ValidatorsHash,
 		NextValidatorsHash:    h.NextValidatorsHash,
 		ConsensusHash:         h.ConsensusHash,
+		NextConsensusHash:     h.NextConsensusHash,
 		AppHash:               h.AppHash,
 		DataHash:              h.DataHash,
 		EvidenceHash:          h.EvidenceHash,
@@ -681,6 +692,7 @@ func HeaderFromProto(ph *tmproto.Header) (Header, error) {
 	h.ValidatorsHash = ph.ValidatorsHash
 	h.NextValidatorsHash = ph.NextValidatorsHash
 	h.ConsensusHash = ph.ConsensusHash
+	h.NextConsensusHash = ph.NextConsensusHash
 	h.AppHash = ph.AppHash
 	h.DataHash = ph.DataHash
 	h.EvidenceHash = ph.EvidenceHash
