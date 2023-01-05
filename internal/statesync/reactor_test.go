@@ -3,6 +3,7 @@ package statesync
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -1010,21 +1011,13 @@ func sendMsgToChan(ctx context.Context, ch chan p2p.Envelope, msg p2p.Envelope) 
 	}
 }
 
-func numbToPeerID(numb int) string {
-	prefix := ""
-	if numb/26 > 0 {
-		prefix = numbToPeerID(numb / 26)
-	}
-	return prefix + string(rune('a'+numb%26))
-}
-
 func genPeerIDs(num int) []string {
 	if num == 0 {
 		return nil
 	}
 	peers := make([]string, num)
 	for i := 0; i < num; i++ {
-		peers[i] = numbToPeerID(i)
+		peers[i] = strconv.Itoa(i)
 	}
 	return peers
 }
