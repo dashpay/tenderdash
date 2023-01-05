@@ -32,7 +32,7 @@ const (
 	// MaxHeaderBytes is a maximum header size.
 	// NOTE: Because app hash can be of arbitrary size, the header is therefore not
 	// capped in size and thus this number should be seen as a soft max
-	MaxHeaderBytes       int64 = 714
+	MaxHeaderBytes       int64 = 727
 	MaxCoreChainLockSize int64 = 132
 
 	// MaxOverheadForBlock - maximum overhead to encode a block (up to
@@ -558,29 +558,30 @@ func (h *Header) Hash() tmbytes.HexBytes {
 	if h == nil || len(h.ValidatorsHash) == 0 {
 		return nil
 	}
-	hpb := h.Version.ToProto()
-	hbz, err := hpb.Marshal()
+	pbVersion := h.Version.ToProto()
+	version, err := pbVersion.Marshal()
 	if err != nil {
 		return nil
 	}
 
-	pbt, err := gogotypes.StdTimeMarshal(h.Time)
+	blockTime, err := gogotypes.StdTimeMarshal(h.Time)
 	if err != nil {
 		return nil
 	}
 
-	pbbi := h.LastBlockID.ToProto()
-	bzbi, err := pbbi.Marshal()
+	pbLastBlockID := h.LastBlockID.ToProto()
+	lastBlockID, err := pbLastBlockID.Marshal()
 	if err != nil {
 		return nil
 	}
+
 	return merkle.HashFromByteSlices([][]byte{
-		hbz,
+		version,
 		cdcEncode(h.ChainID),
 		cdcEncode(h.Height),
 		cdcEncode(h.CoreChainLockedHeight),
-		pbt,
-		bzbi,
+		blockTime,
+		lastBlockID,
 		cdcEncode(h.LastCommitHash),
 		cdcEncode(h.DataHash),
 		cdcEncode(h.ValidatorsHash),
