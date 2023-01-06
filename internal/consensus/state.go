@@ -227,14 +227,9 @@ func NewState(
 		evsw:          tmevents.NewEventSwitch(),
 		metrics:       NopMetrics(),
 		onStopCh:      make(chan *cstypes.RoundState),
-		appStateStore: &AppStateStore{
-			metrics:  NopMetrics(),
-			logger:   logger,
-			config:   cfg,
-			eventBus: eventBus,
-		},
-		observer:     &Observer{subscribers: make(map[int][]func(data any) error)},
-		msgInfoQueue: newMsgInfoQueue(),
+		appStateStore: NewAppStateStore(logger, cfg),
+		observer:      NewObserver(),
+		msgInfoQueue:  newMsgInfoQueue(),
 	}
 
 	// NOTE: we do not call scheduleRound0 yet, we do that upon Start()

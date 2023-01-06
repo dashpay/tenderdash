@@ -8,13 +8,13 @@ import (
 
 	"github.com/tendermint/tendermint/config"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/internal/eventbus"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
 )
 
+// AppStateStore is a state store
 type AppStateStore struct {
 	mtx        sync.Mutex
 	roundState cstypes.RoundState
@@ -24,22 +24,32 @@ type AppStateStore struct {
 	config     *config.ConsensusConfig
 	replayMode bool
 	version    int64
-
-	eventBus *eventbus.EventBus
 }
 
+// NewAppStateStore creates and returns a new state store
+func NewAppStateStore(logger log.Logger, cfg *config.ConsensusConfig) *AppStateStore {
+	return &AppStateStore{
+		metrics: NopMetrics(),
+		logger:  logger,
+		config:  cfg,
+	}
+}
+
+// Get returns application state
 func (s *AppStateStore) Get() AppState {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	return s.load()
 }
 
+// Update updates application state with candidate
 func (s *AppStateStore) Update(candidate AppState) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	return s.update(candidate)
 }
 
+// UpdateAndGet updates application state with a candidate and returns updated application state
 func (s *AppStateStore) UpdateAndGet(candidate AppState) (AppState, error) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
@@ -103,6 +113,10 @@ func (s *AppState) Save() error {
 
 func (s *AppState) isProposer(proTxHash types.ProTxHash) bool {
 	return proTxHash != nil && bytes.Equal(s.Validators.GetProposer().ProTxHash.Bytes(), proTxHash.Bytes())
+}
+
+func (s *AppState) isValidator(proTxHash types.ProTxHash) bool {
+	return s.state.Validators.HasProTxHash(proTxHash)
 }
 
 // Returns true if the proposal block is complete &&
