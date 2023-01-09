@@ -78,6 +78,7 @@ func (candidate *CurrentRoundState) UpdateBlock(target *types.Block) error {
 	target.AppHash = candidate.AppHash
 	target.ResultsHash = candidate.ResultsHash
 	target.NextValidatorsHash = candidate.NextValidators.Hash()
+	target.NextConsensusHash = candidate.NextConsensusParams.HashConsensusParams()
 	target.CoreChainLock = candidate.CoreChainLock
 	if candidate.CoreChainLock != nil {
 		target.CoreChainLockedHeight = candidate.CoreChainLock.CoreBlockHeight

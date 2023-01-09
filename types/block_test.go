@@ -368,13 +368,14 @@ func TestHeaderHash(t *testing.T) {
 				ValidatorsHash:     crypto.Checksum([]byte("validators_hash")),
 				NextValidatorsHash: crypto.Checksum([]byte("next_validators_hash")),
 				ConsensusHash:      crypto.Checksum([]byte("consensus_hash")),
+				NextConsensusHash:  crypto.Checksum([]byte("next_consensus_hash")),
 				AppHash:            crypto.Checksum([]byte("app_hash")),
 				ResultsHash:        crypto.Checksum([]byte("last_results_hash")),
 				EvidenceHash:       crypto.Checksum([]byte("evidence_hash")),
 				ProposerProTxHash:  crypto.ProTxHashFromSeedBytes([]byte("proposer_pro_tx_hash")),
 				ProposedAppVersion: 1,
 			},
-			expectHash: hexBytesFromString(t, "891099982E9BC6035675DE94726BB0ADB8AE49E0277C67C7911BAC145119065A"),
+			expectHash: hexBytesFromString(t, "5CF83D17EEC01506B3F1EA0596B49CD21B7DEBDCB18E3204A99E6BDC5C470B9B"),
 		},
 		{
 			"nil header yields nil",
@@ -467,22 +468,23 @@ func TestMaxHeaderBytes(t *testing.T) {
 	timestamp := time.Date(math.MaxInt64, 0, 0, 0, 0, 0, math.MaxInt64, time.UTC)
 
 	h := Header{
-		Version:            version.Consensus{Block: math.MaxInt64, App: math.MaxInt64},
-		ChainID:            maxChainID,
-		Height:             math.MaxInt64,
-		Time:               timestamp,
-		LastBlockID:        makeBlockID(make([]byte, crypto.HashSize), math.MaxInt32, make([]byte, crypto.HashSize), RandStateID().Hash()),
-		LastCommitHash:     crypto.Checksum([]byte("last_commit_hash")),
-		DataHash:           crypto.Checksum([]byte("data_hash")),
-		ValidatorsHash:     crypto.Checksum([]byte("validators_hash")),
-		NextValidatorsHash: crypto.Checksum([]byte("next_validators_hash")),
-		ConsensusHash:      crypto.Checksum([]byte("consensus_hash")),
-		AppHash:            crypto.Checksum([]byte("app_hash")),
-		ResultsHash:        crypto.Checksum([]byte("results_hash")),
-		EvidenceHash:       crypto.Checksum([]byte("evidence_hash")),
-
+		Version:               version.Consensus{Block: math.MaxInt64, App: math.MaxInt64},
+		ChainID:               maxChainID,
+		Height:                math.MaxInt64,
+		Time:                  timestamp,
+		LastBlockID:           makeBlockID(make([]byte, crypto.HashSize), math.MaxInt32, make([]byte, crypto.HashSize), RandStateID().Hash()),
+		LastCommitHash:        crypto.Checksum([]byte("last_commit_hash")),
+		DataHash:              crypto.Checksum([]byte("data_hash")),
+		ValidatorsHash:        crypto.Checksum([]byte("validators_hash")),
+		NextValidatorsHash:    crypto.Checksum([]byte("next_validators_hash")),
+		ConsensusHash:         crypto.Checksum([]byte("consensus_hash")),
+		NextConsensusHash:     crypto.Checksum([]byte("next_consensus_hash")),
+		AppHash:               crypto.Checksum([]byte("app_hash")),
+		ResultsHash:           crypto.Checksum([]byte("results_hash")),
+		EvidenceHash:          crypto.Checksum([]byte("evidence_hash")),
 		CoreChainLockedHeight: math.MaxUint32,
 		ProposerProTxHash:     crypto.ProTxHashFromSeedBytes([]byte("proposer_pro_tx_hash")),
+		ProposedAppVersion:    math.MaxUint64,
 	}
 
 	bz, err := h.ToProto().Marshal()
@@ -525,6 +527,9 @@ func TestBlockMaxDataBytes(t *testing.T) {
 	commit := randCommit(ctx, t, height, stateID)
 	require.NotNil(t, commit)
 
+	// minBlockSize is minimum correct size of a block
+	const minBlockSize = 1236
+
 	testCases := []struct {
 		maxBytes      int64
 		lastCommit    *Commit
@@ -534,13 +539,14 @@ func TestBlockMaxDataBytes(t *testing.T) {
 	}{
 		0: {-10, commit, 1, true, 0},
 		1: {10, commit, 1, true, 0},
-		2: {1189, commit, 1, true, 0},
-		3: {1189, commit, 0, false, 0},
-		4: {1190, commit, 0, false, 1},
-		5: {1190, commit, 1, false, 0},
-		6: {1190, commit, 2, true, 0},
-		7: {1191, commit, 2, false, 0},
-		8: {1218, commit, 2, false, 27},
+		2: {minBlockSize - 1, commit, 0, true, 0},
+		3: {minBlockSize, commit, 1, true, 0},
+		4: {minBlockSize, commit, 0, false, 0},
+		5: {minBlockSize + 1, commit, 0, false, 1},
+		6: {minBlockSize + 1, commit, 1, false, 0},
+		7: {minBlockSize + 1, commit, 2, true, 0},
+		8: {minBlockSize + 2, commit, 2, false, 0},
+		9: {minBlockSize + 29, commit, 2, false, 27},
 	}
 	// An extra 33 bytes (32 for sig, 1 for proto encoding are needed for BLS compared to edwards per validator
 
@@ -558,6 +564,9 @@ func TestBlockMaxDataBytes(t *testing.T) {
 }
 
 func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
+	// minBlockSize is minimum correct size of a block
+	const minBlockSize = 1132
+
 	testCases := []struct {
 		maxBytes int64
 		errs     bool
@@ -565,10 +574,10 @@ func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
 	}{
 		0: {-10, true, 0},
 		1: {10, true, 0},
-		2: {1084, true, 0},
-		3: {1085, false, 0},
-		4: {1086, false, 1},
-		5: {1119, false, 1119 - 1085},
+		2: {minBlockSize - 1, true, 0},
+		3: {minBlockSize, false, 0},
+		4: {minBlockSize + 1, false, 1},
+		5: {minBlockSize + 34, false, 34},
 	}
 
 	for i, tc := range testCases {
@@ -1365,6 +1374,7 @@ func TestHeaderHashVector(t *testing.T) {
 		ValidatorsHash:     []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 		NextValidatorsHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 		ConsensusHash:      []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
+		NextConsensusHash:  []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 		AppHash:            []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
 
 		ResultsHash: []byte("f2564c78071e26643ae9b3e2a19fa0dc10d4d9e873aa0be808660123f11a1e78"),
@@ -1377,7 +1387,7 @@ func TestHeaderHashVector(t *testing.T) {
 		header   Header
 		expBytes string
 	}{
-		{header: h, expBytes: "8df5f303af2ae303adaaa56d8f5645247dd8fd12dc5ebdff55444649f653452f"},
+		{header: h, expBytes: "1476e858bfe231d7cd767a9693f63fe6a8757e8c07aba432f338a5ecba2b0342"},
 	}
 
 	for _, tc := range testCases {

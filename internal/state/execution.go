@@ -364,7 +364,12 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 			block.NextValidatorsHash,
 		)
 	}
-
+	if !block.NextConsensusHash.Equal(uncommittedState.NextConsensusParams.HashConsensusParams()) {
+		return fmt.Errorf(
+			"wrong Block.Header.ConsensusHash. Expected %X, got %X",
+			uncommittedState.NextConsensusParams.HashConsensusParams(), block.NextConsensusHash,
+		)
+	}
 	return validateCoreChainLock(block, state)
 }
 
