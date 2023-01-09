@@ -56,6 +56,7 @@ func newPeerGossipWorker(
 	return &peerGossipWorker{
 		clock:         clock.New(),
 		logger:        logger,
+		stopCh:        make(chan struct{}),
 		appStateStore: state.appStateStore,
 		handlers: []gossipHandler{
 			newGossipHandler(
@@ -116,7 +117,6 @@ func (g *peerGossipWorker) runHandler(ctx context.Context, hd gossipHandler) {
 		case <-ctx.Done():
 			g.logger.Debug("peer gossip worker got stop signal via context.Done")
 			close(hd.stoppedCh)
-			//close(g.stopCh)
 			return
 		}
 	}
