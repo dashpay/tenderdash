@@ -1,3 +1,5 @@
+//go:generate ../../scripts/mockery_generate.sh Channel
+
 package p2p
 
 import (
