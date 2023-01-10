@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/hashicorp/go-multierror"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
@@ -259,10 +260,8 @@ func (g *msgGossiper) syncProposalBlockPart(ctx context.Context, part *types.Par
 }
 
 func (g *msgGossiper) sync(ctx context.Context, protoMsg proto.Message, syncFunc func() error) error {
-	var err *peerSyncErr
-	sendErr := g.msgSender.send(ctx, protoMsg)
-	if sendErr != nil {
-		err = &peerSyncErr{sendErr: sendErr}
+	err := g.msgSender.send(ctx, protoMsg)
+	if err != nil {
 		if !g.optimistic {
 			return err
 		}
@@ -271,13 +270,9 @@ func (g *msgGossiper) sync(ctx context.Context, protoMsg proto.Message, syncFunc
 		return err
 	}
 	syncErr := syncFunc()
-	if syncErr == nil {
-		return err
+	if syncErr != nil {
+		err = multierror.Append(syncErr)
 	}
-	if err == nil {
-		err = &peerSyncErr{}
-	}
-	err.syncErr = syncErr
 	return err
 }
 
@@ -341,26 +336,6 @@ func (r *blockRepository) loadPart(height int64, index int) (*types.Part, error)
 		"index", index,
 	)
 	return nil, errFailedLoadBlockPart
-}
-
-type peerSyncErr struct {
-	sendErr error
-	syncErr error
-}
-
-func (e *peerSyncErr) Error() string {
-	err := ""
-	if e.sendErr != nil {
-		err += e.sendErr.Error()
-	}
-	if e.syncErr == nil {
-		return err
-	}
-	if err != "" {
-		err += ": "
-	}
-	err += e.syncErr.Error()
-	return err
 }
 
 func logKeyValsWithError(keyVals []any, err error) []any {
