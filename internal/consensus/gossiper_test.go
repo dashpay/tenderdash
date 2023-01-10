@@ -208,6 +208,7 @@ func (suite *GossiperSuiteTest) TestGossipProposalBlockParts() {
 	defer cancel()
 	commit := types.Commit{Height: 99, Round: 0}
 	block := types.MakeBlock(100, types.Txs{[]byte{1, 2, 3}}, &commit, nil)
+	block.Header.ValidatorsHash = tmrand.Bytes(crypto.HashSize)
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(suite.T(), err)
 	blockID := block.BlockID(nil)

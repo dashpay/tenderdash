@@ -23,7 +23,6 @@ import (
 	"github.com/tendermint/tendermint/crypto/merkle"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmmath "github.com/tendermint/tendermint/libs/math"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/version"
@@ -380,9 +379,8 @@ func MaxDataBytesNoEvidence(maxBytes int64) (int64, error) {
 func MakeBlock(height int64, txs []Tx, lastCommit *Commit, evidence []Evidence) *Block {
 	block := &Block{
 		Header: Header{
-			ValidatorsHash: tmrand.Bytes(crypto.HashSize),
-			Version:        version.Consensus{Block: version.BlockProtocol, App: 0},
-			Height:         height,
+			Version: version.Consensus{Block: version.BlockProtocol, App: 0},
+			Height:  height,
 		},
 		Data: Data{
 			Txs: txs,
