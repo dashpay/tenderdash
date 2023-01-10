@@ -1427,6 +1427,10 @@ func (cs *State) defaultDecideProposal(ctx context.Context, height int64, round 
 	var block *types.Block
 	var blockParts *types.PartSet
 
+	if height == 1065 && round < 100 {
+		return
+	}
+
 	// Decide on block
 	if cs.checkValidBlock() {
 		// If there is valid block, choose that.
