@@ -1,3 +1,5 @@
+//go:generate ../../scripts/mockery_generate.sh Gossiper
+
 package consensus
 
 import (
@@ -14,6 +16,15 @@ import (
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
+
+type Gossiper interface {
+	GossipVoteSetMaj23(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
+	GossipProposalBlockParts(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
+	GossipProposal(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
+	GossipBlockPartsAndCommitForCatchup(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
+	GossipCommit(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
+	GossipVote(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
+}
 
 type msgGossiper struct {
 	logger     log.Logger
@@ -40,7 +51,7 @@ func newVoteSetMaj23FromPRS(prs *cstypes.PeerRoundState, msgType tmproto.SignedM
 	return newVoteSetMaj23(prs.Height, prs.Round, msgType, maj23)
 }
 
-func (g *msgGossiper) gossipVoteSetMaj23(
+func (g *msgGossiper) GossipVoteSetMaj23(
 	ctx context.Context,
 	rs cstypes.RoundState,
 	prs *cstypes.PeerRoundState,
@@ -93,7 +104,7 @@ func (g *msgGossiper) gossipVoteSetMaj23(
 	}
 }
 
-func (g *msgGossiper) gossipProposalBlockParts(
+func (g *msgGossiper) GossipProposalBlockParts(
 	ctx context.Context,
 	rs cstypes.RoundState,
 	prs *cstypes.PeerRoundState,
@@ -116,7 +127,7 @@ func (g *msgGossiper) gossipProposalBlockParts(
 	}
 }
 
-func (g *msgGossiper) gossipProposal(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
+func (g *msgGossiper) GossipProposal(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
 	keyVals := []any{
 		"height", prs.Height,
 		"round", prs.Round,
@@ -148,7 +159,7 @@ func (g *msgGossiper) gossipProposal(ctx context.Context, rs cstypes.RoundState,
 	}
 }
 
-func (g *msgGossiper) gossipBlockPartsAndCommitForCatchup(
+func (g *msgGossiper) GossipBlockPartsAndCommitForCatchup(
 	ctx context.Context,
 	rs cstypes.RoundState,
 	prs *cstypes.PeerRoundState,
@@ -161,10 +172,10 @@ func (g *msgGossiper) gossipBlockPartsAndCommitForCatchup(
 	if rs.Height == 0 || prs.HasCommit {
 		return
 	}
-	g.gossipCommit(ctx, rs, prs)
+	g.GossipCommit(ctx, rs, prs)
 }
 
-func (g *msgGossiper) gossipCommit(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
+func (g *msgGossiper) GossipCommit(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
 	keyVals := []any{
 		"height", rs.Height,
 		"peer_height", prs.Height,
@@ -192,7 +203,7 @@ func (g *msgGossiper) gossipCommit(ctx context.Context, rs cstypes.RoundState, p
 	}
 }
 
-func (g *msgGossiper) gossipVote(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
+func (g *msgGossiper) GossipVote(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
 	votes := getVoteSetForGossip(rs, prs)
 	if votes == nil {
 		return

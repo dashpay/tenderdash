@@ -198,7 +198,7 @@ func (suite *GossiperSuiteTest) TestGossipVoteSetMaj23() {
 				On("Send", ctx, want).
 				Once().
 				Return(nil)
-			suite.gossiper.gossipVoteSetMaj23(ctx, tc.rs, &tc.prs)
+			suite.gossiper.GossipVoteSetMaj23(ctx, tc.rs, &tc.prs)
 		})
 	}
 }
@@ -250,7 +250,7 @@ func (suite *GossiperSuiteTest) TestGossipProposalBlockParts() {
 				On("Send", ctx, want).
 				Once().
 				Return(nil)
-			suite.gossiper.gossipProposalBlockParts(ctx, tc.rs, &tc.prs)
+			suite.gossiper.GossipProposalBlockParts(ctx, tc.rs, &tc.prs)
 			suite.Equal(tc.wantPBPs, tc.prs.ProposalBlockParts.Bits)
 		})
 	}
@@ -324,7 +324,7 @@ func (suite *GossiperSuiteTest) TestGossipProposal() {
 					Once().
 					Return(nil)
 			}
-			suite.gossiper.gossipProposal(ctx, tc.rs, &tc.prs)
+			suite.gossiper.GossipProposal(ctx, tc.rs, &tc.prs)
 			newPRS := suite.gossiper.ps.GetRoundState()
 			require.True(suite.T(), newPRS.Proposal)
 		})
