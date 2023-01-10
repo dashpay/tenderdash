@@ -4,7 +4,10 @@ import (
 	"context"
 	"fmt"
 	"testing"
+	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
@@ -13,6 +16,7 @@ import (
 	"github.com/tendermint/tendermint/internal/p2p"
 	mocks2 "github.com/tendermint/tendermint/internal/p2p/mocks"
 	"github.com/tendermint/tendermint/internal/state/mocks"
+	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/log"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
@@ -47,6 +51,10 @@ func (suite *GossiperSuiteTest) SetupSuite() {
 	var err error
 	suite.proTxHash, err = suite.privVals[0].GetProTxHash(context.Background())
 	require.NoError(suite.T(), err)
+}
+
+func (suite *GossiperSuiteTest) TearDownTest() {
+	mock.AssertExpectationsForObjects(suite.T(), suite.stateCh, suite.dataCh, suite.voteCh, suite.blockStore)
 }
 
 func (suite *GossiperSuiteTest) SetupTest() {
@@ -191,6 +199,134 @@ func (suite *GossiperSuiteTest) TestGossipVoteSetMaj23() {
 				Once().
 				Return(nil)
 			suite.gossiper.gossipVoteSetMaj23(ctx, tc.rs, &tc.prs)
+		})
+	}
+}
+
+func (suite *GossiperSuiteTest) TestGossipProposalBlockParts() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	commit := types.Commit{Height: 99, Round: 0}
+	block := types.MakeBlock(100, types.Txs{[]byte{1, 2, 3}}, &commit, nil)
+	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(suite.T(), err)
+	blockID := block.BlockID(nil)
+	part0 := partSet.GetPart(0)
+	protoPart0, err := part0.ToProto()
+	require.NoError(suite.T(), err)
+	testCases := []struct {
+		rs       cstypes.RoundState
+		prs      cstypes.PeerRoundState
+		wantMsg  *tmcons.BlockPart
+		wantPBPs int
+	}{
+		{
+			rs: cstypes.RoundState{
+				Height:             100,
+				Round:              0,
+				ProposalBlockParts: partSet,
+			},
+			prs: cstypes.PeerRoundState{
+				Height:             100,
+				Round:              0,
+				ProposalBlockParts: types.NewPartSetFromHeader(blockID.PartSetHeader).BitArray(),
+			},
+			wantPBPs: 1,
+			wantMsg: &tmcons.BlockPart{
+				Height: 100,
+				Round:  0,
+				Part:   *protoPart0,
+			},
+		},
+	}
+	for i, tc := range testCases {
+		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
+			suite.ps.PRS = tc.prs
+			want := p2p.Envelope{
+				To:      suite.ps.peerID,
+				Message: tc.wantMsg,
+			}
+			suite.dataCh.
+				On("Send", ctx, want).
+				Once().
+				Return(nil)
+			suite.gossiper.gossipProposalBlockParts(ctx, tc.rs, &tc.prs)
+			suite.Equal(tc.wantPBPs, tc.prs.ProposalBlockParts.Bits)
+		})
+	}
+}
+
+func (suite *GossiperSuiteTest) TestGossipProposal() {
+	const (
+		H100 = 100
+	)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	blockID := factory.MakeBlockID()
+	now := time.Now().UTC()
+	proposalPOLRoundMinus1 := types.NewProposal(H100, 2400, 0, -1, blockID, now)
+	proposalPOLRound1 := types.NewProposal(H100, 2400, 0, 1, blockID, now)
+	prevoteVoteH100R1 := suite.makeSignedVote(H100, 1, tmproto.PrevoteType)
+	prevoteVotes := cstypes.NewHeightVoteSet(suite.chainID, H100, suite.valSet)
+	added, err := prevoteVotes.AddVote(prevoteVoteH100R1, suite.ps.peerID)
+	require.True(suite.T(), added)
+	require.NoError(suite.T(), err)
+	testCases := []struct {
+		rs       cstypes.RoundState
+		prs      cstypes.PeerRoundState
+		wantMsgs []proto.Message
+	}{
+		{
+			rs: cstypes.RoundState{
+				Height:   100,
+				Proposal: proposalPOLRoundMinus1,
+			},
+			prs: cstypes.PeerRoundState{
+				Height:   100,
+				Round:    0,
+				Proposal: false,
+			},
+			wantMsgs: []proto.Message{
+				&tmcons.Proposal{
+					Proposal: *proposalPOLRoundMinus1.ToProto(),
+				},
+			},
+		},
+		{
+			rs: cstypes.RoundState{
+				Height:   100,
+				Proposal: proposalPOLRound1,
+				Votes:    prevoteVotes,
+			},
+			prs: cstypes.PeerRoundState{
+				Height:   100,
+				Round:    0,
+				Proposal: true,
+			},
+			wantMsgs: []proto.Message{
+				&tmcons.Proposal{
+					Proposal: *proposalPOLRound1.ToProto(),
+				},
+				&tmcons.ProposalPOL{
+					Height:           100,
+					ProposalPolRound: 1,
+					ProposalPol:      *prevoteVotes.Prevotes(1).BitArray().ToProto(),
+				},
+			},
+		},
+	}
+	for i, tc := range testCases {
+		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
+			suite.ps.PRS = tc.prs
+			for _, want := range tc.wantMsgs {
+				suite.dataCh.
+					On("Send", ctx, p2p.Envelope{To: suite.ps.peerID, Message: want}).
+					Once().
+					Return(nil)
+			}
+			suite.gossiper.gossipProposal(ctx, tc.rs, &tc.prs)
+			newPRS := suite.gossiper.ps.GetRoundState()
+			require.True(suite.T(), newPRS.Proposal)
 		})
 	}
 }
