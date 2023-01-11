@@ -32,7 +32,7 @@ const (
 	// MaxHeaderBytes is a maximum header size.
 	// NOTE: Because app hash can be of arbitrary size, the header is therefore not
 	// capped in size and thus this number should be seen as a soft max
-	MaxHeaderBytes       int64 = 727
+	MaxHeaderBytes       int64 = 725
 	MaxCoreChainLockSize int64 = 132
 
 	// MaxOverheadForBlock - maximum overhead to encode a block (up to
@@ -721,8 +721,8 @@ const (
 const (
 	// MaxCommitOverheadBytes is the max size of commit, with overhead but without vote extensions:
 	// (110+2) for BlockID,  (8+2) for Height, (4+2) for Round,
-	// (32+3) for QuorumHash, (96+3) for Block signature.
-	MaxCommitOverheadBytes int64 = (110 + 2) + (8 + 2) + (4 + 2) + (32 + 3) + (96 + 3) + 0
+	// (32+2) for QuorumHash, (96+2) for Block signature.
+	MaxCommitOverheadBytes int64 = (110 + 2) + (8 + 2) + (4 + 2) + (32 + 2) + (96 + 2) + 0
 )
 
 //-------------------------------------

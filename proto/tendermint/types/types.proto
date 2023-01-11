@@ -90,12 +90,10 @@ message StateID {
 // Header defines the structure of a Tendermint block header.
 message Header {
   // basic block info
-  tendermint.version.Consensus version                  = 1 [(gogoproto.nullable) = false];
-  string                       chain_id                 = 2 [(gogoproto.customname) = "ChainID"];
-  int64                        height                   = 3;
-  uint32                       core_chain_locked_height = 100;
-  google.protobuf.Timestamp    time                     = 4
-      [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  tendermint.version.Consensus version  = 1 [(gogoproto.nullable) = false];
+  string                       chain_id = 2 [(gogoproto.customname) = "ChainID"];
+  int64                        height   = 3;
+  google.protobuf.Timestamp    time     = 4 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 
   // prev block info
   BlockID last_block_id = 5 [(gogoproto.nullable) = false];
@@ -105,18 +103,19 @@ message Header {
   bytes data_hash        = 7;  // transactions
 
   // hashes from the app output from the prev block
-  bytes validators_hash      = 8;    // validators for the current block
-  bytes next_validators_hash = 9;    // validators for the next block
-  bytes consensus_hash       = 10;   // consensus params for current block
-  bytes next_consensus_hash  = 103;  // consensus params for next block
-  bytes app_hash             = 11;   // state after txs from the previous block
-  bytes results_hash         = 12;   // root hash of all results from the txs from current block
+  bytes validators_hash      = 8;   // validators for the current block
+  bytes next_validators_hash = 9;   // validators for the next block
+  bytes consensus_hash       = 10;  // consensus params for current block
+  bytes next_consensus_hash  = 11;  // consensus params for next block
+  bytes app_hash             = 12;  // state after txs from the previous block
+  bytes results_hash         = 13;  // root hash of all results from the txs from current block
 
   // consensus info
-  bytes evidence_hash        = 13;   // evidence included in the block
-  bytes proposer_pro_tx_hash = 101;  // original proposer of the block
+  bytes evidence_hash = 14;  // evidence included in the block
 
-  uint64 proposed_app_version = 102;  // proposer's latest available app protocol version
+  uint64 proposed_app_version     = 15;  // proposer's latest available app protocol version
+  bytes  proposer_pro_tx_hash     = 16;  // original proposer of the block
+  uint32 core_chain_locked_height = 17;
 }
 
 // Data contains the set of transactions included in the block
@@ -138,27 +137,26 @@ message Vote {
     (gogoproto.customname) = "BlockID"
   ];  // zero if vote is nil.
 
-  bytes validator_pro_tx_hash = 6;
-  int32 validator_index       = 7;
-  bytes block_signature       = 8;
+  bytes validator_pro_tx_hash = 5;
+  int32 validator_index       = 6;
+  bytes block_signature       = 7;
 
   // Vote extension provided by the application. Only valid for precommit
   // messages.
   // Vote extension signature by the validator if they participated in
   // consensus for the associated block. Only valid for precommit messages.
-  repeated VoteExtension vote_extensions = 11;
+  repeated VoteExtension vote_extensions = 8;
 }
 
 // Commit contains the evidence that a block was committed by a set of
 // validators.
 message Commit {
-  int64   height                    = 1;
-  int32   round                     = 2;
-  BlockID block_id                  = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "BlockID"];
-  bytes   quorum_hash               = 101;
-  bytes   threshold_block_signature = 102;
-
-  repeated VoteExtension threshold_vote_extensions = 104;
+  int64                  height                    = 1;
+  int32                  round                     = 2;
+  BlockID                block_id                  = 3 [(gogoproto.nullable) = false, (gogoproto.customname) = "BlockID"];
+  bytes                  quorum_hash               = 4;
+  bytes                  threshold_block_signature = 5;
+  repeated VoteExtension threshold_vote_extensions = 6;
 }
 
 message Proposal {
@@ -173,8 +171,9 @@ message Proposal {
   bytes signature = 7;
 
   // dash's fields
-  uint32                         core_chain_locked_height = 100;
-  tendermint.types.CoreChainLock core_chain_lock_update   = 101;
+
+  uint32                         core_chain_locked_height = 8;
+  tendermint.types.CoreChainLock core_chain_lock_update   = 9;
 }
 
 message SignedHeader {
@@ -188,14 +187,12 @@ message LightBlock {
 }
 
 message BlockMeta {
-  BlockID block_id = 1
-      [(gogoproto.customname) = "BlockID", (gogoproto.nullable) = false];
-  int64  block_size = 2;
-  Header header     = 3 [(gogoproto.nullable) = false];
-  int64  num_txs    = 4;
-  int32  round      = 5;
-
-  bool has_core_chain_lock = 100;
+  BlockID block_id            = 1 [(gogoproto.customname) = "BlockID", (gogoproto.nullable) = false];
+  int64   block_size          = 2;
+  Header  header              = 3 [(gogoproto.nullable) = false];
+  int64   num_txs             = 4;
+  int32   round               = 5;
+  bool    has_core_chain_lock = 6;
 }
 
 // TxProof represents a Merkle proof of the presence of a transaction in the
