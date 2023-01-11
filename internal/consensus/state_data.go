@@ -86,18 +86,13 @@ func (s *AppStateStore) update(candidate AppState) error {
 
 type AppState struct {
 	config *config.ConsensusConfig
-
 	cstypes.RoundState
-	state   sm.State // State until height-1.
-	version int64
-
-	logger log.Logger
-
-	metrics *Metrics
-
+	state      sm.State // State until height-1.
+	logger     log.Logger
+	metrics    *Metrics
+	store      *AppStateStore
+	version    int64
 	replayMode bool
-
-	store *AppStateStore
 }
 
 func (s *AppState) Save() error {
@@ -266,9 +261,6 @@ func (s *AppState) updateToState(state sm.State, commit *types.Commit) {
 	s.TriggeredTimeoutPrecommit = false
 
 	s.state = state
-
-	// Finally, broadcast RoundState
-	//s.newStep()
 }
 
 func (s *AppState) updateHeight(height int64) {
@@ -284,8 +276,6 @@ func (s *AppState) InitialHeight() int64 {
 func (s *AppState) HeightVoteSet() (int64, *cstypes.HeightVoteSet) {
 	return s.Height, s.Votes
 }
-
-//
 
 func (s *AppState) checkValidBlock() bool {
 	if s.ValidBlock == nil {

@@ -24,7 +24,10 @@ COPY Makefile ./
 RUN make install-bls
 
 # Copy Tenderdash source
+# Avoid overwriting third-party libs
+RUN mv third_party third_party.bak
 COPY . .
+RUN rm -r third_party && mv third_party.bak third_party
 
 COPY test/e2e/docker/entrypoint* /usr/bin/
 

@@ -258,98 +258,7 @@ func NewState(
 		eventBus: cs.eventBus,
 		logger:   cs.logger,
 	}
-	executor := &CommandExecutor{
-		commands: map[EventType]CommandHandler{
-			EnterNewRoundType: &EnterNewRoundCommand{
-				logger:         cs.logger,
-				config:         cs.config,
-				eventPublisher: eventPublisher,
-			},
-			EnterProposeType: &EnterProposeCommand{
-				logger:        cs.logger,
-				privValidator: cs.privValidator,
-				msgInfoQueue:  cs.msgInfoQueue,
-				wal:           cs.wal,
-				replayMode:    cs.replayMode,
-				metrics:       cs.metrics,
-				blockExec:     cs.blockExecutor,
-			},
-			SetProposalType: &SetProposalCommand{
-				logger:  cs.logger,
-				metrics: cs.metrics,
-			},
-			DecideProposalType: &DecideProposalCommand{
-				logger:        cs.logger,
-				privValidator: cs.privValidator,
-				msgInfoQueue:  cs.msgInfoQueue,
-				wal:           cs.wal,
-				metrics:       cs.metrics,
-				blockExec:     cs.blockExecutor,
-				replayMode:    cs.replayMode,
-			},
-			AddProposalBlockPartType: &AddProposalBlockPartCommand{
-				logger:         cs.logger,
-				metrics:        cs.metrics,
-				blockExec:      cs.blockExecutor,
-				eventPublisher: eventPublisher,
-			},
-			DoPrevoteType: &DoPrevoteCommand{
-				logger:     cs.logger,
-				voteSigner: cs.voteSigner,
-				blockExec:  cs.blockExecutor,
-				metrics:    cs.metrics,
-				replayMode: cs.replayMode,
-			},
-			TryAddVoteType: &TryAddVoteCommand{
-				evpool:         cs.evpool,
-				logger:         cs.logger,
-				privValidator:  cs.privValidator,
-				eventPublisher: eventPublisher,
-				blockExec:      cs.blockExec,
-				metrics:        cs.metrics,
-			},
-			EnterCommitType: &EnterCommitCommand{
-				logger:         cs.logger,
-				eventPublisher: eventPublisher,
-				metrics:        cs.metrics,
-				evsw:           cs.evsw,
-			},
-			EnterPrevoteType: &EnterPrevoteCommand{
-				logger: cs.logger,
-			},
-			EnterPrecommitType: &EnterPrecommitCommand{
-				logger:         cs.logger,
-				eventPublisher: eventPublisher,
-				blockExec:      cs.blockExecutor,
-				voteSigner:     cs.voteSigner,
-			},
-			TryAddCommitType: &TryAddCommitCommand{
-				logger:         cs.logger,
-				blockExec:      cs.blockExecutor,
-				eventPublisher: eventPublisher,
-			},
-			AddCommitType: &AddCommitCommand{
-				eventPublisher: eventPublisher,
-			},
-			ApplyCommitType: &ApplyCommitCommand{
-				logger:     cs.logger,
-				blockStore: cs.blockStore,
-				blockExec:  cs.blockExecutor,
-				wal:        wal,
-			},
-			TryFinalizeCommitType: &TryFinalizeCommitCommand{
-				logger:     cs.logger,
-				blockExec:  cs.blockExecutor,
-				blockStore: cs.blockStore,
-			},
-			EnterPrevoteWaitType: &EnterPrevoteWaitCommand{
-				logger: cs.logger,
-			},
-			EnterPrecommitWaitType: &EnterPrecommitWaitCommand{
-				logger: cs.logger,
-			},
-		},
-	}
+	executor := NewCommandExecutor(cs, eventPublisher, wal)
 	behavior := &Behavior{
 		wal:            wal,
 		eventPublisher: eventPublisher,
@@ -370,11 +279,11 @@ func NewState(
 		pv := obj.(privValidator)
 		cs.voteSigner.privValidator = pv
 		cs.blockExecutor.privValidator = pv
-		tryAddVoteCmd := executor.commands[TryAddVoteType].(*TryAddVoteCommand)
+		tryAddVoteCmd := executor.Get(TryAddVoteType).(*TryAddVoteCommand)
 		tryAddVoteCmd.privValidator = pv
-		enterProposeCmd := executor.commands[EnterProposeType].(*EnterProposeCommand)
+		enterProposeCmd := executor.Get(EnterProposeType).(*EnterProposeCommand)
 		enterProposeCmd.privValidator = pv
-		decideProposalCmd := executor.commands[DecideProposalType].(*DecideProposalCommand)
+		decideProposalCmd := executor.Get(DecideProposalType).(*DecideProposalCommand)
 		decideProposalCmd.privValidator = pv
 		return nil
 	})
