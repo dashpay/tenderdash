@@ -89,11 +89,7 @@ func (cs *VoteSigner) signVote(
 	if msgType == tmproto.PrecommitType && !vote.BlockID.IsNil() {
 		timeout = appState.voteTimeout(appState.Round)
 		// if the signedMessage type is for a precommit, add VoteExtension
-		exts, err := cs.blockExec.ExtendVote(ctx, vote)
-		if err != nil {
-			return nil, err
-		}
-		vote.VoteExtensions = types.NewVoteExtensionsFromABCIExtended(exts)
+		cs.voteExtender.ExtendVote(ctx, vote)
 	}
 
 	v := vote.ToProto()

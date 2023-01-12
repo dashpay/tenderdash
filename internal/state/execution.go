@@ -1,3 +1,5 @@
+//go:generate ../../scripts/mockery_generate.sh Executor
+
 package state
 
 import (
@@ -21,6 +23,59 @@ import (
 // BlockExecutor handles block execution and state updates.
 // It exposes ApplyBlock(), which validates & executes the block, updates state w/ ABCI responses,
 // then commits and updates the mempool atomically, then saves state.
+
+type VoteExtender interface {
+	ExtendVote(ctx context.Context, vote *types.Vote)
+}
+
+type Executor interface {
+	VoteExtender
+	CreateProposalBlock(
+		ctx context.Context,
+		height int64,
+		round int32,
+		state State,
+		commit *types.Commit,
+		proposerProTxHash []byte,
+		proposedAppVersion uint64,
+	) (*types.Block, CurrentRoundState, error)
+
+	ProcessProposal(
+		ctx context.Context,
+		block *types.Block,
+		round int32,
+		state State,
+		verify bool,
+	) (CurrentRoundState, error)
+
+	ValidateBlock(ctx context.Context, state State, block *types.Block) error
+
+	ValidateBlockWithRoundState(
+		ctx context.Context,
+		state State,
+		uncommittedState CurrentRoundState,
+		block *types.Block,
+	) error
+
+	FinalizeBlock(
+		ctx context.Context,
+		state State,
+		uncommittedState CurrentRoundState,
+		blockID types.BlockID,
+		block *types.Block,
+		commit *types.Commit,
+	) (State, error)
+
+	ApplyBlock(
+		ctx context.Context,
+		state State,
+		blockID types.BlockID,
+		block *types.Block,
+		commit *types.Commit,
+	) (State, error)
+
+	VerifyVoteExtension(ctx context.Context, vote *types.Vote) error
+}
 
 // BlockExecutor provides the context and accessories for properly executing a block.
 type BlockExecutor struct {
@@ -471,7 +526,8 @@ func (blockExec *BlockExecutor) ApplyBlock(
 	return blockExec.FinalizeBlock(ctx, state, uncommittedState, blockID, block, commit)
 }
 
-func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote) ([]*abci.ExtendVoteExtension, error) {
+// ExtendVote gets vote-extensions from ABCI and updates vote.VoteExtensions with this value
+func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote) {
 	resp, err := blockExec.appClient.ExtendVote(ctx, &abci.RequestExtendVote{
 		Hash:   vote.BlockID.Hash,
 		Height: vote.Height,
@@ -480,7 +536,7 @@ func (blockExec *BlockExecutor) ExtendVote(ctx context.Context, vote *types.Vote
 	if err != nil {
 		panic(fmt.Errorf("ExtendVote call failed: %w", err))
 	}
-	return resp.VoteExtensions, nil
+	vote.VoteExtensions = types.NewVoteExtensionsFromABCIExtended(resp.VoteExtensions)
 }
 
 func (blockExec *BlockExecutor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {
