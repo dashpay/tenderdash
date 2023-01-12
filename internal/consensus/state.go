@@ -243,9 +243,9 @@ func NewState(
 	cs.voteSigner = &VoteSigner{
 		privValidator: cs.privValidator,
 		logger:        cs.logger,
-		msgInfoQueue:  cs.msgInfoQueue,
+		queueSender:   cs.msgInfoQueue,
 		wal:           wal,
-		blockExec:     cs.blockExec,
+		voteExtender:  cs.blockExec,
 	}
 	cs.blockExecutor = &blockExecutor{
 		logger:             cs.logger,

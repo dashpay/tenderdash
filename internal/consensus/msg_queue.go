@@ -152,6 +152,10 @@ func (q *chanMsgReader[T]) readMessages(ctx context.Context) {
 	q.quitedCh <- struct{}{}
 }
 
+type queueSender interface {
+	send(ctx context.Context, msg Message, peerID types.NodeID) error
+}
+
 type msgInfoQueue struct {
 	sender *chanMsgSender
 	reader *chanMsgReader[msgInfo]
