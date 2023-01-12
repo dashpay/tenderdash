@@ -32,11 +32,11 @@ var (
 )
 
 // StateEvent uses to execute a command handler
-// EventType and AppState are required for a call
+// EventType and StateData are required for a call
 // Data is optional
 type StateEvent struct {
 	EventType EventType
-	AppState  *AppState
+	StateData *StateData
 	Data      any
 }
 

@@ -130,7 +130,7 @@ type State struct {
 	// when it's detected
 	evpool evidencePool
 
-	appStateStore *AppStateStore
+	stateDataStore *StateDataStore
 
 	mtx sync.RWMutex
 
@@ -212,24 +212,24 @@ func NewState(
 	options ...StateOption,
 ) (*State, error) {
 	cs := &State{
-		eventBus:      eventBus,
-		logger:        logger,
-		config:        cfg,
-		blockExec:     blockExec,
-		blockStore:    blockStore,
-		stateStore:    store,
-		txNotifier:    txNotifier,
-		timeoutTicker: NewTimeoutTicker(logger),
-		statsMsgQueue: make(chan msgInfo, msgQueueSize),
-		doWALCatchup:  true,
-		wal:           nilWAL{},
-		evpool:        evpool,
-		evsw:          tmevents.NewEventSwitch(),
-		metrics:       NopMetrics(),
-		onStopCh:      make(chan *cstypes.RoundState),
-		appStateStore: NewAppStateStore(logger, cfg),
-		observer:      NewObserver(),
-		msgInfoQueue:  newMsgInfoQueue(),
+		eventBus:       eventBus,
+		logger:         logger,
+		config:         cfg,
+		blockExec:      blockExec,
+		blockStore:     blockStore,
+		stateStore:     store,
+		txNotifier:     txNotifier,
+		timeoutTicker:  NewTimeoutTicker(logger),
+		statsMsgQueue:  make(chan msgInfo, msgQueueSize),
+		doWALCatchup:   true,
+		wal:            nilWAL{},
+		evpool:         evpool,
+		evsw:           tmevents.NewEventSwitch(),
+		metrics:        NopMetrics(),
+		onStopCh:       make(chan *cstypes.RoundState),
+		stateDataStore: NewStateDataStore(logger, cfg),
+		observer:       NewObserver(),
+		msgInfoQueue:   newMsgInfoQueue(),
 	}
 
 	// NOTE: we do not call scheduleRound0 yet, we do that upon Start()
@@ -304,7 +304,7 @@ func NewState(
 	})
 	cs.observer.Subscribe(SetReplayMode, func(obj any) error {
 		flag := obj.(bool)
-		cs.appStateStore.replayMode = flag
+		cs.stateDataStore.replayMode = flag
 		return nil
 	})
 
@@ -333,8 +333,8 @@ func (cs *State) updateStateFromStore() error {
 		return nil
 	}
 
-	appState := cs.GetAppState()
-	eq, err := state.Equals(appState.state)
+	stateData := cs.GetStateData()
+	eq, err := state.Equals(stateData.state)
 	if err != nil {
 		return fmt.Errorf("comparing state: %w", err)
 	}
@@ -345,18 +345,18 @@ func (cs *State) updateStateFromStore() error {
 
 	// We have no votes, so reconstruct LastCommit from SeenCommit.
 	if state.LastBlockHeight > 0 {
-		appState.LastCommit, err = cs.loadLastCommit(state.LastBlockHeight)
+		stateData.LastCommit, err = cs.loadLastCommit(state.LastBlockHeight)
 		if err != nil {
 			panic(fmt.Sprintf("failed to reconstruct last commit; %s", err))
 		}
 	}
 
-	appState.updateToState(state, nil)
-	err = cs.appStateStore.Update(appState)
+	stateData.updateToState(state, nil)
+	err = cs.stateDataStore.Update(stateData)
 	if err != nil {
 		return err
 	}
-	cs.behavior.newStep(appState.RoundState)
+	cs.behavior.newStep(stateData.RoundState)
 	return nil
 }
 
@@ -373,35 +373,35 @@ func (cs *State) String() string {
 
 // GetRoundState returns a shallow copy of the internal consensus state.
 func (cs *State) GetRoundState() cstypes.RoundState {
-	appState := cs.appStateStore.Get()
+	stateData := cs.stateDataStore.Get()
 	// NOTE: this might be dodgy, as RoundState itself isn't thread
 	// safe as it contains a number of pointers and is explicitly
 	// not thread safe.
-	return appState.RoundState // copy
+	return stateData.RoundState // copy
 }
 
 // GetRoundStateJSON returns a json of RoundState.
 func (cs *State) GetRoundStateJSON() ([]byte, error) {
-	appState := cs.appStateStore.Get()
-	return json.Marshal(appState.RoundState)
+	stateData := cs.stateDataStore.Get()
+	return json.Marshal(stateData.RoundState)
 }
 
 // GetRoundStateSimpleJSON returns a json of RoundStateSimple
 func (cs *State) GetRoundStateSimpleJSON() ([]byte, error) {
-	appState := cs.appStateStore.Get()
-	return json.Marshal(appState.RoundState.RoundStateSimple())
+	stateData := cs.stateDataStore.Get()
+	return json.Marshal(stateData.RoundState.RoundStateSimple())
 }
 
 // GetValidators returns a copy of the current validators.
 func (cs *State) GetValidators() (int64, []*types.Validator) {
-	appState := cs.appStateStore.Get()
-	return appState.state.LastBlockHeight, appState.state.Validators.Copy().Validators
+	stateData := cs.stateDataStore.Get()
+	return stateData.state.LastBlockHeight, stateData.state.Validators.Copy().Validators
 }
 
 // GetValidatorSet returns a copy of the current validator set.
 func (cs *State) GetValidatorSet() (int64, *types.ValidatorSet) {
-	appState := cs.appStateStore.Get()
-	return appState.state.LastBlockHeight, appState.state.Validators.Copy()
+	stateData := cs.stateDataStore.Get()
+	return stateData.state.LastBlockHeight, stateData.state.Validators.Copy()
 }
 
 // SetPrivValidator sets the private validator account for signing votes. It
@@ -481,8 +481,8 @@ func (cs *State) OnStart(ctx context.Context) error {
 
 	LOOP:
 		for {
-			appState := cs.appStateStore.Get()
-			err := cs.catchupReplay(ctx, appState)
+			stateData := cs.stateDataStore.Get()
+			err := cs.catchupReplay(ctx, stateData)
 			switch {
 			case err == nil:
 				break LOOP
@@ -570,13 +570,13 @@ func (cs *State) getOnStopCh() chan *cstypes.RoundState {
 
 // OnStop implements service.Service.
 func (cs *State) OnStop() {
-	appState := cs.appStateStore.Get()
+	stateData := cs.stateDataStore.Get()
 	// If the node is committing a new block, wait until it is finished!
 	if cs.GetRoundState().Step == cstypes.RoundStepApplyCommit {
 		select {
 		case <-cs.getOnStopCh():
-		case <-time.After(appState.state.ConsensusParams.Timeout.Commit):
-			cs.logger.Error("OnStop: timeout waiting for commit to finish", "time", appState.state.ConsensusParams.Timeout.Commit)
+		case <-time.After(stateData.state.ConsensusParams.Timeout.Commit):
+			cs.logger.Error("OnStop: timeout waiting for commit to finish", "time", stateData.state.ConsensusParams.Timeout.Commit)
 		}
 	}
 
@@ -641,8 +641,8 @@ func (cs *State) SetProposalAndBlock(
 	return nil
 }
 
-func (cs *State) GetAppState() AppState {
-	return cs.appStateStore.Get()
+func (cs *State) GetStateData() StateData {
+	return cs.stateDataStore.Get()
 }
 
 // PrivValidator returns safely a PrivValidator
@@ -742,19 +742,19 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 
 		select {
 		case <-cs.txNotifier.TxsAvailable():
-			appState := cs.appStateStore.Get()
-			cs.handleTxsAvailable(ctx, &appState)
-			err := appState.Save()
+			stateData := cs.stateDataStore.Get()
+			cs.handleTxsAvailable(ctx, &stateData)
+			err := stateData.Save()
 			if err != nil {
 				cs.logger.Error("failed update app-state", "err", err)
 			}
 		case mi := <-cs.msgInfoQueue.read():
-			appState := cs.appStateStore.Get()
-			err := cs.msgDispatcher.dispatch(ctx, &appState, mi)
+			stateData := cs.stateDataStore.Get()
+			err := cs.msgDispatcher.dispatch(ctx, &stateData, mi)
 			if err != nil {
 				return
 			}
-			err = appState.Save()
+			err = stateData.Save()
 			if err != nil {
 				cs.logger.Error("failed update app-state", "err", err)
 			}
@@ -762,12 +762,12 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 			if err := cs.wal.Write(ti); err != nil {
 				cs.logger.Error("failed writing to WAL", "err", err)
 			}
-			appState := cs.appStateStore.Get()
+			stateData := cs.stateDataStore.Get()
 
 			// if the timeout is relevant to the rs
 			// go to the next step
-			cs.handleTimeout(ctx, ti, &appState)
-			err := cs.appStateStore.Update(appState)
+			cs.handleTimeout(ctx, ti, &stateData)
+			err := cs.stateDataStore.Update(stateData)
 			if err != nil {
 				cs.logger.Error("failed update app-state", "err", err)
 			}
@@ -783,16 +783,16 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 func (cs *State) handleTimeout(
 	ctx context.Context,
 	ti timeoutInfo,
-	appState *AppState,
+	stateData *StateData,
 ) {
 	cs.logger.Debug("received tock", "timeout", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
 
 	// timeouts must be for current height, round, step
-	if ti.Height != appState.Height || ti.Round < appState.Round || (ti.Round == appState.Round && ti.Step < appState.Step) {
+	if ti.Height != stateData.Height || ti.Round < stateData.Round || (ti.Round == stateData.Round && ti.Step < stateData.Step) {
 		cs.logger.Debug("ignoring tock because we are ahead",
-			"height", appState.Height,
-			"round", appState.Round,
-			"step", appState.Step.String(),
+			"height", stateData.Height,
+			"round", stateData.Round,
+			"step", stateData.Step.String(),
 		)
 		return
 	}
@@ -805,49 +805,49 @@ func (cs *State) handleTimeout(
 	case cstypes.RoundStepNewHeight:
 		// NewRound event fired from enterNewRoundCommand.
 		// XXX: should we fire timeout here (for timeout commit)?
-		_ = cs.behavior.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: ti.Height})
+		_ = cs.behavior.EnterNewRound(ctx, stateData, EnterNewRoundEvent{Height: ti.Height})
 	case cstypes.RoundStepNewRound:
-		_ = cs.behavior.EnterPropose(ctx, appState, EnterProposeEvent{Height: ti.Height})
+		_ = cs.behavior.EnterPropose(ctx, stateData, EnterProposeEvent{Height: ti.Height})
 	case cstypes.RoundStepPropose:
-		if err := cs.eventBus.PublishEventTimeoutPropose(appState.RoundStateEvent()); err != nil {
+		if err := cs.eventBus.PublishEventTimeoutPropose(stateData.RoundStateEvent()); err != nil {
 			cs.logger.Error("failed publishing timeout propose", "err", err)
 		}
-		_ = cs.behavior.EnterPrevote(ctx, appState, EnterPrevoteEvent{Height: ti.Height, Round: ti.Round})
+		_ = cs.behavior.EnterPrevote(ctx, stateData, EnterPrevoteEvent{Height: ti.Height, Round: ti.Round})
 	case cstypes.RoundStepPrevoteWait:
-		if err := cs.eventBus.PublishEventTimeoutWait(appState.RoundStateEvent()); err != nil {
+		if err := cs.eventBus.PublishEventTimeoutWait(stateData.RoundStateEvent()); err != nil {
 			cs.logger.Error("failed publishing timeout wait", "err", err)
 		}
-		_ = cs.behavior.EnterPrecommit(ctx, appState, EnterPrecommitEvent{Height: ti.Height, Round: ti.Round})
+		_ = cs.behavior.EnterPrecommit(ctx, stateData, EnterPrecommitEvent{Height: ti.Height, Round: ti.Round})
 	case cstypes.RoundStepPrecommitWait:
-		if err := cs.eventBus.PublishEventTimeoutWait(appState.RoundStateEvent()); err != nil {
+		if err := cs.eventBus.PublishEventTimeoutWait(stateData.RoundStateEvent()); err != nil {
 			cs.logger.Error("failed publishing timeout wait", "err", err)
 		}
-		_ = cs.behavior.EnterPrecommit(ctx, appState, EnterPrecommitEvent{Height: ti.Height, Round: ti.Round})
-		_ = cs.behavior.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: ti.Height, Round: ti.Round + 1})
+		_ = cs.behavior.EnterPrecommit(ctx, stateData, EnterPrecommitEvent{Height: ti.Height, Round: ti.Round})
+		_ = cs.behavior.EnterNewRound(ctx, stateData, EnterNewRoundEvent{Height: ti.Height, Round: ti.Round + 1})
 	default:
 		panic(fmt.Sprintf("invalid timeout step: %v", ti.Step))
 	}
 }
 
-func (cs *State) handleTxsAvailable(ctx context.Context, appState *AppState) {
+func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 	// We only need to do this for round 0.
-	if appState.Round != 0 {
+	if stateData.Round != 0 {
 		return
 	}
 
-	switch appState.Step {
+	switch stateData.Step {
 	case cstypes.RoundStepNewHeight: // timeoutCommit phase
-		if appState.state.InitialHeight == appState.Height {
+		if stateData.state.InitialHeight == stateData.Height {
 			// enterPropose will be called by enterNewRoundCommand
 			return
 		}
 
 		// +1ms to ensure RoundStepNewRound timeout always happens after RoundStepNewHeight
-		timeoutCommit := appState.StartTime.Sub(tmtime.Now()) + 1*time.Millisecond
-		cs.behavior.ScheduleTimeout(timeoutCommit, appState.Height, 0, cstypes.RoundStepNewRound)
+		timeoutCommit := stateData.StartTime.Sub(tmtime.Now()) + 1*time.Millisecond
+		cs.behavior.ScheduleTimeout(timeoutCommit, stateData.Height, 0, cstypes.RoundStepNewRound)
 
 	case cstypes.RoundStepNewRound: // after timeoutCommit
-		_ = cs.behavior.EnterPropose(ctx, appState, EnterProposeEvent{Height: appState.Height})
+		_ = cs.behavior.EnterPropose(ctx, stateData, EnterProposeEvent{Height: stateData.Height})
 	}
 }
 
@@ -858,8 +858,8 @@ func (cs *State) handleTxsAvailable(ctx context.Context, appState *AppState) {
 // CreateProposalBlock safely creates a proposal block.
 // Only used in tests.
 func (cs *State) CreateProposalBlock(ctx context.Context) (*types.Block, error) {
-	appState := cs.GetAppState()
-	return cs.blockExecutor.create(ctx, &appState, appState.Round)
+	stateData := cs.GetStateData()
+	return cs.blockExecutor.create(ctx, &stateData, stateData.Round)
 }
 
 // PublishCommitEvent ...

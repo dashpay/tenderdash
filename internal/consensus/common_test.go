@@ -225,10 +225,10 @@ func sortVValidatorStubsByPower(ctx context.Context, t *testing.T, vss []*valida
 // Functions for transitioning the consensus state
 
 func startTestRound(ctx context.Context, cs *State, height int64, round int32) {
-	appState := cs.GetAppState()
+	stateData := cs.GetStateData()
 	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
-	_ = cs.behavior.EnterNewRound(ctx, &appState, EnterNewRoundEvent{Height: height, Round: round})
-	_ = appState.Save()
+	_ = cs.behavior.EnterNewRound(ctx, &stateData, EnterNewRoundEvent{Height: height, Round: round})
+	_ = stateData.Save()
 	cs.startRoutines(ctx, 0)
 }
 
@@ -243,19 +243,19 @@ func decideProposal(
 ) (proposal *types.Proposal, block *types.Block) {
 	t.Helper()
 
-	appState := cs1.GetAppState()
+	stateData := cs1.GetStateData()
 	defer func() {
-		_ = appState.Save()
+		_ = stateData.Save()
 	}()
 
-	block, err := cs1.blockExecutor.create(ctx, &appState, round)
+	block, err := cs1.blockExecutor.create(ctx, &stateData, round)
 	require.NoError(t, err)
 	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
-	validRound := appState.ValidRound
-	chainID := appState.state.ChainID
+	validRound := stateData.ValidRound
+	chainID := stateData.state.ChainID
 
-	validatorsAtProposalHeight := appState.state.ValidatorsAtHeight(height)
+	validatorsAtProposalHeight := stateData.state.ValidatorsAtHeight(height)
 	quorumType := validatorsAtProposalHeight.QuorumType
 	quorumHash := validatorsAtProposalHeight.QuorumHash
 
@@ -300,9 +300,9 @@ func signAddVotes(
 	blockID types.BlockID,
 	vss ...*validatorStub,
 ) {
-	appState := to.GetAppState()
-	rs := appState.RoundState
-	valSet := appState.Validators
+	stateData := to.GetStateData()
+	rs := stateData.RoundState
+	valSet := stateData.Validators
 	addVotes(to, signVotes(ctx, t, voteType, chainID, blockID, rs.AppHash, valSet.QuorumType, valSet.QuorumHash, vss...)...)
 }
 
@@ -316,9 +316,9 @@ func validatePrevote(
 ) {
 	t.Helper()
 
-	appState := cs.GetAppState()
+	stateData := cs.GetStateData()
 
-	prevotes := appState.Votes.Prevotes(round)
+	prevotes := stateData.Votes.Prevotes(round)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
 	var vote *types.Vote
@@ -335,8 +335,8 @@ func validatePrevote(
 func validateLastCommit(ctx context.Context, t *testing.T, cs *State, privVal *validatorStub, blockHash []byte) {
 	t.Helper()
 
-	appState := cs.GetAppState()
-	commit := appState.LastCommit
+	stateData := cs.GetStateData()
+	commit := stateData.LastCommit
 	err := commit.ValidateBasic()
 	require.NoError(t, err, "Expected commit to be valid %v, %v", commit, err)
 	require.True(t, bytes.Equal(commit.BlockID.Hash, blockHash), "Expected commit to be for %X, got %X", blockHash, commit.BlockID.Hash)
@@ -354,8 +354,8 @@ func validatePrecommit(
 ) {
 	t.Helper()
 
-	appState := cs.GetAppState()
-	precommits := appState.Votes.Precommits(thisRound)
+	stateData := cs.GetStateData()
+	precommits := stateData.Votes.Precommits(thisRound)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
 	vote := precommits.GetByProTxHash(proTxHash)
@@ -584,10 +584,10 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 	vss := make([]*validatorStub, validators)
 
 	cs := newState(ctx, t, args.logger, state, privVals[0], app)
-	appState := cs.GetAppState()
+	stateData := cs.GetStateData()
 
 	for i := 0; i < validators; i++ {
-		vss[i] = newValidatorStub(privVals[i], int32(i), appState.state.InitialHeight)
+		vss[i] = newValidatorStub(privVals[i], int32(i), stateData.state.InitialHeight)
 	}
 
 	return cs, vss
@@ -914,8 +914,8 @@ func (g *consensusNetGen) newApp(logger log.Logger, state *sm.State, confName st
 func (g *consensusNetGen) execValidatorSetUpdater(ctx context.Context, t *testing.T, states []*State, apps []abci.Application, n int) map[int64]abci.ValidatorSetUpdate {
 	t.Helper()
 	ret := make(map[int64]abci.ValidatorSetUpdate)
-	appState := states[0].GetAppState()
-	ret[0] = types.TM2PB.ValidatorUpdates(appState.state.Validators)
+	stateData := states[0].GetStateData()
+	ret[0] = types.TM2PB.ValidatorUpdates(stateData.state.Validators)
 	if g.validatorUpdates == nil {
 		return ret
 	}

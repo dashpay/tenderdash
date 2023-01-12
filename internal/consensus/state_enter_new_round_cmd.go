@@ -35,65 +35,65 @@ type EnterNewRoundCommand struct {
 // Execute ...
 func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(EnterNewRoundEvent)
-	appState := stateEvent.AppState
+	stateData := stateEvent.StateData
 	height := event.Height
 	round := event.Round
 	// TODO: remove panics in this function and return an error
 
 	logger := cs.logger.With("height", height, "round", round)
 
-	if appState.Height != height || round < appState.Round || (appState.Round == round && appState.Step != cstypes.RoundStepNewHeight) {
+	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && stateData.Step != cstypes.RoundStepNewHeight) {
 		logger.Debug("entering new round with invalid args",
-			"height", appState.Height,
-			"round", appState.Round,
-			"step", appState.Step)
+			"height", stateData.Height,
+			"round", stateData.Round,
+			"step", stateData.Step)
 		return nil, nil
 	}
 
-	if now := tmtime.Now(); appState.StartTime.After(now) {
-		logger.Debug("need to set a buffer and log message here for sanity", "start_time", appState.StartTime, "now", now)
+	if now := tmtime.Now(); stateData.StartTime.After(now) {
+		logger.Debug("need to set a buffer and log message here for sanity", "start_time", stateData.StartTime, "now", now)
 	}
 
 	logger.Debug("entering new round",
-		"height", appState.Height,
-		"round", appState.Round,
-		"step", appState.Step)
+		"height", stateData.Height,
+		"round", stateData.Round,
+		"step", stateData.Step)
 
 	// increment validators if necessary
-	validators := appState.Validators
-	if appState.Round < round {
+	validators := stateData.Validators
+	if stateData.Round < round {
 		validators = validators.Copy()
-		validators.IncrementProposerPriority(round - appState.Round)
+		validators.IncrementProposerPriority(round - stateData.Round)
 	}
 
 	// Setup new round
 	// we don't fire newStep for this step,
 	// but we fire an event, so update the round step first
-	appState.updateRoundStep(round, cstypes.RoundStepNewRound)
-	appState.Validators = validators
+	stateData.updateRoundStep(round, cstypes.RoundStepNewRound)
+	stateData.Validators = validators
 	if round == 0 {
 		// We've already reset these upon new height,
 		// and meanwhile we might have received a proposal
 		// for round 0.
 	} else {
 		logger.Debug("resetting proposal info")
-		appState.Proposal = nil
-		appState.ProposalReceiveTime = time.Time{}
-		appState.ProposalBlock = nil
-		appState.ProposalBlockParts = nil
+		stateData.Proposal = nil
+		stateData.ProposalReceiveTime = time.Time{}
+		stateData.ProposalBlock = nil
+		stateData.ProposalBlockParts = nil
 	}
 
-	appState.Votes.SetRound(round + 1) // also track next round (round+1) to allow round-skipping
-	appState.TriggeredTimeoutPrecommit = false
-	err := appState.Save()
+	stateData.Votes.SetRound(round + 1) // also track next round (round+1) to allow round-skipping
+	stateData.TriggeredTimeoutPrecommit = false
+	err := stateData.Save()
 	if err != nil {
 		return nil, err
 	}
 
-	cs.eventPublisher.PublishNewRoundEvent(appState.NewRoundEvent())
+	cs.eventPublisher.PublishNewRoundEvent(stateData.NewRoundEvent())
 	// Wait for txs to be available in the mempool
 	// before we enterPropose in round 0. If the last block changed the app hash,
-	waitForTxs := cs.config.WaitForTxs() && round == 0 && appState.state.InitialHeight != appState.Height
+	waitForTxs := cs.config.WaitForTxs() && round == 0 && stateData.state.InitialHeight != stateData.Height
 	if waitForTxs {
 		if cs.config.CreateEmptyBlocksInterval > 0 {
 			behavior.ScheduleTimeout(cs.config.CreateEmptyBlocksInterval, height, round, cstypes.RoundStepNewRound)
@@ -101,7 +101,7 @@ func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behavior *Behavior,
 	} else if !cs.config.DontAutoPropose {
 		// DontAutoPropose should always be false, except for
 		// specific tests where proposals are created manually
-		err = behavior.EnterPropose(ctx, appState, EnterProposeEvent{Height: height, Round: round})
+		err = behavior.EnterPropose(ctx, stateData, EnterProposeEvent{Height: height, Round: round})
 		if err != nil {
 			return nil, err
 		}

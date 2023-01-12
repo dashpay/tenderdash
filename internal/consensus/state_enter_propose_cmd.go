@@ -31,25 +31,25 @@ type EnterProposeCommand struct {
 
 func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(EnterProposeEvent)
-	appState := stateEvent.AppState
+	stateData := stateEvent.StateData
 	height := event.Height
 	round := event.Round
 
 	logger := cs.logger.With("height", height, "round", round)
 
-	if appState.Height != height || round < appState.Round || (appState.Round == round && cstypes.RoundStepPropose <= appState.Step) {
-		logger.Debug("entering propose step with invalid args", "step", appState.Step)
+	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPropose <= stateData.Step) {
+		logger.Debug("entering propose step with invalid args", "step", stateData.Step)
 		return nil, nil
 	}
 
 	// If this validator is the proposer of this round, and the previous block time is later than
 	// our local clock time, wait to propose until our local clock time has passed the block time.
-	if appState.isProposer(cs.privValidator.ProTxHash) {
-		pwt := proposerWaitTime(tmtime.Now(), appState.state.LastBlockTime)
+	if stateData.isProposer(cs.privValidator.ProTxHash) {
+		pwt := proposerWaitTime(tmtime.Now(), stateData.state.LastBlockTime)
 		if pwt > 0 {
 			cs.logger.Debug("enter propose: latest block is newer, sleeping",
 				"duration", pwt.String(),
-				"last_block_time", appState.state.LastBlockTime,
+				"last_block_time", stateData.state.LastBlockTime,
 				"now", tmtime.Now(),
 			)
 			behavior.ScheduleTimeout(pwt, height, round, cstypes.RoundStepNewRound)
@@ -58,25 +58,25 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, 
 	}
 
 	logger.Debug("entering propose step",
-		"height", appState.Height,
-		"round", appState.Round,
-		"step", appState.Step)
+		"height", stateData.Height,
+		"round", stateData.Round,
+		"step", stateData.Step)
 
 	defer func() {
 		// Done enterPropose:
-		appState.updateRoundStep(round, cstypes.RoundStepPropose)
-		behavior.newStep(appState.RoundState)
+		stateData.updateRoundStep(round, cstypes.RoundStepPropose)
+		behavior.newStep(stateData.RoundState)
 
 		// If we have the whole proposal + POL, then goto Prevote now.
 		// else, we'll enterPrevote when the rest of the proposal is received (in AddProposalBlockPart),
 		// or else after timeoutPropose
-		if appState.isProposalComplete() {
-			_ = behavior.EnterPrevote(ctx, appState, EnterPrevoteEvent{Height: height, Round: round})
+		if stateData.isProposalComplete() {
+			_ = behavior.EnterPrevote(ctx, stateData, EnterPrevoteEvent{Height: height, Round: round})
 		}
 	}()
 
 	// If we don't get the proposal and all block parts quick enough, enterPrevote
-	behavior.ScheduleTimeout(appState.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
+	behavior.ScheduleTimeout(stateData.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
 
 	// Nothing more to do if we're not a validator
 	if cs.privValidator.IsZero() {
@@ -87,23 +87,23 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, 
 	proTxHash := cs.privValidator.ProTxHash
 
 	// if not a validator, we're done
-	if !appState.Validators.HasProTxHash(proTxHash) {
+	if !stateData.Validators.HasProTxHash(proTxHash) {
 		logger.Debug("propose step; not proposing since node is not in the validator set",
 			"proTxHash", proTxHash.ShortString(),
-			"vals", appState.Validators)
+			"vals", stateData.Validators)
 		return nil, nil
 	}
 
-	if appState.isProposer(proTxHash) {
+	if stateData.isProposer(proTxHash) {
 		logger.Debug("propose step; our turn to propose",
 			"proposer", proTxHash.ShortString(),
 			"privValidator", cs.privValidator,
 		)
-		_ = behavior.DecideProposal(ctx, appState, DecideProposalEvent{Height: height, Round: round})
+		_ = behavior.DecideProposal(ctx, stateData, DecideProposalEvent{Height: height, Round: round})
 	} else {
 		logger.Debug("propose step; not our turn to propose",
 			"proposer",
-			appState.Validators.GetProposer().ProTxHash,
+			stateData.Validators.GetProposer().ProTxHash,
 			"privValidator",
 			cs.privValidator)
 	}

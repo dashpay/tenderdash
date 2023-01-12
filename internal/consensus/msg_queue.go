@@ -29,7 +29,7 @@ type msgEnvelope struct {
 	fromReplay bool
 }
 
-type msgHandlerFunc func(ctx context.Context, appState *AppState, msg msgEnvelope) error
+type msgHandlerFunc func(ctx context.Context, stateData *StateData, msg msgEnvelope) error
 
 type msgMiddlewareFunc func(msgHandlerFunc) msgHandlerFunc
 

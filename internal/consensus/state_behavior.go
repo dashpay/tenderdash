@@ -27,94 +27,94 @@ type Behavior struct {
 }
 
 // EnterNewRound executes enter-new-round command
-func (b *Behavior) EnterNewRound(ctx context.Context, appState *AppState, event EnterNewRoundEvent) error {
-	_, err := b.execCommand(ctx, EnterNewRoundType, appState, event)
+func (b *Behavior) EnterNewRound(ctx context.Context, stateData *StateData, event EnterNewRoundEvent) error {
+	_, err := b.execCommand(ctx, EnterNewRoundType, stateData, event)
 	return err
 }
 
 // EnterPropose executes enter-propose command
-func (b *Behavior) EnterPropose(ctx context.Context, appState *AppState, event EnterProposeEvent) error {
-	_, err := b.execCommand(ctx, EnterProposeType, appState, event)
+func (b *Behavior) EnterPropose(ctx context.Context, stateData *StateData, event EnterProposeEvent) error {
+	_, err := b.execCommand(ctx, EnterProposeType, stateData, event)
 	return err
 }
 
 // SetProposal executes set-proposal command
-func (b *Behavior) SetProposal(ctx context.Context, appState *AppState, event SetProposalEvent) error {
-	_, err := b.execCommand(ctx, SetProposalType, appState, event)
+func (b *Behavior) SetProposal(ctx context.Context, stateData *StateData, event SetProposalEvent) error {
+	_, err := b.execCommand(ctx, SetProposalType, stateData, event)
 	return err
 }
 
 // TryAddVote executes try-add-vote command
-func (b *Behavior) TryAddVote(ctx context.Context, appState *AppState, event TryAddVoteEvent) (bool, error) {
-	res, err := b.execCommand(ctx, TryAddVoteType, appState, event)
+func (b *Behavior) TryAddVote(ctx context.Context, stateData *StateData, event TryAddVoteEvent) (bool, error) {
+	res, err := b.execCommand(ctx, TryAddVoteType, stateData, event)
 	return res.(bool), err
 }
 
 // EnterPrevote executes enter-prevote command
-func (b *Behavior) EnterPrevote(ctx context.Context, appState *AppState, event EnterPrevoteEvent) error {
-	_, err := b.execCommand(ctx, EnterPrevoteType, appState, event)
+func (b *Behavior) EnterPrevote(ctx context.Context, stateData *StateData, event EnterPrevoteEvent) error {
+	_, err := b.execCommand(ctx, EnterPrevoteType, stateData, event)
 	return err
 }
 
 // EnterPrecommit executes enter-precommit command
-func (b *Behavior) EnterPrecommit(ctx context.Context, appState *AppState, event EnterPrecommitEvent) error {
-	_, err := b.execCommand(ctx, EnterPrecommitType, appState, event)
+func (b *Behavior) EnterPrecommit(ctx context.Context, stateData *StateData, event EnterPrecommitEvent) error {
+	_, err := b.execCommand(ctx, EnterPrecommitType, stateData, event)
 	return err
 }
 
 // EnterCommit executes enter-commit command
-func (b *Behavior) EnterCommit(ctx context.Context, appState *AppState, event EnterCommitEvent) error {
-	_, err := b.execCommand(ctx, EnterCommitType, appState, event)
+func (b *Behavior) EnterCommit(ctx context.Context, stateData *StateData, event EnterCommitEvent) error {
+	_, err := b.execCommand(ctx, EnterCommitType, stateData, event)
 	return err
 }
 
 // TryAddCommit executes try-add-commit command
-func (b *Behavior) TryAddCommit(ctx context.Context, appState *AppState, event TryAddCommitEvent) (bool, error) {
-	res, err := b.execCommand(ctx, TryAddCommitType, appState, event)
+func (b *Behavior) TryAddCommit(ctx context.Context, stateData *StateData, event TryAddCommitEvent) (bool, error) {
+	res, err := b.execCommand(ctx, TryAddCommitType, stateData, event)
 	return res.(bool), err
 }
 
 // AddCommit executes add-commit command
-func (b *Behavior) AddCommit(ctx context.Context, appState *AppState, event AddCommitEvent) (bool, error) {
-	res, err := b.execCommand(ctx, AddCommitType, appState, event)
+func (b *Behavior) AddCommit(ctx context.Context, stateData *StateData, event AddCommitEvent) (bool, error) {
+	res, err := b.execCommand(ctx, AddCommitType, stateData, event)
 	return res.(bool), err
 }
 
 // AddProposalBlockPart executes add-proposal-block-part command
-func (b *Behavior) AddProposalBlockPart(ctx context.Context, appState *AppState, event AddProposalBlockPartEvent) (bool, error) {
-	res, err := b.execCommand(ctx, AddProposalBlockPartType, appState, event)
+func (b *Behavior) AddProposalBlockPart(ctx context.Context, stateData *StateData, event AddProposalBlockPartEvent) (bool, error) {
+	res, err := b.execCommand(ctx, AddProposalBlockPartType, stateData, event)
 	return res.(bool), err
 }
 
 // TryFinalizeCommit executes try-finalize-commit command
-func (b *Behavior) TryFinalizeCommit(ctx context.Context, appState *AppState, event TryFinalizeCommitEvent) {
-	_, _ = b.execCommand(ctx, TryFinalizeCommitType, appState, event)
+func (b *Behavior) TryFinalizeCommit(ctx context.Context, stateData *StateData, event TryFinalizeCommitEvent) {
+	_, _ = b.execCommand(ctx, TryFinalizeCommitType, stateData, event)
 }
 
 // ApplyCommit executes apply-commit command
-func (b *Behavior) ApplyCommit(ctx context.Context, appState *AppState, event ApplyCommitEvent) {
-	_, _ = b.execCommand(ctx, ApplyCommitType, appState, event)
+func (b *Behavior) ApplyCommit(ctx context.Context, stateData *StateData, event ApplyCommitEvent) {
+	_, _ = b.execCommand(ctx, ApplyCommitType, stateData, event)
 }
 
 // EnterPrevoteWait executes enter-prevote-wait command
-func (b *Behavior) EnterPrevoteWait(ctx context.Context, appState *AppState, event EnterPrevoteWaitEvent) {
-	_, _ = b.execCommand(ctx, EnterPrevoteWaitType, appState, event)
+func (b *Behavior) EnterPrevoteWait(ctx context.Context, stateData *StateData, event EnterPrevoteWaitEvent) {
+	_, _ = b.execCommand(ctx, EnterPrevoteWaitType, stateData, event)
 }
 
 // EnterPrecommitWait executes enter-precommit-wait command
-func (b *Behavior) EnterPrecommitWait(ctx context.Context, appState *AppState, event EnterPrecommitWaitEvent) {
-	_, _ = b.execCommand(ctx, EnterPrecommitWaitType, appState, event)
+func (b *Behavior) EnterPrecommitWait(ctx context.Context, stateData *StateData, event EnterPrecommitWaitEvent) {
+	_, _ = b.execCommand(ctx, EnterPrecommitWaitType, stateData, event)
 }
 
 // DecideProposal executes decide-proposal command
-func (b *Behavior) DecideProposal(ctx context.Context, appState *AppState, event DecideProposalEvent) error {
-	_, err := b.execCommand(ctx, DecideProposalType, appState, event)
+func (b *Behavior) DecideProposal(ctx context.Context, stateData *StateData, event DecideProposalEvent) error {
+	_, err := b.execCommand(ctx, DecideProposalType, stateData, event)
 	return err
 }
 
 // DoPrevote executes do-prevote command
-func (b *Behavior) DoPrevote(ctx context.Context, appState *AppState, event DoPrevoteEvent) error {
-	_, err := b.execCommand(ctx, DoPrevoteType, appState, event)
+func (b *Behavior) DoPrevote(ctx context.Context, stateData *StateData, event DoPrevoteEvent) error {
+	_, err := b.execCommand(ctx, DoPrevoteType, stateData, event)
 	return err
 }
 
@@ -140,9 +140,9 @@ func (b *Behavior) ScheduleTimeout(duration time.Duration, height int64, round i
 	b.timeoutTicker.ScheduleTimeout(timeoutInfo{duration, height, round, step})
 }
 
-func (b *Behavior) RecordMetrics(appState *AppState, height int64, block *types.Block, lastBlockMeta *types.BlockMeta) {
-	b.metrics.Validators.Set(float64(appState.Validators.Size()))
-	b.metrics.ValidatorsPower.Set(float64(appState.Validators.TotalVotingPower()))
+func (b *Behavior) RecordMetrics(stateData *StateData, height int64, block *types.Block, lastBlockMeta *types.BlockMeta) {
+	b.metrics.Validators.Set(float64(stateData.Validators.Size()))
+	b.metrics.ValidatorsPower.Set(float64(stateData.Validators.TotalVotingPower()))
 
 	var (
 		missingValidators      int
@@ -159,7 +159,7 @@ func (b *Behavior) RecordMetrics(appState *AppState, height int64, block *types.
 
 	for _, ev := range block.Evidence {
 		if dve, ok := ev.(*types.DuplicateVoteEvidence); ok {
-			if _, val := appState.Validators.GetByProTxHash(dve.VoteA.ValidatorProTxHash); val != nil {
+			if _, val := stateData.Validators.GetByProTxHash(dve.VoteA.ValidatorProTxHash); val != nil {
 				byzantineValidatorsCount++
 				byzantineValidatorsPower += val.VotingPower
 			}
@@ -192,35 +192,35 @@ func (b *Behavior) newStep(rs cstypes.RoundState) {
 	b.eventPublisher.PublishNewRoundStepEvent(rs)
 }
 
-func (b *Behavior) execCommand(ctx context.Context, et EventType, appState *AppState, event any) (any, error) {
+func (b *Behavior) execCommand(ctx context.Context, et EventType, stateData *StateData, event any) (any, error) {
 	stateEvent := StateEvent{
 		EventType: et,
-		AppState:  appState,
+		StateData: stateData,
 		Data:      event,
 	}
 	return b.commander.Execute(ctx, b, stateEvent)
 }
 
-func (b *Behavior) updateProposalBlockAndParts(appState *AppState, blockID types.BlockID) error {
-	appState.replaceProposalBlockOnLockedBlock(blockID)
-	if appState.ProposalBlock.HashesTo(blockID.Hash) || appState.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
+func (b *Behavior) updateProposalBlockAndParts(stateData *StateData, blockID types.BlockID) error {
+	stateData.replaceProposalBlockOnLockedBlock(blockID)
+	if stateData.ProposalBlock.HashesTo(blockID.Hash) || stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
 		return nil
 	}
 	// If we don't have the block being committed, set up to get it.
 	b.logger.Info(
 		"commit is for a block we do not know about; set ProposalBlock=nil",
-		"proposal", appState.ProposalBlock.Hash(),
+		"proposal", stateData.ProposalBlock.Hash(),
 		"commit", blockID.Hash,
 	)
 	// We're getting the wrong block.
 	// Set up ProposalBlockParts and keep waiting.
-	appState.ProposalBlock = nil
-	appState.metrics.MarkBlockGossipStarted()
-	appState.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
-	err := appState.Save()
+	stateData.ProposalBlock = nil
+	stateData.metrics.MarkBlockGossipStarted()
+	stateData.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
+	err := stateData.Save()
 	if err != nil {
 		return err
 	}
-	b.eventPublisher.PublishValidBlockEvent(appState.RoundState)
+	b.eventPublisher.PublishValidBlockEvent(stateData.RoundState)
 	return nil
 }

@@ -27,18 +27,18 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, state
 	event := stateEvent.Data.(DecideProposalEvent)
 	height := event.Height
 	round := event.Round
-	appState := stateEvent.AppState
+	stateData := stateEvent.StateData
 	var block *types.Block
 	var blockParts *types.PartSet
 
 	// Decide on block
-	if appState.checkValidBlock() {
+	if stateData.checkValidBlock() {
 		// If there is valid block, choose that.
-		block, blockParts = appState.ValidBlock, appState.ValidBlockParts
+		block, blockParts = stateData.ValidBlock, stateData.ValidBlockParts
 	} else {
 		// Create a new proposal block from state/txs from the mempool.
 		var err error
-		block, err = cs.blockExec.create(ctx, appState, round)
+		block, err = cs.blockExec.create(ctx, stateData, round)
 		if err != nil {
 			cs.logger.Error("unable to create proposal block", "error", err)
 			return nil, nil
@@ -65,13 +65,13 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, state
 		height,
 		block.CoreChainLockedHeight,
 		round,
-		appState.ValidRound,
+		stateData.ValidRound,
 		propBlockID,
 		block.Header.Time,
 	)
 	proposal.SetCoreChainLockUpdate(block.CoreChainLock)
 	p := proposal.ToProto()
-	validatorsAtProposalHeight := appState.state.ValidatorsAtHeight(p.Height)
+	validatorsAtProposalHeight := stateData.state.ValidatorsAtHeight(p.Height)
 	quorumHash := validatorsAtProposalHeight.QuorumHash
 
 	proTxHash, err := cs.privValidator.GetProTxHash(ctx)
@@ -94,7 +94,7 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, state
 		)
 		return nil, nil
 	}
-	messageBytes := types.ProposalBlockSignBytes(appState.state.ChainID, p)
+	messageBytes := types.ProposalBlockSignBytes(stateData.state.ChainID, p)
 	cs.logger.Debug(
 		"signing proposal",
 		"height", proposal.Height,
@@ -106,10 +106,10 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, state
 		"quorumHash", quorumHash.ShortString(),
 	)
 	// wait the max amount we would wait for a proposal
-	ctxto, cancel := context.WithTimeout(ctx, appState.state.ConsensusParams.Timeout.Propose)
+	ctxto, cancel := context.WithTimeout(ctx, stateData.state.ConsensusParams.Timeout.Propose)
 	defer cancel()
 	if _, err := cs.privValidator.SignProposal(ctxto,
-		appState.state.ChainID,
+		stateData.state.ChainID,
 		validatorsAtProposalHeight.QuorumType,
 		quorumHash,
 		p,
@@ -121,7 +121,7 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, state
 
 		for i := 0; i < int(blockParts.Total()); i++ {
 			part := blockParts.GetPart(i)
-			_ = cs.msgInfoQueue.send(ctx, &BlockPartMessage{appState.Height, appState.Round, part}, "")
+			_ = cs.msgInfoQueue.send(ctx, &BlockPartMessage{stateData.Height, stateData.Round, part}, "")
 		}
 
 		cs.logger.Debug("signed proposal", "height", height, "round", round, "proposal", proposal, "pubKey", pubKey.HexString())

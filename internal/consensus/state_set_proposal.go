@@ -20,18 +20,18 @@ type SetProposalCommand struct {
 }
 
 func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) (any, error) {
-	appState := stateEvent.AppState
+	stateData := stateEvent.StateData
 	event := stateEvent.Data.(SetProposalEvent)
 	proposal := event.Proposal
 	recvTime := event.RecvTime
 	// Already have one
 	// TODO: possibly catch double proposals
-	if appState.Proposal != nil {
+	if stateData.Proposal != nil {
 		return nil, nil
 	}
 
 	// Does not apply
-	if proposal.Height != appState.Height || proposal.Round != appState.Round {
+	if proposal.Height != stateData.Height || proposal.Round != stateData.Round {
 		return nil, nil
 	}
 
@@ -41,21 +41,21 @@ func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEve
 		return nil, ErrInvalidProposalPOLRound
 	}
 
-	if proposal.CoreChainLockedHeight < appState.state.LastCoreChainLockedBlockHeight {
+	if proposal.CoreChainLockedHeight < stateData.state.LastCoreChainLockedBlockHeight {
 		return nil, ErrInvalidProposalCoreHeight
 	}
 
 	p := proposal.ToProto()
 	// Verify signature
 	proposalBlockSignID := types.ProposalBlockSignID(
-		appState.state.ChainID,
+		stateData.state.ChainID,
 		p,
-		appState.state.Validators.QuorumType,
-		appState.state.Validators.QuorumHash,
+		stateData.state.Validators.QuorumType,
+		stateData.state.Validators.QuorumHash,
 	)
 
-	vset := appState.Validators
-	height := appState.Height
+	vset := stateData.Validators
+	height := stateData.Height
 	proposer := vset.GetProposer()
 
 	//  fmt.Printf("verifying request Id %s signID %s quorum hash %s proposalBlockSignBytes %s\n",
@@ -76,16 +76,16 @@ func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEve
 				"proposal", proposal,
 				"proposer", proposer.ProTxHash.ShortString(),
 				"pubkey", proposer.PubKey.HexString(),
-				"quorumType", appState.state.Validators.QuorumType,
-				"quorumHash", appState.state.Validators.QuorumHash,
+				"quorumType", stateData.state.Validators.QuorumType,
+				"quorumHash", stateData.state.Validators.QuorumHash,
 				"proposalSignId", tmbytes.HexBytes(proposalBlockSignID))
 			return nil, ErrInvalidProposalSignature
 		}
-	case appState.Commit != nil && appState.Commit.Height == proposal.Height && appState.Commit.Round == proposal.Round:
+	case stateData.Commit != nil && stateData.Commit.Height == proposal.Height && stateData.Commit.Round == proposal.Round:
 		// We are not part of the validator set
 		// We might have a commit already for the Round State
 		// We need to verify that the commit block id is equal to the proposal block id
-		if !proposal.BlockID.Equals(appState.Commit.BlockID) {
+		if !proposal.BlockID.Equals(stateData.Commit.BlockID) {
 			cs.logger.Debug("proposal blockId isn't the same as the commit blockId", "height", proposal.Height,
 				"round", proposal.Round, "proposer", proposer.ProTxHash.ShortString())
 			return nil, ErrInvalidProposalForCommit
@@ -96,15 +96,15 @@ func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEve
 	}
 
 	proposal.Signature = p.Signature
-	appState.Proposal = proposal
-	appState.ProposalReceiveTime = recvTime
-	appState.calculateProposalTimestampDifferenceMetric()
+	stateData.Proposal = proposal
+	stateData.ProposalReceiveTime = recvTime
+	stateData.calculateProposalTimestampDifferenceMetric()
 	// We don't update cs.ProposalBlockParts if it is already set.
 	// This happens if we're already in cstypes.RoundStepApplyCommit or if there is a valid block in the current round.
 	// TODO: We can check if Proposal is for a different block as this is a sign of misbehavior!
-	if appState.ProposalBlockParts == nil {
+	if stateData.ProposalBlockParts == nil {
 		cs.metrics.MarkBlockGossipStarted()
-		appState.ProposalBlockParts = types.NewPartSetFromHeader(proposal.BlockID.PartSetHeader)
+		stateData.ProposalBlockParts = types.NewPartSetFromHeader(proposal.BlockID.PartSetHeader)
 	}
 
 	cs.logger.Info("received proposal", "proposal", proposal)

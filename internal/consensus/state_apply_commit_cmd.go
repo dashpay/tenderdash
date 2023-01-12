@@ -24,22 +24,22 @@ type ApplyCommitCommand struct {
 
 func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(ApplyCommitEvent)
-	appState := stateEvent.AppState
+	stateData := stateEvent.StateData
 	commit := event.Commit
 	cs.logger.Info("applying commit", "commit", commit)
 
-	block, blockParts := appState.ProposalBlock, appState.ProposalBlockParts
+	block, blockParts := stateData.ProposalBlock, stateData.ProposalBlockParts
 
-	height := appState.Height
-	round := appState.Round
+	height := stateData.Height
+	round := stateData.Round
 
 	if commit != nil {
 		height = commit.Height
 		round = commit.Round
 	}
 
-	cs.blockExec.processOrPanic(ctx, appState, round)
-	cs.blockExec.validateOrPanic(ctx, appState)
+	cs.blockExec.processOrPanic(ctx, stateData, round)
+	cs.blockExec.validateOrPanic(ctx, stateData)
 
 	// Save to blockStore
 	if commit != nil {
@@ -68,7 +68,7 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 	}
 
 	// Create a copy of the state for staging and an event cache for txs.
-	stateCopy, err := cs.blockExec.finalize(ctx, appState, commit)
+	stateCopy, err := cs.blockExec.finalize(ctx, stateData, commit)
 	if err != nil {
 		cs.logger.Error("failed to apply block", "err", err)
 		return nil, nil
@@ -77,20 +77,20 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 	lastBlockMeta := cs.blockStore.LoadBlockMeta(height - 1)
 
 	// must be called before we update state
-	behavior.RecordMetrics(appState, height, block, lastBlockMeta)
+	behavior.RecordMetrics(stateData, height, block, lastBlockMeta)
 
 	// NewHeightStep!
-	appState.updateToState(stateCopy, commit)
-	err = appState.Save()
+	stateData.updateToState(stateCopy, commit)
+	err = stateData.Save()
 	if err != nil {
 		return nil, err
 	}
 
-	behavior.newStep(appState.RoundState)
+	behavior.newStep(stateData.RoundState)
 
 	// cs.StartTime is already set.
 	// Schedule Round0 to start soon.
-	behavior.ScheduleRound0(appState.RoundState)
+	behavior.ScheduleRound0(stateData.RoundState)
 
 	// By here,
 	// * cs.Height has been increment to height+1

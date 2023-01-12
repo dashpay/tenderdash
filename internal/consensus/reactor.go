@@ -264,11 +264,11 @@ func (r *Reactor) WaitSync() bool {
 func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool) {
 	r.logger.Info("switching to consensus")
 
-	appState := r.state.GetAppState()
+	stateData := r.state.GetStateData()
 	// we have no votes, so reconstruct LastCommit from SeenCommit
 	if state.LastBlockHeight > 0 {
 		var err error
-		appState.LastCommit, err = r.state.loadLastCommit(state.LastBlockHeight)
+		stateData.LastCommit, err = r.state.loadLastCommit(state.LastBlockHeight)
 		if err != nil {
 			panic(err)
 		}
@@ -276,12 +276,12 @@ func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL
 
 	// NOTE: The line below causes broadcastNewRoundStepRoutine() to broadcast a
 	// NewRoundStepMessage.
-	appState.updateToState(state, nil)
-	err := r.state.appStateStore.Update(appState)
+	stateData.updateToState(state, nil)
+	err := r.state.stateDataStore.Update(stateData)
 	if err != nil {
 		panic(err)
 	}
-	r.state.behavior.newStep(appState.RoundState)
+	r.state.behavior.newStep(stateData.RoundState)
 
 	if err := r.state.Start(ctx); err != nil {
 		panic(fmt.Sprintf(`failed to start consensus state: %v
@@ -1117,8 +1117,8 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 
 	switch msg := envelope.Message.(type) {
 	case *tmcons.NewRoundStep:
-		appState := r.state.GetAppState()
-		initialHeight := appState.InitialHeight()
+		stateData := r.state.GetStateData()
+		initialHeight := stateData.InitialHeight()
 
 		if err := msgI.(*NewRoundStepMessage).ValidateHeight(initialHeight); err != nil {
 			r.logger.Error("peer sent us an invalid msg", "msg", msg, "err", err)
@@ -1139,8 +1139,8 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 			return err
 		}
 	case *tmcons.VoteSetMaj23:
-		appState := r.state.GetAppState()
-		height, votes := appState.HeightVoteSet()
+		stateData := r.state.GetStateData()
+		height, votes := stateData.HeightVoteSet()
 
 		if height != msg.Height {
 			r.logger.Debug("vote set height does not match msg height", "height", height, "msg", msg)
@@ -1268,9 +1268,9 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 			return err
 		}
 	case *tmcons.Vote:
-		appState := r.state.appStateStore.Get()
-		isValidator := appState.Validators.HasProTxHash(r.state.privValidator.ProTxHash)
-		height, valSize, lastCommitSize := appState.Height, appState.Validators.Size(), appState.LastPrecommits.Size()
+		stateData := r.state.stateDataStore.Get()
+		isValidator := stateData.Validators.HasProTxHash(r.state.privValidator.ProTxHash)
+		height, valSize, lastCommitSize := stateData.Height, stateData.Validators.Size(), stateData.LastPrecommits.Size()
 
 		if isValidator { // ignore votes on non-validator nodes; TODO don't even send it
 			vMsg := msgI.(*VoteMessage)
@@ -1309,8 +1309,8 @@ func (r *Reactor) handleVoteSetBitsMessage(ctx context.Context, envelope *p2p.En
 
 	switch msg := envelope.Message.(type) {
 	case *tmcons.VoteSetBits:
-		appState := r.state.appStateStore.Get()
-		height, votes := appState.Height, appState.Votes
+		stateData := r.state.stateDataStore.Get()
+		height, votes := stateData.Height, stateData.Votes
 
 		vsbMsg := msgI.(*VoteSetBitsMessage)
 

@@ -14,8 +14,8 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// AppStateStore is a state store
-type AppStateStore struct {
+// StateDataStore is a state-data store
+type StateDataStore struct {
 	mtx        sync.Mutex
 	roundState cstypes.RoundState
 	state      sm.State
@@ -26,43 +26,43 @@ type AppStateStore struct {
 	version    int64
 }
 
-// NewAppStateStore creates and returns a new state store
-func NewAppStateStore(logger log.Logger, cfg *config.ConsensusConfig) *AppStateStore {
-	return &AppStateStore{
+// NewStateDataStore creates and returns a new state-data store
+func NewStateDataStore(logger log.Logger, cfg *config.ConsensusConfig) *StateDataStore {
+	return &StateDataStore{
 		metrics: NopMetrics(),
 		logger:  logger,
 		config:  cfg,
 	}
 }
 
-// Get returns application state
-func (s *AppStateStore) Get() AppState {
+// Get returns the state-data
+func (s *StateDataStore) Get() StateData {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	return s.load()
 }
 
-// Update updates application state with candidate
-func (s *AppStateStore) Update(candidate AppState) error {
+// Update updates state-data with candidate
+func (s *StateDataStore) Update(candidate StateData) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	return s.update(candidate)
 }
 
-// UpdateAndGet updates application state with a candidate and returns updated application state
-func (s *AppStateStore) UpdateAndGet(candidate AppState) (AppState, error) {
+// UpdateAndGet updates state-data with a candidate and returns updated state-data
+func (s *StateDataStore) UpdateAndGet(candidate StateData) (StateData, error) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 	err := s.update(candidate)
 	if err != nil {
-		return AppState{}, err
+		return StateData{}, err
 	}
 	return s.load(), nil
 
 }
 
-func (s *AppStateStore) load() AppState {
-	return AppState{
+func (s *StateDataStore) load() StateData {
+	return StateData{
 		config:     s.config,
 		RoundState: s.roundState,
 		state:      s.state,
@@ -74,7 +74,7 @@ func (s *AppStateStore) load() AppState {
 	}
 }
 
-func (s *AppStateStore) update(candidate AppState) error {
+func (s *StateDataStore) update(candidate StateData) error {
 	if candidate.version != s.version {
 		return fmt.Errorf("mismatch app-state versions actual %d want %d", candidate.version, s.version)
 	}
@@ -84,39 +84,42 @@ func (s *AppStateStore) update(candidate AppState) error {
 	return nil
 }
 
-type AppState struct {
+// StateData is a copy of the current RoundState nad state.State stored in the store
+// Along with data, StateData provides some methods to check or update data inside
+type StateData struct {
 	config *config.ConsensusConfig
 	cstypes.RoundState
 	state      sm.State // State until height-1.
 	logger     log.Logger
 	metrics    *Metrics
-	store      *AppStateStore
+	store      *StateDataStore
 	version    int64
 	replayMode bool
 }
 
-func (s *AppState) Save() error {
-	appState, err := s.store.UpdateAndGet(*s)
+// Save persists the current state-data using store and updates state-data with the version inclusive
+func (s *StateData) Save() error {
+	stateData, err := s.store.UpdateAndGet(*s)
 	if err != nil {
 		return err
 	}
-	s.RoundState = appState.RoundState
-	s.state = appState.state
-	s.version = appState.version
+	s.RoundState = stateData.RoundState
+	s.state = stateData.state
+	s.version = stateData.version
 	return nil
 }
 
-func (s *AppState) isProposer(proTxHash types.ProTxHash) bool {
+func (s *StateData) isProposer(proTxHash types.ProTxHash) bool {
 	return proTxHash != nil && bytes.Equal(s.Validators.GetProposer().ProTxHash.Bytes(), proTxHash.Bytes())
 }
 
-func (s *AppState) isValidator(proTxHash types.ProTxHash) bool {
+func (s *StateData) isValidator(proTxHash types.ProTxHash) bool {
 	return s.state.Validators.HasProTxHash(proTxHash)
 }
 
 // Returns true if the proposal block is complete &&
 // (if POLRound was proposed, we have +2/3 prevotes from there).
-func (s *AppState) isProposalComplete() bool {
+func (s *StateData) isProposalComplete() bool {
 	if s.Proposal == nil || s.ProposalBlock == nil {
 		return false
 	}
@@ -129,7 +132,7 @@ func (s *AppState) isProposalComplete() bool {
 	return s.Votes.Prevotes(s.Proposal.POLRound).HasTwoThirdsMajority()
 }
 
-func (s *AppState) updateRoundStep(round int32, step cstypes.RoundStepType) {
+func (s *StateData) updateRoundStep(round int32, step cstypes.RoundStepType) {
 	if !s.replayMode {
 		if round != s.Round || round == 0 && step == cstypes.RoundStepNewRound {
 			s.metrics.MarkRound(s.Round, s.StartTime)
@@ -144,7 +147,7 @@ func (s *AppState) updateRoundStep(round int32, step cstypes.RoundStepType) {
 
 // Updates State and increments height to match that of state.
 // The round becomes 0 and cs.Step becomes cstypes.RoundStepNewHeight.
-func (s *AppState) updateToState(state sm.State, commit *types.Commit) {
+func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 	if s.CommitRound > -1 && 0 < s.Height && s.Height != state.LastBlockHeight {
 		panic(fmt.Sprintf(
 			"updateToState() expected state height of %v but found %v",
@@ -263,21 +266,21 @@ func (s *AppState) updateToState(state sm.State, commit *types.Commit) {
 	s.state = state
 }
 
-func (s *AppState) updateHeight(height int64) {
+func (s *StateData) updateHeight(height int64) {
 	s.metrics.Height.Set(float64(height))
 	s.Height = height
 }
 
 // InitialHeight returns an initial height
-func (s *AppState) InitialHeight() int64 {
+func (s *StateData) InitialHeight() int64 {
 	return s.state.InitialHeight
 }
 
-func (s *AppState) HeightVoteSet() (int64, *cstypes.HeightVoteSet) {
+func (s *StateData) HeightVoteSet() (int64, *cstypes.HeightVoteSet) {
 	return s.Height, s.Votes
 }
 
-func (s *AppState) checkValidBlock() bool {
+func (s *StateData) checkValidBlock() bool {
 	if s.ValidBlock == nil {
 		return false
 	}
@@ -298,7 +301,7 @@ func (s *AppState) checkValidBlock() bool {
 	return true
 }
 
-func (s *AppState) commitTime(t time.Time) time.Time {
+func (s *StateData) commitTime(t time.Time) time.Time {
 	c := s.state.ConsensusParams.Timeout.Commit
 	if s.config.UnsafeCommitTimeoutOverride != 0 {
 		c = s.config.UnsafeProposeTimeoutOverride
@@ -306,7 +309,7 @@ func (s *AppState) commitTime(t time.Time) time.Time {
 	return t.Add(c)
 }
 
-func (s *AppState) proposalIsTimely() bool {
+func (s *StateData) proposalIsTimely() bool {
 	if s.Height == s.state.InitialHeight {
 		// by definition, initial block must have genesis time
 		return s.Proposal.Timestamp.Equal(s.state.LastBlockTime)
@@ -315,14 +318,14 @@ func (s *AppState) proposalIsTimely() bool {
 	return s.Proposal.IsTimely(s.ProposalReceiveTime, sp, s.Round)
 }
 
-func (s *AppState) updateValidBlock() {
+func (s *StateData) updateValidBlock() {
 	s.ValidRound = s.Round
 	s.ValidBlock = s.ProposalBlock
 	s.ValidBlockRecvTime = s.ProposalReceiveTime
 	s.ValidBlockParts = s.ProposalBlockParts
 }
 
-func (s *AppState) verifyCommit(commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
+func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
 	// Lets first do some basic commit validation before more complicated commit verification
 	if err := commit.ValidateBasic(); err != nil {
 		return false, fmt.Errorf("error validating commit: %v", err)
@@ -397,11 +400,11 @@ func (s *AppState) verifyCommit(commit *types.Commit, peerID types.NodeID, ignor
 	return true, nil
 }
 
-func (s *AppState) isLockedBlockEqual(blockID types.BlockID) bool {
+func (s *StateData) isLockedBlockEqual(blockID types.BlockID) bool {
 	return s.LockedBlock.HashesTo(blockID.Hash)
 }
 
-func (s *AppState) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
+func (s *StateData) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 	// The Locked* fields no longer matter.
 	// Move them over to ProposalBlock if they match the commit hash,
 	// otherwise they'll be cleared in updateToState.
@@ -413,7 +416,7 @@ func (s *AppState) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 	s.logger.Debug("commit is for a locked block; set ProposalBlock=LockedBlock", "block_hash", blockID.Hash)
 }
 
-func (s *AppState) proposeTimeout(round int32) time.Duration {
+func (s *StateData) proposeTimeout(round int32) time.Duration {
 	tp := s.state.ConsensusParams.Timeout.TimeoutParamsOrDefaults()
 	p := tp.Propose
 	if s.config.UnsafeProposeTimeoutOverride != 0 {
@@ -428,7 +431,7 @@ func (s *AppState) proposeTimeout(round int32) time.Duration {
 	) * time.Nanosecond
 }
 
-func (s *AppState) voteTimeout(round int32) time.Duration {
+func (s *StateData) voteTimeout(round int32) time.Duration {
 	tp := s.state.ConsensusParams.Timeout.TimeoutParamsOrDefaults()
 	v := tp.Vote
 	if s.config.UnsafeVoteTimeoutOverride != 0 {
@@ -443,14 +446,14 @@ func (s *AppState) voteTimeout(round int32) time.Duration {
 	) * time.Nanosecond
 }
 
-func (s *AppState) bypassCommitTimeout() bool {
+func (s *StateData) bypassCommitTimeout() bool {
 	if s.config.UnsafeBypassCommitTimeoutOverride != nil {
 		return *s.config.UnsafeBypassCommitTimeoutOverride
 	}
 	return s.state.ConsensusParams.Timeout.BypassCommitTimeout
 }
 
-func (s *AppState) calculateProposalTimestampDifferenceMetric() {
+func (s *StateData) calculateProposalTimestampDifferenceMetric() {
 	if s.Proposal != nil && s.Proposal.POLRound == -1 {
 		sp := s.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
 		recvTime := s.ProposalReceiveTime

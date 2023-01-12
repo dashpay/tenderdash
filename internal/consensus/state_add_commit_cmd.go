@@ -20,27 +20,27 @@ type AddCommitCommand struct {
 func (cs *AddCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (added any, err error) {
 	event := stateEvent.Data.(AddCommitEvent)
 	commit := event.Commit
-	appState := stateEvent.AppState
+	stateData := stateEvent.StateData
 	// The commit is all good, let's apply it to the state
-	err = behavior.updateProposalBlockAndParts(appState, commit.BlockID)
+	err = behavior.updateProposalBlockAndParts(stateData, commit.BlockID)
 	if err != nil {
 		return nil, err
 	}
 
-	appState.updateRoundStep(appState.Round, cstypes.RoundStepApplyCommit)
-	appState.CommitRound = commit.Round
-	appState.CommitTime = tmtime.Now()
-	behavior.newStep(appState.RoundState)
+	stateData.updateRoundStep(stateData.Round, cstypes.RoundStepApplyCommit)
+	stateData.CommitRound = commit.Round
+	stateData.CommitTime = tmtime.Now()
+	behavior.newStep(stateData.RoundState)
 
 	// The commit is all good, let's apply it to the state
-	behavior.ApplyCommit(ctx, appState, ApplyCommitEvent{Commit: commit})
+	behavior.ApplyCommit(ctx, stateData, ApplyCommitEvent{Commit: commit})
 
 	// This will relay the commit to peers
 	if err := cs.eventPublisher.PublishCommitEvent(commit); err != nil {
 		return false, fmt.Errorf("error adding commit: %w", err)
 	}
-	if appState.bypassCommitTimeout() {
-		_ = behavior.EnterNewRound(ctx, appState, EnterNewRoundEvent{Height: appState.Height})
+	if stateData.bypassCommitTimeout() {
+		_ = behavior.EnterNewRound(ctx, stateData, EnterNewRoundEvent{Height: stateData.Height})
 	}
 	return true, nil
 }

@@ -26,42 +26,42 @@ type EnterCommitCommand struct {
 // Execute ...
 func (cs *EnterCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
 	event := stateEvent.Data.(EnterCommitEvent)
-	appState := stateEvent.AppState
+	stateData := stateEvent.StateData
 	height := event.Height
 	commitRound := event.CommitRound
 	logger := cs.logger.With("new_height", height, "commit_round", commitRound)
 
-	if appState.Height != height || cstypes.RoundStepApplyCommit <= appState.Step {
+	if stateData.Height != height || cstypes.RoundStepApplyCommit <= stateData.Step {
 		logger.Debug("entering commit step with invalid args",
-			"height", appState.Height,
-			"round", appState.Round,
-			"step", appState.Step)
+			"height", stateData.Height,
+			"round", stateData.Round,
+			"step", stateData.Step)
 		return nil, nil
 	}
 
 	logger.Debug("entering commit step",
-		"height", appState.Height,
-		"round", appState.Round,
-		"step", appState.Step)
+		"height", stateData.Height,
+		"round", stateData.Round,
+		"step", stateData.Step)
 
 	defer func() {
 		// Done enterCommit:
 		// keep cs.Round the same, commitRound points to the right Precommits set.
-		appState.updateRoundStep(appState.Round, cstypes.RoundStepApplyCommit)
-		appState.CommitRound = commitRound
-		appState.CommitTime = tmtime.Now()
-		behavior.newStep(appState.RoundState)
+		stateData.updateRoundStep(stateData.Round, cstypes.RoundStepApplyCommit)
+		stateData.CommitRound = commitRound
+		stateData.CommitTime = tmtime.Now()
+		behavior.newStep(stateData.RoundState)
 
 		// Maybe finalize immediately.
-		behavior.TryFinalizeCommit(ctx, appState, TryFinalizeCommitEvent{Height: height})
+		behavior.TryFinalizeCommit(ctx, stateData, TryFinalizeCommitEvent{Height: height})
 	}()
 
-	blockID, ok := appState.Votes.Precommits(commitRound).TwoThirdsMajority()
+	blockID, ok := stateData.Votes.Precommits(commitRound).TwoThirdsMajority()
 	if !ok {
 		panic("RunActionCommit() expects +2/3 precommits")
 	}
 
-	err := behavior.updateProposalBlockAndParts(appState, blockID)
+	err := behavior.updateProposalBlockAndParts(stateData, blockID)
 	return nil, err
 }
 

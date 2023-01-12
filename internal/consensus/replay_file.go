@@ -261,9 +261,9 @@ func (pb *playback) replayConsoleLoop(ctx context.Context) (int, error) {
 			// "rs short" -> print height/round/step
 			// "rs <field>" -> print another field of the round state
 
-			appState := pb.cs.appStateStore.Get()
+			stateData := pb.cs.GetStateData()
 
-			rs := appState.RoundState
+			rs := stateData.RoundState
 			if len(tokens) == 1 {
 				fmt.Println(rs)
 			} else {

@@ -29,30 +29,30 @@ type EnterPrevoteCommand struct {
 // Execute ...
 func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, event StateEvent) (any, error) {
 	epe := event.Data.(EnterPrevoteEvent)
-	appState := event.AppState
+	stateData := event.StateData
 	height := epe.Height
 	round := epe.Round
 
 	logger := cs.logger.With("height", height, "round", round)
 
-	if appState.Height != height || round < appState.Round || (appState.Round == round && cstypes.RoundStepPrevote <= appState.Step) {
+	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPrevote <= stateData.Step) {
 		logger.Debug("entering prevote step with invalid args",
-			"height", appState.Height,
-			"round", appState.Round,
-			"step", appState.Step)
+			"height", stateData.Height,
+			"round", stateData.Round,
+			"step", stateData.Step)
 		return nil, nil
 	}
 
 	defer func() {
 		// Done enterPrevote:
-		appState.updateRoundStep(round, cstypes.RoundStepPrevote)
-		behavior.newStep(appState.RoundState)
+		stateData.updateRoundStep(round, cstypes.RoundStepPrevote)
+		behavior.newStep(stateData.RoundState)
 	}()
 
 	logger.Debug("entering prevote step",
-		"height", appState.Height,
-		"round", appState.Round,
-		"step", appState.Step)
+		"height", stateData.Height,
+		"round", stateData.Round,
+		"step", stateData.Step)
 
 	// Sign and broadcast vote as necessary
 	prevoteEvent := DoPrevoteEvent{
@@ -60,7 +60,7 @@ func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, 
 		Round:          round,
 		AllowOldBlocks: epe.AllowOldBlocks,
 	}
-	err := behavior.DoPrevote(ctx, appState, prevoteEvent)
+	err := behavior.DoPrevote(ctx, stateData, prevoteEvent)
 	if err != nil {
 		return nil, err
 	}

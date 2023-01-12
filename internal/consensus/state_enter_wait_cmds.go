@@ -22,20 +22,20 @@ type EnterPrecommitWaitCommand struct {
 // Execute ...
 // Enter: any +2/3 precommits for next round.
 func (cs *EnterPrecommitWaitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
-	appState := stateEvent.AppState
+	stateData := stateEvent.StateData
 	event := stateEvent.Data.(EnterPrecommitWaitEvent)
 	height, round := event.Height, event.Round
 	logger := cs.logger.With("new_height", height, "new_round", round)
 
-	if appState.Height != height || round < appState.Round || (appState.Round == round && appState.TriggeredTimeoutPrecommit) {
+	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && stateData.TriggeredTimeoutPrecommit) {
 		logger.Debug("entering precommit wait step with invalid args",
-			"triggered_timeout", appState.TriggeredTimeoutPrecommit,
-			"height", appState.Height,
-			"round", appState.Round)
+			"triggered_timeout", stateData.TriggeredTimeoutPrecommit,
+			"height", stateData.Height,
+			"round", stateData.Round)
 		return nil, nil
 	}
 
-	if !appState.Votes.Precommits(round).HasTwoThirdsAny() {
+	if !stateData.Votes.Precommits(round).HasTwoThirdsAny() {
 		panic(fmt.Sprintf(
 			"entering precommit wait step (%v/%v), but precommits does not have any +2/3 votes",
 			height, round,
@@ -43,19 +43,19 @@ func (cs *EnterPrecommitWaitCommand) Execute(ctx context.Context, behavior *Beha
 	}
 
 	logger.Debug("entering precommit wait step",
-		"height", appState.Height,
-		"round", appState.Round,
-		"step", appState.Step)
+		"height", stateData.Height,
+		"round", stateData.Round,
+		"step", stateData.Step)
 
 	defer func() {
 		// Done enterPrecommitWait:
-		appState.TriggeredTimeoutPrecommit = true
-		behavior.newStep(appState.RoundState)
-		// TODO PERSIST AppState
+		stateData.TriggeredTimeoutPrecommit = true
+		behavior.newStep(stateData.RoundState)
+		// TODO PERSIST StateData
 	}()
 
 	// wait for some more precommits; enterNewRoundCommand
-	behavior.ScheduleTimeout(appState.voteTimeout(round), height, round, cstypes.RoundStepPrecommitWait)
+	behavior.ScheduleTimeout(stateData.voteTimeout(round), height, round, cstypes.RoundStepPrecommitWait)
 	return nil, nil
 }
 
@@ -73,21 +73,21 @@ type EnterPrevoteWaitCommand struct {
 // Execute ...
 // Enter: any +2/3 prevotes at next round.
 func (cs *EnterPrevoteWaitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
-	appState := stateEvent.AppState
+	stateData := stateEvent.StateData
 	event := stateEvent.Data.(EnterPrevoteWaitEvent)
 	height, round := event.Height, event.Round
 
 	logger := cs.logger.With("height", height, "round", round)
 
-	if appState.Height != height || round < appState.Round || (appState.Round == round && cstypes.RoundStepPrevoteWait <= appState.Step) {
+	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPrevoteWait <= stateData.Step) {
 		logger.Debug("entering prevote wait step with invalid args",
-			"height", appState.Height,
-			"round", appState.Round,
-			"step", appState.Step)
+			"height", stateData.Height,
+			"round", stateData.Round,
+			"step", stateData.Step)
 		return nil, nil
 	}
 
-	if !appState.Votes.Prevotes(round).HasTwoThirdsAny() {
+	if !stateData.Votes.Prevotes(round).HasTwoThirdsAny() {
 		panic(fmt.Sprintf(
 			"entering prevote wait step (%v/%v), but prevotes does not have any +2/3 votes",
 			height, round,
@@ -95,17 +95,17 @@ func (cs *EnterPrevoteWaitCommand) Execute(ctx context.Context, behavior *Behavi
 	}
 
 	logger.Debug("entering prevote wait step",
-		"height", appState.Height,
-		"round", appState.Round,
-		"step", appState.Step)
+		"height", stateData.Height,
+		"round", stateData.Round,
+		"step", stateData.Step)
 
 	defer func() {
 		// Done enterPrevoteWait:
-		appState.updateRoundStep(round, cstypes.RoundStepPrevoteWait)
-		behavior.newStep(appState.RoundState)
+		stateData.updateRoundStep(round, cstypes.RoundStepPrevoteWait)
+		behavior.newStep(stateData.RoundState)
 	}()
 
 	// Wait for some more prevotes; enterPrecommit
-	behavior.ScheduleTimeout(appState.voteTimeout(round), height, round, cstypes.RoundStepPrevoteWait)
+	behavior.ScheduleTimeout(stateData.voteTimeout(round), height, round, cstypes.RoundStepPrevoteWait)
 	return nil, nil
 }

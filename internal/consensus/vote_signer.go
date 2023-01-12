@@ -23,7 +23,7 @@ type VoteSigner struct {
 // signing a vote is possible only if a validator is a part of validator-set
 func (cs *VoteSigner) signAddVote(
 	ctx context.Context,
-	appState *AppState,
+	stateData *StateData,
 	msgType tmproto.SignedMsgType,
 	blockID types.BlockID,
 ) *types.Vote {
@@ -32,14 +32,14 @@ func (cs *VoteSigner) signAddVote(
 		return nil
 	}
 	// If the node not in the validator set, do nothing.
-	if !appState.Validators.HasProTxHash(cs.privValidator.ProTxHash) {
+	if !stateData.Validators.HasProTxHash(cs.privValidator.ProTxHash) {
 		cs.logger.Debug("do nothing, node is not a part of validator set")
 		return nil
 	}
-	keyVals := []any{"height", appState.Height, "round", appState.Round, "quorum_hash", appState.Validators.QuorumHash}
+	keyVals := []any{"height", stateData.Height, "round", stateData.Round, "quorum_hash", stateData.Validators.QuorumHash}
 	// TODO: pass pubKey to signVote
 	start := time.Now()
-	vote, err := cs.signVote(ctx, appState, msgType, blockID)
+	vote, err := cs.signVote(ctx, stateData, msgType, blockID)
 	if err != nil {
 		cs.logger.Error("failed signing vote", append(keyVals, "error", err)...)
 		return nil
@@ -55,7 +55,7 @@ func (cs *VoteSigner) signAddVote(
 
 func (cs *VoteSigner) signVote(
 	ctx context.Context,
-	appState *AppState,
+	stateData *StateData,
 	msgType tmproto.SignedMsgType,
 	blockID types.BlockID,
 ) (*types.Vote, error) {
@@ -68,13 +68,13 @@ func (cs *VoteSigner) signVote(
 		return nil, ErrPrivValidatorNotSet
 	}
 	proTxHash := cs.privValidator.ProTxHash
-	valIdx, _ := appState.Validators.GetByProTxHash(proTxHash)
+	valIdx, _ := stateData.Validators.GetByProTxHash(proTxHash)
 	// Since the block has already been validated the block.lastAppHash must be the state.AppHash
 	vote := &types.Vote{
 		ValidatorProTxHash: proTxHash,
 		ValidatorIndex:     valIdx,
-		Height:             appState.Height,
-		Round:              appState.Round,
+		Height:             stateData.Height,
+		Round:              stateData.Round,
 		Type:               msgType,
 		BlockID:            blockID,
 	}
@@ -82,7 +82,7 @@ func (cs *VoteSigner) signVote(
 	// use our local precommit Timeout as the max wait time for getting a singed commit. The same goes for prevote.
 	timeout := time.Second
 	if msgType == tmproto.PrecommitType && !vote.BlockID.IsNil() {
-		timeout = appState.voteTimeout(appState.Round)
+		timeout = stateData.voteTimeout(stateData.Round)
 		// if the signedMessage type is for a precommit, add VoteExtension
 		cs.voteExtender.ExtendVote(ctx, vote)
 	}
@@ -93,9 +93,9 @@ func (cs *VoteSigner) signVote(
 	defer cancel()
 
 	err := cs.privValidator.SignVote(ctxto,
-		appState.state.ChainID,
-		appState.state.Validators.QuorumType,
-		appState.state.Validators.QuorumHash,
+		stateData.state.ChainID,
+		stateData.state.Validators.QuorumType,
+		stateData.state.Validators.QuorumHash,
 		protoVote,
 		cs.logger,
 	)

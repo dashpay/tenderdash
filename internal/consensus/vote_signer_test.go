@@ -45,7 +45,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 		},
 	}
 	conf := configSetup(t)
-	appState := AppState{
+	stateData := StateData{
 		config: conf.Consensus,
 		RoundState: cstypes.RoundState{
 			Height:     H100,
@@ -116,8 +116,8 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 			wantVoteMsg := &VoteMessage{
 				Vote: &types.Vote{
 					Type:               tc.msgType,
-					Height:             appState.Height,
-					Round:              appState.Round,
+					Height:             stateData.Height,
+					Round:              stateData.Round,
 					BlockID:            tc.blockID,
 					ValidatorProTxHash: proTxHash,
 					ValidatorIndex:     0,
@@ -133,7 +133,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 				On("FlushAndSync").
 				Once().
 				Return(nil)
-			vote := signer.signAddVote(ctx, &appState, tc.msgType, tc.blockID)
+			vote := signer.signAddVote(ctx, &stateData, tc.msgType, tc.blockID)
 			assert.NotNil(t, vote)
 		})
 	}
