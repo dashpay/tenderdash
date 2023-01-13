@@ -1,3 +1,5 @@
+//go:generate ../scripts/mockery_generate.sh PrivValidator
+
 package types
 
 import (
