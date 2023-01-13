@@ -14,7 +14,7 @@ import (
 type blockExecutor struct {
 	logger             log.Logger
 	privValidator      privValidator
-	blockExec          *sm.BlockExecutor
+	blockExec          sm.Executor
 	proposedAppVersion uint64
 }
 
