@@ -733,7 +733,7 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 		}
 	}()
 
-	go cs.msgInfoQueue.readMessages(ctx)
+	go cs.msgInfoQueue.fanIn(ctx)
 
 	for {
 		if stopFn != nil && stopFn(cs) {
