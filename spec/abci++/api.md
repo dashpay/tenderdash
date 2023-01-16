@@ -446,6 +446,7 @@ offers a snapshot to the application
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
 | version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
+| quorum_hash | [bytes](#bytes) |  | quorum_hash contains hash of validator quorum that will sign the block |
 
 
 
@@ -473,6 +474,7 @@ offers a snapshot to the application
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
 | version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
+| quorum_hash | [bytes](#bytes) |  | quorum_hash contains hash of validator quorum that will sign the block |
 
 
 

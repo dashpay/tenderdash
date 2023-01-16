@@ -141,6 +141,8 @@ message RequestPrepareProposal {
   uint64 proposed_app_version = 11;
   // App and block version used to generate the block.
   tendermint.version.Consensus version = 12;
+  // quorum_hash contains hash of validator quorum that will sign the block
+  bytes quorum_hash = 13;
 }
 
 message RequestProcessProposal {
@@ -170,6 +172,8 @@ message RequestProcessProposal {
   uint64 proposed_app_version = 12;
   // App and block version used to generate the block.
   tendermint.version.Consensus version = 13;
+  // quorum_hash contains hash of validator quorum that will sign the block
+  bytes quorum_hash = 14;
 }
 
 // Extends a vote with application-side injection
