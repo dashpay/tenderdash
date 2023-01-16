@@ -31,6 +31,8 @@ import (
 	"github.com/tendermint/tendermint/internal/store"
 	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/libs/rand"
+	tmtypes "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -228,24 +230,6 @@ func TestProcessProposal(t *testing.T) {
 		eventBus,
 	)
 
-	//block0 := sf.MakeBlock(t, state, height-1, new(types.Commit), nil, 0)
-	//partSet, err := block0.MakePartSet(types.BlockPartSizeBytes)
-	//require.NoError(t, err)
-	//blockID := types.BlockID{Hash: block0.Hash(), PartSetHeader: partSet.Header()}
-	//stateID := types.RandStateID().WithHeight(height - 1)
-
-	//quorumHash := state.Validators.QuorumHash
-	//thBlockSign :=
-	//thStateSign
-	//voteInfos := []abci.VoteInfo{}
-	//for _, privVal := range privVals {
-	//	vote, err := factory.MakeVote(ctx, privVal, state.Validators, block0.Header.ChainID, 0, 0, 0, 2, blockID, stateID)
-	//	require.NoError(t, err)
-	//	proTxHash, err := privVal.GetProTxHash(ctx)
-	//	require.NoError(t, err)
-	//
-	//}
-
 	coreChainLockUpdate := types.CoreChainLock{
 		CoreBlockHeight: 3000,
 		CoreBlockHash:   make([]byte, 32),
@@ -281,6 +265,7 @@ func TestProcessProposal(t *testing.T) {
 		ProposerProTxHash:   block1.ProposerProTxHash,
 		Version:             &version,
 		ProposedAppVersion:  1,
+		QuorumHash:          state.Validators.QuorumHash,
 	}
 
 	app.On("ProcessProposal", mock.Anything, mock.Anything).Return(&abci.ResponseProcessProposal{
@@ -293,6 +278,75 @@ func TestProcessProposal(t *testing.T) {
 	assert.NotZero(t, uncommittedState)
 	app.AssertExpectations(t)
 	app.AssertCalled(t, "ProcessProposal", ctx, expectedRpp)
+}
+
+func TestUpdateConsensusParams(t *testing.T) {
+	const (
+		height = 1
+		round  = int32(12)
+	)
+	txs := factory.MakeNTxs(height, 10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	app := abcimocks.NewApplication(t)
+	logger := log.NewNopLogger()
+	cc := abciclient.NewLocalClient(logger, app)
+	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
+	err := proxyApp.Start(ctx)
+	require.NoError(t, err)
+
+	state, stateDB, _ := makeState(t, 1, height)
+	stateStore := sm.NewStore(stateDB)
+	blockStore := store.NewBlockStore(dbm.NewMemDB())
+
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+
+	pool := new(mpmocks.Mempool)
+	pool.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs).Once()
+
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		proxyApp,
+		pool,
+		sm.EmptyEvidencePool{},
+		blockStore,
+		eventBus,
+	)
+
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
+	txResults := factory.ExecTxResults(txs)
+
+	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
+		TxRecords:             txsToTxRecords(txs),
+		AppHash:               rand.Bytes(crypto.DefaultAppHashSize),
+		TxResults:             txResults,
+		ConsensusParamUpdates: &tmtypes.ConsensusParams{Block: &tmtypes.BlockParams{MaxBytes: 1024 * 1024}},
+	}, nil).Once()
+	block1, _, err := blockExec.CreateProposalBlock(
+		ctx,
+		height,
+		round,
+		state,
+		lastCommit,
+		state.Validators.GetProposer().ProTxHash,
+		1,
+	)
+	require.NoError(t, err)
+
+	app.On("ProcessProposal", mock.Anything, mock.Anything).Return(&abci.ResponseProcessProposal{
+		AppHash:               block1.AppHash,
+		TxResults:             txResults,
+		Status:                abci.ResponseProcessProposal_ACCEPT,
+		ConsensusParamUpdates: &tmtypes.ConsensusParams{Block: &tmtypes.BlockParams{MaxBytes: 1024 * 1024}},
+	}, nil).Once()
+	uncommittedState, err := blockExec.ProcessProposal(ctx, block1, round, state, true)
+	require.NoError(t, err)
+	assert.Equal(t, block1.NextConsensusHash, uncommittedState.NextConsensusParams.HashConsensusParams())
+
+	app.AssertExpectations(t)
+	app.AssertCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
 }
 
 func TestValidateValidatorUpdates(t *testing.T) {
@@ -650,9 +704,16 @@ func TestEmptyPrepareProposal(t *testing.T) {
 
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
-
+	state, stateDB, privVals := makeState(t, 1, height)
 	app := abcimocks.NewApplication(t)
-	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
+
+	reqPrepProposalMatch := mock.MatchedBy(func(req *abci.RequestPrepareProposal) bool {
+		return len(req.QuorumHash) > 0 &&
+			bytes.Equal(req.QuorumHash, state.Validators.QuorumHash) &&
+			req.Height == height
+	})
+
+	app.On("PrepareProposal", mock.Anything, reqPrepProposalMatch).Return(&abci.ResponsePrepareProposal{
 		AppHash: make([]byte, crypto.DefaultAppHashSize),
 	}, nil)
 	cc := abciclient.NewLocalClient(logger, app)
@@ -660,7 +721,6 @@ func TestEmptyPrepareProposal(t *testing.T) {
 	err := proxyApp.Start(ctx)
 	require.NoError(t, err)
 
-	state, stateDB, privVals := makeState(t, 1, height)
 	stateStore := sm.NewStore(stateDB)
 	mp := &mpmocks.Mempool{}
 	mp.On("Lock").Return()

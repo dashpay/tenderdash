@@ -14,19 +14,23 @@ import (
 )
 
 func TestTxFilter(t *testing.T) {
+	const maxBlockBytes = 3241
+	maxTxSize := maxBlockBytes - 1131
 	genDoc := randomGenesisDoc()
-	genDoc.ConsensusParams.Block.MaxBytes = 3241
+	genDoc.ConsensusParams.Block.MaxBytes = maxBlockBytes
 	genDoc.ConsensusParams.Evidence.MaxBytes = 1500
 
 	// Max size of Txs is much smaller than size of block,
 	// since we need to account for commits and evidence.
+
 	testCases := []struct {
 		bytes int
 		isErr bool
 	}{
 		{0, false},
-		{2153, false},
-		{2154, true},
+		{maxTxSize - 1, false},
+		{maxTxSize, false},
+		{maxTxSize + 1, true},
 		{3000, true},
 	}
 	for i, tc := range testCases {

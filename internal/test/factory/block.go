@@ -73,6 +73,9 @@ func MakeHeader(t *testing.T, h *types.Header) *types.Header {
 	if len(h.ConsensusHash) == 0 {
 		h.ConsensusHash = RandomHash()
 	}
+	if len(h.NextConsensusHash) == 0 {
+		h.NextConsensusHash = RandomHash()
+	}
 	if len(h.AppHash) == 0 {
 		h.AppHash = RandomHash()
 	}

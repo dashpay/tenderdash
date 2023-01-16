@@ -280,6 +280,7 @@ func (state State) MakeBlock(
 	// Fill rest of header with state data.
 	blockTime := state.makeBlockTime(height)
 	validatorsHash := state.Validators.Hash()
+	consensusParamsHash := state.ConsensusParams.HashConsensusParams()
 	block.Header.Populate(
 		state.Version.Consensus,
 		state.ChainID,
@@ -287,7 +288,8 @@ func (state State) MakeBlock(
 		state.LastBlockID,
 		validatorsHash,
 		validatorsHash,
-		state.ConsensusParams.HashConsensusParams(),
+		consensusParamsHash,
+		consensusParamsHash,
 		state.LastAppHash,
 		state.LastResultsHash,
 		proposerProTxHash,

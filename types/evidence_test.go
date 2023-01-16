@@ -304,7 +304,7 @@ func TestEvidenceVectors(t *testing.T) {
 	}{
 		{"duplicateVoteEvidence",
 			EvidenceList{&DuplicateVoteEvidence{VoteA: v2, VoteB: v}},
-			"da971433bafdf670fb51a82360731aff158864907578adcf56d97a3c49718ee1",
+			"8f8d2512e20e226d9f11bfbd445b9465e98bc4360cb8b82556576c55ff77e8e3",
 		},
 	}
 
