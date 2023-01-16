@@ -9,7 +9,7 @@ var (
 const (
 	// TMVersionDefault is the used as the fallback version for Tenderdash
 	// when not using git describe. It is formatted with semantic versioning.
-	TMVersionDefault = "0.10.0-dev"
+	TMVersionDefault = "0.10.0-dev.8"
 	// ABCISemVer is the semantic version of the ABCI library
 	ABCISemVer = "0.20.0"
 
@@ -23,7 +23,7 @@ var (
 
 	// BlockProtocol versions all block data structures and processing.
 	// This includes validity of blocks and state updates.
-	BlockProtocol uint64 = 11
+	BlockProtocol uint64 = 12
 )
 
 type Consensus struct {
