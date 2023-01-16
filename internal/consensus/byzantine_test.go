@@ -137,7 +137,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	// lazyProposer := states[1]
 	lazyNodeState := states[1]
 
-	decideProposalCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+	decideProposalCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 		stateData := stateEvent.StateData
 		event := stateEvent.Data.(DecideProposalEvent)
 		height := event.Height
@@ -155,14 +155,14 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 			commit = stateData.LastCommit
 		default: // This shouldn't happen.
 			lazyNodeState.logger.Error("enterPropose: Cannot propose anything: No commit for the previous block")
-			return nil, nil
+			return nil
 		}
 
 		if lazyNodeState.privValidator.IsZero() {
 			// If this node is a validator & proposer in the current round, it will
 			// miss the opportunity to create a block.
 			lazyNodeState.logger.Error("enterPropose", "err", ErrPrivValidatorNotSet)
-			return nil, nil
+			return nil
 		}
 
 		block, uncommittedState, err := lazyNodeState.blockExec.CreateProposalBlock(
@@ -219,7 +219,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		} else if !lazyNodeState.replayMode {
 			lazyNodeState.logger.Error("enterPropose: Error signing proposal", "height", height, "round", round, "err", err)
 		}
-		return nil, nil
+		return nil
 	})
 	lazyNodeState.behavior.RegisterCommand(DecideProposalType, decideProposalCmd)
 
@@ -293,7 +293,7 @@ func newDoPrevoteByzantine(
 	doPrevoteOrigin CommandHandler,
 	prevoteHeight int64,
 ) CommandHandler {
-	return newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+	return newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 		stateData := stateEvent.StateData
 		event := stateEvent.Data.(DoPrevoteEvent)
 		bzNodeState := rts.states[bzNodeID]
@@ -332,7 +332,7 @@ func newDoPrevoteByzantine(
 			require.NoError(t, voteCh.Send(ctx, msg))
 			i++
 		}
-		return nil, nil
+		return nil
 	})
 }
 

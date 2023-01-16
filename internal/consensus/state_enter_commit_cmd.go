@@ -24,7 +24,7 @@ type EnterCommitCommand struct {
 }
 
 // Execute ...
-func (cs *EnterCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *EnterCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	event := stateEvent.Data.(EnterCommitEvent)
 	stateData := stateEvent.StateData
 	height := event.Height
@@ -36,7 +36,7 @@ func (cs *EnterCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"step", stateData.Step)
-		return nil, nil
+		return nil
 	}
 
 	logger.Debug("entering commit step",
@@ -53,7 +53,7 @@ func (cs *EnterCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 		behavior.newStep(stateData.RoundState)
 
 		// Maybe finalize immediately.
-		behavior.TryFinalizeCommit(ctx, stateData, TryFinalizeCommitEvent{Height: height})
+		_ = behavior.TryFinalizeCommit(ctx, stateData, TryFinalizeCommitEvent{Height: height})
 	}()
 
 	blockID, ok := stateData.Votes.Precommits(commitRound).TwoThirdsMajority()
@@ -61,8 +61,7 @@ func (cs *EnterCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 		panic("RunActionCommit() expects +2/3 precommits")
 	}
 
-	err := behavior.updateProposalBlockAndParts(stateData, blockID)
-	return nil, err
+	return behavior.updateProposalBlockAndParts(stateData, blockID)
 }
 
 func (cs *EnterCommitCommand) Subscribe(observer *Observer) {

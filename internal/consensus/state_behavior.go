@@ -28,94 +28,86 @@ type Behavior struct {
 
 // EnterNewRound executes enter-new-round command
 func (b *Behavior) EnterNewRound(ctx context.Context, stateData *StateData, event EnterNewRoundEvent) error {
-	_, err := b.execCommand(ctx, EnterNewRoundType, stateData, event)
-	return err
+	return b.execCommand(ctx, EnterNewRoundType, stateData, event)
 }
 
 // EnterPropose executes enter-propose command
 func (b *Behavior) EnterPropose(ctx context.Context, stateData *StateData, event EnterProposeEvent) error {
-	_, err := b.execCommand(ctx, EnterProposeType, stateData, event)
-	return err
+	return b.execCommand(ctx, EnterProposeType, stateData, event)
 }
 
 // SetProposal executes set-proposal command
 func (b *Behavior) SetProposal(ctx context.Context, stateData *StateData, event SetProposalEvent) error {
-	_, err := b.execCommand(ctx, SetProposalType, stateData, event)
-	return err
+	return b.execCommand(ctx, SetProposalType, stateData, event)
 }
 
 // TryAddVote executes try-add-vote command
-func (b *Behavior) TryAddVote(ctx context.Context, stateData *StateData, event TryAddVoteEvent) (bool, error) {
-	res, err := b.execCommand(ctx, TryAddVoteType, stateData, event)
-	return res.(bool), err
+func (b *Behavior) TryAddVote(ctx context.Context, stateData *StateData, event TryAddVoteEvent) error {
+	return b.execCommand(ctx, TryAddVoteType, stateData, event)
 }
 
 // EnterPrevote executes enter-prevote command
 func (b *Behavior) EnterPrevote(ctx context.Context, stateData *StateData, event EnterPrevoteEvent) error {
-	_, err := b.execCommand(ctx, EnterPrevoteType, stateData, event)
-	return err
+	return b.execCommand(ctx, EnterPrevoteType, stateData, event)
 }
 
 // EnterPrecommit executes enter-precommit command
 func (b *Behavior) EnterPrecommit(ctx context.Context, stateData *StateData, event EnterPrecommitEvent) error {
-	_, err := b.execCommand(ctx, EnterPrecommitType, stateData, event)
-	return err
+	return b.execCommand(ctx, EnterPrecommitType, stateData, event)
 }
 
 // EnterCommit executes enter-commit command
 func (b *Behavior) EnterCommit(ctx context.Context, stateData *StateData, event EnterCommitEvent) error {
-	_, err := b.execCommand(ctx, EnterCommitType, stateData, event)
-	return err
+	return b.execCommand(ctx, EnterCommitType, stateData, event)
 }
 
 // TryAddCommit executes try-add-commit command
-func (b *Behavior) TryAddCommit(ctx context.Context, stateData *StateData, event TryAddCommitEvent) (bool, error) {
-	res, err := b.execCommand(ctx, TryAddCommitType, stateData, event)
-	return res.(bool), err
+func (b *Behavior) TryAddCommit(ctx context.Context, stateData *StateData, event TryAddCommitEvent) error {
+	return b.execCommand(ctx, TryAddCommitType, stateData, event)
 }
 
 // AddCommit executes add-commit command
-func (b *Behavior) AddCommit(ctx context.Context, stateData *StateData, event AddCommitEvent) (bool, error) {
-	res, err := b.execCommand(ctx, AddCommitType, stateData, event)
-	return res.(bool), err
+func (b *Behavior) AddCommit(ctx context.Context, stateData *StateData, event AddCommitEvent) error {
+	return b.execCommand(ctx, AddCommitType, stateData, event)
 }
 
 // AddProposalBlockPart executes add-proposal-block-part command
-func (b *Behavior) AddProposalBlockPart(ctx context.Context, stateData *StateData, event AddProposalBlockPartEvent) (bool, error) {
-	res, err := b.execCommand(ctx, AddProposalBlockPartType, stateData, event)
-	return res.(bool), err
+func (b *Behavior) AddProposalBlockPart(ctx context.Context, stateData *StateData, event AddProposalBlockPartEvent) error {
+	return b.execCommand(ctx, AddProposalBlockPartType, stateData, event)
+}
+
+func (b *Behavior) ProposalCompleted(ctx context.Context, stateData *StateData, event ProposalCompletedEvent) error {
+	return b.execCommand(ctx, ProposalCompletedType, stateData, event)
 }
 
 // TryFinalizeCommit executes try-finalize-commit command
-func (b *Behavior) TryFinalizeCommit(ctx context.Context, stateData *StateData, event TryFinalizeCommitEvent) {
-	_, _ = b.execCommand(ctx, TryFinalizeCommitType, stateData, event)
+func (b *Behavior) TryFinalizeCommit(ctx context.Context, stateData *StateData, event TryFinalizeCommitEvent) error {
+	return b.execCommand(ctx, TryFinalizeCommitType, stateData, event)
 }
 
 // ApplyCommit executes apply-commit command
-func (b *Behavior) ApplyCommit(ctx context.Context, stateData *StateData, event ApplyCommitEvent) {
-	_, _ = b.execCommand(ctx, ApplyCommitType, stateData, event)
+func (b *Behavior) ApplyCommit(ctx context.Context, stateData *StateData, event ApplyCommitEvent) error {
+	return b.execCommand(ctx, ApplyCommitType, stateData, event)
 }
 
 // EnterPrevoteWait executes enter-prevote-wait command
-func (b *Behavior) EnterPrevoteWait(ctx context.Context, stateData *StateData, event EnterPrevoteWaitEvent) {
-	_, _ = b.execCommand(ctx, EnterPrevoteWaitType, stateData, event)
+func (b *Behavior) EnterPrevoteWait(ctx context.Context, stateData *StateData, event EnterPrevoteWaitEvent) error {
+	return b.execCommand(ctx, EnterPrevoteWaitType, stateData, event)
 }
 
 // EnterPrecommitWait executes enter-precommit-wait command
-func (b *Behavior) EnterPrecommitWait(ctx context.Context, stateData *StateData, event EnterPrecommitWaitEvent) {
-	_, _ = b.execCommand(ctx, EnterPrecommitWaitType, stateData, event)
+func (b *Behavior) EnterPrecommitWait(ctx context.Context, stateData *StateData, event EnterPrecommitWaitEvent) error {
+	return b.execCommand(ctx, EnterPrecommitWaitType, stateData, event)
 }
 
 // DecideProposal executes decide-proposal command
 func (b *Behavior) DecideProposal(ctx context.Context, stateData *StateData, event DecideProposalEvent) error {
-	_, err := b.execCommand(ctx, DecideProposalType, stateData, event)
-	return err
+	return b.execCommand(ctx, DecideProposalType, stateData, event)
 }
 
 // DoPrevote executes do-prevote command
 func (b *Behavior) DoPrevote(ctx context.Context, stateData *StateData, event DoPrevoteEvent) error {
-	_, err := b.execCommand(ctx, DoPrevoteType, stateData, event)
-	return err
+	return b.execCommand(ctx, DoPrevoteType, stateData, event)
 }
 
 // RegisterCommand adds a command handler by event type to the command registry
@@ -192,7 +184,7 @@ func (b *Behavior) newStep(rs cstypes.RoundState) {
 	b.eventPublisher.PublishNewRoundStepEvent(rs)
 }
 
-func (b *Behavior) execCommand(ctx context.Context, et EventType, stateData *StateData, event any) (any, error) {
+func (b *Behavior) execCommand(ctx context.Context, et EventType, stateData *StateData, event any) error {
 	stateEvent := StateEvent{
 		EventType: et,
 		StateData: stateData,

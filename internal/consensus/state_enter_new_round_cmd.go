@@ -33,7 +33,7 @@ type EnterNewRoundCommand struct {
 }
 
 // Execute ...
-func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	event := stateEvent.Data.(EnterNewRoundEvent)
 	stateData := stateEvent.StateData
 	height := event.Height
@@ -47,7 +47,7 @@ func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behavior *Behavior,
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"step", stateData.Step)
-		return nil, nil
+		return nil
 	}
 
 	if now := tmtime.Now(); stateData.StartTime.After(now) {
@@ -87,7 +87,7 @@ func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behavior *Behavior,
 	stateData.TriggeredTimeoutPrecommit = false
 	err := stateData.Save()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	cs.eventPublisher.PublishNewRoundEvent(stateData.NewRoundEvent())
@@ -103,8 +103,8 @@ func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behavior *Behavior,
 		// specific tests where proposals are created manually
 		err = behavior.EnterPropose(ctx, stateData, EnterProposeEvent{Height: height, Round: round})
 		if err != nil {
-			return nil, err
+			return err
 		}
 	}
-	return nil, nil
+	return nil
 }

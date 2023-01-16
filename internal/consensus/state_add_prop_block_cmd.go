@@ -30,27 +30,36 @@ type AddProposalBlockPartCommand struct {
 	metrics        *Metrics
 	blockExec      *blockExecutor
 	eventPublisher *EventPublisher
+	statsQueue     *chanQueue[msgInfo]
 }
 
 // Execute ...
-func (cs *AddProposalBlockPartCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *AddProposalBlockPartCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	event := stateEvent.Data.(AddProposalBlockPartEvent)
 	stateData := stateEvent.StateData
 	commitNotExist := stateData.Commit == nil
-
+	var (
+		added bool
+		err   error
+	)
+	defer func() {
+		if added {
+			_ = cs.statsQueue.send(ctx, msgInfoFromCtx(ctx))
+		}
+	}()
 	// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
-	added, err := cs.addProposalBlockPart(ctx, behavior, stateData, event.Msg, event.PeerID)
+	added, err = cs.addProposalBlockPart(ctx, behavior, stateData, event.Msg, event.PeerID)
 	if err != nil {
-		return added, err
+		return err
 	}
 
 	if added && commitNotExist && stateData.ProposalBlockParts.IsComplete() {
-		err = cs.handleCompleteProposal(ctx, behavior, stateData, event.Msg.Height, event.FromReplay)
-		if err != nil {
-			return nil, err
-		}
+		return behavior.ProposalCompleted(ctx, stateData, ProposalCompletedEvent{
+			Height:     event.Msg.Height,
+			FromReplay: event.FromReplay,
+		})
 	}
-	return added, nil
+	return nil
 }
 
 func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
@@ -161,7 +170,8 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 				"hash", stateData.ProposalBlock.Hash(),
 			)
 			// We received a commit before the block
-			return behavior.AddCommit(ctx, stateData, AddCommitEvent{Commit: stateData.Commit})
+			// Transit to AddCommit
+			return added, behavior.AddCommit(ctx, stateData, AddCommitEvent{Commit: stateData.Commit})
 		}
 
 		return added, nil
@@ -170,19 +180,34 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 	return added, nil
 }
 
-func (cs *AddProposalBlockPartCommand) handleCompleteProposal(
-	ctx context.Context,
-	behavior *Behavior,
-	stateData *StateData,
-	height int64,
-	fromReplay bool,
-) error {
+func (cs *AddProposalBlockPartCommand) Subscribe(observer *Observer) {
+	observer.Subscribe(SetMetrics, func(a any) error {
+		cs.metrics = a.(*Metrics)
+		return nil
+	})
+}
+
+type ProposalCompletedEvent struct {
+	Height     int64
+	FromReplay bool
+}
+
+type ProposalCompletedCommand struct {
+	logger log.Logger
+}
+
+func (c *ProposalCompletedCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
+	stateData := stateEvent.StateData
+	event := stateEvent.Data.(ProposalCompletedEvent)
+	height := event.Height
+	fromReplay := event.FromReplay
+
 	// Update Valid* if we can.
 	prevotes := stateData.Votes.Prevotes(stateData.Round)
 	blockID, hasTwoThirds := prevotes.TwoThirdsMajority()
 	if hasTwoThirds && !blockID.IsNil() && (stateData.ValidRound < stateData.Round) {
 		if stateData.ProposalBlock.HashesTo(blockID.Hash) {
-			cs.logger.Debug("updating valid block to new proposal block",
+			c.logger.Debug("updating valid block to new proposal block",
 				"valid_round", stateData.Round,
 				"valid_block_hash", tmstrings.LazyBlockHash(stateData.ProposalBlock))
 
@@ -193,7 +218,7 @@ func (cs *AddProposalBlockPartCommand) handleCompleteProposal(
 			}
 		}
 		// TODO: In case there is +2/3 majority in Prevotes set for some
-		// block and cs.ProposalBlock contains different block, either
+		// block and c.ProposalBlock contains different block, either
 		// proposer is faulty or voting power of faulty processes is more
 		// than 1/3. We should trigger in the future accountability
 		// procedure at this point.
@@ -202,41 +227,39 @@ func (cs *AddProposalBlockPartCommand) handleCompleteProposal(
 	if stateData.Step <= cstypes.RoundStepPropose && stateData.isProposalComplete() {
 		// Move onto the next step
 		// We should allow old blocks if we are recovering from replay
-		allowOldBlocks := fromReplay
-		cs.logger.Debug("entering prevote after complete proposal",
+		c.logger.Debug("entering prevote after complete proposal",
 			"height", stateData.ProposalBlock.Height,
 			"hash", stateData.ProposalBlock.Hash(),
 		)
-		_ = behavior.EnterPrevote(ctx, stateData, EnterPrevoteEvent{
+		err := behavior.EnterPrevote(ctx, stateData, EnterPrevoteEvent{
 			Height:         height,
 			Round:          stateData.Round,
-			AllowOldBlocks: allowOldBlocks,
+			AllowOldBlocks: fromReplay,
 		})
+		if err != nil {
+			return err
+		}
 		if hasTwoThirds { // this is optimisation as this will be triggered when prevote is added
-			cs.logger.Debug(
+			c.logger.Debug(
 				"entering precommit after complete proposal with threshold received",
 				"height", stateData.ProposalBlock.Height,
 				"hash", stateData.ProposalBlock.Hash(),
 			)
-			_ = behavior.EnterPrecommit(ctx, stateData, EnterPrecommitEvent{
+			return behavior.EnterPrecommit(ctx, stateData, EnterPrecommitEvent{
 				Height: height,
 				Round:  stateData.Round,
 			})
 		}
-	} else if stateData.Step == cstypes.RoundStepApplyCommit {
+		return nil
+	}
+	if stateData.Step == cstypes.RoundStepApplyCommit {
 		// If we're waiting on the proposal block...
-		cs.logger.Debug("trying to finalize commit after complete proposal",
+		c.logger.Debug("trying to finalize commit after complete proposal",
 			"height", stateData.ProposalBlock.Height,
 			"hash", stateData.ProposalBlock.Hash(),
 		)
-		behavior.TryFinalizeCommit(ctx, stateData, TryFinalizeCommitEvent{Height: height})
+		// Transit to EnterPrecommit
+		return behavior.TryFinalizeCommit(ctx, stateData, TryFinalizeCommitEvent{Height: height})
 	}
 	return nil
-}
-
-func (cs *AddProposalBlockPartCommand) Subscribe(observer *Observer) {
-	observer.Subscribe(SetMetrics, func(a any) error {
-		cs.metrics = a.(*Metrics)
-		return nil
-	})
 }

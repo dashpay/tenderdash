@@ -23,7 +23,7 @@ type DecideProposalCommand struct {
 	replayMode    bool
 }
 
-func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) error {
 	event := stateEvent.Data.(DecideProposalEvent)
 	height := event.Height
 	round := event.Round
@@ -41,15 +41,15 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, state
 		block, err = cs.blockExec.create(ctx, stateData, round)
 		if err != nil {
 			cs.logger.Error("unable to create proposal block", "error", err)
-			return nil, nil
+			return nil
 		} else if block == nil {
-			return nil, nil
+			return nil
 		}
 		cs.metrics.ProposalCreateCount.Add(1)
 		blockParts, err = block.MakePartSet(types.BlockPartSizeBytes)
 		if err != nil {
 			cs.logger.Error("unable to create proposal block part set", "error", err)
-			return nil, nil
+			return nil
 		}
 	}
 
@@ -82,7 +82,7 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, state
 			"round", round,
 			"err", err,
 		)
-		return nil, nil
+		return nil
 	}
 	pubKey, err := cs.privValidator.GetPubKey(ctx, quorumHash)
 	if err != nil {
@@ -92,7 +92,7 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, state
 			"round", round,
 			"err", err,
 		)
-		return nil, nil
+		return nil
 	}
 	messageBytes := types.ProposalBlockSignBytes(stateData.state.ChainID, p)
 	cs.logger.Debug(
@@ -136,7 +136,7 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, state
 			"error", err)
 
 	}
-	return nil, nil
+	return nil
 }
 
 func (cs *DecideProposalCommand) Subscribe(observer *Observer) {

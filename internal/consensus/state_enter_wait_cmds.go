@@ -21,7 +21,7 @@ type EnterPrecommitWaitCommand struct {
 
 // Execute ...
 // Enter: any +2/3 precommits for next round.
-func (cs *EnterPrecommitWaitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *EnterPrecommitWaitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(EnterPrecommitWaitEvent)
 	height, round := event.Height, event.Round
@@ -32,7 +32,7 @@ func (cs *EnterPrecommitWaitCommand) Execute(ctx context.Context, behavior *Beha
 			"triggered_timeout", stateData.TriggeredTimeoutPrecommit,
 			"height", stateData.Height,
 			"round", stateData.Round)
-		return nil, nil
+		return nil
 	}
 
 	if !stateData.Votes.Precommits(round).HasTwoThirdsAny() {
@@ -56,7 +56,7 @@ func (cs *EnterPrecommitWaitCommand) Execute(ctx context.Context, behavior *Beha
 
 	// wait for some more precommits; enterNewRoundCommand
 	behavior.ScheduleTimeout(stateData.voteTimeout(round), height, round, cstypes.RoundStepPrecommitWait)
-	return nil, nil
+	return nil
 }
 
 type EnterPrevoteWaitEvent struct {
@@ -72,7 +72,7 @@ type EnterPrevoteWaitCommand struct {
 
 // Execute ...
 // Enter: any +2/3 prevotes at next round.
-func (cs *EnterPrevoteWaitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *EnterPrevoteWaitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(EnterPrevoteWaitEvent)
 	height, round := event.Height, event.Round
@@ -84,7 +84,7 @@ func (cs *EnterPrevoteWaitCommand) Execute(ctx context.Context, behavior *Behavi
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"step", stateData.Step)
-		return nil, nil
+		return nil
 	}
 
 	if !stateData.Votes.Prevotes(round).HasTwoThirdsAny() {
@@ -107,5 +107,5 @@ func (cs *EnterPrevoteWaitCommand) Execute(ctx context.Context, behavior *Behavi
 
 	// Wait for some more prevotes; enterPrecommit
 	behavior.ScheduleTimeout(stateData.voteTimeout(round), height, round, cstypes.RoundStepPrevoteWait)
-	return nil, nil
+	return nil
 }

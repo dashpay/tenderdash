@@ -1439,7 +1439,7 @@ func (r *Reactor) peerStatsRoutine(ctx context.Context, peerUpdates *p2p.PeerUpd
 		}
 
 		select {
-		case msg := <-r.state.statsMsgQueue:
+		case msg := <-r.state.statsMsgQueue.ch:
 			ps, ok := r.GetPeerState(msg.PeerID)
 			if !ok || ps == nil {
 				r.logger.Debug("attempt to update stats for non-existent peer", "peer", msg.PeerID)

@@ -140,7 +140,7 @@ type State struct {
 
 	// information about about added votes and block parts are written on this channel
 	// so statistics can be computed by reactor
-	statsMsgQueue chan msgInfo
+	statsMsgQueue *chanQueue[msgInfo]
 
 	// we use eventBus to trigger msg broadcasts in the reactor,
 	// and to notify external subscribers, eg. through a websocket
@@ -212,15 +212,17 @@ func NewState(
 	options ...StateOption,
 ) (*State, error) {
 	cs := &State{
-		eventBus:       eventBus,
-		logger:         logger,
-		config:         cfg,
-		blockExec:      blockExec,
-		blockStore:     blockStore,
-		stateStore:     store,
-		txNotifier:     txNotifier,
-		timeoutTicker:  NewTimeoutTicker(logger),
-		statsMsgQueue:  make(chan msgInfo, msgQueueSize),
+		eventBus:      eventBus,
+		logger:        logger,
+		config:        cfg,
+		blockExec:     blockExec,
+		blockStore:    blockStore,
+		stateStore:    store,
+		txNotifier:    txNotifier,
+		timeoutTicker: NewTimeoutTicker(logger),
+		statsMsgQueue: &chanQueue[msgInfo]{
+			ch: make(chan msgInfo, msgQueueSize),
+		},
 		doWALCatchup:   true,
 		wal:            nilWAL{},
 		evpool:         evpool,
@@ -258,7 +260,7 @@ func NewState(
 		eventBus: cs.eventBus,
 		logger:   cs.logger,
 	}
-	executor := NewCommandExecutor(cs, eventPublisher, wal)
+	executor := NewCommandExecutor(cs, eventPublisher, wal, cs.statsMsgQueue)
 	behavior := &Behavior{
 		wal:            wal,
 		eventPublisher: eventPublisher,
@@ -269,7 +271,7 @@ func NewState(
 		nSteps:         0,
 	}
 	cs.behavior = behavior
-	cs.msgDispatcher = newMsgInfoDispatcher(behavior, wal, cs.logger, cs.statsMsgQueue)
+	cs.msgDispatcher = newMsgInfoDispatcher(behavior, wal, cs.logger)
 	cs.observer.Subscribe(SetProposedAppVersion, func(obj any) error {
 		ver := obj.(uint64)
 		cs.blockExecutor.proposedAppVersion = ver

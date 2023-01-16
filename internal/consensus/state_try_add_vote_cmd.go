@@ -29,21 +29,31 @@ type TryAddVoteCommand struct {
 	eventPublisher *EventPublisher
 	blockExec      *sm.BlockExecutor
 	metrics        *Metrics
+	statsQueue     *chanQueue[msgInfo]
 }
 
 // Execute ...
-func (cs *TryAddVoteCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *TryAddVoteCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(TryAddVoteEvent)
 	vote, peerID := event.Vote, event.PeerID
-	added, err := cs.addVote(ctx, behavior, stateData, vote, peerID)
+	var (
+		added bool
+		err   error
+	)
+	defer func() {
+		if added {
+			_ = cs.statsQueue.send(ctx, msgInfoFromCtx(ctx))
+		}
+	}()
+	added, err = cs.addVote(ctx, behavior, stateData, vote, peerID)
 	if err != nil {
 		// If the vote height is off, we'll just ignore it,
 		// But if it's a conflicting sig, add it to the cs.evpool.
 		// If it's otherwise invalid, punish peer.
 		if voteErr, ok := err.(*types.ErrVoteConflictingVotes); ok {
 			if cs.privValidator.IsZero() {
-				return false, ErrPrivValidatorNotSet
+				return ErrPrivValidatorNotSet
 			}
 
 			if cs.privValidator.IsProTxHashEqual(vote.ValidatorProTxHash) {
@@ -53,7 +63,7 @@ func (cs *TryAddVoteCommand) Execute(ctx context.Context, behavior *Behavior, st
 					"round", vote.Round,
 					"type", vote.Type)
 
-				return added, err
+				return err
 			}
 
 			// report conflicting votes to the evidence pool
@@ -62,7 +72,7 @@ func (cs *TryAddVoteCommand) Execute(ctx context.Context, behavior *Behavior, st
 				"vote_a", voteErr.VoteA,
 				"vote_b", voteErr.VoteB)
 
-			return added, err
+			return err
 		} else if errors.Is(err, types.ErrVoteNonDeterministicSignature) {
 			cs.logger.Debug("vote has non-deterministic signature", "err", err)
 		} else {
@@ -72,11 +82,11 @@ func (cs *TryAddVoteCommand) Execute(ctx context.Context, behavior *Behavior, st
 			// 3) tmkms use with multiple validators connecting to a single tmkms instance
 			//		(https://github.com/tendermint/tendermint/issues/3839).
 			cs.logger.Info("failed attempting to add vote", "quorum_hash", stateData.Validators.QuorumHash, "err", err)
-			return added, ErrAddingVote
+			return ErrAddingVote
 		}
 	}
 
-	return added, nil
+	return nil
 }
 
 func (cs *TryAddVoteCommand) addVote(

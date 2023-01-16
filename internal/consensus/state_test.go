@@ -2950,7 +2950,7 @@ func TestStateOutputsBlockPartsStats(t *testing.T) {
 	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{msg, peerID, tmtime.Now()})
 	require.NoError(t, err)
 
-	statsMessage := <-cs.statsMsgQueue
+	statsMessage := <-cs.statsMsgQueue.ch
 	require.Equal(t, msg, statsMessage.Msg, "")
 	require.Equal(t, peerID, statsMessage.PeerID, "")
 
@@ -2976,7 +2976,7 @@ func TestStateOutputsBlockPartsStats(t *testing.T) {
 	require.NoError(t, err)
 
 	select {
-	case <-cs.statsMsgQueue:
+	case <-cs.statsMsgQueue.ch:
 		t.Errorf("should not output stats message after receiving the known block part!")
 	case <-time.After(50 * time.Millisecond):
 	}
@@ -3004,7 +3004,7 @@ func TestStateOutputVoteStats(t *testing.T) {
 	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{voteMessage, peerID, tmtime.Now()})
 	require.NoError(t, err)
 
-	statsMessage := <-cs.statsMsgQueue
+	statsMessage := <-cs.statsMsgQueue.ch
 	require.Equal(t, voteMessage, statsMessage.Msg, "")
 	require.Equal(t, peerID, statsMessage.PeerID, "")
 
@@ -3022,7 +3022,7 @@ func TestStateOutputVoteStats(t *testing.T) {
 	require.NoError(t, err)
 
 	select {
-	case <-cs.statsMsgQueue:
+	case <-cs.statsMsgQueue.ch:
 		t.Errorf("should not output stats message after receiving the known vote or vote from bigger height")
 	case <-time.After(50 * time.Millisecond):
 	}
@@ -3182,9 +3182,15 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 	css1StateData.ProposalBlockParts = parts
 	css1StateData.updateRoundStep(commit.Round, cstypes.RoundStepPrevote)
 
+	ctx = msgInfoWithCtx(ctx, msgInfo{
+		Msg:         &CommitMessage{commit},
+		PeerID:      peerID,
+		ReceiveTime: time.Time{},
+	})
+
 	// This is where error "2/3 committed an invalid block" occurred before
-	added, err := otherNode.behavior.TryAddCommit(ctx, &css1StateData, TryAddCommitEvent{Commit: commit, PeerID: peerID})
-	assert.True(t, added)
+	err = otherNode.behavior.TryAddCommit(ctx, &css1StateData, TryAddCommitEvent{Commit: commit, PeerID: peerID})
+	assert.Equal(t, int64(2), css1StateData.Height)
 	assert.NoError(t, err)
 }
 

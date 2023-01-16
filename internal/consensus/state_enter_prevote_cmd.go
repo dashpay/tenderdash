@@ -23,11 +23,10 @@ type EnterPrevoteEvent struct {
 // locked round, prevote for the proposal, otherwise vote nil.
 type EnterPrevoteCommand struct {
 	logger log.Logger
-	//prevoter *Prevoter
 }
 
 // Execute ...
-func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, event StateEvent) (any, error) {
+func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, event StateEvent) error {
 	epe := event.Data.(EnterPrevoteEvent)
 	stateData := event.StateData
 	height := epe.Height
@@ -40,7 +39,7 @@ func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, 
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"step", stateData.Step)
-		return nil, nil
+		return nil
 	}
 
 	defer func() {
@@ -62,10 +61,10 @@ func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, 
 	}
 	err := behavior.DoPrevote(ctx, stateData, prevoteEvent)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	// Once `addVote` hits any +2/3 prevotes, we will go to PrevoteWait
 	// (so we have more time to try and collect +2/3 prevotes for a single block)
-	return nil, nil
+	return nil
 }

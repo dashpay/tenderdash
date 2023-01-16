@@ -34,7 +34,7 @@ type EnterPrecommitCommand struct {
 // Enter: +2/3 precomits for block or nil.
 // Lock & precommit the ProposalBlock if we have enough prevotes for it (a POL in this round)
 // else, precommit nil otherwise.
-func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	event := stateEvent.Data.(EnterPrecommitEvent)
 	stateData := stateEvent.StateData
 	height := event.Height
@@ -46,7 +46,7 @@ func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behavior *Behavior
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"step", stateData.Step)
-		return nil, nil
+		return nil
 	}
 
 	logger.Debug("entering precommit step",
@@ -73,7 +73,7 @@ func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behavior *Behavior
 		}
 
 		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
-		return nil, nil
+		return nil
 	}
 
 	// At this point +2/3 prevoted for a particular block or nil.
@@ -89,7 +89,7 @@ func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behavior *Behavior
 	if blockID.IsNil() {
 		logger.Debug("precommit step: +2/3 prevoted for nil; precommitting nil")
 		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
-		return nil, nil
+		return nil
 	}
 	// At this point, +2/3 prevoted for a particular block.
 
@@ -97,14 +97,14 @@ func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behavior *Behavior
 	if stateData.Proposal == nil || stateData.ProposalBlock == nil {
 		logger.Debug("precommit step; did not receive proposal, precommitting nil")
 		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
-		return nil, nil
+		return nil
 	}
 
 	// If the proposal time does not match the block time, precommit nil.
 	if !stateData.Proposal.Timestamp.Equal(stateData.ProposalBlock.Header.Time) {
 		logger.Debug("precommit step: proposal timestamp not equal; precommitting nil")
 		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
-		return nil, nil
+		return nil
 	}
 
 	// If we're already locked on that block, precommit it, and update the LockedRound
@@ -114,7 +114,7 @@ func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behavior *Behavior
 
 		cs.eventPublisher.PublishRelockEvent(stateData.RoundState)
 		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, blockID)
-		return nil, nil
+		return nil
 	}
 
 	// If greater than 2/3 of the voting power on the network prevoted for
@@ -135,7 +135,7 @@ func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behavior *Behavior
 
 		cs.eventPublisher.PublishLockEvent(stateData.RoundState)
 		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, blockID)
-		return nil, nil
+		return nil
 	}
 
 	// There was a polka in this round for a block we don't have.
@@ -149,5 +149,5 @@ func (cs *EnterPrecommitCommand) Execute(ctx context.Context, behavior *Behavior
 	}
 
 	cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
-	return nil, nil
+	return nil
 }

@@ -52,16 +52,16 @@ func newMsgInfoDispatcher(
 	behavior *Behavior,
 	wal WALWriteFlusher,
 	logger log.Logger,
-	statsMsgQueue chan<- msgInfo,
 ) *msgInfoDispatcher {
 	mws := []msgMiddlewareFunc{
+		msgInfoWithCtxMiddleware(),
 		errorMiddleware(logger),
 		walMiddleware(wal, logger),
 	}
 	proposalHandler := withMiddleware(proposalMessageHandler(behavior), mws...)
-	blockPartHandler := withMiddleware(blockPartMessageHandler(behavior, statsMsgQueue), mws...)
-	voteHandler := withMiddleware(voteMessageHandler(behavior, statsMsgQueue), mws...)
-	commitHandler := withMiddleware(commitMessageHandler(behavior, statsMsgQueue), mws...)
+	blockPartHandler := withMiddleware(blockPartMessageHandler(behavior), mws...)
+	voteHandler := withMiddleware(voteMessageHandler(behavior), mws...)
+	commitHandler := withMiddleware(commitMessageHandler(behavior), mws...)
 	return &msgInfoDispatcher{
 		proposalHandler:  proposalHandler,
 		blockPartHandler: blockPartHandler,
@@ -80,25 +80,16 @@ func proposalMessageHandler(b *Behavior) msgHandlerFunc {
 	}
 }
 
-func blockPartMessageHandler(b *Behavior, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
+func blockPartMessageHandler(b *Behavior) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*BlockPartMessage)
 
 		// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
-		added, err := b.AddProposalBlockPart(
+		err := b.AddProposalBlockPart(
 			ctx,
 			stateData,
 			AddProposalBlockPartEvent{Msg: msg, PeerID: envelope.PeerID, FromReplay: envelope.fromReplay},
 		)
-
-		if added {
-			select {
-			case statsMsgQueue <- envelope.msgInfo:
-			case <-ctx.Done():
-				return nil
-			}
-		}
-
 		if err != nil && msg.Round != stateData.Round {
 			b.logger.Debug("received block part from wrong round",
 				"height", stateData.Height,
@@ -115,7 +106,6 @@ func blockPartMessageHandler(b *Behavior, statsMsgQueue chan<- msgInfo) msgHandl
 			"round", stateData.Round,
 			"block_height", msg.Height,
 			"block_round", msg.Round,
-			"added", added,
 			"peer", envelope.PeerID,
 			"index", msg.Part.Index,
 			"error", err,
@@ -124,19 +114,12 @@ func blockPartMessageHandler(b *Behavior, statsMsgQueue chan<- msgInfo) msgHandl
 	}
 }
 
-func voteMessageHandler(b *Behavior, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
+func voteMessageHandler(b *Behavior) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*VoteMessage)
 		// attempt to add the vote and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		added, err := b.TryAddVote(ctx, stateData, TryAddVoteEvent{Vote: msg.Vote, PeerID: envelope.PeerID})
-		if added {
-			select {
-			case statsMsgQueue <- envelope.msgInfo:
-			case <-ctx.Done():
-				return nil
-			}
-		}
+		err := b.TryAddVote(ctx, stateData, TryAddVoteEvent{Vote: msg.Vote, PeerID: envelope.PeerID})
 
 		// TODO: punish peer
 		// We probably don't want to stop the peer here. The vote does not
@@ -155,7 +138,6 @@ func voteMessageHandler(b *Behavior, statsMsgQueue chan<- msgInfo) msgHandlerFun
 			"cs_round", stateData.Round,
 			"vote_height", msg.Vote.Height,
 			"vote_round", msg.Vote.Round,
-			"added", added,
 			"peer", envelope.PeerID,
 		}
 		if err != nil {
@@ -166,12 +148,12 @@ func voteMessageHandler(b *Behavior, statsMsgQueue chan<- msgInfo) msgHandlerFun
 	}
 }
 
-func commitMessageHandler(b *Behavior, statsMsgQueue chan<- msgInfo) msgHandlerFunc {
+func commitMessageHandler(b *Behavior) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*CommitMessage)
 		// attempt to add the commit and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		added, err := b.TryAddCommit(
+		err := b.TryAddCommit(
 			ctx,
 			stateData,
 			TryAddCommitEvent{
@@ -179,16 +161,12 @@ func commitMessageHandler(b *Behavior, statsMsgQueue chan<- msgInfo) msgHandlerF
 				PeerID: envelope.PeerID,
 			},
 		)
-		if added {
-			statsMsgQueue <- envelope.msgInfo
-		}
 		b.logger.Debug(
 			"received commit",
 			"height", stateData.Height,
 			"cs_round", stateData.Round,
 			"commit_height", msg.Commit.Height,
 			"commit_round", msg.Commit.Round,
-			"added", added,
 			"peer", envelope.PeerID,
 			"error", err,
 		)
@@ -236,6 +214,15 @@ func errorMiddleware(logger log.Logger) msgMiddlewareFunc {
 				)
 			}
 			return nil
+		}
+	}
+}
+
+func msgInfoWithCtxMiddleware() msgMiddlewareFunc {
+	return func(hd msgHandlerFunc) msgHandlerFunc {
+		return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
+			ctx = msgInfoWithCtx(ctx, envelope.msgInfo)
+			return hd(ctx, stateData, envelope)
 		}
 	}
 }

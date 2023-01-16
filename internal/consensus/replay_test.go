@@ -1372,13 +1372,13 @@ func TestWALRoundsSkipper(t *testing.T) {
 	}
 	node := ng.Generate(ctx, t)
 	doPrevoteOrigin := node.csState.behavior.commander.commands[DoPrevoteType]
-	doPrevoteCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+	doPrevoteCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 		event := stateEvent.Data.(DoPrevoteEvent)
 		height := event.Height
 		round := event.Round
 		if height >= 3 && round < 10 {
 			node.csState.voteSigner.signAddVote(ctx, stateEvent.StateData, tmproto.PrevoteType, types.BlockID{})
-			return nil, nil
+			return nil
 		}
 		return doPrevoteOrigin.Execute(ctx, behavior, stateEvent)
 	})

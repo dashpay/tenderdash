@@ -1096,13 +1096,13 @@ type quorumData struct {
 }
 
 type mockCommand struct {
-	fn func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error)
+	fn func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error
 }
 
-func newMockCommand(fn func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error)) *mockCommand {
+func newMockCommand(fn func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error) *mockCommand {
 	return &mockCommand{fn: fn}
 }
 
-func (c *mockCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (c *mockCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	return c.fn(ctx, behavior, stateEvent)
 }

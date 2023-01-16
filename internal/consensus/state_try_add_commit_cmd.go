@@ -25,7 +25,7 @@ type TryAddCommitCommand struct {
 }
 
 // Execute ...
-func (cs *TryAddCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *TryAddCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	event := stateEvent.Data.(TryAddCommitEvent)
 	stateData := stateEvent.StateData
 	commit := event.Commit
@@ -33,7 +33,7 @@ func (cs *TryAddCommitCommand) Execute(ctx context.Context, behavior *Behavior, 
 
 	// Let's only add one remote commit
 	if stateData.Commit != nil {
-		return false, nil
+		return nil
 	}
 
 	rs := stateData.RoundState
@@ -45,7 +45,7 @@ func (cs *TryAddCommitCommand) Execute(ctx context.Context, behavior *Behavior, 
 			rs.Round, "commit round", commit.Round)
 		verified, err := cs.verifyCommit(ctx, stateData, commit, peerID, true)
 		if err != nil {
-			return false, err
+			return err
 		}
 		if verified {
 			_ = behavior.EnterNewRound(ctx, stateData, EnterNewRoundEvent{Height: stateData.Height, Round: commit.Round})
@@ -54,14 +54,14 @@ func (cs *TryAddCommitCommand) Execute(ctx context.Context, behavior *Behavior, 
 				stateData.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
 			}
 
-			return false, nil
+			return nil
 		}
 	}
 
 	// First lets verify that the commit is what we are expecting
 	verified, err := cs.verifyCommit(ctx, stateData, commit, peerID, false)
 	if !verified || err != nil {
-		return verified, err
+		return err
 	}
 
 	stateData.Commit = commit
@@ -69,11 +69,8 @@ func (cs *TryAddCommitCommand) Execute(ctx context.Context, behavior *Behavior, 
 	// We need to make sure we are past the Propose step
 	if stateData.Step <= cstypes.RoundStepPropose {
 		// In this case we need to apply the commit after the proposal block comes in
-		return false, nil
+		return nil
 	}
-
-	// TODO figure out how to return a result of operation
-	// for this transition it should be (bool, error)
 	return behavior.AddCommit(ctx, stateData, AddCommitEvent{Commit: commit})
 }
 

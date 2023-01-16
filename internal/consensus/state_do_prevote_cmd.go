@@ -27,7 +27,7 @@ type DoPrevoteCommand struct {
 	replayMode bool
 }
 
-func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(DoPrevoteEvent)
 	height := event.Height
@@ -38,19 +38,19 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent
 	if stateData.ProposalBlock == nil {
 		logger.Debug("prevote step: ProposalBlock is nil; prevoting nil")
 		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
-		return nil, nil
+		return nil
 	}
 
 	if stateData.Proposal == nil {
 		logger.Debug("prevote step: did not receive proposal; prevoting nil")
 		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
-		return nil, nil
+		return nil
 	}
 
 	if !stateData.Proposal.Timestamp.Equal(stateData.ProposalBlock.Header.Time) {
 		logger.Debug("prevote step: proposal timestamp not equal; prevoting nil")
 		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
-		return nil, nil
+		return nil
 	}
 
 	sp := stateData.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
@@ -62,7 +62,7 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent
 			"msg_delay", sp.MessageDelay,
 			"precision", sp.Precision)
 		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
-		return nil, nil
+		return nil
 	}
 
 	// Validate proposal core chain lock
@@ -70,7 +70,7 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent
 	if err != nil {
 		logger.Error("enterPrevote: ProposalBlock chain lock is invalid, prevoting nil", "err", err)
 		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
-		return nil, nil
+		return nil
 	}
 
 	/*
@@ -90,13 +90,13 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent
 			logger.Error("prevote step: state machine rejected a proposed block; this should not happen:"+
 				"the proposer may be misbehaving; prevoting nil", "err", err)
 			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
-			return nil, nil
+			return nil
 		}
 
 		if errors.As(err, &sm.ErrInvalidBlock{}) {
 			logger.Error("prevote step: consensus deems this block invalid; prevoting nil", "err", err)
 			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
-			return nil, nil
+			return nil
 		}
 
 		// Unknown error, so we panic
@@ -126,12 +126,12 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent
 		if stateData.LockedRound == -1 {
 			logger.Debug("prevote step: ProposalBlock is valid and there is no locked block; prevoting the proposal")
 			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, blockID)
-			return nil, nil
+			return nil
 		}
 		if stateData.ProposalBlock.HashesTo(stateData.LockedBlock.Hash()) {
 			logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
 			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, blockID)
-			return nil, nil
+			return nil
 		}
 	}
 
@@ -158,19 +158,19 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent
 			logger.Debug("prevote step: ProposalBlock is valid and received a 2/3 majority in a round later than the locked round",
 				"outcome", "prevoting the proposal")
 			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, blockID)
-			return nil, nil
+			return nil
 		}
 		if stateData.ProposalBlock.HashesTo(stateData.LockedBlock.Hash()) {
 			logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
 			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, blockID)
-			return nil, nil
+			return nil
 		}
 	}
 
 	logger.Debug("prevote step: ProposalBlock is valid but was not our locked block or " +
 		"did not receive a more recent majority; prevoting nil")
 	cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
-	return nil, nil
+	return nil
 }
 
 func (cs *DoPrevoteCommand) Subscribe(observer *Observer) {

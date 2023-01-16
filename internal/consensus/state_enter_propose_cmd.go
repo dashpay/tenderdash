@@ -29,7 +29,7 @@ type EnterProposeCommand struct {
 	blockExec     *blockExecutor
 }
 
-func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	event := stateEvent.Data.(EnterProposeEvent)
 	stateData := stateEvent.StateData
 	height := event.Height
@@ -39,7 +39,7 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, 
 
 	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPropose <= stateData.Step) {
 		logger.Debug("entering propose step with invalid args", "step", stateData.Step)
-		return nil, nil
+		return nil
 	}
 
 	// If this validator is the proposer of this round, and the previous block time is later than
@@ -53,7 +53,7 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, 
 				"now", tmtime.Now(),
 			)
 			behavior.ScheduleTimeout(pwt, height, round, cstypes.RoundStepNewRound)
-			return nil, nil
+			return nil
 		}
 	}
 
@@ -81,7 +81,7 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, 
 	// Nothing more to do if we're not a validator
 	if cs.privValidator.IsZero() {
 		logger.Debug("propose step; not proposing since node is not a validator")
-		return nil, nil
+		return nil
 	}
 
 	proTxHash := cs.privValidator.ProTxHash
@@ -91,7 +91,7 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, 
 		logger.Debug("propose step; not proposing since node is not in the validator set",
 			"proTxHash", proTxHash.ShortString(),
 			"vals", stateData.Validators)
-		return nil, nil
+		return nil
 	}
 
 	if stateData.isProposer(proTxHash) {
@@ -107,7 +107,7 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, 
 			"privValidator",
 			cs.privValidator)
 	}
-	return nil, nil
+	return nil
 }
 
 func (cs *EnterProposeCommand) Subscribe(observer *Observer) {

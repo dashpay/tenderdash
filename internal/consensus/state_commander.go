@@ -21,6 +21,7 @@ const (
 	TryFinalizeCommitType
 	ApplyCommitType
 	AddProposalBlockPartType
+	ProposalCompletedType
 	EnterPrevoteWaitType
 	EnterPrecommitWaitType
 	TryAddVoteType
@@ -42,7 +43,7 @@ type StateEvent struct {
 
 // CommandHandler is a command handler interface
 type CommandHandler interface {
-	Execute(ctx context.Context, behavior *Behavior, event StateEvent) (any, error)
+	Execute(ctx context.Context, behavior *Behavior, event StateEvent) error
 }
 
 type CommandExecutor struct {
@@ -61,7 +62,7 @@ func (c *CommandExecutor) Get(eventType EventType) CommandHandler {
 
 // Execute executes a command for a given state-event
 // panic if a command is not registered
-func (c *CommandExecutor) Execute(ctx context.Context, behavior *Behavior, event StateEvent) (any, error) {
+func (c *CommandExecutor) Execute(ctx context.Context, behavior *Behavior, event StateEvent) error {
 	command, ok := c.commands[event.EventType]
 	if !ok {
 		panic(errCommandNotRegistered)
@@ -70,7 +71,7 @@ func (c *CommandExecutor) Execute(ctx context.Context, behavior *Behavior, event
 }
 
 // NewCommandExecutor ...
-func NewCommandExecutor(cs *State, eventPublisher *EventPublisher, wal *wrapWAL) *CommandExecutor {
+func NewCommandExecutor(cs *State, eventPublisher *EventPublisher, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *CommandExecutor {
 	return &CommandExecutor{
 		commands: map[EventType]CommandHandler{
 			EnterNewRoundType: &EnterNewRoundCommand{
@@ -105,7 +106,9 @@ func NewCommandExecutor(cs *State, eventPublisher *EventPublisher, wal *wrapWAL)
 				metrics:        cs.metrics,
 				blockExec:      cs.blockExecutor,
 				eventPublisher: eventPublisher,
+				statsQueue:     statsQueue,
 			},
+			ProposalCompletedType: &ProposalCompletedCommand{logger: cs.logger},
 			DoPrevoteType: &DoPrevoteCommand{
 				logger:     cs.logger,
 				voteSigner: cs.voteSigner,
@@ -120,6 +123,7 @@ func NewCommandExecutor(cs *State, eventPublisher *EventPublisher, wal *wrapWAL)
 				eventPublisher: eventPublisher,
 				blockExec:      cs.blockExec,
 				metrics:        cs.metrics,
+				statsQueue:     statsQueue,
 			},
 			EnterCommitType: &EnterCommitCommand{
 				logger:         cs.logger,
@@ -127,9 +131,7 @@ func NewCommandExecutor(cs *State, eventPublisher *EventPublisher, wal *wrapWAL)
 				metrics:        cs.metrics,
 				evsw:           cs.evsw,
 			},
-			EnterPrevoteType: &EnterPrevoteCommand{
-				logger: cs.logger,
-			},
+			EnterPrevoteType: &EnterPrevoteCommand{logger: cs.logger},
 			EnterPrecommitType: &EnterPrecommitCommand{
 				logger:         cs.logger,
 				eventPublisher: eventPublisher,
@@ -143,6 +145,7 @@ func NewCommandExecutor(cs *State, eventPublisher *EventPublisher, wal *wrapWAL)
 			},
 			AddCommitType: &AddCommitCommand{
 				eventPublisher: eventPublisher,
+				statsQueue:     statsQueue,
 			},
 			ApplyCommitType: &ApplyCommitCommand{
 				logger:     cs.logger,
@@ -155,12 +158,8 @@ func NewCommandExecutor(cs *State, eventPublisher *EventPublisher, wal *wrapWAL)
 				blockExec:  cs.blockExecutor,
 				blockStore: cs.blockStore,
 			},
-			EnterPrevoteWaitType: &EnterPrevoteWaitCommand{
-				logger: cs.logger,
-			},
-			EnterPrecommitWaitType: &EnterPrecommitWaitCommand{
-				logger: cs.logger,
-			},
+			EnterPrevoteWaitType:   &EnterPrevoteWaitCommand{logger: cs.logger},
+			EnterPrecommitWaitType: &EnterPrecommitWaitCommand{logger: cs.logger},
 		},
 	}
 }

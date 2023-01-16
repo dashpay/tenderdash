@@ -19,7 +19,7 @@ type SetProposalCommand struct {
 	metrics *Metrics
 }
 
-func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(SetProposalEvent)
 	proposal := event.Proposal
@@ -27,22 +27,22 @@ func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEve
 	// Already have one
 	// TODO: possibly catch double proposals
 	if stateData.Proposal != nil {
-		return nil, nil
+		return nil
 	}
 
 	// Does not apply
 	if proposal.Height != stateData.Height || proposal.Round != stateData.Round {
-		return nil, nil
+		return nil
 	}
 
 	// Verify POLRound, which must be -1 or in range [0, proposal.Round).
 	if proposal.POLRound < -1 ||
 		(proposal.POLRound >= 0 && proposal.POLRound >= proposal.Round) {
-		return nil, ErrInvalidProposalPOLRound
+		return ErrInvalidProposalPOLRound
 	}
 
 	if proposal.CoreChainLockedHeight < stateData.state.LastCoreChainLockedBlockHeight {
-		return nil, ErrInvalidProposalCoreHeight
+		return ErrInvalidProposalCoreHeight
 	}
 
 	p := proposal.ToProto()
@@ -79,7 +79,7 @@ func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEve
 				"quorumType", stateData.state.Validators.QuorumType,
 				"quorumHash", stateData.state.Validators.QuorumHash,
 				"proposalSignId", tmbytes.HexBytes(proposalBlockSignID))
-			return nil, ErrInvalidProposalSignature
+			return ErrInvalidProposalSignature
 		}
 	case stateData.Commit != nil && stateData.Commit.Height == proposal.Height && stateData.Commit.Round == proposal.Round:
 		// We are not part of the validator set
@@ -88,11 +88,11 @@ func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEve
 		if !proposal.BlockID.Equals(stateData.Commit.BlockID) {
 			cs.logger.Debug("proposal blockId isn't the same as the commit blockId", "height", proposal.Height,
 				"round", proposal.Round, "proposer", proposer.ProTxHash.ShortString())
-			return nil, ErrInvalidProposalForCommit
+			return ErrInvalidProposalForCommit
 		}
 	default:
 		// We received a proposal we can not check
-		return nil, ErrUnableToVerifyProposal
+		return ErrUnableToVerifyProposal
 	}
 
 	proposal.Signature = p.Signature
@@ -108,7 +108,7 @@ func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEve
 	}
 
 	cs.logger.Info("received proposal", "proposal", proposal)
-	return nil, nil
+	return nil
 }
 
 func (cs *SetProposalCommand) Subscribe(observer *Observer) {

@@ -24,7 +24,7 @@ type TryFinalizeCommitCommand struct {
 }
 
 // Execute ...
-func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	event := stateEvent.Data.(TryFinalizeCommitEvent)
 	stateData := stateEvent.StateData
 	if stateData.Height != event.Height {
@@ -36,7 +36,7 @@ func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, behavior *Behav
 	blockID, ok := stateData.Votes.Precommits(stateData.CommitRound).TwoThirdsMajority()
 	if !ok || blockID.IsNil() {
 		logger.Error("failed attempt to finalize commit; there was no +2/3 majority or +2/3 was for nil")
-		return nil, nil
+		return nil
 	}
 
 	if !stateData.ProposalBlock.HashesTo(blockID.Hash) {
@@ -46,11 +46,11 @@ func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, behavior *Behav
 			"proposal_block", tmstrings.LazyBlockHash(stateData.ProposalBlock),
 			"commit_block", blockID.Hash,
 		)
-		return nil, nil
+		return nil
 	}
 
 	cs.finalizeCommit(ctx, behavior, stateData, event.Height)
-	return nil, nil
+	return nil
 }
 
 // Increment height and goto cstypes.RoundStepNewHeight

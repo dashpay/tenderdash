@@ -8,7 +8,12 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-var usePeerQueueCtx = struct{}{}
+type contextKey int
+
+const (
+	usePeerQueueCtx contextKey = iota
+	msgInfoKey
+)
 
 // ContextWithPeerQueue ...
 func ContextWithPeerQueue(ctx context.Context) context.Context {
@@ -22,6 +27,15 @@ func PeerQueueFromContext(ctx context.Context) bool {
 		return val.(bool)
 	}
 	return false
+}
+
+func msgInfoWithCtx(ctx context.Context, mi msgInfo) context.Context {
+	return context.WithValue(ctx, msgInfoKey, mi)
+}
+
+func msgInfoFromCtx(ctx context.Context) msgInfo {
+	val := ctx.Value(msgInfoKey)
+	return val.(msgInfo)
 }
 
 type msgEnvelope struct {
@@ -58,9 +72,14 @@ func newChanQueue[T Message]() *chanQueue[T] {
 }
 
 func (q *chanQueue[T]) send(ctx context.Context, msg T) error {
+	// first select tries to catch a signal from a context
+	// second select sends a message o a channel, if a queue is full returns the error
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	default:
+	}
+	select {
 	case q.ch <- msg:
 		return nil
 	default:

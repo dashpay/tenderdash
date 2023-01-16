@@ -22,7 +22,7 @@ type ApplyCommitCommand struct {
 	wal       WALWriteFlusher
 }
 
-func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
+func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
 	event := stateEvent.Data.(ApplyCommitEvent)
 	stateData := stateEvent.StateData
 	commit := event.Commit
@@ -71,7 +71,7 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 	stateCopy, err := cs.blockExec.finalize(ctx, stateData, commit)
 	if err != nil {
 		cs.logger.Error("failed to apply block", "err", err)
-		return nil, nil
+		return nil
 	}
 
 	lastBlockMeta := cs.blockStore.LoadBlockMeta(height - 1)
@@ -83,7 +83,7 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 	stateData.updateToState(stateCopy, commit)
 	err = stateData.Save()
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	behavior.newStep(stateData.RoundState)
@@ -96,5 +96,5 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 	// * cs.Height has been increment to height+1
 	// * cs.Step is now cstypes.RoundStepNewHeight
 	// * cs.StartTime is set to when we will start round0.
-	return nil, nil
+	return nil
 }
