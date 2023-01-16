@@ -176,6 +176,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 			ProposerProTxHash:     block.ProposerProTxHash,
 			ProposedAppVersion:    block.ProposedAppVersion,
 			Version:               &version,
+			QuorumHash:            state.Validators.QuorumHash,
 		},
 	)
 	if err != nil {
@@ -255,6 +256,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		CoreChainLockUpdate:   block.CoreChainLock.ToProto(),
 		ProposedAppVersion:    block.ProposedAppVersion,
 		Version:               &version,
+		QuorumHash:            state.Validators.QuorumHash,
 	})
 	if err != nil {
 		return CurrentRoundState{}, err
