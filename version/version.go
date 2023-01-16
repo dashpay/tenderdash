@@ -23,7 +23,7 @@ var (
 
 	// BlockProtocol versions all block data structures and processing.
 	// This includes validity of blocks and state updates.
-	BlockProtocol uint64 = 11
+	BlockProtocol uint64 = 12
 )
 
 type Consensus struct {
