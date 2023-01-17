@@ -7,7 +7,7 @@ BLS_SM_PATH="third_party/bls-signatures/src"
 BLS_GIT_REPO="https://github.com/dashpay/bls-signatures.git"
 BLS_GIT_BRANCH="1.2.5"
 
-set -ex
+set -e
 
 if ! git submodule update --init "${BLS_SM_PATH}" ; then
 	echo "It looks like this source code is not tracked by git."
