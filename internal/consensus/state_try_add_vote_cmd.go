@@ -18,6 +18,11 @@ type TryAddVoteEvent struct {
 	PeerID types.NodeID
 }
 
+// GetType returns TryAddVoteType event-type
+func (e *TryAddVoteEvent) GetType() EventType {
+	return TryAddVoteType
+}
+
 // TryAddVoteCommand ...
 // Attempt to add the vote. if its a duplicate signature, dupeout the validator
 type TryAddVoteCommand struct {
@@ -33,9 +38,9 @@ type TryAddVoteCommand struct {
 }
 
 // Execute ...
-func (cs *TryAddVoteCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
+func (c *TryAddVoteCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
-	event := stateEvent.Data.(TryAddVoteEvent)
+	event := stateEvent.Data.(*TryAddVoteEvent)
 	vote, peerID := event.Vote, event.PeerID
 	var (
 		added bool
@@ -43,21 +48,21 @@ func (cs *TryAddVoteCommand) Execute(ctx context.Context, behavior *Behavior, st
 	)
 	defer func() {
 		if added {
-			_ = cs.statsQueue.send(ctx, msgInfoFromCtx(ctx))
+			_ = c.statsQueue.send(ctx, msgInfoFromCtx(ctx))
 		}
 	}()
-	added, err = cs.addVote(ctx, behavior, stateData, vote, peerID)
+	added, err = c.addVote(ctx, stateEvent.FSM, stateData, vote, peerID)
 	if err != nil {
 		// If the vote height is off, we'll just ignore it,
-		// But if it's a conflicting sig, add it to the cs.evpool.
+		// But if it's a conflicting sig, add it to the c.evpool.
 		// If it's otherwise invalid, punish peer.
 		if voteErr, ok := err.(*types.ErrVoteConflictingVotes); ok {
-			if cs.privValidator.IsZero() {
+			if c.privValidator.IsZero() {
 				return ErrPrivValidatorNotSet
 			}
 
-			if cs.privValidator.IsProTxHashEqual(vote.ValidatorProTxHash) {
-				cs.logger.Error(
+			if c.privValidator.IsProTxHashEqual(vote.ValidatorProTxHash) {
+				c.logger.Error(
 					"found conflicting vote from ourselves; did you unsafe_reset a validator?",
 					"height", vote.Height,
 					"round", vote.Round,
@@ -67,21 +72,21 @@ func (cs *TryAddVoteCommand) Execute(ctx context.Context, behavior *Behavior, st
 			}
 
 			// report conflicting votes to the evidence pool
-			cs.evpool.ReportConflictingVotes(voteErr.VoteA, voteErr.VoteB)
-			cs.logger.Debug("found and sent conflicting votes to the evidence pool",
+			c.evpool.ReportConflictingVotes(voteErr.VoteA, voteErr.VoteB)
+			c.logger.Debug("found and sent conflicting votes to the evidence pool",
 				"vote_a", voteErr.VoteA,
 				"vote_b", voteErr.VoteB)
 
 			return err
 		} else if errors.Is(err, types.ErrVoteNonDeterministicSignature) {
-			cs.logger.Debug("vote has non-deterministic signature", "err", err)
+			c.logger.Debug("vote has non-deterministic signature", "err", err)
 		} else {
 			// Either
 			// 1) bad peer OR
 			// 2) not a bad peer? this can also err sometimes with "Unexpected step" OR
 			// 3) tmkms use with multiple validators connecting to a single tmkms instance
 			//		(https://github.com/tendermint/tendermint/issues/3839).
-			cs.logger.Info("failed attempting to add vote", "quorum_hash", stateData.Validators.QuorumHash, "err", err)
+			c.logger.Info("failed attempting to add vote", "quorum_hash", stateData.Validators.QuorumHash, "err", err)
 			return ErrAddingVote
 		}
 	}
@@ -89,14 +94,14 @@ func (cs *TryAddVoteCommand) Execute(ctx context.Context, behavior *Behavior, st
 	return nil
 }
 
-func (cs *TryAddVoteCommand) addVote(
+func (c *TryAddVoteCommand) addVote(
 	ctx context.Context,
-	behavior *Behavior,
+	fms *FMS,
 	stateData *StateData,
 	vote *types.Vote,
 	peerID types.NodeID,
 ) (added bool, err error) {
-	cs.logger.Debug(
+	c.logger.Debug(
 		"adding vote",
 		"vote", vote,
 		"height", stateData.Height,
@@ -108,17 +113,17 @@ func (cs *TryAddVoteCommand) addVote(
 	if vote.Height+1 == stateData.Height && vote.Type == tmproto.PrecommitType {
 		if stateData.Step != cstypes.RoundStepNewHeight {
 			// Late precommit at prior height is ignored
-			cs.logger.Debug("precommit vote came in after commit timeout and has been ignored", "vote", vote)
+			c.logger.Debug("precommit vote came in after commit timeout and has been ignored", "vote", vote)
 			return
 		}
 		if stateData.LastPrecommits == nil {
-			cs.logger.Debug("no last round precommits on node", "vote", vote)
+			c.logger.Debug("no last round precommits on node", "vote", vote)
 			return
 		}
 
 		added, err = stateData.LastPrecommits.AddVote(vote)
 		if !added {
-			cs.logger.Debug(
+			c.logger.Debug(
 				"vote not added",
 				"height", vote.Height,
 				"vote_type", vote.Type,
@@ -129,9 +134,9 @@ func (cs *TryAddVoteCommand) addVote(
 			return
 		}
 
-		cs.logger.Debug("added vote to last precommits", "last_precommits", stateData.LastPrecommits.StringShort())
+		c.logger.Debug("added vote to last precommits", "last_precommits", stateData.LastPrecommits.StringShort())
 
-		err = cs.eventPublisher.PublishVoteEvent(vote)
+		err = c.eventPublisher.PublishVoteEvent(vote)
 		if err != nil {
 			return added, err
 		}
@@ -139,8 +144,8 @@ func (cs *TryAddVoteCommand) addVote(
 		// if we can skip timeoutCommit and have all the votes now,
 		if stateData.bypassCommitTimeout() && stateData.LastPrecommits.HasAll() {
 			// go straight to new round (skip timeout commit)
-			// cs.scheduleTimeout(time.Duration(0), cs.Height, 0, cstypes.RoundStepNewHeight)
-			_ = behavior.EnterNewRound(ctx, stateData, EnterNewRoundEvent{Height: stateData.Height})
+			// c.scheduleTimeout(time.Duration(0), c.Height, 0, cstypes.RoundStepNewHeight)
+			_ = fms.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
 		}
 
 		return
@@ -150,14 +155,14 @@ func (cs *TryAddVoteCommand) addVote(
 	// Not necessarily a bad peer, but not favorable behavior.
 	if vote.Height != stateData.Height {
 		added = false
-		cs.logger.Debug("vote ignored and not added", "vote_height", vote.Height, "cs_height", stateData.Height, "peer", peerID)
+		c.logger.Debug("vote ignored and not added", "vote_height", vote.Height, "cs_height", stateData.Height, "peer", peerID)
 		return
 	}
 
 	// Verify VoteExtension if precommit and not nil
 	// https://github.com/tendermint/tendermint/issues/8487
 	if vote.Type == tmproto.PrecommitType && !vote.BlockID.IsNil() &&
-		!cs.privValidator.IsProTxHashEqual(vote.ValidatorProTxHash) { // Skip the VerifyVoteExtension call if the vote was issued by this validator.
+		!c.privValidator.IsProTxHashEqual(vote.ValidatorProTxHash) { // Skip the VerifyVoteExtension call if the vote was issued by this validator.
 
 		// The core fields of the vote message were already validated in the
 		// consensus reactor when the vote was received.
@@ -169,8 +174,8 @@ func (cs *TryAddVoteCommand) addVote(
 			return false, err
 		}
 
-		err := cs.blockExec.VerifyVoteExtension(ctx, vote)
-		cs.metrics.MarkVoteExtensionReceived(err == nil)
+		err := c.blockExec.VerifyVoteExtension(ctx, vote)
+		c.metrics.MarkVoteExtensionReceived(err == nil)
 		if err != nil {
 			return false, err
 		}
@@ -179,7 +184,7 @@ func (cs *TryAddVoteCommand) addVote(
 	// Ignore vote if we do not have public keys to verify votes
 	if !stateData.Validators.HasPublicKeys {
 		added = false
-		cs.logger.Debug("vote received on non-validator, ignoring it",
+		c.logger.Debug("vote received on non-validator, ignoring it",
 			"vote", vote,
 			"cs_height", stateData.Height,
 			"peer", peerID,
@@ -187,7 +192,7 @@ func (cs *TryAddVoteCommand) addVote(
 		return
 	}
 
-	cs.logger.Debug(
+	c.logger.Debug(
 		"adding vote to vote set",
 		"height", stateData.Height,
 		"round", stateData.Round,
@@ -198,24 +203,24 @@ func (cs *TryAddVoteCommand) addVote(
 	added, err = stateData.Votes.AddVote(vote, peerID)
 	if !added {
 		if err != nil {
-			cs.logger.Error(
+			c.logger.Error(
 				"error adding vote",
 				"vote", vote,
 				"cs_height", stateData.Height,
 				"error", err,
 			)
 		}
-		// Either duplicate, or error upon cs.Votes.AddByIndex()
+		// Either duplicate, or error upon c.Votes.AddByIndex()
 		return
 	}
 	if vote.Round == stateData.Round {
 		vals := stateData.state.Validators
 		val := vals.GetByIndex(vote.ValidatorIndex)
-		cs.metrics.MarkVoteReceived(vote.Type, val.VotingPower, vals.TotalVotingPower())
+		c.metrics.MarkVoteReceived(vote.Type, val.VotingPower, vals.TotalVotingPower())
 	}
 
 	// TODO discuss about checking error result
-	err = cs.eventPublisher.PublishVoteEvent(vote)
+	err = c.eventPublisher.PublishVoteEvent(vote)
 	if err != nil {
 		return added, err
 	}
@@ -223,7 +228,7 @@ func (cs *TryAddVoteCommand) addVote(
 	switch vote.Type {
 	case tmproto.PrevoteType:
 		prevotes := stateData.Votes.Prevotes(vote.Round)
-		cs.logger.Debug("added vote to prevote", "vote", vote, "prevotes", prevotes.StringShort())
+		c.logger.Debug("added vote to prevote", "vote", vote, "prevotes", prevotes.StringShort())
 
 		// Check to see if >2/3 of the voting power on the network voted for any non-nil block.
 		if blockID, ok := prevotes.TwoThirdsMajority(); ok && !blockID.IsNil() {
@@ -233,10 +238,10 @@ func (cs *TryAddVoteCommand) addVote(
 			// Update Valid* if we can.
 			if stateData.ValidRound < vote.Round && vote.Round == stateData.Round {
 				if stateData.ProposalBlock.HashesTo(blockID.Hash) {
-					cs.logger.Debug("updating valid block because of POL", "valid_round", stateData.ValidRound, "pol_round", vote.Round)
+					c.logger.Debug("updating valid block because of POL", "valid_round", stateData.ValidRound, "pol_round", vote.Round)
 					stateData.updateValidBlock()
 				} else {
-					cs.logger.Debug("valid block we do not know about; set ProposalBlock=nil",
+					c.logger.Debug("valid block we do not know about; set ProposalBlock=nil",
 						"proposal", tmstrings.LazyBlockHash(stateData.ProposalBlock),
 						"block_id", blockID.Hash)
 
@@ -245,14 +250,14 @@ func (cs *TryAddVoteCommand) addVote(
 				}
 
 				if !stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
-					cs.metrics.MarkBlockGossipStarted()
+					c.metrics.MarkBlockGossipStarted()
 					stateData.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
 				}
 				err = stateData.Save()
 				if err != nil {
 					return false, err
 				}
-				cs.eventPublisher.PublishValidBlockEvent(stateData.RoundState)
+				c.eventPublisher.PublishValidBlockEvent(stateData.RoundState)
 			}
 		}
 
@@ -260,26 +265,26 @@ func (cs *TryAddVoteCommand) addVote(
 		switch {
 		case stateData.Round < vote.Round && prevotes.HasTwoThirdsAny():
 			// Round-skip if there is any 2/3+ of votes ahead of us
-			_ = behavior.EnterNewRound(ctx, stateData, EnterNewRoundEvent{Height: height, Round: vote.Round})
+			_ = fms.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
 
 		case stateData.Round == vote.Round && cstypes.RoundStepPrevote <= stateData.Step: // current round
 			blockID, ok := prevotes.TwoThirdsMajority()
 			if ok && (stateData.isProposalComplete() || blockID.IsNil()) {
-				_ = behavior.EnterPrecommit(ctx, stateData, EnterPrecommitEvent{Height: height, Round: vote.Round})
+				_ = fms.Dispatch(ctx, &EnterPrecommitEvent{Height: height, Round: vote.Round}, stateData)
 			} else if prevotes.HasTwoThirdsAny() {
-				behavior.EnterPrevoteWait(ctx, stateData, EnterPrevoteWaitEvent{Height: height, Round: vote.Round})
+				_ = fms.Dispatch(ctx, &EnterPrevoteWaitEvent{Height: height, Round: vote.Round}, stateData)
 			}
 
 		case stateData.Proposal != nil && 0 <= stateData.Proposal.POLRound && stateData.Proposal.POLRound == vote.Round:
-			// If the proposal is now complete, enter prevote of cs.Round.
+			// If the proposal is now complete, enter prevote of c.Round.
 			if stateData.isProposalComplete() {
-				_ = behavior.EnterPrevote(ctx, stateData, EnterPrevoteEvent{Height: height, Round: stateData.Round})
+				_ = fms.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: stateData.Round}, stateData)
 			}
 		}
 
 	case tmproto.PrecommitType:
 		precommits := stateData.Votes.Precommits(vote.Round)
-		cs.logger.Debug("added vote to precommit",
+		c.logger.Debug("added vote to precommit",
 			"height", vote.Height,
 			"round", vote.Round,
 			"validator", vote.ValidatorProTxHash.String(),
@@ -289,20 +294,20 @@ func (cs *TryAddVoteCommand) addVote(
 		blockID, ok := precommits.TwoThirdsMajority()
 		if ok {
 			// Executed as TwoThirdsMajority could be from a higher round
-			_ = behavior.EnterNewRound(ctx, stateData, EnterNewRoundEvent{Height: height, Round: vote.Round})
-			_ = behavior.EnterPrecommit(ctx, stateData, EnterPrecommitEvent{Height: height, Round: vote.Round})
+			_ = fms.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
+			_ = fms.Dispatch(ctx, &EnterPrecommitEvent{Height: height, Round: vote.Round}, stateData)
 
 			if !blockID.IsNil() {
-				_ = behavior.EnterCommit(ctx, stateData, EnterCommitEvent{Height: height, CommitRound: vote.Round})
+				_ = fms.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: vote.Round}, stateData)
 				if stateData.bypassCommitTimeout() && precommits.HasAll() {
-					_ = behavior.EnterNewRound(ctx, stateData, EnterNewRoundEvent{Height: stateData.Height})
+					_ = fms.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
 				}
 			} else {
-				behavior.EnterPrecommitWait(ctx, stateData, EnterPrecommitWaitEvent{Height: height, Round: vote.Round})
+				_ = fms.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
 			}
 		} else if stateData.Round <= vote.Round && precommits.HasTwoThirdsAny() {
-			_ = behavior.EnterNewRound(ctx, stateData, EnterNewRoundEvent{Height: height, Round: vote.Round})
-			behavior.EnterPrecommitWait(ctx, stateData, EnterPrecommitWaitEvent{Height: height, Round: vote.Round})
+			_ = fms.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
+			fms.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
 		}
 
 	default:
@@ -312,9 +317,13 @@ func (cs *TryAddVoteCommand) addVote(
 	return added, err
 }
 
-func (cs *TryAddVoteCommand) Subscribe(observer *Observer) {
+func (c *TryAddVoteCommand) Subscribe(observer *Observer) {
 	observer.Subscribe(SetMetrics, func(a any) error {
-		cs.metrics = a.(*Metrics)
+		c.metrics = a.(*Metrics)
+		return nil
+	})
+	observer.Subscribe(SetPrivValidator, func(a any) error {
+		c.privValidator = a.(privValidator)
 		return nil
 	})
 }

@@ -188,11 +188,11 @@ func TestStateEnterProposeYesPrivValidator(t *testing.T) {
 	timeoutCh := subscribe(ctx, t, cs.eventBus, types.EventQueryTimeoutPropose)
 	proposalCh := subscribe(ctx, t, cs.eventBus, types.EventQueryCompleteProposal)
 
-	err := cs.behavior.EnterNewRound(ctx, &stateData, EnterNewRoundEvent{Height: height, Round: round})
+	err := cs.fms.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
 	require.NoError(t, err)
 	err = stateData.Save()
 	require.NoError(t, err)
-	cs.startRoutines(ctx, 3)
+	startConsensusState(ctx, cs, 3)
 
 	ensureNewProposal(t, proposalCh, height, round)
 
@@ -339,10 +339,10 @@ func TestStateProposalTime(t *testing.T) {
 			time.Sleep(tc.sleep)
 
 			// Wait for complete proposal.
-			err = cs.behavior.EnterPropose(ctx, &stateData, EnterProposeEvent{
+			err = cs.fms.Dispatch(ctx, &EnterProposeEvent{
 				Height: height,
 				Round:  round,
-			})
+			}, &stateData)
 			require.NoError(t, err)
 
 			ensureNewRound(t, newRoundCh, height+1, 0)
@@ -466,12 +466,12 @@ func TestStateFullRoundNil(t *testing.T) {
 
 	voteCh := subscribe(ctx, t, cs.eventBus, types.EventQueryVote)
 
-	err := cs.behavior.EnterPrevote(ctx, &stateData, EnterPrevoteEvent{Height: height, Round: round})
+	err := cs.fms.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: round}, &stateData)
 	require.NoError(t, err)
 	err = stateData.Save()
 	require.NoError(t, err)
 
-	cs.startRoutines(ctx, 4)
+	startConsensusState(ctx, cs, 4)
 
 	ensurePrevoteMatch(t, voteCh, height, round, nil)   // prevote
 	ensurePrecommitMatch(t, voteCh, height, round, nil) // precommit
@@ -547,13 +547,13 @@ func TestStateLock_NoPOL(t *testing.T) {
 	*/
 
 	// start round and wait for prevote
-	err := cs1.behavior.EnterNewRound(ctx, &stateData, EnterNewRoundEvent{Height: height, Round: round})
+	err := cs1.fms.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
 	require.NoError(t, err)
 
 	err = stateData.Save()
 	require.NoError(t, err)
 
-	cs1.startRoutines(ctx, 0)
+	startConsensusState(ctx, cs1, 0)
 
 	ensureNewRound(t, newRoundCh, height, round)
 
@@ -3189,7 +3189,7 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 	})
 
 	// This is where error "2/3 committed an invalid block" occurred before
-	err = otherNode.behavior.TryAddCommit(ctx, &css1StateData, TryAddCommitEvent{Commit: commit, PeerID: peerID})
+	err = otherNode.fms.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &css1StateData)
 	assert.Equal(t, int64(2), css1StateData.Height)
 	assert.NoError(t, err)
 }

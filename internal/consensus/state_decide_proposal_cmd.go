@@ -13,6 +13,11 @@ type DecideProposalEvent struct {
 	Round  int32
 }
 
+// GetType returns DecideProposalType event-type
+func (e *DecideProposalEvent) GetType() EventType {
+	return DecideProposalType
+}
+
 type DecideProposalCommand struct {
 	logger        log.Logger
 	privValidator privValidator
@@ -23,8 +28,8 @@ type DecideProposalCommand struct {
 	replayMode    bool
 }
 
-func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) error {
-	event := stateEvent.Data.(DecideProposalEvent)
+func (cs *DecideProposalCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+	event := stateEvent.Data.(*DecideProposalEvent)
 	height := event.Height
 	round := event.Round
 	stateData := stateEvent.StateData
@@ -142,6 +147,10 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, _ *Behavior, state
 func (cs *DecideProposalCommand) Subscribe(observer *Observer) {
 	observer.Subscribe(SetMetrics, func(a any) error {
 		cs.metrics = a.(*Metrics)
+		return nil
+	})
+	observer.Subscribe(SetPrivValidator, func(a any) error {
+		cs.privValidator = a.(privValidator)
 		return nil
 	})
 }

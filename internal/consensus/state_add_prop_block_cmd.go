@@ -21,6 +21,11 @@ type AddProposalBlockPartEvent struct {
 	FromReplay bool
 }
 
+// GetType returns AddProposalBlockPartType event-type
+func (e *AddProposalBlockPartEvent) GetType() EventType {
+	return AddProposalBlockPartType
+}
+
 // AddProposalBlockPartCommand ...
 // NOTE: block is not necessarily valid.
 // Asynchronously triggers either enterPrevote (before we timeout of propose) or tryFinalizeCommit,
@@ -34,8 +39,8 @@ type AddProposalBlockPartCommand struct {
 }
 
 // Execute ...
-func (cs *AddProposalBlockPartCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
-	event := stateEvent.Data.(AddProposalBlockPartEvent)
+func (c *AddProposalBlockPartCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+	event := stateEvent.Data.(*AddProposalBlockPartEvent)
 	stateData := stateEvent.StateData
 	commitNotExist := stateData.Commit == nil
 	var (
@@ -44,33 +49,33 @@ func (cs *AddProposalBlockPartCommand) Execute(ctx context.Context, behavior *Be
 	)
 	defer func() {
 		if added {
-			_ = cs.statsQueue.send(ctx, msgInfoFromCtx(ctx))
+			_ = c.statsQueue.send(ctx, msgInfoFromCtx(ctx))
 		}
 	}()
 	// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
-	added, err = cs.addProposalBlockPart(ctx, behavior, stateData, event.Msg, event.PeerID)
+	added, err = c.addProposalBlockPart(ctx, stateEvent.FSM, stateData, event.Msg, event.PeerID)
 	if err != nil {
 		return err
 	}
 
 	if added && commitNotExist && stateData.ProposalBlockParts.IsComplete() {
-		return behavior.ProposalCompleted(ctx, stateData, ProposalCompletedEvent{
+		return stateEvent.FSM.Dispatch(ctx, &ProposalCompletedEvent{
 			Height:     event.Msg.Height,
 			FromReplay: event.FromReplay,
-		})
+		}, stateData)
 	}
 	return nil
 }
 
-func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
+func (c *AddProposalBlockPartCommand) addProposalBlockPart(
 	ctx context.Context,
-	behavior *Behavior,
+	fms *FMS,
 	stateData *StateData,
 	msg *BlockPartMessage,
 	peerID types.NodeID,
 ) (bool, error) {
 	height, round, part := msg.Height, msg.Round, msg.Part
-	cs.logger.Info(
+	c.logger.Info(
 		"addProposalBlockPart",
 		"height", stateData.Height,
 		"round", stateData.Round,
@@ -80,22 +85,22 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 
 	// Blocks might be reused, so round mismatch is OK
 	if stateData.Height != height {
-		cs.logger.Debug(
+		c.logger.Debug(
 			"received block part from wrong height",
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"msg_height", height,
 			"msg_round", round)
-		cs.metrics.BlockGossipPartsReceived.With("matches_current", "false").Add(1)
+		c.metrics.BlockGossipPartsReceived.With("matches_current", "false").Add(1)
 		return false, nil
 	}
 
 	// We're not expecting a block part.
 	if stateData.ProposalBlockParts == nil {
-		cs.metrics.BlockGossipPartsReceived.With("matches_current", "false").Add(1)
+		c.metrics.BlockGossipPartsReceived.With("matches_current", "false").Add(1)
 		// NOTE: this can happen when we've gone to a higher round and
 		// then receive parts from the previous round - not necessarily a bad peer.
-		cs.logger.Debug(
+		c.logger.Debug(
 			"received a block part when we are not expecting any",
 			"height", stateData.Height,
 			"round", stateData.Round,
@@ -110,12 +115,12 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 	added, err := stateData.ProposalBlockParts.AddPart(part)
 	if err != nil {
 		if errors.Is(err, types.ErrPartSetInvalidProof) || errors.Is(err, types.ErrPartSetUnexpectedIndex) {
-			cs.metrics.BlockGossipPartsReceived.With("matches_current", "false").Add(1)
+			c.metrics.BlockGossipPartsReceived.With("matches_current", "false").Add(1)
 		}
 		return added, err
 	}
 
-	cs.metrics.BlockGossipPartsReceived.With("matches_current", "true").Add(1)
+	c.metrics.BlockGossipPartsReceived.With("matches_current", "true").Add(1)
 
 	if stateData.ProposalBlockParts.ByteSize() > stateData.state.ConsensusParams.Block.MaxBytes {
 		return added, fmt.Errorf("total size of proposal block parts exceeds maximum block bytes (%d > %d)",
@@ -123,7 +128,7 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 		)
 	}
 	if added && stateData.ProposalBlockParts.IsComplete() {
-		cs.metrics.MarkBlockGossipComplete()
+		c.metrics.MarkBlockGossipComplete()
 		bz, err := io.ReadAll(stateData.ProposalBlockParts.GetReader())
 		if err != nil {
 			return added, err
@@ -153,25 +158,25 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 		}
 
 		// NOTE: it's possible to receive complete proposal blocks for future rounds without having the proposal
-		cs.logger.Info(
+		c.logger.Info(
 			"received complete proposal block",
 			"height", stateData.ProposalBlock.Height,
 			"hash", stateData.ProposalBlock.Hash(),
 			"round_height", stateData.RoundState.GetHeight(),
 		)
 
-		cs.eventPublisher.PublishCompleteProposalEvent(stateData.CompleteProposalEvent())
+		c.eventPublisher.PublishCompleteProposalEvent(stateData.CompleteProposalEvent())
 
 		if stateData.Commit != nil {
-			cs.logger.Info("Proposal block fully received", "proposal", stateData.ProposalBlock)
-			cs.logger.Info("Commit already present", "commit", stateData.Commit)
-			cs.logger.Debug("adding commit after complete proposal",
+			c.logger.Info("Proposal block fully received", "proposal", stateData.ProposalBlock)
+			c.logger.Info("Commit already present", "commit", stateData.Commit)
+			c.logger.Debug("adding commit after complete proposal",
 				"height", stateData.ProposalBlock.Height,
 				"hash", stateData.ProposalBlock.Hash(),
 			)
 			// We received a commit before the block
 			// Transit to AddCommit
-			return added, behavior.AddCommit(ctx, stateData, AddCommitEvent{Commit: stateData.Commit})
+			return added, fms.Dispatch(ctx, &AddCommitEvent{Commit: stateData.Commit}, stateData)
 		}
 
 		return added, nil
@@ -180,9 +185,9 @@ func (cs *AddProposalBlockPartCommand) addProposalBlockPart(
 	return added, nil
 }
 
-func (cs *AddProposalBlockPartCommand) Subscribe(observer *Observer) {
+func (c *AddProposalBlockPartCommand) Subscribe(observer *Observer) {
 	observer.Subscribe(SetMetrics, func(a any) error {
-		cs.metrics = a.(*Metrics)
+		c.metrics = a.(*Metrics)
 		return nil
 	})
 }
@@ -192,13 +197,18 @@ type ProposalCompletedEvent struct {
 	FromReplay bool
 }
 
+// GetType ...
+func (e *ProposalCompletedEvent) GetType() EventType {
+	return ProposalCompletedType
+}
+
 type ProposalCompletedCommand struct {
 	logger log.Logger
 }
 
-func (c *ProposalCompletedCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
+func (c *ProposalCompletedCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
-	event := stateEvent.Data.(ProposalCompletedEvent)
+	event := stateEvent.Data.(*ProposalCompletedEvent)
 	height := event.Height
 	fromReplay := event.FromReplay
 
@@ -231,11 +241,11 @@ func (c *ProposalCompletedCommand) Execute(ctx context.Context, behavior *Behavi
 			"height", stateData.ProposalBlock.Height,
 			"hash", stateData.ProposalBlock.Hash(),
 		)
-		err := behavior.EnterPrevote(ctx, stateData, EnterPrevoteEvent{
+		err := stateEvent.FSM.Dispatch(ctx, &EnterPrevoteEvent{
 			Height:         height,
 			Round:          stateData.Round,
 			AllowOldBlocks: fromReplay,
-		})
+		}, stateData)
 		if err != nil {
 			return err
 		}
@@ -245,10 +255,10 @@ func (c *ProposalCompletedCommand) Execute(ctx context.Context, behavior *Behavi
 				"height", stateData.ProposalBlock.Height,
 				"hash", stateData.ProposalBlock.Hash(),
 			)
-			return behavior.EnterPrecommit(ctx, stateData, EnterPrecommitEvent{
+			return stateEvent.FSM.Dispatch(ctx, &EnterPrecommitEvent{
 				Height: height,
 				Round:  stateData.Round,
-			})
+			}, stateData)
 		}
 		return nil
 	}
@@ -259,7 +269,7 @@ func (c *ProposalCompletedCommand) Execute(ctx context.Context, behavior *Behavi
 			"hash", stateData.ProposalBlock.Hash(),
 		)
 		// Transit to EnterPrecommit
-		return behavior.TryFinalizeCommit(ctx, stateData, TryFinalizeCommitEvent{Height: height})
+		return stateEvent.FSM.Dispatch(ctx, &TryFinalizeCommitEvent{Height: height}, stateData)
 	}
 	return nil
 }

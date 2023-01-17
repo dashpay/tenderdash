@@ -13,19 +13,26 @@ type EnterPrecommitWaitEvent struct {
 	Round  int32
 }
 
+// GetType returns EnterPrecommitWaitType event-type
+func (e *EnterPrecommitWaitEvent) GetType() EventType {
+	return EnterPrecommitWaitType
+}
+
 // EnterPrecommitWaitCommand ...
 // Enter: any +2/3 precommits for next round.
 type EnterPrecommitWaitCommand struct {
-	logger log.Logger
+	logger         log.Logger
+	scheduler      *roundScheduler
+	eventPublisher *EventPublisher
 }
 
 // Execute ...
 // Enter: any +2/3 precommits for next round.
-func (cs *EnterPrecommitWaitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
+func (c *EnterPrecommitWaitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
-	event := stateEvent.Data.(EnterPrecommitWaitEvent)
+	event := stateEvent.Data.(*EnterPrecommitWaitEvent)
 	height, round := event.Height, event.Round
-	logger := cs.logger.With("new_height", height, "new_round", round)
+	logger := c.logger.With("new_height", height, "new_round", round)
 
 	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && stateData.TriggeredTimeoutPrecommit) {
 		logger.Debug("entering precommit wait step with invalid args",
@@ -50,12 +57,12 @@ func (cs *EnterPrecommitWaitCommand) Execute(ctx context.Context, behavior *Beha
 	defer func() {
 		// Done enterPrecommitWait:
 		stateData.TriggeredTimeoutPrecommit = true
-		behavior.newStep(stateData.RoundState)
+		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 		// TODO PERSIST StateData
 	}()
 
 	// wait for some more precommits; enterNewRoundCommand
-	behavior.ScheduleTimeout(stateData.voteTimeout(round), height, round, cstypes.RoundStepPrecommitWait)
+	c.scheduler.ScheduleTimeout(stateData.voteTimeout(round), height, round, cstypes.RoundStepPrecommitWait)
 	return nil
 }
 
@@ -64,20 +71,27 @@ type EnterPrevoteWaitEvent struct {
 	Round  int32
 }
 
+// GetType ...
+func (e *EnterPrevoteWaitEvent) GetType() EventType {
+	return EnterPrevoteWaitType
+}
+
 // EnterPrevoteWaitCommand ...
 // Enter: any +2/3 prevotes at next round.
 type EnterPrevoteWaitCommand struct {
-	logger log.Logger
+	logger         log.Logger
+	scheduler      *roundScheduler
+	eventPublisher *EventPublisher
 }
 
 // Execute ...
 // Enter: any +2/3 prevotes at next round.
-func (cs *EnterPrevoteWaitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
+func (c *EnterPrevoteWaitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
-	event := stateEvent.Data.(EnterPrevoteWaitEvent)
+	event := stateEvent.Data.(*EnterPrevoteWaitEvent)
 	height, round := event.Height, event.Round
 
-	logger := cs.logger.With("height", height, "round", round)
+	logger := c.logger.With("height", height, "round", round)
 
 	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPrevoteWait <= stateData.Step) {
 		logger.Debug("entering prevote wait step with invalid args",
@@ -102,10 +116,10 @@ func (cs *EnterPrevoteWaitCommand) Execute(ctx context.Context, behavior *Behavi
 	defer func() {
 		// Done enterPrevoteWait:
 		stateData.updateRoundStep(round, cstypes.RoundStepPrevoteWait)
-		behavior.newStep(stateData.RoundState)
+		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 	}()
 
 	// Wait for some more prevotes; enterPrecommit
-	behavior.ScheduleTimeout(stateData.voteTimeout(round), height, round, cstypes.RoundStepPrevoteWait)
+	c.scheduler.ScheduleTimeout(stateData.voteTimeout(round), height, round, cstypes.RoundStepPrevoteWait)
 	return nil
 }

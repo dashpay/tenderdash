@@ -124,12 +124,12 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 	}
 
-	doPrevoteOrigin := bzNodeState.behavior.GetCommand(DoPrevoteType)
+	doPrevoteOrigin := bzNodeState.fms.Get(DoPrevoteType)
 	require.NotNil(t, doPrevoteOrigin)
 	// alter prevote so that the byzantine node double votes when height is 2
 	doPrevoteCmd := newDoPrevoteByzantine(t, rts, bzNodeID, doPrevoteOrigin, prevoteHeight)
 
-	bzNodeState.behavior.RegisterCommand(DoPrevoteType, doPrevoteCmd)
+	bzNodeState.fms.Register(DoPrevoteType, doPrevoteCmd)
 
 	// Introducing a lazy proposer means that the time of the block committed is
 	// different to the timestamp that the other nodes have. This tests to ensure
@@ -137,9 +137,9 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	// lazyProposer := states[1]
 	lazyNodeState := states[1]
 
-	decideProposalCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
+	decideProposalCmd := newMockCommand(func(ctx context.Context, stateEvent StateEvent) error {
 		stateData := stateEvent.StateData
-		event := stateEvent.Data.(DecideProposalEvent)
+		event := stateEvent.Data.(*DecideProposalEvent)
 		height := event.Height
 		round := event.Round
 		require.False(t, lazyNodeState.privValidator.IsZero())
@@ -221,7 +221,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 		return nil
 	})
-	lazyNodeState.behavior.RegisterCommand(DecideProposalType, decideProposalCmd)
+	lazyNodeState.fms.Register(DecideProposalType, decideProposalCmd)
 
 	rts.switchToConsensus(ctx)
 
@@ -293,9 +293,9 @@ func newDoPrevoteByzantine(
 	doPrevoteOrigin CommandHandler,
 	prevoteHeight int64,
 ) CommandHandler {
-	return newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
+	return newMockCommand(func(ctx context.Context, stateEvent StateEvent) error {
 		stateData := stateEvent.StateData
-		event := stateEvent.Data.(DoPrevoteEvent)
+		event := stateEvent.Data.(*DoPrevoteEvent)
 		bzNodeState := rts.states[bzNodeID]
 		// allow first height to happen normally so that byzantine validator is no longer proposer
 		uncommittedState, err := bzNodeState.blockExec.ProcessProposal(
@@ -310,7 +310,7 @@ func newDoPrevoteByzantine(
 		stateData.CurrentRoundState = uncommittedState
 
 		if event.Height != prevoteHeight {
-			return doPrevoteOrigin.Execute(ctx, behavior, stateEvent)
+			return doPrevoteOrigin.Execute(ctx, stateEvent)
 		}
 		prevote1, err := bzNodeState.voteSigner.signVote(ctx, stateData, tmproto.PrevoteType, stateData.BlockID())
 		require.NoError(t, err)

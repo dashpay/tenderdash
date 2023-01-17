@@ -224,12 +224,42 @@ func sortVValidatorStubsByPower(ctx context.Context, t *testing.T, vss []*valida
 //-------------------------------------------------------------------------------
 // Functions for transitioning the consensus state
 
+// timeoutRoutine: receive requests for timeouts on tickChan and fire timeouts on tockChan
+// receiveRoutine: serializes processing of proposoals, block parts, votes; coordinates state transitions
+func startConsensusState(ctx context.Context, cs *State, maxSteps int) {
+	err := cs.timeoutTicker.Start(ctx)
+	if err != nil {
+		cs.logger.Error("failed to start timeout ticker", "err", err)
+		return
+	}
+	steps := 0
+	sub, err := cs.eventBus.SubscribeWithArgs(ctx, tmpubsub.SubscribeArgs{
+		ClientID: "stepsCounter",
+		Query:    types.EventQueryNewRound,
+	})
+	if err != nil {
+		panic(err)
+	}
+	go func() {
+		for {
+			_, err := sub.Next(ctx)
+			if err != nil {
+				return
+			}
+			steps++
+		}
+	}()
+	go cs.receiveRoutine(ctx, func(state *State) bool {
+		return maxSteps > 0 && steps >= maxSteps
+	})
+}
+
 func startTestRound(ctx context.Context, cs *State, height int64, round int32) {
 	stateData := cs.GetStateData()
 	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
-	_ = cs.behavior.EnterNewRound(ctx, &stateData, EnterNewRoundEvent{Height: height, Round: round})
+	_ = cs.fms.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
 	_ = stateData.Save()
-	cs.startRoutines(ctx, 0)
+	startConsensusState(ctx, cs, 0)
 }
 
 // Create proposal block from cs1 but sign it with vs.
@@ -1096,13 +1126,13 @@ type quorumData struct {
 }
 
 type mockCommand struct {
-	fn func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error
+	fn func(ctx context.Context, stateEvent StateEvent) error
 }
 
-func newMockCommand(fn func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error) *mockCommand {
+func newMockCommand(fn func(ctx context.Context, stateEvent StateEvent) error) *mockCommand {
 	return &mockCommand{fn: fn}
 }
 
-func (c *mockCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
-	return c.fn(ctx, behavior, stateEvent)
+func (c *mockCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+	return c.fn(ctx, stateEvent)
 }

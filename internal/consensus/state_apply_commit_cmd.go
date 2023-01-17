@@ -13,20 +13,28 @@ type ApplyCommitEvent struct {
 	Commit *types.Commit
 }
 
+// GetType returns ApplyCommitType event-type
+func (e *ApplyCommitEvent) GetType() EventType {
+	return ApplyCommitType
+}
+
 type ApplyCommitCommand struct {
 	logger log.Logger
 	// store blocks and commits
 	blockStore sm.BlockStore
 	// create and execute blocks
-	blockExec *blockExecutor
-	wal       WALWriteFlusher
+	blockExec      *blockExecutor
+	wal            WALWriteFlusher
+	scheduler      *roundScheduler
+	metrics        *Metrics
+	eventPublisher *EventPublisher
 }
 
-func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
-	event := stateEvent.Data.(ApplyCommitEvent)
+func (c *ApplyCommitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+	event := stateEvent.Data.(*ApplyCommitEvent)
 	stateData := stateEvent.StateData
 	commit := event.Commit
-	cs.logger.Info("applying commit", "commit", commit)
+	c.logger.Info("applying commit", "commit", commit)
 
 	block, blockParts := stateData.ProposalBlock, stateData.ProposalBlockParts
 
@@ -38,12 +46,12 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 		round = commit.Round
 	}
 
-	cs.blockExec.processOrPanic(ctx, stateData, round)
-	cs.blockExec.validateOrPanic(ctx, stateData)
+	c.blockExec.processOrPanic(ctx, stateData, round)
+	c.blockExec.validateOrPanic(ctx, stateData)
 
 	// Save to blockStore
 	if commit != nil {
-		cs.blockStore.SaveBlock(block, blockParts, commit)
+		c.blockStore.SaveBlock(block, blockParts, commit)
 	}
 
 	// Write EndHeightMessage{} for this height, implying that the blockstore
@@ -60,7 +68,7 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 	// successfully call ApplyBlock (ie. later here, or in Handshake after
 	// restart).
 	endMsg := EndHeightMessage{height}
-	if err := cs.wal.WriteSync(endMsg); err != nil { // NOTE: fsync
+	if err := c.wal.WriteSync(endMsg); err != nil { // NOTE: fsync
 		panic(fmt.Errorf(
 			"failed to write %v msg to consensus WAL due to %w; check your file system and restart the node",
 			endMsg, err,
@@ -68,16 +76,16 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 	}
 
 	// Create a copy of the state for staging and an event cache for txs.
-	stateCopy, err := cs.blockExec.finalize(ctx, stateData, commit)
+	stateCopy, err := c.blockExec.finalize(ctx, stateData, commit)
 	if err != nil {
-		cs.logger.Error("failed to apply block", "err", err)
+		c.logger.Error("failed to apply block", "err", err)
 		return nil
 	}
 
-	lastBlockMeta := cs.blockStore.LoadBlockMeta(height - 1)
+	lastBlockMeta := c.blockStore.LoadBlockMeta(height - 1)
 
 	// must be called before we update state
-	behavior.RecordMetrics(stateData, height, block, lastBlockMeta)
+	c.RecordMetrics(stateData, height, block, lastBlockMeta)
 
 	// NewHeightStep!
 	stateData.updateToState(stateCopy, commit)
@@ -86,15 +94,62 @@ func (cs *ApplyCommitCommand) Execute(ctx context.Context, behavior *Behavior, s
 		return err
 	}
 
-	behavior.newStep(stateData.RoundState)
+	c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 
-	// cs.StartTime is already set.
+	// c.StartTime is already set.
 	// Schedule Round0 to start soon.
-	behavior.ScheduleRound0(stateData.RoundState)
+	c.scheduler.ScheduleRound0(stateData.RoundState)
 
 	// By here,
-	// * cs.Height has been increment to height+1
-	// * cs.Step is now cstypes.RoundStepNewHeight
-	// * cs.StartTime is set to when we will start round0.
+	// * c.Height has been increment to height+1
+	// * c.Step is now cstypes.RoundStepNewHeight
+	// * c.StartTime is set to when we will start round0.
 	return nil
+}
+
+func (c *ApplyCommitCommand) RecordMetrics(stateData *StateData, height int64, block *types.Block, lastBlockMeta *types.BlockMeta) {
+	c.metrics.Validators.Set(float64(stateData.Validators.Size()))
+	c.metrics.ValidatorsPower.Set(float64(stateData.Validators.TotalVotingPower()))
+
+	var (
+		missingValidators      int
+		missingValidatorsPower int64
+	)
+	c.metrics.MissingValidators.Set(float64(missingValidators))
+	c.metrics.MissingValidatorsPower.Set(float64(missingValidatorsPower))
+
+	// NOTE: byzantine validators power and count is only for consensus evidence i.e. duplicate vote
+	var (
+		byzantineValidatorsPower int64
+		byzantineValidatorsCount int64
+	)
+
+	for _, ev := range block.Evidence {
+		if dve, ok := ev.(*types.DuplicateVoteEvidence); ok {
+			if _, val := stateData.Validators.GetByProTxHash(dve.VoteA.ValidatorProTxHash); val != nil {
+				byzantineValidatorsCount++
+				byzantineValidatorsPower += val.VotingPower
+			}
+		}
+	}
+	c.metrics.ByzantineValidators.Set(float64(byzantineValidatorsCount))
+	c.metrics.ByzantineValidatorsPower.Set(float64(byzantineValidatorsPower))
+
+	if height > 1 && lastBlockMeta != nil {
+		c.metrics.BlockIntervalSeconds.Observe(
+			block.Time.Sub(lastBlockMeta.Header.Time).Seconds(),
+		)
+	}
+
+	c.metrics.NumTxs.Set(float64(len(block.Data.Txs)))
+	c.metrics.TotalTxs.Add(float64(len(block.Data.Txs)))
+	c.metrics.BlockSizeBytes.Observe(float64(block.Size()))
+	c.metrics.CommittedHeight.Set(float64(block.Height))
+}
+
+func (c *ApplyCommitCommand) Subscribe(observer *Observer) {
+	observer.Subscribe(SetMetrics, func(a any) error {
+		c.metrics = a.(*Metrics)
+		return nil
+	})
 }

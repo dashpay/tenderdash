@@ -16,6 +16,11 @@ type EnterNewRoundEvent struct {
 	Round  int32
 }
 
+// GetType returns EnterNewRoundType event-type
+func (e *EnterNewRoundEvent) GetType() EventType {
+	return EnterNewRoundType
+}
+
 // EnterNewRoundCommand ...
 // Enter: `timeoutNewHeight` by startTime (commitTime+timeoutCommit),
 //
@@ -29,18 +34,19 @@ type EnterNewRoundEvent struct {
 type EnterNewRoundCommand struct {
 	logger         log.Logger
 	config         *config.ConsensusConfig
+	scheduler      *roundScheduler
 	eventPublisher *EventPublisher
 }
 
 // Execute ...
-func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
-	event := stateEvent.Data.(EnterNewRoundEvent)
+func (c *EnterNewRoundCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+	event := stateEvent.Data.(*EnterNewRoundEvent)
 	stateData := stateEvent.StateData
 	height := event.Height
 	round := event.Round
 	// TODO: remove panics in this function and return an error
 
-	logger := cs.logger.With("height", height, "round", round)
+	logger := c.logger.With("height", height, "round", round)
 
 	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && stateData.Step != cstypes.RoundStepNewHeight) {
 		logger.Debug("entering new round with invalid args",
@@ -90,18 +96,18 @@ func (cs *EnterNewRoundCommand) Execute(ctx context.Context, behavior *Behavior,
 		return err
 	}
 
-	cs.eventPublisher.PublishNewRoundEvent(stateData.NewRoundEvent())
+	c.eventPublisher.PublishNewRoundEvent(stateData.NewRoundEvent())
 	// Wait for txs to be available in the mempool
 	// before we enterPropose in round 0. If the last block changed the app hash,
-	waitForTxs := cs.config.WaitForTxs() && round == 0 && stateData.state.InitialHeight != stateData.Height
+	waitForTxs := c.config.WaitForTxs() && round == 0 && stateData.state.InitialHeight != stateData.Height
 	if waitForTxs {
-		if cs.config.CreateEmptyBlocksInterval > 0 {
-			behavior.ScheduleTimeout(cs.config.CreateEmptyBlocksInterval, height, round, cstypes.RoundStepNewRound)
+		if c.config.CreateEmptyBlocksInterval > 0 {
+			c.scheduler.ScheduleTimeout(c.config.CreateEmptyBlocksInterval, height, round, cstypes.RoundStepNewRound)
 		}
-	} else if !cs.config.DontAutoPropose {
+	} else if !c.config.DontAutoPropose {
 		// DontAutoPropose should always be false, except for
 		// specific tests where proposals are created manually
-		err = behavior.EnterPropose(ctx, stateData, EnterProposeEvent{Height: height, Round: round})
+		err = stateEvent.FSM.Dispatch(ctx, &EnterProposeEvent{Height: height, Round: round}, stateData)
 		if err != nil {
 			return err
 		}

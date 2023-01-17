@@ -13,6 +13,11 @@ type EnterPrevoteEvent struct {
 	AllowOldBlocks bool
 }
 
+// GetType returns EnterPrevoteType event-type
+func (e *EnterPrevoteEvent) GetType() EventType {
+	return EnterPrevoteType
+}
+
 // EnterPrevoteCommand ...
 // Enter: `timeoutPropose` after entering Propose.
 // Enter: proposal block and POL is ready.
@@ -22,17 +27,18 @@ type EnterPrevoteEvent struct {
 // locked on or matches a block that received a POL in a round later than our
 // locked round, prevote for the proposal, otherwise vote nil.
 type EnterPrevoteCommand struct {
-	logger log.Logger
+	logger         log.Logger
+	eventPublisher *EventPublisher
 }
 
 // Execute ...
-func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, event StateEvent) error {
-	epe := event.Data.(EnterPrevoteEvent)
-	stateData := event.StateData
+func (c *EnterPrevoteCommand) Execute(ctx context.Context, statEvent StateEvent) error {
+	epe := statEvent.Data.(*EnterPrevoteEvent)
+	stateData := statEvent.StateData
 	height := epe.Height
 	round := epe.Round
 
-	logger := cs.logger.With("height", height, "round", round)
+	logger := c.logger.With("height", height, "round", round)
 
 	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPrevote <= stateData.Step) {
 		logger.Debug("entering prevote step with invalid args",
@@ -45,7 +51,7 @@ func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, 
 	defer func() {
 		// Done enterPrevote:
 		stateData.updateRoundStep(round, cstypes.RoundStepPrevote)
-		behavior.newStep(stateData.RoundState)
+		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 	}()
 
 	logger.Debug("entering prevote step",
@@ -59,11 +65,10 @@ func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, 
 		Round:          round,
 		AllowOldBlocks: epe.AllowOldBlocks,
 	}
-	err := behavior.DoPrevote(ctx, stateData, prevoteEvent)
+	err := statEvent.FSM.Dispatch(ctx, &prevoteEvent, stateData)
 	if err != nil {
 		return err
 	}
-
 	// Once `addVote` hits any +2/3 prevotes, we will go to PrevoteWait
 	// (so we have more time to try and collect +2/3 prevotes for a single block)
 	return nil

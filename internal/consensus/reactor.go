@@ -281,7 +281,7 @@ func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL
 	if err != nil {
 		panic(err)
 	}
-	r.state.behavior.newStep(stateData.RoundState)
+	r.state.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 
 	if err := r.state.Start(ctx); err != nil {
 		panic(fmt.Sprintf(`failed to start consensus state: %v

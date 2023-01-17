@@ -14,6 +14,11 @@ type TryFinalizeCommitEvent struct {
 	Height int64
 }
 
+// GetType returns TryFinalizeCommitType event-type
+func (e *TryFinalizeCommitEvent) GetType() EventType {
+	return TryFinalizeCommitType
+}
+
 // TryFinalizeCommitCommand ...
 // If we have the block AND +2/3 commits for it, finalize.
 type TryFinalizeCommitCommand struct {
@@ -24,8 +29,8 @@ type TryFinalizeCommitCommand struct {
 }
 
 // Execute ...
-func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
-	event := stateEvent.Data.(TryFinalizeCommitEvent)
+func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+	event := stateEvent.Data.(*TryFinalizeCommitEvent)
 	stateData := stateEvent.StateData
 	if stateData.Height != event.Height {
 		panic(fmt.Sprintf("tryFinalizeCommit() cs.Height: %v vs height: %v", stateData.Height, event.Height))
@@ -49,12 +54,12 @@ func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, behavior *Behav
 		return nil
 	}
 
-	cs.finalizeCommit(ctx, behavior, stateData, event.Height)
+	cs.finalizeCommit(ctx, stateEvent.FSM, stateData, event.Height)
 	return nil
 }
 
 // Increment height and goto cstypes.RoundStepNewHeight
-func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, behavior *Behavior, stateData *StateData, height int64) {
+func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, fms *FMS, stateData *StateData, height int64) {
 	logger := cs.logger.With("height", height)
 
 	if stateData.Height != height || stateData.Step != cstypes.RoundStepApplyCommit {
@@ -85,17 +90,7 @@ func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, behavior
 		"num_txs", len(block.Txs),
 	)
 
-	// Save to blockStore.
-	if cs.blockStore.Height() < block.Height {
-		// NOTE: the seenCommit is local justification to commit this block,
-		// but may differ from the LastPrecommits included in the next block
-		precommits := stateData.Votes.Precommits(stateData.CommitRound)
-		seenCommit := precommits.MakeCommit()
-		behavior.ApplyCommit(ctx, stateData, ApplyCommitEvent{Commit: seenCommit})
-		return
-	}
-	// Happens during replay if we already saved the block but didn't commit
-	logger.Debug("calling tryFinalizeCommit on already stored block", "height", block.Height)
-	// Todo: do we need this?
-	behavior.ApplyCommit(ctx, stateData, ApplyCommitEvent{})
+	precommits := stateData.Votes.Precommits(stateData.CommitRound)
+	seenCommit := precommits.MakeCommit()
+	_ = fms.Dispatch(ctx, &ApplyCommitEvent{Commit: seenCommit}, stateData)
 }

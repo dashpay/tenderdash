@@ -107,17 +107,17 @@ func TestMempoolProgressInHigherRound(t *testing.T) {
 	newBlockCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
 	newRoundCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewRound)
 	timeoutCh := subscribe(ctx, t, cs.eventBus, types.EventQueryTimeoutPropose)
-	setProposalOrigin := cs.behavior.commander.commands[SetProposalType]
-	setProposalCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
+	setProposalOrigin := cs.fms.Get(SetProposalType)
+	setProposalCmd := newMockCommand(func(ctx context.Context, stateEvent StateEvent) error {
 		stateData := stateEvent.StateData
 		if stateData.Height == stateData.state.InitialHeight+1 && stateData.Round == 0 {
 			// dont set the proposal in round 0 so we timeout and
 			// go to next round
 			return nil
 		}
-		return setProposalOrigin.Execute(ctx, behavior, stateEvent)
+		return setProposalOrigin.Execute(ctx, stateEvent)
 	})
-	cs.behavior.RegisterCommand(SetProposalType, setProposalCmd)
+	cs.fms.Register(SetProposalType, setProposalCmd)
 	startTestRound(ctx, cs, height, round)
 
 	ensureNewRound(t, newRoundCh, height, round) // first round at first height

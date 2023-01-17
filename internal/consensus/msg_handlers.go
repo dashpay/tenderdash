@@ -48,20 +48,16 @@ func (c *msgInfoDispatcher) dispatch(ctx context.Context, stateData *StateData, 
 	return handler(ctx, stateData, envelope)
 }
 
-func newMsgInfoDispatcher(
-	behavior *Behavior,
-	wal WALWriteFlusher,
-	logger log.Logger,
-) *msgInfoDispatcher {
+func newMsgInfoDispatcher(fms *FMS, wal WALWriteFlusher, logger log.Logger) *msgInfoDispatcher {
 	mws := []msgMiddlewareFunc{
 		msgInfoWithCtxMiddleware(),
 		errorMiddleware(logger),
 		walMiddleware(wal, logger),
 	}
-	proposalHandler := withMiddleware(proposalMessageHandler(behavior), mws...)
-	blockPartHandler := withMiddleware(blockPartMessageHandler(behavior), mws...)
-	voteHandler := withMiddleware(voteMessageHandler(behavior), mws...)
-	commitHandler := withMiddleware(commitMessageHandler(behavior), mws...)
+	proposalHandler := withMiddleware(proposalMessageHandler(fms), mws...)
+	blockPartHandler := withMiddleware(blockPartMessageHandler(fms, logger), mws...)
+	voteHandler := withMiddleware(voteMessageHandler(fms, logger), mws...)
+	commitHandler := withMiddleware(commitMessageHandler(fms, logger), mws...)
 	return &msgInfoDispatcher{
 		proposalHandler:  proposalHandler,
 		blockPartHandler: blockPartHandler,
@@ -70,28 +66,28 @@ func newMsgInfoDispatcher(
 	}
 }
 
-func proposalMessageHandler(b *Behavior) msgHandlerFunc {
+func proposalMessageHandler(fms *FMS) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*ProposalMessage)
-		return b.SetProposal(ctx, stateData, SetProposalEvent{
+		return fms.Dispatch(ctx, &SetProposalEvent{
 			Proposal: msg.Proposal,
 			RecvTime: envelope.ReceiveTime,
-		})
+		}, stateData)
 	}
 }
 
-func blockPartMessageHandler(b *Behavior) msgHandlerFunc {
+func blockPartMessageHandler(fms *FMS, logger log.Logger) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*BlockPartMessage)
-
 		// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
-		err := b.AddProposalBlockPart(
-			ctx,
-			stateData,
-			AddProposalBlockPartEvent{Msg: msg, PeerID: envelope.PeerID, FromReplay: envelope.fromReplay},
-		)
+		err := fms.Dispatch(ctx, &AddProposalBlockPartEvent{
+			Msg:        msg,
+			PeerID:     envelope.PeerID,
+			FromReplay: envelope.fromReplay,
+		}, stateData)
+
 		if err != nil && msg.Round != stateData.Round {
-			b.logger.Debug("received block part from wrong round",
+			logger.Debug("received block part from wrong round",
 				"height", stateData.Height,
 				"cs_round", stateData.Round,
 				"block_height", msg.Height,
@@ -99,8 +95,7 @@ func blockPartMessageHandler(b *Behavior) msgHandlerFunc {
 			)
 			err = nil
 		}
-
-		b.logger.Debug(
+		logger.Debug(
 			"received block part",
 			"height", stateData.Height,
 			"round", stateData.Round,
@@ -114,12 +109,12 @@ func blockPartMessageHandler(b *Behavior) msgHandlerFunc {
 	}
 }
 
-func voteMessageHandler(b *Behavior) msgHandlerFunc {
+func voteMessageHandler(fms *FMS, logger log.Logger) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*VoteMessage)
 		// attempt to add the vote and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		err := b.TryAddVote(ctx, stateData, TryAddVoteEvent{Vote: msg.Vote, PeerID: envelope.PeerID})
+		err := fms.Dispatch(ctx, &TryAddVoteEvent{Vote: msg.Vote, PeerID: envelope.PeerID}, stateData)
 
 		// TODO: punish peer
 		// We probably don't want to stop the peer here. The vote does not
@@ -143,25 +138,18 @@ func voteMessageHandler(b *Behavior) msgHandlerFunc {
 		if err != nil {
 			keyVals = append(keyVals, "error", err)
 		}
-		b.logger.Debug("received vote", keyVals...)
+		logger.Debug("received vote", keyVals...)
 		return nil
 	}
 }
 
-func commitMessageHandler(b *Behavior) msgHandlerFunc {
+func commitMessageHandler(fms *FMS, logger log.Logger) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*CommitMessage)
 		// attempt to add the commit and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		err := b.TryAddCommit(
-			ctx,
-			stateData,
-			TryAddCommitEvent{
-				Commit: msg.Commit,
-				PeerID: envelope.PeerID,
-			},
-		)
-		b.logger.Debug(
+		err := fms.Dispatch(ctx, &TryAddCommitEvent{Commit: msg.Commit, PeerID: envelope.PeerID}, stateData)
+		logger.Debug(
 			"received commit",
 			"height", stateData.Height,
 			"cs_round", stateData.Round,

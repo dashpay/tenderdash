@@ -14,14 +14,19 @@ type SetProposalEvent struct {
 	RecvTime time.Time
 }
 
+// GetType returns SetProposalType event-type
+func (e *SetProposalEvent) GetType() EventType {
+	return SetProposalType
+}
+
 type SetProposalCommand struct {
 	logger  log.Logger
 	metrics *Metrics
 }
 
-func (cs *SetProposalCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) error {
+func (cs *SetProposalCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
-	event := stateEvent.Data.(SetProposalEvent)
+	event := stateEvent.Data.(*SetProposalEvent)
 	proposal := event.Proposal
 	recvTime := event.RecvTime
 	// Already have one

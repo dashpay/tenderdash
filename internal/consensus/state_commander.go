@@ -36,57 +36,71 @@ var (
 // EventType and StateData are required for a call
 // Data is optional
 type StateEvent struct {
+	FSM       *FMS
 	EventType EventType
 	StateData *StateData
-	Data      any
+	Data      FMSEvent
+}
+
+type FMSEvent interface {
+	GetType() EventType
 }
 
 // CommandHandler is a command handler interface
 type CommandHandler interface {
-	Execute(ctx context.Context, behavior *Behavior, event StateEvent) error
+	Execute(ctx context.Context, event StateEvent) error
 }
 
-type CommandExecutor struct {
+// FMS ...
+type FMS struct {
 	commands map[EventType]CommandHandler
 }
 
 // Register adds or overrides a command handler for an event-type
-func (c *CommandExecutor) Register(eventType EventType, handler CommandHandler) {
+func (c *FMS) Register(eventType EventType, handler CommandHandler) {
 	c.commands[eventType] = handler
 }
 
 // Get returns a command handler by an event-type, if command not is existed then returns nil
-func (c *CommandExecutor) Get(eventType EventType) CommandHandler {
+func (c *FMS) Get(eventType EventType) CommandHandler {
 	return c.commands[eventType]
 }
 
 // Execute executes a command for a given state-event
 // panic if a command is not registered
-func (c *CommandExecutor) Execute(ctx context.Context, behavior *Behavior, event StateEvent) error {
+func (c *FMS) Execute(ctx context.Context, event StateEvent) error {
 	command, ok := c.commands[event.EventType]
 	if !ok {
 		panic(errCommandNotRegistered)
 	}
-	return command.Execute(ctx, behavior, event)
+	event.FSM = c
+	return command.Execute(ctx, event)
 }
 
-// NewCommandExecutor ...
-func NewCommandExecutor(cs *State, eventPublisher *EventPublisher, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *CommandExecutor {
-	return &CommandExecutor{
+// NewFMS returns a new instance of finite-state-machine with a set of all possible transitions
+func NewFMS(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FMS {
+	propUpdater := &proposalUpdater{
+		logger:         cs.logger,
+		eventPublisher: cs.eventPublisher,
+	}
+	fms := &FMS{
 		commands: map[EventType]CommandHandler{
 			EnterNewRoundType: &EnterNewRoundCommand{
 				logger:         cs.logger,
 				config:         cs.config,
-				eventPublisher: eventPublisher,
+				scheduler:      cs.roundScheduler,
+				eventPublisher: cs.eventPublisher,
 			},
 			EnterProposeType: &EnterProposeCommand{
-				logger:        cs.logger,
-				privValidator: cs.privValidator,
-				msgInfoQueue:  cs.msgInfoQueue,
-				wal:           cs.wal,
-				replayMode:    cs.replayMode,
-				metrics:       cs.metrics,
-				blockExec:     cs.blockExecutor,
+				logger:         cs.logger,
+				privValidator:  cs.privValidator,
+				msgInfoQueue:   cs.msgInfoQueue,
+				wal:            cs.wal,
+				replayMode:     cs.replayMode,
+				metrics:        cs.metrics,
+				blockExec:      cs.blockExecutor,
+				scheduler:      cs.roundScheduler,
+				eventPublisher: cs.eventPublisher,
 			},
 			SetProposalType: &SetProposalCommand{
 				logger:  cs.logger,
@@ -105,7 +119,7 @@ func NewCommandExecutor(cs *State, eventPublisher *EventPublisher, wal *wrapWAL,
 				logger:         cs.logger,
 				metrics:        cs.metrics,
 				blockExec:      cs.blockExecutor,
-				eventPublisher: eventPublisher,
+				eventPublisher: cs.eventPublisher,
 				statsQueue:     statsQueue,
 			},
 			ProposalCompletedType: &ProposalCompletedCommand{logger: cs.logger},
@@ -120,46 +134,79 @@ func NewCommandExecutor(cs *State, eventPublisher *EventPublisher, wal *wrapWAL,
 				evpool:         cs.evpool,
 				logger:         cs.logger,
 				privValidator:  cs.privValidator,
-				eventPublisher: eventPublisher,
+				eventPublisher: cs.eventPublisher,
 				blockExec:      cs.blockExec,
 				metrics:        cs.metrics,
 				statsQueue:     statsQueue,
 			},
 			EnterCommitType: &EnterCommitCommand{
-				logger:         cs.logger,
-				eventPublisher: eventPublisher,
-				metrics:        cs.metrics,
-				evsw:           cs.evsw,
+				logger:          cs.logger,
+				eventPublisher:  cs.eventPublisher,
+				metrics:         cs.metrics,
+				proposalUpdater: propUpdater,
 			},
-			EnterPrevoteType: &EnterPrevoteCommand{logger: cs.logger},
+			EnterPrevoteType: &EnterPrevoteCommand{
+				logger:         cs.logger,
+				eventPublisher: cs.eventPublisher,
+			},
 			EnterPrecommitType: &EnterPrecommitCommand{
 				logger:         cs.logger,
-				eventPublisher: eventPublisher,
+				eventPublisher: cs.eventPublisher,
 				blockExec:      cs.blockExecutor,
 				voteSigner:     cs.voteSigner,
 			},
 			TryAddCommitType: &TryAddCommitCommand{
 				logger:         cs.logger,
 				blockExec:      cs.blockExecutor,
-				eventPublisher: eventPublisher,
+				eventPublisher: cs.eventPublisher,
 			},
 			AddCommitType: &AddCommitCommand{
-				eventPublisher: eventPublisher,
-				statsQueue:     statsQueue,
+				eventPublisher:  cs.eventPublisher,
+				statsQueue:      statsQueue,
+				proposalUpdater: propUpdater,
 			},
 			ApplyCommitType: &ApplyCommitCommand{
-				logger:     cs.logger,
-				blockStore: cs.blockStore,
-				blockExec:  cs.blockExecutor,
-				wal:        wal,
+				logger:         cs.logger,
+				blockStore:     cs.blockStore,
+				blockExec:      cs.blockExecutor,
+				wal:            wal,
+				scheduler:      cs.roundScheduler,
+				metrics:        cs.metrics,
+				eventPublisher: cs.eventPublisher,
 			},
 			TryFinalizeCommitType: &TryFinalizeCommitCommand{
 				logger:     cs.logger,
 				blockExec:  cs.blockExecutor,
 				blockStore: cs.blockStore,
 			},
-			EnterPrevoteWaitType:   &EnterPrevoteWaitCommand{logger: cs.logger},
-			EnterPrecommitWaitType: &EnterPrecommitWaitCommand{logger: cs.logger},
+			EnterPrevoteWaitType: &EnterPrevoteWaitCommand{
+				logger:         cs.logger,
+				scheduler:      cs.roundScheduler,
+				eventPublisher: cs.eventPublisher,
+			},
+			EnterPrecommitWaitType: &EnterPrecommitWaitCommand{
+				logger:         cs.logger,
+				scheduler:      cs.roundScheduler,
+				eventPublisher: cs.eventPublisher,
+			},
 		},
 	}
+	for _, command := range fms.commands {
+		sub, ok := command.(Subscriber)
+		if ok {
+			sub.Subscribe(cs.observer)
+		}
+	}
+	return fms
+}
+
+// Dispatch dispatches an event to a handler
+func (c *FMS) Dispatch(ctx context.Context, event FMSEvent, stateData *StateData) error {
+	stateEvent := StateEvent{
+		FSM:       c,
+		EventType: event.GetType(),
+		StateData: stateData,
+		Data:      event,
+	}
+	return c.Execute(ctx, stateEvent)
 }

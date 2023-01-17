@@ -15,6 +15,11 @@ type TryAddCommitEvent struct {
 	PeerID types.NodeID
 }
 
+// GetType returns TryAddCommitType event-type
+func (e *TryAddCommitEvent) GetType() EventType {
+	return TryAddCommitType
+}
+
 // TryAddCommitCommand ...
 // If we received a commit message from an external source try to add it then finalize it.
 type TryAddCommitCommand struct {
@@ -25,8 +30,8 @@ type TryAddCommitCommand struct {
 }
 
 // Execute ...
-func (cs *TryAddCommitCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
-	event := stateEvent.Data.(TryAddCommitEvent)
+func (cs *TryAddCommitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+	event := stateEvent.Data.(*TryAddCommitEvent)
 	stateData := stateEvent.StateData
 	commit := event.Commit
 	peerID := event.PeerID
@@ -48,7 +53,7 @@ func (cs *TryAddCommitCommand) Execute(ctx context.Context, behavior *Behavior, 
 			return err
 		}
 		if verified {
-			_ = behavior.EnterNewRound(ctx, stateData, EnterNewRoundEvent{Height: stateData.Height, Round: commit.Round})
+			_ = stateEvent.FSM.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height, Round: commit.Round}, stateData)
 			// We are now going to receive the block, so initialize the block parts.
 			if stateData.ProposalBlockParts == nil {
 				stateData.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
@@ -71,7 +76,7 @@ func (cs *TryAddCommitCommand) Execute(ctx context.Context, behavior *Behavior, 
 		// In this case we need to apply the commit after the proposal block comes in
 		return nil
 	}
-	return behavior.AddCommit(ctx, stateData, AddCommitEvent{Commit: commit})
+	return stateEvent.FSM.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
 }
 
 func (cs *TryAddCommitCommand) verifyCommit(ctx context.Context, stateData *StateData, commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {

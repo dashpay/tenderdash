@@ -19,6 +19,11 @@ type DoPrevoteEvent struct {
 	AllowOldBlocks bool
 }
 
+// GetType returns DoPrevoteType event-type
+func (e *DoPrevoteEvent) GetType() EventType {
+	return DoPrevoteType
+}
+
 type DoPrevoteCommand struct {
 	logger     log.Logger
 	voteSigner *VoteSigner
@@ -27,9 +32,9 @@ type DoPrevoteCommand struct {
 	replayMode bool
 }
 
-func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) error {
+func (cs *DoPrevoteCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
-	event := stateEvent.Data.(DoPrevoteEvent)
+	event := stateEvent.Data.(*DoPrevoteEvent)
 	height := event.Height
 	round := event.Round
 	logger := cs.logger.With("height", height, "round", round)

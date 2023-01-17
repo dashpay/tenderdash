@@ -13,6 +13,11 @@ type EnterProposeEvent struct {
 	Round  int32
 }
 
+// GetType returns EnterProposeType event-type
+func (e *EnterProposeEvent) GetType() EventType {
+	return EnterProposeType
+}
+
 // EnterProposeCommand ...
 // Enter (CreateEmptyBlocks): from enterNewRoundCommand(height,round)
 // Enter (CreateEmptyBlocks, CreateEmptyBlocksInterval > 0 ):
@@ -20,22 +25,24 @@ type EnterProposeEvent struct {
 // Enter (!CreateEmptyBlocks) : after enterNewRoundCommand(height,round), once txs are in the mempool
 // Caller should hold cs.mtx lock
 type EnterProposeCommand struct {
-	logger        log.Logger
-	privValidator privValidator
-	msgInfoQueue  *msgInfoQueue
-	wal           WALWriteFlusher
-	replayMode    bool
-	metrics       *Metrics
-	blockExec     *blockExecutor
+	logger         log.Logger
+	privValidator  privValidator
+	msgInfoQueue   *msgInfoQueue
+	wal            WALWriteFlusher
+	replayMode     bool
+	metrics        *Metrics
+	blockExec      *blockExecutor
+	scheduler      *roundScheduler
+	eventPublisher *EventPublisher
 }
 
-func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, stateEvent StateEvent) error {
-	event := stateEvent.Data.(EnterProposeEvent)
+func (c *EnterProposeCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+	event := stateEvent.Data.(*EnterProposeEvent)
 	stateData := stateEvent.StateData
 	height := event.Height
 	round := event.Round
 
-	logger := cs.logger.With("height", height, "round", round)
+	logger := c.logger.With("height", height, "round", round)
 
 	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPropose <= stateData.Step) {
 		logger.Debug("entering propose step with invalid args", "step", stateData.Step)
@@ -44,15 +51,15 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, 
 
 	// If this validator is the proposer of this round, and the previous block time is later than
 	// our local clock time, wait to propose until our local clock time has passed the block time.
-	if stateData.isProposer(cs.privValidator.ProTxHash) {
+	if stateData.isProposer(c.privValidator.ProTxHash) {
 		pwt := proposerWaitTime(tmtime.Now(), stateData.state.LastBlockTime)
 		if pwt > 0 {
-			cs.logger.Debug("enter propose: latest block is newer, sleeping",
+			c.logger.Debug("enter propose: latest block is newer, sleeping",
 				"duration", pwt.String(),
 				"last_block_time", stateData.state.LastBlockTime,
 				"now", tmtime.Now(),
 			)
-			behavior.ScheduleTimeout(pwt, height, round, cstypes.RoundStepNewRound)
+			c.scheduler.ScheduleTimeout(pwt, height, round, cstypes.RoundStepNewRound)
 			return nil
 		}
 	}
@@ -65,26 +72,26 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, 
 	defer func() {
 		// Done enterPropose:
 		stateData.updateRoundStep(round, cstypes.RoundStepPropose)
-		behavior.newStep(stateData.RoundState)
+		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 
 		// If we have the whole proposal + POL, then goto Prevote now.
 		// else, we'll enterPrevote when the rest of the proposal is received (in AddProposalBlockPart),
 		// or else after timeoutPropose
 		if stateData.isProposalComplete() {
-			_ = behavior.EnterPrevote(ctx, stateData, EnterPrevoteEvent{Height: height, Round: round})
+			_ = stateEvent.FSM.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: round}, stateData)
 		}
 	}()
 
 	// If we don't get the proposal and all block parts quick enough, enterPrevote
-	behavior.ScheduleTimeout(stateData.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
+	c.scheduler.ScheduleTimeout(stateData.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
 
 	// Nothing more to do if we're not a validator
-	if cs.privValidator.IsZero() {
+	if c.privValidator.IsZero() {
 		logger.Debug("propose step; not proposing since node is not a validator")
 		return nil
 	}
 
-	proTxHash := cs.privValidator.ProTxHash
+	proTxHash := c.privValidator.ProTxHash
 
 	// if not a validator, we're done
 	if !stateData.Validators.HasProTxHash(proTxHash) {
@@ -97,26 +104,30 @@ func (cs *EnterProposeCommand) Execute(ctx context.Context, behavior *Behavior, 
 	if stateData.isProposer(proTxHash) {
 		logger.Debug("propose step; our turn to propose",
 			"proposer", proTxHash.ShortString(),
-			"privValidator", cs.privValidator,
+			"privValidator", c.privValidator,
 		)
-		_ = behavior.DecideProposal(ctx, stateData, DecideProposalEvent{Height: height, Round: round})
+		_ = stateEvent.FSM.Dispatch(ctx, &DecideProposalEvent{Height: height, Round: round}, stateData)
 	} else {
 		logger.Debug("propose step; not our turn to propose",
 			"proposer",
 			stateData.Validators.GetProposer().ProTxHash,
 			"privValidator",
-			cs.privValidator)
+			c.privValidator)
 	}
 	return nil
 }
 
-func (cs *EnterProposeCommand) Subscribe(observer *Observer) {
+func (c *EnterProposeCommand) Subscribe(observer *Observer) {
 	observer.Subscribe(SetMetrics, func(a any) error {
-		cs.metrics = a.(*Metrics)
+		c.metrics = a.(*Metrics)
 		return nil
 	})
 	observer.Subscribe(SetReplayMode, func(a any) error {
-		cs.replayMode = a.(bool)
+		c.replayMode = a.(bool)
+		return nil
+	})
+	observer.Subscribe(SetPrivValidator, func(a any) error {
+		c.privValidator = a.(privValidator)
 		return nil
 	})
 }
