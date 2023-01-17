@@ -8,12 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
-	"github.com/tendermint/tendermint/crypto"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
 	"github.com/tendermint/tendermint/libs/log"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
@@ -40,7 +38,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 	voteExtensions := types.VoteExtensions{
 		tmproto.VoteExtensionType_THRESHOLD_RECOVER: []types.VoteExtension{
 			{
-				Extension: tmrand.Bytes(32),
+				Extension: mustHexToBytes("524F1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83B"),
 			},
 		},
 	}
@@ -65,7 +63,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 		voteExtender:  mockBlockExecutor,
 	}
 	blockID := types.BlockID{
-		Hash: tmrand.Bytes(crypto.HashSize),
+		Hash: mustHexToBytes("1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83BFFEB"),
 	}
 	mockFn := func(voteExtensions types.VoteExtensions) {
 		mockBlockExecutor.
@@ -87,7 +85,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 		{
 			msgType:       tmproto.PrevoteType,
 			blockID:       blockID,
-			wantBlockSign: "93A9D90CEC5F1B0FB3FB7535D58EAF7215C1E11EF1DA413C195BE371EA9D510CBEC703F20B059C40293DDD3D7A8F6A1E0434FD579A5489C6324FA2CF5EB97F702AAB4743940CBB22CB4D132C3B5283AFD5E9CA1D486B0996DACDE7F3E05E1D70",
+			wantBlockSign: "09B1205CE83BB2B6C447EAE29AB13DBC5FEF5F4B6BCAF9CDE26AB4E0F024577A25669A2ECF7EB00AC9CB952F040E63730D8AB757D8EA7DC904E3EA8EDC625E77319C6692A1B99CF8D5D1B9B1253B5D2E944EA644259506B8DC24B3DAA2E17256",
 		},
 		{
 			msgType:       tmproto.PrecommitType,
@@ -98,14 +96,14 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 			blockID:        blockID,
 			voteExtensions: nil,
 			mockFn:         mockFn,
-			wantBlockSign:  "8031636E190F1C91967645B209C3FF9BA2579BDA3DA72592314ADB91D17190BDC69D18BC1B3D28FED5B9169FC20DCD59040610ECC76EA25EA14CF6732BBE2D096503AE1F8756EBC1035EC72A77674B5967C8CE33EE6B0ABC85B3F8575B27C2DC",
+			wantBlockSign:  "0512BBFA226A90816DD7E84D2DA34BD86E18BF119740FE69EA10043417E409FE70D6C38033981FB01FF13C893F47D3BB146BBE05DBA21DF0707C19098BBC207C328272BF2A36549DFA31A655896ABD7C81B8561BA4568516AFDA3D8693967793",
 		},
 		{
 			msgType:        tmproto.PrecommitType,
 			blockID:        blockID,
 			voteExtensions: voteExtensions,
 			mockFn:         mockFn,
-			wantBlockSign:  "8031636E190F1C91967645B209C3FF9BA2579BDA3DA72592314ADB91D17190BDC69D18BC1B3D28FED5B9169FC20DCD59040610ECC76EA25EA14CF6732BBE2D096503AE1F8756EBC1035EC72A77674B5967C8CE33EE6B0ABC85B3F8575B27C2DC",
+			wantBlockSign:  "0512BBFA226A90816DD7E84D2DA34BD86E18BF119740FE69EA10043417E409FE70D6C38033981FB01FF13C893F47D3BB146BBE05DBA21DF0707C19098BBC207C328272BF2A36549DFA31A655896ABD7C81B8561BA4568516AFDA3D8693967793",
 		},
 	}
 	for i, tc := range testCases {

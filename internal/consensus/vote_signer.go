@@ -21,39 +21,39 @@ type VoteSigner struct {
 
 // signAddVote signs a vote and sends it to internalMsgQueue
 // signing a vote is possible only if a validator is a part of validator-set
-func (cs *VoteSigner) signAddVote(
+func (s *VoteSigner) signAddVote(
 	ctx context.Context,
 	stateData *StateData,
 	msgType tmproto.SignedMsgType,
 	blockID types.BlockID,
 ) *types.Vote {
-	if cs.privValidator.IsZero() { // the node does not have a key
-		cs.logger.Error("private-validator is not set", "error", ErrPrivValidatorNotSet)
+	if s.privValidator.IsZero() { // the node does not have a key
+		s.logger.Error("private-validator is not set", "error", ErrPrivValidatorNotSet)
 		return nil
 	}
 	// If the node not in the validator set, do nothing.
-	if !stateData.Validators.HasProTxHash(cs.privValidator.ProTxHash) {
-		cs.logger.Debug("do nothing, node is not a part of validator set")
+	if !stateData.Validators.HasProTxHash(s.privValidator.ProTxHash) {
+		s.logger.Debug("do nothing, node is not a part of validator set")
 		return nil
 	}
 	keyVals := []any{"height", stateData.Height, "round", stateData.Round, "quorum_hash", stateData.Validators.QuorumHash}
 	// TODO: pass pubKey to signVote
 	start := time.Now()
-	vote, err := cs.signVote(ctx, stateData, msgType, blockID)
+	vote, err := s.signVote(ctx, stateData, msgType, blockID)
 	if err != nil {
-		cs.logger.Error("failed signing vote", append(keyVals, "error", err)...)
+		s.logger.Error("failed signing vote", append(keyVals, "error", err)...)
 		return nil
 	}
-	err = cs.queueSender.send(ctx, &VoteMessage{vote}, "")
+	err = s.queueSender.send(ctx, &VoteMessage{vote}, "")
 	if err != nil {
 		keyVals = append(keyVals, "error", err)
 	}
 	keyVals = append(keyVals, "vote", vote, "took", time.Since(start).String())
-	cs.logger.Debug("signed and pushed vote", keyVals...)
+	s.logger.Debug("signed and pushed vote", keyVals...)
 	return vote
 }
 
-func (cs *VoteSigner) signVote(
+func (s *VoteSigner) signVote(
 	ctx context.Context,
 	stateData *StateData,
 	msgType tmproto.SignedMsgType,
@@ -61,13 +61,13 @@ func (cs *VoteSigner) signVote(
 ) (*types.Vote, error) {
 	// Flush the WAL. Otherwise, we may not recompute the same vote to sign,
 	// and the privValidator will refuse to sign anything.
-	if err := cs.wal.FlushAndSync(); err != nil {
+	if err := s.wal.FlushAndSync(); err != nil {
 		return nil, err
 	}
-	if cs.privValidator.IsZero() {
+	if s.privValidator.IsZero() {
 		return nil, ErrPrivValidatorNotSet
 	}
-	proTxHash := cs.privValidator.ProTxHash
+	proTxHash := s.privValidator.ProTxHash
 	valIdx, _ := stateData.Validators.GetByProTxHash(proTxHash)
 	// Since the block has already been validated the block.lastAppHash must be the state.AppHash
 	vote := &types.Vote{
@@ -84,7 +84,7 @@ func (cs *VoteSigner) signVote(
 	if msgType == tmproto.PrecommitType && !vote.BlockID.IsNil() {
 		timeout = stateData.voteTimeout(stateData.Round)
 		// if the signedMessage type is for a precommit, add VoteExtension
-		cs.voteExtender.ExtendVote(ctx, vote)
+		s.voteExtender.ExtendVote(ctx, vote)
 	}
 
 	protoVote := vote.ToProto()
@@ -92,12 +92,12 @@ func (cs *VoteSigner) signVote(
 	ctxto, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	err := cs.privValidator.SignVote(ctxto,
+	err := s.privValidator.SignVote(ctxto,
 		stateData.state.ChainID,
 		stateData.state.Validators.QuorumType,
 		stateData.state.Validators.QuorumHash,
 		protoVote,
-		cs.logger,
+		s.logger,
 	)
 	if err != nil {
 		return nil, err
