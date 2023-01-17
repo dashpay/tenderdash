@@ -7,16 +7,15 @@ RUN apk update && \
 
 WORKDIR /src/tenderdash
 
-# Fetch dependencies separately (for layer caching)
-# TODO: move below BLS install once on new BLS version
-COPY go.mod go.sum ./
-RUN go mod download
-
 # Install BLS library
-COPY third_party ./third_party
+COPY third_party/bls-signatures/*.sh ./third_party/bls-signatures/
 COPY test/Makefile ./test/Makefile
 COPY Makefile ./
 RUN make install-bls
+
+# Fetch dependencies separately (for layer caching)
+COPY go.mod go.sum ./
+RUN go mod download
 
 # Copy Tenderdash source
 # Avoid overwriting third-party libs
@@ -25,7 +24,9 @@ COPY . .
 RUN rm -r third_party && mv third_party.bak third_party
 
 ARG TENDERMINT_BUILD_OPTIONS=tenderdash
-RUN make build-linux
+ENV GOOS=linux
+# Avoid rebuilding BLS
+RUN make build-binary 
 
 # stage 2
 FROM alpine:3.17

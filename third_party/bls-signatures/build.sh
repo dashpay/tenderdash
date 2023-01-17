@@ -5,7 +5,7 @@ SRC_PATH="${SCRIPT_PATH}/src"
 BUILD_PATH="${SCRIPT_PATH}/build"
 BLS_SM_PATH="third_party/bls-signatures/src"
 BLS_GIT_REPO="https://github.com/dashpay/bls-signatures.git"
-BLS_GIT_BRANCH="develop"
+BLS_GIT_BRANCH="1.2.5"
 
 set -ex
 
