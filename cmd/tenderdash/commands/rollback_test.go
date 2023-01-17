@@ -28,7 +28,7 @@ func TestRollbackIntegration(t *testing.T) {
 	require.NoError(t, err)
 	cfg.BaseConfig.DBBackend = "goleveldb"
 
-	app, err := e2e.NewApplication(kvstore.DefaultConfig(dir))
+	app, err := e2e.NewApplication(kvstore.DefaultConfig(dir), kvstore.WithDuplicateRequestDetection(false))
 	require.NoError(t, err)
 
 	t.Run("First run", func(t *testing.T) {

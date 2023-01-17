@@ -274,7 +274,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 			metrics:       r.metrics,
 		}
 	}
-	r.dispatcher = NewDispatcher(blockCh)
+	r.dispatcher = NewDispatcher(blockCh, r.logger)
 	r.requestSnaphot = func() error {
 		// request snapshots from all currently connected peers
 		return snapshotCh.Send(ctx, p2p.Envelope{
@@ -324,7 +324,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		LightBlockChannel: blockCh,
 		ParamsChannel:     paramsCh,
 	})
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx))
+	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "statesync"))
 
 	if r.needsStateSync {
 		r.logger.Info("starting state sync")
@@ -531,6 +531,10 @@ func (r *Reactor) backfill(
 				case height := <-queue.nextHeight():
 					// pop the next peer of the list to send a request to
 					peer := r.peers.Pop(ctx)
+					if peer == "" {
+						// a peer can be empty only if context is done
+						return
+					}
 					r.logger.Debug("fetching next block", "height", height, "peer", peer)
 					lb, err := func() (*types.LightBlock, error) {
 						subCtx, reqCancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
@@ -538,6 +542,13 @@ func (r *Reactor) backfill(
 						// request the light block with a timeout
 						return r.dispatcher.LightBlock(subCtx, height, peer)
 					}()
+					if lb == nil {
+						r.logger.Info("backfill: peer didn't have block, fetching from another peer", "height", height)
+						queue.retry(height)
+						// As we are fetching blocks backwards, if this node doesn't have the block it likely doesn't
+						// have any prior ones, thus we remove it from the peer list.
+						continue
+					}
 					// once the peer has returned a value, add it back to the peer list to be used again
 					r.peers.Append(peer)
 					if errors.Is(err, context.Canceled) {
@@ -554,14 +565,6 @@ func (r *Reactor) backfill(
 							r.logger.Info("backfill: error with fetching light block",
 								"height", height, "err", err)
 						}
-						continue
-					}
-					if lb == nil {
-						r.logger.Info("backfill: peer didn't have block, fetching from another peer", "height", height)
-						queue.retry(height)
-						// As we are fetching blocks backwards, if this node doesn't have the block it likely doesn't
-						// have any prior ones, thus we remove it from the peer list.
-						r.peers.Remove(peer)
 						continue
 					}
 

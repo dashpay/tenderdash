@@ -93,7 +93,7 @@ func setup(ctx context.Context, t *testing.T, stateStores []sm.Store) *reactorTe
 		require.NoError(t, err)
 
 		rts.peerChans[nodeID] = make(chan p2p.PeerUpdate)
-		pu := p2p.NewPeerUpdates(rts.peerChans[nodeID], 1)
+		pu := p2p.NewPeerUpdates(rts.peerChans[nodeID], 1, "evidence")
 		rts.peerUpdates[nodeID] = pu
 		rts.network.Nodes[nodeID].PeerManager.Register(ctx, pu)
 		rts.nodes = append(rts.nodes, rts.network.Nodes[nodeID])
@@ -105,7 +105,7 @@ func setup(ctx context.Context, t *testing.T, stateStores []sm.Store) *reactorTe
 		rts.reactors[nodeID] = evidence.NewReactor(
 			logger,
 			chCreator,
-			func(ctx context.Context) *p2p.PeerUpdates { return pu },
+			func(ctx context.Context, _ string) *p2p.PeerUpdates { return pu },
 			rts.pools[nodeID])
 
 		require.NoError(t, rts.reactors[nodeID].Start(ctx))
@@ -565,7 +565,7 @@ func TestEvidenceListSerialization(t *testing.T) {
 	}{
 		"DuplicateVoteEvidence": {
 			[]types.Evidence{dupl},
-			"0a83020a80020a78080210031802224a0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a3220959a8f5ef2be68d0ed3a07ed8cff85991ee7995c2ac17030f742c135f9729fbe38d5bb031278080110031802224a0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a3220959a8f5ef2be68d0ed3a07ed8cff85991ee7995c2ac17030f742c135f9729fbe38d5bb03186420642a060880dbaae105",
+			"0a83020a80020a78080210031802224a0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a2a20959a8f5ef2be68d0ed3a07ed8cff85991ee7995c2ac17030f742c135f9729fbe30d5bb031278080110031802224a0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a2a20959a8f5ef2be68d0ed3a07ed8cff85991ee7995c2ac17030f742c135f9729fbe30d5bb03186420642a060880dbaae105",
 		},
 	}
 

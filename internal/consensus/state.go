@@ -182,6 +182,8 @@ type State struct {
 
 	// wait the channel event happening for shutting down the state gracefully
 	onStopCh chan *cstypes.RoundState
+
+	stopFn func(cs *State) bool
 }
 
 // StateOption sets an optional parameter on the State.
@@ -191,6 +193,21 @@ type StateOption func(*State)
 // skip state bootstrapping during construction.
 func SkipStateStoreBootstrap(sm *State) {
 	sm.skipBootstrapping = true
+}
+
+func WithStopFunc(stopFns ...func(cs *State) bool) func(cs *State) {
+	return func(cs *State) {
+		// we assume that even if one function returns true, then the consensus must be stopped
+		cs.stopFn = func(cs *State) bool {
+			for _, fn := range stopFns {
+				ret := fn(cs)
+				if ret {
+					return true
+				}
+			}
+			return false
+		}
+	}
 }
 
 // NewState returns a new State.
@@ -466,7 +483,7 @@ func (cs *State) OnStart(ctx context.Context) error {
 	}
 
 	// now start the receiveRoutine
-	go cs.receiveRoutine(ctx, 0)
+	go cs.receiveRoutine(ctx, cs.stopFn)
 
 	// schedule the first round!
 	// use GetRoundState so we don't race the receiveRoutine for access
@@ -486,7 +503,7 @@ func (cs *State) startRoutines(ctx context.Context, maxSteps int) {
 		return
 	}
 
-	go cs.receiveRoutine(ctx, maxSteps)
+	go cs.receiveRoutine(ctx, stopStateByMaxStepFunc(maxSteps))
 }
 
 // loadWalFile loads WAL data from file. It overwrites cs.wal.
@@ -888,7 +905,7 @@ func (cs *State) newStep() {
 // It keeps the RoundState and is the only thing that updates it.
 // Updates (state transitions) happen on timeouts, complete proposals, and 2/3 majorities.
 // State must be locked before any internal state is updated.
-func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
+func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 	onExit := func(cs *State) {
 		// NOTE: the internalMsgQueue may have signed messages from our
 		// priv_val that haven't hit the WAL, but its ok because
@@ -943,12 +960,8 @@ func (cs *State) receiveRoutine(ctx context.Context, maxSteps int) {
 	}()
 
 	for {
-		if maxSteps > 0 {
-			if cs.nSteps >= maxSteps {
-				cs.logger.Debug("reached max steps; exiting receive routine")
-				cs.nSteps = 0
-				return
-			}
+		if stopFn != nil && stopFn(cs) {
+			return
 		}
 
 		rs := cs.GetRoundState()
@@ -1016,12 +1029,6 @@ func (cs *State) handleMsg(ctx context.Context, mi msgInfo, fromReplay bool) {
 
 		// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
 		added, err = cs.addProposalBlockPart(ctx, msg, peerID)
-
-		if added && cs.ProposalBlockParts != nil && cs.ProposalBlockParts.IsComplete() && fromReplay {
-			if err := cs.ensureProcessProposal(ctx, cs.ProposalBlock, msg.Round, cs.state); err != nil {
-				panic(err)
-			}
-		}
 
 		// We unlock here to yield to any routines that need to read the the RoundState.
 		// Previously, this code held the lock from the point at which the final block
@@ -1712,6 +1719,12 @@ func (cs *State) defaultDoPrevote(ctx context.Context, height int64, round int32
 		// Unknown error, so we panic
 		panic(fmt.Sprintf("ProcessProposal: %v", err))
 	}
+
+	// Validate the block.
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, cs.ProposalBlock); err != nil {
+		panic(fmt.Sprintf("prevote on invalid block: %v", err))
+	}
+
 	cs.metrics.MarkProposalProcessed(true)
 
 	/*
@@ -2099,10 +2112,6 @@ func (cs *State) finalizeCommit(ctx context.Context, height int64) {
 		panic("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
-	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, block); err != nil {
-		panic(fmt.Errorf("+2/3 committed an invalid block %X: %w", cs.CurrentRoundState.AppHash, err))
-	}
-
 	logger.Info(
 		"finalizing commit of block",
 		"hash", tmstrings.LazyBlockHash(block),
@@ -2254,6 +2263,11 @@ func (cs *State) verifyCommit(ctx context.Context, commit *types.Commit, peerID 
 		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 
+	// We have a correct block, let's process it before applying the commit
+	if err := cs.ensureProcessProposal(ctx, block, commit.Round, cs.state); err != nil {
+		return false, fmt.Errorf("unable to process proposal: %w", err)
+	}
+
 	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, block); err != nil {
 		return false, fmt.Errorf("+2/3 committed an invalid block: %w", err)
 	}
@@ -2303,14 +2317,26 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 	)
 
 	block, blockParts := cs.ProposalBlock, cs.ProposalBlockParts
-	// Save to blockStore.
+
 	if commit != nil {
 		height = commit.Height
 		round = commit.Round
-		cs.blockStore.SaveBlock(block, blockParts, commit)
 	} else {
 		height = cs.Height
 		round = cs.Round
+	}
+
+	if err := cs.ensureProcessProposal(ctx, block, round, cs.state); err != nil {
+		panic("cannot finalize commit; cannot process proposal block: " + err.Error())
+	}
+
+	if err := cs.blockExec.ValidateBlockWithRoundState(ctx, cs.state, cs.CurrentRoundState, block); err != nil {
+		panic(fmt.Errorf("+2/3 committed an invalid block %X: %w", cs.CurrentRoundState.AppHash, err))
+	}
+
+	// Save to blockStore.
+	if commit != nil {
+		cs.blockStore.SaveBlock(block, blockParts, commit)
 	}
 
 	// Write EndHeightMessage{} for this height, implying that the blockstore
@@ -2332,13 +2358,6 @@ func (cs *State) applyCommit(ctx context.Context, commit *types.Commit, logger l
 			"failed to write %v msg to consensus WAL due to %w; check your file system and restart the node",
 			endMsg, err,
 		))
-	}
-
-	// Execute and commit the block, update and save the state, and update the mempool.
-	// NOTE The block.AppHash wont reflect these txs until the next block.
-	if err := cs.ensureProcessProposal(ctx, block, round, cs.state); err != nil {
-		logger.Error("cannot apply commit", "error", err)
-		return
 	}
 
 	// Create a copy of the state for staging and an event cache for txs.
@@ -3199,4 +3218,15 @@ func (pv *privValidator) init(ctx context.Context) error {
 	var err error
 	pv.ProTxHash, err = pv.GetProTxHash(ctx)
 	return err
+}
+
+func stopStateByMaxStepFunc(maxSteps int) func(cs *State) bool {
+	return func(cs *State) bool {
+		if maxSteps > 0 && cs.nSteps >= maxSteps {
+			cs.logger.Debug("reached max steps; exiting receive routine")
+			cs.nSteps = 0
+			return true
+		}
+		return false
+	}
 }

@@ -164,7 +164,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		&abci.RequestPrepareProposal{
 			MaxTxBytes:         maxDataBytes,
 			Txs:                block.Txs.ToSliceOfBytes(),
-			LocalLastCommit:    abci.ExtendedCommitInfo(localLastCommit),
+			LocalLastCommit:    localLastCommit,
 			Misbehavior:        block.Evidence.ToABCI(),
 			Height:             block.Height,
 			Round:              round,
@@ -176,6 +176,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 			ProposerProTxHash:     block.ProposerProTxHash,
 			ProposedAppVersion:    block.ProposedAppVersion,
 			Version:               &version,
+			QuorumHash:            state.Validators.QuorumHash,
 		},
 	)
 	if err != nil {
@@ -255,6 +256,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		CoreChainLockUpdate:   block.CoreChainLock.ToProto(),
 		ProposedAppVersion:    block.ProposedAppVersion,
 		Version:               &version,
+		QuorumHash:            state.Validators.QuorumHash,
 	})
 	if err != nil {
 		return CurrentRoundState{}, err
@@ -364,7 +366,12 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 			block.NextValidatorsHash,
 		)
 	}
-
+	if !block.NextConsensusHash.Equal(uncommittedState.NextConsensusParams.HashConsensusParams()) {
+		return fmt.Errorf(
+			"wrong Block.Header.ConsensusHash. Expected %X, got %X",
+			uncommittedState.NextConsensusParams.HashConsensusParams(), block.NextConsensusHash,
+		)
+	}
 	return validateCoreChainLock(block, state)
 }
 

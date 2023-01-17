@@ -328,6 +328,16 @@ max-outgoing-connections = {{ .P2P.MaxOutgoingConnections }}
 # Rate limits the number of incoming connection attempts per IP address.
 max-incoming-connection-attempts = {{ .P2P.MaxIncomingConnectionAttempts }}
 
+# Limits maximum duration after which incoming peer will be evicted.
+# Defaults to 0 which disables this mechanism.
+# Used on seed nodes to evict peers and make space for others.
+max-incoming-connection-time = "{{ .P2P.MaxIncomingConnectionTime }}"
+
+# incoming-connection-window describes how often an IP address
+# can attempt to create a new connection. Defaults to 10
+# milliseconds, and cannot be less than 1 millisecond.
+incoming-connection-window = "{{ .P2P.IncomingConnectionWindow }}"
+
 # Comma separated list of peer IDs to keep private (will not be gossiped to other peers)
 # Warning: IPs will be exposed at /net_info, for more information https://github.com/tendermint/tendermint/issues/3055
 private-peer-ids = "{{ .P2P.PrivatePeerIDs }}"

@@ -545,9 +545,11 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 		validators = args.validators
 	}
 	var app abci.Application
-	app, err := kvstore.NewMemoryApp()
-	require.NoError(t, err)
-	if args.application != nil {
+	if args.application == nil {
+		var err error
+		app, err = kvstore.NewMemoryApp()
+		require.NoError(t, err)
+	} else {
 		app = args.application
 	}
 	if args.config == nil {

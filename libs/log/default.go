@@ -74,6 +74,10 @@ func (l defaultLogger) Debug(msg string, keyVals ...interface{}) {
 	l.Logger.Debug().Fields(getLogFields(keyVals...)).Msg(msg)
 }
 
+func (l defaultLogger) Trace(msg string, keyVals ...interface{}) {
+	l.Logger.Trace().Fields(getLogFields(keyVals...)).Msg(msg)
+}
+
 func (l defaultLogger) With(keyVals ...interface{}) Logger {
 	return &defaultLogger{Logger: l.Logger.With().Fields(getLogFields(keyVals...)).Logger()}
 }

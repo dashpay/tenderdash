@@ -14,13 +14,16 @@ import (
 )
 
 func TestPeerScoring(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	// coppied from p2p_test shared variables
 	selfKey := ed25519.GenPrivKeyFromSecret([]byte{0xf9, 0x1b, 0x08, 0xaa, 0x38, 0xee, 0x34, 0xdd})
 	selfID := types.NodeIDFromPubKey(selfKey.PubKey())
 
 	// create a mock peer manager
 	db := dbm.NewMemDB()
-	peerManager, err := NewPeerManager(selfID, db, PeerManagerOptions{})
+	peerManager, err := NewPeerManager(ctx, selfID, db, PeerManagerOptions{})
 	require.NoError(t, err)
 
 	// create a fake node
@@ -28,9 +31,6 @@ func TestPeerScoring(t *testing.T) {
 	added, err := peerManager.Add(NodeAddress{NodeID: id, Protocol: "memory"})
 	require.NoError(t, err)
 	require.True(t, added)
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
 
 	t.Run("Synchronous", func(t *testing.T) {
 		// update the manager and make sure it's correct
@@ -56,7 +56,7 @@ func TestPeerScoring(t *testing.T) {
 	})
 	t.Run("AsynchronousIncrement", func(t *testing.T) {
 		start := peerManager.Scores()[id]
-		pu := peerManager.Subscribe(ctx)
+		pu := peerManager.Subscribe(ctx, "p2p")
 		pu.SendUpdate(ctx, PeerUpdate{
 			NodeID: id,
 			Status: PeerStatusGood,
@@ -69,7 +69,7 @@ func TestPeerScoring(t *testing.T) {
 	})
 	t.Run("AsynchronousDecrement", func(t *testing.T) {
 		start := peerManager.Scores()[id]
-		pu := peerManager.Subscribe(ctx)
+		pu := peerManager.Subscribe(ctx, "p2p")
 		pu.SendUpdate(ctx, PeerUpdate{
 			NodeID: id,
 			Status: PeerStatusBad,

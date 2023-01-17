@@ -5,11 +5,26 @@ RUN apk update && \
     apk upgrade && \
     apk add bash git gmp-dev sudo cmake build-base python3-dev
 
-COPY . /src
+WORKDIR /src/tenderdash
 
-WORKDIR /src
+# Fetch dependencies separately (for layer caching)
+# TODO: move below BLS install once on new BLS version
+COPY go.mod go.sum ./
+RUN go mod download
 
-RUN make build-bls
+# Install BLS library
+COPY third_party ./third_party
+COPY test/Makefile ./test/Makefile
+COPY Makefile ./
+RUN make install-bls
+
+# Copy Tenderdash source
+# Avoid overwriting third-party libs
+RUN mv third_party third_party.bak
+COPY . .
+RUN rm -r third_party && mv third_party.bak third_party
+
+ARG TENDERMINT_BUILD_OPTIONS=tenderdash
 RUN make build-linux
 
 # stage 2
@@ -44,7 +59,7 @@ EXPOSE 26656 26657 26660
 
 STOPSIGNAL SIGTERM
 
-COPY --from=builder /src/build/tenderdash /usr/bin/tenderdash
+COPY --from=builder /src/tenderdash/build/tenderdash /usr/bin/tenderdash
 
 # You can overwrite these before the first run to influence
 # config.json and genesis.json. Additionally, you can override
