@@ -59,7 +59,7 @@ func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, stateEvent Stat
 }
 
 // Increment height and goto cstypes.RoundStepNewHeight
-func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, fms *FMS, stateData *StateData, height int64) {
+func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, fsm *FSM, stateData *StateData, height int64) {
 	logger := cs.logger.With("height", height)
 
 	if stateData.Height != height || stateData.Step != cstypes.RoundStepApplyCommit {
@@ -92,5 +92,5 @@ func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, fms *FMS
 
 	precommits := stateData.Votes.Precommits(stateData.CommitRound)
 	seenCommit := precommits.MakeCommit()
-	_ = fms.Dispatch(ctx, &ApplyCommitEvent{Commit: seenCommit}, stateData)
+	_ = fsm.Dispatch(ctx, &ApplyCommitEvent{Commit: seenCommit}, stateData)
 }

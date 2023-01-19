@@ -96,7 +96,7 @@ func (c *TryAddVoteCommand) Execute(ctx context.Context, stateEvent StateEvent) 
 
 func (c *TryAddVoteCommand) addVote(
 	ctx context.Context,
-	fms *FMS,
+	fsm *FSM,
 	stateData *StateData,
 	vote *types.Vote,
 	peerID types.NodeID,
@@ -145,7 +145,7 @@ func (c *TryAddVoteCommand) addVote(
 		if stateData.bypassCommitTimeout() && stateData.LastPrecommits.HasAll() {
 			// go straight to new round (skip timeout commit)
 			// c.scheduleTimeout(time.Duration(0), c.Height, 0, cstypes.RoundStepNewHeight)
-			_ = fms.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
+			_ = fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
 		}
 
 		return
@@ -265,20 +265,20 @@ func (c *TryAddVoteCommand) addVote(
 		switch {
 		case stateData.Round < vote.Round && prevotes.HasTwoThirdsAny():
 			// Round-skip if there is any 2/3+ of votes ahead of us
-			_ = fms.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
+			_ = fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
 
 		case stateData.Round == vote.Round && cstypes.RoundStepPrevote <= stateData.Step: // current round
 			blockID, ok := prevotes.TwoThirdsMajority()
 			if ok && (stateData.isProposalComplete() || blockID.IsNil()) {
-				_ = fms.Dispatch(ctx, &EnterPrecommitEvent{Height: height, Round: vote.Round}, stateData)
+				_ = fsm.Dispatch(ctx, &EnterPrecommitEvent{Height: height, Round: vote.Round}, stateData)
 			} else if prevotes.HasTwoThirdsAny() {
-				_ = fms.Dispatch(ctx, &EnterPrevoteWaitEvent{Height: height, Round: vote.Round}, stateData)
+				_ = fsm.Dispatch(ctx, &EnterPrevoteWaitEvent{Height: height, Round: vote.Round}, stateData)
 			}
 
 		case stateData.Proposal != nil && 0 <= stateData.Proposal.POLRound && stateData.Proposal.POLRound == vote.Round:
 			// If the proposal is now complete, enter prevote of c.Round.
 			if stateData.isProposalComplete() {
-				_ = fms.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: stateData.Round}, stateData)
+				_ = fsm.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: stateData.Round}, stateData)
 			}
 		}
 
@@ -294,20 +294,20 @@ func (c *TryAddVoteCommand) addVote(
 		blockID, ok := precommits.TwoThirdsMajority()
 		if ok {
 			// Executed as TwoThirdsMajority could be from a higher round
-			_ = fms.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
-			_ = fms.Dispatch(ctx, &EnterPrecommitEvent{Height: height, Round: vote.Round}, stateData)
+			_ = fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
+			_ = fsm.Dispatch(ctx, &EnterPrecommitEvent{Height: height, Round: vote.Round}, stateData)
 
 			if !blockID.IsNil() {
-				_ = fms.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: vote.Round}, stateData)
+				_ = fsm.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: vote.Round}, stateData)
 				if stateData.bypassCommitTimeout() && precommits.HasAll() {
-					_ = fms.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
+					_ = fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
 				}
 			} else {
-				_ = fms.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
+				_ = fsm.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
 			}
 		} else if stateData.Round <= vote.Round && precommits.HasTwoThirdsAny() {
-			_ = fms.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
-			fms.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
+			_ = fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
+			fsm.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
 		}
 
 	default:

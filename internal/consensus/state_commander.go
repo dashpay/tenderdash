@@ -36,13 +36,13 @@ var (
 // EventType and StateData are required for a call
 // Data is optional
 type StateEvent struct {
-	FSM       *FMS
+	FSM       *FSM
 	EventType EventType
 	StateData *StateData
-	Data      FMSEvent
+	Data      FSMEvent
 }
 
-type FMSEvent interface {
+type FSMEvent interface {
 	GetType() EventType
 }
 
@@ -51,24 +51,24 @@ type CommandHandler interface {
 	Execute(ctx context.Context, event StateEvent) error
 }
 
-// FMS ...
-type FMS struct {
+// FSM ...
+type FSM struct {
 	commands map[EventType]CommandHandler
 }
 
 // Register adds or overrides a command handler for an event-type
-func (c *FMS) Register(eventType EventType, handler CommandHandler) {
+func (c *FSM) Register(eventType EventType, handler CommandHandler) {
 	c.commands[eventType] = handler
 }
 
 // Get returns a command handler by an event-type, if command not is existed then returns nil
-func (c *FMS) Get(eventType EventType) CommandHandler {
+func (c *FSM) Get(eventType EventType) CommandHandler {
 	return c.commands[eventType]
 }
 
 // Execute executes a command for a given state-event
 // panic if a command is not registered
-func (c *FMS) Execute(ctx context.Context, event StateEvent) error {
+func (c *FSM) Execute(ctx context.Context, event StateEvent) error {
 	command, ok := c.commands[event.EventType]
 	if !ok {
 		panic(errCommandNotRegistered)
@@ -77,13 +77,13 @@ func (c *FMS) Execute(ctx context.Context, event StateEvent) error {
 	return command.Execute(ctx, event)
 }
 
-// NewFMS returns a new instance of finite-state-machine with a set of all possible transitions
-func NewFMS(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FMS {
+// NewFSM returns a new instance of finite-state-machine with a set of all possible transitions
+func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
 	propUpdater := &proposalUpdater{
 		logger:         cs.logger,
 		eventPublisher: cs.eventPublisher,
 	}
-	fms := &FMS{
+	fsm := &FSM{
 		commands: map[EventType]CommandHandler{
 			EnterNewRoundType: &EnterNewRoundCommand{
 				logger:         cs.logger,
@@ -191,17 +191,17 @@ func NewFMS(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FMS {
 			},
 		},
 	}
-	for _, command := range fms.commands {
+	for _, command := range fsm.commands {
 		sub, ok := command.(Subscriber)
 		if ok {
 			sub.Subscribe(cs.observer)
 		}
 	}
-	return fms
+	return fsm
 }
 
 // Dispatch dispatches an event to a handler
-func (c *FMS) Dispatch(ctx context.Context, event FMSEvent, stateData *StateData) error {
+func (c *FSM) Dispatch(ctx context.Context, event FSMEvent, stateData *StateData) error {
 	stateEvent := StateEvent{
 		FSM:       c,
 		EventType: event.GetType(),

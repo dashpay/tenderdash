@@ -54,7 +54,7 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 		invalidDoPrevoteFunc(ctx, t, stateData, byzState, byzReactor, rts.voteChannels[node.NodeID], privVal)
 		return nil
 	})
-	byzState.fms.Register(DoPrevoteType, doPrevoteCmd)
+	byzState.fsm.Register(DoPrevoteType, doPrevoteCmd)
 
 	rts.switchToConsensus(ctx)
 

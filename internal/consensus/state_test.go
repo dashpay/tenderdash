@@ -188,7 +188,7 @@ func TestStateEnterProposeYesPrivValidator(t *testing.T) {
 	timeoutCh := subscribe(ctx, t, cs.eventBus, types.EventQueryTimeoutPropose)
 	proposalCh := subscribe(ctx, t, cs.eventBus, types.EventQueryCompleteProposal)
 
-	err := cs.fms.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
+	err := cs.fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
 	require.NoError(t, err)
 	err = stateData.Save()
 	require.NoError(t, err)
@@ -339,7 +339,7 @@ func TestStateProposalTime(t *testing.T) {
 			time.Sleep(tc.sleep)
 
 			// Wait for complete proposal.
-			err = cs.fms.Dispatch(ctx, &EnterProposeEvent{
+			err = cs.fsm.Dispatch(ctx, &EnterProposeEvent{
 				Height: height,
 				Round:  round,
 			}, &stateData)
@@ -466,7 +466,7 @@ func TestStateFullRoundNil(t *testing.T) {
 
 	voteCh := subscribe(ctx, t, cs.eventBus, types.EventQueryVote)
 
-	err := cs.fms.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: round}, &stateData)
+	err := cs.fsm.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: round}, &stateData)
 	require.NoError(t, err)
 	err = stateData.Save()
 	require.NoError(t, err)
@@ -547,7 +547,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	*/
 
 	// start round and wait for prevote
-	err := cs1.fms.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
+	err := cs1.fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
 	require.NoError(t, err)
 
 	err = stateData.Save()
@@ -3189,7 +3189,7 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 	})
 
 	// This is where error "2/3 committed an invalid block" occurred before
-	err = otherNode.fms.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &css1StateData)
+	err = otherNode.fsm.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &css1StateData)
 	assert.Equal(t, int64(2), css1StateData.Height)
 	assert.NoError(t, err)
 }

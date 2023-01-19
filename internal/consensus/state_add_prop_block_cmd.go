@@ -69,7 +69,7 @@ func (c *AddProposalBlockPartCommand) Execute(ctx context.Context, stateEvent St
 
 func (c *AddProposalBlockPartCommand) addProposalBlockPart(
 	ctx context.Context,
-	fms *FMS,
+	fsm *FSM,
 	stateData *StateData,
 	msg *BlockPartMessage,
 	peerID types.NodeID,
@@ -176,7 +176,7 @@ func (c *AddProposalBlockPartCommand) addProposalBlockPart(
 			)
 			// We received a commit before the block
 			// Transit to AddCommit
-			return added, fms.Dispatch(ctx, &AddCommitEvent{Commit: stateData.Commit}, stateData)
+			return added, fsm.Dispatch(ctx, &AddCommitEvent{Commit: stateData.Commit}, stateData)
 		}
 
 		return added, nil

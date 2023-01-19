@@ -124,12 +124,12 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 	}
 
-	doPrevoteOrigin := bzNodeState.fms.Get(DoPrevoteType)
+	doPrevoteOrigin := bzNodeState.fsm.Get(DoPrevoteType)
 	require.NotNil(t, doPrevoteOrigin)
 	// alter prevote so that the byzantine node double votes when height is 2
 	doPrevoteCmd := newDoPrevoteByzantine(t, rts, bzNodeID, doPrevoteOrigin, prevoteHeight)
 
-	bzNodeState.fms.Register(DoPrevoteType, doPrevoteCmd)
+	bzNodeState.fsm.Register(DoPrevoteType, doPrevoteCmd)
 
 	// Introducing a lazy proposer means that the time of the block committed is
 	// different to the timestamp that the other nodes have. This tests to ensure
@@ -221,7 +221,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 		return nil
 	})
-	lazyNodeState.fms.Register(DecideProposalType, decideProposalCmd)
+	lazyNodeState.fsm.Register(DecideProposalType, decideProposalCmd)
 
 	rts.switchToConsensus(ctx)
 
