@@ -315,7 +315,7 @@ func decideProposal(
 }
 
 func addVotes(to *State, votes ...*types.Vote) {
-	ctx := ContextWithPeerQueue(context.Background())
+	ctx := ctxWithPeerQueue(context.Background())
 	for _, vote := range votes {
 		_ = to.msgInfoQueue.send(ctx, &VoteMessage{vote}, "")
 	}

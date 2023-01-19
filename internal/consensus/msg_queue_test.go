@@ -66,7 +66,7 @@ func TestChanMsgSender(t *testing.T) {
 			wantPeerLen:     0,
 		},
 		{
-			ctx:             ContextWithPeerQueue(ctx), // add a parameter into context to use peer queue
+			ctx:             ctxWithPeerQueue(ctx), // add a parameter into context to use peer queue
 			wantInternalLen: 0,
 			wantPeerLen:     1,
 		},

@@ -8,36 +8,6 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-type contextKey int
-
-const (
-	usePeerQueueCtx contextKey = iota
-	msgInfoKey
-)
-
-// ContextWithPeerQueue ...
-func ContextWithPeerQueue(ctx context.Context) context.Context {
-	return context.WithValue(ctx, usePeerQueueCtx, true)
-}
-
-// PeerQueueFromContext ...
-func PeerQueueFromContext(ctx context.Context) bool {
-	val := ctx.Value(usePeerQueueCtx)
-	if val != nil {
-		return val.(bool)
-	}
-	return false
-}
-
-func msgInfoWithCtx(ctx context.Context, mi msgInfo) context.Context {
-	return context.WithValue(ctx, msgInfoKey, mi)
-}
-
-func msgInfoFromCtx(ctx context.Context) msgInfo {
-	val := ctx.Value(msgInfoKey)
-	return val.(msgInfo)
-}
-
 type msgEnvelope struct {
 	msgInfo
 	fromReplay bool
@@ -98,7 +68,7 @@ type chanMsgSender struct {
 
 func (s *chanMsgSender) send(ctx context.Context, msg Message, peerID types.NodeID) error {
 	mi := msgInfo{msg, peerID, tmtime.Now()}
-	usePeerQueue := PeerQueueFromContext(ctx)
+	usePeerQueue := peerQueueFromCtx(ctx)
 	ch := s.peerQueue
 	if peerID == "" && !usePeerQueue {
 		ch = s.internalQueue
