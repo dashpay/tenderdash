@@ -112,9 +112,20 @@ func blockPartMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
 func voteMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*VoteMessage)
+		keyVals := []any{
+			"height", stateData.Height,
+			"cs_round", stateData.Round,
+			"vote_type", msg.Vote.Type.String(),
+			"vote_height", msg.Vote.Height,
+			"vote_round", msg.Vote.Round,
+			"val_proTxHash", msg.Vote.ValidatorProTxHash.ShortString(),
+			"val_index", msg.Vote.ValidatorIndex,
+			"peer", envelope.PeerID,
+		}
+		ctx = ctxWithLogKeyVals(ctx, keyVals)
 		// attempt to add the vote and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		err := fsm.Dispatch(ctx, &TryAddVoteEvent{Vote: msg.Vote, PeerID: envelope.PeerID}, stateData)
+		err := fsm.Dispatch(ctx, &AddVoteEvent{Vote: msg.Vote, PeerID: envelope.PeerID}, stateData)
 
 		// TODO: punish peer
 		// We probably don't want to stop the peer here. The vote does not
@@ -128,13 +139,6 @@ func voteMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
 		// TODO: If rs.Height == vote.Height && rs.Round < vote.Round,
 		// the peer is sending us CatchupCommit precommits.
 		// We could make note of this and help filter in broadcastHasVoteMessage().
-		keyVals := []interface{}{
-			"height", stateData.Height,
-			"cs_round", stateData.Round,
-			"vote_height", msg.Vote.Height,
-			"vote_round", msg.Vote.Round,
-			"peer", envelope.PeerID,
-		}
 		if err != nil {
 			keyVals = append(keyVals, "error", err)
 		}

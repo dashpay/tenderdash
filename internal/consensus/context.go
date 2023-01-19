@@ -7,6 +7,7 @@ type contextKey int
 const (
 	usePeerQueueCtx contextKey = iota
 	msgInfoCtx
+	logKeyValsCtx
 )
 
 // ctxWithPeerQueue adds a key into the context with true value
@@ -34,4 +35,18 @@ func msgInfoWithCtx(ctx context.Context, mi msgInfo) context.Context {
 func msgInfoFromCtx(ctx context.Context) msgInfo {
 	val := ctx.Value(msgInfoCtx)
 	return val.(msgInfo)
+}
+
+// ctxWithLogKeyVals puts key-vals log slice into the context
+func ctxWithLogKeyVals(ctx context.Context, keyVals []any) context.Context {
+	return context.WithValue(ctx, logKeyValsCtx, keyVals)
+}
+
+// logKeyValsFromCtx gets key-vals log from the context
+func logKeyValsFromCtx(ctx context.Context) []any {
+	keyVals := ctx.Value(logKeyValsCtx)
+	if keyVals != nil {
+		return keyVals.([]any)
+	}
+	return []any{}
 }

@@ -24,7 +24,7 @@ const (
 	ProposalCompletedType
 	EnterPrevoteWaitType
 	EnterPrecommitWaitType
-	TryAddVoteType
+	AddVoteType
 	DoPrevoteType
 )
 
@@ -83,112 +83,125 @@ func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
 		logger:         cs.logger,
 		eventPublisher: cs.eventPublisher,
 	}
-	fsm := &FSM{
-		commands: map[EventType]CommandHandler{
-			EnterNewRoundType: &EnterNewRoundCommand{
-				logger:         cs.logger,
-				config:         cs.config,
-				scheduler:      cs.roundScheduler,
-				eventPublisher: cs.eventPublisher,
-			},
-			EnterProposeType: &EnterProposeCommand{
-				logger:         cs.logger,
-				privValidator:  cs.privValidator,
-				msgInfoQueue:   cs.msgInfoQueue,
-				wal:            cs.wal,
-				replayMode:     cs.replayMode,
-				metrics:        cs.metrics,
-				blockExec:      cs.blockExecutor,
-				scheduler:      cs.roundScheduler,
-				eventPublisher: cs.eventPublisher,
-			},
-			SetProposalType: &SetProposalCommand{
-				logger:  cs.logger,
-				metrics: cs.metrics,
-			},
-			DecideProposalType: &DecideProposalCommand{
-				logger:        cs.logger,
-				privValidator: cs.privValidator,
-				msgInfoQueue:  cs.msgInfoQueue,
-				wal:           cs.wal,
-				metrics:       cs.metrics,
-				blockExec:     cs.blockExecutor,
-				replayMode:    cs.replayMode,
-			},
-			AddProposalBlockPartType: &AddProposalBlockPartCommand{
-				logger:         cs.logger,
-				metrics:        cs.metrics,
-				blockExec:      cs.blockExecutor,
-				eventPublisher: cs.eventPublisher,
-				statsQueue:     statsQueue,
-			},
-			ProposalCompletedType: &ProposalCompletedCommand{logger: cs.logger},
-			DoPrevoteType: &DoPrevoteCommand{
-				logger:     cs.logger,
-				voteSigner: cs.voteSigner,
-				blockExec:  cs.blockExecutor,
-				metrics:    cs.metrics,
-				replayMode: cs.replayMode,
-			},
-			TryAddVoteType: &TryAddVoteCommand{
-				evpool:         cs.evpool,
-				logger:         cs.logger,
-				privValidator:  cs.privValidator,
-				eventPublisher: cs.eventPublisher,
-				blockExec:      cs.blockExec,
-				metrics:        cs.metrics,
-				statsQueue:     statsQueue,
-			},
-			EnterCommitType: &EnterCommitCommand{
-				logger:          cs.logger,
-				eventPublisher:  cs.eventPublisher,
-				metrics:         cs.metrics,
-				proposalUpdater: propUpdater,
-			},
-			EnterPrevoteType: &EnterPrevoteCommand{
-				logger:         cs.logger,
-				eventPublisher: cs.eventPublisher,
-			},
-			EnterPrecommitType: &EnterPrecommitCommand{
-				logger:         cs.logger,
-				eventPublisher: cs.eventPublisher,
-				blockExec:      cs.blockExecutor,
-				voteSigner:     cs.voteSigner,
-			},
-			TryAddCommitType: &TryAddCommitCommand{
-				logger:         cs.logger,
-				blockExec:      cs.blockExecutor,
-				eventPublisher: cs.eventPublisher,
-			},
-			AddCommitType: &AddCommitCommand{
-				eventPublisher:  cs.eventPublisher,
-				statsQueue:      statsQueue,
-				proposalUpdater: propUpdater,
-			},
-			ApplyCommitType: &ApplyCommitCommand{
-				logger:         cs.logger,
-				blockStore:     cs.blockStore,
-				blockExec:      cs.blockExecutor,
-				wal:            wal,
-				scheduler:      cs.roundScheduler,
-				metrics:        cs.metrics,
-				eventPublisher: cs.eventPublisher,
-			},
-			TryFinalizeCommitType: &TryFinalizeCommitCommand{
-				logger:     cs.logger,
-				blockExec:  cs.blockExecutor,
-				blockStore: cs.blockStore,
-			},
-			EnterPrevoteWaitType: &EnterPrevoteWaitCommand{
-				logger:         cs.logger,
-				scheduler:      cs.roundScheduler,
-				eventPublisher: cs.eventPublisher,
-			},
-			EnterPrecommitWaitType: &EnterPrecommitWaitCommand{
-				logger:         cs.logger,
-				scheduler:      cs.roundScheduler,
-				eventPublisher: cs.eventPublisher,
-			},
+
+	fsm := &FSM{}
+	addVoteCmd := &AddVoteCommand{
+		prevote: withVoterMws(
+			addVoteToVoteSet(cs.metrics, cs.eventPublisher, cs.observer),
+			addVoteLoggingMw(cs.logger),
+			addVoteUpdateValidBlockMw(cs.eventPublisher),
+			addVoteDispatchPrevoteMw(fsm),
+			addVoteValidateVoteMw(),
+			addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.observer),
+			addVoteStatsMw(statsQueue),
+		),
+		precommit: withVoterMws(
+			addVoteToVoteSet(cs.metrics, cs.eventPublisher, cs.observer),
+			addVoteLoggingMw(cs.logger),
+			addVoteDispatchPrecommitMw(fsm),
+			addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExec, cs.metrics, cs.observer),
+			addVoteValidateVoteMw(),
+			addVoteToLastPrecommitMw(cs.logger, cs.eventPublisher, fsm),
+			addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.observer),
+			addVoteStatsMw(statsQueue),
+		),
+	}
+	fsm.commands = map[EventType]CommandHandler{
+		EnterNewRoundType: &EnterNewRoundCommand{
+			logger:         cs.logger,
+			config:         cs.config,
+			scheduler:      cs.roundScheduler,
+			eventPublisher: cs.eventPublisher,
+		},
+		EnterProposeType: &EnterProposeCommand{
+			logger:         cs.logger,
+			privValidator:  cs.privValidator,
+			msgInfoQueue:   cs.msgInfoQueue,
+			wal:            cs.wal,
+			replayMode:     cs.replayMode,
+			metrics:        cs.metrics,
+			blockExec:      cs.blockExecutor,
+			scheduler:      cs.roundScheduler,
+			eventPublisher: cs.eventPublisher,
+		},
+		SetProposalType: &SetProposalCommand{
+			logger:  cs.logger,
+			metrics: cs.metrics,
+		},
+		DecideProposalType: &DecideProposalCommand{
+			logger:        cs.logger,
+			privValidator: cs.privValidator,
+			msgInfoQueue:  cs.msgInfoQueue,
+			wal:           cs.wal,
+			metrics:       cs.metrics,
+			blockExec:     cs.blockExecutor,
+			replayMode:    cs.replayMode,
+		},
+		AddProposalBlockPartType: &AddProposalBlockPartCommand{
+			logger:         cs.logger,
+			metrics:        cs.metrics,
+			blockExec:      cs.blockExecutor,
+			eventPublisher: cs.eventPublisher,
+			statsQueue:     statsQueue,
+		},
+		ProposalCompletedType: &ProposalCompletedCommand{logger: cs.logger},
+		DoPrevoteType: &DoPrevoteCommand{
+			logger:     cs.logger,
+			voteSigner: cs.voteSigner,
+			blockExec:  cs.blockExecutor,
+			metrics:    cs.metrics,
+			replayMode: cs.replayMode,
+		},
+		AddVoteType: addVoteCmd,
+		EnterCommitType: &EnterCommitCommand{
+			logger:          cs.logger,
+			eventPublisher:  cs.eventPublisher,
+			metrics:         cs.metrics,
+			proposalUpdater: propUpdater,
+		},
+		EnterPrevoteType: &EnterPrevoteCommand{
+			logger:         cs.logger,
+			eventPublisher: cs.eventPublisher,
+		},
+		EnterPrecommitType: &EnterPrecommitCommand{
+			logger:         cs.logger,
+			eventPublisher: cs.eventPublisher,
+			blockExec:      cs.blockExecutor,
+			voteSigner:     cs.voteSigner,
+		},
+		TryAddCommitType: &TryAddCommitCommand{
+			logger:         cs.logger,
+			blockExec:      cs.blockExecutor,
+			eventPublisher: cs.eventPublisher,
+		},
+		AddCommitType: &AddCommitCommand{
+			eventPublisher:  cs.eventPublisher,
+			statsQueue:      statsQueue,
+			proposalUpdater: propUpdater,
+		},
+		ApplyCommitType: &ApplyCommitCommand{
+			logger:         cs.logger,
+			blockStore:     cs.blockStore,
+			blockExec:      cs.blockExecutor,
+			wal:            wal,
+			scheduler:      cs.roundScheduler,
+			metrics:        cs.metrics,
+			eventPublisher: cs.eventPublisher,
+		},
+		TryFinalizeCommitType: &TryFinalizeCommitCommand{
+			logger:     cs.logger,
+			blockExec:  cs.blockExecutor,
+			blockStore: cs.blockStore,
+		},
+		EnterPrevoteWaitType: &EnterPrevoteWaitCommand{
+			logger:         cs.logger,
+			scheduler:      cs.roundScheduler,
+			eventPublisher: cs.eventPublisher,
+		},
+		EnterPrecommitWaitType: &EnterPrecommitWaitCommand{
+			logger:         cs.logger,
+			scheduler:      cs.roundScheduler,
+			eventPublisher: cs.eventPublisher,
 		},
 	}
 	for _, command := range fsm.commands {

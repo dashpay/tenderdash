@@ -1136,3 +1136,22 @@ func newMockCommand(fn func(ctx context.Context, stateEvent StateEvent) error) *
 func (c *mockCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
 	return c.fn(ctx, stateEvent)
 }
+
+type testSigner struct {
+	privVals []types.PrivValidator
+	valSet   *types.ValidatorSet
+	logger   log.Logger
+}
+
+func (s *testSigner) signVotes(ctx context.Context, votes ...*types.Vote) error {
+	for _, vote := range votes {
+		protoVote := vote.ToProto()
+		qt, qh := s.valSet.QuorumType, s.valSet.QuorumHash
+		err := s.privVals[vote.ValidatorIndex].SignVote(ctx, chainID, qt, qh, protoVote, s.logger)
+		if err != nil {
+			return err
+		}
+		vote.BlockSignature = protoVote.BlockSignature
+	}
+	return nil
+}

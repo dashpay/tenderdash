@@ -2,16 +2,23 @@ package consensus
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
 
 	"github.com/tendermint/tendermint/config"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
+	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
+)
+
+var (
+	errHeightMismatch      = errors.New("vote height does not match on a state")
+	errValSetDoesNotPubKey = errors.New("validator set does not have public key")
 )
 
 // StateDataStore is a state-data store
@@ -325,6 +332,27 @@ func (s *StateData) updateValidBlock() {
 	s.ValidBlockParts = s.ProposalBlockParts
 }
 
+func (s *StateData) updateValidBlockIfBlockIDMatches(blockID types.BlockID, voteRound int32) {
+	// Update Valid* if we can.
+	if s.ValidRound >= voteRound || voteRound != s.Round {
+		return
+	}
+	if s.ProposalBlock.HashesTo(blockID.Hash) {
+		s.logger.Debug("updating valid block because of POL", "valid_round", s.ValidRound, "pol_round", voteRound)
+		s.updateValidBlock()
+	} else {
+		s.logger.Debug("valid block we do not know about; set ProposalBlock=nil",
+			"proposal", tmstrings.LazyBlockHash(s.ProposalBlock),
+			"block_id", blockID.Hash)
+		// we're getting the wrong block
+		s.ProposalBlock = nil
+	}
+	if !s.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
+		s.metrics.MarkBlockGossipStarted()
+		s.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
+	}
+}
+
 func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
 	// Lets first do some basic commit validation before more complicated commit verification
 	if err := commit.ValidateBasic(); err != nil {
@@ -464,4 +492,17 @@ func (s *StateData) calculateProposalTimestampDifferenceMetric() {
 		s.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", isTimely)).
 			Observe(s.ProposalReceiveTime.Sub(s.Proposal.Timestamp).Seconds())
 	}
+}
+
+func (s *StateData) validateVote(vote *types.Vote) error {
+	// Height mismatch is ignored.
+	// Not necessarily a bad peer, but not favorable behavior.
+	if vote.Height != s.Height {
+		return errHeightMismatch
+	}
+	// Ignore vote if we do not have public keys to verify votes
+	if !s.Validators.HasPublicKeys {
+		return errValSetDoesNotPubKey
+	}
+	return nil
 }
