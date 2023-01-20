@@ -63,11 +63,11 @@ func (suite *AddVoteTestSuite) TestAddVoteCommand() {
 	prevoteCalled := false
 	precommitCalled := false
 	cmd := AddVoteCommand{
-		prevote: func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
+		prevote: func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			prevoteCalled = true
 			return true, nil
 		},
-		precommit: func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
+		precommit: func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			precommitCalled = true
 			return true, nil
 		},
@@ -137,7 +137,6 @@ func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 	voteH100R1.Round = 1
 	err := suite.signer.signVotes(ctx, &voteH100R0, &voteH100R1)
 	require.NoError(suite.T(), err)
-	peerID := "peer"
 	testCases := []struct {
 		vote           types.Vote
 		wantAdded      bool
@@ -162,7 +161,7 @@ func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 		eventFired = false
 		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
 			stateData.Votes = cstypes.NewHeightVoteSet(chainID, 100, suite.valSet)
-			added, err := fn(ctx, stateData, &tc.vote, types.NodeID(peerID))
+			added, err := fn(ctx, stateData, &tc.vote)
 			suite.NoError(err)
 			suite.Equal(tc.wantAdded, added)
 			suite.Equal(tc.wantFiredEvent, eventFired)
@@ -178,7 +177,6 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 		eventFired = true
 		return nil
 	})
-	peerID := types.NodeID("peer")
 	val0 := suite.valSet.Validators[0]
 	val1 := suite.valSet.Validators[1]
 	blockID := types.BlockID{
@@ -201,7 +199,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 	suite.NoError(err)
 	returnAdded := true
 	var returnError error
-	mockFn := func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
+	mockFn := func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 		return returnAdded, returnError
 	}
 	fn := addVoteUpdateValidBlockMw(suite.publisher)(mockFn)
@@ -265,7 +263,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
 			hvs := cstypes.NewHeightVoteSet(chainID, 100, suite.valSet)
 			for _, vote := range tc.votes {
-				added, err := hvs.AddVote(&vote, peerID)
+				added, err := hvs.AddVote(&vote)
 				suite.NoError(err)
 				suite.True(added)
 			}
@@ -283,7 +281,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 					Votes: hvs,
 				},
 			}
-			added, err := fn(ctx, stateData, &tc.vote, peerID)
+			added, err := fn(ctx, stateData, &tc.vote)
 			assertError(suite.T(), tc.wantErr, err)
 			suite.Equal(tc.wantAdded, added)
 			suite.Equal(tc.wantFiredEvent, eventFired)

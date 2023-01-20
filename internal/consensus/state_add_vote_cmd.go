@@ -12,7 +12,7 @@ import (
 )
 
 type (
-	AddVoteFunc   func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error)
+	AddVoteFunc   func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error)
 	AddVoteMwFunc func(next AddVoteFunc) AddVoteFunc
 )
 
@@ -37,13 +37,13 @@ type AddVoteCommand struct {
 func (c *AddVoteCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(*AddVoteEvent)
-	vote, peerID := event.Vote, event.PeerID
+	vote := event.Vote
 	var err error
 	switch vote.Type {
 	case tmproto.PrevoteType:
-		_, err = c.prevote(ctx, stateData, vote, peerID)
+		_, err = c.prevote(ctx, stateData, event.Vote)
 	case tmproto.PrecommitType:
-		_, err = c.precommit(ctx, stateData, vote, peerID)
+		_, err = c.precommit(ctx, stateData, event.Vote)
 	}
 	return err
 }
@@ -54,8 +54,8 @@ func addVoteToVoteSet(metrics *Metrics, ep *EventPublisher, observer *Observer) 
 		metrics = a.(*Metrics)
 		return nil
 	})
-	return func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
-		added, err := stateData.Votes.AddVote(vote, peerID)
+	return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+		added, err := stateData.Votes.AddVote(vote)
 		if !added || err != nil {
 			return added, err
 		}
@@ -71,9 +71,9 @@ func addVoteToVoteSet(metrics *Metrics, ep *EventPublisher, observer *Observer) 
 
 func addVoteToLastPrecommitMw(logger log.Logger, ep *EventPublisher, fsm *FSM) AddVoteMwFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
-		return func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
+		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			if vote.Height+1 != stateData.Height || vote.Type != tmproto.PrecommitType {
-				return next(ctx, stateData, vote, peerID)
+				return next(ctx, stateData, vote)
 			}
 			logKeyVals := logKeyValsFromCtx(ctx)
 			if stateData.Step != cstypes.RoundStepNewHeight {
@@ -113,8 +113,8 @@ func addVoteToLastPrecommitMw(logger log.Logger, ep *EventPublisher, fsm *FSM) A
 
 func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMwFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
-		return func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
-			added, err := next(ctx, stateData, vote, peerID)
+		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+			added, err := next(ctx, stateData, vote)
 			if !added || err != nil {
 				return added, err
 			}
@@ -140,8 +140,8 @@ func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMwFunc {
 
 func addVoteDispatchPrevoteMw(fsm *FSM) AddVoteMwFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
-		return func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
-			added, err := next(ctx, stateData, vote, peerID)
+		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+			added, err := next(ctx, stateData, vote)
 			if !added || err != nil || vote.Type != tmproto.PrevoteType {
 				return added, err
 			}
@@ -173,8 +173,8 @@ func addVoteDispatchPrevoteMw(fsm *FSM) AddVoteMwFunc {
 
 func addVoteDispatchPrecommitMw(FSM *FSM) AddVoteMwFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
-		return func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
-			added, err := next(ctx, stateData, vote, peerID)
+		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+			added, err := next(ctx, stateData, vote)
 			if !added || err != nil || vote.Type != tmproto.PrecommitType {
 				return added, err
 			}
@@ -223,14 +223,14 @@ func addVoteVerifyVoteExtensionMw(
 		return nil
 	})
 	return func(next AddVoteFunc) AddVoteFunc {
-		return func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
+		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			// Verify VoteExtension if precommit and not nil
 			// https://github.com/tendermint/tendermint/issues/8487
 			if vote.Type != tmproto.PrecommitType ||
 				vote.BlockID.IsNil() ||
 				privVal.IsProTxHashEqual(vote.ValidatorProTxHash) {
 				// Skip the VerifyVoteExtension call if the vote was issued by this validator.
-				return next(ctx, stateData, vote, peerID)
+				return next(ctx, stateData, vote)
 			}
 
 			// The core fields of the vote message were already validated in the
@@ -247,14 +247,14 @@ func addVoteVerifyVoteExtensionMw(
 			if err != nil {
 				return false, err
 			}
-			return next(ctx, stateData, vote, peerID)
+			return next(ctx, stateData, vote)
 		}
 	}
 }
 
 func addVoteValidateVoteMw() AddVoteMwFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
-		return func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
+		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			// Height mismatch is ignored.
 			// Not necessarily a bad peer, but not favorable behavior.
 			if vote.Height != stateData.Height {
@@ -264,15 +264,15 @@ func addVoteValidateVoteMw() AddVoteMwFunc {
 			if !stateData.Validators.HasPublicKeys {
 				return false, nil
 			}
-			return next(ctx, stateData, vote, peerID)
+			return next(ctx, stateData, vote)
 		}
 	}
 }
 
 func addVoteStatsMw(statsQueue *chanQueue[msgInfo]) AddVoteMwFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
-		return func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
-			added, err := next(ctx, stateData, vote, peerID)
+		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+			added, err := next(ctx, stateData, vote)
 			if added {
 				_ = statsQueue.send(ctx, msgInfoFromCtx(ctx))
 			}
@@ -289,8 +289,8 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 		return nil
 	})
 	return func(next AddVoteFunc) AddVoteFunc {
-		return func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
-			added, err := next(ctx, stateData, vote, peerID)
+		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+			added, err := next(ctx, stateData, vote)
 			if err == nil {
 				return added, err
 			}
@@ -325,10 +325,10 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 
 func addVoteLoggingMw(logger log.Logger) AddVoteMwFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
-		return func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error) {
+		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			logKeyVals := logKeyValsFromCtx(ctx)
 			logger.Debug("adding vote to vote set", logKeyVals...)
-			added, err := next(ctx, stateData, vote, peerID)
+			added, err := next(ctx, stateData, vote)
 			if !added {
 				if err != nil {
 					logger.Error("vote not added", append(logKeyVals, "error", err))
