@@ -88,7 +88,8 @@ const (
 	votesToContributeToBecomeGoodPeer   = 10000
 	commitsToContributeToBecomeGoodPeer = 10000
 
-	listenerIDConsensus = "consensus-reactor"
+	listenerIDConsensus      = "consensus-reactor"
+	listenerIDConsensusState = "consensus-state"
 )
 
 var errReactorClosed = errors.New("reactor is closed")
@@ -482,10 +483,10 @@ OUTER_LOOP:
 		case <-timer.C:
 		}
 
-		rs := r.getRoundState()
+		stateData := r.state.GetStateData()
+		rs := stateData.RoundState
 		prs := ps.GetRoundState()
-
-		isValidator := r.isValidator(ps.GetProTxHash())
+		isValidator := stateData.isValidator(ps.GetProTxHash())
 
 		// Send proposal Block parts?
 		if (isValidator && rs.ProposalBlockParts.HasHeader(prs.ProposalBlockPartSetHeader)) ||
@@ -623,7 +624,7 @@ func (r *Reactor) pickSendVote(ctx context.Context, ps *PeerState, votes types.V
 		"height", vote.Height,
 		"round", vote.Round,
 		"size", voteProto.Size(),
-		"isValidator", r.isValidator(vote.ValidatorProTxHash),
+		//"isValidator", r.isValidator(vote.ValidatorProTxHash),
 	)
 	if err != nil {
 		return false, err
@@ -810,10 +811,10 @@ func (r *Reactor) gossipVotesAndCommitRoutine(ctx context.Context, voteCh p2p.Ch
 		default:
 		}
 
-		rs := r.getRoundState()
+		stateData := r.state.GetStateData()
+		rs := stateData.RoundState
 		prs := ps.GetRoundState()
-
-		isValidator := r.isValidator(ps.GetProTxHash())
+		isValidator := stateData.isValidator(ps.GetProTxHash())
 
 		//	If there are lastCommits to send...
 		//prs.Step == cstypes.RoundStepNewHeight &&
@@ -878,15 +879,17 @@ func (r *Reactor) queryMaj23Routine(ctx context.Context, stateCh p2p.Channel, ps
 			return
 		}
 
+		stateData := r.state.GetStateData()
+
 		// If peer is not a validator, we do nothing
-		if !r.isValidator(ps.GetProTxHash()) {
+		if !stateData.isValidator(ps.GetProTxHash()) {
 			time.Sleep(r.state.config.PeerQueryMaj23SleepDuration)
 			continue
 		}
 
 		// TODO create more reliable copies of these
 		// structures so the following go routines don't race
-		rs := r.getRoundState()
+		rs := stateData.RoundState
 		prs := ps.GetRoundState()
 
 		wg := &sync.WaitGroup{}
@@ -987,11 +990,6 @@ func (r *Reactor) queryMaj23Routine(ctx context.Context, stateCh p2p.Channel, ps
 			return
 		}
 	}
-}
-
-func (r *Reactor) isValidator(proTxHash types.ProTxHash) bool {
-	_, vset := r.state.GetValidatorSet()
-	return vset.HasProTxHash(proTxHash)
 }
 
 // processPeerUpdate process a peer update message. For new or reconnected peers,
@@ -1269,7 +1267,7 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 		}
 	case *tmcons.Vote:
 		stateData := r.state.stateDataStore.Get()
-		isValidator := stateData.Validators.HasProTxHash(r.state.privValidator.ProTxHash)
+		isValidator := stateData.isValidator(r.state.privValidator.ProTxHash)
 		height, valSize, lastCommitSize := stateData.Height, stateData.Validators.Size(), stateData.LastPrecommits.Size()
 
 		if isValidator { // ignore votes on non-validator nodes; TODO don't even send it

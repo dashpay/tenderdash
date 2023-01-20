@@ -388,11 +388,9 @@ func TestReactorWithEvidence(t *testing.T) {
 		blockExec := sm.NewBlockExecutor(stateStore, proxyAppConnCon, mempool, evpool, blockStore, eventBus)
 
 		cs, err := NewState(logger.With("validator", i, "module", "consensus"),
-			thisConfig.Consensus, stateStore, blockExec, blockStore, mempool, evpool2, eventBus)
+			thisConfig.Consensus, stateStore, blockExec, blockStore, mempool, evpool2, eventBus, WithTimeoutTicker(tickerFunc()))
 		require.NoError(t, err)
 		cs.SetPrivValidator(ctx, pv)
-
-		cs.SetTimeoutTicker(tickerFunc())
 
 		states[i] = cs
 	}

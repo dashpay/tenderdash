@@ -146,10 +146,3 @@ func (c *ApplyCommitCommand) RecordMetrics(stateData *StateData, height int64, b
 	c.metrics.BlockSizeBytes.Observe(float64(block.Size()))
 	c.metrics.CommittedHeight.Set(float64(block.Height))
 }
-
-func (c *ApplyCommitCommand) Subscribe(observer *Observer) {
-	observer.Subscribe(SetMetrics, func(a any) error {
-		c.metrics = a.(*Metrics)
-		return nil
-	})
-}

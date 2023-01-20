@@ -243,5 +243,5 @@ func assertError(t *testing.T, want string, err error) {
 		require.NoError(t, err)
 		return
 	}
-	require.Contains(t, err.Error(), want)
+	require.ErrorContains(t, err, want)
 }

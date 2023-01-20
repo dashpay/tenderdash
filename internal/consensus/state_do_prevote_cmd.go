@@ -7,6 +7,7 @@ import (
 	"time"
 
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -178,12 +179,8 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, stateEvent StateEvent) 
 	return nil
 }
 
-func (cs *DoPrevoteCommand) Subscribe(observer *Observer) {
-	observer.Subscribe(SetMetrics, func(a any) error {
-		cs.metrics = a.(*Metrics)
-		return nil
-	})
-	observer.Subscribe(SetReplayMode, func(a any) error {
+func (cs *DoPrevoteCommand) subscribe(evsw events.EventSwitch) {
+	_ = evsw.AddListenerForEvent("doPrevoteCommand", setReplayMode, func(a events.EventData) error {
 		cs.replayMode = a.(bool)
 		return nil
 	})

@@ -185,13 +185,6 @@ func (c *AddProposalBlockPartCommand) addProposalBlockPart(
 	return added, nil
 }
 
-func (c *AddProposalBlockPartCommand) Subscribe(observer *Observer) {
-	observer.Subscribe(SetMetrics, func(a any) error {
-		c.metrics = a.(*Metrics)
-		return nil
-	})
-}
-
 type ProposalCompletedEvent struct {
 	Height     int64
 	FromReplay bool

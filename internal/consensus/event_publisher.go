@@ -8,7 +8,10 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// EventPublisher ...
+// EventPublisher is event message sender to event-bus and event-switch
+// this component provides some methods for sending events
+// event-bus is used to interact internally and between the modules
+// event-switch is mostly used in tests
 type EventPublisher struct {
 	// synchronous pubsub between consensus state and reactor.
 	// state only emits EventNewRoundStep, EventValidBlock, and EventVote

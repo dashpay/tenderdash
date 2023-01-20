@@ -4,6 +4,7 @@ import (
 	"context"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
+	"github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 )
@@ -117,16 +118,13 @@ func (c *EnterProposeCommand) Execute(ctx context.Context, stateEvent StateEvent
 	return nil
 }
 
-func (c *EnterProposeCommand) Subscribe(observer *Observer) {
-	observer.Subscribe(SetMetrics, func(a any) error {
-		c.metrics = a.(*Metrics)
-		return nil
-	})
-	observer.Subscribe(SetReplayMode, func(a any) error {
+func (c *EnterProposeCommand) subscribe(evsw events.EventSwitch) {
+	const listenerID = "enterProposeCommand"
+	_ = evsw.AddListenerForEvent(listenerID, setReplayMode, func(a events.EventData) error {
 		c.replayMode = a.(bool)
 		return nil
 	})
-	observer.Subscribe(SetPrivValidator, func(a any) error {
+	_ = evsw.AddListenerForEvent(listenerID, setPrivValidator, func(a events.EventData) error {
 		c.privValidator = a.(privValidator)
 		return nil
 	})

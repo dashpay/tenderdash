@@ -67,10 +67,3 @@ func (c *EnterCommitCommand) Execute(ctx context.Context, stateEvent StateEvent)
 
 	return c.proposalUpdater.updateStateData(stateData, blockID)
 }
-
-func (c *EnterCommitCommand) Subscribe(observer *Observer) {
-	observer.Subscribe(SetMetrics, func(a any) error {
-		c.metrics = a.(*Metrics)
-		return nil
-	})
-}

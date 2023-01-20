@@ -110,3 +110,12 @@ func Reverse(bz []byte) []byte {
 	}
 	return s
 }
+
+// MustHexDecode decodes hex string to slice of bytes
+func MustHexDecode(s string) []byte {
+	bz, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err.Error())
+	}
+	return bz
+}

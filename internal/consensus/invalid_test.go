@@ -30,12 +30,9 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 	const n = 2
 	states := makeConsensusState(ctx, t,
 		config, n, "consensus_reactor_test",
-		newMockTickerFunc(true))
-
-	for i := 0; i < n; i++ {
-		ticker := NewTimeoutTicker(states[i].logger)
-		states[i].SetTimeoutTicker(ticker)
-	}
+		func() TimeoutTicker {
+			return NewTimeoutTicker(log.NewNopLogger())
+		})
 
 	rts := setup(ctx, t, n, states, 100) // buffer must be large enough to not deadlock
 
