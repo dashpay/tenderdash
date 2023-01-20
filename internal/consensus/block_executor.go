@@ -27,7 +27,7 @@ type blockExecutor struct {
 // CONTRACT: cs.privValidator is not nil.
 func (c *blockExecutor) create(ctx context.Context, stateData *StateData, round int32) (*types.Block, error) {
 	if c.privValidator.IsZero() {
-		return nil, errors.New("entered createProposalBlock with privValidator being nil")
+		return nil, errors.New("cannot create proposal block on non-validator")
 	}
 
 	// TODO(sergio): wouldn't it be easier if CreateProposalBlock accepted cs.LastCommit directly?
