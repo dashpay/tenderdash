@@ -70,7 +70,7 @@ func (c *blockExecutor) process(ctx context.Context, stateData *StateData, round
 	return nil
 }
 
-func (c *blockExecutor) processOrPanic(ctx context.Context, stateData *StateData, round int32) {
+func (c *blockExecutor) mustProcess(ctx context.Context, stateData *StateData, round int32) {
 	err := c.process(ctx, stateData, round)
 	if err != nil {
 		panic(err)
