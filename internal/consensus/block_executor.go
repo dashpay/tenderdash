@@ -27,7 +27,7 @@ type blockExecutor struct {
 // CONTRACT: cs.privValidator is not nil.
 func (c *blockExecutor) create(ctx context.Context, stateData *StateData, round int32) (*types.Block, error) {
 	if c.privValidator.IsZero() {
-		return nil, errors.New("entered createProposalBlock with privValidator being nil")
+		return nil, errors.New("cannot create proposal block on non-validator")
 	}
 
 	// TODO(sergio): wouldn't it be easier if CreateProposalBlock accepted cs.LastCommit directly?
@@ -70,7 +70,7 @@ func (c *blockExecutor) process(ctx context.Context, stateData *StateData, round
 	return nil
 }
 
-func (c *blockExecutor) processOrPanic(ctx context.Context, stateData *StateData, round int32) {
+func (c *blockExecutor) mustProcess(ctx context.Context, stateData *StateData, round int32) {
 	err := c.process(ctx, stateData, round)
 	if err != nil {
 		panic(err)
@@ -112,7 +112,7 @@ func (c *blockExecutor) validate(ctx context.Context, stateData *StateData) erro
 	return nil
 }
 
-func (c *blockExecutor) validateOrPanic(ctx context.Context, stateData *StateData) {
+func (c *blockExecutor) mustValidate(ctx context.Context, stateData *StateData) {
 	err := c.validate(ctx, stateData)
 	if err != nil {
 		panic(err)
