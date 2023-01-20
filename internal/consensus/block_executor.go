@@ -112,7 +112,7 @@ func (c *blockExecutor) validate(ctx context.Context, stateData *StateData) erro
 	return nil
 }
 
-func (c *blockExecutor) validateOrPanic(ctx context.Context, stateData *StateData) {
+func (c *blockExecutor) mustValidate(ctx context.Context, stateData *StateData) {
 	err := c.validate(ctx, stateData)
 	if err != nil {
 		panic(err)
