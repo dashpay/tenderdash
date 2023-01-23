@@ -25,9 +25,11 @@ func (e *DoPrevoteEvent) GetType() EventType {
 	return DoPrevoteType
 }
 
+// DoPrevoteCommand validates, signs and adds a prevote vote to the consensus state
+// if the state-data has an invalid, then signs and adds empty vote
 type DoPrevoteCommand struct {
 	logger     log.Logger
-	voteSigner *VoteSigner
+	voteSigner *voteSigner
 	blockExec  *blockExecutor
 	metrics    *Metrics
 	replayMode bool

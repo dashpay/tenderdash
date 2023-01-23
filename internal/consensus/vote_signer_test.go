@@ -55,7 +55,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 			Validators: valSet,
 		},
 	}
-	signer := VoteSigner{
+	signer := voteSigner{
 		privValidator: privVal,
 		logger:        logger,
 		queueSender:   mockQueue,

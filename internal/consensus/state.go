@@ -169,7 +169,7 @@ type State struct {
 	msgDispatcher  *msgInfoDispatcher
 	blockExecutor  *blockExecutor
 	eventPublisher *EventPublisher
-	voteSigner     *VoteSigner
+	voteSigner     *voteSigner
 	fsm            *FSM
 	roundScheduler *roundScheduler
 
@@ -248,7 +248,7 @@ func NewState(
 	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg)
 	wal := &wrapWAL{getter: func() WALWriteFlusher { return cs.wal }}
 
-	cs.voteSigner = &VoteSigner{
+	cs.voteSigner = &voteSigner{
 		privValidator: cs.privValidator,
 		logger:        cs.logger,
 		queueSender:   cs.msgInfoQueue,

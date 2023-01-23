@@ -30,7 +30,7 @@ type EnterPrecommitCommand struct {
 	logger         log.Logger
 	eventPublisher *EventPublisher
 	blockExec      *blockExecutor
-	voteSigner     *VoteSigner
+	voteSigner     *voteSigner
 }
 
 // Execute ...
