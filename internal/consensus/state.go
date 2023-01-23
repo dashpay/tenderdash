@@ -270,18 +270,18 @@ func NewState(
 	cs.roundScheduler = &roundScheduler{timeoutTicker: cs.timeoutTicker}
 	cs.fsm = NewFSM(cs, wal, cs.statsMsgQueue)
 	cs.msgDispatcher = newMsgInfoDispatcher(cs.fsm, wal, cs.logger)
-	cs.evsw.AddListenerForEvent(listenerIDConsensusState, setProposedAppVersion, func(obj tmevents.EventData) error {
+	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setProposedAppVersion, func(obj tmevents.EventData) error {
 		ver := obj.(uint64)
 		cs.blockExecutor.proposedAppVersion = ver
 		return nil
 	})
-	cs.evsw.AddListenerForEvent(listenerIDConsensusState, setPrivValidator, func(obj tmevents.EventData) error {
+	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setPrivValidator, func(obj tmevents.EventData) error {
 		pv := obj.(privValidator)
 		cs.voteSigner.privValidator = pv
 		cs.blockExecutor.privValidator = pv
 		return nil
 	})
-	cs.evsw.AddListenerForEvent(listenerIDConsensusState, setReplayMode, func(obj tmevents.EventData) error {
+	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setReplayMode, func(obj tmevents.EventData) error {
 		flag := obj.(bool)
 		cs.stateDataStore.replayMode = flag
 		return nil

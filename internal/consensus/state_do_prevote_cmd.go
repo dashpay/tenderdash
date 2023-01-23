@@ -110,7 +110,7 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, stateEvent StateEvent) 
 	}
 
 	// Validate the block
-	cs.blockExec.validateOrPanic(ctx, stateData)
+	cs.blockExec.mustValidate(ctx, stateData)
 
 	cs.metrics.MarkProposalProcessed(true)
 

@@ -308,7 +308,7 @@ func (c *TryAddVoteCommand) addVote(
 			}
 		} else if stateData.Round <= vote.Round && precommits.HasTwoThirdsAny() {
 			_ = fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
-			fsm.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
+			_ = fsm.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
 		}
 
 	default:
@@ -319,7 +319,7 @@ func (c *TryAddVoteCommand) addVote(
 }
 
 func (c *TryAddVoteCommand) subscribe(evsw events.EventSwitch) {
-	evsw.AddListenerForEvent("addVoteCommand", setPrivValidator, func(a events.EventData) error {
+	_ = evsw.AddListenerForEvent("addVoteCommand", setPrivValidator, func(a events.EventData) error {
 		c.privValidator = a.(privValidator)
 		return nil
 	})

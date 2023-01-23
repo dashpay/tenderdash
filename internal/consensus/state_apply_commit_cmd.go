@@ -46,8 +46,8 @@ func (c *ApplyCommitCommand) Execute(ctx context.Context, stateEvent StateEvent)
 		round = commit.Round
 	}
 
-	c.blockExec.processOrPanic(ctx, stateData, round)
-	c.blockExec.validateOrPanic(ctx, stateData)
+	c.blockExec.mustProcess(ctx, stateData, round)
+	c.blockExec.mustValidate(ctx, stateData)
 
 	// Save to blockStore
 	if commit != nil {
