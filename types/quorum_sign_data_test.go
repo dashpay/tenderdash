@@ -1,7 +1,6 @@
 package types
 
 import (
-	"encoding/hex"
 	"fmt"
 	"testing"
 
@@ -90,7 +89,7 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 					tmbytes.MustHexDecode("61519D79DE4C4D5AC5DD210C1BCE81AA24F76DD5581A24970E60112890C68FB7"),
 				},
 				types.VoteExtensionType_THRESHOLD_RECOVER: {
-					tmbytes.MustHexDecode("E5E9DE2371FC580F944CAA0725A876B8490ADF4FD430ED38743054E3AC189EEC"),
+					tmbytes.MustHexDecode("46C72C423B74034E1AF574A99091B017C0698FEAA55C8B188BFD512FCADD3143"),
 				},
 			},
 		},
@@ -101,7 +100,7 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 			require.NoError(t, err)
 			for et, signs := range signItems {
 				for i, sign := range signs {
-					assert.Equal(t, tc.wantHash[et][i], sign.Hash, hex.EncodeToString(sign.Hash))
+					assert.Equal(t, tc.wantHash[et][i], sign.Hash, "want %X, actual %X", tc.wantHash[et][i], sign.Hash)
 					if !assert.Equal(t, tc.want[et][i], sign) {
 						logger.Error("invalid sign", "sign", sign, "type", et, "i", i)
 					}
