@@ -45,9 +45,9 @@ type HeightVoteSet struct {
 	valSet  *types.ValidatorSet
 
 	mtx               sync.Mutex
-	round             int32                    // max tracked round
-	roundVoteSets     map[int32]RoundVoteSet   // keys: [0...round]
-	peerCatchupRounds map[types.NodeID][]int32 // keys: peer.ID; values: at most 2 rounds
+	round             int32                  // max tracked round
+	roundVoteSets     map[int32]RoundVoteSet // keys: [0...round]
+	peerCatchupRounds map[string][]int32     // keys: proTxHash; values: at most 2 rounds
 }
 
 func NewHeightVoteSet(
@@ -66,7 +66,7 @@ func (hvs *HeightVoteSet) Reset(height int64, valSet *types.ValidatorSet) {
 	hvs.height = height
 	hvs.valSet = valSet
 	hvs.roundVoteSets = make(map[int32]RoundVoteSet)
-	hvs.peerCatchupRounds = make(map[types.NodeID][]int32)
+	hvs.peerCatchupRounds = make(map[string][]int32)
 
 	hvs.addRound(0)
 	hvs.round = 0
@@ -119,8 +119,7 @@ func (hvs *HeightVoteSet) addRound(round int32) {
 
 // AddVote adds a vote of a specific type to the round
 // Duplicate votes return added=false, err=nil.
-// By convention, peerID is "" if origin is self.
-func (hvs *HeightVoteSet) AddVote(vote *types.Vote, peerID types.NodeID) (added bool, err error) {
+func (hvs *HeightVoteSet) AddVote(vote *types.Vote) (added bool, err error) {
 	if !hvs.valSet.HasPublicKeys {
 		return false, nil
 	}
@@ -131,10 +130,11 @@ func (hvs *HeightVoteSet) AddVote(vote *types.Vote, peerID types.NodeID) (added 
 	}
 	voteSet := hvs.getVoteSet(vote.Round, vote.Type)
 	if voteSet == nil {
-		if rndz := hvs.peerCatchupRounds[peerID]; len(rndz) < 2 {
+		proTxHash := vote.ValidatorProTxHash.String()
+		if rndz := hvs.peerCatchupRounds[proTxHash]; len(rndz) < 2 {
 			hvs.addRound(vote.Round)
 			voteSet = hvs.getVoteSet(vote.Round, vote.Type)
-			hvs.peerCatchupRounds[peerID] = append(rndz, vote.Round)
+			hvs.peerCatchupRounds[proTxHash] = append(rndz, vote.Round)
 		} else {
 			// punish peer
 			err = ErrGotVoteFromUnwantedRound

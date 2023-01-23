@@ -21,9 +21,7 @@ message NodeInfo {
   bytes           channels         = 6;
   string          moniker          = 7;
   NodeInfoOther   other            = 8 [(gogoproto.nullable) = false];
-
-  // dash's fields
-  bytes pro_tx_hash = 100;
+  bytes           pro_tx_hash      = 9;
 }
 
 message NodeInfoOther {
@@ -36,16 +34,12 @@ message PeerInfo {
   repeated PeerAddressInfo  address_info   = 2;
   google.protobuf.Timestamp last_connected = 3 [(gogoproto.stdtime) = true];
   bool                      inactive       = 4;
-
-  // dash's fields
-  bytes pro_tx_hash = 100;
+  bytes                     pro_tx_hash    = 5;
 }
 
 message PeerAddressInfo {
   string                    address           = 1;
-  google.protobuf.Timestamp last_dial_success = 2
-      [(gogoproto.stdtime) = true];
-  google.protobuf.Timestamp last_dial_failure = 3
-      [(gogoproto.stdtime) = true];
-  uint32 dial_failures = 4;
+  google.protobuf.Timestamp last_dial_success = 2 [(gogoproto.stdtime) = true];
+  google.protobuf.Timestamp last_dial_failure = 3 [(gogoproto.stdtime) = true];
+  uint32                    dial_failures     = 4;
 }

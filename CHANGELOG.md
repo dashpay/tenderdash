@@ -1,3 +1,36 @@
+## [0.10.0-dev.8] - 2023-01-16
+
+### Bug Fixes
+
+- Ensure process proposal runs on complete proposal (#538)
+- Peer notifications should be async to avoid deadlock in PeerUp (#509)
+- Improve flaky TestWALRoundsSkipper (#539)
+- Flaky TestReactor_Backfill test (#549)
+
+### Features
+
+- [**breaking**] Verify next consensus params between nodes (#550)
+- Add quorum hash to RequestPrepare/ProcessProposal (#553)
+
+### Refactor
+
+- Use logger for log printing (#545)
+- Blocksync.bpRequester should stop procedure if block was received (#546)
+- [**breaking**] Cleanup protobuf definitions and reorganize fields (#552)
+
+### Testing
+
+- Fix Index out of bounds on "runner logs" (#537)
+
+### Build
+
+- Bump goreleaser/goreleaser-action from 3 to 4 (#544)
+- Bump actions/stale from 6 to 7 (#543)
+- Bump actions/setup-go from 3.4.0 to 3.5.0 (#542)
+- Bump bufbuild/buf-setup-action from 1.10.0 to 1.11.0 (#541)
+- Use ubuntu 20.04 in github workflows (#547)
+- Enable deadlock detection on -dev docker images  (#540)
+
 ## [0.10.0-dev.7] - 2022-12-20
 
 ### Bug Fixes
@@ -8,6 +41,10 @@
 ### Features
 
 - Seed connectivity tuning options (max-incoming-connection-time,incoming-connection-window) (#532)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.10.0-dev.7 (#536)
 
 ### Build
 

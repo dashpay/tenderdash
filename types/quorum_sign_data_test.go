@@ -5,10 +5,12 @@ import (
 	"testing"
 
 	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -48,6 +50,7 @@ func TestMakeBlockSignID(t *testing.T) {
 
 func TestMakeVoteExtensionSignsData(t *testing.T) {
 	const chainID = "dash-platform"
+	logger := log.NewTestingLogger(t)
 	testCases := []struct {
 		vote       Vote
 		quorumHash []byte
@@ -75,9 +78,9 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 				},
 				types.VoteExtensionType_THRESHOLD_RECOVER: {
 					newSignItem(
-						"FB95F2CA6530F02AC623589D7938643FF22AE79A75DD79AEA1C8871162DE675E",
-						"32EEC36505B3E47E97C210B4BC386538128688B1575EC428904270A131D43EBD",
-						"260A097468726573686F6C6411E903000000000000220D646173682D706C6174666F726DA00601",
+						"fb95f2ca6530f02ac623589d7938643ff22ae79a75dd79aea1c8871162de675e",
+						"d3b7d53a0f9ca8072d47d6c18e782ee3155ef8dcddb010087030b6cbc63978bc",
+						"250a097468726573686f6c6411e903000000000000220d646173682d706c6174666f726d2801",
 					),
 				},
 			},
@@ -97,8 +100,10 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 			require.NoError(t, err)
 			for et, signs := range signItems {
 				for i, sign := range signs {
-					require.Equal(t, tc.wantHash[et][i], sign.Hash)
-					require.Equal(t, tc.want[et][i], sign)
+					assert.Equal(t, tc.wantHash[et][i], sign.Hash, hex.EncodeToString(sign.Hash))
+					if !assert.Equal(t, tc.want[et][i], sign) {
+						logger.Error("invalid sign", "sign", sign, "type", et, "i", i)
+					}
 				}
 			}
 		})
