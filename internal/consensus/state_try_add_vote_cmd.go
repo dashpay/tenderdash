@@ -201,7 +201,7 @@ func (c *TryAddVoteCommand) addVote(
 	)
 
 	height := stateData.Height
-	added, err = stateData.Votes.AddVote(vote, peerID)
+	added, err = stateData.Votes.AddVote(vote)
 	if !added {
 		if err != nil {
 			c.logger.Error(
