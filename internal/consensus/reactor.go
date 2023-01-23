@@ -397,10 +397,6 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 	}
 }
 
-func (r *Reactor) getRoundState() cstypes.RoundState {
-	return r.state.GetRoundState()
-}
-
 func (r *Reactor) gossipDataForCatchup(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState, chans channelBundle) {
 	height := prs.Height
 	logger := r.logger.With("height", height, "peer", ps.peerID)

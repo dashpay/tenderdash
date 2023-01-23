@@ -1016,7 +1016,7 @@ func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State,
 		proTxHash, _ := privVals[i].GetProTxHash(ctx)
 		css[i] = newStateWithConfig(ctx, t,
 			logger.With("validator", i, "node_proTxHash", proTxHash.ShortString(), "module", "consensus"),
-			thisConfig, state, privVals[i], apps[i])
+			thisConfig, state, privVals[i], apps[i], WithTimeoutTicker(tickerFunc()))
 	}
 
 	validatorSetUpdates := g.execValidatorSetUpdater(ctx, t, css, apps, g.nVals)
