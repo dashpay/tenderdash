@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -12,6 +13,14 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
+)
+
+var (
+	errPrevoteProposalBlockNil  = errors.New("proposal-block is nil")
+	errPrevoteProposalNil       = errors.New("proposal is nil")
+	errPrevoteTimestampNotEqual = errors.New("proposal timestamp not equal")
+	errPrevoteProposalNotTimely = errors.New("proposal is not timely")
+	errPrevoteInvalidChainLock  = errors.New("proposal-block chain lock is invalid")
 )
 
 // StateDataStore is a state-data store
@@ -464,4 +473,27 @@ func (s *StateData) calculateProposalTimestampDifferenceMetric() {
 		s.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", isTimely)).
 			Observe(s.ProposalReceiveTime.Sub(s.Proposal.Timestamp).Seconds())
 	}
+}
+
+func (s *StateData) isValidForPrevote() error {
+	// Check that a proposed block was not received within this round (and thus executing this from a timeout).
+	if s.ProposalBlock == nil {
+		return errPrevoteProposalBlockNil
+	}
+	if s.Proposal == nil {
+		return errPrevoteProposalNil
+	}
+	if !s.Proposal.Timestamp.Equal(s.ProposalBlock.Header.Time) {
+		return errPrevoteTimestampNotEqual
+	}
+	//TODO: Remove this temporary fix when the complete solution is ready. See #8739
+	if !s.replayMode && s.Proposal.POLRound == -1 && s.LockedRound == -1 && !s.proposalIsTimely() {
+		return errPrevoteProposalNotTimely
+	}
+	// Validate proposal core chain lock
+	err := sm.ValidateBlockChainLock(s.state, s.ProposalBlock)
+	if err != nil {
+		return errPrevoteInvalidChainLock
+	}
+	return nil
 }

@@ -25,7 +25,6 @@ const (
 	EnterPrevoteWaitType
 	EnterPrecommitWaitType
 	TryAddVoteType
-	DoPrevoteType
 )
 
 var (
@@ -112,13 +111,6 @@ func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
 			statsQueue:     statsQueue,
 		},
 		ProposalCompletedType: &ProposalCompletedCommand{logger: cs.logger},
-		DoPrevoteType: &DoPrevoteCommand{
-			logger:     cs.logger,
-			voteSigner: cs.voteSigner,
-			blockExec:  cs.blockExecutor,
-			metrics:    cs.metrics,
-			replayMode: cs.replayMode,
-		},
 		TryAddVoteType: &TryAddVoteCommand{
 			evpool:         cs.evpool,
 			logger:         cs.logger,
@@ -137,6 +129,7 @@ func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
 		EnterPrevoteType: &EnterPrevoteCommand{
 			logger:         cs.logger,
 			eventPublisher: cs.eventPublisher,
+			prevoter:       newPrevote(cs.logger, cs.voteSigner, cs.blockExecutor, cs.metrics),
 		},
 		EnterPrecommitType: &EnterPrecommitCommand{
 			logger:         cs.logger,

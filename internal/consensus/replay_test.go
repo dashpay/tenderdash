@@ -1371,18 +1371,8 @@ func TestWALRoundsSkipper(t *testing.T) {
 		)},
 	}
 	node := ng.Generate(ctx, t)
-	doPrevoteOrigin := node.csState.fsm.Get(DoPrevoteType)
-	doPrevoteCmd := newMockCommand(func(ctx context.Context, stateEvent StateEvent) error {
-		event := stateEvent.Data.(*DoPrevoteEvent)
-		height := event.Height
-		round := event.Round
-		if height >= 3 && round < 10 {
-			node.csState.voteSigner.signAddVote(ctx, stateEvent.StateData, tmproto.PrevoteType, types.BlockID{})
-			return nil
-		}
-		return doPrevoteOrigin.Execute(ctx, stateEvent)
-	})
-	node.csState.fsm.Register(DoPrevoteType, doPrevoteCmd)
+	withReplayPrevoter(node.csState)
+
 	walBody, err := WALWithNBlocks(ctx, t, logger, node, chainLen)
 	require.NoError(t, err)
 	walFile := tempWALWithData(t, walBody)
@@ -1493,4 +1483,26 @@ func newBlockReplayer(
 		NewReplayBlockExecutor(proxyApp, stateStore, blockStore, eventBus),
 		ReplayerWithProTxHash(proTxHash),
 	)
+}
+
+type replayPrevoter struct {
+	voteSigner *voteSigner
+	prevoter   Prevoter
+}
+
+func withReplayPrevoter(state *State) {
+	cmd := state.fsm.Get(EnterPrevoteType)
+	enterPrevoteCmd := cmd.(*EnterPrevoteCommand)
+	enterPrevoteCmd.prevoter = &replayPrevoter{
+		voteSigner: state.voteSigner,
+		prevoter:   enterPrevoteCmd.prevoter,
+	}
+}
+
+func (p *replayPrevoter) Do(ctx context.Context, stateData *StateData) error {
+	if stateData.Height >= 3 && stateData.Round < 10 {
+		p.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+		return nil
+	}
+	return p.prevoter.Do(ctx, stateData)
 }
