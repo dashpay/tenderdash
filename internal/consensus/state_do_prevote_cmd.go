@@ -7,6 +7,7 @@ import (
 	"time"
 
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -24,9 +25,11 @@ func (e *DoPrevoteEvent) GetType() EventType {
 	return DoPrevoteType
 }
 
+// DoPrevoteCommand validates, signs and adds a prevote vote to the consensus state
+// if the state-data has an invalid, then signs and adds empty vote
 type DoPrevoteCommand struct {
 	logger     log.Logger
-	voteSigner *VoteSigner
+	voteSigner *voteSigner
 	blockExec  *blockExecutor
 	metrics    *Metrics
 	replayMode bool
@@ -109,7 +112,7 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, stateEvent StateEvent) 
 	}
 
 	// Validate the block
-	cs.blockExec.validateOrPanic(ctx, stateData)
+	cs.blockExec.mustValidate(ctx, stateData)
 
 	cs.metrics.MarkProposalProcessed(true)
 
@@ -178,12 +181,8 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, stateEvent StateEvent) 
 	return nil
 }
 
-func (cs *DoPrevoteCommand) Subscribe(observer *Observer) {
-	observer.Subscribe(SetMetrics, func(a any) error {
-		cs.metrics = a.(*Metrics)
-		return nil
-	})
-	observer.Subscribe(SetReplayMode, func(a any) error {
+func (cs *DoPrevoteCommand) subscribe(evsw events.EventSwitch) {
+	_ = evsw.AddListenerForEvent("doPrevoteCommand", setReplayMode, func(a events.EventData) error {
 		cs.replayMode = a.(bool)
 		return nil
 	})

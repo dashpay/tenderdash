@@ -38,17 +38,17 @@ message CanonicalVote {
   // block_id is a checksum (sha256) of CanonicalBlockID for the block being voted on
   bytes block_id = 4 [(gogoproto.customname) = "BlockID"];
   // state_id is a checksum  (sha256) of StateID message for the block being voted on
-  bytes  state_id = 5 [(gogoproto.customname) = "StateID"];
+  bytes state_id = 5 [(gogoproto.customname) = "StateID"];
+  // chain_id is last, to allow variable length of string
   string chain_id = 99 [(gogoproto.customname) = "ChainID"];
 }
 
 // CanonicalVoteExtension provides us a way to serialize a vote extension from
 // a particular validator such that we can sign over those serialized bytes.
 message CanonicalVoteExtension {
-  bytes    extension = 1;
-  sfixed64 height    = 2;
-  sfixed64 round     = 3;
-  string   chain_id  = 4;
-
-  tendermint.types.VoteExtensionType type = 100;
+  bytes                              extension = 1;
+  sfixed64                           height    = 2;
+  sfixed64                           round     = 3;
+  string                             chain_id  = 4;
+  tendermint.types.VoteExtensionType type      = 5;
 }

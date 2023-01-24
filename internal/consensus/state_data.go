@@ -34,9 +34,9 @@ type StateDataStore struct {
 }
 
 // NewStateDataStore creates and returns a new state-data store
-func NewStateDataStore(logger log.Logger, cfg *config.ConsensusConfig) *StateDataStore {
+func NewStateDataStore(metrics *Metrics, logger log.Logger, cfg *config.ConsensusConfig) *StateDataStore {
 	return &StateDataStore{
-		metrics: NopMetrics(),
+		metrics: metrics,
 		logger:  logger,
 		config:  cfg,
 	}

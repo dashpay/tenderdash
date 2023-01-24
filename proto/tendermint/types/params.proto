@@ -133,5 +133,5 @@ message TimeoutParams {
 message ABCIParams {
   // Indicates if CheckTx should be called on all the transactions
   // remaining in the mempool after a block is executed.
-  bool recheck_tx = 2;
+  bool recheck_tx = 1;
 }

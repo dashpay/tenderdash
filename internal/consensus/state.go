@@ -167,10 +167,9 @@ type State struct {
 
 	msgInfoQueue   *msgInfoQueue
 	msgDispatcher  *msgInfoDispatcher
-	observer       *Observer
 	blockExecutor  *blockExecutor
 	eventPublisher *EventPublisher
-	voteSigner     *VoteSigner
+	voteSigner     *voteSigner
 	fsm            *FSM
 	roundScheduler *roundScheduler
 
@@ -184,6 +183,12 @@ type StateOption func(*State)
 // skip state bootstrapping during construction.
 func SkipStateStoreBootstrap(sm *State) {
 	sm.skipBootstrapping = true
+}
+
+func WithTimeoutTicker(timeoutTicker TimeoutTicker) func(cs *State) {
+	return func(cs *State) {
+		cs.timeoutTicker = timeoutTicker
+	}
 }
 
 func WithStopFunc(stopFns ...func(cs *State) bool) func(cs *State) {
@@ -225,15 +230,13 @@ func NewState(
 		statsMsgQueue: &chanQueue[msgInfo]{
 			ch: make(chan msgInfo, msgQueueSize),
 		},
-		doWALCatchup:   true,
-		wal:            nilWAL{},
-		evpool:         evpool,
-		evsw:           tmevents.NewEventSwitch(),
-		metrics:        NopMetrics(),
-		onStopCh:       make(chan *cstypes.RoundState),
-		stateDataStore: NewStateDataStore(logger, cfg),
-		observer:       NewObserver(),
-		msgInfoQueue:   newMsgInfoQueue(),
+		doWALCatchup: true,
+		wal:          nilWAL{},
+		evpool:       evpool,
+		evsw:         tmevents.NewEventSwitch(),
+		metrics:      NopMetrics(),
+		onStopCh:     make(chan *cstypes.RoundState),
+		msgInfoQueue: newMsgInfoQueue(),
 	}
 
 	// NOTE: we do not call scheduleRound0 yet, we do that upon Start()
@@ -242,9 +245,10 @@ func NewState(
 		option(cs)
 	}
 
+	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg)
 	wal := &wrapWAL{getter: func() WALWriteFlusher { return cs.wal }}
 
-	cs.voteSigner = &VoteSigner{
+	cs.voteSigner = &voteSigner{
 		privValidator: cs.privValidator,
 		logger:        cs.logger,
 		queueSender:   cs.msgInfoQueue,
@@ -266,24 +270,20 @@ func NewState(
 	cs.roundScheduler = &roundScheduler{timeoutTicker: cs.timeoutTicker}
 	cs.fsm = NewFSM(cs, wal, cs.statsMsgQueue)
 	cs.msgDispatcher = newMsgInfoDispatcher(cs.fsm, wal, cs.logger)
-	cs.observer.Subscribe(SetProposedAppVersion, func(obj any) error {
+	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setProposedAppVersion, func(obj tmevents.EventData) error {
 		ver := obj.(uint64)
 		cs.blockExecutor.proposedAppVersion = ver
 		return nil
 	})
-	cs.observer.Subscribe(SetPrivValidator, func(obj any) error {
+	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setPrivValidator, func(obj tmevents.EventData) error {
 		pv := obj.(privValidator)
 		cs.voteSigner.privValidator = pv
 		cs.blockExecutor.privValidator = pv
 		return nil
 	})
-	cs.observer.Subscribe(SetReplayMode, func(obj any) error {
+	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setReplayMode, func(obj tmevents.EventData) error {
 		flag := obj.(bool)
 		cs.stateDataStore.replayMode = flag
-		return nil
-	})
-	cs.observer.Subscribe(SetTimeoutTicker, func(obj any) error {
-		cs.roundScheduler.timeoutTicker = obj.(TimeoutTicker)
 		return nil
 	})
 
@@ -300,7 +300,7 @@ func NewState(
 
 func (cs *State) SetProposedAppVersion(ver uint64) {
 	cs.proposedAppVersion = ver
-	_ = cs.observer.Notify(SetProposedAppVersion, ver)
+	cs.evsw.FireEvent(setProposedAppVersion, ver)
 }
 
 func (cs *State) updateStateFromStore() error {
@@ -389,7 +389,7 @@ func (cs *State) SetPrivValidator(ctx context.Context, priv types.PrivValidator)
 	cs.mtx.Lock()
 	defer cs.mtx.Unlock()
 	defer func() {
-		_ = cs.observer.Notify(SetPrivValidator, cs.privValidator)
+		cs.evsw.FireEvent(setPrivValidator, cs.privValidator)
 	}()
 	if priv == nil {
 		cs.privValidator = privValidator{}
@@ -402,15 +402,6 @@ func (cs *State) SetPrivValidator(ctx context.Context, priv types.PrivValidator)
 		cs.logger.Error("failed to initialize private validator", "err", err)
 		return
 	}
-}
-
-// SetTimeoutTicker sets the local timer. It may be useful to overwrite for
-// testing.
-func (cs *State) SetTimeoutTicker(timeoutTicker TimeoutTicker) {
-	cs.mtx.Lock()
-	defer cs.mtx.Unlock()
-	cs.timeoutTicker = timeoutTicker
-	_ = cs.observer.Notify(SetTimeoutTicker, timeoutTicker)
 }
 
 // LoadCommit loads the commit for a given height.

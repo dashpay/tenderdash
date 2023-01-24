@@ -115,10 +115,3 @@ func (cs *SetProposalCommand) Execute(ctx context.Context, stateEvent StateEvent
 	cs.logger.Info("received proposal", "proposal", proposal)
 	return nil
 }
-
-func (cs *SetProposalCommand) Subscribe(observer *Observer) {
-	observer.Subscribe(SetMetrics, func(a any) error {
-		cs.metrics = a.(*Metrics)
-		return nil
-	})
-}

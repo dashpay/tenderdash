@@ -265,6 +265,7 @@ func TestProcessProposal(t *testing.T) {
 		ProposerProTxHash:   block1.ProposerProTxHash,
 		Version:             &version,
 		ProposedAppVersion:  1,
+		QuorumHash:          state.Validators.QuorumHash,
 	}
 
 	app.On("ProcessProposal", mock.Anything, mock.Anything).Return(&abci.ResponseProcessProposal{
@@ -703,9 +704,16 @@ func TestEmptyPrepareProposal(t *testing.T) {
 
 	eventBus := eventbus.NewDefault(logger)
 	require.NoError(t, eventBus.Start(ctx))
-
+	state, stateDB, privVals := makeState(t, 1, height)
 	app := abcimocks.NewApplication(t)
-	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
+
+	reqPrepProposalMatch := mock.MatchedBy(func(req *abci.RequestPrepareProposal) bool {
+		return len(req.QuorumHash) > 0 &&
+			bytes.Equal(req.QuorumHash, state.Validators.QuorumHash) &&
+			req.Height == height
+	})
+
+	app.On("PrepareProposal", mock.Anything, reqPrepProposalMatch).Return(&abci.ResponsePrepareProposal{
 		AppHash: make([]byte, crypto.DefaultAppHashSize),
 	}, nil)
 	cc := abciclient.NewLocalClient(logger, app)
@@ -713,7 +721,6 @@ func TestEmptyPrepareProposal(t *testing.T) {
 	err := proxyApp.Start(ctx)
 	require.NoError(t, err)
 
-	state, stateDB, privVals := makeState(t, 1, height)
 	stateStore := sm.NewStore(stateDB)
 	mp := &mpmocks.Mempool{}
 	mp.On("Lock").Return()

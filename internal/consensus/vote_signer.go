@@ -10,8 +10,8 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// VoteSigner provides the ability to sign and add a vote
-type VoteSigner struct {
+// voteSigner provides the ability to sign and add a vote
+type voteSigner struct {
 	privValidator privValidator
 	logger        log.Logger
 	queueSender   queueSender
@@ -21,7 +21,7 @@ type VoteSigner struct {
 
 // signAddVote signs a vote and sends it to internalMsgQueue
 // signing a vote is possible only if a validator is a part of validator-set
-func (s *VoteSigner) signAddVote(
+func (s *voteSigner) signAddVote(
 	ctx context.Context,
 	stateData *StateData,
 	msgType tmproto.SignedMsgType,
@@ -53,7 +53,7 @@ func (s *VoteSigner) signAddVote(
 	return vote
 }
 
-func (s *VoteSigner) signVote(
+func (s *voteSigner) signVote(
 	ctx context.Context,
 	stateData *StateData,
 	msgType tmproto.SignedMsgType,

@@ -9,7 +9,7 @@ type EventType int
 
 // All possible event types
 const (
-	EnterNewRoundType EventType = iota + 1
+	EnterNewRoundType EventType = iota
 	EnterProposeType
 	SetProposalType
 	DecideProposalType
@@ -66,24 +66,12 @@ func (c *FSM) Get(eventType EventType) CommandHandler {
 	return c.commands[eventType]
 }
 
-// Execute executes a command for a given state-event
-// panic if a command is not registered
-func (c *FSM) Execute(ctx context.Context, event StateEvent) error {
-	command, ok := c.commands[event.EventType]
-	if !ok {
-		panic(errCommandNotRegistered)
-	}
-	event.FSM = c
-	return command.Execute(ctx, event)
-}
-
 // NewFSM returns a new instance of finite-state-machine with a set of all possible transitions
 func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
 	propUpdater := &proposalUpdater{
 		logger:         cs.logger,
 		eventPublisher: cs.eventPublisher,
 	}
-
 	fsm := &FSM{}
 	addVoteCmd := &AddVoteCommand{
 		prevote: withVoterMws(
@@ -205,9 +193,9 @@ func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
 		},
 	}
 	for _, command := range fsm.commands {
-		sub, ok := command.(Subscriber)
+		sub, ok := command.(eventSwitchSubscriber)
 		if ok {
-			sub.Subscribe(cs.observer)
+			sub.subscribe(cs.evsw)
 		}
 	}
 	return fsm
@@ -221,5 +209,9 @@ func (c *FSM) Dispatch(ctx context.Context, event FSMEvent, stateData *StateData
 		StateData: stateData,
 		Data:      event,
 	}
-	return c.Execute(ctx, stateEvent)
+	if int(event.GetType()) >= len(c.commands) {
+		panic(errCommandNotRegistered)
+	}
+	stateEvent.FSM = c
+	return c.commands[event.GetType()].Execute(ctx, stateEvent)
 }

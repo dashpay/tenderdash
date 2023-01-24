@@ -494,9 +494,10 @@ func newStateWithConfig(
 	state sm.State,
 	pv types.PrivValidator,
 	app abci.Application,
+	opts ...StateOption,
 ) *State {
 	t.Helper()
-	return newStateWithConfigAndBlockStore(ctx, t, logger, thisConfig, state, pv, app, store.NewBlockStore(dbm.NewMemDB()))
+	return newStateWithConfigAndBlockStore(ctx, t, logger, thisConfig, state, pv, app, store.NewBlockStore(dbm.NewMemDB()), opts...)
 }
 
 func newStateWithConfigAndBlockStore(
@@ -508,6 +509,7 @@ func newStateWithConfigAndBlockStore(
 	pv types.PrivValidator,
 	app abci.Application,
 	blockStore sm.BlockStore,
+	opts ...StateOption,
 ) *State {
 	t.Helper()
 
@@ -546,6 +548,7 @@ func newStateWithConfigAndBlockStore(
 		mpool,
 		evpool,
 		eventBus,
+		opts...,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -887,8 +890,7 @@ func makeConsensusState(
 		sCtx := dash.ContextWithProTxHash(ctx, proTxHash)
 
 		l := logger.With("validator", i, "module", "consensus")
-		css[i] = newStateWithConfigAndBlockStore(sCtx, t, l, thisConfig, state, privVals[i], app, blockStore)
-		css[i].SetTimeoutTicker(tickerFunc())
+		css[i] = newStateWithConfigAndBlockStore(sCtx, t, l, thisConfig, state, privVals[i], app, blockStore, WithTimeoutTicker(tickerFunc()))
 	}
 
 	return css
@@ -1014,8 +1016,7 @@ func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State,
 		proTxHash, _ := privVals[i].GetProTxHash(ctx)
 		css[i] = newStateWithConfig(ctx, t,
 			logger.With("validator", i, "node_proTxHash", proTxHash.ShortString(), "module", "consensus"),
-			thisConfig, state, privVals[i], apps[i])
-		css[i].SetTimeoutTicker(tickerFunc())
+			thisConfig, state, privVals[i], apps[i], WithTimeoutTicker(tickerFunc()))
 	}
 
 	validatorSetUpdates := g.execValidatorSetUpdater(ctx, t, css, apps, g.nVals)

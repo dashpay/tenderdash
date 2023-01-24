@@ -219,7 +219,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		&abci.RequestPrepareProposal{
 			MaxTxBytes:         maxDataBytes,
 			Txs:                block.Txs.ToSliceOfBytes(),
-			LocalLastCommit:    abci.ExtendedCommitInfo(localLastCommit),
+			LocalLastCommit:    localLastCommit,
 			Misbehavior:        block.Evidence.ToABCI(),
 			Height:             block.Height,
 			Round:              round,
@@ -231,6 +231,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 			ProposerProTxHash:     block.ProposerProTxHash,
 			ProposedAppVersion:    block.ProposedAppVersion,
 			Version:               &version,
+			QuorumHash:            state.Validators.QuorumHash,
 		},
 	)
 	if err != nil {
@@ -310,6 +311,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		CoreChainLockUpdate:   block.CoreChainLock.ToProto(),
 		ProposedAppVersion:    block.ProposedAppVersion,
 		Version:               &version,
+		QuorumHash:            state.Validators.QuorumHash,
 	})
 	if err != nil {
 		return CurrentRoundState{}, err
