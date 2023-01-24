@@ -2,7 +2,6 @@ package consensus
 
 import (
 	"bytes"
-	"errors"
 	"fmt"
 	"sync"
 	"time"
@@ -14,11 +13,6 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
-)
-
-var (
-	errHeightMismatch          = errors.New("vote height does not match on a state")
-	errValSetDoesNotHavePubKey = errors.New("validator set does not have public key")
 )
 
 // StateDataStore is a state-data store
@@ -492,17 +486,4 @@ func (s *StateData) calculateProposalTimestampDifferenceMetric() {
 		s.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", isTimely)).
 			Observe(s.ProposalReceiveTime.Sub(s.Proposal.Timestamp).Seconds())
 	}
-}
-
-func (s *StateData) validateVote(vote *types.Vote) error {
-	// Height mismatch is ignored.
-	// Not necessarily a bad peer, but not favorable behavior.
-	if vote.Height != s.Height {
-		return errHeightMismatch
-	}
-	// Ignore vote if we do not have public keys to verify votes
-	if !s.Validators.HasPublicKeys {
-		return errValSetDoesNotHavePubKey
-	}
-	return nil
 }
