@@ -13,7 +13,7 @@ import (
 
 type (
 	AddVoteFunc   func(ctx context.Context, stateData *StateData, vote *types.Vote, peerID types.NodeID) (bool, error)
-	AddVoteMwFunc func(next AddVoteFunc) AddVoteFunc
+	AddVoteMiddlewareFunc func(next AddVoteFunc) AddVoteFunc
 )
 
 type AddVoteEvent struct {
