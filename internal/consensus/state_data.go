@@ -17,14 +17,14 @@ import (
 
 // StateDataStore is a state-data store
 type StateDataStore struct {
-	mtx        sync.Mutex
-	roundState cstypes.RoundState
-	state      sm.State
-	metrics    *Metrics
-	logger     log.Logger
-	config     *config.ConsensusConfig
-	replayMode bool
-	version    int64
+	mtx            sync.Mutex
+	roundState     cstypes.RoundState
+	committedState sm.State
+	metrics        *Metrics
+	logger         log.Logger
+	config         *config.ConsensusConfig
+	replayMode     bool
+	version        int64
 }
 
 // NewStateDataStore creates and returns a new state-data store
@@ -66,7 +66,7 @@ func (s *StateDataStore) load() StateData {
 	return StateData{
 		config:     s.config,
 		RoundState: s.roundState,
-		state:      s.state,
+		state:      s.committedState,
 		version:    s.version,
 		metrics:    s.metrics,
 		replayMode: s.replayMode,
@@ -77,10 +77,10 @@ func (s *StateDataStore) load() StateData {
 
 func (s *StateDataStore) update(candidate StateData) error {
 	if candidate.version != s.version {
-		return fmt.Errorf("mismatch app-state versions actual %d want %d", candidate.version, s.version)
+		return fmt.Errorf("mismatch state-data versions actual %d want %d", candidate.version, s.version)
 	}
 	s.roundState = candidate.RoundState
-	s.state = candidate.state
+	s.committedState = candidate.state
 	s.version++
 	return nil
 }
@@ -161,13 +161,13 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 			// This might happen when someone else is mutating cs.state.
 			// Someone forgot to pass in state.Copy() somewhere?!
 			panic(fmt.Sprintf(
-				"inconsistent cs.state.LastBlockHeight+1 %v vs cs.Height %v",
+				"inconsistent committedState.LastBlockHeight+1 %v vs cs.Height %v",
 				s.state.LastBlockHeight+1, s.Height,
 			))
 		}
 		if s.state.LastBlockHeight > 0 && s.Height == s.state.InitialHeight {
 			panic(fmt.Sprintf(
-				"inconsistent cs.state.LastBlockHeight %v, expected 0 for initial height %v",
+				"inconsistent committedState.LastBlockHeight %v, expected 0 for initial height %v",
 				s.state.LastBlockHeight, s.state.InitialHeight,
 			))
 		}

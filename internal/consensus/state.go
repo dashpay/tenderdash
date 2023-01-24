@@ -170,7 +170,7 @@ type State struct {
 	blockExecutor  *blockExecutor
 	eventPublisher *EventPublisher
 	voteSigner     *voteSigner
-	fsm            *FSM
+	ctrl           *Controller
 	roundScheduler *roundScheduler
 
 	stopFn func(cs *State) bool
@@ -268,8 +268,8 @@ func NewState(
 		wal:      wal,
 	}
 	cs.roundScheduler = &roundScheduler{timeoutTicker: cs.timeoutTicker}
-	cs.fsm = NewFSM(cs, wal, cs.statsMsgQueue)
-	cs.msgDispatcher = newMsgInfoDispatcher(cs.fsm, wal, cs.logger)
+	cs.ctrl = NewController(cs, wal, cs.statsMsgQueue)
+	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, wal, cs.logger)
 	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setProposedAppVersion, func(obj tmevents.EventData) error {
 		ver := obj.(uint64)
 		cs.blockExecutor.proposedAppVersion = ver
@@ -702,7 +702,7 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 			cs.handleTxsAvailable(ctx, &stateData)
 			err := stateData.Save()
 			if err != nil {
-				cs.logger.Error("failed update app-state", "err", err)
+				cs.logger.Error("failed update state-data", "err", err)
 			}
 		case mi := <-cs.msgInfoQueue.read():
 			stateData := cs.stateDataStore.Get()
@@ -712,7 +712,7 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 			}
 			err = stateData.Save()
 			if err != nil {
-				cs.logger.Error("failed update app-state", "err", err)
+				cs.logger.Error("failed update state-data", "err", err)
 			}
 		case ti := <-cs.timeoutTicker.Chan(): // tockChan:
 			if err := cs.wal.Write(ti); err != nil {
@@ -725,7 +725,7 @@ func (cs *State) receiveRoutine(ctx context.Context, stopFn func(*State) bool) {
 			cs.handleTimeout(ctx, ti, &stateData)
 			err := cs.stateDataStore.Update(stateData)
 			if err != nil {
-				cs.logger.Error("failed update app-state", "err", err)
+				cs.logger.Error("failed update state-data", "err", err)
 			}
 		case <-ctx.Done():
 			onExit(cs)
@@ -761,25 +761,25 @@ func (cs *State) handleTimeout(
 	case cstypes.RoundStepNewHeight:
 		// NewRound event fired from enterNewRoundCommand.
 		// XXX: should we fire timeout here (for timeout commit)?
-		_ = cs.fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: ti.Height}, stateData)
+		_ = cs.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: ti.Height}, stateData)
 	case cstypes.RoundStepNewRound:
-		_ = cs.fsm.Dispatch(ctx, &EnterProposeEvent{Height: ti.Height}, stateData)
+		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: ti.Height}, stateData)
 	case cstypes.RoundStepPropose:
 		if err := cs.eventBus.PublishEventTimeoutPropose(stateData.RoundStateEvent()); err != nil {
 			cs.logger.Error("failed publishing timeout propose", "err", err)
 		}
-		_ = cs.fsm.Dispatch(ctx, &EnterPrevoteEvent{Height: ti.Height, Round: ti.Round}, stateData)
+		_ = cs.ctrl.Dispatch(ctx, &EnterPrevoteEvent{Height: ti.Height, Round: ti.Round}, stateData)
 	case cstypes.RoundStepPrevoteWait:
 		if err := cs.eventBus.PublishEventTimeoutWait(stateData.RoundStateEvent()); err != nil {
 			cs.logger.Error("failed publishing timeout wait", "err", err)
 		}
-		_ = cs.fsm.Dispatch(ctx, &EnterPrecommitEvent{Height: ti.Height, Round: ti.Round}, stateData)
+		_ = cs.ctrl.Dispatch(ctx, &EnterPrecommitEvent{Height: ti.Height, Round: ti.Round}, stateData)
 	case cstypes.RoundStepPrecommitWait:
 		if err := cs.eventBus.PublishEventTimeoutWait(stateData.RoundStateEvent()); err != nil {
 			cs.logger.Error("failed publishing timeout wait", "err", err)
 		}
-		_ = cs.fsm.Dispatch(ctx, &EnterPrecommitEvent{Height: ti.Height, Round: ti.Round}, stateData)
-		_ = cs.fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: ti.Height, Round: ti.Round + 1}, stateData)
+		_ = cs.ctrl.Dispatch(ctx, &EnterPrecommitEvent{Height: ti.Height, Round: ti.Round}, stateData)
+		_ = cs.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: ti.Height, Round: ti.Round + 1}, stateData)
 	default:
 		panic(fmt.Sprintf("invalid timeout step: %v", ti.Step))
 	}
@@ -803,7 +803,7 @@ func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 		cs.roundScheduler.ScheduleTimeout(timeoutCommit, stateData.Height, 0, cstypes.RoundStepNewRound)
 
 	case cstypes.RoundStepNewRound: // after timeoutCommit
-		_ = cs.fsm.Dispatch(ctx, &EnterProposeEvent{Height: stateData.Height}, stateData)
+		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: stateData.Height}, stateData)
 	}
 }
 

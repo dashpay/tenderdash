@@ -25,9 +25,9 @@ func (e *DoPrevoteEvent) GetType() EventType {
 	return DoPrevoteType
 }
 
-// DoPrevoteCommand validates, signs and adds a prevote vote to the consensus state
+// DoPrevoteAction validates, signs and adds a prevote vote to the consensus state
 // if the state-data has an invalid, then signs and adds empty vote
-type DoPrevoteCommand struct {
+type DoPrevoteAction struct {
 	logger     log.Logger
 	voteSigner *voteSigner
 	blockExec  *blockExecutor
@@ -35,7 +35,7 @@ type DoPrevoteCommand struct {
 	replayMode bool
 }
 
-func (cs *DoPrevoteCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (cs *DoPrevoteAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(*DoPrevoteEvent)
 	height := event.Height
@@ -91,7 +91,7 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, stateEvent StateEvent) 
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	err = cs.blockExec.process(ctx, stateData, stateData.Round)
+	err = cs.blockExec.ensureProcess(ctx, stateData, stateData.Round)
 	if err != nil {
 		cs.metrics.MarkProposalProcessed(false)
 		if errors.Is(err, sm.ErrBlockRejected) {
@@ -181,8 +181,8 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, stateEvent StateEvent) 
 	return nil
 }
 
-func (cs *DoPrevoteCommand) subscribe(evsw events.EventSwitch) {
-	_ = evsw.AddListenerForEvent("doPrevoteCommand", setReplayMode, func(a events.EventData) error {
+func (cs *DoPrevoteAction) subscribe(evsw events.EventSwitch) {
+	_ = evsw.AddListenerForEvent("doPrevoteAction", setReplayMode, func(a events.EventData) error {
 		cs.replayMode = a.(bool)
 		return nil
 	})

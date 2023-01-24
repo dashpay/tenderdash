@@ -18,7 +18,7 @@ func (e *EnterPrevoteEvent) GetType() EventType {
 	return EnterPrevoteType
 }
 
-// EnterPrevoteCommand ...
+// EnterPrevoteAction ...
 // Enter: `timeoutPropose` after entering Propose.
 // Enter: proposal block and POL is ready.
 // If we received a valid proposal within this round and we are not locked on a block,
@@ -26,13 +26,13 @@ func (e *EnterPrevoteEvent) GetType() EventType {
 // Otherwise, if we receive a valid proposal that matches the block we are
 // locked on or matches a block that received a POL in a round later than our
 // locked round, prevote for the proposal, otherwise vote nil.
-type EnterPrevoteCommand struct {
+type EnterPrevoteAction struct {
 	logger         log.Logger
 	eventPublisher *EventPublisher
 }
 
 // Execute ...
-func (c *EnterPrevoteCommand) Execute(ctx context.Context, statEvent StateEvent) error {
+func (c *EnterPrevoteAction) Execute(ctx context.Context, statEvent StateEvent) error {
 	epe := statEvent.Data.(*EnterPrevoteEvent)
 	stateData := statEvent.StateData
 	height := epe.Height
@@ -65,7 +65,7 @@ func (c *EnterPrevoteCommand) Execute(ctx context.Context, statEvent StateEvent)
 		Round:          round,
 		AllowOldBlocks: epe.AllowOldBlocks,
 	}
-	err := statEvent.FSM.Dispatch(ctx, &prevoteEvent, stateData)
+	err := statEvent.Ctrl.Dispatch(ctx, &prevoteEvent, stateData)
 	if err != nil {
 		return err
 	}

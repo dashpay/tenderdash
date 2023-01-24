@@ -48,16 +48,16 @@ func (c *msgInfoDispatcher) dispatch(ctx context.Context, stateData *StateData, 
 	return handler(ctx, stateData, envelope)
 }
 
-func newMsgInfoDispatcher(fsm *FSM, wal WALWriteFlusher, logger log.Logger) *msgInfoDispatcher {
+func newMsgInfoDispatcher(ctrl *Controller, wal WALWriteFlusher, logger log.Logger) *msgInfoDispatcher {
 	mws := []msgMiddlewareFunc{
 		msgInfoWithCtxMiddleware(),
 		errorMiddleware(logger),
 		walMiddleware(wal, logger),
 	}
-	proposalHandler := withMiddleware(proposalMessageHandler(fsm), mws...)
-	blockPartHandler := withMiddleware(blockPartMessageHandler(fsm, logger), mws...)
-	voteHandler := withMiddleware(voteMessageHandler(fsm, logger), mws...)
-	commitHandler := withMiddleware(commitMessageHandler(fsm, logger), mws...)
+	proposalHandler := withMiddleware(proposalMessageHandler(ctrl), mws...)
+	blockPartHandler := withMiddleware(blockPartMessageHandler(ctrl, logger), mws...)
+	voteHandler := withMiddleware(voteMessageHandler(ctrl, logger), mws...)
+	commitHandler := withMiddleware(commitMessageHandler(ctrl, logger), mws...)
 	return &msgInfoDispatcher{
 		proposalHandler:  proposalHandler,
 		blockPartHandler: blockPartHandler,
@@ -66,21 +66,21 @@ func newMsgInfoDispatcher(fsm *FSM, wal WALWriteFlusher, logger log.Logger) *msg
 	}
 }
 
-func proposalMessageHandler(fsm *FSM) msgHandlerFunc {
+func proposalMessageHandler(ctrl *Controller) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*ProposalMessage)
-		return fsm.Dispatch(ctx, &SetProposalEvent{
+		return ctrl.Dispatch(ctx, &SetProposalEvent{
 			Proposal: msg.Proposal,
 			RecvTime: envelope.ReceiveTime,
 		}, stateData)
 	}
 }
 
-func blockPartMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
+func blockPartMessageHandler(ctrl *Controller, logger log.Logger) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*BlockPartMessage)
 		// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
-		err := fsm.Dispatch(ctx, &AddProposalBlockPartEvent{
+		err := ctrl.Dispatch(ctx, &AddProposalBlockPartEvent{
 			Msg:        msg,
 			PeerID:     envelope.PeerID,
 			FromReplay: envelope.fromReplay,
@@ -109,7 +109,7 @@ func blockPartMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
 	}
 }
 
-func voteMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
+func voteMessageHandler(ctrl *Controller, logger log.Logger) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*VoteMessage)
 		logger = logger.With([]any{
@@ -126,7 +126,7 @@ func voteMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
 		ctx = ctxWithLogger(ctx, logger)
 		// attempt to add the vote and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		err := fsm.Dispatch(ctx, &AddVoteEvent{Vote: msg.Vote, PeerID: envelope.PeerID}, stateData)
+		err := ctrl.Dispatch(ctx, &AddVoteEvent{Vote: msg.Vote, PeerID: envelope.PeerID}, stateData)
 
 		// TODO: punish peer
 		// We probably don't want to stop the peer here. The vote does not
@@ -145,12 +145,12 @@ func voteMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
 	}
 }
 
-func commitMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
+func commitMessageHandler(ctrl *Controller, logger log.Logger) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*CommitMessage)
 		// attempt to add the commit and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
-		err := fsm.Dispatch(ctx, &TryAddCommitEvent{Commit: msg.Commit, PeerID: envelope.PeerID}, stateData)
+		err := ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: msg.Commit, PeerID: envelope.PeerID}, stateData)
 		logger.Debug(
 			"received commit",
 			"height", stateData.Height,

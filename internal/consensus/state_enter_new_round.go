@@ -21,7 +21,7 @@ func (e *EnterNewRoundEvent) GetType() EventType {
 	return EnterNewRoundType
 }
 
-// EnterNewRoundCommand ...
+// EnterNewRoundAction ...
 // Enter: `timeoutNewHeight` by startTime (commitTime+timeoutCommit),
 //
 //	or, if SkipTimeoutCommit==true, after receiving all precommits from (height,round-1)
@@ -31,7 +31,7 @@ func (e *EnterNewRoundEvent) GetType() EventType {
 // Enter: +2/3 prevotes any or +2/3 precommits for block or any from (height, round)
 // Enter: A valid commit came in from a future round
 // NOTE: cs.StartTime was already set for height.
-type EnterNewRoundCommand struct {
+type EnterNewRoundAction struct {
 	logger         log.Logger
 	config         *config.ConsensusConfig
 	scheduler      *roundScheduler
@@ -39,7 +39,7 @@ type EnterNewRoundCommand struct {
 }
 
 // Execute ...
-func (c *EnterNewRoundCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	event := stateEvent.Data.(*EnterNewRoundEvent)
 	stateData := stateEvent.StateData
 	height := event.Height
@@ -107,7 +107,7 @@ func (c *EnterNewRoundCommand) Execute(ctx context.Context, stateEvent StateEven
 	} else if !c.config.DontAutoPropose {
 		// DontAutoPropose should always be false, except for
 		// specific tests where proposals are created manually
-		err = stateEvent.FSM.Dispatch(ctx, &EnterProposeEvent{Height: height, Round: round}, stateData)
+		err = stateEvent.Ctrl.Dispatch(ctx, &EnterProposeEvent{Height: height, Round: round}, stateData)
 		if err != nil {
 			return err
 		}

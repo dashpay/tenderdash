@@ -45,13 +45,13 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 	// Update the doPrevote function to just send a valid precommit for a random
 	// block and otherwise disable the priv validator.
 	privVal := byzState.privValidator
-	doPrevoteCmd := newMockCommand(func(ctx context.Context, stateEvent StateEvent) error {
+	doPrevoteCmd := newMockAction(func(ctx context.Context, stateEvent StateEvent) error {
 		stateData := stateEvent.StateData
 		defer close(signal)
 		invalidDoPrevoteFunc(ctx, t, stateData, byzState, byzReactor, rts.voteChannels[node.NodeID], privVal)
 		return nil
 	})
-	byzState.fsm.Register(DoPrevoteType, doPrevoteCmd)
+	byzState.ctrl.Register(DoPrevoteType, doPrevoteCmd)
 
 	rts.switchToConsensus(ctx)
 

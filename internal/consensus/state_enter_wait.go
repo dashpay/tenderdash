@@ -18,9 +18,9 @@ func (e *EnterPrecommitWaitEvent) GetType() EventType {
 	return EnterPrecommitWaitType
 }
 
-// EnterPrecommitWaitCommand ...
+// EnterPrecommitWaitAction ...
 // Enter: any +2/3 precommits for next round.
-type EnterPrecommitWaitCommand struct {
+type EnterPrecommitWaitAction struct {
 	logger         log.Logger
 	scheduler      *roundScheduler
 	eventPublisher *EventPublisher
@@ -28,7 +28,7 @@ type EnterPrecommitWaitCommand struct {
 
 // Execute ...
 // Enter: any +2/3 precommits for next round.
-func (c *EnterPrecommitWaitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *EnterPrecommitWaitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(*EnterPrecommitWaitEvent)
 	height, round := event.Height, event.Round
@@ -61,7 +61,7 @@ func (c *EnterPrecommitWaitCommand) Execute(ctx context.Context, stateEvent Stat
 		// TODO PERSIST StateData
 	}()
 
-	// wait for some more precommits; enterNewRoundCommand
+	// wait for some more precommits; enterNewRound
 	c.scheduler.ScheduleTimeout(stateData.voteTimeout(round), height, round, cstypes.RoundStepPrecommitWait)
 	return nil
 }
@@ -76,9 +76,9 @@ func (e *EnterPrevoteWaitEvent) GetType() EventType {
 	return EnterPrevoteWaitType
 }
 
-// EnterPrevoteWaitCommand ...
+// EnterPrevoteWaitAction ...
 // Enter: any +2/3 prevotes at next round.
-type EnterPrevoteWaitCommand struct {
+type EnterPrevoteWaitAction struct {
 	logger         log.Logger
 	scheduler      *roundScheduler
 	eventPublisher *EventPublisher
@@ -86,7 +86,7 @@ type EnterPrevoteWaitCommand struct {
 
 // Execute ...
 // Enter: any +2/3 prevotes at next round.
-func (c *EnterPrevoteWaitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *EnterPrevoteWaitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(*EnterPrevoteWaitEvent)
 	height, round := event.Height, event.Round

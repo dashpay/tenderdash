@@ -20,13 +20,13 @@ func (e *EnterPrecommitEvent) GetType() EventType {
 	return EnterPrecommitType
 }
 
-// EnterPrecommitCommand ...
+// EnterPrecommitAction ...
 // Enter: `timeoutPrevote` after any +2/3 prevotes.
 // Enter: `timeoutPrecommit` after any +2/3 precommits.
 // Enter: +2/3 precomits for block or nil.
 // Lock & precommit the ProposalBlock if we have enough prevotes for it (a POL in this round)
 // else, precommit nil otherwise.
-type EnterPrecommitCommand struct {
+type EnterPrecommitAction struct {
 	logger         log.Logger
 	eventPublisher *EventPublisher
 	blockExec      *blockExecutor
@@ -39,7 +39,7 @@ type EnterPrecommitCommand struct {
 // Enter: +2/3 precomits for block or nil.
 // Lock & precommit the ProposalBlock if we have enough prevotes for it (a POL in this round)
 // else, precommit nil otherwise.
-func (c *EnterPrecommitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	event := stateEvent.Data.(*EnterPrecommitEvent)
 	stateData := stateEvent.StateData
 	height := event.Height
@@ -127,7 +127,7 @@ func (c *EnterPrecommitCommand) Execute(ctx context.Context, stateEvent StateEve
 		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
 
 		// we got precommit but we didn't process proposal yet
-		c.blockExec.mustProcess(ctx, stateData, round)
+		c.blockExec.mustEnsureProcess(ctx, stateData, round)
 
 		// Validate the block.
 		c.blockExec.mustValidate(ctx, stateData)

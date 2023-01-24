@@ -122,12 +122,12 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 	}
 
-	doPrevoteOrigin := bzNodeState.fsm.Get(DoPrevoteType)
+	doPrevoteOrigin := bzNodeState.ctrl.Get(DoPrevoteType)
 	require.NotNil(t, doPrevoteOrigin)
 	// alter prevote so that the byzantine node double votes when height is 2
 	doPrevoteCmd := newDoPrevoteByzantine(t, rts, bzNodeID, doPrevoteOrigin, prevoteHeight)
 
-	bzNodeState.fsm.Register(DoPrevoteType, doPrevoteCmd)
+	bzNodeState.ctrl.Register(DoPrevoteType, doPrevoteCmd)
 
 	// Introducing a lazy proposer means that the time of the block committed is
 	// different to the timestamp that the other nodes have. This tests to ensure
@@ -135,7 +135,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	// lazyProposer := states[1]
 	lazyNodeState := states[1]
 
-	decideProposalCmd := newMockCommand(func(ctx context.Context, stateEvent StateEvent) error {
+	decideProposalCmd := newMockAction(func(ctx context.Context, stateEvent StateEvent) error {
 		stateData := stateEvent.StateData
 		event := stateEvent.Data.(*DecideProposalEvent)
 		height := event.Height
@@ -219,7 +219,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 		return nil
 	})
-	lazyNodeState.fsm.Register(DecideProposalType, decideProposalCmd)
+	lazyNodeState.ctrl.Register(DecideProposalType, decideProposalCmd)
 
 	rts.switchToConsensus(ctx)
 
@@ -288,10 +288,10 @@ func newDoPrevoteByzantine(
 	t *testing.T,
 	rts *reactorTestSuite,
 	bzNodeID types.NodeID,
-	doPrevoteOrigin CommandHandler,
+	doPrevoteOrigin ActionHandler,
 	prevoteHeight int64,
-) CommandHandler {
-	return newMockCommand(func(ctx context.Context, stateEvent StateEvent) error {
+) ActionHandler {
+	return newMockAction(func(ctx context.Context, stateEvent StateEvent) error {
 		stateData := stateEvent.StateData
 		event := stateEvent.Data.(*DoPrevoteEvent)
 		bzNodeState := rts.states[bzNodeID]
