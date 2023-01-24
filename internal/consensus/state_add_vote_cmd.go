@@ -3,6 +3,7 @@ package consensus
 import (
 	"context"
 	"errors"
+	"github.com/tendermint/tendermint/libs/events"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
@@ -12,8 +13,8 @@ import (
 )
 
 type (
-	AddVoteFunc   func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error)
-	AddVoteMwFunc func(next AddVoteFunc) AddVoteFunc
+	AddVoteFunc           func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error)
+	AddVoteMiddlewareFunc func(next AddVoteFunc) AddVoteFunc
 )
 
 type AddVoteEvent struct {
@@ -49,11 +50,7 @@ func (c *AddVoteCommand) Execute(ctx context.Context, stateEvent StateEvent) err
 }
 
 // addVoteToVoteSet adds a vote to the vote-set
-func addVoteToVoteSet(metrics *Metrics, ep *EventPublisher, observer *Observer) AddVoteFunc {
-	observer.Subscribe(SetMetrics, func(a any) error {
-		metrics = a.(*Metrics)
-		return nil
-	})
+func addVoteToVoteSet(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
 	return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 		added, err := stateData.Votes.AddVote(vote)
 		if !added || err != nil {
@@ -69,7 +66,7 @@ func addVoteToVoteSet(metrics *Metrics, ep *EventPublisher, observer *Observer) 
 	}
 }
 
-func addVoteToLastPrecommitMw(logger log.Logger, ep *EventPublisher, fsm *FSM) AddVoteMwFunc {
+func addVoteToLastPrecommitMw(logger log.Logger, ep *EventPublisher, fsm *FSM) AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			if vote.Height+1 != stateData.Height || vote.Type != tmproto.PrecommitType {
@@ -111,7 +108,7 @@ func addVoteToLastPrecommitMw(logger log.Logger, ep *EventPublisher, fsm *FSM) A
 	}
 }
 
-func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMwFunc {
+func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			added, err := next(ctx, stateData, vote)
@@ -138,7 +135,7 @@ func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMwFunc {
 	}
 }
 
-func addVoteDispatchPrevoteMw(fsm *FSM) AddVoteMwFunc {
+func addVoteDispatchPrevoteMw(fsm *FSM) AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			added, err := next(ctx, stateData, vote)
@@ -171,7 +168,7 @@ func addVoteDispatchPrevoteMw(fsm *FSM) AddVoteMwFunc {
 	}
 }
 
-func addVoteDispatchPrecommitMw(FSM *FSM) AddVoteMwFunc {
+func addVoteDispatchPrecommitMw(FSM *FSM) AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			added, err := next(ctx, stateData, vote)
@@ -212,14 +209,10 @@ func addVoteVerifyVoteExtensionMw(
 	privVal privValidator,
 	blockExec *sm.BlockExecutor,
 	metrics *Metrics,
-	observer *Observer,
-) AddVoteMwFunc {
-	observer.Subscribe(SetPrivValidator, func(a any) error {
-		privVal = a.(privValidator)
-		return nil
-	})
-	observer.Subscribe(SetMetrics, func(a any) error {
-		metrics = a.(*Metrics)
+	evsw events.EventSwitch,
+) AddVoteMiddlewareFunc {
+	_ = evsw.AddListenerForEvent("addVoteVerifyVoteExtensionMw", setPrivValidator, func(data events.EventData) error {
+		privVal = data.(privValidator)
 		return nil
 	})
 	return func(next AddVoteFunc) AddVoteFunc {
@@ -252,7 +245,7 @@ func addVoteVerifyVoteExtensionMw(
 	}
 }
 
-func addVoteValidateVoteMw() AddVoteMwFunc {
+func addVoteValidateVoteMw() AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			// Height mismatch is ignored.
@@ -269,7 +262,7 @@ func addVoteValidateVoteMw() AddVoteMwFunc {
 	}
 }
 
-func addVoteStatsMw(statsQueue *chanQueue[msgInfo]) AddVoteMwFunc {
+func addVoteStatsMw(statsQueue *chanQueue[msgInfo]) AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			added, err := next(ctx, stateData, vote)
@@ -283,9 +276,9 @@ func addVoteStatsMw(statsQueue *chanQueue[msgInfo]) AddVoteMwFunc {
 
 // add evidence to the pool
 // when it's detected
-func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidator, observer *Observer) AddVoteMwFunc {
-	observer.Subscribe(SetPrivValidator, func(a any) error {
-		privVal = a.(privValidator)
+func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidator, evsw events.EventSwitch) AddVoteMiddlewareFunc {
+	_ = evsw.AddListenerForEvent("addVoteErrorMw", setPrivValidator, func(data events.EventData) error {
+		privVal = data.(privValidator)
 		return nil
 	})
 	return func(next AddVoteFunc) AddVoteFunc {
@@ -323,7 +316,7 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 	}
 }
 
-func addVoteLoggingMw(logger log.Logger) AddVoteMwFunc {
+func addVoteLoggingMw(logger log.Logger) AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			logKeyVals := logKeyValsFromCtx(ctx)
@@ -353,7 +346,7 @@ func addVoteLoggingMw(logger log.Logger) AddVoteMwFunc {
 	}
 }
 
-func withVoterMws(fn AddVoteFunc, mws ...AddVoteMwFunc) AddVoteFunc {
+func withVoterMws(fn AddVoteFunc, mws ...AddVoteMiddlewareFunc) AddVoteFunc {
 	for _, mw := range mws {
 		fn = mw(fn)
 	}
