@@ -257,7 +257,7 @@ func startConsensusState(ctx context.Context, cs *State, maxSteps int) {
 func startTestRound(ctx context.Context, cs *State, height int64, round int32) {
 	stateData := cs.GetStateData()
 	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
-	_ = cs.fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
+	_ = cs.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
 	_ = stateData.Save()
 	startConsensusState(ctx, cs, 0)
 }
@@ -1126,14 +1126,14 @@ type quorumData struct {
 	validatorSetUpdate abci.ValidatorSetUpdate
 }
 
-type mockCommand struct {
+type mockAction struct {
 	fn func(ctx context.Context, stateEvent StateEvent) error
 }
 
-func newMockCommand(fn func(ctx context.Context, stateEvent StateEvent) error) *mockCommand {
-	return &mockCommand{fn: fn}
+func newMockAction(fn func(ctx context.Context, stateEvent StateEvent) error) *mockAction {
+	return &mockAction{fn: fn}
 }
 
-func (c *mockCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *mockAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	return c.fn(ctx, stateEvent)
 }

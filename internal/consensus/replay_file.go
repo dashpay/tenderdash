@@ -182,10 +182,10 @@ func (pb *playback) replayReset(ctx context.Context, count int, newStepSub event
 }
 
 func (cs *State) startForReplay() {
-	cs.logger.Error("Replay commands are disabled until someone updates them and writes tests")
+	cs.logger.Error("Replay actions are disabled until someone updates them and writes tests")
 }
 
-// console function for parsing input and running commands. The integer
+// console function for parsing input and running actions. The integer
 // return value is invalid unless the error is nil.
 func (pb *playback) replayConsoleLoop(ctx context.Context) (int, error) {
 	for {

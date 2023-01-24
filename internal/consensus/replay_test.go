@@ -1371,8 +1371,8 @@ func TestWALRoundsSkipper(t *testing.T) {
 		)},
 	}
 	node := ng.Generate(ctx, t)
-	doPrevoteOrigin := node.csState.fsm.Get(DoPrevoteType)
-	doPrevoteCmd := newMockCommand(func(ctx context.Context, stateEvent StateEvent) error {
+	doPrevoteOrigin := node.csState.ctrl.Get(DoPrevoteType)
+	doPrevoteCmd := newMockAction(func(ctx context.Context, stateEvent StateEvent) error {
 		event := stateEvent.Data.(*DoPrevoteEvent)
 		height := event.Height
 		round := event.Round
@@ -1382,7 +1382,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 		}
 		return doPrevoteOrigin.Execute(ctx, stateEvent)
 	})
-	node.csState.fsm.Register(DoPrevoteType, doPrevoteCmd)
+	node.csState.ctrl.Register(DoPrevoteType, doPrevoteCmd)
 	walBody, err := WALWithNBlocks(ctx, t, logger, node, chainLen)
 	require.NoError(t, err)
 	walFile := tempWALWithData(t, walBody)

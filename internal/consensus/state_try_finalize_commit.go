@@ -19,9 +19,9 @@ func (e *TryFinalizeCommitEvent) GetType() EventType {
 	return TryFinalizeCommitType
 }
 
-// TryFinalizeCommitCommand ...
+// TryFinalizeCommitAction ...
 // If we have the block AND +2/3 commits for it, finalize.
-type TryFinalizeCommitCommand struct {
+type TryFinalizeCommitAction struct {
 	logger log.Logger
 	// create and execute blocks
 	blockExec  *blockExecutor
@@ -29,7 +29,7 @@ type TryFinalizeCommitCommand struct {
 }
 
 // Execute ...
-func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (cs *TryFinalizeCommitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	event := stateEvent.Data.(*TryFinalizeCommitEvent)
 	stateData := stateEvent.StateData
 	if stateData.Height != event.Height {
@@ -54,12 +54,12 @@ func (cs *TryFinalizeCommitCommand) Execute(ctx context.Context, stateEvent Stat
 		return nil
 	}
 
-	cs.finalizeCommit(ctx, stateEvent.FSM, stateData, event.Height)
+	cs.finalizeCommit(ctx, stateEvent.Ctrl, stateData, event.Height)
 	return nil
 }
 
 // Increment height and goto cstypes.RoundStepNewHeight
-func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, fsm *FSM, stateData *StateData, height int64) {
+func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Controller, stateData *StateData, height int64) {
 	logger := cs.logger.With("height", height)
 
 	if stateData.Height != height || stateData.Step != cstypes.RoundStepApplyCommit {
@@ -92,5 +92,5 @@ func (cs *TryFinalizeCommitCommand) finalizeCommit(ctx context.Context, fsm *FSM
 
 	precommits := stateData.Votes.Precommits(stateData.CommitRound)
 	seenCommit := precommits.MakeCommit()
-	_ = fsm.Dispatch(ctx, &ApplyCommitEvent{Commit: seenCommit}, stateData)
+	_ = ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: seenCommit}, stateData)
 }

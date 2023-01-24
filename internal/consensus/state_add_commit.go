@@ -18,13 +18,13 @@ func (e *AddCommitEvent) GetType() EventType {
 	return AddCommitType
 }
 
-type AddCommitCommand struct {
+type AddCommitAction struct {
 	eventPublisher  *EventPublisher
 	statsQueue      *chanQueue[msgInfo]
 	proposalUpdater *proposalUpdater
 }
 
-func (c *AddCommitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *AddCommitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	event := stateEvent.Data.(*AddCommitEvent)
 	commit := event.Commit
 	stateData := stateEvent.StateData
@@ -40,7 +40,7 @@ func (c *AddCommitCommand) Execute(ctx context.Context, stateEvent StateEvent) e
 	c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 
 	// The commit is all good, let's apply it to the state
-	_ = stateEvent.FSM.Dispatch(ctx, &ApplyCommitEvent{Commit: commit}, stateData)
+	_ = stateEvent.Ctrl.Dispatch(ctx, &ApplyCommitEvent{Commit: commit}, stateData)
 
 	// This will relay the commit to peers
 	err = c.eventPublisher.PublishCommitEvent(commit)
@@ -48,7 +48,7 @@ func (c *AddCommitCommand) Execute(ctx context.Context, stateEvent StateEvent) e
 		return fmt.Errorf("error adding commit: %w", err)
 	}
 	if stateData.bypassCommitTimeout() {
-		_ = stateEvent.FSM.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
+		_ = stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
 	}
 	_ = c.statsQueue.send(ctx, msgInfoFromCtx(ctx))
 	return nil

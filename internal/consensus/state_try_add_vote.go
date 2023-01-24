@@ -24,9 +24,9 @@ func (e *TryAddVoteEvent) GetType() EventType {
 	return TryAddVoteType
 }
 
-// TryAddVoteCommand ...
+// TryAddVoteAction ...
 // Attempt to add the vote. if its a duplicate signature, dupeout the validator
-type TryAddVoteCommand struct {
+type TryAddVoteAction struct {
 	// add evidence to the pool
 	// when it's detected
 	evpool         evidencePool
@@ -39,7 +39,7 @@ type TryAddVoteCommand struct {
 }
 
 // Execute ...
-func (c *TryAddVoteCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *TryAddVoteAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(*TryAddVoteEvent)
 	vote, peerID := event.Vote, event.PeerID
@@ -52,7 +52,7 @@ func (c *TryAddVoteCommand) Execute(ctx context.Context, stateEvent StateEvent) 
 			_ = c.statsQueue.send(ctx, msgInfoFromCtx(ctx))
 		}
 	}()
-	added, err = c.addVote(ctx, stateEvent.FSM, stateData, vote, peerID)
+	added, err = c.addVote(ctx, stateEvent.Ctrl, stateData, vote, peerID)
 	if err != nil {
 		// If the vote height is off, we'll just ignore it,
 		// But if it's a conflicting sig, add it to the c.evpool.
@@ -95,9 +95,9 @@ func (c *TryAddVoteCommand) Execute(ctx context.Context, stateEvent StateEvent) 
 	return nil
 }
 
-func (c *TryAddVoteCommand) addVote(
+func (c *TryAddVoteAction) addVote(
 	ctx context.Context,
-	fsm *FSM,
+	ctrl *Controller,
 	stateData *StateData,
 	vote *types.Vote,
 	peerID types.NodeID,
@@ -146,7 +146,7 @@ func (c *TryAddVoteCommand) addVote(
 		if stateData.bypassCommitTimeout() && stateData.LastPrecommits.HasAll() {
 			// go straight to new round (skip timeout commit)
 			// c.scheduleTimeout(time.Duration(0), c.Height, 0, cstypes.RoundStepNewHeight)
-			_ = fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
+			_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
 		}
 
 		return
@@ -266,20 +266,20 @@ func (c *TryAddVoteCommand) addVote(
 		switch {
 		case stateData.Round < vote.Round && prevotes.HasTwoThirdsAny():
 			// Round-skip if there is any 2/3+ of votes ahead of us
-			_ = fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
+			_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
 
 		case stateData.Round == vote.Round && cstypes.RoundStepPrevote <= stateData.Step: // current round
 			blockID, ok := prevotes.TwoThirdsMajority()
 			if ok && (stateData.isProposalComplete() || blockID.IsNil()) {
-				_ = fsm.Dispatch(ctx, &EnterPrecommitEvent{Height: height, Round: vote.Round}, stateData)
+				_ = ctrl.Dispatch(ctx, &EnterPrecommitEvent{Height: height, Round: vote.Round}, stateData)
 			} else if prevotes.HasTwoThirdsAny() {
-				_ = fsm.Dispatch(ctx, &EnterPrevoteWaitEvent{Height: height, Round: vote.Round}, stateData)
+				_ = ctrl.Dispatch(ctx, &EnterPrevoteWaitEvent{Height: height, Round: vote.Round}, stateData)
 			}
 
 		case stateData.Proposal != nil && 0 <= stateData.Proposal.POLRound && stateData.Proposal.POLRound == vote.Round:
 			// If the proposal is now complete, enter prevote of c.Round.
 			if stateData.isProposalComplete() {
-				_ = fsm.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: stateData.Round}, stateData)
+				_ = ctrl.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: stateData.Round}, stateData)
 			}
 		}
 
@@ -295,20 +295,20 @@ func (c *TryAddVoteCommand) addVote(
 		blockID, ok := precommits.TwoThirdsMajority()
 		if ok {
 			// Executed as TwoThirdsMajority could be from a higher round
-			_ = fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
-			_ = fsm.Dispatch(ctx, &EnterPrecommitEvent{Height: height, Round: vote.Round}, stateData)
+			_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
+			_ = ctrl.Dispatch(ctx, &EnterPrecommitEvent{Height: height, Round: vote.Round}, stateData)
 
 			if !blockID.IsNil() {
-				_ = fsm.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: vote.Round}, stateData)
+				_ = ctrl.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: vote.Round}, stateData)
 				if stateData.bypassCommitTimeout() && precommits.HasAll() {
-					_ = fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
+					_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
 				}
 			} else {
-				_ = fsm.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
+				_ = ctrl.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
 			}
 		} else if stateData.Round <= vote.Round && precommits.HasTwoThirdsAny() {
-			_ = fsm.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
-			_ = fsm.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
+			_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: vote.Round}, stateData)
+			_ = ctrl.Dispatch(ctx, &EnterPrecommitWaitEvent{Height: height, Round: vote.Round}, stateData)
 		}
 
 	default:
@@ -318,7 +318,7 @@ func (c *TryAddVoteCommand) addVote(
 	return added, err
 }
 
-func (c *TryAddVoteCommand) subscribe(evsw events.EventSwitch) {
+func (c *TryAddVoteAction) subscribe(evsw events.EventSwitch) {
 	_ = evsw.AddListenerForEvent("addVoteCommand", setPrivValidator, func(a events.EventData) error {
 		c.privValidator = a.(privValidator)
 		return nil

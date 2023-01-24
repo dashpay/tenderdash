@@ -18,9 +18,9 @@ func (e *EnterCommitEvent) GetType() EventType {
 	return EnterCommitType
 }
 
-// EnterCommitCommand ...
+// EnterCommitAction ...
 // Enter: +2/3 precommits for block
-type EnterCommitCommand struct {
+type EnterCommitAction struct {
 	logger          log.Logger
 	eventPublisher  *EventPublisher
 	proposalUpdater *proposalUpdater
@@ -28,7 +28,7 @@ type EnterCommitCommand struct {
 }
 
 // Execute ...
-func (c *EnterCommitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *EnterCommitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	event := stateEvent.Data.(*EnterCommitEvent)
 	stateData := stateEvent.StateData
 	height := event.Height
@@ -57,7 +57,7 @@ func (c *EnterCommitCommand) Execute(ctx context.Context, stateEvent StateEvent)
 		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 
 		// Maybe finalize immediately.
-		_ = stateEvent.FSM.Dispatch(ctx, &TryFinalizeCommitEvent{Height: height}, stateData)
+		_ = stateEvent.Ctrl.Dispatch(ctx, &TryFinalizeCommitEvent{Height: height}, stateData)
 	}()
 
 	blockID, ok := stateData.Votes.Precommits(commitRound).TwoThirdsMajority()

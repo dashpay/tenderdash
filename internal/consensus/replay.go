@@ -96,7 +96,7 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 	}
 	err := stateData.Save()
 	if err != nil {
-		return fmt.Errorf("failed to update app-state: %w", err)
+		return fmt.Errorf("failed to update state-data: %w", err)
 	}
 	return nil
 }

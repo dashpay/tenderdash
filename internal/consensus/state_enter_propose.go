@@ -19,13 +19,13 @@ func (e *EnterProposeEvent) GetType() EventType {
 	return EnterProposeType
 }
 
-// EnterProposeCommand ...
-// Enter (CreateEmptyBlocks): from enterNewRoundCommand(height,round)
+// EnterProposeAction ...
+// Enter (CreateEmptyBlocks): from enterNewRound(height,round)
 // Enter (CreateEmptyBlocks, CreateEmptyBlocksInterval > 0 ):
-// after enterNewRoundCommand(height,round), after timeout of CreateEmptyBlocksInterval
-// Enter (!CreateEmptyBlocks) : after enterNewRoundCommand(height,round), once txs are in the mempool
+// after enterNewRound(height,round), after timeout of CreateEmptyBlocksInterval
+// Enter (!CreateEmptyBlocks) : after enterNewRound(height,round), once txs are in the mempool
 // Caller should hold cs.mtx lock
-type EnterProposeCommand struct {
+type EnterProposeAction struct {
 	logger         log.Logger
 	privValidator  privValidator
 	msgInfoQueue   *msgInfoQueue
@@ -37,7 +37,7 @@ type EnterProposeCommand struct {
 	eventPublisher *EventPublisher
 }
 
-func (c *EnterProposeCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	event := stateEvent.Data.(*EnterProposeEvent)
 	stateData := stateEvent.StateData
 	height := event.Height
@@ -79,7 +79,7 @@ func (c *EnterProposeCommand) Execute(ctx context.Context, stateEvent StateEvent
 		// else, we'll enterPrevote when the rest of the proposal is received (in AddProposalBlockPart),
 		// or else after timeoutPropose
 		if stateData.isProposalComplete() {
-			_ = stateEvent.FSM.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: round}, stateData)
+			_ = stateEvent.Ctrl.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: round}, stateData)
 		}
 	}()
 
@@ -107,7 +107,7 @@ func (c *EnterProposeCommand) Execute(ctx context.Context, stateEvent StateEvent
 			"proposer", proTxHash.ShortString(),
 			"privValidator", c.privValidator,
 		)
-		_ = stateEvent.FSM.Dispatch(ctx, &DecideProposalEvent{Height: height, Round: round}, stateData)
+		_ = stateEvent.Ctrl.Dispatch(ctx, &DecideProposalEvent{Height: height, Round: round}, stateData)
 	} else {
 		logger.Debug("propose step; not our turn to propose",
 			"proposer",
@@ -118,8 +118,8 @@ func (c *EnterProposeCommand) Execute(ctx context.Context, stateEvent StateEvent
 	return nil
 }
 
-func (c *EnterProposeCommand) subscribe(evsw events.EventSwitch) {
-	const listenerID = "enterProposeCommand"
+func (c *EnterProposeAction) subscribe(evsw events.EventSwitch) {
+	const listenerID = "enterProposeAction"
 	_ = evsw.AddListenerForEvent(listenerID, setReplayMode, func(a events.EventData) error {
 		c.replayMode = a.(bool)
 		return nil
