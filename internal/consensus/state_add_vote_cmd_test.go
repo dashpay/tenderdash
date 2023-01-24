@@ -30,7 +30,6 @@ type AddVoteTestSuite struct {
 	evsw      events.EventSwitch
 	eventbus  *eventbus.EventBus
 	publisher *EventPublisher
-	observer  *Observer
 	signer    testSigner
 	valSet    *types.ValidatorSet
 }
@@ -48,7 +47,6 @@ func (suite *AddVoteTestSuite) SetupTest() {
 	err := suite.eventbus.Start(ctx)
 	suite.NoError(err)
 	suite.publisher = &EventPublisher{eventBus: suite.eventbus, evsw: suite.evsw}
-	suite.observer = &Observer{}
 	valSet, privVals := mockValidatorSet()
 	suite.signer = testSigner{privVals: privVals, valSet: valSet}
 	suite.valSet = valSet
@@ -111,7 +109,7 @@ func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 		eventFired = true
 		return nil
 	})
-	fn := addVoteToVoteSet(suite.metrics, suite.publisher, suite.observer)
+	fn := addVoteToVoteSet(suite.metrics, suite.publisher)
 	stateData := &StateData{
 		state: sm.State{
 			Validators: suite.valSet,

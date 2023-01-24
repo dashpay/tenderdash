@@ -1,13 +1,17 @@
 package consensus
 
-import "context"
+import (
+	"context"
+
+	"github.com/tendermint/tendermint/libs/log"
+)
 
 type contextKey int
 
 const (
 	usePeerQueueCtx contextKey = iota
 	msgInfoCtx
-	logKeyValsCtx
+	loggerCtx
 )
 
 // ctxWithPeerQueue adds a key into the context with true value
@@ -37,16 +41,17 @@ func msgInfoFromCtx(ctx context.Context) msgInfo {
 	return val.(msgInfo)
 }
 
-// ctxWithLogKeyVals puts key-vals log slice into the context
-func ctxWithLogKeyVals(ctx context.Context, keyVals []any) context.Context {
-	return context.WithValue(ctx, logKeyValsCtx, keyVals)
+// ctxWithLogger adds a logger instance to a context
+func ctxWithLogger(ctx context.Context, logger log.Logger) context.Context {
+	return context.WithValue(ctx, loggerCtx, logger)
 }
 
-// logKeyValsFromCtx gets key-vals log from the context
-func logKeyValsFromCtx(ctx context.Context) []any {
-	keyVals := ctx.Value(logKeyValsCtx)
-	if keyVals != nil {
-		return keyVals.([]any)
+// loggerFromCtxOrNop gets a logger instance from a context
+// returns Nop logger if logget didn't add
+func loggerFromCtxOrNop(ctx context.Context) log.Logger {
+	val := ctx.Value(loggerCtx)
+	if val != nil {
+		return val.(log.Logger)
 	}
-	return []any{}
+	return log.NewNopLogger()
 }

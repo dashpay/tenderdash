@@ -112,7 +112,7 @@ func blockPartMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
 func voteMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*VoteMessage)
-		keyVals := []any{
+		logger = logger.With([]any{
 			"height", stateData.Height,
 			"cs_round", stateData.Round,
 			"vote_type", msg.Vote.Type.String(),
@@ -120,9 +120,10 @@ func voteMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
 			"vote_round", msg.Vote.Round,
 			"val_proTxHash", msg.Vote.ValidatorProTxHash.ShortString(),
 			"val_index", msg.Vote.ValidatorIndex,
+			"quorum_hash", stateData.Validators.QuorumHash,
 			"peer", envelope.PeerID,
-		}
-		ctx = ctxWithLogKeyVals(ctx, keyVals)
+		})
+		ctx = ctxWithLogger(ctx, logger)
 		// attempt to add the vote and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
 		err := fsm.Dispatch(ctx, &AddVoteEvent{Vote: msg.Vote, PeerID: envelope.PeerID}, stateData)
@@ -139,10 +140,7 @@ func voteMessageHandler(fsm *FSM, logger log.Logger) msgHandlerFunc {
 		// TODO: If rs.Height == vote.Height && rs.Round < vote.Round,
 		// the peer is sending us CatchupCommit precommits.
 		// We could make note of this and help filter in broadcastHasVoteMessage().
-		if err != nil {
-			keyVals = append(keyVals, "error", err)
-		}
-		logger.Debug("received vote", keyVals...)
+		logger.Debug("received vote", logKeyValsWithError([]any(nil), err)...)
 		return nil
 	}
 }
@@ -202,7 +200,7 @@ func errorMiddleware(logger log.Logger) msgMiddlewareFunc {
 					"round", stateData.Round,
 					"peer", envelope.PeerID,
 					"msg_type", fmt.Sprintf("%T", envelope.Msg),
-					"err", err,
+					"error", err,
 				)
 			}
 			return nil
@@ -217,4 +215,11 @@ func msgInfoWithCtxMiddleware() msgMiddlewareFunc {
 			return hd(ctx, stateData, envelope)
 		}
 	}
+}
+
+func logKeyValsWithError(keyVals []any, err error) []any {
+	if err == nil {
+		return keyVals
+	}
+	return append(keyVals, "error", err)
 }

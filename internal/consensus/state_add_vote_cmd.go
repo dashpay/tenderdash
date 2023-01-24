@@ -3,10 +3,10 @@ package consensus
 import (
 	"context"
 	"errors"
-	"github.com/tendermint/tendermint/libs/events"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -66,16 +66,16 @@ func addVoteToVoteSet(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
 	}
 }
 
-func addVoteToLastPrecommitMw(logger log.Logger, ep *EventPublisher, fsm *FSM) AddVoteMiddlewareFunc {
+func addVoteToLastPrecommitMw(ep *EventPublisher, fsm *FSM) AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			if vote.Height+1 != stateData.Height || vote.Type != tmproto.PrecommitType {
 				return next(ctx, stateData, vote)
 			}
-			logKeyVals := logKeyValsFromCtx(ctx)
+			logger := loggerFromCtxOrNop(ctx)
 			if stateData.Step != cstypes.RoundStepNewHeight {
 				// Late precommit at prior height is ignored
-				logger.Debug("precommit vote came in after commit timeout and has been ignored", logKeyVals...)
+				logger.Debug("precommit vote came in after commit timeout and has been ignored")
 				return false, nil
 			}
 			if stateData.LastPrecommits == nil {
@@ -84,13 +84,10 @@ func addVoteToLastPrecommitMw(logger log.Logger, ep *EventPublisher, fsm *FSM) A
 			}
 			added, err := stateData.LastPrecommits.AddVote(vote)
 			if !added {
-				if err != nil {
-					logKeyVals = append(logKeyVals, "error", err)
-				}
-				logger.Debug("vote not added to last precommits", logKeyVals...)
+				logger.Debug("vote not added to last precommits", logKeyValsWithError([]any(nil), err)...)
 				return false, nil
 			}
-			logger.Debug("added vote to last precommits", append(logKeyVals, "last_precommits", stateData.LastPrecommits.StringShort())...)
+			logger.Debug("added vote to last precommits", "last_precommits", stateData.LastPrecommits.StringShort())
 
 			err = ep.PublishVoteEvent(vote)
 			if err != nil {
@@ -135,6 +132,8 @@ func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMiddlewareFunc {
 	}
 }
 
+// addVoteDispatchPrevoteMw executes one of these transitions "enter new round" OR "enter precommit" OR "enter prevote"
+// based on the current state
 func addVoteDispatchPrevoteMw(fsm *FSM) AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
@@ -211,7 +210,8 @@ func addVoteVerifyVoteExtensionMw(
 	metrics *Metrics,
 	evsw events.EventSwitch,
 ) AddVoteMiddlewareFunc {
-	_ = evsw.AddListenerForEvent("addVoteVerifyVoteExtensionMw", setPrivValidator, func(data events.EventData) error {
+	const listenerID = "addVoteVerifyVoteExtensionMw"
+	_ = evsw.AddListenerForEvent(listenerID, setPrivValidator, func(data events.EventData) error {
 		privVal = data.(privValidator)
 		return nil
 	})
@@ -277,7 +277,8 @@ func addVoteStatsMw(statsQueue *chanQueue[msgInfo]) AddVoteMiddlewareFunc {
 // add evidence to the pool
 // when it's detected
 func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidator, evsw events.EventSwitch) AddVoteMiddlewareFunc {
-	_ = evsw.AddListenerForEvent("addVoteErrorMw", setPrivValidator, func(data events.EventData) error {
+	const listenerID = "addVoteErrorMw"
+	_ = evsw.AddListenerForEvent(listenerID, setPrivValidator, func(data events.EventData) error {
 		privVal = data.(privValidator)
 		return nil
 	})
@@ -316,17 +317,16 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 	}
 }
 
-func addVoteLoggingMw(logger log.Logger) AddVoteMiddlewareFunc {
+func addVoteLoggingMw() AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
-			logKeyVals := logKeyValsFromCtx(ctx)
-			logger.Debug("adding vote to vote set", logKeyVals...)
+			logger := loggerFromCtxOrNop(ctx)
+			logger.Debug("adding vote to vote set")
 			added, err := next(ctx, stateData, vote)
 			if !added {
 				if err != nil {
-					logger.Error("vote not added", append(logKeyVals, "error", err))
+					logger.Error("vote not added", "error", err)
 					if errors.Is(err, types.ErrVoteNonDeterministicSignature) {
-						logger.Debug("vote has non-deterministic signature", "error", err)
 						return added, err
 					}
 					// Either
@@ -334,13 +334,12 @@ func addVoteLoggingMw(logger log.Logger) AddVoteMiddlewareFunc {
 					// 2) not a bad peer? this can also err sometimes with "Unexpected step" OR
 					// 3) tmkms use with multiple validators connecting to a single tmkms instance
 					//		(https://github.com/tendermint/tendermint/issues/3839).
-					logger.Info("failed attempting to add vote", "quorum_hash", stateData.Validators.QuorumHash, "err", err)
 					// return added, ErrAddingVote
 				}
 				return added, err
 			}
 			votes := stateData.Votes.GetVoteSet(vote.Round, vote.Type)
-			logger.Debug("vote added", append(logKeyVals, []any{"data", votes.LogString()})...)
+			logger.Debug("vote added", "data", votes.LogString())
 			return added, err
 		}
 	}

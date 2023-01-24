@@ -17,8 +17,8 @@ import (
 )
 
 var (
-	errHeightMismatch      = errors.New("vote height does not match on a state")
-	errValSetDoesNotPubKey = errors.New("validator set does not have public key")
+	errHeightMismatch          = errors.New("vote height does not match on a state")
+	errValSetDoesNotHavePubKey = errors.New("validator set does not have public key")
 )
 
 // StateDataStore is a state-data store
@@ -502,7 +502,7 @@ func (s *StateData) validateVote(vote *types.Vote) error {
 	}
 	// Ignore vote if we do not have public keys to verify votes
 	if !s.Validators.HasPublicKeys {
-		return errValSetDoesNotPubKey
+		return errValSetDoesNotHavePubKey
 	}
 	return nil
 }

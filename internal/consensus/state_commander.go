@@ -75,22 +75,22 @@ func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
 	fsm := &FSM{}
 	addVoteCmd := &AddVoteCommand{
 		prevote: withVoterMws(
-			addVoteToVoteSet(cs.metrics, cs.eventPublisher, cs.observer),
-			addVoteLoggingMw(cs.logger),
+			addVoteToVoteSet(cs.metrics, cs.eventPublisher),
+			addVoteLoggingMw(),
 			addVoteUpdateValidBlockMw(cs.eventPublisher),
 			addVoteDispatchPrevoteMw(fsm),
 			addVoteValidateVoteMw(),
-			addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.observer),
+			addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.evsw),
 			addVoteStatsMw(statsQueue),
 		),
 		precommit: withVoterMws(
-			addVoteToVoteSet(cs.metrics, cs.eventPublisher, cs.observer),
-			addVoteLoggingMw(cs.logger),
+			addVoteToVoteSet(cs.metrics, cs.eventPublisher),
+			addVoteLoggingMw(),
 			addVoteDispatchPrecommitMw(fsm),
-			addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExec, cs.metrics, cs.observer),
+			addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExec, cs.metrics, cs.evsw),
 			addVoteValidateVoteMw(),
-			addVoteToLastPrecommitMw(cs.logger, cs.eventPublisher, fsm),
-			addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.observer),
+			addVoteToLastPrecommitMw(cs.eventPublisher, fsm),
+			addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.evsw),
 			addVoteStatsMw(statsQueue),
 		),
 	}
