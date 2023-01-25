@@ -934,7 +934,9 @@ ValidatorUpdate
 | pub_key | [tendermint.crypto.PublicKey](#tendermint-crypto-PublicKey) |  |  |
 | power | [int64](#int64) |  |  |
 | pro_tx_hash | [bytes](#bytes) |  |  |
-| node_address | [string](#string) |  | address of the Validator, correct URI |
+| node_address | [string](#string) |  | node_address is an URI containing address of validator (`proto://node_id@ip_address:port`), for example: `tcp://f2dbd9b0a1f541a7c44d34a58674d0262f5feca5@12.34.5.6:1234`
+
+address of the Validator, correct URI |
 
 
 
