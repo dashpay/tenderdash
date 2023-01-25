@@ -35,11 +35,10 @@ func MakeGenNodeKeyCommand(*config.Config, log.Logger) *cobra.Command {
 		Use:   "gen-node-key",
 		Short: "Generate a new node key for this node and print its ID",
 		Long: `Generate a new node key for this node and print its ID. 
-			Note that the key is not saved to disk.
+Note that the key is not saved to disk.
 
-			Node key can be generated randomly (default) or derived from BIP39 mnemonic phrase.
-			Seed phrase and optional password is read from standard input.
-`,
+Node key can be generated randomly (default) or derived from BIP39 mnemonic phrase.
+Seed phrase and optional password is read from standard input.`,
 		RunE: genNodeKey,
 	}
 
