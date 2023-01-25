@@ -102,7 +102,7 @@ func genNodeKey(cmd *cobra.Command, args []string) error {
 			return fmt.Errorf("cannot generate key from mnemonic: %w", err)
 		}
 	} else {
-		if derivationPath != "" {
+		if derivationPath != "" && derivationPath != defaultDeriviationPath {
 			return fmt.Errorf("--%s can be used only with --%s", flagDerivationPath, flagFromMnemonic)
 		}
 
