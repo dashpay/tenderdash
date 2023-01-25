@@ -231,7 +231,7 @@ func (suite *BockExecutorTestSuite) TestProcess() {
 					Once().
 					Return(tc.wantCRS, wantErr)
 			}
-			err := suite.blockExec.process(ctx, &stateData, round)
+			err := suite.blockExec.ensureProcess(ctx, &stateData, round)
 			assertError(suite.T(), tc.wantErr, err)
 			require.Equal(suite.T(), tc.wantCRS, stateData.CurrentRoundState)
 		})

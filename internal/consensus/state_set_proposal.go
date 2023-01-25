@@ -19,12 +19,12 @@ func (e *SetProposalEvent) GetType() EventType {
 	return SetProposalType
 }
 
-type SetProposalCommand struct {
+type SetProposalAction struct {
 	logger  log.Logger
 	metrics *Metrics
 }
 
-func (cs *SetProposalCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (cs *SetProposalAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(*SetProposalEvent)
 	proposal := event.Proposal

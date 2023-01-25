@@ -20,9 +20,9 @@ func (e *TryAddCommitEvent) GetType() EventType {
 	return TryAddCommitType
 }
 
-// TryAddCommitCommand ...
+// TryAddCommitAction ...
 // If we received a commit message from an external source try to add it then finalize it.
-type TryAddCommitCommand struct {
+type TryAddCommitAction struct {
 	logger log.Logger
 	// create and execute blocks
 	eventPublisher *EventPublisher
@@ -30,7 +30,7 @@ type TryAddCommitCommand struct {
 }
 
 // Execute ...
-func (cs *TryAddCommitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	event := stateEvent.Data.(*TryAddCommitEvent)
 	stateData := stateEvent.StateData
 	commit := event.Commit
@@ -53,7 +53,7 @@ func (cs *TryAddCommitCommand) Execute(ctx context.Context, stateEvent StateEven
 			return err
 		}
 		if verified {
-			_ = stateEvent.FSM.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height, Round: commit.Round}, stateData)
+			_ = stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height, Round: commit.Round}, stateData)
 			// We are now going to receive the block, so initialize the block parts.
 			if stateData.ProposalBlockParts == nil {
 				stateData.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
@@ -76,10 +76,10 @@ func (cs *TryAddCommitCommand) Execute(ctx context.Context, stateEvent StateEven
 		// In this case we need to apply the commit after the proposal block comes in
 		return nil
 	}
-	return stateEvent.FSM.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
+	return stateEvent.Ctrl.Dispatch(ctx, &AddCommitEvent{Commit: commit}, stateData)
 }
 
-func (cs *TryAddCommitCommand) verifyCommit(ctx context.Context, stateData *StateData, commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
+func (cs *TryAddCommitAction) verifyCommit(ctx context.Context, stateData *StateData, commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
 	verified, err = stateData.verifyCommit(commit, peerID, ignoreProposalBlock)
 	if !verified || err != nil {
 		return verified, err
@@ -106,7 +106,7 @@ func (cs *TryAddCommitCommand) verifyCommit(ctx context.Context, stateData *Stat
 		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 	// We have a correct block, let's process it before applying the commit
-	err = cs.blockExec.process(ctx, stateData, commit.Round)
+	err = cs.blockExec.ensureProcess(ctx, stateData, commit.Round)
 	if err != nil {
 		return false, fmt.Errorf("unable to process proposal: %w", err)
 	}

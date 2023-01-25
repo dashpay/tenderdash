@@ -26,11 +26,11 @@ func (e *AddProposalBlockPartEvent) GetType() EventType {
 	return AddProposalBlockPartType
 }
 
-// AddProposalBlockPartCommand ...
+// AddProposalBlockPartAction ...
 // NOTE: block is not necessarily valid.
 // Asynchronously triggers either enterPrevote (before we timeout of propose) or tryFinalizeCommit,
 // once we have the full block.
-type AddProposalBlockPartCommand struct {
+type AddProposalBlockPartAction struct {
 	logger         log.Logger
 	metrics        *Metrics
 	blockExec      *blockExecutor
@@ -39,7 +39,7 @@ type AddProposalBlockPartCommand struct {
 }
 
 // Execute ...
-func (c *AddProposalBlockPartCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *AddProposalBlockPartAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	event := stateEvent.Data.(*AddProposalBlockPartEvent)
 	stateData := stateEvent.StateData
 	commitNotExist := stateData.Commit == nil
@@ -53,13 +53,13 @@ func (c *AddProposalBlockPartCommand) Execute(ctx context.Context, stateEvent St
 		}
 	}()
 	// if the proposal is complete, we'll enterPrevote or tryFinalizeCommit
-	added, err = c.addProposalBlockPart(ctx, stateEvent.FSM, stateData, event.Msg, event.PeerID)
+	added, err = c.addProposalBlockPart(ctx, stateEvent.Ctrl, stateData, event.Msg, event.PeerID)
 	if err != nil {
 		return err
 	}
 
 	if added && commitNotExist && stateData.ProposalBlockParts.IsComplete() {
-		return stateEvent.FSM.Dispatch(ctx, &ProposalCompletedEvent{
+		return stateEvent.Ctrl.Dispatch(ctx, &ProposalCompletedEvent{
 			Height:     event.Msg.Height,
 			FromReplay: event.FromReplay,
 		}, stateData)
@@ -67,9 +67,9 @@ func (c *AddProposalBlockPartCommand) Execute(ctx context.Context, stateEvent St
 	return nil
 }
 
-func (c *AddProposalBlockPartCommand) addProposalBlockPart(
+func (c *AddProposalBlockPartAction) addProposalBlockPart(
 	ctx context.Context,
-	fsm *FSM,
+	ctrl *Controller,
 	stateData *StateData,
 	msg *BlockPartMessage,
 	peerID types.NodeID,
@@ -176,7 +176,7 @@ func (c *AddProposalBlockPartCommand) addProposalBlockPart(
 			)
 			// We received a commit before the block
 			// Transit to AddCommit
-			return added, fsm.Dispatch(ctx, &AddCommitEvent{Commit: stateData.Commit}, stateData)
+			return added, ctrl.Dispatch(ctx, &AddCommitEvent{Commit: stateData.Commit}, stateData)
 		}
 
 		return added, nil
@@ -195,11 +195,11 @@ func (e *ProposalCompletedEvent) GetType() EventType {
 	return ProposalCompletedType
 }
 
-type ProposalCompletedCommand struct {
+type ProposalCompletedAction struct {
 	logger log.Logger
 }
 
-func (c *ProposalCompletedCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *ProposalCompletedAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(*ProposalCompletedEvent)
 	height := event.Height
@@ -234,7 +234,7 @@ func (c *ProposalCompletedCommand) Execute(ctx context.Context, stateEvent State
 			"height", stateData.ProposalBlock.Height,
 			"hash", stateData.ProposalBlock.Hash(),
 		)
-		err := stateEvent.FSM.Dispatch(ctx, &EnterPrevoteEvent{
+		err := stateEvent.Ctrl.Dispatch(ctx, &EnterPrevoteEvent{
 			Height:         height,
 			Round:          stateData.Round,
 			AllowOldBlocks: fromReplay,
@@ -248,7 +248,7 @@ func (c *ProposalCompletedCommand) Execute(ctx context.Context, stateEvent State
 				"height", stateData.ProposalBlock.Height,
 				"hash", stateData.ProposalBlock.Hash(),
 			)
-			return stateEvent.FSM.Dispatch(ctx, &EnterPrecommitEvent{
+			return stateEvent.Ctrl.Dispatch(ctx, &EnterPrecommitEvent{
 				Height: height,
 				Round:  stateData.Round,
 			}, stateData)
@@ -262,7 +262,7 @@ func (c *ProposalCompletedCommand) Execute(ctx context.Context, stateEvent State
 			"hash", stateData.ProposalBlock.Hash(),
 		)
 		// Transit to EnterPrecommit
-		return stateEvent.FSM.Dispatch(ctx, &TryFinalizeCommitEvent{Height: height}, stateData)
+		return stateEvent.Ctrl.Dispatch(ctx, &TryFinalizeCommitEvent{Height: height}, stateData)
 	}
 	return nil
 }

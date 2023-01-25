@@ -131,7 +131,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	// lazyProposer := states[1]
 	lazyNodeState := states[1]
 
-	decideProposalCmd := newMockCommand(func(ctx context.Context, stateEvent StateEvent) error {
+	decideProposalCmd := newMockAction(func(ctx context.Context, stateEvent StateEvent) error {
 		stateData := stateEvent.StateData
 		event := stateEvent.Data.(*DecideProposalEvent)
 		height := event.Height
@@ -215,7 +215,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 		return nil
 	})
-	lazyNodeState.fsm.Register(DecideProposalType, decideProposalCmd)
+	lazyNodeState.ctrl.Register(DecideProposalType, decideProposalCmd)
 
 	rts.switchToConsensus(ctx)
 
@@ -295,8 +295,8 @@ func withBzPrevoter(t *testing.T, rts *reactorTestSuite, bzNodeID types.NodeID, 
 	reactor := rts.reactors[bzNodeID]
 	bzState := rts.states[bzNodeID]
 	voteCh := rts.voteChannels[bzNodeID]
-	cmd := bzState.fsm.Get(EnterPrevoteType)
-	enterPrevoteCmd := cmd.(*EnterPrevoteCommand)
+	cmd := bzState.ctrl.Get(EnterPrevoteType)
+	enterPrevoteCmd := cmd.(*EnterPrevoteAction)
 	enterPrevoteCmd.prevoter = &byzantinePrevoter{
 		t:             t,
 		logger:        bzState.logger,

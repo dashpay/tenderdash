@@ -1491,8 +1491,8 @@ type replayPrevoter struct {
 }
 
 func withReplayPrevoter(state *State) {
-	cmd := state.fsm.Get(EnterPrevoteType)
-	enterPrevoteCmd := cmd.(*EnterPrevoteCommand)
+	cmd := state.ctrl.Get(EnterPrevoteType)
+	enterPrevoteCmd := cmd.(*EnterPrevoteAction)
 	enterPrevoteCmd.prevoter = &replayPrevoter{
 		voteSigner: state.voteSigner,
 		prevoter:   enterPrevoteCmd.prevoter,

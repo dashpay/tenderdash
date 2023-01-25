@@ -620,7 +620,6 @@ func (r *Reactor) pickSendVote(ctx context.Context, ps *PeerState, votes types.V
 		"height", vote.Height,
 		"round", vote.Round,
 		"size", voteProto.Size(),
-		//"isValidator", r.isValidator(vote.ValidatorProTxHash),
 	)
 	if err != nil {
 		return false, err

@@ -19,7 +19,7 @@ func (e *DecideProposalEvent) GetType() EventType {
 	return DecideProposalType
 }
 
-type DecideProposalCommand struct {
+type DecideProposalAction struct {
 	logger        log.Logger
 	privValidator privValidator
 	msgInfoQueue  *msgInfoQueue
@@ -29,7 +29,7 @@ type DecideProposalCommand struct {
 	replayMode    bool
 }
 
-func (cs *DecideProposalCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (cs *DecideProposalAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	event := stateEvent.Data.(*DecideProposalEvent)
 	height := event.Height
 	round := event.Round
@@ -145,8 +145,8 @@ func (cs *DecideProposalCommand) Execute(ctx context.Context, stateEvent StateEv
 	return nil
 }
 
-func (cs *DecideProposalCommand) subscribe(evsw events.EventSwitch) {
-	_ = evsw.AddListenerForEvent("decideProposalCommand", setPrivValidator, func(a events.EventData) error {
+func (cs *DecideProposalAction) subscribe(evsw events.EventSwitch) {
+	_ = evsw.AddListenerForEvent("decideProposalAction", setPrivValidator, func(a events.EventData) error {
 		cs.privValidator = a.(privValidator)
 		return nil
 	})

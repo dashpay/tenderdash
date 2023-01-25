@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
@@ -56,7 +55,7 @@ func (c *blockExecutor) create(ctx context.Context, stateData *StateData, round 
 	return ret, nil
 }
 
-func (c *blockExecutor) process(ctx context.Context, stateData *StateData, round int32) error {
+func (c *blockExecutor) ensureProcess(ctx context.Context, stateData *StateData, round int32) error {
 	block := stateData.ProposalBlock
 	crs := stateData.CurrentRoundState
 	if crs.Params.Source != sm.ProcessProposalSource || !crs.MatchesBlock(block.Header, round) {
@@ -70,8 +69,8 @@ func (c *blockExecutor) process(ctx context.Context, stateData *StateData, round
 	return nil
 }
 
-func (c *blockExecutor) mustProcess(ctx context.Context, stateData *StateData, round int32) {
-	err := c.process(ctx, stateData, round)
+func (c *blockExecutor) mustEnsureProcess(ctx context.Context, stateData *StateData, round int32) {
+	err := c.ensureProcess(ctx, stateData, round)
 	if err != nil {
 		panic(err)
 	}
@@ -98,16 +97,8 @@ func (c *blockExecutor) validate(ctx context.Context, stateData *StateData) erro
 	// Validate the block.
 	err := c.blockExec.ValidateBlockWithRoundState(ctx, stateData.state, stateData.CurrentRoundState, stateData.ProposalBlock)
 	if err != nil {
-		step := ""
-		switch stateData.Step {
-		case cstypes.RoundStepApplyCommit:
-			step = "committed"
-		case cstypes.RoundStepPrevote:
-			step = "prevoted"
-		case cstypes.RoundStepPrecommit:
-			step = "precommited"
-		}
-		return fmt.Errorf("+2/3 %s for an invalid block %X: %w", step, stateData.CurrentRoundState.AppHash, err)
+		step := stateData.Step.String()
+		return fmt.Errorf("invalid block %X (step %s): %w", step, stateData.CurrentRoundState.AppHash, err)
 	}
 	return nil
 }

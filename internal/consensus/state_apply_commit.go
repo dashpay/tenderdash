@@ -18,7 +18,7 @@ func (e *ApplyCommitEvent) GetType() EventType {
 	return ApplyCommitType
 }
 
-type ApplyCommitCommand struct {
+type ApplyCommitAction struct {
 	logger log.Logger
 	// store blocks and commits
 	blockStore sm.BlockStore
@@ -30,7 +30,7 @@ type ApplyCommitCommand struct {
 	eventPublisher *EventPublisher
 }
 
-func (c *ApplyCommitCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	event := stateEvent.Data.(*ApplyCommitEvent)
 	stateData := stateEvent.StateData
 	commit := event.Commit
@@ -46,7 +46,7 @@ func (c *ApplyCommitCommand) Execute(ctx context.Context, stateEvent StateEvent)
 		round = commit.Round
 	}
 
-	c.blockExec.mustProcess(ctx, stateData, round)
+	c.blockExec.mustEnsureProcess(ctx, stateData, round)
 	c.blockExec.mustValidate(ctx, stateData)
 
 	// Save to blockStore
@@ -107,7 +107,7 @@ func (c *ApplyCommitCommand) Execute(ctx context.Context, stateEvent StateEvent)
 	return nil
 }
 
-func (c *ApplyCommitCommand) RecordMetrics(stateData *StateData, height int64, block *types.Block, lastBlockMeta *types.BlockMeta) {
+func (c *ApplyCommitAction) RecordMetrics(stateData *StateData, height int64, block *types.Block, lastBlockMeta *types.BlockMeta) {
 	c.metrics.Validators.Set(float64(stateData.Validators.Size()))
 	c.metrics.ValidatorsPower.Set(float64(stateData.Validators.TotalVotingPower()))
 

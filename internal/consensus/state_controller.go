@@ -5,6 +5,7 @@ import (
 	"errors"
 )
 
+// EventType is an integer representation of a transition event
 type EventType int
 
 // All possible event types
@@ -28,58 +29,58 @@ const (
 )
 
 var (
-	errCommandNotRegistered = errors.New("a command is not registered")
+	errActionNotRegistered = errors.New("an action is not registered")
 )
 
-// StateEvent uses to execute a command handler
+// StateEvent uses to execute an action handler
 // EventType and StateData are required for a call
 // Data is optional
 type StateEvent struct {
-	FSM       *FSM
+	Ctrl      *Controller
 	EventType EventType
 	StateData *StateData
-	Data      FSMEvent
+	Data      ActionEvent
 }
 
-type FSMEvent interface {
+type ActionEvent interface {
 	GetType() EventType
 }
 
-// CommandHandler is a command handler interface
-type CommandHandler interface {
+// ActionHandler is an action handler interface
+type ActionHandler interface {
 	Execute(ctx context.Context, event StateEvent) error
 }
 
-// FSM ...
-type FSM struct {
-	commands map[EventType]CommandHandler
+// Controller is responsible for registering and dispatching an event to an action
+type Controller struct {
+	actions map[EventType]ActionHandler
 }
 
-// Register adds or overrides a command handler for an event-type
-func (c *FSM) Register(eventType EventType, handler CommandHandler) {
-	c.commands[eventType] = handler
+// Register adds or overrides a action handler for an event-type
+func (c *Controller) Register(eventType EventType, handler ActionHandler) {
+	c.actions[eventType] = handler
 }
 
-// Get returns a command handler by an event-type, if command not is existed then returns nil
-func (c *FSM) Get(eventType EventType) CommandHandler {
-	return c.commands[eventType]
+// Get returns an action handler by an event-type, if the action is not existed then returns nil
+func (c *Controller) Get(eventType EventType) ActionHandler {
+	return c.actions[eventType]
 }
 
-// NewFSM returns a new instance of finite-state-machine with a set of all possible transitions
-func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
+// NewController returns a new instance of a controller with a set of all possible transitions (actions)
+func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Controller {
 	propUpdater := &proposalUpdater{
 		logger:         cs.logger,
 		eventPublisher: cs.eventPublisher,
 	}
-	fsm := &FSM{}
-	fsm.commands = map[EventType]CommandHandler{
-		EnterNewRoundType: &EnterNewRoundCommand{
+	ctrl := &Controller{}
+	ctrl.actions = map[EventType]ActionHandler{
+		EnterNewRoundType: &EnterNewRoundAction{
 			logger:         cs.logger,
 			config:         cs.config,
 			scheduler:      cs.roundScheduler,
 			eventPublisher: cs.eventPublisher,
 		},
-		EnterProposeType: &EnterProposeCommand{
+		EnterProposeType: &EnterProposeAction{
 			logger:         cs.logger,
 			privValidator:  cs.privValidator,
 			msgInfoQueue:   cs.msgInfoQueue,
@@ -90,11 +91,11 @@ func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
 			scheduler:      cs.roundScheduler,
 			eventPublisher: cs.eventPublisher,
 		},
-		SetProposalType: &SetProposalCommand{
+		SetProposalType: &SetProposalAction{
 			logger:  cs.logger,
 			metrics: cs.metrics,
 		},
-		DecideProposalType: &DecideProposalCommand{
+		DecideProposalType: &DecideProposalAction{
 			logger:        cs.logger,
 			privValidator: cs.privValidator,
 			msgInfoQueue:  cs.msgInfoQueue,
@@ -103,15 +104,15 @@ func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
 			blockExec:     cs.blockExecutor,
 			replayMode:    cs.replayMode,
 		},
-		AddProposalBlockPartType: &AddProposalBlockPartCommand{
+		AddProposalBlockPartType: &AddProposalBlockPartAction{
 			logger:         cs.logger,
 			metrics:        cs.metrics,
 			blockExec:      cs.blockExecutor,
 			eventPublisher: cs.eventPublisher,
 			statsQueue:     statsQueue,
 		},
-		ProposalCompletedType: &ProposalCompletedCommand{logger: cs.logger},
-		TryAddVoteType: &TryAddVoteCommand{
+		ProposalCompletedType: &ProposalCompletedAction{logger: cs.logger},
+		TryAddVoteType: &TryAddVoteAction{
 			evpool:         cs.evpool,
 			logger:         cs.logger,
 			privValidator:  cs.privValidator,
@@ -120,34 +121,34 @@ func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
 			metrics:        cs.metrics,
 			statsQueue:     statsQueue,
 		},
-		EnterCommitType: &EnterCommitCommand{
+		EnterCommitType: &EnterCommitAction{
 			logger:          cs.logger,
 			eventPublisher:  cs.eventPublisher,
 			metrics:         cs.metrics,
 			proposalUpdater: propUpdater,
 		},
-		EnterPrevoteType: &EnterPrevoteCommand{
+		EnterPrevoteType: &EnterPrevoteAction{
 			logger:         cs.logger,
 			eventPublisher: cs.eventPublisher,
 			prevoter:       newPrevote(cs.logger, cs.voteSigner, cs.blockExecutor, cs.metrics),
 		},
-		EnterPrecommitType: &EnterPrecommitCommand{
+		EnterPrecommitType: &EnterPrecommitAction{
 			logger:         cs.logger,
 			eventPublisher: cs.eventPublisher,
 			blockExec:      cs.blockExecutor,
 			voteSigner:     cs.voteSigner,
 		},
-		TryAddCommitType: &TryAddCommitCommand{
+		TryAddCommitType: &TryAddCommitAction{
 			logger:         cs.logger,
 			blockExec:      cs.blockExecutor,
 			eventPublisher: cs.eventPublisher,
 		},
-		AddCommitType: &AddCommitCommand{
+		AddCommitType: &AddCommitAction{
 			eventPublisher:  cs.eventPublisher,
 			statsQueue:      statsQueue,
 			proposalUpdater: propUpdater,
 		},
-		ApplyCommitType: &ApplyCommitCommand{
+		ApplyCommitType: &ApplyCommitAction{
 			logger:         cs.logger,
 			blockStore:     cs.blockStore,
 			blockExec:      cs.blockExecutor,
@@ -156,42 +157,41 @@ func NewFSM(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *FSM {
 			metrics:        cs.metrics,
 			eventPublisher: cs.eventPublisher,
 		},
-		TryFinalizeCommitType: &TryFinalizeCommitCommand{
+		TryFinalizeCommitType: &TryFinalizeCommitAction{
 			logger:     cs.logger,
 			blockExec:  cs.blockExecutor,
 			blockStore: cs.blockStore,
 		},
-		EnterPrevoteWaitType: &EnterPrevoteWaitCommand{
+		EnterPrevoteWaitType: &EnterPrevoteWaitAction{
 			logger:         cs.logger,
 			scheduler:      cs.roundScheduler,
 			eventPublisher: cs.eventPublisher,
 		},
-		EnterPrecommitWaitType: &EnterPrecommitWaitCommand{
+		EnterPrecommitWaitType: &EnterPrecommitWaitAction{
 			logger:         cs.logger,
 			scheduler:      cs.roundScheduler,
 			eventPublisher: cs.eventPublisher,
 		},
 	}
-	for _, command := range fsm.commands {
-		sub, ok := command.(eventSwitchSubscriber)
+	for _, action := range ctrl.actions {
+		sub, ok := action.(eventSwitchSubscriber)
 		if ok {
 			sub.subscribe(cs.evsw)
 		}
 	}
-	return fsm
+	return ctrl
 }
 
 // Dispatch dispatches an event to a handler
-func (c *FSM) Dispatch(ctx context.Context, event FSMEvent, stateData *StateData) error {
+func (c *Controller) Dispatch(ctx context.Context, event ActionEvent, stateData *StateData) error {
+	if int(event.GetType()) >= len(c.actions) {
+		panic(errActionNotRegistered)
+	}
 	stateEvent := StateEvent{
-		FSM:       c,
+		Ctrl:      c,
 		EventType: event.GetType(),
 		StateData: stateData,
 		Data:      event,
 	}
-	if int(event.GetType()) >= len(c.commands) {
-		panic(errCommandNotRegistered)
-	}
-	stateEvent.FSM = c
-	return c.commands[event.GetType()].Execute(ctx, stateEvent)
+	return c.actions[event.GetType()].Execute(ctx, stateEvent)
 }

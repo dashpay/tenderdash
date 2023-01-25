@@ -103,8 +103,8 @@ func withInvalidPrevoter(t *testing.T, rts *reactorTestSuite, nodeID types.NodeI
 	privVal.ProTxHash = proTxHash
 
 	voteCh := rts.voteChannels[nodeID]
-	cmd := bzState.fsm.Get(EnterPrevoteType)
-	enterPrevoteCmd := cmd.(*EnterPrevoteCommand)
+	cmd := bzState.ctrl.Get(EnterPrevoteType)
+	enterPrevoteCmd := cmd.(*EnterPrevoteAction)
 	enterPrevoteCmd.prevoter = &invalidPrevoter{
 		t:        t,
 		stopCh:   stopCh,
