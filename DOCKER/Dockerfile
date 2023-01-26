@@ -3,7 +3,7 @@ FROM golang:1.19-alpine3.15 AS builder
 
 RUN apk update && \
     apk upgrade && \
-    apk add bash git gmp-dev sudo cmake build-base
+    apk --no-cache add bash git gmp-dev sudo cmake build-base libpcap-dev
 
 WORKDIR /src/tenderdash
 
@@ -27,6 +27,8 @@ RUN rm -r third_party && mv third_party.bak third_party
 ARG TENDERMINT_BUILD_OPTIONS=tenderdash
 RUN make build-linux
 
+RUN make build_abcidump
+
 # stage 2
 FROM alpine:3.15
 LABEL maintainer="developers@dash.org"
@@ -45,7 +47,7 @@ ENV TMHOME /tenderdash
 # could execute bash commands.
 RUN apk update && \
     apk upgrade && \
-    apk --no-cache add curl jq bash gmp libstdc++ && \
+    apk --no-cache add curl jq bash gmp libstdc++ libpcap && \
     addgroup tmuser && \
     adduser -S -G tmuser tmuser -h "$TMHOME"
 
@@ -60,6 +62,7 @@ EXPOSE 26656 26657 26660
 STOPSIGNAL SIGTERM
 
 COPY --from=builder /src/tenderdash/build/tenderdash /usr/bin/tenderdash
+COPY --from=builder /src/tenderdash/build/abcidump /usr/bin/abcidump
 
 # You can overwrite these before the first run to influence
 # config.json and genesis.json. Additionally, you can override
