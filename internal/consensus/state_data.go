@@ -9,6 +9,7 @@ import (
 	"github.com/tendermint/tendermint/config"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
@@ -22,16 +23,18 @@ type StateDataStore struct {
 	metrics        *Metrics
 	logger         log.Logger
 	config         *config.ConsensusConfig
+	evws           events.EventSwitch
 	replayMode     bool
 	version        int64
 }
 
 // NewStateDataStore creates and returns a new state-data store
-func NewStateDataStore(metrics *Metrics, logger log.Logger, cfg *config.ConsensusConfig) *StateDataStore {
+func NewStateDataStore(metrics *Metrics, logger log.Logger, cfg *config.ConsensusConfig, evws events.EventSwitch) *StateDataStore {
 	return &StateDataStore{
 		metrics: metrics,
 		logger:  logger,
 		config:  cfg,
+		evws:    evws,
 	}
 }
 
@@ -58,7 +61,6 @@ func (s *StateDataStore) UpdateAndGet(candidate StateData) (StateData, error) {
 		return StateData{}, err
 	}
 	return s.load(), nil
-
 }
 
 func (s *StateDataStore) load() StateData {
@@ -79,9 +81,22 @@ func (s *StateDataStore) update(candidate StateData) error {
 		return fmt.Errorf("mismatch state-data versions actual %d want %d", candidate.version, s.version)
 	}
 	s.roundState = candidate.RoundState
+	if s.committedState.LastBlockHeight == 0 || s.committedState.LastBlockHeight < candidate.state.LastBlockHeight {
+		// fires the event to update committed-state in those components that have a reference with this data
+		s.evws.FireEvent(committedStateUpdate, candidate.state)
+	}
 	s.committedState = candidate.state
 	s.version++
 	return nil
+}
+
+func (s *StateDataStore) subscribe(evsw events.EventSwitch) {
+	const listenerID = "stateDataStore"
+	_ = evsw.AddListenerForEvent(listenerID, setReplayMode, func(obj events.EventData) error {
+		flag := obj.(bool)
+		s.replayMode = flag
+		return nil
+	})
 }
 
 // StateData is a copy of the current RoundState nad state.State stored in the store
@@ -451,17 +466,4 @@ func (s *StateData) bypassCommitTimeout() bool {
 		return *s.config.UnsafeBypassCommitTimeoutOverride
 	}
 	return s.state.ConsensusParams.Timeout.BypassCommitTimeout
-}
-
-func (s *StateData) calculateProposalTimestampDifferenceMetric() {
-	if s.Proposal != nil && s.Proposal.POLRound == -1 {
-		sp := s.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
-		recvTime := s.ProposalReceiveTime
-		if s.Height == s.state.InitialHeight {
-			recvTime = s.state.LastBlockTime // genesis time
-		}
-		isTimely := s.Proposal.IsTimely(recvTime, sp, s.Round)
-		s.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", isTimely)).
-			Observe(s.ProposalReceiveTime.Sub(s.Proposal.Timestamp).Seconds())
-	}
 }

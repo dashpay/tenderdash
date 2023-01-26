@@ -6,6 +6,7 @@ const (
 	setProposedAppVersion = "setProposedAppVersion"
 	setPrivValidator      = "setPrivValidator"
 	setReplayMode         = "setReplayMode"
+	committedStateUpdate  = "committedStateUpdate"
 )
 
 // eventSwitchSubscriber is a subscriber interface to an observer

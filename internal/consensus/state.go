@@ -245,7 +245,7 @@ func NewState(
 		option(cs)
 	}
 
-	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg)
+	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg, cs.evsw)
 	wal := &wrapWAL{getter: func() WALWriteFlusher { return cs.wal }}
 
 	cs.voteSigner = &voteSigner{
@@ -268,24 +268,13 @@ func NewState(
 		wal:      wal,
 	}
 	cs.roundScheduler = &roundScheduler{timeoutTicker: cs.timeoutTicker}
-	cs.ctrl = NewController(cs, wal, cs.statsMsgQueue)
-	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, wal, cs.logger)
-	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setProposedAppVersion, func(obj tmevents.EventData) error {
-		ver := obj.(uint64)
-		cs.blockExecutor.proposedAppVersion = ver
-		return nil
-	})
-	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setPrivValidator, func(obj tmevents.EventData) error {
-		pv := obj.(privValidator)
-		cs.voteSigner.privValidator = pv
-		cs.blockExecutor.privValidator = pv
-		return nil
-	})
-	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setReplayMode, func(obj tmevents.EventData) error {
-		flag := obj.(bool)
-		cs.stateDataStore.replayMode = flag
-		return nil
-	})
+	propler := newProposaler(cs.logger, cs.metrics, cs.privValidator, cs.msgInfoQueue, cs.blockExecutor)
+	cs.ctrl = NewController(cs, wal, cs.statsMsgQueue, propler)
+	subs := []eventSwitchSubscriber{propler, cs.blockExecutor, cs.stateDataStore, cs.voteSigner}
+	for _, sub := range subs {
+		sub.subscribe(cs.evsw)
+	}
+	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger)
 
 	// this is not ideal, but it lets the consensus tests start
 	// node-fragments gracefully while letting the nodes
@@ -815,7 +804,7 @@ func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 // Only used in tests.
 func (cs *State) CreateProposalBlock(ctx context.Context) (*types.Block, error) {
 	stateData := cs.GetStateData()
-	return cs.blockExecutor.create(ctx, &stateData, stateData.Round)
+	return cs.blockExecutor.create(ctx, &stateData.RoundState, stateData.Round)
 }
 
 // PublishCommitEvent ...

@@ -106,7 +106,7 @@ func (cs *TryAddCommitAction) verifyCommit(ctx context.Context, stateData *State
 		return false, fmt.Errorf("cannot finalize commit; proposal block does not hash to commit hash")
 	}
 	// We have a correct block, let's process it before applying the commit
-	err = cs.blockExec.ensureProcess(ctx, stateData, commit.Round)
+	err = cs.blockExec.ensureProcess(ctx, &stateData.RoundState, commit.Round)
 	if err != nil {
 		return false, fmt.Errorf("unable to process proposal: %w", err)
 	}

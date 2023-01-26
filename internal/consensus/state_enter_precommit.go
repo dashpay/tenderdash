@@ -127,7 +127,7 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 		logger.Debug("precommit step: +2/3 prevoted proposal block; locking", "hash", blockID.Hash)
 
 		// we got precommit but we didn't process proposal yet
-		c.blockExec.mustEnsureProcess(ctx, stateData, round)
+		c.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, round)
 
 		// Validate the block.
 		c.blockExec.mustValidate(ctx, stateData)

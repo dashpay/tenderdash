@@ -91,7 +91,7 @@ func (cs *DoPrevoteAction) Execute(ctx context.Context, stateEvent StateEvent) e
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	err = cs.blockExec.ensureProcess(ctx, stateData, stateData.Round)
+	err = cs.blockExec.ensureProcess(ctx, &stateData.RoundState, stateData.Round)
 	if err != nil {
 		cs.metrics.MarkProposalProcessed(false)
 		if errors.Is(err, sm.ErrBlockRejected) {

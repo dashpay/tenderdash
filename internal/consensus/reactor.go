@@ -88,8 +88,7 @@ const (
 	votesToContributeToBecomeGoodPeer   = 10000
 	commitsToContributeToBecomeGoodPeer = 10000
 
-	listenerIDConsensus      = "consensus-reactor"
-	listenerIDConsensusState = "consensus-state"
+	listenerIDConsensus = "consensus-reactor"
 )
 
 var errReactorClosed = errors.New("reactor is closed")

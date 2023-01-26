@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 
+	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/libs/log"
 )
 
@@ -48,13 +49,18 @@ func (c *msgInfoDispatcher) dispatch(ctx context.Context, stateData *StateData, 
 	return handler(ctx, stateData, envelope)
 }
 
-func newMsgInfoDispatcher(ctrl *Controller, wal WALWriteFlusher, logger log.Logger) *msgInfoDispatcher {
+func newMsgInfoDispatcher(
+	ctrl *Controller,
+	proposaler cstypes.Proposaler,
+	wal WALWriteFlusher,
+	logger log.Logger,
+) *msgInfoDispatcher {
 	mws := []msgMiddlewareFunc{
 		msgInfoWithCtxMiddleware(),
 		errorMiddleware(logger),
 		walMiddleware(wal, logger),
 	}
-	proposalHandler := withMiddleware(proposalMessageHandler(ctrl), mws...)
+	proposalHandler := withMiddleware(proposalMessageHandler(proposaler), mws...)
 	blockPartHandler := withMiddleware(blockPartMessageHandler(ctrl, logger), mws...)
 	voteHandler := withMiddleware(voteMessageHandler(ctrl, logger), mws...)
 	commitHandler := withMiddleware(commitMessageHandler(ctrl, logger), mws...)
@@ -66,13 +72,10 @@ func newMsgInfoDispatcher(ctrl *Controller, wal WALWriteFlusher, logger log.Logg
 	}
 }
 
-func proposalMessageHandler(ctrl *Controller) msgHandlerFunc {
+func proposalMessageHandler(propSetter cstypes.ProposalSetter) msgHandlerFunc {
 	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*ProposalMessage)
-		return ctrl.Dispatch(ctx, &SetProposalEvent{
-			Proposal: msg.Proposal,
-			RecvTime: envelope.ReceiveTime,
-		}, stateData)
+		return propSetter.Set(msg.Proposal, envelope.ReceiveTime, &stateData.RoundState)
 	}
 }
 

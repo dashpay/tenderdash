@@ -3,6 +3,8 @@ package consensus
 import (
 	"context"
 	"errors"
+
+	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 )
 
 // EventType is an integer representation of a transition event
@@ -12,8 +14,6 @@ type EventType int
 const (
 	EnterNewRoundType EventType = iota
 	EnterProposeType
-	SetProposalType
-	DecideProposalType
 	EnterPrevoteType
 	EnterPrecommitType
 	EnterCommitType
@@ -68,7 +68,7 @@ func (c *Controller) Get(eventType EventType) ActionHandler {
 }
 
 // NewController returns a new instance of a controller with a set of all possible transitions (actions)
-func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Controller {
+func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], propler cstypes.Proposaler) *Controller {
 	propUpdater := &proposalUpdater{
 		logger:         cs.logger,
 		eventPublisher: cs.eventPublisher,
@@ -83,27 +83,10 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Con
 		},
 		EnterProposeType: &EnterProposeAction{
 			logger:         cs.logger,
-			privValidator:  cs.privValidator,
-			msgInfoQueue:   cs.msgInfoQueue,
-			wal:            cs.wal,
-			replayMode:     cs.replayMode,
-			metrics:        cs.metrics,
-			blockExec:      cs.blockExecutor,
+			wal:            wal,
 			scheduler:      cs.roundScheduler,
 			eventPublisher: cs.eventPublisher,
-		},
-		SetProposalType: &SetProposalAction{
-			logger:  cs.logger,
-			metrics: cs.metrics,
-		},
-		DecideProposalType: &DecideProposalAction{
-			logger:        cs.logger,
-			privValidator: cs.privValidator,
-			msgInfoQueue:  cs.msgInfoQueue,
-			wal:           cs.wal,
-			metrics:       cs.metrics,
-			blockExec:     cs.blockExecutor,
-			replayMode:    cs.replayMode,
+			propDecider:    propler,
 		},
 		AddProposalBlockPartType: &AddProposalBlockPartAction{
 			logger:         cs.logger,

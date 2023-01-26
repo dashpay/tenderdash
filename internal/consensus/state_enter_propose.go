@@ -3,8 +3,8 @@ package consensus
 import (
 	"context"
 
+	"github.com/tendermint/tendermint/dash"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 )
@@ -27,14 +27,10 @@ func (e *EnterProposeEvent) GetType() EventType {
 // Caller should hold cs.mtx lock
 type EnterProposeAction struct {
 	logger         log.Logger
-	privValidator  privValidator
-	msgInfoQueue   *msgInfoQueue
-	wal            WALWriteFlusher
-	replayMode     bool
-	metrics        *Metrics
-	blockExec      *blockExecutor
+	wal            WALFlusher
 	scheduler      *roundScheduler
 	eventPublisher *EventPublisher
+	propDecider    cstypes.ProposalDecider
 }
 
 func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent) error {
@@ -50,9 +46,15 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 		return nil
 	}
 
+	proTxHash, err := dash.ProTxHashFromContext(ctx)
+	if err != nil {
+		return err
+	}
+	isProposer := stateData.isProposer(proTxHash)
+
 	// If this validator is the proposer of this round, and the previous block time is later than
 	// our local clock time, wait to propose until our local clock time has passed the block time.
-	if stateData.isProposer(c.privValidator.ProTxHash) {
+	if isProposer {
 		pwt := proposerWaitTime(tmtime.Now(), stateData.state.LastBlockTime)
 		if pwt > 0 {
 			c.logger.Debug("enter propose: latest block is newer, sleeping",
@@ -86,46 +88,19 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	// If we don't get the proposal and all block parts quick enough, enterPrevote
 	c.scheduler.ScheduleTimeout(stateData.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
 
-	// Nothing more to do if we're not a validator
-	if c.privValidator.IsZero() {
-		logger.Debug("propose step; not proposing since node is not a validator")
-		return nil
-	}
-
-	proTxHash := c.privValidator.ProTxHash
-
-	// if not a validator, we're done
-	if !stateData.Validators.HasProTxHash(proTxHash) {
-		logger.Debug("propose step; not proposing since node is not in the validator set",
-			"proTxHash", proTxHash.ShortString(),
-			"vals", stateData.Validators)
-		return nil
-	}
-
-	if stateData.isProposer(proTxHash) {
-		logger.Debug("propose step; our turn to propose",
-			"proposer", proTxHash.ShortString(),
-			"privValidator", c.privValidator,
-		)
-		_ = stateEvent.Ctrl.Dispatch(ctx, &DecideProposalEvent{Height: height, Round: round}, stateData)
-	} else {
+	if !isProposer {
 		logger.Debug("propose step; not our turn to propose",
-			"proposer",
-			stateData.Validators.GetProposer().ProTxHash,
-			"privValidator",
-			c.privValidator)
+			"proposer_proTxHash", stateData.Validators.GetProposer().ProTxHash,
+			"node_proTxHash", proTxHash.String())
+		return nil
 	}
-	return nil
-}
-
-func (c *EnterProposeAction) subscribe(evsw events.EventSwitch) {
-	const listenerID = "enterProposeAction"
-	_ = evsw.AddListenerForEvent(listenerID, setReplayMode, func(a events.EventData) error {
-		c.replayMode = a.(bool)
-		return nil
-	})
-	_ = evsw.AddListenerForEvent(listenerID, setPrivValidator, func(a events.EventData) error {
-		c.privValidator = a.(privValidator)
-		return nil
-	})
+	logger.Debug("propose step; our turn to propose",
+		"proposer_proTxHash", proTxHash.ShortString(),
+	)
+	// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,
+	// and the privVal will refuse to sign anything.
+	if err := c.wal.FlushAndSync(); err != nil {
+		c.logger.Error("failed flushing WAL to disk")
+	}
+	return c.propDecider.Decide(ctx, height, round, &stateData.RoundState)
 }

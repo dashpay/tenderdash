@@ -5,6 +5,7 @@ import (
 	"time"
 
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -107,4 +108,13 @@ func (s *voteSigner) signVote(
 		return nil, err
 	}
 	return vote, nil
+}
+
+func (s *voteSigner) subscribe(evsw events.EventSwitch) {
+	const listenerID = "voteSigner"
+	_ = evsw.AddListenerForEvent(listenerID, setPrivValidator, func(obj events.EventData) error {
+		pv := obj.(privValidator)
+		s.privValidator = pv
+		return nil
+	})
 }

@@ -278,7 +278,7 @@ func decideProposal(
 		_ = stateData.Save()
 	}()
 
-	block, err := cs1.blockExecutor.create(ctx, &stateData, round)
+	block, err := cs1.blockExecutor.create(ctx, &stateData.RoundState, round)
 	require.NoError(t, err)
 	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
