@@ -48,7 +48,6 @@ func TestNewFromMnemonic(t *testing.T) {
 			assert.NoError(t, err)
 			require.NotNil(t, pk)
 			assert.Equal(t, tc.pubkeyHex, pk.PubKey().HexString())
-			// t.Logf("%d pubkey hex: %s\n", i, pk.PubKey().HexString())
 		})
 	}
 }
