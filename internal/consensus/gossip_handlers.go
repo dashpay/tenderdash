@@ -10,12 +10,12 @@ import (
 )
 
 func queryMaj23GossipHandler(ps *PeerState, gossiper Gossiper) gossipHandlerFunc {
-	return func(ctx context.Context, appState AppState) {
+	return func(ctx context.Context, stateData StateData) {
 		// If peer is not a validator, we do nothing
-		if !appState.isValidator(ps.GetProTxHash()) {
+		if !stateData.isValidator(ps.GetProTxHash()) {
 			return
 		}
-		rs := appState.RoundState
+		rs := stateData.RoundState
 		prs := ps.GetRoundState()
 		gossiper.GossipVoteSetMaj23(ctx, rs, prs)
 	}
@@ -26,10 +26,10 @@ func votesAndCommitGossipHandler(
 	blockStore sm.BlockStore,
 	gossiper Gossiper,
 ) gossipHandlerFunc {
-	return func(ctx context.Context, appState AppState) {
-		rs := appState.RoundState
+	return func(ctx context.Context, stateData StateData) {
+		rs := stateData.RoundState
 		prs := ps.GetRoundState()
-		isValidator := appState.isValidator(ps.GetProTxHash())
+		isValidator := stateData.isValidator(ps.GetProTxHash())
 		//	If there are lastCommits to send
 		if shouldCommitBeGossiped(rs, prs) {
 			gossiper.GossipCommit(ctx, rs, prs)
@@ -50,9 +50,9 @@ func votesAndCommitGossipHandler(
 }
 
 func dataGossipHandler(ps *PeerState, logger log.Logger, blockStore sm.BlockStore, gossiper Gossiper) gossipHandlerFunc {
-	return func(ctx context.Context, appState AppState) {
-		isValidator := appState.isValidator(ps.GetProTxHash())
-		rs := appState.RoundState
+	return func(ctx context.Context, stateData StateData) {
+		isValidator := stateData.isValidator(ps.GetProTxHash())
+		rs := stateData.RoundState
 		prs := ps.GetRoundState()
 
 		// Send proposal Block parts?

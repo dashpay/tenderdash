@@ -490,7 +490,7 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 		"peer_proTxHash", ps.GetProTxHash().ShortString(),
 	)
 	// TODO needs to register this gossip worker, to be able to stop it once a peer will be down
-	pg := newPeerGossipWorker(logger, ps, r.state, chans)
+	pgw := newPeerGossipWorker(logger, ps, r.state, chans)
 
 	select {
 	case <-ctx.Done():
@@ -524,7 +524,7 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 				return
 			}
 			// start goroutines for this peer
-			pg.start(ctx)
+			pgw.start(ctx)
 
 			// Send our state to the peer. If we're block-syncing, broadcast a
 			// RoundStepMessage later upon SwitchToConsensus().

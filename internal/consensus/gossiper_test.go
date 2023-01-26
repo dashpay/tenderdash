@@ -187,7 +187,7 @@ func (suite *GossiperSuiteTest) TestGossipVoteSetMaj23() {
 				tc.mockFn()
 			}
 			tc.rs.Votes = cstypes.NewHeightVoteSet(suite.chainID, H100, suite.valSet)
-			added, err := tc.rs.Votes.AddVote(tc.vote, suite.ps.peerID)
+			added, err := tc.rs.Votes.AddVote(tc.vote)
 			require.True(suite.T(), added)
 			require.NoError(suite.T(), err)
 			want := p2p.Envelope{
@@ -269,7 +269,7 @@ func (suite *GossiperSuiteTest) TestGossipProposal() {
 	proposalPOLRound1 := types.NewProposal(H100, 2400, 0, 1, blockID, now)
 	prevoteVoteH100R1 := suite.makeSignedVote(H100, 1, tmproto.PrevoteType)
 	prevoteVotes := cstypes.NewHeightVoteSet(suite.chainID, H100, suite.valSet)
-	added, err := prevoteVotes.AddVote(prevoteVoteH100R1, suite.ps.peerID)
+	added, err := prevoteVotes.AddVote(prevoteVoteH100R1)
 	require.True(suite.T(), added)
 	require.NoError(suite.T(), err)
 	testCases := []struct {

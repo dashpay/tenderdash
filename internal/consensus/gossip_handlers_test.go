@@ -37,7 +37,7 @@ func (suite *GossipHandlerTestSuite) TestQueryMaj23GossipHandler() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	valSet, _ := types.RandValidatorSet(1)
-	appState := AppState{
+	appState := StateData{
 		RoundState: cstypes.RoundState{},
 		state: sm.State{
 			Validators: valSet,
@@ -45,7 +45,7 @@ func (suite *GossipHandlerTestSuite) TestQueryMaj23GossipHandler() {
 	}
 	testCases := []struct {
 		peerState *PeerState
-		appState  AppState
+		appState  StateData
 		mockFn    func(rs cstypes.RoundState, prs *cstypes.PeerRoundState)
 	}{
 		{

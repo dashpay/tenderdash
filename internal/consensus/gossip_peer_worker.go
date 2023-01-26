@@ -10,11 +10,11 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 )
 
-type gossipHandlerFunc func(ctx context.Context, appState AppState)
+type gossipHandlerFunc func(ctx context.Context, appState StateData)
 
 type gossipHandler struct {
 	sleepDuration time.Duration
-	handlerFunc   func(ctx context.Context, appState AppState)
+	handlerFunc   func(ctx context.Context, appState StateData)
 	stoppedCh     chan struct{}
 }
 
@@ -27,12 +27,12 @@ func newGossipHandler(fn gossipHandlerFunc, sleep time.Duration) gossipHandler {
 }
 
 type peerGossipWorker struct {
-	clock         clock.Clock
-	logger        log.Logger
-	handlers      []gossipHandler
-	running       atomic.Bool
-	appStateStore *AppStateStore
-	stopCh        chan struct{}
+	clock          clock.Clock
+	logger         log.Logger
+	handlers       []gossipHandler
+	running        atomic.Bool
+	stateDataStore *StateDataStore
+	stopCh         chan struct{}
 }
 
 func newPeerGossipWorker(
@@ -54,10 +54,10 @@ func newPeerGossipWorker(
 		optimistic: true,
 	}
 	return &peerGossipWorker{
-		clock:         clock.New(),
-		logger:        logger,
-		stopCh:        make(chan struct{}),
-		appStateStore: state.appStateStore,
+		clock:          clock.New(),
+		logger:         logger,
+		stopCh:         make(chan struct{}),
+		stateDataStore: state.stateDataStore,
 		handlers: []gossipHandler{
 			newGossipHandler(
 				votesAndCommitGossipHandler(ps, state.blockStore, &gossiper),
@@ -106,7 +106,7 @@ func (g *peerGossipWorker) runHandler(ctx context.Context, hd gossipHandler) {
 	timer := time.NewTimer(0)
 	defer timer.Stop()
 	for {
-		hd.handlerFunc(ctx, g.appStateStore.Get())
+		hd.handlerFunc(ctx, g.stateDataStore.Get())
 		timer.Reset(hd.sleepDuration)
 		select {
 		case <-timer.C:

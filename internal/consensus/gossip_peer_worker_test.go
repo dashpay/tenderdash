@@ -23,16 +23,16 @@ func TestPeerGossipWorker(t *testing.T) {
 		clock:  fakeClock,
 		logger: logger,
 		handlers: []gossipHandler{
-			newGossipHandler(func(ctx context.Context, appState AppState) {
+			newGossipHandler(func(ctx context.Context, appState StateData) {
 				handlerCalledCh <- struct{}{}
 			}, 1*time.Second),
-			newGossipHandler(func(ctx context.Context, appState AppState) {
+			newGossipHandler(func(ctx context.Context, appState StateData) {
 				handlerCalledCh <- struct{}{}
 			}, 1*time.Second),
 		},
-		running:       atomic.Bool{},
-		appStateStore: NewAppStateStore(logger, cfg.Consensus),
-		stopCh:        make(chan struct{}),
+		running:        atomic.Bool{},
+		stateDataStore: NewStateDataStore(NopMetrics(), logger, cfg.Consensus),
+		stopCh:         make(chan struct{}),
 	}
 	pg.start(ctx)
 	for i := 0; i < 4; i++ {

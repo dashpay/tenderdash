@@ -404,15 +404,6 @@ func (cs *State) SetPrivValidator(ctx context.Context, priv types.PrivValidator)
 	}
 }
 
-// SetTimeoutTicker sets the local timer. It may be useful to overwrite for
-// testing.
-func (cs *State) SetTimeoutTicker(timeoutTicker TimeoutTicker) {
-	cs.mtx.Lock()
-	defer cs.mtx.Unlock()
-	cs.timeoutTicker = timeoutTicker
-	_ = cs.observer.Notify(SetTimeoutTicker, timeoutTicker)
-}
-
 // OnStart loads the latest state via the WAL, and starts the timeout and
 // receive routines.
 func (cs *State) OnStart(ctx context.Context) error {
