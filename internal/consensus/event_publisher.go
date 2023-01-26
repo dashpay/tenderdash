@@ -8,7 +8,10 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-// EventPublisher ...
+// EventPublisher is event message sender to event-bus and event-switch
+// this component provides some methods for sending events
+// event-bus is used to interact internally and between the modules
+// event-switch is mostly used in tests
 type EventPublisher struct {
 	// synchronous pubsub between consensus state and reactor.
 	// state only emits EventNewRoundStep, EventValidBlock, and EventVote
@@ -16,8 +19,8 @@ type EventPublisher struct {
 	// we use eventBus to trigger msg broadcasts in the reactor,
 	// and to notify external subscribers, eg. through a websocket
 	eventBus *eventbus.EventBus
-
-	logger log.Logger
+	wal      WALWriter
+	logger   log.Logger
 }
 
 // PublishValidBlockEvent ...
@@ -87,6 +90,10 @@ func (p *EventPublisher) PublishVoteEvent(vote *types.Vote) error {
 }
 
 func (p *EventPublisher) PublishNewRoundStepEvent(rs cstypes.RoundState) {
+	event := rs.RoundStateEvent()
+	if err := p.wal.Write(event); err != nil {
+		p.logger.Error("failed writing to WAL", "err", err)
+	}
 	if err := p.eventBus.PublishEventNewRoundStep(rs.RoundStateEvent()); err != nil {
 		p.logger.Error("failed publishing new round step", "err", err)
 	}

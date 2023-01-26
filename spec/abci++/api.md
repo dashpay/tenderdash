@@ -9,7 +9,6 @@
     - [EventAttribute](#tendermint-abci-EventAttribute)
     - [ExecTxResult](#tendermint-abci-ExecTxResult)
     - [ExtendVoteExtension](#tendermint-abci-ExtendVoteExtension)
-    - [ExtendedCommitInfo](#tendermint-abci-ExtendedCommitInfo)
     - [ExtendedVoteInfo](#tendermint-abci-ExtendedVoteInfo)
     - [Misbehavior](#tendermint-abci-Misbehavior)
     - [QuorumHashUpdate](#tendermint-abci-QuorumHashUpdate)
@@ -163,26 +162,6 @@ ExecTxResult contains results of executing one individual transaction.
 | ----- | ---- | ----- | ----------- |
 | type | [tendermint.types.VoteExtensionType](#tendermint-types-VoteExtensionType) |  |  |
 | extension | [bytes](#bytes) |  |  |
-
-
-
-
-
-
-<a name="tendermint-abci-ExtendedCommitInfo"></a>
-
-### ExtendedCommitInfo
-ExtendedCommitInfo is similar to CommitInfo except that it is only used in
-the PrepareProposal request such that Tendermint can provide vote extensions
-to the application.
-
-
-| Field | Type | Label | Description |
-| ----- | ---- | ----- | ----------- |
-| round | [int32](#int32) |  | The round at which the block proposer decided in the previous height. |
-| quorum_hash | [bytes](#bytes) |  | List of validators&#39; addresses in the last validator set with their voting information, including vote extensions. |
-| block_signature | [bytes](#bytes) |  |  |
-| threshold_vote_extensions | [tendermint.types.VoteExtension](#tendermint-types-VoteExtension) | repeated |  |
 
 
 
@@ -457,7 +436,7 @@ offers a snapshot to the application
 | ----- | ---- | ----- | ----------- |
 | max_tx_bytes | [int64](#int64) |  | Currently configured maximum size in bytes taken by the modified transactions. The modified transactions cannot exceed this size. |
 | txs | [bytes](#bytes) | repeated | Preliminary list of transactions that have been picked as part of the block to propose. Sent to the app for possible modifications. |
-| local_last_commit | [ExtendedCommitInfo](#tendermint-abci-ExtendedCommitInfo) |  | Info about the last commit, obtained locally from Tendermint&#39;s data structures. |
+| local_last_commit | [CommitInfo](#tendermint-abci-CommitInfo) |  | Info about the last commit, obtained locally from Tendermint&#39;s data structures. |
 | misbehavior | [Misbehavior](#tendermint-abci-Misbehavior) | repeated | List of information about validators that acted incorrectly. |
 | height | [int64](#int64) |  | The height of the block that will be proposed. |
 | time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp of the block that that will be proposed. |
@@ -467,6 +446,7 @@ offers a snapshot to the application
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
 | version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
+| quorum_hash | [bytes](#bytes) |  | quorum_hash contains hash of validator quorum that will sign the block |
 
 
 
@@ -490,10 +470,11 @@ offers a snapshot to the application
 | time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp included in the proposed block. |
 | next_validators_hash | [bytes](#bytes) |  | Merkle root of the next validator set. |
 | core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
+| core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Next core-chain-lock-update for validation in ABCI. |
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
 | version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
-| core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Next core-chain-lock-update for validation in ABCI. |
+| quorum_hash | [bytes](#bytes) |  | quorum_hash contains hash of validator quorum that will sign the block |
 
 
 
@@ -599,7 +580,7 @@ Verify the vote extension
 | codespace | [string](#string) |  |  |
 | sender | [string](#string) |  |  |
 | priority | [int64](#int64) |  |  |
-| mempool_error | [string](#string) |  | ABCI applications creating a ResponseCheckTX should not set mempool_error. |
+| mempool_error | [string](#string) |  | mempool_error is set by Tendermint. ABCI applications creating a ResponseCheckTX should not set mempool_error. |
 
 
 
@@ -688,7 +669,7 @@ as those must have been provided by PrepareProposal.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | data | [string](#string) |  |  |
-| version | [string](#string) |  | this is the software version of the application. TODO: remove? |
+| version | [string](#string) |  | this is the software version of the application. |
 | app_version | [uint64](#uint64) |  |  |
 | last_block_height | [int64](#int64) |  |  |
 | last_block_app_hash | [bytes](#bytes) |  |  |
@@ -810,9 +791,7 @@ as those must have been provided by PrepareProposal.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | code | [uint32](#uint32) |  |  |
-| log | [string](#string) |  | bytes data = 2; // use &#34;value&#34; instead.
-
-nondeterministic |
+| log | [string](#string) |  | nondeterministic |
 | info | [string](#string) |  | nondeterministic |
 | index | [int64](#int64) |  |  |
 | key | [bytes](#bytes) |  |  |
@@ -919,9 +898,7 @@ Validator
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| power | [int64](#int64) |  | bytes address = 1; // The first 20 bytes of SHA256(public key) PubKey pub_key = 2 [(gogoproto.nullable)=false];
-
-The voting power |
+| power | [int64](#int64) |  | The voting power |
 | pro_tx_hash | [bytes](#bytes) |  |  |
 
 

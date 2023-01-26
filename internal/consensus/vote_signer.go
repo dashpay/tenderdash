@@ -10,106 +10,101 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-type VoteSigner struct {
+// voteSigner provides the ability to sign and add a vote
+type voteSigner struct {
 	privValidator privValidator
 	logger        log.Logger
-	msgInfoQueue  *msgInfoQueue
+	queueSender   queueSender
 	wal           WALWriteFlusher
-	blockExec     *sm.BlockExecutor
+	voteExtender  sm.VoteExtender
 }
 
-// sign the vote and publish on internalMsgQueue
-func (cs *VoteSigner) signAddVote(
+// signAddVote signs a vote and sends it to internalMsgQueue
+// signing a vote is possible only if a validator is a part of validator-set
+func (s *voteSigner) signAddVote(
 	ctx context.Context,
-	appState *AppState,
+	stateData *StateData,
 	msgType tmproto.SignedMsgType,
 	blockID types.BlockID,
 ) *types.Vote {
-	if cs.privValidator.IsZero() { // the node does not have a key
-		cs.logger.Error("signAddVote", "err", ErrPrivValidatorNotSet)
+	if s.privValidator.IsZero() { // the node does not have a key
+		s.logger.Error("private-validator is not set", "error", ErrPrivValidatorNotSet)
 		return nil
 	}
-
 	// If the node not in the validator set, do nothing.
-	if !appState.Validators.HasProTxHash(cs.privValidator.ProTxHash) {
-		cs.logger.Debug("do nothing, node is not a part of validator set")
+	if !stateData.Validators.HasProTxHash(s.privValidator.ProTxHash) {
+		s.logger.Debug("do nothing, node is not a part of validator set")
 		return nil
 	}
-
+	keyVals := []any{"height", stateData.Height, "round", stateData.Round, "quorum_hash", stateData.Validators.QuorumHash}
 	// TODO: pass pubKey to signVote
 	start := time.Now()
-	vote, err := cs.signVote(ctx, appState, msgType, blockID)
+	vote, err := s.signVote(ctx, stateData, msgType, blockID)
 	if err != nil {
-		cs.logger.Error("failed signing vote", "height", appState.Height, "round", appState.Round, "vote", vote, "err", err)
+		s.logger.Error("failed signing vote", append(keyVals, "error", err)...)
 		return nil
 	}
-	_ = cs.msgInfoQueue.send(ctx, &VoteMessage{vote}, "")
-	cs.logger.Debug("signed and pushed vote",
-		"height", appState.Height,
-		"round", appState.Round,
-		"vote", vote,
-		"quorum_hash", appState.Validators.QuorumHash,
-		"took", time.Since(start).String())
+	err = s.queueSender.send(ctx, &VoteMessage{vote}, "")
+	if err != nil {
+		keyVals = append(keyVals, "error", err)
+	}
+	keyVals = append(keyVals, "vote", vote, "took", time.Since(start).String())
+	s.logger.Debug("signed and pushed vote", keyVals...)
 	return vote
 }
 
-// CONTRACT: cs.privValidator is not nil.
-// FIXME: Looks like it is used only in tests, remove and refactor the test.
-func (cs *VoteSigner) signVote(
+func (s *voteSigner) signVote(
 	ctx context.Context,
-	appState *AppState,
+	stateData *StateData,
 	msgType tmproto.SignedMsgType,
 	blockID types.BlockID,
 ) (*types.Vote, error) {
 	// Flush the WAL. Otherwise, we may not recompute the same vote to sign,
 	// and the privValidator will refuse to sign anything.
-	if err := cs.wal.FlushAndSync(); err != nil {
+	if err := s.wal.FlushAndSync(); err != nil {
 		return nil, err
 	}
-
-	if cs.privValidator.IsZero() {
+	if s.privValidator.IsZero() {
 		return nil, ErrPrivValidatorNotSet
 	}
-	proTxHash := cs.privValidator.ProTxHash
-	valIdx, _ := appState.Validators.GetByProTxHash(proTxHash)
-
+	proTxHash := s.privValidator.ProTxHash
+	valIdx, _ := stateData.Validators.GetByProTxHash(proTxHash)
 	// Since the block has already been validated the block.lastAppHash must be the state.AppHash
 	vote := &types.Vote{
 		ValidatorProTxHash: proTxHash,
 		ValidatorIndex:     valIdx,
-		Height:             appState.Height,
-		Round:              appState.Round,
+		Height:             stateData.Height,
+		Round:              stateData.Round,
 		Type:               msgType,
 		BlockID:            blockID,
 	}
-
 	// If the signedMessageType is for precommit,
 	// use our local precommit Timeout as the max wait time for getting a singed commit. The same goes for prevote.
 	timeout := time.Second
 	if msgType == tmproto.PrecommitType && !vote.BlockID.IsNil() {
-		timeout = appState.voteTimeout(appState.Round)
+		timeout = stateData.voteTimeout(stateData.Round)
 		// if the signedMessage type is for a precommit, add VoteExtension
-		exts, err := cs.blockExec.ExtendVote(ctx, vote)
-		if err != nil {
-			return nil, err
-		}
-		vote.VoteExtensions = types.NewVoteExtensionsFromABCIExtended(exts)
+		s.voteExtender.ExtendVote(ctx, vote)
 	}
 
-	v := vote.ToProto()
+	protoVote := vote.ToProto()
 
 	ctxto, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
-	err := cs.privValidator.SignVote(ctxto, appState.state.ChainID, appState.state.Validators.QuorumType, appState.state.Validators.QuorumHash,
-		v, cs.logger)
+	err := s.privValidator.SignVote(ctxto,
+		stateData.state.ChainID,
+		stateData.state.Validators.QuorumType,
+		stateData.state.Validators.QuorumHash,
+		protoVote,
+		s.logger,
+	)
 	if err != nil {
 		return nil, err
 	}
-	err = vote.PopulateSignsFromProto(v)
+	err = vote.PopulateSignsFromProto(protoVote)
 	if err != nil {
 		return nil, err
 	}
-
 	return vote, nil
 }

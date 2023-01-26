@@ -7,6 +7,7 @@ import (
 	"time"
 
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -19,58 +20,65 @@ type DoPrevoteEvent struct {
 	AllowOldBlocks bool
 }
 
-type DoPrevoteCommand struct {
+// GetType returns DoPrevoteType event-type
+func (e *DoPrevoteEvent) GetType() EventType {
+	return DoPrevoteType
+}
+
+// DoPrevoteAction validates, signs and adds a prevote vote to the consensus state
+// if the state-data has an invalid, then signs and adds empty vote
+type DoPrevoteAction struct {
 	logger     log.Logger
-	voteSigner *VoteSigner
+	voteSigner *voteSigner
 	blockExec  *blockExecutor
 	metrics    *Metrics
 	replayMode bool
 }
 
-func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent StateEvent) (any, error) {
-	appState := stateEvent.AppState
-	event := stateEvent.Data.(DoPrevoteEvent)
+func (cs *DoPrevoteAction) Execute(ctx context.Context, stateEvent StateEvent) error {
+	stateData := stateEvent.StateData
+	event := stateEvent.Data.(*DoPrevoteEvent)
 	height := event.Height
 	round := event.Round
 	logger := cs.logger.With("height", height, "round", round)
 
 	// Check that a proposed block was not received within this round (and thus executing this from a timeout).
-	if appState.ProposalBlock == nil {
+	if stateData.ProposalBlock == nil {
 		logger.Debug("prevote step: ProposalBlock is nil; prevoting nil")
-		cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
-		return nil, nil
+		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+		return nil
 	}
 
-	if appState.Proposal == nil {
+	if stateData.Proposal == nil {
 		logger.Debug("prevote step: did not receive proposal; prevoting nil")
-		cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
-		return nil, nil
+		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+		return nil
 	}
 
-	if !appState.Proposal.Timestamp.Equal(appState.ProposalBlock.Header.Time) {
+	if !stateData.Proposal.Timestamp.Equal(stateData.ProposalBlock.Header.Time) {
 		logger.Debug("prevote step: proposal timestamp not equal; prevoting nil")
-		cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
-		return nil, nil
+		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+		return nil
 	}
 
-	sp := appState.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
+	sp := stateData.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
 	//TODO: Remove this temporary fix when the complete solution is ready. See #8739
-	if !cs.replayMode && appState.Proposal.POLRound == -1 && appState.LockedRound == -1 && !appState.proposalIsTimely() {
+	if !cs.replayMode && stateData.Proposal.POLRound == -1 && stateData.LockedRound == -1 && !stateData.proposalIsTimely() {
 		logger.Debug("prevote step: Proposal is not timely; prevoting nil",
-			"proposed", tmtime.Canonical(appState.Proposal.Timestamp).Format(time.RFC3339Nano),
-			"received", tmtime.Canonical(appState.ProposalReceiveTime).Format(time.RFC3339Nano),
+			"proposed", tmtime.Canonical(stateData.Proposal.Timestamp).Format(time.RFC3339Nano),
+			"received", tmtime.Canonical(stateData.ProposalReceiveTime).Format(time.RFC3339Nano),
 			"msg_delay", sp.MessageDelay,
 			"precision", sp.Precision)
-		cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
-		return nil, nil
+		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+		return nil
 	}
 
 	// Validate proposal core chain lock
-	err := sm.ValidateBlockChainLock(appState.state, appState.ProposalBlock)
+	err := sm.ValidateBlockChainLock(stateData.state, stateData.ProposalBlock)
 	if err != nil {
 		logger.Error("enterPrevote: ProposalBlock chain lock is invalid, prevoting nil", "err", err)
-		cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
-		return nil, nil
+		cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+		return nil
 	}
 
 	/*
@@ -83,20 +91,20 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent
 		liveness properties. Please see PrepareProposal-ProcessProposal coherence and determinism
 		properties in the ABCI++ specification.
 	*/
-	err = cs.blockExec.process(ctx, appState, appState.Round)
+	err = cs.blockExec.ensureProcess(ctx, stateData, stateData.Round)
 	if err != nil {
 		cs.metrics.MarkProposalProcessed(false)
 		if errors.Is(err, sm.ErrBlockRejected) {
 			logger.Error("prevote step: state machine rejected a proposed block; this should not happen:"+
 				"the proposer may be misbehaving; prevoting nil", "err", err)
-			cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
-			return nil, nil
+			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+			return nil
 		}
 
 		if errors.As(err, &sm.ErrInvalidBlock{}) {
 			logger.Error("prevote step: consensus deems this block invalid; prevoting nil", "err", err)
-			cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
-			return nil, nil
+			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+			return nil
 		}
 
 		// Unknown error, so we panic
@@ -104,7 +112,7 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent
 	}
 
 	// Validate the block
-	cs.blockExec.validateOrPanic(ctx, appState)
+	cs.blockExec.mustValidate(ctx, stateData)
 
 	cs.metrics.MarkProposalProcessed(true)
 
@@ -121,17 +129,17 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent
 		we prevote nil since we are locked on a different value. Otherwise, if we're not locked on a block
 		or the proposal matches our locked block, we prevote the proposal.
 	*/
-	blockID := appState.BlockID()
-	if appState.Proposal.POLRound == -1 {
-		if appState.LockedRound == -1 {
+	blockID := stateData.BlockID()
+	if stateData.Proposal.POLRound == -1 {
+		if stateData.LockedRound == -1 {
 			logger.Debug("prevote step: ProposalBlock is valid and there is no locked block; prevoting the proposal")
-			cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, blockID)
-			return nil, nil
+			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, blockID)
+			return nil
 		}
-		if appState.ProposalBlock.HashesTo(appState.LockedBlock.Hash()) {
+		if stateData.ProposalBlock.HashesTo(stateData.LockedBlock.Hash()) {
 			logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
-			cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, blockID)
-			return nil, nil
+			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, blockID)
+			return nil
 		}
 	}
 
@@ -152,33 +160,29 @@ func (cs *DoPrevoteCommand) Execute(ctx context.Context, _ *Behavior, stateEvent
 		the network prevoted a value in round 'v_r' but we did not lock on it, possibly because we
 		missed the proposal in round 'v_r'.
 	*/
-	blockID, ok := appState.Votes.Prevotes(appState.Proposal.POLRound).TwoThirdsMajority()
-	if ok && appState.ProposalBlock.HashesTo(blockID.Hash) && appState.Proposal.POLRound >= 0 && appState.Proposal.POLRound < appState.Round {
-		if appState.LockedRound <= appState.Proposal.POLRound {
+	blockID, ok := stateData.Votes.Prevotes(stateData.Proposal.POLRound).TwoThirdsMajority()
+	if ok && stateData.ProposalBlock.HashesTo(blockID.Hash) && stateData.Proposal.POLRound >= 0 && stateData.Proposal.POLRound < stateData.Round {
+		if stateData.LockedRound <= stateData.Proposal.POLRound {
 			logger.Debug("prevote step: ProposalBlock is valid and received a 2/3 majority in a round later than the locked round",
 				"outcome", "prevoting the proposal")
-			cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, blockID)
-			return nil, nil
+			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, blockID)
+			return nil
 		}
-		if appState.ProposalBlock.HashesTo(appState.LockedBlock.Hash()) {
+		if stateData.ProposalBlock.HashesTo(stateData.LockedBlock.Hash()) {
 			logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
-			cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, blockID)
-			return nil, nil
+			cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, blockID)
+			return nil
 		}
 	}
 
 	logger.Debug("prevote step: ProposalBlock is valid but was not our locked block or " +
 		"did not receive a more recent majority; prevoting nil")
-	cs.voteSigner.signAddVote(ctx, appState, tmproto.PrevoteType, types.BlockID{})
-	return nil, nil
+	cs.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+	return nil
 }
 
-func (cs *DoPrevoteCommand) Subscribe(observer *Observer) {
-	observer.Subscribe(SetMetrics, func(a any) error {
-		cs.metrics = a.(*Metrics)
-		return nil
-	})
-	observer.Subscribe(SetReplayMode, func(a any) error {
+func (cs *DoPrevoteAction) subscribe(evsw events.EventSwitch) {
+	_ = evsw.AddListenerForEvent("doPrevoteAction", setReplayMode, func(a events.EventData) error {
 		cs.replayMode = a.(bool)
 		return nil
 	})

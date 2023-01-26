@@ -135,10 +135,10 @@ func newPBTSTestHarness(ctx context.Context, t *testing.T, tc pbtsTestConfigurat
 }
 
 func (p *pbtsTestHarness) newProposal(ctx context.Context, t *testing.T) (types.Proposal, *types.Block, *types.PartSet) {
-	appState := p.observedState.GetAppState()
+	stateData := p.observedState.GetStateData()
 	proposer := p.pickProposer()
-	quorumType := appState.state.Validators.QuorumType
-	quorumHash := appState.state.Validators.QuorumHash
+	quorumType := stateData.state.Validators.QuorumType
+	quorumHash := stateData.state.Validators.QuorumHash
 
 	b, err := p.observedState.CreateProposalBlock(ctx)
 	require.NoError(t, err)
@@ -150,12 +150,12 @@ func (p *pbtsTestHarness) newProposal(ctx context.Context, t *testing.T) (types.
 	bid := b.BlockID(ps)
 	require.NoError(t, err)
 
-	appState = p.observedState.GetAppState()
-	coreChainLockedHeight := appState.state.LastCoreChainLockedBlockHeight
+	stateData = p.observedState.GetStateData()
+	coreChainLockedHeight := stateData.state.LastCoreChainLockedBlockHeight
 	prop := types.NewProposal(p.currentHeight, coreChainLockedHeight, 0, -1, bid, b.Time)
 	tp := prop.ToProto()
 
-	if _, err := proposer.SignProposal(ctx, appState.state.ChainID, quorumType, quorumHash, tp); err != nil {
+	if _, err := proposer.SignProposal(ctx, stateData.state.ChainID, quorumType, quorumHash, tp); err != nil {
 		t.Fatalf("error signing proposal: %s", err)
 	}
 
@@ -180,9 +180,9 @@ func (p *pbtsTestHarness) nextHeight(
 	require.NoError(t, err)
 
 	ensureNewRound(t, p.roundCh, p.currentHeight, p.currentRound)
-	appState := p.observedState.GetAppState()
+	stateData := p.observedState.GetStateData()
 
-	if !appState.isProposer(proTxHash) {
+	if !stateData.isProposer(proTxHash) {
 		time.Sleep(proposalDelay)
 		prop, _, ps := p.newProposal(ctx, t)
 
@@ -278,8 +278,8 @@ type timestampedEvent struct {
 }
 
 func (p *pbtsTestHarness) pickProposer() types.PrivValidator {
-	appState := p.observedState.GetAppState()
-	proposer := appState.Validators.GetProposer()
+	stateData := p.observedState.GetStateData()
+	proposer := stateData.Validators.GetProposer()
 	p.observedState.logger.Debug("picking proposer", "protxhash", proposer.ProTxHash)
 
 	allVals := append(p.otherValidators, p.observedValidator)

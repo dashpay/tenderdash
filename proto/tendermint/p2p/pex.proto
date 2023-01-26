@@ -7,8 +7,6 @@ import "gogoproto/gogo.proto";
 
 message PexAddress {
   string url = 1 [(gogoproto.customname) = "URL"];
-
-  reserved 2, 3;  // See https://github.com/tendermint/spec/pull/352
 }
 
 message PexRequest {}
@@ -18,9 +16,8 @@ message PexResponse {
 }
 
 message PexMessage {
-  reserved 1, 2;  // See https://github.com/tendermint/spec/pull/352
   oneof sum {
-    PexRequest  pex_request  = 3;
-    PexResponse pex_response = 4;
+    PexRequest  pex_request  = 1;
+    PexResponse pex_response = 2;
   }
 }

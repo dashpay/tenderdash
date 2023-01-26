@@ -8,28 +8,13 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-var usePeerQueueCtx = struct{}{}
-
-// ContextWithPeerQueue ...
-func ContextWithPeerQueue(ctx context.Context) context.Context {
-	return context.WithValue(ctx, usePeerQueueCtx, true)
-}
-
-// PeerQueueFromContext ...
-func PeerQueueFromContext(ctx context.Context) bool {
-	val := ctx.Value(usePeerQueueCtx)
-	if val != nil {
-		return val.(bool)
-	}
-	return false
-}
-
 type msgEnvelope struct {
 	msgInfo
 	fromReplay bool
 }
 
-type msgHandlerFunc func(ctx context.Context, appState *AppState, msg msgEnvelope) error
+// msgHandlerFunc must be implemented by function to handle a state message
+type msgHandlerFunc func(ctx context.Context, stateData *StateData, msg msgEnvelope) error
 
 type msgMiddlewareFunc func(msgHandlerFunc) msgHandlerFunc
 
@@ -57,9 +42,14 @@ func newChanQueue[T Message]() *chanQueue[T] {
 }
 
 func (q *chanQueue[T]) send(ctx context.Context, msg T) error {
+	// first select tries to catch a signal from a context
+	// second select sends a message o a channel, if a queue is full returns the error
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
+	default:
+	}
+	select {
 	case q.ch <- msg:
 		return nil
 	default:
@@ -67,6 +57,10 @@ func (q *chanQueue[T]) send(ctx context.Context, msg T) error {
 	}
 }
 
+// chanMsgSender routes a msgInfo either to internal or peer queue
+// message routing based on peerID or boolean flag in context
+// if peerID is passed or the parameter usePeerQueueCtx is true, then message will send through peer channel
+// otherwise internal
 type chanMsgSender struct {
 	internalQueue *chanQueue[msgInfo]
 	peerQueue     *chanQueue[msgInfo]
@@ -74,7 +68,7 @@ type chanMsgSender struct {
 
 func (s *chanMsgSender) send(ctx context.Context, msg Message, peerID types.NodeID) error {
 	mi := msgInfo{msg, peerID, tmtime.Now()}
-	usePeerQueue := PeerQueueFromContext(ctx)
+	usePeerQueue := peerQueueFromCtx(ctx)
 	ch := s.peerQueue
 	if peerID == "" && !usePeerQueue {
 		ch = s.internalQueue
@@ -134,7 +128,7 @@ func (q *chanMsgReader[T]) safeSend(ctx context.Context, msg T) (res bool) {
 	return
 }
 
-func (q *chanMsgReader[T]) readMessages(ctx context.Context) {
+func (q *chanMsgReader[T]) fanIn(ctx context.Context) {
 	defer close(q.outCh)
 	quitedChs := makeChs[struct{}](len(q.queues))
 	ctx, cancel := context.WithCancel(ctx)
@@ -150,6 +144,10 @@ func (q *chanMsgReader[T]) readMessages(ctx context.Context) {
 		<-quitedCh
 	}
 	q.quitedCh <- struct{}{}
+}
+
+type queueSender interface {
+	send(ctx context.Context, msg Message, peerID types.NodeID) error
 }
 
 type msgInfoQueue struct {
@@ -177,8 +175,8 @@ func (q *msgInfoQueue) read() <-chan msgInfo {
 	return q.reader.outCh
 }
 
-func (q *msgInfoQueue) readMessages(ctx context.Context) {
-	q.reader.readMessages(ctx)
+func (q *msgInfoQueue) fanIn(ctx context.Context) {
+	q.reader.fanIn(ctx)
 }
 
 func (q *msgInfoQueue) stop() {

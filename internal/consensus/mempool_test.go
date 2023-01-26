@@ -50,8 +50,8 @@ func TestMempoolNoProgressUntilTxsAvailable(t *testing.T) {
 	cs := newStateWithConfig(ctx, t, log.NewNopLogger(), config, state, privVals[0], NewCounterApplication())
 	assertMempool(t, cs.txNotifier).EnableTxsAvailable()
 
-	appState := cs.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs.GetStateData()
+	height, round := stateData.Height, stateData.Round
 	newBlockCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
 	startTestRound(ctx, cs, height, round)
 
@@ -76,11 +76,11 @@ func TestMempoolProgressAfterCreateEmptyBlocksInterval(t *testing.T) {
 		Power:      types.DefaultDashVotingPower,
 		Params:     factory.ConsensusParams()})
 	cs := newStateWithConfig(ctx, t, log.NewNopLogger(), config, state, privVals[0], NewCounterApplication())
-	appState := cs.GetAppState()
+	stateData := cs.GetStateData()
 	assertMempool(t, cs.txNotifier).EnableTxsAvailable()
 
 	newBlockCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
-	startTestRound(ctx, cs, appState.Height, appState.Round)
+	startTestRound(ctx, cs, stateData.Height, stateData.Round)
 
 	ensureNewEventOnChannel(t, newBlockCh)   // first block gets committed
 	ensureNoNewEventOnChannel(t, newBlockCh) // then we dont make a block ...
@@ -101,23 +101,23 @@ func TestMempoolProgressInHigherRound(t *testing.T) {
 		Power:      10,
 		Params:     factory.ConsensusParams()})
 	cs := newStateWithConfig(ctx, t, log.NewNopLogger(), config, state, privVals[0], NewCounterApplication())
-	appState := cs.GetAppState()
+	stateData := cs.GetStateData()
 	assertMempool(t, cs.txNotifier).EnableTxsAvailable()
-	height, round := appState.Height, appState.Round
+	height, round := stateData.Height, stateData.Round
 	newBlockCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
 	newRoundCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewRound)
 	timeoutCh := subscribe(ctx, t, cs.eventBus, types.EventQueryTimeoutPropose)
-	setProposalOrigin := cs.behavior.commander.commands[SetProposalType]
-	setProposalCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
-		appState := stateEvent.AppState
-		if appState.Height == appState.state.InitialHeight+1 && appState.Round == 0 {
+	setProposalOrigin := cs.ctrl.Get(SetProposalType)
+	setProposalCmd := newMockAction(func(ctx context.Context, stateEvent StateEvent) error {
+		stateData := stateEvent.StateData
+		if stateData.Height == stateData.state.InitialHeight+1 && stateData.Round == 0 {
 			// dont set the proposal in round 0 so we timeout and
 			// go to next round
-			return nil, nil
+			return nil
 		}
-		return setProposalOrigin.Execute(ctx, behavior, stateEvent)
+		return setProposalOrigin.Execute(ctx, stateEvent)
 	})
-	cs.behavior.RegisterCommand(SetProposalType, setProposalCmd)
+	cs.ctrl.Register(SetProposalType, setProposalCmd)
 	startTestRound(ctx, cs, height, round)
 
 	ensureNewRound(t, newRoundCh, height, round) // first round at first height
@@ -129,8 +129,8 @@ func TestMempoolProgressInHigherRound(t *testing.T) {
 	ensureNewRound(t, newRoundCh, height, round) // first round at next height
 	checkTxsRange(ctx, t, cs, 0, 1)              // we deliver txs, but don't set a proposal so we get the next round
 
-	appState = cs.GetAppState()
-	ensureNewTimeout(t, timeoutCh, height, round, appState.state.ConsensusParams.Timeout.ProposeTimeout(round).Nanoseconds())
+	stateData = cs.GetStateData()
+	ensureNewTimeout(t, timeoutCh, height, round, stateData.state.ConsensusParams.Timeout.ProposeTimeout(round).Nanoseconds())
 
 	round++                                      // moving to the next round
 	ensureNewRound(t, newRoundCh, height, round) // wait for the next round
@@ -176,8 +176,8 @@ func TestMempoolTxConcurrentWithCommit(t *testing.T) {
 	const numTxs int64 = 3000
 	go checkTxsRange(ctx, t, cs, 0, int(numTxs))
 
-	appState := cs.GetAppState()
-	startTestRound(ctx, cs, appState.Height, appState.Round)
+	stateData := cs.GetStateData()
+	startTestRound(ctx, cs, stateData.Height, stateData.Round)
 	for n := int64(0); n < numTxs; {
 		select {
 		case msg := <-newBlockHeaderCh:

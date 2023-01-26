@@ -117,7 +117,7 @@ CRTh3SnZkYXlCMXJIckh4cEQ1MVdJb3AwUUlPTElkNWZxRm5UYlV6RG9WS0JqbDQ3WVo3S2NKTlJVZGR
 JlV2MyNEVGNWhEd2p2WVpOZXU3aUV1VHEzTUt4ZUN0Q3pFelFYU1p2T1BBVDFLeXZ2WlVVV1hpaUl1c09zRmFEeUFkODZMdVZNd0tLbEVwRVBxRFI0UXBlRGVvYnNYbnRDOW1QW
 jlUczRFT1lEWnkxVjNuWlRpOUFWOUkxSEF2RVo4b1ZVTW9OcUtIVUxpSFNPc2lNZFdJTFRoQVVmZU1yTGhVN25DekJIem81R3Jmb2dGZTdYQ2hib2puV1p1VXFOMGhxSWFHZEJl
 Ym1saWRueGJDSmpZdXBUTkNNdFpMcUdC`)},
-				LocalLastCommit: abci.ExtendedCommitInfo{
+				LocalLastCommit: abci.CommitInfo{
 					ThresholdVoteExtensions: []*tmtypes.VoteExtension{
 						{
 							Type:      tmtypes.VoteExtensionType_THRESHOLD_RECOVER,

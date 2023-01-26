@@ -36,7 +36,7 @@ func TestValidProposalChainLocks(t *testing.T) {
 			require.NoError(t, err)
 			block := msg.Data().(types.EventDataNewBlock).Block
 			// this is true just because of this test where each new height has a new chain lock that is incremented by 1
-			state := states[0].GetAppState().state
+			state := states[0].GetStateData().state
 			assert.EqualValues(t, initChainLockHeight+uint32(i), block.Header.CoreChainLockedHeight) //nolint:scopelint
 			assert.EqualValues(t, state.InitialHeight+int64(i), block.Header.Height)                 //nolint:scopelint
 		})
@@ -57,12 +57,12 @@ func TestReactorInvalidProposalHeightForChainLocks(t *testing.T) {
 	byzProposer := states[byzProposerID]
 
 	// update the decide proposal to propose the incorrect height
-	byzProposer.behavior.RegisterCommand(
+	byzProposer.ctrl.Register(
 		DecideProposalType,
-		newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
-			event := stateEvent.Data.(DecideProposalEvent)
+		newMockAction(func(ctx context.Context, stateEvent StateEvent) error {
+			event := stateEvent.Data.(*DecideProposalEvent)
 			invalidProposeCoreChainLockFunc(ctx, t, event.Height, event.Round, states[byzProposerID])
-			return nil, nil
+			return nil
 		}),
 	)
 
@@ -74,7 +74,7 @@ func TestReactorInvalidProposalHeightForChainLocks(t *testing.T) {
 			require.NoError(t, err)
 			block := msg.Data().(types.EventDataNewBlock).Block
 			// this is true just because of this test where each new height has a new chain lock that is incremented by 1
-			state := states[0].GetAppState().state
+			state := states[0].GetStateData().state
 			assert.EqualValues(t, initChainLockHeight+uint32(i), block.Header.CoreChainLockedHeight) //nolint:scopelint
 			assert.EqualValues(t, state.InitialHeight+int64(i), block.Header.Height)                 //nolint:scopelint
 		})
@@ -124,21 +124,20 @@ func invalidProposeCoreChainLockFunc(ctx context.Context, t *testing.T, height i
 	// - send precommit to all peers
 	// - disable privValidator (so we don't do normal precommits)
 
-	appState := cs.appStateStore.Get()
-
 	var (
 		block      *types.Block
 		blockParts *types.PartSet
 		err        error
+		stateData  = cs.GetStateData()
 	)
 
 	// Decide on block
-	if appState.ValidBlock != nil {
+	if stateData.ValidBlock != nil {
 		// If there is valid block, choose that.
-		block, blockParts = appState.ValidBlock, appState.ValidBlockParts
+		block, blockParts = stateData.ValidBlock, stateData.ValidBlockParts
 	} else {
 		// Create a new proposal block from state/txs from the mempool.
-		block, err = cs.blockExecutor.create(ctx, &appState, round)
+		block, err = cs.blockExecutor.create(ctx, &stateData, round)
 		require.NoError(t, err)
 		blockParts, err = block.MakePartSet(types.BlockPartSizeBytes)
 		require.NoError(t, err)
@@ -153,13 +152,13 @@ func invalidProposeCoreChainLockFunc(ctx context.Context, t *testing.T, height i
 	// Make proposal
 	propBlockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
 	// It is byzantine because it is not updating the LastCoreChainLockedBlockHeight
-	proposal := types.NewProposal(height, appState.state.LastCoreChainLockedBlockHeight, round, appState.ValidRound, propBlockID, block.Header.Time)
+	proposal := types.NewProposal(height, stateData.state.LastCoreChainLockedBlockHeight, round, stateData.ValidRound, propBlockID, block.Header.Time)
 	p := proposal.ToProto()
 
-	validatorsAtProposalHeight := appState.state.ValidatorsAtHeight(p.Height)
+	validatorsAtProposalHeight := stateData.state.ValidatorsAtHeight(p.Height)
 	quorumHash := validatorsAtProposalHeight.QuorumHash
 
-	_, err = cs.privValidator.SignProposal(ctx, appState.state.ChainID, appState.Validators.QuorumType, quorumHash, p)
+	_, err = cs.privValidator.SignProposal(ctx, stateData.state.ChainID, stateData.Validators.QuorumType, quorumHash, p)
 	if err != nil {
 		if !cs.replayMode {
 			cs.logger.Error("enterPropose: Error signing proposal", "height", height, "round", round, "err", err)
@@ -173,7 +172,7 @@ func invalidProposeCoreChainLockFunc(ctx context.Context, t *testing.T, height i
 	_ = cs.msgInfoQueue.send(ctx, &ProposalMessage{proposal}, "")
 	for i := 0; i < int(blockParts.Total()); i++ {
 		part := blockParts.GetPart(i)
-		_ = cs.msgInfoQueue.send(ctx, &BlockPartMessage{appState.Height, appState.Round, part}, "")
+		_ = cs.msgInfoQueue.send(ctx, &BlockPartMessage{stateData.Height, stateData.Round, part}, "")
 	}
 
 	cs.logger.Info("Signed proposal", "height", height, "round", round, "proposal", proposal)

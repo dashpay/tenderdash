@@ -174,7 +174,7 @@ func TestBlockMakePartSetWithEvidence(t *testing.T) {
 	require.NoError(t, err)
 	evList := []Evidence{ev}
 
-	partSet, err := MakeBlock(h, []Tx{Tx("Hello World :)")}, commit, evList).MakePartSet(512)
+	partSet, err := MakeBlock(h, []Tx{Tx("Hello World :):)")}, commit, evList).MakePartSet(512)
 	require.NoError(t, err)
 
 	assert.EqualValues(t, 3, partSet.Total())
@@ -528,7 +528,7 @@ func TestBlockMaxDataBytes(t *testing.T) {
 	require.NotNil(t, commit)
 
 	// minBlockSize is minimum correct size of a block
-	const minBlockSize = 1236
+	const minBlockSize = 1231
 
 	testCases := []struct {
 		maxBytes      int64
@@ -565,7 +565,7 @@ func TestBlockMaxDataBytes(t *testing.T) {
 
 func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
 	// minBlockSize is minimum correct size of a block
-	const minBlockSize = 1132
+	const minBlockSize = 1128
 
 	testCases := []struct {
 		maxBytes int64

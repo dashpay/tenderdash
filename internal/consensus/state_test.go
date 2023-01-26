@@ -79,8 +79,8 @@ func TestStateProposerSelection0(t *testing.T) {
 	config := configSetup(t)
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
@@ -118,8 +118,8 @@ func TestStateProposerSelection2(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config}) // test needs more work for more than 3 validators
-	appState := cs1.GetAppState()
-	height := appState.Height
+	stateData := cs1.GetStateData()
+	height := stateData.Height
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
 
 	// this time we jump in at round 2
@@ -157,8 +157,8 @@ func TestStateEnterProposeNoPrivValidator(t *testing.T) {
 
 	cs, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1})
 	cs.SetPrivValidator(ctx, nil)
-	appState := cs.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	// Listen for propose timeout event
 	timeoutCh := subscribe(ctx, t, cs.eventBus, types.EventQueryTimeoutPropose)
@@ -166,7 +166,7 @@ func TestStateEnterProposeNoPrivValidator(t *testing.T) {
 	startTestRound(ctx, cs, height, round)
 
 	// if we're not a validator, EnterPropose should timeout
-	ensureNewTimeout(t, timeoutCh, height, round, appState.state.ConsensusParams.Timeout.ProposeTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutCh, height, round, stateData.state.ConsensusParams.Timeout.ProposeTimeout(round).Nanoseconds())
 
 	if cs.GetRoundState().Proposal != nil {
 		t.Error("Expected to make no proposal, since no privValidator")
@@ -180,19 +180,19 @@ func TestStateEnterProposeYesPrivValidator(t *testing.T) {
 	defer cancel()
 
 	cs, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1})
-	appState := cs.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	// Listen for propose timeout event
 
 	timeoutCh := subscribe(ctx, t, cs.eventBus, types.EventQueryTimeoutPropose)
 	proposalCh := subscribe(ctx, t, cs.eventBus, types.EventQueryCompleteProposal)
 
-	err := cs.behavior.EnterNewRound(ctx, &appState, EnterNewRoundEvent{Height: height, Round: round})
+	err := cs.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
 	require.NoError(t, err)
-	err = appState.Save()
+	err = stateData.Save()
 	require.NoError(t, err)
-	cs.startRoutines(ctx, 3)
+	startConsensusState(ctx, cs, 3)
 
 	ensureNewProposal(t, proposalCh, height, round)
 
@@ -202,7 +202,7 @@ func TestStateEnterProposeYesPrivValidator(t *testing.T) {
 	require.NotZero(t, rs.ProposalBlockParts.Total(), "rs.ProposalBlockParts should be set")
 
 	// if we're a validator, enterPropose should not timeout
-	ensureNoNewTimeout(t, timeoutCh, appState.state.ConsensusParams.Timeout.ProposeTimeout(round).Nanoseconds())
+	ensureNoNewTimeout(t, timeoutCh, stateData.state.ConsensusParams.Timeout.ProposeTimeout(round).Nanoseconds())
 }
 
 func TestStateBadProposal(t *testing.T) {
@@ -211,15 +211,15 @@ func TestStateBadProposal(t *testing.T) {
 	defer cancel()
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, validators: 2})
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 	vs2 := vss[1]
 
 	partSize := types.BlockPartSizeBytes
 
 	voteCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryVote)
 
-	propBlock, err := cs1.blockExecutor.create(ctx, &appState, round) // changeProposer(t, cs1, vs2)
+	propBlock, err := cs1.blockExecutor.create(ctx, &stateData, round) // changeProposer(t, cs1, vs2)
 	require.NoError(t, err)
 
 	// make the second validator the proposer by incrementing round
@@ -232,11 +232,11 @@ func TestStateBadProposal(t *testing.T) {
 	proposal := types.NewProposal(vs2.Height, 1, round, -1, blockID, propBlock.Header.Time)
 	p := proposal.ToProto()
 
-	appState = cs1.GetAppState()
+	stateData = cs1.GetStateData()
 
 	// Break the proposal
 	p.BlockID.Hash[0] = ^p.BlockID.Hash[0]
-	_, err = vs2.SignProposal(ctx, config.ChainID(), appState.Validators.QuorumType, appState.Validators.QuorumHash, p)
+	_, err = vs2.SignProposal(ctx, config.ChainID(), stateData.Validators.QuorumType, stateData.Validators.QuorumHash, p)
 	require.NoError(t, err)
 
 	proposal.Signature = p.Signature
@@ -272,16 +272,16 @@ func TestStateProposalTime(t *testing.T) {
 	app, err := kvstore.NewMemoryApp(kvstore.WithDuplicateRequestDetection(false))
 	require.NoError(t, err)
 	cs1, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1, application: app})
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 	cs1.config.DontAutoPropose = true
 	cs1.config.CreateEmptyBlocksInterval = 0
-	appState.state.ConsensusParams.Synchrony.MessageDelay = 5 * time.Millisecond
-	appState.state.ConsensusParams.Synchrony.Precision = 10 * time.Millisecond
-	delay := appState.state.ConsensusParams.Synchrony.MessageDelay
-	precision := appState.state.ConsensusParams.Synchrony.Precision
+	stateData.state.ConsensusParams.Synchrony.MessageDelay = 5 * time.Millisecond
+	stateData.state.ConsensusParams.Synchrony.Precision = 10 * time.Millisecond
+	delay := stateData.state.ConsensusParams.Synchrony.MessageDelay
+	precision := stateData.state.ConsensusParams.Synchrony.Precision
 
-	err = appState.Save()
+	err = stateData.Save()
 	require.NoError(t, err)
 
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
@@ -305,8 +305,8 @@ func TestStateProposalTime(t *testing.T) {
 		},
 		{ // TEST 2: BLOCK TIME IS OLDER THAN PREVIOUS BLOCK TIME
 			blockTimeFunc: func(s *State) time.Time {
-				appState = s.GetAppState()
-				state := appState.state
+				stateData = s.GetStateData()
+				state := stateData.state
 				return state.LastBlockTime.Add(-1 * time.Second)
 			},
 			expectNewBlock: true,
@@ -320,8 +320,8 @@ func TestStateProposalTime(t *testing.T) {
 
 	for id, tc := range testCases {
 		t.Run(strconv.Itoa(id), func(t *testing.T) {
-			appState = cs1.GetAppState()
-			height, round = appState.Height, appState.Round
+			stateData = cs1.GetStateData()
+			height, round = stateData.Height, stateData.Round
 			cs := cs1
 			// Generate proposal block
 			propBlock, err := cs.CreateProposalBlock(ctx)
@@ -332,27 +332,27 @@ func TestStateProposalTime(t *testing.T) {
 			parSet, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
 			require.NoError(t, err)
 			blockID := propBlock.BlockID(parSet)
-			appState.ValidBlock = propBlock
-			appState.ValidBlockParts = parSet
+			stateData.ValidBlock = propBlock
+			stateData.ValidBlockParts = parSet
 
 			// sleep if needed
 			time.Sleep(tc.sleep)
 
 			// Wait for complete proposal.
-			err = cs.behavior.EnterPropose(ctx, &appState, EnterProposeEvent{
+			err = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{
 				Height: height,
 				Round:  round,
-			})
+			}, &stateData)
 			require.NoError(t, err)
 
 			ensureNewRound(t, newRoundCh, height+1, 0)
 
-			appState = cs.GetAppState()
+			stateData = cs.GetStateData()
 
 			if tc.expectNewBlock {
-				assert.NotEqual(t, blockID, appState.LastCommit.BlockID, "expected that block will be regenerated")
+				assert.NotEqual(t, blockID, stateData.LastCommit.BlockID, "expected that block will be regenerated")
 			} else {
-				assert.Equal(t, blockID, appState.LastCommit.BlockID, "expected that block will not change")
+				assert.Equal(t, blockID, stateData.LastCommit.BlockID, "expected that block will not change")
 			}
 		})
 	}
@@ -364,9 +364,9 @@ func TestStateOversizedBlock(t *testing.T) {
 	defer cancel()
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, validators: 2})
-	appState := cs1.GetAppState()
-	appState.state.ConsensusParams.Block.MaxBytes = 2000
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	stateData.state.ConsensusParams.Block.MaxBytes = 2000
+	height, round := stateData.Height, stateData.Round
 	vs2 := vss[1]
 
 	partSize := types.BlockPartSizeBytes
@@ -389,8 +389,8 @@ func TestStateOversizedBlock(t *testing.T) {
 	proposal := types.NewProposal(height, 1, round, -1, blockID, propBlock.Header.Time)
 	p := proposal.ToProto()
 
-	_, err = vs2.SignProposal(ctx, config.ChainID(), appState.Validators.QuorumType,
-		appState.Validators.QuorumHash, p)
+	_, err = vs2.SignProposal(ctx, config.ChainID(), stateData.Validators.QuorumType,
+		stateData.Validators.QuorumHash, p)
 	require.NoError(t, err)
 	proposal.Signature = p.Signature
 
@@ -408,7 +408,7 @@ func TestStateOversizedBlock(t *testing.T) {
 
 	// c1 should log an error with the block part message as it exceeds the consensus params. The
 	// block is not added to cs.ProposalBlock so the node timeouts.
-	ensureNewTimeout(t, timeoutProposeCh, height, round, appState.proposeTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutProposeCh, height, round, stateData.proposeTimeout(round).Nanoseconds())
 
 	// and then should send nil prevote and precommit regardless of whether other validators prevote and
 	// precommit on it
@@ -430,8 +430,8 @@ func TestStateFullRound1(t *testing.T) {
 	defer cancel()
 
 	cs, vss := makeState(ctx, t, makeStateArgs{config: config, validators: 1})
-	appState := cs.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	voteCh := subscribe(ctx, t, cs.eventBus, types.EventQueryVote)
 	propCh := subscribe(ctx, t, cs.eventBus, types.EventQueryCompleteProposal)
@@ -461,17 +461,17 @@ func TestStateFullRoundNil(t *testing.T) {
 	defer cancel()
 
 	cs, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1})
-	appState := cs.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	voteCh := subscribe(ctx, t, cs.eventBus, types.EventQueryVote)
 
-	err := cs.behavior.EnterPrevote(ctx, &appState, EnterPrevoteEvent{Height: height, Round: round})
+	err := cs.ctrl.Dispatch(ctx, &EnterPrevoteEvent{Height: height, Round: round}, &stateData)
 	require.NoError(t, err)
-	err = appState.Save()
+	err = stateData.Save()
 	require.NoError(t, err)
 
-	cs.startRoutines(ctx, 4)
+	startConsensusState(ctx, cs, 4)
 
 	ensurePrevoteMatch(t, voteCh, height, round, nil)   // prevote
 	ensurePrecommitMatch(t, voteCh, height, round, nil) // precommit
@@ -486,8 +486,8 @@ func TestStateFullRound2(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, validators: 2})
 	vs2 := vss[1]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	voteCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryVote)
 	newBlockCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewBlock)
@@ -531,8 +531,8 @@ func TestStateLock_NoPOL(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, validators: 2})
 	vs2 := vss[1]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	partSize := types.BlockPartSizeBytes
 
@@ -547,13 +547,13 @@ func TestStateLock_NoPOL(t *testing.T) {
 	*/
 
 	// start round and wait for prevote
-	err := cs1.behavior.EnterNewRound(ctx, &appState, EnterNewRoundEvent{Height: height, Round: round})
+	err := cs1.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
 	require.NoError(t, err)
 
-	err = appState.Save()
+	err = stateData.Save()
 	require.NoError(t, err)
 
-	cs1.startRoutines(ctx, 0)
+	startConsensusState(ctx, cs1, 0)
 
 	ensureNewRound(t, newRoundCh, height, round)
 
@@ -588,7 +588,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 
 	// (note we're entering precommit for a second time this round)
 	// but with invalid args. then we enterPrecommitWait, and the timeout to new round
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	///
 
@@ -601,7 +601,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	incrementRound(vs2)
 
 	// now we're on a new round and not the proposer, so wait for timeout
-	ensureNewTimeout(t, timeoutProposeCh, height, round, appState.proposeTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutProposeCh, height, round, stateData.proposeTimeout(round).Nanoseconds())
 
 	rs := cs1.GetRoundState()
 
@@ -624,7 +624,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 
 	// now we're going to enter prevote again, but with invalid args
 	// and then prevote wait, which should timeout. then wait for precommit
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 	// the proposed block should still be locked block.
 	// we should precommit nil and be locked on the proposal.
 	ensurePrecommit(t, voteCh, height, round)
@@ -636,7 +636,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 
 	// (note we're entering precommit for a second time this round, but with invalid args
 	// then we enterPrecommitWait and timeout into NewRound
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	round++ // entering new round
 	ensureNewRound(t, newRoundCh, height, round)
@@ -667,7 +667,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), newBlockID, vs2)
 	ensurePrevote(t, voteCh, height, round)
 
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 	ensurePrecommit(t, voteCh, height, round) // precommit
 
 	validatePrecommit(ctx, t, cs1, round, 0, vss[0], nil, initialBlockID.Hash) // precommit nil but be locked on proposal
@@ -682,20 +682,20 @@ func TestStateLock_NoPOL(t *testing.T) {
 		vs2) // NOTE: conflicting precommits at same height
 	ensurePrecommit(t, voteCh, height, round)
 
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
-	cs1AppState := cs1.GetAppState()
+	cs1StateData := cs1.GetStateData()
 
 	// cs1 is locked on a block at this point, so we must generate a new consensus
 	// state to force a new proposal block to be generated.
-	assert.NotNil(t, cs1AppState.LockedBlock)
+	assert.NotNil(t, cs1StateData.LockedBlock)
 
 	cs2, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 2})
-	cs2AppState := cs2.GetAppState()
+	cs2StateData := cs2.GetStateData()
 
 	// Since the quorum hash is also part of the sign ID we must make sure it's the same
-	cs2AppState.state.Validators = cs1AppState.state.Validators.Copy()
-	err = cs2AppState.Save()
+	cs2StateData.state.Validators = cs1StateData.state.Validators.Copy()
+	err = cs2StateData.Save()
 	require.NoError(t, err)
 	cs2.SetPrivValidator(ctx, vs2)
 
@@ -730,7 +730,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), propBlockID, vs2)
 	ensurePrevote(t, voteCh, height, round)
 
-	ensureNewTimeout(t, timeoutWaitCh, height, round, cs1AppState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, cs1StateData.voteTimeout(round).Nanoseconds())
 	ensurePrecommit(t, voteCh, height, round)
 	validatePrecommit(ctx, t, cs1, round, 0, vss[0], nil, initialBlockID.Hash) // precommit nil but locked on proposal
 
@@ -759,8 +759,8 @@ func TestStateLock_POLUpdateLock(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, logger: logger})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	partSize := types.BlockPartSizeBytes
 
@@ -803,7 +803,7 @@ func TestStateLock_POLUpdateLock(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 
 	// timeout to new round.
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	/*
 		Round 1:
@@ -817,7 +817,7 @@ func TestStateLock_POLUpdateLock(t *testing.T) {
 	round++
 
 	// Generate a new proposal block.
-	cs2 := newState(ctx, t, logger, appState.state, vs2, newKVStoreFunc(t)(logger, ""))
+	cs2 := newState(ctx, t, logger, stateData.state, vs2, newKVStoreFunc(t)(logger, ""))
 	require.NoError(t, err)
 	propR1, propBlockR1 := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	propBlockR1Parts, err := propBlockR1.MakePartSet(partSize)
@@ -858,8 +858,8 @@ func TestStateLock_POLRelock(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	timeoutWaitCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutWait)
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
@@ -882,8 +882,8 @@ func TestStateLock_POLRelock(t *testing.T) {
 
 	ensureNewRound(t, newRoundCh, height, round)
 	ensureNewProposal(t, proposalCh, height, round)
-	appState = cs1.GetAppState()
-	blockID := appState.BlockID()
+	stateData = cs1.GetStateData()
+	blockID := stateData.BlockID()
 
 	ensurePrevote(t, voteCh, height, round)
 
@@ -899,12 +899,12 @@ func TestStateLock_POLRelock(t *testing.T) {
 	// add precommits from the rest of the validators.
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 
-	appState = cs1.GetAppState()
-	theBlock := appState.ProposalBlock
-	theBlockParts := appState.ProposalBlockParts
+	stateData = cs1.GetStateData()
+	theBlock := stateData.ProposalBlock
+	theBlockParts := stateData.ProposalBlockParts
 
 	// timeout to new round.
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	/*
 		Round 1:
@@ -916,10 +916,10 @@ func TestStateLock_POLRelock(t *testing.T) {
 	*/
 	incrementRound(vs2, vs3, vs4)
 	round++
-	propR1 := types.NewProposal(height, 1, round, appState.ValidRound, blockID, theBlock.Header.Time)
+	propR1 := types.NewProposal(height, 1, round, stateData.ValidRound, blockID, theBlock.Header.Time)
 	p := propR1.ToProto()
 	_, valSet := cs1.GetValidatorSet()
-	_, err = vs2.SignProposal(ctx, appState.state.ChainID, valSet.QuorumType, valSet.QuorumHash, p)
+	_, err = vs2.SignProposal(ctx, stateData.state.ChainID, valSet.QuorumType, valSet.QuorumHash, p)
 	require.NoError(t, err)
 	propR1.Signature = p.Signature
 	err = cs1.SetProposalAndBlock(ctx, propR1, theBlockParts, "")
@@ -955,8 +955,8 @@ func TestStateLock_PrevoteNilWhenLockedAndMissProposal(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	timeoutWaitCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutWait)
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
@@ -997,7 +997,7 @@ func TestStateLock_PrevoteNilWhenLockedAndMissProposal(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 
 	// timeout to new round.
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	/*
 		Round 1:
@@ -1039,8 +1039,8 @@ func TestStateLock_PrevoteNilWhenLockedAndDifferentProposal(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, logger: logger})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	timeoutWaitCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutWait)
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
@@ -1080,7 +1080,7 @@ func TestStateLock_PrevoteNilWhenLockedAndDifferentProposal(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 
 	// timeout to new round.
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	/*
 		Round 1:
@@ -1093,7 +1093,7 @@ func TestStateLock_PrevoteNilWhenLockedAndDifferentProposal(t *testing.T) {
 	*/
 	incrementRound(vs2, vs3, vs4)
 	round++
-	cs2 := newState(ctx, t, logger, appState.state, vs2, newKVStoreFunc(t)(logger, ""))
+	cs2 := newState(ctx, t, logger, stateData.state, vs2, newKVStoreFunc(t)(logger, ""))
 	propR1, propBlockR1 := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	propBlockR1Parts, err := propBlockR1.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
@@ -1136,8 +1136,8 @@ func TestStateLock_POLDoesNotUnlock(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, logger: logger})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
 	timeoutWaitCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutWait)
@@ -1185,7 +1185,7 @@ func TestStateLock_POLDoesNotUnlock(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), blockID, vs3)
 
 	// timeout to new round
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	/*
 		Round 1:
@@ -1195,7 +1195,7 @@ func TestStateLock_POLDoesNotUnlock(t *testing.T) {
 	*/
 	round++
 	incrementRound(vs2, vs3, vs4)
-	cs2 := newState(ctx, t, logger, appState.state, vs2, newKVStoreFunc(t)(logger, ""))
+	cs2 := newState(ctx, t, logger, stateData.state, vs2, newKVStoreFunc(t)(logger, ""))
 	prop, propBlock := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	propBlockParts, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
@@ -1219,7 +1219,7 @@ func TestStateLock_POLDoesNotUnlock(t *testing.T) {
 	validatePrecommit(ctx, t, cs1, round, 0, vss[0], nil, blockID.Hash)
 
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	/*
 		Round 2:
@@ -1229,7 +1229,7 @@ func TestStateLock_POLDoesNotUnlock(t *testing.T) {
 	*/
 	round++
 	incrementRound(vs2, vs3, vs4)
-	cs3 := newState(ctx, t, logger, appState.state, vs2, newKVStoreFunc(t)(logger, ""))
+	cs3 := newState(ctx, t, logger, stateData.state, vs2, newKVStoreFunc(t)(logger, ""))
 	prop, propBlock = decideProposal(ctx, t, cs3, vs3, vs3.Height, vs3.Round)
 	propBlockParts, err = propBlock.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
@@ -1264,8 +1264,8 @@ func TestStateLock_MissingProposalWhenPOLSeenDoesNotUpdateLock(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, logger: logger})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	partSize := types.BlockPartSizeBytes
 
@@ -1302,7 +1302,7 @@ func TestStateLock_MissingProposalWhenPOLSeenDoesNotUpdateLock(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 
 	// timeout to new round
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	/*
 		Round 1:
@@ -1313,7 +1313,7 @@ func TestStateLock_MissingProposalWhenPOLSeenDoesNotUpdateLock(t *testing.T) {
 	*/
 	incrementRound(vs2, vs3, vs4)
 	round++
-	cs2 := newState(ctx, t, logger, appState.state, vs2, newKVStoreFunc(t)(logger, ""))
+	cs2 := newState(ctx, t, logger, stateData.state, vs2, newKVStoreFunc(t)(logger, ""))
 	require.NoError(t, err)
 	prop, propBlock := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	require.NotNil(t, propBlock, "Failed to create proposal block with vs2")
@@ -1347,8 +1347,8 @@ func TestStateLock_DoesNotLockOnOldProposal(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	timeoutWaitCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutWait)
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
@@ -1384,7 +1384,7 @@ func TestStateLock_DoesNotLockOnOldProposal(t *testing.T) {
 	incrementRound(vs2, vs3, vs4)
 
 	// timeout to new round
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	/*
 		Round 1:
@@ -1420,8 +1420,8 @@ func TestStateLock_POLSafety1(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, logger: logger})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	partSize := types.BlockPartSizeBytes
 
@@ -1434,7 +1434,7 @@ func TestStateLock_POLSafety1(t *testing.T) {
 	voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
 
 	// start round and wait for propose and prevote
-	startTestRound(ctx, cs1, appState.Height, round)
+	startTestRound(ctx, cs1, stateData.Height, round)
 	ensureNewRound(t, newRoundCh, height, round)
 
 	ensureNewProposal(t, proposalCh, height, round)
@@ -1446,8 +1446,8 @@ func TestStateLock_POLSafety1(t *testing.T) {
 	require.NoError(t, err)
 	blockID := propBlock.BlockID(partSet)
 	// the others sign a polka but we don't see it
-	prevotes := signVotes(ctx, t, tmproto.PrevoteType, config.ChainID(), blockID, appState.state.LastAppHash,
-		appState.Validators.QuorumType, appState.Validators.QuorumHash,
+	prevotes := signVotes(ctx, t, tmproto.PrevoteType, config.ChainID(), blockID, stateData.state.LastAppHash,
+		stateData.Validators.QuorumType, stateData.Validators.QuorumHash,
 		vs2, vs3, vs4)
 
 	// we do see them precommit nil
@@ -1455,11 +1455,11 @@ func TestStateLock_POLSafety1(t *testing.T) {
 
 	// cs1 precommit nil
 	ensurePrecommit(t, voteCh, height, round)
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	incrementRound(vs2, vs3, vs4)
 	round++ // moving to the next round
-	cs2 := newState(ctx, t, logger, appState.state, vs2, newKVStoreFunc(t)(logger, ""))
+	cs2 := newState(ctx, t, logger, stateData.state, vs2, newKVStoreFunc(t)(logger, ""))
 	prop, propBlock := decideProposal(ctx, t, cs2, vs2, vs2.Height, vs2.Round)
 	propBlockParts, err := propBlock.MakePartSet(partSize)
 	require.NoError(t, err)
@@ -1493,7 +1493,7 @@ func TestStateLock_POLSafety1(t *testing.T) {
 
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	incrementRound(vs2, vs3, vs4)
 	round++ // moving to the next round
@@ -1505,7 +1505,7 @@ func TestStateLock_POLSafety1(t *testing.T) {
 	*/
 
 	// timeout of propose
-	ensureNewTimeout(t, timeoutProposeCh, height, round, appState.proposeTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutProposeCh, height, round, stateData.proposeTimeout(round).Nanoseconds())
 
 	// finish prevote
 	ensurePrevoteMatch(t, voteCh, height, round, nil)
@@ -1533,8 +1533,8 @@ func TestStateLock_POLSafety2(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, logger: consensusLogger(t)})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	partSize := types.BlockPartSizeBytes
 
@@ -1553,8 +1553,8 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	propBlockID0 := propBlock0.BlockID(propBlockParts0)
 
 	// the others sign a polka but we don't see it
-	prevotes := signVotes(ctx, t, tmproto.PrevoteType, config.ChainID(), propBlockID0, appState.state.LastAppHash,
-		appState.Validators.QuorumType, appState.Validators.QuorumHash,
+	prevotes := signVotes(ctx, t, tmproto.PrevoteType, config.ChainID(), propBlockID0, stateData.state.LastAppHash,
+		stateData.Validators.QuorumType, stateData.Validators.QuorumHash,
 		vs2, vs3, vs4)
 
 	// the block for round 1
@@ -1589,9 +1589,9 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	// the proposed block should now be locked and our precommit added
 	validatePrecommit(ctx, t, cs1, round, round, vss[0], propBlockID1.Hash, propBlockID1.Hash)
 
-	appState = cs1.GetAppState()
-	assert.True(t, appState.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
-	assert.Equal(t, round, appState.LockedRound, "invalid round locked")
+	stateData = cs1.GetStateData()
+	assert.True(t, stateData.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
+	assert.Equal(t, round, stateData.LockedRound, "invalid round locked")
 
 	// add precommits from the rest
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs4)
@@ -1600,7 +1600,7 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	incrementRound(vs2, vs3, vs4)
 
 	// timeout of precommit wait to new round
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	round++ // moving to the next round
 	// in round 2 we see the polkad block from round 0
@@ -1626,8 +1626,8 @@ func TestStateLock_POLSafety2(t *testing.T) {
 	ensureNewProposal(t, proposalCh, height, round)
 
 	ensurePrevote(t, voteCh, height, round)
-	appState = cs1.GetAppState()
-	assert.True(t, appState.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
+	stateData = cs1.GetStateData()
+	assert.True(t, stateData.LockedBlock.HashesTo(propBlockID1.Hash), "invalid block locked")
 	validatePrevote(ctx, t, cs1, round, vss[0], nil)
 
 }
@@ -1643,8 +1643,8 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, logger: logger})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	partSize := types.BlockPartSizeBytes
 
@@ -1687,7 +1687,7 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 
 	// timeout to new round.
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	/*
 		Round 1:
@@ -1702,10 +1702,10 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	incrementRound(vs2, vs3, vs4)
 	round++
 	// Generate a new proposal block.
-	cs2 := newState(ctx, t, logger, appState.state, vs2, newKVStoreFunc(t)(logger, ""))
-	cs2AppState := cs2.GetAppState()
-	cs2AppState.ValidRound = 1
-	err = cs2AppState.Save()
+	cs2 := newState(ctx, t, logger, stateData.state, vs2, newKVStoreFunc(t)(logger, ""))
+	cs2StateData := cs2.GetStateData()
+	cs2StateData.ValidRound = 1
+	err = cs2StateData.Save()
 	require.NoError(t, err)
 	propR1, propBlockR1 := decideProposal(ctx, t, cs2, vs2, vs2.Height, round)
 
@@ -1728,7 +1728,7 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	ensurePrecommit(t, voteCh, height, round)
 
 	// timeout to new round.
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	/*
 		Create a new proposal for D, the same block from Round 1.
@@ -1746,7 +1746,7 @@ func TestState_PrevotePOLFromPreviousRound(t *testing.T) {
 	propR2 := types.NewProposal(height, 1, round, 1, r1BlockID, propBlockR1.Header.Time)
 	p := propR2.ToProto()
 	_, valSet := cs1.GetValidatorSet()
-	_, err = vs3.SignProposal(ctx, appState.state.ChainID, valSet.QuorumType, valSet.QuorumHash, p)
+	_, err = vs3.SignProposal(ctx, stateData.state.ChainID, valSet.QuorumType, valSet.QuorumHash, p)
 	require.NoError(t, err)
 	propR2.Signature = p.Signature
 
@@ -1783,8 +1783,8 @@ func TestProposeValidBlock(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	partSize := types.BlockPartSizeBytes
 
@@ -1819,7 +1819,7 @@ func TestProposeValidBlock(t *testing.T) {
 
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	incrementRound(vs2, vs3, vs4)
 	round++ // moving to the next round
@@ -1827,7 +1827,7 @@ func TestProposeValidBlock(t *testing.T) {
 	ensureNewRound(t, newRoundCh, height, round)
 
 	// timeout of propose
-	ensureNewTimeout(t, timeoutProposeCh, height, round, appState.proposeTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutProposeCh, height, round, stateData.proposeTimeout(round).Nanoseconds())
 
 	// We did not see a valid proposal within this round, so prevote nil.
 	ensurePrevoteMatch(t, voteCh, height, round, nil)
@@ -1848,7 +1848,7 @@ func TestProposeValidBlock(t *testing.T) {
 
 	ensureNewRound(t, newRoundCh, height, round)
 
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	round++ // moving to the next round
 
@@ -1872,8 +1872,8 @@ func TestSetValidBlockOnDelayedPrevote(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	partSize := types.BlockPartSizeBytes
 
@@ -1904,7 +1904,7 @@ func TestSetValidBlockOnDelayedPrevote(t *testing.T) {
 	// vs3 send prevote nil
 	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), types.BlockID{}, vs3)
 
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	ensurePrecommit(t, voteCh, height, round)
 	// we should have precommitted
@@ -1938,8 +1938,8 @@ func TestSetValidBlockOnDelayedProposal(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	partSize := types.BlockPartSizeBytes
 
@@ -1955,10 +1955,10 @@ func TestSetValidBlockOnDelayedProposal(t *testing.T) {
 	round++ // move to round in which P0 is not proposer
 	incrementRound(vs2, vs3, vs4)
 
-	startTestRound(ctx, cs1, appState.Height, round)
+	startTestRound(ctx, cs1, stateData.Height, round)
 	ensureNewRound(t, newRoundCh, height, round)
 
-	ensureNewTimeout(t, timeoutProposeCh, height, round, appState.proposeTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutProposeCh, height, round, stateData.proposeTimeout(round).Nanoseconds())
 
 	ensurePrevoteMatch(t, voteCh, height, round, nil)
 
@@ -1971,7 +1971,7 @@ func TestSetValidBlockOnDelayedProposal(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), blockID, vs2, vs3, vs4)
 	ensureNewValidBlock(t, validBlockCh, height, round)
 
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	ensurePrecommit(t, voteCh, height, round)
 	validatePrecommit(ctx, t, cs1, round, -1, vss[0], nil, nil)
@@ -2025,8 +2025,8 @@ func TestProcessProposalAccept(t *testing.T) {
 			}, nil).Maybe()
 
 			cs1, _ := makeState(ctx, t, makeStateArgs{config: config, application: m})
-			appState := cs1.GetAppState()
-			height, round := appState.Height, appState.Round
+			stateData := cs1.GetStateData()
+			height, round := stateData.Height, stateData.Round
 
 			proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
 			newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
@@ -2091,8 +2091,8 @@ func TestFinalizeBlockCalled(t *testing.T) {
 			m.On("FinalizeBlock", mock.Anything, mock.Anything).Return(&abci.ResponseFinalizeBlock{}, nil).Maybe()
 
 			cs1, vss := makeState(ctx, t, makeStateArgs{config: config, application: m})
-			appState := cs1.GetAppState()
-			height, round := appState.Height, appState.Round
+			stateData := cs1.GetStateData()
+			height, round := stateData.Height, stateData.Round
 
 			proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
 			newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
@@ -2100,7 +2100,7 @@ func TestFinalizeBlockCalled(t *testing.T) {
 			require.NoError(t, err)
 			voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
 
-			startTestRound(ctx, cs1, appState.Height, round)
+			startTestRound(ctx, cs1, stateData.Height, round)
 			ensureNewRound(t, newRoundCh, height, round)
 			ensureNewProposal(t, proposalCh, height, round)
 			rs := cs1.GetRoundState()
@@ -2165,8 +2165,8 @@ func TestExtendVote(t *testing.T) {
 	}, nil)
 	m.On("FinalizeBlock", mock.Anything, mock.Anything).Return(&abci.ResponseFinalizeBlock{}, nil).Maybe()
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, application: m})
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	proTxHashMap := make(map[string]struct{})
 	for _, vs := range vss {
@@ -2229,8 +2229,8 @@ func TestCorrectABCIRound(t *testing.T) {
 	m := abcimocks.NewApplication(t)
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, application: m})
-	appState := cs1.GetAppState()
-	height := appState.Height
+	stateData := cs1.GetStateData()
+	height := stateData.Height
 
 	proTxHashMap := make(map[string]struct{})
 	for _, vs := range vss {
@@ -2253,10 +2253,10 @@ func TestCorrectABCIRound(t *testing.T) {
 			mockProposerApplicationCalls(t, m, round, false)
 		}
 
-		appState = cs1.GetAppState()
+		stateData = cs1.GetStateData()
 		// start the test on round 0
 		if round == 0 {
-			startTestRound(ctx, cs1, appState.Height, round)
+			startTestRound(ctx, cs1, stateData.Height, round)
 		}
 		ensureNewRound(t, newRoundCh, height, round)
 
@@ -2317,8 +2317,8 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 	}, nil)
 	m.On("FinalizeBlock", mock.Anything, mock.Anything).Return(&abci.ResponseFinalizeBlock{}, nil).Maybe()
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, application: m})
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	proTxHashMap := make(map[string]struct{})
 	for _, vs := range vss {
@@ -2332,7 +2332,7 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 	require.NoError(t, err)
 	voteCh := subscribeToVoter(ctx, t, cs1, proTxHash)
 
-	startTestRound(ctx, cs1, appState.Height, round)
+	startTestRound(ctx, cs1, stateData.Height, round)
 	ensureNewRound(t, newRoundCh, height, round)
 	ensureNewProposal(t, proposalCh, height, round)
 	rs := cs1.GetRoundState()
@@ -2429,8 +2429,8 @@ func TestPrepareProposalReceivesVoteExtensions(t *testing.T) {
 	m.On("FinalizeBlock", mock.Anything, mock.Anything).Return(&abci.ResponseFinalizeBlock{}, nil)
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, application: m})
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
@@ -2493,8 +2493,8 @@ func TestWaitingTimeoutOnNilPolka(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	timeoutWaitCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutWait)
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
@@ -2505,7 +2505,7 @@ func TestWaitingTimeoutOnNilPolka(t *testing.T) {
 
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 	ensureNewRound(t, newRoundCh, height, round+1)
 }
 
@@ -2519,8 +2519,8 @@ func TestWaitingTimeoutProposeOnNewRound(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	timeoutWaitCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutPropose)
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
@@ -2540,7 +2540,7 @@ func TestWaitingTimeoutProposeOnNewRound(t *testing.T) {
 	round++ // moving to the next round
 	ensureNewRound(t, newRoundCh, height, round)
 
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.proposeTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.proposeTimeout(round).Nanoseconds())
 
 	ensurePrevoteMatch(t, voteCh, height, round, nil)
 }
@@ -2555,8 +2555,8 @@ func TestRoundSkipOnNilPolkaFromHigherRound(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	timeoutWaitCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutWait)
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
@@ -2579,7 +2579,7 @@ func TestRoundSkipOnNilPolkaFromHigherRound(t *testing.T) {
 	ensurePrecommit(t, voteCh, height, round)
 	validatePrecommit(ctx, t, cs1, round, -1, vss[0], nil, nil)
 
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	round++ // moving to the next round
 	ensureNewRound(t, newRoundCh, height, round)
@@ -2595,8 +2595,8 @@ func TestWaitTimeoutProposeOnNilPolkaForTheCurrentRound(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, int32(1)
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, int32(1)
 
 	timeoutProposeCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutPropose)
 	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
@@ -2611,7 +2611,7 @@ func TestWaitTimeoutProposeOnNilPolkaForTheCurrentRound(t *testing.T) {
 	incrementRound(vss[1:]...)
 	signAddVotes(ctx, t, cs1, tmproto.PrevoteType, config.ChainID(), types.BlockID{}, vs2, vs3, vs4)
 
-	ensureNewTimeout(t, timeoutProposeCh, height, round, appState.proposeTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutProposeCh, height, round, stateData.proposeTimeout(round).Nanoseconds())
 
 	ensurePrevoteMatch(t, voteCh, height, round, nil)
 }
@@ -2625,8 +2625,8 @@ func TestEmitNewValidBlockEventOnCommitWithoutBlock(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, int32(1)
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, int32(1)
 
 	incrementRound(vs2, vs3, vs4)
 
@@ -2664,8 +2664,8 @@ func TestCommitFromPreviousRound(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, logger: log.NewTestingLogger(t)})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, int32(1)
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, int32(1)
 
 	partSize := types.BlockPartSizeBytes
 
@@ -2724,14 +2724,14 @@ func TestStartNextHeightCorrectlyAfterTimeout(t *testing.T) {
 	defer cancel()
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
-	appState := cs1.GetAppState()
-	appState.state.ConsensusParams.Timeout.BypassCommitTimeout = false
-	err := appState.Save()
+	stateData := cs1.GetStateData()
+	stateData.state.ConsensusParams.Timeout.BypassCommitTimeout = false
+	err := stateData.Save()
 	require.NoError(t, err)
 	cs1.txNotifier = &fakeTxNotifier{ch: make(chan struct{})}
 
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	height, round := appState.Height, appState.Round
+	height, round := stateData.Height, stateData.Round
 
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
 	timeoutProposeCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryTimeoutPropose)
@@ -2764,7 +2764,7 @@ func TestStartNextHeightCorrectlyAfterTimeout(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), blockID, vs3)
 
 	// wait till timeout occurs
-	ensureNewTimeout(t, precommitTimeoutCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, precommitTimeoutCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	ensureNewRound(t, newRoundCh, height, round+1)
 
@@ -2775,7 +2775,7 @@ func TestStartNextHeightCorrectlyAfterTimeout(t *testing.T) {
 
 	cs1.txNotifier.(*fakeTxNotifier).Notify()
 
-	ensureNewTimeout(t, timeoutProposeCh, height+1, round, appState.proposeTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutProposeCh, height+1, round, stateData.proposeTimeout(round).Nanoseconds())
 	rs = cs1.GetRoundState()
 	assert.False(
 		t,
@@ -2789,13 +2789,13 @@ func TestResetTimeoutPrecommitUponNewHeight(t *testing.T) {
 	defer cancel()
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
-	appState := cs1.GetAppState()
-	appState.state.ConsensusParams.Timeout.BypassCommitTimeout = false
-	err := appState.Save()
+	stateData := cs1.GetStateData()
+	stateData.state.ConsensusParams.Timeout.BypassCommitTimeout = false
+	err := stateData.Save()
 	require.NoError(t, err)
 
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	height, round := appState.Height, appState.Round
+	height, round := stateData.Height, stateData.Round
 
 	partSize := types.BlockPartSizeBytes
 
@@ -2859,8 +2859,8 @@ func TestStateHalt1(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 	partSize := types.BlockPartSizeBytes
 
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
@@ -2895,14 +2895,14 @@ func TestStateHalt1(t *testing.T) {
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), blockID, vs3)
 	// we receive this later, but vs3 might receive it earlier and with ours will go to commit!
 	precommit4 := signVote(ctx, t, vs4, tmproto.PrecommitType, config.ChainID(), blockID,
-		appState.state.Validators.QuorumType,
-		appState.state.Validators.QuorumHash,
+		stateData.state.Validators.QuorumType,
+		stateData.state.Validators.QuorumHash,
 	)
 
 	incrementRound(vs2, vs3, vs4)
 
 	// timeout to new round
-	ensureNewTimeout(t, timeoutWaitCh, height, round, appState.voteTimeout(round).Nanoseconds())
+	ensureNewTimeout(t, timeoutWaitCh, height, round, stateData.voteTimeout(round).Nanoseconds())
 
 	round++ // moving to the next round
 
@@ -2934,49 +2934,49 @@ func TestStateOutputsBlockPartsStats(t *testing.T) {
 	cs, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1})
 	peerID, err := types.NewNodeID("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 	require.NoError(t, err)
-	appState := cs.GetAppState()
+	stateData := cs.GetStateData()
 
 	// 1) new block part
 	parts := types.NewPartSetFromData(tmrand.Bytes(100), 10)
 	msg := &BlockPartMessage{
-		Height: appState.state.InitialHeight,
+		Height: stateData.state.InitialHeight,
 		Round:  0,
 		Part:   parts.GetPart(0),
 	}
 
-	appState.ProposalBlockParts = types.NewPartSetFromHeader(parts.Header())
-	err = appState.Save()
+	stateData.ProposalBlockParts = types.NewPartSetFromHeader(parts.Header())
+	err = stateData.Save()
 	require.NoError(t, err)
-	err = cs.msgDispatcher.dispatch(ctx, &appState, msgInfo{msg, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{msg, peerID, tmtime.Now()})
 	require.NoError(t, err)
 
-	statsMessage := <-cs.statsMsgQueue
+	statsMessage := <-cs.statsMsgQueue.ch
 	require.Equal(t, msg, statsMessage.Msg, "")
 	require.Equal(t, peerID, statsMessage.PeerID, "")
 
-	appState = cs.GetAppState()
+	stateData = cs.GetStateData()
 
 	// sending the same part from different peer
-	err = cs.msgDispatcher.dispatch(ctx, &appState, msgInfo{msg, "peer2", tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{msg, "peer2", tmtime.Now()})
 	require.NoError(t, err)
 
 	// sending the part with the same height, but different round
 	msg.Round = 1
-	err = cs.msgDispatcher.dispatch(ctx, &appState, msgInfo{msg, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{msg, peerID, tmtime.Now()})
 	require.NoError(t, err)
 
 	// sending the part from the smaller height
 	msg.Height = 0
-	err = cs.msgDispatcher.dispatch(ctx, &appState, msgInfo{msg, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{msg, peerID, tmtime.Now()})
 	require.NoError(t, err)
 
 	// sending the part from the bigger height
 	msg.Height = 3
-	err = cs.msgDispatcher.dispatch(ctx, &appState, msgInfo{msg, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{msg, peerID, tmtime.Now()})
 	require.NoError(t, err)
 
 	select {
-	case <-cs.statsMsgQueue:
+	case <-cs.statsMsgQueue.ch:
 		t.Errorf("should not output stats message after receiving the known block part!")
 	case <-time.After(50 * time.Millisecond):
 	}
@@ -2993,36 +2993,36 @@ func TestStateOutputVoteStats(t *testing.T) {
 	peerID, err := types.NewNodeID("AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA")
 	require.NoError(t, err)
 
-	appState := cs.GetAppState()
-	blockID := appState.BlockID()
+	stateData := cs.GetStateData()
+	blockID := stateData.BlockID()
 
 	vote := signVote(ctx, t, vss[1], tmproto.PrecommitType, config.ChainID(), blockID,
-		appState.state.Validators.QuorumType, appState.state.Validators.QuorumHash,
+		stateData.state.Validators.QuorumType, stateData.state.Validators.QuorumHash,
 	)
 
 	voteMessage := &VoteMessage{vote}
-	err = cs.msgDispatcher.dispatch(ctx, &appState, msgInfo{voteMessage, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{voteMessage, peerID, tmtime.Now()})
 	require.NoError(t, err)
 
-	statsMessage := <-cs.statsMsgQueue
+	statsMessage := <-cs.statsMsgQueue.ch
 	require.Equal(t, voteMessage, statsMessage.Msg, "")
 	require.Equal(t, peerID, statsMessage.PeerID, "")
 
 	// sending the same part from different peer
-	err = cs.msgDispatcher.dispatch(ctx, &appState, msgInfo{&VoteMessage{vote}, "peer2", tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{&VoteMessage{vote}, "peer2", tmtime.Now()})
 	require.NoError(t, err)
 
 	// sending the vote for the bigger height
 	incrementHeight(vss[1])
 	vote = signVote(ctx, t, vss[1], tmproto.PrecommitType, config.ChainID(), blockID,
-		appState.state.Validators.QuorumType, appState.state.Validators.QuorumHash,
+		stateData.state.Validators.QuorumType, stateData.state.Validators.QuorumHash,
 	)
 
-	err = cs.msgDispatcher.dispatch(ctx, &appState, msgInfo{&VoteMessage{vote}, peerID, tmtime.Now()})
+	err = cs.msgDispatcher.dispatch(ctx, &stateData, msgInfo{&VoteMessage{vote}, peerID, tmtime.Now()})
 	require.NoError(t, err)
 
 	select {
-	case <-cs.statsMsgQueue:
+	case <-cs.statsMsgQueue.ch:
 		t.Errorf("should not output stats message after receiving the known vote or vote from bigger height")
 	case <-time.After(50 * time.Millisecond):
 	}
@@ -3035,7 +3035,7 @@ func TestSignSameVoteTwice(t *testing.T) {
 	defer cancel()
 
 	cs, vss := makeState(ctx, t, makeStateArgs{config: config, validators: 2})
-	appState := cs.GetAppState()
+	stateData := cs.GetStateData()
 
 	randBytes := tmrand.Bytes(crypto.HashSize)
 	stateID := types.RandStateID()
@@ -3050,8 +3050,8 @@ func TestSignSameVoteTwice(t *testing.T) {
 			PartSetHeader: types.PartSetHeader{Total: 10, Hash: randBytes},
 			StateID:       stateID.Hash(),
 		},
-		appState.state.Validators.QuorumType,
-		appState.state.Validators.QuorumHash,
+		stateData.state.Validators.QuorumType,
+		stateData.state.Validators.QuorumHash,
 	)
 	vote2 := signVote(
 		ctx,
@@ -3064,8 +3064,8 @@ func TestSignSameVoteTwice(t *testing.T) {
 			PartSetHeader: types.PartSetHeader{Total: 10, Hash: randBytes},
 			StateID:       stateID.Hash(),
 		},
-		appState.state.Validators.QuorumType,
-		appState.state.Validators.QuorumHash,
+		stateData.state.Validators.QuorumType,
+		stateData.state.Validators.QuorumHash,
 	)
 
 	require.Equal(t, vote, vote2)
@@ -3080,8 +3080,8 @@ func TestStateTimestamp_ProposalNotMatch(t *testing.T) {
 	defer cancel()
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)
@@ -3146,10 +3146,10 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 	proposer := css[0]
 	otherNode := css[1]
 
-	css0AppState := proposer.GetAppState()
-	css1AppState := otherNode.GetAppState()
+	css0StateData := proposer.GetStateData()
+	css1StateData := otherNode.GetStateData()
 
-	block, err := sf.MakeBlock(css0AppState.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
+	block, err := sf.MakeBlock(css0StateData.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
 	require.NoError(t, err)
 	block.CoreChainLockedHeight = 1
 
@@ -3158,8 +3158,8 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 		block.BlockID(nil),
 		block.Height,
 		0,
-		css0AppState.Votes.Precommits(0),
-		css0AppState.Validators,
+		css0StateData.Votes.Precommits(0),
+		css0StateData.Validators,
 		privvals,
 		block.StateID(),
 	)
@@ -3176,15 +3176,21 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 	parts, err := block.MakePartSet(999999999)
 	require.NoError(t, err)
 
-	peerID := css0AppState.Validators.Proposer.NodeAddress.NodeID
-	css1AppState.Proposal = proposal
-	css1AppState.ProposalBlock = block
-	css1AppState.ProposalBlockParts = parts
-	css1AppState.updateRoundStep(commit.Round, cstypes.RoundStepPrevote)
+	peerID := css0StateData.Validators.Proposer.NodeAddress.NodeID
+	css1StateData.Proposal = proposal
+	css1StateData.ProposalBlock = block
+	css1StateData.ProposalBlockParts = parts
+	css1StateData.updateRoundStep(commit.Round, cstypes.RoundStepPrevote)
+
+	ctx = msgInfoWithCtx(ctx, msgInfo{
+		Msg:         &CommitMessage{commit},
+		PeerID:      peerID,
+		ReceiveTime: time.Time{},
+	})
 
 	// This is where error "2/3 committed an invalid block" occurred before
-	added, err := otherNode.behavior.TryAddCommit(ctx, &css1AppState, TryAddCommitEvent{Commit: commit, PeerID: peerID})
-	assert.True(t, added)
+	err = otherNode.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &css1StateData)
+	assert.Equal(t, int64(2), css1StateData.Height)
 	assert.NoError(t, err)
 }
 
@@ -3197,8 +3203,8 @@ func TestStateTimestamp_ProposalMatch(t *testing.T) {
 	defer cancel()
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
-	appState := cs1.GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
 	vs2, vs3, vs4 := vss[1], vss[2], vss[3]
 
 	proposalCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryCompleteProposal)

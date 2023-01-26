@@ -170,8 +170,8 @@ func NewChainGenerator(t *testing.T, nVals int, len int) ChainGenerator {
 }
 
 func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []*validatorStub) []sm.State {
-	appState := css[0].GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := css[0].GetStateData()
+	height, round := stateData.Height, stateData.Round
 	newRoundCh := subscribe(ctx, c.t, css[0].eventBus, types.EventQueryNewRound)
 	proposalCh := subscribe(ctx, c.t, css[0].eventBus, types.EventQueryCompleteProposal)
 	// start the machine; note height should be equal to InitialHeight here,
@@ -181,7 +181,7 @@ func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []
 	ensureNewRound(c.t, newRoundCh, height, 0)
 	ensureNewProposal(c.t, proposalCh, height, round)
 
-	rs := css[0].GetAppState().RoundState
+	rs := css[0].GetStateData().RoundState
 	css[0].config.DontAutoPropose = true
 
 	blockID := rs.ProposalBlock.BlockID(nil)
@@ -190,7 +190,7 @@ func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []
 	ensureNewRound(c.t, newRoundCh, height+1, 0)
 
 	states := make([]sm.State, 0, c.len)
-	states = append(states, css[0].GetAppState().state)
+	states = append(states, css[0].GetStateData().state)
 	height++
 	for ; height <= int64(c.len); height++ {
 		incrementHeight(vss...)
@@ -198,7 +198,7 @@ func (c *ChainGenerator) generateChain(ctx context.Context, css []*State, vss []
 		ensureNewProposal(c.t, proposalCh, height, round)
 		signAddVotes(ctx, c.t, css[0], tmproto.PrecommitType, c.cfg.ChainID(), blockID, vss[1:c.nVals]...)
 		ensureNewRound(c.t, newRoundCh, height+1, 0)
-		states = append(states, css[0].GetAppState().state)
+		states = append(states, css[0].GetStateData().state)
 	}
 	return states
 }
@@ -242,7 +242,7 @@ func (c *ChainGenerator) Generate(ctx context.Context, t *testing.T) Chain {
 
 func stopConsensusAtHeight(height int64, round int32) func(cs *State) bool {
 	return func(cs *State) bool {
-		appState := cs.GetAppState()
-		return appState.Height == height && appState.Round == round
+		stateData := cs.GetStateData()
+		return stateData.Height == height && stateData.Round == round
 	}
 }

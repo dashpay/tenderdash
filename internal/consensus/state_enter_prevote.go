@@ -13,7 +13,12 @@ type EnterPrevoteEvent struct {
 	AllowOldBlocks bool
 }
 
-// EnterPrevoteCommand ...
+// GetType returns EnterPrevoteType event-type
+func (e *EnterPrevoteEvent) GetType() EventType {
+	return EnterPrevoteType
+}
+
+// EnterPrevoteAction ...
 // Enter: `timeoutPropose` after entering Propose.
 // Enter: proposal block and POL is ready.
 // If we received a valid proposal within this round and we are not locked on a block,
@@ -21,38 +26,38 @@ type EnterPrevoteEvent struct {
 // Otherwise, if we receive a valid proposal that matches the block we are
 // locked on or matches a block that received a POL in a round later than our
 // locked round, prevote for the proposal, otherwise vote nil.
-type EnterPrevoteCommand struct {
-	logger log.Logger
-	//prevoter *Prevoter
+type EnterPrevoteAction struct {
+	logger         log.Logger
+	eventPublisher *EventPublisher
 }
 
 // Execute ...
-func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, event StateEvent) (any, error) {
-	epe := event.Data.(EnterPrevoteEvent)
-	appState := event.AppState
+func (c *EnterPrevoteAction) Execute(ctx context.Context, statEvent StateEvent) error {
+	epe := statEvent.Data.(*EnterPrevoteEvent)
+	stateData := statEvent.StateData
 	height := epe.Height
 	round := epe.Round
 
-	logger := cs.logger.With("height", height, "round", round)
+	logger := c.logger.With("height", height, "round", round)
 
-	if appState.Height != height || round < appState.Round || (appState.Round == round && cstypes.RoundStepPrevote <= appState.Step) {
+	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPrevote <= stateData.Step) {
 		logger.Debug("entering prevote step with invalid args",
-			"height", appState.Height,
-			"round", appState.Round,
-			"step", appState.Step)
-		return nil, nil
+			"height", stateData.Height,
+			"round", stateData.Round,
+			"step", stateData.Step)
+		return nil
 	}
 
 	defer func() {
 		// Done enterPrevote:
-		appState.updateRoundStep(round, cstypes.RoundStepPrevote)
-		behavior.newStep(appState.RoundState)
+		stateData.updateRoundStep(round, cstypes.RoundStepPrevote)
+		c.eventPublisher.PublishNewRoundStepEvent(stateData.RoundState)
 	}()
 
 	logger.Debug("entering prevote step",
-		"height", appState.Height,
-		"round", appState.Round,
-		"step", appState.Step)
+		"height", stateData.Height,
+		"round", stateData.Round,
+		"step", stateData.Step)
 
 	// Sign and broadcast vote as necessary
 	prevoteEvent := DoPrevoteEvent{
@@ -60,12 +65,11 @@ func (cs *EnterPrevoteCommand) Execute(ctx context.Context, behavior *Behavior, 
 		Round:          round,
 		AllowOldBlocks: epe.AllowOldBlocks,
 	}
-	err := behavior.DoPrevote(ctx, appState, prevoteEvent)
+	err := statEvent.Ctrl.Dispatch(ctx, &prevoteEvent, stateData)
 	if err != nil {
-		return nil, err
+		return err
 	}
-
 	// Once `addVote` hits any +2/3 prevotes, we will go to PrevoteWait
 	// (so we have more time to try and collect +2/3 prevotes for a single block)
-	return nil, nil
+	return nil
 }

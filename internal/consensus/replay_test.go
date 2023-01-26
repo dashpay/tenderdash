@@ -394,8 +394,8 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 	for i := 0; i < nPeers; i++ {
 		vss[i] = newValidatorStub(css[i].privValidator, int32(i), 0)
 	}
-	appState := css[0].GetAppState()
-	height, round := appState.Height, appState.Round
+	stateData := css[0].GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	// start the machine; note height should be equal to InitialHeight here,
 	// so we don't need to increment it
@@ -419,18 +419,18 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 		height++
 		incrementHeight(vss...)
 		vals := findSuitableValidatorSetUpdates(height, valSetUpdates).ValidatorUpdates
-		appState = css[0].GetAppState()
-		require.Len(t, appState.Validators.Validators, len(vals))
+		stateData = css[0].GetStateData()
+		require.Len(t, stateData.Validators.Validators, len(vals))
 		for _, tx := range txs {
 			err = assertMempool(t, css[0].txNotifier).CheckTx(ctx, tx, nil, mempool.TxInfo{})
 			assert.Nil(t, err)
 		}
-		vssForSigning = determineActiveValidators(ctx, t, vss, appState.Validators)
+		vssForSigning = determineActiveValidators(ctx, t, vss, stateData.Validators)
 		blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), txs.ToSliceOfBytes())
 		ensureNewProposal(t, proposalCh, height, round)
 
-		appState = css[0].GetAppState()
-		require.True(t, appState.Validators.HasPublicKeys)
+		stateData = css[0].GetStateData()
+		require.True(t, stateData.Validators.HasPublicKeys)
 		signAddVotes(ctx, t, css[0], tmproto.PrecommitType, sim.Config.ChainID(), blockID, vssForSigning...)
 		ensureNewRound(t, newRoundCh, height+1, 0)
 	}
@@ -484,14 +484,14 @@ func createSignSendProposal(ctx context.Context,
 		partSize = types.BlockPartSizeBytes
 	)
 
-	appState := css[0].GetAppState()
+	stateData := css[0].GetStateData()
 
-	quorumType := appState.Validators.QuorumType
-	quorumHash := appState.Validators.QuorumHash
-	height := appState.RoundState.Height
-	round := appState.RoundState.Round
+	quorumType := stateData.Validators.QuorumType
+	quorumHash := stateData.Validators.QuorumHash
+	height := stateData.RoundState.Height
+	round := stateData.RoundState.Round
 
-	proposer := appState.Validators.GetProposer()
+	proposer := stateData.Validators.GetProposer()
 	proposerVs := findValByProTxHash(ctx, t, vss, proposer.ProTxHash)
 	proposerCs := findStateByProTxHash(t, css, proposer.ProTxHash)
 
@@ -1371,18 +1371,18 @@ func TestWALRoundsSkipper(t *testing.T) {
 		)},
 	}
 	node := ng.Generate(ctx, t)
-	doPrevoteOrigin := node.csState.behavior.commander.commands[DoPrevoteType]
-	doPrevoteCmd := newMockCommand(func(ctx context.Context, behavior *Behavior, stateEvent StateEvent) (any, error) {
-		event := stateEvent.Data.(DoPrevoteEvent)
+	doPrevoteOrigin := node.csState.ctrl.Get(DoPrevoteType)
+	doPrevoteCmd := newMockAction(func(ctx context.Context, stateEvent StateEvent) error {
+		event := stateEvent.Data.(*DoPrevoteEvent)
 		height := event.Height
 		round := event.Round
 		if height >= 3 && round < 10 {
-			node.csState.voteSigner.signAddVote(ctx, stateEvent.AppState, tmproto.PrevoteType, types.BlockID{})
-			return nil, nil
+			node.csState.voteSigner.signAddVote(ctx, stateEvent.StateData, tmproto.PrevoteType, types.BlockID{})
+			return nil
 		}
-		return doPrevoteOrigin.Execute(ctx, behavior, stateEvent)
+		return doPrevoteOrigin.Execute(ctx, stateEvent)
 	})
-	node.csState.behavior.RegisterCommand(DoPrevoteType, doPrevoteCmd)
+	node.csState.ctrl.Register(DoPrevoteType, doPrevoteCmd)
 	walBody, err := WALWithNBlocks(ctx, t, logger, node, chainLen)
 	require.NoError(t, err)
 	walFile := tempWALWithData(t, walBody)

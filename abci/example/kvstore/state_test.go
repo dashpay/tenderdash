@@ -1,7 +1,6 @@
 package kvstore
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"testing"
 
@@ -16,9 +15,9 @@ import (
 func TestStateMarshalUnmarshal(t *testing.T) {
 	var (
 		// key3 is some key with random bytes that is not printable
-		key3 = mustHexDecode("69e57b53d00c4516a07976cb8d38a430")
+		key3 = tmbytes.MustHexDecode("69e57b53d00c4516a07976cb8d38a430")
 		// value3 is some value with random bytes that is not printable
-		value3 = mustHexDecode("78a8f0f46a0d75cfdad3c753aac92dc9")
+		value3 = tmbytes.MustHexDecode("78a8f0f46a0d75cfdad3c753aac92dc9")
 	)
 
 	state := NewKvState(dbm.NewMemDB(), 1)
@@ -96,7 +95,7 @@ func TestStateUnmarshal(t *testing.T) {
 				   "key2": "value2"
 				}}`),
 			expectHeight:  6531,
-			expectAppHash: mustHexDecode("1C9ECEC90E28D2461650418635878A5C91E49F47586ECF75F2B0CBB94E897112"),
+			expectAppHash: tmbytes.MustHexDecode("1C9ECEC90E28D2461650418635878A5C91E49F47586ECF75F2B0CBB94E897112"),
 			expectKeyVals: []keyVals{
 				{[]byte("key1"), []byte("value1")},
 				{[]byte("key2"), []byte("value2")},
@@ -128,12 +127,4 @@ func TestStateUnmarshal(t *testing.T) {
 		})
 	}
 
-}
-
-func mustHexDecode(s string) []byte {
-	bz, err := hex.DecodeString(s)
-	if err != nil {
-		panic(err.Error())
-	}
-	return bz
 }

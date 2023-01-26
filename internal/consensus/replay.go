@@ -44,7 +44,7 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 		return nil
 	}
 
-	appState := cs.appStateStore.Get()
+	stateData := cs.stateDataStore.Get()
 
 	// for logging
 	switch m := msg.Msg.(type) {
@@ -73,12 +73,12 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 		switch msg := m.Msg.(type) {
 		case *ProposalMessage:
 			p := msg.Proposal
-			if cs.config.WalSkipRoundsToLast && p.Round > appState.Round {
-				appState.Validators.IncrementProposerPriority(p.Round - appState.Round)
-				appState.Votes.SetRound(p.Round)
-				appState.Round = p.Round
+			if cs.config.WalSkipRoundsToLast && p.Round > stateData.Round {
+				stateData.Validators.IncrementProposerPriority(p.Round - stateData.Round)
+				stateData.Votes.SetRound(p.Round)
+				stateData.Round = p.Round
 			}
-			cs.logger.Info("Replay: Proposal", "height", p.Height, "round", p.Round, "cs.Round", appState.Round,
+			cs.logger.Info("Replay: Proposal", "height", p.Height, "round", p.Round, "cs.Round", stateData.Round,
 				"header", p.BlockID.PartSetHeader, "pol", p.POLRound, "peer", peerID)
 		case *BlockPartMessage:
 			cs.logger.Info("Replay: BlockPart", "height", msg.Height, "round", msg.Round, "peer", peerID)
@@ -87,30 +87,30 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 			cs.logger.Info("Replay: Vote", "height", v.Height, "round", v.Round, "type", v.Type,
 				"blockID", v.BlockID, "peer", peerID)
 		}
-		_ = cs.msgDispatcher.dispatch(ctx, &appState, m, msgFromReplay())
+		_ = cs.msgDispatcher.dispatch(ctx, &stateData, m, msgFromReplay())
 	case timeoutInfo:
 		cs.logger.Info("Replay: Timeout", "height", m.Height, "round", m.Round, "step", m.Step, "dur", m.Duration)
-		cs.handleTimeout(ctx, m, &appState)
+		cs.handleTimeout(ctx, m, &stateData)
 	default:
 		return fmt.Errorf("replay: Unknown TimedWALMessage type: %v", reflect.TypeOf(msg.Msg))
 	}
-	err := appState.Save()
+	err := stateData.Save()
 	if err != nil {
-		return fmt.Errorf("failed to update app-state: %w", err)
+		return fmt.Errorf("failed to update state-data: %w", err)
 	}
 	return nil
 }
 
 // Replay only those messages since the last block.  `timeoutRoutine` should
 // run concurrently to read off tickChan.
-func (cs *State) catchupReplay(ctx context.Context, appState AppState) error {
-	csHeight := appState.Height
+func (cs *State) catchupReplay(ctx context.Context, stateData StateData) error {
+	csHeight := stateData.Height
 	// Set replayMode to true so we don't log signing errors.
 	cs.replayMode = true
-	_ = cs.observer.Notify(SetReplayMode, cs.replayMode)
+	cs.evsw.FireEvent(setReplayMode, cs.replayMode)
 	defer func() {
 		cs.replayMode = false
-		_ = cs.observer.Notify(SetReplayMode, cs.replayMode)
+		cs.evsw.FireEvent(setReplayMode, cs.replayMode)
 	}()
 
 	// Ensure that #ENDHEIGHT for this height doesn't exist.
@@ -138,15 +138,15 @@ func (cs *State) catchupReplay(ctx context.Context, appState AppState) error {
 	// Search for last height marker.
 	//
 	// Ignore data corruption errors in previous heights because we only care about last height
-	if csHeight < appState.state.InitialHeight {
+	if csHeight < stateData.state.InitialHeight {
 		return fmt.Errorf(
 			"cannot replay height %v, below initial height %v",
 			csHeight,
-			appState.state.InitialHeight,
+			stateData.state.InitialHeight,
 		)
 	}
 	endHeight := csHeight - 1
-	if csHeight == appState.state.InitialHeight {
+	if csHeight == stateData.state.InitialHeight {
 		endHeight = 0
 	}
 	gr, found, err = cs.wal.SearchForEndHeight(
