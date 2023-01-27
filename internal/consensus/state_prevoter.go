@@ -88,6 +88,7 @@ func (p *prevoter) signVote(ctx context.Context, stateData *StateData) {
 	p.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, blockID)
 }
 
+// checkProposalBlock returns true when proposal block can be prevoted based on proposal locked state
 func (p *prevoter) checkProposalBlock(stateData *StateData) bool {
 	/*
 		22: upon <PROPOSAL, h_p, round_p, v, −1> from proposer(h_p, round_p) while step_p = propose do
