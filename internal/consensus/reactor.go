@@ -397,24 +397,6 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 	}
 }
 
-func (r *Reactor) getRoundState() cstypes.RoundState {
-	return r.state.GetRoundState()
-}
-
-// send sends a message to provided channel.
-// If to is nil, message will be broadcasted.
-func (r *Reactor) send(ctx context.Context, ps *PeerState, channel p2p.Channel, msg proto.Message) error {
-	select {
-	case <-ctx.Done():
-		return errReactorClosed
-	default:
-		return channel.Send(ctx, p2p.Envelope{
-			To:      ps.peerID,
-			Message: msg,
-		})
-	}
-}
-
 // broadcast sends a broadcast message to all peers connected to the `channel`.
 func (r *Reactor) broadcast(ctx context.Context, channel p2p.Channel, msg proto.Message) error {
 	select {
@@ -436,11 +418,6 @@ func (r *Reactor) logResult(err error, logger log.Logger, message string, keyval
 	}
 	logger.Debug(message+" success", keyvals...)
 	return true
-}
-
-func (r *Reactor) isValidator(proTxHash types.ProTxHash) bool {
-	_, vset := r.state.GetValidatorSet()
-	return vset.HasProTxHash(proTxHash)
 }
 
 // processPeerUpdate process a peer update message. For new or reconnected peers,
@@ -490,7 +467,8 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 		"peer_proTxHash", ps.GetProTxHash().ShortString(),
 	)
 	// TODO needs to register this gossip worker, to be able to stop it once a peer will be down
-	pgw := newPeerGossipWorker(logger, ps, r.state, chans)
+	msgSender := p2pMsgSender{logger: logger, ps: ps, chans: chans}
+	pgw := newPeerGossipWorker(logger, ps, r.state, &msgSender)
 
 	select {
 	case <-ctx.Done():
@@ -531,7 +509,7 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 			if !r.WaitSync() {
 				go func() {
 					rs := r.state.GetRoundState()
-					err := r.send(ctx, ps, chans.state, rs.NewRoundStepMessage())
+					err := msgSender.send(ctx, rs.NewRoundStepMessage())
 					r.logResult(err, r.logger, "sending round step msg", "height", rs.Height, "round", rs.Round)
 				}()
 			}
@@ -763,7 +741,7 @@ func (r *Reactor) handleVoteSetBitsMessage(ctx context.Context, envelope *p2p.En
 
 	switch msg := envelope.Message.(type) {
 	case *tmcons.VoteSetBits:
-		stateData := r.state.stateDataStore.Get()
+		stateData := r.state.GetStateData()
 		height, votes := stateData.Height, stateData.Votes
 
 		vsbMsg := msgI.(*VoteSetBitsMessage)

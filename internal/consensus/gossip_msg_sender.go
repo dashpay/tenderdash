@@ -34,7 +34,7 @@ func (c *p2pMsgSender) send(ctx context.Context, protoMsg proto.Message) error {
 		return c.sendTo(ctx, c.chans.data, protoMsg)
 	case *tmproto.Proposal:
 		return c.sendTo(ctx, c.chans.data, &tmcons.Proposal{Proposal: *pm})
-	case *tmcons.VoteSetMaj23:
+	case *tmcons.VoteSetMaj23, *tmcons.NewRoundStep:
 		return c.sendTo(ctx, c.chans.state, protoMsg)
 	}
 	return fmt.Errorf("given unsupported p2p message %T", protoMsg)

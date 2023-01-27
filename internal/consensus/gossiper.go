@@ -91,15 +91,15 @@ func (g *msgGossiper) GossipVoteSetMaj23(
 			}
 		}
 	}
-	keyVals := []any{
+	logger := g.logger.With([]any{
 		"height", prs.Height,
 		"round", prs.Round,
-	}
+	})
 	for _, msg := range msgs {
-		g.logger.Debug("syncing vote set +2/3 message")
+		logger.Debug("syncing vote set +2/3 message")
 		err := g.msgSender.send(ctx, msg)
 		if err != nil {
-			g.logger.Error("failed to syncing vote set +2/3 message to the peer", logKeyValsWithError(keyVals, err)...)
+			logger.Error("failed to syncing vote set +2/3 message to the peer", "error", err)
 		}
 	}
 }
@@ -113,30 +113,30 @@ func (g *msgGossiper) GossipProposalBlockParts(
 	if !ok {
 		return
 	}
-	keyVals := []any{
+	logger := g.logger.With([]any{
 		"height", prs.Height,
 		"round", prs.Round,
 		"part_index", index,
-	}
-	g.logger.Debug("syncing proposal block part to the peer", keyVals...)
+	})
+	logger.Debug("syncing proposal block part to the peer")
 	part := rs.ProposalBlockParts.GetPart(index)
 	// NOTE: A peer might have received a different proposal message, so this Proposal msg will be rejected!
 	err := g.syncProposalBlockPart(ctx, part, rs.Height, rs.Round)
 	if err != nil {
-		g.logger.Error("failed to sync proposal block part to the peer", logKeyValsWithError(keyVals, err)...)
+		logger.Error("failed to sync proposal block part to the peer", "error", err)
 	}
 }
 
 func (g *msgGossiper) GossipProposal(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
-	keyVals := []any{
+	logger := g.logger.With([]any{
 		"height", prs.Height,
 		"round", prs.Round,
-	}
+	})
 	// Proposal: share the proposal metadata with peer.
-	g.logger.Debug("syncing proposal", keyVals...)
+	logger.Debug("syncing proposal")
 	err := g.sync(ctx, rs.Proposal.ToProto(), updatePeerProposal(g.ps, rs.Proposal))
 	if err != nil {
-		g.logger.Error("failed to sync proposal to the peer", logKeyValsWithError(keyVals, err)...)
+		logger.Error("failed to sync proposal to the peer", "error", err)
 	}
 	// ProposalPOL: lets peer know which POL votes we have so far. The peer
 	// must receive ProposalMessage first. Note, rs.Proposal was validated,
@@ -152,10 +152,10 @@ func (g *msgGossiper) GossipProposal(ctx context.Context, rs cstypes.RoundState,
 		ProposalPolRound: rs.Proposal.POLRound,
 		ProposalPol:      *pPolProto,
 	}
-	g.logger.Debug("syncing proposal POL", keyVals...)
+	logger.Debug("syncing proposal POL")
 	err = g.sync(ctx, propPOLMsg, nil)
 	if err != nil {
-		g.logger.Error("failed to sync proposal POL to the peer", logKeyValsWithError(keyVals, err)...)
+		logger.Error("failed to sync proposal POL to the peer", "error", err)
 	}
 }
 
@@ -176,10 +176,10 @@ func (g *msgGossiper) GossipBlockPartsAndCommitForCatchup(
 }
 
 func (g *msgGossiper) GossipCommit(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
-	keyVals := []any{
+	logger := g.logger.With([]any{
 		"height", rs.Height,
 		"peer_height", prs.Height,
-	}
+	})
 	var commit *types.Commit
 	blockStoreBase := g.blockStore.Base()
 	if prs.Height+1 == rs.Height && !prs.HasCommit {
@@ -193,37 +193,33 @@ func (g *msgGossiper) GossipCommit(ctx context.Context, rs cstypes.RoundState, p
 		if prs.Height == 0 {
 			return // not an error when we are at genesis
 		}
-		g.logger.Error("commit not found", keyVals...)
+		logger.Error("commit not found")
 		return
 	}
-	g.logger.Debug("syncing commit", keyVals...)
+	logger.Debug("syncing commit")
 	err := g.sync(ctx, commit.ToProto(), updatePeerCommit(g.ps, commit))
 	if err != nil {
-		g.logger.Error("failed to sync commit to the peer", logKeyValsWithError(keyVals, err))
+		logger.Error("failed to sync commit to the peer", "error", err)
 	}
 }
 
 func (g *msgGossiper) GossipVote(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
-	votes := getVoteSetForGossip(rs, prs)
-	if votes == nil {
-		return
-	}
-	vote, ok := g.ps.PickVoteToSend(votes)
-	if !ok {
+	vote, found := g.pickVoteForGossip(rs, prs)
+	if !found {
 		return
 	}
 	protoVote := vote.ToProto()
-	keyVals := []any{
+	logger := g.logger.With([]any{
 		"vote", vote,
 		"val_proTxHash", vote.ValidatorProTxHash.ShortString(),
 		"vote_height", vote.Height,
 		"vote_round", vote.Round,
 		"proto_vote_size", protoVote.Size(),
-	}
-	g.logger.Debug("syncing vote message", keyVals...)
+	})
+	logger.Debug("syncing vote message")
 	err := g.sync(ctx, protoVote, updatePeerVote(g.ps, vote))
 	if err != nil {
-		g.logger.Error("failed to sync vote message to the peer", logKeyValsWithError(keyVals, err)...)
+		logger.Error("failed to sync vote message to the peer", "error", err)
 	}
 }
 
@@ -252,20 +248,20 @@ func (g *msgGossiper) syncProposalBlockPart(ctx context.Context, part *types.Par
 	if err != nil {
 		return fmt.Errorf("failed to convert block part to proto, error: %w", err)
 	}
-	keyVals := []any{
+	logger := g.logger.With([]any{
 		"height", height,
 		"round", round,
 		"part_index", part.Index,
-	}
+	})
 	protoBlockPart := &tmcons.BlockPart{
 		Height: height, // not our height, so it does not matter
 		Round:  round,  // not our height, so it does not matter
 		Part:   *protoPart,
 	}
-	g.logger.Debug("syncing proposal block part", keyVals...)
+	logger.Debug("syncing proposal block part")
 	err = g.sync(ctx, protoBlockPart, updatePeerProposalBlockPart(g.ps, height, round, int(part.Index)))
 	if err != nil {
-		g.logger.Error("failed to sync proposal block part to the peer", logKeyValsWithError(keyVals, err)...)
+		logger.Error("failed to sync proposal block part to the peer", "error", err)
 	}
 	return nil
 }
@@ -298,6 +294,43 @@ func (g *msgGossiper) ensurePeerPartSetHeader(blockPartSetHeader types.PartSetHe
 		"peer_block_part_set_header", peerPartSetHeader,
 	)
 	return false
+}
+
+// pickVoteForGossip picks a vote to sends it to the peer. It will return (*types.Vote and true) if
+// there is a vote to send and (nil,false) otherwise.
+func (g *msgGossiper) pickVoteForGossip(rs cstypes.RoundState, prs *cstypes.PeerRoundState) (*types.Vote, bool) {
+	var voteSets []*types.VoteSet
+	// if there are lastPrecommits to send
+	if prs.Step == cstypes.RoundStepNewHeight {
+		voteSets = append(voteSets, rs.LastPrecommits)
+	}
+	// if there are POL prevotes to send
+	if prs.Step <= cstypes.RoundStepPropose && prs.Round != -1 && prs.Round <= rs.Round && prs.ProposalPOLRound != -1 {
+		voteSets = append(voteSets, rs.Votes.Prevotes(prs.ProposalPOLRound))
+	}
+	// if there are prevotes to send
+	if prs.Step <= cstypes.RoundStepPrevoteWait && prs.Round != -1 && prs.Round <= rs.Round {
+		voteSets = append(voteSets, rs.Votes.Prevotes(prs.Round))
+	}
+	// if there are precommits to send
+	if prs.Step <= cstypes.RoundStepPrecommitWait && prs.Round != -1 && prs.Round <= rs.Round {
+		voteSets = append(voteSets, rs.Votes.Precommits(prs.Round))
+	}
+	// if there are prevotes to send (which are needed because of validBlock mechanism)
+	if prs.Round != -1 && prs.Round <= rs.Round {
+		voteSets = append(voteSets, rs.Votes.Prevotes(prs.Round))
+	}
+	// if there are POLPrevotes to send
+	if prs.ProposalPOLRound != -1 {
+		voteSets = append(voteSets, rs.Votes.Prevotes(prs.ProposalPOLRound))
+	}
+	for _, voteSet := range voteSets {
+		vote, ok := g.ps.PickVoteToSend(voteSet)
+		if ok {
+			return vote, true
+		}
+	}
+	return nil, false
 }
 
 type blockRepository struct {
@@ -347,13 +380,6 @@ func (r *blockRepository) loadPart(height int64, index int) (*types.Part, error)
 		"index", index,
 	)
 	return nil, errFailedLoadBlockPart
-}
-
-func logKeyValsWithError(keyVals []any, err error) []any {
-	if err == nil {
-		return keyVals
-	}
-	return append(keyVals, "error", err)
 }
 
 func updatePeerProposal(ps *PeerState, proposal *types.Proposal) func() error {

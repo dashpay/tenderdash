@@ -39,17 +39,12 @@ func newPeerGossipWorker(
 	logger log.Logger,
 	ps *PeerState,
 	state *State,
-	chans channelBundle,
+	msgSender *p2pMsgSender,
 ) *peerGossipWorker {
-	msgSender := p2pMsgSender{
-		logger: logger,
-		ps:     ps,
-		chans:  chans,
-	}
 	gossiper := msgGossiper{
 		ps:         ps,
 		blockStore: &blockRepository{BlockStore: state.blockStore},
-		msgSender:  &msgSender,
+		msgSender:  msgSender,
 		logger:     logger,
 		optimistic: true,
 	}

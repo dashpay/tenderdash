@@ -6,7 +6,6 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/types"
 )
 
 func queryMaj23GossipHandler(ps *PeerState, gossiper Gossiper) gossipHandlerFunc {
@@ -135,32 +134,4 @@ func shouldCommitBeGossiped(rs cstypes.RoundState, prs *cstypes.PeerRoundState) 
 
 func shouldVoteBeGossiped(rs cstypes.RoundState, prs *cstypes.PeerRoundState, isValidator bool) bool {
 	return isValidator && rs.Height == prs.Height
-}
-
-func getVoteSetForGossip(rs cstypes.RoundState, prs *cstypes.PeerRoundState) *types.VoteSet {
-	// if there are lastPrecommits to send
-	if prs.Step == cstypes.RoundStepNewHeight {
-		return rs.LastPrecommits
-	}
-	// if there are POL prevotes to send
-	if prs.Step <= cstypes.RoundStepPropose && prs.Round != -1 && prs.Round <= rs.Round && prs.ProposalPOLRound != -1 {
-		return rs.Votes.Prevotes(prs.ProposalPOLRound)
-	}
-	// if there are prevotes to send
-	if prs.Step <= cstypes.RoundStepPrevoteWait && prs.Round != -1 && prs.Round <= rs.Round {
-		return rs.Votes.Prevotes(prs.Round)
-	}
-	// if there are precommits to send
-	if prs.Step <= cstypes.RoundStepPrecommitWait && prs.Round != -1 && prs.Round <= rs.Round {
-		return rs.Votes.Precommits(prs.Round)
-	}
-	// if there are prevotes to send (which are needed because of validBlock mechanism)
-	if prs.Round != -1 && prs.Round <= rs.Round {
-		return rs.Votes.Prevotes(prs.Round)
-	}
-	// if there are POLPrevotes to send
-	if prs.ProposalPOLRound != -1 {
-		return rs.Votes.Prevotes(prs.ProposalPOLRound)
-	}
-	return nil
 }

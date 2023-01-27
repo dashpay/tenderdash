@@ -139,7 +139,7 @@ func voteMessageHandler(ctrl *Controller, logger log.Logger) msgHandlerFunc {
 			keyVals = append(keyVals, "error", err)
 		}
 		logger.Debug("received vote", keyVals...)
-		return nil
+		return err
 	}
 }
 
