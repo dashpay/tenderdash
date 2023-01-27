@@ -2,12 +2,12 @@ package consensus
 
 import (
 	"context"
-	"github.com/stretchr/testify/require"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/benbjohnson/clock"
+	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/libs/log"
 )
