@@ -117,6 +117,7 @@ func (p *prevoter) checkProposalBlock(stateData *StateData) bool {
 	return false
 }
 
+// checkPrevoteMaj23 checks if the proposal can be prevoted based on the majority of prevotes received from other validators
 func (p *prevoter) checkPrevoteMaj23(stateData *StateData) bool {
 	/*
 		28: upon <PROPOSAL, h_p, round_p, v, v_r> from proposer(h_p, round_p) AND 2f + 1 <PREVOTE, h_p, v_r, id(v)> while
