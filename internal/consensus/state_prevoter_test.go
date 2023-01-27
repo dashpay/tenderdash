@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
@@ -41,7 +40,7 @@ func (suite *PrevoterTestSuite) SetupTest() {
 	valSet, privVals := mockValidatorSet()
 	suite.valSet = valSet
 	proTxHash, err := privVals[0].GetProTxHash(context.Background())
-	require.NoError(suite.T(), err)
+	suite.Require().NoError(err)
 	suite.privVal = privValidator{
 		PrivValidator: privVals[0],
 		ProTxHash:     proTxHash,
@@ -185,7 +184,7 @@ func (suite *PrevoterTestSuite) TestCheckProposalBlock() {
 			if tc.modifier != nil {
 				tc.modifier(&stateData)
 			}
-			suite.Equal(tc.want, suite.prevoter.checkProposalBlock(&stateData))
+			suite.Equal(tc.want, suite.prevoter.checkProposalBlock(stateData.RoundState))
 		})
 	}
 }
@@ -280,7 +279,7 @@ func (suite *PrevoterTestSuite) TestCheckPrevoteMaj23() {
 			if tc.modifier != nil {
 				tc.modifier(&stateData)
 			}
-			suite.Equal(tc.want, suite.prevoter.checkPrevoteMaj23(&stateData))
+			suite.Equal(tc.want, suite.prevoter.checkPrevoteMaj23(stateData.RoundState))
 		})
 	}
 }

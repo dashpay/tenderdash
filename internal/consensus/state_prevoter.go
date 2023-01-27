@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
@@ -22,7 +23,6 @@ type prevoter struct {
 	voteSigner *voteSigner
 	blockExec  *blockExecutor
 	metrics    *Metrics
-	checker    []func(stateData *StateData) bool
 }
 
 func newPrevote(logger log.Logger, voteSigner *voteSigner, blockExec *blockExecutor, metrics *Metrics) *prevoter {
@@ -32,17 +32,14 @@ func newPrevote(logger log.Logger, voteSigner *voteSigner, blockExec *blockExecu
 		blockExec:  blockExec,
 		metrics:    metrics,
 	}
-	p.checker = []func(stateData *StateData) bool{
-		p.checkProposalBlock,
-		p.checkPrevoteMaj23,
-	}
 	return p
 }
 
 func (p *prevoter) Do(ctx context.Context, stateData *StateData) error {
 	err := stateData.isValidForPrevote()
 	if err != nil {
-		p.logger.Debug("prevoting nil: "+err.Error(), prevoteKeyVals(stateData)...)
+		keyVals := append(prevoteKeyVals(stateData), "error", err)
+		p.logger.Debug("prevote is invalid", keyVals...)
 		p.signAndAddNilVote(ctx, stateData)
 		return err
 	}
@@ -62,12 +59,12 @@ func (p *prevoter) Do(ctx context.Context, stateData *StateData) error {
 func (p *prevoter) handleError(err error) {
 	p.metrics.MarkProposalProcessed(false)
 	if errors.Is(err, sm.ErrBlockRejected) {
-		p.logger.Error("prevoting nil: state machine rejected a proposed block; this should not happen:"+
+		p.logger.Error("state machine rejected a proposed block; this should not happen:"+
 			"the proposer may be misbehaving; prevoting nil", "error", err)
 		return
 	}
 	if errors.As(err, &sm.ErrInvalidBlock{}) {
-		p.logger.Error("prevoting nil: consensus deems this block invalid", "error", err)
+		p.logger.Error("consensus deems this block invalid", "error", err)
 		return
 	}
 	// Unknown error, so we panic
@@ -75,11 +72,12 @@ func (p *prevoter) handleError(err error) {
 }
 
 func (p *prevoter) signAndAddNilVote(ctx context.Context, stateData *StateData) {
+	p.logger.Debug("sending prevote nil")
 	p.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
 }
 
 func (p *prevoter) signVote(ctx context.Context, stateData *StateData) {
-	shouldBeSent := p.shouldVoteBeSent(stateData)
+	shouldBeSent := p.shouldVoteBeSent(stateData.RoundState)
 	if !shouldBeSent {
 		p.signAndAddNilVote(ctx, stateData)
 		return
@@ -88,7 +86,7 @@ func (p *prevoter) signVote(ctx context.Context, stateData *StateData) {
 	p.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, blockID)
 }
 
-func (p *prevoter) checkProposalBlock(stateData *StateData) bool {
+func (p *prevoter) checkProposalBlock(rs cstypes.RoundState) bool {
 	/*
 		22: upon <PROPOSAL, h_p, round_p, v, −1> from proposer(h_p, round_p) while step_p = propose do
 		23: if valid(v) && (lockedRound_p = −1 || lockedValue_p = v) then
@@ -102,21 +100,21 @@ func (p *prevoter) checkProposalBlock(stateData *StateData) bool {
 		we prevote nil since we are locked on a different value. Otherwise, if we're not locked on a block
 		or the proposal matches our locked block, we prevote the proposal.
 	*/
-	if stateData.Proposal.POLRound != -1 {
+	if rs.Proposal.POLRound != -1 {
 		return false
 	}
-	if stateData.LockedRound == -1 {
+	if rs.LockedRound == -1 {
 		p.logger.Debug("prevote step: ProposalBlock is valid and there is no locked block; prevoting the proposal")
 		return true
 	}
-	if stateData.ProposalBlock.HashesTo(stateData.LockedBlock.Hash()) {
+	if rs.ProposalBlock.HashesTo(rs.LockedBlock.Hash()) {
 		p.logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
 		return true
 	}
 	return false
 }
 
-func (p *prevoter) checkPrevoteMaj23(stateData *StateData) bool {
+func (p *prevoter) checkPrevoteMaj23(rs cstypes.RoundState) bool {
 	/*
 		28: upon <PROPOSAL, h_p, round_p, v, v_r> from proposer(h_p, round_p) AND 2f + 1 <PREVOTE, h_p, v_r, id(v)> while
 		step_p = propose && (v_r ≥ 0 && v_r < round_p) do
@@ -134,39 +132,33 @@ func (p *prevoter) checkPrevoteMaj23(stateData *StateData) bool {
 		the network prevoted a value in round 'v_r' but we did not lock on it, possibly because we
 		missed the proposal in round 'v_r'.
 	*/
-	blockID, ok := stateData.Votes.Prevotes(stateData.Proposal.POLRound).TwoThirdsMajority()
+	blockID, ok := rs.Votes.Prevotes(rs.Proposal.POLRound).TwoThirdsMajority()
 	if !ok {
 		return false
 	}
-	if !stateData.ProposalBlock.HashesTo(blockID.Hash) {
+	if !rs.ProposalBlock.HashesTo(blockID.Hash) {
 		return false
 	}
-	if stateData.Proposal.POLRound < 0 {
+	if rs.Proposal.POLRound < 0 {
 		return false
 	}
-	if stateData.Proposal.POLRound >= stateData.Round {
+	if rs.Proposal.POLRound >= rs.Round {
 		return false
 	}
-	if stateData.LockedRound <= stateData.Proposal.POLRound {
+	if rs.LockedRound <= rs.Proposal.POLRound {
 		p.logger.Debug("prevote step: ProposalBlock is valid and received a 2/3 majority in a round later than the locked round",
 			"outcome", "prevoting the proposal")
 		return true
 	}
-	if stateData.ProposalBlock.HashesTo(stateData.LockedBlock.Hash()) {
+	if rs.ProposalBlock.HashesTo(rs.LockedBlock.Hash()) {
 		p.logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
 		return true
 	}
 	return false
 }
 
-func (p *prevoter) shouldVoteBeSent(stateData *StateData) bool {
-	for _, cond := range []func(stateData *StateData) bool{p.checkProposalBlock, p.checkPrevoteMaj23} {
-		res := cond(stateData)
-		if res {
-			return true
-		}
-	}
-	return false
+func (p *prevoter) shouldVoteBeSent(rs cstypes.RoundState) bool {
+	return p.checkProposalBlock(rs) || p.checkPrevoteMaj23(rs)
 }
 
 func prevoteKeyVals(stateData *StateData) []any {
