@@ -2,8 +2,6 @@ package consensus
 
 import (
 	"context"
-
-	"github.com/tendermint/tendermint/libs/log"
 )
 
 type contextKey int
@@ -39,19 +37,4 @@ func msgInfoWithCtx(ctx context.Context, mi msgInfo) context.Context {
 func msgInfoFromCtx(ctx context.Context) msgInfo {
 	val := ctx.Value(msgInfoCtx)
 	return val.(msgInfo)
-}
-
-// ctxWithLogger adds a logger instance to a context
-func ctxWithLogger(ctx context.Context, logger log.Logger) context.Context {
-	return context.WithValue(ctx, loggerCtx, logger)
-}
-
-// loggerFromCtxOrNop gets a logger instance from a context
-// returns Nop logger if logget didn't add
-func loggerFromCtxOrNop(ctx context.Context) log.Logger {
-	val := ctx.Value(loggerCtx)
-	if val != nil {
-		return val.(log.Logger)
-	}
-	return log.NewNopLogger()
 }

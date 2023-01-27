@@ -72,7 +72,7 @@ func addVoteToLastPrecommitMw(ep *EventPublisher, ctrl *Controller) AddVoteMiddl
 			if vote.Height+1 != stateData.Height || vote.Type != tmproto.PrecommitType {
 				return next(ctx, stateData, vote)
 			}
-			logger := loggerFromCtxOrNop(ctx)
+			logger := log.FromCtxOrNop(ctx)
 			if stateData.Step != cstypes.RoundStepNewHeight {
 				// Late precommit at prior height is ignored
 				logger.Debug("precommit vote came in after commit timeout and has been ignored")
@@ -84,7 +84,7 @@ func addVoteToLastPrecommitMw(ep *EventPublisher, ctrl *Controller) AddVoteMiddl
 			}
 			added, err := stateData.LastPrecommits.AddVote(vote)
 			if !added {
-				logger.Debug("vote not added to last precommits", logKeyValsWithError([]any(nil), err)...)
+				logger.Debug("vote not added to last precommits", logKeyValsWithError(nil, err)...)
 				return false, nil
 			}
 			logger.Debug("added vote to last precommits", "last_precommits", stateData.LastPrecommits.StringShort())
@@ -320,7 +320,7 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 func addVoteLoggingMw() AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
-			logger := loggerFromCtxOrNop(ctx)
+			logger := log.FromCtxOrNop(ctx)
 			logger.Debug("adding vote to vote set")
 			added, err := next(ctx, stateData, vote)
 			if !added {
@@ -339,7 +339,7 @@ func addVoteLoggingMw() AddVoteMiddlewareFunc {
 				return added, err
 			}
 			votes := stateData.Votes.GetVoteSet(vote.Round, vote.Type)
-			logger.Debug("vote added", "data", votes.LogString())
+			logger.Debug("vote added", "data", votes)
 			return added, err
 		}
 	}

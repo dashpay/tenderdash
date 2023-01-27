@@ -123,7 +123,7 @@ func voteMessageHandler(ctrl *Controller, logger log.Logger) msgHandlerFunc {
 			"quorum_hash", stateData.Validators.QuorumHash,
 			"peer", envelope.PeerID,
 		})
-		ctx = ctxWithLogger(ctx, logger)
+		ctx = log.CtxWithLogger(ctx, logger)
 		// attempt to add the vote and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
 		err := ctrl.Dispatch(ctx, &AddVoteEvent{Vote: msg.Vote, PeerID: envelope.PeerID}, stateData)
@@ -141,7 +141,7 @@ func voteMessageHandler(ctrl *Controller, logger log.Logger) msgHandlerFunc {
 		// the peer is sending us CatchupCommit precommits.
 		// We could make note of this and help filter in broadcastHasVoteMessage().
 		logger.Debug("received vote")
-		return nil
+		return err
 	}
 }
 
