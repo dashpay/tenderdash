@@ -27,15 +27,15 @@ func (e *AddVoteEvent) GetType() EventType {
 	return AddVoteType
 }
 
-// AddVoteCommand is the command to add a vote to the vote-set
+// AddVoteAction is the command to add a vote to the vote-set
 // Attempt to add the vote. if its a duplicate signature, dupeout the validator
-type AddVoteCommand struct {
+type AddVoteAction struct {
 	prevote   AddVoteFunc
 	precommit AddVoteFunc
 }
 
 // Execute adds received vote to prevote or precommit set
-func (c *AddVoteCommand) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *AddVoteAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(*AddVoteEvent)
 	vote := event.Vote

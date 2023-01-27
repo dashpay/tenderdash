@@ -56,11 +56,11 @@ func (suite *AddVoteTestSuite) TearDownTest() {
 	suite.eventbus.Stop()
 }
 
-func (suite *AddVoteTestSuite) TestAddVoteCommand() {
+func (suite *AddVoteTestSuite) TestAddVoteAction() {
 	ctx := context.Background()
 	prevoteCalled := false
 	precommitCalled := false
-	cmd := AddVoteCommand{
+	cmd := AddVoteAction{
 		prevote: func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			prevoteCalled = true
 			return true, nil

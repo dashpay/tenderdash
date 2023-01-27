@@ -74,7 +74,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Con
 		eventPublisher: cs.eventPublisher,
 	}
 	ctrl := &Controller{}
-	addVoteCmd := &AddVoteCommand{
+	addVoteAction := &AddVoteAction{
 		prevote: withVoterMws(
 			addVoteToVoteSet(cs.metrics, cs.eventPublisher),
 			addVoteLoggingMw(),
@@ -141,7 +141,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Con
 			metrics:    cs.metrics,
 			replayMode: cs.replayMode,
 		},
-		AddVoteType: addVoteCmd,
+		AddVoteType: addVoteAction,
 		EnterCommitType: &EnterCommitAction{
 			logger:          cs.logger,
 			eventPublisher:  cs.eventPublisher,
