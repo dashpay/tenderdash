@@ -140,7 +140,7 @@ func voteMessageHandler(ctrl *Controller, logger log.Logger) msgHandlerFunc {
 		// TODO: If rs.Height == vote.Height && rs.Round < vote.Round,
 		// the peer is sending us CatchupCommit precommits.
 		// We could make note of this and help filter in broadcastHasVoteMessage().
-		logger.Debug("received vote", logKeyValsWithError([]any(nil), err)...)
+		logger.Debug("received vote")
 		return nil
 	}
 }
