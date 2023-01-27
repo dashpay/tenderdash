@@ -90,10 +90,8 @@ func (g *peerGossipWorker) stop() {
 
 func (g *peerGossipWorker) wait() {
 	for _, hd := range g.handlers {
-		select {
-		case <-hd.stoppedCh:
-			g.logger.Debug("peer gossip worker stopped")
-		}
+		<-hd.stoppedCh
+		g.logger.Debug("peer gossip worker stopped")
 	}
 }
 
