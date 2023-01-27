@@ -2,9 +2,11 @@ package ed25519
 
 import (
 	"bytes"
+	stded25519 "crypto/ed25519"
 	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -162,6 +164,24 @@ func genPrivKey(rand io.Reader) PrivKey {
 func GenPrivKeyFromSecret(secret []byte) PrivKey {
 	seed := sha256.Sum256(secret)
 	return PrivKey(ed25519.NewKeyFromSeed(seed[:]))
+}
+
+// FromDER loads ed25519 private key from DER-encoded buffer
+func FromDER(der []byte) (PrivKey, error) {
+	// x509.MarshalPKCS8PrivateKey(priv)
+
+	parsed, err := x509.ParsePKCS8PrivateKey(der)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse DER private key: %w", err)
+	}
+
+	privkey, ok := parsed.(stded25519.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("cannot convert %T to ED25519 private key", parsed)
+	}
+	_ = privkey
+	// return nil, nil
+	return PrivKey(ed25519.NewKeyFromSeed(privkey.Seed())), nil
 }
 
 //-------------------------------------

@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"encoding/json"
+	"encoding/pem"
 	"fmt"
 	"io"
 	"os"
@@ -19,12 +20,14 @@ import (
 
 const (
 	flagFromMnemonic       = "from-mnemonic"
+	flagFromPem            = "from-pem"
 	flagDerivationPath     = "derivation-path"
 	defaultDeriviationPath = "m/9'/5'/3'/4'/0'"
 )
 
 var (
 	useSeedPhrase  bool
+	pemFile        string
 	derivationPath string
 )
 
@@ -39,14 +42,35 @@ Note that the key is not saved to disk.
 
 Node key can be generated randomly (default) or derived from BIP39 mnemonic phrase.
 Seed phrase and optional password is read from standard input.`,
-		RunE: genNodeKey,
+		PreRunE: verifyGenNodeKeyFlags,
+		RunE:    genNodeKey,
 	}
 
 	cmd.Flags().BoolVar(&useSeedPhrase, flagFromMnemonic, false,
 		"derive key from BIP39 seed mnemonic phrase (read from stdin)")
+	cmd.Flags().StringVar(&pemFile, flagFromPem, "",
+		"read PEM-encoded ED25519 private key file (use '-' for stdin)")
 	cmd.Flags().StringVar(&derivationPath, flagDerivationPath, defaultDeriviationPath,
 		"BIP32 derivation path")
 	return cmd
+}
+
+func verifyGenNodeKeyFlags(cmd *cobra.Command, args []string) error {
+	if useSeedPhrase && pemFile != "" {
+		return fmt.Errorf("--%s cannot be be used with --%s", flagFromMnemonic, flagFromPem)
+	}
+
+	if !useSeedPhrase && derivationPath != "" && derivationPath != defaultDeriviationPath {
+		return fmt.Errorf("--%s can be used only with --%s", flagDerivationPath, flagFromMnemonic)
+	}
+
+	if pemFile != "" && pemFile != "-" {
+		if _, err := os.Stat(pemFile); err != nil {
+			return fmt.Errorf("--%s: cannot load %s: %w", flagFromPem, pemFile, err)
+		}
+	}
+
+	return nil
 }
 
 func readMnemonic(in io.Reader, out io.Writer) (mnemonic string, password string, err error) {
@@ -89,23 +113,57 @@ func nodeKeyFromMnemonic(cmd *cobra.Command, args []string) (types.NodeKey, erro
 		PrivKey: privKey,
 	}, nil
 }
+func nodeKeyFromPem(in io.Reader) (nodeKey types.NodeKey, err error) {
+	var pemData []byte
+
+	if pemData, err = io.ReadAll(in); err != nil {
+		return nodeKey, err
+	}
+
+	block, _ := pem.Decode(pemData)
+	if block == nil {
+		return nodeKey, fmt.Errorf("cannot PEM-decode input file")
+	}
+	// x509.MarshalPKCS8PrivateKey(priv)
+
+	privKey, err := ed25519.FromDER(block.Bytes)
+	if err != nil {
+		return nodeKey, fmt.Errorf("cannot parse private key: %w", err)
+	}
+
+	return types.NodeKey{
+		ID:      types.NodeIDFromPubKey(privKey.PubKey()),
+		PrivKey: privKey,
+	}, nil
+}
 
 func genNodeKey(cmd *cobra.Command, args []string) error {
 	var (
 		nodeKey types.NodeKey
 		err     error
 	)
-	if useSeedPhrase {
+	switch {
+	case useSeedPhrase:
 		nodeKey, err = nodeKeyFromMnemonic(cmd, args)
-		if err != nil {
-			return fmt.Errorf("cannot generate key from mnemonic: %w", err)
-		}
-	} else {
-		if derivationPath != "" && derivationPath != defaultDeriviationPath {
-			return fmt.Errorf("--%s can be used only with --%s", flagDerivationPath, flagFromMnemonic)
+
+	case pemFile != "":
+
+		if pemFile == "-" {
+			nodeKey, err = nodeKeyFromPem(cmd.InOrStdin())
+		} else {
+			var in io.ReadCloser
+			if in, err = os.Open(pemFile); err == nil {
+				defer in.Close()
+				nodeKey, err = nodeKeyFromPem(in)
+			}
 		}
 
+	default:
 		nodeKey = types.GenNodeKey()
+	}
+
+	if err != nil {
+		return fmt.Errorf("cannot generate node key: %w", err)
 	}
 
 	bz, err := json.Marshal(nodeKey)
@@ -113,8 +171,6 @@ func genNodeKey(cmd *cobra.Command, args []string) error {
 		return fmt.Errorf("nodeKey -> json: %w", err)
 	}
 
-	fmt.Printf(`%v
-`, string(bz))
-
+	cmd.Printf("%v\n", string(bz))
 	return nil
 }

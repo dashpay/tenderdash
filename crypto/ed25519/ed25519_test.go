@@ -1,6 +1,9 @@
 package ed25519_test
 
 import (
+	stded25519 "crypto/ed25519"
+	"crypto/x509"
+	"encoding/base64"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -52,4 +55,35 @@ func TestBatchSafe(t *testing.T) {
 
 	ok, _ := v.Verify()
 	require.True(t, ok)
+}
+
+func TestFromDer(t *testing.T) {
+	type testCase struct {
+		privkeyBase64Der        string
+		expectedPubkeyBase64Der string
+	}
+
+	testCases := []testCase{
+		{
+			privkeyBase64Der:        "MC4CAQAwBQYDK2VwBCIEIB/3MZ9V0e8JidiOiDtN3Nk3sGnwohSgaAmIFuScDfOy",
+			expectedPubkeyBase64Der: "MCowBQYDK2VwAyEAcpYVXaxQmDGUnlpgTe71OKv4cUcbw8k+/IeW8cZF4W4=",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			privkeyDer, err := base64.StdEncoding.DecodeString(tc.privkeyBase64Der)
+			require.NoError(t, err)
+			expectedPubkeyDer, err := base64.StdEncoding.DecodeString(tc.expectedPubkeyBase64Der)
+			require.NoError(t, err)
+
+			expectedPubkeyStd, err := x509.ParsePKIXPublicKey(expectedPubkeyDer)
+			require.NoError(t, err)
+			expectedPubkey := []byte(expectedPubkeyStd.(stded25519.PublicKey))
+
+			privkey, err := ed25519.FromDER(privkeyDer)
+			assert.NoError(t, err)
+			assert.Len(t, privkey, ed25519.PrivateKeySize)
+			assert.Equal(t, expectedPubkey, privkey.PubKey().Bytes())
+		})
+	}
 }
