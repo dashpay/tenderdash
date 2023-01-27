@@ -9,7 +9,6 @@ type contextKey int
 const (
 	usePeerQueueCtx contextKey = iota
 	msgInfoCtx
-	loggerCtx
 )
 
 // ctxWithPeerQueue adds a key into the context with true value
