@@ -63,6 +63,13 @@ func (s *StateDataStore) UpdateAndGet(candidate StateData) (StateData, error) {
 	return s.load(), nil
 }
 
+// UpdateReplayMode safe updates replay-mode flag
+func (s *StateDataStore) UpdateReplayMode(flag bool) {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+	s.replayMode = flag
+}
+
 func (s *StateDataStore) load() StateData {
 	return StateData{
 		config:     s.config,
