@@ -74,27 +74,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Con
 		eventPublisher: cs.eventPublisher,
 	}
 	ctrl := &Controller{}
-	addVoteAction := &AddVoteAction{
-		prevote: withVoterMws(
-			addVoteToVoteSet(cs.metrics, cs.eventPublisher),
-			addVoteLoggingMw(),
-			addVoteUpdateValidBlockMw(cs.eventPublisher),
-			addVoteDispatchPrevoteMw(ctrl),
-			addVoteValidateVoteMw(),
-			addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.evsw),
-			addVoteStatsMw(statsQueue),
-		),
-		precommit: withVoterMws(
-			addVoteToVoteSet(cs.metrics, cs.eventPublisher),
-			addVoteLoggingMw(),
-			addVoteDispatchPrecommitMw(ctrl),
-			addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExec, cs.metrics, cs.evsw),
-			addVoteValidateVoteMw(),
-			addVoteToLastPrecommitMw(cs.eventPublisher, ctrl),
-			addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.evsw),
-			addVoteStatsMw(statsQueue),
-		),
-	}
+
 	ctrl.actions = map[EventType]ActionHandler{
 		EnterNewRoundType: &EnterNewRoundAction{
 			logger:         cs.logger,
@@ -141,7 +121,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Con
 			metrics:    cs.metrics,
 			replayMode: cs.replayMode,
 		},
-		AddVoteType: addVoteAction,
+		AddVoteType: newAddVoteAction(cs, ctrl, statsQueue),
 		EnterCommitType: &EnterCommitAction{
 			logger:          cs.logger,
 			eventPublisher:  cs.eventPublisher,

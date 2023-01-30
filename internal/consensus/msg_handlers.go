@@ -95,16 +95,18 @@ func blockPartMessageHandler(ctrl *Controller, logger log.Logger) msgHandlerFunc
 			)
 			err = nil
 		}
-		logger.Debug(
-			"received block part",
+		kv := []any{
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"block_height", msg.Height,
 			"block_round", msg.Round,
 			"peer", envelope.PeerID,
 			"index", msg.Part.Index,
-			"error", err,
-		)
+		}
+		if err != nil {
+			kv = append(kv, "error", err)
+		}
+		logger.Debug("received block part", kv...)
 		return err
 	}
 }
@@ -151,15 +153,17 @@ func commitMessageHandler(ctrl *Controller, logger log.Logger) msgHandlerFunc {
 		// attempt to add the commit and dupeout the validator if its a duplicate signature
 		// if the vote gives us a 2/3-any or 2/3-one, we transition
 		err := ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: msg.Commit, PeerID: envelope.PeerID}, stateData)
-		logger.Debug(
-			"received commit",
+		kv := []any{
 			"height", stateData.Height,
 			"cs_round", stateData.Round,
 			"commit_height", msg.Commit.Height,
 			"commit_round", msg.Commit.Round,
 			"peer", envelope.PeerID,
-			"error", err,
-		)
+		}
+		if err != nil {
+			kv = append(kv, "error", err)
+		}
+		logger.Debug("received commit", kv...)
 		return nil
 	}
 }

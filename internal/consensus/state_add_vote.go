@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
+	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
@@ -34,6 +35,40 @@ type AddVoteAction struct {
 	precommit AddVoteFunc
 }
 
+func newAddVoteAction(cs *State, ctrl *Controller, statsQueue *chanQueue[msgInfo]) *AddVoteAction {
+	addToVoteSet := addVoteToVoteSetFunc(cs.metrics, cs.eventPublisher)
+	loggingMw := addVoteLoggingMw()
+	updateValidBlockMw := addVoteUpdateValidBlockMw(cs.eventPublisher)
+	dispatchPrevoteMw := addVoteDispatchPrevoteMw(ctrl)
+	validateVoteMw := addVoteValidateVoteMw()
+	errorMw := addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.evsw)
+	statsMw := addVoteStatsMw(statsQueue)
+	dispatchPrecommitMw := addVoteDispatchPrecommitMw(ctrl)
+	verifyVoteExtensionMw := addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExec, cs.metrics, cs.evsw)
+	addToLastPrecommitMw := addVoteToLastPrecommitMw(cs.eventPublisher, ctrl)
+	return &AddVoteAction{
+		prevote: withVoterMws(
+			addToVoteSet,
+			loggingMw,
+			updateValidBlockMw,
+			dispatchPrevoteMw,
+			validateVoteMw,
+			errorMw,
+			statsMw,
+		),
+		precommit: withVoterMws(
+			addToVoteSet,
+			loggingMw,
+			dispatchPrecommitMw,
+			verifyVoteExtensionMw,
+			validateVoteMw,
+			addToLastPrecommitMw,
+			errorMw,
+			statsMw,
+		),
+	}
+}
+
 // Execute adds received vote to prevote or precommit set
 func (c *AddVoteAction) Execute(ctx context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
@@ -42,15 +77,15 @@ func (c *AddVoteAction) Execute(ctx context.Context, stateEvent StateEvent) erro
 	var err error
 	switch vote.Type {
 	case tmproto.PrevoteType:
-		_, err = c.prevote(ctx, stateData, event.Vote)
+		_, err = c.prevote(ctx, stateData, vote)
 	case tmproto.PrecommitType:
-		_, err = c.precommit(ctx, stateData, event.Vote)
+		_, err = c.precommit(ctx, stateData, vote)
 	}
 	return err
 }
 
-// addVoteToVoteSet adds a vote to the vote-set
-func addVoteToVoteSet(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
+// addVoteToVoteSetFunc adds a vote to the vote-set
+func addVoteToVoteSetFunc(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
 	return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 		added, err := stateData.Votes.AddVote(vote)
 		if !added || err != nil {
@@ -61,8 +96,8 @@ func addVoteToVoteSet(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
 			val := vals.GetByIndex(vote.ValidatorIndex)
 			metrics.MarkVoteReceived(vote.Type, val.VotingPower, vals.TotalVotingPower())
 		}
-		err = ep.PublishVoteEvent(vote)
-		return true, err
+		_ = ep.PublishVoteEvent(vote)
+		return true, nil
 	}
 }
 
@@ -87,7 +122,7 @@ func addVoteToLastPrecommitMw(ep *EventPublisher, ctrl *Controller) AddVoteMiddl
 				logger.Debug("vote not added to last precommits", logKeyValsWithError(nil, err)...)
 				return false, nil
 			}
-			logger.Debug("added vote to last precommits", "last_precommits", stateData.LastPrecommits.StringShort())
+			logger.Debug("added vote to last precommits", "last_precommits", stateData.LastPrecommits)
 
 			err = ep.PublishVoteEvent(vote)
 			if err != nil {
@@ -115,18 +150,37 @@ func addVoteUpdateValidBlockMw(ep *EventPublisher) AddVoteMiddlewareFunc {
 			prevotes := stateData.Votes.Prevotes(vote.Round)
 			// Check to see if >2/3 of the voting power on the network voted for any non-nil block.
 			blockID, ok := prevotes.TwoThirdsMajority()
-			if ok && !blockID.IsNil() {
-				// Greater than 2/3 of the voting power on the network voted for some
-				// non-nil block
-
-				// Update Valid* if we can.
-				stateData.updateValidBlockIfBlockIDMatches(blockID, vote.Round)
-				err = stateData.Save()
-				if err != nil {
-					return added, err
-				}
-				ep.PublishValidBlockEvent(stateData.RoundState)
+			if !ok || blockID.IsNil() {
+				return added, err
 			}
+			// Greater than 2/3 of the voting power on the network voted for some
+			// non-nil block
+			// Update Valid* if we can.
+			if stateData.ValidRound >= vote.Round || vote.Round != stateData.Round {
+				return added, err
+			}
+			logger := log.FromCtxOrNop(ctx)
+			if stateData.ProposalBlock.HashesTo(blockID.Hash) {
+				logger.Debug("updating valid block because of POL",
+					"valid_round", stateData.ValidRound,
+					"pol_round", vote.Round)
+				stateData.updateValidBlock()
+			} else {
+				logger.Debug("valid block we do not know about; set ProposalBlock=nil",
+					"proposal", tmstrings.LazyBlockHash(stateData.ProposalBlock),
+					"block_id", blockID.Hash)
+				// we're getting the wrong block
+				stateData.ProposalBlock = nil
+			}
+			if !stateData.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
+				//c.metrics.MarkBlockGossipStarted()
+				stateData.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
+			}
+			err = stateData.Save()
+			if err != nil {
+				return added, err
+			}
+			ep.PublishValidBlockEvent(stateData.RoundState)
 			return added, err
 		}
 	}
@@ -286,6 +340,10 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			added, err := next(ctx, stateData, vote)
 			if err == nil {
+				return added, err
+			}
+			if errors.Is(err, types.ErrVoteNonDeterministicSignature) {
+				logger.Debug("vote has non-deterministic signature", "err", err)
 				return added, err
 			}
 			// If the vote height is off, we'll just ignore it,

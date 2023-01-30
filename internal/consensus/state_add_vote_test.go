@@ -109,7 +109,7 @@ func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 		eventFired = true
 		return nil
 	})
-	fn := addVoteToVoteSet(suite.metrics, suite.publisher)
+	fn := addVoteToVoteSetFunc(suite.metrics, suite.publisher)
 	stateData := &StateData{
 		state: sm.State{
 			Validators: suite.valSet,
@@ -202,7 +202,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 	}
 	fn := addVoteUpdateValidBlockMw(suite.publisher)(mockFn)
 	testCases := []struct {
-		votes            []types.Vote
+		presetVotes      []types.Vote
 		vote             types.Vote
 		wantAdded        bool
 		wantErr          string
@@ -212,21 +212,19 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 		wantStateDataVer int64
 	}{
 		{
-			votes:            []types.Vote{voteH100R0V0, voteH100R0V1},
+			presetVotes:      []types.Vote{voteH100R0V0, voteH100R0V1},
 			vote:             voteH100R0V1,
 			wantAdded:        true,
 			wantFiredEvent:   true,
 			returnAdded:      true,
-			returnError:      nil,
 			wantStateDataVer: 1,
 		},
 		{
-			votes:          []types.Vote{voteH100R0V0},
+			presetVotes:    []types.Vote{voteH100R0V0},
 			vote:           voteH100R0V0,
 			wantAdded:      true,
 			wantFiredEvent: false,
 			returnAdded:    true,
-			returnError:    nil,
 		},
 		{
 			vote:           voteH100R0V0,
@@ -236,7 +234,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 			returnError:    nil,
 		},
 		{
-			votes:          []types.Vote{voteNilH100R0V0},
+			presetVotes:    []types.Vote{voteNilH100R0V0},
 			vote:           voteNilH100R0V0,
 			wantAdded:      true,
 			wantFiredEvent: false,
@@ -260,7 +258,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 	for i, tc := range testCases {
 		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
 			hvs := cstypes.NewHeightVoteSet(chainID, 100, suite.valSet)
-			for _, vote := range tc.votes {
+			for _, vote := range tc.presetVotes {
 				added, err := hvs.AddVote(&vote)
 				suite.NoError(err)
 				suite.True(added)
@@ -275,8 +273,9 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 					Validators: suite.valSet,
 				},
 				RoundState: cstypes.RoundState{
-					Round: 0,
-					Votes: hvs,
+					Round:      0,
+					Votes:      hvs,
+					ValidRound: -1,
 				},
 			}
 			added, err := fn(ctx, stateData, &tc.vote)

@@ -8,7 +8,6 @@ import (
 
 	"github.com/tendermint/tendermint/config"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
@@ -324,27 +323,6 @@ func (s *StateData) updateValidBlock() {
 	s.ValidBlock = s.ProposalBlock
 	s.ValidBlockRecvTime = s.ProposalReceiveTime
 	s.ValidBlockParts = s.ProposalBlockParts
-}
-
-func (s *StateData) updateValidBlockIfBlockIDMatches(blockID types.BlockID, voteRound int32) {
-	// Update Valid* if we can.
-	if s.ValidRound >= voteRound || voteRound != s.Round {
-		return
-	}
-	if s.ProposalBlock.HashesTo(blockID.Hash) {
-		s.logger.Debug("updating valid block because of POL", "valid_round", s.ValidRound, "pol_round", voteRound)
-		s.updateValidBlock()
-	} else {
-		s.logger.Debug("valid block we do not know about; set ProposalBlock=nil",
-			"proposal", tmstrings.LazyBlockHash(s.ProposalBlock),
-			"block_id", blockID.Hash)
-		// we're getting the wrong block
-		s.ProposalBlock = nil
-	}
-	if !s.ProposalBlockParts.HasHeader(blockID.PartSetHeader) {
-		s.metrics.MarkBlockGossipStarted()
-		s.ProposalBlockParts = types.NewPartSetFromHeader(blockID.PartSetHeader)
-	}
 }
 
 func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
