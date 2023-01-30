@@ -3,6 +3,7 @@ package consensus
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"testing"
 	"time"
 
@@ -21,7 +22,7 @@ type PrevoterTestSuite struct {
 	suite.Suite
 
 	privVal         privValidator
-	logger          log.Logger
+	logger          *log.TestingLogger
 	valSet          *types.ValidatorSet
 	mockWAL         *mockWAL
 	mockQueueSender *mockQueueSender
@@ -86,15 +87,16 @@ func (suite *PrevoterTestSuite) TestDo() {
 		wantBlockID         types.BlockID
 		ppErr               error
 		wantErr             string
+		wantLog             string
 		mockProcessProposal bool
 		mockValidateBlock   bool
 	}{
 		{
-			// invalid
+			// prevote is invalid, but returns nil
 			state:       sm.State{Validators: suite.valSet},
 			rs:          cstypes.RoundState{Validators: suite.valSet},
 			wantBlockID: types.BlockID{},
-			wantErr:     "proposal-block is nil",
+			wantLog:     "proposal-block is nil",
 		},
 		{
 			// process-proposal error
@@ -134,6 +136,9 @@ func (suite *PrevoterTestSuite) TestDo() {
 			fn := mock.MatchedBy(func(voteMsg *VoteMessage) bool {
 				return tc.wantBlockID.Equals(voteMsg.Vote.BlockID)
 			})
+			if tc.wantLog != "" {
+				suite.logger.AssertMatch(regexp.MustCompile(tc.wantLog))
+			}
 			suite.mockQueueSender.
 				On("send", mock.Anything, fn, types.NodeID("")).
 				Once().

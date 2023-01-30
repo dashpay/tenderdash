@@ -41,7 +41,7 @@ func (p *prevoter) Do(ctx context.Context, stateData *StateData) error {
 		keyVals := append(prevoteKeyVals(stateData), "error", err)
 		p.logger.Debug("prevote is invalid", keyVals...)
 		p.signAndAddNilVote(ctx, stateData)
-		return err
+		return nil
 	}
 	err = p.blockExec.ensureProcess(ctx, stateData, stateData.Round)
 	if err != nil {
