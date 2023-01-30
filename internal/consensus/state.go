@@ -341,7 +341,7 @@ func (cs *State) String() string {
 
 // GetRoundState returns a shallow copy of the internal consensus state.
 func (cs *State) GetRoundState() cstypes.RoundState {
-	stateData := cs.stateDataStore.Get()
+	stateData := cs.GetStateData()
 	// NOTE: this might be dodgy, as RoundState itself isn't thread
 	// safe as it contains a number of pointers and is explicitly
 	// not thread safe.

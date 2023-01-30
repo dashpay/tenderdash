@@ -100,8 +100,7 @@ func (s *StateDataStore) update(candidate StateData) error {
 func (s *StateDataStore) subscribe(evsw events.EventSwitch) {
 	const listenerID = "stateDataStore"
 	_ = evsw.AddListenerForEvent(listenerID, setReplayMode, func(obj events.EventData) error {
-		flag := obj.(bool)
-		s.replayMode = flag
+		s.UpdateReplayMode(obj.(bool))
 		return nil
 	})
 }
