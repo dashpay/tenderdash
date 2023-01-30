@@ -295,27 +295,6 @@ func (s *StateData) HeightVoteSet() (int64, *cstypes.HeightVoteSet) {
 	return s.Height, s.Votes
 }
 
-func (s *StateData) checkValidBlock() bool {
-	if s.ValidBlock == nil {
-		return false
-	}
-	sp := s.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
-	if s.Height == s.state.InitialHeight {
-		// by definition, initial block must have genesis time
-		return s.ValidBlock.Time.Equal(s.state.LastBlockTime)
-	}
-	if !s.ValidBlock.IsTimely(s.ValidBlockRecvTime, sp, s.ValidRound) {
-		s.logger.Debug(
-			"proposal block is outdated",
-			"height", s.Height,
-			"round", s.ValidRound,
-			"received", s.ValidBlockRecvTime,
-			"block", s.ValidBlock)
-		return false
-	}
-	return true
-}
-
 func (s *StateData) commitTime(t time.Time) time.Time {
 	c := s.state.ConsensusParams.Timeout.Commit
 	if s.config.UnsafeCommitTimeoutOverride != 0 {
