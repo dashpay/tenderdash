@@ -168,19 +168,18 @@ func GenPrivKeyFromSecret(secret []byte) PrivKey {
 
 // FromDER loads ed25519 private key from DER-encoded buffer
 func FromDER(der []byte) (PrivKey, error) {
-	// x509.MarshalPKCS8PrivateKey(priv)
-
 	parsed, err := x509.ParsePKCS8PrivateKey(der)
 	if err != nil {
 		return nil, fmt.Errorf("cannot parse private key: %w", err)
 	}
 
+	// As x509 uses stdlib crypto/ed25519, we have to convert it to curve25519-voi
+	// Fortunately, they are compatible (at least for now)
 	privkey, ok := parsed.(stded25519.PrivateKey)
 	if !ok {
 		return nil, fmt.Errorf("cannot convert %T to ED25519 private key", parsed)
 	}
-	_ = privkey
-	// return nil, nil
+
 	return PrivKey(ed25519.NewKeyFromSeed(privkey.Seed())), nil
 }
 

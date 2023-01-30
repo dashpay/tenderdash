@@ -101,10 +101,10 @@ func genNodeKeyRunE(cmd *cobra.Command, args []string) error {
 
 	bz, err := json.Marshal(nodeKey)
 	if err != nil {
-		return fmt.Errorf("nodeKey -> json: %w", err)
+		return fmt.Errorf("cannot format node key: %w", err)
 	}
 
-	cmd.Printf("%v\n", string(bz))
+	cmd.Println(string(bz))
 	return nil
 }
 

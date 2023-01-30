@@ -2,15 +2,18 @@ package ed25519_test
 
 import (
 	stded25519 "crypto/ed25519"
+
 	"crypto/x509"
 	"encoding/base64"
 	"testing"
 
+	voided25519 "github.com/oasisprotocol/curve25519-voi/primitives/ed25519"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
+	tmrand "github.com/tendermint/tendermint/libs/rand"
 )
 
 func TestSignAndValidateEd25519(t *testing.T) {
@@ -58,17 +61,16 @@ func TestBatchSafe(t *testing.T) {
 }
 
 func TestFromDer(t *testing.T) {
-	type testCase struct {
+	var testCases = []struct {
 		privkeyBase64Der        string
 		expectedPubkeyBase64Der string
-	}
-
-	testCases := []testCase{
+	}{
 		{
 			privkeyBase64Der:        "MC4CAQAwBQYDK2VwBCIEIB/3MZ9V0e8JidiOiDtN3Nk3sGnwohSgaAmIFuScDfOy",
 			expectedPubkeyBase64Der: "MCowBQYDK2VwAyEAcpYVXaxQmDGUnlpgTe71OKv4cUcbw8k+/IeW8cZF4W4=",
 		},
 	}
+
 	for _, tc := range testCases {
 		t.Run("", func(t *testing.T) {
 			privkeyDer, err := base64.StdEncoding.DecodeString(tc.privkeyBase64Der)
@@ -86,4 +88,19 @@ func TestFromDer(t *testing.T) {
 			assert.Equal(t, expectedPubkey, privkey.PubKey().Bytes())
 		})
 	}
+}
+
+// TestEd25519StdlibCompat ensures that key format in "crypto/ed25519" is compatible with
+// the keys in "github.com/oasisprotocol/curve25519-voi" (which we use)
+func TestEd25519StdlibCompat(t *testing.T) {
+	seed := tmrand.Bytes(ed25519.SeedSize)
+
+	voiPrivkey := voided25519.NewKeyFromSeed(seed)
+	voiPubkey := voiPrivkey.Public()
+	stdPrivkey := stded25519.NewKeyFromSeed(seed)
+	stdPubkey := stdPrivkey.Public()
+
+	assert.EqualValues(t, voiPrivkey, stdPrivkey)
+	assert.EqualValues(t, voiPrivkey.Seed(), stdPrivkey.Seed())
+	assert.EqualValues(t, voiPubkey, stdPubkey)
 }
