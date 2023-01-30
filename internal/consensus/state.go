@@ -282,8 +282,7 @@ func NewState(
 		return nil
 	})
 	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setReplayMode, func(obj tmevents.EventData) error {
-		flag := obj.(bool)
-		cs.stateDataStore.replayMode = flag
+		cs.stateDataStore.UpdateReplayMode(obj.(bool))
 		return nil
 	})
 
