@@ -103,6 +103,9 @@ func nodeKeyFromMnemonic(cmd *cobra.Command, args []string) (types.NodeKey, erro
 	if err != nil {
 		return types.NodeKey{}, err
 	}
+	if strings.Count(mnemonic, " ") < 11 {
+		return types.NodeKey{}, fmt.Errorf("mnemonic must have at least 12 words")
+	}
 	privKey, err := ed25519.FromBip39Mnemonic(mnemonic, password, derivationPath)
 	if err != nil {
 		return types.NodeKey{}, err
