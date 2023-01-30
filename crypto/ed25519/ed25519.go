@@ -172,7 +172,7 @@ func FromDER(der []byte) (PrivKey, error) {
 
 	parsed, err := x509.ParsePKCS8PrivateKey(der)
 	if err != nil {
-		return nil, fmt.Errorf("cannot parse DER private key: %w", err)
+		return nil, fmt.Errorf("cannot parse private key: %w", err)
 	}
 
 	privkey, ok := parsed.(stded25519.PrivateKey)

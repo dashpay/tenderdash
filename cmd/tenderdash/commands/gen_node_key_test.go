@@ -35,7 +35,7 @@ MC4CAQAwBQYDK2VwBCIEINP0WhqYyl63gJlPGaMImeuO1H6IlzF2CmTMuCT6QudH
 			pem: []byte(`-----BEGIN PRIVATE KEY-----
 NC4CAQAwBQYDK2VwBCIEINP0WhqYyl63gJlPGaMImeuO1H6IlzF2CmTMuCT6QudH
 -----END PRIVATE KEY-----`),
-			expectErrorContains: "cannot parse DER",
+			expectErrorContains: "cannot parse private key: asn1: structure error",
 		},
 		{
 			pem:                 []byte{},
@@ -116,7 +116,7 @@ func testGenNodeKey(t *testing.T, input []byte, expectedNodeID types.NodeID, exp
 	cmd.SetArgs(args)
 
 	err := cmd.Execute()
-	
+
 	if expectErrorContains == "" {
 		assert.NoError(t, err)
 		assert.Empty(t, stderr)
