@@ -113,8 +113,7 @@ func (s *voteSigner) signVote(
 func (s *voteSigner) subscribe(evsw events.EventSwitch) {
 	const listenerID = "voteSigner"
 	_ = evsw.AddListenerForEvent(listenerID, setPrivValidator, func(obj events.EventData) error {
-		pv := obj.(privValidator)
-		s.privValidator = pv
+		s.privValidator = obj.(privValidator)
 		return nil
 	})
 }
