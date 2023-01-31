@@ -59,7 +59,7 @@ func (p *prevoter) Do(ctx context.Context, stateData *StateData) error {
 func (p *prevoter) handleError(err error) {
 	p.metrics.MarkProposalProcessed(false)
 	if errors.Is(err, sm.ErrBlockRejected) {
-		p.logger.Error("state machine rejected a proposed block; this should not happen:"+
+		p.logger.Error("proposed block rejected; this should not happen: "+
 			"the proposer may be misbehaving; prevoting nil", "error", err)
 		return
 	}
