@@ -268,7 +268,7 @@ func NewState(
 		wal:      wal,
 	}
 	cs.roundScheduler = &roundScheduler{timeoutTicker: cs.timeoutTicker}
-	propler := newProposaler(cs.logger, cs.metrics, cs.privValidator, cs.msgInfoQueue, cs.blockExecutor)
+	propler := NewProposaler(cs.logger, cs.metrics, cs.privValidator, cs.msgInfoQueue, cs.blockExecutor)
 	cs.ctrl = NewController(cs, wal, cs.statsMsgQueue, propler)
 	subs := []eventSwitchSubscriber{propler, cs.blockExecutor, cs.stateDataStore, cs.voteSigner}
 	for _, sub := range subs {

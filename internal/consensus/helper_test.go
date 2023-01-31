@@ -2,6 +2,7 @@ package consensus
 
 import (
 	"context"
+	"github.com/tendermint/tendermint/dash"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -132,6 +133,9 @@ func newDefaultFakeNode(ctx context.Context, t *testing.T, logger log.Logger) *f
 }
 
 func (n *fakeNode) start(ctx context.Context, t *testing.T) {
+	proTxHash, err := n.pv.GetProTxHash(ctx)
+	require.NoError(t, err)
+	ctx = dash.ContextWithProTxHash(ctx, proTxHash)
 	require.NoError(t, n.csState.Start(ctx))
 	t.Cleanup(n.csState.Wait)
 }

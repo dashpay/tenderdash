@@ -1428,6 +1428,10 @@ func TestWALRoundsSkipper(t *testing.T) {
 		blockStore,
 	)
 
+	proTxHash, err := privVal.GetProTxHash(ctx)
+	require.NoError(t, err)
+	ctx = dash.ContextWithProTxHash(ctx, proTxHash)
+
 	cs := newStateWithConfigAndBlockStore(ctx, t, log.NewTestingLogger(t), cfg, state, privVal, app, blockStore)
 
 	commit := blockStore.commits[len(blockStore.commits)-1]

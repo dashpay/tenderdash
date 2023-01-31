@@ -114,13 +114,13 @@ func setupReactor(ctx context.Context, t *testing.T, n int, states []*State, siz
 func enterProposeWithInvalidProposalDecider(state *State) {
 	action := state.ctrl.Get(EnterProposeType)
 	enterProposeAction := action.(*EnterProposeAction)
-	propler := enterProposeAction.propDecider.(*proposaler)
-	invalidDecider := &invalidProposalDecider{proposaler: propler}
+	propler := enterProposeAction.propDecider.(*Proposaler)
+	invalidDecider := &invalidProposalDecider{Proposaler: propler}
 	enterProposeAction.propDecider = invalidDecider
 }
 
 type invalidProposalDecider struct {
-	*proposaler
+	*Proposaler
 }
 
 func (p *invalidProposalDecider) Decide(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {

@@ -259,6 +259,7 @@ func startTestRound(ctx context.Context, cs *State, height int64, round int32) {
 	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
 	_ = cs.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
 	_ = stateData.Save()
+	dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
 	startConsensusState(ctx, cs, 0)
 }
 

@@ -94,7 +94,7 @@ func (cs *TryAddCommitAction) verifyCommit(ctx context.Context, stateData *State
 	if !blockParts.HasHeader(commit.BlockID.PartSetHeader) {
 		return false, fmt.Errorf("expected ProposalBlockParts header to be commit header")
 	}
-	proTxHash, _ := dash.ProTxHashFromContext(ctx)
+	proTxHash := dash.MustProTxHashFromContext(ctx)
 	if !block.HashesTo(commit.BlockID.Hash) {
 		cs.logger.Error("proposal block does not hash to commit hash",
 			"height", commit.Height,

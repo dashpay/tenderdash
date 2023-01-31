@@ -46,10 +46,7 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 		return nil
 	}
 
-	proTxHash, err := dash.ProTxHashFromContext(ctx)
-	if err != nil {
-		return err
-	}
+	proTxHash := dash.MustProTxHashFromContext(ctx)
 	isProposer := stateData.isProposer(proTxHash)
 
 	// If this validator is the proposer of this round, and the previous block time is later than

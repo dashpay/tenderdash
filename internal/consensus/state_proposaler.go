@@ -13,7 +13,9 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-type proposaler struct {
+// Proposaler is used to set and create a proposal
+// This structure must implement internal/consensus/types/Proposaler interface
+type Proposaler struct {
 	logger         log.Logger
 	metrics        *Metrics
 	privVal        privValidator
@@ -23,14 +25,15 @@ type proposaler struct {
 	committedState sm.State
 }
 
-func newProposaler(
+// NewProposaler creates a new Po
+func NewProposaler(
 	logger log.Logger,
 	metrics *Metrics,
 	privVal privValidator,
 	queue *msgInfoQueue,
 	blockExec *blockExecutor,
-) *proposaler {
-	return &proposaler{
+) *Proposaler {
+	return &Proposaler{
 		logger:       logger,
 		metrics:      metrics,
 		privVal:      privVal,
@@ -39,7 +42,8 @@ func newProposaler(
 	}
 }
 
-func (p *proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cstypes.RoundState) error {
+// Set updates Proposal, ProposalReceiveTime and ProposalBlockParts in RoundState if the passed proposal met conditions
+func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cstypes.RoundState) error {
 	// Does not apply
 	if rs.Proposal != nil || proposal.Height != rs.Height || proposal.Round != rs.Round {
 		return nil
@@ -74,7 +78,9 @@ func (p *proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 	return nil
 }
 
-func (p *proposaler) Decide(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
+// Decide creates, sings and sends a created proposal to the queue
+// To create a proposal is used RoundState.ValidBlock if it isn't nil and valid, otherwise create a new one
+func (p *Proposaler) Decide(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
 	// If there is valid block, choose that.
 	block, blockParts := rs.ValidBlock, rs.ValidBlockParts
 	// Decide on block
@@ -115,7 +121,7 @@ func (p *proposaler) Decide(ctx context.Context, height int64, round int32, rs *
 	return nil
 }
 
-func (p *proposaler) createProposalBlock(ctx context.Context, round int32, rs *cstypes.RoundState) (*types.Block, *types.PartSet, error) {
+func (p *Proposaler) createProposalBlock(ctx context.Context, round int32, rs *cstypes.RoundState) (*types.Block, *types.PartSet, error) {
 	// Create a new proposal block from state/txs from the mempool.
 	block, err := p.blockExec.create(ctx, rs, round)
 	if err != nil {
@@ -134,7 +140,7 @@ func (p *proposaler) createProposalBlock(ctx context.Context, round int32, rs *c
 	return block, blockParts, nil
 }
 
-func (p *proposaler) signProposal(ctx context.Context, height int64, proposal *types.Proposal) error {
+func (p *Proposaler) signProposal(ctx context.Context, height int64, proposal *types.Proposal) error {
 	protoProposal := proposal.ToProto()
 
 	// validator-set at a proposal height
@@ -153,7 +159,7 @@ func (p *proposaler) signProposal(ctx context.Context, height int64, proposal *t
 	return nil
 }
 
-func (p *proposaler) checkValidBlock(rs *cstypes.RoundState) bool {
+func (p *Proposaler) checkValidBlock(rs *cstypes.RoundState) bool {
 	if rs.ValidBlock == nil {
 		return false
 	}
@@ -174,7 +180,7 @@ func (p *proposaler) checkValidBlock(rs *cstypes.RoundState) bool {
 	return true
 }
 
-func (p *proposaler) proposalTimestampDifferenceMetric(rs cstypes.RoundState) {
+func (p *Proposaler) proposalTimestampDifferenceMetric(rs cstypes.RoundState) {
 	if rs.Proposal != nil && rs.Proposal.POLRound == -1 {
 		sp := p.committedState.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
 		recvTime := rs.ProposalReceiveTime
@@ -187,13 +193,13 @@ func (p *proposaler) proposalTimestampDifferenceMetric(rs cstypes.RoundState) {
 	}
 }
 
-func (p *proposaler) sendMessages(ctx context.Context, msgs ...Message) {
+func (p *Proposaler) sendMessages(ctx context.Context, msgs ...Message) {
 	for _, msg := range msgs {
 		_ = p.msgInfoQueue.send(ctx, msg, "")
 	}
 }
 
-func (p *proposaler) verifyProposal(proposal *types.Proposal, rs *cstypes.RoundState) error {
+func (p *Proposaler) verifyProposal(proposal *types.Proposal, rs *cstypes.RoundState) error {
 	protoProposal := proposal.ToProto()
 	stateValSet := p.committedState.Validators
 	// Verify signature
@@ -204,32 +210,31 @@ func (p *proposaler) verifyProposal(proposal *types.Proposal, rs *cstypes.RoundS
 		stateValSet.QuorumHash,
 	)
 	vset := rs.Validators
-	height := rs.Height
 	proposer := vset.GetProposer()
 	if proposer.PubKey == nil {
 		return p.verifyProposalForNonValidatorSet(proposal, *rs)
 	}
 	// We are part of the validator set
-	if !proposer.PubKey.VerifySignatureDigest(proposalBlockSignID, proposal.Signature) {
-		p.logger.Debug(
-			"error verifying signature",
-			"height", height,
-			"proposal_height", proposal.Height,
-			"proposal_round", proposal.Round,
-			"proposal", proposal,
-			"proposer_proTxHash", proposer.ProTxHash.ShortString(),
-			"proposer_pubkey", proposer.PubKey.HexString(),
-			"quorumType", stateValSet.QuorumType,
-			"quorumHash", stateValSet.QuorumHash,
-			"proposalSignId", tmbytes.HexBytes(proposalBlockSignID))
-		return ErrInvalidProposalSignature
+	if proposer.PubKey.VerifySignatureDigest(proposalBlockSignID, proposal.Signature) {
+		return nil
 	}
-	return nil
+	p.logger.Debug(
+		"error verifying signature",
+		"height", rs.Height,
+		"proposal_height", proposal.Height,
+		"proposal_round", proposal.Round,
+		"proposal", proposal,
+		"proposer_proTxHash", proposer.ProTxHash.ShortString(),
+		"proposer_pubkey", proposer.PubKey.HexString(),
+		"quorumType", stateValSet.QuorumType,
+		"quorumHash", stateValSet.QuorumHash,
+		"proposalSignId", tmbytes.HexBytes(proposalBlockSignID))
+	return ErrInvalidProposalSignature
 }
 
-func (p *proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, rs cstypes.RoundState) error {
+func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, rs cstypes.RoundState) error {
 	commit := rs.Commit
-	if commit == nil && commit.Height != proposal.Height || commit.Round != proposal.Round {
+	if commit == nil || commit.Height != proposal.Height || commit.Round != proposal.Round {
 		// We received a proposal we can not check
 		return ErrUnableToVerifyProposal
 	}
@@ -247,7 +252,7 @@ func (p *proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, 
 	return nil
 }
 
-func (p *proposaler) subscribe(evsw events.EventSwitch) {
+func (p *Proposaler) subscribe(evsw events.EventSwitch) {
 	const listenerID = "propDecider"
 	_ = evsw.AddListenerForEvent(listenerID, committedStateUpdate, func(obj events.EventData) error {
 		p.committedState = obj.(sm.State)

@@ -265,14 +265,14 @@ func newP2PMessage(peerID types.NodeID, obj any) p2p.Envelope {
 }
 
 type bzProposalDecider struct {
-	*proposaler
+	*Proposaler
 }
 
 func enterProposeWithBzProposalDecider(state *State) {
 	action := state.ctrl.Get(EnterProposeType)
 	enterProposeAction := action.(*EnterProposeAction)
-	propler := enterProposeAction.propDecider.(*proposaler)
-	invalidDecider := &bzProposalDecider{proposaler: propler}
+	propler := enterProposeAction.propDecider.(*Proposaler)
+	invalidDecider := &bzProposalDecider{Proposaler: propler}
 	enterProposeAction.propDecider = invalidDecider
 }
 
