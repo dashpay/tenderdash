@@ -72,7 +72,7 @@ func (p *prevoter) handleError(err error) {
 }
 
 func (p *prevoter) signAndAddNilVote(ctx context.Context, stateData *StateData) {
-	p.logger.Debug("sending prevote nil")
+	p.logger.Debug("prevote nil")
 	p.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
 }
 
