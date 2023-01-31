@@ -678,8 +678,8 @@ func (voteSet *VoteSet) MarshalZerologObject(e *zerolog.Event) {
 		return
 	}
 	voteSet.mtx.Lock()
-	voted, total, frac := voteSet.sumTotalFrac()
 	defer voteSet.mtx.Unlock()
+	voted, total, frac := voteSet.sumTotalFrac()
 	e.Int64("voted", voted)
 	e.Int64("total", total)
 	e.Float64("frac", frac)
