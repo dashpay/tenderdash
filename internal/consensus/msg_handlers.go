@@ -197,7 +197,6 @@ func makeLogArgsFromMessage(msg Message) []any {
 			"proposal_round", m.Proposal.Round,
 			"proposal_polRound", m.Proposal.POLRound,
 		}
-		return nil
 	case *BlockPartMessage:
 		return []any{
 			"block_height", m.Height,
