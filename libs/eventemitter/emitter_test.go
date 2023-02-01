@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/fortytw2/leaktest"
-	"github.com/stretchr/testify/require"
 )
 
 // TestAddListenerForEventFireOnce sets up an EventEmitter, subscribes a single
@@ -20,15 +19,7 @@ func TestAddListenerForEventFireOnce(t *testing.T) {
 	evsw := New()
 
 	messages := make(chan EventData)
-	require.NoError(t, evsw.AddListener("event",
-		func(data EventData) error {
-			select {
-			case messages <- data:
-				return nil
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}))
+	evsw.AddListener("event", listenerFunc(ctx, messages))
 	go evsw.Emit("event", "data")
 	received := <-messages
 	if received != "data" {
@@ -48,7 +39,7 @@ func TestAddListenerForEventFireMany(t *testing.T) {
 	doneSending := make(chan uint64)
 	numbers := make(chan uint64, 4)
 	// subscribe one listener for one event
-	require.NoError(t, evsw.AddListener("event", listenerFunc(ctx, numbers)))
+	evsw.AddListener("event", listenerFunc(ctx, numbers))
 	// collect received events
 	go sumReceivedNumbers(numbers, doneSum)
 	// go fire events
@@ -78,9 +69,9 @@ func TestAddListenerForDifferentEvents(t *testing.T) {
 	doneSending3 := make(chan uint64)
 	numbers := make(chan uint64, 4)
 	// subscribe one listener to three events
-	require.NoError(t, evsw.AddListener("event1", listenerFunc(ctx, numbers)))
-	require.NoError(t, evsw.AddListener("event2", listenerFunc(ctx, numbers)))
-	require.NoError(t, evsw.AddListener("event3", listenerFunc(ctx, numbers)))
+	evsw.AddListener("event1", listenerFunc(ctx, numbers))
+	evsw.AddListener("event2", listenerFunc(ctx, numbers))
+	evsw.AddListener("event3", listenerFunc(ctx, numbers))
 	// collect received events
 	go sumReceivedNumbers(numbers, doneSum)
 	// go fire events
@@ -118,11 +109,11 @@ func TestAddDifferentListenerForDifferentEvents(t *testing.T) {
 	numbers1 := make(chan uint64, 4)
 	numbers2 := make(chan uint64, 4)
 	// subscribe two listener to three events
-	require.NoError(t, evsw.AddListener("event1", listenerFunc(ctx, numbers1)))
-	require.NoError(t, evsw.AddListener("event2", listenerFunc(ctx, numbers1)))
-	require.NoError(t, evsw.AddListener("event3", listenerFunc(ctx, numbers1)))
-	require.NoError(t, evsw.AddListener("event2", listenerFunc(ctx, numbers2)))
-	require.NoError(t, evsw.AddListener("event3", listenerFunc(ctx, numbers2)))
+	evsw.AddListener("event1", listenerFunc(ctx, numbers1))
+	evsw.AddListener("event2", listenerFunc(ctx, numbers1))
+	evsw.AddListener("event3", listenerFunc(ctx, numbers1))
+	evsw.AddListener("event2", listenerFunc(ctx, numbers2))
+	evsw.AddListener("event3", listenerFunc(ctx, numbers2))
 	// collect received events for listener1
 	go sumReceivedNumbers(numbers1, doneSum1)
 	// collect received events for listener2
@@ -170,12 +161,12 @@ func TestManageListenersAsync(t *testing.T) {
 	numbers1 := make(chan uint64, 4)
 	numbers2 := make(chan uint64, 4)
 	// subscribe two listener to three events
-	require.NoError(t, evsw.AddListener("event1", listenerFunc(ctx, numbers1)))
-	require.NoError(t, evsw.AddListener("event2", listenerFunc(ctx, numbers1)))
-	require.NoError(t, evsw.AddListener("event3", listenerFunc(ctx, numbers1)))
-	require.NoError(t, evsw.AddListener("event1", listenerFunc(ctx, numbers2)))
-	require.NoError(t, evsw.AddListener("event2", listenerFunc(ctx, numbers2)))
-	require.NoError(t, evsw.AddListener("event3", listenerFunc(ctx, numbers2)))
+	evsw.AddListener("event1", listenerFunc(ctx, numbers1))
+	evsw.AddListener("event2", listenerFunc(ctx, numbers1))
+	evsw.AddListener("event3", listenerFunc(ctx, numbers1))
+	evsw.AddListener("event1", listenerFunc(ctx, numbers2))
+	evsw.AddListener("event2", listenerFunc(ctx, numbers2))
+	evsw.AddListener("event3", listenerFunc(ctx, numbers2))
 	// collect received events for event1
 	go sumReceivedNumbers(numbers1, doneSum1)
 	// collect received events for event2
@@ -251,10 +242,10 @@ func fireEvents(ctx context.Context, emitter *EventEmitter, event string, doneCh
 	}
 }
 
-func listenerFunc(ctx context.Context, ch chan uint64) func(data EventData) error {
+func listenerFunc[T any](ctx context.Context, ch chan T) func(data EventData) error {
 	return func(data EventData) error {
 		select {
-		case ch <- data.(uint64):
+		case ch <- data.(T):
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()

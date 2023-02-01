@@ -87,9 +87,6 @@ const (
 	blocksToContributeToBecomeGoodPeer  = 10000
 	votesToContributeToBecomeGoodPeer   = 10000
 	commitsToContributeToBecomeGoodPeer = 10000
-
-	listenerIDConsensus      = "consensus-reactor"
-	listenerIDConsensusState = "consensus-state"
 )
 
 var errReactorClosed = errors.New("reactor is closed")
@@ -334,7 +331,7 @@ func (r *Reactor) GetPeerState(peerID types.NodeID) (*PeerState, bool) {
 func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Channel) {
 	onStopCh := r.state.getOnStopCh()
 
-	err := r.state.emitter.AddListener(
+	r.state.emitter.AddListener(
 		types.EventNewRoundStepValue,
 		func(data eventemitter.EventData) error {
 			rs := data.(*cstypes.RoundState)
@@ -353,11 +350,8 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 			}
 		},
 	)
-	if err != nil {
-		r.logger.Error("failed to add listener for events", "err", err)
-	}
 
-	err = r.state.emitter.AddListener(
+	r.state.emitter.AddListener(
 		types.EventValidBlockValue,
 		func(data eventemitter.EventData) error {
 			rs := data.(*cstypes.RoundState)
@@ -366,11 +360,8 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 			return err
 		},
 	)
-	if err != nil {
-		r.logger.Error("failed to add listener for events", "err", err)
-	}
 
-	err = r.state.emitter.AddListener(
+	r.state.emitter.AddListener(
 		types.EventVoteValue,
 		func(data eventemitter.EventData) error {
 			vote := data.(*types.Vote)
@@ -379,19 +370,15 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 			return err
 		},
 	)
-	if err != nil {
-		r.logger.Error("failed to add listener for events", "err", err)
-	}
 
-	if err := r.state.emitter.AddListener(types.EventCommitValue,
+	r.state.emitter.AddListener(types.EventCommitValue,
 		func(data eventemitter.EventData) error {
 			commit := data.(*types.Commit)
 			err := r.broadcast(ctx, stateCh, commit.HasCommitMessage())
 			r.logResult(err, r.logger, "broadcasting HasVote message", "height", commit.Height, "round", commit.Round)
 			return err
-		}); err != nil {
-		r.logger.Error("Error adding listener for events", "err", err)
-	}
+		},
+	)
 }
 
 func (r *Reactor) gossipDataForCatchup(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState, ps *PeerState, chans channelBundle) {

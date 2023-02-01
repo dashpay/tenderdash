@@ -51,11 +51,10 @@ func New(opts ...OptionFunc) *EventEmitter {
 }
 
 // AddListener adds a listener function to the event set, that will be called during Emit operation
-func (e *EventEmitter) AddListener(event string, listener ListenerFunc) error {
+func (e *EventEmitter) AddListener(event string, listener ListenerFunc) {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
 	e.events[event] = append(e.events[event], listener)
-	return nil
 }
 
 // Emit synchronously invokes all registered listeners for the given event name and data

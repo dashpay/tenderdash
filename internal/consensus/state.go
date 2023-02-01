@@ -277,18 +277,18 @@ func NewState(
 	cs.roundScheduler = &roundScheduler{timeoutTicker: cs.timeoutTicker}
 	cs.ctrl = NewController(cs, wal, cs.statsMsgQueue)
 	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, wal, cs.logger)
-	_ = cs.emitter.AddListener(setProposedAppVersionEventName, func(obj eventemitter.EventData) error {
+	cs.emitter.AddListener(setProposedAppVersionEventName, func(obj eventemitter.EventData) error {
 		ver := obj.(uint64)
 		cs.blockExecutor.proposedAppVersion = ver
 		return nil
 	})
-	_ = cs.emitter.AddListener(setPrivValidatorEventName, func(obj eventemitter.EventData) error {
+	cs.emitter.AddListener(setPrivValidatorEventName, func(obj eventemitter.EventData) error {
 		pv := obj.(privValidator)
 		cs.voteSigner.privValidator = pv
 		cs.blockExecutor.privValidator = pv
 		return nil
 	})
-	_ = cs.emitter.AddListener(setReplayModeEventName, func(obj eventemitter.EventData) error {
+	cs.emitter.AddListener(setReplayModeEventName, func(obj eventemitter.EventData) error {
 		cs.stateDataStore.UpdateReplayMode(obj.(bool))
 		return nil
 	})

@@ -2683,7 +2683,7 @@ func TestCommitFromPreviousRound(t *testing.T) {
 
 	// vs2, vs3 and vs4 send precommit for propBlock for the previous round
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), blockID, vs2, vs3, vs4)
-	err = cs1.emitter.AddListener(types.EventValidBlockValue, func(data tmevents.EventData) error {
+	cs1.emitter.AddListener(types.EventValidBlockValue, func(data tmevents.EventData) error {
 		rs := data.(*cstypes.RoundState)
 		assert.Equal(t, cstypes.RoundStepPropose, rs.Step)
 		assert.Equal(t, int32(-1), rs.CommitRound)
@@ -2691,7 +2691,6 @@ func TestCommitFromPreviousRound(t *testing.T) {
 		assert.True(t, rs.ProposalBlockParts.Header().Equals(blockID.PartSetHeader))
 		return nil
 	})
-	require.NoError(t, err)
 	ensureNewValidBlock(t, validBlockCh, height, round)
 
 	partSet, err = propBlock.MakePartSet(partSize)

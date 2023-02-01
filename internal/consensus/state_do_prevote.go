@@ -182,7 +182,7 @@ func (cs *DoPrevoteAction) Execute(ctx context.Context, stateEvent StateEvent) e
 }
 
 func (cs *DoPrevoteAction) Subscribe(emitter *eventemitter.EventEmitter) {
-	_ = emitter.AddListener(setReplayModeEventName, func(a eventemitter.EventData) error {
+	emitter.AddListener(setReplayModeEventName, func(a eventemitter.EventData) error {
 		cs.replayMode = a.(bool)
 		return nil
 	})

@@ -119,11 +119,11 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 }
 
 func (c *EnterProposeAction) Subscribe(emitter *eventemitter.EventEmitter) {
-	_ = emitter.AddListener(setReplayModeEventName, func(a eventemitter.EventData) error {
+	emitter.AddListener(setReplayModeEventName, func(a eventemitter.EventData) error {
 		c.replayMode = a.(bool)
 		return nil
 	})
-	_ = emitter.AddListener(setPrivValidatorEventName, func(a eventemitter.EventData) error {
+	emitter.AddListener(setPrivValidatorEventName, func(a eventemitter.EventData) error {
 		c.privValidator = a.(privValidator)
 		return nil
 	})

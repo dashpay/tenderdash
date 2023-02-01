@@ -319,7 +319,7 @@ func (c *TryAddVoteAction) addVote(
 }
 
 func (c *TryAddVoteAction) Subscribe(emitter *eventemitter.EventEmitter) {
-	_ = emitter.AddListener(setPrivValidatorEventName, func(a eventemitter.EventData) error {
+	emitter.AddListener(setPrivValidatorEventName, func(a eventemitter.EventData) error {
 		c.privValidator = a.(privValidator)
 		return nil
 	})

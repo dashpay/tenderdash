@@ -146,7 +146,7 @@ func (cs *DecideProposalAction) Execute(ctx context.Context, stateEvent StateEve
 }
 
 func (cs *DecideProposalAction) Subscribe(emitter *eventemitter.EventEmitter) {
-	_ = emitter.AddListener(setPrivValidatorEventName, func(a eventemitter.EventData) error {
+	emitter.AddListener(setPrivValidatorEventName, func(a eventemitter.EventData) error {
 		cs.privValidator = a.(privValidator)
 		return nil
 	})
