@@ -107,6 +107,7 @@ func (rpcClient *RPCClient) Close() error {
 // Ping sends a ping request to the remote signer
 func (rpcClient *RPCClient) Ping() error {
 	err := rpcClient.endpoint.Ping()
+	rpcClient.logger.Trace("core rpc call Ping", "error", err)
 	if err != nil {
 		return err
 	}
@@ -118,22 +119,43 @@ func (rpcClient *RPCClient) QuorumInfo(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 ) (*btcjson.QuorumInfoResult, error) {
-	return rpcClient.endpoint.QuorumInfo(quorumType, quorumHash.String(), false)
+	resp, err := rpcClient.endpoint.QuorumInfo(quorumType, quorumHash.String(), false)
+	rpcClient.logger.Trace("core rpc call QuorumInfo",
+		"quorumType", quorumType,
+		"quorumHash", quorumHash,
+		"includeSkShare", false,
+		"resp", resp,
+		"error", err,
+	)
+	return resp, err
 }
 
 func (rpcClient *RPCClient) MasternodeStatus() (*btcjson.MasternodeStatusResult, error) {
-	return rpcClient.endpoint.MasternodeStatus()
+	resp, err := rpcClient.endpoint.MasternodeStatus()
+	rpcClient.logger.Trace("core rpc call MasternodeStatus",
+		"resp", resp,
+		"error", err)
+	return resp, err
 }
 
 func (rpcClient *RPCClient) GetNetworkInfo() (*btcjson.GetNetworkInfoResult, error) {
-	return rpcClient.endpoint.GetNetworkInfo()
+	resp, err := rpcClient.endpoint.GetNetworkInfo()
+	rpcClient.logger.Trace("core rpc call GetNetworkInfo",
+		"resp", resp,
+		"error", err)
+	return resp, err
 }
 
 func (rpcClient *RPCClient) MasternodeListJSON(filter string) (
 	map[string]btcjson.MasternodelistResultJSON,
 	error,
 ) {
-	return rpcClient.endpoint.MasternodeListJSON(filter)
+	resp, err := rpcClient.endpoint.MasternodeListJSON(filter)
+	rpcClient.logger.Trace("core rpc call MasternodeListJSON",
+		"filter", filter,
+		"resp", resp,
+		"error", err)
+	return resp, err
 }
 
 func (rpcClient *RPCClient) QuorumSign(
@@ -152,6 +174,16 @@ func (rpcClient *RPCClient) QuorumSign(
 		quorumHash.String(),
 		false,
 	)
+	rpcClient.logger.Trace("core rpc call QuorumSign",
+		"quorumType", quorumType,
+		"requestID", requestID.String(),
+		"messageHash", messageHash.String(),
+		"quorumHash", quorumHash.String(),
+		"submit", false,
+		"resp", quorumSignResultWithBool,
+		"error", err,
+	)
+
 	if quorumSignResultWithBool == nil {
 		return nil, err
 	}
@@ -166,17 +198,27 @@ func (rpcClient *RPCClient) QuorumVerify(
 	signature bytes.HexBytes,
 	quorumHash crypto.QuorumHash,
 ) (bool, error) {
-	rpcClient.logger.Debug("quorum verify", "sig", signature, "quorumhash", quorumHash)
 	if err := ValidateQuorumType(quorumType); err != nil {
 		return false, err
 	}
-	return rpcClient.endpoint.QuorumVerify(
+	resp, err := rpcClient.endpoint.QuorumVerify(
 		quorumType,
 		requestID.String(),
 		messageHash.String(),
 		signature.String(),
 		quorumHash.String(),
 	)
+	rpcClient.logger.Trace("core rpc call QuorumVerify",
+		"quorumType", quorumType,
+		"requestID", requestID.String(),
+		"messageHash", messageHash.String(),
+		"signature", signature.String(),
+		"quorumHash", quorumHash.String(),
+		"resp", resp,
+		"error", err,
+	)
+	return resp, err
+
 }
 
 // ValidateQuorumType checks if quorum type is valid.
