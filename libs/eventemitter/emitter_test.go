@@ -251,10 +251,10 @@ func fireEvents(ctx context.Context, emitter *EventEmitter, event string, doneCh
 	}
 }
 
-func listenerFunc(ctx context.Context, numbers chan uint64) func(data EventData) error {
+func listenerFunc(ctx context.Context, ch chan uint64) func(data EventData) error {
 	return func(data EventData) error {
 		select {
-		case numbers <- data.(uint64):
+		case ch <- data.(uint64):
 			return nil
 		case <-ctx.Done():
 			return ctx.Err()
