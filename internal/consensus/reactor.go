@@ -17,7 +17,7 @@ import (
 	"github.com/tendermint/tendermint/internal/p2p"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/bits"
-	tmevents "github.com/tendermint/tendermint/libs/events"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
 	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
@@ -334,10 +334,9 @@ func (r *Reactor) GetPeerState(peerID types.NodeID) (*PeerState, bool) {
 func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Channel) {
 	onStopCh := r.state.getOnStopCh()
 
-	err := r.state.evsw.AddListenerForEvent(
-		listenerIDConsensus,
+	err := r.state.emitter.AddListener(
 		types.EventNewRoundStepValue,
-		func(data tmevents.EventData) error {
+		func(data eventemitter.EventData) error {
 			rs := data.(*cstypes.RoundState)
 			err := r.broadcast(ctx, stateCh, rs.NewRoundStepMessage())
 			if err != nil {
@@ -358,10 +357,9 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 		r.logger.Error("failed to add listener for events", "err", err)
 	}
 
-	err = r.state.evsw.AddListenerForEvent(
-		listenerIDConsensus,
+	err = r.state.emitter.AddListener(
 		types.EventValidBlockValue,
-		func(data tmevents.EventData) error {
+		func(data eventemitter.EventData) error {
 			rs := data.(*cstypes.RoundState)
 			err := r.broadcast(ctx, stateCh, rs.NewValidBlockMessage())
 			r.logResult(err, r.logger, "broadcasting new valid block message", "height", rs.Height, "round", rs.Round)
@@ -372,10 +370,9 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 		r.logger.Error("failed to add listener for events", "err", err)
 	}
 
-	err = r.state.evsw.AddListenerForEvent(
-		listenerIDConsensus,
+	err = r.state.emitter.AddListener(
 		types.EventVoteValue,
-		func(data tmevents.EventData) error {
+		func(data eventemitter.EventData) error {
 			vote := data.(*types.Vote)
 			err := r.broadcast(ctx, stateCh, vote.HasVoteMessage())
 			r.logResult(err, r.logger, "broadcasting HasVote message", "height", vote.Height, "round", vote.Round)
@@ -386,8 +383,8 @@ func (r *Reactor) subscribeToBroadcastEvents(ctx context.Context, stateCh p2p.Ch
 		r.logger.Error("failed to add listener for events", "err", err)
 	}
 
-	if err := r.state.evsw.AddListenerForEvent(listenerIDConsensus, types.EventCommitValue,
-		func(data tmevents.EventData) error {
+	if err := r.state.emitter.AddListener(types.EventCommitValue,
+		func(data eventemitter.EventData) error {
 			commit := data.(*types.Commit)
 			err := r.broadcast(ctx, stateCh, commit.HasCommitMessage())
 			r.logResult(err, r.logger, "broadcasting HasVote message", "height", commit.Height, "round", commit.Round)

@@ -17,12 +17,19 @@ import (
 	"github.com/tendermint/tendermint/internal/jsontypes"
 	"github.com/tendermint/tendermint/internal/libs/autofile"
 	sm "github.com/tendermint/tendermint/internal/state"
-	tmevents "github.com/tendermint/tendermint/libs/events"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	"github.com/tendermint/tendermint/libs/service"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
+)
+
+// consensus events
+const (
+	setProposedAppVersionEventName = "setProposedAppVersion"
+	setPrivValidatorEventName      = "setPrivValidator"
+	setReplayModeEventName         = "setReplayMode"
 )
 
 // Consensus sentinel errors
@@ -154,7 +161,7 @@ type State struct {
 
 	// synchronous pubsub between consensus state and reactor.
 	// state only emits EventNewRoundStep, EventValidBlock, and EventVote
-	evsw tmevents.EventSwitch
+	emitter *eventemitter.EventEmitter
 
 	// for reporting metrics
 	metrics *Metrics
@@ -233,7 +240,7 @@ func NewState(
 		doWALCatchup: true,
 		wal:          nilWAL{},
 		evpool:       evpool,
-		evsw:         tmevents.NewEventSwitch(),
+		emitter:      eventemitter.New(eventemitter.WithLogger(logger)),
 		metrics:      NopMetrics(),
 		onStopCh:     make(chan *cstypes.RoundState),
 		msgInfoQueue: newMsgInfoQueue(),
@@ -262,7 +269,7 @@ func NewState(
 		proposedAppVersion: cs.proposedAppVersion,
 	}
 	cs.eventPublisher = &EventPublisher{
-		evsw:     cs.evsw,
+		emitter:  cs.emitter,
 		eventBus: cs.eventBus,
 		logger:   cs.logger,
 		wal:      wal,
@@ -270,18 +277,18 @@ func NewState(
 	cs.roundScheduler = &roundScheduler{timeoutTicker: cs.timeoutTicker}
 	cs.ctrl = NewController(cs, wal, cs.statsMsgQueue)
 	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, wal, cs.logger)
-	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setProposedAppVersion, func(obj tmevents.EventData) error {
+	_ = cs.emitter.AddListener(setProposedAppVersionEventName, func(obj eventemitter.EventData) error {
 		ver := obj.(uint64)
 		cs.blockExecutor.proposedAppVersion = ver
 		return nil
 	})
-	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setPrivValidator, func(obj tmevents.EventData) error {
+	_ = cs.emitter.AddListener(setPrivValidatorEventName, func(obj eventemitter.EventData) error {
 		pv := obj.(privValidator)
 		cs.voteSigner.privValidator = pv
 		cs.blockExecutor.privValidator = pv
 		return nil
 	})
-	_ = cs.evsw.AddListenerForEvent(listenerIDConsensusState, setReplayMode, func(obj tmevents.EventData) error {
+	_ = cs.emitter.AddListener(setReplayModeEventName, func(obj eventemitter.EventData) error {
 		cs.stateDataStore.UpdateReplayMode(obj.(bool))
 		return nil
 	})
@@ -299,7 +306,7 @@ func NewState(
 
 func (cs *State) SetProposedAppVersion(ver uint64) {
 	cs.proposedAppVersion = ver
-	cs.evsw.FireEvent(setProposedAppVersion, ver)
+	cs.emitter.Emit(setProposedAppVersionEventName, ver)
 }
 
 func (cs *State) updateStateFromStore() error {
@@ -388,7 +395,7 @@ func (cs *State) SetPrivValidator(ctx context.Context, priv types.PrivValidator)
 	cs.mtx.Lock()
 	defer cs.mtx.Unlock()
 	defer func() {
-		cs.evsw.FireEvent(setPrivValidator, cs.privValidator)
+		cs.emitter.Emit(setPrivValidatorEventName, cs.privValidator)
 	}()
 	if priv == nil {
 		cs.privValidator = privValidator{}
@@ -823,7 +830,7 @@ func (cs *State) PublishCommitEvent(commit *types.Commit) error {
 	if err := cs.eventBus.PublishEventCommit(types.EventDataCommit{Commit: commit}); err != nil {
 		return err
 	}
-	cs.evsw.FireEvent(types.EventCommitValue, commit)
+	cs.emitter.Emit(types.EventCommitValue, commit)
 	return nil
 }
 

@@ -3,6 +3,8 @@ package consensus
 import (
 	"context"
 	"errors"
+
+	"github.com/tendermint/tendermint/libs/eventemitter"
 )
 
 // EventType is an integer representation of a transition event
@@ -181,9 +183,9 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Con
 		},
 	}
 	for _, action := range ctrl.actions {
-		sub, ok := action.(eventSwitchSubscriber)
+		sub, ok := action.(eventemitter.Subscriber)
 		if ok {
-			sub.subscribe(cs.evsw)
+			sub.Subscribe(cs.emitter)
 		}
 	}
 	return ctrl

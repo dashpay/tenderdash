@@ -4,7 +4,7 @@ import (
 	"context"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/libs/events"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 )
@@ -118,13 +118,12 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	return nil
 }
 
-func (c *EnterProposeAction) subscribe(evsw events.EventSwitch) {
-	const listenerID = "enterProposeAction"
-	_ = evsw.AddListenerForEvent(listenerID, setReplayMode, func(a events.EventData) error {
+func (c *EnterProposeAction) Subscribe(emitter *eventemitter.EventEmitter) {
+	_ = emitter.AddListener(setReplayModeEventName, func(a eventemitter.EventData) error {
 		c.replayMode = a.(bool)
 		return nil
 	})
-	_ = evsw.AddListenerForEvent(listenerID, setPrivValidator, func(a events.EventData) error {
+	_ = emitter.AddListener(setPrivValidatorEventName, func(a eventemitter.EventData) error {
 		c.privValidator = a.(privValidator)
 		return nil
 	})

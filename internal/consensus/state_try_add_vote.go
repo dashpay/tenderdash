@@ -8,7 +8,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/events"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -318,8 +318,8 @@ func (c *TryAddVoteAction) addVote(
 	return added, err
 }
 
-func (c *TryAddVoteAction) subscribe(evsw events.EventSwitch) {
-	_ = evsw.AddListenerForEvent("addVoteCommand", setPrivValidator, func(a events.EventData) error {
+func (c *TryAddVoteAction) Subscribe(emitter *eventemitter.EventEmitter) {
+	_ = emitter.AddListener(setPrivValidatorEventName, func(a eventemitter.EventData) error {
 		c.privValidator = a.(privValidator)
 		return nil
 	})

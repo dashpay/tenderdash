@@ -3,7 +3,7 @@ package consensus
 import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
-	tmevents "github.com/tendermint/tendermint/libs/events"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -15,7 +15,7 @@ import (
 type EventPublisher struct {
 	// synchronous pubsub between consensus state and reactor.
 	// state only emits EventNewRoundStep, EventValidBlock, and EventVote
-	evsw tmevents.EventSwitch
+	emitter *eventemitter.EventEmitter
 	// we use eventBus to trigger msg broadcasts in the reactor,
 	// and to notify external subscribers, eg. through a websocket
 	eventBus *eventbus.EventBus
@@ -29,7 +29,7 @@ func (p *EventPublisher) PublishValidBlockEvent(rs cstypes.RoundState) {
 	if err != nil {
 		p.logger.Error("failed publishing valid block", "err", err)
 	}
-	p.evsw.FireEvent(types.EventValidBlockValue, &rs)
+	p.emitter.Emit(types.EventValidBlockValue, &rs)
 }
 
 // PublishCommitEvent ...
@@ -38,7 +38,7 @@ func (p *EventPublisher) PublishCommitEvent(commit *types.Commit) error {
 	if err := p.eventBus.PublishEventCommit(types.EventDataCommit{Commit: commit}); err != nil {
 		return err
 	}
-	p.evsw.FireEvent(types.EventCommitValue, commit)
+	p.emitter.Emit(types.EventCommitValue, commit)
 	return nil
 }
 
@@ -85,7 +85,7 @@ func (p *EventPublisher) PublishVoteEvent(vote *types.Vote) error {
 	if err != nil {
 		return err
 	}
-	p.evsw.FireEvent(types.EventVoteValue, vote)
+	p.emitter.Emit(types.EventVoteValue, vote)
 	return nil
 }
 
@@ -97,5 +97,5 @@ func (p *EventPublisher) PublishNewRoundStepEvent(rs cstypes.RoundState) {
 	if err := p.eventBus.PublishEventNewRoundStep(rs.RoundStateEvent()); err != nil {
 		p.logger.Error("failed publishing new round step", "err", err)
 	}
-	p.evsw.FireEvent(types.EventNewRoundStepValue, &rs)
+	p.emitter.Emit(types.EventNewRoundStepValue, &rs)
 }
