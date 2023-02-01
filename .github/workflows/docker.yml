@@ -8,7 +8,7 @@ on:
       tag:
         type: string
         description: 'Docker tag'
-        required: true
+        required: false
   release:
     types:
       - published
@@ -66,6 +66,7 @@ jobs:
           images: dashpay/tenderdash
           tags: |
             type=semver,pattern={{version}},value=${{ github.event.inputs.tag }}
+            type=raw,priority=650,value=${{ github.event.inputs.tag }}
             type=ref,event=branch
             type=ref,event=pr
             type=match,pattern=v(\d+),group=1
