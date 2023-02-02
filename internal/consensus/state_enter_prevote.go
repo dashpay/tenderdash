@@ -29,6 +29,7 @@ func (e *EnterPrevoteEvent) GetType() EventType {
 type EnterPrevoteAction struct {
 	logger         log.Logger
 	eventPublisher *EventPublisher
+	prevoter       Prevoter
 }
 
 // Execute ...
@@ -60,16 +61,8 @@ func (c *EnterPrevoteAction) Execute(ctx context.Context, statEvent StateEvent) 
 		"step", stateData.Step)
 
 	// Sign and broadcast vote as necessary
-	prevoteEvent := DoPrevoteEvent{
-		Height:         height,
-		Round:          round,
-		AllowOldBlocks: epe.AllowOldBlocks,
-	}
-	err := statEvent.Ctrl.Dispatch(ctx, &prevoteEvent, stateData)
-	if err != nil {
-		return err
-	}
+
 	// Once `addVote` hits any +2/3 prevotes, we will go to PrevoteWait
 	// (so we have more time to try and collect +2/3 prevotes for a single block)
-	return nil
+	return c.prevoter.Do(ctx, stateData)
 }
