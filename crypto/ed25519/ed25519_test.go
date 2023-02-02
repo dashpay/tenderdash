@@ -2,7 +2,6 @@ package ed25519_test
 
 import (
 	stded25519 "crypto/ed25519"
-
 	"crypto/x509"
 	"encoding/base64"
 	"testing"
@@ -91,7 +90,8 @@ func TestFromDer(t *testing.T) {
 }
 
 // TestEd25519StdlibCompat ensures that key format in "crypto/ed25519" is compatible with
-// the keys in "github.com/oasisprotocol/curve25519-voi" (which we use)
+// the keys in "github.com/oasisprotocol/curve25519-voi" (which we use).
+// The intention of this test is to detect when external dependencies change the key format, breaking FromDER() logic.
 func TestEd25519StdlibCompat(t *testing.T) {
 	seed := tmrand.Bytes(ed25519.SeedSize)
 

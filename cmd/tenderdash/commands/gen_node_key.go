@@ -4,12 +4,14 @@ import (
 	"bufio"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"strings"
 
 	"github.com/spf13/cobra"
+	"github.com/tyler-smith/go-bip39"
 	"golang.org/x/term"
 
 	"github.com/tendermint/tendermint/config"
@@ -20,7 +22,7 @@ import (
 
 const (
 	flagFromMnemonic       = "from-mnemonic"
-	flagFromPem            = "from-pem"
+	flagFromPem            = "from-pem-file"
 	flagDerivationPath     = "derivation-path"
 	defaultDeriviationPath = "m/9'/5'/3'/4'/0'"
 )
@@ -108,6 +110,8 @@ func genNodeKeyRunE(cmd *cobra.Command, args []string) error {
 	return nil
 }
 
+// readMnemonic reads mnemonic and passphrase from `in`.
+// If `in` is a terminal, it reads the passphrase without displaying it.
 func readMnemonic(in io.Reader, out io.Writer) (mnemonic string, password string, err error) {
 	reader := bufio.NewReader(in)
 
@@ -133,14 +137,20 @@ func readMnemonic(in io.Reader, out io.Writer) (mnemonic string, password string
 	return strings.TrimSpace(mnemonic), strings.TrimSpace(password), nil
 }
 
+// nodeKeyFromMnemonic reads BIP39 mnemonic and optional passphrase from stdin, and derives node key from it.
 func nodeKeyFromMnemonic(cmd *cobra.Command, args []string) (types.NodeKey, error) {
 	mnemonic, password, err := readMnemonic(cmd.InOrStdin(), cmd.OutOrStdout())
 	if err != nil {
 		return types.NodeKey{}, err
 	}
-	if strings.Count(mnemonic, " ") < 11 {
-		return types.NodeKey{}, fmt.Errorf("mnemonic must have at least 12 words")
+	// Validate the mnemonic
+	if _, err := bip39.EntropyFromMnemonic(mnemonic); err != nil {
+		if errors.Is(err, bip39.ErrInvalidMnemonic) {
+			return types.NodeKey{}, fmt.Errorf("mnemonic must have 12, 15, 18, 21 or 24 words")
+		}
+		return types.NodeKey{}, err
 	}
+
 	privKey, err := ed25519.FromBip39Mnemonic(mnemonic, password, derivationPath)
 	if err != nil {
 		return types.NodeKey{}, err
@@ -151,12 +161,15 @@ func nodeKeyFromMnemonic(cmd *cobra.Command, args []string) (types.NodeKey, erro
 		PrivKey: privKey,
 	}, nil
 }
+
+// nodeKeyFromPem reads PEM ED25519 private key from `in` and formats it as a `types.NodeKey`
 func nodeKeyFromPem(in io.Reader) (nodeKey types.NodeKey, err error) {
 	pemData, err := io.ReadAll(in)
 	if err != nil {
 		return nodeKey, err
 	}
 
+	// ignore `rest`, as we don't support multiple items in one PEM file
 	block, _ := pem.Decode(pemData)
 	if block == nil {
 		return nodeKey, fmt.Errorf("cannot PEM-decode input file")
