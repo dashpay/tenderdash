@@ -25,7 +25,7 @@ const (
 	ProposalCompletedType
 	EnterPrevoteWaitType
 	EnterPrecommitWaitType
-	TryAddVoteType
+	AddVoteType
 	DoPrevoteType
 )
 
@@ -74,6 +74,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Con
 		eventPublisher: cs.eventPublisher,
 	}
 	ctrl := &Controller{}
+
 	ctrl.actions = map[EventType]ActionHandler{
 		EnterNewRoundType: &EnterNewRoundAction{
 			logger:         cs.logger,
@@ -120,15 +121,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Con
 			metrics:    cs.metrics,
 			replayMode: cs.replayMode,
 		},
-		TryAddVoteType: &TryAddVoteAction{
-			evpool:         cs.evpool,
-			logger:         cs.logger,
-			privValidator:  cs.privValidator,
-			eventPublisher: cs.eventPublisher,
-			blockExec:      cs.blockExec,
-			metrics:        cs.metrics,
-			statsQueue:     statsQueue,
-		},
+		AddVoteType: newAddVoteAction(cs, ctrl, statsQueue),
 		EnterCommitType: &EnterCommitAction{
 			logger:          cs.logger,
 			eventPublisher:  cs.eventPublisher,

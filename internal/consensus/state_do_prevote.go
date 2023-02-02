@@ -64,7 +64,7 @@ func (cs *DoPrevoteAction) Execute(ctx context.Context, stateEvent StateEvent) e
 	sp := stateData.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
 	//TODO: Remove this temporary fix when the complete solution is ready. See #8739
 	if !cs.replayMode && stateData.Proposal.POLRound == -1 && stateData.LockedRound == -1 && !stateData.proposalIsTimely() {
-		logger.Debug("prevote step: Proposal is not timely; prevoting nil",
+		logger.Debug("prevote step: proposal is not timely; prevoting nil",
 			"proposed", tmtime.Canonical(stateData.Proposal.Timestamp).Format(time.RFC3339Nano),
 			"received", tmtime.Canonical(stateData.ProposalReceiveTime).Format(time.RFC3339Nano),
 			"msg_delay", sp.MessageDelay,

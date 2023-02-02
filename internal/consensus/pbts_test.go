@@ -489,7 +489,7 @@ func TestTooFarInThePastProposal(t *testing.T) {
 	}
 
 	pbtsTest := newPBTSTestHarness(ctx, t, cfg)
-	pbtsTest.logger.AssertMatch(regexp.MustCompile(`"height":2,.*Proposal is not timely`))
+	pbtsTest.logger.AssertMatch(regexp.MustCompile(`"height":2,.*proposal is not timely`))
 	results := pbtsTest.run(ctx, t)
 
 	require.Nil(t, results[2].prevote.BlockID.Hash)
@@ -520,7 +520,7 @@ func TestTooFarInTheFutureProposal(t *testing.T) {
 	}
 
 	pbtsTest := newPBTSTestHarness(ctx, t, cfg)
-	pbtsTest.logger.AssertMatch(regexp.MustCompile(`"height":2,.*Proposal is not timely`))
+	pbtsTest.logger.AssertMatch(regexp.MustCompile(`"height":2,.*proposal is not timely`))
 	results := pbtsTest.run(ctx, t)
 
 	require.Nil(t, results[2].prevote.BlockID.Hash)
