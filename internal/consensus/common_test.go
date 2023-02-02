@@ -45,6 +45,7 @@ import (
 const (
 	testSubscriber = "test-client"
 	ensureTimeout  = time.Millisecond * 800
+	chainID        = "test-chain"
 )
 
 // A cleanupFunc cleans up any config / test files created for a particular
