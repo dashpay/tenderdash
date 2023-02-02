@@ -25,7 +25,7 @@ const (
 	ProposalCompletedType
 	EnterPrevoteWaitType
 	EnterPrecommitWaitType
-	TryAddVoteType
+	AddVoteType
 )
 
 var (
@@ -112,15 +112,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Con
 			statsQueue:     statsQueue,
 		},
 		ProposalCompletedType: &ProposalCompletedAction{logger: cs.logger},
-		TryAddVoteType: &TryAddVoteAction{
-			evpool:         cs.evpool,
-			logger:         cs.logger,
-			privValidator:  cs.privValidator,
-			eventPublisher: cs.eventPublisher,
-			blockExec:      cs.blockExec,
-			metrics:        cs.metrics,
-			statsQueue:     statsQueue,
-		},
+		AddVoteType: newAddVoteAction(cs, ctrl, statsQueue),
 		EnterCommitType: &EnterCommitAction{
 			logger:          cs.logger,
 			eventPublisher:  cs.eventPublisher,

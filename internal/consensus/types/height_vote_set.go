@@ -145,6 +145,13 @@ func (hvs *HeightVoteSet) AddVote(vote *types.Vote) (added bool, err error) {
 	return
 }
 
+// GetVoteSet returns the vote-set for the round and the type of vote
+func (hvs *HeightVoteSet) GetVoteSet(round int32, voteType tmproto.SignedMsgType) *types.VoteSet {
+	hvs.mtx.Lock()
+	defer hvs.mtx.Unlock()
+	return hvs.getVoteSet(round, voteType)
+}
+
 func (hvs *HeightVoteSet) Prevotes(round int32) *types.VoteSet {
 	hvs.mtx.Lock()
 	defer hvs.mtx.Unlock()
