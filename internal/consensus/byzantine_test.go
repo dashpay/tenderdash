@@ -159,7 +159,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		if lazyNodeState.privValidator.IsZero() {
 			// If this node is a validator & proposer in the current round, it will
 			// miss the opportunity to create a block.
-			lazyNodeState.logger.Error("enterPropose", "err", ErrPrivValidatorNotSet)
+			lazyNodeState.logger.Error("enterPropose", "error", ErrPrivValidatorNotSet)
 			return nil
 		}
 
