@@ -1,6 +1,8 @@
 package consensus
 
-import "context"
+import (
+	"context"
+)
 
 type contextKey int
 

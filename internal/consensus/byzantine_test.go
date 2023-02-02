@@ -122,12 +122,8 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 	}
 
-	doPrevoteOrigin := bzNodeState.ctrl.Get(DoPrevoteType)
-	require.NotNil(t, doPrevoteOrigin)
+	withBzPrevoter(t, rts, bzNodeID, prevoteHeight)
 	// alter prevote so that the byzantine node double votes when height is 2
-	doPrevoteCmd := newDoPrevoteByzantine(t, rts, bzNodeID, doPrevoteOrigin, prevoteHeight)
-
-	bzNodeState.ctrl.Register(DoPrevoteType, doPrevoteCmd)
 
 	// Introducing a lazy proposer means that the time of the block committed is
 	// different to the timestamp that the other nodes have. This tests to ensure
@@ -159,7 +155,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		if lazyNodeState.privValidator.IsZero() {
 			// If this node is a validator & proposer in the current round, it will
 			// miss the opportunity to create a block.
-			lazyNodeState.logger.Error("enterPropose", "err", ErrPrivValidatorNotSet)
+			lazyNodeState.logger.Error("enterPropose", "error", ErrPrivValidatorNotSet)
 			return nil
 		}
 
@@ -284,54 +280,67 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	}
 }
 
-func newDoPrevoteByzantine(
-	t *testing.T,
-	rts *reactorTestSuite,
-	bzNodeID types.NodeID,
-	doPrevoteOrigin ActionHandler,
-	prevoteHeight int64,
-) ActionHandler {
-	return newMockAction(func(ctx context.Context, stateEvent StateEvent) error {
-		stateData := stateEvent.StateData
-		event := stateEvent.Data.(*DoPrevoteEvent)
-		bzNodeState := rts.states[bzNodeID]
-		// allow first height to happen normally so that byzantine validator is no longer proposer
-		uncommittedState, err := bzNodeState.blockExec.ProcessProposal(
-			ctx,
-			stateData.ProposalBlock,
-			event.Round,
-			stateData.state,
-			true,
-		)
-		assert.NoError(t, err)
-		assert.NotZero(t, uncommittedState)
-		stateData.CurrentRoundState = uncommittedState
+type byzantinePrevoter struct {
+	t             *testing.T
+	logger        log.Logger
+	voteSigner    *voteSigner
+	blockExec     *sm.BlockExecutor
+	prevoteHeight int64
+	voteCh        p2p.Channel
+	peers         map[types.NodeID]*PeerState
+	origin        Prevoter
+}
 
-		if event.Height != prevoteHeight {
-			return doPrevoteOrigin.Execute(ctx, stateEvent)
+func withBzPrevoter(t *testing.T, rts *reactorTestSuite, bzNodeID types.NodeID, height int64) {
+	reactor := rts.reactors[bzNodeID]
+	bzState := rts.states[bzNodeID]
+	voteCh := rts.voteChannels[bzNodeID]
+	cmd := bzState.ctrl.Get(EnterPrevoteType)
+	enterPrevoteCmd := cmd.(*EnterPrevoteAction)
+	enterPrevoteCmd.prevoter = &byzantinePrevoter{
+		t:             t,
+		logger:        bzState.logger,
+		voteSigner:    bzState.voteSigner,
+		blockExec:     bzState.blockExec,
+		prevoteHeight: height,
+		voteCh:        voteCh,
+		peers:         reactor.peers,
+		origin:        enterPrevoteCmd.prevoter,
+	}
+}
+
+func (p *byzantinePrevoter) Do(ctx context.Context, stateData *StateData) error {
+	// allow first height to happen normally so that byzantine validator is no longer proposer
+	uncommittedState, err := p.blockExec.ProcessProposal(
+		ctx,
+		stateData.ProposalBlock,
+		stateData.Round,
+		stateData.state,
+		true,
+	)
+	require.NoError(p.t, err)
+	assert.NotZero(p.t, uncommittedState)
+	stateData.CurrentRoundState = uncommittedState
+	if stateData.Height != p.prevoteHeight {
+		return p.origin.Do(ctx, stateData)
+	}
+	prevote1, err := p.voteSigner.signVote(ctx, stateData, tmproto.PrevoteType, stateData.BlockID())
+	require.NoError(p.t, err)
+	prevote2, err := p.voteSigner.signVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+	require.NoError(p.t, err)
+	// send two votes to all peers (1st to one half, 2nd to another half)
+	i := 0
+	for _, ps := range p.peers {
+		var msg p2p.Envelope
+		if i < len(p.peers)/2 {
+			msg = newP2PMessage(ps.peerID, prevote1)
+		} else {
+			msg = newP2PMessage(ps.peerID, prevote2)
 		}
-		prevote1, err := bzNodeState.voteSigner.signVote(ctx, stateData, tmproto.PrevoteType, stateData.BlockID())
-		require.NoError(t, err)
-
-		prevote2, err := bzNodeState.voteSigner.signVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
-		require.NoError(t, err)
-
-		bzReactor := rts.reactors[bzNodeID]
-		// send two votes to all peers (1st to one half, 2nd to another half)
-		i := 0
-		voteCh := rts.voteChannels[bzNodeID]
-		for _, ps := range bzReactor.peers {
-			var msg p2p.Envelope
-			if i < len(bzReactor.peers)/2 {
-				msg = newP2PMessage(ps.peerID, prevote1)
-			} else {
-				msg = newP2PMessage(ps.peerID, prevote2)
-			}
-			require.NoError(t, voteCh.Send(ctx, msg))
-			i++
-		}
-		return nil
-	})
+		require.NoError(p.t, p.voteCh.Send(ctx, msg))
+		i++
+	}
+	return nil
 }
 
 func newP2PMessage(peerID types.NodeID, obj any) p2p.Envelope {
