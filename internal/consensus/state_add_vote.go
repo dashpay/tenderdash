@@ -3,11 +3,11 @@ package consensus
 import (
 	"context"
 	"errors"
-	"github.com/tendermint/tendermint/libs/eventemitter"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
