@@ -85,7 +85,7 @@ func TestGenNodeKeyFromMnemonic(t *testing.T) {
 		},
 		{
 			mnemonic:            "safe fire saddle",
-			expectErrorContains: "mnemonic must have at least 12 words",
+			expectErrorContains: "mnemonic must have 12, 15, 18, 21 or 24 words",
 		},
 	}
 	for _, tc := range testCases {
