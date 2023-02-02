@@ -45,7 +45,7 @@ func (p *prevoter) Do(ctx context.Context, stateData *StateData) error {
 	}
 	err = p.blockExec.ensureProcess(ctx, stateData, stateData.Round)
 	if err != nil {
-		p.handleError(err)
+		p.handleError(err, "block", stateData.ProposalBlock)
 		p.signAndAddNilVote(ctx, stateData)
 		return err
 	}
@@ -56,15 +56,15 @@ func (p *prevoter) Do(ctx context.Context, stateData *StateData) error {
 	return nil
 }
 
-func (p *prevoter) handleError(err error) {
+func (p *prevoter) handleError(err error, args ...any) {
 	p.metrics.MarkProposalProcessed(false)
+	args = append(args, "error", err)
 	if errors.Is(err, sm.ErrBlockRejected) {
-		p.logger.Error("proposed block rejected; this should not happen: "+
-			"the proposer may be misbehaving; prevoting nil", "error", err)
+		p.logger.Error("proposed block rejected; this should not happen: the proposer may be misbehaving; prevoting nil", args...)
 		return
 	}
 	if errors.As(err, &sm.ErrInvalidBlock{}) {
-		p.logger.Error("consensus deems this block invalid", "error", err)
+		p.logger.Error("consensus deems this block invalid", args...)
 		return
 	}
 	// Unknown error, so we panic
