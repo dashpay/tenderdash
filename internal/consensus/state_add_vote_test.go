@@ -18,10 +18,6 @@ import (
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
-const (
-	chainID = "test-chain"
-)
-
 type AddVoteTestSuite struct {
 	suite.Suite
 
