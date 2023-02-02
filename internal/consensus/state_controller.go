@@ -112,7 +112,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo]) *Con
 			statsQueue:     statsQueue,
 		},
 		ProposalCompletedType: &ProposalCompletedAction{logger: cs.logger},
-		AddVoteType: newAddVoteAction(cs, ctrl, statsQueue),
+		AddVoteType:           newAddVoteAction(cs, ctrl, statsQueue),
 		EnterCommitType: &EnterCommitAction{
 			logger:          cs.logger,
 			eventPublisher:  cs.eventPublisher,
