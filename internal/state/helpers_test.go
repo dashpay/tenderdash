@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
@@ -124,6 +125,7 @@ func makeState(t *testing.T, nVals, height int) (sm.State, dbm.DB, map[string]ty
 		Validators:         genVals,
 		ThresholdPublicKey: vals.ThresholdPublicKey,
 		QuorumHash:         vals.QuorumHash,
+		QuorumType:         btcjson.LLMQType_5_60,
 		AppHash:            make([]byte, crypto.DefaultAppHashSize),
 	})
 
@@ -196,6 +198,7 @@ func randomGenesisDoc() *types.GenesisDoc {
 		ConsensusParams:    types.DefaultConsensusParams(),
 		ThresholdPublicKey: pubkey,
 		QuorumHash:         crypto.RandQuorumHash(),
+		QuorumType:         btcjson.LLMQType_5_60,
 	}
 }
 

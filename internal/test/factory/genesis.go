@@ -3,6 +3,8 @@ package factory
 import (
 	"sort"
 
+	"github.com/dashevo/dashd-go/btcjson"
+
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/llmq"
@@ -55,5 +57,6 @@ func RandGenesisDoc(
 		InitialProposalCoreChainLock: coreChainLock.ToProto(),
 		ThresholdPublicKey:           ld.ThresholdPubKey,
 		QuorumHash:                   quorumHash,
+		QuorumType:                   btcjson.LLMQType_5_60,
 	}, privValidators
 }
