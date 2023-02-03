@@ -1,9 +1,21 @@
-# stage 1 Generate Tenderdash Binary
-FROM golang:1.19-alpine3.15 AS builder
+# STAGE 1: install dependencies
+FROM golang:1.19-alpine3.15 AS deps
 
 RUN apk update && \
     apk upgrade && \
     apk --no-cache add bash git gmp-dev sudo cmake build-base libpcap-dev
+
+WORKDIR /src/bls
+
+# Install BLS library
+COPY third_party ./third_party
+COPY test/Makefile ./test/Makefile
+COPY Makefile ./
+RUN make install-bls
+
+
+# STAGE 2: install golang libraries
+FROM deps AS libs
 
 WORKDIR /src/tenderdash
 
@@ -12,11 +24,8 @@ WORKDIR /src/tenderdash
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Install BLS library
-COPY third_party ./third_party
-COPY test/Makefile ./test/Makefile
-COPY Makefile ./
-RUN make install-bls
+# STAGE 3: build binaries
+FROM libs AS builder
 
 # Copy Tenderdash source
 # Avoid overwriting third-party libs
@@ -27,8 +36,9 @@ RUN make build-linux
 
 RUN make build_abcidump
 
-# stage 2
+# STAGE 4: FINAL IMAGE
 FROM alpine:3.15
+
 LABEL maintainer="developers@dash.org"
 
 # Tenderdash will be looking for the genesis file in /tenderdash/config/genesis.json

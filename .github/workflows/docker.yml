@@ -81,7 +81,7 @@ jobs:
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
           cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-to: type=gha,mode=min
           build-args: |
             TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
       - name: Show Docker image digest
