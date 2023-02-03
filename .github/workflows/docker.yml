@@ -76,6 +76,22 @@ jobs:
             latest=${{ github.event.release != null && !contains(github.event.release.tag_name, '-dev') }}
             suffix=${{ steps.suffix.outputs.result }}
 
+      - name: Build BLS library
+        id: docker_bls
+        uses: docker/build-push-action@v3.3.0
+        with:
+          context: .
+          file: ./DOCKER/Dockerfile
+          platforms: linux/${{ matrix.arch }} # linux/amd64 # ,linux/arm64
+          target: deps
+          push: false
+          cache-from: |
+            type=registry,ref=dashpay/tenderdash:buildcache-deps
+          cache-to: |
+            type=registry,ref=dashpay/tenderdash:buildcache-deps,mode=max
+          build-args: |
+            TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
+
       - name: Publish to Docker Hub
         id: docker_build
         uses: docker/build-push-action@v3.3.0
@@ -86,7 +102,9 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
-          cache-from: type=gha
+          cache-from: |
+            type=gha
+            type=registry,ref=dashpay/tenderdash:buildcache-deps
           cache-to: type=gha,mode=min
           build-args: |
             TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
