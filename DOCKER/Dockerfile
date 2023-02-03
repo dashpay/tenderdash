@@ -32,7 +32,7 @@ FROM libs AS builder
 COPY . .
 
 ARG TENDERMINT_BUILD_OPTIONS=tenderdash
-RUN make build-linux
+RUN make build-binary
 
 RUN make build_abcidump
 
