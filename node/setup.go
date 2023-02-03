@@ -529,7 +529,7 @@ func createPrivval(ctx context.Context, logger log.Logger, conf *config.Config, 
 
 		// If a local port is provided for Dash Core rpc into the service to sign.
 		privValidator, err := createAndStartPrivValidatorDashCoreClient(
-			conf.Consensus.QuorumType,
+			genDoc.QuorumType,
 			dashCoreRPCClient,
 			logger,
 		)

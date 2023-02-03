@@ -1011,7 +1011,7 @@ type ConsensusConfig struct {
 
 	DoubleSignCheckHeight int64 `mapstructure:"double-sign-check-height"`
 
-	QuorumType btcjson.LLMQType `mapstructure:"quorum-type"`
+	DeprecatedQuorumType btcjson.LLMQType `mapstructure:"quorum-type"`
 
 	// TODO: The following fields are all temporary overrides that should exist only
 	// for the duration of the v0.36 release. The below fields should be completely
@@ -1071,7 +1071,6 @@ func DefaultConsensusConfig() *ConsensusConfig {
 		PeerGossipSleepDuration:     100 * time.Millisecond,
 		PeerQueryMaj23SleepDuration: 2000 * time.Millisecond,
 		DoubleSignCheckHeight:       int64(0),
-		QuorumType:                  btcjson.LLMQType_5_60,
 		DontAutoPropose:             false,
 	}
 }
@@ -1082,7 +1081,6 @@ func TestConsensusConfig() *ConsensusConfig {
 	cfg.PeerGossipSleepDuration = 5 * time.Millisecond
 	cfg.PeerQueryMaj23SleepDuration = 250 * time.Millisecond
 	cfg.DoubleSignCheckHeight = int64(0)
-	cfg.QuorumType = btcjson.LLMQType_5_60
 	return cfg
 }
 
@@ -1163,11 +1161,15 @@ func (cfg *ConsensusConfig) DeprecatedFieldWarning() error {
 	if cfg.DeprecatedTimeoutCommit != nil {
 		fields = append(fields, "timeout-commit")
 	}
+	if cfg.DeprecatedQuorumType != 0 {
+		fields = append(fields, "quorum-type")
+	}
 	if len(fields) != 0 {
 		return fmt.Errorf("the following deprecated fields were set in the "+
-			"configuration file: %s. These fields were removed in v0.36. Timeout "+
-			"configuration has been moved to the ConsensusParams. For more information see "+
-			"https://tinyurl.com/adr074", strings.Join(fields, ", "))
+			"configuration file: %s. These fields were removed. "+
+			"Timeout configuration has been moved to the ConsensusParams. "+
+			"quorum-type has been moved to genesis document. ",
+			strings.Join(fields, ", "))
 	}
 	return nil
 }

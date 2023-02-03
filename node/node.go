@@ -9,7 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 
@@ -215,9 +214,10 @@ func makeNode(
 				return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
 			}
 		} else {
-			llmqType := cfg.Consensus.QuorumType
-			if llmqType == 0 {
-				llmqType = btcjson.LLMQType_100_67
+
+			llmqType := genDoc.QuorumType
+			if err := core.ValidateQuorumType(llmqType); err != nil {
+				return nil, fmt.Errorf("invalid genesis quorum type %d: %w", llmqType, err)
 			}
 			// This is used for light client verification only
 			dashCoreRPCClient = core.NewMockClient(cfg.ChainID(), llmqType, privValidator, false)

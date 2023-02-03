@@ -529,9 +529,6 @@ peer-query-maj23-sleep-duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 # as soon as the node has gathered votes from all of the validators on the network.
 # unsafe-bypass-commit-timeout-override =
 
-# Signing parameters
-quorum-type = "{{ .Consensus.QuorumType }}"
-
 #######################################################
 ###   Transaction Indexer Configuration Options     ###
 #######################################################
