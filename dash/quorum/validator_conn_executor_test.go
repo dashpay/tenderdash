@@ -32,7 +32,6 @@ import (
 
 const (
 	mySeedID     uint16 = math.MaxUint16 - 1
-	chainID             = "execution_chain"
 	nTxsPerBlock        = 10
 )
 

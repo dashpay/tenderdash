@@ -214,7 +214,6 @@ func makeNode(
 				return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
 			}
 		} else {
-
 			llmqType := genDoc.QuorumType
 			if err := core.ValidateQuorumType(llmqType); err != nil {
 				return nil, fmt.Errorf("invalid genesis quorum type %d: %w", llmqType, err)

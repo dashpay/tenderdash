@@ -13,12 +13,8 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-func TestGenesisDoc(
-	valSet *types.ValidatorSet,
-	appHash tmbytes.HexBytes) types.GenesisDoc {
-
+func TestGenesisDoc(valSet *types.ValidatorSet, appHash tmbytes.HexBytes) types.GenesisDoc {
 	genVals := types.MakeGenesisValsFromValidatorSet(valSet)
-
 	return types.GenesisDoc{
 		GenesisTime:        tmtime.Now(),
 		ChainID:            "test-chain",
