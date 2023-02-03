@@ -190,6 +190,7 @@ func (r *Reactor) processPexCh(ctx context.Context, pexCh p2p.Channel) {
 				return // channel closed
 			}
 
+			start := time.Now()
 			// A request from another peer, or a response to one of our requests.
 			dur, err := r.handlePexMessage(ctx, envelope, pexCh)
 			if err != nil {
@@ -204,6 +205,7 @@ func (r *Reactor) processPexCh(ctx context.Context, pexCh p2p.Channel) {
 				// We got a useful result; update the poll timer.
 				nextPeerRequest = dur
 			}
+			r.logger.Trace("handled incoming PEX message", "peer", envelope.From, "envelope", envelope, "dur", dur, "took", time.Since(start))
 		}
 	}
 }
@@ -265,6 +267,7 @@ func (r *Reactor) handlePexMessage(ctx context.Context, envelope *p2p.Envelope, 
 		for _, pexAddress := range msg.Addresses {
 			peerAddress, err := p2p.ParseNodeAddress(pexAddress.URL)
 			if err != nil {
+				logger.Error("failed to parse PEX address", "address", peerAddress, "err", err)
 				continue
 			}
 			added, err := r.peerManager.Add(peerAddress)
@@ -323,12 +326,15 @@ func (r *Reactor) sendRequestForPeers(ctx context.Context, pexCh p2p.Channel) er
 		break
 	}
 
-	if err := pexCh.Send(ctx, p2p.Envelope{
+	envelope := p2p.Envelope{
 		To:      peerID,
 		Message: &protop2p.PexRequest{},
-	}); err != nil {
+	}
+	start := time.Now()
+	if err := pexCh.Send(ctx, envelope); err != nil {
 		return err
 	}
+	r.logger.Trace("sent PEX request", "envelope", envelope, "peer", peerID, "took", time.Since(start))
 
 	// Move the peer from available to pending.
 	delete(r.availablePeers, peerID)
