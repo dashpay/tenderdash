@@ -71,6 +71,7 @@ jobs:
             suffix=${{ steps.suffix.outputs.result }}
 
       - name: Publish to Docker Hub
+        id: docker_build
         uses: docker/build-push-action@v3.3.0
         with:
           context: .
