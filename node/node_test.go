@@ -755,14 +755,8 @@ func TestNodeSetEventSink(t *testing.T) {
 func state(t *testing.T, nVals int, height int64) (sm.State, dbm.DB, []types.PrivValidator) {
 	t.Helper()
 	vals, privVals := types.RandValidatorSet(nVals)
-	genVals := types.MakeGenesisValsFromValidatorSet(vals)
-	s, _ := sm.MakeGenesisState(&types.GenesisDoc{
-		ChainID:            "test-chain",
-		Validators:         genVals,
-		ThresholdPublicKey: vals.ThresholdPublicKey,
-		QuorumHash:         vals.QuorumHash,
-		AppHash:            nil,
-	})
+	genDoc := factory.TestGenesisDoc(vals, nil)
+	s, _ := sm.MakeGenesisState(&genDoc)
 
 	// save validators to db for 2 heights
 	stateDB := dbm.NewMemDB()

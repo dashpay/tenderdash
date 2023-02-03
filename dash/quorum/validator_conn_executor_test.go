@@ -615,14 +615,8 @@ func makeState(nVals int, height int64) (sm.State, dbm.DB, map[string]types.Priv
 		proTxHash := validator.ProTxHash
 		privValsByProTxHash[proTxHash.String()] = privVals[i]
 	}
-	genVals := types.MakeGenesisValsFromValidatorSet(valSet)
-	s, _ := sm.MakeGenesisState(&types.GenesisDoc{
-		ChainID:            chainID,
-		Validators:         genVals,
-		ThresholdPublicKey: valSet.ThresholdPublicKey,
-		QuorumHash:         valSet.QuorumHash,
-		AppHash:            nil,
-	})
+	genDoc := factory.TestGenesisDoc(valSet, nil)
+	s, _ := sm.MakeGenesisState(&genDoc)
 
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
