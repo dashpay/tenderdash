@@ -108,7 +108,7 @@ jobs:
           cache-from: |
             type=gha
             type=registry,ref=dashpay/tenderdash:buildcache-deps
-          cache-to: type=gha,mode=min
+          cache-to: type=gha,mode=max
           build-args: |
             TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
       - name: Show Docker image digest
