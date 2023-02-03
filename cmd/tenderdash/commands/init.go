@@ -45,7 +45,7 @@ func MakeInitFilesCommand(conf *config.Config, logger log.Logger) *cobra.Command
 		},
 	}
 
-	cmd.Flags().IntVar(&nodeConf.quorumType, "quorumType", 0, "Quorum Type")
+	cmd.Flags().IntVar(&nodeConf.quorumType, "quorumType", int(btcjson.LLMQType_5_60), "Quorum Type")
 	cmd.Flags().Uint32Var(&nodeConf.coreChainLockedHeight, "coreChainLockedHeight", 1, "Initial Core Chain Locked Height")
 	cmd.Flags().Int64Var(&nodeConf.initChainInitialHeight, "initialHeight", 0, "Initial Height")
 	cmd.Flags().BytesHexVar(&nodeConf.proTxHash, "proTxHash", []byte(nil), "Node pro tx hash")

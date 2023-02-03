@@ -684,6 +684,7 @@ const testGenesisFmt = `{
     "type": "tendermint/PubKeyBLS12381",
 	"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
   },
+  "validator_quorum_type":100,
   "app_hash": ""
 }`
 
