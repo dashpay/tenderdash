@@ -76,6 +76,8 @@ jobs:
             latest=${{ github.event.release != null && !contains(github.event.release.tag_name, '-dev') }}
             suffix=${{ steps.suffix.outputs.result }}
 
+      # We build BLS library separately and push it to Docker Hub,
+      # as Github caches are not available for other branches
       - name: Build BLS library
         id: docker_bls
         uses: docker/build-push-action@v3.3.0

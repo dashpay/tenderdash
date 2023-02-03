@@ -9,9 +9,7 @@ WORKDIR /src/bls
 
 # Install BLS library
 COPY third_party ./third_party
-COPY test/Makefile ./test/Makefile
-COPY Makefile ./
-RUN make install-bls
+RUN ./third_party/bls-signatures/build.sh && ./third_party/bls-signatures/install.sh
 
 
 # STAGE 2: install golang libraries
