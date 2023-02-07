@@ -31,8 +31,7 @@ import (
 )
 
 const (
-	mySeedID     uint16 = math.MaxUint16 - 1
-	nTxsPerBlock        = 10
+	mySeedID uint16 = math.MaxUint16 - 1
 )
 
 type validatorUpdate struct {
