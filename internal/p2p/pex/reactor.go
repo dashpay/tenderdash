@@ -50,6 +50,8 @@ const (
 	// The reactor should still look to add new peers in order to flush out low
 	// scoring peers that are still in the peer store
 	fullCapacityInterval = 10 * time.Minute
+
+	pexSendTimeout = 30 * time.Second
 )
 
 // TODO: We should decide whether we want channel descriptors to be housed
@@ -246,7 +248,9 @@ func (r *Reactor) handlePexMessage(ctx context.Context, envelope *p2p.Envelope, 
 				URL: addr.String(),
 			}
 		}
-		return 0, pexCh.Send(ctx, p2p.Envelope{
+		chCtx, cancel := context.WithTimeout(ctx, pexSendTimeout)
+		defer cancel()
+		return 0, pexCh.Send(chCtx, p2p.Envelope{
 			To:      envelope.From,
 			Message: &protop2p.PexResponse{Addresses: pexAddresses},
 		})
@@ -307,23 +311,37 @@ func (r *Reactor) processPeerUpdate(peerUpdate p2p.PeerUpdate) {
 	}
 }
 
-// sendRequestForPeers chooses a peer from the set of available peers and sends
-// that peer a request for more peer addresses. The chosen peer is moved into
-// the requestsSent bucket so that we will not attempt to contact them again
-// until they've replied or updated.
-func (r *Reactor) sendRequestForPeers(ctx context.Context, pexCh p2p.Channel) error {
+func (r *Reactor) selectPeerToSendMsg() (types.NodeID, error) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
+
 	if len(r.availablePeers) == 0 {
 		// no peers are available
 		r.logger.Debug("no available peers to send a PEX request to (retrying)")
-		return nil
+		return "", nil
 	}
 
 	// Select an arbitrary peer from the available set.
 	var peerID types.NodeID
 	for peerID = range r.availablePeers {
 		break
+	}
+
+	// Move the peer from available to pending. Even if sending fails, we don't want to retry.
+	delete(r.availablePeers, peerID)
+	r.requestsSent[peerID] = struct{}{}
+
+	return peerID, nil
+}
+
+// sendRequestForPeers chooses a peer from the set of available peers and sends
+// that peer a request for more peer addresses. The chosen peer is moved into
+// the requestsSent bucket so that we will not attempt to contact them again
+// until they've replied or updated.
+func (r *Reactor) sendRequestForPeers(ctx context.Context, pexCh p2p.Channel) error {
+	peerID, err := r.selectPeerToSendMsg()
+	if err != nil {
+		return err
 	}
 
 	envelope := p2p.Envelope{
@@ -335,10 +353,6 @@ func (r *Reactor) sendRequestForPeers(ctx context.Context, pexCh p2p.Channel) er
 		return err
 	}
 	r.logger.Trace("sent PEX request", "envelope", envelope, "peer", peerID, "took", time.Since(start))
-
-	// Move the peer from available to pending.
-	delete(r.availablePeers, peerID)
-	r.requestsSent[peerID] = struct{}{}
 
 	return nil
 }
