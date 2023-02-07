@@ -622,7 +622,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 }
 
 func TestNodeNewSeedNode(t *testing.T) {
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_new_node_custom_reactors_test")
+	cfg, err := config.ResetTestRoot(t.TempDir(), "node_new_seed_test")
 	require.NoError(t, err)
 	cfg.Mode = config.ModeSeed
 	defer os.RemoveAll(cfg.RootDir)
