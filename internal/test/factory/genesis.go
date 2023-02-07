@@ -19,7 +19,6 @@ func MinimalGenesisDoc() types.GenesisDoc {
 	genesisDoc := types.GenesisDoc{
 		ChainID:    ChainID,
 		QuorumType: btcjson.LLMQType_5_60,
-		// ConsensusParams: &types.ConsensusParams{},
 	}
 	if err := genesisDoc.ValidateAndComplete(); err != nil {
 		// should never happen
@@ -33,12 +32,6 @@ func MinimalGenesisDoc() types.GenesisDoc {
 // NOTE: It's better to use MinimalGensisDoc() which generates genesis doc
 // similar to Dash Platform production environment.
 func RandGenesisDoc(numValidators int, consensusParams *types.ConsensusParams) (*types.GenesisDoc, []types.PrivValidator) {
-	genesisDoc := types.GenesisDoc{
-		ChainID:    ChainID,
-		QuorumType: btcjson.LLMQType_5_60,
-		// ConsensusParams: &types.ConsensusParams{},
-	}
-
 	proTxHashes := crypto.RandProTxHashes(numValidators)
 	valSetParams := types.NewValSetParam(proTxHashes)
 	valSet, privValidators := types.GenerateValidatorSet(valSetParams)
@@ -46,7 +39,7 @@ func RandGenesisDoc(numValidators int, consensusParams *types.ConsensusParams) (
 	genesisVals := types.MakeGenesisValsFromValidatorSet(valSet)
 	coreChainLock := types.NewMockChainLock(2)
 
-	genesis := types.GenesisDoc{
+	genesisDoc := types.GenesisDoc{
 		GenesisTime:     tmtime.Now(),
 		InitialHeight:   1,
 		ChainID:         ChainID,
@@ -66,5 +59,5 @@ func RandGenesisDoc(numValidators int, consensusParams *types.ConsensusParams) (
 		panic("cannot generate random genesis doc:" + err.Error())
 	}
 
-	return &genesis, privValidators
+	return &genesisDoc, privValidators
 }
