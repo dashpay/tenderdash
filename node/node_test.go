@@ -754,9 +754,9 @@ func TestNodeSetEventSink(t *testing.T) {
 
 func state(t *testing.T, nVals int, height int64) (sm.State, dbm.DB, []types.PrivValidator) {
 	t.Helper()
-	vals, privVals := types.RandValidatorSet(nVals)
-	genDoc := factory.TestGenesisDoc(vals, nil)
-	s, _ := sm.MakeGenesisState(&genDoc)
+
+	genDoc, privVals := factory.RandGenesisDoc(nVals, factory.ConsensusParams())
+	s, _ := sm.MakeGenesisState(genDoc)
 
 	// save validators to db for 2 heights
 	stateDB := dbm.NewMemDB()
@@ -785,14 +785,14 @@ func loadStatefromGenesis(ctx context.Context, t *testing.T) sm.State {
 
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
-	cfg, err := config.ResetTestRoot(t.TempDir(), "load_state_from_genesis")
+	_, err := config.ResetTestRoot(t.TempDir(), "load_state_from_genesis")
 	require.NoError(t, err)
 
 	loadedState, err := stateStore.Load()
 	require.NoError(t, err)
 	require.True(t, loadedState.IsEmpty())
 
-	genDoc, _ := factory.RandGenesisDoc(cfg, 10, 0, factory.ConsensusParams())
+	genDoc, _ := factory.RandGenesisDoc(10, factory.ConsensusParams())
 
 	state, err := loadStateFromDBOrGenesisDocProvider(
 		stateStore,

@@ -357,7 +357,8 @@ func TestFinalizeBlock(t *testing.T) {
 	err := proxyApp.Start(ctx)
 	require.Nil(t, err)
 
-	state, stateDB, _ := makeState(3, 1)
+	state, stateDB := makeState(3, 1)
+	require.NoError(t, err)
 	nodeProTxHash := state.Validators.Validators[0].ProTxHash
 	ctx = dash.ContextWithProTxHash(ctx, nodeProTxHash)
 
@@ -370,6 +371,8 @@ func TestFinalizeBlock(t *testing.T) {
 	mp.On("Lock").Return()
 	mp.On("Unlock").Return()
 	mp.On("FlushAppConn", testifymock.Anything).Return(nil)
+	mp.On("ReapMaxBytesMaxGas", testifymock.Anything, testifymock.Anything).
+		Return(types.Txs{})
 	mp.On("Update",
 		testifymock.Anything,
 		testifymock.Anything,
@@ -418,7 +421,7 @@ func TestFinalizeBlock(t *testing.T) {
 	err = vc.Start(ctx)
 	require.NoError(t, err)
 
-	block := makeBlock(t, state, 1, new(types.Commit))
+	block := makeBlock(ctx, t, blockExec, state, 1, new(types.Commit))
 	blockID := block.BlockID(nil)
 	require.NoError(t, err)
 	block.NextValidatorsHash = newVals.Hash()
@@ -606,16 +609,9 @@ func makeTxs(height int64) (txs []types.Tx) {
 	return txs
 }
 
-func makeState(nVals int, height int64) (sm.State, dbm.DB, map[string]types.PrivValidator) {
-	privValsByProTxHash := make(map[string]types.PrivValidator, nVals)
-	valSet, privVals := types.RandValidatorSet(nVals)
-	for i := 0; i < nVals; i++ {
-		validator := valSet.Validators[i]
-		proTxHash := validator.ProTxHash
-		privValsByProTxHash[proTxHash.String()] = privVals[i]
-	}
-	genDoc := factory.TestGenesisDoc(valSet, nil)
-	s, _ := sm.MakeGenesisState(&genDoc)
+func makeState(nVals int, height int64) (sm.State, dbm.DB) {
+	genDoc, _ := factory.RandGenesisDoc(nVals, factory.ConsensusParams())
+	s, _ := sm.MakeGenesisState(genDoc)
 
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
@@ -631,18 +627,16 @@ func makeState(nVals int, height int64) (sm.State, dbm.DB, map[string]types.Priv
 		}
 	}
 
-	return s, stateDB, privValsByProTxHash
+	return s, stateDB
 }
 
-func makeBlock(t *testing.T, state sm.State, height int64, commit *types.Commit) *types.Block {
-	block := state.MakeBlock(
-		height, makeTxs(state.LastBlockHeight),
-		commit, nil, state.Validators.GetProposer().ProTxHash, 0,
-	)
-	var err error
-	block.AppHash = make([]byte, crypto.DefaultAppHashSize)
-	block.ResultsHash, err = abci.TxResultsHash(factory.ExecTxResults(block.Txs))
+func makeBlock(ctx context.Context, t *testing.T, blockExec *sm.BlockExecutor, state sm.State, height int64, commit *types.Commit) *types.Block {
+	block, crs, err := blockExec.CreateProposalBlock(ctx, 1, 0, state, commit, state.Validators.Proposer.ProTxHash, 1)
 	require.NoError(t, err)
+
+	err = crs.UpdateBlock(block)
+	require.NoError(t, err)
+
 	return block
 }
 
@@ -665,15 +659,32 @@ func newTestApp() *testApp {
 
 var _ abci.Application = (*testApp)(nil)
 
-func (app *testApp) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
-	txs := make([]*abci.ExecTxResult, 0, len(req.Txs))
-	for range req.Txs {
-		txs = append(txs, &abci.ExecTxResult{Code: abci.CodeTypeOK})
+func (app *testApp) PrepareProposal(_ context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
+	txs := types.NewTxs(req.Txs)
+	results := factory.ExecTxResults(txs)
+	resultsHash, err := abci.TxResultsHash(results)
+	if err != nil {
+		return nil, err
 	}
+
+	return &abci.ResponsePrepareProposal{
+		AppHash:   resultsHash,
+		TxResults: results,
+	}, nil
+}
+
+func (app *testApp) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+	txs := types.NewTxs(req.Txs)
+	results := factory.ExecTxResults(txs)
+	resultsHash, err := abci.TxResultsHash(results)
+	if err != nil {
+		return nil, err
+	}
+
 	return &abci.ResponseProcessProposal{
 		Status:                abci.ResponseProcessProposal_ACCEPT,
-		AppHash:               make([]byte, 32),
-		TxResults:             txs,
+		AppHash:               resultsHash,
+		TxResults:             results,
 		ConsensusParamUpdates: nil,
 		ValidatorSetUpdate:    app.ValidatorSetUpdates[req.Height],
 	}, nil
