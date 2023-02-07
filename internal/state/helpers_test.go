@@ -5,16 +5,15 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
 	sm "github.com/tendermint/tendermint/internal/state"
 	sf "github.com/tendermint/tendermint/internal/state/test/factory"
 	"github.com/tendermint/tendermint/internal/test/factory"
-	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -124,6 +123,7 @@ func makeState(t *testing.T, nVals, height int) (sm.State, dbm.DB, map[string]ty
 		Validators:         genVals,
 		ThresholdPublicKey: vals.ThresholdPublicKey,
 		QuorumHash:         vals.QuorumHash,
+		QuorumType:         btcjson.LLMQType_5_60,
 		AppHash:            make([]byte, crypto.DefaultAppHashSize),
 	})
 
@@ -181,22 +181,9 @@ func makeHeaderPartsResponsesParams(
 }
 
 func randomGenesisDoc() *types.GenesisDoc {
-	pubkey := bls12381.GenPrivKey().PubKey()
-	return &types.GenesisDoc{
-		GenesisTime: tmtime.Now(),
-		ChainID:     "abc",
-		Validators: []types.GenesisValidator{
-			{
-				PubKey:    pubkey,
-				ProTxHash: crypto.RandProTxHash(),
-				Power:     types.DefaultDashVotingPower,
-				Name:      "myval",
-			},
-		},
-		ConsensusParams:    types.DefaultConsensusParams(),
-		ThresholdPublicKey: pubkey,
-		QuorumHash:         crypto.RandQuorumHash(),
-	}
+	valset, _ := types.RandValidatorSet(1)
+	genDoc := factory.TestGenesisDoc(valset, nil)
+	return &genDoc
 }
 
 // used for testing by state store

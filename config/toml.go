@@ -529,9 +529,6 @@ peer-query-maj23-sleep-duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 # as soon as the node has gathered votes from all of the validators on the network.
 # unsafe-bypass-commit-timeout-override =
 
-# Signing parameters
-quorum-type = "{{ .Consensus.QuorumType }}"
-
 #######################################################
 ###   Transaction Indexer Configuration Options     ###
 #######################################################
@@ -687,6 +684,7 @@ const testGenesisFmt = `{
     "type": "tendermint/PubKeyBLS12381",
 	"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
   },
+  "validator_quorum_type":100,
   "app_hash": ""
 }`
 

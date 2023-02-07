@@ -3,12 +3,29 @@ package factory
 import (
 	"sort"
 
+	"github.com/dashevo/dashd-go/btcjson"
+
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/dash/llmq"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
 )
+
+func TestGenesisDoc(valSet *types.ValidatorSet, appHash tmbytes.HexBytes) types.GenesisDoc {
+	genVals := types.MakeGenesisValsFromValidatorSet(valSet)
+	return types.GenesisDoc{
+		GenesisTime:        tmtime.Now(),
+		ChainID:            "test-chain",
+		Validators:         genVals,
+		ConsensusParams:    types.DefaultConsensusParams(),
+		ThresholdPublicKey: valSet.ThresholdPublicKey,
+		QuorumHash:         valSet.QuorumHash,
+		QuorumType:         btcjson.LLMQType_5_60,
+		AppHash:            nil,
+	}
+}
 
 func RandGenesisDoc(
 	cfg *config.Config,
@@ -55,5 +72,6 @@ func RandGenesisDoc(
 		InitialProposalCoreChainLock: coreChainLock.ToProto(),
 		ThresholdPublicKey:           ld.ThresholdPubKey,
 		QuorumHash:                   quorumHash,
+		QuorumType:                   btcjson.LLMQType_5_60,
 	}, privValidators
 }
