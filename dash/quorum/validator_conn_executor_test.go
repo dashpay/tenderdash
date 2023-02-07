@@ -601,14 +601,6 @@ func cleanup(t *testing.T, bus *eventbus.EventBus, dialer p2p.DashDialer, vc *Va
 
 // SOME UTILS //
 
-// make some bogus txs
-func makeTxs(height int64) (txs []types.Tx) {
-	for i := 0; i < nTxsPerBlock; i++ {
-		txs = append(txs, types.Tx([]byte{byte(height), byte(i)}))
-	}
-	return txs
-}
-
 func makeState(nVals int, height int64) (sm.State, dbm.DB) {
 	genDoc, _ := factory.RandGenesisDoc(nVals, factory.ConsensusParams())
 	s, _ := sm.MakeGenesisState(genDoc)
