@@ -8,6 +8,7 @@ import (
 	"strings"
 	"text/template"
 
+	"github.com/tendermint/tendermint/internal/test/factory"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 )
@@ -577,7 +578,7 @@ namespace = "{{ .Instrumentation.Namespace }}"
 /****** these are for test settings ***********/
 
 func ResetTestRoot(dir, testName string) (*Config, error) {
-	return ResetTestRootWithChainID(dir, testName, "")
+	return ResetTestRootWithChainID(dir, testName, factory.DefaultTestChainID)
 }
 
 func ResetTestRootWithChainID(dir, testName string, chainID string) (*Config, error) {

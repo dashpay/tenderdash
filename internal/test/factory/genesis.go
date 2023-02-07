@@ -9,15 +9,13 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-const ChainID = "test-chain"
-
 // MinimalGenesisDoc generates a minimal working genesis doc.
 // It is very similar to Dash Platform's production environment
 // genesis doc, which assumes that all other settings (like validator
 // set) will be provided by ABCI during initial handshake.
 func MinimalGenesisDoc() types.GenesisDoc {
 	genesisDoc := types.GenesisDoc{
-		ChainID:    ChainID,
+		ChainID:    DefaultTestChainID,
 		QuorumType: btcjson.LLMQType_5_60,
 	}
 	if err := genesisDoc.ValidateAndComplete(); err != nil {
@@ -42,7 +40,7 @@ func RandGenesisDoc(numValidators int, consensusParams *types.ConsensusParams) (
 	genesisDoc := types.GenesisDoc{
 		GenesisTime:     tmtime.Now(),
 		InitialHeight:   1,
-		ChainID:         ChainID,
+		ChainID:         DefaultTestChainID,
 		Validators:      genesisVals,
 		ConsensusParams: consensusParams,
 		AppHash:         make(bytes.HexBytes, crypto.DefaultAppHashSize),
