@@ -77,15 +77,15 @@ jobs:
             latest=${{ github.event.release != null && !contains(github.event.release.tag_name, '-dev') }}
             suffix=${{ steps.suffix.outputs.result }}
 
-      # We build BLS library separately and push it to Docker Hub,
-      # as Github caches are not available for other branches
-      - name: Build BLS library
+      # We build some dependencies and libraries separately. Layers are cached
+      # on Docker Hub, as Github caches are not available for other branches.
+      - name: Build and cache image with dependencies
         id: docker_bls
         uses: docker/build-push-action@v3.3.0
         with:
           context: .
           file: ./DOCKER/Dockerfile
-          platforms: linux/${{ matrix.arch }} # linux/amd64 # ,linux/arm64
+          platforms: linux/${{ matrix.arch }}
           target: deps
           push: false
           cache-from: |
