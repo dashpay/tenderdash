@@ -89,9 +89,9 @@ jobs:
           target: deps
           push: false
           cache-from: |
-            type=registry,ref=dashpay/tenderdash:buildcache-deps
+            type=registry,ref=dashpay/tenderdash:buildcache-deps-${{ matrix.arch }}
           cache-to: |
-            type=registry,ref=dashpay/tenderdash:buildcache-deps,mode=max
+            type=registry,ref=dashpay/tenderdash:buildcache-deps-${{ matrix.arch }},mode=max
           build-args: |
             TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
 
@@ -107,7 +107,7 @@ jobs:
           labels: ${{ steps.docker_meta.outputs.labels }}
           cache-from: |
             type=gha
-            type=registry,ref=dashpay/tenderdash:buildcache-deps
+            type=registry,ref=dashpay/tenderdash:buildcache-deps-${{ matrix.arch }}
           cache-to: type=gha,mode=max
           build-args: |
             TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
