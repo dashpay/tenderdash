@@ -1006,14 +1006,14 @@ func (m *PeerManager) Inactivate(peerID types.NodeID) error {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	peer, ok := m.store.peers[peerID]
+	peer, ok := m.store.Get(peerID)
 	if !ok {
 		return nil
 	}
 
 	peer.Inactive = true
 	m.metrics.PeersInactivated.Add(1)
-	return m.store.Set(*peer)
+	return m.store.Set(peer)
 }
 
 // Advertise returns a list of peer addresses to advertise to a peer.
@@ -1191,21 +1191,25 @@ func (m *PeerManager) processPeerEvent(ctx context.Context, pu PeerUpdate) {
 		return
 	}
 
-	if _, ok := m.store.peers[pu.NodeID]; !ok {
-		m.store.peers[pu.NodeID] = &peerInfo{}
+	peer, ok := m.store.Get(pu.NodeID)
+	if !ok {
+		peer = peerInfo{}
 	}
 
 	switch pu.Status {
 	case PeerStatusBad:
-		if m.store.peers[pu.NodeID].MutableScore == math.MinInt16 {
+		if peer.MutableScore == math.MinInt16 {
 			return
 		}
-		m.store.peers[pu.NodeID].MutableScore--
+		peer.MutableScore--
 	case PeerStatusGood:
-		if m.store.peers[pu.NodeID].MutableScore == math.MaxInt16 {
+		if peer.MutableScore == math.MaxInt16 {
 			return
 		}
-		m.store.peers[pu.NodeID].MutableScore++
+		peer.MutableScore++
+	}
+	if err := m.store.Set(peer); err != nil {
+		m.logger.Error("cannot save peer to database", "peer", peer, "error", err)
 	}
 }
 
