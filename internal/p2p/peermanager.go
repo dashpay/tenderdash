@@ -6,8 +6,6 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
-	"os"
-	"runtime/debug"
 	"sort"
 	"time"
 
@@ -1443,12 +1441,6 @@ func (s *peerStore) Set(peer peerInfo) error {
 	}
 	if err = s.db.Set(keyPeerInfo(peer.ID), bz); err != nil {
 		return err
-	}
-
-	if len(peer.AddressInfo) == 0 {
-		// TODO: remove after testing
-		fmt.Fprintf(os.Stderr, "added peer %s with 0 addresses\n", peer.ID)
-		debug.PrintStack()
 	}
 
 	if current, ok := s.peers[peer.ID]; !ok || current.Score() != peer.Score() {

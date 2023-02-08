@@ -179,9 +179,8 @@ func (r *Reactor) processPexCh(ctx context.Context, pexCh p2p.Channel) {
 		case <-timer.C:
 			// Send a request for more peer addresses.
 			if err := r.sendRequestForPeers(ctx, pexCh); err != nil {
-				return
-				// TODO(creachadair): Do we really want to stop processing the PEX
-				// channel just because of an error here?
+				r.logger.Error("cannot send request for peers, retrying", "error", err)
+				continue
 			}
 
 			// Note we do not update the poll timer upon making a request, only
