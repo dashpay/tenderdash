@@ -1495,7 +1495,7 @@ func (s *peerStore) List() []peerInfo {
 //
 // FIXME: The scoring logic is currently very naïve, see peerInfo.Score().
 func (s *peerStore) Ranked() []*peerInfo {
-	if s.ranked != nil {
+	if len(s.ranked) > 0 {
 		return s.ranked
 	}
 	s.ranked = make([]*peerInfo, 0, len(s.peers))
