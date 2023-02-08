@@ -317,7 +317,6 @@ func (r *Reactor) selectPeerToSendMsg() (types.NodeID, error) {
 
 	if len(r.availablePeers) == 0 {
 		// no peers are available
-		r.logger.Debug("no available peers to send a PEX request to (retrying)")
 		return "", nil
 	}
 
@@ -342,6 +341,10 @@ func (r *Reactor) sendRequestForPeers(ctx context.Context, pexCh p2p.Channel) er
 	peerID, err := r.selectPeerToSendMsg()
 	if err != nil {
 		return err
+	}
+	if peerID == "" {
+		r.logger.Debug("no available peers to send a PEX request to (retrying)")
+		return nil
 	}
 
 	envelope := p2p.Envelope{
