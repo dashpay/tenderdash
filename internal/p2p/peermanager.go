@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math"
 	"math/rand"
+	"os"
+	"runtime/debug"
 	"sort"
 	"time"
 
@@ -1069,6 +1071,10 @@ func (m *PeerManager) Advertise(peerID types.NodeID, limit uint16) []NodeAddress
 		limit = uint16(numAddresses)
 	}
 
+	if numAddresses == 0 {
+		m.logger.Error("no peer addresses to advertise", "peers", ranked)
+	}
+
 	// collect addresses until we have the number requested
 	// (limit), or we've added all known addresses, or we've tried
 	// at least 256 times and the last time we iterated over
@@ -1439,6 +1445,12 @@ func (s *peerStore) Set(peer peerInfo) error {
 		return err
 	}
 
+	if len(peer.AddressInfo) == 0 {
+		// TODO: remove after testing
+		fmt.Fprintf(os.Stderr, "added peer %s with 0 addresses\n", peer.ID)
+		debug.PrintStack()
+	}
+
 	if current, ok := s.peers[peer.ID]; !ok || current.Score() != peer.Score() {
 		// If the peer is new, or its score changes, we invalidate the Ranked() cache.
 		s.peers[peer.ID] = &peer
@@ -1697,6 +1709,13 @@ func (p *peerInfo) MarshalZerologObject(e *zerolog.Event) {
 		e.Bool("inactive", p.Inactive)
 	}
 	e.Int16("score", int16(p.Score()))
+
+	addresses := zerolog.Arr()
+	for address := range p.AddressInfo {
+		addresses.Str(address.String())
+	}
+	e.Array("addresses", addresses)
+
 }
 
 // peerAddressInfo contains information and statistics about a peer address.
