@@ -206,7 +206,7 @@ func (r *Reactor) processPexCh(ctx context.Context, pexCh p2p.Channel) {
 				// We got a useful result; update the poll timer.
 				nextPeerRequest = dur
 			}
-			r.logger.Trace("handled incoming PEX message", "peer", envelope.From, "envelope", envelope, "dur", dur, "took", time.Since(start))
+			r.logger.Trace("handled incoming PEX message", "peer", envelope.From, "envelope", envelope, "dur", dur.String(), "took", time.Since(start))
 		}
 	}
 }

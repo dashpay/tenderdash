@@ -9,6 +9,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/orderedcode"
 	"github.com/rs/zerolog"
@@ -1025,14 +1026,15 @@ func (m *PeerManager) Advertise(peerID types.NodeID, limit uint16) []NodeAddress
 	defer m.mtx.Unlock()
 
 	addresses := make([]NodeAddress, 0, limit)
+	var numAddresses int
 
 	// advertise ourselves, to let everyone know how to dial us back
 	// and enable mutual address discovery
 	if m.options.SelfAddress.Hostname != "" && m.options.SelfAddress.Port != 0 {
 		addresses = append(addresses, m.options.SelfAddress)
+		numAddresses++
 	}
 
-	var numAddresses int
 	var totalAbsScore int
 	ranked := m.store.Ranked()
 	seenAddresses := map[NodeAddress]struct{}{}
@@ -1070,7 +1072,11 @@ func (m *PeerManager) Advertise(peerID types.NodeID, limit uint16) []NodeAddress
 	}
 
 	if numAddresses == 0 {
-		m.logger.Error("no peer addresses to advertise", "peers", ranked)
+		peers := make([]string, 0, len(ranked))
+		for _, p := range ranked {
+			peers = append(peers, p.String())
+		}
+		m.logger.Error("no peer addresses to advertise", "peers", peers)
 	}
 
 	// collect addresses until we have the number requested
@@ -1676,6 +1682,16 @@ func (p *peerInfo) IsZero() bool {
 	return p == nil || len(p.ID) == 0
 }
 
+func (p *peerInfo) String() string {
+	marshaler := jsonpb.Marshaler{}
+
+	json, err := marshaler.MarshalToString(p.ToProto())
+	if err != nil {
+		return `{"error":"` + err.Error() + `"}`
+	}
+	return json
+}
+
 func (p *peerInfo) MarshalZerologObject(e *zerolog.Event) {
 	if p == nil {
 		return
@@ -1707,7 +1723,6 @@ func (p *peerInfo) MarshalZerologObject(e *zerolog.Event) {
 		addresses.Str(address.String())
 	}
 	e.Array("addresses", addresses)
-
 }
 
 // peerAddressInfo contains information and statistics about a peer address.
