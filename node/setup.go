@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dbm "github.com/tendermint/tm-db"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
@@ -35,7 +37,15 @@ import (
 	"github.com/tendermint/tendermint/types"
 	"github.com/tendermint/tendermint/version"
 
+	"net/http"
 	_ "net/http/pprof" //nolint: gosec // securely exposed on separate, optional port
+)
+
+const (
+	// httpReadHeaderTimeout is set to address linter issue:
+	//   G112: Potential Slowloris Attack because ReadHeaderTimeout
+	//   is not configured in the http.Server (gosec).
+	httpReadHeaderTimeout = 10 * time.Second
 )
 
 type closer func() error
@@ -589,4 +599,65 @@ func createBlockReplayer(n *nodeImpl) *consensus.BlockReplayer {
 		consensus.ReplayerWithLogger(logger),
 		consensus.ReplayerWithProTxHash(n.rpcEnv.ProTxHash),
 	)
+}
+
+// startPrometheusServer starts a Prometheus HTTP server, listening for metrics
+// collectors on addr.
+func startPrometheusServer(ctx context.Context, cfg config.InstrumentationConfig) *http.Server {
+	addr := cfg.PrometheusListenAddr
+	srv := &http.Server{
+		Addr:              addr,
+		ReadHeaderTimeout: httpReadHeaderTimeout,
+		Handler: promhttp.InstrumentMetricHandler(
+			prometheus.DefaultRegisterer, promhttp.HandlerFor(
+				prometheus.DefaultGatherer,
+				promhttp.HandlerOpts{MaxRequestsInFlight: cfg.MaxOpenConnections},
+			),
+		),
+	}
+
+	signal := make(chan struct{})
+	go func() {
+		select {
+		case <-ctx.Done():
+			sctx, scancel := context.WithTimeout(context.Background(), time.Second)
+			defer scancel()
+			_ = srv.Shutdown(sctx)
+		case <-signal:
+		}
+	}()
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil {
+			close(signal)
+		}
+	}()
+
+	return srv
+}
+
+// startPProfServer creates a new pprof server
+// FIXME: implement as a Service
+func startPProfServer(ctx context.Context, cfg config.RPCConfig) {
+	signal := make(chan struct{})
+	srv := &http.Server{
+		Addr:              cfg.PprofListenAddress,
+		ReadHeaderTimeout: httpReadHeaderTimeout,
+		Handler:           nil,
+	}
+	go func() {
+		select {
+		case <-ctx.Done():
+			sctx, scancel := context.WithTimeout(context.Background(), time.Second)
+			defer scancel()
+			_ = srv.Shutdown(sctx)
+		case <-signal:
+		}
+	}()
+
+	go func() {
+		if err := srv.ListenAndServe(); err != nil {
+			close(signal)
+		}
+	}()
 }
