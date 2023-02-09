@@ -166,28 +166,25 @@ func (r *Reactor) processPexCh(ctx context.Context, pexCh p2p.Channel) {
 	// will be adjusted upward as knowledge of the network grows.
 	var nextPeerRequest = minReceiveRequestInterval
 
-	timer := time.NewTimer(0)
+	timer := time.NewTimer(nextPeerRequest)
 	defer timer.Stop()
 
 	for {
-		timer.Reset(nextPeerRequest)
-
 		select {
 		case <-ctx.Done():
 			return
 
 		case <-timer.C:
 			// Send a request for more peer addresses.
-			if err := r.sendRequestForPeers(ctx, pexCh); err != nil {
-				r.logger.Error("cannot send request for peers, retrying", "error", err)
-				continue
+			err := r.sendRequestForPeers(ctx, pexCh)
+			if err != nil {
+				r.logger.Debug("request for peers failed, retrying", "error", err)
 			}
 
-			// Note we do not update the poll timer upon making a request, only
-			// when we receive an update that updates our priors.
-
+			timer.Reset(nextPeerRequest)
 		case envelope, ok := <-incoming:
 			if !ok {
+				r.logger.Error("incoming PEX channel closed")
 				return // channel closed
 			}
 
@@ -200,10 +197,12 @@ func (r *Reactor) processPexCh(ctx context.Context, pexCh p2p.Channel) {
 					NodeID: envelope.From,
 					Err:    err,
 				}); serr != nil {
+					r.logger.Error("cannot send error to PEX channel", "error", serr, "previous_error", err)
 					return
 				}
-			} else if dur != 0 {
+			} else if dur >= minReceiveRequestInterval {
 				// We got a useful result; update the poll timer.
+				// It will apply in the next timer reset.
 				nextPeerRequest = dur
 			}
 			r.logger.Trace("handled incoming PEX message", "peer", envelope.From, "envelope", envelope, "dur", dur.String(), "took", time.Since(start))
