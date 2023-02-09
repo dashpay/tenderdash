@@ -1,36 +1,42 @@
-# stage 1 Generate Tenderdash Binary
-FROM golang:1.19-alpine3.15 AS builder
+# STAGE 1: install dependencies
+FROM golang:1.19-alpine3.15 AS deps
 
 RUN apk update && \
     apk upgrade && \
-    apk --no-cache add bash git gmp-dev sudo cmake build-base libpcap-dev
+    apk --no-cache add bash git gmp-dev sudo cmake build-base libpcap-dev && \
+    rm -rf /var/cache/apk/*
+
+WORKDIR /src/bls
+
+# Install BLS library
+COPY third_party ./third_party
+RUN ./third_party/bls-signatures/build.sh && \
+    ./third_party/bls-signatures/install.sh && \
+    rm -fr ./third_party
+
+
+# STAGE 2: install golang libraries
+FROM deps AS builder
 
 WORKDIR /src/tenderdash
 
 # Fetch dependencies separately (for layer caching)
 # TODO: move below BLS install once on new BLS version
 COPY go.mod go.sum ./
-RUN go mod download
-
-# Install BLS library
-COPY third_party ./third_party
-COPY test/Makefile ./test/Makefile
-COPY Makefile ./
-RUN make install-bls
+RUN go mod download && go clean -cache -fuzzcache -testcache
 
 # Copy Tenderdash source
 # Avoid overwriting third-party libs
-RUN mv third_party third_party.bak
 COPY . .
-RUN rm -r third_party && mv third_party.bak third_party
 
 ARG TENDERMINT_BUILD_OPTIONS=tenderdash
-RUN make build-linux
+RUN make build-binary && \
+    make build_abcidump && \
+    go clean && go clean -cache -fuzzcache -testcache -modcache
 
-RUN make build_abcidump
+# STAGE 3: FINAL IMAGE
+FROM alpine:3.15 AS tenderdash
 
-# stage 2
-FROM alpine:3.15
 LABEL maintainer="developers@dash.org"
 
 # Tenderdash will be looking for the genesis file in /tenderdash/config/genesis.json
@@ -48,6 +54,7 @@ ENV TMHOME /tenderdash
 RUN apk update && \
     apk upgrade && \
     apk --no-cache add curl jq bash gmp libstdc++ libpcap && \
+    rm -rf /var/cache/apk/* && \
     addgroup tmuser && \
     adduser -S -G tmuser tmuser -h "$TMHOME"
 
