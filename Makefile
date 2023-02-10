@@ -195,7 +195,7 @@ install_abci:
 ##################################################################################
 
 build_abcidump:
-	go build -o build/abcidump ./cmd/abcidump
+	$(GO) build -o build/abcidump ./cmd/abcidump
 .PHONY: build_abcidump
 
 install_abcidump:
@@ -314,10 +314,16 @@ build-docs:
 ###                            Docker image                                 ###
 ###############################################################################
 
-build-docker: build-linux
-	cp $(BUILDDIR)/tenderdash DOCKER/tenderdash
-	docker build --label=tendermint --tag="dashpay/tenderdash" -f DOCKER/Dockerfile .
-	rm -rf DOCKER/tenderdash
+docker: build-docker
+.PHONY: docker
+
+build-docker:
+	docker buildx build \
+		--load \
+		--cache-from=type=registry,ref=dashpay/tenderdash:buildcache-deps \
+		--label=tendermint \
+		--tag="dashpay/tenderdash" \
+		-f DOCKER/Dockerfile .
 .PHONY: build-docker
 
 

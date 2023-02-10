@@ -2863,7 +2863,7 @@ func (cs *State) addVote(
 	)
 
 	height := cs.Height
-	added, err = cs.Votes.AddVote(vote, peerID)
+	added, err = cs.Votes.AddVote(vote)
 	if !added {
 		if err != nil {
 			cs.logger.Error(

@@ -3,10 +3,11 @@ package types
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
-	"strconv"
 	"testing"
 
+	"github.com/dashevo/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -35,7 +36,7 @@ func TestGenesisBad(t *testing.T) {
 			"genesis doc must include non-empty chain_id",
 		},
 		{ // invalid validator
-			[]byte(`{"chain_id":"mychain","validators":[{}]}`),
+			[]byte(`{"chain_id":"mychain","validators":[{}],"validator_quorum_type":100}`),
 			"the genesis file cannot contain validators with no voting power",
 		},
 		{ // negative initial height
@@ -63,7 +64,8 @@ func TestGenesisBad(t *testing.T) {
 				"power":10,
 				"name":"",
 				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
-			}]}`,
+			}],
+			"validator_quorum_type":100}`,
 			), "the threshold public key must be set if there are validators"},
 		{ // missing threshold_public_key key type
 			[]byte(`{
@@ -99,6 +101,7 @@ func TestGenesisBad(t *testing.T) {
 				"chain_id":"mychain",
 				"validator_quorum_threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
 				"validator_quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
+				"validator_quorum_type":100,				
 				"validators":[{
 					"address": "A",
 					"pub_key":{"type":"tendermint/PubKeyEd25519","value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},
@@ -119,6 +122,7 @@ func TestGenesisBad(t *testing.T) {
 				"name":"",
 				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
 			}],
+			"validator_quorum_type":100,			
 			"validator_quorum_threshold_public_key":{
 				"type": "tendermint/PubKeyBLS12381",
 				"value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
@@ -137,6 +141,7 @@ func TestGenesisBad(t *testing.T) {
 					"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
 				}],
 				"validator_quorum_threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
+				"validator_quorum_type":100,
 				"validator_quorum_hash": "MDEyMzQ1Njc4OTAxMjM0NTY3OA=="
 				}`), "the quorum hash must be base64-encoded and 32 bytes long, is 19 byte"},
 		{ // validator power is not an int
@@ -155,10 +160,14 @@ func TestGenesisBad(t *testing.T) {
 				"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
 			}}`,
 			), expectErrorContains: "cannot unmarshal string into Go struct field genesisValidatorJSON.power of type int64"},
+		{
+			jsonBlob:            []byte(`{"chain_id": "test-chain-QDKdJr"}`),
+			expectErrorContains: "validator_quorum_type must be provided",
+		},
 	}
 
 	for tcID, testCase := range testCases {
-		t.Run(strconv.Itoa(tcID)+": "+testCase.expectErrorContains, func(t *testing.T) {
+		t.Run(fmt.Sprintf("%02d", tcID)+": "+testCase.expectErrorContains, func(t *testing.T) {
 			gdoc, err := GenesisDocFromJSON(testCase.jsonBlob)
 			assert.ErrorContains(t, err, testCase.expectErrorContains, "%+v", gdoc)
 		})
@@ -176,7 +185,8 @@ func TestGenesisCorrect(t *testing.T) {
 		{
 			"minimal genesis file",
 			`{
-				"chain_id": "test-chain-QDKdJr"
+				"chain_id": "test-chain-QDKdJr",
+				"validator_quorum_type":100
 			}`,
 		},
 	}
@@ -210,6 +220,7 @@ func TestBasicGenesisDoc(t *testing.T) {
 				"value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
 			},
 			"validator_quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
+			"validator_quorum_type":100,
 			"app_hash":"",
 			"app_state":{"account_owner": "Bob"},
 			"consensus_params": {
@@ -238,6 +249,7 @@ func TestBasicGenesisDoc(t *testing.T) {
 		Validators:         []GenesisValidator{{pubkey, 100, "myval", crypto.RandProTxHash()}},
 		ThresholdPublicKey: pubkey,
 		QuorumHash:         crypto.RandQuorumHash(),
+		QuorumType:         btcjson.LLMQType_5_60,
 	}
 	genDocBytes, err = json.Marshal(baseGenDoc)
 	assert.NoError(t, err, "error marshaling genDoc")
@@ -265,9 +277,9 @@ func TestBasicGenesisDoc(t *testing.T) {
 
 	// Genesis doc from raw json
 	missingValidatorsTestCases := [][]byte{
-		[]byte(`{"chain_id":"mychain"}`),                   // missing validators
-		[]byte(`{"chain_id":"mychain","validators":[]}`),   // missing validators
-		[]byte(`{"chain_id":"mychain","validators":null}`), // nil validator
+		[]byte(`{"chain_id":"mychain","validator_quorum_type":100}`),                   // missing validators
+		[]byte(`{"chain_id":"mychain","validator_quorum_type":100,"validators":[]}`),   // missing validators
+		[]byte(`{"chain_id":"mychain","validator_quorum_type":100,"validators":null}`), // nil validator
 	}
 
 	for _, tc := range missingValidatorsTestCases {

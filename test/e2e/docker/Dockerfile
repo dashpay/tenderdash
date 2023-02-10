@@ -1,37 +1,71 @@
-# We need to build in a Linux environment to support C libraries
-# We use Debian instead of Alpine, so that we can use binary database packages
-# instead of spending time compiling them.
-FROM golang:1.19-alpine3.17
+## Stage 1 and 2 is copied from /DOCKER/Dockerfile
+ARG ALIPNE_VERSION=3.17
+ARG GOLANG_VERSION=1.19
+#################################
+# STAGE 1: install dependencies #
+#################################
+FROM golang:${GOLANG_VERSION}-alpine${ALIPNE_VERSION} AS base
 
 RUN apk update && \
     apk upgrade && \
-    apk add bash git gmp-dev sudo cmake build-base python3-dev leveldb-dev
+    apk --no-cache add bash git gmp-dev sudo cmake build-base python3-dev libpcap-dev leveldb-dev && \
+    rm -rf /var/cache/apk/*
 
-# Set up build directory /src/tenderdash
+WORKDIR /src/bls
+
+# Install BLS library
+COPY third_party ./third_party
+RUN ./third_party/bls-signatures/build.sh && \
+    ./third_party/bls-signatures/install.sh
+
+#####################################
+# STAGE 2: install golang libraries #
+#####################################
+FROM base AS deps
+
 WORKDIR /src/tenderdash
-
-# Install DLV debugger
-ENV DEBUG ""
-RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
 # Fetch dependencies separately (for layer caching)
 COPY go.mod go.sum ./
 RUN go mod download
 
-COPY third_party ./third_party
-COPY test/Makefile ./test/Makefile
-COPY Makefile ./
-COPY .git ./.git
+###########################
+# STAGE 2a: INSTALL DELVE #
+###########################
+# This is a separate stage to "go clean" unneeded deps and optimize space
+FROM deps AS delve
 
-# Install BLS library
-RUN make build-bls
+RUN go install github.com/go-delve/delve/cmd/dlv@latest && \
+    go clean -cache -fuzzcache -testcache -modcache && \
+    rm -fr /usr/local/go
+
+#########################
+# STAGE 3: BUILD SOURCE #
+#########################
+FROM deps AS e2e
+
+WORKDIR /src/tenderdash
+
+# Install DLV debugger
+ENV DEBUG ""
+COPY --from=delve /go/bin/dlv /go/bin/dlv
+
+LABEL maintainer="developers@dash.org"
+
+# Tenderdash will be looking for the genesis file in /tenderdash/config/genesis.json
+# (unless you change `genesis_file` in config.toml). You can put your config.toml and
+# private validator file into /tenderdash/config.
+#
+# The /tenderdash/data dir is used by tenderdash to store state.
+ENV TMHOME /tenderdash
 
 # Copy Tenderdash source
 COPY . .
-
 COPY test/e2e/docker/entrypoint* /usr/bin/
 
-RUN cd test/e2e && make node && cp build/node /usr/bin/app
+RUN rm -r /src/tenderdash/third_party && ln -s /src/bls/third_party /src/tenderdash/third_party && \
+	cd test/e2e && make node && cp build/node /usr/bin/app && \
+    go clean && go clean -cache -fuzzcache -testcache -modcache
 
 # Set up runtime directory. We don't use a separate runtime image since we need
 # e.g. leveldb and rocksdb which are already installed in the build image.

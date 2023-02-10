@@ -12,6 +12,7 @@ func TestNewMessageType(t *testing.T) {
 		"tendermint.abci.Response":       true,
 		"tendermint.types.CoreChainLock": true,
 		"tendermint.abci.RequestNX":      false,
+		"tendermint.p2p.Packet":          true,
 	}
 	for typeName, isCorrect := range types {
 		t.Run(typeName, func(t *testing.T) {

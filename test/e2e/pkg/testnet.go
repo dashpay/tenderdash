@@ -326,7 +326,8 @@ func LoadTestnet(file string) (*Testnet, error) {
 
 		// If there are no seeds or persistent peers specified, default to persistent
 		// connections to all other full nodes.
-		if len(node.PersistentPeers) == 0 && len(node.Seeds) == 0 {
+		// Seed nodes are an exception here.
+		if node.Mode != ModeSeed && len(node.PersistentPeers) == 0 && len(node.Seeds) == 0 {
 			for _, peer := range testnet.Nodes {
 				if peer.Name == node.Name {
 					continue
