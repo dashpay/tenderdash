@@ -2,73 +2,348 @@ package blocksync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	mrand "math/rand"
+	"sort"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
-	"github.com/tendermint/tendermint/libs/log"
+	bsmocks "github.com/tendermint/tendermint/internal/blocksync/mocks"
+	"github.com/tendermint/tendermint/internal/p2p"
+	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/internal/state/mocks"
+	"github.com/tendermint/tendermint/internal/state/test/factory"
+	"github.com/tendermint/tendermint/libs/promise"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
+	"github.com/tendermint/tendermint/libs/workerpool"
+	"github.com/tendermint/tendermint/proto/tendermint/blocksync"
 	"github.com/tendermint/tendermint/types"
+	"github.com/tendermint/tendermint/version"
 )
 
-func init() {
-	peerTimeout = 2 * time.Second
+type BlockPoolTestSuite struct {
+	suite.Suite
+
+	store        *mocks.BlockStore
+	blockExec    *mocks.Executor
+	client       *bsmocks.BlockClient
+	responses    []*blocksync.BlockResponse
+	initialState sm.State
 }
 
-type testPeer struct {
-	id        types.NodeID
-	base      int64
-	height    int64
-	inputChan chan inputData // make sure each peer's data is sequential
+func TestBlockPool(t *testing.T) {
+	suite.Run(t, new(BlockPoolTestSuite))
 }
 
-type inputData struct {
-	t       *testing.T
-	pool    *BlockPool
-	request BlockRequest
+func (suite *BlockPoolTestSuite) SetupTest() {
+	ctx := context.Background()
+	const chainLen = 200
+	valSet, privVals := types.MockValidatorSet()
+	suite.initialState = fakeInitialState(valSet)
+	state := suite.initialState.Copy()
+	blocks := factory.MakeBlocks(ctx, suite.T(), chainLen+1, &state, privVals, 1)
+	suite.responses = generateBlockResponses(suite.T(), blocks)
+	suite.client = bsmocks.NewBlockClient(suite.T())
+	suite.store = mocks.NewBlockStore(suite.T())
+	suite.blockExec = mocks.NewExecutor(suite.T())
 }
 
-func (p testPeer) runInputRoutine() {
-	go func() {
-		for input := range p.inputChan {
-			p.simulateInput(input)
-		}
-	}()
-}
+func (suite *BlockPoolTestSuite) TestBlockPoolBasic() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-// Request desired, pretend like we got the block immediately.
-func (p testPeer) simulateInput(input inputData) {
-	block := &types.Block{Header: types.Header{Height: input.request.Height}}
-	extCommit := &types.Commit{
-		Height: input.request.Height,
+	startAt := int64(42)
+	peers := makePeers(10, startAt, 200)
+
+	suite.store.On("SaveBlock", mock.Anything, mock.Anything, mock.Anything)
+	suite.blockExec.
+		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
+		Return(nil)
+	suite.blockExec.
+		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Return(func(_ context.Context, state sm.State, _ types.BlockID, block *types.Block, _ *types.Commit) sm.State {
+			return state
+		}, nil)
+	suite.client.
+		On("GetBlock", mock.Anything, mock.Anything, mock.Anything).
+		Return(func(ctx context.Context, height int64, peerID types.NodeID) *promise.Promise[*blocksync.BlockResponse] {
+			return promise.New(func(resolve func(data *blocksync.BlockResponse), reject func(err error)) {
+				resolve(suite.responses[int(height-1)])
+			})
+		}, nil)
+
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	pool := NewBlockPool(startAt, suite.client, applier)
+
+	if err := pool.Start(ctx); err != nil {
+		suite.Require().Error(err)
 	}
-	_ = input.pool.AddBlock(input.request.PeerID, block, extCommit, 123)
-	// TODO: uncommenting this creates a race which is detected by:
-	// https://github.com/golang/go/blob/2bd767b1022dd3254bcec469f0ee164024726486/src/testing/testing.go#L854-L856
-	// see: https://github.com/tendermint/tendermint/issues/3390#issue-418379890
-	// input.t.Logf("Added block from peer %v (height: %v)", input.request.PeerID, input.request.Height)
+
+	// Introduce each peer.
+	for _, peer := range peers {
+		pool.SetPeerRange(newPeerData(peer.peerID, peer.base, peer.height))
+	}
+	suite.Require().Eventually(func() bool {
+		return !pool.IsCaughtUp()
+	}, 5*time.Second, 100*time.Millisecond)
 }
 
-type testPeers map[types.NodeID]testPeer
-
-func (ps testPeers) start() {
-	for _, v := range ps {
-		v.runInputRoutine()
+func (suite *BlockPoolTestSuite) TestProduceJob() {
+	ctx := context.Background()
+	peer1 := newPeerData("peer1", 1, 1000)
+	testCases := []struct {
+		startHeight  int64
+		wantHeight   int64
+		pushBack     []int64
+		wantPeer     *PeerData
+		isJobChEmpty bool
+	}{
+		{
+			startHeight: 1,
+			wantHeight:  1,
+			wantPeer:    peer1,
+		},
+		{
+			startHeight: 2,
+			wantHeight:  2,
+			wantPeer:    peer1,
+		},
+		{
+			startHeight: 2,
+			pushBack:    []int64{1},
+			wantHeight:  1,
+			wantPeer:    peer1,
+		},
+		{
+			startHeight:  1001,
+			isJobChEmpty: true,
+		},
+	}
+	for i, tc := range testCases {
+		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
+			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+			jobCh := make(chan workerpool.Job, 1)
+			wp := workerpool.New(0, workerpool.WithJobCh(jobCh))
+			pool := NewBlockPool(tc.startHeight, suite.client, applier, WithWorkerPool(wp))
+			pool.SetPeerRange(peer1)
+			for _, height := range tc.pushBack {
+				pool.jobGen.pushBack(height)
+			}
+			pool.produceJob(ctx)
+			if tc.isJobChEmpty {
+				suite.Require().Len(jobCh, 0)
+				return
+			}
+			suite.Require().Len(jobCh, 1)
+			job := <-jobCh
+			bfJob := job.(*blockFetchJob)
+			suite.Require().Equal(tc.wantHeight, bfJob.height)
+			suite.Require().Equal(tc.wantPeer, bfJob.peer)
+		})
 	}
 }
 
-func (ps testPeers) stop() {
-	for _, v := range ps {
-		close(v.inputChan)
+func (suite *BlockPoolTestSuite) TestConsumeJobResult() {
+	ctx := context.Background()
+
+	resultCh := make(chan workerpool.Result, 1)
+	wp := workerpool.New(1, workerpool.WithResultCh(resultCh))
+	mockErr := &errBlockFetch{peerID: "peer 1", height: 1, err: errors.New("error")}
+	peerID1 := types.NodeID("peer 1")
+	peerID2 := types.NodeID("peer 2")
+	respH1, _ := BlockResponseFromProto(suite.responses[0], peerID1)
+	respH2, _ := BlockResponseFromProto(suite.responses[1], peerID1)
+	respH3, _ := BlockResponseFromProto(suite.responses[2], peerID2)
+	testCases := []struct {
+		result       workerpool.Result
+		mockFn       func(pool *BlockPool)
+		wantPushBack []int64
+	}{
+		{
+			result: workerpool.Result{Value: respH1},
+			mockFn: func(pool *BlockPool) {
+				suite.store.
+					On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
+					Once().
+					Return(nil)
+				suite.blockExec.
+					On("ValidateBlock", mock.Anything, mock.Anything, respH1.Block).
+					Once().
+					Return(nil)
+				suite.blockExec.
+					On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, respH1.Block, respH1.Commit).
+					Once().
+					Return(sm.State{}, nil)
+			},
+		},
+		{
+			result:       workerpool.Result{Err: mockErr},
+			wantPushBack: []int64{1},
+			mockFn: func(pool *BlockPool) {
+				suite.client.
+					On("Send", mock.Anything, p2p.PeerError{NodeID: "peer 1", Err: mockErr}).
+					Once().
+					Return(nil)
+			},
+		},
+		{
+			result:       workerpool.Result{Err: mockErr},
+			wantPushBack: []int64{1, 2},
+			mockFn: func(pool *BlockPool) {
+				pool.pendingToApply[2] = *respH2
+				pool.pendingToApply[3] = *respH3
+				suite.client.
+					On("Send", mock.Anything, p2p.PeerError{NodeID: "peer 1", Err: mockErr}).
+					Once().
+					Return(nil)
+			},
+		},
+		{
+			result:       workerpool.Result{Value: respH1},
+			wantPushBack: []int64{1, 2},
+			mockFn: func(pool *BlockPool) {
+				pool.pendingToApply[2] = BlockResponse{PeerID: "peer 1", Block: respH2.Block}
+				suite.blockExec.
+					On("ValidateBlock", mock.Anything, mock.Anything, respH1.Block).
+					Once().
+					Return(errors.New("invalid error"))
+				suite.client.
+					On("Send", mock.Anything, mock.Anything).
+					Once().
+					Return(nil)
+			},
+		},
+		{
+			result: workerpool.Result{Value: respH2},
+			mockFn: func(pool *BlockPool) {},
+		},
+	}
+	for i, tc := range testCases {
+		applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+		pool := NewBlockPool(1, suite.client, applier, WithWorkerPool(wp))
+		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
+			tc.mockFn(pool)
+			resultCh <- tc.result
+			pool.consumeJobResult(ctx)
+			sort.Slice(pool.jobGen.pushedBack, func(i, j int) bool {
+				return pool.jobGen.pushedBack[i] < pool.jobGen.pushedBack[j]
+			})
+			suite.Require().Equal(tc.wantPushBack, pool.jobGen.pushedBack)
+			suite.Require().Equal(int32(-1), pool.jobProgressCounter.Load())
+		})
 	}
 }
 
-func makePeers(numPeers int, minHeight, maxHeight int64) testPeers {
-	peers := make(testPeers, numPeers)
+func (suite *BlockPoolTestSuite) TestRemovePeer() {
+	peerID1 := types.NodeID("peer1")
+	peerID2 := types.NodeID("peer2")
+	peerID3 := types.NodeID("peer3")
+	const maxHeight = 300
+	peers := []*PeerData{
+		newPeerData(peerID1, 1, 100),
+		newPeerData(peerID2, 1, 200),
+		newPeerData(peerID3, 1, maxHeight),
+	}
+	respH1, _ := BlockResponseFromProto(suite.responses[0], peerID1)
+	respH2, _ := BlockResponseFromProto(suite.responses[1], peerID2)
+	respH3, _ := BlockResponseFromProto(suite.responses[2], peerID3)
+	respH4, _ := BlockResponseFromProto(suite.responses[3], peerID1)
+	respH5, _ := BlockResponseFromProto(suite.responses[4], peerID1)
+	respH6, _ := BlockResponseFromProto(suite.responses[5], peerID3)
+	respH7, _ := BlockResponseFromProto(suite.responses[6], peerID2)
+	responses := []*BlockResponse{respH1, respH2, respH3, respH4, respH5, respH6, respH7}
+	testCases := []struct {
+		peers         []*PeerData
+		responses     []*BlockResponse
+		peerID        types.NodeID
+		wantPushBack  []int64
+		wantPeers     []*PeerData
+		wantMaxHeight int64
+	}{
+		{
+			peers:         peers,
+			responses:     responses,
+			peerID:        peerID1,
+			wantPushBack:  []int64{1, 4, 5},
+			wantPeers:     []*PeerData{peers[1], peers[2]},
+			wantMaxHeight: maxHeight,
+		},
+		{
+			peers:         peers,
+			responses:     responses,
+			peerID:        peerID2,
+			wantPushBack:  []int64{2, 7},
+			wantPeers:     []*PeerData{peers[0], peers[2]},
+			wantMaxHeight: maxHeight,
+		},
+		{
+			peers:         peers,
+			responses:     responses,
+			peerID:        peerID3,
+			wantPushBack:  []int64{3, 6},
+			wantPeers:     []*PeerData{peers[0], peers[1]},
+			wantMaxHeight: 200,
+		},
+	}
+	for i, tc := range testCases {
+		suite.Run(fmt.Sprintf("%d", i), func() {
+			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+			pool := NewBlockPool(1, suite.client, applier)
+			//for _, peer := range tc.peers {
+			//	pool.peerStore.Put(peer)
+			//}
+			for _, peer := range peers {
+				pool.SetPeerRange(peer)
+			}
+			for _, resp := range tc.responses {
+				pool.pendingToApply[resp.Block.Height] = *resp
+			}
+			pool.RemovePeer(tc.peerID)
+			sort.Slice(pool.jobGen.pushedBack, func(i, j int) bool {
+				return pool.jobGen.pushedBack[i] < pool.jobGen.pushedBack[j]
+			})
+			suite.Require().Equal(tc.wantPushBack, pool.jobGen.pushedBack)
+			actualPeers := pool.peerStore.All()
+			suite.Require().Equal(tc.wantPeers, actualPeers)
+			suite.Require().Equal(tc.wantMaxHeight, pool.MaxPeerHeight())
+		})
+	}
+}
+
+func generateBlockResponses(t *testing.T, blocks []*types.Block) []*blocksync.BlockResponse {
+	responses := make([]*blocksync.BlockResponse, 0, len(blocks)-1)
+	for i := 0; i < len(blocks)-1; i++ {
+		protoBlock, err := blocks[i].ToProto()
+		require.NoError(t, err)
+		responses = append(responses, &blocksync.BlockResponse{
+			Block:  protoBlock,
+			Commit: blocks[i+1].LastCommit.ToProto(),
+		})
+	}
+	return responses
+}
+
+func fakeInitialState(valSet *types.ValidatorSet) sm.State {
+	return sm.State{
+		Version: sm.Version{
+			Consensus: version.Consensus{
+				Block: version.BlockProtocol,
+			},
+		},
+		ChainID:        "test-chain",
+		InitialHeight:  1,
+		Validators:     valSet,
+		LastValidators: valSet,
+	}
+}
+
+func makePeers(numPeers int, minHeight, maxHeight int64) map[types.NodeID]*PeerData {
+	peers := make(map[types.NodeID]*PeerData, numPeers)
 	for i := 0; i < numPeers; i++ {
 		peerID := types.NodeID(tmrand.Str(12))
 		height := minHeight + mrand.Int63n(maxHeight-minHeight)
@@ -76,162 +351,7 @@ func makePeers(numPeers int, minHeight, maxHeight int64) testPeers {
 		if base > height {
 			base = height
 		}
-		peers[peerID] = testPeer{peerID, base, height, make(chan inputData, 10)}
+		peers[peerID] = newPeerData(peerID, base, height)
 	}
 	return peers
-}
-
-func TestBlockPoolBasic(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	start := int64(42)
-	peers := makePeers(10, start+1, 1000)
-	errorsCh := make(chan peerError, 1000)
-	requestsCh := make(chan BlockRequest, 1000)
-	pool := NewBlockPool(log.NewNopLogger(), start, requestsCh, errorsCh)
-
-	if err := pool.Start(ctx); err != nil {
-		t.Error(err)
-	}
-
-	t.Cleanup(func() { cancel(); pool.Wait() })
-
-	peers.start()
-	defer peers.stop()
-
-	// Introduce each peer.
-	go func() {
-		for _, peer := range peers {
-			pool.SetPeerRange(peer.id, peer.base, peer.height)
-		}
-	}()
-
-	// Start a goroutine to pull blocks
-	go func() {
-		for {
-			if !pool.IsRunning() {
-				return
-			}
-			first, second, _ := pool.PeekTwoBlocks()
-			if first != nil && second != nil {
-				pool.PopRequest()
-			} else {
-				time.Sleep(1 * time.Second)
-			}
-		}
-	}()
-
-	// Pull from channels
-	for {
-		select {
-		case err := <-errorsCh:
-			t.Error(err)
-		case request := <-requestsCh:
-			if request.Height == 300 {
-				return // Done!
-			}
-
-			peers[request.PeerID].inputChan <- inputData{t, pool, request}
-		}
-	}
-}
-
-func TestBlockPoolTimeout(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	logger := log.NewNopLogger()
-
-	start := int64(42)
-	peers := makePeers(10, start+1, 1000)
-	errorsCh := make(chan peerError, 1000)
-	requestsCh := make(chan BlockRequest, 1000)
-	pool := NewBlockPool(logger, start, requestsCh, errorsCh)
-	err := pool.Start(ctx)
-	if err != nil {
-		t.Error(err)
-	}
-	t.Cleanup(func() { cancel(); pool.Wait() })
-
-	// Introduce each peer.
-	go func() {
-		for _, peer := range peers {
-			pool.SetPeerRange(peer.id, peer.base, peer.height)
-		}
-	}()
-
-	// Start a goroutine to pull blocks
-	go func() {
-		for {
-			if !pool.IsRunning() {
-				return
-			}
-			first, second, _ := pool.PeekTwoBlocks()
-			if first != nil && second != nil {
-				pool.PopRequest()
-			} else {
-				time.Sleep(1 * time.Second)
-			}
-		}
-	}()
-
-	// Pull from channels
-	counter := 0
-	timedOut := map[types.NodeID]struct{}{}
-	for {
-		select {
-		case err := <-errorsCh:
-			// consider error to be always timeout here
-			if _, ok := timedOut[err.peerID]; !ok {
-				counter++
-				if counter == len(peers) {
-					return // Done!
-				}
-			}
-		case request := <-requestsCh:
-			logger.Debug("received request",
-				"counter", counter,
-				"request", request)
-		}
-	}
-}
-
-func TestBlockPoolRemovePeer(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	peers := make(testPeers, 10)
-	for i := 0; i < 10; i++ {
-		peerID := types.NodeID(fmt.Sprintf("%d", i+1))
-		height := int64(i + 1)
-		peers[peerID] = testPeer{peerID, 0, height, make(chan inputData)}
-	}
-	requestsCh := make(chan BlockRequest)
-	errorsCh := make(chan peerError)
-
-	pool := NewBlockPool(log.NewNopLogger(), 1, requestsCh, errorsCh)
-	err := pool.Start(ctx)
-	require.NoError(t, err)
-	t.Cleanup(func() { cancel(); pool.Wait() })
-
-	// add peers
-	for peerID, peer := range peers {
-		pool.SetPeerRange(peerID, peer.base, peer.height)
-	}
-	assert.EqualValues(t, 10, pool.MaxPeerHeight())
-
-	// remove not-existing peer
-	assert.NotPanics(t, func() { pool.RemovePeer(types.NodeID("Superman")) })
-
-	// remove peer with biggest height
-	pool.RemovePeer(types.NodeID("10"))
-	assert.EqualValues(t, 9, pool.MaxPeerHeight())
-
-	// remove all peers
-	for peerID := range peers {
-		pool.RemovePeer(peerID)
-	}
-
-	assert.EqualValues(t, 0, pool.MaxPeerHeight())
 }
