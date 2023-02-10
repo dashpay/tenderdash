@@ -13,7 +13,8 @@ RUN apt-get -qq update -y && \
     apt-get -qq install -y cmake sudo libgmp-dev libleveldb-dev \
         librocksdb-dev libpcap-dev >/dev/null && \
     apt-get clean && \
-    rm -r /var/lib/apt/lists/*
+    rm -r /var/lib/apt/lists/* && \
+    rm -r /usr/share/locale/* /usr/share/doc/*
 
 WORKDIR /src/bls
 
@@ -32,7 +33,7 @@ WORKDIR /src/tenderdash
 
 # Fetch dependencies separately (for layer caching)
 COPY go.mod go.sum ./
-RUN go mod download && go clean -cache -fuzzcache -testcache
+RUN go mod download
 
 
 ###########################
@@ -41,7 +42,9 @@ RUN go mod download && go clean -cache -fuzzcache -testcache
 # This is a separate stage to "go clean" unneeded deps and optimize space
 FROM deps AS delve
 
-RUN go install github.com/go-delve/delve/cmd/dlv@latest && go clean -cache -fuzzcache -testcache -modcache
+RUN go install github.com/go-delve/delve/cmd/dlv@latest && \
+    go clean -cache -fuzzcache -testcache -modcache && \
+    rm -fr /usr/local/go
 
 ######################
 # STAGE 3: BUILD E2E #
