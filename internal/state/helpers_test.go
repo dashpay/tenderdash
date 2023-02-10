@@ -180,12 +180,6 @@ func makeHeaderPartsResponsesParams(
 	return block.Header, block.CoreChainLock, types.BlockID{Hash: block.Hash(), PartSetHeader: types.PartSetHeader{}}, abciResponses
 }
 
-func randomGenesisDoc() *types.GenesisDoc {
-	valset, _ := types.RandValidatorSet(1)
-	genDoc := factory.TestGenesisDoc(valset, nil)
-	return &genDoc
-}
-
 // used for testing by state store
 func makeRandomStateFromValidatorSet(
 	lastValSet *types.ValidatorSet,

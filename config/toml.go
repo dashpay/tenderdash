@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 
+	"github.com/tendermint/tendermint/internal/test/factory"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 )
@@ -577,7 +579,7 @@ namespace = "{{ .Instrumentation.Namespace }}"
 /****** these are for test settings ***********/
 
 func ResetTestRoot(dir, testName string) (*Config, error) {
-	return ResetTestRootWithChainID(dir, testName, "")
+	return ResetTestRootWithChainID(dir, testName, factory.DefaultTestChainID)
 }
 
 func ResetTestRootWithChainID(dir, testName string, chainID string) (*Config, error) {
@@ -622,7 +624,9 @@ func ResetTestRootWithChainID(dir, testName string, chainID string) (*Config, er
 	}
 
 	config := TestConfig().SetRoot(rootDir)
-	config.Instrumentation.Namespace = fmt.Sprintf("%s_%s_%s", testName, chainID, tmrand.Str(16))
+	// Label names may contain ASCII letters, numbers, as well as underscores.
+	metricChainID := regexp.MustCompile(`[^a-zA-Z0-9_]+`).ReplaceAllString(chainID, "_")
+	config.Instrumentation.Namespace = fmt.Sprintf("%s_%s_%s", testName, metricChainID, tmrand.Str(16))
 	return config, nil
 }
 

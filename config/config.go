@@ -13,6 +13,7 @@ import (
 
 	"github.com/dashevo/dashd-go/btcjson"
 
+	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	"github.com/tendermint/tendermint/types"
@@ -266,7 +267,7 @@ func SingleNodeBaseConfig() BaseConfig {
 // TestBaseConfig returns a base configuration for testing a Tendermint node
 func TestBaseConfig() BaseConfig {
 	cfg := DefaultBaseConfig()
-	cfg.chainID = "tendermint_test"
+	cfg.chainID = factory.DefaultTestChainID
 	cfg.Mode = ModeValidator
 	cfg.ProxyApp = "kvstore"
 	cfg.DBBackend = "memdb"
