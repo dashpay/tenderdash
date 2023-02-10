@@ -80,7 +80,7 @@ jobs:
           context: .
           file: ./DOCKER/Dockerfile
           platforms: linux/amd64,linux/arm64
-          target: deps
+          target: base
           push: false
           cache-from: |
             type=registry,ref=dashpay/tenderdash:buildcache-deps

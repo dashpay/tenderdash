@@ -3,7 +3,7 @@ ROOT_PATH := $(abspath $(lastword $(MAKEFILE_LIST)/../../../))
 all: docker generator runner tests
 
 docker:
-	docker build --tag tenderdash/e2e-node -f docker/Dockerfile ../..
+	docker buildx build $(BUILDX_OPTIONS) --load --tag tenderdash/e2e-node -f docker/Dockerfile ../..
 
 node:
 	GOTRACEBACK=crash go build -gcflags="all=-N -l" -o build/node -tags badgerdb,boltdb,cleveldb,rocksdb,deadlock ./node

@@ -1,5 +1,13 @@
-# STAGE 1: install dependencies
-FROM golang:1.19-alpine3.15 AS deps
+# This is a multi-stage Dockerfile.
+# * base - base dependencies that rarely change
+# * deps - branch-dependent dependencies
+# * compile - builds final binaries
+# * image - creates final image of minimal size
+
+#################################
+# STAGE 1: install dependencies #
+#################################
+FROM golang:1.19-alpine3.15 AS base
 
 RUN apk update && \
     apk upgrade && \
@@ -14,9 +22,10 @@ RUN ./third_party/bls-signatures/build.sh && \
     ./third_party/bls-signatures/install.sh && \
     rm -fr ./third_party
 
-
-# STAGE 2: install golang libraries
-FROM deps AS builder
+#####################################
+# STAGE 2: install golang libraries #
+#####################################
+FROM base AS deps
 
 WORKDIR /src/tenderdash
 
@@ -24,6 +33,13 @@ WORKDIR /src/tenderdash
 # TODO: move below BLS install once on new BLS version
 COPY go.mod go.sum ./
 RUN go mod download && go clean -cache -fuzzcache -testcache
+
+#########################
+# STAGE 3: BUILD SOURCE #
+#########################
+FROM deps AS compile
+
+WORKDIR /src/tenderdash
 
 # Copy Tenderdash source
 # Avoid overwriting third-party libs
@@ -34,8 +50,10 @@ RUN make build-binary && \
     make build_abcidump && \
     go clean && go clean -cache -fuzzcache -testcache -modcache
 
-# STAGE 3: FINAL IMAGE
-FROM alpine:3.15 AS tenderdash
+########################
+# STAGE 4: FINAL IMAGE #
+########################
+FROM alpine:3.15 AS image
 
 LABEL maintainer="developers@dash.org"
 
@@ -68,8 +86,7 @@ EXPOSE 26656 26657 26660
 
 STOPSIGNAL SIGTERM
 
-COPY --from=builder /src/tenderdash/build/tenderdash /usr/bin/tenderdash
-COPY --from=builder /src/tenderdash/build/abcidump /usr/bin/abcidump
+COPY --from=compile /src/tenderdash/build/tenderdash /src/tenderdash/build/abcidump /usr/bin/
 
 # You can overwrite these before the first run to influence
 # config.json and genesis.json. Additionally, you can override

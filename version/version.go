@@ -36,4 +36,5 @@ func (c Consensus) ToProto() tmversion.Consensus {
 		Block: c.Block,
 		App:   c.App,
 	}
+
 }
