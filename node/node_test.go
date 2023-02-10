@@ -41,7 +41,7 @@ import (
 )
 
 func TestNodeStartStop(t *testing.T) {
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_node_test")
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 
 	defer os.RemoveAll(cfg.RootDir)
@@ -118,7 +118,7 @@ func TestNodeDelayedStart(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_delayed_start_test")
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 
 	defer os.RemoveAll(cfg.RootDir)
@@ -140,7 +140,7 @@ func TestNodeDelayedStart(t *testing.T) {
 }
 
 func TestNodeSetAppVersion(t *testing.T) {
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_app_version_test")
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.RootDir)
 
@@ -175,7 +175,7 @@ func TestNodeSetPrivValTCP(t *testing.T) {
 
 	logger := log.NewNopLogger()
 
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_priv_val_tcp_test")
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.RootDir)
 	cfg.PrivValidator.ListenAddr = addr
@@ -222,7 +222,7 @@ func TestPrivValidatorListenAddrNoProtocol(t *testing.T) {
 
 	addrNoPrefix := testFreeAddr(t)
 
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_priv_val_tcp_test")
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.RootDir)
 	cfg.PrivValidator.ListenAddr = addrNoPrefix
@@ -240,13 +240,13 @@ func TestPrivValidatorListenAddrNoProtocol(t *testing.T) {
 }
 
 func TestNodeSetPrivValIPC(t *testing.T) {
-	tmpfile := "/tmp/kms." + tmrand.Str(6) + ".sock"
-	defer os.Remove(tmpfile) // clean up
+
+	tmpfile := t.TempDir() + "/kms." + tmrand.Str(6) + ".sock"
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_priv_val_tcp_test")
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.RootDir)
 	cfg.PrivValidator.ListenAddr = "unix://" + tmpfile
@@ -299,7 +299,7 @@ func TestCreateProposalBlock(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_create_proposal")
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.RootDir)
 
@@ -413,7 +413,7 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_create_proposal")
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 
 	defer os.RemoveAll(cfg.RootDir)
@@ -496,7 +496,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_create_proposal")
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 	defer os.RemoveAll(cfg.RootDir)
 
@@ -622,7 +622,7 @@ func TestMaxProposalBlockSize(t *testing.T) {
 }
 
 func TestNodeNewSeedNode(t *testing.T) {
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_new_seed_test")
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 	cfg.Mode = config.ModeSeed
 	defer os.RemoveAll(cfg.RootDir)
@@ -661,7 +661,7 @@ func TestNodeNewSeedNode(t *testing.T) {
 }
 
 func TestNodeSetEventSink(t *testing.T) {
-	cfg, err := config.ResetTestRoot(t.TempDir(), "node_app_version_test")
+	cfg, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 
 	defer os.RemoveAll(cfg.RootDir)
@@ -785,7 +785,7 @@ func loadStatefromGenesis(ctx context.Context, t *testing.T) sm.State {
 
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
-	_, err := config.ResetTestRoot(t.TempDir(), "load_state_from_genesis")
+	_, err := config.ResetTestRoot(t.TempDir(), t.Name())
 	require.NoError(t, err)
 
 	loadedState, err := stateStore.Load()
