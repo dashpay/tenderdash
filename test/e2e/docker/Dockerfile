@@ -12,7 +12,8 @@ RUN apt-get -qq update -y && \
     apt-get -qq upgrade -y >/dev/null && \
     apt-get -qq install -y cmake sudo libgmp-dev libleveldb-dev \
         librocksdb-dev libpcap-dev >/dev/null && \
-    apt-get clean
+    apt-get clean && \
+    rm -r /var/lib/apt/lists/*
 
 WORKDIR /src/bls
 
@@ -33,6 +34,15 @@ WORKDIR /src/tenderdash
 COPY go.mod go.sum ./
 RUN go mod download && go clean -cache -fuzzcache -testcache
 
+
+###########################
+# STAGE 2a: INSTALL DELVE #
+###########################
+# This is a separate stage to "go clean" unneeded deps and optimize space
+FROM deps AS delve
+
+RUN go install github.com/go-delve/delve/cmd/dlv@latest && go clean -cache -fuzzcache -testcache -modcache
+
 ######################
 # STAGE 3: BUILD E2E #
 ######################
@@ -40,11 +50,9 @@ FROM deps AS e2e
 
 WORKDIR /src/tenderdash
 
-
-
 # Install DLV debugger
 ENV DEBUG ""
-RUN go install github.com/go-delve/delve/cmd/dlv@latest
+COPY --from=delve /go/bin/dlv /go/bin/dlv
 
 LABEL maintainer="developers@dash.org"
 
