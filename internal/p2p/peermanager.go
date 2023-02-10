@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -1685,11 +1686,12 @@ func (p *peerInfo) IsZero() bool {
 func (p *peerInfo) String() string {
 	marshaler := jsonpb.Marshaler{}
 
-	json, err := marshaler.MarshalToString(p.ToProto())
+	ret, err := marshaler.MarshalToString(p.ToProto())
 	if err != nil {
-		return `{"error":"` + err.Error() + `"}`
+		b, _ := json.Marshal(map[string]string{"error": err.Error()})
+		return string(b)
 	}
-	return json
+	return ret
 }
 
 func (p *peerInfo) MarshalZerologObject(e *zerolog.Event) {
