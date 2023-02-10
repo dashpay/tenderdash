@@ -343,7 +343,6 @@ func TestProposerWaitsForGenesisTime(t *testing.T) {
 	results := pbtsTest.run(ctx, t)
 
 	// ensure that the proposal was issued after the genesis time.
-
 	assert.True(t, results[1].proposalIssuedAt.After(cfg.genesisTime),
 		"Proposal issued at %s, genesis %s", results[1].proposalIssuedAt, cfg.genesisTime)
 }

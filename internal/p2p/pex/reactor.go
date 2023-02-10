@@ -50,6 +50,8 @@ const (
 	// The reactor should still look to add new peers in order to flush out low
 	// scoring peers that are still in the peer store
 	fullCapacityInterval = 10 * time.Minute
+
+	pexSendTimeout = 30 * time.Second
 )
 
 // TODO: We should decide whether we want channel descriptors to be housed
@@ -164,32 +166,29 @@ func (r *Reactor) processPexCh(ctx context.Context, pexCh p2p.Channel) {
 	// will be adjusted upward as knowledge of the network grows.
 	var nextPeerRequest = minReceiveRequestInterval
 
-	timer := time.NewTimer(0)
+	timer := time.NewTimer(nextPeerRequest)
 	defer timer.Stop()
 
 	for {
-		timer.Reset(nextPeerRequest)
-
 		select {
 		case <-ctx.Done():
 			return
 
 		case <-timer.C:
 			// Send a request for more peer addresses.
-			if err := r.sendRequestForPeers(ctx, pexCh); err != nil {
-				return
-				// TODO(creachadair): Do we really want to stop processing the PEX
-				// channel just because of an error here?
+			err := r.sendRequestForPeers(ctx, pexCh)
+			if err != nil {
+				r.logger.Debug("request for peers failed, retrying", "error", err)
 			}
 
-			// Note we do not update the poll timer upon making a request, only
-			// when we receive an update that updates our priors.
-
+			timer.Reset(nextPeerRequest)
 		case envelope, ok := <-incoming:
 			if !ok {
+				r.logger.Error("incoming PEX channel closed")
 				return // channel closed
 			}
 
+			start := time.Now()
 			// A request from another peer, or a response to one of our requests.
 			dur, err := r.handlePexMessage(ctx, envelope, pexCh)
 			if err != nil {
@@ -198,12 +197,15 @@ func (r *Reactor) processPexCh(ctx context.Context, pexCh p2p.Channel) {
 					NodeID: envelope.From,
 					Err:    err,
 				}); serr != nil {
+					r.logger.Error("cannot send error to PEX channel", "error", serr, "previous_error", err)
 					return
 				}
-			} else if dur != 0 {
+			} else if dur >= minReceiveRequestInterval {
 				// We got a useful result; update the poll timer.
+				// It will apply in the next timer reset.
 				nextPeerRequest = dur
 			}
+			r.logger.Trace("handled incoming PEX message", "peer", envelope.From, "envelope", envelope, "dur", dur.String(), "took", time.Since(start))
 		}
 	}
 }
@@ -244,7 +246,9 @@ func (r *Reactor) handlePexMessage(ctx context.Context, envelope *p2p.Envelope, 
 				URL: addr.String(),
 			}
 		}
-		return 0, pexCh.Send(ctx, p2p.Envelope{
+		chCtx, cancel := context.WithTimeout(ctx, pexSendTimeout)
+		defer cancel()
+		return 0, pexCh.Send(chCtx, p2p.Envelope{
 			To:      envelope.From,
 			Message: &protop2p.PexResponse{Addresses: pexAddresses},
 		})
@@ -265,6 +269,7 @@ func (r *Reactor) handlePexMessage(ctx context.Context, envelope *p2p.Envelope, 
 		for _, pexAddress := range msg.Addresses {
 			peerAddress, err := p2p.ParseNodeAddress(pexAddress.URL)
 			if err != nil {
+				logger.Error("failed to parse PEX address", "address", peerAddress, "err", err)
 				continue
 			}
 			added, err := r.peerManager.Add(peerAddress)
@@ -304,17 +309,13 @@ func (r *Reactor) processPeerUpdate(peerUpdate p2p.PeerUpdate) {
 	}
 }
 
-// sendRequestForPeers chooses a peer from the set of available peers and sends
-// that peer a request for more peer addresses. The chosen peer is moved into
-// the requestsSent bucket so that we will not attempt to contact them again
-// until they've replied or updated.
-func (r *Reactor) sendRequestForPeers(ctx context.Context, pexCh p2p.Channel) error {
+func (r *Reactor) selectPeerToSendMsg() (types.NodeID, error) {
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
+
 	if len(r.availablePeers) == 0 {
 		// no peers are available
-		r.logger.Debug("no available peers to send a PEX request to (retrying)")
-		return nil
+		return "", nil
 	}
 
 	// Select an arbitrary peer from the available set.
@@ -323,16 +324,36 @@ func (r *Reactor) sendRequestForPeers(ctx context.Context, pexCh p2p.Channel) er
 		break
 	}
 
-	if err := pexCh.Send(ctx, p2p.Envelope{
-		To:      peerID,
-		Message: &protop2p.PexRequest{},
-	}); err != nil {
-		return err
-	}
-
-	// Move the peer from available to pending.
+	// Move the peer from available to pending. Even if sending fails, we don't want to retry.
 	delete(r.availablePeers, peerID)
 	r.requestsSent[peerID] = struct{}{}
+
+	return peerID, nil
+}
+
+// sendRequestForPeers chooses a peer from the set of available peers and sends
+// that peer a request for more peer addresses. The chosen peer is moved into
+// the requestsSent bucket so that we will not attempt to contact them again
+// until they've replied or updated.
+func (r *Reactor) sendRequestForPeers(ctx context.Context, pexCh p2p.Channel) error {
+	peerID, err := r.selectPeerToSendMsg()
+	if err != nil {
+		return err
+	}
+	if peerID == "" {
+		r.logger.Debug("no available peers to send a PEX request to (retrying)")
+		return nil
+	}
+
+	envelope := p2p.Envelope{
+		To:      peerID,
+		Message: &protop2p.PexRequest{},
+	}
+	start := time.Now()
+	if err := pexCh.Send(ctx, envelope); err != nil {
+		return err
+	}
+	r.logger.Trace("sent PEX request", "envelope", envelope, "peer", peerID, "took", time.Since(start))
 
 	return nil
 }

@@ -28,11 +28,13 @@ type seedNodeImpl struct {
 	// network
 	peerManager *p2p.PeerManager
 	router      *p2p.Router
+	nodeInfo    types.NodeInfo
 	nodeKey     types.NodeKey // our node privkey
-	isListening bool
 
 	// services
-	pexReactor  service.Service // for exchanging peer addresses
+	pexReactor    service.Service // for exchanging peer addresses
+	prometheusSrv *http.Server
+
 	shutdownOps closer
 }
 
@@ -55,11 +57,6 @@ func makeSeedNode(
 		return nil, err
 	}
 
-	nodeInfo, err := makeSeedNodeInfo(cfg, nodeKey, genDoc, state)
-	if err != nil {
-		return nil, err
-	}
-
 	// Setup Transport and Switch.
 	p2pMetrics := p2p.PrometheusMetrics(cfg.Instrumentation.Namespace, "chain_id", genDoc.ChainID)
 
@@ -70,13 +67,6 @@ func makeSeedNode(
 			closer)
 	}
 
-	router, err := createRouter(logger, p2pMetrics, func() *types.NodeInfo { return &nodeInfo }, nodeKey, peerManager, cfg, nil)
-	if err != nil {
-		return nil, combineCloseError(
-			fmt.Errorf("failed to create router: %w", err),
-			closer)
-	}
-
 	node := &seedNodeImpl{
 		config:     cfg,
 		logger:     logger,
@@ -84,12 +74,23 @@ func makeSeedNode(
 
 		nodeKey:     nodeKey,
 		peerManager: peerManager,
-		router:      router,
 
 		shutdownOps: closer,
-
-		pexReactor: pex.NewReactor(logger, peerManager, router.OpenChannel, peerManager.Subscribe),
 	}
+
+	node.nodeInfo, err = makeSeedNodeInfo(cfg, nodeKey, genDoc, state)
+	if err != nil {
+		return nil, err
+	}
+
+	node.router, err = createRouter(logger, p2pMetrics, node.NodeInfo, nodeKey, peerManager, cfg, nil)
+	if err != nil {
+		return nil, combineCloseError(
+			fmt.Errorf("failed to create router: %w", err),
+			closer)
+	}
+	node.pexReactor = pex.NewReactor(logger, peerManager, node.router.OpenChannel, peerManager.Subscribe)
+
 	node.BaseService = *service.NewBaseService(logger, "SeedNode", node)
 
 	return node, nil
@@ -98,26 +99,7 @@ func makeSeedNode(
 // OnStart starts the Seed Node. It implements service.Service.
 func (n *seedNodeImpl) OnStart(ctx context.Context) error {
 	if n.config.RPC.PprofListenAddress != "" {
-		rpcCtx, rpcCancel := context.WithCancel(ctx)
-		srv := &http.Server{Addr: n.config.RPC.PprofListenAddress, Handler: nil}
-		go func() {
-			select {
-			case <-ctx.Done():
-				sctx, scancel := context.WithTimeout(context.Background(), time.Second)
-				defer scancel()
-				_ = srv.Shutdown(sctx)
-			case <-rpcCtx.Done():
-			}
-		}()
-
-		go func() {
-			n.logger.Info("Starting pprof server", "laddr", n.config.RPC.PprofListenAddress)
-
-			if err := srv.ListenAndServe(); err != nil {
-				n.logger.Error("pprof server error", "err", err)
-				rpcCancel()
-			}
-		}()
+		startPProfServer(ctx, *n.config.RPC)
 	}
 
 	now := tmtime.Now()
@@ -127,11 +109,14 @@ func (n *seedNodeImpl) OnStart(ctx context.Context) error {
 		time.Sleep(genTime.Sub(now))
 	}
 
+	if n.config.Instrumentation.Prometheus && n.config.Instrumentation.PrometheusListenAddr != "" {
+		n.prometheusSrv = startPrometheusServer(ctx, *n.config.Instrumentation)
+	}
+
 	// Start the transport.
 	if err := n.router.Start(ctx); err != nil {
 		return err
 	}
-	n.isListening = true
 
 	return n.pexReactor.Start(ctx)
 }
@@ -142,11 +127,14 @@ func (n *seedNodeImpl) OnStop() {
 
 	n.pexReactor.Wait()
 	n.router.Wait()
-	n.isListening = false
 
 	if err := n.shutdownOps(); err != nil {
 		if strings.TrimSpace(err.Error()) != "" {
 			n.logger.Error("problem shutting down additional services", "err", err)
 		}
 	}
+}
+
+func (n *seedNodeImpl) NodeInfo() *types.NodeInfo {
+	return &n.nodeInfo
 }

@@ -818,7 +818,7 @@ func makeConsensusState(
 ) []*State {
 	t.Helper()
 
-	genDoc, privVals := factory.RandGenesisDoc(cfg, nValidators, 1, factory.ConsensusParams())
+	genDoc, privVals := factory.RandGenesisDoc(nValidators, factory.ConsensusParams())
 	css := make([]*State, nValidators)
 	logger := consensusLogger(t)
 
@@ -939,7 +939,7 @@ func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State,
 	}
 	css := make([]*State, g.nPeers)
 	apps := make([]abci.Application, g.nPeers)
-	genDoc, privVals := factory.RandGenesisDoc(g.cfg, g.nVals, 1, g.consensusParams)
+	genDoc, privVals := factory.RandGenesisDoc(g.nVals, g.consensusParams)
 	logger := consensusLogger(t)
 	var peer0Config *config.Config
 	tickerFunc := g.tickerFun
@@ -1004,7 +1004,7 @@ func makeGenesisState(ctx context.Context, t *testing.T, cfg *config.Config, arg
 	if args.Time.IsZero() {
 		args.Time = tmtime.Now()
 	}
-	genDoc, privVals := factory.RandGenesisDoc(cfg, args.Validators, 1, args.Params)
+	genDoc, privVals := factory.RandGenesisDoc(args.Validators, args.Params)
 	genDoc.GenesisTime = args.Time
 	s0, err := sm.MakeGenesisState(genDoc)
 	require.NoError(t, err)

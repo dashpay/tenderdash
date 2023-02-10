@@ -10,13 +10,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/types"
 )
 
 func TestTxFilter(t *testing.T) {
 	const maxBlockBytes = 3241
 	maxTxSize := maxBlockBytes - 1131
-	genDoc := randomGenesisDoc()
+	genDoc := factory.MinimalGenesisDoc()
 	genDoc.ConsensusParams.Block.MaxBytes = maxBlockBytes
 	genDoc.ConsensusParams.Evidence.MaxBytes = 1500
 
@@ -35,7 +36,7 @@ func TestTxFilter(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(strconv.Itoa(i), func(t *testing.T) {
-			state, err := sm.MakeGenesisState(genDoc)
+			state, err := sm.MakeGenesisState(&genDoc)
 			require.NoError(t, err)
 			tx := types.Tx(tmrand.Bytes(tc.bytes))
 			// Read MaxDataBytes, for debugging/logging only

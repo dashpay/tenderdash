@@ -197,8 +197,9 @@ func (genDoc *GenesisDoc) ValidateAndComplete() error {
 		genDoc.InitialHeight = 1
 	}
 
+	//  TODO: user LLMQType.Validate()
 	if genDoc.QuorumType == 0 {
-		genDoc.QuorumType = 100
+		return fmt.Errorf("validator_quorum_type must be provided")
 	}
 
 	if genDoc.InitialProposalCoreChainLock != nil &&

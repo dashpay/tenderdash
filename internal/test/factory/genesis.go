@@ -1,59 +1,61 @@
 package factory
 
 import (
-	"sort"
+	"github.com/dashevo/dashd-go/btcjson"
 
-	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/llmq"
+	"github.com/tendermint/tendermint/libs/bytes"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
 )
 
-func RandGenesisDoc(
-	cfg *config.Config,
-	numValidators int,
-	initialHeight int64,
-	consensusParams *types.ConsensusParams,
-) (*types.GenesisDoc, []types.PrivValidator) {
-	validators := make([]types.GenesisValidator, 0, numValidators)
-	privValidators := make([]types.PrivValidator, 0, numValidators)
-
-	ld := llmq.MustGenerate(crypto.RandProTxHashes(numValidators))
-	quorumHash := crypto.RandQuorumHash()
-	iter := ld.Iter()
-	for iter.Next() {
-		proTxHash, qks := iter.Value()
-		validators = append(validators, types.GenesisValidator{
-			PubKey:    qks.PubKey,
-			Power:     types.DefaultDashVotingPower,
-			ProTxHash: proTxHash,
-		})
-		privValidators = append(privValidators, types.NewMockPVWithParams(
-			qks.PrivKey,
-			proTxHash,
-			quorumHash,
-			ld.ThresholdPubKey,
-			false,
-			false,
-		))
+// MinimalGenesisDoc generates a minimal working genesis doc.
+// It is very similar to Dash Platform's production environment
+// genesis doc, which assumes that all other settings (like validator
+// set) will be provided by ABCI during initial handshake.
+func MinimalGenesisDoc() types.GenesisDoc {
+	genesisDoc := types.GenesisDoc{
+		ChainID:    DefaultTestChainID,
+		QuorumType: btcjson.LLMQType_5_60,
 	}
-	sort.Sort(types.PrivValidatorsByProTxHash(privValidators))
+	if err := genesisDoc.ValidateAndComplete(); err != nil {
+		// should never happen
+		panic("cannot generate minimal genesis doc: " + err.Error())
+	}
 
+	return genesisDoc
+}
+
+// RandGenesisDoc generates a genesis doc with random validator set.
+// NOTE: It's better to use MinimalGensisDoc() which generates genesis doc
+// similar to Dash Platform production environment.
+func RandGenesisDoc(numValidators int, consensusParams *types.ConsensusParams) (*types.GenesisDoc, []types.PrivValidator) {
+	proTxHashes := crypto.RandProTxHashes(numValidators)
+	valSetParams := types.NewValSetParam(proTxHashes)
+	valSet, privValidators := types.GenerateValidatorSet(valSetParams)
+
+	genesisVals := types.MakeGenesisValsFromValidatorSet(valSet)
 	coreChainLock := types.NewMockChainLock(2)
 
-	return &types.GenesisDoc{
+	genesisDoc := types.GenesisDoc{
 		GenesisTime:     tmtime.Now(),
-		InitialHeight:   initialHeight,
-		ChainID:         cfg.ChainID(),
-		Validators:      validators,
+		InitialHeight:   1,
+		ChainID:         DefaultTestChainID,
+		Validators:      genesisVals,
 		ConsensusParams: consensusParams,
-		AppHash:         make([]byte, crypto.DefaultAppHashSize),
+		AppHash:         make(bytes.HexBytes, crypto.DefaultAppHashSize),
 
 		// dash fields
 		InitialCoreChainLockedHeight: 1,
 		InitialProposalCoreChainLock: coreChainLock.ToProto(),
-		ThresholdPublicKey:           ld.ThresholdPubKey,
-		QuorumHash:                   quorumHash,
-	}, privValidators
+		ThresholdPublicKey:           valSet.ThresholdPublicKey,
+		QuorumHash:                   valSet.QuorumHash,
+		QuorumType:                   btcjson.LLMQType_5_60,
+	}
+	if err := genesisDoc.ValidateAndComplete(); err != nil {
+		// should never happen
+		panic("cannot generate random genesis doc:" + err.Error())
+	}
+
+	return &genesisDoc, privValidators
 }

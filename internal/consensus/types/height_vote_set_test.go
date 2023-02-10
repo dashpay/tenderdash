@@ -31,31 +31,25 @@ func TestPeerCatchupRounds(t *testing.T) {
 	hvs := NewHeightVoteSet(chainID, 1, valSet)
 
 	vote999_0 := makeVoteHR(ctx, t, 1, 0, 999, privVals, chainID, valSet.QuorumType, valSet.QuorumHash, stateID)
-	added, err := hvs.AddVote(vote999_0, "peer1")
+	added, err := hvs.AddVote(vote999_0)
 	if !added || err != nil {
 		t.Error("Expected to successfully add vote from peer", added, err)
 	}
 
 	vote1000_0 := makeVoteHR(ctx, t, 1, 0, 1000, privVals, chainID, valSet.QuorumType, valSet.QuorumHash, stateID)
-	added, err = hvs.AddVote(vote1000_0, "peer1")
+	added, err = hvs.AddVote(vote1000_0)
 	if !added || err != nil {
 		t.Error("Expected to successfully add vote from peer", added, err)
 	}
 
 	vote1001_0 := makeVoteHR(ctx, t, 1, 0, 1001, privVals, chainID, valSet.QuorumType, valSet.QuorumHash, stateID)
-	added, err = hvs.AddVote(vote1001_0, "peer1")
+	added, err = hvs.AddVote(vote1001_0)
 	if err != ErrGotVoteFromUnwantedRound {
 		t.Errorf("expected GotVoteFromUnwantedRoundError, but got %v", err)
 	}
 	if added {
 		t.Error("Expected to *not* add vote from peer, too many catchup rounds.")
 	}
-
-	added, err = hvs.AddVote(vote1001_0, "peer2")
-	if !added || err != nil {
-		t.Error("Expected to successfully add vote from another peer")
-	}
-
 }
 
 func makeVoteHR(

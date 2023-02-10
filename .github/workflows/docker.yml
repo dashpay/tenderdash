@@ -8,7 +8,7 @@ on:
       tag:
         type: string
         description: 'Docker tag'
-        required: true
+        required: false
   release:
     types:
       - published
@@ -25,7 +25,7 @@ jobs:
           platforms: all
 
       - name: Set up Docker Build
-        uses: docker/setup-buildx-action@v2.2.1
+        uses: docker/setup-buildx-action@v2.4.1
 
       - name: Login to DockerHub
         if: ${{ github.event_name != 'pull_request' }}
@@ -60,6 +60,7 @@ jobs:
           images: dashpay/tenderdash
           tags: |
             type=semver,pattern={{version}},value=${{ github.event.inputs.tag }}
+            type=raw,priority=650,value=${{ github.event.inputs.tag }}
             type=ref,event=branch
             type=ref,event=pr
             type=match,pattern=v(\d+),group=1
@@ -70,8 +71,27 @@ jobs:
             latest=${{ github.event.release != null && !contains(github.event.release.tag_name, '-dev') }}
             suffix=${{ steps.suffix.outputs.result }}
 
+      # We build some dependencies and libraries separately. Layers are cached
+      # on Docker Hub, as Github caches are not available for other branches.
+      - name: Build and cache image with dependencies
+        id: docker_bls
+        uses: docker/build-push-action@v4.0.0
+        with:
+          context: .
+          file: ./DOCKER/Dockerfile
+          platforms: linux/amd64,linux/arm64
+          target: base
+          push: false
+          cache-from: |
+            type=registry,ref=dashpay/tenderdash:buildcache-deps
+          cache-to: |
+            type=registry,ref=dashpay/tenderdash:buildcache-deps,mode=max
+          build-args: |
+            TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
+
       - name: Publish to Docker Hub
-        uses: docker/build-push-action@v3.1.0
+        id: docker_build
+        uses: docker/build-push-action@v4.0.0
         with:
           context: .
           file: ./DOCKER/Dockerfile
@@ -79,7 +99,9 @@ jobs:
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
-          cache-from: type=gha
+          cache-from: |
+            type=gha
+            type=registry,ref=dashpay/tenderdash:buildcache-deps
           cache-to: type=gha,mode=max
           build-args: |
             TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"

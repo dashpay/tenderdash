@@ -18,7 +18,12 @@ CGO_CXXFLAGS ?= -I$(BLS_DIR)/build/depends/relic/include \
 GO := CGO_ENABLED=$(CGO_ENABLED) CGO_CXXFLAGS="$(CGO_CXXFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go
 
 docker:
-	docker build --tag tenderdash/e2e-node -f docker/Dockerfile ../..
+	docker buildx build \
+		$(BUILDX_OPTIONS) \
+		--cache-from=type=registry,ref=dashpay/tenderdash:buildcache-deps \
+		--load \
+		--tag tenderdash/e2e-node \
+		-f docker/Dockerfile ../..
 
 node:
 	GOTRACEBACK=crash $(GO) build -gcflags="all=-N -l" -o build/node -tags badgerdb,boltdb,cleveldb,deadlock ./node

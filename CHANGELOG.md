@@ -1,6 +1,41 @@
 ## [0.11.0-dev.1] - 2022-12-15
 
 - Update BLS libraries
+## [0.10.0-dev.9] - 2023-02-10
+
+### Bug Fixes
+
+- [**breaking**] Quorum type set to 0 during replay at genesis (#570)
+- Seed doesn't respond to pex requests (#574)
+
+### Features
+
+- Derive node key from bip39 mnemonic (#562)
+- Conversion of PEM-encoded ED25519 node keys (#564)
+
+### Refactor
+
+- Replace peerID on proTxHash for peer catchup rounds in HeightVoteSet component (#559)
+- Sync node and seed implementation (#576)
+
+### Testing
+
+- Refactor genesis doc generation (#573)
+
+### Build
+
+- Bump bufbuild/buf-setup-action from 1.11.0 to 1.12.0 (#556)
+- Bump docker/build-push-action from 3.1.0 to 3.3.0 (#555)
+- Bump golangci/golangci-lint-action from 3.3.1 to 3.4.0 (#560)
+- Add abcidump to release image (#563)
+- Bump bufbuild/buf-setup-action from 1.12.0 to 1.13.1 (#566)
+- Bump docker/setup-buildx-action from 2.2.1 to 2.4.0 (#567)
+- Improve docker image build caching (#571)
+- Refactor e2e docker image build process (#575)
+- Bump docker/build-push-action from 3.3.0 to 4.0.0 (#568)
+- Bump docker/setup-buildx-action from 2.4.0 to 2.4.1 (#572)
+- Bump bufbuild/buf-setup-action from 1.13.1 to 1.14.0 (#577)
+- Move e2e-manual.yml  logic to e2e.yml (#578)
 
 ## [0.10.0-dev.8] - 2023-01-16
 
