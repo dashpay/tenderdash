@@ -354,10 +354,9 @@ func TestFinalizeBlock(t *testing.T) {
 	require.NotNil(t, proxyApp)
 
 	err := proxyApp.Start(ctx)
-	require.Nil(t, err)
+	require.NoError(t, err)
 
 	state, stateDB := makeState(3, 1)
-	require.NoError(t, err)
 	nodeProTxHash := state.Validators.Validators[0].ProTxHash
 	ctx = dash.ContextWithProTxHash(ctx, nodeProTxHash)
 
