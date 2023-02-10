@@ -40,13 +40,13 @@ jobs:
 
       - uses: ./.github/actions/bls
         name: Install BLS library
-        if: "env.GIT_DIFF != '' || github.event_name == 'workflow_dispatch'"
+        if: "github.event_name != 'pull_request' || env.GIT_DIFF != ''"
 
       - name: Build runner and tests
         working-directory: test/e2e
         # Run two make jobs in parallel, since we can't run steps in parallel.
         run: make -j2 runner tests
-        if: "env.GIT_DIFF != '' || github.event_name == 'workflow_dispatch'"
+        if: "github.event_name != 'pull_request' || env.GIT_DIFF != ''"
 
       - name: Build E2E Docker image
         uses: docker/build-push-action@v4.0.0
@@ -58,12 +58,12 @@ jobs:
           tags: tenderdash/e2e-node
           cache-from: type=gha
           cache-to: type=gha,mode=max
-        if: "env.GIT_DIFF != '' || github.event_name == 'workflow_dispatch'"
+        if: "github.event_name != 'pull_request' || env.GIT_DIFF != ''"
 
       - name: Run CI ${{ matrix.testnet }} testnet
         working-directory: test/e2e
         run: ./build/runner -f networks/${{ matrix.testnet }}.toml
-        if: "env.GIT_DIFF != '' || github.event_name == 'workflow_dispatch'"
+        if: "github.event_name != 'pull_request' || env.GIT_DIFF != ''"
 
       - name: Emit ${{ matrix.testnet }} logs on failure
         working-directory: test/e2e
@@ -81,4 +81,4 @@ jobs:
       - name: Cleanup ${{ matrix.testnet }} configuration
         working-directory: test/e2e
         run: ./build/runner -f networks/${{ matrix.testnet }}.toml cleanup
-        if: "env.GIT_DIFF != '' || github.event_name == 'workflow_dispatch'"
+        if: "github.event_name != 'pull_request' || env.GIT_DIFF != ''"
