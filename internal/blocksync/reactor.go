@@ -27,8 +27,6 @@ const (
 	// BlockSyncChannel is a channel for blocks and status updates
 	BlockSyncChannel = p2p.ChannelID(0x40)
 
-	trySyncIntervalMS = 10
-
 	// ask for best height every 10s
 	statusUpdateIntervalSeconds = 10
 
@@ -55,15 +53,6 @@ type consensusReactor interface {
 	// For when we switch from block sync reactor to the consensus
 	// machine.
 	SwitchToConsensus(ctx context.Context, state sm.State, skipWAL bool)
-}
-
-type peerError struct {
-	err    error
-	peerID types.NodeID
-}
-
-func (e peerError) Error() string {
-	return fmt.Sprintf("error with peer %v: %s", e.peerID, e.err.Error())
 }
 
 // Reactor handles long-term catchup syncing.
@@ -171,7 +160,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		}
 		go r.requestRoutine(ctx, blockSyncCh)
 
-		go r.poolRoutine(ctx, false, blockSyncCh)
+		go r.poolRoutine(ctx, false)
 	}
 
 	go r.processBlockSyncCh(ctx, blockSyncCh, blockSyncClient)
@@ -364,7 +353,7 @@ func (r *Reactor) SwitchToBlockSync(ctx context.Context, state sm.State) error {
 	}
 
 	go r.requestRoutine(ctx, bsCh)
-	go r.poolRoutine(ctx, true, bsCh)
+	go r.poolRoutine(ctx, true)
 
 	if err := r.PublishStatus(types.EventDataBlockSyncStatus{
 		Complete: false,
@@ -399,7 +388,7 @@ func (r *Reactor) requestRoutine(ctx context.Context, blockSyncCh p2p.Channel) {
 // do.
 //
 // NOTE: Don't sleep in the FOR_LOOP or otherwise slow it down!
-func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool, blockSyncCh p2p.Channel) {
+func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool) {
 	switchToConsensusTicker := time.NewTicker(switchToConsensusIntervalSeconds * time.Second)
 	defer switchToConsensusTicker.Stop()
 

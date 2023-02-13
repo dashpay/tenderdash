@@ -119,6 +119,6 @@ func (suite *BlockFetchJobTestSuite) TestJobGeneratorNextJob() {
 	suite.Require().Equal(suite.peer, job.peer)
 
 	cancel()
-	job, err = jobGen.nextJob(ctx)
+	_, err = jobGen.nextJob(ctx)
 	suite.Require().Error(err)
 }

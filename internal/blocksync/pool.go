@@ -32,9 +32,7 @@ eg, L = latency = 0.1s
 
 const (
 	requestInterval           = 2 * time.Millisecond
-	maxTotalRequesters        = 600
-	maxPeerErrBuffer          = 1000
-	maxPendingRequests        = maxTotalRequesters
+	poolWorkerSize            = 600
 	maxPendingRequestsPerPeer = 20
 
 	// Minimum recv rate to ensure we're receiving blocks from a peer fast
@@ -122,7 +120,7 @@ func NewBlockPool(start int64, client BlockClient, blockExec *blockApplier, opts
 		startHeight:    start,
 		height:         start,
 		lastSyncRate:   0,
-		workerPool:     workerpool.New(100),
+		workerPool:     workerpool.New(poolWorkerSize),
 		pendingToApply: map[int64]BlockResponse{},
 	}
 	for _, opt := range opts {

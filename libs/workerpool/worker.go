@@ -50,8 +50,6 @@ type WorkerPool struct {
 	resultCh     chan Result
 	logger       log.Logger
 	workers      []*worker
-
-	pendingJobs int
 }
 
 // New ...
