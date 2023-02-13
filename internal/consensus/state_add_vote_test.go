@@ -13,6 +13,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	sm "github.com/tendermint/tendermint/internal/state"
+	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"github.com/tendermint/tendermint/libs/events"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -279,7 +280,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 				},
 			}
 			added, err := fn(ctx, stateData, &tc.vote)
-			assertError(suite.T(), tc.wantErr, err)
+			tmrequire.Error(suite.T(), tc.wantErr, err)
 			suite.Equal(tc.wantAdded, added)
 			suite.Equal(tc.wantFiredEvent, eventFired)
 			suite.Equal(tc.wantStateDataVer, store.version)
