@@ -14,7 +14,7 @@ import (
 	"github.com/tendermint/tendermint/internal/eventbus"
 	sm "github.com/tendermint/tendermint/internal/state"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
-	"github.com/tendermint/tendermint/libs/events"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
@@ -24,7 +24,7 @@ type AddVoteTestSuite struct {
 
 	logger    log.Logger
 	metrics   *Metrics
-	evsw      events.EventSwitch
+	emitter   *eventemitter.EventEmitter
 	eventbus  *eventbus.EventBus
 	publisher *EventPublisher
 	signer    testSigner
@@ -39,11 +39,11 @@ func (suite *AddVoteTestSuite) SetupTest() {
 	ctx := context.Background()
 	suite.logger = log.NewTestingLogger(suite.T())
 	suite.metrics = NopMetrics()
-	suite.evsw = events.NewEventSwitch()
+	suite.emitter = eventemitter.New()
 	suite.eventbus = eventbus.NewDefault(suite.logger)
 	err := suite.eventbus.Start(ctx)
 	suite.NoError(err)
-	suite.publisher = &EventPublisher{eventBus: suite.eventbus, evsw: suite.evsw}
+	suite.publisher = &EventPublisher{eventBus: suite.eventbus, emitter: suite.emitter}
 	valSet, privVals := mockValidatorSet()
 	suite.signer = testSigner{privVals: privVals, valSet: valSet}
 	suite.valSet = valSet
@@ -102,7 +102,7 @@ func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eventFired := false
-	_ = suite.evsw.AddListenerForEvent("test", types.EventVoteValue, func(data events.EventData) error {
+	suite.emitter.AddListener(types.EventVoteValue, func(data eventemitter.EventData) error {
 		eventFired = true
 		return nil
 	})
@@ -168,7 +168,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eventFired := false
-	_ = suite.evsw.AddListenerForEvent("test", types.EventValidBlockValue, func(data events.EventData) error {
+	suite.emitter.AddListener(types.EventValidBlockValue, func(data eventemitter.EventData) error {
 		eventFired = true
 		return nil
 	})

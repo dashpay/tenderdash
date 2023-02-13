@@ -4,7 +4,7 @@ import (
 	"context"
 
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/events"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -145,8 +145,8 @@ func (cs *DecideProposalAction) Execute(ctx context.Context, stateEvent StateEve
 	return nil
 }
 
-func (cs *DecideProposalAction) subscribe(evsw events.EventSwitch) {
-	_ = evsw.AddListenerForEvent("decideProposalAction", setPrivValidator, func(a events.EventData) error {
+func (cs *DecideProposalAction) Subscribe(emitter *eventemitter.EventEmitter) {
+	emitter.AddListener(setPrivValidatorEventName, func(a eventemitter.EventData) error {
 		cs.privValidator = a.(privValidator)
 		return nil
 	})
