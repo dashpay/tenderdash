@@ -52,28 +52,31 @@ func (suite *BlockFetchJobTestSuite) TestExecute() {
 	ctx := context.Background()
 
 	testCases := []struct {
-		height       int64
-		clientErr    error
-		rejectErr    error
-		wantErr      string
-		wantTimedout bool
+		height        int64
+		clientErr     error
+		wantErr       string
+		wantTimedout  bool
+		promiseReturn *promise.Promise[*bcproto.BlockResponse]
 	}{
 		{
-			height: 2,
+			height:        2,
+			promiseReturn: suite.promiseResolve(2),
 		},
 		{
-			height: 10,
+			height:        10,
+			promiseReturn: suite.promiseResolve(10),
 		},
 		{
-			height:    9,
-			clientErr: errors.New("client error"),
-			wantErr:   "client error",
+			height:        9,
+			clientErr:     errors.New("client error"),
+			wantErr:       "client error",
+			promiseReturn: suite.promiseResolve(9),
 		},
 		{
-			height:       9,
-			rejectErr:    errPeerNotResponded,
-			wantErr:      errPeerNotResponded.Error(),
-			wantTimedout: true,
+			height:        9,
+			wantErr:       errPeerNotResponded.Error(),
+			wantTimedout:  true,
+			promiseReturn: suite.promiseReject(errPeerNotResponded),
 		},
 	}
 	for i, tc := range testCases {
@@ -81,15 +84,7 @@ func (suite *BlockFetchJobTestSuite) TestExecute() {
 			suite.client.
 				On("GetBlock", mock.Anything, tc.height, suite.peer.peerID).
 				Once().
-				Return(func(_ context.Context, height int64, _ types.NodeID) *promise.Promise[*bcproto.BlockResponse] {
-					return promise.New(func(resolve func(data *bcproto.BlockResponse), reject func(err error)) {
-						if tc.rejectErr != nil {
-							reject(tc.rejectErr)
-							return
-						}
-						resolve(suite.responses[height-1])
-					})
-				}, tc.clientErr)
+				Return(suite.getBlockReturnFunc(tc.promiseReturn), tc.clientErr)
 			suite.job.height = tc.height
 			res := suite.job.Execute(ctx)
 			suite.requireError(tc.wantErr, res.Err)
@@ -121,4 +116,22 @@ func (suite *BlockFetchJobTestSuite) TestJobGeneratorNextJob() {
 	cancel()
 	_, err = jobGen.nextJob(ctx)
 	suite.Require().Error(err)
+}
+
+func (suite *BlockFetchJobTestSuite) promiseReject(err error) *promise.Promise[*bcproto.BlockResponse] {
+	return promise.New(func(_ func(data *bcproto.BlockResponse), reject func(err error)) {
+		reject(err)
+	})
+}
+
+func (suite *BlockFetchJobTestSuite) promiseResolve(height int64) *promise.Promise[*bcproto.BlockResponse] {
+	return promise.New(func(resolve func(data *bcproto.BlockResponse), _ func(err error)) {
+		resolve(suite.responses[height-1])
+	})
+}
+
+func (suite *BlockFetchJobTestSuite) getBlockReturnFunc(promiseFunc *promise.Promise[*bcproto.BlockResponse]) any {
+	return func(_ context.Context, _ int64, _ types.NodeID) *promise.Promise[*bcproto.BlockResponse] {
+		return promiseFunc
+	}
 }
