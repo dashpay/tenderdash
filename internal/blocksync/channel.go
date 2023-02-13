@@ -27,11 +27,9 @@ type (
 	}
 	// Channel ...
 	Channel struct {
-		mtx     sync.Mutex
 		channel p2p.Channel
 		clock   clock.Clock
 		logger  log.Logger
-		//pending map[string]chan result
 		pending sync.Map
 		timeout time.Duration
 	}
