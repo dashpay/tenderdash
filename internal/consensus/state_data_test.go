@@ -7,6 +7,7 @@ import (
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
+	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -97,7 +98,7 @@ func TestIsValidForPrevote(t *testing.T) {
 				state:      tc.state,
 				RoundState: tc.rs,
 			}
-			assertError(t, tc.wantErr, stateData.isValidForPrevote())
+			tmrequire.Error(t, tc.wantErr, stateData.isValidForPrevote())
 		})
 	}
 }

@@ -13,6 +13,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
+	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -144,7 +145,7 @@ func (suite *PrevoterTestSuite) TestDo() {
 				Once().
 				Return(nil)
 			err := suite.prevoter.Do(ctx, &stateData)
-			assertError(suite.T(), tc.wantErr, err)
+			tmrequire.Error(suite.T(), tc.wantErr, err)
 		})
 	}
 }
