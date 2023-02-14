@@ -399,9 +399,9 @@ func (sc *DashCoreSignerClient) quorumSignAndVerify(
 	}
 	sc.logger.Trace("quorum sign result",
 		"sign", hex.EncodeToString(qs.sign),
-		"signHash", hex.EncodeToString(qs.signHash),
-		"reqID", hex.EncodeToString(signItem.ReqID),
-		"ID", hex.EncodeToString(signItem.ID),
+		"sign_hash", hex.EncodeToString(qs.signHash),
+		"req_id", hex.EncodeToString(signItem.ReqID),
+		"id", hex.EncodeToString(signItem.ID),
 		"raw", hex.EncodeToString(signItem.Raw),
 		"hash", hex.EncodeToString(signItem.Hash),
 		"quorum_sign_result", *qs.QuorumSignResult)
