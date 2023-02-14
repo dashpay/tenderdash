@@ -169,7 +169,7 @@ func blsSigs2CSigs(sigs []*bls.G2Element) [][]byte {
 
 func initKeys(seed io.Reader) func(ld *blsLLMQData) error {
 	return func(ld *blsLLMQData) error {
-		scheme := bls.NewAugSchemeMPL()
+		scheme := bls12381.BasicScheme()
 		for i := 0; i < len(ld.sks); i++ {
 			createdSeed := make([]byte, bls12381.SeedSize)
 			_, err := io.ReadFull(seed, createdSeed)
