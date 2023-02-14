@@ -36,6 +36,7 @@ func TestInMemPeerStoreBasicOperations(t *testing.T) {
 	inmem.PeerUpdate(peerID, AddNumPending(1))
 	require.Equal(t, int32(0), foundPeer.numPending)
 	foundPeer, found = inmem.Get(peerID)
+	require.True(t, found)
 	require.Equal(t, int32(1), foundPeer.numPending)
 
 	require.Equal(t, 1, inmem.Len())
