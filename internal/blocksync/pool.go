@@ -162,7 +162,7 @@ func (pool *BlockPool) OnStart(ctx context.Context) error {
 func (*BlockPool) OnStop() {}
 
 func (pool *BlockPool) produceJob(ctx context.Context) {
-	if !pool.jobGen.shouldJobBeGenerated(pool.maxPeerHeight) {
+	if !pool.jobGen.shouldJobBeGenerated(pool.MaxPeerHeight()) {
 		// TODO should we stop producer loop ?
 		return
 	}
