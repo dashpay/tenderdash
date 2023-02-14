@@ -174,6 +174,7 @@ func (pool *BlockPool) produceJob(ctx context.Context) {
 		pool.logger.Error("cannot create a next job", "error", err)
 		return
 	}
+	pool.peerStore.PeerUpdate(job.peer.peerID, ResetMonitor(), AddNumPending(1))
 	pool.workerPool.Add(job)
 }
 
@@ -195,6 +196,7 @@ func (pool *BlockPool) consumeJobResult(ctx context.Context) {
 		return
 	}
 	resp := res.Value.(*BlockResponse)
+	pool.peerStore.PeerUpdate(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Block.Size()))
 	err = pool.addBlock(*resp)
 	if err != nil {
 		_ = pool.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
@@ -301,7 +303,7 @@ func (pool *BlockPool) LastAdvance() time.Time {
 }
 
 // SetPeerRange sets the peer's alleged blockchain base and height.
-func (pool *BlockPool) SetPeerRange(peer *PeerData) {
+func (pool *BlockPool) SetPeerRange(peer PeerData) {
 	pool.mtx.Lock()
 	defer pool.mtx.Unlock()
 	pool.peerStore.Put(peer)

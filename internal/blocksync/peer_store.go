@@ -3,7 +3,6 @@ package blocksync
 import (
 	"math"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"github.com/tendermint/tendermint/internal/libs/flowrate"
@@ -11,16 +10,33 @@ import (
 )
 
 type (
-	PeerQueryFunc  func(peer *PeerData) bool
+	// PeerQueryFunc is a function type for peer specification function
+	PeerQueryFunc func(peer PeerData) bool
+	// PeerUpdateFunc is a function type for peer update functions
+	PeerUpdateFunc func(peer *PeerData)
+	// InMemPeerStore in-memory peer store
 	InMemPeerStore struct {
 		mtx     sync.RWMutex
 		peerIDx map[types.NodeID]int
 		peers   []*PeerData
 	}
+	// PeerData uses to keep peer related data like base height and the current height etc
+	PeerData struct {
+		numPending  int32
+		height      int64
+		base        int64
+		peerID      types.NodeID
+		recvMonitor *flowrate.Monitor
+		startAt     time.Time
+	}
 )
 
-// NewInMemPeerStore ...
-func NewInMemPeerStore(peers ...*PeerData) *InMemPeerStore {
+const (
+	flowRateInitialValue = float64(minRecvRate) * math.E
+)
+
+// NewInMemPeerStore creates a new in-memory peer store
+func NewInMemPeerStore(peers ...PeerData) *InMemPeerStore {
 	mem := &InMemPeerStore{
 		peerIDx: make(map[types.NodeID]int),
 	}
@@ -30,46 +46,53 @@ func NewInMemPeerStore(peers ...*PeerData) *InMemPeerStore {
 	return mem
 }
 
-// Get ...
-func (p *InMemPeerStore) Get(peerID types.NodeID) (*PeerData, bool) {
+// Get returns peer's data and true if the peer is found otherwise empty structure and false
+func (p *InMemPeerStore) Get(peerID types.NodeID) (PeerData, bool) {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
-	return p.get(peerID)
+	peer, found := p.get(peerID)
+	if found {
+		return *peer, true
+	}
+	return PeerData{}, false
 }
 
-// GetAndRemove ...
-func (p *InMemPeerStore) GetAndRemove(peerID types.NodeID) (*PeerData, bool) {
+// GetAndRemove combines Get operation and Remove in one call
+func (p *InMemPeerStore) GetAndRemove(peerID types.NodeID) (PeerData, bool) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
-	peer, ok := p.get(peerID)
-	if ok {
+	peer, found := p.get(peerID)
+	if found {
 		p.remove(peerID)
+		return *peer, true
 	}
-	return peer, ok
+	return PeerData{}, found
 }
 
-// Put ...
-func (p *InMemPeerStore) Put(newPeer *PeerData) {
+// Put adds the peer data to the store if the peer does not exist, otherwise update the current value
+func (p *InMemPeerStore) Put(newPeer PeerData) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 	_, ok := p.get(newPeer.peerID)
 	if !ok {
-		p.peers = append(p.peers, newPeer)
+		p.peers = append(p.peers, &newPeer)
 		p.peerIDx[newPeer.peerID] = len(p.peers) - 1
 		return
 	}
 	p.update(newPeer)
 }
 
-// Remove ...
+// Remove removes the peer data from the store
 func (p *InMemPeerStore) Remove(peerID types.NodeID) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 	p.remove(peerID)
 }
 
-// MaxPeerHeight if no peers are left, maxPeerHeight is set to 0.
+// MaxPeerHeight looks at all the peers in the store to get the maximum peer height.
 func (p *InMemPeerStore) MaxPeerHeight() int64 {
+	p.mtx.RLock()
+	defer p.mtx.RUnlock()
 	var max int64
 	for _, peer := range p.peers {
 		if peer.height > max {
@@ -79,14 +102,20 @@ func (p *InMemPeerStore) MaxPeerHeight() int64 {
 	return max
 }
 
-// Update ...
-func (p *InMemPeerStore) Update(peer *PeerData) {
+// PeerUpdate applies update functions to the peer if it exists
+func (p *InMemPeerStore) PeerUpdate(peerID types.NodeID, updates ...PeerUpdateFunc) {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
-	p.update(peer)
+	peer, found := p.get(peerID)
+	if !found {
+		return
+	}
+	for _, update := range updates {
+		update(peer)
+	}
 }
 
-// Query ...
+// Query finds and returns the peers by specification conditions
 func (p *InMemPeerStore) Query(spec PeerQueryFunc) []*PeerData {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
@@ -95,47 +124,54 @@ func (p *InMemPeerStore) Query(spec PeerQueryFunc) []*PeerData {
 
 // FindPeer finds a peer for the request
 // criteria by which the peer is looked up:
-// 1. the peer is not timed out,
-// 2. the number of pending requests must be less allowed (maxPendingRequestsPerPeer)
-// 3. the height must be between two values base and height
-// otherwise return nil
-func (p *InMemPeerStore) FindPeer(height int64) *PeerData {
+// 1. the number of pending requests must be less allowed (maxPendingRequestsPerPeer)
+// 2. the height must be between two values base and height
+// otherwise return the empty peer data and false
+func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
 	peers := p.Query(andX(
-		peerIsTimedout(false),
 		peerNumPendingCond(maxPendingRequestsPerPeer, "<"),
 		heightBetweenPeerHeightRange(height),
+		func(peer PeerData) bool {
+			curRate := peer.recvMonitor.CurrentTransferRate()
+			if curRate == 0 {
+				return true
+			}
+			return curRate >= minRecvRate
+		},
 	))
 	if len(peers) == 0 {
-		return nil
+		return PeerData{}, false
 	}
-	return peers[0]
+	return *peers[0], true
 }
 
-// FindTimedoutPeers ...
+// FindTimedoutPeers finds and returns the timed out peers
 func (p *InMemPeerStore) FindTimedoutPeers() []*PeerData {
-	return p.Query(orX(
-		peerIsTimedout(true),
-		andX(
-			peerIsTimedout(false),
-			peerNumPendingCond(0, ">"),
-			transferRateNotZeroAndLessMinRate(),
-		),
+	return p.Query(andX(
+		peerNumPendingCond(0, ">"),
+		transferRateNotZeroAndLessMinRate(minRecvRate),
 	))
 }
 
-// All ...
-func (p *InMemPeerStore) All() []*PeerData {
+// All returns all stored peers in the store
+func (p *InMemPeerStore) All() []PeerData {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
-	return append([]*PeerData(nil), p.peers...)
+	ret := make([]PeerData, len(p.peers))
+	for i, peer := range p.peers {
+		ret[i] = *peer
+	}
+	return ret
 }
 
+// Len returns the count of all stored peers
 func (p *InMemPeerStore) Len() int {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 	return len(p.peers)
 }
 
+// IsZero returns true if the store doesn't have a peer yet otherwise false
 func (p *InMemPeerStore) IsZero() bool {
 	return p.Len() == 0
 }
@@ -148,7 +184,7 @@ func (p *InMemPeerStore) get(peerID types.NodeID) (*PeerData, bool) {
 	return p.peers[i], true
 }
 
-func (p *InMemPeerStore) update(peer *PeerData) {
+func (p *InMemPeerStore) update(peer PeerData) {
 	i, ok := p.peerIDx[peer.peerID]
 	if !ok {
 		return
@@ -175,48 +211,41 @@ func (p *InMemPeerStore) query(spec PeerQueryFunc) []*PeerData {
 	var res []*PeerData
 	for _, i := range p.peerIDx {
 		peer := p.peers[i]
-		if spec(peer) {
+		if spec(*peer) {
 			res = append(res, peer)
 		}
 	}
 	return res
 }
 
-func peerIsTimedout(timedout bool) PeerQueryFunc {
-	return func(peer *PeerData) bool {
-		return peer.didTimeout.Load() == timedout
-	}
-}
-
 // TODO with fixed worker pool size this condition is not needed anymore
 func peerNumPendingCond(val int32, op string) PeerQueryFunc {
-	return func(peer *PeerData) bool {
-		numPending := peer.numPending.Load()
+	return func(peer PeerData) bool {
 		switch op {
 		case "<":
-			return numPending < val
+			return peer.numPending < val
 		case ">":
-			return numPending > val
+			return peer.numPending > val
 		}
 		panic("unsupported operation")
 	}
 }
 
 func heightBetweenPeerHeightRange(height int64) PeerQueryFunc {
-	return func(peer *PeerData) bool {
+	return func(peer PeerData) bool {
 		return height >= peer.base && height <= peer.height
 	}
 }
 
-func transferRateNotZeroAndLessMinRate() PeerQueryFunc {
-	return func(peer *PeerData) bool {
+func transferRateNotZeroAndLessMinRate(minRate int64) PeerQueryFunc {
+	return func(peer PeerData) bool {
 		curRate := peer.recvMonitor.CurrentTransferRate()
-		return curRate != 0 && curRate < minRecvRate
+		return curRate != 0 && curRate < minRate
 	}
 }
 
 func andX(specs ...PeerQueryFunc) PeerQueryFunc {
-	return func(peer *PeerData) bool {
+	return func(peer PeerData) bool {
 		for _, spec := range specs {
 			if !spec(peer) {
 				return false
@@ -226,64 +255,44 @@ func andX(specs ...PeerQueryFunc) PeerQueryFunc {
 	}
 }
 
-func orX(specs ...PeerQueryFunc) PeerQueryFunc {
-	return func(peer *PeerData) bool {
-		for _, spec := range specs {
-			if spec(peer) {
-				return true
-			}
-		}
-		return false
-	}
-}
-
-// PeerData ...
-type PeerData struct {
-	didTimeout  *atomic.Bool
-	numPending  *atomic.Int32
-	height      int64
-	base        int64
-	peerID      types.NodeID
-	recvMonitor *flowrate.Monitor
-	startAt     time.Time
-}
-
-func newPeerData(peerID types.NodeID, base, height int64) *PeerData {
+func newPeerData(peerID types.NodeID, base, height int64) PeerData {
 	startAt := time.Now()
-	initialValue := float64(minRecvRate) * math.E
-	recvMonitor := flowrate.New(startAt, time.Second, time.Second*40)
-	recvMonitor.SetREMA(initialValue)
-	return &PeerData{
+	return PeerData{
 		peerID:      peerID,
 		base:        base,
 		height:      height,
-		didTimeout:  &atomic.Bool{},
-		numPending:  &atomic.Int32{},
-		recvMonitor: recvMonitor,
+		recvMonitor: newPeerMonitor(startAt),
 		startAt:     startAt,
 	}
 }
 
-func (p *PeerData) resetMonitor() {
-	p.recvMonitor = flowrate.New(p.startAt, time.Second, time.Second*40)
-	initialValue := float64(minRecvRate) * math.E
-	p.recvMonitor.SetREMA(initialValue)
+func newPeerMonitor(at time.Time) *flowrate.Monitor {
+	m := flowrate.New(at, time.Second, time.Second*40)
+	m.SetREMA(flowRateInitialValue)
+	return m
 }
 
-func (p *PeerData) IncrPending() {
-	if p.numPending.Load() == 0 {
-		p.resetMonitor()
-	}
-	p.numPending.Add(1)
-}
-
-func (p *PeerData) DecrPending(recvSize int) {
-	p.numPending.Add(-1)
-	if p.numPending.Load() > 0 {
-		p.recvMonitor.Update(recvSize)
+// AddNumPending adds a value to the numPending field
+func AddNumPending(val int32) PeerUpdateFunc {
+	return func(peer *PeerData) {
+		peer.numPending += val
 	}
 }
 
-func (p *PeerData) NumPending() int32 {
-	return p.numPending.Load()
+// UpdateMonitor adds a block size value to the peer monitor if numPending is greater than zero
+func UpdateMonitor(recvSize int) PeerUpdateFunc {
+	return func(peer *PeerData) {
+		if peer.numPending > 0 {
+			peer.recvMonitor.Update(recvSize)
+		}
+	}
+}
+
+// ResetMonitor replaces a peer monitor on a new one if numPending is zero
+func ResetMonitor() PeerUpdateFunc {
+	return func(peer *PeerData) {
+		if peer.numPending == 0 {
+			peer.recvMonitor = newPeerMonitor(peer.startAt)
+		}
+	}
 }

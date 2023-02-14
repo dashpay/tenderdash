@@ -2,7 +2,6 @@ package blocksync
 
 import (
 	"context"
-	"errors"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -21,7 +20,7 @@ type (
 	blockFetchJob struct {
 		logger log.Logger
 		client BlockClient
-		peer   *PeerData
+		peer   PeerData
 		height int64
 	}
 )
@@ -36,17 +35,10 @@ func (j *blockFetchJob) Execute(ctx context.Context) workerpool.Result {
 	if err != nil {
 		return j.errorResult(j.peer.peerID, j.height, err)
 	}
-	// increment peer's
-	j.peer.IncrPending()
 	protoResp, err := promise.Await()
 	if err != nil {
-		j.peer.DecrPending(0)
-		if errors.Is(err, errPeerNotResponded) {
-			j.peer.didTimeout.Store(true)
-		}
 		return j.errorResult(j.peer.peerID, j.height, err)
 	}
-	j.peer.DecrPending(protoResp.Size())
 	resp, err := BlockResponseFromProto(protoResp, j.peer.peerID)
 	if err != nil {
 		return j.errorResult(j.peer.peerID, j.height, err)
@@ -118,14 +110,13 @@ func (p *jobGenerator) createJob(ctx context.Context, height int64) (*blockFetch
 	}, nil
 }
 
-func (p *jobGenerator) getPeer(ctx context.Context, height int64) (*PeerData, error) {
-	var peer *PeerData
+func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, error) {
 	for {
 		if ctx.Err() != nil {
-			return nil, ctx.Err()
+			return PeerData{}, ctx.Err()
 		}
-		peer = p.peerStore.FindPeer(height)
-		if peer != nil {
+		peer, found := p.peerStore.FindPeer(height)
+		if found {
 			return peer, nil
 		}
 		// This is preferable to using a timer because the request

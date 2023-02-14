@@ -100,7 +100,7 @@ func (suite *BlockPoolTestSuite) TestProduceJob() {
 		startHeight  int64
 		wantHeight   int64
 		pushBack     []int64
-		wantPeer     *PeerData
+		wantPeer     PeerData
 		isJobChEmpty bool
 	}{
 		{
@@ -244,7 +244,7 @@ func (suite *BlockPoolTestSuite) TestRemovePeer() {
 	peerID2 := types.NodeID("peer2")
 	peerID3 := types.NodeID("peer3")
 	const maxHeight = 300
-	peers := []*PeerData{
+	peers := []PeerData{
 		newPeerData(peerID1, 1, 100),
 		newPeerData(peerID2, 1, 200),
 		newPeerData(peerID3, 1, maxHeight),
@@ -258,11 +258,11 @@ func (suite *BlockPoolTestSuite) TestRemovePeer() {
 	respH7, _ := BlockResponseFromProto(suite.responses[6], peerID2)
 	responses := []*BlockResponse{respH1, respH2, respH3, respH4, respH5, respH6, respH7}
 	testCases := []struct {
-		peers         []*PeerData
+		peers         []PeerData
 		responses     []*BlockResponse
 		peerID        types.NodeID
 		wantPushBack  []int64
-		wantPeers     []*PeerData
+		wantPeers     []PeerData
 		wantMaxHeight int64
 	}{
 		{
@@ -270,7 +270,7 @@ func (suite *BlockPoolTestSuite) TestRemovePeer() {
 			responses:     responses,
 			peerID:        peerID1,
 			wantPushBack:  []int64{1, 4, 5},
-			wantPeers:     []*PeerData{peers[1], peers[2]},
+			wantPeers:     []PeerData{peers[1], peers[2]},
 			wantMaxHeight: maxHeight,
 		},
 		{
@@ -278,7 +278,7 @@ func (suite *BlockPoolTestSuite) TestRemovePeer() {
 			responses:     responses,
 			peerID:        peerID2,
 			wantPushBack:  []int64{2, 7},
-			wantPeers:     []*PeerData{peers[0], peers[2]},
+			wantPeers:     []PeerData{peers[0], peers[2]},
 			wantMaxHeight: maxHeight,
 		},
 		{
@@ -286,7 +286,7 @@ func (suite *BlockPoolTestSuite) TestRemovePeer() {
 			responses:     responses,
 			peerID:        peerID3,
 			wantPushBack:  []int64{3, 6},
-			wantPeers:     []*PeerData{peers[0], peers[1]},
+			wantPeers:     []PeerData{peers[0], peers[1]},
 			wantMaxHeight: 200,
 		},
 	}
@@ -294,9 +294,6 @@ func (suite *BlockPoolTestSuite) TestRemovePeer() {
 		suite.Run(fmt.Sprintf("%d", i), func() {
 			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
 			pool := NewBlockPool(1, suite.client, applier)
-			//for _, peer := range tc.peers {
-			//	pool.peerStore.Put(peer)
-			//}
 			for _, peer := range peers {
 				pool.SetPeerRange(peer)
 			}
@@ -342,8 +339,8 @@ func fakeInitialState(valSet *types.ValidatorSet) sm.State {
 	}
 }
 
-func makePeers(numPeers int, minHeight, maxHeight int64) map[types.NodeID]*PeerData {
-	peers := make(map[types.NodeID]*PeerData, numPeers)
+func makePeers(numPeers int, minHeight, maxHeight int64) map[types.NodeID]PeerData {
+	peers := make(map[types.NodeID]PeerData, numPeers)
 	for i := 0; i < numPeers; i++ {
 		peerID := types.NodeID(tmrand.Str(12))
 		height := minHeight + mrand.Int63n(maxHeight-minHeight)

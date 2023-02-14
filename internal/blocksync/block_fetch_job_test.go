@@ -23,7 +23,7 @@ type BlockFetchJobTestSuite struct {
 
 	responses []*bcproto.BlockResponse
 	client    *mocks.BlockClient
-	peer      *PeerData
+	peer      PeerData
 	job       *blockFetchJob
 }
 
@@ -75,7 +75,6 @@ func (suite *BlockFetchJobTestSuite) TestExecute() {
 		{
 			height:        9,
 			wantErr:       errPeerNotResponded.Error(),
-			wantTimedout:  true,
 			promiseReturn: suite.promiseReject(errPeerNotResponded),
 		},
 	}
@@ -88,7 +87,6 @@ func (suite *BlockFetchJobTestSuite) TestExecute() {
 			suite.job.height = tc.height
 			res := suite.job.Execute(ctx)
 			suite.requireError(tc.wantErr, res.Err)
-			suite.Require().Equal(tc.wantTimedout, suite.peer.didTimeout.Load())
 		})
 	}
 }
