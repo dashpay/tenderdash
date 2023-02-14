@@ -54,6 +54,11 @@ func init() {
 	jsontypes.MustRegister(PrivKey{})
 }
 
+// BasicScheme returns basic bls scheme
+func BasicScheme() *bls.BasicSchemeMPL {
+	return schema
+}
+
 // PrivKey implements crypto.PrivKey.
 type PrivKey []byte
 
