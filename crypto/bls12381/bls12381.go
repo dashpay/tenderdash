@@ -45,6 +45,8 @@ var (
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}
+
+	schema = bls.NewBasicSchemeMPL()
 )
 
 func init() {
@@ -305,7 +307,8 @@ func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
 	}
 	var h bls.Hash
 	copy(h[:], hash)
-	return bls.ThresholdVerify(publicKey, h, blsSignature)
+
+	return schema.Verify(publicKey, h[:], blsSignature)
 }
 
 func (pubKey PubKey) VerifySignature(msg []byte, sig []byte) bool {
@@ -328,7 +331,7 @@ func (pubKey PubKey) VerifySignature(msg []byte, sig []byte) bool {
 		// fmt.Printf("bls verifying error (blsSignature) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
 		return false
 	}
-	return bls.NewAugSchemeMPL().Verify(publicKey, msg, sig1)
+	return schema.Verify(publicKey, msg, sig1)
 }
 
 func (pubKey PubKey) String() string {

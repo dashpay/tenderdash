@@ -36,6 +36,7 @@ type DashPrivValidator interface {
 // DashCoreSignerClient implements DashPrivValidator.
 // Handles remote validator connections that provide signing services
 type DashCoreSignerClient struct {
+	logger            log.Logger
 	dashCoreRPCClient dashcore.Client
 	cachedProTxHash   crypto.ProTxHash
 	defaultQuorumType btcjson.LLMQType
@@ -45,13 +46,15 @@ var _ DashPrivValidator = (*DashCoreSignerClient)(nil)
 
 // NewDashCoreSignerClient returns an instance of SignerClient.
 // it will start the endpoint (if not already started)
-func NewDashCoreSignerClient(
-	client dashcore.Client, defaultQuorumType btcjson.LLMQType,
-) (*DashCoreSignerClient, error) {
+func NewDashCoreSignerClient(client dashcore.Client, defaultQuorumType btcjson.LLMQType, logger log.Logger) (*DashCoreSignerClient, error) {
 	if err := dashcore.ValidateQuorumType(defaultQuorumType); err != nil {
 		return nil, err
 	}
-	return &DashCoreSignerClient{dashCoreRPCClient: client, defaultQuorumType: defaultQuorumType}, nil
+	return &DashCoreSignerClient{
+		logger:            logger,
+		dashCoreRPCClient: client,
+		defaultQuorumType: defaultQuorumType,
+	}, nil
 }
 
 // Close closes the underlying connection
@@ -394,6 +397,14 @@ func (sc *DashCoreSignerClient) quorumSignAndVerify(
 	if err != nil {
 		return nil, err
 	}
+	sc.logger.Trace("quorum sign result",
+		"sign", hex.EncodeToString(qs.sign),
+		"signHash", hex.EncodeToString(qs.signHash),
+		"reqID", hex.EncodeToString(signItem.ReqID),
+		"ID", hex.EncodeToString(signItem.ID),
+		"raw", hex.EncodeToString(signItem.Raw),
+		"hash", hex.EncodeToString(signItem.Hash),
+		"quorum_sign_result", *qs.QuorumSignResult)
 	pubKey, err := sc.GetPubKey(ctx, quorumHash)
 	if err != nil {
 		return nil, &RemoteSignerError{Code: 500, Description: err.Error()}
