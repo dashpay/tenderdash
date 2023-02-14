@@ -74,8 +74,6 @@ type BlockPool struct {
 	mtx sync.RWMutex
 
 	height int64 // the lowest key in requesters.
-	// peers
-	maxPeerHeight int64 // the biggest reported height
 
 	// atomic
 	jobProgressCounter atomic.Int32 // number of requests pending assignment or block response
@@ -162,7 +160,7 @@ func (pool *BlockPool) OnStart(ctx context.Context) error {
 func (*BlockPool) OnStop() {}
 
 func (pool *BlockPool) produceJob(ctx context.Context) {
-	if !pool.jobGen.shouldJobBeGenerated(pool.MaxPeerHeight()) {
+	if !pool.jobGen.shouldJobBeGenerated() {
 		// TODO should we stop producer loop ?
 		return
 	}
@@ -232,7 +230,7 @@ func (pool *BlockPool) applyBlock(ctx context.Context) error {
 			pool.logger.Info(
 				"block sync rate",
 				"height", pool.height,
-				"max_peer_height", pool.maxPeerHeight,
+				"max_peer_height", pool.peerStore.MaxHeight(),
 				"blocks/s", pool.lastSyncRate,
 			)
 			pool.lastHundredBlock = time.Now()
@@ -257,7 +255,7 @@ func (pool *BlockPool) IsCaughtUp() bool {
 	}
 	// NOTE: we use maxPeerHeight - 1 because to sync block H requires block H+1
 	// to verify the LastCommit.
-	return pool.height >= (pool.maxPeerHeight - 1)
+	return pool.height >= (pool.peerStore.MaxHeight() - 1)
 }
 
 // addBlock validates that the block comes from the peer it was expected from
@@ -289,9 +287,7 @@ func (pool *BlockPool) addBlock(resp BlockResponse) error {
 
 // MaxPeerHeight returns the highest reported height.
 func (pool *BlockPool) MaxPeerHeight() int64 {
-	pool.mtx.RLock()
-	defer pool.mtx.RUnlock()
-	return pool.maxPeerHeight
+	return pool.peerStore.MaxHeight()
 }
 
 // LastAdvance returns the time when the last block was processed (or start
@@ -304,12 +300,7 @@ func (pool *BlockPool) LastAdvance() time.Time {
 
 // SetPeerRange sets the peer's alleged blockchain base and height.
 func (pool *BlockPool) SetPeerRange(peer PeerData) {
-	pool.mtx.Lock()
-	defer pool.mtx.Unlock()
 	pool.peerStore.Put(peer)
-	if peer.height > pool.maxPeerHeight {
-		pool.maxPeerHeight = peer.height
-	}
 }
 
 // RemovePeer removes the peer with peerID from the pool. If there's no peer
@@ -326,13 +317,7 @@ func (pool *BlockPool) removePeer(peerID types.NodeID) {
 			pool.jobGen.pushBack(resp.Block.Height)
 		}
 	}
-	peer, ok := pool.peerStore.GetAndRemove(peerID)
-	if !ok {
-		return
-	}
-	if peer.height == pool.maxPeerHeight {
-		pool.maxPeerHeight = pool.peerStore.MaxPeerHeight()
-	}
+	pool.peerStore.Remove(peerID)
 }
 
 func (pool *BlockPool) removeTimedoutPeers(ctx context.Context) {
@@ -353,8 +338,7 @@ func (pool *BlockPool) removeTimedoutPeers(ctx context.Context) {
 func (pool *BlockPool) targetSyncBlocks() int64 {
 	pool.mtx.RLock()
 	defer pool.mtx.RUnlock()
-
-	return pool.maxPeerHeight - pool.startHeight + 1
+	return pool.peerStore.MaxHeight() - pool.startHeight + 1
 }
 
 func (pool *BlockPool) getLastSyncRate() float64 {

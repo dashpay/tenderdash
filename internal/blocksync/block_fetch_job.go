@@ -126,11 +126,11 @@ func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, err
 	}
 }
 
-func (p *jobGenerator) shouldJobBeGenerated(maxHeight int64) bool {
+func (p *jobGenerator) shouldJobBeGenerated() bool {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
 	if len(p.pushedBack) > 0 {
 		return true
 	}
-	return p.height <= maxHeight
+	return p.height <= p.peerStore.MaxHeight()
 }

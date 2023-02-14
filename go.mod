@@ -39,8 +39,8 @@ require (
 	github.com/spf13/viper v1.12.0
 	github.com/stretchr/testify v1.8.0
 	github.com/tendermint/tm-db v0.6.6
-	golang.org/x/crypto v0.0.0-20220525230936-793ad666bf5e
-	golang.org/x/net v0.0.0-20220617184016-355a448f1bc9
+	golang.org/x/crypto v0.1.0
+	golang.org/x/net v0.1.0
 	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
 	google.golang.org/grpc v1.48.0
 	pgregory.net/rapid v0.4.8
@@ -57,7 +57,6 @@ require (
 )
 
 require (
-	github.com/benbjohnson/clock v1.3.0 // indirect
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f // indirect
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
 	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792 // indirect
@@ -248,11 +247,11 @@ require (
 	go.uber.org/multierr v1.8.0 // indirect
 	go.uber.org/zap v1.21.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20220613132600-b0d781184e0d // indirect
-	golang.org/x/mod v0.6.0-dev.0.20220419223038-86c51ed26bb4 // indirect
-	golang.org/x/sys v0.0.0-20220702020025-31831981b65f // indirect
-	golang.org/x/term v0.0.0-20220526004731-065cf7ba2467 // indirect
-	golang.org/x/text v0.3.7 // indirect
-	golang.org/x/tools v0.1.12-0.20220628192153-7743d1d949f1 // indirect
+	golang.org/x/mod v0.6.0 // indirect
+	golang.org/x/sys v0.1.0 // indirect
+	golang.org/x/term v0.1.0 // indirect
+	golang.org/x/text v0.4.0 // indirect
+	golang.org/x/tools v0.2.0 // indirect
 	google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd // indirect
 	google.golang.org/protobuf v1.28.0 // indirect
 	gopkg.in/ini.v1 v1.66.6 // indirect
@@ -266,9 +265,11 @@ require (
 )
 
 require (
+	github.com/benbjohnson/clock v1.3.0
 	github.com/creachadair/tomledit v0.0.23
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca
+	golang.org/x/exp v0.0.0-20230213192124-5e25df0256eb
 )
 
 replace github.com/tendermint/tendermint => ./

@@ -5,6 +5,8 @@ import (
 	"sync"
 	"time"
 
+	"golang.org/x/exp/constraints"
+
 	"github.com/tendermint/tendermint/internal/libs/flowrate"
 	"github.com/tendermint/tendermint/types"
 )
@@ -16,9 +18,10 @@ type (
 	PeerUpdateFunc func(peer *PeerData)
 	// InMemPeerStore in-memory peer store
 	InMemPeerStore struct {
-		mtx     sync.RWMutex
-		peerIDx map[types.NodeID]int
-		peers   []*PeerData
+		mtx       sync.RWMutex
+		peerIDx   map[types.NodeID]int
+		peers     []*PeerData
+		maxHeight int64
 	}
 	// PeerData uses to keep peer related data like base height and the current height etc
 	PeerData struct {
@@ -77,6 +80,7 @@ func (p *InMemPeerStore) Put(newPeer PeerData) {
 	if !ok {
 		p.peers = append(p.peers, &newPeer)
 		p.peerIDx[newPeer.peerID] = len(p.peers) - 1
+		p.maxHeight = max(p.maxHeight, newPeer.height)
 		return
 	}
 	p.update(newPeer)
@@ -89,17 +93,11 @@ func (p *InMemPeerStore) Remove(peerID types.NodeID) {
 	p.remove(peerID)
 }
 
-// MaxPeerHeight looks at all the peers in the store to get the maximum peer height.
-func (p *InMemPeerStore) MaxPeerHeight() int64 {
+// MaxHeight looks at all the peers in the store to get the maximum peer height.
+func (p *InMemPeerStore) MaxHeight() int64 {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
-	var max int64
-	for _, peer := range p.peers {
-		if peer.height > max {
-			max = peer.height
-		}
-	}
-	return max
+	return p.maxHeight
 }
 
 // PeerUpdate applies update functions to the peer if it exists
@@ -191,6 +189,7 @@ func (p *InMemPeerStore) update(peer PeerData) {
 	}
 	p.peers[i].height = peer.height
 	p.peers[i].base = peer.base
+	p.maxHeight = max(p.maxHeight, peer.height)
 }
 
 func (p *InMemPeerStore) remove(peerID types.NodeID) {
@@ -198,6 +197,7 @@ func (p *InMemPeerStore) remove(peerID types.NodeID) {
 	if !ok {
 		return
 	}
+	peer := p.peers[i]
 	right := p.peers[i+1:]
 	for j, peer := range right {
 		p.peerIDx[peer.peerID] = i + j
@@ -205,6 +205,9 @@ func (p *InMemPeerStore) remove(peerID types.NodeID) {
 	left := p.peers[0:i]
 	p.peers = append(left, right...)
 	delete(p.peerIDx, peerID)
+	if peer.height == p.maxHeight {
+		p.updateMaxHeight()
+	}
 }
 
 func (p *InMemPeerStore) query(spec PeerQueryFunc) []*PeerData {
@@ -216,6 +219,13 @@ func (p *InMemPeerStore) query(spec PeerQueryFunc) []*PeerData {
 		}
 	}
 	return res
+}
+
+func (p *InMemPeerStore) updateMaxHeight() {
+	p.maxHeight = 0
+	for _, peer := range p.peers {
+		p.maxHeight = max(p.maxHeight, peer.height)
+	}
 }
 
 // TODO with fixed worker pool size this condition is not needed anymore
@@ -295,4 +305,11 @@ func ResetMonitor() PeerUpdateFunc {
 			peer.recvMonitor = newPeerMonitor(peer.startAt)
 		}
 	}
+}
+
+func max[T constraints.Ordered](a, b T) T {
+	if a > b {
+		return a
+	}
+	return b
 }
