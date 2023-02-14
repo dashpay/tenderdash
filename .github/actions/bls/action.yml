@@ -40,11 +40,11 @@ runs:
       run: |
         mkdir -p ~/bls-cache/include/bls-dash
         mkdir -p ~/bls-cache/lib
-        cp -r ./third_party/bls-signatures/build/depends/minialloc/libminialloc.a ~/bls-cache/lib
+        cp -r ./third_party/bls-signatures/build/depends/mimalloc/libmimalloc-secure.a ~/bls-cache/lib
         cp -r ./third_party/bls-signatures/build/depends/relic/lib/librelic_s.a ~/bls-cache/lib
         cp -r ./third_party/bls-signatures/build/src/libdashbls.a ~/bls-cache/lib
         cp -rv ./third_party/bls-signatures/build/depends/relic/include/* ~/bls-cache/include
-        cp -rv ./third_party/bls-signatures/src/depends/minialloc/include/* ~/bls-cache/include
+        cp -rv ./third_party/bls-signatures/src/depends/mimalloc/include/* ~/bls-cache/include
         cp -rv ./third_party/bls-signatures/src/depends/relic/include/* ~/bls-cache/include
         cp -rv ./third_party/bls-signatures/src/include/* ~/bls-cache/include
       if: steps.bls-cache.outputs.cache-hit != 'true'
