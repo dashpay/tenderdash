@@ -13,6 +13,12 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 )
 
+var Now = TimeNow
+
+func TimeNow() time.Time {
+	return time.Now()
+}
+
 // Monitor monitors and limits the transfer rate of a data stream.
 type Monitor struct {
 	mu       sync.Mutex    // Mutex guarding access to all internal fields
