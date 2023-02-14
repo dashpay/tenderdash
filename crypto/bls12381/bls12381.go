@@ -103,9 +103,7 @@ func (privKey PrivKey) SignDigest(msg []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var hash bls.Hash
-	copy(hash[:], msg)
-	sig := bls.ThresholdSign(blsPrivateKey, hash)
+	sig := schema.Sign(blsPrivateKey, msg)
 	serializedSignature := sig.Serialize()
 	// fmt.Printf("signature %X created for msg %X with key %X\n", serializedSignature, msg, privKey.PubKey().Bytes())
 	return serializedSignature, nil
