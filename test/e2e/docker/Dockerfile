@@ -15,8 +15,7 @@ WORKDIR /src/bls
 
 # Install BLS library
 COPY third_party ./third_party
-RUN ./third_party/bls-signatures/build.sh && \
-    ./third_party/bls-signatures/install.sh
+RUN ./third_party/bls-signatures/build.sh
 
 #####################################
 # STAGE 2: install golang libraries #

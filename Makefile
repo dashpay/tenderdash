@@ -24,13 +24,13 @@ CURR_DIR := $(dir $(MAKEFILE_PATH))
 
 BLS_DIR="$(CURR_DIR)third_party/bls-signatures"
 
-CGO_LDFLAGS ?= "-L$(BLS_DIR)/build/depends/minialloc \
+CGO_LDFLAGS ?= "-L$(BLS_DIR)/build/depends/mimalloc \
 -L$(BLS_DIR)/build/depends/relic/lib \
 -L$(BLS_DIR)/build/src \
--ldashbls -lrelic_s -lgmp -lminialloc"
+-ldashbls -lrelic_s -lmimalloc-secure -lgmp"
 
 CGO_CXXFLAGS ?= "-I$(BLS_DIR)/build/depends/relic/include \
--I$(BLS_DIR)/src/depends/minialloc/include \
+-I$(BLS_DIR)/src/depends/mimalloc/include \
 -I$(BLS_DIR)/src/depends/relic/include \
 -I$(BLS_DIR)/src/include"
 

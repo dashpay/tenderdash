@@ -45,11 +45,18 @@ var (
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 		0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
 	}
+
+	schema = bls.NewBasicSchemeMPL()
 )
 
 func init() {
 	jsontypes.MustRegister(PubKey{})
 	jsontypes.MustRegister(PrivKey{})
+}
+
+// BasicScheme returns basic bls scheme
+func BasicScheme() *bls.BasicSchemeMPL {
+	return schema
 }
 
 // PrivKey implements crypto.PrivKey.
@@ -79,7 +86,7 @@ func (privKey PrivKey) Sign(msg []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	sig := bls.NewAugSchemeMPL().Sign(blsPrivateKey, msg)
+	sig := schema.Sign(blsPrivateKey, msg)
 	serializedSignature := sig.Serialize()
 	// fmt.Printf("signature %X created for msg %X with key %X\n", serializedSignature, msg, privKey.PubKey().Bytes())
 	return serializedSignature, nil
@@ -101,9 +108,7 @@ func (privKey PrivKey) SignDigest(msg []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	var hash bls.Hash
-	copy(hash[:], msg)
-	sig := bls.ThresholdSign(blsPrivateKey, hash)
+	sig := schema.Sign(blsPrivateKey, msg)
 	serializedSignature := sig.Serialize()
 	// fmt.Printf("signature %X created for msg %X with key %X\n", serializedSignature, msg, privKey.PubKey().Bytes())
 	return serializedSignature, nil
@@ -164,7 +169,7 @@ func genPrivKey(rand io.Reader) PrivKey {
 	if err != nil {
 		panic(err)
 	}
-	sk, err := bls.NewAugSchemeMPL().KeyGen(seed)
+	sk, err := schema.KeyGen(seed)
 	if err != nil {
 		panic(err)
 	}
@@ -177,7 +182,7 @@ func genPrivKey(rand io.Reader) PrivKey {
 // if it's derived from user input.
 func GenPrivKeyFromSecret(secret []byte) PrivKey {
 	seed := crypto.Checksum(secret) // Not Ripemd160 because we want 32 bytes.
-	sk, err := bls.NewAugSchemeMPL().KeyGen(seed)
+	sk, err := schema.KeyGen(seed)
 	if err != nil {
 		panic(err)
 	}
@@ -303,9 +308,8 @@ func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
 		// fmt.Printf("bls verifying error (blsSignature) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
 		return false
 	}
-	var h bls.Hash
-	copy(h[:], hash)
-	return bls.ThresholdVerify(publicKey, h, blsSignature)
+
+	return schema.Verify(publicKey, hash, blsSignature)
 }
 
 func (pubKey PubKey) VerifySignature(msg []byte, sig []byte) bool {
@@ -328,7 +332,7 @@ func (pubKey PubKey) VerifySignature(msg []byte, sig []byte) bool {
 		// fmt.Printf("bls verifying error (blsSignature) sig %X from message %X with key %X\n", sig, msg, pubKey.Bytes())
 		return false
 	}
-	return bls.NewAugSchemeMPL().Verify(publicKey, msg, sig1)
+	return schema.Verify(publicKey, msg, sig1)
 }
 
 func (pubKey PubKey) String() string {
