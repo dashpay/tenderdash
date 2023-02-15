@@ -1,3 +1,16 @@
+## [0.11.0-dev.3] - 2023-02-15
+
+### Bug Fixes
+
+- Docker tag is invalid for empty input.tag (#580) (#585)
+- Signature verification (#584)
+
+## [0.11.0-dev.2] - 2023-02-13
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.11.0-dev.2 (#583)
+
 ## [0.10.0-dev.9] - 2023-02-10
 
 ### Bug Fixes
