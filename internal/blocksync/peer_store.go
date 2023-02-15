@@ -113,11 +113,11 @@ func (p *InMemPeerStore) PeerUpdate(peerID types.NodeID, updates ...PeerUpdateFu
 	}
 }
 
-// Query finds and returns the peers by specification conditions
-func (p *InMemPeerStore) Query(spec PeerQueryFunc) []*PeerData {
+// Query finds and returns the copy of peers by specification conditions
+func (p *InMemPeerStore) Query(spec PeerQueryFunc, limit int) []*PeerData {
 	p.mtx.RLock()
 	defer p.mtx.RUnlock()
-	return p.query(spec)
+	return p.query(spec, limit)
 }
 
 // FindPeer finds a peer for the request
@@ -126,17 +126,12 @@ func (p *InMemPeerStore) Query(spec PeerQueryFunc) []*PeerData {
 // 2. the height must be between two values base and height
 // otherwise return the empty peer data and false
 func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
-	peers := p.Query(andX(
+	spec := andX(
 		peerNumPendingCond(maxPendingRequestsPerPeer, "<"),
 		heightBetweenPeerHeightRange(height),
-		func(peer PeerData) bool {
-			curRate := peer.recvMonitor.CurrentTransferRate()
-			if curRate == 0 {
-				return true
-			}
-			return curRate >= minRecvRate
-		},
-	))
+		ignoreTimedOutPeers(minRecvRate),
+	)
+	peers := p.Query(spec, 1)
 	if len(peers) == 0 {
 		return PeerData{}, false
 	}
@@ -148,7 +143,7 @@ func (p *InMemPeerStore) FindTimedoutPeers() []*PeerData {
 	return p.Query(andX(
 		peerNumPendingCond(0, ">"),
 		transferRateNotZeroAndLessMinRate(minRecvRate),
-	))
+	), 0)
 }
 
 // All returns all stored peers in the store
@@ -210,12 +205,16 @@ func (p *InMemPeerStore) remove(peerID types.NodeID) {
 	}
 }
 
-func (p *InMemPeerStore) query(spec PeerQueryFunc) []*PeerData {
+func (p *InMemPeerStore) query(spec PeerQueryFunc, limit int) []*PeerData {
 	var res []*PeerData
 	for _, i := range p.peerIDx {
 		peer := p.peers[i]
 		if spec(*peer) {
-			res = append(res, peer)
+			c := *peer
+			res = append(res, &c)
+			if limit > 0 && limit == len(res) {
+				return res
+			}
 		}
 	}
 	return res
@@ -251,6 +250,16 @@ func transferRateNotZeroAndLessMinRate(minRate int64) PeerQueryFunc {
 	return func(peer PeerData) bool {
 		curRate := peer.recvMonitor.CurrentTransferRate()
 		return curRate != 0 && curRate < minRate
+	}
+}
+
+func ignoreTimedOutPeers(minRate int64) PeerQueryFunc {
+	return func(peer PeerData) bool {
+		curRate := peer.recvMonitor.CurrentTransferRate()
+		if curRate == 0 {
+			return true
+		}
+		return curRate >= minRate
 	}
 }
 
