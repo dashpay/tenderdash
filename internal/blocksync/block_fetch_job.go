@@ -79,25 +79,21 @@ func newJobGenerator(height int64, logger log.Logger, client BlockClient, peerSt
 	}
 }
 
-func (p *jobGenerator) nextJob(ctx context.Context) (*blockFetchJob, error) {
+func (p *jobGenerator) nextHeight() int64 {
 	p.mtx.Lock()
 	defer p.mtx.Unlock()
 	if len(p.pushedBack) > 0 {
 		height := p.pushedBack[0]
 		p.pushedBack = p.pushedBack[1:]
-		return p.createJob(ctx, height)
+		return height
 	}
+	height := p.height
 	p.height++
-	return p.createJob(ctx, p.height-1)
+	return height
 }
 
-func (p *jobGenerator) pushBack(height int64) {
-	p.mtx.Lock()
-	defer p.mtx.Unlock()
-	p.pushedBack = append(p.pushedBack, height)
-}
-
-func (p *jobGenerator) createJob(ctx context.Context, height int64) (*blockFetchJob, error) {
+func (p *jobGenerator) nextJob(ctx context.Context) (*blockFetchJob, error) {
+	height := p.nextHeight()
 	peer, err := p.getPeer(ctx, height)
 	if err != nil {
 		return nil, err
@@ -108,6 +104,12 @@ func (p *jobGenerator) createJob(ctx context.Context, height int64) (*blockFetch
 		peer:   peer,
 		height: height,
 	}, nil
+}
+
+func (p *jobGenerator) pushBack(height int64) {
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
+	p.pushedBack = append(p.pushedBack, height)
 }
 
 func (p *jobGenerator) getPeer(ctx context.Context, height int64) (PeerData, error) {

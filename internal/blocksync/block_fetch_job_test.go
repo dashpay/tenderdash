@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -114,6 +115,39 @@ func (suite *BlockFetchJobTestSuite) TestJobGeneratorNextJob() {
 	cancel()
 	_, err = jobGen.nextJob(ctx)
 	suite.Require().Error(err)
+}
+
+func (suite *BlockFetchJobTestSuite) TestGeneratorNextJobWaitForPeerAndPushBackHeight() {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	logger := log.NewNopLogger()
+	peerStore := NewInMemPeerStore()
+	jobGen := newJobGenerator(5, logger, suite.client, peerStore)
+	jobCh := make(chan *blockFetchJob, 2)
+	nextJobCh := make(chan struct{}, 1)
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-nextJobCh:
+				job, err := jobGen.nextJob(ctx)
+				suite.Require().NoError(err)
+				suite.T().Logf("pushed %d", job.height)
+				jobCh <- job
+			}
+		}
+	}()
+	nextJobCh <- struct{}{}
+	jobGen.pushBack(9)
+	peerStore.Put(suite.peer)
+	nextJobCh <- struct{}{}
+	suite.Eventually(func() bool {
+		job1 := <-jobCh
+		job2 := <-jobCh
+		want := []int64{5, 9}
+		return suite.Contains(want, job1.height) && suite.Contains(want, job2.height)
+	}, 10*time.Millisecond, 5*time.Millisecond)
 }
 
 func (suite *BlockFetchJobTestSuite) promiseReject(err error) *promise.Promise[*bcproto.BlockResponse] {
