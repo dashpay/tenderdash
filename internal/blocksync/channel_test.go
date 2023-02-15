@@ -5,6 +5,7 @@ import (
 	"errors"
 	"runtime"
 	"testing"
+	"time"
 
 	"github.com/benbjohnson/clock"
 	"github.com/stretchr/testify/mock"
@@ -97,7 +98,8 @@ func (suite *ChannelTestSuite) TestGetBlockTimeout() {
 		Once().
 		Return(nil)
 	p, err := suite.channel.GetBlock(ctx, suite.height, suite.peerID)
-	runtime.Gosched()
+	// need to wait for the goroutine is started
+	time.Sleep(time.Millisecond)
 	suite.fakeClock.Add(peerTimeout)
 	suite.Require().NoError(err)
 	_, err = p.Await()
@@ -107,5 +109,19 @@ func (suite *ChannelTestSuite) TestGetBlockTimeout() {
 }
 
 func (suite *ChannelTestSuite) TestSend() {
-
+	ctx := context.Background()
+	errMsg := p2p.PeerError{}
+	msg := p2p.Envelope{}
+	suite.p2pChannel.
+		On("Send", ctx, msg).
+		Once().
+		Return(nil)
+	suite.p2pChannel.
+		On("SendError", ctx, errMsg).
+		Once().
+		Return(nil)
+	err := suite.channel.Send(ctx, msg)
+	suite.Require().NoError(err)
+	err = suite.channel.Send(ctx, errMsg)
+	suite.Require().NoError(err)
 }

@@ -87,8 +87,13 @@ func (c *Channel) GetBlock(ctx context.Context, height int64, peerID types.NodeI
 	reqID := makeGetBlockReqID(height, peerID)
 	respCh := c.addPending(reqID)
 	p := promise.New(func(resolve func(data *bcproto.BlockResponse), reject func(err error)) {
+		defer func() {
+			c.pending.Delete(reqID)
+			close(respCh)
+		}()
 		select {
 		case <-ctx.Done():
+			reject(fmt.Errorf("cannot complete a promise: %w", ctx.Err()))
 			return
 		case res := <-respCh:
 			if res.Err != nil {
@@ -104,8 +109,6 @@ func (c *Channel) GetBlock(ctx context.Context, height int64, peerID types.NodeI
 			c.logger.Error("SendTimeout", "reason", errPeerNotResponded, "timeout", peerTimeout)
 			reject(errPeerNotResponded)
 		}
-		c.pending.Delete(reqID)
-		close(respCh)
 	})
 	return p, nil
 }
