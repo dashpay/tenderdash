@@ -8,6 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/internal/p2p"
@@ -75,6 +76,8 @@ type BlockPool struct {
 
 	height int64 // the lowest key in requesters.
 
+	clock clock.Clock
+
 	// atomic
 	jobProgressCounter atomic.Int32 // number of requests pending assignment or block response
 
@@ -104,6 +107,12 @@ func WithLogger(logger log.Logger) OptionFunc {
 	}
 }
 
+func WithClock(c clock.Clock) OptionFunc {
+	return func(v *BlockPool) {
+		v.clock = c
+	}
+}
+
 // NewBlockPool returns a new BlockPool with the height equal to start. Block
 // requests and errors will be sent to requestsCh and errorsCh accordingly.
 func NewBlockPool(start int64, client BlockClient, blockExec *blockApplier, opts ...OptionFunc) *BlockPool {
@@ -111,13 +120,13 @@ func NewBlockPool(start int64, client BlockClient, blockExec *blockApplier, opts
 	logger := log.NewNopLogger()
 	bp := &BlockPool{
 		logger:         logger,
+		clock:          clock.New(),
 		client:         client,
 		applier:        blockExec,
 		peerStore:      peerStore,
 		jobGen:         newJobGenerator(start, logger, client, peerStore),
 		startHeight:    start,
 		height:         start,
-		lastSyncRate:   0,
 		workerPool:     workerpool.New(poolWorkerSize),
 		pendingToApply: map[int64]BlockResponse{},
 	}
@@ -131,37 +140,23 @@ func NewBlockPool(start int64, client BlockClient, blockExec *blockApplier, opts
 // OnStart implements service.Service by spawning requesters routine and recording
 // pool's start time.
 func (pool *BlockPool) OnStart(ctx context.Context) error {
-	pool.lastAdvance = time.Now()
+	pool.lastAdvance = pool.clock.Now()
 	pool.lastHundredBlock = pool.lastAdvance
 	pool.workerPool.Run(ctx)
-	go func() {
-		for pool.IsRunning() {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				pool.produceJob(ctx)
-			}
-		}
-	}()
-	go func() {
-		for pool.IsRunning() {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				pool.consumeJobResult(ctx)
-			}
-		}
-	}()
+	go pool.runHandler(ctx, pool.produceJob)
+	go pool.runHandler(ctx, pool.consumeJobResult)
 	return nil
 }
 
-func (*BlockPool) OnStop() {}
+func (pool *BlockPool) OnStop() {
+	pool.workerPool.Stop(context.Background())
+}
 
 func (pool *BlockPool) produceJob(ctx context.Context) {
 	if !pool.jobGen.shouldJobBeGenerated() {
 		// TODO should we stop producer loop ?
+		// TODO need to come up with a smarter way how to produce jobs without sleeping
+		pool.clock.Sleep(50 * time.Millisecond)
 		return
 	}
 	// remove timed out peers and redo its heights again
@@ -173,7 +168,10 @@ func (pool *BlockPool) produceJob(ctx context.Context) {
 		return
 	}
 	pool.peerStore.PeerUpdate(job.peer.peerID, ResetMonitor(), AddNumPending(1))
-	pool.workerPool.Add(job)
+	err = pool.workerPool.Add(ctx, job)
+	if err != nil {
+		pool.logger.Error("cannot add a job to worker-pool", "error", err)
+	}
 }
 
 func (pool *BlockPool) consumeJobResult(ctx context.Context) {
@@ -220,42 +218,73 @@ func (pool *BlockPool) applyBlock(ctx context.Context) error {
 		}
 		delete(pool.pendingToApply, pool.height)
 		pool.height++
-		pool.lastAdvance = time.Now()
+		pool.lastAdvance = pool.clock.Now()
 
 		diff := pool.height - pool.startHeight
 		if diff%100 == 0 {
 			// the lastSyncRate will be updated every 100 blocks, it uses the adaptive filter
 			// to smooth the block sync rate and the unit represents the number of blocks per second.
-			pool.lastSyncRate = 0.9*pool.lastSyncRate + 0.1*(100/time.Since(pool.lastHundredBlock).Seconds())
+			newSyncRate := 100 / pool.clock.Since(pool.lastHundredBlock).Seconds()
+			if pool.lastSyncRate == 0 {
+				pool.lastSyncRate = newSyncRate
+			} else {
+				pool.lastSyncRate = 0.9*pool.lastSyncRate + 0.1*newSyncRate
+			}
 			pool.logger.Info(
 				"block sync rate",
 				"height", pool.height,
 				"max_peer_height", pool.peerStore.MaxHeight(),
 				"blocks/s", pool.lastSyncRate,
 			)
-			pool.lastHundredBlock = time.Now()
+			pool.lastHundredBlock = pool.clock.Now()
 		}
 	}
 }
 
 // GetStatus returns pool's height, count of in progress requests
-func (pool *BlockPool) GetStatus() (height int64, numPending int32) {
+func (pool *BlockPool) GetStatus() (int64, int32) {
 	pool.mtx.RLock()
-	defer pool.mtx.RUnlock()
-	return pool.height, pool.jobProgressCounter.Load()
+	height := pool.height
+	pool.mtx.RUnlock()
+	return height, pool.jobProgressCounter.Load()
 }
 
 // IsCaughtUp returns true if this node is caught up, false - otherwise.
 func (pool *BlockPool) IsCaughtUp() bool {
-	pool.mtx.RLock()
-	defer pool.mtx.RUnlock()
 	// Need at least 1 peer to be considered caught up.
 	if pool.peerStore.IsZero() {
 		return false
 	}
-	// NOTE: we use maxPeerHeight - 1 because to sync block H requires block H+1
-	// to verify the LastCommit.
-	return pool.height >= (pool.peerStore.MaxHeight() - 1)
+	pool.mtx.RLock()
+	height := pool.height
+	pool.mtx.RUnlock()
+	return height >= pool.peerStore.MaxHeight()
+}
+
+func (pool *BlockPool) WaitForSync(ctx context.Context) {
+	ticker := time.NewTicker(switchToConsensusIntervalSeconds * time.Second)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			var (
+				height, _   = pool.GetStatus()
+				lastAdvance = pool.LastAdvance()
+				isCaughtUp  = pool.IsCaughtUp()
+			)
+			if isCaughtUp || time.Since(lastAdvance) > syncTimeout {
+				return
+			}
+			pool.logger.Info(
+				"not caught up yet",
+				"height", height,
+				"max_peer_height", pool.MaxPeerHeight(),
+				"timeout_in", syncTimeout-time.Since(lastAdvance),
+			)
+		}
+	}
 }
 
 // addBlock validates that the block comes from the peer it was expected from
@@ -346,6 +375,17 @@ func (pool *BlockPool) getLastSyncRate() float64 {
 	defer pool.mtx.RUnlock()
 
 	return pool.lastSyncRate
+}
+
+func (pool *BlockPool) runHandler(ctx context.Context, handler func(ctx context.Context)) {
+	for pool.IsRunning() {
+		select {
+		case <-ctx.Done():
+			return
+		default:
+			handler(ctx)
+		}
+	}
 }
 
 // BlockResponse ...

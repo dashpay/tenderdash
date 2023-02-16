@@ -389,52 +389,11 @@ func (r *Reactor) requestRoutine(ctx context.Context, blockSyncCh p2p.Channel) {
 //
 // NOTE: Don't sleep in the FOR_LOOP or otherwise slow it down!
 func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool) {
-	switchToConsensusTicker := time.NewTicker(switchToConsensusIntervalSeconds * time.Second)
-	defer switchToConsensusTicker.Stop()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-switchToConsensusTicker.C:
-			var (
-				height, numPending = r.pool.GetStatus()
-				lastAdvance        = r.pool.LastAdvance()
-				isCaughtUp         = r.pool.IsCaughtUp()
-			)
-
-			r.logger.Debug("consensus ticker",
-				"num_pending", numPending,
-				"height", height)
-
-			switch {
-
-			case isCaughtUp:
-				r.logger.Info("switching to consensus reactor", "height", height)
-
-			case time.Since(lastAdvance) > syncTimeout:
-				r.logger.Error("no progress since last advance", "last_advance", lastAdvance)
-
-			default:
-				r.logger.Info(
-					"not caught up yet",
-					"height", height,
-					"max_peer_height", r.pool.MaxPeerHeight(),
-					"timeout_in", syncTimeout-time.Since(lastAdvance),
-				)
-				continue
-			}
-
-			r.pool.Stop()
-
-			r.blockSync.Store(false)
-
-			if r.consReactor != nil {
-				r.consReactor.SwitchToConsensus(ctx, r.executor.State(), isCaughtUp || stateSynced)
-			}
-
-			return
-		}
+	r.pool.WaitForSync(ctx)
+	r.pool.Stop()
+	r.blockSync.Store(false)
+	if r.consReactor != nil {
+		r.consReactor.SwitchToConsensus(ctx, r.executor.State(), r.pool.IsCaughtUp() || stateSynced)
 	}
 }
 
@@ -453,16 +412,14 @@ func (r *Reactor) GetRemainingSyncTime() time.Duration {
 	if !r.blockSync.Load() {
 		return time.Duration(0)
 	}
-
 	targetSyncs := r.pool.targetSyncBlocks()
 	currentSyncs := r.store.Height() - r.pool.startHeight + 1
 	lastSyncRate := r.pool.getLastSyncRate()
 	if currentSyncs < 0 || lastSyncRate < 0.001 {
 		return time.Duration(0)
 	}
-
-	remain := float64(targetSyncs-currentSyncs) / lastSyncRate
-
+	remainSyncs := targetSyncs - currentSyncs
+	remain := float64(remainSyncs) / lastSyncRate
 	return time.Duration(int64(remain * float64(time.Second)))
 }
 
