@@ -3,8 +3,6 @@ package workerpool
 import (
 	"context"
 	"errors"
-	"sync/atomic"
-
 	"github.com/tendermint/tendermint/libs/log"
 )
 
@@ -47,7 +45,6 @@ func WithJobCh(jobCh chan Job) OptionFunc {
 
 // WorkerPool ...
 type WorkerPool struct {
-	running      atomic.Bool
 	initPoolSize int
 	maxPoolSize  int
 	jobCh        chan Job
