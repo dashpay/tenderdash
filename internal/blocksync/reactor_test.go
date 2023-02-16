@@ -293,7 +293,6 @@ func TestReactor_AbruptDisconnect(t *testing.T) {
 }
 
 func TestReactor_SyncTime(t *testing.T) {
-	t.Skip()
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -302,7 +301,7 @@ func TestReactor_SyncTime(t *testing.T) {
 	defer os.RemoveAll(cfg.RootDir)
 
 	genDoc, privVals := factory.RandGenesisDoc(cfg, 1, 1, factory.ConsensusParams())
-	maxBlockHeight := int64(101)
+	maxBlockHeight := int64(199)
 
 	rts := setup(ctx, t, genDoc, privVals[0], []int64{maxBlockHeight, 0})
 	require.Equal(t, maxBlockHeight, rts.reactors[rts.nodes[0]].store.Height())
@@ -312,13 +311,11 @@ func TestReactor_SyncTime(t *testing.T) {
 		t,
 		func() bool {
 			node := rts.reactors[rts.nodes[1]]
-
-			fmt.Printf("_debug height=%d | caught up %v | remaning sync time %v\n", node.pool.height, node.pool.IsCaughtUp(), node.GetRemainingSyncTime())
 			return node.GetRemainingSyncTime() > time.Nanosecond &&
 				node.pool.getLastSyncRate() > 0.001
 		},
 		10*time.Second,
-		1*time.Second,
+		10*time.Millisecond,
 		"expected node to be partially synced",
 	)
 }
