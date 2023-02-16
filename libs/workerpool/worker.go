@@ -141,17 +141,19 @@ func newWorker(id int, jobCh chan Job, resultCh chan Result, logger log.Logger) 
 		jobCh:    jobCh,
 		resultCh: resultCh,
 		quitCh:   make(chan struct{}),
-		quitedCh: make(chan struct{}),
+		quitedCh: make(chan struct{}, 1),
 	}
 }
 
 func (w *worker) start(ctx context.Context) {
+	defer func() {
+		w.quitedCh <- struct{}{}
+	}()
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case <-w.quitCh:
-			w.quitedCh <- struct{}{}
 			return
 		case job, ok := <-w.jobCh:
 			if !ok {
@@ -162,7 +164,6 @@ func (w *worker) start(ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case <-w.quitCh:
-				w.quitedCh <- struct{}{}
 				return
 			case w.resultCh <- result:
 			}
@@ -172,10 +173,11 @@ func (w *worker) start(ctx context.Context) {
 
 func (w *worker) stop(ctx context.Context) {
 	close(w.quitCh)
+	defer func() {
+		close(w.quitedCh)
+	}()
 	select {
 	case <-ctx.Done():
-		return
 	case <-w.quitedCh:
-		close(w.quitedCh)
 	}
 }
