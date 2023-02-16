@@ -3,11 +3,14 @@ package workerpool
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 
 	"github.com/tendermint/tendermint/libs/log"
 )
 
 var (
+	ErrWorkerPoolStopped = errors.New("worker-pool has stopped")
+
 	errCannotReadResultChannel = errors.New("cannot read result from a channel")
 )
 
@@ -44,9 +47,11 @@ func WithJobCh(jobCh chan Job) OptionFunc {
 
 // WorkerPool ...
 type WorkerPool struct {
+	running      atomic.Bool
 	initPoolSize int
 	maxPoolSize  int
 	jobCh        chan Job
+	doneCh       chan struct{}
 	resultCh     chan Result
 	logger       log.Logger
 	workers      []*worker
@@ -58,7 +63,9 @@ func New(poolSize int, opts ...OptionFunc) *WorkerPool {
 		initPoolSize: poolSize,
 		maxPoolSize:  poolSize,
 		jobCh:        make(chan Job, poolSize),
+		doneCh:       make(chan struct{}),
 		resultCh:     make(chan Result, poolSize),
+		workers:      make([]*worker, poolSize),
 		logger:       log.NewNopLogger(),
 	}
 	for _, opt := range opts {
@@ -67,10 +74,17 @@ func New(poolSize int, opts ...OptionFunc) *WorkerPool {
 	return p
 }
 
-func (p *WorkerPool) Add(jobs ...Job) {
+func (p *WorkerPool) Add(ctx context.Context, jobs ...Job) error {
 	for _, job := range jobs {
-		p.jobCh <- job
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-p.doneCh:
+			return ErrWorkerPoolStopped
+		case p.jobCh <- job:
+		}
 	}
+	return nil
 }
 
 func (p *WorkerPool) Receive(ctx context.Context) (Result, error) {
@@ -78,6 +92,8 @@ func (p *WorkerPool) Receive(ctx context.Context) (Result, error) {
 	case <-ctx.Done():
 		// stop
 		return Result{}, ctx.Err()
+	case <-p.doneCh:
+		return Result{}, ErrWorkerPoolStopped
 	case res, ok := <-p.resultCh:
 		if !ok {
 			return Result{}, errCannotReadResultChannel
@@ -89,20 +105,28 @@ func (p *WorkerPool) Receive(ctx context.Context) (Result, error) {
 // Run ...
 func (p *WorkerPool) Run(ctx context.Context) {
 	for i := 0; i < p.initPoolSize; i++ {
-		w := newWorker(p.jobCh, p.resultCh, p.logger)
-		p.workers = append(p.workers, w)
-		go w.start(ctx)
+		p.workers[i] = newWorker(i, p.jobCh, p.resultCh, p.logger)
+		go p.workers[i].start(ctx)
 	}
 }
 
 // Stop ...
-func (p *WorkerPool) Stop() {
+func (p *WorkerPool) Stop(ctx context.Context) {
+	select {
+	case <-ctx.Done():
+		return
+	case <-p.doneCh:
+		return
+	default:
+		close(p.doneCh)
+	}
 	for _, w := range p.workers {
-		w.stop()
+		w.stop(ctx)
 	}
 }
 
 type worker struct {
+	id       int
 	logger   log.Logger
 	jobCh    chan Job
 	resultCh chan Result
@@ -110,8 +134,9 @@ type worker struct {
 	quitedCh chan struct{}
 }
 
-func newWorker(jobCh chan Job, resultCh chan Result, logger log.Logger) *worker {
+func newWorker(id int, jobCh chan Job, resultCh chan Result, logger log.Logger) *worker {
 	return &worker{
+		id:       id,
 		logger:   logger,
 		jobCh:    jobCh,
 		resultCh: resultCh,
@@ -132,13 +157,25 @@ func (w *worker) start(ctx context.Context) {
 			if !ok {
 				return
 			}
-			w.resultCh <- job.Execute(ctx)
+			result := job.Execute(ctx)
+			select {
+			case <-ctx.Done():
+				return
+			case <-w.quitCh:
+				w.quitedCh <- struct{}{}
+				return
+			case w.resultCh <- result:
+			}
 		}
 	}
 }
 
-func (w *worker) stop() {
+func (w *worker) stop(ctx context.Context) {
 	close(w.quitCh)
-	<-w.quitedCh
-	close(w.quitedCh)
+	select {
+	case <-ctx.Done():
+		return
+	case <-w.quitedCh:
+		close(w.quitedCh)
+	}
 }
