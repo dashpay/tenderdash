@@ -90,7 +90,8 @@ func (suite *BlockPoolTestSuite) TestBlockPoolBasic() {
 	}
 	suite.Require().Eventually(func() bool {
 		return !pool.IsCaughtUp()
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 2*time.Second, 10*time.Millisecond)
+	pool.Stop()
 }
 
 func (suite *BlockPoolTestSuite) TestProduceJob() {
