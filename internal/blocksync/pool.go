@@ -127,7 +127,7 @@ func NewBlockPool(start int64, client BlockClient, blockExec *blockApplier, opts
 		jobGen:         newJobGenerator(start, logger, client, peerStore),
 		startHeight:    start,
 		height:         start,
-		workerPool:     workerpool.New(poolWorkerSize),
+		workerPool:     workerpool.New(poolWorkerSize, workerpool.WithLogger(logger)),
 		pendingToApply: map[int64]BlockResponse{},
 	}
 	for _, opt := range opts {
@@ -168,7 +168,7 @@ func (pool *BlockPool) produceJob(ctx context.Context) {
 		return
 	}
 	pool.peerStore.PeerUpdate(job.peer.peerID, ResetMonitor(), AddNumPending(1))
-	err = pool.workerPool.Add(ctx, job)
+	err = pool.workerPool.Send(ctx, job)
 	if err != nil {
 		pool.logger.Error("cannot add a job to worker-pool", "error", err)
 	}
