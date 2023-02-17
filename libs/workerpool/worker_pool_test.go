@@ -50,8 +50,10 @@ func TestWorkerPool_Basic(t *testing.T) {
 			defer cancel()
 			wp := New(tc.poolSize)
 			wp.Run(ctx)
-			var counter atomic.Int32
-			var wg sync.WaitGroup
+			var (
+				counter atomic.Int32
+				wg      sync.WaitGroup
+			)
 			wg.Add(2)
 			go func() {
 				defer counter.Add(1)
@@ -72,6 +74,26 @@ func TestWorkerPool_Basic(t *testing.T) {
 			wg.Wait()
 		})
 	}
+}
+
+func TestWorkerPool_Stop(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	jobs := generateJobs(10)
+	wp := New(2)
+	wp.Start(ctx)
+	var wg sync.WaitGroup
+	for i := 0; i < 10; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			err := wp.Send(ctx, jobs...)
+			tmrequire.Error(t, ErrWorkerPoolStopped.Error(), err)
+		}()
+	}
+	time.Sleep(100 * time.Millisecond)
+	wp.Stop(ctx)
+	wg.Wait()
 }
 
 func TestWorkerPool_Send(t *testing.T) {
@@ -108,6 +130,7 @@ func TestWorkerPool_Send(t *testing.T) {
 				tmrequire.Error(t, tc.wantErr, err)
 			}()
 			tc.stopFn(ctx, cancel, wp)
+			wg.Wait()
 			err := wp.Send(ctx, jobs...)
 			tmrequire.Error(t, tc.wantErr, err)
 		})
@@ -174,17 +197,20 @@ func TestWorkerPool_Reset(t *testing.T) {
 	// try to send the jobs to stopped worker pool
 	err = wp.Send(ctx, jobs...)
 	tmrequire.Error(t, ErrWorkerPoolStopped.Error(), err)
-	require.Error(t, err)
 
 	// try to stop worker pool again
 	wp.Stop(ctx)
 
 	// reset and start the worker pool
+	wp.Reset()
+
+	//  reset and start workers again
 	wp.Run(ctx)
 
 	// send several jobs to process
 	err = wp.Send(ctx, jobs...)
 	require.NoError(t, err)
+
 	// consume jobs
 	results, err = consumeResult(ctx, wp, jobsCnt)
 	require.NoError(t, err)

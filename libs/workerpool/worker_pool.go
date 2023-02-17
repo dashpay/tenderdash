@@ -3,6 +3,10 @@ package workerpool
 import (
 	"context"
 	"errors"
+	"sync/atomic"
+
+	sync "github.com/sasha-s/go-deadlock"
+
 	"github.com/tendermint/tendermint/libs/log"
 )
 
@@ -61,6 +65,9 @@ type WorkerPool struct {
 	initPoolSize int
 	maxPoolSize  int
 	jobCh        chan Job
+	wg           sync.WaitGroup
+	wgMtx        sync.Mutex
+	stopped      atomic.Bool
 	doneCh       chan struct{}
 	resultCh     chan Result
 	logger       log.Logger
@@ -73,13 +80,9 @@ func New(poolSize int, opts ...OptionFunc) *WorkerPool {
 		initPoolSize: poolSize,
 		maxPoolSize:  poolSize,
 		jobCh:        make(chan Job, poolSize),
-		doneCh:       make(chan struct{}),
 		resultCh:     make(chan Result, poolSize),
-		workers:      make([]*worker, poolSize),
+		doneCh:       make(chan struct{}),
 		logger:       log.NewNopLogger(),
-	}
-	for i := 0; i < p.initPoolSize; i++ {
-		p.workers[i] = newWorker(i, p.jobCh, p.resultCh, p.logger)
 	}
 	for _, opt := range opts {
 		opt(p)
@@ -88,14 +91,18 @@ func New(poolSize int, opts ...OptionFunc) *WorkerPool {
 }
 
 // Send sends one or many jobs to the workers via job channel
-func (p *WorkerPool) Send(ctx context.Context, jobs ...Job) (err error) {
-	defer func() {
-		if recover() != nil {
-			// this might happen if we try to send a job to the closed channel
-			err = ErrWorkerPoolStopped
-		}
-	}()
+func (p *WorkerPool) Send(ctx context.Context, jobs ...Job) error {
+	if p.stopped.Load() {
+		return ErrWorkerPoolStopped
+	}
+	p.wgMtx.Lock()
+	p.wg.Add(1)
+	p.wgMtx.Unlock()
+	defer p.wg.Done()
 	for _, job := range jobs {
+		if p.stopped.Load() {
+			return ErrWorkerPoolStopped
+		}
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
@@ -109,9 +116,11 @@ func (p *WorkerPool) Send(ctx context.Context, jobs ...Job) (err error) {
 
 // Receive waits for a job result from a worker via result channel
 func (p *WorkerPool) Receive(ctx context.Context) (Result, error) {
+	if p.stopped.Load() {
+		return Result{}, ErrWorkerPoolStopped
+	}
 	select {
 	case <-ctx.Done():
-		// stop
 		return Result{}, ctx.Err()
 	case <-p.doneCh:
 		return Result{}, ErrWorkerPoolStopped
@@ -125,6 +134,12 @@ func (p *WorkerPool) Receive(ctx context.Context) (Result, error) {
 
 // Start starts a pool of workers to process jobs
 func (p *WorkerPool) Start(ctx context.Context) {
+	if p.stopped.Swap(false) {
+		return
+	}
+	if len(p.workers) == 0 {
+		p.initWorkers()
+	}
 	for i := 0; i < p.initPoolSize; i++ {
 		go p.workers[i].start(ctx)
 	}
@@ -138,6 +153,9 @@ func (p *WorkerPool) Run(ctx context.Context) {
 
 // Stop stops the worker-pool and all dependent workers
 func (p *WorkerPool) Stop(ctx context.Context) {
+	if p.stopped.Swap(true) {
+		return
+	}
 	select {
 	case <-ctx.Done():
 		return
@@ -145,21 +163,38 @@ func (p *WorkerPool) Stop(ctx context.Context) {
 		return
 	default:
 		close(p.doneCh)
-		defer close(p.jobCh)
-		defer close(p.resultCh)
 	}
 	for _, w := range p.workers {
 		w.stop(ctx)
 	}
+	done := make(chan struct{})
+	go func() {
+		for range p.jobCh {
+		}
+		close(done)
+	}()
+	p.wg.Wait()
+	close(p.jobCh)
+	close(p.resultCh)
+	<-done
 }
 
 // Reset resets some data to initial values, among with these are
 func (p *WorkerPool) Reset() {
-	p.doneCh = make(chan struct{}, 1)
+	if !p.stopped.Swap(false) {
+		return
+	}
+	p.doneCh = make(chan struct{})
 	p.jobCh = make(chan Job, p.initPoolSize)
-	p.resultCh = make(chan Result, p.initPoolSize)
+	p.resultCh = make(chan Result, p.initPoolSize*2)
+	for i := 0; i < p.initPoolSize; i++ {
+		p.workers[i] = newWorker(i, p.jobCh, p.resultCh, p.doneCh, p.logger)
+	}
+}
+
+func (p *WorkerPool) initWorkers() {
 	p.workers = make([]*worker, p.initPoolSize)
 	for i := 0; i < p.initPoolSize; i++ {
-		p.workers[i] = newWorker(i, p.jobCh, p.resultCh, p.logger)
+		p.workers[i] = newWorker(i, p.jobCh, p.resultCh, p.doneCh, p.logger)
 	}
 }
