@@ -206,41 +206,6 @@ func (pool *BlockPool) consumeJobResult(ctx context.Context) {
 	}
 }
 
-func (pool *BlockPool) applyBlock(ctx context.Context) error {
-	for {
-		resp, ok := pool.pendingToApply[pool.height]
-		if !ok {
-			return nil
-		}
-		err := pool.applier.Apply(ctx, resp.Block, resp.Commit)
-		if err != nil {
-			return fmt.Errorf("cannot apply block: %w", err)
-		}
-		delete(pool.pendingToApply, pool.height)
-		pool.height++
-		pool.lastAdvance = pool.clock.Now()
-
-		diff := pool.height - pool.startHeight
-		if diff%100 == 0 {
-			// the lastSyncRate will be updated every 100 blocks, it uses the adaptive filter
-			// to smooth the block sync rate and the unit represents the number of blocks per second.
-			newSyncRate := 100 / pool.clock.Since(pool.lastHundredBlock).Seconds()
-			if pool.lastSyncRate == 0 {
-				pool.lastSyncRate = newSyncRate
-			} else {
-				pool.lastSyncRate = 0.9*pool.lastSyncRate + 0.1*newSyncRate
-			}
-			pool.logger.Info(
-				"block sync rate",
-				"height", pool.height,
-				"max_peer_height", pool.peerStore.MaxHeight(),
-				"blocks/s", pool.lastSyncRate,
-			)
-			pool.lastHundredBlock = pool.clock.Now()
-		}
-	}
-}
-
 // GetStatus returns pool's height, count of in progress requests
 func (pool *BlockPool) GetStatus() (int64, int32) {
 	pool.mtx.RLock()
@@ -287,33 +252,6 @@ func (pool *BlockPool) WaitForSync(ctx context.Context) {
 	}
 }
 
-// addBlock validates that the block comes from the peer it was expected from
-// and calls the requester to store it.
-//
-// This requires an extended commit at the same height as the supplied block -
-// the block contains the last commit, but we need the latest commit in case we
-// need to switch over from block sync to consensus at this height. If the
-// height of the extended commit and the height of the block do not match, we
-// do not add the block and return an error.
-// TODO: ensure that blocks come in order for each peer.
-func (pool *BlockPool) addBlock(resp BlockResponse) error {
-	pool.mtx.Lock()
-	defer pool.mtx.Unlock()
-
-	block := resp.Block
-	_, ok := pool.pendingToApply[block.Height]
-	if ok {
-		return fmt.Errorf("block response already exists (peer: %s, block height: %d)", resp.PeerID, block.Height)
-	}
-	// TODO doubt this checking is necessary
-	diff := math.Abs(float64(pool.height - block.Height))
-	if diff > maxDiffBetweenCurrentAndReceivedBlockHeight {
-		return errors.New("peer sent us a block we didn't expect with a height too far ahead/behind")
-	}
-	pool.pendingToApply[block.Height] = resp
-	return nil
-}
-
 // MaxPeerHeight returns the highest reported height.
 func (pool *BlockPool) MaxPeerHeight() int64 {
 	return pool.peerStore.MaxHeight()
@@ -347,6 +285,88 @@ func (pool *BlockPool) removePeer(peerID types.NodeID) {
 		}
 	}
 	pool.peerStore.Remove(peerID)
+}
+
+func (pool *BlockPool) applyBlock(ctx context.Context) error {
+	for {
+		resp, ok := pool.getPendingResponse()
+		if !ok {
+			return nil
+		}
+		err := pool.applier.Apply(ctx, resp.Block, resp.Commit)
+		if err != nil {
+			return fmt.Errorf("cannot apply block: %w", err)
+		}
+		pool.advance()
+		pool.updateMonitor()
+	}
+}
+
+func (pool *BlockPool) getPendingResponse() (BlockResponse, bool) {
+	pool.mtx.RLock()
+	defer pool.mtx.RUnlock()
+	resp, ok := pool.pendingToApply[pool.height]
+	return resp, ok
+}
+
+func (pool *BlockPool) advance() {
+	pool.mtx.Lock()
+	defer pool.mtx.Unlock()
+	delete(pool.pendingToApply, pool.height)
+	pool.height++
+	pool.lastAdvance = pool.clock.Now()
+}
+
+func (pool *BlockPool) updateMonitor() {
+	pool.mtx.Lock()
+	defer pool.mtx.Unlock()
+
+	diff := pool.height - pool.startHeight
+	if diff%100 != 0 {
+		return
+	}
+	// the lastSyncRate will be updated every 100 blocks, it uses the adaptive filter
+	// to smooth the block sync rate and the unit represents the number of blocks per second.
+	newSyncRate := 100 / pool.clock.Since(pool.lastHundredBlock).Seconds()
+	if pool.lastSyncRate == 0 {
+		pool.lastSyncRate = newSyncRate
+	} else {
+		pool.lastSyncRate = 0.9*pool.lastSyncRate + 0.1*newSyncRate
+	}
+	pool.logger.Info(
+		"block sync rate",
+		"height", pool.height,
+		"max_peer_height", pool.peerStore.MaxHeight(),
+		"blocks/s", pool.lastSyncRate,
+	)
+	pool.lastHundredBlock = pool.clock.Now()
+}
+
+// addBlock validates that the block comes from the peer it was expected from
+// and calls the requester to store it.
+//
+// This requires an extended commit at the same height as the supplied block -
+// the block contains the last commit, but we need the latest commit in case we
+// need to switch over from block sync to consensus at this height. If the
+// height of the extended commit and the height of the block do not match, we
+// do not add the block and return an error.
+// TODO: ensure that blocks come in order for each peer.
+func (pool *BlockPool) addBlock(resp BlockResponse) error {
+	pool.mtx.Lock()
+	defer pool.mtx.Unlock()
+
+	block := resp.Block
+	_, ok := pool.pendingToApply[block.Height]
+	if ok {
+		return fmt.Errorf("block response already exists (peer: %s, block height: %d)", resp.PeerID, block.Height)
+	}
+	// TODO doubt this checking is necessary
+	diff := math.Abs(float64(pool.height - block.Height))
+	if diff > maxDiffBetweenCurrentAndReceivedBlockHeight {
+		return errors.New("peer sent us a block we didn't expect with a height too far ahead/behind")
+	}
+	pool.pendingToApply[block.Height] = resp
+	return nil
 }
 
 func (pool *BlockPool) removeTimedoutPeers(ctx context.Context) {
