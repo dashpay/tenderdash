@@ -23,58 +23,58 @@ func TestP2PMsgSender_Send(t *testing.T) {
 	logger := log.NewTestingLogger(t)
 	nodeID := types.NodeID("test-peer")
 	ps := NewPeerState(logger, nodeID)
-	mockStateCh := mocks.NewChannel(t)
-	mockDataCh := mocks.NewChannel(t)
-	mockVoteCh := mocks.NewChannel(t)
-	sender := p2pMsgSender{
-		logger: log.NewTestingLogger(t),
-		ps:     ps,
-		chans: channelBundle{
-			state: mockStateCh,
-			data:  mockDataCh,
-			vote:  mockVoteCh,
-		},
+	mockVoteChannelFn := func(bundle *channelBundle) *mocks.Channel {
+		bundle.vote = mocks.NewChannel(t)
+		return bundle.vote.(*mocks.Channel)
+	}
+	mockDataChannelFn := func(bundle *channelBundle) *mocks.Channel {
+		bundle.data = mocks.NewChannel(t)
+		return bundle.data.(*mocks.Channel)
+	}
+	mockStateChannelFn := func(bundle *channelBundle) *mocks.Channel {
+		bundle.state = mocks.NewChannel(t)
+		return bundle.state.(*mocks.Channel)
 	}
 	testCases := []struct {
-		ch   *mocks.Channel
-		msg  proto.Message
-		want proto.Message
+		mockChannel func(bundle *channelBundle) *mocks.Channel
+		msg         proto.Message
+		want        proto.Message
 	}{
 		{
-			ch:  mockVoteCh,
-			msg: &tmproto.Commit{},
+			mockChannel: mockVoteChannelFn,
+			msg:         &tmproto.Commit{},
 			want: &tmcons.Commit{
 				Commit: &tmproto.Commit{},
 			},
 		},
 		{
-			ch:  mockVoteCh,
-			msg: &tmproto.Vote{},
+			mockChannel: mockVoteChannelFn,
+			msg:         &tmproto.Vote{},
 			want: &tmcons.Vote{
 				Vote: &tmproto.Vote{},
 			},
 		},
 		{
-			ch:   mockDataCh,
-			msg:  &tmcons.BlockPart{},
-			want: &tmcons.BlockPart{},
+			mockChannel: mockDataChannelFn,
+			msg:         &tmcons.BlockPart{},
+			want:        &tmcons.BlockPart{},
 		},
 		{
-			ch:   mockDataCh,
-			msg:  &tmcons.ProposalPOL{},
-			want: &tmcons.ProposalPOL{},
+			mockChannel: mockDataChannelFn,
+			msg:         &tmcons.ProposalPOL{},
+			want:        &tmcons.ProposalPOL{},
 		},
 		{
-			ch:  mockDataCh,
-			msg: &tmproto.Proposal{},
+			mockChannel: mockDataChannelFn,
+			msg:         &tmproto.Proposal{},
 			want: &tmcons.Proposal{
 				Proposal: tmproto.Proposal{},
 			},
 		},
 		{
-			ch:   mockStateCh,
-			msg:  &tmcons.VoteSetMaj23{},
-			want: &tmcons.VoteSetMaj23{},
+			mockChannel: mockStateChannelFn,
+			msg:         &tmcons.VoteSetMaj23{},
+			want:        &tmcons.VoteSetMaj23{},
 		},
 	}
 	for i, tc := range testCases {
@@ -83,7 +83,13 @@ func TestP2PMsgSender_Send(t *testing.T) {
 				To:      nodeID,
 				Message: tc.want,
 			}
-			tc.ch.
+			sender := p2pMsgSender{
+				logger: log.NewTestingLogger(t),
+				ps:     ps,
+				chans:  channelBundle{},
+			}
+			mockCh := tc.mockChannel(&sender.chans)
+			mockCh.
 				On("Send", ctx, envelope).
 				Once().
 				Return(nil)
