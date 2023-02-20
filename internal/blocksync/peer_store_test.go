@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/benbjohnson/clock"
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/internal/libs/flowrate"
@@ -48,7 +48,7 @@ func TestInMemPeerStoreBasicOperations(t *testing.T) {
 }
 
 func TestInMemPeerStoreFindPeer(t *testing.T) {
-	fakeClock := clock.NewMock()
+	fakeClock := clockwork.NewFakeClock()
 	flowrate.Now = func() time.Time {
 		return fakeClock.Now()
 	}
@@ -56,7 +56,7 @@ func TestInMemPeerStoreFindPeer(t *testing.T) {
 		flowrate.Now = flowrate.TimeNow
 	}()
 	monitor := flowrate.New(time.Now(), 1*time.Second, 10*time.Second)
-	fakeClock.Add(5 * time.Second)
+	fakeClock.Advance(5 * time.Second)
 	monitor.Update(10000)
 	peers := []PeerData{
 		newPeerData("peer 1", 1, 100),

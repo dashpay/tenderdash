@@ -39,8 +39,6 @@ require (
 	github.com/spf13/viper v1.12.0
 	github.com/stretchr/testify v1.8.0
 	github.com/tendermint/tm-db v0.6.6
-	golang.org/x/crypto v0.1.0
-	golang.org/x/net v0.1.0
 	golang.org/x/sync v0.0.0-20220513210516-0976fa681c29
 	google.golang.org/grpc v1.48.0
 	pgregory.net/rapid v0.4.8
@@ -265,11 +263,13 @@ require (
 )
 
 require (
-	github.com/benbjohnson/clock v1.3.0
 	github.com/creachadair/tomledit v0.0.23
+	github.com/jonboulle/clockwork v0.3.0
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca
+	golang.org/x/crypto v0.1.0
 	golang.org/x/exp v0.0.0-20230213192124-5e25df0256eb
+	golang.org/x/net v0.1.0
 )
 
 replace github.com/tendermint/tendermint => ./

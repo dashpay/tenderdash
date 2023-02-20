@@ -7,7 +7,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/benbjohnson/clock"
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
@@ -24,7 +24,7 @@ type ChannelTestSuite struct {
 
 	height           int64
 	peerID           types.NodeID
-	fakeClock        *clock.Mock
+	fakeClock        clockwork.FakeClock
 	p2pChannel       *mocks.Channel
 	channel          *Channel
 	receivedEnvelope *p2p.Envelope
@@ -38,7 +38,7 @@ func (suite *ChannelTestSuite) SetupTest() {
 	suite.p2pChannel = mocks.NewChannel(suite.T())
 	suite.height = 101
 	suite.peerID = "peer id"
-	suite.fakeClock = clock.NewMock()
+	suite.fakeClock = clockwork.NewFakeClock()
 	suite.channel = NewChannel(suite.p2pChannel, ChannelWithClock(suite.fakeClock))
 	suite.receivedEnvelope = &p2p.Envelope{
 		From: suite.peerID,
@@ -100,7 +100,7 @@ func (suite *ChannelTestSuite) TestGetBlockTimeout() {
 	p, err := suite.channel.GetBlock(ctx, suite.height, suite.peerID)
 	// need to wait for the goroutine is started
 	time.Sleep(time.Millisecond)
-	suite.fakeClock.Add(peerTimeout)
+	suite.fakeClock.Advance(peerTimeout)
 	suite.Require().NoError(err)
 	_, err = p.Await()
 	tmrequire.Error(suite.T(), errPeerNotResponded.Error(), err)

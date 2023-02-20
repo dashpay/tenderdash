@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/benbjohnson/clock"
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -315,12 +315,12 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 }
 
 func (suite *SynchronizerTestSuite) TestUpdateMonitor() {
-	fakeClock := clock.NewMock()
+	fakeClock := clockwork.NewFakeClock()
 	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
 	sync := NewSynchronizer(1, suite.client, applier, WithClock(fakeClock))
 	sync.lastHundredBlock = fakeClock.Now()
 	for i := 1; i <= 555; i++ {
-		fakeClock.Add(10 * time.Millisecond)
+		fakeClock.Advance(10 * time.Millisecond)
 		sync.updateMonitor()
 		sync.height++
 	}

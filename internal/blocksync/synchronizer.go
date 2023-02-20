@@ -8,7 +8,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/benbjohnson/clock"
+	"github.com/jonboulle/clockwork"
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/internal/p2p"
@@ -76,7 +76,7 @@ type Synchronizer struct {
 
 	height int64 // the lowest key in requesters.
 
-	clock clock.Clock
+	clock clockwork.Clock
 
 	// atomic
 	jobProgressCounter atomic.Int32 // number of requests pending assignment or block response
@@ -107,9 +107,9 @@ func WithLogger(logger log.Logger) OptionFunc {
 	}
 }
 
-func WithClock(c clock.Clock) OptionFunc {
+func WithClock(clock clockwork.Clock) OptionFunc {
 	return func(v *Synchronizer) {
-		v.clock = c
+		v.clock = clock
 	}
 }
 
@@ -119,7 +119,7 @@ func NewSynchronizer(start int64, client BlockClient, blockExec *blockApplier, o
 	logger := log.NewNopLogger()
 	bp := &Synchronizer{
 		logger:         logger,
-		clock:          clock.New(),
+		clock:          clockwork.NewRealClock(),
 		client:         client,
 		applier:        blockExec,
 		peerStore:      peerStore,

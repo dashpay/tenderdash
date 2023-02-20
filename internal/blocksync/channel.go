@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/benbjohnson/clock"
 	"github.com/hashicorp/go-multierror"
+	"github.com/jonboulle/clockwork"
 
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/libs/log"
@@ -28,7 +28,7 @@ type (
 	// Channel ...
 	Channel struct {
 		channel p2p.Channel
-		clock   clock.Clock
+		clock   clockwork.Clock
 		logger  log.Logger
 		pending sync.Map
 		timeout time.Duration
@@ -41,25 +41,25 @@ type (
 	}
 )
 
-// ChannelWithLogger ...
+// ChannelWithLogger is an optional function to set logger to Channel
 func ChannelWithLogger(logger log.Logger) ChannelOptionFunc {
 	return func(c *Channel) {
 		c.logger = logger
 	}
 }
 
-// ChannelWithClock ...
-func ChannelWithClock(clock clock.Clock) ChannelOptionFunc {
+// ChannelWithClock is an optional function to set clock to Channel
+func ChannelWithClock(clock clockwork.Clock) ChannelOptionFunc {
 	return func(c *Channel) {
 		c.clock = clock
 	}
 }
 
-// NewChannel ...
+// NewChannel creates and returns Channel with optional functions
 func NewChannel(ch p2p.Channel, opts ...ChannelOptionFunc) *Channel {
 	channel := &Channel{
 		channel: ch,
-		clock:   clock.New(),
+		clock:   clockwork.NewRealClock(),
 		logger:  log.NewNopLogger(),
 		timeout: peerTimeout,
 	}
