@@ -41,7 +41,7 @@ func (c *p2pMsgSender) send(ctx context.Context, protoMsg proto.Message) error {
 }
 
 func (c *p2pMsgSender) sendTo(ctx context.Context, ch p2p.Channel, msg proto.Message) error {
-	c.logger.Debug("sending message", logKeyValsFromProto(msg, c.ps)...)
+	c.logger.Trace("sending message", logKeyValsFromProto(msg, c.ps)...)
 	select {
 	case <-ctx.Done():
 		return errReactorClosed

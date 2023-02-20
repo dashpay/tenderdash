@@ -45,7 +45,6 @@ import (
 const (
 	testSubscriber = "test-client"
 	ensureTimeout  = time.Millisecond * 800
-	chainID        = "test-chain"
 )
 
 // A cleanupFunc cleans up any config / test files created for a particular
@@ -1149,7 +1148,7 @@ func (s *testSigner) signVotes(ctx context.Context, votes ...*types.Vote) error 
 	for _, vote := range votes {
 		protoVote := vote.ToProto()
 		qt, qh := s.valSet.QuorumType, s.valSet.QuorumHash
-		err := s.privVals[vote.ValidatorIndex].SignVote(ctx, chainID, qt, qh, protoVote, s.logger)
+		err := s.privVals[vote.ValidatorIndex].SignVote(ctx, factory.DefaultTestChainID, qt, qh, protoVote, s.logger)
 		if err != nil {
 			return err
 		}

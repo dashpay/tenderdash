@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/benbjohnson/clock"
+	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/libs/log"
@@ -17,7 +17,7 @@ func TestPeerGossipWorker(t *testing.T) {
 
 	logger := log.NewTestingLogger(t)
 	cfg := configSetup(t)
-	fakeClock := clock.NewMock()
+	fakeClock := clockwork.NewFakeClock()
 
 	handlerCalledCh := make(chan struct{}, 2)
 	pg := peerGossipWorker{
@@ -42,7 +42,7 @@ func TestPeerGossipWorker(t *testing.T) {
 		<-handlerCalledCh
 	}
 	defer cancel()
-	pg.stop()
+	pg.stop(ctx)
 	require.False(t, pg.isRunning())
 	close(handlerCalledCh)
 }

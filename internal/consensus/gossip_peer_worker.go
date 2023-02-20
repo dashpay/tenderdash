@@ -5,7 +5,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/benbjohnson/clock"
+	"github.com/jonboulle/clockwork"
 
 	"github.com/tendermint/tendermint/libs/log"
 )
@@ -27,7 +27,7 @@ func newGossipHandler(fn gossipHandlerFunc, sleep time.Duration) gossipHandler {
 }
 
 type peerGossipWorker struct {
-	clock          clock.Clock
+	clock          clockwork.Clock
 	logger         log.Logger
 	handlers       []gossipHandler
 	running        atomic.Bool
@@ -49,7 +49,7 @@ func newPeerGossipWorker(
 		optimistic: true,
 	}
 	return &peerGossipWorker{
-		clock:          clock.New(),
+		clock:          clockwork.NewRealClock(),
 		logger:         logger,
 		stopCh:         make(chan struct{}),
 		stateDataStore: state.stateDataStore,
@@ -81,17 +81,23 @@ func (g *peerGossipWorker) start(ctx context.Context) {
 	}
 }
 
-func (g *peerGossipWorker) stop() {
+func (g *peerGossipWorker) stop(ctx context.Context) {
+	if !g.running.Swap(false) {
+		return
+	}
 	g.logger.Debug("peer gossip worker stopping")
 	close(g.stopCh)
-	g.running.Store(false)
-	g.wait()
+	g.wait(ctx)
 }
 
-func (g *peerGossipWorker) wait() {
+func (g *peerGossipWorker) wait(ctx context.Context) {
 	for _, hd := range g.handlers {
-		<-hd.stoppedCh
-		g.logger.Debug("peer gossip worker stopped")
+		select {
+		case <-ctx.Done():
+			return
+		case <-hd.stoppedCh:
+			g.logger.Debug("peer gossip worker stopped")
+		}
 	}
 }
 

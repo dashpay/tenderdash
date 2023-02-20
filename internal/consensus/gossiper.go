@@ -288,7 +288,7 @@ func (g *msgGossiper) ensurePeerPartSetHeader(blockPartSetHeader types.PartSetHe
 	if blockPartSetHeader.Equals(peerPartSetHeader) {
 		return true
 	}
-	g.logger.Info(
+	g.logger.Debug(
 		"peer ProposalBlockPartSetHeader mismatch",
 		"block_part_set_header", blockPartSetHeader,
 		"peer_block_part_set_header", peerPartSetHeader,

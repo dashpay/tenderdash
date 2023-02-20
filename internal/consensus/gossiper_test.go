@@ -46,7 +46,7 @@ func TestGossiper(t *testing.T) {
 }
 
 func (suite *GossiperSuiteTest) SetupSuite() {
-	suite.chainID = "test-chain"
+	suite.chainID = factory.DefaultTestChainID
 	suite.valSet, suite.privVals = types.RandValidatorSet(1)
 	var err error
 	suite.proTxHash, err = suite.privVals[0].GetProTxHash(context.Background())

@@ -6,7 +6,6 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/internal/p2p"
@@ -24,9 +23,9 @@ func TestP2PMsgSender_Send(t *testing.T) {
 	logger := log.NewTestingLogger(t)
 	nodeID := types.NodeID("test-peer")
 	ps := NewPeerState(logger, nodeID)
-	mockStateCh := &mocks.Channel{}
-	mockDataCh := &mocks.Channel{}
-	mockVoteCh := &mocks.Channel{}
+	mockStateCh := mocks.NewChannel(t)
+	mockDataCh := mocks.NewChannel(t)
+	mockVoteCh := mocks.NewChannel(t)
 	sender := p2pMsgSender{
 		logger: log.NewTestingLogger(t),
 		ps:     ps,
@@ -79,7 +78,7 @@ func TestP2PMsgSender_Send(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			envelope := p2p.Envelope{
 				To:      nodeID,
 				Message: tc.want,
@@ -92,7 +91,6 @@ func TestP2PMsgSender_Send(t *testing.T) {
 			require.NoError(t, err)
 		})
 	}
-	mock.AssertExpectationsForObjects(t, mockStateCh, mockDataCh, mockVoteCh)
 }
 
 func TestP2PMsgSender_UnsupportedMessage(t *testing.T) {
