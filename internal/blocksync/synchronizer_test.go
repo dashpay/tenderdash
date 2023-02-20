@@ -4,12 +4,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"github.com/benbjohnson/clock"
 	mrand "math/rand"
 	"sort"
 	"testing"
 	"time"
 
+	"github.com/benbjohnson/clock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
