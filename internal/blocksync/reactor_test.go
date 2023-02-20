@@ -270,7 +270,7 @@ func TestReactor_AbruptDisconnect(t *testing.T) {
 
 	rts.start(ctx, t)
 
-	secondaryPool := rts.reactors[rts.nodes[1]].pool
+	secondaryPool := rts.reactors[rts.nodes[1]].synchronizer
 
 	require.Eventually(
 		t,
@@ -312,7 +312,7 @@ func TestReactor_SyncTime(t *testing.T) {
 		func() bool {
 			node := rts.reactors[rts.nodes[1]]
 			return node.GetRemainingSyncTime() > time.Nanosecond &&
-				node.pool.getLastSyncRate() > 0.001
+				node.synchronizer.getLastSyncRate() > 0.001
 		},
 		10*time.Second,
 		10*time.Millisecond,
@@ -347,7 +347,7 @@ func TestReactor_NoBlockResponse(t *testing.T) {
 		{100, false},
 	}
 
-	secondaryPool := rts.reactors[rts.nodes[1]].pool
+	secondaryPool := rts.reactors[rts.nodes[1]].synchronizer
 	require.Eventually(
 		t,
 		func() bool { return secondaryPool.MaxPeerHeight() > 0 && secondaryPool.IsCaughtUp() },
@@ -392,7 +392,7 @@ func TestReactor_BadBlockStopsPeer(t *testing.T) {
 		func() bool {
 			caughtUp := true
 			for _, id := range rts.nodes[1 : len(rts.nodes)-1] {
-				if rts.reactors[id].pool.MaxPeerHeight() == 0 || !rts.reactors[id].pool.IsCaughtUp() {
+				if rts.reactors[id].synchronizer.MaxPeerHeight() == 0 || !rts.reactors[id].synchronizer.IsCaughtUp() {
 					caughtUp = false
 				}
 			}
@@ -405,7 +405,7 @@ func TestReactor_BadBlockStopsPeer(t *testing.T) {
 	)
 
 	for _, id := range rts.nodes[:len(rts.nodes)-1] {
-		require.Len(t, rts.reactors[id].pool.peerStore.Len(), 3)
+		require.Len(t, rts.reactors[id].synchronizer.peerStore.Len(), 3)
 	}
 
 	// Mark testSuites[3] as an invalid peer which will cause newSuite to disconnect
@@ -421,13 +421,13 @@ func TestReactor_BadBlockStopsPeer(t *testing.T) {
 	rts.addNode(ctx, t, newNode.NodeID, otherGenDoc, otherPrivVals[0], maxBlockHeight)
 
 	// add a fake peer just so we do not wait for the consensus ticker to timeout
-	rts.reactors[newNode.NodeID].pool.SetPeerRange(newPeerData("00ff", 10, 10))
+	rts.reactors[newNode.NodeID].synchronizer.SetPeerRange(newPeerData("00ff", 10, 10))
 
 	// wait for the new peer to catch up and become fully synced
 	require.Eventually(
 		t,
 		func() bool {
-			return rts.reactors[newNode.NodeID].pool.MaxPeerHeight() > 0 && rts.reactors[newNode.NodeID].pool.IsCaughtUp()
+			return rts.reactors[newNode.NodeID].synchronizer.MaxPeerHeight() > 0 && rts.reactors[newNode.NodeID].synchronizer.IsCaughtUp()
 		},
 		10*time.Minute,
 		10*time.Millisecond,
@@ -436,11 +436,11 @@ func TestReactor_BadBlockStopsPeer(t *testing.T) {
 
 	require.Eventuallyf(
 		t,
-		func() bool { return rts.reactors[newNode.NodeID].pool.peerStore.Len() < len(rts.nodes)-1 },
+		func() bool { return rts.reactors[newNode.NodeID].synchronizer.peerStore.Len() < len(rts.nodes)-1 },
 		10*time.Minute,
 		10*time.Millisecond,
 		"invalid number of peers; expected < %d, got: %d",
 		len(rts.nodes)-1,
-		rts.reactors[newNode.NodeID].pool.peerStore.Len(),
+		rts.reactors[newNode.NodeID].synchronizer.peerStore.Len(),
 	)
 }

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/benbjohnson/clock"
 	mrand "math/rand"
 	"sort"
 	"testing"
@@ -26,7 +27,7 @@ import (
 	"github.com/tendermint/tendermint/version"
 )
 
-type BlockPoolTestSuite struct {
+type SynchronizerTestSuite struct {
 	suite.Suite
 
 	store        *mocks.BlockStore
@@ -36,11 +37,11 @@ type BlockPoolTestSuite struct {
 	initialState sm.State
 }
 
-func TestBlockPool(t *testing.T) {
-	suite.Run(t, new(BlockPoolTestSuite))
+func TestSynchronizer(t *testing.T) {
+	suite.Run(t, new(SynchronizerTestSuite))
 }
 
-func (suite *BlockPoolTestSuite) SetupTest() {
+func (suite *SynchronizerTestSuite) SetupTest() {
 	ctx := context.Background()
 	const chainLen = 200
 	valSet, privVals := types.MockValidatorSet()
@@ -53,7 +54,7 @@ func (suite *BlockPoolTestSuite) SetupTest() {
 	suite.blockExec = mocks.NewExecutor(suite.T())
 }
 
-func (suite *BlockPoolTestSuite) TestBlockPoolBasic() {
+func (suite *SynchronizerTestSuite) TestBasic() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -78,23 +79,23 @@ func (suite *BlockPoolTestSuite) TestBlockPoolBasic() {
 		}, nil)
 
 	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
-	pool := NewBlockPool(startAt, suite.client, applier)
+	sync := NewSynchronizer(startAt, suite.client, applier)
 
-	if err := pool.Start(ctx); err != nil {
+	if err := sync.Start(ctx); err != nil {
 		suite.Require().Error(err)
 	}
 
 	// Introduce each peer.
 	for _, peer := range peers {
-		pool.SetPeerRange(newPeerData(peer.peerID, peer.base, peer.height))
+		sync.SetPeerRange(newPeerData(peer.peerID, peer.base, peer.height))
 	}
 	suite.Require().Eventually(func() bool {
-		return !pool.IsCaughtUp()
+		return !sync.IsCaughtUp()
 	}, 2*time.Second, 10*time.Millisecond)
-	pool.Stop()
+	sync.Stop()
 }
 
-func (suite *BlockPoolTestSuite) TestProduceJob() {
+func (suite *SynchronizerTestSuite) TestProduceJob() {
 	ctx := context.Background()
 	peer1 := newPeerData("peer1", 1, 1000)
 	testCases := []struct {
@@ -130,7 +131,7 @@ func (suite *BlockPoolTestSuite) TestProduceJob() {
 			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
 			jobCh := make(chan workerpool.Job, 1)
 			wp := workerpool.New(0, workerpool.WithJobCh(jobCh))
-			pool := NewBlockPool(tc.startHeight, suite.client, applier, WithWorkerPool(wp))
+			pool := NewSynchronizer(tc.startHeight, suite.client, applier, WithWorkerPool(wp))
 			pool.SetPeerRange(peer1)
 			for _, height := range tc.pushBack {
 				pool.jobGen.pushBack(height)
@@ -149,7 +150,7 @@ func (suite *BlockPoolTestSuite) TestProduceJob() {
 	}
 }
 
-func (suite *BlockPoolTestSuite) TestConsumeJobResult() {
+func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 	ctx := context.Background()
 
 	resultCh := make(chan workerpool.Result, 1)
@@ -162,12 +163,12 @@ func (suite *BlockPoolTestSuite) TestConsumeJobResult() {
 	respH3, _ := BlockResponseFromProto(suite.responses[2], peerID2)
 	testCases := []struct {
 		result       workerpool.Result
-		mockFn       func(pool *BlockPool)
+		mockFn       func(pool *Synchronizer)
 		wantPushBack []int64
 	}{
 		{
 			result: workerpool.Result{Value: respH1},
-			mockFn: func(pool *BlockPool) {
+			mockFn: func(pool *Synchronizer) {
 				suite.store.
 					On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
 					Once().
@@ -185,7 +186,7 @@ func (suite *BlockPoolTestSuite) TestConsumeJobResult() {
 		{
 			result:       workerpool.Result{Err: mockErr},
 			wantPushBack: []int64{1},
-			mockFn: func(pool *BlockPool) {
+			mockFn: func(pool *Synchronizer) {
 				suite.client.
 					On("Send", mock.Anything, p2p.PeerError{NodeID: "peer 1", Err: mockErr}).
 					Once().
@@ -195,7 +196,7 @@ func (suite *BlockPoolTestSuite) TestConsumeJobResult() {
 		{
 			result:       workerpool.Result{Err: mockErr},
 			wantPushBack: []int64{1, 2},
-			mockFn: func(pool *BlockPool) {
+			mockFn: func(pool *Synchronizer) {
 				pool.pendingToApply[2] = *respH2
 				pool.pendingToApply[3] = *respH3
 				suite.client.
@@ -207,7 +208,7 @@ func (suite *BlockPoolTestSuite) TestConsumeJobResult() {
 		{
 			result:       workerpool.Result{Value: respH1},
 			wantPushBack: []int64{1, 2},
-			mockFn: func(pool *BlockPool) {
+			mockFn: func(pool *Synchronizer) {
 				pool.pendingToApply[2] = BlockResponse{PeerID: "peer 1", Block: respH2.Block}
 				suite.blockExec.
 					On("ValidateBlock", mock.Anything, mock.Anything, respH1.Block).
@@ -221,12 +222,12 @@ func (suite *BlockPoolTestSuite) TestConsumeJobResult() {
 		},
 		{
 			result: workerpool.Result{Value: respH2},
-			mockFn: func(pool *BlockPool) {},
+			mockFn: func(pool *Synchronizer) {},
 		},
 	}
 	for i, tc := range testCases {
 		applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
-		pool := NewBlockPool(1, suite.client, applier, WithWorkerPool(wp))
+		pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
 		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
 			tc.mockFn(pool)
 			resultCh <- tc.result
@@ -240,7 +241,7 @@ func (suite *BlockPoolTestSuite) TestConsumeJobResult() {
 	}
 }
 
-func (suite *BlockPoolTestSuite) TestRemovePeer() {
+func (suite *SynchronizerTestSuite) TestRemovePeer() {
 	peerID1 := types.NodeID("peer1")
 	peerID2 := types.NodeID("peer2")
 	peerID3 := types.NodeID("peer3")
@@ -294,7 +295,7 @@ func (suite *BlockPoolTestSuite) TestRemovePeer() {
 	for i, tc := range testCases {
 		suite.Run(fmt.Sprintf("%d", i), func() {
 			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
-			pool := NewBlockPool(1, suite.client, applier)
+			pool := NewSynchronizer(1, suite.client, applier)
 			for _, peer := range peers {
 				pool.SetPeerRange(peer)
 			}
@@ -311,6 +312,19 @@ func (suite *BlockPoolTestSuite) TestRemovePeer() {
 			suite.Require().Equal(tc.wantMaxHeight, pool.MaxPeerHeight())
 		})
 	}
+}
+
+func (suite *SynchronizerTestSuite) TestUpdateMonitor() {
+	fakeClock := clock.NewMock()
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	sync := NewSynchronizer(1, suite.client, applier, WithClock(fakeClock))
+	sync.lastHundredBlock = fakeClock.Now()
+	for i := 1; i <= 555; i++ {
+		fakeClock.Add(10 * time.Millisecond)
+		sync.updateMonitor()
+		sync.height++
+	}
+	require.Equal(suite.T(), float64(100), sync.lastSyncRate)
 }
 
 func generateBlockResponses(t *testing.T, blocks []*types.Block) []*blocksync.BlockResponse {

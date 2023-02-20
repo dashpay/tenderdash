@@ -65,11 +65,11 @@ type Reactor struct {
 	// store
 	stateStore sm.Store
 
-	blockExec   *sm.BlockExecutor
-	store       sm.BlockStore
-	pool        *BlockPool
-	consReactor consensusReactor
-	blockSync   *atomic.Bool
+	blockExec     *sm.BlockExecutor
+	store         sm.BlockStore
+	synchronizer  *Synchronizer
+	consReactor   consensusReactor
+	blockSyncFlag *atomic.Bool
 
 	chCreator  p2p.ChannelCreator
 	peerEvents p2p.PeerEventSubscriber
@@ -104,7 +104,7 @@ func NewReactor(
 		blockExec:     blockExec,
 		store:         store,
 		consReactor:   consReactor,
-		blockSync:     &atomic.Bool{},
+		blockSyncFlag: &atomic.Bool{},
 		chCreator:     channelCreator,
 		peerEvents:    peerEvents,
 		metrics:       metrics,
@@ -117,7 +117,7 @@ func NewReactor(
 			applierWithLogger(logger),
 		),
 	}
-	r.blockSync.Store(blockSync)
+	r.blockSyncFlag.Store(blockSync)
 	r.BaseService = *service.NewBaseService(logger, "BlockSync", r)
 	return r
 }
@@ -127,8 +127,8 @@ func NewReactor(
 // messages on that p2p channel accordingly. The caller must be sure to execute
 // OnStop to ensure the outbound p2p Channels are closed.
 //
-// If blockSync is enabled, we also start the pool and the pool processing
-// goroutine. If the pool fails to start, an error is returned.
+// If blockSyncFlag is enabled, we also start the synchronizer
+// If the synchronizer fails to start, an error is returned.
 func (r *Reactor) OnStart(ctx context.Context) error {
 	blockSyncCh, err := r.chCreator(ctx, GetChannelDescriptor())
 	if err != nil {
@@ -153,9 +153,9 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	}
 
 	blockSyncClient := NewChannel(blockSyncCh, ChannelWithLogger(r.logger))
-	r.pool = NewBlockPool(startHeight, blockSyncClient, r.executor, WithLogger(r.logger))
-	if r.blockSync.Load() {
-		if err := r.pool.Start(ctx); err != nil {
+	r.synchronizer = NewSynchronizer(startHeight, blockSyncClient, r.executor, WithLogger(r.logger))
+	if r.blockSyncFlag.Load() {
+		if err := r.synchronizer.Start(ctx); err != nil {
 			return err
 		}
 		go r.requestRoutine(ctx, blockSyncCh)
@@ -172,8 +172,8 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 // OnStop stops the reactor by signaling to all spawned goroutines to exit and
 // blocking until they all exit.
 func (r *Reactor) OnStop() {
-	if r.blockSync.Load() {
-		r.pool.Stop()
+	if r.blockSyncFlag.Load() {
+		r.synchronizer.Stop()
 	}
 }
 
@@ -247,7 +247,7 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, blo
 			},
 		})
 	case *bcproto.StatusResponse:
-		r.pool.SetPeerRange(newPeerData(envelope.From, msg.Base, msg.Height))
+		r.synchronizer.SetPeerRange(newPeerData(envelope.From, msg.Base, msg.Height))
 
 	case *bcproto.NoBlockResponse:
 		r.logger.Debug("peer does not have the requested block",
@@ -305,7 +305,7 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 				Height: r.store.Height(),
 			},
 		}); err != nil {
-			r.pool.RemovePeer(peerUpdate.NodeID)
+			r.synchronizer.RemovePeer(peerUpdate.NodeID)
 			if err := blockSyncCh.SendError(ctx, p2p.PeerError{
 				NodeID: peerUpdate.NodeID,
 				Err:    err,
@@ -315,7 +315,7 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		}
 
 	case p2p.PeerStatusDown:
-		r.pool.RemovePeer(peerUpdate.NodeID)
+		r.synchronizer.RemovePeer(peerUpdate.NodeID)
 	}
 }
 
@@ -336,12 +336,12 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 // SwitchToBlockSync is called by the state sync reactor when switching to fast
 // sync.
 func (r *Reactor) SwitchToBlockSync(ctx context.Context, state sm.State) error {
-	r.blockSync.Store(true)
+	r.blockSyncFlag.Store(true)
 	r.initialState = state
 	r.executor.state = state
-	r.pool.height = state.LastBlockHeight + 1
+	r.synchronizer.height = state.LastBlockHeight + 1
 
-	if err := r.pool.Start(ctx); err != nil {
+	if err := r.synchronizer.Start(ctx); err != nil {
 		return err
 	}
 
@@ -389,32 +389,32 @@ func (r *Reactor) requestRoutine(ctx context.Context, blockSyncCh p2p.Channel) {
 //
 // NOTE: Don't sleep in the FOR_LOOP or otherwise slow it down!
 func (r *Reactor) poolRoutine(ctx context.Context, stateSynced bool) {
-	r.pool.WaitForSync(ctx)
-	r.pool.Stop()
-	r.blockSync.Store(false)
+	r.synchronizer.WaitForSync(ctx)
+	r.synchronizer.Stop()
+	r.blockSyncFlag.Store(false)
 	if r.consReactor != nil {
-		r.consReactor.SwitchToConsensus(ctx, r.executor.State(), r.pool.IsCaughtUp() || stateSynced)
+		r.consReactor.SwitchToConsensus(ctx, r.executor.State(), r.synchronizer.IsCaughtUp() || stateSynced)
 	}
 }
 
 func (r *Reactor) GetMaxPeerBlockHeight() int64 {
-	return r.pool.MaxPeerHeight()
+	return r.synchronizer.MaxPeerHeight()
 }
 
 func (r *Reactor) GetTotalSyncedTime() time.Duration {
-	if !r.blockSync.Load() || r.syncStartTime.IsZero() {
+	if !r.blockSyncFlag.Load() || r.syncStartTime.IsZero() {
 		return time.Duration(0)
 	}
 	return time.Since(r.syncStartTime)
 }
 
 func (r *Reactor) GetRemainingSyncTime() time.Duration {
-	if !r.blockSync.Load() {
+	if !r.blockSyncFlag.Load() {
 		return time.Duration(0)
 	}
-	targetSyncs := r.pool.targetSyncBlocks()
-	currentSyncs := r.store.Height() - r.pool.startHeight + 1
-	lastSyncRate := r.pool.getLastSyncRate()
+	targetSyncs := r.synchronizer.targetSyncBlocks()
+	currentSyncs := r.store.Height() - r.synchronizer.startHeight + 1
+	lastSyncRate := r.synchronizer.getLastSyncRate()
 	if currentSyncs < 0 || lastSyncRate < 0.001 {
 		return time.Duration(0)
 	}
