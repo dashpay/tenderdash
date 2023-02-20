@@ -107,10 +107,10 @@ func (cs *State) catchupReplay(ctx context.Context, stateData StateData) error {
 	csHeight := stateData.Height
 	// Set replayMode to true so we don't log signing errors.
 	cs.replayMode = true
-	cs.evsw.FireEvent(setReplayMode, cs.replayMode)
+	cs.emitter.Emit(setReplayModeEventName, cs.replayMode)
 	defer func() {
 		cs.replayMode = false
-		cs.evsw.FireEvent(setReplayMode, cs.replayMode)
+		cs.emitter.Emit(setReplayModeEventName, cs.replayMode)
 	}()
 
 	// Ensure that #ENDHEIGHT for this height doesn't exist.
