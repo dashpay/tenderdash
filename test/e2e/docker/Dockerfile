@@ -1,34 +1,67 @@
 # We need to build in a Linux environment to support C libraries, e.g. RocksDB.
 # We use Debian instead of Alpine, so that we can use binary database packages
 # instead of spending time compiling them.
-FROM golang:1.19-bullseye
+# FIXME: Migrate back to Alpine when possible, and reuse some stages from /DOCKER/Dockerfile
 
-RUN apt-get -qq update -y && apt-get -qq upgrade -y >/dev/null
-RUN apt-get -qq install -y cmake sudo libgmp-dev libleveldb-dev librocksdb-dev >/dev/null
+#################################
+# STAGE 1: install dependencies #
+#################################
+FROM golang:1.19-bullseye AS base
 
-# Set up build directory /src/tenderdash
+RUN apt-get -qq update -y && \
+    apt-get -qq upgrade -y >/dev/null && \
+    apt-get -qq install -y cmake sudo libgmp-dev libleveldb-dev \
+        librocksdb-dev libpcap-dev >/dev/null && \
+    apt-get clean && \
+    rm -r /var/lib/apt/lists/* && \
+    rm -r /usr/share/locale/* /usr/share/doc/*
+
+WORKDIR /src/bls
+
+# Install BLS library
+COPY third_party ./third_party
+RUN ./third_party/bls-signatures/build.sh && \
+    ./third_party/bls-signatures/install.sh && \
+    rm -fr ./third_party
+
+#####################################
+# STAGE 2: install golang libraries #
+#####################################
+FROM base AS deps
+
 WORKDIR /src/tenderdash
-
-# Install DLV debugger
-ENV DEBUG ""
-RUN go install github.com/go-delve/delve/cmd/dlv@latest
 
 # Fetch dependencies separately (for layer caching)
 COPY go.mod go.sum ./
 RUN go mod download
 
-# Install BLS library
-COPY third_party ./third_party
-COPY test/Makefile ./test/Makefile
-COPY Makefile ./
-RUN make install-bls
+
+###########################
+# STAGE 2a: INSTALL DELVE #
+###########################
+# This is a separate stage to "go clean" unneeded deps and optimize space
+FROM deps AS delve
+
+RUN go install github.com/go-delve/delve/cmd/dlv@latest && \
+    go clean -cache -fuzzcache -testcache -modcache && \
+    rm -fr /usr/local/go
+
+######################
+# STAGE 3: BUILD E2E #
+######################
+FROM deps AS e2e
+
+WORKDIR /src/tenderdash
+
+# Install DLV debugger
+ENV DEBUG ""
+COPY --from=delve /go/bin/dlv /go/bin/dlv
+
+LABEL maintainer="developers@dash.org"
 
 # Copy Tenderdash source
 # Avoid overwriting third-party libs
-RUN mv third_party third_party.bak
 COPY . .
-RUN rm -r third_party && mv third_party.bak third_party
-
 COPY test/e2e/docker/entrypoint* /usr/bin/
 
 RUN cd test/e2e && make node && cp build/node /usr/bin/app

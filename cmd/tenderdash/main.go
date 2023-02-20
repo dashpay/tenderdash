@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"os"
 
 	"github.com/tendermint/tendermint/cmd/tenderdash/commands"
 	"github.com/tendermint/tendermint/cmd/tenderdash/commands/debug"
@@ -36,7 +37,7 @@ func main() {
 		commands.MakeShowValidatorCommand(conf, logger),
 		commands.MakeTestnetFilesCommand(conf, logger),
 		commands.MakeShowNodeIDCommand(conf),
-		commands.GenNodeKeyCmd,
+		commands.MakeGenNodeKeyCommand(conf, logger),
 		commands.VersionCmd,
 		commands.MakeInspectCommand(conf, logger),
 		commands.MakeRollbackStateCommand(conf),
@@ -60,6 +61,6 @@ func main() {
 	rcmd.AddCommand(commands.NewRunNodeCmd(nodeFunc, conf, logger))
 
 	if err := cli.RunWithTrace(ctx, rcmd); err != nil {
-		panic(err)
+		os.Exit(2)
 	}
 }

@@ -75,6 +75,7 @@ func TestMakeGenesisStateNilValidators(t *testing.T) {
 	doc := types.GenesisDoc{
 		ChainID:    "dummy",
 		Validators: nil,
+		QuorumType: btcjson.LLMQType_5_60,
 	}
 	require.Nil(t, doc.ValidateAndComplete())
 	state, err := sm.MakeGenesisState(&doc)

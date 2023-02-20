@@ -9,10 +9,6 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dashevo/dashd-go/btcjson"
-	"github.com/prometheus/client_golang/prometheus"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
-
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
@@ -215,9 +211,9 @@ func makeNode(
 				return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
 			}
 		} else {
-			llmqType := cfg.Consensus.QuorumType
-			if llmqType == 0 {
-				llmqType = btcjson.LLMQType_100_67
+			llmqType := genDoc.QuorumType
+			if err := core.ValidateQuorumType(llmqType); err != nil {
+				return nil, fmt.Errorf("invalid genesis quorum type %d: %w", llmqType, err)
 			}
 			// This is used for light client verification only
 			dashCoreRPCClient = core.NewMockClient(cfg.ChainID(), llmqType, privValidator, false)
@@ -513,28 +509,8 @@ func (n *nodeImpl) OnStart(ctx context.Context) error {
 		return err
 	}
 	// Start Internal Services
-
 	if n.config.RPC.PprofListenAddress != "" {
-		signal := make(chan struct{})
-		srv := &http.Server{Addr: n.config.RPC.PprofListenAddress, Handler: nil}
-		go func() {
-			select {
-			case <-ctx.Done():
-				sctx, scancel := context.WithTimeout(context.Background(), time.Second)
-				defer scancel()
-				_ = srv.Shutdown(sctx)
-			case <-signal:
-			}
-		}()
-
-		go func() {
-			n.logger.Info("Starting pprof server", "laddr", n.config.RPC.PprofListenAddress)
-
-			if err := srv.ListenAndServe(); err != nil {
-				n.logger.Error("pprof server error", "err", err)
-				close(signal)
-			}
-		}()
+		startPProfServer(ctx, *n.config.RPC)
 	}
 
 	now := tmtime.Now()
@@ -560,7 +536,7 @@ func (n *nodeImpl) OnStart(ctx context.Context) error {
 	}
 
 	if n.config.Instrumentation.Prometheus && n.config.Instrumentation.PrometheusListenAddr != "" {
-		n.prometheusSrv = n.startPrometheusServer(ctx, n.config.Instrumentation.PrometheusListenAddr)
+		n.prometheusSrv = startPrometheusServer(ctx, *n.config.Instrumentation)
 	}
 
 	// Start the transport.
@@ -641,40 +617,6 @@ func (n *nodeImpl) OnStop() {
 			n.logger.Error("problem closing statestore", "err", err)
 		}
 	}
-}
-
-// startPrometheusServer starts a Prometheus HTTP server, listening for metrics
-// collectors on addr.
-func (n *nodeImpl) startPrometheusServer(ctx context.Context, addr string) *http.Server {
-	srv := &http.Server{
-		Addr: addr,
-		Handler: promhttp.InstrumentMetricHandler(
-			prometheus.DefaultRegisterer, promhttp.HandlerFor(
-				prometheus.DefaultGatherer,
-				promhttp.HandlerOpts{MaxRequestsInFlight: n.config.Instrumentation.MaxOpenConnections},
-			),
-		),
-	}
-
-	signal := make(chan struct{})
-	go func() {
-		select {
-		case <-ctx.Done():
-			sctx, scancel := context.WithTimeout(context.Background(), time.Second)
-			defer scancel()
-			_ = srv.Shutdown(sctx)
-		case <-signal:
-		}
-	}()
-
-	go func() {
-		if err := srv.ListenAndServe(); err != nil {
-			n.logger.Error("Prometheus HTTP server ListenAndServe", "err", err)
-			close(signal)
-		}
-	}()
-
-	return srv
 }
 
 func (n *nodeImpl) NodeInfo() *types.NodeInfo {

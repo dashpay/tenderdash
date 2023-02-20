@@ -6,7 +6,16 @@ import (
 	"reflect"
 
 	"github.com/gogo/protobuf/proto"
+
+	protoAbci "github.com/tendermint/tendermint/abci/types"
+	protoP2p "github.com/tendermint/tendermint/proto/tendermint/p2p"
 )
+
+// ensure we have some dependencies compiled in
+func _() {
+	_ = protoP2p.Packet{}
+	_ = protoAbci.Request{}
+}
 
 // NewMessageType loads protobuf message type `typeName` and
 // allocates new instance of this type.
