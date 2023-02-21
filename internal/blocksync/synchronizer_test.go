@@ -41,7 +41,7 @@ func TestSynchronizer(t *testing.T) {
 	suite.Run(t, new(SynchronizerTestSuite))
 }
 
-func (suite *SynchronizerTestSuite) SetupTest() {
+func (suite *SynchronizerTestSuite) SetupSuite() {
 	ctx := context.Background()
 	const chainLen = 200
 	valSet, privVals := types.MockValidatorSet()
@@ -49,6 +49,9 @@ func (suite *SynchronizerTestSuite) SetupTest() {
 	state := suite.initialState.Copy()
 	blocks := factory.MakeBlocks(ctx, suite.T(), chainLen+1, &state, privVals, 1)
 	suite.responses = generateBlockResponses(suite.T(), blocks)
+}
+
+func (suite *SynchronizerTestSuite) SetupTest() {
 	suite.client = bsmocks.NewBlockClient(suite.T())
 	suite.store = mocks.NewBlockStore(suite.T())
 	suite.blockExec = mocks.NewExecutor(suite.T())
@@ -61,17 +64,22 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 	startAt := int64(42)
 	peers := makePeers(10, startAt, 200)
 
-	suite.store.On("SaveBlock", mock.Anything, mock.Anything, mock.Anything)
+	suite.store.
+		On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
+		Maybe()
 	suite.blockExec.
 		On("ValidateBlock", mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
 		Return(nil)
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
 		Return(func(_ context.Context, state sm.State, _ types.BlockID, block *types.Block, _ *types.Commit) sm.State {
 			return state
 		}, nil)
 	suite.client.
 		On("GetBlock", mock.Anything, mock.Anything, mock.Anything).
+		Maybe().
 		Return(func(ctx context.Context, height int64, peerID types.NodeID) *promise.Promise[*blocksync.BlockResponse] {
 			return promise.New(func(resolve func(data *blocksync.BlockResponse), reject func(err error)) {
 				resolve(suite.responses[int(height-1)])
