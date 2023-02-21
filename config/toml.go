@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"text/template"
 
+	"github.com/tendermint/tendermint/internal/test/factory"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 )
@@ -529,9 +531,6 @@ peer-query-maj23-sleep-duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 # as soon as the node has gathered votes from all of the validators on the network.
 # unsafe-bypass-commit-timeout-override =
 
-# Signing parameters
-quorum-type = "{{ .Consensus.QuorumType }}"
-
 #######################################################
 ###   Transaction Indexer Configuration Options     ###
 #######################################################
@@ -580,7 +579,7 @@ namespace = "{{ .Instrumentation.Namespace }}"
 /****** these are for test settings ***********/
 
 func ResetTestRoot(dir, testName string) (*Config, error) {
-	return ResetTestRootWithChainID(dir, testName, "")
+	return ResetTestRootWithChainID(dir, testName, factory.DefaultTestChainID)
 }
 
 func ResetTestRootWithChainID(dir, testName string, chainID string) (*Config, error) {
@@ -625,7 +624,9 @@ func ResetTestRootWithChainID(dir, testName string, chainID string) (*Config, er
 	}
 
 	config := TestConfig().SetRoot(rootDir)
-	config.Instrumentation.Namespace = fmt.Sprintf("%s_%s_%s", testName, chainID, tmrand.Str(16))
+	// Label names may contain ASCII letters, numbers, as well as underscores.
+	metricChainID := regexp.MustCompile(`[^a-zA-Z0-9_]+`).ReplaceAllString(chainID, "_")
+	config.Instrumentation.Namespace = fmt.Sprintf("%s_%s_%s", testName, metricChainID, tmrand.Str(16))
 	return config, nil
 }
 
@@ -687,6 +688,7 @@ const testGenesisFmt = `{
     "type": "tendermint/PubKeyBLS12381",
 	"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
   },
+  "validator_quorum_type":100,
   "app_hash": ""
 }`
 

@@ -331,7 +331,7 @@ func TestReactorWithEvidence(t *testing.T) {
 	// due to a timeout handler performs before than validators will be ready for the message
 	consParams.Timeout.Propose = 1 * time.Second
 
-	genDoc, privVals := factory.RandGenesisDoc(cfg, n, 1, consParams)
+	genDoc, privVals := factory.RandGenesisDoc(n, consParams)
 	states := make([]*State, n)
 	logger := consensusLogger(t)
 

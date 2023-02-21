@@ -6,10 +6,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"reflect"
 
-	sync "github.com/sasha-s/go-deadlock"
-
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
+	"github.com/rs/zerolog"
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/types"
 )
@@ -25,6 +27,25 @@ type Envelope struct {
 
 func (e Envelope) IsZero() bool {
 	return e.From == "" && e.To == "" && e.Message == nil
+}
+
+var _ = zerolog.LogObjectMarshaler(&Envelope{})
+
+func (e Envelope) MarshalZerologObject(event *zerolog.Event) {
+	event.Str("From", string(e.From))
+	event.Str("To", string(e.To))
+	event.Bool("Broadcast", e.Broadcast)
+	event.Int("ChannelID", int(e.ChannelID))
+
+	marshaler := jsonpb.Marshaler{}
+	payload, err := marshaler.MarshalToString(e.Message)
+	if err != nil {
+		event.Err(err)
+	} else {
+		event.RawJSON("Payload", []byte(payload))
+	}
+
+	event.Str("PayloadType", reflect.TypeOf(e.Message).String())
 }
 
 // Wrapper is a Protobuf message that can contain a variety of inner messages
