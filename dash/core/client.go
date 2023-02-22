@@ -164,7 +164,7 @@ func (rpcClient *RPCClient) QuorumSign(
 	messageHash bytes.HexBytes,
 	quorumHash crypto.QuorumHash,
 ) (*btcjson.QuorumSignResult, error) {
-	if err := ValidateQuorumType(quorumType); err != nil {
+	if err := quorumType.Validate(); err != nil {
 		return nil, err
 	}
 	quorumSignResultWithBool, err := rpcClient.endpoint.QuorumSign(
@@ -198,7 +198,7 @@ func (rpcClient *RPCClient) QuorumVerify(
 	signature bytes.HexBytes,
 	quorumHash crypto.QuorumHash,
 ) (bool, error) {
-	if err := ValidateQuorumType(quorumType); err != nil {
+	if err := quorumType.Validate(); err != nil {
 		return false, err
 	}
 	resp, err := rpcClient.endpoint.QuorumVerify(
@@ -219,14 +219,4 @@ func (rpcClient *RPCClient) QuorumVerify(
 	)
 	return resp, err
 
-}
-
-// ValidateQuorumType checks if quorum type is valid.
-// TODO: move to dashevo/dashd-go
-func ValidateQuorumType(t btcjson.LLMQType) error {
-	if (t >= 1 && t <= 5) || (t >= 100 && t <= 105) {
-		return nil
-	}
-
-	return fmt.Errorf("unsupported quorum type %d", t)
 }
