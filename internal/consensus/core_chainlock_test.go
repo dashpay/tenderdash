@@ -114,22 +114,22 @@ func setupReactor(ctx context.Context, t *testing.T, n int, states []*State, siz
 func enterProposeWithInvalidProposalDecider(state *State) {
 	action := state.ctrl.Get(EnterProposeType)
 	enterProposeAction := action.(*EnterProposeAction)
-	propler := enterProposeAction.propDecider.(*Proposaler)
+	propler := enterProposeAction.proposalCreator.(*Proposaler)
 	invalidDecider := &invalidProposalDecider{Proposaler: propler}
-	enterProposeAction.propDecider = invalidDecider
+	enterProposeAction.proposalCreator = invalidDecider
 }
 
 type invalidProposalDecider struct {
 	*Proposaler
 }
 
-func (p *invalidProposalDecider) Decide(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
+func (p *invalidProposalDecider) Create(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
 	// routine to:
 	// - precommit for a random block
 	// - send precommit to all peers
 	// - disable privValidator (so we don't do normal precommits)
 
-	// Decide on block
+	// Create on block
 	block, blockParts := rs.ValidBlock, rs.ValidBlockParts
 	if block == nil {
 		var err error

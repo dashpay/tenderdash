@@ -150,7 +150,7 @@ func (suite *ProposalerTestSuite) TestSet() {
 		},
 	}
 	for i, tc := range testCases {
-		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
+		suite.Run(fmt.Sprintf("%d", i), func() {
 			err := suite.proposer.Set(&tc.proposal, tc.receivedAt, &tc.rs)
 			assertError(suite.T(), tc.wantErr, err)
 			suite.Require().Equal(tc.wantProposal, tc.rs.Proposal)
@@ -222,7 +222,7 @@ func (suite *ProposalerTestSuite) TestDecide() {
 			if tc.mockFn != nil {
 				tc.mockFn(tc.rs)
 			}
-			err := suite.proposer.Decide(ctx, tc.height, tc.round, &tc.rs)
+			err := suite.proposer.Create(ctx, tc.height, tc.round, &tc.rs)
 			assertError(suite.T(), tc.wantErr, err)
 			if tc.wantProposal == nil {
 				suite.Require().Len(suite.msgInfoQueue.sender.peerQueue.ch, 0)

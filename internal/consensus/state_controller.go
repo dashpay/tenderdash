@@ -81,11 +81,11 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			eventPublisher: cs.eventPublisher,
 		},
 		EnterProposeType: &EnterProposeAction{
-			logger:         cs.logger,
-			wal:            wal,
-			scheduler:      cs.roundScheduler,
-			eventPublisher: cs.eventPublisher,
-			propDecider:    propler,
+			logger:          cs.logger,
+			wal:             wal,
+			scheduler:       cs.roundScheduler,
+			eventPublisher:  cs.eventPublisher,
+			proposalCreator: propler,
 		},
 		AddProposalBlockPartType: &AddProposalBlockPartAction{
 			logger:         cs.logger,

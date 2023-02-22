@@ -25,7 +25,7 @@ type Proposaler struct {
 	committedState sm.State
 }
 
-// NewProposaler creates a new Po
+// NewProposaler creates and returns a new Proposaler
 func NewProposaler(
 	logger log.Logger,
 	metrics *Metrics,
@@ -78,12 +78,12 @@ func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 	return nil
 }
 
-// Decide creates, sings and sends a created proposal to the queue
+// Create creates, sings and sends a created proposal to the queue
 // To create a proposal is used RoundState.ValidBlock if it isn't nil and valid, otherwise create a new one
-func (p *Proposaler) Decide(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
+func (p *Proposaler) Create(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
 	// If there is valid block, choose that.
 	block, blockParts := rs.ValidBlock, rs.ValidBlockParts
-	// Decide on block
+	// Create on block
 	if !p.checkValidBlock(rs) {
 		var err error
 		block, blockParts, err = p.createProposalBlock(ctx, round, rs)
@@ -91,22 +91,13 @@ func (p *Proposaler) Decide(ctx context.Context, height int64, round int32, rs *
 			return err
 		}
 	}
-	pubKey, err := p.privVal.GetPubKey(ctx, rs.Validators.QuorumHash)
-	if err != nil {
-		p.logger.Error("propose step; failed signing proposal; couldn't get pubKey",
-			"height", height,
-			"round", round,
-			"error", err)
-		return err
-	}
 	logger := p.logger.With(
 		"height", height,
-		"round", round,
-		"pubKey", pubKey.HexString())
+		"round", round)
 	// Make proposal
 	proposal := makeProposal(height, round, rs.ValidRound, block, blockParts)
 	// Sign proposal
-	err = p.signProposal(ctx, height, proposal)
+	err := p.signProposal(ctx, height, proposal)
 	if err != nil {
 		if !p.replayMode {
 			logger.Error("propose step; failed signing proposal", "error", err)
@@ -253,7 +244,7 @@ func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, 
 }
 
 func (p *Proposaler) subscribe(evsw events.EventSwitch) {
-	const listenerID = "propDecider"
+	const listenerID = "proposalCreator"
 	_ = evsw.AddListenerForEvent(listenerID, committedStateUpdate, func(obj events.EventData) error {
 		p.committedState = obj.(sm.State)
 		return nil

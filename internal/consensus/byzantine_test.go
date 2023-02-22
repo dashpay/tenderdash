@@ -280,12 +280,12 @@ type bzProposalDecider struct {
 func enterProposeWithBzProposalDecider(state *State) {
 	action := state.ctrl.Get(EnterProposeType)
 	enterProposeAction := action.(*EnterProposeAction)
-	propler := enterProposeAction.propDecider.(*Proposaler)
+	propler := enterProposeAction.proposalCreator.(*Proposaler)
 	invalidDecider := &bzProposalDecider{Proposaler: propler}
-	enterProposeAction.propDecider = invalidDecider
+	enterProposeAction.proposalCreator = invalidDecider
 }
 
-func (p *bzProposalDecider) Decide(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
+func (p *bzProposalDecider) Create(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
 	block, blockParts, err := p.createProposalBlock(ctx, round, rs)
 	if err != nil {
 		return err

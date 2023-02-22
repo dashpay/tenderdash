@@ -26,11 +26,11 @@ func (e *EnterProposeEvent) GetType() EventType {
 // Enter (!CreateEmptyBlocks) : after enterNewRound(height,round), once txs are in the mempool
 // Caller should hold cs.mtx lock
 type EnterProposeAction struct {
-	logger         log.Logger
-	wal            WALFlusher
-	scheduler      *roundScheduler
-	eventPublisher *EventPublisher
-	propDecider    cstypes.ProposalDecider
+	logger          log.Logger
+	wal             WALFlusher
+	scheduler       *roundScheduler
+	eventPublisher  *EventPublisher
+	proposalCreator cstypes.ProposalCreator
 }
 
 func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent) error {
@@ -41,7 +41,9 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 
 	logger := c.logger.With("height", height, "round", round)
 
-	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPropose <= stateData.Step) {
+	if stateData.Height != height ||
+		round < stateData.Round ||
+		(stateData.Round == round && cstypes.RoundStepPropose <= stateData.Step) {
 		logger.Debug("entering propose step with invalid args", "step", stateData.Step)
 		return nil
 	}
@@ -99,5 +101,5 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	if err := c.wal.FlushAndSync(); err != nil {
 		c.logger.Error("failed flushing WAL to disk")
 	}
-	return c.propDecider.Decide(ctx, height, round, &stateData.RoundState)
+	return c.proposalCreator.Create(ctx, height, round, &stateData.RoundState)
 }
