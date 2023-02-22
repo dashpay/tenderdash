@@ -46,8 +46,12 @@ var _ DashPrivValidator = (*DashCoreSignerClient)(nil)
 
 // NewDashCoreSignerClient returns an instance of SignerClient.
 // it will start the endpoint (if not already started)
-func NewDashCoreSignerClient(client dashcore.Client, defaultQuorumType btcjson.LLMQType, logger log.Logger) (*DashCoreSignerClient, error) {
-	if err := dashcore.ValidateQuorumType(defaultQuorumType); err != nil {
+func NewDashCoreSignerClient(
+	client dashcore.Client,
+	defaultQuorumType btcjson.LLMQType,
+	logger log.Logger,
+) (*DashCoreSignerClient, error) {
+	if err := defaultQuorumType.Validate(); err != nil {
 		return nil, err
 	}
 	return &DashCoreSignerClient{
