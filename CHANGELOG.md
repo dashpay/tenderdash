@@ -1,3 +1,26 @@
+## [0.11.0-dev.4] - 2023-02-22
+
+### Backport
+
+- Catch up the recent changes from v0.10 to v0.11 (#589)
+
+## [0.10.0-dev.11] - 2023-02-22
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.10.0-dev.11 (#591)
+
+### Refactor
+
+- Use llmq.Validate function to validate llmq type (#590)
+
+## [0.10.0-dev.10] - 2023-02-22
+
+### Miscellaneous Tasks
+
+- Bump up dashd-go version to v0.23.6 (#587)
+- Update changelog and version to 0.10.0-dev.10 (#588)
+
 ## [0.11.0-dev.3] - 2023-02-15
 
 ### Bug Fixes
@@ -5,7 +28,15 @@
 - Docker tag is invalid for empty input.tag (#580) (#585)
 - Signature verification (#584)
 
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.11.0-dev.3 (#586)
+
 ## [0.11.0-dev.2] - 2023-02-13
+
+### Bug Fixes
+
+- Docker tag is invalid for empty input.tag (#580)
 
 ### Miscellaneous Tasks
 
@@ -5657,7 +5688,7 @@
 - Only run when applicable (#4752)
 - Check git diff on each job (#4770)
 - Checkout code before git diff check (#4779)
-- Add paths
+- Add paths 
 - Bump the timeout for test_coverage (#4864)
 - Migrate localnet to github actions (#4878)
 - Add timeouts (#4912)
@@ -5940,7 +5971,7 @@
 
 ### Swagger
 
-- Remove duplicate blockID
+- Remove duplicate blockID 
 - Define version (#4952)
 
 ### Template
