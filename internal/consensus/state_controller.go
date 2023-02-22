@@ -148,12 +148,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			eventPublisher: cs.eventPublisher,
 		},
 	}
-	for _, action := range ctrl.actions {
-		sub, ok := action.(eventSwitchSubscriber)
-		if ok {
-			sub.subscribe(cs.evsw)
-		}
-	}
+	subscribeActions(cs.emitter, ctrl.actions)
 	return ctrl
 }
 
@@ -169,4 +164,13 @@ func (c *Controller) Dispatch(ctx context.Context, event ActionEvent, stateData 
 		Data:      event,
 	}
 	return c.actions[event.GetType()].Execute(ctx, stateEvent)
+}
+
+func subscribeActions(emitter *eventemitter.EventEmitter, actions map[EventType]ActionHandler) {
+	for _, action := range actions {
+		sub, ok := action.(eventemitter.Subscriber)
+		if ok {
+			sub.Subscribe(emitter)
+		}
+	}
 }

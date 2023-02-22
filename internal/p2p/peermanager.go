@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math"
@@ -9,6 +10,7 @@ import (
 	"sort"
 	"time"
 
+	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/orderedcode"
 	"github.com/rs/zerolog"
@@ -1006,14 +1008,14 @@ func (m *PeerManager) Inactivate(peerID types.NodeID) error {
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 
-	peer, ok := m.store.peers[peerID]
+	peer, ok := m.store.Get(peerID)
 	if !ok {
 		return nil
 	}
 
 	peer.Inactive = true
 	m.metrics.PeersInactivated.Add(1)
-	return m.store.Set(*peer)
+	return m.store.Set(peer)
 }
 
 // Advertise returns a list of peer addresses to advertise to a peer.
@@ -1025,14 +1027,15 @@ func (m *PeerManager) Advertise(peerID types.NodeID, limit uint16) []NodeAddress
 	defer m.mtx.Unlock()
 
 	addresses := make([]NodeAddress, 0, limit)
+	var numAddresses int
 
 	// advertise ourselves, to let everyone know how to dial us back
 	// and enable mutual address discovery
 	if m.options.SelfAddress.Hostname != "" && m.options.SelfAddress.Port != 0 {
 		addresses = append(addresses, m.options.SelfAddress)
+		numAddresses++
 	}
 
-	var numAddresses int
 	var totalAbsScore int
 	ranked := m.store.Ranked()
 	seenAddresses := map[NodeAddress]struct{}{}
@@ -1067,6 +1070,14 @@ func (m *PeerManager) Advertise(peerID types.NodeID, limit uint16) []NodeAddress
 	// to advertise, adjust the limit downwards
 	if numAddresses < int(limit) {
 		limit = uint16(numAddresses)
+	}
+
+	if numAddresses == 0 {
+		peers := make([]string, 0, len(ranked))
+		for _, p := range ranked {
+			peers = append(peers, p.String())
+		}
+		m.logger.Error("no peer addresses to advertise", "peers", peers)
 	}
 
 	// collect addresses until we have the number requested
@@ -1191,21 +1202,25 @@ func (m *PeerManager) processPeerEvent(ctx context.Context, pu PeerUpdate) {
 		return
 	}
 
-	if _, ok := m.store.peers[pu.NodeID]; !ok {
-		m.store.peers[pu.NodeID] = &peerInfo{}
+	peer, ok := m.store.Get(pu.NodeID)
+	if !ok {
+		peer = peerInfo{}
 	}
 
 	switch pu.Status {
 	case PeerStatusBad:
-		if m.store.peers[pu.NodeID].MutableScore == math.MinInt16 {
+		if peer.MutableScore == math.MinInt16 {
 			return
 		}
-		m.store.peers[pu.NodeID].MutableScore--
+		peer.MutableScore--
 	case PeerStatusGood:
-		if m.store.peers[pu.NodeID].MutableScore == math.MaxInt16 {
+		if peer.MutableScore == math.MaxInt16 {
 			return
 		}
-		m.store.peers[pu.NodeID].MutableScore++
+		peer.MutableScore++
+	}
+	if err := m.store.Set(peer); err != nil {
+		m.logger.Error("cannot save peer to database", "peer", peer, "error", err)
 	}
 }
 
@@ -1495,7 +1510,7 @@ func (s *peerStore) List() []peerInfo {
 //
 // FIXME: The scoring logic is currently very naïve, see peerInfo.Score().
 func (s *peerStore) Ranked() []*peerInfo {
-	if s.ranked != nil {
+	if len(s.ranked) > 0 {
 		return s.ranked
 	}
 	s.ranked = make([]*peerInfo, 0, len(s.peers))
@@ -1668,6 +1683,17 @@ func (p *peerInfo) IsZero() bool {
 	return p == nil || len(p.ID) == 0
 }
 
+func (p *peerInfo) String() string {
+	marshaler := jsonpb.Marshaler{}
+
+	ret, err := marshaler.MarshalToString(p.ToProto())
+	if err != nil {
+		b, _ := json.Marshal(map[string]string{"error": err.Error()})
+		return string(b)
+	}
+	return ret
+}
+
 func (p *peerInfo) MarshalZerologObject(e *zerolog.Event) {
 	if p == nil {
 		return
@@ -1693,6 +1719,12 @@ func (p *peerInfo) MarshalZerologObject(e *zerolog.Event) {
 		e.Bool("inactive", p.Inactive)
 	}
 	e.Int16("score", int16(p.Score()))
+
+	addresses := zerolog.Arr()
+	for address := range p.AddressInfo {
+		addresses.Str(address.String())
+	}
+	e.Array("addresses", addresses)
 }
 
 // peerAddressInfo contains information and statistics about a peer address.

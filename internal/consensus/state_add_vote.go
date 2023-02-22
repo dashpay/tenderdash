@@ -7,7 +7,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/events"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -41,10 +41,10 @@ func newAddVoteAction(cs *State, ctrl *Controller, statsQueue *chanQueue[msgInfo
 	updateValidBlockMw := addVoteUpdateValidBlockMw(cs.eventPublisher)
 	dispatchPrevoteMw := addVoteDispatchPrevoteMw(ctrl)
 	validateVoteMw := addVoteValidateVoteMw()
-	errorMw := addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.evsw)
+	errorMw := addVoteErrorMw(cs.evpool, cs.logger, cs.privValidator, cs.emitter)
 	statsMw := addVoteStatsMw(statsQueue)
 	dispatchPrecommitMw := addVoteDispatchPrecommitMw(ctrl)
-	verifyVoteExtensionMw := addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExec, cs.metrics, cs.evsw)
+	verifyVoteExtensionMw := addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExec, cs.metrics, cs.emitter)
 	addToLastPrecommitMw := addVoteToLastPrecommitMw(cs.eventPublisher, ctrl)
 	return &AddVoteAction{
 		prevote: withVoterMws(
@@ -262,10 +262,9 @@ func addVoteVerifyVoteExtensionMw(
 	privVal privValidator,
 	blockExec *sm.BlockExecutor,
 	metrics *Metrics,
-	evsw events.EventSwitch,
+	evsw *eventemitter.EventEmitter,
 ) AddVoteMiddlewareFunc {
-	const listenerID = "addVoteVerifyVoteExtensionMw"
-	_ = evsw.AddListenerForEvent(listenerID, setPrivValidator, func(data events.EventData) error {
+	evsw.AddListener(setPrivValidatorEventName, func(data eventemitter.EventData) error {
 		privVal = data.(privValidator)
 		return nil
 	})
@@ -330,9 +329,8 @@ func addVoteStatsMw(statsQueue *chanQueue[msgInfo]) AddVoteMiddlewareFunc {
 
 // add evidence to the pool
 // when it's detected
-func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidator, evsw events.EventSwitch) AddVoteMiddlewareFunc {
-	const listenerID = "addVoteErrorMw"
-	_ = evsw.AddListenerForEvent(listenerID, setPrivValidator, func(data events.EventData) error {
+func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidator, emitter *eventemitter.EventEmitter) AddVoteMiddlewareFunc {
+	emitter.AddListener(setPrivValidatorEventName, func(data eventemitter.EventData) error {
 		privVal = data.(privValidator)
 		return nil
 	})

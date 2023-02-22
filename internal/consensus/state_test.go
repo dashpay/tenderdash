@@ -25,7 +25,7 @@ import (
 	sf "github.com/tendermint/tendermint/internal/state/test/factory"
 	"github.com/tendermint/tendermint/internal/test/factory"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmevents "github.com/tendermint/tendermint/libs/events"
+	tmevents "github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmtime "github.com/tendermint/tendermint/libs/time"
@@ -2687,7 +2687,7 @@ func TestCommitFromPreviousRound(t *testing.T) {
 
 	// vs2, vs3 and vs4 send precommit for propBlock for the previous round
 	signAddVotes(ctx, t, cs1, tmproto.PrecommitType, config.ChainID(), blockID, vs2, vs3, vs4)
-	err = cs1.evsw.AddListenerForEvent(testSubscriber, types.EventValidBlockValue, func(data tmevents.EventData) error {
+	cs1.emitter.AddListener(types.EventValidBlockValue, func(data tmevents.EventData) error {
 		rs := data.(*cstypes.RoundState)
 		assert.Equal(t, cstypes.RoundStepPropose, rs.Step)
 		assert.Equal(t, int32(-1), rs.CommitRound)
@@ -2695,7 +2695,6 @@ func TestCommitFromPreviousRound(t *testing.T) {
 		assert.True(t, rs.ProposalBlockParts.Header().Equals(blockID.PartSetHeader))
 		return nil
 	})
-	require.NoError(t, err)
 	ensureNewValidBlock(t, validBlockCh, height, round)
 
 	partSet, err = propBlock.MakePartSet(partSize)
