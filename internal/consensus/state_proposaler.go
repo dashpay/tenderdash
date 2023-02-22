@@ -8,7 +8,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/events"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -243,17 +243,16 @@ func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, 
 	return nil
 }
 
-func (p *Proposaler) subscribe(evsw events.EventSwitch) {
-	const listenerID = "proposalCreator"
-	_ = evsw.AddListenerForEvent(listenerID, committedStateUpdate, func(obj events.EventData) error {
+func (p *Proposaler) Subscribe(emitter *eventemitter.EventEmitter) {
+	emitter.AddListener(committedStateUpdateEventName, func(obj eventemitter.EventData) error {
 		p.committedState = obj.(sm.State)
 		return nil
 	})
-	_ = evsw.AddListenerForEvent(listenerID, setReplayMode, func(obj events.EventData) error {
+	emitter.AddListener(setReplayModeEventName, func(obj eventemitter.EventData) error {
 		p.replayMode = obj.(bool)
 		return nil
 	})
-	_ = evsw.AddListenerForEvent(listenerID, setPrivValidator, func(obj events.EventData) error {
+	emitter.AddListener(setPrivValidatorEventName, func(obj eventemitter.EventData) error {
 		p.privVal = obj.(privValidator)
 		return nil
 	})

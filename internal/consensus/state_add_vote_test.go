@@ -262,7 +262,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 			eventFired = false
 			returnAdded = tc.returnAdded
 			returnError = tc.returnError
-			store := &StateDataStore{evws: suite.evsw}
+			store := &StateDataStore{emitter: suite.emitter}
 			stateData := &StateData{
 				store: store,
 				state: sm.State{

@@ -10,7 +10,7 @@ import (
 	"github.com/tendermint/tendermint/config"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/events"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
@@ -32,18 +32,23 @@ type StateDataStore struct {
 	metrics        *Metrics
 	logger         log.Logger
 	config         *config.ConsensusConfig
-	evws           events.EventSwitch
+	emitter        *eventemitter.EventEmitter
 	replayMode     bool
 	version        int64
 }
 
 // NewStateDataStore creates and returns a new state-data store
-func NewStateDataStore(metrics *Metrics, logger log.Logger, cfg *config.ConsensusConfig, evws events.EventSwitch) *StateDataStore {
+func NewStateDataStore(
+	metrics *Metrics,
+	logger log.Logger,
+	cfg *config.ConsensusConfig,
+	emitter *eventemitter.EventEmitter,
+) *StateDataStore {
 	return &StateDataStore{
 		metrics: metrics,
 		logger:  logger,
 		config:  cfg,
-		evws:    evws,
+		emitter: emitter,
 	}
 }
 
@@ -99,16 +104,15 @@ func (s *StateDataStore) update(candidate StateData) error {
 	s.roundState = candidate.RoundState
 	if s.committedState.LastBlockHeight == 0 || s.committedState.LastBlockHeight < candidate.state.LastBlockHeight {
 		// fires the event to update committed-state in those components that have a reference with this data
-		s.evws.FireEvent(committedStateUpdate, candidate.state)
+		s.emitter.Emit(committedStateUpdateEventName, candidate.state)
 	}
 	s.committedState = candidate.state
 	s.version++
 	return nil
 }
 
-func (s *StateDataStore) subscribe(evsw events.EventSwitch) {
-	const listenerID = "stateDataStore"
-	_ = evsw.AddListenerForEvent(listenerID, setReplayMode, func(obj events.EventData) error {
+func (s *StateDataStore) Subscribe(evsw *eventemitter.EventEmitter) {
+	evsw.AddListener(setReplayModeEventName, func(obj eventemitter.EventData) error {
 		s.UpdateReplayMode(obj.(bool))
 		return nil
 	})

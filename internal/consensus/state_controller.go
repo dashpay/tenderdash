@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 )
 
 // EventType is an integer representation of a transition event

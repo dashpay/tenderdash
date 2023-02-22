@@ -30,6 +30,7 @@ const (
 	setProposedAppVersionEventName = "setProposedAppVersion"
 	setPrivValidatorEventName      = "setPrivValidator"
 	setReplayModeEventName         = "setReplayMode"
+	committedStateUpdateEventName  = "committedStateUpdate"
 )
 
 // Consensus sentinel errors
@@ -252,7 +253,7 @@ func NewState(
 		option(cs)
 	}
 
-	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg, cs.evsw)
+	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg, cs.emitter)
 	wal := &wrapWAL{getter: func() WALWriteFlusher { return cs.wal }}
 
 	cs.voteSigner = &voteSigner{
@@ -277,9 +278,9 @@ func NewState(
 	cs.roundScheduler = &roundScheduler{timeoutTicker: cs.timeoutTicker}
 	propler := NewProposaler(cs.logger, cs.metrics, cs.privValidator, cs.msgInfoQueue, cs.blockExecutor)
 	cs.ctrl = NewController(cs, wal, cs.statsMsgQueue, propler)
-	subs := []eventSwitchSubscriber{propler, cs.blockExecutor, cs.stateDataStore, cs.voteSigner}
+	subs := []eventemitter.Subscriber{propler, cs.blockExecutor, cs.stateDataStore, cs.voteSigner}
 	for _, sub := range subs {
-		sub.subscribe(cs.evsw)
+		sub.Subscribe(cs.emitter)
 	}
 	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger)
 

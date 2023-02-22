@@ -7,7 +7,7 @@ import (
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/events"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -112,17 +112,16 @@ func (c *blockExecutor) mustValidate(ctx context.Context, stateData *StateData) 
 	}
 }
 
-func (c *blockExecutor) subscribe(evsw events.EventSwitch) {
-	const listenerID = "blockExecutor"
-	_ = evsw.AddListenerForEvent(listenerID, setPrivValidator, func(obj events.EventData) error {
+func (c *blockExecutor) Subscribe(emitter *eventemitter.EventEmitter) {
+	emitter.AddListener(setPrivValidatorEventName, func(obj eventemitter.EventData) error {
 		c.privValidator = obj.(privValidator)
 		return nil
 	})
-	_ = evsw.AddListenerForEvent(listenerID, setProposedAppVersion, func(obj events.EventData) error {
+	emitter.AddListener(setProposedAppVersionEventName, func(obj eventemitter.EventData) error {
 		c.proposedAppVersion = obj.(uint64)
 		return nil
 	})
-	_ = evsw.AddListenerForEvent(listenerID, committedStateUpdate, func(obj events.EventData) error {
+	emitter.AddListener(committedStateUpdateEventName, func(obj eventemitter.EventData) error {
 		c.committedState = obj.(sm.State)
 		return nil
 	})
