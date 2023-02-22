@@ -55,7 +55,7 @@ func newBlockApplier(blockExec sm.Executor, store sm.BlockStore, opts ...applier
 	return applier
 }
 
-// Apply ...
+// Apply safely verifies, saves to the store and executes a block with commit
 func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *types.Commit) error {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
@@ -81,12 +81,14 @@ func (e *blockApplier) Apply(ctx context.Context, block *types.Block, commit *ty
 	return nil
 }
 
+// State safely returns the last version of a state
 func (e *blockApplier) State() sm.State {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()
 	return e.state
 }
 
+// UpdateState safely updates a state on a new one
 func (e *blockApplier) UpdateState(newState sm.State) {
 	e.mtx.Lock()
 	defer e.mtx.Unlock()

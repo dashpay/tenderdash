@@ -4,6 +4,7 @@ import (
 	"encoding/hex"
 
 	"github.com/dashevo/dashd-go/btcjson"
+
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 )

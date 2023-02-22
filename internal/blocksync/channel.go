@@ -20,12 +20,10 @@ import (
 )
 
 type (
-	// BlockClient ...
 	BlockClient interface {
 		GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error)
 		Send(ctx context.Context, msg any) error
 	}
-	// Channel ...
 	Channel struct {
 		channel p2p.Channel
 		clock   clockwork.Clock
@@ -33,7 +31,6 @@ type (
 		pending sync.Map
 		timeout time.Duration
 	}
-	// ChannelOptionFunc ...
 	ChannelOptionFunc func(c *Channel)
 	result            struct {
 		Value any
@@ -69,7 +66,8 @@ func NewChannel(ch p2p.Channel, opts ...ChannelOptionFunc) *Channel {
 	return channel
 }
 
-// GetBlock ...
+// GetBlock requests a block from a peer and returns promise.Promise which resolve the result
+// if response received in time otherwise reject
 func (c *Channel) GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error) {
 	err := c.Send(ctx, p2p.Envelope{
 		To:      peerID,
@@ -124,7 +122,8 @@ func (c *Channel) Send(ctx context.Context, msg any) error {
 	return fmt.Errorf("unsupported message type %T", msg)
 }
 
-// Resolve ...
+// Resolve finds a pending promise to resolve the response
+// This is a part of stateful channel
 func (c *Channel) Resolve(ctx context.Context, envelope *p2p.Envelope) error {
 	switch msg := envelope.Message.(type) {
 	case *bcproto.BlockResponse:

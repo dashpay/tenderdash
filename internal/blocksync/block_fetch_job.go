@@ -29,7 +29,8 @@ func (e *errBlockFetch) Error() string {
 	return e.err.Error()
 }
 
-// Execute ...
+// Execute requests for a block by height from the peer, if the peer responds to the block in time, then the job
+// will return it, otherwise the job will return an error
 func (j *blockFetchJob) Execute(ctx context.Context) workerpool.Result {
 	promise, err := j.client.GetBlock(ctx, j.height, j.peer.peerID)
 	if err != nil {
