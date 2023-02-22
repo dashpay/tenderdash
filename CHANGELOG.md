@@ -1,3 +1,9 @@
+## [0.10.0-dev.11] - 2023-02-22
+
+### Refactor
+
+- Use llmq.Validate function to validate llmq type (#590)
+
 ## [0.10.0-dev.10] - 2023-02-22
 
 ### Bug Fixes
@@ -7,6 +13,7 @@
 ### Miscellaneous Tasks
 
 - Bump up dashd-go version to v0.23.6 (#587)
+- Update changelog and version to 0.10.0-dev.10 (#588)
 
 ## [0.10.0-dev.9] - 2023-02-10
 
