@@ -212,7 +212,7 @@ func makeNode(
 			}
 		} else {
 			llmqType := genDoc.QuorumType
-			if err := core.ValidateQuorumType(llmqType); err != nil {
+			if err := llmqType.Validate(); err != nil {
 				return nil, fmt.Errorf("invalid genesis quorum type %d: %w", llmqType, err)
 			}
 			// This is used for light client verification only

@@ -8,7 +8,6 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
-	"github.com/tendermint/tendermint/dash/core"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/log"
@@ -338,7 +337,7 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	}
 
 	quorumType := state.Validators.QuorumType
-	if core.ValidateQuorumType(quorumType) != nil {
+	if quorumType.Validate() != nil {
 		r.logger.Debug("state quorum type: %w", err)
 		quorumType = r.genDoc.QuorumType
 	}

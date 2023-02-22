@@ -146,7 +146,7 @@ func (mc *MockClient) QuorumSign(
 	messageHash tmbytes.HexBytes,
 	quorumHash crypto.QuorumHash,
 ) (*btcjson.QuorumSignResult, error) {
-	if err := ValidateQuorumType(quorumType); err != nil {
+	if err := quorumType.Validate(); err != nil {
 		return nil, err
 	}
 	if !mc.canSign {
@@ -187,7 +187,7 @@ func (mc *MockClient) QuorumVerify(
 	signature tmbytes.HexBytes,
 	quorumHash crypto.QuorumHash,
 ) (bool, error) {
-	if err := ValidateQuorumType(quorumType); err != nil {
+	if err := quorumType.Validate(); err != nil {
 		return false, err
 	}
 	signID := crypto.SignID(
