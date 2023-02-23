@@ -1162,6 +1162,13 @@ func (m *PeerManager) Subscribe(ctx context.Context, subscriberName string) *Pee
 	return peerUpdates
 }
 
+// Unsubscribe removes subscription from subscription list
+func (m *PeerManager) Unsubscribe(sub *PeerUpdates) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+	delete(m.subscriptions, sub)
+}
+
 // Register allows you to inject a custom PeerUpdate instance into the
 // PeerManager, rather than relying on the instance constructed by the
 // Subscribe method, which wraps the functionality of the Register
@@ -1176,21 +1183,18 @@ func (m *PeerManager) Register(ctx context.Context, peerUpdates *PeerUpdates) {
 	m.subscriptions[peerUpdates] = peerUpdates
 
 	go func() {
+		defer m.Unsubscribe(peerUpdates)
 		for {
 			select {
 			case <-ctx.Done():
 				return
-			case pu := <-peerUpdates.routerUpdatesCh:
+			case pu, ok := <-peerUpdates.routerUpdatesCh:
+				if !ok {
+					return
+				}
 				m.processPeerEvent(ctx, pu)
 			}
 		}
-	}()
-
-	go func() {
-		<-ctx.Done()
-		m.mtx.Lock()
-		defer m.mtx.Unlock()
-		delete(m.subscriptions, peerUpdates)
 	}()
 }
 
