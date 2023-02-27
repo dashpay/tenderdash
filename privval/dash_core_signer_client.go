@@ -48,7 +48,7 @@ var _ DashPrivValidator = (*DashCoreSignerClient)(nil)
 func NewDashCoreSignerClient(
 	client dashcore.Client, defaultQuorumType btcjson.LLMQType,
 ) (*DashCoreSignerClient, error) {
-	if err := dashcore.ValidateQuorumType(defaultQuorumType); err != nil {
+	if err := defaultQuorumType.Validate(); err != nil {
 		return nil, err
 	}
 	return &DashCoreSignerClient{dashCoreRPCClient: client, defaultQuorumType: defaultQuorumType}, nil
