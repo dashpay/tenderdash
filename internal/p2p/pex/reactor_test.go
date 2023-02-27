@@ -708,6 +708,9 @@ func (r *reactorTestSuite) connectPeers(ctx context.Context, t *testing.T, sourc
 	added, err = n2.PeerManager.Add(sourceAddress)
 	require.NoError(t, err)
 	require.True(t, added)
+
+	n1.PeerManager.Unsubscribe(sourceSub)
+	n2.PeerManager.Unsubscribe(targetSub)
 }
 
 func (r *reactorTestSuite) checkNodePair(t *testing.T, first, second int) (types.NodeID, types.NodeID) {
