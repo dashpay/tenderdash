@@ -194,12 +194,15 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) {
 	s.peerStore.PeerUpdate(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Block.Size()))
 	err = s.addBlock(*resp)
 	if err != nil {
+		s.logger.Error("cannot add a block to the pending list",
+			"height", resp.Block.Height,
+			"error", err.Error())
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
 		return
 	}
 	err = s.applyBlock(ctx)
 	if err != nil {
-		s.logger.Error("cannot apply block", "height", resp.Block.Height, "error", err.Error())
+		s.logger.Error("cannot apply a block", "height", resp.Block.Height, "error", err.Error())
 		s.RemovePeer(resp.PeerID)
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
 	}
