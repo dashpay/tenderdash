@@ -14,6 +14,7 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/tendermint/tendermint/internal/p2p"
+	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -1852,24 +1853,12 @@ func TestPeerManager_Advertise(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	added, err := peerManager.Add(aTCP)
-	require.NoError(t, err)
-	require.True(t, added)
-	added, err = peerManager.Add(aMem)
-	require.NoError(t, err)
-	require.True(t, added)
-	added, err = peerManager.Add(bTCP)
-	require.NoError(t, err)
-	require.True(t, added)
-	added, err = peerManager.Add(bMem)
-	require.NoError(t, err)
-	require.True(t, added)
-	added, err = peerManager.Add(cTCP)
-	require.NoError(t, err)
-	require.True(t, added)
-	added, err = peerManager.Add(cMem)
-	require.NoError(t, err)
-	require.True(t, added)
+	addAddressToPeerManager(t, peerManager, aTCP)
+	addAddressToPeerManager(t, peerManager, aMem)
+	addAddressToPeerManager(t, peerManager, bTCP)
+	addAddressToPeerManager(t, peerManager, bMem)
+	addAddressToPeerManager(t, peerManager, cTCP)
+	addAddressToPeerManager(t, peerManager, cMem)
 
 	require.Len(t, peerManager.Advertise(dID, 100), 6)
 	// d should get all addresses.
@@ -1915,4 +1904,58 @@ func TestPeerManager_Advertise_Self(t *testing.T) {
 	require.ElementsMatch(t, []p2p.NodeAddress{
 		self,
 	}, peerManager.Advertise(dID, 100))
+}
+
+func TestPeerManager_Advertise_None(t *testing.T) {
+	ctx := context.TODO()
+	requestorID := types.NodeID(strings.Repeat("a", 40))
+	requestorTCP := p2p.NodeAddress{Protocol: "tcp", NodeID: requestorID, Hostname: "127.0.0.1", Port: 26657, Path: "/path"}
+
+	// Create a peer manager
+	peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+	require.NoError(t, err)
+	peerManager.SetLogger(log.NewTestingLogger(t))
+
+	// self address not defined, so we are not advertising anything
+	require.Empty(t, peerManager.Advertise(requestorID, 100))
+
+	// add requestor address, but don't advertise
+	addAddressToPeerManager(t, peerManager, requestorTCP)
+	require.Empty(t, peerManager.Advertise(requestorID, 100))
+}
+
+func TestPeerManager_Advertise_SelfAndOthers(t *testing.T) {
+	ctx := context.TODO()
+
+	aID := types.NodeID(strings.Repeat("a", 40))
+	aTCP := p2p.NodeAddress{Protocol: "tcp", NodeID: aID, Hostname: "127.0.0.1", Port: 26657, Path: "/path"}
+	aMem := p2p.NodeAddress{Protocol: "memory", NodeID: aID}
+
+	requesterID := types.NodeID(strings.Repeat("d", 40))
+
+	self := p2p.NodeAddress{Protocol: "tcp", NodeID: selfID, Hostname: "2001:db8::1", Port: 26657}
+
+	// Create a peer manager with SelfAddress defined.
+	peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{
+		SelfAddress: self,
+	})
+	require.NoError(t, err)
+
+	addAddressToPeerManager(t, peerManager, aTCP)
+	addAddressToPeerManager(t, peerManager, aMem)
+
+	adv2 := peerManager.Advertise(requesterID, 2)
+	assert.Len(t, adv2, 2)
+
+	adv3 := peerManager.Advertise(requesterID, 3)
+	assert.Len(t, adv3, 3)
+
+	adv100 := peerManager.Advertise(requesterID, 100)
+	assert.Len(t, adv100, 3)
+}
+
+func addAddressToPeerManager(t *testing.T, pm *p2p.PeerManager, addr p2p.NodeAddress) {
+	added, err := pm.Add(addr)
+	require.True(t, added)
+	require.NoError(t, err)
 }

@@ -43,14 +43,12 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 	defer cancel()
 
-	config := configSetup(t)
-
 	nValidators := 4
 	prevoteHeight := int64(2)
 	testName := "consensus_byzantine_test"
 	tickerFunc := newMockTickerFunc(true)
 
-	genDoc, privVals := factory.RandGenesisDoc(config, nValidators, 1, factory.ConsensusParams())
+	genDoc, privVals := factory.RandGenesisDoc(nValidators, factory.ConsensusParams())
 	states := make([]*State, nValidators)
 
 	for i := 0; i < nValidators; i++ {

@@ -48,6 +48,9 @@ var _ DashPrivValidator = (*DashCoreSignerClient)(nil)
 func NewDashCoreSignerClient(
 	client dashcore.Client, defaultQuorumType btcjson.LLMQType,
 ) (*DashCoreSignerClient, error) {
+	if err := defaultQuorumType.Validate(); err != nil {
+		return nil, err
+	}
 	return &DashCoreSignerClient{dashCoreRPCClient: client, defaultQuorumType: defaultQuorumType}, nil
 }
 
@@ -282,9 +285,6 @@ func (sc *DashCoreSignerClient) SignVote(
 func (sc *DashCoreSignerClient) SignProposal(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, proposalProto *tmproto.Proposal,
 ) (tmbytes.HexBytes, error) {
-	if quorumType == 0 {
-		return nil, fmt.Errorf("error signing proposal with invalid quorum type")
-	}
 	signItem := types.NewSignItem(
 		quorumType,
 		quorumHash,

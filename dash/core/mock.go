@@ -6,11 +6,11 @@ import (
 	"errors"
 	"strconv"
 
-	"github.com/tendermint/tendermint/types"
-
 	"github.com/dashevo/dashd-go/btcjson"
+
 	"github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/types"
 )
 
 // MockClient is an implementation of a mock core-server
@@ -146,6 +146,9 @@ func (mc *MockClient) QuorumSign(
 	messageHash tmbytes.HexBytes,
 	quorumHash crypto.QuorumHash,
 ) (*btcjson.QuorumSignResult, error) {
+	if err := quorumType.Validate(); err != nil {
+		return nil, err
+	}
 	if !mc.canSign {
 		return nil, errors.New("dash core mock client not set up for signing")
 	}
@@ -184,6 +187,9 @@ func (mc *MockClient) QuorumVerify(
 	signature tmbytes.HexBytes,
 	quorumHash crypto.QuorumHash,
 ) (bool, error) {
+	if err := quorumType.Validate(); err != nil {
+		return false, err
+	}
 	signID := crypto.SignID(
 		quorumType,
 		tmbytes.Reverse(quorumHash),

@@ -28,7 +28,7 @@ func TestVerifyBlockCommit(t *testing.T) {
 
 	logger := log.NewNopLogger()
 
-	genDoc, privVals := factory.RandGenesisDoc(cfg, 4, 1, factory.ConsensusParams())
+	genDoc, privVals := factory.RandGenesisDoc(4, factory.ConsensusParams())
 	height := genDoc.InitialHeight
 	state, err := sm.MakeGenesisState(genDoc)
 	require.NoError(t, err)

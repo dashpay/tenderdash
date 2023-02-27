@@ -336,9 +336,15 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 		return nil
 	}
 
+	quorumType := state.Validators.QuorumType
+	if quorumType.Validate() != nil {
+		r.logger.Debug("state quorum type: %w", err)
+		quorumType = r.genDoc.QuorumType
+	}
+
 	if len(res.ValidatorSetUpdate.ValidatorUpdates) != 0 {
 		// we replace existing validator with the one from InitChain instead of applying it as a diff
-		state.Validators = types.NewValidatorSet(nil, nil, state.Validators.QuorumType, nil, false)
+		state.Validators = types.NewValidatorSet(nil, nil, quorumType, nil, false)
 	}
 
 	// we only update state when we are in initial state
