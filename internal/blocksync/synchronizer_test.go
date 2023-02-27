@@ -95,7 +95,7 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 
 	// Introduce each peer.
 	for _, peer := range peers {
-		sync.SetPeerRange(newPeerData(peer.peerID, peer.base, peer.height))
+		sync.AddPeer(newPeerData(peer.peerID, peer.base, peer.height))
 	}
 	suite.Require().Eventually(func() bool {
 		return !sync.IsCaughtUp()
@@ -140,7 +140,7 @@ func (suite *SynchronizerTestSuite) TestProduceJob() {
 			jobCh := make(chan workerpool.Job, 1)
 			wp := workerpool.New(0, workerpool.WithJobCh(jobCh))
 			pool := NewSynchronizer(tc.startHeight, suite.client, applier, WithWorkerPool(wp))
-			pool.SetPeerRange(peer1)
+			pool.AddPeer(peer1)
 			for _, height := range tc.pushBack {
 				pool.jobGen.pushBack(height)
 			}
@@ -305,7 +305,7 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
 			pool := NewSynchronizer(1, suite.client, applier)
 			for _, peer := range peers {
-				pool.SetPeerRange(peer)
+				pool.AddPeer(peer)
 			}
 			for _, resp := range tc.responses {
 				pool.pendingToApply[resp.Block.Height] = *resp

@@ -66,34 +66,41 @@ var (
 */
 
 // Synchronizer keeps track of the block sync peers, block requests and block responses.
-type Synchronizer struct {
-	service.BaseService
-	logger log.Logger
+type (
+	PeerAdder interface {
+		AddPeer(peer PeerData)
+	}
+	PeerRemover interface {
+		RemovePeer(peerID types.NodeID)
+	}
+	Synchronizer struct {
+		service.BaseService
+		logger log.Logger
 
-	lastAdvance time.Time
+		lastAdvance time.Time
 
-	mtx sync.RWMutex
+		mtx sync.RWMutex
 
-	height int64 // the lowest key in requesters.
+		height int64 // the lowest key in requesters.
 
-	clock clockwork.Clock
+		clock clockwork.Clock
 
-	// atomic
-	jobProgressCounter atomic.Int32 // number of requests pending assignment or block response
+		// atomic
+		jobProgressCounter atomic.Int32 // number of requests pending assignment or block response
 
-	startHeight      int64
-	lastHundredBlock time.Time
-	lastSyncRate     float64
+		startHeight      int64
+		lastHundredBlock time.Time
+		lastSyncRate     float64
 
-	peerStore      *InMemPeerStore
-	client         BlockClient
-	applier        *blockApplier
-	workerPool     *workerpool.WorkerPool
-	jobGen         *jobGenerator
-	pendingToApply map[int64]BlockResponse
-}
-
-type OptionFunc func(v *Synchronizer)
+		peerStore      *InMemPeerStore
+		client         BlockClient
+		applier        *blockApplier
+		workerPool     *workerpool.WorkerPool
+		jobGen         *jobGenerator
+		pendingToApply map[int64]BlockResponse
+	}
+	OptionFunc func(v *Synchronizer)
+)
 
 func WithWorkerPool(wp *workerpool.WorkerPool) OptionFunc {
 	return func(v *Synchronizer) {
@@ -267,8 +274,8 @@ func (s *Synchronizer) LastAdvance() time.Time {
 	return s.lastAdvance
 }
 
-// SetPeerRange sets the peer's alleged blockchain base and height.
-func (s *Synchronizer) SetPeerRange(peer PeerData) {
+// AddPeer adds the peer's alleged blockchain base and height
+func (s *Synchronizer) AddPeer(peer PeerData) {
 	s.peerStore.Put(peer)
 }
 

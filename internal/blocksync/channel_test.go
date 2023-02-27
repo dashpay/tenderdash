@@ -125,3 +125,48 @@ func (suite *ChannelTestSuite) TestSend() {
 	err = suite.channel.Send(ctx, errMsg)
 	suite.Require().NoError(err)
 }
+
+func (suite *ChannelTestSuite) TestConsume() {
+	ctx := context.Background()
+	outCh := make(chan p2p.Envelope, 3)
+	go func() {
+		for i := 0; i < 3; i++ {
+			outCh <- p2p.Envelope{}
+		}
+		close(outCh)
+	}()
+	suite.p2pChannel.
+		On("Receive", ctx).
+		Once().
+		Return(func(ctx context.Context) *p2p.ChannelIterator {
+			return p2p.NewChannelIterator(outCh)
+		})
+	consumer := newMockConsumer(suite.T())
+	consumer.
+		On("Handle", ctx, mock.Anything, mock.Anything).
+		Times(3).
+		Return(nil)
+	suite.channel.Consume(ctx, consumer)
+}
+
+type mockConsumer struct {
+	mock.Mock
+}
+
+func newMockConsumer(t *testing.T) *mockConsumer {
+	m := &mockConsumer{}
+	m.Mock.Test(t)
+	t.Cleanup(func() { m.AssertExpectations(t) })
+	return m
+}
+
+func (m *mockConsumer) Handle(ctx context.Context, channel *Channel, envelope *p2p.Envelope) error {
+	ret := m.Called(ctx, channel, envelope)
+	var r0 error
+	if rf, ok := ret.Get(0).(func(ctx context.Context, channel *Channel, envelope *p2p.Envelope) error); ok {
+		r0 = rf(ctx, channel, envelope)
+	} else {
+		r0 = ret.Error(0)
+	}
+	return r0
+}

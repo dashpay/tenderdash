@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime/debug"
 	"sync/atomic"
 	"time"
 
@@ -162,8 +161,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 
 		go r.poolRoutine(ctx, false)
 	}
-
-	go r.processBlockSyncCh(ctx, blockSyncCh, blockSyncClient)
+	go blockSyncClient.Consume(ctx, consumerHandler(r.logger, r.store, r.synchronizer))
 	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "blocksync"), blockSyncCh)
 
 	return nil
@@ -174,115 +172,6 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 func (r *Reactor) OnStop() {
 	if r.blockSyncFlag.Load() {
 		r.synchronizer.Stop()
-	}
-}
-
-// respondToPeer loads a block and sends it to the requesting peer, if we have it.
-// Otherwise, we'll respond saying we do not have it.
-func (r *Reactor) respondToPeer(ctx context.Context, msg *bcproto.BlockRequest, peerID types.NodeID, blockSyncCh p2p.Channel) error {
-	block := r.store.LoadBlock(msg.Height)
-	if block == nil {
-		r.logger.Info("peer requesting a block we do not have", "peer", peerID, "height", msg.Height)
-		return blockSyncCh.Send(ctx, p2p.Envelope{
-			To:      peerID,
-			Message: &bcproto.NoBlockResponse{Height: msg.Height},
-		})
-	}
-
-	commit := r.store.LoadSeenCommitAt(msg.Height)
-	if commit == nil {
-		return fmt.Errorf("found block in store with no commit: %v", block)
-	}
-
-	blockProto, err := block.ToProto()
-	if err != nil {
-		return fmt.Errorf("failed to convert block to protobuf: %w", err)
-	}
-
-	return blockSyncCh.Send(ctx, p2p.Envelope{
-		To: peerID,
-		Message: &bcproto.BlockResponse{
-			Block:  blockProto,
-			Commit: commit.ToProto(),
-		},
-	})
-
-}
-
-// handleMessage handles an Envelope sent from a peer on a specific p2p Channel.
-// It will handle errors and any possible panics gracefully. A caller can handle
-// any error returned by sending a PeerError on the respective channel.
-func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, blockSyncCh p2p.Channel, channel *Channel) (err error) {
-	defer func() {
-		if e := recover(); e != nil {
-			err = fmt.Errorf("panic in processing message: %v", e)
-			r.logger.Error(
-				"recovering from processing message panic",
-				"err", err,
-				"stack", string(debug.Stack()),
-			)
-		}
-	}()
-
-	//r.logger.Debug("received message", "message", envelope.Message, "peer", envelope.From)
-
-	if envelope.ChannelID != BlockSyncChannel {
-		return fmt.Errorf("unknown channel ID (%d) for envelope (%v)", envelope.ChannelID, envelope)
-	}
-
-	switch msg := envelope.Message.(type) {
-	case *bcproto.BlockRequest:
-		return r.respondToPeer(ctx, msg, envelope.From, blockSyncCh)
-	case *bcproto.BlockResponse:
-		err = channel.Resolve(ctx, envelope)
-		if err != nil {
-			r.logger.Error("error", "error", err)
-		}
-	case *bcproto.StatusRequest:
-		return blockSyncCh.Send(ctx, p2p.Envelope{
-			To: envelope.From,
-			Message: &bcproto.StatusResponse{
-				Height: r.store.Height(),
-				Base:   r.store.Base(),
-			},
-		})
-	case *bcproto.StatusResponse:
-		r.synchronizer.SetPeerRange(newPeerData(envelope.From, msg.Base, msg.Height))
-
-	case *bcproto.NoBlockResponse:
-		r.logger.Debug("peer does not have the requested block",
-			"peer", envelope.From,
-			"height", msg.Height)
-
-	default:
-		return fmt.Errorf("received unknown message: %T", msg)
-	}
-
-	return nil
-}
-
-// processBlockSyncCh initiates a blocking process where we listen for and handle
-// envelopes on the BlockSyncChannel and blockSyncOutBridgeCh. Any error encountered during
-// message execution will result in a PeerError being sent on the BlockSyncChannel.
-// When the reactor is stopped, we will catch the signal and close the p2p Channel
-// gracefully.
-func (r *Reactor) processBlockSyncCh(ctx context.Context, blockSyncCh p2p.Channel, channel *Channel) {
-	iter := blockSyncCh.Receive(ctx)
-	for iter.Next(ctx) {
-		envelope := iter.Envelope()
-		if err := r.handleMessage(ctx, envelope, blockSyncCh, channel); err != nil {
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				return
-			}
-
-			r.logger.Error("failed to process message", "ch_id", envelope.ChannelID, "envelope", envelope, "err", err)
-			if serr := blockSyncCh.SendError(ctx, p2p.PeerError{
-				NodeID: envelope.From,
-				Err:    err,
-			}); serr != nil {
-				return
-			}
-		}
 	}
 }
 

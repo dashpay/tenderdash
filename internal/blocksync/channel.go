@@ -4,6 +4,7 @@ package blocksync
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -20,6 +21,13 @@ import (
 )
 
 type (
+	ConsumerHandler interface {
+		Handle(ctx context.Context, channel *Channel, envelope *p2p.Envelope) error
+	}
+	ConsumerMiddlewareFunc func(next ConsumerHandler) ConsumerHandler
+	ChannelSender          interface {
+		Send(ctx context.Context, msg any) error
+	}
 	BlockClient interface {
 		GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error)
 		Send(ctx context.Context, msg any) error
@@ -119,7 +127,7 @@ func (c *Channel) Send(ctx context.Context, msg any) error {
 	case p2p.Envelope:
 		return c.channel.Send(ctx, t)
 	}
-	return fmt.Errorf("unsupported message type %T", msg)
+	return fmt.Errorf("cannot send an unsupported message type %T", msg)
 }
 
 // Resolve finds a pending promise to resolve the response
@@ -131,6 +139,28 @@ func (c *Channel) Resolve(ctx context.Context, envelope *p2p.Envelope) error {
 		return c.resolveResponse(ctx, reqID, result{Value: msg})
 	default:
 		return fmt.Errorf("cannot resolve response to unknown message: %T", msg)
+	}
+}
+
+// Consume reads the messages from a p2p channel and processes them using a consumer-handler
+func (c *Channel) Consume(ctx context.Context, handler ConsumerHandler) {
+	iter := c.channel.Receive(ctx)
+	for iter.Next(ctx) {
+		envelope := iter.Envelope()
+		err := handler.Handle(ctx, c, envelope)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+		if err != nil {
+			c.logger.Error("failed to process message",
+				"ch_id", envelope.ChannelID,
+				"envelope", envelope,
+				"error", err)
+			serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err})
+			if serr != nil {
+				return
+			}
+		}
 	}
 }
 

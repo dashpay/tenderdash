@@ -421,7 +421,7 @@ func TestReactor_BadBlockStopsPeer(t *testing.T) {
 	rts.addNode(ctx, t, newNode.NodeID, otherGenDoc, otherPrivVals[0], maxBlockHeight)
 
 	// add a fake peer just so we do not wait for the consensus ticker to timeout
-	rts.reactors[newNode.NodeID].synchronizer.SetPeerRange(newPeerData("00ff", 10, 10))
+	rts.reactors[newNode.NodeID].synchronizer.AddPeer(newPeerData("00ff", 10, 10))
 
 	// wait for the new peer to catch up and become fully synced
 	require.Eventually(
