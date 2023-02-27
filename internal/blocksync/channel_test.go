@@ -3,6 +3,7 @@ package blocksync
 import (
 	"context"
 	"errors"
+	"fmt"
 	"runtime"
 	"testing"
 	"time"
@@ -128,7 +129,7 @@ func (suite *ChannelTestSuite) TestSend() {
 
 func (suite *ChannelTestSuite) TestConsume() {
 	ctx := context.Background()
-	outCh := make(chan p2p.Envelope, 3)
+	outCh := make(chan p2p.Envelope)
 	go func() {
 		for i := 0; i < 3; i++ {
 			outCh <- p2p.Envelope{}
@@ -147,6 +148,58 @@ func (suite *ChannelTestSuite) TestConsume() {
 		Times(3).
 		Return(nil)
 	suite.channel.Consume(ctx, consumer)
+}
+
+func (suite *ChannelTestSuite) TestConsumeError() {
+	ctx := context.Background()
+	msg := p2p.Envelope{
+		From: "peer",
+	}
+	handlerErr := errors.New("consumer handler error")
+	testCases := []struct {
+		mockFn func()
+		retErr error
+	}{
+		{
+			retErr: context.Canceled,
+		},
+		{
+			retErr: context.DeadlineExceeded,
+		},
+		{
+			retErr: errors.New("consumer handler error"),
+			mockFn: func() {
+				suite.p2pChannel.
+					On("SendError", ctx, p2p.PeerError{NodeID: msg.From, Err: handlerErr}).
+					Once().
+					Return(nil)
+			},
+		},
+	}
+	for i, tc := range testCases {
+		suite.Run(fmt.Sprintf("%d", i), func() {
+			if tc.mockFn != nil {
+				tc.mockFn()
+			}
+			outCh := make(chan p2p.Envelope, 1)
+			outCh <- msg
+			suite.p2pChannel.
+				On("Receive", ctx).
+				Once().
+				Return(func(ctx context.Context) *p2p.ChannelIterator {
+					return p2p.NewChannelIterator(outCh)
+				})
+			consumer := newMockConsumer(suite.T())
+			consumer.
+				On("Handle", ctx, mock.Anything, mock.Anything).
+				Once().
+				Return(func(_ context.Context, _ *Channel, _ *p2p.Envelope) error {
+					close(outCh)
+					return tc.retErr
+				})
+			suite.channel.Consume(ctx, consumer)
+		})
+	}
 }
 
 type mockConsumer struct {
