@@ -10,6 +10,7 @@ import (
 	"github.com/tendermint/tendermint/config"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
@@ -31,16 +32,23 @@ type StateDataStore struct {
 	metrics        *Metrics
 	logger         log.Logger
 	config         *config.ConsensusConfig
+	emitter        *eventemitter.EventEmitter
 	replayMode     bool
 	version        int64
 }
 
 // NewStateDataStore creates and returns a new state-data store
-func NewStateDataStore(metrics *Metrics, logger log.Logger, cfg *config.ConsensusConfig) *StateDataStore {
+func NewStateDataStore(
+	metrics *Metrics,
+	logger log.Logger,
+	cfg *config.ConsensusConfig,
+	emitter *eventemitter.EventEmitter,
+) *StateDataStore {
 	return &StateDataStore{
 		metrics: metrics,
 		logger:  logger,
 		config:  cfg,
+		emitter: emitter,
 	}
 }
 
@@ -67,7 +75,6 @@ func (s *StateDataStore) UpdateAndGet(candidate StateData) (StateData, error) {
 		return StateData{}, err
 	}
 	return s.load(), nil
-
 }
 
 // UpdateReplayMode safe updates replay-mode flag
@@ -95,9 +102,20 @@ func (s *StateDataStore) update(candidate StateData) error {
 		return fmt.Errorf("mismatch state-data versions actual %d want %d", candidate.version, s.version)
 	}
 	s.roundState = candidate.RoundState
+	if s.committedState.LastBlockHeight == 0 || s.committedState.LastBlockHeight < candidate.state.LastBlockHeight {
+		// fires the event to update committed-state in those components that have a reference with this data
+		s.emitter.Emit(committedStateUpdateEventName, candidate.state)
+	}
 	s.committedState = candidate.state
 	s.version++
 	return nil
+}
+
+func (s *StateDataStore) Subscribe(evsw *eventemitter.EventEmitter) {
+	evsw.AddListener(setReplayModeEventName, func(obj eventemitter.EventData) error {
+		s.UpdateReplayMode(obj.(bool))
+		return nil
+	})
 }
 
 // StateData is a copy of the current RoundState nad state.State stored in the store
@@ -296,27 +314,6 @@ func (s *StateData) HeightVoteSet() (int64, *cstypes.HeightVoteSet) {
 	return s.Height, s.Votes
 }
 
-func (s *StateData) checkValidBlock() bool {
-	if s.ValidBlock == nil {
-		return false
-	}
-	sp := s.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
-	if s.Height == s.state.InitialHeight {
-		// by definition, initial block must have genesis time
-		return s.ValidBlock.Time.Equal(s.state.LastBlockTime)
-	}
-	if !s.ValidBlock.IsTimely(s.ValidBlockRecvTime, sp, s.ValidRound) {
-		s.logger.Debug(
-			"proposal block is outdated",
-			"height", s.Height,
-			"round", s.ValidRound,
-			"received", s.ValidBlockRecvTime,
-			"block", s.ValidBlock)
-		return false
-	}
-	return true
-}
-
 func (s *StateData) commitTime(t time.Time) time.Time {
 	c := s.state.ConsensusParams.Timeout.Commit
 	if s.config.UnsafeCommitTimeoutOverride != 0 {
@@ -467,19 +464,6 @@ func (s *StateData) bypassCommitTimeout() bool {
 		return *s.config.UnsafeBypassCommitTimeoutOverride
 	}
 	return s.state.ConsensusParams.Timeout.BypassCommitTimeout
-}
-
-func (s *StateData) calculateProposalTimestampDifferenceMetric() {
-	if s.Proposal != nil && s.Proposal.POLRound == -1 {
-		sp := s.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
-		recvTime := s.ProposalReceiveTime
-		if s.Height == s.state.InitialHeight {
-			recvTime = s.state.LastBlockTime // genesis time
-		}
-		isTimely := s.Proposal.IsTimely(recvTime, sp, s.Round)
-		s.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", isTimely)).
-			Observe(s.ProposalReceiveTime.Sub(s.Proposal.Timestamp).Seconds())
-	}
 }
 
 func (s *StateData) isValidForPrevote() error {

@@ -5,6 +5,7 @@ import (
 	"time"
 
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -107,4 +108,11 @@ func (s *voteSigner) signVote(
 		return nil, err
 	}
 	return vote, nil
+}
+
+func (s *voteSigner) Subscribe(emitter *eventemitter.EventEmitter) {
+	emitter.AddListener(setPrivValidatorEventName, func(obj eventemitter.EventData) error {
+		s.privValidator = obj.(privValidator)
+		return nil
+	})
 }

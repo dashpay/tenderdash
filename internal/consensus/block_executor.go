@@ -5,7 +5,9 @@ import (
 	"errors"
 	"fmt"
 
+	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -15,6 +17,7 @@ type blockExecutor struct {
 	privValidator      privValidator
 	blockExec          sm.Executor
 	proposedAppVersion uint64
+	committedState     sm.State
 }
 
 // Create the next block to propose and return it. Returns nil block upon error.
@@ -23,8 +26,7 @@ type blockExecutor struct {
 // convenience so we can log the proposal block.
 //
 // NOTE: keep it side-effect free for clarity.
-// CONTRACT: cs.privValidator is not nil.
-func (c *blockExecutor) create(ctx context.Context, stateData *StateData, round int32) (*types.Block, error) {
+func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, round int32) (*types.Block, error) {
 	if c.privValidator.IsZero() {
 		return nil, errors.New("cannot create proposal block on non-validator")
 	}
@@ -32,13 +34,13 @@ func (c *blockExecutor) create(ctx context.Context, stateData *StateData, round 
 	// TODO(sergio): wouldn't it be easier if CreateProposalBlock accepted cs.LastCommit directly?
 	var commit *types.Commit
 	switch {
-	case stateData.Height == stateData.state.InitialHeight:
+	case rs.Height == c.committedState.InitialHeight:
 		// We're creating a proposal for the first block.
 		// The commit is empty, but not nil.
 		commit = types.NewCommit(0, 0, types.BlockID{}, nil)
-	case stateData.LastCommit != nil:
+	case rs.LastCommit != nil:
 		// Make the commit from LastPrecommits
-		commit = stateData.LastCommit
+		commit = rs.LastCommit
 
 	default: // This shouldn't happen.
 		c.logger.Error("propose step; cannot propose anything without commit for the previous block")
@@ -47,30 +49,30 @@ func (c *blockExecutor) create(ctx context.Context, stateData *StateData, round 
 
 	proposerProTxHash := c.privValidator.ProTxHash
 
-	ret, uncommittedState, err := c.blockExec.CreateProposalBlock(ctx, stateData.Height, round, stateData.state, commit, proposerProTxHash, c.proposedAppVersion)
+	ret, uncommittedState, err := c.blockExec.CreateProposalBlock(ctx, rs.Height, round, c.committedState, commit, proposerProTxHash, c.proposedAppVersion)
 	if err != nil {
 		panic(err)
 	}
-	stateData.RoundState.CurrentRoundState = uncommittedState
+	rs.CurrentRoundState = uncommittedState
 	return ret, nil
 }
 
-func (c *blockExecutor) ensureProcess(ctx context.Context, stateData *StateData, round int32) error {
-	block := stateData.ProposalBlock
-	crs := stateData.CurrentRoundState
+func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundState, round int32) error {
+	block := rs.ProposalBlock
+	crs := rs.CurrentRoundState
 	if crs.Params.Source != sm.ProcessProposalSource || !crs.MatchesBlock(block.Header, round) {
 		c.logger.Debug("CurrentRoundState is outdated", "crs", crs)
-		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, stateData.state, true)
+		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.committedState, true)
 		if err != nil {
 			return fmt.Errorf("ProcessProposal abci method: %w", err)
 		}
-		stateData.CurrentRoundState = uncommittedState
+		rs.CurrentRoundState = uncommittedState
 	}
 	return nil
 }
 
-func (c *blockExecutor) mustEnsureProcess(ctx context.Context, stateData *StateData, round int32) {
-	err := c.ensureProcess(ctx, stateData, round)
+func (c *blockExecutor) mustEnsureProcess(ctx context.Context, rs *cstypes.RoundState, round int32) {
+	err := c.ensureProcess(ctx, rs, round)
 	if err != nil {
 		panic(err)
 	}
@@ -108,4 +110,19 @@ func (c *blockExecutor) mustValidate(ctx context.Context, stateData *StateData) 
 	if err != nil {
 		panic(err)
 	}
+}
+
+func (c *blockExecutor) Subscribe(emitter *eventemitter.EventEmitter) {
+	emitter.AddListener(setPrivValidatorEventName, func(obj eventemitter.EventData) error {
+		c.privValidator = obj.(privValidator)
+		return nil
+	})
+	emitter.AddListener(setProposedAppVersionEventName, func(obj eventemitter.EventData) error {
+		c.proposedAppVersion = obj.(uint64)
+		return nil
+	})
+	emitter.AddListener(committedStateUpdateEventName, func(obj eventemitter.EventData) error {
+		c.committedState = obj.(sm.State)
+		return nil
+	})
 }

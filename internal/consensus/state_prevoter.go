@@ -43,7 +43,7 @@ func (p *prevoter) Do(ctx context.Context, stateData *StateData) error {
 		p.signAndAddNilVote(ctx, stateData)
 		return nil
 	}
-	err = p.blockExec.ensureProcess(ctx, stateData, stateData.Round)
+	err = p.blockExec.ensureProcess(ctx, &stateData.RoundState, stateData.Round)
 	if err != nil {
 		p.handleError(err, "block", stateData.ProposalBlock)
 		p.signAndAddNilVote(ctx, stateData)

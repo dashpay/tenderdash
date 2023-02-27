@@ -16,6 +16,7 @@ import (
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/example/kvstore"
 	abci "github.com/tendermint/tendermint/abci/types"
+	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/evidence"
 	"github.com/tendermint/tendermint/internal/mempool"
@@ -129,91 +130,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	// lazyProposer := states[1]
 	lazyNodeState := states[1]
 
-	decideProposalCmd := newMockAction(func(ctx context.Context, stateEvent StateEvent) error {
-		stateData := stateEvent.StateData
-		event := stateEvent.Data.(*DecideProposalEvent)
-		height := event.Height
-		round := event.Round
-		require.False(t, lazyNodeState.privValidator.IsZero())
-
-		var commit *types.Commit
-		switch {
-		case stateData.Height == stateData.state.InitialHeight:
-			// We're creating a proposal for the first block.
-			// The commit is empty, but not nil.
-			commit = types.NewCommit(0, 0, types.BlockID{}, nil)
-		case stateData.LastCommit != nil:
-			// Make the commit from LastCommit
-			commit = stateData.LastCommit
-		default: // This shouldn't happen.
-			lazyNodeState.logger.Error("enterPropose: Cannot propose anything: No commit for the previous block")
-			return nil
-		}
-
-		if lazyNodeState.privValidator.IsZero() {
-			// If this node is a validator & proposer in the current round, it will
-			// miss the opportunity to create a block.
-			lazyNodeState.logger.Error("enterPropose", "error", ErrPrivValidatorNotSet)
-			return nil
-		}
-
-		block, uncommittedState, err := lazyNodeState.blockExec.CreateProposalBlock(
-			ctx,
-			stateData.Height,
-			round,
-			stateData.state,
-			commit,
-			lazyNodeState.privValidator.ProTxHash,
-			0,
-		)
-		require.NoError(t, err)
-		assert.NotZero(t, uncommittedState)
-		blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
-		require.NoError(t, err)
-
-		// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,
-		// and the privValidator will refuse to sign anything.
-		if err := lazyNodeState.wal.FlushAndSync(); err != nil {
-			lazyNodeState.logger.Error("error flushing to disk")
-		}
-
-		// Make proposal
-		propBlockID := block.BlockID(blockParts)
-		assert.NoError(t, err)
-
-		proposal := types.NewProposal(
-			height,
-			stateData.state.LastCoreChainLockedBlockHeight,
-			round,
-			stateData.ValidRound,
-			propBlockID,
-			block.Header.Time,
-		)
-		p := proposal.ToProto()
-		if _, err := lazyNodeState.privValidator.SignProposal(
-			ctx,
-			stateData.state.ChainID,
-			stateData.state.Validators.QuorumType,
-			stateData.state.Validators.QuorumHash,
-			p,
-		); err == nil {
-			proposal.Signature = p.Signature
-
-			// send proposal and block parts on internal msg queue
-			_ = lazyNodeState.msgInfoQueue.send(ctx, &ProposalMessage{proposal}, "")
-			for i := 0; i < int(blockParts.Total()); i++ {
-				part := blockParts.GetPart(i)
-				_ = lazyNodeState.msgInfoQueue.send(ctx, &BlockPartMessage{
-					stateData.Height, stateData.Round, part,
-				}, "")
-			}
-			lazyNodeState.logger.Debug("signed proposal block", "block", block)
-		} else if !lazyNodeState.replayMode {
-			lazyNodeState.logger.Error("enterPropose: Error signing proposal", "height", height, "round", round, "err", err)
-		}
-		return nil
-	})
-	lazyNodeState.ctrl.Register(DecideProposalType, decideProposalCmd)
+	enterProposeWithBzProposalDecider(lazyNodeState)
 
 	rts.switchToConsensus(ctx)
 
@@ -352,4 +269,45 @@ func newP2PMessage(peerID types.NodeID, obj any) p2p.Envelope {
 		}
 	}
 	return envelope
+}
+
+type bzProposalDecider struct {
+	*Proposaler
+}
+
+func enterProposeWithBzProposalDecider(state *State) {
+	action := state.ctrl.Get(EnterProposeType)
+	enterProposeAction := action.(*EnterProposeAction)
+	propler := enterProposeAction.proposalCreator.(*Proposaler)
+	invalidDecider := &bzProposalDecider{Proposaler: propler}
+	enterProposeAction.proposalCreator = invalidDecider
+}
+
+func (p *bzProposalDecider) Create(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
+	block, blockParts, err := p.createProposalBlock(ctx, round, rs)
+	if err != nil {
+		return err
+	}
+
+	// Make proposal
+	propBlockID := block.BlockID(blockParts)
+	proposal := types.NewProposal(
+		height,
+		p.committedState.LastCoreChainLockedBlockHeight,
+		round,
+		rs.ValidRound,
+		propBlockID,
+		block.Header.Time,
+	)
+	err = p.signProposal(ctx, height, proposal)
+	if err != nil {
+		p.logger.Error("enterPropose: Error signing proposal",
+			"height", height,
+			"round", round,
+			"error", err)
+		return err
+	}
+	p.sendMessages(ctx, &ProposalMessage{proposal})
+	p.sendMessages(ctx, blockPartsToMessages(height, round, blockParts)...)
+	return nil
 }
