@@ -57,25 +57,17 @@ require (
 )
 
 require (
-	github.com/aead/siphash v1.0.1 // indirect
 	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f // indirect
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
-	github.com/btcsuite/goleveldb v1.0.0 // indirect
-	github.com/btcsuite/snappy-go v1.0.0 // indirect
 	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792 // indirect
-	github.com/btcsuite/winsvc v1.0.0 // indirect
 	github.com/dashevo/dashd-go/btcutil v1.1.1 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
-	github.com/decred/dcrd/lru v1.0.0 // indirect
 	github.com/didip/tollbooth/v6 v6.0.1 // indirect
 	github.com/didip/tollbooth_chi v0.0.0-20200524181329-8b84cd7183d9 // indirect
 	github.com/go-chi/render v1.0.1 // indirect
 	github.com/go-pkgz/expirable-cache v0.0.3 // indirect
 	github.com/go-pkgz/rest v1.5.0 // indirect
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
-	github.com/jessevdk/go-flags v1.4.0 // indirect
-	github.com/jrick/logrotate v1.0.0 // indirect
-	github.com/kkdai/bstream v1.0.0 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.5 // indirect
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
 	golang.org/x/time v0.0.0-20210723032227-1f47c861a9ac // indirect
