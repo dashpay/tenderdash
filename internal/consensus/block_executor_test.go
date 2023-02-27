@@ -113,6 +113,7 @@ func (suite *BockExecutorTestSuite) TestCreate() {
 					InitialHeight: tc.initialHeight,
 				},
 			}
+			suite.blockExec.committedState = stateData.state
 			if tc.wantCommit != nil {
 				suite.mockBlockExec.
 					On(
@@ -128,7 +129,7 @@ func (suite *BockExecutorTestSuite) TestCreate() {
 					Once().
 					Return(tc.wantBlock, tc.wantCRS, nil)
 			}
-			actualBlock, err := suite.blockExec.create(ctx, &stateData, tc.round)
+			actualBlock, err := suite.blockExec.create(ctx, &stateData.RoundState, tc.round)
 			require.NoError(suite.T(), err)
 			require.Equal(suite.T(), tc.wantBlock, actualBlock)
 			require.Equal(suite.T(), tc.wantCRS, stateData.CurrentRoundState)
@@ -232,7 +233,7 @@ func (suite *BockExecutorTestSuite) TestProcess() {
 					Once().
 					Return(tc.wantCRS, wantErr)
 			}
-			err := suite.blockExec.ensureProcess(ctx, &stateData, round)
+			err := suite.blockExec.ensureProcess(ctx, &stateData.RoundState, round)
 			tmrequire.Error(suite.T(), tc.wantErr, err)
 			require.Equal(suite.T(), tc.wantCRS, stateData.CurrentRoundState)
 		})

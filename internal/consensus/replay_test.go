@@ -24,6 +24,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/dash"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/internal/proxy"
@@ -55,7 +56,7 @@ import (
 // wal writer when we need to, instead of with every message.
 
 func startNewStateAndWaitForBlock(ctx context.Context, t *testing.T, consensusReplayConfig *config.Config) {
-	logger := log.NewNopLogger()
+	logger := log.NewTestingLogger(t)
 	state, err := sm.MakeGenesisStateFromFile(consensusReplayConfig.GenesisFile())
 	require.NoError(t, err)
 	privValidator := loadPrivValidator(t, consensusReplayConfig)
@@ -171,20 +172,23 @@ LOOP:
 		// due to a timeout handler performs before than validators will be ready for the message
 		state.ConsensusParams.Timeout.Propose = 1 * time.Second
 
-		privValidator := loadPrivValidator(t, consensusReplayConfig)
+		privVal := loadPrivValidator(t, consensusReplayConfig)
 		cs := newStateWithConfigAndBlockStore(
 			rctx,
 			t,
 			logger,
 			consensusReplayConfig,
 			state,
-			privValidator,
+			privVal,
 			newKVStoreFunc(t)(logger, ""),
 			blockStore,
 		)
 
 		// start sending transactions
 		ctx, cancel := context.WithCancel(rctx)
+		proTxHash, err := privVal.GetProTxHash(ctx)
+		require.NoError(t, err)
+		ctx = dash.ContextWithProTxHash(ctx, proTxHash)
 		initFn(stateDB, cs, ctx)
 
 		// clean up WAL file from the previous iteration
@@ -1414,6 +1418,10 @@ func TestWALRoundsSkipper(t *testing.T) {
 		0,
 		blockStore,
 	)
+
+	proTxHash, err := privVal.GetProTxHash(ctx)
+	require.NoError(t, err)
+	ctx = dash.ContextWithProTxHash(ctx, proTxHash)
 
 	cs := newStateWithConfigAndBlockStore(ctx, t, log.NewTestingLogger(t), cfg, state, privVal, app, blockStore)
 
