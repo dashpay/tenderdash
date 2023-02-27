@@ -3,7 +3,6 @@ package consensus
 import (
 	"context"
 	"fmt"
-	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"testing"
 	"time"
 
@@ -13,6 +12,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
+	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
