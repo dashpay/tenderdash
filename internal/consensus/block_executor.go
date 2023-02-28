@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 
+	sync "github.com/sasha-s/go-deadlock"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/eventemitter"
@@ -13,6 +14,7 @@ import (
 )
 
 type blockExecutor struct {
+	mtx                sync.RWMutex
 	logger             log.Logger
 	privValidator      privValidator
 	blockExec          sm.Executor
@@ -49,7 +51,8 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 
 	proposerProTxHash := c.privValidator.ProTxHash
 
-	ret, uncommittedState, err := c.blockExec.CreateProposalBlock(ctx, rs.Height, round, c.committedState, commit, proposerProTxHash, c.proposedAppVersion)
+	committedState := c.getCommittedState()
+	ret, uncommittedState, err := c.blockExec.CreateProposalBlock(ctx, rs.Height, round, committedState, commit, proposerProTxHash, c.proposedAppVersion)
 	if err != nil {
 		panic(err)
 	}
@@ -112,6 +115,18 @@ func (c *blockExecutor) mustValidate(ctx context.Context, stateData *StateData) 
 	}
 }
 
+func (c *blockExecutor) setCommittedState(committedState sm.State) {
+	c.mtx.Lock()
+	defer c.mtx.Unlock()
+	c.committedState = committedState
+}
+
+func (c *blockExecutor) getCommittedState() sm.State {
+	c.mtx.RLock()
+	defer c.mtx.RUnlock()
+	return c.committedState
+}
+
 func (c *blockExecutor) Subscribe(emitter *eventemitter.EventEmitter) {
 	emitter.AddListener(setPrivValidatorEventName, func(obj eventemitter.EventData) error {
 		c.privValidator = obj.(privValidator)
@@ -122,7 +137,7 @@ func (c *blockExecutor) Subscribe(emitter *eventemitter.EventEmitter) {
 		return nil
 	})
 	emitter.AddListener(committedStateUpdateEventName, func(obj eventemitter.EventData) error {
-		c.committedState = obj.(sm.State)
+		c.setCommittedState(obj.(sm.State))
 		return nil
 	})
 }
