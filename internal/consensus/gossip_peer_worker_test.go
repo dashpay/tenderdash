@@ -9,6 +9,7 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
+	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 )
 
@@ -18,6 +19,7 @@ func TestPeerGossipWorker(t *testing.T) {
 	logger := log.NewTestingLogger(t)
 	cfg := configSetup(t)
 	fakeClock := clockwork.NewFakeClock()
+	emitter := eventemitter.New()
 
 	handlerCalledCh := make(chan struct{}, 2)
 	pg := peerGossipWorker{
@@ -32,7 +34,7 @@ func TestPeerGossipWorker(t *testing.T) {
 			}, 1*time.Second),
 		},
 		running:        atomic.Bool{},
-		stateDataStore: NewStateDataStore(NopMetrics(), logger, cfg.Consensus),
+		stateDataStore: NewStateDataStore(NopMetrics(), logger, cfg.Consensus, emitter),
 		stopCh:         make(chan struct{}),
 	}
 	require.False(t, pg.IsRunning())
