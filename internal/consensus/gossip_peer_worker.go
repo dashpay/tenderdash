@@ -70,45 +70,42 @@ func newPeerGossipWorker(
 	}
 }
 
-func (g *peerGossipWorker) isRunning() bool {
+func (g *peerGossipWorker) IsRunning() bool {
 	return g.running.Load()
 }
 
-func (g *peerGossipWorker) start(ctx context.Context) {
+func (g *peerGossipWorker) Start(ctx context.Context) error {
 	g.running.Store(true)
 	for _, handler := range g.handlers {
 		go g.runHandler(ctx, handler)
 	}
+	return nil
 }
 
-func (g *peerGossipWorker) stop(ctx context.Context) {
+func (g *peerGossipWorker) Stop() {
 	if !g.running.Swap(false) {
 		return
 	}
 	g.logger.Debug("peer gossip worker stopping")
 	close(g.stopCh)
-	g.wait(ctx)
+	g.Wait()
 }
 
-func (g *peerGossipWorker) wait(ctx context.Context) {
+func (g *peerGossipWorker) Wait() {
 	for _, hd := range g.handlers {
-		select {
-		case <-ctx.Done():
-			return
-		case <-hd.stoppedCh:
-			g.logger.Debug("peer gossip worker stopped")
-		}
+		<-hd.stoppedCh
+		g.logger.Debug("peer gossip worker stopped")
 	}
 }
 
 func (g *peerGossipWorker) runHandler(ctx context.Context, hd gossipHandler) {
-	timer := time.NewTimer(0)
+	timer := g.clock.NewTimer(0)
 	defer timer.Stop()
 	for {
 		hd.handlerFunc(ctx, g.stateDataStore.Get())
 		timer.Reset(hd.sleepDuration)
 		select {
-		case <-timer.C:
+		case <-timer.Chan():
 		case <-g.stopCh:
 			g.logger.Debug("peer gossip worker got stop signal")
 			close(hd.stoppedCh)

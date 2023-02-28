@@ -486,7 +486,7 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 				return
 			}
 			// start goroutines for this peer
-			pgw.start(ctx)
+			pgw.Start(ctx)
 
 			// Send our state to the peer. If we're block-syncing, broadcast a
 			// RoundStepMessage later upon SwitchToConsensus().
