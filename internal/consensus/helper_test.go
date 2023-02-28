@@ -12,6 +12,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/dash"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/internal/proxy"
@@ -132,6 +133,9 @@ func newDefaultFakeNode(ctx context.Context, t *testing.T, logger log.Logger) *f
 }
 
 func (n *fakeNode) start(ctx context.Context, t *testing.T) {
+	proTxHash, err := n.pv.GetProTxHash(ctx)
+	require.NoError(t, err)
+	ctx = dash.ContextWithProTxHash(ctx, proTxHash)
 	require.NoError(t, n.csState.Start(ctx))
 	t.Cleanup(n.csState.Wait)
 }

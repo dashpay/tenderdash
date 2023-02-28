@@ -16,6 +16,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	abcimocks "github.com/tendermint/tendermint/abci/types/mocks"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/dash"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
@@ -180,6 +181,7 @@ func TestStateEnterProposeYesPrivValidator(t *testing.T) {
 	defer cancel()
 
 	cs, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1})
+	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
 	stateData := cs.GetStateData()
 	height, round := stateData.Height, stateData.Round
 
@@ -219,7 +221,7 @@ func TestStateBadProposal(t *testing.T) {
 
 	voteCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryVote)
 
-	propBlock, err := cs1.blockExecutor.create(ctx, &stateData, round) // changeProposer(t, cs1, vs2)
+	propBlock, err := cs1.blockExecutor.create(ctx, &stateData.RoundState, round) // changeProposer(t, cs1, vs2)
 	require.NoError(t, err)
 
 	// make the second validator the proposer by incrementing round
@@ -272,6 +274,7 @@ func TestStateProposalTime(t *testing.T) {
 	app, err := kvstore.NewMemoryApp(kvstore.WithDuplicateRequestDetection(false))
 	require.NoError(t, err)
 	cs1, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1, application: app})
+	ctx = dash.ContextWithProTxHash(ctx, cs1.privValidator.ProTxHash)
 	stateData := cs1.GetStateData()
 	height, round := stateData.Height, stateData.Round
 	cs1.config.DontAutoPropose = true
@@ -530,6 +533,7 @@ func TestStateLock_NoPOL(t *testing.T) {
 	defer cancel()
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, validators: 2})
+	ctx = dash.ContextWithProTxHash(ctx, cs1.privValidator.ProTxHash)
 	vs2 := vss[1]
 	stateData := cs1.GetStateData()
 	height, round := stateData.Height, stateData.Round
@@ -3186,6 +3190,8 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 		PeerID:      peerID,
 		ReceiveTime: time.Time{},
 	})
+
+	ctx = dash.ContextWithProTxHash(ctx, otherNode.privValidator.ProTxHash)
 
 	// This is where error "2/3 committed an invalid block" occurred before
 	err = otherNode.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &css1StateData)

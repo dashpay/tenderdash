@@ -30,6 +30,7 @@ const (
 	setProposedAppVersionEventName = "setProposedAppVersion"
 	setPrivValidatorEventName      = "setPrivValidator"
 	setReplayModeEventName         = "setReplayMode"
+	committedStateUpdateEventName  = "committedStateUpdate"
 )
 
 // Consensus sentinel errors
@@ -252,7 +253,7 @@ func NewState(
 		option(cs)
 	}
 
-	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg)
+	cs.stateDataStore = NewStateDataStore(cs.metrics, logger, cfg, cs.emitter)
 	wal := &wrapWAL{getter: func() WALWriteFlusher { return cs.wal }}
 
 	cs.voteSigner = &voteSigner{
@@ -275,23 +276,13 @@ func NewState(
 		wal:      wal,
 	}
 	cs.roundScheduler = &roundScheduler{timeoutTicker: cs.timeoutTicker}
-	cs.ctrl = NewController(cs, wal, cs.statsMsgQueue)
-	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, wal, cs.logger)
-	cs.emitter.AddListener(setProposedAppVersionEventName, func(obj eventemitter.EventData) error {
-		ver := obj.(uint64)
-		cs.blockExecutor.proposedAppVersion = ver
-		return nil
-	})
-	cs.emitter.AddListener(setPrivValidatorEventName, func(obj eventemitter.EventData) error {
-		pv := obj.(privValidator)
-		cs.voteSigner.privValidator = pv
-		cs.blockExecutor.privValidator = pv
-		return nil
-	})
-	cs.emitter.AddListener(setReplayModeEventName, func(obj eventemitter.EventData) error {
-		cs.stateDataStore.UpdateReplayMode(obj.(bool))
-		return nil
-	})
+	propler := NewProposaler(cs.logger, cs.metrics, cs.privValidator, cs.msgInfoQueue, cs.blockExecutor)
+	cs.ctrl = NewController(cs, wal, cs.statsMsgQueue, propler)
+	subs := []eventemitter.Subscriber{propler, cs.blockExecutor, cs.stateDataStore, cs.voteSigner}
+	for _, sub := range subs {
+		sub.Subscribe(cs.emitter)
+	}
+	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger)
 
 	// this is not ideal, but it lets the consensus tests start
 	// node-fragments gracefully while letting the nodes
@@ -358,7 +349,7 @@ func (cs *State) String() string {
 
 // GetRoundState returns a shallow copy of the internal consensus state.
 func (cs *State) GetRoundState() cstypes.RoundState {
-	stateData := cs.stateDataStore.Get()
+	stateData := cs.GetStateData()
 	// NOTE: this might be dodgy, as RoundState itself isn't thread
 	// safe as it contains a number of pointers and is explicitly
 	// not thread safe.
@@ -805,7 +796,7 @@ func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 // Only used in tests.
 func (cs *State) CreateProposalBlock(ctx context.Context) (*types.Block, error) {
 	stateData := cs.GetStateData()
-	return cs.blockExecutor.create(ctx, &stateData, stateData.Round)
+	return cs.blockExecutor.create(ctx, &stateData.RoundState, stateData.Round)
 }
 
 // PublishCommitEvent ...

@@ -278,7 +278,7 @@ func decideProposal(
 		_ = stateData.Save()
 	}()
 
-	block, err := cs1.blockExecutor.create(ctx, &stateData, round)
+	block, err := cs1.blockExecutor.create(ctx, &stateData.RoundState, round)
 	require.NoError(t, err)
 	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
@@ -1124,18 +1124,6 @@ type quorumData struct {
 	llmq.Data
 	quorumHash         crypto.QuorumHash
 	validatorSetUpdate abci.ValidatorSetUpdate
-}
-
-type mockAction struct {
-	fn func(ctx context.Context, stateEvent StateEvent) error
-}
-
-func newMockAction(fn func(ctx context.Context, stateEvent StateEvent) error) *mockAction {
-	return &mockAction{fn: fn}
-}
-
-func (c *mockAction) Execute(ctx context.Context, stateEvent StateEvent) error {
-	return c.fn(ctx, stateEvent)
 }
 
 type testSigner struct {

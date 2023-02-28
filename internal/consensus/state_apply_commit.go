@@ -46,7 +46,7 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 		round = commit.Round
 	}
 
-	c.blockExec.mustEnsureProcess(ctx, stateData, round)
+	c.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, round)
 	c.blockExec.mustValidate(ctx, stateData)
 
 	// Save to blockStore
