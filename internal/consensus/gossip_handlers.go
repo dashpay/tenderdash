@@ -59,6 +59,7 @@ func dataGossipHandler(ps *PeerState, logger log.Logger, blockStore sm.BlockStor
 			if !isValidator && prs.HasCommit && prs.ProposalBlockParts == nil {
 				// We can assume if they have the commit then they should have the same part set header
 				ps.UpdateProposalBlockParts(rs.ProposalBlockParts)
+				prs = ps.GetRoundState()
 			}
 			_, ok := rs.ProposalBlockParts.BitArray().Sub(prs.ProposalBlockParts.Copy()).PickRandom()
 			if ok {
@@ -86,7 +87,7 @@ func dataGossipHandler(ps *PeerState, logger log.Logger, blockStore sm.BlockStor
 			logger.Error(
 				"failed to load block meta",
 				"height", prs.Height,
-				"blockstor_base", blockStoreBase,
+				"blockstore_base", blockStoreBase,
 				"blockstore_height", blockStore.Height(),
 			)
 			return
