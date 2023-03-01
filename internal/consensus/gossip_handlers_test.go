@@ -209,7 +209,8 @@ func (suite *GossipHandlerTestSuite) TestDataGossipHandler() {
 			},
 			mockFn: func() {
 				suite.fakeBlockStore.On("Base").Return(int64(1))
-				suite.fakeGossiper.On("GossipBlockPartsAndCommitForCatchup", ctx, mock.Anything, mock.Anything)
+				suite.fakeGossiper.On("GossipBlockPartsForCatchup", ctx, mock.Anything, mock.Anything)
+				suite.fakeGossiper.On("GossipCommit", ctx, mock.Anything, mock.Anything)
 			},
 		},
 		{

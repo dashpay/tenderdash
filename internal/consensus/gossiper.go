@@ -17,13 +17,14 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
+// Gossiper is the interface that wraps the methods needed to gossip a state between connected peers
 type Gossiper interface {
-	GossipVoteSetMaj23(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
-	GossipProposalBlockParts(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
 	GossipProposal(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
-	GossipBlockPartsAndCommitForCatchup(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
-	GossipCommit(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
+	GossipProposalBlockParts(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
+	GossipBlockPartsForCatchup(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
 	GossipVote(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
+	GossipVoteSetMaj23(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
+	GossipCommit(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState)
 }
 
 type msgGossiper struct {
@@ -51,6 +52,7 @@ func newVoteSetMaj23FromPRS(prs *cstypes.PeerRoundState, msgType tmproto.SignedM
 	return newVoteSetMaj23(prs.Height, prs.Round, msgType, maj23)
 }
 
+// GossipVoteSetMaj23 sends VoteSetMaj23 messages to the peer
 func (g *msgGossiper) GossipVoteSetMaj23(
 	ctx context.Context,
 	rs cstypes.RoundState,
@@ -104,6 +106,7 @@ func (g *msgGossiper) GossipVoteSetMaj23(
 	}
 }
 
+// GossipProposalBlockParts sends a block part message to the peer
 func (g *msgGossiper) GossipProposalBlockParts(
 	ctx context.Context,
 	rs cstypes.RoundState,
@@ -127,6 +130,7 @@ func (g *msgGossiper) GossipProposalBlockParts(
 	}
 }
 
+// GossipProposal sends a proposal message to the peer
 func (g *msgGossiper) GossipProposal(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
 	logger := g.logger.With([]any{
 		"height", prs.Height,
@@ -159,32 +163,56 @@ func (g *msgGossiper) GossipProposal(ctx context.Context, rs cstypes.RoundState,
 	}
 }
 
-func (g *msgGossiper) GossipBlockPartsAndCommitForCatchup(
+// GossipBlockPartsForCatchup sends a block part for catch up
+func (g *msgGossiper) GossipBlockPartsForCatchup(
 	ctx context.Context,
-	rs cstypes.RoundState,
+	_ cstypes.RoundState,
 	prs *cstypes.PeerRoundState,
 ) {
-	err := g.gossipBlockPartsForCatchup(ctx, prs)
+	index, ok := prs.ProposalBlockParts.Not().PickRandom()
+	if !ok {
+		return
+	}
+	logger := g.logger.With([]any{
+		"height", prs.Height,
+		"round", prs.Round,
+	})
+	meta, err := g.blockStore.loadMeta(prs.Height)
 	if err != nil {
+		logger.Error("couldn't find a block meta", "error", err)
 		return
 	}
-	// block parts already delivered -  send commits?
-	if rs.Height == 0 || prs.HasCommit {
+	err = g.ensurePeerPartSetHeader(meta.BlockID.PartSetHeader, prs.ProposalBlockPartSetHeader)
+	if err != nil {
+		logger.Error("block and peer part-set headers do not match", "error", err)
 		return
 	}
-	g.GossipCommit(ctx, rs, prs)
+	part, err := g.blockStore.loadPart(prs.Height, index)
+	if err != nil {
+		logger.Error("couldn't find a block part", "part_index", index, "error", err)
+		return
+	}
+	err = g.syncProposalBlockPart(ctx, part, prs.Height, meta.Round)
+	if err != nil {
+		logger.Error("failed to sync proposal block part to the peer", "error", err)
+	}
 }
 
+// GossipCommit sends a commit message to the peer
 func (g *msgGossiper) GossipCommit(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
+	if prs.HasCommit {
+		return
+	}
 	logger := g.logger.With([]any{
 		"height", rs.Height,
 		"peer_height", prs.Height,
 	})
 	var commit *types.Commit
 	blockStoreBase := g.blockStore.Base()
-	if prs.Height+1 == rs.Height && !prs.HasCommit {
+	if rs.Height == prs.Height+1 {
 		commit = rs.LastCommit
-	} else if rs.Height >= prs.Height+2 && prs.Height >= blockStoreBase && !prs.HasCommit {
+	}
+	if rs.Height >= prs.Height+2 && prs.Height >= blockStoreBase {
 		// Load the block commit for prs.Height, which contains precommit
 		// signatures for prs.Height.
 		commit = g.blockStore.LoadBlockCommit(prs.Height)
@@ -203,6 +231,7 @@ func (g *msgGossiper) GossipCommit(ctx context.Context, rs cstypes.RoundState, p
 	}
 }
 
+// GossipVote sends a vote message to the peer
 func (g *msgGossiper) GossipVote(ctx context.Context, rs cstypes.RoundState, prs *cstypes.PeerRoundState) {
 	vote, found := g.pickVoteForGossip(rs, prs)
 	if !found {
@@ -221,26 +250,6 @@ func (g *msgGossiper) GossipVote(ctx context.Context, rs cstypes.RoundState, prs
 	if err != nil {
 		logger.Error("failed to sync vote message to the peer", "error", err)
 	}
-}
-
-func (g *msgGossiper) gossipBlockPartsForCatchup(ctx context.Context, prs *cstypes.PeerRoundState) error {
-	index, ok := prs.ProposalBlockParts.Not().PickRandom()
-	if !ok {
-		return nil
-	}
-	meta, err := g.blockStore.loadMeta(prs.Height)
-	if err != nil {
-		return err
-	}
-	valid := g.ensurePeerPartSetHeader(meta.BlockID.PartSetHeader, prs.ProposalBlockPartSetHeader)
-	if !valid {
-		return nil
-	}
-	part, err := g.blockStore.loadPart(prs.Height, index)
-	if err != nil {
-		return err
-	}
-	return g.syncProposalBlockPart(ctx, part, prs.Height, meta.Round)
 }
 
 func (g *msgGossiper) syncProposalBlockPart(ctx context.Context, part *types.Part, height int64, round int32) error {
@@ -283,17 +292,19 @@ func (g *msgGossiper) sync(ctx context.Context, protoMsg proto.Message, syncFunc
 	return err
 }
 
-func (g *msgGossiper) ensurePeerPartSetHeader(blockPartSetHeader types.PartSetHeader, peerPartSetHeader types.PartSetHeader) bool {
+func (g *msgGossiper) ensurePeerPartSetHeader(blockPartSetHeader types.PartSetHeader, peerPartSetHeader types.PartSetHeader) error {
 	// ensure that the peer's PartSetHeader is correct
 	if blockPartSetHeader.Equals(peerPartSetHeader) {
-		return true
+		return nil
 	}
 	g.logger.Debug(
 		"peer ProposalBlockPartSetHeader mismatch",
 		"block_part_set_header", blockPartSetHeader,
 		"peer_block_part_set_header", peerPartSetHeader,
 	)
-	return false
+	return fmt.Errorf("peer block part-set header %s is mismatch with block part-set header %s",
+		peerPartSetHeader.String(),
+		blockPartSetHeader.String())
 }
 
 // pickVoteForGossip picks a vote to sends it to the peer. It will return (*types.Vote and true) if
@@ -304,20 +315,20 @@ func (g *msgGossiper) pickVoteForGossip(rs cstypes.RoundState, prs *cstypes.Peer
 	if prs.Step == cstypes.RoundStepNewHeight {
 		voteSets = append(voteSets, rs.LastPrecommits)
 	}
-	// if there are POL prevotes to send
-	if prs.Step <= cstypes.RoundStepPropose && prs.Round != -1 && prs.Round <= rs.Round && prs.ProposalPOLRound != -1 {
-		voteSets = append(voteSets, rs.Votes.Prevotes(prs.ProposalPOLRound))
-	}
-	// if there are prevotes to send
-	if prs.Step <= cstypes.RoundStepPrevoteWait && prs.Round != -1 && prs.Round <= rs.Round {
-		voteSets = append(voteSets, rs.Votes.Prevotes(prs.Round))
-	}
-	// if there are precommits to send
-	if prs.Step <= cstypes.RoundStepPrecommitWait && prs.Round != -1 && prs.Round <= rs.Round {
-		voteSets = append(voteSets, rs.Votes.Precommits(prs.Round))
-	}
-	// if there are prevotes to send (which are needed because of validBlock mechanism)
 	if prs.Round != -1 && prs.Round <= rs.Round {
+		// if there are POL prevotes to send
+		if prs.Step <= cstypes.RoundStepPropose && prs.ProposalPOLRound != -1 {
+			voteSets = append(voteSets, rs.Votes.Prevotes(prs.ProposalPOLRound))
+		}
+		// if there are prevotes to send
+		if prs.Step <= cstypes.RoundStepPrevoteWait {
+			voteSets = append(voteSets, rs.Votes.Prevotes(prs.Round))
+		}
+		// if there are precommits to send
+		if prs.Step <= cstypes.RoundStepPrecommitWait {
+			voteSets = append(voteSets, rs.Votes.Precommits(prs.Round))
+		}
+		// if there are prevotes to send (which are needed because of validBlock mechanism)
 		voteSets = append(voteSets, rs.Votes.Prevotes(prs.Round))
 	}
 	// if there are POLPrevotes to send

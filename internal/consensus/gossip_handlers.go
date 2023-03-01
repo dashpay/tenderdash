@@ -72,7 +72,9 @@ func dataGossipHandler(ps *PeerState, logger log.Logger, blockStore sm.BlockStor
 		blockStoreBase := blockStore.Base()
 		if shouldPeerBeCaughtUp(rs, prs, blockStoreBase) {
 			if prs.ProposalBlockParts != nil {
-				gossiper.GossipBlockPartsAndCommitForCatchup(ctx, rs, prs)
+				gossiper.GossipBlockPartsForCatchup(ctx, rs, prs)
+				// block parts already delivered -  send commits?
+				gossiper.GossipCommit(ctx, rs, prs)
 				return
 			}
 			// If we never received the commit message from the peer, the block parts
