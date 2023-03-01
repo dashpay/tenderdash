@@ -36,7 +36,6 @@ var (
 		"goleveldb": 35,
 		"badgerdb":  35,
 		"boltdb":    15,
-		"rocksdb":   10,
 		"cleveldb":  5,
 	}
 	ABCIProtocols = weightedChoice{

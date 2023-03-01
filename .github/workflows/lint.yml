@@ -15,8 +15,11 @@ on:
 jobs:
   golangci:
     name: golangci-lint
-    runs-on: ubuntu-20.04
-    timeout-minutes: 8
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      CGO_LDFLAGS: "-L/usr/local/lib -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
+      CGO_CXXFLAGS: "-I/usr/local/include"
     steps:
       - uses: actions/checkout@v3
         with:

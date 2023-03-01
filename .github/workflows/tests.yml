@@ -11,7 +11,7 @@ on:
       - v0.*-dev
 jobs:
   tests:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
@@ -37,6 +37,9 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - name: Run Go Tests
+        env:
+          CGO_LDFLAGS: "-L/usr/local/lib -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
+          CGO_CXXFLAGS: "-I/usr/local/include"
         run: |
           make test-group-${{ matrix.part }} NUM_SPLIT=6
         if: env.GIT_DIFF

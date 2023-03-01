@@ -80,7 +80,7 @@ perturb = ["kill"]
 
 [node.validator04]
 persistent_peers = ["validator01"]
-database = "rocksdb"
+database = "cleveldb"
 abci_protocol = "builtin"
 privval_protocol = "dashcore"
 perturb = ["pause"]

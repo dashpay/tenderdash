@@ -1,14 +1,15 @@
 package crypto
 
 import (
-	"crypto/rand"
+	crand "crypto/rand"
 	"encoding/hex"
+	"io"
 )
 
-// This only uses the OS's randomness
+// CRandBytes this only uses the OS's randomness
 func CRandBytes(numBytes int) []byte {
 	b := make([]byte, numBytes)
-	_, err := rand.Read(b)
+	_, err := crand.Read(b)
 	if err != nil {
 		panic(err)
 	}
@@ -21,4 +22,9 @@ func CRandBytes(numBytes int) []byte {
 // are usually strong enough for most purposes.
 func CRandHex(numDigits int) string {
 	return hex.EncodeToString(CRandBytes(numDigits / 2))
+}
+
+// CReader returns a crand.Reader.
+func CReader() io.Reader {
+	return crand.Reader
 }

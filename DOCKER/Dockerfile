@@ -4,14 +4,16 @@
 # * compile - builds final binaries
 # * image - creates final image of minimal size
 
+ARG ALIPNE_VERSION=3.17
+ARG GOLANG_VERSION=1.19
 #################################
 # STAGE 1: install dependencies #
 #################################
-FROM golang:1.19-alpine3.15 AS base
+FROM golang:${GOLANG_VERSION}-alpine${ALIPNE_VERSION} AS base
 
 RUN apk update && \
     apk upgrade && \
-    apk --no-cache add bash git gmp-dev sudo cmake build-base libpcap-dev && \
+    apk --no-cache add bash git gmp-dev sudo cmake build-base python3-dev libpcap-dev leveldb-dev && \
     rm -rf /var/cache/apk/*
 
 WORKDIR /src/bls
@@ -19,8 +21,7 @@ WORKDIR /src/bls
 # Install BLS library
 COPY third_party ./third_party
 RUN ./third_party/bls-signatures/build.sh && \
-    ./third_party/bls-signatures/install.sh && \
-    rm -fr ./third_party
+    ./third_party/bls-signatures/install.sh
 
 #####################################
 # STAGE 2: install golang libraries #
@@ -30,9 +31,8 @@ FROM base AS deps
 WORKDIR /src/tenderdash
 
 # Fetch dependencies separately (for layer caching)
-# TODO: move below BLS install once on new BLS version
 COPY go.mod go.sum ./
-RUN go mod download && go clean -cache -fuzzcache -testcache
+RUN go mod download
 
 #########################
 # STAGE 3: BUILD SOURCE #
@@ -46,14 +46,17 @@ WORKDIR /src/tenderdash
 COPY . .
 
 ARG TENDERMINT_BUILD_OPTIONS=tenderdash
-RUN make build-binary && \
+ARG GOOS=linux
+
+RUN rm -r /src/tenderdash/third_party && ln -s /src/bls/third_party /src/tenderdash/third_party && \
+    make build-binary && \
     make build_abcidump && \
     go clean && go clean -cache -fuzzcache -testcache -modcache
 
 ########################
 # STAGE 4: FINAL IMAGE #
 ########################
-FROM alpine:3.15 AS image
+FROM alpine:${ALIPNE_VERSION} AS image
 
 LABEL maintainer="developers@dash.org"
 
@@ -71,7 +74,7 @@ ENV TMHOME /tenderdash
 # could execute bash commands.
 RUN apk update && \
     apk upgrade && \
-    apk --no-cache add curl jq bash gmp libstdc++ libpcap && \
+    apk --no-cache add curl jq bash gmp libsodium-dev libstdc++ libpcap && \
     rm -rf /var/cache/apk/* && \
     addgroup tmuser && \
     adduser -S -G tmuser tmuser -h "$TMHOME"
