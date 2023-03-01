@@ -135,6 +135,7 @@ func (suite *GossipHandlerTestSuite) TestVotesAndCommitGossipHandler() {
 			if tc.mockFn != nil {
 				tc.mockFn()
 			}
+			// the expectations are defined on the mock "gossiper", see mockFn function
 			hd(ctx, tc.stateData)
 		})
 	}
