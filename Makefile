@@ -34,7 +34,7 @@ CGO_CXXFLAGS ?= "-I$(BLS_DIR)/build/depends/relic/include \
 -I$(BLS_DIR)/src/depends/relic/include \
 -I$(BLS_DIR)/src/include"
 
-GO := CGO_ENABLED=$(CGO_ENABLED) CGO_CXXFLAGS=$(CGO_CXXFLAGS) CGO_LDFLAGS=$(CGO_LDFLAGS) go
+GO := CGO_ENABLED=$(CGO_ENABLED) CGO_CXXFLAGS="$(CGO_CXXFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go
 
 # handle ARM builds
 ifeq (arm,$(GOARCH))
