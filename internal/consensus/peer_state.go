@@ -105,6 +105,15 @@ func (ps *PeerState) UpdateRoundState(fn func(prs *cstypes.PeerRoundState)) {
 	fn(&ps.PRS)
 }
 
+// UpdateProposalBlockParts updates peer-round-state with proposal block parts
+func (ps *PeerState) UpdateProposalBlockParts(partSet *types.PartSet) {
+	ps.mtx.Lock()
+	defer ps.mtx.Unlock()
+	header := partSet.Header()
+	ps.PRS.ProposalBlockPartSetHeader = header
+	ps.PRS.ProposalBlockParts = bits.NewBitArray(int(header.Total))
+}
+
 // ToJSON returns a json of PeerState.
 func (ps *PeerState) ToJSON() ([]byte, error) {
 	ps.mtx.Lock()
