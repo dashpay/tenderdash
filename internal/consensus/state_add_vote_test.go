@@ -13,6 +13,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/internal/test/factory"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
@@ -113,7 +114,7 @@ func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 		},
 		RoundState: cstypes.RoundState{
 			Round: 0,
-			Votes: cstypes.NewHeightVoteSet(chainID, 100, suite.valSet),
+			Votes: cstypes.NewHeightVoteSet(factory.DefaultTestChainID, 100, suite.valSet),
 		},
 	}
 	val0 := suite.valSet.Validators[0]
@@ -155,7 +156,7 @@ func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 	for i, tc := range testCases {
 		eventFired = false
 		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
-			stateData.Votes = cstypes.NewHeightVoteSet(chainID, 100, suite.valSet)
+			stateData.Votes = cstypes.NewHeightVoteSet(factory.DefaultTestChainID, 100, suite.valSet)
 			added, err := fn(ctx, stateData, &tc.vote)
 			suite.NoError(err)
 			suite.Equal(tc.wantAdded, added)
@@ -254,7 +255,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 	}
 	for i, tc := range testCases {
 		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
-			hvs := cstypes.NewHeightVoteSet(chainID, 100, suite.valSet)
+			hvs := cstypes.NewHeightVoteSet(factory.DefaultTestChainID, 100, suite.valSet)
 			for _, vote := range tc.presetVotes {
 				added, err := hvs.AddVote(&vote)
 				suite.NoError(err)
