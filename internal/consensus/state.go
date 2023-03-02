@@ -401,22 +401,6 @@ func (cs *State) SetPrivValidator(ctx context.Context, priv types.PrivValidator)
 	}
 }
 
-// LoadCommit loads the commit for a given height.
-func (cs *State) LoadCommit(height int64) *types.Commit {
-	if height == cs.blockStore.Height() {
-		commit := cs.blockStore.LoadSeenCommit()
-		// NOTE: Retrieving the height of the most recent block and retrieving
-		// the most recent commit does not currently occur as an atomic
-		// operation. We check the height and commit here in case a more recent
-		// commit has arrived since retrieving the latest height.
-		if commit != nil && commit.Height == height {
-			return commit
-		}
-	}
-
-	return cs.blockStore.LoadBlockCommit(height)
-}
-
 // OnStart loads the latest state via the WAL, and starts the timeout and
 // receive routines.
 func (cs *State) OnStart(ctx context.Context) error {
