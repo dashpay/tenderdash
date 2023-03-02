@@ -522,7 +522,7 @@ func (n Node) Validate(testnet Testnet) error {
 		return fmt.Errorf("unsupported p2p queue type: %s", n.QueueType)
 	}
 	switch n.Database {
-	case "goleveldb", "cleveldb", "boltdb", "rocksdb", "badgerdb", "memdb":
+	case "goleveldb", "cleveldb", "boltdb", "badgerdb", "memdb":
 	default:
 		return fmt.Errorf("invalid database setting %q", n.Database)
 	}

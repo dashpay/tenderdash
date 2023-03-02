@@ -88,7 +88,7 @@ func TestGenesisBad(t *testing.T) {
 			), "genesis doc must include non-empty chain_id"},
 		{ // too big chain_id
 			[]byte(
-				`{"chain_id": "Lorem ipsum dolor sit amet, consectetuer adipiscing", 
+				`{"chain_id": "Lorem ipsum dolor sit amet, consectetuer adipiscing",
 				"validators": [
 					{"pub_key":{"type": "tendermint/PubKeyBLS12381","value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
 					"power":10,
@@ -146,9 +146,9 @@ func TestGenesisBad(t *testing.T) {
 				}`), "the quorum hash must be base64-encoded and 32 bytes long, is 19 byte"},
 		{ // validator power is not an int
 			jsonBlob: []byte(`{
-			"chain_id":"mychain", 
+			"chain_id":"mychain",
 			"validators":[{
-				"address": "A", 
+				"address": "A",
 				"pub_key":{"type":"tendermint/PubKeyEd25519","value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},
 				"power":"10",
 				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F",
@@ -217,7 +217,7 @@ func TestBasicGenesisDoc(t *testing.T) {
 			}],
 			"validator_quorum_threshold_public_key": {
 				"type": "tendermint/PubKeyBLS12381",
-				"value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+				"value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
 			},
 			"validator_quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
 			"validator_quorum_type":100,

@@ -19,6 +19,23 @@ DOCKER_PROTO := docker run -v $(shell pwd):/workspace --workdir /workspace $(BUI
 CGO_ENABLED ?= 1
 GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}' github.com/gogo/protobuf)
 
+MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
+CURR_DIR := $(dir $(MAKEFILE_PATH))
+
+BLS_DIR="$(CURR_DIR)third_party/bls-signatures"
+
+CGO_LDFLAGS ?= "-L$(BLS_DIR)/build/depends/mimalloc \
+-L$(BLS_DIR)/build/depends/relic/lib \
+-L$(BLS_DIR)/build/src \
+-ldashbls -lrelic_s -lmimalloc-secure -lgmp"
+
+CGO_CXXFLAGS ?= "-I$(BLS_DIR)/build/depends/relic/include \
+-I$(BLS_DIR)/src/depends/mimalloc/include \
+-I$(BLS_DIR)/src/depends/relic/include \
+-I$(BLS_DIR)/src/include"
+
+GO := CGO_ENABLED=$(CGO_ENABLED) CGO_CXXFLAGS=$(CGO_CXXFLAGS) CGO_LDFLAGS=$(CGO_LDFLAGS) go
+
 # handle ARM builds
 ifeq (arm,$(GOARCH))
 	export CC = arm-linux-gnueabi-gcc-10
@@ -96,11 +113,11 @@ install-bls: build-bls
 ###############################################################################
 
 build-binary:
-	CGO_ENABLED=$(CGO_ENABLED) go build $(BUILD_FLAGS) -tags '$(BUILD_TAGS)' -o $(OUTPUT) ./cmd/tenderdash/
+	$(GO) build $(BUILD_FLAGS) -tags '$(BUILD_TAGS)' -o $(OUTPUT) ./cmd/tenderdash/
 .PHONY: build-binary
 
 install:
-	CGO_ENABLED=$(CGO_ENABLED) go install $(BUILD_FLAGS) -tags $(BUILD_TAGS) ./cmd/tenderdash
+	$(GO) install $(BUILD_FLAGS) -tags $(BUILD_TAGS) ./cmd/tenderdash
 .PHONY: install
 
 $(BUILDDIR)/:
@@ -152,7 +169,7 @@ proto-check-breaking: check-proto-deps
 .PHONY: proto-check-breaking
 
 proto-doc:
-	@echo Generating Protobuf API specification: spec/abci++/api.md 
+	@echo Generating Protobuf API specification: spec/abci++/api.md
 	@protoc \
 		-I $(realpath .)/proto \
 		-I "$(GOGOPROTO_PATH)" \
@@ -165,11 +182,11 @@ proto-doc:
 ###############################################################################
 
 build_abci:
-	@go build -mod=readonly ./abci/cmd/...
+	$(GO) build -mod=readonly ./abci/cmd/...
 .PHONY: build_abci
 
 install_abci:
-	@go install -mod=readonly ./abci/cmd/...
+	$(GO) install -mod=readonly ./abci/cmd/...
 .PHONY: install_abci
 
 
@@ -178,11 +195,11 @@ install_abci:
 ##################################################################################
 
 build_abcidump:
-	@go build -o build/abcidump ./cmd/abcidump
+	$(GO) build -o build/abcidump ./cmd/abcidump
 .PHONY: build_abcidump
 
 install_abcidump:
-	@go install ./cmd/abcidump
+	go install ./cmd/abcidump
 .PHONY: install_abcidump
 
 ###############################################################################

@@ -113,7 +113,7 @@ definition](https://github.com/tenderdash/tenderdash/blob/master/types/genesis.g
       "address": "B547AB87E79F75A4A3198C57A8C2FDAF8628CB47",
       "pub_key": {
         "type": "tenderdash/PubKeyBLS25519",
-        "value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+        "value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
       },
       "power": "100",
       "name": "",
@@ -123,7 +123,7 @@ definition](https://github.com/tenderdash/tenderdash/blob/master/types/genesis.g
   "validator_quorum_hash": "444F39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C433",
   "validator_quorum_threshold_public_key": {
     "type": "tendermint/PubKeyBLS12381",
-    "value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+    "value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
   },
   "app_hash": ""
 }
@@ -558,7 +558,7 @@ then the new `genesis.json` will be:
   ],
   "threshold_public_key": {
     "type": "tendermint/PubKeyBLS12381",
-    "value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+    "value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
   },
   "app_hash" : "",
   "chain_id" : "test-chain-rDlYSN",

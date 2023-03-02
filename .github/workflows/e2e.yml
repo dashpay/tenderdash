@@ -12,7 +12,7 @@ on:
 
 jobs:
   e2e-test:
-    runs-on: ubuntu-20.04
+    runs-on: ubuntu-latest
     strategy:
       fail-fast: true
       matrix:
@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 25
     env:
       FULLNODE_PUBKEY_KEEP: false
+      CGO_LDFLAGS: "-L/usr/local/lib -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
+      CGO_CXXFLAGS: "-I/usr/local/include"
     steps:
       - uses: actions/setup-go@v3.5.0
         with:

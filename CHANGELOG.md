@@ -1,4 +1,14 @@
+## [0.11.0-dev.4] - 2023-02-22
+
+### Backport
+
+- Catch up the recent changes from v0.10 to v0.11 (#589)
+
 ## [0.10.0-dev.11] - 2023-02-22
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.10.0-dev.11 (#591)
 
 ### Refactor
 
@@ -6,14 +16,31 @@
 
 ## [0.10.0-dev.10] - 2023-02-22
 
+### Miscellaneous Tasks
+
+- Bump up dashd-go version to v0.23.6 (#587)
+- Update changelog and version to 0.10.0-dev.10 (#588)
+
+## [0.11.0-dev.3] - 2023-02-15
+
+### Bug Fixes
+
+- Docker tag is invalid for empty input.tag (#580) (#585)
+- Signature verification (#584)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.11.0-dev.3 (#586)
+
+## [0.11.0-dev.2] - 2023-02-13
+
 ### Bug Fixes
 
 - Docker tag is invalid for empty input.tag (#580)
 
 ### Miscellaneous Tasks
 
-- Bump up dashd-go version to v0.23.6 (#587)
-- Update changelog and version to 0.10.0-dev.10 (#588)
+- Update changelog and version to 0.11.0-dev.2 (#583)
 
 ## [0.10.0-dev.9] - 2023-02-10
 
@@ -38,12 +65,14 @@
 
 ### Testing
 
+- Update test vectors for BLS
 - Refactor genesis doc generation (#573)
 
 ### Build
 
 - Bump bufbuild/buf-setup-action from 1.11.0 to 1.12.0 (#556)
 - Bump docker/build-push-action from 3.1.0 to 3.3.0 (#555)
+- Use version 1.2.5 of BLS lib in Docker (#557)
 - Bump golangci/golangci-lint-action from 3.3.1 to 3.4.0 (#560)
 - Add abcidump to release image (#563)
 - Bump bufbuild/buf-setup-action from 1.12.0 to 1.13.1 (#566)
@@ -68,6 +97,10 @@
 
 - [**breaking**] Verify next consensus params between nodes (#550)
 - Add quorum hash to RequestPrepare/ProcessProposal (#553)
+
+### Miscellaneous Tasks
+
+- Update bls library (#535)
 
 ### Refactor
 
@@ -105,7 +138,18 @@
 
 ### Build
 
+- CGO paths to BLS deps are incorrect (#531)
 - Improve release script (#522)
+
+## [0.11.0-dev.1] - 2022-12-15
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.11.0-dev.1 (#530)
+
+### Backport
+
+- Catch up on the latest changes from v0.10 (#528)
 
 ## [0.10.0-dev.6] - 2022-12-15
 
@@ -116,6 +160,10 @@
 - ProcessProposal executed twice for a block (#516)
 - Proposer-based timestamp broken during backport (#523)
 - Improve wal replay mechanism (#510)
+
+### Features
+
+- Upgrade bls library to version 1 (#224)
 
 ### Miscellaneous Tasks
 
