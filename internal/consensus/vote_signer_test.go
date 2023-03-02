@@ -11,6 +11,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -37,9 +38,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 	}
 	voteExtensions := types.VoteExtensions{
 		tmproto.VoteExtensionType_THRESHOLD_RECOVER: []types.VoteExtension{
-			{
-				Extension: mustHexToBytes("524F1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83B"),
-			},
+			{Extension: tmbytes.MustHexDecode("524F1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83B")},
 		},
 	}
 	conf := configSetup(t)
@@ -63,7 +62,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 		voteExtender:  mockBlockExecutor,
 	}
 	blockID := types.BlockID{
-		Hash: mustHexToBytes("1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83BFFEB"),
+		Hash: tmbytes.MustHexDecode("1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83BFFEB"),
 	}
 	mockFn := func(voteExtensions types.VoteExtensions) {
 		mockBlockExecutor.
@@ -119,7 +118,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 					BlockID:            tc.blockID,
 					ValidatorProTxHash: proTxHash,
 					ValidatorIndex:     0,
-					BlockSignature:     mustHexToBytes(tc.wantBlockSign),
+					BlockSignature:     tmbytes.MustHexDecode(tc.wantBlockSign),
 					VoteExtensions:     tc.voteExtensions,
 				},
 			}

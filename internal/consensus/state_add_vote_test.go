@@ -14,6 +14,7 @@ import (
 	"github.com/tendermint/tendermint/internal/eventbus"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/test/factory"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -101,6 +102,7 @@ func (suite *AddVoteTestSuite) TestAddVoteAction() {
 func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	const H100 = int64(100)
 	eventFired := false
 	suite.emitter.AddListener(types.EventVoteValue, func(data eventemitter.EventData) error {
 		eventFired = true
@@ -113,16 +115,16 @@ func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 		},
 		RoundState: cstypes.RoundState{
 			Round: 0,
-			Votes: cstypes.NewHeightVoteSet(factory.DefaultTestChainID, 100, suite.valSet),
+			Votes: cstypes.NewHeightVoteSet(factory.DefaultTestChainID, H100, suite.valSet),
 		},
 	}
 	val0 := suite.valSet.Validators[0]
 	blockID := types.BlockID{
-		Hash: mustHexToBytes("1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83BFFEB"),
+		Hash: tmbytes.MustHexDecode("1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83BFFEB"),
 	}
 	voteH100R0 := types.Vote{
 		Type:               tmproto.PrevoteType,
-		Height:             100,
+		Height:             H100,
 		Round:              0,
 		BlockID:            blockID,
 		ValidatorProTxHash: val0.ProTxHash,
@@ -154,8 +156,8 @@ func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 	}
 	for i, tc := range testCases {
 		eventFired = false
-		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
-			stateData.Votes = cstypes.NewHeightVoteSet(factory.DefaultTestChainID, 100, suite.valSet)
+		suite.Run(fmt.Sprintf("%d", i), func() {
+			stateData.Votes = cstypes.NewHeightVoteSet(factory.DefaultTestChainID, H100, suite.valSet)
 			added, err := fn(ctx, stateData, &tc.vote)
 			suite.NoError(err)
 			suite.Equal(tc.wantAdded, added)
@@ -175,7 +177,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 	val0 := suite.valSet.Validators[0]
 	val1 := suite.valSet.Validators[1]
 	blockID := types.BlockID{
-		Hash: mustHexToBytes("1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83BFFEB"),
+		Hash: tmbytes.MustHexDecode("1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83BFFEB"),
 	}
 	voteH100R0V0 := types.Vote{
 		Type:               tmproto.PrevoteType,
