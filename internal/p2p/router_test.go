@@ -24,6 +24,7 @@ import (
 	"github.com/tendermint/tendermint/internal/p2p/mocks"
 	"github.com/tendermint/tendermint/internal/p2p/p2ptest"
 	"github.com/tendermint/tendermint/libs/log"
+	protop2p "github.com/tendermint/tendermint/proto/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -66,10 +67,7 @@ func TestRouter_Network(t *testing.T) {
 
 	// Sending a message to each peer should work.
 	for _, peer := range peers {
-		p2ptest.RequireSendReceive(ctx, t, channel, peer.NodeID,
-			&p2ptest.Message{Value: "foo"},
-			&p2ptest.Message{Value: "foo"},
-		)
+		p2ptest.RequireSendReceive(ctx, t, channel, peer.NodeID, &p2ptest.Message{Value: "foo"})
 	}
 
 	// Sending a broadcast should return back a message from all peers.
@@ -77,12 +75,13 @@ func TestRouter_Network(t *testing.T) {
 		Broadcast: true,
 		Message:   &p2ptest.Message{Value: "bar"},
 	})
-	expect := []*p2p.Envelope{}
+	var expect []*p2p.Envelope
 	for _, peer := range peers {
 		expect = append(expect, &p2p.Envelope{
-			From:      peer.NodeID,
-			ChannelID: 1,
-			Message:   &p2ptest.Message{Value: "bar"},
+			From:       peer.NodeID,
+			ChannelID:  1,
+			Message:    &p2ptest.Message{Value: "bar"},
+			Attributes: make(map[string]string),
 		})
 	}
 	p2ptest.RequireReceiveUnordered(ctx, t, channel, expect)
@@ -140,7 +139,7 @@ func TestRouter_Channel_Basic(t *testing.T) {
 	require.Error(t, err)
 
 	// Opening a different channel should work.
-	chDesc2 := &p2p.ChannelDescriptor{ID: 2, MessageType: &p2ptest.Message{}}
+	chDesc2 := &p2p.ChannelDescriptor{ID: 2}
 	_, err = router.OpenChannel(ctx, chDesc2)
 	require.NoError(t, err)
 
@@ -204,7 +203,7 @@ func TestRouter_Channel_SendReceive(t *testing.T) {
 	// Sending to an unknown peer should be dropped.
 	p2ptest.RequireSend(ctx, t, a, p2p.Envelope{
 		To:      types.NodeID(strings.Repeat("a", 40)),
-		Message: &p2ptest.Message{Value: "a"},
+		Message: &protop2p.PexRequest{},
 	})
 	p2ptest.RequireEmpty(ctx, t, a, b, c)
 
@@ -265,57 +264,6 @@ func TestRouter_Channel_Broadcast(t *testing.T) {
 	p2ptest.RequireReceive(ctx, t, b, p2p.Envelope{From: aID, Message: &p2ptest.Message{Value: "bar"}})
 	p2ptest.RequireReceive(ctx, t, c, p2p.Envelope{From: aID, Message: &p2ptest.Message{Value: "bar"}})
 	p2ptest.RequireEmpty(ctx, t, a, b, c, d)
-}
-
-func TestRouter_Channel_Wrapper(t *testing.T) {
-	if testing.Short() {
-		t.Skip("skipping test in short mode")
-	}
-
-	t.Cleanup(leaktest.Check(t))
-
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	// Create a test network and open a channel on all nodes.
-	network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 2})
-
-	ids := network.NodeIDs()
-	aID, bID := ids[0], ids[1]
-	chDesc := &p2p.ChannelDescriptor{
-		ID:                  chID,
-		MessageType:         &wrapperMessage{},
-		Priority:            5,
-		SendQueueCapacity:   10,
-		RecvMessageCapacity: 10,
-	}
-
-	channels := network.MakeChannels(ctx, t, chDesc)
-	a, b := channels[aID], channels[bID]
-
-	network.Start(ctx, t)
-
-	// Since wrapperMessage implements p2p.Wrapper and handles Message, it
-	// should automatically wrap and unwrap sent messages -- we prepend the
-	// wrapper actions to the message value to signal this.
-	p2ptest.RequireSend(ctx, t, a, p2p.Envelope{To: bID, Message: &p2ptest.Message{Value: "foo"}})
-	p2ptest.RequireReceive(ctx, t, b, p2p.Envelope{From: aID, Message: &p2ptest.Message{Value: "unwrap:wrap:foo"}})
-
-	// If we send a different message that can't be wrapped, it should be dropped.
-	p2ptest.RequireSend(ctx, t, a, p2p.Envelope{To: bID, Message: &gogotypes.BoolValue{Value: true}})
-	p2ptest.RequireEmpty(ctx, t, b)
-
-	// If we send the wrapper message itself, it should also be passed through
-	// since WrapperMessage supports it, and should only be unwrapped at the receiver.
-	p2ptest.RequireSend(ctx, t, a, p2p.Envelope{
-		To:      bID,
-		Message: &wrapperMessage{Message: p2ptest.Message{Value: "foo"}},
-	})
-	p2ptest.RequireReceive(ctx, t, b, p2p.Envelope{
-		From:    aID,
-		Message: &p2ptest.Message{Value: "unwrap:foo"},
-	})
-
 }
 
 // WrapperMessage prepends the value with "wrap:" and "unwrap:" to test it.

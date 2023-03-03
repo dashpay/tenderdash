@@ -217,7 +217,7 @@ func TestMsgToProto(t *testing.T) {
 			}
 			assert.EqualValues(t, tt.want, pb, tt.testName)
 
-			msg, err := MsgFromProto(pb)
+			msg, err := MsgFromProtoMsg(pb)
 
 			if !tt.wantErr {
 				require.NoError(t, err)

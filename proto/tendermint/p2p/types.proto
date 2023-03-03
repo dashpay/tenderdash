@@ -4,6 +4,12 @@ package tendermint.p2p;
 option go_package = "github.com/tendermint/tendermint/proto/tendermint/p2p";
 
 import "gogoproto/gogo.proto";
+import "tendermint/blocksync/types.proto";
+import "tendermint/consensus/types.proto";
+import "tendermint/statesync/types.proto";
+import "tendermint/types/evidence.proto";
+import "tendermint/mempool/types.proto";
+import "tendermint/p2p/pex.proto";
 import "google/protobuf/timestamp.proto";
 
 message ProtocolVersion {
@@ -42,4 +48,22 @@ message PeerAddressInfo {
   google.protobuf.Timestamp last_dial_success = 2 [(gogoproto.stdtime) = true];
   google.protobuf.Timestamp last_dial_failure = 3 [(gogoproto.stdtime) = true];
   uint32                    dial_failures     = 4;
+}
+
+message Echo {
+  string Value = 1;
+}
+
+message Envelope {
+  map<string, string> attributes = 1;
+
+  oneof sum {
+    tendermint.blocksync.Message blocksync_message = 2;
+    tendermint.consensus.Message consensus_message = 3;
+    tendermint.statesync.Message statesync_message = 4;
+    tendermint.p2p.PexMessage    pex_message       = 5;
+    tendermint.types.Evidence    evidence          = 6;
+    tendermint.mempool.Txs       mempool_txs       = 7;
+    Echo                         echo              = 8;
+  }
 }

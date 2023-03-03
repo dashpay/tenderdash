@@ -17,6 +17,7 @@ import (
 	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
+	"github.com/tendermint/tendermint/proto/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -198,15 +199,14 @@ func NewRouter(
 			options.MaxIncomingConnectionAttempts,
 			options.IncomingConnectionWindow,
 		),
-		chDescs:         make([]*ChannelDescriptor, 0),
-		transport:       transport,
-		endpoint:        endpoint,
-		peerManager:     peerManager,
-		options:         options,
-		channelQueues:   map[ChannelID]queue{},
-		channelMessages: map[ChannelID]proto.Message{},
-		peerQueues:      map[types.NodeID]queue{},
-		peerChannels:    make(map[types.NodeID]ChannelIDSet),
+		chDescs:       make([]*ChannelDescriptor, 0),
+		transport:     transport,
+		endpoint:      endpoint,
+		peerManager:   peerManager,
+		options:       options,
+		channelQueues: map[ChannelID]queue{},
+		peerQueues:    map[types.NodeID]queue{},
+		peerChannels:  make(map[types.NodeID]ChannelIDSet),
 	}
 
 	router.BaseService = service.NewBaseService(logger, "router", router)
@@ -259,20 +259,12 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 	}
 	r.chDescs = append(r.chDescs, chDesc)
 
-	messageType := chDesc.MessageType
-
 	queue := r.queueFactory(chDesc.RecvBufferCapacity)
 	outCh := make(chan Envelope, chDesc.RecvBufferCapacity)
 	errCh := make(chan PeerError, chDesc.RecvBufferCapacity)
 	channel := NewChannel(chDesc.ID, chDesc.Name, queue.dequeue(), outCh, errCh)
 
-	var wrapper Wrapper
-	if w, ok := chDesc.MessageType.(Wrapper); ok {
-		wrapper = w
-	}
-
 	r.channelQueues[id] = queue
-	r.channelMessages[id] = messageType
 
 	// add the channel to the nodeInfo if it's not already there.
 	r.nodeInfoProducer().AddChannel(uint16(chDesc.ID))
@@ -283,12 +275,11 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 		defer func() {
 			r.channelMtx.Lock()
 			delete(r.channelQueues, id)
-			delete(r.channelMessages, id)
 			r.channelMtx.Unlock()
 			queue.close()
 		}()
 
-		r.routeChannel(ctx, chDesc.ID, outCh, errCh, wrapper)
+		r.routeChannel(ctx, chDesc.ID, outCh, errCh)
 	}()
 
 	return channel, nil
@@ -304,7 +295,6 @@ func (r *Router) routeChannel(
 	chID ChannelID,
 	outCh <-chan Envelope,
 	errCh <-chan PeerError,
-	wrapper Wrapper,
 ) {
 	for {
 		select {
@@ -315,17 +305,6 @@ func (r *Router) routeChannel(
 			// Mark the envelope with the channel ID to allow sendPeer() to pass
 			// it on to Transport.SendMessage().
 			envelope.ChannelID = chID
-
-			// wrap the message in a wrapper message, if requested
-			if wrapper != nil {
-				msg := proto.Clone(wrapper)
-				if err := msg.(Wrapper).Wrap(envelope.Message); err != nil {
-					r.logger.Error("failed to wrap message", "channel", chID, "err", err)
-					continue
-				}
-
-				envelope.Message = msg
-			}
 
 			// collect peer queues to pass the message via
 			var queues []queue
@@ -794,7 +773,6 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 
 		r.channelMtx.RLock()
 		queue, ok := r.channelQueues[chID]
-		messageType := r.channelMessages[chID]
 		r.channelMtx.RUnlock()
 
 		if !ok {
@@ -802,28 +780,25 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 			continue
 		}
 
-		msg := proto.Clone(messageType)
-		if err := proto.Unmarshal(bz, msg); err != nil {
+		var protoEnvelope p2p.Envelope
+		if err := proto.Unmarshal(bz, &protoEnvelope); err != nil {
 			r.logger.Error("message decoding failed, dropping message", "peer", peerID, "err", err)
 			continue
 		}
-
-		if wrapper, ok := msg.(Wrapper); ok {
-			msg, err = wrapper.Unwrap()
-			if err != nil {
-				r.logger.Error("failed to unwrap message", "err", err)
-				continue
-			}
-		}
-
 		start := time.Now().UTC()
-
+		envelope, err := EnvelopeFromProto(protoEnvelope)
+		if err != nil {
+			r.logger.Error("message decoding failed, dropping message", "peer", peerID, "err", err)
+			continue
+		}
+		envelope.From = peerID
+		envelope.ChannelID = chID
 		select {
-		case queue.enqueue() <- Envelope{From: peerID, Message: msg, ChannelID: chID}:
+		case queue.enqueue() <- envelope:
 			r.metrics.PeerReceiveBytesTotal.With(
 				"chID", fmt.Sprint(chID),
 				"peer_id", string(peerID),
-				"message_type", r.lc.ValueToMetricLabel(msg)).Add(float64(proto.Size(msg)))
+				"message_type", r.lc.ValueToMetricLabel(envelope.Message)).Add(float64(proto.Size(envelope.Message)))
 			r.metrics.RouterChannelQueueSend.Observe(time.Since(start).Seconds())
 			// r.logger.Debug("received message", "peer", peerID, "msg", msg)
 
@@ -849,7 +824,12 @@ func (r *Router) sendPeer(ctx context.Context, peerID types.NodeID, conn Connect
 				continue
 			}
 
-			bz, err := proto.Marshal(envelope.Message)
+			protoEnvelope, err := envelope.ToProto()
+			if err != nil {
+				r.logger.Error("failed to marshal message", "peer", peerID, "err", err)
+				continue
+			}
+			bz, err := proto.Marshal(protoEnvelope)
 			if err != nil {
 				r.logger.Error("failed to marshal message", "peer", peerID, "err", err)
 				continue

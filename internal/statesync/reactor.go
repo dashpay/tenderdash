@@ -86,7 +86,6 @@ func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
 	return map[p2p.ChannelID]*p2p.ChannelDescriptor{
 		SnapshotChannel: {
 			ID:                  SnapshotChannel,
-			MessageType:         new(ssproto.Message),
 			Priority:            6,
 			SendQueueCapacity:   10,
 			RecvMessageCapacity: snapshotMsgSize,
@@ -96,7 +95,6 @@ func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
 		ChunkChannel: {
 			ID:                  ChunkChannel,
 			Priority:            3,
-			MessageType:         new(ssproto.Message),
 			SendQueueCapacity:   4,
 			RecvMessageCapacity: chunkMsgSize,
 			RecvBufferCapacity:  128,
@@ -104,7 +102,6 @@ func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
 		},
 		LightBlockChannel: {
 			ID:                  LightBlockChannel,
-			MessageType:         new(ssproto.Message),
 			Priority:            5,
 			SendQueueCapacity:   10,
 			RecvMessageCapacity: lightBlockMsgSize,
@@ -113,7 +110,6 @@ func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
 		},
 		ParamsChannel: {
 			ID:                  ParamsChannel,
-			MessageType:         new(ssproto.Message),
 			Priority:            2,
 			SendQueueCapacity:   10,
 			RecvMessageCapacity: paramMsgSize,
