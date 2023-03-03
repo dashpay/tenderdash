@@ -13,6 +13,7 @@ import (
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -53,7 +54,7 @@ func (suite *ProposalerTestSuite) SetupTest() {
 		proposedAppVersion: 0,
 	}
 	lastBlockID := types.BlockID{
-		Hash: mustHexToBytes("524F1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83B"),
+		Hash: tmbytes.MustHexDecode("524F1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83B"),
 	}
 	suite.committedState = sm.State{
 		ChainID:                          "test-chain",
