@@ -184,7 +184,7 @@ func TestWorkerPool_Reset(t *testing.T) {
 	wp := New(2)
 	// start worker pool
 	wp.Start(ctx)
-	// send severa jobs to process
+	// send several jobs to process
 	err := wp.Send(ctx, jobs...)
 	require.NoError(t, err)
 	// consume jobs
