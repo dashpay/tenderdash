@@ -72,14 +72,14 @@ func TestRouter_Network(t *testing.T) {
 		Broadcast: true,
 		Message:   &p2ptest.Message{Value: "bar"},
 	})
-	var expect []*p2p.Envelope
-	for _, peer := range peers {
-		expect = append(expect, &p2p.Envelope{
+	expect := make([]*p2p.Envelope, len(peers))
+	for i, peer := range peers {
+		expect[i] = &p2p.Envelope{
 			From:       peer.NodeID,
 			ChannelID:  1,
 			Message:    &p2ptest.Message{Value: "bar"},
 			Attributes: make(map[string]string),
-		})
+		}
 	}
 	p2ptest.RequireReceiveUnordered(ctx, t, channel, expect)
 
