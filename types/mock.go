@@ -1,8 +1,6 @@
 package types
 
 import (
-	"encoding/hex"
-
 	"github.com/dashevo/dashd-go/btcjson"
 
 	"github.com/tendermint/tendermint/crypto"
@@ -46,12 +44,4 @@ func MockValidatorSet() (*ValidatorSet, []PrivValidator) {
 		)
 	}
 	return NewValidatorSet(valz, thPubKey, btcjson.LLMQType_5_60, quorumHash, true), privVals
-}
-
-func mustHexToBytes(s string) []byte {
-	b, err := hex.DecodeString(s)
-	if err != nil {
-		panic(err)
-	}
-	return b
 }
