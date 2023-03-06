@@ -21,7 +21,7 @@ import (
 	"github.com/tendermint/tendermint/internal/p2p/mocks"
 	"github.com/tendermint/tendermint/internal/p2p/p2ptest"
 	"github.com/tendermint/tendermint/libs/log"
-	protop2p "github.com/tendermint/tendermint/proto/tendermint/p2p"
+	p2pproto "github.com/tendermint/tendermint/proto/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -200,7 +200,7 @@ func TestRouter_Channel_SendReceive(t *testing.T) {
 	// Sending to an unknown peer should be dropped.
 	p2ptest.RequireSend(ctx, t, a, p2p.Envelope{
 		To:      types.NodeID(strings.Repeat("a", 40)),
-		Message: &protop2p.PexRequest{},
+		Message: &p2pproto.PexRequest{},
 	})
 	p2ptest.RequireEmpty(ctx, t, a, b, c)
 

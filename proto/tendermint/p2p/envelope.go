@@ -12,6 +12,11 @@ import (
 	"github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
+const (
+	BlockResponseMessagePrefixSize   = 4
+	BlockResponseMessageFieldKeySize = 1
+)
+
 func (m *Envelope) Wrap(pb proto.Message) error {
 	switch msg := pb.(type) {
 	case *blocksync.BlockRequest:
