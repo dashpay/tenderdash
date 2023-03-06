@@ -1,4 +1,4 @@
-package types
+package factory
 
 import (
 	"github.com/dashevo/dashd-go/btcjson"
@@ -6,10 +6,11 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/types"
 )
 
 // MockValidatorSet returns static validator set with 2 validators and 2 private keys
-func MockValidatorSet() (*ValidatorSet, []PrivValidator) {
+func MockValidatorSet() (*types.ValidatorSet, []types.PrivValidator) {
 	quorumHash := crypto.QuorumHash(tmbytes.MustHexDecode("D6711FA18C7DA6D3FF8615D3CD3C14500EE91DA5FA942425B8E2B79A30FD8E6C"))
 	thPubKey := bls12381.PubKey(tmbytes.MustHexDecode("8E948D00D16B2005B6F6DCB2E37E3C49B116A61BB4F3D899122A4442D94E8AE46757BCE1435586C43B62594D8EDA411E"))
 	confs := []struct {
@@ -28,13 +29,13 @@ func MockValidatorSet() (*ValidatorSet, []PrivValidator) {
 			pubKey:    "b2d09bf043beb595f5856c891e507fcbf4467c9d0d753c29c4ccb75dee18d87c1fbd9b479a4373cc0aa02faebd83b6d7",
 		},
 	}
-	privVals := make([]PrivValidator, 2)
-	valz := make([]*Validator, 2)
+	privVals := make([]types.PrivValidator, 2)
+	valz := make([]*types.Validator, 2)
 	for i, conf := range confs {
 		proTxHash := tmbytes.MustHexDecode(conf.proTxHash)
 		pubKey := bls12381.PubKey(tmbytes.MustHexDecode(conf.pubKey))
-		valz[i] = NewValidator(pubKey, DefaultDashVotingPower, proTxHash, "")
-		privVals[i] = NewMockPVWithParams(
+		valz[i] = types.NewValidator(pubKey, types.DefaultDashVotingPower, proTxHash, "")
+		privVals[i] = types.NewMockPVWithParams(
 			bls12381.PrivKey(tmbytes.MustHexDecode(conf.privKey)),
 			proTxHash,
 			quorumHash,
@@ -43,5 +44,5 @@ func MockValidatorSet() (*ValidatorSet, []PrivValidator) {
 			false,
 		)
 	}
-	return NewValidatorSet(valz, thPubKey, btcjson.LLMQType_5_60, quorumHash, true), privVals
+	return types.NewValidatorSet(valz, thPubKey, btcjson.LLMQType_5_60, quorumHash, true), privVals
 }

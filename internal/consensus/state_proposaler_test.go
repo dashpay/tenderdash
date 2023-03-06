@@ -12,6 +12,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
+	"github.com/tendermint/tendermint/internal/test/factory"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
@@ -39,7 +40,7 @@ func TestProposaler(t *testing.T) {
 func (suite *ProposalerTestSuite) SetupTest() {
 	logger := log.NewTestingLogger(suite.T())
 	metrics := NopMetrics()
-	valSet, privVals := types.MockValidatorSet()
+	valSet, privVals := factory.MockValidatorSet()
 	suite.mockPrivVals = privVals
 	suite.mockValSet = valSet
 	privVal := privValidator{

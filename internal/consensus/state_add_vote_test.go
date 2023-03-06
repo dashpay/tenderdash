@@ -46,7 +46,7 @@ func (suite *AddVoteTestSuite) SetupTest() {
 	err := suite.eventbus.Start(ctx)
 	suite.NoError(err)
 	suite.publisher = &EventPublisher{eventBus: suite.eventbus, emitter: suite.emitter}
-	valSet, privVals := types.MockValidatorSet()
+	valSet, privVals := factory.MockValidatorSet()
 	suite.signer = testSigner{privVals: privVals, valSet: valSet}
 	suite.valSet = valSet
 }

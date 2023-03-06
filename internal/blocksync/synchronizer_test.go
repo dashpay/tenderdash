@@ -18,7 +18,8 @@ import (
 	"github.com/tendermint/tendermint/internal/p2p"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
-	"github.com/tendermint/tendermint/internal/state/test/factory"
+	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
+	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/promise"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/libs/workerpool"
@@ -44,10 +45,10 @@ func TestSynchronizer(t *testing.T) {
 func (suite *SynchronizerTestSuite) SetupSuite() {
 	ctx := context.Background()
 	const chainLen = 200
-	valSet, privVals := types.MockValidatorSet()
+	valSet, privVals := factory.MockValidatorSet()
 	suite.initialState = fakeInitialState(valSet)
 	state := suite.initialState.Copy()
-	blocks := factory.MakeBlocks(ctx, suite.T(), chainLen+1, &state, privVals, 1)
+	blocks := statefactory.MakeBlocks(ctx, suite.T(), chainLen+1, &state, privVals, 1)
 	suite.responses = generateBlockResponses(suite.T(), blocks)
 }
 

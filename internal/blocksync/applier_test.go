@@ -10,7 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/internal/state/mocks"
-	"github.com/tendermint/tendermint/internal/state/test/factory"
+	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
+	"github.com/tendermint/tendermint/internal/test/factory"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"github.com/tendermint/tendermint/types"
 )
@@ -19,10 +20,10 @@ func TestBlockApplierApply(t *testing.T) {
 	ctx := context.Background()
 	mockBlockExec := mocks.NewExecutor(t)
 	mockBlockStore := mocks.NewBlockStore(t)
-	valSet, privVals := types.MockValidatorSet()
+	valSet, privVals := factory.MockValidatorSet()
 	initialState := fakeInitialState(valSet)
 	state := initialState.Copy()
-	blocks := factory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
+	blocks := statefactory.MakeBlocks(ctx, t, 2, &state, privVals, 1)
 	blockH1 := blocks[0]
 	blockH1ID := blockH1.BlockID(nil)
 	commitH1 := blocks[1].LastCommit

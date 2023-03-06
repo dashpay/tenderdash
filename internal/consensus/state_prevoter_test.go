@@ -13,6 +13,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
+	"github.com/tendermint/tendermint/internal/test/factory"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -39,7 +40,7 @@ func TestPrevoter(t *testing.T) {
 }
 
 func (suite *PrevoterTestSuite) SetupTest() {
-	valSet, privVals := types.MockValidatorSet()
+	valSet, privVals := factory.MockValidatorSet()
 	suite.valSet = valSet
 	proTxHash, err := privVals[0].GetProTxHash(context.Background())
 	suite.Require().NoError(err)
