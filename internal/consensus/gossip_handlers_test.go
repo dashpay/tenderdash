@@ -148,7 +148,7 @@ func (suite *GossipHandlerTestSuite) TestDataGossipHandler() {
 	)
 	ctx := context.Background()
 	logger := log.NewTestingLogger(suite.T())
-	valSet, _ := mockValidatorSet()
+	valSet, _ := types.MockValidatorSet()
 	committedState := sm.State{Validators: valSet}
 	data := tmrand.Bytes(partSetSize * nParts)
 	partSet1 := types.NewPartSetFromData(data, partSetSize)

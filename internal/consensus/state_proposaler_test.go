@@ -39,7 +39,7 @@ func TestProposaler(t *testing.T) {
 func (suite *ProposalerTestSuite) SetupTest() {
 	logger := log.NewTestingLogger(suite.T())
 	metrics := NopMetrics()
-	valSet, privVals := mockValidatorSet()
+	valSet, privVals := types.MockValidatorSet()
 	suite.mockPrivVals = privVals
 	suite.mockValSet = valSet
 	privVal := privValidator{

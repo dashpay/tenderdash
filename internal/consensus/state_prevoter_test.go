@@ -39,7 +39,7 @@ func TestPrevoter(t *testing.T) {
 }
 
 func (suite *PrevoterTestSuite) SetupTest() {
-	valSet, privVals := mockValidatorSet()
+	valSet, privVals := types.MockValidatorSet()
 	suite.valSet = valSet
 	proTxHash, err := privVals[0].GetProTxHash(context.Background())
 	suite.Require().NoError(err)

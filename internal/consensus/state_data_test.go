@@ -12,7 +12,7 @@ import (
 )
 
 func TestIsValidForPrevote(t *testing.T) {
-	valSet, _ := mockValidatorSet()
+	valSet, _ := types.MockValidatorSet()
 	now := time.Now()
 	defState := sm.State{
 		Validators: valSet,

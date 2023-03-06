@@ -25,7 +25,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 	)
 	emptyPeerID := types.NodeID("")
 	mockCancelCtx := mock.AnythingOfType("*context.cancelCtx")
-	valSet, priVals := mockValidatorSet()
+	valSet, priVals := types.MockValidatorSet()
 	proTxHash, err := priVals[0].GetProTxHash(ctx)
 	assert.NoError(t, err)
 	logger := log.NewTestingLogger(t)
