@@ -17,7 +17,6 @@ import (
 
 var (
 	_ service.Service = (*Reactor)(nil)
-	_ p2p.Wrapper     = (*protop2p.PexMessage)(nil)
 )
 
 const (

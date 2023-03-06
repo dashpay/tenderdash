@@ -51,19 +51,44 @@ message PeerAddressInfo {
 }
 
 message Echo {
-  string Value = 1;
+  string value = 1;
 }
 
 message Envelope {
   map<string, string> attributes = 1;
 
   oneof sum {
-    tendermint.blocksync.Message blocksync_message = 2;
-    tendermint.consensus.Message consensus_message = 3;
-    tendermint.statesync.Message statesync_message = 4;
-    tendermint.p2p.PexMessage    pex_message       = 5;
-    tendermint.types.Evidence    evidence          = 6;
-    tendermint.mempool.Txs       mempool_txs       = 7;
-    Echo                         echo              = 8;
+    Echo                         echo              = 2;
+    tendermint.p2p.PexRequest    pex_request       = 3;
+    tendermint.p2p.PexResponse   pex_response      = 4;
+    tendermint.types.Evidence    evidence          = 5;
+    tendermint.mempool.Txs       mempool_txs       = 6;
+
+    tendermint.blocksync.BlockRequest    block_request     = 7;
+    tendermint.blocksync.NoBlockResponse no_block_response = 8;
+    tendermint.blocksync.BlockResponse   block_response    = 9;
+    tendermint.blocksync.StatusRequest   status_request    = 10;
+    tendermint.blocksync.StatusResponse  status_response   = 11;
+
+    tendermint.statesync.SnapshotsRequest   snapshots_request    = 12;
+    tendermint.statesync.SnapshotsResponse  snapshots_response   = 13;
+    tendermint.statesync.ChunkRequest       chunk_request        = 14;
+    tendermint.statesync.ChunkResponse      chunk_response       = 15;
+    tendermint.statesync.LightBlockRequest  light_block_request  = 16;
+    tendermint.statesync.LightBlockResponse light_block_response = 17;
+    tendermint.statesync.ParamsRequest      params_request       = 18;
+    tendermint.statesync.ParamsResponse     params_response      = 19;
+
+    tendermint.consensus.NewRoundStep  new_round_step  = 20;
+    tendermint.consensus.NewValidBlock new_valid_block = 21;
+    tendermint.consensus.Proposal      proposal        = 22;
+    tendermint.consensus.ProposalPOL   proposal_pol    = 23;
+    tendermint.consensus.BlockPart     block_part      = 24;
+    tendermint.consensus.Vote          vote            = 25;
+    tendermint.consensus.HasVote       has_vote        = 26;
+    tendermint.consensus.VoteSetMaj23  vote_set_maj23  = 27;
+    tendermint.consensus.VoteSetBits   vote_set_bits   = 28;
+    tendermint.consensus.Commit        commit          = 29;
+    tendermint.consensus.HasCommit     has_commit      = 30;
   }
 }

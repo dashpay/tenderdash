@@ -31,13 +31,3 @@ message StatusResponse {
   int64 height = 1;
   int64 base   = 2;
 }
-
-message Message {
-  oneof sum {
-    BlockRequest    block_request     = 1;
-    NoBlockResponse no_block_response = 2;
-    BlockResponse   block_response    = 3;
-    StatusRequest   status_request    = 4;
-    StatusResponse  status_response   = 5;
-  }
-}

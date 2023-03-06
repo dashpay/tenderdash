@@ -3,18 +3,15 @@ package p2p_test
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"runtime"
 	"strings"
 	"testing"
 	"time"
 
-	sync "github.com/sasha-s/go-deadlock"
-
 	"github.com/fortytw2/leaktest"
-	"github.com/gogo/protobuf/proto"
 	gogotypes "github.com/gogo/protobuf/types"
+	sync "github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
@@ -264,29 +261,6 @@ func TestRouter_Channel_Broadcast(t *testing.T) {
 	p2ptest.RequireReceive(ctx, t, b, p2p.Envelope{From: aID, Message: &p2ptest.Message{Value: "bar"}})
 	p2ptest.RequireReceive(ctx, t, c, p2p.Envelope{From: aID, Message: &p2ptest.Message{Value: "bar"}})
 	p2ptest.RequireEmpty(ctx, t, a, b, c, d)
-}
-
-// WrapperMessage prepends the value with "wrap:" and "unwrap:" to test it.
-type wrapperMessage struct {
-	p2ptest.Message
-}
-
-var _ p2p.Wrapper = (*wrapperMessage)(nil)
-
-func (w *wrapperMessage) Wrap(inner proto.Message) error {
-	switch inner := inner.(type) {
-	case *p2ptest.Message:
-		w.Message.Value = fmt.Sprintf("wrap:%v", inner.Value)
-	case *wrapperMessage:
-		*w = *inner
-	default:
-		return fmt.Errorf("invalid message type %T", inner)
-	}
-	return nil
-}
-
-func (w *wrapperMessage) Unwrap() (proto.Message, error) {
-	return &p2ptest.Message{Value: fmt.Sprintf("unwrap:%v", w.Message.Value)}, nil
 }
 
 func TestRouter_Channel_Error(t *testing.T) {

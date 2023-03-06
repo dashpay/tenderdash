@@ -29,7 +29,6 @@ import (
 
 var (
 	_ service.Service = (*Reactor)(nil)
-	_ p2p.Wrapper     = (*ssproto.Message)(nil)
 )
 
 const (

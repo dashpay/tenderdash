@@ -166,9 +166,8 @@ type Router struct {
 	// FIXME: We don't strictly need to use a mutex for this if we seal the
 	// channels on router start. This depends on whether we want to allow
 	// dynamic channels in the future.
-	channelMtx      sync.RWMutex
-	channelQueues   map[ChannelID]queue // inbound messages from all peers to a single channel
-	channelMessages map[ChannelID]proto.Message
+	channelMtx    sync.RWMutex
+	channelQueues map[ChannelID]queue // inbound messages from all peers to a single channel
 }
 
 // NewRouter creates a new Router. The given Transports must already be

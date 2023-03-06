@@ -15,12 +15,12 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
 	protomem "github.com/tendermint/tendermint/proto/tendermint/mempool"
+	protop2p "github.com/tendermint/tendermint/proto/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
 
 var (
 	_ service.Service = (*Reactor)(nil)
-	_ p2p.Wrapper     = (*protomem.Message)(nil)
 )
 
 // Reactor implements a service that contains mempool of txs that are broadcasted
@@ -74,9 +74,9 @@ func defaultObservePanic(r interface{}) {}
 // package's required channels.
 func getChannelDescriptor(cfg *config.MempoolConfig) *p2p.ChannelDescriptor {
 	largestTx := make([]byte, cfg.MaxTxBytes)
-	batchMsg := protomem.Message{
-		Sum: &protomem.Message_Txs{
-			Txs: &protomem.Txs{Txs: [][]byte{largestTx}},
+	batchMsg := protop2p.Envelope{
+		Sum: &protop2p.Envelope_MempoolTxs{
+			MempoolTxs: &protomem.Txs{Txs: [][]byte{largestTx}},
 		},
 	}
 
