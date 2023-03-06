@@ -797,7 +797,7 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 			r.metrics.PeerReceiveBytesTotal.With(
 				"chID", fmt.Sprint(chID),
 				"peer_id", string(peerID),
-				"message_type", r.lc.ValueToMetricLabel(envelope.Message)).Add(float64(proto.Size(envelope.Message)))
+				"message_type", r.lc.ValueToMetricLabel(envelope.Message)).Add(float64(proto.Size(&protoEnvelope)))
 			r.metrics.RouterChannelQueueSend.Observe(time.Since(start).Seconds())
 			// r.logger.Debug("received message", "peer", peerID, "msg", msg)
 
