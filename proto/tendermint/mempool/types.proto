@@ -6,9 +6,3 @@ option go_package = "github.com/tendermint/tendermint/proto/tendermint/mempool";
 message Txs {
   repeated bytes txs = 1;
 }
-
-message Message {
-  oneof sum {
-    Txs txs = 1;
-  }
-}
