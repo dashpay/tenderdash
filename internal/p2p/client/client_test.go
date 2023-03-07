@@ -1,4 +1,4 @@
-package blocksync
+package client
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/gogo/protobuf/proto"
+	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -23,12 +25,12 @@ import (
 type ChannelTestSuite struct {
 	suite.Suite
 
-	height           int64
-	peerID           types.NodeID
-	fakeClock        clockwork.FakeClock
-	p2pChannel       *mocks.Channel
-	channel          *Channel
-	receivedEnvelope *p2p.Envelope
+	height     int64
+	peerID     types.NodeID
+	fakeClock  clockwork.FakeClock
+	p2pChannel *mocks.Channel
+	client     *Client
+	response   *bcproto.BlockResponse
 }
 
 func TestChannelTestSuite(t *testing.T) {
@@ -40,33 +42,31 @@ func (suite *ChannelTestSuite) SetupTest() {
 	suite.height = 101
 	suite.peerID = "peer id"
 	suite.fakeClock = clockwork.NewFakeClock()
-	suite.channel = NewChannel(suite.p2pChannel, ChannelWithClock(suite.fakeClock))
-	suite.receivedEnvelope = &p2p.Envelope{
-		From: suite.peerID,
-		Message: &bcproto.BlockResponse{
-			Commit: &tmproto.Commit{Height: suite.height},
-		},
+	suite.client = New(suite.p2pChannel, WithClock(suite.fakeClock))
+	suite.response = &bcproto.BlockResponse{
+		Commit: &tmproto.Commit{Height: suite.height},
 	}
-}
-
-func (suite *ChannelTestSuite) TearDownTest() {
-	ctx := context.Background()
-	// try to resolve again
-	err := suite.channel.Resolve(ctx, suite.receivedEnvelope)
-	tmrequire.Error(suite.T(), "cannot resolve a result", err)
 }
 
 func (suite *ChannelTestSuite) TestGetBlockSuccess() {
 	ctx := context.Background()
+	var reqID string
+	envelopeArg := func(envelope p2p.Envelope) bool {
+		var ok bool
+		reqID, ok = envelope.Attributes[RequestIDAttribute]
+		return ok
+	}
 	suite.p2pChannel.
-		On("Send", mock.Anything, mock.Anything).
+		On("Send", mock.Anything, mock.MatchedBy(envelopeArg)).
 		Once().
 		Return(nil)
-	p, err := suite.channel.GetBlock(ctx, suite.height, suite.peerID)
+	p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
 	suite.Require().NoError(err)
 	// this call should start a goroutine that was created in a promise that a result of GetBlock method
 	runtime.Gosched()
-	err = suite.channel.Resolve(ctx, suite.receivedEnvelope)
+	envelope := newEnvelope(uuid.NewString(), suite.peerID, suite.response)
+	envelope.AddAttribute(ResponseIDAttribute, reqID)
+	err = suite.client.resolve(ctx, envelope)
 	suite.Require().NoError(err)
 	resp, err := p.Await()
 	suite.Require().NoError(err)
@@ -84,51 +84,62 @@ func (suite *ChannelTestSuite) TestGetBlockFailedSend() {
 		On("SendError", mock.Anything, p2p.PeerError{NodeID: suite.peerID, Err: err}).
 		Once().
 		Return(err)
-	_, err = suite.channel.GetBlock(ctx, suite.height, suite.peerID)
+	_, err = suite.client.GetBlock(ctx, suite.height, suite.peerID)
 	suite.Require().Error(err)
 	tmrequire.Error(suite.T(), "failed send", err)
 }
 
 func (suite *ChannelTestSuite) TestGetBlockTimeout() {
 	ctx := context.Background()
+	var reqID string
+	envelopeArg := func(envelope p2p.Envelope) bool {
+		var ok bool
+		reqID, ok = envelope.Attributes[RequestIDAttribute]
+		return ok
+	}
 	suite.p2pChannel.
-		On("Send", mock.Anything, mock.Anything).
+		On("Send", mock.Anything, mock.MatchedBy(envelopeArg)).
 		Once().
 		Return(nil)
 	suite.p2pChannel.
 		On("SendError", mock.Anything, mock.Anything).
 		Once().
 		Return(nil)
-	p, err := suite.channel.GetBlock(ctx, suite.height, suite.peerID)
+	p, err := suite.client.GetBlock(ctx, suite.height, suite.peerID)
 	// need to wait for the goroutine is started
 	time.Sleep(time.Millisecond)
 	suite.fakeClock.Advance(peerTimeout)
 	suite.Require().NoError(err)
 	_, err = p.Await()
-	tmrequire.Error(suite.T(), errPeerNotResponded.Error(), err)
-	err = suite.channel.Resolve(ctx, suite.receivedEnvelope)
+	tmrequire.Error(suite.T(), ErrPeerNotResponded.Error(), err)
+	err = suite.client.resolve(ctx, newEnvelope(reqID, suite.peerID, suite.response))
 	tmrequire.Error(suite.T(), "cannot resolve a result", err)
 }
 
 func (suite *ChannelTestSuite) TestSend() {
 	ctx := context.Background()
 	errMsg := p2p.PeerError{}
-	msg := p2p.Envelope{}
+	envelope := p2p.Envelope{}
+	envelopeArg := func(envelope p2p.Envelope) bool {
+		var ok bool
+		_, ok = envelope.Attributes[RequestIDAttribute]
+		return ok
+	}
 	suite.p2pChannel.
-		On("Send", ctx, msg).
+		On("Send", mock.Anything, mock.MatchedBy(envelopeArg)).
 		Once().
 		Return(nil)
 	suite.p2pChannel.
-		On("SendError", ctx, errMsg).
+		On("SendError", mock.Anything, errMsg).
 		Once().
 		Return(nil)
-	err := suite.channel.Send(ctx, msg)
+	err := suite.client.Send(ctx, envelope)
 	suite.Require().NoError(err)
-	err = suite.channel.Send(ctx, errMsg)
+	err = suite.client.Send(ctx, errMsg)
 	suite.Require().NoError(err)
 }
 
-func (suite *ChannelTestSuite) TestConsume() {
+func (suite *ChannelTestSuite) TestConsumeHandle() {
 	ctx := context.Background()
 	outCh := make(chan p2p.Envelope)
 	go func() {
@@ -148,7 +159,45 @@ func (suite *ChannelTestSuite) TestConsume() {
 		On("Handle", ctx, mock.Anything, mock.Anything).
 		Times(3).
 		Return(nil)
-	suite.channel.Consume(ctx, consumer)
+	suite.client.Consume(ctx, consumer)
+}
+
+func (suite *ChannelTestSuite) TestConsumeResolve() {
+	ctx := context.Background()
+	reqID := uuid.NewString()
+	testCases := []struct {
+		resp proto.Message
+	}{
+		{
+			resp: &bcproto.BlockResponse{},
+		},
+	}
+	for i, tc := range testCases {
+		suite.Run(fmt.Sprintf("%d", i), func() {
+			outCh := make(chan p2p.Envelope)
+			go func() {
+				defer close(outCh)
+				outCh <- p2p.Envelope{
+					Attributes: map[string]string{
+						ResponseIDAttribute: reqID,
+					},
+					Message: &bcproto.BlockResponse{},
+				}
+			}()
+			consumer := newMockConsumer(suite.T())
+			suite.p2pChannel.
+				On("Receive", ctx).
+				Once().
+				Return(func(ctx context.Context) *p2p.ChannelIterator {
+					return p2p.NewChannelIterator(outCh)
+				})
+			resCh := suite.client.addPending(reqID)
+			suite.client.Consume(ctx, consumer)
+			res := <-resCh
+			resp := res.Value.(*bcproto.BlockResponse)
+			suite.Require().Equal(tc.resp, resp)
+		})
+	}
 }
 
 func (suite *ChannelTestSuite) TestConsumeError() {
@@ -194,11 +243,11 @@ func (suite *ChannelTestSuite) TestConsumeError() {
 			consumer.
 				On("Handle", ctx, mock.Anything, mock.Anything).
 				Once().
-				Return(func(_ context.Context, _ *Channel, _ *p2p.Envelope) error {
+				Return(func(_ context.Context, _ *Client, _ *p2p.Envelope) error {
 					close(outCh)
 					return tc.retErr
 				})
-			suite.channel.Consume(ctx, consumer)
+			suite.client.Consume(ctx, consumer)
 		})
 	}
 }
@@ -214,13 +263,23 @@ func newMockConsumer(t *testing.T) *mockConsumer {
 	return m
 }
 
-func (m *mockConsumer) Handle(ctx context.Context, channel *Channel, envelope *p2p.Envelope) error {
+func (m *mockConsumer) Handle(ctx context.Context, channel *Client, envelope *p2p.Envelope) error {
 	ret := m.Called(ctx, channel, envelope)
 	var r0 error
-	if rf, ok := ret.Get(0).(func(ctx context.Context, channel *Channel, envelope *p2p.Envelope) error); ok {
+	if rf, ok := ret.Get(0).(func(ctx context.Context, channel *Client, envelope *p2p.Envelope) error); ok {
 		r0 = rf(ctx, channel, envelope)
 	} else {
 		r0 = ret.Error(0)
 	}
 	return r0
+}
+
+func newEnvelope(reqID string, peerID types.NodeID, resp *bcproto.BlockResponse) *p2p.Envelope {
+	return &p2p.Envelope{
+		Attributes: map[string]string{
+			RequestIDAttribute: reqID,
+		},
+		From:    peerID,
+		Message: resp,
+	}
 }

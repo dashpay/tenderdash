@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/tendermint/tendermint/internal/blocksync/mocks"
+	"github.com/tendermint/tendermint/internal/p2p/client"
 	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
 	"github.com/tendermint/tendermint/internal/test/factory"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
@@ -71,8 +72,8 @@ func (suite *BlockFetchJobTestSuite) TestExecute() {
 		},
 		{
 			height:        9,
-			wantErr:       errPeerNotResponded.Error(),
-			promiseReturn: suite.promiseReject(errPeerNotResponded),
+			wantErr:       client.ErrPeerNotResponded.Error(),
+			promiseReturn: suite.promiseReject(client.ErrPeerNotResponded),
 		},
 	}
 	for i, tc := range testCases {

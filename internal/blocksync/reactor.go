@@ -11,6 +11,7 @@ import (
 	"github.com/tendermint/tendermint/internal/consensus"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/p2p"
+	"github.com/tendermint/tendermint/internal/p2p/client"
 	"github.com/tendermint/tendermint/internal/p2p/conn"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/store"
@@ -150,7 +151,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		startHeight = state.InitialHeight
 	}
 
-	blockSyncClient := NewChannel(blockSyncCh, ChannelWithLogger(r.logger))
+	blockSyncClient := client.New(blockSyncCh, client.WithLogger(r.logger))
 	r.synchronizer = NewSynchronizer(startHeight, blockSyncClient, r.executor, WithLogger(r.logger))
 	if r.blockSyncFlag.Load() {
 		if err := r.synchronizer.Start(ctx); err != nil {

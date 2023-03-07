@@ -11,6 +11,7 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/internal/p2p"
+	"github.com/tendermint/tendermint/internal/p2p/client"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
 	"github.com/tendermint/tendermint/libs/workerpool"
@@ -42,15 +43,6 @@ const (
 	// Assuming a DSL connection (not a good choice) 128 Kbps (upload) ~ 15 KB/s,
 	// sending data across atlantic ~ 7.5 KB/s.
 	minRecvRate = 7680
-
-	// Maximum difference between current and new block's height.
-	maxDiffBetweenCurrentAndReceivedBlockHeight = 100
-
-	peerTimeout = 15 * time.Second
-)
-
-var (
-	errPeerNotResponded = errors.New("peer did not send us anything")
 )
 
 /*
@@ -92,7 +84,7 @@ type (
 		lastSyncRate     float64
 
 		peerStore      *InMemPeerStore
-		client         BlockClient
+		client         client.BlockClient
 		applier        *blockApplier
 		workerPool     *workerpool.WorkerPool
 		jobGen         *jobGenerator
@@ -120,7 +112,7 @@ func WithClock(clock clockwork.Clock) OptionFunc {
 }
 
 // NewSynchronizer returns a new Synchronizer with the height equal to start
-func NewSynchronizer(start int64, client BlockClient, blockExec *blockApplier, opts ...OptionFunc) *Synchronizer {
+func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApplier, opts ...OptionFunc) *Synchronizer {
 	peerStore := NewInMemPeerStore()
 	logger := log.NewNopLogger()
 	bp := &Synchronizer{

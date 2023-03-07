@@ -6,10 +6,12 @@ import (
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
 	"github.com/tendermint/tendermint/internal/p2p"
+	"github.com/tendermint/tendermint/internal/p2p/client"
 	p2pmocks "github.com/tendermint/tendermint/internal/p2p/mocks"
 	"github.com/tendermint/tendermint/internal/state/mocks"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
@@ -21,11 +23,12 @@ import (
 type BlockP2PMessageHandlerTestSuite struct {
 	suite.Suite
 
+	reqID          string
 	logger         log.Logger
 	fakeStore      *mocks.BlockStore
 	fakePeerAdder  *mockPeerAdder
 	fakeP2PChannel *p2pmocks.Channel
-	fakeChannel    *Channel
+	fakeClient     *client.Client
 	handler        *blockP2PMessageHandler
 }
 
@@ -33,13 +36,17 @@ func TestBlockP2PMessageHandler(t *testing.T) {
 	suite.Run(t, new(BlockP2PMessageHandlerTestSuite))
 }
 
+func (suite *BlockP2PMessageHandlerTestSuite) SetupSuite() {
+	suite.reqID = uuid.NewString()
+}
+
 func (suite *BlockP2PMessageHandlerTestSuite) SetupTest() {
 	suite.logger = log.NewTestingLogger(suite.T())
 	suite.fakeStore = mocks.NewBlockStore(suite.T())
 	suite.fakePeerAdder = newMockPeerAdder(suite.T())
 	suite.fakeP2PChannel = p2pmocks.NewChannel(suite.T())
-	suite.fakeChannel = NewChannel(suite.fakeP2PChannel)
-	suite.handler = newBlockMessageHandler(suite.logger, suite.fakeStore, suite.fakePeerAdder)
+	suite.fakeClient = client.New(suite.fakeP2PChannel)
+	suite.handler = blockMessageHandler(suite.logger, suite.fakeStore, suite.fakePeerAdder)
 
 }
 
@@ -104,60 +111,12 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockRequest() {
 			}
 			if tc.wantResp != nil {
 				suite.fakeP2PChannel.
-					On("Send", ctx, p2p.Envelope{
-						To:      peerID,
-						Message: tc.wantResp,
-					}).
+					On("Send", ctx, mock.MatchedBy(suite.envelopeArg(peerID, tc.wantResp))).
 					Once().
 					Return(nil)
 			}
 			err := suite.handleMessage(ctx, blockRequestH1001, peerID)
 			tmrequire.Error(suite.T(), tc.wantErr, err)
-		})
-	}
-}
-
-func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockResponse() {
-	ctx := context.Background()
-	const H1001 = int64(1001)
-	blockH1001 := types.Block{Header: types.Header{Height: H1001}}
-	protoBlockH1001, err := blockH1001.ToProto()
-	suite.Require().NoError(err)
-	commit1001 := types.Commit{Height: H1001}
-	protoCommit := commit1001.ToProto()
-	peerID := types.NodeID("peer")
-	reqID := makeGetBlockReqID(H1001, peerID)
-	resultCh := suite.fakeChannel.addPending(reqID)
-	blockResponse := bcproto.BlockResponse{
-		Block:  protoBlockH1001,
-		Commit: protoCommit,
-	}
-	testCases := []struct {
-		peerID     types.NodeID
-		wantResult *bcproto.BlockResponse
-		wantErr    string
-	}{
-		{
-			peerID:  "peer0",
-			wantErr: "cannot resolve a result",
-		},
-		{
-			peerID:     peerID,
-			wantResult: &blockResponse,
-		},
-	}
-	for i, tc := range testCases {
-		suite.Run(fmt.Sprintf("%d", i), func() {
-			err := suite.handleMessage(ctx, &blockResponse, tc.peerID)
-			tmrequire.Error(suite.T(), tc.wantErr, err)
-			if tc.wantResult == nil {
-				suite.Require().Len(resultCh, 0)
-				return
-			}
-			suite.Require().Len(resultCh, 1)
-			res := <-resultCh
-			resp := res.Value.(*bcproto.BlockResponse)
-			suite.Require().Equal(tc.wantResult, resp)
 		})
 	}
 }
@@ -218,11 +177,10 @@ func (suite *BlockP2PMessageHandlerTestSuite) TestHandleStatusRequest() {
 				tc.mockFn()
 			}
 			if tc.wantResp != nil {
-				envl := p2p.Envelope{
-					To:      peerID,
-					Message: tc.wantResp,
-				}
-				suite.fakeP2PChannel.On("Send", ctx, envl).Once().Return(nil)
+				suite.fakeP2PChannel.
+					On("Send", ctx, mock.MatchedBy(suite.envelopeArg(peerID, tc.wantResp))).
+					Once().
+					Return(nil)
 			}
 			err := suite.handleMessage(ctx, &bcproto.StatusRequest{}, peerID)
 			suite.Require().NoError(err)
@@ -235,11 +193,31 @@ func (suite *BlockP2PMessageHandlerTestSuite) handleMessage(
 	msg proto.Message,
 	peerID types.NodeID,
 ) error {
-	return suite.handler.Handle(ctx, suite.fakeChannel, &p2p.Envelope{
+	return suite.handler.Handle(ctx, suite.fakeClient, &p2p.Envelope{
+		Attributes: map[string]string{
+			client.RequestIDAttribute: suite.reqID,
+		},
 		From:      peerID,
 		Message:   msg,
 		ChannelID: BlockSyncChannel,
 	})
+}
+
+func (suite *BlockP2PMessageHandlerTestSuite) envelopeArg(
+	peerID types.NodeID,
+	resp proto.Message,
+) func(envelope p2p.Envelope) bool {
+	called := false
+	return func(envelope p2p.Envelope) bool {
+		if called {
+			return true
+		}
+		called = true
+		_, hasRespID := envelope.Attributes[client.ResponseIDAttribute]
+		return suite.Equal(peerID, envelope.To) &&
+			suite.Equal(resp, envelope.Message) &&
+			hasRespID
+	}
 }
 
 type mockPeerAdder struct {

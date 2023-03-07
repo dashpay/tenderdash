@@ -1,0 +1,262 @@
+//go:generate ../../scripts/mockery_generate.sh BlockClient
+
+package client
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sync"
+	"time"
+
+	"github.com/gogo/protobuf/proto"
+	"github.com/google/uuid"
+	"github.com/hashicorp/go-multierror"
+	"github.com/jonboulle/clockwork"
+
+	"github.com/tendermint/tendermint/internal/p2p"
+	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/libs/promise"
+	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
+	"github.com/tendermint/tendermint/types"
+)
+
+const (
+	RequestIDAttribute  = "RequestID"
+	ResponseIDAttribute = "ResponseID"
+	peerTimeout         = 15 * time.Second
+)
+
+var (
+	ErrPeerNotResponded      = errors.New("peer did not send us anything")
+	ErrCannotResolveResponse = errors.New("cannot resolve a result")
+)
+
+type (
+	// Sender is the interface that wraps Send method
+	Sender interface {
+		Send(ctx context.Context, msg any) error
+	}
+	// BlockClient defines the methods which must be implemented by block client
+	BlockClient interface {
+		Sender
+		// GetBlock is the method that requests a block by a specific height from a peer.
+		// Since the request is asynchronous, then the method returns a promise that will be resolved
+		// as a response will be received or rejected by timeoutMilli, otherwise returns an error
+		GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error)
+	}
+	// Client is a stateful implementation of a client, which means that the client stores a request ID
+	// in order to be able to resolve the response once it is received from the peer
+	Client struct {
+		channel      p2p.Channel
+		clock        clockwork.Clock
+		logger       log.Logger
+		pending      sync.Map
+		timeoutMilli time.Duration
+	}
+	// OptionFunc is a client optional function, it is used to override the default parameters in a Client
+	OptionFunc func(c *Client)
+	result     struct {
+		Value any
+		Err   error
+	}
+)
+
+// WithLogger is an optional function to set logger to Client
+func WithLogger(logger log.Logger) OptionFunc {
+	return func(c *Client) {
+		c.logger = logger
+	}
+}
+
+// WithClock is an optional function to set clock to Client
+func WithClock(clock clockwork.Clock) OptionFunc {
+	return func(c *Client) {
+		c.clock = clock
+	}
+}
+
+// New creates and returns Client with optional functions
+func New(ch p2p.Channel, opts ...OptionFunc) *Client {
+	client := &Client{
+		channel:      ch,
+		clock:        clockwork.NewRealClock(),
+		logger:       log.NewNopLogger(),
+		timeoutMilli: peerTimeout,
+	}
+	for _, opt := range opts {
+		opt(client)
+	}
+	return client
+}
+
+// GetBlock requests a block from a peer and returns promise.Promise which resolve the result
+// if response received in time otherwise reject
+func (c *Client) GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error) {
+	reqID := uuid.NewString()
+	err := c.Send(ctx, p2p.Envelope{
+		Attributes: map[string]string{RequestIDAttribute: reqID},
+		To:         peerID,
+		Message:    &bcproto.BlockRequest{Height: height},
+	})
+	if err != nil {
+		errSendError := c.Send(ctx, p2p.PeerError{
+			NodeID: peerID,
+			Err:    err,
+		})
+		if errSendError != nil {
+			return nil, multierror.Append(err, errSendError)
+		}
+	}
+	respCh := c.addPending(reqID)
+	return newPromise[*bcproto.BlockResponse](ctx, peerID, reqID, respCh, c), nil
+}
+
+// Send sends p2p message to a peer, allowed p2p.Envelope or p2p.PeerError types
+func (c *Client) Send(ctx context.Context, msg any) error {
+	switch t := msg.(type) {
+	case p2p.PeerError:
+		return c.channel.SendError(ctx, t)
+	case p2p.Envelope:
+		if _, ok := t.Attributes[RequestIDAttribute]; !ok {
+			// populate RequestID if it is absent
+			t.AddAttribute(RequestIDAttribute, uuid.NewString())
+		}
+		return c.channel.Send(ctx, t)
+	}
+	return fmt.Errorf("cannot send an unsupported message type %T", msg)
+}
+
+// Consume reads the messages from a p2p client and processes them using a consumer-handler
+func (c *Client) Consume(ctx context.Context, handler ConsumerHandler) {
+	iter := c.channel.Receive(ctx)
+	for iter.Next(ctx) {
+		envelope := iter.Envelope()
+		if isMessageResolvable(envelope) {
+			err := c.resolve(ctx, envelope)
+			if err != nil {
+				reqID := envelope.Attributes[ResponseIDAttribute]
+				c.logger.Error("failed to resolve response message",
+					"ch_id", envelope.ChannelID,
+					"request_id", reqID,
+					"envelope", envelope,
+					"error", err)
+				serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err})
+				if serr != nil {
+					return
+				}
+			}
+			continue
+		}
+		err := handler.Handle(ctx, c, envelope)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return
+		}
+		if err != nil {
+			c.logger.Error("failed to process message",
+				"ch_id", envelope.ChannelID,
+				"envelope", envelope,
+				"error", err)
+			serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err})
+			if serr != nil {
+				return
+			}
+		}
+	}
+}
+
+func (c *Client) resolve(ctx context.Context, envelope *p2p.Envelope) error {
+	reqID, ok := envelope.Attributes[ResponseIDAttribute]
+	if !ok {
+		return ErrCannotResolveResponse
+	}
+	err := c.resolveMessage(ctx, reqID, result{Value: envelope.Message})
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (c *Client) resolveMessage(ctx context.Context, reqID string, res result) error {
+	val, ok := c.pending.Load(reqID)
+	if !ok {
+		return fmt.Errorf("cannot resolve a result for a request %s", reqID)
+	}
+	respCh := val.(chan result)
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case respCh <- res:
+	}
+	return nil
+}
+
+func (c *Client) addPending(reqID string) chan result {
+	respCh := make(chan result, 1)
+	c.pending.Store(reqID, respCh)
+	return respCh
+}
+
+func (c *Client) removePending(reqID string) {
+	val, loaded := c.pending.LoadAndDelete(reqID)
+	if !loaded {
+		return
+	}
+	respCh := val.(chan result)
+	close(respCh)
+}
+
+func (c *Client) timeout() <-chan time.Time {
+	return c.clock.After(c.timeoutMilli)
+}
+
+func newPromise[T proto.Message](
+	ctx context.Context,
+	peerID types.NodeID,
+	reqID string,
+	respCh chan result,
+	client *Client,
+) *promise.Promise[T] {
+	return promise.New(func(resolve func(data T), reject func(err error)) {
+		defer client.removePending(reqID)
+		select {
+		case <-ctx.Done():
+			reject(fmt.Errorf("cannot complete a promise: %w", ctx.Err()))
+			return
+		case res := <-respCh:
+			if res.Err != nil {
+				reject(res.Err)
+				return
+			}
+			resolve(res.Value.(T))
+		case <-client.timeout():
+			_ = client.Send(ctx, p2p.PeerError{
+				NodeID: peerID,
+				Err:    ErrPeerNotResponded,
+			})
+			//c.logger.Error("SendTimeout", "reason", ErrPeerNotResponded, "timeout", peerTimeout)
+			reject(ErrPeerNotResponded)
+		}
+	})
+}
+
+func isMessageResolvable(envelope *p2p.Envelope) bool {
+	// This list should be expanded using other response messages
+	switch envelope.Message.(type) {
+	case *bcproto.BlockResponse:
+		return true
+	}
+	return false
+}
+
+func ResponseFuncFromEnvelope(channel *Client, envelope *p2p.Envelope) func(ctx context.Context, msg proto.Message) error {
+	return func(ctx context.Context, msg proto.Message) error {
+		return channel.Send(ctx, p2p.Envelope{
+			Attributes: map[string]string{
+				ResponseIDAttribute: envelope.Attributes[RequestIDAttribute],
+			},
+			To:      envelope.From,
+			Message: msg,
+		})
+	}
+}
