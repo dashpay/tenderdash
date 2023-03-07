@@ -81,7 +81,7 @@ func TestBlockApplierApply(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		t.Run(fmt.Sprintf("test-case %d", i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			applier := newBlockApplier(mockBlockExec, mockBlockStore, applierWithState(initialState))
 			if tc.mockFn != nil {
 				tc.mockFn()

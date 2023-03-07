@@ -358,7 +358,7 @@ func TestReactor_NoBlockResponse(t *testing.T) {
 
 	reactor := rts.reactors[rts.nodes[1]]
 	for i, tc := range testCases {
-		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			block := reactor.store.LoadBlock(tc.height)
 			require.Equal(t, tc.existent, block != nil)
 		})

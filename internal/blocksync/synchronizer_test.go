@@ -136,9 +136,9 @@ func (suite *SynchronizerTestSuite) TestProduceJob() {
 		},
 	}
 	for i, tc := range testCases {
-		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
+		suite.Run(fmt.Sprintf("%d", i), func() {
 			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
-			jobCh := make(chan workerpool.Job, 1)
+			jobCh := make(chan *workerpool.Job, 1)
 			wp := workerpool.New(0, workerpool.WithJobCh(jobCh))
 			pool := NewSynchronizer(tc.startHeight, suite.client, applier, WithWorkerPool(wp))
 			pool.AddPeer(peer1)
@@ -152,9 +152,11 @@ func (suite *SynchronizerTestSuite) TestProduceJob() {
 			}
 			suite.Require().Len(jobCh, 1)
 			job := <-jobCh
-			bfJob := job.(*blockFetchJob)
-			suite.Require().Equal(tc.wantHeight, bfJob.height)
-			suite.Require().Equal(tc.wantPeer, bfJob.peer)
+			suite.client.
+				On("GetBlock", mock.Anything, tc.wantHeight, tc.wantPeer.peerID).
+				Once().
+				Return(nil, errors.New("error"))
+			_ = job.Execute(ctx)
 		})
 	}
 }
@@ -237,7 +239,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 	for i, tc := range testCases {
 		applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
 		pool := NewSynchronizer(1, suite.client, applier, WithWorkerPool(wp))
-		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
+		suite.Run(fmt.Sprintf("%d", i), func() {
 			tc.mockFn(pool)
 			resultCh <- tc.result
 			pool.consumeJobResult(ctx)

@@ -16,7 +16,7 @@ import (
 func TestWorkerPool_Basic(t *testing.T) {
 	testCases := []struct {
 		poolSize        int
-		jobs            []Job
+		jobs            []*Job
 		wantConsumeJobs int
 		doneCounter     int32
 		wantProducerErr string
@@ -118,8 +118,8 @@ func TestWorkerPool_Send(t *testing.T) {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
-			jobs := generateJobs(1)
-			jobCh := make(chan Job)
+			jobs := generateJobs(3)
+			jobCh := make(chan *Job)
 			wp := New(1, WithJobCh(jobCh))
 			wp.Start(ctx)
 			var wg sync.WaitGroup
@@ -129,6 +129,9 @@ func TestWorkerPool_Send(t *testing.T) {
 				err := wp.Send(ctx, jobs...)
 				tmrequire.Error(t, tc.wantErr, err)
 			}()
+			require.Eventually(t, func() bool {
+				return jobs[2].Status() == JobSending
+			}, 5*time.Millisecond, time.Millisecond)
 			tc.stopFn(ctx, cancel, wp)
 			wg.Wait()
 			err := wp.Send(ctx, jobs...)
@@ -231,20 +234,12 @@ func consumeResult(ctx context.Context, wp *WorkerPool, num int) ([]Result, erro
 	return results, nil
 }
 
-type valueJob struct {
-	value int
-}
-
-func (j *valueJob) Execute(ctx context.Context) Result {
-	return Result{
-		Value: j.value,
-	}
-}
-
-func generateJobs(n int) []Job {
-	jobs := make([]Job, n)
+func generateJobs(n int) []*Job {
+	jobs := make([]*Job, n)
 	for i := 0; i < n; i++ {
-		jobs[i] = &valueJob{value: i}
+		jobs[i] = NewJob(func(ctx context.Context) Result {
+			return Result{Value: n}
+		})
 	}
 	return jobs
 }

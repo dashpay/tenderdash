@@ -17,41 +17,37 @@ type (
 		height int64
 		err    error
 	}
-	blockFetchJob struct {
-		logger log.Logger
-		client BlockClient
-		peer   PeerData
-		height int64
-	}
 )
 
 func (e *errBlockFetch) Error() string {
 	return e.err.Error()
 }
 
-// Execute requests for a block by height from the peer, if the peer responds to the block in time, then the job
+// blockFetchJobHandler requests for a block by height from the peer, if the peer responds to the block in time, then the job
 // will return it, otherwise the job will return an error
-func (j *blockFetchJob) Execute(ctx context.Context) workerpool.Result {
-	promise, err := j.client.GetBlock(ctx, j.height, j.peer.peerID)
-	if err != nil {
-		return j.errorResult(j.peer.peerID, j.height, err)
+func blockFetchJobHandler(client BlockClient, peer PeerData, height int64) workerpool.JobHandler {
+	return func(ctx context.Context) workerpool.Result {
+		promise, err := client.GetBlock(ctx, height, peer.peerID)
+		if err != nil {
+			return errorResult(peer.peerID, height, err)
+		}
+		protoResp, err := promise.Await()
+		if err != nil {
+			return errorResult(peer.peerID, height, err)
+		}
+		resp, err := BlockResponseFromProto(protoResp, peer.peerID)
+		if err != nil {
+			return errorResult(peer.peerID, height, err)
+		}
+		err = resp.Validate()
+		if err != nil {
+			return errorResult(peer.peerID, height, err)
+		}
+		return workerpool.Result{Value: resp}
 	}
-	protoResp, err := promise.Await()
-	if err != nil {
-		return j.errorResult(j.peer.peerID, j.height, err)
-	}
-	resp, err := BlockResponseFromProto(protoResp, j.peer.peerID)
-	if err != nil {
-		return j.errorResult(j.peer.peerID, j.height, err)
-	}
-	err = resp.Validate()
-	if err != nil {
-		return j.errorResult(j.peer.peerID, j.height, err)
-	}
-	return workerpool.Result{Value: resp}
 }
 
-func (j *blockFetchJob) errorResult(peerID types.NodeID, height int64, err error) workerpool.Result {
+func errorResult(peerID types.NodeID, height int64, err error) workerpool.Result {
 	return workerpool.Result{
 		Err: &errBlockFetch{
 			err:    err,
@@ -93,18 +89,14 @@ func (p *jobGenerator) nextHeight() int64 {
 	return height
 }
 
-func (p *jobGenerator) nextJob(ctx context.Context) (*blockFetchJob, error) {
+func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
 	height := p.nextHeight()
 	peer, err := p.getPeer(ctx, height)
 	if err != nil {
 		return nil, err
 	}
-	return &blockFetchJob{
-		logger: p.logger,
-		client: p.client,
-		peer:   peer,
-		height: height,
-	}, nil
+	p.peerStore.PeerUpdate(peer.peerID, ResetMonitor(), AddNumPending(1))
+	return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 }
 
 func (p *jobGenerator) pushBack(height int64) {

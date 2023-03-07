@@ -173,7 +173,6 @@ func (s *Synchronizer) produceJob(ctx context.Context) {
 		s.logger.Error("cannot create a next job", "error", err)
 		return
 	}
-	s.peerStore.PeerUpdate(job.peer.peerID, ResetMonitor(), AddNumPending(1))
 	err = s.workerPool.Send(ctx, job)
 	if err != nil {
 		s.logger.Error("cannot add a job to worker-pool", "error", err)

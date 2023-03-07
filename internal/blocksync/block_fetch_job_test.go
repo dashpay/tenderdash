@@ -11,10 +11,12 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	"github.com/tendermint/tendermint/internal/blocksync/mocks"
-	"github.com/tendermint/tendermint/internal/state/test/factory"
+	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
+	"github.com/tendermint/tendermint/internal/test/factory"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/promise"
+	"github.com/tendermint/tendermint/libs/workerpool"
 	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
 	"github.com/tendermint/tendermint/types"
 )
@@ -25,7 +27,6 @@ type BlockFetchJobTestSuite struct {
 	responses []*bcproto.BlockResponse
 	client    *mocks.BlockClient
 	peer      PeerData
-	job       *blockFetchJob
 }
 
 func TestBlockFetchJob(t *testing.T) {
@@ -36,17 +37,12 @@ func (suite *BlockFetchJobTestSuite) SetupTest() {
 	const chainLen = 10
 	ctx := context.Background()
 
-	valSet, privVals := types.MockValidatorSet()
+	valSet, privVals := factory.MockValidatorSet()
 	state := fakeInitialState(valSet)
-	blocks := factory.MakeBlocks(ctx, suite.T(), chainLen+1, &state, privVals, 1)
+	blocks := statefactory.MakeBlocks(ctx, suite.T(), chainLen+1, &state, privVals, 1)
 	suite.responses = generateBlockResponses(suite.T(), blocks)
 	suite.client = mocks.NewBlockClient(suite.T())
 	suite.peer = newPeerData("peer-id", 1, 10)
-	suite.job = &blockFetchJob{
-		logger: log.NewNopLogger(),
-		client: suite.client,
-		peer:   suite.peer,
-	}
 }
 
 func (suite *BlockFetchJobTestSuite) TestExecute() {
@@ -80,13 +76,13 @@ func (suite *BlockFetchJobTestSuite) TestExecute() {
 		},
 	}
 	for i, tc := range testCases {
-		suite.Run(fmt.Sprintf("test-case %d", i), func() {
+		suite.Run(fmt.Sprintf("%d", i), func() {
 			suite.client.
 				On("GetBlock", mock.Anything, tc.height, suite.peer.peerID).
 				Once().
 				Return(suite.getBlockReturnFunc(tc.promiseReturn), tc.clientErr)
-			suite.job.height = tc.height
-			res := suite.job.Execute(ctx)
+			handler := blockFetchJobHandler(suite.client, suite.peer, tc.height)
+			res := handler(ctx)
 			suite.requireError(tc.wantErr, res.Err)
 		})
 	}
@@ -110,7 +106,7 @@ func (suite *BlockFetchJobTestSuite) TestJobGeneratorNextJob() {
 
 	job, err := jobGen.nextJob(ctx)
 	suite.Require().NoError(err)
-	suite.Require().Equal(suite.peer, job.peer)
+	suite.Require().NotNil(job)
 
 	cancel()
 	_, err = jobGen.nextJob(ctx)
@@ -123,7 +119,7 @@ func (suite *BlockFetchJobTestSuite) TestGeneratorNextJobWaitForPeerAndPushBackH
 	logger := log.NewNopLogger()
 	peerStore := NewInMemPeerStore()
 	jobGen := newJobGenerator(5, logger, suite.client, peerStore)
-	jobCh := make(chan *blockFetchJob, 2)
+	jobCh := make(chan *workerpool.Job, 2)
 	nextJobCh := make(chan struct{}, 1)
 	go func() {
 		for {
@@ -133,7 +129,6 @@ func (suite *BlockFetchJobTestSuite) TestGeneratorNextJobWaitForPeerAndPushBackH
 			case <-nextJobCh:
 				job, err := jobGen.nextJob(ctx)
 				suite.Require().NoError(err)
-				suite.T().Logf("pushed %d", job.height)
 				jobCh <- job
 			}
 		}
@@ -142,11 +137,26 @@ func (suite *BlockFetchJobTestSuite) TestGeneratorNextJobWaitForPeerAndPushBackH
 	jobGen.pushBack(9)
 	peerStore.Put(suite.peer)
 	nextJobCh <- struct{}{}
+	heightCheck := mock.MatchedBy(func(height int64) bool {
+		return suite.Contains([]int64{5, 9}, height)
+	})
+	suite.client.
+		On("GetBlock", mock.Anything, heightCheck, mock.Anything).
+		Twice().
+		Return(func(_ context.Context, height int64, _ types.NodeID) *promise.Promise[*bcproto.BlockResponse] {
+			return suite.promiseResolve(height)
+		}, nil)
 	suite.Eventually(func() bool {
 		job1 := <-jobCh
+		res1 := job1.Execute(ctx)
+		resp1 := res1.Value.(*BlockResponse)
 		job2 := <-jobCh
-		want := []int64{5, 9}
-		return suite.Contains(want, job1.height) && suite.Contains(want, job2.height)
+		res2 := job2.Execute(ctx)
+		resp2 := res2.Value.(*BlockResponse)
+		return suite.Equal(suite.peer.peerID, resp1.PeerID) &&
+			suite.Equal(suite.peer.peerID, resp2.PeerID) &&
+			suite.Contains([]int64{5, 9}, resp1.Block.Height) &&
+			suite.Contains([]int64{5, 9}, resp2.Block.Height)
 	}, 10*time.Millisecond, 5*time.Millisecond)
 }
 

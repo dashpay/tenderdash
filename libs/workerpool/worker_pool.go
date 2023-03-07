@@ -16,6 +16,15 @@ var (
 	ErrCannotReadResultChannel = errors.New("cannot read result from a channel")
 )
 
+const (
+	JobCreated JobStatus = iota
+	JobSending
+	JobSent
+	JobReceived
+	JobExecuting
+	JobExecuted
+)
+
 type (
 	// JobSender is an interface that wraps basic job sender methods
 	JobSender interface {
@@ -25,10 +34,16 @@ type (
 	JobReceiver interface {
 		Receive(ctx context.Context) (Result, error)
 	}
-	// Job is an interface that wraps the job methods that a job must implement to be executed on a worker
-	Job interface {
-		Execute(ctx context.Context) Result
+	JobStatus int
+	// Job wraps the job-handler that will be executed on a worker.
+	// Once the worker consumes the Job from the job-channel, it will execute the job's handler
+	// and the obtained execution Result will be published on the result channel
+	Job struct {
+		status  atomic.Int32
+		Handler JobHandler
 	}
+	// JobHandler is a function that must be wrapped by a Job
+	JobHandler func(ctx context.Context) Result
 	// Result this structure is the result of the job and will be sent to main goroutine via result channel
 	Result struct {
 		Value any
@@ -37,6 +52,48 @@ type (
 	// OptionFunc is function type for a worker-pool optional functions
 	OptionFunc func(*WorkerPool)
 )
+
+// String returns string representation of JobStatus
+func (j JobStatus) String() string {
+	switch j {
+	case JobCreated:
+		return "created"
+	case JobSending:
+		return "sending"
+	case JobSent:
+		return "sent"
+	case JobReceived:
+		return "received"
+	case JobExecuting:
+		return "executing"
+	case JobExecuted:
+		return "executed"
+	}
+	return "unknown"
+}
+
+// NewJob creates a new Job instance with the job's handler
+func NewJob(handler JobHandler) *Job {
+	job := &Job{Handler: handler}
+	job.SetStatus(JobCreated)
+	return job
+}
+
+// Execute invokes the job's handler
+func (j *Job) Execute(ctx context.Context) Result {
+	j.SetStatus(JobExecuting)
+	defer j.SetStatus(JobExecuted)
+	return j.Handler(ctx)
+}
+
+func (j *Job) Status() JobStatus {
+	status := j.status.Load()
+	return JobStatus(status)
+}
+
+func (j *Job) SetStatus(status JobStatus) {
+	j.status.Swap(int32(status))
+}
 
 // WithLogger sets a logger to worker-pool using option function
 func WithLogger(logger log.Logger) OptionFunc {
@@ -53,7 +110,7 @@ func WithResultCh(resultCh chan Result) OptionFunc {
 }
 
 // WithJobCh sets a job channel to worker-pool using option function
-func WithJobCh(jobCh chan Job) OptionFunc {
+func WithJobCh(jobCh chan *Job) OptionFunc {
 	return func(p *WorkerPool) {
 		p.jobCh = jobCh
 	}
@@ -63,8 +120,7 @@ func WithJobCh(jobCh chan Job) OptionFunc {
 // to process arbitrary jobs in background
 type WorkerPool struct {
 	initPoolSize int
-	maxPoolSize  int
-	jobCh        chan Job
+	jobCh        chan *Job
 	wg           sync.WaitGroup
 	wgMtx        sync.Mutex
 	stopped      atomic.Bool
@@ -78,8 +134,7 @@ type WorkerPool struct {
 func New(poolSize int, opts ...OptionFunc) *WorkerPool {
 	p := &WorkerPool{
 		initPoolSize: poolSize,
-		maxPoolSize:  poolSize,
-		jobCh:        make(chan Job, poolSize),
+		jobCh:        make(chan *Job, poolSize),
 		resultCh:     make(chan Result, poolSize),
 		doneCh:       make(chan struct{}),
 		logger:       log.NewNopLogger(),
@@ -91,7 +146,7 @@ func New(poolSize int, opts ...OptionFunc) *WorkerPool {
 }
 
 // Send sends one or many jobs to the workers via job channel
-func (p *WorkerPool) Send(ctx context.Context, jobs ...Job) error {
+func (p *WorkerPool) Send(ctx context.Context, jobs ...*Job) error {
 	if p.stopped.Load() {
 		return ErrWorkerPoolStopped
 	}
@@ -103,12 +158,14 @@ func (p *WorkerPool) Send(ctx context.Context, jobs ...Job) error {
 		if p.stopped.Load() {
 			return ErrWorkerPoolStopped
 		}
+		job.SetStatus(JobSending)
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-p.doneCh:
 			return ErrWorkerPoolStopped
 		case p.jobCh <- job:
+			job.SetStatus(JobSent)
 		}
 	}
 	return nil
@@ -185,7 +242,7 @@ func (p *WorkerPool) Reset() {
 		return
 	}
 	p.doneCh = make(chan struct{})
-	p.jobCh = make(chan Job, p.initPoolSize)
+	p.jobCh = make(chan *Job, p.initPoolSize)
 	p.resultCh = make(chan Result, p.initPoolSize*2)
 	for i := 0; i < p.initPoolSize; i++ {
 		p.workers[i] = newWorker(i, p.jobCh, p.resultCh, p.doneCh, p.logger)

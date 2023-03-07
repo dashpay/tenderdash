@@ -9,13 +9,13 @@ import (
 type worker struct {
 	id        int
 	logger    log.Logger
-	jobCh     chan Job
+	jobCh     chan *Job
 	resultCh  chan Result
 	stopCh    <-chan struct{}
 	stoppedCh chan struct{}
 }
 
-func newWorker(id int, jobCh chan Job, resultCh chan Result, stopCh <-chan struct{}, logger log.Logger) *worker {
+func newWorker(id int, jobCh chan *Job, resultCh chan Result, stopCh <-chan struct{}, logger log.Logger) *worker {
 	return &worker{
 		id:        id,
 		logger:    logger,
@@ -40,6 +40,7 @@ func (w *worker) start(ctx context.Context) {
 			if !ok {
 				return
 			}
+			job.SetStatus(JobReceived)
 			result := job.Execute(ctx)
 			select {
 			case <-ctx.Done():
