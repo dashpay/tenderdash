@@ -147,102 +147,16 @@ func (m *PexResponse) GetAddresses() []PexAddress {
 	return nil
 }
 
-type PexMessage struct {
-	// Types that are valid to be assigned to Sum:
-	//	*PexMessage_PexRequest
-	//	*PexMessage_PexResponse
-	Sum isPexMessage_Sum `protobuf_oneof:"sum"`
-}
-
-func (m *PexMessage) Reset()         { *m = PexMessage{} }
-func (m *PexMessage) String() string { return proto.CompactTextString(m) }
-func (*PexMessage) ProtoMessage()    {}
-func (*PexMessage) Descriptor() ([]byte, []int) {
-	return fileDescriptor_81c2f011fd13be57, []int{3}
-}
-func (m *PexMessage) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *PexMessage) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_PexMessage.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *PexMessage) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_PexMessage.Merge(m, src)
-}
-func (m *PexMessage) XXX_Size() int {
-	return m.Size()
-}
-func (m *PexMessage) XXX_DiscardUnknown() {
-	xxx_messageInfo_PexMessage.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_PexMessage proto.InternalMessageInfo
-
-type isPexMessage_Sum interface {
-	isPexMessage_Sum()
-	MarshalTo([]byte) (int, error)
-	Size() int
-}
-
-type PexMessage_PexRequest struct {
-	PexRequest *PexRequest `protobuf:"bytes,1,opt,name=pex_request,json=pexRequest,proto3,oneof" json:"pex_request,omitempty"`
-}
-type PexMessage_PexResponse struct {
-	PexResponse *PexResponse `protobuf:"bytes,2,opt,name=pex_response,json=pexResponse,proto3,oneof" json:"pex_response,omitempty"`
-}
-
-func (*PexMessage_PexRequest) isPexMessage_Sum()  {}
-func (*PexMessage_PexResponse) isPexMessage_Sum() {}
-
-func (m *PexMessage) GetSum() isPexMessage_Sum {
-	if m != nil {
-		return m.Sum
-	}
-	return nil
-}
-
-func (m *PexMessage) GetPexRequest() *PexRequest {
-	if x, ok := m.GetSum().(*PexMessage_PexRequest); ok {
-		return x.PexRequest
-	}
-	return nil
-}
-
-func (m *PexMessage) GetPexResponse() *PexResponse {
-	if x, ok := m.GetSum().(*PexMessage_PexResponse); ok {
-		return x.PexResponse
-	}
-	return nil
-}
-
-// XXX_OneofWrappers is for the internal use of the proto package.
-func (*PexMessage) XXX_OneofWrappers() []interface{} {
-	return []interface{}{
-		(*PexMessage_PexRequest)(nil),
-		(*PexMessage_PexResponse)(nil),
-	}
-}
-
 func init() {
 	proto.RegisterType((*PexAddress)(nil), "tendermint.p2p.PexAddress")
 	proto.RegisterType((*PexRequest)(nil), "tendermint.p2p.PexRequest")
 	proto.RegisterType((*PexResponse)(nil), "tendermint.p2p.PexResponse")
-	proto.RegisterType((*PexMessage)(nil), "tendermint.p2p.PexMessage")
 }
 
 func init() { proto.RegisterFile("tendermint/p2p/pex.proto", fileDescriptor_81c2f011fd13be57) }
 
 var fileDescriptor_81c2f011fd13be57 = []byte{
-	// 289 bytes of a gzipped FileDescriptorProto
+	// 220 bytes of a gzipped FileDescriptorProto
 	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x92, 0x28, 0x49, 0xcd, 0x4b,
 	0x49, 0x2d, 0xca, 0xcd, 0xcc, 0x2b, 0xd1, 0x2f, 0x30, 0x2a, 0xd0, 0x2f, 0x48, 0xad, 0xd0, 0x2b,
 	0x28, 0xca, 0x2f, 0xc9, 0x17, 0xe2, 0x43, 0xc8, 0xe8, 0x15, 0x18, 0x15, 0x48, 0x89, 0xa4, 0xe7,
@@ -252,16 +166,11 @@ var fileDescriptor_81c2f011fd13be57 = []byte{
 	0x4a, 0x3c, 0x60, 0x85, 0x41, 0xa9, 0x85, 0xa5, 0xa9, 0xc5, 0x25, 0x4a, 0xbe, 0x5c, 0xdc, 0x60,
 	0x5e, 0x71, 0x41, 0x7e, 0x5e, 0x71, 0xaa, 0x90, 0x1d, 0x17, 0x67, 0x22, 0xc4, 0x88, 0xd4, 0x62,
 	0x09, 0x46, 0x05, 0x66, 0x0d, 0x6e, 0x23, 0x29, 0x3d, 0x54, 0xfb, 0xf5, 0x10, 0xd6, 0x38, 0xb1,
-	0x9c, 0xb8, 0x27, 0xcf, 0x10, 0x84, 0xd0, 0xa2, 0x34, 0x85, 0x11, 0x6c, 0xba, 0x6f, 0x6a, 0x71,
-	0x71, 0x62, 0x7a, 0xaa, 0x90, 0x2d, 0x17, 0x77, 0x41, 0x6a, 0x45, 0x7c, 0x11, 0xc4, 0x32, 0xb0,
-	0x73, 0xb0, 0x1b, 0x08, 0x75, 0x8e, 0x07, 0x43, 0x10, 0x57, 0x01, 0x9c, 0x27, 0xe4, 0xc0, 0xc5,
-	0x03, 0xd1, 0x0e, 0x71, 0x9d, 0x04, 0x13, 0x58, 0xbf, 0x34, 0x56, 0xfd, 0x10, 0x25, 0x1e, 0x0c,
-	0x41, 0xdc, 0x05, 0x08, 0xae, 0x13, 0x2b, 0x17, 0x73, 0x71, 0x69, 0xae, 0x93, 0xff, 0x89, 0x47,
-	0x72, 0x8c, 0x17, 0x1e, 0xc9, 0x31, 0x3e, 0x78, 0x24, 0xc7, 0x38, 0xe1, 0xb1, 0x1c, 0xc3, 0x85,
-	0xc7, 0x72, 0x0c, 0x37, 0x1e, 0xcb, 0x31, 0x44, 0x99, 0xa6, 0x67, 0x96, 0x64, 0x94, 0x26, 0xe9,
-	0x25, 0xe7, 0xe7, 0xea, 0x23, 0xc5, 0x00, 0x72, 0x64, 0x80, 0x43, 0x1a, 0x35, 0x76, 0x92, 0xd8,
-	0xc0, 0xa2, 0xc6, 0x80, 0x00, 0x00, 0x00, 0xff, 0xff, 0xe7, 0x83, 0x1b, 0x03, 0xb6, 0x01, 0x00,
-	0x00,
+	0x9c, 0xb8, 0x27, 0xcf, 0x10, 0x84, 0xd0, 0xe2, 0xe4, 0x7f, 0xe2, 0x91, 0x1c, 0xe3, 0x85, 0x47,
+	0x72, 0x8c, 0x0f, 0x1e, 0xc9, 0x31, 0x4e, 0x78, 0x2c, 0xc7, 0x70, 0xe1, 0xb1, 0x1c, 0xc3, 0x8d,
+	0xc7, 0x72, 0x0c, 0x51, 0xa6, 0xe9, 0x99, 0x25, 0x19, 0xa5, 0x49, 0x7a, 0xc9, 0xf9, 0xb9, 0xfa,
+	0x48, 0x5e, 0x45, 0xf6, 0x35, 0xd8, 0x4b, 0xa8, 0xc1, 0x90, 0xc4, 0x06, 0x16, 0x35, 0x06, 0x04,
+	0x00, 0x00, 0xff, 0xff, 0xe7, 0x5b, 0xe7, 0x33, 0x1f, 0x01, 0x00, 0x00,
 }
 
 func (m *PexAddress) Marshal() (dAtA []byte, err error) {
@@ -354,80 +263,6 @@ func (m *PexResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *PexMessage) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *PexMessage) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *PexMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.Sum != nil {
-		{
-			size := m.Sum.Size()
-			i -= size
-			if _, err := m.Sum.MarshalTo(dAtA[i:]); err != nil {
-				return 0, err
-			}
-		}
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *PexMessage_PexRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *PexMessage_PexRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.PexRequest != nil {
-		{
-			size, err := m.PexRequest.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintPex(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-func (m *PexMessage_PexResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *PexMessage_PexResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.PexResponse != nil {
-		{
-			size, err := m.PexResponse.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintPex(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x12
-	}
-	return len(dAtA) - i, nil
-}
 func encodeVarintPex(dAtA []byte, offset int, v uint64) int {
 	offset -= sovPex(v)
 	base := offset
@@ -472,43 +307,6 @@ func (m *PexResponse) Size() (n int) {
 			l = e.Size()
 			n += 1 + l + sovPex(uint64(l))
 		}
-	}
-	return n
-}
-
-func (m *PexMessage) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.Sum != nil {
-		n += m.Sum.Size()
-	}
-	return n
-}
-
-func (m *PexMessage_PexRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.PexRequest != nil {
-		l = m.PexRequest.Size()
-		n += 1 + l + sovPex(uint64(l))
-	}
-	return n
-}
-func (m *PexMessage_PexResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.PexResponse != nil {
-		l = m.PexResponse.Size()
-		n += 1 + l + sovPex(uint64(l))
 	}
 	return n
 }
@@ -713,126 +511,6 @@ func (m *PexResponse) Unmarshal(dAtA []byte) error {
 			if err := m.Addresses[len(m.Addresses)-1].Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
-			iNdEx = postIndex
-		default:
-			iNdEx = preIndex
-			skippy, err := skipPex(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthPex
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *PexMessage) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowPex
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: PexMessage: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: PexMessage: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field PexRequest", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowPex
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthPex
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthPex
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			v := &PexRequest{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			m.Sum = &PexMessage_PexRequest{v}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field PexResponse", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowPex
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthPex
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthPex
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			v := &PexResponse{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			m.Sum = &PexMessage_PexResponse{v}
 			iNdEx = postIndex
 		default:
 			iNdEx = preIndex

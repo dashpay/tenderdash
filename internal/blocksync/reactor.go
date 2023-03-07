@@ -42,7 +42,6 @@ const (
 func GetChannelDescriptor() *p2p.ChannelDescriptor {
 	return &p2p.ChannelDescriptor{
 		ID:                  BlockSyncChannel,
-		MessageType:         new(bcproto.Message),
 		Priority:            5,
 		SendQueueCapacity:   1000,
 		RecvBufferCapacity:  1024,

@@ -36,7 +36,6 @@ func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
 	return map[p2p.ChannelID]*p2p.ChannelDescriptor{
 		StateChannel: {
 			ID:                  StateChannel,
-			MessageType:         new(tmcons.Message),
 			Priority:            8,
 			SendQueueCapacity:   64,
 			RecvMessageCapacity: maxMsgSize,
@@ -48,7 +47,6 @@ func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
 			// stuff. Once we gossip the whole block there is nothing left to send
 			// until next height or round.
 			ID:                  DataChannel,
-			MessageType:         new(tmcons.Message),
 			Priority:            12,
 			SendQueueCapacity:   64,
 			RecvBufferCapacity:  512,
@@ -57,7 +55,6 @@ func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
 		},
 		VoteChannel: {
 			ID:                  VoteChannel,
-			MessageType:         new(tmcons.Message),
 			Priority:            10,
 			SendQueueCapacity:   64,
 			RecvBufferCapacity:  4096,
@@ -66,7 +63,6 @@ func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
 		},
 		VoteSetBitsChannel: {
 			ID:                  VoteSetBitsChannel,
-			MessageType:         new(tmcons.Message),
 			Priority:            5,
 			SendQueueCapacity:   8,
 			RecvBufferCapacity:  128,
@@ -778,18 +774,7 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 		}
 	}()
 
-	// We wrap the envelope's message in a Proto wire type so we can convert back
-	// the domain type that individual channel message handlers can work with. We
-	// do this here once to avoid having to do it for each individual message type.
-	// and because a large part of the core business logic depends on these
-	// domain types opposed to simply working with the Proto types.
-	protoMsg := new(tmcons.Message)
-	if err = protoMsg.Wrap(envelope.Message); err != nil {
-		return err
-	}
-
-	var msgI Message
-	msgI, err = MsgFromProto(protoMsg)
+	msg, err := MsgFromProto(envelope.Message)
 	if err != nil {
 		return err
 	}
@@ -798,13 +783,13 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 
 	switch envelope.ChannelID {
 	case StateChannel:
-		err = r.handleStateMessage(ctx, envelope, msgI, chans.voteSet)
+		err = r.handleStateMessage(ctx, envelope, msg, chans.voteSet)
 	case DataChannel:
-		err = r.handleDataMessage(ctx, envelope, msgI)
+		err = r.handleDataMessage(ctx, envelope, msg)
 	case VoteChannel:
-		err = r.handleVoteMessage(ctx, envelope, msgI)
+		err = r.handleVoteMessage(ctx, envelope, msg)
 	case VoteSetBitsChannel:
-		err = r.handleVoteSetBitsMessage(ctx, envelope, msgI)
+		err = r.handleVoteSetBitsMessage(ctx, envelope, msg)
 	default:
 		err = fmt.Errorf("unknown channel ID (%d) for envelope (%v)", envelope.ChannelID, envelope)
 	}

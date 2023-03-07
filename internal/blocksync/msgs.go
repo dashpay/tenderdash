@@ -1,12 +1,12 @@
 package blocksync
 
 import (
-	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
+	p2pproto "github.com/tendermint/tendermint/proto/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
 
 const (
 	MaxMsgSize = types.MaxBlockSizeBytes +
-		bcproto.BlockResponseMessagePrefixSize +
-		bcproto.BlockResponseMessageFieldKeySize
+		p2pproto.BlockResponseMessagePrefixSize +
+		p2pproto.BlockResponseMessageFieldKeySize
 )

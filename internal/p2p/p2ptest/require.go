@@ -58,20 +58,12 @@ func RequireReceiveUnordered(ctx context.Context, t *testing.T, channel p2p.Chan
 	ctx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
-	actual := []*p2p.Envelope{}
-
+	var actual []*p2p.Envelope
 	iter := channel.Receive(ctx)
-	for iter.Next(ctx) {
+	for iter.Next(ctx) && len(actual) < len(expect) {
 		actual = append(actual, iter.Envelope())
-		if len(actual) == len(expect) {
-			require.ElementsMatch(t, expect, actual, "len=%d", len(actual))
-			return
-		}
 	}
-
-	if errors.Is(ctx.Err(), context.DeadlineExceeded) {
-		require.ElementsMatch(t, expect, actual)
-	}
+	require.ElementsMatch(t, expect, actual, "len=%d", len(actual))
 }
 
 // RequireSend requires that the given envelope is sent on the channel.
@@ -96,7 +88,6 @@ func RequireSendReceive(
 	channel p2p.Channel,
 	peerID types.NodeID,
 	send proto.Message,
-	receive proto.Message,
 ) {
 	RequireSend(ctx, t, channel, p2p.Envelope{To: peerID, Message: send})
 	RequireReceive(ctx, t, channel, p2p.Envelope{From: peerID, Message: send})

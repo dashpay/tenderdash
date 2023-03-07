@@ -11,13 +11,12 @@ import (
 	"github.com/tendermint/tendermint/internal/p2p/conn"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/service"
-	protop2p "github.com/tendermint/tendermint/proto/tendermint/p2p"
+	p2pproto "github.com/tendermint/tendermint/proto/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
 
 var (
 	_ service.Service = (*Reactor)(nil)
-	_ p2p.Wrapper     = (*protop2p.PexMessage)(nil)
 )
 
 const (
@@ -61,7 +60,6 @@ const (
 func ChannelDescriptor() *conn.ChannelDescriptor {
 	return &conn.ChannelDescriptor{
 		ID:                  PexChannel,
-		MessageType:         new(protop2p.PexMessage),
 		Priority:            1,
 		SendQueueCapacity:   10,
 		RecvMessageCapacity: maxMsgSize,
@@ -231,7 +229,7 @@ func (r *Reactor) handlePexMessage(ctx context.Context, envelope *p2p.Envelope, 
 	logger := r.logger.With("peer", envelope.From)
 
 	switch msg := envelope.Message.(type) {
-	case *protop2p.PexRequest:
+	case *p2pproto.PexRequest:
 		// Verify that this peer hasn't sent us another request too recently.
 		if err := r.markPeerRequest(envelope.From); err != nil {
 			return 0, err
@@ -240,9 +238,9 @@ func (r *Reactor) handlePexMessage(ctx context.Context, envelope *p2p.Envelope, 
 		// Fetch peers from the peer manager, convert NodeAddresses into URL
 		// strings, and send them back to the caller.
 		nodeAddresses := r.peerManager.Advertise(envelope.From, maxAddresses)
-		pexAddresses := make([]protop2p.PexAddress, len(nodeAddresses))
+		pexAddresses := make([]p2pproto.PexAddress, len(nodeAddresses))
 		for idx, addr := range nodeAddresses {
-			pexAddresses[idx] = protop2p.PexAddress{
+			pexAddresses[idx] = p2pproto.PexAddress{
 				URL: addr.String(),
 			}
 		}
@@ -250,10 +248,10 @@ func (r *Reactor) handlePexMessage(ctx context.Context, envelope *p2p.Envelope, 
 		defer cancel()
 		return 0, pexCh.Send(chCtx, p2p.Envelope{
 			To:      envelope.From,
-			Message: &protop2p.PexResponse{Addresses: pexAddresses},
+			Message: &p2pproto.PexResponse{Addresses: pexAddresses},
 		})
 
-	case *protop2p.PexResponse:
+	case *p2pproto.PexResponse:
 		// Verify that this response corresponds to one of our pending requests.
 		if err := r.markPeerResponse(envelope.From); err != nil {
 			return 0, err
@@ -347,7 +345,7 @@ func (r *Reactor) sendRequestForPeers(ctx context.Context, pexCh p2p.Channel) er
 
 	envelope := p2p.Envelope{
 		To:      peerID,
-		Message: &protop2p.PexRequest{},
+		Message: &p2pproto.PexRequest{},
 	}
 	start := time.Now()
 	if err := pexCh.Send(ctx, envelope); err != nil {
