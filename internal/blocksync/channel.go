@@ -30,7 +30,7 @@ type (
 	}
 	BlockClient interface {
 		GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error)
-		Send(ctx context.Context, msg any) error
+		ChannelSender
 	}
 	Channel struct {
 		channel p2p.Channel
