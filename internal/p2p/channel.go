@@ -13,16 +13,49 @@ import (
 	"github.com/rs/zerolog"
 	sync "github.com/sasha-s/go-deadlock"
 
+	"github.com/tendermint/tendermint/proto/tendermint/p2p"
 	"github.com/tendermint/tendermint/types"
 )
 
 // Envelope contains a message with sender/receiver routing info.
 type Envelope struct {
-	From      types.NodeID  // sender (empty if outbound)
-	To        types.NodeID  // receiver (empty if inbound)
-	Broadcast bool          // send to all connected peers (ignores To)
-	Message   proto.Message // message payload
-	ChannelID ChannelID
+	From       types.NodeID  // sender (empty if outbound)
+	To         types.NodeID  // receiver (empty if inbound)
+	Broadcast  bool          // send to all connected peers (ignores To)
+	Message    proto.Message // message payload
+	ChannelID  ChannelID
+	Attributes map[string]string
+}
+
+// EnvelopeFromProto creates a domain Envelope from p2p representation
+func EnvelopeFromProto(proto p2p.Envelope) (Envelope, error) {
+	msg, err := proto.Unwrap()
+	if err != nil {
+		return Envelope{}, err
+	}
+	envelope := Envelope{
+		Message:    msg,
+		Attributes: make(map[string]string),
+	}
+	for key, val := range proto.Attributes {
+		envelope.Attributes[key] = val
+	}
+	return envelope, nil
+}
+
+// ToProto converts domain Envelope into p2p representation
+func (e Envelope) ToProto() (*p2p.Envelope, error) {
+	envelope := p2p.Envelope{
+		Attributes: make(map[string]string),
+	}
+	for key, val := range e.Attributes {
+		envelope.Attributes[key] = val
+	}
+	err := envelope.Wrap(e.Message)
+	if err != nil {
+		return nil, err
+	}
+	return &envelope, nil
 }
 
 func (e Envelope) IsZero() bool {
@@ -36,7 +69,11 @@ func (e Envelope) MarshalZerologObject(event *zerolog.Event) {
 	event.Str("To", string(e.To))
 	event.Bool("Broadcast", e.Broadcast)
 	event.Int("ChannelID", int(e.ChannelID))
-
+	attrs := zerolog.Dict()
+	for key, val := range e.Attributes {
+		attrs.Str(key, val)
+	}
+	event.Dict("attributes", attrs)
 	marshaler := jsonpb.Marshaler{}
 	payload, err := marshaler.MarshalToString(e.Message)
 	if err != nil {

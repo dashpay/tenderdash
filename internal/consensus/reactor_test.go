@@ -33,7 +33,6 @@ import (
 	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
-	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -64,7 +63,6 @@ func (rts *reactorTestSuite) switchToConsensus(ctx context.Context) {
 func chDesc(chID p2p.ChannelID, size int) *p2p.ChannelDescriptor {
 	return &p2p.ChannelDescriptor{
 		ID:                 chID,
-		MessageType:        new(tmcons.Message),
 		RecvBufferCapacity: size,
 	}
 }

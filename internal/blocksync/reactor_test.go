@@ -26,7 +26,6 @@ import (
 	"github.com/tendermint/tendermint/internal/store"
 	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/log"
-	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -69,7 +68,7 @@ func setup(
 		peerUpdates:       make(map[types.NodeID]*p2p.PeerUpdates, numNodes),
 	}
 
-	chDesc := &p2p.ChannelDescriptor{ID: BlockSyncChannel, MessageType: new(bcproto.Message)}
+	chDesc := &p2p.ChannelDescriptor{ID: BlockSyncChannel}
 	rts.blockSyncChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc)
 
 	i := 0
