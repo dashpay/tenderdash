@@ -64,6 +64,7 @@ func (suite *ChannelTestSuite) TestGetBlockSuccess() {
 		Return(nil)
 	p, err := suite.channel.GetBlock(ctx, suite.height, suite.peerID)
 	suite.Require().NoError(err)
+	// this call should start a goroutine that was created in a promise that a result of GetBlock method
 	runtime.Gosched()
 	err = suite.channel.Resolve(ctx, suite.receivedEnvelope)
 	suite.Require().NoError(err)

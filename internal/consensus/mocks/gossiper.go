@@ -14,7 +14,7 @@ type Gossiper struct {
 	mock.Mock
 }
 
-// GossipBlockPartsAndCommitForCatchup provides a mock function with given fields: ctx, rs, prs
+// GossipBlockPartsForCatchup provides a mock function with given fields: ctx, rs, prs
 func (_m *Gossiper) GossipBlockPartsForCatchup(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState) {
 	_m.Called(ctx, rs, prs)
 }

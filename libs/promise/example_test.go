@@ -50,7 +50,7 @@ func TestExample(t *testing.T) {
 func newPromise(msgCh chan message[int]) *Promise[int] {
 	return New[int](func(resolve func(data int), reject func(err error)) {
 		// here we need to put the logic that resolves or rejects this deferred execution
-		// for this example is used go channel to simulate asynchronous behaviour
+		// for this example is used go channel to simulate asynchronous behavior
 		msg := <-msgCh
 		// if a message has an error, then will call the reject function, otherwise, the message's value will be resolved
 		if msg.err != nil {

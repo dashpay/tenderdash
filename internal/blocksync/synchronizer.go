@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math"
 	"sync/atomic"
 	"time"
 
@@ -216,10 +215,10 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) {
 
 // GetStatus returns synchronizer's height, count of in progress requests
 func (s *Synchronizer) GetStatus() (int64, int32) {
+	cnt := s.jobProgressCounter.Load()
 	s.mtx.RLock()
-	height := s.height
-	s.mtx.RUnlock()
-	return height, s.jobProgressCounter.Load()
+	defer s.mtx.RUnlock()
+	return s.height, cnt
 }
 
 // IsCaughtUp returns true if this node is caught up, false - otherwise.
@@ -228,10 +227,10 @@ func (s *Synchronizer) IsCaughtUp() bool {
 	if s.peerStore.IsZero() {
 		return false
 	}
+	maxHeight := s.peerStore.MaxHeight()
 	s.mtx.RLock()
-	height := s.height
-	s.mtx.RUnlock()
-	return height >= s.peerStore.MaxHeight()
+	defer s.mtx.RUnlock()
+	return s.height >= maxHeight
 }
 
 func (s *Synchronizer) WaitForSync(ctx context.Context) {
@@ -367,11 +366,6 @@ func (s *Synchronizer) addBlock(resp BlockResponse) error {
 	_, ok := s.pendingToApply[block.Height]
 	if ok {
 		return fmt.Errorf("block response already exists (peer: %s, block height: %d)", resp.PeerID, block.Height)
-	}
-	// TODO doubt this checking is necessary
-	diff := math.Abs(float64(s.height - block.Height))
-	if diff > maxDiffBetweenCurrentAndReceivedBlockHeight {
-		return errors.New("peer sent us a block we didn't expect with a height too far ahead/behind")
 	}
 	s.pendingToApply[block.Height] = resp
 	return nil

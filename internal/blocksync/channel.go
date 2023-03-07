@@ -1,4 +1,5 @@
 //go:generate ../../scripts/mockery_generate.sh BlockClient
+//go:generate ../../scripts/mockery_generate.sh ConsumerHandler
 
 package blocksync
 
@@ -21,17 +22,29 @@ import (
 )
 
 type (
+	// ConsumerHandler is the interface that wraps a Handler method.
+	// This interface must be implemented by the p2p message handler
+	// and must be used in conjunction with the p2p channel consumer.
 	ConsumerHandler interface {
 		Handle(ctx context.Context, channel *Channel, envelope *p2p.Envelope) error
 	}
+	// ConsumerMiddlewareFunc is used to wrap ConsumerHandler to provide the ability to do something
+	// before or after the handler execution
 	ConsumerMiddlewareFunc func(next ConsumerHandler) ConsumerHandler
-	ChannelSender          interface {
+	// ChannelSender is the interface that wraps Send method
+	ChannelSender interface {
 		Send(ctx context.Context, msg any) error
 	}
+	// BlockClient defines the methods which must be implemented by block client
 	BlockClient interface {
-		GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error)
 		ChannelSender
+		// GetBlock is the method that requests a block by a specific height from a peer.
+		// Since the request is asynchronous, then the method returns a promise that will be resolved
+		// as a response will be received or rejected by timeout, otherwise returns an error
+		GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error)
 	}
+	// Channel is a stateful implementation of a channel, which means that the channel stores a request ID
+	// in order to be able to resolve the response once it is received from the peer
 	Channel struct {
 		channel p2p.Channel
 		clock   clockwork.Clock
@@ -39,6 +52,7 @@ type (
 		pending sync.Map
 		timeout time.Duration
 	}
+	// ChannelOptionFunc is a channel optional function, it is used to override the default parameters in a Channel
 	ChannelOptionFunc func(c *Channel)
 	result            struct {
 		Value any
