@@ -43,9 +43,6 @@ const (
 	// sending data across atlantic ~ 7.5 KB/s.
 	minRecvRate = 7680
 
-	// Maximum difference between current and new block's height.
-	maxDiffBetweenCurrentAndReceivedBlockHeight = 100
-
 	peerTimeout = 15 * time.Second
 )
 
