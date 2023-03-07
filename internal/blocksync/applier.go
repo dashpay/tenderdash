@@ -112,7 +112,7 @@ func (e *blockApplier) verify(ctx context.Context, blockID types.BlockID, block 
 	// validate the block before we persist it
 	err = e.blockExec.ValidateBlock(ctx, e.state, block)
 	if err != nil {
-		err = fmt.Errorf("invalid a block: %w", err)
+		err = fmt.Errorf("invalid block: %w", err)
 		e.logger.Error(err.Error(),
 			"commit", commit,
 			"block_id", blockID,
