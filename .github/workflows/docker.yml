@@ -7,7 +7,7 @@ on:
     inputs:
       tag:
         type: string
-        description: 'Docker tag'
+        description: "Docker tag"
         required: false
   release:
     types:
@@ -107,3 +107,13 @@ jobs:
             TENDERMINT_BUILD_OPTIONS="${{ steps.TENDERMINT_BUILD_OPTIONS.outputs.result }}"
       - name: Show Docker image digest
         run: echo ${{ steps.docker_build.outputs.digest }}
+
+      - name: Docker Hub Description
+        uses: peter-evans/dockerhub-description@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+          repository: "dashpay/tenderdash"
+          short-description: Tenderdash is a consensus engine of Dash Platform.
+          readme-filepath: "./DOCKER/README.md"
+        # if: github.event_name == 'release' && github.event.action == 'created'
