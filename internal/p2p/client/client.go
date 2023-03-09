@@ -132,13 +132,15 @@ func (c *Client) Consume(ctx context.Context, handler ConsumerHandler) {
 	iter := c.channel.Receive(ctx)
 	for iter.Next(ctx) {
 		envelope := iter.Envelope()
+		reqID := envelope.Attributes[RequestIDAttribute]
 		if isMessageResolvable(envelope) {
 			err := c.resolve(ctx, envelope)
 			if err != nil {
-				reqID := envelope.Attributes[ResponseIDAttribute]
+				respID := envelope.Attributes[ResponseIDAttribute]
 				c.logger.Error("failed to resolve response message",
 					"ch_id", envelope.ChannelID,
 					"request_id", reqID,
+					"response_id", respID,
 					"envelope", envelope,
 					"error", err)
 				serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err})
@@ -155,6 +157,7 @@ func (c *Client) Consume(ctx context.Context, handler ConsumerHandler) {
 		if err != nil {
 			c.logger.Error("failed to process message",
 				"ch_id", envelope.ChannelID,
+				"request_id", reqID,
 				"envelope", envelope,
 				"error", err)
 			serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err})
@@ -166,21 +169,17 @@ func (c *Client) Consume(ctx context.Context, handler ConsumerHandler) {
 }
 
 func (c *Client) resolve(ctx context.Context, envelope *p2p.Envelope) error {
-	reqID, ok := envelope.Attributes[ResponseIDAttribute]
+	respID, ok := envelope.Attributes[ResponseIDAttribute]
 	if !ok {
-		return ErrCannotResolveResponse
+		return fmt.Errorf("responseID attribute is missed: %w", ErrCannotResolveResponse)
 	}
-	err := c.resolveMessage(ctx, reqID, result{Value: envelope.Message})
-	if err != nil {
-		return err
-	}
-	return nil
+	return c.resolveMessage(ctx, respID, result{Value: envelope.Message})
 }
 
-func (c *Client) resolveMessage(ctx context.Context, reqID string, res result) error {
-	val, ok := c.pending.Load(reqID)
+func (c *Client) resolveMessage(ctx context.Context, respID string, res result) error {
+	val, ok := c.pending.Load(respID)
 	if !ok {
-		return fmt.Errorf("cannot resolve a result for a request %s", reqID)
+		return fmt.Errorf("pending response %s not found", respID)
 	}
 	respCh := val.(chan result)
 	select {
