@@ -203,12 +203,15 @@ func TestWorkerPool_Reset(t *testing.T) {
 
 	// try to stop worker pool again
 	wp.Stop(ctx)
+	checkWorkerPoolChannels(t, true, wp)
 
 	// reset and start the worker pool
 	wp.Reset()
+	checkWorkerPoolChannels(t, false, wp)
 
 	//  reset and start workers again
 	wp.Run(ctx)
+	checkWorkerPoolChannels(t, false, wp)
 
 	// send several jobs to process
 	err = wp.Send(ctx, jobs...)
@@ -220,6 +223,19 @@ func TestWorkerPool_Reset(t *testing.T) {
 	require.Len(t, results, jobsCnt)
 
 	wp.Stop(ctx)
+	checkWorkerPoolChannels(t, true, wp)
+}
+
+func checkWorkerPoolChannels(t *testing.T, want bool, wp *WorkerPool) {
+	require.Equal(t, want, isChannelClosed(wp.doneCh))
+	require.Equal(t, want, isChannelClosed(wp.jobCh))
+	require.Equal(t, want, isChannelClosed(wp.resultCh))
+	require.Equal(t, want, wp.stopped.Load())
+	for _, w := range wp.workers {
+		require.Equal(t, want, isChannelClosed(w.stoppedCh))
+		require.Equal(t, want, isChannelClosed(w.stopCh))
+		require.Equal(t, want, isChannelClosed(w.resultCh))
+	}
 }
 
 func consumeResult(ctx context.Context, wp *WorkerPool, num int) ([]Result, error) {
@@ -242,4 +258,13 @@ func generateJobs(n int) []*Job {
 		})
 	}
 	return jobs
+}
+
+func isChannelClosed[T any](ch <-chan T) bool {
+	select {
+	case <-ch:
+		return true
+	default:
+		return false
+	}
 }
