@@ -7,6 +7,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/consensus"
 	"github.com/tendermint/tendermint/internal/eventbus"
@@ -265,8 +267,9 @@ func (r *Reactor) requestRoutine(ctx context.Context, blockSyncCh p2p.Channel) {
 			return
 		case <-statusUpdateTicker.C:
 			if err := blockSyncCh.Send(ctx, p2p.Envelope{
-				Broadcast: true,
-				Message:   &bcproto.StatusRequest{},
+				Attributes: map[string]string{client.RequestIDAttribute: uuid.NewString()},
+				Broadcast:  true,
+				Message:    &bcproto.StatusRequest{},
 			}); err != nil {
 				return
 			}
