@@ -133,7 +133,7 @@ func (c *Client) Consume(ctx context.Context, handler ConsumerHandler) {
 	for iter.Next(ctx) {
 		envelope := iter.Envelope()
 		reqID := envelope.Attributes[RequestIDAttribute]
-		if isMessageResolvable(envelope) {
+		if isMessageResolvable(envelope.Message) {
 			err := c.resolve(ctx, envelope)
 			if err != nil {
 				respID := envelope.Attributes[ResponseIDAttribute]
@@ -238,9 +238,9 @@ func newPromise[T proto.Message](
 	})
 }
 
-func isMessageResolvable(envelope *p2p.Envelope) bool {
+func isMessageResolvable(msg proto.Message) bool {
 	// This list should be expanded using other response messages
-	switch envelope.Message.(type) {
+	switch msg.(type) {
 	case *bcproto.BlockResponse:
 		return true
 	}

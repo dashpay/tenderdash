@@ -22,17 +22,14 @@ type (
 	}
 )
 
-func blockMessageHandler(logger log.Logger, store sm.BlockStore, peerAdder PeerAdder) *blockP2PMessageHandler {
-	return &blockP2PMessageHandler{
-		logger:    logger,
-		store:     store,
-		peerAdder: peerAdder,
-	}
-}
-
 func consumerHandler(logger log.Logger, store sm.BlockStore, peerAdder PeerAdder) client.ConsumerHandler {
 	return client.HandlerWithMiddlewares(
-		blockMessageHandler(logger, store, peerAdder),
+		&blockP2PMessageHandler{
+			logger:    logger,
+			store:     store,
+			peerAdder: peerAdder,
+		},
+		client.WithValidateMessageHandler(BlockSyncChannel),
 		client.WithLoggerMiddleware(logger),
 		client.WithRecoveryMiddleware(logger),
 	)
@@ -40,9 +37,6 @@ func consumerHandler(logger log.Logger, store sm.BlockStore, peerAdder PeerAdder
 
 // Handle handles a message from a block-sync message set
 func (h *blockP2PMessageHandler) Handle(ctx context.Context, p2pClient *client.Client, envelope *p2p.Envelope) error {
-	if envelope.ChannelID != BlockSyncChannel {
-		return fmt.Errorf("unknown client ID (%d) for envelope (%v)", envelope.ChannelID, envelope)
-	}
 	resp := client.ResponseFuncFromEnvelope(p2pClient, envelope)
 	switch msg := envelope.Message.(type) {
 	case *bcproto.BlockRequest:
