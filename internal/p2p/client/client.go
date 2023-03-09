@@ -42,17 +42,17 @@ type (
 		Sender
 		// GetBlock is the method that requests a block by a specific height from a peer.
 		// Since the request is asynchronous, then the method returns a promise that will be resolved
-		// as a response will be received or rejected by timeoutMilli, otherwise returns an error
+		// as a response will be received or rejected by timeout, otherwise returns an error
 		GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error)
 	}
 	// Client is a stateful implementation of a client, which means that the client stores a request ID
 	// in order to be able to resolve the response once it is received from the peer
 	Client struct {
-		channel      p2p.Channel
-		clock        clockwork.Clock
-		logger       log.Logger
-		pending      sync.Map
-		timeoutMilli time.Duration
+		channel    p2p.Channel
+		clock      clockwork.Clock
+		logger     log.Logger
+		pending    sync.Map
+		reqTimeout time.Duration
 	}
 	// OptionFunc is a client optional function, it is used to override the default parameters in a Client
 	OptionFunc func(c *Client)
@@ -79,10 +79,10 @@ func WithClock(clock clockwork.Clock) OptionFunc {
 // New creates and returns Client with optional functions
 func New(ch p2p.Channel, opts ...OptionFunc) *Client {
 	client := &Client{
-		channel:      ch,
-		clock:        clockwork.NewRealClock(),
-		logger:       log.NewNopLogger(),
-		timeoutMilli: peerTimeout,
+		channel:    ch,
+		clock:      clockwork.NewRealClock(),
+		logger:     log.NewNopLogger(),
+		reqTimeout: peerTimeout,
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -207,7 +207,7 @@ func (c *Client) removePending(reqID string) {
 }
 
 func (c *Client) timeout() <-chan time.Time {
-	return c.clock.After(c.timeoutMilli)
+	return c.clock.After(c.reqTimeout)
 }
 
 func newPromise[T proto.Message](
@@ -234,7 +234,6 @@ func newPromise[T proto.Message](
 				NodeID: peerID,
 				Err:    ErrPeerNotResponded,
 			})
-			//c.logger.Error("SendTimeout", "reason", ErrPeerNotResponded, "timeout", peerTimeout)
 			reject(ErrPeerNotResponded)
 		}
 	})
