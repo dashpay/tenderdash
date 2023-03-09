@@ -46,8 +46,11 @@ func (suite *BlockP2PMessageHandlerTestSuite) SetupTest() {
 	suite.fakePeerAdder = newMockPeerAdder(suite.T())
 	suite.fakeP2PChannel = p2pmocks.NewChannel(suite.T())
 	suite.fakeClient = client.New(suite.fakeP2PChannel)
-	suite.handler = blockMessageHandler(suite.logger, suite.fakeStore, suite.fakePeerAdder)
-
+	suite.handler = &blockP2PMessageHandler{
+		logger:    suite.logger,
+		store:     suite.fakeStore,
+		peerAdder: suite.fakePeerAdder,
+	}
 }
 
 func (suite *BlockP2PMessageHandlerTestSuite) TestHandleBlockRequest() {

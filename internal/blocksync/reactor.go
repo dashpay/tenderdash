@@ -151,8 +151,8 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		startHeight = state.InitialHeight
 	}
 
-	blockSyncClient := client.New(blockSyncCh, client.WithLogger(r.logger))
-	r.synchronizer = NewSynchronizer(startHeight, blockSyncClient, r.executor, WithLogger(r.logger))
+	p2pClient := client.New(blockSyncCh, client.WithLogger(r.logger))
+	r.synchronizer = NewSynchronizer(startHeight, p2pClient, r.executor, WithLogger(r.logger))
 	if r.blockSyncFlag.Load() {
 		if err := r.synchronizer.Start(ctx); err != nil {
 			return err
@@ -161,8 +161,8 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 
 		go r.poolRoutine(ctx, false)
 	}
-	go blockSyncClient.Consume(ctx, consumerHandler(r.logger, r.store, r.synchronizer))
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "blocksync"), blockSyncCh)
+	go p2pClient.Consume(ctx, consumerHandler(r.logger, r.store, r.synchronizer))
+	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "blocksync"), p2pClient)
 
 	return nil
 }
@@ -176,7 +176,7 @@ func (r *Reactor) OnStop() {
 }
 
 // processPeerUpdate processes a PeerUpdate.
-func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpdate, blockSyncCh p2p.Channel) {
+func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpdate, client *client.Client) {
 	r.logger.Debug("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 
 	// XXX: Pool#RedoRequest can sometimes give us an empty peer.
@@ -187,15 +187,16 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 	switch peerUpdate.Status {
 	case p2p.PeerStatusUp:
 		// send a status update the newly added peer
-		if err := blockSyncCh.Send(ctx, p2p.Envelope{
+		err := client.Send(ctx, p2p.Envelope{
 			To: peerUpdate.NodeID,
 			Message: &bcproto.StatusResponse{
 				Base:   r.store.Base(),
 				Height: r.store.Height(),
 			},
-		}); err != nil {
+		})
+		if err != nil {
 			r.synchronizer.RemovePeer(peerUpdate.NodeID)
-			if err := blockSyncCh.SendError(ctx, p2p.PeerError{
+			if err := client.Send(ctx, p2p.PeerError{
 				NodeID: peerUpdate.NodeID,
 				Err:    err,
 			}); err != nil {
@@ -211,13 +212,13 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 // processPeerUpdates initiates a blocking process where we listen for and handle
 // PeerUpdate messages. When the reactor is stopped, we will catch the signal and
 // close the p2p PeerUpdatesCh gracefully.
-func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerUpdates, blockSyncCh p2p.Channel) {
+func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerUpdates, client *client.Client) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case peerUpdate := <-peerUpdates.Updates():
-			r.processPeerUpdate(ctx, peerUpdate, blockSyncCh)
+			r.processPeerUpdate(ctx, peerUpdate, client)
 		}
 	}
 }
