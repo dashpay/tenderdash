@@ -7,8 +7,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/uuid"
-
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/consensus"
 	"github.com/tendermint/tendermint/internal/eventbus"
@@ -159,8 +157,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		if err := r.synchronizer.Start(ctx); err != nil {
 			return err
 		}
-		go r.requestRoutine(ctx, blockSyncCh)
-
+		go r.requestRoutine(ctx, p2pClient)
 		go r.poolRoutine(ctx, false)
 	}
 	go p2pClient.Consume(ctx, consumerHandler(r.logger, r.store, r.synchronizer))
@@ -243,8 +240,8 @@ func (r *Reactor) SwitchToBlockSync(ctx context.Context, state sm.State) error {
 	if err != nil {
 		return err
 	}
-
-	go r.requestRoutine(ctx, bsCh)
+	p2pClient := client.New(bsCh, client.WithLogger(r.logger))
+	go r.requestRoutine(ctx, p2pClient)
 	go r.poolRoutine(ctx, true)
 
 	if err := r.PublishStatus(types.EventDataBlockSyncStatus{
@@ -257,7 +254,7 @@ func (r *Reactor) SwitchToBlockSync(ctx context.Context, state sm.State) error {
 	return nil
 }
 
-func (r *Reactor) requestRoutine(ctx context.Context, blockSyncCh p2p.Channel) {
+func (r *Reactor) requestRoutine(ctx context.Context, p2pClient *client.Client) {
 	statusUpdateTicker := time.NewTicker(statusUpdateIntervalSeconds * time.Second)
 	defer statusUpdateTicker.Stop()
 
@@ -266,11 +263,8 @@ func (r *Reactor) requestRoutine(ctx context.Context, blockSyncCh p2p.Channel) {
 		case <-ctx.Done():
 			return
 		case <-statusUpdateTicker.C:
-			if err := blockSyncCh.Send(ctx, p2p.Envelope{
-				Attributes: map[string]string{client.RequestIDAttribute: uuid.NewString()},
-				Broadcast:  true,
-				Message:    &bcproto.StatusRequest{},
-			}); err != nil {
+			err := p2pClient.GetSyncStatus(ctx)
+			if err != nil {
 				return
 			}
 		}

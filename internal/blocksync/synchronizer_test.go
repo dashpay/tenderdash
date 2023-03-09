@@ -14,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
-	bsmocks "github.com/tendermint/tendermint/internal/blocksync/mocks"
 	"github.com/tendermint/tendermint/internal/p2p"
+	clientmocks "github.com/tendermint/tendermint/internal/p2p/client/mocks"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
 	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
@@ -33,7 +33,7 @@ type SynchronizerTestSuite struct {
 
 	store        *mocks.BlockStore
 	blockExec    *mocks.Executor
-	client       *bsmocks.BlockClient
+	client       *clientmocks.BlockClient
 	responses    []*blocksync.BlockResponse
 	initialState sm.State
 }
@@ -53,7 +53,7 @@ func (suite *SynchronizerTestSuite) SetupSuite() {
 }
 
 func (suite *SynchronizerTestSuite) SetupTest() {
-	suite.client = bsmocks.NewBlockClient(suite.T())
+	suite.client = clientmocks.NewBlockClient(suite.T())
 	suite.store = mocks.NewBlockStore(suite.T())
 	suite.blockExec = mocks.NewExecutor(suite.T())
 }

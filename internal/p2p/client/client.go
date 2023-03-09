@@ -1,4 +1,4 @@
-//go:generate ../../scripts/mockery_generate.sh BlockClient
+//go:generate ../../../scripts/mockery_generate.sh BlockClient
 
 package client
 
@@ -44,6 +44,8 @@ type (
 		// Since the request is asynchronous, then the method returns a promise that will be resolved
 		// as a response will be received or rejected by timeout, otherwise returns an error
 		GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error)
+		// GetSyncStatus requests a block synchronization status from all connected peers
+		GetSyncStatus(ctx context.Context) error
 	}
 	// Client is a stateful implementation of a client, which means that the client stores a request ID
 	// in order to be able to resolve the response once it is received from the peer
@@ -110,6 +112,18 @@ func (c *Client) GetBlock(ctx context.Context, height int64, peerID types.NodeID
 	}
 	respCh := c.addPending(reqID)
 	return newPromise[*bcproto.BlockResponse](ctx, peerID, reqID, respCh, c), nil
+}
+
+// GetSyncStatus requests a block synchronization status from all connected peers
+// Since this is broadcast request, we can't use promise to process a response
+// instead, we should be able to process the response as a normal message in the handler
+func (c *Client) GetSyncStatus(ctx context.Context) error {
+	reqID := uuid.NewString()
+	return c.Send(ctx, p2p.Envelope{
+		Attributes: map[string]string{RequestIDAttribute: reqID},
+		Broadcast:  true,
+		Message:    &bcproto.StatusRequest{},
+	})
 }
 
 // Send sends p2p message to a peer, allowed p2p.Envelope or p2p.PeerError types

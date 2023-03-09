@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/tendermint/tendermint/internal/blocksync/mocks"
 	"github.com/tendermint/tendermint/internal/p2p/client"
+	"github.com/tendermint/tendermint/internal/p2p/client/mocks"
 	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
 	"github.com/tendermint/tendermint/internal/test/factory"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
