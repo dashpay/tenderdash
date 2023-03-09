@@ -146,17 +146,10 @@ func (c *Client) Consume(ctx context.Context, handler ConsumerHandler) {
 	iter := c.channel.Receive(ctx)
 	for iter.Next(ctx) {
 		envelope := iter.Envelope()
-		reqID := envelope.Attributes[RequestIDAttribute]
 		if isMessageResolvable(envelope.Message) {
 			err := c.resolve(ctx, envelope)
 			if err != nil {
-				respID := envelope.Attributes[ResponseIDAttribute]
-				c.logger.Error("failed to resolve response message",
-					"ch_id", envelope.ChannelID,
-					"request_id", reqID,
-					"response_id", respID,
-					"envelope", envelope,
-					"error", err)
+				c.logger.Error("failed to resolve response message", loggingArgsFromEnvelope(envelope)...)
 				serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err})
 				if serr != nil {
 					return
@@ -169,11 +162,7 @@ func (c *Client) Consume(ctx context.Context, handler ConsumerHandler) {
 			return
 		}
 		if err != nil {
-			c.logger.Error("failed to process message",
-				"ch_id", envelope.ChannelID,
-				"request_id", reqID,
-				"envelope", envelope,
-				"error", err)
+			c.logger.Error("failed to process message", loggingArgsFromEnvelope(envelope)...)
 			serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err})
 			if serr != nil {
 				return
@@ -271,4 +260,15 @@ func ResponseFuncFromEnvelope(channel *Client, envelope *p2p.Envelope) func(ctx 
 			Message: msg,
 		})
 	}
+}
+
+func loggingArgsFromEnvelope(envelope *p2p.Envelope, extraArgs ...any) []any {
+	reqID := envelope.Attributes[RequestIDAttribute]
+	args := make([]any, 0, 3+len(extraArgs))
+	args = append(args, "ch_id", envelope.ChannelID, "request_id", reqID, "envelope", envelope)
+	respID, ok := envelope.Attributes[ResponseIDAttribute]
+	if ok {
+		args = append(args, "response_id", respID)
+	}
+	return append(args, extraArgs...)
 }
