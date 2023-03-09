@@ -80,10 +80,7 @@ func (h *recoveryP2PMessageHandler) Handle(ctx context.Context, client *Client, 
 	defer func() {
 		if e := recover(); e != nil {
 			err = fmt.Errorf("panic in processing message: %v", e)
-			h.logger.Error(
-				"recovering from processing message",
-				"error", err,
-			)
+			h.logger.Error("recovering from processing message", "error", err)
 		}
 	}()
 	return h.next.Handle(ctx, client, envelope)
@@ -93,11 +90,13 @@ func (h *recoveryP2PMessageHandler) Handle(ctx context.Context, client *Client, 
 func (h *loggerP2PMessageHandler) Handle(ctx context.Context, client *Client, envelope *p2p.Envelope) error {
 	err := h.next.Handle(ctx, client, envelope)
 	if err != nil {
+		reqID := envelope.Attributes[RequestIDAttribute]
 		h.logger.Error("failed to handle a message from a p2p client",
 			"message_type", fmt.Sprintf("%T", envelope.Message),
+			"request_id", reqID,
 			"error", err)
 	}
-	return nil
+	return err
 }
 
 // Handle validates is received envelope on required data

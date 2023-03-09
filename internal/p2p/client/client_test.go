@@ -263,11 +263,11 @@ func newMockConsumer(t *testing.T) *mockConsumer {
 	return m
 }
 
-func (m *mockConsumer) Handle(ctx context.Context, channel *Client, envelope *p2p.Envelope) error {
-	ret := m.Called(ctx, channel, envelope)
+func (m *mockConsumer) Handle(ctx context.Context, client *Client, envelope *p2p.Envelope) error {
+	ret := m.Called(ctx, client, envelope)
 	var r0 error
 	if rf, ok := ret.Get(0).(func(ctx context.Context, channel *Client, envelope *p2p.Envelope) error); ok {
-		r0 = rf(ctx, channel, envelope)
+		r0 = rf(ctx, client, envelope)
 	} else {
 		r0 = ret.Error(0)
 	}

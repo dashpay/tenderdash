@@ -2,16 +2,97 @@ package client
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"regexp"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
+	"github.com/tendermint/tendermint/libs/log"
 
 	"github.com/tendermint/tendermint/internal/p2p"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
 )
+
+func TestLoggerP2PMessageHandler(t *testing.T) {
+	ctx := context.Background()
+	reqID := uuid.NewString()
+	fakeHandler := newMockConsumer(t)
+	logger := log.NewTestingLogger(t)
+	testCases := []struct {
+		mockFn  func(hd *mockConsumer, logger *log.TestingLogger)
+		wantErr string
+	}{
+		{
+			mockFn: func(hd *mockConsumer, logger *log.TestingLogger) {
+				logger.AssertMatch(regexp.MustCompile("failed to handle a message from a p2p client"))
+				hd.On("Handle", mock.Anything, mock.Anything, mock.Anything).
+					Once().
+					Return(errors.New("error"))
+			},
+			wantErr: "error",
+		},
+		{
+			mockFn: func(hd *mockConsumer, logger *log.TestingLogger) {
+				hd.On("Handle", mock.Anything, mock.Anything, mock.Anything).
+					Once().
+					Return(nil)
+			},
+		},
+	}
+	client := &Client{}
+	envelope := &p2p.Envelope{
+		Attributes: map[string]string{RequestIDAttribute: reqID},
+	}
+	for i, tc := range testCases {
+		mw := &loggerP2PMessageHandler{logger: logger, next: fakeHandler}
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			tc.mockFn(fakeHandler, logger)
+			err := mw.Handle(ctx, client, envelope)
+			tmrequire.Error(t, tc.wantErr, err)
+		})
+	}
+}
+
+func TestRecoveryP2PMessageHandler(t *testing.T) {
+	ctx := context.Background()
+	fakeHandler := newMockConsumer(t)
+	testCases := []struct {
+		mockFn  func(fakeHandler *mockConsumer)
+		wantErr string
+	}{
+		{
+			mockFn: func(fakeHandler *mockConsumer) {
+				fakeHandler.
+					On("Handle", mock.Anything, mock.Anything, mock.Anything).
+					Once().
+					Panic("panic")
+			},
+			wantErr: "panic in processing message",
+		},
+		{
+			mockFn: func(fakeHandler *mockConsumer) {
+				fakeHandler.
+					On("Handle", mock.Anything, mock.Anything, mock.Anything).
+					Once().
+					Return(nil)
+			},
+		},
+	}
+	logger := log.NewTestingLogger(t)
+	mw := recoveryP2PMessageHandler{logger: logger, next: fakeHandler}
+	client := &Client{}
+	envelope := &p2p.Envelope{}
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			tc.mockFn(fakeHandler)
+			err := mw.Handle(ctx, client, envelope)
+			tmrequire.Error(t, tc.wantErr, err)
+		})
+	}
+}
 
 func TestValidateMessageHandler(t *testing.T) {
 	ctx := context.Background()
@@ -51,14 +132,11 @@ func TestValidateMessageHandler(t *testing.T) {
 		On("Handle", mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(nil)
-	hd := validateMessageHandler{
-		channelID: 1,
-		next:      fakeHandler,
-	}
+	mw := validateMessageHandler{channelID: 1, next: fakeHandler}
 	client := &Client{}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
-			err := hd.Handle(ctx, client, &tc.envelope)
+			err := mw.Handle(ctx, client, &tc.envelope)
 			tmrequire.Error(t, tc.wantErr, err)
 		})
 	}
