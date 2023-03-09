@@ -116,6 +116,21 @@ func (suite *ChannelTestSuite) TestGetBlockTimeout() {
 	tmrequire.Error(suite.T(), "cannot resolve a result", err)
 }
 
+func (suite *ChannelTestSuite) TestGetSyncStatus() {
+	ctx := context.Background()
+	envelopeArg := func(envelope p2p.Envelope) bool {
+		_, ok := envelope.Attributes[RequestIDAttribute]
+		_, isStatusRequest := envelope.Message.(*bcproto.StatusRequest)
+		return ok && isStatusRequest && envelope.Broadcast
+	}
+	suite.p2pChannel.
+		On("Send", mock.Anything, mock.MatchedBy(envelopeArg)).
+		Once().
+		Return(nil)
+	err := suite.client.GetSyncStatus(ctx)
+	suite.Require().NoError(err)
+}
+
 func (suite *ChannelTestSuite) TestSend() {
 	ctx := context.Background()
 	errMsg := p2p.PeerError{}
