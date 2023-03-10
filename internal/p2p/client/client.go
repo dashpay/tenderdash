@@ -21,11 +21,15 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
+// These attributes should use as a key in Envelope.Attributes map
 const (
-	RequestIDAttribute  = "RequestID"
+	// RequestIDAttribute is used to provide unique request-id value
+	RequestIDAttribute = "RequestID"
+	// ResponseIDAttribute is used to provide response-id that should be taken from received request-id
 	ResponseIDAttribute = "ResponseID"
-	peerTimeout         = 15 * time.Second
 )
+
+const peerTimeout = 15 * time.Second
 
 var (
 	ErrPeerNotResponded      = errors.New("peer did not send us anything")
@@ -250,6 +254,8 @@ func isMessageResolvable(msg proto.Message) bool {
 	return false
 }
 
+// ResponseFuncFromEnvelope creates a response function that is taken some parameters from received envelope
+// to make the valid message that will be sent back to the peer
 func ResponseFuncFromEnvelope(channel *Client, envelope *p2p.Envelope) func(ctx context.Context, msg proto.Message) error {
 	return func(ctx context.Context, msg proto.Message) error {
 		return channel.Send(ctx, p2p.Envelope{
