@@ -22,19 +22,35 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
+const testChannelID = 0x1
+
 type ChannelTestSuite struct {
 	suite.Suite
 
-	height     int64
-	peerID     types.NodeID
-	fakeClock  clockwork.FakeClock
-	p2pChannel *mocks.Channel
-	client     *Client
-	response   *bcproto.BlockResponse
+	height      int64
+	peerID      types.NodeID
+	fakeClock   clockwork.FakeClock
+	p2pChannel  *mocks.Channel
+	client      *Client
+	response    *bcproto.BlockResponse
+	descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor
 }
 
 func TestChannelTestSuite(t *testing.T) {
 	suite.Run(t, new(ChannelTestSuite))
+}
+
+func (suite *ChannelTestSuite) SetupSuite() {
+	suite.descriptors = map[p2p.ChannelID]*p2p.ChannelDescriptor{
+		testChannelID: {
+			ID:                  testChannelID,
+			Priority:            5,
+			SendQueueCapacity:   8,
+			RecvBufferCapacity:  128,
+			RecvMessageCapacity: int(1e5),
+			Name:                "test",
+		},
+	}
 }
 
 func (suite *ChannelTestSuite) SetupTest() {
@@ -42,7 +58,13 @@ func (suite *ChannelTestSuite) SetupTest() {
 	suite.height = 101
 	suite.peerID = "peer id"
 	suite.fakeClock = clockwork.NewFakeClock()
-	suite.client = New(suite.p2pChannel, WithClock(suite.fakeClock))
+	suite.client = New(
+		suite.descriptors,
+		func(ctx context.Context, descriptor *p2p.ChannelDescriptor) (p2p.Channel, error) {
+			return suite.p2pChannel, nil
+		},
+		WithClock(suite.fakeClock),
+	)
 	suite.response = &bcproto.BlockResponse{
 		Commit: &tmproto.Commit{Height: suite.height},
 	}
@@ -174,7 +196,10 @@ func (suite *ChannelTestSuite) TestConsumeHandle() {
 		On("Handle", ctx, mock.Anything, mock.Anything).
 		Times(3).
 		Return(nil)
-	suite.client.Consume(ctx, consumer)
+	suite.client.Consume(ctx, ConsumerParams{
+		ReadChannels: []p2p.ChannelID{testChannelID},
+		Handler:      consumer,
+	})
 }
 
 func (suite *ChannelTestSuite) TestConsumeResolve() {
@@ -207,7 +232,10 @@ func (suite *ChannelTestSuite) TestConsumeResolve() {
 					return p2p.NewChannelIterator(outCh)
 				})
 			resCh := suite.client.addPending(reqID)
-			suite.client.Consume(ctx, consumer)
+			suite.client.Consume(ctx, ConsumerParams{
+				ReadChannels: []p2p.ChannelID{testChannelID},
+				Handler:      consumer,
+			})
 			res := <-resCh
 			resp := res.Value.(*bcproto.BlockResponse)
 			suite.Require().Equal(tc.resp, resp)
@@ -262,7 +290,10 @@ func (suite *ChannelTestSuite) TestConsumeError() {
 					close(outCh)
 					return tc.retErr
 				})
-			suite.client.Consume(ctx, consumer)
+			suite.client.Consume(ctx, ConsumerParams{
+				ReadChannels: []p2p.ChannelID{testChannelID},
+				Handler:      consumer,
+			})
 		})
 	}
 }

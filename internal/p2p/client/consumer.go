@@ -23,7 +23,12 @@ type (
 	}
 	// ConsumerMiddlewareFunc is used to wrap ConsumerHandler to provide the ability to do something
 	// before or after the handler execution
-	ConsumerMiddlewareFunc    func(next ConsumerHandler) ConsumerHandler
+	ConsumerMiddlewareFunc func(next ConsumerHandler) ConsumerHandler
+	// ConsumerParams is p2p handler parameters set
+	ConsumerParams struct {
+		ReadChannels []p2p.ChannelID
+		Handler      ConsumerHandler
+	}
 	recoveryP2PMessageHandler struct {
 		logger log.Logger
 		next   ConsumerHandler
@@ -33,8 +38,8 @@ type (
 		next   ConsumerHandler
 	}
 	validateMessageHandler struct {
-		channelID p2p.ChannelID
-		next      ConsumerHandler
+		allowedChannelIDs map[p2p.ChannelID]struct{}
+		next              ConsumerHandler
 	}
 )
 
@@ -57,9 +62,12 @@ func WithLoggerMiddleware(logger log.Logger) ConsumerMiddlewareFunc {
 }
 
 // WithValidateMessageHandler creates message validation middleware
-func WithValidateMessageHandler(channelID p2p.ChannelID) ConsumerMiddlewareFunc {
+func WithValidateMessageHandler(allowedChannelIDs []p2p.ChannelID) ConsumerMiddlewareFunc {
 	hd := &validateMessageHandler{
-		channelID: channelID,
+		allowedChannelIDs: map[p2p.ChannelID]struct{}{},
+	}
+	for _, chanID := range allowedChannelIDs {
+		hd.allowedChannelIDs[chanID] = struct{}{}
 	}
 	return func(next ConsumerHandler) ConsumerHandler {
 		hd.next = next
@@ -101,10 +109,11 @@ func (h *loggerP2PMessageHandler) Handle(ctx context.Context, client *Client, en
 
 // Handle validates is received envelope on required data
 func (h *validateMessageHandler) Handle(ctx context.Context, client *Client, envelope *p2p.Envelope) error {
-	if envelope.ChannelID != h.channelID {
+	_, ok := h.allowedChannelIDs[envelope.ChannelID]
+	if !ok {
 		return fmt.Errorf("unknown channel ID (%d) for envelope (%v)", envelope.ChannelID, envelope)
 	}
-	_, ok := envelope.Attributes[RequestIDAttribute]
+	_, ok = envelope.Attributes[RequestIDAttribute]
 	if !ok {
 		return ErrRequestIDAttributeRequired
 	}

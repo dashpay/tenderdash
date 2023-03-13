@@ -20,6 +20,8 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
+const testChannelID = 0x1
+
 type BlockP2PMessageHandlerTestSuite struct {
 	suite.Suite
 
@@ -45,7 +47,26 @@ func (suite *BlockP2PMessageHandlerTestSuite) SetupTest() {
 	suite.fakeStore = mocks.NewBlockStore(suite.T())
 	suite.fakePeerAdder = newMockPeerAdder(suite.T())
 	suite.fakeP2PChannel = p2pmocks.NewChannel(suite.T())
-	suite.fakeClient = client.New(suite.fakeP2PChannel)
+	suite.fakeClient = client.New(
+		map[p2p.ChannelID]*p2p.ChannelDescriptor{
+			testChannelID: {
+				ID:                  testChannelID,
+				Priority:            5,
+				SendQueueCapacity:   8,
+				RecvBufferCapacity:  128,
+				RecvMessageCapacity: int(1e5),
+				Name:                "test",
+			},
+		},
+		func(ctx context.Context, descriptor *p2p.ChannelDescriptor) (p2p.Channel, error) {
+			return suite.fakeP2PChannel, nil
+		},
+	)
+	suite.fakeClient = client.New(
+		map[p2p.ChannelID]*p2p.ChannelDescriptor{},
+		func(context.Context, *p2p.ChannelDescriptor) (p2p.Channel, error) {
+			return suite.fakeP2PChannel, nil
+		})
 	suite.handler = &blockP2PMessageHandler{
 		logger:    suite.logger,
 		store:     suite.fakeStore,
@@ -202,7 +223,7 @@ func (suite *BlockP2PMessageHandlerTestSuite) handleMessage(
 		},
 		From:      peerID,
 		Message:   msg,
-		ChannelID: BlockSyncChannel,
+		ChannelID: p2p.BlockSyncChannel,
 	})
 }
 

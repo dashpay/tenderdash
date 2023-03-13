@@ -22,17 +22,20 @@ type (
 	}
 )
 
-func consumerHandler(logger log.Logger, store sm.BlockStore, peerAdder PeerAdder) client.ConsumerHandler {
-	return client.HandlerWithMiddlewares(
-		&blockP2PMessageHandler{
-			logger:    logger,
-			store:     store,
-			peerAdder: peerAdder,
-		},
-		client.WithValidateMessageHandler(BlockSyncChannel),
-		client.WithLoggerMiddleware(logger),
-		client.WithRecoveryMiddleware(logger),
-	)
+func consumerHandler(logger log.Logger, store sm.BlockStore, peerAdder PeerAdder) client.ConsumerParams {
+	return client.ConsumerParams{
+		ReadChannels: []p2p.ChannelID{p2p.BlockSyncChannel},
+		Handler: client.HandlerWithMiddlewares(
+			&blockP2PMessageHandler{
+				logger:    logger,
+				store:     store,
+				peerAdder: peerAdder,
+			},
+			client.WithValidateMessageHandler([]p2p.ChannelID{p2p.BlockSyncChannel}),
+			client.WithLoggerMiddleware(logger),
+			client.WithRecoveryMiddleware(logger),
+		),
+	}
 }
 
 // Handle handles a message from a block-sync message set

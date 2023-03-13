@@ -54,7 +54,7 @@ type (
 	// Client is a stateful implementation of a client, which means that the client stores a request ID
 	// in order to be able to resolve the response once it is received from the peer
 	Client struct {
-		channel    p2p.Channel
+		chanStore  *chanStore
 		clock      clockwork.Clock
 		logger     log.Logger
 		pending    sync.Map
@@ -83,9 +83,9 @@ func WithClock(clock clockwork.Clock) OptionFunc {
 }
 
 // New creates and returns Client with optional functions
-func New(ch p2p.Channel, opts ...OptionFunc) *Client {
+func New(descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor, creator p2p.ChannelCreator, opts ...OptionFunc) *Client {
 	client := &Client{
-		channel:    ch,
+		chanStore:  newChanStore(descriptors, creator),
 		clock:      clockwork.NewRealClock(),
 		logger:     log.NewNopLogger(),
 		reqTimeout: peerTimeout,
@@ -134,20 +134,36 @@ func (c *Client) GetSyncStatus(ctx context.Context) error {
 func (c *Client) Send(ctx context.Context, msg any) error {
 	switch t := msg.(type) {
 	case p2p.PeerError:
-		return c.channel.SendError(ctx, t)
+		ch, err := c.chanStore.get(ctx, p2p.ErrorChannel)
+		if err != nil {
+			return err
+		}
+		return ch.SendError(ctx, t)
 	case p2p.Envelope:
 		if _, ok := t.Attributes[RequestIDAttribute]; !ok {
 			// populate RequestID if it is absent
 			t.AddAttribute(RequestIDAttribute, uuid.NewString())
 		}
-		return c.channel.Send(ctx, t)
+		ch, err := c.chanStore.get(ctx, t.ChannelID)
+		if err != nil {
+			return err
+		}
+		return ch.Send(ctx, t)
 	}
 	return fmt.Errorf("cannot send an unsupported message type %T", msg)
 }
 
 // Consume reads the messages from a p2p client and processes them using a consumer-handler
-func (c *Client) Consume(ctx context.Context, handler ConsumerHandler) {
-	iter := c.channel.Receive(ctx)
+func (c *Client) Consume(ctx context.Context, params ConsumerParams) {
+	iter, err := c.chanStore.iter(ctx, params.ReadChannels...)
+	if err != nil {
+		c.logger.Error("failed to get a channel iterator", "error", err)
+		return
+	}
+	c.iter(ctx, iter, params.Handler)
+}
+
+func (c *Client) iter(ctx context.Context, iter *p2p.ChannelIterator, handler ConsumerHandler) {
 	for iter.Next(ctx) {
 		envelope := iter.Envelope()
 		if isMessageResolvable(envelope.Message) {

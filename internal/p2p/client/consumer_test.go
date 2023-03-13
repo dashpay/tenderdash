@@ -132,7 +132,9 @@ func TestValidateMessageHandler(t *testing.T) {
 		On("Handle", mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
 		Return(nil)
-	mw := validateMessageHandler{channelID: 1, next: fakeHandler}
+	mw := validateMessageHandler{allowedChannelIDs: map[p2p.ChannelID]struct{}{
+		0x1: {},
+	}, next: fakeHandler}
 	client := &Client{}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {

@@ -23,6 +23,7 @@ import (
 	"github.com/tendermint/tendermint/internal/evidence"
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/internal/p2p"
+	p2pclient "github.com/tendermint/tendermint/internal/p2p/client"
 	"github.com/tendermint/tendermint/internal/p2p/pex"
 	"github.com/tendermint/tendermint/internal/proxy"
 	rpccore "github.com/tendermint/tendermint/internal/rpc/core"
@@ -300,6 +301,11 @@ func makeNode(
 			makeCloser(closers))
 	}
 
+	p2pClient := p2pclient.New(
+		p2p.ChannelDescriptors(cfg),
+		node.router.OpenChannel,
+		p2pclient.WithLogger(logger),
+	)
 	evReactor, evPool, edbCloser, err := createEvidenceReactor(logger, cfg, dbProvider,
 		stateStore, blockStore, peerManager.Subscribe, node.router.OpenChannel, nodeMetrics.evidence, eventBus)
 	closers = append(closers, edbCloser)
@@ -377,7 +383,7 @@ func makeNode(
 		blockStore,
 		proTxHash,
 		csReactor,
-		node.router.OpenChannel,
+		p2pClient,
 		peerManager.Subscribe,
 		blockSync && !stateSync,
 		nodeMetrics.consensus,
