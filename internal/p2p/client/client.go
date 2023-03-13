@@ -54,11 +54,12 @@ type (
 	// Client is a stateful implementation of a client, which means that the client stores a request ID
 	// in order to be able to resolve the response once it is received from the peer
 	Client struct {
-		chanStore  *chanStore
-		clock      clockwork.Clock
-		logger     log.Logger
-		pending    sync.Map
-		reqTimeout time.Duration
+		chanStore      *chanStore
+		clock          clockwork.Clock
+		logger         log.Logger
+		pending        sync.Map
+		reqTimeout     time.Duration
+		chanIDResolver func(msg proto.Message) p2p.ChannelID
 	}
 	// OptionFunc is a client optional function, it is used to override the default parameters in a Client
 	OptionFunc func(c *Client)
@@ -82,13 +83,21 @@ func WithClock(clock clockwork.Clock) OptionFunc {
 	}
 }
 
+// WithChanIDResolver is an option function to set channel ID resolver function
+func WithChanIDResolver(resolver func(msg proto.Message) p2p.ChannelID) OptionFunc {
+	return func(c *Client) {
+		c.chanIDResolver = resolver
+	}
+}
+
 // New creates and returns Client with optional functions
 func New(descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor, creator p2p.ChannelCreator, opts ...OptionFunc) *Client {
 	client := &Client{
-		chanStore:  newChanStore(descriptors, creator),
-		clock:      clockwork.NewRealClock(),
-		logger:     log.NewNopLogger(),
-		reqTimeout: peerTimeout,
+		chanStore:      newChanStore(descriptors, creator),
+		clock:          clockwork.NewRealClock(),
+		logger:         log.NewNopLogger(),
+		reqTimeout:     peerTimeout,
+		chanIDResolver: p2p.ResolveChannelID,
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -101,6 +110,7 @@ func New(descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor, creator p2p.Chann
 func (c *Client) GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error) {
 	reqID := uuid.NewString()
 	err := c.Send(ctx, p2p.Envelope{
+		ChannelID:  p2p.BlockSyncChannel,
 		Attributes: map[string]string{RequestIDAttribute: reqID},
 		To:         peerID,
 		Message:    &bcproto.BlockRequest{Height: height},
@@ -124,6 +134,7 @@ func (c *Client) GetBlock(ctx context.Context, height int64, peerID types.NodeID
 func (c *Client) GetSyncStatus(ctx context.Context) error {
 	reqID := uuid.NewString()
 	return c.Send(ctx, p2p.Envelope{
+		ChannelID:  p2p.BlockSyncChannel,
 		Attributes: map[string]string{RequestIDAttribute: reqID},
 		Broadcast:  true,
 		Message:    &bcproto.StatusRequest{},
@@ -140,6 +151,9 @@ func (c *Client) Send(ctx context.Context, msg any) error {
 		}
 		return ch.SendError(ctx, t)
 	case p2p.Envelope:
+		if t.ChannelID == 0 {
+			t.ChannelID = c.chanIDResolver(t.Message)
+		}
 		if _, ok := t.Attributes[RequestIDAttribute]; !ok {
 			// populate RequestID if it is absent
 			t.AddAttribute(RequestIDAttribute, uuid.NewString())
@@ -275,6 +289,7 @@ func isMessageResolvable(msg proto.Message) bool {
 func ResponseFuncFromEnvelope(channel *Client, envelope *p2p.Envelope) func(ctx context.Context, msg proto.Message) error {
 	return func(ctx context.Context, msg proto.Message) error {
 		return channel.Send(ctx, p2p.Envelope{
+			ChannelID: envelope.ChannelID,
 			Attributes: map[string]string{
 				ResponseIDAttribute: envelope.Attributes[RequestIDAttribute],
 			},

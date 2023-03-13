@@ -64,6 +64,9 @@ func (suite *ChannelTestSuite) SetupTest() {
 			return suite.p2pChannel, nil
 		},
 		WithClock(suite.fakeClock),
+		WithChanIDResolver(func(msg proto.Message) p2p.ChannelID {
+			return testChannelID
+		}),
 	)
 	suite.response = &bcproto.BlockResponse{
 		Commit: &tmproto.Commit{Height: suite.height},
