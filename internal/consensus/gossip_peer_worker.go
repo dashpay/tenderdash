@@ -43,7 +43,7 @@ func newPeerGossipWorker(
 ) *peerGossipWorker {
 	gossiper := msgGossiper{
 		ps:         ps,
-		blockStore: &blockRepository{BlockStore: state.blockStore},
+		blockStore: &blockRepository{BlockStore: state.blockStore, logger: logger},
 		msgSender:  msgSender,
 		logger:     logger,
 		optimistic: true,
