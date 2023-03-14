@@ -21,8 +21,6 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-const testChannelID = 0x1
-
 type BlockP2PMessageHandlerTestSuite struct {
 	suite.Suite
 
