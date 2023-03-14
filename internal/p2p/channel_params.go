@@ -47,6 +47,7 @@ func ChannelDescriptors(cfg *config.Config) map[ChannelID]*ChannelDescriptor {
 }
 
 // ResolveChannelID returns channel ID according to message type
+// currently only is supported blocksync channelID, the remaining channelIDs should be added as it will be necessary
 func ResolveChannelID(msg proto.Message) ChannelID {
 	switch msg.(type) {
 	case *blocksync.BlockRequest,

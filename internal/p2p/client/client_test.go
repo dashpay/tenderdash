@@ -42,14 +42,8 @@ func TestChannelTestSuite(t *testing.T) {
 
 func (suite *ChannelTestSuite) SetupSuite() {
 	suite.descriptors = map[p2p.ChannelID]*p2p.ChannelDescriptor{
-		testChannelID: {
-			ID:                  testChannelID,
-			Priority:            5,
-			SendQueueCapacity:   8,
-			RecvBufferCapacity:  128,
-			RecvMessageCapacity: int(1e5),
-			Name:                "test",
-		},
+		p2p.ErrorChannel: {ID: p2p.ErrorChannel, Name: "error"},
+		testChannelID:    {ID: testChannelID, Name: "test"},
 	}
 }
 

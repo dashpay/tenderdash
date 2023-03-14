@@ -2,24 +2,33 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/tendermint/tendermint/internal/p2p"
 )
 
-type chanStore struct {
-	mtx         sync.Mutex
-	descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor
-	creator     p2p.ChannelCreator
-	chans       map[p2p.ChannelID]p2p.Channel
-}
+type (
+	chanStore struct {
+		mtx       sync.Mutex
+		creator   p2p.ChannelCreator
+		chanItems map[p2p.ChannelID]*chanItem
+	}
+	chanItem struct {
+		descriptor *p2p.ChannelDescriptor
+		channel    p2p.Channel
+	}
+)
 
 func newChanStore(descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor, creator p2p.ChannelCreator) *chanStore {
-	return &chanStore{
-		creator:     creator,
-		chans:       make(map[p2p.ChannelID]p2p.Channel),
-		descriptors: descriptors,
+	store := &chanStore{
+		creator:   creator,
+		chanItems: make(map[p2p.ChannelID]*chanItem),
 	}
+	for _, descr := range descriptors {
+		store.chanItems[descr.ID] = &chanItem{descriptor: descr}
+	}
+	return store
 }
 
 func (c *chanStore) iter(ctx context.Context, chanIDs ...p2p.ChannelID) (*p2p.ChannelIterator, error) {
@@ -40,14 +49,15 @@ func (c *chanStore) iter(ctx context.Context, chanIDs ...p2p.ChannelID) (*p2p.Ch
 func (c *chanStore) get(ctx context.Context, chanID p2p.ChannelID) (p2p.Channel, error) {
 	c.mtx.Lock()
 	defer c.mtx.Unlock()
-	ch, ok := c.chans[chanID]
-	if ok {
-		return ch, nil
+	item, ok := c.chanItems[chanID]
+	if !ok {
+		return nil, fmt.Errorf("channelID %v is unsupported", chanID)
 	}
-	ch, err := c.creator(ctx, c.descriptors[chanID])
+	var err error
+	item.channel, err = c.creator(ctx, item.descriptor)
 	if err != nil {
 		return nil, err
 	}
-	c.chans[chanID] = ch
-	return ch, nil
+	c.chanItems[chanID] = item
+	return item.channel, nil
 }

@@ -110,7 +110,6 @@ func New(descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor, creator p2p.Chann
 func (c *Client) GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error) {
 	reqID := uuid.NewString()
 	err := c.Send(ctx, p2p.Envelope{
-		ChannelID:  p2p.BlockSyncChannel,
 		Attributes: map[string]string{RequestIDAttribute: reqID},
 		To:         peerID,
 		Message:    &bcproto.BlockRequest{Height: height},
@@ -134,7 +133,6 @@ func (c *Client) GetBlock(ctx context.Context, height int64, peerID types.NodeID
 func (c *Client) GetSyncStatus(ctx context.Context) error {
 	reqID := uuid.NewString()
 	return c.Send(ctx, p2p.Envelope{
-		ChannelID:  p2p.BlockSyncChannel,
 		Attributes: map[string]string{RequestIDAttribute: reqID},
 		Broadcast:  true,
 		Message:    &bcproto.StatusRequest{},
