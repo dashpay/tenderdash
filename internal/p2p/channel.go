@@ -67,7 +67,7 @@ func (e *Envelope) ToProto() (*p2p.Envelope, error) {
 }
 
 func (e *Envelope) IsZero() bool {
-	return e.From == "" && e.To == "" && e.Message == nil
+	return e==nil || (e.From == "" && e.To == "" && e.Message == nil)
 }
 
 var _ = zerolog.LogObjectMarshaler(&Envelope{})
