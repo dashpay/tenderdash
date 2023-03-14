@@ -16,7 +16,7 @@ import (
 	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
 )
 
-func TestLoggerP2PMessageHandler(t *testing.T) {
+func TestErrorLoggerP2PMessageHandler(t *testing.T) {
 	ctx := context.Background()
 	reqID := uuid.NewString()
 	fakeHandler := newMockConsumer(t)
@@ -47,7 +47,7 @@ func TestLoggerP2PMessageHandler(t *testing.T) {
 		Attributes: map[string]string{RequestIDAttribute: reqID},
 	}
 	for i, tc := range testCases {
-		mw := &loggerP2PMessageHandler{logger: logger, next: fakeHandler}
+		mw := &errorLoggerP2PMessageHandler{logger: logger, next: fakeHandler}
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			tc.mockFn(fakeHandler, logger)
 			err := mw.Handle(ctx, client, envelope)

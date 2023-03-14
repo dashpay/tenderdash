@@ -67,12 +67,15 @@ func (e *Envelope) ToProto() (*p2p.Envelope, error) {
 }
 
 func (e *Envelope) IsZero() bool {
-	return e==nil || (e.From == "" && e.To == "" && e.Message == nil)
+	return e == nil || (e.From == "" && e.To == "" && e.Message == nil)
 }
 
 var _ = zerolog.LogObjectMarshaler(&Envelope{})
 
 func (e *Envelope) MarshalZerologObject(event *zerolog.Event) {
+	if e == nil {
+		return
+	}
 	event.Str("From", string(e.From))
 	event.Str("To", string(e.To))
 	event.Bool("Broadcast", e.Broadcast)

@@ -33,7 +33,7 @@ type (
 		logger log.Logger
 		next   ConsumerHandler
 	}
-	loggerP2PMessageHandler struct {
+	errorLoggerP2PMessageHandler struct {
 		logger log.Logger
 		next   ConsumerHandler
 	}
@@ -52,9 +52,9 @@ func WithRecoveryMiddleware(logger log.Logger) ConsumerMiddlewareFunc {
 	}
 }
 
-// WithLoggerMiddleware creates error logging middleware
+// WithErrorLoggerMiddleware creates error logging middleware
 func WithErrorLoggerMiddleware(logger log.Logger) ConsumerMiddlewareFunc {
-	hd := &loggerP2PMessageHandler{logger: logger}
+	hd := &errorLoggerP2PMessageHandler{logger: logger}
 	return func(next ConsumerHandler) ConsumerHandler {
 		hd.next = next
 		return hd

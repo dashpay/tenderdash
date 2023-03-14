@@ -138,7 +138,12 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		go r.requestRoutine(ctx, r.p2pClient)
 		go r.poolRoutine(ctx, false)
 	}
-	go r.p2pClient.Consume(ctx, consumerHandler(r.logger, r.store, r.synchronizer))
+	go func() {
+		err := r.p2pClient.Consume(ctx, consumerHandler(r.logger, r.store, r.synchronizer))
+		if err != nil {
+			r.logger.Error("failed to consume p2p blocksync messages", "error", err)
+		}
+	}()
 	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "blocksync"), r.p2pClient)
 
 	return nil

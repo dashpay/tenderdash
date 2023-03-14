@@ -168,16 +168,16 @@ func (c *Client) Send(ctx context.Context, msg any) error {
 }
 
 // Consume reads the messages from a p2p client and processes them using a consumer-handler
-func (c *Client) Consume(ctx context.Context, params ConsumerParams) {
+func (c *Client) Consume(ctx context.Context, params ConsumerParams) error {
 	iter, err := c.chanStore.iter(ctx, params.ReadChannels...)
 	if err != nil {
 		c.logger.Error("failed to get a channel iterator", "error", err)
-		return
+		return err
 	}
-	c.iter(ctx, iter, params.Handler)
+	return c.iter(ctx, iter, params.Handler)
 }
 
-func (c *Client) iter(ctx context.Context, iter *p2p.ChannelIterator, handler ConsumerHandler) {
+func (c *Client) iter(ctx context.Context, iter *p2p.ChannelIterator, handler ConsumerHandler) error {
 	for iter.Next(ctx) {
 		envelope := iter.Envelope()
 		if isMessageResolvable(envelope.Message) {
@@ -186,23 +186,24 @@ func (c *Client) iter(ctx context.Context, iter *p2p.ChannelIterator, handler Co
 				c.logger.Error("failed to resolve response message", loggingArgsFromEnvelope(envelope)...)
 				serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err})
 				if serr != nil {
-					return
+					return multierror.Append(err, serr)
 				}
 			}
 			continue
 		}
 		err := handler.Handle(ctx, c, envelope)
 		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-			return
+			return nil
 		}
 		if err != nil {
 			c.logger.Error("failed to process message", loggingArgsFromEnvelope(envelope)...)
 			serr := c.Send(ctx, p2p.PeerError{NodeID: envelope.From, Err: err})
 			if serr != nil {
-				return
+				return multierror.Append(err, serr)
 			}
 		}
 	}
+	return nil
 }
 
 func (c *Client) resolve(ctx context.Context, envelope *p2p.Envelope) error {

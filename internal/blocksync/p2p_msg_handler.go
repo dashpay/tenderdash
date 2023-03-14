@@ -32,7 +32,7 @@ func consumerHandler(logger log.Logger, store sm.BlockStore, peerAdder PeerAdder
 				peerAdder: peerAdder,
 			},
 			client.WithValidateMessageHandler([]p2p.ChannelID{p2p.BlockSyncChannel}),
-			client.WithLoggerMiddleware(logger),
+			client.WithErrorLoggerMiddleware(logger),
 			client.WithRecoveryMiddleware(logger),
 		),
 	}
