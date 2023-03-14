@@ -7,11 +7,13 @@ import (
 
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
+	"github.com/tendermint/tendermint/internal/test/factory"
+	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"github.com/tendermint/tendermint/types"
 )
 
 func TestIsValidForPrevote(t *testing.T) {
-	valSet, _ := mockValidatorSet()
+	valSet, _ := factory.MockValidatorSet()
 	now := time.Now()
 	defState := sm.State{
 		Validators: valSet,
@@ -97,7 +99,7 @@ func TestIsValidForPrevote(t *testing.T) {
 				state:      tc.state,
 				RoundState: tc.rs,
 			}
-			assertError(t, tc.wantErr, stateData.isValidForPrevote())
+			tmrequire.Error(t, tc.wantErr, stateData.isValidForPrevote())
 		})
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/tendermint/tendermint/internal/eventbus"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/test/factory"
+	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/eventemitter"
 	"github.com/tendermint/tendermint/libs/log"
@@ -45,7 +46,7 @@ func (suite *AddVoteTestSuite) SetupTest() {
 	err := suite.eventbus.Start(ctx)
 	suite.NoError(err)
 	suite.publisher = &EventPublisher{eventBus: suite.eventbus, emitter: suite.emitter}
-	valSet, privVals := mockValidatorSet()
+	valSet, privVals := factory.MockValidatorSet()
 	suite.signer = testSigner{privVals: privVals, valSet: valSet}
 	suite.valSet = valSet
 }
@@ -278,7 +279,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 				},
 			}
 			added, err := fn(ctx, stateData, &tc.vote)
-			assertError(suite.T(), tc.wantErr, err)
+			tmrequire.Error(suite.T(), tc.wantErr, err)
 			suite.Equal(tc.wantAdded, added)
 			suite.Equal(tc.wantFiredEvent, eventFired)
 			suite.Equal(tc.wantStateDataVer, store.version)

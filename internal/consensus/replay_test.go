@@ -981,8 +981,9 @@ func TestHandshakeErrorsIfAppReturnsWrongAppHash(t *testing.T) {
 	require.NoError(t, err)
 	state.LastValidators = state.Validators.Copy()
 	// mode = 0 for committing all the blocks
-	blocks := sf.MakeBlocks(ctx, t, 3, &state, privVal, 1)
+	blocks := sf.MakeBlocks(ctx, t, 6, &state, []types.PrivValidator{privVal}, 1)
 
+	state.LastBlockHeight = 3
 	store.chain = blocks
 
 	logger := log.NewNopLogger()

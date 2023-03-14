@@ -11,6 +11,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
+	"github.com/tendermint/tendermint/internal/test/factory"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -25,7 +26,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 	)
 	emptyPeerID := types.NodeID("")
 	mockCancelCtx := mock.AnythingOfType("*context.cancelCtx")
-	valSet, priVals := mockValidatorSet()
+	valSet, priVals := factory.MockValidatorSet()
 	proTxHash, err := priVals[0].GetProTxHash(ctx)
 	assert.NoError(t, err)
 	logger := log.NewTestingLogger(t)

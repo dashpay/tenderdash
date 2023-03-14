@@ -12,6 +12,8 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
+	"github.com/tendermint/tendermint/internal/test/factory"
+	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
@@ -38,7 +40,7 @@ func TestProposaler(t *testing.T) {
 func (suite *ProposalerTestSuite) SetupTest() {
 	logger := log.NewTestingLogger(suite.T())
 	metrics := NopMetrics()
-	valSet, privVals := mockValidatorSet()
+	valSet, privVals := factory.MockValidatorSet()
 	suite.mockPrivVals = privVals
 	suite.mockValSet = valSet
 	privVal := privValidator{
@@ -153,7 +155,7 @@ func (suite *ProposalerTestSuite) TestSet() {
 	for i, tc := range testCases {
 		suite.Run(fmt.Sprintf("%d", i), func() {
 			err := suite.proposer.Set(&tc.proposal, tc.receivedAt, &tc.rs)
-			assertError(suite.T(), tc.wantErr, err)
+			tmrequire.Error(suite.T(), tc.wantErr, err)
 			suite.Require().Equal(tc.wantProposal, tc.rs.Proposal)
 			suite.Require().Equal(tc.wantReceiveTime, tc.rs.ProposalReceiveTime)
 		})
@@ -224,7 +226,7 @@ func (suite *ProposalerTestSuite) TestDecide() {
 				tc.mockFn(tc.rs)
 			}
 			err := suite.proposer.Create(ctx, tc.height, tc.round, &tc.rs)
-			assertError(suite.T(), tc.wantErr, err)
+			tmrequire.Error(suite.T(), tc.wantErr, err)
 			if tc.wantProposal == nil {
 				suite.Require().Len(suite.msgInfoQueue.sender.peerQueue.ch, 0)
 				suite.Require().Len(suite.msgInfoQueue.sender.internalQueue.ch, 0)
@@ -315,7 +317,7 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 	for i, tc := range testCases {
 		suite.Run(fmt.Sprintf("test-case #%d", i), func() {
 			err := suite.proposer.verifyProposal(tc.proposal, &tc.rs)
-			assertError(suite.T(), tc.wantErr, err)
+			tmrequire.Error(suite.T(), tc.wantErr, err)
 		})
 	}
 }

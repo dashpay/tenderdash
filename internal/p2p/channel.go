@@ -216,6 +216,11 @@ type ChannelIterator struct {
 	current *Envelope
 }
 
+// NewChannelIterator returns a new instance of ChannelIterator
+func NewChannelIterator(pipe chan Envelope) *ChannelIterator {
+	return &ChannelIterator{pipe: pipe}
+}
+
 // Next returns true when the Envelope value has advanced, and false
 // when the context is canceled or iteration should stop. If an iterator has returned false,
 // it will never return true again.

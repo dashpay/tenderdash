@@ -15,7 +15,7 @@ const clockRate = 20 * time.Millisecond
 
 // clock returns a low resolution timestamp relative to the process start time.
 func clock(startAt time.Time) time.Duration {
-	return time.Now().Round(clockRate).Sub(startAt)
+	return Now().Round(clockRate).Sub(startAt)
 }
 
 // clockRound returns d rounded to the nearest clockRate increment.

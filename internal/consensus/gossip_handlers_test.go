@@ -14,6 +14,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	statemocks "github.com/tendermint/tendermint/internal/state/mocks"
+	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/log"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	"github.com/tendermint/tendermint/types"
@@ -148,7 +149,7 @@ func (suite *GossipHandlerTestSuite) TestDataGossipHandler() {
 	)
 	ctx := context.Background()
 	logger := log.NewTestingLogger(suite.T())
-	valSet, _ := mockValidatorSet()
+	valSet, _ := factory.MockValidatorSet()
 	committedState := sm.State{Validators: valSet}
 	data := tmrand.Bytes(partSetSize * nParts)
 	partSet1 := types.NewPartSetFromData(data, partSetSize)

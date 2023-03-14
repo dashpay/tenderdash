@@ -14,6 +14,7 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	smmocks "github.com/tendermint/tendermint/internal/state/mocks"
+	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 	"github.com/tendermint/tendermint/types/mocks"
@@ -233,16 +234,8 @@ func (suite *BockExecutorTestSuite) TestProcess() {
 					Return(tc.wantCRS, wantErr)
 			}
 			err := suite.blockExec.ensureProcess(ctx, &stateData.RoundState, round)
-			assertError(suite.T(), tc.wantErr, err)
+			tmrequire.Error(suite.T(), tc.wantErr, err)
 			require.Equal(suite.T(), tc.wantCRS, stateData.CurrentRoundState)
 		})
 	}
-}
-
-func assertError(t *testing.T, want string, err error) {
-	if want == "" {
-		require.NoError(t, err)
-		return
-	}
-	require.ErrorContains(t, err, want)
 }
