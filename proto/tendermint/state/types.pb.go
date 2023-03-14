@@ -266,7 +266,7 @@ type State struct {
 	LastHeightConsensusParamsChanged int64                  `protobuf:"varint,11,opt,name=last_height_consensus_params_changed,json=lastHeightConsensusParamsChanged,proto3" json:"last_height_consensus_params_changed,omitempty"`
 	// Merkle root of the results from executing prev block
 	LastResultsHash []byte `protobuf:"bytes,12,opt,name=last_results_hash,json=lastResultsHash,proto3" json:"last_results_hash,omitempty"`
-	// the latest AppHash we've received from calling abci.Commit()
+	// the latest AppHash we've received from calling abci.Commit(). 32 bytes.
 	AppHash                        []byte                `protobuf:"bytes,13,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
 	LastCoreChainLockedBlockHeight uint32                `protobuf:"varint,14,opt,name=last_core_chain_locked_block_height,json=lastCoreChainLockedBlockHeight,proto3" json:"last_core_chain_locked_block_height,omitempty"`
 	NextCoreChainLock              *types1.CoreChainLock `protobuf:"bytes,15,opt,name=next_core_chain_lock,json=nextCoreChainLock,proto3" json:"next_core_chain_lock,omitempty"`

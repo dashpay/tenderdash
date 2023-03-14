@@ -138,14 +138,14 @@ ExecTxResult contains results of executing one individual transaction.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| code | [uint32](#uint32) |  |  |
-| data | [bytes](#bytes) |  |  |
-| log | [string](#string) |  | nondeterministic |
-| info | [string](#string) |  | nondeterministic |
-| gas_wanted | [int64](#int64) |  |  |
-| gas_used | [int64](#int64) |  |  |
-| events | [Event](#tendermint-abci-Event) | repeated | nondeterministic |
-| codespace | [string](#string) |  |  |
+| code | [uint32](#uint32) |  | Response code within codespace; by convention, 0 means success. |
+| data | [bytes](#bytes) |  | Result bytes, if any (arbitrary data, not interpreted by Tenderdash). |
+| log | [string](#string) |  | The output of the application&#39;s logger. May be non-deterministic. |
+| info | [string](#string) |  | Additional information. May be non-deterministic. |
+| gas_wanted | [int64](#int64) |  | Amount of gas requested for transaction. |
+| gas_used | [int64](#int64) |  | Amount of gas consumed by transaction. |
+| events | [Event](#tendermint-abci-Event) | repeated | Type &amp; Key-Value events for indexing transactions (e.g. by account). |
+| codespace | [string](#string) |  | Namespace for the code. |
 
 
 
@@ -352,10 +352,10 @@ Extends a vote with application-side injection
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| version | [string](#string) |  |  |
-| block_version | [uint64](#uint64) |  |  |
-| p2p_version | [uint64](#uint64) |  |  |
-| abci_version | [string](#string) |  |  |
+| version | [string](#string) |  | The Tendermint software semantic version. |
+| block_version | [uint64](#uint64) |  | The Tendermint Block Protocol version. |
+| p2p_version | [uint64](#uint64) |  | The Tendermint P2P Protocol version. |
+| abci_version | [string](#string) |  | The Tendermint ABCI semantic version. |
 
 
 
@@ -419,7 +419,7 @@ offers a snapshot to the application
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | snapshot | [Snapshot](#tendermint-abci-Snapshot) |  | The snapshot offered for restoration. |
-| app_hash | [bytes](#bytes) |  | The light client-verified app hash for this height, from the blockchain. |
+| app_hash | [bytes](#bytes) |  | The light client-verified app hash for this height, from the blockchain. 32 bytes. |
 
 
 
@@ -668,11 +668,11 @@ as those must have been provided by PrepareProposal.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| data | [string](#string) |  |  |
-| version | [string](#string) |  | this is the software version of the application. |
-| app_version | [uint64](#uint64) |  |  |
-| last_block_height | [int64](#int64) |  |  |
-| last_block_app_hash | [bytes](#bytes) |  |  |
+| data | [string](#string) |  | Some arbitrary information. |
+| version | [string](#string) |  | The application software semantic version. |
+| app_version | [uint64](#uint64) |  | The application protocol version. |
+| last_block_height | [int64](#int64) |  | Latest block for which the app has called Commit. |
+| last_block_app_hash | [bytes](#bytes) |  | Latest result of Commit. 32 bytes. |
 
 
 
@@ -688,7 +688,7 @@ as those must have been provided by PrepareProposal.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | consensus_params | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Initial consensus-critical parameters (optional). |
-| app_hash | [bytes](#bytes) |  | Initial application hash. |
+| app_hash | [bytes](#bytes) |  | Initial application hash. 32 bytes. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Initial validator set (optional). |
 | next_core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Initial core chain lock update. |
 | initial_core_height | [uint32](#uint32) |  | Initial height of core lock. |
@@ -752,7 +752,7 @@ as those must have been provided by PrepareProposal.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | tx_records | [TxRecord](#tendermint-abci-TxRecord) | repeated | Possibly modified list of transactions that have been picked as part of the proposed block. |
-| app_hash | [bytes](#bytes) |  | The Merkle root hash of the application state. |
+| app_hash | [bytes](#bytes) |  | The Merkle root hash of the application state. 32 bytes. |
 | tx_results | [ExecTxResult](#tendermint-abci-ExecTxResult) | repeated | List of structures containing the data resulting from executing the transactions. |
 | consensus_param_updates | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Changes to consensus-critical gas, size, and other parameters that will be applied at next height. |
 | core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Core chain lock that will be used for generated block. |
@@ -772,7 +772,7 @@ as those must have been provided by PrepareProposal.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | status | [ResponseProcessProposal.ProposalStatus](#tendermint-abci-ResponseProcessProposal-ProposalStatus) |  | `enum` that signals if the application finds the proposal valid. |
-| app_hash | [bytes](#bytes) |  | The Merkle root hash of the application state. |
+| app_hash | [bytes](#bytes) |  | The Merkle root hash of the application state. 32 bytes. |
 | tx_results | [ExecTxResult](#tendermint-abci-ExecTxResult) | repeated | List of structures containing the data resulting from executing the transactions. |
 | consensus_param_updates | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Changes to consensus-critical gas, size, and other parameters. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Changes to validator set (set voting power to 0 to remove). |
@@ -862,8 +862,8 @@ as those must have been provided by PrepareProposal.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| action | [TxRecord.TxAction](#tendermint-abci-TxRecord-TxAction) |  |  |
-| tx | [bytes](#bytes) |  |  |
+| action | [TxRecord.TxAction](#tendermint-abci-TxRecord-TxAction) |  | What should Tendermint do with this transaction? |
+| tx | [bytes](#bytes) |  | Transaction contents. |
 
 
 

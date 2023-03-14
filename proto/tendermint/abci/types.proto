@@ -48,10 +48,10 @@ message RequestEcho {
 message RequestFlush {}
 
 message RequestInfo {
-  string version       = 1;
-  uint64 block_version = 2;
-  uint64 p2p_version   = 3;
-  string abci_version  = 4;
+  string version       = 1;  // The Tendermint software semantic version.
+  uint64 block_version = 2;  // The Tendermint Block Protocol version.
+  uint64 p2p_version   = 3;  // The Tendermint P2P Protocol version.
+  string abci_version  = 4;  // The Tendermint ABCI semantic version.
 }
 
 message RequestInitChain {
@@ -96,7 +96,7 @@ message RequestListSnapshots {}
 message RequestOfferSnapshot {
   // The snapshot offered for restoration.
   Snapshot snapshot = 1;
-  // The light client-verified app hash for this height, from the blockchain.
+  // The light client-verified app hash for this height, from the blockchain. 32 bytes.
   bytes app_hash = 2;
 }
 
@@ -247,18 +247,17 @@ message ResponseEcho {
 message ResponseFlush {}
 
 message ResponseInfo {
-  string data = 1;
-  // this is the software version of the application.
-  string version             = 2;
-  uint64 app_version         = 3;
-  int64  last_block_height   = 4;
-  bytes  last_block_app_hash = 5;
+  string data                = 1;  // Some arbitrary information.
+  string version             = 2;  // The application software semantic version.
+  uint64 app_version         = 3;  // The application protocol version.
+  int64  last_block_height   = 4;  // Latest block for which the app has called Commit.
+  bytes  last_block_app_hash = 5;  // Latest result of Commit. 32 bytes.
 }
 
 message ResponseInitChain {
   // Initial consensus-critical parameters (optional).
   tendermint.types.ConsensusParams consensus_params = 1;
-  // Initial application hash.
+  // Initial application hash. 32 bytes.
   bytes app_hash = 2;
   // Initial validator set (optional).
   ValidatorSetUpdate validator_set_update = 3 [(gogoproto.nullable) = false];
@@ -331,7 +330,7 @@ message ResponseApplySnapshotChunk {
 message ResponsePrepareProposal {
   // Possibly modified list of transactions that have been picked as part of the proposed block.
   repeated TxRecord tx_records = 1;
-  // The Merkle root hash of the application state.
+  // The Merkle root hash of the application state. 32 bytes.
   bytes app_hash = 2;
   // List of structures containing the data resulting from executing the transactions.
   repeated ExecTxResult tx_results = 3;
@@ -353,7 +352,7 @@ message ResponseProcessProposal {
     REJECT  = 2;  // Proposal is not valid; prevoting `nil`
   }
 
-  // The Merkle root hash of the application state.
+  // The Merkle root hash of the application state. 32 bytes.
   bytes app_hash = 2;
   // List of structures containing the data resulting from executing the transactions.
   repeated ExecTxResult tx_results = 3;
@@ -422,15 +421,16 @@ message EventAttribute {
 
 // ExecTxResult contains results of executing one individual transaction.
 message ExecTxResult {
-  uint32         code       = 1;
-  bytes          data       = 2;
-  string         log        = 3;  // nondeterministic
-  string         info       = 4;  // nondeterministic
-  int64          gas_wanted = 5;
-  int64          gas_used   = 6;
-  repeated Event events     = 7
-      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];  // nondeterministic
-  string codespace = 8;
+  uint32 code       = 1;  // Response code within codespace; by convention, 0 means success.
+  bytes  data       = 2;  // Result bytes, if any (arbitrary data, not interpreted by Tenderdash).
+  string log        = 3;  // The output of the application's logger. May be non-deterministic.
+  string info       = 4;  // Additional information. May be non-deterministic.
+  int64  gas_wanted = 5;  // Amount of gas requested for transaction.
+  int64  gas_used   = 6;  // Amount of gas consumed by transaction.
+  // Type & Key-Value events for indexing transactions (e.g. by account).
+  repeated Event events = 7
+      [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
+  string codespace = 8;  // Namespace for the code.
 }
 
 // TxResult contains results of executing the transaction.
@@ -444,8 +444,8 @@ message TxResult {
 }
 
 message TxRecord {
-  TxAction action = 1;
-  bytes    tx     = 2;
+  TxAction action = 1;  // What should Tendermint do with this transaction?
+  bytes    tx     = 2;  // Transaction contents.
 
   // TxAction contains App-provided information on what to do with a transaction that is part of a raw proposal
   enum TxAction {

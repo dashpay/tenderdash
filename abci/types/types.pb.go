@@ -911,7 +911,7 @@ var xxx_messageInfo_RequestListSnapshots proto.InternalMessageInfo
 type RequestOfferSnapshot struct {
 	// The snapshot offered for restoration.
 	Snapshot *Snapshot `protobuf:"bytes,1,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
-	// The light client-verified app hash for this height, from the blockchain.
+	// The light client-verified app hash for this height, from the blockchain. 32 bytes.
 	AppHash []byte `protobuf:"bytes,2,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
 }
 
@@ -2033,8 +2033,7 @@ func (m *ResponseFlush) XXX_DiscardUnknown() {
 var xxx_messageInfo_ResponseFlush proto.InternalMessageInfo
 
 type ResponseInfo struct {
-	Data string `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
-	// this is the software version of the application.
+	Data             string `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
 	Version          string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
 	AppVersion       uint64 `protobuf:"varint,3,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
 	LastBlockHeight  int64  `protobuf:"varint,4,opt,name=last_block_height,json=lastBlockHeight,proto3" json:"last_block_height,omitempty"`
@@ -2112,7 +2111,7 @@ func (m *ResponseInfo) GetLastBlockAppHash() []byte {
 type ResponseInitChain struct {
 	// Initial consensus-critical parameters (optional).
 	ConsensusParams *types1.ConsensusParams `protobuf:"bytes,1,opt,name=consensus_params,json=consensusParams,proto3" json:"consensus_params,omitempty"`
-	// Initial application hash.
+	// Initial application hash. 32 bytes.
 	AppHash []byte `protobuf:"bytes,2,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
 	// Initial validator set (optional).
 	ValidatorSetUpdate ValidatorSetUpdate `protobuf:"bytes,3,opt,name=validator_set_update,json=validatorSetUpdate,proto3" json:"validator_set_update"`
@@ -2594,7 +2593,7 @@ func (m *ResponseApplySnapshotChunk) GetRejectSenders() []string {
 type ResponsePrepareProposal struct {
 	// Possibly modified list of transactions that have been picked as part of the proposed block.
 	TxRecords []*TxRecord `protobuf:"bytes,1,rep,name=tx_records,json=txRecords,proto3" json:"tx_records,omitempty"`
-	// The Merkle root hash of the application state.
+	// The Merkle root hash of the application state. 32 bytes.
 	AppHash []byte `protobuf:"bytes,2,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
 	// List of structures containing the data resulting from executing the transactions.
 	TxResults []*ExecTxResult `protobuf:"bytes,3,rep,name=tx_results,json=txResults,proto3" json:"tx_results,omitempty"`
@@ -2684,7 +2683,7 @@ func (m *ResponsePrepareProposal) GetValidatorSetUpdate() *ValidatorSetUpdate {
 type ResponseProcessProposal struct {
 	// `enum` that signals if the application finds the proposal valid.
 	Status ResponseProcessProposal_ProposalStatus `protobuf:"varint,1,opt,name=status,proto3,enum=tendermint.abci.ResponseProcessProposal_ProposalStatus" json:"status,omitempty"`
-	// The Merkle root hash of the application state.
+	// The Merkle root hash of the application state. 32 bytes.
 	AppHash []byte `protobuf:"bytes,2,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
 	// List of structures containing the data resulting from executing the transactions.
 	TxResults []*ExecTxResult `protobuf:"bytes,3,rep,name=tx_results,json=txResults,proto3" json:"tx_results,omitempty"`
@@ -3147,12 +3146,13 @@ func (m *EventAttribute) GetIndex() bool {
 
 // ExecTxResult contains results of executing one individual transaction.
 type ExecTxResult struct {
-	Code      uint32  `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
-	Data      []byte  `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
-	Log       string  `protobuf:"bytes,3,opt,name=log,proto3" json:"log,omitempty"`
-	Info      string  `protobuf:"bytes,4,opt,name=info,proto3" json:"info,omitempty"`
-	GasWanted int64   `protobuf:"varint,5,opt,name=gas_wanted,json=gasWanted,proto3" json:"gas_wanted,omitempty"`
-	GasUsed   int64   `protobuf:"varint,6,opt,name=gas_used,json=gasUsed,proto3" json:"gas_used,omitempty"`
+	Code      uint32 `protobuf:"varint,1,opt,name=code,proto3" json:"code,omitempty"`
+	Data      []byte `protobuf:"bytes,2,opt,name=data,proto3" json:"data,omitempty"`
+	Log       string `protobuf:"bytes,3,opt,name=log,proto3" json:"log,omitempty"`
+	Info      string `protobuf:"bytes,4,opt,name=info,proto3" json:"info,omitempty"`
+	GasWanted int64  `protobuf:"varint,5,opt,name=gas_wanted,json=gasWanted,proto3" json:"gas_wanted,omitempty"`
+	GasUsed   int64  `protobuf:"varint,6,opt,name=gas_used,json=gasUsed,proto3" json:"gas_used,omitempty"`
+	// Type & Key-Value events for indexing transactions (e.g. by account).
 	Events    []Event `protobuf:"bytes,7,rep,name=events,proto3" json:"events,omitempty"`
 	Codespace string  `protobuf:"bytes,8,opt,name=codespace,proto3" json:"codespace,omitempty"`
 }
