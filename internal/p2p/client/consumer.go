@@ -95,7 +95,7 @@ func (h *recoveryP2PMessageHandler) Handle(ctx context.Context, client *Client, 
 }
 
 // Handle writes an error message in a log
-func (h *loggerP2PMessageHandler) Handle(ctx context.Context, client *Client, envelope *p2p.Envelope) error {
+func (h *errorLoggerP2PMessageHandler) Handle(ctx context.Context, client *Client, envelope *p2p.Envelope) error {
 	err := h.next.Handle(ctx, client, envelope)
 	if err != nil {
 		reqID := envelope.Attributes[RequestIDAttribute]
