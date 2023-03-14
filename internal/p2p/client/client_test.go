@@ -199,10 +199,11 @@ func (suite *ChannelTestSuite) TestConsumeHandle() {
 		On("Handle", ctx, mock.Anything, mock.Anything).
 		Times(3).
 		Return(nil)
-	suite.client.Consume(ctx, ConsumerParams{
+	err := suite.client.Consume(ctx, ConsumerParams{
 		ReadChannels: []p2p.ChannelID{testChannelID},
 		Handler:      consumer,
 	})
+	suite.Require().NoError(err)
 }
 
 func (suite *ChannelTestSuite) TestConsumeResolve() {
@@ -235,10 +236,11 @@ func (suite *ChannelTestSuite) TestConsumeResolve() {
 					return p2p.NewChannelIterator(outCh)
 				})
 			resCh := suite.client.addPending(reqID)
-			suite.client.Consume(ctx, ConsumerParams{
+			err := suite.client.Consume(ctx, ConsumerParams{
 				ReadChannels: []p2p.ChannelID{testChannelID},
 				Handler:      consumer,
 			})
+			suite.Require().NoError(err)
 			res := <-resCh
 			resp := res.Value.(*bcproto.BlockResponse)
 			suite.Require().Equal(tc.resp, resp)
@@ -293,10 +295,11 @@ func (suite *ChannelTestSuite) TestConsumeError() {
 					close(outCh)
 					return tc.retErr
 				})
-			suite.client.Consume(ctx, ConsumerParams{
+			err := suite.client.Consume(ctx, ConsumerParams{
 				ReadChannels: []p2p.ChannelID{testChannelID},
 				Handler:      consumer,
 			})
+			suite.Require().NoError(err)
 		})
 	}
 }
