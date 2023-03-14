@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
+	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/internal/p2p/client"
 	p2pmocks "github.com/tendermint/tendermint/internal/p2p/mocks"
@@ -43,27 +44,13 @@ func (suite *BlockP2PMessageHandlerTestSuite) SetupSuite() {
 }
 
 func (suite *BlockP2PMessageHandlerTestSuite) SetupTest() {
+	conf := config.TestConfig()
 	suite.logger = log.NewTestingLogger(suite.T())
 	suite.fakeStore = mocks.NewBlockStore(suite.T())
 	suite.fakePeerAdder = newMockPeerAdder(suite.T())
 	suite.fakeP2PChannel = p2pmocks.NewChannel(suite.T())
 	suite.fakeClient = client.New(
-		map[p2p.ChannelID]*p2p.ChannelDescriptor{
-			testChannelID: {
-				ID:                  testChannelID,
-				Priority:            5,
-				SendQueueCapacity:   8,
-				RecvBufferCapacity:  128,
-				RecvMessageCapacity: int(1e5),
-				Name:                "test",
-			},
-		},
-		func(ctx context.Context, descriptor *p2p.ChannelDescriptor) (p2p.Channel, error) {
-			return suite.fakeP2PChannel, nil
-		},
-	)
-	suite.fakeClient = client.New(
-		map[p2p.ChannelID]*p2p.ChannelDescriptor{},
+		p2p.ChannelDescriptors(conf),
 		func(context.Context, *p2p.ChannelDescriptor) (p2p.Channel, error) {
 			return suite.fakeP2PChannel, nil
 		})
