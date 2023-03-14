@@ -53,7 +53,7 @@ func WithRecoveryMiddleware(logger log.Logger) ConsumerMiddlewareFunc {
 }
 
 // WithLoggerMiddleware creates error logging middleware
-func WithLoggerMiddleware(logger log.Logger) ConsumerMiddlewareFunc {
+func WithErrorLoggerMiddleware(logger log.Logger) ConsumerMiddlewareFunc {
 	hd := &loggerP2PMessageHandler{logger: logger}
 	return func(next ConsumerHandler) ConsumerHandler {
 		hd.next = next
