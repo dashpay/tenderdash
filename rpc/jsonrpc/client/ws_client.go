@@ -90,18 +90,14 @@ func NewWS(remoteAddr, endpoint string) (*WSClient, error) {
 		return nil, err
 	}
 
-	protocol, addr := dialParamsFromURL(pURL)
-	dialFn, err := makeHTTPDialer(protocol, addr)
-	if err != nil {
-		return nil, err
-	}
+	dialFn := makeHTTPDialer(dialParamsFromURL(pURL))
 	// default to ws protocol, unless wss is explicitly specified
 	if pURL.Scheme != protoWSS {
 		pURL.Scheme = protoWS
 	}
 	c := &WSClient{
 		Logger:               log.NewNopLogger(),
-		Address:              addr,
+		Address:              pURL.GetTrimmedHostWithPath(),
 		DialerContext:        dialFn,
 		Endpoint:             endpoint,
 		maxReconnectAttempts: opts.MaxReconnectAttempts,

@@ -368,10 +368,10 @@ func dialParamsFromURL(pURL *parsedURL) (string, string) {
 	return protocol, pURL.GetDialAddress()
 }
 
-func makeHTTPDialer(protocol, addr string) (func(context.Context, string, string) (net.Conn, error), error) {
+func makeHTTPDialer(protocol, addr string) func(context.Context, string, string) (net.Conn, error) {
 	return func(ctx context.Context, _, _ string) (net.Conn, error) {
 		return net.DialTimeout(protocol, addr, 10*time.Second)
-	}, nil
+	}
 }
 
 // DefaultHTTPClient is used to create an http client with some default parameters.
@@ -383,17 +383,11 @@ func DefaultHTTPClient(remoteAddr string) (*http.Client, error) {
 	if err != nil {
 		return nil, err
 	}
-	protocol, addr := dialParamsFromURL(pURL)
-	dialFn, err := makeHTTPDialer(protocol, addr)
-	if err != nil {
-		return nil, err
-	}
-
 	client := &http.Client{
 		Transport: &http.Transport{
 			// Set to true to prevent GZIP-bomb DoS attacks
 			DisableCompression: true,
-			DialContext:        dialFn,
+			DialContext:        makeHTTPDialer(dialParamsFromURL(pURL)),
 		},
 	}
 
