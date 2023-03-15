@@ -27,7 +27,9 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 type VoteExtensionType int32
 
 const (
-	VoteExtensionType_DEFAULT           VoteExtensionType = 0
+	// Unsupported
+	VoteExtensionType_DEFAULT VoteExtensionType = 0
+	// Deterministic vote extension - each validator in a quorum must provide the same vote extension data.
 	VoteExtensionType_THRESHOLD_RECOVER VoteExtensionType = 1
 )
 
