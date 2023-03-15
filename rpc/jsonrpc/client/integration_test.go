@@ -26,7 +26,7 @@ func TestWSClientReconnectWithJitter(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	failDialer := func(net, addr string) (net.Conn, error) {
+	failDialer := func(_ context.Context, net, addr string) (net.Conn, error) {
 		return nil, errors.New("not connected")
 	}
 
@@ -35,7 +35,7 @@ func TestWSClientReconnectWithJitter(t *testing.T) {
 	for i := 0; i < numClients; i++ {
 		c, err := NewWS("tcp://foo", "/websocket")
 		require.NoError(t, err)
-		c.Dialer = failDialer
+		c.DialerContext = failDialer
 		c.maxReconnectAttempts = maxReconnectAttempts
 		c.Start(ctx)
 

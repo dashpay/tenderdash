@@ -354,32 +354,24 @@ func (b *RequestBatch) Call(_ context.Context, method string, params, result int
 
 //-------------------------------------------------------------
 
-func makeHTTPDialer(remoteAddr string) (func(string, string) (net.Conn, error), error) {
-	u, err := newParsedURL(remoteAddr)
-	if err != nil {
-		return nil, err
-	}
-
-	protocol := u.Scheme
-	padding := u.Scheme
-
+func dialParamsFromURL(pURL *parsedURL) (string, string) {
+	protocol := pURL.Scheme
+	padding := pURL.Scheme
 	// accept http(s) as an alias for tcp
 	switch protocol {
 	case protoHTTP, protoHTTPS:
 		protocol = protoTCP
 	}
-
-	dialFn := func(proto, addr string) (net.Conn, error) {
-		var timeout = 10 * time.Second
-		if !u.isUnixSocket && strings.LastIndex(u.Host, ":") == -1 {
-			u.Host = fmt.Sprintf("%s:%s", u.Host, padding)
-			return net.DialTimeout(protocol, u.GetDialAddress(), timeout)
-		}
-
-		return net.DialTimeout(protocol, u.GetDialAddress(), timeout)
+	if !pURL.isUnixSocket && strings.LastIndex(pURL.Host, ":") == -1 {
+		pURL.Host = fmt.Sprintf("%s:%s", pURL.Host, padding)
 	}
+	return protocol, pURL.GetDialAddress()
+}
 
-	return dialFn, nil
+func makeHTTPDialer(protocol, addr string) (func(context.Context, string, string) (net.Conn, error), error) {
+	return func(ctx context.Context, _, _ string) (net.Conn, error) {
+		return net.DialTimeout(protocol, addr, 10*time.Second)
+	}, nil
 }
 
 // DefaultHTTPClient is used to create an http client with some default parameters.
@@ -387,7 +379,12 @@ func makeHTTPDialer(remoteAddr string) (func(string, string) (net.Conn, error), 
 // remoteAddr should be fully featured (eg. with tcp:// or unix://).
 // An error will be returned in case of invalid remoteAddr.
 func DefaultHTTPClient(remoteAddr string) (*http.Client, error) {
-	dialFn, err := makeHTTPDialer(remoteAddr)
+	pURL, err := newParsedURL(remoteAddr)
+	if err != nil {
+		return nil, err
+	}
+	protocol, addr := dialParamsFromURL(pURL)
+	dialFn, err := makeHTTPDialer(protocol, addr)
 	if err != nil {
 		return nil, err
 	}
@@ -396,7 +393,7 @@ func DefaultHTTPClient(remoteAddr string) (*http.Client, error) {
 		Transport: &http.Transport{
 			// Set to true to prevent GZIP-bomb DoS attacks
 			DisableCompression: true,
-			Dial:               dialFn,
+			DialContext:        dialFn,
 		},
 	}
 
