@@ -43,8 +43,16 @@ func EnvelopeFromProto(proto p2p.Envelope) (Envelope, error) {
 	return envelope, nil
 }
 
+// AddAttribute adds an attribute to a attributes bag
+func (e *Envelope) AddAttribute(key, val string) {
+	if e.Attributes == nil {
+		e.Attributes = make(map[string]string)
+	}
+	e.Attributes[key] = val
+}
+
 // ToProto converts domain Envelope into p2p representation
-func (e Envelope) ToProto() (*p2p.Envelope, error) {
+func (e *Envelope) ToProto() (*p2p.Envelope, error) {
 	envelope := p2p.Envelope{
 		Attributes: make(map[string]string),
 	}
@@ -58,13 +66,16 @@ func (e Envelope) ToProto() (*p2p.Envelope, error) {
 	return &envelope, nil
 }
 
-func (e Envelope) IsZero() bool {
-	return e.From == "" && e.To == "" && e.Message == nil
+func (e *Envelope) IsZero() bool {
+	return e == nil || (e.From == "" && e.To == "" && e.Message == nil)
 }
 
 var _ = zerolog.LogObjectMarshaler(&Envelope{})
 
-func (e Envelope) MarshalZerologObject(event *zerolog.Event) {
+func (e *Envelope) MarshalZerologObject(event *zerolog.Event) {
+	if e == nil {
+		return
+	}
 	event.Str("From", string(e.From))
 	event.Str("To", string(e.To))
 	event.Bool("Broadcast", e.Broadcast)

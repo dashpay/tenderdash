@@ -19,6 +19,7 @@ import (
 	"github.com/tendermint/tendermint/internal/eventbus"
 	mpmocks "github.com/tendermint/tendermint/internal/mempool/mocks"
 	"github.com/tendermint/tendermint/internal/p2p"
+	"github.com/tendermint/tendermint/internal/p2p/client"
 	"github.com/tendermint/tendermint/internal/p2p/p2ptest"
 	"github.com/tendermint/tendermint/internal/proxy"
 	sm "github.com/tendermint/tendermint/internal/state"
@@ -31,6 +32,7 @@ import (
 
 type reactorTestSuite struct {
 	network *p2ptest.Network
+	config  *config.Config
 	logger  log.Logger
 	nodes   []types.NodeID
 
@@ -45,6 +47,7 @@ type reactorTestSuite struct {
 func setup(
 	ctx context.Context,
 	t *testing.T,
+	conf *config.Config,
 	genDoc *types.GenesisDoc,
 	privVal types.PrivValidator,
 	maxBlockHeights []int64,
@@ -58,6 +61,7 @@ func setup(
 	require.True(t, numNodes >= 1, "must specify at least one block height (nodes)")
 
 	rts := &reactorTestSuite{
+		config:            conf,
 		logger:            log.NewTestingLogger(t).With("module", "block_sync", "testCase", t.Name()),
 		network:           p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: numNodes}),
 		nodes:             make([]types.NodeID, 0, numNodes),
@@ -68,7 +72,7 @@ func setup(
 		peerUpdates:       make(map[types.NodeID]*p2p.PeerUpdates, numNodes),
 	}
 
-	chDesc := &p2p.ChannelDescriptor{ID: BlockSyncChannel}
+	chDesc := &p2p.ChannelDescriptor{ID: p2p.BlockSyncChannel}
 	rts.blockSyncChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc)
 
 	i := 0
@@ -96,6 +100,7 @@ func setup(
 func makeReactor(
 	ctx context.Context,
 	t *testing.T,
+	conf *config.Config,
 	proTxHash types.ProTxHash,
 	nodeID types.NodeID,
 	genDoc *types.GenesisDoc,
@@ -148,7 +153,7 @@ func makeReactor(
 		blockStore,
 		proTxHash,
 		nil,
-		channelCreator,
+		client.New(p2p.ChannelDescriptors(conf), channelCreator, client.WithLogger(logger)),
 		peerEvents,
 		true,
 		consensus.NopMetrics(),
@@ -182,7 +187,7 @@ func (rts *reactorTestSuite) addNode(
 
 	proTxHash := rts.network.Nodes[nodeID].NodeInfo.ProTxHash
 	peerEvents := func(ctx context.Context, _ string) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] }
-	reactor := makeReactor(ctx, t, proTxHash, nodeID, genDoc, privVal, chCreator, peerEvents)
+	reactor := makeReactor(ctx, t, rts.config, proTxHash, nodeID, genDoc, privVal, chCreator, peerEvents)
 
 	commit := types.NewCommit(0, 0, types.BlockID{}, nil)
 
@@ -263,7 +268,7 @@ func TestReactor_AbruptDisconnect(t *testing.T) {
 	genDoc, privVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
 	maxBlockHeight := int64(64)
 
-	rts := setup(ctx, t, genDoc, privVals[0], []int64{maxBlockHeight, 0})
+	rts := setup(ctx, t, cfg, genDoc, privVals[0], []int64{maxBlockHeight, 0})
 
 	require.Equal(t, maxBlockHeight, rts.reactors[rts.nodes[0]].store.Height())
 
@@ -302,7 +307,7 @@ func TestReactor_SyncTime(t *testing.T) {
 	genDoc, privVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
 	maxBlockHeight := int64(199)
 
-	rts := setup(ctx, t, genDoc, privVals[0], []int64{maxBlockHeight, 0})
+	rts := setup(ctx, t, cfg, genDoc, privVals[0], []int64{maxBlockHeight, 0})
 	require.Equal(t, maxBlockHeight, rts.reactors[rts.nodes[0]].store.Height())
 	rts.start(ctx, t)
 
@@ -330,7 +335,7 @@ func TestReactor_NoBlockResponse(t *testing.T) {
 	genDoc, privVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
 	maxBlockHeight := int64(65)
 
-	rts := setup(ctx, t, genDoc, privVals[0], []int64{maxBlockHeight, 0})
+	rts := setup(ctx, t, cfg, genDoc, privVals[0], []int64{maxBlockHeight, 0})
 
 	require.Equal(t, maxBlockHeight, rts.reactors[rts.nodes[0]].store.Height())
 
@@ -380,7 +385,7 @@ func TestReactor_BadBlockStopsPeer(t *testing.T) {
 	maxBlockHeight := int64(48)
 	genDoc, privVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
 
-	rts := setup(ctx, t, genDoc, privVals[0], []int64{maxBlockHeight, 0, 0, 0, 0})
+	rts := setup(ctx, t, cfg, genDoc, privVals[0], []int64{maxBlockHeight, 0, 0, 0, 0})
 
 	require.Equal(t, maxBlockHeight, rts.reactors[rts.nodes[0]].store.Height())
 

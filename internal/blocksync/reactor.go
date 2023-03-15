@@ -11,7 +11,7 @@ import (
 	"github.com/tendermint/tendermint/internal/consensus"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/p2p"
-	"github.com/tendermint/tendermint/internal/p2p/conn"
+	"github.com/tendermint/tendermint/internal/p2p/client"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/store"
 	"github.com/tendermint/tendermint/libs/log"
@@ -23,9 +23,6 @@ import (
 var _ service.Service = (*Reactor)(nil)
 
 const (
-	// BlockSyncChannel is a channel for blocks and status updates
-	BlockSyncChannel = p2p.ChannelID(0x40)
-
 	// ask for best height every 10s
 	statusUpdateIntervalSeconds = 10
 
@@ -35,17 +32,6 @@ const (
 	// switch to consensus after this duration of inactivity
 	syncTimeout = 60 * time.Second
 )
-
-func GetChannelDescriptor() *p2p.ChannelDescriptor {
-	return &p2p.ChannelDescriptor{
-		ID:                  BlockSyncChannel,
-		Priority:            5,
-		SendQueueCapacity:   1000,
-		RecvBufferCapacity:  1024,
-		RecvMessageCapacity: MaxMsgSize,
-		Name:                "blockSync",
-	}
-}
 
 type consensusReactor interface {
 	// For when we switch from block sync reactor to the consensus
@@ -69,7 +55,7 @@ type Reactor struct {
 	consReactor   consensusReactor
 	blockSyncFlag *atomic.Bool
 
-	chCreator  p2p.ChannelCreator
+	p2pClient  *client.Client
 	peerEvents p2p.PeerEventSubscriber
 
 	metrics  *consensus.Metrics
@@ -90,7 +76,7 @@ func NewReactor(
 	store *store.BlockStore,
 	nodeProTxHash crypto.ProTxHash,
 	consReactor consensusReactor,
-	channelCreator p2p.ChannelCreator,
+	p2pClient *client.Client,
 	peerEvents p2p.PeerEventSubscriber,
 	blockSync bool,
 	metrics *consensus.Metrics,
@@ -103,7 +89,7 @@ func NewReactor(
 		store:         store,
 		consReactor:   consReactor,
 		blockSyncFlag: &atomic.Bool{},
-		chCreator:     channelCreator,
+		p2pClient:     p2pClient,
 		peerEvents:    peerEvents,
 		metrics:       metrics,
 		eventBus:      eventBus,
@@ -128,12 +114,6 @@ func NewReactor(
 // If blockSyncFlag is enabled, we also start the synchronizer
 // If the synchronizer fails to start, an error is returned.
 func (r *Reactor) OnStart(ctx context.Context) error {
-	blockSyncCh, err := r.chCreator(ctx, GetChannelDescriptor())
-	if err != nil {
-		return err
-	}
-	r.chCreator = func(context.Context, *conn.ChannelDescriptor) (p2p.Channel, error) { return blockSyncCh, nil }
-
 	state, err := r.stateStore.Load()
 	if err != nil {
 		return err
@@ -150,18 +130,21 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		startHeight = state.InitialHeight
 	}
 
-	blockSyncClient := NewChannel(blockSyncCh, ChannelWithLogger(r.logger))
-	r.synchronizer = NewSynchronizer(startHeight, blockSyncClient, r.executor, WithLogger(r.logger))
+	r.synchronizer = NewSynchronizer(startHeight, r.p2pClient, r.executor, WithLogger(r.logger))
 	if r.blockSyncFlag.Load() {
 		if err := r.synchronizer.Start(ctx); err != nil {
 			return err
 		}
-		go r.requestRoutine(ctx, blockSyncCh)
-
+		go r.requestRoutine(ctx, r.p2pClient)
 		go r.poolRoutine(ctx, false)
 	}
-	go blockSyncClient.Consume(ctx, consumerHandler(r.logger, r.store, r.synchronizer))
-	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "blocksync"), blockSyncCh)
+	go func() {
+		err := r.p2pClient.Consume(ctx, consumerHandler(r.logger, r.store, r.synchronizer))
+		if err != nil {
+			r.logger.Error("failed to consume p2p blocksync messages", "error", err)
+		}
+	}()
+	go r.processPeerUpdates(ctx, r.peerEvents(ctx, "blocksync"), r.p2pClient)
 
 	return nil
 }
@@ -175,7 +158,7 @@ func (r *Reactor) OnStop() {
 }
 
 // processPeerUpdate processes a PeerUpdate.
-func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpdate, blockSyncCh p2p.Channel) {
+func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpdate, client *client.Client) {
 	r.logger.Debug("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 
 	// XXX: Pool#RedoRequest can sometimes give us an empty peer.
@@ -186,15 +169,16 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 	switch peerUpdate.Status {
 	case p2p.PeerStatusUp:
 		// send a status update the newly added peer
-		if err := blockSyncCh.Send(ctx, p2p.Envelope{
+		err := client.Send(ctx, p2p.Envelope{
 			To: peerUpdate.NodeID,
 			Message: &bcproto.StatusResponse{
 				Base:   r.store.Base(),
 				Height: r.store.Height(),
 			},
-		}); err != nil {
+		})
+		if err != nil {
 			r.synchronizer.RemovePeer(peerUpdate.NodeID)
-			if err := blockSyncCh.SendError(ctx, p2p.PeerError{
+			if err := client.Send(ctx, p2p.PeerError{
 				NodeID: peerUpdate.NodeID,
 				Err:    err,
 			}); err != nil {
@@ -210,13 +194,13 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 // processPeerUpdates initiates a blocking process where we listen for and handle
 // PeerUpdate messages. When the reactor is stopped, we will catch the signal and
 // close the p2p PeerUpdatesCh gracefully.
-func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerUpdates, blockSyncCh p2p.Channel) {
+func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerUpdates, client *client.Client) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
 		case peerUpdate := <-peerUpdates.Updates():
-			r.processPeerUpdate(ctx, peerUpdate, blockSyncCh)
+			r.processPeerUpdate(ctx, peerUpdate, client)
 		}
 	}
 }
@@ -235,12 +219,7 @@ func (r *Reactor) SwitchToBlockSync(ctx context.Context, state sm.State) error {
 
 	r.syncStartTime = time.Now()
 
-	bsCh, err := r.chCreator(ctx, GetChannelDescriptor())
-	if err != nil {
-		return err
-	}
-
-	go r.requestRoutine(ctx, bsCh)
+	go r.requestRoutine(ctx, r.p2pClient)
 	go r.poolRoutine(ctx, true)
 
 	if err := r.PublishStatus(types.EventDataBlockSyncStatus{
@@ -253,7 +232,7 @@ func (r *Reactor) SwitchToBlockSync(ctx context.Context, state sm.State) error {
 	return nil
 }
 
-func (r *Reactor) requestRoutine(ctx context.Context, blockSyncCh p2p.Channel) {
+func (r *Reactor) requestRoutine(ctx context.Context, p2pClient *client.Client) {
 	statusUpdateTicker := time.NewTicker(statusUpdateIntervalSeconds * time.Second)
 	defer statusUpdateTicker.Stop()
 
@@ -262,10 +241,8 @@ func (r *Reactor) requestRoutine(ctx context.Context, blockSyncCh p2p.Channel) {
 		case <-ctx.Done():
 			return
 		case <-statusUpdateTicker.C:
-			if err := blockSyncCh.Send(ctx, p2p.Envelope{
-				Broadcast: true,
-				Message:   &bcproto.StatusRequest{},
-			}); err != nil {
+			err := p2pClient.GetSyncStatus(ctx)
+			if err != nil {
 				return
 			}
 		}

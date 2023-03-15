@@ -6,6 +6,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	"github.com/tendermint/tendermint/internal/p2p/client"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/workerpool"
 	"github.com/tendermint/tendermint/types"
@@ -25,7 +26,7 @@ func (e *errBlockFetch) Error() string {
 
 // blockFetchJobHandler requests for a block by height from the peer, if the peer responds to the block in time, then the job
 // will return it, otherwise the job will return an error
-func blockFetchJobHandler(client BlockClient, peer PeerData, height int64) workerpool.JobHandler {
+func blockFetchJobHandler(client client.BlockClient, peer PeerData, height int64) workerpool.JobHandler {
 	return func(ctx context.Context) workerpool.Result {
 		promise, err := client.GetBlock(ctx, height, peer.peerID)
 		if err != nil {
@@ -60,13 +61,13 @@ func errorResult(peerID types.NodeID, height int64, err error) workerpool.Result
 type jobGenerator struct {
 	mtx        sync.RWMutex
 	logger     log.Logger
-	client     BlockClient
+	client     client.BlockClient
 	peerStore  *InMemPeerStore
 	height     int64
 	pushedBack []int64
 }
 
-func newJobGenerator(height int64, logger log.Logger, client BlockClient, peerStore *InMemPeerStore) *jobGenerator {
+func newJobGenerator(height int64, logger log.Logger, client client.BlockClient, peerStore *InMemPeerStore) *jobGenerator {
 	return &jobGenerator{
 		logger:     logger,
 		client:     client,

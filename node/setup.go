@@ -16,7 +16,6 @@ import (
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	dashcore "github.com/tendermint/tendermint/dash/core"
-	"github.com/tendermint/tendermint/internal/blocksync"
 	"github.com/tendermint/tendermint/internal/consensus"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/evidence"
@@ -364,7 +363,7 @@ func makeNodeInfo(
 		Network: genDoc.ChainID,
 		Version: version.TMCoreSemVer,
 		Channels: []byte{
-			byte(blocksync.BlockSyncChannel),
+			byte(p2p.BlockSyncChannel),
 			byte(consensus.StateChannel),
 			byte(consensus.DataChannel),
 			byte(consensus.VoteChannel),
