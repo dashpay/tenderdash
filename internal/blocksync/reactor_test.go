@@ -421,6 +421,7 @@ func TestReactor_BadBlockStopsPeer(t *testing.T) {
 	newNode := rts.network.MakeNode(ctx, t, nil, p2ptest.NodeOptions{
 		MaxPeers:     uint16(len(rts.nodes) + 1),
 		MaxConnected: uint16(len(rts.nodes) + 1),
+		ChanDescr:    p2p.ChannelDescriptors(cfg),
 	})
 	rts.addNode(ctx, t, newNode.NodeID, otherGenDoc, otherPrivVals[0], maxBlockHeight)
 

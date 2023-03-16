@@ -18,6 +18,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/promise"
 	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
+	protomem "github.com/tendermint/tendermint/proto/tendermint/mempool"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -136,6 +137,15 @@ func (c *Client) GetSyncStatus(ctx context.Context) error {
 		Attributes: map[string]string{RequestIDAttribute: reqID},
 		Broadcast:  true,
 		Message:    &bcproto.StatusRequest{},
+	})
+}
+
+// SendTxs sends a transaction to the peer
+func (c *Client) SendTxs(ctx context.Context, peerID types.NodeID, tx types.Tx) error {
+	return c.Send(ctx, p2p.Envelope{
+		Attributes: map[string]string{RequestIDAttribute: uuid.NewString()},
+		To:         peerID,
+		Message:    &protomem.Txs{Txs: [][]byte{tx}},
 	})
 }
 

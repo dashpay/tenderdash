@@ -25,14 +25,19 @@ const (
 
 //go:generate ../../scripts/mockery_generate.sh Mempool
 
+// TxChecker ...
+type TxChecker interface {
+	// CheckTx executes a new transaction against the application to determine
+	// its validity and whether it should be added to the checker.
+	CheckTx(ctx context.Context, tx types.Tx, cb func(*abci.ResponseCheckTx), txInfo TxInfo) error
+}
+
 // Mempool defines the mempool interface.
 //
 // Updates to the mempool need to be synchronized with committing a block so
 // applications can reset their transient state on Commit.
 type Mempool interface {
-	// CheckTx executes a new transaction against the application to determine
-	// its validity and whether it should be added to the mempool.
-	CheckTx(ctx context.Context, tx types.Tx, callback func(*abci.ResponseCheckTx), txInfo TxInfo) error
+	TxChecker
 
 	// RemoveTxByKey removes a transaction, identified by its key,
 	// from the mempool.

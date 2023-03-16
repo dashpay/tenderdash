@@ -20,6 +20,8 @@ const (
 	// BlockSyncChannel is a channelStore for blocks and status updates
 	BlockSyncChannel = ChannelID(0x40)
 
+	MempoolChannel = ChannelID(0x30)
+
 	blockMaxMsgSize = 1048576 // 1MB TODO make it configurable
 )
 
@@ -42,6 +44,13 @@ func ChannelDescriptors(cfg *config.Config) map[ChannelID]*ChannelDescriptor {
 				p2pproto.BlockResponseMessagePrefixSize +
 				p2pproto.BlockResponseMessageFieldKeySize,
 			Name: "blockSync",
+		},
+		MempoolChannel: {
+			ID:                  MempoolChannel,
+			Priority:            5,
+			RecvMessageCapacity: mempoolBatchSize(cfg.Mempool.MaxTxBytes),
+			RecvBufferCapacity:  128,
+			Name:                "mempool",
 		},
 	}
 }
@@ -80,6 +89,17 @@ func ResolveChannelID(msg proto.Message) ChannelID {
 		*p2pproto.Echo:
 	case *prototypes.Evidence:
 	case *mempool.Txs:
+		return MempoolChannel
 	}
 	panic(fmt.Sprintf("unsupported message type %T", msg))
+}
+
+func mempoolBatchSize(maxTxBytes int) int {
+	largestTx := make([]byte, maxTxBytes)
+	batchMsg := p2pproto.Envelope{
+		Sum: &p2pproto.Envelope_MempoolTxs{
+			MempoolTxs: &mempool.Txs{Txs: [][]byte{largestTx}},
+		},
+	}
+	return batchMsg.Size()
 }
