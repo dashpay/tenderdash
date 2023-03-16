@@ -22,7 +22,7 @@ const (
 
 //go:generate ../../scripts/mockery_generate.sh Mempool
 
-// TxChecker ...
+// TxChecker is the interface that wraps CheckTx method
 type TxChecker interface {
 	// CheckTx executes a new transaction against the application to determine
 	// its validity and whether it should be added to the checker.

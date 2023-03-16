@@ -166,7 +166,7 @@ func (r *Reactor) broadcastTxRoutine(ctx context.Context, peerID types.NodeID) {
 		if e := recover(); e != nil {
 			r.observePanic(e)
 			r.logger.Error(
-				"recovering from broadcasting checker loop",
+				"recovering from broadcasting mempool loop",
 				"err", e,
 				"stack", string(debug.Stack()),
 			)
@@ -197,8 +197,8 @@ func (r *Reactor) broadcastTxRoutine(ctx context.Context, peerID types.NodeID) {
 		// NOTE: Transaction batching was disabled due to:
 		// https://github.com/tendermint/tendermint/issues/5796
 		if !memTx.HasPeer(peerMempoolID) {
-			// Send the checker tx to the corresponding peer. Note, the peer may be
-			// behind and thus would not be able to process the checker tx correctly.
+			// Send the mempool tx to the corresponding peer. Note, the peer may be
+			// behind and thus would not be able to process the mempool tx correctly.
 			err := r.p2pClient.SendTxs(ctx, peerID, memTx.tx)
 			if err != nil {
 				r.logger.Error("failed to gossip transaction", "peerID", peerID, "error", err)
