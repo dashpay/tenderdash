@@ -91,7 +91,7 @@ func NewWS(remoteAddr, endpoint string) (*WSClient, error) {
 	}
 
 	dialFn := makeHTTPDialer(dialParamsFromURL(pURL))
-	// default to ws protocol, unless wss is explicitly specified
+	// override schema on "ws" if the origin value is not "wss"
 	if pURL.Scheme != protoWSS {
 		pURL.Scheme = protoWS
 	}
