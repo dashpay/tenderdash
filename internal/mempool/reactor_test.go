@@ -116,7 +116,7 @@ func (rts *reactorTestSuite) start(ctx context.Context, t *testing.T) {
 	rts.network.Start(ctx, t)
 
 	require.Len(t,
-		rts.network.RandomNode().PeerManager.Peers(),
+		rts.network.AnyNode().PeerManager.Peers(),
 		len(rts.nodes)-1,
 		"network does not have expected number of nodes")
 }

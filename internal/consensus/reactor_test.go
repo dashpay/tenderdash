@@ -520,7 +520,7 @@ func TestReactorRecordsVotesAndBlockParts(t *testing.T) {
 		"number of block parts sent should've increased",
 	)
 
-	nodeID := rts.network.RandomNode().NodeID
+	nodeID := rts.network.AnyNode().NodeID
 	reactor := rts.reactors[nodeID]
 	peers := rts.network.Peers(nodeID)
 

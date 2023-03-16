@@ -186,8 +186,8 @@ func (n *Network) MakeChannelsNoCleanup(
 	return channels
 }
 
-// RandomNode returns a random node.
-func (n *Network) RandomNode() *Node {
+// AnyNode returns a any node.
+func (n *Network) AnyNode() *Node {
 	for _, node := range n.Nodes {
 		return node
 	}

@@ -37,7 +37,7 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 	rts := setup(ctx, t, n, states, 100) // buffer must be large enough to not deadlock
 
 	// this val sends a random precommit at each height
-	node := rts.network.RandomNode()
+	node := rts.network.AnyNode()
 
 	signal := make(chan struct{})
 	// Update the doPrevote function to just send a valid precommit for a random
