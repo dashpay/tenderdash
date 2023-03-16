@@ -41,9 +41,9 @@ type WSClient struct { // nolint: maligned
 	Logger log.Logger
 	conn   *websocket.Conn
 
-	Address  string // IP:PORT or /path/to/socket
-	Endpoint string // /websocket/url/endpoint
-	Dialer   func(string, string) (net.Conn, error)
+	Address       string // IP:PORT or /path/to/socket
+	Endpoint      string // /websocket/addr/endpoint
+	DialerContext func(context.Context, string, string) (net.Conn, error)
 
 	// Single user facing channel to read RPCResponses from, closed only when the
 	// client is being stopped.
@@ -85,30 +85,26 @@ type WSClient struct { // nolint: maligned
 // begin with a `/`. An error is returned on invalid remote.
 func NewWS(remoteAddr, endpoint string) (*WSClient, error) {
 	opts := defaultWSOptions
-	parsedURL, err := newParsedURL(remoteAddr)
-	if err != nil {
-		return nil, err
-	}
-	// default to ws protocol, unless wss is explicitly specified
-	if parsedURL.Scheme != protoWSS {
-		parsedURL.Scheme = protoWS
-	}
-
-	dialFn, err := makeHTTPDialer(remoteAddr)
+	pURL, err := newParsedURL(remoteAddr)
 	if err != nil {
 		return nil, err
 	}
 
+	dialFn := makeHTTPDialer(dialParamsFromURL(pURL))
+	// override schema on "ws" if the origin value is not "wss"
+	if pURL.Scheme != protoWSS {
+		pURL.Scheme = protoWS
+	}
 	c := &WSClient{
 		Logger:               log.NewNopLogger(),
-		Address:              parsedURL.GetTrimmedHostWithPath(),
-		Dialer:               dialFn,
+		Address:              pURL.GetTrimmedHostWithPath(),
+		DialerContext:        dialFn,
 		Endpoint:             endpoint,
 		maxReconnectAttempts: opts.MaxReconnectAttempts,
 		readWait:             opts.ReadWait,
 		writeWait:            opts.WriteWait,
 		pingPeriod:           opts.PingPeriod,
-		protocol:             parsedURL.Scheme,
+		protocol:             pURL.Scheme,
 
 		// sentIDs: make(map[types.JSONRPCIntID]bool),
 	}
@@ -206,8 +202,8 @@ func (c *WSClient) nextRequestID() int {
 
 func (c *WSClient) dial() error {
 	dialer := &websocket.Dialer{
-		NetDial: c.Dialer,
-		Proxy:   http.ProxyFromEnvironment,
+		NetDialContext: c.DialerContext,
+		Proxy:          http.ProxyFromEnvironment,
 	}
 	rHeader := http.Header{}
 	conn, _, err := dialer.Dial(c.protocol+"://"+c.Address+c.Endpoint, rHeader) // nolint:nolintlint,bodyclose
