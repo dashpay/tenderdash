@@ -369,7 +369,7 @@ func makeNodeInfo(
 			byte(consensus.DataChannel),
 			byte(consensus.VoteChannel),
 			byte(consensus.VoteSetBitsChannel),
-			byte(mempool.MempoolChannel),
+			byte(p2p.MempoolChannel),
 			byte(evidence.EvidenceChannel),
 			byte(statesync.SnapshotChannel),
 			byte(statesync.ChunkChannel),
