@@ -1,6 +1,8 @@
 package client
 
 import (
+	"context"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -11,6 +13,8 @@ import (
 )
 
 func TestHTTPClientMakeHTTPDialer(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 	handler := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("Hi!\n"))
 	})
@@ -26,12 +30,12 @@ func TestHTTPClientMakeHTTPDialer(t *testing.T) {
 	for _, testURL := range []string{ts.URL, tsTLS.URL} {
 		u, err := newParsedURL(testURL)
 		require.NoError(t, err)
-		dialFn, err := makeHTTPDialer(testURL)
+		dialFn := makeHTTPDialer(dialParamsFromURL(u))
 		require.NoError(t, err)
 
-		addr, err := dialFn(u.Scheme, u.GetHostWithPath())
+		conn, err := dialFn(ctx, u.Scheme, u.GetHostWithPath())
 		require.NoError(t, err)
-		require.NotNil(t, addr)
+		require.NotNil(t, conn)
 	}
 }
 
@@ -85,30 +89,40 @@ func Test_parsedURL(t *testing.T) {
 	}
 }
 
-func TestMakeHTTPDialerURL(t *testing.T) {
-	remotes := []string{"https://foo-bar.com", "http://foo-bar.com"}
-
-	for _, remote := range remotes {
-		u, err := newParsedURL(remote)
-		require.NoError(t, err)
-		dialFn, err := makeHTTPDialer(remote)
-		require.NoError(t, err)
-
-		addr, err := dialFn(u.Scheme, u.GetHostWithPath())
-		require.NoError(t, err)
-		require.NotNil(t, addr)
+func TestDialParamsFromURL(t *testing.T) {
+	testCases := []struct {
+		addr         string
+		wantAddr     string
+		wantProtocol string
+	}{
+		{
+			addr:         "https://localhost",
+			wantProtocol: "tcp",
+			wantAddr:     "localhost:https",
+		},
+		{
+			addr:         "http://localhost",
+			wantProtocol: "tcp",
+			wantAddr:     "localhost:http",
+		},
+		{
+			addr:         "tcp://localhost",
+			wantProtocol: "tcp",
+			wantAddr:     "localhost:tcp",
+		},
+		{
+			addr:         "ftp://localhost",
+			wantProtocol: "ftp",
+			wantAddr:     "localhost:ftp",
+		},
 	}
-
-	errorURLs := []string{"tcp://foo-bar.com", "ftp://foo-bar.com"}
-
-	for _, errorURL := range errorURLs {
-		u, err := newParsedURL(errorURL)
-		require.NoError(t, err)
-		dialFn, err := makeHTTPDialer(errorURL)
-		require.NoError(t, err)
-
-		addr, err := dialFn(u.Scheme, u.GetHostWithPath())
-		require.Error(t, err)
-		require.Nil(t, addr)
+	for i, tc := range testCases {
+		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
+			pURL, err := newParsedURL(tc.addr)
+			require.NoError(t, err)
+			protocol, addr := dialParamsFromURL(pURL)
+			require.Equal(t, tc.wantProtocol, protocol)
+			require.Equal(t, tc.wantAddr, addr)
+		})
 	}
 }
