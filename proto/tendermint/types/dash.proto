@@ -14,7 +14,9 @@ message CoreChainLock {
 }
 
 enum VoteExtensionType {
-  DEFAULT           = 0;
+  // Unsupported
+  DEFAULT = 0;
+  // Deterministic vote extension - each validator in a quorum must provide the same vote extension data.
   THRESHOLD_RECOVER = 1;
 }
 

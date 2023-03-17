@@ -66,7 +66,7 @@ message State {
   // Merkle root of the results from executing prev block
   bytes last_results_hash = 12;
 
-  // the latest AppHash we've received from calling abci.Commit()
+  // the latest AppHash we've received from calling abci.Commit(). 32 bytes.
   bytes                          app_hash                            = 13;
   uint32                         last_core_chain_locked_block_height = 14;
   tendermint.types.CoreChainLock next_core_chain_lock                = 15 [(gogoproto.nullable) = true];
