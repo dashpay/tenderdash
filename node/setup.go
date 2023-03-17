@@ -22,6 +22,7 @@ import (
 	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/internal/p2p"
+	"github.com/tendermint/tendermint/internal/p2p/client"
 	"github.com/tendermint/tendermint/internal/p2p/conn"
 	"github.com/tendermint/tendermint/internal/p2p/pex"
 	sm "github.com/tendermint/tendermint/internal/state"
@@ -149,7 +150,7 @@ func createMempoolReactor(
 	store sm.Store,
 	memplMetrics *mempool.Metrics,
 	peerEvents p2p.PeerEventSubscriber,
-	chCreator p2p.ChannelCreator,
+	p2pClient *client.Client,
 ) (service.Service, mempool.Mempool) {
 	logger = logger.With("module", "mempool")
 
@@ -166,7 +167,7 @@ func createMempoolReactor(
 		logger,
 		cfg.Mempool,
 		mp,
-		chCreator,
+		p2pClient,
 		peerEvents,
 	)
 
@@ -368,7 +369,7 @@ func makeNodeInfo(
 			byte(consensus.DataChannel),
 			byte(consensus.VoteChannel),
 			byte(consensus.VoteSetBitsChannel),
-			byte(mempool.MempoolChannel),
+			byte(p2p.MempoolChannel),
 			byte(evidence.EvidenceChannel),
 			byte(statesync.SnapshotChannel),
 			byte(statesync.ChunkChannel),

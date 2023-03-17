@@ -63,7 +63,7 @@ func setup(
 	rts := &reactorTestSuite{
 		config:            conf,
 		logger:            log.NewTestingLogger(t).With("module", "block_sync", "testCase", t.Name()),
-		network:           p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: numNodes}),
+		network:           p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{Config: conf, NumNodes: numNodes}),
 		nodes:             make([]types.NodeID, 0, numNodes),
 		reactors:          make(map[types.NodeID]*Reactor, numNodes),
 		app:               make(map[types.NodeID]abciclient.Client, numNodes),
@@ -421,6 +421,7 @@ func TestReactor_BadBlockStopsPeer(t *testing.T) {
 	newNode := rts.network.MakeNode(ctx, t, nil, p2ptest.NodeOptions{
 		MaxPeers:     uint16(len(rts.nodes) + 1),
 		MaxConnected: uint16(len(rts.nodes) + 1),
+		ChanDescr:    p2p.ChannelDescriptors(cfg),
 	})
 	rts.addNode(ctx, t, newNode.NodeID, otherGenDoc, otherPrivVals[0], maxBlockHeight)
 

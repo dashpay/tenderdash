@@ -18,6 +18,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/libs/promise"
 	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
+	protomem "github.com/tendermint/tendermint/proto/tendermint/mempool"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -50,6 +51,9 @@ type (
 		GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error)
 		// GetSyncStatus requests a block synchronization status from all connected peers
 		GetSyncStatus(ctx context.Context) error
+	}
+	TxSender interface {
+		SendTxs(ctx context.Context, peerID types.NodeID, tx types.Tx) error
 	}
 	// Client is a stateful implementation of a client, which means that the client stores a request ID
 	// in order to be able to resolve the response once it is received from the peer
@@ -136,6 +140,14 @@ func (c *Client) GetSyncStatus(ctx context.Context) error {
 		Attributes: map[string]string{RequestIDAttribute: reqID},
 		Broadcast:  true,
 		Message:    &bcproto.StatusRequest{},
+	})
+}
+
+// SendTxs sends a transaction to the peer
+func (c *Client) SendTxs(ctx context.Context, peerID types.NodeID, tx types.Tx) error {
+	return c.Send(ctx, p2p.Envelope{
+		To:      peerID,
+		Message: &protomem.Txs{Txs: [][]byte{tx}},
 	})
 }
 

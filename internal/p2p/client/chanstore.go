@@ -53,6 +53,9 @@ func (c *chanStore) get(ctx context.Context, chanID p2p.ChannelID) (p2p.Channel,
 	if !ok {
 		return nil, fmt.Errorf("channelID %v is unsupported", chanID)
 	}
+	if item.channel != nil {
+		return item.channel, nil
+	}
 	var err error
 	item.channel, err = c.creator(ctx, item.descriptor)
 	if err != nil {
