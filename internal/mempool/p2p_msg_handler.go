@@ -48,9 +48,9 @@ func (h *mempoolP2PMessageHandler) Handle(ctx context.Context, _ *client.Client,
 	if len(protoTxs) == 0 {
 		return errors.New("empty txs received from peer")
 	}
-	txInfo := TxInfo{SenderID: h.ids.GetForPeer(envelope.From)}
-	if len(envelope.From) != 0 {
-		txInfo.SenderNodeID = envelope.From
+	txInfo := TxInfo{
+		SenderID:     h.ids.GetForPeer(envelope.From),
+		SenderNodeID: envelope.From,
 	}
 	for _, tx := range protoTxs {
 		if err := h.checker.CheckTx(ctx, tx, nil, txInfo); err != nil {
@@ -69,7 +69,7 @@ func (h *mempoolP2PMessageHandler) Handle(ctx context.Context, _ *client.Client,
 				// not continue to check
 				// transactions from this
 				// message if we are shutting down.
-				return nil
+				return err
 			}
 			logger.Error("checktx failed for tx",
 				"tx", fmt.Sprintf("%X", types.Tx(tx).Hash()),

@@ -32,6 +32,7 @@ type Network struct {
 // NetworkOptions is an argument structure to parameterize the
 // MakeNetwork function.
 type NetworkOptions struct {
+	Config      *config.Config
 	NumNodes    int
 	BufferSize  int
 	NodeOpts    NodeOptions
@@ -61,8 +62,10 @@ func MakeNetwork(ctx context.Context, t *testing.T, opts NetworkOptions) *Networ
 		memoryNetwork: p2p.NewMemoryNetwork(logger, opts.BufferSize),
 	}
 	if opts.NodeOpts.ChanDescr == nil {
-		conf, err := config.ResetTestRoot(t.TempDir(), t.Name())
-		require.NoError(t, err)
+		conf := opts.Config
+		if conf == nil {
+			conf = config.TestConfig()
+		}
 		opts.NodeOpts.ChanDescr = p2p.ChannelDescriptors(conf)
 	}
 	for i := 0; i < opts.NumNodes; i++ {

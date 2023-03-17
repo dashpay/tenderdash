@@ -52,6 +52,9 @@ type (
 		// GetSyncStatus requests a block synchronization status from all connected peers
 		GetSyncStatus(ctx context.Context) error
 	}
+	TxSender interface {
+		SendTxs(ctx context.Context, peerID types.NodeID, tx types.Tx) error
+	}
 	// Client is a stateful implementation of a client, which means that the client stores a request ID
 	// in order to be able to resolve the response once it is received from the peer
 	Client struct {
@@ -143,9 +146,8 @@ func (c *Client) GetSyncStatus(ctx context.Context) error {
 // SendTxs sends a transaction to the peer
 func (c *Client) SendTxs(ctx context.Context, peerID types.NodeID, tx types.Tx) error {
 	return c.Send(ctx, p2p.Envelope{
-		Attributes: map[string]string{RequestIDAttribute: uuid.NewString()},
-		To:         peerID,
-		Message:    &protomem.Txs{Txs: [][]byte{tx}},
+		To:      peerID,
+		Message: &protomem.Txs{Txs: [][]byte{tx}},
 	})
 }
 
