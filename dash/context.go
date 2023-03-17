@@ -27,3 +27,12 @@ func ProTxHashFromContext(ctx context.Context) (crypto.ProTxHash, error) {
 	}
 	return proTxHash, nil
 }
+
+// MustProTxHashFromContext retrieves node pro-tx-hash from a context, panic if pro-tx-hash is absent
+func MustProTxHashFromContext(ctx context.Context) crypto.ProTxHash {
+	proTxHash, err := ProTxHashFromContext(ctx)
+	if err != nil {
+		panic(err)
+	}
+	return proTxHash
+}

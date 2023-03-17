@@ -31,6 +31,7 @@ import (
 	statemocks "github.com/tendermint/tendermint/internal/state/mocks"
 	"github.com/tendermint/tendermint/internal/store"
 	"github.com/tendermint/tendermint/internal/test/factory"
+	"github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -53,9 +54,9 @@ type reactorTestSuite struct {
 
 func (rts *reactorTestSuite) switchToConsensus(ctx context.Context) {
 	for nodeID, reactor := range rts.reactors {
-		state := reactor.state.GetState()
+		stateData := reactor.state.GetStateData()
 		sCtx := dash.ContextWithProTxHash(ctx, rts.states[nodeID].privValidator.ProTxHash)
-		reactor.SwitchToConsensus(sCtx, state, false)
+		reactor.SwitchToConsensus(sCtx, stateData.state, false)
 	}
 }
 
@@ -147,9 +148,11 @@ func setup(
 		rts.reactors[nodeID] = reactor
 		rts.blocksyncSubs[nodeID] = fsSub
 
+		stateData := state.GetStateData()
+
 		// simulate handle initChain in handshake
-		if state.state.LastBlockHeight == 0 {
-			require.NoError(t, state.blockExec.Store().Save(state.state))
+		if stateData.state.LastBlockHeight == 0 {
+			require.NoError(t, state.blockExec.Store().Save(stateData.state))
 		}
 
 		require.NoError(t, reactor.Start(sCtx))
@@ -172,7 +175,6 @@ func waitForAndValidateBlock(
 	t *testing.T,
 	n int,
 	blocksSubs []eventbus.Subscription,
-
 ) []*types.Block {
 	t.Helper()
 
@@ -384,11 +386,9 @@ func TestReactorWithEvidence(t *testing.T) {
 		blockExec := sm.NewBlockExecutor(stateStore, proxyAppConnCon, mempool, evpool, blockStore, eventBus)
 
 		cs, err := NewState(logger.With("validator", i, "module", "consensus"),
-			thisConfig.Consensus, stateStore, blockExec, blockStore, mempool, evpool2, eventBus)
+			thisConfig.Consensus, stateStore, blockExec, blockStore, mempool, evpool2, eventBus, WithTimeoutTicker(tickerFunc()))
 		require.NoError(t, err)
 		cs.SetPrivValidator(ctx, pv)
-
-		cs.SetTimeoutTicker(tickerFunc())
 
 		states[i] = cs
 	}
@@ -520,7 +520,7 @@ func TestReactorRecordsVotesAndBlockParts(t *testing.T) {
 		"number of block parts sent should've increased",
 	)
 
-	nodeID := rts.network.RandomNode().NodeID
+	nodeID := rts.network.AnyNode().NodeID
 	reactor := rts.reactors[nodeID]
 	peers := rts.network.Peers(nodeID)
 
@@ -560,8 +560,13 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 			cp.Timeout.Vote = 1 * time.Second
 		}),
 	}
-	states, _, _, validatorSetUpdates := gen.generate(ctx, t)
-
+	states, genDoc, _, validatorSetUpdates := gen.generate(ctx, t)
+	valsSets := make(map[int64]bytes.HexBytes, len(validatorSetUpdates))
+	for height, vsu := range validatorSetUpdates {
+		valsSet, err := types.PB2TM.ValidatorSetFromProtoUpdate(genDoc.QuorumType, &vsu)
+		require.NoError(t, err)
+		valsSets[height] = valsSet.Hash()
+	}
 	var (
 		endHeight         int64
 		allowedValidators = make([]map[string]struct{}, 0, len(updates)+1)
@@ -607,40 +612,36 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		blocksSubs = append(blocksSubs, sub)
 	}
 	var height int64 = 2
-	blocksByHeights := make(map[int64][]*types.Block)
+	blocksByHeights := make(map[int64]*types.Block)
 	for ; height <= endHeight; height++ {
 		blocks := waitForAndValidateBlock(ctx, t, nPeers, blocksSubs)
-		blocksByHeights[height] = blocks
-		validate(t, states)
+		firstBlock := blocks[0]
+		for _, block := range blocks[1:] {
+			require.Equal(t, height, block.Height)
+			require.Equal(t, firstBlock.ValidatorsHash, block.ValidatorsHash)
+			require.Equal(t, firstBlock.NextValidatorsHash, block.NextValidatorsHash)
+		}
+		blocksByHeights[height] = firstBlock
+	}
+	var currH int64 = 2
+	prevH := heights[0]
+	for _, nextH := range heights[1:] {
+		for ; currH < nextH+1; currH++ {
+			block := blocksByHeights[currH]
+			require.Equal(t, block.ValidatorsHash, valsSets[prevH])
+		}
+		prevH = nextH
 	}
 	var i int64 = 2
 	for _, h := range heights[1:] {
 		vals := allowedValidators[0]
 		allowedValidators = allowedValidators[1:]
 		for ; i <= h; i++ {
-			for _, block := range blocksByHeights[i] {
-				_, ok := vals[block.ProposerProTxHash.ShortString()]
-				require.True(t, ok)
-			}
+			block := blocksByHeights[i]
+			_, ok := vals[block.ProposerProTxHash.ShortString()]
+			require.True(t, ok)
 		}
 	}
-	i = 2
-	vh := heights[0]
-	for _, h := range heights[1:] {
-		for ; i < h+2; i++ {
-			for _, block := range blocksByHeights[i] {
-				require.Equalf(t, validatorSetUpdates[vh].QuorumHash, block.LastCommit.QuorumHash.Bytes(),
-					"LastCommit at %d has unexpected quorum-hash. want %X, got %X",
-					block.LastCommit.Height,
-					validatorSetUpdates[vh].QuorumHash,
-					block.LastCommit.QuorumHash.Bytes(),
-				)
-			}
-		}
-		vh = h
-	}
-	cancel()
-	time.Sleep(100 * time.Microsecond)
 }
 
 func makeProTxHashMap(proTxHashes []crypto.ProTxHash) map[string]struct{} {
@@ -787,16 +788,4 @@ func generatePrivValUpdate(proTxHashes []crypto.ProTxHash) (*quorumData, error) 
 	}
 	qd.validatorSetUpdate = *vsu
 	return &qd, nil
-}
-
-func validate(t *testing.T, states []*State) {
-	currHeight, currValidators := states[0].GetValidatorSet()
-	currValidatorCount := currValidators.Size()
-	for validatorID, state := range states {
-		height, validators := state.GetValidatorSet()
-		assert.Equal(t, currHeight, height,
-			"height mistmatch, validator_id=%d, time=%s", validatorID, time.Now().Format(time.RFC3339Nano))
-		assert.Equal(t, currValidatorCount, len(validators.Validators), "validator_id=%d", validatorID)
-		assert.True(t, currValidators.Equals(validators), "validator_id=%d", validatorID)
-	}
 }

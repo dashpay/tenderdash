@@ -3,16 +3,17 @@ package p2ptest
 import (
 	"bytes"
 	"context"
-	"math/rand"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
+	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/internal/p2p"
+	p2pclient "github.com/tendermint/tendermint/internal/p2p/client"
 	"github.com/tendermint/tendermint/libs/log"
 	"github.com/tendermint/tendermint/types"
 )
@@ -31,6 +32,7 @@ type Network struct {
 // NetworkOptions is an argument structure to parameterize the
 // MakeNetwork function.
 type NetworkOptions struct {
+	Config      *config.Config
 	NumNodes    int
 	BufferSize  int
 	NodeOpts    NodeOptions
@@ -40,6 +42,7 @@ type NetworkOptions struct {
 type NodeOptions struct {
 	MaxPeers     uint16
 	MaxConnected uint16
+	ChanDescr    map[p2p.ChannelID]*p2p.ChannelDescriptor
 }
 
 func (opts *NetworkOptions) setDefaults() {
@@ -58,7 +61,13 @@ func MakeNetwork(ctx context.Context, t *testing.T, opts NetworkOptions) *Networ
 		logger:        logger,
 		memoryNetwork: p2p.NewMemoryNetwork(logger, opts.BufferSize),
 	}
-
+	if opts.NodeOpts.ChanDescr == nil {
+		conf := opts.Config
+		if conf == nil {
+			conf = config.TestConfig()
+		}
+		opts.NodeOpts.ChanDescr = p2p.ChannelDescriptors(conf)
+	}
 	for i := 0; i < opts.NumNodes; i++ {
 		var proTxHash crypto.ProTxHash
 		if i < len(opts.ProTxHashes) {
@@ -187,13 +196,12 @@ func (n *Network) MakeChannelsNoCleanup(
 	return channels
 }
 
-// RandomNode returns a random node.
-func (n *Network) RandomNode() *Node {
-	nodes := make([]*Node, 0, len(n.Nodes))
+// AnyNode returns a any node.
+func (n *Network) AnyNode() *Node {
 	for _, node := range n.Nodes {
-		nodes = append(nodes, node)
+		return node
 	}
-	return nodes[rand.Intn(len(nodes))] //nolint:gosec
+	panic("failed to get random node")
 }
 
 // Peers returns a node's peers (i.e. everyone except itself).
@@ -244,6 +252,7 @@ type Node struct {
 	NodeAddress p2p.NodeAddress
 	PrivKey     crypto.PrivKey
 	Router      *p2p.Router
+	Client      *p2pclient.Client
 	PeerManager *p2p.PeerManager
 	Transport   *p2p.MemoryTransport
 
@@ -313,6 +322,7 @@ func (n *Network) MakeNode(ctx context.Context, t *testing.T, proTxHash crypto.P
 		NodeAddress: ep.NodeAddress(nodeID),
 		PrivKey:     privKey,
 		Router:      router,
+		Client:      p2pclient.New(opts.ChanDescr, router.OpenChannel, p2pclient.WithLogger(n.logger)),
 		PeerManager: peerManager,
 		Transport:   transport,
 		cancel:      cancel,

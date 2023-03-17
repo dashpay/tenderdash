@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
+	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto/ed25519"
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/internal/p2p/p2ptest"
@@ -127,9 +128,14 @@ func TestReactorNeverSendsTooManyPeers(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	conf, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+	chanDescr := p2p.ChannelDescriptors(conf)
+
 	testNet := setupNetwork(ctx, t, testOptions{
 		MockNodes:  1,
 		TotalNodes: 2,
+		ChanDescr:  chanDescr,
 	})
 	testNet.connectAll(ctx, t)
 	testNet.start(ctx, t)
@@ -240,9 +246,13 @@ func TestReactorWithNetworkGrowth(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	conf, err := config.ResetTestRoot(t.TempDir(), t.Name())
+	require.NoError(t, err)
+
 	testNet := setupNetwork(ctx, t, testOptions{
 		TotalNodes: 5,
 		BufferSize: 5,
+		ChanDescr:  p2p.ChannelDescriptors(conf),
 	})
 	testNet.connectAll(ctx, t)
 	testNet.start(ctx, t)
@@ -345,6 +355,7 @@ type testOptions struct {
 	BufferSize   int
 	MaxPeers     uint16
 	MaxConnected uint16
+	ChanDescr    map[p2p.ChannelID]*p2p.ChannelDescriptor
 }
 
 // setup setups a test suite with a network of nodes. Mocknodes represent the
@@ -362,6 +373,7 @@ func setupNetwork(ctx context.Context, t *testing.T, opts testOptions) *reactorT
 		NodeOpts: p2ptest.NodeOptions{
 			MaxPeers:     opts.MaxPeers,
 			MaxConnected: opts.MaxConnected,
+			ChanDescr:    opts.ChanDescr,
 		},
 	}
 	chBuf := opts.BufferSize
@@ -445,6 +457,7 @@ func (r *reactorTestSuite) addNodes(ctx context.Context, t *testing.T, nodes int
 		node := r.network.MakeNode(nodeCtx, t, nil, p2ptest.NodeOptions{
 			MaxPeers:     r.opts.MaxPeers,
 			MaxConnected: r.opts.MaxConnected,
+			ChanDescr:    r.opts.ChanDescr,
 		})
 		r.network.Nodes[node.NodeID] = node
 		nodeID := node.NodeID

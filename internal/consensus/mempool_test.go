@@ -49,7 +49,9 @@ func TestMempoolNoProgressUntilTxsAvailable(t *testing.T) {
 		Params:     factory.ConsensusParams()})
 	cs := newStateWithConfig(ctx, t, log.NewNopLogger(), config, state, privVals[0], NewCounterApplication())
 	assertMempool(t, cs.txNotifier).EnableTxsAvailable()
-	height, round := cs.Height, cs.Round
+
+	stateData := cs.GetStateData()
+	height, round := stateData.Height, stateData.Round
 	newBlockCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
 	startTestRound(ctx, cs, height, round)
 
@@ -74,11 +76,11 @@ func TestMempoolProgressAfterCreateEmptyBlocksInterval(t *testing.T) {
 		Power:      types.DefaultDashVotingPower,
 		Params:     factory.ConsensusParams()})
 	cs := newStateWithConfig(ctx, t, log.NewNopLogger(), config, state, privVals[0], NewCounterApplication())
-
+	stateData := cs.GetStateData()
 	assertMempool(t, cs.txNotifier).EnableTxsAvailable()
 
 	newBlockCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
-	startTestRound(ctx, cs, cs.Height, cs.Round)
+	startTestRound(ctx, cs, stateData.Height, stateData.Round)
 
 	ensureNewEventOnChannel(t, newBlockCh)   // first block gets committed
 	ensureNoNewEventOnChannel(t, newBlockCh) // then we dont make a block ...
@@ -99,19 +101,23 @@ func TestMempoolProgressInHigherRound(t *testing.T) {
 		Power:      10,
 		Params:     factory.ConsensusParams()})
 	cs := newStateWithConfig(ctx, t, log.NewNopLogger(), config, state, privVals[0], NewCounterApplication())
+	stateData := cs.GetStateData()
 	assertMempool(t, cs.txNotifier).EnableTxsAvailable()
-	height, round := cs.Height, cs.Round
+	height, round := stateData.Height, stateData.Round
 	newBlockCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewBlock)
 	newRoundCh := subscribe(ctx, t, cs.eventBus, types.EventQueryNewRound)
 	timeoutCh := subscribe(ctx, t, cs.eventBus, types.EventQueryTimeoutPropose)
-	cs.setProposal = func(proposal *types.Proposal, recvTime time.Time) error {
-		if cs.Height == cs.state.InitialHeight+1 && cs.Round == 0 {
+
+	proposalHandler := cs.msgDispatcher.proposalHandler
+	cs.msgDispatcher.proposalHandler = func(ctx context.Context, stateData *StateData, msg msgEnvelope) error {
+		if stateData.Height == stateData.state.InitialHeight+1 && stateData.Round == 0 {
 			// dont set the proposal in round 0 so we timeout and
 			// go to next round
 			return nil
 		}
-		return cs.defaultSetProposal(proposal, recvTime)
+		return proposalHandler(ctx, stateData, msg)
 	}
+
 	startTestRound(ctx, cs, height, round)
 
 	ensureNewRound(t, newRoundCh, height, round) // first round at first height
@@ -122,7 +128,9 @@ func TestMempoolProgressInHigherRound(t *testing.T) {
 
 	ensureNewRound(t, newRoundCh, height, round) // first round at next height
 	checkTxsRange(ctx, t, cs, 0, 1)              // we deliver txs, but don't set a proposal so we get the next round
-	ensureNewTimeout(t, timeoutCh, height, round, cs.state.ConsensusParams.Timeout.ProposeTimeout(round).Nanoseconds())
+
+	stateData = cs.GetStateData()
+	ensureNewTimeout(t, timeoutCh, height, round, stateData.state.ConsensusParams.Timeout.ProposeTimeout(round).Nanoseconds())
 
 	round++                                      // moving to the next round
 	ensureNewRound(t, newRoundCh, height, round) // wait for the next round
@@ -168,7 +176,8 @@ func TestMempoolTxConcurrentWithCommit(t *testing.T) {
 	const numTxs int64 = 3000
 	go checkTxsRange(ctx, t, cs, 0, int(numTxs))
 
-	startTestRound(ctx, cs, cs.Height, cs.Round)
+	stateData := cs.GetStateData()
+	startTestRound(ctx, cs, stateData.Height, stateData.Round)
 	for n := int64(0); n < numTxs; {
 		select {
 		case msg := <-newBlockHeaderCh:

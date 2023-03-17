@@ -16,10 +16,10 @@ import (
 	"github.com/tendermint/tendermint/types"
 )
 
-func MakeBlocks(ctx context.Context, t *testing.T, n int, state *sm.State, privVal types.PrivValidator, proposedAppVersion uint64) []*types.Block {
+func MakeBlocks(ctx context.Context, t *testing.T, n int, state *sm.State, privVals []types.PrivValidator, proposedAppVersion uint64) []*types.Block {
 	t.Helper()
 
-	blocks := make([]*types.Block, n)
+	blocks := make([]*types.Block, 0, n)
 
 	var (
 		prevBlock     *types.Block
@@ -30,7 +30,7 @@ func MakeBlocks(ctx context.Context, t *testing.T, n int, state *sm.State, privV
 	for i := 0; i < n; i++ {
 		height := int64(i + 1)
 
-		block, parts := makeBlockAndPartSet(ctx, t, *state, prevBlock, prevBlockMeta, privVal, height, proposedAppVersion)
+		block, parts := makeBlockAndPartSet(ctx, t, *state, prevBlock, prevBlockMeta, privVals, height, proposedAppVersion)
 		blocks = append(blocks, block)
 
 		prevBlock = block
@@ -77,7 +77,7 @@ func makeBlockAndPartSet(
 	state sm.State,
 	lastBlock *types.Block,
 	lastBlockMeta *types.BlockMeta,
-	privVal types.PrivValidator,
+	privVals []types.PrivValidator,
 	height int64,
 	proposedAppVersion uint64,
 ) (*types.Block, *types.PartSet) {
@@ -86,20 +86,25 @@ func makeBlockAndPartSet(
 	quorumSigns := &types.CommitSigns{QuorumHash: state.LastValidators.QuorumHash}
 	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, quorumSigns)
 	if height > 1 {
-		vote, err := factory.MakeVote(
-			ctx,
-			privVal,
-			state.Validators,
-			lastBlock.Header.ChainID,
-			1, lastBlock.Header.Height, 0, 2,
-			lastBlockMeta.BlockID,
-		)
-		require.NoError(t, err)
-		thresholdSigns, err := types.NewSignsRecoverer([]*types.Vote{vote}).Recover()
+		var err error
+		votes := make([]*types.Vote, len(privVals))
+		for i, privVal := range privVals {
+			votes[i], err = factory.MakeVote(
+				ctx,
+				privVal,
+				state.Validators,
+				lastBlock.Header.ChainID,
+				1, lastBlock.Header.Height, 0, 2,
+				lastBlockMeta.BlockID,
+			)
+			require.NoError(t, err)
+		}
+
+		thresholdSigns, err := types.NewSignsRecoverer(votes).Recover()
 		require.NoError(t, err)
 		lastCommit = types.NewCommit(
-			vote.Height,
-			vote.Round,
+			lastBlock.Header.Height,
+			0,
 			lastBlockMeta.BlockID,
 			&types.CommitSigns{
 				QuorumSigns: *thresholdSigns,

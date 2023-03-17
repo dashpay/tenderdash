@@ -117,7 +117,7 @@ func (t *timeoutTicker) timeoutRoutine(ctx context.Context) {
 			t.timer.Reset(ti.Duration)
 			t.logger.Debug("Internal state machine timeout scheduled", "duration", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step.String())
 		case <-t.timer.C:
-			t.logger.Debug("Internal state machine timeout elapsed ", "duration", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step.String())
+			t.logger.Debug("Internal state machine timeout elapsed", "duration", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step.String())
 			// go routine here guarantees timeoutRoutine doesn't block.
 			// Determinism comes from playback in the receiveRoutine.
 			// We can eliminate it by merging the timeoutRoutine into receiveRoutine

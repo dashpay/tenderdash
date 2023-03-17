@@ -22,10 +22,10 @@ channel is responsible for handling messages that both request blocks and respon
 to block requests from peers. For every block request from a peer, the reactor
 will execute respondToPeer which will fetch the block from the node's state store
 and respond to the peer. For every block response, the node will add the block
-to its pool via AddBlock.
+to its synchronizer.
 
 Internally, v0 runs a poolRoutine that constantly checks for what blocks it needs
 and requests them. The poolRoutine is also responsible for taking blocks from the
-pool, saving and executing each block.
+synchronizer, saving and executing each block.
 */
 package blocksync

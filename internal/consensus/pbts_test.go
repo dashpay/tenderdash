@@ -135,12 +135,10 @@ func newPBTSTestHarness(ctx context.Context, t *testing.T, tc pbtsTestConfigurat
 }
 
 func (p *pbtsTestHarness) newProposal(ctx context.Context, t *testing.T) (types.Proposal, *types.Block, *types.PartSet) {
-	state := p.observedState.GetState()
-
-	proposer := p.pickProposer(p.currentHeight)
-
-	quorumType := state.Validators.QuorumType
-	quorumHash := state.Validators.QuorumHash
+	stateData := p.observedState.GetStateData()
+	proposer := p.pickProposer()
+	quorumType := stateData.state.Validators.QuorumType
+	quorumHash := stateData.state.Validators.QuorumHash
 
 	b, err := p.observedState.CreateProposalBlock(ctx)
 	require.NoError(t, err)
@@ -152,11 +150,12 @@ func (p *pbtsTestHarness) newProposal(ctx context.Context, t *testing.T) (types.
 	bid := b.BlockID(ps)
 	require.NoError(t, err)
 
-	coreChainLockedHeight := p.observedState.state.LastCoreChainLockedBlockHeight
+	stateData = p.observedState.GetStateData()
+	coreChainLockedHeight := stateData.state.LastCoreChainLockedBlockHeight
 	prop := types.NewProposal(p.currentHeight, coreChainLockedHeight, 0, -1, bid, b.Time)
 	tp := prop.ToProto()
 
-	if _, err := proposer.SignProposal(ctx, p.observedState.state.ChainID, quorumType, quorumHash, tp); err != nil {
+	if _, err := proposer.SignProposal(ctx, stateData.state.ChainID, quorumType, quorumHash, tp); err != nil {
 		t.Fatalf("error signing proposal: %s", err)
 	}
 
@@ -177,13 +176,18 @@ func (p *pbtsTestHarness) nextHeight(
 
 	bid := types.BlockID{}
 
+	proTxHash, err := p.observedState.privValidator.GetProTxHash(ctx)
+	require.NoError(t, err)
+
 	ensureNewRound(t, p.roundCh, p.currentHeight, p.currentRound)
-	if !p.observedState.isProposer() {
+	stateData := p.observedState.GetStateData()
+
+	if !stateData.isProposer(proTxHash) {
 		time.Sleep(proposalDelay)
-		prop, b, ps := p.newProposal(ctx, t)
+		prop, _, ps := p.newProposal(ctx, t)
 
 		time.Sleep(deliveryDelay)
-		if err := p.observedState.SetProposalAndBlock(ctx, &prop, b, ps, "peerID"); err != nil {
+		if err := p.observedState.SetProposalAndBlock(ctx, &prop, ps, "peerID"); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -196,8 +200,6 @@ func (p *pbtsTestHarness) nextHeight(
 	signAddVotes(ctx, t, p.observedState, tmproto.PrecommitType, p.chainID, bid, p.otherValidators...)
 	ensurePrecommit(t, p.ensureVoteCh, p.currentHeight, p.currentRound)
 
-	proTxHash, err := p.observedValidator.GetProTxHash(ctx)
-	require.NoError(t, err)
 	res := collectHeightResults(ctx, t, p.eventCh, p.currentHeight, proTxHash)
 	ensureNewBlock(t, p.blockCh, p.currentHeight)
 
@@ -275,8 +277,9 @@ type timestampedEvent struct {
 	m  tmpubsub.Message
 }
 
-func (p *pbtsTestHarness) pickProposer(height int64) types.PrivValidator {
-	proposer := p.observedState.Validators.GetProposer()
+func (p *pbtsTestHarness) pickProposer() types.PrivValidator {
+	stateData := p.observedState.GetStateData()
+	proposer := stateData.Validators.GetProposer()
 	p.observedState.logger.Debug("picking proposer", "protxhash", proposer.ProTxHash)
 
 	allVals := append(p.otherValidators, p.observedValidator)
@@ -485,7 +488,7 @@ func TestTooFarInThePastProposal(t *testing.T) {
 	}
 
 	pbtsTest := newPBTSTestHarness(ctx, t, cfg)
-	pbtsTest.logger.AssertMatch(regexp.MustCompile(`"height":2,.*Proposal is not timely`))
+	pbtsTest.logger.AssertMatch(regexp.MustCompile(`"proposal is not timely","height":2`))
 	results := pbtsTest.run(ctx, t)
 
 	require.Nil(t, results[2].prevote.BlockID.Hash)
@@ -516,7 +519,7 @@ func TestTooFarInTheFutureProposal(t *testing.T) {
 	}
 
 	pbtsTest := newPBTSTestHarness(ctx, t, cfg)
-	pbtsTest.logger.AssertMatch(regexp.MustCompile(`"height":2,.*Proposal is not timely`))
+	pbtsTest.logger.AssertMatch(regexp.MustCompile(`"proposal is not timely","height":2`))
 	results := pbtsTest.run(ctx, t)
 
 	require.Nil(t, results[2].prevote.BlockID.Hash)

@@ -2,9 +2,7 @@ package consensus
 
 import (
 	"context"
-	"encoding/hex"
 	"fmt"
-
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -18,6 +16,7 @@ import (
 	"github.com/tendermint/tendermint/internal/proxy"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/store"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	tmtypes "github.com/tendermint/tendermint/types"
 )
@@ -40,7 +39,7 @@ func TestBlockReplayerReplay(t *testing.T) {
 	gen := NewChainGenerator(t, nVals, chainSize)
 	chain := gen.Generate(ctx, t)
 
-	lastAppHash := mustHexToBytes("434BB5713255371561623E144D06F3056A65FD66AF40207FBA4451DA5A6A4025")
+	lastAppHash := tmbytes.MustHexDecode("434BB5713255371561623E144D06F3056A65FD66AF40207FBA4451DA5A6A4025")
 
 	testCases := []struct {
 		state       sm.State
@@ -147,12 +146,4 @@ func updateStateStoreWithState(state sm.State, store sm.Store) sm.Store {
 		panic(err)
 	}
 	return store
-}
-
-func mustHexToBytes(s string) []byte {
-	b, err := hex.DecodeString(s)
-	if err != nil {
-		panic(err)
-	}
-	return b
 }

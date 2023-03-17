@@ -114,6 +114,9 @@ func (app *Application) ExtendVote(_ context.Context, req *abci.RequestExtendVot
 // without doing anything about them. In this case, it just makes sure that the
 // vote extension is a well-formed integer value.
 func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.RequestVerifyVoteExtension) (*abci.ResponseVerifyVoteExtension, error) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+
 	// We allow vote extensions to be optional
 	if len(req.VoteExtensions) == 0 {
 		return &abci.ResponseVerifyVoteExtension{
@@ -155,6 +158,9 @@ func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.Request
 }
 
 func (app *Application) FinalizeBlock(ctx context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+
 	prevState := kvstore.NewKvState(db.NewMemDB(), 0)
 	if err := app.LastCommittedState.Copy(prevState); err != nil {
 		return &abci.ResponseFinalizeBlock{}, err
@@ -174,7 +180,7 @@ func (app *Application) Rollback() error {
 	if app.PreviousCommittedState == nil {
 		return fmt.Errorf("cannot rollback - no previous state found")
 	}
-	app.LastCommittedState = app.PreviousCommittedState
+	app.SetLastCommittedState(app.PreviousCommittedState)
 	return nil
 }
 

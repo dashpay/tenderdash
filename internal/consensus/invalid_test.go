@@ -30,36 +30,21 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 	const n = 2
 	states := makeConsensusState(ctx, t,
 		config, n, "consensus_reactor_test",
-		newMockTickerFunc(true))
-
-	for i := 0; i < n; i++ {
-		ticker := NewTimeoutTicker(states[i].logger)
-		states[i].SetTimeoutTicker(ticker)
-	}
+		func() TimeoutTicker {
+			return NewTimeoutTicker(log.NewNopLogger())
+		})
 
 	rts := setup(ctx, t, n, states, 100) // buffer must be large enough to not deadlock
 
-	for _, reactor := range rts.reactors {
-		state := reactor.state.GetState()
-		reactor.SwitchToConsensus(ctx, state, false)
-	}
-
 	// this val sends a random precommit at each height
-	node := rts.network.RandomNode()
-
-	byzState := rts.states[node.NodeID]
-	byzReactor := rts.reactors[node.NodeID]
+	node := rts.network.AnyNode()
 
 	signal := make(chan struct{})
 	// Update the doPrevote function to just send a valid precommit for a random
 	// block and otherwise disable the priv validator.
-	byzState.mtx.Lock()
-	privVal := byzState.privValidator
-	byzState.doPrevote = func(ctx context.Context, height int64, round int32, _ bool) {
-		defer close(signal)
-		invalidDoPrevoteFunc(ctx, t, height, round, byzState, byzReactor, rts.voteChannels[node.NodeID], privVal)
-	}
-	byzState.mtx.Unlock()
+	withInvalidPrevoter(t, rts, node.NodeID, signal)
+
+	rts.switchToConsensus(ctx)
 
 	// wait for a bunch of blocks
 	//
@@ -100,83 +85,100 @@ func TestReactorInvalidPrecommit(t *testing.T) {
 	}
 }
 
-func invalidDoPrevoteFunc(
-	ctx context.Context,
-	t *testing.T,
-	height int64,
-	round int32,
-	cs *State,
-	r *Reactor,
-	voteCh p2p.Channel,
-	pv types.PrivValidator,
-) {
+type invalidPrevoter struct {
+	t        *testing.T
+	stopCh   chan struct{}
+	state    *State
+	voteCh   p2p.Channel
+	privVal  privValidator
+	prevoter Prevoter
+	peers    map[types.NodeID]*PeerState
+}
+
+func withInvalidPrevoter(t *testing.T, rts *reactorTestSuite, nodeID types.NodeID, stopCh chan struct{}) {
+	reactor := rts.reactors[nodeID]
+	bzState := rts.states[nodeID]
+	proTxHash := rts.network.Nodes[nodeID].NodeInfo.ProTxHash
+	privVal := bzState.privValidator
+	privVal.ProTxHash = proTxHash
+
+	voteCh := rts.voteChannels[nodeID]
+	cmd := bzState.ctrl.Get(EnterPrevoteType)
+	enterPrevoteCmd := cmd.(*EnterPrevoteAction)
+	enterPrevoteCmd.prevoter = &invalidPrevoter{
+		t:        t,
+		stopCh:   stopCh,
+		state:    bzState,
+		voteCh:   voteCh,
+		privVal:  privVal,
+		peers:    reactor.peers,
+		prevoter: enterPrevoteCmd.prevoter,
+	}
+}
+
+func (p *invalidPrevoter) Do(ctx context.Context, stateData *StateData) error {
 	// routine to:
 	// - precommit for a random block
 	// - send precommit to all peers
 	// - disable privValidator (so we don't do normal precommits)
-	go func() {
-		cs.mtx.Lock()
-		var err error
-		cs.privValidator.PrivValidator = pv
-		err = cs.privValidator.init(ctx)
-		require.NoError(t, err)
-
-		valIndex, _ := cs.Validators.GetByProTxHash(cs.privValidator.ProTxHash)
-
-		// precommit a random block
-		blockHash := bytes.HexBytes(tmrand.Bytes(32))
-		precommit := &types.Vote{
-			ValidatorProTxHash: cs.privValidator.ProTxHash,
-			ValidatorIndex:     valIndex,
-			Height:             cs.Height,
-			Round:              cs.Round,
-			Type:               tmproto.PrecommitType,
-			BlockID: types.BlockID{
-				Hash:          blockHash,
-				PartSetHeader: types.PartSetHeader{Total: 1, Hash: tmrand.Bytes(32)},
-				StateID:       types.RandStateID().Hash(),
-			},
-		}
-
-		p := precommit.ToProto()
-		err = cs.privValidator.SignVote(
-			ctx,
-			cs.state.ChainID,
-			cs.Validators.QuorumType,
-			cs.Validators.QuorumHash,
-			p,
-			log.NewNopLogger(),
-		)
-		require.NoError(t, err)
-
-		precommit.BlockSignature = p.BlockSignature
-		cs.privValidator = privValidator{} // disable priv val so we don't do normal votes
-		cs.mtx.Unlock()
-
-		r.mtx.Lock()
-		ids := make([]types.NodeID, 0, len(r.peers))
-		for _, ps := range r.peers {
-			ids = append(ids, ps.peerID)
-		}
-		r.mtx.Unlock()
-
-		count := 0
-		for _, peerID := range ids {
-			count++
-			err := voteCh.Send(ctx, p2p.Envelope{
-				To: peerID,
-				Message: &tmcons.Vote{
-					Vote: precommit.ToProto(),
-				},
-			})
-			// we want to have sent some of these votes,
-			// but if the test completes without erroring
-			// or not sending any messages, then we should
-			// error.
-			if errors.Is(err, context.Canceled) && count > 0 {
-				break
-			}
-			require.NoError(t, err)
-		}
+	defer func() {
+		defer close(p.stopCh)
 	}()
+	valIndex, _ := stateData.Validators.GetByProTxHash(p.privVal.ProTxHash)
+	// precommit a random block
+	precommit := newFakePrecommit(stateData.Height, stateData.Round, p.privVal.ProTxHash, valIndex)
+	protoVote := precommit.ToProto()
+	err := p.privVal.SignVote(
+		ctx,
+		stateData.state.ChainID,
+		stateData.Validators.QuorumType,
+		stateData.Validators.QuorumHash,
+		protoVote,
+		log.NewNopLogger(),
+	)
+	require.NoError(p.t, err)
+
+	precommit.BlockSignature = protoVote.BlockSignature
+	p.privVal = privValidator{} // disable priv val so we don't do normal votes
+
+	ids := make([]types.NodeID, 0, len(p.peers))
+	for _, ps := range p.peers {
+		ids = append(ids, ps.peerID)
+	}
+
+	count := 0
+	for _, peerID := range ids {
+		count++
+		err = p.voteCh.Send(ctx, p2p.Envelope{
+			To: peerID,
+			Message: &tmcons.Vote{
+				Vote: precommit.ToProto(),
+			},
+		})
+		// we want to have sent some of these votes,
+		// but if the test completes without erroring
+		// or not sending any messages, then we should
+		// error.
+		if errors.Is(err, context.Canceled) && count > 0 {
+			break
+		}
+		require.NoError(p.t, err)
+	}
+	return nil
+}
+
+func newFakePrecommit(height int64, round int32, proTxHash types.ProTxHash, valIndex int32) *types.Vote {
+	blockHash := bytes.HexBytes(tmrand.Bytes(32))
+	return &types.Vote{
+		ValidatorProTxHash: proTxHash,
+		ValidatorIndex:     valIndex,
+		Height:             height,
+		Round:              round,
+		Type:               tmproto.PrecommitType,
+		BlockID: types.BlockID{
+			Hash:          blockHash,
+			PartSetHeader: types.PartSetHeader{Total: 1, Hash: tmrand.Bytes(32)},
+			StateID:       types.RandStateID().Hash(),
+		},
+	}
 }

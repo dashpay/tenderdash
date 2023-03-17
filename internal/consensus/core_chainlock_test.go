@@ -10,15 +10,14 @@ import (
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/abci/example/counter"
 	abci "github.com/tendermint/tendermint/abci/types"
+	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/libs/log"
-	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -37,7 +36,7 @@ func TestValidProposalChainLocks(t *testing.T) {
 			require.NoError(t, err)
 			block := msg.Data().(types.EventDataNewBlock).Block
 			// this is true just because of this test where each new height has a new chain lock that is incremented by 1
-			state := states[0].GetState()
+			state := states[0].GetStateData().state
 			assert.EqualValues(t, initChainLockHeight+uint32(i), block.Header.CoreChainLockedHeight) //nolint:scopelint
 			assert.EqualValues(t, state.InitialHeight+int64(i), block.Header.Height)                 //nolint:scopelint
 		})
@@ -58,11 +57,7 @@ func TestReactorInvalidProposalHeightForChainLocks(t *testing.T) {
 	byzProposer := states[byzProposerID]
 
 	// update the decide proposal to propose the incorrect height
-	byzProposer.decideProposal = func() func(context.Context, int64, int32) {
-		return func(_ context.Context, height int64, round int32) {
-			invalidProposeCoreChainLockFunc(ctx, t, height, round, states[byzProposerID])
-		}
-	}()
+	enterProposeWithInvalidProposalDecider(byzProposer)
 
 	rts := setupReactor(ctx, t, nVals, states, 100)
 
@@ -72,7 +67,7 @@ func TestReactorInvalidProposalHeightForChainLocks(t *testing.T) {
 			require.NoError(t, err)
 			block := msg.Data().(types.EventDataNewBlock).Block
 			// this is true just because of this test where each new height has a new chain lock that is incremented by 1
-			state := states[0].GetState()
+			state := states[0].GetStateData().state
 			assert.EqualValues(t, initChainLockHeight+uint32(i), block.Header.CoreChainLockedHeight) //nolint:scopelint
 			assert.EqualValues(t, state.InitialHeight+int64(i), block.Header.Height)                 //nolint:scopelint
 		})
@@ -116,64 +111,46 @@ func setupReactor(ctx context.Context, t *testing.T, n int, states []*State, siz
 	return rts
 }
 
-func invalidProposeCoreChainLockFunc(ctx context.Context, t *testing.T, height int64, round int32, cs *State) {
+func enterProposeWithInvalidProposalDecider(state *State) {
+	action := state.ctrl.Get(EnterProposeType)
+	enterProposeAction := action.(*EnterProposeAction)
+	propler := enterProposeAction.proposalCreator.(*Proposaler)
+	invalidDecider := &invalidProposalDecider{Proposaler: propler}
+	enterProposeAction.proposalCreator = invalidDecider
+}
+
+type invalidProposalDecider struct {
+	*Proposaler
+}
+
+func (p *invalidProposalDecider) Create(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
 	// routine to:
 	// - precommit for a random block
 	// - send precommit to all peers
 	// - disable privValidator (so we don't do normal precommits)
 
-	var (
-		block      *types.Block
-		blockParts *types.PartSet
-		err        error
-	)
-
-	// Decide on block
-	if cs.ValidBlock != nil {
-		// If there is valid block, choose that.
-		block, blockParts = cs.ValidBlock, cs.ValidBlockParts
-	} else {
+	// Create on block
+	block, blockParts := rs.ValidBlock, rs.ValidBlockParts
+	if block == nil {
+		var err error
 		// Create a new proposal block from state/txs from the mempool.
-		block, err = cs.createProposalBlock(ctx, round)
-		require.NoError(t, err)
-		blockParts, err = block.MakePartSet(types.BlockPartSizeBytes)
-		require.NoError(t, err)
+		block, blockParts, err = p.createProposalBlock(ctx, round, rs)
+		if err != nil {
+			return err
+		}
 	}
-
-	// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,
-	// and the privValidator will refuse to sign anything.
-	if err := cs.wal.FlushAndSync(); err != nil {
-		cs.logger.Error("Error flushing to disk")
-	}
-
 	// Make proposal
 	propBlockID := types.BlockID{Hash: block.Hash(), PartSetHeader: blockParts.Header()}
 	// It is byzantine because it is not updating the LastCoreChainLockedBlockHeight
-	proposal := types.NewProposal(height, cs.state.LastCoreChainLockedBlockHeight, round, cs.ValidRound, propBlockID, block.Header.Time)
-	p := proposal.ToProto()
-
-	validatorsAtProposalHeight := cs.state.ValidatorsAtHeight(p.Height)
-	quorumHash := validatorsAtProposalHeight.QuorumHash
-
-	_, err = cs.privValidator.SignProposal(ctx, cs.state.ChainID, cs.Validators.QuorumType, quorumHash, p)
+	proposal := types.NewProposal(height, p.committedState.LastCoreChainLockedBlockHeight, round, rs.ValidRound, propBlockID, block.Header.Time)
+	err := p.signProposal(ctx, height, proposal)
 	if err != nil {
-		if !cs.replayMode {
-			cs.logger.Error("enterPropose: Error signing proposal", "height", height, "round", round, "err", err)
-		}
-		return
+		return err
 	}
-
-	proposal.Signature = p.Signature
-
 	// send proposal and block parts on internal msg queue
-	cs.sendInternalMessage(ctx, msgInfo{&ProposalMessage{proposal}, "", tmtime.Now()})
-	for i := 0; i < int(blockParts.Total()); i++ {
-		part := blockParts.GetPart(i)
-		cs.sendInternalMessage(ctx, msgInfo{&BlockPartMessage{cs.Height, cs.Round, part}, "", tmtime.Now()})
-	}
-
-	cs.logger.Info("Signed proposal", "height", height, "round", round, "proposal", proposal)
-	cs.logger.Debug(fmt.Sprintf("Signed proposal block: %v", block))
+	p.sendMessages(ctx, &ProposalMessage{proposal})
+	p.sendMessages(ctx, blockPartsToMessages(rs.Height, rs.Round, blockParts)...)
+	return nil
 }
 
 func timeoutWaitGroup(

@@ -9,9 +9,8 @@ import (
 	"testing"
 	"time"
 
-	sync "github.com/sasha-s/go-deadlock"
-
 	"github.com/fortytw2/leaktest"
+	sync "github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/require"
 
 	abciclient "github.com/tendermint/tendermint/abci/client"
@@ -22,7 +21,6 @@ import (
 	"github.com/tendermint/tendermint/internal/p2p/p2ptest"
 	"github.com/tendermint/tendermint/libs/log"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
-	protomem "github.com/tendermint/tendermint/proto/tendermint/mempool"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -30,10 +28,9 @@ type reactorTestSuite struct {
 	network *p2ptest.Network
 	logger  log.Logger
 
-	reactors        map[types.NodeID]*Reactor
-	mempoolChannels map[types.NodeID]p2p.Channel
-	mempools        map[types.NodeID]*TxMempool
-	kvstores        map[types.NodeID]*kvstore.Application
+	reactors map[types.NodeID]*Reactor
+	mempools map[types.NodeID]*TxMempool
+	kvstores map[types.NodeID]*kvstore.Application
 
 	peerChans   map[types.NodeID]chan p2p.PeerUpdate
 	peerUpdates map[types.NodeID]*p2p.PeerUpdates
@@ -49,18 +46,14 @@ func setupReactors(ctx context.Context, t *testing.T, logger log.Logger, numNode
 	t.Cleanup(func() { os.RemoveAll(cfg.RootDir) })
 
 	rts := &reactorTestSuite{
-		logger:          log.NewNopLogger().With("testCase", t.Name()),
-		network:         p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: numNodes}),
-		reactors:        make(map[types.NodeID]*Reactor, numNodes),
-		mempoolChannels: make(map[types.NodeID]p2p.Channel, numNodes),
-		mempools:        make(map[types.NodeID]*TxMempool, numNodes),
-		kvstores:        make(map[types.NodeID]*kvstore.Application, numNodes),
-		peerChans:       make(map[types.NodeID]chan p2p.PeerUpdate, numNodes),
-		peerUpdates:     make(map[types.NodeID]*p2p.PeerUpdates, numNodes),
+		logger:      log.NewNopLogger().With("testCase", t.Name()),
+		network:     p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: numNodes}),
+		reactors:    make(map[types.NodeID]*Reactor, numNodes),
+		mempools:    make(map[types.NodeID]*TxMempool, numNodes),
+		kvstores:    make(map[types.NodeID]*kvstore.Application, numNodes),
+		peerChans:   make(map[types.NodeID]chan p2p.PeerUpdate, numNodes),
+		peerUpdates: make(map[types.NodeID]*p2p.PeerUpdates, numNodes),
 	}
-
-	chDesc := getChannelDescriptor(cfg.Mempool)
-	rts.mempoolChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc)
 
 	for nodeID := range rts.network.Nodes {
 		rts.kvstores[nodeID] = mustKvStore(t)
@@ -73,18 +66,14 @@ func setupReactors(ctx context.Context, t *testing.T, logger log.Logger, numNode
 		rts.mempools[nodeID] = mempool
 
 		rts.peerChans[nodeID] = make(chan p2p.PeerUpdate, chBuf)
-		rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], 1, "mempool")
+		rts.peerUpdates[nodeID] = p2p.NewPeerUpdates(rts.peerChans[nodeID], 1, "checker")
 		rts.network.Nodes[nodeID].PeerManager.Register(ctx, rts.peerUpdates[nodeID])
-
-		chCreator := func(ctx context.Context, chDesc *p2p.ChannelDescriptor) (p2p.Channel, error) {
-			return rts.mempoolChannels[nodeID], nil
-		}
 
 		rts.reactors[nodeID] = NewReactor(
 			rts.logger.With("nodeID", nodeID),
 			cfg.Mempool,
 			mempool,
-			chCreator,
+			rts.network.Nodes[nodeID].Client,
 			func(ctx context.Context, n string) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] },
 		)
 		rts.nodes = append(rts.nodes, nodeID)
@@ -116,7 +105,7 @@ func (rts *reactorTestSuite) start(ctx context.Context, t *testing.T) {
 	rts.network.Start(ctx, t)
 
 	require.Len(t,
-		rts.network.RandomNode().PeerManager.Peers(),
+		rts.network.AnyNode().PeerManager.Peers(),
 		len(rts.nodes)-1,
 		"network does not have expected number of nodes")
 }
@@ -178,7 +167,7 @@ func TestReactorBroadcastDoesNotPanic(t *testing.T) {
 	// run the router
 	rts.start(ctx, t)
 
-	go primaryReactor.broadcastTxRoutine(ctx, secondary, rts.mempoolChannels[primary])
+	go primaryReactor.broadcastTxRoutine(ctx, secondary)
 
 	wg := &sync.WaitGroup{}
 	for i := 0; i < 50; i++ {
@@ -364,13 +353,8 @@ func TestDontExhaustMaxActiveIDs(t *testing.T) {
 			Status: p2p.PeerStatusUp,
 			NodeID: peerID,
 		}
-
-		require.NoError(t, rts.mempoolChannels[nodeID].Send(ctx, p2p.Envelope{
-			To: peerID,
-			Message: &protomem.Txs{
-				Txs: [][]byte{},
-			},
-		}))
+		err = rts.network.Nodes[nodeID].Client.SendTxs(ctx, peerID, types.Tx{})
+		require.NoError(t, err)
 	}
 }
 
