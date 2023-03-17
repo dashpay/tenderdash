@@ -1,4 +1,37 @@
+## [0.12.0-dev.1] - 2023-03-17
+
+### Bug Fixes
+
+- Replace tenderdash init single with validator (#599)
+- Broken error handling in ValueOp (VSA-2022-100) (#601)
+- Broken error handling in ValueOp (VSA-2022-100) (#601)
+
+### Documentation
+
+- Improve protobuf documentation (#604)
+
+### Miscellaneous Tasks
+
+- Add quote to CGO variables in Makefile (#597)
+
+### Refactor
+
+- Introduce p2p proto Envelope as a wrapper for p2p messages (#598)
+- Consensus state to fix deadlock (#491)
+
+### Testing
+
+- Fix TestMakeHTTPDialerURL (#605)
+
+### Backport
+
+- V0.10 to v0.11 (#596)
+
 ## [0.11.0-dev.4] - 2023-02-22
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.11.0-dev.4 (#593)
 
 ### Backport
 
