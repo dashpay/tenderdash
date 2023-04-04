@@ -21,6 +21,10 @@ func (_m *EvidenceClient) BroadcastEvidence(_a0 context.Context, _a1 types.Evide
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *coretypes.ResultBroadcastEvidence
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, types.Evidence) (*coretypes.ResultBroadcastEvidence, error)); ok {
+		return rf(_a0, _a1)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, types.Evidence) *coretypes.ResultBroadcastEvidence); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -29,7 +33,6 @@ func (_m *EvidenceClient) BroadcastEvidence(_a0 context.Context, _a1 types.Evide
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, types.Evidence) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
