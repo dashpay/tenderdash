@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 

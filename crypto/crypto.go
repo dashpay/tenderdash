@@ -7,7 +7,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 
 	"github.com/tendermint/tendermint/internal/jsontypes"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"

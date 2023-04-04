@@ -7,7 +7,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dbm "github.com/tendermint/tm-db"

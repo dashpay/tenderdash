@@ -8,8 +8,8 @@ import (
 	"math/rand"
 	"sort"
 
-	"github.com/dashevo/dashd-go/btcjson"
 	bls "github.com/dashpay/bls-signatures/go-bindings"
+	"github.com/dashpay/dashd-go/btcjson"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"

@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/rs/zerolog"
 
 	abci "github.com/tendermint/tendermint/abci/types"

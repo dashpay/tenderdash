@@ -13,7 +13,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/rs/zerolog"

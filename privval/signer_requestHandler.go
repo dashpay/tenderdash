@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 
 	"github.com/gogo/protobuf/proto"
 

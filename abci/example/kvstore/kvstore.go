@@ -12,7 +12,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
 	dbm "github.com/tendermint/tm-db"
 
