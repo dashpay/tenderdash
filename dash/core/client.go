@@ -3,8 +3,8 @@ package core
 import (
 	"fmt"
 
-	"github.com/dashevo/dashd-go/btcjson"
-	rpc "github.com/dashevo/dashd-go/rpcclient"
+	"github.com/dashpay/dashd-go/btcjson"
+	rpc "github.com/dashpay/dashd-go/rpcclient"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/libs/bytes"

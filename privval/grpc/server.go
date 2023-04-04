@@ -3,7 +3,7 @@ package grpc
 import (
 	"context"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
