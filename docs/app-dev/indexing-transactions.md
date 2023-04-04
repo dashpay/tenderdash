@@ -15,7 +15,7 @@ the block itself is never stored.
 Each event contains a type and a list of attributes, which are key-value pairs
 denoting something about what happened during the method's execution. For more
 details on `Events`, see the
-[ABCI](https://github.com/tendermint/tendermint/blob/master/spec/abci/abci.md#events)
+[ABCI](https://github.com/dashpay/tenderdash/blob/v0.11-dev/spec/abci/abci.md#events)
 documentation.
 
 An `Event` has a composite key associated with it. A `compositeKey` is
@@ -84,7 +84,7 @@ the `psql` indexer type.
 Example:
 
 ```shell
-$ psql ... -f state/indexer/sink/psql/schema.sql
+psql ... -f state/indexer/sink/psql/schema.sql
 ```
 
 ## Default Indexes
@@ -146,7 +146,7 @@ You can query for a paginated set of transaction by their events by calling the
 curl "localhost:26657/tx_search?query=\"message.sender='cosmos1...'\"&prove=true"
 ```
 
-Check out [API docs](https://docs.tendermint.com/master/rpc/#/Info/tx_search)
+Check out [API docs](https://github.com/dashpay/tenderdash/tree/v0.11-dev/spec/rpc)
 for more information on query syntax and other options.
 
 ## Subscribing to Transactions
@@ -165,7 +165,7 @@ a query to `/subscribe` RPC endpoint.
 }
 ```
 
-Check out [API docs](https://docs.tendermint.com/master/rpc/#subscribe) for more information
+Check out [API docs](https://github.com/dashpay/tenderdash/tree/v0.11-dev/spec/rpc/#subscribe) for more information
 on query syntax and other options.
 
 ## Querying Blocks Events
@@ -177,5 +177,5 @@ You can query for a paginated set of blocks by their events by calling the
 curl "localhost:26657/block_search?query=\"block.height > 10 AND val_set.num_changed > 0\""
 ```
 
-Check out [API docs](https://docs.tendermint.com/master/rpc/#/Info/block_search)
+Check out [API docs](https://github.com/dashpay/tenderdash/tree/v0.11-dev/spec/rpc/#/Info/block_search)
 for more information on query syntax and other options.

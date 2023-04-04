@@ -98,8 +98,3 @@ To build documentation as a static website run `npm run build`. You will find th
 ## Search
 
 We are using [Algolia](https://www.algolia.com) to power full-text search. This uses a public API search-only key in the `config.js` as well as a [tendermint.json](https://github.com/algolia/docsearch-configs/blob/master/configs/tendermint.json) configuration file that we can update with PRs.
-
-## Consistency
-
-Because the build processes are identical (as is the information contained herein), this file should be kept in sync as
-much as possible with its [counterpart in the Cosmos SDK repo](https://github.com/cosmos/cosmos-sdk/blob/master/docs/DOCS_README.md).

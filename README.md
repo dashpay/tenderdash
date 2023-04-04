@@ -75,9 +75,7 @@ Please abide by the [Code of Conduct](CODE_OF_CONDUCT.md) in all interactions.
 
 Before contributing to the project, please take a look at the [contributing guidelines](CONTRIBUTING.md)
 and the [style guide](STYLE_GUIDE.md). You may also find it helpful to read the
-[specifications](./spec/README.md),
-and familiarize yourself with our
-[Architectural Decision Records (ADRs)](./docs/architecture/README.md) and [Request For Comments (RFCs)](./docs/rfc/README.md).
+[specifications](./spec/README.md).
 
 ## Versioning
 
@@ -127,7 +125,6 @@ We keep a public up-to-date version of our roadmap [here](./docs/roadmap/roadmap
 
 - [Cosmos Hub](https://hub.cosmos.network/)
 - [Terra](https://www.terra.money/)
-- [Celestia](https://celestia.org/)
 - [Anoma](https://anoma.network/)
 - [Vocdoni](https://docs.vocdoni.io/)
 
@@ -143,9 +140,6 @@ We keep a public up-to-date version of our roadmap [here](./docs/roadmap/roadmap
 
 Tenderdash is maintained by [Dash Core Group](https://www.dash.org/dcg/).
 If you'd like to work full-time on Tenderdash, [see our Jobs page](https://www.dash.org/dcg/jobs/).
-
-Tendermint Core is maintained by [Interchain GmbH](https://interchain.berlin).
-If you'd like to work full-time on Tendermint Core, [we're hiring](https://interchain-gmbh.breezy.hr/)!
 
 Funding for Tendermint Core development comes primarily from the [Interchain Foundation](https://interchain.io),
 a Swiss non-profit. The Tendermint trademark is owned by [Tendermint Inc.](https://tendermint.com), the for-profit entity

@@ -288,7 +288,7 @@ most probably (99.9%)*.
 
 For components, that have been [formally
 verified](https://en.wikipedia.org/wiki/Formal_verification) using
-[TLA+](https://en.wikipedia.org/wiki/TLA%2B), it may be possible to generate
+[TLA+](https://en.wikipedia.org/wiki/TLA+), it may be possible to generate
 tests using a combination of the [Apalache Model
 Checker](https://apalache.informal.systems/) and [tendermint-rs testgen
 util](https://github.com/informalsystems/tendermint-rs/tree/master/testgen).
