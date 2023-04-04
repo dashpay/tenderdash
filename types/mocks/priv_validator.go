@@ -3,7 +3,7 @@
 package mocks
 
 import (
-	btcjson "github.com/dashevo/dashd-go/btcjson"
+	btcjson "github.com/dashpay/dashd-go/btcjson"
 	bytes "github.com/tendermint/tendermint/libs/bytes"
 
 	context "context"

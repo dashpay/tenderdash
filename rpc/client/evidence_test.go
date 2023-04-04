@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/crypto"

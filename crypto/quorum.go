@@ -1,8 +1,8 @@
 package crypto
 
 import (
-	"github.com/dashevo/dashd-go/btcjson"
 	bls "github.com/dashpay/bls-signatures/go-bindings"
+	"github.com/dashpay/dashd-go/btcjson"
 )
 
 // SignID returns signing session data that will be signed to get threshold signature share.
