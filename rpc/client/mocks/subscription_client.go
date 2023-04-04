@@ -26,6 +26,10 @@ func (_m *SubscriptionClient) Subscribe(ctx context.Context, subscriber string, 
 	ret := _m.Called(_ca...)
 
 	var r0 <-chan coretypes.ResultEvent
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...int) (<-chan coretypes.ResultEvent, error)); ok {
+		return rf(ctx, subscriber, query, outCapacity...)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...int) <-chan coretypes.ResultEvent); ok {
 		r0 = rf(ctx, subscriber, query, outCapacity...)
 	} else {
@@ -34,7 +38,6 @@ func (_m *SubscriptionClient) Subscribe(ctx context.Context, subscriber string, 
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, string, string, ...int) error); ok {
 		r1 = rf(ctx, subscriber, query, outCapacity...)
 	} else {

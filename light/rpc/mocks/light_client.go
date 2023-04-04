@@ -52,6 +52,10 @@ func (_m *LightClient) TrustedLightBlock(height int64) (*types.LightBlock, error
 	ret := _m.Called(height)
 
 	var r0 *types.LightBlock
+	var r1 error
+	if rf, ok := ret.Get(0).(func(int64) (*types.LightBlock, error)); ok {
+		return rf(height)
+	}
 	if rf, ok := ret.Get(0).(func(int64) *types.LightBlock); ok {
 		r0 = rf(height)
 	} else {
@@ -60,7 +64,6 @@ func (_m *LightClient) TrustedLightBlock(height int64) (*types.LightBlock, error
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(int64) error); ok {
 		r1 = rf(height)
 	} else {
@@ -75,6 +78,10 @@ func (_m *LightClient) Update(ctx context.Context, now time.Time) (*types.LightB
 	ret := _m.Called(ctx, now)
 
 	var r0 *types.LightBlock
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, time.Time) (*types.LightBlock, error)); ok {
+		return rf(ctx, now)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, time.Time) *types.LightBlock); ok {
 		r0 = rf(ctx, now)
 	} else {
@@ -83,7 +90,6 @@ func (_m *LightClient) Update(ctx context.Context, now time.Time) (*types.LightB
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, time.Time) error); ok {
 		r1 = rf(ctx, now)
 	} else {
@@ -98,6 +104,10 @@ func (_m *LightClient) VerifyLightBlockAtHeight(ctx context.Context, height int6
 	ret := _m.Called(ctx, height, now)
 
 	var r0 *types.LightBlock
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64, time.Time) (*types.LightBlock, error)); ok {
+		return rf(ctx, height, now)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, int64, time.Time) *types.LightBlock); ok {
 		r0 = rf(ctx, height, now)
 	} else {
@@ -106,7 +116,6 @@ func (_m *LightClient) VerifyLightBlockAtHeight(ctx context.Context, height int6
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, int64, time.Time) error); ok {
 		r1 = rf(ctx, height, now)
 	} else {

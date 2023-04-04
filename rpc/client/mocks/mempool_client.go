@@ -21,6 +21,10 @@ func (_m *MempoolClient) CheckTx(_a0 context.Context, _a1 types.Tx) (*coretypes.
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *coretypes.ResultCheckTx
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) (*coretypes.ResultCheckTx, error)); ok {
+		return rf(_a0, _a1)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) *coretypes.ResultCheckTx); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -29,7 +33,6 @@ func (_m *MempoolClient) CheckTx(_a0 context.Context, _a1 types.Tx) (*coretypes.
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, types.Tx) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -44,6 +47,10 @@ func (_m *MempoolClient) NumUnconfirmedTxs(_a0 context.Context) (*coretypes.Resu
 	ret := _m.Called(_a0)
 
 	var r0 *coretypes.ResultUnconfirmedTxs
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultUnconfirmedTxs, error)); ok {
+		return rf(_a0)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context) *coretypes.ResultUnconfirmedTxs); ok {
 		r0 = rf(_a0)
 	} else {
@@ -52,7 +59,6 @@ func (_m *MempoolClient) NumUnconfirmedTxs(_a0 context.Context) (*coretypes.Resu
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -81,6 +87,10 @@ func (_m *MempoolClient) UnconfirmedTxs(ctx context.Context, page *int, perPage 
 	ret := _m.Called(ctx, page, perPage)
 
 	var r0 *coretypes.ResultUnconfirmedTxs
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *int, *int) (*coretypes.ResultUnconfirmedTxs, error)); ok {
+		return rf(ctx, page, perPage)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, *int, *int) *coretypes.ResultUnconfirmedTxs); ok {
 		r0 = rf(ctx, page, perPage)
 	} else {
@@ -89,7 +99,6 @@ func (_m *MempoolClient) UnconfirmedTxs(ctx context.Context, page *int, perPage 
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *int, *int) error); ok {
 		r1 = rf(ctx, page, perPage)
 	} else {

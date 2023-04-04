@@ -58,11 +58,11 @@ message Envelope {
   map<string, string> attributes = 1;
 
   oneof sum {
-    Echo                         echo              = 2;
-    tendermint.p2p.PexRequest    pex_request       = 3;
-    tendermint.p2p.PexResponse   pex_response      = 4;
-    tendermint.types.Evidence    evidence          = 5;
-    tendermint.mempool.Txs       mempool_txs       = 6;
+    Echo                       echo         = 2;
+    tendermint.p2p.PexRequest  pex_request  = 3;
+    tendermint.p2p.PexResponse pex_response = 4;
+    tendermint.types.Evidence  evidence     = 5;
+    tendermint.mempool.Txs     mempool_txs  = 6;
 
     tendermint.blocksync.BlockRequest    block_request     = 7;
     tendermint.blocksync.NoBlockResponse no_block_response = 8;

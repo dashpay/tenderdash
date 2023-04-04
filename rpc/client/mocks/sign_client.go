@@ -22,6 +22,10 @@ func (_m *SignClient) Block(ctx context.Context, height *int64) (*coretypes.Resu
 	ret := _m.Called(ctx, height)
 
 	var r0 *coretypes.ResultBlock
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *int64) (*coretypes.ResultBlock, error)); ok {
+		return rf(ctx, height)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, *int64) *coretypes.ResultBlock); ok {
 		r0 = rf(ctx, height)
 	} else {
@@ -30,7 +34,6 @@ func (_m *SignClient) Block(ctx context.Context, height *int64) (*coretypes.Resu
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *int64) error); ok {
 		r1 = rf(ctx, height)
 	} else {
@@ -45,6 +48,10 @@ func (_m *SignClient) BlockByHash(ctx context.Context, hash bytes.HexBytes) (*co
 	ret := _m.Called(ctx, hash)
 
 	var r0 *coretypes.ResultBlock
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (*coretypes.ResultBlock, error)); ok {
+		return rf(ctx, hash)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) *coretypes.ResultBlock); ok {
 		r0 = rf(ctx, hash)
 	} else {
@@ -53,7 +60,6 @@ func (_m *SignClient) BlockByHash(ctx context.Context, hash bytes.HexBytes) (*co
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes) error); ok {
 		r1 = rf(ctx, hash)
 	} else {
@@ -68,6 +74,10 @@ func (_m *SignClient) BlockResults(ctx context.Context, height *int64) (*coretyp
 	ret := _m.Called(ctx, height)
 
 	var r0 *coretypes.ResultBlockResults
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *int64) (*coretypes.ResultBlockResults, error)); ok {
+		return rf(ctx, height)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, *int64) *coretypes.ResultBlockResults); ok {
 		r0 = rf(ctx, height)
 	} else {
@@ -76,7 +86,6 @@ func (_m *SignClient) BlockResults(ctx context.Context, height *int64) (*coretyp
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *int64) error); ok {
 		r1 = rf(ctx, height)
 	} else {
@@ -91,6 +100,10 @@ func (_m *SignClient) BlockSearch(ctx context.Context, query string, page *int, 
 	ret := _m.Called(ctx, query, page, perPage, orderBy)
 
 	var r0 *coretypes.ResultBlockSearch
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, *int, *int, string) (*coretypes.ResultBlockSearch, error)); ok {
+		return rf(ctx, query, page, perPage, orderBy)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, string, *int, *int, string) *coretypes.ResultBlockSearch); ok {
 		r0 = rf(ctx, query, page, perPage, orderBy)
 	} else {
@@ -99,7 +112,6 @@ func (_m *SignClient) BlockSearch(ctx context.Context, query string, page *int, 
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, string, *int, *int, string) error); ok {
 		r1 = rf(ctx, query, page, perPage, orderBy)
 	} else {
@@ -114,6 +126,10 @@ func (_m *SignClient) Commit(ctx context.Context, height *int64) (*coretypes.Res
 	ret := _m.Called(ctx, height)
 
 	var r0 *coretypes.ResultCommit
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *int64) (*coretypes.ResultCommit, error)); ok {
+		return rf(ctx, height)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, *int64) *coretypes.ResultCommit); ok {
 		r0 = rf(ctx, height)
 	} else {
@@ -122,7 +138,6 @@ func (_m *SignClient) Commit(ctx context.Context, height *int64) (*coretypes.Res
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *int64) error); ok {
 		r1 = rf(ctx, height)
 	} else {
@@ -137,6 +152,10 @@ func (_m *SignClient) Header(ctx context.Context, height *int64) (*coretypes.Res
 	ret := _m.Called(ctx, height)
 
 	var r0 *coretypes.ResultHeader
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *int64) (*coretypes.ResultHeader, error)); ok {
+		return rf(ctx, height)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, *int64) *coretypes.ResultHeader); ok {
 		r0 = rf(ctx, height)
 	} else {
@@ -145,7 +164,6 @@ func (_m *SignClient) Header(ctx context.Context, height *int64) (*coretypes.Res
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *int64) error); ok {
 		r1 = rf(ctx, height)
 	} else {
@@ -160,6 +178,10 @@ func (_m *SignClient) HeaderByHash(ctx context.Context, hash bytes.HexBytes) (*c
 	ret := _m.Called(ctx, hash)
 
 	var r0 *coretypes.ResultHeader
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (*coretypes.ResultHeader, error)); ok {
+		return rf(ctx, hash)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) *coretypes.ResultHeader); ok {
 		r0 = rf(ctx, hash)
 	} else {
@@ -168,7 +190,6 @@ func (_m *SignClient) HeaderByHash(ctx context.Context, hash bytes.HexBytes) (*c
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes) error); ok {
 		r1 = rf(ctx, hash)
 	} else {
@@ -183,6 +204,10 @@ func (_m *SignClient) Tx(ctx context.Context, hash bytes.HexBytes, prove bool) (
 	ret := _m.Called(ctx, hash, prove)
 
 	var r0 *coretypes.ResultTx
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes, bool) (*coretypes.ResultTx, error)); ok {
+		return rf(ctx, hash, prove)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes, bool) *coretypes.ResultTx); ok {
 		r0 = rf(ctx, hash, prove)
 	} else {
@@ -191,7 +216,6 @@ func (_m *SignClient) Tx(ctx context.Context, hash bytes.HexBytes, prove bool) (
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes, bool) error); ok {
 		r1 = rf(ctx, hash, prove)
 	} else {
@@ -206,6 +230,10 @@ func (_m *SignClient) TxSearch(ctx context.Context, query string, prove bool, pa
 	ret := _m.Called(ctx, query, prove, page, perPage, orderBy)
 
 	var r0 *coretypes.ResultTxSearch
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, bool, *int, *int, string) (*coretypes.ResultTxSearch, error)); ok {
+		return rf(ctx, query, prove, page, perPage, orderBy)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, string, bool, *int, *int, string) *coretypes.ResultTxSearch); ok {
 		r0 = rf(ctx, query, prove, page, perPage, orderBy)
 	} else {
@@ -214,7 +242,6 @@ func (_m *SignClient) TxSearch(ctx context.Context, query string, prove bool, pa
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, string, bool, *int, *int, string) error); ok {
 		r1 = rf(ctx, query, prove, page, perPage, orderBy)
 	} else {
@@ -229,6 +256,10 @@ func (_m *SignClient) Validators(ctx context.Context, height *int64, page *int, 
 	ret := _m.Called(ctx, height, page, perPage, requestQuorumInfo)
 
 	var r0 *coretypes.ResultValidators
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *int64, *int, *int, *bool) (*coretypes.ResultValidators, error)); ok {
+		return rf(ctx, height, page, perPage, requestQuorumInfo)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, *int64, *int, *int, *bool) *coretypes.ResultValidators); ok {
 		r0 = rf(ctx, height, page, perPage, requestQuorumInfo)
 	} else {
@@ -237,7 +268,6 @@ func (_m *SignClient) Validators(ctx context.Context, height *int64, page *int, 
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *int64, *int, *int, *bool) error); ok {
 		r1 = rf(ctx, height, page, perPage, requestQuorumInfo)
 	} else {
