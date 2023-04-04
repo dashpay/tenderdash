@@ -1642,6 +1642,7 @@ func (m *RequestFinalizeBlock) GetBlockID() *types1.BlockID {
 
 type Response struct {
 	// Types that are valid to be assigned to Value:
+	//
 	//	*Response_Exception
 	//	*Response_Echo
 	//	*Response_Flush
@@ -3428,7 +3429,8 @@ type ValidatorUpdate struct {
 	Power     int64             `protobuf:"varint,2,opt,name=power,proto3" json:"power,omitempty"`
 	ProTxHash []byte            `protobuf:"bytes,3,opt,name=pro_tx_hash,json=proTxHash,proto3" json:"pro_tx_hash,omitempty"`
 	// node_address is an URI containing address of validator (`proto://node_id@ip_address:port`), for example:
-	//   `tcp://f2dbd9b0a1f541a7c44d34a58674d0262f5feca5@12.34.5.6:1234`
+	//
+	//	`tcp://f2dbd9b0a1f541a7c44d34a58674d0262f5feca5@12.34.5.6:1234`
 	NodeAddress string `protobuf:"bytes,4,opt,name=node_address,json=nodeAddress,proto3" json:"node_address,omitempty"`
 }
 
