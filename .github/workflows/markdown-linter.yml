@@ -1,17 +1,14 @@
 name: Markdown Linter
 on:
-  push:
-    branches:
-      - master
+  pull_request:
     paths:
       - "**.md"
       - "**.yml"
       - "**.yaml"
-  pull_request:
-    branches: [master]
-    paths:
-      - "**.md"
-      - "**.yml"
+  push:
+    branches:
+      - master
+      - v[0-9]+.[0-9]+-dev
 
 jobs:
   build:
@@ -23,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - name: Lint Code Base
-        uses: docker://github/super-linter:v4
+        uses: github/super-linter@v4
         env:
           VALIDATE_ALL_CODEBASE: true
           DEFAULT_BRANCH: master
