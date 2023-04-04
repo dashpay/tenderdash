@@ -572,6 +572,9 @@ func (voteSet *VoteSet) String() string {
 //
 // See Vote#String.
 func (voteSet *VoteSet) StringIndented(indent string) string {
+	if voteSet == nil {
+		return nilVoteSetString
+	}
 	voteSet.mtx.Lock()
 	defer voteSet.mtx.Unlock()
 
@@ -599,6 +602,9 @@ func (voteSet *VoteSet) StringIndented(indent string) string {
 // Marshal the VoteSet to JSON. Same as String(), just in JSON,
 // and without the height/round/signedMsgType (since its already included in the votes).
 func (voteSet *VoteSet) MarshalJSON() ([]byte, error) {
+	if voteSet == nil {
+		return nil, nil
+	}
 	voteSet.mtx.Lock()
 	defer voteSet.mtx.Unlock()
 	return json.Marshal(VoteSetJSON{
@@ -621,6 +627,9 @@ type VoteSetJSON struct {
 // the fraction of power that has voted like:
 // "BA{29:xx__x__x_x___x__x_______xxx__} 856/1304 = 0.66"
 func (voteSet *VoteSet) BitArrayString() string {
+	if voteSet == nil {
+		return nilVoteSetString
+	}
 	voteSet.mtx.Lock()
 	defer voteSet.mtx.Unlock()
 	return voteSet.bitArrayString()
@@ -634,6 +643,9 @@ func (voteSet *VoteSet) bitArrayString() string {
 
 // Returns a list of votes compressed to more readable strings.
 func (voteSet *VoteSet) VoteStrings() []string {
+	if voteSet == nil {
+		return []string{}
+	}
 	voteSet.mtx.Lock()
 	defer voteSet.mtx.Unlock()
 	return voteSet.voteStrings()

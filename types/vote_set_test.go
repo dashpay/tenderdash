@@ -3,6 +3,7 @@ package types
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"math"
 	"sort"
 	"strconv"
@@ -546,6 +547,24 @@ func TestVoteSet_LLMQType_50_60(t *testing.T) {
 			assert.True(t, anyMaj, "'any' majority expected")
 		})
 	}
+}
+
+func TestVoteSet_json_marshal_nil(t *testing.T) {
+	var vset *VoteSet
+	jsonBytes, err := json.Marshal(vset)
+	assert.Equal(t, "null", string(jsonBytes))
+	assert.Nil(t, err)
+}
+
+func TestVoteSet_strings_nil(t *testing.T) {
+	var vset *VoteSet
+	assert.Equal(t, nilVoteSetString, vset.String())
+	assert.Equal(t, nilVoteSetString, vset.BitArrayString())
+	assert.Equal(t, nilVoteSetString, vset.String())
+	assert.Equal(t, nilVoteSetString, vset.StringIndented(" "))
+	assert.Equal(t, nilVoteSetString, vset.StringShort())
+	assert.Zero(t, vset.Type())
+	assert.Empty(t, vset.VoteStrings())
 }
 
 func castVote(
