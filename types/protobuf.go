@@ -3,7 +3,7 @@ package types
 import (
 	"fmt"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
@@ -120,8 +120,12 @@ func (pb2tm) ValidatorUpdates(vals []abci.ValidatorUpdate) ([]*Validator, error)
 	return tmVals, nil
 }
 
-func (pb2tm) ValidatorUpdatesFromValidatorSet(valSetUpdate *abci.ValidatorSetUpdate) ([]*Validator,
-	crypto.PubKey, crypto.QuorumHash, error) {
+func (pb2tm) ValidatorUpdatesFromValidatorSet(valSetUpdate *abci.ValidatorSetUpdate) (
+	[]*Validator,
+	crypto.PubKey,
+	crypto.QuorumHash,
+	error,
+) {
 	if valSetUpdate == nil {
 		return nil, nil, nil, nil
 	}

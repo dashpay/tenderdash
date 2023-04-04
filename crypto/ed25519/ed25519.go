@@ -2,7 +2,11 @@ package ed25519
 
 import (
 	"bytes"
+	stded25519 "crypto/ed25519"
+	"crypto/rand"
+	"crypto/sha256"
 	"crypto/subtle"
+	"crypto/x509"
 	"encoding/hex"
 	"errors"
 	"fmt"
@@ -12,8 +16,7 @@ import (
 	"github.com/oasisprotocol/curve25519-voi/primitives/ed25519/extra/cache"
 
 	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/tmhash"
-	tmjson "github.com/tendermint/tendermint/libs/json"
+	"github.com/tendermint/tendermint/internal/jsontypes"
 )
 
 //-------------------------------------
@@ -57,12 +60,15 @@ const (
 )
 
 func init() {
-	tmjson.RegisterType(PubKey{}, PubKeyName)
-	tmjson.RegisterType(PrivKey{}, PrivKeyName)
+	jsontypes.MustRegister(PubKey{})
+	jsontypes.MustRegister(PrivKey{})
 }
 
 // PrivKey implements crypto.PrivKey.
 type PrivKey []byte
+
+// TypeTag satisfies the jsontypes.Tagged interface.
+func (PrivKey) TypeTag() string { return PrivKeyName }
 
 // Bytes returns the privkey byte format.
 func (privKey PrivKey) Bytes() []byte {
@@ -138,7 +144,7 @@ func (privKey PrivKey) TypeValue() crypto.KeyType {
 // It uses OS randomness in conjunction with the current global random seed
 // in tendermint/libs/common to generate the private key.
 func GenPrivKey() PrivKey {
-	return genPrivKey(crypto.CReader())
+	return genPrivKey(rand.Reader)
 }
 
 // genPrivKey generates a new ed25519 private key using the provided reader.
@@ -156,37 +162,48 @@ func genPrivKey(rand io.Reader) PrivKey {
 // NOTE: secret should be the output of a KDF like bcrypt,
 // if it's derived from user input.
 func GenPrivKeyFromSecret(secret []byte) PrivKey {
-	seed := crypto.Sha256(secret) // Not Ripemd160 because we want 32 bytes.
+	seed := sha256.Sum256(secret)
+	return PrivKey(ed25519.NewKeyFromSeed(seed[:]))
+}
 
-	return PrivKey(ed25519.NewKeyFromSeed(seed))
+// FromDER loads ed25519 private key from DER-encoded buffer
+func FromDER(der []byte) (PrivKey, error) {
+	parsed, err := x509.ParsePKCS8PrivateKey(der)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse private key: %w", err)
+	}
+
+	// As x509 uses stdlib crypto/ed25519, we have to convert it to curve25519-voi
+	// Fortunately, they are compatible (at least for now)
+	privkey, ok := parsed.(stded25519.PrivateKey)
+	if !ok {
+		return nil, fmt.Errorf("cannot convert %T to ED25519 private key", parsed)
+	}
+
+	return PrivKey(ed25519.NewKeyFromSeed(privkey.Seed())), nil
 }
 
 //-------------------------------------
 
 var _ crypto.PubKey = PubKey{}
 
-// PubKeyEd25519 implements crypto.PubKey for the Ed25519 signature scheme.
+// PubKey implements crypto.PubKey for the Ed25519 signature scheme.
 type PubKey []byte
+
+// TypeTag satisfies the jsontypes.Tagged interface.
+func (PubKey) TypeTag() string { return PubKeyName }
 
 // Address is the SHA256-20 of the raw pubkey bytes.
 func (pubKey PubKey) Address() crypto.Address {
 	if len(pubKey) != PubKeySize {
 		panic("pubkey is incorrect size")
 	}
-	return crypto.Address(tmhash.SumTruncated(pubKey))
+	return crypto.AddressHash(pubKey)
 }
 
 // Bytes returns the PubKey byte format.
 func (pubKey PubKey) Bytes() []byte {
 	return []byte(pubKey)
-}
-
-func (pubKey PubKey) AggregateSignatures(sigSharesData [][]byte, messages [][]byte) ([]byte, error) {
-	return nil, errors.New("should not aggregate an edwards signature")
-}
-
-func (pubKey PubKey) VerifyAggregateSignature(messages [][]byte, sig []byte) bool {
-	return false
 }
 
 func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
@@ -268,5 +285,5 @@ func (b *BatchVerifier) Add(key crypto.PubKey, msg, signature []byte) error {
 }
 
 func (b *BatchVerifier) Verify() (bool, []bool) {
-	return b.BatchVerifier.Verify(crypto.CReader())
+	return b.BatchVerifier.Verify(rand.Reader)
 }

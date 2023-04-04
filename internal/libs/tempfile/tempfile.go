@@ -9,7 +9,7 @@ import (
 	"strings"
 	"time"
 
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
+	sync "github.com/sasha-s/go-deadlock"
 )
 
 const (
@@ -32,7 +32,7 @@ const (
 
 var (
 	atomicWriteFileRand   uint64
-	atomicWriteFileRandMu tmsync.Mutex
+	atomicWriteFileRandMu sync.Mutex
 )
 
 func writeFileRandReseed() uint64 {

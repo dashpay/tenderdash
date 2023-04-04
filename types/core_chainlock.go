@@ -1,6 +1,7 @@
 package types
 
 import (
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -57,7 +58,8 @@ func (cl CoreChainLock) RequestID() []byte {
 	binary.LittleEndian.PutUint32(coreBlockHeightBytes[:], cl.CoreBlockHeight)
 
 	s = append(s, coreBlockHeightBytes[:]...)
-	return crypto.Sha256(crypto.Sha256(s))
+	hash := sha256.Sum256(s)
+	return hash[:]
 }
 
 // ValidateBasic performs stateless validation on a Chain Lock returning an error
@@ -100,6 +102,9 @@ func (cl *CoreChainLock) StringIndented(indent string) string {
 		indent, cl.CoreBlockHeight,
 		indent, cl.CoreBlockHash,
 		indent, cl.Signature)
+}
+func (cl *CoreChainLock) IsZero() bool {
+	return cl == nil || (len(cl.CoreBlockHash) == 0 && len(cl.Signature) == 0 && cl.CoreBlockHeight == 0)
 }
 
 // FromProto sets a protobuf Header to the given pointer.

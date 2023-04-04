@@ -1,4 +1,3 @@
----
 name: Build
 # Tests runs different tests (test_abci_apps, test_abci_cli, test_apps)
 # This workflow runs on every push to master or release branch and  every pull requests
@@ -8,9 +7,7 @@ on:
   push:
     branches:
       - master
-      - release/**
-      - v0.*-dev
-
+      - v[0-9]+.[0-9]+-dev
 jobs:
   build:
     name: Build
@@ -22,13 +19,13 @@ jobs:
           - "amd64"
         # - "arm"
         goos: ["linux"]
-    timeout-minutes: 5
+    timeout-minutes: 55
     steps:
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3.5.0
         with:
-          go-version: "1.17"
-      - uses: actions/checkout@v2.4.0
-      - uses: technote-space/get-diff-action@v5
+          go-version: "1.19"
+      - uses: actions/checkout@v3
+      - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
             **/**.go
@@ -42,7 +39,7 @@ jobs:
         with:
           arch: ${{ matrix.goarch }}
       - name: install-gcc
-        run: sudo apt-get update -qq && sudo apt-get install -qq --yes gcc-10-arm-linux-gnueabi g++-10-arm-linux-gnueabi
+        run: sudo apt-get -qq --yes gcc-10-arm-linux-gnueabi g++-10-arm-linux-gnueabi
         if: "matrix.goarch == 'arm'"
       - name: install
         run: |
@@ -55,11 +52,11 @@ jobs:
     needs: build
     timeout-minutes: 5
     steps:
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3.5.0
         with:
-          go-version: "1.17"
-      - uses: actions/checkout@v2.4.0
-      - uses: technote-space/get-diff-action@v5
+          go-version: "1.19"
+      - uses: actions/checkout@v3
+      - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
             **/**.go
@@ -80,11 +77,11 @@ jobs:
     needs: build
     timeout-minutes: 5
     steps:
-      - uses: actions/setup-go@v2
+      - uses: actions/setup-go@v3.5.0
         with:
-          go-version: "1.17"
-      - uses: actions/checkout@v2.4.0
-      - uses: technote-space/get-diff-action@v5
+          go-version: "1.19"
+      - uses: actions/checkout@v3
+      - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
             **/**.go

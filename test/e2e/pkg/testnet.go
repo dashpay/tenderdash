@@ -1,4 +1,3 @@
-//nolint: gosec
 package e2e
 
 import (
@@ -14,8 +13,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 
+	"github.com/tendermint/tendermint/abci/example/kvstore"
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/bls12381"
@@ -72,20 +72,25 @@ type ValidatorConfig struct {
 
 type ValidatorsMap map[*Node]ValidatorConfig
 type Testnet struct {
-	Name             string
-	File             string
-	Dir              string
-	IP               *net.IPNet
-	InitialHeight    int64
-	InitialState     map[string]string
-	Validators       ValidatorsMap
-	ValidatorUpdates map[int64]ValidatorsMap
-	Nodes            []*Node
-	KeyType          string
-	Evidence         int
-	LogLevel         string
-	TxSize           int
-	ABCIProtocol     string
+	Name                   string
+	File                   string
+	Dir                    string
+	IP                     *net.IPNet
+	InitialHeight          int64
+	InitialState           kvstore.StateExport
+	Validators             ValidatorsMap
+	ValidatorUpdates       map[int64]ValidatorsMap
+	Nodes                  []*Node
+	KeyType                string
+	Evidence               int
+	LogLevel               string
+	TxSize                 int
+	ABCIProtocol           Protocol
+	PrepareProposalDelayMS int
+	ProcessProposalDelayMS int
+	CheckTxDelayMS         int
+	VoteExtensionDelayMS   int
+	FinalizeBlockDelayMS   int
 
 	// Tenderdash-specific fields
 	GenesisCoreHeight         uint32 // InitialCoreHeight is a core height put into genesis file
@@ -100,32 +105,33 @@ type Testnet struct {
 
 // Node represents a Tenderdash node in a testnet.
 type Node struct {
-	Name                 string
-	Testnet              *Testnet
-	Mode                 Mode
-	PrivvalKeys          map[string]crypto.QuorumKeys
-	PrivvalUpdateHeights map[string]crypto.QuorumHash
-	NodeKey              crypto.PrivKey
-	ProTxHash            crypto.ProTxHash
-	IP                   net.IP
-	ProxyPort            uint32
-	StartAt              int64
-	BlockSync            string
-	Mempool              string
-	StateSync            string
-	Database             string
-	ABCIProtocol         Protocol
-	PrivvalProtocol      Protocol
-	PersistInterval      uint64
-	SnapshotInterval     uint64
-	RetainBlocks         uint64
-	Seeds                []*Node
-	PersistentPeers      []*Node
-	Perturbations        []Perturbation
-	LogLevel             string
-	UseLegacyP2P         bool
-	QueueType            string
-	HasStarted           bool
+	Name                         string
+	Testnet                      *Testnet
+	Mode                         Mode
+	PrivvalKeys                  map[string]crypto.QuorumKeys
+	PrivvalUpdateHeights         map[string]crypto.QuorumHash
+	NodeKey                      crypto.PrivKey
+	ProTxHash                    crypto.ProTxHash
+	IP                           net.IP
+	ProxyPort                    uint32
+	StartAt                      int64
+	Mempool                      string
+	StateSync                    string
+	Database                     string
+	PrivvalProtocol              Protocol
+	PersistInterval              uint64
+	SnapshotInterval             uint64
+	RetainBlocks                 uint64
+	P2PMaxConnections            uint16
+	P2PMaxOutgoingConnections    uint16
+	P2PMaxIncomingConnectionTime time.Duration
+	P2PIncomingConnectionWindow  time.Duration
+	Seeds                        []*Node
+	PersistentPeers              []*Node
+	Perturbations                []Perturbation
+	LogLevel                     string
+	QueueType                    string
+	HasStarted                   bool
 }
 
 // LoadTestnet loads a testnet from a manifest file, using the filename to
@@ -196,7 +202,12 @@ func LoadTestnet(file string) (*Testnet, error) {
 		KeyType:                   bls12381.KeyType,
 		LogLevel:                  manifest.LogLevel,
 		TxSize:                    manifest.TxSize,
-		ABCIProtocol:              manifest.ABCIProtocol,
+		ABCIProtocol:              Protocol(manifest.ABCIProtocol),
+		PrepareProposalDelayMS:    int(manifest.PrepareProposalDelayMS),
+		ProcessProposalDelayMS:    int(manifest.ProcessProposalDelayMS),
+		CheckTxDelayMS:            int(manifest.CheckTxDelayMS),
+		VoteExtensionDelayMS:      int(manifest.VoteExtensionDelayMS),
+		FinalizeBlockDelayMS:      int(manifest.FinalizeBlockDelayMS),
 		ThresholdPublicKey:        ld.ThresholdPubKey,
 		ThresholdPublicKeyUpdates: map[int64]crypto.PubKey{},
 		QuorumType:                btcjson.LLMQType(quorumType),
@@ -213,7 +224,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 		testnet.InitialHeight = manifest.InitialHeight
 	}
 	if testnet.ABCIProtocol == "" {
-		testnet.ABCIProtocol = string(ProtocolBuiltin)
+		testnet.ABCIProtocol = ProtocolBuiltin
 	}
 	if manifest.GenesisCoreChainLockedHeight > 0 {
 		testnet.GenesisCoreHeight = manifest.GenesisCoreChainLockedHeight
@@ -241,10 +252,8 @@ func LoadTestnet(file string) (*Testnet, error) {
 			ProxyPort:        proxyPortGen.Next(),
 			Mode:             ModeValidator,
 			Database:         "goleveldb",
-			ABCIProtocol:     Protocol(testnet.ABCIProtocol),
 			PrivvalProtocol:  ProtocolFile,
 			StartAt:          nodeManifest.StartAt,
-			BlockSync:        nodeManifest.BlockSync,
 			Mempool:          nodeManifest.Mempool,
 			StateSync:        nodeManifest.StateSync,
 			PersistInterval:  1,
@@ -253,16 +262,12 @@ func LoadTestnet(file string) (*Testnet, error) {
 			Perturbations:    []Perturbation{},
 			LogLevel:         manifest.LogLevel,
 			QueueType:        manifest.QueueType,
-			UseLegacyP2P:     nodeManifest.UseLegacyP2P,
 		}
 		if node.StartAt == testnet.InitialHeight {
 			node.StartAt = 0 // normalize to 0 for initial nodes, since code expects this
 		}
 		if nodeManifest.Mode != "" {
 			node.Mode = Mode(nodeManifest.Mode)
-		}
-		if node.Mode == ModeLight {
-			node.ABCIProtocol = ProtocolBuiltin
 		}
 		if nodeManifest.Database != "" {
 			node.Database = nodeManifest.Database
@@ -273,6 +278,19 @@ func LoadTestnet(file string) (*Testnet, error) {
 		if nodeManifest.PersistInterval != nil {
 			node.PersistInterval = *nodeManifest.PersistInterval
 		}
+		if nodeManifest.P2PMaxConnections > 0 {
+			node.P2PMaxConnections = nodeManifest.P2PMaxConnections
+		}
+		if nodeManifest.P2PMaxOutgoingConnections > 0 {
+			node.P2PMaxOutgoingConnections = nodeManifest.P2PMaxOutgoingConnections
+		}
+		if nodeManifest.P2PMaxIncomingConnectionTime > 0 {
+			node.P2PMaxIncomingConnectionTime = nodeManifest.P2PMaxIncomingConnectionTime
+		}
+		if nodeManifest.P2PIncomingConnectionWindow > 0 {
+			node.P2PIncomingConnectionWindow = nodeManifest.P2PIncomingConnectionWindow
+		}
+
 		for _, p := range nodeManifest.Perturb {
 			node.Perturbations = append(node.Perturbations, Perturbation(p))
 		}
@@ -308,7 +326,8 @@ func LoadTestnet(file string) (*Testnet, error) {
 
 		// If there are no seeds or persistent peers specified, default to persistent
 		// connections to all other full nodes.
-		if len(node.PersistentPeers) == 0 && len(node.Seeds) == 0 {
+		// Seed nodes are an exception here.
+		if node.Mode != ModeSeed && len(node.PersistentPeers) == 0 && len(node.Seeds) == 0 {
 			for _, peer := range testnet.Nodes {
 				if peer.Name == node.Name {
 					continue
@@ -444,6 +463,12 @@ func (t Testnet) Validate() error {
 	default:
 		return errors.New("unsupported KeyType")
 	}
+	switch t.ABCIProtocol {
+	case ProtocolBuiltin, ProtocolUNIX, ProtocolTCP, ProtocolGRPC:
+	default:
+		return fmt.Errorf("invalid ABCI protocol setting %q", t.ABCIProtocol)
+	}
+
 	for _, node := range t.Nodes {
 		if err := node.Validate(t); err != nil {
 			return fmt.Errorf("invalid node %q: %w", node.Name, err)
@@ -481,11 +506,6 @@ func (n Node) Validate(testnet Testnet) error {
 			return fmt.Errorf("validator %s must have a proTxHash of size 32 (%d)", n.Name, len(n.ProTxHash))
 		}
 	}
-	switch n.BlockSync {
-	case "", "v0", "v2":
-	default:
-		return fmt.Errorf("invalid block sync setting %q", n.BlockSync)
-	}
 	switch n.StateSync {
 	case StateSyncDisabled, StateSyncP2P, StateSyncRPC:
 	default:
@@ -497,22 +517,14 @@ func (n Node) Validate(testnet Testnet) error {
 		return fmt.Errorf("invalid mempool version %q", n.Mempool)
 	}
 	switch n.QueueType {
-	case "", "priority", "wdrr", "fifo":
+	case "", "priority", "fifo", "simple-priority":
 	default:
 		return fmt.Errorf("unsupported p2p queue type: %s", n.QueueType)
 	}
 	switch n.Database {
-	case "goleveldb", "cleveldb", "boltdb", "rocksdb", "badgerdb":
+	case "goleveldb", "cleveldb", "boltdb", "badgerdb", "memdb":
 	default:
 		return fmt.Errorf("invalid database setting %q", n.Database)
-	}
-	switch n.ABCIProtocol {
-	case ProtocolBuiltin, ProtocolUNIX, ProtocolTCP, ProtocolGRPC:
-	default:
-		return fmt.Errorf("invalid ABCI protocol setting %q", n.ABCIProtocol)
-	}
-	if n.Mode == ModeLight && n.ABCIProtocol != ProtocolBuiltin {
-		return errors.New("light client must use builtin protocol")
 	}
 	switch n.PrivvalProtocol {
 	case ProtocolFile, ProtocolUNIX, ProtocolTCP, ProtocolGRPC, ProtocolDashCore:
@@ -651,6 +663,8 @@ type keyGenerator struct {
 }
 
 func newKeyGenerator(seed int64) *keyGenerator {
+	// nolint: gosec
+	// G404: Use of weak random number generator (math/rand instead of crypto/rand)
 	return &keyGenerator{
 		random: rand.New(rand.NewSource(seed)),
 	}

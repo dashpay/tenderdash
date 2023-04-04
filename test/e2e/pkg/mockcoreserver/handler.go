@@ -3,7 +3,8 @@ package mockcoreserver
 import (
 	"log"
 	"net/http"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 )
 
 type handler struct {

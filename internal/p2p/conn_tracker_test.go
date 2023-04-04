@@ -28,7 +28,7 @@ func TestConnTracker(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			factory := factory // nolint:scopelint
+			factory := factory //nolint:scopelint
 			t.Run("Initialized", func(t *testing.T) {
 				ct := factory()
 				require.Equal(t, 0, ct.Len())
@@ -70,4 +70,15 @@ func TestConnTracker(t *testing.T) {
 		}
 		require.Equal(t, 10, ct.Len())
 	})
+	t.Run("Window", func(t *testing.T) {
+		const window = 100 * time.Millisecond
+		ct := newConnTracker(10, window)
+		ip := randLocalIPv4()
+		require.NoError(t, ct.AddConn(ip))
+		ct.RemoveConn(ip)
+		require.Error(t, ct.AddConn(ip))
+		time.Sleep(window)
+		require.NoError(t, ct.AddConn(ip))
+	})
+
 }

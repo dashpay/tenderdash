@@ -18,7 +18,7 @@ function testExample() {
 	echo "Example $N: $APP"
 	$APP &> /dev/null &
 	sleep 2
-	abci-cli --log_level=error --verbose batch < "$INPUT" > "${INPUT}.out.new"
+	abci-cli --log_level=debug --verbose batch < "$INPUT" > "${INPUT}.out.new"
 	killall "$3"
 
 	pre=$(shasum < "${INPUT}.out")
@@ -30,6 +30,8 @@ function testExample() {
 		cat "${INPUT}.out.new"
 		echo "Expected:"
 		cat "${INPUT}.out"
+		echo "Diff:"
+		diff "${INPUT}.out" "${INPUT}.out.new"
 		exit 1
 	fi
 

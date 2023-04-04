@@ -5,17 +5,37 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/tendermint/tendermint/crypto/tmhash"
+	gogotypes "github.com/gogo/protobuf/types"
+
+	"github.com/tendermint/tendermint/crypto"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
-func MakeCommit(blockID BlockID, stateID StateID, height int64, round int32,
-	voteSet *VoteSet, validators []PrivValidator) (*Commit, error) {
+const StateIDVersion = 1
+
+func RandStateID() tmproto.StateID {
+	return tmproto.StateID{
+		Height:                uint64(rand.Int63()), //nolint:gosec
+		AppHash:               tmrand.Bytes(crypto.DefaultAppHashSize),
+		AppVersion:            StateIDVersion,
+		CoreChainLockedHeight: rand.Uint32(), //nolint:gosec
+		Time:                  *gogotypes.TimestampNow(),
+	}
+}
+
+func makeCommit(
+	ctx context.Context,
+	blockID BlockID,
+	height int64,
+	round int32,
+	voteSet *VoteSet,
+	validators []PrivValidator,
+) (*Commit, error) {
 
 	// all sign
 	for i := 0; i < len(validators); i++ {
-		proTxHash, err := validators[i].GetProTxHash(context.Background())
+		proTxHash, err := validators[i].GetProTxHash(ctx)
 		if err != nil {
 			return nil, fmt.Errorf("can't get proTxHash: %w", err)
 		}
@@ -26,9 +46,13 @@ func MakeCommit(blockID BlockID, stateID StateID, height int64, round int32,
 			Round:              round,
 			Type:               tmproto.PrecommitType,
 			BlockID:            blockID,
+			VoteExtensions: VoteExtensions{
+				tmproto.VoteExtensionType_DEFAULT:           []VoteExtension{{Extension: []byte("default")}},
+				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Extension: []byte("threshold")}},
+			},
 		}
 
-		_, err = signAddVote(validators[i], vote, voteSet)
+		_, err = signAddVote(ctx, validators[i], vote, voteSet)
 		if err != nil {
 			return nil, err
 		}
@@ -38,64 +62,16 @@ func MakeCommit(blockID BlockID, stateID StateID, height int64, round int32,
 }
 
 // signAddVote signs a vote using StateID configured inside voteSet, and adds it to that voteSet
-func signAddVote(privVal PrivValidator, vote *Vote, voteSet *VoteSet) (signed bool, err error) {
-	return signAddVoteForStateID(privVal, vote, voteSet, voteSet.stateID)
-}
-
-// signAddVoteForStateID signs a vote using specific StateID and adds it to voteSet
-func signAddVoteForStateID(privVal PrivValidator, vote *Vote, voteSet *VoteSet,
-	stateID StateID) (signed bool, err error) {
+func signAddVote(ctx context.Context, privVal PrivValidator, vote *Vote, voteSet *VoteSet) (signed bool, err error) {
 	v := vote.ToProto()
-	err = privVal.SignVote(context.Background(), voteSet.ChainID(), voteSet.valSet.QuorumType, voteSet.valSet.QuorumHash,
-		v, stateID, nil)
+	err = privVal.SignVote(ctx, voteSet.ChainID(), voteSet.valSet.QuorumType, voteSet.valSet.QuorumHash,
+		v, nil)
 	if err != nil {
 		return false, err
 	}
-	vote.BlockSignature = v.BlockSignature
-	vote.StateSignature = v.StateSignature
-	return voteSet.AddVote(vote)
-}
-
-func MakeVote(
-	height int64,
-	blockID BlockID,
-	stateID StateID,
-	valSet *ValidatorSet,
-	privVal PrivValidator,
-	chainID string,
-) (*Vote, error) {
-	if privVal == nil {
-		return nil, fmt.Errorf("privVal must be set")
-	}
-	proTxHash, err := privVal.GetProTxHash(context.Background())
+	err = vote.PopulateSignsFromProto(v)
 	if err != nil {
-		return nil, fmt.Errorf("can't get proTxHash: %w", err)
+		return false, err
 	}
-	idx, _ := valSet.GetByProTxHash(proTxHash)
-	vote := &Vote{
-		ValidatorProTxHash: proTxHash,
-		ValidatorIndex:     idx,
-		Height:             height,
-		Round:              0,
-		Type:               tmproto.PrecommitType,
-		BlockID:            blockID,
-	}
-	v := vote.ToProto()
-
-	if err := privVal.SignVote(context.Background(), chainID, valSet.QuorumType, valSet.QuorumHash,
-		v, stateID, nil); err != nil {
-		return nil, err
-	}
-
-	vote.BlockSignature = v.BlockSignature
-	vote.StateSignature = v.StateSignature
-
-	return vote, nil
-}
-
-func RandStateID() StateID {
-	return StateID{
-		Height:      rand.Int63(), // nolint:gosec
-		LastAppHash: tmrand.Bytes(tmhash.Size),
-	}
+	return voteSet.AddVote(vote)
 }

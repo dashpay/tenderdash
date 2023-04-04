@@ -4,9 +4,11 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/gogo/protobuf/proto"
+
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
+	"github.com/tendermint/tendermint/internal/jsontypes"
 	"github.com/tendermint/tendermint/libs/bits"
-	tmjson "github.com/tendermint/tendermint/libs/json"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -15,33 +17,37 @@ import (
 
 // Message defines an interface that the consensus domain types implement. When
 // a proto message is received on a consensus p2p Channel, it is wrapped and then
-// converted to a Message via MsgFromProto.
+// converted to a Message via MsgFromProtoMsg.
 type Message interface {
 	ValidateBasic() error
+
+	jsontypes.Tagged
 }
 
 func init() {
-	tmjson.RegisterType(&NewRoundStepMessage{}, "tendermint/NewRoundStepMessage")
-	tmjson.RegisterType(&NewValidBlockMessage{}, "tendermint/NewValidBlockMessage")
-	tmjson.RegisterType(&ProposalMessage{}, "tendermint/Proposal")
-	tmjson.RegisterType(&ProposalPOLMessage{}, "tendermint/ProposalPOL")
-	tmjson.RegisterType(&BlockPartMessage{}, "tendermint/BlockPart")
-	tmjson.RegisterType(&VoteMessage{}, "tendermint/Vote")
-	tmjson.RegisterType(&HasVoteMessage{}, "tendermint/HasVote")
-	tmjson.RegisterType(&VoteSetMaj23Message{}, "tendermint/VoteSetMaj23")
-	tmjson.RegisterType(&VoteSetBitsMessage{}, "tendermint/VoteSetBits")
-	tmjson.RegisterType(&CommitMessage{}, "tendermint/CommitMessage")
+	jsontypes.MustRegister(&NewRoundStepMessage{})
+	jsontypes.MustRegister(&NewValidBlockMessage{})
+	jsontypes.MustRegister(&ProposalMessage{})
+	jsontypes.MustRegister(&ProposalPOLMessage{})
+	jsontypes.MustRegister(&BlockPartMessage{})
+	jsontypes.MustRegister(&VoteMessage{})
+	jsontypes.MustRegister(&HasVoteMessage{})
+	jsontypes.MustRegister(&VoteSetMaj23Message{})
+	jsontypes.MustRegister(&VoteSetBitsMessage{})
+	jsontypes.MustRegister(&CommitMessage{})
 }
 
 // NewRoundStepMessage is sent for every step taken in the ConsensusState.
 // For every height/round/step transition
 type NewRoundStepMessage struct {
-	Height                int64
+	Height                int64 `json:",string"`
 	Round                 int32
 	Step                  cstypes.RoundStepType
-	SecondsSinceStartTime int64
+	SecondsSinceStartTime int64 `json:",string"`
 	LastCommitRound       int32
 }
+
+func (*NewRoundStepMessage) TypeTag() string { return "tendermint/NewRoundStepMessage" }
 
 // ValidateBasic performs basic validation.
 func (m *NewRoundStepMessage) ValidateBasic() error {
@@ -94,12 +100,14 @@ func (m *NewRoundStepMessage) String() string {
 // i.e., there is a Proposal for block B and 2/3+ prevotes for the block B in the round r.
 // In case the block is also committed, then IsCommit flag is set to true.
 type NewValidBlockMessage struct {
-	Height             int64
+	Height             int64 `json:",string"`
 	Round              int32
 	BlockPartSetHeader types.PartSetHeader
 	BlockParts         *bits.BitArray
 	IsCommit           bool
 }
+
+func (*NewValidBlockMessage) TypeTag() string { return "tendermint/NewValidBlockMessage" }
 
 // ValidateBasic performs basic validation.
 func (m *NewValidBlockMessage) ValidateBasic() error {
@@ -110,7 +118,7 @@ func (m *NewValidBlockMessage) ValidateBasic() error {
 		return errors.New("negative Round")
 	}
 	if err := m.BlockPartSetHeader.ValidateBasic(); err != nil {
-		return fmt.Errorf("wrong BlockPartSetHeader: %v", err)
+		return fmt.Errorf("wrong BlockPartSetHeader: %w", err)
 	}
 	if m.BlockParts.Size() == 0 {
 		return errors.New("empty blockParts")
@@ -137,6 +145,8 @@ type ProposalMessage struct {
 	Proposal *types.Proposal
 }
 
+func (*ProposalMessage) TypeTag() string { return "tendermint/Proposal" }
+
 // ValidateBasic performs basic validation.
 func (m *ProposalMessage) ValidateBasic() error {
 	return m.Proposal.ValidateBasic()
@@ -149,10 +159,12 @@ func (m *ProposalMessage) String() string {
 
 // ProposalPOLMessage is sent when a previous proposal is re-proposed.
 type ProposalPOLMessage struct {
-	Height           int64
+	Height           int64 `json:",string"`
 	ProposalPOLRound int32
 	ProposalPOL      *bits.BitArray
 }
+
+func (*ProposalPOLMessage) TypeTag() string { return "tendermint/ProposalPOL" }
 
 // ValidateBasic performs basic validation.
 func (m *ProposalPOLMessage) ValidateBasic() error {
@@ -178,10 +190,12 @@ func (m *ProposalPOLMessage) String() string {
 
 // BlockPartMessage is sent when gossipping a piece of the proposed block.
 type BlockPartMessage struct {
-	Height int64
+	Height int64 `json:",string"`
 	Round  int32
 	Part   *types.Part
 }
+
+func (*BlockPartMessage) TypeTag() string { return "tendermint/BlockPart" }
 
 // ValidateBasic performs basic validation.
 func (m *BlockPartMessage) ValidateBasic() error {
@@ -192,7 +206,7 @@ func (m *BlockPartMessage) ValidateBasic() error {
 		return errors.New("negative Round")
 	}
 	if err := m.Part.ValidateBasic(); err != nil {
-		return fmt.Errorf("wrong Part: %v", err)
+		return fmt.Errorf("wrong Part: %w", err)
 	}
 	return nil
 }
@@ -207,7 +221,9 @@ type VoteMessage struct {
 	Vote *types.Vote
 }
 
-// ValidateBasic performs basic validation.
+func (*VoteMessage) TypeTag() string { return "tendermint/Vote" }
+
+// ValidateBasic checks whether the vote within the message is well-formed.
 func (m *VoteMessage) ValidateBasic() error {
 	return m.Vote.ValidateBasic()
 }
@@ -219,11 +235,13 @@ func (m *VoteMessage) String() string {
 
 // HasVoteMessage is sent to indicate that a particular vote has been received.
 type HasVoteMessage struct {
-	Height int64
+	Height int64 `json:",string"`
 	Round  int32
 	Type   tmproto.SignedMsgType
 	Index  int32
 }
+
+func (*HasVoteMessage) TypeTag() string { return "tendermint/HasVote" }
 
 // ValidateBasic performs basic validation.
 func (m *HasVoteMessage) ValidateBasic() error {
@@ -252,6 +270,8 @@ type CommitMessage struct {
 	Commit *types.Commit
 }
 
+func (*CommitMessage) TypeTag() string { return "tendermint/Commit" }
+
 // ValidateBasic performs basic validation.
 func (m *CommitMessage) ValidateBasic() error {
 	return m.Commit.ValidateBasic()
@@ -262,6 +282,8 @@ type HasCommitMessage struct {
 	Height int64
 	Round  int32
 }
+
+func (*HasCommitMessage) TypeTag() string { return "tendermint/HasCommit" }
 
 // ValidateBasic performs basic validation.
 func (m *HasCommitMessage) ValidateBasic() error {
@@ -281,11 +303,13 @@ func (m *HasCommitMessage) String() string {
 
 // VoteSetMaj23Message is sent to indicate that a given BlockID has seen +2/3 votes.
 type VoteSetMaj23Message struct {
-	Height  int64
+	Height  int64 `json:",string"`
 	Round   int32
 	Type    tmproto.SignedMsgType
 	BlockID types.BlockID
 }
+
+func (*VoteSetMaj23Message) TypeTag() string { return "tendermint/VoteSetMaj23" }
 
 // ValidateBasic performs basic validation.
 func (m *VoteSetMaj23Message) ValidateBasic() error {
@@ -299,7 +323,7 @@ func (m *VoteSetMaj23Message) ValidateBasic() error {
 		return errors.New("invalid Type")
 	}
 	if err := m.BlockID.ValidateBasic(); err != nil {
-		return fmt.Errorf("wrong BlockID: %v", err)
+		return fmt.Errorf("wrong BlockID: %w", err)
 	}
 
 	return nil
@@ -313,12 +337,14 @@ func (m *VoteSetMaj23Message) String() string {
 // VoteSetBitsMessage is sent to communicate the bit-array of votes seen for the
 // BlockID.
 type VoteSetBitsMessage struct {
-	Height  int64
+	Height  int64 `json:",string"`
 	Round   int32
 	Type    tmproto.SignedMsgType
 	BlockID types.BlockID
 	Votes   *bits.BitArray
 }
+
+func (*VoteSetBitsMessage) TypeTag() string { return "tendermint/VoteSetBits" }
 
 // ValidateBasic performs basic validation.
 func (m *VoteSetBitsMessage) ValidateBasic() error {
@@ -329,7 +355,7 @@ func (m *VoteSetBitsMessage) ValidateBasic() error {
 		return errors.New("invalid Type")
 	}
 	if err := m.BlockID.ValidateBasic(); err != nil {
-		return fmt.Errorf("wrong BlockID: %v", err)
+		return fmt.Errorf("wrong BlockID: %w", err)
 	}
 
 	// NOTE: Votes.Size() can be zero if the node does not have any
@@ -494,48 +520,78 @@ func MsgToProto(msg Message) (*tmcons.Message, error) {
 	return &pb, nil
 }
 
-// MsgFromProto takes a consensus proto message and returns the native go type.
-func MsgFromProto(msg *tmcons.Message) (Message, error) {
+// MsgFromProtoMsg takes a consensus proto message and returns the native go type.
+func MsgFromProtoMsg(msg *tmcons.Message) (Message, error) {
+	switch msg := msg.Sum.(type) {
+	case *tmcons.Message_NewRoundStep:
+		return MsgFromProto(msg.NewRoundStep)
+	case *tmcons.Message_NewValidBlock:
+		return MsgFromProto(msg.NewValidBlock)
+	case *tmcons.Message_Proposal:
+		return MsgFromProto(msg.Proposal)
+	case *tmcons.Message_ProposalPol:
+		return MsgFromProto(msg.ProposalPol)
+	case *tmcons.Message_BlockPart:
+		return MsgFromProto(msg.BlockPart)
+	case *tmcons.Message_Vote:
+		return MsgFromProto(msg.Vote)
+	case *tmcons.Message_HasVote:
+		return MsgFromProto(msg.HasVote)
+	case *tmcons.Message_Commit:
+		return MsgFromProto(msg.Commit)
+	case *tmcons.Message_HasCommit:
+		return MsgFromProto(msg.HasCommit)
+	case *tmcons.Message_VoteSetMaj23:
+		return MsgFromProto(msg.VoteSetMaj23)
+	case *tmcons.Message_VoteSetBits:
+		return MsgFromProto(msg.VoteSetBits)
+	default:
+		return nil, fmt.Errorf("consensus: message not recognized: %T", msg)
+	}
+}
+
+// MsgFromProto ...
+func MsgFromProto(msg proto.Message) (Message, error) {
 	if msg == nil {
 		return nil, errors.New("consensus: nil message")
 	}
 	var pb Message
 
-	switch msg := msg.Sum.(type) {
-	case *tmcons.Message_NewRoundStep:
-		rs, err := tmmath.SafeConvertUint8(int64(msg.NewRoundStep.Step))
+	switch msg := msg.(type) {
+	case *tmcons.NewRoundStep:
+		rs, err := tmmath.SafeConvertUint8(int64(msg.Step))
 		// deny message based on possible overflow
 		if err != nil {
 			return nil, fmt.Errorf("denying message due to possible overflow: %w", err)
 		}
 		pb = &NewRoundStepMessage{
-			Height:                msg.NewRoundStep.Height,
-			Round:                 msg.NewRoundStep.Round,
+			Height:                msg.Height,
+			Round:                 msg.Round,
 			Step:                  cstypes.RoundStepType(rs),
-			SecondsSinceStartTime: msg.NewRoundStep.SecondsSinceStartTime,
-			LastCommitRound:       msg.NewRoundStep.LastCommitRound,
+			SecondsSinceStartTime: msg.SecondsSinceStartTime,
+			LastCommitRound:       msg.LastCommitRound,
 		}
-	case *tmcons.Message_NewValidBlock:
-		pbPartSetHeader, err := types.PartSetHeaderFromProto(&msg.NewValidBlock.BlockPartSetHeader)
+	case *tmcons.NewValidBlock:
+		pbPartSetHeader, err := types.PartSetHeaderFromProto(&msg.BlockPartSetHeader)
 		if err != nil {
 			return nil, fmt.Errorf("parts header to proto error: %w", err)
 		}
 
 		pbBits := new(bits.BitArray)
-		err = pbBits.FromProto(msg.NewValidBlock.BlockParts)
+		err = pbBits.FromProto(msg.BlockParts)
 		if err != nil {
 			return nil, fmt.Errorf("parts to proto error: %w", err)
 		}
 
 		pb = &NewValidBlockMessage{
-			Height:             msg.NewValidBlock.Height,
-			Round:              msg.NewValidBlock.Round,
+			Height:             msg.Height,
+			Round:              msg.Round,
 			BlockPartSetHeader: *pbPartSetHeader,
 			BlockParts:         pbBits,
-			IsCommit:           msg.NewValidBlock.IsCommit,
+			IsCommit:           msg.IsCommit,
 		}
-	case *tmcons.Message_Proposal:
-		pbP, err := types.ProposalFromProto(&msg.Proposal.Proposal)
+	case *tmcons.Proposal:
+		pbP, err := types.ProposalFromProto(&msg.Proposal)
 		if err != nil {
 			return nil, fmt.Errorf("proposal msg to proto error: %w", err)
 		}
@@ -543,29 +599,31 @@ func MsgFromProto(msg *tmcons.Message) (Message, error) {
 		pb = &ProposalMessage{
 			Proposal: pbP,
 		}
-	case *tmcons.Message_ProposalPol:
+	case *tmcons.ProposalPOL:
 		pbBits := new(bits.BitArray)
-		err := pbBits.FromProto(&msg.ProposalPol.ProposalPol)
+		err := pbBits.FromProto(&msg.ProposalPol)
 		if err != nil {
 			return nil, fmt.Errorf("proposal PoL to proto error: %w", err)
 		}
 		pb = &ProposalPOLMessage{
-			Height:           msg.ProposalPol.Height,
-			ProposalPOLRound: msg.ProposalPol.ProposalPolRound,
+			Height:           msg.Height,
+			ProposalPOLRound: msg.ProposalPolRound,
 			ProposalPOL:      pbBits,
 		}
-	case *tmcons.Message_BlockPart:
-		parts, err := types.PartFromProto(&msg.BlockPart.Part)
+	case *tmcons.BlockPart:
+		parts, err := types.PartFromProto(&msg.Part)
 		if err != nil {
 			return nil, fmt.Errorf("blockpart msg to proto error: %w", err)
 		}
 		pb = &BlockPartMessage{
-			Height: msg.BlockPart.Height,
-			Round:  msg.BlockPart.Round,
+			Height: msg.Height,
+			Round:  msg.Round,
 			Part:   parts,
 		}
-	case *tmcons.Message_Vote:
-		vote, err := types.VoteFromProto(msg.Vote.Vote)
+	case *tmcons.Vote:
+		// Vote validation will be handled in the vote message ValidateBasic
+		// call below.
+		vote, err := types.VoteFromProto(msg.Vote)
 		if err != nil {
 			return nil, fmt.Errorf("vote msg to proto error: %w", err)
 		}
@@ -573,15 +631,15 @@ func MsgFromProto(msg *tmcons.Message) (Message, error) {
 		pb = &VoteMessage{
 			Vote: vote,
 		}
-	case *tmcons.Message_HasVote:
+	case *tmcons.HasVote:
 		pb = &HasVoteMessage{
-			Height: msg.HasVote.Height,
-			Round:  msg.HasVote.Round,
-			Type:   msg.HasVote.Type,
-			Index:  msg.HasVote.Index,
+			Height: msg.Height,
+			Round:  msg.Round,
+			Type:   msg.Type,
+			Index:  msg.Index,
 		}
-	case *tmcons.Message_Commit:
-		commit, err := types.CommitFromProto(msg.Commit.Commit)
+	case *tmcons.Commit:
+		commit, err := types.CommitFromProto(msg.Commit)
 		if err != nil {
 			return nil, fmt.Errorf("commit msg to proto error: %w", err)
 		}
@@ -589,37 +647,37 @@ func MsgFromProto(msg *tmcons.Message) (Message, error) {
 		pb = &CommitMessage{
 			Commit: commit,
 		}
-	case *tmcons.Message_HasCommit:
+	case *tmcons.HasCommit:
 		pb = &HasCommitMessage{
-			Height: msg.HasCommit.Height,
-			Round:  msg.HasCommit.Round,
+			Height: msg.Height,
+			Round:  msg.Round,
 		}
-	case *tmcons.Message_VoteSetMaj23:
-		bi, err := types.BlockIDFromProto(&msg.VoteSetMaj23.BlockID)
+	case *tmcons.VoteSetMaj23:
+		bi, err := types.BlockIDFromProto(&msg.BlockID)
 		if err != nil {
 			return nil, fmt.Errorf("voteSetMaj23 msg to proto error: %w", err)
 		}
 		pb = &VoteSetMaj23Message{
-			Height:  msg.VoteSetMaj23.Height,
-			Round:   msg.VoteSetMaj23.Round,
-			Type:    msg.VoteSetMaj23.Type,
+			Height:  msg.Height,
+			Round:   msg.Round,
+			Type:    msg.Type,
 			BlockID: *bi,
 		}
-	case *tmcons.Message_VoteSetBits:
-		bi, err := types.BlockIDFromProto(&msg.VoteSetBits.BlockID)
+	case *tmcons.VoteSetBits:
+		bi, err := types.BlockIDFromProto(&msg.BlockID)
 		if err != nil {
 			return nil, fmt.Errorf("block ID to proto error: %w", err)
 		}
 		bits := new(bits.BitArray)
-		err = bits.FromProto(&msg.VoteSetBits.Votes)
+		err = bits.FromProto(&msg.Votes)
 		if err != nil {
 			return nil, fmt.Errorf("votes to proto error: %w", err)
 		}
 
 		pb = &VoteSetBitsMessage{
-			Height:  msg.VoteSetBits.Height,
-			Round:   msg.VoteSetBits.Round,
-			Type:    msg.VoteSetBits.Type,
+			Height:  msg.Height,
+			Round:   msg.Round,
+			Type:    msg.Type,
 			BlockID: *bi,
 			Votes:   bits,
 		}
@@ -709,7 +767,7 @@ func WALFromProto(msg *tmcons.WALMessage) (WALMessage, error) {
 		}
 
 	case *tmcons.WALMessage_MsgInfo:
-		walMsg, err := MsgFromProto(&msg.MsgInfo.Msg)
+		walMsg, err := MsgFromProtoMsg(&msg.MsgInfo.Msg)
 		if err != nil {
 			return nil, fmt.Errorf("msgInfo from proto error: %w", err)
 		}

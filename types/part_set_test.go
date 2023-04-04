@@ -1,7 +1,7 @@
 package types
 
 import (
-	"io/ioutil"
+	"io"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -16,6 +16,10 @@ const (
 )
 
 func TestBasicPartSet(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Construct random data of size partSize * 100
 	nParts := 100
 	data := tmrand.Bytes(testPartSize * nParts)
@@ -48,7 +52,7 @@ func TestBasicPartSet(t *testing.T) {
 	// adding existing part
 	added, err = partSet2.AddPart(partSet2.GetPart(0))
 	assert.False(t, added)
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	assert.Equal(t, partSet.Hash(), partSet2.Hash())
 	assert.EqualValues(t, nParts, partSet2.Total())
@@ -57,13 +61,17 @@ func TestBasicPartSet(t *testing.T) {
 
 	// Reconstruct data, assert that they are equal.
 	data2Reader := partSet2.GetReader()
-	data2, err := ioutil.ReadAll(data2Reader)
+	data2, err := io.ReadAll(data2Reader)
 	require.NoError(t, err)
 
 	assert.Equal(t, data, data2)
 }
 
 func TestWrongProof(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	// Construct random data of size partSize * 100
 	data := tmrand.Bytes(testPartSize * 100)
 	partSet := NewPartSetFromData(data, testPartSize)
@@ -89,6 +97,10 @@ func TestWrongProof(t *testing.T) {
 }
 
 func TestPartSetHeaderValidateBasic(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	testCases := []struct {
 		testName              string
 		malleatePartSetHeader func(*PartSetHeader)
@@ -110,6 +122,10 @@ func TestPartSetHeaderValidateBasic(t *testing.T) {
 }
 
 func TestPartValidateBasic(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
 	testCases := []struct {
 		testName     string
 		malleatePart func(*Part)

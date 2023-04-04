@@ -15,29 +15,6 @@ const TimeFormat = time.RFC3339Nano
 //-----------------------------------
 // Canonicalize the structs
 
-func CanonicalizeBlockID(bid tmproto.BlockID) *tmproto.CanonicalBlockID {
-	rbid, err := BlockIDFromProto(&bid)
-	if err != nil {
-		panic(err)
-	}
-	var cbid *tmproto.CanonicalBlockID
-	if rbid == nil || rbid.IsZero() {
-		cbid = nil
-	} else {
-		cbid = &tmproto.CanonicalBlockID{
-			Hash:          bid.Hash,
-			PartSetHeader: CanonicalizePartSetHeader(bid.PartSetHeader),
-		}
-	}
-
-	return cbid
-}
-
-// CanonicalizeVote transforms the given PartSetHeader to a CanonicalPartSetHeader.
-func CanonicalizePartSetHeader(psh tmproto.PartSetHeader) tmproto.CanonicalPartSetHeader {
-	return tmproto.CanonicalPartSetHeader(psh)
-}
-
 // CanonicalizeVote transforms the given Proposal to a CanonicalProposal.
 func CanonicalizeProposal(chainID string, proposal *tmproto.Proposal) tmproto.CanonicalProposal {
 	return tmproto.CanonicalProposal{
@@ -45,21 +22,22 @@ func CanonicalizeProposal(chainID string, proposal *tmproto.Proposal) tmproto.Ca
 		Height:    proposal.Height,       // encoded as sfixed64
 		Round:     int64(proposal.Round), // encoded as sfixed64
 		POLRound:  int64(proposal.PolRound),
-		BlockID:   CanonicalizeBlockID(proposal.BlockID),
+		BlockID:   proposal.BlockID.ToCanonicalBlockID(),
 		Timestamp: proposal.Timestamp,
 		ChainID:   chainID,
 	}
 }
 
-// CanonicalizeVote transforms the given Vote to a CanonicalVote, which does
-// not contain ValidatorIndex and ValidatorProTxHash fields.
-func CanonicalizeVote(chainID string, vote *tmproto.Vote) tmproto.CanonicalVote {
-	return tmproto.CanonicalVote{
-		Type:    vote.Type,
-		Height:  vote.Height,       // encoded as sfixed64
-		Round:   int64(vote.Round), // encoded as sfixed64
-		BlockID: CanonicalizeBlockID(vote.BlockID),
-		ChainID: chainID,
+// CanonicalizeVoteExtension extracts the vote extension from the given vote
+// and constructs a CanonicalizeVoteExtension struct, whose representation in
+// bytes is what is signed in order to produce the vote extension's signature.
+func CanonicalizeVoteExtension(chainID string, ext *tmproto.VoteExtension, height int64, round int32) tmproto.CanonicalVoteExtension {
+	return tmproto.CanonicalVoteExtension{
+		Extension: ext.Extension,
+		Type:      ext.Type,
+		Height:    height,
+		Round:     int64(round),
+		ChainId:   chainID,
 	}
 }
 

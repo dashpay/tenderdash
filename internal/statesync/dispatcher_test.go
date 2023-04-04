@@ -4,30 +4,47 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/fortytw2/leaktest"
+	sync "github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/internal/test/factory"
+	"github.com/tendermint/tendermint/libs/log"
 	ssproto "github.com/tendermint/tendermint/proto/tendermint/statesync"
 	"github.com/tendermint/tendermint/types"
 )
+
+type channelInternal struct {
+	In    chan p2p.Envelope
+	Out   chan p2p.Envelope
+	Error chan p2p.PeerError
+}
+
+func testChannel(size int) (*channelInternal, p2p.Channel) {
+	in := &channelInternal{
+		In:    make(chan p2p.Envelope, size),
+		Out:   make(chan p2p.Envelope, size),
+		Error: make(chan p2p.PeerError, size),
+	}
+	return in, p2p.NewChannel(0, "test", in.In, in.Out, in.Error)
+}
 
 func TestDispatcherBasic(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
 	const numPeers = 5
 
-	ch := make(chan p2p.Envelope, 100)
-	closeCh := make(chan struct{})
-	defer close(closeCh)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	d := NewDispatcher(ch)
-	go handleRequests(t, d, ch, closeCh)
+	chans, ch := testChannel(100)
+
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
+	go handleRequests(ctx, t, d, chans.Out)
 
 	peers := createPeerSet(numPeers)
 	wg := sync.WaitGroup{}
@@ -38,7 +55,7 @@ func TestDispatcherBasic(t *testing.T) {
 		wg.Add(1)
 		go func(height int64) {
 			defer wg.Done()
-			lb, err := d.LightBlock(context.Background(), height, peers[height-1])
+			lb, err := d.LightBlock(ctx, height, peers[height-1])
 			require.NoError(t, err)
 			require.NotNil(t, lb)
 			require.Equal(t, lb.Height, height)
@@ -52,31 +69,40 @@ func TestDispatcherBasic(t *testing.T) {
 
 func TestDispatcherReturnsNoBlock(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
-	ch := make(chan p2p.Envelope, 100)
-	d := NewDispatcher(ch)
-	doneCh := make(chan struct{})
-	peer := factory.NodeID("a")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	chans, ch := testChannel(100)
+
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
+
+	peer := factory.NodeID(t, "a")
 
 	go func() {
-		<-ch
-		require.NoError(t, d.Respond(nil, peer))
-		close(doneCh)
+		<-chans.Out
+		require.NoError(t, d.Respond(ctx, nil, peer))
+		cancel()
 	}()
 
-	lb, err := d.LightBlock(context.Background(), 1, peer)
-	<-doneCh
+	lb, err := d.LightBlock(ctx, 1, peer)
+	<-ctx.Done()
 
 	require.Nil(t, lb)
-	require.Nil(t, err)
+	require.NoError(t, err)
 }
 
 func TestDispatcherTimeOutWaitingOnLightBlock(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
-	ch := make(chan p2p.Envelope, 100)
-	d := NewDispatcher(ch)
-	peer := factory.NodeID("a")
 
-	ctx, cancelFunc := context.WithTimeout(context.Background(), 10*time.Millisecond)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_, ch := testChannel(100)
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
+	peer := factory.NodeID(t, "a")
+
+	ctx, cancelFunc := context.WithTimeout(ctx, 10*time.Millisecond)
 	defer cancelFunc()
 
 	lb, err := d.LightBlock(ctx, 1, peer)
@@ -89,13 +115,15 @@ func TestDispatcherTimeOutWaitingOnLightBlock(t *testing.T) {
 func TestDispatcherProviders(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
 
-	ch := make(chan p2p.Envelope, 100)
 	chainID := "test-chain"
-	closeCh := make(chan struct{})
-	defer close(closeCh)
 
-	d := NewDispatcher(ch)
-	go handleRequests(t, d, ch, closeCh)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	chans, ch := testChannel(100)
+
+	d := NewDispatcher(ch, log.NewTestingLogger(t))
+	go handleRequests(ctx, t, d, chans.Out)
 
 	peers := createPeerSet(5)
 	providers := make([]*BlockProvider, len(peers))
@@ -106,7 +134,7 @@ func TestDispatcherProviders(t *testing.T) {
 
 	for i, p := range providers {
 		assert.Equal(t, string(peers[i]), p.String(), i)
-		lb, err := p.LightBlock(context.Background(), 10)
+		lb, err := p.LightBlock(ctx, 10)
 		assert.NoError(t, err)
 		assert.NotNil(t, lb)
 	}
@@ -114,6 +142,10 @@ func TestDispatcherProviders(t *testing.T) {
 
 func TestPeerListBasic(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	peerList := newPeerList()
 	assert.Zero(t, peerList.Len())
 	numPeers := 10
@@ -176,7 +208,10 @@ func TestEmptyPeerListReturnsWhenContextCanceled(t *testing.T) {
 	peerList := newPeerList()
 	require.Zero(t, peerList.Len())
 	doneCh := make(chan struct{})
-	ctx := context.Background()
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	wrapped, cancel := context.WithCancel(ctx)
 	go func() {
 		peerList.Pop(wrapped)
@@ -199,6 +234,9 @@ func TestEmptyPeerListReturnsWhenContextCanceled(t *testing.T) {
 
 func TestPeerListConcurrent(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	peerList := newPeerList()
 	numPeers := 10
 
@@ -229,7 +267,6 @@ func TestPeerListConcurrent(t *testing.T) {
 
 	// we use a context with cancel and a separate go routine to wait for all
 	// the other goroutines to close.
-	ctx, cancel := context.WithCancel(context.Background())
 	go func() { wg.Wait(); cancel() }()
 
 	select {
@@ -264,17 +301,17 @@ func TestPeerListRemove(t *testing.T) {
 
 // handleRequests is a helper function usually run in a separate go routine to
 // imitate the expected responses of the reactor wired to the dispatcher
-func handleRequests(t *testing.T, d *Dispatcher, ch chan p2p.Envelope, closeCh chan struct{}) {
+func handleRequests(ctx context.Context, t *testing.T, d *Dispatcher, ch chan p2p.Envelope) {
 	t.Helper()
 	for {
 		select {
 		case request := <-ch:
 			height := request.Message.(*ssproto.LightBlockRequest).Height
 			peer := request.To
-			resp := mockLBResp(t, peer, int64(height), time.Now())
+			resp := mockLBResp(ctx, t, peer, int64(height), time.Now())
 			block, _ := resp.block.ToProto()
-			require.NoError(t, d.Respond(block, resp.peer))
-		case <-closeCh:
+			require.NoError(t, d.Respond(ctx, block, resp.peer))
+		case <-ctx.Done():
 			return
 		}
 	}

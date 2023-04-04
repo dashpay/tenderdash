@@ -1,12 +1,13 @@
 package types
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
-	"sync"
 
-	tmjson "github.com/tendermint/tendermint/libs/json"
+	sync "github.com/sasha-s/go-deadlock"
+
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -41,24 +42,19 @@ One for their LastPrecommits round, and another for the official commit round.
 type HeightVoteSet struct {
 	chainID string
 	height  int64
-	stateID types.StateID // State ID describing current state (eg. previous height and previous app hash)
 	valSet  *types.ValidatorSet
 
 	mtx               sync.Mutex
-	round             int32                    // max tracked round
-	roundVoteSets     map[int32]RoundVoteSet   // keys: [0...round]
-	peerCatchupRounds map[types.NodeID][]int32 // keys: peer.ID; values: at most 2 rounds
+	round             int32                  // max tracked round
+	roundVoteSets     map[int32]RoundVoteSet // keys: [0...round]
+	peerCatchupRounds map[string][]int32     // keys: proTxHash; values: at most 2 rounds
 }
 
 func NewHeightVoteSet(
 	chainID string,
 	height int64,
-	stateID types.StateID,
 	valSet *types.ValidatorSet) *HeightVoteSet {
-	hvs := &HeightVoteSet{
-		chainID: chainID,
-		stateID: stateID,
-	}
+	hvs := &HeightVoteSet{chainID: chainID}
 	hvs.Reset(height, valSet)
 	return hvs
 }
@@ -70,7 +66,7 @@ func (hvs *HeightVoteSet) Reset(height int64, valSet *types.ValidatorSet) {
 	hvs.height = height
 	hvs.valSet = valSet
 	hvs.roundVoteSets = make(map[int32]RoundVoteSet)
-	hvs.peerCatchupRounds = make(map[types.NodeID][]int32)
+	hvs.peerCatchupRounds = make(map[string][]int32)
 
 	hvs.addRound(0)
 	hvs.round = 0
@@ -92,7 +88,11 @@ func (hvs *HeightVoteSet) Round() int32 {
 func (hvs *HeightVoteSet) SetRound(round int32) {
 	hvs.mtx.Lock()
 	defer hvs.mtx.Unlock()
-	newRound := tmmath.SafeSubInt32(hvs.round, 1)
+	newRound, err := tmmath.SafeSubInt32(hvs.round, 1)
+	if err != nil {
+		panic(err)
+	}
+
 	if hvs.round != 0 && (round < newRound) {
 		panic("SetRound() must increment hvs.round")
 	}
@@ -109,23 +109,17 @@ func (hvs *HeightVoteSet) addRound(round int32) {
 	if _, ok := hvs.roundVoteSets[round]; ok {
 		panic("addRound() for an existing round")
 	}
-	// log.Debug("addRound(round)", "round", round)
+	rvs := RoundVoteSet{}
 	if hvs.valSet.HasPublicKeys {
-		prevotes := types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet, hvs.stateID)
-		precommits := types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrecommitType, hvs.valSet, hvs.stateID)
-		hvs.roundVoteSets[round] = RoundVoteSet{
-			Prevotes:   prevotes,
-			Precommits: precommits,
-		}
-	} else {
-		hvs.roundVoteSets[round] = RoundVoteSet{}
+		rvs.Prevotes = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrevoteType, hvs.valSet)
+		rvs.Precommits = types.NewVoteSet(hvs.chainID, hvs.height, round, tmproto.PrecommitType, hvs.valSet)
 	}
+	hvs.roundVoteSets[round] = rvs
 }
 
 // AddVote adds a vote of a specific type to the round
 // Duplicate votes return added=false, err=nil.
-// By convention, peerID is "" if origin is self.
-func (hvs *HeightVoteSet) AddVote(vote *types.Vote, peerID types.NodeID) (added bool, err error) {
+func (hvs *HeightVoteSet) AddVote(vote *types.Vote) (added bool, err error) {
 	if !hvs.valSet.HasPublicKeys {
 		return false, nil
 	}
@@ -136,10 +130,11 @@ func (hvs *HeightVoteSet) AddVote(vote *types.Vote, peerID types.NodeID) (added 
 	}
 	voteSet := hvs.getVoteSet(vote.Round, vote.Type)
 	if voteSet == nil {
-		if rndz := hvs.peerCatchupRounds[peerID]; len(rndz) < 2 {
+		proTxHash := vote.ValidatorProTxHash.String()
+		if rndz := hvs.peerCatchupRounds[proTxHash]; len(rndz) < 2 {
 			hvs.addRound(vote.Round)
 			voteSet = hvs.getVoteSet(vote.Round, vote.Type)
-			hvs.peerCatchupRounds[peerID] = append(rndz, vote.Round)
+			hvs.peerCatchupRounds[proTxHash] = append(rndz, vote.Round)
 		} else {
 			// punish peer
 			err = ErrGotVoteFromUnwantedRound
@@ -197,6 +192,7 @@ func (hvs *HeightVoteSet) getVoteSet(round int32, voteType tmproto.SignedMsgType
 // this can cause memory issues.
 // TODO: implement ability to remove peers too
 func (hvs *HeightVoteSet) SetPeerMaj23(
+	height int64,
 	round int32,
 	voteType tmproto.SignedMsgType,
 	peerID types.NodeID,
@@ -210,7 +206,8 @@ func (hvs *HeightVoteSet) SetPeerMaj23(
 	if voteSet == nil {
 		return nil // something we don't know about yet
 	}
-	return voteSet.SetPeerMaj23(types.P2PID(peerID), blockID)
+
+	return voteSet.SetPeerMaj23(string(peerID), blockID, height, round)
 }
 
 //---------------------------------------------------------
@@ -252,7 +249,7 @@ func (hvs *HeightVoteSet) StringIndented(indent string) string {
 func (hvs *HeightVoteSet) MarshalJSON() ([]byte, error) {
 	hvs.mtx.Lock()
 	defer hvs.mtx.Unlock()
-	return tmjson.Marshal(hvs.toAllRoundVotes())
+	return json.Marshal(hvs.toAllRoundVotes())
 }
 
 func (hvs *HeightVoteSet) toAllRoundVotes() []roundVotes {

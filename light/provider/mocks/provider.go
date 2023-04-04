@@ -15,11 +15,29 @@ type Provider struct {
 	mock.Mock
 }
 
+// ID provides a mock function with given fields:
+func (_m *Provider) ID() string {
+	ret := _m.Called()
+
+	var r0 string
+	if rf, ok := ret.Get(0).(func() string); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(string)
+	}
+
+	return r0
+}
+
 // LightBlock provides a mock function with given fields: ctx, height
 func (_m *Provider) LightBlock(ctx context.Context, height int64) (*types.LightBlock, error) {
 	ret := _m.Called(ctx, height)
 
 	var r0 *types.LightBlock
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64) (*types.LightBlock, error)); ok {
+		return rf(ctx, height)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, int64) *types.LightBlock); ok {
 		r0 = rf(ctx, height)
 	} else {
@@ -28,7 +46,6 @@ func (_m *Provider) LightBlock(ctx context.Context, height int64) (*types.LightB
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, int64) error); ok {
 		r1 = rf(ctx, height)
 	} else {
@@ -50,4 +67,19 @@ func (_m *Provider) ReportEvidence(_a0 context.Context, _a1 types.Evidence) erro
 	}
 
 	return r0
+}
+
+type mockConstructorTestingTNewProvider interface {
+	mock.TestingT
+	Cleanup(func())
+}
+
+// NewProvider creates a new instance of Provider. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewProvider(t mockConstructorTestingTNewProvider) *Provider {
+	mock := &Provider{}
+	mock.Mock.Test(t)
+
+	t.Cleanup(func() { mock.AssertExpectations(t) })
+
+	return mock
 }

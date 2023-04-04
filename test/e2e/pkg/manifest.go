@@ -4,8 +4,11 @@ import (
 	"fmt"
 	"os"
 	"sort"
+	"time"
 
 	"github.com/BurntSushi/toml"
+
+	"github.com/tendermint/tendermint/abci/example/kvstore"
 )
 
 // Manifest represents a TOML testnet manifest.
@@ -28,7 +31,7 @@ type Manifest struct {
 
 	// InitialState is an initial set of key/value pairs for the application,
 	// set in genesis. Defaults to nothing.
-	InitialState map[string]string `toml:"initial_state"`
+	InitialState kvstore.StateExport `toml:"initial_state"`
 
 	// Validators is the initial validator set in genesis, given as node names
 	// and power (for Dash power must all be set to default power):
@@ -86,13 +89,26 @@ type Manifest struct {
 	QueueType string `toml:"queue_type"`
 
 	// Number of bytes per tx. Default is 1kb (1024)
-	TxSize int
+	TxSize int `toml:"tx_size"`
+
+	// VoteExtensionsEnableHeight configures the first height during which
+	// the chain will use and require vote extension data to be present
+	// in precommit messages.
+	VoteExtensionsEnableHeight int64 `toml:"vote_extensions_enable_height"`
 
 	// ABCIProtocol specifies the protocol used to communicate with the ABCI
 	// application: "unix", "tcp", "grpc", or "builtin". Defaults to builtin.
 	// builtin will build a complete Tendermint node into the application and
 	// launch it instead of launching a separate Tendermint process.
 	ABCIProtocol string `toml:"abci_protocol"`
+
+	// Add artificial delays to each of the main ABCI calls to mimic computation time
+	// of the application
+	PrepareProposalDelayMS uint64 `toml:"prepare_proposal_delay_ms"`
+	ProcessProposalDelayMS uint64 `toml:"process_proposal_delay_ms"`
+	CheckTxDelayMS         uint64 `toml:"check_tx_delay_ms"`
+	VoteExtensionDelayMS   uint64 `toml:"vote_extension_delay_ms"`
+	FinalizeBlockDelayMS   uint64 `toml:"finalize_block_delay_ms"`
 }
 
 // ManifestNode represents a node in a testnet manifest.
@@ -126,10 +142,6 @@ type ManifestNode struct {
 	// runner will wait for the network to reach at least this block height.
 	StartAt int64 `toml:"start_at"`
 
-	// BlockSync specifies the block sync mode: "" (disable), "v0" or "v2".
-	// Defaults to disabled.
-	BlockSync string `toml:"block_sync"`
-
 	// Mempool specifies which version of mempool to use. Either "v0" or "v1"
 	Mempool string `toml:"mempool_version"`
 
@@ -154,6 +166,11 @@ type ManifestNode struct {
 	// SnapshotInterval and EvidenceAgeHeight.
 	RetainBlocks uint64 `toml:"retain_blocks"`
 
+	P2PMaxConnections            uint16        `toml:"p2p_max_connections"`
+	P2PMaxOutgoingConnections    uint16        `toml:"p2p_max_outgoing_connections"`
+	P2PMaxIncomingConnectionTime time.Duration `toml:"p2p_max_incoming_connection_time"`
+	P2PIncomingConnectionWindow  time.Duration `toml:"p2p_incoming_connection_window"`
+
 	// Perturb lists perturbations to apply to the node after it has been
 	// started and synced with the network:
 	//
@@ -167,9 +184,6 @@ type ManifestNode struct {
 	// This is helpful when debugging a specific problem. This overrides the network
 	// level.
 	LogLevel string `toml:"log_level"`
-
-	// UseLegacyP2P enables use of the legacy p2p layer for this node.
-	UseLegacyP2P bool `toml:"use_legacy_p2p"`
 }
 
 // Stateless reports whether m is a node that does not own state, including light and seed nodes.

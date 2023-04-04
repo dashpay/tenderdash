@@ -2,6 +2,7 @@ package types
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/hex"
@@ -10,16 +11,16 @@ import (
 	"strings"
 	"time"
 
-	"github.com/dashevo/dashd-go/btcjson"
-	"github.com/rs/zerolog"
+	sync "github.com/sasha-s/go-deadlock"
 
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
 	gogotypes "github.com/gogo/protobuf/types"
+	"github.com/rs/zerolog"
 
+	"github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
-	"github.com/tendermint/tendermint/crypto/tmhash"
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmmath "github.com/tendermint/tendermint/libs/math"
 	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
@@ -31,9 +32,8 @@ const (
 	// MaxHeaderBytes is a maximum header size.
 	// NOTE: Because app hash can be of arbitrary size, the header is therefore not
 	// capped in size and thus this number should be seen as a soft max
-	MaxHeaderBytes       int64 = 646
+	MaxHeaderBytes       int64 = 725
 	MaxCoreChainLockSize int64 = 132
-	MaxCommitSize        int64 = 374
 
 	// MaxOverheadForBlock - maximum overhead to encode a block (up to
 	// MaxBlockSizeBytes in size) not including it's parts except Data.
@@ -48,23 +48,52 @@ const (
 
 // Block defines the atomic unit of a Tendermint blockchain.
 type Block struct {
-	mtx tmsync.Mutex
+	mtx sync.Mutex
 
 	Header        `json:"header"`
 	Data          `json:"data"`
 	CoreChainLock *CoreChainLock `json:"core_chain_lock"`
-	Evidence      EvidenceData   `json:"evidence"`
+	Evidence      EvidenceList   `json:"evidence"`
 	LastCommit    *Commit        `json:"last_commit"`
 }
 
-// StateID returns a state ID of this block
-func (b *Block) StateID() StateID {
-	return StateID{Height: b.Height, LastAppHash: b.AppHash}
+// SetTxs updates Data (in particular the transactions) and DataHash
+func (b *Block) SetTxs(txs []Tx) {
+	b.Data = Data{Txs: txs}
+	b.DataHash = nil
+	b.fillHeader()
 }
 
-// BlockID returns a block ID of this block
-func (b *Block) BlockID() BlockID {
-	return BlockID{Hash: b.Hash(), PartSetHeader: b.MakePartSet(BlockPartSizeBytes).Header()}
+// BlockID returns a block ID of this block.
+// BlockID of a nil block is zero-value (BlockID{})
+// If partSet is nil, new partSet will be created
+func (b *Block) BlockID(partSet *PartSet) BlockID {
+	var err error
+
+	if b == nil {
+		return BlockID{}
+	}
+
+	blockHash := b.Hash()
+	// cannot calculate block hash, so we return nil block ID
+	if len(blockHash) == 0 {
+		return BlockID{}
+	}
+
+	if partSet == nil {
+		partSet, err = b.MakePartSet(BlockPartSizeBytes)
+		if err != nil {
+			panic("cannot make part set: " + err.Error())
+		}
+	}
+
+	blockID := BlockID{
+		Hash:          blockHash,
+		PartSetHeader: partSet.Header(),
+		StateID:       b.Header.StateID().Hash(),
+	}
+
+	return blockID
 }
 
 // ValidateBasic performs basic validation that doesn't involve state data.
@@ -93,7 +122,7 @@ func (b *Block) ValidateBasic() error {
 		return errors.New("nil LastPrecommits")
 	}
 	if err := b.LastCommit.ValidateBasic(); err != nil {
-		return fmt.Errorf("wrong LastPrecommits: %v", err)
+		return fmt.Errorf("wrong LastPrecommits: %w", err)
 	}
 
 	if w, g := b.LastCommit.Hash(), b.LastCommitHash; !bytes.Equal(w, g) {
@@ -105,8 +134,8 @@ func (b *Block) ValidateBasic() error {
 		return fmt.Errorf("wrong Header.DataHash. Expected %X, got %X", w, g)
 	}
 
-	// NOTE: b.Evidence.Evidence may be nil, but we're just looping.
-	for i, ev := range b.Evidence.Evidence {
+	// NOTE: b.Evidence may be nil, but we're just looping.
+	for i, ev := range b.Evidence {
 		if err := ev.ValidateBasic(); err != nil {
 			return fmt.Errorf("invalid evidence (#%d): %v", i, err)
 		}
@@ -148,25 +177,36 @@ func (b *Block) Hash() tmbytes.HexBytes {
 	return b.Header.Hash()
 }
 
+func (b *Block) SetCoreChainLock(chainlock *CoreChainLock) {
+	if chainlock == nil {
+		return //noop
+	}
+
+	if b.CoreChainLockedHeight < chainlock.CoreBlockHeight {
+		b.CoreChainLock = chainlock
+		b.CoreChainLockedHeight = chainlock.CoreBlockHeight
+	}
+}
+
 // MakePartSet returns a PartSet containing parts of a serialized block.
 // This is the form in which the block is gossipped to peers.
 // CONTRACT: partSize is greater than zero.
-func (b *Block) MakePartSet(partSize uint32) *PartSet {
+func (b *Block) MakePartSet(partSize uint32) (*PartSet, error) {
 	if b == nil {
-		return nil
+		return nil, errors.New("nil block")
 	}
 	b.mtx.Lock()
 	defer b.mtx.Unlock()
 
 	pbb, err := b.ToProto()
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
 	bz, err := proto.Marshal(pbb)
 	if err != nil {
-		panic(err)
+		return nil, err
 	}
-	return NewPartSetFromData(bz, partSize)
+	return NewPartSetFromData(bz, partSize), nil
 }
 
 // HashesTo is a convenience function that checks if a block hashes to the given argument.
@@ -297,69 +337,56 @@ func BlockFromProto(bp *tmproto.Block) (*Block, error) {
 //-----------------------------------------------------------------------------
 
 // MaxDataBytes returns the maximum size of block's data.
-//
-// XXX: Panics on negative result.
-
-func MaxDataBytes(maxBytes int64, keyType crypto.KeyType, evidenceBytes int64, valsCount int) int64 {
+// If `commit` is nil, it is assumed to use `MaxCommitOverheadBytes`
+func MaxDataBytes(maxBytes int64, commit *Commit, evidenceBytes int64) (int64, error) {
+	lastCommitSize := MaxCommitOverheadBytes
+	if commit != nil {
+		lastCommitSize = int64(commit.ToProto().Size())
+	}
 	maxDataBytes := maxBytes -
 		MaxOverheadForBlock -
 		MaxHeaderBytes -
 		MaxCoreChainLockSize -
-		MaxCommitOverheadBytes -
+		lastCommitSize -
 		evidenceBytes
 
 	if maxDataBytes < 0 {
-		panic(fmt.Sprintf(
-			"Negative MaxDataBytes. Block.MaxBytes=%d is too small to accommodate header&lastCommit&evidence=%d",
+		return maxDataBytes, fmt.Errorf(
+			"block MaxBytes (%d) is too small to accommodate "+
+				"header (%d) + lastCommit (%d) + core chain lock (%d) + evidence (%d), need %d more bytes",
 			maxBytes,
-			-(maxDataBytes - maxBytes),
-		))
+			MaxOverheadForBlock+MaxHeaderBytes,
+			lastCommitSize,
+			+MaxCoreChainLockSize,
+			evidenceBytes,
+			-maxDataBytes,
+		)
 	}
 
-	return maxDataBytes
+	return maxDataBytes, nil
 }
 
 // MaxDataBytesNoEvidence returns the maximum size of block's data when
-// evidence count is unknown. MaxEvidencePerBlock will be used for the size
-// of evidence.
-//
-// XXX: Panics on negative result.
-func MaxDataBytesNoEvidence(maxBytes int64) int64 {
-	maxDataBytes := maxBytes -
-		MaxOverheadForBlock -
-		MaxHeaderBytes -
-		MaxCoreChainLockSize -
-		MaxCommitOverheadBytes
+// no evidence is used.
+func MaxDataBytesNoEvidence(maxBytes int64) (int64, error) {
+	return MaxDataBytes(maxBytes, nil, 0)
 
-	if maxDataBytes < 0 {
-		panic(fmt.Sprintf(
-			"Negative MaxDataBytesUnknownEvidence. Block.MaxBytes=%d is too small to accommodate header&lastCommit&evidence=%d",
-			maxBytes,
-			-(maxDataBytes - maxBytes),
-		))
-	}
-
-	return maxDataBytes
 }
 
 // MakeBlock returns a new block with an empty header, except what can be
 // computed from itself.
 // It populates the same set of fields validated by ValidateBasic.
-func MakeBlock(height int64, coreHeight uint32, coreChainLock *CoreChainLock, txs []Tx, lastCommit *Commit,
-	evidence []Evidence, proposedAppVersion uint64) *Block {
+func MakeBlock(height int64, txs []Tx, lastCommit *Commit, evidence []Evidence) *Block {
 	block := &Block{
 		Header: Header{
-			Version:               version.Consensus{Block: version.BlockProtocol, App: 0},
-			Height:                height,
-			CoreChainLockedHeight: coreHeight,
-			ProposedAppVersion:    proposedAppVersion,
+			Version: version.Consensus{Block: version.BlockProtocol, App: 0},
+			Height:  height,
 		},
 		Data: Data{
 			Txs: txs,
 		},
-		CoreChainLock: coreChainLock,
-		Evidence:      EvidenceData{Evidence: evidence},
-		LastCommit:    lastCommit,
+		Evidence:   evidence,
+		LastCommit: lastCommit,
 	}
 	block.fillHeader()
 	return block
@@ -371,12 +398,12 @@ func MakeBlock(height int64, coreHeight uint32, coreChainLock *CoreChainLock, tx
 // NOTE: changes to the Header should be duplicated in:
 // - header.Hash()
 // - abci.Header
-// - https://github.com/tendermint/spec/blob/master/spec/blockchain/blockchain.md
+// - https://github.com/tendermint/tendermint/blob/master/spec/core/data_structures.md
 type Header struct {
 	// basic block info
 	Version               version.Consensus `json:"version"`
 	ChainID               string            `json:"chain_id"`
-	Height                int64             `json:"height"`
+	Height                int64             `json:"height,string"`
 	CoreChainLockedHeight uint32            `json:"core_chain_locked_height"`
 	Time                  time.Time         `json:"time"`
 
@@ -391,10 +418,11 @@ type Header struct {
 	ValidatorsHash     tmbytes.HexBytes `json:"validators_hash"`      // validators for the current block
 	NextValidatorsHash tmbytes.HexBytes `json:"next_validators_hash"` // validators for the next block
 	ConsensusHash      tmbytes.HexBytes `json:"consensus_hash"`       // consensus params for current block
-	AppHash            tmbytes.HexBytes `json:"app_hash"`             // state after txs from the previous block
-	// root hash of all results from the txs from the previous block
+	NextConsensusHash  tmbytes.HexBytes `json:"next_consensus_hash"`  // consensus params for next block
+	AppHash            tmbytes.HexBytes `json:"app_hash"`             // state after txs from current block
+	// ResultsHash is  the root hash of all results from the txs from the current block
 	// see `deterministicResponseDeliverTx` to understand which parts of a tx is hashed into here
-	LastResultsHash tmbytes.HexBytes `json:"last_results_hash"`
+	ResultsHash tmbytes.HexBytes `json:"results_hash"`
 
 	// consensus info
 	EvidenceHash      tmbytes.HexBytes `json:"evidence_hash"`        // evidence included in the block
@@ -409,8 +437,10 @@ func (h *Header) Populate(
 	version version.Consensus, chainID string,
 	timestamp time.Time, lastBlockID BlockID,
 	valHash, nextValHash []byte,
-	consensusHash, appHash, lastResultsHash []byte,
+	consensusHash, nextConsensusHash []byte,
+	appHash, resultsHash []byte,
 	proposerProTxHash ProTxHash,
+	proposedAppVersion uint64,
 ) {
 	h.Version = version
 	h.ChainID = chainID
@@ -419,9 +449,11 @@ func (h *Header) Populate(
 	h.ValidatorsHash = valHash
 	h.NextValidatorsHash = nextValHash
 	h.ConsensusHash = consensusHash
+	h.NextConsensusHash = nextConsensusHash
 	h.AppHash = appHash
-	h.LastResultsHash = lastResultsHash
+	h.ResultsHash = resultsHash
 	h.ProposerProTxHash = proposerProTxHash
+	h.ProposedAppVersion = proposedAppVersion
 }
 
 // ValidateBasic performs stateless validation on a Header returning an error
@@ -447,15 +479,15 @@ func (h Header) ValidateBasic() error {
 	}
 
 	if err := ValidateHash(h.LastCommitHash); err != nil {
-		return fmt.Errorf("wrong LastCommitHash: %v", err)
+		return fmt.Errorf("wrong LastCommitHash: %w", err)
 	}
 
 	if err := ValidateHash(h.DataHash); err != nil {
-		return fmt.Errorf("wrong DataHash: %v", err)
+		return fmt.Errorf("wrong DataHash: %w", err)
 	}
 
 	if err := ValidateHash(h.EvidenceHash); err != nil {
-		return fmt.Errorf("wrong EvidenceHash: %v", err)
+		return fmt.Errorf("wrong EvidenceHash: %w", err)
 	}
 
 	if len(h.ProposerProTxHash) != crypto.DefaultHashSize {
@@ -468,20 +500,52 @@ func (h Header) ValidateBasic() error {
 	// Basic validation of hashes related to application data.
 	// Will validate fully against state in state#ValidateBlock.
 	if err := ValidateHash(h.ValidatorsHash); err != nil {
-		return fmt.Errorf("wrong ValidatorsHash: %v", err)
+		return fmt.Errorf("wrong ValidatorsHash: %w", err)
 	}
 	if err := ValidateHash(h.NextValidatorsHash); err != nil {
-		return fmt.Errorf("wrong NextValidatorsHash: %v", err)
+		return fmt.Errorf("wrong NextValidatorsHash: %w", err)
 	}
 	if err := ValidateHash(h.ConsensusHash); err != nil {
-		return fmt.Errorf("wrong ConsensusHash: %v", err)
+		return fmt.Errorf("wrong ConsensusHash: %w", err)
+	}
+	if err := ValidateHash(h.NextConsensusHash); err != nil {
+		return fmt.Errorf("wrong NextConsensusHash: %w", err)
 	}
 	// NOTE: AppHash is arbitrary length
-	if err := ValidateHash(h.LastResultsHash); err != nil {
-		return fmt.Errorf("wrong LastResultsHash: %v", err)
+	if err := ValidateHash(h.ResultsHash); err != nil {
+		return fmt.Errorf("wrong LastResultsHash: %w", err)
 	}
 
 	return nil
+}
+
+// IsTimely defines whether the the proposal time is correct, as per PBTS spec.
+// NOTE: By definition, at initial height, recvTime MUST be genesis time.
+func (h Header) IsTimely(recvTime time.Time, sp SynchronyParams, round int32) bool {
+	return isTimely(h.Time, recvTime, sp, round)
+}
+
+// StateID returns a state ID of this block
+func (h *Header) StateID() tmproto.StateID {
+	var appHash []byte
+	if len(h.AppHash) != 0 {
+		appHash = h.AppHash.Copy()
+	} else {
+		appHash = make([]byte, crypto.DefaultAppHashSize)
+	}
+
+	ts, err := gogotypes.TimestampProto(h.Time)
+	if err != nil || ts == nil {
+		panic("cannot convert time " + h.Time.String() + " to Timesstamp: " + err.Error())
+	}
+
+	return tmproto.StateID{
+		AppVersion:            h.Version.App,
+		Height:                uint64(h.Height),
+		AppHash:               appHash,
+		CoreChainLockedHeight: h.CoreChainLockedHeight,
+		Time:                  *ts,
+	}
 }
 
 // Hash returns the hash of the header.
@@ -494,36 +558,38 @@ func (h *Header) Hash() tmbytes.HexBytes {
 	if h == nil || len(h.ValidatorsHash) == 0 {
 		return nil
 	}
-	hpb := h.Version.ToProto()
-	hbz, err := hpb.Marshal()
+	pbVersion := h.Version.ToProto()
+	version, err := pbVersion.Marshal()
 	if err != nil {
 		return nil
 	}
 
-	pbt, err := gogotypes.StdTimeMarshal(h.Time)
+	blockTime, err := gogotypes.StdTimeMarshal(h.Time)
 	if err != nil {
 		return nil
 	}
 
-	pbbi := h.LastBlockID.ToProto()
-	bzbi, err := pbbi.Marshal()
+	pbLastBlockID := h.LastBlockID.ToProto()
+	lastBlockID, err := pbLastBlockID.Marshal()
 	if err != nil {
 		return nil
 	}
+
 	return merkle.HashFromByteSlices([][]byte{
-		hbz,
+		version,
 		cdcEncode(h.ChainID),
 		cdcEncode(h.Height),
 		cdcEncode(h.CoreChainLockedHeight),
-		pbt,
-		bzbi,
+		blockTime,
+		lastBlockID,
 		cdcEncode(h.LastCommitHash),
 		cdcEncode(h.DataHash),
 		cdcEncode(h.ValidatorsHash),
 		cdcEncode(h.NextValidatorsHash),
 		cdcEncode(h.ConsensusHash),
+		cdcEncode(h.NextConsensusHash),
 		cdcEncode(h.AppHash),
-		cdcEncode(h.LastResultsHash),
+		cdcEncode(h.ResultsHash),
 		cdcEncode(h.EvidenceHash),
 		cdcEncode(h.ProposerProTxHash),
 		cdcEncode(h.ProposedAppVersion),
@@ -548,6 +614,7 @@ func (h *Header) StringIndented(indent string) string {
 %s  NextValidators:          %v
 %s  App:                     %v
 %s  Consensus:               %v
+%s  NextConsensus:           %v
 %s  Results:                 %v
 %s  Evidence:                %v
 %s  Proposer:                %v
@@ -565,11 +632,13 @@ func (h *Header) StringIndented(indent string) string {
 		indent, h.NextValidatorsHash,
 		indent, h.AppHash,
 		indent, h.ConsensusHash,
-		indent, h.LastResultsHash,
+		indent, h.NextConsensusHash,
+		indent, h.ResultsHash,
 		indent, h.EvidenceHash,
 		indent, h.ProposerProTxHash,
 		indent, h.ProposedAppVersion,
-		indent, h.Hash())
+		indent, h.Hash(),
+	)
 }
 
 // ToProto converts Header to protobuf
@@ -588,10 +657,11 @@ func (h *Header) ToProto() *tmproto.Header {
 		ValidatorsHash:        h.ValidatorsHash,
 		NextValidatorsHash:    h.NextValidatorsHash,
 		ConsensusHash:         h.ConsensusHash,
+		NextConsensusHash:     h.NextConsensusHash,
 		AppHash:               h.AppHash,
 		DataHash:              h.DataHash,
 		EvidenceHash:          h.EvidenceHash,
-		LastResultsHash:       h.LastResultsHash,
+		ResultsHash:           h.ResultsHash,
 		LastCommitHash:        h.LastCommitHash,
 		ProposerProTxHash:     h.ProposerProTxHash,
 		ProposedAppVersion:    h.ProposedAppVersion,
@@ -622,10 +692,11 @@ func HeaderFromProto(ph *tmproto.Header) (Header, error) {
 	h.ValidatorsHash = ph.ValidatorsHash
 	h.NextValidatorsHash = ph.NextValidatorsHash
 	h.ConsensusHash = ph.ConsensusHash
+	h.NextConsensusHash = ph.NextConsensusHash
 	h.AppHash = ph.AppHash
 	h.DataHash = ph.DataHash
 	h.EvidenceHash = ph.EvidenceHash
-	h.LastResultsHash = ph.LastResultsHash
+	h.ResultsHash = ph.ResultsHash
 	h.LastCommitHash = ph.LastCommitHash
 	h.ProposerProTxHash = ph.ProposerProTxHash
 	h.ProposedAppVersion = ph.ProposedAppVersion
@@ -648,9 +719,10 @@ const (
 )
 
 const (
-	// MaxCommitOverheadBytes is the max size of commit -> 82 for BlockID, 34 for StateID, 8 for Height, 4 for Round.
-	// 96 for Block signature, 96 for State Signature and -> 3 bytes overhead
-	MaxCommitOverheadBytes int64 = 329
+	// MaxCommitOverheadBytes is the max size of commit, with overhead but without vote extensions:
+	// (110+2) for BlockID,  (8+2) for Height, (4+2) for Round,
+	// (32+2) for QuorumHash, (96+2) for Block signature.
+	MaxCommitOverheadBytes int64 = (110 + 2) + (8 + 2) + (4 + 2) + (32 + 2) + (96 + 2) + 0
 )
 
 //-------------------------------------
@@ -665,10 +737,10 @@ type Commit struct {
 	Height                  int64             `json:"height"`
 	Round                   int32             `json:"round"`
 	BlockID                 BlockID           `json:"block_id"`
-	StateID                 StateID           `json:"state_id"`
 	QuorumHash              crypto.QuorumHash `json:"quorum_hash"`
 	ThresholdBlockSignature []byte            `json:"threshold_block_signature"`
-	ThresholdStateSignature []byte            `json:"threshold_state_signature"`
+	// ThresholdVoteExtensions keeps the list of recovered threshold signatures for vote-extensions
+	ThresholdVoteExtensions []ThresholdExtensionSign `json:"threshold_vote_extensions"`
 
 	// Memoized in first call to corresponding method.
 	// NOTE: can't memoize in constructor because constructor isn't used for
@@ -677,16 +749,25 @@ type Commit struct {
 }
 
 // NewCommit returns a new Commit.
-func NewCommit(height int64, round int32, blockID BlockID, stateID StateID, quorumHash []byte,
-	thresholdBlockSignature []byte, thresholdStateSignature []byte) *Commit {
-	return &Commit{
-		Height:                  height,
-		Round:                   round,
-		BlockID:                 blockID,
-		StateID:                 stateID,
-		QuorumHash:              quorumHash,
-		ThresholdBlockSignature: thresholdBlockSignature,
-		ThresholdStateSignature: thresholdStateSignature,
+func NewCommit(height int64, round int32, blockID BlockID, commitSigns *CommitSigns) *Commit {
+	commit := &Commit{
+		Height:  height,
+		Round:   round,
+		BlockID: blockID,
+	}
+	if commitSigns != nil {
+		commitSigns.CopyToCommit(commit)
+	}
+	return commit
+}
+
+// ToCommitInfo convert and returns CommitInfo structure
+func (commit *Commit) ToCommitInfo() types.CommitInfo {
+	return types.CommitInfo{
+		Round:                   commit.Round,
+		QuorumHash:              commit.QuorumHash,
+		BlockSignature:          commit.ThresholdBlockSignature,
+		ThresholdVoteExtensions: ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions),
 	}
 }
 
@@ -714,14 +795,19 @@ func (commit *Commit) VoteBlockRequestID() []byte {
 	requestIDMessage = append(requestIDMessage, heightByteArray...)
 	requestIDMessage = append(requestIDMessage, roundByteArray...)
 
-	return crypto.Sha256(requestIDMessage)
+	hash := sha256.Sum256(requestIDMessage)
+	return hash[:]
 }
 
 // CanonicalVoteVerifySignBytes returns the bytes of the Canonical Vote that is threshold signed.
 func (commit *Commit) CanonicalVoteVerifySignBytes(chainID string) []byte {
 	voteCanonical := commit.GetCanonicalVote()
 	vCanonical := voteCanonical.ToProto()
-	return VoteBlockSignBytes(chainID, vCanonical)
+	bz, err := vCanonical.SignBytes(chainID)
+	if err != nil {
+		panic(fmt.Errorf("canonical vote sign bytes: %w", err))
+	}
+	return bz
 }
 
 // CanonicalVoteVerifySignID returns the signID bytes of the Canonical Vote that is threshold signed.
@@ -769,7 +855,7 @@ func (commit *Commit) ValidateBasic() error {
 	}
 
 	if commit.Height >= 1 {
-		if commit.BlockID.IsZero() {
+		if commit.BlockID.IsNil() {
 			return errors.New("commit cannot be for nil block")
 		}
 		if len(commit.ThresholdBlockSignature) != SignatureSize {
@@ -777,13 +863,6 @@ func (commit *Commit) ValidateBasic() error {
 				"block threshold signature is wrong size (wanted: %d, received: %d)",
 				SignatureSize,
 				len(commit.ThresholdBlockSignature),
-			)
-		}
-		if len(commit.ThresholdStateSignature) != SignatureSize {
-			return fmt.Errorf(
-				"state threshold signature is wrong size (wanted: %d, received: %d)",
-				SignatureSize,
-				len(commit.ThresholdStateSignature),
 			)
 		}
 	}
@@ -804,10 +883,7 @@ func (commit *Commit) Hash() tmbytes.HexBytes {
 		return nil
 	}
 	if commit.hash == nil {
-		bs := make([][]byte, 2)
-		bs[0] = commit.ThresholdBlockSignature
-		bs[1] = commit.ThresholdStateSignature
-		commit.hash = merkle.HashFromByteSlices(bs)
+		commit.hash = crypto.Checksum(commit.ThresholdBlockSignature)
 	}
 	return commit.hash
 }
@@ -820,14 +896,12 @@ func (commit *Commit) String() string {
 		return "nil-Commit"
 	}
 	return fmt.Sprintf(
-		`Commit{H: %d, R: %d, BlockID: %v, StateID: %v, QuorumHash %v, BlockSignature: %v, StateSignature: %v}#%v`,
+		`Commit{H: %d, R: %d, BlockID: %v, QuorumHash %v, BlockSignature: %v}#%v`,
 		commit.Height,
 		commit.Round,
 		commit.BlockID,
-		commit.StateID,
 		commit.QuorumHash,
 		base64.StdEncoding.EncodeToString(commit.ThresholdBlockSignature),
-		base64.StdEncoding.EncodeToString(commit.ThresholdStateSignature),
 		commit.hash)
 }
 
@@ -840,16 +914,12 @@ func (commit *Commit) StringIndented(indent string) string {
 %s  Height:     %d
 %s  Round:      %d
 %s  BlockID:    %v
-%s  StateID:    %v
 %s  BlockSignature: %v
-%s  StateSignature: %v
 %s}#%v`,
 		indent, commit.Height,
 		indent, commit.Round,
 		indent, commit.BlockID,
-		indent, commit.StateID,
 		indent, base64.StdEncoding.EncodeToString(commit.ThresholdBlockSignature),
-		indent, base64.StdEncoding.EncodeToString(commit.ThresholdStateSignature),
 		indent, commit.hash)
 }
 
@@ -859,9 +929,7 @@ func (commit *Commit) MarshalZerologObject(e *zerolog.Event) {
 		e.Int64("height", commit.Height)
 		e.Int32("round", commit.Round)
 		e.Str("BlockID.Hash", commit.BlockID.Hash.String())
-		e.Str("StateID", commit.StateID.String())
 		e.Str("BlockSignature", hex.EncodeToString(commit.ThresholdBlockSignature))
-		e.Str("StateSignature", hex.EncodeToString(commit.ThresholdStateSignature))
 	}
 }
 
@@ -876,11 +944,9 @@ func (commit *Commit) ToProto() *tmproto.Commit {
 	c.Height = commit.Height
 	c.Round = commit.Round
 	c.BlockID = commit.BlockID.ToProto()
-	c.StateID = commit.StateID.ToProto()
 
-	c.ThresholdStateSignature = commit.ThresholdStateSignature
 	c.ThresholdBlockSignature = commit.ThresholdBlockSignature
-
+	c.ThresholdVoteExtensions = ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions)
 	c.QuorumHash = commit.QuorumHash
 
 	return c
@@ -902,24 +968,16 @@ func CommitFromProto(cp *tmproto.Commit) (*Commit, error) {
 		return nil, err
 	}
 
-	si, err := StateIDFromProto(&cp.StateID)
-	if err != nil {
-		return nil, err
-	}
-
 	commit.QuorumHash = cp.QuorumHash
 	commit.ThresholdBlockSignature = cp.ThresholdBlockSignature
-	commit.ThresholdStateSignature = cp.ThresholdStateSignature
+	commit.ThresholdVoteExtensions = ThresholdExtensionSignFromProto(cp.ThresholdVoteExtensions)
 
 	commit.Height = cp.Height
 	commit.Round = cp.Round
 	commit.BlockID = *bi
-	commit.StateID = *si
 
 	return commit, commit.ValidateBasic()
 }
-
-//-----------------------------------------------------------------------------
 
 // Data contains the set of transactions included in the block
 type Data struct {
@@ -1000,109 +1058,20 @@ func DataFromProto(dp *tmproto.Data) (Data, error) {
 	return *data, nil
 }
 
-//-----------------------------------------------------------------------------
-
-// EvidenceData contains any evidence of malicious wrong-doing by validators
-type EvidenceData struct {
-	Evidence EvidenceList `json:"evidence"`
-
-	// Volatile. Used as cache
-	hash     tmbytes.HexBytes
-	byteSize int64
-}
-
-// Hash returns the hash of the data.
-func (data *EvidenceData) Hash() tmbytes.HexBytes {
-	if data.hash == nil {
-		data.hash = data.Evidence.Hash()
-	}
-	return data.hash
-}
-
-// ByteSize returns the total byte size of all the evidence
-func (data *EvidenceData) ByteSize() int64 {
-	if data.byteSize == 0 && len(data.Evidence) != 0 {
-		pb, err := data.ToProto()
-		if err != nil {
-			panic(err)
-		}
-		data.byteSize = int64(pb.Size())
-	}
-	return data.byteSize
-}
-
-// StringIndented returns a string representation of the evidence.
-func (data *EvidenceData) StringIndented(indent string) string {
-	if data == nil {
-		return "nil-Evidence"
-	}
-	evStrings := make([]string, tmmath.MinInt(len(data.Evidence), 21))
-	for i, ev := range data.Evidence {
-		if i == 20 {
-			evStrings[i] = fmt.Sprintf("... (%v total)", len(data.Evidence))
-			break
-		}
-		evStrings[i] = fmt.Sprintf("Evidence:%v", ev)
-	}
-	return fmt.Sprintf(`EvidenceData{
-%s  %v
-%s}#%v`,
-		indent, strings.Join(evStrings, "\n"+indent+"  "),
-		indent, data.hash)
-}
-
-// ToProto converts EvidenceData to protobuf
-func (data *EvidenceData) ToProto() (*tmproto.EvidenceList, error) {
-	if data == nil {
-		return nil, errors.New("nil evidence data")
-	}
-
-	evi := new(tmproto.EvidenceList)
-	eviBzs := make([]tmproto.Evidence, len(data.Evidence))
-	for i := range data.Evidence {
-		protoEvi, err := EvidenceToProto(data.Evidence[i])
-		if err != nil {
-			return nil, err
-		}
-		eviBzs[i] = *protoEvi
-	}
-	evi.Evidence = eviBzs
-
-	return evi, nil
-}
-
-// FromProto sets a protobuf EvidenceData to the given pointer.
-func (data *EvidenceData) FromProto(eviData *tmproto.EvidenceList) error {
-	if eviData == nil {
-		return errors.New("nil evidenceData")
-	}
-
-	eviBzs := make(EvidenceList, len(eviData.Evidence))
-	for i := range eviData.Evidence {
-		evi, err := EvidenceFromProto(&eviData.Evidence[i])
-		if err != nil {
-			return err
-		}
-		eviBzs[i] = evi
-	}
-	data.Evidence = eviBzs
-	data.byteSize = int64(eviData.Size())
-
-	return nil
-}
-
 //--------------------------------------------------------------------------------
 
 // BlockID
 type BlockID struct {
 	Hash          tmbytes.HexBytes `json:"hash"`
 	PartSetHeader PartSetHeader    `json:"parts"`
+	StateID       tmbytes.HexBytes `json:"state_id"`
 }
 
 // Equals returns true if the BlockID matches the given BlockID
 func (blockID BlockID) Equals(other BlockID) bool {
 	return bytes.Equal(blockID.Hash, other.Hash) &&
-		blockID.PartSetHeader.Equals(other.PartSetHeader)
+		blockID.PartSetHeader.Equals(other.PartSetHeader) &&
+		blockID.StateID.Equal(other.StateID)
 }
 
 // Key returns a machine-readable string representation of the BlockID
@@ -1113,7 +1082,9 @@ func (blockID BlockID) Key() string {
 		panic(err)
 	}
 
-	return fmt.Sprint(string(blockID.Hash), string(bz))
+	stateID := blockID.StateID
+
+	return string(blockID.Hash) + string(bz) + string(stateID)
 }
 
 // ValidateBasic performs basic validation.
@@ -1125,30 +1096,54 @@ func (blockID BlockID) ValidateBasic() error {
 	if err := blockID.PartSetHeader.ValidateBasic(); err != nil {
 		return fmt.Errorf("wrong PartSetHeader: %w", err)
 	}
+
+	if len(blockID.Hash) != 0 && len(blockID.StateID) != crypto.HashSize {
+		return fmt.Errorf("expected state ID len: %d, actual: %d", crypto.HashSize, len(blockID.StateID))
+	}
+
 	return nil
 }
 
-// IsZero returns true if this is the BlockID of a nil block.
-func (blockID BlockID) IsZero() bool {
+func (blockID BlockID) Copy() BlockID {
+	return BlockID{
+		PartSetHeader: PartSetHeader{
+			Total: blockID.PartSetHeader.Total,
+			Hash:  blockID.PartSetHeader.Hash.Copy(),
+		},
+		Hash:    blockID.Hash.Copy(),
+		StateID: blockID.StateID.Copy(),
+	}
+}
+
+// IsNil returns true if this is the BlockID of a nil block.
+func (blockID BlockID) IsNil() bool {
 	return len(blockID.Hash) == 0 &&
-		blockID.PartSetHeader.IsZero()
+		blockID.PartSetHeader.IsZero() &&
+		blockID.StateID.IsZero()
 }
 
 // IsComplete returns true if this is a valid BlockID of a non-nil block.
 func (blockID BlockID) IsComplete() bool {
-	return len(blockID.Hash) == tmhash.Size &&
+	return len(blockID.Hash) == crypto.HashSize &&
 		blockID.PartSetHeader.Total > 0 &&
-		len(blockID.PartSetHeader.Hash) == tmhash.Size
+		len(blockID.PartSetHeader.Hash) == crypto.HashSize &&
+		len(blockID.StateID) == crypto.HashSize
 }
 
 // String returns a human readable string representation of the BlockID.
 //
 // 1. hash
 // 2. part set header
+// 3. state ID hash
 //
 // See PartSetHeader#String
 func (blockID BlockID) String() string {
-	return fmt.Sprintf(`%v:%v`, blockID.Hash, blockID.PartSetHeader)
+
+	stateIDHash := blockID.StateID
+	if len(stateIDHash) > 6 {
+		stateIDHash = stateIDHash[:6]
+	}
+	return fmt.Sprintf(`%v:%v:%X`, blockID.Hash, blockID.PartSetHeader, stateIDHash)
 }
 
 // ToProto converts BlockID to protobuf
@@ -1158,8 +1153,9 @@ func (blockID *BlockID) ToProto() tmproto.BlockID {
 	}
 
 	return tmproto.BlockID{
-		Hash:          blockID.Hash,
+		Hash:          blockID.Hash.Copy(),
 		PartSetHeader: blockID.PartSetHeader.ToProto(),
+		StateID:       blockID.StateID.Copy(),
 	}
 }
 
@@ -1178,6 +1174,9 @@ func BlockIDFromProto(bID *tmproto.BlockID) (*BlockID, error) {
 
 	blockID.PartSetHeader = *ph
 	blockID.Hash = bID.Hash
+	if bID.StateID != nil {
+		blockID.StateID = bID.StateID
+	}
 
 	return blockID, blockID.ValidateBasic()
 }

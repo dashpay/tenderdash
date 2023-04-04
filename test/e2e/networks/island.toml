@@ -1,5 +1,5 @@
 initial_height = 1000
-initial_state = { initial01 = "a", initial02 = "b", initial03 = "c" }
+initial_state = {items={ initial01 = "a", initial02 = "b", initial03 = "c" }}
 initial_core_chain_locked_height = 3400
 
 [chainlock_updates]
@@ -56,7 +56,7 @@ retain_blocks = 3
 perturb = ["kill"]
 
 [node.validator04]
-database = "rocksdb"
+database = "badgerdb"
 abci_protocol = "builtin"
 privval_protocol = "dashcore"
 perturb = ["pause"]
@@ -69,7 +69,7 @@ privval_protocol = "dashcore"
 perturb = ["kill", "pause", "disconnect", "restart"]
 
 [node.validator06]
-database = "rocksdb"
+database = "cleveldb"
 fast_sync = "v0"
 privval_protocol = "dashcore"
 

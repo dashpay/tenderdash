@@ -1,6 +1,7 @@
 package state_test
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"testing"
@@ -29,18 +30,17 @@ func TestStoreBootstrap(t *testing.T) {
 	vals, _ := types.RandValidatorSet(3)
 
 	bootstrapState := makeRandomStateFromValidatorSet(vals, 100, 100)
-	err := stateStore.Bootstrap(bootstrapState)
-	require.NoError(t, err)
+	require.NoError(t, stateStore.Bootstrap(bootstrapState))
 
 	// bootstrap should also save the previous validator
-	_, err = stateStore.LoadValidators(99)
+	_, err := stateStore.LoadValidators(99)
 	require.NoError(t, err)
 
 	_, err = stateStore.LoadValidators(100)
 	require.NoError(t, err)
 
 	_, err = stateStore.LoadValidators(101)
-	require.NoError(t, err)
+	require.Error(t, err)
 
 	state, err := stateStore.Load()
 	require.NoError(t, err)
@@ -53,19 +53,22 @@ func TestStoreLoadValidators(t *testing.T) {
 	vals, _ := types.RandValidatorSet(3)
 
 	// 1) LoadValidators loads validators using a height where they were last changed
-	// Note that only the next validators at height h + 1 are saved
-	err := stateStore.Save(makeRandomStateFromValidatorSet(vals, 1, 1))
+	// Note that only the current validators at height h are saved
+	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals, 1, 1)))
+	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals.CopyIncrementProposerPriority(1), 2, 1)))
+	loadedVals, err := stateStore.LoadValidators(2)
 	require.NoError(t, err)
-	err = stateStore.Save(makeRandomStateFromValidatorSet(vals.CopyIncrementProposerPriority(1), 2, 1))
-	require.NoError(t, err)
-	loadedVals, err := stateStore.LoadValidators(3)
-	require.NoError(t, err)
-	require.Equal(t, vals.CopyIncrementProposerPriority(3), loadedVals)
+
+	_, err = stateStore.LoadValidators(3)
+	assert.Error(t, err, "no validator expected at this height")
+
+	require.Equal(t, vals.CopyIncrementProposerPriority(2), loadedVals)
 
 	// 2) LoadValidators loads validators using a checkpoint height
 
-	// add a validator set at the checkpoint
-	err = stateStore.Save(makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval, 1))
+	// add a validator set after the checkpoint
+	state := makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval+1, 1)
+	err = stateStore.Save(state)
 	require.NoError(t, err)
 
 	// check that a request will go back to the last checkpoint
@@ -76,15 +79,14 @@ func TestStoreLoadValidators(t *testing.T) {
 		valSetCheckpointInterval, valSetCheckpointInterval+1), err.Error())
 
 	// now save a validator set at that checkpoint
-	err = stateStore.Save(makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval-1, 1))
+	err = stateStore.Save(makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval, 1))
 	require.NoError(t, err)
 
 	loadedVals, err = stateStore.LoadValidators(valSetCheckpointInterval)
 	require.NoError(t, err)
-	// validator set gets updated with the one given hence we expect it to equal next validators (with an increment of one)
-	// as opposed to being equal to an increment of 100000 - 1 (if we didn't save at the checkpoint)
-	require.Equal(t, vals.CopyIncrementProposerPriority(2), loadedVals)
-	require.NotEqual(t, vals.CopyIncrementProposerPriority(valSetCheckpointInterval), loadedVals)
+	// ensure we have correct validator set loaded
+	require.Equal(t, vals.CopyIncrementProposerPriority(valSetCheckpointInterval), loadedVals)
+	require.NotEqual(t, vals.CopyIncrementProposerPriority(valSetCheckpointInterval-1), loadedVals)
 }
 
 // This benchmarks the speed of loading validators from different heights if there is no validator set change.
@@ -94,7 +96,7 @@ func TestStoreLoadValidators(t *testing.T) {
 func BenchmarkLoadValidators(b *testing.B) {
 	const valSetSize = 100
 
-	cfg, err := config.ResetTestRoot("state_")
+	cfg, err := config.ResetTestRoot(b.TempDir(), "state_")
 	require.NoError(b, err)
 
 	defer os.RemoveAll(cfg.RootDir)
@@ -108,7 +110,6 @@ func BenchmarkLoadValidators(b *testing.B) {
 	}
 
 	state.Validators, _ = types.RandValidatorSet(valSetSize)
-	state.NextValidators = state.Validators.CopyIncrementProposerPriority(1)
 	err = stateStore.Save(state)
 	require.NoError(b, err)
 
@@ -116,7 +117,7 @@ func BenchmarkLoadValidators(b *testing.B) {
 
 	for i := 10; i < 10000000000; i *= 10 { // 10, 100, 1000, ...
 		i := i
-		err = stateStore.Save(makeRandomStateFromValidatorSet(state.NextValidators,
+		err = stateStore.Save(makeRandomStateFromValidatorSet(state.Validators,
 			int64(i)-1, state.LastHeightValidatorsChanged))
 		if err != nil {
 			b.Fatalf("error saving store: %v", err)
@@ -134,9 +135,12 @@ func BenchmarkLoadValidators(b *testing.B) {
 }
 
 func TestStoreLoadConsensusParams(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
-	err := stateStore.Save(makeRandomStateFromConsensusParams(types.DefaultConsensusParams(), 1, 1))
+	err := stateStore.Save(makeRandomStateFromConsensusParams(ctx, t, types.DefaultConsensusParams(), 1, 1))
 	require.NoError(t, err)
 	params, err := stateStore.LoadConsensusParams(1)
 	require.NoError(t, err)
@@ -146,7 +150,7 @@ func TestStoreLoadConsensusParams(t *testing.T) {
 	// it should save a pointer to the params at height 1
 	differentParams := types.DefaultConsensusParams()
 	differentParams.Block.MaxBytes = 20000
-	err = stateStore.Save(makeRandomStateFromConsensusParams(differentParams, 10, 1))
+	err = stateStore.Save(makeRandomStateFromConsensusParams(ctx, t, differentParams, 10, 1))
 	require.NoError(t, err)
 	res, err := stateStore.LoadConsensusParams(10)
 	require.NoError(t, err)
@@ -196,8 +200,8 @@ func TestPruneStates(t *testing.T) {
 			paramsChanged := int64(0)
 
 			for h := tc.startHeight; h <= tc.endHeight; h++ {
-				if valsChanged == 0 || h%10 == 2 {
-					valsChanged = h + 1 // Have to add 1, since NextValidators is what's stored
+				if valsChanged == 0 || h%10 == 3 {
+					valsChanged = h
 				}
 				if paramsChanged == 0 || h%10 == 5 {
 					paramsChanged = h
@@ -207,7 +211,6 @@ func TestPruneStates(t *testing.T) {
 					InitialHeight:   1,
 					LastBlockHeight: h - 1,
 					Validators:      validatorSet,
-					NextValidators:  validatorSet,
 					ConsensusParams: types.ConsensusParams{
 						Block: types.BlockParams{MaxBytes: 10e6},
 					},
@@ -222,12 +225,15 @@ func TestPruneStates(t *testing.T) {
 				err := stateStore.Save(state)
 				require.NoError(t, err)
 
-				err = stateStore.SaveABCIResponses(h, &tmstate.ABCIResponses{
-					DeliverTxs: []*abci.ResponseDeliverTx{
-						{Data: []byte{1}},
-						{Data: []byte{2}},
-						{Data: []byte{3}},
+				err = stateStore.SaveABCIResponses(h, tmstate.ABCIResponses{
+					ProcessProposal: &abci.ResponseProcessProposal{
+						TxResults: []*abci.ExecTxResult{
+							{Data: []byte{1}},
+							{Data: []byte{2}},
+							{Data: []byte{3}},
+						},
 					},
+					FinalizeBlock: &abci.ResponseFinalizeBlock{},
 				})
 				require.NoError(t, err)
 			}
@@ -249,9 +255,9 @@ func TestPruneStates(t *testing.T) {
 				require.NoError(t, err, h)
 				require.NotNil(t, params, h)
 
-				abci, err := stateStore.LoadABCIResponses(h)
+				abciRes, err := stateStore.LoadABCIResponses(h)
 				require.NoError(t, err, h)
-				require.NotNil(t, abci, h)
+				require.NotNil(t, abciRes, h)
 			}
 
 			emptyParams := types.ConsensusParams{}
@@ -275,32 +281,10 @@ func TestPruneStates(t *testing.T) {
 					require.Equal(t, emptyParams, params, h)
 				}
 
-				abci, err := stateStore.LoadABCIResponses(h)
+				abciRes, err := stateStore.LoadABCIResponses(h)
 				require.Error(t, err, h)
-				require.Nil(t, abci, h)
+				require.Nil(t, abciRes, h)
 			}
 		})
 	}
-}
-
-func TestABCIResponsesResultsHash(t *testing.T) {
-	responses := &tmstate.ABCIResponses{
-		BeginBlock: &abci.ResponseBeginBlock{},
-		DeliverTxs: []*abci.ResponseDeliverTx{
-			{Code: 32, Data: []byte("Hello"), Log: "Huh?"},
-		},
-		EndBlock: &abci.ResponseEndBlock{},
-	}
-
-	root := sm.ABCIResponsesResultsHash(responses)
-
-	// root should be Merkle tree root of DeliverTxs responses
-	results := types.NewResults(responses.DeliverTxs)
-	assert.Equal(t, root, results.Hash())
-
-	// test we can prove first DeliverTx
-	proof := results.ProveResult(0)
-	bz, err := results[0].Marshal()
-	require.NoError(t, err)
-	assert.NoError(t, proof.Verify(root, bz))
 }

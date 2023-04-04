@@ -4,6 +4,12 @@ package tendermint.p2p;
 option go_package = "github.com/tendermint/tendermint/proto/tendermint/p2p";
 
 import "gogoproto/gogo.proto";
+import "tendermint/blocksync/types.proto";
+import "tendermint/consensus/types.proto";
+import "tendermint/statesync/types.proto";
+import "tendermint/types/evidence.proto";
+import "tendermint/mempool/types.proto";
+import "tendermint/p2p/pex.proto";
 import "google/protobuf/timestamp.proto";
 
 message ProtocolVersion {
@@ -33,7 +39,8 @@ message PeerInfo {
   string                    id             = 1 [(gogoproto.customname) = "ID"];
   repeated PeerAddressInfo  address_info   = 2;
   google.protobuf.Timestamp last_connected = 3 [(gogoproto.stdtime) = true];
-  bytes                     pro_tx_hash    = 4;
+  bool                      inactive       = 4;
+  bytes                     pro_tx_hash    = 5;
 }
 
 message PeerAddressInfo {
@@ -41,4 +48,47 @@ message PeerAddressInfo {
   google.protobuf.Timestamp last_dial_success = 2 [(gogoproto.stdtime) = true];
   google.protobuf.Timestamp last_dial_failure = 3 [(gogoproto.stdtime) = true];
   uint32                    dial_failures     = 4;
+}
+
+message Echo {
+  string value = 1;
+}
+
+message Envelope {
+  map<string, string> attributes = 1;
+
+  oneof sum {
+    Echo                       echo         = 2;
+    tendermint.p2p.PexRequest  pex_request  = 3;
+    tendermint.p2p.PexResponse pex_response = 4;
+    tendermint.types.Evidence  evidence     = 5;
+    tendermint.mempool.Txs     mempool_txs  = 6;
+
+    tendermint.blocksync.BlockRequest    block_request     = 7;
+    tendermint.blocksync.NoBlockResponse no_block_response = 8;
+    tendermint.blocksync.BlockResponse   block_response    = 9;
+    tendermint.blocksync.StatusRequest   status_request    = 10;
+    tendermint.blocksync.StatusResponse  status_response   = 11;
+
+    tendermint.statesync.SnapshotsRequest   snapshots_request    = 12;
+    tendermint.statesync.SnapshotsResponse  snapshots_response   = 13;
+    tendermint.statesync.ChunkRequest       chunk_request        = 14;
+    tendermint.statesync.ChunkResponse      chunk_response       = 15;
+    tendermint.statesync.LightBlockRequest  light_block_request  = 16;
+    tendermint.statesync.LightBlockResponse light_block_response = 17;
+    tendermint.statesync.ParamsRequest      params_request       = 18;
+    tendermint.statesync.ParamsResponse     params_response      = 19;
+
+    tendermint.consensus.NewRoundStep  new_round_step  = 20;
+    tendermint.consensus.NewValidBlock new_valid_block = 21;
+    tendermint.consensus.Proposal      proposal        = 22;
+    tendermint.consensus.ProposalPOL   proposal_pol    = 23;
+    tendermint.consensus.BlockPart     block_part      = 24;
+    tendermint.consensus.Vote          vote            = 25;
+    tendermint.consensus.HasVote       has_vote        = 26;
+    tendermint.consensus.VoteSetMaj23  vote_set_maj23  = 27;
+    tendermint.consensus.VoteSetBits   vote_set_bits   = 28;
+    tendermint.consensus.Commit        commit          = 29;
+    tendermint.consensus.HasCommit     has_commit      = 30;
+  }
 }

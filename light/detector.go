@@ -15,7 +15,9 @@ import (
 //
 // 1: errConflictingHeaders -> there may have been an attack on this light client
 // 2: errBadWitness -> the witness has either not responded, doesn't have the header or has given us an invalid one
-//    Note: In the case of an invalid header we remove the witness
+//
+//	Note: In the case of an invalid header we remove the witness
+//
 // 3: nil -> the hashes of the two headers match
 func (c *Client) compareNewHeaderWithWitness(ctx context.Context, errc chan error, h *types.SignedHeader,
 	witness provider.Provider, witnessIndex int) {
@@ -105,6 +107,14 @@ func (c *Client) compareNewHeaderWithWitness(ctx context.Context, errc chan erro
 	}
 
 	if !bytes.Equal(h.Hash(), lightBlock.Hash()) {
+		c.logger.Debug(
+			"conflicting header received by witness",
+			"height", h.Height,
+			"witness", witnessIndex,
+			"header", h,
+			"witness_header", lightBlock,
+		)
+
 		errc <- errConflictingHeaders{Block: lightBlock, WitnessIndex: witnessIndex}
 	}
 

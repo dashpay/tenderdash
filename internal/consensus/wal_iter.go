@@ -1,71 +1,99 @@
 package consensus
 
 import (
+	"fmt"
 	"io"
 
+	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/types"
 )
+
+type walIter interface {
+	Value() *TimedWALMessage
+	Next() bool
+	Err() error
+}
 
 type walReader interface {
 	Decode() (*TimedWALMessage, error)
 }
 
-type walIter struct {
-	reader    walReader
-	curHeight int64
-	curRound  int32
-	queue     []*TimedWALMessage
-	hold      []*TimedWALMessage
-	msg       *TimedWALMessage
-	err       error
+type simpleWalIter struct {
+	reader walReader
+	value  *TimedWALMessage
+	err    error
 }
 
-func newWalIter(reader walReader) *walIter {
-	return &walIter{
-		reader: reader,
-	}
+func (i *simpleWalIter) Value() *TimedWALMessage {
+	return i.value
 }
 
-// Value takes a top element from a queue, otherwise returns nil if the queue is empty
-func (i *walIter) Value() *TimedWALMessage {
-	if len(i.queue) == 0 {
-		return nil
-	}
-	msg := i.queue[0]
-	i.queue = i.queue[1:]
-	return msg
+func (i *simpleWalIter) Next() bool {
+	i.value, i.err = i.reader.Decode()
+	return i.err == nil
 }
 
-// Next reads a next message from WAL, every message holds until reach a next height
-// if the read message is Propose with the "round" greater than previous, then held messages are flush
-func (i *walIter) Next() bool {
-	if len(i.queue) > 0 {
-		return true
-	}
-	if i.err != nil {
-		return false
-	}
-	for len(i.queue) == 0 && i.readMsg() {
-		if !i.processMsg(i.msg) {
-			return false
-		}
-		i.hold = append(i.hold, i.msg)
-	}
-	if len(i.queue) == 0 {
-		i.queue = i.hold
-	}
-	return len(i.queue) > 0
-}
-
-// Err returns an error if got the error is not io.EOF otherwise returns nil
-func (i *walIter) Err() error {
+func (i *simpleWalIter) Err() error {
 	if i.err == io.EOF {
 		return nil
 	}
 	return i.err
 }
 
-func (i *walIter) readMsg() bool {
+type skipperWalIter struct {
+	reader    walReader
+	curHeight int64
+	curRound  int32
+	queue     []*TimedWALMessage
+	hold      []*TimedWALMessage
+	msg       *TimedWALMessage
+	value     *TimedWALMessage
+	err       error
+}
+
+func newWalIter(reader walReader, shouldSkip bool) walIter {
+	if shouldSkip {
+		return &skipperWalIter{reader: reader}
+	}
+	return &simpleWalIter{reader: reader}
+}
+
+// Value takes a top element from a queue, otherwise returns nil if the queue is empty
+func (i *skipperWalIter) Value() *TimedWALMessage {
+	return i.value
+}
+
+// Next reads a next message from WAL, every message holds until reach a next height
+// if the read message is Propose with the "round" greater than previous, then held messages are flush
+func (i *skipperWalIter) Next() bool {
+	for len(i.queue) == 0 && i.readMsg() {
+		err := i.processTimedWALMessage(i.msg)
+		if err != nil {
+			i.err = err
+			return false
+		}
+	}
+	if len(i.queue) == 0 {
+		i.queue = i.hold
+		i.hold = nil
+	}
+	if len(i.queue) > 0 {
+		i.value = i.queue[0]
+		i.queue = i.queue[1:]
+		return true
+	}
+	return false
+}
+
+// Err returns an error if got the error is not io.EOF otherwise returns nil
+func (i *skipperWalIter) Err() error {
+	if i.err == io.EOF {
+		return nil
+	}
+	return i.err
+}
+
+func (i *skipperWalIter) readMsg() bool {
 	if i.err == io.EOF {
 		return false
 	}
@@ -79,27 +107,61 @@ func (i *walIter) readMsg() bool {
 	return true
 }
 
-func (i *walIter) processMsg(msg *TimedWALMessage) bool {
-	m, ok := msg.Msg.(msgInfo)
-	if !ok {
-		return true
-	}
-	mi, ok := m.Msg.(*ProposalMessage)
+func (i *skipperWalIter) processTimedWALMessage(msg *TimedWALMessage) error {
+	ehm, ok := msg.Msg.(EndHeightMessage)
 	if ok {
-		i.processProposal(mi.Proposal)
+		i.curHeight = ehm.Height + 1
+		i.curRound = 0
+		i.hold = append(i.hold, msg)
+		return nil
 	}
-	return true
+	height, round, err := walMsgHeight(msg.Msg)
+	if err != nil {
+		return err
+	}
+	if height < i.curHeight {
+		i.queue = append(i.queue, msg)
+		return nil
+	}
+	if height == i.curHeight && round < i.curRound {
+		return nil
+	}
+	switch m := msg.Msg.(type) {
+	case types.EventDataRoundState:
+		switch m.Step {
+		case cstypes.RoundStepNewHeight.String():
+			i.curHeight = m.Height
+			i.curRound = m.Round
+			i.queue = i.hold
+			i.hold = nil
+		case cstypes.RoundStepPropose.String():
+			if m.Round == i.curRound+1 {
+				i.curRound = m.Round
+				i.hold = nil
+			}
+		}
+	}
+	i.hold = append(i.hold, i.msg)
+	return nil
 }
 
-func (i *walIter) processProposal(p *types.Proposal) {
-	if p.Height == i.curHeight && i.curRound < p.Round {
-		i.hold = nil
-		i.curRound = p.Round
+func walMsgHeight(msg WALMessage) (int64, int32, error) {
+	switch m := msg.(type) {
+	case types.EventDataRoundState:
+		return m.Height, m.Round, nil
+	case msgInfo:
+		switch msg := m.Msg.(type) {
+		case *ProposalMessage:
+			return msg.Proposal.Height, msg.Proposal.Round, nil
+		case *BlockPartMessage:
+			return msg.Height, msg.Round, nil
+		case *VoteMessage:
+			return msg.Vote.Height, msg.Vote.Round, nil
+		case *CommitMessage:
+			return msg.Commit.Height, msg.Commit.Round, nil
+		}
+	case timeoutInfo:
+		return m.Height, m.Round, nil
 	}
-	if p.Height > i.curHeight {
-		i.curHeight = p.Height
-		i.curRound = p.Round
-		i.queue = i.hold
-		i.hold = nil
-	}
+	return 0, 0, fmt.Errorf("unknown WALMessage type: %T", msg)
 }

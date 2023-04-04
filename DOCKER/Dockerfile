@@ -1,19 +1,63 @@
-# stage 1 Generate Tenderdash Binary
-FROM golang:1.17.13-alpine3.15 AS builder
+# This is a multi-stage Dockerfile.
+# * base - base dependencies that rarely change
+# * deps - branch-dependent dependencies
+# * compile - builds final binaries
+# * image - creates final image of minimal size
+
+ARG ALIPNE_VERSION=3.17
+ARG GOLANG_VERSION=1.19
+#################################
+# STAGE 1: install dependencies #
+#################################
+FROM golang:${GOLANG_VERSION}-alpine${ALIPNE_VERSION} AS base
 
 RUN apk update && \
     apk upgrade && \
-    apk add bash git gmp-dev sudo cmake build-base
+    apk --no-cache add bash git gmp-dev sudo cmake build-base python3-dev libpcap-dev leveldb-dev && \
+    rm -rf /var/cache/apk/*
 
-COPY . /go/src/github.com/dashevo/tenderdash
+WORKDIR /src/bls
 
-WORKDIR /go/src/github.com/dashevo/tenderdash
+# Install BLS library
+COPY third_party ./third_party
+RUN ./third_party/bls-signatures/build.sh && \
+    ./third_party/bls-signatures/install.sh
 
-RUN make install-bls
-RUN make build-linux
+#####################################
+# STAGE 2: install golang libraries #
+#####################################
+FROM base AS deps
 
-# stage 2
-FROM alpine:3.15
+WORKDIR /src/tenderdash
+
+# Fetch dependencies separately (for layer caching)
+COPY go.mod go.sum ./
+RUN go mod download
+
+#########################
+# STAGE 3: BUILD SOURCE #
+#########################
+FROM deps AS compile
+
+WORKDIR /src/tenderdash
+
+# Copy Tenderdash source
+# Avoid overwriting third-party libs
+COPY . .
+
+ARG TENDERMINT_BUILD_OPTIONS=tenderdash
+ARG GOOS=linux
+
+RUN rm -r /src/tenderdash/third_party && ln -s /src/bls/third_party /src/tenderdash/third_party && \
+    make build-binary && \
+    make build_abcidump && \
+    go clean && go clean -cache -fuzzcache -testcache -modcache
+
+########################
+# STAGE 4: FINAL IMAGE #
+########################
+FROM alpine:${ALIPNE_VERSION} AS image
+
 LABEL maintainer="developers@dash.org"
 
 # Tenderdash will be looking for the genesis file in /tenderdash/config/genesis.json
@@ -30,7 +74,8 @@ ENV TMHOME /tenderdash
 # could execute bash commands.
 RUN apk update && \
     apk upgrade && \
-    apk --no-cache add curl jq bash gmp libstdc++ && \
+    apk --no-cache add curl jq bash gmp libsodium-dev libstdc++ libpcap && \
+    rm -rf /var/cache/apk/* && \
     addgroup tmuser && \
     adduser -S -G tmuser tmuser -h "$TMHOME"
 
@@ -44,7 +89,7 @@ EXPOSE 26656 26657 26660
 
 STOPSIGNAL SIGTERM
 
-COPY --from=builder /go/src/github.com/dashevo/tenderdash/build/tenderdash /usr/bin/tenderdash
+COPY --from=compile /src/tenderdash/build/tenderdash /src/tenderdash/build/abcidump /usr/bin/
 
 # You can overwrite these before the first run to influence
 # config.json and genesis.json. Additionally, you can override

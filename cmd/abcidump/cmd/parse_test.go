@@ -4,7 +4,7 @@ import (
 	"bytes"
 	"encoding/base64"
 	"encoding/hex"
-	"strconv"
+	"fmt"
 	"testing"
 
 	"github.com/gogo/protobuf/proto"
@@ -12,114 +12,110 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/internal/libs/protoio"
-)
 
-func init() {
-}
+	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/libs/log"
+)
 
 func TestParse(t *testing.T) {
 	testCases := []struct {
+		name       string
 		input      proto.Message
-		format     string
 		args       []string
 		conditions []string
 	}{
 		{
-			input: &types.Request{
-				Value: &types.Request_ListSnapshots{
-					ListSnapshots: &types.RequestListSnapshots{},
-				}},
-			format:     formatHex,
-			conditions: []string{"\"listSnapshots\": {"},
+			name:       "Echo",
+			input:      types.ToRequestEcho("test echo MESSAGE"),
+			args:       []string{"parse", "--type", "tendermint.abci.Request"},
+			conditions: []string{"\"message\": \"test echo MESSAGE\""},
 		},
 		{
-			input: &types.Request{
-				Value: &types.Request_BeginBlock{
-					BeginBlock: &types.RequestBeginBlock{
-						Hash: []byte("block start"),
-					},
-				}},
-			format: formatBase64,
+			name: "PrepareProposal",
+			input: types.ToRequestPrepareProposal(&types.RequestPrepareProposal{
+				Height:             1234,
+				ProposerProTxHash:  crypto.Checksum([]byte("begin block")),
+				NextValidatorsHash: crypto.Checksum([]byte("next validators")),
+			}),
+			args: []string{"parse"},
 			conditions: []string{
-				"beginBlock",
-				"\"partSetHeader\"",
+				"prepareProposal",
+				"\"nextValidatorsHash\": \"79BF/WUzE4YwIPSizbaiGl2m4+JQGSoyy/h8ktnY/lU=\"",
 			},
 		},
 		{
-			input: &types.Request{
-				Value: &types.Request_BeginBlock{
-					BeginBlock: &types.RequestBeginBlock{
-						Hash: []byte("block start"),
-					},
-				}},
-			format: formatHex,
-			conditions: []string{
-				"beginBlock",
-				"\"partSetHeader\"",
-			},
+			name:       "response",
+			input:      types.ToResponseEcho("some response message"),
+			args:       []string{"--type", "tendermint.abci.Response"},
+			conditions: []string{"\"message\": \"some response message\""},
 		},
 	}
-	for _, raw := range []string{"raw", "delim"} {
-		for i, tc := range testCases {
+	for _, tc := range testCases {
+		for _, format := range []string{formatBase64, formatHex} {
+			for _, raw := range []bool{true, false} {
 
-			t.Run(strconv.Itoa(i)+"_"+raw, func(t *testing.T) {
-				// rootCmd := &ParseCmd{}
-				rootCmd := MakeRootCmd()
+				testName := fmt.Sprintf("parse-%s-%s-raw:%t", tc.name, format, raw)
+				t.Run(testName, func(t *testing.T) {
+					var (
+						err error
+					)
 
-				parsecmd := &ParseCmd{}
-				rootCmd.AddCommand(parsecmd.Command())
-				cmd := rootCmd
+					input := encodeProtobuf(t, tc.input, format, raw)
 
-				args := []string{"parse", "--format", tc.format}
+					args := append(tc.args, "--"+flagFormat, format, "--"+flagInput, input)
+					if raw {
+						args = append(args, "--"+flagRaw)
+					}
 
-				var (
-					inputBytes []byte
-					err        error
-				)
-				if raw == "raw" {
-					inputBytes, err = proto.Marshal(tc.input)
-					args = append(args, "--raw")
-				} else {
-					inputBytes, err = protoio.MarshalDelimited(tc.input)
-				}
-				require.NoError(t, err)
+					parseCmd := &ParseCmd{}
+					cmd := parseCmd.Command()
+					cmd.SetArgs(args)
 
-				var input string
-				switch tc.format {
-				case formatBase64:
-					input = base64.StdEncoding.EncodeToString(inputBytes)
-				case formatHex:
-					input = hex.EncodeToString(inputBytes)
-				default:
-					t.Errorf("unsupported format: %s", tc.format)
-				}
-				args = append(args, []string{"--input", input}...)
+					outBuf := &bytes.Buffer{}
+					cmd.SetOut(outBuf)
 
-				t.Log(input)
-				require.NotZero(t, input)
+					errBuf := &bytes.Buffer{}
+					cmd.SetErr(errBuf)
+					logger, err = log.NewLogger(log.LogLevelDebug, errBuf)
+					require.NoError(t, err)
 
-				args = append(args, tc.args...)
-				cmd.SetArgs(args)
+					err = cmd.Execute()
+					assert.NoError(t, err)
+					assert.Equal(t, 0, errBuf.Len(), errBuf.String())
 
-				outBuf := &bytes.Buffer{}
-				cmd.SetOut(outBuf)
+					s := outBuf.String()
 
-				errBuf := &bytes.Buffer{}
-				cmd.SetErr(errBuf)
+					for _, condition := range tc.conditions {
+						assert.Contains(t, s, condition)
+					}
 
-				err = cmd.Execute()
-				assert.NoError(t, err)
-				assert.Equal(t, 0, errBuf.Len(), errBuf.String())
-
-				s := outBuf.String()
-
-				for _, condition := range tc.conditions {
-					assert.Contains(t, s, condition)
-				}
-
-				t.Log(s)
-			})
+					t.Log(s)
+				})
+			}
 		}
 	}
+}
+
+func encodeProtobuf(t *testing.T, msg proto.Message, format string, raw bool) string {
+	buf := &bytes.Buffer{}
+	if raw {
+		result, err := proto.Marshal(msg)
+		require.NoError(t, err)
+		buf.Write(result)
+	} else {
+		err := types.WriteMessage(msg, buf)
+		require.NoError(t, err)
+	}
+
+	marshaled := buf.Bytes()
+
+	switch format {
+	case formatHex:
+		return hex.EncodeToString(marshaled)
+	case formatBase64:
+		return base64.StdEncoding.EncodeToString(marshaled)
+	}
+
+	t.Errorf("invalid format %s", format)
+	return ""
 }

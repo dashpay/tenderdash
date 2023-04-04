@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -27,66 +27,77 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 		chainID = "Lalande21185"
 	)
 
-	vote := examplePrecommit()
+	vote := examplePrecommit(t)
 	vote.ValidatorProTxHash = proTxHash
 	v := vote.ToProto()
 
-	stateID := RandStateID().WithHeight(v.Height - 1)
-
-	blockSig, err := privKey.SignDigest(VoteBlockSignID(chainID, v, btcjson.LLMQType_5_60, quorumHash))
+	quorumSigns, err := MakeQuorumSigns(chainID, btcjson.LLMQType_5_60, quorumHash, v)
 	require.NoError(t, err)
-	stateSig, err := privKey.SignDigest(stateID.SignID(chainID, btcjson.LLMQType_5_60, quorumHash))
+
+	blockSig, err := privKey.SignDigest(quorumSigns.Block.ID)
 	require.NoError(t, err)
 	vote.BlockSignature = blockSig
-	vote.StateSignature = stateSig
 
 	commit := NewCommit(vote.Height,
 		vote.Round,
 		vote.BlockID,
-		stateID,
-		quorumHash,
-		vote.BlockSignature,
-		vote.StateSignature,
+		&CommitSigns{
+			QuorumSigns: QuorumSigns{
+				BlockSign: blockSig,
+			},
+			QuorumHash: quorumHash,
+		},
 	)
 
 	vote2 := *vote
-	blockSig2, err := privKey.SignDigest(VoteBlockSignBytes("EpsilonEridani", v))
+	signBytes, err := v.SignBytes("EpsilonEridani")
 	require.NoError(t, err)
-	stateSig2, err := privKey.SignDigest(stateID.SignBytes("EpsilonEridani"))
+	blockSig2, err := privKey.SignDigest(signBytes)
 	require.NoError(t, err)
 	vote2.BlockSignature = blockSig2
-	vote2.StateSignature = stateSig2
 
 	testCases := []struct {
 		description string
 		chainID     string
 		blockID     BlockID
-		stateID     StateID
 		height      int64
 		commit      *Commit
 		expErr      bool
 	}{
-		{"good", chainID, vote.BlockID, stateID, vote.Height, commit, false},
+		{"good", chainID, vote.BlockID, vote.Height, commit, false},
 
-		{"incorrect threshold block signature", "EpsilonEridani", vote.BlockID, stateID, vote.Height, commit, true},
-		{"wrong block ID", chainID, makeBlockIDRandom(), stateID, vote.Height, commit, true},
-		{"wrong height", chainID, vote.BlockID, stateID, vote.Height - 1, commit, true},
+		{"threshold block signature is invalid", "EpsilonEridani", vote.BlockID, vote.Height, commit, true},
+		{"wrong block ID", chainID, makeBlockIDRandom(), vote.Height, commit, true},
+		{
+			description: "invalid commit -- wrong block ID",
+			chainID:     chainID,
+			blockID: BlockID{
+				Hash:          vote.BlockID.Hash.Copy(),
+				PartSetHeader: vote.BlockID.PartSetHeader,
+				StateID:       RandStateID().Hash(),
+			},
+			height: vote.Height,
+			commit: commit,
+			expErr: true,
+		},
+		{"wrong height", chainID, vote.BlockID, vote.Height - 1, commit, true},
 
-		{"incorrect threshold block signature", chainID, vote.BlockID, stateID, vote.Height,
-			NewCommit(vote.Height, vote.Round, vote.BlockID, stateID, quorumHash, nil, nil), true},
+		{"threshold block signature is invalid", chainID, vote.BlockID, vote.Height,
+			NewCommit(vote.Height, vote.Round, vote.BlockID, &CommitSigns{QuorumHash: quorumHash}), true},
 
-		{"incorrect threshold state signature", chainID, vote.BlockID, stateID, vote.Height,
-			NewCommit(vote.Height, vote.Round, vote.BlockID, stateID,
-				quorumHash, vote.BlockSignature, nil), true},
-
-		{"incorrect threshold block signature", chainID, vote.BlockID, stateID, vote.Height,
-			NewCommit(vote.Height, vote.Round, vote.BlockID, stateID, quorumHash, vote2.BlockSignature, vote2.StateSignature), true},
+		{"threshold block signature is invalid", chainID, vote.BlockID, vote.Height,
+			NewCommit(vote.Height, vote.Round, vote.BlockID,
+				&CommitSigns{
+					QuorumHash:  quorumHash,
+					QuorumSigns: QuorumSigns{BlockSign: vote2.BlockSignature},
+				},
+			), true},
 	}
 
 	for _, tc := range testCases {
 		tc := tc
 		t.Run(tc.description, func(t *testing.T) {
-			err := vset.VerifyCommit(tc.chainID, tc.blockID, tc.stateID, tc.height, tc.commit)
+			err := vset.VerifyCommit(tc.chainID, tc.blockID, tc.height, tc.commit)
 			if tc.expErr {
 				if assert.Error(t, err, "VerifyCommit") {
 					assert.Contains(t, err.Error(), tc.description, "VerifyCommit")
@@ -101,27 +112,35 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 //-------------------------------------------------------------------
 
 func TestValidatorSet_VerifyCommit_CheckThresholdSignatures(t *testing.T) {
-	var (
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	const (
 		chainID = "test_chain_id"
 		h       = int64(3)
-		blockID = makeBlockIDRandom()
-		stateID = RandStateID().WithHeight(h - 1)
 	)
+	blockID := makeBlockIDRandom()
 
-	voteSet, valSet, vals := randVoteSet(h, 0, tmproto.PrecommitType, 4, stateID)
-	commit, err := MakeCommit(blockID, stateID, h, 0, voteSet, vals)
+	voteSet, valSet, vals := randVoteSet(ctx, t, h, 0, tmproto.PrecommitType, 4)
+	commit, err := makeCommit(ctx, blockID, h, 0, voteSet, vals)
 	require.NoError(t, err)
 
 	// malleate threshold sigs signature
 	vote := voteSet.GetByIndex(3)
 	v := vote.ToProto()
-	err = vals[3].SignVote(context.Background(), "CentaurusA", valSet.QuorumType, valSet.QuorumHash, v, stateID, nil)
+	err = vals[3].SignVote(ctx, "CentaurusA", valSet.QuorumType, valSet.QuorumHash, v, nil)
 	require.NoError(t, err)
 	commit.ThresholdBlockSignature = v.BlockSignature
-	commit.ThresholdStateSignature = v.StateSignature
-
-	err = valSet.VerifyCommit(chainID, blockID, stateID, h, commit)
+	err = valSet.VerifyCommit(chainID, blockID, h, commit)
 	if assert.Error(t, err) {
-		assert.Contains(t, err.Error(), "incorrect threshold block signature")
+		assert.Contains(t, err.Error(), "threshold block signature is invalid")
 	}
+
+	recoverer := NewSignsRecoverer(voteSet.votes)
+	thresholdSigns, err := recoverer.Recover()
+	require.NoError(t, err)
+	commit.ThresholdBlockSignature = thresholdSigns.BlockSign
+	commit.ThresholdVoteExtensions = thresholdSigns.ExtensionSigns
+	err = valSet.VerifyCommit(chainID, blockID, h, commit)
+	require.NoError(t, err)
 }

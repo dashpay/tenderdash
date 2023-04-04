@@ -2,12 +2,13 @@ package statesync
 
 import (
 	"crypto/sha256"
-	"fmt"
+	"encoding/binary"
 	"math/rand"
 	"sort"
 	"strings"
 
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
+	sync "github.com/sasha-s/go-deadlock"
+
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/types"
 )
@@ -17,12 +18,11 @@ type snapshotKey [sha256.Size]byte
 
 // snapshot contains data about a snapshot.
 type snapshot struct {
-	Height                uint64
-	CoreChainLockedHeight uint32
-	Format                uint32
-	Chunks                uint32
-	Hash                  tmbytes.HexBytes
-	Metadata              []byte
+	Height   uint64
+	Format   uint32
+	Chunks   uint32
+	Hash     tmbytes.HexBytes
+	Metadata []byte
 
 	trustedAppHash tmbytes.HexBytes // populated by light client
 }
@@ -33,10 +33,12 @@ type snapshot struct {
 func (s *snapshot) Key() snapshotKey {
 	// Hash.Write() never returns an error.
 	hasher := sha256.New()
-	hasher.Write(
-		[]byte(fmt.Sprintf("%v:%v:%v:%v", s.Height, s.CoreChainLockedHeight, // ignore error
-			s.Format, s.Chunks)),
-	)
+
+	bz := make([]byte, 0, (64+32+32)/8)
+	bz = binary.LittleEndian.AppendUint64(bz, s.Height)
+	bz = binary.LittleEndian.AppendUint32(bz, s.Format)
+	bz = binary.LittleEndian.AppendUint32(bz, s.Chunks)
+	hasher.Write(bz)
 	hasher.Write(s.Hash)
 	hasher.Write(s.Metadata)
 	var key snapshotKey
@@ -46,7 +48,7 @@ func (s *snapshot) Key() snapshotKey {
 
 // snapshotPool discovers and aggregates snapshots across peers.
 type snapshotPool struct {
-	tmsync.Mutex
+	sync.Mutex
 	snapshots     map[snapshotKey]*snapshot
 	snapshotPeers map[snapshotKey]map[types.NodeID]types.NodeID
 
@@ -139,7 +141,7 @@ func (p *snapshotPool) GetPeer(snapshot *snapshot) types.NodeID {
 	if len(peers) == 0 {
 		return ""
 	}
-	return peers[rand.Intn(len(peers))] // nolint:gosec // G404: Use of weak random number generator
+	return peers[rand.Intn(len(peers))] //nolint:gosec // G404: Use of weak random number generator
 }
 
 // GetPeers returns the peers for a snapshot.

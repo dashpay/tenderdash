@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tendermint/tendermint/libs/log"
-
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 
 	"github.com/tendermint/tendermint/crypto"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/libs/log"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
@@ -39,15 +39,15 @@ func (sc *RetrySignerClient) IsConnected() bool {
 	return sc.next.IsConnected()
 }
 
-func (sc *RetrySignerClient) WaitForConnection(maxWait time.Duration) error {
-	return sc.next.WaitForConnection(maxWait)
+func (sc *RetrySignerClient) WaitForConnection(ctx context.Context, maxWait time.Duration) error {
+	return sc.next.WaitForConnection(ctx, maxWait)
 }
 
 //--------------------------------------------------------
 // Implement PrivValidator
 
-func (sc *RetrySignerClient) Ping() error {
-	return sc.next.Ping()
+func (sc *RetrySignerClient) Ping(ctx context.Context) error {
+	return sc.next.Ping(ctx)
 }
 
 func (sc *RetrySignerClient) ExtractIntoValidator(ctx context.Context, quorumHash crypto.QuorumHash) *types.Validator {
@@ -139,10 +139,10 @@ func (sc *RetrySignerClient) GetHeight(ctx context.Context, quorumHash crypto.Qu
 
 func (sc *RetrySignerClient) SignVote(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
-	vote *tmproto.Vote, stateID types.StateID, logger log.Logger) error {
+	vote *tmproto.Vote, logger log.Logger) error {
 	var err error
 	for i := 0; i < sc.retries || sc.retries == 0; i++ {
-		err = sc.next.SignVote(ctx, chainID, quorumType, quorumHash, vote, stateID, nil)
+		err = sc.next.SignVote(ctx, chainID, quorumType, quorumHash, vote, nil)
 		if err == nil {
 			return nil
 		}
@@ -157,7 +157,7 @@ func (sc *RetrySignerClient) SignVote(
 
 func (sc *RetrySignerClient) SignProposal(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, proposal *tmproto.Proposal,
-) ([]byte, error) {
+) (tmbytes.HexBytes, error) {
 	var signID []byte
 	var err error
 	for i := 0; i < sc.retries || sc.retries == 0; i++ {

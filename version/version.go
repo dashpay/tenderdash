@@ -9,9 +9,9 @@ var (
 const (
 	// TMVersionDefault is the used as the fallback version for Tenderdash
 	// when not using git describe. It is formatted with semantic versioning.
-	TMVersionDefault = "0.8.0"
+	TMVersionDefault = "0.11.0"
 	// ABCISemVer is the semantic version of the ABCI library
-	ABCISemVer = "0.19.0"
+	ABCISemVer = "0.20.0"
 
 	ABCIVersion = ABCISemVer
 )
@@ -23,12 +23,12 @@ var (
 
 	// BlockProtocol versions all block data structures and processing.
 	// This includes validity of blocks and state updates.
-	BlockProtocol uint64 = 11
+	BlockProtocol uint64 = 12
 )
 
 type Consensus struct {
-	Block uint64 `json:"block"`
-	App   uint64 `json:"app"`
+	Block uint64 `json:"block,string"`
+	App   uint64 `json:"app,string"`
 }
 
 func (c Consensus) ToProto() tmversion.Consensus {

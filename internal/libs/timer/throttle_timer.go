@@ -3,7 +3,7 @@ package timer
 import (
 	"time"
 
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
+	sync "github.com/sasha-s/go-deadlock"
 )
 
 /*
@@ -18,7 +18,7 @@ type ThrottleTimer struct {
 	quit chan struct{}
 	dur  time.Duration
 
-	mtx   tmsync.Mutex
+	mtx   sync.Mutex
 	timer *time.Timer
 	isSet bool
 }
@@ -54,13 +54,6 @@ func (t *ThrottleTimer) Set() {
 		t.isSet = true
 		t.timer.Reset(t.dur)
 	}
-}
-
-func (t *ThrottleTimer) Unset() {
-	t.mtx.Lock()
-	defer t.mtx.Unlock()
-	t.isSet = false
-	t.timer.Stop()
 }
 
 // For ease of .Stop()'ing services before .Start()'ing them,

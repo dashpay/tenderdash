@@ -2,6 +2,7 @@ package secp256k1
 
 import (
 	"bytes"
+	"crypto/rand"
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/hex"
@@ -13,13 +14,13 @@ import (
 	secp256k1 "github.com/btcsuite/btcd/btcec"
 
 	"github.com/tendermint/tendermint/crypto"
-	tmjson "github.com/tendermint/tendermint/libs/json"
+	"github.com/tendermint/tendermint/internal/jsontypes"
 
 	// necessary for Bitcoin address format
-	"golang.org/x/crypto/ripemd160" // nolint
+	"golang.org/x/crypto/ripemd160" //nolint:staticcheck
 )
 
-//-------------------------------------
+// -------------------------------------
 const (
 	PrivKeyName = "tendermint/PrivKeySecp256k1"
 	PubKeyName  = "tendermint/PubKeySecp256k1"
@@ -29,14 +30,17 @@ const (
 )
 
 func init() {
-	tmjson.RegisterType(PubKey{}, PubKeyName)
-	tmjson.RegisterType(PrivKey{}, PrivKeyName)
+	jsontypes.MustRegister(PubKey{})
+	jsontypes.MustRegister(PrivKey{})
 }
 
 var _ crypto.PrivKey = PrivKey{}
 
 // PrivKey implements PrivKey.
 type PrivKey []byte
+
+// TypeTag satisfies the jsontypes.Tagged interface.
+func (PrivKey) TypeTag() string { return PrivKeyName }
 
 // Bytes marshalls the private key using amino encoding.
 func (privKey PrivKey) Bytes() []byte {
@@ -73,7 +77,7 @@ func (privKey PrivKey) TypeValue() crypto.KeyType {
 // GenPrivKey generates a new ECDSA private key on curve secp256k1 private key.
 // It uses OS randomness to generate the private key.
 func GenPrivKey() PrivKey {
-	return genPrivKey(crypto.CReader())
+	return genPrivKey(rand.Reader)
 }
 
 // genPrivKey generates a new secp256k1 private key using the provided reader.
@@ -145,6 +149,9 @@ const PubKeySize = 33
 // This prefix is followed with the x-coordinate.
 type PubKey []byte
 
+// TypeTag satisfies the jsontypes.Tagged interface.
+func (PubKey) TypeTag() string { return PubKeyName }
+
 // Address returns a Bitcoin style addresses: RIPEMD160(SHA256(pubkey))
 func (pubKey PubKey) Address() crypto.Address {
 	if len(pubKey) != PubKeySize {
@@ -191,16 +198,16 @@ func (pubKey PubKey) Equals(other crypto.PubKey) bool {
 
 // used to reject malleable signatures
 // see:
-//  - https://github.com/ethereum/go-ethereum/blob/f9401ae011ddf7f8d2d95020b7446c17f8d98dc1/crypto/signature_nocgo.go#L90-L93
-//  - https://github.com/ethereum/go-ethereum/blob/f9401ae011ddf7f8d2d95020b7446c17f8d98dc1/crypto/crypto.go#L39
+//   - https://github.com/ethereum/go-ethereum/blob/f9401ae011ddf7f8d2d95020b7446c17f8d98dc1/crypto/signature_nocgo.go#L90-L93
+//   - https://github.com/ethereum/go-ethereum/blob/f9401ae011ddf7f8d2d95020b7446c17f8d98dc1/crypto/crypto.go#L39
 var secp256k1halfN = new(big.Int).Rsh(secp256k1.S256().N, 1)
 
 // Sign creates an ECDSA signature on curve Secp256k1, using SHA256 on the msg.
 // The returned signature will be of the form R || S (in lower-S form).
 func (privKey PrivKey) Sign(msg []byte) ([]byte, error) {
 	priv, _ := secp256k1.PrivKeyFromBytes(secp256k1.S256(), privKey)
-
-	sig, err := priv.Sign(crypto.Sha256(msg))
+	seed := sha256.Sum256(msg)
+	sig, err := priv.Sign(seed[:])
 	if err != nil {
 		return nil, err
 	}
@@ -229,28 +236,8 @@ func (pubKey PubKey) VerifySignature(msg []byte, sigStr []byte) bool {
 		return false
 	}
 
-	return signature.Verify(crypto.Sha256(msg), pub)
-}
-
-// Read Signature struct from R || S. Caller needs to ensure
-// that len(sigStr) == 64.
-func signatureFromBytes(sigStr []byte) *secp256k1.Signature {
-	return &secp256k1.Signature{
-		R: new(big.Int).SetBytes(sigStr[:32]),
-		S: new(big.Int).SetBytes(sigStr[32:64]),
-	}
-}
-
-// Serialize signature to R || S.
-// R, S are padded to 32 bytes respectively.
-func serializeSig(sig *secp256k1.Signature) []byte {
-	rBytes := sig.R.Bytes()
-	sBytes := sig.S.Bytes()
-	sigBytes := make([]byte, 64)
-	// 0 pad the byte arrays from the left if they aren't big enough.
-	copy(sigBytes[32-len(rBytes):32], rBytes)
-	copy(sigBytes[64-len(sBytes):64], sBytes)
-	return sigBytes
+	seed := sha256.Sum256(msg)
+	return signature.Verify(seed[:], pub)
 }
 
 // SignDigest creates an ECDSA signature on curve Secp256k1.
@@ -277,4 +264,25 @@ func (pubKey PubKey) VerifyAggregateSignature(messages [][]byte, sig []byte) boo
 
 func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
 	return false
+}
+
+// Read Signature struct from R || S. Caller needs to ensure
+// that len(sigStr) == 64.
+func signatureFromBytes(sigStr []byte) *secp256k1.Signature {
+	return &secp256k1.Signature{
+		R: new(big.Int).SetBytes(sigStr[:32]),
+		S: new(big.Int).SetBytes(sigStr[32:64]),
+	}
+}
+
+// Serialize signature to R || S.
+// R, S are padded to 32 bytes respectively.
+func serializeSig(sig *secp256k1.Signature) []byte {
+	rBytes := sig.R.Bytes()
+	sBytes := sig.S.Bytes()
+	sigBytes := make([]byte, 64)
+	// 0 pad the byte arrays from the left if they aren't big enough.
+	copy(sigBytes[32-len(rBytes):32], rBytes)
+	copy(sigBytes[64-len(sBytes):64], sBytes)
+	return sigBytes
 }

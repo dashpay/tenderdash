@@ -183,18 +183,37 @@ func (_m *BlockStore) LoadSeenCommit() *types.Commit {
 	return r0
 }
 
+// LoadSeenCommitAt provides a mock function with given fields: height
+func (_m *BlockStore) LoadSeenCommitAt(height int64) *types.Commit {
+	ret := _m.Called(height)
+
+	var r0 *types.Commit
+	if rf, ok := ret.Get(0).(func(int64) *types.Commit); ok {
+		r0 = rf(height)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*types.Commit)
+		}
+	}
+
+	return r0
+}
+
 // PruneBlocks provides a mock function with given fields: height
 func (_m *BlockStore) PruneBlocks(height int64) (uint64, error) {
 	ret := _m.Called(height)
 
 	var r0 uint64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(int64) (uint64, error)); ok {
+		return rf(height)
+	}
 	if rf, ok := ret.Get(0).(func(int64) uint64); ok {
 		r0 = rf(height)
 	} else {
 		r0 = ret.Get(0).(uint64)
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(int64) error); ok {
 		r1 = rf(height)
 	} else {
@@ -221,4 +240,19 @@ func (_m *BlockStore) Size() int64 {
 	}
 
 	return r0
+}
+
+type mockConstructorTestingTNewBlockStore interface {
+	mock.TestingT
+	Cleanup(func())
+}
+
+// NewBlockStore creates a new instance of BlockStore. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewBlockStore(t mockConstructorTestingTNewBlockStore) *BlockStore {
+	mock := &BlockStore{}
+	mock.Mock.Test(t)
+
+	t.Cleanup(func() { mock.AssertExpectations(t) })
+
+	return mock
 }

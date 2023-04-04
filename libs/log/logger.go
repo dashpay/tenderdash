@@ -2,7 +2,8 @@ package log
 
 import (
 	"io"
-	"sync"
+
+	sync "github.com/sasha-s/go-deadlock"
 )
 
 const (
@@ -22,6 +23,7 @@ const (
 	LogFormatJSON string = "json"
 
 	// Supported loging levels
+	LogLevelTrace = "trace"
 	LogLevelDebug = "debug"
 	LogLevelInfo  = "info"
 	LogLevelWarn  = "warn"
@@ -30,12 +32,12 @@ const (
 
 // Logger defines a generic logging interface compatible with Tendermint.
 type Logger interface {
+	Trace(msg string, keyVals ...interface{})
 	Debug(msg string, keyVals ...interface{})
 	Info(msg string, keyVals ...interface{})
 	Error(msg string, keyVals ...interface{})
 
 	With(keyVals ...interface{}) Logger
-	Output(w io.Writer) Logger
 }
 
 // syncWriter wraps an io.Writer that can be used in a Logger that is safe for

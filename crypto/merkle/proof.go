@@ -5,7 +5,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/tendermint/tendermint/crypto/tmhash"
+	"github.com/tendermint/tendermint/crypto"
 	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 )
 
@@ -24,10 +24,10 @@ const (
 // everything.  This also affects the generalized proof system as
 // well.
 type Proof struct {
-	Total    int64    `json:"total"`     // Total number of items.
-	Index    int64    `json:"index"`     // Index of item to prove.
-	LeafHash []byte   `json:"leaf_hash"` // Hash of item value.
-	Aunts    [][]byte `json:"aunts"`     // Hashes from leaf's sibling to a root's child.
+	Total    int64    `json:"total,string"` // Total number of items.
+	Index    int64    `json:"index,string"` // Index of item to prove.
+	LeafHash []byte   `json:"leaf_hash"`    // Hash of item value.
+	Aunts    [][]byte `json:"aunts"`        // Hashes from leaf's sibling to a root's child.
 }
 
 // ProofsFromByteSlices computes inclusion proof for given items.
@@ -60,7 +60,10 @@ func (sp *Proof) Verify(rootHash []byte, leaf []byte) error {
 	if !bytes.Equal(sp.LeafHash, leafHash) {
 		return fmt.Errorf("invalid leaf hash: wanted %X got %X", leafHash, sp.LeafHash)
 	}
-	computedHash := sp.ComputeRootHash()
+	computedHash, err := sp.ComputeRootHash()
+	if err != nil {
+		return fmt.Errorf("compute root hash: %w", err)
+	}
 	if !bytes.Equal(computedHash, rootHash) {
 		return fmt.Errorf("invalid root hash: wanted %X got %X", rootHash, computedHash)
 	}
@@ -68,7 +71,7 @@ func (sp *Proof) Verify(rootHash []byte, leaf []byte) error {
 }
 
 // Compute the root hash given a leaf hash.  Does not verify the result.
-func (sp *Proof) ComputeRootHash() []byte {
+func (sp *Proof) ComputeRootHash() ([]byte, error) {
 	return computeHashFromAunts(
 		sp.Index,
 		sp.Total,
@@ -102,15 +105,15 @@ func (sp *Proof) ValidateBasic() error {
 	if sp.Index < 0 {
 		return errors.New("negative Index")
 	}
-	if len(sp.LeafHash) != tmhash.Size {
-		return fmt.Errorf("expected LeafHash size to be %d, got %d", tmhash.Size, len(sp.LeafHash))
+	if len(sp.LeafHash) != crypto.HashSize {
+		return fmt.Errorf("expected LeafHash size to be %d, got %d", crypto.HashSize, len(sp.LeafHash))
 	}
 	if len(sp.Aunts) > MaxAunts {
 		return fmt.Errorf("expected no more than %d aunts, got %d", MaxAunts, len(sp.Aunts))
 	}
 	for i, auntHash := range sp.Aunts {
-		if len(auntHash) != tmhash.Size {
-			return fmt.Errorf("expected Aunts#%d size to be %d, got %d", i, tmhash.Size, len(auntHash))
+		if len(auntHash) != crypto.HashSize {
+			return fmt.Errorf("expected Aunts#%d size to be %d, got %d", i, crypto.HashSize, len(auntHash))
 		}
 	}
 	return nil
@@ -148,35 +151,36 @@ func ProofFromProto(pb *tmcrypto.Proof) (*Proof, error) {
 // Use the leafHash and innerHashes to get the root merkle hash.
 // If the length of the innerHashes slice isn't exactly correct, the result is nil.
 // Recursive impl.
-func computeHashFromAunts(index, total int64, leafHash []byte, innerHashes [][]byte) []byte {
+func computeHashFromAunts(index, total int64, leafHash []byte, innerHashes [][]byte) ([]byte, error) {
 	if index >= total || index < 0 || total <= 0 {
-		return nil
+		return nil, fmt.Errorf("invalid index %d and/or total %d", index, total)
 	}
 	switch total {
 	case 0:
 		panic("Cannot call computeHashFromAunts() with 0 total")
 	case 1:
 		if len(innerHashes) != 0 {
-			return nil
+			return nil, fmt.Errorf("unexpected inner hashes")
 		}
-		return leafHash
+		return leafHash, nil
 	default:
 		if len(innerHashes) == 0 {
-			return nil
+			return nil, fmt.Errorf("expected at least one inner hash")
 		}
 		numLeft := getSplitPoint(total)
 		if index < numLeft {
-			leftHash := computeHashFromAunts(index, numLeft, leafHash, innerHashes[:len(innerHashes)-1])
-			if leftHash == nil {
-				return nil
+			leftHash, err := computeHashFromAunts(index, numLeft, leafHash, innerHashes[:len(innerHashes)-1])
+			if err != nil {
+				return nil, err
 			}
-			return innerHash(leftHash, innerHashes[len(innerHashes)-1])
+
+			return innerHash(leftHash, innerHashes[len(innerHashes)-1]), nil
 		}
-		rightHash := computeHashFromAunts(index-numLeft, total-numLeft, leafHash, innerHashes[:len(innerHashes)-1])
-		if rightHash == nil {
-			return nil
+		rightHash, err := computeHashFromAunts(index-numLeft, total-numLeft, leafHash, innerHashes[:len(innerHashes)-1])
+		if err != nil {
+			return nil, err
 		}
-		return innerHash(innerHashes[len(innerHashes)-1], rightHash)
+		return innerHash(innerHashes[len(innerHashes)-1], rightHash), nil
 	}
 }
 

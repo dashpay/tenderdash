@@ -68,7 +68,8 @@ func (m *BlockRequest) GetHeight() int64 {
 	return 0
 }
 
-// NoBlockResponse informs the node that the peer does not have block at the requested height
+// NoBlockResponse informs the node that the peer does not have block at the
+// requested height
 type NoBlockResponse struct {
 	Height int64 `protobuf:"varint,1,opt,name=height,proto3" json:"height,omitempty"`
 }
@@ -115,7 +116,8 @@ func (m *NoBlockResponse) GetHeight() int64 {
 
 // BlockResponse returns block to the requested
 type BlockResponse struct {
-	Block *types.Block `protobuf:"bytes,1,opt,name=block,proto3" json:"block,omitempty"`
+	Block  *types.Block  `protobuf:"bytes,1,opt,name=block,proto3" json:"block,omitempty"`
+	Commit *types.Commit `protobuf:"bytes,2,opt,name=commit,proto3" json:"commit,omitempty"`
 }
 
 func (m *BlockResponse) Reset()         { *m = BlockResponse{} }
@@ -154,6 +156,13 @@ var xxx_messageInfo_BlockResponse proto.InternalMessageInfo
 func (m *BlockResponse) GetBlock() *types.Block {
 	if m != nil {
 		return m.Block
+	}
+	return nil
+}
+
+func (m *BlockResponse) GetCommit() *types.Commit {
+	if m != nil {
+		return m.Commit
 	}
 	return nil
 }
@@ -248,166 +257,35 @@ func (m *StatusResponse) GetBase() int64 {
 	return 0
 }
 
-type Message struct {
-	// Types that are valid to be assigned to Sum:
-	//	*Message_BlockRequest
-	//	*Message_NoBlockResponse
-	//	*Message_BlockResponse
-	//	*Message_StatusRequest
-	//	*Message_StatusResponse
-	Sum isMessage_Sum `protobuf_oneof:"sum"`
-}
-
-func (m *Message) Reset()         { *m = Message{} }
-func (m *Message) String() string { return proto.CompactTextString(m) }
-func (*Message) ProtoMessage()    {}
-func (*Message) Descriptor() ([]byte, []int) {
-	return fileDescriptor_19b397c236e0fa07, []int{5}
-}
-func (m *Message) XXX_Unmarshal(b []byte) error {
-	return m.Unmarshal(b)
-}
-func (m *Message) XXX_Marshal(b []byte, deterministic bool) ([]byte, error) {
-	if deterministic {
-		return xxx_messageInfo_Message.Marshal(b, m, deterministic)
-	} else {
-		b = b[:cap(b)]
-		n, err := m.MarshalToSizedBuffer(b)
-		if err != nil {
-			return nil, err
-		}
-		return b[:n], nil
-	}
-}
-func (m *Message) XXX_Merge(src proto.Message) {
-	xxx_messageInfo_Message.Merge(m, src)
-}
-func (m *Message) XXX_Size() int {
-	return m.Size()
-}
-func (m *Message) XXX_DiscardUnknown() {
-	xxx_messageInfo_Message.DiscardUnknown(m)
-}
-
-var xxx_messageInfo_Message proto.InternalMessageInfo
-
-type isMessage_Sum interface {
-	isMessage_Sum()
-	MarshalTo([]byte) (int, error)
-	Size() int
-}
-
-type Message_BlockRequest struct {
-	BlockRequest *BlockRequest `protobuf:"bytes,1,opt,name=block_request,json=blockRequest,proto3,oneof" json:"block_request,omitempty"`
-}
-type Message_NoBlockResponse struct {
-	NoBlockResponse *NoBlockResponse `protobuf:"bytes,2,opt,name=no_block_response,json=noBlockResponse,proto3,oneof" json:"no_block_response,omitempty"`
-}
-type Message_BlockResponse struct {
-	BlockResponse *BlockResponse `protobuf:"bytes,3,opt,name=block_response,json=blockResponse,proto3,oneof" json:"block_response,omitempty"`
-}
-type Message_StatusRequest struct {
-	StatusRequest *StatusRequest `protobuf:"bytes,4,opt,name=status_request,json=statusRequest,proto3,oneof" json:"status_request,omitempty"`
-}
-type Message_StatusResponse struct {
-	StatusResponse *StatusResponse `protobuf:"bytes,5,opt,name=status_response,json=statusResponse,proto3,oneof" json:"status_response,omitempty"`
-}
-
-func (*Message_BlockRequest) isMessage_Sum()    {}
-func (*Message_NoBlockResponse) isMessage_Sum() {}
-func (*Message_BlockResponse) isMessage_Sum()   {}
-func (*Message_StatusRequest) isMessage_Sum()   {}
-func (*Message_StatusResponse) isMessage_Sum()  {}
-
-func (m *Message) GetSum() isMessage_Sum {
-	if m != nil {
-		return m.Sum
-	}
-	return nil
-}
-
-func (m *Message) GetBlockRequest() *BlockRequest {
-	if x, ok := m.GetSum().(*Message_BlockRequest); ok {
-		return x.BlockRequest
-	}
-	return nil
-}
-
-func (m *Message) GetNoBlockResponse() *NoBlockResponse {
-	if x, ok := m.GetSum().(*Message_NoBlockResponse); ok {
-		return x.NoBlockResponse
-	}
-	return nil
-}
-
-func (m *Message) GetBlockResponse() *BlockResponse {
-	if x, ok := m.GetSum().(*Message_BlockResponse); ok {
-		return x.BlockResponse
-	}
-	return nil
-}
-
-func (m *Message) GetStatusRequest() *StatusRequest {
-	if x, ok := m.GetSum().(*Message_StatusRequest); ok {
-		return x.StatusRequest
-	}
-	return nil
-}
-
-func (m *Message) GetStatusResponse() *StatusResponse {
-	if x, ok := m.GetSum().(*Message_StatusResponse); ok {
-		return x.StatusResponse
-	}
-	return nil
-}
-
-// XXX_OneofWrappers is for the internal use of the proto package.
-func (*Message) XXX_OneofWrappers() []interface{} {
-	return []interface{}{
-		(*Message_BlockRequest)(nil),
-		(*Message_NoBlockResponse)(nil),
-		(*Message_BlockResponse)(nil),
-		(*Message_StatusRequest)(nil),
-		(*Message_StatusResponse)(nil),
-	}
-}
-
 func init() {
 	proto.RegisterType((*BlockRequest)(nil), "tendermint.blocksync.BlockRequest")
 	proto.RegisterType((*NoBlockResponse)(nil), "tendermint.blocksync.NoBlockResponse")
 	proto.RegisterType((*BlockResponse)(nil), "tendermint.blocksync.BlockResponse")
 	proto.RegisterType((*StatusRequest)(nil), "tendermint.blocksync.StatusRequest")
 	proto.RegisterType((*StatusResponse)(nil), "tendermint.blocksync.StatusResponse")
-	proto.RegisterType((*Message)(nil), "tendermint.blocksync.Message")
 }
 
 func init() { proto.RegisterFile("tendermint/blocksync/types.proto", fileDescriptor_19b397c236e0fa07) }
 
 var fileDescriptor_19b397c236e0fa07 = []byte{
-	// 368 bytes of a gzipped FileDescriptorProto
-	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0x7c, 0x93, 0x4d, 0x4f, 0xfa, 0x40,
-	0x10, 0xc6, 0xdb, 0x7f, 0x81, 0x7f, 0x32, 0x50, 0x1a, 0x1b, 0xa3, 0xc4, 0x98, 0x86, 0xd4, 0x97,
-	0xe8, 0xc1, 0x36, 0xc1, 0xa3, 0xc6, 0x03, 0x27, 0x4c, 0x7c, 0x49, 0x4a, 0xbc, 0x78, 0x21, 0x14,
-	0x37, 0x40, 0x94, 0x2e, 0x32, 0xdb, 0x03, 0xdf, 0xc2, 0x2f, 0xe0, 0xf7, 0xf1, 0xc8, 0xd1, 0xa3,
-	0x81, 0x2f, 0x62, 0x98, 0x2d, 0x65, 0x69, 0xb0, 0xb7, 0xdd, 0xe9, 0x33, 0xbf, 0x79, 0xfa, 0x64,
-	0x16, 0xea, 0x82, 0x45, 0x2f, 0x6c, 0x32, 0x1a, 0x46, 0xc2, 0x0f, 0xdf, 0x78, 0xef, 0x15, 0xa7,
-	0x51, 0xcf, 0x17, 0xd3, 0x31, 0x43, 0x6f, 0x3c, 0xe1, 0x82, 0xdb, 0xbb, 0x6b, 0x85, 0x97, 0x2a,
-	0x0e, 0x0e, 0x95, 0x3e, 0x52, 0xcb, 0x6e, 0xd9, 0xe3, 0x9e, 0x42, 0xa5, 0xb9, 0xbc, 0x06, 0xec,
-	0x3d, 0x66, 0x28, 0xec, 0x3d, 0x28, 0x0d, 0xd8, 0xb0, 0x3f, 0x10, 0x35, 0xbd, 0xae, 0x9f, 0x19,
-	0x41, 0x72, 0x73, 0xcf, 0xc1, 0x7a, 0xe0, 0x89, 0x12, 0xc7, 0x3c, 0x42, 0xf6, 0xa7, 0xf4, 0x06,
-	0xcc, 0x4d, 0xe1, 0x05, 0x14, 0x69, 0x24, 0xe9, 0xca, 0x8d, 0x7d, 0x4f, 0xf1, 0x29, 0xfd, 0x4b,
-	0xbd, 0x54, 0xb9, 0x16, 0x98, 0x6d, 0xd1, 0x15, 0x31, 0x26, 0x9e, 0xdc, 0x6b, 0xa8, 0xae, 0x0a,
-	0xf9, 0xa3, 0x6d, 0x1b, 0x0a, 0x61, 0x17, 0x59, 0xed, 0x1f, 0x55, 0xe9, 0xec, 0x7e, 0x1a, 0xf0,
-	0xff, 0x9e, 0x21, 0x76, 0xfb, 0xcc, 0xbe, 0x05, 0x93, 0x66, 0x74, 0x26, 0x12, 0x9d, 0x38, 0x72,
-	0xbd, 0x6d, 0xc9, 0x79, 0x6a, 0x30, 0x2d, 0x2d, 0xa8, 0x84, 0x6a, 0x50, 0x6d, 0xd8, 0x89, 0x78,
-	0x67, 0x45, 0x93, 0xbe, 0x68, 0x6e, 0xb9, 0x71, 0xb2, 0x1d, 0x97, 0xc9, 0xaf, 0xa5, 0x05, 0x56,
-	0x94, 0x89, 0xf4, 0x0e, 0xaa, 0x19, 0xa2, 0x41, 0xc4, 0xa3, 0x5c, 0x83, 0x29, 0xcf, 0x0c, 0xb3,
-	0x34, 0xa4, 0xdc, 0xd2, 0xdf, 0x2d, 0xe4, 0xd1, 0x36, 0x42, 0x5f, 0xd2, 0x50, 0x2d, 0xd8, 0x8f,
-	0x60, 0xa5, 0xb4, 0xc4, 0x5c, 0x91, 0x70, 0xc7, 0xf9, 0xb8, 0xd4, 0x5d, 0x15, 0x37, 0x2a, 0xcd,
-	0x22, 0x18, 0x18, 0x8f, 0x9a, 0x4f, 0x5f, 0x73, 0x47, 0x9f, 0xcd, 0x1d, 0xfd, 0x67, 0xee, 0xe8,
-	0x1f, 0x0b, 0x47, 0x9b, 0x2d, 0x1c, 0xed, 0x7b, 0xe1, 0x68, 0xcf, 0x57, 0xfd, 0xa1, 0x18, 0xc4,
-	0xa1, 0xd7, 0xe3, 0x23, 0x5f, 0x5d, 0xe2, 0xf5, 0x91, 0x76, 0xd8, 0xdf, 0xf6, 0x30, 0xc2, 0x12,
-	0x7d, 0xbb, 0xfc, 0x0d, 0x00, 0x00, 0xff, 0xff, 0xf5, 0x1c, 0xa3, 0x45, 0x37, 0x03, 0x00, 0x00,
+	// 267 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x02, 0xff, 0xe2, 0x52, 0x28, 0x49, 0xcd, 0x4b,
+	0x49, 0x2d, 0xca, 0xcd, 0xcc, 0x2b, 0xd1, 0x4f, 0xca, 0xc9, 0x4f, 0xce, 0x2e, 0xae, 0xcc, 0x4b,
+	0xd6, 0x2f, 0xa9, 0x2c, 0x48, 0x2d, 0xd6, 0x2b, 0x28, 0xca, 0x2f, 0xc9, 0x17, 0x12, 0x41, 0xa8,
+	0xd0, 0x83, 0xab, 0x90, 0x92, 0x41, 0xd2, 0x07, 0x56, 0x0d, 0xd1, 0x0d, 0xd1, 0x83, 0x45, 0x16,
+	0xc9, 0x44, 0x25, 0x35, 0x2e, 0x1e, 0x27, 0x90, 0xe2, 0xa0, 0xd4, 0xc2, 0xd2, 0xd4, 0xe2, 0x12,
+	0x21, 0x31, 0x2e, 0xb6, 0x8c, 0xd4, 0xcc, 0xf4, 0x8c, 0x12, 0x09, 0x46, 0x05, 0x46, 0x0d, 0xe6,
+	0x20, 0x28, 0x4f, 0x49, 0x93, 0x8b, 0xdf, 0x2f, 0x1f, 0xaa, 0xb2, 0xb8, 0x20, 0x3f, 0xaf, 0x38,
+	0x15, 0xa7, 0xd2, 0x02, 0x2e, 0x5e, 0x54, 0x85, 0xba, 0x5c, 0xac, 0x60, 0x07, 0x81, 0xd5, 0x71,
+	0x1b, 0x89, 0xeb, 0x21, 0xf9, 0x02, 0xe2, 0x16, 0x88, 0x7a, 0x88, 0x2a, 0x21, 0x03, 0x2e, 0xb6,
+	0xe4, 0xfc, 0xdc, 0xdc, 0xcc, 0x12, 0x09, 0x26, 0xb0, 0x7a, 0x09, 0x4c, 0xf5, 0xce, 0x60, 0xf9,
+	0x20, 0xa8, 0x3a, 0x25, 0x7e, 0x2e, 0xde, 0xe0, 0x92, 0xc4, 0x92, 0xd2, 0x62, 0xa8, 0x2f, 0x94,
+	0x6c, 0xb8, 0xf8, 0x60, 0x02, 0xf8, 0x1d, 0x2b, 0x24, 0xc4, 0xc5, 0x92, 0x94, 0x58, 0x9c, 0x0a,
+	0xb6, 0x8a, 0x39, 0x08, 0xcc, 0x76, 0x0a, 0x3d, 0xf1, 0x48, 0x8e, 0xf1, 0xc2, 0x23, 0x39, 0xc6,
+	0x07, 0x8f, 0xe4, 0x18, 0x27, 0x3c, 0x96, 0x63, 0xb8, 0xf0, 0x58, 0x8e, 0xe1, 0xc6, 0x63, 0x39,
+	0x86, 0x28, 0xeb, 0xf4, 0xcc, 0x92, 0x8c, 0xd2, 0x24, 0xbd, 0xe4, 0xfc, 0x5c, 0x7d, 0xe4, 0x60,
+	0x45, 0x30, 0xc1, 0xa1, 0xaa, 0x8f, 0x2d, 0x22, 0x93, 0xd8, 0xc0, 0x72, 0xc6, 0x80, 0x00, 0x00,
+	0x00, 0xff, 0xff, 0x73, 0xe1, 0x09, 0xcb, 0xe7, 0x01, 0x00, 0x00,
 }
 
 func (m *BlockRequest) Marshal() (dAtA []byte, err error) {
@@ -486,6 +364,18 @@ func (m *BlockResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	_ = i
 	var l int
 	_ = l
+	if m.Commit != nil {
+		{
+			size, err := m.Commit.MarshalToSizedBuffer(dAtA[:i])
+			if err != nil {
+				return 0, err
+			}
+			i -= size
+			i = encodeVarintTypes(dAtA, i, uint64(size))
+		}
+		i--
+		dAtA[i] = 0x12
+	}
 	if m.Block != nil {
 		{
 			size, err := m.Block.MarshalToSizedBuffer(dAtA[:i])
@@ -557,143 +447,6 @@ func (m *StatusResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	return len(dAtA) - i, nil
 }
 
-func (m *Message) Marshal() (dAtA []byte, err error) {
-	size := m.Size()
-	dAtA = make([]byte, size)
-	n, err := m.MarshalToSizedBuffer(dAtA[:size])
-	if err != nil {
-		return nil, err
-	}
-	return dAtA[:n], nil
-}
-
-func (m *Message) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *Message) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	_ = i
-	var l int
-	_ = l
-	if m.Sum != nil {
-		{
-			size := m.Sum.Size()
-			i -= size
-			if _, err := m.Sum.MarshalTo(dAtA[i:]); err != nil {
-				return 0, err
-			}
-		}
-	}
-	return len(dAtA) - i, nil
-}
-
-func (m *Message_BlockRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *Message_BlockRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.BlockRequest != nil {
-		{
-			size, err := m.BlockRequest.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintTypes(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0xa
-	}
-	return len(dAtA) - i, nil
-}
-func (m *Message_NoBlockResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *Message_NoBlockResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.NoBlockResponse != nil {
-		{
-			size, err := m.NoBlockResponse.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintTypes(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x12
-	}
-	return len(dAtA) - i, nil
-}
-func (m *Message_BlockResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *Message_BlockResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.BlockResponse != nil {
-		{
-			size, err := m.BlockResponse.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintTypes(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x1a
-	}
-	return len(dAtA) - i, nil
-}
-func (m *Message_StatusRequest) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *Message_StatusRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.StatusRequest != nil {
-		{
-			size, err := m.StatusRequest.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintTypes(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x22
-	}
-	return len(dAtA) - i, nil
-}
-func (m *Message_StatusResponse) MarshalTo(dAtA []byte) (int, error) {
-	size := m.Size()
-	return m.MarshalToSizedBuffer(dAtA[:size])
-}
-
-func (m *Message_StatusResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
-	i := len(dAtA)
-	if m.StatusResponse != nil {
-		{
-			size, err := m.StatusResponse.MarshalToSizedBuffer(dAtA[:i])
-			if err != nil {
-				return 0, err
-			}
-			i -= size
-			i = encodeVarintTypes(dAtA, i, uint64(size))
-		}
-		i--
-		dAtA[i] = 0x2a
-	}
-	return len(dAtA) - i, nil
-}
 func encodeVarintTypes(dAtA []byte, offset int, v uint64) int {
 	offset -= sovTypes(v)
 	base := offset
@@ -739,6 +492,10 @@ func (m *BlockResponse) Size() (n int) {
 		l = m.Block.Size()
 		n += 1 + l + sovTypes(uint64(l))
 	}
+	if m.Commit != nil {
+		l = m.Commit.Size()
+		n += 1 + l + sovTypes(uint64(l))
+	}
 	return n
 }
 
@@ -762,79 +519,6 @@ func (m *StatusResponse) Size() (n int) {
 	}
 	if m.Base != 0 {
 		n += 1 + sovTypes(uint64(m.Base))
-	}
-	return n
-}
-
-func (m *Message) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.Sum != nil {
-		n += m.Sum.Size()
-	}
-	return n
-}
-
-func (m *Message_BlockRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.BlockRequest != nil {
-		l = m.BlockRequest.Size()
-		n += 1 + l + sovTypes(uint64(l))
-	}
-	return n
-}
-func (m *Message_NoBlockResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.NoBlockResponse != nil {
-		l = m.NoBlockResponse.Size()
-		n += 1 + l + sovTypes(uint64(l))
-	}
-	return n
-}
-func (m *Message_BlockResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.BlockResponse != nil {
-		l = m.BlockResponse.Size()
-		n += 1 + l + sovTypes(uint64(l))
-	}
-	return n
-}
-func (m *Message_StatusRequest) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.StatusRequest != nil {
-		l = m.StatusRequest.Size()
-		n += 1 + l + sovTypes(uint64(l))
-	}
-	return n
-}
-func (m *Message_StatusResponse) Size() (n int) {
-	if m == nil {
-		return 0
-	}
-	var l int
-	_ = l
-	if m.StatusResponse != nil {
-		l = m.StatusResponse.Size()
-		n += 1 + l + sovTypes(uint64(l))
 	}
 	return n
 }
@@ -1048,6 +732,42 @@ func (m *BlockResponse) Unmarshal(dAtA []byte) error {
 				return err
 			}
 			iNdEx = postIndex
+		case 2:
+			if wireType != 2 {
+				return fmt.Errorf("proto: wrong wireType = %d for field Commit", wireType)
+			}
+			var msglen int
+			for shift := uint(0); ; shift += 7 {
+				if shift >= 64 {
+					return ErrIntOverflowTypes
+				}
+				if iNdEx >= l {
+					return io.ErrUnexpectedEOF
+				}
+				b := dAtA[iNdEx]
+				iNdEx++
+				msglen |= int(b&0x7F) << shift
+				if b < 0x80 {
+					break
+				}
+			}
+			if msglen < 0 {
+				return ErrInvalidLengthTypes
+			}
+			postIndex := iNdEx + msglen
+			if postIndex < 0 {
+				return ErrInvalidLengthTypes
+			}
+			if postIndex > l {
+				return io.ErrUnexpectedEOF
+			}
+			if m.Commit == nil {
+				m.Commit = &types.Commit{}
+			}
+			if err := m.Commit.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
+				return err
+			}
+			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTypes(dAtA[iNdEx:])
@@ -1186,231 +906,6 @@ func (m *StatusResponse) Unmarshal(dAtA []byte) error {
 					break
 				}
 			}
-		default:
-			iNdEx = preIndex
-			skippy, err := skipTypes(dAtA[iNdEx:])
-			if err != nil {
-				return err
-			}
-			if (skippy < 0) || (iNdEx+skippy) < 0 {
-				return ErrInvalidLengthTypes
-			}
-			if (iNdEx + skippy) > l {
-				return io.ErrUnexpectedEOF
-			}
-			iNdEx += skippy
-		}
-	}
-
-	if iNdEx > l {
-		return io.ErrUnexpectedEOF
-	}
-	return nil
-}
-func (m *Message) Unmarshal(dAtA []byte) error {
-	l := len(dAtA)
-	iNdEx := 0
-	for iNdEx < l {
-		preIndex := iNdEx
-		var wire uint64
-		for shift := uint(0); ; shift += 7 {
-			if shift >= 64 {
-				return ErrIntOverflowTypes
-			}
-			if iNdEx >= l {
-				return io.ErrUnexpectedEOF
-			}
-			b := dAtA[iNdEx]
-			iNdEx++
-			wire |= uint64(b&0x7F) << shift
-			if b < 0x80 {
-				break
-			}
-		}
-		fieldNum := int32(wire >> 3)
-		wireType := int(wire & 0x7)
-		if wireType == 4 {
-			return fmt.Errorf("proto: Message: wiretype end group for non-group")
-		}
-		if fieldNum <= 0 {
-			return fmt.Errorf("proto: Message: illegal tag %d (wire type %d)", fieldNum, wire)
-		}
-		switch fieldNum {
-		case 1:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BlockRequest", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTypes
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthTypes
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthTypes
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			v := &BlockRequest{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			m.Sum = &Message_BlockRequest{v}
-			iNdEx = postIndex
-		case 2:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field NoBlockResponse", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTypes
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthTypes
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthTypes
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			v := &NoBlockResponse{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			m.Sum = &Message_NoBlockResponse{v}
-			iNdEx = postIndex
-		case 3:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field BlockResponse", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTypes
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthTypes
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthTypes
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			v := &BlockResponse{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			m.Sum = &Message_BlockResponse{v}
-			iNdEx = postIndex
-		case 4:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StatusRequest", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTypes
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthTypes
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthTypes
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			v := &StatusRequest{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			m.Sum = &Message_StatusRequest{v}
-			iNdEx = postIndex
-		case 5:
-			if wireType != 2 {
-				return fmt.Errorf("proto: wrong wireType = %d for field StatusResponse", wireType)
-			}
-			var msglen int
-			for shift := uint(0); ; shift += 7 {
-				if shift >= 64 {
-					return ErrIntOverflowTypes
-				}
-				if iNdEx >= l {
-					return io.ErrUnexpectedEOF
-				}
-				b := dAtA[iNdEx]
-				iNdEx++
-				msglen |= int(b&0x7F) << shift
-				if b < 0x80 {
-					break
-				}
-			}
-			if msglen < 0 {
-				return ErrInvalidLengthTypes
-			}
-			postIndex := iNdEx + msglen
-			if postIndex < 0 {
-				return ErrInvalidLengthTypes
-			}
-			if postIndex > l {
-				return io.ErrUnexpectedEOF
-			}
-			v := &StatusResponse{}
-			if err := v.Unmarshal(dAtA[iNdEx:postIndex]); err != nil {
-				return err
-			}
-			m.Sum = &Message_StatusResponse{v}
-			iNdEx = postIndex
 		default:
 			iNdEx = preIndex
 			skippy, err := skipTypes(dAtA[iNdEx:])

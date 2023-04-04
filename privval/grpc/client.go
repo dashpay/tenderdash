@@ -5,12 +5,13 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/status"
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/encoding"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	"github.com/tendermint/tendermint/libs/log"
 	privvalproto "github.com/tendermint/tendermint/proto/tendermint/privval"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
@@ -132,13 +133,12 @@ func (sc *SignerClient) GetHeight(ctx context.Context, quorumHash crypto.QuorumH
 // SignVote requests a remote signer to sign a vote
 func (sc *SignerClient) SignVote(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
-	vote *tmproto.Vote, stateID types.StateID, logger log.Logger) error {
+	vote *tmproto.Vote, logger log.Logger) error {
 	if len(quorumHash.Bytes()) != crypto.DefaultHashSize {
 		return fmt.Errorf("quorum hash must be 32 bytes long when signing vote")
 	}
-	protoStateID := stateID.ToProto()
 	resp, err := sc.client.SignVote(ctx, &privvalproto.SignVoteRequest{ChainId: sc.chainID, Vote: vote,
-		QuorumType: int32(quorumType), QuorumHash: quorumHash, StateId: &protoStateID})
+		QuorumType: int32(quorumType), QuorumHash: quorumHash})
 	if err != nil {
 		errStatus, _ := status.FromError(err)
 		sc.logger.Error("Client SignVote", "err", errStatus.Message())
@@ -153,7 +153,7 @@ func (sc *SignerClient) SignVote(
 // SignProposal requests a remote signer to sign a proposal
 func (sc *SignerClient) SignProposal(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, proposal *tmproto.Proposal,
-) ([]byte, error) {
+) (tmbytes.HexBytes, error) {
 	resp, err := sc.client.SignProposal(
 		ctx, &privvalproto.SignProposalRequest{ChainId: chainID, Proposal: proposal,
 			QuorumType: int32(quorumType), QuorumHash: quorumHash})

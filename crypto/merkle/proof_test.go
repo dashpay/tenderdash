@@ -1,13 +1,16 @@
 package merkle
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	goanimo "github.com/tendermint/go-amino"
 
+	"github.com/tendermint/tendermint/crypto"
 	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 )
 
@@ -79,58 +82,58 @@ func TestProofOperators(t *testing.T) {
 	// Good
 	popz := ProofOperators([]ProofOperator{op1, op2, op3, op4})
 	err = popz.Verify(bz("OUTPUT4"), "/KEY4/KEY2/KEY1", [][]byte{bz("INPUT1")})
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 	err = popz.VerifyValue(bz("OUTPUT4"), "/KEY4/KEY2/KEY1", bz("INPUT1"))
-	assert.Nil(t, err)
+	assert.NoError(t, err)
 
 	// BAD INPUT
 	err = popz.Verify(bz("OUTPUT4"), "/KEY4/KEY2/KEY1", [][]byte{bz("INPUT1_WRONG")})
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 	err = popz.VerifyValue(bz("OUTPUT4"), "/KEY4/KEY2/KEY1", bz("INPUT1_WRONG"))
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	// BAD KEY 1
 	err = popz.Verify(bz("OUTPUT4"), "/KEY3/KEY2/KEY1", [][]byte{bz("INPUT1")})
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	// BAD KEY 2
 	err = popz.Verify(bz("OUTPUT4"), "KEY4/KEY2/KEY1", [][]byte{bz("INPUT1")})
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	// BAD KEY 3
 	err = popz.Verify(bz("OUTPUT4"), "/KEY4/KEY2/KEY1/", [][]byte{bz("INPUT1")})
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	// BAD KEY 4
 	err = popz.Verify(bz("OUTPUT4"), "//KEY4/KEY2/KEY1", [][]byte{bz("INPUT1")})
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	// BAD KEY 5
 	err = popz.Verify(bz("OUTPUT4"), "/KEY2/KEY1", [][]byte{bz("INPUT1")})
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	// BAD OUTPUT 1
 	err = popz.Verify(bz("OUTPUT4_WRONG"), "/KEY4/KEY2/KEY1", [][]byte{bz("INPUT1")})
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	// BAD OUTPUT 2
 	err = popz.Verify(bz(""), "/KEY4/KEY2/KEY1", [][]byte{bz("INPUT1")})
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	// BAD POPZ 1
 	popz = []ProofOperator{op1, op2, op4}
 	err = popz.Verify(bz("OUTPUT4"), "/KEY4/KEY2/KEY1", [][]byte{bz("INPUT1")})
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	// BAD POPZ 2
 	popz = []ProofOperator{op4, op3, op2, op1}
 	err = popz.Verify(bz("OUTPUT4"), "/KEY4/KEY2/KEY1", [][]byte{bz("INPUT1")})
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 
 	// BAD POPZ 3
 	popz = []ProofOperator{}
 	err = popz.Verify(bz("OUTPUT4"), "/KEY4/KEY2/KEY1", [][]byte{bz("INPUT1")})
-	assert.NotNil(t, err)
+	assert.Error(t, err)
 }
 
 func bz(s string) []byte {
@@ -197,4 +200,27 @@ func TestVoteProtobuf(t *testing.T) {
 			require.Error(t, err)
 		}
 	}
+}
+
+// TestVsa2022_100 verifies https://blog.verichains.io/p/vsa-2022-100-tendermint-forging-membership-proof
+func TestVsa2022_100(t *testing.T) {
+	// a fake key-value pair and its hash
+	key := []byte{0x13}
+	value := []byte{0x37}
+	vhash := crypto.Checksum(value)
+	bz := new(bytes.Buffer)
+	_ = goanimo.EncodeByteSlice(bz, key)
+	_ = goanimo.EncodeByteSlice(bz, vhash)
+	kvhash := crypto.Checksum(append([]byte{0}, bz.Bytes()...))
+
+	// the malicious `op`
+	op := NewValueOp(
+		key,
+		&Proof{LeafHash: kvhash},
+	)
+
+	// the nil root
+	var root []byte
+
+	assert.NotNil(t, ProofOperators{op}.Verify(root, "/"+string(key), [][]byte{value}))
 }

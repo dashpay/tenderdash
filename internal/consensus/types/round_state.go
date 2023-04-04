@@ -6,9 +6,9 @@ import (
 	"strconv"
 	"time"
 
+	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/libs/bytes"
 	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
-
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -74,19 +74,30 @@ type RoundState struct {
 	StartTime time.Time     `json:"start_time"`
 
 	// Subjective time when +2/3 precommits for Block at Round were found
-	CommitTime         time.Time           `json:"commit_time"`
-	Validators         *types.ValidatorSet `json:"validators"`
-	Proposal           *types.Proposal     `json:"proposal"`
-	ProposalBlock      *types.Block        `json:"proposal_block"`
-	ProposalBlockParts *types.PartSet      `json:"proposal_block_parts"`
-	LockedRound        int32               `json:"locked_round"`
-	LockedBlock        *types.Block        `json:"locked_block"`
-	LockedBlockParts   *types.PartSet      `json:"locked_block_parts"`
-	Commit             *types.Commit       `json:"commit"`
+	CommitTime          time.Time           `json:"commit_time"`
+	Validators          *types.ValidatorSet `json:"validators"`
+	Proposal            *types.Proposal     `json:"proposal"`
+	ProposalReceiveTime time.Time           `json:"proposal_receive_time"`
+	ProposalBlock       *types.Block        `json:"proposal_block"`
+	ProposalBlockParts  *types.PartSet      `json:"proposal_block_parts"`
+	LockedRound         int32               `json:"locked_round"`
+	LockedBlock         *types.Block        `json:"locked_block"`
+	LockedBlockParts    *types.PartSet      `json:"locked_block_parts"`
+	Commit              *types.Commit       `json:"commit"`
+
+	// The variables below starting with "Valid..." derive their name from
+	// the algorithm presented in this paper:
+	// [The latest gossip on BFT consensus](https://arxiv.org/abs/1807.04938).
+	// Therefore, "Valid...":
+	//   * means that the block or round that the variable refers to has
+	//     received 2/3+ non-`nil` prevotes (a.k.a. a *polka*)
+	//   * has nothing to do with whether the Application returned "Accept" in its
+	//     response to `ProcessProposal`, or "Reject"
 
 	// Last known round with POL for non-nil valid block.
-	ValidRound int32        `json:"valid_round"`
-	ValidBlock *types.Block `json:"valid_block"` // Last known block of POL mentioned above.
+	ValidRound         int32        `json:"valid_round"`
+	ValidBlock         *types.Block `json:"valid_block"`      // Last known block of POL mentioned above.
+	ValidBlockRecvTime time.Time    `json:"valid_block_time"` // Receive time of ast known block of POL mentioned above.
 
 	// Last known block parts of POL mentioned above.
 	ValidBlockParts           *types.PartSet      `json:"valid_block_parts"`
@@ -96,6 +107,8 @@ type RoundState struct {
 	LastCommit                *types.Commit       `json:"last_commit"`
 	LastValidators            *types.ValidatorSet `json:"last_validators"`
 	TriggeredTimeoutPrecommit bool                `json:"triggered_timeout_precommit"`
+
+	sm.CurrentRoundState `json:"uncommitted_state"`
 }
 
 // RoundStateSimple is a compressed version of the RoundState for use in RPC
@@ -149,20 +162,23 @@ func (rs *RoundState) NewRoundEvent() types.EventDataNewRound {
 	}
 }
 
-// CompleteProposalEvent returns information about a proposed block as an event.
-func (rs *RoundState) CompleteProposalEvent() types.EventDataCompleteProposal {
-	// We must construct BlockID from ProposalBlock and ProposalBlockParts
-	// cs.Proposal is not guaranteed to be set when this function is called
-	blockID := types.BlockID{
-		Hash:          rs.ProposalBlock.Hash(),
-		PartSetHeader: rs.ProposalBlockParts.Header(),
+// BlockID returns block ID from proposal or constructs new block ID from ProposalBlock and ProposalBlockParts.
+// cs.Proposal is not guaranteed to be set when this function is called
+func (rs *RoundState) BlockID() types.BlockID {
+	if rs.Proposal != nil && rs.Height == rs.Proposal.Height && rs.Round == rs.Proposal.Round {
+		return rs.Proposal.BlockID
 	}
 
+	return rs.ProposalBlock.BlockID(rs.ProposalBlockParts)
+}
+
+// CompleteProposalEvent returns information about a proposed block as an event.
+func (rs *RoundState) CompleteProposalEvent() types.EventDataCompleteProposal {
 	return types.EventDataCompleteProposal{
 		Height:  rs.Height,
 		Round:   rs.Round,
 		Step:    rs.Step.String(),
-		BlockID: blockID,
+		BlockID: rs.BlockID(),
 	}
 }
 

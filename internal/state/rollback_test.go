@@ -18,6 +18,7 @@ func TestRollback(t *testing.T) {
 		height     int64 = 100
 		nextHeight int64 = 101
 	)
+
 	blockStore := &mocks.BlockStore{}
 	stateStore := setupStateStore(t, height)
 	initialState, err := stateStore.Load()
@@ -31,10 +32,8 @@ func TestRollback(t *testing.T) {
 	nextState.LastBlockHeight = nextHeight
 	nextState.Version.Consensus.App = 11
 	nextState.LastBlockID = factory.MakeBlockID()
-	nextState.AppHash = factory.RandomHash()
+	nextState.LastAppHash = factory.RandomHash()
 	nextState.LastValidators = initialState.Validators
-	nextState.Validators = initialState.NextValidators
-	nextState.NextValidators = initialState.NextValidators.CopyIncrementProposerPriority(1)
 	nextState.ConsensusParams = *newParams
 	nextState.LastHeightConsensusParamsChanged = nextHeight + 1
 	nextState.LastHeightValidatorsChanged = nextHeight + 1
@@ -45,19 +44,19 @@ func TestRollback(t *testing.T) {
 	block := &types.BlockMeta{
 		BlockID: initialState.LastBlockID,
 		Header: types.Header{
-			Height:          initialState.LastBlockHeight,
-			AppHash:         factory.RandomHash(),
-			LastBlockID:     factory.MakeBlockID(),
-			LastResultsHash: initialState.LastResultsHash,
+			Height:      initialState.LastBlockHeight,
+			AppHash:     factory.RandomHash(),
+			LastBlockID: factory.MakeBlockID(),
+			ResultsHash: initialState.LastResultsHash,
 		},
 	}
 	nextBlock := &types.BlockMeta{
 		BlockID: initialState.LastBlockID,
 		Header: types.Header{
-			Height:          nextState.LastBlockHeight,
-			AppHash:         initialState.AppHash,
-			LastBlockID:     block.BlockID,
-			LastResultsHash: nextState.LastResultsHash,
+			Height:      nextState.LastBlockHeight,
+			AppHash:     initialState.LastAppHash,
+			LastBlockID: block.BlockID,
+			ResultsHash: nextState.LastResultsHash,
 		},
 	}
 	blockStore.On("LoadBlockMeta", height).Return(block)
@@ -68,7 +67,7 @@ func TestRollback(t *testing.T) {
 	rollbackHeight, rollbackHash, err := state.Rollback(blockStore, stateStore)
 	require.NoError(t, err)
 	require.EqualValues(t, height, rollbackHeight)
-	require.EqualValues(t, initialState.AppHash, rollbackHash)
+	require.EqualValues(t, initialState.LastAppHash, rollbackHash)
 	blockStore.AssertExpectations(t)
 
 	// assert that we've recovered the prior state
@@ -88,10 +87,12 @@ func TestRollbackNoState(t *testing.T) {
 
 func TestRollbackNoBlocks(t *testing.T) {
 	const height = int64(100)
+
 	stateStore := setupStateStore(t, height)
 	blockStore := &mocks.BlockStore{}
 	blockStore.On("Height").Return(height)
 	blockStore.On("LoadBlockMeta", height).Return(nil)
+	blockStore.On("LoadBlockCommit", height-1).Return(&types.Commit{})
 	blockStore.On("LoadBlockMeta", height-1).Return(nil)
 
 	_, _, err := state.Rollback(blockStore, stateStore)
@@ -128,12 +129,11 @@ func setupStateStore(t *testing.T, height int64) state.Store {
 		ChainID:                          factory.DefaultTestChainID,
 		InitialHeight:                    10,
 		LastBlockID:                      factory.MakeBlockID(),
-		AppHash:                          factory.RandomHash(),
+		LastAppHash:                      factory.RandomHash(),
 		LastResultsHash:                  factory.RandomHash(),
 		LastBlockHeight:                  height,
 		LastValidators:                   valSet,
 		Validators:                       valSet.CopyIncrementProposerPriority(1),
-		NextValidators:                   valSet.CopyIncrementProposerPriority(2),
 		LastHeightValidatorsChanged:      height + 1,
 		ConsensusParams:                  *params,
 		LastHeightConsensusParamsChanged: height + 1,

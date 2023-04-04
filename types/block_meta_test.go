@@ -5,13 +5,17 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/crypto/tmhash"
+	"github.com/tendermint/tendermint/crypto"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
 )
 
 func TestBlockMeta_ToProto(t *testing.T) {
 	h := MakeRandHeader()
-	bi := BlockID{Hash: h.Hash(), PartSetHeader: PartSetHeader{Total: 123, Hash: tmrand.Bytes(tmhash.Size)}}
+	bi := BlockID{
+		Hash:          h.Hash(),
+		PartSetHeader: PartSetHeader{Total: 123, Hash: tmrand.Bytes(crypto.HashSize)},
+		StateID:       RandStateID().Hash(),
+	}
 
 	bm := &BlockMeta{
 		BlockID:   bi,
@@ -48,9 +52,13 @@ func TestBlockMeta_ToProto(t *testing.T) {
 
 func TestBlockMeta_ValidateBasic(t *testing.T) {
 	h := MakeRandHeader()
-	bi := BlockID{Hash: h.Hash(), PartSetHeader: PartSetHeader{Total: 123, Hash: tmrand.Bytes(tmhash.Size)}}
-	bi2 := BlockID{Hash: tmrand.Bytes(tmhash.Size),
-		PartSetHeader: PartSetHeader{Total: 123, Hash: tmrand.Bytes(tmhash.Size)}}
+	bi := BlockID{
+		Hash:          h.Hash(),
+		PartSetHeader: PartSetHeader{Total: 123, Hash: tmrand.Bytes(crypto.HashSize)},
+		StateID:       RandStateID().Hash(),
+	}
+	bi2 := BlockID{Hash: tmrand.Bytes(crypto.HashSize),
+		PartSetHeader: PartSetHeader{Total: 123, Hash: tmrand.Bytes(crypto.HashSize)}}
 	bi3 := BlockID{Hash: []byte("incorrect hash"),
 		PartSetHeader: PartSetHeader{Total: 123, Hash: []byte("incorrect hash")}}
 

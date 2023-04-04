@@ -47,9 +47,9 @@ definition](https://github.com/tenderdash/tenderdash/blob/master/types/genesis.g
 - `chain_id`: ID of the blockchain. **This must be unique for
   every blockchain.** If your testnet blockchains do not have unique
   chain IDs, you will have a bad time. The ChainID must be less than 50 symbols.
-- `initial_height`: Height at which Tenderdash should begin at. If a blockchain is conducting a network upgrade,
+- `initial_height`: Height at which Tenderdash should begin. If a blockchain is conducting a network upgrade,
     starting from the stopped height brings uniqueness to previous heights.
-- `consensus_params` [spec](https://github.com/tenderdash/spec/blob/master/spec/core/state.md#consensusparams)
+- `consensus_params` [spec](https://github.com/tendermint/tendermint/blob/master/spec/core/state.md#consensusparams)
     - `block`
         - `max_bytes`: Max block size, in bytes.
         - `max_gas`: Max gas per block.
@@ -113,17 +113,17 @@ definition](https://github.com/tenderdash/tenderdash/blob/master/types/genesis.g
       "address": "B547AB87E79F75A4A3198C57A8C2FDAF8628CB47",
       "pub_key": {
         "type": "tenderdash/PubKeyBLS25519",
-        "value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+        "value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
       },
       "power": "100",
       "name": "",
       "pro_tx_hash": "4F01160F58390DA57FE7FE1CCE4DDE452A448E90F4B560C0D788DCEEAD5B5E69"
     }
   ],
-  "quorum_hash": "444F39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C433",
-  "threshold_public_key": {
+  "validator_quorum_hash": "444F39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C433",
+  "validator_quorum_threshold_public_key": {
     "type": "tendermint/PubKeyBLS12381",
-    "value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+    "value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
   },
   "app_hash": ""
 }
@@ -261,7 +261,7 @@ afford to lose all blockchain data!
 To reset a blockchain, stop the node and run:
 
 ```sh
-tenderdash unsafe_reset_all
+tendermint unsafe-reset-all
 ```
 
 This command will remove the data directory and reset private validator and
@@ -558,7 +558,7 @@ then the new `genesis.json` will be:
   ],
   "threshold_public_key": {
     "type": "tendermint/PubKeyBLS12381",
-    "value": "F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"
+    "value": "rK8dtUyUYi5wCgjEFL2t8AKRfhbVnCu2C3cchusRyWfkapjRX6Wc2FL5fvJkahq6"
   },
   "app_hash" : "",
   "chain_id" : "test-chain-rDlYSN",

@@ -1,0 +1,27 @@
+---
+name: Check Markdown links
+
+on:
+  # Temporarily disabled job on PRs. Re-enable when docs are fixed.
+  # pull_request:
+  #   paths:
+  #     - "**.md"
+  push:
+    branches:
+      - master
+      - v[0-9]+.[0-9]+-dev
+
+jobs:
+  markdown-link-check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: technote-space/get-diff-action@v6
+        with:
+          PATTERNS: |
+            **/**.md
+      - uses: gaurav-nelson/github-action-markdown-link-check@v1
+        with:
+          check-modified-files-only: "yes"
+          config-file: ".md-link-check.json"
+        if: env.GIT_DIFF

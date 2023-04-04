@@ -3,8 +3,9 @@ package statesync
 import (
 	"container/heap"
 	"fmt"
-	"sync"
 	"time"
+
+	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/types"
 )
@@ -200,7 +201,7 @@ func (q *blockQueue) retry(height int64) {
 
 // Success is called when a light block has been successfully verified and
 // processed
-func (q *blockQueue) success(height int64) {
+func (q *blockQueue) success() {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 	if q.terminal != nil && q.verifyHeight == q.terminal.Height {

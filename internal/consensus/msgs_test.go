@@ -14,26 +14,31 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/crypto/merkle"
-	"github.com/tendermint/tendermint/crypto/tmhash"
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/bits"
 	"github.com/tendermint/tendermint/libs/bytes"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
+	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
 
 func TestMsgToProto(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
 	psh := types.PartSetHeader{
 		Total: 1,
 		Hash:  tmrand.Bytes(32),
 	}
 	pbPsh := psh.ToProto()
+	stateID := types.RandStateID()
 	bi := types.BlockID{
 		Hash:          tmrand.Bytes(32),
 		PartSetHeader: psh,
+		StateID:       stateID.Hash(),
 	}
 	pbBi := bi.ToProto()
 	bits := bits.NewBitArray(1)
@@ -59,18 +64,19 @@ func TestMsgToProto(t *testing.T) {
 		Round:                 1,
 		POLRound:              1,
 		BlockID:               bi,
-		Timestamp:             time.Now(),
+		Timestamp:             tmtime.Now(),
 		Signature:             tmrand.Bytes(20),
 	}
 	pbProposal := proposal.ToProto()
 
 	quorumHash := crypto.RandQuorumHash()
 	pv := types.NewMockPVForQuorum(quorumHash)
-	pk, err := pv.GetPubKey(context.Background(), quorumHash)
-	require.NoError(t, err)
+	pk, err := pv.GetPubKey(ctx, quorumHash)
 	val := types.NewValidatorDefaultVotingPower(pk, pv.ProTxHash)
+	require.NoError(t, err)
 
 	vote, err := factory.MakeVote(
+		ctx,
 		pv,
 		&types.ValidatorSet{Proposer: val, Validators: []*types.Validator{val}, QuorumHash: quorumHash, ThresholdPublicKey: pk},
 		"chainID",
@@ -78,8 +84,7 @@ func TestMsgToProto(t *testing.T) {
 		1,
 		1,
 		2,
-		types.BlockID{},
-		types.StateID{},
+		bi,
 	)
 	require.NoError(t, err)
 	pbVote := vote.ToProto()
@@ -212,7 +217,7 @@ func TestMsgToProto(t *testing.T) {
 			}
 			assert.EqualValues(t, tt.want, pb, tt.testName)
 
-			msg, err := MsgFromProto(pb)
+			msg, err := MsgFromProtoMsg(pb)
 
 			if !tt.wantErr {
 				require.NoError(t, err)
@@ -379,7 +384,11 @@ func TestConsMsgsVectors(t *testing.T) {
 		Round:              0,
 		Type:               tmproto.PrecommitType,
 		BlockID:            bi,
+		VoteExtensions: types.VoteExtensions{
+			tmproto.VoteExtensionType_DEFAULT: []types.VoteExtension{{Extension: []byte("extension")}},
+		},
 	}
+
 	vpb := v.ToProto()
 
 	testCases := []struct {
@@ -406,7 +415,7 @@ func TestConsMsgsVectors(t *testing.T) {
 				Height: 1, Round: 1, BlockPartSetHeader: pbPsh, BlockParts: pbBits, IsCommit: false}}},
 			"1231080110011a24080112206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d22050801120100"},
 		{"Proposal", &tmcons.Message{Sum: &tmcons.Message_Proposal{Proposal: &tmcons.Proposal{Proposal: *pbProposal}}},
-			"1a750a7308201001180120012a480a206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d1224080112206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d320608c0b89fdc053a146164645f6d6f72655f6578636c616d6174696f6ea00601"},
+			"1a740a7208201001180120012a480a206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d1224080112206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d320608c0b89fdc053a146164645f6d6f72655f6578636c616d6174696f6e4001"},
 		{"ProposalPol", &tmcons.Message{Sum: &tmcons.Message_ProposalPol{
 			ProposalPol: &tmcons.ProposalPOL{Height: 1, ProposalPolRound: 1}}},
 			"2206080110011a00"},
@@ -415,7 +424,7 @@ func TestConsMsgsVectors(t *testing.T) {
 			"2a36080110011a3008011204746573741a26080110011a206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d"},
 		{"Vote", &tmcons.Message{Sum: &tmcons.Message_Vote{
 			Vote: &tmcons.Vote{Vote: vpb}}},
-			"32680a660802100122480a206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d1224080112206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d32146164645f6d6f72655f6578636c616d6174696f6e3801"},
+			"32750a730802100122480a206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d1224080112206164645f6d6f72655f6578636c616d6174696f6e5f6d61726b735f636f64652d2a146164645f6d6f72655f6578636c616d6174696f6e3001420b1209657874656e73696f6e"},
 		{"HasVote", &tmcons.Message{Sum: &tmcons.Message_HasVote{
 			HasVote: &tmcons.HasVote{Height: 1, Round: 1, Type: tmproto.PrevoteType, Index: 1}}},
 			"3a080801100118012001"},
@@ -457,7 +466,7 @@ func TestVoteSetMaj23MessageValidateBasic(t *testing.T) {
 		},
 	}
 
-	testCases := []struct { // nolint: maligned
+	testCases := []struct { //nolint: maligned
 		expectErr      bool
 		messageRound   int32
 		messageHeight  int64
@@ -529,7 +538,7 @@ func TestVoteSetBitsMessageValidateBasic(t *testing.T) {
 }
 
 func TestNewRoundStepMessageValidateBasic(t *testing.T) {
-	testCases := []struct { // nolint: maligned
+	testCases := []struct { //nolint: maligned
 		expectErr              bool
 		messageRound           int32
 		messageLastCommitRound int32
@@ -568,7 +577,7 @@ func TestNewRoundStepMessageValidateBasic(t *testing.T) {
 
 func TestNewRoundStepMessageValidateHeight(t *testing.T) {
 	initialHeight := int64(10)
-	testCases := []struct { // nolint: maligned
+	testCases := []struct { //nolint: maligned
 		expectErr              bool
 		messageLastCommitRound int32
 		messageHeight          int64
@@ -680,7 +689,7 @@ func TestProposalPOLMessageValidateBasic(t *testing.T) {
 
 func TestBlockPartMessageValidateBasic(t *testing.T) {
 	testPart := new(types.Part)
-	testPart.Proof.LeafHash = tmhash.Sum([]byte("leaf"))
+	testPart.Proof.LeafHash = crypto.Checksum([]byte("leaf"))
 	testCases := []struct {
 		testName      string
 		messageHeight int64
@@ -718,7 +727,7 @@ func TestHasVoteMessageValidateBasic(t *testing.T) {
 		invalidSignedMsgType tmproto.SignedMsgType = 0x03
 	)
 
-	testCases := []struct { // nolint: maligned
+	testCases := []struct { //nolint: maligned
 		expectErr     bool
 		messageRound  int32
 		messageIndex  int32

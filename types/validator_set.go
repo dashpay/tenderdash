@@ -9,7 +9,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/rs/zerolog"
 
 	abci "github.com/tendermint/tendermint/abci/types"
@@ -18,6 +18,7 @@ import (
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/crypto/merkle"
 	"github.com/tendermint/tendermint/dash/llmq"
+	tmbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -41,8 +42,10 @@ const (
 
 // ErrTotalVotingPowerOverflow is returned if the total voting power of the
 // resulting validator set exceeds MaxTotalVotingPower.
-var ErrTotalVotingPowerOverflow = fmt.Errorf("total voting power of resulting valset exceeds max %d",
-	MaxTotalVotingPower)
+var (
+	ErrTotalVotingPowerOverflow = fmt.Errorf("total voting power of resulting valset exceeds max %d", MaxTotalVotingPower)
+	ErrValidatorSetNilOrEmpty   = errors.New("validator set is nil or empty")
+)
 
 // ValidatorSet represent a set of *Validator at a given height.
 //
@@ -121,7 +124,7 @@ func NewEmptyValidatorSet() *ValidatorSet {
 
 func (vals *ValidatorSet) ValidateBasic() error {
 	if vals.IsNilOrEmpty() {
-		return errors.New("validator set is nil or empty")
+		return ErrValidatorSetNilOrEmpty
 	}
 
 	if vals.Proposer == nil {
@@ -156,6 +159,12 @@ func (vals *ValidatorSet) ValidateBasic() error {
 }
 
 func (vals *ValidatorSet) Equals(other *ValidatorSet) bool {
+	if vals == nil && other == nil {
+		return true
+	}
+	if vals == nil || other == nil {
+		return false
+	}
 	if !vals.ThresholdPublicKey.Equals(other.ThresholdPublicKey) {
 		return false
 	}
@@ -358,7 +367,7 @@ func (vals *ValidatorSet) shiftByAvgProposerPriority() {
 
 // Makes a copy of the validator list.
 func validatorListCopy(valsList []*Validator) []*Validator {
-	if valsList == nil {
+	if len(valsList) == 0 {
 		return nil
 	}
 	valsCopy := make([]*Validator, len(valsList))
@@ -370,6 +379,9 @@ func validatorListCopy(valsList []*Validator) []*Validator {
 
 // Copy each validator into a new ValidatorSet.
 func (vals *ValidatorSet) Copy() *ValidatorSet {
+	if vals == nil {
+		return nil
+	}
 	return &ValidatorSet{
 		Validators:         validatorListCopy(vals.Validators),
 		Proposer:           vals.Proposer,
@@ -384,6 +396,9 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 // HasProTxHash returns true if proTxHash given is in the validator set, false -
 // otherwise.
 func (vals *ValidatorSet) HasProTxHash(proTxHash crypto.ProTxHash) bool {
+	if len(proTxHash) == 0 {
+		return false
+	}
 	for _, val := range vals.Validators {
 		if bytes.Equal(val.ProTxHash, proTxHash) {
 			return true
@@ -407,12 +422,11 @@ func (vals *ValidatorSet) GetByProTxHash(proTxHash []byte) (index int32, val *Va
 // index.
 // It returns nil values if index is less than 0 or greater or equal to
 // len(ValidatorSet.Validators).
-func (vals *ValidatorSet) GetByIndex(index int32) (proTxHash crypto.ProTxHash, val *Validator) {
+func (vals *ValidatorSet) GetByIndex(index int32) *Validator {
 	if index < 0 || int(index) >= len(vals.Validators) {
-		return nil, nil
+		return nil
 	}
-	val = vals.Validators[index]
-	return val.ProTxHash, val.Copy()
+	return vals.Validators[index].Copy()
 }
 
 // GetProTxHashes returns the all validator proTxHashes
@@ -455,40 +469,6 @@ func (vals *ValidatorSet) GetProTxHashesOrdered() []crypto.ProTxHash {
 // Size returns the length of the validator set.
 func (vals *ValidatorSet) Size() int {
 	return len(vals.Validators)
-}
-
-func (vals *ValidatorSet) RegenerateWithNewKeys() (*ValidatorSet, []PrivValidator) {
-	var (
-		numValidators  = len(vals.Validators)
-		valz           = make([]*Validator, 0, numValidators)
-		privValidators = make([]PrivValidator, 0, numValidators)
-	)
-	ld := llmq.MustGenerate(vals.GetProTxHashes())
-	quorumHash := crypto.RandQuorumHash()
-	iter := ld.Iter()
-	for iter.Next() {
-		proTxHash, qks := iter.Value()
-		privValidators = append(privValidators, NewMockPVWithParams(
-			qks.PrivKey,
-			proTxHash,
-			quorumHash,
-			ld.ThresholdPubKey,
-			false,
-			false,
-		))
-		valz = append(valz, NewValidatorDefaultVotingPower(qks.PubKey, proTxHash))
-	}
-
-	// Just to make sure
-	sort.Sort(PrivValidatorsByProTxHash(privValidators))
-
-	return NewValidatorSet(
-		valz,
-		ld.ThresholdPubKey,
-		vals.QuorumType,
-		crypto.RandQuorumHash(),
-		vals.HasPublicKeys,
-	), privValidators
 }
 
 // Forces recalculation of the set's total voting power.
@@ -570,8 +550,8 @@ func (vals *ValidatorSet) findProposer() *Validator {
 }
 
 // Hash returns the Quorum Hash.
-func (vals *ValidatorSet) Hash() []byte {
-	if vals.QuorumHash == nil || vals.ThresholdPublicKey == nil {
+func (vals *ValidatorSet) Hash() tmbytes.HexBytes {
+	if vals == nil || vals.QuorumHash == nil || vals.ThresholdPublicKey == nil {
 		return []byte(nil)
 	}
 	bzs := make([][]byte, 2)
@@ -639,14 +619,17 @@ func processChanges(origChanges []*Validator) (updates, removals []*Validator, e
 //
 // Inputs:
 // updates - a list of proper validator changes, i.e. they have been verified by processChanges for duplicates
-//   and invalid values.
+//
+//	and invalid values.
+//
 // vals - the original validator set. Note that vals is NOT modified by this function.
 // removedPower - the total voting power that will be removed after the updates are verified and applied.
 //
 // Returns:
 // tvpAfterUpdatesBeforeRemovals -  the new total voting power if these updates would be applied without the removals.
-//   Note that this will be < 2 * MaxTotalVotingPower in case high power validators are removed and
-//   validators are added/ updated with high power values.
+//
+//	Note that this will be < 2 * MaxTotalVotingPower in case high power validators are removed and
+//	validators are added/ updated with high power values.
 //
 // err - non-nil if the maximum allowed total voting power would be exceeded
 func verifyUpdates(
@@ -701,8 +684,9 @@ func numNewValidators(updates []*Validator, vals *ValidatorSet) int {
 // 'updates' parameter must be a list of unique validators to be added or updated.
 //
 // 'updatedTotalVotingPower' is the total voting power of a set where all updates would be applied but
-//   not the removals. It must be < 2*MaxTotalVotingPower and may be close to this limit if close to
-//   MaxTotalVotingPower will be removed. This is still safe from overflow since MaxTotalVotingPower is maxInt64/8.
+//
+//	not the removals. It must be < 2*MaxTotalVotingPower and may be close to this limit if close to
+//	MaxTotalVotingPower will be removed. This is still safe from overflow since MaxTotalVotingPower is maxInt64/8.
 //
 // No changes are made to the validator set 'vals'.
 func computeNewPriorities(updates []*Validator, vals *ValidatorSet, updatedTotalVotingPower int64) {
@@ -884,14 +868,15 @@ func (vals *ValidatorSet) updateWithChangeSet(changes []*Validator, allowDeletes
 
 // UpdateWithChangeSet attempts to update the validator set with 'changes'.
 // It performs the following steps:
-// - validates the changes making sure there are no duplicates and splits them in updates and deletes
-// - verifies that applying the changes will not result in errors
-// - computes the total voting power BEFORE removals to ensure that in the next steps the priorities
-//   across old and newly added validators are fair
-// - computes the priorities of new validators against the final set
-// - applies the updates against the validator set
-// - applies the removals against the validator set
-// - performs scaling and centering of priority values
+//   - validates the changes making sure there are no duplicates and splits them in updates and deletes
+//   - verifies that applying the changes will not result in errors
+//   - computes the total voting power BEFORE removals to ensure that in the next steps the priorities
+//     across old and newly added validators are fair
+//   - computes the priorities of new validators against the final set
+//   - applies the updates against the validator set
+//   - applies the removals against the validator set
+//   - performs scaling and centering of priority values
+//
 // If an error is detected during verification steps, it is returned and the validator set
 // is not changed.
 func (vals *ValidatorSet) UpdateWithChangeSet(
@@ -902,15 +887,6 @@ func (vals *ValidatorSet) UpdateWithChangeSet(
 	return vals.updateWithChangeSet(changes, true, newThresholdPublicKey, newQuorumHash)
 }
 
-func (vals *ValidatorSet) CommitSignIds(chainID string, commit *Commit) ([]byte, []byte) {
-
-	blockSignID := commit.CanonicalVoteVerifySignID(chainID, vals.QuorumType, vals.QuorumHash)
-
-	stateSignID := commit.StateID.SignID(chainID, vals.QuorumType, vals.QuorumHash)
-
-	return blockSignID, stateSignID
-}
-
 // VerifyCommit verifies +2/3 of the set had signed the given commit.
 //
 // It checks all the signatures! While it's safe to exit as soon as we have
@@ -918,7 +894,7 @@ func (vals *ValidatorSet) CommitSignIds(chainID string, commit *Commit) ([]byte,
 // application that depends on the LastCommitInfo sent in BeginBlock, which
 // includes which validators signed. For instance, Gaia incentivizes proposers
 // with a bonus for including more than +2/3 of the signatures.
-func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID, stateID StateID,
+func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 	height int64, commit *Commit) error {
 
 	// Validate Height and BlockID.
@@ -930,29 +906,16 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID, stateID 
 			blockID, commit.BlockID)
 	}
 
-	if !stateID.Equals(commit.StateID) {
-		return fmt.Errorf("invalid commit -- wrong state ID: want %v, got %v",
-			stateID, commit.StateID)
+	canonVote := commit.GetCanonicalVote()
+	quorumSigns, err := MakeQuorumSigns(chainID, vals.QuorumType, vals.QuorumHash, canonVote.ToProto())
+	if err != nil {
+		return err
 	}
-
-	blockSignID := commit.CanonicalVoteVerifySignID(chainID, vals.QuorumType, vals.QuorumHash)
-
-	if !vals.ThresholdPublicKey.VerifySignatureDigest(blockSignID, commit.ThresholdBlockSignature) {
-		canonicalVoteBlockSignBytes := commit.CanonicalVoteVerifySignBytes(chainID)
-		return fmt.Errorf(
-			"incorrect threshold block signature bytes: %X signId %X commit: %v valQuorumType %d valQuorumHash %X valThresholdPublicKey %X", // nolint:lll
-			canonicalVoteBlockSignBytes, blockSignID, commit, vals.QuorumType, vals.QuorumHash, vals.ThresholdPublicKey)
+	err = quorumSigns.Verify(vals.ThresholdPublicKey, NewQuorumSignsFromCommit(commit))
+	if err != nil {
+		return fmt.Errorf("invalid commit signatures for quorum(type=%v, hash=%X), thresholdPubKey=%X: %w",
+			vals.QuorumType, vals.QuorumHash, vals.ThresholdPublicKey, err)
 	}
-
-	stateSignID := commit.StateID.SignID(chainID, vals.QuorumType, vals.QuorumHash)
-
-	if !vals.ThresholdPublicKey.VerifySignatureDigest(stateSignID, commit.ThresholdStateSignature) {
-		commit.StateID.SignBytes(chainID)
-		stateSignBytes := commit.StateID.SignBytes(chainID)
-		return fmt.Errorf("incorrect threshold state signature bytes: %X commit: %v valQuorumHash %X",
-			stateSignBytes, commit, vals.QuorumHash)
-	}
-
 	return nil
 }
 
@@ -1075,6 +1038,9 @@ func (vals *ValidatorSet) StringIndentedBasic(indent string) string {
 
 // MarshalZerologObject implements zerolog.LogObjectMarshaler
 func (vals *ValidatorSet) MarshalZerologObject(e *zerolog.Event) {
+	if vals == nil {
+		return
+	}
 	e.Str("proposer", vals.GetProposer().ProTxHash.ShortString())
 	e.Str("quorum_hash", vals.QuorumHash.ShortString())
 	validators := zerolog.Arr()
@@ -1172,27 +1138,28 @@ func (vals *ValidatorSet) ToProto() (*tmproto.ValidatorSet, error) {
 // is invalid
 func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 	if vp == nil {
-		return nil, errors.New("nil validator set") // validator set should never be nil
+		return nil, ErrValidatorSetNilOrEmpty // validator set should never be nil
 		// bigger issues are at play if empty
 	}
 	vals := new(ValidatorSet)
 
-	valsProto := make([]*Validator, len(vp.Validators))
+	vals.Validators = make([]*Validator, len(vp.Validators))
 	for i := 0; i < len(vp.Validators); i++ {
 		v, err := ValidatorFromProto(vp.Validators[i])
 		if err != nil {
 			return nil, fmt.Errorf("fromProto: validatorSet validator error: %w", err)
 		}
-		valsProto[i] = v
-	}
-	vals.Validators = valsProto
-
-	p, err := ValidatorFromProto(vp.GetProposer())
-	if err != nil {
-		return nil, fmt.Errorf("fromProto: validatorSet proposer error: %w", err)
+		vals.Validators[i] = v
 	}
 
-	vals.Proposer = p
+	var err error
+	proposer := vp.GetProposer()
+	if proposer != nil {
+		vals.Proposer, err = ValidatorFromProto(vp.GetProposer())
+		if err != nil {
+			return nil, fmt.Errorf("fromProto: validatorSet proposer error: %w", err)
+		}
+	}
 
 	// NOTE: We can't trust the total voting power given to us by other peers. If someone were to
 	// inject a non-zeo value that wasn't the correct voting power we could assume a wrong total
@@ -1201,12 +1168,12 @@ func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 	// so we don't have to do this
 	vals.TotalVotingPower()
 
-	thresholdPublicKey, err := cryptoenc.PubKeyFromProto(vp.ThresholdPublicKey)
-	if err != nil {
-		return nil, fmt.Errorf("fromProto: thresholdPublicKey error: %w", err)
+	if vp.ThresholdPublicKey.Size() > 0 {
+		vals.ThresholdPublicKey, err = cryptoenc.PubKeyFromProto(vp.ThresholdPublicKey)
+		if err != nil {
+			return nil, fmt.Errorf("fromProto: thresholdPublicKey error: %w", err)
+		}
 	}
-
-	vals.ThresholdPublicKey = thresholdPublicKey
 
 	vals.QuorumType = btcjson.LLMQType(vp.QuorumType)
 

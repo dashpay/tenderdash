@@ -4,9 +4,25 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
+	"time"
 
+	tbytes "github.com/tendermint/tendermint/libs/bytes"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
+
+// Info about the status of the light client
+type LightClientInfo struct {
+	PrimaryID         string          `json:"primaryID"`
+	WitnessesID       []string        `json:"witnessesID"`
+	NumPeers          int             `json:"number_of_peers,string"`
+	LastTrustedHeight int64           `json:"last_trusted_height,string"`
+	LastTrustedHash   tbytes.HexBytes `json:"last_trusted_hash"`
+	LatestBlockTime   time.Time       `json:"latest_block_time"`
+	TrustingPeriod    string          `json:"trusting_period"`
+	// Boolean that reflects whether LatestBlockTime + trusting period is before
+	// time.Now() (time when /status is called)
+	TrustedBlockExpired bool `json:"trusted_block_expired"`
+}
 
 // LightBlock is a SignedHeader and a ValidatorSet.
 // It is the basis of the light client
@@ -32,10 +48,12 @@ func (lb LightBlock) ValidateBasic(chainID string) error {
 	if err := lb.ValidatorSet.ValidateBasic(); err != nil {
 		return fmt.Errorf("invalid validator set: %w", err)
 	}
+
 	// Validate StateID height
-	if lb.Commit.StateID.Height != lb.Height-1 {
-		return fmt.Errorf("invalid commit stateID height %d for light block height %d",
-			lb.Commit.StateID.Height, lb.Height)
+	stateID := lb.StateID().Hash()
+
+	if !lb.Commit.BlockID.StateID.Equal(stateID) {
+		return fmt.Errorf("invalid commit state id hash %X != %X for light block", lb.Commit.BlockID.StateID, stateID)
 	}
 
 	// make sure the validator set is consistent with the header
@@ -49,12 +67,11 @@ func (lb LightBlock) ValidateBasic(chainID string) error {
 }
 
 // StateID() returns StateID for a given light block
-func (lb LightBlock) StateID() StateID {
-	if lb.Commit == nil {
-		panic("Cannot read state of a block without commit")
+func (lb LightBlock) StateID() tmproto.StateID {
+	if lb.SignedHeader == nil || lb.SignedHeader.Header == nil {
+		panic("Cannot read state of a block without header")
 	}
-
-	return lb.Commit.StateID.Copy()
+	return lb.SignedHeader.Header.StateID()
 }
 
 // String returns a string representation of the LightBlock
