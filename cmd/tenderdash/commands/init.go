@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/spf13/cobra"
 
 	"github.com/tendermint/tendermint/config"

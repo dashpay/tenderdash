@@ -7,7 +7,7 @@ import (
 	"log"
 	"net/http"
 
-	"github.com/dashevo/dashd-go/btcjson"
+	"github.com/dashpay/dashd-go/btcjson"
 )
 
 type response struct {

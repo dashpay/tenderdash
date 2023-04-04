@@ -1,8 +1,8 @@
 package light
 
 import (
-	"github.com/dashevo/dashd-go/btcjson"
-	rpc "github.com/dashevo/dashd-go/rpcclient"
+	"github.com/dashpay/dashd-go/btcjson"
+	rpc "github.com/dashpay/dashd-go/rpcclient"
 )
 
 // DashCoreVerifier is used to verify signatures of light blocks
