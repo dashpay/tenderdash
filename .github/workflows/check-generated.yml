@@ -5,10 +5,11 @@
 # even if no files in the repository are modified.
 name: Check generated code
 on:
-  push:
-    branches:
-      - master
   pull_request:
+    paths:
+      - "**.go"
+      - "**.proto"
+  push:
     branches:
       - master
       - v[0-9]+.[0-9]+-dev

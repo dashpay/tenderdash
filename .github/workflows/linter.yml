@@ -1,17 +1,14 @@
 name: Markdown Linter
 on:
-  push:
-    branches:
-      - master
+  pull_request:
     paths:
       - "**.md"
       - "**.yml"
       - "**.yaml"
-  pull_request:
-    branches: [master]
-    paths:
-      - "**.md"
-      - "**.yml"
+  push:
+    branches:
+      - master
+      - v[0-9]+.[0-9]+-dev
 
 jobs:
   build:
