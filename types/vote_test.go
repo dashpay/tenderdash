@@ -615,6 +615,21 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 	}
 }
 
+// TestVoteExtensionsSignBytes checks if vote extension sign bytes are generated correctly.
+//
+// This test is synchronized with tests from github.com/dashpay/rs-tenderdash-abci
+func TestVoteExtensionsSignBytes(t *testing.T) {
+	expect := hexBytesFromString(t, "2a0a080102030405060708110100000000000000190200000000000000220a736f6d652d636861696e2801")
+	ve := tmproto.VoteExtension{
+		Extension: []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Signature: []byte{},
+		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+	}
+	actual := VoteExtensionSignBytes("some-chain", 1, 2, &ve)
+	t.Logf("sign bytes: %x", actual)
+	assert.EqualValues(t, expect, actual)
+}
+
 func TestVoteProtobuf(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
