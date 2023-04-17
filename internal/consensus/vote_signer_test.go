@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 
+	bls "github.com/dashpay/bls-signatures/go-bindings"
+
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	sm "github.com/tendermint/tendermint/internal/state"
 	"github.com/tendermint/tendermint/internal/state/mocks"
@@ -133,6 +135,14 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 				Return(nil)
 			vote := signer.signAddVote(ctx, &stateData, tc.msgType, tc.blockID)
 			assert.NotNil(t, vote)
+			key, err := privVal.GetPubKey(ctx, valSet.QuorumHash)
+			assert.NoError(t, err)
+
+			key1, err := bls.G1ElementFromBytes(key.Bytes())
+			assert.NoError(t, err)
+
+			t.Logf("key: %x", key1.Serialize())
+			t.Logf("%+v", vote.VoteExtensions[tmproto.VoteExtensionType_THRESHOLD_RECOVER])
 		})
 	}
 }
