@@ -1,12 +1,15 @@
 package types
 
 import (
+	"bytes"
 	"context"
 	"fmt"
 	"testing"
 
+	bls "github.com/dashpay/bls-signatures/go-bindings"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
+	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -44,19 +47,31 @@ func examplePrecommit(t testing.TB) *Vote {
 }
 
 func exampleVote(tb testing.TB, t byte) *Vote {
-	tb.Helper()
+	const (
+		height = 12345
+		round  = 2
+	)
+	appHash := bytes.Repeat([]byte{1, 2, 3, 4}, 8)
 
+	tb.Helper()
+	stateID := tmproto.StateID{
+		Height:                height,
+		AppHash:               appHash,
+		AppVersion:            StateIDVersion,
+		CoreChainLockedHeight: 3,
+		Time:                  gogotypes.Timestamp{},
+	}
 	return &Vote{
 		Type:   tmproto.SignedMsgType(t),
-		Height: 12345,
-		Round:  2,
+		Height: height,
+		Round:  round,
 		BlockID: BlockID{
 			Hash: crypto.Checksum([]byte("blockID_hash")),
 			PartSetHeader: PartSetHeader{
 				Total: 1000000,
 				Hash:  crypto.Checksum([]byte("blockID_part_set_header_hash")),
 			},
-			StateID: RandStateID().Hash(),
+			StateID: stateID.Hash(),
 		},
 		ValidatorProTxHash: crypto.ProTxHashFromSeedBytes([]byte("validator_pro_tx_hash")),
 		ValidatorIndex:     56789,
@@ -253,7 +268,7 @@ func TestVoteVerifySignature(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
 
-			quorumHash := crypto.RandQuorumHash()
+			quorumHash := make([]byte, 32)
 			privVal := NewMockPVForQuorum(quorumHash)
 			pubkey, err := privVal.GetPubKey(context.Background(), quorumHash)
 			require.NoError(t, err)
@@ -271,6 +286,15 @@ func TestVoteVerifySignature(t *testing.T) {
 			valid := pubkey.VerifySignatureDigest(signID, v.BlockSignature)
 			require.True(t, valid)
 
+			g1, err := bls.G1ElementFromBytes(pubkey.Bytes())
+			require.NoError(t, err)
+			signBytes, err := v.SignBytes("test_chain_id")
+			require.NoError(t, err)
+			t.Logf("-> pubkey: %s\n-> sign bytes: %x\n->  signID: %x\n-> signature: %x",
+				g1.HexString(),
+				signBytes,
+				signID,
+				v.BlockSignature)
 			// serialize, deserialize and verify again....
 			precommit := new(tmproto.Vote)
 			bs, err := proto.Marshal(v)
@@ -613,6 +637,21 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 			require.Error(t, precommit.ValidateWithExtension(), "ValidateWithExtension for %s", tc.name)
 		})
 	}
+}
+
+// TestVoteExtensionsSignBytes checks if vote extension sign bytes are generated correctly.
+//
+// This test is synchronized with tests from github.com/dashpay/rs-tenderdash-abci
+func TestVoteExtensionsSignBytes(t *testing.T) {
+	expect := hexBytesFromString(t, "2a0a080102030405060708110100000000000000190200000000000000220a736f6d652d636861696e2801")
+	ve := tmproto.VoteExtension{
+		Extension: []byte{1, 2, 3, 4, 5, 6, 7, 8},
+		Signature: []byte{},
+		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+	}
+	actual := VoteExtensionSignBytes("some-chain", 1, 2, &ve)
+	t.Logf("sign bytes: %x", actual)
+	assert.EqualValues(t, expect, actual)
 }
 
 func TestVoteProtobuf(t *testing.T) {

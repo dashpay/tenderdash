@@ -14,6 +14,12 @@ import (
 	"github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
+func TestBlockRequestID(t *testing.T) {
+	expected := tmbytes.MustHexDecode("28277743e77872951df01bda93a344feca2435e113b8824ce636eada665aadd5")
+	got := BlockRequestID(12, 34)
+	assert.EqualValues(t, expected, got)
+}
+
 func TestMakeBlockSignID(t *testing.T) {
 	const chainID = "dash-platform"
 	testCases := []struct {
