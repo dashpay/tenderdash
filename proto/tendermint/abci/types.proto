@@ -629,7 +629,7 @@ message ResponsePrepareProposal {
   repeated ExecTxResult tx_results = 3;
   // Changes to consensus-critical gas, size, and other parameters that will be applied at next height.
   tendermint.types.ConsensusParams consensus_param_updates = 4;
-  // Core chain lock that will be used for generated block.
+  // Core chain lock that will be used for next block.
   tendermint.types.CoreChainLock core_chain_lock_update = 5;
   // Changes to validator set that will be applied at next height.
   ValidatorSetUpdate validator_set_update = 6 [(gogoproto.nullable) = true];
