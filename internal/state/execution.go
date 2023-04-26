@@ -307,7 +307,7 @@ func (blockExec *BlockExecutor) ProcessProposal(
 
 		// Dash's fields
 		ProposerProTxHash:     block.ProposerProTxHash,
-		CoreChainLockedHeight: state.LastCoreChainLockedBlockHeight,
+		CoreChainLockedHeight: block.CoreChainLockedHeight,
 		CoreChainLockUpdate:   block.CoreChainLock.ToProto(),
 		ProposedAppVersion:    block.ProposedAppVersion,
 		Version:               &version,
