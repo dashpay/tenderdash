@@ -2889,7 +2889,7 @@ type ResponsePrepareProposal struct {
 	TxResults []*ExecTxResult `protobuf:"bytes,3,rep,name=tx_results,json=txResults,proto3" json:"tx_results,omitempty"`
 	// Changes to consensus-critical gas, size, and other parameters that will be applied at next height.
 	ConsensusParamUpdates *types1.ConsensusParams `protobuf:"bytes,4,opt,name=consensus_param_updates,json=consensusParamUpdates,proto3" json:"consensus_param_updates,omitempty"`
-	// Core chain lock that will be used for generated block.
+	// Core chain lock that will be used for next block.
 	CoreChainLockUpdate *types1.CoreChainLock `protobuf:"bytes,5,opt,name=core_chain_lock_update,json=coreChainLockUpdate,proto3" json:"core_chain_lock_update,omitempty"`
 	// Changes to validator set that will be applied at next height.
 	ValidatorSetUpdate *ValidatorSetUpdate `protobuf:"bytes,6,opt,name=validator_set_update,json=validatorSetUpdate,proto3" json:"validator_set_update,omitempty"`

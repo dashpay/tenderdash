@@ -115,7 +115,7 @@ message Header {
 
   uint64 proposed_app_version     = 15;  // proposer's latest available app protocol version
   bytes  proposer_pro_tx_hash     = 16;  // original proposer of the block
-  uint32 core_chain_locked_height = 17;
+  uint32 core_chain_locked_height = 17;  // core chain height used to verify this block
 }
 
 // Data contains the set of transactions included in the block
@@ -172,8 +172,10 @@ message Proposal {
 
   // dash's fields
 
-  uint32                         core_chain_locked_height = 8;
-  tendermint.types.CoreChainLock core_chain_lock_update   = 9;
+  // core chain locked height to be used to sign/verify current block
+  uint32 core_chain_locked_height = 8;
+  // core chain lock to be used to sign/verify next block
+  tendermint.types.CoreChainLock core_chain_lock_update = 9;
 }
 
 message SignedHeader {

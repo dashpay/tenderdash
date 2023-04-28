@@ -260,12 +260,13 @@ func TestProcessProposal(t *testing.T) {
 			//BlockSignature:
 			//StateSignature:
 		},
-		CoreChainLockUpdate: block1.CoreChainLock.ToProto(),
-		NextValidatorsHash:  block1.NextValidatorsHash,
-		ProposerProTxHash:   block1.ProposerProTxHash,
-		Version:             &version,
-		ProposedAppVersion:  1,
-		QuorumHash:          state.Validators.QuorumHash,
+		CoreChainLockUpdate:   block1.CoreChainLock.ToProto(),
+		CoreChainLockedHeight: block1.CoreChainLock.CoreBlockHeight,
+		NextValidatorsHash:    block1.NextValidatorsHash,
+		ProposerProTxHash:     block1.ProposerProTxHash,
+		Version:               &version,
+		ProposedAppVersion:    1,
+		QuorumHash:            state.Validators.QuorumHash,
 	}
 
 	app.On("ProcessProposal", mock.Anything, mock.Anything).Return(&abci.ResponseProcessProposal{
