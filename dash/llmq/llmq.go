@@ -36,7 +36,7 @@ var (
 		btcjson.LLMQType_TEST_PLATFORM:    {3, 2},
 		btcjson.LLMQType_DEVNET_PLATFORM:  {12, 8},
 
-		// temporary commented due to the default behaviour where if llmq type not found
+		// temporary commented due to the default behavior where if llmq type not found
 		// then we take the length of actual validators as members
 		//btcjson.LLMQType_50_60:            {50, 30},
 		//btcjson.LLMQType_TEST:             {3, 2},
