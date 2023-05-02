@@ -9,7 +9,7 @@ var (
 const (
 	// TMVersionDefault is the used as the fallback version for Tenderdash
 	// when not using git describe. It is formatted with semantic versioning.
-	TMVersionDefault = "0.11.0-dev.4"
+	TMVersionDefault = "0.11.1"
 	// ABCISemVer is the semantic version of the ABCI library
 	ABCISemVer = "0.20.0"
 
