@@ -23,6 +23,7 @@ var (
 		Members   int
 		Threshold int
 	}{
+		btcjson.LLMQType_50_60:            {50, 30},
 		btcjson.LLMQType_400_60:           {400, 240},
 		btcjson.LLMQType_400_85:           {400, 340},
 		btcjson.LLMQType_100_67:           {100, 67},
@@ -36,9 +37,8 @@ var (
 		btcjson.LLMQType_TEST_PLATFORM:    {3, 2},
 		btcjson.LLMQType_DEVNET_PLATFORM:  {12, 8},
 
-		// temporary commented due to the default behavior where if llmq type not found
-		// then we take the length of actual validators as members
-		//btcjson.LLMQType_50_60:            {50, 30},
+		// temporarily commented out due to the default behavior where if llmq type is not found
+		// then we take the length of the actual validators as members
 		//btcjson.LLMQType_TEST:             {3, 2},
 	}
 )
