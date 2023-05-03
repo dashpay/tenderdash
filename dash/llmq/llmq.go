@@ -18,6 +18,29 @@ import (
 var (
 	errThresholdInvalid      = errors.New("threshold must be greater than 0")
 	errKeySharesNotGenerated = errors.New("to initialize shares you must generate the keys")
+
+	quorumParams = map[btcjson.LLMQType]struct {
+		Members   int
+		Threshold int
+	}{
+		btcjson.LLMQType_50_60:            {50, 30},
+		btcjson.LLMQType_400_60:           {400, 240},
+		btcjson.LLMQType_400_85:           {400, 340},
+		btcjson.LLMQType_100_67:           {100, 67},
+		btcjson.LLMQType_60_75:            {60, 45},
+		btcjson.LLMQType_25_67:            {25, 16},
+		btcjson.LLMQType_DEVNET:           {12, 6},
+		btcjson.LLMQType_TEST_V17:         {3, 2},
+		btcjson.LLMQType_TEST_DIP0024:     {4, 2},
+		btcjson.LLMQType_TEST_INSTANTSEND: {3, 2},
+		btcjson.LLMQType_DEVNET_DIP0024:   {8, 4},
+		btcjson.LLMQType_TEST_PLATFORM:    {3, 2},
+		btcjson.LLMQType_DEVNET_PLATFORM:  {12, 8},
+
+		// temporarily commented out due to the default behavior where if llmq type is not found
+		// then we take the length of the actual validators as members
+		//btcjson.LLMQType_TEST:             {3, 2},
+	}
 )
 
 type optionFunc func(c *llmqConfig)
@@ -43,24 +66,16 @@ type blsLLMQData struct {
 	pkShares    []*bls.G1Element
 }
 
-// QuorumProps returns corresponding LLMQ parameters
+// QuorumParams returns corresponding LLMQ parameters
 // the first integer is an expected size of quorum
 // the second is an expected threshold
 // the third parameter is an error, it returns in a case if quorumType is not supported
-func QuorumProps(quorumType btcjson.LLMQType) (int, int, error) {
-	switch quorumType {
-	case btcjson.LLMQType_50_60:
-		return 50, 30, nil
-	case btcjson.LLMQType_400_60:
-		return 400, 240, nil
-	case btcjson.LLMQType_400_85:
-		return 400, 340, nil
-	case btcjson.LLMQType_100_67:
-		return 100, 67, nil
-	case 101:
-		return 10, 6, nil
+func QuorumParams(quorumType btcjson.LLMQType) (int, int, error) {
+	params, ok := quorumParams[quorumType]
+	if !ok {
+		return 0, 0, fmt.Errorf("quorumType '%d' doesn't match with available", quorumType)
 	}
-	return 0, 0, fmt.Errorf("quorumType '%d' doesn't match with available", quorumType)
+	return params.Members, params.Threshold, nil
 }
 
 // MustGenerate generates long-living master node quorum, but panics if a got error
