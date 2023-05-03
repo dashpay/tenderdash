@@ -28,7 +28,7 @@ var (
 		btcjson.LLMQType_400_85:           {400, 340},
 		btcjson.LLMQType_100_67:           {100, 67},
 		btcjson.LLMQType_60_75:            {60, 45},
-		btcjson.LLMQType_25_67:            {25, 16},
+		btcjson.LLMQType_25_67:            {25, 17},
 		btcjson.LLMQType_DEVNET:           {12, 6},
 		btcjson.LLMQType_TEST_V17:         {3, 2},
 		btcjson.LLMQType_TEST_DIP0024:     {4, 2},
