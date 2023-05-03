@@ -1,8 +1,12 @@
+## [0.11.2] - 2023-05-03
+
+### Bug Fixes
+- Invalid threshold for LLMQType_25_67 (#628)
+
 ## [0.11.1] - 2023-05-02
 
 ### Bug Fixes
 - Missing quorum params (#626)
-
 
 ## [0.11.0] - 2023-04-04
 
@@ -259,6 +263,22 @@
 - Fix build
 - Fix abcidump after backport
 - Update changelog and version to 0.8.0
+- [**breaking**] Rename genesis.json quorum fields (#515)
+- [**breaking**] Remove Snapshot.core_chain_locked_height (#527)
+- Update changelog and version to 0.10.0-dev.6 (#526)
+- Update changelog and version to 0.11.0-dev.1 (#530)
+- Update changelog and version to 0.10.0-dev.7 (#536)
+- Update bls library (#535)
+- Update changelog and version to 0.10.0-dev.9 (#579)
+- Update changelog and version to 0.11.0-dev.2 (#583)
+- Update changelog and version to 0.11.0-dev.3 (#586)
+- Bump up dashd-go version to v0.23.6 (#587)
+- Update changelog and version to 0.10.0-dev.10 (#588)
+- Update changelog and version to 0.10.0-dev.11 (#591)
+- Update changelog and version to 0.11.0-dev.4 (#593)
+- Add quote to CGO variables in Makefile (#597)
+- Update changelog and version to 0.11.1 (#627)
+- Catch up the changes from master into v0.11 dev (#629)
 
 ### PBTS
 
