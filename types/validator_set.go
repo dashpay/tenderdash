@@ -511,7 +511,7 @@ func (vals *ValidatorSet) QuorumVotingThresholdPower() int64 {
 
 // QuorumTypeMemberCount returns a number of validators for a quorum by a type
 func (vals *ValidatorSet) QuorumTypeMemberCount() int {
-	size, _, err := llmq.QuorumProps(vals.QuorumType)
+	size, _, err := llmq.QuorumParams(vals.QuorumType)
 	if err != nil {
 		return len(vals.Validators)
 	}
@@ -520,7 +520,7 @@ func (vals *ValidatorSet) QuorumTypeMemberCount() int {
 
 // QuorumTypeThresholdCount returns a threshold number for a quorum by a type
 func (vals *ValidatorSet) QuorumTypeThresholdCount() int {
-	_, threshold, err := llmq.QuorumProps(vals.QuorumType)
+	_, threshold, err := llmq.QuorumParams(vals.QuorumType)
 	if err != nil {
 		return len(vals.Validators)*2/3 + 1
 	}
