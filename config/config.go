@@ -214,6 +214,9 @@ type BaseConfig struct { //nolint: maligned
 	// Output format: 'plain' (colored text) or 'json'
 	LogFormat string `mapstructure:"log-format"`
 
+	// Path to the log file. This parameter is an additional option to the existing stderr output
+	LogFilePath string `mapstructure:"log-file-path"`
+
 	// Path to the JSON file containing the initial validator set and other meta data
 	Genesis string `mapstructure:"genesis-file"`
 
