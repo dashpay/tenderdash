@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"fmt"
+	"io"
 	"os"
 
 	"github.com/tendermint/tendermint/cmd/tenderdash/commands"
@@ -21,10 +23,11 @@ func main() {
 		panic(err)
 	}
 
-	logger, err := log.NewDefaultLogger(conf.LogFormat, conf.LogLevel)
+	logger, stopFn, err := newLoggerFromConfig(conf)
 	if err != nil {
 		panic(err)
 	}
+	defer stopFn()
 
 	rcmd := commands.RootCommand(conf, logger)
 	rcmd.AddCommand(
@@ -63,4 +66,31 @@ func main() {
 	if err := cli.RunWithTrace(ctx, rcmd); err != nil {
 		os.Exit(2)
 	}
+}
+
+func newLoggerFromConfig(conf *config.Config) (log.Logger, func(), error) {
+	var (
+		writer    io.Writer = os.Stderr
+		closeFunc           = func() {}
+		err       error
+	)
+	if conf.LogFilePath != "" {
+		file, err := os.OpenFile(conf.LogFilePath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		if err != nil {
+			return nil, nil, fmt.Errorf("failed to create log writer: %w", err)
+		}
+		closeFunc = func() {
+			_ = file.Close()
+		}
+		writer = io.MultiWriter(writer, file)
+	}
+	writer, err = log.NewFormatter(conf.LogFormat, writer)
+	if err != nil {
+		return nil, nil, fmt.Errorf("failed to create log formatter: %w", err)
+	}
+	logger, err := log.NewLogger(conf.LogLevel, writer)
+	if err != nil {
+		return nil, nil, err
+	}
+	return logger, closeFunc, nil
 }
