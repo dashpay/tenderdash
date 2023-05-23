@@ -135,6 +135,9 @@ log-level = "{{ .BaseConfig.LogLevel }}"
 # Output format: 'plain' (colored text) or 'json'
 log-format = "{{ .BaseConfig.LogFormat }}"
 
+# Path to the log file. This parameter is an additional option to the existing stderr output
+log-file-path = "{{ .BaseConfig.LogFilePath }}"
+
 ##### additional base config options #####
 
 # Path to the JSON file containing the initial validator set and other meta data
@@ -468,7 +471,7 @@ fetchers = "{{ .StateSync.Fetchers }}"
 [consensus]
 
 wal-file = "{{ js .Consensus.WalPath }}"
-# wal-skip-rounds-to-last set to true will skip replaying all non-committed rounds stored in 
+# wal-skip-rounds-to-last set to true will skip replaying all non-committed rounds stored in
 # WAL, increasing performance in a significant way. It should be set to false by default, as it
 # can have security side-effects.
 wal-skip-rounds-to-last = "{{ .Consensus.WalSkipRoundsToLast }}"
