@@ -679,6 +679,13 @@ func (app *Application) AddValidatorSetUpdate(vsu abci.ValidatorSetUpdate, heigh
 	app.validatorSetUpdates[height] = vsu
 }
 
+// SetLastCommittedState updates a last committed state
+func (app *Application) SetLastCommittedState(state State) {
+	app.mu.Lock()
+	defer app.mu.Unlock()
+	app.LastCommittedState = state
+}
+
 // Close closes the app gracefully
 func (app *Application) Close() error {
 	app.mu.Lock()

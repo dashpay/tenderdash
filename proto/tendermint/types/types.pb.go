@@ -772,15 +772,17 @@ func (m *Commit) GetThresholdVoteExtensions() []*VoteExtension {
 }
 
 type Proposal struct {
-	Type                  SignedMsgType  `protobuf:"varint,1,opt,name=type,proto3,enum=tendermint.types.SignedMsgType" json:"type,omitempty"`
-	Height                int64          `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
-	Round                 int32          `protobuf:"varint,3,opt,name=round,proto3" json:"round,omitempty"`
-	PolRound              int32          `protobuf:"varint,4,opt,name=pol_round,json=polRound,proto3" json:"pol_round,omitempty"`
-	BlockID               BlockID        `protobuf:"bytes,5,opt,name=block_id,json=blockId,proto3" json:"block_id"`
-	Timestamp             time.Time      `protobuf:"bytes,6,opt,name=timestamp,proto3,stdtime" json:"timestamp"`
-	Signature             []byte         `protobuf:"bytes,7,opt,name=signature,proto3" json:"signature,omitempty"`
-	CoreChainLockedHeight uint32         `protobuf:"varint,8,opt,name=core_chain_locked_height,json=coreChainLockedHeight,proto3" json:"core_chain_locked_height,omitempty"`
-	CoreChainLockUpdate   *CoreChainLock `protobuf:"bytes,9,opt,name=core_chain_lock_update,json=coreChainLockUpdate,proto3" json:"core_chain_lock_update,omitempty"`
+	Type      SignedMsgType `protobuf:"varint,1,opt,name=type,proto3,enum=tendermint.types.SignedMsgType" json:"type,omitempty"`
+	Height    int64         `protobuf:"varint,2,opt,name=height,proto3" json:"height,omitempty"`
+	Round     int32         `protobuf:"varint,3,opt,name=round,proto3" json:"round,omitempty"`
+	PolRound  int32         `protobuf:"varint,4,opt,name=pol_round,json=polRound,proto3" json:"pol_round,omitempty"`
+	BlockID   BlockID       `protobuf:"bytes,5,opt,name=block_id,json=blockId,proto3" json:"block_id"`
+	Timestamp time.Time     `protobuf:"bytes,6,opt,name=timestamp,proto3,stdtime" json:"timestamp"`
+	Signature []byte        `protobuf:"bytes,7,opt,name=signature,proto3" json:"signature,omitempty"`
+	// core chain locked height to be used to sign/verify current block
+	CoreChainLockedHeight uint32 `protobuf:"varint,8,opt,name=core_chain_locked_height,json=coreChainLockedHeight,proto3" json:"core_chain_locked_height,omitempty"`
+	// core chain lock to be used to sign/verify next block
+	CoreChainLockUpdate *CoreChainLock `protobuf:"bytes,9,opt,name=core_chain_lock_update,json=coreChainLockUpdate,proto3" json:"core_chain_lock_update,omitempty"`
 }
 
 func (m *Proposal) Reset()         { *m = Proposal{} }

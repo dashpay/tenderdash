@@ -51,7 +51,7 @@ func TestRouter_Network(t *testing.T) {
 
 	// Create a test network and open a channel where all peers run echoReactor.
 	network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 8})
-	local := network.RandomNode()
+	local := network.AnyNode()
 	peers := network.Peers(local.NodeID)
 	channels := network.MakeChannels(ctx, t, chDesc)
 
@@ -114,7 +114,7 @@ func TestRouter_Channel_Basic(t *testing.T) {
 		selfKey,
 		peerManager,
 		func() *types.NodeInfo { return &selfInfo },
-		testnet.RandomNode().Transport,
+		testnet.AnyNode().Transport,
 		&p2p.Endpoint{},
 		p2p.RouterOptions{},
 	)

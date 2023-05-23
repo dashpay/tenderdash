@@ -224,10 +224,42 @@ func sortVValidatorStubsByPower(ctx context.Context, t *testing.T, vss []*valida
 //-------------------------------------------------------------------------------
 // Functions for transitioning the consensus state
 
+// timeoutRoutine: receive requests for timeouts on tickChan and fire timeouts on tockChan
+// receiveRoutine: serializes processing of proposoals, block parts, votes; coordinates state transitions
+func startConsensusState(ctx context.Context, cs *State, maxSteps int) {
+	err := cs.timeoutTicker.Start(ctx)
+	if err != nil {
+		cs.logger.Error("failed to start timeout ticker", "err", err)
+		return
+	}
+	steps := 0
+	sub, err := cs.eventBus.SubscribeWithArgs(ctx, tmpubsub.SubscribeArgs{
+		ClientID: "stepsCounter",
+		Query:    types.EventQueryNewRound,
+	})
+	if err != nil {
+		panic(err)
+	}
+	go func() {
+		for {
+			_, err := sub.Next(ctx)
+			if err != nil {
+				return
+			}
+			steps++
+		}
+	}()
+	go cs.receiveRoutine(ctx, func(state *State) bool {
+		return maxSteps > 0 && steps >= maxSteps
+	})
+}
+
 func startTestRound(ctx context.Context, cs *State, height int64, round int32) {
+	stateData := cs.GetStateData()
 	ctx = dash.ContextWithProTxHash(ctx, cs.privValidator.ProTxHash)
-	cs.enterNewRound(ctx, height, round)
-	cs.startRoutines(ctx, 0)
+	_ = cs.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: height, Round: round}, &stateData)
+	_ = stateData.Save()
+	startConsensusState(ctx, cs, 0)
 }
 
 // Create proposal block from cs1 but sign it with vs.
@@ -241,18 +273,21 @@ func decideProposal(
 ) (proposal *types.Proposal, block *types.Block) {
 	t.Helper()
 
-	cs1.mtx.Lock()
-	block, err := cs1.createProposalBlock(ctx, round)
+	stateData := cs1.GetStateData()
+	defer func() {
+		_ = stateData.Save()
+	}()
+
+	block, err := cs1.blockExecutor.create(ctx, &stateData.RoundState, round)
 	require.NoError(t, err)
 	blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
-	validRound := cs1.ValidRound
-	chainID := cs1.state.ChainID
+	validRound := stateData.ValidRound
+	chainID := stateData.state.ChainID
 
-	validatorsAtProposalHeight := cs1.state.ValidatorsAtHeight(height)
+	validatorsAtProposalHeight := stateData.state.ValidatorsAtHeight(height)
 	quorumType := validatorsAtProposalHeight.QuorumType
 	quorumHash := validatorsAtProposalHeight.QuorumHash
-	cs1.mtx.Unlock()
 
 	require.NotNil(t, block, "Failed to createProposalBlock. Did you forget to add commit for previous block?")
 
@@ -280,8 +315,9 @@ func decideProposal(
 }
 
 func addVotes(to *State, votes ...*types.Vote) {
+	ctx := ctxWithPeerQueue(context.Background())
 	for _, vote := range votes {
-		to.peerMsgQueue <- msgInfo{Msg: &VoteMessage{vote}}
+		_ = to.msgInfoQueue.send(ctx, &VoteMessage{vote}, "")
 	}
 }
 
@@ -294,8 +330,9 @@ func signAddVotes(
 	blockID types.BlockID,
 	vss ...*validatorStub,
 ) {
-	rs := to.GetRoundState()
-	_, valSet := to.GetValidatorSet()
+	stateData := to.GetStateData()
+	rs := stateData.RoundState
+	valSet := stateData.Validators
 	addVotes(to, signVotes(ctx, t, voteType, chainID, blockID, rs.AppHash, valSet.QuorumType, valSet.QuorumHash, vss...)...)
 }
 
@@ -309,10 +346,9 @@ func validatePrevote(
 ) {
 	t.Helper()
 
-	cs.mtx.RLock()
-	defer cs.mtx.RUnlock()
+	stateData := cs.GetStateData()
 
-	prevotes := cs.Votes.Prevotes(round)
+	prevotes := stateData.Votes.Prevotes(round)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
 	var vote *types.Vote
@@ -329,7 +365,8 @@ func validatePrevote(
 func validateLastCommit(ctx context.Context, t *testing.T, cs *State, privVal *validatorStub, blockHash []byte) {
 	t.Helper()
 
-	commit := cs.LastCommit
+	stateData := cs.GetStateData()
+	commit := stateData.LastCommit
 	err := commit.ValidateBasic()
 	require.NoError(t, err, "Expected commit to be valid %v, %v", commit, err)
 	require.True(t, bytes.Equal(commit.BlockID.Hash, blockHash), "Expected commit to be for %X, got %X", blockHash, commit.BlockID.Hash)
@@ -347,7 +384,8 @@ func validatePrecommit(
 ) {
 	t.Helper()
 
-	precommits := cs.Votes.Precommits(thisRound)
+	stateData := cs.GetStateData()
+	precommits := stateData.Votes.Precommits(thisRound)
 	proTxHash, err := privVal.GetProTxHash(ctx)
 	require.NoError(t, err)
 	vote := precommits.GetByProTxHash(proTxHash)
@@ -456,9 +494,10 @@ func newStateWithConfig(
 	state sm.State,
 	pv types.PrivValidator,
 	app abci.Application,
+	opts ...StateOption,
 ) *State {
 	t.Helper()
-	return newStateWithConfigAndBlockStore(ctx, t, logger, thisConfig, state, pv, app, store.NewBlockStore(dbm.NewMemDB()))
+	return newStateWithConfigAndBlockStore(ctx, t, logger, thisConfig, state, pv, app, store.NewBlockStore(dbm.NewMemDB()), opts...)
 }
 
 func newStateWithConfigAndBlockStore(
@@ -470,6 +509,7 @@ func newStateWithConfigAndBlockStore(
 	pv types.PrivValidator,
 	app abci.Application,
 	blockStore sm.BlockStore,
+	opts ...StateOption,
 ) *State {
 	t.Helper()
 
@@ -479,14 +519,14 @@ func newStateWithConfigAndBlockStore(
 
 	// Make Mempool
 
-	mempool := mempool.NewTxMempool(
+	mpool := mempool.NewTxMempool(
 		logger.With("module", "mempool"),
 		thisConfig.Mempool,
 		proxyAppConnMem,
 	)
 
 	if thisConfig.Consensus.WaitForTxs() {
-		mempool.EnableTxsAvailable()
+		mpool.EnableTxsAvailable()
 	}
 
 	evpool := sm.EmptyEvidencePool{}
@@ -499,15 +539,16 @@ func newStateWithConfigAndBlockStore(
 	eventBus := eventbus.NewDefault(logger.With("module", "events"))
 	require.NoError(t, eventBus.Start(ctx))
 
-	blockExec := sm.NewBlockExecutor(stateStore, proxyAppConnCon, mempool, evpool, blockStore, eventBus)
+	blockExec := sm.NewBlockExecutor(stateStore, proxyAppConnCon, mpool, evpool, blockStore, eventBus)
 	cs, err := NewState(logger.With("module", "consensus"),
 		thisConfig.Consensus,
 		stateStore,
 		blockExec,
 		blockStore,
-		mempool,
+		mpool,
 		evpool,
 		eventBus,
+		opts...,
 	)
 	if err != nil {
 		t.Fatal(err)
@@ -576,9 +617,10 @@ func makeState(ctx context.Context, t *testing.T, args makeStateArgs) (*State, [
 	vss := make([]*validatorStub, validators)
 
 	cs := newState(ctx, t, args.logger, state, privVals[0], app)
+	stateData := cs.GetStateData()
 
 	for i := 0; i < validators; i++ {
-		vss[i] = newValidatorStub(privVals[i], int32(i), cs.state.InitialHeight)
+		vss[i] = newValidatorStub(privVals[i], int32(i), stateData.state.InitialHeight)
 	}
 
 	return cs, vss
@@ -628,7 +670,7 @@ func ensureNoNewTimeout(t *testing.T, stepCh <-chan tmpubsub.Message, timeout in
 
 func ensureNewEvent(t *testing.T, ch <-chan tmpubsub.Message, height int64, round int32, timeout time.Duration) {
 	t.Helper()
-	msg := ensureMessageBeforeTimeout(t, ch, ensureTimeout)
+	msg := ensureMessageBeforeTimeout(t, ch, timeout)
 	roundStateEvent, ok := msg.Data().(types.EventDataRoundState)
 	require.True(t, ok,
 		"expected a EventDataRoundState, got %T. Wrong subscription channel?",
@@ -848,8 +890,7 @@ func makeConsensusState(
 		sCtx := dash.ContextWithProTxHash(ctx, proTxHash)
 
 		l := logger.With("validator", i, "module", "consensus")
-		css[i] = newStateWithConfigAndBlockStore(sCtx, t, l, thisConfig, state, privVals[i], app, blockStore)
-		css[i].SetTimeoutTicker(tickerFunc())
+		css[i] = newStateWithConfigAndBlockStore(sCtx, t, l, thisConfig, state, privVals[i], app, blockStore, WithTimeoutTicker(tickerFunc()))
 	}
 
 	return css
@@ -905,7 +946,8 @@ func (g *consensusNetGen) newApp(logger log.Logger, state *sm.State, confName st
 func (g *consensusNetGen) execValidatorSetUpdater(ctx context.Context, t *testing.T, states []*State, apps []abci.Application, n int) map[int64]abci.ValidatorSetUpdate {
 	t.Helper()
 	ret := make(map[int64]abci.ValidatorSetUpdate)
-	ret[0] = types.TM2PB.ValidatorUpdates(states[0].state.Validators)
+	stateData := states[0].GetStateData()
+	ret[0] = types.TM2PB.ValidatorUpdates(stateData.state.Validators)
 	if g.validatorUpdates == nil {
 		return ret
 	}
@@ -974,8 +1016,7 @@ func (g *consensusNetGen) generate(ctx context.Context, t *testing.T) ([]*State,
 		proTxHash, _ := privVals[i].GetProTxHash(ctx)
 		css[i] = newStateWithConfig(ctx, t,
 			logger.With("validator", i, "node_proTxHash", proTxHash.ShortString(), "module", "consensus"),
-			thisConfig, state, privVals[i], apps[i])
-		css[i].SetTimeoutTicker(tickerFunc())
+			thisConfig, state, privVals[i], apps[i], WithTimeoutTicker(tickerFunc()))
 	}
 
 	validatorSetUpdates := g.execValidatorSetUpdater(ctx, t, css, apps, g.nVals)
@@ -1083,4 +1124,23 @@ type quorumData struct {
 	llmq.Data
 	quorumHash         crypto.QuorumHash
 	validatorSetUpdate abci.ValidatorSetUpdate
+}
+
+type testSigner struct {
+	privVals []types.PrivValidator
+	valSet   *types.ValidatorSet
+	logger   log.Logger
+}
+
+func (s *testSigner) signVotes(ctx context.Context, votes ...*types.Vote) error {
+	for _, vote := range votes {
+		protoVote := vote.ToProto()
+		qt, qh := s.valSet.QuorumType, s.valSet.QuorumHash
+		err := s.privVals[vote.ValidatorIndex].SignVote(ctx, factory.DefaultTestChainID, qt, qh, protoVote, s.logger)
+		if err != nil {
+			return err
+		}
+		vote.BlockSignature = protoVote.BlockSignature
+	}
+	return nil
 }

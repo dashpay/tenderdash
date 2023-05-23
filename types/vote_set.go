@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/rs/zerolog"
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/tendermint/tendermint/libs/bits"
@@ -683,17 +684,17 @@ func (voteSet *VoteSet) StringShort() string {
 		voteSet.height, voteSet.round, voteSet.signedMsgType, voteSet.maj23, frac, voteSet.votesBitArray, voteSet.peerMaj23s)
 }
 
-// LogString produces a logging suitable string representation of the
-// vote set.
-func (voteSet *VoteSet) LogString() string {
+// MarshalZerologObject marshals vote-set into the zerolog structure
+func (voteSet *VoteSet) MarshalZerologObject(e *zerolog.Event) {
 	if voteSet == nil {
-		return nilVoteSetString
+		return
 	}
 	voteSet.mtx.Lock()
 	defer voteSet.mtx.Unlock()
 	voted, total, frac := voteSet.sumTotalFrac()
-
-	return fmt.Sprintf("Votes:%d/%d(%.3f)", voted, total, frac)
+	e.Int64("voted", voted)
+	e.Int64("total", total)
+	e.Float64("frac", frac)
 }
 
 // return the power voted, the total, and the fraction

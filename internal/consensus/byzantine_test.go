@@ -16,6 +16,7 @@ import (
 	abciclient "github.com/tendermint/tendermint/abci/client"
 	"github.com/tendermint/tendermint/abci/example/kvstore"
 	abci "github.com/tendermint/tendermint/abci/types"
+	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/evidence"
 	"github.com/tendermint/tendermint/internal/mempool"
@@ -24,7 +25,6 @@ import (
 	"github.com/tendermint/tendermint/internal/store"
 	"github.com/tendermint/tendermint/internal/test/factory"
 	"github.com/tendermint/tendermint/libs/log"
-	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
@@ -97,13 +97,11 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 
 			// Make State
 			blockExec := sm.NewBlockExecutor(stateStore, proxyAppConnCon, mp, evpool, blockStore, eventBus)
-			cs, err := NewState(logger, thisConfig.Consensus, stateStore, blockExec, blockStore, mp, evpool, eventBus)
+			cs, err := NewState(logger, thisConfig.Consensus, stateStore, blockExec, blockStore, mp, evpool, eventBus, WithTimeoutTicker(tickerFunc()))
 			require.NoError(t, err)
 			// set private validator
 			pv := privVals[i]
 			cs.SetPrivValidator(ctx, pv)
-
-			cs.SetTimeoutTicker(tickerFunc())
 
 			states[i] = cs
 		}()
@@ -123,52 +121,8 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		}
 	}
 
-	bzReactor := rts.reactors[bzNodeID]
-
+	withBzPrevoter(t, rts, bzNodeID, prevoteHeight)
 	// alter prevote so that the byzantine node double votes when height is 2
-	bzNodeState.doPrevote = func(ctx context.Context, height int64, round int32, allowOldBlocks bool) {
-		// allow first height to happen normally so that byzantine validator is no longer proposer
-		uncommittedState, err := bzNodeState.blockExec.ProcessProposal(ctx, bzNodeState.ProposalBlock, round, bzNodeState.state, true)
-		assert.NoError(t, err)
-		assert.NotZero(t, uncommittedState)
-		bzNodeState.CurrentRoundState = uncommittedState
-
-		if height == prevoteHeight {
-			prevote1, err := bzNodeState.signVote(ctx, tmproto.PrevoteType, bzNodeState.BlockID())
-			require.NoError(t, err)
-
-			prevote2, err := bzNodeState.signVote(ctx, tmproto.PrevoteType, types.BlockID{})
-			require.NoError(t, err)
-
-			// send two votes to all peers (1st to one half, 2nd to another half)
-			i := 0
-			for _, ps := range bzReactor.peers {
-				voteCh := rts.voteChannels[bzNodeID]
-				if i < len(bzReactor.peers)/2 {
-
-					require.NoError(t, voteCh.Send(ctx,
-						p2p.Envelope{
-							To: ps.peerID,
-							Message: &tmcons.Vote{
-								Vote: prevote1.ToProto(),
-							},
-						}))
-				} else {
-					require.NoError(t, voteCh.Send(ctx,
-						p2p.Envelope{
-							To: ps.peerID,
-							Message: &tmcons.Vote{
-								Vote: prevote2.ToProto(),
-							},
-						}))
-				}
-
-				i++
-			}
-		} else {
-			bzNodeState.defaultDoPrevote(ctx, height, round, false)
-		}
-	}
 
 	// Introducing a lazy proposer means that the time of the block committed is
 	// different to the timestamp that the other nodes have. This tests to ensure
@@ -176,85 +130,7 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 	// lazyProposer := states[1]
 	lazyNodeState := states[1]
 
-	lazyNodeState.decideProposal = func(ctx context.Context, height int64, round int32) {
-		require.False(t, lazyNodeState.privValidator.IsZero())
-
-		var commit *types.Commit
-		switch {
-		case lazyNodeState.Height == lazyNodeState.state.InitialHeight:
-			// We're creating a proposal for the first block.
-			// The commit is empty, but not nil.
-			commit = types.NewCommit(0, 0, types.BlockID{}, nil)
-		case lazyNodeState.LastCommit != nil:
-			// Make the commit from LastCommit
-			commit = lazyNodeState.LastCommit
-		default: // This shouldn't happen.
-			lazyNodeState.logger.Error("enterPropose: Cannot propose anything: No commit for the previous block")
-			return
-		}
-
-		if lazyNodeState.privValidator.IsZero() {
-			// If this node is a validator & proposer in the current round, it will
-			// miss the opportunity to create a block.
-			lazyNodeState.logger.Error("enterPropose", "err", ErrPrivValidatorNotSet)
-			return
-		}
-
-		block, uncommittedState, err := lazyNodeState.blockExec.CreateProposalBlock(
-			ctx,
-			lazyNodeState.Height,
-			round,
-			lazyNodeState.state,
-			commit,
-			lazyNodeState.privValidator.ProTxHash,
-			0,
-		)
-		require.NoError(t, err)
-		assert.NotZero(t, uncommittedState)
-		blockParts, err := block.MakePartSet(types.BlockPartSizeBytes)
-		require.NoError(t, err)
-
-		// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,
-		// and the privValidator will refuse to sign anything.
-		if err := lazyNodeState.wal.FlushAndSync(); err != nil {
-			lazyNodeState.logger.Error("error flushing to disk")
-		}
-
-		// Make proposal
-		propBlockID := block.BlockID(blockParts)
-		assert.NoError(t, err)
-
-		proposal := types.NewProposal(
-			height,
-			lazyNodeState.state.LastCoreChainLockedBlockHeight,
-			round,
-			lazyNodeState.ValidRound,
-			propBlockID,
-			block.Header.Time,
-		)
-		p := proposal.ToProto()
-		if _, err := lazyNodeState.privValidator.SignProposal(
-			ctx,
-			lazyNodeState.state.ChainID,
-			lazyNodeState.state.Validators.QuorumType,
-			lazyNodeState.state.Validators.QuorumHash,
-			p,
-		); err == nil {
-			proposal.Signature = p.Signature
-
-			// send proposal and block parts on internal msg queue
-			lazyNodeState.sendInternalMessage(ctx, msgInfo{&ProposalMessage{proposal}, "", tmtime.Now()})
-			for i := 0; i < int(blockParts.Total()); i++ {
-				part := blockParts.GetPart(i)
-				lazyNodeState.sendInternalMessage(ctx, msgInfo{&BlockPartMessage{
-					lazyNodeState.Height, lazyNodeState.Round, part,
-				}, "", tmtime.Now()})
-			}
-			lazyNodeState.logger.Debug("signed proposal block", "block", block)
-		} else if !lazyNodeState.replayMode {
-			lazyNodeState.logger.Error("enterPropose: Error signing proposal", "height", height, "round", round, "err", err)
-		}
-	}
+	enterProposeWithBzProposalDecider(lazyNodeState)
 
 	rts.switchToConsensus(ctx)
 
@@ -317,4 +193,121 @@ func TestByzantinePrevoteEquivocation(t *testing.T) {
 		assert.Equal(t, proTxHash, ev.VoteA.ValidatorProTxHash)
 		assert.Equal(t, prevoteHeight, ev.Height())
 	}
+}
+
+type byzantinePrevoter struct {
+	t             *testing.T
+	logger        log.Logger
+	voteSigner    *voteSigner
+	blockExec     *sm.BlockExecutor
+	prevoteHeight int64
+	voteCh        p2p.Channel
+	peers         map[types.NodeID]*PeerState
+	origin        Prevoter
+}
+
+func withBzPrevoter(t *testing.T, rts *reactorTestSuite, bzNodeID types.NodeID, height int64) {
+	reactor := rts.reactors[bzNodeID]
+	bzState := rts.states[bzNodeID]
+	voteCh := rts.voteChannels[bzNodeID]
+	cmd := bzState.ctrl.Get(EnterPrevoteType)
+	enterPrevoteCmd := cmd.(*EnterPrevoteAction)
+	enterPrevoteCmd.prevoter = &byzantinePrevoter{
+		t:             t,
+		logger:        bzState.logger,
+		voteSigner:    bzState.voteSigner,
+		blockExec:     bzState.blockExec,
+		prevoteHeight: height,
+		voteCh:        voteCh,
+		peers:         reactor.peers,
+		origin:        enterPrevoteCmd.prevoter,
+	}
+}
+
+func (p *byzantinePrevoter) Do(ctx context.Context, stateData *StateData) error {
+	// allow first height to happen normally so that byzantine validator is no longer proposer
+	uncommittedState, err := p.blockExec.ProcessProposal(
+		ctx,
+		stateData.ProposalBlock,
+		stateData.Round,
+		stateData.state,
+		true,
+	)
+	require.NoError(p.t, err)
+	assert.NotZero(p.t, uncommittedState)
+	stateData.CurrentRoundState = uncommittedState
+	if stateData.Height != p.prevoteHeight {
+		return p.origin.Do(ctx, stateData)
+	}
+	prevote1, err := p.voteSigner.signVote(ctx, stateData, tmproto.PrevoteType, stateData.BlockID())
+	require.NoError(p.t, err)
+	prevote2, err := p.voteSigner.signVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+	require.NoError(p.t, err)
+	// send two votes to all peers (1st to one half, 2nd to another half)
+	i := 0
+	for _, ps := range p.peers {
+		var msg p2p.Envelope
+		if i < len(p.peers)/2 {
+			msg = newP2PMessage(ps.peerID, prevote1)
+		} else {
+			msg = newP2PMessage(ps.peerID, prevote2)
+		}
+		require.NoError(p.t, p.voteCh.Send(ctx, msg))
+		i++
+	}
+	return nil
+}
+
+func newP2PMessage(peerID types.NodeID, obj any) p2p.Envelope {
+	envelope := p2p.Envelope{
+		To: peerID,
+	}
+	switch t := obj.(type) {
+	case *types.Vote:
+		envelope.Message = &tmcons.Vote{
+			Vote: t.ToProto(),
+		}
+	}
+	return envelope
+}
+
+type bzProposalDecider struct {
+	*Proposaler
+}
+
+func enterProposeWithBzProposalDecider(state *State) {
+	action := state.ctrl.Get(EnterProposeType)
+	enterProposeAction := action.(*EnterProposeAction)
+	propler := enterProposeAction.proposalCreator.(*Proposaler)
+	invalidDecider := &bzProposalDecider{Proposaler: propler}
+	enterProposeAction.proposalCreator = invalidDecider
+}
+
+func (p *bzProposalDecider) Create(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
+	block, blockParts, err := p.createProposalBlock(ctx, round, rs)
+	if err != nil {
+		return err
+	}
+
+	// Make proposal
+	propBlockID := block.BlockID(blockParts)
+	proposal := types.NewProposal(
+		height,
+		p.committedState.LastCoreChainLockedBlockHeight,
+		round,
+		rs.ValidRound,
+		propBlockID,
+		block.Header.Time,
+	)
+	err = p.signProposal(ctx, height, proposal)
+	if err != nil {
+		p.logger.Error("enterPropose: Error signing proposal",
+			"height", height,
+			"round", round,
+			"error", err)
+		return err
+	}
+	p.sendMessages(ctx, &ProposalMessage{proposal})
+	p.sendMessages(ctx, blockPartsToMessages(height, round, blockParts)...)
+	return nil
 }

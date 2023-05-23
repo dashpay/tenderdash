@@ -67,7 +67,7 @@ func setup(ctx context.Context, t *testing.T, stateStores []sm.Store) *reactorTe
 
 	chDesc := &p2p.ChannelDescriptor{ID: evidence.EvidenceChannel}
 	rts.evidenceChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc)
-	require.Len(t, rts.network.RandomNode().PeerManager.Peers(), 0)
+	require.Len(t, rts.network.AnyNode().PeerManager.Peers(), 0)
 
 	idx := 0
 	evidenceTime := time.Date(2019, 1, 1, 0, 0, 0, 0, time.UTC)
@@ -132,7 +132,7 @@ func setup(ctx context.Context, t *testing.T, stateStores []sm.Store) *reactorTe
 func (rts *reactorTestSuite) start(ctx context.Context, t *testing.T) {
 	rts.network.Start(ctx, t)
 	require.Len(t,
-		rts.network.RandomNode().PeerManager.Peers(),
+		rts.network.AnyNode().PeerManager.Peers(),
 		rts.numStateStores-1,
 		"network does not have expected number of nodes")
 }
@@ -301,7 +301,7 @@ func TestReactorBroadcastEvidence(t *testing.T) {
 	// secondaries where each secondary is added as a peer via a PeerUpdate to the
 	// primary. As a result, the primary will gossip all evidence to each secondary.
 
-	primary := rts.network.RandomNode()
+	primary := rts.network.AnyNode()
 	secondaries := make([]*p2ptest.Node, 0, len(rts.network.NodeIDs())-1)
 	secondaryIDs := make([]types.NodeID, 0, cap(secondaries))
 	for id := range rts.network.Nodes {
@@ -491,7 +491,7 @@ func TestReactorBroadcastEvidence_FullyConnected(t *testing.T) {
 	rts := setup(ctx, t, stateDBs)
 	rts.start(ctx, t)
 
-	evList := createEvidenceList(ctx, t, rts.pools[rts.network.RandomNode().NodeID], val, numEvidence)
+	evList := createEvidenceList(ctx, t, rts.pools[rts.network.AnyNode().NodeID], val, numEvidence)
 
 	// every suite (reactor) connects to every other suite (reactor)
 	for outerID, outerChan := range rts.peerChans {

@@ -59,6 +59,7 @@ LABEL maintainer="developers@dash.org"
 ENV TMHOME /tenderdash
 
 # Copy Tenderdash source
+# Avoid overwriting third-party libs
 COPY . .
 COPY test/e2e/docker/entrypoint* /usr/bin/
 

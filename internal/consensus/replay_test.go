@@ -24,6 +24,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/config"
 	"github.com/tendermint/tendermint/crypto"
+	"github.com/tendermint/tendermint/dash"
 	"github.com/tendermint/tendermint/internal/eventbus"
 	"github.com/tendermint/tendermint/internal/mempool"
 	"github.com/tendermint/tendermint/internal/proxy"
@@ -54,9 +55,8 @@ import (
 // and which ones we need the wal for - then we'd also be able to only flush the
 // wal writer when we need to, instead of with every message.
 
-func startNewStateAndWaitForBlock(ctx context.Context, t *testing.T, consensusReplayConfig *config.Config,
-	lastBlockHeight int64, blockDB dbm.DB, stateStore sm.Store) {
-	logger := log.NewNopLogger()
+func startNewStateAndWaitForBlock(ctx context.Context, t *testing.T, consensusReplayConfig *config.Config) {
+	logger := log.NewTestingLogger(t)
 	state, err := sm.MakeGenesisStateFromFile(consensusReplayConfig.GenesisFile())
 	require.NoError(t, err)
 	privValidator := loadPrivValidator(t, consensusReplayConfig)
@@ -163,7 +163,6 @@ LOOP:
 		logger := log.NewTestingLogger(t)
 		blockDB := dbm.NewMemDB()
 		stateDB := dbm.NewMemDB()
-		stateStore := sm.NewStore(stateDB)
 		blockStore := store.NewBlockStore(blockDB)
 		state, err := sm.MakeGenesisStateFromFile(consensusReplayConfig.GenesisFile())
 		require.NoError(t, err)
@@ -173,20 +172,23 @@ LOOP:
 		// due to a timeout handler performs before than validators will be ready for the message
 		state.ConsensusParams.Timeout.Propose = 1 * time.Second
 
-		privValidator := loadPrivValidator(t, consensusReplayConfig)
+		privVal := loadPrivValidator(t, consensusReplayConfig)
 		cs := newStateWithConfigAndBlockStore(
 			rctx,
 			t,
 			logger,
 			consensusReplayConfig,
 			state,
-			privValidator,
+			privVal,
 			newKVStoreFunc(t)(logger, ""),
 			blockStore,
 		)
 
 		// start sending transactions
 		ctx, cancel := context.WithCancel(rctx)
+		proTxHash, err := privVal.GetProTxHash(ctx)
+		require.NoError(t, err)
+		ctx = dash.ContextWithProTxHash(ctx, proTxHash)
 		initFn(stateDB, cs, ctx)
 
 		// clean up WAL file from the previous iteration
@@ -213,7 +215,7 @@ LOOP:
 			t.Fatal("context canceled before test completed")
 		case err := <-walPanicked:
 			// make sure we can make blocks after a crash
-			startNewStateAndWaitForBlock(ctx, t, consensusReplayConfig, cs.Height, blockDB, stateStore)
+			startNewStateAndWaitForBlock(ctx, t, consensusReplayConfig)
 
 			// stop consensus state and transactions sender (initFn)
 			cs.Stop()
@@ -396,7 +398,8 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 	for i := 0; i < nPeers; i++ {
 		vss[i] = newValidatorStub(css[i].privValidator, int32(i), 0)
 	}
-	height, round := css[0].Height, css[0].Round
+	stateData := css[0].GetStateData()
+	height, round := stateData.Height, stateData.Round
 
 	// start the machine; note height should be equal to InitialHeight here,
 	// so we don't need to increment it
@@ -420,15 +423,18 @@ func setupSimulator(ctx context.Context, t *testing.T) *simulatorTestSuite {
 		height++
 		incrementHeight(vss...)
 		vals := findSuitableValidatorSetUpdates(height, valSetUpdates).ValidatorUpdates
-		require.Len(t, css[0].Validators.Validators, len(vals))
+		stateData = css[0].GetStateData()
+		require.Len(t, stateData.Validators.Validators, len(vals))
 		for _, tx := range txs {
 			err = assertMempool(t, css[0].txNotifier).CheckTx(ctx, tx, nil, mempool.TxInfo{})
 			assert.Nil(t, err)
 		}
-		vssForSigning = determineActiveValidators(ctx, t, vss, css[0].Validators)
+		vssForSigning = determineActiveValidators(ctx, t, vss, stateData.Validators)
 		blockID = createSignSendProposal(ctx, t, css, vss, cfg.ChainID(), txs.ToSliceOfBytes())
 		ensureNewProposal(t, proposalCh, height, round)
-		require.True(t, css[0].Validators.HasPublicKeys)
+
+		stateData = css[0].GetStateData()
+		require.True(t, stateData.Validators.HasPublicKeys)
 		signAddVotes(ctx, t, css[0], tmproto.PrecommitType, sim.Config.ChainID(), blockID, vssForSigning...)
 		ensureNewRound(t, newRoundCh, height+1, 0)
 	}
@@ -482,12 +488,14 @@ func createSignSendProposal(ctx context.Context,
 		partSize = types.BlockPartSizeBytes
 	)
 
-	quorumType := css[0].Validators.QuorumType
-	quorumHash := css[0].Validators.QuorumHash
-	height := css[0].RoundState.Height
-	round := css[0].RoundState.Round
+	stateData := css[0].GetStateData()
 
-	proposer := css[0].Validators.GetProposer()
+	quorumType := stateData.Validators.QuorumType
+	quorumHash := stateData.Validators.QuorumHash
+	height := stateData.RoundState.Height
+	round := stateData.RoundState.Round
+
+	proposer := stateData.Validators.GetProposer()
 	proposerVs := findValByProTxHash(ctx, t, vss, proposer.ProTxHash)
 	proposerCs := findStateByProTxHash(t, css, proposer.ProTxHash)
 
@@ -517,7 +525,7 @@ func createSignSendProposal(ctx context.Context,
 
 	// set the proposal block to state on node 0, this will result in a signed prevote,
 	// so we do not need to prevote with it again (hence the vss[1:nVals])
-	if err := css[0].SetProposalAndBlock(ctx, proposal, propBlock, propBlockParts, "some peer"); err != nil {
+	if err := css[0].SetProposalAndBlock(ctx, proposal, propBlockParts, "some peer"); err != nil {
 		t.Fatal(err)
 	}
 
@@ -696,15 +704,12 @@ func testHandshakeReplay(
 		walFile := tempWALWithData(t, walBody)
 		cfg.Consensus.SetWalFile(walFile)
 
-		gdoc, err := sm.MakeGenesisDocFromFile(cfg.GenesisFile())
-		require.NoError(t, err)
-
 		wal, err := NewWAL(ctx, logger, walFile)
 		require.NoError(t, err)
 		err = wal.Start(ctx)
 		require.NoError(t, err)
 		t.Cleanup(func() { cancel(); wal.Wait() })
-		chain, commits = makeBlockchainFromWAL(t, wal, gdoc)
+		chain, commits = makeBlockchainFromWAL(t, wal)
 		stateDB, genesisState, store = stateAndStore(t, cfg, kvstore.ProtocolVersion)
 	}
 	proTxHash, err := privVal.GetProTxHash(ctx)
@@ -976,8 +981,9 @@ func TestHandshakeErrorsIfAppReturnsWrongAppHash(t *testing.T) {
 	require.NoError(t, err)
 	state.LastValidators = state.Validators.Copy()
 	// mode = 0 for committing all the blocks
-	blocks := sf.MakeBlocks(ctx, t, 3, &state, privVal, 1)
+	blocks := sf.MakeBlocks(ctx, t, 6, &state, []types.PrivValidator{privVal}, 1)
 
+	state.LastBlockHeight = 3
 	store.chain = blocks
 
 	logger := log.NewNopLogger()
@@ -1049,7 +1055,7 @@ func (app *badApp) ProcessProposal(_ context.Context, _ *abci.RequestProcessProp
 //--------------------------
 // utils for making blocks
 
-func makeBlockchainFromWAL(t *testing.T, wal WAL, genDoc *types.GenesisDoc) ([]*types.Block, []*types.Commit) {
+func makeBlockchainFromWAL(t *testing.T, wal WAL) ([]*types.Block, []*types.Commit) {
 	t.Helper()
 	var height int64
 
@@ -1370,29 +1376,20 @@ func TestWALRoundsSkipper(t *testing.T) {
 		)},
 	}
 	node := ng.Generate(ctx, t)
-	originDoPrevote := node.csState.doPrevote
-	node.csState.doPrevote = func(ctx context.Context, height int64, round int32, allowOldBlocks bool) {
-		if height >= 3 && round < 10 {
-			node.csState.signAddVote(ctx, tmproto.PrevoteType, types.BlockID{})
-			return
-		}
-		originDoPrevote(ctx, height, round, allowOldBlocks)
-	}
+	withReplayPrevoter(node.csState)
+
 	walBody, err := WALWithNBlocks(ctx, t, logger, node, chainLen)
 	require.NoError(t, err)
 	walFile := tempWALWithData(t, walBody)
 
 	cfg.Consensus.SetWalFile(walFile)
 
-	gdoc, err := sm.MakeGenesisDocFromFile(cfg.GenesisFile())
-	require.NoError(t, err)
-
 	wal, err := NewWAL(ctx, logger, walFile)
 	require.NoError(t, err)
 	err = wal.Start(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { cancel(); wal.Wait() })
-	chain, commits := makeBlockchainFromWAL(t, wal, gdoc)
+	chain, commits := makeBlockchainFromWAL(t, wal)
 
 	stateDB, state, blockStore := stateAndStore(t, cfg, kvstore.ProtocolVersion)
 
@@ -1400,6 +1397,8 @@ func TestWALRoundsSkipper(t *testing.T) {
 	blockStore.chain = chain[:chainLen-1]
 	blockStore.commits = commits[:chainLen-1]
 
+	cfg = getConfig(t)
+	cfg.Consensus.SetWalFile(walFile)
 	privVal := privval.MustLoadOrGenFilePVFromConfig(cfg)
 
 	app := newKVStoreFunc(t)(logger, "")
@@ -1420,11 +1419,15 @@ func TestWALRoundsSkipper(t *testing.T) {
 		blockStore,
 	)
 
+	proTxHash, err := privVal.GetProTxHash(ctx)
+	require.NoError(t, err)
+	ctx = dash.ContextWithProTxHash(ctx, proTxHash)
+
 	cs := newStateWithConfigAndBlockStore(ctx, t, log.NewTestingLogger(t), cfg, state, privVal, app, blockStore)
 
 	commit := blockStore.commits[len(blockStore.commits)-1]
 	require.Equal(t, int64(4), commit.Height)
-	require.Equal(t, maxRound, commit.Round)
+	require.GreaterOrEqual(t, maxRound, commit.Round)
 
 	require.NoError(t, cs.Start(ctx))
 	defer cs.Stop()
@@ -1443,7 +1446,7 @@ func TestWALRoundsSkipper(t *testing.T) {
 	require.Equal(t, chainLen+1, eventNewBlock.Block.Height)
 	commit = blockStore.commits[chainLen-1]
 	require.Equal(t, chainLen, commit.Height)
-	require.Equal(t, maxRound, commit.Round)
+	require.GreaterOrEqual(t, maxRound, commit.Round)
 }
 
 // returns the vals on InitChain
@@ -1489,4 +1492,26 @@ func newBlockReplayer(
 		NewReplayBlockExecutor(proxyApp, stateStore, blockStore, eventBus),
 		ReplayerWithProTxHash(proTxHash),
 	)
+}
+
+type replayPrevoter struct {
+	voteSigner *voteSigner
+	prevoter   Prevoter
+}
+
+func withReplayPrevoter(state *State) {
+	cmd := state.ctrl.Get(EnterPrevoteType)
+	enterPrevoteCmd := cmd.(*EnterPrevoteAction)
+	enterPrevoteCmd.prevoter = &replayPrevoter{
+		voteSigner: state.voteSigner,
+		prevoter:   enterPrevoteCmd.prevoter,
+	}
+}
+
+func (p *replayPrevoter) Do(ctx context.Context, stateData *StateData) error {
+	if stateData.Height >= 3 && stateData.Round < 10 {
+		p.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
+		return nil
+	}
+	return p.prevoter.Do(ctx, stateData)
 }

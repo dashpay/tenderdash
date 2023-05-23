@@ -19,13 +19,13 @@ type Mempool struct {
 	mock.Mock
 }
 
-// CheckTx provides a mock function with given fields: ctx, tx, callback, txInfo
-func (_m *Mempool) CheckTx(ctx context.Context, tx types.Tx, callback func(*abcitypes.ResponseCheckTx), txInfo mempool.TxInfo) error {
-	ret := _m.Called(ctx, tx, callback, txInfo)
+// CheckTx provides a mock function with given fields: ctx, tx, cb, txInfo
+func (_m *Mempool) CheckTx(ctx context.Context, tx types.Tx, cb func(*abcitypes.ResponseCheckTx), txInfo mempool.TxInfo) error {
+	ret := _m.Called(ctx, tx, cb, txInfo)
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.Tx, func(*abcitypes.ResponseCheckTx), mempool.TxInfo) error); ok {
-		r0 = rf(ctx, tx, callback, txInfo)
+		r0 = rf(ctx, tx, cb, txInfo)
 	} else {
 		r0 = ret.Error(0)
 	}
