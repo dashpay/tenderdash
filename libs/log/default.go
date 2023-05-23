@@ -104,6 +104,27 @@ func OverrideWithNewLogger(logger Logger, format, level string) error {
 	return nil
 }
 
+// NewFormatter creates a new formatter for the given format. If the format is empty or unsupported then returns error.
+func NewFormatter(format string, w io.Writer) (io.Writer, error) {
+	switch strings.ToLower(format) {
+	case LogFormatPlain, LogFormatText:
+		return zerolog.ConsoleWriter{
+			Out:        w,
+			NoColor:    true,
+			TimeFormat: time.RFC3339Nano,
+			FormatLevel: func(i interface{}) string {
+				if ll, ok := i.(string); ok {
+					return strings.ToUpper(ll)
+				}
+				return "????"
+			},
+		}, nil
+	case LogFormatJSON:
+		return w, nil
+	}
+	return nil, fmt.Errorf("unsupported log format: %s", format)
+}
+
 func getLogFields(keyVals ...interface{}) map[string]interface{} {
 	if len(keyVals)%2 != 0 {
 		return nil
