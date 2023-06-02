@@ -693,7 +693,7 @@ When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which
 | txs | [bytes](#bytes) | repeated | List of transactions that have been picked as part of the proposed |
 | proposed_last_commit | [CommitInfo](#tendermint-abci-CommitInfo) |  | Info about the last commit, obtained from the information in the proposed block. |
 | misbehavior | [Misbehavior](#tendermint-abci-Misbehavior) | repeated | List of information about validators that acted incorrectly. |
-| hash | [bytes](#bytes) |  | The block header&#39;s hash of the proposed block. |
+| hash | [bytes](#bytes) |  | The block header&#39;s hash of the proposed block. It is computed as a Merkle tree from the header fields. |
 | height | [int64](#int64) |  | The height of the proposed block. |
 | round | [int32](#int32) |  | Round number for the block |
 | time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | Timestamp included in the proposed block. |

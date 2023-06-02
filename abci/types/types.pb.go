@@ -1444,6 +1444,7 @@ type RequestProcessProposal struct {
 	// List of information about validators that acted incorrectly.
 	Misbehavior []Misbehavior `protobuf:"bytes,3,rep,name=misbehavior,proto3" json:"misbehavior"`
 	// The block header's hash of the proposed block.
+	// It is computed as a Merkle tree from the header fields.
 	Hash []byte `protobuf:"bytes,4,opt,name=hash,proto3" json:"hash,omitempty"`
 	// The height of the proposed block.
 	Height int64 `protobuf:"varint,5,opt,name=height,proto3" json:"height,omitempty"`

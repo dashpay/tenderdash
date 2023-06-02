@@ -193,7 +193,7 @@ app state using vote signature. Data needed to do the verification is:
 
 * Chain ID
 * Commit information:
-    * Type (constant, always Commit)
+    * Type (constant, always Precommit)
     * Height
     * Round
 * Hash of CanonicalBlockID
