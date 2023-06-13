@@ -346,6 +346,7 @@ message RequestProcessProposal {
   // List of information about validators that acted incorrectly.
   repeated Misbehavior misbehavior = 3 [(gogoproto.nullable) = false];
   // The block header's hash of the proposed block.
+  // It is computed as a Merkle tree from the header fields.
   bytes hash = 4;
   // The height of the proposed block.
   int64 height = 5;
