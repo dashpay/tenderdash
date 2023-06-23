@@ -1,4 +1,5 @@
 //go:generate ../../../scripts/mockery_generate.sh BlockClient
+//go:generate ../../../scripts/mockery_generate.sh SnapshotClient
 
 package client
 
@@ -19,6 +20,7 @@ import (
 	"github.com/tendermint/tendermint/libs/promise"
 	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
 	protomem "github.com/tendermint/tendermint/proto/tendermint/mempool"
+	"github.com/tendermint/tendermint/proto/tendermint/statesync"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -51,6 +53,27 @@ type (
 		GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error)
 		// GetSyncStatus requests a block synchronization status from all connected peers
 		GetSyncStatus(ctx context.Context) error
+	}
+	// SnapshotClient defines the methods which must be implemented by snapshot client
+	SnapshotClient interface {
+		GetSnapshots(ctx context.Context, peerID types.NodeID) error
+		GetChunk(
+			ctx context.Context,
+			peerID types.NodeID,
+			height uint64,
+			format uint32,
+			index uint32,
+		) (*promise.Promise[*statesync.ChunkResponse], error)
+		GetParams(
+			ctx context.Context,
+			peerID types.NodeID,
+			height uint64,
+		) (*promise.Promise[*statesync.ParamsResponse], error)
+		GetLightBlock(
+			ctx context.Context,
+			peerID types.NodeID,
+			height uint64,
+		) (*promise.Promise[*statesync.LightBlockResponse], error)
 	}
 	TxSender interface {
 		SendTxs(ctx context.Context, peerID types.NodeID, tx types.Tx) error
@@ -113,22 +136,68 @@ func New(descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor, creator p2p.Chann
 // if response received in time otherwise reject
 func (c *Client) GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*bcproto.BlockResponse], error) {
 	reqID := uuid.NewString()
-	err := c.Send(ctx, p2p.Envelope{
-		Attributes: map[string]string{RequestIDAttribute: reqID},
-		To:         peerID,
-		Message:    &bcproto.BlockRequest{Height: height},
-	})
+	msg := &bcproto.BlockRequest{Height: height}
+	respCh, err := c.sendWithResponse(ctx, reqID, peerID, msg)
 	if err != nil {
-		errSendError := c.Send(ctx, p2p.PeerError{
-			NodeID: peerID,
-			Err:    err,
-		})
-		if errSendError != nil {
-			return nil, multierror.Append(err, errSendError)
-		}
+		return nil, err
 	}
-	respCh := c.addPending(reqID)
 	return newPromise[*bcproto.BlockResponse](ctx, peerID, reqID, respCh, c), nil
+}
+
+// GetChunk requests a chunk from a peer and returns promise.Promise which resolve the result
+func (c *Client) GetChunk(
+	ctx context.Context,
+	peerID types.NodeID,
+	height uint64,
+	format uint32,
+	index uint32,
+) (*promise.Promise[*statesync.ChunkResponse], error) {
+	reqID := uuid.NewString()
+	msg := &statesync.ChunkRequest{Height: height, Format: format, Index: index}
+	respCh, err := c.sendWithResponse(ctx, reqID, peerID, msg)
+	if err != nil {
+		return nil, err
+	}
+	return newPromise[*statesync.ChunkResponse](ctx, peerID, reqID, respCh, c), nil
+}
+
+// GetSnapshots requests snapshots from a peer
+func (c *Client) GetSnapshots(ctx context.Context, peerID types.NodeID) error {
+	return c.Send(ctx, p2p.Envelope{
+		Attributes: map[string]string{RequestIDAttribute: uuid.NewString()},
+		To:         peerID,
+		Message:    &statesync.SnapshotsRequest{},
+	})
+}
+
+// GetParams returns a promise.Promise which resolve the result if response received in time otherwise reject
+func (c *Client) GetParams(
+	ctx context.Context,
+	peerID types.NodeID,
+	height uint64,
+) (*promise.Promise[*statesync.ParamsResponse], error) {
+	reqID := uuid.NewString()
+	msg := &statesync.ParamsRequest{Height: height}
+	respCh, err := c.sendWithResponse(ctx, reqID, peerID, msg)
+	if err != nil {
+		return nil, err
+	}
+	return newPromise[*statesync.ParamsResponse](ctx, peerID, reqID, respCh, c), nil
+}
+
+// GetLightBlock returns a promise.Promise which resolve the result if response received in time otherwise reject
+func (c *Client) GetLightBlock(
+	ctx context.Context,
+	peerID types.NodeID,
+	height uint64,
+) (*promise.Promise[*statesync.LightBlockResponse], error) {
+	reqID := uuid.NewString()
+	msg := &statesync.LightBlockRequest{Height: height}
+	respCh, err := c.sendWithResponse(ctx, reqID, peerID, msg)
+	if err != nil {
+		return nil, err
+	}
+	return newPromise[*statesync.LightBlockResponse](ctx, peerID, reqID, respCh, c), nil
 }
 
 // GetSyncStatus requests a block synchronization status from all connected peers
@@ -236,6 +305,24 @@ func (c *Client) resolveMessage(ctx context.Context, respID string, res result) 
 	case respCh <- res:
 	}
 	return nil
+}
+
+func (c *Client) sendWithResponse(ctx context.Context, reqID string, peerID types.NodeID, msg proto.Message) (chan result, error) {
+	err := c.Send(ctx, p2p.Envelope{
+		Attributes: map[string]string{RequestIDAttribute: reqID},
+		To:         peerID,
+		Message:    msg,
+	})
+	if err != nil {
+		errSendError := c.Send(ctx, p2p.PeerError{
+			NodeID: peerID,
+			Err:    err,
+		})
+		if errSendError != nil {
+			return nil, multierror.Append(err, errSendError)
+		}
+	}
+	return c.addPending(reqID), nil
 }
 
 func (c *Client) addPending(reqID string) chan result {
