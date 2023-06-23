@@ -48,7 +48,7 @@ const (
 	PeerReady
 )
 
-// NewPeerSubscriber ...
+// NewPeerSubscriber creates a new peer subscriber
 func NewPeerSubscriber(logger log.Logger, sub p2p.PeerEventSubscriber) *PeerSubscriber {
 	return &PeerSubscriber{
 		logger:    logger,
@@ -59,12 +59,12 @@ func NewPeerSubscriber(logger log.Logger, sub p2p.PeerEventSubscriber) *PeerSubs
 	}
 }
 
-// On ...
+// On adds a handler for a peer update event
 func (p *PeerSubscriber) On(eventName p2p.PeerStatus, handler HandlerFunc) {
 	p.handles[eventName] = handler
 }
 
-// Start ...
+// Start starts the peer subscriber
 func (p *PeerSubscriber) Start(ctx context.Context) {
 	peerUpdates := p.sub(ctx, "statesync")
 	defer close(p.stoppedCh)
@@ -83,7 +83,7 @@ func (p *PeerSubscriber) Start(ctx context.Context) {
 	}
 }
 
-// Stop ...
+// Stop stops the peer subscriber
 func (p *PeerSubscriber) Stop(ctx context.Context) {
 	close(p.stopCh)
 	select {
