@@ -108,10 +108,18 @@ func (r *SnapshotRepository) RecentSnapshots(ctx context.Context, n uint32) ([]*
 	if err != nil {
 		return nil, err
 	}
-	sort.Slice(resp.Snapshots, func(i, j int) bool {
-		a := resp.Snapshots[i]
-		b := resp.Snapshots[j]
+	sortSnapshot(resp.Snapshots)
+	snapshots := make([]*snapshot, 0, n)
+	for _, s := range resp.Snapshots[:recentSnapshots] {
+		snapshots = append(snapshots, newSnapshotFromABCI(s))
+	}
+	return snapshots, nil
+}
 
+func sortSnapshot(snapshots []*abci.Snapshot) {
+	sort.Slice(snapshots, func(i, j int) bool {
+		a := snapshots[i]
+		b := snapshots[j]
 		switch {
 		case a.Height > b.Height:
 			return true
@@ -121,18 +129,14 @@ func (r *SnapshotRepository) RecentSnapshots(ctx context.Context, n uint32) ([]*
 			return false
 		}
 	})
-	snapshots := make([]*snapshot, 0, n)
-	for i, s := range resp.Snapshots {
-		if i >= recentSnapshots {
-			break
-		}
-		snapshots = append(snapshots, &snapshot{
-			Height:   s.Height,
-			Format:   s.Format,
-			Chunks:   s.Chunks,
-			Hash:     s.Hash,
-			Metadata: s.Metadata,
-		})
+}
+
+func newSnapshotFromABCI(s *abci.Snapshot) *snapshot {
+	return &snapshot{
+		Height:   s.Height,
+		Format:   s.Format,
+		Chunks:   s.Chunks,
+		Hash:     s.Hash,
+		Metadata: s.Metadata,
 	}
-	return snapshots, nil
 }
