@@ -1,12 +1,53 @@
+## [0.13.0-dev.1] - 2023-06-28
+
+### Bug Fixes
+
+- [**breaking**] Remove unused SIGNED_MSG_TYPE_COMMIT (#638)
+- [**breaking**] Use millisecond resolution of block time (#650)
+
+## [0.12.0] - 2023-05-23
+
+### Bug Fixes
+
+- [**breaking**] ProcessProposal should get CoreChainLockedHeight from block (#625)
+
+### Testing
+
+- Sign_bytes tests synchronized with rs-tenderdash-abci (#623)
+
+### Backport
+
+- Catch up with the latest commits from v0.11 to v0.12 (#631)
+- Catch up the changes from v0.11 to v0.12 (#636)
+
+## [0.11.0] - 2023-04-04
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.11.0
+
+### Build
+
+- Fix broken github actions and regenerate some code (#615)
+
 ## [0.12.0-dev.2] - 2023-04-04
 
 ### Bug Fixes
 
 - Nil voteset panics in rest handler (#609)
+- Nil voteset panics in rest handler (#609) (#612)
 
 ### Features
 
 - Use dashd-go 0.24.0 to support LLMQ type 6 (LLMQType_25_67) (#610)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.12.0-dev.2 (#613)
+
+### Backport
+
+- Use dashd-go 0.24.0 to support LLMQ type 6 (LLMQType_25_67) (#610) (#611)
 
 ## [0.12.0-dev.1] - 2023-03-17
 
@@ -5783,7 +5824,7 @@
 - Only run when applicable (#4752)
 - Check git diff on each job (#4770)
 - Checkout code before git diff check (#4779)
-- Add paths
+- Add paths 
 - Bump the timeout for test_coverage (#4864)
 - Migrate localnet to github actions (#4878)
 - Add timeouts (#4912)
@@ -6066,7 +6107,7 @@
 
 ### Swagger
 
-- Remove duplicate blockID
+- Remove duplicate blockID 
 - Define version (#4952)
 
 ### Template
@@ -8796,7 +8837,50 @@
 
 ### Documentation
 
+- Give index a Tools section
+- Update and clean up adr
+- Use README.rst to be pulled from tendermint
+- Re-add the images
+- Add original README's from tools repo
+- Convert from md to rst
+- Update index.rst
+- Move images in from tools repo
+- Harmonize headers for tools docs
+- Add kubes docs to mintnet doc, from tools
+- Add original tm-bench/monitor files
+- Organize tm-bench/monitor description
+- Pull from tools on build
+- Finish pull from tools
+- Organize the directory, #656
+- Add software.json from website (ecosystem)
+- Rename file
+- Add and re-format the ecosystem from website
+- Pull from tools' master branch
+- Using ABCI-CLI
+- Remove last section from ecosystem
+- Organize install a bit better
+- Add ABCI implementations
+- Added passchain to the ecosystem.rst in the applications section;
+- Fix build warnings
+- Add stratumn
+- Add py-tendermint to abci-servers
+- Remove mention of type byte
+- Add info about tm-migrate
+- Update abci example details [ci skip]
+- Typo
+- Smaller logo (200px)
+- Comb through step by step
+- Fixup abci guide
 - Fix links, closes #860
+
+### GroupReader#Read
+
+- Return io.EOF if file is empty
+
+### Makefile
+
+- Remove redundant lint
+- Fix linter
 
 ### PubKeyFromBytes
 
@@ -8806,24 +8890,88 @@
 
 - Use bytes.Equal for key comparison
 
+### Testing
+
+- Add simple client/server test with no addr prefix
+- Update for abci-cli consolidation. shell formatting
+
 ### WIP
 
 - Begin parallel refactoring with go-wire Write methods and MConnection
 
+### [docs
+
+- Typo fix] remove misplaced "the"
+- Typo fix] add missing "have"
+
+### Adr
+
+- Add 005 consensus params
+
+### All
+
+- No more anonymous imports
+
+### Autofile
+
+- Ensure file is open in Sync
+
 ### Blockchain
 
+- Fixing reactor tests
 - Add comment in AddPeer. closes #666
+
+### Blockchain/pool
+
+- Some comments and small changes
+
+### Blockchain/reactor
+
+- RespondWithNoResponseMessage for missing height
+
+### Blockchain/store
+
+- Comment about panics
 
 ### Certifiers
 
 - Test uses WaitForHeight
 
+### Changelog
+
+- Add genesis amount->power
+
+### Circle
+
+- Add metalinter to test
+
+### Cli
+
+- Clean up error handling
+- Use cobra's new ExactArgs() feature
+
 ### Clist
 
 - Reduce numTimes in test
 
+### Cmd
+
+- Dont wait for genesis. closes #562
+
+### Cmn
+
+- Kill
+
+### Common
+
+- Fingerprint comment
+- WriteFileAtomic use tempfile in current dir
+
 ### Consensus
 
+- Remove support for replay by #HEIGHT. closes #567
+- Use filepath for windows compatibility, closes #595
+- Kill process on app error
 - Ensure prs.ProposalBlockParts is initialized. fixes #810
 - Fix for initializing block parts during catchup
 - Make mempool_test deterministic
@@ -8834,25 +8982,59 @@
 
 - Benchmark WALDecode across data sizes
 
+### Console
+
+- Fix output, closes #93
+- Fix tests
+
 ### Db
 
+- Fix MemDB.Close
 - Sort keys for memdb iterator
+
+### Dummy
+
+- Verify pubkey is go-crypto encoded in DeliverTx. closes #51
 
 ### Errcheck
 
 - PR comment fixes
 
+### Example
+
+- Fix func suffix
+
+### Glide
+
+- Update for autofile fix
+- More external deps locked to versions
+
+### Keys
+
+- Transactions.go -> types.go
+
 ### Lint
 
+- Couple more fixes
 - Apply deadcode/unused
 
 ### Linter
 
+- Couple fixes
+- Add metalinter to Makefile & apply some fixes
+- Last fixes & add to circle
 - Address deadcode, implement incremental lint testing
 - Sort through each kind and address small fixes
 
 ### Linting
 
+- Cover the basics
+- Catch some errors
+- Add to Makefile & do some fixes
+- Next round  of fixes
+- Fixup some stuffs
+- Little more fixes
+- A few fixes
 - Replace megacheck with metalinter
 - Apply 'gofmt -s -w' throughout
 - Apply misspell
@@ -8861,12 +9043,26 @@
 - Moar fixes
 - Few more fixes
 
+### Makefile
+
+- Remove megacheck
+
+### Metalinter
+
+- Add linter to Makefile like tendermint
+
 ### Node
 
+- NewNode takes DBProvider and GenDocProvider
 - Clean makeNodeInfo
 
 ### P2p
 
+- Fully test PeerSet, more docs, parallelize PeerSet tests
+- Minor comment fixes
+- Delete unused and untested *IPRangeCount functions
+- Sw.AddPeer -> sw.addPeer
+- Allow listener with no external connection
 - Update readme, some minor things
 - Some fixes re @odeke-em issues #813,#816,#817
 - Comment on the wg.Add before go saveRoutine()
@@ -8896,10 +9092,30 @@
 
 - Simplify ensurePeers
 
+### Readme
+
+- Re-organize & update docs links
+
 ### Rpc
 
+- Fix client websocket timeout (#687)
+- Subscribe on reconnection (#689)
+- Use /iavl repo in test (#713)
 - Wait for rpc servers to be available in tests
 - Fix tests
+
+### Rpc/client
+
+- Use compile time assertions instead of methods
+
+### Rpc/lib
+
+- Remove dead files, closes #710
+
+### Rpc/lib/client
+
+- Add jitter for exponential backoff of WSClient
+- Jitter test updates and only to-be run on releases
 
 ### Rpc/lib/server
 
@@ -8918,184 +9134,28 @@
 
 ### Server
 
-- Minor refactor
-
-### State
-
-- Return to-be-used function
-
-### Types
-
-- Add gas and fee fields to CheckTx
-
-### WsConnection
-
-- Call onDisconnect
-
-## [0.12.0] - 2017-10-28
-
-### Documentation
-
-- Add py-tendermint to abci-servers
-- Remove mention of type byte
-- Add info about tm-migrate
-- Update abci example details [ci skip]
-- Typo
-- Smaller logo (200px)
-- Comb through step by step
-- Fixup abci guide
-
-### GroupReader#Read
-
-- Return io.EOF if file is empty
-
-### Makefile
-
-- Fix linter
-
-### Testing
-
-- Add simple client/server test with no addr prefix
-- Update for abci-cli consolidation. shell formatting
-
-### Blockchain/pool
-
-- Some comments and small changes
-
-### Blockchain/store
-
-- Comment about panics
-
-### Cli
-
-- Clean up error handling
-- Use cobra's new ExactArgs() feature
-
-### Cmn
-
-- Kill
-
-### Consensus
-
-- Kill process on app error
-
-### Console
-
-- Fix output, closes #93
-- Fix tests
-
-### Dummy
-
-- Verify pubkey is go-crypto encoded in DeliverTx. closes #51
-
-### Glide
-
-- More external deps locked to versions
-
-### Keys
-
-- Transactions.go -> types.go
-
-### Linting
-
-- A few fixes
-
-### Rpc
-
-- Use /iavl repo in test (#713)
-
-### Rpc/client
-
-- Use compile time assertions instead of methods
-
-### Rpc/lib/client
-
-- Add jitter for exponential backoff of WSClient
-- Jitter test updates and only to-be run on releases
-
-### Server
-
 - Use cmn.ProtocolAndAddress
+- Minor refactor
 
 ### SocketClient
 
 - Fix and test for StopForError deadlock
 
+### State
+
+- Minor comment fixes
+- Return to-be-used function
+
 ### Types
 
+- Remove redundant version file
+- PrivVal.Sign returns an error
+- More . -> cmn
+- Comments
 - ConsensusParams test + document the ranges/limits
 - ConsensusParams: add feedback from @ebuchman and @melekes
 - Unexpose valset.To/FromBytes
-
-## [0.11.1] - 2017-10-10
-
-### Documentation
-
-- Add ABCI implementations
-- Added passchain to the ecosystem.rst in the applications section;
-- Fix build warnings
-- Add stratumn
-
-### [docs
-
-- Typo fix] remove misplaced "the"
-- Typo fix] add missing "have"
-
-### All
-
-- No more anonymous imports
-
-### Autofile
-
-- Ensure file is open in Sync
-
-### Blockchain
-
-- Fixing reactor tests
-
-### Blockchain/reactor
-
-- RespondWithNoResponseMessage for missing height
-
-### Changelog
-
-- Add genesis amount->power
-
-### Db
-
-- Fix MemDB.Close
-
-### Example
-
-- Fix func suffix
-
-### Glide
-
-- Update for autofile fix
-
-### Linter
-
-- Couple fixes
-- Add metalinter to Makefile & apply some fixes
-- Last fixes & add to circle
-
-### Linting
-
-- Fixup some stuffs
-- Little more fixes
-
-### Makefile
-
-- Remove megacheck
-
-### Rpc
-
-- Fix client websocket timeout (#687)
-- Subscribe on reconnection (#689)
-
-### Rpc/lib
-
-- Remove dead files, closes #710
+- Add gas and fee fields to CheckTx
 
 ### Types/heartbeat
 
@@ -9105,100 +9165,9 @@
 
 - Keep a link
 
-## [0.11.0] - 2017-09-22
+### WsConnection
 
-### Documentation
-
-- Give index a Tools section
-- Update and clean up adr
-- Use README.rst to be pulled from tendermint
-- Re-add the images
-- Add original README's from tools repo
-- Convert from md to rst
-- Update index.rst
-- Move images in from tools repo
-- Harmonize headers for tools docs
-- Add kubes docs to mintnet doc, from tools
-- Add original tm-bench/monitor files
-- Organize tm-bench/monitor description
-- Pull from tools on build
-- Finish pull from tools
-- Organize the directory, #656
-- Add software.json from website (ecosystem)
-- Rename file
-- Add and re-format the ecosystem from website
-- Pull from tools' master branch
-- Using ABCI-CLI
-- Remove last section from ecosystem
-- Organize install a bit better
-
-### Makefile
-
-- Remove redundant lint
-
-### Adr
-
-- Add 005 consensus params
-
-### Circle
-
-- Add metalinter to test
-
-### Cmd
-
-- Dont wait for genesis. closes #562
-
-### Common
-
-- Fingerprint comment
-- WriteFileAtomic use tempfile in current dir
-
-### Consensus
-
-- Remove support for replay by #HEIGHT. closes #567
-- Use filepath for windows compatibility, closes #595
-
-### Lint
-
-- Couple more fixes
-
-### Linting
-
-- Cover the basics
-- Catch some errors
-- Add to Makefile & do some fixes
-- Next round  of fixes
-
-### Metalinter
-
-- Add linter to Makefile like tendermint
-
-### Node
-
-- NewNode takes DBProvider and GenDocProvider
-
-### P2p
-
-- Fully test PeerSet, more docs, parallelize PeerSet tests
-- Minor comment fixes
-- Delete unused and untested *IPRangeCount functions
-- Sw.AddPeer -> sw.addPeer
-- Allow listener with no external connection
-
-### Readme
-
-- Re-organize & update docs links
-
-### State
-
-- Minor comment fixes
-
-### Types
-
-- Remove redundant version file
-- PrivVal.Sign returns an error
-- More . -> cmn
-- Comments
+- Call onDisconnect
 
 ## [0.10.4] - 2017-09-05
 
