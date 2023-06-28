@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
-	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -280,14 +279,13 @@ func TestEvidenceVectors(t *testing.T) {
 	val := NewMockPVForQuorum(quorumHash)
 	val.ProTxHash = make([]byte, crypto.ProTxHashSize)
 	key := bls12381.GenPrivKeyFromSecret([]byte("it's a secret")) // deterministic key
-	ts, err := types.TimestampProto(time.Date(2022, 1, 2, 3, 4, 5, 6, time.UTC))
-	require.NoError(t, err)
+	ts := uint64(time.Date(2022, 1, 2, 3, 4, 5, 6, time.UTC).UnixMilli())
 	stateID := tmproto.StateID{
 		AppVersion:            StateIDVersion,
 		Height:                1,
 		AppHash:               make([]byte, crypto.DefaultAppHashSize),
 		CoreChainLockedHeight: 1,
-		Time:                  *ts,
+		Time:                  ts,
 	}.Hash()
 	val.UpdatePrivateKey(context.Background(), key, quorumHash, key.PubKey(), 10)
 	blockID := makeBlockID(crypto.Checksum([]byte("blockhash")), math.MaxInt32, crypto.Checksum([]byte("partshash")), stateID)

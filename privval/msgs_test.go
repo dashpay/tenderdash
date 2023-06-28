@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -23,10 +22,8 @@ var stamp = time.Date(2019, 10, 13, 16, 14, 44, 0, time.UTC)
 
 func exampleVote() *types.Vote {
 
-	ts, err := gogotypes.TimestampProto(time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC))
-	if err != nil {
-		panic(err)
-	}
+	ts := uint64(time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC).UnixMilli())
+
 	return &types.Vote{
 		Type:   tmproto.PrecommitType,
 		Height: 3,
@@ -42,7 +39,7 @@ func exampleVote() *types.Vote {
 				Height:                3,
 				AppHash:               crypto.Checksum([]byte("apphash")),
 				CoreChainLockedHeight: 12345,
-				Time:                  *ts,
+				Time:                  ts,
 			}.Hash(),
 		},
 		ValidatorProTxHash: crypto.ProTxHashFromSeedBytes([]byte("validator_pro_tx_hash")),

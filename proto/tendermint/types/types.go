@@ -4,8 +4,6 @@ import (
 	"bytes"
 	"fmt"
 
-	"github.com/gogo/protobuf/types"
-
 	"github.com/tendermint/tendermint/crypto"
 	"github.com/tendermint/tendermint/internal/libs/protoio"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
@@ -120,7 +118,7 @@ func (s *StateID) IsZero() bool {
 			s.AppVersion == 0 &&
 			s.CoreChainLockedHeight == 0 &&
 			s.Height == 0 &&
-			s.Time.Equal(types.Timestamp{}))
+			s.Time == 0)
 }
 
 // Copy returns new StateID that is equal to this one
@@ -134,12 +132,12 @@ func (s StateID) Copy() StateID {
 
 func (s StateID) String() string {
 	return fmt.Sprintf(
-		`v%d:h=%d,cl=%d,ah=%s,t=%s`,
+		`v%d:h=%d,cl=%d,ah=%s,t=%d`,
 		s.AppVersion,
 		s.Height,
 		s.CoreChainLockedHeight,
 		tmbytes.HexBytes(s.AppHash).ShortString(),
-		s.Time.String(),
+		s.Time,
 	)
 }
 
@@ -159,8 +157,8 @@ func (s StateID) Equal(other StateID) bool {
 
 // ValidateBasic performs basic validation.
 func (s StateID) ValidateBasic() error {
-	if s.Time.Equal(types.Timestamp{}) {
-		return fmt.Errorf("invalid stateID time %s", s.Time.String())
+	if s.Time == 0 {
+		return fmt.Errorf("invalid stateID time %d", s.Time)
 	}
 	if len(s.AppHash) != crypto.DefaultAppHashSize {
 		return fmt.Errorf(

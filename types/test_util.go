@@ -5,10 +5,9 @@ import (
 	"fmt"
 	"math/rand"
 
-	gogotypes "github.com/gogo/protobuf/types"
-
 	"github.com/tendermint/tendermint/crypto"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
+	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 )
 
@@ -20,7 +19,7 @@ func RandStateID() tmproto.StateID {
 		AppHash:               tmrand.Bytes(crypto.DefaultAppHashSize),
 		AppVersion:            StateIDVersion,
 		CoreChainLockedHeight: rand.Uint32(), //nolint:gosec
-		Time:                  *gogotypes.TimestampNow(),
+		Time:                  uint64(tmtime.Now().UnixMilli()),
 	}
 }
 

@@ -9,7 +9,6 @@ import (
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
-	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -59,7 +58,7 @@ func exampleVote(tb testing.TB, t byte) *Vote {
 		AppHash:               appHash,
 		AppVersion:            StateIDVersion,
 		CoreChainLockedHeight: 3,
-		Time:                  gogotypes.Timestamp{},
+		Time:                  0,
 	}
 	return &Vote{
 		Type:   tmproto.SignedMsgType(t),

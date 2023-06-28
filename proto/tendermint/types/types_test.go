@@ -7,12 +7,12 @@ import (
 	"testing"
 	time "time"
 
-	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/internal/libs/protoio"
 	"github.com/tendermint/tendermint/libs/rand"
+	tmtime "github.com/tendermint/tendermint/libs/time"
 )
 
 // TestVoteSignBytes checks if sign bytes are generated correctly.
@@ -24,7 +24,7 @@ func TestVoteSignBytes(t *testing.T) {
 		round   = 2
 		chainID = "some-chain"
 	)
-	ts := &gogotypes.Timestamp{}
+	ts := uint64(0)
 	h := bytes.Repeat([]byte{1, 2, 3, 4}, 8)
 
 	type testCase struct {
@@ -40,7 +40,7 @@ func TestVoteSignBytes(t *testing.T) {
 				Height:                height,
 				AppHash:               h,
 				CoreChainLockedHeight: 1,
-				Time:                  *ts,
+				Time:                  ts,
 			},
 			vote: Vote{
 				Type:   PrevoteType,
@@ -62,7 +62,7 @@ func TestVoteSignBytes(t *testing.T) {
 				Height:                height,
 				AppHash:               h,
 				CoreChainLockedHeight: 1,
-				Time:                  *ts,
+				Time:                  ts,
 			},
 			vote: Vote{
 				Type:   PrecommitType,
@@ -98,6 +98,7 @@ func TestVoteSignBytes(t *testing.T) {
 }
 
 func TestStateID_Equals(t *testing.T) {
+	ts := mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC))
 	tests := []struct {
 		state1 StateID
 		state2 StateID
@@ -109,14 +110,14 @@ func TestStateID_Equals(t *testing.T) {
 				Height:                123,
 				AppHash:               []byte("12345678901234567890123456789012"),
 				CoreChainLockedHeight: 12,
-				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+				Time:                  ts,
 			},
 			StateID{
 				AppVersion:            12,
 				Height:                123,
 				AppHash:               []byte("12345678901234567890123456789012"),
 				CoreChainLockedHeight: 12,
-				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+				Time:                  ts,
 			},
 			true,
 		},
@@ -126,14 +127,14 @@ func TestStateID_Equals(t *testing.T) {
 				Height:                123,
 				AppHash:               []byte("12345678901234567890123456789012"),
 				CoreChainLockedHeight: 12,
-				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+				Time:                  ts,
 			},
 			StateID{
 				AppVersion:            12,
 				Height:                124,
 				AppHash:               []byte("12345678901234567890123456789012"),
 				CoreChainLockedHeight: 12,
-				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+				Time:                  ts,
 			},
 			false,
 		},
@@ -143,14 +144,14 @@ func TestStateID_Equals(t *testing.T) {
 				Height:                123,
 				AppHash:               []byte("12345678901234567890123456789012"),
 				CoreChainLockedHeight: 12,
-				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+				Time:                  ts,
 			},
 			StateID{
 				AppVersion:            12,
 				Height:                123,
 				AppHash:               []byte("12345678901234567890123456789021"),
 				CoreChainLockedHeight: 12,
-				Time:                  *mustTimestamp(time.Date(2019, 1, 2, 3, 4, 5, 6, time.UTC)),
+				Time:                  ts,
 			},
 			false,
 		},
@@ -173,7 +174,7 @@ func TestStateIDIsZero(t *testing.T) {
 			expectZero: true,
 		},
 		{
-			StateID:    StateID{Time: *gogotypes.TimestampNow()},
+			StateID:    StateID{Time: uint64(tmtime.Now().UnixMilli())},
 			expectZero: false,
 		},
 	}
@@ -195,7 +196,7 @@ func TestStateIDSignBytes(t *testing.T) {
 			Height:                1,
 			AppHash:               rand.Bytes(32),
 			CoreChainLockedHeight: 123,
-			Time:                  *mustTimestamp(time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC)),
+			Time:                  mustTimestamp(time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC)),
 		},
 	}
 
@@ -211,10 +212,6 @@ func TestStateIDSignBytes(t *testing.T) {
 	}
 }
 
-func mustTimestamp(t time.Time) *gogotypes.Timestamp {
-	ts, err := gogotypes.TimestampProto(t)
-	if err != nil {
-		panic(err)
-	}
-	return ts
+func mustTimestamp(t time.Time) uint64 {
+	return uint64(t.UnixMilli())
 }

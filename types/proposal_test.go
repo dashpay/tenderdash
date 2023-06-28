@@ -8,7 +8,6 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -25,15 +24,14 @@ func getTestProposal(t testing.TB) *Proposal {
 	stamp, err := time.Parse(TimeFormat, "2018-02-11T07:09:22.765Z")
 	require.NoError(t, err)
 
-	ts, err := types.TimestampProto(stamp)
-	require.NoError(t, err)
+	ts := uint64(stamp.UnixMilli())
 
 	stateID := tmproto.StateID{
 		AppVersion:            StateIDVersion,
 		Height:                12345,
 		AppHash:               []byte("12345678901234567890123456789012"),
 		CoreChainLockedHeight: math.MaxUint32,
-		Time:                  *ts,
+		Time:                  ts,
 	}
 
 	return &Proposal{
