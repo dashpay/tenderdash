@@ -11,7 +11,7 @@ const (
 	// when not using git describe. It is formatted with semantic versioning.
 	TMVersionDefault = "0.12.0-dev.2"
 	// ABCISemVer is the semantic version of the ABCI library
-	ABCISemVer = "0.21.0"
+	ABCISemVer = "0.22.0"
 
 	ABCIVersion = ABCISemVer
 )
@@ -23,7 +23,7 @@ var (
 
 	// BlockProtocol versions all block data structures and processing.
 	// This includes validity of blocks and state updates.
-	BlockProtocol uint64 = 12
+	BlockProtocol uint64 = 13
 )
 
 type Consensus struct {

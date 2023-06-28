@@ -87,7 +87,7 @@ definition](https://github.com/tenderdash/tenderdash/blob/master/types/genesis.g
 
 ```json
 {
-  "genesis_time": "2020-04-21T11:17:42.341227868Z",
+  "genesis_time": "2020-04-21T11:17:42.341Z",
   "chain_id": "test-chain-ROp9KF",
   "initial_height": "0",
   "initial_core_chain_locked_height": 1,

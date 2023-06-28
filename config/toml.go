@@ -641,7 +641,7 @@ func writeFile(filePath string, contents []byte, mode os.FileMode) error {
 }
 
 const testGenesisFmt = `{
-  "genesis_time": "2018-10-10T08:20:13.695936996Z",
+  "genesis_time": "2018-10-10T08:20:13.695Z",
   "chain_id": "%s",
   "initial_height": "1",
   "initial_core_chain_locked_height": 1,

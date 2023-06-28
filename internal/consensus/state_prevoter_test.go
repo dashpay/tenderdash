@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"regexp"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
@@ -16,6 +15,7 @@ import (
 	"github.com/tendermint/tendermint/internal/test/factory"
 	tmrequire "github.com/tendermint/tendermint/internal/test/require"
 	"github.com/tendermint/tendermint/libs/log"
+	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
@@ -292,7 +292,7 @@ func (suite *PrevoterTestSuite) TestCheckPrevoteMaj23() {
 }
 
 func (suite *PrevoterTestSuite) makeValidStateData() StateData {
-	now := time.Now()
+	now := tmtime.Now()
 	validState := sm.State{
 		InitialHeight: 1000,
 		LastBlockTime: now,
