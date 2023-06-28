@@ -413,20 +413,20 @@ func TestProposerWaitTime(t *testing.T) {
 	}{
 		{
 			name:              "block time greater than local time",
-			previousBlockTime: genesisTime.Add(5 * time.Nanosecond),
-			localTime:         genesisTime.Add(1 * time.Nanosecond),
-			expectedWait:      4 * time.Nanosecond,
+			previousBlockTime: genesisTime.Add(5 * time.Millisecond),
+			localTime:         genesisTime.Add(1 * time.Millisecond),
+			expectedWait:      4 * time.Millisecond,
 		},
 		{
 			name:              "local time greater than block time",
-			previousBlockTime: genesisTime.Add(1 * time.Nanosecond),
-			localTime:         genesisTime.Add(5 * time.Nanosecond),
+			previousBlockTime: genesisTime.Add(1 * time.Millisecond),
+			localTime:         genesisTime.Add(5 * time.Millisecond),
 			expectedWait:      0,
 		},
 		{
 			name:              "both times equal",
-			previousBlockTime: genesisTime.Add(5 * time.Nanosecond),
-			localTime:         genesisTime.Add(5 * time.Nanosecond),
+			previousBlockTime: genesisTime.Add(5 * time.Millisecond),
+			localTime:         genesisTime.Add(5 * time.Millisecond),
 			expectedWait:      0,
 		},
 	}
