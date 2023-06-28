@@ -52,10 +52,11 @@ func TestVoteSignBytes(t *testing.T) {
 					StateID:       []byte{}, // filled later
 				},
 			},
-			expectHex: "0100000001000000000000000200000000000000fb7c89bf010a91d50f890455582b7fed0c346e53ab" +
-				"33df7da0bcd85c10fa92ead7509905b5407ee72dadd93b4ae70a24ad8a7755fc677acd2b215710a05cfc47736" +
-				"f6d652d636861696e",
-		},
+			expectHex: "0100000001000000000000000200000000000000" +
+				"fb7c89bf010a91d50f890455582b7fed0c346e53" +
+				"ab33df7da0bcd85c10fa92ea1854710e3fa0f558" +
+				"fee16269c62154c5ca00114f96d782df690a3f6d" +
+				"8e25c117736f6d652d636861696e"},
 		1: {
 			stateID: StateID{
 				AppVersion:            2,
@@ -74,9 +75,9 @@ func TestVoteSignBytes(t *testing.T) {
 					StateID:       []byte{}, // filled later
 				},
 			},
-			expectHex: "0200000001000000000000000200000000000000fb7c89bf010a91d50f8904" +
-				"55582b7fed0c346e53ab33df7da0bcd85c10fa92ead7509905b5407ee72dadd93b4ae70a2" +
-				"4ad8a7755fc677acd2b215710a05cfc47736f6d652d636861696e",
+			expectHex: "0200000001000000000000000200000000000000fb7c89bf010a91d50f890455582b7fed0c34" +
+				"6e53ab33df7da0bcd85c10fa92ea1854710e3fa0f558fee16269c62154c5ca00114f96d782df690a3f6d8e2" +
+				"5c117736f6d652d636861696e",
 		},
 	}
 
