@@ -283,7 +283,7 @@ type StateID struct {
 	AppHash []byte `protobuf:"bytes,3,opt,name=app_hash,json=appHash,proto3" json:"app_hash,omitempty"`
 	// CoreChainLockedHeight for the block, equal to Header.CoreChainLockedHeight.
 	CoreChainLockedHeight uint32 `protobuf:"fixed32,4,opt,name=core_chain_locked_height,json=coreChainLockedHeight,proto3" json:"core_chain_locked_height,omitempty"`
-	// Time of the block.
+	// Time of the block, truncated (rounded down) to millisecond
 	Time types.Timestamp `protobuf:"bytes,5,opt,name=time,proto3" json:"time"`
 }
 
@@ -356,7 +356,8 @@ type Header struct {
 	Version version.Consensus `protobuf:"bytes,1,opt,name=version,proto3" json:"version"`
 	ChainID string            `protobuf:"bytes,2,opt,name=chain_id,json=chainId,proto3" json:"chain_id,omitempty"`
 	Height  int64             `protobuf:"varint,3,opt,name=height,proto3" json:"height,omitempty"`
-	Time    time.Time         `protobuf:"bytes,4,opt,name=time,proto3,stdtime" json:"time"`
+	// Time of the block, truncated (rounded down) to millisecond
+	Time time.Time `protobuf:"bytes,4,opt,name=time,proto3,stdtime" json:"time"`
 	// prev block info
 	LastBlockId BlockID `protobuf:"bytes,5,opt,name=last_block_id,json=lastBlockId,proto3" json:"last_block_id"`
 	// hashes of block data
