@@ -14,7 +14,6 @@ import (
 	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
 	"github.com/tendermint/tendermint/libs/bits"
 	"github.com/tendermint/tendermint/libs/log"
-	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
@@ -498,7 +497,7 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 		psRound              = ps.PRS.Round
 		psCatchupCommitRound = ps.PRS.CatchupCommitRound
 		psCatchupCommit      = ps.PRS.CatchupCommit
-		startTime            = tmtime.Now().Add(-1 * time.Duration(msg.SecondsSinceStartTime) * time.Second)
+		startTime            = time.Now().Add(-1 * time.Duration(msg.SecondsSinceStartTime) * time.Second)
 	)
 
 	ps.PRS.Height = msg.Height
