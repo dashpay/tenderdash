@@ -603,6 +603,7 @@ func (suite *SyncerTestSuite) TestApplyChunksResults() {
 	}
 
 	for name, tc := range testCases {
+		tc := tc
 		suite.Run(name, func() {
 			suite.SetupTest() // reset
 			ctx, cancel := context.WithCancel(suite.ctx)
@@ -804,6 +805,7 @@ func (suite *SyncerTestSuite) TestApplyChunksRejectSenders() {
 	defer cancel()
 
 	for name, tc := range testCases {
+		tc := tc
 		suite.Run(name, func() {
 			for _, peerSnapshot := range peerSnapshots {
 				for _, s := range peerSnapshot.snapshot {
@@ -842,7 +844,7 @@ func (suite *SyncerTestSuite) TestApplyChunksRejectSenders() {
 			// However, it will block on e.g. retry result, so we spawn a goroutine that will
 			// be shut down when the chunk requestQueue closes.
 
-			_ = suite.syncer.applyChunks(ctx, queue, fetchStartTime) //nolint:errcheck // purposefully ignore error
+			_ = suite.syncer.applyChunks(ctx, queue, fetchStartTime)
 
 			s1peers := suite.syncer.snapshots.GetPeers(s1)
 			suite.Require().Len(s1peers, 2)
