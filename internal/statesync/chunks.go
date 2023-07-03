@@ -366,18 +366,6 @@ func (q *chunkQueue) validateChunk(chunk *chunk) error {
 	return nil
 }
 
-func (q *chunkQueue) closeWaiters(chunkID bytes.HexBytes) {
-	item, ok := q.items[chunkID.String()]
-	if !ok {
-		return
-	}
-	for _, waiter := range item.waitChs {
-		waiter <- chunkID
-		close(waiter)
-	}
-	item.waitChs = nil
-}
-
 func (c *chunkItem) remove() error {
 	if err := os.Remove(c.file); err != nil {
 		return fmt.Errorf("failed to remove chunk %s: %w", c.chunkID, err)

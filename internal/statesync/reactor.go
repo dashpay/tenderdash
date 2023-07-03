@@ -521,7 +521,7 @@ func (r *Reactor) backfill(
 	// time. Ideally we want the verification process to never have to be
 	// waiting on blocks. If it takes 4s to retrieve a block and 1s to verify
 	// it, then steady state involves four workers.
-	for i := 0; i < int(r.cfg.Fetchers); i++ {
+	for i := 0; i < r.cfg.Fetchers; i++ {
 		go func() {
 			for {
 				select {

@@ -312,9 +312,9 @@ func (suite *ChunkQueueTestSuite) TestRetryAll() {
 func (suite *ChunkQueueTestSuite) TestWaitFor() {
 	suite.initChunks()
 	require := suite.Require()
-	var waitForChs []<-chan bytes.HexBytes
-	for _, c := range suite.chunks {
-		waitForChs = append(waitForChs, suite.queue.WaitFor(c.ID))
+	waitForChs := make([]<-chan bytes.HexBytes, len(suite.chunks))
+	for i, c := range suite.chunks {
+		waitForChs[i] = suite.queue.WaitFor(c.ID)
 	}
 
 	for _, ch := range waitForChs {

@@ -167,10 +167,9 @@ func (s *SnapshotStore) LoadChunk(height uint64, version uint32, chunkID []byte)
 }
 
 type offerSnapshot struct {
-	snapshot  *abci.Snapshot
-	appHash   tmbytes.HexBytes
-	chunksIDx map[string]int
-	chunks    *ds.OrderedMap[string, []byte]
+	snapshot *abci.Snapshot
+	appHash  tmbytes.HexBytes
+	chunks   *ds.OrderedMap[string, []byte]
 }
 
 func newOfferSnapshot(snapshot *abci.Snapshot, appHash tmbytes.HexBytes) *offerSnapshot {
