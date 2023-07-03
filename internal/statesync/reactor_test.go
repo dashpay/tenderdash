@@ -91,7 +91,7 @@ func setup(
 	t.Helper()
 
 	if conn == nil {
-		conn = &clientmocks.Client{}
+		conn = clientmocks.NewClient(t)
 	}
 
 	rts := &reactorTestSuite{
@@ -146,7 +146,7 @@ func setup(
 		rts.paramsPeerErrCh,
 	)
 
-	rts.stateStore = &smmocks.Store{}
+	rts.stateStore = smmocks.NewStore(t)
 	rts.blockStore = store.NewBlockStore(dbm.NewMemDB())
 
 	cfg := config.DefaultStateSyncConfig()
@@ -227,38 +227,51 @@ func TestReactor_Sync(t *testing.T) {
 	rts := setup(ctx, t, nil, nil, 100)
 	chain := buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
 	// app accepts any snapshot
-	rts.conn.On("OfferSnapshot", ctx, mock.IsType(&abci.RequestOfferSnapshot{})).
+	rts.conn.
+		On("OfferSnapshot", ctx, mock.IsType(&abci.RequestOfferSnapshot{})).
 		Return(&abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ACCEPT}, nil)
 
-	// app accepts every chunk
-	rts.conn.On("ApplySnapshotChunk", ctx, mock.IsType(&abci.RequestApplySnapshotChunk{})).
-		Return(&abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}, nil)
+	rts.conn.
+		On("ApplySnapshotChunk", ctx, mock.IsType(&abci.RequestApplySnapshotChunk{})).
+		Once().
+		Return(&abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_COMPLETE_SNAPSHOT}, nil)
 
 	// app query returns valid state app hash
-	rts.conn.On("Info", mock.Anything, &proxy.RequestInfo).Return(&abci.ResponseInfo{
-		AppVersion:       testAppVersion,
-		LastBlockHeight:  snapshotHeight,
-		LastBlockAppHash: chain[snapshotHeight+1].AppHash,
-	}, nil)
+	rts.conn.
+		On("Info", mock.Anything, &proxy.RequestInfo).
+		Return(&abci.ResponseInfo{
+			AppVersion:       testAppVersion,
+			LastBlockHeight:  snapshotHeight,
+			LastBlockAppHash: chain[snapshotHeight+1].AppHash,
+		}, nil)
 
 	// store accepts state and validator sets
-	rts.stateStore.On("Bootstrap", mock.AnythingOfType("state.State")).Return(nil)
-	rts.stateStore.On("SaveValidatorSets", mock.AnythingOfType("int64"), mock.AnythingOfType("int64"),
-		mock.AnythingOfType("*types.ValidatorSet")).Return(nil)
+	rts.stateStore.
+		On("Bootstrap", mock.AnythingOfType("state.State")).
+		Return(nil)
+	rts.stateStore.
+		On("SaveValidatorSets",
+			mock.AnythingOfType("int64"),
+			mock.AnythingOfType("int64"),
+			mock.AnythingOfType("*types.ValidatorSet")).
+		Return(nil)
 
 	closeCh := make(chan struct{})
 	defer close(closeCh)
+
+	appHash := []byte{1, 2, 3}
+
 	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0)
 	go graduallyAddPeers(ctx, t, rts.peerUpdateCh, closeCh, 1*time.Second)
 	go handleSnapshotRequests(ctx, t, rts.snapshotOutCh, rts.snapshotInCh, closeCh, []snapshot{
 		{
-			Height: uint64(snapshotHeight),
-			Format: 1,
-			Chunks: 1,
+			Height:  uint64(snapshotHeight),
+			Version: 1,
+			Hash:    appHash,
 		},
 	})
 
-	go handleChunkRequests(ctx, t, rts.chunkOutCh, rts.chunkInCh, closeCh, []byte("abc"))
+	go handleChunkRequests(ctx, t, rts.chunkOutCh, rts.chunkInCh, closeCh, appHash, []byte("abc"))
 
 	go handleConsensusParamsRequest(ctx, t, rts.paramsOutCh, rts.paramsInCh, closeCh)
 
@@ -293,30 +306,31 @@ func TestReactor_ChunkRequest_InvalidRequest(t *testing.T) {
 }
 
 func TestReactor_ChunkRequest(t *testing.T) {
+	chunkID := []byte{1, 2, 3, 4}
 	testcases := map[string]struct {
 		request        *ssproto.ChunkRequest
 		chunk          []byte
 		expectResponse *ssproto.ChunkResponse
 	}{
 		"chunk is returned": {
-			&ssproto.ChunkRequest{Height: 1, Format: 1, Index: 1},
+			&ssproto.ChunkRequest{Height: 1, Version: 1, ChunkId: chunkID},
 			[]byte{1, 2, 3},
-			&ssproto.ChunkResponse{Height: 1, Format: 1, Index: 1, Chunk: []byte{1, 2, 3}},
+			&ssproto.ChunkResponse{Height: 1, Version: 1, ChunkId: chunkID, Chunk: []byte{1, 2, 3}},
 		},
 		"empty chunk is returned, as empty": {
-			&ssproto.ChunkRequest{Height: 1, Format: 1, Index: 1},
+			&ssproto.ChunkRequest{Height: 1, Version: 1, ChunkId: chunkID},
 			[]byte{},
-			&ssproto.ChunkResponse{Height: 1, Format: 1, Index: 1, Chunk: []byte{}},
+			&ssproto.ChunkResponse{Height: 1, Version: 1, ChunkId: chunkID, Chunk: []byte{}},
 		},
 		"nil (missing) chunk is returned as missing": {
-			&ssproto.ChunkRequest{Height: 1, Format: 1, Index: 1},
+			&ssproto.ChunkRequest{Height: 1, Version: 1, ChunkId: chunkID},
 			nil,
-			&ssproto.ChunkResponse{Height: 1, Format: 1, Index: 1, Missing: true},
+			&ssproto.ChunkResponse{Height: 1, Version: 1, ChunkId: chunkID, Missing: true},
 		},
 		"invalid request": {
-			&ssproto.ChunkRequest{Height: 1, Format: 1, Index: 1},
+			&ssproto.ChunkRequest{Height: 1, Version: 1, ChunkId: chunkID},
 			nil,
-			&ssproto.ChunkResponse{Height: 1, Format: 1, Index: 1, Missing: true},
+			&ssproto.ChunkResponse{Height: 1, Version: 1, ChunkId: chunkID, Missing: true},
 		},
 	}
 
@@ -331,9 +345,9 @@ func TestReactor_ChunkRequest(t *testing.T) {
 			// mock ABCI connection to return local snapshots
 			conn := &clientmocks.Client{}
 			conn.On("LoadSnapshotChunk", mock.Anything, &abci.RequestLoadSnapshotChunk{
-				Height: tc.request.Height,
-				Format: tc.request.Format,
-				Chunk:  tc.request.Index,
+				Height:  tc.request.Height,
+				Version: tc.request.Version,
+				ChunkId: tc.request.ChunkId,
 			}).Return(&abci.ResponseLoadSnapshotChunk{Chunk: tc.chunk}, nil)
 
 			rts := setup(ctx, t, conn, nil, 2)
@@ -380,30 +394,30 @@ func TestReactor_SnapshotsRequest(t *testing.T) {
 		"no snapshots": {nil, []*ssproto.SnapshotsResponse{}},
 		">10 unordered snapshots": {
 			[]*abci.Snapshot{
-				{Height: 1, Format: 2, Chunks: 7, Hash: []byte{1, 2}, Metadata: []byte{1}},
-				{Height: 2, Format: 2, Chunks: 7, Hash: []byte{2, 2}, Metadata: []byte{2}},
-				{Height: 3, Format: 2, Chunks: 7, Hash: []byte{3, 2}, Metadata: []byte{3}},
-				{Height: 1, Format: 1, Chunks: 7, Hash: []byte{1, 1}, Metadata: []byte{4}},
-				{Height: 2, Format: 1, Chunks: 7, Hash: []byte{2, 1}, Metadata: []byte{5}},
-				{Height: 3, Format: 1, Chunks: 7, Hash: []byte{3, 1}, Metadata: []byte{6}},
-				{Height: 1, Format: 4, Chunks: 7, Hash: []byte{1, 4}, Metadata: []byte{7}},
-				{Height: 2, Format: 4, Chunks: 7, Hash: []byte{2, 4}, Metadata: []byte{8}},
-				{Height: 3, Format: 4, Chunks: 7, Hash: []byte{3, 4}, Metadata: []byte{9}},
-				{Height: 1, Format: 3, Chunks: 7, Hash: []byte{1, 3}, Metadata: []byte{10}},
-				{Height: 2, Format: 3, Chunks: 7, Hash: []byte{2, 3}, Metadata: []byte{11}},
-				{Height: 3, Format: 3, Chunks: 7, Hash: []byte{3, 3}, Metadata: []byte{12}},
+				{Height: 1, Version: 2, Hash: []byte{1, 2}, Metadata: []byte{1}},
+				{Height: 2, Version: 2, Hash: []byte{2, 2}, Metadata: []byte{2}},
+				{Height: 3, Version: 2, Hash: []byte{3, 2}, Metadata: []byte{3}},
+				{Height: 1, Version: 1, Hash: []byte{1, 1}, Metadata: []byte{4}},
+				{Height: 2, Version: 1, Hash: []byte{2, 1}, Metadata: []byte{5}},
+				{Height: 3, Version: 1, Hash: []byte{3, 1}, Metadata: []byte{6}},
+				{Height: 1, Version: 4, Hash: []byte{1, 4}, Metadata: []byte{7}},
+				{Height: 2, Version: 4, Hash: []byte{2, 4}, Metadata: []byte{8}},
+				{Height: 3, Version: 4, Hash: []byte{3, 4}, Metadata: []byte{9}},
+				{Height: 1, Version: 3, Hash: []byte{1, 3}, Metadata: []byte{10}},
+				{Height: 2, Version: 3, Hash: []byte{2, 3}, Metadata: []byte{11}},
+				{Height: 3, Version: 3, Hash: []byte{3, 3}, Metadata: []byte{12}},
 			},
 			[]*ssproto.SnapshotsResponse{
-				{Height: 3, Format: 4, Chunks: 7, Hash: []byte{3, 4}, Metadata: []byte{9}},
-				{Height: 3, Format: 3, Chunks: 7, Hash: []byte{3, 3}, Metadata: []byte{12}},
-				{Height: 3, Format: 2, Chunks: 7, Hash: []byte{3, 2}, Metadata: []byte{3}},
-				{Height: 3, Format: 1, Chunks: 7, Hash: []byte{3, 1}, Metadata: []byte{6}},
-				{Height: 2, Format: 4, Chunks: 7, Hash: []byte{2, 4}, Metadata: []byte{8}},
-				{Height: 2, Format: 3, Chunks: 7, Hash: []byte{2, 3}, Metadata: []byte{11}},
-				{Height: 2, Format: 2, Chunks: 7, Hash: []byte{2, 2}, Metadata: []byte{2}},
-				{Height: 2, Format: 1, Chunks: 7, Hash: []byte{2, 1}, Metadata: []byte{5}},
-				{Height: 1, Format: 4, Chunks: 7, Hash: []byte{1, 4}, Metadata: []byte{7}},
-				{Height: 1, Format: 3, Chunks: 7, Hash: []byte{1, 3}, Metadata: []byte{10}},
+				{Height: 3, Version: 4, Hash: []byte{3, 4}, Metadata: []byte{9}},
+				{Height: 3, Version: 3, Hash: []byte{3, 3}, Metadata: []byte{12}},
+				{Height: 3, Version: 2, Hash: []byte{3, 2}, Metadata: []byte{3}},
+				{Height: 3, Version: 1, Hash: []byte{3, 1}, Metadata: []byte{6}},
+				{Height: 2, Version: 4, Hash: []byte{2, 4}, Metadata: []byte{8}},
+				{Height: 2, Version: 3, Hash: []byte{2, 3}, Metadata: []byte{11}},
+				{Height: 2, Version: 2, Hash: []byte{2, 2}, Metadata: []byte{2}},
+				{Height: 2, Version: 1, Hash: []byte{2, 1}, Metadata: []byte{5}},
+				{Height: 1, Version: 4, Hash: []byte{1, 4}, Metadata: []byte{7}},
+				{Height: 1, Version: 3, Hash: []byte{1, 3}, Metadata: []byte{10}},
 			},
 		},
 	}
@@ -633,7 +647,7 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	require.Equal(t, commit.BlockID, state.LastBlockID)
 
 	added, err := rts.reactor.getSyncer().AddSnapshot(peerA, &snapshot{
-		Height: 1, Format: 2, Chunks: 7, Hash: []byte{1, 2}, Metadata: []byte{1},
+		Height: 1, Version: 2, Hash: []byte{1, 2}, Metadata: []byte{1},
 	})
 	require.NoError(t, err)
 	require.True(t, added)
@@ -696,14 +710,19 @@ func TestReactor_Backfill(t *testing.T) {
 			}
 
 			trackingHeight := startHeight
-			rts.stateStore.On("SaveValidatorSets", mock.AnythingOfType("int64"), mock.AnythingOfType("int64"),
-				mock.AnythingOfType("*types.ValidatorSet")).Return(func(lh, uh int64, vals *types.ValidatorSet) error {
-				require.Equal(t, trackingHeight, lh)
-				require.Equal(t, lh, uh)
-				require.GreaterOrEqual(t, lh, stopHeight)
-				trackingHeight--
-				return nil
-			})
+			rts.stateStore.
+				On("SaveValidatorSets",
+					mock.AnythingOfType("int64"),
+					mock.AnythingOfType("int64"),
+					mock.AnythingOfType("*types.ValidatorSet")).
+				Maybe().
+				Return(func(lh, uh int64, vals *types.ValidatorSet) error {
+					require.Equal(t, trackingHeight, lh)
+					require.Equal(t, lh, uh)
+					require.GreaterOrEqual(t, lh, stopHeight)
+					trackingHeight--
+					return nil
+				})
 
 			chain := buildLightBlockChain(ctx, t, stopHeight-1, startHeight+1, stopTime, rts.privVal)
 
@@ -948,8 +967,7 @@ func handleSnapshotRequests(
 					ChannelID: SnapshotChannel,
 					Message: &ssproto.SnapshotsResponse{
 						Height:   snapshot.Height,
-						Format:   snapshot.Format,
-						Chunks:   snapshot.Chunks,
+						Version:  snapshot.Version,
 						Hash:     snapshot.Hash,
 						Metadata: snapshot.Metadata,
 					},
@@ -965,6 +983,7 @@ func handleChunkRequests(
 	receivingCh chan p2p.Envelope,
 	sendingCh chan p2p.Envelope,
 	closeCh chan struct{},
+	chunkID []byte,
 	chunk []byte,
 ) {
 	t.Helper()
@@ -981,9 +1000,9 @@ func handleChunkRequests(
 				From:      envelope.To,
 				ChannelID: ChunkChannel,
 				Message: &ssproto.ChunkResponse{
+					ChunkId: chunkID,
 					Height:  msg.Height,
-					Format:  msg.Format,
-					Index:   msg.Index,
+					Version: msg.Version,
 					Chunk:   chunk,
 					Missing: false,
 				},

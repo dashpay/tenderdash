@@ -12,19 +12,17 @@ func TestSnapshot_Key(t *testing.T) {
 	testcases := map[string]struct {
 		modify func(*snapshot)
 	}{
-		"new height":      {func(s *snapshot) { s.Height = 9 }},
-		"new format":      {func(s *snapshot) { s.Format = 9 }},
-		"new chunk count": {func(s *snapshot) { s.Chunks = 9 }},
-		"new hash":        {func(s *snapshot) { s.Hash = []byte{9} }},
-		"no metadata":     {func(s *snapshot) { s.Metadata = nil }},
+		"new height":  {func(s *snapshot) { s.Height = 9 }},
+		"new format":  {func(s *snapshot) { s.Version = 9 }},
+		"new hash":    {func(s *snapshot) { s.Hash = []byte{9} }},
+		"no metadata": {func(s *snapshot) { s.Metadata = nil }},
 	}
 	for name, tc := range testcases {
 		tc := tc
 		t.Run(name, func(t *testing.T) {
 			s := snapshot{
 				Height:   3,
-				Format:   1,
-				Chunks:   7,
+				Version:  1,
 				Hash:     []byte{1, 2, 3},
 				Metadata: []byte{255},
 			}
@@ -42,10 +40,9 @@ func TestSnapshotPool_Add(t *testing.T) {
 	// Adding to the pool should work
 	pool := newSnapshotPool()
 	added, err := pool.Add(peerID, &snapshot{
-		Height: 1,
-		Format: 1,
-		Chunks: 1,
-		Hash:   []byte{1},
+		Height:  1,
+		Version: 1,
+		Hash:    []byte{1},
 	})
 	require.NoError(t, err)
 	require.True(t, added)
@@ -53,10 +50,9 @@ func TestSnapshotPool_Add(t *testing.T) {
 	// Adding again from a different peer should return false
 	otherNodeID := types.NodeID("bb")
 	added, err = pool.Add(otherNodeID, &snapshot{
-		Height: 1,
-		Format: 1,
-		Chunks: 1,
-		Hash:   []byte{1},
+		Height:  1,
+		Version: 1,
+		Hash:    []byte{1},
 	})
 	require.NoError(t, err)
 	require.False(t, added)
@@ -68,7 +64,7 @@ func TestSnapshotPool_Add(t *testing.T) {
 func TestSnapshotPool_GetPeer(t *testing.T) {
 	pool := newSnapshotPool()
 
-	s := &snapshot{Height: 1, Format: 1, Chunks: 1, Hash: []byte{1}}
+	s := &snapshot{Height: 1, Version: 1, Hash: []byte{1}}
 
 	peerAID := types.NodeID("aa")
 	peerBID := types.NodeID("bb")
@@ -79,7 +75,7 @@ func TestSnapshotPool_GetPeer(t *testing.T) {
 	_, err = pool.Add(peerBID, s)
 	require.NoError(t, err)
 
-	_, err = pool.Add(peerAID, &snapshot{Height: 2, Format: 1, Chunks: 1, Hash: []byte{1}})
+	_, err = pool.Add(peerAID, &snapshot{Height: 2, Version: 1, Hash: []byte{1}})
 	require.NoError(t, err)
 
 	// GetPeer currently picks a random peer, so lets run it until we've seen both.
@@ -96,14 +92,14 @@ func TestSnapshotPool_GetPeer(t *testing.T) {
 	}
 
 	// GetPeer should return empty for an unknown snapshot
-	peer := pool.GetPeer(&snapshot{Height: 9, Format: 9})
+	peer := pool.GetPeer(&snapshot{Height: 9, Version: 9})
 	require.EqualValues(t, "", peer)
 }
 
 func TestSnapshotPool_GetPeers(t *testing.T) {
 	pool := newSnapshotPool()
 
-	s := &snapshot{Height: 1, Format: 1, Chunks: 1, Hash: []byte{1}}
+	s := &snapshot{Height: 1, Version: 1, Hash: []byte{1}}
 
 	peerAID := types.NodeID("aa")
 	peerBID := types.NodeID("bb")
@@ -114,7 +110,7 @@ func TestSnapshotPool_GetPeers(t *testing.T) {
 	_, err = pool.Add(peerBID, s)
 	require.NoError(t, err)
 
-	_, err = pool.Add(peerAID, &snapshot{Height: 2, Format: 1, Chunks: 1, Hash: []byte{2}})
+	_, err = pool.Add(peerAID, &snapshot{Height: 2, Version: 1, Hash: []byte{2}})
 	require.NoError(t, err)
 
 	peers := pool.GetPeers(s)
@@ -133,11 +129,11 @@ func TestSnapshotPool_Ranked_Best(t *testing.T) {
 		snapshot *snapshot
 		peers    []types.NodeID
 	}{
-		{&snapshot{Height: 2, Format: 2, Chunks: 4, Hash: []byte{1, 3}}, []types.NodeID{"AA", "BB", "CC", "DD"}},
-		{&snapshot{Height: 1, Format: 1, Chunks: 4, Hash: []byte{1, 2}}, []types.NodeID{"AA", "BB", "CC", "DD"}},
-		{&snapshot{Height: 2, Format: 2, Chunks: 5, Hash: []byte{1, 2}}, []types.NodeID{"AA", "BB", "CC"}},
-		{&snapshot{Height: 2, Format: 1, Chunks: 3, Hash: []byte{1, 2}}, []types.NodeID{"AA", "BB", "CC"}},
-		{&snapshot{Height: 1, Format: 2, Chunks: 5, Hash: []byte{1, 2}}, []types.NodeID{"AA", "BB", "CC"}},
+		{&snapshot{Height: 2, Version: 2, Hash: []byte{1, 3}}, []types.NodeID{"AA", "BB", "CC", "DD"}},
+		{&snapshot{Height: 1, Version: 1, Hash: []byte{1, 2}}, []types.NodeID{"AA", "BB", "CC", "DD"}},
+		{&snapshot{Height: 2, Version: 2, Hash: []byte{1, 2}}, []types.NodeID{"AA", "BB", "CC"}},
+		{&snapshot{Height: 2, Version: 1, Hash: []byte{1, 2}}, []types.NodeID{"AA", "BB", "CC"}},
+		{&snapshot{Height: 1, Version: 2, Hash: []byte{1, 2}}, []types.NodeID{"AA", "BB", "CC"}},
 	}
 
 	// Add snapshots in reverse order, to make sure the pool enforces some order.
@@ -172,10 +168,10 @@ func TestSnapshotPool_Reject(t *testing.T) {
 	peerID := types.NodeID("aa")
 
 	snapshots := []*snapshot{
-		{Height: 2, Format: 2, Chunks: 1, Hash: []byte{1, 2}},
-		{Height: 2, Format: 1, Chunks: 1, Hash: []byte{1, 2}},
-		{Height: 1, Format: 2, Chunks: 1, Hash: []byte{1, 2}},
-		{Height: 1, Format: 1, Chunks: 1, Hash: []byte{1, 2}},
+		{Height: 2, Version: 2, Hash: []byte{1, 2}},
+		{Height: 2, Version: 1, Hash: []byte{1, 2}},
+		{Height: 1, Version: 2, Hash: []byte{1, 2}},
+		{Height: 1, Version: 1, Hash: []byte{1, 2}},
 	}
 	for _, s := range snapshots {
 		_, err := pool.Add(peerID, s)
@@ -189,7 +185,7 @@ func TestSnapshotPool_Reject(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, added)
 
-	added, err = pool.Add(peerID, &snapshot{Height: 3, Format: 3, Chunks: 1, Hash: []byte{1}})
+	added, err = pool.Add(peerID, &snapshot{Height: 3, Version: 3, Hash: []byte{1}})
 	require.NoError(t, err)
 	require.True(t, added)
 }
@@ -200,10 +196,10 @@ func TestSnapshotPool_RejectFormat(t *testing.T) {
 	peerID := types.NodeID("aa")
 
 	snapshots := []*snapshot{
-		{Height: 2, Format: 2, Chunks: 1, Hash: []byte{1, 2}},
-		{Height: 2, Format: 1, Chunks: 1, Hash: []byte{1, 2}},
-		{Height: 1, Format: 2, Chunks: 1, Hash: []byte{1, 2}},
-		{Height: 1, Format: 1, Chunks: 1, Hash: []byte{1, 2}},
+		{Height: 2, Version: 2, Hash: []byte{1, 2}},
+		{Height: 2, Version: 1, Hash: []byte{1, 2}},
+		{Height: 1, Version: 2, Hash: []byte{1, 2}},
+		{Height: 1, Version: 1, Hash: []byte{1, 2}},
 	}
 	for _, s := range snapshots {
 		_, err := pool.Add(peerID, s)
@@ -213,12 +209,12 @@ func TestSnapshotPool_RejectFormat(t *testing.T) {
 	pool.RejectFormat(1)
 	require.Equal(t, []*snapshot{snapshots[0], snapshots[2]}, pool.Ranked())
 
-	added, err := pool.Add(peerID, &snapshot{Height: 3, Format: 1, Chunks: 1, Hash: []byte{1}})
+	added, err := pool.Add(peerID, &snapshot{Height: 3, Version: 1, Hash: []byte{1}})
 	require.NoError(t, err)
 	require.False(t, added)
 	require.Equal(t, []*snapshot{snapshots[0], snapshots[2]}, pool.Ranked())
 
-	added, err = pool.Add(peerID, &snapshot{Height: 3, Format: 3, Chunks: 1, Hash: []byte{1}})
+	added, err = pool.Add(peerID, &snapshot{Height: 3, Version: 3, Hash: []byte{1}})
 	require.NoError(t, err)
 	require.True(t, added)
 }
@@ -229,9 +225,9 @@ func TestSnapshotPool_RejectPeer(t *testing.T) {
 	peerAID := types.NodeID("aa")
 	peerBID := types.NodeID("bb")
 
-	s1 := &snapshot{Height: 1, Format: 1, Chunks: 1, Hash: []byte{1}}
-	s2 := &snapshot{Height: 2, Format: 1, Chunks: 1, Hash: []byte{2}}
-	s3 := &snapshot{Height: 3, Format: 1, Chunks: 1, Hash: []byte{2}}
+	s1 := &snapshot{Height: 1, Version: 1, Hash: []byte{1}}
+	s2 := &snapshot{Height: 2, Version: 1, Hash: []byte{2}}
+	s3 := &snapshot{Height: 3, Version: 1, Hash: []byte{2}}
 
 	_, err := pool.Add(peerAID, s1)
 	require.NoError(t, err)
@@ -269,8 +265,8 @@ func TestSnapshotPool_RemovePeer(t *testing.T) {
 	peerAID := types.NodeID("aa")
 	peerBID := types.NodeID("bb")
 
-	s1 := &snapshot{Height: 1, Format: 1, Chunks: 1, Hash: []byte{1}}
-	s2 := &snapshot{Height: 2, Format: 1, Chunks: 1, Hash: []byte{2}}
+	s1 := &snapshot{Height: 1, Version: 1, Hash: []byte{1}}
+	s2 := &snapshot{Height: 2, Version: 1, Hash: []byte{2}}
 
 	_, err := pool.Add(peerAID, s1)
 	require.NoError(t, err)

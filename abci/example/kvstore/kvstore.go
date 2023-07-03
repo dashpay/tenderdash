@@ -493,7 +493,7 @@ func (app *Application) LoadSnapshotChunk(_ context.Context, req *abci.RequestLo
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	chunk, err := app.snapshots.LoadChunk(req.Height, req.Format, req.Chunk)
+	chunk, err := app.snapshots.LoadChunk(req.Height, req.Version, req.ChunkId)
 	if err != nil {
 		return &abci.ResponseLoadSnapshotChunk{}, err
 	}
@@ -523,7 +523,7 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 	if app.offerSnapshot == nil {
 		return &abci.ResponseApplySnapshotChunk{}, fmt.Errorf("no restore in progress")
 	}
-	app.offerSnapshot.addChunk(int(req.Index), req.Chunk)
+	app.offerSnapshot.addChunk(req.ChunkId, req.Chunk)
 
 	if app.offerSnapshot.isFull() {
 		chunks := app.offerSnapshot.bytes()

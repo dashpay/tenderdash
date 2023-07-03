@@ -911,7 +911,7 @@ type StateSyncConfig struct {
 	ChunkRequestTimeout time.Duration `mapstructure:"chunk-request-timeout"`
 
 	// The number of concurrent chunk and block fetchers to run (default: 4).
-	Fetchers int32 `mapstructure:"fetchers"`
+	Fetchers int `mapstructure:"fetchers"`
 }
 
 func (cfg *StateSyncConfig) TrustHashBytes() []byte {

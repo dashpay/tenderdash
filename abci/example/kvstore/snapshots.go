@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 
@@ -15,6 +14,7 @@ import (
 	abci "github.com/tendermint/tendermint/abci/types"
 	"github.com/tendermint/tendermint/crypto"
 	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	"github.com/tendermint/tendermint/libs/ds"
 )
 
 const (
@@ -96,10 +96,9 @@ func (s *SnapshotStore) Create(state State) (abci.Snapshot, error) {
 	}
 	height := state.GetHeight()
 	snapshot := abci.Snapshot{
-		Height: uint64(height),
-		Format: 1,
-		Hash:   crypto.Checksum(bz),
-		Chunks: byteChunks(bz),
+		Height:  uint64(height),
+		Version: 1,
+		Hash:    crypto.Checksum(bz),
 	}
 	err = os.WriteFile(filepath.Join(s.dir, fmt.Sprintf("%v.json", height)), bz, 0644)
 	if err != nil {
@@ -152,72 +151,63 @@ func (s *SnapshotStore) List() ([]*abci.Snapshot, error) {
 }
 
 // LoadChunk loads a snapshot chunk.
-func (s *SnapshotStore) LoadChunk(height uint64, format uint32, chunk uint32) ([]byte, error) {
+func (s *SnapshotStore) LoadChunk(height uint64, version uint32, chunkID []byte) ([]byte, error) {
 	s.RLock()
 	defer s.RUnlock()
 	for _, snapshot := range s.metadata {
-		if snapshot.Height == height && snapshot.Format == format {
+		if snapshot.Height == height && snapshot.Version == version {
 			bz, err := os.ReadFile(filepath.Join(s.dir, fmt.Sprintf("%v.json", height)))
 			if err != nil {
 				return nil, err
 			}
-			return byteChunk(bz, chunk), nil
+			return byteChunk(bz, chunkID), nil
 		}
 	}
 	return nil, nil
 }
 
 type offerSnapshot struct {
-	snapshot *abci.Snapshot
-	appHash  tmbytes.HexBytes
-	chunks   [][]byte
-	chunkCnt int
+	snapshot  *abci.Snapshot
+	appHash   tmbytes.HexBytes
+	chunksIDx map[string]int
+	chunks    *ds.OrderedMap[string, []byte]
 }
 
 func newOfferSnapshot(snapshot *abci.Snapshot, appHash tmbytes.HexBytes) *offerSnapshot {
 	return &offerSnapshot{
 		snapshot: snapshot,
 		appHash:  appHash,
-		chunks:   make([][]byte, snapshot.Chunks),
-		chunkCnt: 0,
+		chunks:   ds.NewOrderedMap[string, []byte](),
 	}
 }
 
-func (s *offerSnapshot) addChunk(index int, chunk []byte) {
-	if s.chunks[index] != nil {
+func (s *offerSnapshot) addChunk(chunkID tmbytes.HexBytes, chunk []byte) {
+	if s.chunks.Has(chunkID.String()) {
 		return
 	}
-	s.chunks[index] = chunk
-	s.chunkCnt++
+	s.chunks.Put(chunkID.String(), chunk)
 }
 
 func (s *offerSnapshot) isFull() bool {
-	return s.chunkCnt == int(s.snapshot.Chunks)
+	return bytes.Equal(crypto.Checksum(s.bytes()), s.snapshot.Hash)
 }
 
 func (s *offerSnapshot) bytes() []byte {
+	chunks := s.chunks.Values()
 	buf := bytes.NewBuffer(nil)
-	for _, chunk := range s.chunks {
+	for _, chunk := range chunks {
 		buf.Write(chunk)
 	}
 	return buf.Bytes()
 }
 
 // byteChunk returns the chunk at a given index from the full byte slice.
-func byteChunk(bz []byte, index uint32) []byte {
-	start := int(index * snapshotChunkSize)
-	end := int((index + 1) * snapshotChunkSize)
-	switch {
-	case start >= len(bz):
-		return nil
-	case end >= len(bz):
-		return bz[start:]
-	default:
-		return bz[start:end]
+func byteChunk(bz []byte, chunkID []byte) []byte {
+	for i := 0; i < len(bz); i += snapshotChunkSize {
+		key := crypto.Checksum(bz[i : i+snapshotChunkSize])
+		if bytes.Equal(key, chunkID) {
+			return append([]byte(nil), bz[i:i+snapshotChunkSize]...)
+		}
 	}
-}
-
-// byteChunks calculates the number of chunks in the byte slice.
-func byteChunks(bz []byte) uint32 {
-	return uint32(math.Ceil(float64(len(bz)) / snapshotChunkSize))
+	return bz[:snapshotChunkSize]
 }

@@ -19,8 +19,7 @@ type snapshotKey [sha256.Size]byte
 // snapshot contains data about a snapshot.
 type snapshot struct {
 	Height   uint64
-	Format   uint32
-	Chunks   uint32
+	Version  uint32
 	Hash     tmbytes.HexBytes
 	Metadata []byte
 
@@ -36,8 +35,7 @@ func (s *snapshot) Key() snapshotKey {
 
 	bz := make([]byte, 0, (64+32+32)/8)
 	bz = binary.LittleEndian.AppendUint64(bz, s.Height)
-	bz = binary.LittleEndian.AppendUint32(bz, s.Format)
-	bz = binary.LittleEndian.AppendUint32(bz, s.Chunks)
+	bz = binary.LittleEndian.AppendUint32(bz, s.Version)
 	hasher.Write(bz)
 	hasher.Write(s.Hash)
 	hasher.Write(s.Metadata)
@@ -88,7 +86,7 @@ func (p *snapshotPool) Add(peerID types.NodeID, snapshot *snapshot) (bool, error
 	defer p.Unlock()
 
 	switch {
-	case p.formatBlacklist[snapshot.Format]:
+	case p.formatBlacklist[snapshot.Version]:
 		return false, nil
 	case p.peerBlacklist[peerID]:
 		return false, nil
@@ -113,10 +111,10 @@ func (p *snapshotPool) Add(peerID types.NodeID, snapshot *snapshot) (bool, error
 	}
 	p.snapshots[key] = snapshot
 
-	if p.formatIndex[snapshot.Format] == nil {
-		p.formatIndex[snapshot.Format] = make(map[snapshotKey]bool)
+	if p.formatIndex[snapshot.Version] == nil {
+		p.formatIndex[snapshot.Version] = make(map[snapshotKey]bool)
 	}
-	p.formatIndex[snapshot.Format][key] = true
+	p.formatIndex[snapshot.Version][key] = true
 
 	if p.heightIndex[snapshot.Height] == nil {
 		p.heightIndex[snapshot.Height] = make(map[snapshotKey]bool)
@@ -216,9 +214,9 @@ func (p *snapshotPool) sorterFactory(candidates []*snapshot) func(int, int) bool
 			return false
 		case len(p.snapshotPeers[a.Key()]) > len(p.snapshotPeers[b.Key()]):
 			return true
-		case a.Format > b.Format:
+		case a.Version > b.Version:
 			return true
-		case a.Format < b.Format:
+		case a.Version < b.Version:
 			return false
 		default:
 			return false
@@ -287,7 +285,7 @@ func (p *snapshotPool) removeSnapshot(key snapshotKey) {
 	}
 
 	delete(p.snapshots, key)
-	delete(p.formatIndex[snapshot.Format], key)
+	delete(p.formatIndex[snapshot.Version], key)
 	delete(p.heightIndex[snapshot.Height], key)
 	for peerID := range p.snapshotPeers[key] {
 		delete(p.peerIndex[peerID], key)

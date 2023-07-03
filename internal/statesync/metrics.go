@@ -21,8 +21,6 @@ type Metrics struct {
 	SnapshotHeight metrics.Gauge
 	// The current number of chunks that have been processed.
 	SnapshotChunk metrics.Counter
-	// The total number of chunks in the current snapshot.
-	SnapshotChunkTotal metrics.Gauge
 	// The current number of blocks that have been back-filled.
 	BackFilledBlocks metrics.Counter
 	// The total number of blocks that need to be back-filled.
