@@ -443,7 +443,6 @@ func (m *Echo) GetValue() string {
 type Envelope struct {
 	Attributes map[string]string `protobuf:"bytes,1,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	// Types that are valid to be assigned to Sum:
-	//
 	//	*Envelope_Echo
 	//	*Envelope_PexRequest
 	//	*Envelope_PexResponse
