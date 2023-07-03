@@ -493,24 +493,20 @@ func TestSnapshots(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, types.ResponseOfferSnapshot_ACCEPT, respOffer.Result)
+	loaded, err := app.LoadSnapshotChunk(ctx, &types.RequestLoadSnapshotChunk{
+		Height:  recentSnapshot.Height,
+		ChunkId: recentSnapshot.Hash,
+		Version: recentSnapshot.Version,
+	})
+	require.NoError(t, err)
 
-	for chunk := uint32(0); chunk < recentSnapshot.Chunks; chunk++ {
-		loaded, err := app.LoadSnapshotChunk(ctx, &types.RequestLoadSnapshotChunk{
-			Height: recentSnapshot.Height,
-			Chunk:  chunk,
-			Format: recentSnapshot.Format,
-		})
-		require.NoError(t, err)
-
-		applied, err := dstApp.ApplySnapshotChunk(ctx, &types.RequestApplySnapshotChunk{
-			Index:  chunk,
-			Chunk:  loaded.Chunk,
-			Sender: "app",
-		})
-		require.NoError(t, err)
-		assert.Equal(t, types.ResponseApplySnapshotChunk_ACCEPT, applied.Result)
-	}
-
+	applied, err := dstApp.ApplySnapshotChunk(ctx, &types.RequestApplySnapshotChunk{
+		ChunkId: recentSnapshot.Hash,
+		Chunk:   loaded.Chunk,
+		Sender:  "app",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, types.ResponseApplySnapshotChunk_ACCEPT, applied.Result)
 	infoResp, err := dstApp.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
 	assertRespInfo(t, int64(recentSnapshot.Height), appHashes[snapshotHeight], *infoResp)

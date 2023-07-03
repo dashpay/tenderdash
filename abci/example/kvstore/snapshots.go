@@ -204,9 +204,13 @@ func (s *offerSnapshot) bytes() []byte {
 // byteChunk returns the chunk at a given index from the full byte slice.
 func byteChunk(bz []byte, chunkID []byte) []byte {
 	for i := 0; i < len(bz); i += snapshotChunkSize {
-		key := crypto.Checksum(bz[i : i+snapshotChunkSize])
+		j := i + snapshotChunkSize
+		if j > len(bz) {
+			j = len(bz)
+		}
+		key := crypto.Checksum(bz[i:j])
 		if bytes.Equal(key, chunkID) {
-			return append([]byte(nil), bz[i:i+snapshotChunkSize]...)
+			return append([]byte(nil), bz[i:j]...)
 		}
 	}
 	return bz[:snapshotChunkSize]
