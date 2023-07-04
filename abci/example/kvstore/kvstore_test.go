@@ -506,7 +506,7 @@ func TestSnapshots(t *testing.T) {
 		Sender:  "app",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, types.ResponseApplySnapshotChunk_ACCEPT, applied.Result)
+	assert.Equal(t, types.ResponseApplySnapshotChunk_COMPLETE_SNAPSHOT, applied.Result)
 	infoResp, err := dstApp.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
 	assertRespInfo(t, int64(recentSnapshot.Height), appHashes[snapshotHeight], *infoResp)
