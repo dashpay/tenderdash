@@ -487,8 +487,8 @@ func (s *syncer) acceptChunk(queue *chunkQueue, start time.Time) {
 }
 
 // fetchChunks requests chunks from peers, receiving allocations from the chunk queue. Chunks
-// will be received from the reactor via syncer.AddChunks() to chunkQueue.Add().
-func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, chunks *chunkQueue) {
+// will be received from the reactor via syncer.AddChunks() to queue.Add().
+func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chunkQueue) {
 	ticker := time.NewTicker(s.retryTimeout)
 	defer ticker.Stop()
 	dequeueChunkIDTimeout := s.dequeueChunkIDTimeout
@@ -496,7 +496,7 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, chunks *ch
 		dequeueChunkIDTimeout = dequeueChunkIDTimeoutDefault
 	}
 	for {
-		if s.chunkQueue.IsRequestEmpty() {
+		if queue.IsRequestEmpty() {
 			select {
 			case <-ctx.Done():
 				return
@@ -504,7 +504,7 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, chunks *ch
 				continue
 			}
 		}
-		ID, err := s.chunkQueue.Dequeue()
+		ID, err := queue.Dequeue()
 		if errors.Is(err, errQueueEmpty) {
 			continue
 		}
@@ -517,7 +517,7 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, chunks *ch
 			return
 		}
 		select {
-		case <-chunks.WaitFor(ID):
+		case <-queue.WaitFor(ID):
 			// do nothing
 		case <-ticker.C:
 			s.chunkQueue.Enqueue(ID)
