@@ -429,9 +429,9 @@ func (s *syncer) applyChunks(ctx context.Context, queue *chunkQueue, start time.
 		if err != nil {
 			return fmt.Errorf("failed to apply chunkID %x: %w", chunk.ID, err)
 		}
-		s.logger.Info("Applied snapshot chunk to ABCI app",
+		s.logger.Info("applied snapshot chunk to ABCI app",
 			"height", chunk.Height,
-			"format", chunk.Version,
+			"version", chunk.Version,
 			"chunkID", chunk.ID.String())
 
 		// Discard and refetch any chunks as requested by the app
@@ -454,6 +454,10 @@ func (s *syncer) applyChunks(ctx context.Context, queue *chunkQueue, start time.
 				}
 			}
 		}
+
+		s.logger.Debug("snapshot chunk applied",
+			"result", resp.Result.String(),
+			"chunkID", chunk.ID.String())
 
 		switch resp.Result {
 		case abci.ResponseApplySnapshotChunk_ACCEPT:

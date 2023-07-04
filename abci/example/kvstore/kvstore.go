@@ -523,7 +523,11 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 	if app.offerSnapshot == nil {
 		return &abci.ResponseApplySnapshotChunk{}, fmt.Errorf("no restore in progress")
 	}
-	app.offerSnapshot.addChunk(req.ChunkId, req.Chunk)
+
+	resp := &abci.ResponseApplySnapshotChunk{
+		Result:     abci.ResponseApplySnapshotChunk_ACCEPT,
+		NextChunks: app.offerSnapshot.addChunk(req.ChunkId, req.Chunk),
+	}
 
 	if app.offerSnapshot.isFull() {
 		chunks := app.offerSnapshot.bytes()
@@ -538,10 +542,9 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 			"snapshot_height", app.offerSnapshot.snapshot.Height,
 			"snapshot_apphash", app.offerSnapshot.appHash,
 		)
+		resp.Result = abci.ResponseApplySnapshotChunk_COMPLETE_SNAPSHOT
 		app.offerSnapshot = nil
 	}
-
-	resp := &abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}
 
 	app.logger.Debug("ApplySnapshotChunk", "resp", resp)
 	return resp, nil
