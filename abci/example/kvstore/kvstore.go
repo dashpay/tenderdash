@@ -559,7 +559,9 @@ func (app *Application) createSnapshot() error {
 	if err != nil {
 		return fmt.Errorf("create snapshot: %w", err)
 	}
-	app.logger.Info("created state sync snapshot", "height", height, "apphash", app.LastCommittedState.GetAppHash())
+	app.logger.Info("created state sync snapshot",
+		"height", height,
+		"apphash", app.LastCommittedState.GetAppHash())
 	err = app.snapshots.Prune(maxSnapshotCount)
 	if err != nil {
 		return fmt.Errorf("prune snapshots: %w", err)
