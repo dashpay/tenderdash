@@ -2,9 +2,10 @@ package kvstore
 
 import (
 	"encoding/hex"
-	"github.com/stretchr/testify/require"
 	"math/rand"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestChunkItem(t *testing.T) {
