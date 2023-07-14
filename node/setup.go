@@ -537,6 +537,11 @@ func createPrivval(ctx context.Context, logger log.Logger, conf *config.Config, 
 			return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
 		}
 
+		err = dashcore.WaitForMNReady(dashCoreRPCClient, time.Second)
+		if err != nil {
+			return nil, fmt.Errorf("failed to wait for masternode status 'ready': %w", err)
+		}
+
 		// If a local port is provided for Dash Core rpc into the service to sign.
 		privValidator, err := createAndStartPrivValidatorDashCoreClient(
 			genDoc.QuorumType,

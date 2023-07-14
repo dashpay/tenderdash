@@ -1,7 +1,10 @@
+//go:generate ../../scripts/mockery_generate.sh Client
+
 package core
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
 	rpc "github.com/dashpay/dashd-go/rpcclient"
@@ -12,6 +15,8 @@ import (
 )
 
 const ModuleName = "rpcclient"
+
+var sleep = time.Sleep
 
 // QuorumVerifier represents subset of priv validator features that
 // allows verification of threshold signatures.
@@ -219,4 +224,27 @@ func (rpcClient *RPCClient) QuorumVerify(
 	)
 	return resp, err
 
+}
+
+// WaitForMNReady waits until the masternode is ready
+func WaitForMNReady(client Client, retryTimeout time.Duration) error {
+	for {
+		result, err := client.MasternodeStatus()
+		if err != nil {
+			return fmt.Errorf("failed to get masternode status: %w", err)
+		}
+		switch result.State {
+		case btcjson.MNStatusStateReady:
+			return nil
+		case btcjson.MNStatusStateWaitingForProtx:
+			sleep(retryTimeout)
+		case btcjson.MNStatusStatePoseBanned,
+			btcjson.MNStatusStateRemoved,
+			btcjson.MNStatusStateOperatorKeyChanged,
+			btcjson.MNStatusStateProtxIpChanged,
+			btcjson.MNStatusStateError,
+			btcjson.MNStatusStateUnknown:
+			return fmt.Errorf("got masternode state %s", result.State)
+		}
+	}
 }
