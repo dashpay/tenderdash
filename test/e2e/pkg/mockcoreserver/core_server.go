@@ -170,6 +170,7 @@ func (c *MockCoreServer) MasternodeStatus(ctx context.Context, _ btcjson.Mastern
 	}
 	return btcjson.MasternodeStatusResult{
 		ProTxHash: proTxHash.String(),
+		State:     btcjson.MNStatusStateReady,
 	}
 }
 
