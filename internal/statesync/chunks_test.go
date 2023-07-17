@@ -122,7 +122,7 @@ func (suite *ChunkQueueTestSuite) TestChunkQueue() {
 	err = suite.queue.Close()
 	require.NoError(err)
 	added, err = suite.queue.Add(suite.chunks[0])
-	require.NoError(err)
+	require.Error(err, errNilSnapshot)
 	require.False(added)
 
 	// Closing the queue again should also be fine
