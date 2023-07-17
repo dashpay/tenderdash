@@ -49,7 +49,8 @@ var (
 	// errTimeout is returned by Sync() when we've waited too long to receive a chunk.
 	errTimeout = errors.New("timed out waiting for chunk")
 	// errNoSnapshots is returned by SyncAny() if no snapshots are found and discovery is disabled.
-	errNoSnapshots = errors.New("no suitable snapshots found")
+	errNoSnapshots            = errors.New("no suitable snapshots found")
+	errStatesyncNotInProgress = errors.New("no state sync in progress")
 )
 
 // syncer runs a state sync against an ABCI app. Use either SyncAny() to automatically attempt to
@@ -83,22 +84,25 @@ func (s *syncer) AddChunk(chunk *chunk) (bool, error) {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 	if s.chunkQueue == nil {
-		return false, errors.New("no state sync in progress")
+		return false, errStatesyncNotInProgress
+	}
+	keyVals := []any{
+		"height", chunk.Height,
+		"version", chunk.Version,
+		"chunk", chunk.ID,
 	}
 	added, err := s.chunkQueue.Add(chunk)
 	if err != nil {
+		if errors.Is(err, errNilSnapshot) {
+			s.logger.Error("Can't add a chunk because of a snapshot is nil", keyVals...)
+			return false, nil
+		}
 		return false, err
 	}
 	if added {
-		s.logger.Debug("Added chunk to queue",
-			"height", chunk.Height,
-			"format", chunk.Version,
-			"chunk", chunk.ID)
+		s.logger.Debug("Added chunk to queue", keyVals...)
 	} else {
-		s.logger.Debug("Ignoring duplicate chunk in requestQueue",
-			"height", chunk.Height,
-			"format", chunk.Version,
-			"chunk", chunk.ID)
+		s.logger.Debug("Ignoring duplicate chunk in requestQueue", keyVals...)
 	}
 	return added, nil
 }
@@ -240,7 +244,7 @@ func (s *syncer) SyncAny(
 				"hash", snapshot.Hash)
 
 		case errors.Is(err, errRejectFormat):
-			s.snapshots.RejectFormat(snapshot.Version)
+			s.snapshots.RejectVersion(snapshot.Version)
 			s.logger.Info("Snapshot format rejected", "format", snapshot.Version)
 
 		case errors.Is(err, errRejectSender):
@@ -496,7 +500,7 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chu
 		dequeueChunkIDTimeout = dequeueChunkIDTimeoutDefault
 	}
 	for {
-		if queue.IsRequestEmpty() {
+		if queue.IsRequestQueueEmpty() {
 			select {
 			case <-ctx.Done():
 				return

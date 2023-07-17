@@ -213,7 +213,7 @@ func (suite *ChunkQueueTestSuite) TestDiscardSender() {
 	// returned.
 	err = suite.queue.DiscardSender(suite.chunks[1].Sender)
 	suite.Require().NoError(err)
-	suite.Require().True(suite.queue.IsRequestEmpty())
+	suite.Require().True(suite.queue.IsRequestQueueEmpty())
 }
 
 func (suite *ChunkQueueTestSuite) TestGetSender() {
@@ -304,9 +304,9 @@ func (suite *ChunkQueueTestSuite) TestRetryAll() {
 	suite.initChunks()
 	suite.processChunks()
 	require := suite.Require()
-	require.True(suite.queue.IsRequestEmpty())
+	require.True(suite.queue.IsRequestQueueEmpty())
 	suite.queue.RetryAll()
-	require.Equal(len(suite.chunks), suite.queue.IsRequestLen())
+	require.Equal(len(suite.chunks), suite.queue.RequestQueueLen())
 }
 
 func (suite *ChunkQueueTestSuite) TestWaitFor() {

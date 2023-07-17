@@ -19,6 +19,7 @@ var (
 	errQueueEmpty  = errors.New("requestQueue is empty")
 	errChunkNil    = errors.New("cannot add nil chunk")
 	errNoChunkItem = errors.New("no chunk item found")
+	errNilSnapshot = errors.New("snapshot is nil")
 )
 
 const (
@@ -78,15 +79,15 @@ func newChunkQueue(snapshot *snapshot, tempDir string, bufLen int) (*chunkQueue,
 	}, nil
 }
 
-// IsRequestEmpty returns true if the request queue is empty
-func (q *chunkQueue) IsRequestEmpty() bool {
-	q.mtx.Lock()
-	defer q.mtx.Unlock()
-	return len(q.requestQueue) == 0
+// IsRequestQueueEmpty returns true if the request queue is empty
+func (q *chunkQueue) IsRequestQueueEmpty() bool {
+	return q.RequestQueueLen() == 0
 }
 
-// IsRequestLen returns the length of the request queue
-func (q *chunkQueue) IsRequestLen() int {
+// RequestQueueLen returns the length of the request queue
+func (q *chunkQueue) RequestQueueLen() int {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
 	return len(q.requestQueue)
 }
 
@@ -136,12 +137,12 @@ func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 	if q.snapshot == nil {
-		return false, nil // queue is closed
+		return false, errNilSnapshot
 	}
 	chunkIDKey := chunk.ID.String()
-	item,ok := q.items[chunkIDKey]
+	item, ok := q.items[chunkIDKey]
 	if !ok {
-		return false, fmt.Errorf("chunk item %x not found", chunk.ID)
+		return false, fmt.Errorf("failed to add the chunk %x, it was never requested", chunk.ID)
 	}
 	if item.status != inProgressStatus && item.status != discardedStatus {
 		return false, nil
@@ -151,15 +152,15 @@ func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
 		return false, err
 	}
 	item.file = filepath.Join(q.dir, chunkIDKey)
-	item.sender = chunk.Sender
-	item.status = receivedStatus
 	err = item.write(chunk.Chunk)
 	if err != nil {
 		return false, err
 	}
+	item.sender = chunk.Sender
+	item.status = receivedStatus
 	q.applyCh <- chunk.ID
 	// Signal any waiters that the chunk has arrived.
-	item.closeWaiteChs(true)
+	item.closeWaitChs(true)
 	return true, nil
 }
 
@@ -176,7 +177,7 @@ func (q *chunkQueue) Close() error {
 		<-q.applyCh
 	}
 	for _, item := range q.items {
-		item.closeWaiteChs(false)
+		item.closeWaitChs(false)
 	}
 	if err := os.RemoveAll(q.dir); err != nil {
 		return fmt.Errorf("failed to clean up state sync tempdir %s: %w", q.dir, err)
@@ -213,7 +214,7 @@ func (q *chunkQueue) DiscardSender(peerID types.NodeID) error {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 	for _, item := range q.items {
-		if item.isDiscardable(peerID) {
+		if item.sender == peerID && item.isDiscardable() {
 			err := q.discard(item.chunkID)
 			if err != nil {
 				return err
@@ -235,15 +236,7 @@ func (q *chunkQueue) GetSender(chunkID bytes.HexBytes) types.NodeID {
 	return ""
 }
 
-// Has checks whether a chunk exists in the queue.
-func (q *chunkQueue) Has(chunkID bytes.HexBytes) bool {
-	q.mtx.Lock()
-	defer q.mtx.Unlock()
-	item, ok := q.items[chunkID.String()]
-	return ok && item.status == doneStatus
-}
-
-// load loads a chunk from disk, or nil if the chunk has not been received yet. The caller must hold the
+// load loads a chunk from disk, or nil if the chunk is not in the queue. The caller must hold the
 // mutex lock.
 func (q *chunkQueue) load(chunkID bytes.HexBytes) (*chunk, error) {
 	chunkIDKey := chunkID.String()
@@ -320,8 +313,7 @@ func (q *chunkQueue) RetryAll() {
 }
 
 // WaitFor returns a channel that receives a chunk ID when it arrives in the queue, or
-// immediately if it has already arrived. The channel is closed without a value if the queue is
-// closed or if the chunk ID is not valid.
+// immediately if it has already arrived. The channel is closed without a value if the queue is closed
 func (q *chunkQueue) WaitFor(chunkID bytes.HexBytes) <-chan bytes.HexBytes {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
@@ -330,11 +322,11 @@ func (q *chunkQueue) WaitFor(chunkID bytes.HexBytes) <-chan bytes.HexBytes {
 
 func (q *chunkQueue) waitFor(chunkID bytes.HexBytes) <-chan bytes.HexBytes {
 	ch := make(chan bytes.HexBytes, 1)
+	item, ok := q.items[chunkID.String()]
 	if q.snapshot == nil {
 		close(ch)
 		return ch
 	}
-	item, ok := q.items[chunkID.String()]
 	if !ok {
 		ch <- chunkID
 		close(ch)
@@ -344,7 +336,7 @@ func (q *chunkQueue) waitFor(chunkID bytes.HexBytes) <-chan bytes.HexBytes {
 	return ch
 }
 
-// DoneChunksCount returns the number of chunks that have been returned.=
+// DoneChunksCount returns the number of chunks that have been returned
 func (q *chunkQueue) DoneChunksCount() int {
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
@@ -389,7 +381,7 @@ func (c *chunkItem) loadData() ([]byte, error) {
 	return body, nil
 }
 
-func (c *chunkItem) closeWaiteChs(send bool) {
+func (c *chunkItem) closeWaitChs(send bool) {
 	for _, ch := range c.waitChs {
 		if send {
 			ch <- c.chunkID
@@ -399,6 +391,7 @@ func (c *chunkItem) closeWaiteChs(send bool) {
 	c.waitChs = nil
 }
 
-func (c *chunkItem) isDiscardable(peerID types.NodeID) bool {
-	return c.sender == peerID && c.status == initStatus
+// isDiscardable returns true if a status is suitable for transition to discarded, otherwise false
+func (c *chunkItem) isDiscardable() bool {
+	return c.status == initStatus
 }

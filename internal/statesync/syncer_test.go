@@ -627,7 +627,7 @@ func (suite *SyncerTestSuite) TestApplyChunksResults() {
 			}
 			go func() {
 				for i := 0; i < len(tc.resps); i++ {
-					for chunks.IsRequestEmpty() {
+					for chunks.IsRequestQueueEmpty() {
 						time.Sleep(5 * time.Millisecond)
 					}
 					chunkID, err := chunks.Dequeue()
@@ -704,7 +704,7 @@ func (suite *SyncerTestSuite) TestApplyChunksRefetchChunks() {
 			}
 			go func() {
 				for i := 0; i < len(tc.resp); i++ {
-					for queue.IsRequestEmpty() {
+					for queue.IsRequestQueueEmpty() {
 						time.Sleep(10 * time.Millisecond)
 					}
 					chunkID, err := queue.Dequeue()
@@ -822,7 +822,7 @@ func (suite *SyncerTestSuite) TestApplyChunksRejectSenders() {
 
 			go func() {
 				for i := 0; i < len(tc.resps); i++ {
-					for queue.IsRequestEmpty() {
+					for queue.IsRequestQueueEmpty() {
 						time.Sleep(10 * time.Millisecond)
 					}
 					chunkID, err := queue.Dequeue()

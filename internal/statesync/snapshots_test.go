@@ -206,7 +206,7 @@ func TestSnapshotPool_RejectFormat(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	pool.RejectFormat(1)
+	pool.RejectVersion(1)
 	require.Equal(t, []*snapshot{snapshots[0], snapshots[2]}, pool.Ranked())
 
 	added, err := pool.Add(peerID, &snapshot{Height: 3, Version: 1, Hash: []byte{1}})

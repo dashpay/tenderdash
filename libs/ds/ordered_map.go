@@ -1,6 +1,7 @@
 package ds
 
 // OrderedMap is a map with a deterministic iteration order
+// this datastructure is not thread-safe
 type OrderedMap[T comparable, V any] struct {
 	keys   map[T]int
 	values []V

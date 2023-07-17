@@ -51,9 +51,9 @@ type snapshotPool struct {
 	snapshotPeers map[snapshotKey]map[types.NodeID]types.NodeID
 
 	// indexes for fast searches
-	formatIndex map[uint32]map[snapshotKey]bool
-	heightIndex map[uint64]map[snapshotKey]bool
-	peerIndex   map[types.NodeID]map[snapshotKey]bool
+	versionIndex map[uint32]map[snapshotKey]bool
+	heightIndex  map[uint64]map[snapshotKey]bool
+	peerIndex    map[types.NodeID]map[snapshotKey]bool
 
 	// blacklists for rejected items
 	formatBlacklist   map[uint32]bool
@@ -66,7 +66,7 @@ func newSnapshotPool() *snapshotPool {
 	return &snapshotPool{
 		snapshots:         make(map[snapshotKey]*snapshot),
 		snapshotPeers:     make(map[snapshotKey]map[types.NodeID]types.NodeID),
-		formatIndex:       make(map[uint32]map[snapshotKey]bool),
+		versionIndex:      make(map[uint32]map[snapshotKey]bool),
 		heightIndex:       make(map[uint64]map[snapshotKey]bool),
 		peerIndex:         make(map[types.NodeID]map[snapshotKey]bool),
 		formatBlacklist:   make(map[uint32]bool),
@@ -111,10 +111,10 @@ func (p *snapshotPool) Add(peerID types.NodeID, snapshot *snapshot) (bool, error
 	}
 	p.snapshots[key] = snapshot
 
-	if p.formatIndex[snapshot.Version] == nil {
-		p.formatIndex[snapshot.Version] = make(map[snapshotKey]bool)
+	if p.versionIndex[snapshot.Version] == nil {
+		p.versionIndex[snapshot.Version] = make(map[snapshotKey]bool)
 	}
-	p.formatIndex[snapshot.Version][key] = true
+	p.versionIndex[snapshot.Version][key] = true
 
 	if p.heightIndex[snapshot.Height] == nil {
 		p.heightIndex[snapshot.Height] = make(map[snapshotKey]bool)
@@ -234,13 +234,13 @@ func (p *snapshotPool) Reject(snapshot *snapshot) {
 	p.removeSnapshot(key)
 }
 
-// RejectFormat rejects a snapshot format. It will never be used again.
-func (p *snapshotPool) RejectFormat(format uint32) {
+// RejectVersion rejects a snapshot version. It will never be used again.
+func (p *snapshotPool) RejectVersion(version uint32) {
 	p.Lock()
 	defer p.Unlock()
 
-	p.formatBlacklist[format] = true
-	for key := range p.formatIndex[format] {
+	p.formatBlacklist[version] = true
+	for key := range p.versionIndex[version] {
 		p.removeSnapshot(key)
 	}
 }
@@ -285,7 +285,7 @@ func (p *snapshotPool) removeSnapshot(key snapshotKey) {
 	}
 
 	delete(p.snapshots, key)
-	delete(p.formatIndex[snapshot.Version], key)
+	delete(p.versionIndex[snapshot.Version], key)
 	delete(p.heightIndex[snapshot.Height], key)
 	for peerID := range p.snapshotPeers[key] {
 		delete(p.peerIndex[peerID], key)

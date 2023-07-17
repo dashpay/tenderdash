@@ -1204,15 +1204,6 @@ func (r *Reactor) SnapshotHeight() int64 {
 	}
 	return 0
 }
-func (r *Reactor) SnapshotChunksCount() int64 {
-	r.mtx.RLock()
-	defer r.mtx.RUnlock()
-
-	if r.syncer != nil && r.syncer.chunkQueue != nil {
-		return int64(r.syncer.chunkQueue.DoneChunksCount())
-	}
-	return 0
-}
 
 func (r *Reactor) BackFilledBlocks() int64 {
 	r.mtx.RLock()
