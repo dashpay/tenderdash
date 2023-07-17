@@ -243,7 +243,7 @@ func (q *chunkQueue) Has(chunkID bytes.HexBytes) bool {
 	return ok && item.status == doneStatus
 }
 
-// load loads a chunk from disk, or nil if the chunk is not in the queue. The caller must hold the
+// load loads a chunk from disk, or nil if the chunk has not been received yet. The caller must hold the
 // mutex lock.
 func (q *chunkQueue) load(chunkID bytes.HexBytes) (*chunk, error) {
 	chunkIDKey := chunkID.String()
