@@ -139,8 +139,7 @@ func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
 		return false, nil // queue is closed
 	}
 	chunkIDKey := chunk.ID.String()
-	item := q.items[chunkIDKey]
-	_, ok := q.items[chunk.ID.String()]
+	item,ok := q.items[chunkIDKey]
 	if !ok {
 		return false, fmt.Errorf("chunk item %x not found", chunk.ID)
 	}
