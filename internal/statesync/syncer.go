@@ -300,7 +300,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 				fmt.Errorf("failed to get app hash at height %d. No witnesses remaining", snapshot.Height)
 		}
 		s.logger.Info("failed to get and verify tendermint state. Dropping snapshot and trying again",
-			"err", err,
+			"error", err,
 			"height", snapshot.Height)
 		return sm.State{}, nil, errRejectSnapshot
 	}
