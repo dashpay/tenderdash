@@ -18,8 +18,6 @@ type (
 		client    client.SnapshotClient
 		peerStore peer.Store[PeerData]
 		peerSubs  *PeerSubscriber
-		stopCh    chan struct{}
-		stoppedCh chan struct{}
 	}
 	// PeerSubscriber is a subscriber for peer events
 	PeerSubscriber struct {

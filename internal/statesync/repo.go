@@ -51,15 +51,23 @@ func (r *LightBlockRepository) Get(height uint64) (*types.LightBlock, error) {
 	}, nil
 }
 
-// SnapshotRepository is a repository for snapshots
-type SnapshotRepository struct {
+// snapshotRepository is a repository for snapshots
+type snapshotRepository struct {
 	logger log.Logger
-	client abciclient.Client
+	client abci.StateSyncer
 }
 
-// OfferSnapshot offers a snapshot to the app. It returns various errors depending on the app's
+// newSnapshotRepository creates a new snapshot repository
+func newSnapshotRepository(client abciclient.Client, logger log.Logger) *snapshotRepository {
+	return &snapshotRepository{
+		logger: logger,
+		client: client,
+	}
+}
+
+// offerSnapshot offers a snapshot to the app. It returns various errors depending on the app's
 // response, or nil if the snapshot was accepted.
-func (r *SnapshotRepository) OfferSnapshot(ctx context.Context, snapshot *snapshot) error {
+func (r *snapshotRepository) offerSnapshot(ctx context.Context, snapshot *snapshot) error { //nolint:dupl
 	r.logger.Info("Offering snapshot to ABCI app", "height", snapshot.Height,
 		"format", snapshot.Format, "hash", snapshot.Hash)
 	resp, err := r.client.OfferSnapshot(ctx, &abci.RequestOfferSnapshot{
@@ -93,8 +101,13 @@ func (r *SnapshotRepository) OfferSnapshot(ctx context.Context, snapshot *snapsh
 	}
 }
 
-// LoadSnapshotChunk loads a chunk of a snapshot from the app
-func (r *SnapshotRepository) LoadSnapshotChunk(ctx context.Context, height uint64, format, index uint32) (*abci.ResponseLoadSnapshotChunk, error) {
+// loadSnapshotChunk loads a chunk of a snapshot from the app
+func (r *snapshotRepository) loadSnapshotChunk(
+	ctx context.Context,
+	height uint64,
+	format,
+	index uint32,
+) (*abci.ResponseLoadSnapshotChunk, error) {
 	return r.client.LoadSnapshotChunk(ctx, &abci.RequestLoadSnapshotChunk{
 		Height: height,
 		Format: format,
@@ -102,15 +115,18 @@ func (r *SnapshotRepository) LoadSnapshotChunk(ctx context.Context, height uint6
 	})
 }
 
-// RecentSnapshots fetches the n most recent snapshots from the app
-func (r *SnapshotRepository) RecentSnapshots(ctx context.Context, n uint32) ([]*snapshot, error) {
+// recentSnapshots fetches the n most recent snapshots from the app
+func (r *snapshotRepository) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, error) {
 	resp, err := r.client.ListSnapshots(ctx, &abci.RequestListSnapshots{})
 	if err != nil {
 		return nil, err
 	}
 	sortSnapshot(resp.Snapshots)
+	if n > recentSnapshots {
+		n = recentSnapshots
+	}
 	snapshots := make([]*snapshot, 0, n)
-	for _, s := range resp.Snapshots[:recentSnapshots] {
+	for _, s := range resp.Snapshots[:n] {
 		snapshots = append(snapshots, newSnapshotFromABCI(s))
 	}
 	return snapshots, nil

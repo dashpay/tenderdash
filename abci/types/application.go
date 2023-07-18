@@ -6,11 +6,25 @@ import (
 	"github.com/tendermint/tendermint/crypto"
 )
 
+// StateSyncer is an interface that handles the state sync protocol
+type StateSyncer interface {
+	// ListSnapshots returns list available snapshots
+	ListSnapshots(context.Context, *RequestListSnapshots) (*ResponseListSnapshots, error)
+	// OfferSnapshot accepts or rejects an offered snapshot to the state synchronization
+	OfferSnapshot(context.Context, *RequestOfferSnapshot) (*ResponseOfferSnapshot, error)
+	// LoadSnapshotChunk loads a chunk of snapshot
+	LoadSnapshotChunk(context.Context, *RequestLoadSnapshotChunk) (*ResponseLoadSnapshotChunk, error)
+	// ApplySnapshotChunk applies a chunk of snapshot
+	ApplySnapshotChunk(context.Context, *RequestApplySnapshotChunk) (*ResponseApplySnapshotChunk, error)
+}
+
 // Application is an interface that enables any finite, deterministic state machine
 // to be driven by a blockchain-based replication engine via the ABCI.
 //
 //go:generate ../../scripts/mockery_generate.sh Application
 type Application interface {
+	StateSyncer
+
 	// Info/Query Connection
 	Info(context.Context, *RequestInfo) (*ResponseInfo, error)    // Return application info
 	Query(context.Context, *RequestQuery) (*ResponseQuery, error) // Query for state
@@ -28,12 +42,6 @@ type Application interface {
 	VerifyVoteExtension(context.Context, *RequestVerifyVoteExtension) (*ResponseVerifyVoteExtension, error)
 	// Deliver the decided block with its txs to the Application
 	FinalizeBlock(context.Context, *RequestFinalizeBlock) (*ResponseFinalizeBlock, error)
-
-	// State Sync Connection
-	ListSnapshots(context.Context, *RequestListSnapshots) (*ResponseListSnapshots, error)                // List available snapshots
-	OfferSnapshot(context.Context, *RequestOfferSnapshot) (*ResponseOfferSnapshot, error)                // Offer a snapshot to the application
-	LoadSnapshotChunk(context.Context, *RequestLoadSnapshotChunk) (*ResponseLoadSnapshotChunk, error)    // Load a snapshot chunk
-	ApplySnapshotChunk(context.Context, *RequestApplySnapshotChunk) (*ResponseApplySnapshotChunk, error) // Apply a shapshot chunk
 }
 
 //-------------------------------------------------------
