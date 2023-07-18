@@ -161,7 +161,7 @@ message RequestOfferSnapshot {
 message RequestLoadSnapshotChunk {
   uint64 height   = 1; // The height of the snapshot the chunks belongs to.
   uint32 version  = 2; // The application-specific format of the snapshot the chunk belongs to.
-  bytes  chunk_id = 3; // The chunk id is a hash of the node of subtree of the snapshot in GroveDb.
+  bytes  chunk_id = 3; // The chunk id is a hash of the node of subtree of the snapshot.
 }
 
 // Applies a snapshot chunk.

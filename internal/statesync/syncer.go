@@ -313,6 +313,11 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 	// Offer snapshot to ABCI app.
 	err = s.offerSnapshot(ctx, snapshot)
 	if err != nil {
+		s.logger.Error("Snapshot wasn't accepted",
+			"height", snapshot.Height,
+			"format", snapshot.Version,
+			"hash", snapshot.Hash,
+			"error", err)
 		return sm.State{}, nil, err
 	}
 
@@ -320,6 +325,9 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 	fetchCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	fetchStartTime := time.Now()
+
+	// TODO: this approach of creating will be deprecated in favor of new design
+	// This epic https://dashpay.atlassian.net/browse/TD-161 contains all the tasks for refactoring
 	for i := 0; i < s.fetchers; i++ {
 		go s.fetchChunks(fetchCtx, snapshot, queue)
 	}

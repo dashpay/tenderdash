@@ -57,7 +57,9 @@ type (
 		items        map[string]*chunkItem
 		requestQueue []bytes.HexBytes
 		applyCh      chan bytes.HexBytes
-		doneCount    int
+		// doneCount counts the number of chunks that have been processed to the done status
+		// if for some reason some chunks have been processed more than once, this number should take them into account
+		doneCount int
 	}
 )
 
@@ -322,11 +324,11 @@ func (q *chunkQueue) WaitFor(chunkID bytes.HexBytes) <-chan bytes.HexBytes {
 
 func (q *chunkQueue) waitFor(chunkID bytes.HexBytes) <-chan bytes.HexBytes {
 	ch := make(chan bytes.HexBytes, 1)
-	item, ok := q.items[chunkID.String()]
 	if q.snapshot == nil {
 		close(ch)
 		return ch
 	}
+	item, ok := q.items[chunkID.String()]
 	if !ok {
 		ch <- chunkID
 		close(ch)
