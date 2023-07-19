@@ -19,10 +19,6 @@ func (_m *Application) ApplySnapshotChunk(_a0 context.Context, _a1 *types.Reques
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseApplySnapshotChunk
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestApplySnapshotChunk) (*types.ResponseApplySnapshotChunk, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestApplySnapshotChunk) *types.ResponseApplySnapshotChunk); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -31,6 +27,7 @@ func (_m *Application) ApplySnapshotChunk(_a0 context.Context, _a1 *types.Reques
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestApplySnapshotChunk) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -45,10 +42,6 @@ func (_m *Application) CheckTx(_a0 context.Context, _a1 *types.RequestCheckTx) (
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseCheckTx
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestCheckTx) (*types.ResponseCheckTx, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestCheckTx) *types.ResponseCheckTx); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -57,6 +50,7 @@ func (_m *Application) CheckTx(_a0 context.Context, _a1 *types.RequestCheckTx) (
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestCheckTx) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -71,10 +65,6 @@ func (_m *Application) ExtendVote(_a0 context.Context, _a1 *types.RequestExtendV
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseExtendVote
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestExtendVote) (*types.ResponseExtendVote, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestExtendVote) *types.ResponseExtendVote); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -83,6 +73,7 @@ func (_m *Application) ExtendVote(_a0 context.Context, _a1 *types.RequestExtendV
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestExtendVote) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -97,10 +88,6 @@ func (_m *Application) FinalizeBlock(_a0 context.Context, _a1 *types.RequestFina
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseFinalizeBlock
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestFinalizeBlock) (*types.ResponseFinalizeBlock, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestFinalizeBlock) *types.ResponseFinalizeBlock); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -109,6 +96,7 @@ func (_m *Application) FinalizeBlock(_a0 context.Context, _a1 *types.RequestFina
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestFinalizeBlock) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -123,10 +111,6 @@ func (_m *Application) Info(_a0 context.Context, _a1 *types.RequestInfo) (*types
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseInfo
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestInfo) (*types.ResponseInfo, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestInfo) *types.ResponseInfo); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -135,6 +119,7 @@ func (_m *Application) Info(_a0 context.Context, _a1 *types.RequestInfo) (*types
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestInfo) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -149,10 +134,6 @@ func (_m *Application) InitChain(_a0 context.Context, _a1 *types.RequestInitChai
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseInitChain
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestInitChain) (*types.ResponseInitChain, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestInitChain) *types.ResponseInitChain); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -161,6 +142,7 @@ func (_m *Application) InitChain(_a0 context.Context, _a1 *types.RequestInitChai
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestInitChain) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -175,10 +157,6 @@ func (_m *Application) ListSnapshots(_a0 context.Context, _a1 *types.RequestList
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseListSnapshots
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestListSnapshots) (*types.ResponseListSnapshots, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestListSnapshots) *types.ResponseListSnapshots); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -187,6 +165,7 @@ func (_m *Application) ListSnapshots(_a0 context.Context, _a1 *types.RequestList
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestListSnapshots) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -201,10 +180,6 @@ func (_m *Application) LoadSnapshotChunk(_a0 context.Context, _a1 *types.Request
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseLoadSnapshotChunk
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestLoadSnapshotChunk) (*types.ResponseLoadSnapshotChunk, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestLoadSnapshotChunk) *types.ResponseLoadSnapshotChunk); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -213,6 +188,7 @@ func (_m *Application) LoadSnapshotChunk(_a0 context.Context, _a1 *types.Request
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestLoadSnapshotChunk) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -227,10 +203,6 @@ func (_m *Application) OfferSnapshot(_a0 context.Context, _a1 *types.RequestOffe
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseOfferSnapshot
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestOfferSnapshot) (*types.ResponseOfferSnapshot, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestOfferSnapshot) *types.ResponseOfferSnapshot); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -239,6 +211,7 @@ func (_m *Application) OfferSnapshot(_a0 context.Context, _a1 *types.RequestOffe
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestOfferSnapshot) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -253,10 +226,6 @@ func (_m *Application) PrepareProposal(_a0 context.Context, _a1 *types.RequestPr
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponsePrepareProposal
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestPrepareProposal) *types.ResponsePrepareProposal); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -265,6 +234,7 @@ func (_m *Application) PrepareProposal(_a0 context.Context, _a1 *types.RequestPr
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestPrepareProposal) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -279,10 +249,6 @@ func (_m *Application) ProcessProposal(_a0 context.Context, _a1 *types.RequestPr
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseProcessProposal
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestProcessProposal) (*types.ResponseProcessProposal, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestProcessProposal) *types.ResponseProcessProposal); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -291,6 +257,7 @@ func (_m *Application) ProcessProposal(_a0 context.Context, _a1 *types.RequestPr
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestProcessProposal) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -305,10 +272,6 @@ func (_m *Application) Query(_a0 context.Context, _a1 *types.RequestQuery) (*typ
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseQuery
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestQuery) (*types.ResponseQuery, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestQuery) *types.ResponseQuery); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -317,6 +280,7 @@ func (_m *Application) Query(_a0 context.Context, _a1 *types.RequestQuery) (*typ
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestQuery) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -331,10 +295,6 @@ func (_m *Application) VerifyVoteExtension(_a0 context.Context, _a1 *types.Reque
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *types.ResponseVerifyVoteExtension
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestVerifyVoteExtension) (*types.ResponseVerifyVoteExtension, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *types.RequestVerifyVoteExtension) *types.ResponseVerifyVoteExtension); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -343,6 +303,7 @@ func (_m *Application) VerifyVoteExtension(_a0 context.Context, _a1 *types.Reque
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *types.RequestVerifyVoteExtension) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {

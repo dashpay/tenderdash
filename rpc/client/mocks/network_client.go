@@ -19,10 +19,6 @@ func (_m *NetworkClient) ConsensusParams(ctx context.Context, height *int64) (*c
 	ret := _m.Called(ctx, height)
 
 	var r0 *coretypes.ResultConsensusParams
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *int64) (*coretypes.ResultConsensusParams, error)); ok {
-		return rf(ctx, height)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *int64) *coretypes.ResultConsensusParams); ok {
 		r0 = rf(ctx, height)
 	} else {
@@ -31,6 +27,7 @@ func (_m *NetworkClient) ConsensusParams(ctx context.Context, height *int64) (*c
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *int64) error); ok {
 		r1 = rf(ctx, height)
 	} else {
@@ -45,10 +42,6 @@ func (_m *NetworkClient) ConsensusState(_a0 context.Context) (*coretypes.ResultC
 	ret := _m.Called(_a0)
 
 	var r0 *coretypes.ResultConsensusState
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultConsensusState, error)); ok {
-		return rf(_a0)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context) *coretypes.ResultConsensusState); ok {
 		r0 = rf(_a0)
 	} else {
@@ -57,6 +50,7 @@ func (_m *NetworkClient) ConsensusState(_a0 context.Context) (*coretypes.ResultC
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -71,10 +65,6 @@ func (_m *NetworkClient) DumpConsensusState(_a0 context.Context) (*coretypes.Res
 	ret := _m.Called(_a0)
 
 	var r0 *coretypes.ResultDumpConsensusState
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultDumpConsensusState, error)); ok {
-		return rf(_a0)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context) *coretypes.ResultDumpConsensusState); ok {
 		r0 = rf(_a0)
 	} else {
@@ -83,6 +73,7 @@ func (_m *NetworkClient) DumpConsensusState(_a0 context.Context) (*coretypes.Res
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -97,10 +88,6 @@ func (_m *NetworkClient) Health(_a0 context.Context) (*coretypes.ResultHealth, e
 	ret := _m.Called(_a0)
 
 	var r0 *coretypes.ResultHealth
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultHealth, error)); ok {
-		return rf(_a0)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context) *coretypes.ResultHealth); ok {
 		r0 = rf(_a0)
 	} else {
@@ -109,6 +96,7 @@ func (_m *NetworkClient) Health(_a0 context.Context) (*coretypes.ResultHealth, e
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -123,10 +111,6 @@ func (_m *NetworkClient) NetInfo(_a0 context.Context) (*coretypes.ResultNetInfo,
 	ret := _m.Called(_a0)
 
 	var r0 *coretypes.ResultNetInfo
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultNetInfo, error)); ok {
-		return rf(_a0)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context) *coretypes.ResultNetInfo); ok {
 		r0 = rf(_a0)
 	} else {
@@ -135,6 +119,7 @@ func (_m *NetworkClient) NetInfo(_a0 context.Context) (*coretypes.ResultNetInfo,
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {

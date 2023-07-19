@@ -25,10 +25,6 @@ func (_m *EventSink) GetTxByHash(_a0 []byte) (*types.TxResult, error) {
 	ret := _m.Called(_a0)
 
 	var r0 *types.TxResult
-	var r1 error
-	if rf, ok := ret.Get(0).(func([]byte) (*types.TxResult, error)); ok {
-		return rf(_a0)
-	}
 	if rf, ok := ret.Get(0).(func([]byte) *types.TxResult); ok {
 		r0 = rf(_a0)
 	} else {
@@ -37,6 +33,7 @@ func (_m *EventSink) GetTxByHash(_a0 []byte) (*types.TxResult, error) {
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func([]byte) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -51,16 +48,13 @@ func (_m *EventSink) HasBlock(_a0 int64) (bool, error) {
 	ret := _m.Called(_a0)
 
 	var r0 bool
-	var r1 error
-	if rf, ok := ret.Get(0).(func(int64) (bool, error)); ok {
-		return rf(_a0)
-	}
 	if rf, ok := ret.Get(0).(func(int64) bool); ok {
 		r0 = rf(_a0)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(int64) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -103,10 +97,6 @@ func (_m *EventSink) SearchBlockEvents(_a0 context.Context, _a1 *query.Query) ([
 	ret := _m.Called(_a0, _a1)
 
 	var r0 []int64
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *query.Query) ([]int64, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *query.Query) []int64); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -115,6 +105,7 @@ func (_m *EventSink) SearchBlockEvents(_a0 context.Context, _a1 *query.Query) ([
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *query.Query) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -129,10 +120,6 @@ func (_m *EventSink) SearchTxEvents(_a0 context.Context, _a1 *query.Query) ([]*t
 	ret := _m.Called(_a0, _a1)
 
 	var r0 []*types.TxResult
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *query.Query) ([]*types.TxResult, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *query.Query) []*types.TxResult); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -141,6 +128,7 @@ func (_m *EventSink) SearchTxEvents(_a0 context.Context, _a1 *query.Query) ([]*t
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *query.Query) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {

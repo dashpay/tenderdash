@@ -19,10 +19,6 @@ func (_m *EventsClient) Events(ctx context.Context, req *coretypes.RequestEvents
 	ret := _m.Called(ctx, req)
 
 	var r0 *coretypes.ResultEvents
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *coretypes.RequestEvents) (*coretypes.ResultEvents, error)); ok {
-		return rf(ctx, req)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, *coretypes.RequestEvents) *coretypes.ResultEvents); ok {
 		r0 = rf(ctx, req)
 	} else {
@@ -31,6 +27,7 @@ func (_m *EventsClient) Events(ctx context.Context, req *coretypes.RequestEvents
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *coretypes.RequestEvents) error); ok {
 		r1 = rf(ctx, req)
 	} else {
