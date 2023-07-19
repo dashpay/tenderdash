@@ -19,10 +19,6 @@ func (_m *StatusClient) Status(_a0 context.Context) (*coretypes.ResultStatus, er
 	ret := _m.Called(_a0)
 
 	var r0 *coretypes.ResultStatus
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultStatus, error)); ok {
-		return rf(_a0)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context) *coretypes.ResultStatus); ok {
 		r0 = rf(_a0)
 	} else {
@@ -31,6 +27,7 @@ func (_m *StatusClient) Status(_a0 context.Context) (*coretypes.ResultStatus, er
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {

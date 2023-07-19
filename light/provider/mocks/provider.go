@@ -34,10 +34,6 @@ func (_m *Provider) LightBlock(ctx context.Context, height int64) (*types.LightB
 	ret := _m.Called(ctx, height)
 
 	var r0 *types.LightBlock
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, int64) (*types.LightBlock, error)); ok {
-		return rf(ctx, height)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, int64) *types.LightBlock); ok {
 		r0 = rf(ctx, height)
 	} else {
@@ -46,6 +42,7 @@ func (_m *Provider) LightBlock(ctx context.Context, height int64) (*types.LightB
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, int64) error); ok {
 		r1 = rf(ctx, height)
 	} else {

@@ -42,17 +42,13 @@ func (_m *Connection) Handshake(_a0 context.Context, _a1 time.Duration, _a2 type
 	ret := _m.Called(_a0, _a1, _a2, _a3)
 
 	var r0 types.NodeInfo
-	var r1 crypto.PubKey
-	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context, time.Duration, types.NodeInfo, crypto.PrivKey) (types.NodeInfo, crypto.PubKey, error)); ok {
-		return rf(_a0, _a1, _a2, _a3)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, time.Duration, types.NodeInfo, crypto.PrivKey) types.NodeInfo); ok {
 		r0 = rf(_a0, _a1, _a2, _a3)
 	} else {
 		r0 = ret.Get(0).(types.NodeInfo)
 	}
 
+	var r1 crypto.PubKey
 	if rf, ok := ret.Get(1).(func(context.Context, time.Duration, types.NodeInfo, crypto.PrivKey) crypto.PubKey); ok {
 		r1 = rf(_a0, _a1, _a2, _a3)
 	} else {
@@ -61,6 +57,7 @@ func (_m *Connection) Handshake(_a0 context.Context, _a1 time.Duration, _a2 type
 		}
 	}
 
+	var r2 error
 	if rf, ok := ret.Get(2).(func(context.Context, time.Duration, types.NodeInfo, crypto.PrivKey) error); ok {
 		r2 = rf(_a0, _a1, _a2, _a3)
 	} else {
@@ -89,17 +86,13 @@ func (_m *Connection) ReceiveMessage(_a0 context.Context) (conn.ChannelID, []byt
 	ret := _m.Called(_a0)
 
 	var r0 conn.ChannelID
-	var r1 []byte
-	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context) (conn.ChannelID, []byte, error)); ok {
-		return rf(_a0)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context) conn.ChannelID); ok {
 		r0 = rf(_a0)
 	} else {
 		r0 = ret.Get(0).(conn.ChannelID)
 	}
 
+	var r1 []byte
 	if rf, ok := ret.Get(1).(func(context.Context) []byte); ok {
 		r1 = rf(_a0)
 	} else {
@@ -108,6 +101,7 @@ func (_m *Connection) ReceiveMessage(_a0 context.Context) (conn.ChannelID, []byt
 		}
 	}
 
+	var r2 error
 	if rf, ok := ret.Get(2).(func(context.Context) error); ok {
 		r2 = rf(_a0)
 	} else {
