@@ -267,7 +267,7 @@ Applies a snapshot chunk.
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| index | [uint32](#uint32) |  | The chunk index, starting from 0. Tenderdash applies chunks sequentially. |
+| chunk_id | [bytes](#bytes) |  | The chunk index, starting from 0. Tenderdash applies chunks sequentially. |
 | chunk | [bytes](#bytes) |  | The binary chunk contents, as returned by LoadSnapshotChunk. |
 | sender | [string](#string) |  | The P2P ID of the node who sent this chunk. |
 
@@ -499,8 +499,8 @@ Used during state sync to retrieve snapshot chunks from peers.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | height | [uint64](#uint64) |  | The height of the snapshot the chunks belongs to. |
-| format | [uint32](#uint32) |  | The application-specific format of the snapshot the chunk belongs to. |
-| chunk | [uint32](#uint32) |  | The chunk index, starting from 0 for the initial chunk. |
+| version | [uint32](#uint32) |  | The application-specific format of the snapshot the chunk belongs to. |
+| chunk_id | [bytes](#bytes) |  | The chunk id is a hash of the node of subtree of the snapshot. |
 
 
 
@@ -819,8 +819,9 @@ from this condition, but not sure), and _p_ receives a Precommit message for rou
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | result | [ResponseApplySnapshotChunk.Result](#tendermint-abci-ResponseApplySnapshotChunk-Result) |  | The result of applying this chunk. |
-| refetch_chunks | [uint32](#uint32) | repeated | Refetch and reapply the given chunks, regardless of `result`. Only the listed chunks will be refetched, and reapplied in sequential order. |
+| refetch_chunks | [bytes](#bytes) | repeated | Refetch and reapply the given chunks, regardless of `result`. Only the listed chunks will be refetched, and reapplied in sequential order. |
 | reject_senders | [string](#string) | repeated | Reject the given P2P senders, regardless of `Result`. Any chunks already applied will not be refetched unless explicitly requested, but queued chunks from these senders will be discarded, and new chunks or other snapshots rejected. |
+| next_chunks | [bytes](#bytes) | repeated | Next chunks provides the list of chunks that should be requested next, if any. |
 
 
 
@@ -1088,8 +1089,7 @@ nondeterministic
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | height | [uint64](#uint64) |  | The height at which the snapshot was taken |
-| format | [uint32](#uint32) |  | The application-specific snapshot format |
-| chunks | [uint32](#uint32) |  | Number of chunks in the snapshot |
+| version | [uint32](#uint32) |  | The application-specific snapshot version |
 | hash | [bytes](#bytes) |  | Arbitrary snapshot hash, equal only if identical |
 | metadata | [bytes](#bytes) |  | Arbitrary application metadata |
 
@@ -1256,6 +1256,7 @@ Type of transaction check
 | RETRY | 3 | Retry chunk (combine with refetch and reject) |
 | RETRY_SNAPSHOT | 4 | Retry snapshot (combine with refetch and reject) |
 | REJECT_SNAPSHOT | 5 | Reject this snapshot, try others |
+| COMPLETE_SNAPSHOT | 6 | Complete this snapshot, no more chunks |
 
 
 

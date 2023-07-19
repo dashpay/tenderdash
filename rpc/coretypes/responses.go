@@ -111,7 +111,6 @@ type SyncInfo struct {
 	ChunkProcessAvgTime time.Duration `json:"chunk_process_avg_time,string"`
 	SnapshotHeight      int64         `json:"snapshot_height,string"`
 	SnapshotChunksCount int64         `json:"snapshot_chunks_count,string"`
-	SnapshotChunksTotal int64         `json:"snapshot_chunks_total,string"`
 	BackFilledBlocks    int64         `json:"backfilled_blocks,string"`
 	BackFillBlocksTotal int64         `json:"backfill_blocks_total,string"`
 }
