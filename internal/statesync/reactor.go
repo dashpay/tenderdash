@@ -3,6 +3,7 @@ package statesync
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"runtime/debug"
@@ -324,7 +325,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	if r.needsStateSync {
 		r.logger.Info("starting state sync")
 		if _, err := r.Sync(ctx); err != nil {
-			r.logger.Error("state sync failed; shutting down this node", "err", err)
+			r.logger.Error("state sync failed; shutting down this node", "error", err)
 			return err
 		}
 	}
@@ -393,7 +394,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 	}
 
 	if err := r.Backfill(ctx, state); err != nil {
-		r.logger.Error("backfill failed. Proceeding optimistically...", "err", err)
+		r.logger.Error("backfill failed. Proceeding optimistically...", "error", err)
 	}
 
 	if r.eventBus != nil {
@@ -496,8 +497,11 @@ func (r *Reactor) backfill(
 	sleepTime time.Duration,
 	lightBlockResponseTimeout time.Duration,
 ) error {
-	r.logger.Info("starting backfill process...", "startHeight", startHeight,
-		"stopHeight", stopHeight, "stopTime", stopTime, "trustedBlockID", trustedBlockID)
+	r.logger.Info("starting backfill process...",
+		"startHeight", startHeight,
+		"stopHeight", stopHeight,
+		"stopTime", stopTime,
+		"trustedBlockID", trustedBlockID)
 
 	r.backfillBlockTotal = startHeight - stopHeight + 1
 	r.metrics.BackFillBlocksTotal.Set(float64(r.backfillBlockTotal))
@@ -517,7 +521,7 @@ func (r *Reactor) backfill(
 	// time. Ideally we want the verification process to never have to be
 	// waiting on blocks. If it takes 4s to retrieve a block and 1s to verify
 	// it, then steady state involves four workers.
-	for i := 0; i < int(r.cfg.Fetchers); i++ {
+	for i := 0; i < r.cfg.Fetchers; i++ {
 		go func() {
 			for {
 				select {
@@ -558,7 +562,8 @@ func (r *Reactor) backfill(
 						} else {
 							// we don't punish the peer as it might just have not responded in time
 							r.logger.Info("backfill: error with fetching light block",
-								"height", height, "err", err)
+								"height", height,
+								"error", err)
 						}
 						continue
 					}
@@ -568,7 +573,8 @@ func (r *Reactor) backfill(
 					err = lb.ValidateBasic(chainID)
 					if err != nil || lb.Height != height {
 						r.logger.Info("backfill: fetched light block failed validate basic, removing peer...",
-							"err", err, "height", height)
+							"height", height,
+							"error", err)
 						queue.retry(height)
 						if serr := r.sendBlockError(ctx, p2p.PeerError{
 							NodeID: peer,
@@ -675,7 +681,7 @@ func (r *Reactor) handleSnapshotMessage(ctx context.Context, envelope *p2p.Envel
 	case *ssproto.SnapshotsRequest:
 		snapshots, err := r.recentSnapshots(ctx, recentSnapshots)
 		if err != nil {
-			logger.Error("failed to fetch snapshots", "err", err)
+			logger.Error("failed to fetch snapshots", "error", err)
 			return nil
 		}
 
@@ -683,7 +689,7 @@ func (r *Reactor) handleSnapshotMessage(ctx context.Context, envelope *p2p.Envel
 			logger.Info(
 				"advertising snapshot",
 				"height", snapshot.Height,
-				"format", snapshot.Format,
+				"version", snapshot.Version,
 				"peer", envelope.From,
 			)
 
@@ -691,8 +697,7 @@ func (r *Reactor) handleSnapshotMessage(ctx context.Context, envelope *p2p.Envel
 				To: envelope.From,
 				Message: &ssproto.SnapshotsResponse{
 					Height:   snapshot.Height,
-					Format:   snapshot.Format,
-					Chunks:   snapshot.Chunks,
+					Version:  snapshot.Version,
 					Hash:     snapshot.Hash,
 					Metadata: snapshot.Metadata,
 				},
@@ -708,11 +713,12 @@ func (r *Reactor) handleSnapshotMessage(ctx context.Context, envelope *p2p.Envel
 			return nil
 		}
 
-		logger.Info("received snapshot", "height", msg.Height, "format", msg.Format)
+		logger.Info("received snapshot",
+			"height", msg.Height,
+			"format", msg.Version)
 		_, err := syncer.AddSnapshot(envelope.From, &snapshot{
 			Height:   msg.Height,
-			Format:   msg.Format,
-			Chunks:   msg.Chunks,
+			Version:  msg.Version,
 			Hash:     msg.Hash,
 			Metadata: msg.Metadata,
 		})
@@ -720,13 +726,15 @@ func (r *Reactor) handleSnapshotMessage(ctx context.Context, envelope *p2p.Envel
 			logger.Error(
 				"failed to add snapshot",
 				"height", msg.Height,
-				"format", msg.Format,
+				"version", msg.Version,
 				"channel", envelope.ChannelID,
-				"err", err,
+				"error", err,
 			)
 			return nil
 		}
-		logger.Info("added snapshot", "height", msg.Height, "format", msg.Format)
+		logger.Info("added snapshot",
+			"height", msg.Height,
+			"version", msg.Version)
 
 	default:
 		return fmt.Errorf("received unknown message: %T", msg)
@@ -743,35 +751,35 @@ func (r *Reactor) handleChunkMessage(ctx context.Context, envelope *p2p.Envelope
 	case *ssproto.ChunkRequest:
 		r.logger.Debug("received chunk request",
 			"height", msg.Height,
-			"format", msg.Format,
-			"chunk", msg.Index,
+			"version", msg.Version,
+			"chunkID", hex.EncodeToString(msg.ChunkId),
 			"peer", envelope.From)
 		resp, err := r.conn.LoadSnapshotChunk(ctx, &abci.RequestLoadSnapshotChunk{
-			Height: msg.Height,
-			Format: msg.Format,
-			Chunk:  msg.Index,
+			Height:  msg.Height,
+			Version: msg.Version,
+			ChunkId: msg.ChunkId,
 		})
 		if err != nil {
 			r.logger.Error("failed to load chunk",
 				"height", msg.Height,
-				"format", msg.Format,
-				"chunk", msg.Index,
-				"err", err,
-				"peer", envelope.From)
+				"version", msg.Version,
+				"chunkID", hex.EncodeToString(msg.ChunkId),
+				"peer", envelope.From,
+				"error", err)
 			return nil
 		}
 
 		r.logger.Debug("sending chunk",
 			"height", msg.Height,
-			"format", msg.Format,
-			"chunk", msg.Index,
+			"version", msg.Version,
+			"chunkID", hex.EncodeToString(msg.ChunkId),
 			"peer", envelope.From)
 		if err := chunkCh.Send(ctx, p2p.Envelope{
 			To: envelope.From,
 			Message: &ssproto.ChunkResponse{
 				Height:  msg.Height,
-				Format:  msg.Format,
-				Index:   msg.Index,
+				Version: msg.Version,
+				ChunkId: msg.ChunkId,
 				Chunk:   resp.Chunk,
 				Missing: resp.Chunk == nil,
 			},
@@ -788,23 +796,24 @@ func (r *Reactor) handleChunkMessage(ctx context.Context, envelope *p2p.Envelope
 
 		r.logger.Debug("received chunk; adding to sync",
 			"height", msg.Height,
-			"format", msg.Format,
-			"chunk", msg.Index,
+			"version", msg.Version,
+			"chunkID", hex.EncodeToString(msg.ChunkId),
+			"chunkLen", len(msg.Chunk),
 			"peer", envelope.From)
 		_, err := syncer.AddChunk(&chunk{
-			Height: msg.Height,
-			Format: msg.Format,
-			Index:  msg.Index,
-			Chunk:  msg.Chunk,
-			Sender: envelope.From,
+			Height:  msg.Height,
+			Version: msg.Version,
+			ID:      msg.ChunkId,
+			Chunk:   msg.Chunk,
+			Sender:  envelope.From,
 		})
 		if err != nil {
 			r.logger.Error("failed to add chunk",
 				"height", msg.Height,
-				"format", msg.Format,
-				"chunk", msg.Index,
-				"err", err,
-				"peer", envelope.From)
+				"version", msg.Version,
+				"chunkID", hex.EncodeToString(msg.ChunkId),
+				"peer", envelope.From,
+				"error", err)
 			return nil
 		}
 
@@ -821,7 +830,9 @@ func (r *Reactor) handleLightBlockMessage(ctx context.Context, envelope *p2p.Env
 		r.logger.Info("received light block request", "height", msg.Height)
 		lb, err := r.fetchLightBlock(msg.Height)
 		if err != nil {
-			r.logger.Error("failed to retrieve light block", "err", err, "height", msg.Height)
+			r.logger.Error("failed to retrieve light block",
+				"height", msg.Height,
+				"error", err)
 			return err
 		}
 		if lb == nil {
@@ -838,7 +849,7 @@ func (r *Reactor) handleLightBlockMessage(ctx context.Context, envelope *p2p.Env
 
 		lbproto, err := lb.ToProto()
 		if err != nil {
-			r.logger.Error("marshaling light block to proto", "err", err)
+			r.logger.Error("marshaling light block to proto", "error", err)
 			return nil
 		}
 
@@ -862,7 +873,9 @@ func (r *Reactor) handleLightBlockMessage(ctx context.Context, envelope *p2p.Env
 			if errors.Is(err, context.Canceled) {
 				return err
 			}
-			r.logger.Error("error processing light block response", "err", err, "height", height)
+			r.logger.Error("error processing light block response",
+				"height", height,
+				"error", err)
 		}
 
 	default:
@@ -878,7 +891,9 @@ func (r *Reactor) handleParamsMessage(ctx context.Context, envelope *p2p.Envelop
 		r.logger.Debug("received consensus params request", "height", msg.Height)
 		cp, err := r.stateStore.LoadConsensusParams(int64(msg.Height))
 		if err != nil {
-			r.logger.Error("failed to fetch requested consensus params", "err", err, "height", msg.Height)
+			r.logger.Error("failed to fetch requested consensus params",
+				"height", msg.Height,
+				"error", err)
 			return nil
 		}
 
@@ -927,7 +942,7 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 			err = fmt.Errorf("panic in processing message: %v", e)
 			r.logger.Error(
 				"recovering from processing message panic",
-				"err", err,
+				"error", err,
 				"stack", string(debug.Stack()),
 			)
 		}
@@ -975,15 +990,15 @@ func (r *Reactor) processChannels(ctx context.Context, chanTable map[p2p.Channel
 					"envelope_from", envelope.From,
 					"envelope_ch", envelope.ChannelID,
 					"num_chs", len(chanTable),
-					"err", err,
+					"error", err,
 				)
 				return
 			}
 			r.logger.Error("failed to process message",
-				"err", err,
 				"channel", ch.String(),
 				"ch_id", envelope.ChannelID,
-				"envelope", envelope)
+				"envelope", envelope,
+				"error", err)
 			if serr := ch.SendError(ctx, p2p.PeerError{
 				NodeID: envelope.From,
 				Err:    err,
@@ -1076,7 +1091,7 @@ func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, e
 		switch {
 		case a.Height > b.Height:
 			return true
-		case a.Height == b.Height && a.Format > b.Format:
+		case a.Height == b.Height && a.Version > b.Version:
 			return true
 		default:
 			return false
@@ -1091,8 +1106,7 @@ func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, e
 
 		snapshots = append(snapshots, &snapshot{
 			Height:   s.Height,
-			Format:   s.Format,
-			Chunks:   s.Chunks,
+			Version:  s.Version,
 			Hash:     s.Hash,
 			Metadata: s.Metadata,
 		})
@@ -1187,25 +1201,6 @@ func (r *Reactor) SnapshotHeight() int64 {
 
 	if r.syncer != nil {
 		return r.syncer.lastSyncedSnapshotHeight
-	}
-	return 0
-}
-func (r *Reactor) SnapshotChunksCount() int64 {
-	r.mtx.RLock()
-	defer r.mtx.RUnlock()
-
-	if r.syncer != nil && r.syncer.chunks != nil {
-		return int64(r.syncer.chunks.numChunksReturned())
-	}
-	return 0
-}
-
-func (r *Reactor) SnapshotChunksTotal() int64 {
-	r.mtx.RLock()
-	defer r.mtx.RUnlock()
-
-	if r.syncer != nil && r.syncer.processingSnapshot != nil {
-		return int64(r.syncer.processingSnapshot.Chunks)
 	}
 	return 0
 }

@@ -4,562 +4,363 @@ import (
 	"os"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/suite"
 
-	"github.com/tendermint/tendermint/types"
+	"github.com/tendermint/tendermint/internal/test/factory"
+	"github.com/tendermint/tendermint/libs/bytes"
 )
 
-func setupChunkQueue(t *testing.T) (*chunkQueue, func()) {
-	snapshot := &snapshot{
-		Height:   3,
-		Format:   1,
-		Chunks:   5,
-		Hash:     []byte{7},
-		Metadata: nil,
-	}
-	queue, err := newChunkQueue(snapshot, t.TempDir())
-	require.NoError(t, err)
-	teardown := func() {
-		err := queue.Close()
-		require.NoError(t, err)
-	}
-	return queue, teardown
-}
+type ChunkQueueTestSuite struct {
+	suite.Suite
 
-func TestNewChunkQueue_TempDir(t *testing.T) {
-	snapshot := &snapshot{
-		Height:   3,
-		Format:   1,
-		Chunks:   5,
-		Hash:     []byte{7},
-		Metadata: nil,
-	}
-	dir := t.TempDir()
-	queue, err := newChunkQueue(snapshot, dir)
-	require.NoError(t, err)
-
-	files, err := os.ReadDir(dir)
-	require.NoError(t, err)
-	assert.Len(t, files, 1)
-
-	err = queue.Close()
-	require.NoError(t, err)
-
-	files, err = os.ReadDir(dir)
-	require.NoError(t, err)
-	assert.Len(t, files, 0)
+	snapshot *snapshot
+	queue    *chunkQueue
+	tempDir  string
+	chunks   []*chunk
 }
 
 func TestChunkQueue(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
-
-	// Adding the first chunk should be fine
-	added, err := queue.Add(&chunk{Height: 3, Format: 1, Index: 0, Chunk: []byte{3, 1, 0}})
-	require.NoError(t, err)
-	assert.True(t, added)
-
-	// Adding the last chunk should also be fine
-	added, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 4, Chunk: []byte{3, 1, 4}})
-	require.NoError(t, err)
-	assert.True(t, added)
-
-	// Adding the first or last chunks again should return false
-	added, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 0, Chunk: []byte{3, 1, 0}})
-	require.NoError(t, err)
-	assert.False(t, added)
-
-	added, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 4, Chunk: []byte{3, 1, 4}})
-	require.NoError(t, err)
-	assert.False(t, added)
-
-	// Adding the remaining chunks in reverse should be fine
-	added, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 3, Chunk: []byte{3, 1, 3}})
-	require.NoError(t, err)
-	assert.True(t, added)
-
-	added, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 2, Chunk: []byte{3, 1, 2}})
-	require.NoError(t, err)
-	assert.True(t, added)
-
-	added, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 1, Chunk: []byte{3, 1, 1}})
-	require.NoError(t, err)
-	assert.True(t, added)
-
-	// At this point, we should be able to retrieve them all via Next
-	for i := 0; i < 5; i++ {
-		c, err := queue.Next()
-		require.NoError(t, err)
-		assert.Equal(
-			t,
-			&chunk{Height: 3, Format: 1, Index: uint32(i), Chunk: []byte{3, 1, byte(i)}},
-			c,
-		)
-	}
-	_, err = queue.Next()
-	require.Error(t, err)
-	assert.Equal(t, errDone, err)
-
-	// It should still be possible to try to add chunks (which will be ignored)
-	added, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 0, Chunk: []byte{3, 1, 0}})
-	require.NoError(t, err)
-	assert.False(t, added)
-
-	// After closing the queue it will also return false
-	err = queue.Close()
-	require.NoError(t, err)
-	added, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 0, Chunk: []byte{3, 1, 0}})
-	require.NoError(t, err)
-	assert.False(t, added)
-
-	// Closing the queue again should also be fine
-	err = queue.Close()
-	require.NoError(t, err)
+	suite.Run(t, new(ChunkQueueTestSuite))
 }
 
-func TestChunkQueue_Add_ChunkErrors(t *testing.T) {
-	testcases := map[string]struct {
+func (suite *ChunkQueueTestSuite) SetupSuite() {
+	suite.snapshot = &snapshot{
+		Height:   3,
+		Version:  1,
+		Hash:     []byte{0},
+		Metadata: nil,
+	}
+	suite.chunks = []*chunk{
+		{
+			Height:  3,
+			Version: 1,
+			ID:      []byte{0},
+			Chunk:   []byte{3, 1, 0},
+			Sender:  "a",
+		},
+		{
+			Height:  3,
+			Version: 1,
+			ID:      []byte{1},
+			Chunk:   []byte{3, 1, 1},
+			Sender:  "b",
+		},
+		{
+			Height:  3,
+			Version: 1,
+			ID:      []byte{2},
+			Chunk:   []byte{3, 1, 2},
+			Sender:  "c",
+		},
+		{
+			Height:  3,
+			Version: 1,
+			ID:      []byte{3},
+			Chunk:   []byte{3, 1, 3},
+			Sender:  "d",
+		},
+	}
+}
+
+func (suite *ChunkQueueTestSuite) SetupTest() {
+	var err error
+	suite.tempDir = suite.T().TempDir()
+	suite.queue, err = newChunkQueue(suite.snapshot, suite.tempDir, 100)
+	suite.Require().NoError(err)
+}
+
+func (suite *ChunkQueueTestSuite) TearDownTest() {
+	err := suite.queue.Close()
+	suite.Require().NoError(err)
+}
+
+func (suite *ChunkQueueTestSuite) TestTempDir() {
+	files, err := os.ReadDir(suite.tempDir)
+	suite.Require().NoError(err)
+	suite.Require().Len(files, 1)
+
+	err = suite.queue.Close()
+	suite.Require().NoError(err)
+
+	files, err = os.ReadDir(suite.tempDir)
+	suite.Require().NoError(err)
+	suite.Require().Len(files, 0)
+}
+
+func (suite *ChunkQueueTestSuite) TestChunkQueue() {
+	suite.initChunks()
+	testCases := []struct {
+		chunk *chunk
+		want  bool
+	}{
+		{chunk: suite.chunks[0], want: true},
+		{chunk: suite.chunks[2], want: true},
+		{chunk: suite.chunks[0], want: false},
+		{chunk: suite.chunks[2], want: false},
+		{chunk: suite.chunks[1], want: true},
+	}
+	require := suite.Require()
+	for _, tc := range testCases {
+		added, err := suite.queue.Add(tc.chunk)
+		require.NoError(err)
+		require.Equal(tc.want, added)
+	}
+
+	// At this point, we should be able to retrieve them all via Next
+	for _, i := range []int{0, 2, 1} {
+		c, err := suite.queue.Next()
+		require.NoError(err)
+		require.Equal(suite.chunks[i], c)
+	}
+
+	// It should still be possible to try to add chunks (which will be ignored)
+	added, err := suite.queue.Add(suite.chunks[0])
+	require.NoError(err)
+	require.False(added)
+
+	// After closing the requestQueue it will also return false
+	err = suite.queue.Close()
+	require.NoError(err)
+	added, err = suite.queue.Add(suite.chunks[0])
+	require.Error(err, errNilSnapshot)
+	require.False(added)
+
+	// Closing the queue again should also be fine
+	err = suite.queue.Close()
+	require.NoError(err)
+}
+
+func (suite *ChunkQueueTestSuite) TestAddChunkErrors() {
+	testCases := map[string]struct {
 		chunk *chunk
 	}{
 		"nil chunk":     {nil},
-		"nil body":      {&chunk{Height: 3, Format: 1, Index: 0, Chunk: nil}},
-		"wrong height":  {&chunk{Height: 9, Format: 1, Index: 0, Chunk: []byte{3, 1, 0}}},
-		"wrong format":  {&chunk{Height: 3, Format: 9, Index: 0, Chunk: []byte{3, 1, 0}}},
-		"invalid index": {&chunk{Height: 3, Format: 1, Index: 5, Chunk: []byte{3, 1, 0}}},
+		"nil body":      {&chunk{Height: 3, Version: 1, ID: []byte{1}, Chunk: nil}},
+		"wrong height":  {&chunk{Height: 9, Version: 1, ID: []byte{2}, Chunk: []byte{2}}},
+		"wrong format":  {&chunk{Height: 3, Version: 9, ID: []byte{3}, Chunk: []byte{3}}},
+		"invalid index": {&chunk{Height: 3, Version: 1, ID: []byte{4}, Chunk: []byte{4}}},
 	}
-	for name, tc := range testcases {
-		tc := tc
-		t.Run(name, func(t *testing.T) {
-			queue, teardown := setupChunkQueue(t)
-			defer teardown()
-			_, err := queue.Add(tc.chunk)
-			require.Error(t, err)
+	for name, tc := range testCases {
+		suite.Run(name, func() {
+			_, err := suite.queue.Add(tc.chunk)
+			suite.Require().Error(err)
 		})
 	}
 }
 
-func TestChunkQueue_Allocate(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
-
-	for i := uint32(0); i < queue.Size(); i++ {
-		index, err := queue.Allocate()
-		require.NoError(t, err)
-		assert.EqualValues(t, i, index)
-	}
-
-	_, err := queue.Allocate()
-	require.Error(t, err)
-	assert.Equal(t, errDone, err)
-
-	for i := uint32(0); i < queue.Size(); i++ {
-		_, err = queue.Add(&chunk{Height: 3, Format: 1, Index: i, Chunk: []byte{byte(i)}})
-		require.NoError(t, err)
-	}
-
-	// After all chunks have been allocated and retrieved, discarding a chunk will reallocate it.
-	err = queue.Discard(2)
-	require.NoError(t, err)
-
-	index, err := queue.Allocate()
-	require.NoError(t, err)
-	assert.EqualValues(t, 2, index)
-	_, err = queue.Allocate()
-	require.Error(t, err)
-	assert.Equal(t, errDone, err)
-
-	// Discarding a chunk the closing the queue will return errDone.
-	err = queue.Discard(2)
-	require.NoError(t, err)
-	err = queue.Close()
-	require.NoError(t, err)
-	_, err = queue.Allocate()
-	require.Error(t, err)
-	assert.Equal(t, errDone, err)
-}
-
-func TestChunkQueue_Discard(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
-
+func (suite *ChunkQueueTestSuite) TestDiscard() {
+	suite.initChunks()
+	require := suite.Require()
 	// Add a few chunks to the queue and fetch a couple
-	_, err := queue.Add(&chunk{Height: 3, Format: 1, Index: 0, Chunk: []byte{byte(0)}})
-	require.NoError(t, err)
-	_, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 1, Chunk: []byte{byte(1)}})
-	require.NoError(t, err)
-	_, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 2, Chunk: []byte{byte(2)}})
-	require.NoError(t, err)
-
-	c, err := queue.Next()
-	require.NoError(t, err)
-	assert.EqualValues(t, 0, c.Index)
-	c, err = queue.Next()
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, c.Index)
-
+	for _, c := range suite.chunks {
+		_, err := suite.queue.Add(c)
+		require.NoError(err)
+	}
+	for _, i := range []int{0, 1} {
+		c, err := suite.queue.Next()
+		require.NoError(err)
+		require.EqualValues(suite.chunks[i].ID, c.ID)
+	}
 	// Discarding the first chunk and re-adding it should cause it to be returned
-	// immediately by Next(), before procceeding with chunk 2
-	err = queue.Discard(0)
-	require.NoError(t, err)
-	added, err := queue.Add(&chunk{Height: 3, Format: 1, Index: 0, Chunk: []byte{byte(0)}})
-	require.NoError(t, err)
-	assert.True(t, added)
-	c, err = queue.Next()
-	require.NoError(t, err)
-	assert.EqualValues(t, 0, c.Index)
-	c, err = queue.Next()
-	require.NoError(t, err)
-	assert.EqualValues(t, 2, c.Index)
-
-	// Discard then allocate, add and fetch all chunks
-	for i := uint32(0); i < queue.Size(); i++ {
-		err := queue.Discard(i)
-		require.NoError(t, err)
-	}
-	for i := uint32(0); i < queue.Size(); i++ {
-		_, err := queue.Allocate()
-		require.NoError(t, err)
-		_, err = queue.Add(&chunk{Height: 3, Format: 1, Index: i, Chunk: []byte{byte(i)}})
-		require.NoError(t, err)
-		c, err = queue.Next()
-		require.NoError(t, err)
-		assert.EqualValues(t, i, c.Index)
-	}
+	// immediately by Next(), before proceeding with chunk 2
+	err := suite.queue.Discard(suite.chunks[0].ID)
+	require.NoError(err)
+	added, err := suite.queue.Add(suite.chunks[0])
+	require.NoError(err)
+	require.True(added)
+	nextChunk, err := suite.queue.Next()
+	require.NoError(err)
+	require.EqualValues(suite.chunks[2].ID, nextChunk.ID)
 
 	// Discarding a non-existent chunk does nothing.
-	err = queue.Discard(99)
-	require.NoError(t, err)
+	err = suite.queue.Discard(factory.RandomHash())
+	require.NoError(err)
 
 	// When discard a couple of chunks, we should be able to allocate, add, and fetch them again.
-	err = queue.Discard(3)
-	require.NoError(t, err)
-	err = queue.Discard(1)
-	require.NoError(t, err)
+	for _, i := range []int{1, 2} {
+		err = suite.queue.Discard(suite.chunks[i].ID)
+		require.NoError(err)
+	}
 
-	index, err := queue.Allocate()
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, index)
-	index, err = queue.Allocate()
-	require.NoError(t, err)
-	assert.EqualValues(t, 3, index)
+	for _, i := range []int{2, 1} {
+		added, err = suite.queue.Add(suite.chunks[i])
+		require.NoError(err)
+		require.True(added)
+	}
 
-	added, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 3, Chunk: []byte{3}})
-	require.NoError(t, err)
-	assert.True(t, added)
-	added, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 1, Chunk: []byte{1}})
-	require.NoError(t, err)
-	assert.True(t, added)
+	for _, i := range []int{3, 0, 2, 1} {
+		nextChunk, err = suite.queue.Next()
+		require.NoError(err)
+		require.EqualValues(suite.chunks[i].ID, nextChunk.ID)
+	}
 
-	chunk, err := queue.Next()
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, chunk.Index)
-
-	chunk, err = queue.Next()
-	require.NoError(t, err)
-	assert.EqualValues(t, 3, chunk.Index)
-
-	_, err = queue.Next()
-	require.Error(t, err)
-	assert.Equal(t, errDone, err)
-
-	// After closing the queue, discarding does nothing
-	err = queue.Close()
-	require.NoError(t, err)
-	err = queue.Discard(2)
-	require.NoError(t, err)
+	// After closing the requestQueue, discarding does nothing
+	err = suite.queue.Close()
+	require.NoError(err)
+	err = suite.queue.Discard(suite.chunks[2].ID)
+	require.NoError(err)
 }
 
-func TestChunkQueue_DiscardSender(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
-
-	// Allocate and add all chunks to the queue
-	senders := []types.NodeID{types.NodeID("a"), types.NodeID("b"), types.NodeID("c")}
-	for i := uint32(0); i < queue.Size(); i++ {
-		_, err := queue.Allocate()
-		require.NoError(t, err)
-		_, err = queue.Add(&chunk{
-			Height: 3,
-			Format: 1,
-			Index:  i,
-			Chunk:  []byte{byte(i)},
-			Sender: senders[int(i)%len(senders)],
-		})
-		require.NoError(t, err)
-	}
-
-	// Fetch the first three chunks
-	for i := uint32(0); i < 3; i++ {
-		_, err := queue.Next()
-		require.NoError(t, err)
-	}
+func (suite *ChunkQueueTestSuite) TestDiscardSender() {
+	suite.initChunks()
+	suite.processChunks()
 
 	// Discarding an unknown sender should do nothing
-	err := queue.DiscardSender(types.NodeID("x"))
-	require.NoError(t, err)
-	_, err = queue.Allocate()
-	assert.Equal(t, errDone, err)
+	err := suite.queue.DiscardSender("unknown")
+	suite.Require().NoError(err)
 
 	// Discarding sender b should discard chunk 4, but not chunk 1 which has already been
 	// returned.
-	err = queue.DiscardSender(types.NodeID("b"))
-	require.NoError(t, err)
-	index, err := queue.Allocate()
-	require.NoError(t, err)
-	assert.EqualValues(t, 4, index)
-	_, err = queue.Allocate()
-	assert.Equal(t, errDone, err)
+	err = suite.queue.DiscardSender(suite.chunks[1].Sender)
+	suite.Require().NoError(err)
+	suite.Require().True(suite.queue.IsRequestQueueEmpty())
 }
 
-func TestChunkQueue_GetSender(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
+func (suite *ChunkQueueTestSuite) TestGetSender() {
+	suite.initChunks()
+	require := suite.Require()
+	_, err := suite.queue.Add(suite.chunks[0])
+	require.NoError(err)
+	_, err = suite.queue.Add(suite.chunks[1])
+	require.NoError(err)
 
-	peerAID := types.NodeID("aa")
-	peerBID := types.NodeID("bb")
-
-	_, err := queue.Add(&chunk{Height: 3, Format: 1, Index: 0, Chunk: []byte{1}, Sender: peerAID})
-	require.NoError(t, err)
-	_, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 1, Chunk: []byte{2}, Sender: peerBID})
-	require.NoError(t, err)
-
-	assert.EqualValues(t, "aa", queue.GetSender(0))
-	assert.EqualValues(t, "bb", queue.GetSender(1))
-	assert.EqualValues(t, "", queue.GetSender(2))
+	require.EqualValues(suite.chunks[0].Sender, suite.queue.GetSender(suite.chunks[0].ID))
+	require.EqualValues(suite.chunks[1].Sender, suite.queue.GetSender(suite.chunks[1].ID))
+	require.EqualValues("", suite.queue.GetSender(suite.chunks[2].ID))
 
 	// After the chunk has been processed, we should still know who the sender was
-	chunk, err := queue.Next()
-	require.NoError(t, err)
-	require.NotNil(t, chunk)
-	require.EqualValues(t, 0, chunk.Index)
-	assert.EqualValues(t, "aa", queue.GetSender(0))
+	nextChunk, err := suite.queue.Next()
+	require.NoError(err)
+	require.NotNil(nextChunk)
+	require.EqualValues(suite.chunks[0].ID, nextChunk.ID)
+	require.EqualValues(suite.chunks[0].Sender, suite.queue.GetSender(suite.chunks[0].ID))
 }
 
-func TestChunkQueue_Next(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
-
+func (suite *ChunkQueueTestSuite) TestNext() {
+	suite.initChunks()
+	require := suite.Require()
 	// Next should block waiting for the next chunks, even when given out of order.
-	chNext := make(chan *chunk, 10)
+	chNext := make(chan *chunk)
 	go func() {
 		for {
-			c, err := queue.Next()
+			c, err := suite.queue.Next()
 			if err == errDone {
 				close(chNext)
 				break
 			}
-			require.NoError(t, err)
+			require.NoError(err)
 			chNext <- c
 		}
 	}()
 
-	assert.Empty(t, chNext)
-	_, err := queue.Add(&chunk{Height: 3, Format: 1, Index: 1, Chunk: []byte{3, 1, 1}, Sender: types.NodeID("b")})
-	require.NoError(t, err)
+	require.Empty(chNext)
+	_, err := suite.queue.Add(suite.chunks[1])
+	require.NoError(err)
 	select {
 	case <-chNext:
-		assert.Fail(t, "channel should be empty")
+		suite.Fail("channel should be empty")
 	default:
 	}
 
-	_, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 0, Chunk: []byte{3, 1, 0}, Sender: types.NodeID("a")})
-	require.NoError(t, err)
+	_, err = suite.queue.Add(suite.chunks[0])
+	require.NoError(err)
+	require.Equal(suite.chunks[1], <-chNext)
+	require.Equal(suite.chunks[0], <-chNext)
 
-	assert.Equal(t,
-		&chunk{Height: 3, Format: 1, Index: 0, Chunk: []byte{3, 1, 0}, Sender: types.NodeID("a")},
-		<-chNext)
-	assert.Equal(t,
-		&chunk{Height: 3, Format: 1, Index: 1, Chunk: []byte{3, 1, 1}, Sender: types.NodeID("b")},
-		<-chNext)
-
-	_, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 4, Chunk: []byte{3, 1, 4}, Sender: types.NodeID("e")})
-	require.NoError(t, err)
-	select {
-	case <-chNext:
-		assert.Fail(t, "channel should be empty")
-	default:
-	}
-
-	_, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 2, Chunk: []byte{3, 1, 2}, Sender: types.NodeID("c")})
-	require.NoError(t, err)
-	_, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 3, Chunk: []byte{3, 1, 3}, Sender: types.NodeID("d")})
-	require.NoError(t, err)
-
-	assert.Equal(t,
-		&chunk{Height: 3, Format: 1, Index: 2, Chunk: []byte{3, 1, 2}, Sender: types.NodeID("c")},
-		<-chNext)
-	assert.Equal(t,
-		&chunk{Height: 3, Format: 1, Index: 3, Chunk: []byte{3, 1, 3}, Sender: types.NodeID("d")},
-		<-chNext)
-	assert.Equal(t,
-		&chunk{Height: 3, Format: 1, Index: 4, Chunk: []byte{3, 1, 4}, Sender: types.NodeID("e")},
-		<-chNext)
+	err = suite.queue.Close()
+	require.NoError(err)
 
 	_, ok := <-chNext
-	assert.False(t, ok, "channel should be closed")
-
-	// Calling next on a finished queue should return done
-	_, err = queue.Next()
-	assert.Equal(t, errDone, err)
+	require.False(ok)
 }
 
-func TestChunkQueue_Next_Closed(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
-
+func (suite *ChunkQueueTestSuite) TestNextClosed() {
+	suite.initChunks()
+	require := suite.Require()
 	// Calling Next on a closed queue should return done
-	_, err := queue.Add(&chunk{Height: 3, Format: 1, Index: 1, Chunk: []byte{3, 1, 1}})
-	require.NoError(t, err)
-	err = queue.Close()
-	require.NoError(t, err)
+	_, err := suite.queue.Add(suite.chunks[1])
+	require.NoError(err)
+	err = suite.queue.Close()
+	require.NoError(err)
 
-	_, err = queue.Next()
-	assert.Equal(t, errDone, err)
+	_, err = suite.queue.Next()
+	require.Equal(errDone, err)
 }
 
-func TestChunkQueue_Retry(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
+func (suite *ChunkQueueTestSuite) TestRetry() {
+	suite.initChunks()
+	suite.processChunks()
+	require := suite.Require()
 
-	allocateAddChunksToQueue(t, queue)
-
-	// Retrying a couple of chunks makes Next() return them, but they are not allocatable
-	queue.Retry(3)
-	queue.Retry(1)
-
-	_, err := queue.Allocate()
-	assert.Equal(t, errDone, err)
-
-	chunk, err := queue.Next()
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, chunk.Index)
-
-	chunk, err = queue.Next()
-	require.NoError(t, err)
-	assert.EqualValues(t, 3, chunk.Index)
-
-	_, err = queue.Next()
-	assert.Equal(t, errDone, err)
+	for i := range []int{2, 0} {
+		suite.queue.Retry(suite.chunks[i].ID)
+		chunkID, err := suite.queue.Dequeue()
+		require.NoError(err)
+		require.Equal(chunkID, suite.chunks[i].ID)
+	}
 }
 
-func TestChunkQueue_RetryAll(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
+func (suite *ChunkQueueTestSuite) TestRetryAll() {
+	suite.initChunks()
+	suite.processChunks()
+	require := suite.Require()
+	require.True(suite.queue.IsRequestQueueEmpty())
+	suite.queue.RetryAll()
+	require.Equal(len(suite.chunks), suite.queue.RequestQueueLen())
+}
 
-	allocateAddChunksToQueue(t, queue)
-
-	_, err := queue.Next()
-	assert.Equal(t, errDone, err)
-
-	queue.RetryAll()
-
-	_, err = queue.Allocate()
-	assert.Equal(t, errDone, err)
-
-	for i := uint32(0); i < queue.Size(); i++ {
-		chunk, err := queue.Next()
-		require.NoError(t, err)
-		assert.EqualValues(t, i, chunk.Index)
+func (suite *ChunkQueueTestSuite) TestWaitFor() {
+	suite.initChunks()
+	require := suite.Require()
+	waitForChs := make([]<-chan bytes.HexBytes, len(suite.chunks))
+	for i, c := range suite.chunks {
+		waitForChs[i] = suite.queue.WaitFor(c.ID)
 	}
 
-	_, err = queue.Next()
-	assert.Equal(t, errDone, err)
-}
-
-func TestChunkQueue_Size(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
-
-	assert.EqualValues(t, 5, queue.Size())
-
-	err := queue.Close()
-	require.NoError(t, err)
-	assert.EqualValues(t, 0, queue.Size())
-}
-
-func TestChunkQueue_WaitFor(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
-
-	waitFor1 := queue.WaitFor(1)
-	waitFor4 := queue.WaitFor(4)
-
-	// Adding 0 and 2 should not trigger waiters
-	_, err := queue.Add(&chunk{Height: 3, Format: 1, Index: 0, Chunk: []byte{3, 1, 0}})
-	require.NoError(t, err)
-	_, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 2, Chunk: []byte{3, 1, 2}})
-	require.NoError(t, err)
-	select {
-	case <-waitFor1:
-		require.Fail(t, "WaitFor(1) should not trigger on 0 or 2")
-	case <-waitFor4:
-		require.Fail(t, "WaitFor(4) should not trigger on 0 or 2")
-	default:
+	for _, ch := range waitForChs {
+		select {
+		case <-ch:
+			require.Fail("WaitFor should not trigger")
+		default:
+		}
 	}
 
-	// Adding 1 should trigger WaitFor(1), but not WaitFor(4). The channel should be closed.
-	_, err = queue.Add(&chunk{Height: 3, Format: 1, Index: 1, Chunk: []byte{3, 1, 1}})
-	require.NoError(t, err)
-	assert.EqualValues(t, 1, <-waitFor1)
-	_, ok := <-waitFor1
-	assert.False(t, ok)
-	select {
-	case <-waitFor4:
-		require.Fail(t, "WaitFor(4) should not trigger on 0 or 2")
-	default:
-	}
+	_, err := suite.queue.Add(suite.chunks[0])
+	require.NoError(err)
+	require.EqualValues(suite.chunks[0].ID, <-waitForChs[0])
+	_, ok := <-waitForChs[0]
+	require.False(ok)
 
 	// Fetch the first chunk. At this point, waiting for either 0 (retrieved from pool) or 1
 	// (queued in pool) should immediately return true.
-	c, err := queue.Next()
-	require.NoError(t, err)
-	assert.EqualValues(t, 0, c.Index)
-
-	w := queue.WaitFor(0)
-	assert.EqualValues(t, 0, <-w)
-	_, ok = <-w
-	assert.False(t, ok)
-
-	w = queue.WaitFor(1)
-	assert.EqualValues(t, 1, <-w)
-	_, ok = <-w
-	assert.False(t, ok)
+	c, err := suite.queue.Next()
+	require.NoError(err)
+	require.EqualValues(suite.chunks[0].ID, c.ID)
 
 	// Close the queue. This should cause the waiter for 4 to close, and also cause any future
 	// waiters to get closed channels.
-	err = queue.Close()
-	require.NoError(t, err)
-	_, ok = <-waitFor4
-	assert.False(t, ok)
-
-	w = queue.WaitFor(3)
-	_, ok = <-w
-	assert.False(t, ok)
+	err = suite.queue.Close()
+	require.NoError(err)
+	_, ok = <-waitForChs[2]
+	require.False(ok)
 }
 
-func TestNumChunkReturned(t *testing.T) {
-	queue, teardown := setupChunkQueue(t)
-	defer teardown()
-
-	assert.EqualValues(t, 5, queue.Size())
-
-	allocateAddChunksToQueue(t, queue)
-	assert.EqualValues(t, 5, queue.numChunksReturned())
-
-	err := queue.Close()
-	require.NoError(t, err)
+func (suite *ChunkQueueTestSuite) initChunks() {
+	for _, c0 := range suite.chunks {
+		suite.queue.Enqueue(c0.ID)
+		c1, err := suite.queue.Dequeue()
+		suite.Require().NoError(err)
+		suite.Require().Equal(c0.ID, c1)
+	}
 }
 
-// Allocate and add all chunks to the queue
-func allocateAddChunksToQueue(t *testing.T, q *chunkQueue) {
-	t.Helper()
-	for i := uint32(0); i < q.Size(); i++ {
-		_, err := q.Allocate()
-		require.NoError(t, err)
-		_, err = q.Add(&chunk{Height: 3, Format: 1, Index: i, Chunk: []byte{byte(i)}})
-		require.NoError(t, err)
-		_, err = q.Next()
-		require.NoError(t, err)
+func (suite *ChunkQueueTestSuite) processChunks() {
+	for _, c := range suite.chunks {
+		added, err := suite.queue.Add(c)
+		suite.Require().NoError(err)
+		suite.Require().True(added)
+		c1, err := suite.queue.Next()
+		suite.Require().NoError(err)
+		suite.Require().Equal(c, c1)
 	}
 }

@@ -31,7 +31,6 @@ func TestStatus(t *testing.T) {
 					ChunkProcessAvgTime: time.Duration(10),
 					SnapshotHeight:      10,
 					SnapshotChunksCount: 9,
-					SnapshotChunksTotal: 10,
 					BackFilledBlocks:    9,
 					BackFillBlocksTotal: 10,
 				},
@@ -69,7 +68,6 @@ func TestStatus(t *testing.T) {
 	assert.EqualValues(t, time.Duration(10), st.SyncInfo.ChunkProcessAvgTime)
 	assert.EqualValues(t, 10, st.SyncInfo.SnapshotHeight)
 	assert.EqualValues(t, 9, status.SyncInfo.SnapshotChunksCount)
-	assert.EqualValues(t, 10, status.SyncInfo.SnapshotChunksTotal)
 	assert.EqualValues(t, 9, status.SyncInfo.BackFilledBlocks)
 	assert.EqualValues(t, 10, status.SyncInfo.BackFillBlocksTotal)
 }

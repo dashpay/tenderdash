@@ -159,9 +159,9 @@ message RequestOfferSnapshot {
 
 // Used during state sync to retrieve snapshot chunks from peers.
 message RequestLoadSnapshotChunk {
-  uint64 height = 1;  // The height of the snapshot the chunks belongs to.
-  uint32 format = 2;  // The application-specific format of the snapshot the chunk belongs to.
-  uint32 chunk  = 3;  // The chunk index, starting from 0 for the initial chunk.
+  uint64 height   = 1;  // The height of the snapshot the chunks belongs to.
+  uint32 version  = 2;  // The application-specific format of the snapshot the chunk belongs to.
+  bytes  chunk_id = 3;  // The chunk id is a hash of the node of subtree of the snapshot.
 }
 
 // Applies a snapshot chunk.
@@ -177,9 +177,9 @@ message RequestLoadSnapshotChunk {
 //   it will reject the snapshot and try a different one via OfferSnapshot. The application should be prepared to reset
 //   and accept it or abort as appropriate.
 message RequestApplySnapshotChunk {
-  uint32 index  = 1;  // The chunk index, starting from 0. Tenderdash applies chunks sequentially.
-  bytes  chunk  = 2;  // The binary chunk contents, as returned by LoadSnapshotChunk.
-  string sender = 3;  // The P2P ID of the node who sent this chunk.
+  bytes  chunk_id = 1;  // The chunk index, starting from 0. Tenderdash applies chunks sequentially.
+  bytes  chunk    = 2;  // The binary chunk contents, as returned by LoadSnapshotChunk.
+  string sender   = 3;  // The P2P ID of the node who sent this chunk.
 }
 
 // Prepare new block proposal, potentially altering list of transactions.
@@ -605,19 +605,22 @@ message ResponseApplySnapshotChunk {
   Result result = 1;  // The result of applying this chunk.
   // Refetch and reapply the given chunks, regardless of `result`.
   // Only the listed chunks will be refetched, and reapplied in sequential order.
-  repeated uint32 refetch_chunks = 2;
+  repeated bytes refetch_chunks = 2;
   // Reject the given P2P senders, regardless of `Result`. Any chunks already applied will not be refetched
   // unless explicitly requested, but queued chunks from these senders will be discarded, and new chunks
   // or other snapshots rejected.
   repeated string reject_senders = 3;
+  // Next chunks provides the list of chunks that should be requested next, if any.
+  repeated bytes next_chunks = 4;
 
   enum Result {
-    UNKNOWN         = 0;  // Unknown result, abort all snapshot restoration
-    ACCEPT          = 1;  // Chunk successfully accepted
-    ABORT           = 2;  // Abort all snapshot restoration
-    RETRY           = 3;  // Retry chunk (combine with refetch and reject)
-    RETRY_SNAPSHOT  = 4;  // Retry snapshot (combine with refetch and reject)
-    REJECT_SNAPSHOT = 5;  // Reject this snapshot, try others
+    UNKNOWN           = 0;  // Unknown result, abort all snapshot restoration
+    ACCEPT            = 1;  // Chunk successfully accepted
+    ABORT             = 2;  // Abort all snapshot restoration
+    RETRY             = 3;  // Retry chunk (combine with refetch and reject)
+    RETRY_SNAPSHOT    = 4;  // Retry snapshot (combine with refetch and reject)
+    REJECT_SNAPSHOT   = 5;  // Reject this snapshot, try others
+    COMPLETE_SNAPSHOT = 6;  // Complete this snapshot, no more chunks
   }
 }
 
@@ -825,8 +828,7 @@ message Misbehavior {
 
 message Snapshot {
   uint64 height   = 1;  // The height at which the snapshot was taken
-  uint32 format   = 2;  // The application-specific snapshot format
-  uint32 chunks   = 3;  // Number of chunks in the snapshot
+  uint32 version  = 2;  // The application-specific snapshot version
   bytes  hash     = 4;  // Arbitrary snapshot hash, equal only if identical
   bytes  metadata = 5;  // Arbitrary application metadata
 }
