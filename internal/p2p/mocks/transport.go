@@ -22,6 +22,10 @@ func (_m *Transport) Accept(_a0 context.Context) (p2p.Connection, error) {
 	ret := _m.Called(_a0)
 
 	var r0 p2p.Connection
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) (p2p.Connection, error)); ok {
+		return rf(_a0)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context) p2p.Connection); ok {
 		r0 = rf(_a0)
 	} else {
@@ -30,7 +34,6 @@ func (_m *Transport) Accept(_a0 context.Context) (p2p.Connection, error) {
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -64,6 +67,10 @@ func (_m *Transport) Dial(_a0 context.Context, _a1 *p2p.Endpoint) (p2p.Connectio
 	ret := _m.Called(_a0, _a1)
 
 	var r0 p2p.Connection
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, *p2p.Endpoint) (p2p.Connection, error)); ok {
+		return rf(_a0, _a1)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, *p2p.Endpoint) p2p.Connection); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -72,7 +79,6 @@ func (_m *Transport) Dial(_a0 context.Context, _a1 *p2p.Endpoint) (p2p.Connectio
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, *p2p.Endpoint) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -87,6 +93,10 @@ func (_m *Transport) Endpoint() (*p2p.Endpoint, error) {
 	ret := _m.Called()
 
 	var r0 *p2p.Endpoint
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (*p2p.Endpoint, error)); ok {
+		return rf()
+	}
 	if rf, ok := ret.Get(0).(func() *p2p.Endpoint); ok {
 		r0 = rf()
 	} else {
@@ -95,7 +105,6 @@ func (_m *Transport) Endpoint() (*p2p.Endpoint, error) {
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func() error); ok {
 		r1 = rf()
 	} else {

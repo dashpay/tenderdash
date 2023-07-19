@@ -19,6 +19,10 @@ func (_m *HistoryClient) BlockchainInfo(ctx context.Context, minHeight int64, ma
 	ret := _m.Called(ctx, minHeight, maxHeight)
 
 	var r0 *coretypes.ResultBlockchainInfo
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64, int64) (*coretypes.ResultBlockchainInfo, error)); ok {
+		return rf(ctx, minHeight, maxHeight)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, int64, int64) *coretypes.ResultBlockchainInfo); ok {
 		r0 = rf(ctx, minHeight, maxHeight)
 	} else {
@@ -27,7 +31,6 @@ func (_m *HistoryClient) BlockchainInfo(ctx context.Context, minHeight int64, ma
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, int64, int64) error); ok {
 		r1 = rf(ctx, minHeight, maxHeight)
 	} else {
@@ -42,6 +45,10 @@ func (_m *HistoryClient) Genesis(_a0 context.Context) (*coretypes.ResultGenesis,
 	ret := _m.Called(_a0)
 
 	var r0 *coretypes.ResultGenesis
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultGenesis, error)); ok {
+		return rf(_a0)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context) *coretypes.ResultGenesis); ok {
 		r0 = rf(_a0)
 	} else {
@@ -50,7 +57,6 @@ func (_m *HistoryClient) Genesis(_a0 context.Context) (*coretypes.ResultGenesis,
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -65,6 +71,10 @@ func (_m *HistoryClient) GenesisChunked(_a0 context.Context, _a1 uint) (*coretyp
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *coretypes.ResultGenesisChunk
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, uint) (*coretypes.ResultGenesisChunk, error)); ok {
+		return rf(_a0, _a1)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, uint) *coretypes.ResultGenesisChunk); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -73,7 +83,6 @@ func (_m *HistoryClient) GenesisChunked(_a0 context.Context, _a1 uint) (*coretyp
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, uint) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {

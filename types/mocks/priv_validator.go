@@ -45,6 +45,10 @@ func (_m *PrivValidator) GetFirstQuorumHash(_a0 context.Context) (bytes.HexBytes
 	ret := _m.Called(_a0)
 
 	var r0 bytes.HexBytes
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) (bytes.HexBytes, error)); ok {
+		return rf(_a0)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context) bytes.HexBytes); ok {
 		r0 = rf(_a0)
 	} else {
@@ -53,7 +57,6 @@ func (_m *PrivValidator) GetFirstQuorumHash(_a0 context.Context) (bytes.HexBytes
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -68,13 +71,16 @@ func (_m *PrivValidator) GetHeight(ctx context.Context, quorumHash bytes.HexByte
 	ret := _m.Called(ctx, quorumHash)
 
 	var r0 int64
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (int64, error)); ok {
+		return rf(ctx, quorumHash)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) int64); ok {
 		r0 = rf(ctx, quorumHash)
 	} else {
 		r0 = ret.Get(0).(int64)
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes) error); ok {
 		r1 = rf(ctx, quorumHash)
 	} else {
@@ -89,6 +95,10 @@ func (_m *PrivValidator) GetPrivateKey(ctx context.Context, quorumHash bytes.Hex
 	ret := _m.Called(ctx, quorumHash)
 
 	var r0 crypto.PrivKey
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (crypto.PrivKey, error)); ok {
+		return rf(ctx, quorumHash)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) crypto.PrivKey); ok {
 		r0 = rf(ctx, quorumHash)
 	} else {
@@ -97,7 +107,6 @@ func (_m *PrivValidator) GetPrivateKey(ctx context.Context, quorumHash bytes.Hex
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes) error); ok {
 		r1 = rf(ctx, quorumHash)
 	} else {
@@ -112,6 +121,10 @@ func (_m *PrivValidator) GetProTxHash(_a0 context.Context) (bytes.HexBytes, erro
 	ret := _m.Called(_a0)
 
 	var r0 bytes.HexBytes
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) (bytes.HexBytes, error)); ok {
+		return rf(_a0)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context) bytes.HexBytes); ok {
 		r0 = rf(_a0)
 	} else {
@@ -120,7 +133,6 @@ func (_m *PrivValidator) GetProTxHash(_a0 context.Context) (bytes.HexBytes, erro
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -135,6 +147,10 @@ func (_m *PrivValidator) GetPubKey(ctx context.Context, quorumHash bytes.HexByte
 	ret := _m.Called(ctx, quorumHash)
 
 	var r0 crypto.PubKey
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (crypto.PubKey, error)); ok {
+		return rf(ctx, quorumHash)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) crypto.PubKey); ok {
 		r0 = rf(ctx, quorumHash)
 	} else {
@@ -143,7 +159,6 @@ func (_m *PrivValidator) GetPubKey(ctx context.Context, quorumHash bytes.HexByte
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes) error); ok {
 		r1 = rf(ctx, quorumHash)
 	} else {
@@ -158,6 +173,10 @@ func (_m *PrivValidator) GetThresholdPublicKey(ctx context.Context, quorumHash b
 	ret := _m.Called(ctx, quorumHash)
 
 	var r0 crypto.PubKey
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (crypto.PubKey, error)); ok {
+		return rf(ctx, quorumHash)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) crypto.PubKey); ok {
 		r0 = rf(ctx, quorumHash)
 	} else {
@@ -166,7 +185,6 @@ func (_m *PrivValidator) GetThresholdPublicKey(ctx context.Context, quorumHash b
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes) error); ok {
 		r1 = rf(ctx, quorumHash)
 	} else {
@@ -181,6 +199,10 @@ func (_m *PrivValidator) SignProposal(ctx context.Context, chainID string, quoru
 	ret := _m.Called(ctx, chainID, quorumType, quorumHash, proposal)
 
 	var r0 bytes.HexBytes
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, bytes.HexBytes, *tenderminttypes.Proposal) (bytes.HexBytes, error)); ok {
+		return rf(ctx, chainID, quorumType, quorumHash, proposal)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, bytes.HexBytes, *tenderminttypes.Proposal) bytes.HexBytes); ok {
 		r0 = rf(ctx, chainID, quorumType, quorumHash, proposal)
 	} else {
@@ -189,7 +211,6 @@ func (_m *PrivValidator) SignProposal(ctx context.Context, chainID string, quoru
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, string, btcjson.LLMQType, bytes.HexBytes, *tenderminttypes.Proposal) error); ok {
 		r1 = rf(ctx, chainID, quorumType, quorumHash, proposal)
 	} else {
