@@ -159,9 +159,9 @@ message RequestOfferSnapshot {
 
 // Used during state sync to retrieve snapshot chunks from peers.
 message RequestLoadSnapshotChunk {
-  uint64 height   = 1; // The height of the snapshot the chunks belongs to.
-  uint32 version  = 2; // The application-specific format of the snapshot the chunk belongs to.
-  bytes  chunk_id = 3; // The chunk id is a hash of the node of subtree of the snapshot.
+  uint64 height   = 1;  // The height of the snapshot the chunks belongs to.
+  uint32 version  = 2;  // The application-specific format of the snapshot the chunk belongs to.
+  bytes  chunk_id = 3;  // The chunk id is a hash of the node of subtree of the snapshot.
 }
 
 // Applies a snapshot chunk.
@@ -614,13 +614,13 @@ message ResponseApplySnapshotChunk {
   repeated bytes next_chunks = 4;
 
   enum Result {
-    UNKNOWN           = 0; // Unknown result, abort all snapshot restoration
-    ACCEPT            = 1; // Chunk successfully accepted
-    ABORT             = 2; // Abort all snapshot restoration
-    RETRY             = 3; // Retry chunk (combine with refetch and reject)
-    RETRY_SNAPSHOT    = 4; // Retry snapshot (combine with refetch and reject)
-    REJECT_SNAPSHOT   = 5; // Reject this snapshot, try others
-    COMPLETE_SNAPSHOT = 6; // Complete this snapshot, no more chunks
+    UNKNOWN           = 0;  // Unknown result, abort all snapshot restoration
+    ACCEPT            = 1;  // Chunk successfully accepted
+    ABORT             = 2;  // Abort all snapshot restoration
+    RETRY             = 3;  // Retry chunk (combine with refetch and reject)
+    RETRY_SNAPSHOT    = 4;  // Retry snapshot (combine with refetch and reject)
+    REJECT_SNAPSHOT   = 5;  // Reject this snapshot, try others
+    COMPLETE_SNAPSHOT = 6;  // Complete this snapshot, no more chunks
   }
 }
 
