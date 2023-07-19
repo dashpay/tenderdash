@@ -13,6 +13,11 @@ import (
 )
 
 func TestWaitForMNReady(t *testing.T) {
+	retryTimeout := 1 * time.Millisecond
+	sleep = func(d time.Duration) {
+		require.Equal(t, d, retryTimeout)
+	}
+	defer func() { sleep = time.Sleep }()
 	testCases := []struct {
 		states  []btcjson.MNStatusState
 		wantErr string
