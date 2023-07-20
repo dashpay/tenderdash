@@ -25,10 +25,6 @@ func (_m *ABCIClient) ABCIInfo(_a0 context.Context) (*coretypes.ResultABCIInfo, 
 	ret := _m.Called(_a0)
 
 	var r0 *coretypes.ResultABCIInfo
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultABCIInfo, error)); ok {
-		return rf(_a0)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context) *coretypes.ResultABCIInfo); ok {
 		r0 = rf(_a0)
 	} else {
@@ -37,6 +33,7 @@ func (_m *ABCIClient) ABCIInfo(_a0 context.Context) (*coretypes.ResultABCIInfo, 
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -51,10 +48,6 @@ func (_m *ABCIClient) ABCIQuery(ctx context.Context, path string, data bytes.Hex
 	ret := _m.Called(ctx, path, data)
 
 	var r0 *coretypes.ResultABCIQuery
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, bytes.HexBytes) (*coretypes.ResultABCIQuery, error)); ok {
-		return rf(ctx, path, data)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, string, bytes.HexBytes) *coretypes.ResultABCIQuery); ok {
 		r0 = rf(ctx, path, data)
 	} else {
@@ -63,6 +56,7 @@ func (_m *ABCIClient) ABCIQuery(ctx context.Context, path string, data bytes.Hex
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, string, bytes.HexBytes) error); ok {
 		r1 = rf(ctx, path, data)
 	} else {
@@ -77,10 +71,6 @@ func (_m *ABCIClient) ABCIQueryWithOptions(ctx context.Context, path string, dat
 	ret := _m.Called(ctx, path, data, opts)
 
 	var r0 *coretypes.ResultABCIQuery
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, bytes.HexBytes, client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error)); ok {
-		return rf(ctx, path, data, opts)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, string, bytes.HexBytes, client.ABCIQueryOptions) *coretypes.ResultABCIQuery); ok {
 		r0 = rf(ctx, path, data, opts)
 	} else {
@@ -89,6 +79,7 @@ func (_m *ABCIClient) ABCIQueryWithOptions(ctx context.Context, path string, dat
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, string, bytes.HexBytes, client.ABCIQueryOptions) error); ok {
 		r1 = rf(ctx, path, data, opts)
 	} else {
@@ -103,10 +94,6 @@ func (_m *ABCIClient) BroadcastTx(_a0 context.Context, _a1 types.Tx) (*coretypes
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *coretypes.ResultBroadcastTx
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) (*coretypes.ResultBroadcastTx, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) *coretypes.ResultBroadcastTx); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -115,6 +102,7 @@ func (_m *ABCIClient) BroadcastTx(_a0 context.Context, _a1 types.Tx) (*coretypes
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, types.Tx) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -129,10 +117,6 @@ func (_m *ABCIClient) BroadcastTxAsync(_a0 context.Context, _a1 types.Tx) (*core
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *coretypes.ResultBroadcastTx
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) (*coretypes.ResultBroadcastTx, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) *coretypes.ResultBroadcastTx); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -141,6 +125,7 @@ func (_m *ABCIClient) BroadcastTxAsync(_a0 context.Context, _a1 types.Tx) (*core
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, types.Tx) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -155,10 +140,6 @@ func (_m *ABCIClient) BroadcastTxCommit(_a0 context.Context, _a1 types.Tx) (*cor
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *coretypes.ResultBroadcastTxCommit
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) (*coretypes.ResultBroadcastTxCommit, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) *coretypes.ResultBroadcastTxCommit); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -167,6 +148,7 @@ func (_m *ABCIClient) BroadcastTxCommit(_a0 context.Context, _a1 types.Tx) (*cor
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, types.Tx) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -181,10 +163,6 @@ func (_m *ABCIClient) BroadcastTxSync(_a0 context.Context, _a1 types.Tx) (*coret
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *coretypes.ResultBroadcastTx
-	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) (*coretypes.ResultBroadcastTx, error)); ok {
-		return rf(_a0, _a1)
-	}
 	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) *coretypes.ResultBroadcastTx); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -193,6 +171,7 @@ func (_m *ABCIClient) BroadcastTxSync(_a0 context.Context, _a1 types.Tx) (*coret
 		}
 	}
 
+	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, types.Tx) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
