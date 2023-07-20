@@ -33,6 +33,10 @@ func (_m *Client) GetNetworkInfo() (*btcjson.GetNetworkInfoResult, error) {
 	ret := _m.Called()
 
 	var r0 *btcjson.GetNetworkInfoResult
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (*btcjson.GetNetworkInfoResult, error)); ok {
+		return rf()
+	}
 	if rf, ok := ret.Get(0).(func() *btcjson.GetNetworkInfoResult); ok {
 		r0 = rf()
 	} else {
@@ -41,7 +45,6 @@ func (_m *Client) GetNetworkInfo() (*btcjson.GetNetworkInfoResult, error) {
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func() error); ok {
 		r1 = rf()
 	} else {
@@ -56,6 +59,10 @@ func (_m *Client) MasternodeListJSON(filter string) (map[string]btcjson.Masterno
 	ret := _m.Called(filter)
 
 	var r0 map[string]btcjson.MasternodelistResultJSON
+	var r1 error
+	if rf, ok := ret.Get(0).(func(string) (map[string]btcjson.MasternodelistResultJSON, error)); ok {
+		return rf(filter)
+	}
 	if rf, ok := ret.Get(0).(func(string) map[string]btcjson.MasternodelistResultJSON); ok {
 		r0 = rf(filter)
 	} else {
@@ -64,7 +71,6 @@ func (_m *Client) MasternodeListJSON(filter string) (map[string]btcjson.Masterno
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(string) error); ok {
 		r1 = rf(filter)
 	} else {
@@ -79,6 +85,10 @@ func (_m *Client) MasternodeStatus() (*btcjson.MasternodeStatusResult, error) {
 	ret := _m.Called()
 
 	var r0 *btcjson.MasternodeStatusResult
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (*btcjson.MasternodeStatusResult, error)); ok {
+		return rf()
+	}
 	if rf, ok := ret.Get(0).(func() *btcjson.MasternodeStatusResult); ok {
 		r0 = rf()
 	} else {
@@ -87,7 +97,6 @@ func (_m *Client) MasternodeStatus() (*btcjson.MasternodeStatusResult, error) {
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func() error); ok {
 		r1 = rf()
 	} else {
@@ -116,6 +125,10 @@ func (_m *Client) QuorumInfo(quorumType btcjson.LLMQType, quorumHash bytes.HexBy
 	ret := _m.Called(quorumType, quorumHash)
 
 	var r0 *btcjson.QuorumInfoResult
+	var r1 error
+	if rf, ok := ret.Get(0).(func(btcjson.LLMQType, bytes.HexBytes) (*btcjson.QuorumInfoResult, error)); ok {
+		return rf(quorumType, quorumHash)
+	}
 	if rf, ok := ret.Get(0).(func(btcjson.LLMQType, bytes.HexBytes) *btcjson.QuorumInfoResult); ok {
 		r0 = rf(quorumType, quorumHash)
 	} else {
@@ -124,7 +137,6 @@ func (_m *Client) QuorumInfo(quorumType btcjson.LLMQType, quorumHash bytes.HexBy
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(btcjson.LLMQType, bytes.HexBytes) error); ok {
 		r1 = rf(quorumType, quorumHash)
 	} else {
@@ -139,6 +151,10 @@ func (_m *Client) QuorumSign(quorumType btcjson.LLMQType, requestID bytes.HexByt
 	ret := _m.Called(quorumType, requestID, messageHash, quorumHash)
 
 	var r0 *btcjson.QuorumSignResult
+	var r1 error
+	if rf, ok := ret.Get(0).(func(btcjson.LLMQType, bytes.HexBytes, bytes.HexBytes, bytes.HexBytes) (*btcjson.QuorumSignResult, error)); ok {
+		return rf(quorumType, requestID, messageHash, quorumHash)
+	}
 	if rf, ok := ret.Get(0).(func(btcjson.LLMQType, bytes.HexBytes, bytes.HexBytes, bytes.HexBytes) *btcjson.QuorumSignResult); ok {
 		r0 = rf(quorumType, requestID, messageHash, quorumHash)
 	} else {
@@ -147,7 +163,6 @@ func (_m *Client) QuorumSign(quorumType btcjson.LLMQType, requestID bytes.HexByt
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(btcjson.LLMQType, bytes.HexBytes, bytes.HexBytes, bytes.HexBytes) error); ok {
 		r1 = rf(quorumType, requestID, messageHash, quorumHash)
 	} else {
@@ -162,13 +177,16 @@ func (_m *Client) QuorumVerify(quorumType btcjson.LLMQType, requestID bytes.HexB
 	ret := _m.Called(quorumType, requestID, messageHash, signature, quorumHash)
 
 	var r0 bool
+	var r1 error
+	if rf, ok := ret.Get(0).(func(btcjson.LLMQType, bytes.HexBytes, bytes.HexBytes, bytes.HexBytes, bytes.HexBytes) (bool, error)); ok {
+		return rf(quorumType, requestID, messageHash, signature, quorumHash)
+	}
 	if rf, ok := ret.Get(0).(func(btcjson.LLMQType, bytes.HexBytes, bytes.HexBytes, bytes.HexBytes, bytes.HexBytes) bool); ok {
 		r0 = rf(quorumType, requestID, messageHash, signature, quorumHash)
 	} else {
 		r0 = ret.Get(0).(bool)
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(btcjson.LLMQType, bytes.HexBytes, bytes.HexBytes, bytes.HexBytes, bytes.HexBytes) error); ok {
 		r1 = rf(quorumType, requestID, messageHash, signature, quorumHash)
 	} else {
@@ -178,13 +196,12 @@ func (_m *Client) QuorumVerify(quorumType btcjson.LLMQType, requestID bytes.HexB
 	return r0, r1
 }
 
-type mockConstructorTestingTNewClient interface {
+// NewClient creates a new instance of Client. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewClient(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewClient creates a new instance of Client. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewClient(t mockConstructorTestingTNewClient) *Client {
+}) *Client {
 	mock := &Client{}
 	mock.Mock.Test(t)
 

@@ -19,6 +19,10 @@ func (_m *StatusClient) Status(_a0 context.Context) (*coretypes.ResultStatus, er
 	ret := _m.Called(_a0)
 
 	var r0 *coretypes.ResultStatus
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultStatus, error)); ok {
+		return rf(_a0)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context) *coretypes.ResultStatus); ok {
 		r0 = rf(_a0)
 	} else {
@@ -27,7 +31,6 @@ func (_m *StatusClient) Status(_a0 context.Context) (*coretypes.ResultStatus, er
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -37,13 +40,12 @@ func (_m *StatusClient) Status(_a0 context.Context) (*coretypes.ResultStatus, er
 	return r0, r1
 }
 
-type mockConstructorTestingTNewStatusClient interface {
+// NewStatusClient creates a new instance of StatusClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewStatusClient(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewStatusClient creates a new instance of StatusClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewStatusClient(t mockConstructorTestingTNewStatusClient) *StatusClient {
+}) *StatusClient {
 	mock := &StatusClient{}
 	mock.Mock.Test(t)
 

@@ -26,6 +26,10 @@ func (_m *SubscriptionClient) Subscribe(ctx context.Context, subscriber string, 
 	ret := _m.Called(_ca...)
 
 	var r0 <-chan coretypes.ResultEvent
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...int) (<-chan coretypes.ResultEvent, error)); ok {
+		return rf(ctx, subscriber, query, outCapacity...)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...int) <-chan coretypes.ResultEvent); ok {
 		r0 = rf(ctx, subscriber, query, outCapacity...)
 	} else {
@@ -34,7 +38,6 @@ func (_m *SubscriptionClient) Subscribe(ctx context.Context, subscriber string, 
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, string, string, ...int) error); ok {
 		r1 = rf(ctx, subscriber, query, outCapacity...)
 	} else {
@@ -72,13 +75,12 @@ func (_m *SubscriptionClient) UnsubscribeAll(ctx context.Context, subscriber str
 	return r0
 }
 
-type mockConstructorTestingTNewSubscriptionClient interface {
+// NewSubscriptionClient creates a new instance of SubscriptionClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewSubscriptionClient(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewSubscriptionClient creates a new instance of SubscriptionClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewSubscriptionClient(t mockConstructorTestingTNewSubscriptionClient) *SubscriptionClient {
+}) *SubscriptionClient {
 	mock := &SubscriptionClient{}
 	mock.Mock.Test(t)
 

@@ -48,13 +48,16 @@ func (_m *Store) Load() (state.State, error) {
 	ret := _m.Called()
 
 	var r0 state.State
+	var r1 error
+	if rf, ok := ret.Get(0).(func() (state.State, error)); ok {
+		return rf()
+	}
 	if rf, ok := ret.Get(0).(func() state.State); ok {
 		r0 = rf()
 	} else {
 		r0 = ret.Get(0).(state.State)
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func() error); ok {
 		r1 = rf()
 	} else {
@@ -69,6 +72,10 @@ func (_m *Store) LoadABCIResponses(_a0 int64) (*tendermintstate.ABCIResponses, e
 	ret := _m.Called(_a0)
 
 	var r0 *tendermintstate.ABCIResponses
+	var r1 error
+	if rf, ok := ret.Get(0).(func(int64) (*tendermintstate.ABCIResponses, error)); ok {
+		return rf(_a0)
+	}
 	if rf, ok := ret.Get(0).(func(int64) *tendermintstate.ABCIResponses); ok {
 		r0 = rf(_a0)
 	} else {
@@ -77,7 +84,6 @@ func (_m *Store) LoadABCIResponses(_a0 int64) (*tendermintstate.ABCIResponses, e
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(int64) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -92,13 +98,16 @@ func (_m *Store) LoadConsensusParams(_a0 int64) (types.ConsensusParams, error) {
 	ret := _m.Called(_a0)
 
 	var r0 types.ConsensusParams
+	var r1 error
+	if rf, ok := ret.Get(0).(func(int64) (types.ConsensusParams, error)); ok {
+		return rf(_a0)
+	}
 	if rf, ok := ret.Get(0).(func(int64) types.ConsensusParams); ok {
 		r0 = rf(_a0)
 	} else {
 		r0 = ret.Get(0).(types.ConsensusParams)
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(int64) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -113,6 +122,10 @@ func (_m *Store) LoadValidators(_a0 int64) (*types.ValidatorSet, error) {
 	ret := _m.Called(_a0)
 
 	var r0 *types.ValidatorSet
+	var r1 error
+	if rf, ok := ret.Get(0).(func(int64) (*types.ValidatorSet, error)); ok {
+		return rf(_a0)
+	}
 	if rf, ok := ret.Get(0).(func(int64) *types.ValidatorSet); ok {
 		r0 = rf(_a0)
 	} else {
@@ -121,7 +134,6 @@ func (_m *Store) LoadValidators(_a0 int64) (*types.ValidatorSet, error) {
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(int64) error); ok {
 		r1 = rf(_a0)
 	} else {
@@ -187,13 +199,12 @@ func (_m *Store) SaveValidatorSets(_a0 int64, _a1 int64, _a2 *types.ValidatorSet
 	return r0
 }
 
-type mockConstructorTestingTNewStore interface {
+// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewStore(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewStore(t mockConstructorTestingTNewStore) *Store {
+}) *Store {
 	mock := &Store{}
 	mock.Mock.Test(t)
 
