@@ -21,6 +21,10 @@ func (_m *EvidenceClient) BroadcastEvidence(_a0 context.Context, _a1 types.Evide
 	ret := _m.Called(_a0, _a1)
 
 	var r0 *coretypes.ResultBroadcastEvidence
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, types.Evidence) (*coretypes.ResultBroadcastEvidence, error)); ok {
+		return rf(_a0, _a1)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, types.Evidence) *coretypes.ResultBroadcastEvidence); ok {
 		r0 = rf(_a0, _a1)
 	} else {
@@ -29,7 +33,6 @@ func (_m *EvidenceClient) BroadcastEvidence(_a0 context.Context, _a1 types.Evide
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, types.Evidence) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
@@ -39,13 +42,12 @@ func (_m *EvidenceClient) BroadcastEvidence(_a0 context.Context, _a1 types.Evide
 	return r0, r1
 }
 
-type mockConstructorTestingTNewEvidenceClient interface {
+// NewEvidenceClient creates a new instance of EvidenceClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewEvidenceClient(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewEvidenceClient creates a new instance of EvidenceClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewEvidenceClient(t mockConstructorTestingTNewEvidenceClient) *EvidenceClient {
+}) *EvidenceClient {
 	mock := &EvidenceClient{}
 	mock.Mock.Test(t)
 

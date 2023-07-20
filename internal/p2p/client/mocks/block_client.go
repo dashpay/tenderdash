@@ -24,6 +24,10 @@ func (_m *BlockClient) GetBlock(ctx context.Context, height int64, peerID types.
 	ret := _m.Called(ctx, height, peerID)
 
 	var r0 *promise.Promise[*blocksync.BlockResponse]
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, int64, types.NodeID) (*promise.Promise[*blocksync.BlockResponse], error)); ok {
+		return rf(ctx, height, peerID)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, int64, types.NodeID) *promise.Promise[*blocksync.BlockResponse]); ok {
 		r0 = rf(ctx, height, peerID)
 	} else {
@@ -32,7 +36,6 @@ func (_m *BlockClient) GetBlock(ctx context.Context, height int64, peerID types.
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, int64, types.NodeID) error); ok {
 		r1 = rf(ctx, height, peerID)
 	} else {
@@ -70,13 +73,12 @@ func (_m *BlockClient) Send(ctx context.Context, msg interface{}) error {
 	return r0
 }
 
-type mockConstructorTestingTNewBlockClient interface {
+// NewBlockClient creates a new instance of BlockClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewBlockClient(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewBlockClient creates a new instance of BlockClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewBlockClient(t mockConstructorTestingTNewBlockClient) *BlockClient {
+}) *BlockClient {
 	mock := &BlockClient{}
 	mock.Mock.Test(t)
 

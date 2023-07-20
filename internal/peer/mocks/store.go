@@ -34,13 +34,16 @@ func (_m *Store[T]) Get(peerID types.NodeID) (T, bool) {
 	ret := _m.Called(peerID)
 
 	var r0 T
+	var r1 bool
+	if rf, ok := ret.Get(0).(func(types.NodeID) (T, bool)); ok {
+		return rf(peerID)
+	}
 	if rf, ok := ret.Get(0).(func(types.NodeID) T); ok {
 		r0 = rf(peerID)
 	} else {
 		r0 = ret.Get(0).(T)
 	}
 
-	var r1 bool
 	if rf, ok := ret.Get(1).(func(types.NodeID) bool); ok {
 		r1 = rf(peerID)
 	} else {
@@ -55,13 +58,16 @@ func (_m *Store[T]) GetAndRemove(peerID types.NodeID) (T, bool) {
 	ret := _m.Called(peerID)
 
 	var r0 T
+	var r1 bool
+	if rf, ok := ret.Get(0).(func(types.NodeID) (T, bool)); ok {
+		return rf(peerID)
+	}
 	if rf, ok := ret.Get(0).(func(types.NodeID) T); ok {
 		r0 = rf(peerID)
 	} else {
 		r0 = ret.Get(0).(T)
 	}
 
-	var r1 bool
 	if rf, ok := ret.Get(1).(func(types.NodeID) bool); ok {
 		r1 = rf(peerID)
 	} else {
@@ -109,13 +115,12 @@ func (_m *Store[T]) Update(peerID types.NodeID, updates ...peer.UpdateFunc[T]) {
 	_m.Called(_ca...)
 }
 
-type mockConstructorTestingTNewStore interface {
+// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewStore[T interface{}](t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewStore[T interface{}](t mockConstructorTestingTNewStore) *Store[T] {
+}) *Store[T] {
 	mock := &Store[T]{}
 	mock.Mock.Test(t)
 

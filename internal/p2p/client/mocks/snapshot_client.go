@@ -23,6 +23,10 @@ func (_m *SnapshotClient) GetChunk(ctx context.Context, peerID types.NodeID, hei
 	ret := _m.Called(ctx, peerID, height, format, index)
 
 	var r0 *promise.Promise[*statesync.ChunkResponse]
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, types.NodeID, uint64, uint32, uint32) (*promise.Promise[*statesync.ChunkResponse], error)); ok {
+		return rf(ctx, peerID, height, format, index)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, types.NodeID, uint64, uint32, uint32) *promise.Promise[*statesync.ChunkResponse]); ok {
 		r0 = rf(ctx, peerID, height, format, index)
 	} else {
@@ -31,7 +35,6 @@ func (_m *SnapshotClient) GetChunk(ctx context.Context, peerID types.NodeID, hei
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, types.NodeID, uint64, uint32, uint32) error); ok {
 		r1 = rf(ctx, peerID, height, format, index)
 	} else {
@@ -46,6 +49,10 @@ func (_m *SnapshotClient) GetLightBlock(ctx context.Context, peerID types.NodeID
 	ret := _m.Called(ctx, peerID, height)
 
 	var r0 *promise.Promise[*statesync.LightBlockResponse]
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, types.NodeID, uint64) (*promise.Promise[*statesync.LightBlockResponse], error)); ok {
+		return rf(ctx, peerID, height)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, types.NodeID, uint64) *promise.Promise[*statesync.LightBlockResponse]); ok {
 		r0 = rf(ctx, peerID, height)
 	} else {
@@ -54,7 +61,6 @@ func (_m *SnapshotClient) GetLightBlock(ctx context.Context, peerID types.NodeID
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, types.NodeID, uint64) error); ok {
 		r1 = rf(ctx, peerID, height)
 	} else {
@@ -69,6 +75,10 @@ func (_m *SnapshotClient) GetParams(ctx context.Context, peerID types.NodeID, he
 	ret := _m.Called(ctx, peerID, height)
 
 	var r0 *promise.Promise[*statesync.ParamsResponse]
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, types.NodeID, uint64) (*promise.Promise[*statesync.ParamsResponse], error)); ok {
+		return rf(ctx, peerID, height)
+	}
 	if rf, ok := ret.Get(0).(func(context.Context, types.NodeID, uint64) *promise.Promise[*statesync.ParamsResponse]); ok {
 		r0 = rf(ctx, peerID, height)
 	} else {
@@ -77,7 +87,6 @@ func (_m *SnapshotClient) GetParams(ctx context.Context, peerID types.NodeID, he
 		}
 	}
 
-	var r1 error
 	if rf, ok := ret.Get(1).(func(context.Context, types.NodeID, uint64) error); ok {
 		r1 = rf(ctx, peerID, height)
 	} else {
@@ -101,13 +110,12 @@ func (_m *SnapshotClient) GetSnapshots(ctx context.Context, peerID types.NodeID)
 	return r0
 }
 
-type mockConstructorTestingTNewSnapshotClient interface {
+// NewSnapshotClient creates a new instance of SnapshotClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewSnapshotClient(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewSnapshotClient creates a new instance of SnapshotClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewSnapshotClient(t mockConstructorTestingTNewSnapshotClient) *SnapshotClient {
+}) *SnapshotClient {
 	mock := &SnapshotClient{}
 	mock.Mock.Test(t)
 
