@@ -244,7 +244,7 @@ func WaitForMNReady(client Client, retryTimeout time.Duration) error {
 			btcjson.MNStatusStateProtxIpChanged,
 			btcjson.MNStatusStateError,
 			btcjson.MNStatusStateUnknown:
-			return fmt.Errorf("got masternode state %s", result.State)
+			return fmt.Errorf("unexpected masternode state %s", result.State)
 		}
 	}
 }
