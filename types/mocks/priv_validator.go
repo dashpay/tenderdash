@@ -239,12 +239,13 @@ func (_m *PrivValidator) UpdatePrivateKey(ctx context.Context, privateKey crypto
 	_m.Called(ctx, privateKey, quorumHash, thresholdPublicKey, height)
 }
 
-// NewPrivValidator creates a new instance of PrivValidator. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewPrivValidator(t interface {
+type mockConstructorTestingTNewPrivValidator interface {
 	mock.TestingT
 	Cleanup(func())
-}) *PrivValidator {
+}
+
+// NewPrivValidator creates a new instance of PrivValidator. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewPrivValidator(t mockConstructorTestingTNewPrivValidator) *PrivValidator {
 	mock := &PrivValidator{}
 	mock.Mock.Test(t)
 

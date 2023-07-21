@@ -40,12 +40,13 @@ func (_m *EventsClient) Events(ctx context.Context, req *coretypes.RequestEvents
 	return r0, r1
 }
 
-// NewEventsClient creates a new instance of EventsClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewEventsClient(t interface {
+type mockConstructorTestingTNewEventsClient interface {
 	mock.TestingT
 	Cleanup(func())
-}) *EventsClient {
+}
+
+// NewEventsClient creates a new instance of EventsClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewEventsClient(t mockConstructorTestingTNewEventsClient) *EventsClient {
 	mock := &EventsClient{}
 	mock.Mock.Test(t)
 

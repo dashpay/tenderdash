@@ -178,12 +178,13 @@ func (_m *EventSink) Type() indexer.EventSinkType {
 	return r0
 }
 
-// NewEventSink creates a new instance of EventSink. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewEventSink(t interface {
+type mockConstructorTestingTNewEventSink interface {
 	mock.TestingT
 	Cleanup(func())
-}) *EventSink {
+}
+
+// NewEventSink creates a new instance of EventSink. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewEventSink(t mockConstructorTestingTNewEventSink) *EventSink {
 	mock := &EventSink{}
 	mock.Mock.Test(t)
 
