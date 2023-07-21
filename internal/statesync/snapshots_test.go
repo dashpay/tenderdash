@@ -13,7 +13,7 @@ func TestSnapshot_Key(t *testing.T) {
 		modify func(*snapshot)
 	}{
 		"new height":  {func(s *snapshot) { s.Height = 9 }},
-		"new format":  {func(s *snapshot) { s.Version = 9 }},
+		"new version": {func(s *snapshot) { s.Version = 9 }},
 		"new hash":    {func(s *snapshot) { s.Hash = []byte{9} }},
 		"no metadata": {func(s *snapshot) { s.Metadata = nil }},
 	}

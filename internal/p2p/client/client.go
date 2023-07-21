@@ -149,11 +149,11 @@ func (c *Client) GetChunk(
 	ctx context.Context,
 	peerID types.NodeID,
 	height uint64,
-	format uint32,
-	index uint32,
+	version uint32,
+	chunkID []byte,
 ) (*promise.Promise[*statesync.ChunkResponse], error) {
 	reqID := uuid.NewString()
-	msg := &statesync.ChunkRequest{Height: height, Format: format, Index: index}
+	msg := &statesync.ChunkRequest{Height: height, Version: version, ChunkId: chunkID}
 	respCh, err := c.sendWithResponse(ctx, reqID, peerID, msg)
 	if err != nil {
 		return nil, err

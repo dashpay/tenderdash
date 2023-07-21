@@ -32,15 +32,14 @@ func (suite *snapshotRepositoryTestSuite) SetupTest() {
 func (suite *snapshotRepositoryTestSuite) TestOfferSnapshot() {
 	ctx := context.Background()
 	fakeSnapshot := &snapshot{
-		Height: 1,
-		Format: 0,
-		Hash:   []byte{1, 2, 3, 4, 5},
+		Height:  1,
+		Version: 0,
+		Hash:    []byte{1, 2, 3, 4, 5},
 	}
 	req := &abci.RequestOfferSnapshot{
 		Snapshot: &abci.Snapshot{
 			Height:   fakeSnapshot.Height,
-			Format:   fakeSnapshot.Format,
-			Chunks:   fakeSnapshot.Chunks,
+			Version:  fakeSnapshot.Version,
 			Hash:     fakeSnapshot.Hash,
 			Metadata: fakeSnapshot.Metadata,
 		},
@@ -96,13 +95,13 @@ func (suite *snapshotRepositoryTestSuite) TestLoadSnapshotChunk() {
 	data := []byte{1, 2, 3, 4, 5}
 	suite.client.
 		On("LoadSnapshotChunk", ctx, &abci.RequestLoadSnapshotChunk{
-			Height: 1,
-			Format: 2,
-			Chunk:  3,
+			Height:  1,
+			Version: 2,
+			ChunkId: []byte{3},
 		}).
 		Once().
 		Return(&abci.ResponseLoadSnapshotChunk{Chunk: data}, nil)
-	resp, err := suite.repo.loadSnapshotChunk(ctx, 1, 2, 3)
+	resp, err := suite.repo.loadSnapshotChunk(ctx, 1, 2, []byte{3})
 	suite.Require().NoError(err)
 	suite.Require().Equal(data, resp.Chunk)
 }
@@ -113,8 +112,8 @@ func (suite *snapshotRepositoryTestSuite) TestRecentSnapshots() {
 	storedSnapshots := make([]*abci.Snapshot, 0, storedLen)
 	for i := 1; i <= storedLen; i++ {
 		storedSnapshots = append(storedSnapshots, &abci.Snapshot{
-			Height: uint64(i * 1000),
-			Format: 0,
+			Height:  uint64(i * 1000),
+			Version: 0,
 		})
 	}
 	rand.Shuffle(20, func(i, j int) {

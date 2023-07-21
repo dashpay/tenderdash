@@ -68,13 +68,14 @@ func newSnapshotRepository(client abciclient.Client, logger log.Logger) *snapsho
 // offerSnapshot offers a snapshot to the app. It returns various errors depending on the app's
 // response, or nil if the snapshot was accepted.
 func (r *snapshotRepository) offerSnapshot(ctx context.Context, snapshot *snapshot) error { //nolint:dupl
-	r.logger.Info("Offering snapshot to ABCI app", "height", snapshot.Height,
-		"format", snapshot.Format, "hash", snapshot.Hash)
+	r.logger.Info("Offering snapshot to ABCI app",
+		"height", snapshot.Height,
+		"version", snapshot.Version,
+		"hash", snapshot.Hash)
 	resp, err := r.client.OfferSnapshot(ctx, &abci.RequestOfferSnapshot{
 		Snapshot: &abci.Snapshot{
 			Height:   snapshot.Height,
-			Format:   snapshot.Format,
-			Chunks:   snapshot.Chunks,
+			Version:  snapshot.Version,
 			Hash:     snapshot.Hash,
 			Metadata: snapshot.Metadata,
 		},
@@ -85,8 +86,10 @@ func (r *snapshotRepository) offerSnapshot(ctx context.Context, snapshot *snapsh
 	}
 	switch resp.Result {
 	case abci.ResponseOfferSnapshot_ACCEPT:
-		r.logger.Info("Snapshot accepted, restoring", "height", snapshot.Height,
-			"format", snapshot.Format, "hash", snapshot.Hash)
+		r.logger.Info("Snapshot accepted, restoring",
+			"height", snapshot.Height,
+			"version", snapshot.Version,
+			"hash", snapshot.Hash)
 		return nil
 	case abci.ResponseOfferSnapshot_ABORT:
 		return errAbort
@@ -105,13 +108,13 @@ func (r *snapshotRepository) offerSnapshot(ctx context.Context, snapshot *snapsh
 func (r *snapshotRepository) loadSnapshotChunk(
 	ctx context.Context,
 	height uint64,
-	format,
-	index uint32,
+	version uint32,
+	chunkID []byte,
 ) (*abci.ResponseLoadSnapshotChunk, error) {
 	return r.client.LoadSnapshotChunk(ctx, &abci.RequestLoadSnapshotChunk{
-		Height: height,
-		Format: format,
-		Chunk:  index,
+		Height:  height,
+		Version: version,
+		ChunkId: chunkID,
 	})
 }
 
@@ -139,7 +142,7 @@ func sortSnapshot(snapshots []*abci.Snapshot) {
 		switch {
 		case a.Height > b.Height:
 			return true
-		case a.Height == b.Height && a.Format > b.Format:
+		case a.Height == b.Height && a.Version > b.Version:
 			return true
 		default:
 			return false
@@ -150,8 +153,7 @@ func sortSnapshot(snapshots []*abci.Snapshot) {
 func newSnapshotFromABCI(s *abci.Snapshot) *snapshot {
 	return &snapshot{
 		Height:   s.Height,
-		Format:   s.Format,
-		Chunks:   s.Chunks,
+		Version:  s.Version,
 		Hash:     s.Hash,
 		Metadata: s.Metadata,
 	}
