@@ -387,7 +387,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 
 // offerSnapshot offers a snapshot to the app. It returns various errors depending on the app's
 // response, or nil if the snapshot was accepted.
-func (s *syncer) offerSnapshot(ctx context.Context, snapshot *snapshot) error {
+func (s *syncer) offerSnapshot(ctx context.Context, snapshot *snapshot) error { //nolint:dupl
 	s.logger.Info("Offering snapshot to ABCI app",
 		"height", snapshot.Height,
 		"version", snapshot.Version,
