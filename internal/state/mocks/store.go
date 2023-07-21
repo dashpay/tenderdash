@@ -199,12 +199,13 @@ func (_m *Store) SaveValidatorSets(_a0 int64, _a1 int64, _a2 *types.ValidatorSet
 	return r0
 }
 
-// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewStore(t interface {
+type mockConstructorTestingTNewStore interface {
 	mock.TestingT
 	Cleanup(func())
-}) *Store {
+}
+
+// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewStore(t mockConstructorTestingTNewStore) *Store {
 	mock := &Store{}
 	mock.Mock.Test(t)
 

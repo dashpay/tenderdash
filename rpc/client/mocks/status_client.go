@@ -40,12 +40,13 @@ func (_m *StatusClient) Status(_a0 context.Context) (*coretypes.ResultStatus, er
 	return r0, r1
 }
 
-// NewStatusClient creates a new instance of StatusClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewStatusClient(t interface {
+type mockConstructorTestingTNewStatusClient interface {
 	mock.TestingT
 	Cleanup(func())
-}) *StatusClient {
+}
+
+// NewStatusClient creates a new instance of StatusClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewStatusClient(t mockConstructorTestingTNewStatusClient) *StatusClient {
 	mock := &StatusClient{}
 	mock.Mock.Test(t)
 

@@ -115,12 +115,13 @@ func (_m *Store[T]) Update(peerID types.NodeID, updates ...peer.UpdateFunc[T]) {
 	_m.Called(_ca...)
 }
 
-// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewStore[T interface{}](t interface {
+type mockConstructorTestingTNewStore interface {
 	mock.TestingT
 	Cleanup(func())
-}) *Store[T] {
+}
+
+// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewStore[T interface{}](t mockConstructorTestingTNewStore) *Store[T] {
 	mock := &Store[T]{}
 	mock.Mock.Test(t)
 
