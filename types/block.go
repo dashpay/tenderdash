@@ -534,17 +534,14 @@ func (h *Header) StateID() tmproto.StateID {
 		appHash = make([]byte, crypto.DefaultAppHashSize)
 	}
 
-	ts, err := gogotypes.TimestampProto(h.Time)
-	if err != nil || ts == nil {
-		panic("cannot convert time " + h.Time.String() + " to Timesstamp: " + err.Error())
-	}
+	ts := uint64(h.Time.UnixMilli())
 
 	return tmproto.StateID{
 		AppVersion:            h.Version.App,
 		Height:                uint64(h.Height),
 		AppHash:               appHash,
 		CoreChainLockedHeight: h.CoreChainLockedHeight,
-		Time:                  *ts,
+		Time:                  ts,
 	}
 }
 

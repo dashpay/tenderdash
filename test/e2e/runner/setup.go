@@ -24,6 +24,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
 	"github.com/tendermint/tendermint/libs/log"
+	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/privval"
 	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
 	"github.com/tendermint/tendermint/test/e2e/pkg/infra"
@@ -512,7 +513,7 @@ func shouldResetPubkeys() bool {
 
 func initGenesisForEveryNode(testnet *e2e.Testnet) (map[e2e.Mode]types.GenesisDoc, error) {
 	genesis := make(map[e2e.Mode]types.GenesisDoc)
-	genesisTime := time.Now()
+	genesisTime := tmtime.Now()
 	for _, tn := range testnet.Nodes {
 		if _, ok := genesis[tn.Mode]; ok {
 			continue

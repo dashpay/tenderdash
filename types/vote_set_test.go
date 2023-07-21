@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
-	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -681,13 +680,13 @@ func withBlockHash(vote *Vote, blockHash []byte) *Vote {
 	vote = vote.Copy()
 	vote.BlockID.Hash = blockHash
 
-	ts, _ := types.TimestampProto(time.Date(2022, 1, 2, 3, 4, 5, 6, time.UTC))
+	ts := uint64(time.Date(2022, 1, 2, 3, 4, 5, 6, time.UTC).UnixMilli())
 	vote.BlockID.StateID = tmproto.StateID{
 		AppVersion:            StateIDVersion,
 		Height:                uint64(vote.Height),
 		AppHash:               blockHash,
 		CoreChainLockedHeight: 1,
-		Time:                  *ts,
+		Time:                  ts,
 	}.Hash()
 	return vote
 }

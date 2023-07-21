@@ -493,7 +493,7 @@ func (app *Application) LoadSnapshotChunk(_ context.Context, req *abci.RequestLo
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	chunk, err := app.snapshots.LoadChunk(req.Height, req.Format, req.Chunk)
+	chunk, err := app.snapshots.LoadChunk(req.Height, req.Version, req.ChunkId)
 	if err != nil {
 		return &abci.ResponseLoadSnapshotChunk{}, err
 	}
@@ -523,7 +523,11 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 	if app.offerSnapshot == nil {
 		return &abci.ResponseApplySnapshotChunk{}, fmt.Errorf("no restore in progress")
 	}
-	app.offerSnapshot.addChunk(int(req.Index), req.Chunk)
+
+	resp := &abci.ResponseApplySnapshotChunk{
+		Result:     abci.ResponseApplySnapshotChunk_ACCEPT,
+		NextChunks: app.offerSnapshot.addChunk(req.ChunkId, req.Chunk),
+	}
 
 	if app.offerSnapshot.isFull() {
 		chunks := app.offerSnapshot.bytes()
@@ -538,10 +542,9 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 			"snapshot_height", app.offerSnapshot.snapshot.Height,
 			"snapshot_apphash", app.offerSnapshot.appHash,
 		)
+		resp.Result = abci.ResponseApplySnapshotChunk_COMPLETE_SNAPSHOT
 		app.offerSnapshot = nil
 	}
-
-	resp := &abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_ACCEPT}
 
 	app.logger.Debug("ApplySnapshotChunk", "resp", resp)
 	return resp, nil
@@ -556,7 +559,9 @@ func (app *Application) createSnapshot() error {
 	if err != nil {
 		return fmt.Errorf("create snapshot: %w", err)
 	}
-	app.logger.Info("created state sync snapshot", "height", height, "apphash", app.LastCommittedState.GetAppHash())
+	app.logger.Info("created state sync snapshot",
+		"height", height,
+		"apphash", app.LastCommittedState.GetAppHash())
 	err = app.snapshots.Prune(maxSnapshotCount)
 	if err != nil {
 		return fmt.Errorf("prune snapshots: %w", err)

@@ -1,12 +1,53 @@
+## [0.13.0-dev.2] - 2023-07-19
+
+### Features
+
+- Implement statesync spec for the new approach (#663)
+
+## [0.13.0-dev.1] - 2023-06-28
+
+### Bug Fixes
+
+- [**breaking**] ProcessProposal should get CoreChainLockedHeight from block (#625)
+- [**breaking**] Remove unused SIGNED_MSG_TYPE_COMMIT (#638)
+- [**breaking**] Use millisecond resolution of block time (#650)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.11.0
+- Update changelog and version to 0.13.0-dev.1 (#651)
+
+### Testing
+
+- Sign_bytes tests synchronized with rs-tenderdash-abci (#623)
+
+### Backport
+
+- Catch up with the latest commits from v0.11 to v0.12 (#631)
+- Catch up the changes from v0.11 to v0.12 (#636)
+
+### Build
+
+- Fix broken github actions and regenerate some code (#615)
+
 ## [0.12.0-dev.2] - 2023-04-04
 
 ### Bug Fixes
 
 - Nil voteset panics in rest handler (#609)
+- Nil voteset panics in rest handler (#609) (#612)
 
 ### Features
 
 - Use dashd-go 0.24.0 to support LLMQ type 6 (LLMQType_25_67) (#610)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.12.0-dev.2 (#613)
+
+### Backport
+
+- Use dashd-go 0.24.0 to support LLMQ type 6 (LLMQType_25_67) (#610) (#611)
 
 ## [0.12.0-dev.1] - 2023-03-17
 
@@ -199,6 +240,8 @@
 
 ### Bug Fixes
 
+- Commits received during state sync are lost (#513)
+- Statesync stops the node when light block request fails (#514)
 - ProcessProposal executed twice for a block (#516)
 - Proposer-based timestamp broken during backport (#523)
 - Improve wal replay mechanism (#510)
@@ -209,28 +252,13 @@
 
 ### Miscellaneous Tasks
 
-- [**breaking**] Rename genesis.json quorum fields (#515)
-- [**breaking**] Remove Snapshot.core_chain_locked_height (#527)
-- Update changelog and version to 0.10.0-dev.6 (#526)
-
-### Build
-
-- Bump actions/setup-go from 3.3.1 to 3.4.0 (#524)
-- Bump bufbuild/buf-setup-action from 1.9.0 to 1.10.0 (#525)
-
-## [0.8.0] - 2022-12-07
-
-### Bug Fixes
-
-- Commits received during state sync are lost (#513)
-- Statesync stops the node when light block request fails (#514)
-
-### Miscellaneous Tasks
-
 - Backport to 0.8
 - Fix build
 - Fix abcidump after backport
 - Update changelog and version to 0.8.0
+- [**breaking**] Rename genesis.json quorum fields (#515)
+- [**breaking**] Remove Snapshot.core_chain_locked_height (#527)
+- Update changelog and version to 0.10.0-dev.6 (#526)
 
 ### Refactor
 
@@ -246,6 +274,8 @@
 - Fix missing dependencies in lint and tests
 - Fix superlinter yaml issues
 - Improve release script for v0.8 (#520)
+- Bump actions/setup-go from 3.3.1 to 3.4.0 (#524)
+- Bump bufbuild/buf-setup-action from 1.9.0 to 1.10.0 (#525)
 
 ## [0.10.0-dev.5] - 2022-11-23
 
@@ -657,6 +687,8 @@
 
 ### Bug Fixes
 
+- Network stuck due to outdated proposal block (#327)
+- Don't process WAL logs for old rounds (#331)
 - Use thread-safely way to get pro-tx-hash from peer-state (#344)
 - Slightly modify a way of interacting with p2p channels in consensus reactor (#357)
 - Remove select block to don't block sending a witness response (#336)
@@ -664,76 +696,10 @@
 
 ### Miscellaneous Tasks
 
+- Update changelog and version to 0.7.1
 - If the tenderdash source code is not tracked by git then cloning "develop_0.1" branch as fallback scenario to build a project (#356)
 - If the tenderdash source code is not tracked by git then cloning "develop_0.1" branch as fallback scenario to build a project (#355)
 - Update changelog and version to 0.8.0-dev.2 (#333)
-
-### Security
-
-- Bump github.com/vektra/mockery/v2 from 2.10.4 to 2.10.6 (#8346)
-- Bump github.com/spf13/viper from 1.10.1 to 1.11.0 (#8344)
-- Bump github.com/creachadair/atomicfile from 0.2.4 to 0.2.5 (#8365)
-- Bump github.com/vektra/mockery/v2 from 2.10.6 to 2.11.0 (#8374)
-- Bump github.com/creachadair/tomledit from 0.0.16 to 0.0.18 (#8392)
-
-### Testing
-
-- Convert to Go 1.18 native fuzzing (#8359)
-- Remove debug logging statement (#8385)
-
-### Abci
-
-- Avoid having untracked requests in the channel (#8382)
-- Streamline grpc application construction (#8383)
-
-### Abci++
-
-- Sync implementation and spec for vote extensions (#8141)
-
-### Build
-
-- Bump async from 2.6.3 to 2.6.4 in /docs (#8357)
-
-### Cleanup
-
-- Unused parameters (#8372)
-- Pin get-diff-action uses to major version only, not minor/patch (#8368)
-
-### Confix
-
-- Convert tx-index.indexer from string to array (#8342)
-
-### Eventbus
-
-- Publish without contexts (#8369)
-
-### Keymigrate
-
-- Fix conversion of transaction hash keys (#8352)
-
-### Node
-
-- Use signals rather than ephemeral contexts (#8376)
-- Cleanup setup for indexer and evidence components (#8378)
-
-### P2p
-
-- Fix setting in con-tracker (#8370)
-
-### Rpc
-
-- Reformat method signatures and use a context (#8377)
-
-## [0.7.1] - 2022-04-14
-
-### Bug Fixes
-
-- Network stuck due to outdated proposal block (#327)
-- Don't process WAL logs for old rounds (#331)
-
-### Miscellaneous Tasks
-
-- Update changelog and version to 0.7.1
 
 ### Refactor
 
@@ -748,14 +714,27 @@
 - Bump actions/download-artifact from 2 to 3 (#8302)
 - Bump actions/upload-artifact from 2 to 3 (#8303)
 - Bump github.com/creachadair/tomledit from 0.0.11 to 0.0.13 (#8307)
+- Bump github.com/vektra/mockery/v2 from 2.10.4 to 2.10.6 (#8346)
+- Bump github.com/spf13/viper from 1.10.1 to 1.11.0 (#8344)
+- Bump github.com/creachadair/atomicfile from 0.2.4 to 0.2.5 (#8365)
+- Bump github.com/vektra/mockery/v2 from 2.10.6 to 2.11.0 (#8374)
+- Bump github.com/creachadair/tomledit from 0.0.16 to 0.0.18 (#8392)
 
 ### Testing
 
 - Update oss-fuzz build script to match reality (#8296)
+- Convert to Go 1.18 native fuzzing (#8359)
+- Remove debug logging statement (#8385)
+
+### Abci
+
+- Avoid having untracked requests in the channel (#8382)
+- Streamline grpc application construction (#8383)
 
 ### Abci++
 
 - Only include meaningful header fields in data passed-through to application (#8216)
+- Sync implementation and spec for vote extensions (#8141)
 
 ### Build
 
@@ -763,6 +742,12 @@
 - Use go install instead of go get. (#8299)
 - Implement full release workflow in the release script (#332) (#345)
 - Implement full release workflow in the release script (#332) (#345)
+- Bump async from 2.6.3 to 2.6.4 in /docs (#8357)
+
+### Cleanup
+
+- Unused parameters (#8372)
+- Pin get-diff-action uses to major version only, not minor/patch (#8368)
 
 ### Cli
 
@@ -773,10 +758,15 @@
 
 - Clean up and document transformations (#8301)
 - Remove mempool.version in v0.36 (#8334)
+- Convert tx-index.indexer from string to array (#8342)
 
 ### Consensus
 
 - Add nil check to gossip routine (#8288)
+
+### Eventbus
+
+- Publish without contexts (#8369)
 
 ### Events
 
@@ -785,14 +775,21 @@
 ### Keymigrate
 
 - Fix decoding of block-hash row keys (#8294)
+- Fix conversion of transaction hash keys (#8352)
 
 ### Node
 
 - Move handshake out of constructor (#8264)
+- Use signals rather than ephemeral contexts (#8376)
+- Cleanup setup for indexer and evidence components (#8378)
 
 ### Node+statesync
 
 - Normalize initialization (#8275)
+
+### P2p
+
+- Fix setting in con-tracker (#8370)
 
 ### Pubsub
 
@@ -802,6 +799,7 @@
 
 - Add more nil checks in the status end point (#8287)
 - Avoid leaking threads (#8328)
+- Reformat method signatures and use a context (#8377)
 
 ### Scmigrate
 
@@ -823,6 +821,7 @@
 
 ### Bug Fixes
 
+- Remove option c form linux build (#305)
 - Cannot read properties of undefined
 - Network stuck due to outdated proposal block (#327)
 - Don't process WAL logs for old rounds (#331)
@@ -1004,7 +1003,6 @@
 ### Bug Fixes
 
 - Backport e2e tests (#248)
-- Remove option c form linux build (#305)
 
 ### Docs
 
@@ -1210,6 +1208,7 @@
 
 ### Miscellaneous Tasks
 
+- Update changelog and version to 0.7.0
 - Update unit tests after backport fo tendermint v0.35 (#245)
 - Backport Tenderdash 0.7 to 0.8 (#246)
 - Fix e2e tests and protxhash population (#273)
@@ -1316,6 +1315,7 @@
 
 ### Consensus
 
+- Use buffered channel in TestStateFullRound1 (#7668)
 - Remove unused closer construct (#7734)
 - Delay start of peer routines (#7753)
 - Delay start of peer routines (backport of #7753) (#7760)
@@ -1427,6 +1427,10 @@
 
 - Changed evidence message to contain evidence, not a list… (#394)
 
+### Params
+
+- Increase default synchrony params (#7704)
+
 ### Proto
 
 - Merge the proposer-based timestamps parameters (#393)
@@ -1509,20 +1513,6 @@
 ### Types/events+evidence
 
 - Emit events + metrics on evidence validation (#7802)
-
-## [0.7.0] - 2022-01-27
-
-### Miscellaneous Tasks
-
-- Update changelog and version to 0.7.0
-
-### Consensus
-
-- Use buffered channel in TestStateFullRound1 (#7668)
-
-### Params
-
-- Increase default synchrony params (#7704)
 
 ## [0.35.1] - 2022-01-26
 
@@ -5783,7 +5773,7 @@
 - Only run when applicable (#4752)
 - Check git diff on each job (#4770)
 - Checkout code before git diff check (#4779)
-- Add paths
+- Add paths 
 - Bump the timeout for test_coverage (#4864)
 - Migrate localnet to github actions (#4878)
 - Add timeouts (#4912)
@@ -6066,7 +6056,7 @@
 
 ### Swagger
 
-- Remove duplicate blockID
+- Remove duplicate blockID 
 - Define version (#4952)
 
 ### Template
@@ -9555,10 +9545,6 @@
 
 - DumpConsensusState, not DialSeeds. Cleanup
 
-### Connect2Switches
-
-- Panic on err
-
 ### Makefile
 
 - Add gmt and lint
@@ -9571,20 +9557,6 @@
 
 ### Testing
 
-- RandConsensusNet takes more args
-- Crank circle timeouts
-- Automate building consensus/test_data
-- Circle artifacts
-- Dont start cs until all peers connected
-- Shorten timeouts
-- Remove codecov patch threshold
-- Kill and restart all nodes
-- Use PROXY_APP=persistent_dummy
-- Use fail-test failure indices
-- More unique container names
-- Set log_level=info
-- Always rebuild grpc_client
-- Split up test/net/test.sh
 - Unexport internal function.
 - Update docker to 1.7.4
 - Dont use log files on circle
@@ -9609,25 +9581,12 @@
 
 - JTMSP -> jABCI
 
-### Blockchain
-
-- Thread safe store.Height()
-
 ### Cleanup
 
 - Replace common.Exit with log.Crit or log.Fatal
 
 ### Consensus
 
-- Wal.Flush() and cleanup replay tests
-- TimeoutTicker, skip TimeoutCommit on HasAll
-- Mv timeoutRoutine into TimeoutTicker
-- No internal vars in reactor.String()
-- Sync wal.writeHeight
-- Remove crankTimeoutPropose from tests
-- Be more explicit when we need to write height after handshake
-- Let time.Timer handle non-positive durations
-- Check HasAll when TwoThirdsMajority
 - Nice error msg if ApplyBlock fails
 - Handshake replay test using wal
 - More handshake replay tests
@@ -9639,7 +9598,6 @@
 
 ### Glide
 
-- Update go-wire
 - Use versions where applicable
 
 ### Lint
@@ -9661,6 +9619,58 @@
 - /commit
 - Fix SeenCommit condition
 
+### State
+
+- Remove StateIntermediate
+
+### Types
+
+- Use mtx on PartSet.String()
+- ValSet LastProposer->Proposer and Proposer()->GetProposer()
+
+## [0.8.0] - 2017-01-13
+
+### Connect2Switches
+
+- Panic on err
+
+### Testing
+
+- RandConsensusNet takes more args
+- Crank circle timeouts
+- Automate building consensus/test_data
+- Circle artifacts
+- Dont start cs until all peers connected
+- Shorten timeouts
+- Remove codecov patch threshold
+- Kill and restart all nodes
+- Use PROXY_APP=persistent_dummy
+- Use fail-test failure indices
+- More unique container names
+- Set log_level=info
+- Always rebuild grpc_client
+- Split up test/net/test.sh
+
+### Blockchain
+
+- Thread safe store.Height()
+
+### Consensus
+
+- Wal.Flush() and cleanup replay tests
+- TimeoutTicker, skip TimeoutCommit on HasAll
+- Mv timeoutRoutine into TimeoutTicker
+- No internal vars in reactor.String()
+- Sync wal.writeHeight
+- Remove crankTimeoutPropose from tests
+- Be more explicit when we need to write height after handshake
+- Let time.Timer handle non-positive durations
+- Check HasAll when TwoThirdsMajority
+
+### Glide
+
+- Update go-wire
+
 ### Shame
 
 - Version bump 0.7.4
@@ -9668,7 +9678,6 @@
 ### State
 
 - AppHashIsStale -> IntermediateState
-- Remove StateIntermediate
 
 ### Tmsp
 
@@ -9679,8 +9688,6 @@
 - Benchmark WriteSignBytes
 - Canonical_json.go
 - SignatureEd25519 -> Signature
-- Use mtx on PartSet.String()
-- ValSet LastProposer->Proposer and Proposer()->GetProposer()
 
 ## [0.7.4] - 2016-12-14
 
@@ -9779,7 +9786,48 @@
 
 - Bump 0.7.3
 
-## [0.7.2] - 2016-09-11
+## [0.7.1] - 2016-09-11
+
+### Testing
+
+- Refactor bash; test fastsync (failing)
+- Name client conts so we dont need to rm them because circle
+- Test dummy using rpc query
+- Add xxd dep to dockerfile
+- More verbosity
+- Add killall to dockerfile. cleanup
+
+### Client
+
+- Safe error handling
+
+### Config
+
+- All urls use tcp:// or unix:// prefix
+- Filter_peers defaults to false
+- Reduce timeouts during test
+
+### Consensus
+
+- Add note about replay test
+- No sign err in replay; fix a race
+
+### Proxy
+
+- Typed app conns
+- NewAppConns takes a NewTMSPClient func
+- Wrap NewTMSPClient in ClientCreator
+- Nil -> nilapp
+
+### Throttle_timer
+
+- Fix race, use mtx instead of atomic
+
+### Types
+
+- PrivVal.LastSignature. closes #247
+
+## [0.7.0] - 2016-08-07
 
 ### Documentation
 
@@ -9798,12 +9846,6 @@
 - Cleanup
 - Dont run cloud test on push to master
 - README.md
-- Refactor bash; test fastsync (failing)
-- Name client conts so we dont need to rm them because circle
-- Test dummy using rpc query
-- Add xxd dep to dockerfile
-- More verbosity
-- Add killall to dockerfile. cleanup
 
 ### Binary
 
@@ -9822,7 +9864,6 @@
 
 - ResultsCh chan json.RawMessage, ErrorsCh
 - Wsc.String()
-- Safe error handling
 
 ### Config
 
@@ -9831,9 +9872,6 @@
 - Cswal_light, mempool_broadcast, mempool_reap
 - Toggle authenticated encryption
 - Disable_data_hash (for testing)
-- All urls use tcp:// or unix:// prefix
-- Filter_peers defaults to false
-- Reduce timeouts during test
 
 ### Consensus
 
@@ -9852,8 +9890,6 @@
 - Hvs.Reset(height, valSet)
 - Increase mempool_test timeout
 - Don't print shared vars in cs.String()
-- Add note about replay test
-- No sign err in replay; fix a race
 
 ### Daemon
 
@@ -9884,13 +9920,6 @@
 - Fix switch_test to account for handshake
 - Broadcast spawns goroutine to Send on each peer and times out after 10 seconds. Closes #7
 - Fix switch test for Broadcast returning success channel
-
-### Proxy
-
-- Typed app conns
-- NewAppConns takes a NewTMSPClient func
-- Wrap NewTMSPClient in ClientCreator
-- Nil -> nilapp
 
 ### Rpc
 
@@ -9952,14 +9981,6 @@
 - Fixes for creating a contract and msging it in the same block
 - Fix GetStorage on blockcache with unknown account
 - FireEvents flag on ExecTx and fixes for GetAccount
-
-### Throttle_timer
-
-- Fix race, use mtx instead of atomic
-
-### Types
-
-- PrivVal.LastSignature. closes #247
 
 ### Vm
 

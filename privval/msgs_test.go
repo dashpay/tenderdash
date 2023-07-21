@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
-	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -23,10 +22,8 @@ var stamp = time.Date(2019, 10, 13, 16, 14, 44, 0, time.UTC)
 
 func exampleVote() *types.Vote {
 
-	ts, err := gogotypes.TimestampProto(time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC))
-	if err != nil {
-		panic(err)
-	}
+	ts := uint64(time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC).UnixMilli())
+
 	return &types.Vote{
 		Type:   tmproto.PrecommitType,
 		Height: 3,
@@ -42,7 +39,7 @@ func exampleVote() *types.Vote {
 				Height:                3,
 				AppHash:               crypto.Checksum([]byte("apphash")),
 				CoreChainLockedHeight: 12345,
-				Time:                  *ts,
+				Time:                  ts,
 			}.Hash(),
 		},
 		ValidatorProTxHash: crypto.ProTxHashFromSeedBytes([]byte("validator_pro_tx_hash")),
@@ -98,8 +95,8 @@ func TestPrivvalVectors(t *testing.T) {
 		{"pubKey request", &privproto.PubKeyRequest{}, "0a00"},
 		{"pubKey response", &privproto.PubKeyResponse{PubKey: ppk, Error: nil}, "12340a321a30991a1c4f159f8e4730bf897e97e27c11f27ba0c1337111a3c102e1081a19372832b596623b1a248a0e00b156d80690cf"},
 		{"pubKey response with error", &privproto.PubKeyResponse{PubKey: cryptoproto.PublicKey{}, Error: remoteError}, "12140a0012100801120c697427732061206572726f72"},
-		{"Vote Request", &privproto.SignVoteRequest{Vote: votepb}, "1aaa010aa701080210031802226c0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a1a2071aa7631e86d2b19d27f0c63e41ed08e5f8d43cfbb69d35913a7731b61bbdc622a20959a8f5ef2be68d0ed3a07ed8cff85991ee7995c2ac17030f742c135f9729fbe30d5bb03420b1209657874656e73696f6e"},
-		{"Vote Response", &privproto.SignedVoteResponse{Vote: *votepb, Error: nil}, "22aa010aa701080210031802226c0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a1a2071aa7631e86d2b19d27f0c63e41ed08e5f8d43cfbb69d35913a7731b61bbdc622a20959a8f5ef2be68d0ed3a07ed8cff85991ee7995c2ac17030f742c135f9729fbe30d5bb03420b1209657874656e73696f6e"},
+		{"Vote Request", &privproto.SignVoteRequest{Vote: votepb}, "1aaa010aa701080210031802226c0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a1a20b583d49b95a0a5526966b519d8b7bba2aefc800b370a7438c7063728904e58ee2a20959a8f5ef2be68d0ed3a07ed8cff85991ee7995c2ac17030f742c135f9729fbe30d5bb03420b1209657874656e73696f6e"},
+		{"Vote Response", &privproto.SignedVoteResponse{Vote: *votepb, Error: nil}, "22aa010aa701080210031802226c0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a1a20b583d49b95a0a5526966b519d8b7bba2aefc800b370a7438c7063728904e58ee2a20959a8f5ef2be68d0ed3a07ed8cff85991ee7995c2ac17030f742c135f9729fbe30d5bb03420b1209657874656e73696f6e"},
 		{"Vote Response with error", &privproto.SignedVoteResponse{Vote: tmproto.Vote{}, Error: remoteError}, "22180a042202120012100801120c697427732061206572726f72"},
 		{"Proposal Request", &privproto.SignProposalRequest{Proposal: proposalpb}, "2a700a6e08011003180220022a4a0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a320608f49a8ded053a10697427732061207369676e6174757265"},
 		{"Proposal Response", &privproto.SignedProposalResponse{Proposal: *proposalpb, Error: nil}, "32700a6e08011003180220022a4a0a208b01023386c371778ecb6368573e539afc3cc860ec3a2f614e54fe5652f4fc80122608c0843d122072db3d959635dff1bb567bedaa70573392c5159666a3f8caf11e413aac52207a320608f49a8ded053a10697427732061207369676e6174757265"},

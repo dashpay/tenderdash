@@ -93,7 +93,6 @@ func (env *Environment) Status(ctx context.Context) (*coretypes.ResultStatus, er
 		result.SyncInfo.ChunkProcessAvgTime = env.StateSyncMetricer.ChunkProcessAvgTime()
 		result.SyncInfo.SnapshotHeight = env.StateSyncMetricer.SnapshotHeight()
 		result.SyncInfo.SnapshotChunksCount = env.StateSyncMetricer.SnapshotChunksCount()
-		result.SyncInfo.SnapshotChunksTotal = env.StateSyncMetricer.SnapshotChunksTotal()
 		result.SyncInfo.BackFilledBlocks = env.StateSyncMetricer.BackFilledBlocks()
 		result.SyncInfo.BackFillBlocksTotal = env.StateSyncMetricer.BackFillBlocksTotal()
 	}

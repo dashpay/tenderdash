@@ -18,6 +18,7 @@ import (
 	"github.com/tendermint/tendermint/crypto/bls12381"
 	"github.com/tendermint/tendermint/libs/log"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
+	tmtime "github.com/tendermint/tendermint/libs/time"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 )
@@ -424,7 +425,7 @@ func newProposal(height int64, coreChainLockedHeight uint32, round int32, blockI
 		CoreChainLockedHeight: coreChainLockedHeight,
 		Round:                 round,
 		BlockID:               blockID,
-		Timestamp:             time.Now(),
+		Timestamp:             tmtime.Now(),
 	}
 }
 

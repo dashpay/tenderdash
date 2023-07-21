@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/spf13/cobra"
@@ -13,6 +12,7 @@ import (
 	"github.com/tendermint/tendermint/libs/log"
 	tmos "github.com/tendermint/tendermint/libs/os"
 	tmrand "github.com/tendermint/tendermint/libs/rand"
+	tmtime "github.com/tendermint/tendermint/libs/time"
 	"github.com/tendermint/tendermint/privval"
 	"github.com/tendermint/tendermint/types"
 )
@@ -103,7 +103,7 @@ func initFilesWithConfig(ctx context.Context, conf nodeConfig, logger log.Logger
 
 		genDoc := types.GenesisDoc{
 			ChainID:                      fmt.Sprintf("test-chain-%v", tmrand.Str(6)),
-			GenesisTime:                  time.Now(),
+			GenesisTime:                  tmtime.Now(),
 			ConsensusParams:              types.DefaultConsensusParams(),
 			QuorumType:                   btcjson.LLMQType(conf.quorumType),
 			InitialCoreChainLockedHeight: conf.coreChainLockedHeight,
