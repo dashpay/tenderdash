@@ -110,12 +110,13 @@ func (_m *SnapshotClient) GetSnapshots(ctx context.Context, peerID types.NodeID)
 	return r0
 }
 
-// NewSnapshotClient creates a new instance of SnapshotClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewSnapshotClient(t interface {
+type mockConstructorTestingTNewSnapshotClient interface {
 	mock.TestingT
 	Cleanup(func())
-}) *SnapshotClient {
+}
+
+// NewSnapshotClient creates a new instance of SnapshotClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewSnapshotClient(t mockConstructorTestingTNewSnapshotClient) *SnapshotClient {
 	mock := &SnapshotClient{}
 	mock.Mock.Test(t)
 
