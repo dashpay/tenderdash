@@ -135,7 +135,7 @@ func (r *snapshotRepository) recentSnapshots(ctx context.Context, n uint32) ([]*
 	return snapshots, nil
 }
 
-func sortSnapshot(snapshots []*abci.Snapshot) {
+func sortSnapshots(snapshots []*abci.Snapshot) {
 	sort.Slice(snapshots, func(i, j int) bool {
 		a := snapshots[i]
 		b := snapshots[j]
