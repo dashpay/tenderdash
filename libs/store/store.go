@@ -14,8 +14,10 @@ type (
 		Put(key K, data V)
 		Delete(key K)
 		Update(key K, updates ...UpdateFunc[K, V])
-		Query(spec QueryFunc[K, V], limit int) []*V
+		Query(spec QueryFunc[K, V], limit int) []V
 		All() []V
+		Len() int
+		IsZero() bool
 	}
 	// QueryFunc is a function type for a specification function
 	QueryFunc[K comparable, V any] func(key K, data V) bool
