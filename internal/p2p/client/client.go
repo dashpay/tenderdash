@@ -56,7 +56,12 @@ type (
 	}
 	// SnapshotClient defines the methods which must be implemented by snapshot client
 	SnapshotClient interface {
+		// GetSnapshots requests a list of available snapshots from a peer without handling the response.
+		// The snapshots will be sent by peer asynchronously and should be received by reading the channel separately.
+		// The method returns an error if the request is not possible to send to the peer.
 		GetSnapshots(ctx context.Context, peerID types.NodeID) error
+		// GetChunk requests a snapshot chunk from a peer and returns a promise.Promise which will be resolved
+		// as a response will be received or rejected by timeout, otherwise returns an error
 		GetChunk(
 			ctx context.Context,
 			peerID types.NodeID,
@@ -64,18 +69,24 @@ type (
 			format uint32,
 			index uint32,
 		) (*promise.Promise[*statesync.ChunkResponse], error)
+		// GetParams requests a snapshot params from a peer.
+		// The method returns a promise.Promise which will be resolved.
 		GetParams(
 			ctx context.Context,
 			peerID types.NodeID,
 			height uint64,
 		) (*promise.Promise[*statesync.ParamsResponse], error)
+		// GetLightBlock requests a light block from a peer.
+		// The method returns a promise.Promise which will be resolved.
 		GetLightBlock(
 			ctx context.Context,
 			peerID types.NodeID,
 			height uint64,
 		) (*promise.Promise[*statesync.LightBlockResponse], error)
 	}
+	// TxSender is the interface that wraps SendTxs method
 	TxSender interface {
+		// SendTxs sends a transaction to a peer
 		SendTxs(ctx context.Context, peerID types.NodeID, tx types.Tx) error
 	}
 	// Client is a stateful implementation of a client, which means that the client stores a request ID
