@@ -1,4 +1,4 @@
-package peer
+package store
 
 import (
 	"testing"
@@ -32,19 +32,19 @@ func TestInMemStore(t *testing.T) {
 		}, 0)
 		require.Equal(t, []int{2, 3}, vals)
 	}
-	// GetAndRemove test
+	// GetAndDelete test
 	{
-		val, ok := store.GetAndRemove(pairs[0].key)
+		val, ok := store.GetAndDelete(pairs[0].key)
 		require.True(t, ok)
 		require.Equal(t, pairs[0].val, val)
 		_, ok = store.Get(pairs[0].key)
 		require.False(t, ok)
-		_, ok = store.GetAndRemove(pairs[0].key)
+		_, ok = store.GetAndDelete(pairs[0].key)
 		require.False(t, ok)
 	}
-	// Remove test
+	// Delete test
 	{
-		store.Remove(pairs[1].key)
+		store.Delete(pairs[1].key)
 		_, ok := store.Get(pairs[1].key)
 		require.False(t, ok)
 	}

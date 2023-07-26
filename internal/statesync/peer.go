@@ -5,8 +5,9 @@ import (
 
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/internal/p2p/client"
-	"github.com/tendermint/tendermint/internal/peer"
 	"github.com/tendermint/tendermint/libs/log"
+	"github.com/tendermint/tendermint/libs/store"
+	"github.com/tendermint/tendermint/types"
 )
 
 type (
@@ -16,7 +17,7 @@ type (
 	PeerManager struct {
 		logger    log.Logger
 		client    client.SnapshotClient
-		peerStore peer.Store[PeerData]
+		peerStore store.Store[types.NodeID, PeerData]
 		peerSubs  *PeerSubscriber
 	}
 	// PeerSubscriber is a subscriber for peer events
@@ -113,7 +114,7 @@ func (p *PeerSubscriber) execute(ctx context.Context, peerUpdate p2p.PeerUpdate)
 func NewPeerManager(
 	logger log.Logger,
 	client client.SnapshotClient,
-	peerStore peer.Store[PeerData],
+	peerStore store.Store[types.NodeID, PeerData],
 	peerSubs *PeerSubscriber,
 ) *PeerManager {
 	return &PeerManager{
@@ -136,7 +137,7 @@ func (p *PeerManager) Start(ctx context.Context) {
 		return nil
 	})
 	p.peerSubs.On(p2p.PeerStatusDown, func(ctx context.Context, update p2p.PeerUpdate) error {
-		p.peerStore.Remove(update.NodeID)
+		p.peerStore.Delete(update.NodeID)
 		return nil
 	})
 	p.peerSubs.Start(ctx)
@@ -148,6 +149,6 @@ func (p *PeerManager) Stop(ctx context.Context) {
 }
 
 // NewPeerStore returns a new in-memory peer store
-func NewPeerStore() *peer.InMemStore[PeerData] {
-	return peer.NewInMemStore[PeerData]()
+func NewPeerStore() *store.InMemStore[types.NodeID, PeerData] {
+	return store.NewInMemStore[types.NodeID, PeerData]()
 }

@@ -7,8 +7,8 @@ import (
 
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/internal/p2p/client/mocks"
-	peerMocks "github.com/tendermint/tendermint/internal/peer/mocks"
 	"github.com/tendermint/tendermint/libs/log"
+	peerMocks "github.com/tendermint/tendermint/libs/store/mocks"
 	"github.com/tendermint/tendermint/types"
 )
 
@@ -61,13 +61,13 @@ func TestPeerManagerBasic(t *testing.T) {
 	peerSubs := NewPeerSubscriber(logger, func(context.Context, string) *p2p.PeerUpdates {
 		return p2p.NewPeerUpdates(peerUpdateCh, 0, "test")
 	})
-	peerStore := peerMocks.NewStore[PeerData](t)
+	peerStore := peerMocks.NewStore[types.NodeID, PeerData](t)
 	peerStore.
 		On("Put", peerID, PeerData{Status: PeerNotReady}).
 		Once().
 		Return(nil)
 	peerStore.
-		On("Remove", peerID).
+		On("Delete", peerID).
 		Once().
 		Return(nil)
 	manager := NewPeerManager(logger, fakeClient, peerStore, peerSubs)
