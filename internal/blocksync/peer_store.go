@@ -96,6 +96,8 @@ func (p *InMemPeerStore) Update(peerID types.NodeID, updates ...store.UpdateFunc
 	if !found {
 		return
 	}
+	p.mtx.Lock()
+	defer p.mtx.Unlock()
 	p.maxHeight = max(p.maxHeight, peer.height)
 }
 
