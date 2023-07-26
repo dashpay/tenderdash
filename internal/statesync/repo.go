@@ -124,7 +124,7 @@ func (r *snapshotRepository) recentSnapshots(ctx context.Context, n uint32) ([]*
 	if err != nil {
 		return nil, err
 	}
-	sortSnapshot(resp.Snapshots)
+	sortSnapshots(resp.Snapshots)
 	if n > recentSnapshots {
 		n = recentSnapshots
 	}
