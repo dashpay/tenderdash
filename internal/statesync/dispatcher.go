@@ -8,9 +8,9 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	"github.com/tendermint/tendermint/dash/light/provider"
 	"github.com/tendermint/tendermint/internal/p2p"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/light/provider"
 	ssproto "github.com/tendermint/tendermint/proto/tendermint/statesync"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"

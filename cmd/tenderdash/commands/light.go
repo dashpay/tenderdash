@@ -16,11 +16,11 @@ import (
 
 	"github.com/tendermint/tendermint/config"
 	dashcore "github.com/tendermint/tendermint/dash/core"
+	"github.com/tendermint/tendermint/dash/light"
+	lproxy "github.com/tendermint/tendermint/dash/light/proxy"
+	lrpc "github.com/tendermint/tendermint/dash/light/rpc"
+	dbs "github.com/tendermint/tendermint/dash/light/store/db"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/light"
-	lproxy "github.com/tendermint/tendermint/light/proxy"
-	lrpc "github.com/tendermint/tendermint/light/rpc"
-	dbs "github.com/tendermint/tendermint/light/store/db"
 	rpcserver "github.com/tendermint/tendermint/rpc/jsonrpc/server"
 )
 
