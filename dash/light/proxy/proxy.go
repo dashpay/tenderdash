@@ -6,11 +6,11 @@ import (
 	"net"
 	"net/http"
 
+	"github.com/tendermint/tendermint/dash/light"
+	lrpc "github.com/tendermint/tendermint/dash/light/rpc"
 	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
 	rpccore "github.com/tendermint/tendermint/internal/rpc/core"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/light"
-	lrpc "github.com/tendermint/tendermint/light/rpc"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	rpcserver "github.com/tendermint/tendermint/rpc/jsonrpc/server"
 )

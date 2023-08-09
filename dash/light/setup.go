@@ -4,9 +4,9 @@ import (
 	"context"
 
 	dashcore "github.com/tendermint/tendermint/dash/core"
-	"github.com/tendermint/tendermint/light/provider"
-	"github.com/tendermint/tendermint/light/provider/http"
-	"github.com/tendermint/tendermint/light/store"
+	"github.com/tendermint/tendermint/dash/light/provider"
+	"github.com/tendermint/tendermint/dash/light/provider/http"
+	"github.com/tendermint/tendermint/dash/light/store"
 )
 
 // NewHTTPClient initiates an instance of a light client using HTTP addresses

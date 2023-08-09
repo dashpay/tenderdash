@@ -13,10 +13,10 @@ import (
 
 	"github.com/tendermint/tendermint/abci/example/kvstore"
 	dashcore "github.com/tendermint/tendermint/dash/core"
+	"github.com/tendermint/tendermint/dash/light"
+	httpp "github.com/tendermint/tendermint/dash/light/provider/http"
+	dbs "github.com/tendermint/tendermint/dash/light/store/db"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/light"
-	httpp "github.com/tendermint/tendermint/light/provider/http"
-	dbs "github.com/tendermint/tendermint/light/store/db"
 	rpctest "github.com/tendermint/tendermint/rpc/test"
 )
 

@@ -3,7 +3,7 @@ package proxy
 import (
 	"context"
 
-	lrpc "github.com/tendermint/tendermint/light/rpc"
+	lrpc "github.com/tendermint/tendermint/dash/light/rpc"
 	rpcclient "github.com/tendermint/tendermint/rpc/client"
 	"github.com/tendermint/tendermint/rpc/coretypes"
 )

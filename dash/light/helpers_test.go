@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/tendermint/tendermint/crypto"
-	provider_mocks "github.com/tendermint/tendermint/light/provider/mocks"
+	provider_mocks "github.com/tendermint/tendermint/dash/light/provider/mocks"
 	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
 	"github.com/tendermint/tendermint/types"
 	"github.com/tendermint/tendermint/version"

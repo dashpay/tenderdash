@@ -13,7 +13,7 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 
-	"github.com/tendermint/tendermint/light/provider"
+	"github.com/tendermint/tendermint/dash/light/provider"
 	rpcclient "github.com/tendermint/tendermint/rpc/client"
 	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
 	"github.com/tendermint/tendermint/rpc/coretypes"

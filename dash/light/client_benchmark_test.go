@@ -9,10 +9,10 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	dashcore "github.com/tendermint/tendermint/dash/core"
+	"github.com/tendermint/tendermint/dash/light"
+	"github.com/tendermint/tendermint/dash/light/provider"
+	dbs "github.com/tendermint/tendermint/dash/light/store/db"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/light"
-	"github.com/tendermint/tendermint/light/provider"
-	dbs "github.com/tendermint/tendermint/light/store/db"
 	"github.com/tendermint/tendermint/types"
 )
 

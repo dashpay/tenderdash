@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/tendermint/tendermint/light/provider"
+	"github.com/tendermint/tendermint/dash/light/provider"
 	"github.com/tendermint/tendermint/types"
 )
 

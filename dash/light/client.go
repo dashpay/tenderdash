@@ -12,10 +12,10 @@ import (
 
 	"github.com/tendermint/tendermint/crypto"
 	dashcore "github.com/tendermint/tendermint/dash/core"
+	"github.com/tendermint/tendermint/dash/light/provider"
+	"github.com/tendermint/tendermint/dash/light/store"
 	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
 	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/light/provider"
-	"github.com/tendermint/tendermint/light/store"
 	"github.com/tendermint/tendermint/types"
 )
 
