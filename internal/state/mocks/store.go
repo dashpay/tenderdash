@@ -4,8 +4,9 @@ package mocks
 
 import (
 	state "github.com/dashpay/tenderdash/internal/state"
-	tendermintstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 	mock "github.com/stretchr/testify/mock"
+
+	tendermintstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 
 	types "github.com/dashpay/tenderdash/types"
 )
@@ -199,13 +200,12 @@ func (_m *Store) SaveValidatorSets(_a0 int64, _a1 int64, _a2 *types.ValidatorSet
 	return r0
 }
 
-type mockConstructorTestingTNewStore interface {
+// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewStore(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewStore(t mockConstructorTestingTNewStore) *Store {
+}) *Store {
 	mock := &Store{}
 	mock.Mock.Test(t)
 

@@ -44,13 +44,12 @@ func (_m *Gossiper) GossipVoteSetMaj23(ctx context.Context, rs types.RoundState,
 	_m.Called(ctx, rs, prs)
 }
 
-type mockConstructorTestingTNewGossiper interface {
+// NewGossiper creates a new instance of Gossiper. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewGossiper(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewGossiper creates a new instance of Gossiper. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewGossiper(t mockConstructorTestingTNewGossiper) *Gossiper {
+}) *Gossiper {
 	mock := &Gossiper{}
 	mock.Mock.Test(t)
 

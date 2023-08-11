@@ -10,7 +10,7 @@ import (
 
 	query "github.com/dashpay/tenderdash/internal/pubsub/query"
 
-	tenderminttypes "github.com/dashpay/tenderdash/types"
+	tenderdashtypes "github.com/dashpay/tenderdash/types"
 
 	types "github.com/dashpay/tenderdash/abci/types"
 )
@@ -71,11 +71,11 @@ func (_m *EventSink) HasBlock(_a0 int64) (bool, error) {
 }
 
 // IndexBlockEvents provides a mock function with given fields: _a0
-func (_m *EventSink) IndexBlockEvents(_a0 tenderminttypes.EventDataNewBlockHeader) error {
+func (_m *EventSink) IndexBlockEvents(_a0 tenderdashtypes.EventDataNewBlockHeader) error {
 	ret := _m.Called(_a0)
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(tenderminttypes.EventDataNewBlockHeader) error); ok {
+	if rf, ok := ret.Get(0).(func(tenderdashtypes.EventDataNewBlockHeader) error); ok {
 		r0 = rf(_a0)
 	} else {
 		r0 = ret.Error(0)
@@ -178,13 +178,12 @@ func (_m *EventSink) Type() indexer.EventSinkType {
 	return r0
 }
 
-type mockConstructorTestingTNewEventSink interface {
+// NewEventSink creates a new instance of EventSink. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewEventSink(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewEventSink creates a new instance of EventSink. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewEventSink(t mockConstructorTestingTNewEventSink) *EventSink {
+}) *EventSink {
 	mock := &EventSink{}
 	mock.Mock.Test(t)
 
