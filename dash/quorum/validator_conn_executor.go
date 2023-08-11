@@ -10,15 +10,15 @@ import (
 
 	"github.com/hashicorp/go-multierror"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/quorum/selectpeers"
-	"github.com/tendermint/tendermint/internal/eventbus"
-	"github.com/tendermint/tendermint/internal/p2p"
-	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/service"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/dash/quorum/selectpeers"
+	"github.com/dashpay/tenderdash/internal/eventbus"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/service"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (

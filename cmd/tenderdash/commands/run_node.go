@@ -11,8 +11,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	cfg "github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/log"
+	cfg "github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/libs/log"
 )
 
 var (

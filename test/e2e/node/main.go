@@ -15,27 +15,27 @@ import (
 	"github.com/spf13/viper"
 	"google.golang.org/grpc"
 
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	"github.com/tendermint/tendermint/abci/server"
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/crypto/ed25519"
-	dashcore "github.com/tendermint/tendermint/dash/core"
-	"github.com/tendermint/tendermint/dash/light"
-	lproxy "github.com/tendermint/tendermint/dash/light/proxy"
-	lrpc "github.com/tendermint/tendermint/dash/light/rpc"
-	dbs "github.com/tendermint/tendermint/dash/light/store/db"
-	"github.com/tendermint/tendermint/internal/p2p"
-	"github.com/tendermint/tendermint/libs/log"
-	tmnet "github.com/tendermint/tendermint/libs/net"
-	"github.com/tendermint/tendermint/node"
-	"github.com/tendermint/tendermint/privval"
-	grpcprivval "github.com/tendermint/tendermint/privval/grpc"
-	privvalproto "github.com/tendermint/tendermint/proto/tendermint/privval"
-	rpcserver "github.com/tendermint/tendermint/rpc/jsonrpc/server"
-	"github.com/tendermint/tendermint/test/e2e/app"
-	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
-	"github.com/tendermint/tendermint/test/e2e/pkg/mockcoreserver"
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	"github.com/dashpay/tenderdash/abci/server"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/crypto/ed25519"
+	dashcore "github.com/dashpay/tenderdash/dash/core"
+	"github.com/dashpay/tenderdash/dash/light"
+	lproxy "github.com/dashpay/tenderdash/dash/light/proxy"
+	lrpc "github.com/dashpay/tenderdash/dash/light/rpc"
+	dbs "github.com/dashpay/tenderdash/dash/light/store/db"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmnet "github.com/dashpay/tenderdash/libs/net"
+	"github.com/dashpay/tenderdash/node"
+	"github.com/dashpay/tenderdash/privval"
+	grpcprivval "github.com/dashpay/tenderdash/privval/grpc"
+	privvalproto "github.com/dashpay/tenderdash/proto/tendermint/privval"
+	rpcserver "github.com/dashpay/tenderdash/rpc/jsonrpc/server"
+	"github.com/dashpay/tenderdash/test/e2e/app"
+	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
+	"github.com/dashpay/tenderdash/test/e2e/pkg/mockcoreserver"
 )
 
 var (
@@ -261,7 +261,7 @@ func startLightNode(ctx context.Context, logger log.Logger, cfg *Config) error {
 	rpccfg.MaxOpenConnections = tmcfg.RPC.MaxOpenConnections
 	// If necessary adjust global WriteTimeout to ensure it's greater than
 	// TimeoutBroadcastTxCommit.
-	// See https://github.com/tendermint/tendermint/issues/3435
+	// See https://github.com/dashpay/tenderdash/issues/3435
 	// Note we don't need to adjust anything if the timeout is already unlimited.
 	if rpccfg.WriteTimeout > 0 && rpccfg.WriteTimeout <= tmcfg.RPC.TimeoutBroadcastTxCommit {
 		rpccfg.WriteTimeout = tmcfg.RPC.TimeoutBroadcastTxCommit + 1*time.Second

@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	"github.com/tendermint/tendermint/types"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type msgEnvelope struct {

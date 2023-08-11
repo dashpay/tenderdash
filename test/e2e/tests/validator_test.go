@@ -8,10 +8,10 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/crypto"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
+	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // Tests that validator sets are available and correct according to

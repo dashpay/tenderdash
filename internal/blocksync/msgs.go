@@ -1,8 +1,8 @@
 package blocksync
 
 import (
-	p2pproto "github.com/tendermint/tendermint/proto/tendermint/p2p"
-	"github.com/tendermint/tendermint/types"
+	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (

@@ -10,13 +10,13 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/crypto"
-	dashcore "github.com/tendermint/tendermint/dash/core"
-	"github.com/tendermint/tendermint/dash/light/provider"
-	"github.com/tendermint/tendermint/dash/light/store"
-	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	dashcore "github.com/dashpay/tenderdash/dash/core"
+	"github.com/dashpay/tenderdash/dash/light/provider"
+	"github.com/dashpay/tenderdash/dash/light/store"
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type mode byte
@@ -417,7 +417,7 @@ func (c *Client) VerifyLightBlockAtHeight(ctx context.Context, height int64, now
 // headers are not adjacent, verifySkipping is performed and necessary (not all)
 // intermediate headers will be requested. See the specification for details.
 // Intermediate headers are not saved to database.
-// https://github.com/tendermint/tendermint/blob/master/spec/light-client/README.md
+// https://github.com/dashpay/tenderdash/blob/master/spec/light-client/README.md
 //
 // If the header, which is older than the currently trusted header, is
 // requested and the light client does not have it, VerifyHeader will perform:

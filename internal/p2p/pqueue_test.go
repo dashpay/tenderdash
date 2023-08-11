@@ -7,7 +7,7 @@ import (
 
 	gogotypes "github.com/gogo/protobuf/types"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/dashpay/tenderdash/libs/log"
 )
 
 type testMessage = gogotypes.StringValue

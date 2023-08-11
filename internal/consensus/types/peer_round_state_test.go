@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/libs/bits"
+	"github.com/dashpay/tenderdash/libs/bits"
 )
 
 func TestCopy(t *testing.T) {

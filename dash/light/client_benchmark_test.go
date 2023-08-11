@@ -8,12 +8,12 @@ import (
 
 	dbm "github.com/tendermint/tm-db"
 
-	dashcore "github.com/tendermint/tendermint/dash/core"
-	"github.com/tendermint/tendermint/dash/light"
-	"github.com/tendermint/tendermint/dash/light/provider"
-	dbs "github.com/tendermint/tendermint/dash/light/store/db"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/types"
+	dashcore "github.com/dashpay/tenderdash/dash/core"
+	"github.com/dashpay/tenderdash/dash/light"
+	"github.com/dashpay/tenderdash/dash/light/provider"
+	dbs "github.com/dashpay/tenderdash/dash/light/store/db"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // NOTE: block is produced every minute. Make sure the verification time

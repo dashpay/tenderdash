@@ -13,8 +13,8 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/internal/eventlog/cursor"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/eventlog/cursor"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // A Log is a reverse time-ordered log of events in a sliding window of time

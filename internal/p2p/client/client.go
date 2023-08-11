@@ -14,12 +14,12 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/jonboulle/clockwork"
 
-	"github.com/tendermint/tendermint/internal/p2p"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/promise"
-	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
-	protomem "github.com/tendermint/tendermint/proto/tendermint/mempool"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/promise"
+	bcproto "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
+	protomem "github.com/dashpay/tenderdash/proto/tendermint/mempool"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // These attributes should use as a key in Envelope.Attributes map

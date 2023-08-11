@@ -10,8 +10,8 @@ import (
 	"github.com/stretchr/testify/require"
 	goanimo "github.com/tendermint/go-amino"
 
-	"github.com/tendermint/tendermint/crypto"
-	tmcrypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
+	"github.com/dashpay/tenderdash/crypto"
+	tmcrypto "github.com/dashpay/tenderdash/proto/tendermint/crypto"
 )
 
 const ProofOpDomino = "test:domino"

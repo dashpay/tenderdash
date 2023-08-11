@@ -6,10 +6,10 @@ import (
 	"strconv"
 	"time"
 
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/bytes"
-	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
-	"github.com/tendermint/tendermint/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/libs/bytes"
+	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
+	"github.com/dashpay/tenderdash/types"
 )
 
 //-----------------------------------------------------------------------------

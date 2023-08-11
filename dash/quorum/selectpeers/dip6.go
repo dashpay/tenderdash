@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"math"
 
-	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // minValidators is a minimum number of validators needed in order to execute the selection

@@ -6,9 +6,10 @@ import (
 
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/types"
-	"github.com/tendermint/tendermint/types/mocks"
+
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/types"
+	"github.com/dashpay/tenderdash/types/mocks"
 )
 
 type mockEvidence struct{ types.Evidence }

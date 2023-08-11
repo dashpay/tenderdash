@@ -9,8 +9,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/version"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/version"
 )
 
 func TestLightBlockValidateBasic(t *testing.T) {

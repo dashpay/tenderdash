@@ -8,9 +8,9 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	tmmath "github.com/tendermint/tendermint/libs/math"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type RoundVoteSet struct {

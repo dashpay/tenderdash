@@ -3,7 +3,7 @@ package types
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/crypto"
+	"github.com/dashpay/tenderdash/crypto"
 )
 
 // Application is an interface that enables any finite, deterministic state machine

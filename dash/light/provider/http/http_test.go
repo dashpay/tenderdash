@@ -10,15 +10,15 @@ import (
 	testify "github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	"github.com/tendermint/tendermint/dash/light/provider"
-	lighthttp "github.com/tendermint/tendermint/dash/light/provider/http"
-	rpcclient "github.com/tendermint/tendermint/rpc/client"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	rpcmock "github.com/tendermint/tendermint/rpc/client/mocks"
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	rpctest "github.com/tendermint/tendermint/rpc/test"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	"github.com/dashpay/tenderdash/dash/light/provider"
+	lighthttp "github.com/dashpay/tenderdash/dash/light/provider/http"
+	rpcclient "github.com/dashpay/tenderdash/rpc/client"
+	rpchttp "github.com/dashpay/tenderdash/rpc/client/http"
+	rpcmock "github.com/dashpay/tenderdash/rpc/client/mocks"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	rpctest "github.com/dashpay/tenderdash/rpc/test"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func TestNewProvider(t *testing.T) {

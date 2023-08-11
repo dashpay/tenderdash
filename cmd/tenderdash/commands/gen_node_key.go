@@ -14,10 +14,10 @@ import (
 	"github.com/tyler-smith/go-bip39"
 	"golang.org/x/term"
 
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/crypto/ed25519"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/crypto/ed25519"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (
@@ -39,7 +39,7 @@ func MakeGenNodeKeyCommand(*config.Config, log.Logger) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "gen-node-key",
 		Short: "Generate a new node key for this node and print its ID",
-		Long: `Generate a new node key for this node and print its ID. 
+		Long: `Generate a new node key for this node and print its ID.
 Note that the key is not saved to disk.
 
 Node key can be generated randomly (default) or derived from BIP39 mnemonic phrase.

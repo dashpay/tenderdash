@@ -7,11 +7,11 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/tendermint/tendermint/libs/bytes"
-	rpcclient "github.com/tendermint/tendermint/rpc/client"
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	jsonrpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/libs/bytes"
+	rpcclient "github.com/dashpay/tenderdash/rpc/client"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	jsonrpcclient "github.com/dashpay/tenderdash/rpc/jsonrpc/client"
+	"github.com/dashpay/tenderdash/types"
 )
 
 /*

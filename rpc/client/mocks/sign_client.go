@@ -3,11 +3,11 @@
 package mocks
 
 import (
-	bytes "github.com/tendermint/tendermint/libs/bytes"
+	bytes "github.com/dashpay/tenderdash/libs/bytes"
 
 	context "context"
 
-	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
+	coretypes "github.com/dashpay/tenderdash/rpc/coretypes"
 
 	mock "github.com/stretchr/testify/mock"
 )

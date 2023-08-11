@@ -1,8 +1,8 @@
 package p2ptest
 
 import (
-	"github.com/tendermint/tendermint/proto/tendermint/p2p"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/proto/tendermint/p2p"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // Message is a simple message containing a string-typed Value field.

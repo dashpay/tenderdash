@@ -5,11 +5,10 @@ import (
 	"errors"
 	"fmt"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-
-	"github.com/tendermint/tendermint/types"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
+	"github.com/dashpay/tenderdash/types"
 )
 
 //-----------------------------------------------------

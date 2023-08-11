@@ -8,17 +8,16 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/creachadair/taskgroup"
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/creachadair/taskgroup"
-
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/internal/libs/clist"
-	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/types"
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/internal/libs/clist"
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/types"
 )
 
 var _ Mempool = (*TxMempool)(nil)

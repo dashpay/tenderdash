@@ -3,8 +3,8 @@ package core
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	rpc "github.com/tendermint/tendermint/rpc/jsonrpc/server"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	rpc "github.com/dashpay/tenderdash/rpc/jsonrpc/server"
 )
 
 // TODO: better system than "unsafe" prefix

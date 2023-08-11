@@ -4,7 +4,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // validatorMapIndexType represents data that is used to index `validatorMap` elements

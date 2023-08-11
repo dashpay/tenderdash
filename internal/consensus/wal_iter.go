@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"io"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type walIter interface {

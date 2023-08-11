@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tendermint/tendermint/rpc/coretypes"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
 )
 
 // BroadcastEvidence broadcasts evidence of the misbehavior.

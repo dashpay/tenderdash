@@ -9,9 +9,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/rpc/client"
-	"github.com/tendermint/tendermint/rpc/client/mock"
-	"github.com/tendermint/tendermint/rpc/coretypes"
+	"github.com/dashpay/tenderdash/rpc/client"
+	"github.com/dashpay/tenderdash/rpc/client/mock"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
 )
 
 func TestWaitForHeight(t *testing.T) {

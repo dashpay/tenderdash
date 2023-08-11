@@ -1,10 +1,10 @@
 package kvstore
 
 import (
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/llmq"
-	tmtypes "github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/dash/llmq"
+	tmtypes "github.com/dashpay/tenderdash/types"
 )
 
 // RandValidatorSetUpdate returns a list of cnt validators for initializing

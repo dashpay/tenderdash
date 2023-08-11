@@ -5,7 +5,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // verify verifies the evidence fully by checking:

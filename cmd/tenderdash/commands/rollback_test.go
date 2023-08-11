@@ -7,12 +7,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	"github.com/tendermint/tendermint/cmd/tenderdash/commands"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/rpc/client/local"
-	rpctest "github.com/tendermint/tendermint/rpc/test"
-	e2e "github.com/tendermint/tendermint/test/e2e/app"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	"github.com/dashpay/tenderdash/cmd/tenderdash/commands"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/rpc/client/local"
+	rpctest "github.com/dashpay/tenderdash/rpc/test"
+	e2e "github.com/dashpay/tenderdash/test/e2e/app"
 )
 
 func TestRollbackIntegration(t *testing.T) {

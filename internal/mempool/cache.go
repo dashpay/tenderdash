@@ -5,7 +5,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // TxCache defines an interface for raw transaction caching in a mempool.

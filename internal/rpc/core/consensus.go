@@ -3,9 +3,9 @@ package core
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/libs"
-	tmmath "github.com/tendermint/tendermint/libs/math"
-	"github.com/tendermint/tendermint/rpc/coretypes"
+	"github.com/dashpay/tenderdash/libs"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
 )
 
 // Validators gets the validator set at the given block height.

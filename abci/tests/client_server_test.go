@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	abciclientent "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	abciserver "github.com/tendermint/tendermint/abci/server"
-	"github.com/tendermint/tendermint/libs/log"
+	abciclientent "github.com/dashpay/tenderdash/abci/client"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	abciserver "github.com/dashpay/tenderdash/abci/server"
+	"github.com/dashpay/tenderdash/libs/log"
 )
 
 func TestClientServerNoAddrPrefix(t *testing.T) {
