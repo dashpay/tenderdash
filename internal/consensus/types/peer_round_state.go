@@ -6,8 +6,8 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/tendermint/tendermint/libs/bits"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/libs/bits"
+	"github.com/dashpay/tenderdash/types"
 )
 
 //-----------------------------------------------------------------------------

@@ -9,8 +9,8 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/types"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // snapshotKey is a snapshot key used for lookups.

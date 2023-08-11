@@ -9,8 +9,8 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	"github.com/tendermint/tendermint/internal/jsontypes"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	"github.com/dashpay/tenderdash/internal/jsontypes"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 )
 
 const (
@@ -205,7 +205,7 @@ type HexStringer interface {
 }
 
 // BatchVerifier If a new key type implements batch verification,
-// the key type must be registered in github.com/tendermint/tendermint/crypto/batch
+// the key type must be registered in github.com/dashpay/tenderdash/crypto/batch
 type BatchVerifier interface {
 	// Add appends an entry into the BatchVerifier.
 	Add(key PubKey, message, signature []byte) error

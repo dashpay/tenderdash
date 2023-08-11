@@ -9,8 +9,8 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // errDone is returned by chunkQueue.Next() when all chunks have been returned.

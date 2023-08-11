@@ -3,10 +3,10 @@ package factory
 import (
 	"github.com/dashpay/dashd-go/btcjson"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // MockValidatorSet returns static validator set with 2 validators and 2 private keys

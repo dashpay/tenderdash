@@ -20,7 +20,7 @@ import (
 	"encoding/hex"
 	"testing"
 
-	"github.com/tendermint/tendermint/crypto"
+	"github.com/dashpay/tenderdash/crypto"
 )
 
 func TestRFC6962Hasher(t *testing.T) {

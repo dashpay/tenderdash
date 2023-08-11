@@ -7,9 +7,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/crypto"
-	ctest "github.com/tendermint/tendermint/internal/libs/test"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
+	"github.com/dashpay/tenderdash/crypto"
+	ctest "github.com/dashpay/tenderdash/internal/libs/test"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
 )
 
 type testItem []byte

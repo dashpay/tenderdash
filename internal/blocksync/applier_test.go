@@ -9,11 +9,11 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/internal/state/mocks"
-	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
-	"github.com/tendermint/tendermint/internal/test/factory"
-	tmrequire "github.com/tendermint/tendermint/internal/test/require"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/state/mocks"
+	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
+	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func TestBlockApplierApply(t *testing.T) {

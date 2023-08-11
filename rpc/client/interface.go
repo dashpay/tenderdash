@@ -23,9 +23,9 @@ implementation.
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 //go:generate ../../scripts/mockery_generate.sh Client|RemoteClient

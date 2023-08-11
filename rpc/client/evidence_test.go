@@ -8,12 +8,12 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/crypto"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
-	"github.com/tendermint/tendermint/privval"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/rpc/client"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	"github.com/dashpay/tenderdash/privval"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/rpc/client"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func newEvidence(t *testing.T, val *privval.FilePV,

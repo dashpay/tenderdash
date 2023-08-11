@@ -5,12 +5,12 @@ import (
 	"fmt"
 	"time"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	sm "github.com/tendermint/tendermint/internal/state"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/eventemitter"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/eventemitter"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // Proposaler is used to set and create a proposal

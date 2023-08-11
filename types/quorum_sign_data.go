@@ -7,9 +7,9 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/rs/zerolog"
 
-	"github.com/tendermint/tendermint/crypto"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 var (

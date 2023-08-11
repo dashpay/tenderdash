@@ -8,10 +8,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	ctest "github.com/tendermint/tendermint/internal/libs/test"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	ctest "github.com/dashpay/tenderdash/internal/libs/test"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 func makeTxs(cnt, size int) Txs {

@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/abci/example/code"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
-	"github.com/tendermint/tendermint/rpc/client/http"
-	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/abci/example/code"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	"github.com/dashpay/tenderdash/rpc/client/http"
+	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (

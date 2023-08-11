@@ -9,35 +9,35 @@ import (
 	"strings"
 	"time"
 
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash"
-	"github.com/tendermint/tendermint/dash/core"
-	dashquorum "github.com/tendermint/tendermint/dash/quorum"
-	"github.com/tendermint/tendermint/internal/blocksync"
-	"github.com/tendermint/tendermint/internal/consensus"
-	"github.com/tendermint/tendermint/internal/eventbus"
-	"github.com/tendermint/tendermint/internal/eventlog"
-	"github.com/tendermint/tendermint/internal/evidence"
-	"github.com/tendermint/tendermint/internal/mempool"
-	"github.com/tendermint/tendermint/internal/p2p"
-	p2pclient "github.com/tendermint/tendermint/internal/p2p/client"
-	"github.com/tendermint/tendermint/internal/p2p/pex"
-	"github.com/tendermint/tendermint/internal/proxy"
-	rpccore "github.com/tendermint/tendermint/internal/rpc/core"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/internal/state/indexer"
-	"github.com/tendermint/tendermint/internal/state/indexer/sink"
-	"github.com/tendermint/tendermint/internal/statesync"
-	"github.com/tendermint/tendermint/internal/store"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/service"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	"github.com/tendermint/tendermint/privval"
-	"github.com/tendermint/tendermint/types"
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/dash"
+	"github.com/dashpay/tenderdash/dash/core"
+	dashquorum "github.com/dashpay/tenderdash/dash/quorum"
+	"github.com/dashpay/tenderdash/internal/blocksync"
+	"github.com/dashpay/tenderdash/internal/consensus"
+	"github.com/dashpay/tenderdash/internal/eventbus"
+	"github.com/dashpay/tenderdash/internal/eventlog"
+	"github.com/dashpay/tenderdash/internal/evidence"
+	"github.com/dashpay/tenderdash/internal/mempool"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	p2pclient "github.com/dashpay/tenderdash/internal/p2p/client"
+	"github.com/dashpay/tenderdash/internal/p2p/pex"
+	"github.com/dashpay/tenderdash/internal/proxy"
+	rpccore "github.com/dashpay/tenderdash/internal/rpc/core"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/internal/state/indexer"
+	"github.com/dashpay/tenderdash/internal/state/indexer/sink"
+	"github.com/dashpay/tenderdash/internal/statesync"
+	"github.com/dashpay/tenderdash/internal/store"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/service"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	"github.com/dashpay/tenderdash/privval"
+	"github.com/dashpay/tenderdash/types"
 
 	_ "net/http/pprof" //nolint: gosec // securely exposed on separate, optional port
 
@@ -410,7 +410,7 @@ func makeNode(
 	// Set up state sync reactor, and schedule a sync if requested.
 	// FIXME The way we do phased startups (e.g. replay -> block sync -> consensus) is very messy,
 	// we should clean this whole thing up. See:
-	// https://github.com/tendermint/tendermint/issues/4644
+	// https://github.com/dashpay/tenderdash/issues/4644
 	node.services = append(node.services, statesync.NewReactor(
 		genDoc.ChainID,
 		genDoc.InitialHeight,

@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/log"
 )
 
 // WALGenerateNBlocks generates a consensus WAL. It does this by

@@ -1,6 +1,6 @@
 package types
 
-import tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+import tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 
 // PopulateSignsFromProto updates the signatures of the current Vote with values are taken from the Vote's protobuf
 func (vote *Vote) PopulateSignsFromProto(pv *tmproto.Vote) error {

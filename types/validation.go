@@ -5,9 +5,9 @@ import (
 	"math/bits"
 	"time"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/crypto/ed25519"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	"github.com/dashpay/tenderdash/crypto/ed25519"
 )
 
 // ValidateHash returns an error if the hash is not empty, but its

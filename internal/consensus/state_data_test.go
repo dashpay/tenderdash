@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/internal/test/factory"
-	tmrequire "github.com/tendermint/tendermint/internal/test/require"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func TestIsValidForPrevote(t *testing.T) {

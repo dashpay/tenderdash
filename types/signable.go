@@ -1,7 +1,7 @@
 package types
 
 import (
-	"github.com/tendermint/tendermint/crypto/bls12381"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
 )
 
 const (

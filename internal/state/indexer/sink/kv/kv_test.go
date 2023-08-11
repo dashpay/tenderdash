@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/internal/pubsub/query"
-	"github.com/tendermint/tendermint/internal/state/indexer"
-	kvtx "github.com/tendermint/tendermint/internal/state/indexer/tx/kv"
-	"github.com/tendermint/tendermint/types"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/internal/pubsub/query"
+	"github.com/dashpay/tenderdash/internal/state/indexer"
+	kvtx "github.com/dashpay/tenderdash/internal/state/indexer/tx/kv"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func TestType(t *testing.T) {

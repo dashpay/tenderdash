@@ -6,11 +6,11 @@ import (
 	"errors"
 	"fmt"
 
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/llmq"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/dash/llmq"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 func InitChain(ctx context.Context, client abciclient.Client) error {

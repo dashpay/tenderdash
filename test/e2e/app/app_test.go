@@ -14,11 +14,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/abci/example/code"
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	tmtypes "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/abci/example/code"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	tmtypes "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 func newApp(t *testing.T) *Application {

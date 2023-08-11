@@ -8,9 +8,9 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	"github.com/tendermint/tendermint/crypto"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // MockClient is an implementation of a mock core-server

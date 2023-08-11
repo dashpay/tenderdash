@@ -8,11 +8,11 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
-	"github.com/tendermint/tendermint/libs/log"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type AddProposalBlockPartEvent struct {

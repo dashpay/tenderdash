@@ -11,9 +11,9 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/tendermint/tendermint/libs/log"
-	rpcserver "github.com/tendermint/tendermint/rpc/jsonrpc/server"
-	"github.com/tendermint/tendermint/rpc/jsonrpc/types"
+	"github.com/dashpay/tenderdash/libs/log"
+	rpcserver "github.com/dashpay/tenderdash/rpc/jsonrpc/server"
+	"github.com/dashpay/tenderdash/rpc/jsonrpc/types"
 )
 
 func FuzzRPCJSONRPCServer(f *testing.F) {

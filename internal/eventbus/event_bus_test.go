@@ -11,14 +11,13 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/crypto"
-
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/internal/eventbus"
-	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
-	tmquery "github.com/tendermint/tendermint/internal/pubsub/query"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/types"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/eventbus"
+	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
+	tmquery "github.com/dashpay/tenderdash/internal/pubsub/query"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func TestEventBusPublishEventTx(t *testing.T) {

@@ -5,8 +5,8 @@ import (
 	"errors"
 	"os"
 
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/test/e2e/pkg/infra"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/test/e2e/pkg/infra"
 )
 
 // Cleanup destroys all infrastructure and removes all generated testnet files.

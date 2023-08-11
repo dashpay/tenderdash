@@ -3,8 +3,8 @@ package consensus
 import (
 	"time"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	tmtime "github.com/tendermint/tendermint/libs/time"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
 )
 
 type roundScheduler struct {

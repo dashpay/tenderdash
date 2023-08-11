@@ -6,10 +6,10 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/tendermint/tendermint/libs/log"
-	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
-	"github.com/tendermint/tendermint/test/e2e/pkg/exec"
-	"github.com/tendermint/tendermint/test/e2e/pkg/infra"
+	"github.com/dashpay/tenderdash/libs/log"
+	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
+	"github.com/dashpay/tenderdash/test/e2e/pkg/exec"
+	"github.com/dashpay/tenderdash/test/e2e/pkg/infra"
 )
 
 // testnetInfra provides an API for provisioning and manipulating

@@ -8,11 +8,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/internal/mempool"
-	"github.com/tendermint/tendermint/libs/log"
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/internal/mempool"
+	"github.com/dashpay/tenderdash/libs/log"
 )
 
 func FuzzMempool(f *testing.F) {

@@ -3,10 +3,10 @@ package consensus
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/dash"
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/libs/log"
-	tmtime "github.com/tendermint/tendermint/libs/time"
+	"github.com/dashpay/tenderdash/dash"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
 )
 
 type EnterProposeEvent struct {

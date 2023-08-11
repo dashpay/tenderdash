@@ -5,10 +5,10 @@ import (
 	"fmt"
 	"math/rand"
 
-	"github.com/tendermint/tendermint/crypto"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 const StateIDVersion = 1

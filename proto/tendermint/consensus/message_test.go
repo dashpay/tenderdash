@@ -8,8 +8,8 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 
-	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 func TestHasVoteVector(t *testing.T) {

@@ -13,16 +13,16 @@ import (
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
-	"github.com/tendermint/tendermint/abci/example/code"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/internal/mempool"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/internal/store"
-	"github.com/tendermint/tendermint/internal/test/factory"
-	"github.com/tendermint/tendermint/libs/log"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/abci/example/code"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/mempool"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/internal/store"
+	"github.com/dashpay/tenderdash/internal/test/factory"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // for testing

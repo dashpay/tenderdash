@@ -5,9 +5,9 @@ package statesync
 
 import (
 	fmt "fmt"
+	types "github.com/dashpay/tenderdash/proto/tendermint/types"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
-	types "github.com/tendermint/tendermint/proto/tendermint/types"
 	io "io"
 	math "math"
 	math_bits "math/bits"

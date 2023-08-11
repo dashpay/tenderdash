@@ -14,12 +14,12 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 	db "github.com/tendermint/tm-db"
 
-	"github.com/tendermint/tendermint/abci/example/code"
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/libs/log"
-	types1 "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/abci/example/code"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/libs/log"
+	types1 "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (

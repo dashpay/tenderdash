@@ -10,15 +10,14 @@ import (
 	"fmt"
 	"strconv"
 
+	"github.com/dashpay/dashd-go/btcjson"
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/dashpay/dashd-go/btcjson"
-
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/log"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 // PrivValidatorType defines the implementation types.

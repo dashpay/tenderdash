@@ -6,7 +6,7 @@ import (
 	"github.com/sasha-s/go-deadlock"
 	"github.com/spf13/cobra"
 
-	"github.com/tendermint/tendermint/version"
+	"github.com/dashpay/tenderdash/version"
 )
 
 // VersionCmd ...

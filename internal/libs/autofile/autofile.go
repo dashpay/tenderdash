@@ -12,7 +12,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	tmrand "github.com/tendermint/tendermint/libs/rand"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
 )
 
 /* AutoFile usage

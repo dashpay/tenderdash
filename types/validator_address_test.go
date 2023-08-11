@@ -7,7 +7,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/libs/rand"
+	"github.com/dashpay/tenderdash/libs/rand"
 )
 
 func TestValidatorAddress_String(t *testing.T) {

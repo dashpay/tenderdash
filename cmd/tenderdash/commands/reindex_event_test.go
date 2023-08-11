@@ -10,13 +10,13 @@ import (
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
-	abcitypes "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/internal/state/indexer"
-	"github.com/tendermint/tendermint/internal/state/mocks"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/proto/tendermint/state"
-	"github.com/tendermint/tendermint/types"
+	abcitypes "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/internal/state/indexer"
+	"github.com/dashpay/tenderdash/internal/state/mocks"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/proto/tendermint/state"
+	"github.com/dashpay/tenderdash/types"
 
 	_ "github.com/lib/pq" // for the psql sink
 )

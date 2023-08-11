@@ -10,14 +10,14 @@ import (
 
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/internal/state/mocks"
-	"github.com/tendermint/tendermint/internal/test/factory"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/log"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/internal/state/mocks"
+	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func TestVoteSigner_signAddVote(t *testing.T) {

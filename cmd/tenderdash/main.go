@@ -6,12 +6,12 @@ import (
 	"io"
 	"os"
 
-	"github.com/tendermint/tendermint/cmd/tenderdash/commands"
-	"github.com/tendermint/tendermint/cmd/tenderdash/commands/debug"
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/cli"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/node"
+	"github.com/dashpay/tenderdash/cmd/tenderdash/commands"
+	"github.com/dashpay/tenderdash/cmd/tenderdash/commands/debug"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/libs/cli"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/node"
 )
 
 func main() {

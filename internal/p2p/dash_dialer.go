@@ -6,8 +6,8 @@ import (
 	"net"
 	"time"
 
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (

@@ -14,12 +14,12 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/tendermint/tendermint/internal/p2p"
-	"github.com/tendermint/tendermint/internal/p2p/mocks"
-	tmrequire "github.com/tendermint/tendermint/internal/test/require"
-	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/internal/p2p/mocks"
+	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
+	bcproto "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const testChannelID = 0x1

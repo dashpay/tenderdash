@@ -6,13 +6,13 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tendermint/tendermint/internal/eventlog"
-	"github.com/tendermint/tendermint/internal/eventlog/cursor"
-	"github.com/tendermint/tendermint/internal/jsontypes"
-	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
-	tmquery "github.com/tendermint/tendermint/internal/pubsub/query"
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+	"github.com/dashpay/tenderdash/internal/eventlog"
+	"github.com/dashpay/tenderdash/internal/eventlog/cursor"
+	"github.com/dashpay/tenderdash/internal/jsontypes"
+	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
+	tmquery "github.com/dashpay/tenderdash/internal/pubsub/query"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	rpctypes "github.com/dashpay/tenderdash/rpc/jsonrpc/types"
 )
 
 const (

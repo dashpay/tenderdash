@@ -5,11 +5,11 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/tendermint/tendermint/proto/tendermint/blocksync"
-	"github.com/tendermint/tendermint/proto/tendermint/consensus"
-	"github.com/tendermint/tendermint/proto/tendermint/mempool"
-	"github.com/tendermint/tendermint/proto/tendermint/statesync"
-	"github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/proto/tendermint/blocksync"
+	"github.com/dashpay/tenderdash/proto/tendermint/consensus"
+	"github.com/dashpay/tenderdash/proto/tendermint/mempool"
+	"github.com/dashpay/tenderdash/proto/tendermint/statesync"
+	"github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 const (

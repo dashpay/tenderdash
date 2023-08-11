@@ -12,14 +12,14 @@ import (
 
 	dbm "github.com/tendermint/tm-db"
 
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/internal/eventbus"
-	"github.com/tendermint/tendermint/internal/proxy"
-	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/internal/store"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/internal/eventbus"
+	"github.com/dashpay/tenderdash/internal/proxy"
+	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/internal/store"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (

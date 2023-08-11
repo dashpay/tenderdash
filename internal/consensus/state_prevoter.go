@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/log"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type Prevoter interface {

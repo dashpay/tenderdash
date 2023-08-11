@@ -11,10 +11,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/crypto/ed25519"
-	"github.com/tendermint/tendermint/internal/p2p"
-	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto/ed25519"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // transportFactory is used to set up transports for tests.

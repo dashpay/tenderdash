@@ -7,8 +7,8 @@ import (
 
 	"golang.org/x/exp/constraints"
 
-	"github.com/tendermint/tendermint/internal/libs/flowrate"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/libs/flowrate"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type (

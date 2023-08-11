@@ -6,11 +6,11 @@ import (
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
-	"github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/internal/state/mocks"
-	"github.com/tendermint/tendermint/internal/test/factory"
-	"github.com/tendermint/tendermint/types"
-	"github.com/tendermint/tendermint/version"
+	"github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/internal/state/mocks"
+	"github.com/dashpay/tenderdash/internal/test/factory"
+	"github.com/dashpay/tenderdash/types"
+	"github.com/dashpay/tenderdash/version"
 )
 
 func TestRollback(t *testing.T) {

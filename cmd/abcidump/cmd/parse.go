@@ -11,7 +11,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tendermint/tendermint/cmd/abcidump/parser"
+	"github.com/dashpay/tenderdash/cmd/abcidump/parser"
 )
 
 const (

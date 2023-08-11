@@ -15,7 +15,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+	rpctypes "github.com/dashpay/tenderdash/rpc/jsonrpc/types"
 )
 
 const (

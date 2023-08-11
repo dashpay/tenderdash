@@ -4,13 +4,13 @@ import (
 	"context"
 	"errors"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/eventemitter"
-	"github.com/tendermint/tendermint/libs/log"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/libs/eventemitter"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type (

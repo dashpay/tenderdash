@@ -4,8 +4,8 @@ import (
 	"context"
 	"sort"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/llmq"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/dash/llmq"
 )
 
 // RandValidatorSet returns a randomized validator set (size: +numValidators+),

@@ -17,10 +17,10 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 	dbm "github.com/tendermint/tm-db"
 
-	tmsync "github.com/tendermint/tendermint/internal/libs/sync"
-	"github.com/tendermint/tendermint/libs/log"
-	p2pproto "github.com/tendermint/tendermint/proto/tendermint/p2p"
-	"github.com/tendermint/tendermint/types"
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
+	"github.com/dashpay/tenderdash/libs/log"
+	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (

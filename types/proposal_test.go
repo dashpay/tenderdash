@@ -11,11 +11,11 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/internal/libs/protoio"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/libs/protoio"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 func getTestProposal(t testing.TB) *Proposal {

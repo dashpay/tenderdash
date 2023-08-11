@@ -6,9 +6,9 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 	rpc "github.com/dashpay/dashd-go/rpcclient"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/log"
 )
 
 const ModuleName = "rpcclient"

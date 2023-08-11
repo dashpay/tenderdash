@@ -7,7 +7,7 @@ import (
 
 	"github.com/jonboulle/clockwork"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/dashpay/tenderdash/libs/log"
 )
 
 type gossipHandlerFunc func(ctx context.Context, appState StateData)

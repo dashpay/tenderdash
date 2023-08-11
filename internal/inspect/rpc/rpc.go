@@ -7,13 +7,13 @@ import (
 
 	"github.com/rs/cors"
 
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/internal/pubsub"
-	"github.com/tendermint/tendermint/internal/rpc/core"
-	"github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/internal/state/indexer"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/rpc/jsonrpc/server"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/internal/pubsub"
+	"github.com/dashpay/tenderdash/internal/rpc/core"
+	"github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/internal/state/indexer"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/rpc/jsonrpc/server"
 )
 
 // Server defines parameters for running an Inspector rpc server.

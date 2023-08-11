@@ -11,9 +11,9 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	tmtime "github.com/tendermint/tendermint/libs/time"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
 )
 
 func TestGenesisBad(t *testing.T) {
@@ -101,7 +101,7 @@ func TestGenesisBad(t *testing.T) {
 				"chain_id":"mychain",
 				"validator_quorum_threshold_public_key":{"type": "tendermint/PubKeyBLS12381","value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"},
 				"validator_quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
-				"validator_quorum_type":100,				
+				"validator_quorum_type":100,
 				"validators":[{
 					"address": "A",
 					"pub_key":{"type":"tendermint/PubKeyEd25519","value":"AT/+aaL1eB0477Mud9JMm8Sh8BIvOYlPGC9KkIUmFaE="},
@@ -122,7 +122,7 @@ func TestGenesisBad(t *testing.T) {
 				"name":"",
 				"pro_tx_hash":"51BF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C45F"
 			}],
-			"validator_quorum_type":100,			
+			"validator_quorum_type":100,
 			"validator_quorum_threshold_public_key":{
 				"type": "tendermint/PubKeyBLS12381",
 				"value":"F5BjXeh0DppqaxX7a3LzoWr6CXPZcZeba6VHYdbiUCxQ23b00mFD8FRZpCz9Ug1E"

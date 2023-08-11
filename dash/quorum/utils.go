@@ -1,8 +1,8 @@
 package quorum
 
 import (
-	"github.com/tendermint/tendermint/internal/p2p"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // nodeAddress converts ValidatorAddress to a NodeAddress object

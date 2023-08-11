@@ -4,8 +4,8 @@ import (
 	"bytes"
 	"sort"
 
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/types"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // sortedValidatorList is a list of sortableValidators that are sorted by `sortableValidator.SortKey()`

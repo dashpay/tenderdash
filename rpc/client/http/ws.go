@@ -9,11 +9,11 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/internal/pubsub"
-	"github.com/tendermint/tendermint/libs/log"
-	rpcclient "github.com/tendermint/tendermint/rpc/client"
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	jsonrpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
+	"github.com/dashpay/tenderdash/internal/pubsub"
+	"github.com/dashpay/tenderdash/libs/log"
+	rpcclient "github.com/dashpay/tenderdash/rpc/client"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	jsonrpcclient "github.com/dashpay/tenderdash/rpc/jsonrpc/client"
 )
 
 // wsEvents is a wrapper around WSClient, which implements SubscriptionClient.

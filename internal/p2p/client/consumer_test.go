@@ -9,11 +9,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/mock"
-	"github.com/tendermint/tendermint/libs/log"
 
-	"github.com/tendermint/tendermint/internal/p2p"
-	tmrequire "github.com/tendermint/tendermint/internal/test/require"
-	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
+	"github.com/dashpay/tenderdash/libs/log"
+	bcproto "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
 )
 
 func TestErrorLoggerP2PMessageHandler(t *testing.T) {

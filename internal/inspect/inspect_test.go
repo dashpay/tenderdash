@@ -16,17 +16,17 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	abcitypes "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/internal/inspect"
-	"github.com/tendermint/tendermint/internal/pubsub/query"
-	"github.com/tendermint/tendermint/internal/state/indexer"
-	indexermocks "github.com/tendermint/tendermint/internal/state/indexer/mocks"
-	statemocks "github.com/tendermint/tendermint/internal/state/mocks"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/proto/tendermint/state"
-	httpclient "github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/types"
+	abcitypes "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/internal/inspect"
+	"github.com/dashpay/tenderdash/internal/pubsub/query"
+	"github.com/dashpay/tenderdash/internal/state/indexer"
+	indexermocks "github.com/dashpay/tenderdash/internal/state/indexer/mocks"
+	statemocks "github.com/dashpay/tenderdash/internal/state/mocks"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/proto/tendermint/state"
+	httpclient "github.com/dashpay/tenderdash/rpc/client/http"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func TestInspectConstructor(t *testing.T) {

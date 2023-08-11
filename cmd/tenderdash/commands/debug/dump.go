@@ -11,10 +11,10 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/cli"
-	"github.com/tendermint/tendermint/libs/log"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/libs/cli"
+	"github.com/dashpay/tenderdash/libs/log"
+	rpchttp "github.com/dashpay/tenderdash/rpc/client/http"
 )
 
 func getDumpCmd(logger log.Logger) *cobra.Command {

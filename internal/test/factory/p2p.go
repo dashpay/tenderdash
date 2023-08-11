@@ -7,8 +7,8 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/libs/rand"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/libs/rand"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // NodeID returns a valid NodeID based on an inputted string

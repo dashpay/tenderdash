@@ -9,9 +9,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/tendermint/tendermint/internal/test/factory"
-	tmos "github.com/tendermint/tendermint/libs/os"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
+	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmos "github.com/dashpay/tenderdash/libs/os"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
 )
 
 // defaultDirPerm is the default permissions used when creating directories.

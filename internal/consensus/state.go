@@ -11,18 +11,18 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/config"
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/internal/eventbus"
-	"github.com/tendermint/tendermint/internal/jsontypes"
-	"github.com/tendermint/tendermint/internal/libs/autofile"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/eventemitter"
-	"github.com/tendermint/tendermint/libs/log"
-	tmos "github.com/tendermint/tendermint/libs/os"
-	"github.com/tendermint/tendermint/libs/service"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/config"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/eventbus"
+	"github.com/dashpay/tenderdash/internal/jsontypes"
+	"github.com/dashpay/tenderdash/internal/libs/autofile"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/libs/eventemitter"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmos "github.com/dashpay/tenderdash/libs/os"
+	"github.com/dashpay/tenderdash/libs/service"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // consensus events

@@ -6,15 +6,15 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tendermint/tendermint/internal/eventbus"
-	"github.com/tendermint/tendermint/internal/pubsub"
-	"github.com/tendermint/tendermint/internal/pubsub/query"
-	rpccore "github.com/tendermint/tendermint/internal/rpc/core"
-	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/log"
-	rpcclient "github.com/tendermint/tendermint/rpc/client"
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/eventbus"
+	"github.com/dashpay/tenderdash/internal/pubsub"
+	"github.com/dashpay/tenderdash/internal/pubsub/query"
+	rpccore "github.com/dashpay/tenderdash/internal/rpc/core"
+	"github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/log"
+	rpcclient "github.com/dashpay/tenderdash/rpc/client"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 /*

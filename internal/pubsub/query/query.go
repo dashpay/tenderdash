@@ -18,8 +18,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/internal/pubsub/query/syntax"
+	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/internal/pubsub/query/syntax"
 )
 
 // All is a query that matches all events.

@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"strings"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/internal/jsontypes"
-	tmquery "github.com/tendermint/tendermint/internal/pubsub/query"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/jsontypes"
+	tmquery "github.com/dashpay/tenderdash/internal/pubsub/query"
 )
 
 // Reserved event types (alphabetically sorted).
