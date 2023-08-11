@@ -11,14 +11,13 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	"github.com/tendermint/tendermint/crypto"
-
-	"github.com/tendermint/tendermint/light/provider"
-	rpcclient "github.com/tendermint/tendermint/rpc/client"
-	rpchttp "github.com/tendermint/tendermint/rpc/client/http"
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/light/provider"
+	rpcclient "github.com/dashpay/tenderdash/rpc/client"
+	rpchttp "github.com/dashpay/tenderdash/rpc/client/http"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	rpctypes "github.com/dashpay/tenderdash/rpc/jsonrpc/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 var defaultOptions = Options{

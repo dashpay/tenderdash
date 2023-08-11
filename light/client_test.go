@@ -14,13 +14,13 @@ import (
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
-	dashcore "github.com/tendermint/tendermint/dash/core"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/light"
-	"github.com/tendermint/tendermint/light/provider"
-	provider_mocks "github.com/tendermint/tendermint/light/provider/mocks"
-	dbs "github.com/tendermint/tendermint/light/store/db"
-	"github.com/tendermint/tendermint/types"
+	dashcore "github.com/dashpay/tenderdash/dash/core"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/light"
+	"github.com/dashpay/tenderdash/light/provider"
+	provider_mocks "github.com/dashpay/tenderdash/light/provider/mocks"
+	dbs "github.com/dashpay/tenderdash/light/store/db"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (

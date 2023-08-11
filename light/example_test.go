@@ -9,15 +9,14 @@ import (
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
-	"github.com/tendermint/tendermint/privval"
-
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	dashcore "github.com/tendermint/tendermint/dash/core"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/light"
-	httpp "github.com/tendermint/tendermint/light/provider/http"
-	dbs "github.com/tendermint/tendermint/light/store/db"
-	rpctest "github.com/tendermint/tendermint/rpc/test"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	dashcore "github.com/dashpay/tenderdash/dash/core"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/light"
+	httpp "github.com/dashpay/tenderdash/light/provider/http"
+	dbs "github.com/dashpay/tenderdash/light/store/db"
+	"github.com/dashpay/tenderdash/privval"
+	rpctest "github.com/dashpay/tenderdash/rpc/test"
 )
 
 // Manually getting light blocks and verifying them.
