@@ -112,7 +112,7 @@ func (p *InMemPeerStore) Query(spec store.QueryFunc[types.NodeID, PeerData], lim
 // 2. the height must be between two values base and height
 // otherwise return the empty peer data and false
 func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
-	spec := andX(
+	spec := store.AndX(
 		peerNumPendingCond(maxPendingRequestsPerPeer, "<"),
 		heightBetweenPeerHeightRange(height),
 		ignoreTimedOutPeers(minRecvRate),
@@ -126,7 +126,7 @@ func (p *InMemPeerStore) FindPeer(height int64) (PeerData, bool) {
 
 // FindTimedoutPeers finds and returns the timed out peers
 func (p *InMemPeerStore) FindTimedoutPeers() []PeerData {
-	return p.Query(andX(
+	return p.Query(store.AndX(
 		peerNumPendingCond(0, ">"),
 		transferRateNotZeroAndLessMinRate(minRecvRate),
 	), 0)
@@ -187,17 +187,6 @@ func ignoreTimedOutPeers(minRate int64) store.QueryFunc[types.NodeID, PeerData] 
 			return true
 		}
 		return curRate >= minRate
-	}
-}
-
-func andX(specs ...store.QueryFunc[types.NodeID, PeerData]) store.QueryFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer PeerData) bool {
-		for _, spec := range specs {
-			if !spec(peerID, peer) {
-				return false
-			}
-		}
-		return true
 	}
 }
 

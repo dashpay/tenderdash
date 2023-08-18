@@ -126,3 +126,15 @@ func (p *InMemStore[K, T]) query(spec QueryFunc[K, T], limit int) []T {
 	}
 	return res
 }
+
+// AndX combines multiple specification functions into one
+func AndX[K comparable, V any](specs ...QueryFunc[K, V]) QueryFunc[K, V] {
+	return func(k K, v V) bool {
+		for _, spec := range specs {
+			if !spec(k, v) {
+				return false
+			}
+		}
+		return true
+	}
+}
