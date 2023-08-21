@@ -5,9 +5,9 @@ package p2p
 
 import (
 	fmt "fmt"
-	crypto "github.com/dashpay/tenderdash/proto/tendermint/crypto"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
+	crypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -158,7 +158,6 @@ func (m *PacketMsg) GetData() []byte {
 
 type Packet struct {
 	// Types that are valid to be assigned to Sum:
-	//
 	//	*Packet_PacketPing
 	//	*Packet_PacketPong
 	//	*Packet_PacketMsg

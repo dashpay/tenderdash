@@ -5,10 +5,10 @@ package privval
 
 import (
 	fmt "fmt"
-	crypto "github.com/dashpay/tenderdash/proto/tendermint/crypto"
-	types "github.com/dashpay/tenderdash/proto/tendermint/types"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
+	crypto "github.com/tendermint/tendermint/proto/tendermint/crypto"
+	types "github.com/tendermint/tendermint/proto/tendermint/types"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -959,7 +959,7 @@ func (*Message) XXX_OneofWrappers() []interface{} {
 
 // AuthSigMessage is duplicated from p2p prior to the P2P refactor.
 // It is used for the SecretConnection until we migrate privval to gRPC.
-// https://github.com/dashpay/tenderdash/issues/4698
+// https://github.com/tendermint/tendermint/issues/4698
 type AuthSigMessage struct {
 	PubKey crypto.PublicKey `protobuf:"bytes,1,opt,name=pub_key,json=pubKey,proto3" json:"pub_key"`
 	Sig    []byte           `protobuf:"bytes,2,opt,name=sig,proto3" json:"sig,omitempty"`

@@ -5,15 +5,15 @@ package p2p
 
 import (
 	fmt "fmt"
-	blocksync "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
-	consensus "github.com/dashpay/tenderdash/proto/tendermint/consensus"
-	mempool "github.com/dashpay/tenderdash/proto/tendermint/mempool"
-	statesync "github.com/dashpay/tenderdash/proto/tendermint/statesync"
-	types1 "github.com/dashpay/tenderdash/proto/tendermint/types"
 	_ "github.com/gogo/protobuf/gogoproto"
 	proto "github.com/gogo/protobuf/proto"
 	_ "github.com/gogo/protobuf/types"
 	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
+	blocksync "github.com/tendermint/tendermint/proto/tendermint/blocksync"
+	consensus "github.com/tendermint/tendermint/proto/tendermint/consensus"
+	mempool "github.com/tendermint/tendermint/proto/tendermint/mempool"
+	statesync "github.com/tendermint/tendermint/proto/tendermint/statesync"
+	types1 "github.com/tendermint/tendermint/proto/tendermint/types"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -443,7 +443,6 @@ func (m *Echo) GetValue() string {
 type Envelope struct {
 	Attributes map[string]string `protobuf:"bytes,1,rep,name=attributes,proto3" json:"attributes,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 	// Types that are valid to be assigned to Sum:
-	//
 	//	*Envelope_Echo
 	//	*Envelope_PexRequest
 	//	*Envelope_PexResponse
