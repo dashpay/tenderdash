@@ -69,13 +69,12 @@ func (_m *Provider) ReportEvidence(_a0 context.Context, _a1 types.Evidence) erro
 	return r0
 }
 
-type mockConstructorTestingTNewProvider interface {
+// NewProvider creates a new instance of Provider. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewProvider(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewProvider creates a new instance of Provider. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewProvider(t mockConstructorTestingTNewProvider) *Provider {
+}) *Provider {
 	mock := &Provider{}
 	mock.Mock.Test(t)
 

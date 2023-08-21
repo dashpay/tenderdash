@@ -168,13 +168,12 @@ func (_m *Executor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) e
 	return r0
 }
 
-type mockConstructorTestingTNewExecutor interface {
+// NewExecutor creates a new instance of Executor. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewExecutor(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewExecutor creates a new instance of Executor. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewExecutor(t mockConstructorTestingTNewExecutor) *Executor {
+}) *Executor {
 	mock := &Executor{}
 	mock.Mock.Test(t)
 

@@ -82,13 +82,12 @@ func (_m *BlockEventPublisher) PublishEventValidatorSetUpdates(_a0 types.EventDa
 	return r0
 }
 
-type mockConstructorTestingTNewBlockEventPublisher interface {
+// NewBlockEventPublisher creates a new instance of BlockEventPublisher. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewBlockEventPublisher(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewBlockEventPublisher creates a new instance of BlockEventPublisher. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewBlockEventPublisher(t mockConstructorTestingTNewBlockEventPublisher) *BlockEventPublisher {
+}) *BlockEventPublisher {
 	mock := &BlockEventPublisher{}
 	mock.Mock.Test(t)
 
