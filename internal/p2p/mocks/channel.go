@@ -86,13 +86,12 @@ func (_m *Channel) String() string {
 	return r0
 }
 
-type mockConstructorTestingTNewChannel interface {
+// NewChannel creates a new instance of Channel. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewChannel(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewChannel creates a new instance of Channel. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewChannel(t mockConstructorTestingTNewChannel) *Channel {
+}) *Channel {
 	mock := &Channel{}
 	mock.Mock.Test(t)
 

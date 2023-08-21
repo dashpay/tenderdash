@@ -40,7 +40,7 @@ var (
 	// errRejectSnapshot is returned by Sync() when the snapshot is rejected.
 	errRejectSnapshot = errors.New("snapshot was rejected")
 	// errRejectFormat is returned by Sync() when the snapshot format is rejected.
-	errRejectFormat = errors.New("snapshot format was rejected")
+	errRejectFormat = errors.New("snapshot version was rejected")
 	// errRejectSender is returned by Sync() when the snapshot sender is rejected.
 	errRejectSender = errors.New("snapshot sender was rejected")
 	// errVerifyFailed is returned by Sync() when app hash or last height
@@ -118,7 +118,7 @@ func (s *syncer) AddSnapshot(peerID types.NodeID, snapshot *snapshot) (bool, err
 		s.metrics.TotalSnapshots.Add(1)
 		s.logger.Info("Discovered new snapshot",
 			"height", snapshot.Height,
-			"format", snapshot.Version,
+			"version", snapshot.Version,
 			"hash", snapshot.Hash.ShortString())
 	}
 	return added, nil
@@ -225,7 +225,7 @@ func (s *syncer) SyncAny(
 			queue.RetryAll()
 			s.logger.Info("Retrying snapshot",
 				"height", snapshot.Height,
-				"format", snapshot.Version,
+				"version", snapshot.Version,
 				"hash", snapshot.Hash)
 			continue
 
@@ -233,24 +233,24 @@ func (s *syncer) SyncAny(
 			s.snapshots.Reject(snapshot)
 			s.logger.Error("Timed out waiting for snapshot chunks, rejected snapshot",
 				"height", snapshot.Height,
-				"format", snapshot.Version,
+				"version", snapshot.Version,
 				"hash", snapshot.Hash)
 
 		case errors.Is(err, errRejectSnapshot):
 			s.snapshots.Reject(snapshot)
 			s.logger.Info("Snapshot rejected",
 				"height", snapshot.Height,
-				"format", snapshot.Version,
+				"version", snapshot.Version,
 				"hash", snapshot.Hash)
 
 		case errors.Is(err, errRejectFormat):
 			s.snapshots.RejectVersion(snapshot.Version)
-			s.logger.Info("Snapshot format rejected", "format", snapshot.Version)
+			s.logger.Info("Snapshot version rejected", "version", snapshot.Version)
 
 		case errors.Is(err, errRejectSender):
 			s.logger.Info("Snapshot senders rejected",
 				"height", snapshot.Height,
-				"format", snapshot.Version,
+				"version", snapshot.Version,
 				"hash", snapshot.Hash)
 			for _, peer := range s.snapshots.GetPeers(snapshot) {
 				s.snapshots.RejectPeer(peer)
@@ -315,7 +315,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 	if err != nil {
 		s.logger.Error("Snapshot wasn't accepted",
 			"height", snapshot.Height,
-			"format", snapshot.Version,
+			"version", snapshot.Version,
 			"hash", snapshot.Hash,
 			"error", err)
 		return sm.State{}, nil, err
@@ -387,7 +387,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 
 // offerSnapshot offers a snapshot to the app. It returns various errors depending on the app's
 // response, or nil if the snapshot was accepted.
-func (s *syncer) offerSnapshot(ctx context.Context, snapshot *snapshot) error {
+func (s *syncer) offerSnapshot(ctx context.Context, snapshot *snapshot) error { //nolint:dupl
 	s.logger.Info("Offering snapshot to ABCI app",
 		"height", snapshot.Height,
 		"version", snapshot.Version,
@@ -408,7 +408,7 @@ func (s *syncer) offerSnapshot(ctx context.Context, snapshot *snapshot) error {
 	case abci.ResponseOfferSnapshot_ACCEPT:
 		s.logger.Info("Snapshot accepted, restoring",
 			"height", snapshot.Height,
-			"format", snapshot.Version,
+			"version", snapshot.Version,
 			"hash", snapshot.Hash)
 		return nil
 	case abci.ResponseOfferSnapshot_ABORT:
