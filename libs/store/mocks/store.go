@@ -81,49 +81,21 @@ func (_m *Store[K, V]) GetAndDelete(key K) (V, bool) {
 	return r0, r1
 }
 
-// IsZero provides a mock function with given fields:
-func (_m *Store[K, V]) IsZero() bool {
-	ret := _m.Called()
-
-	var r0 bool
-	if rf, ok := ret.Get(0).(func() bool); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(bool)
-	}
-
-	return r0
-}
-
-// Len provides a mock function with given fields:
-func (_m *Store[K, V]) Len() int {
-	ret := _m.Called()
-
-	var r0 int
-	if rf, ok := ret.Get(0).(func() int); ok {
-		r0 = rf()
-	} else {
-		r0 = ret.Get(0).(int)
-	}
-
-	return r0
-}
-
 // Put provides a mock function with given fields: key, data
 func (_m *Store[K, V]) Put(key K, data V) {
 	_m.Called(key, data)
 }
 
 // Query provides a mock function with given fields: spec, limit
-func (_m *Store[K, V]) Query(spec store.QueryFunc[K, V], limit int) []V {
+func (_m *Store[K, V]) Query(spec store.QueryFunc[K, V], limit int) []*V {
 	ret := _m.Called(spec, limit)
 
-	var r0 []V
-	if rf, ok := ret.Get(0).(func(store.QueryFunc[K, V], int) []V); ok {
+	var r0 []*V
+	if rf, ok := ret.Get(0).(func(store.QueryFunc[K, V], int) []*V); ok {
 		r0 = rf(spec, limit)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).([]V)
+			r0 = ret.Get(0).([]*V)
 		}
 	}
 
