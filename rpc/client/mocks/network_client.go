@@ -144,13 +144,12 @@ func (_m *NetworkClient) NetInfo(_a0 context.Context) (*coretypes.ResultNetInfo,
 	return r0, r1
 }
 
-type mockConstructorTestingTNewNetworkClient interface {
+// NewNetworkClient creates a new instance of NetworkClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewNetworkClient(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewNetworkClient creates a new instance of NetworkClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewNetworkClient(t mockConstructorTestingTNewNetworkClient) *NetworkClient {
+}) *NetworkClient {
 	mock := &NetworkClient{}
 	mock.Mock.Test(t)
 
