@@ -188,7 +188,7 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) {
 		return
 	}
 	resp := res.Value.(*BlockResponse)
-	s.peerStore.PeerUpdate(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Block.Size()))
+	s.peerStore.Update(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Block.Size()))
 	err = s.addBlock(*resp)
 	if err != nil {
 		s.logger.Error("cannot add a block to the pending list",
@@ -266,7 +266,7 @@ func (s *Synchronizer) LastAdvance() time.Time {
 
 // AddPeer adds the peer's alleged blockchain base and height
 func (s *Synchronizer) AddPeer(peer PeerData) {
-	s.peerStore.Put(peer)
+	s.peerStore.Put(peer.peerID, peer)
 }
 
 // RemovePeer removes the peer with peerID from the synchronizer. If there's no peer
@@ -283,7 +283,7 @@ func (s *Synchronizer) removePeer(peerID types.NodeID) {
 			s.jobGen.pushBack(resp.Block.Height)
 		}
 	}
-	s.peerStore.Remove(peerID)
+	s.peerStore.Delete(peerID)
 }
 
 func (s *Synchronizer) applyBlock(ctx context.Context) error {

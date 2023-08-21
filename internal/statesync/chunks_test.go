@@ -137,7 +137,7 @@ func (suite *ChunkQueueTestSuite) TestAddChunkErrors() {
 		"nil chunk":     {nil},
 		"nil body":      {&chunk{Height: 3, Version: 1, ID: []byte{1}, Chunk: nil}},
 		"wrong height":  {&chunk{Height: 9, Version: 1, ID: []byte{2}, Chunk: []byte{2}}},
-		"wrong format":  {&chunk{Height: 3, Version: 9, ID: []byte{3}, Chunk: []byte{3}}},
+		"wrong version": {&chunk{Height: 3, Version: 9, ID: []byte{3}, Chunk: []byte{3}}},
 		"invalid index": {&chunk{Height: 3, Version: 1, ID: []byte{4}, Chunk: []byte{4}}},
 	}
 	for name, tc := range testCases {

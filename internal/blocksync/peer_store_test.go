@@ -20,20 +20,20 @@ func TestInMemPeerStoreBasicOperations(t *testing.T) {
 	require.False(t, found)
 
 	// add a peer to store
-	inmem.Put(peer)
+	inmem.Put(peer.peerID, peer)
 	foundPeer, found := inmem.Get(peerID)
 	require.True(t, found)
 	require.Equal(t, peer, foundPeer)
 
 	// update a peer data
 	updatedPeer := newPeerData(peerID, 100, 200)
-	inmem.Put(updatedPeer)
+	inmem.Put(updatedPeer.peerID, updatedPeer)
 	foundPeer, found = inmem.Get(peerID)
 	require.True(t, found)
 	require.Equal(t, updatedPeer.height, foundPeer.height)
 	require.Equal(t, updatedPeer.base, foundPeer.base)
 
-	inmem.PeerUpdate(peerID, AddNumPending(1))
+	inmem.Update(peerID, AddNumPending(1))
 	require.Equal(t, int32(0), foundPeer.numPending)
 	foundPeer, found = inmem.Get(peerID)
 	require.True(t, found)
@@ -42,7 +42,7 @@ func TestInMemPeerStoreBasicOperations(t *testing.T) {
 	require.Equal(t, 1, inmem.Len())
 	require.False(t, inmem.IsZero())
 
-	inmem.Remove(peerID)
+	inmem.Delete(peerID)
 	require.Equal(t, 0, inmem.Len())
 	require.True(t, inmem.IsZero())
 }

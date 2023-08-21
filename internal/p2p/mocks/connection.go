@@ -159,13 +159,12 @@ func (_m *Connection) String() string {
 	return r0
 }
 
-type mockConstructorTestingTNewConnection interface {
+// NewConnection creates a new instance of Connection. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewConnection(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewConnection creates a new instance of Connection. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewConnection(t mockConstructorTestingTNewConnection) *Connection {
+}) *Connection {
 	mock := &Connection{}
 	mock.Mock.Test(t)
 

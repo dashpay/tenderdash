@@ -497,7 +497,7 @@ func (suite *SyncerTestSuite) TestOfferSnapshot() {
 		"accept":           {abci.ResponseOfferSnapshot_ACCEPT, nil, nil},
 		"abort":            {abci.ResponseOfferSnapshot_ABORT, nil, errAbort},
 		"reject":           {abci.ResponseOfferSnapshot_REJECT, nil, errRejectSnapshot},
-		"reject_format":    {abci.ResponseOfferSnapshot_REJECT_FORMAT, nil, errRejectFormat},
+		"reject_version":   {abci.ResponseOfferSnapshot_REJECT_FORMAT, nil, errRejectFormat},
 		"reject_sender":    {abci.ResponseOfferSnapshot_REJECT_SENDER, nil, errRejectSender},
 		"unknown":          {abci.ResponseOfferSnapshot_UNKNOWN, nil, unknownErr},
 		"error":            {0, boom, boom},

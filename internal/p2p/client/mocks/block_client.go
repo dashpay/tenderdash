@@ -73,13 +73,12 @@ func (_m *BlockClient) Send(ctx context.Context, msg interface{}) error {
 	return r0
 }
 
-type mockConstructorTestingTNewBlockClient interface {
+// NewBlockClient creates a new instance of BlockClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewBlockClient(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewBlockClient creates a new instance of BlockClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewBlockClient(t mockConstructorTestingTNewBlockClient) *BlockClient {
+}) *BlockClient {
 	mock := &BlockClient{}
 	mock.Mock.Test(t)
 

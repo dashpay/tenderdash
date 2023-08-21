@@ -3,6 +3,7 @@ package ds
 // OrderedMap is a map with a deterministic iteration order
 // this datastructure is not thread-safe
 type OrderedMap[T comparable, V any] struct {
+	len    int
 	keys   map[T]int
 	values []V
 }
@@ -21,8 +22,13 @@ func (m *OrderedMap[T, V]) Put(key T, val V) {
 		m.values[i] = val
 		return
 	}
-	m.keys[key] = len(m.values)
-	m.values = append(m.values, val)
+	m.keys[key] = m.len
+	if len(m.values) == m.len {
+		m.values = append(m.values, val)
+	} else {
+		m.values[m.len] = val
+	}
+	m.len++
 }
 
 // Get returns the value for a given key
@@ -47,13 +53,17 @@ func (m *OrderedMap[T, V]) Delete(key T) {
 	if !ok {
 		return
 	}
+	i++
+	for ; i < len(m.values); i++ {
+		m.values[i-1] = m.values[i]
+	}
 	delete(m.keys, key)
-	m.values = append(m.values[:i], m.values[i+1:]...)
+	m.len--
 }
 
 // Values returns all values in the map
 func (m *OrderedMap[T, V]) Values() []V {
-	return append([]V{}, m.values...)
+	return append([]V{}, m.values[0:m.len]...)
 }
 
 // Keys returns all keys in the map
@@ -67,5 +77,5 @@ func (m *OrderedMap[T, V]) Keys() []T {
 
 // Len returns a number of the map
 func (m *OrderedMap[T, V]) Len() int {
-	return len(m.keys)
+	return m.len
 }

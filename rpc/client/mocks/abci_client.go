@@ -3,13 +3,15 @@
 package mocks
 
 import (
+	bytes "github.com/dashpay/tenderdash/libs/bytes"
+	client "github.com/dashpay/tenderdash/rpc/client"
+
 	context "context"
+
+	coretypes "github.com/dashpay/tenderdash/rpc/coretypes"
 
 	mock "github.com/stretchr/testify/mock"
 
-	bytes "github.com/dashpay/tenderdash/libs/bytes"
-	client "github.com/dashpay/tenderdash/rpc/client"
-	coretypes "github.com/dashpay/tenderdash/rpc/coretypes"
 	types "github.com/dashpay/tenderdash/types"
 )
 
@@ -200,13 +202,12 @@ func (_m *ABCIClient) BroadcastTxSync(_a0 context.Context, _a1 types.Tx) (*coret
 	return r0, r1
 }
 
-type mockConstructorTestingTNewABCIClient interface {
+// NewABCIClient creates a new instance of ABCIClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewABCIClient(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewABCIClient creates a new instance of ABCIClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewABCIClient(t mockConstructorTestingTNewABCIClient) *ABCIClient {
+}) *ABCIClient {
 	mock := &ABCIClient{}
 	mock.Mock.Test(t)
 

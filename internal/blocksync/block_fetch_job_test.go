@@ -102,7 +102,7 @@ func (suite *BlockFetchJobTestSuite) TestJobGeneratorNextJob() {
 
 	logger := log.NewNopLogger()
 	peerStore := NewInMemPeerStore()
-	peerStore.Put(suite.peer)
+	peerStore.Put(suite.peer.peerID, suite.peer)
 	jobGen := newJobGenerator(5, logger, suite.client, peerStore)
 
 	job, err := jobGen.nextJob(ctx)
@@ -136,7 +136,7 @@ func (suite *BlockFetchJobTestSuite) TestGeneratorNextJobWaitForPeerAndPushBackH
 	}()
 	nextJobCh <- struct{}{}
 	jobGen.pushBack(9)
-	peerStore.Put(suite.peer)
+	peerStore.Put(suite.peer.peerID, suite.peer)
 	nextJobCh <- struct{}{}
 	heightCheck := mock.MatchedBy(func(height int64) bool {
 		return suite.Contains([]int64{5, 9}, height)

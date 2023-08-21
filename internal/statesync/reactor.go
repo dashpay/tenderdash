@@ -715,7 +715,7 @@ func (r *Reactor) handleSnapshotMessage(ctx context.Context, envelope *p2p.Envel
 
 		logger.Info("received snapshot",
 			"height", msg.Height,
-			"format", msg.Version)
+			"version", msg.Version)
 		_, err := syncer.AddSnapshot(envelope.From, &snapshot{
 			Height:   msg.Height,
 			Version:  msg.Version,
