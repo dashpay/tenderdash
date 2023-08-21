@@ -8,9 +8,9 @@ import (
 
 	"github.com/stretchr/testify/suite"
 
-	clientmocks "github.com/tendermint/tendermint/abci/client/mocks"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/libs/log"
+	clientmocks "github.com/dashpay/tenderdash/abci/client/mocks"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/libs/log"
 )
 
 type snapshotRepositoryTestSuite struct {

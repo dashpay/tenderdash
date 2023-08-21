@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tendermint/tendermint/internal/p2p"
-	"github.com/tendermint/tendermint/internal/p2p/client/mocks"
-	"github.com/tendermint/tendermint/libs/log"
-	peerMocks "github.com/tendermint/tendermint/libs/store/mocks"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/internal/p2p/client/mocks"
+	"github.com/dashpay/tenderdash/libs/log"
+	peerMocks "github.com/dashpay/tenderdash/libs/store/mocks"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func TestPeerSubscriberBasic(t *testing.T) {
