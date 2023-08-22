@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"sort"
 
-	tmquery "github.com/tendermint/tendermint/internal/pubsub/query"
-	"github.com/tendermint/tendermint/internal/state/indexer"
-	tmmath "github.com/tendermint/tendermint/libs/math"
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	"github.com/tendermint/tendermint/types"
+	tmquery "github.com/dashpay/tenderdash/internal/pubsub/query"
+	"github.com/dashpay/tenderdash/internal/state/indexer"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // Tx allows you to query the transaction results. `nil` could mean the

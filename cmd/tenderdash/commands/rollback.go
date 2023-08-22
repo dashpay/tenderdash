@@ -5,8 +5,8 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/internal/state"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/internal/state"
 )
 
 func MakeRollbackStateCommand(conf *config.Config) *cobra.Command {

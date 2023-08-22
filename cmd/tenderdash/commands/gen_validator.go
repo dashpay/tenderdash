@@ -6,7 +6,7 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tendermint/tendermint/privval"
+	"github.com/dashpay/tenderdash/privval"
 )
 
 // MakeGenValidatorCommand allows the generation of a keypair for a

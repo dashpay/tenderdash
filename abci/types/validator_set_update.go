@@ -1,9 +1,9 @@
 package types
 
 import (
-	"github.com/tendermint/tendermint/crypto"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-	"github.com/tendermint/tendermint/dash/llmq"
+	"github.com/dashpay/tenderdash/crypto"
+	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
+	"github.com/dashpay/tenderdash/dash/llmq"
 )
 
 // QuorumOptionFunc is an option function for quorum config

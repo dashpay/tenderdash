@@ -11,7 +11,7 @@ import (
 	"strconv"
 	"strings"
 
-	tmrand "github.com/tendermint/tendermint/libs/rand"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
 )
 
 var (

@@ -7,11 +7,10 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tendermint/tendermint/crypto"
-
-	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmp2p "github.com/tendermint/tendermint/proto/tendermint/p2p"
+	"github.com/dashpay/tenderdash/crypto"
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmp2p "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 )
 
 const (

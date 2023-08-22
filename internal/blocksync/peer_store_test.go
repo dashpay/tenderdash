@@ -8,8 +8,8 @@ import (
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/internal/libs/flowrate"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/libs/flowrate"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func TestInMemPeerStoreBasicOperations(t *testing.T) {

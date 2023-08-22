@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/tendermint/tendermint/cmd/abcidump/cmd"
+	"github.com/dashpay/tenderdash/cmd/abcidump/cmd"
 )
 
 func main() {

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/tendermint/tendermint/internal/p2p"
+	"github.com/dashpay/tenderdash/internal/p2p"
 )
 
 type (

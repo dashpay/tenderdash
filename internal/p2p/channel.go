@@ -13,8 +13,8 @@ import (
 	"github.com/rs/zerolog"
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/proto/tendermint/p2p"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/proto/tendermint/p2p"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // Envelope contains a message with sender/receiver routing info.

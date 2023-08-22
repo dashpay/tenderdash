@@ -3,7 +3,7 @@ package types
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/crypto"
+	"github.com/dashpay/tenderdash/crypto"
 )
 
 // StateSyncer is an interface that handles the state sync protocol

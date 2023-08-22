@@ -3,8 +3,8 @@
 package store
 
 import (
+	"github.com/dashpay/tenderdash/libs/ds"
 	sync "github.com/sasha-s/go-deadlock"
-	"github.com/tendermint/tendermint/libs/ds"
 )
 
 type (

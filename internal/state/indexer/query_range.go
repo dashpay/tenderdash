@@ -3,7 +3,7 @@ package indexer
 import (
 	"time"
 
-	"github.com/tendermint/tendermint/internal/pubsub/query/syntax"
+	"github.com/dashpay/tenderdash/internal/pubsub/query/syntax"
 )
 
 // QueryRanges defines a mapping between a composite event key and a QueryRange.

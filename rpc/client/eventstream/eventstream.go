@@ -9,7 +9,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tendermint/tendermint/rpc/coretypes"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
 )
 
 // Client is the subset of the RPC client interface consumed by Stream.

@@ -7,15 +7,15 @@ import (
 	"testing"
 	"time"
 
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/log"
-	tmnet "github.com/tendermint/tendermint/libs/net"
-	"github.com/tendermint/tendermint/libs/service"
-	"github.com/tendermint/tendermint/node"
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	rpcclient "github.com/tendermint/tendermint/rpc/jsonrpc/client"
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmnet "github.com/dashpay/tenderdash/libs/net"
+	"github.com/dashpay/tenderdash/libs/service"
+	"github.com/dashpay/tenderdash/node"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	rpcclient "github.com/dashpay/tenderdash/rpc/jsonrpc/client"
 )
 
 // Options helps with specifying some parameters for our RPC testing for greater

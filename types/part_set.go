@@ -7,15 +7,14 @@ import (
 	"fmt"
 	"io"
 
+	"github.com/rs/zerolog"
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/rs/zerolog"
-
-	"github.com/tendermint/tendermint/crypto/merkle"
-	"github.com/tendermint/tendermint/libs/bits"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmmath "github.com/tendermint/tendermint/libs/math"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto/merkle"
+	"github.com/dashpay/tenderdash/libs/bits"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 var (

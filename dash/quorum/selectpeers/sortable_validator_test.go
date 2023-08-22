@@ -4,10 +4,11 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/quorum/mock"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/types"
+
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/dash/quorum/mock"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // Test_sortableValidator_SortKey checks if the sortableValidatorList.Index() works correctly

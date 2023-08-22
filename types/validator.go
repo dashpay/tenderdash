@@ -9,11 +9,11 @@ import (
 
 	"github.com/rs/zerolog"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	ce "github.com/tendermint/tendermint/crypto/encoding"
-	"github.com/tendermint/tendermint/internal/jsontypes"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	ce "github.com/dashpay/tenderdash/crypto/encoding"
+	"github.com/dashpay/tenderdash/internal/jsontypes"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 // Validator Volatile state for each Validator

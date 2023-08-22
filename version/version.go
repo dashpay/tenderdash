@@ -1,6 +1,6 @@
 package version
 
-import tmversion "github.com/tendermint/tendermint/proto/tendermint/version"
+import tmversion "github.com/dashpay/tenderdash/proto/tendermint/version"
 
 var (
 	TMCoreSemVer = TMVersionDefault

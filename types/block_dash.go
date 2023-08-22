@@ -1,6 +1,6 @@
 package types
 
-import tmbytes "github.com/tendermint/tendermint/libs/bytes"
+import tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 
 // SetDashParams sets dash's some parameters to a block
 // this method should call if we need to provide specific dash data

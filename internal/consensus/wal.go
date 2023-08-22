@@ -12,13 +12,13 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/tendermint/tendermint/internal/jsontypes"
-	auto "github.com/tendermint/tendermint/internal/libs/autofile"
-	"github.com/tendermint/tendermint/libs/log"
-	tmos "github.com/tendermint/tendermint/libs/os"
-	"github.com/tendermint/tendermint/libs/service"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
+	"github.com/dashpay/tenderdash/internal/jsontypes"
+	auto "github.com/dashpay/tenderdash/internal/libs/autofile"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmos "github.com/dashpay/tenderdash/libs/os"
+	"github.com/dashpay/tenderdash/libs/service"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 )
 
 const (

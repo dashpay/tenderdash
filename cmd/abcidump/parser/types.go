@@ -7,8 +7,8 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	protoAbci "github.com/tendermint/tendermint/abci/types"
-	protoP2p "github.com/tendermint/tendermint/proto/tendermint/p2p"
+	protoAbci "github.com/dashpay/tenderdash/abci/types"
+	protoP2p "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 )
 
 // ensure we have some dependencies compiled in

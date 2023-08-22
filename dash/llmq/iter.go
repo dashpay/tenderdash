@@ -1,6 +1,6 @@
 package llmq
 
-import "github.com/tendermint/tendermint/crypto"
+import "github.com/dashpay/tenderdash/crypto"
 
 // Iter creates and returns LLMQ iterator
 func (l *Data) Iter() *Iter {

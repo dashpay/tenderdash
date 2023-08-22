@@ -9,8 +9,8 @@ import (
 	"github.com/rs/zerolog"
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/libs/bits"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/libs/bits"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 const (

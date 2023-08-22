@@ -5,9 +5,9 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/internal/mempool"
-	"github.com/tendermint/tendermint/types"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/internal/mempool"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func cachingStateFetcher(store Store) func() (State, error) {

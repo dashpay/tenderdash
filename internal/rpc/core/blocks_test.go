@@ -10,11 +10,11 @@ import (
 
 	dbm "github.com/tendermint/tm-db"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/internal/state/mocks"
-	"github.com/tendermint/tendermint/proto/tendermint/state"
-	"github.com/tendermint/tendermint/rpc/coretypes"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/internal/state/mocks"
+	"github.com/dashpay/tenderdash/proto/tendermint/state"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
 )
 
 func TestBlockchainInfo(t *testing.T) {

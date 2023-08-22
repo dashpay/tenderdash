@@ -9,8 +9,8 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/tendermint/tendermint/libs/log"
-	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+	"github.com/dashpay/tenderdash/libs/log"
+	rpctypes "github.com/dashpay/tenderdash/rpc/jsonrpc/types"
 )
 
 // uriReqID is a placeholder ID used for GET requests, which do not receive a

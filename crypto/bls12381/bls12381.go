@@ -10,10 +10,10 @@ import (
 	"io"
 
 	bls "github.com/dashpay/bls-signatures/go-bindings"
-	"github.com/tendermint/tendermint/internal/jsontypes"
 
-	"github.com/tendermint/tendermint/crypto"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/jsontypes"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 )
 
 //-------------------------------------

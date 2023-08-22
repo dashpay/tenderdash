@@ -3,7 +3,7 @@ package workerpool
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/dashpay/tenderdash/libs/log"
 )
 
 type worker struct {

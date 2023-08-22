@@ -1,8 +1,8 @@
 package batch
 
 import (
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/ed25519"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/ed25519"
 )
 
 // CreateBatchVerifier checks if a key type implements the batch verifier interface.

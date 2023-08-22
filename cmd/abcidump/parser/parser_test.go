@@ -8,7 +8,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/abci/types"
+	"github.com/dashpay/tenderdash/abci/types"
 )
 
 func TestParser(t *testing.T) {

@@ -7,8 +7,8 @@ import (
 	"math/rand"
 	"strconv"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash/llmq"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/dash/llmq"
 )
 
 // proTxHashGenerator generates pseudorandom proTxHash based on a seed.

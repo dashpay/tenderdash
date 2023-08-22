@@ -10,7 +10,7 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/require"
 
-	tmrequire "github.com/tendermint/tendermint/internal/test/require"
+	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
 )
 
 func TestWorkerPool_Basic(t *testing.T) {

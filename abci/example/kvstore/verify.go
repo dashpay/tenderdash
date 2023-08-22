@@ -6,11 +6,11 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto/encoding"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	types1 "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto/encoding"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	types1 "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func (app *Application) verifyBlockCommit(qsd types.QuorumSignData, commit abci.CommitInfo) error {

@@ -7,12 +7,12 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	abcitypes "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/internal/p2p"
-	tmrequire "github.com/tendermint/tendermint/internal/test/require"
-	"github.com/tendermint/tendermint/libs/log"
-	protomem "github.com/tendermint/tendermint/proto/tendermint/mempool"
-	"github.com/tendermint/tendermint/types"
+	abcitypes "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
+	"github.com/dashpay/tenderdash/libs/log"
+	protomem "github.com/dashpay/tenderdash/proto/tendermint/mempool"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func TestMempoolP2PMessageHandler(t *testing.T) {

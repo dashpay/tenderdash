@@ -1,6 +1,6 @@
 package selectpeers
 
-import "github.com/tendermint/tendermint/types"
+import "github.com/dashpay/tenderdash/types"
 
 // ValidatorSelector represents an algorithm that chooses some validators from provided list
 type ValidatorSelector interface {

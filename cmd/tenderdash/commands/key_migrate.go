@@ -6,10 +6,10 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/scripts/keymigrate"
-	"github.com/tendermint/tendermint/scripts/scmigrate"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/scripts/keymigrate"
+	"github.com/dashpay/tenderdash/scripts/scmigrate"
 )
 
 func MakeKeyMigrateCommand(conf *config.Config, logger log.Logger) *cobra.Command {

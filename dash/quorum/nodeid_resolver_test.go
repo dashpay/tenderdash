@@ -7,8 +7,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/types"
+
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // TestNewValidator checks if new validator can be created with some validator address, and then the address can be

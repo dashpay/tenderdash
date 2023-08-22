@@ -8,7 +8,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/tendermint/tendermint/abci/example/kvstore"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
 )
 
 // Manifest represents a TOML testnet manifest.

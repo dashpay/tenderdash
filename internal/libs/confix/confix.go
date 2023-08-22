@@ -16,7 +16,7 @@ import (
 	"github.com/creachadair/tomledit/transform"
 	"github.com/spf13/viper"
 
-	"github.com/tendermint/tendermint/config"
+	"github.com/dashpay/tenderdash/config"
 )
 
 // Upgrade reads the configuration file at configPath and applies any
