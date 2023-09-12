@@ -121,7 +121,7 @@ func (g *msgGossiper) GossipProposalBlockParts(
 		"round", prs.Round,
 		"part_index", index,
 	})
-	logger.Debug("syncing proposal block part to the peer")
+	logger.Trace("syncing proposal block part to the peer")
 	part := rs.ProposalBlockParts.GetPart(index)
 	// NOTE: A peer might have received a different proposal message, so this Proposal msg will be rejected!
 	err := g.syncProposalBlockPart(ctx, part, rs.Height, rs.Round)
@@ -137,7 +137,7 @@ func (g *msgGossiper) GossipProposal(ctx context.Context, rs cstypes.RoundState,
 		"round", prs.Round,
 	})
 	// Proposal: share the proposal metadata with peer.
-	logger.Debug("syncing proposal")
+	logger.Trace("syncing proposal")
 	err := g.sync(ctx, rs.Proposal.ToProto(), updatePeerProposal(g.ps, rs.Proposal))
 	if err != nil {
 		logger.Error("failed to sync proposal to the peer", "error", err)

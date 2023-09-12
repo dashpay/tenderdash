@@ -86,7 +86,7 @@ func (g *peerGossipWorker) Stop() {
 	if !g.running.Swap(false) {
 		return
 	}
-	g.logger.Debug("peer gossip worker stopping")
+	g.logger.Trace("peer gossip worker stopping")
 	close(g.stopCh)
 	g.Wait()
 }
@@ -94,7 +94,7 @@ func (g *peerGossipWorker) Stop() {
 func (g *peerGossipWorker) Wait() {
 	for _, hd := range g.handlers {
 		<-hd.stoppedCh
-		g.logger.Debug("peer gossip worker stopped")
+		g.logger.Trace("peer gossip worker stopped")
 	}
 }
 
@@ -107,11 +107,11 @@ func (g *peerGossipWorker) runHandler(ctx context.Context, hd gossipHandler) {
 		select {
 		case <-timer.Chan():
 		case <-g.stopCh:
-			g.logger.Debug("peer gossip worker got stop signal")
+			g.logger.Trace("peer gossip worker got stop signal")
 			close(hd.stoppedCh)
 			return
 		case <-ctx.Done():
-			g.logger.Debug("peer gossip worker got stop signal via context.Done")
+			g.logger.Trace("peer gossip worker got stop signal via context.Done")
 			close(hd.stoppedCh)
 			return
 		}

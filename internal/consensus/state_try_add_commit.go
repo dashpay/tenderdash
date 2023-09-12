@@ -46,7 +46,7 @@ func (cs *TryAddCommitAction) Execute(ctx context.Context, stateEvent StateEvent
 	// We need to first verify that the commit received wasn't for a future round,
 	// If it was then we must go to next round
 	if commit.Height == rs.Height && commit.Round > rs.Round {
-		cs.logger.Debug("Commit received for a later round", "height", commit.Height, "our round",
+		cs.logger.Trace("Commit received for a later round", "height", commit.Height, "our round",
 			rs.Round, "commit round", commit.Round)
 		verified, err := cs.verifyCommit(ctx, stateData, commit, peerID, true)
 		if err != nil {

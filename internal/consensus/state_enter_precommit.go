@@ -47,7 +47,7 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 	logger := c.logger.With("new_height", height, "new_round", round)
 
 	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPrecommit <= stateData.Step) {
-		logger.Debug("entering precommit step with invalid args",
+		logger.Trace("entering precommit step with invalid args",
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"step", stateData.Step)
@@ -68,11 +68,12 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 	blockID, ok := stateData.Votes.Prevotes(round).TwoThirdsMajority()
 
 	// If we don't have a polka, we must precommit nil.
+	// From protocol perspective it's an error condition, so we log it on Error level.
 	if !ok {
 		if stateData.LockedBlock != nil {
-			logger.Debug("precommit step; no +2/3 prevotes during enterPrecommit while we are locked; precommitting nil")
+			logger.Error("precommit step; no +2/3 prevotes during enterPrecommit while we are locked; precommitting nil")
 		} else {
-			logger.Debug("precommit step; no +2/3 prevotes during enterPrecommit; precommitting nil")
+			logger.Error("precommit step; no +2/3 prevotes during enterPrecommit; precommitting nil")
 		}
 
 		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
@@ -90,7 +91,8 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 
 	// +2/3 prevoted nil. Precommit nil.
 	if blockID.IsNil() {
-		logger.Debug("precommit step: +2/3 prevoted for nil; precommitting nil")
+		// From protocol perspective it's an error condition, so we log it on Error level.
+		logger.Error("precommit step: +2/3 prevoted for nil; precommitting nil")
 		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
 		return nil
 	}
@@ -105,7 +107,7 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 
 	// If the proposal time does not match the block time, precommit nil.
 	if !stateData.Proposal.Timestamp.Equal(stateData.ProposalBlock.Header.Time) {
-		logger.Debug("precommit step: proposal timestamp not equal; precommitting nil")
+		logger.Error("precommit step: proposal timestamp not equal; precommitting nil")
 		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, types.BlockID{})
 		return nil
 	}

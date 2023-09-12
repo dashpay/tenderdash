@@ -75,7 +75,7 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 	peerID types.NodeID,
 ) (bool, error) {
 	height, round, part := msg.Height, msg.Round, msg.Part
-	c.logger.Info(
+	c.logger.Trace(
 		"addProposalBlockPart",
 		"height", stateData.Height,
 		"round", stateData.Round,
@@ -158,6 +158,20 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 		}
 
 		// NOTE: it's possible to receive complete proposal blocks for future rounds without having the proposal
+
+		if stateData.Commit != nil {
+			c.logger.Info("received complete proposal block and commit",
+				"proposal", stateData.ProposalBlock,
+				"commit", stateData.Commit,
+				"height", stateData.RoundState.Height,
+				"round", stateData.RoundState.Round,
+				"hash", stateData.ProposalBlock.Hash(),
+			)
+			// We received a commit before the block
+			// Transit to AddCommit
+			return added, ctrl.Dispatch(ctx, &AddCommitEvent{Commit: stateData.Commit}, stateData)
+		}
+
 		c.logger.Info(
 			"received complete proposal block",
 			"height", stateData.RoundState.Height,
@@ -168,20 +182,6 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 		)
 
 		c.eventPublisher.PublishCompleteProposalEvent(stateData.CompleteProposalEvent())
-
-		if stateData.Commit != nil {
-			c.logger.Info("Proposal block fully received", "proposal", stateData.ProposalBlock)
-			c.logger.Info("Commit already present", "commit", stateData.Commit)
-			c.logger.Debug("adding commit after complete proposal",
-				"height", stateData.ProposalBlock.Height,
-				"hash", stateData.ProposalBlock.Hash(),
-			)
-			// We received a commit before the block
-			// Transit to AddCommit
-			return added, ctrl.Dispatch(ctx, &AddCommitEvent{Commit: stateData.Commit}, stateData)
-		}
-
-		return added, nil
 	}
 
 	return added, nil
@@ -236,7 +236,6 @@ func (c *ProposalCompletedAction) Execute(ctx context.Context, stateEvent StateE
 			"height", stateData.RoundState.Height,
 			"round", stateData.RoundState.Round,
 			"proposal_height", stateData.ProposalBlock.Height,
-
 			"hash", stateData.ProposalBlock.Hash(),
 		)
 		err := stateEvent.Ctrl.Dispatch(ctx, &EnterPrevoteEvent{

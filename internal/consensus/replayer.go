@@ -272,7 +272,7 @@ func (r *BlockReplayer) replayBlock(
 	state sm.State,
 	height int64,
 ) (sm.CurrentRoundState, *abci.ResponseFinalizeBlock, error) {
-	r.logger.Info("Applying block", "height", height)
+	r.logger.Info("Replay: applying block", "height", height)
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
 	ucState, err := r.blockExec.ProcessProposal(ctx, block, commit.Round, state, false)
 	if err != nil {
@@ -337,8 +337,8 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	}
 
 	quorumType := state.Validators.QuorumType
-	if quorumType.Validate() != nil {
-		r.logger.Debug("state quorum type: %w", err)
+	if err := quorumType.Validate(); err != nil {
+		r.logger.Error("state quorum type validation failed: %w", err)
 		quorumType = r.genDoc.QuorumType
 	}
 

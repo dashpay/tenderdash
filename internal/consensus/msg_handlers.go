@@ -90,7 +90,7 @@ func blockPartMessageHandler(ctrl *Controller) msgHandlerFunc {
 			FromReplay: envelope.fromReplay,
 		}, stateData)
 		if err != nil && msg.Round != stateData.Round {
-			logger.Debug("received block part from wrong round")
+			logger.Trace("received block part from wrong round")
 			return nil
 		}
 		return err

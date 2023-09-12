@@ -93,7 +93,7 @@ func (t *timeoutTicker) timeoutRoutine(ctx context.Context) {
 	for {
 		select {
 		case newti := <-t.tickChan:
-			t.logger.Debug("Received tick", "old_ti", ti, "new_ti", newti)
+			t.logger.Trace("Received tick", "old_ti", ti, "new_ti", newti)
 
 			// ignore tickers for old height/round/step
 			if newti.Height < ti.Height {
@@ -115,7 +115,7 @@ func (t *timeoutTicker) timeoutRoutine(ctx context.Context) {
 			// NOTE time.Timer allows duration to be non-positive
 			ti = newti
 			t.timer.Reset(ti.Duration)
-			t.logger.Debug("Internal state machine timeout scheduled", "duration", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step.String())
+			t.logger.Trace("Internal state machine timeout scheduled", "duration", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step.String())
 		case <-t.timer.C:
 			t.logger.Debug("Internal state machine timeout elapsed", "duration", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step.String())
 			// go routine here guarantees timeoutRoutine doesn't block.

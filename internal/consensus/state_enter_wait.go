@@ -35,7 +35,7 @@ func (c *EnterPrecommitWaitAction) Execute(ctx context.Context, stateEvent State
 	logger := c.logger.With("new_height", height, "new_round", round)
 
 	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && stateData.TriggeredTimeoutPrecommit) {
-		logger.Debug("entering precommit wait step with invalid args",
+		logger.Trace("entering precommit wait step with invalid args",
 			"triggered_timeout", stateData.TriggeredTimeoutPrecommit,
 			"height", stateData.Height,
 			"round", stateData.Round)
