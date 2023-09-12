@@ -170,7 +170,7 @@ func loggingMiddleware(logger log.Logger) msgMiddlewareFunc {
 				loggerWithArgs.Error("failed to process message", "error", err)
 				return nil
 			}
-			loggerWithArgs.Debug("message processed successfully")
+			loggerWithArgs.Trace("message processed successfully")
 			return nil
 		}
 	}

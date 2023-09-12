@@ -393,10 +393,10 @@ func (r *Reactor) broadcast(ctx context.Context, channel p2p.Channel, msg proto.
 // logResult creates a log that depends on value of err
 func (r *Reactor) logResult(err error, logger log.Logger, message string, keyvals ...interface{}) bool {
 	if err != nil {
-		logger.Debug(message+" error", append(keyvals, "error", err))
+		logger.Error(message+" error", append(keyvals, "error", err))
 		return false
 	}
-	logger.Debug(message+" success", keyvals...)
+	logger.Trace(message+" success", keyvals...)
 	return true
 }
 
@@ -623,7 +623,7 @@ func (r *Reactor) handleDataMessage(ctx context.Context, envelope *p2p.Envelope,
 		return nil
 	}
 
-	logger.Debug("data channel processing", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
+	logger.Trace("data channel processing", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
 
 	switch msg := envelope.Message.(type) {
 	case *tmcons.Proposal:
@@ -664,7 +664,7 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 		return nil
 	}
 
-	logger.Debug("vote channel processing", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
+	logger.Trace("vote channel processing", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
 
 	switch msg := envelope.Message.(type) {
 	case *tmcons.Commit:

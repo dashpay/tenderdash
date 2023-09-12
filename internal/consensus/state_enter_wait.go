@@ -94,7 +94,7 @@ func (c *EnterPrevoteWaitAction) Execute(ctx context.Context, stateEvent StateEv
 	logger := c.logger.With("height", height, "round", round)
 
 	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPrevoteWait <= stateData.Step) {
-		logger.Debug("entering prevote wait step with invalid args",
+		logger.Trace("entering prevote wait step with invalid args",
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"step", stateData.Step)

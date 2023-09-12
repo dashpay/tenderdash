@@ -98,7 +98,7 @@ func (g *msgGossiper) GossipVoteSetMaj23(
 		"round", prs.Round,
 	})
 	for _, msg := range msgs {
-		logger.Debug("syncing vote set +2/3 message")
+		logger.Trace("syncing vote set +2/3 message")
 		err := g.msgSender.send(ctx, msg)
 		if err != nil {
 			logger.Error("failed to syncing vote set +2/3 message to the peer", "error", err)
@@ -156,7 +156,7 @@ func (g *msgGossiper) GossipProposal(ctx context.Context, rs cstypes.RoundState,
 		ProposalPolRound: rs.Proposal.POLRound,
 		ProposalPol:      *pPolProto,
 	}
-	logger.Debug("syncing proposal POL")
+	logger.Trace("syncing proposal POL")
 	err = g.sync(ctx, propPOLMsg, nil)
 	if err != nil {
 		logger.Error("failed to sync proposal POL to the peer", "error", err)
@@ -245,7 +245,7 @@ func (g *msgGossiper) GossipVote(ctx context.Context, rs cstypes.RoundState, prs
 		"vote_round", vote.Round,
 		"proto_vote_size", protoVote.Size(),
 	})
-	logger.Debug("syncing vote message")
+	logger.Trace("syncing vote message")
 	err := g.sync(ctx, protoVote, updatePeerVote(g.ps, vote))
 	if err != nil {
 		logger.Error("failed to sync vote message to the peer", "error", err)

@@ -160,7 +160,9 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 		// NOTE: it's possible to receive complete proposal blocks for future rounds without having the proposal
 		c.logger.Info(
 			"received complete proposal block",
-			"height", stateData.ProposalBlock.Height,
+			"height", stateData.RoundState.Height,
+			"round", stateData.RoundState.Round,
+			"proposal_height", stateData.ProposalBlock.Height,
 			"hash", stateData.ProposalBlock.Hash(),
 			"round_height", stateData.RoundState.GetHeight(),
 		)
@@ -231,7 +233,10 @@ func (c *ProposalCompletedAction) Execute(ctx context.Context, stateEvent StateE
 		// Move onto the next step
 		// We should allow old blocks if we are recovering from replay
 		c.logger.Debug("entering prevote after complete proposal",
-			"height", stateData.ProposalBlock.Height,
+			"height", stateData.RoundState.Height,
+			"round", stateData.RoundState.Round,
+			"proposal_height", stateData.ProposalBlock.Height,
+
 			"hash", stateData.ProposalBlock.Hash(),
 		)
 		err := stateEvent.Ctrl.Dispatch(ctx, &EnterPrevoteEvent{

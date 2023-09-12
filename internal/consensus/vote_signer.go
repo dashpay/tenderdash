@@ -50,7 +50,7 @@ func (s *voteSigner) signAddVote(
 		keyVals = append(keyVals, "error", err)
 	}
 	keyVals = append(keyVals, "vote", vote, "took", time.Since(start).String())
-	s.logger.Debug("signed and pushed vote", keyVals...)
+	s.logger.Info("signed and pushed vote", keyVals...)
 	return vote
 }
 

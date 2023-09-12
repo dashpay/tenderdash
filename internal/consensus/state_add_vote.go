@@ -377,7 +377,7 @@ func addVoteLoggingMw() AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			logger := log.FromCtxOrNop(ctx)
-			logger.Debug("adding vote to vote set")
+			logger.Trace("adding vote to vote set")
 			added, err := next(ctx, stateData, vote)
 			if !added {
 				if err != nil {
