@@ -31,6 +31,7 @@ type EnterProposeAction struct {
 	scheduler       *roundScheduler
 	eventPublisher  *EventPublisher
 	proposalCreator cstypes.ProposalCreator
+	replayMode      bool
 }
 
 func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent) error {
@@ -93,6 +94,12 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 			"node_proTxHash", proTxHash.String())
 		return nil
 	}
+	// In replay mode, we don't propose blocks.
+	if c.replayMode {
+		logger.Debug("enter propose step; our turn to propose but in replay mode, not proposing")
+		return nil
+	}
+
 	logger.Debug("propose step; our turn to propose",
 		"proposer_proTxHash", proTxHash.ShortString(),
 	)

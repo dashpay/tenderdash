@@ -87,6 +87,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			scheduler:       cs.roundScheduler,
 			eventPublisher:  cs.eventPublisher,
 			proposalCreator: propler,
+			replayMode:      cs.replayMode,
 		},
 		AddProposalBlockPartType: &AddProposalBlockPartAction{
 			logger:         cs.logger,

@@ -97,7 +97,7 @@ type RoundState struct {
 	// Last known round with POL for non-nil valid block.
 	ValidRound         int32        `json:"valid_round"`
 	ValidBlock         *types.Block `json:"valid_block"`      // Last known block of POL mentioned above.
-	ValidBlockRecvTime time.Time    `json:"valid_block_time"` // Receive time of ast known block of POL mentioned above.
+	ValidBlockRecvTime time.Time    `json:"valid_block_time"` // Receive time of last known block of POL mentioned above.
 
 	// Last known block parts of POL mentioned above.
 	ValidBlockParts           *types.PartSet      `json:"valid_block_parts"`
