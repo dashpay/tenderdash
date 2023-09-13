@@ -427,7 +427,7 @@ func (ps *PeerState) SetHasVote(vote *types.Vote) error {
 
 // setHasVote will return an error when the index exceeds the bitArray length
 func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.SignedMsgType, index int32) error {
-	ps.logger.Debug(
+	ps.logger.Trace(
 		"peerState setHasVote",
 		"peer", ps.peerID,
 		"height", height,
@@ -466,7 +466,7 @@ func (ps *PeerState) SetHasCommit(commit *types.Commit) {
 }
 
 func (ps *PeerState) setHasCommit(height int64, round int32) {
-	ps.logger.Debug(
+	ps.logger.Trace(
 		"setHasCommit",
 		"height", height,
 		"round", round,

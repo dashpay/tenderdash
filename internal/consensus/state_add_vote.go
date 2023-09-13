@@ -110,7 +110,7 @@ func addVoteToLastPrecommitMw(ep *EventPublisher, ctrl *Controller) AddVoteMiddl
 			logger := log.FromCtxOrNop(ctx)
 			if stateData.Step != cstypes.RoundStepNewHeight {
 				// Late precommit at prior height is ignored
-				logger.Debug("precommit vote came in after commit timeout and has been ignored")
+				logger.Trace("precommit vote came in after commit timeout and has been ignored")
 				return false, nil
 			}
 			if stateData.LastPrecommits == nil {
@@ -122,7 +122,7 @@ func addVoteToLastPrecommitMw(ep *EventPublisher, ctrl *Controller) AddVoteMiddl
 				logger.Debug("vote not added to last precommits", logKeyValsWithError(nil, err)...)
 				return false, nil
 			}
-			logger.Debug("added vote to last precommits", "last_precommits", stateData.LastPrecommits)
+			logger.Trace("added vote to last precommits", "last_precommits", stateData.LastPrecommits)
 
 			err = ep.PublishVoteEvent(vote)
 			if err != nil {
@@ -341,7 +341,7 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 				return added, err
 			}
 			if errors.Is(err, types.ErrVoteNonDeterministicSignature) {
-				logger.Debug("vote has non-deterministic signature", "err", err)
+				logger.Error("vote has non-deterministic signature", "err", err)
 				return added, err
 			}
 			// If the vote height is off, we'll just ignore it,
@@ -365,7 +365,7 @@ func addVoteErrorMw(evpool evidencePool, logger log.Logger, privVal privValidato
 
 			// report conflicting votes to the evidence pool
 			evpool.ReportConflictingVotes(voteErr.VoteA, voteErr.VoteB)
-			logger.Debug("found and sent conflicting votes to the evidence pool",
+			logger.Error("found and sent conflicting votes to the evidence pool",
 				"vote_a", voteErr.VoteA,
 				"vote_b", voteErr.VoteB)
 			return added, err
@@ -377,7 +377,7 @@ func addVoteLoggingMw() AddVoteMiddlewareFunc {
 	return func(next AddVoteFunc) AddVoteFunc {
 		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 			logger := log.FromCtxOrNop(ctx)
-			logger.Debug("adding vote to vote set")
+			logger.Trace("adding vote to vote set")
 			added, err := next(ctx, stateData, vote)
 			if !added {
 				if err != nil {
@@ -395,7 +395,7 @@ func addVoteLoggingMw() AddVoteMiddlewareFunc {
 				return added, err
 			}
 			votes := stateData.Votes.GetVoteSet(vote.Round, vote.Type)
-			logger.Debug("vote added", "data", votes)
+			logger.Trace("vote added", "data", votes)
 			return added, err
 		}
 	}

@@ -34,7 +34,7 @@ func (p *EventPublisher) PublishValidBlockEvent(rs cstypes.RoundState) {
 
 // PublishCommitEvent ...
 func (p *EventPublisher) PublishCommitEvent(commit *types.Commit) error {
-	p.logger.Debug("publish commit event", "commit", commit)
+	p.logger.Trace("publish commit event", "commit", commit)
 	if err := p.eventBus.PublishEventCommit(types.EventDataCommit{Commit: commit}); err != nil {
 		return err
 	}

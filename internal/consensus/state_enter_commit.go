@@ -36,7 +36,8 @@ func (c *EnterCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	logger := c.logger.With("new_height", height, "commit_round", commitRound)
 
 	if stateData.Height != height || cstypes.RoundStepApplyCommit <= stateData.Step {
-		logger.Debug("entering commit step with invalid args",
+		// this is quite common event
+		logger.Trace("entering commit step with invalid args",
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"step", stateData.Step)

@@ -98,7 +98,7 @@ func (g *msgGossiper) GossipVoteSetMaj23(
 		"round", prs.Round,
 	})
 	for _, msg := range msgs {
-		logger.Debug("syncing vote set +2/3 message")
+		logger.Trace("syncing vote set +2/3 message")
 		err := g.msgSender.send(ctx, msg)
 		if err != nil {
 			logger.Error("failed to syncing vote set +2/3 message to the peer", "error", err)
@@ -121,7 +121,7 @@ func (g *msgGossiper) GossipProposalBlockParts(
 		"round", prs.Round,
 		"part_index", index,
 	})
-	logger.Debug("syncing proposal block part to the peer")
+	logger.Trace("syncing proposal block part to the peer")
 	part := rs.ProposalBlockParts.GetPart(index)
 	// NOTE: A peer might have received a different proposal message, so this Proposal msg will be rejected!
 	err := g.syncProposalBlockPart(ctx, part, rs.Height, rs.Round)
@@ -137,7 +137,7 @@ func (g *msgGossiper) GossipProposal(ctx context.Context, rs cstypes.RoundState,
 		"round", prs.Round,
 	})
 	// Proposal: share the proposal metadata with peer.
-	logger.Debug("syncing proposal")
+	logger.Trace("syncing proposal")
 	err := g.sync(ctx, rs.Proposal.ToProto(), updatePeerProposal(g.ps, rs.Proposal))
 	if err != nil {
 		logger.Error("failed to sync proposal to the peer", "error", err)
@@ -156,7 +156,7 @@ func (g *msgGossiper) GossipProposal(ctx context.Context, rs cstypes.RoundState,
 		ProposalPolRound: rs.Proposal.POLRound,
 		ProposalPol:      *pPolProto,
 	}
-	logger.Debug("syncing proposal POL")
+	logger.Trace("syncing proposal POL")
 	err = g.sync(ctx, propPOLMsg, nil)
 	if err != nil {
 		logger.Error("failed to sync proposal POL to the peer", "error", err)
@@ -245,7 +245,7 @@ func (g *msgGossiper) GossipVote(ctx context.Context, rs cstypes.RoundState, prs
 		"vote_round", vote.Round,
 		"proto_vote_size", protoVote.Size(),
 	})
-	logger.Debug("syncing vote message")
+	logger.Trace("syncing vote message")
 	err := g.sync(ctx, protoVote, updatePeerVote(g.ps, vote))
 	if err != nil {
 		logger.Error("failed to sync vote message to the peer", "error", err)

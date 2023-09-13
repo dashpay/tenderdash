@@ -49,7 +49,8 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 	logger := c.logger.With("height", height, "round", round)
 
 	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && stateData.Step != cstypes.RoundStepNewHeight) {
-		logger.Debug("entering new round with invalid args",
+		// this is quite common event
+		logger.Trace("entering new round with invalid args",
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"step", stateData.Step)
@@ -57,7 +58,7 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 	}
 
 	if now := tmtime.Now(); stateData.StartTime.After(now) {
-		logger.Debug("need to set a buffer and log message here for sanity", "start_time", stateData.StartTime, "now", now)
+		logger.Trace("need to set a buffer and log message here for sanity", "start_time", stateData.StartTime, "now", now)
 	}
 
 	logger.Debug("entering new round",
@@ -82,7 +83,7 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 		// and meanwhile we might have received a proposal
 		// for round 0.
 	} else {
-		logger.Debug("resetting proposal info")
+		logger.Trace("resetting proposal info")
 		stateData.Proposal = nil
 		stateData.ProposalReceiveTime = time.Time{}
 		stateData.ProposalBlock = nil

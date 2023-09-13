@@ -459,7 +459,7 @@ func (cs *State) OnStart(ctx context.Context) error {
 				return err
 			}
 
-			cs.logger.Debug("backed up WAL file", "src", cs.config.WalFile(), "dst", corruptedFile)
+			cs.logger.Info("backed up WAL file", "src", cs.config.WalFile(), "dst", corruptedFile)
 
 			// 3) try to repair (WAL file will be overwritten!)
 			if err := repairWalFile(corruptedFile, cs.config.WalFile()); err != nil {
@@ -722,7 +722,7 @@ func (cs *State) handleTimeout(
 	ti timeoutInfo,
 	stateData *StateData,
 ) {
-	cs.logger.Debug("received tock", "timeout", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
+	cs.logger.Trace("received tock", "timeout", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
 
 	// timeouts must be for current height, round, step
 	if ti.Height != stateData.Height || ti.Round < stateData.Round || (ti.Round == stateData.Round && ti.Step < stateData.Step) {
@@ -801,7 +801,7 @@ func (cs *State) CreateProposalBlock(ctx context.Context) (*types.Block, error) 
 
 // PublishCommitEvent ...
 func (cs *State) PublishCommitEvent(commit *types.Commit) error {
-	cs.logger.Debug("publish commit event", "commit", commit)
+	cs.logger.Trace("publish commit event", "commit", commit)
 	if err := cs.eventBus.PublishEventCommit(types.EventDataCommit{Commit: commit}); err != nil {
 		return err
 	}

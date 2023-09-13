@@ -16,7 +16,7 @@ func (u *proposalUpdater) updateStateData(stateData *StateData, blockID types.Bl
 		return nil
 	}
 	// If we don't have the block being committed, set up to get it.
-	u.logger.Info(
+	u.logger.Debug(
 		"commit is for a block we do not know about; set ProposalBlock=nil",
 		"proposal", stateData.ProposalBlock.Hash(),
 		"commit", blockID.Hash,

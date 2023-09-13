@@ -47,7 +47,7 @@ func (cs *TryFinalizeCommitAction) Execute(ctx context.Context, stateEvent State
 	if !stateData.ProposalBlock.HashesTo(blockID.Hash) {
 		// TODO: this happens every time if we're not a validator (ugly logs)
 		// TODO: ^^ wait, why does it matter that we're a validator?
-		logger.Debug("failed attempt to finalize commit; we do not have the commit block",
+		logger.Trace("failed attempt to finalize commit; we do not have the commit block",
 			"proposal_block", tmstrings.LazyBlockHash(stateData.ProposalBlock),
 			"commit_block", blockID.Hash,
 		)
@@ -88,6 +88,7 @@ func (cs *TryFinalizeCommitAction) finalizeCommit(ctx context.Context, ctrl *Con
 		"hash", tmstrings.LazyBlockHash(block),
 		"root", block.AppHash,
 		"num_txs", len(block.Txs),
+		"block", block,
 	)
 
 	precommits := stateData.Votes.Precommits(stateData.CommitRound)

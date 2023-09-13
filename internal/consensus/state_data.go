@@ -258,7 +258,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 		height = state.InitialHeight
 	}
 
-	s.logger.Debug("updating state height", "newHeight", height)
+	s.logger.Trace("updating state height", "newHeight", height)
 
 	// RoundState fields
 	s.updateHeight(height)
@@ -350,11 +350,11 @@ func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, igno
 	// A commit for the previous height?
 	// These come in while we wait timeoutCommit
 	if commit.Height+1 == stateHeight {
-		s.logger.Debug("old commit ignored", "commit", commit)
+		s.logger.Trace("old commit ignored", "commit", commit)
 		return false, nil
 	}
 
-	s.logger.Debug(
+	s.logger.Trace(
 		"verifying commit from remote",
 		"commit_height", commit.Height,
 		"cs_height", s.Height,
@@ -377,9 +377,9 @@ func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, igno
 
 	if rs.Proposal == nil || ignoreProposalBlock {
 		if ignoreProposalBlock {
-			s.logger.Info("Commit verified for future round", "height", commit.Height, "round", commit.Round)
+			s.logger.Debug("Commit verified for future round", "height", commit.Height, "round", commit.Round)
 		} else {
-			s.logger.Info("Commit came in before proposal", "height", commit.Height, "round", commit.Round)
+			s.logger.Debug("Commit came in before proposal", "height", commit.Height, "round", commit.Round)
 		}
 
 		// We need to verify that it was properly signed
@@ -389,7 +389,7 @@ func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, igno
 		}
 
 		if !s.ProposalBlockParts.HasHeader(commit.BlockID.PartSetHeader) {
-			s.logger.Info("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
+			s.logger.Debug("setting proposal block parts from commit", "partSetHeader", commit.BlockID.PartSetHeader)
 			s.ProposalBlockParts = types.NewPartSetFromHeader(commit.BlockID.PartSetHeader)
 		}
 
@@ -426,7 +426,7 @@ func (s *StateData) replaceProposalBlockOnLockedBlock(blockID types.BlockID) {
 	}
 	s.ProposalBlock = s.LockedBlock
 	s.ProposalBlockParts = s.LockedBlockParts
-	s.logger.Debug("commit is for a locked block; set ProposalBlock=LockedBlock", "block_hash", blockID.Hash)
+	s.logger.Trace("commit is for a locked block; set ProposalBlock=LockedBlock", "block_hash", blockID.Hash)
 }
 
 func (s *StateData) proposeTimeout(round int32) time.Duration {

@@ -39,7 +39,7 @@ func (p *prevoter) Do(ctx context.Context, stateData *StateData) error {
 	err := stateData.isValidForPrevote()
 	if err != nil {
 		keyVals := append(prevoteKeyVals(stateData), "error", err)
-		p.logger.Debug("prevote is invalid", keyVals...)
+		p.logger.Error("prevote is invalid", keyVals...)
 		p.signAndAddNilVote(ctx, stateData)
 		return nil
 	}
@@ -72,7 +72,7 @@ func (p *prevoter) handleError(err error, args ...any) {
 }
 
 func (p *prevoter) signAndAddNilVote(ctx context.Context, stateData *StateData) {
-	p.logger.Debug("prevote nil")
+	p.logger.Debug("prevote nil", "height", stateData.RoundState.Height, "round", stateData.RoundState.Round)
 	p.voteSigner.signAddVote(ctx, stateData, tmproto.PrevoteType, types.BlockID{})
 }
 
@@ -142,9 +142,11 @@ func (p *prevoter) checkPrevoteMaj23(rs cstypes.RoundState) bool {
 		return false
 	}
 	if rs.Proposal.POLRound < 0 {
+		p.logger.Debug("prevote step: ProposalBlock is valid but we have no Polka")
 		return false
 	}
 	if rs.Proposal.POLRound >= rs.Round {
+		p.logger.Debug("prevote step: ProposalBlock is valid but POLRound is greater than or equal to our current round")
 		return false
 	}
 	if rs.LockedRound <= rs.Proposal.POLRound {

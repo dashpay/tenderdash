@@ -103,7 +103,7 @@ func (p *Proposaler) Create(ctx context.Context, height int64, round int32, rs *
 			logger.Error("propose step; failed signing proposal", "error", err)
 			return err
 		}
-		p.logger.Debug("replay; failed signing proposal", "proposal", proposal, "error", err)
+		p.logger.Error("replay; failed signing proposal", "proposal", proposal, "error", err)
 		return err
 	}
 	p.logger.Debug("signed proposal", "proposal", proposal)
@@ -160,7 +160,7 @@ func (p *Proposaler) checkValidBlock(rs *cstypes.RoundState) bool {
 		return rs.ValidBlock.Time.Equal(p.committedState.LastBlockTime)
 	}
 	if !rs.ValidBlock.IsTimely(rs.ValidBlockRecvTime, sp, rs.ValidRound) {
-		p.logger.Debug(
+		p.logger.Error(
 			"proposal block is outdated",
 			"height", rs.Height,
 			"round", rs.ValidRound,
@@ -209,7 +209,7 @@ func (p *Proposaler) verifyProposal(proposal *types.Proposal, rs *cstypes.RoundS
 	if proposer.PubKey.VerifySignatureDigest(proposalBlockSignID, proposal.Signature) {
 		return nil
 	}
-	p.logger.Debug(
+	p.logger.Error(
 		"error verifying signature",
 		"height", rs.Height,
 		"proposal_height", proposal.Height,
@@ -234,7 +234,7 @@ func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, 
 	// We need to verify that the commit block id is equal to the proposal block id
 	if !proposal.BlockID.Equals(commit.BlockID) {
 		proposer := rs.Validators.GetProposer()
-		p.logger.Debug("proposal blockID isn't the same as the commit blockID",
+		p.logger.Error("proposal blockID isn't the same as the commit blockID",
 			"height", proposal.Height,
 			"round", proposal.Round,
 			"proposer_proTxHash", proposer.ProTxHash.ShortString())

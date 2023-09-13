@@ -49,7 +49,7 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 	// for logging
 	switch m := msg.Msg.(type) {
 	case types.EventDataRoundState:
-		cs.logger.Info("Replay: New Step", "height", m.Height, "round", m.Round, "step", m.Step)
+		cs.logger.Trace("Replay: New Step", "height", m.Height, "round", m.Round, "step", m.Step)
 		// these are playback checks
 		if newStepSub != nil {
 			ctxto, cancel := context.WithTimeout(ctx, 2*time.Second)
@@ -78,18 +78,18 @@ func (cs *State) readReplayMessage(ctx context.Context, msg *TimedWALMessage, ne
 				stateData.Votes.SetRound(p.Round)
 				stateData.Round = p.Round
 			}
-			cs.logger.Info("Replay: Proposal", "height", p.Height, "round", p.Round, "cs.Round", stateData.Round,
+			cs.logger.Trace("Replay: Proposal", "height", p.Height, "round", p.Round, "cs.Round", stateData.Round,
 				"header", p.BlockID.PartSetHeader, "pol", p.POLRound, "peer", peerID)
 		case *BlockPartMessage:
-			cs.logger.Info("Replay: BlockPart", "height", msg.Height, "round", msg.Round, "peer", peerID)
+			cs.logger.Trace("Replay: BlockPart", "height", msg.Height, "round", msg.Round, "peer", peerID)
 		case *VoteMessage:
 			v := msg.Vote
-			cs.logger.Info("Replay: Vote", "height", v.Height, "round", v.Round, "type", v.Type,
+			cs.logger.Trace("Replay: Vote", "height", v.Height, "round", v.Round, "type", v.Type,
 				"blockID", v.BlockID, "peer", peerID)
 		}
 		_ = cs.msgDispatcher.dispatch(ctx, &stateData, m, msgFromReplay())
 	case timeoutInfo:
-		cs.logger.Info("Replay: Timeout", "height", m.Height, "round", m.Round, "step", m.Step, "dur", m.Duration)
+		cs.logger.Trace("Replay: Timeout", "height", m.Height, "round", m.Round, "step", m.Step, "dur", m.Duration)
 		cs.handleTimeout(ctx, m, &stateData)
 	default:
 		return fmt.Errorf("replay: Unknown TimedWALMessage type: %v", reflect.TypeOf(msg.Msg))
