@@ -14,14 +14,14 @@ import (
 	"github.com/spf13/cobra"
 	dbm "github.com/tendermint/tm-db"
 
-	"github.com/tendermint/tendermint/config"
-	dashcore "github.com/tendermint/tendermint/dash/core"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/light"
-	lproxy "github.com/tendermint/tendermint/light/proxy"
-	lrpc "github.com/tendermint/tendermint/light/rpc"
-	dbs "github.com/tendermint/tendermint/light/store/db"
-	rpcserver "github.com/tendermint/tendermint/rpc/jsonrpc/server"
+	"github.com/dashpay/tenderdash/config"
+	dashcore "github.com/dashpay/tenderdash/dash/core"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/light"
+	lproxy "github.com/dashpay/tenderdash/light/proxy"
+	lrpc "github.com/dashpay/tenderdash/light/rpc"
+	dbs "github.com/dashpay/tenderdash/light/store/db"
+	rpcserver "github.com/dashpay/tenderdash/rpc/jsonrpc/server"
 )
 
 // LightCmd constructs the base command called when invoked without any subcommands.

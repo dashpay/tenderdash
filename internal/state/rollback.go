@@ -4,7 +4,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/tendermint/tendermint/version"
+	"github.com/dashpay/tenderdash/version"
 )
 
 // Rollback overwrites the current Tendermint state (height n) with the most

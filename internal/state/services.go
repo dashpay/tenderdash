@@ -3,7 +3,7 @@ package state
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 //------------------------------------------------------

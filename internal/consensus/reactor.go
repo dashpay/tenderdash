@@ -11,18 +11,18 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/internal/eventbus"
-	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
-	"github.com/tendermint/tendermint/internal/p2p"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/bits"
-	"github.com/tendermint/tendermint/libs/eventemitter"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/service"
-	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/eventbus"
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/libs/bits"
+	"github.com/dashpay/tenderdash/libs/eventemitter"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/service"
+	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 var (
@@ -166,7 +166,7 @@ type channelBundle struct {
 // messages on that p2p channel accordingly. The caller must be sure to execute
 // OnStop to ensure the outbound p2p Channels are closed.
 func (r *Reactor) OnStart(ctx context.Context) error {
-	r.logger.Debug("consensus wait sync", "wait_sync", r.WaitSync())
+	r.logger.Trace("consensus wait sync", "wait_sync", r.WaitSync())
 
 	peerUpdates := r.peerEvents(ctx, "consensus")
 
@@ -393,10 +393,10 @@ func (r *Reactor) broadcast(ctx context.Context, channel p2p.Channel, msg proto.
 // logResult creates a log that depends on value of err
 func (r *Reactor) logResult(err error, logger log.Logger, message string, keyvals ...interface{}) bool {
 	if err != nil {
-		logger.Debug(message+" error", append(keyvals, "error", err))
+		logger.Error(message+" error", append(keyvals, "error", err))
 		return false
 	}
-	logger.Debug(message+" success", keyvals...)
+	logger.Trace(message+" success", keyvals...)
 	return true
 }
 
@@ -406,7 +406,7 @@ func (r *Reactor) logResult(err error, logger log.Logger, message string, keyval
 // the peer. During peer removal, we remove the peer for our set of peers and
 // signal to all spawned goroutines to gracefully exit in a non-blocking manner.
 func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpdate, chans channelBundle) {
-	r.logger.Debug("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status,
+	r.logger.Trace("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status,
 		"peer_proTxHash", peerUpdate.ProTxHash.ShortString())
 
 	switch peerUpdate.Status {
@@ -547,7 +547,7 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 
 	case *tmcons.HasVote:
 		if err := ps.ApplyHasVoteMessage(msgI.(*HasVoteMessage)); err != nil {
-			r.logger.Error("applying HasVote message", "msg", msg, "err", err)
+			r.logger.Error("applying HasVote message failed", "msg", msg, "err", err)
 			return err
 		}
 	case *tmcons.VoteSetMaj23:
@@ -619,11 +619,11 @@ func (r *Reactor) handleDataMessage(ctx context.Context, envelope *p2p.Envelope,
 	}
 
 	if r.WaitSync() {
-		logger.Info("ignoring message received during sync", "msg", tmstrings.LazySprintf("%T", msgI))
+		logger.Debug("ignoring message received during sync", "msg", tmstrings.LazySprintf("%T", msgI))
 		return nil
 	}
 
-	logger.Debug("data channel processing", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
+	logger.Trace("data channel processing", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
 
 	switch msg := envelope.Message.(type) {
 	case *tmcons.Proposal:
@@ -660,11 +660,11 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 	}
 
 	if r.WaitSync() {
-		logger.Info("ignoring message received during sync", "msg", msgI)
+		logger.Debug("ignoring message received during sync", "msg", msgI)
 		return nil
 	}
 
-	logger.Debug("vote channel processing", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
+	logger.Trace("vote channel processing", "msg", envelope.Message, "type", fmt.Sprintf("%T", envelope.Message))
 
 	switch msg := envelope.Message.(type) {
 	case *tmcons.Commit:
@@ -715,7 +715,7 @@ func (r *Reactor) handleVoteSetBitsMessage(ctx context.Context, envelope *p2p.En
 	}
 
 	if r.WaitSync() {
-		logger.Info("ignoring message received during sync", "msg", msgI)
+		logger.Debug("ignoring message received during sync", "msg", msgI)
 		return nil
 	}
 
@@ -779,8 +779,6 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 		return err
 	}
 
-	//r.logger.Debug("received message", "ch_id", envelope.ChannelID, "message", msgI, "peer", envelope.From)
-
 	switch envelope.ChannelID {
 	case StateChannel:
 		err = r.handleStateMessage(ctx, envelope, msg, chans.voteSet)
@@ -835,7 +833,7 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 func (r *Reactor) peerStatsRoutine(ctx context.Context, peerUpdates *p2p.PeerUpdates) {
 	for {
 		if !r.IsRunning() {
-			r.logger.Info("stopping peerStatsRoutine")
+			r.logger.Trace("stopping peerStatsRoutine")
 			return
 		}
 
@@ -843,7 +841,8 @@ func (r *Reactor) peerStatsRoutine(ctx context.Context, peerUpdates *p2p.PeerUpd
 		case msg := <-r.state.statsMsgQueue.ch:
 			ps, ok := r.GetPeerState(msg.PeerID)
 			if !ok || ps == nil {
-				r.logger.Debug("attempt to update stats for non-existent peer", "peer", msg.PeerID)
+				// it's quite common to happen when a peer is removed
+				r.logger.Trace("attempt to update stats for non-existent peer", "peer", msg.PeerID)
 				continue
 			}
 

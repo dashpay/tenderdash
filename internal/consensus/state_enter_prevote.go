@@ -3,8 +3,8 @@ package consensus
 import (
 	"context"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/libs/log"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/libs/log"
 )
 
 type EnterPrevoteEvent struct {
@@ -42,7 +42,7 @@ func (c *EnterPrevoteAction) Execute(ctx context.Context, statEvent StateEvent) 
 	logger := c.logger.With("height", height, "round", round)
 
 	if stateData.Height != height || round < stateData.Round || (stateData.Round == round && cstypes.RoundStepPrevote <= stateData.Step) {
-		logger.Debug("entering prevote step with invalid args",
+		logger.Trace("entering prevote step with invalid args",
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"step", stateData.Step)

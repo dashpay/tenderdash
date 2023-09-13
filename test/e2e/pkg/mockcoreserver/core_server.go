@@ -8,9 +8,9 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	"github.com/tendermint/tendermint/crypto"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/privval"
+	"github.com/dashpay/tenderdash/crypto"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/privval"
 )
 
 // CoreServer is an interface of a mock core-server
@@ -170,6 +170,7 @@ func (c *MockCoreServer) MasternodeStatus(ctx context.Context, _ btcjson.Mastern
 	}
 	return btcjson.MasternodeStatusResult{
 		ProTxHash: proTxHash.String(),
+		State:     btcjson.MNStatusStateReady,
 	}
 }
 

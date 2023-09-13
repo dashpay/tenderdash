@@ -13,8 +13,8 @@ import (
 
 	secp256k1 "github.com/btcsuite/btcd/btcec"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/internal/jsontypes"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/jsontypes"
 
 	// necessary for Bitcoin address format
 	"golang.org/x/crypto/ripemd160" //nolint:staticcheck

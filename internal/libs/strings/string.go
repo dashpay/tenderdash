@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 )
 
 type lazyStringf struct {

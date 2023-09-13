@@ -15,7 +15,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+	rpctypes "github.com/dashpay/tenderdash/rpc/jsonrpc/types"
 )
 
 const wsCallTimeout = 5 * time.Second

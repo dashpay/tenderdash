@@ -12,25 +12,25 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	abci "github.com/tendermint/tendermint/abci/types"
-	abcimocks "github.com/tendermint/tendermint/abci/types/mocks"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/dash"
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/internal/eventbus"
-	"github.com/tendermint/tendermint/internal/mempool"
-	tmpubsub "github.com/tendermint/tendermint/internal/pubsub"
-	tmquery "github.com/tendermint/tendermint/internal/pubsub/query"
-	sf "github.com/tendermint/tendermint/internal/state/test/factory"
-	"github.com/tendermint/tendermint/internal/test/factory"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmevents "github.com/tendermint/tendermint/libs/eventemitter"
-	"github.com/tendermint/tendermint/libs/log"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	abcimocks "github.com/dashpay/tenderdash/abci/types/mocks"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/dash"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/eventbus"
+	"github.com/dashpay/tenderdash/internal/mempool"
+	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
+	tmquery "github.com/dashpay/tenderdash/internal/pubsub/query"
+	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
+	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmevents "github.com/dashpay/tenderdash/libs/eventemitter"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 /*
@@ -303,7 +303,7 @@ func TestStateProposalTime(t *testing.T) {
 			expectNewBlock: false,
 		},
 		{ // TEST 1: BLOCK TIME IS IN FUTURE
-			blockTimeFunc:  func(s *State) time.Time { return time.Now().Add(delay + precision + 24*time.Hour) },
+			blockTimeFunc:  func(s *State) time.Time { return tmtime.Now().Add(delay + precision + 24*time.Hour) },
 			expectNewBlock: true,
 		},
 		{ // TEST 2: BLOCK TIME IS OLDER THAN PREVIOUS BLOCK TIME

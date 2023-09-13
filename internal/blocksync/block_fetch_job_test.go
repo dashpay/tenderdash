@@ -10,16 +10,16 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/suite"
 
-	"github.com/tendermint/tendermint/internal/p2p/client"
-	"github.com/tendermint/tendermint/internal/p2p/client/mocks"
-	statefactory "github.com/tendermint/tendermint/internal/state/test/factory"
-	"github.com/tendermint/tendermint/internal/test/factory"
-	tmrequire "github.com/tendermint/tendermint/internal/test/require"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/promise"
-	"github.com/tendermint/tendermint/libs/workerpool"
-	bcproto "github.com/tendermint/tendermint/proto/tendermint/blocksync"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/p2p/client"
+	"github.com/dashpay/tenderdash/internal/p2p/client/mocks"
+	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
+	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/promise"
+	"github.com/dashpay/tenderdash/libs/workerpool"
+	bcproto "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type BlockFetchJobTestSuite struct {
@@ -102,7 +102,7 @@ func (suite *BlockFetchJobTestSuite) TestJobGeneratorNextJob() {
 
 	logger := log.NewNopLogger()
 	peerStore := NewInMemPeerStore()
-	peerStore.Put(suite.peer)
+	peerStore.Put(suite.peer.peerID, suite.peer)
 	jobGen := newJobGenerator(5, logger, suite.client, peerStore)
 
 	job, err := jobGen.nextJob(ctx)
@@ -136,7 +136,7 @@ func (suite *BlockFetchJobTestSuite) TestGeneratorNextJobWaitForPeerAndPushBackH
 	}()
 	nextJobCh <- struct{}{}
 	jobGen.pushBack(9)
-	peerStore.Put(suite.peer)
+	peerStore.Put(suite.peer.peerID, suite.peer)
 	nextJobCh <- struct{}{}
 	heightCheck := mock.MatchedBy(func(height int64) bool {
 		return suite.Contains([]int64{5, 9}, height)

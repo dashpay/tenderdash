@@ -6,12 +6,12 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/crypto/ed25519"
-	"github.com/tendermint/tendermint/crypto/secp256k1"
-	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	"github.com/dashpay/tenderdash/crypto/ed25519"
+	"github.com/dashpay/tenderdash/crypto/secp256k1"
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 const (

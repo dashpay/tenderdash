@@ -5,9 +5,9 @@ import (
 	"fmt"
 	"time"
 
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	"github.com/tendermint/tendermint/types"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // Status returns Tendermint status including node info, pubkey, latest block
@@ -93,7 +93,6 @@ func (env *Environment) Status(ctx context.Context) (*coretypes.ResultStatus, er
 		result.SyncInfo.ChunkProcessAvgTime = env.StateSyncMetricer.ChunkProcessAvgTime()
 		result.SyncInfo.SnapshotHeight = env.StateSyncMetricer.SnapshotHeight()
 		result.SyncInfo.SnapshotChunksCount = env.StateSyncMetricer.SnapshotChunksCount()
-		result.SyncInfo.SnapshotChunksTotal = env.StateSyncMetricer.SnapshotChunksTotal()
 		result.SyncInfo.BackFilledBlocks = env.StateSyncMetricer.BackFilledBlocks()
 		result.SyncInfo.BackFillBlocksTotal = env.StateSyncMetricer.BackFillBlocksTotal()
 	}

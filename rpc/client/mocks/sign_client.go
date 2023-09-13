@@ -3,11 +3,11 @@
 package mocks
 
 import (
-	bytes "github.com/tendermint/tendermint/libs/bytes"
+	bytes "github.com/dashpay/tenderdash/libs/bytes"
 
 	context "context"
 
-	coretypes "github.com/tendermint/tendermint/rpc/coretypes"
+	coretypes "github.com/dashpay/tenderdash/rpc/coretypes"
 
 	mock "github.com/stretchr/testify/mock"
 )
@@ -277,13 +277,12 @@ func (_m *SignClient) Validators(ctx context.Context, height *int64, page *int, 
 	return r0, r1
 }
 
-type mockConstructorTestingTNewSignClient interface {
+// NewSignClient creates a new instance of SignClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewSignClient(t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewSignClient creates a new instance of SignClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewSignClient(t mockConstructorTestingTNewSignClient) *SignClient {
+}) *SignClient {
 	mock := &SignClient{}
 	mock.Mock.Test(t)
 

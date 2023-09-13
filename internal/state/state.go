@@ -10,13 +10,13 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/tendermint/tendermint/dash"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	tmstate "github.com/tendermint/tendermint/proto/tendermint/state"
-	tmversion "github.com/tendermint/tendermint/proto/tendermint/version"
-	"github.com/tendermint/tendermint/types"
-	"github.com/tendermint/tendermint/version"
+	"github.com/dashpay/tenderdash/dash"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
+	tmversion "github.com/dashpay/tenderdash/proto/tendermint/version"
+	"github.com/dashpay/tenderdash/types"
+	"github.com/dashpay/tenderdash/version"
 )
 
 //-----------------------------------------------------------------------------

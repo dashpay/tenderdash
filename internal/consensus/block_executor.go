@@ -6,11 +6,12 @@ import (
 	"fmt"
 
 	sync "github.com/sasha-s/go-deadlock"
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/eventemitter"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/types"
+
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/libs/eventemitter"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type blockExecutor struct {
@@ -64,7 +65,7 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 	block := rs.ProposalBlock
 	crs := rs.CurrentRoundState
 	if crs.Params.Source != sm.ProcessProposalSource || !crs.MatchesBlock(block.Header, round) {
-		c.logger.Debug("CurrentRoundState is outdated", "crs", crs)
+		c.logger.Debug("CurrentRoundState is outdated, executing ProcessProposal", "crs", crs)
 		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.committedState, true)
 		if err != nil {
 			return fmt.Errorf("ProcessProposal abci method: %w", err)

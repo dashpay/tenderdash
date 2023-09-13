@@ -4,11 +4,11 @@ import (
 	"context"
 	"time"
 
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/eventemitter"
-	"github.com/tendermint/tendermint/libs/log"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/libs/eventemitter"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // voteSigner provides the ability to sign and add a vote
@@ -34,7 +34,7 @@ func (s *voteSigner) signAddVote(
 	}
 	// If the node not in the validator set, do nothing.
 	if !stateData.Validators.HasProTxHash(s.privValidator.ProTxHash) {
-		s.logger.Debug("do nothing, node is not a part of validator set")
+		s.logger.Error("do nothing, node is not a part of validator set")
 		return nil
 	}
 	keyVals := []any{"height", stateData.Height, "round", stateData.Round, "quorum_hash", stateData.Validators.QuorumHash}
@@ -50,7 +50,7 @@ func (s *voteSigner) signAddVote(
 		keyVals = append(keyVals, "error", err)
 	}
 	keyVals = append(keyVals, "vote", vote, "took", time.Since(start).String())
-	s.logger.Debug("signed and pushed vote", keyVals...)
+	s.logger.Info("signed and pushed vote", keyVals...)
 	return vote
 }
 

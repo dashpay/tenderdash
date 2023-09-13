@@ -11,8 +11,8 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	tmmath "github.com/tendermint/tendermint/libs/math"
-	tmprotobits "github.com/tendermint/tendermint/proto/tendermint/libs/bits"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
+	tmprotobits "github.com/dashpay/tenderdash/proto/tendermint/libs/bits"
 )
 
 // BitArray is a thread-safe implementation of a bit array.

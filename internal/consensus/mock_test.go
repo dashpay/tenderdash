@@ -5,7 +5,7 @@ import (
 
 	"github.com/stretchr/testify/mock"
 
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type mockConstructorTesting interface {

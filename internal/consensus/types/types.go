@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // ProposalSetter updates a proposal for the round if all conditions are met

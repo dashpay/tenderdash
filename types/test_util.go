@@ -5,11 +5,10 @@ import (
 	"fmt"
 	"math/rand"
 
-	gogotypes "github.com/gogo/protobuf/types"
-
-	"github.com/tendermint/tendermint/crypto"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 const StateIDVersion = 1
@@ -20,7 +19,7 @@ func RandStateID() tmproto.StateID {
 		AppHash:               tmrand.Bytes(crypto.DefaultAppHashSize),
 		AppVersion:            StateIDVersion,
 		CoreChainLockedHeight: rand.Uint32(), //nolint:gosec
-		Time:                  *gogotypes.TimestampNow(),
+		Time:                  uint64(tmtime.Now().UnixMilli()),
 	}
 }
 

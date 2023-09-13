@@ -15,17 +15,16 @@ import (
 
 	"github.com/spf13/cobra"
 
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/version"
-
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/example/code"
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	"github.com/tendermint/tendermint/abci/server"
-	servertest "github.com/tendermint/tendermint/abci/tests/server"
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/proto/tendermint/crypto"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	"github.com/dashpay/tenderdash/abci/example/code"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	"github.com/dashpay/tenderdash/abci/server"
+	servertest "github.com/dashpay/tenderdash/abci/tests/server"
+	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/proto/tendermint/crypto"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/version"
 )
 
 // client is a global variable so it can be reused by the console

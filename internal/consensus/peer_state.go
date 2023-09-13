@@ -11,12 +11,11 @@ import (
 
 	"github.com/rs/zerolog"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/libs/bits"
-	"github.com/tendermint/tendermint/libs/log"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/libs/bits"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 var (
@@ -428,7 +427,7 @@ func (ps *PeerState) SetHasVote(vote *types.Vote) error {
 
 // setHasVote will return an error when the index exceeds the bitArray length
 func (ps *PeerState) setHasVote(height int64, round int32, voteType tmproto.SignedMsgType, index int32) error {
-	ps.logger.Debug(
+	ps.logger.Trace(
 		"peerState setHasVote",
 		"peer", ps.peerID,
 		"height", height,
@@ -467,7 +466,7 @@ func (ps *PeerState) SetHasCommit(commit *types.Commit) {
 }
 
 func (ps *PeerState) setHasCommit(height int64, round int32) {
-	ps.logger.Debug(
+	ps.logger.Trace(
 		"setHasCommit",
 		"height", height,
 		"round", round,
@@ -498,7 +497,7 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 		psRound              = ps.PRS.Round
 		psCatchupCommitRound = ps.PRS.CatchupCommitRound
 		psCatchupCommit      = ps.PRS.CatchupCommit
-		startTime            = tmtime.Now().Add(-1 * time.Duration(msg.SecondsSinceStartTime) * time.Second)
+		startTime            = time.Now().Add(-1 * time.Duration(msg.SecondsSinceStartTime) * time.Second)
 	)
 
 	ps.PRS.Height = msg.Height

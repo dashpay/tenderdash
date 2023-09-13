@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/rpc/coretypes"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
 )
 
 // UnsafeFlushMempool removes all transactions from the mempool.

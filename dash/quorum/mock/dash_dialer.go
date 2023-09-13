@@ -6,8 +6,8 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/internal/p2p"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (

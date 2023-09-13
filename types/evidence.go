@@ -11,13 +11,13 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/merkle"
-	"github.com/tendermint/tendermint/internal/jsontypes"
-	tmmath "github.com/tendermint/tendermint/libs/math"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/merkle"
+	"github.com/dashpay/tenderdash/internal/jsontypes"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 // Evidence represents any provable malicious activity by a validator.

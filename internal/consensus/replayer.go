@@ -4,15 +4,15 @@ import (
 	"context"
 	"fmt"
 
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/merkle"
-	"github.com/tendermint/tendermint/internal/eventbus"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/libs/log"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/merkle"
+	"github.com/dashpay/tenderdash/internal/eventbus"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // NewReplayBlockExecutor returns a new instance of state.BlockExecutor configured for BlockReplayer
@@ -272,7 +272,7 @@ func (r *BlockReplayer) replayBlock(
 	state sm.State,
 	height int64,
 ) (sm.CurrentRoundState, *abci.ResponseFinalizeBlock, error) {
-	r.logger.Info("Applying block", "height", height)
+	r.logger.Info("Replay: applying block", "height", height)
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
 	ucState, err := r.blockExec.ProcessProposal(ctx, block, commit.Round, state, false)
 	if err != nil {
@@ -337,8 +337,8 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	}
 
 	quorumType := state.Validators.QuorumType
-	if quorumType.Validate() != nil {
-		r.logger.Debug("state quorum type: %w", err)
+	if err := quorumType.Validate(); err != nil {
+		r.logger.Error("state quorum type validation failed: %w", err)
 		quorumType = r.genDoc.QuorumType
 	}
 

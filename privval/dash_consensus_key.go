@@ -8,8 +8,8 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	tmcrypto "github.com/tendermint/tendermint/crypto"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	tmcrypto "github.com/dashpay/tenderdash/crypto"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 )
 
 type dashConsensusPrivateKey struct {

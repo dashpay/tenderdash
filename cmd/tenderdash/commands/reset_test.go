@@ -7,10 +7,10 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	cfg "github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/privval"
-	"github.com/tendermint/tendermint/types"
+	cfg "github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/privval"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func Test_ResetAll(t *testing.T) {

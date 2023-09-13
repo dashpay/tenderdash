@@ -8,15 +8,14 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
-	"github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/internal/libs/protoio"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/libs/protoio"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 func getTestProposal(t testing.TB) *Proposal {
@@ -25,15 +24,14 @@ func getTestProposal(t testing.TB) *Proposal {
 	stamp, err := time.Parse(TimeFormat, "2018-02-11T07:09:22.765Z")
 	require.NoError(t, err)
 
-	ts, err := types.TimestampProto(stamp)
-	require.NoError(t, err)
+	ts := uint64(stamp.UnixMilli())
 
 	stateID := tmproto.StateID{
 		AppVersion:            StateIDVersion,
 		Height:                12345,
 		AppHash:               []byte("12345678901234567890123456789012"),
 		CoreChainLockedHeight: math.MaxUint32,
-		Time:                  *ts,
+		Time:                  ts,
 	}
 
 	return &Proposal{
@@ -63,7 +61,7 @@ func TestProposalSignable(t *testing.T) {
 
 func TestProposalString(t *testing.T) {
 	str := getTestProposal(t).String()
-	expected := `Proposal{12345/23456 (2D2D4A756E655F31355F323032305F616D696E6F5F7761735F72656D6F766564:111:2D2D4A756E65:D8A08898004B, -1) 000000000000 @ 2018-02-11T07:09:22.765Z}`
+	expected := `Proposal{12345/23456 (2D2D4A756E655F31355F323032305F616D696E6F5F7761735F72656D6F766564:111:2D2D4A756E65:E97D78757A53, -1) 000000000000 @ 2018-02-11T07:09:22.765Z}`
 	assert.Equal(t, expected, str)
 }
 

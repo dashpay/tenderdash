@@ -3,18 +3,19 @@ package kvstore
 
 import (
 	"bytes"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
-	"math"
 	"os"
 	"path/filepath"
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/ds"
 )
 
 const (
@@ -27,11 +28,17 @@ const (
 // SnapshotStore stores state sync snapshots. Snapshots are stored simply as
 // JSON files, and chunks are generated on-the-fly by splitting the JSON data
 // into fixed-size chunks.
-type SnapshotStore struct {
-	sync.RWMutex
-	dir      string
-	metadata []abci.Snapshot
-}
+type (
+	SnapshotStore struct {
+		sync.RWMutex
+		dir      string
+		metadata []abci.Snapshot
+	}
+	chunkItem struct {
+		Data         []byte   `json:"data"`
+		NextChunkIDs [][]byte `json:"nextChunkIDs"`
+	}
+)
 
 // NewSnapshotStore creates a new snapshot store.
 func NewSnapshotStore(dir string) (*SnapshotStore, error) {
@@ -49,7 +56,7 @@ func NewSnapshotStore(dir string) (*SnapshotStore, error) {
 // called internally on construction.
 func (s *SnapshotStore) loadMetadata() error {
 	file := filepath.Join(s.dir, "metadata.json")
-	metadata := []abci.Snapshot{}
+	var metadata []abci.Snapshot
 
 	bz, err := os.ReadFile(file)
 	switch {
@@ -96,10 +103,9 @@ func (s *SnapshotStore) Create(state State) (abci.Snapshot, error) {
 	}
 	height := state.GetHeight()
 	snapshot := abci.Snapshot{
-		Height: uint64(height),
-		Format: 1,
-		Hash:   crypto.Checksum(bz),
-		Chunks: byteChunks(bz),
+		Height:  uint64(height),
+		Version: 1,
+		Hash:    crypto.Checksum(bz),
 	}
 	err = os.WriteFile(filepath.Join(s.dir, fmt.Sprintf("%v.json", height)), bz, 0644)
 	if err != nil {
@@ -152,16 +158,18 @@ func (s *SnapshotStore) List() ([]*abci.Snapshot, error) {
 }
 
 // LoadChunk loads a snapshot chunk.
-func (s *SnapshotStore) LoadChunk(height uint64, format uint32, chunk uint32) ([]byte, error) {
+func (s *SnapshotStore) LoadChunk(height uint64, version uint32, chunkID []byte) ([]byte, error) {
 	s.RLock()
 	defer s.RUnlock()
 	for _, snapshot := range s.metadata {
-		if snapshot.Height == height && snapshot.Format == format {
-			bz, err := os.ReadFile(filepath.Join(s.dir, fmt.Sprintf("%v.json", height)))
+		if snapshot.Height == height && snapshot.Version == version {
+			bz, err := os.ReadFile(filepath.Join(s.dir, fmt.Sprintf("%d.json", height)))
 			if err != nil {
 				return nil, err
 			}
-			return byteChunk(bz, chunk), nil
+			chunks := makeChunks(bz, snapshotChunkSize)
+			item := makeChunkItem(chunks, chunkID)
+			return json.Marshal(item)
 		}
 	}
 	return nil, nil
@@ -170,54 +178,79 @@ func (s *SnapshotStore) LoadChunk(height uint64, format uint32, chunk uint32) ([
 type offerSnapshot struct {
 	snapshot *abci.Snapshot
 	appHash  tmbytes.HexBytes
-	chunks   [][]byte
-	chunkCnt int
+	chunks   *ds.OrderedMap[string, []byte]
 }
 
 func newOfferSnapshot(snapshot *abci.Snapshot, appHash tmbytes.HexBytes) *offerSnapshot {
 	return &offerSnapshot{
 		snapshot: snapshot,
 		appHash:  appHash,
-		chunks:   make([][]byte, snapshot.Chunks),
-		chunkCnt: 0,
+		chunks:   ds.NewOrderedMap[string, []byte](),
 	}
 }
 
-func (s *offerSnapshot) addChunk(index int, chunk []byte) {
-	if s.chunks[index] != nil {
-		return
+func (s *offerSnapshot) addChunk(chunkID tmbytes.HexBytes, data []byte) [][]byte {
+	chunkIDStr := chunkID.String()
+	if s.chunks.Has(chunkIDStr) {
+		return nil
 	}
-	s.chunks[index] = chunk
-	s.chunkCnt++
+	var item chunkItem
+	err := json.Unmarshal(data, &item)
+	if err != nil {
+		panic("failed to decode a chunk data: " + err.Error())
+	}
+	s.chunks.Put(chunkIDStr, item.Data)
+	return item.NextChunkIDs
 }
 
 func (s *offerSnapshot) isFull() bool {
-	return s.chunkCnt == int(s.snapshot.Chunks)
+	return bytes.Equal(crypto.Checksum(s.bytes()), s.snapshot.Hash)
 }
 
 func (s *offerSnapshot) bytes() []byte {
+	chunks := s.chunks.Values()
 	buf := bytes.NewBuffer(nil)
-	for _, chunk := range s.chunks {
+	for _, chunk := range chunks {
 		buf.Write(chunk)
 	}
 	return buf.Bytes()
 }
 
-// byteChunk returns the chunk at a given index from the full byte slice.
-func byteChunk(bz []byte, index uint32) []byte {
-	start := int(index * snapshotChunkSize)
-	end := int((index + 1) * snapshotChunkSize)
-	switch {
-	case start >= len(bz):
-		return nil
-	case end >= len(bz):
-		return bz[start:]
-	default:
-		return bz[start:end]
+// makeChunkItem returns the chunk at a given index from the full byte slice.
+func makeChunkItem(chunks *ds.OrderedMap[string, []byte], chunkID []byte) chunkItem {
+	chunkIDStr := hex.EncodeToString(chunkID)
+	val, ok := chunks.Get(chunkIDStr)
+	if !ok {
+		panic("chunk not found")
 	}
+	chunkIDs := chunks.Keys()
+	ci := chunkItem{Data: val}
+	i := 0
+	for ; i < len(chunkIDs) && chunkIDs[i] != chunkIDStr; i++ {
+	}
+	if i+1 < len(chunkIDs) {
+		data, err := hex.DecodeString(chunkIDs[i+1])
+		if err != nil {
+			panic(err)
+		}
+		ci.NextChunkIDs = [][]byte{data}
+	}
+	return ci
 }
 
-// byteChunks calculates the number of chunks in the byte slice.
-func byteChunks(bz []byte) uint32 {
-	return uint32(math.Ceil(float64(len(bz)) / snapshotChunkSize))
+func makeChunks(bz []byte, chunkSize int) *ds.OrderedMap[string, []byte] {
+	chunks := ds.NewOrderedMap[string, []byte]()
+	totalHash := hex.EncodeToString(crypto.Checksum(bz))
+	key := totalHash
+	for i := 0; i < len(bz); i += chunkSize {
+		j := i + chunkSize
+		if j > len(bz) {
+			j = len(bz)
+		}
+		if i > 1 {
+			key = hex.EncodeToString(crypto.Checksum(bz[i:j]))
+		}
+		chunks.Put(key, append([]byte(nil), bz[i:j]...))
+	}
+	return chunks
 }

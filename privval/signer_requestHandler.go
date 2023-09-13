@@ -8,12 +8,12 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/tendermint/tendermint/crypto"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-	cryptoproto "github.com/tendermint/tendermint/proto/tendermint/crypto"
-	privvalproto "github.com/tendermint/tendermint/proto/tendermint/privval"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
+	cryptoproto "github.com/dashpay/tenderdash/proto/tendermint/crypto"
+	privvalproto "github.com/dashpay/tenderdash/proto/tendermint/privval"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func DefaultValidationRequestHandler(

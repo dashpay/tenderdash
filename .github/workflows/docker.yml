@@ -7,7 +7,7 @@ on:
     inputs:
       tag:
         type: string
-        description: 'Docker tag'
+        description: "Docker tag"
         required: false
   release:
     types:
@@ -17,7 +17,7 @@ jobs:
   build:
     runs-on: ubuntu-22.04
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@master
@@ -48,7 +48,7 @@ jobs:
         with:
           result-encoding: string
           script: |
-            if (github.ref_type == 'tag' && !contains(github.ref_name,'-dev')) {
+            if ('${{ github.ref_type }}' == 'tag' && ! '${{ github.ref_name }}'.includes('-dev')) {
               return 'tenderdash,stable'
             }
             return 'tenderdash,dev,deadlock'

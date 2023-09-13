@@ -5,24 +5,41 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/proto/tendermint/blocksync"
-	"github.com/tendermint/tendermint/proto/tendermint/consensus"
-	"github.com/tendermint/tendermint/proto/tendermint/mempool"
-	p2pproto "github.com/tendermint/tendermint/proto/tendermint/p2p"
-	"github.com/tendermint/tendermint/proto/tendermint/statesync"
-	prototypes "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/proto/tendermint/blocksync"
+	"github.com/dashpay/tenderdash/proto/tendermint/consensus"
+	"github.com/dashpay/tenderdash/proto/tendermint/mempool"
+	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
+	"github.com/dashpay/tenderdash/proto/tendermint/statesync"
+	prototypes "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (
 	ErrorChannel = ChannelID(0x10)
 	// BlockSyncChannel is a channelStore for blocks and status updates
 	BlockSyncChannel = ChannelID(0x40)
+	// SnapshotChannel exchanges snapshot metadata
+	SnapshotChannel = ChannelID(0x60)
+	// ChunkChannel exchanges chunk contents
+	ChunkChannel = ChannelID(0x61)
+	// LightBlockChannel exchanges light blocks
+	LightBlockChannel = ChannelID(0x62)
+	// ParamsChannel exchanges consensus params
+	ParamsChannel = ChannelID(0x63)
 
 	MempoolChannel = ChannelID(0x30)
 
 	blockMaxMsgSize = 1048576 // 1MB TODO make it configurable
+
+	// snapshotMsgSize is the maximum size of a snapshotResponseMessage
+	snapshotMsgSize = int(4e6) // ~4MB
+	// chunkMsgSize is the maximum size of a chunkResponseMessage
+	chunkMsgSize = int(16e6) // ~16MB
+	// lightBlockMsgSize is the maximum size of a lightBlockResponseMessage
+	lightBlockMsgSize = int(1e7) // ~1MB
+	// paramMsgSize is the maximum size of a paramsResponseMessage
+	paramMsgSize = int(1e5) // ~100kb
 )
 
 // ChannelDescriptors returns a map of all supported descriptors
@@ -52,6 +69,38 @@ func ChannelDescriptors(cfg *config.Config) map[ChannelID]*ChannelDescriptor {
 			RecvBufferCapacity:  128,
 			Name:                "mempool",
 		},
+		SnapshotChannel: {
+			ID:                  SnapshotChannel,
+			Priority:            6,
+			SendQueueCapacity:   10,
+			RecvMessageCapacity: snapshotMsgSize,
+			RecvBufferCapacity:  128,
+			Name:                "snapshot",
+		},
+		ChunkChannel: {
+			ID:                  ChunkChannel,
+			Priority:            3,
+			SendQueueCapacity:   4,
+			RecvMessageCapacity: chunkMsgSize,
+			RecvBufferCapacity:  128,
+			Name:                "chunk",
+		},
+		LightBlockChannel: {
+			ID:                  LightBlockChannel,
+			Priority:            5,
+			SendQueueCapacity:   10,
+			RecvMessageCapacity: lightBlockMsgSize,
+			RecvBufferCapacity:  128,
+			Name:                "light-block",
+		},
+		ParamsChannel: {
+			ID:                  ParamsChannel,
+			Priority:            2,
+			SendQueueCapacity:   10,
+			RecvMessageCapacity: paramMsgSize,
+			RecvBufferCapacity:  128,
+			Name:                "params",
+		},
 	}
 }
 
@@ -65,6 +114,18 @@ func ResolveChannelID(msg proto.Message) ChannelID {
 		*blocksync.StatusRequest,
 		*blocksync.StatusResponse:
 		return BlockSyncChannel
+	case *statesync.ChunkRequest,
+		*statesync.ChunkResponse:
+		return ChunkChannel
+	case *statesync.SnapshotsRequest,
+		*statesync.SnapshotsResponse:
+		return SnapshotChannel
+	case *statesync.ParamsRequest,
+		*statesync.ParamsResponse:
+		return ParamsChannel
+	case *statesync.LightBlockRequest,
+		*statesync.LightBlockResponse:
+		return LightBlockChannel
 	case *consensus.NewRoundStep,
 		*consensus.NewValidBlock,
 		*consensus.Proposal,
@@ -75,15 +136,16 @@ func ResolveChannelID(msg proto.Message) ChannelID {
 		*consensus.VoteSetMaj23,
 		*consensus.VoteSetBits,
 		*consensus.Commit,
-		*consensus.HasCommit,
-		*statesync.SnapshotsRequest,
-		*statesync.SnapshotsResponse,
-		*statesync.ChunkRequest,
-		*statesync.ChunkResponse,
-		*statesync.LightBlockRequest,
-		*statesync.LightBlockResponse,
-		*statesync.ParamsRequest,
-		*statesync.ParamsResponse:
+		*consensus.HasCommit:
+		// TODO: enable these channels when they are implemented
+		//*statesync.SnapshotsRequest,
+		//*statesync.SnapshotsResponse,
+		//*statesync.ChunkRequest,
+		//*statesync.ChunkResponse,
+		//*statesync.LightBlockRequest,
+		//*statesync.LightBlockResponse,
+		//*statesync.ParamsRequest,
+		//*statesync.ParamsResponse:
 	case *p2pproto.PexRequest,
 		*p2pproto.PexResponse,
 		*p2pproto.Echo:

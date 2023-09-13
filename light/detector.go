@@ -6,8 +6,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/tendermint/tendermint/light/provider"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/light/provider"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // compareNewHeaderWithWitness takes the verified header from the primary and compares it with a

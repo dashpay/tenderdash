@@ -9,9 +9,9 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/internal/consensus/types"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	tmtypes "github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/consensus/types"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	tmtypes "github.com/dashpay/tenderdash/types"
 )
 
 func TestWalIter_Next(t *testing.T) {

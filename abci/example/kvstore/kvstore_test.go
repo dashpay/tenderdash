@@ -12,17 +12,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/abci/example/code"
-	abciserver "github.com/tendermint/tendermint/abci/server"
-	"github.com/tendermint/tendermint/abci/types"
-	tmcrypto "github.com/tendermint/tendermint/crypto"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/service"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	tmtypes "github.com/tendermint/tendermint/types"
-	"github.com/tendermint/tendermint/version"
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	"github.com/dashpay/tenderdash/abci/example/code"
+	abciserver "github.com/dashpay/tenderdash/abci/server"
+	"github.com/dashpay/tenderdash/abci/types"
+	tmcrypto "github.com/dashpay/tenderdash/crypto"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/service"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	tmtypes "github.com/dashpay/tenderdash/types"
+	"github.com/dashpay/tenderdash/version"
 )
 
 const (
@@ -493,24 +493,20 @@ func TestSnapshots(t *testing.T) {
 	})
 	require.NoError(t, err)
 	assert.Equal(t, types.ResponseOfferSnapshot_ACCEPT, respOffer.Result)
+	loaded, err := app.LoadSnapshotChunk(ctx, &types.RequestLoadSnapshotChunk{
+		Height:  recentSnapshot.Height,
+		ChunkId: recentSnapshot.Hash,
+		Version: recentSnapshot.Version,
+	})
+	require.NoError(t, err)
 
-	for chunk := uint32(0); chunk < recentSnapshot.Chunks; chunk++ {
-		loaded, err := app.LoadSnapshotChunk(ctx, &types.RequestLoadSnapshotChunk{
-			Height: recentSnapshot.Height,
-			Chunk:  chunk,
-			Format: recentSnapshot.Format,
-		})
-		require.NoError(t, err)
-
-		applied, err := dstApp.ApplySnapshotChunk(ctx, &types.RequestApplySnapshotChunk{
-			Index:  chunk,
-			Chunk:  loaded.Chunk,
-			Sender: "app",
-		})
-		require.NoError(t, err)
-		assert.Equal(t, types.ResponseApplySnapshotChunk_ACCEPT, applied.Result)
-	}
-
+	applied, err := dstApp.ApplySnapshotChunk(ctx, &types.RequestApplySnapshotChunk{
+		ChunkId: recentSnapshot.Hash,
+		Chunk:   loaded.Chunk,
+		Sender:  "app",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, types.ResponseApplySnapshotChunk_COMPLETE_SNAPSHOT, applied.Result)
 	infoResp, err := dstApp.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
 	assertRespInfo(t, int64(recentSnapshot.Height), appHashes[snapshotHeight], *infoResp)

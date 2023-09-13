@@ -6,9 +6,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/internal/pubsub/query"
-	"github.com/tendermint/tendermint/internal/pubsub/query/syntax"
+	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/internal/pubsub/query"
+	"github.com/dashpay/tenderdash/internal/pubsub/query/syntax"
 )
 
 // Example events from the OpenAPI documentation:

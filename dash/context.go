@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"github.com/tendermint/tendermint/crypto"
+	"github.com/dashpay/tenderdash/crypto"
 )
 
 type contextKey string

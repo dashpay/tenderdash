@@ -18,14 +18,14 @@ import (
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/rs/zerolog"
 
-	"github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/merkle"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmmath "github.com/tendermint/tendermint/libs/math"
-	tmcons "github.com/tendermint/tendermint/proto/tendermint/consensus"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/version"
+	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/merkle"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
+	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/version"
 )
 
 const (
@@ -398,7 +398,7 @@ func MakeBlock(height int64, txs []Tx, lastCommit *Commit, evidence []Evidence) 
 // NOTE: changes to the Header should be duplicated in:
 // - header.Hash()
 // - abci.Header
-// - https://github.com/tendermint/tendermint/blob/master/spec/core/data_structures.md
+// - https://github.com/dashpay/tenderdash/blob/master/spec/core/data_structures.md
 type Header struct {
 	// basic block info
 	Version               version.Consensus `json:"version"`
@@ -534,17 +534,14 @@ func (h *Header) StateID() tmproto.StateID {
 		appHash = make([]byte, crypto.DefaultAppHashSize)
 	}
 
-	ts, err := gogotypes.TimestampProto(h.Time)
-	if err != nil || ts == nil {
-		panic("cannot convert time " + h.Time.String() + " to Timesstamp: " + err.Error())
-	}
+	ts := uint64(h.Time.UnixMilli())
 
 	return tmproto.StateID{
 		AppVersion:            h.Version.App,
 		Height:                uint64(h.Height),
 		AppHash:               appHash,
 		CoreChainLockedHeight: h.CoreChainLockedHeight,
-		Time:                  *ts,
+		Time:                  ts,
 	}
 }
 

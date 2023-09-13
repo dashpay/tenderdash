@@ -3,10 +3,10 @@ package consensus
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/dash"
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/libs/log"
-	tmtime "github.com/tendermint/tendermint/libs/time"
+	"github.com/dashpay/tenderdash/dash"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
 )
 
 type EnterProposeEvent struct {
@@ -31,6 +31,7 @@ type EnterProposeAction struct {
 	scheduler       *roundScheduler
 	eventPublisher  *EventPublisher
 	proposalCreator cstypes.ProposalCreator
+	replayMode      bool
 }
 
 func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent) error {
@@ -44,7 +45,7 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	if stateData.Height != height ||
 		round < stateData.Round ||
 		(stateData.Round == round && cstypes.RoundStepPropose <= stateData.Step) {
-		logger.Debug("entering propose step with invalid args", "step", stateData.Step)
+		logger.Trace("entering propose step with invalid args", "step", stateData.Step)
 		return nil
 	}
 
@@ -66,11 +67,6 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 		}
 	}
 
-	logger.Debug("entering propose step",
-		"height", stateData.Height,
-		"round", stateData.Round,
-		"step", stateData.Step)
-
 	defer func() {
 		// Done enterPropose:
 		stateData.updateRoundStep(round, cstypes.RoundStepPropose)
@@ -88,13 +84,25 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	c.scheduler.ScheduleTimeout(stateData.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
 
 	if !isProposer {
-		logger.Debug("propose step; not our turn to propose",
+		logger.Info("propose step; not our turn to propose",
 			"proposer_proTxHash", stateData.Validators.GetProposer().ProTxHash,
-			"node_proTxHash", proTxHash.String())
+			"node_proTxHash", proTxHash.String(),
+			"height", stateData.Height,
+			"round", stateData.Round,
+			"step", stateData.Step)
 		return nil
 	}
-	logger.Debug("propose step; our turn to propose",
+	// In replay mode, we don't propose blocks.
+	if c.replayMode {
+		logger.Debug("enter propose step; our turn to propose but in replay mode, not proposing")
+		return nil
+	}
+
+	logger.Info("propose step; our turn to propose",
 		"proposer_proTxHash", proTxHash.ShortString(),
+		"height", stateData.Height,
+		"round", stateData.Round,
+		"step", stateData.Step,
 	)
 	// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,
 	// and the privVal will refuse to sign anything.

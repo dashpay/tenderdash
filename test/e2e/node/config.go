@@ -7,7 +7,7 @@ import (
 
 	"github.com/BurntSushi/toml"
 
-	"github.com/tendermint/tendermint/abci/example/kvstore"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
 )
 
 // Config is the application configuration.

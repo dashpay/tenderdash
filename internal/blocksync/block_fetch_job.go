@@ -6,10 +6,10 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/internal/p2p/client"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/workerpool"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/p2p/client"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/workerpool"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type (
@@ -96,7 +96,7 @@ func (p *jobGenerator) nextJob(ctx context.Context) (*workerpool.Job, error) {
 	if err != nil {
 		return nil, err
 	}
-	p.peerStore.PeerUpdate(peer.peerID, ResetMonitor(), AddNumPending(1))
+	p.peerStore.Update(peer.peerID, ResetMonitor(), AddNumPending(1))
 	return workerpool.NewJob(blockFetchJobHandler(p.client, peer, height)), nil
 }
 

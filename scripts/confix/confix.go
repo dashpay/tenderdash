@@ -11,7 +11,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/tendermint/tendermint/internal/libs/confix"
+	"github.com/dashpay/tenderdash/internal/libs/confix"
 )
 
 func init() {

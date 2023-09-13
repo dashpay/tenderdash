@@ -10,16 +10,16 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	"github.com/tendermint/tendermint/abci/example/kvstore"
-	dashcore "github.com/tendermint/tendermint/dash/core"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/light"
-	"github.com/tendermint/tendermint/light/provider"
-	httpp "github.com/tendermint/tendermint/light/provider/http"
-	dbs "github.com/tendermint/tendermint/light/store/db"
-	"github.com/tendermint/tendermint/privval"
-	rpctest "github.com/tendermint/tendermint/rpc/test"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	dashcore "github.com/dashpay/tenderdash/dash/core"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/light"
+	"github.com/dashpay/tenderdash/light/provider"
+	httpp "github.com/dashpay/tenderdash/light/provider/http"
+	dbs "github.com/dashpay/tenderdash/light/store/db"
+	"github.com/dashpay/tenderdash/privval"
+	rpctest "github.com/dashpay/tenderdash/rpc/test"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // NOTE: these are ports of the tests from example_test.go but

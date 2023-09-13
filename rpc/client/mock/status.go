@@ -3,8 +3,8 @@ package mock
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/rpc/client"
-	"github.com/tendermint/tendermint/rpc/coretypes"
+	"github.com/dashpay/tenderdash/rpc/client"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
 )
 
 // StatusMock returns the result specified by the Call

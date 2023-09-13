@@ -6,8 +6,8 @@ import (
 	"fmt"
 	"time"
 
-	tbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	tbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 // Info about the status of the light client

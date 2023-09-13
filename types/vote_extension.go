@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 var (

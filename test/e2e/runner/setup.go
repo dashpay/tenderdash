@@ -19,15 +19,16 @@ import (
 	"github.com/BurntSushi/toml"
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/privval"
-	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
-	"github.com/tendermint/tendermint/test/e2e/pkg/infra"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	"github.com/dashpay/tenderdash/privval"
+	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
+	"github.com/dashpay/tenderdash/test/e2e/pkg/infra"
+	"github.com/dashpay/tenderdash/types"
 )
 
 const (
@@ -512,7 +513,7 @@ func shouldResetPubkeys() bool {
 
 func initGenesisForEveryNode(testnet *e2e.Testnet) (map[e2e.Mode]types.GenesisDoc, error) {
 	genesis := make(map[e2e.Mode]types.GenesisDoc)
-	genesisTime := time.Now()
+	genesisTime := tmtime.Now()
 	for _, tn := range testnet.Nodes {
 		if _, ok := genesis[tn.Mode]; ok {
 			continue

@@ -4,9 +4,9 @@ import (
 	"context"
 	"fmt"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type AddCommitEvent struct {

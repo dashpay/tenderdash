@@ -8,11 +8,11 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
-	"github.com/tendermint/tendermint/libs/log"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type AddProposalBlockPartEvent struct {
@@ -75,7 +75,7 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 	peerID types.NodeID,
 ) (bool, error) {
 	height, round, part := msg.Height, msg.Round, msg.Part
-	c.logger.Info(
+	c.logger.Trace(
 		"addProposalBlockPart",
 		"height", stateData.Height,
 		"round", stateData.Round,
@@ -158,20 +158,13 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 		}
 
 		// NOTE: it's possible to receive complete proposal blocks for future rounds without having the proposal
-		c.logger.Info(
-			"received complete proposal block",
-			"height", stateData.ProposalBlock.Height,
-			"hash", stateData.ProposalBlock.Hash(),
-			"round_height", stateData.RoundState.GetHeight(),
-		)
-
-		c.eventPublisher.PublishCompleteProposalEvent(stateData.CompleteProposalEvent())
 
 		if stateData.Commit != nil {
-			c.logger.Info("Proposal block fully received", "proposal", stateData.ProposalBlock)
-			c.logger.Info("Commit already present", "commit", stateData.Commit)
-			c.logger.Debug("adding commit after complete proposal",
-				"height", stateData.ProposalBlock.Height,
+			c.logger.Info("received complete proposal block and commit",
+				"proposal", stateData.ProposalBlock,
+				"commit", stateData.Commit,
+				"height", stateData.RoundState.Height,
+				"round", stateData.RoundState.Round,
 				"hash", stateData.ProposalBlock.Hash(),
 			)
 			// We received a commit before the block
@@ -179,7 +172,16 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			return added, ctrl.Dispatch(ctx, &AddCommitEvent{Commit: stateData.Commit}, stateData)
 		}
 
-		return added, nil
+		c.logger.Info(
+			"received complete proposal block",
+			"height", stateData.RoundState.Height,
+			"round", stateData.RoundState.Round,
+			"proposal_height", stateData.ProposalBlock.Height,
+			"hash", stateData.ProposalBlock.Hash(),
+			"round_height", stateData.RoundState.GetHeight(),
+		)
+
+		c.eventPublisher.PublishCompleteProposalEvent(stateData.CompleteProposalEvent())
 	}
 
 	return added, nil
@@ -231,7 +233,9 @@ func (c *ProposalCompletedAction) Execute(ctx context.Context, stateEvent StateE
 		// Move onto the next step
 		// We should allow old blocks if we are recovering from replay
 		c.logger.Debug("entering prevote after complete proposal",
-			"height", stateData.ProposalBlock.Height,
+			"height", stateData.RoundState.Height,
+			"round", stateData.RoundState.Round,
+			"proposal_height", stateData.ProposalBlock.Height,
 			"hash", stateData.ProposalBlock.Hash(),
 		)
 		err := stateEvent.Ctrl.Dispatch(ctx, &EnterPrevoteEvent{

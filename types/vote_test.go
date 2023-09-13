@@ -9,15 +9,14 @@ import (
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
-	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/libs/rand"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/rand"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 const (
@@ -59,7 +58,7 @@ func exampleVote(tb testing.TB, t byte) *Vote {
 		AppHash:               appHash,
 		AppVersion:            StateIDVersion,
 		CoreChainLockedHeight: 3,
-		Time:                  gogotypes.Timestamp{},
+		Time:                  0,
 	}
 	return &Vote{
 		Type:   tmproto.SignedMsgType(t),

@@ -38,12 +38,6 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "snapshot_chunk",
 			Help:      "The current number of chunks that have been processed.",
 		}, labels).With(labelsAndValues...),
-		SnapshotChunkTotal: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-			Namespace: namespace,
-			Subsystem: MetricsSubsystem,
-			Name:      "snapshot_chunk_total",
-			Help:      "The total number of chunks in the current snapshot.",
-		}, labels).With(labelsAndValues...),
 		BackFilledBlocks: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
@@ -65,7 +59,6 @@ func NopMetrics() *Metrics {
 		ChunkProcessAvgTime: discard.NewGauge(),
 		SnapshotHeight:      discard.NewGauge(),
 		SnapshotChunk:       discard.NewCounter(),
-		SnapshotChunkTotal:  discard.NewGauge(),
 		BackFilledBlocks:    discard.NewCounter(),
 		BackFillBlocksTotal: discard.NewGauge(),
 	}

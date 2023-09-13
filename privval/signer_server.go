@@ -6,9 +6,9 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/libs/service"
-	privvalproto "github.com/tendermint/tendermint/proto/tendermint/privval"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/libs/service"
+	privvalproto "github.com/dashpay/tenderdash/proto/tendermint/privval"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // ValidationRequestHandlerFunc handles different remoteSigner requests

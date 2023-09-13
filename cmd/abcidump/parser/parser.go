@@ -7,7 +7,7 @@ import (
 	"github.com/gogo/protobuf/jsonpb"
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/tendermint/tendermint/abci/types"
+	"github.com/dashpay/tenderdash/abci/types"
 )
 
 // Parser reads protobuf data from In, parses it and writes to Out in JSON format

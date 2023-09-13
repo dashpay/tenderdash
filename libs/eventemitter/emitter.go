@@ -3,7 +3,7 @@ package eventemitter
 import (
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/tendermint/tendermint/libs/log"
+	"github.com/dashpay/tenderdash/libs/log"
 )
 
 // ListenerFunc is a type function of an event listener

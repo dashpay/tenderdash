@@ -3,7 +3,7 @@ package jsontypes_test
 import (
 	"testing"
 
-	"github.com/tendermint/tendermint/internal/jsontypes"
+	"github.com/dashpay/tenderdash/internal/jsontypes"
 )
 
 type testPtrType struct {

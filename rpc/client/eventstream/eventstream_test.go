@@ -10,12 +10,12 @@ import (
 	"github.com/fortytw2/leaktest"
 	"github.com/google/go-cmp/cmp"
 
-	"github.com/tendermint/tendermint/internal/eventlog"
-	"github.com/tendermint/tendermint/internal/eventlog/cursor"
-	rpccore "github.com/tendermint/tendermint/internal/rpc/core"
-	"github.com/tendermint/tendermint/rpc/client/eventstream"
-	"github.com/tendermint/tendermint/rpc/coretypes"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/eventlog"
+	"github.com/dashpay/tenderdash/internal/eventlog/cursor"
+	rpccore "github.com/dashpay/tenderdash/internal/rpc/core"
+	"github.com/dashpay/tenderdash/rpc/client/eventstream"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func TestStream_filterOrder(t *testing.T) {

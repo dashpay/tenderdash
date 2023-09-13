@@ -11,11 +11,11 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/rs/zerolog"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/internal/libs/protoio"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmtime "github.com/tendermint/tendermint/libs/time"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/libs/protoio"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 var (
@@ -107,7 +107,7 @@ func (p *Proposal) ValidateBasic() error {
 // localtime <= proposedBlockTime + MsgDelay + Precision
 //
 // For more information on the meaning of 'timely', see the proposer-based timestamp specification:
-// https://github.com/tendermint/tendermint/tree/master/spec/consensus/proposer-based-timestamp
+// https://github.com/dashpay/tenderdash/tree/master/spec/consensus/proposer-based-timestamp
 //
 // NOTE: by definition, at initial height, recvTime MUST be genesis time.
 func (p *Proposal) IsTimely(recvTime time.Time, sp SynchronyParams, round int32) bool {

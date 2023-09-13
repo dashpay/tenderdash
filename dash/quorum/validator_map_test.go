@@ -3,9 +3,9 @@ package quorum
 import (
 	"testing"
 
+	"github.com/dashpay/tenderdash/dash/quorum/mock"
+	"github.com/dashpay/tenderdash/types"
 	"github.com/stretchr/testify/assert"
-	"github.com/tendermint/tendermint/dash/quorum/mock"
-	"github.com/tendermint/tendermint/types"
 )
 
 func Test_validatorMap_String(t *testing.T) {

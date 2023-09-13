@@ -3,9 +3,9 @@ package core
 import (
 	"context"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/internal/proxy"
-	"github.com/tendermint/tendermint/rpc/coretypes"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/internal/proxy"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
 )
 
 // ABCIQuery queries the application for some information.

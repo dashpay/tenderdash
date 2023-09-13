@@ -18,14 +18,15 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/crypto/merkle"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
-	tmversion "github.com/tendermint/tendermint/proto/tendermint/version"
-	"github.com/tendermint/tendermint/version"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	"github.com/dashpay/tenderdash/crypto/merkle"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	tmversion "github.com/dashpay/tenderdash/proto/tendermint/version"
+	"github.com/dashpay/tenderdash/version"
 )
 
 func TestMain(m *testing.M) {
@@ -337,8 +338,7 @@ func TestMaxCommitBytes(t *testing.T) {
 }
 
 func TestHeaderHash(t *testing.T) {
-	ts, err := gogotypes.TimestampProto(time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC))
-	require.NoError(t, err)
+	ts := uint64(time.Date(2022, 3, 4, 5, 6, 7, 8, time.UTC).UnixMilli())
 
 	testCases := []struct {
 		desc       string
@@ -360,7 +360,7 @@ func TestHeaderHash(t *testing.T) {
 						Height:                3,
 						AppHash:               crypto.Checksum([]byte("app_hash")),
 						CoreChainLockedHeight: 1,
-						Time:                  *ts,
+						Time:                  ts,
 					}.Hash(),
 				),
 				LastCommitHash:     crypto.Checksum([]byte("last_commit_hash")),
@@ -375,7 +375,7 @@ func TestHeaderHash(t *testing.T) {
 				ProposerProTxHash:  crypto.ProTxHashFromSeedBytes([]byte("proposer_pro_tx_hash")),
 				ProposedAppVersion: 1,
 			},
-			expectHash: hexBytesFromString(t, "5CF83D17EEC01506B3F1EA0596B49CD21B7DEBDCB18E3204A99E6BDC5C470B9B"),
+			expectHash: hexBytesFromString(t, "FF24DDAB9E1550BEB40AB7AD432A4D577560E9B87A80C7BB86E75263974B87E0"),
 		},
 		{
 			"nil header yields nil",
@@ -1259,7 +1259,7 @@ func TestStateID_ValidateBasic(t *testing.T) {
 				AppVersion: StateIDVersion,
 				Height:     0,
 				AppHash:    tmrand.Bytes(crypto.DefaultAppHashSize),
-				Time:       *gogotypes.TimestampNow(),
+				Time:       uint64(tmtime.Now().UnixMilli()),
 			},
 			wantErr: "",
 		},
@@ -1269,7 +1269,7 @@ func TestStateID_ValidateBasic(t *testing.T) {
 				AppVersion: StateIDVersion,
 				Height:     12,
 				AppHash:    tmrand.Bytes(crypto.DefaultAppHashSize),
-				Time:       *gogotypes.TimestampNow(),
+				Time:       uint64(tmtime.Now().UnixMilli()),
 			},
 			wantErr: "",
 		},

@@ -10,8 +10,8 @@ import (
 
 	"github.com/gorilla/websocket"
 
-	"github.com/tendermint/tendermint/libs/log"
-	rpctypes "github.com/tendermint/tendermint/rpc/jsonrpc/types"
+	"github.com/dashpay/tenderdash/libs/log"
+	rpctypes "github.com/dashpay/tenderdash/rpc/jsonrpc/types"
 )
 
 // WebSocket handler

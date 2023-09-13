@@ -9,9 +9,9 @@ import (
 	"strings"
 	"text/template"
 
-	"github.com/tendermint/tendermint/internal/test/factory"
-	tmos "github.com/tendermint/tendermint/libs/os"
-	tmrand "github.com/tendermint/tendermint/libs/rand"
+	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmos "github.com/dashpay/tenderdash/libs/os"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
 )
 
 // defaultDirPerm is the default permissions used when creating directories.
@@ -641,7 +641,7 @@ func writeFile(filePath string, contents []byte, mode os.FileMode) error {
 }
 
 const testGenesisFmt = `{
-  "genesis_time": "2018-10-10T08:20:13.695936996Z",
+  "genesis_time": "2018-10-10T08:20:13.695Z",
   "chain_id": "%s",
   "initial_height": "1",
   "initial_core_chain_locked_height": 1,

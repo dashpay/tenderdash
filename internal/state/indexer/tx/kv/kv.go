@@ -11,11 +11,11 @@ import (
 	"github.com/google/orderedcode"
 	dbm "github.com/tendermint/tm-db"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/internal/pubsub/query"
-	"github.com/tendermint/tendermint/internal/pubsub/query/syntax"
-	"github.com/tendermint/tendermint/internal/state/indexer"
-	"github.com/tendermint/tendermint/types"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/internal/pubsub/query"
+	"github.com/dashpay/tenderdash/internal/pubsub/query/syntax"
+	"github.com/dashpay/tenderdash/internal/state/indexer"
+	"github.com/dashpay/tenderdash/types"
 )
 
 var _ indexer.TxIndexer = (*TxIndex)(nil)

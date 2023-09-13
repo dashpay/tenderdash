@@ -3,7 +3,7 @@ package core
 import (
 	"context"
 
-	"github.com/tendermint/tendermint/rpc/coretypes"
+	"github.com/dashpay/tenderdash/rpc/coretypes"
 )
 
 // Health gets node health. Returns empty result (200 OK) on success, no

@@ -7,11 +7,11 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/internal/jsontypes"
-	"github.com/tendermint/tendermint/libs/bytes"
-	"github.com/tendermint/tendermint/types"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/jsontypes"
+	"github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // List of standardized errors used across RPC
@@ -111,7 +111,6 @@ type SyncInfo struct {
 	ChunkProcessAvgTime time.Duration `json:"chunk_process_avg_time,string"`
 	SnapshotHeight      int64         `json:"snapshot_height,string"`
 	SnapshotChunksCount int64         `json:"snapshot_chunks_count,string"`
-	SnapshotChunksTotal int64         `json:"snapshot_chunks_total,string"`
 	BackFilledBlocks    int64         `json:"backfilled_blocks,string"`
 	BackFillBlocksTotal int64         `json:"backfill_blocks_total,string"`
 }

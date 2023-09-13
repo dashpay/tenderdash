@@ -1,6 +1,6 @@
 package version
 
-import tmversion "github.com/tendermint/tendermint/proto/tendermint/version"
+import tmversion "github.com/dashpay/tenderdash/proto/tendermint/version"
 
 var (
 	TMCoreSemVer = TMVersionDefault
@@ -9,9 +9,9 @@ var (
 const (
 	// TMVersionDefault is the used as the fallback version for Tenderdash
 	// when not using git describe. It is formatted with semantic versioning.
-	TMVersionDefault = "0.12.0"
+	TMVersionDefault = "0.13.0"
 	// ABCISemVer is the semantic version of the ABCI library
-	ABCISemVer = "0.20.0"
+	ABCISemVer = "0.23.0"
 
 	ABCIVersion = ABCISemVer
 )
@@ -23,7 +23,7 @@ var (
 
 	// BlockProtocol versions all block data structures and processing.
 	// This includes validity of blocks and state updates.
-	BlockProtocol uint64 = 12
+	BlockProtocol uint64 = 13
 )
 
 type Consensus struct {

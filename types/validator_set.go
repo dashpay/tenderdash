@@ -12,14 +12,14 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/rs/zerolog"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-	"github.com/tendermint/tendermint/crypto/merkle"
-	"github.com/tendermint/tendermint/dash/llmq"
-	tmbytes "github.com/tendermint/tendermint/libs/bytes"
-	tmproto "github.com/tendermint/tendermint/proto/tendermint/types"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
+	"github.com/dashpay/tenderdash/crypto/merkle"
+	"github.com/dashpay/tenderdash/dash/llmq"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 const (

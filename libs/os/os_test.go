@@ -9,7 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	tmos "github.com/tendermint/tendermint/libs/os"
+	tmos "github.com/dashpay/tenderdash/libs/os"
 )
 
 func TestCopyFile(t *testing.T) {

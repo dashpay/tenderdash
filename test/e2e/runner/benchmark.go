@@ -8,9 +8,9 @@ import (
 	"path/filepath"
 	"time"
 
-	"github.com/tendermint/tendermint/libs/log"
-	e2e "github.com/tendermint/tendermint/test/e2e/pkg"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/libs/log"
+	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // Benchmark is a simple function for fetching, calculating and printing

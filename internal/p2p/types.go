@@ -1,7 +1,7 @@
 package p2p
 
 import (
-	"github.com/tendermint/tendermint/internal/p2p/conn"
+	"github.com/dashpay/tenderdash/internal/p2p/conn"
 )
 
 type ChannelDescriptor = conn.ChannelDescriptor

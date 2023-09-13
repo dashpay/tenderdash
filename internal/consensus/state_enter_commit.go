@@ -3,9 +3,9 @@ package consensus
 import (
 	"context"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/libs/log"
-	tmtime "github.com/tendermint/tendermint/libs/time"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
 )
 
 type EnterCommitEvent struct {
@@ -36,7 +36,8 @@ func (c *EnterCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	logger := c.logger.With("new_height", height, "commit_round", commitRound)
 
 	if stateData.Height != height || cstypes.RoundStepApplyCommit <= stateData.Step {
-		logger.Debug("entering commit step with invalid args",
+		// this is quite common event
+		logger.Trace("entering commit step with invalid args",
 			"height", stateData.Height,
 			"round", stateData.Round,
 			"step", stateData.Step)

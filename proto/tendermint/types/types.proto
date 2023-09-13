@@ -1,7 +1,7 @@
 syntax = "proto3";
 package tendermint.types;
 
-option go_package = "github.com/tendermint/tendermint/proto/tendermint/types";
+option go_package = "github.com/dashpay/tenderdash/proto/tendermint/types";
 
 import "gogoproto/gogo.proto";
 import "google/protobuf/timestamp.proto";
@@ -36,8 +36,6 @@ enum SignedMsgType {
       [(gogoproto.enumvalue_customname) = "PrevoteType"];
   SIGNED_MSG_TYPE_PRECOMMIT = 2
       [(gogoproto.enumvalue_customname) = "PrecommitType"];
-  SIGNED_MSG_TYPE_COMMIT = 3
-      [(gogoproto.enumvalue_customname) = "CommitType"];
 
   // Proposals
   SIGNED_MSG_TYPE_PROPOSAL = 32
@@ -81,8 +79,8 @@ message StateID {
   bytes app_hash = 3 [(gogoproto.customname) = "AppHash"];
   // CoreChainLockedHeight for the block, equal to Header.CoreChainLockedHeight.
   fixed32 core_chain_locked_height = 4 [(gogoproto.customname) = "CoreChainLockedHeight"];
-  // Time of the block.
-  google.protobuf.Timestamp time = 5 [(gogoproto.nullable) = false];
+  // Time of the block in milliseconds since epoch, truncated (rounded down) to milliseconds
+  fixed64 time = 5;
 }
 
 // --------------------------------
@@ -93,7 +91,8 @@ message Header {
   tendermint.version.Consensus version  = 1 [(gogoproto.nullable) = false];
   string                       chain_id = 2 [(gogoproto.customname) = "ChainID"];
   int64                        height   = 3;
-  google.protobuf.Timestamp    time     = 4 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
+  // Time of the block, truncated (rounded down) to millisecond
+  google.protobuf.Timestamp time = 4 [(gogoproto.nullable) = false, (gogoproto.stdtime) = true];
 
   // prev block info
   BlockID last_block_id = 5 [(gogoproto.nullable) = false];

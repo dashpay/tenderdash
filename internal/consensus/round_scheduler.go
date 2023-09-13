@@ -3,8 +3,8 @@ package consensus
 import (
 	"time"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	tmtime "github.com/tendermint/tendermint/libs/time"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
 )
 
 type roundScheduler struct {
@@ -15,7 +15,6 @@ type roundScheduler struct {
 
 // ScheduleRound0 enterNewRoundCommand(height, 0) at StartTime
 func (b *roundScheduler) ScheduleRound0(rs cstypes.RoundState) {
-	// b.logger.Info("scheduleRound0", "now", tmtime.Now(), "startTime", b.StartTime)
 	sleepDuration := rs.StartTime.Sub(tmtime.Now())
 	b.ScheduleTimeout(sleepDuration, rs.Height, 0, cstypes.RoundStepNewHeight)
 }

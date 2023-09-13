@@ -5,13 +5,13 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
-	"github.com/tendermint/tendermint/crypto/ed25519"
-	cryptoenc "github.com/tendermint/tendermint/crypto/encoding"
-	"github.com/tendermint/tendermint/crypto/secp256k1"
-	crypto2 "github.com/tendermint/tendermint/proto/tendermint/crypto"
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	"github.com/dashpay/tenderdash/crypto/ed25519"
+	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
+	"github.com/dashpay/tenderdash/crypto/secp256k1"
+	crypto2 "github.com/dashpay/tenderdash/proto/tendermint/crypto"
 )
 
 //-------------------------------------------------------

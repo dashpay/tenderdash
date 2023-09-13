@@ -5,11 +5,11 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/tendermint/tendermint/internal/p2p"
-	"github.com/tendermint/tendermint/internal/p2p/client"
-	"github.com/tendermint/tendermint/libs/log"
-	protomem "github.com/tendermint/tendermint/proto/tendermint/mempool"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/internal/p2p/client"
+	"github.com/dashpay/tenderdash/libs/log"
+	protomem "github.com/dashpay/tenderdash/proto/tendermint/mempool"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type (

@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/libs/eventemitter"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/libs/eventemitter"
 )
 
 // EventType is an integer representation of a transition event
@@ -87,6 +87,7 @@ func NewController(cs *State, wal *wrapWAL, statsQueue *chanQueue[msgInfo], prop
 			scheduler:       cs.roundScheduler,
 			eventPublisher:  cs.eventPublisher,
 			proposalCreator: propler,
+			replayMode:      cs.replayMode,
 		},
 		AddProposalBlockPartType: &AddProposalBlockPartAction{
 			logger:         cs.logger,

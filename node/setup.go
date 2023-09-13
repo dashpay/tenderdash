@@ -12,30 +12,30 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	dbm "github.com/tendermint/tm-db"
 
-	abciclient "github.com/tendermint/tendermint/abci/client"
-	"github.com/tendermint/tendermint/config"
-	"github.com/tendermint/tendermint/crypto"
-	dashcore "github.com/tendermint/tendermint/dash/core"
-	"github.com/tendermint/tendermint/internal/consensus"
-	"github.com/tendermint/tendermint/internal/eventbus"
-	"github.com/tendermint/tendermint/internal/evidence"
-	tmstrings "github.com/tendermint/tendermint/internal/libs/strings"
-	"github.com/tendermint/tendermint/internal/mempool"
-	"github.com/tendermint/tendermint/internal/p2p"
-	"github.com/tendermint/tendermint/internal/p2p/client"
-	"github.com/tendermint/tendermint/internal/p2p/conn"
-	"github.com/tendermint/tendermint/internal/p2p/pex"
-	sm "github.com/tendermint/tendermint/internal/state"
-	"github.com/tendermint/tendermint/internal/state/indexer"
-	"github.com/tendermint/tendermint/internal/statesync"
-	"github.com/tendermint/tendermint/internal/store"
-	"github.com/tendermint/tendermint/libs/log"
-	tmnet "github.com/tendermint/tendermint/libs/net"
-	"github.com/tendermint/tendermint/libs/service"
-	"github.com/tendermint/tendermint/privval"
-	tmgrpc "github.com/tendermint/tendermint/privval/grpc"
-	"github.com/tendermint/tendermint/types"
-	"github.com/tendermint/tendermint/version"
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/crypto"
+	dashcore "github.com/dashpay/tenderdash/dash/core"
+	"github.com/dashpay/tenderdash/internal/consensus"
+	"github.com/dashpay/tenderdash/internal/eventbus"
+	"github.com/dashpay/tenderdash/internal/evidence"
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	"github.com/dashpay/tenderdash/internal/mempool"
+	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/internal/p2p/client"
+	"github.com/dashpay/tenderdash/internal/p2p/conn"
+	"github.com/dashpay/tenderdash/internal/p2p/pex"
+	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/internal/state/indexer"
+	"github.com/dashpay/tenderdash/internal/statesync"
+	"github.com/dashpay/tenderdash/internal/store"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmnet "github.com/dashpay/tenderdash/libs/net"
+	"github.com/dashpay/tenderdash/libs/service"
+	"github.com/dashpay/tenderdash/privval"
+	tmgrpc "github.com/dashpay/tenderdash/privval/grpc"
+	"github.com/dashpay/tenderdash/types"
+	"github.com/dashpay/tenderdash/version"
 
 	"net/http"
 	_ "net/http/pprof" //nolint: gosec // securely exposed on separate, optional port
@@ -536,6 +536,13 @@ func createPrivval(ctx context.Context, logger log.Logger, conf *config.Config, 
 		if err != nil {
 			return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
 		}
+
+		logger.Info("Waiting for Dash Core RPC Client to be ready")
+		err = dashcore.WaitForMNReady(dashCoreRPCClient, time.Second)
+		if err != nil {
+			return nil, fmt.Errorf("failed to wait for masternode status 'ready': %w", err)
+		}
+		logger.Info("Dash Core RPC Client is ready")
 
 		// If a local port is provided for Dash Core rpc into the service to sign.
 		privValidator, err := createAndStartPrivValidatorDashCoreClient(

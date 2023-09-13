@@ -4,8 +4,9 @@ import (
 	"fmt"
 
 	"github.com/hashicorp/go-multierror"
-	abci "github.com/tendermint/tendermint/abci/types"
-	"github.com/tendermint/tendermint/types"
+
+	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // EventSet is a set of events that are published immediately after the block is committed.

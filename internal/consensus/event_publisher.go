@@ -1,11 +1,11 @@
 package consensus
 
 import (
-	cstypes "github.com/tendermint/tendermint/internal/consensus/types"
-	"github.com/tendermint/tendermint/internal/eventbus"
-	"github.com/tendermint/tendermint/libs/eventemitter"
-	"github.com/tendermint/tendermint/libs/log"
-	"github.com/tendermint/tendermint/types"
+	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/eventbus"
+	"github.com/dashpay/tenderdash/libs/eventemitter"
+	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // EventPublisher is event message sender to event-bus and event-switch
@@ -34,7 +34,7 @@ func (p *EventPublisher) PublishValidBlockEvent(rs cstypes.RoundState) {
 
 // PublishCommitEvent ...
 func (p *EventPublisher) PublishCommitEvent(commit *types.Commit) error {
-	p.logger.Debug("publish commit event", "commit", commit)
+	p.logger.Trace("publish commit event", "commit", commit)
 	if err := p.eventBus.PublishEventCommit(types.EventDataCommit{Commit: commit}); err != nil {
 		return err
 	}

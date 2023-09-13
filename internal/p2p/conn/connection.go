@@ -17,13 +17,13 @@ import (
 
 	"github.com/gogo/protobuf/proto"
 
-	"github.com/tendermint/tendermint/internal/libs/flowrate"
-	"github.com/tendermint/tendermint/internal/libs/protoio"
-	"github.com/tendermint/tendermint/internal/libs/timer"
-	"github.com/tendermint/tendermint/libs/log"
-	tmmath "github.com/tendermint/tendermint/libs/math"
-	"github.com/tendermint/tendermint/libs/service"
-	tmp2p "github.com/tendermint/tendermint/proto/tendermint/p2p"
+	"github.com/dashpay/tenderdash/internal/libs/flowrate"
+	"github.com/dashpay/tenderdash/internal/libs/protoio"
+	"github.com/dashpay/tenderdash/internal/libs/timer"
+	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
+	"github.com/dashpay/tenderdash/libs/service"
+	tmp2p "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 )
 
 const (
@@ -534,7 +534,7 @@ FOR_LOOP:
 		switch pkt := packet.Sum.(type) {
 		case *tmp2p.Packet_PacketPing:
 			// TODO: prevent abuse, as they cause flush()'s.
-			// https://github.com/tendermint/tendermint/issues/1190
+			// https://github.com/dashpay/tenderdash/issues/1190
 			select {
 			case c.pong <- struct{}{}:
 			default:
@@ -643,7 +643,7 @@ type channel struct {
 	// Exponential moving average.
 	// This field must be accessed atomically.
 	// It is first in the struct to ensure correct alignment.
-	// See https://github.com/tendermint/tendermint/issues/7000.
+	// See https://github.com/dashpay/tenderdash/issues/7000.
 	recentlySent int64
 
 	conn          *MConnection

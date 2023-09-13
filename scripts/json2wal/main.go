@@ -15,8 +15,8 @@ import (
 	"os"
 	"strings"
 
-	"github.com/tendermint/tendermint/internal/consensus"
-	"github.com/tendermint/tendermint/types"
+	"github.com/dashpay/tenderdash/internal/consensus"
+	"github.com/dashpay/tenderdash/types"
 )
 
 func main() {

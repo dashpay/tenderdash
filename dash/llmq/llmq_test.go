@@ -9,8 +9,9 @@ import (
 
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 	"github.com/stretchr/testify/require"
-	"github.com/tendermint/tendermint/crypto"
-	"github.com/tendermint/tendermint/crypto/bls12381"
+
+	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
 )
 
 const defaultSeedSource = 999
