@@ -108,12 +108,13 @@ func (_m *MempoolClient) UnconfirmedTxs(ctx context.Context, page *int, perPage 
 	return r0, r1
 }
 
-// NewMempoolClient creates a new instance of MempoolClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewMempoolClient(t interface {
+type mockConstructorTestingTNewMempoolClient interface {
 	mock.TestingT
 	Cleanup(func())
-}) *MempoolClient {
+}
+
+// NewMempoolClient creates a new instance of MempoolClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewMempoolClient(t mockConstructorTestingTNewMempoolClient) *MempoolClient {
 	mock := &MempoolClient{}
 	mock.Mock.Test(t)
 

@@ -439,12 +439,13 @@ func (_m *Client) Wait() {
 	_m.Called()
 }
 
-// NewClient creates a new instance of Client. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewClient(t interface {
+type mockConstructorTestingTNewClient interface {
 	mock.TestingT
 	Cleanup(func())
-}) *Client {
+}
+
+// NewClient creates a new instance of Client. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewClient(t mockConstructorTestingTNewClient) *Client {
 	mock := &Client{}
 	mock.Mock.Test(t)
 

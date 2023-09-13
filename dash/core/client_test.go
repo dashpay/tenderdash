@@ -9,7 +9,7 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
 
-	"github.com/tendermint/tendermint/dash/core/mocks"
+	"github.com/dashpay/tenderdash/dash/core/mocks"
 )
 
 func TestWaitForMNReady(t *testing.T) {

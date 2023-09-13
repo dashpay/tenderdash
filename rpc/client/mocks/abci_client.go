@@ -202,12 +202,13 @@ func (_m *ABCIClient) BroadcastTxSync(_a0 context.Context, _a1 types.Tx) (*coret
 	return r0, r1
 }
 
-// NewABCIClient creates a new instance of ABCIClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewABCIClient(t interface {
+type mockConstructorTestingTNewABCIClient interface {
 	mock.TestingT
 	Cleanup(func())
-}) *ABCIClient {
+}
+
+// NewABCIClient creates a new instance of ABCIClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewABCIClient(t mockConstructorTestingTNewABCIClient) *ABCIClient {
 	mock := &ABCIClient{}
 	mock.Mock.Test(t)
 

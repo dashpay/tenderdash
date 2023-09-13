@@ -4,7 +4,7 @@ package mocks
 
 import (
 	btcjson "github.com/dashpay/dashd-go/btcjson"
-	bytes "github.com/tendermint/tendermint/libs/bytes"
+	bytes "github.com/dashpay/tenderdash/libs/bytes"
 
 	mock "github.com/stretchr/testify/mock"
 )

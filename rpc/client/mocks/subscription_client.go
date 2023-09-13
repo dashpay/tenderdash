@@ -75,12 +75,13 @@ func (_m *SubscriptionClient) UnsubscribeAll(ctx context.Context, subscriber str
 	return r0
 }
 
-// NewSubscriptionClient creates a new instance of SubscriptionClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-// The first argument is typically a *testing.T value.
-func NewSubscriptionClient(t interface {
+type mockConstructorTestingTNewSubscriptionClient interface {
 	mock.TestingT
 	Cleanup(func())
-}) *SubscriptionClient {
+}
+
+// NewSubscriptionClient creates a new instance of SubscriptionClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+func NewSubscriptionClient(t mockConstructorTestingTNewSubscriptionClient) *SubscriptionClient {
 	mock := &SubscriptionClient{}
 	mock.Mock.Test(t)
 
