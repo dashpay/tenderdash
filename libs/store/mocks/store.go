@@ -142,13 +142,12 @@ func (_m *Store[K, V]) Update(key K, updates ...store.UpdateFunc[K, V]) {
 	_m.Called(_ca...)
 }
 
-type mockConstructorTestingTNewStore interface {
+// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
+// The first argument is typically a *testing.T value.
+func NewStore[K comparable, V interface{}](t interface {
 	mock.TestingT
 	Cleanup(func())
-}
-
-// NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
-func NewStore[K comparable, V interface{}](t mockConstructorTestingTNewStore) *Store[K, V] {
+}) *Store[K, V] {
 	mock := &Store[K, V]{}
 	mock.Mock.Test(t)
 
