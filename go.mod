@@ -9,7 +9,7 @@ require (
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/containerd/continuity v0.3.0 // indirect
 	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20230207105415-06df92693ac8
-	github.com/dashpay/dashd-go v0.24.0
+	github.com/dashpay/dashd-go v0.24.1
 	github.com/dashpay/dashd-go/btcec/v2 v2.1.0 // indirect
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fxamacker/cbor/v2 v2.4.0
@@ -71,8 +71,6 @@ require (
 	github.com/docker/docker v20.10.17+incompatible // indirect
 	github.com/go-chi/chi/v5 v5.0.7 // indirect
 	github.com/go-chi/render v1.0.1 // indirect
-	github.com/go-kit/log v0.2.1 // indirect
-	github.com/go-logfmt/logfmt v0.5.1 // indirect
 	github.com/go-logr/logr v1.2.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-pkgz/expirable-cache v0.0.3 // indirect
@@ -85,6 +83,7 @@ require (
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
 	github.com/sashamelentyev/usestdlibvars v1.8.0 // indirect
 	github.com/tecbot/gorocksdb v0.0.0-20191217155057-f0fad39f321c // indirect
+	github.com/tendermint/tendermint v0.34.21 // indirect
 	go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc v0.33.0 // indirect
 	go.opentelemetry.io/otel v1.8.0 // indirect
 	go.opentelemetry.io/otel/trace v1.8.0 // indirect
@@ -285,7 +284,6 @@ require (
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/syndtr/goleveldb v1.0.1-0.20200815110645-5c35d600f0ca
 	github.com/tendermint/go-amino v0.16.0
-	github.com/tendermint/tendermint v0.34.21
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/exp v0.0.0-20230213192124-5e25df0256eb
 )

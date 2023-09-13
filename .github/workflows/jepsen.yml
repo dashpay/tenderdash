@@ -46,7 +46,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout the Jepsen repository
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: 'tendermint/jepsen'
 
