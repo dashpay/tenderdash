@@ -359,7 +359,7 @@ func (r *Router) routeChannel(
 					r.metrics.RouterPeerQueueSend.Observe(time.Since(start).Seconds())
 
 				case <-q.closed():
-					r.logger.Debug("dropping message for unconnected peer", "peer", envelope.To, "channel", chID)
+					r.logger.Debug("dropping message on closed channel", "peer", envelope.To, "channel", chID)
 
 				case <-ctx.Done():
 					return
