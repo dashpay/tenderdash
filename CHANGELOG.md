@@ -1,3 +1,10 @@
+## [0.13.1] - 2023-09-14
+
+### Bug Fixes
+
+- Send evidence only once (#683)
+- Panic verifying evidence due to missing pubkey (#684)
+
 ## [0.13.0] - 2023-09-13
 
 ### Bug Fixes
@@ -15,6 +22,7 @@
 - Update changelog and version to 0.13.0-dev.2 (#664)
 - Improve logs (#679)
 - Update mocks and .proto files after merge 12 to 13
+- Update changelog and version to 0.13.0
 
 ### Refactor
 
@@ -37,6 +45,7 @@
 
 ### Miscellaneous Tasks
 
+- Update changelog and version to 0.12.0
 - Update changelog and version to 0.13.0-dev.1 (#651)
 - Update changelog and version to 0.11.3
 
@@ -46,14 +55,20 @@
 
 - Add ability to write logs in a file (#632)
 
-### Miscellaneous Tasks
-
-- Catch up the changes from master into v0.11 dev (#629)
-
 ### Backport
 
 - Catch up with the latest commits from v0.11 to v0.12 (#631)
 - Catch up the changes from v0.11 to v0.12 (#636)
+
+## [0.11.2] - 2023-05-03
+
+### Bug Fixes
+
+- Invalid threshold for `LLMQType_25_67` (#628)
+
+### Miscellaneous Tasks
+
+- Catch up the changes from master into v0.11 dev (#629)
 
 ## [0.11.1] - 2023-05-02
 
@@ -8129,6 +8144,11 @@
 
 - Fix up doc to mention length of digits
 
+### Documentation
+
+- Add note about putting GOPATH/bin on PATH
+- Correction, closes #910
+
 ### Proposal
 
 - New Makefile standard template (#168)
@@ -8139,12 +8159,29 @@
 
 ### Testing
 
+- Sunset tmlibs/process.Process
+- Wait for node heights before checking app hash
+- Fix ensureABCIIsUp
+- Fix test/app/counter_test.sh
 - Longer timeout
 - Add some timeouts
+
+### Abci-cli
+
+- Print OK if code is 0
+- Prefix flag variables with flag
+
+### Adr
+
+- Update 007 trust metric usage
 
 ### All
 
 - Fix vet issues with build tags, formatting
+
+### Appveyor
+
+- Use make
 
 ### Batch
 
@@ -8152,8 +8189,19 @@
 
 ### Blockchain
 
+- Add tests and more docs for BlockStore
+- Update store comments
+- Updated store docs/comments from review
+- Deduplicate store header value tests
+- Less fragile and involved tests for blockstore
+- Block creator helper for compressing tests as per @ebuchman
+- Note about store tests needing simplification ...
 - Test fixes
 - Update for new state
+
+### Client
+
+- Use vars for retry intervals
 
 ### Cmd/abci-cli
 
@@ -8172,6 +8220,7 @@
 
 ### Common
 
+- Comments for Service
 - No more relying on math/rand.DefaultSource
 - Use names prng and mrand
 - Use genius simplification of tests from @ebuchman
@@ -8185,6 +8234,7 @@
 
 ### Consensus
 
+- Fix typo on ticker.go documentation
 - Fix makeBlockchainFromWAL
 - Remove log stmt. closes #987
 - Note about duplicate evidence
@@ -8202,6 +8252,10 @@
 - Fix c and go iterators
 - Simplify exists check, fix IsKeyInDomain signature, Iterator Close
 
+### Dummy
+
+- Include app.key tag
+
 ### Evidence
 
 - More funcs in store.go
@@ -8210,12 +8264,29 @@
 - Reactor test
 - Reactor test
 
+### Glide
+
+- Update grpc version
+
+### Linter
+
+- Enable in CI & make deterministic
+
 ### Mempool
 
+- Implement Mempool.CloseWAL
+- Return error on cached txs
+- Assert -> require in test
 - Remove Peer interface. use p2p.Peer
+
+### P2p
+
+- Exponential backoff on reconnect. closes #939
 
 ### P2p/trust
 
+- Split into multiple files and improve function order
+- Lock on Copy()
 - Remove extra channels
 
 ### Protoc
@@ -8224,8 +8295,13 @@
 
 ### Rpc
 
+- Make time human readable. closes #926
 - GetHeight helper function
 - Fix getHeight
+
+### Shame
+
+- Forgot to add new code pkg
 
 ### Spec
 
@@ -8241,6 +8317,16 @@
 
 ### Types
 
+- Use data.Bytes directly in type.proto via gogo/protobuf. wow
+- Consolidate some file
+- Add note about ReadMessage having no cap
+- RequestBeginBlock includes absent and byzantine validators
+- Drop uint64 from protobuf.go
+- IsOK()
+- Int32 with gogo int
+- Fix for broken customtype int in gogo
+- Add MarshalJSON funcs for Response types with a Code
+- Add UnmarshalJSON funcs for Response types
 - Compile type assertions to avoid sneaky runtime surprises
 - Check ResponseCheckTx too
 - Update String() test to assert Prevote type
@@ -8260,105 +8346,6 @@
 ### Wip
 
 - Tendermint specification
-
-## [0.14.0] - 2017-12-12
-
-### Adr
-
-- Update 007 trust metric usage
-
-### Appveyor
-
-- Use make
-
-### Blockchain
-
-- Add tests and more docs for BlockStore
-- Update store comments
-- Updated store docs/comments from review
-- Deduplicate store header value tests
-- Less fragile and involved tests for blockstore
-- Block creator helper for compressing tests as per @ebuchman
-- Note about store tests needing simplification ...
-
-### Consensus
-
-- Fix typo on ticker.go documentation
-
-### Linter
-
-- Enable in CI & make deterministic
-
-### P2p
-
-- Exponential backoff on reconnect. closes #939
-
-## [0.13.0] - 2017-12-06
-
-### Documentation
-
-- Add note about putting GOPATH/bin on PATH
-- Correction, closes #910
-
-### Testing
-
-- Sunset tmlibs/process.Process
-- Wait for node heights before checking app hash
-- Fix ensureABCIIsUp
-- Fix test/app/counter_test.sh
-
-### Abci-cli
-
-- Print OK if code is 0
-- Prefix flag variables with flag
-
-### Client
-
-- Use vars for retry intervals
-
-### Common
-
-- Comments for Service
-
-### Dummy
-
-- Include app.key tag
-
-### Glide
-
-- Update grpc version
-
-### Mempool
-
-- Implement Mempool.CloseWAL
-- Return error on cached txs
-- Assert -> require in test
-
-### P2p/trust
-
-- Split into multiple files and improve function order
-- Lock on Copy()
-
-### Rpc
-
-- Make time human readable. closes #926
-
-### Shame
-
-- Forgot to add new code pkg
-
-### Types
-
-- Use data.Bytes directly in type.proto via gogo/protobuf. wow
-- Consolidate some file
-- Add note about ReadMessage having no cap
-- RequestBeginBlock includes absent and byzantine validators
-- Drop uint64 from protobuf.go
-- IsOK()
-- Int32 with gogo int
-- Fix for broken customtype int in gogo
-- Add MarshalJSON funcs for Response types with a Code
-- Add UnmarshalJSON funcs for Response types
 
 ## [0.12.1] - 2017-11-28
 
