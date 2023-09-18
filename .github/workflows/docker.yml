@@ -55,7 +55,7 @@ jobs:
 
       - name: Set Docker tags and labels
         id: docker_meta
-        uses: docker/metadata-action@v3
+        uses: docker/metadata-action@v5
         with:
           images: dashpay/tenderdash
           tags: |
