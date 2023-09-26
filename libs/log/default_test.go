@@ -11,7 +11,7 @@ import (
 func TestNewDefaultLogger(t *testing.T) {
 	testCases := map[string]struct {
 		format    string
-		level     string
+		level     log.Level
 		expectErr bool
 	}{
 		"invalid format": {

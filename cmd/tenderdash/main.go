@@ -88,7 +88,7 @@ func newLoggerFromConfig(conf *config.Config) (log.Logger, func(), error) {
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to create log formatter: %w", err)
 	}
-	logger, err := log.NewLogger(conf.LogLevel, writer)
+	logger, err := log.NewLogger(log.Level(conf.LogLevel), writer)
 	if err != nil {
 		return nil, nil, err
 	}

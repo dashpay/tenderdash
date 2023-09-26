@@ -362,7 +362,7 @@ func setupNode() (*config.Config, log.Logger, error) {
 		return nil, nil, fmt.Errorf("error in config file: %w", err)
 	}
 
-	nodeLogger, err := log.NewDefaultLogger(tmcfg.LogFormat, tmcfg.LogLevel)
+	nodeLogger, err := log.NewDefaultLogger(tmcfg.LogFormat, log.Level(tmcfg.LogLevel))
 	if err != nil {
 		return nil, nil, err
 	}

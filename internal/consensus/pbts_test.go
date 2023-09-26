@@ -7,7 +7,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/rs/zerolog"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -102,7 +101,7 @@ func newPBTSTestHarness(ctx context.Context, t *testing.T, tc pbtsTestConfigurat
 		Time:       tc.genesisTime,
 		Validators: validators,
 	})
-	logger := log.NewTestingLoggerWithLevel(t, zerolog.LevelDebugValue)
+	logger := log.NewTestingLoggerWithLevel(t, log.LogLevelDebug)
 	kvApp, err := kvstore.NewMemoryApp(kvstore.WithLogger(logger))
 	require.NoError(t, err)
 

@@ -3,6 +3,7 @@ package log
 import (
 	"io"
 
+	"github.com/rs/zerolog"
 	sync "github.com/sasha-s/go-deadlock"
 )
 
@@ -23,17 +24,30 @@ const (
 	LogFormatJSON string = "json"
 
 	// Supported loging levels
-	LogLevelTrace = "trace"
-	LogLevelDebug = "debug"
-	LogLevelInfo  = "info"
-	LogLevelWarn  = "warn"
-	LogLevelError = "error"
+	LogLevelTrace Level = "trace"
+	LogLevelDebug Level = "debug"
+	LogLevelInfo  Level = "info"
+	LogLevelWarn  Level = "warn"
+	LogLevelError Level = "error"
 )
+
+type Level string
+
+func (l Level) ToZerologLevel() (zerolog.Level, error) {
+	return zerolog.ParseLevel(string(l))
+}
+
+func (l Level) String() string {
+	return string(l)
+}
 
 // Logger defines a generic logging interface compatible with Tendermint.
 type Logger interface {
+	Log(level Level, msg string, keyVals ...interface{})
+
 	Trace(msg string, keyVals ...interface{})
 	Debug(msg string, keyVals ...interface{})
+	Warn(msg string, keyVals ...interface{})
 	Info(msg string, keyVals ...interface{})
 	Error(msg string, keyVals ...interface{})
 

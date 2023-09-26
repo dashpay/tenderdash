@@ -20,7 +20,7 @@ func MakeRootCmd() *cobra.Command {
 		Use:   "abcidump",
 		Short: "Parse dump of protobuf communication between two nodes",
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
-			logger, err = log.NewDefaultLogger(log.LogFormatPlain, logLevel)
+			logger, err = log.NewDefaultLogger(log.LogFormatPlain, log.Level(logLevel))
 			if err != nil {
 				return fmt.Errorf("cannot initialize logging: %w", err)
 			}
@@ -28,7 +28,7 @@ func MakeRootCmd() *cobra.Command {
 			return nil
 		},
 	}
-	cmd.PersistentFlags().StringVar(&logLevel, "log-level", log.LogLevelInfo, "log level")
+	cmd.PersistentFlags().StringVar(&logLevel, "log-level", log.LogLevelInfo.String(), "log level")
 
 	return cmd
 }

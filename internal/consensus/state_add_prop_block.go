@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -84,8 +85,14 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 	)
 
 	// Blocks might be reused, so round mismatch is OK
+	// Height mismatch > 1 might be a warning condition
 	if stateData.Height != height {
-		c.logger.Debug(
+		lvl := log.LogLevelTrace
+		if math.Abs(float64(stateData.Height-height)) > 1 {
+			lvl = log.LogLevelWarn
+		}
+
+		c.logger.Log(lvl,
 			"received block part from wrong height",
 			"height", stateData.Height,
 			"round", stateData.Round,

@@ -33,13 +33,13 @@ func NewTestingLogger(t testing.TB) *TestingLogger {
 
 // NewTestingLoggerWithLevel creates a testing logger instance at a
 // specific level that wraps the behavior of testing.T.Log().
-func NewTestingLoggerWithLevel(t testing.TB, level string) *TestingLogger {
+func NewTestingLoggerWithLevel(t testing.TB, level Level) *TestingLogger {
 	t.Helper()
 	t.Cleanup(func() {
 		// we need time to properly flush all logs, otherwise test can fail with race condition
 		time.Sleep(10 * time.Millisecond)
 	})
-	logLevel, err := zerolog.ParseLevel(level)
+	logLevel, err := zerolog.ParseLevel(string(level))
 	if err != nil {
 		t.Fatalf("failed to parse log level (%s): %v", level, err)
 	}

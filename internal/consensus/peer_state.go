@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -173,7 +174,11 @@ func (ps *PeerState) InitProposalBlockParts(partSetHeader types.PartSetHeader) {
 func (ps *PeerState) SetHasProposalBlockPart(height int64, round int32, index int) {
 	prs := ps.GetRoundState()
 	if prs.Height != height || prs.Round != round {
-		ps.logger.Debug("SetHasProposalBlockPart height/round mismatch",
+		lvl := log.LogLevelTrace
+		if math.Abs(float64(prs.Height-height)) > 1 || math.Abs(float64(prs.Round-round)) > 1 {
+			lvl = log.LogLevelWarn
+		}
+		ps.logger.Log(lvl, "SetHasProposalBlockPart height/round mismatch",
 			"height", height, "round", round, "peer_height", prs.Height, "peer_round", prs.Round)
 		return
 	}

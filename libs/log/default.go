@@ -24,7 +24,7 @@ type defaultLogger struct {
 // Since zerolog supports typed structured logging and it is difficult to reflect
 // that in a generic interface, all logging methods accept a series of key/value
 // pair tuples, where the key must be a string.
-func NewDefaultLogger(format, level string) (Logger, error) {
+func NewDefaultLogger(format string, level Level) (Logger, error) {
 	var logWriter io.Writer
 	switch strings.ToLower(format) {
 	case LogFormatPlain, LogFormatText:
@@ -50,8 +50,8 @@ func NewDefaultLogger(format, level string) (Logger, error) {
 	return NewLogger(level, logWriter)
 }
 
-func NewLogger(level string, logWriter io.Writer) (Logger, error) {
-	logLevel, err := zerolog.ParseLevel(level)
+func NewLogger(level Level, logWriter io.Writer) (Logger, error) {
+	logLevel, err := level.ToZerologLevel()
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse log level (%s): %w", level, err)
 	}
@@ -66,6 +66,10 @@ func (l defaultLogger) Info(msg string, keyVals ...interface{}) {
 	l.Logger.Info().Fields(getLogFields(keyVals...)).Msg(msg)
 }
 
+func (l defaultLogger) Warn(msg string, keyVals ...interface{}) {
+	l.Logger.Warn().Fields(getLogFields(keyVals...)).Msg(msg)
+}
+
 func (l defaultLogger) Error(msg string, keyVals ...interface{}) {
 	l.Logger.Error().Fields(getLogFields(keyVals...)).Msg(msg)
 }
@@ -78,6 +82,15 @@ func (l defaultLogger) Trace(msg string, keyVals ...interface{}) {
 	l.Logger.Trace().Fields(getLogFields(keyVals...)).Msg(msg)
 }
 
+func (l defaultLogger) Log(level Level, msg string, keyVals ...interface{}) {
+	lvl, err := level.ToZerologLevel()
+	if err != nil {
+		panic("invalid log level " + string(level) + ": " + err.Error())
+	}
+
+	l.Logger.WithLevel(lvl).Fields(getLogFields(keyVals...)).Msg(msg)
+}
+
 func (l defaultLogger) With(keyVals ...interface{}) Logger {
 	return &defaultLogger{Logger: l.Logger.With().Fields(getLogFields(keyVals...)).Logger()}
 }
@@ -85,7 +98,7 @@ func (l defaultLogger) With(keyVals ...interface{}) Logger {
 // OverrideWithNewLogger replaces an existing logger's internal with
 // a new logger, and makes it possible to reconfigure an existing
 // logger that has already been propagated to callers.
-func OverrideWithNewLogger(logger Logger, format, level string) error {
+func OverrideWithNewLogger(logger Logger, format string, level Level) error {
 	ol, ok := logger.(*defaultLogger)
 	if !ok {
 		return fmt.Errorf("logger %T cannot be overridden", logger)
