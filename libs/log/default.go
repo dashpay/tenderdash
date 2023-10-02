@@ -27,9 +27,7 @@ type defaultLogger struct {
 // that in a generic interface, all logging methods accept a series of key/value
 // pair tuples, where the key must be a string.
 func NewDefaultLogger(format, level string) (Logger, error) {
-	logger, err := NewMultiLogger(format, level, "")
-
-	return logger, err
+	return NewMultiLogger(format, level, "")
 }
 
 // NewMultiLogger creates a new logger that writes to os.Stderr and an additional log file if provided.
@@ -39,6 +37,8 @@ func NewDefaultLogger(format, level string) (Logger, error) {
 // The additionalLogPath parameter specifies the path to the additional log file.
 // If additionalLogPath is not empty, the logger writes to both os.Stderr and the additional log file.
 // The function returns a Logger interface and an error if any.
+//
+// See NewDefaultLogger for more details.
 func NewMultiLogger(format, level, additionalLogPath string) (Logger, error) {
 	var (
 		writer    io.Writer = os.Stderr
