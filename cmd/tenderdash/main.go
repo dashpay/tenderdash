@@ -21,7 +21,7 @@ func main() {
 		panic(err)
 	}
 
-	logger, err := newLoggerFromConfig(conf)
+	logger, err := log.NewMultiLogger(conf.LogFormat, conf.LogLevel, conf.LogFilePath)
 	if err != nil {
 		panic(err)
 	}
@@ -67,8 +67,4 @@ func main() {
 		_ = logger.Close()
 		os.Exit(2)
 	}
-}
-
-func newLoggerFromConfig(conf *config.Config) (log.Logger, error) {
-	return log.NewMultiLogger(conf.LogFormat, conf.LogLevel, conf.LogFilePath)
 }
