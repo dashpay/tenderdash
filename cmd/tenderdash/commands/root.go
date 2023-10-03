@@ -51,7 +51,7 @@ func RootCommand(conf *config.Config, logger log.Logger) *cobra.Command {
 			}
 			*conf = *pconf
 			config.EnsureRoot(conf.RootDir)
-			if err := log.OverrideWithNewLogger(logger, conf.LogFormat, conf.LogLevel); err != nil {
+			if err := log.OverrideWithNewLogger(logger, conf.LogFormat, conf.LogLevel, conf.LogFilePath); err != nil {
 				return err
 			}
 			if warning := pconf.DeprecatedFieldWarning(); warning != nil {
