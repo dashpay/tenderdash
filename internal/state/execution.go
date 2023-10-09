@@ -395,10 +395,10 @@ func (blockExec *BlockExecutor) ValidateBlockWithRoundState(
 	// Validate app info
 	if uncommittedState.AppHash != nil && !bytes.Equal(block.AppHash, uncommittedState.AppHash) {
 		return fmt.Errorf(
-			"wrong Block.Header.AppHash at state height %d, block %d. Expected %X, got %X",
+			"Block.Header.AppHash mismatch; state (or ABCI App) at height %d expects App Hash %X, block at height %d expects App Hash %X",
 			uncommittedState.GetHeight(),
-			block.Height,
 			uncommittedState.AppHash,
+			block.Height,
 			block.AppHash,
 		)
 	}
