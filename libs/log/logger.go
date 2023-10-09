@@ -32,6 +32,8 @@ const (
 
 // Logger defines a generic logging interface compatible with Tendermint.
 type Logger interface {
+	io.Closer
+
 	Trace(msg string, keyVals ...interface{})
 	Debug(msg string, keyVals ...interface{})
 	Info(msg string, keyVals ...interface{})
