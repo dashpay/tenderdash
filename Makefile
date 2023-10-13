@@ -19,6 +19,17 @@ DOCKER_PROTO := docker run -v $(shell pwd):/workspace --workdir /workspace $(BUI
 CGO_ENABLED ?= 1
 GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}' github.com/gogo/protobuf)
 
+OS := $(shell uname)
+
+ifeq ($(OS),Darwin)  # macOS
+    GMP_PREFIX := $(shell brew --prefix gmp 2>/dev/null)
+endif
+ifeq ($(OS),Linux)   # Linux
+    # Typically on Linux, GMP would be in /usr/include and /usr/lib or /usr/local/include and /usr/local/lib
+    # but you might want to adjust if different:
+    GMP_PREFIX := /usr
+endif
+
 MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURR_DIR := $(dir $(MAKEFILE_PATH))
 
@@ -27,12 +38,14 @@ BLS_DIR="$(CURR_DIR)third_party/bls-signatures"
 CGO_LDFLAGS ?= -L$(BLS_DIR)/build/depends/mimalloc \
 -L$(BLS_DIR)/build/depends/relic/lib \
 -L$(BLS_DIR)/build/src \
+-L$(GMP_PREFIX)/lib \
 -ldashbls -lrelic_s -lmimalloc-secure -lgmp
 
 CGO_CXXFLAGS ?= -I$(BLS_DIR)/build/depends/relic/include \
 -I$(BLS_DIR)/src/depends/mimalloc/include \
 -I$(BLS_DIR)/src/depends/relic/include \
--I$(BLS_DIR)/src/include
+-I$(BLS_DIR)/src/include \
+-I$(GMP_PREFIX)/include
 
 GO := CGO_ENABLED=$(CGO_ENABLED) CGO_CXXFLAGS="$(CGO_CXXFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go
 
