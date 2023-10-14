@@ -203,7 +203,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	if err != nil {
 		return nil, CurrentRoundState{}, fmt.Errorf("create proposal block: %w", err)
 	}
-	
+
 	txs := blockExec.mempool.ReapMaxBytesMaxGas(maxDataBytes, maxGas)
 	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 
