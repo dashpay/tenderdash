@@ -51,14 +51,6 @@ func validateBlock(state State, block *types.Block) error {
 		)
 	}
 
-	// Validate proposed app version
-	if block.Header.ProposedAppVersion > 0 && block.Header.ProposedAppVersion <= state.Version.Consensus.App {
-		return fmt.Errorf("wrong block.Header.ProposedAppVersion must be higher than %v, is %d",
-			state.Version.Consensus.App,
-			block.Header.ProposedAppVersion,
-		)
-	}
-
 	// Validate prev block info.
 	if !block.LastBlockID.Equals(state.LastBlockID) {
 		return fmt.Errorf("wrong Block.Header.LastBlockID.  Expected %v, got %v",
