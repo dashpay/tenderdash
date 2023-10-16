@@ -1,8 +1,19 @@
+## [0.13.3] - 2023-10-16
+
+### Bug Fixes
+
+- Issue with GMP not properly being linked on mac (#698)
+- Always propose with current app version (#697)
+
 ## [0.13.2] - 2023-10-09
 
 ### Bug Fixes
 
 - Log-file-path setting does not work (#691)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.13.2
 
 ## [0.13.1] - 2023-09-14
 
