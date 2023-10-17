@@ -87,8 +87,6 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 		logger.Info("propose step; not our turn to propose",
 			"proposer_proTxHash", stateData.Validators.GetProposer().ProTxHash,
 			"node_proTxHash", proTxHash.String(),
-			"height", stateData.Height,
-			"round", stateData.Round,
 			"step", stateData.Step)
 		return nil
 	}
@@ -100,8 +98,6 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 
 	logger.Info("propose step; our turn to propose",
 		"proposer_proTxHash", proTxHash.ShortString(),
-		"height", stateData.Height,
-		"round", stateData.Round,
 		"step", stateData.Step,
 	)
 	// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,
