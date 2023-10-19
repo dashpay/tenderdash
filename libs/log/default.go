@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/rs/zerolog"
 )
 
@@ -14,6 +15,7 @@ var _ Logger = (*defaultLogger)(nil)
 
 type defaultLogger struct {
 	zerolog.Logger
+	closeFuncs []func() error
 }
 
 // NewDefaultLogger returns a default logger that can be used within Tendermint
@@ -25,29 +27,47 @@ type defaultLogger struct {
 // that in a generic interface, all logging methods accept a series of key/value
 // pair tuples, where the key must be a string.
 func NewDefaultLogger(format string, level Level) (Logger, error) {
-	var logWriter io.Writer
-	switch strings.ToLower(format) {
-	case LogFormatPlain, LogFormatText:
-		logWriter = zerolog.ConsoleWriter{
-			Out:        os.Stderr,
-			NoColor:    true,
-			TimeFormat: time.RFC3339Nano,
-			FormatLevel: func(i interface{}) string {
-				if ll, ok := i.(string); ok {
-					return strings.ToUpper(ll)
-				}
-				return "????"
-			},
+	return NewMultiLogger(format, level, "")
+}
+
+// NewMultiLogger creates a new logger that writes to os.Stderr and an additional log file if provided.
+// It takes in three parameters: format, level, and additionalLogPath.
+// The format parameter specifies the format of the log message.
+// The level parameter specifies the minimum log level to write.
+// The additionalLogPath parameter specifies the path to the additional log file.
+// If additionalLogPath is not empty, the logger writes to both os.Stderr and the additional log file.
+// The function returns a Logger interface and an error if any.
+//
+// See NewDefaultLogger for more details.
+func NewMultiLogger(format string, level Level, additionalLogPath string) (Logger, error) {
+	var (
+		writer    io.Writer = os.Stderr
+		closeFunc           = func() error { return nil }
+		err       error
+	)
+	if additionalLogPath != "" {
+		file, err := os.OpenFile(additionalLogPath, os.O_WRONLY|os.O_CREATE|os.O_APPEND, 0644)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create log writer: %w", err)
 		}
-
-	case LogFormatJSON:
-		logWriter = os.Stderr
-
-	default:
-		return nil, fmt.Errorf("unsupported log format: %s", format)
+		closeFunc = func() error {
+			return file.Close()
+		}
+		writer = io.MultiWriter(writer, file)
 	}
+	writer, err = NewFormatter(format, writer)
+	if err != nil {
+		_ = closeFunc()
+		return nil, fmt.Errorf("failed to create log formatter: %w", err)
+	}
+	logger, err := NewLogger(level, writer)
+	if err != nil {
+		_ = closeFunc()
+		return nil, err
+	}
+	logger.(*defaultLogger).closeFuncs = append(logger.(*defaultLogger).closeFuncs, closeFunc)
 
-	return NewLogger(level, logWriter)
+	return logger, nil
 }
 
 func NewLogger(level Level, logWriter io.Writer) (Logger, error) {
@@ -95,25 +115,48 @@ func (l defaultLogger) With(keyVals ...interface{}) Logger {
 	return &defaultLogger{Logger: l.Logger.With().Fields(getLogFields(keyVals...)).Logger()}
 }
 
+func (l *defaultLogger) Close() (err error) {
+	if l == nil {
+		return nil
+	}
+	l.Debug("Closing logger")
+	for _, f := range l.closeFuncs {
+		if e := f(); e != nil {
+			err = multierror.Append(err, e)
+		}
+	}
+
+	l.closeFuncs = nil
+
+	return err
+}
+
 // OverrideWithNewLogger replaces an existing logger's internal with
 // a new logger, and makes it possible to reconfigure an existing
 // logger that has already been propagated to callers.
-func OverrideWithNewLogger(logger Logger, format string, level Level) error {
+func OverrideWithNewLogger(logger Logger, format string, level Level, additionalLogFilePath string) error {
 	ol, ok := logger.(*defaultLogger)
 	if !ok {
 		return fmt.Errorf("logger %T cannot be overridden", logger)
 	}
 
-	newLogger, err := NewDefaultLogger(format, level)
+	newLogger, err := NewMultiLogger(format, level, additionalLogFilePath)
 	if err != nil {
 		return err
 	}
 	nl, ok := newLogger.(*defaultLogger)
 	if !ok {
+		newLogger.Close()
 		return fmt.Errorf("logger %T cannot be overridden by %T", logger, newLogger)
 	}
 
+	if err := ol.Close(); err != nil {
+		return err
+	}
+
 	ol.Logger = nl.Logger
+	ol.closeFuncs = nl.closeFuncs
+
 	return nil
 }
 

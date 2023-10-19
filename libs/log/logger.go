@@ -43,6 +43,8 @@ func (l Level) String() string {
 
 // Logger defines a generic logging interface compatible with Tendermint.
 type Logger interface {
+	io.Closer
+
 	Log(level Level, msg string, keyVals ...interface{})
 
 	Trace(msg string, keyVals ...interface{})

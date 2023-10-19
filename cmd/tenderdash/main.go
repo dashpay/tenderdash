@@ -23,11 +23,11 @@ func main() {
 		panic(err)
 	}
 
-	logger, stopFn, err := newLoggerFromConfig(conf)
+	logger, err := log.NewMultiLogger(conf.LogFormat, log.Level(conf.LogLevel), conf.LogFilePath)
 	if err != nil {
 		panic(err)
 	}
-	defer stopFn()
+	defer logger.Close()
 
 	rcmd := commands.RootCommand(conf, logger)
 	rcmd.AddCommand(
@@ -64,6 +64,9 @@ func main() {
 	rcmd.AddCommand(commands.NewRunNodeCmd(nodeFunc, conf, logger))
 
 	if err := cli.RunWithTrace(ctx, rcmd); err != nil {
+		// os.Exit doesn't call defer functions, so we manually close the logger here
+		cancel()
+		_ = logger.Close()
 		os.Exit(2)
 	}
 }
