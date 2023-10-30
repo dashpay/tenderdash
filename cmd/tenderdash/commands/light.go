@@ -215,7 +215,7 @@ for applications built w/ Cosmos SDK).
 		"max-open-connections",
 		900,
 		"maximum number of simultaneous connections (including WebSocket).")
-	cmd.Flags().StringVar(&logLevel, "log-level", log.LogLevelInfo.String(), "The logging level (debug|info|warn|error|fatal)")
+	cmd.Flags().StringVar(&logLevel, "log-level", log.LogLevelInfo.String(), "The logging level (trace|debug|info|warn|error)")
 	cmd.Flags().StringVar(&logFormat, "log-format", log.LogFormatPlain, "The logging format (text|json)")
 	cmd.Flags().StringVar(&dashCoreRPCHost, "dchost", "",
 		"host address of the Dash Core RPC node")
