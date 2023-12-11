@@ -1,6 +1,8 @@
 package ds
 
 import (
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -39,4 +41,21 @@ func TestOrderedMap(t *testing.T) {
 
 	// delete unknown key
 	om.Delete("c")
+}
+
+// / Run TestOrderedMap in parallel
+func TestOrderedMapMultithread(t *testing.T) {
+	threads := 100
+
+	wg := sync.WaitGroup{}
+	wg.Add(threads)
+
+	for i := 0; i < threads; i++ {
+		go func(id int) {
+			t.Run(strconv.FormatInt(int64(id), 10), TestOrderedMap)
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
 }
