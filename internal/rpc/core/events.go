@@ -17,7 +17,7 @@ import (
 
 const (
 	// Buffer on the Tendermint (server) side to allow some slowness in clients.
-	subBufferSize = 100
+	subBufferSize = 500
 
 	// maxQueryLength is the maximum length of a query string that will be
 	// accepted. This is just a safety check to avoid outlandish queries.
