@@ -456,7 +456,7 @@ message RequestVerifyVoteExtension {
 
   // If not set, Tenderdash will generate it based on height and round.
   //
-  // If set, it SHOULD be unique per voting round, and it MUST start with `dpbvote` string.
+  // If set, it SHOULD be unique per voting round, and it MUST start with `dpevote` string.
   //
   // Use with caution - it can have severe security consequences.
   optional bytes sign_request_id = 6;
