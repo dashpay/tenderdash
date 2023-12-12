@@ -3069,8 +3069,8 @@ func (m *ResponseProcessProposal) GetValidatorSetUpdate() *ValidatorSetUpdate {
 
 // Provides a vote extension for signing. `type` and `extension` fields are mandatory for filling
 type ExtendVoteExtension struct {
-	// Vote extension type can be either DEFAULT or THRESHOLD_RECOVER.
-	// The Tenderdash supports only THRESHOLD_RECOVER at this moment.
+	// Vote extension type can be either DEFAULT, THRESHOLD_RECOVER or THRESHOLD_RECOVER_RAW.
+	// The Tenderdash supports only THRESHOLD_RECOVER and THRESHOLD_RECOVER_RAW at this moment.
 	Type types1.VoteExtensionType `protobuf:"varint,1,opt,name=type,proto3,enum=tendermint.types.VoteExtensionType" json:"type,omitempty"`
 	// Deterministic or (Non-Deterministic) extension provided by the sending validator's Application.
 	Extension []byte `protobuf:"bytes,2,opt,name=extension,proto3" json:"extension,omitempty"`

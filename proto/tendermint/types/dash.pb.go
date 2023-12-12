@@ -33,8 +33,17 @@ const (
 	//
 	// Deterministic vote extension - each validator in a quorum must provide the same vote extension data.
 	VoteExtensionType_THRESHOLD_RECOVER VoteExtensionType = 1
+	// Sign raw form of vote extension and threshold-recover signatures.
+	//
+	// Deterministic vote extension - each validator in a quorum must provide the same vote extension data.
 	// Use with caution - it can have severe security consequences, like replay attacks.
 	//
+	// THRESHOLD_RECOVER_RAW alows overriding sign request ID with `sign_request_id` field
+	// of ExtendVoteExtension.sign_request_id. If sign_request_id is provided, SHA256(sign_request_id) will be used as
+	// a sign request ID.
+	//
+	// It also changes how threshold-recover signatures are generated. Instead of signing canonical form of
+	// threshold-recover signatures, it signs SHA256 of raw form of the vote extension (`ExtendVoteExtension.extension`).
 	VoteExtensionType_THRESHOLD_RECOVER_RAW VoteExtensionType = 2
 )
 

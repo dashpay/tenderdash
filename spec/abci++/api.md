@@ -160,10 +160,12 @@ Provides a vote extension for signing. `type` and `extension` fields are mandato
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| type | [tendermint.types.VoteExtensionType](#tendermint-types-VoteExtensionType) |  | Vote extension type can be either DEFAULT or THRESHOLD_RECOVER. The Tenderdash supports only THRESHOLD_RECOVER at this moment. |
+| type | [tendermint.types.VoteExtensionType](#tendermint-types-VoteExtensionType) |  | Vote extension type can be either DEFAULT, THRESHOLD_RECOVER or THRESHOLD_RECOVER_RAW. The Tenderdash supports only THRESHOLD_RECOVER and THRESHOLD_RECOVER_RAW at this moment. |
 | extension | [bytes](#bytes) |  | Deterministic or (Non-Deterministic) extension provided by the sending validator&#39;s Application.
 
-Sign request ID that will be used to sign the vote extensions. Tenderdash will use checksum of `sign_request_id` when generating quorum signatures of THRESHOLD_RECOVER vote extensions. |
+Sign request ID that will be used to sign the vote extensions. Only applicable for THRESHOLD_RECOVER_RAW vote extension type.
+
+Tenderdash will use SHA256 checksum of `sign_request_id` when generating quorum signatures of THRESHOLD_RECOVER_RAW vote extensions. It MUST NOT be set for any other vote extension types. |
 | sign_request_id | [bytes](#bytes) | optional | If not set, Tenderdash will generate it based on height and round.
 
 If set, it SHOULD be unique per voting round, and it MUST start with `dpevote` string.
