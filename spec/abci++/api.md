@@ -774,6 +774,7 @@ from this condition, but not sure), and _p_ receives a Precommit message for rou
 | height | [int64](#int64) |  | Height of the block (for sanity check). |
 | round | [int32](#int32) |  | Round number for the block. |
 | vote_extensions | [ExtendVoteExtension](#tendermint-abci-ExtendVoteExtension) | repeated | Application-specific information signed by Tenderdash. Can have 0 length. |
+| sign_id | [bytes](#bytes) | optional | Sign ID that will be used to sign the vote extensions. If not set, Tenderdash will generate it based on height and round. It should be unique per voting round. Use with caution - it can have severe security consequences. |
 
 
 
