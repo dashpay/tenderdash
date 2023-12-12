@@ -773,8 +773,12 @@ from this condition, but not sure), and _p_ receives a Precommit message for rou
 | validator_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the validator that signed the extensions. |
 | height | [int64](#int64) |  | Height of the block (for sanity check). |
 | round | [int32](#int32) |  | Round number for the block. |
-| vote_extensions | [ExtendVoteExtension](#tendermint-abci-ExtendVoteExtension) | repeated | Application-specific information signed by Tenderdash. Can have 0 length. |
-| sign_id | [bytes](#bytes) | optional | Sign ID that will be used to sign the vote extensions. If not set, Tenderdash will generate it based on height and round. It should be unique per voting round. Use with caution - it can have severe security consequences. |
+| vote_extensions | [ExtendVoteExtension](#tendermint-abci-ExtendVoteExtension) | repeated | Application-specific information signed by Tenderdash. Can have 0 length.
+
+Sign ID that will be used to sign the vote extensions. If not set, Tenderdash will generate it based on height and round. |
+| sign_id | [bytes](#bytes) | optional | If set, it SHOULD be unique per voting round, and it MUST start with `dpbvote` string.
+
+Use with caution - it can have severe security consequences. |
 
 
 
