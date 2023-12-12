@@ -450,13 +450,13 @@ message RequestVerifyVoteExtension {
   int32 round                 = 4;  // // Round number for the block.
   // Application-specific information signed by Tenderdash. Can have 0 length.
   repeated ExtendVoteExtension vote_extensions = 5;
-  // Sign ID that will be used to sign the vote extensions.
+  // Sign request ID that will be used to sign the vote extensions.
   // If not set, Tenderdash will generate it based on height and round.
 
   // If set, it SHOULD be unique per voting round, and it MUST start with `dpbvote` string.
   //
   // Use with caution - it can have severe security consequences.
-  optional bytes sign_id = 6;
+  optional bytes sign_request_id = 6;
 }
 
 // Finalize newly decided block.
