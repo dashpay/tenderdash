@@ -155,9 +155,8 @@ func TestVoteExtensionsRawSignDataRawVector(t *testing.T) {
 	expected = append(expected, tmbytes.Reverse(crypto.Checksum(requestID))...)
 	expected = append(expected, tmbytes.Reverse(crypto.Checksum(extension))...)
 
-	fmt.Printf("Expected: %v \n", expected)
-
 	expected = crypto.Checksum(crypto.Checksum(expected))
+
 	t.Logf("sign bytes: %x", actual)
 	assert.EqualValues(t, expected, actual)
 }
