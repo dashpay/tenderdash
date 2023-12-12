@@ -1,4 +1,61 @@
 package types
 
+import (
+	"errors"
+	fmt "fmt"
+	"strings"
+
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+)
+
 // VoteExtensions is a container type for grouped vote extensions by type
 type VoteExtensions map[VoteExtensionType][]*VoteExtension
+
+var (
+	errExtensionSignEmpty                  = errors.New("vote extension signature is missing")
+	errExtensionSignTooBig                 = fmt.Errorf("vote extension signature is too big (max: %d)", bls12381.SignatureSize)
+	errExtensionSignRequestIdNotSupported  = errors.New("vote extension sign request id is not supported")
+	errExtensionSignRequestIdMissingPrefix = errors.New("vote extension sign request id must have dpevote prefix")
+)
+
+// Clone returns a copy of current vote-extension
+func (v *VoteExtension) Clone() VoteExtension {
+	var xSignRequestID *VoteExtension_SignRequestId
+
+	if v.XSignRequestId != nil {
+		src := v.GetSignRequestId()
+		dst := make([]byte, len(src))
+		copy(dst, src)
+		xSignRequestID = &VoteExtension_SignRequestId{
+			SignRequestId: dst,
+		}
+	}
+
+	return VoteExtension{
+		Extension:      v.Extension,
+		Signature:      v.Signature,
+		XSignRequestId: xSignRequestID,
+	}
+}
+
+// Validate checks the validity of the vote-extension
+func (v *VoteExtension) Validate() error {
+	if len(v.Extension) > 0 && len(v.Signature) == 0 {
+		return errExtensionSignEmpty
+	}
+	if len(v.Signature) > bls12381.SignatureSize {
+		return errExtensionSignTooBig
+	}
+
+	if v.XSignRequestId != nil {
+		if v.Type != VoteExtensionType_THRESHOLD_RECOVER_RAW {
+			return errExtensionSignRequestIdNotSupported
+		}
+		requestID := v.GetSignRequestId()
+		if !strings.HasPrefix(string(requestID), "dpevote") {
+			return errExtensionSignRequestIdMissingPrefix
+		}
+	}
+
+	return nil
+}

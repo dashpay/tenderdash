@@ -94,7 +94,7 @@ func ThresholdExtensionSignToProto(extensions []ThresholdExtensionSign) []*tmpro
 
 // MakeThresholdVoteExtensions creates a list of ThresholdExtensionSign from the list of VoteExtension
 // and recovered threshold signatures. The lengths of vote-extensions and threshold signatures must be the same
-func MakeThresholdVoteExtensions(extensions []VoteExtension, thresholdSigs [][]byte) []ThresholdExtensionSign {
+func MakeThresholdVoteExtensions(extensions []tmproto.VoteExtension, thresholdSigs [][]byte) []ThresholdExtensionSign {
 	thresholdExtensions := make([]ThresholdExtensionSign, len(extensions))
 	for i, ext := range extensions {
 		thresholdExtensions[i] = ThresholdExtensionSign{

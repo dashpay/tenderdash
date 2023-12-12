@@ -16,12 +16,31 @@ message CoreChainLock {
 enum VoteExtensionType {
   // Unsupported
   DEFAULT = 0;
+  // Sign canonical form of vote extension and threshold-recover signatures.
+  //
   // Deterministic vote extension - each validator in a quorum must provide the same vote extension data.
   THRESHOLD_RECOVER = 1;
+  // Sign raw form of vote extension and threshold-recover signatures.
+  //
+  // Deterministic vote extension - each validator in a quorum must provide the same vote extension data.
+
+  // Use with caution - it can have severe security consequences, like replay attacks.
+  //
+  THRESHOLD_RECOVER_RAW = 2;
 }
 
 message VoteExtension {
   VoteExtensionType type      = 1;
   bytes             extension = 2;
   bytes             signature = 3;
+  // Sign request ID that will be used to sign the vote extensions.
+  // Tenderdash will use checksum of `sign_request_id` when generating quorum signatures of
+  // THRESHOLD_RECOVER vote extensions.
+
+  // If not set, Tenderdash will generate it based on height and round.
+  //
+  // If set, it SHOULD be unique per voting round, and it MUST start with `dpevote` string.
+  //
+  // Use with caution - it can have severe security consequences.
+  optional bytes sign_request_id = 4;
 }

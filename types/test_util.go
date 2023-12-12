@@ -46,8 +46,8 @@ func makeCommit(
 			Type:               tmproto.PrecommitType,
 			BlockID:            blockID,
 			VoteExtensions: VoteExtensions{
-				tmproto.VoteExtensionType_DEFAULT:           []VoteExtension{{Extension: []byte("default")}},
-				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Extension: []byte("threshold")}},
+				tmproto.VoteExtensionType_DEFAULT:           []tmproto.VoteExtension{{Extension: []byte("default")}},
+				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{Extension: []byte("threshold")}},
 			},
 		}
 
@@ -68,9 +68,8 @@ func signAddVote(ctx context.Context, privVal PrivValidator, vote *Vote, voteSet
 	if err != nil {
 		return false, err
 	}
-	err = vote.PopulateSignsFromProto(v)
-	if err != nil {
-		return false, err
-	}
+
+	vote.VoteExtensions = VoteExtensionsFromProto(v.VoteExtensions)
+
 	return voteSet.AddVote(vote)
 }

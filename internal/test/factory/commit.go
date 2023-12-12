@@ -38,10 +38,7 @@ func MakeCommit(
 			return nil, err
 		}
 		vote.BlockSignature = v.BlockSignature
-		err = vote.VoteExtensions.CopySignsFromProto(v.VoteExtensionsToMap())
-		if err != nil {
-			return nil, err
-		}
+		vote.VoteExtensions = types.VoteExtensionsFromProto(v.VoteExtensions)
 		if _, err := voteSet.AddVote(vote); err != nil {
 			return nil, err
 		}

@@ -11,7 +11,6 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
-	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -29,6 +28,7 @@ const (
 var VoteExtensionTypes = []tmproto.VoteExtensionType{
 	tmproto.VoteExtensionType_DEFAULT,
 	tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+	tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 }
 
 func MaxVoteBytesForKeyType(keyType crypto.KeyType) int64 {
@@ -118,8 +118,7 @@ func VoteFromProto(pv *tmproto.Vote) (*Vote, error) {
 // Similar to VoteSignBytes, the encoded Protobuf message is varint
 // length-prefixed for backwards-compatibility with the Amino encoding.
 func VoteExtensionSignBytes(chainID string, height int64, round int32, ext *tmproto.VoteExtension) []byte {
-	pb := CanonicalizeVoteExtension(chainID, ext, height, round)
-	bz, err := protoio.MarshalDelimited(&pb)
+	bz, err := CanonicalizeVoteExtension(chainID, ext, height, round)
 	if err != nil {
 		panic(err)
 	}
@@ -127,7 +126,17 @@ func VoteExtensionSignBytes(chainID string, height int64, round int32, ext *tmpr
 }
 
 // VoteExtensionRequestID returns vote extension request ID
-func VoteExtensionRequestID(height int64, round int32) []byte {
+func VoteExtensionRequestID(ext *tmproto.VoteExtension, height int64, round int32) []byte {
+	signRequestID := ext.GetSignRequestId()
+
+	if signRequestID != nil {
+		if ext.Type == tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW {
+			return signRequestID
+		}
+
+		panic(fmt.Sprintf("unexpected sign request id for vote extension type %s", ext.Type.String()))
+	}
+
 	return heightRoundRequestID("dpevote", height, round)
 }
 
@@ -236,6 +245,7 @@ func (vote *Vote) Verify(
 		return err
 	}
 
+	// TODO check why we don't verify extensions here
 	return vote.verifySign(pubKey, quorumSignData, WithVerifyExtensions(false))
 }
 

@@ -155,13 +155,20 @@ ExecTxResult contains results of executing one individual transaction.
 <a name="tendermint-abci-ExtendVoteExtension"></a>
 
 ### ExtendVoteExtension
-Provides a vote extension for signing. Each field is mandatory for filling
+Provides a vote extension for signing. `type` and `extension` fields are mandatory for filling
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | type | [tendermint.types.VoteExtensionType](#tendermint-types-VoteExtensionType) |  | Vote extension type can be either DEFAULT or THRESHOLD_RECOVER. The Tenderdash supports only THRESHOLD_RECOVER at this moment. |
-| extension | [bytes](#bytes) |  | Deterministic or (Non-Deterministic) extension provided by the sending validator&#39;s Application. |
+| extension | [bytes](#bytes) |  | Deterministic or (Non-Deterministic) extension provided by the sending validator&#39;s Application.
+
+Sign request ID that will be used to sign the vote extensions. Tenderdash will use checksum of `sign_request_id` when generating quorum signatures of THRESHOLD_RECOVER vote extensions. |
+| sign_request_id | [bytes](#bytes) | optional | If not set, Tenderdash will generate it based on height and round.
+
+If set, it SHOULD be unique per voting round, and it MUST start with `dpevote` string.
+
+Use with caution - it can have severe security consequences. |
 
 
 
@@ -773,14 +780,7 @@ from this condition, but not sure), and _p_ receives a Precommit message for rou
 | validator_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the validator that signed the extensions. |
 | height | [int64](#int64) |  | Height of the block (for sanity check). |
 | round | [int32](#int32) |  | Round number for the block. |
-| vote_extensions | [ExtendVoteExtension](#tendermint-abci-ExtendVoteExtension) | repeated | Application-specific information signed by Tenderdash. Can have 0 length.
-
-Sign request ID that will be used to sign the vote extensions. Tenderdash will use checksum of `sign_request_id` when generating quorum signatures of THRESHOLD_RECOVER vote extensions. |
-| sign_request_id | [bytes](#bytes) | optional | If not set, Tenderdash will generate it based on height and round.
-
-If set, it SHOULD be unique per voting round, and it MUST start with `dpevote` string.
-
-Use with caution - it can have severe security consequences. |
+| vote_extensions | [ExtendVoteExtension](#tendermint-abci-ExtendVoteExtension) | repeated | Application-specific information signed by Tenderdash. Can have 0 length. |
 
 
 

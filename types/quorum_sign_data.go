@@ -109,13 +109,17 @@ func MakeVoteExtensionSignItems(
 		return nil, nil
 	}
 	items := make(map[types.VoteExtensionType][]SignItem)
-	reqID := VoteExtensionRequestID(protoVote.Height, protoVote.Round)
 	protoExtensionsMap := protoVote.VoteExtensionsToMap()
 	for t, exts := range protoExtensionsMap {
 		if items[t] == nil && len(exts) > 0 {
 			items[t] = make([]SignItem, len(exts))
 		}
+		if t == types.VoteExtensionType_DEFAULT {
+			// DEFAULT vote extensions don't support signing
+			continue
+		}
 		for i, ext := range exts {
+			reqID := VoteExtensionRequestID(ext, protoVote.Height, protoVote.Round)
 			raw := VoteExtensionSignBytes(chainID, protoVote.Height, protoVote.Round, ext)
 			items[t][i] = NewSignItem(quorumType, quorumHash, reqID, raw)
 		}

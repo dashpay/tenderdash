@@ -103,10 +103,8 @@ func (s *voteSigner) signVote(
 	if err != nil {
 		return nil, err
 	}
-	err = vote.PopulateSignsFromProto(protoVote)
-	if err != nil {
-		return nil, err
-	}
+	// Deep copy vote extensions
+	vote.VoteExtensions = types.VoteExtensionsFromProto(protoVote.VoteExtensions)
 	return vote, nil
 }
 
