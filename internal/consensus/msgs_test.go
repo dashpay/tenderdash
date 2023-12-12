@@ -385,7 +385,7 @@ func TestConsMsgsVectors(t *testing.T) {
 		Type:               tmproto.PrecommitType,
 		BlockID:            bi,
 		VoteExtensions: types.VoteExtensions{
-			tmproto.VoteExtensionType_DEFAULT: []types.VoteExtension{{Extension: []byte("extension")}},
+			tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{Extension: []byte("extension")}},
 		},
 	}
 

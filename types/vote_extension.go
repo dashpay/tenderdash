@@ -2,10 +2,15 @@ package types
 
 import (
 	"bytes"
+	"errors"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+)
+
+var (
+	errUnableCopySigns = errors.New("unable copy signatures the sizes of extensions are not equal")
 )
 
 // VoteExtensions is a container where the key is vote-extension type and value is a list of VoteExtension
@@ -140,4 +145,33 @@ func (e VoteExtensions) Copy() VoteExtensions {
 	}
 
 	return copied
+}
+
+// CopySignsFromProto copies the signatures from VoteExtensions's protobuf into the current VoteExtension state
+func (e VoteExtensions) CopySignsFromProto(src tmproto.VoteExtensions) error {
+	return e.copySigns(src, func(a *tmproto.VoteExtension, b *tmproto.VoteExtension) {
+		b.Signature = a.Signature
+	})
+}
+
+// CopySignsToProto copies the signatures from the current VoteExtensions into VoteExtension's protobuf
+func (e VoteExtensions) CopySignsToProto(dist tmproto.VoteExtensions) error {
+	return e.copySigns(dist, func(a *tmproto.VoteExtension, b *tmproto.VoteExtension) {
+		a.Signature = b.Signature
+	})
+}
+
+func (e VoteExtensions) copySigns(
+	protoMap tmproto.VoteExtensions,
+	modifier func(a *tmproto.VoteExtension, b *tmproto.VoteExtension),
+) error {
+	for t, exts := range e {
+		if len(exts) != len(protoMap[t]) {
+			return errUnableCopySigns
+		}
+		for i := range exts {
+			modifier(protoMap[t][i], &exts[i])
+		}
+	}
+	return nil
 }

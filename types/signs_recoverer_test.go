@@ -141,7 +141,7 @@ func mockVoteExtensions(t *testing.T, pairs ...interface{}) VoteExtensions {
 		if !ok {
 			t.Fatalf("given unsupported type %T", pairs[i])
 		}
-		ext := VoteExtension{}
+		ext := tmproto.VoteExtension{}
 		switch v := pairs[i+1].(type) {
 		case string:
 			ext.Extension = []byte(v)

@@ -131,7 +131,7 @@ func VoteExtensionRequestID(ext *tmproto.VoteExtension, height int64, round int3
 
 	if signRequestID != nil {
 		if ext.Type == tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW {
-			return signRequestID
+			return crypto.Checksum(signRequestID)
 		}
 
 		panic(fmt.Sprintf("unexpected sign request id for vote extension type %s", ext.Type.String()))

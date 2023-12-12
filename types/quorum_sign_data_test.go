@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
 
@@ -12,6 +13,7 @@ import (
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/proto/tendermint/types"
+	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 func TestBlockRequestID(t *testing.T) {
@@ -69,8 +71,8 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 				Height:             1001,
 				ValidatorProTxHash: tmbytes.MustHexDecode("9CC13F685BC3EA0FCA99B87F42ABCC934C6305AA47F62A32266A2B9D55306B7B"),
 				VoteExtensions: VoteExtensions{
-					types.VoteExtensionType_DEFAULT:           []VoteExtension{{Extension: []byte("default")}},
-					types.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Extension: []byte("threshold")}},
+					types.VoteExtensionType_DEFAULT:           []tmproto.VoteExtension{{Extension: []byte("default")}},
+					types.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{Extension: []byte("threshold")}},
 				},
 			},
 			quorumHash: tmbytes.MustHexDecode("6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD"),
@@ -114,6 +116,50 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestVoteExtensionsRawSignData checks signed data for a VoteExtensionType_THRESHOLD_RECOVER_RAW vote extension type.
+//
+// Given some vote extension, llmq type, quorum hash and sign request id, sign data should match predefined test vector.
+func TestVoteExtensionsRawSignDataRawVector(t *testing.T) {
+	extension := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+	quorumHash := bytes.Repeat([]byte{4, 3, 2, 1}, 8)
+
+	requestID := []byte("dpevote-someSignRequestID")
+	llmq := btcjson.LLMQType_100_67
+	chainID := "some-chain"
+
+	ve := tmproto.VoteExtension{
+		Extension: extension,
+		Signature: []byte{},
+		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+		XSignRequestId: &tmproto.VoteExtension_SignRequestId{
+			SignRequestId: requestID,
+		},
+	}
+
+	signItems, err := MakeVoteExtensionSignItems(chainID, &tmproto.Vote{
+		Type:           tmproto.PrecommitType,
+		VoteExtensions: []*tmproto.VoteExtension{&ve},
+	}, llmq, quorumHash)
+	assert.NoError(t, err)
+
+	item := signItems[tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW][0]
+	actual := item.ID
+
+	// SHA256(llmqType, quorumHash, ABCI_sign_requestId, ABCI_extension)
+	// blsSignHash := bls.BuildSignHash(uint8(llmqType), blsQuorumHash, blsRequestID, blsMessageHash)
+
+	expected := []byte{uint8(llmq)}
+	expected = append(expected, tmbytes.Reverse(quorumHash)...)
+	expected = append(expected, tmbytes.Reverse(crypto.Checksum(requestID))...)
+	expected = append(expected, tmbytes.Reverse(crypto.Checksum(extension))...)
+
+	fmt.Printf("Expected: %v \n", expected)
+
+	expected = crypto.Checksum(crypto.Checksum(expected))
+	t.Logf("sign bytes: %x", actual)
+	assert.EqualValues(t, expected, actual)
 }
 
 func newSignItem(reqID, ID, raw string) SignItem {

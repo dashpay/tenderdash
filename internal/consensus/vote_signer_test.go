@@ -40,7 +40,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 		ProTxHash:     proTxHash,
 	}
 	voteExtensions := types.VoteExtensions{
-		tmproto.VoteExtensionType_THRESHOLD_RECOVER: []types.VoteExtension{
+		tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{
 			{Extension: tmbytes.MustHexDecode("524F1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83B")},
 		},
 	}

@@ -2454,10 +2454,10 @@ func TestPrepareProposalReceivesVoteExtensions(t *testing.T) {
 	// create a precommit for each validator with the associated vote extension.
 	for _, vs := range vss[1:] {
 		voteExtensions := types.VoteExtensions{
-			tmproto.VoteExtensionType_DEFAULT: []types.VoteExtension{
+			tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{
 				{Extension: []byte("extension")},
 			},
-			tmproto.VoteExtensionType_THRESHOLD_RECOVER: []types.VoteExtension{
+			tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{
 				{Extension: []byte("deterministic")},
 			},
 		}
