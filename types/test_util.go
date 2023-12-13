@@ -73,7 +73,10 @@ func signAddVote(ctx context.Context, privVal PrivValidator, vote *Vote, voteSet
 		return false, err
 	}
 
-	vote.VoteExtensions = VoteExtensionsFromProto(v.VoteExtensions)
+	err = vote.PopulateSignsFromProto(v)
+	if err != nil {
+		return false, err
+	}
 
 	return voteSet.AddVote(vote)
 }
