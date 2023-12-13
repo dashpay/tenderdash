@@ -45,7 +45,9 @@ func exampleVote() *types.Vote {
 		ValidatorProTxHash: crypto.ProTxHashFromSeedBytes([]byte("validator_pro_tx_hash")),
 		ValidatorIndex:     56789,
 		VoteExtensions: types.VoteExtensions{
-			tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{Extension: []byte("extension")}},
+			tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{
+				Type:      tmproto.VoteExtensionType_DEFAULT,
+				Extension: []byte("extension")}},
 		},
 	}
 }

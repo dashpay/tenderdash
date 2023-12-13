@@ -628,7 +628,9 @@ func TestInvalidPrecommitExtensions(t *testing.T) {
 			"oversized vote extension signature",
 			func(v *Vote) {
 				v.VoteExtensions = VoteExtensions{
-					tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{Signature: make([]byte, SignatureSize+1)}},
+					tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{
+						Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+						Signature: make([]byte, SignatureSize+1)}},
 				}
 			},
 		},

@@ -2455,10 +2455,16 @@ func TestPrepareProposalReceivesVoteExtensions(t *testing.T) {
 	for _, vs := range vss[1:] {
 		voteExtensions := types.VoteExtensions{
 			tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{
-				{Extension: []byte("extension")},
+				{
+					Type:      tmproto.VoteExtensionType_DEFAULT,
+					Extension: []byte("extension"),
+				},
 			},
 			tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{
-				{Extension: []byte("deterministic")},
+				{
+					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+					Extension: []byte("deterministic"),
+				},
 			},
 		}
 		signAddPrecommitWithExtension(ctx, t, cs1, config.ChainID(), blockID, voteExtensions, vs)

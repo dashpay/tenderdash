@@ -377,11 +377,9 @@ func (m *ExtendVoteExtension) ToVoteExtension() types.VoteExtension {
 	var requestID *types.VoteExtension_SignRequestId
 	if m.XSignRequestId != nil {
 		src := m.GetSignRequestId()
-		dst := make([]byte, len(src))
-		copy(dst, src)
 
 		requestID = &types.VoteExtension_SignRequestId{
-			SignRequestId: dst,
+			SignRequestId: bytes.Clone(src),
 		}
 	}
 	return types.VoteExtension{

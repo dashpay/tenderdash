@@ -1,7 +1,6 @@
 package types
 
 import (
-	"bytes"
 	"encoding/hex"
 	"fmt"
 	"testing"
@@ -72,8 +71,12 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 				Height:             1001,
 				ValidatorProTxHash: tmbytes.MustHexDecode("9CC13F685BC3EA0FCA99B87F42ABCC934C6305AA47F62A32266A2B9D55306B7B"),
 				VoteExtensions: VoteExtensions{
-					types.VoteExtensionType_DEFAULT:           []tmproto.VoteExtension{{Extension: []byte("default")}},
-					types.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{Extension: []byte("threshold")}},
+					types.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{
+						Type:      tmproto.VoteExtensionType_DEFAULT,
+						Extension: []byte("default")}},
+					types.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{
+						Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+						Extension: []byte("threshold")}},
 				},
 			},
 			quorumHash: tmbytes.MustHexDecode("6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD"),
@@ -117,6 +120,36 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 			}
 		})
 	}
+}
+func TestA(t *testing.T) {
+	llmq := btcjson.LLMQType_TEST_PLATFORM
+
+	quorumHash, err := hex.DecodeString("dddabfe1c883dd8a2c71c4281a4212c3715a61f87d62a99aaed0f65a0506c053")
+	assert.NoError(t, err)
+	assert.Len(t, quorumHash, 32)
+
+	requestID, err := hex.DecodeString("922a8fc39b6e265ca761eaaf863387a5e2019f4795a42260805f5562699fd9fa")
+	assert.NoError(t, err)
+	assert.Len(t, requestID, 32)
+
+	extension, err := hex.DecodeString("7dfb2432d37f004c4eb2b9aebf601ba4ad59889b81d2e8c7029dce3e0bf8381c")
+	assert.NoError(t, err)
+	assert.Len(t, extension, 32)
+
+	expected, err := hex.DecodeString("6d98f773cef8484432c4946c6b96e04aab39fd119c77de2f21d668dd17d5d2f6")
+	assert.NoError(t, err)
+	assert.Len(t, expected, 32)
+
+	manual := []byte{uint8(llmq)}
+	manual = append(manual, tmbytes.Reverse(quorumHash)...)
+	manual = append(manual, tmbytes.Reverse(requestID)...)
+	manual = append(manual, tmbytes.Reverse(extension)...)
+
+	t.Logf("before checksum: %x", manual)
+	sigHash := crypto.Checksum(crypto.Checksum(manual))
+	sigHash = tmbytes.Reverse(sigHash)
+
+	assert.EqualValues(t, expected, sigHash)
 }
 
 // TestVoteExtensionsRawSignData checks signed data for a VoteExtensionType_THRESHOLD_RECOVER_RAW vote extension type.

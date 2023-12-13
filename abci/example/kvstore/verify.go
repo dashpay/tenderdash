@@ -71,10 +71,6 @@ func makeVoteExtensionSignItems(
 	items := make(map[types1.VoteExtensionType][]types.SignItem)
 	protoExtensionsMap := types1.VoteExtensionsToMap(req.Commit.ThresholdVoteExtensions)
 	for t, exts := range protoExtensionsMap {
-		if t == types1.VoteExtensionType_DEFAULT {
-			// DEFAULT vote extensions don't support signing
-			continue
-		}
 		if items[t] == nil && len(exts) > 0 {
 			items[t] = make([]types.SignItem, len(exts))
 		}

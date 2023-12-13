@@ -360,8 +360,12 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 
 	voteType := tmproto.PrecommitType
 	exts := types.VoteExtensions{
-		tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{Extension: []byte("extension")}},
+		tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{
+			Type:      tmproto.VoteExtensionType_DEFAULT,
+			Extension: []byte("extension"),
+		}},
 	}
+
 	// We initially sign this vote without an extension
 	vote1 := newVote(proTxHash, 0, height, round, voteType, blockID, exts)
 	vpb1 := vote1.ToProto()
@@ -378,7 +382,9 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 	// its extension
 	vote2 := vote1.Copy()
 	vote2.VoteExtensions = types.VoteExtensions{
-		tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{Extension: []byte("new extension")}},
+		tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{
+			Type:      tmproto.VoteExtensionType_DEFAULT,
+			Extension: []byte("new extension")}},
 	}
 	vpb2 := vote2.ToProto()
 

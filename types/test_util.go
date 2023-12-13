@@ -46,8 +46,12 @@ func makeCommit(
 			Type:               tmproto.PrecommitType,
 			BlockID:            blockID,
 			VoteExtensions: VoteExtensions{
-				tmproto.VoteExtensionType_DEFAULT:           []tmproto.VoteExtension{{Extension: []byte("default")}},
-				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{Extension: []byte("threshold")}},
+				tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{
+					Type:      tmproto.VoteExtensionType_DEFAULT,
+					Extension: []byte("default")}},
+				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{
+					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+					Extension: []byte("threshold")}},
 			},
 		}
 
