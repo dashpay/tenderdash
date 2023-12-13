@@ -10,7 +10,7 @@ import (
 )
 
 var (
-	errUnableCopySigns = errors.New("unable copy signatures the sizes of extensions are not equal")
+	errUnableCopySigns = errors.New("unable to copy signatures: the sizes of extensions are not equal")
 )
 
 // VoteExtensions is a container where the key is vote-extension type and value is a list of VoteExtension
