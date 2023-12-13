@@ -59,11 +59,8 @@ func (e VoteExtensions) ToProto() []*tmproto.VoteExtension {
 	extensions := make([]*tmproto.VoteExtension, 0, e.totalCount())
 	for _, t := range VoteExtensionTypes {
 		for _, ext := range e[t] {
-			extensions = append(extensions, &tmproto.VoteExtension{
-				Type:      t,
-				Extension: ext.Extension,
-				Signature: ext.Signature,
-			})
+			cloned := ext.Clone()
+			extensions = append(extensions, &cloned)
 		}
 	}
 	return extensions

@@ -114,14 +114,24 @@ func MakeVoteExtensionSignItems(
 		if items[t] == nil && len(exts) > 0 {
 			items[t] = make([]SignItem, len(exts))
 		}
-		if t == types.VoteExtensionType_DEFAULT {
-			// DEFAULT vote extensions don't support signing
-			continue
-		}
+
 		for i, ext := range exts {
 			reqID := VoteExtensionRequestID(ext, protoVote.Height, protoVote.Round)
 			raw := VoteExtensionSignBytes(chainID, protoVote.Height, protoVote.Round, ext)
-			items[t][i] = NewSignItem(quorumType, quorumHash, reqID, raw)
+			// TODO: this is to avoid sha256 of raw data, to be removed once we get into agreement on the format
+			if ext.Type == types.VoteExtensionType_THRESHOLD_RECOVER_RAW {
+				// ensure we have exactly 32 bytes, cut or fill with 0s if it's not
+				msgHash := make([]byte, 32)
+				copy(msgHash, raw)
+				items[t][i] = SignItem{
+					ReqID: reqID,
+					ID:    MakeSignID(raw, reqID, quorumType, quorumHash),
+					Raw:   raw,
+					Hash:  msgHash,
+				}
+			} else {
+				items[t][i] = NewSignItem(quorumType, quorumHash, reqID, raw)
+			}
 		}
 	}
 	return items, nil

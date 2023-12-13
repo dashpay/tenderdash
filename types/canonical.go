@@ -35,7 +35,7 @@ func CanonicalizeProposal(chainID string, proposal *tmproto.Proposal) tmproto.Ca
 // bytes is what is signed in order to produce the vote extension's signature.
 func CanonicalizeVoteExtension(chainID string, ext *tmproto.VoteExtension, height int64, round int32) ([]byte, error) {
 	switch ext.Type {
-	case tmproto.VoteExtensionType_THRESHOLD_RECOVER:
+	case tmproto.VoteExtensionType_DEFAULT, tmproto.VoteExtensionType_THRESHOLD_RECOVER:
 		{
 			canonical := tmproto.CanonicalVoteExtension{
 				Extension: ext.Extension,

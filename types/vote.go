@@ -127,11 +127,14 @@ func VoteExtensionSignBytes(chainID string, height int64, round int32, ext *tmpr
 
 // VoteExtensionRequestID returns vote extension request ID
 func VoteExtensionRequestID(ext *tmproto.VoteExtension, height int64, round int32) []byte {
-	signRequestID := ext.GetSignRequestId()
 
-	if signRequestID != nil {
+	if ext.XSignRequestId != nil && ext.XSignRequestId.Size() > 0 {
 		if ext.Type == tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW {
-			return crypto.Checksum(signRequestID)
+			// TODO to avoid blind signing, we should have crypto.Checksum(signRequestID) here
+			buf := make([]byte, 32)
+			// this will ensure sign request ID has exactly 32 bytes
+			copy(buf, ext.GetSignRequestId())
+			return buf
 		}
 
 		panic(fmt.Sprintf("unexpected sign request id for vote extension type %s", ext.Type.String()))

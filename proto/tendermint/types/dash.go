@@ -12,6 +12,7 @@ import (
 type VoteExtensions map[VoteExtensionType][]*VoteExtension
 
 var (
+	errExtensionNil                        = errors.New("vote extension is nil")
 	errExtensionSignEmpty                  = errors.New("vote extension signature is missing")
 	errExtensionSignTooBig                 = fmt.Errorf("vote extension signature is too big (max: %d)", bls12381.SignatureSize)
 	errExtensionSignRequestIdNotSupported  = errors.New("vote extension sign request id is not supported")
@@ -19,10 +20,17 @@ var (
 )
 
 // Clone returns a copy of current vote-extension
-func (v *VoteExtension) Clone() VoteExtension {
-	var xSignRequestID *VoteExtension_SignRequestId
+//
+// Clone of nil will panic
 
-	if v.XSignRequestId != nil {
+func (v *VoteExtension) Clone() VoteExtension {
+	if v == nil {
+		panic("cannot clone nil vote-extension")
+	}
+
+	var xSignRequestID isVoteExtension_XSignRequestId
+
+	if v.XSignRequestId != nil && v.XSignRequestId.Size() > 0 {
 		src := v.GetSignRequestId()
 		dst := make([]byte, len(src))
 		copy(dst, src)
@@ -32,6 +40,7 @@ func (v *VoteExtension) Clone() VoteExtension {
 	}
 
 	return VoteExtension{
+		Type:           v.Type,
 		Extension:      v.Extension,
 		Signature:      v.Signature,
 		XSignRequestId: xSignRequestID,
@@ -40,6 +49,10 @@ func (v *VoteExtension) Clone() VoteExtension {
 
 // Validate checks the validity of the vote-extension
 func (v *VoteExtension) Validate() error {
+	if v == nil {
+		return errExtensionNil
+	}
+
 	if len(v.Extension) > 0 && len(v.Signature) == 0 {
 		return errExtensionSignEmpty
 	}
@@ -47,7 +60,7 @@ func (v *VoteExtension) Validate() error {
 		return errExtensionSignTooBig
 	}
 
-	if v.XSignRequestId != nil {
+	if v.XSignRequestId != nil && v.XSignRequestId.Size() > 0 {
 		if v.Type != VoteExtensionType_THRESHOLD_RECOVER_RAW {
 			return errExtensionSignRequestIdNotSupported
 		}

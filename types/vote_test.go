@@ -40,7 +40,10 @@ func examplePrecommit(t testing.TB) *Vote {
 	t.Helper()
 	vote := exampleVote(t, byte(tmproto.PrecommitType))
 	vote.VoteExtensions = VoteExtensions{
-		tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{Signature: []byte("signature")}},
+		tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{
+			Type:      tmproto.VoteExtensionType_DEFAULT,
+			Signature: []byte("signature"),
+		}},
 	}
 	return vote
 }
@@ -331,9 +334,11 @@ func TestVoteExtension(t *testing.T) {
 		expectError      bool
 	}{
 		{
-			name: "all fields present",
+			name: "valid THRESHOLD_RECOVER",
 			extensions: VoteExtensions{
-				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{Extension: []byte("extension")}},
+				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{
+					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+					Extension: []byte("extension")}},
 			},
 			includeSignature: true,
 			expectError:      false,
@@ -341,7 +346,9 @@ func TestVoteExtension(t *testing.T) {
 		{
 			name: "no extension signature",
 			extensions: VoteExtensions{
-				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{Extension: []byte("extension")}},
+				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{
+					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+					Extension: []byte("extension")}},
 			},
 			includeSignature: false,
 			expectError:      true,
@@ -693,22 +700,24 @@ func TestVoteProtobuf(t *testing.T) {
 		{"fail vote validate basic", &Vote{}, true, false},
 	}
 	for _, tc := range testCases {
-		protoProposal := tc.vote.ToProto()
+		t.Run(tc.msg, func(t *testing.T) {
+			protoProposal := tc.vote.ToProto()
 
-		v, err := VoteFromProto(protoProposal)
-		if tc.convertsOk {
-			require.NoError(t, err)
-		} else {
-			require.Error(t, err)
-		}
+			v, err := VoteFromProto(protoProposal)
+			if tc.convertsOk {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
+			}
 
-		err = v.ValidateBasic()
-		if tc.passesValidateBasic {
-			require.NoError(t, err)
-			require.Equal(t, tc.vote, v, tc.msg)
-		} else {
-			require.Error(t, err)
-		}
+			err = v.ValidateBasic()
+			if tc.passesValidateBasic {
+				require.NoError(t, err)
+				require.Equal(t, tc.vote, v, tc.msg)
+			} else {
+				require.Error(t, err)
+			}
+		})
 	}
 }
 
