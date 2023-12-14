@@ -204,11 +204,6 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		return nil, CurrentRoundState{}, fmt.Errorf("create proposal block: %w", err)
 	}
 
-	// Pass proposed app version only if it's higher than current network app version
-	if proposedAppVersion <= state.Version.Consensus.App {
-		proposedAppVersion = 0
-	}
-
 	txs := blockExec.mempool.ReapMaxBytesMaxGas(maxDataBytes, maxGas)
 	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 

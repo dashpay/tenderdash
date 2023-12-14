@@ -34,6 +34,14 @@ CGO_CXXFLAGS ?= -I$(BLS_DIR)/build/depends/relic/include \
 -I$(BLS_DIR)/src/depends/relic/include \
 -I$(BLS_DIR)/src/include
 
+OS := $(shell uname)
+
+ifeq ($(OS),Darwin)  # macOS
+    GMP_PREFIX := $(shell brew --prefix gmp 2>/dev/null)
+    CGO_LDFLAGS += -L$(GMP_PREFIX)/lib
+    CGO_CXXFLAGS += -I$(GMP_PREFIX)/include
+endif
+
 GO := CGO_ENABLED=$(CGO_ENABLED) CGO_CXXFLAGS="$(CGO_CXXFLAGS)" CGO_LDFLAGS="$(CGO_LDFLAGS)" go
 
 # handle ARM builds

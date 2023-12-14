@@ -17,7 +17,7 @@ import (
 // WebSocket handler
 
 const (
-	defaultWSWriteChanCapacity = 100
+	defaultWSWriteChanCapacity = 500
 	defaultWSWriteWait         = 10 * time.Second
 	defaultWSReadWait          = 30 * time.Second
 	defaultWSPingPeriod        = (defaultWSReadWait * 9) / 10

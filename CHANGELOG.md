@@ -1,9 +1,44 @@
+## [0.13.4] - 2023-12-11
+
+### Bug Fixes
+
+- Ordered map race condition (#708)
+
+### Performance
+
+- Increase web socket channels capacity (#709)
+
+## [0.13.3] - 2023-10-16
+
+### Bug Fixes
+
+- Issue with GMP not properly being linked on mac (#698)
+- Always propose with current app version (#697)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.13.3
+
+## [0.13.2] - 2023-10-09
+
+### Bug Fixes
+
+- Log-file-path setting does not work (#691)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.13.2
+
 ## [0.13.1] - 2023-09-14
 
 ### Bug Fixes
 
 - Send evidence only once (#683)
 - Panic verifying evidence due to missing pubkey (#684)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.13.1
 
 ## [0.13.0] - 2023-09-13
 
