@@ -77,7 +77,10 @@ func makeVoteExtensionSignItems(
 		chainID := req.Block.Header.ChainID
 		for i, ext := range exts {
 			raw := types.VoteExtensionSignBytes(chainID, req.Height, req.Round, ext)
-			reqID := types.VoteExtensionRequestID(ext, req.Height, req.Round)
+			reqID, err := types.VoteExtensionRequestID(ext, req.Height, req.Round)
+			if err != nil {
+				panic(fmt.Errorf("vote extension sign items: %w", err))
+			}
 
 			items[t][i] = types.NewSignItem(quorumType, quorumHash, reqID, raw)
 		}

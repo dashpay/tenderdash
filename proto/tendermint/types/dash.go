@@ -1,9 +1,9 @@
 package types
 
 import (
+	"bytes"
 	"errors"
 	fmt "fmt"
-	"strings"
 
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 )
@@ -12,11 +12,11 @@ import (
 type VoteExtensions map[VoteExtensionType][]*VoteExtension
 
 var (
-	errExtensionNil                        = errors.New("vote extension is nil")
-	errExtensionSignEmpty                  = errors.New("vote extension signature is missing")
-	errExtensionSignTooBig                 = fmt.Errorf("vote extension signature is too big (max: %d)", bls12381.SignatureSize)
-	errExtensionSignRequestIdNotSupported  = errors.New("vote extension sign request id is not supported")
-	errExtensionSignRequestIdMissingPrefix = errors.New("vote extension sign request id must have dpevote prefix")
+	errExtensionNil                       = errors.New("vote extension is nil")
+	errExtensionSignEmpty                 = errors.New("vote extension signature is missing")
+	errExtensionSignTooBig                = fmt.Errorf("vote extension signature is too big (max: %d)", bls12381.SignatureSize)
+	errExtensionSignRequestIdNotSupported = errors.New("vote extension sign request id is not supported")
+	errExtensionSignRequestIdWrongPrefix  = errors.New("vote extension sign request id must have dpevote or plwdtx prefix")
 )
 
 // Clone returns a copy of current vote-extension
@@ -64,9 +64,19 @@ func (v *VoteExtension) Validate() error {
 		if v.Type != VoteExtensionType_THRESHOLD_RECOVER_RAW {
 			return errExtensionSignRequestIdNotSupported
 		}
+		var validPrefixes = []string{"plwdtx", "dpevote"}
 		requestID := v.GetSignRequestId()
-		if !strings.HasPrefix(string(requestID), "dpevote") {
-			return errExtensionSignRequestIdMissingPrefix
+
+		var validPrefix bool
+		for _, prefix := range validPrefixes {
+			if bytes.HasPrefix(requestID, []byte(prefix)) {
+				validPrefix = true
+				break
+			}
+		}
+
+		if !validPrefix {
+			return errExtensionSignRequestIdWrongPrefix
 		}
 	}
 

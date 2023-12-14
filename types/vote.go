@@ -42,19 +42,20 @@ func MaxVoteBytesForKeyType(keyType crypto.KeyType) int64 {
 }
 
 var (
-	ErrVoteUnexpectedStep             = errors.New("unexpected step")
-	ErrVoteInvalidValidatorIndex      = errors.New("invalid validator index")
-	ErrVoteInvalidValidatorAddress    = errors.New("invalid validator address")
-	ErrVoteInvalidSignature           = errors.New("invalid signature")
-	ErrVoteInvalidBlockHash           = errors.New("invalid block hash")
-	ErrVoteNonDeterministicSignature  = errors.New("non-deterministic signature")
-	ErrVoteNil                        = errors.New("nil vote")
-	ErrVoteInvalidExtension           = errors.New("invalid vote extension")
-	ErrVoteInvalidValidatorProTxHash  = errors.New("invalid validator pro_tx_hash")
-	ErrVoteInvalidValidatorPubKeySize = errors.New("invalid validator public key size")
-	ErrVoteInvalidBlockSignature      = errors.New("invalid block signature")
-	ErrVoteInvalidStateSignature      = errors.New("invalid state signature")
-	ErrVoteStateSignatureShouldBeNil  = errors.New("state signature when voting for nil block")
+	ErrVoteUnexpectedStep                 = errors.New("unexpected step")
+	ErrVoteInvalidValidatorIndex          = errors.New("invalid validator index")
+	ErrVoteInvalidValidatorAddress        = errors.New("invalid validator address")
+	ErrVoteInvalidSignature               = errors.New("invalid signature")
+	ErrVoteInvalidBlockHash               = errors.New("invalid block hash")
+	ErrVoteNonDeterministicSignature      = errors.New("non-deterministic signature")
+	ErrVoteNil                            = errors.New("nil vote")
+	ErrVoteInvalidExtension               = errors.New("invalid vote extension")
+	ErrVoteExtensionTypeWrongForRequestID = errors.New("provided vote extension type does not support sign request ID")
+	ErrVoteInvalidValidatorProTxHash      = errors.New("invalid validator pro_tx_hash")
+	ErrVoteInvalidValidatorPubKeySize     = errors.New("invalid validator public key size")
+	ErrVoteInvalidBlockSignature          = errors.New("invalid block signature")
+	ErrVoteInvalidStateSignature          = errors.New("invalid state signature")
+	ErrVoteStateSignatureShouldBeNil      = errors.New("state signature when voting for nil block")
 )
 
 type ErrVoteConflictingVotes struct {
@@ -126,7 +127,7 @@ func VoteExtensionSignBytes(chainID string, height int64, round int32, ext *tmpr
 }
 
 // VoteExtensionRequestID returns vote extension request ID
-func VoteExtensionRequestID(ext *tmproto.VoteExtension, height int64, round int32) []byte {
+func VoteExtensionRequestID(ext *tmproto.VoteExtension, height int64, round int32) ([]byte, error) {
 
 	if ext.XSignRequestId != nil && ext.XSignRequestId.Size() > 0 {
 		if ext.Type == tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW {
@@ -134,13 +135,12 @@ func VoteExtensionRequestID(ext *tmproto.VoteExtension, height int64, round int3
 			buf := make([]byte, 32)
 			// this will ensure sign request ID has exactly 32 bytes
 			copy(buf, ext.GetSignRequestId())
-			return buf
+			return buf, nil
 		}
-
-		panic(fmt.Sprintf("unexpected sign request id for vote extension type %s", ext.Type.String()))
+		return nil, ErrVoteExtensionTypeWrongForRequestID
 	}
 
-	return heightRoundRequestID("dpevote", height, round)
+	return heightRoundRequestID("dpevote", height, round), nil
 }
 
 // VoteBlockSignID returns signID that should be signed for the block

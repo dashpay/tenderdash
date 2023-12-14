@@ -116,7 +116,10 @@ func MakeVoteExtensionSignItems(
 		}
 
 		for i, ext := range exts {
-			reqID := VoteExtensionRequestID(ext, protoVote.Height, protoVote.Round)
+			reqID, err := VoteExtensionRequestID(ext, protoVote.Height, protoVote.Round)
+			if err != nil {
+				return nil, err
+			}
 			raw := VoteExtensionSignBytes(chainID, protoVote.Height, protoVote.Round, ext)
 			// TODO: this is to avoid sha256 of raw data, to be removed once we get into agreement on the format
 			if ext.Type == types.VoteExtensionType_THRESHOLD_RECOVER_RAW {
