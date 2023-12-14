@@ -1,6 +1,6 @@
 module github.com/dashpay/tenderdash
 
-go 1.19
+go 1.21
 
 require (
 	github.com/BurntSushi/toml v1.2.0
@@ -18,7 +18,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.2
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/golangci/golangci-lint v1.48.0
+	github.com/golangci/golangci-lint v1.55.0
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/gopacket v1.1.19
 	github.com/google/orderedcode v0.0.1
