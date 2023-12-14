@@ -109,6 +109,8 @@ type Manifest struct {
 	CheckTxDelayMS         uint64 `toml:"check_tx_delay_ms"`
 	VoteExtensionDelayMS   uint64 `toml:"vote_extension_delay_ms"`
 	FinalizeBlockDelayMS   uint64 `toml:"finalize_block_delay_ms"`
+	MaxBlockSize           uint64 `toml:"max_block_size"`
+	MaxEvidenceSize        uint64 `toml:"max_evidence_size"`
 }
 
 // ManifestNode represents a node in a testnet manifest.

@@ -63,7 +63,7 @@ func TestPrepareFinalize(t *testing.T) {
 	txs := make([][]byte, 0, len(respPrep.TxRecords))
 	bz := &bytes.Buffer{}
 	for _, tx := range respPrep.TxRecords {
-		if tx.Action != abci.TxRecord_REMOVED {
+		if tx.Action != abci.TxRecord_REMOVED && tx.Action != abci.TxRecord_DELAYED {
 			txs = append(txs, tx.Tx)
 			n, err := bz.Write(tx.Tx)
 			assert.NoError(t, err)
@@ -99,9 +99,12 @@ func TestPrepareFinalize(t *testing.T) {
 
 func TestPrepareProposal(t *testing.T) {
 	testCases := []struct {
-		request abci.RequestPrepareProposal
+		request       abci.RequestPrepareProposal
+		expectTxCount int
 	}{
+		// valid
 		{
+			expectTxCount: 2, // one added due to vote extensions
 			request: abci.RequestPrepareProposal{
 				Height:     1,
 				Time:       time.Now(),
@@ -129,6 +132,25 @@ Ym1saWRueGJDSmpZdXBUTkNNdFpMcUdC`)},
 				},
 			},
 		},
+		// too many txs
+		{
+			expectTxCount: 5,
+			request: abci.RequestPrepareProposal{
+				Height:     1,
+				Time:       time.Now(),
+				MaxTxBytes: 32,
+				Txs: [][]byte{
+					{1, 2, 3, 4, 5, 6, 7, 8}, // 8 bytes
+					{2, 2, 3, 4, 5, 6, 7, 8}, // 8+8=16 bytes
+					{3, 2, 3, 4, 5, 6, 7, 8}, // 16+8=24 bytes
+					{4, 2, 3, 4, 5, 6, 7},    // 24+7=31 bytes
+					{5, 2, 3, 4, 5, 6, 7, 8}, // 31+8=39 bytes - this one does not fit
+					{6},                      // 31+1=32 bytes - this one fits
+					{7},                      // 32+1=33 bytes - this one does not fit
+				},
+				LocalLastCommit: abci.CommitInfo{},
+			},
+		},
 	}
 	ctx := context.TODO()
 
@@ -138,6 +160,16 @@ Ym1saWRueGJDSmpZdXBUTkNNdFpMcUdC`)},
 			respPrep, err := app.PrepareProposal(ctx, &tc.request)
 			require.NoError(t, err)
 			assert.NotEmpty(t, respPrep.AppHash)
+
+			txCount := 0
+			for _, tx := range respPrep.TxRecords {
+				if tx.Action != abci.TxRecord_REMOVED && tx.Action != abci.TxRecord_DELAYED {
+					txCount++
+				} else {
+					t.Logf("removed or delayed tx: %+v", tx)
+				}
+			}
+			assert.Equal(t, tc.expectTxCount, txCount)
 		})
 	}
 

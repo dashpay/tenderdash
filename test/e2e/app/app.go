@@ -201,15 +201,14 @@ func parseVoteExtension(ext []byte) (int64, error) {
 }
 
 func prepareTxs(req abci.RequestPrepareProposal) ([]*abci.TxRecord, error) {
-	var (
-		totalBytes int64
-		txRecords  []*abci.TxRecord
-	)
-
+	txRecords := kvstore.TxRecords{
+		Size:  0,
+		Limit: req.MaxTxBytes,
+		Txs:   make([]*abci.TxRecord, 0, len(req.Txs)+1),
+	}
 	txs := req.Txs
 	extCount := len(req.LocalLastCommit.ThresholdVoteExtensions)
 
-	txRecords = make([]*abci.TxRecord, 0, len(txs)+1)
 	extTxPrefix := VoteExtensionKey + "="
 	extTx := []byte(fmt.Sprintf("%s%d", extTxPrefix, extCount))
 
@@ -218,30 +217,33 @@ func prepareTxs(req abci.RequestPrepareProposal) ([]*abci.TxRecord, error) {
 	for _, tx := range txs {
 		// we only modify transactions if there is at least 1 extension, eg. extCount > 0
 		if extCount > 0 && strings.HasPrefix(string(tx), extTxPrefix) {
-			txRecords = append(txRecords, &abci.TxRecord{
+			if _, err := txRecords.Add(&abci.TxRecord{
 				Action: abci.TxRecord_REMOVED,
 				Tx:     tx,
-			})
-			totalBytes -= int64(len(tx))
+			}); err != nil {
+				return nil, err
+			}
 		} else {
-			txRecords = append(txRecords, &abci.TxRecord{
+			if _, err := txRecords.Add(&abci.TxRecord{
 				Action: abci.TxRecord_UNMODIFIED,
 				Tx:     tx,
-			})
-			totalBytes += int64(len(tx))
+			}); err != nil {
+				return nil, err
+			}
 		}
 	}
 	// we only modify transactions if there is at least 1 extension, eg. extCount > 0
 	if extCount > 0 {
-		if totalBytes+int64(len(extTx)) < req.MaxTxBytes {
-			txRecords = append(txRecords, &abci.TxRecord{
-				Action: abci.TxRecord_ADDED,
-				Tx:     extTx,
-			})
+		tx := abci.TxRecord{
+			Action: abci.TxRecord_ADDED,
+			Tx:     extTx,
+		}
+		if _, err := txRecords.Add(&tx); err != nil {
+			return nil, err
 		}
 	}
 
-	return txRecords, nil
+	return txRecords.Txs, nil
 }
 
 func verifyTx(tx types.Tx, _ abci.CheckTxType) (abci.ResponseCheckTx, error) {

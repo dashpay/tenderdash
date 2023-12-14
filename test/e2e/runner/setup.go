@@ -174,6 +174,12 @@ func MakeGenesis(testnet *e2e.Testnet, genesisTime time.Time) (types.GenesisDoc,
 		append(genesis.ConsensusParams.Validator.PubKeyTypes, types.ABCIPubKeyTypeBLS12381)
 	genesis.ConsensusParams.Evidence.MaxAgeNumBlocks = e2e.EvidenceAgeHeight
 	genesis.ConsensusParams.Evidence.MaxAgeDuration = e2e.EvidenceAgeTime
+	if testnet.MaxEvidenceSize > 0 {
+		genesis.ConsensusParams.Evidence.MaxBytes = testnet.MaxEvidenceSize
+	}
+	if testnet.MaxBlockSize > 0 {
+		genesis.ConsensusParams.Block.MaxBytes = testnet.MaxBlockSize
+	}
 
 	for validator, validatorUpdate := range testnet.Validators {
 		if validatorUpdate.PubKey == nil {
