@@ -131,11 +131,7 @@ func VoteExtensionRequestID(ext *tmproto.VoteExtension, height int64, round int3
 
 	if ext.XSignRequestId != nil && ext.XSignRequestId.Size() > 0 {
 		if ext.Type == tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW {
-			// TODO to avoid blind signing, we should have crypto.Checksum(signRequestID) here
-			buf := make([]byte, 32)
-			// this will ensure sign request ID has exactly 32 bytes
-			copy(buf, ext.GetSignRequestId())
-			return buf, nil
+			return crypto.Checksum(ext.GetSignRequestId()), nil
 		}
 		return nil, ErrVoteExtensionTypeWrongForRequestID
 	}
