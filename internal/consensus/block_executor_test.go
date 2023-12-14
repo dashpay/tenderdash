@@ -118,7 +118,7 @@ func (suite *BockExecutorTestSuite) TestCreate() {
 				suite.mockBlockExec.
 					On(
 						"CreateProposalBlock",
-						mock.AnythingOfType("*context.emptyCtx"),
+						mock.Anything,
 						tc.height,
 						tc.round,
 						stateData.state,
@@ -224,7 +224,7 @@ func (suite *BockExecutorTestSuite) TestProcess() {
 				suite.mockBlockExec.
 					On(
 						"ProcessProposal",
-						mock.AnythingOfType("*context.emptyCtx"),
+						mock.Anything,
 						stateData.ProposalBlock,
 						round,
 						stateData.state,
