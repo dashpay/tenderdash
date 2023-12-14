@@ -873,6 +873,66 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 	mp.AssertExpectations(t)
 }
 
+// TestPrepareProposalDelayedTxs tests that any transactions marked as DELAYED
+// are not included in the block produced by CreateProposalBlock. The test also
+// ensures that delayed transactions are NOT removed from the mempool.
+func TestPrepareProposalDelayedTxs(t *testing.T) {
+	const height = 2
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := log.NewNopLogger()
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+
+	state, stateDB, privVals := makeState(t, 1, height)
+	stateStore := sm.NewStore(stateDB)
+
+	evpool := &mocks.EvidencePool{}
+	evpool.On("PendingEvidence", mock.Anything).Return([]types.Evidence{}, int64(0))
+
+	txs := factory.MakeNTxs(height, 10)
+	// 2 first transactions will be removed, so results only contain info about 8 txs
+	txResults := factory.ExecTxResults(txs[2:])
+	mp := &mpmocks.Mempool{}
+	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs)
+
+	trs := txsToTxRecords(txs)
+	trs[0].Action = abci.TxRecord_DELAYED
+	trs[1].Action = abci.TxRecord_DELAYED
+
+	app := abcimocks.NewApplication(t)
+	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
+		TxRecords: trs,
+		TxResults: txResults,
+		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+	}, nil)
+
+	cc := abciclient.NewLocalClient(logger, app)
+	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
+	err := proxyApp.Start(ctx)
+	require.NoError(t, err)
+
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		proxyApp,
+		mp,
+		evpool,
+		nil,
+		eventBus,
+	)
+	val := state.Validators.GetByIndex(0)
+	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, 0, state, commit, val.ProTxHash, 0)
+	require.NoError(t, err)
+	require.Len(t, block.Data.Txs.ToSliceOfBytes(), len(trs)-2)
+
+	require.Equal(t, -1, block.Data.Txs.Index(types.Tx(trs[0].Tx)))
+	require.Equal(t, -1, block.Data.Txs.Index(types.Tx(trs[1].Tx)))
+
+	mp.AssertExpectations(t)
+}
+
 // TestPrepareProposalAddedTxsIncluded tests that any transactions marked as ADDED
 // in the prepare proposal response are included in the block.
 func TestPrepareProposalAddedTxsIncluded(t *testing.T) {

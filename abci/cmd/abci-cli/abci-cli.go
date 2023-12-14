@@ -674,7 +674,7 @@ func cmdPrepareProposal(cmd *cobra.Command, args []string) error {
 		existingTx := inTxArray(txsBytesArray, tx.Tx)
 		if tx.Action == types.TxRecord_UNKNOWN ||
 			(existingTx && tx.Action == types.TxRecord_ADDED) ||
-			(!existingTx && (tx.Action == types.TxRecord_UNMODIFIED || tx.Action == types.TxRecord_REMOVED)) {
+			(!existingTx && (tx.Action == types.TxRecord_UNMODIFIED || tx.Action == types.TxRecord_REMOVED || tx.Action == types.TxRecord_DELAYED)) {
 			resps = append(resps, response{
 				Code: codeBad,
 				Log:  "Failed. Tx: " + string(tx.GetTx()) + " action: " + tx.Action.String(),

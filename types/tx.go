@@ -239,7 +239,7 @@ func (t TxRecordSet) Validate(maxSizeBytes int64, otxs Txs) error {
 		return fmt.Errorf("new transaction incorrectly marked as removed, transaction hash: %x", removedCopy[ix].Hash())
 	}
 	if ix, ok := containsAll(otxsCopy, delayedCopy); !ok {
-		return fmt.Errorf("new transaction incorrectly marked as delayed, transaction hash: %x", removedCopy[ix].Hash())
+		return fmt.Errorf("new transaction incorrectly marked as delayed, transaction hash: %x", delayedCopy[ix].Hash())
 	}
 	if ix, ok := containsAny(otxsCopy, addedCopy); ok {
 		return fmt.Errorf("existing transaction incorrectly marked as added, transaction hash: %x", addedCopy[ix].Hash())
