@@ -168,7 +168,7 @@ Sign request ID that will be used to sign the vote extensions. Only applicable f
 Tenderdash will use SHA256 checksum of `sign_request_id` when generating quorum signatures of THRESHOLD_RECOVER_RAW vote extensions. It MUST NOT be set for any other vote extension types. |
 | sign_request_id | [bytes](#bytes) | optional | If not set, Tenderdash will generate it based on height and round.
 
-If set, it SHOULD be unique per voting round, and it MUST start with `dpevote` string.
+If set, it SHOULD be unique per voting round, and it MUST start with `dpevote` or `plwdtx` string.
 
 Use with caution - it can have severe security consequences. |
 
