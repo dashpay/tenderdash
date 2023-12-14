@@ -16,7 +16,7 @@ var (
 	errExtensionSignEmpty                 = errors.New("vote extension signature is missing")
 	errExtensionSignTooBig                = fmt.Errorf("vote extension signature is too big (max: %d)", bls12381.SignatureSize)
 	errExtensionSignRequestIdNotSupported = errors.New("vote extension sign request id is not supported")
-	errExtensionSignRequestIdWrongPrefix  = errors.New("vote extension sign request id must have dpevote or plwdtx prefix")
+	errExtensionSignRequestIdWrongPrefix  = errors.New("vote extension sign request id must have dpevote or \\x06plwdtx prefix")
 )
 
 // Clone returns a copy of current vote-extension
@@ -64,7 +64,7 @@ func (v *VoteExtension) Validate() error {
 		if v.Type != VoteExtensionType_THRESHOLD_RECOVER_RAW {
 			return errExtensionSignRequestIdNotSupported
 		}
-		var validPrefixes = []string{"plwdtx", "dpevote"}
+		var validPrefixes = []string{"\x06plwdtx", "dpevote"}
 		requestID := v.GetSignRequestId()
 
 		var validPrefix bool

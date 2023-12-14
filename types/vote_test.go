@@ -344,12 +344,25 @@ func TestVoteExtension(t *testing.T) {
 			expectError:      false,
 		},
 		{
-			name: "valid THRESHOLD_RECOVER_RAW",
+			name: "valid THRESHOLD_RECOVER_RAW plwdtx",
 			extensions: VoteExtensions{
 				tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW: []tmproto.VoteExtension{{
 					Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 					XSignRequestId: &tmproto.VoteExtension_SignRequestId{
-						SignRequestId: []byte("plwdtx"),
+						SignRequestId: []byte("\x06plwdtx"),
+					},
+					Extension: []byte("extension")}},
+			},
+			includeSignature: true,
+			expectError:      false,
+		},
+		{
+			name: "valid THRESHOLD_RECOVER_RAW dpevote",
+			extensions: VoteExtensions{
+				tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW: []tmproto.VoteExtension{{
+					Type: tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+					XSignRequestId: &tmproto.VoteExtension_SignRequestId{
+						SignRequestId: []byte("dpevote"),
 					},
 					Extension: []byte("extension")}},
 			},
