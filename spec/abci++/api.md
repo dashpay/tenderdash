@@ -1313,6 +1313,7 @@ TxAction contains App-provided information on what to do with a transaction that
 | UNMODIFIED | 1 | The Application did not modify this transaction. |
 | ADDED | 2 | The Application added this transaction. |
 | REMOVED | 3 | The Application wants this transaction removed from the proposal and the mempool. |
+| DELAYED | 4 | The Application wants this transaction removed from the proposal but not the mempool. |
 
 
  

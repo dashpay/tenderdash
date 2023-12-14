@@ -120,7 +120,7 @@ type TxRecordSet struct {
 	// in the list of TxRecords.
 	included Txs
 
-	// added, unmodified, removed, and unknown are indexes for each of the actions
+	// added, unmodified, delayed, removed, and unknown are indexes for each of the actions
 	// that may be supplied with a transaction.
 	//
 	// Because each transaction only has one action, it can be referenced by
@@ -129,6 +129,7 @@ type TxRecordSet struct {
 	added      Txs
 	unmodified Txs
 	removed    Txs
+	delayed    Txs
 	unknown    Txs
 }
 
@@ -156,6 +157,8 @@ func NewTxRecordSet(trs []*abci.TxRecord) TxRecordSet {
 			txrSet.included = append(txrSet.included, txrSet.all[i])
 		case abci.TxRecord_REMOVED:
 			txrSet.removed = append(txrSet.removed, txrSet.all[i])
+		case abci.TxRecord_DELAYED:
+			txrSet.delayed = append(txrSet.delayed, txrSet.all[i])
 		}
 	}
 	return txrSet
@@ -171,6 +174,11 @@ func (t TxRecordSet) IncludedTxs() []Tx {
 // RemovedTxs returns the transactions marked for removal by the application.
 func (t TxRecordSet) RemovedTxs() []Tx {
 	return t.removed
+}
+
+// DelayedTxs returns the transactions that should be delivered in future blocks.
+func (t TxRecordSet) DelayedTxs() []Tx {
+	return t.delayed
 }
 
 // Validate checks that the record set was correctly constructed from the original
@@ -208,6 +216,7 @@ func (t TxRecordSet) Validate(maxSizeBytes int64, otxs Txs) error {
 	// indexes can be preserved.
 	addedCopy := sortedCopy(t.added)
 	removedCopy := sortedCopy(t.removed)
+	delayedCopy := sortedCopy(t.delayed)
 	unmodifiedCopy := sortedCopy(t.unmodified)
 
 	var size int64
@@ -228,6 +237,9 @@ func (t TxRecordSet) Validate(maxSizeBytes int64, otxs Txs) error {
 
 	if ix, ok := containsAll(otxsCopy, removedCopy); !ok {
 		return fmt.Errorf("new transaction incorrectly marked as removed, transaction hash: %x", removedCopy[ix].Hash())
+	}
+	if ix, ok := containsAll(otxsCopy, delayedCopy); !ok {
+		return fmt.Errorf("new transaction incorrectly marked as delayed, transaction hash: %x", removedCopy[ix].Hash())
 	}
 	if ix, ok := containsAny(otxsCopy, addedCopy); ok {
 		return fmt.Errorf("existing transaction incorrectly marked as added, transaction hash: %x", addedCopy[ix].Hash())
