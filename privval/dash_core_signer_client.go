@@ -292,7 +292,7 @@ func (sc *DashCoreSignerClient) SignVote(
 func (sc *DashCoreSignerClient) SignProposal(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, proposalProto *tmproto.Proposal,
 ) (tmbytes.HexBytes, error) {
-	signItem := types.NewSignItem(
+	signItem := crypto.NewSignItem(
 		quorumType,
 		quorumHash,
 		types.ProposalRequestIDProto(proposalProto),
@@ -314,7 +314,7 @@ func (sc *DashCoreSignerClient) QuorumSign(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 ) ([]byte, []byte, error) {
-	signItem := types.NewSignItemFromHash(quorumType, quorumHash, requestIDHash, msgHash)
+	signItem := crypto.NewSignItemFromHash(quorumType, quorumHash, requestIDHash, msgHash)
 
 	qs, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
 	if err != nil {
@@ -392,7 +392,7 @@ func (sc *DashCoreSignerClient) quorumSignAndVerify(
 	ctx context.Context,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
-	signItem types.SignItem,
+	signItem crypto.SignItem,
 ) (*quorumSignResult, error) {
 	qs, err := sc.quorumSign(quorumType, quorumHash, signItem)
 	if err != nil {
@@ -420,7 +420,7 @@ func (sc *DashCoreSignerClient) quorumSignAndVerify(
 func (sc *DashCoreSignerClient) quorumSign(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
-	signItem types.SignItem,
+	signItem crypto.SignItem,
 ) (*quorumSignResult, error) {
 	resp, err := sc.dashCoreRPCClient.QuorumSign(quorumType, signItem.ReqID, signItem.Hash, quorumHash)
 	if err != nil {

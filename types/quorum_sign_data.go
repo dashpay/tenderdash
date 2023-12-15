@@ -4,10 +4,8 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"testing"
 
 	"github.com/dashpay/dashd-go/btcjson"
-	"github.com/rs/zerolog"
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -19,49 +17,13 @@ var (
 
 // QuorumSignData holds data which is necessary for signing and verification block, state, and each vote-extension in a list
 type QuorumSignData struct {
-	Block      SignItem
-	Extensions map[types.VoteExtensionType][]SignItem
+	Block      crypto.SignItem
+	Extensions map[types.VoteExtensionType][]crypto.SignItem
 }
 
 // Verify verifies a quorum signatures: block, state and vote-extensions
 func (q QuorumSignData) Verify(pubKey crypto.PubKey, signs QuorumSigns) error {
 	return NewQuorumSignsVerifier(q).Verify(pubKey, signs)
-}
-
-// SignItem represents quorum sign data, like a request id, message bytes, sha256 hash of message and signID
-type SignItem struct {
-	ReqID      []byte           // Request ID for quorum signing
-	ID         []byte           // Signature ID
-	Raw        []byte           // Raw data to be signed
-	Hash       []byte           // Checksum of Raw
-	QuorumType btcjson.LLMQType // Quorum type for which this sign item is created
-	QuorumHash []byte           // Quorum hash for which this sign item is created
-}
-
-// Validate validates prepared data for signing
-func (i *SignItem) Validate() error {
-	if len(i.ReqID) != crypto.DefaultHashSize {
-		return fmt.Errorf("invalid request ID size: %X", i.ReqID)
-	}
-	if len(i.Hash) != crypto.DefaultHashSize {
-		return fmt.Errorf("invalid hash size: %X", i.ReqID)
-	}
-	if len(i.QuorumHash) != crypto.DefaultHashSize {
-		return fmt.Errorf("invalid quorum hash size: %X", i.ReqID)
-	}
-	if len(i.Raw) > 0 {
-		if !bytes.Equal(crypto.Checksum(i.Raw), i.Hash) {
-			return fmt.Errorf("invalid hash %X for raw data: %X", i.Hash, i.Raw)
-		}
-	}
-	return nil
-}
-
-func (i SignItem) MarshalZerologObject(e *zerolog.Event) {
-	e.Hex("signBytes", i.Raw)
-	e.Hex("signRequestID", i.ReqID)
-	e.Hex("signID", i.ID)
-	e.Hex("signHash", i.Hash)
 }
 
 // MakeQuorumSignsWithVoteSet creates and returns QuorumSignData struct built with a vote-set and an added vote
@@ -94,13 +56,13 @@ func MakeQuorumSigns(
 }
 
 // MakeBlockSignItem creates SignItem struct for a block
-func MakeBlockSignItem(chainID string, vote *types.Vote, quorumType btcjson.LLMQType, quorumHash []byte) SignItem {
+func MakeBlockSignItem(chainID string, vote *types.Vote, quorumType btcjson.LLMQType, quorumHash []byte) crypto.SignItem {
 	reqID := BlockRequestID(vote.Height, vote.Round)
 	raw, err := vote.SignBytes(chainID)
 	if err != nil {
 		panic(fmt.Errorf("block sign item: %w", err))
 	}
-	return NewSignItem(quorumType, quorumHash, reqID, raw)
+	return crypto.NewSignItem(quorumType, quorumHash, reqID, raw)
 }
 
 // BlockRequestID returns a block request ID
@@ -114,7 +76,7 @@ func MakeVoteExtensionSignItems(
 	protoVote *types.Vote,
 	quorumType btcjson.LLMQType,
 	quorumHash []byte,
-) (map[types.VoteExtensionType][]SignItem, error) {
+) (map[types.VoteExtensionType][]crypto.SignItem, error) {
 	// We only sign vote extensions for precommits
 	if protoVote.Type != types.PrecommitType {
 		if len(protoVote.VoteExtensions) > 0 {
@@ -122,11 +84,11 @@ func MakeVoteExtensionSignItems(
 		}
 		return nil, nil
 	}
-	items := make(map[types.VoteExtensionType][]SignItem)
+	items := make(map[types.VoteExtensionType][]crypto.SignItem)
 	protoExtensionsMap := protoVote.VoteExtensionsToMap()
 	for t, exts := range protoExtensionsMap {
 		if items[t] == nil && len(exts) > 0 {
-			items[t] = make([]SignItem, len(exts))
+			items[t] = make([]crypto.SignItem, len(exts))
 		}
 
 		for i, ext := range exts {
@@ -139,72 +101,12 @@ func MakeVoteExtensionSignItems(
 			if ext.Type == types.VoteExtensionType_THRESHOLD_RECOVER_RAW {
 				// for this vote extension type, we just sign raw data from extension
 				msgHash := bytes.Clone(raw)
-				items[t][i] = NewSignItemFromHash(quorumType, quorumHash, reqID, msgHash)
+				items[t][i] = crypto.NewSignItemFromHash(quorumType, quorumHash, reqID, msgHash)
 				items[t][i].Raw = raw
 			} else {
-				items[t][i] = NewSignItem(quorumType, quorumHash, reqID, raw)
+				items[t][i] = crypto.NewSignItem(quorumType, quorumHash, reqID, raw)
 			}
 		}
 	}
 	return items, nil
-}
-
-// NewSignItem creates a new instance of SignItem with calculating a hash for a raw and creating signID
-//
-// Arguments:
-// - quorumType: quorum type
-// - quorumHash: quorum hash
-// - reqID: sign request ID
-// - raw: raw data to be signed; it will be hashed with crypto.Checksum()
-func NewSignItem(quorumType btcjson.LLMQType, quorumHash, reqID, raw []byte) SignItem {
-	msgHash := crypto.Checksum(raw)
-	item := NewSignItemFromHash(quorumType, quorumHash, reqID, msgHash)
-	item.Raw = raw
-
-	return item
-}
-
-// Create a new sign item without raw value, using provided hash.
-func NewSignItemFromHash(quorumType btcjson.LLMQType, quorumHash, reqID, msgHash []byte) SignItem {
-	item := SignItem{
-		ReqID:      reqID,
-		Hash:       msgHash,
-		QuorumType: quorumType,
-		QuorumHash: quorumHash,
-		Raw:        nil, // Raw is empty, as we don't have it
-	}
-	item.UpdateID()
-
-	return item
-}
-
-func (i *SignItem) UpdateID() {
-	if err := i.Validate(); err != nil {
-		panic("invalid sign item: " + err.Error())
-	}
-	// FIXME: previously we had reversals, but this doesn't work with Core test vectors
-	// So
-	// quorumHash := tmbytes.Reverse(i.QuorumHash)
-	quorumHash := i.QuorumHash
-	// requestID := tmbytes.Reverse(i.ReqID)
-	requestID := i.ReqID
-	// messageHash := tmbytes.Reverse(i.Hash)
-	messageHash := i.Hash
-
-	if testing.Testing() {
-		fmt.Printf("generating  sign ID using bls.BuildSignHash for %d %X %X %X\n", i.QuorumType, quorumHash, requestID, messageHash)
-		out := append([]byte{byte(i.QuorumType)}, quorumHash...)
-		out = append(out, requestID...)
-		out = append(out, messageHash...)
-
-		fmt.Printf("data before sha256: %X\n", out)
-		fmt.Printf("sha256(sha256(data)): %X\n", crypto.Checksum((crypto.Checksum(out))))
-
-	}
-	i.ID = crypto.SignID(
-		i.QuorumType,
-		quorumHash,
-		requestID,
-		messageHash,
-	)
 }

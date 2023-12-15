@@ -7,6 +7,7 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	types1 "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -50,7 +51,7 @@ func makeBlockSignItem(
 	req *abci.RequestFinalizeBlock,
 	quorumType btcjson.LLMQType,
 	quorumHash []byte,
-) types.SignItem {
+) crypto.SignItem {
 	reqID := types.BlockRequestID(req.Height, req.Round)
 	cv, err := req.ToCanonicalVote()
 	if err != nil {
@@ -60,19 +61,19 @@ func makeBlockSignItem(
 	if err != nil {
 		panic(fmt.Errorf("block sign item: %w", err))
 	}
-	return types.NewSignItem(quorumType, quorumHash, reqID, raw)
+	return crypto.NewSignItem(quorumType, quorumHash, reqID, raw)
 }
 
 func makeVoteExtensionSignItems(
 	req *abci.RequestFinalizeBlock,
 	quorumType btcjson.LLMQType,
 	quorumHash []byte,
-) map[types1.VoteExtensionType][]types.SignItem {
-	items := make(map[types1.VoteExtensionType][]types.SignItem)
+) map[types1.VoteExtensionType][]crypto.SignItem {
+	items := make(map[types1.VoteExtensionType][]crypto.SignItem)
 	protoExtensionsMap := types1.VoteExtensionsToMap(req.Commit.ThresholdVoteExtensions)
 	for t, exts := range protoExtensionsMap {
 		if items[t] == nil && len(exts) > 0 {
-			items[t] = make([]types.SignItem, len(exts))
+			items[t] = make([]crypto.SignItem, len(exts))
 		}
 		chainID := req.Block.Header.ChainID
 		for i, ext := range exts {
@@ -82,7 +83,7 @@ func makeVoteExtensionSignItems(
 				panic(fmt.Errorf("vote extension sign items: %w", err))
 			}
 
-			items[t][i] = types.NewSignItem(quorumType, quorumHash, reqID, raw)
+			items[t][i] = crypto.NewSignItem(quorumType, quorumHash, reqID, raw)
 		}
 	}
 	return items

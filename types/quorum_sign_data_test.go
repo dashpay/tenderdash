@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/crypto"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -26,7 +27,7 @@ func TestMakeBlockSignID(t *testing.T) {
 	testCases := []struct {
 		vote       Vote
 		quorumHash []byte
-		want       SignItem
+		want       crypto.SignItem
 		wantHash   []byte
 	}{
 		{
@@ -63,7 +64,7 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 	testCases := []struct {
 		vote       Vote
 		quorumHash []byte
-		want       map[types.VoteExtensionType][]SignItem
+		want       map[types.VoteExtensionType][]crypto.SignItem
 		wantHash   map[types.VoteExtensionType][][]byte
 	}{
 		{
@@ -81,7 +82,7 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 				},
 			},
 			quorumHash: tmbytes.MustHexDecode("6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD"),
-			want: map[types.VoteExtensionType][]SignItem{
+			want: map[types.VoteExtensionType][]crypto.SignItem{
 				types.VoteExtensionType_DEFAULT: {
 					newSignItem(
 						"FB95F2CA6530F02AC623589D7938643FF22AE79A75DD79AEA1C8871162DE675E",
@@ -184,8 +185,8 @@ func TestVoteExtensionsRawSignDataRawVector(t *testing.T) {
 
 }
 
-func newSignItem(reqID, ID, raw, quorumHash string, quorumType btcjson.LLMQType) SignItem {
-	item := NewSignItem(quorumType, tmbytes.MustHexDecode(quorumHash), tmbytes.MustHexDecode(reqID), tmbytes.MustHexDecode(raw))
+func newSignItem(reqID, ID, raw, quorumHash string, quorumType btcjson.LLMQType) crypto.SignItem {
+	item := crypto.NewSignItem(quorumType, tmbytes.MustHexDecode(quorumHash), tmbytes.MustHexDecode(reqID), tmbytes.MustHexDecode(raw))
 	item.ID = tmbytes.MustHexDecode(ID)
 	return item
 }

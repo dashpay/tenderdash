@@ -9,7 +9,6 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 
 	"github.com/dashpay/tenderdash/crypto"
-	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/privval"
 )
 
@@ -93,13 +92,8 @@ func (c *MockCoreServer) QuorumSign(ctx context.Context, cmd btcjson.QuorumCmd) 
 		panic(err)
 	}
 	quorumHash := crypto.QuorumHash(quorumHashBytes)
+	signID := crypto.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).ID
 
-	signID := crypto.SignID(
-		*cmd.LLMQType,
-		tmbytes.Reverse(quorumHash),
-		tmbytes.Reverse(reqID),
-		tmbytes.Reverse(msgHash),
-	)
 	privateKey, err := c.FilePV.GetPrivateKey(ctx, quorumHash)
 	if err != nil {
 		panic(err)
@@ -142,13 +136,8 @@ func (c *MockCoreServer) QuorumVerify(ctx context.Context, cmd btcjson.QuorumCmd
 	if err != nil {
 		panic(err)
 	}
+	signID := crypto.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).ID
 
-	signID := crypto.SignID(
-		*cmd.LLMQType,
-		tmbytes.Reverse(quorumHash),
-		tmbytes.Reverse(reqID),
-		tmbytes.Reverse(msgHash),
-	)
 	thresholdPublicKey, err := c.FilePV.GetThresholdPublicKey(ctx, quorumHash)
 	if err != nil {
 		panic(err)

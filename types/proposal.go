@@ -182,12 +182,7 @@ func ProposalBlockSignID(
 
 	proposalRequestID := ProposalRequestIDProto(p)
 
-	signID := crypto.SignID(
-		quorumType,
-		tmbytes.Reverse(quorumHash),
-		tmbytes.Reverse(proposalRequestID),
-		tmbytes.Reverse(proposalMessageHash[:]),
-	)
+	signID := crypto.NewSignItemFromHash(quorumType, quorumHash, proposalRequestID, proposalMessageHash[:]).ID
 
 	return signID
 }
