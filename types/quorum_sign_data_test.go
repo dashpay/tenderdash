@@ -146,10 +146,13 @@ func TestVoteExtensionsRawSignDataRawVector(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Len(t, extension, 32)
 
-	expected, err := hex.DecodeString("6d98f773cef8484432c4946c6b96e04aab39fd119c77de2f21d668dd17d5d2f6")
+	extension = []byte{192, 37, 45, 64, 121, 74, 111, 51, 205, 98, 131, 161, 46, 118, 67, 43, 230, 124, 152, 192, 116, 136, 97, 125, 135, 163, 168, 131, 139, 120, 59, 42}
+	requestID = []byte{6, 112, 108, 119, 100, 116, 120, 0, 0, 0, 0, 0, 0, 0, 0}
+
+	expected, err := hex.DecodeString("B7561730665DBD53A1947265CA5B78A3556B27DA5AB9264630A8E03918915397")
 	assert.NoError(t, err)
 	assert.Len(t, expected, 32)
-	expected = tmbytes.Reverse(expected)
+	// expected = tmbytes.Reverse(expected)
 
 	// Note: MakeVoteExtensionSignItems() calls MakeSignID(), which will reverse bytes in quorumHash, requestID and extension.
 
@@ -171,16 +174,18 @@ func TestVoteExtensionsRawSignDataRawVector(t *testing.T) {
 	item := signItems[tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW][0]
 	actual := item.ID
 
-	t.Logf("sign bytes: %x", actual)
+	t.Logf("LLMQ type: %s (%d)\n", llmqType.Name(), llmqType)
+	t.Logf("extension: %X\n", extension)
+	t.Logf("sign requestID: %X\n", requestID)
+	t.Logf("quorum hash: %X\n", quorumHash)
+
+	t.Logf("RESULT: sign bytes: %X", actual)
 	assert.EqualValues(t, expected, actual)
+
 }
 
-func newSignItem(reqID, ID, raw string) SignItem {
-	item := SignItem{
-		ReqID: tmbytes.MustHexDecode(reqID),
-		ID:    tmbytes.MustHexDecode(ID),
-		Raw:   tmbytes.MustHexDecode(raw),
-	}
-	item.Hash = crypto.Checksum(item.Raw)
+func newSignItem(reqID, ID, raw, quorumHash string, quorumType btcjson.LLMQType) SignItem {
+	item := NewSignItem(quorumType, tmbytes.MustHexDecode(quorumHash), tmbytes.MustHexDecode(reqID), tmbytes.MustHexDecode(raw))
+	item.ID = tmbytes.MustHexDecode(ID)
 	return item
 }
