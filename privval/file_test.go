@@ -238,7 +238,7 @@ func TestSignVote(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		assert.Error(t, privVal.SignVote(ctx, "mychainid", 0, crypto.QuorumHash{}, c.ToProto(), nil),
+		assert.Error(t, privVal.SignVote(ctx, "mychainid", 0, quorumHash, c.ToProto(), nil),
 			"expected error on signing conflicting vote")
 	}
 
@@ -289,7 +289,7 @@ func TestSignProposal(t *testing.T) {
 	}
 
 	for _, c := range cases {
-		_, err = privVal.SignProposal(ctx, "mychainid", 0, crypto.QuorumHash{}, c.ToProto())
+		_, err = privVal.SignProposal(ctx, "mychainid", 0, quorumHash, c.ToProto())
 		assert.Error(t, err, "expected error on signing conflicting proposal")
 	}
 }

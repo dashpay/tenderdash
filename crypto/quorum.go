@@ -26,10 +26,10 @@ func (i *SignItem) Validate() error {
 		return fmt.Errorf("invalid request ID size: %X", i.ReqID)
 	}
 	if len(i.Hash) != DefaultHashSize {
-		return fmt.Errorf("invalid hash size: %X", i.ReqID)
+		return fmt.Errorf("invalid hash size %d: %X", len(i.Hash), i.Hash)
 	}
 	if len(i.QuorumHash) != DefaultHashSize {
-		return fmt.Errorf("invalid quorum hash size: %X", i.ReqID)
+		return fmt.Errorf("invalid quorum hash size %d: %X", len(i.QuorumHash), i.QuorumHash)
 	}
 	if len(i.Raw) > 0 {
 		if !bytes.Equal(Checksum(i.Raw), i.Hash) {
