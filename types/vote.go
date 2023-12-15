@@ -126,12 +126,13 @@ func VoteExtensionSignBytes(chainID string, height int64, round int32, ext *tmpr
 	return bz
 }
 
-// VoteExtensionRequestID returns vote extension request ID
+// VoteExtensionRequestID returns vote extension sign request ID used to generate
+// threshold signatures
 func VoteExtensionRequestID(ext *tmproto.VoteExtension, height int64, round int32) ([]byte, error) {
 
 	if ext.XSignRequestId != nil && ext.XSignRequestId.Size() > 0 {
 		if ext.Type == tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW {
-			return crypto.Checksum(ext.GetSignRequestId()), nil
+			return crypto.Checksum(crypto.Checksum(ext.GetSignRequestId())), nil
 		}
 		return nil, ErrVoteExtensionTypeWrongForRequestID
 	}

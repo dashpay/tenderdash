@@ -1,14 +1,15 @@
 package types
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
+	"testing"
 
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/rs/zerolog"
 
 	"github.com/dashpay/tenderdash/crypto"
-	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
@@ -29,16 +30,29 @@ func (q QuorumSignData) Verify(pubKey crypto.PubKey, signs QuorumSigns) error {
 
 // SignItem represents quorum sign data, like a request id, message bytes, sha256 hash of message and signID
 type SignItem struct {
-	ReqID []byte // Request ID for quorum signing
-	ID    []byte // Signature ID
-	Raw   []byte // Raw data to be signed
-	Hash  []byte // Checksum of Raw
+	ReqID      []byte           // Request ID for quorum signing
+	ID         []byte           // Signature ID
+	Raw        []byte           // Raw data to be signed
+	Hash       []byte           // Checksum of Raw
+	QuorumType btcjson.LLMQType // Quorum type for which this sign item is created
+	QuorumHash []byte           // Quorum hash for which this sign item is created
 }
 
 // Validate validates prepared data for signing
 func (i *SignItem) Validate() error {
 	if len(i.ReqID) != crypto.DefaultHashSize {
 		return fmt.Errorf("invalid request ID size: %X", i.ReqID)
+	}
+	if len(i.Hash) != crypto.DefaultHashSize {
+		return fmt.Errorf("invalid hash size: %X", i.ReqID)
+	}
+	if len(i.QuorumHash) != crypto.DefaultHashSize {
+		return fmt.Errorf("invalid quorum hash size: %X", i.ReqID)
+	}
+	if len(i.Raw) > 0 {
+		if !bytes.Equal(crypto.Checksum(i.Raw), i.Hash) {
+			return fmt.Errorf("invalid hash %X for raw data: %X", i.Hash, i.Raw)
+		}
 	}
 	return nil
 }
@@ -123,15 +137,10 @@ func MakeVoteExtensionSignItems(
 			raw := VoteExtensionSignBytes(chainID, protoVote.Height, protoVote.Round, ext)
 			// TODO: this is to avoid sha256 of raw data, to be removed once we get into agreement on the format
 			if ext.Type == types.VoteExtensionType_THRESHOLD_RECOVER_RAW {
-				// ensure we have exactly 32 bytes, cut or fill with 0s if it's not
-				msgHash := make([]byte, 32)
-				copy(msgHash, raw)
-				items[t][i] = SignItem{
-					ReqID: reqID,
-					ID:    MakeSignID(raw, reqID, quorumType, quorumHash),
-					Raw:   raw,
-					Hash:  msgHash,
-				}
+				// for this vote extension type, we just sign raw data from extension
+				msgHash := bytes.Clone(raw)
+				items[t][i] = NewSignItemFromHash(quorumType, quorumHash, reqID, msgHash)
+				items[t][i].Raw = raw
 			} else {
 				items[t][i] = NewSignItem(quorumType, quorumHash, reqID, raw)
 			}
@@ -141,22 +150,61 @@ func MakeVoteExtensionSignItems(
 }
 
 // NewSignItem creates a new instance of SignItem with calculating a hash for a raw and creating signID
+//
+// Arguments:
+// - quorumType: quorum type
+// - quorumHash: quorum hash
+// - reqID: sign request ID
+// - raw: raw data to be signed; it will be hashed with crypto.Checksum()
 func NewSignItem(quorumType btcjson.LLMQType, quorumHash, reqID, raw []byte) SignItem {
 	msgHash := crypto.Checksum(raw)
-	return SignItem{
-		ReqID: reqID,
-		ID:    MakeSignID(msgHash, reqID, quorumType, quorumHash),
-		Raw:   raw,
-		Hash:  msgHash,
-	}
+	item := NewSignItemFromHash(quorumType, quorumHash, reqID, msgHash)
+	item.Raw = raw
+
+	return item
 }
 
-// MakeSignID creates singID
-func MakeSignID(msgHash, reqID []byte, quorumType btcjson.LLMQType, quorumHash []byte) []byte {
-	return crypto.SignID(
-		quorumType,
-		tmbytes.Reverse(quorumHash),
-		tmbytes.Reverse(reqID),
-		tmbytes.Reverse(msgHash),
+// Create a new sign item without raw value, using provided hash.
+func NewSignItemFromHash(quorumType btcjson.LLMQType, quorumHash, reqID, msgHash []byte) SignItem {
+	item := SignItem{
+		ReqID:      reqID,
+		Hash:       msgHash,
+		QuorumType: quorumType,
+		QuorumHash: quorumHash,
+		Raw:        nil, // Raw is empty, as we don't have it
+	}
+	item.UpdateID()
+
+	return item
+}
+
+func (i *SignItem) UpdateID() {
+	if err := i.Validate(); err != nil {
+		panic("invalid sign item: " + err.Error())
+	}
+	// FIXME: previously we had reversals, but this doesn't work with Core test vectors
+	// So
+	// quorumHash := tmbytes.Reverse(i.QuorumHash)
+	quorumHash := i.QuorumHash
+	// requestID := tmbytes.Reverse(i.ReqID)
+	requestID := i.ReqID
+	// messageHash := tmbytes.Reverse(i.Hash)
+	messageHash := i.Hash
+
+	if testing.Testing() {
+		fmt.Printf("generating  sign ID using bls.BuildSignHash for %d %X %X %X\n", i.QuorumType, quorumHash, requestID, messageHash)
+		out := append([]byte{byte(i.QuorumType)}, quorumHash...)
+		out = append(out, requestID...)
+		out = append(out, messageHash...)
+
+		fmt.Printf("data before sha256: %X\n", out)
+		fmt.Printf("sha256(sha256(data)): %X\n", crypto.Checksum((crypto.Checksum(out))))
+
+	}
+	i.ID = crypto.SignID(
+		i.QuorumType,
+		quorumHash,
+		requestID,
+		messageHash,
 	)
 }

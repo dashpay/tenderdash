@@ -314,11 +314,8 @@ func (sc *DashCoreSignerClient) QuorumSign(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 ) ([]byte, []byte, error) {
-	signItem := types.SignItem{
-		ReqID: requestIDHash,
-		ID:    types.MakeSignID(msgHash, requestIDHash, quorumType, quorumHash),
-		Hash:  msgHash,
-	}
+	signItem := types.NewSignItemFromHash(quorumType, quorumHash, requestIDHash, msgHash)
+
 	qs, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
 	if err != nil {
 		return nil, nil, err
