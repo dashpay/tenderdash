@@ -91,6 +91,8 @@ type Testnet struct {
 	CheckTxDelayMS         int
 	VoteExtensionDelayMS   int
 	FinalizeBlockDelayMS   int
+	MaxBlockSize           int64
+	MaxEvidenceSize        int64
 
 	// Tenderdash-specific fields
 	GenesisCoreHeight         uint32 // InitialCoreHeight is a core height put into genesis file
@@ -208,6 +210,8 @@ func LoadTestnet(file string) (*Testnet, error) {
 		CheckTxDelayMS:            int(manifest.CheckTxDelayMS),
 		VoteExtensionDelayMS:      int(manifest.VoteExtensionDelayMS),
 		FinalizeBlockDelayMS:      int(manifest.FinalizeBlockDelayMS),
+		MaxBlockSize:              int64(manifest.MaxBlockSize),
+		MaxEvidenceSize:           int64(manifest.MaxEvidenceSize),
 		ThresholdPublicKey:        ld.ThresholdPubKey,
 		ThresholdPublicKeyUpdates: map[int64]crypto.PubKey{},
 		QuorumType:                btcjson.LLMQType(quorumType),

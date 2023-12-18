@@ -2,10 +2,14 @@
 # functionality with a single network.
 
 initial_height = 1000
-initial_state = {items = {initial01 = "a", initial02 = "b", initial03 = "c"}}
+initial_state = { items = { initial01 = "a", initial02 = "b", initial03 = "c" } }
 initial_core_chain_locked_height = 3400
 queue_type = "priority"
 log_level = "debug"
+
+
+max_block_size = 1048576   # 1 MB
+max_evidence_size = 102400 # 100 kB
 
 [chainlock_updates]
 1000 = 3450
@@ -76,7 +80,7 @@ privval_protocol = "dashcore"
 perturb = ["pause"]
 
 [node.validator05]
-start_at = 1005 # Becomes part of the validator set at 1010
+start_at = 1005                              # Becomes part of the validator set at 1010
 seeds = ["seed01"]
 database = "cleveldb"
 block_sync = "v0"
@@ -95,7 +99,7 @@ retain_blocks = 10
 perturb = ["restart"]
 
 [node.light01]
-mode= "light"
-start_at= 1010
+mode = "light"
+start_at = 1010
 privval_protocol = "dashcore"
 persistent_peers = ["validator01", "validator02", "validator03"]

@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/jsonpb"
+	"github.com/rs/zerolog"
 
 	"github.com/dashpay/tenderdash/crypto"
 	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
@@ -274,6 +275,64 @@ func (m *ResponsePrepareProposal) Validate() error {
 	}
 
 	return nil
+}
+
+type Misbehaviors []Misbehavior
+
+func (m Misbehaviors) MarshalZerologArray(e *zerolog.Array) {
+	for v := range m {
+		e.Interface(v)
+	}
+}
+
+type Txs [][]byte
+
+func (b Txs) MarshalZerologArray(a *zerolog.Array) {
+	for _, bs := range b {
+		a.Hex(crypto.Checksum(bs)[:8])
+	}
+}
+
+func (txr *TxRecord) MarshalZerologObject(e *zerolog.Event) {
+	e.Str("action", txr.Action.String())
+	e.Hex("tx", crypto.Checksum(txr.Tx)[:8])
+}
+
+func (r *RequestPrepareProposal) MarshalZerologObject(e *zerolog.Event) {
+	e.Int64("max_tx_bytes", r.MaxTxBytes)
+	e.Array("txs", Txs(r.Txs))
+	e.Interface("last_commit", r.LocalLastCommit)
+	e.Array("misbehavior", Misbehaviors(r.Misbehavior))
+	e.Time("proposed_time", r.Time)
+
+	e.Int64("height", r.Height)
+	e.Int32("round", r.Round)
+
+	e.Hex("next_validators_hash", r.NextValidatorsHash)
+	e.Uint32("core_chain_locked_height", r.CoreChainLockedHeight)
+	e.Hex("proposer_pro_tx_hash", r.ProposerProTxHash)
+	e.Uint64("proposed_app_version", r.ProposedAppVersion)
+	e.Str("version", r.Version.String())
+	e.Hex("quorum_hash", r.QuorumHash)
+}
+
+func (r *RequestProcessProposal) MarshalZerologObject(e *zerolog.Event) {
+	e.Array("txs", Txs(r.Txs))
+	e.Interface("last_commit", r.ProposedLastCommit.String())
+	e.Array("misbehavior", Misbehaviors(r.Misbehavior))
+	e.Time("proposed_time", r.Time)
+
+	e.Hex("block_hash", r.Hash)
+	e.Int64("height", r.Height)
+	e.Int32("round", r.Round)
+
+	e.Hex("next_validators_hash", r.NextValidatorsHash)
+	e.Uint32("core_chain_locked_height", r.CoreChainLockedHeight)
+	e.Interface("core_chain_lock_update", r.CoreChainLockUpdate)
+	e.Hex("proposer_pro_tx_hash", r.ProposerProTxHash)
+	e.Uint64("proposed_app_version", r.ProposedAppVersion)
+	e.Str("version", r.Version.String())
+	e.Hex("quorum_hash", r.QuorumHash)
 }
 
 func isValidApphash(apphash tmbytes.HexBytes) bool {

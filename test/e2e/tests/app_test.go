@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/big"
 	"math/rand"
 	"testing"
 	"time"
@@ -187,5 +188,87 @@ func TestApp_Tx(t *testing.T) {
 		})
 
 	}
+
+}
+
+// Given transactions which take more than the block size,
+// when I submit them to the node,
+// then the first transaction should be committed before the last one.
+func TestApp_TxTooBig(t *testing.T) {
+	const timeout = 10 * time.Second
+
+	testNode(t, func(ctx context.Context, t *testing.T, node e2e.Node) {
+		session := rand.Int63()
+
+		client, err := node.Client()
+		require.NoError(t, err)
+
+		cp, err := client.ConsensusParams(ctx, nil)
+		assert.NoError(t, err)
+
+		// ensure we have more txs than fits the block
+		TxPayloadSize := int(cp.ConsensusParams.Block.MaxBytes / 100) // 1% of block size
+		numTxs := 101
+
+		tx := make(types.Tx, TxPayloadSize) // first tx is just zeros
+
+		var firstTxHash []byte
+		var key string
+
+		for i := 0; i < numTxs; i++ {
+			key = fmt.Sprintf("testapp-big-tx-%v-%08x-%06x=", node.Name, session, i)
+			copy(tx, key)
+
+			payloadOffset := len(tx) - 8 // where we put the `i` into the payload
+			assert.Greater(t, payloadOffset, len(key))
+
+			big.NewInt(int64(i)).FillBytes(tx[payloadOffset:])
+			assert.Len(t, tx, TxPayloadSize)
+
+			if i == 0 {
+				firstTxHash = tx.Hash()
+			}
+
+			_, err = client.BroadcastTxAsync(ctx, tx)
+			t.Logf("submitted tx %x", tx.Hash())
+
+			assert.NoError(t, err, "failed to broadcast tx %06x", i)
+		}
+
+		lastTxHash := tx.Hash()
+
+		require.Eventuallyf(t, func() bool {
+			// last tx should be committed later than first
+			lastTxResp, err := client.Tx(ctx, lastTxHash, false)
+			if err == nil {
+				assert.Equal(t, lastTxHash, lastTxResp.Tx.Hash())
+
+				// fetch first tx
+				firstTxResp, err := client.Tx(ctx, firstTxHash, false)
+				assert.NoError(t, err, "first tx should be committed before second")
+				assert.EqualValues(t, firstTxHash, firstTxResp.Tx.Hash())
+
+				t.Logf("first tx in block %d, last tx in block %d", firstTxResp.Height, lastTxResp.Height)
+
+				assert.Less(t, firstTxResp.Height, lastTxResp.Height, "first tx should in block before last tx")
+				return true
+			}
+
+			// tx2 not there yet
+			t.Log("last tx not committed within timeout")
+			return false
+		},
+			timeout,     // timeout
+			time.Second, // interval
+			"submitted tx %X wasn't committed after %v",
+			lastTxHash, timeout,
+		)
+
+		// abciResp, err := client.ABCIQuery(ctx, "", []byte(lastTxKey))
+		// require.NoError(t, err)
+		// assert.Equal(t, code.CodeTypeOK, abciResp.Response.Code)
+		// assert.Equal(t, lastTxKey, string(abciResp.Response.Key))
+		// assert.Equal(t, lastTxHash, types.Tx(abciResp.Response.Value).Hash())
+	})
 
 }

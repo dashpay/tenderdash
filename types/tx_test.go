@@ -80,7 +80,7 @@ func TestValidateTxRecordSet(t *testing.T) {
 			},
 		}
 		txrSet := NewTxRecordSet(trs)
-		err := txrSet.Validate(9, []Tx{[]byte{10}})
+		err := txrSet.Validate(9, []Tx{[]byte{10}, []byte{11}})
 		require.NoError(t, err)
 	})
 	t.Run("should error on duplicate transactions with the same action", func(t *testing.T) {
@@ -144,6 +144,17 @@ func TestValidateTxRecordSet(t *testing.T) {
 		trs := []*abci.TxRecord{
 			{
 				Action: abci.TxRecord_REMOVED,
+				Tx:     Tx([]byte{1, 2, 3, 4, 5}),
+			},
+		}
+		txrSet := NewTxRecordSet(trs)
+		err := txrSet.Validate(100, []Tx{})
+		require.Error(t, err)
+	})
+	t.Run("should error on new transactions marked DELAYED", func(t *testing.T) {
+		trs := []*abci.TxRecord{
+			{
+				Action: abci.TxRecord_DELAYED,
 				Tx:     Tx([]byte{1, 2, 3, 4, 5}),
 			},
 		}
