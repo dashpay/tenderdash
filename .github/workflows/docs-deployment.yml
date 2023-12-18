@@ -37,7 +37,7 @@ jobs:
         run: |
           git config --global --add safe.directory "$PWD"
           make build-docs
-      - uses: actions/upload-artifact@v3
+      - uses: actions/upload-artifact@v4
         with:
           name: build-output
           path: ~/output/
