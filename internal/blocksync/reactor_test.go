@@ -239,8 +239,8 @@ func makeNextBlock(ctx context.Context,
 		blockID,
 		&types.CommitSigns{
 			QuorumSigns: types.QuorumSigns{
-				BlockSign:      vote.BlockSignature,
-				ExtensionSigns: types.MakeThresholdExtensionSigns(vote.VoteExtensions),
+				BlockSign:               vote.BlockSignature,
+				ThresholdVoteExtensions: vote.VoteExtensions.Filter(func(ext types.VoteExtensionIf) bool { return ext.IsThresholdRecoverable() }),
 			},
 			QuorumHash: state.Validators.QuorumHash,
 		},

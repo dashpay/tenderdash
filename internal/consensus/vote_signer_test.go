@@ -39,14 +39,11 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 		PrivValidator: priVals[0],
 		ProTxHash:     proTxHash,
 	}
-	voteExtensions := types.VoteExtensions{
-		tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{
-			{
-				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
-				Extension: tmbytes.MustHexDecode("524F1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83B"),
-			},
-		},
-	}
+	voteExtensions := tmproto.VoteExtensions{{
+		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+		Extension: tmbytes.MustHexDecode("524F1D03D1D81E94A099042736D40BD9681B867321443FF58A4568E274DBD83B"),
+	}}
+
 	conf := configSetup(t)
 	stateData := StateData{
 		config: conf.Consensus,
@@ -106,7 +103,7 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 		{
 			msgType:        tmproto.PrecommitType,
 			blockID:        blockID,
-			voteExtensions: voteExtensions,
+			voteExtensions: types.VoteExtensionsFromProto(voteExtensions...),
 			mockFn:         mockFn,
 			wantBlockSign:  "B2C484BB07094AAB8EFAB187982F6A8E8172FBEBAE5B6EB6304E527ABAAB7D059D9A43DDDBA82A6D296AF30E67C28D250449A586E9A69C2577057E01FA290BB03C186982D4D45E6016935AD4B9A84EB0911B62A83E457E25CE44DC28516D0E0A",
 		},
@@ -145,7 +142,6 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 			assert.NoError(t, err)
 
 			t.Logf("key: %x", key1.Serialize())
-			t.Logf("%+v", vote.VoteExtensions[tmproto.VoteExtensionType_THRESHOLD_RECOVER])
 		})
 	}
 }

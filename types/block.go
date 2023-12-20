@@ -737,7 +737,7 @@ type Commit struct {
 	QuorumHash              crypto.QuorumHash `json:"quorum_hash"`
 	ThresholdBlockSignature []byte            `json:"threshold_block_signature"`
 	// ThresholdVoteExtensions keeps the list of recovered threshold signatures for vote-extensions
-	ThresholdVoteExtensions []ThresholdExtensionSign `json:"threshold_vote_extensions"`
+	ThresholdVoteExtensions VoteExtensions `json:"threshold_vote_extensions"`
 
 	// Memoized in first call to corresponding method.
 	// NOTE: can't memoize in constructor because constructor isn't used for
@@ -764,7 +764,7 @@ func (commit *Commit) ToCommitInfo() types.CommitInfo {
 		Round:                   commit.Round,
 		QuorumHash:              commit.QuorumHash,
 		BlockSignature:          commit.ThresholdBlockSignature,
-		ThresholdVoteExtensions: ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions),
+		ThresholdVoteExtensions: commit.ThresholdVoteExtensions.ToProto(),
 	}
 }
 
@@ -943,7 +943,7 @@ func (commit *Commit) ToProto() *tmproto.Commit {
 	c.BlockID = commit.BlockID.ToProto()
 
 	c.ThresholdBlockSignature = commit.ThresholdBlockSignature
-	c.ThresholdVoteExtensions = ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions)
+	c.ThresholdVoteExtensions = commit.ThresholdVoteExtensions.ToProto()
 	c.QuorumHash = commit.QuorumHash
 
 	return c
@@ -967,7 +967,7 @@ func CommitFromProto(cp *tmproto.Commit) (*Commit, error) {
 
 	commit.QuorumHash = cp.QuorumHash
 	commit.ThresholdBlockSignature = cp.ThresholdBlockSignature
-	commit.ThresholdVoteExtensions = ThresholdExtensionSignFromProto(cp.ThresholdVoteExtensions)
+	commit.ThresholdVoteExtensions = VoteExtensionsFromProto(cp.ThresholdVoteExtensions...)
 
 	commit.Height = cp.Height
 	commit.Round = cp.Round

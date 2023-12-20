@@ -2143,7 +2143,7 @@ func TestExtendVote(t *testing.T) {
 
 	voteExtensions := []*abci.ExtendVoteExtension{
 		{
-			Type:      tmproto.VoteExtensionType_DEFAULT,
+			Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 			Extension: []byte("extension"),
 		},
 	}
@@ -2159,7 +2159,7 @@ func TestExtendVote(t *testing.T) {
 	m.On("ExtendVote", mock.Anything, mock.Anything).Return(&abci.ResponseExtendVote{
 		VoteExtensions: []*abci.ExtendVoteExtension{
 			{
-				Type:      tmproto.VoteExtensionType_DEFAULT,
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 				Extension: []byte("extension"),
 			},
 		},
@@ -2304,7 +2304,7 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 	defer cancel()
 	voteExtensions := []*abci.ExtendVoteExtension{
 		{
-			Type:      tmproto.VoteExtensionType_DEFAULT,
+			Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 			Extension: []byte("extension"),
 		},
 	}
@@ -2381,7 +2381,7 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 		Round:              round,
 		VoteExtensions: []*abci.ExtendVoteExtension{
 			{
-				Type:      tmproto.VoteExtensionType_DEFAULT,
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 				Extension: []byte("extension"),
 			},
 		},
@@ -2405,8 +2405,8 @@ func TestPrepareProposalReceivesVoteExtensions(t *testing.T) {
 	m.On("ExtendVote", mock.Anything, mock.Anything).Return(&abci.ResponseExtendVote{
 		VoteExtensions: []*abci.ExtendVoteExtension{
 			{
-				Type:      tmproto.VoteExtensionType_DEFAULT,
-				Extension: []byte("extension"),
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+				Extension: crypto.Checksum([]byte("extension-raw")),
 			},
 			{
 				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
@@ -2430,7 +2430,24 @@ func TestPrepareProposalReceivesVoteExtensions(t *testing.T) {
 
 	m.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{AppHash: make([]byte, crypto.DefaultAppHashSize)}, nil).Once()
 	m.On("VerifyVoteExtension", mock.Anything, mock.Anything).Return(&abci.ResponseVerifyVoteExtension{Status: abci.ResponseVerifyVoteExtension_ACCEPT}, nil)
-	m.On("FinalizeBlock", mock.Anything, mock.Anything).Return(&abci.ResponseFinalizeBlock{}, nil)
+
+	// no vote extensions are present
+	m.On("FinalizeBlock", mock.Anything, mock.MatchedBy(func(r *abci.RequestFinalizeBlock) bool {
+		return len(r.Commit.ThresholdVoteExtensions) == 0
+	})).Return(&abci.ResponseFinalizeBlock{}, nil)
+
+	// we expect 2 threshold-recovered vote extensions
+	m.On("FinalizeBlock", mock.Anything, mock.MatchedBy(func(r *abci.RequestFinalizeBlock) bool {
+		if len(r.Commit.ThresholdVoteExtensions) != 0 {
+			return false
+		}
+		t.Logf("FinalizeBlock with %d vote extensions", len(r.Commit.ThresholdVoteExtensions))
+
+		vexts := r.Commit.ThresholdVoteExtensions
+
+		return bytes.Equal(vexts[0].Extension, []byte("deterministic")) &&
+			bytes.Equal(vexts[1].Extension, crypto.Checksum([]byte("raw")))
+	})).Return(&abci.ResponseFinalizeBlock{}, nil).Once()
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config, application: m})
 	stateData := cs1.GetStateData()
@@ -2453,21 +2470,22 @@ func TestPrepareProposalReceivesVoteExtensions(t *testing.T) {
 
 	// create a precommit for each validator with the associated vote extension.
 	for _, vs := range vss[1:] {
-		voteExtensions := types.VoteExtensions{
-			tmproto.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{
-				{
-					Type:      tmproto.VoteExtensionType_DEFAULT,
-					Extension: []byte("extension"),
-				},
+		voteExtensions := tmproto.VoteExtensions{
+			{
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+				Extension: []byte("extension"),
 			},
-			tmproto.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{
-				{
-					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
-					Extension: []byte("deterministic"),
-				},
+			{
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+				Extension: []byte("deterministic"),
+			},
+			{
+				Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+				Extension: crypto.Checksum([]byte("raw")),
 			},
 		}
-		signAddPrecommitWithExtension(ctx, t, cs1, config.ChainID(), blockID, voteExtensions, vs)
+
+		signAddPrecommitWithExtension(ctx, t, cs1, config.ChainID(), blockID, types.VoteExtensionsFromProto(voteExtensions...), vs)
 	}
 
 	ensurePrevote(t, voteCh, height, round)
@@ -2491,6 +2509,7 @@ func TestPrepareProposalReceivesVoteExtensions(t *testing.T) {
 	// ensure that the proposer received the list of vote extensions from the
 	// previous height.
 	require.Len(t, rpp.LocalLastCommit.ThresholdVoteExtensions, 1)
+	m.AssertExpectations(t)
 }
 
 // 4 vals, 3 Nil Precommits at P0
@@ -3328,7 +3347,7 @@ func mockProposerApplicationCalls(t *testing.T, m *abcimocks.Application, round 
 		m.On("ExtendVote", mock.Anything, roundMatcher).
 			Return(&abci.ResponseExtendVote{
 				VoteExtensions: []*abci.ExtendVoteExtension{{
-					Type:      tmproto.VoteExtensionType_DEFAULT,
+					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
 					Extension: []byte("extension"),
 				}},
 			}, nil).Once()

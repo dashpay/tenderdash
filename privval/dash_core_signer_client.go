@@ -375,15 +375,15 @@ func (sc *DashCoreSignerClient) signVoteExtensions(
 		}
 		return nil
 	}
-	for et, extensions := range protoVote.VoteExtensionsToMap() {
-		for i, ext := range extensions {
-			signItem := quorumSignData.Extensions[et][i]
-			resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
-			if err != nil {
-				return err
-			}
-			ext.Signature = resp.sign
+
+	for i, ext := range quorumSignData.ThresholdVoteExtensions {
+		signItem := ext
+		resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
+		if err != nil {
+			return err
 		}
+
+		protoVote.VoteExtensions[i].Signature = resp.sign
 	}
 	return nil
 }

@@ -87,7 +87,7 @@ func makeVoteHR(
 	require.NoError(t, err, "Error signing vote")
 
 	vote.BlockSignature = v.BlockSignature
-	err = vote.VoteExtensions.CopySignsFromProto(v.VoteExtensionsToMap())
+	err = vote.VoteExtensions.CopySignsFromProto(v.VoteExtensions)
 	require.NoError(t, err)
 
 	return vote

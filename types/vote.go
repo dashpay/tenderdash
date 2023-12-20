@@ -24,13 +24,6 @@ const (
 	MaxVoteBytesEd25519  int64 = 209
 )
 
-// VoteExtensionTypes is a list of all possible vote-extension types
-var VoteExtensionTypes = []tmproto.VoteExtensionType{
-	tmproto.VoteExtensionType_DEFAULT,
-	tmproto.VoteExtensionType_THRESHOLD_RECOVER,
-	tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
-}
-
 func MaxVoteBytesForKeyType(keyType crypto.KeyType) int64 {
 	switch keyType {
 	case crypto.Ed25519:
@@ -109,35 +102,8 @@ func VoteFromProto(pv *tmproto.Vote) (*Vote, error) {
 		ValidatorProTxHash: pv.ValidatorProTxHash,
 		ValidatorIndex:     pv.ValidatorIndex,
 		BlockSignature:     pv.BlockSignature,
-		VoteExtensions:     VoteExtensionsFromProto(pv.VoteExtensions),
+		VoteExtensions:     VoteExtensionsFromProto(pv.VoteExtensions...),
 	}, nil
-}
-
-// VoteExtensionSignBytes returns the proto-encoding of the canonicalized vote
-// extension for signing. Panics if the marshaling fails.
-//
-// Similar to VoteSignBytes, the encoded Protobuf message is varint
-// length-prefixed for backwards-compatibility with the Amino encoding.
-func VoteExtensionSignBytes(chainID string, height int64, round int32, ext *tmproto.VoteExtension) []byte {
-	bz, err := CanonicalizeVoteExtension(chainID, ext, height, round)
-	if err != nil {
-		panic(err)
-	}
-	return bz
-}
-
-// VoteExtensionRequestID returns vote extension sign request ID used to generate
-// threshold signatures
-func VoteExtensionRequestID(ext *tmproto.VoteExtension, height int64, round int32) ([]byte, error) {
-
-	if ext.XSignRequestId != nil && ext.XSignRequestId.Size() > 0 {
-		if ext.Type == tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW {
-			return crypto.Checksum(crypto.Checksum(ext.GetSignRequestId())), nil
-		}
-		return nil, ErrVoteExtensionTypeWrongForRequestID
-	}
-
-	return heightRoundRequestID("dpevote", height, round), nil
 }
 
 // VoteBlockSignID returns signID that should be signed for the block
@@ -291,8 +257,10 @@ func (vote *Vote) verifySign(
 
 func (vote *Vote) makeQuorumSigns() QuorumSigns {
 	return QuorumSigns{
-		BlockSign:      vote.BlockSignature,
-		ExtensionSigns: MakeThresholdExtensionSigns(vote.VoteExtensions),
+		BlockSign: vote.BlockSignature,
+		ThresholdVoteExtensions: vote.VoteExtensions.Filter(func(ext VoteExtensionIf) bool {
+			return ext.IsThresholdRecoverable()
+		}).Copy(),
 	}
 }
 
@@ -350,8 +318,7 @@ func (vote *Vote) ValidateBasic() error {
 	}
 
 	if vote.Type == tmproto.PrecommitType && !vote.BlockID.IsNil() {
-		err := vote.VoteExtensions.Validate()
-		if err != nil {
+		if err := vote.VoteExtensions.Validate(); err != nil {
 			return err
 		}
 	}

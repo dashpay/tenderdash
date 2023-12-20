@@ -1123,8 +1123,8 @@ func makeBlockchainFromWAL(t *testing.T, wal WAL) ([]*types.Block, []*types.Comm
 					p.BlockID,
 					&types.CommitSigns{
 						QuorumSigns: types.QuorumSigns{
-							BlockSign:      p.BlockSignature,
-							ExtensionSigns: types.MakeThresholdExtensionSigns(p.VoteExtensions),
+							BlockSign:               p.BlockSignature,
+							ThresholdVoteExtensions: p.VoteExtensions,
 						},
 						QuorumHash: crypto.RandQuorumHash(),
 					},

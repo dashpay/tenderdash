@@ -686,16 +686,14 @@ func (pv *FilePV) signVote(
 	// application may have created a different extension. We therefore always
 	// re-sign the vote extensions of precommits. For prevotes, the extension
 	// signature will always be empty.
-	extSigns := make(map[tmproto.VoteExtensionType][]tmbytes.HexBytes)
+	extSigns := make([]tmbytes.HexBytes, 0, len(quorumSigns.ThresholdVoteExtensions))
 	if vote.Type == tmproto.PrecommitType {
-		for et, signItems := range quorumSigns.Extensions {
-			for _, signItem := range signItems {
-				extSig, err := privKey.SignDigest(signItem.ID)
-				if err != nil {
-					return err
-				}
-				extSigns[et] = append(extSigns[et], extSig)
+		for _, signItem := range quorumSigns.ThresholdVoteExtensions {
+			extSig, err := privKey.SignDigest(signItem.ID)
+			if err != nil {
+				return err
 			}
+			extSigns = append(extSigns, extSig)
 		}
 	} else if len(vote.VoteExtensions) > 0 {
 		return errors.New("unexpected vote extension - extensions are only allowed in precommits")
@@ -712,7 +710,7 @@ func (pv *FilePV) signVote(
 		} else {
 			return errors.New("conflicting data")
 		}
-		fillProtoVoteExtensionSigns(vote.VoteExtensionsToMap(), extSigns)
+		fillProtoVoteExtensionSigns(vote.VoteExtensions, extSigns)
 		return nil
 	}
 
@@ -735,7 +733,7 @@ func (pv *FilePV) signVote(
 	}
 
 	vote.BlockSignature = sigBlock
-	fillProtoVoteExtensionSigns(vote.VoteExtensionsToMap(), extSigns)
+	fillProtoVoteExtensionSigns(vote.VoteExtensions, extSigns)
 
 	return nil
 }
@@ -815,12 +813,12 @@ func (pv *FilePV) saveSigned(
 }
 
 func fillProtoVoteExtensionSigns(
-	voteExtensions map[tmproto.VoteExtensionType][]*tmproto.VoteExtension,
-	signs map[tmproto.VoteExtensionType][]tmbytes.HexBytes,
+	extensions []*tmproto.VoteExtension,
+	signs []tmbytes.HexBytes,
 ) {
-	for et, extensions := range voteExtensions {
-		for i, ext := range extensions {
-			ext.Signature = signs[et][i]
-		}
+
+	for i, ext := range extensions {
+		ext.Signature = signs[i]
 	}
+
 }

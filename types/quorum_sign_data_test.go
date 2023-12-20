@@ -24,6 +24,8 @@ func TestBlockRequestID(t *testing.T) {
 
 func TestMakeBlockSignID(t *testing.T) {
 	const chainID = "dash-platform"
+	const quorumType = btcjson.LLMQType_5_60
+
 	testCases := []struct {
 		vote       Vote
 		quorumHash []byte
@@ -39,20 +41,20 @@ func TestMakeBlockSignID(t *testing.T) {
 			quorumHash: tmbytes.MustHexDecode("6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD"),
 			want: newSignItem(
 				"C8F2E1FE35DE03AC94F76191F59CAD1BA1F7A3C63742B7125990D996315001CC",
-				"DA25B746781DDF47B5D736F30B1D9D0CC86981EEC67CBE255265C4361DEF8C2E",
+				"C2CB4650EFA1179482AF85591E0C065563BD9EBBAF588ACD3BD3F5EBDD997DD6",
 				"02000000E9030000000000000000000000000000E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B"+
 					"7852B855E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855646173682D706C6174666F726D",
 				"6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD",
-				btcjson.LLMQType_5_60,
+				quorumType,
 			),
 			wantHash: tmbytes.MustHexDecode("0CA3D5F42BDFED0C4FDE7E6DE0F046CC76CDA6CEE734D65E8B2EE0E375D4C57D"),
 		},
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case %d", i), func(t *testing.T) {
-			signItem := MakeBlockSignItem(chainID, tc.vote.ToProto(), btcjson.LLMQType_5_60, tc.quorumHash)
+			signItem := MakeBlockSignItem(chainID, tc.vote.ToProto(), quorumType, tc.quorumHash)
 			t.Logf("hash %X id %X raw %X reqID %X", signItem.Hash, signItem.ID, signItem.Raw, signItem.ReqID)
-			require.Equal(t, tc.want, signItem)
+			require.Equal(t, tc.want, signItem, "Got ID: %X", signItem.ID)
 			require.Equal(t, tc.wantHash, signItem.Hash)
 		})
 	}
@@ -60,68 +62,62 @@ func TestMakeBlockSignID(t *testing.T) {
 
 func TestMakeVoteExtensionSignsData(t *testing.T) {
 	const chainID = "dash-platform"
+	const quorumType = btcjson.LLMQType_5_60
+
 	logger := log.NewTestingLogger(t)
 	testCases := []struct {
 		vote       Vote
 		quorumHash []byte
-		want       map[types.VoteExtensionType][]crypto.SignItem
-		wantHash   map[types.VoteExtensionType][][]byte
+		want       []crypto.SignItem
+		wantHash   [][]byte
 	}{
 		{
 			vote: Vote{
 				Type:               types.PrecommitType,
 				Height:             1001,
 				ValidatorProTxHash: tmbytes.MustHexDecode("9CC13F685BC3EA0FCA99B87F42ABCC934C6305AA47F62A32266A2B9D55306B7B"),
-				VoteExtensions: VoteExtensions{
-					types.VoteExtensionType_DEFAULT: []tmproto.VoteExtension{{
-						Type:      tmproto.VoteExtensionType_DEFAULT,
-						Extension: []byte("default")}},
-					types.VoteExtensionType_THRESHOLD_RECOVER: []tmproto.VoteExtension{{
+				VoteExtensions: VoteExtensionsFromProto(&tmproto.VoteExtension{
+					Type:      tmproto.VoteExtensionType_DEFAULT,
+					Extension: []byte("default")},
+					&tmproto.VoteExtension{
 						Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
-						Extension: []byte("threshold")}},
-				},
+						Extension: []byte("threshold")},
+				),
 			},
 			quorumHash: tmbytes.MustHexDecode("6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD"),
-			want: map[types.VoteExtensionType][]crypto.SignItem{
-				types.VoteExtensionType_DEFAULT: {
-					newSignItem(
-						"FB95F2CA6530F02AC623589D7938643FF22AE79A75DD79AEA1C8871162DE675E",
-						"533524404D3A905F5AC9A30FCEB5A922EAD96F30DA02F979EE41C4342F540467",
-						"210A0764656661756C7411E903000000000000220D646173682D706C6174666F726D",
-						"6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD",
-						btcjson.LLMQType_5_60,
-					),
-				},
-				types.VoteExtensionType_THRESHOLD_RECOVER: {
-					newSignItem(
-						"fb95f2ca6530f02ac623589d7938643ff22ae79a75dd79aea1c8871162de675e",
-						"d3b7d53a0f9ca8072d47d6c18e782ee3155ef8dcddb010087030b6cbc63978bc",
-						"250a097468726573686f6c6411e903000000000000220d646173682d706c6174666f726d2801",
-						"6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD",
-						btcjson.LLMQType_5_60,
-					),
-				},
+			want: []crypto.SignItem{
+
+				newSignItem(
+					"FB95F2CA6530F02AC623589D7938643FF22AE79A75DD79AEA1C8871162DE675E",
+					"920740B3DA954CDB33F05F542E46502C10BACF8C085E8F8738B6BA99083FD1DF",
+					"210A0764656661756C7411E903000000000000220D646173682D706C6174666F726D",
+					"6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD",
+					quorumType,
+				),
+				newSignItem(
+					"fb95f2ca6530f02ac623589d7938643ff22ae79a75dd79aea1c8871162de675e",
+					"A3B22D7D0D3D7DEB91AE414E8911AAB7BA476455113CA0E847628910C2FF312E",
+					"250a097468726573686f6c6411e903000000000000220d646173682d706c6174666f726d2801",
+					"6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD",
+					quorumType,
+				),
 			},
-			wantHash: map[types.VoteExtensionType][][]byte{
-				types.VoteExtensionType_DEFAULT: {
-					tmbytes.MustHexDecode("61519D79DE4C4D5AC5DD210C1BCE81AA24F76DD5581A24970E60112890C68FB7"),
-				},
-				types.VoteExtensionType_THRESHOLD_RECOVER: {
-					tmbytes.MustHexDecode("46C72C423B74034E1AF574A99091B017C0698FEAA55C8B188BFD512FCADD3143"),
-				},
+			wantHash: [][]byte{
+				tmbytes.MustHexDecode("61519D79DE4C4D5AC5DD210C1BCE81AA24F76DD5581A24970E60112890C68FB7"),
+				tmbytes.MustHexDecode("46C72C423B74034E1AF574A99091B017C0698FEAA55C8B188BFD512FCADD3143"),
 			},
 		},
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
-			signItems, err := MakeVoteExtensionSignItems(chainID, tc.vote.ToProto(), btcjson.LLMQType_5_60, tc.quorumHash)
+			signItems, err := tc.vote.VoteExtensions.SignItems(chainID, quorumType, tc.quorumHash, tc.vote.Height, tc.vote.Round)
+
 			require.NoError(t, err)
-			for et, signs := range signItems {
-				for i, sign := range signs {
-					assert.Equal(t, tc.wantHash[et][i], sign.Hash, "want %X, actual %X", tc.wantHash[et][i], sign.Hash)
-					if !assert.Equal(t, tc.want[et][i], sign) {
-						logger.Error("invalid sign", "sign", sign, "type", et, "i", i)
-					}
+
+			for i, sign := range signItems {
+				assert.Equal(t, tc.wantHash[i], sign.Hash, "want %X, actual %X", tc.wantHash[i], sign.Hash)
+				if !assert.Equal(t, tc.want[i], sign, "Got ID(%d): %X", i, sign.ID) {
+					logger.Error("invalid sign", "sign", sign, "i", i)
 				}
 			}
 		})
@@ -157,22 +153,17 @@ func TestVoteExtensionsRawSignDataRawVector(t *testing.T) {
 
 	// Note: MakeVoteExtensionSignItems() calls MakeSignID(), which will reverse bytes in quorumHash, requestID and extension.
 
-	ve := tmproto.VoteExtension{
+	ve := VoteExtensionFromProto(tmproto.VoteExtension{
 		Extension: extension,
 		Signature: []byte{},
 		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 		XSignRequestId: &tmproto.VoteExtension_SignRequestId{
 			SignRequestId: requestID,
 		},
-	}
+	})
 
-	signItems, err := MakeVoteExtensionSignItems(chainID, &tmproto.Vote{
-		Type:           tmproto.PrecommitType,
-		VoteExtensions: []*tmproto.VoteExtension{&ve},
-	}, llmqType, quorumHash)
+	item, err := ve.SignItem(chainID, 1, 0, llmqType, quorumHash)
 	assert.NoError(t, err)
-
-	item := signItems[tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW][0]
 	actual := item.ID
 
 	t.Logf("LLMQ type: %s (%d)\n", llmqType.Name(), llmqType)

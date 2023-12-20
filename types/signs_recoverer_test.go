@@ -23,7 +23,8 @@ func TestSigsRecoverer(t *testing.T) {
 	quorumType := crypto.SmallQuorumType()
 	quorumHash := crypto.RandQuorumHash()
 	testCases := []struct {
-		votes []*Vote
+		expectInvalidSig bool
+		votes            []*Vote
 	}{
 		{
 			votes: []*Vote{
@@ -32,7 +33,29 @@ func TestSigsRecoverer(t *testing.T) {
 					Type:               tmproto.PrecommitType,
 					BlockID:            blockID,
 					VoteExtensions: mockVoteExtensions(t,
-						tmproto.VoteExtensionType_DEFAULT, "default",
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER, "threshold",
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW, crypto.Checksum([]byte("threshold-raw")),
+					),
+				},
+				{
+					ValidatorProTxHash: crypto.RandProTxHash(),
+					Type:               tmproto.PrecommitType,
+					BlockID:            blockID,
+					VoteExtensions: mockVoteExtensions(t,
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER, "threshold",
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW, crypto.Checksum([]byte("threshold-raw")),
+					),
+				},
+			},
+		},
+		{
+			votes: []*Vote{
+				{
+					ValidatorProTxHash: crypto.RandProTxHash(),
+					Type:               tmproto.PrecommitType,
+					BlockID:            blockID,
+					VoteExtensions: mockVoteExtensions(t,
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW, crypto.Checksum([]byte("threshold-raw")),
 						tmproto.VoteExtensionType_THRESHOLD_RECOVER, "threshold",
 					),
 				},
@@ -41,7 +64,53 @@ func TestSigsRecoverer(t *testing.T) {
 					Type:               tmproto.PrecommitType,
 					BlockID:            blockID,
 					VoteExtensions: mockVoteExtensions(t,
-						tmproto.VoteExtensionType_DEFAULT, "default",
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW, crypto.Checksum([]byte("threshold-raw")),
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER, "threshold",
+					),
+				},
+			},
+		},
+		{
+			expectInvalidSig: true,
+			votes: []*Vote{
+				{
+					ValidatorProTxHash: crypto.RandProTxHash(),
+					Type:               tmproto.PrecommitType,
+					BlockID:            blockID,
+					VoteExtensions: mockVoteExtensions(t,
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW, crypto.Checksum([]byte("threshold-raw")),
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER, "threshold",
+					),
+				},
+				{
+					ValidatorProTxHash: crypto.RandProTxHash(),
+					Type:               tmproto.PrecommitType,
+					BlockID:            blockID,
+					VoteExtensions: mockVoteExtensions(t,
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW, crypto.Checksum([]byte("threshold-raw")),
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER, "threshold1",
+					),
+				},
+			},
+		},
+		{
+			expectInvalidSig: true,
+			votes: []*Vote{
+				{
+					ValidatorProTxHash: crypto.RandProTxHash(),
+					Type:               tmproto.PrecommitType,
+					BlockID:            blockID,
+					VoteExtensions: mockVoteExtensions(t,
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW, crypto.Checksum([]byte("threshold-raw1")),
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER, "threshold",
+					),
+				},
+				{
+					ValidatorProTxHash: crypto.RandProTxHash(),
+					Type:               tmproto.PrecommitType,
+					BlockID:            blockID,
+					VoteExtensions: mockVoteExtensions(t,
+						tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW, crypto.Checksum([]byte("threshold-raw")),
 						tmproto.VoteExtensionType_THRESHOLD_RECOVER, "threshold",
 					),
 				},
@@ -78,7 +147,11 @@ func TestSigsRecoverer(t *testing.T) {
 			thresholdVoteSigns, err := sr.Recover()
 			require.NoError(t, err)
 			err = quorumSigns.Verify(thresholdPubKey, *thresholdVoteSigns)
-			require.NoError(t, err)
+			if tc.expectInvalidSig {
+				require.Error(t, err)
+			} else {
+				require.NoError(t, err)
+			}
 		})
 	}
 }
@@ -108,7 +181,7 @@ func TestSigsRecoverer_UsingVoteSet(t *testing.T) {
 			Type:               tmproto.PrecommitType,
 			BlockID:            blockID,
 			VoteExtensions: mockVoteExtensions(t,
-				tmproto.VoteExtensionType_DEFAULT, "default",
+				tmproto.VoteExtensionType_THRESHOLD_RECOVER, "default",
 				tmproto.VoteExtensionType_THRESHOLD_RECOVER, "threshold",
 			),
 		}
@@ -130,12 +203,12 @@ func TestSigsRecoverer_UsingVoteSet(t *testing.T) {
 // the format of pairs is
 // 1. the length of pairs must be even
 // 2. each pair consist of 2 elements: type and extension value
-// example: types.VoteExtensionType_DEFAULT, "defailt", types.VoteExtensionType_THRESHOLD_RECOVER, "threshold"
+// example: types.VoteExtensionType_THRESHOLD_RECOVER, "defailt", types.VoteExtensionType_THRESHOLD_RECOVER, "threshold"
 func mockVoteExtensions(t *testing.T, pairs ...interface{}) VoteExtensions {
 	if len(pairs)%2 != 0 {
 		t.Fatalf("the pairs length must be even")
 	}
-	ve := make(VoteExtensions)
+	ve := make(VoteExtensions, 0)
 	for i := 0; i < len(pairs); i += 2 {
 		extensionType, ok := pairs[i].(tmproto.VoteExtensionType)
 		if !ok {
@@ -152,7 +225,8 @@ func mockVoteExtensions(t *testing.T, pairs ...interface{}) VoteExtensions {
 		default:
 			t.Fatalf("given unsupported type %T", pairs[i+1])
 		}
-		ve[extensionType] = append(ve[extensionType], ext)
+		ve.Add(ext)
+
 	}
 	return ve
 }

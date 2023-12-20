@@ -10,7 +10,6 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
-	types1 "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -25,26 +24,9 @@ func (app *Application) verifyBlockCommit(qsd types.QuorumSignData, commit abci.
 		return err
 	}
 	return verifier.Verify(pubKey, types.QuorumSigns{
-		BlockSign:      commit.BlockSignature,
-		ExtensionSigns: makeThresholdVoteExtensions(commit.ThresholdVoteExtensions),
+		BlockSign:               commit.BlockSignature,
+		ThresholdVoteExtensions: types.VoteExtensionsFromProto(commit.ThresholdVoteExtensions...),
 	})
-}
-
-func makeThresholdVoteExtensions(pbVoteExtensions []*types1.VoteExtension) []types.ThresholdExtensionSign {
-	voteExtensions := types.VoteExtensionsFromProto(pbVoteExtensions)
-	var thresholdExtensionSigns []types.ThresholdExtensionSign
-	thresholdVoteExtensions, ok := voteExtensions[types1.VoteExtensionType_THRESHOLD_RECOVER]
-	if !ok {
-		return nil
-	}
-	thresholdExtensionSigns = make([]types.ThresholdExtensionSign, len(thresholdVoteExtensions))
-	for i, voteExtension := range thresholdVoteExtensions {
-		thresholdExtensionSigns[i] = types.ThresholdExtensionSign{
-			Extension:          voteExtension.Extension,
-			ThresholdSignature: voteExtension.Signature,
-		}
-	}
-	return thresholdExtensionSigns
 }
 
 func makeBlockSignItem(
@@ -68,23 +50,14 @@ func makeVoteExtensionSignItems(
 	req *abci.RequestFinalizeBlock,
 	quorumType btcjson.LLMQType,
 	quorumHash []byte,
-) map[types1.VoteExtensionType][]crypto.SignItem {
-	items := make(map[types1.VoteExtensionType][]crypto.SignItem)
-	protoExtensionsMap := types1.VoteExtensionsToMap(req.Commit.ThresholdVoteExtensions)
-	for t, exts := range protoExtensionsMap {
-		if items[t] == nil && len(exts) > 0 {
-			items[t] = make([]crypto.SignItem, len(exts))
-		}
-		chainID := req.Block.Header.ChainID
-		for i, ext := range exts {
-			raw := types.VoteExtensionSignBytes(chainID, req.Height, req.Round, ext)
-			reqID, err := types.VoteExtensionRequestID(ext, req.Height, req.Round)
-			if err != nil {
-				panic(fmt.Errorf("vote extension sign items: %w", err))
-			}
+) []crypto.SignItem {
 
-			items[t][i] = crypto.NewSignItem(quorumType, quorumHash, reqID, raw)
-		}
+	extensions := types.VoteExtensionsFromProto(req.Commit.ThresholdVoteExtensions...)
+	chainID := req.Block.Header.ChainID
+
+	items, err := extensions.SignItems(chainID, quorumType, quorumHash, req.Height, req.Round)
+	if err != nil {
+		panic(fmt.Errorf("vote extension sign items: %w", err))
 	}
 	return items
 }

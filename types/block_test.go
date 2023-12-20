@@ -528,7 +528,7 @@ func TestBlockMaxDataBytes(t *testing.T) {
 	require.NotNil(t, commit)
 
 	// minBlockSize is minimum correct size of a block
-	const minBlockSize = 1231
+	const minBlockSize = 1370
 
 	testCases := []struct {
 		maxBytes      int64

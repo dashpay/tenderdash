@@ -70,8 +70,8 @@ type VoteSet struct {
 	peerMaj23s    map[string]maj23Info   // Maj23 for each peer
 
 	// dash fields
-	thresholdBlockSig    []byte                   // If a 2/3 majority is seen, recover the block sig
-	thresholdVoteExtSigs []ThresholdExtensionSign // If a 2/3 majority is seen, recover the vote extension sigs
+	thresholdBlockSig    []byte         // If a 2/3 majority is seen, recover the block sig
+	thresholdVoteExtSigs VoteExtensions // If a 2/3 majority is seen, recover the vote extension sigs
 }
 
 type maj23Info struct {
@@ -349,10 +349,10 @@ func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes, q
 		// there is only 1 validator
 		vote := blockVotes.votes[0]
 		voteSet.thresholdBlockSig = vote.BlockSignature
-		voteSet.thresholdVoteExtSigs = MakeThresholdVoteExtensions(
-			vote.VoteExtensions[tmproto.VoteExtensionType_THRESHOLD_RECOVER],
-			vote.GetVoteExtensionsSigns(tmproto.VoteExtensionType_THRESHOLD_RECOVER),
-		)
+		voteSet.thresholdVoteExtSigs = vote.VoteExtensions.
+			Filter(func(ext VoteExtensionIf) bool {
+				return ext.IsThresholdRecoverable()
+			}).Copy()
 		return nil
 	}
 	err := voteSet.recoverThresholdSigns(blockVotes)
@@ -377,7 +377,7 @@ func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) error {
 		return err
 	}
 	voteSet.thresholdBlockSig = thresholdSigns.BlockSign
-	voteSet.thresholdVoteExtSigs = thresholdSigns.ExtensionSigns
+	voteSet.thresholdVoteExtSigs = thresholdSigns.ThresholdVoteExtensions
 	return nil
 }
 
@@ -742,8 +742,8 @@ func (voteSet *VoteSet) MakeCommit() *Commit {
 func (voteSet *VoteSet) makeCommitSigns() *CommitSigns {
 	return &CommitSigns{
 		QuorumSigns: QuorumSigns{
-			BlockSign:      voteSet.thresholdBlockSig,
-			ExtensionSigns: voteSet.thresholdVoteExtSigs,
+			BlockSign:               voteSet.thresholdBlockSig,
+			ThresholdVoteExtensions: voteSet.thresholdVoteExtSigs,
 		},
 		QuorumHash: voteSet.valSet.QuorumHash,
 	}
@@ -751,8 +751,8 @@ func (voteSet *VoteSet) makeCommitSigns() *CommitSigns {
 
 func (voteSet *VoteSet) makeQuorumSigns() QuorumSigns {
 	return QuorumSigns{
-		BlockSign:      voteSet.thresholdBlockSig,
-		ExtensionSigns: voteSet.thresholdVoteExtSigs,
+		BlockSign:               voteSet.thresholdBlockSig,
+		ThresholdVoteExtensions: voteSet.thresholdVoteExtSigs,
 	}
 }
 
