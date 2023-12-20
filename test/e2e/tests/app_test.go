@@ -203,7 +203,10 @@ func TestApp_TxTooBig(t *testing.T) {
 		client, err := node.Client()
 		require.NoError(t, err)
 
-		cp, err := client.ConsensusParams(ctx, nil)
+		// FIXME: ConsensusParams is broken for last height, this is just workaround
+		status, err := client.Status(ctx)
+		assert.NoError(t, err)
+		cp, err := client.ConsensusParams(ctx, &status.SyncInfo.LatestBlockHeight)
 		assert.NoError(t, err)
 
 		// ensure we have more txs than fits the block
