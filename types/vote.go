@@ -380,6 +380,7 @@ func (vote *Vote) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("val_proTxHash", vote.ValidatorProTxHash.ShortString())
 	e.Int32("val_index", vote.ValidatorIndex)
 	e.Bool("nil", vote.BlockID.IsNil())
+	e.Array("extensions", vote.VoteExtensions)
 }
 
 func (vote *Vote) HasVoteMessage() *tmcons.HasVote {

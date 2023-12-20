@@ -17,7 +17,7 @@ type CommitSigns struct {
 func (c *CommitSigns) CopyToCommit(commit *Commit) {
 	commit.QuorumHash = c.QuorumHash
 	commit.ThresholdBlockSignature = c.BlockSign
-	commit.ThresholdVoteExtensions = c.ThresholdVoteExtensions
+	commit.ThresholdVoteExtensions = c.ThresholdVoteExtensions.ToProto()
 }
 
 // QuorumSigns holds all created signatures, block, state and for each recovered vote-extensions
@@ -33,7 +33,7 @@ type QuorumSigns struct {
 func NewQuorumSignsFromCommit(commit *Commit) QuorumSigns {
 	return QuorumSigns{
 		BlockSign:               commit.ThresholdBlockSignature,
-		ThresholdVoteExtensions: commit.ThresholdVoteExtensions,
+		ThresholdVoteExtensions: VoteExtensionsFromProto(commit.ThresholdVoteExtensions...),
 	}
 }
 
@@ -135,8 +135,8 @@ func (q *QuorumSingsVerifier) verifyVoteExtensions(
 
 	for i, sig := range thresholdSigs {
 		if !pubKey.VerifySignatureDigest(signItems[i].ID, sig) {
-			return fmt.Errorf("vote-extension %d signature is invalid: %X", i,
-				signItems[i].Raw)
+			return fmt.Errorf("vote-extension %d signature is invalid: raw %X, signatrure %X", i,
+				signItems[i].Raw, sig)
 		}
 	}
 	return nil

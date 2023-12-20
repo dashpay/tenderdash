@@ -10,9 +10,11 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/hashicorp/go-multierror"
+	"github.com/rs/zerolog"
 )
 
 var (
@@ -191,6 +193,10 @@ func VoteExtensionsFromProto(pve ...*tmproto.VoteExtension) VoteExtensions {
 
 // Copy creates a deep copy of VoteExtensions
 func (e VoteExtensions) Copy() VoteExtensions {
+	if e.IsEmpty() {
+		return nil
+	}
+
 	copied := make(VoteExtensions, 0, len(e))
 	for _, ext := range e {
 		copied = append(copied, ext.Copy())
@@ -237,6 +243,13 @@ func (e VoteExtensions) CopySignsToProto(dest tmproto.VoteExtensions) error {
 	return nil
 }
 
+// Marshal VoteExtensions as zerolog array
+func (e VoteExtensions) MarshalZerologArray(a *zerolog.Array) {
+	for _, ext := range e {
+		a.Object(ext)
+	}
+}
+
 type VoteExtensionIf interface {
 	// Return type of this vote extension
 	GetType() tmproto.VoteExtensionType
@@ -255,6 +268,8 @@ type VoteExtensionIf interface {
 	Validate() error
 
 	SetSignature(sig []byte)
+
+	zerolog.LogObjectMarshaler
 }
 
 func VoteExtensionFromProto(ve tmproto.VoteExtension) VoteExtensionIf {
@@ -282,7 +297,7 @@ func (e GenericVoteExtension) Copy() VoteExtensionIf {
 }
 
 func (e GenericVoteExtension) ToProto() tmproto.VoteExtension {
-	return e.VoteExtension
+	return e.VoteExtension.Clone()
 }
 
 func (e GenericVoteExtension) SignItem(chainID string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (crypto.SignItem, error) {
@@ -297,10 +312,29 @@ func (e *GenericVoteExtension) SetSignature(sig []byte) {
 	e.Signature = sig
 }
 
+func (e GenericVoteExtension) MarshalZerologObject(o *zerolog.Event) {
+	o.Str("type", e.GetType().String())
+	o.Hex("extension", e.GetExtension())
+	o.Hex("signature", e.GetSignature())
+	o.Hex("sign_request_id", e.GetSignRequestId())
+}
+
+//nolint:revive,stylecheck // name is the same as in protobuf-generated code
+func (e GenericVoteExtension) GetSignRequestId() []byte {
+	if e.XSignRequestId == nil {
+		return nil
+	}
+	id, ok := e.XSignRequestId.(*tmproto.VoteExtension_SignRequestId)
+	if !ok || id == nil {
+		return nil
+	}
+
+	return id.SignRequestId
+}
+
 // ThresholdVoteExtension is a threshold type of VoteExtension
 type ThresholdVoteExtension struct {
 	GenericVoteExtension
-	ThresholdSignature []byte
 }
 
 func (e ThresholdVoteExtension) Copy() VoteExtensionIf {
@@ -369,10 +403,15 @@ func voteExtensionRequestID(height int64, round int32) ([]byte, error) {
 // Similar to VoteSignBytes, the encoded Protobuf message is varint
 // length-prefixed for backwards-compatibility with the Amino encoding.
 func voteExtensionSignBytes(chainID string, height int64, round int32, ext *tmproto.VoteExtension) []byte {
-	bz, err := CanonicalizeVoteExtension(chainID, ext, height, round)
+	canonical, err := CanonicalizeVoteExtension(chainID, ext, height, round)
 	if err != nil {
 		panic(err)
 	}
+	bz, err := protoio.MarshalDelimited(&canonical)
+	if err != nil {
+		panic(err)
+	}
+
 	return bz
 }
 

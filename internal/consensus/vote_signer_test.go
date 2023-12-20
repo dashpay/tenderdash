@@ -138,6 +138,10 @@ func TestVoteSigner_signAddVote(t *testing.T) {
 			key, err := privVal.GetPubKey(ctx, valSet.QuorumHash)
 			assert.NoError(t, err)
 
+			for _, ext := range vote.VoteExtensions {
+				assert.NotEmpty(t, ext.GetSignature())
+			}
+
 			key1, err := bls.G1ElementFromBytes(key.Bytes())
 			assert.NoError(t, err)
 

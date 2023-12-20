@@ -1,10 +1,9 @@
 package types
 
 import (
-	"errors"
+	"fmt"
 	"time"
 
-	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
@@ -33,7 +32,7 @@ func CanonicalizeProposal(chainID string, proposal *tmproto.Proposal) tmproto.Ca
 // CanonicalizeVoteExtension extracts the vote extension from the given vote
 // and constructs a CanonicalizeVoteExtension struct, whose representation in
 // bytes is what is signed in order to produce the vote extension's signature.
-func CanonicalizeVoteExtension(chainID string, ext *tmproto.VoteExtension, height int64, round int32) ([]byte, error) {
+func CanonicalizeVoteExtension(chainID string, ext *tmproto.VoteExtension, height int64, round int32) (tmproto.CanonicalVoteExtension, error) {
 	switch ext.Type {
 	case tmproto.VoteExtensionType_DEFAULT, tmproto.VoteExtensionType_THRESHOLD_RECOVER:
 		{
@@ -44,12 +43,10 @@ func CanonicalizeVoteExtension(chainID string, ext *tmproto.VoteExtension, heigh
 				Round:     int64(round),
 				ChainId:   chainID,
 			}
-			return protoio.MarshalDelimited(&canonical)
+			return canonical, nil
 		}
-	case tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW:
-		return ext.Extension, nil
 	}
-	return nil, errors.New("provided vote extension type does not have canonical form for signing")
+	return tmproto.CanonicalVoteExtension{}, fmt.Errorf("provided vote extension type %s does not have canonical form for signing", ext.Type)
 }
 
 // CanonicalTime can be used to stringify time in a canonical way.

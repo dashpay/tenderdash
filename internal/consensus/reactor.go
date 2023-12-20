@@ -687,6 +687,10 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 		if isValidator { // ignore votes on non-validator nodes; TODO don't even send it
 			vMsg := msgI.(*VoteMessage)
 
+			if err := vMsg.Vote.ValidateBasic(); err != nil {
+				return fmt.Errorf("invalid vote received from %s: %w", envelope.From, err)
+			}
+
 			ps.EnsureVoteBitArrays(height, valSize)
 			ps.EnsureVoteBitArrays(height-1, lastCommitSize)
 			if err := ps.SetHasVote(vMsg.Vote); err != nil {

@@ -96,7 +96,6 @@ func (v *SignsRecoverer) addVoteExtensionSigs(voteExtensions VoteExtensions) {
 	for i, ext := range thresholdExtensions {
 		v.voteThresholdExtensionSigs[i] = append(v.voteThresholdExtensionSigs[i], ext.GetSignature())
 	}
-
 }
 
 func (v *SignsRecoverer) recoverBlockSig(thresholdSigns *QuorumSigns) error {
@@ -128,7 +127,17 @@ func (v *SignsRecoverer) recoverVoteExtensionSigs(quorumSigs *QuorumSigns) error
 			thresholdExtIndex++
 
 			if len(extensionSignatures) > 0 {
-				thresholdSignature, err := bls12381.RecoverThresholdSignatureFromShares(extensionSignatures, v.validatorProTxHashes)
+				// as some nodes might have voted nil, we will have empty sigs from them;
+				// we need to filter them out before threshold-recovering
+				sigs := make([][]byte, 0, len(extensionSignatures))
+				proTxHashes := make([][]byte, 0, len(extensionSignatures))
+				for i, sig := range extensionSignatures {
+					if len(sig) > 0 {
+						sigs = append(sigs, sig)
+						proTxHashes = append(proTxHashes, v.validatorProTxHashes[i])
+					}
+				}
+				thresholdSignature, err := bls12381.RecoverThresholdSignatureFromShares(sigs, proTxHashes)
 				if err != nil {
 					return fmt.Errorf("error recovering vote-extension %d threshold signature: %w", extIndex, err)
 				}

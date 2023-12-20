@@ -275,7 +275,7 @@ func (sc *DashCoreSignerClient) SignVote(
 		"voteType", protoVote.Type,
 		"quorumType", quorumType,
 		"quorumHash", quorumHash,
-		"signature", qs.sign,
+		"signature", hex.EncodeToString(qs.sign),
 		"proTxHash", proTxHash,
 		"coreBlockRequestId", qs.ID,
 		"coreSignId", tmbytes.Reverse(qs.signHash),
