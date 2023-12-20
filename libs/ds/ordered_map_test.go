@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -73,4 +74,11 @@ func TestOrderedMapDelete(t *testing.T) {
 	if keys[0] != 1 && keys[1] != 3 {
 		t.Errorf("Expected keys [1, 3], got %v", keys)
 	}
+	v1, ok := m.Get(1)
+	assert.Equal(t, v1, 1)
+	assert.True(t, ok)
+
+	v3, ok := m.Get(3)
+	assert.Equal(t, v3, 3)
+	assert.True(t, ok)
 }
