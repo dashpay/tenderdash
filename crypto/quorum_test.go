@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/dashpay/tenderdash/crypto"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/stretchr/testify/assert"
 )
 
@@ -18,7 +19,7 @@ func TestQuorumSignItem(t *testing.T) {
 	}
 	si.UpdateSignHash(true)
 
-	expectID := mustHexDecode("94635358f4c75a1d0b38314619d1c5d9a16f12961b5314d857e04f2eb61d78d2")
+	expectID := tmbytes.Reverse(mustHexDecode("94635358f4c75a1d0b38314619d1c5d9a16f12961b5314d857e04f2eb61d78d2"))
 
 	assert.EqualValues(t, expectID, si.SignHash)
 }
