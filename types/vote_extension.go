@@ -123,21 +123,20 @@ func (e VoteExtensions) ToExtendProto() []*abci.ExtendVoteExtension {
 		}
 
 		pb := ext.ToProto()
+		eve := &abci.ExtendVoteExtension{
+			Type:      pb.Type,
+			Extension: pb.Extension,
+		}
 
-		var requestID *abci.ExtendVoteExtension_SignRequestId
 		if pb.XSignRequestId != nil {
 			if src := pb.GetSignRequestId(); len(src) > 0 {
-				requestID = &abci.ExtendVoteExtension_SignRequestId{
+				eve.XSignRequestId = &abci.ExtendVoteExtension_SignRequestId{
 					SignRequestId: bytes.Clone(src),
 				}
 			}
 		}
 
-		proto = append(proto, &abci.ExtendVoteExtension{
-			Type:           pb.Type,
-			Extension:      pb.Extension,
-			XSignRequestId: requestID,
-		})
+		proto = append(proto, eve)
 	}
 
 	return proto

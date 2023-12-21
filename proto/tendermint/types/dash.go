@@ -28,20 +28,19 @@ func (v *VoteExtension) Clone() VoteExtension {
 		panic("cannot clone nil vote-extension")
 	}
 
-	var xSignRequestID isVoteExtension_XSignRequestId
+	ve := VoteExtension{
+		Type:      v.Type,
+		Extension: v.Extension,
+		Signature: v.Signature,
+	}
 
 	if v.XSignRequestId != nil && v.XSignRequestId.Size() > 0 {
-		xSignRequestID = &VoteExtension_SignRequestId{
+		ve.XSignRequestId = &VoteExtension_SignRequestId{
 			SignRequestId: v.GetSignRequestId(),
 		}
 	}
 
-	return VoteExtension{
-		Type:           v.Type,
-		Extension:      v.Extension,
-		Signature:      v.Signature,
-		XSignRequestId: xSignRequestID,
-	}
+	return ve
 }
 
 // Copy returns a deep copy of current vote-extension.
@@ -50,20 +49,19 @@ func (v *VoteExtension) Copy() VoteExtension {
 		panic("cannot copy nil vote-extension")
 	}
 
-	var xSignRequestID isVoteExtension_XSignRequestId
+	ve := VoteExtension{
+		Type:      v.Type,
+		Extension: bytes.Clone(v.Extension),
+		Signature: bytes.Clone(v.Signature),
+	}
 
 	if v.XSignRequestId != nil && v.XSignRequestId.Size() > 0 {
-		xSignRequestID = &VoteExtension_SignRequestId{
+		ve.XSignRequestId = &VoteExtension_SignRequestId{
 			SignRequestId: bytes.Clone(v.GetSignRequestId()),
 		}
 	}
 
-	return VoteExtension{
-		Type:           v.Type,
-		Extension:      bytes.Clone(v.Extension),
-		Signature:      bytes.Clone(v.Signature),
-		XSignRequestId: xSignRequestID,
-	}
+	return ve
 }
 
 func (v *VoteExtension) Equal(other *VoteExtension) bool {
