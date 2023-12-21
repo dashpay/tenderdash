@@ -5,6 +5,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -58,4 +59,26 @@ func TestOrderedMapMultithread(t *testing.T) {
 	}
 
 	wg.Wait()
+}
+
+func TestOrderedMapDelete(t *testing.T) {
+	m := NewOrderedMap[int, int]()
+	m.Put(1, 1)
+	m.Put(2, 2)
+	m.Put(3, 3)
+	m.Delete(2)
+	keys := m.Keys()
+	if len(keys) != 2 {
+		t.Errorf("Expected 2 keys, got %d", len(keys))
+	}
+	if keys[0] != 1 && keys[1] != 3 {
+		t.Errorf("Expected keys [1, 3], got %v", keys)
+	}
+	v1, ok := m.Get(1)
+	assert.Equal(t, v1, 1)
+	assert.True(t, ok)
+
+	v3, ok := m.Get(3)
+	assert.Equal(t, v3, 3)
+	assert.True(t, ok)
 }
