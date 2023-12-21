@@ -121,9 +121,6 @@ func (i *SignItem) UpdateSignHash(reverse bool) {
 
 	signHash := make([]byte, 32)
 	copy(signHash, blsSignHash[:])
-	if reverse {
-		signHash = tmbytes.Reverse(signHash)
-	}
 
 	i.SignHash = signHash
 }
