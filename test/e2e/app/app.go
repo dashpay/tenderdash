@@ -263,5 +263,14 @@ func verifyTx(tx types.Tx, _ abci.CheckTxType) (abci.ResponseCheckTx, error) {
 				fmt.Errorf("malformed vote extension transaction %X=%X: %w", k, v, err)
 		}
 	}
-	return abci.ResponseCheckTx{Code: code.CodeTypeOK, GasWanted: 1}, nil
+	// For TestApp_TxTooBig we need to preserve order of transactions
+	var priority int64
+	// in this case, k is defined as fmt.Sprintf("testapp-big-tx-%v-%08x-%d=", node.Name, session, i)
+	// but in general, we take last digit as inverse priority
+	split = bytes.Split(k, []byte{'-'})
+	if n, err := strconv.ParseInt(string(split[len(split)-1]), 10, 64); err == nil {
+		priority = 1000000000 - n
+	}
+
+	return abci.ResponseCheckTx{Code: code.CodeTypeOK, GasWanted: 1, Priority: priority}, nil
 }

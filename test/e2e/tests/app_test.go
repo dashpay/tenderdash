@@ -219,7 +219,7 @@ func TestApp_TxTooBig(t *testing.T) {
 		var key string
 
 		for i := 0; i < numTxs; i++ {
-			key = fmt.Sprintf("testapp-big-tx-%v-%08x-%06x=", node.Name, session, i)
+			key = fmt.Sprintf("testapp-big-tx-%v-%08x-%d=", node.Name, session, i)
 			copy(tx, key)
 
 			payloadOffset := len(tx) - 8 // where we put the `i` into the payload
@@ -233,7 +233,6 @@ func TestApp_TxTooBig(t *testing.T) {
 			}
 
 			_, err = client.BroadcastTxAsync(ctx, tx)
-			t.Logf("submitted tx %x", tx.Hash())
 
 			assert.NoError(t, err, "failed to broadcast tx %06x", i)
 		}
@@ -257,8 +256,6 @@ func TestApp_TxTooBig(t *testing.T) {
 				return true
 			}
 
-			// tx2 not there yet
-			t.Log("last tx not committed within timeout")
 			return false
 		},
 			timeout,     // timeout
