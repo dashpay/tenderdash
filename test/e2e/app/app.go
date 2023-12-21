@@ -158,6 +158,14 @@ func (app *Application) FinalizeBlock(ctx context.Context, req *abci.RequestFina
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
+	for i, ext := range req.Commit.ThresholdVoteExtensions {
+		if len(ext.Signature) == 0 {
+			return &abci.ResponseFinalizeBlock{}, fmt.Errorf("vote extension signature is empty: %+v", ext)
+		}
+
+		app.logger.Debug("vote extension received in FinalizeBlock", "extension", ext, "i", i)
+	}
+
 	prevState := kvstore.NewKvState(db.NewMemDB(), 0)
 	if err := app.LastCommittedState.Copy(prevState); err != nil {
 		return &abci.ResponseFinalizeBlock{}, err
