@@ -23,9 +23,15 @@ func (app *Application) verifyBlockCommit(qsd types.QuorumSignData, commit abci.
 	if err != nil {
 		return err
 	}
+
+	extSigs := make([][]byte, 0, len(commit.ThresholdVoteExtensions))
+	for _, ext := range commit.ThresholdVoteExtensions {
+		extSigs = append(extSigs, ext.Signature)
+	}
+
 	return verifier.Verify(pubKey, types.QuorumSigns{
 		BlockSign:               commit.BlockSignature,
-		ThresholdVoteExtensions: types.VoteExtensionsFromProto(commit.ThresholdVoteExtensions...),
+		VoteExtensionSignatures: extSigs,
 	})
 }
 

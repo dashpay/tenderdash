@@ -53,7 +53,7 @@ func (suite *BlockExecutorTestSuite) TestCreate() {
 		Height: 99,
 		Round:  0,
 	}
-	emptyCommit := types.NewCommit(0, 0, types.BlockID{}, nil)
+	emptyCommit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 	testCases := []struct {
 		round         int32
 		initialHeight int64

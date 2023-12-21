@@ -288,7 +288,7 @@ func (pv *MockPV) SignVote(
 	}
 
 	for i, sign := range signItems {
-		sig, err := privKey.SignDigest(sign.ID)
+		sig, err := privKey.SignDigest(sign.SignHash)
 		if err != nil {
 			return err
 		}

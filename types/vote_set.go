@@ -376,8 +376,9 @@ func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) error {
 	if err != nil {
 		return err
 	}
+
 	voteSet.thresholdBlockSig = thresholdSigns.BlockSign
-	voteSet.thresholdVoteExtSigs = thresholdSigns.ThresholdVoteExtensions
+	voteSet.thresholdVoteExtSigs = signsRecoverer.GetVoteExtensions(*thresholdSigns)
 	return nil
 }
 
@@ -735,6 +736,7 @@ func (voteSet *VoteSet) MakeCommit() *Commit {
 		voteSet.GetHeight(),
 		voteSet.GetRound(),
 		*voteSet.maj23,
+		voteSet.thresholdVoteExtSigs,
 		voteSet.makeCommitSigns(),
 	)
 }
@@ -743,7 +745,7 @@ func (voteSet *VoteSet) makeCommitSigns() *CommitSigns {
 	return &CommitSigns{
 		QuorumSigns: QuorumSigns{
 			BlockSign:               voteSet.thresholdBlockSig,
-			ThresholdVoteExtensions: voteSet.thresholdVoteExtSigs,
+			VoteExtensionSignatures: voteSet.thresholdVoteExtSigs.GetSignatures(),
 		},
 		QuorumHash: voteSet.valSet.QuorumHash,
 	}
@@ -752,7 +754,7 @@ func (voteSet *VoteSet) makeCommitSigns() *CommitSigns {
 func (voteSet *VoteSet) makeQuorumSigns() QuorumSigns {
 	return QuorumSigns{
 		BlockSign:               voteSet.thresholdBlockSig,
-		ThresholdVoteExtensions: voteSet.thresholdVoteExtSigs,
+		VoteExtensionSignatures: voteSet.thresholdVoteExtSigs.GetSignatures(),
 	}
 }
 

@@ -41,7 +41,7 @@ func TestMakeBlockSignID(t *testing.T) {
 			quorumHash: tmbytes.MustHexDecode("6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD"),
 			want: newSignItem(
 				"C8F2E1FE35DE03AC94F76191F59CAD1BA1F7A3C63742B7125990D996315001CC",
-				"C2CB4650EFA1179482AF85591E0C065563BD9EBBAF588ACD3BD3F5EBDD997DD6",
+				"2E8CEF1D36C4655225BE7CC6EE8169C80C9D1D0BF336D7B547DF1D7846B725DA",
 				"02000000E9030000000000000000000000000000E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B"+
 					"7852B855E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855646173682D706C6174666F726D",
 				"6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD",
@@ -53,9 +53,9 @@ func TestMakeBlockSignID(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case %d", i), func(t *testing.T) {
 			signItem := MakeBlockSignItem(chainID, tc.vote.ToProto(), quorumType, tc.quorumHash)
-			t.Logf("hash %X id %X raw %X reqID %X", signItem.Hash, signItem.ID, signItem.Raw, signItem.ReqID)
-			require.Equal(t, tc.want, signItem, "Got ID: %X", signItem.ID)
-			require.Equal(t, tc.wantHash, signItem.Hash)
+			t.Logf("hash %X id %X raw %X reqID %X", signItem.RawHash, signItem.SignHash, signItem.Raw, signItem.ID)
+			require.Equal(t, tc.want, signItem, "Got ID: %X", signItem.SignHash)
+			require.Equal(t, tc.wantHash, signItem.RawHash)
 		})
 	}
 }
@@ -115,8 +115,8 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 			require.NoError(t, err)
 
 			for i, sign := range signItems {
-				assert.Equal(t, tc.wantHash[i], sign.Hash, "want %X, actual %X", tc.wantHash[i], sign.Hash)
-				if !assert.Equal(t, tc.want[i], sign, "Got ID(%d): %X", i, sign.ID) {
+				assert.Equal(t, tc.wantHash[i], sign.RawHash, "want %X, actual %X", tc.wantHash[i], sign.RawHash)
+				if !assert.Equal(t, tc.want[i], sign, "Got ID(%d): %X", i, sign.SignHash) {
 					logger.Error("invalid sign", "sign", sign, "i", i)
 				}
 			}
@@ -164,7 +164,7 @@ func TestVoteExtensionsRawSignDataRawVector(t *testing.T) {
 
 	item, err := ve.SignItem(chainID, 1, 0, llmqType, quorumHash)
 	assert.NoError(t, err)
-	actual := item.ID
+	actual := item.SignHash
 
 	t.Logf("LLMQ type: %s (%d)\n", llmqType.Name(), llmqType)
 	t.Logf("extension: %X\n", extension)
@@ -176,8 +176,8 @@ func TestVoteExtensionsRawSignDataRawVector(t *testing.T) {
 
 }
 
-func newSignItem(reqID, ID, raw, quorumHash string, quorumType btcjson.LLMQType) crypto.SignItem {
+func newSignItem(reqID, signHash, raw, quorumHash string, quorumType btcjson.LLMQType) crypto.SignItem {
 	item := crypto.NewSignItem(quorumType, tmbytes.MustHexDecode(quorumHash), tmbytes.MustHexDecode(reqID), tmbytes.MustHexDecode(raw))
-	item.ID = tmbytes.MustHexDecode(ID)
+	item.SignHash = tmbytes.MustHexDecode(signHash)
 	return item
 }

@@ -105,7 +105,7 @@ func (pub DashConsensusPublicKey) VerifySignature(msg []byte, sig []byte) bool {
 	return pub.VerifySignatureDigest(hash, sig)
 }
 func (pub DashConsensusPublicKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
-	signID := crypto.NewSignItemFromHash(pub.quorumType, pub.quorumHash, hash, hash).ID
+	signID := crypto.NewSignItemFromHash(pub.quorumType, pub.quorumHash, hash, hash).SignHash
 
 	return pub.PubKey.VerifySignatureDigest(signID, sig)
 }

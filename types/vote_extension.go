@@ -10,6 +10,7 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
 	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -193,7 +194,7 @@ func VoteExtensionsFromProto(pve ...*tmproto.VoteExtension) VoteExtensions {
 
 // Copy creates a deep copy of VoteExtensions
 func (e VoteExtensions) Copy() VoteExtensions {
-	if e.IsEmpty() {
+	if e == nil || e.IsEmpty() {
 		return nil
 	}
 
@@ -223,8 +224,21 @@ func (e VoteExtensions) CopySignsFromProto(src tmproto.VoteExtensions) error {
 	if len(e) != len(src) {
 		return errUnableCopySigns
 	}
+
 	for i, ext := range e {
 		ext.SetSignature(src[i].Signature)
+	}
+
+	return nil
+}
+
+func (e VoteExtensions) SetSignatures(src [][]byte) error {
+	if len(e) != len(src) {
+		return errUnableCopySigns
+	}
+
+	for i, ext := range e {
+		ext.SetSignature(src[i])
 	}
 
 	return nil
@@ -272,17 +286,33 @@ type VoteExtensionIf interface {
 	zerolog.LogObjectMarshaler
 }
 
+type ThresholdVoteExtensionIf interface {
+	VoteExtensionIf
+
+	AddThresholdSignature(validator ProTxHash, sig []byte) error
+	// Recover threshold signature from collected signatures
+	//
+	// Returns recovered signature or error. VoteExtension, including any signature already set, is not modified.
+	ThresholdRecover() ([]byte, error)
+}
+
 func VoteExtensionFromProto(ve tmproto.VoteExtension) VoteExtensionIf {
 	switch ve.Type {
 	case tmproto.VoteExtensionType_DEFAULT:
 		return &GenericVoteExtension{VoteExtension: ve}
 	case tmproto.VoteExtensionType_THRESHOLD_RECOVER:
-		return &ThresholdVoteExtension{GenericVoteExtension: GenericVoteExtension{VoteExtension: ve}}
+		ext := newThresholdVoteExtension(ve)
+		return &ext
 	case tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW:
-		return &ThresholdRawVoteExtension{GenericVoteExtension: GenericVoteExtension{VoteExtension: ve}}
+		ext := newThresholdVoteExtension(ve)
+		return &ThresholdRawVoteExtension{ThresholdVoteExtension: ext}
 	default:
 		panic(fmt.Errorf("unknown vote extension type: %s", ve.Type.String()))
 	}
+}
+
+func newThresholdVoteExtension(ve tmproto.VoteExtension) ThresholdVoteExtension {
+	return ThresholdVoteExtension{GenericVoteExtension: GenericVoteExtension{VoteExtension: ve}}
 }
 
 // VOTE EXTENSION TYPES
@@ -332,9 +362,13 @@ func (e GenericVoteExtension) GetSignRequestId() []byte {
 	return id.SignRequestId
 }
 
+type ThresholdSignature [bls12381.SignatureSize]byte
+
 // ThresholdVoteExtension is a threshold type of VoteExtension
 type ThresholdVoteExtension struct {
 	GenericVoteExtension
+	// threshold signatures for this vote extension, collected from validators
+	thresholdSignatures map[[crypto.ProTxHashSize]byte]ThresholdSignature
 }
 
 func (e ThresholdVoteExtension) Copy() VoteExtensionIf {
@@ -348,23 +382,57 @@ func (e ThresholdVoteExtension) IsThresholdRecoverable() bool {
 	return true
 }
 
+func (e *ThresholdVoteExtension) AddThresholdSignature(validator ProTxHash, sig []byte) error {
+	if e.thresholdSignatures == nil {
+		e.thresholdSignatures = make(map[[crypto.ProTxHashSize]byte]ThresholdSignature)
+	}
+
+	proTxHash := [crypto.ProTxHashSize]byte(validator)
+	e.thresholdSignatures[proTxHash] = ThresholdSignature(sig)
+
+	return nil
+}
+
+func (e *ThresholdVoteExtension) ThresholdRecover() ([]byte, error) {
+	proTxHashes := make([][]byte, 0, len(e.thresholdSignatures))
+	signatures := make([][]byte, 0, len(e.thresholdSignatures))
+
+	// collect signatures and proTxHashes
+	for proTxHash, signature := range e.thresholdSignatures {
+		if len(signature) != bls12381.SignatureSize {
+			return nil, fmt.Errorf("invalid vote extension signature from validator %s: got %d, expected %d",
+				proTxHash, len(signature), bls12381.SignatureSize)
+		}
+
+		proTxHashes = append(proTxHashes, bytes.Clone(proTxHash[:]))
+		signatures = append(signatures, bytes.Clone(signature[:]))
+	}
+
+	if len(signatures) > 0 {
+		thresholdSignature, err := bls12381.RecoverThresholdSignatureFromShares(signatures, proTxHashes)
+		if err != nil {
+			return nil, fmt.Errorf("error recovering vote extension %s %X threshold signature: %w",
+				e.GetType().String(), e.GetExtension(), err)
+		}
+
+		return thresholdSignature, nil
+	}
+
+	return nil, fmt.Errorf("vote extension %s of type %X does not have any signatures for threshold-recovering",
+		e.GetType().String(), e.GetExtension())
+}
+
 // ThresholdRawVoteExtension is a threshold raw type of VoteExtension
 type ThresholdRawVoteExtension struct {
-	GenericVoteExtension
-	ThresholdSignature []byte
+	ThresholdVoteExtension
 }
 
 func (e ThresholdRawVoteExtension) Copy() VoteExtensionIf {
-	return &ThresholdRawVoteExtension{GenericVoteExtension: GenericVoteExtension{
-		VoteExtension: e.VoteExtension.Copy(),
-	}}
+	inner := e.ThresholdVoteExtension.Copy().(*ThresholdVoteExtension)
+	return &ThresholdRawVoteExtension{ThresholdVoteExtension: *inner}
 }
 
-func (e ThresholdRawVoteExtension) IsThresholdRecoverable() bool {
-	return true
-}
-
-func (e ThresholdRawVoteExtension) SignItem(chainID string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (crypto.SignItem, error) {
+func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (crypto.SignItem, error) {
 	var signRequestID []byte
 	var err error
 
@@ -386,6 +454,8 @@ func (e ThresholdRawVoteExtension) SignItem(chainID string, height int64, round 
 	if err != nil {
 		return crypto.SignItem{}, err
 	}
+	// we do not reverse fields when calculating SignHash for vote extensions
+	// signItem.UpdateSignHash(false)
 	signItem.Raw = ext.Extension
 
 	return signItem, nil
@@ -421,5 +491,8 @@ func signItem(ext *tmproto.VoteExtension, chainID string, height int64, round in
 		return crypto.SignItem{}, err
 	}
 	signBytes := voteExtensionSignBytes(chainID, height, round, ext)
-	return crypto.NewSignItem(quorumType, quorumHash, requestID, signBytes), nil
+	si := crypto.NewSignItem(quorumType, quorumHash, requestID, signBytes)
+	// we do not reverse fields when calculating SignHash for vote extensions
+	// si.UpdateSignHash(false)
+	return si, nil
 }

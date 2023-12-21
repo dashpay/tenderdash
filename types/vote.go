@@ -109,7 +109,7 @@ func VoteFromProto(pv *tmproto.Vote) (*Vote, error) {
 // VoteBlockSignID returns signID that should be signed for the block
 func VoteBlockSignID(chainID string, vote *tmproto.Vote, quorumType btcjson.LLMQType, quorumHash []byte) []byte {
 	signID := MakeBlockSignItem(chainID, vote, quorumType, quorumHash)
-	return signID.ID
+	return signID.SignHash
 }
 
 // Copy creates a deep copy of the vote
@@ -258,9 +258,9 @@ func (vote *Vote) verifySign(
 func (vote *Vote) makeQuorumSigns() QuorumSigns {
 	return QuorumSigns{
 		BlockSign: vote.BlockSignature,
-		ThresholdVoteExtensions: vote.VoteExtensions.Filter(func(ext VoteExtensionIf) bool {
+		VoteExtensionSignatures: vote.VoteExtensions.Filter(func(ext VoteExtensionIf) bool {
 			return ext.IsThresholdRecoverable()
-		}).Copy(),
+		}).GetSignatures(),
 	}
 }
 

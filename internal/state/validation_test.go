@@ -78,7 +78,7 @@ func TestValidateBlockHeader(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil)
+	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 
 	// some bad values
 	wrongHash := crypto.Checksum([]byte("this hash is wrong"))
@@ -206,8 +206,8 @@ func TestValidateBlockCommit(t *testing.T) {
 		blockStore,
 		eventBus,
 	)
-	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil)
-	wrongVoteMessageSignedCommit := types.NewCommit(1, 0, types.BlockID{}, nil)
+	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
+	wrongVoteMessageSignedCommit := types.NewCommit(1, 0, types.BlockID{}, nil, nil)
 	badPrivValQuorumHash := crypto.RandQuorumHash()
 	badPrivVal := types.NewMockPVForQuorum(badPrivValQuorumHash)
 
@@ -235,6 +235,7 @@ func TestValidateBlockCommit(t *testing.T) {
 				wrongHeightVote.Height,
 				wrongHeightVote.Round,
 				state.LastBlockID,
+				wrongHeightVote.VoteExtensions,
 				&types.CommitSigns{
 					QuorumSigns: *thresholdSigns,
 					QuorumHash:  state.Validators.QuorumHash,
@@ -338,7 +339,7 @@ func TestValidateBlockCommit(t *testing.T) {
 			QuorumHash:  state.Validators.QuorumHash,
 		}
 		wrongVoteMessageSignedCommit = types.NewCommit(goodVote.Height, goodVote.Round,
-			blockID, quorumSigns)
+			blockID, goodVote.VoteExtensions, quorumSigns)
 	}
 }
 
@@ -385,7 +386,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 		blockStore,
 		eventBus,
 	)
-	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil)
+	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil,nil)
 
 	for height := int64(1); height < validationTestsStopHeight; height++ {
 		proposerProTxHash := state.Validators.GetProposer().ProTxHash

@@ -11,8 +11,30 @@ import (
 
 // QuorumSignData holds data which is necessary for signing and verification block, state, and each vote-extension in a list
 type QuorumSignData struct {
-	Block                   crypto.SignItem
-	ThresholdVoteExtensions []crypto.SignItem
+	Block                  crypto.SignItem
+	VoteExtensionSignItems []crypto.SignItem
+}
+
+// Signs items inside QuorumSignData using a given private key.
+//
+// Mainly for testing.
+func (q QuorumSignData) SignWithPrivkey(key crypto.PrivKey) (QuorumSigns, error) {
+	var err error
+	var signs QuorumSigns
+	if signs.BlockSign, err = key.SignDigest(q.Block.SignHash); err != nil {
+		return signs, err
+	}
+
+	signs.VoteExtensionSignatures = make([][]byte, 0, len(q.VoteExtensionSignItems))
+	for _, item := range q.VoteExtensionSignItems {
+		var sign []byte
+		if sign, err = key.SignDigest(item.SignHash); err != nil {
+			return signs, err
+		}
+		signs.VoteExtensionSignatures = append(signs.VoteExtensionSignatures, sign)
+	}
+
+	return signs, nil
 }
 
 // Verify verifies a quorum signatures: block, state and vote-extensions
@@ -42,7 +64,7 @@ func MakeQuorumSigns(
 		Block: MakeBlockSignItem(chainID, protoVote, quorumType, quorumHash),
 	}
 	var err error
-	quorumSign.ThresholdVoteExtensions, err =
+	quorumSign.VoteExtensionSignItems, err =
 		VoteExtensionsFromProto(protoVote.VoteExtensions...).
 			Filter(func(ext VoteExtensionIf) bool {
 				return ext.IsThresholdRecoverable()

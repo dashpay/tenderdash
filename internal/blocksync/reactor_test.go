@@ -189,7 +189,7 @@ func (rts *reactorTestSuite) addNode(
 	peerEvents := func(ctx context.Context, _ string) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] }
 	reactor := makeReactor(ctx, t, rts.config, proTxHash, nodeID, genDoc, privVal, chCreator, peerEvents)
 
-	commit := types.NewCommit(0, 0, types.BlockID{}, nil)
+	commit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 
 	state, err := reactor.stateStore.Load()
 	require.NoError(t, err)
@@ -237,10 +237,11 @@ func makeNextBlock(ctx context.Context,
 		vote.Height,
 		vote.Round,
 		blockID,
+		vote.VoteExtensions,
 		&types.CommitSigns{
 			QuorumSigns: types.QuorumSigns{
 				BlockSign:               vote.BlockSignature,
-				ThresholdVoteExtensions: vote.VoteExtensions.Filter(func(ext types.VoteExtensionIf) bool { return ext.IsThresholdRecoverable() }),
+				VoteExtensionSignatures: vote.VoteExtensions.GetSignatures(),
 			},
 			QuorumHash: state.Validators.QuorumHash,
 		},

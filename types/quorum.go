@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"fmt"
 
 	"github.com/dashpay/tenderdash/crypto"
@@ -14,26 +15,40 @@ type CommitSigns struct {
 }
 
 // CopyToCommit copies threshold signature to commit
+//
+// commit.ThresholdVoteExtensions must be initialized
 func (c *CommitSigns) CopyToCommit(commit *Commit) {
 	commit.QuorumHash = c.QuorumHash
 	commit.ThresholdBlockSignature = c.BlockSign
-	commit.ThresholdVoteExtensions = c.ThresholdVoteExtensions.ToProto()
+	if len(c.VoteExtensionSignatures) != len(commit.ThresholdVoteExtensions) {
+		panic(fmt.Sprintf("count of threshold vote extension signatures (%d) doesn't match vote extensions in commit (%d)",
+			len(commit.ThresholdVoteExtensions), len(c.VoteExtensionSignatures),
+		))
+	}
+	for i, ext := range c.VoteExtensionSignatures {
+		commit.ThresholdVoteExtensions[i].Signature = bytes.Clone(ext)
+	}
 }
 
 // QuorumSigns holds all created signatures, block, state and for each recovered vote-extensions
 type QuorumSigns struct {
 	BlockSign []byte
-	// Signed vote extensions
-	ThresholdVoteExtensions VoteExtensions
+	// List of vote extensions signatures. Order matters.
+	VoteExtensionSignatures [][]byte
 }
 
 // NewQuorumSignsFromCommit creates and returns QuorumSigns using threshold signatures from a commit.
 //
 // Note it only uses threshold-revoverable vote extension signatures, as non-threshold signatures are not included in the commit
 func NewQuorumSignsFromCommit(commit *Commit) QuorumSigns {
+	sigs := make([][]byte, 0, len(commit.ThresholdVoteExtensions))
+	for _, ext := range commit.ThresholdVoteExtensions {
+		sigs = append(sigs, ext.Signature)
+	}
+
 	return QuorumSigns{
 		BlockSign:               commit.ThresholdBlockSignature,
-		ThresholdVoteExtensions: VoteExtensionsFromProto(commit.ThresholdVoteExtensions...),
+		VoteExtensionSignatures: sigs,
 	}
 }
 
@@ -102,11 +117,11 @@ func (q *QuorumSingsVerifier) verifyBlock(pubKey crypto.PubKey, signs QuorumSign
 	if !q.shouldVerifyBlock {
 		return nil
 	}
-	if !pubKey.VerifySignatureDigest(q.Block.ID, signs.BlockSign) {
+	if !pubKey.VerifySignatureDigest(q.Block.SignHash, signs.BlockSign) {
 		return fmt.Errorf(
 			"threshold block signature is invalid: (%X) signID=%X: %w",
 			q.Block.Raw,
-			q.Block.ID,
+			q.Block.SignHash,
 			ErrVoteInvalidBlockSignature,
 		)
 	}
@@ -122,20 +137,20 @@ func (q *QuorumSingsVerifier) verifyVoteExtensions(
 		return nil
 	}
 
-	thresholdSigs := signs.ThresholdVoteExtensions.GetSignatures()
-	signItems := q.ThresholdVoteExtensions
+	thresholdSigs := signs.VoteExtensionSignatures
+	signItems := q.VoteExtensionSignItems
 	if len(signItems) == 0 {
 		return nil
 	}
 	if len(signItems) != len(thresholdSigs) {
-		return fmt.Errorf("count of threshold vote extension signatures (%d) doesn't match with recoverable vote extensions (%d)",
+		return fmt.Errorf("count of threshold vote extension signatures (%d) doesn't match recoverable vote extensions (%d)",
 			len(thresholdSigs), len(signItems),
 		)
 	}
 
 	for i, sig := range thresholdSigs {
-		if !pubKey.VerifySignatureDigest(signItems[i].ID, sig) {
-			return fmt.Errorf("vote-extension %d signature is invalid: raw %X, signatrure %X", i,
+		if !pubKey.VerifySignatureDigest(signItems[i].SignHash, sig) {
+			return fmt.Errorf("vote-extension %d signature is invalid: raw %X, signature %X", i,
 				signItems[i].Raw, sig)
 		}
 	}

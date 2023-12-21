@@ -686,10 +686,10 @@ func (pv *FilePV) signVote(
 	// application may have created a different extension. We therefore always
 	// re-sign the vote extensions of precommits. For prevotes, the extension
 	// signature will always be empty.
-	extSigns := make([]tmbytes.HexBytes, 0, len(quorumSigns.ThresholdVoteExtensions))
+	extSigns := make([]tmbytes.HexBytes, 0, len(quorumSigns.VoteExtensionSignItems))
 	if vote.Type == tmproto.PrecommitType {
-		for _, signItem := range quorumSigns.ThresholdVoteExtensions {
-			extSig, err := privKey.SignDigest(signItem.ID)
+		for _, signItem := range quorumSigns.VoteExtensionSignItems {
+			extSig, err := privKey.SignDigest(signItem.SignHash)
 			if err != nil {
 				return err
 			}
@@ -714,7 +714,7 @@ func (pv *FilePV) signVote(
 		return nil
 	}
 
-	sigBlock, err := privKey.SignDigest(quorumSigns.Block.ID)
+	sigBlock, err := privKey.SignDigest(quorumSigns.Block.SignHash)
 	if err != nil {
 		return err
 	}

@@ -6,34 +6,36 @@ import (
 
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 	"github.com/dashpay/dashd-go/btcjson"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/rs/zerolog"
 )
 
 // SignItem represents signing session data (in field SignItem.ID) that will be signed to get threshold signature share.
+// Field names are the same as in Dash Core, but the meaning is different.
 // See DIP-0007
 type SignItem struct {
-	ReqID      []byte           // Request ID for quorum signing
-	ID         []byte           // Signature ID
-	Raw        []byte           // Raw data to be signed
-	Hash       []byte           // Checksum of Raw
-	QuorumType btcjson.LLMQType // Quorum type for which this sign item is created
+	ID         []byte           // Request ID for quorum signing
+	SignHash   []byte           // Hash of llmqType, quorumHash, id, and msgHash - final data to  sign/verify
+	Raw        []byte           // Raw data to be signed, before any transformations
+	RawHash    []byte           // Checksum of Raw
+	LlmqType   btcjson.LLMQType // Quorum type for which this sign item is created
 	QuorumHash []byte           // Quorum hash for which this sign item is created
 }
 
 // Validate validates prepared data for signing
 func (i *SignItem) Validate() error {
-	if len(i.ReqID) != DefaultHashSize {
-		return fmt.Errorf("invalid request ID size: %X", i.ReqID)
+	if len(i.ID) != DefaultHashSize {
+		return fmt.Errorf("invalid request ID size: %X", i.ID)
 	}
-	if len(i.Hash) != DefaultHashSize {
-		return fmt.Errorf("invalid hash size %d: %X", len(i.Hash), i.Hash)
+	if len(i.RawHash) != DefaultHashSize {
+		return fmt.Errorf("invalid hash size %d: %X", len(i.RawHash), i.RawHash)
 	}
 	if len(i.QuorumHash) != DefaultHashSize {
 		return fmt.Errorf("invalid quorum hash size %d: %X", len(i.QuorumHash), i.QuorumHash)
 	}
 	if len(i.Raw) > 0 {
-		if !bytes.Equal(Checksum(i.Raw), i.Hash) {
-			return fmt.Errorf("invalid hash %X for raw data: %X", i.Hash, i.Raw)
+		if !bytes.Equal(Checksum(i.Raw), i.RawHash) {
+			return fmt.Errorf("invalid hash %X for raw data: %X", i.RawHash, i.Raw)
 		}
 	}
 	return nil
@@ -41,9 +43,9 @@ func (i *SignItem) Validate() error {
 
 func (i SignItem) MarshalZerologObject(e *zerolog.Event) {
 	e.Hex("signBytes", i.Raw)
-	e.Hex("signRequestID", i.ReqID)
-	e.Hex("signID", i.ID)
-	e.Hex("signHash", i.Hash)
+	e.Hex("signRequestID", i.ID)
+	e.Hex("signID", i.SignHash)
+	e.Hex("signHash", i.RawHash)
 }
 
 // NewSignItem creates a new instance of SignItem with calculating a hash for a raw and creating signID
@@ -64,31 +66,37 @@ func NewSignItem(quorumType btcjson.LLMQType, quorumHash, reqID, raw []byte) Sig
 // Create a new sign item without raw value, using provided hash.
 func NewSignItemFromHash(quorumType btcjson.LLMQType, quorumHash, reqID, msgHash []byte) SignItem {
 	item := SignItem{
-		ReqID:      reqID,
-		Hash:       msgHash,
-		QuorumType: quorumType,
+		ID:         reqID,
+		RawHash:    msgHash,
+		LlmqType:   quorumType,
 		QuorumHash: quorumHash,
 		Raw:        nil, // Raw is empty, as we don't have it
 	}
-	item.UpdateID()
+
+	// By default, reverse fields when calculating SignHash
+	item.UpdateSignHash(true)
 
 	return item
 }
 
-func (i *SignItem) UpdateID() {
+// UpdateSignHash recalculates signHash field
+// If reverse is true, then all []byte elements will be reversed before
+// calculating signID
+func (i *SignItem) UpdateSignHash(reverse bool) {
 	if err := i.Validate(); err != nil {
 		panic("invalid sign item: " + err.Error())
 	}
-	// FIXME: previously we had reversals, but this doesn't work with Core test vectors
-	// So
-	// quorumHash := tmbytes.Reverse(i.QuorumHash)
-	quorumHash := i.QuorumHash
-	// requestID := tmbytes.Reverse(i.ReqID)
-	requestID := i.ReqID
-	// messageHash := tmbytes.Reverse(i.Hash)
-	messageHash := i.Hash
+	llmqType := i.LlmqType
 
-	llmqType := i.QuorumType
+	quorumHash := i.QuorumHash
+	requestID := i.ID
+	messageHash := i.RawHash
+
+	if reverse {
+		quorumHash = tmbytes.Reverse(quorumHash)
+		requestID = tmbytes.Reverse(requestID)
+		messageHash = tmbytes.Reverse(messageHash)
+	}
 
 	// if testing.Testing() {
 	// 	fmt.Printf("generating  sign ID using bls.BuildSignHash for %d %X %X %X\n", llmqType, quorumHash, requestID, messageHash)
@@ -99,6 +107,7 @@ func (i *SignItem) UpdateID() {
 	// 	fmt.Printf("data before sha256: %X\n", out)
 	// 	fmt.Printf("sha256(sha256(data)): %X\n", crypto.Checksum((crypto.Checksum(out))))
 	// }
+
 	var blsQuorumHash bls.Hash
 	copy(blsQuorumHash[:], quorumHash)
 
@@ -112,6 +121,9 @@ func (i *SignItem) UpdateID() {
 
 	signHash := make([]byte, 32)
 	copy(signHash, blsSignHash[:])
+	if reverse {
+		signHash = tmbytes.Reverse(signHash)
+	}
 
-	i.ID = signHash
+	i.SignHash = signHash
 }

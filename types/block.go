@@ -746,12 +746,17 @@ type Commit struct {
 }
 
 // NewCommit returns a new Commit.
-func NewCommit(height int64, round int32, blockID BlockID, commitSigns *CommitSigns) *Commit {
+func NewCommit(height int64, round int32, blockID BlockID, voteExtensions VoteExtensions, commitSigns *CommitSigns) *Commit {
 	commit := &Commit{
 		Height:  height,
 		Round:   round,
 		BlockID: blockID,
+		ThresholdVoteExtensions: voteExtensions.Filter(func(ext VoteExtensionIf) bool {
+			_, ok := ext.(ThresholdVoteExtensionIf)
+			return ok
+		}).ToProto(),
 	}
+
 	if commitSigns != nil {
 		commitSigns.CopyToCommit(commit)
 	}

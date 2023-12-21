@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/dashpay/tenderdash/crypto/bls12381"
+	"github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 // SignsRecoverer is used to recover threshold block, state, and vote-extension signatures
@@ -12,10 +13,11 @@ type SignsRecoverer struct {
 	blockSigs            [][]byte
 	stateSigs            [][]byte
 	validatorProTxHashes [][]byte
-	// List of all threshold-recovered vote extensions, indexed by vote extension number
-	voteThresholdExts VoteExtensions
-	// voteThresholdExtensionSigs is a list of signatures for each threshold-recovered vote-extension, indexed by vote extension number
-	voteThresholdExtensionSigs [][][]byte
+	// List of all vote extensions. Order matters.
+	voteExtensions VoteExtensions
+
+	// true when the recovery of vote extensions was already executed
+	voteExtensionsRecovered bool
 
 	quorumReached bool
 }
@@ -56,11 +58,32 @@ func (v *SignsRecoverer) Recover() (*QuorumSigns, error) {
 	return thresholdSigns, nil
 }
 
+// Helper function that returns deep copy of recovered vote extensions with signatures from QuorumSigns.
+//
+// Note that this method doesn't recover threshold signatures.
+// It requires to call Recover() method first.
+//
+// ## Panics
+//
+// Panics when the count of threshold vote extension signatures in QuorumSigns doesn't match recoverable vote extensions
+func (v *SignsRecoverer) GetVoteExtensions(qs QuorumSigns) VoteExtensions {
+	if len(qs.VoteExtensionSignatures) != len(v.voteExtensions) {
+		panic(fmt.Sprintf("count of threshold vote extension signatures (%d) doesn't match recoverable vote extensions (%d)",
+			len(qs.VoteExtensionSignatures), len(v.voteExtensions)))
+	}
+	exts := v.voteExtensions.Copy()
+	for i, ext := range exts {
+		ext.SetSignature(qs.VoteExtensionSignatures[i])
+	}
+
+	return exts
+}
+
 func (v *SignsRecoverer) init(votes []*Vote) {
 	v.blockSigs = nil
 	v.stateSigs = nil
 	v.validatorProTxHashes = nil
-	v.voteThresholdExtensionSigs = nil
+
 	for _, vote := range votes {
 		v.addVoteSigs(vote)
 	}
@@ -70,31 +93,39 @@ func (v *SignsRecoverer) addVoteSigs(vote *Vote) {
 	if vote == nil {
 		return
 	}
+
 	v.blockSigs = append(v.blockSigs, vote.BlockSignature)
 	v.validatorProTxHashes = append(v.validatorProTxHashes, vote.ValidatorProTxHash)
-	v.addVoteExtensionSigs(vote.VoteExtensions)
+	v.addVoteExtensionSigs(vote)
 }
 
 // Add threshold-recovered vote extensions
-func (v *SignsRecoverer) addVoteExtensionSigs(voteExtensions VoteExtensions) {
-	// Skip non-threshold vote-extensions
-	thresholdExtensions := voteExtensions.Filter(func(ext VoteExtensionIf) bool {
-		return ext.IsThresholdRecoverable()
-	})
-	// initialize vote extensions if it's empty
-	if len(v.voteThresholdExts) == 0 && !thresholdExtensions.IsEmpty() {
-		v.voteThresholdExts = thresholdExtensions.Copy()
-		v.voteThresholdExtensionSigs = make([][][]byte, len(thresholdExtensions))
+func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) {
+	if len(vote.VoteExtensions) == 0 {
+		return
+	}
+
+	// initialize vote extensions
+	if v.voteExtensions.IsEmpty() {
+		v.voteExtensions = vote.VoteExtensions.Copy()
 	}
 
 	// sanity check; this should be detected on higher layers
-	if len(v.voteThresholdExts) != len(thresholdExtensions) {
-		panic(fmt.Sprintf("received vote extensions with different length: current %d, new %d", len(v.voteThresholdExts), len(thresholdExtensions)))
+	if vote.Type != types.PrecommitType || vote.BlockID.IsNil() {
+		panic(fmt.Sprintf("only non-nil precommits can have vote extensions, got: %s", vote.String()))
+	}
+
+	if len(vote.VoteExtensions) != len(v.voteExtensions) {
+		panic(fmt.Sprintf("received vote extensions with different length: current %d, new %d", len(v.voteExtensions), len(v.voteExtensions)))
 	}
 
 	// append signatures from this vote to each extension
-	for i, ext := range thresholdExtensions {
-		v.voteThresholdExtensionSigs[i] = append(v.voteThresholdExtensionSigs[i], ext.GetSignature())
+	for i, ext := range vote.VoteExtensions {
+		if recoverable, ok := (v.voteExtensions[i]).(ThresholdVoteExtensionIf); ok {
+			if err := recoverable.AddThresholdSignature(vote.ValidatorProTxHash, ext.GetSignature()); err != nil {
+				panic(fmt.Errorf("failed to add vote %s to recover vote extension threshold sig: %w", vote.String(), err))
+			}
+		}
 	}
 }
 
@@ -113,40 +144,26 @@ func (v *SignsRecoverer) recoverVoteExtensionSigs(quorumSigs *QuorumSigns) error
 		return nil
 	}
 
-	// initialize threshold vote extensions with empty signatures
-	quorumSigs.ThresholdVoteExtensions = v.voteThresholdExts.Filter(func(ext VoteExtensionIf) bool { return ext.IsThresholdRecoverable() }).Copy()
-	for i := range quorumSigs.ThresholdVoteExtensions {
-		quorumSigs.ThresholdVoteExtensions[i].SetSignature(nil)
+	if quorumSigs.VoteExtensionSignatures == nil {
+		quorumSigs.VoteExtensionSignatures = make([][]byte, len(v.voteExtensions))
 	}
 
-	// for each vote extension, if it's threshold-recoverable, recover its signature
-	thresholdExtIndex := 0
-	for extIndex, extension := range quorumSigs.ThresholdVoteExtensions {
-		if extension.IsThresholdRecoverable() {
-			extensionSignatures := v.voteThresholdExtensionSigs[thresholdExtIndex]
-			thresholdExtIndex++
+	if len(v.voteExtensions) != len(quorumSigs.VoteExtensionSignatures) {
+		return fmt.Errorf("count of threshold vote extension signatures (%d) doesn't match recoverable vote extensions (%d)",
+			len(quorumSigs.VoteExtensionSignatures), len(v.voteExtensions))
+	}
 
-			if len(extensionSignatures) > 0 {
-				// as some nodes might have voted nil, we will have empty sigs from them;
-				// we need to filter them out before threshold-recovering
-				sigs := make([][]byte, 0, len(extensionSignatures))
-				proTxHashes := make([][]byte, 0, len(extensionSignatures))
-				for i, sig := range extensionSignatures {
-					if len(sig) > 0 {
-						sigs = append(sigs, sig)
-						proTxHashes = append(proTxHashes, v.validatorProTxHashes[i])
-					}
-				}
-				thresholdSignature, err := bls12381.RecoverThresholdSignatureFromShares(sigs, proTxHashes)
-				if err != nil {
-					return fmt.Errorf("error recovering vote-extension %d threshold signature: %w", extIndex, err)
-				}
-				quorumSigs.ThresholdVoteExtensions[extIndex].SetSignature(thresholdSignature)
-			} else {
-				return fmt.Errorf("vote extension %d does not have any signatures for threshold-recovering", extIndex)
+	for i, ext := range v.voteExtensions {
+		if extension, ok := ext.(ThresholdVoteExtensionIf); ok {
+			sig, err := extension.ThresholdRecover()
+			if err != nil {
+				return fmt.Errorf("error recovering threshold signature for vote extension %d: %w", i, err)
 			}
+			quorumSigs.VoteExtensionSignatures[i] = sig
 		}
 	}
+
+	v.voteExtensionsRecovered = true
 
 	return nil
 }

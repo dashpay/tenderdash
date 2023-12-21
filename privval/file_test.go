@@ -374,7 +374,7 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 
 	extSignItem1, err := types.VoteExtensionsFromProto(vpb1.VoteExtensions...).SignItems(chainID, quorumType, quorumHash, vpb1.Height, vpb1.Round)
 	require.NoError(t, err)
-	assert.True(t, pubKey.VerifySignatureDigest(extSignItem1[0].ID, vpb1.VoteExtensions[0].Signature))
+	assert.True(t, pubKey.VerifySignatureDigest(extSignItem1[0].SignHash, vpb1.VoteExtensions[0].Signature))
 
 	// We duplicate this vote precisely, including its timestamp, but change
 	// its extension
@@ -394,8 +394,8 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 	// with the old extension.
 	extSignItem2, err := types.VoteExtensionsFromProto(vpb2.VoteExtensions...).SignItems(chainID, quorumType, quorumHash, vpb2.Height, vpb2.Round)
 	require.NoError(t, err)
-	assert.True(t, pubKey.VerifySignatureDigest(extSignItem2[0].ID, vpb2.VoteExtensions[0].Signature))
-	assert.False(t, pubKey.VerifySignatureDigest(extSignItem1[0].ID, vpb2.VoteExtensions[0].Signature))
+	assert.True(t, pubKey.VerifySignatureDigest(extSignItem2[0].SignHash, vpb2.VoteExtensions[0].Signature))
+	assert.False(t, pubKey.VerifySignatureDigest(extSignItem1[0].SignHash, vpb2.VoteExtensions[0].Signature))
 
 	vpb2.BlockSignature = nil
 	vpb2.VoteExtensions[0].Signature = nil
@@ -405,8 +405,8 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 
 	extSignItem3, err := types.VoteExtensionsFromProto(vpb2.VoteExtensions...).SignItems(chainID, quorumType, quorumHash, vpb2.Height, vpb2.Round)
 	require.NoError(t, err)
-	assert.True(t, pubKey.VerifySignatureDigest(extSignItem3[0].ID, vpb2.VoteExtensions[0].Signature))
-	assert.False(t, pubKey.VerifySignatureDigest(extSignItem1[0].ID, vpb2.VoteExtensions[0].Signature))
+	assert.True(t, pubKey.VerifySignatureDigest(extSignItem3[0].SignHash, vpb2.VoteExtensions[0].Signature))
+	assert.False(t, pubKey.VerifySignatureDigest(extSignItem1[0].SignHash, vpb2.VoteExtensions[0].Signature))
 }
 
 func newVote(proTxHash types.ProTxHash, idx int32, height int64, round int32,

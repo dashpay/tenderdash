@@ -62,6 +62,7 @@ func makeTestCommit(state sm.State, height int64, timestamp time.Time) *types.Co
 			PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2},
 			StateID:       []byte{},
 		},
+		goodVote.VoteExtensions,
 		&types.CommitSigns{
 			QuorumSigns: *thresholdSigns,
 			QuorumHash:  crypto.RandQuorumHash(),

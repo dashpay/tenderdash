@@ -87,7 +87,7 @@ func (pkz privKeys) signHeader(t testing.TB, header *types.Header, valSet *types
 		QuorumSigns: *thresholdSigns,
 		QuorumHash:  valSet.QuorumHash,
 	}
-	return types.NewCommit(header.Height, 1, blockID, quorumSigns)
+	return types.NewCommit(header.Height, 1, blockID, votes[0].VoteExtensions, quorumSigns)
 }
 
 func makeVote(t testing.TB, header *types.Header, valset *types.ValidatorSet, proTxHash crypto.ProTxHash,

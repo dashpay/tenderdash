@@ -92,7 +92,7 @@ func (c *MockCoreServer) QuorumSign(ctx context.Context, cmd btcjson.QuorumCmd) 
 		panic(err)
 	}
 	quorumHash := crypto.QuorumHash(quorumHashBytes)
-	signID := crypto.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).ID
+	signID := crypto.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).SignHash
 
 	privateKey, err := c.FilePV.GetPrivateKey(ctx, quorumHash)
 	if err != nil {
@@ -136,7 +136,7 @@ func (c *MockCoreServer) QuorumVerify(ctx context.Context, cmd btcjson.QuorumCmd
 	if err != nil {
 		panic(err)
 	}
-	signID := crypto.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).ID
+	signID := crypto.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).SignHash
 
 	thresholdPublicKey, err := c.FilePV.GetThresholdPublicKey(ctx, quorumHash)
 	if err != nil {
