@@ -438,7 +438,8 @@ func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32,
 	ext := &e.VoteExtension
 
 	if ext.XSignRequestId != nil && ext.XSignRequestId.Size() > 0 {
-		signRequestID = crypto.Checksum(crypto.Checksum(ext.GetSignRequestId()))
+		receivedReqID := tmbytes.Reverse(ext.GetSignRequestId())
+		signRequestID = crypto.Checksum(crypto.Checksum(receivedReqID)) // reverse ext.GetSignRequestId()?
 	} else {
 		if signRequestID, err = voteExtensionRequestID(height, round); err != nil {
 			return crypto.SignItem{}, err
