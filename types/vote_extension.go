@@ -330,7 +330,24 @@ func (e GenericVoteExtension) ToProto() tmproto.VoteExtension {
 }
 
 func (e GenericVoteExtension) SignItem(chainID string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (crypto.SignItem, error) {
-	return signItem(&e.VoteExtension, chainID, height, round, quorumType, quorumHash)
+	requestID, err := voteExtensionRequestID(height, round)
+	if err != nil {
+		return crypto.SignItem{}, err
+	}
+	canonical, err := CanonicalizeVoteExtension(chainID, &e.VoteExtension, height, round)
+	if err != nil {
+		panic(err)
+	}
+
+	signBytes, err := protoio.MarshalDelimited(&canonical)
+	if err != nil {
+		panic(err)
+	}
+
+	si := crypto.NewSignItem(quorumType, quorumHash, requestID, signBytes)
+	// we do not reverse fields when calculating SignHash for vote extensions
+	// si.UpdateSignHash(false)
+	return si, nil
 }
 
 func (e GenericVoteExtension) IsThresholdRecoverable() bool {
@@ -465,34 +482,4 @@ func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32,
 // threshold signatures
 func voteExtensionRequestID(height int64, round int32) ([]byte, error) {
 	return heightRoundRequestID("dpevote", height, round), nil
-}
-
-// voteExtensionSignBytes returns the proto-encoding of the canonicalized vote
-// extension for signing. Panics if the marshaling fails.
-//
-// Similar to VoteSignBytes, the encoded Protobuf message is varint
-// length-prefixed for backwards-compatibility with the Amino encoding.
-func voteExtensionSignBytes(chainID string, height int64, round int32, ext *tmproto.VoteExtension) []byte {
-	canonical, err := CanonicalizeVoteExtension(chainID, ext, height, round)
-	if err != nil {
-		panic(err)
-	}
-	bz, err := protoio.MarshalDelimited(&canonical)
-	if err != nil {
-		panic(err)
-	}
-
-	return bz
-}
-
-func signItem(ext *tmproto.VoteExtension, chainID string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (crypto.SignItem, error) {
-	requestID, err := voteExtensionRequestID(height, round)
-	if err != nil {
-		return crypto.SignItem{}, err
-	}
-	signBytes := voteExtensionSignBytes(chainID, height, round, ext)
-	si := crypto.NewSignItem(quorumType, quorumHash, requestID, signBytes)
-	// we do not reverse fields when calculating SignHash for vote extensions
-	// si.UpdateSignHash(false)
-	return si, nil
 }
