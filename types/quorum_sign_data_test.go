@@ -53,9 +53,9 @@ func TestMakeBlockSignID(t *testing.T) {
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case %d", i), func(t *testing.T) {
 			signItem := MakeBlockSignItem(chainID, tc.vote.ToProto(), quorumType, tc.quorumHash)
-			t.Logf("hash %X id %X raw %X reqID %X", signItem.RawHash, signItem.SignHash, signItem.Raw, signItem.ID)
+			t.Logf("hash %X id %X raw %X reqID %X", signItem.MsgHash, signItem.SignHash, signItem.Msg, signItem.ID)
 			require.Equal(t, tc.want, signItem, "Got ID: %X", signItem.SignHash)
-			require.Equal(t, tc.wantHash, signItem.RawHash)
+			require.Equal(t, tc.wantHash, signItem.MsgHash)
 		})
 	}
 }
@@ -114,7 +114,7 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 			require.NoError(t, err)
 
 			for i, sign := range signItems {
-				assert.Equal(t, tc.wantHash[i], sign.RawHash, "want %X, actual %X", tc.wantHash[i], sign.RawHash)
+				assert.Equal(t, tc.wantHash[i], sign.MsgHash, "want %X, actual %X", tc.wantHash[i], sign.MsgHash)
 				if !assert.Equal(t, tc.want[i], sign, "Got ID(%d): %X", i, sign.SignHash) {
 					logger.Error("invalid sign", "sign", sign, "i", i)
 				}
@@ -127,24 +127,37 @@ func TestMakeVoteExtensionSignsData(t *testing.T) {
 //
 // Given some vote extension, llmq type, quorum hash and sign request id, sign data should match predefined test vector.
 func TestVoteExtensionsRawSignDataRawVector(t *testing.T) {
-	t.Skip("TODO: this should use the same test vectors as dash core")
+	// t.Skip("TODO: this should use the same test vectors as dash core")
 	const chainID = "some-chain"
 	const llmqType = btcjson.LLMQType_TEST_PLATFORM
 
-	quorumHash, err := hex.DecodeString("dddabfe1c883dd8a2c71c4281a4212c3715a61f87d62a99aaed0f65a0506c053")
+	// threshold_vote_extensions: [VoteExtension { r#type: ThresholdRecoverRaw,
+	//  signature: [172, 4, 13, 160, 146, 213, 36, 188, 135, 233, 210, 83, 219, 136, 137, 56, 239, 214, 169, 192, 230, 76, 12, 129, 225, 221, 226, 53, 121, 4, 208, 206, 187, 5, 189, 177, 153, 248, 113, 211, 48, 64, 106, 119, 168, 92, 231, 199, 12, 225, 210, 227, 198, 53, 89, 178, 166, 144, 35, 58, 74, 230, 154, 60, 86, 193, 197, 113, 24, 92, 119, 211, 31, 50, 175, 139, 63, 182, 1, 236, 181, 55, 183, 240, 70, 101, 152, 134, 17, 45, 17, 107, 81, 112, 101, 3],
+	//   sign_request_id: Some([6, 112, 108, 119, 100, 116, 120, 0, 0, 0, 0, 0, 0, 0, 0]) }] }
+
+	// TODO
+	// quorumHash, err := hex.DecodeString("dddabfe1c883dd8a2c71c4281a4212c3715a61f87d62a99aaed0f65a0506c053")
+	// assert.NoError(t, err)
+	// assert.Len(t, quorumHash, 32)
+
+	// requestID, err := hex.DecodeString("922a8fc39b6e265ca761eaaf863387a5e2019f4795a42260805f5562699fd9fa")
+	// assert.NoError(t, err)
+	// assert.Len(t, requestID, 32)
+
+	// extension, err := hex.DecodeString("7dfb2432d37f004c4eb2b9aebf601ba4ad59889b81d2e8c7029dce3e0bf8381c")
+	// assert.NoError(t, err)
+	// assert.Len(t, extension, 32)
+	quorumHash, err := hex.DecodeString("1cdbea29c8b947d6a35269aabbd0cccfef64245778a62116524ccdbb6e3ec919")
 	assert.NoError(t, err)
 	assert.Len(t, quorumHash, 32)
 
-	requestID, err := hex.DecodeString("922a8fc39b6e265ca761eaaf863387a5e2019f4795a42260805f5562699fd9fa")
 	assert.NoError(t, err)
-	assert.Len(t, requestID, 32)
 
-	extension, err := hex.DecodeString("7dfb2432d37f004c4eb2b9aebf601ba4ad59889b81d2e8c7029dce3e0bf8381c")
-	assert.NoError(t, err)
+	extension := []byte{209, 226, 137, 236, 75, 102, 97, 95, 224, 61, 203, 233, 87, 62, 153, 90, 177, 26, 169, 127, 239, 22, 141, 238, 175, 198, 120, 8, 156, 150, 182, 166}
 	assert.Len(t, extension, 32)
 
-	extension = []byte{192, 37, 45, 64, 121, 74, 111, 51, 205, 98, 131, 161, 46, 118, 67, 43, 230, 124, 152, 192, 116, 136, 97, 125, 135, 163, 168, 131, 139, 120, 59, 42}
-	requestID = []byte{6, 112, 108, 119, 100, 116, 120, 0, 0, 0, 0, 0, 0, 0, 0}
+	requestID := []byte{6, 112, 108, 119, 100, 116, 120, 0, 0, 0, 0, 0, 0, 0, 0}
+	signature := []byte{172, 4, 13, 160, 146, 213, 36, 188, 135, 233, 210, 83, 219, 136, 137, 56, 239, 214, 169, 192, 230, 76, 12, 129, 225, 221, 226, 53, 121, 4, 208, 206, 187, 5, 189, 177, 153, 248, 113, 211, 48, 64, 106, 119, 168, 92, 231, 199, 12, 225, 210, 227, 198, 53, 89, 178, 166, 144, 35, 58, 74, 230, 154, 60, 86, 193, 197, 113, 24, 92, 119, 211, 31, 50, 175, 139, 63, 182, 1, 236, 181, 55, 183, 240, 70, 101, 152, 134, 17, 45, 17, 107, 81, 112, 101, 3}
 
 	expected, err := hex.DecodeString("B7561730665DBD53A1947265CA5B78A3556B27DA5AB9264630A8E03918915397")
 	assert.NoError(t, err)
@@ -155,7 +168,7 @@ func TestVoteExtensionsRawSignDataRawVector(t *testing.T) {
 
 	ve := VoteExtensionFromProto(tmproto.VoteExtension{
 		Extension: extension,
-		Signature: []byte{},
+		Signature: signature,
 		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 		XSignRequestId: &tmproto.VoteExtension_SignRequestId{
 			SignRequestId: requestID,
@@ -171,7 +184,7 @@ func TestVoteExtensionsRawSignDataRawVector(t *testing.T) {
 	t.Logf("sign requestID: %X\n", requestID)
 	t.Logf("quorum hash: %X\n", quorumHash)
 
-	t.Logf("RESULT: sign bytes: %X", actual)
+	t.Logf("RESULT: signHash: %X", actual)
 	assert.EqualValues(t, expected, actual)
 
 }

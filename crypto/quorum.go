@@ -14,12 +14,14 @@ import (
 // Field names are the same as in Dash Core, but the meaning is different.
 // See DIP-0007
 type SignItem struct {
-	ID         []byte           // Request ID for quorum signing
-	SignHash   []byte           // Hash of llmqType, quorumHash, id, and msgHash - final data to  sign/verify
-	Raw        []byte           // Raw data to be signed, before any transformations
-	RawHash    []byte           // Checksum of Raw
 	LlmqType   btcjson.LLMQType // Quorum type for which this sign item is created
+	ID         []byte           // Request ID for quorum signing
+	MsgHash    []byte           // Checksum of Raw
 	QuorumHash []byte           // Quorum hash for which this sign item is created
+
+	SignHash []byte // Hash of llmqType, quorumHash, id, and msgHash - as provided to crypto sign/verify functions
+
+	Msg []byte // Raw data to be signed, before any transformations; optional
 }
 
 // Validate validates prepared data for signing
@@ -27,25 +29,29 @@ func (i *SignItem) Validate() error {
 	if len(i.ID) != DefaultHashSize {
 		return fmt.Errorf("invalid request ID size: %X", i.ID)
 	}
-	if len(i.RawHash) != DefaultHashSize {
-		return fmt.Errorf("invalid hash size %d: %X", len(i.RawHash), i.RawHash)
+	if len(i.MsgHash) != DefaultHashSize {
+		return fmt.Errorf("invalid hash size %d: %X", len(i.MsgHash), i.MsgHash)
 	}
 	if len(i.QuorumHash) != DefaultHashSize {
 		return fmt.Errorf("invalid quorum hash size %d: %X", len(i.QuorumHash), i.QuorumHash)
 	}
-	if len(i.Raw) > 0 {
-		if !bytes.Equal(Checksum(i.Raw), i.RawHash) {
-			return fmt.Errorf("invalid hash %X for raw data: %X", i.RawHash, i.Raw)
+	// Msg is optional
+	if len(i.Msg) > 0 {
+		if !bytes.Equal(Checksum(i.Msg), i.MsgHash) {
+			return fmt.Errorf("invalid hash %X for raw data: %X", i.MsgHash, i.Msg)
 		}
 	}
 	return nil
 }
 
 func (i SignItem) MarshalZerologObject(e *zerolog.Event) {
-	e.Hex("signBytes", i.Raw)
+	e.Hex("msg", i.Msg)
 	e.Hex("signRequestID", i.ID)
 	e.Hex("signID", i.SignHash)
-	e.Hex("signHash", i.RawHash)
+	e.Hex("msgHash", i.MsgHash)
+	e.Hex("quorumHash", i.QuorumHash)
+	e.Uint8("llmqType", uint8(i.LlmqType))
+
 }
 
 // NewSignItem creates a new instance of SignItem with calculating a hash for a raw and creating signID
@@ -54,11 +60,11 @@ func (i SignItem) MarshalZerologObject(e *zerolog.Event) {
 // - quorumType: quorum type
 // - quorumHash: quorum hash
 // - reqID: sign request ID
-// - raw: raw data to be signed; it will be hashed with crypto.Checksum()
-func NewSignItem(quorumType btcjson.LLMQType, quorumHash, reqID, raw []byte) SignItem {
-	msgHash := Checksum(raw)
+// - msg: raw data to be signed; it will be hashed with crypto.Checksum()
+func NewSignItem(quorumType btcjson.LLMQType, quorumHash, reqID, msg []byte) SignItem {
+	msgHash := Checksum(msg) // FIXME: shouldn't we use sha256(sha256(raw)) here?
 	item := NewSignItemFromHash(quorumType, quorumHash, reqID, msgHash)
-	item.Raw = raw
+	item.Msg = msg
 
 	return item
 }
@@ -67,10 +73,10 @@ func NewSignItem(quorumType btcjson.LLMQType, quorumHash, reqID, raw []byte) Sig
 func NewSignItemFromHash(quorumType btcjson.LLMQType, quorumHash, reqID, msgHash []byte) SignItem {
 	item := SignItem{
 		ID:         reqID,
-		RawHash:    msgHash,
+		MsgHash:    msgHash,
 		LlmqType:   quorumType,
 		QuorumHash: quorumHash,
-		Raw:        nil, // Raw is empty, as we don't have it
+		Msg:        nil, // Raw is empty, as we don't have it
 	}
 
 	// By default, reverse fields when calculating SignHash
@@ -90,7 +96,7 @@ func (i *SignItem) UpdateSignHash(reverse bool) {
 
 	quorumHash := i.QuorumHash
 	requestID := i.ID
-	messageHash := i.RawHash
+	messageHash := i.MsgHash
 
 	if reverse {
 		quorumHash = tmbytes.Reverse(quorumHash)

@@ -705,7 +705,7 @@ func (pv *FilePV) signVote(
 	// If they only differ by timestamp, use last timestamp and signature
 	// Otherwise, return error
 	if sameHRS {
-		if bytes.Equal(quorumSigns.Block.Raw, lss.BlockSignBytes) {
+		if bytes.Equal(quorumSigns.Block.Msg, lss.BlockSignBytes) {
 			vote.BlockSignature = lss.BlockSignature
 		} else {
 			return errors.New("conflicting data")
@@ -727,7 +727,7 @@ func (pv *FilePV) signVote(
 	//	   sigBlock, vote)
 	//  }
 
-	err = pv.saveSigned(height, round, step, quorumSigns.Block.Raw, sigBlock)
+	err = pv.saveSigned(height, round, step, quorumSigns.Block.Msg, sigBlock)
 	if err != nil {
 		return err
 	}

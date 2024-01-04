@@ -408,8 +408,8 @@ func (sc *DashCoreSignerClient) quorumSignAndVerify(
 		"sign_hash", hex.EncodeToString(qs.signHash),
 		"req_id", hex.EncodeToString(signItem.ID),
 		"id", hex.EncodeToString(signItem.SignHash),
-		"raw", hex.EncodeToString(signItem.Raw),
-		"hash", hex.EncodeToString(signItem.RawHash),
+		"raw", hex.EncodeToString(signItem.Msg),
+		"hash", hex.EncodeToString(signItem.MsgHash),
 		"quorum_sign_result", *qs.QuorumSignResult)
 	pubKey, err := sc.GetPubKey(ctx, quorumHash)
 	if err != nil {
@@ -427,7 +427,7 @@ func (sc *DashCoreSignerClient) quorumSign(
 	quorumHash crypto.QuorumHash,
 	signItem crypto.SignItem,
 ) (*quorumSignResult, error) {
-	resp, err := sc.dashCoreRPCClient.QuorumSign(quorumType, signItem.ID, signItem.RawHash, quorumHash)
+	resp, err := sc.dashCoreRPCClient.QuorumSign(quorumType, signItem.ID, signItem.MsgHash, quorumHash)
 	if err != nil {
 		return nil, &RemoteSignerError{Code: 500, Description: "cannot sign vote: " + err.Error()}
 	}

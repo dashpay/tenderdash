@@ -13,7 +13,7 @@ func TestQuorumSignItem(t *testing.T) {
 
 	si := crypto.SignItem{
 		ID:         mustHexDecode("87cda9461081793e7e31ab1def8ffbd453775a0f9987304598398d42a78d68d4"),
-		RawHash:    mustHexDecode("5ef9b9eecc4df7c5aee677c0a72816f4515999a539003cf4bbb6c15c39634c31"),
+		MsgHash:    mustHexDecode("5ef9b9eecc4df7c5aee677c0a72816f4515999a539003cf4bbb6c15c39634c31"),
 		LlmqType:   106,
 		QuorumHash: mustHexDecode("366f07c9b80a2661563a33c09f02156720159b911186b4438ff281e537674771"),
 	}

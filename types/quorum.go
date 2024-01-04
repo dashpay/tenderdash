@@ -120,7 +120,7 @@ func (q *QuorumSingsVerifier) verifyBlock(pubKey crypto.PubKey, signs QuorumSign
 	if !pubKey.VerifySignatureDigest(q.Block.SignHash, signs.BlockSign) {
 		return fmt.Errorf(
 			"threshold block signature is invalid: (%X) signID=%X: %w",
-			q.Block.Raw,
+			q.Block.Msg,
 			q.Block.SignHash,
 			ErrVoteInvalidBlockSignature,
 		)
@@ -151,7 +151,7 @@ func (q *QuorumSingsVerifier) verifyVoteExtensions(
 	for i, sig := range thresholdSigs {
 		if !pubKey.VerifySignatureDigest(signItems[i].SignHash, sig) {
 			return fmt.Errorf("vote-extension %d signature is invalid: raw %X, signature %X", i,
-				signItems[i].Raw, sig)
+				signItems[i].Msg, sig)
 		}
 	}
 	return nil

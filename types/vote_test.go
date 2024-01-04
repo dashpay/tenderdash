@@ -674,7 +674,7 @@ func TestVoteExtensionsSignBytes(t *testing.T) {
 	signItem, err := VoteExtensionFromProto(ve).SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, crypto.RandQuorumHash())
 	assert.NoError(t, err)
 
-	actual := signItem.Raw
+	actual := signItem.Msg
 
 	t.Logf("sign bytes: %x", actual)
 	assert.EqualValues(t, expect, actual)
@@ -696,7 +696,7 @@ func TestVoteExtensionsSignBytesRaw(t *testing.T) {
 	signItem, err := VoteExtensionFromProto(ve).SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, crypto.RandQuorumHash())
 	assert.NoError(t, err)
 
-	actual := signItem.Raw
+	actual := signItem.Msg
 
 	t.Logf("sign bytes: %x", actual)
 	assert.EqualValues(t, expect, actual)
