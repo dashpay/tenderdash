@@ -5,6 +5,7 @@ import (
 	"errors"
 	fmt "fmt"
 
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 )
 
@@ -103,6 +104,13 @@ func (v *VoteExtension) Validate() error {
 
 	if v.Type == VoteExtensionType_DEFAULT {
 		return fmt.Errorf("vote extension type %s is not supported", v.Type.String())
+	}
+
+	if v.Type == VoteExtensionType_THRESHOLD_RECOVER_RAW {
+		if len(v.Extension) != crypto.HashSize {
+			return fmt.Errorf("invalid %s vote extension size: got %d, expected %d",
+				v.Type.String(), len(v.Extension), crypto.HashSize)
+		}
 	}
 
 	if len(v.Extension) > 0 && len(v.Signature) == 0 {

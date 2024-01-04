@@ -463,17 +463,22 @@ func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32,
 		}
 	}
 
-	// ensure signBytes is 32 bytes long
-	signBytes := make([]byte, crypto.DefaultHashSize)
-	copy(signBytes, ext.Extension)
+	// ensure Extension is 32 bytes long
+	if len(ext.Extension) != crypto.DefaultHashSize {
+		return crypto.SignItem{}, fmt.Errorf("invalid vote extension %s %X: extension must be %d bytes long",
+			ext.Type.String(), ext.Extension, crypto.DefaultHashSize)
+	}
 
-	signItem, err := crypto.NewSignItemFromHash(quorumType, quorumHash, signRequestID, signBytes), nil
+	// We sign extension as it is, without any hashing, etc.
+	// However, as it is reversed in SignItem.UpdateSignHash, we need to reverse it also here to undo
+	// that reversal.
+	msgHash := tmbytes.Reverse(ext.Extension)
+
+	signItem, err := crypto.NewSignItemFromHash(quorumType, quorumHash, signRequestID, msgHash), nil
 	if err != nil {
 		return crypto.SignItem{}, err
 	}
-	// we do not reverse fields when calculating SignHash for vote extensions
-	// signItem.UpdateSignHash(false)
-	signItem.Raw = ext.Extension
+	signItem.Msg = ext.Extension
 
 	return signItem, nil
 }

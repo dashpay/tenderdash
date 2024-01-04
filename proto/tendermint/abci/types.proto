@@ -666,6 +666,8 @@ message ExtendVoteExtension {
   // The Tenderdash supports only THRESHOLD_RECOVER and THRESHOLD_RECOVER_RAW at this moment.
   tendermint.types.VoteExtensionType type = 1;
   // Deterministic or (Non-Deterministic) extension provided by the sending validator's Application.
+  //
+  // For THRESHOLD_RECOVER_RAW, it MUST be 32 bytes.
   bytes extension = 2;
   // Sign request ID that will be used to sign the vote extensions.
   // Only applicable for THRESHOLD_RECOVER_RAW vote extension type.
