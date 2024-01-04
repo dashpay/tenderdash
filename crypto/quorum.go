@@ -123,6 +123,11 @@ func (i *SignItem) UpdateSignHash(reverse bool) {
 	var blsMessageHash bls.Hash
 	copy(blsMessageHash[:], messageHash)
 
+	fmt.Printf("LlmqType: %x + ", llmqType)
+	fmt.Printf("QuorumHash: %x + ", blsQuorumHash)
+	fmt.Printf("RequestID: %x + ", blsRequestID)
+	fmt.Printf("MsgHash: %x\n", blsMessageHash)
+
 	blsSignHash := bls.BuildSignHash(uint8(llmqType), blsQuorumHash, blsRequestID, blsMessageHash)
 
 	signHash := make([]byte, 32)
