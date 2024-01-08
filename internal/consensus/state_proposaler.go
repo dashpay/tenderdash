@@ -65,6 +65,13 @@ func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 	}
 	rs.Proposal = proposal
 	rs.ProposalReceiveTime = receivedAt
+
+	// if rand.Intn(5) != 0 && !rs.Validators.Proposer.ProTxHash.Equal(p.privVal.ProTxHash) {
+	// 	p.logger.Debug("waiting for proposal to get outdated as a test")
+	// 	sleepTime := p.blockExec.committedState.ConsensusParams.Synchrony.MessageDelay + p.blockExec.committedState.ConsensusParams.Synchrony.Precision
+	// 	rs.ProposalReceiveTime = rs.ProposalReceiveTime.Add(sleepTime)
+	// }
+
 	p.proposalTimestampDifferenceMetric(*rs)
 	// We don't update cs.ProposalBlockParts if it is already set.
 	// This happens if we're already in cstypes.RoundStepApplyCommit or if there is a valid block in the current round.
@@ -94,8 +101,13 @@ func (p *Proposaler) Create(ctx context.Context, height int64, round int32, rs *
 	logger := p.logger.With(
 		"height", height,
 		"round", round)
+
+	p.logger.Trace("before makeProposal")
+	start := time.Now()
 	// Make proposal
 	proposal := makeProposal(height, round, rs.ValidRound, block, blockParts)
+	p.logger.Info("makeProposal executed successfully", "duration", time.Since(start))
+
 	// Sign proposal
 	err := p.signProposal(ctx, height, proposal)
 	if err != nil {
