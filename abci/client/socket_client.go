@@ -10,6 +10,7 @@ import (
 	"net"
 	"time"
 
+	"github.com/ethereum/go-ethereum/common/prque"
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashpay/tenderdash/abci/types"
@@ -28,7 +29,10 @@ type socketClient struct {
 	mustConnect bool
 	conn        net.Conn
 
-	reqQueue chan *requestAndResponse
+	// Requests queue
+	reqQueue *prque.Prque[int8, *requestAndResponse]
+	// Signal emitted when new request is added to the queue.
+	reqSignal chan struct{}
 
 	mtx     sync.Mutex
 	err     error
@@ -42,8 +46,10 @@ var _ Client = (*socketClient)(nil)
 // if it fails to connect.
 func NewSocketClient(logger log.Logger, addr string, mustConnect bool) Client {
 	cli := &socketClient{
-		logger:      logger,
-		reqQueue:    make(chan *requestAndResponse),
+		logger:    logger,
+		reqQueue:  prque.New[int8, *requestAndResponse](nil),
+		reqSignal: make(chan struct{}),
+
 		mustConnect: mustConnect,
 		addr:        addr,
 		reqSent:     list.New(),
@@ -114,7 +120,11 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 		select {
 		case <-ctx.Done():
 			return
-		case reqres := <-cli.reqQueue:
+		case <-cli.reqSignal:
+			cli.mtx.Lock()
+			reqres := cli.reqQueue.PopItem()
+			cli.mtx.Unlock()
+
 			// N.B. We must enqueue before sending out the request, otherwise the
 			// server may reply before we do it, and the receiver will fail for an
 			// unsolicited reply.
@@ -203,8 +213,12 @@ func (cli *socketClient) doRequest(ctx context.Context, req *types.Request) (*ty
 
 	reqres := makeReqRes(req)
 
+	cli.mtx.Lock()
+	cli.reqQueue.Push(reqres, reqres.priority())
+	cli.mtx.Unlock()
+
 	select {
-	case cli.reqQueue <- reqres:
+	case cli.reqSignal <- struct{}{}:
 	case <-ctx.Done():
 		return nil, fmt.Errorf("can't queue req: %w", ctx.Err())
 	}
@@ -227,6 +241,7 @@ func (cli *socketClient) drainQueue() {
 	cli.mtx.Lock()
 	defer cli.mtx.Unlock()
 
+	cli.reqQueue.Reset()
 	// mark all in-flight messages as resolved (they will get cli.Error())
 	for req := cli.reqSent.Front(); req != nil; req = req.Next() {
 		reqres := req.Value.(*requestAndResponse)
