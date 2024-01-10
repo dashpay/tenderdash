@@ -93,7 +93,10 @@ func (p *Proposaler) Create(ctx context.Context, height int64, round int32, rs *
 	// Create on block
 	if !p.checkValidBlock(rs) {
 		var err error
+		start := time.Now()
 		block, blockParts, err = p.createProposalBlock(ctx, round, rs)
+		p.logger.Debug("createProposalBlock executed", "took", time.Since(start).String())
+
 		if err != nil {
 			return err
 		}
@@ -102,11 +105,8 @@ func (p *Proposaler) Create(ctx context.Context, height int64, round int32, rs *
 		"height", height,
 		"round", round)
 
-	p.logger.Trace("before makeProposal")
-	start := time.Now()
 	// Make proposal
 	proposal := makeProposal(height, round, rs.ValidRound, block, blockParts)
-	p.logger.Info("makeProposal executed successfully", "duration", time.Since(start))
 
 	// Sign proposal
 	err := p.signProposal(ctx, height, proposal)

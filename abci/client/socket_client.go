@@ -215,7 +215,12 @@ func (cli *socketClient) doRequest(ctx context.Context, req *types.Request) (*ty
 
 	cli.mtx.Lock()
 	cli.reqQueue.Push(reqres, reqres.priority())
+	size := cli.reqQueue.Size()
 	cli.mtx.Unlock()
+
+	if size > 0 && size%1000 == 0 {
+		cli.logger.Error("suspicious abci.socketClient queue size", "size", size)
+	}
 
 	select {
 	case cli.reqSignal <- struct{}{}:
