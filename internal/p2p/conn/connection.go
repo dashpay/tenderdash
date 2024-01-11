@@ -14,6 +14,7 @@ import (
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
+	"golang.org/x/time/rate"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -614,6 +615,9 @@ type ChannelDescriptor struct {
 	// TODO: Remove once p2p refactor is complete.
 	SendQueueCapacity   int
 	RecvMessageCapacity int
+
+	SendRateLimit rate.Limit
+	SendRateBurst int
 
 	// RecvBufferCapacity defines the max buffer size of inbound messages for a
 	// given p2p Channel queue.

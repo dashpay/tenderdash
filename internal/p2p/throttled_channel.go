@@ -15,8 +15,6 @@ type ThrottledChannel struct {
 // NewThrottledChannel creates a new throttled channel.
 // The rate is specified in messages per second.
 // The burst is specified in messages.
-//
-// If unsure, use burst equal to 60 times the rate.
 func NewThrottledChannel(channel Channel, r rate.Limit, burst int) *ThrottledChannel {
 	return &ThrottledChannel{
 		channel: channel,
