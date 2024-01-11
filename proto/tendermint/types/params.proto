@@ -115,6 +115,13 @@ message TimeoutParams {
   // to the next step immediately.
   google.protobuf.Duration vote       = 3 [(gogoproto.stdduration) = true];
   google.protobuf.Duration vote_delta = 4 [(gogoproto.stdduration) = true];
+
+  // UNUSED
+  reserved "commit";
+  reserved 5;
+
+  reserved "bypass_commit_timeout";
+  reserved 6;
 }
 
 // ABCIParams configure functionality specific to the Application Blockchain Interface.
