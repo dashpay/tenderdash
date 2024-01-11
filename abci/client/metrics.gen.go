@@ -20,18 +20,12 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 			Name:      "queued_messages",
 			Help:      "Number of messages in ABCI Socket queue",
 		}, append(labels, "type", "priority")).With(labelsAndValues...),
-		SentMessagesTotal: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
-			Namespace: namespace,
-			Subsystem: MetricsSubsystem,
-			Name:      "sent_messages_total",
-			Help:      "Number of messages received from ABCI Socket",
-		}, append(labels, "type", "priority")).With(labelsAndValues...),
+	
 	}
 }
 
 func NopMetrics() *Metrics {
 	return &Metrics{
 		QueuedMessages:    discard.NewGauge(),
-		SentMessagesTotal: discard.NewCounter(),
 	}
 }

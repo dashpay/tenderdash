@@ -14,7 +14,7 @@ import (
 const (
 	// MetricsSubsystem is a subsystem shared by all metrics exposed by this
 	// package.
-	MetricsSubsystem = "abciclient"
+	MetricsSubsystem = "abci"
 )
 
 var (
@@ -30,9 +30,6 @@ var (
 type Metrics struct {
 	// Number of messages in ABCI Socket queue
 	QueuedMessages metrics.Gauge `metrics_labels:"type, priority"`
-
-	// Number of messages received from ABCI Socket
-	SentMessagesTotal metrics.Counter `metrics_labels:"type, priority"`
 
 	// labels cache
 	labels metricsLabelCache
@@ -61,16 +58,6 @@ func (m *Metrics) DequeuedMessage(reqres *requestAndResponse) {
 	}
 
 	m.QueuedMessages.With("type", typ, "priority", priority).Add(-1)
-}
-
-func (m *Metrics) SentMessage(reqres *requestAndResponse) {
-	priority := strconv.Itoa(int(reqres.priority()))
-	typ := "nil"
-	if reqres != nil && reqres.Request != nil {
-		typ = m.labels.ValueToMetricLabel(reqres.Request.Value)
-	}
-
-	m.SentMessagesTotal.With("type", typ, "priority", priority).Add(1)
 }
 
 // ValueToMetricLabel is a method that is used to produce a prometheus label value of the golang

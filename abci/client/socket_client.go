@@ -159,7 +159,6 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 				cli.stopForError(fmt.Errorf("write to buffer: %w", err))
 				return
 			}
-			cli.metrics.SentMessage(reqres)
 
 			if err := bw.Flush(); err != nil {
 				cli.stopForError(fmt.Errorf("flush buffer: %w", err))
