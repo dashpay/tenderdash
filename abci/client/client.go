@@ -71,12 +71,14 @@ func (reqResp *requestAndResponse) priority() (priority int8) {
 		priority = 100
 	case *types.Request_FinalizeBlock:
 		priority = 100
+	case *types.Request_Flush:
+		priority = 100
 	case *types.Request_ExtendVote:
 		priority = 100
 	case *types.Request_VerifyVoteExtension:
-		priority = 100
-	case *types.Request_Info:
 		priority = 90
+	case *types.Request_Info:
+		priority = 120
 	case *types.Request_CheckTx:
 		priority = -10
 	case *types.Request_Query:
