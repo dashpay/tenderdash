@@ -129,10 +129,10 @@ func addVoteToLastPrecommitMw(ep *EventPublisher, ctrl *Controller) AddVoteMiddl
 				return added, err
 			}
 
-			// if we can skip timeoutCommit and have all the votes now,
-			if stateData.bypassCommitTimeout() && stateData.LastPrecommits.HasAll() {
-				// go straight to new round (skip timeout commit)
-				// c.scheduleTimeout(time.Duration(0), c.Height, 0, cstypes.RoundStepNewHeight)
+			// if we have reached majority, we can go straight to new round.
+			// No need to wait, as we don't save all the precommits anyway
+			if stateData.LastPrecommits.HasTwoThirdsMajority() {
+				// go straight to new round
 				_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
 			}
 			return added, err
@@ -250,7 +250,7 @@ func addVoteDispatchPrecommitMw(ctrl *Controller) AddVoteMiddlewareFunc {
 				return added, err
 			}
 			_ = ctrl.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: vote.Round}, stateData)
-			if stateData.bypassCommitTimeout() && precommits.HasAll() {
+			if precommits.HasTwoThirdsMajority() {
 				_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
 			}
 			return added, err

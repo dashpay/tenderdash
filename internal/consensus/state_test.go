@@ -2728,7 +2728,6 @@ func TestStartNextHeightCorrectlyAfterTimeout(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	stateData := cs1.GetStateData()
-	stateData.state.ConsensusParams.Timeout.BypassCommitTimeout = false
 	err := stateData.Save()
 	require.NoError(t, err)
 	cs1.txNotifier = &fakeTxNotifier{ch: make(chan struct{})}
@@ -2793,7 +2792,6 @@ func TestResetTimeoutPrecommitUponNewHeight(t *testing.T) {
 
 	cs1, vss := makeState(ctx, t, makeStateArgs{config: config})
 	stateData := cs1.GetStateData()
-	stateData.state.ConsensusParams.Timeout.BypassCommitTimeout = false
 	err := stateData.Save()
 	require.NoError(t, err)
 

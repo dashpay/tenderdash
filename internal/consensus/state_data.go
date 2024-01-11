@@ -266,13 +266,9 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 
 	if s.CommitTime.IsZero() {
 		// "Now" makes it easier to sync up dev nodes.
-		// We add timeoutCommit to allow transactions
-		// to be gathered for the first block.
-		// And alternative solution that relies on clocks:
-		// cs.StartTime = state.LastBlockTime.Add(timeoutCommit)
-		s.StartTime = s.commitTime(tmtime.Now())
+		s.StartTime = tmtime.Now()
 	} else {
-		s.StartTime = s.commitTime(s.CommitTime)
+		s.StartTime = s.CommitTime
 	}
 
 	if s.Validators == nil || !bytes.Equal(s.Validators.QuorumHash, validators.QuorumHash) {
@@ -312,14 +308,6 @@ func (s *StateData) InitialHeight() int64 {
 
 func (s *StateData) HeightVoteSet() (int64, *cstypes.HeightVoteSet) {
 	return s.Height, s.Votes
-}
-
-func (s *StateData) commitTime(t time.Time) time.Time {
-	c := s.state.ConsensusParams.Timeout.Commit
-	if s.config.UnsafeCommitTimeoutOverride != 0 {
-		c = s.config.UnsafeProposeTimeoutOverride
-	}
-	return t.Add(c)
 }
 
 func (s *StateData) proposalIsTimely() bool {
@@ -457,13 +445,6 @@ func (s *StateData) voteTimeout(round int32) time.Duration {
 	return time.Duration(
 		v.Nanoseconds()+vd.Nanoseconds()*int64(round),
 	) * time.Nanosecond
-}
-
-func (s *StateData) bypassCommitTimeout() bool {
-	if s.config.UnsafeBypassCommitTimeoutOverride != nil {
-		return *s.config.UnsafeBypassCommitTimeoutOverride
-	}
-	return s.state.ConsensusParams.Timeout.BypassCommitTimeout
 }
 
 func (s *StateData) isValidForPrevote() error {

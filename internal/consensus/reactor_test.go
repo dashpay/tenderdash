@@ -556,7 +556,6 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		validatorUpdates: updates,
 		consensusParams: factory.ConsensusParams(func(cp *types.ConsensusParams) {
 			cp.Timeout.Propose = 2 * time.Second
-			cp.Timeout.Commit = 1 * time.Second
 			cp.Timeout.Vote = 1 * time.Second
 		}),
 	}
