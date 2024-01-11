@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"reflect"
 	"regexp"
+	"strconv"
 
 	sync "github.com/sasha-s/go-deadlock"
 
@@ -28,17 +29,48 @@ var (
 // Metrics contains metrics exposed by this package.
 type Metrics struct {
 	// Number of messages in ABCI Socket queue
-	PendingSendMessages metrics.Gauge `metrics_labels:"message_type"`
+	QueuedMessages metrics.Gauge `metrics_labels:"type, priority"`
 
 	// Number of messages received from ABCI Socket
-	SocketReceiveMessagesTotal metrics.Counter `metrics_labels:"message_type"`
-	// Number of messages sent to ABCI Socket
-	SocketSendMessagesTotal metrics.Counter `metrics_labels:"message_type"`
+	SentMessagesTotal metrics.Counter `metrics_labels:"type, priority"`
+
+	// labels cache
+	labels metricsLabelCache
 }
 
 type metricsLabelCache struct {
-	mtx               *sync.RWMutex
+	mtx               sync.RWMutex
 	messageLabelNames map[reflect.Type]string
+}
+
+func (m *Metrics) EnqueuedMessage(reqres *requestAndResponse) {
+	priority := strconv.Itoa(int(reqres.priority()))
+	typ := "nil"
+	if reqres != nil && reqres.Request != nil {
+		typ = m.labels.ValueToMetricLabel(reqres.Request.Value)
+	}
+
+	m.QueuedMessages.With("type", typ, "priority", priority).Add(1)
+}
+
+func (m *Metrics) DequeuedMessage(reqres *requestAndResponse) {
+	priority := strconv.Itoa(int(reqres.priority()))
+	typ := "nil"
+	if reqres != nil && reqres.Request != nil {
+		typ = m.labels.ValueToMetricLabel(reqres.Request.Value)
+	}
+
+	m.QueuedMessages.With("type", typ, "priority", priority).Add(-1)
+}
+
+func (m *Metrics) SentMessage(reqres *requestAndResponse) {
+	priority := strconv.Itoa(int(reqres.priority()))
+	typ := "nil"
+	if reqres != nil && reqres.Request != nil {
+		typ = m.labels.ValueToMetricLabel(reqres.Request.Value)
+	}
+
+	m.SentMessagesTotal.With("type", typ, "priority", priority).Add(1)
 }
 
 // ValueToMetricLabel is a method that is used to produce a prometheus label value of the golang
@@ -46,6 +78,12 @@ type metricsLabelCache struct {
 // This method uses a map on the Metrics struct so that each label name only needs
 // to be produced once to prevent expensive string operations.
 func (m *metricsLabelCache) ValueToMetricLabel(i interface{}) string {
+	if m.messageLabelNames == nil {
+		m.mtx.Lock()
+		m.messageLabelNames = map[reflect.Type]string{}
+		m.mtx.Unlock()
+	}
+
 	t := reflect.TypeOf(i)
 	m.mtx.RLock()
 
@@ -62,11 +100,4 @@ func (m *metricsLabelCache) ValueToMetricLabel(i interface{}) string {
 	defer m.mtx.Unlock()
 	m.messageLabelNames[t] = l
 	return l
-}
-
-func newMetricsLabelCache() *metricsLabelCache {
-	return &metricsLabelCache{
-		mtx:               &sync.RWMutex{},
-		messageLabelNames: map[reflect.Type]string{},
-	}
 }

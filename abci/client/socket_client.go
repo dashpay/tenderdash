@@ -120,7 +120,26 @@ func (cli *socketClient) Error() error {
 	return cli.err
 }
 
-//----------------------------------------
+// Add the request to the pending messages queue.
+//
+// Note that you still need to wake up sendRequestsRoutine writing to `cli.reqSignal`
+func (cli *socketClient) enqueue(reqres *requestAndResponse) {
+	cli.mtx.Lock()
+	cli.reqQueue.Push(reqres, reqres.priority())
+	cli.mtx.Unlock()
+
+	cli.metrics.EnqueuedMessage(reqres)
+}
+
+// Remove the first request from the queue and return it.
+func (cli *socketClient) dequeue() *requestAndResponse {
+	cli.mtx.Lock()
+	reqres := cli.reqQueue.PopItem()
+	cli.mtx.Unlock()
+
+	cli.metrics.DequeuedMessage(reqres)
+	return reqres
+}
 
 func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer) {
 	bw := bufio.NewWriter(conn)
@@ -129,11 +148,9 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 		case <-ctx.Done():
 			return
 		case <-cli.reqSignal:
-			cli.mtx.Lock()
-			reqres := cli.reqQueue.PopItem()
-			cli.mtx.Unlock()
+			reqres := cli.dequeue()
 
-			// N.B. We must enqueue before sending out the request, otherwise the
+			// N.B. We must track request before sending it out, otherwise the
 			// server may reply before we do it, and the receiver will fail for an
 			// unsolicited reply.
 			cli.trackRequest(reqres)
@@ -142,6 +159,7 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 				cli.stopForError(fmt.Errorf("write to buffer: %w", err))
 				return
 			}
+			cli.metrics.SentMessage(reqres)
 
 			if err := bw.Flush(); err != nil {
 				cli.stopForError(fmt.Errorf("flush buffer: %w", err))
@@ -220,15 +238,7 @@ func (cli *socketClient) doRequest(ctx context.Context, req *types.Request) (*ty
 	}
 
 	reqres := makeReqRes(req)
-
-	cli.mtx.Lock()
-	cli.reqQueue.Push(reqres, reqres.priority())
-	size := cli.reqQueue.Size()
-	cli.mtx.Unlock()
-
-	if size > 0 && size%1000 == 0 {
-		cli.logger.Error("suspicious abci.socketClient queue size", "size", size)
-	}
+	cli.enqueue(reqres)
 
 	select {
 	case cli.reqSignal <- struct{}{}:

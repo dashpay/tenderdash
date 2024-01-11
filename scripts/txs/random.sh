@@ -14,6 +14,7 @@ for i in `seq 1 $N`; do
 	VALUE="$i"
 	echo $(toHex $KEY=$VALUE)
 	curl 127.0.0.1:$PORT/broadcast_tx_sync?tx=0x$(toHex $KEY=$VALUE)
+	echo
 done
 
 

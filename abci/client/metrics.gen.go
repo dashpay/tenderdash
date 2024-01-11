@@ -14,31 +14,24 @@ func PrometheusMetrics(namespace string, labelsAndValues ...string) *Metrics {
 		labels = append(labels, labelsAndValues[i])
 	}
 	return &Metrics{
-		PendingSendMessages: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+		QueuedMessages: prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
 			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
-			Name:      "pending_send_messages",
+			Name:      "queued_messages",
 			Help:      "Number of messages in ABCI Socket queue",
-		}, append(labels, "message_type")).With(labelsAndValues...),
-		SocketReceiveMessagesTotal: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+		}, append(labels, "type", "priority")).With(labelsAndValues...),
+		SentMessagesTotal: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
 			Namespace: namespace,
 			Subsystem: MetricsSubsystem,
-			Name:      "socket_receive_messages_total",
+			Name:      "sent_messages_total",
 			Help:      "Number of messages received from ABCI Socket",
-		}, append(labels, "message_type")).With(labelsAndValues...),
-		SocketSendMessagesTotal: prometheus.NewCounterFrom(stdprometheus.CounterOpts{
-			Namespace: namespace,
-			Subsystem: MetricsSubsystem,
-			Name:      "socket_send_messages_total",
-			Help:      "Number of messages sent to ABCI Socket",
-		}, append(labels, "message_type")).With(labelsAndValues...),
+		}, append(labels, "type", "priority")).With(labelsAndValues...),
 	}
 }
 
 func NopMetrics() *Metrics {
 	return &Metrics{
-		PendingSendMessages:        discard.NewGauge(),
-		SocketReceiveMessagesTotal: discard.NewCounter(),
-		SocketSendMessagesTotal:    discard.NewCounter(),
+		QueuedMessages:    discard.NewGauge(),
+		SentMessagesTotal: discard.NewCounter(),
 	}
 }
