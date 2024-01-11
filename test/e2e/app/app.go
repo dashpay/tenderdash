@@ -249,6 +249,10 @@ func prepareTxs(req abci.RequestPrepareProposal) ([]*abci.TxRecord, error) {
 func verifyTx(tx types.Tx, _ abci.CheckTxType) (abci.ResponseCheckTx, error) {
 
 	split := bytes.SplitN(tx, []byte{'='}, 2)
+	if len(split) != 2 {
+		return abci.ResponseCheckTx{Code: code.CodeTypeOK, GasWanted: 1}, nil
+	}
+
 	k, v := split[0], split[1]
 
 	if string(k) == VoteExtensionKey {
