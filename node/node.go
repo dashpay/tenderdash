@@ -3,6 +3,7 @@ package node
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"strconv"
@@ -34,6 +35,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/store"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/os"
 	"github.com/dashpay/tenderdash/libs/service"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	"github.com/dashpay/tenderdash/privval"
@@ -43,6 +45,15 @@ import (
 
 	_ "github.com/lib/pq" // provide the psql db driver
 )
+
+// Function that creates new abciclient.Client
+type ClientCreatorFunc func(metrics *abciclient.Metrics) (abciclient.Client, io.Closer, error)
+
+func MakeClientCreator(client abciclient.Client) ClientCreatorFunc {
+	return func(metrics *abciclient.Metrics) (abciclient.Client, io.Closer, error) {
+		return client, os.NoopCloser{}, nil
+	}
+}
 
 // nodeImpl is the highest level interface to a full Tendermint node.
 // It includes all configuration information and running services.
@@ -101,9 +112,8 @@ func newDefaultNode(
 		)
 	}
 
-	appClient, _, err := proxy.ClientFactory(logger, cfg.ProxyApp, cfg.ABCI, cfg.DBDir())
-	if err != nil {
-		return nil, err
+	appClient := func(metrics *abciclient.Metrics) (abciclient.Client, io.Closer, error) {
+		return proxy.ClientFactory(logger, cfg.ProxyApp, cfg.ABCI, cfg.DBDir(), metrics)
 	}
 
 	return makeNode(
@@ -122,7 +132,7 @@ func makeNode(
 	ctx context.Context,
 	cfg *config.Config,
 	nodeKey types.NodeKey,
-	client abciclient.Client,
+	createClientFunc ClientCreatorFunc,
 	genesisDocProvider genesisDocProvider,
 	dbProvider config.DBProvider,
 	logger log.Logger,
@@ -155,6 +165,12 @@ func makeNode(
 	}
 
 	nodeMetrics := defaultMetricsProvider(cfg.Instrumentation)(genDoc.ChainID)
+
+	client, closer, err := createClientFunc(nodeMetrics.abci)
+	if err != nil {
+		return nil, err
+	}
+	defer closer.Close()
 
 	proxyApp := proxy.New(client, logger.With("module", "proxy"), nodeMetrics.proxy)
 	eventBus := eventbus.NewDefault(logger.With("module", "events"))
@@ -669,6 +685,7 @@ type nodeMetrics struct {
 	state     *sm.Metrics
 	statesync *statesync.Metrics
 	evidence  *evidence.Metrics
+	abci      *abciclient.Metrics
 }
 
 // metricsProvider returns consensus, p2p, mempool, state, statesync Metrics.
@@ -689,6 +706,7 @@ func defaultMetricsProvider(cfg *config.InstrumentationConfig) metricsProvider {
 				state:     sm.PrometheusMetrics(cfg.Namespace, "chain_id", chainID),
 				statesync: statesync.PrometheusMetrics(cfg.Namespace, "chain_id", chainID),
 				evidence:  evidence.PrometheusMetrics(cfg.Namespace, "chain_id", chainID),
+				abci:      abciclient.PrometheusMetrics(cfg.Namespace, "chain_id", chainID),
 			}
 		}
 		return &nodeMetrics{
@@ -700,6 +718,7 @@ func defaultMetricsProvider(cfg *config.InstrumentationConfig) metricsProvider {
 			state:     sm.NopMetrics(),
 			statesync: statesync.NopMetrics(),
 			evidence:  evidence.NopMetrics(),
+			abci:      abciclient.NopMetrics(),
 		}
 	}
 }

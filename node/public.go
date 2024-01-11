@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 
-	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/service"
@@ -34,7 +33,7 @@ func New(
 	ctx context.Context,
 	conf *config.Config,
 	logger log.Logger,
-	cf abciclient.Client,
+	cf ClientCreatorFunc,
 	gen *types.GenesisDoc,
 ) (service.Service, error) {
 	nodeKey, err := types.LoadOrGenNodeKey(conf.NodeKeyFile())

@@ -322,7 +322,7 @@ func makeSocketClientServer(
 	}
 
 	// Connect to the socket
-	client := abciclient.NewSocketClient(logger.With("module", "abci-client"), socket, false)
+	client := abciclient.NewSocketClient(logger.With("module", "abci-client"), socket, false, nil)
 	if err := client.Start(ctx); err != nil {
 		cancel()
 		return nil, nil, err

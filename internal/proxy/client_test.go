@@ -60,7 +60,7 @@ var SOCKET = "socket"
 func TestEcho(t *testing.T) {
 	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", t.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
-	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true)
+	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true, nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func BenchmarkEcho(b *testing.B) {
 	b.StopTimer() // Initialize
 	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", b.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
-	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true)
+	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true, nil)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -155,7 +155,7 @@ func TestInfo(t *testing.T) {
 
 	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", t.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
-	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true)
+	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true, nil)
 	require.NoError(t, err)
 
 	// Start server

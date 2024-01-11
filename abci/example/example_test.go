@@ -71,7 +71,7 @@ func testBulk(ctx context.Context, t *testing.T, logger log.Logger, app types.Ap
 	require.NoError(t, err)
 
 	// Connect to the socket
-	client := abciclient.NewSocketClient(logger.With("module", "abci-client"), socket, false)
+	client := abciclient.NewSocketClient(logger.With("module", "abci-client"), socket, false, nil)
 	t.Cleanup(client.Wait)
 
 	err = client.Start(ctx)

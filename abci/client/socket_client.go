@@ -37,6 +37,8 @@ type socketClient struct {
 	mtx     sync.Mutex
 	err     error
 	reqSent *list.List // list of requests sent, waiting for response
+
+	metrics *Metrics
 }
 
 var _ Client = (*socketClient)(nil)
@@ -44,7 +46,11 @@ var _ Client = (*socketClient)(nil)
 // NewSocketClient creates a new socket client, which connects to a given
 // address. If mustConnect is true, the client will return an error upon start
 // if it fails to connect.
-func NewSocketClient(logger log.Logger, addr string, mustConnect bool) Client {
+func NewSocketClient(logger log.Logger, addr string, mustConnect bool, metrics *Metrics) Client {
+	if metrics == nil {
+		metrics = NopMetrics()
+	}
+
 	cli := &socketClient{
 		logger:    logger,
 		reqQueue:  prque.New[int8, *requestAndResponse](nil),
@@ -53,6 +59,8 @@ func NewSocketClient(logger log.Logger, addr string, mustConnect bool) Client {
 		mustConnect: mustConnect,
 		addr:        addr,
 		reqSent:     list.New(),
+
+		metrics: metrics,
 	}
 	cli.BaseService = *service.NewBaseService(logger, "socketClient", cli)
 	return cli
