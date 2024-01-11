@@ -209,7 +209,7 @@ func addVoteDispatchPrecommitMw(ctrl *Controller) AddVoteMiddlewareFunc {
 				return added, err
 			}
 			_ = ctrl.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: vote.Round}, stateData)
-			if stateData.bypassCommitTimeout() && precommits.HasAll() {
+			if precommits.HasTwoThirdsMajority() {
 				_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
 			}
 			return added, err
