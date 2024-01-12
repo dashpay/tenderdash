@@ -88,10 +88,10 @@ func setup(
 		blocksyncSubs: make(map[types.NodeID]eventbus.Subscription, numNodes),
 	}
 
-	rts.stateChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc(StateChannel, size))
-	rts.dataChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc(DataChannel, size))
-	rts.voteChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc(VoteChannel, size))
-	rts.voteSetBitsChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc(VoteSetBitsChannel, size))
+	rts.stateChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc(p2p.ConsensusStateChannel, size))
+	rts.dataChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc(p2p.ConsensusDataChannel, size))
+	rts.voteChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc(p2p.ConsensusVoteChannel, size))
+	rts.voteSetBitsChannels = rts.network.MakeChannelsNoCleanup(ctx, t, chDesc(p2p.VoteSetBitsChannel, size))
 
 	ctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
@@ -99,13 +99,13 @@ func setup(
 	chCreator := func(nodeID types.NodeID) p2p.ChannelCreator {
 		return func(ctx context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
 			switch desc.ID {
-			case StateChannel:
+			case p2p.ConsensusStateChannel:
 				return rts.stateChannels[nodeID], nil
-			case DataChannel:
+			case p2p.ConsensusDataChannel:
 				return rts.dataChannels[nodeID], nil
-			case VoteChannel:
+			case p2p.ConsensusVoteChannel:
 				return rts.voteChannels[nodeID], nil
-			case VoteSetBitsChannel:
+			case p2p.VoteSetBitsChannel:
 				return rts.voteSetBitsChannels[nodeID], nil
 			default:
 				return nil, fmt.Errorf("invalid channel; %v", desc.ID)

@@ -27,7 +27,7 @@ const (
 func GetChannelDescriptor() *p2p.ChannelDescriptor {
 	return &p2p.ChannelDescriptor{
 		ID:                  EvidenceChannel,
-		Priority:            6,
+		Priority:            3,
 		RecvMessageCapacity: maxMsgSize,
 		RecvBufferCapacity:  32,
 		Name:                "evidence",
