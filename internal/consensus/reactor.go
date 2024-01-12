@@ -30,54 +30,7 @@ var (
 	_ p2p.Wrapper     = (*tmcons.Message)(nil)
 )
 
-// GetChannelDescriptor produces an instance of a descriptor for this
-// package's required channels.
-func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
-	return map[p2p.ChannelID]*p2p.ChannelDescriptor{
-		StateChannel: {
-			ID:                  StateChannel,
-			Priority:            8,
-			SendQueueCapacity:   64,
-			RecvMessageCapacity: maxMsgSize,
-			RecvBufferCapacity:  128,
-			Name:                "state",
-		},
-		DataChannel: {
-			// TODO: Consider a split between gossiping current block and catchup
-			// stuff. Once we gossip the whole block there is nothing left to send
-			// until next height or round.
-			ID:                  DataChannel,
-			Priority:            12,
-			SendQueueCapacity:   64,
-			RecvBufferCapacity:  512,
-			RecvMessageCapacity: maxMsgSize,
-			Name:                "data",
-		},
-		VoteChannel: {
-			ID:                  VoteChannel,
-			Priority:            10,
-			SendQueueCapacity:   64,
-			RecvBufferCapacity:  4096,
-			RecvMessageCapacity: maxMsgSize,
-			Name:                "vote",
-		},
-		VoteSetBitsChannel: {
-			ID:                  VoteSetBitsChannel,
-			Priority:            5,
-			SendQueueCapacity:   8,
-			RecvBufferCapacity:  128,
-			RecvMessageCapacity: maxMsgSize,
-			Name:                "voteSet",
-		},
-	}
-}
-
 const (
-	StateChannel       = p2p.ChannelID(0x20)
-	DataChannel        = p2p.ChannelID(0x21)
-	VoteChannel        = p2p.ChannelID(0x22)
-	VoteSetBitsChannel = p2p.ChannelID(0x23)
-
 	maxMsgSize = 1048576 // 1MB; NOTE: keep in sync with types.PartSet sizes.
 
 	blocksToContributeToBecomeGoodPeer  = 10000
@@ -173,23 +126,23 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	var chBundle channelBundle
 	var err error
 
-	chans := getChannelDescriptors()
-	chBundle.state, err = r.chCreator(ctx, chans[StateChannel])
+	chans := p2p.ConsensusChannelDescriptors()
+	chBundle.state, err = r.chCreator(ctx, chans[p2p.ConsensusStateChannel])
 	if err != nil {
 		return err
 	}
 
-	chBundle.data, err = r.chCreator(ctx, chans[DataChannel])
+	chBundle.data, err = r.chCreator(ctx, chans[p2p.ConsensusDataChannel])
 	if err != nil {
 		return err
 	}
 
-	chBundle.vote, err = r.chCreator(ctx, chans[VoteChannel])
+	chBundle.vote, err = r.chCreator(ctx, chans[p2p.ConsensusVoteChannel])
 	if err != nil {
 		return err
 	}
 
-	chBundle.voteSet, err = r.chCreator(ctx, chans[VoteSetBitsChannel])
+	chBundle.voteSet, err = r.chCreator(ctx, chans[p2p.VoteSetBitsChannel])
 	if err != nil {
 		return err
 	}
@@ -785,13 +738,13 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 	}
 
 	switch envelope.ChannelID {
-	case StateChannel:
+	case p2p.ConsensusStateChannel:
 		err = r.handleStateMessage(ctx, envelope, msg, chans.voteSet)
-	case DataChannel:
+	case p2p.ConsensusDataChannel:
 		err = r.handleDataMessage(ctx, envelope, msg)
-	case VoteChannel:
+	case p2p.ConsensusVoteChannel:
 		err = r.handleVoteMessage(ctx, envelope, msg)
-	case VoteSetBitsChannel:
+	case p2p.VoteSetBitsChannel:
 		err = r.handleVoteSetBitsMessage(ctx, envelope, msg)
 	default:
 		err = fmt.Errorf("unknown channel ID (%d) for envelope (%v)", envelope.ChannelID, envelope)

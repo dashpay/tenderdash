@@ -83,41 +83,7 @@ const (
 )
 
 func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
-	return map[p2p.ChannelID]*p2p.ChannelDescriptor{
-		SnapshotChannel: {
-			ID:                  SnapshotChannel,
-			Priority:            6,
-			SendQueueCapacity:   10,
-			RecvMessageCapacity: snapshotMsgSize,
-			RecvBufferCapacity:  128,
-			Name:                "snapshot",
-		},
-		ChunkChannel: {
-			ID:                  ChunkChannel,
-			Priority:            3,
-			SendQueueCapacity:   4,
-			RecvMessageCapacity: chunkMsgSize,
-			RecvBufferCapacity:  128,
-			Name:                "chunk",
-		},
-		LightBlockChannel: {
-			ID:                  LightBlockChannel,
-			Priority:            5,
-			SendQueueCapacity:   10,
-			RecvMessageCapacity: lightBlockMsgSize,
-			RecvBufferCapacity:  128,
-			Name:                "light-block",
-		},
-		ParamsChannel: {
-			ID:                  ParamsChannel,
-			Priority:            2,
-			SendQueueCapacity:   10,
-			RecvMessageCapacity: paramMsgSize,
-			RecvBufferCapacity:  128,
-			Name:                "params",
-		},
-	}
-
+	return p2p.StatesyncChannelDescriptors()
 }
 
 // Metricer defines an interface used for the rpc sync info query, please see statesync.metrics
