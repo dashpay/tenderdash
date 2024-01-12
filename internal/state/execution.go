@@ -250,6 +250,8 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	blockExec.logger.Debug("PrepareProposal executed",
 		"request_hash", hex.EncodeToString(reqHash),
 		"response_hash", hex.EncodeToString(respHash),
+		"height", height,
+		"round", round,
 		"took", time.Since(start).String(),
 	)
 	if bytes.Equal(blockExec.lastRequestPrepareProposalHash, reqHash) &&

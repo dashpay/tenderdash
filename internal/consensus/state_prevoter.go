@@ -102,6 +102,7 @@ func (p *prevoter) checkProposalBlock(rs cstypes.RoundState) bool {
 		or the proposal matches our locked block, we prevote the proposal.
 	*/
 	if rs.Proposal.POLRound != -1 {
+		p.logger.Trace("prevote step: proposal has POLRound; no decision", "POLRound", rs.Proposal.POLRound)
 		return false
 	}
 	if rs.LockedRound == -1 {
@@ -112,6 +113,11 @@ func (p *prevoter) checkProposalBlock(rs cstypes.RoundState) bool {
 		p.logger.Debug("prevote step: ProposalBlock is valid and matches our locked block; prevoting the proposal")
 		return true
 	}
+
+	p.logger.Debug("prevote step: this block is not locked",
+		"locked_block_hash", rs.LockedBlock.Hash(),
+		"proposal_block_hash", rs.ProposalBlock.Hash())
+
 	return false
 }
 

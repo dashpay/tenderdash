@@ -177,7 +177,7 @@ func (p *Proposaler) checkValidBlock(rs *cstypes.RoundState) bool {
 			"height", rs.Height,
 			"round", rs.ValidRound,
 			"received", rs.ValidBlockRecvTime,
-			"block", rs.ValidBlock)
+			"block", rs.ValidBlock.Hash())
 		return false
 	}
 	return true
