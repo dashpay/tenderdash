@@ -139,7 +139,10 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 		c.eventPublisher.PublishLockEvent(stateData.RoundState)
 		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, blockID)
 
-		stateData.updateValidBlock()
+		if stateData.updateValidBlock() {
+			c.eventPublisher.PublishValidBlockEvent(stateData.RoundState)
+		}
+
 		return nil
 	}
 

@@ -39,7 +39,11 @@ func (p *prevoter) Do(ctx context.Context, stateData *StateData) error {
 	err := stateData.isValidForPrevote()
 	if err != nil {
 		keyVals := append(prevoteKeyVals(stateData), "error", err)
-		p.logger.Error("prevote is invalid", keyVals...)
+
+		if !errors.Is(err, errPrevoteProposalBlockNil) {
+			p.logger.Error("prevote is invalid", keyVals...)
+		}
+		p.logger.Debug("we don't have a valid block for this round, prevoting nil", keyVals...)
 		p.signAndAddNilVote(ctx, stateData)
 		return nil
 	}

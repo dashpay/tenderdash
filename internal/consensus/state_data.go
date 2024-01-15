@@ -319,31 +319,35 @@ func (s *StateData) proposalIsTimely() bool {
 	return s.Proposal.IsTimely(s.ProposalReceiveTime, sp, s.Round)
 }
 
-func (s *StateData) updateValidBlock() {
+// Updates ValidBlock to current proposal.
+// Returns true if the block was updated.
+func (s *StateData) updateValidBlock() bool {
+	s.ValidRound = s.Round
 	// we only update valid block if it's not set already; otherwise we might overwrite the recv time
 	if !s.ValidBlock.HashesTo(s.ProposalBlock.Hash()) {
 		s.ValidBlock = s.ProposalBlock
 		s.ValidBlockRecvTime = s.ProposalReceiveTime
 		s.ValidBlockParts = s.ProposalBlockParts
-	} else {
-		s.logger.Debug("valid block is already up to date, not updating",
-			"proposal_block", s.ProposalBlock.Hash(),
-			"proposal_round", s.Round,
-			"valid_block", s.ValidBlock.Hash(),
-			"valid_block_round", s.ValidRound,
-		)
+
+		return true
 	}
 
-	s.ValidRound = s.Round
+	s.logger.Debug("valid block is already up to date, not updating",
+		"proposal_block", s.ProposalBlock.Hash(),
+		"proposal_round", s.Round,
+		"valid_block", s.ValidBlock.Hash(),
+		"valid_block_round", s.ValidRound,
+	)
+
+	return false
 }
 
-// Locks the proposed block. Note that it also updates ValidBlock.
+// Locks the proposed block.
+// You might also need to call updateValidBlock().
 func (s *StateData) updateLockedBlock() {
 	s.LockedRound = s.Round
 	s.LockedBlock = s.ProposalBlock
 	s.LockedBlockParts = s.ProposalBlockParts
-
-	s.updateValidBlock()
 }
 
 func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
