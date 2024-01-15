@@ -8,6 +8,7 @@ import (
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmtypes "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
+	"github.com/rs/zerolog"
 )
 
 const (
@@ -234,6 +235,30 @@ func (rp RoundParams) ToProcessProposal() *abci.ResponseProcessProposal {
 		ConsensusParamUpdates: rp.ConsensusParamUpdates,
 		ValidatorSetUpdate:    rp.ValidatorSetUpdate,
 	}
+}
+
+func (rp *RoundParams) MarshalZerologObject(e *zerolog.Event) {
+	if rp == nil {
+		e.Bool("nil", true)
+		return
+	}
+
+	e.Str("app_hash", rp.AppHash.ShortString())
+
+	e.Int("tx_results_len", len(rp.TxResults))
+	for i, txResult := range rp.TxResults {
+		e.Interface(fmt.Sprintf("tx_result[%d]", i), txResult)
+		if i >= 20 {
+			e.Str("tx_result[...]", "...")
+			break
+		}
+	}
+
+	e.Interface("consensus_param_updates", rp.ConsensusParamUpdates)
+	e.Interface("validator_set_update", rp.ValidatorSetUpdate)
+	e.Interface("core_chain_lock", rp.CoreChainLock)
+	e.Str("source", rp.Source)
+	e.Int32("round", rp.Round)
 }
 
 // RoundParamsFromPrepareProposal creates RoundParams from ResponsePrepareProposal

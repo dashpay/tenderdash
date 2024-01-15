@@ -12,6 +12,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/rs/zerolog"
 )
 
 // Tx is an arbitrary byte array.
@@ -101,6 +102,20 @@ func (txs Txs) ToSliceOfBytes() [][]byte {
 		txBzs[i] = txs[i]
 	}
 	return txBzs
+}
+
+func (txs *Txs) MarshalZerologArray(e *zerolog.Array) {
+	if txs == nil {
+		return
+	}
+
+	for i, tx := range *txs {
+		e.Str(tx.Hash().ShortString())
+		if i >= 20 {
+			e.Str("...")
+			return
+		}
+	}
 }
 
 // TxRecordSet contains indexes into an underlying set of transactions.

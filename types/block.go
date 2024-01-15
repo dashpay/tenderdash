@@ -1034,6 +1034,17 @@ func (data *Data) ToProto() tmproto.Data {
 	return *tp
 }
 
+func (data *Data) MarshalZerologObject(e *zerolog.Event) {
+	if data == nil {
+		e.Bool("nil", true)
+		return
+	}
+
+	e.Str("hash", data.Hash().ShortString())
+	e.Int("num_txs", len(data.Txs))
+	e.Array("txs", &data.Txs)
+}
+
 // DataFromProto takes a protobuf representation of Data &
 // returns the native type.
 func DataFromProto(dp *tmproto.Data) (Data, error) {
