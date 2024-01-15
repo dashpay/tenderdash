@@ -80,21 +80,12 @@ func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 
 // Create creates, sings and sends a created proposal to the queue
 //
-// We prioritize LockedBlock. If it's not set, then we use ValidBlock.
 // To create a proposal is used RoundState.ValidBlock if it isn't nil and valid, otherwise create a new one
 func (p *Proposaler) Create(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
-	create := false
-	// If we are locked on some block, propose that.
-	// We don't check the timestamp in this case, as the block is already valid
-	block, blockParts := rs.LockedBlock, rs.LockedBlockParts
-	// when no locked block, use valid block
-	if block == nil || blockParts == nil {
-		block, blockParts = rs.ValidBlock, rs.ValidBlockParts
-		create = !p.checkValidBlock(rs)
-	}
-
-	// Create a block
-	if create {
+	// Create a block.
+	// Note that we only create a block if we don't have a valid block already.
+	block, blockParts := rs.ValidBlock, rs.ValidBlockParts
+	if !p.checkValidBlock(rs) {
 		var err error
 		block, blockParts, err = p.createProposalBlock(ctx, round, rs)
 		if err != nil {
@@ -171,7 +162,7 @@ func (p *Proposaler) checkValidBlock(rs *cstypes.RoundState) bool {
 	}
 	if !rs.ValidBlock.IsTimely(rs.ValidBlockRecvTime, sp, rs.ValidRound) {
 		p.logger.Error(
-			"proposal block is outdated",
+			"proposal block is not timely",
 			"height", rs.Height,
 			"round", rs.ValidRound,
 			"received", rs.ValidBlockRecvTime,

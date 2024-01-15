@@ -314,10 +314,30 @@ func (s *StateData) proposalIsTimely() bool {
 }
 
 func (s *StateData) updateValidBlock() {
+	// we only update valid block if it's not set already; otherwise we might overwrite the recv time
+	if !s.ValidBlock.HashesTo(s.ProposalBlock.Hash()) {
+		s.ValidBlock = s.ProposalBlock
+		s.ValidBlockRecvTime = s.ProposalReceiveTime
+		s.ValidBlockParts = s.ProposalBlockParts
+	} else {
+		s.logger.Debug("valid block is already up to date, not updating",
+			"proposal_block", s.ProposalBlock.Hash(),
+			"proposal_round", s.Round,
+			"valid_block", s.ValidBlock.Hash(),
+			"valid_block_round", s.ValidRound,
+		)
+	}
+
 	s.ValidRound = s.Round
-	s.ValidBlock = s.ProposalBlock
-	s.ValidBlockRecvTime = s.ProposalReceiveTime
-	s.ValidBlockParts = s.ProposalBlockParts
+}
+
+// Locks the proposed block. Note that it also updates ValidBlock.
+func (s *StateData) updateLockedBlock() {
+	s.LockedRound = s.Round
+	s.LockedBlock = s.ProposalBlock
+	s.LockedBlockParts = s.ProposalBlockParts
+
+	s.updateValidBlock()
 }
 
 func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
@@ -452,10 +472,11 @@ func (s *StateData) isValidForPrevote() error {
 	if !s.Proposal.Timestamp.Equal(s.ProposalBlock.Header.Time) {
 		return errPrevoteTimestampNotEqual
 	}
-	//TODO: Remove this temporary fix when the complete solution is ready. See #8739
-	if !s.replayMode && s.Proposal.POLRound == -1 && s.LockedRound == -1 && !s.proposalIsTimely() {
+
+	if !s.replayMode && !s.proposalIsTimely() {
 		return errPrevoteProposalNotTimely
 	}
+
 	// Validate proposal core chain lock
 	err := sm.ValidateBlockChainLock(s.state, s.ProposalBlock)
 	if err != nil {
