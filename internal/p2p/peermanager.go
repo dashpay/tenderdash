@@ -980,6 +980,7 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 	}
 
 	m.dialWaker.Wake()
+	m.logger.Debug("peer disconnected", "peer", peerID, "ready", ready)
 }
 
 // Errored reports a peer error, causing the peer to be evicted if it's

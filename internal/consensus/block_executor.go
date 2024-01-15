@@ -65,7 +65,7 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 	block := rs.ProposalBlock
 	crs := rs.CurrentRoundState
 	if crs.Params.Source != sm.ProcessProposalSource || !crs.MatchesBlock(block.Header, round) {
-		c.logger.Debug("CurrentRoundState is outdated, executing ProcessProposal", "crs", crs)
+		c.logger.Trace("CurrentRoundState is outdated, executing ProcessProposal", "crs", crs)
 		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.committedState, true)
 		if err != nil {
 			return fmt.Errorf("ProcessProposal abci method: %w", err)
