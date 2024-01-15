@@ -13,6 +13,11 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+const (
+	// max time to wait for a response from CheckTx
+	p2pCheckTxTimeout = 5 * time.Second
+)
+
 type (
 	mempoolP2PMessageHandler struct {
 		logger  log.Logger
@@ -58,6 +63,9 @@ func (h *mempoolP2PMessageHandler) Handle(ctx context.Context, _ *client.Client,
 	known := 0
 	failed := 0
 	for _, tx := range protoTxs {
+		// TODO: Move to abciclient, define configuration settings
+		ctx, cancel := context.WithTimeout(ctx, p2pCheckTxTimeout)
+		defer cancel()
 		if err := h.checker.CheckTx(ctx, tx, nil, txInfo); err != nil {
 			if errors.Is(err, types.ErrTxInCache) {
 				// if the tx is in the cache,
