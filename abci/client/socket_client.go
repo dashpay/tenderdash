@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common/prque"
@@ -45,6 +46,9 @@ type socketClient struct {
 	reqSent *list.List // list of requests sent, waiting for response
 
 	metrics *Metrics
+
+	// if true, send blocks until response is received
+	blocking atomic.Bool
 }
 
 var _ Client = (*socketClient)(nil)
@@ -126,6 +130,12 @@ func (cli *socketClient) Error() error {
 	return cli.err
 }
 
+// setBlocking sets the blocking mode of the client.
+// Used in tests.
+func (cli *socketClient) setBlocking(blocking bool) {
+	cli.blocking.Store(blocking)
+}
+
 // Add the request to the pending messages queue.
 //
 // Note that you still need to wake up sendRequestsRoutine writing to `cli.reqSignal`
@@ -150,7 +160,22 @@ func (cli *socketClient) dequeue() *requestAndResponse {
 func (cli *socketClient) reqQueueEmpty() bool {
 	cli.mtx.Lock()
 	defer cli.mtx.Unlock()
+
 	return cli.reqQueue.Empty()
+}
+
+func (cli *socketClient) reqWake() {
+	cli.mtx.Lock()
+	defer cli.mtx.Unlock()
+
+	cli.reqWaker.Wake()
+}
+
+func (cli *socketClient) reqSleep() <-chan struct{} {
+	cli.mtx.Lock()
+	defer cli.mtx.Unlock()
+
+	return cli.reqWaker.Sleep()
 }
 
 func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer) {
@@ -160,7 +185,7 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 		select {
 		case <-ctx.Done():
 			return
-		case <-cli.reqWaker.Sleep():
+		case <-cli.reqSleep():
 		}
 
 		for !cli.reqQueueEmpty() {
@@ -184,6 +209,14 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 			if err := bw.Flush(); err != nil {
 				cli.stopForError(fmt.Errorf("flush buffer: %w", err))
 				return
+			}
+
+			if cli.blocking.Load() {
+				select {
+				case <-reqres.signal:
+				case <-ctx.Done():
+					return
+				}
 			}
 		}
 	}
@@ -250,8 +283,6 @@ func (cli *socketClient) didRecvResponse(res *types.Response) error {
 	return nil
 }
 
-//----------------------------------------
-
 func (cli *socketClient) doRequest(ctx context.Context, req *types.Request) (*types.Response, error) {
 	if !cli.IsRunning() {
 		return nil, errors.New("client has stopped")
@@ -261,7 +292,7 @@ func (cli *socketClient) doRequest(ctx context.Context, req *types.Request) (*ty
 	cli.enqueue(reqres)
 
 	// Asynchronously wake up the sender.
-	cli.reqWaker.Wake()
+	cli.reqWake()
 
 	// wait for response for our request
 	select {
