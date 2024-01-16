@@ -224,10 +224,15 @@ func (c *Client) GetSyncStatus(ctx context.Context) error {
 }
 
 // SendTxs sends a transaction to the peer
-func (c *Client) SendTxs(ctx context.Context, peerID types.NodeID, tx types.Tx) error {
+func (c *Client) SendTxs(ctx context.Context, peerID types.NodeID, tx ...types.Tx) error {
+	txs := make([][]byte, len(tx))
+	for i := 0; i < len(tx); i++ {
+		txs[i] = tx[i]
+	}
+
 	return c.Send(ctx, p2p.Envelope{
 		To:      peerID,
-		Message: &protomem.Txs{Txs: [][]byte{tx}},
+		Message: &protomem.Txs{Txs: txs},
 	})
 }
 

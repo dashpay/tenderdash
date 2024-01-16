@@ -58,7 +58,10 @@ func (h *mempoolP2PMessageHandler) Handle(ctx context.Context, _ *client.Client,
 	known := 0
 	failed := 0
 	for _, tx := range protoTxs {
-		if err := h.checker.CheckTx(ctx, tx, nil, txInfo); err != nil {
+		subCtx, subCtxCancel := context.WithTimeout(ctx, 5*time.Second)
+		defer subCtxCancel()
+
+		if err := h.checker.CheckTx(subCtx, tx, nil, txInfo); err != nil {
 			if errors.Is(err, types.ErrTxInCache) {
 				// if the tx is in the cache,
 				// then we've been gossiped a
@@ -69,13 +72,11 @@ func (h *mempoolP2PMessageHandler) Handle(ctx context.Context, _ *client.Client,
 				known++
 				continue
 			}
-			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-				// Do not propagate context
-				// cancellation errors, but do
-				// not continue to check
-				// transactions from this
-				// message if we are shutting down.
-				return err
+
+			// In case of ctx cancelation, we return error as we are most likely shutting down.
+			// Otherwise we just reject the tx.
+			if errCtx := ctx.Err(); errCtx != nil {
+				return errCtx
 			}
 			failed++
 			logger.Error("checktx failed for tx",

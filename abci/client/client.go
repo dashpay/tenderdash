@@ -51,7 +51,9 @@ type requestAndResponse struct {
 	*types.Request
 	*types.Response
 
-	mtx    sync.Mutex
+	mtx sync.Mutex
+	// context for the request; we check if it's not expired before sending
+	ctx    context.Context
 	signal chan struct{}
 }
 
@@ -90,10 +92,11 @@ func (reqResp *requestAndResponse) priority() (priority int8) {
 	return priority
 }
 
-func makeReqRes(req *types.Request) *requestAndResponse {
+func makeReqRes(ctx context.Context, req *types.Request) *requestAndResponse {
 	return &requestAndResponse{
 		Request:  req,
 		Response: nil,
+		ctx:      ctx,
 		signal:   make(chan struct{}),
 	}
 }
