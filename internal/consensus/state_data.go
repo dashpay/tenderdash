@@ -483,13 +483,13 @@ func (s *StateData) isValidForPrevote() error {
 		return errPrevoteTimestampNotEqual
 	}
 
-	if !s.replayMode && !s.proposalIsTimely() {
+	// if this block was not validated yet, we check if it's timely
+	if !s.replayMode && !s.ProposalBlock.HashesTo(s.ValidBlock.Hash()) && !s.proposalIsTimely() {
 		return errPrevoteProposalNotTimely
 	}
 
 	// Validate proposal core chain lock
-	err := sm.ValidateBlockChainLock(s.state, s.ProposalBlock)
-	if err != nil {
+	if err := sm.ValidateBlockChainLock(s.state, s.ProposalBlock); err != nil {
 		return errPrevoteInvalidChainLock
 	}
 	return nil
