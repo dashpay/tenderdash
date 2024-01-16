@@ -13,6 +13,12 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+const (
+	// CheckTxTimeout is the maximum time we wait for CheckTx to return.
+	// TODO: Change to config option
+	CheckTxTimeout = 1 * time.Second
+)
+
 type (
 	mempoolP2PMessageHandler struct {
 		logger  log.Logger
@@ -54,8 +60,7 @@ func (h *mempoolP2PMessageHandler) Handle(ctx context.Context, _ *client.Client,
 		SenderNodeID: envelope.From,
 	}
 	for _, tx := range protoTxs {
-		// TODO add configuration for timeout
-		subCtx, subCtxCancel := context.WithTimeout(ctx, 1*time.Second)
+		subCtx, subCtxCancel := context.WithTimeout(ctx, CheckTxTimeout)
 		defer subCtxCancel()
 
 		if err := h.checker.CheckTx(subCtx, tx, nil, txInfo); err != nil {
