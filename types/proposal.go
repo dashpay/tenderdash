@@ -9,13 +9,12 @@ import (
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
-	"github.com/rs/zerolog"
-
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/rs/zerolog"
 )
 
 var (
@@ -182,7 +181,7 @@ func ProposalBlockSignID(
 
 	proposalRequestID := ProposalRequestIDProto(p)
 
-	signID := crypto.NewSignItemFromHash(quorumType, quorumHash, proposalRequestID, proposalMessageHash[:]).SignHash
+	signID := NewSignItemFromHash(quorumType, quorumHash, proposalRequestID, proposalMessageHash[:]).SignHash
 
 	return signID
 }

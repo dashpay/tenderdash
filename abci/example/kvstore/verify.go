@@ -7,7 +7,6 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
-	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/types"
@@ -39,7 +38,7 @@ func makeBlockSignItem(
 	req *abci.RequestFinalizeBlock,
 	quorumType btcjson.LLMQType,
 	quorumHash []byte,
-) crypto.SignItem {
+) types.SignItem {
 	reqID := types.BlockRequestID(req.Height, req.Round)
 	cv, err := req.ToCanonicalVote()
 	if err != nil {
@@ -49,14 +48,14 @@ func makeBlockSignItem(
 	if err != nil {
 		panic(fmt.Errorf("block sign item: %w", err))
 	}
-	return crypto.NewSignItem(quorumType, quorumHash, reqID, raw)
+	return types.NewSignItem(quorumType, quorumHash, reqID, raw)
 }
 
 func makeVoteExtensionSignItems(
 	req *abci.RequestFinalizeBlock,
 	quorumType btcjson.LLMQType,
 	quorumHash []byte,
-) []crypto.SignItem {
+) []types.SignItem {
 
 	extensions := types.VoteExtensionsFromProto(req.Commit.ThresholdVoteExtensions...)
 	chainID := req.Block.Header.ChainID

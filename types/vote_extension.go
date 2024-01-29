@@ -48,9 +48,9 @@ func (e VoteExtensions) SignItems(
 	quorumHash []byte,
 	height int64,
 	round int32,
-) ([]crypto.SignItem, error) {
+) ([]SignItem, error) {
 
-	items := make([]crypto.SignItem, 0, e.Len())
+	items := make([]SignItem, 0, e.Len())
 
 	for _, ext := range e {
 		item, err := ext.SignItem(chainID, height, round, quorumType, quorumHash)
@@ -276,7 +276,7 @@ type VoteExtensionIf interface {
 	// It should prioritize performance and can do a shallow copy of the vote-extension,
 	// so the returned object should not be modified.
 	ToProto() tmproto.VoteExtension
-	SignItem(chainID string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (crypto.SignItem, error)
+	SignItem(chainID string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (SignItem, error)
 	IsThresholdRecoverable() bool
 	// Validate returns error if a vote-extension is invalid.
 	// It should not modify the state of the vote-extension.
@@ -331,10 +331,10 @@ func (e GenericVoteExtension) ToProto() tmproto.VoteExtension {
 	return e.VoteExtension.Clone()
 }
 
-func (e GenericVoteExtension) SignItem(chainID string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (crypto.SignItem, error) {
+func (e GenericVoteExtension) SignItem(chainID string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (SignItem, error) {
 	requestID, err := voteExtensionRequestID(height, round)
 	if err != nil {
-		return crypto.SignItem{}, err
+		return SignItem{}, err
 	}
 	canonical, err := CanonicalizeVoteExtension(chainID, &e.VoteExtension, height, round)
 	if err != nil {
@@ -346,7 +346,7 @@ func (e GenericVoteExtension) SignItem(chainID string, height int64, round int32
 		panic(err)
 	}
 
-	si := crypto.NewSignItem(quorumType, quorumHash, requestID, signBytes)
+	si := NewSignItem(quorumType, quorumHash, requestID, signBytes)
 	// we do not reverse fields when calculating SignHash for vote extensions
 	// si.UpdateSignHash(false)
 	return si, nil
@@ -454,7 +454,7 @@ func (e ThresholdRawVoteExtension) Copy() VoteExtensionIf {
 // SignItem creates a SignItem for a threshold raw vote extension
 //
 // Note: signItem.Msg left empty by purpose, as we don't want hash to be checked in Verify()
-func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (crypto.SignItem, error) {
+func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (SignItem, error) {
 	var signRequestID []byte
 	var err error
 
@@ -466,13 +466,13 @@ func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32,
 		signRequestID = tmbytes.Reverse(signRequestID)
 	} else {
 		if signRequestID, err = voteExtensionRequestID(height, round); err != nil {
-			return crypto.SignItem{}, err
+			return SignItem{}, err
 		}
 	}
 
 	// ensure Extension is 32 bytes long
 	if len(ext.Extension) != crypto.DefaultHashSize {
-		return crypto.SignItem{}, fmt.Errorf("invalid vote extension %s %X: extension must be %d bytes long",
+		return SignItem{}, fmt.Errorf("invalid vote extension %s %X: extension must be %d bytes long",
 			ext.Type.String(), ext.Extension, crypto.DefaultHashSize)
 	}
 
@@ -481,9 +481,9 @@ func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32,
 	// that reversal.
 	msgHash := tmbytes.Reverse(ext.Extension)
 
-	signItem, err := crypto.NewSignItemFromHash(quorumType, quorumHash, signRequestID, msgHash), nil
+	signItem, err := NewSignItemFromHash(quorumType, quorumHash, signRequestID, msgHash), nil
 	if err != nil {
-		return crypto.SignItem{}, err
+		return SignItem{}, err
 	}
 	// signItem.Msg left empty by purpose, as we don't want hash to be checked in Verify()
 

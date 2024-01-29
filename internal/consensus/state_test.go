@@ -3,7 +3,6 @@ package consensus
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"reflect"
 	"strconv"
 	"testing"
@@ -3307,7 +3306,7 @@ func signAddPrecommitsWithExtension(ctx context.Context,
 
 		protx, _ := vs.GetProTxHash(ctx)
 		q, _ := vs.GetPubKey(ctx, valSet.QuorumHash)
-		fmt.Printf("signAddPrecommitsWithExtension: pubkey: %X, sigs %X, val protxhash(%d): %X\n", q.Bytes(), v.VoteExtensions.GetSignatures(), vs.Index, protx)
+		t.Logf("signAddPrecommitsWithExtension: pubkey: %X, sigs %X, val protxhash(%d): %X\n", q.Bytes(), v.VoteExtensions.GetSignatures(), vs.Index, protx)
 	}
 	addVotes(cs, votes...)
 }

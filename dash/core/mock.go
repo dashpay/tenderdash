@@ -152,7 +152,7 @@ func (mc *MockClient) QuorumSign(
 	if !mc.canSign {
 		return nil, errors.New("dash core mock client not set up for signing")
 	}
-	signID := crypto.NewSignItemFromHash(quorumType, quorumHash, requestID, messageHash).SignHash
+	signID := types.NewSignItemFromHash(quorumType, quorumHash, requestID, messageHash).SignHash
 
 	privateKey, err := mc.localPV.GetPrivateKey(context.Background(), quorumHash)
 	if err != nil {
@@ -186,7 +186,7 @@ func (mc *MockClient) QuorumVerify(
 		return false, err
 	}
 
-	signID := crypto.NewSignItemFromHash(quorumType, quorumHash, requestID, messageHash).SignHash
+	signID := types.NewSignItemFromHash(quorumType, quorumHash, requestID, messageHash).SignHash
 
 	thresholdPublicKey, err := mc.localPV.GetThresholdPublicKey(context.Background(), quorumHash)
 	if err != nil {

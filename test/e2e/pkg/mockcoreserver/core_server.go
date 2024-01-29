@@ -10,6 +10,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/privval"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // CoreServer is an interface of a mock core-server
@@ -92,7 +93,7 @@ func (c *MockCoreServer) QuorumSign(ctx context.Context, cmd btcjson.QuorumCmd) 
 		panic(err)
 	}
 	quorumHash := crypto.QuorumHash(quorumHashBytes)
-	signID := crypto.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).SignHash
+	signID := types.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).SignHash
 
 	privateKey, err := c.FilePV.GetPrivateKey(ctx, quorumHash)
 	if err != nil {
@@ -136,7 +137,7 @@ func (c *MockCoreServer) QuorumVerify(ctx context.Context, cmd btcjson.QuorumCmd
 	if err != nil {
 		panic(err)
 	}
-	signID := crypto.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).SignHash
+	signID := types.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).SignHash
 
 	thresholdPublicKey, err := c.FilePV.GetThresholdPublicKey(ctx, quorumHash)
 	if err != nil {

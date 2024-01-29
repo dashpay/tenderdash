@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/dashpay/dashd-go/btcjson"
-	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -41,7 +40,7 @@ func TestMakeVoteExtensionsSignItems(t *testing.T) {
 	testCases := []struct {
 		vote       Vote
 		quorumHash []byte
-		want       []crypto.SignItem
+		want       []SignItem
 		wantHash   [][]byte
 	}{
 		{
@@ -58,7 +57,7 @@ func TestMakeVoteExtensionsSignItems(t *testing.T) {
 				),
 			},
 			quorumHash: tmbytes.MustHexDecode("6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD"),
-			want: []crypto.SignItem{
+			want: []SignItem{
 				newSignItem(
 					"FB95F2CA6530F02AC623589D7938643FF22AE79A75DD79AEA1C8871162DE675E",
 					"533524404D3A905F5AC9A30FCEB5A922EAD96F30DA02F979EE41C4342F540467",

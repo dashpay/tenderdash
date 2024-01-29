@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/hex"
 	"fmt"
 	"testing"
 
@@ -8,7 +9,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dashpay/tenderdash/crypto"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/proto/tendermint/types"
 )
@@ -26,7 +26,7 @@ func TestMakeBlockSignItem(t *testing.T) {
 	testCases := []struct {
 		vote       Vote
 		quorumHash []byte
-		want       crypto.SignItem
+		want       SignItem
 		wantHash   []byte
 	}{
 		{
@@ -57,8 +57,31 @@ func TestMakeBlockSignItem(t *testing.T) {
 	}
 }
 
-func newSignItem(reqID, signHash, raw, quorumHash string, quorumType btcjson.LLMQType) crypto.SignItem {
-	item := crypto.NewSignItem(quorumType, tmbytes.MustHexDecode(quorumHash), tmbytes.MustHexDecode(reqID), tmbytes.MustHexDecode(raw))
+func newSignItem(reqID, signHash, raw, quorumHash string, quorumType btcjson.LLMQType) SignItem {
+	item := NewSignItem(quorumType, tmbytes.MustHexDecode(quorumHash), tmbytes.MustHexDecode(reqID), tmbytes.MustHexDecode(raw))
 	item.SignHash = tmbytes.MustHexDecode(signHash)
 	return item
+}
+
+func TestQuorumSignItem(t *testing.T) {
+
+	si := SignItem{
+		ID:         mustHexDecode("87cda9461081793e7e31ab1def8ffbd453775a0f9987304598398d42a78d68d4"),
+		MsgHash:    mustHexDecode("5ef9b9eecc4df7c5aee677c0a72816f4515999a539003cf4bbb6c15c39634c31"),
+		LlmqType:   106,
+		QuorumHash: mustHexDecode("366f07c9b80a2661563a33c09f02156720159b911186b4438ff281e537674771"),
+	}
+	si.UpdateSignHash(true)
+
+	expectID := tmbytes.Reverse(mustHexDecode("94635358f4c75a1d0b38314619d1c5d9a16f12961b5314d857e04f2eb61d78d2"))
+
+	assert.EqualValues(t, expectID, si.SignHash)
+}
+
+func mustHexDecode(s string) []byte {
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

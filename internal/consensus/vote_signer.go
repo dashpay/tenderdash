@@ -108,7 +108,7 @@ func (s *voteSigner) signVote(
 	if err != nil {
 		return nil, err
 	}
-	s.logger.Debug("signed Vote", "vote", vote, "signature", vote.BlockSignature.String())
+	s.logger.Trace("signed Vote", "vote", vote, "signature", vote.BlockSignature.String())
 	return vote, nil
 }
 
