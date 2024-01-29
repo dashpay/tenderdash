@@ -3073,6 +3073,8 @@ type ExtendVoteExtension struct {
 	// The Tenderdash supports only THRESHOLD_RECOVER and THRESHOLD_RECOVER_RAW at this moment.
 	Type types1.VoteExtensionType `protobuf:"varint,1,opt,name=type,proto3,enum=tendermint.types.VoteExtensionType" json:"type,omitempty"`
 	// Deterministic or (Non-Deterministic) extension provided by the sending validator's Application.
+	//
+	// For THRESHOLD_RECOVER_RAW, it MUST be 32 bytes.
 	Extension []byte `protobuf:"bytes,2,opt,name=extension,proto3" json:"extension,omitempty"`
 	// Types that are valid to be assigned to XSignRequestId:
 	//
