@@ -407,7 +407,7 @@ func TestVoteExtension(t *testing.T) {
 				}
 			}
 
-			err = vote.VerifyWithExtension("test_chain_id", btcjson.LLMQType_5_60, quorumHash, pk, proTxHash)
+			err = vote.Verify("test_chain_id", btcjson.LLMQType_5_60, quorumHash, pk, proTxHash)
 			if tc.expectError {
 				require.Error(t, err)
 			} else {
@@ -458,13 +458,13 @@ func TestVoteVerify(t *testing.T) {
 	stateID := RandStateID()
 	stateID.Height = uint64(vote.Height - 1)
 	pubKey := bls12381.GenPrivKey().PubKey()
-	err = vote.Verify("test_chain_id", quorumType, quorumHash, pubKey, crypto.RandProTxHash(), stateID)
+	err = vote.Verify("test_chain_id", quorumType, quorumHash, pubKey, crypto.RandProTxHash())
 
 	if assert.Error(t, err) {
 		assert.Equal(t, ErrVoteInvalidValidatorProTxHash, err)
 	}
 
-	err = vote.Verify("test_chain_id", quorumType, quorumHash, pubkey, proTxHash, stateID)
+	err = vote.Verify("test_chain_id", quorumType, quorumHash, pubkey, proTxHash)
 	if assert.Error(t, err) {
 		assert.ErrorIs(t, err, ErrVoteInvalidBlockSignature) // since block signatures are verified first
 	}
