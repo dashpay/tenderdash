@@ -104,16 +104,6 @@ func (i *SignItem) UpdateSignHash(reverse bool) {
 		messageHash = tmbytes.Reverse(messageHash)
 	}
 
-	// if testing.Testing() {
-	// 	fmt.Printf("generating  sign ID using bls.BuildSignHash for %d %X %X %X\n", llmqType, quorumHash, requestID, messageHash)
-	// 	out := append([]byte{byte(llmqType)}, quorumHash...)
-	// 	out = append(out, requestID...)
-	// 	out = append(out, messageHash...)
-
-	// 	fmt.Printf("data before sha256: %X\n", out)
-	// 	fmt.Printf("sha256(sha256(data)): %X\n", crypto.Checksum((crypto.Checksum(out))))
-	// }
-
 	var blsQuorumHash bls.Hash
 	copy(blsQuorumHash[:], quorumHash)
 
@@ -123,10 +113,10 @@ func (i *SignItem) UpdateSignHash(reverse bool) {
 	var blsMessageHash bls.Hash
 	copy(blsMessageHash[:], messageHash)
 
-	fmt.Printf("LlmqType: %x + ", llmqType)
-	fmt.Printf("QuorumHash: %x + ", blsQuorumHash)
-	fmt.Printf("RequestID: %x + ", blsRequestID)
-	fmt.Printf("MsgHash: %x\n", blsMessageHash)
+	// fmt.Printf("LlmqType: %x + ", llmqType)
+	// fmt.Printf("QuorumHash: %x + ", blsQuorumHash)
+	// fmt.Printf("RequestID: %x + ", blsRequestID)
+	// fmt.Printf("MsgHash: %x\n", blsMessageHash)
 
 	blsSignHash := bls.BuildSignHash(uint8(llmqType), blsQuorumHash, blsRequestID, blsMessageHash)
 

@@ -345,7 +345,7 @@ func TestVoteExtension(t *testing.T) {
 				XSignRequestId: &tmproto.VoteExtension_SignRequestId{
 					SignRequestId: []byte("\x06plwdtx"),
 				},
-				Extension: []byte("extension")}),
+				Extension: bytes.Repeat([]byte("extensio"), 4)}), // must be 32 bytes
 			includeSignature: true,
 			expectError:      false,
 		},
@@ -356,7 +356,7 @@ func TestVoteExtension(t *testing.T) {
 				XSignRequestId: &tmproto.VoteExtension_SignRequestId{
 					SignRequestId: []byte("dpevote"),
 				},
-				Extension: []byte("extension")}),
+				Extension: bytes.Repeat([]byte("extensio"), 4)}), // must be 32 bytes
 			includeSignature: true,
 			expectError:      false,
 		},
@@ -684,22 +684,29 @@ func TestVoteExtensionsSignBytes(t *testing.T) {
 //
 // Given some vote extension, SignBytes or THRESHOLD_RECOVER_RAW returns that extension.
 func TestVoteExtensionsSignBytesRaw(t *testing.T) {
-	expect := []byte{1, 2, 3, 4, 5, 6, 7, 8}
+	extension := bytes.Repeat([]byte{1, 2, 3, 4, 5, 6, 7, 8}, 4)
+	quorumHash := bytes.Repeat([]byte{8, 7, 6, 5, 4, 3, 2, 1}, 4)
+	expectedSignHash := []byte{0xe, 0x88, 0x8d, 0xa8, 0x97, 0xf1, 0xc0, 0xfd, 0x6a, 0xe8, 0x3b, 0x77, 0x9b, 0x5, 0xdd,
+		0x28, 0xc, 0xe2, 0x58, 0xf6, 0x4c, 0x86, 0x1, 0x34, 0xfa, 0x4, 0x27, 0xe1, 0xaa, 0xab, 0x1a, 0xde}
+
+	assert.Len(t, extension, 32)
+
 	ve := tmproto.VoteExtension{
-		Extension: expect,
+		Extension: extension,
 		Signature: []byte{},
 		Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 		XSignRequestId: &tmproto.VoteExtension_SignRequestId{
 			SignRequestId: []byte("dpevote-someSignRequestID"),
 		},
 	}
-	signItem, err := VoteExtensionFromProto(ve).SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, crypto.RandQuorumHash())
+
+	signItem, err := VoteExtensionFromProto(ve).SignItem("some-chain", 1, 2, btcjson.LLMQType_TEST_PLATFORM, quorumHash)
 	assert.NoError(t, err)
 
-	actual := signItem.Msg
+	actual := signItem.SignHash
 
-	t.Logf("sign bytes: %x", actual)
-	assert.EqualValues(t, expect, actual)
+	t.Logf("sign hash: %x", actual)
+	assert.EqualValues(t, expectedSignHash, actual)
 }
 
 func TestVoteProtobuf(t *testing.T) {

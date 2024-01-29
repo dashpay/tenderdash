@@ -448,6 +448,9 @@ func (e ThresholdRawVoteExtension) Copy() VoteExtensionIf {
 	return &ThresholdRawVoteExtension{ThresholdVoteExtension: *inner}
 }
 
+// SignItem creates a SignItem for a threshold raw vote extension
+//
+// Note: signItem.Msg left empty by purpose, as we don't want hash to be checked in Verify()
 func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (crypto.SignItem, error) {
 	var signRequestID []byte
 	var err error
