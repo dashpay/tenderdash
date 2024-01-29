@@ -150,8 +150,13 @@ func (q *QuorumSingsVerifier) verifyVoteExtensions(
 
 	for i, sig := range thresholdSigs {
 		if !pubKey.VerifySignatureDigest(signItems[i].SignHash, sig) {
-			return fmt.Errorf("vote-extension %d signature is invalid: raw %X, signature %X", i,
-				signItems[i].Msg, sig)
+			return fmt.Errorf("vote-extension %d signature is invalid: raw %X, signature %X, pubkey %X, sigHash: %X",
+				i,
+				signItems[i].Msg,
+				sig,
+				pubKey.Bytes(),
+				signItems[i].SignHash,
+			)
 		}
 	}
 	return nil

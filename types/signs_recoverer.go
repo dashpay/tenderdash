@@ -116,7 +116,8 @@ func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) {
 	}
 
 	if len(vote.VoteExtensions) != len(v.voteExtensions) {
-		panic(fmt.Sprintf("received vote extensions with different length: current %d, new %d", len(v.voteExtensions), len(v.voteExtensions)))
+		panic(fmt.Sprintf("received vote extensions with different length: current %d, received %d",
+			len(v.voteExtensions), len(vote.VoteExtensions)))
 	}
 
 	// append signatures from this vote to each extension
@@ -125,6 +126,7 @@ func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) {
 			if err := recoverable.AddThresholdSignature(vote.ValidatorProTxHash, ext.GetSignature()); err != nil {
 				panic(fmt.Errorf("failed to add vote %s to recover vote extension threshold sig: %w", vote.String(), err))
 			}
+			v.voteExtensions[i] = recoverable
 		}
 	}
 }

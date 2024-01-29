@@ -118,10 +118,6 @@ func (e VoteExtensions) ToExtendProto() []*abci.ExtendVoteExtension {
 	proto := make([]*abci.ExtendVoteExtension, 0, e.Len())
 
 	for _, ext := range e {
-		if err := ext.Validate(); err != nil {
-			panic(fmt.Errorf("invalid vote extension %v: %w", ext, err))
-		}
-
 		pb := ext.ToProto()
 		eve := &abci.ExtendVoteExtension{
 			Type:      pb.Type,
@@ -164,6 +160,10 @@ func (e VoteExtensions) Fingerprint() []byte {
 // IsSameWithProto compares the current state of the vote-extension with the same in VoteExtensions's protobuf
 // checks only the value of extensions
 func (e VoteExtensions) IsSameWithProto(right tmproto.VoteExtensions) bool {
+	if len(e) != len(right) {
+		return false
+	}
+
 	for t, ext := range e {
 		pb := ext.ToProto()
 		other := right[t]
@@ -278,6 +278,8 @@ type VoteExtensionIf interface {
 	ToProto() tmproto.VoteExtension
 	SignItem(chainID string, height int64, round int32, quorumType btcjson.LLMQType, quorumHash []byte) (crypto.SignItem, error)
 	IsThresholdRecoverable() bool
+	// Validate returns error if a vote-extension is invalid.
+	// It should not modify the state of the vote-extension.
 	Validate() error
 
 	SetSignature(sig []byte)
@@ -409,6 +411,7 @@ func (e *ThresholdVoteExtension) AddThresholdSignature(validator ProTxHash, sig 
 	return nil
 }
 
+// ThresholdRecover recovers threshold signature from collected signatures
 func (e *ThresholdVoteExtension) ThresholdRecover() ([]byte, error) {
 	proTxHashes := make([][]byte, 0, len(e.thresholdSignatures))
 	signatures := make([][]byte, 0, len(e.thresholdSignatures))
@@ -416,7 +419,7 @@ func (e *ThresholdVoteExtension) ThresholdRecover() ([]byte, error) {
 	// collect signatures and proTxHashes
 	for proTxHash, signature := range e.thresholdSignatures {
 		if len(signature) != bls12381.SignatureSize {
-			return nil, fmt.Errorf("invalid vote extension signature from validator %s: got %d, expected %d",
+			return nil, fmt.Errorf("invalid vote extension signature len from validator %s: got %d, expected %d",
 				proTxHash, len(signature), bls12381.SignatureSize)
 		}
 

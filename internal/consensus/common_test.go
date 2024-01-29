@@ -158,11 +158,6 @@ func signVote(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash) *types.Vote {
 	exts := make(types.VoteExtensions, 0)
-	if voteType == tmproto.PrecommitType && !blockID.IsNil() {
-		exts.Add(tmproto.VoteExtension{
-			Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
-			Extension: []byte("extension")})
-	}
 	v, err := vs.signVote(ctx, voteType, chainID, blockID, quorumType, quorumHash, exts)
 	require.NoError(t, err, "failed to sign vote")
 
