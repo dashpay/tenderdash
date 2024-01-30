@@ -57,3 +57,64 @@ linters-settings:
     suggest-new: true
   misspell:
     locale: US
+  depguard:
+    # Rules to apply.
+    #
+    # Variables:
+    # - File Variables
+    #   you can still use and exclamation mark ! in front of a variable to say not to use it.
+    #   Example !$test will match any file that is not a go test file.
+    #
+    #   `$all` - matches all go files
+    #   `$test` - matches all go test files
+    #
+    # - Package Variables
+    #
+    #  `$gostd` - matches all of go's standard library (Pulled from `GOROOT`)
+    #
+    # Default: Only allow $gostd in all files.
+    rules:
+      # Name of a rule.
+      main:
+        # Used to determine the package matching priority.
+        # There are three different modes: `original`, `strict`, and `lax`.
+        # Default: "original"
+        list-mode: lax
+        # List of file globs that will match this list of settings to compare against.
+        # Default: $all
+        files:
+          - $all
+          - "!$test"
+        # List of allowed packages.
+        allow:
+          - $gostd
+          - github.com/dashpay/tenderdash
+          - github.com/dashpay/dashd-go
+          - github.com/sasha-s/go-deadlock
+          - github.com/tendermint/tm-db
+          - github.com/gogo/protobuf
+          - github.com/rs/zerolog
+          - github.com/jonboulle/clockwork
+          - github.com/go-kit/kit/metrics
+          - github.com/hashicorp/go-multierror
+
+      tests:
+        # Used to determine the package matching priority.
+        # There are three different modes: `original`, `strict`, and `lax`.
+        # Default: "original"
+        list-mode: lax
+        # List of file globs that will match this list of settings to compare against.
+        # Default: $all
+        files:
+          - $test
+        # List of allowed packages.
+        allow:
+          - $gostd
+          - github.com/dashpay
+          - github.com/gogo/protobuf
+          - github.com/rs/zerolog
+          - github.com/sasha-s/go-deadlock
+          - github.com/tendermint/tm-db
+          - github.com/jonboulle/clockwork
+          - github.com/stretchr/testify
+          - github.com/fortytw2/leaktest
