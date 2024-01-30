@@ -103,12 +103,10 @@ func (s *voteSigner) signVote(
 	if err != nil {
 		return nil, err
 	}
-
 	err = vote.PopulateSignsFromProto(protoVote)
 	if err != nil {
 		return nil, err
 	}
-	s.logger.Trace("signed Vote", "vote", vote, "signature", vote.BlockSignature.String())
 	return vote, nil
 }
 
