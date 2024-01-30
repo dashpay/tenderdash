@@ -11,6 +11,8 @@ on:
   pull_request:
     paths:
       - "**.go"
+      - ".golangci.yml"
+      - ".github/linters/*"
   push:
     branches:
       - master
