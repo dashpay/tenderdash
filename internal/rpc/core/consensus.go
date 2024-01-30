@@ -15,7 +15,7 @@ import (
 // for the validators in the set as used in computing their Merkle root.
 //
 // More: https://docs.tendermint.com/master/rpc/#/Info/validators
-func (env *Environment) Validators(ctx context.Context, req *coretypes.RequestValidators) (*coretypes.ResultValidators, error) {
+func (env *Environment) Validators(_ctx context.Context, req *coretypes.RequestValidators) (*coretypes.ResultValidators, error) {
 	// The latest validator that we know is the NextValidator of the last block.
 	height, err := env.getHeight(env.latestUncommittedHeight(), (*int64)(req.Height))
 	if err != nil {
@@ -55,7 +55,7 @@ func (env *Environment) Validators(ctx context.Context, req *coretypes.RequestVa
 // DumpConsensusState dumps consensus state.
 // UNSTABLE
 // More: https://docs.tendermint.com/master/rpc/#/Info/dump_consensus_state
-func (env *Environment) DumpConsensusState(ctx context.Context) (*coretypes.ResultDumpConsensusState, error) {
+func (env *Environment) DumpConsensusState(_ctx context.Context) (*coretypes.ResultDumpConsensusState, error) {
 	// Get Peer consensus states.
 
 	var peerStates []coretypes.PeerStateInfo
@@ -97,7 +97,7 @@ func (env *Environment) DumpConsensusState(ctx context.Context) (*coretypes.Resu
 // ConsensusState returns a concise summary of the consensus state.
 // UNSTABLE
 // More: https://docs.tendermint.com/master/rpc/#/Info/consensus_state
-func (env *Environment) GetConsensusState(ctx context.Context) (*coretypes.ResultConsensusState, error) {
+func (env *Environment) GetConsensusState(_ctx context.Context) (*coretypes.ResultConsensusState, error) {
 	// Get self round state.
 	bz, err := env.ConsensusState.GetRoundStateSimpleJSON()
 	return &coretypes.ResultConsensusState{RoundState: bz}, err
@@ -106,7 +106,7 @@ func (env *Environment) GetConsensusState(ctx context.Context) (*coretypes.Resul
 // ConsensusParams gets the consensus parameters at the given block height.
 // If no height is provided, it will fetch the latest consensus params.
 // More: https://docs.tendermint.com/master/rpc/#/Info/consensus_params
-func (env *Environment) ConsensusParams(ctx context.Context, req *coretypes.RequestConsensusParams) (*coretypes.ResultConsensusParams, error) {
+func (env *Environment) ConsensusParams(_ctx context.Context, req *coretypes.RequestConsensusParams) (*coretypes.ResultConsensusParams, error) {
 	// The latest consensus params that we know is the consensus params after
 	// the last block.
 	height, err := env.getHeight(env.latestUncommittedHeight(), (*int64)(req.Height))

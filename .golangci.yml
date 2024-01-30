@@ -2,7 +2,6 @@ linters:
   enable:
     - asciicheck
     - bodyclose
-    - deadcode
     # - depguard
     - dogsled
     - dupl
@@ -30,14 +29,11 @@ linters:
     - nakedret
     - nolintlint
     - prealloc
-    - staticcheck
-    - structcheck
     - stylecheck
     # - typecheck
     - unconvert
     # - unparam
     - unused
-    - varcheck
     # - whitespace
     # - wsl
 
@@ -53,7 +49,19 @@ linters-settings:
     max-blank-identifiers: 3
   golint:
     min-confidence: 0
+  goconst:
+    min-len: 5
+    min-occurrences: 5
+    ignore-tests: true
   maligned:
     suggest-new: true
   misspell:
     locale: US
+  revive:
+    rules:
+      # https://github.com/mgechev/revive/blob/master/RULES_DESCRIPTIONS.md#unused-parameter
+      - name: unused-parameter
+        severity: warning
+        disabled: false
+        arguments:
+          - allowRegex: "^_"

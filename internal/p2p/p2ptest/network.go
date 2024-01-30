@@ -374,7 +374,7 @@ func (n *Node) MakePeerUpdates(ctx context.Context, t *testing.T) *p2p.PeerUpdat
 // MakePeerUpdatesNoRequireEmpty opens a peer update subscription, with automatic cleanup.
 // It does *not* check that all updates have been consumed, but will
 // close the update channel.
-func (n *Node) MakePeerUpdatesNoRequireEmpty(ctx context.Context, t *testing.T) *p2p.PeerUpdates {
+func (n *Node) MakePeerUpdatesNoRequireEmpty(ctx context.Context, _t *testing.T) *p2p.PeerUpdates {
 	return n.PeerManager.Subscribe(ctx, "p2ptest")
 }
 

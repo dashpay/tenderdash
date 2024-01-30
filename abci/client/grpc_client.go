@@ -47,7 +47,7 @@ func NewGRPCClient(logger log.Logger, addr string, mustConnect bool) Client {
 	return cli
 }
 
-func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
+func dialerFunc(_ctx context.Context, addr string) (net.Conn, error) {
 	return tmnet.Connect(addr)
 }
 
@@ -122,7 +122,7 @@ func (cli *grpcClient) Error() error {
 
 //----------------------------------------
 
-func (cli *grpcClient) Flush(ctx context.Context) error { return nil }
+func (cli *grpcClient) Flush(_ctx context.Context) error { return nil }
 
 func (cli *grpcClient) Echo(ctx context.Context, msg string) (*types.ResponseEcho, error) {
 	return cli.client.Echo(ctx, types.ToRequestEcho(msg).GetEcho(), grpc.WaitForReady(true))

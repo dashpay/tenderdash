@@ -98,7 +98,7 @@ func Setup(ctx context.Context, logger log.Logger, testnet *e2e.Testnet, ti infr
 		if err != nil {
 			return err
 		}
-		// nolint: gosec
+		//nolint:gosec
 		// G306: Expect WriteFile permissions to be 0600 or less
 		err = os.WriteFile(filepath.Join(nodeDir, "config", "app.toml"), appCfg, 0644)
 		if err != nil {

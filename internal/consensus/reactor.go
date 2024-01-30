@@ -497,7 +497,7 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 	}
 }
 
-func (r *Reactor) peerDown(ctx context.Context, peerUpdate p2p.PeerUpdate, chans channelBundle) {
+func (r *Reactor) peerDown(_ context.Context, peerUpdate p2p.PeerUpdate, chans channelBundle) {
 	r.mtx.RLock()
 	ps, ok := r.peers[peerUpdate.NodeID]
 	r.mtx.RUnlock()
@@ -705,7 +705,7 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 // VoteSetBitsChannel. If we fail to find the peer state for the envelope sender,
 // we perform a no-op and return. This can happen when we process the envelope
 // after the peer is removed.
-func (r *Reactor) handleVoteSetBitsMessage(ctx context.Context, envelope *p2p.Envelope, msgI Message) error {
+func (r *Reactor) handleVoteSetBitsMessage(_ context.Context, envelope *p2p.Envelope, msgI Message) error {
 	logger := r.logger.With("peer", envelope.From, "ch_id", "VoteSetBitsChannel")
 
 	ps, ok := r.GetPeerState(envelope.From)

@@ -118,7 +118,7 @@ func (mc *MockClient) GetNetworkInfo() (*btcjson.GetNetworkInfoResult, error) {
 	}, nil
 }
 
-func (mc *MockClient) MasternodeListJSON(filter string) (map[string]btcjson.MasternodelistResultJSON, error) {
+func (mc *MockClient) MasternodeListJSON(_filter string) (map[string]btcjson.MasternodelistResultJSON, error) {
 	proTxHash, err := mc.localPV.GetProTxHash(context.Background())
 	if err != nil {
 		panic(err)

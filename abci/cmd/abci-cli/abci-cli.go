@@ -316,7 +316,7 @@ func compose(fs []func() error) error {
 	return err
 }
 
-func cmdTest(cmd *cobra.Command, args []string) error {
+func cmdTest(cmd *cobra.Command, _args []string) error {
 	ctx := cmd.Context()
 	return compose(
 		[]func() error{
@@ -379,7 +379,7 @@ func cmdTest(cmd *cobra.Command, args []string) error {
 		})
 }
 
-func cmdBatch(cmd *cobra.Command, args []string) error {
+func cmdBatch(cmd *cobra.Command, _args []string) error {
 	bufReader := bufio.NewReader(os.Stdin)
 LOOP:
 	for {
@@ -405,7 +405,7 @@ LOOP:
 	return nil
 }
 
-func cmdConsole(cmd *cobra.Command, args []string) error {
+func cmdConsole(cmd *cobra.Command, _args []string) error {
 	for {
 		fmt.Printf("> ")
 		bufReader := bufio.NewReader(os.Stdin)

@@ -158,7 +158,7 @@ func (s *Server) BufferCapacity() int { return cap(s.queue) }
 // being forwarded to any subscriber.  If no queries are specified, all
 // messages will be observed. An error is reported if an observer is already
 // registered.
-func (s *Server) Observe(ctx context.Context, observe func(Message) error, queries ...*query.Query) error {
+func (s *Server) Observe(_ctx context.Context, observe func(Message) error, queries ...*query.Query) error {
 	s.subs.Lock()
 	defer s.subs.Unlock()
 	if observe == nil {
@@ -194,7 +194,7 @@ func (s *Server) Observe(ctx context.Context, observe func(Message) error, queri
 // SubscribeWithArgs creates a subscription for the given arguments.  It is an
 // error if the query is nil, a subscription already exists for the specified
 // client ID and query, or if the capacity arguments are invalid.
-func (s *Server) SubscribeWithArgs(ctx context.Context, args SubscribeArgs) (*Subscription, error) {
+func (s *Server) SubscribeWithArgs(_ctx context.Context, args SubscribeArgs) (*Subscription, error) {
 	s.subs.Lock()
 	defer s.subs.Unlock()
 
@@ -222,7 +222,7 @@ func (s *Server) SubscribeWithArgs(ctx context.Context, args SubscribeArgs) (*Su
 
 // Unsubscribe removes the subscription for the given client and/or query.  It
 // returns ErrSubscriptionNotFound if no such subscription exists.
-func (s *Server) Unsubscribe(ctx context.Context, args UnsubscribeArgs) error {
+func (s *Server) Unsubscribe(_ctx context.Context, args UnsubscribeArgs) error {
 	if err := args.Validate(); err != nil {
 		return err
 	}
@@ -257,7 +257,7 @@ func (s *Server) Unsubscribe(ctx context.Context, args UnsubscribeArgs) error {
 
 // UnsubscribeAll removes all subscriptions for the given client ID.
 // It returns ErrSubscriptionNotFound if no subscriptions exist for that client.
-func (s *Server) UnsubscribeAll(ctx context.Context, clientID string) error {
+func (s *Server) UnsubscribeAll(_ctx context.Context, clientID string) error {
 	s.subs.Lock()
 	defer s.subs.Unlock()
 

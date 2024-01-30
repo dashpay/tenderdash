@@ -10,7 +10,7 @@ import (
 
 // NetInfo returns network info.
 // More: https://docs.tendermint.com/master/rpc/#/Info/net_info
-func (env *Environment) NetInfo(ctx context.Context) (*coretypes.ResultNetInfo, error) {
+func (env *Environment) NetInfo(_ctx context.Context) (*coretypes.ResultNetInfo, error) {
 	peerList := env.PeerManager.Peers()
 
 	peers := make([]coretypes.Peer, 0, len(peerList))

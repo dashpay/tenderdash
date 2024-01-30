@@ -328,7 +328,7 @@ type PeerManager struct {
 }
 
 // NewPeerManager creates a new peer manager.
-func NewPeerManager(ctx context.Context, selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptions) (*PeerManager, error) {
+func NewPeerManager(_ctx context.Context, selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptions) (*PeerManager, error) {
 	if selfID == "" {
 		return nil, errors.New("self ID not given")
 	}

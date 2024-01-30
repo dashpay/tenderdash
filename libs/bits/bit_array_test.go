@@ -189,7 +189,7 @@ func TestEmptyFull(t *testing.T) {
 	}
 }
 
-func TestUpdateNeverPanics(t *testing.T) {
+func TestUpdateNeverPanics(_t *testing.T) {
 	newRandBitArray := func(n int) *BitArray { return randBitArray(n) }
 	pairs := []struct {
 		a, b *BitArray
@@ -208,7 +208,7 @@ func TestUpdateNeverPanics(t *testing.T) {
 	}
 }
 
-func TestNewBitArrayNeverCrashesOnNegatives(t *testing.T) {
+func TestNewBitArrayNeverCrashesOnNegatives(_t *testing.T) {
 	bitList := []int{-127, -128, -1 << 31}
 	for _, bits := range bitList {
 		_ = NewBitArray(bits)
