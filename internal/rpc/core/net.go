@@ -36,7 +36,7 @@ func (env *Environment) NetInfo(_ctx context.Context) (*coretypes.ResultNetInfo,
 
 // Genesis returns genesis file.
 // More: https://docs.tendermint.com/master/rpc/#/Info/genesis
-func (env *Environment) Genesis(ctx context.Context) (*coretypes.ResultGenesis, error) {
+func (env *Environment) Genesis(_ctx context.Context) (*coretypes.ResultGenesis, error) {
 	if len(env.genChunks) > 1 {
 		return nil, errors.New("genesis response is large, please use the genesis_chunked API instead")
 	}
@@ -44,7 +44,7 @@ func (env *Environment) Genesis(ctx context.Context) (*coretypes.ResultGenesis, 
 	return &coretypes.ResultGenesis{Genesis: env.GenDoc}, nil
 }
 
-func (env *Environment) GenesisChunked(ctx context.Context, req *coretypes.RequestGenesisChunked) (*coretypes.ResultGenesisChunk, error) {
+func (env *Environment) GenesisChunked(_ctx context.Context, req *coretypes.RequestGenesisChunked) (*coretypes.ResultGenesisChunk, error) {
 	if env.genChunks == nil {
 		return nil, fmt.Errorf("service configuration error, genesis chunks are not initialized")
 	}

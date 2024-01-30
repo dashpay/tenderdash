@@ -30,7 +30,7 @@ func NewTestnetInfra(logger log.Logger, testnet *e2e.Testnet) infra.TestnetInfra
 	}
 }
 
-func (ti *testnetInfra) Setup(ctx context.Context) error {
+func (ti *testnetInfra) Setup(_ctx context.Context) error {
 	compose, err := makeDockerCompose(ti.testnet)
 	if err != nil {
 		return err

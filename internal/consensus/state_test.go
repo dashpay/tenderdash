@@ -3164,7 +3164,6 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 		css0StateData.Votes.Precommits(0),
 		css0StateData.Validators,
 		privvals,
-		block.StateID(),
 	)
 	require.NoError(t, err)
 

@@ -25,7 +25,7 @@ func (emptyMempool) Size() int { return 0 }
 func (emptyMempool) CheckTx(context.Context, types.Tx, func(*abci.ResponseCheckTx), mempool.TxInfo) error {
 	return nil
 }
-func (emptyMempool) RemoveTxByKey(txKey types.TxKey) error   { return nil }
+func (emptyMempool) RemoveTxByKey(_txKey types.TxKey) error  { return nil }
 func (emptyMempool) ReapMaxBytesMaxGas(_, _ int64) types.Txs { return types.Txs{} }
 func (emptyMempool) ReapMaxTxs(_n int) types.Txs             { return types.Txs{} }
 func (emptyMempool) Update(
@@ -39,11 +39,11 @@ func (emptyMempool) Update(
 ) error {
 	return nil
 }
-func (emptyMempool) Flush()                                 {}
-func (emptyMempool) FlushAppConn(ctx context.Context) error { return nil }
-func (emptyMempool) TxsAvailable() <-chan struct{}          { return make(chan struct{}) }
-func (emptyMempool) EnableTxsAvailable()                    {}
-func (emptyMempool) SizeBytes() int64                       { return 0 }
+func (emptyMempool) Flush()                                  {}
+func (emptyMempool) FlushAppConn(_ctx context.Context) error { return nil }
+func (emptyMempool) TxsAvailable() <-chan struct{}           { return make(chan struct{}) }
+func (emptyMempool) EnableTxsAvailable()                     {}
+func (emptyMempool) SizeBytes() int64                        { return 0 }
 
 func (emptyMempool) TxsFront() *clist.CElement    { return nil }
 func (emptyMempool) TxsWaitChan() <-chan struct{} { return nil }
@@ -104,7 +104,7 @@ type mockProxyApp struct {
 	abciResponses *tmstate.ABCIResponses
 }
 
-func (mock *mockProxyApp) ProcessProposal(_ context.Context, req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
+func (mock *mockProxyApp) ProcessProposal(_ context.Context, _req *abci.RequestProcessProposal) (*abci.ResponseProcessProposal, error) {
 	r := mock.abciResponses.ProcessProposal
 	if r == nil {
 		return &abci.ResponseProcessProposal{}, nil
@@ -112,7 +112,7 @@ func (mock *mockProxyApp) ProcessProposal(_ context.Context, req *abci.RequestPr
 	return r, nil
 }
 
-func (mock *mockProxyApp) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
+func (mock *mockProxyApp) FinalizeBlock(_ context.Context, _req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	r := mock.abciResponses.FinalizeBlock
 	mock.txCount++
 	if r == nil {

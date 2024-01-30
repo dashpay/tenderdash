@@ -193,7 +193,7 @@ func Test_Concurrency(t *testing.T) {
 	wg.Wait()
 }
 
-func randLightBlock(ctx context.Context, t *testing.T, height int64) *types.LightBlock {
+func randLightBlock(_ctx context.Context, t *testing.T, height int64) *types.LightBlock {
 	t.Helper()
 	vals, _ := types.RandValidatorSet(2)
 	return &types.LightBlock{

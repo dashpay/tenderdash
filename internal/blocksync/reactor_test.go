@@ -102,9 +102,9 @@ func makeReactor(
 	t *testing.T,
 	conf *config.Config,
 	proTxHash types.ProTxHash,
-	nodeID types.NodeID,
+	_nodeID types.NodeID,
 	genDoc *types.GenesisDoc,
-	privVal types.PrivValidator,
+	_privVal types.PrivValidator,
 	channelCreator p2p.ChannelCreator,
 	peerEvents p2p.PeerEventSubscriber) *Reactor {
 

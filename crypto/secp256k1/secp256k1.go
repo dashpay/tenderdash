@@ -254,15 +254,15 @@ func (privKey PrivKey) SignDigest(msg []byte) ([]byte, error) {
 	return sigBytes, nil
 }
 
-func (pubKey PubKey) AggregateSignatures(sigSharesData [][]byte, messages [][]byte) ([]byte, error) {
+func (pubKey PubKey) AggregateSignatures(_sigSharesData [][]byte, _messages [][]byte) ([]byte, error) {
 	return nil, errors.New("should not aggregate an edwards signature")
 }
 
-func (pubKey PubKey) VerifyAggregateSignature(messages [][]byte, sig []byte) bool {
+func (pubKey PubKey) VerifyAggregateSignature(_messages [][]byte, _sig []byte) bool {
 	return false
 }
 
-func (pubKey PubKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
+func (pubKey PubKey) VerifySignatureDigest(_hash []byte, _sig []byte) bool {
 	return false
 }
 

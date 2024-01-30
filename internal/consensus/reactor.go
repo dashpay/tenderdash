@@ -497,7 +497,7 @@ func (r *Reactor) peerUp(ctx context.Context, peerUpdate p2p.PeerUpdate, retries
 	}
 }
 
-func (r *Reactor) peerDown(_ context.Context, peerUpdate p2p.PeerUpdate, chans channelBundle) {
+func (r *Reactor) peerDown(_ context.Context, peerUpdate p2p.PeerUpdate, _chans channelBundle) {
 	r.mtx.RLock()
 	ps, ok := r.peers[peerUpdate.NodeID]
 	r.mtx.RUnlock()

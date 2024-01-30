@@ -175,7 +175,7 @@ func signVotes(
 	voteType tmproto.SignedMsgType,
 	chainID string,
 	blockID types.BlockID,
-	appHash []byte,
+	_appHash []byte,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	vss ...*validatorStub,
@@ -362,7 +362,7 @@ func validatePrevote(
 	}
 }
 
-func validateLastCommit(ctx context.Context, t *testing.T, cs *State, privVal *validatorStub, blockHash []byte) {
+func validateLastCommit(_ctx context.Context, t *testing.T, cs *State, _privVal *validatorStub, blockHash []byte) {
 	t.Helper()
 
 	stateData := cs.GetStateData()
@@ -852,7 +852,7 @@ func consensusLogger(t *testing.T) log.Logger {
 func makeConsensusState(
 	ctx context.Context,
 	t *testing.T,
-	cfg *config.Config,
+	_cfg *config.Config,
 	nValidators int,
 	testName string,
 	tickerFunc func() TimeoutTicker,
@@ -1031,7 +1031,7 @@ type genesisStateArgs struct {
 	Time       time.Time
 }
 
-func makeGenesisState(ctx context.Context, t *testing.T, cfg *config.Config, args genesisStateArgs) (sm.State, []types.PrivValidator) {
+func makeGenesisState(_ctx context.Context, t *testing.T, _cfg *config.Config, args genesisStateArgs) (sm.State, []types.PrivValidator) {
 	t.Helper()
 	if args.Power == 0 {
 		args.Power = 1
