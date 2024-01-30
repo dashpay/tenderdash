@@ -328,7 +328,7 @@ type PeerManager struct {
 }
 
 // NewPeerManager creates a new peer manager.
-func NewPeerManager(ctx context.Context, selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptions) (*PeerManager, error) {
+func NewPeerManager(_ctx context.Context, selfID types.NodeID, peerDB dbm.DB, options PeerManagerOptions) (*PeerManager, error) {
 	if selfID == "" {
 		return nil, errors.New("self ID not given")
 	}
@@ -683,7 +683,7 @@ func (m *PeerManager) DialFailed(ctx context.Context, address NodeAddress) error
 }
 
 // scheduleDial will dial peers after some delay
-func (m *PeerManager) scheduleDial(ctx context.Context, delay time.Duration) {
+func (m *PeerManager) scheduleDial(_ctx context.Context, delay time.Duration) {
 	if delay > 0 && delay != retryNever {
 		m.dialWaker.WakeAfter(delay)
 	} else {
@@ -991,6 +991,7 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 // FIXME: This will cause the peer manager to immediately try to reconnect to
 // the peer, which is probably not always what we want.
 func (m *PeerManager) Errored(peerID types.NodeID, err error) {
+	m.logger.Error("peer errored", "peer", peerID, "error", err)
 	m.mtx.Lock()
 	defer m.mtx.Unlock()
 

@@ -1,4 +1,4 @@
-// nolint:lll
+//nolint:lll
 package bls12381
 
 import (
@@ -378,7 +378,8 @@ func TestRecoverThresholdSignatureFromSharesCaseStudy(t *testing.T) {
 			msg:             "C4E3500CAEC0AEB79CFA05F10EBE77717BEEF5D51159E2A89D8FE98B696BE4A9",
 		},
 	}
-	for i, tc := range testCases {
+	for i, testCase := range testCases {
+		tc := testCase
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
 			t.Parallel()
 			var err error

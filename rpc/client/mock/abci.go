@@ -146,7 +146,7 @@ type ABCIMock struct {
 	Broadcast       Call
 }
 
-func (m ABCIMock) ABCIInfo(ctx context.Context) (*coretypes.ResultABCIInfo, error) {
+func (m ABCIMock) ABCIInfo(_ctx context.Context) (*coretypes.ResultABCIInfo, error) {
 	res, err := m.Info.GetResponse(nil)
 	if err != nil {
 		return nil, err
@@ -158,7 +158,7 @@ func (m ABCIMock) ABCIQuery(ctx context.Context, path string, data bytes.HexByte
 	return m.ABCIQueryWithOptions(ctx, path, data, client.DefaultABCIQueryOptions)
 }
 
-func (m ABCIMock) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
+func (m ABCIMock) ABCIQueryWithOptions(_ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	res, err := m.Query.GetResponse(QueryArgs{path, data, opts.Height, opts.Prove})
 	if err != nil {
 		return nil, err
@@ -167,7 +167,7 @@ func (m ABCIMock) ABCIQueryWithOptions(ctx context.Context, path string, data by
 	return &coretypes.ResultABCIQuery{Response: resQuery}, nil
 }
 
-func (m ABCIMock) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTxCommit, error) {
+func (m ABCIMock) BroadcastTxCommit(_ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTxCommit, error) {
 	res, err := m.BroadcastCommit.GetResponse(tx)
 	if err != nil {
 		return nil, err
@@ -175,7 +175,7 @@ func (m ABCIMock) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*coretype
 	return res.(*coretypes.ResultBroadcastTxCommit), nil
 }
 
-func (m ABCIMock) BroadcastTxAsync(ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
+func (m ABCIMock) BroadcastTxAsync(_ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	res, err := m.Broadcast.GetResponse(tx)
 	if err != nil {
 		return nil, err
@@ -183,7 +183,7 @@ func (m ABCIMock) BroadcastTxAsync(ctx context.Context, tx types.Tx) (*coretypes
 	return res.(*coretypes.ResultBroadcastTx), nil
 }
 
-func (m ABCIMock) BroadcastTx(ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
+func (m ABCIMock) BroadcastTx(_ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	res, err := m.Broadcast.GetResponse(tx)
 	if err != nil {
 		return nil, err
@@ -191,7 +191,7 @@ func (m ABCIMock) BroadcastTx(ctx context.Context, tx types.Tx) (*coretypes.Resu
 	return res.(*coretypes.ResultBroadcastTx), nil
 }
 
-func (m ABCIMock) BroadcastTxSync(ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
+func (m ABCIMock) BroadcastTxSync(_ctx context.Context, tx types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	res, err := m.Broadcast.GetResponse(tx)
 	if err != nil {
 		return nil, err

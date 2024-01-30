@@ -104,7 +104,7 @@ func (sc *SignerClient) GetProTxHash(ctx context.Context) (crypto.ProTxHash, err
 	return resp.ProTxHash, nil
 }
 
-func (sc *SignerClient) GetFirstQuorumHash(ctx context.Context) (crypto.QuorumHash, error) {
+func (sc *SignerClient) GetFirstQuorumHash(_ctx context.Context) (crypto.QuorumHash, error) {
 	return nil, errors.New("getFirstQuorumHash should not be called on a signer client")
 }
 
@@ -126,14 +126,14 @@ func (sc *SignerClient) GetThresholdPublicKey(ctx context.Context, quorumHash cr
 
 	return pk, nil
 }
-func (sc *SignerClient) GetHeight(ctx context.Context, quorumHash crypto.QuorumHash) (int64, error) {
+func (sc *SignerClient) GetHeight(_ctx context.Context, quorumHash crypto.QuorumHash) (int64, error) {
 	return 0, fmt.Errorf("getHeight should not be called on asigner client %s", quorumHash.String())
 }
 
 // SignVote requests a remote signer to sign a vote
 func (sc *SignerClient) SignVote(
-	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
-	vote *tmproto.Vote, logger log.Logger) error {
+	ctx context.Context, _chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
+	vote *tmproto.Vote, _logger log.Logger) error {
 	if len(quorumHash.Bytes()) != crypto.DefaultHashSize {
 		return fmt.Errorf("quorum hash must be 32 bytes long when signing vote")
 	}
@@ -173,11 +173,11 @@ func (sc *SignerClient) SignProposal(
 }
 
 func (sc *SignerClient) UpdatePrivateKey(
-	ctx context.Context, privateKey crypto.PrivKey, quorumHash crypto.QuorumHash, thresholdPublicKey crypto.PubKey, height int64,
+	_ctx context.Context, _privateKey crypto.PrivKey, _quorumHash crypto.QuorumHash, _thresholdPublicKey crypto.PubKey, _height int64,
 ) {
 
 }
 
-func (sc *SignerClient) GetPrivateKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
+func (sc *SignerClient) GetPrivateKey(_ctx context.Context, _quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
 	return nil, nil
 }

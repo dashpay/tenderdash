@@ -320,7 +320,7 @@ func (evpool *Pool) isPending(evidence types.Evidence) bool {
 	return ok
 }
 
-func (evpool *Pool) addPendingEvidence(ctx context.Context, ev types.Evidence) error {
+func (evpool *Pool) addPendingEvidence(_ctx context.Context, ev types.Evidence) error {
 	evpb, err := types.EvidenceToProto(ev)
 	if err != nil {
 		return fmt.Errorf("failed to convert to proto: %w", err)

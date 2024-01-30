@@ -1,12 +1,10 @@
 package merkle
 
 import (
-	// it is ok to use math/rand here: we do not need a cryptographically secure random
-	// number generator here and we can run the tests a bit faster
-	"math/rand"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"golang.org/x/exp/rand"
 )
 
 func TestKeyPath(t *testing.T) {
@@ -26,7 +24,7 @@ func TestKeyPath(t *testing.T) {
 					keys[i][j] = alphanum[rand.Intn(len(alphanum))]
 				}
 			case KeyEncodingHex:
-				rand.Read(keys[i])
+				_, _ = rand.Read(keys[i])
 			default:
 				require.Fail(t, "Unexpected encoding")
 			}

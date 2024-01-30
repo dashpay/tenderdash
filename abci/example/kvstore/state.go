@@ -171,7 +171,7 @@ func (state kvState) GetAppHash() tmbytes.HexBytes {
 	return state.AppHash.Copy()
 }
 
-func (state *kvState) UpdateAppHash(lastCommittedState State, txs types1.Txs, txResults []*types.ExecTxResult) error {
+func (state *kvState) UpdateAppHash(lastCommittedState State, _txs types1.Txs, txResults []*types.ExecTxResult) error {
 	// UpdateAppHash updates app hash for the current app state.
 	txResultsHash, err := types.TxResultsHash(txResults)
 	if err != nil {

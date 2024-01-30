@@ -37,7 +37,7 @@ var defaultWSOptions = wsOptions{
 // the remote server.
 //
 // WSClient is safe for concurrent use by multiple goroutines.
-type WSClient struct { // nolint: maligned
+type WSClient struct { //nolint: maligned
 	Logger log.Logger
 	conn   *websocket.Conn
 
@@ -206,7 +206,7 @@ func (c *WSClient) dial() error {
 		Proxy:          http.ProxyFromEnvironment,
 	}
 	rHeader := http.Header{}
-	conn, _, err := dialer.Dial(c.protocol+"://"+c.Address+c.Endpoint, rHeader) // nolint:nolintlint,bodyclose
+	conn, _, err := dialer.Dial(c.protocol+"://"+c.Address+c.Endpoint, rHeader) //nolint:nolintlint,bodyclose
 	if err != nil {
 		return err
 	}
@@ -232,7 +232,7 @@ func (c *WSClient) reconnect(ctx context.Context) error {
 	defer timer.Stop()
 
 	for {
-		// nolint:gosec // G404: Use of weak random number generator
+		//nolint:gosec // G404: Use of weak random number generator
 		jitter := time.Duration(mrand.Float64() * float64(time.Second)) // 1s == (1e9 ns)
 		backoffDuration := jitter + ((1 << attempt) * time.Second)
 

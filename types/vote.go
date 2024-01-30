@@ -225,7 +225,7 @@ func (vote *Vote) Verify(
 	quorumHash []byte,
 	pubKey crypto.PubKey,
 	proTxHash crypto.ProTxHash,
-	stateID tmproto.StateID,
+	_stateID tmproto.StateID,
 ) error {
 	err := vote.verifyBasic(proTxHash, pubKey)
 	if err != nil {

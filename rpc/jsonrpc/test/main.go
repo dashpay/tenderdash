@@ -17,7 +17,7 @@ var routes = map[string]*rpcserver.RPCFunc{
 	"hello_world": rpcserver.NewRPCFunc(HelloWorld),
 }
 
-func HelloWorld(ctx context.Context, name string, num int) (Result, error) {
+func HelloWorld(_ctx context.Context, name string, num int) (Result, error) {
 	return Result{fmt.Sprintf("hi %s %d", name, num)}, nil
 }
 

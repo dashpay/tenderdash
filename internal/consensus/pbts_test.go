@@ -239,7 +239,7 @@ func timestampedCollector(ctx context.Context, t *testing.T, eb *eventbus.EventB
 	return eventCh
 }
 
-func collectHeightResults(ctx context.Context, t *testing.T, eventCh <-chan timestampedEvent, height int64, proTxHash crypto.ProTxHash) heightResult {
+func collectHeightResults(_ctx context.Context, t *testing.T, eventCh <-chan timestampedEvent, height int64, proTxHash crypto.ProTxHash) heightResult {
 	t.Helper()
 	var res heightResult
 	for event := range eventCh {

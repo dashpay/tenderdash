@@ -91,7 +91,7 @@ func FinalizeBlock(ctx context.Context, client abciclient.Client, txBytes [][]by
 	return nil
 }
 
-func PrepareProposal(ctx context.Context, client abciclient.Client, txBytes [][]byte, codeExp []types.TxRecord_TxAction, dataExp []byte) error {
+func PrepareProposal(ctx context.Context, client abciclient.Client, txBytes [][]byte, codeExp []types.TxRecord_TxAction, _dataExp []byte) error {
 	res, _ := client.PrepareProposal(ctx, &types.RequestPrepareProposal{Txs: txBytes})
 	for i, tx := range res.TxRecords {
 		if tx.Action != codeExp[i] {

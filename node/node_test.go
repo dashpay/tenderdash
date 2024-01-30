@@ -780,7 +780,7 @@ func TestLoadStateFromGenesis(t *testing.T) {
 	_ = loadStatefromGenesis(ctx, t)
 }
 
-func loadStatefromGenesis(ctx context.Context, t *testing.T) sm.State {
+func loadStatefromGenesis(_ctx context.Context, t *testing.T) sm.State {
 	t.Helper()
 
 	stateDB := dbm.NewMemDB()

@@ -229,7 +229,7 @@ func (p *BlockProvider) LightBlock(ctx context.Context, height int64) (*types.Li
 // attacks. This is a no op as there currently isn't a way to wire this up to
 // the evidence reactor (we should endeavor to do this in the future but for now
 // it's not critical for backwards verification)
-func (p *BlockProvider) ReportEvidence(ctx context.Context, ev types.Evidence) error {
+func (p *BlockProvider) ReportEvidence(_ctx context.Context, _ev types.Evidence) error {
 	return nil
 }
 

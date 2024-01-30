@@ -259,7 +259,7 @@ func TestEvidencePoolUpdate(t *testing.T) {
 		state.Validators.QuorumHash,
 	)
 	require.NoError(t, err)
-	lastCommit := makeCommit(height, state.Validators.QuorumHash, val.ProTxHash)
+	lastCommit := makeCommit(height, state.Validators.QuorumHash)
 
 	coreChainLockHeight := state.LastCoreChainLockedBlockHeight
 	block := types.MakeBlock(height+1, []types.Tx{}, lastCommit, []types.Evidence{ev})
@@ -402,14 +402,13 @@ func TestRecoverPendingEvidence(t *testing.T) {
 	height := int64(10)
 	quorumHash := crypto.RandQuorumHash()
 	val := types.NewMockPVForQuorum(quorumHash)
-	proTxHash := val.ProTxHash
 	evidenceDB := dbm.NewMemDB()
 	stateStore := initializeValidatorState(ctx, t, val, height, btcjson.LLMQType_5_60, quorumHash)
 
 	state, err := stateStore.Load()
 	require.NoError(t, err)
 
-	blockStore, err := initializeBlockStore(dbm.NewMemDB(), state, proTxHash)
+	blockStore, err := initializeBlockStore(dbm.NewMemDB(), state)
 	require.NoError(t, err)
 
 	logger := log.NewNopLogger()
@@ -536,11 +535,11 @@ func initializeValidatorState(
 
 // initializeBlockStore creates a block storage and populates it w/ a dummy
 // block at +height+.
-func initializeBlockStore(db dbm.DB, state sm.State, valProTxHash []byte) (*store.BlockStore, error) {
+func initializeBlockStore(db dbm.DB, state sm.State) (*store.BlockStore, error) {
 	blockStore := store.NewBlockStore(db)
 
 	for i := int64(1); i <= state.LastBlockHeight; i++ {
-		lastCommit := makeCommit(i-1, state.Validators.QuorumHash, valProTxHash)
+		lastCommit := makeCommit(i-1, state.Validators.QuorumHash)
 		block := state.MakeBlock(i, []types.Tx{}, lastCommit, nil, state.Validators.GetProposer().ProTxHash, 0)
 
 		block.Header.Time = defaultEvidenceTime.Add(time.Duration(i) * time.Minute)
@@ -551,14 +550,14 @@ func initializeBlockStore(db dbm.DB, state sm.State, valProTxHash []byte) (*stor
 			return nil, err
 		}
 
-		seenCommit := makeCommit(i, state.Validators.QuorumHash, valProTxHash)
+		seenCommit := makeCommit(i, state.Validators.QuorumHash)
 		blockStore.SaveBlock(block, partSet, seenCommit)
 	}
 
 	return blockStore, nil
 }
 
-func makeCommit(height int64, quorumHash []byte, valProTxHash []byte) *types.Commit {
+func makeCommit(height int64, quorumHash []byte) *types.Commit {
 	return types.NewCommit(
 		height,
 		0,
@@ -581,7 +580,7 @@ func defaultTestPool(ctx context.Context, t *testing.T, height int64) (*evidence
 	stateStore := initializeValidatorState(ctx, t, val, height, btcjson.LLMQType_5_60, quorumHash)
 	state, err := stateStore.Load()
 	require.NoError(t, err)
-	blockStore, err := initializeBlockStore(dbm.NewMemDB(), state, val.ProTxHash)
+	blockStore, err := initializeBlockStore(dbm.NewMemDB(), state)
 	require.NoError(t, err)
 
 	logger := log.NewNopLogger()

@@ -598,7 +598,7 @@ func castVote(
 
 // NOTE: privValidators are in order
 func randVoteSet(
-	ctx context.Context,
+	_ctx context.Context,
 	t testing.TB,
 	height int64,
 	round int32,

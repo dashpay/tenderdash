@@ -57,12 +57,12 @@ type EvidencePool interface {
 // to the consensus evidence pool interface
 type EmptyEvidencePool struct{}
 
-func (EmptyEvidencePool) PendingEvidence(maxBytes int64) (ev []types.Evidence, size int64) {
+func (EmptyEvidencePool) PendingEvidence(_maxBytes int64) (ev []types.Evidence, size int64) {
 	return nil, 0
 }
 func (EmptyEvidencePool) AddEvidence(context.Context, types.Evidence) error { return nil }
 func (EmptyEvidencePool) Update(context.Context, State, types.EvidenceList) {}
-func (EmptyEvidencePool) CheckEvidence(ctx context.Context, evList types.EvidenceList) error {
+func (EmptyEvidencePool) CheckEvidence(_ctx context.Context, _evList types.EvidenceList) error {
 	return nil
 }
-func (EmptyEvidencePool) ReportConflictingVotes(voteA, voteB *types.Vote) {}
+func (EmptyEvidencePool) ReportConflictingVotes(_voteA, _voteB *types.Vote) {}

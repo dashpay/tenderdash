@@ -1117,7 +1117,7 @@ func TestStateProto(t *testing.T) {
 	}
 }
 
-func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
+func blockExecutorFunc(_ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
 	return func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
 		t.Helper()
 

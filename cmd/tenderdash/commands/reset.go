@@ -146,7 +146,7 @@ func ResetState(dbDir string, logger log.Logger) error {
 // ResetFilePV loads the file private validator and resets the watermark to 0. If used on an existing network,
 // this can cause the node to double sign.
 // XXX: this is unsafe and should only suitable for testnets.
-func ResetFilePV(privValKeyFile, privValStateFile string, logger log.Logger, keyType string) error {
+func ResetFilePV(privValKeyFile, privValStateFile string, logger log.Logger, _keyType string) error {
 	if _, err := os.Stat(privValKeyFile); err == nil {
 		pv, err := privval.LoadFilePVEmptyState(privValKeyFile, privValStateFile)
 		if err != nil {

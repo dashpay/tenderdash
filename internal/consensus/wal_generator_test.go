@@ -11,9 +11,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
-	"github.com/stretchr/testify/require"
 )
 
 // WALGenerateNBlocks generates a consensus WAL. It does this by
@@ -157,8 +158,8 @@ func (w *byteBufferWAL) WriteSync(m WALMessage) error {
 func (w *byteBufferWAL) FlushAndSync() error { return nil }
 
 func (w *byteBufferWAL) SearchForEndHeight(
-	height int64,
-	options *WALSearchOptions) (rd io.ReadCloser, found bool, err error) {
+	_height int64,
+	_options *WALSearchOptions) (rd io.ReadCloser, found bool, err error) {
 	return nil, false, nil
 }
 

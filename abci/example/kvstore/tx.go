@@ -119,7 +119,7 @@ func execTx(tx types.Tx, roundState State) (abci.ExecTxResult, error) {
 
 // execPrepareTx is noop. tx data is considered as placeholder
 // and is substitute at the PrepareProposal.
-func execPrepareTx(tx []byte) (abci.ExecTxResult, error) {
+func execPrepareTx(_tx []byte) (abci.ExecTxResult, error) {
 	// noop
 	return abci.ExecTxResult{}, nil
 }

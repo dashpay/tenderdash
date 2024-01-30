@@ -389,7 +389,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 		return sm.State{}, fmt.Errorf("failed to bootstrap node with new state: %w", err)
 	}
 
-	if err := r.blockStore.SaveSeenCommit(state.LastBlockHeight, commit); err != nil {
+	if err := r.blockStore.SaveSeenCommit(commit); err != nil {
 		return sm.State{}, fmt.Errorf("failed to store last seen commit: %w", err)
 	}
 
@@ -1055,7 +1055,7 @@ func (r *Reactor) processPeerUp(ctx context.Context, peerUpdate p2p.PeerUpdate) 
 	}
 }
 
-func (r *Reactor) processPeerDown(ctx context.Context, peerUpdate p2p.PeerUpdate) {
+func (r *Reactor) processPeerDown(_ctx context.Context, peerUpdate p2p.PeerUpdate) {
 	r.peers.Remove(peerUpdate.NodeID)
 	syncer := r.getSyncer()
 	if syncer != nil {

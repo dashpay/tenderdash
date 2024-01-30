@@ -89,7 +89,7 @@ func NewCLI(logger log.Logger) *CLI {
 				return err
 			}
 
-			r := rand.New(rand.NewSource(randomSeed)) // nolint: gosec
+			r := rand.New(rand.NewSource(randomSeed)) //nolint:gosec
 
 			chLoadResult := make(chan error)
 			ctx, cancel := context.WithCancel(cmd.Context())
@@ -241,7 +241,7 @@ func NewCLI(logger log.Logger) *CLI {
 			return Load(
 				cmd.Context(),
 				logger,
-				rand.New(rand.NewSource(randomSeed)), // nolint: gosec
+				rand.New(rand.NewSource(randomSeed)), //nolint:gosec
 				cli.testnet,
 			)
 		},
@@ -264,7 +264,7 @@ func NewCLI(logger log.Logger) *CLI {
 			return InjectEvidence(
 				cmd.Context(),
 				logger,
-				rand.New(rand.NewSource(randomSeed)), // nolint: gosec
+				rand.New(rand.NewSource(randomSeed)), //nolint:gosec
 				cli.testnet,
 				amount,
 			)
@@ -350,7 +350,7 @@ Does not run any perbutations.
 			ctx, cancel := context.WithCancel(cmd.Context())
 			defer cancel()
 
-			r := rand.New(rand.NewSource(randomSeed)) // nolint: gosec
+			r := rand.New(rand.NewSource(randomSeed)) //nolint:gosec
 
 			lctx, loadCancel := context.WithCancel(ctx)
 			defer loadCancel()
