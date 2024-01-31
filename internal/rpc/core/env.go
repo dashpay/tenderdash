@@ -251,7 +251,7 @@ func (env *Environment) StartService(ctx context.Context, conf *config.Config) (
 		}
 		go func() {
 			// N.B. Use background for unsubscribe, ctx is already terminated.
-			defer env.EventBus.UnsubscribeAll(context.Background(), subscriberID) // nolint:errcheck
+			defer env.EventBus.UnsubscribeAll(context.Background(), subscriberID) //nolint:errcheck
 			for {
 				msg, err := sub.Next(ctx)
 				if err != nil {

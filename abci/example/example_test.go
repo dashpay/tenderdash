@@ -7,7 +7,6 @@ import (
 	"net"
 	"os"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/require"
 
@@ -22,10 +21,6 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	tmnet "github.com/dashpay/tenderdash/libs/net"
 )
-
-func init() {
-	rand.Seed(time.Now().UnixNano())
-}
 
 func TestKVStore(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -98,7 +93,7 @@ func testBulk(ctx context.Context, t *testing.T, logger log.Logger, app types.Ap
 //-------------------------
 // test grpc
 
-func dialerFunc(ctx context.Context, addr string) (net.Conn, error) {
+func dialerFunc(_ctx context.Context, addr string) (net.Conn, error) {
 	return tmnet.Connect(addr)
 }
 

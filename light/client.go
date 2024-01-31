@@ -467,7 +467,7 @@ func (c *Client) VerifyHeader(ctx context.Context, newHeader *types.Header, now 
 	return c.verifyLightBlock(ctx, l, now)
 }
 
-func (c *Client) verifyLightBlock(ctx context.Context, newLightBlock *types.LightBlock, now time.Time) error {
+func (c *Client) verifyLightBlock(ctx context.Context, newLightBlock *types.LightBlock, _now time.Time) error {
 	c.logger.Info("verify light block", "height", newLightBlock.Height, "hash", newLightBlock.Hash())
 
 	if err := newLightBlock.ValidateBasic(c.ChainID()); err != nil {
@@ -514,7 +514,7 @@ func (c *Client) verifyBlockWithDashCore(ctx context.Context, newLightBlock *typ
 	return nil
 }
 
-func (c *Client) verifyBlockSignatureWithDashCore(ctx context.Context, newLightBlock *types.LightBlock) error {
+func (c *Client) verifyBlockSignatureWithDashCore(_ctx context.Context, newLightBlock *types.LightBlock) error {
 
 	quorumHash := newLightBlock.ValidatorSet.QuorumHash
 	quorumType := newLightBlock.ValidatorSet.QuorumType
@@ -878,7 +878,7 @@ func (c *Client) compareFirstHeaderWithWitnesses(ctx context.Context, h *types.S
 	return c.removeWitnesses(witnessesToRemove)
 }
 
-func (c *Client) Status(ctx context.Context) *types.LightClientInfo {
+func (c *Client) Status(_ctx context.Context) *types.LightClientInfo {
 	chunks := make([]string, len(c.witnesses))
 
 	// If primary is in witness list we do not want to count it twice in the number of peers

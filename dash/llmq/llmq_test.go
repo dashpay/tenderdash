@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"testing"
-	"time"
 
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 	"github.com/stretchr/testify/require"
@@ -185,13 +184,11 @@ func TestLLMQ(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
+		tc := tc
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
 			t.Parallel()
 			llmqData := tc.llmqDataGetter()
-
-			// Validate threshold signature recoveryTestCase only works with minimum expected signatures
-			// and works from there up to the maximum
-			rand.Seed(time.Now().UnixNano())
+			tc := tc
 
 			for round := 0; round < tc.rounds; round++ {
 				// For the given rounds shuffleSigsAndIDs the sigShares/ids each round to try various combinations
@@ -242,7 +239,7 @@ type llmqTestCaseData struct {
 	wantThresholdSig *bls.G2Element
 }
 
-func mustGenerateLLMQData(proTxHashes []crypto.ProTxHash, m int, sigHash bls.Hash) *Data {
+func mustGenerateLLMQData(proTxHashes []crypto.ProTxHash, m int, _sigHash bls.Hash) *Data {
 	llmqData, err := Generate(
 		proTxHashes,
 		WithThreshold(m),

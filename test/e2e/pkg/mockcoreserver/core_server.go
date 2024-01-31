@@ -209,7 +209,7 @@ func (c *StaticCoreServer) GetNetworkInfo(_ context.Context, _ btcjson.GetNetwor
 }
 
 // Ping ...
-func (c *StaticCoreServer) Ping(_ context.Context, cmd btcjson.PingCmd) error {
+func (c *StaticCoreServer) Ping(_ context.Context, _cmd btcjson.PingCmd) error {
 	return nil
 }
 

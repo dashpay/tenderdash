@@ -423,7 +423,7 @@ func LoadOrGenFilePV(keyFilePath, stateFilePath string) (*FilePV, error) {
 
 // GetPubKey returns the public key of the validator.
 // Implements PrivValidator.
-func (pv *FilePV) GetPubKey(context context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
+func (pv *FilePV) GetPubKey(_ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -435,7 +435,7 @@ func (pv *FilePV) GetPubKey(context context.Context, quorumHash crypto.QuorumHas
 
 // GetFirstPubKey returns the first public key of the validator.
 // Implements PrivValidator.
-func (pv *FilePV) GetFirstPubKey(context context.Context) (crypto.PubKey, error) {
+func (pv *FilePV) GetFirstPubKey(_ctx context.Context) (crypto.PubKey, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -445,7 +445,7 @@ func (pv *FilePV) GetFirstPubKey(context context.Context) (crypto.PubKey, error)
 	return nil, nil
 }
 
-func (pv *FilePV) GetQuorumHashes(context context.Context) ([]crypto.QuorumHash, error) {
+func (pv *FilePV) GetQuorumHashes(_ctx context.Context) ([]crypto.QuorumHash, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -462,7 +462,7 @@ func (pv *FilePV) GetQuorumHashes(context context.Context) ([]crypto.QuorumHash,
 	return quorumHashes, nil
 }
 
-func (pv *FilePV) GetFirstQuorumHash(context context.Context) (crypto.QuorumHash, error) {
+func (pv *FilePV) GetFirstQuorumHash(_ctx context.Context) (crypto.QuorumHash, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -473,7 +473,7 @@ func (pv *FilePV) GetFirstQuorumHash(context context.Context) (crypto.QuorumHash
 }
 
 // GetThresholdPublicKey ...
-func (pv *FilePV) GetThresholdPublicKey(context context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
+func (pv *FilePV) GetThresholdPublicKey(_ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -491,7 +491,7 @@ func (pv *FilePV) GetPrivateKey(context context.Context, quorumHash crypto.Quoru
 	return pv.getPrivateKey(context, quorumHash)
 }
 
-func (pv *FilePV) getPrivateKey(context context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
+func (pv *FilePV) getPrivateKey(_ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
 	if keys, ok := pv.Key.PrivateKeys[quorumHash.String()]; ok {
 		return keys.PrivKey, nil
 	}
@@ -515,7 +515,7 @@ func (pv *FilePV) GetPublicKey(context context.Context, quorumHash crypto.Quorum
 }
 
 // GetHeight ...
-func (pv *FilePV) GetHeight(_ context.Context, quorumHash crypto.QuorumHash) (int64, error) {
+func (pv *FilePV) GetHeight(_ctx context.Context, quorumHash crypto.QuorumHash) (int64, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -543,7 +543,7 @@ func (pv *FilePV) ExtractIntoValidator(ctx context.Context, quorumHash crypto.Qu
 
 // GetProTxHash returns the pro tx hash of the validator.
 // Implements PrivValidator.
-func (pv *FilePV) GetProTxHash(context context.Context) (crypto.ProTxHash, error) {
+func (pv *FilePV) GetProTxHash(_ctx context.Context) (crypto.ProTxHash, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -561,7 +561,7 @@ func (pv *FilePV) SignVote(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	vote *tmproto.Vote,
-	logger log.Logger,
+	_logger log.Logger,
 ) error {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
@@ -626,7 +626,7 @@ func (pv *FilePV) String() string {
 }
 
 func (pv *FilePV) UpdatePrivateKey(
-	context context.Context,
+	_ctx context.Context,
 	privateKey crypto.PrivKey,
 	quorumHash crypto.QuorumHash,
 	thresholdPublicKey crypto.PubKey,

@@ -12,7 +12,7 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-func TestPeerSubscriberBasic(t *testing.T) {
+func TestPeerSubscriberBasic(_t *testing.T) {
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Millisecond)
 	defer cancel()
 	inCh := make(chan p2p.PeerUpdate)

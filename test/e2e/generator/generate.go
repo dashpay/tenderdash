@@ -186,7 +186,7 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 	// prepare the list of the validator names
 	validatorNames := generateValidatorNames(numValidators)
 	valPlr := validatorUpdatesPopulator{
-		rand:           rand.New(rand.NewSource(time.Now().UnixNano())), // nolint:gosec
+		rand:           rand.New(rand.NewSource(time.Now().UnixNano())), //nolint:gosec
 		initialHeight:  manifest.InitialHeight,
 		validatorNames: validatorNames,
 		quorumMembers:  topology.quorumMembersCount,

@@ -75,23 +75,23 @@ var Routes = map[string]*server.RPCFunc{
 	"echo_int":        server.NewRPCFunc(EchoIntResult),
 }
 
-func EchoResult(ctx context.Context, v *RequestEcho) (*ResultEcho, error) {
+func EchoResult(_ctx context.Context, v *RequestEcho) (*ResultEcho, error) {
 	return &ResultEcho{v.Value}, nil
 }
 
-func EchoWSResult(ctx context.Context, v *RequestEcho) (*ResultEcho, error) {
+func EchoWSResult(_ctx context.Context, v *RequestEcho) (*ResultEcho, error) {
 	return &ResultEcho{v.Value}, nil
 }
 
-func EchoIntResult(ctx context.Context, v *RequestEchoInt) (*ResultEchoInt, error) {
+func EchoIntResult(_ctx context.Context, v *RequestEchoInt) (*ResultEchoInt, error) {
 	return &ResultEchoInt{v.Value}, nil
 }
 
-func EchoBytesResult(ctx context.Context, v *RequestEchoBytes) (*ResultEchoBytes, error) {
+func EchoBytesResult(_ctx context.Context, v *RequestEchoBytes) (*ResultEchoBytes, error) {
 	return &ResultEchoBytes{v.Value}, nil
 }
 
-func EchoDataBytesResult(ctx context.Context, v *RequestEchoDataBytes) (*ResultEchoDataBytes, error) {
+func EchoDataBytesResult(_ctx context.Context, v *RequestEchoDataBytes) (*ResultEchoDataBytes, error) {
 	return &ResultEchoDataBytes{v.Value}, nil
 }
 

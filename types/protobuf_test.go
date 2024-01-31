@@ -58,20 +58,20 @@ func TestABCIValidators(t *testing.T) {
 
 type pubKeyBLS struct{}
 
-func (pubKeyBLS) Address() Address                                  { return []byte{} }
-func (pubKeyBLS) Bytes() []byte                                     { return []byte{} }
-func (pubKeyBLS) VerifySignature(msg []byte, sig []byte) bool       { return false }
-func (pubKeyBLS) VerifySignatureDigest(msg []byte, sig []byte) bool { return false }
-func (pubKeyBLS) AggregateSignatures(sigSharesData [][]byte, messages [][]byte) ([]byte, error) {
+func (pubKeyBLS) Address() Address                              { return []byte{} }
+func (pubKeyBLS) Bytes() []byte                                 { return []byte{} }
+func (pubKeyBLS) VerifySignature(_ []byte, _ []byte) bool       { return false }
+func (pubKeyBLS) VerifySignatureDigest(_ []byte, _ []byte) bool { return false }
+func (pubKeyBLS) AggregateSignatures(_sigSharesData [][]byte, _messages [][]byte) ([]byte, error) {
 	return []byte{}, nil
 }
-func (pubKeyBLS) VerifyAggregateSignature(msgs [][]byte, sig []byte) bool { return false }
-func (pubKeyBLS) Equals(crypto.PubKey) bool                               { return false }
-func (pubKeyBLS) String() string                                          { return "" }
-func (pubKeyBLS) HexString() string                                       { return "" }
-func (pubKeyBLS) Type() string                                            { return bls12381.KeyType }
-func (pubKeyBLS) TypeValue() crypto.KeyType                               { return crypto.BLS12381 }
-func (pubKeyBLS) TypeTag() string                                         { return bls12381.PubKeyName }
+func (pubKeyBLS) VerifyAggregateSignature(_ [][]byte, _ []byte) bool { return false }
+func (pubKeyBLS) Equals(crypto.PubKey) bool                          { return false }
+func (pubKeyBLS) String() string                                     { return "" }
+func (pubKeyBLS) HexString() string                                  { return "" }
+func (pubKeyBLS) Type() string                                       { return bls12381.KeyType }
+func (pubKeyBLS) TypeValue() crypto.KeyType                          { return crypto.BLS12381 }
+func (pubKeyBLS) TypeTag() string                                    { return bls12381.PubKeyName }
 
 func TestABCIValidatorFromPubKeyAndPower(t *testing.T) {
 	pubkey := bls12381.GenPrivKey().PubKey()

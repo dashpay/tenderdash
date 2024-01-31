@@ -28,7 +28,7 @@ type EnterPrecommitWaitAction struct {
 
 // Execute ...
 // Enter: any +2/3 precommits for next round.
-func (c *EnterPrecommitWaitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *EnterPrecommitWaitAction) Execute(_ context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(*EnterPrecommitWaitEvent)
 	height, round := event.Height, event.Round
@@ -86,7 +86,7 @@ type EnterPrevoteWaitAction struct {
 
 // Execute ...
 // Enter: any +2/3 prevotes at next round.
-func (c *EnterPrevoteWaitAction) Execute(ctx context.Context, stateEvent StateEvent) error {
+func (c *EnterPrevoteWaitAction) Execute(_ context.Context, stateEvent StateEvent) error {
 	stateData := stateEvent.StateData
 	event := stateEvent.Data.(*EnterPrevoteWaitEvent)
 	height, round := event.Height, event.Round

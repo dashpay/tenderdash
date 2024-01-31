@@ -74,6 +74,6 @@ func (app *gRPCApplication) Echo(_ context.Context, req *types.RequestEcho) (*ty
 	return &types.ResponseEcho{Message: req.Message}, nil
 }
 
-func (app *gRPCApplication) Flush(_ context.Context, req *types.RequestFlush) (*types.ResponseFlush, error) {
+func (app *gRPCApplication) Flush(_ context.Context, _req *types.RequestFlush) (*types.ResponseFlush, error) {
 	return &types.ResponseFlush{}, nil
 }

@@ -22,27 +22,27 @@ func (nes *EventSink) Type() indexer.EventSinkType {
 	return indexer.NULL
 }
 
-func (nes *EventSink) IndexBlockEvents(bh types.EventDataNewBlockHeader) error {
+func (nes *EventSink) IndexBlockEvents(_bh types.EventDataNewBlockHeader) error {
 	return nil
 }
 
-func (nes *EventSink) IndexTxEvents(results []*abci.TxResult) error {
+func (nes *EventSink) IndexTxEvents(_results []*abci.TxResult) error {
 	return nil
 }
 
-func (nes *EventSink) SearchBlockEvents(ctx context.Context, q *query.Query) ([]int64, error) {
+func (nes *EventSink) SearchBlockEvents(_ctx context.Context, _q *query.Query) ([]int64, error) {
 	return nil, nil
 }
 
-func (nes *EventSink) SearchTxEvents(ctx context.Context, q *query.Query) ([]*abci.TxResult, error) {
+func (nes *EventSink) SearchTxEvents(_ctx context.Context, _q *query.Query) ([]*abci.TxResult, error) {
 	return nil, nil
 }
 
-func (nes *EventSink) GetTxByHash(hash []byte) (*abci.TxResult, error) {
+func (nes *EventSink) GetTxByHash(_hash []byte) (*abci.TxResult, error) {
 	return nil, nil
 }
 
-func (nes *EventSink) HasBlock(h int64) (bool, error) {
+func (nes *EventSink) HasBlock(_h int64) (bool, error) {
 	return false, nil
 }
 

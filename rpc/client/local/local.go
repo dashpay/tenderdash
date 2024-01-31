@@ -114,7 +114,7 @@ func (c *Local) CheckTx(ctx context.Context, tx types.Tx) (*coretypes.ResultChec
 	return c.env.CheckTx(ctx, &coretypes.RequestCheckTx{Tx: tx})
 }
 
-func (c *Local) RemoveTx(ctx context.Context, txKey types.TxKey) error {
+func (c *Local) RemoveTx(_ctx context.Context, txKey types.TxKey) error {
 	return c.env.Mempool.RemoveTxByKey(txKey)
 }
 

@@ -171,11 +171,11 @@ func (sc *DashCoreSignerClient) GetPubKey(ctx context.Context, quorumHash crypto
 	return bls12381.PubKey(decodedPublicKeyShare), nil
 }
 
-func (sc *DashCoreSignerClient) GetFirstQuorumHash(ctx context.Context) (crypto.QuorumHash, error) {
+func (sc *DashCoreSignerClient) GetFirstQuorumHash(_ctx context.Context) (crypto.QuorumHash, error) {
 	return nil, errors.New("getFirstQuorumHash should not be called on a dash core signer client")
 }
 
-func (sc *DashCoreSignerClient) GetThresholdPublicKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
+func (sc *DashCoreSignerClient) GetThresholdPublicKey(_ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
 	if len(quorumHash.Bytes()) != crypto.DefaultHashSize {
 		return nil, fmt.Errorf("quorum hash must be 32 bytes long if requesting public key from dash core")
 	}
@@ -200,11 +200,11 @@ func (sc *DashCoreSignerClient) GetThresholdPublicKey(ctx context.Context, quoru
 	return bls12381.PubKey(decodedThresholdPublicKey), nil
 }
 
-func (sc *DashCoreSignerClient) GetHeight(ctx context.Context, quorumHash crypto.QuorumHash) (int64, error) {
+func (sc *DashCoreSignerClient) GetHeight(_ctx context.Context, quorumHash crypto.QuorumHash) (int64, error) {
 	return 0, fmt.Errorf("getHeight should not be called on a dash core signer client %s", quorumHash.String())
 }
 
-func (sc *DashCoreSignerClient) GetProTxHash(ctx context.Context) (crypto.ProTxHash, error) {
+func (sc *DashCoreSignerClient) GetProTxHash(_ctx context.Context) (crypto.ProTxHash, error) {
 	if sc.cachedProTxHash != nil {
 		return sc.cachedProTxHash, nil
 	}
@@ -324,16 +324,16 @@ func (sc *DashCoreSignerClient) QuorumSign(
 }
 
 func (sc *DashCoreSignerClient) UpdatePrivateKey(
-	ctx context.Context,
-	privateKey crypto.PrivKey,
-	quorumHash crypto.QuorumHash,
-	thresholdPublicKey crypto.PubKey,
-	height int64,
+	_ctx context.Context,
+	_privateKey crypto.PrivKey,
+	_quorumHash crypto.QuorumHash,
+	_thresholdPublicKey crypto.PubKey,
+	_height int64,
 ) {
 
 }
 
-func (sc *DashCoreSignerClient) GetPrivateKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
+func (sc *DashCoreSignerClient) GetPrivateKey(_ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
 	key := &dashConsensusPrivateKey{
 		quorumHash: quorumHash,
 		quorumType: sc.defaultQuorumType,

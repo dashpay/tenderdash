@@ -440,12 +440,12 @@ type nilWAL struct{}
 
 var _ WAL = nilWAL{}
 
-func (nilWAL) Write(m WALMessage) error     { return nil }
-func (nilWAL) WriteSync(m WALMessage) error { return nil }
-func (nilWAL) FlushAndSync() error          { return nil }
-func (nilWAL) SearchForEndHeight(height int64, options *WALSearchOptions) (rd io.ReadCloser, found bool, err error) {
+func (nilWAL) Write(_m WALMessage) error     { return nil }
+func (nilWAL) WriteSync(_m WALMessage) error { return nil }
+func (nilWAL) FlushAndSync() error           { return nil }
+func (nilWAL) SearchForEndHeight(_height int64, _options *WALSearchOptions) (rd io.ReadCloser, found bool, err error) {
 	return nil, false, nil
 }
-func (nilWAL) Start(context.Context) error { return nil }
-func (nilWAL) Stop()                       {}
-func (nilWAL) Wait()                       {}
+func (nilWAL) Start(_ctx context.Context) error { return nil }
+func (nilWAL) Stop()                            {}
+func (nilWAL) Wait()                            {}

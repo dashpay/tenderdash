@@ -77,7 +77,7 @@ func (w *wsEvents) Stop() error { return w.ws.Stop() }
 // event.
 //
 // It returns an error if wsEvents is not running.
-func (w *wsEvents) Subscribe(ctx context.Context, subscriber, query string,
+func (w *wsEvents) Subscribe(ctx context.Context, _subscriber, query string,
 	outCapacity ...int) (out <-chan coretypes.ResultEvent, err error) {
 	if err := w.ws.Subscribe(ctx, query); err != nil {
 		return nil, err
@@ -102,7 +102,7 @@ func (w *wsEvents) Subscribe(ctx context.Context, subscriber, query string,
 // given subscriber from query.
 //
 // It returns an error if wsEvents is not running.
-func (w *wsEvents) Unsubscribe(ctx context.Context, subscriber, query string) error {
+func (w *wsEvents) Unsubscribe(ctx context.Context, _subscriber, query string) error {
 	if err := w.ws.Unsubscribe(ctx, query); err != nil {
 		return err
 	}
@@ -124,7 +124,7 @@ func (w *wsEvents) Unsubscribe(ctx context.Context, subscriber, query string) er
 // unsubscribe given subscriber from all the queries.
 //
 // It returns an error if wsEvents is not running.
-func (w *wsEvents) UnsubscribeAll(ctx context.Context, subscriber string) error {
+func (w *wsEvents) UnsubscribeAll(ctx context.Context, _subscriber string) error {
 	if err := w.ws.UnsubscribeAll(ctx); err != nil {
 		return err
 	}

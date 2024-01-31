@@ -68,7 +68,7 @@ func (captureCmd *CaptureCmd) Command() *cobra.Command {
 }
 
 // RunE executes traffic capture
-func (captureCmd *CaptureCmd) RunE(cmd *cobra.Command, args []string) error {
+func (captureCmd *CaptureCmd) RunE(_cmd *cobra.Command, _args []string) error {
 	logger.Debug("Starting packet capture", "port", captureCmd.Port)
 
 	return captureCmd.capture()

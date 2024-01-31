@@ -23,7 +23,7 @@ import (
 // order (highest first).
 //
 // More: https://docs.tendermint.com/master/rpc/#/Info/blockchain
-func (env *Environment) BlockchainInfo(ctx context.Context, req *coretypes.RequestBlockchainInfo) (*coretypes.ResultBlockchainInfo, error) {
+func (env *Environment) BlockchainInfo(_ctx context.Context, req *coretypes.RequestBlockchainInfo) (*coretypes.ResultBlockchainInfo, error) {
 	const limit = 20
 	minHeight, maxHeight, err := filterMinMax(
 		env.BlockStore.Base(),
@@ -88,7 +88,7 @@ func filterMinMax(base, height, min, max, limit int64) (int64, int64, error) {
 // Block gets block at a given height.
 // If no height is provided, it will fetch the latest block.
 // More: https://docs.tendermint.com/master/rpc/#/Info/block
-func (env *Environment) Block(ctx context.Context, req *coretypes.RequestBlockInfo) (*coretypes.ResultBlock, error) {
+func (env *Environment) Block(_ctx context.Context, req *coretypes.RequestBlockInfo) (*coretypes.ResultBlock, error) {
 	height, err := env.getHeight(env.BlockStore.Height(), (*int64)(req.Height))
 	if err != nil {
 		return nil, err
@@ -105,7 +105,7 @@ func (env *Environment) Block(ctx context.Context, req *coretypes.RequestBlockIn
 
 // BlockByHash gets block by hash.
 // More: https://docs.tendermint.com/master/rpc/#/Info/block_by_hash
-func (env *Environment) BlockByHash(ctx context.Context, req *coretypes.RequestBlockByHash) (*coretypes.ResultBlock, error) {
+func (env *Environment) BlockByHash(_ctx context.Context, req *coretypes.RequestBlockByHash) (*coretypes.ResultBlock, error) {
 	block := env.BlockStore.LoadBlockByHash(req.Hash)
 	if block == nil {
 		return &coretypes.ResultBlock{BlockID: types.BlockID{}, Block: nil}, nil
@@ -118,7 +118,7 @@ func (env *Environment) BlockByHash(ctx context.Context, req *coretypes.RequestB
 // Header gets block header at a given height.
 // If no height is provided, it will fetch the latest header.
 // More: https://docs.tendermint.com/master/rpc/#/Info/header
-func (env *Environment) Header(ctx context.Context, req *coretypes.RequestBlockInfo) (*coretypes.ResultHeader, error) {
+func (env *Environment) Header(_ctx context.Context, req *coretypes.RequestBlockInfo) (*coretypes.ResultHeader, error) {
 	height, err := env.getHeight(env.BlockStore.Height(), (*int64)(req.Height))
 	if err != nil {
 		return nil, err
@@ -134,7 +134,7 @@ func (env *Environment) Header(ctx context.Context, req *coretypes.RequestBlockI
 
 // HeaderByHash gets header by hash.
 // More: https://docs.tendermint.com/master/rpc/#/Info/header_by_hash
-func (env *Environment) HeaderByHash(ctx context.Context, req *coretypes.RequestBlockByHash) (*coretypes.ResultHeader, error) {
+func (env *Environment) HeaderByHash(_ctx context.Context, req *coretypes.RequestBlockByHash) (*coretypes.ResultHeader, error) {
 	blockMeta := env.BlockStore.LoadBlockMetaByHash(req.Hash)
 	if blockMeta == nil {
 		return &coretypes.ResultHeader{}, nil
@@ -146,7 +146,7 @@ func (env *Environment) HeaderByHash(ctx context.Context, req *coretypes.Request
 // Commit gets block commit at a given height.
 // If no height is provided, it will fetch the commit for the latest block.
 // More: https://docs.tendermint.com/master/rpc/#/Info/commit
-func (env *Environment) Commit(ctx context.Context, req *coretypes.RequestBlockInfo) (*coretypes.ResultCommit, error) {
+func (env *Environment) Commit(_ctx context.Context, req *coretypes.RequestBlockInfo) (*coretypes.ResultCommit, error) {
 	height, err := env.getHeight(env.BlockStore.Height(), (*int64)(req.Height))
 	if err != nil {
 		return nil, err
@@ -182,7 +182,7 @@ func (env *Environment) Commit(ctx context.Context, req *coretypes.RequestBlockI
 //
 // Results are for the height of the block containing the txs.
 // More: https://docs.tendermint.com/master/rpc/#/Info/block_results
-func (env *Environment) BlockResults(ctx context.Context, req *coretypes.RequestBlockInfo) (*coretypes.ResultBlockResults, error) {
+func (env *Environment) BlockResults(_ctx context.Context, req *coretypes.RequestBlockInfo) (*coretypes.ResultBlockResults, error) {
 	height, err := env.getHeight(env.BlockStore.Height(), (*int64)(req.Height))
 	if err != nil {
 		return nil, err
