@@ -8,14 +8,15 @@ import (
 	"math/big"
 
 	"github.com/dashpay/dashd-go/btcjson"
+	"github.com/hashicorp/go-multierror"
+	"github.com/rs/zerolog"
+
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
-	"github.com/hashicorp/go-multierror"
-	"github.com/rs/zerolog"
 )
 
 var (
@@ -367,7 +368,7 @@ func (e GenericVoteExtension) MarshalZerologObject(o *zerolog.Event) {
 	o.Hex("sign_request_id", e.GetSignRequestId())
 }
 
-//nolint:revive,stylecheck // name is the same as in protobuf-generated code
+//nolint:stylecheck // name is the same as in protobuf-generated code
 func (e GenericVoteExtension) GetSignRequestId() []byte {
 	if e.XSignRequestId == nil {
 		return nil

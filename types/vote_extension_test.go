@@ -8,13 +8,13 @@ import (
 	"testing"
 
 	"github.com/dashpay/dashd-go/btcjson"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
-	"github.com/dashpay/tenderdash/proto/tendermint/types"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestVoteExtensionCopySignsFromProto(t *testing.T) {
@@ -45,7 +45,7 @@ func TestMakeVoteExtensionsSignItems(t *testing.T) {
 	}{
 		{
 			vote: Vote{
-				Type:               types.PrecommitType,
+				Type:               tmproto.PrecommitType,
 				Height:             1001,
 				ValidatorProTxHash: tmbytes.MustHexDecode("9CC13F685BC3EA0FCA99B87F42ABCC934C6305AA47F62A32266A2B9D55306B7B"),
 				VoteExtensions: VoteExtensionsFromProto(&tmproto.VoteExtension{
