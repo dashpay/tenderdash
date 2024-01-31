@@ -18,7 +18,7 @@ require (
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.2
 	github.com/golang/snappy v0.0.4 // indirect
-	github.com/golangci/golangci-lint v1.55.0
+	github.com/golangci/golangci-lint v1.55.2
 	github.com/google/btree v1.1.2 // indirect
 	github.com/google/gopacket v1.1.19
 	github.com/google/orderedcode v0.0.1
@@ -51,7 +51,7 @@ require (
 	github.com/creachadair/atomicfile v0.2.6
 	github.com/creachadair/taskgroup v0.3.2
 	github.com/go-pkgz/jrpc v0.2.0
-	github.com/google/go-cmp v0.5.9
+	github.com/google/go-cmp v0.6.0
 	github.com/vektra/mockery/v2 v2.33.2
 	gotest.tools v2.2.0+incompatible
 )
@@ -98,7 +98,7 @@ require (
 	github.com/moby/buildkit v0.10.3 // indirect
 	github.com/moby/term v0.0.0-20210619224110-3f7ff695adc6 // indirect
 	github.com/morikuni/aec v1.0.0 // indirect
-	github.com/nunnatsa/ginkgolinter v0.14.0 // indirect
+	github.com/nunnatsa/ginkgolinter v0.14.1 // indirect
 	github.com/pelletier/go-toml/v2 v2.0.6 // indirect
 	github.com/petermattis/goid v0.0.0-20180202154549-b0b1615b78e5 // indirect
 	github.com/sashamelentyev/interfacebloat v1.1.0 // indirect
@@ -138,7 +138,7 @@ require (
 	github.com/bombsimon/wsl/v3 v3.4.0 // indirect
 	github.com/breml/bidichk v0.2.7 // indirect
 	github.com/breml/errchkjson v0.3.6 // indirect
-	github.com/butuzov/ireturn v0.2.1 // indirect
+	github.com/butuzov/ireturn v0.2.2 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
@@ -181,7 +181,7 @@ require (
 	github.com/golangci/lint-1 v0.0.0-20191013205115-297bf364a8e0 // indirect
 	github.com/golangci/maligned v0.0.0-20180506175553-b1d89398deca // indirect
 	github.com/golangci/misspell v0.4.1 // indirect
-	github.com/golangci/revgrep v0.5.0 // indirect
+	github.com/golangci/revgrep v0.5.2 // indirect
 	github.com/golangci/unconvert v0.0.0-20180507085042-28b1c447d1f4 // indirect
 	github.com/gordonklaus/ineffassign v0.0.0-20230610083614-0e73809eb601 // indirect
 	github.com/gostaticanalysis/analysisutil v0.7.1 // indirect
@@ -248,7 +248,7 @@ require (
 	github.com/ryancurrah/gomodguard v1.3.0 // indirect
 	github.com/ryanrolds/sqlclosecheck v0.5.1 // indirect
 	github.com/sanposhiho/wastedassign/v2 v2.0.7 // indirect
-	github.com/securego/gosec/v2 v2.18.1 // indirect
+	github.com/securego/gosec/v2 v2.18.2 // indirect
 	github.com/shazow/go-diff v0.0.0-20160112020656-b6b7b6733b8c // indirect
 	github.com/sirupsen/logrus v1.9.3 // indirect
 	github.com/sivchari/containedctx v1.0.3 // indirect
