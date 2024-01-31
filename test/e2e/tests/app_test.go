@@ -250,7 +250,16 @@ func TestApp_TxTooBig(t *testing.T) {
 				assert.NoError(t, err, "first tx should be committed before second")
 				assert.EqualValues(t, firstTxHash, firstTxResp.Tx.Hash())
 
-				t.Logf("first tx in block %d, last tx in block %d", firstTxResp.Height, lastTxResp.Height)
+				firstTxBlock, err := client.Header(ctx, &firstTxResp.Height)
+				assert.NoError(t, err)
+				lastTxBlock, err := client.Header(ctx, &lastTxResp.Height)
+				assert.NoError(t, err)
+
+				t.Logf("first tx in block %d, last tx in block %d, took %s",
+					firstTxResp.Height,
+					lastTxResp.Height,
+					lastTxBlock.Header.Time.Sub(firstTxBlock.Header.Time).String(),
+				)
 
 				assert.Less(t, firstTxResp.Height, lastTxResp.Height, "first tx should in block before last tx")
 				return true

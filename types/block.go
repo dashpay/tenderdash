@@ -294,6 +294,20 @@ func (b *Block) ToProto() (*tmproto.Block, error) {
 	return pb, nil
 }
 
+func (b *Block) MarshalZerologObject(e *zerolog.Event) {
+	if b == nil {
+		e.Bool("nil", true)
+		return
+	}
+	e.Bool("nil", false)
+
+	e.Interface("header", b.Header)
+	e.Interface("core_chain_lock", b.CoreChainLock)
+	e.Interface("data", b.Data)
+	e.Interface("evidence", b.Evidence)
+	e.Interface("last_commit", b.LastCommit)
+}
+
 // FromProto sets a protobuf Block to the given pointer.
 // It returns an error if the block is invalid.
 func BlockFromProto(bp *tmproto.Block) (*Block, error) {
@@ -1037,6 +1051,17 @@ func (data *Data) ToProto() tmproto.Data {
 	}
 
 	return *tp
+}
+
+func (data *Data) MarshalZerologObject(e *zerolog.Event) {
+	if data == nil {
+		e.Bool("nil", true)
+		return
+	}
+	e.Bool("nil", false)
+
+	e.Array("txs", data.Txs)
+	e.Hex("hash", data.Hash())
 }
 
 // DataFromProto takes a protobuf representation of Data &
