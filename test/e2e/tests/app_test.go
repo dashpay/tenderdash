@@ -255,7 +255,7 @@ func TestApp_TxTooBig(t *testing.T) {
 				lastTxBlock, err := client.Header(ctx, &lastTxResp.Height)
 				assert.NoError(t, err)
 
-				t.Logf("first tx in block %d, last tx in block %d, took %s",
+				t.Logf("first tx in block %d, last tx in block %d, time diff %s",
 					firstTxResp.Height,
 					lastTxResp.Height,
 					lastTxBlock.Header.Time.Sub(firstTxBlock.Header.Time).String(),
