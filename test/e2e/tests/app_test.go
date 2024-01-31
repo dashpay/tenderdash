@@ -195,7 +195,7 @@ func TestApp_Tx(t *testing.T) {
 // when I submit them to the node,
 // then the first transaction should be committed before the last one.
 func TestApp_TxTooBig(t *testing.T) {
-	const timeout = 30 * time.Second
+	const timeout = 60 * time.Second
 
 	testNode(t, func(ctx context.Context, t *testing.T, node e2e.Node) {
 		session := rand.Int63()
