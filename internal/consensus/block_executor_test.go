@@ -20,7 +20,7 @@ import (
 	"github.com/dashpay/tenderdash/types/mocks"
 )
 
-type BockExecutorTestSuite struct {
+type BlockExecutorTestSuite struct {
 	suite.Suite
 
 	blockExec     *blockExecutor
@@ -28,11 +28,11 @@ type BockExecutorTestSuite struct {
 	mockBlockExec *smmocks.Executor
 }
 
-func TestBockExecutor(t *testing.T) {
-	suite.Run(t, new(BockExecutorTestSuite))
+func TestBlockExecutor(t *testing.T) {
+	suite.Run(t, new(BlockExecutorTestSuite))
 }
 
-func (suite *BockExecutorTestSuite) SetupTest() {
+func (suite *BlockExecutorTestSuite) SetupTest() {
 	logger := log.NewTestingLogger(suite.T())
 	suite.mockPrivVal = mocks.NewPrivValidator(suite.T())
 	suite.mockBlockExec = smmocks.NewExecutor(suite.T())
@@ -47,13 +47,13 @@ func (suite *BockExecutorTestSuite) SetupTest() {
 	}
 }
 
-func (suite *BockExecutorTestSuite) TestCreate() {
+func (suite *BlockExecutorTestSuite) TestCreate() {
 	ctx := context.Background()
 	commitH99R0 := &types.Commit{
 		Height: 99,
 		Round:  0,
 	}
-	emptyCommit := types.NewCommit(0, 0, types.BlockID{}, nil)
+	emptyCommit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 	testCases := []struct {
 		round         int32
 		initialHeight int64
@@ -137,7 +137,7 @@ func (suite *BockExecutorTestSuite) TestCreate() {
 	}
 }
 
-func (suite *BockExecutorTestSuite) TestProcess() {
+func (suite *BlockExecutorTestSuite) TestProcess() {
 	ctx := context.Background()
 	const round = int32(0)
 	wantDefaultCRS := sm.CurrentRoundState{

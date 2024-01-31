@@ -157,10 +157,7 @@ func signVote(
 	blockID types.BlockID,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash) *types.Vote {
-	exts := make(types.VoteExtensions)
-	if voteType == tmproto.PrecommitType && !blockID.IsNil() {
-		exts.Add(tmproto.VoteExtensionType_DEFAULT, []byte("extension"))
-	}
+	exts := make(types.VoteExtensions, 0)
 	v, err := vs.signVote(ctx, voteType, chainID, blockID, quorumType, quorumHash, exts)
 	require.NoError(t, err, "failed to sign vote")
 
@@ -1109,7 +1106,7 @@ func signDataIsEqual(v1 *types.Vote, v2 *tmproto.Vote) bool {
 	if v1 == nil || v2 == nil {
 		return false
 	}
-	if v1.VoteExtensions.IsSameWithProto(v2.VoteExtensionsToMap()) {
+	if v1.VoteExtensions.IsSameWithProto(v2.VoteExtensions) {
 		return false
 	}
 	return v1.Type == v2.Type &&

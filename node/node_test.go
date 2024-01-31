@@ -378,7 +378,7 @@ func TestCreateProposalBlock(t *testing.T) {
 	)
 
 	proposedAppVersion := uint64(1)
-	commit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
+	commit := types.NewCommit(height-1, 0, types.BlockID{}, nil, nil)
 	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
@@ -466,7 +466,7 @@ func TestMaxTxsProposalBlockSize(t *testing.T) {
 		eventBus,
 	)
 
-	commit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
+	commit := types.NewCommit(height-1, 0, types.BlockID{}, nil, nil)
 	block, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,

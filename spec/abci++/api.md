@@ -155,13 +155,24 @@ ExecTxResult contains results of executing one individual transaction.
 <a name="tendermint-abci-ExtendVoteExtension"></a>
 
 ### ExtendVoteExtension
-Provides a vote extension for signing. Each field is mandatory for filling
+Provides a vote extension for signing. `type` and `extension` fields are mandatory for filling
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| type | [tendermint.types.VoteExtensionType](#tendermint-types-VoteExtensionType) |  | Vote extension type can be either DEFAULT or THRESHOLD_RECOVER. The Tenderdash supports only THRESHOLD_RECOVER at this moment. |
-| extension | [bytes](#bytes) |  | Deterministic or (Non-Deterministic) extension provided by the sending validator&#39;s Application. |
+| type | [tendermint.types.VoteExtensionType](#tendermint-types-VoteExtensionType) |  | Vote extension type can be either DEFAULT, THRESHOLD_RECOVER or THRESHOLD_RECOVER_RAW. The Tenderdash supports only THRESHOLD_RECOVER and THRESHOLD_RECOVER_RAW at this moment. |
+| extension | [bytes](#bytes) |  | Deterministic or (Non-Deterministic) extension provided by the sending validator&#39;s Application.
+
+For THRESHOLD_RECOVER_RAW, it MUST be 32 bytes.
+
+Sign request ID that will be used to sign the vote extensions. Only applicable for THRESHOLD_RECOVER_RAW vote extension type.
+
+Tenderdash will use SHA256 checksum of `sign_request_id` when generating quorum signatures of THRESHOLD_RECOVER_RAW vote extensions. It MUST NOT be set for any other vote extension types. |
+| sign_request_id | [bytes](#bytes) | optional | If not set, Tenderdash will generate it based on height and round.
+
+If set, it SHOULD be unique per voting round, and it MUST start with `dpevote` or `\x06plwdtx` prefix.
+
+Use with caution - it can have severe security consequences. |
 
 
 

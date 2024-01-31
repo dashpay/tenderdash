@@ -84,7 +84,11 @@ func makeBlockAndPartSet(
 	t.Helper()
 
 	quorumSigns := &types.CommitSigns{QuorumHash: state.LastValidators.QuorumHash}
-	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, quorumSigns)
+	var ve types.VoteExtensions
+	if lastBlock != nil && lastBlock.LastCommit != nil {
+		ve = types.VoteExtensionsFromProto(lastBlock.LastCommit.ThresholdVoteExtensions...)
+	}
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, ve, quorumSigns)
 	if height > 1 {
 		var err error
 		votes := make([]*types.Vote, len(privVals))
@@ -106,6 +110,7 @@ func makeBlockAndPartSet(
 			lastBlock.Header.Height,
 			0,
 			lastBlockMeta.BlockID,
+			types.VoteExtensionsFromProto(lastBlock.LastCommit.ThresholdVoteExtensions...),
 			&types.CommitSigns{
 				QuorumSigns: *thresholdSigns,
 				QuorumHash:  state.LastValidators.QuorumHash,

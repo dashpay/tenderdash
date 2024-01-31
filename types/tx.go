@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/rs/zerolog"
+
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/merkle"
@@ -101,6 +103,12 @@ func (txs Txs) ToSliceOfBytes() [][]byte {
 		txBzs[i] = txs[i]
 	}
 	return txBzs
+}
+
+func (txs Txs) MarshalZerologArray(e *zerolog.Array) {
+	for _, tx := range txs {
+		e.Hex(tx.Hash())
+	}
 }
 
 // TxRecordSet contains indexes into an underlying set of transactions.

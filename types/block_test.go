@@ -117,7 +117,7 @@ func TestBlockValidateBasic(t *testing.T) {
 			blk.LastCommit = nil
 		}, true},
 		{"Invalid LastCommit", func(blk *Block) {
-			blk.LastCommit = NewCommit(-1, 0, *voteSet.maj23, nil)
+			blk.LastCommit = NewCommit(-1, 0, *voteSet.maj23, nil, nil)
 		}, true},
 		{"Invalid Evidence", func(blk *Block) {
 			emptyEv := &DuplicateVoteEvidence{}
@@ -528,7 +528,7 @@ func TestBlockMaxDataBytes(t *testing.T) {
 	require.NotNil(t, commit)
 
 	// minBlockSize is minimum correct size of a block
-	const minBlockSize = 1231
+	const minBlockSize = 1370
 
 	testCases := []struct {
 		maxBytes      int64

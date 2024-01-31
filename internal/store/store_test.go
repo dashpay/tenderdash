@@ -52,7 +52,7 @@ func makeTestCommit(state sm.State, height int64) *types.Commit {
 	_ = privVal.SignVote(context.Background(), "chainID", state.Validators.QuorumType, state.Validators.QuorumHash, g, nil)
 
 	goodVote.BlockSignature = g.BlockSignature
-	goodVote.VoteExtensions = types.VoteExtensionsFromProto(g.VoteExtensions)
+	goodVote.VoteExtensions = types.VoteExtensionsFromProto(g.VoteExtensions...)
 	thresholdSigns, _ := types.NewSignsRecoverer([]*types.Vote{goodVote}).Recover()
 
 	return types.NewCommit(height, 0,
@@ -61,6 +61,7 @@ func makeTestCommit(state sm.State, height int64) *types.Commit {
 			PartSetHeader: types.PartSetHeader{Hash: []byte(""), Total: 2},
 			StateID:       []byte{},
 		},
+		goodVote.VoteExtensions,
 		&types.CommitSigns{
 			QuorumSigns: *thresholdSigns,
 			QuorumHash:  crypto.RandQuorumHash(),

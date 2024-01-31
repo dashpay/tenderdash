@@ -615,7 +615,7 @@ func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInf
 		Round:                   block.LastCommit.Round,
 		QuorumHash:              block.LastCommit.QuorumHash,
 		BlockSignature:          block.LastCommit.ThresholdBlockSignature,
-		ThresholdVoteExtensions: types.ThresholdExtensionSignToProto(block.LastCommit.ThresholdVoteExtensions),
+		ThresholdVoteExtensions: block.LastCommit.ThresholdVoteExtensions,
 	}
 }
 

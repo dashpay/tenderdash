@@ -603,6 +603,6 @@ func (suite *GossiperSuiteTest) signVote(vote *types.Vote) {
 	err := privVal.SignVote(ctx, factory.DefaultTestChainID, suite.valSet.QuorumType, suite.valSet.QuorumHash, protoVote, nil)
 	suite.Require().NoError(err)
 	vote.BlockSignature = protoVote.BlockSignature
-	err = vote.VoteExtensions.CopySignsFromProto(protoVote.VoteExtensionsToMap())
+	err = vote.VoteExtensions.CopySignsFromProto(protoVote.VoteExtensions)
 	suite.Require().NoError(err)
 }

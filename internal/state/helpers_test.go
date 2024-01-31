@@ -102,6 +102,7 @@ func makeValidCommit(
 	return types.NewCommit(
 		height, 0,
 		blockID,
+		votes[0].VoteExtensions,
 		&types.CommitSigns{
 			QuorumSigns: *thresholdSigns,
 			QuorumHash:  vals.QuorumHash,

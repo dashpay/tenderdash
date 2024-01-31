@@ -1121,10 +1121,11 @@ func makeBlockchainFromWAL(t *testing.T, wal WAL) ([]*types.Block, []*types.Comm
 			if p.Type == tmproto.PrecommitType {
 				thisBlockCommit = types.NewCommit(p.Height, p.Round,
 					p.BlockID,
+					p.VoteExtensions,
 					&types.CommitSigns{
 						QuorumSigns: types.QuorumSigns{
-							BlockSign:      p.BlockSignature,
-							ExtensionSigns: types.MakeThresholdExtensionSigns(p.VoteExtensions),
+							BlockSign:               p.BlockSignature,
+							VoteExtensionSignatures: p.VoteExtensions.GetSignatures(),
 						},
 						QuorumHash: crypto.RandQuorumHash(),
 					},
