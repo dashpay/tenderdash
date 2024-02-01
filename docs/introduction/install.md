@@ -4,45 +4,62 @@ order: 3
 
 # Install Tenderdash
 
+## Using Dashmate (Recommended Method)
+
+Dashmate is a part of the Dash Platform and provides a comprehensive solution for installing the entire platform. We highly recommend using Dashmate for a seamless and straightforward installation process.
+
+For detailed instructions on how to set up a node using Dashmate, please refer to the official Dash documentation: [Set Up a Node](https://docs.dash.org/projects/platform/en/stable/docs/tutorials/setup-a-node.html).
+
 ## From Binary
 
 To download pre-built binaries, see the [releases page](https://github.com/dashevo/tenderdash/releases).
 
 ## From Source
 
-You'll need `go` [installed](https://golang.org/doc/install) and the required
-environment variables set, which can be done with the following commands:
+Install official go into the standard location with standard PATH updates:
 
-```sh
-echo export GOPATH=\"\$HOME/go\" >> ~/.bash_profile
-echo export PATH=\"\$PATH:\$GOPATH/bin\" >> ~/.bash_profile
-```
+  ```bash
+  curl https://webinstall.dev/go | sh
+  source ~/.config/envman/PATH.env
+  ```
+
+Install git, cmake, and build-essential (apt) or build-base (apk) and other libs.
+
+For Debian-based (eg. Ubuntu):
+  
+  ```bash
+  sudo apt update
+  sudo apt install -y git build-essential cmake libgmp-dev
+  ```
+
+For Alpine Linux:
+
+  ```bash
+  apk add --no-cache git build-base cmake gmp-dev
+  ```
 
 Get the source code:
 
-```sh
-git clone https://github.com/dashevo/tenderdash.git
-cd tenderdash
-```
+  ```bash
+  git clone https://github.com/dashpay/tenderdash.git
+  pushd ./tenderdash/
+  git submodule init
+  git submodule update
+  ```
 
-Then run:
+Build:
 
-```sh
-make install
-```
+to put the binary in `$GOPATH/bin`:
 
-to put the binary in `$GOPATH/bin` or use:
+  ```sh
+  make install
+  ```
 
-```sh
-make build
-```
+to put the binary in `./build`:
 
-to put the binary in `./build`.
-
-_DISCLAIMER_ The binary of Tenderdash is build/installed without the DWARF
-symbol table. If you would like to build/install Tenderdash with the DWARF
-symbol and debug information, remove `-s -w` from `BUILD_FLAGS` in the make
-file.
+  ```sh
+  make build
+  ```
 
 The latest Tenderdash is now installed. You can verify the installation by
 running:
