@@ -19,7 +19,7 @@ fi
 pushd "${SCRIPT_PATH}"
 
 # Install the library
-cmake -D CMAKE_INSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}" -P "$BUILD_PATH/cmake_install.cmake"
+cmake -P "$BUILD_PATH/cmake_install.cmake"
 
 popd
 
