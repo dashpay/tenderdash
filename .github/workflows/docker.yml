@@ -25,6 +25,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-22.04
+    env:
+      PLATFORMS: ${{ github.event_name == 'release' && 'linux/amd64,linux/arm64' || github.event.inputs.platforms }}
     steps:
       - uses: actions/checkout@v4
 
@@ -88,7 +90,7 @@ jobs:
         with:
           context: .
           file: ./DOCKER/Dockerfile
-          platforms: ${{ github.event.inputs.platforms }}
+          platforms: ${{ env.PLATFORMS }}
           target: base
           push: false
           cache-from: |
@@ -104,7 +106,7 @@ jobs:
         with:
           context: .
           file: ./DOCKER/Dockerfile
-          platforms: ${{ github.event.inputs.platforms }}
+          platforms: ${{ env.PLATFORMS }}
           push: ${{ github.event_name != 'pull_request' }}
           tags: ${{ steps.docker_meta.outputs.tags }}
           labels: ${{ steps.docker_meta.outputs.labels }}
