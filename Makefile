@@ -95,9 +95,10 @@ endif
 # allow users to pass additional flags via the conventional LDFLAGS variable
 LD_FLAGS += $(LDFLAGS)
 
-all: build install
+all: build
 build: build-bls build-binary
 .PHONY: build
+
 install: install-bls
 
 .PHONY: all

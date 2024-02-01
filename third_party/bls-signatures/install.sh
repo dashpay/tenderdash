@@ -6,9 +6,9 @@ SCRIPT_PATH="$(realpath "$(dirname "$0")")"
 BUILD_PATH="$SCRIPT_PATH/build"
 
 if [ "$UID" -eq "0" ]; then
-	CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX:-"/usr/local"}
+	DESTDIR=${DESTDIR:-"/usr/local"}
 else
-	CMAKE_INSTALL_PREFIX=${CMAKE_INSTALL_PREFIX:-"${HOME}/.local"}
+	DESTDIR=${DESTDIR:-"${HOME}/.local"}
 fi
 
 if [ ! -d "$BUILD_PATH" ]; then
