@@ -6,9 +6,9 @@ SCRIPT_PATH="$(realpath "$(dirname "$0")")"
 BUILD_PATH="$SCRIPT_PATH/build"
 
 if [ "$UID" -eq "0" ]; then
-	DESTDIR=${DESTDIR:-"/usr/local"}
+	CMAKE_INSTALL_PREFIX=${DESTDIR:-"/usr/local"}
 else
-	DESTDIR=${DESTDIR:-"${HOME}/.local"}
+	CMAKE_INSTALL_PREFIX=${DESTDIR:-"${HOME}/.local"}
 fi
 
 if [ ! -d "$BUILD_PATH" ]; then
@@ -19,7 +19,7 @@ fi
 pushd "${SCRIPT_PATH}"
 
 # Install the library
-cmake -P "$BUILD_PATH/cmake_install.cmake"
+cmake -D CMAKE_INSTALL_PREFIX="${CMAKE_INSTALL_PREFIX}" -P "$BUILD_PATH/cmake_install.cmake"
 
 popd
 
