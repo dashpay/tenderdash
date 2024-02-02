@@ -14,7 +14,6 @@ import (
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
-	"github.com/rs/zerolog"
 )
 
 // Tx is an arbitrary byte array.
