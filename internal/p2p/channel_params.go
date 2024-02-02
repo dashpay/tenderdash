@@ -82,7 +82,7 @@ func ChannelDescriptors(cfg *config.Config) map[ChannelID]*ChannelDescriptor {
 			Name:                "mempool",
 			// SendRateLimit:       5,
 			// SendRateBurst:       20,
-			EnqueueTimeout: 1 * time.Millisecond,
+			EnqueueTimeout: 10 * time.Millisecond,
 		},
 	}
 
