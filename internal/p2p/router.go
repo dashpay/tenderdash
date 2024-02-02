@@ -823,7 +823,7 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 				"peer", peerID,
 				"channel", chID,
 				"channel_name", chDesc.Name,
-				"timeout", chDesc.EnqueueTimeout,
+				"timeout", chDesc.EnqueueTimeout.String(),
 				"type", reflect.TypeOf((envelope.Message)).Name(),
 			)
 
