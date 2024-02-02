@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"reflect"
 	"runtime"
 	"time"
 
@@ -151,7 +152,7 @@ type Router struct {
 	options     RouterOptions
 	privKey     crypto.PrivKey
 	peerManager *PeerManager
-	chDescs     []*ChannelDescriptor
+	chDescs     map[ChannelID]*ChannelDescriptor
 	transport   Transport
 	endpoint    *Endpoint
 	connTracker connectionTracker
@@ -198,7 +199,7 @@ func NewRouter(
 			options.MaxIncomingConnectionAttempts,
 			options.IncomingConnectionWindow,
 		),
-		chDescs:       make([]*ChannelDescriptor, 0),
+		chDescs:       make(map[ChannelID]*ChannelDescriptor, 0),
 		transport:     transport,
 		endpoint:      endpoint,
 		peerManager:   peerManager,
@@ -256,7 +257,7 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 	if _, ok := r.channelQueues[id]; ok {
 		return nil, fmt.Errorf("channel %v already exists", id)
 	}
-	r.chDescs = append(r.chDescs, chDesc)
+	r.chDescs[id] = chDesc
 
 	queue := r.queueFactory(chDesc.RecvBufferCapacity)
 	outCh := make(chan Envelope, chDesc.RecvBufferCapacity)
@@ -764,6 +765,10 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 // receivePeer receives inbound messages from a peer, deserializes them and
 // passes them on to the appropriate channel.
 func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Connection) error {
+	// default timeout; by default, we set it to ~ 10 years so that it will practically never fire
+	timeout := time.NewTimer(24 * 30 * 12 * 10 * time.Hour)
+	defer timeout.Stop()
+
 	for {
 		chID, bz, err := conn.ReceiveMessage(ctx)
 		if err != nil {
@@ -771,11 +776,14 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		}
 
 		r.channelMtx.RLock()
-		queue, ok := r.channelQueues[chID]
+		queue, queueOk := r.channelQueues[chID]
+		chDesc, chDescOk := r.chDescs[chID]
 		r.channelMtx.RUnlock()
 
-		if !ok {
-			r.logger.Debug("dropping message for unknown channel", "peer", peerID, "channel", chID)
+		if !queueOk || !chDescOk {
+			r.logger.Debug("dropping message for unknown channel",
+				"peer", peerID, "channel", chID,
+				"queue", queueOk, "chDesc", chDescOk)
 			continue
 		}
 
@@ -792,6 +800,11 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		}
 		envelope.From = peerID
 		envelope.ChannelID = chID
+
+		if chDesc.EnqueueTimeout > 0 {
+			timeout.Reset(chDesc.EnqueueTimeout)
+		}
+
 		select {
 		case queue.enqueue() <- envelope:
 			r.metrics.PeerReceiveBytesTotal.With(
@@ -803,6 +816,16 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 
 		case <-queue.closed():
 			r.logger.Debug("channel closed, dropping message", "peer", peerID, "channel", chID)
+
+		case <-timeout.C:
+			// TODO change to Trace
+			r.logger.Debug("dropping message from peer due to enqueue timeout",
+				"peer", peerID,
+				"channel", chID,
+				"channel_name", chDesc.Name,
+				"timeout", chDesc.EnqueueTimeout,
+				"type", reflect.TypeOf((envelope.Message)).Name(),
+			)
 
 		case <-ctx.Done():
 			return nil

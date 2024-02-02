@@ -622,6 +622,12 @@ type ChannelDescriptor struct {
 	// Human readable name of the channel, used in logging and
 	// diagnostics.
 	Name string
+
+	// Timeout for enqueue operations on the incoming queue.
+	// When timeout expires, messages will be silently dropped.
+	//
+	// If zero, enqueue operations will not time out.
+	EnqueueTimeout time.Duration
 }
 
 func (chDesc ChannelDescriptor) FillDefaults() (filled ChannelDescriptor) {
@@ -634,6 +640,7 @@ func (chDesc ChannelDescriptor) FillDefaults() (filled ChannelDescriptor) {
 	if chDesc.RecvMessageCapacity == 0 {
 		chDesc.RecvMessageCapacity = defaultRecvMessageCapacity
 	}
+
 	filled = chDesc
 	return
 }
