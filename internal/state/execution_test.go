@@ -236,7 +236,7 @@ func TestProcessProposal(t *testing.T) {
 		Signature:       make([]byte, bls12381.SignatureSize),
 	}
 
-	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil, nil)
 	block1, err := sf.MakeBlock(state, height, lastCommit, 1)
 	require.NoError(t, err)
 	block1.SetCoreChainLock(&coreChainLockUpdate)
@@ -316,7 +316,7 @@ func TestUpdateConsensusParams(t *testing.T) {
 		eventBus,
 	)
 
-	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil, nil)
 	txResults := factory.ExecTxResults(txs)
 
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
@@ -601,7 +601,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 		1,
 		round,
 		state,
-		types.NewCommit(state.LastBlockHeight, 0, state.LastBlockID, nil),
+		types.NewCommit(state.LastBlockHeight, 0, state.LastBlockID, nil, nil),
 		proTxHashes[0],
 		1,
 	)

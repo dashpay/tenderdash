@@ -134,7 +134,7 @@ func (env *Environment) BroadcastTxCommit(ctx context.Context, req *coretypes.Re
 					Prove: false,
 				})
 				if err != nil {
-					jitter := 100*time.Millisecond + time.Duration(rand.Int63n(int64(time.Second))) // nolint: gosec
+					jitter := 100*time.Millisecond + time.Duration(rand.Int63n(int64(time.Second))) //nolint:gosec
 					backoff := 100 * time.Duration(count) * time.Millisecond
 					timer.Reset(jitter + backoff)
 					continue
@@ -153,7 +153,7 @@ func (env *Environment) BroadcastTxCommit(ctx context.Context, req *coretypes.Re
 
 // UnconfirmedTxs gets unconfirmed transactions from the mempool in order of priority
 // More: https://docs.tendermint.com/master/rpc/#/Info/unconfirmed_txs
-func (env *Environment) UnconfirmedTxs(ctx context.Context, req *coretypes.RequestUnconfirmedTxs) (*coretypes.ResultUnconfirmedTxs, error) {
+func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.RequestUnconfirmedTxs) (*coretypes.ResultUnconfirmedTxs, error) {
 	totalCount := env.Mempool.Size()
 	perPage := env.validatePerPage(req.PerPage.IntPtr())
 	page, err := validatePage(req.Page.IntPtr(), perPage, totalCount)
@@ -176,7 +176,7 @@ func (env *Environment) UnconfirmedTxs(ctx context.Context, req *coretypes.Reque
 
 // NumUnconfirmedTxs gets number of unconfirmed transactions.
 // More: https://docs.tendermint.com/master/rpc/#/Info/num_unconfirmed_txs
-func (env *Environment) NumUnconfirmedTxs(ctx context.Context) (*coretypes.ResultUnconfirmedTxs, error) {
+func (env *Environment) NumUnconfirmedTxs(_ctx context.Context) (*coretypes.ResultUnconfirmedTxs, error) {
 	return &coretypes.ResultUnconfirmedTxs{
 		Count:      env.Mempool.Size(),
 		Total:      env.Mempool.Size(),
@@ -194,6 +194,6 @@ func (env *Environment) CheckTx(ctx context.Context, req *coretypes.RequestCheck
 	return &coretypes.ResultCheckTx{ResponseCheckTx: *res}, nil
 }
 
-func (env *Environment) RemoveTx(ctx context.Context, req *coretypes.RequestRemoveTx) error {
+func (env *Environment) RemoveTx(_ctx context.Context, req *coretypes.RequestRemoveTx) error {
 	return env.Mempool.RemoveTxByKey(req.TxKey)
 }

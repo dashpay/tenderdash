@@ -478,9 +478,6 @@ func BenchmarkEventBus(b *testing.B) {
 }
 
 func benchmarkEventBus(numClients int, randQueries bool, randEvents bool, b *testing.B) {
-	// for random* functions
-	mrand.Seed(time.Now().Unix())
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

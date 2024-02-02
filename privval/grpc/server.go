@@ -76,7 +76,7 @@ func (ss *SignerServer) GetThresholdPubKey(ctx context.Context, req *privvalprot
 
 // GetProTxHash receives a request for the proTxHash
 // returns the proTxHash on success and error on failure
-func (ss *SignerServer) GetProTxHash(ctx context.Context, req *privvalproto.ProTxHashRequest) (
+func (ss *SignerServer) GetProTxHash(ctx context.Context, _req *privvalproto.ProTxHashRequest) (
 	*privvalproto.ProTxHashResponse, error) {
 	var proTxHash crypto.ProTxHash
 

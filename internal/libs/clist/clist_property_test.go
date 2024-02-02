@@ -25,7 +25,7 @@ type clistModel struct {
 // Init is a method used by the rapid state machine testing library.
 // Init is called when the test starts to initialize the data that will be used
 // in the state machine test.
-func (m *clistModel) Init(t *rapid.T) {
+func (m *clistModel) Init(_t *rapid.T) {
 	m.clist = clist.New()
 	m.model = []*clist.CElement{}
 }

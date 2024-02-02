@@ -28,7 +28,7 @@ func IsConnTimeout(err error) bool {
 // NewSignerListener creates a new SignerListenerEndpoint using the corresponding listen address
 func NewSignerListener(listenAddr string, logger log.Logger) (*SignerListenerEndpoint, error) {
 	protocol, address := tmnet.ProtocolAndAddress(listenAddr)
-	if protocol != "unix" && protocol != "tcp" { //nolint:goconst
+	if protocol != "unix" && protocol != "tcp" {
 		return nil, fmt.Errorf("unsupported address family %q, want unix or tcp", protocol)
 	}
 

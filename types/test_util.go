@@ -45,10 +45,14 @@ func makeCommit(
 			Round:              round,
 			Type:               tmproto.PrecommitType,
 			BlockID:            blockID,
-			VoteExtensions: VoteExtensions{
-				tmproto.VoteExtensionType_DEFAULT:           []VoteExtension{{Extension: []byte("default")}},
-				tmproto.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Extension: []byte("threshold")}},
-			},
+			VoteExtensions: VoteExtensionsFromProto(
+				&tmproto.VoteExtension{
+					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER_RAW,
+					Extension: crypto.Checksum([]byte("raw"))},
+				&tmproto.VoteExtension{
+					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
+					Extension: []byte("threshold")},
+			),
 		}
 
 		_, err = signAddVote(ctx, validators[i], vote, voteSet)
@@ -68,9 +72,11 @@ func signAddVote(ctx context.Context, privVal PrivValidator, vote *Vote, voteSet
 	if err != nil {
 		return false, err
 	}
+
 	err = vote.PopulateSignsFromProto(v)
 	if err != nil {
 		return false, err
 	}
+
 	return voteSet.AddVote(vote)
 }

@@ -294,6 +294,20 @@ func (b *Block) ToProto() (*tmproto.Block, error) {
 	return pb, nil
 }
 
+func (b *Block) MarshalZerologObject(e *zerolog.Event) {
+	if b == nil {
+		e.Bool("nil", true)
+		return
+	}
+	e.Bool("nil", false)
+
+	e.Interface("header", b.Header)
+	e.Interface("core_chain_lock", b.CoreChainLock)
+	e.Interface("data", b.Data)
+	e.Interface("evidence", b.Evidence)
+	e.Interface("last_commit", b.LastCommit)
+}
+
 // FromProto sets a protobuf Block to the given pointer.
 // It returns an error if the block is invalid.
 func BlockFromProto(bp *tmproto.Block) (*Block, error) {
@@ -737,7 +751,7 @@ type Commit struct {
 	QuorumHash              crypto.QuorumHash `json:"quorum_hash"`
 	ThresholdBlockSignature []byte            `json:"threshold_block_signature"`
 	// ThresholdVoteExtensions keeps the list of recovered threshold signatures for vote-extensions
-	ThresholdVoteExtensions []ThresholdExtensionSign `json:"threshold_vote_extensions"`
+	ThresholdVoteExtensions tmproto.VoteExtensions `json:"threshold_vote_extensions"`
 
 	// Memoized in first call to corresponding method.
 	// NOTE: can't memoize in constructor because constructor isn't used for
@@ -746,12 +760,17 @@ type Commit struct {
 }
 
 // NewCommit returns a new Commit.
-func NewCommit(height int64, round int32, blockID BlockID, commitSigns *CommitSigns) *Commit {
+func NewCommit(height int64, round int32, blockID BlockID, voteExtensions VoteExtensions, commitSigns *CommitSigns) *Commit {
 	commit := &Commit{
 		Height:  height,
 		Round:   round,
 		BlockID: blockID,
+		ThresholdVoteExtensions: voteExtensions.Filter(func(ext VoteExtensionIf) bool {
+			_, ok := ext.(ThresholdVoteExtensionIf)
+			return ok
+		}).ToProto(),
 	}
+
 	if commitSigns != nil {
 		commitSigns.CopyToCommit(commit)
 	}
@@ -764,7 +783,7 @@ func (commit *Commit) ToCommitInfo() types.CommitInfo {
 		Round:                   commit.Round,
 		QuorumHash:              commit.QuorumHash,
 		BlockSignature:          commit.ThresholdBlockSignature,
-		ThresholdVoteExtensions: ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions),
+		ThresholdVoteExtensions: commit.ThresholdVoteExtensions,
 	}
 }
 
@@ -943,7 +962,7 @@ func (commit *Commit) ToProto() *tmproto.Commit {
 	c.BlockID = commit.BlockID.ToProto()
 
 	c.ThresholdBlockSignature = commit.ThresholdBlockSignature
-	c.ThresholdVoteExtensions = ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions)
+	c.ThresholdVoteExtensions = commit.ThresholdVoteExtensions
 	c.QuorumHash = commit.QuorumHash
 
 	return c
@@ -967,7 +986,7 @@ func CommitFromProto(cp *tmproto.Commit) (*Commit, error) {
 
 	commit.QuorumHash = cp.QuorumHash
 	commit.ThresholdBlockSignature = cp.ThresholdBlockSignature
-	commit.ThresholdVoteExtensions = ThresholdExtensionSignFromProto(cp.ThresholdVoteExtensions)
+	commit.ThresholdVoteExtensions = cp.ThresholdVoteExtensions
 
 	commit.Height = cp.Height
 	commit.Round = cp.Round
@@ -1039,6 +1058,7 @@ func (data *Data) MarshalZerologObject(e *zerolog.Event) {
 		e.Bool("nil", true)
 		return
 	}
+	e.Bool("nil", false)
 
 	e.Str("hash", data.Hash().ShortString())
 	e.Int("num_txs", len(data.Txs))

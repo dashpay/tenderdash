@@ -51,7 +51,7 @@ func Test_sortableValidator_SortKey(t *testing.T) {
 		},
 	}
 
-	// nolint:scopelint
+	//nolint:scopelint
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			v := newSortableValidator(*tt.Validator, tt.quorumHash)
@@ -74,7 +74,7 @@ func Test_sortableValidator_Compare(t *testing.T) {
 			want:  0,
 		},
 	}
-	// nolint:scopelint
+	//nolint:scopelint
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			got := tt.left.compare(tt.right)

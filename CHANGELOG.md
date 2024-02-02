@@ -1,3 +1,22 @@
+## [0.14.0-dev.2] - 2024-01-31
+
+### Bug Fixes
+
+- Panic in ordered_map Key() (#721)
+
+### Features
+
+- New vote extenison type THRESHOLD_RAW (#715)
+
+### Build
+
+- Bump actions/download-artifact from 3 to 4 (#720)
+- Bump actions/upload-artifact from 3 to 4 (#719)
+- Manual docker image build platform selection (#722)
+- Bump bufbuild/buf-setup-action from 1.27.0 to 1.29.0 (#729)
+- Bump styfle/cancel-workflow-action from 0.12.0 to 0.12.1 (#728)
+- Fix depguard linter configuration (#730)
+
 ## [0.14.0-dev.1] - 2023-12-18
 
 ### Features

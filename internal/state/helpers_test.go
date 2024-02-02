@@ -102,6 +102,7 @@ func makeValidCommit(
 	return types.NewCommit(
 		height, 0,
 		blockID,
+		votes[0].VoteExtensions,
 		&types.CommitSigns{
 			QuorumSigns: *thresholdSigns,
 			QuorumHash:  vals.QuorumHash,
@@ -196,7 +197,7 @@ func makeRandomStateFromValidatorSet(
 	}
 }
 func makeRandomStateFromConsensusParams(
-	ctx context.Context,
+	_ctx context.Context,
 	t *testing.T,
 	consensusParams *types.ConsensusParams,
 	height,
@@ -226,7 +227,7 @@ type testApp struct {
 
 var _ abci.Application = (*testApp)(nil)
 
-func (app *testApp) Info(_ context.Context, req *abci.RequestInfo) (*abci.ResponseInfo, error) {
+func (app *testApp) Info(_ context.Context, _req *abci.RequestInfo) (*abci.ResponseInfo, error) {
 	return &abci.ResponseInfo{}, nil
 }
 
@@ -238,11 +239,11 @@ func (app *testApp) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBl
 	}, nil
 }
 
-func (app *testApp) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*abci.ResponseCheckTx, error) {
+func (app *testApp) CheckTx(_ context.Context, _req *abci.RequestCheckTx) (*abci.ResponseCheckTx, error) {
 	return &abci.ResponseCheckTx{}, nil
 }
 
-func (app *testApp) Query(_ context.Context, req *abci.RequestQuery) (*abci.ResponseQuery, error) {
+func (app *testApp) Query(_ context.Context, _req *abci.RequestQuery) (*abci.ResponseQuery, error) {
 	return &abci.ResponseQuery{}, nil
 }
 

@@ -40,7 +40,7 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 	case rs.Height == c.committedState.InitialHeight:
 		// We're creating a proposal for the first block.
 		// The commit is empty, but not nil.
-		commit = types.NewCommit(0, 0, types.BlockID{}, nil)
+		commit = types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 	case rs.LastCommit != nil:
 		// Make the commit from LastPrecommits
 		commit = rs.LastCommit

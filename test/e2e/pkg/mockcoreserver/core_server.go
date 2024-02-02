@@ -9,8 +9,8 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 
 	"github.com/dashpay/tenderdash/crypto"
-	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/privval"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // CoreServer is an interface of a mock core-server
@@ -93,13 +93,8 @@ func (c *MockCoreServer) QuorumSign(ctx context.Context, cmd btcjson.QuorumCmd) 
 		panic(err)
 	}
 	quorumHash := crypto.QuorumHash(quorumHashBytes)
+	signID := types.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).SignHash
 
-	signID := crypto.SignID(
-		*cmd.LLMQType,
-		tmbytes.Reverse(quorumHash),
-		tmbytes.Reverse(reqID),
-		tmbytes.Reverse(msgHash),
-	)
 	privateKey, err := c.FilePV.GetPrivateKey(ctx, quorumHash)
 	if err != nil {
 		panic(err)
@@ -142,13 +137,8 @@ func (c *MockCoreServer) QuorumVerify(ctx context.Context, cmd btcjson.QuorumCmd
 	if err != nil {
 		panic(err)
 	}
+	signID := types.NewSignItemFromHash(*cmd.LLMQType, quorumHash, reqID, msgHash).SignHash
 
-	signID := crypto.SignID(
-		*cmd.LLMQType,
-		tmbytes.Reverse(quorumHash),
-		tmbytes.Reverse(reqID),
-		tmbytes.Reverse(msgHash),
-	)
 	thresholdPublicKey, err := c.FilePV.GetThresholdPublicKey(ctx, quorumHash)
 	if err != nil {
 		panic(err)
@@ -219,7 +209,7 @@ func (c *StaticCoreServer) GetNetworkInfo(_ context.Context, _ btcjson.GetNetwor
 }
 
 // Ping ...
-func (c *StaticCoreServer) Ping(_ context.Context, cmd btcjson.PingCmd) error {
+func (c *StaticCoreServer) Ping(_ context.Context, _cmd btcjson.PingCmd) error {
 	return nil
 }
 

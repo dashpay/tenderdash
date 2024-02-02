@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/hex"
 	"fmt"
 	"testing"
 
@@ -8,9 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dashpay/tenderdash/crypto"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
-	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
@@ -20,8 +19,10 @@ func TestBlockRequestID(t *testing.T) {
 	assert.EqualValues(t, expected, got)
 }
 
-func TestMakeBlockSignID(t *testing.T) {
+func TestMakeBlockSignItem(t *testing.T) {
 	const chainID = "dash-platform"
+	const quorumType = btcjson.LLMQType_5_60
+
 	testCases := []struct {
 		vote       Vote
 		quorumHash []byte
@@ -40,88 +41,47 @@ func TestMakeBlockSignID(t *testing.T) {
 				"DA25B746781DDF47B5D736F30B1D9D0CC86981EEC67CBE255265C4361DEF8C2E",
 				"02000000E9030000000000000000000000000000E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B"+
 					"7852B855E3B0C44298FC1C149AFBF4C8996FB92427AE41E4649B934CA495991B7852B855646173682D706C6174666F726D",
+				"6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD",
+				quorumType,
 			),
 			wantHash: tmbytes.MustHexDecode("0CA3D5F42BDFED0C4FDE7E6DE0F046CC76CDA6CEE734D65E8B2EE0E375D4C57D"),
 		},
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case %d", i), func(t *testing.T) {
-			signItem := MakeBlockSignItem(chainID, tc.vote.ToProto(), btcjson.LLMQType_5_60, tc.quorumHash)
-			t.Logf("hash %X id %X raw %X reqID %X", signItem.Hash, signItem.ID, signItem.Raw, signItem.ReqID)
-			require.Equal(t, tc.want, signItem)
-			require.Equal(t, tc.wantHash, signItem.Hash)
+			signItem := MakeBlockSignItem(chainID, tc.vote.ToProto(), quorumType, tc.quorumHash)
+			t.Logf("hash %X id %X raw %X reqID %X", signItem.MsgHash, signItem.SignHash, signItem.Msg, signItem.ID)
+			require.Equal(t, tc.want, signItem, "Got ID: %X", signItem.SignHash)
+			require.Equal(t, tc.wantHash, signItem.MsgHash)
 		})
 	}
 }
 
-func TestMakeVoteExtensionSignsData(t *testing.T) {
-	const chainID = "dash-platform"
-	logger := log.NewTestingLogger(t)
-	testCases := []struct {
-		vote       Vote
-		quorumHash []byte
-		want       map[types.VoteExtensionType][]SignItem
-		wantHash   map[types.VoteExtensionType][][]byte
-	}{
-		{
-			vote: Vote{
-				Type:               types.PrecommitType,
-				Height:             1001,
-				ValidatorProTxHash: tmbytes.MustHexDecode("9CC13F685BC3EA0FCA99B87F42ABCC934C6305AA47F62A32266A2B9D55306B7B"),
-				VoteExtensions: VoteExtensions{
-					types.VoteExtensionType_DEFAULT:           []VoteExtension{{Extension: []byte("default")}},
-					types.VoteExtensionType_THRESHOLD_RECOVER: []VoteExtension{{Extension: []byte("threshold")}},
-				},
-			},
-			quorumHash: tmbytes.MustHexDecode("6A12D9CF7091D69072E254B297AEF15997093E480FDE295E09A7DE73B31CEEDD"),
-			want: map[types.VoteExtensionType][]SignItem{
-				types.VoteExtensionType_DEFAULT: {
-					newSignItem(
-						"FB95F2CA6530F02AC623589D7938643FF22AE79A75DD79AEA1C8871162DE675E",
-						"533524404D3A905F5AC9A30FCEB5A922EAD96F30DA02F979EE41C4342F540467",
-						"210A0764656661756C7411E903000000000000220D646173682D706C6174666F726D",
-					),
-				},
-				types.VoteExtensionType_THRESHOLD_RECOVER: {
-					newSignItem(
-						"fb95f2ca6530f02ac623589d7938643ff22ae79a75dd79aea1c8871162de675e",
-						"d3b7d53a0f9ca8072d47d6c18e782ee3155ef8dcddb010087030b6cbc63978bc",
-						"250a097468726573686f6c6411e903000000000000220d646173682d706c6174666f726d2801",
-					),
-				},
-			},
-			wantHash: map[types.VoteExtensionType][][]byte{
-				types.VoteExtensionType_DEFAULT: {
-					tmbytes.MustHexDecode("61519D79DE4C4D5AC5DD210C1BCE81AA24F76DD5581A24970E60112890C68FB7"),
-				},
-				types.VoteExtensionType_THRESHOLD_RECOVER: {
-					tmbytes.MustHexDecode("46C72C423B74034E1AF574A99091B017C0698FEAA55C8B188BFD512FCADD3143"),
-				},
-			},
-		},
-	}
-	for i, tc := range testCases {
-		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
-			signItems, err := MakeVoteExtensionSignItems(chainID, tc.vote.ToProto(), btcjson.LLMQType_5_60, tc.quorumHash)
-			require.NoError(t, err)
-			for et, signs := range signItems {
-				for i, sign := range signs {
-					assert.Equal(t, tc.wantHash[et][i], sign.Hash, "want %X, actual %X", tc.wantHash[et][i], sign.Hash)
-					if !assert.Equal(t, tc.want[et][i], sign) {
-						logger.Error("invalid sign", "sign", sign, "type", et, "i", i)
-					}
-				}
-			}
-		})
-	}
-}
-
-func newSignItem(reqID, ID, raw string) SignItem {
-	item := SignItem{
-		ReqID: tmbytes.MustHexDecode(reqID),
-		ID:    tmbytes.MustHexDecode(ID),
-		Raw:   tmbytes.MustHexDecode(raw),
-	}
-	item.Hash = crypto.Checksum(item.Raw)
+func newSignItem(reqID, signHash, raw, quorumHash string, quorumType btcjson.LLMQType) SignItem {
+	item := NewSignItem(quorumType, tmbytes.MustHexDecode(quorumHash), tmbytes.MustHexDecode(reqID), tmbytes.MustHexDecode(raw))
+	item.SignHash = tmbytes.MustHexDecode(signHash)
 	return item
+}
+
+func TestQuorumSignItem(t *testing.T) {
+
+	si := SignItem{
+		ID:         mustHexDecode("87cda9461081793e7e31ab1def8ffbd453775a0f9987304598398d42a78d68d4"),
+		MsgHash:    mustHexDecode("5ef9b9eecc4df7c5aee677c0a72816f4515999a539003cf4bbb6c15c39634c31"),
+		LlmqType:   106,
+		QuorumHash: mustHexDecode("366f07c9b80a2661563a33c09f02156720159b911186b4438ff281e537674771"),
+	}
+	si.UpdateSignHash(true)
+
+	expectID := tmbytes.Reverse(mustHexDecode("94635358f4c75a1d0b38314619d1c5d9a16f12961b5314d857e04f2eb61d78d2"))
+
+	assert.EqualValues(t, expectID, si.SignHash)
+}
+
+func mustHexDecode(s string) []byte {
+	b, err := hex.DecodeString(s)
+	if err != nil {
+		panic(err)
+	}
+	return b
 }

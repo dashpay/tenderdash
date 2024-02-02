@@ -9,6 +9,7 @@ import (
 	"log"
 	"net"
 	"net/http"
+	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
 
@@ -57,8 +58,9 @@ func (s *HTTPServer) On(pattern string) *Call {
 func (s *HTTPServer) Start() {
 	s.guard.Lock()
 	s.httpSrv = &http.Server{
-		Addr:    s.addr,
-		Handler: s.mux,
+		Addr:              s.addr,
+		Handler:           s.mux,
+		ReadHeaderTimeout: 5 * time.Second,
 	}
 	s.guard.Unlock()
 	l, err := net.Listen("tcp", s.addr)

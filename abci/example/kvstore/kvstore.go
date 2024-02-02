@@ -422,8 +422,8 @@ func (app *Application) FinalizeBlock(ctx context.Context, req *abci.RequestFina
 	if app.shouldCommitVerify {
 		vsu := app.getActiveValidatorSetUpdates()
 		qsd := types.QuorumSignData{
-			Block:      makeBlockSignItem(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
-			Extensions: makeVoteExtensionSignItems(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
+			Block:                  makeBlockSignItem(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
+			VoteExtensionSignItems: makeVoteExtensionSignItems(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
 		}
 		err := app.verifyBlockCommit(qsd, req.Commit)
 		if err != nil {

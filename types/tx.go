@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"sort"
 
+	"github.com/rs/zerolog"
+
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/merkle"

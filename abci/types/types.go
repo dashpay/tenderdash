@@ -370,3 +370,23 @@ func (m *RequestFinalizeBlock) ToCanonicalVote() (types.CanonicalVote, error) {
 	}
 	return cv, nil
 }
+
+// Convert to proto.types.VoteExtension.
+// Signature field will be nil, as ExtendVoteExtension doesn't have it.
+func (m *ExtendVoteExtension) ToVoteExtension() types.VoteExtension {
+	ve := types.VoteExtension{
+		Type:      m.Type,
+		Extension: m.Extension,
+	}
+
+	// workaround for a bug in gogoproto
+	if m.XSignRequestId != nil {
+		src := m.GetSignRequestId()
+
+		ve.XSignRequestId = &types.VoteExtension_SignRequestId{
+			SignRequestId: bytes.Clone(src),
+		}
+	}
+
+	return ve
+}

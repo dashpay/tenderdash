@@ -11,7 +11,6 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
-	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -25,12 +24,6 @@ const (
 	MaxVoteBytesEd25519  int64 = 209
 )
 
-// VoteExtensionTypes is a list of all possible vote-extension types
-var VoteExtensionTypes = []tmproto.VoteExtensionType{
-	tmproto.VoteExtensionType_DEFAULT,
-	tmproto.VoteExtensionType_THRESHOLD_RECOVER,
-}
-
 func MaxVoteBytesForKeyType(keyType crypto.KeyType) int64 {
 	switch keyType {
 	case crypto.Ed25519:
@@ -42,19 +35,20 @@ func MaxVoteBytesForKeyType(keyType crypto.KeyType) int64 {
 }
 
 var (
-	ErrVoteUnexpectedStep             = errors.New("unexpected step")
-	ErrVoteInvalidValidatorIndex      = errors.New("invalid validator index")
-	ErrVoteInvalidValidatorAddress    = errors.New("invalid validator address")
-	ErrVoteInvalidSignature           = errors.New("invalid signature")
-	ErrVoteInvalidBlockHash           = errors.New("invalid block hash")
-	ErrVoteNonDeterministicSignature  = errors.New("non-deterministic signature")
-	ErrVoteNil                        = errors.New("nil vote")
-	ErrVoteInvalidExtension           = errors.New("invalid vote extension")
-	ErrVoteInvalidValidatorProTxHash  = errors.New("invalid validator pro_tx_hash")
-	ErrVoteInvalidValidatorPubKeySize = errors.New("invalid validator public key size")
-	ErrVoteInvalidBlockSignature      = errors.New("invalid block signature")
-	ErrVoteInvalidStateSignature      = errors.New("invalid state signature")
-	ErrVoteStateSignatureShouldBeNil  = errors.New("state signature when voting for nil block")
+	ErrVoteUnexpectedStep                 = errors.New("unexpected step")
+	ErrVoteInvalidValidatorIndex          = errors.New("invalid validator index")
+	ErrVoteInvalidValidatorAddress        = errors.New("invalid validator address")
+	ErrVoteInvalidSignature               = errors.New("invalid signature")
+	ErrVoteInvalidBlockHash               = errors.New("invalid block hash")
+	ErrVoteNonDeterministicSignature      = errors.New("non-deterministic signature")
+	ErrVoteNil                            = errors.New("nil vote")
+	ErrVoteInvalidExtension               = errors.New("invalid vote extension")
+	ErrVoteExtensionTypeWrongForRequestID = errors.New("provided vote extension type does not support sign request ID")
+	ErrVoteInvalidValidatorProTxHash      = errors.New("invalid validator pro_tx_hash")
+	ErrVoteInvalidValidatorPubKeySize     = errors.New("invalid validator public key size")
+	ErrVoteInvalidBlockSignature          = errors.New("invalid block signature")
+	ErrVoteInvalidStateSignature          = errors.New("invalid state signature")
+	ErrVoteStateSignatureShouldBeNil      = errors.New("state signature when voting for nil block")
 )
 
 type ErrVoteConflictingVotes struct {
@@ -108,33 +102,14 @@ func VoteFromProto(pv *tmproto.Vote) (*Vote, error) {
 		ValidatorProTxHash: pv.ValidatorProTxHash,
 		ValidatorIndex:     pv.ValidatorIndex,
 		BlockSignature:     pv.BlockSignature,
-		VoteExtensions:     VoteExtensionsFromProto(pv.VoteExtensions),
+		VoteExtensions:     VoteExtensionsFromProto(pv.VoteExtensions...),
 	}, nil
-}
-
-// VoteExtensionSignBytes returns the proto-encoding of the canonicalized vote
-// extension for signing. Panics if the marshaling fails.
-//
-// Similar to VoteSignBytes, the encoded Protobuf message is varint
-// length-prefixed for backwards-compatibility with the Amino encoding.
-func VoteExtensionSignBytes(chainID string, height int64, round int32, ext *tmproto.VoteExtension) []byte {
-	pb := CanonicalizeVoteExtension(chainID, ext, height, round)
-	bz, err := protoio.MarshalDelimited(&pb)
-	if err != nil {
-		panic(err)
-	}
-	return bz
-}
-
-// VoteExtensionRequestID returns vote extension request ID
-func VoteExtensionRequestID(height int64, round int32) []byte {
-	return heightRoundRequestID("dpevote", height, round)
 }
 
 // VoteBlockSignID returns signID that should be signed for the block
 func VoteBlockSignID(chainID string, vote *tmproto.Vote, quorumType btcjson.LLMQType, quorumHash []byte) []byte {
 	signID := MakeBlockSignItem(chainID, vote, quorumType, quorumHash)
-	return signID.ID
+	return signID.SignHash
 }
 
 // Copy creates a deep copy of the vote
@@ -225,7 +200,7 @@ func (vote *Vote) Verify(
 	quorumHash []byte,
 	pubKey crypto.PubKey,
 	proTxHash crypto.ProTxHash,
-	stateID tmproto.StateID,
+	_stateID tmproto.StateID,
 ) error {
 	err := vote.verifyBasic(proTxHash, pubKey)
 	if err != nil {
@@ -236,6 +211,7 @@ func (vote *Vote) Verify(
 		return err
 	}
 
+	// TODO check why we don't verify extensions here
 	return vote.verifySign(pubKey, quorumSignData, WithVerifyExtensions(false))
 }
 
@@ -281,8 +257,10 @@ func (vote *Vote) verifySign(
 
 func (vote *Vote) makeQuorumSigns() QuorumSigns {
 	return QuorumSigns{
-		BlockSign:      vote.BlockSignature,
-		ExtensionSigns: MakeThresholdExtensionSigns(vote.VoteExtensions),
+		BlockSign: vote.BlockSignature,
+		VoteExtensionSignatures: vote.VoteExtensions.Filter(func(ext VoteExtensionIf) bool {
+			return ext.IsThresholdRecoverable()
+		}).GetSignatures(),
 	}
 }
 
@@ -340,8 +318,7 @@ func (vote *Vote) ValidateBasic() error {
 	}
 
 	if vote.Type == tmproto.PrecommitType && !vote.BlockID.IsNil() {
-		err := vote.VoteExtensions.Validate()
-		if err != nil {
+		if err := vote.VoteExtensions.Validate(); err != nil {
 			return err
 		}
 	}
@@ -403,6 +380,7 @@ func (vote *Vote) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("val_proTxHash", vote.ValidatorProTxHash.ShortString())
 	e.Int32("val_index", vote.ValidatorIndex)
 	e.Bool("nil", vote.BlockID.IsNil())
+	e.Array("extensions", vote.VoteExtensions)
 }
 
 func (vote *Vote) HasVoteMessage() *tmcons.HasVote {

@@ -39,8 +39,10 @@ func MakeVote(
 	}
 
 	v.BlockSignature = vpb.BlockSignature
-	err = v.VoteExtensions.CopySignsFromProto(vpb.VoteExtensionsToMap())
+
+	err = v.VoteExtensions.CopySignsFromProto(vpb.VoteExtensions)
 	if err != nil {
+
 		return nil, err
 	}
 	return v, nil

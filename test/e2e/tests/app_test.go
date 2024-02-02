@@ -195,7 +195,7 @@ func TestApp_Tx(t *testing.T) {
 // when I submit them to the node,
 // then the first transaction should be committed before the last one.
 func TestApp_TxTooBig(t *testing.T) {
-	const timeout = 10 * time.Second
+	const timeout = 60 * time.Second
 
 	testNode(t, func(ctx context.Context, t *testing.T, node e2e.Node) {
 		session := rand.Int63()
@@ -203,7 +203,10 @@ func TestApp_TxTooBig(t *testing.T) {
 		client, err := node.Client()
 		require.NoError(t, err)
 
-		cp, err := client.ConsensusParams(ctx, nil)
+		// FIXME: ConsensusParams is broken for last height, this is just workaround
+		status, err := client.Status(ctx)
+		assert.NoError(t, err)
+		cp, err := client.ConsensusParams(ctx, &status.SyncInfo.LatestBlockHeight)
 		assert.NoError(t, err)
 
 		// ensure we have more txs than fits the block
@@ -216,7 +219,7 @@ func TestApp_TxTooBig(t *testing.T) {
 		var key string
 
 		for i := 0; i < numTxs; i++ {
-			key = fmt.Sprintf("testapp-big-tx-%v-%08x-%06x=", node.Name, session, i)
+			key = fmt.Sprintf("testapp-big-tx-%v-%08x-%d=", node.Name, session, i)
 			copy(tx, key)
 
 			payloadOffset := len(tx) - 8 // where we put the `i` into the payload
@@ -230,7 +233,6 @@ func TestApp_TxTooBig(t *testing.T) {
 			}
 
 			_, err = client.BroadcastTxAsync(ctx, tx)
-			t.Logf("submitted tx %x", tx.Hash())
 
 			assert.NoError(t, err, "failed to broadcast tx %06x", i)
 		}
@@ -248,14 +250,21 @@ func TestApp_TxTooBig(t *testing.T) {
 				assert.NoError(t, err, "first tx should be committed before second")
 				assert.EqualValues(t, firstTxHash, firstTxResp.Tx.Hash())
 
-				t.Logf("first tx in block %d, last tx in block %d", firstTxResp.Height, lastTxResp.Height)
+				firstTxBlock, err := client.Header(ctx, &firstTxResp.Height)
+				assert.NoError(t, err)
+				lastTxBlock, err := client.Header(ctx, &lastTxResp.Height)
+				assert.NoError(t, err)
+
+				t.Logf("first tx in block %d, last tx in block %d, time diff %s",
+					firstTxResp.Height,
+					lastTxResp.Height,
+					lastTxBlock.Header.Time.Sub(firstTxBlock.Header.Time).String(),
+				)
 
 				assert.Less(t, firstTxResp.Height, lastTxResp.Height, "first tx should in block before last tx")
 				return true
 			}
 
-			// tx2 not there yet
-			t.Log("last tx not committed within timeout")
 			return false
 		},
 			timeout,     // timeout

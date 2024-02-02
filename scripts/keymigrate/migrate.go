@@ -597,7 +597,7 @@ func replaceKey(db dbm.DB, storeName string, key keyID) error {
 
 	// 10% of the time, force a write to disk, but mostly don't,
 	// because it's faster.
-	if rand.Intn(100)%10 == 0 { // nolint:gosec
+	if rand.Intn(100)%10 == 0 { //nolint:gosec
 		if err = batch.WriteSync(); err != nil {
 			return err
 		}

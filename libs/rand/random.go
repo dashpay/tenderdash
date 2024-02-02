@@ -44,7 +44,7 @@ func buildString(length int, picker func() int64) string {
 func Bytes(n int) []byte {
 	bs := make([]byte, n)
 	for i := 0; i < len(bs); i++ {
-		// nolint:gosec // G404: Use of weak random number generator
+		//nolint:gosec // G404: Use of weak random number generator
 		bs[i] = byte(mrand.Int() & 0xFF)
 	}
 	return bs

@@ -269,7 +269,7 @@ func (bA *BitArray) PickRandom() (int, bool) {
 	// rand.New(rand.NewSeed(time.Now().Unix())).Intn() to
 	// counteract this possibility if it proved to be material.
 	//
-	// nolint:gosec // G404: Use of weak random number generator
+	//nolint:gosec // G404: Use of weak random number generator
 	return trueIndices[rand.Intn(len(trueIndices))], true
 }
 
