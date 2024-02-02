@@ -7,10 +7,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/time/rate"
+
+	"github.com/dashpay/tenderdash/internal/p2p"
 )
 
 type mockChannel struct {
@@ -21,7 +22,7 @@ func (c *mockChannel) Len() int {
 	return int(c.counter.Load())
 }
 
-func (c *mockChannel) Send(_ context.Context, e p2p.Envelope) error {
+func (c *mockChannel) Send(_ context.Context, _e p2p.Envelope) error {
 	c.counter.Add(1)
 	return nil
 }
