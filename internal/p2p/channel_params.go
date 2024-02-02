@@ -80,9 +80,9 @@ func ChannelDescriptors(cfg *config.Config) map[ChannelID]*ChannelDescriptor {
 			RecvMessageCapacity: mempoolBatchSize(cfg.Mempool.MaxTxBytes),
 			RecvBufferCapacity:  1000,
 			Name:                "mempool",
-			SendRateLimit:       5,
-			SendRateBurst:       20,
-			EnqueueTimeout:      1 * time.Millisecond,
+			// SendRateLimit:       5,
+			// SendRateBurst:       20,
+			EnqueueTimeout: 1 * time.Millisecond,
 		},
 	}
 
