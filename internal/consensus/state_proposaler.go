@@ -44,8 +44,15 @@ func NewProposaler(
 
 // Set updates Proposal, ProposalReceiveTime and ProposalBlockParts in RoundState if the passed proposal met conditions
 func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cstypes.RoundState) error {
-	// Does not apply
-	if rs.Proposal != nil || proposal.Height != rs.Height || proposal.Round != rs.Round {
+
+	if rs.Proposal != nil {
+		// We already have a proposal
+		return nil
+	}
+
+	if proposal.Height != rs.Height || proposal.Round != rs.Round {
+		p.logger.Debug("received proposal for invalid height/round, ignoring", "proposal", proposal,
+			"height", rs.Height, "round", rs.Round, "received", receivedAt)
 		return nil
 	}
 
