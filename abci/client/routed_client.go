@@ -27,6 +27,67 @@ var _ Client = (*routedClient)(nil)
 type RequestType string
 type Routing map[RequestType][]Client
 
+// NewRoutedClientWithAddr returns a new ABCI client that routes requests to multiple
+// underlying clients based on the request type.
+//
+// It takes a comma-separated list of routing rules, consisting of colon-separated: request type, transport, address.
+// Special request type "*" is used for default client.
+//
+// Example:
+//
+//	"Info:socket:///tmp/socket.1,"Info:socket:///tmp/socket.2,CheckTx:socket:///tmp/socket.1,Query:socket:///tmp/socket.2,*:socket:///tmp/socket.3"
+//
+// # Arguments
+//   - `logger` - The logger to use for the client.
+//   - `addr` - comma-separated list of routing rules, consisting of request type and client address separated with colon.
+//     Special request type "*" is used for default client.
+func NewRoutedClientWithAddr(logger log.Logger, addr string, mustConnect bool) (Client, error) {
+	// Split the routing rules
+	routing := make(Routing)
+	clients := make(map[string]Client)
+	var defaultClient Client
+
+	rules := strings.Split(addr, ",")
+
+	for _, rule := range rules {
+		parts := strings.SplitN(rule, ":", 3)
+		if len(parts) != 3 {
+			return nil, fmt.Errorf("invalid routing rule: %s", rule)
+		}
+		requestType := parts[0]
+		transport := parts[1]
+		address := parts[2]
+
+		// Create a new client if it doesn't exist
+		clientName := fmt.Sprintf("%s:%s", transport, address)
+		if _, ok := clients[clientName]; !ok {
+			c, err := NewClient(logger, address, transport, mustConnect)
+			if err != nil {
+				return nil, err
+			}
+			clients[clientName] = c
+		}
+
+		// Add the client to the routing table
+		if requestType == "*" {
+			if defaultClient != nil {
+				return nil, fmt.Errorf("multiple default clients")
+			}
+			defaultClient = clients[clientName]
+			continue
+		}
+
+		client := clients[clientName]
+		routing[RequestType(requestType)] = append(routing[RequestType(requestType)], client)
+	}
+
+	if defaultClient == nil {
+		return nil, fmt.Errorf("no default client defined for routed client address %s", addr)
+	}
+
+	return NewRoutedClient(logger, defaultClient, routing)
+}
+
 // NewRoutedClient returns a new ABCI client that routes requests to the
 // appropriate underlying client based on the request type.
 //
@@ -53,11 +114,23 @@ func NewRoutedClient(
 	return cli, nil
 }
 
-func (cli *routedClient) OnStart(context.Context) error {
-	return nil
+func (cli *routedClient) OnStart(ctx context.Context) error {
+	var errs error
+	for _, clients := range cli.routing {
+		for _, client := range clients {
+			if !client.IsRunning() {
+				if err := client.Start(ctx); err != nil {
+					errs = multierror.Append(errs, err)
+				}
+			}
+		}
+	}
+
+	return errs
 }
 
 func (cli *routedClient) OnStop() {
+	// FIXME: Stop all underlying clients
 }
 
 // // getClient returns the client for the caller function
