@@ -12,8 +12,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto/ed25519"
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/internal/p2p"
-	"github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -283,7 +283,7 @@ func TestConnection_Handshake(t *testing.T) {
 			ListenAddr: "listenaddr",
 			Network:    "network",
 			Version:    "1.2.3",
-			Channels:   bytes.HexBytes([]byte{0xf0, 0x0f}),
+			Channels:   tmsync.NewConcurrentSlice[uint16](0xf0, 0x0f),
 			Moniker:    "moniker",
 			Other: types.NodeInfoOther{
 				TxIndex:    "txindex",

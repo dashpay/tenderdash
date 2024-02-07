@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto/ed25519"
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	tmnet "github.com/dashpay/tenderdash/libs/net"
 	"github.com/dashpay/tenderdash/version"
 )
@@ -20,13 +21,13 @@ func TestNodeInfoValidate(t *testing.T) {
 	ni := NodeInfo{}
 	assert.Error(t, ni.Validate())
 
-	channels := make([]byte, maxNumChannels)
-	for i := 0; i < maxNumChannels; i++ {
-		channels[i] = byte(i)
+	channels := tmsync.NewConcurrentSlice[uint16]()
+	for i := uint16(0); i < maxNumChannels; i++ {
+		channels.Append(i)
 	}
-	dupChannels := make([]byte, 5)
-	copy(dupChannels, channels[:5])
-	dupChannels = append(dupChannels, testCh)
+
+	dupChannels := tmsync.NewConcurrentSlice[uint16](channels.ToSlice()[:5]...)
+	dupChannels.Append(testCh)
 
 	nonASCII := "¢§µ"
 	emptyTab := "\t"
@@ -39,11 +40,14 @@ func TestNodeInfoValidate(t *testing.T) {
 	}{
 		{
 			"Too Many Channels",
-			func(ni *NodeInfo) { ni.Channels = append(channels, byte(maxNumChannels)) },
+			func(ni *NodeInfo) {
+				ni.Channels = channels.Copy()
+				ni.Channels.Append(maxNumChannels)
+			},
 			true,
 		},
 		{"Duplicate Channel", func(ni *NodeInfo) { ni.Channels = dupChannels }, true},
-		{"Good Channels", func(ni *NodeInfo) { ni.Channels = ni.Channels[:5] }, false},
+		{"Good Channels", func(ni *NodeInfo) { ni.Channels = tmsync.NewConcurrentSlice(ni.Channels.ToSlice()[:5]...) }, false},
 
 		{"Invalid NetAddress", func(ni *NodeInfo) { ni.ListenAddr = "not-an-address" }, true},
 		{"Good NetAddress", func(ni *NodeInfo) { ni.ListenAddr = "0.0.0.0:26656" }, false},
@@ -117,7 +121,7 @@ func testNodeInfoWithNetwork(t *testing.T, id NodeID, name, network string) Node
 		ListenAddr: fmt.Sprintf("127.0.0.1:%d", getFreePort(t)),
 		Network:    network,
 		Version:    "1.2.3-rc0-deadbeef",
-		Channels:   []byte{testCh},
+		Channels:   tmsync.NewConcurrentSlice[uint16](testCh),
 		Moniker:    name,
 		Other: NodeInfoOther{
 			TxIndex:    "on",
@@ -146,7 +150,7 @@ func TestNodeInfoCompatible(t *testing.T) {
 	assert.NoError(t, ni1.CompatibleWith(ni2))
 
 	// add another channel; still compatible
-	ni2.Channels = []byte{newTestChannel, testCh}
+	ni2.Channels = tmsync.NewConcurrentSlice[uint16](testCh)
 	assert.NoError(t, ni1.CompatibleWith(ni2))
 
 	testCases := []struct {
@@ -155,7 +159,7 @@ func TestNodeInfoCompatible(t *testing.T) {
 	}{
 		{"Wrong block version", func(ni *NodeInfo) { ni.ProtocolVersion.Block++ }},
 		{"Wrong network", func(ni *NodeInfo) { ni.Network += "-wrong" }},
-		{"No common channels", func(ni *NodeInfo) { ni.Channels = []byte{newTestChannel} }},
+		{"No common channels", func(ni *NodeInfo) { ni.Channels = tmsync.NewConcurrentSlice[uint16](uint16(newTestChannel)) }},
 	}
 
 	for _, tc := range testCases {
@@ -167,15 +171,15 @@ func TestNodeInfoCompatible(t *testing.T) {
 
 func TestNodeInfoAddChannel(t *testing.T) {
 	nodeInfo := testNodeInfo(t, testNodeID(), "testing")
-	nodeInfo.Channels = []byte{}
+	nodeInfo.Channels = tmsync.NewConcurrentSlice[uint16]()
 	require.Empty(t, nodeInfo.Channels)
 
 	nodeInfo.AddChannel(2)
-	require.Contains(t, nodeInfo.Channels, byte(0x02))
+	require.Contains(t, nodeInfo.Channels.ToSlice(), uint16(2))
 
 	// adding the same channel again shouldn't be a problem
 	nodeInfo.AddChannel(2)
-	require.Contains(t, nodeInfo.Channels, byte(0x02))
+	require.Contains(t, nodeInfo.Channels.ToSlice(), uint16(2))
 }
 
 func TestParseAddressString(t *testing.T) {

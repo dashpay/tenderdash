@@ -17,6 +17,7 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/crypto"
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/p2p/mocks"
 	"github.com/dashpay/tenderdash/internal/p2p/p2ptest"
@@ -766,7 +767,7 @@ func TestRouter_ChannelCompatability(t *testing.T) {
 		ListenAddr: "0.0.0.0:0",
 		Network:    "test",
 		Moniker:    string(peerID),
-		Channels:   []byte{0x03},
+		Channels:   tmsync.NewConcurrentSlice[uint16](0x03),
 	}
 
 	mockConnection := &mocks.Connection{}
@@ -817,7 +818,7 @@ func TestRouter_DontSendOnInvalidChannel(t *testing.T) {
 		ListenAddr: "0.0.0.0:0",
 		Network:    "test",
 		Moniker:    string(peerID),
-		Channels:   []byte{0x02},
+		Channels:   tmsync.NewConcurrentSlice[uint16](0x02),
 	}
 
 	mockConnection := &mocks.Connection{}

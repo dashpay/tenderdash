@@ -501,7 +501,7 @@ func (r *Router) openConnection(ctx context.Context, conn Connection) {
 		return
 	}
 
-	r.routePeer(ctx, peerInfo.NodeID, conn, toChannelIDs(peerInfo.Channels))
+	r.routePeer(ctx, peerInfo.NodeID, conn, toChannelIDs(peerInfo.Channels.ToSlice()))
 }
 
 // dialPeers maintains outbound connections to peers by dialing them.
@@ -589,7 +589,7 @@ func (r *Router) connectPeer(ctx context.Context, address NodeAddress) {
 	}
 
 	// routePeer (also) calls connection close
-	go r.routePeer(ctx, address.NodeID, conn, toChannelIDs(peerInfo.Channels))
+	go r.routePeer(ctx, address.NodeID, conn, toChannelIDs(peerInfo.Channels.ToSlice()))
 }
 
 func (r *Router) getOrMakeQueue(peerID types.NodeID, channels ChannelIDSet) queue {
@@ -943,9 +943,9 @@ func (cs ChannelIDSet) Contains(id ChannelID) bool {
 	return ok
 }
 
-func toChannelIDs(bytes []byte) ChannelIDSet {
-	c := make(map[ChannelID]struct{}, len(bytes))
-	for _, b := range bytes {
+func toChannelIDs(ids []uint16) ChannelIDSet {
+	c := make(map[ChannelID]struct{}, len(ids))
+	for _, b := range ids {
 		c[ChannelID(b)] = struct{}{}
 	}
 	return c
