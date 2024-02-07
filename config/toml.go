@@ -91,7 +91,7 @@ const defaultConfigTemplate = `# This is a TOML config file.
 # or the name of an ABCI application compiled in with the Tendermint binary
 # Example for routed multi-app setup:
 #   abci = "routed"
-#   proxy-app = "Info:socket:///tmp/socket.1,Info:socket:///tmp/socket.2,CheckTx:socket:///tmp/socket.1,*:socket:///tmp/socket.3"
+#   proxy-app = "Info:socket:unix:///tmp/socket.1,Info:socket:unix:///tmp/socket.2,CheckTx:socket:unix:///tmp/socket.1,*:socket:unix:///tmp/socket.3"
 
 proxy-app = "{{ .BaseConfig.ProxyApp }}"
 

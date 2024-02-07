@@ -56,18 +56,10 @@ func TestRouting(t *testing.T) {
 		fmt.Sprintf(",PrepareProposal:socket:%s", consensusSocket) +
 		fmt.Sprintf(",*:socket:%s", defaultSocket)
 
+	logger.Info("configuring routed abci client with address", "addr", addr)
 	routedClient, err := abciclient.NewRoutedClientWithAddr(logger, addr, true)
 	assert.NoError(t, err)
 	err = routedClient.Start(ctx)
-	assert.NoError(t, err)
-
-	// routing := abciclient.Routing{
-	// 	abciclient.RequestType("CheckTx"):         []abciclient.Client{queryApp},
-	// 	abciclient.RequestType("FinalizeBlock"):   []abciclient.Client{queryApp, consensusApp},
-	// 	abciclient.RequestType("PrepareProposal"): []abciclient.Client{consensusApp},
-	// }
-
-	// routedClient, err := abciclient.NewRoutedClient(logger, defaultApp, routing)
 	assert.NoError(t, err)
 
 	// Test routing

@@ -35,11 +35,15 @@ type Routing map[RequestType][]Client
 //
 // Example:
 //
-//	"Info:socket:unix:///tmp/socket.1,Info:socket:unix:///tmp/socket.2,CheckTx:socket:unix:///tmp/socket.1,Query:socket:unix:///tmp/socket.2,*:socket:unix:///tmp/socket.3"
+// ```
+//
+//	"Info:socket:unix:///tmp/socket.1,Info:socket:unix:///tmp/socket.2,CheckTx:socket:unix:///tmp/socket.1,*:socket:unix:///tmp/socket.3"
+//
+// ```
 //
 // # Arguments
 //   - `logger` - The logger to use for the client.
-//   - `addr` - comma-separated list of routing rules, consisting of request type and client address separated with colon.
+//   - `addr` - comma-separated list of routing rules, consisting of request type, transport name and client address separated with colon.
 //     Special request type "*" is used for default client.
 func NewRoutedClientWithAddr(logger log.Logger, addr string, mustConnect bool) (Client, error) {
 	// Split the routing rules
@@ -136,29 +140,7 @@ func (cli *routedClient) OnStart(ctx context.Context) error {
 }
 
 func (cli *routedClient) OnStop() {
-	// FIXME: Stop all underlying clients
 }
-
-// // getClient returns the client for the caller function
-// func (cli *routedClient) getClient() (Client, error) {
-// 	// Get the caller function name; it will be our request type
-// 	pc, _, _, _ := runtime.Caller(1)
-// 	funcObj := runtime.FuncForPC(pc)
-// 	funcName := funcObj.Name()
-// 	// remove package name
-// 	funcName = funcName[strings.LastIndex(funcName, ".")+1:]
-
-// 	client, ok := cli.routing[RequestType(funcName)]
-// 	if !ok {
-// 		if cli.defaultClient != nil {
-// 			return *cli.defaultClient, nil
-// 		}
-
-// 		return nil, fmt.Errorf("no client for ABCI method %s", funcName)
-// 	}
-
-// 	return client, nil
-// }
 
 // delegate calls the given function on the appropriate client with the given
 // arguments.
