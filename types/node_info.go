@@ -97,6 +97,10 @@ func (info NodeInfo) Validate() error {
 	}
 
 	// Validate Channels - ensure max and check for duplicates.
+	if info.Channels == nil {
+		return fmt.Errorf("info.Channels is nil")
+	}
+
 	if info.Channels.Len() > maxNumChannels {
 		return fmt.Errorf("info.Channels is too long (%v). Max is %v", info.Channels.Len(), maxNumChannels)
 	}
@@ -235,6 +239,7 @@ func NodeInfoFromProto(pb *tmp2p.NodeInfo) (NodeInfo, error) {
 		ListenAddr: pb.ListenAddr,
 		Network:    pb.Network,
 		Version:    pb.Version,
+		Channels:   tmsync.NewConcurrentSlice[uint16](),
 		Moniker:    pb.Moniker,
 		Other: NodeInfoOther{
 			TxIndex:    pb.Other.TxIndex,

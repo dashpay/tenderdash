@@ -22,12 +22,12 @@ func TestConcurrentSlice(t *testing.T) {
 	}
 
 	// Test Set
-	s.Set(3, 5)
+	s.Set(1, 5)
 
 	// Test ToSlice
 	slice := s.ToSlice()
-	if len(slice) != 4 || slice[3] != 4 {
-		t.Errorf("Expected ToSlice to return [1 2 3 4], got %v", slice)
+	if len(slice) != 4 || slice[3] != 4 || slice[1] != 5 {
+		t.Errorf("Expected ToSlice to return [1 5 3 4], got %v", slice)
 	}
 
 	// Test Reset

@@ -291,7 +291,10 @@ func TestConnection_Handshake(t *testing.T) {
 			},
 		}
 		bKey := ed25519.GenPrivKey()
-		bInfo := types.NodeInfo{NodeID: types.NodeIDFromPubKey(bKey.PubKey())}
+		bInfo := types.NodeInfo{
+			NodeID:   types.NodeIDFromPubKey(bKey.PubKey()),
+			Channels: tmsync.NewConcurrentSlice[uint16](),
+		}
 
 		errCh := make(chan error, 1)
 		go func() {
@@ -641,13 +644,13 @@ func dialAcceptHandshake(ctx context.Context, t *testing.T, a, b p2p.Transport) 
 	errCh := make(chan error, 1)
 	go func() {
 		privKey := ed25519.GenPrivKey()
-		nodeInfo := types.NodeInfo{NodeID: types.NodeIDFromPubKey(privKey.PubKey())}
+		nodeInfo := types.NodeInfo{NodeID: types.NodeIDFromPubKey(privKey.PubKey()), Channels: tmsync.NewConcurrentSlice[uint16]()}
 		_, _, err := ba.Handshake(ctx, 0, nodeInfo, privKey)
 		errCh <- err
 	}()
 
 	privKey := ed25519.GenPrivKey()
-	nodeInfo := types.NodeInfo{NodeID: types.NodeIDFromPubKey(privKey.PubKey())}
+	nodeInfo := types.NodeInfo{NodeID: types.NodeIDFromPubKey(privKey.PubKey()), Channels: tmsync.NewConcurrentSlice[uint16]()}
 	_, _, err := ab.Handshake(ctx, 0, nodeInfo, privKey)
 	require.NoError(t, err)
 
