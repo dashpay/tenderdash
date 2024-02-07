@@ -35,7 +35,7 @@ type Routing map[RequestType][]Client
 //
 // Example:
 //
-//	"Info:socket:///tmp/socket.1,"Info:socket:///tmp/socket.2,CheckTx:socket:///tmp/socket.1,Query:socket:///tmp/socket.2,*:socket:///tmp/socket.3"
+//	"Info:socket:unix:///tmp/socket.1,Info:socket:unix:///tmp/socket.2,CheckTx:socket:unix:///tmp/socket.1,Query:socket:unix:///tmp/socket.2,*:socket:unix:///tmp/socket.3"
 //
 // # Arguments
 //   - `logger` - The logger to use for the client.
@@ -123,6 +123,12 @@ func (cli *routedClient) OnStart(ctx context.Context) error {
 					errs = multierror.Append(errs, err)
 				}
 			}
+		}
+	}
+
+	if !cli.defaultClient.IsRunning() {
+		if err := cli.defaultClient.Start(ctx); err != nil {
+			errs = multierror.Append(errs, err)
 		}
 	}
 
