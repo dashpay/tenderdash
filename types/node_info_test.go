@@ -41,7 +41,7 @@ func TestNodeInfoValidate(t *testing.T) {
 		{
 			"Too Many Channels",
 			func(ni *NodeInfo) {
-				ni.Channels = channels.Copy()
+				ni.Channels = ref(channels.Copy())
 				ni.Channels.Append(maxNumChannels)
 			},
 			true,
@@ -99,6 +99,10 @@ func TestNodeInfoValidate(t *testing.T) {
 
 	}
 
+}
+
+func ref[T any](t T) *T {
+	return &t
 }
 
 func testNodeID() NodeID {

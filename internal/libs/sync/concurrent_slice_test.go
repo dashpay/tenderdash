@@ -71,17 +71,26 @@ func TestConcurrentSlice_Concurrency(t *testing.T) {
 }
 
 func TestConcurrentSlice_MarshalUnmarshalJSON(t *testing.T) {
-	// Create a concurrentSlice
+	type node struct {
+		Channels *ConcurrentSlice[uint16]
+	}
 	cs := NewConcurrentSlice[uint16](1, 2, 3)
 
+	node1 := node{
+		Channels: cs,
+	}
+
 	// Marshal to JSON
-	data, err := json.Marshal(cs)
+	data, err := json.Marshal(node1)
 	assert.NoError(t, err, "Failed to marshal concurrentSlice")
 
 	// Unmarshal from JSON
-	var cs2 concurrentSlice[uint16]
-	err = json.Unmarshal(data, &cs2)
+	node2 := node{
+		// Channels: NewConcurrentSlice[uint16](),
+	}
+
+	err = json.Unmarshal(data, &node2)
 	assert.NoError(t, err, "Failed to unmarshal concurrentSlice")
 
-	assert.EqualValues(t, cs.ToSlice(), cs2.ToSlice())
+	assert.EqualValues(t, node1.Channels.ToSlice(), node2.Channels.ToSlice())
 }

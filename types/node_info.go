@@ -49,7 +49,7 @@ type NodeInfo struct {
 	Network string `json:"network"` // network/chain ID
 	Version string `json:"version"` // major.minor.revision
 	// Channels supported by this node. Use GetChannels() as a getter.
-	Channels tmsync.Slice[uint16] `json:"channels"` // channels this node knows about
+	Channels *tmsync.ConcurrentSlice[uint16] `json:"channels"` // channels this node knows about
 
 	// ASCIIText fields
 	Moniker string        `json:"moniker"` // arbitrary moniker
@@ -185,13 +185,14 @@ func (info *NodeInfo) AddChannel(channel uint16) {
 }
 
 func (info NodeInfo) Copy() NodeInfo {
+	chans := info.Channels.Copy()
 	return NodeInfo{
 		ProtocolVersion: info.ProtocolVersion,
 		NodeID:          info.NodeID,
 		ListenAddr:      info.ListenAddr,
 		Network:         info.Network,
 		Version:         info.Version,
-		Channels:        info.Channels.Copy(),
+		Channels:        &chans,
 		Moniker:         info.Moniker,
 		Other:           info.Other,
 		ProTxHash:       info.ProTxHash.Copy(),
