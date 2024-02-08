@@ -1,6 +1,7 @@
 package sync
 
 import (
+	"encoding/json"
 	"sync"
 	"testing"
 
@@ -67,4 +68,20 @@ func TestConcurrentSlice_Concurrency(t *testing.T) {
 	for i := 0; i < 100; i++ {
 		assert.Contains(t, s.ToSlice(), i)
 	}
+}
+
+func TestConcurrentSlice_MarshalUnmarshalJSON(t *testing.T) {
+	// Create a concurrentSlice
+	cs := NewConcurrentSlice[uint16](1, 2, 3)
+
+	// Marshal to JSON
+	data, err := json.Marshal(cs)
+	assert.NoError(t, err, "Failed to marshal concurrentSlice")
+
+	// Unmarshal from JSON
+	var cs2 concurrentSlice[uint16]
+	err = json.Unmarshal(data, &cs2)
+	assert.NoError(t, err, "Failed to unmarshal concurrentSlice")
+
+	assert.EqualValues(t, cs.ToSlice(), cs2.ToSlice())
 }

@@ -3,8 +3,8 @@ package sync
 import "sync"
 
 type concurrentSlice[T any] struct {
-	mtx   sync.RWMutex
-	slice []T
+	mtx   sync.RWMutex `json:"-"`
+	Items []T          `json:"items"`
 }
 
 // Slice is a thread-safe slice interface
@@ -23,7 +23,7 @@ type Slice[T any] interface {
 // It can be referenced by value, and will behave similarly to a regular slice (which is a reference type).
 func NewConcurrentSlice[T any](initial ...T) Slice[T] {
 	return &concurrentSlice[T]{
-		slice: initial,
+		Items: initial,
 	}
 }
 
@@ -32,7 +32,7 @@ func (s *concurrentSlice[T]) Append(val ...T) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	s.slice = append(s.slice, val...)
+	s.Items = append(s.Items, val...)
 }
 
 // Reset removes all elements from the slice
@@ -40,7 +40,7 @@ func (s *concurrentSlice[T]) Reset() {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	s.slice = []T{}
+	s.Items = []T{}
 }
 
 // Get returns the value at the given index
@@ -48,21 +48,21 @@ func (s *concurrentSlice[T]) Get(index int) T {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
-	return s.slice[index]
+	return s.Items[index]
 }
 
 func (s *concurrentSlice[T]) Set(index int, val T) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	if index > len(s.slice) {
+	if index > len(s.Items) {
 		panic("index out of range")
-	} else if index == len(s.slice) {
-		s.slice = append(s.slice, val)
+	} else if index == len(s.Items) {
+		s.Items = append(s.Items, val)
 		return
 	}
 
-	s.slice[index] = val
+	s.Items[index] = val
 }
 
 // ToSlice returns a copy of the underlying slice
@@ -70,8 +70,8 @@ func (s *concurrentSlice[T]) ToSlice() []T {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
-	slice := make([]T, len(s.slice))
-	copy(slice, s.slice)
+	slice := make([]T, len(s.Items))
+	copy(slice, s.Items)
 	return slice
 }
 
@@ -80,7 +80,7 @@ func (s *concurrentSlice[T]) Len() int {
 	s.mtx.RLock()
 	defer s.mtx.RUnlock()
 
-	return len(s.slice)
+	return len(s.Items)
 }
 
 // Copy returns a new deep copy of concurrentSlice with the same elements
@@ -89,6 +89,6 @@ func (s *concurrentSlice[T]) Copy() Slice[T] {
 	defer s.mtx.RUnlock()
 
 	return &concurrentSlice[T]{
-		slice: s.ToSlice(),
+		Items: s.ToSlice(),
 	}
 }
