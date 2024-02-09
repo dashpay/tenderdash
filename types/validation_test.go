@@ -68,8 +68,7 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 		expErr      bool
 	}{
 		{"good", chainID, vote.BlockID, vote.Height, commit, false},
-
-		{"threshold block signature is invalid", "EpsilonEridani", vote.BlockID, vote.Height, commit, true},
+		{"invalid block signature", "EpsilonEridani", vote.BlockID, vote.Height, commit, true},
 		{"wrong block ID", chainID, makeBlockIDRandom(), vote.Height, commit, true},
 		{
 			description: "invalid commit -- wrong block ID",
@@ -84,8 +83,8 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 			expErr: true,
 		},
 		{"wrong height", chainID, vote.BlockID, vote.Height - 1, commit, true},
-
-		{"threshold block signature is invalid", chainID, vote.BlockID, vote.Height,
+		// block sign malformed
+		{"invalid block signature", chainID, vote.BlockID, vote.Height,
 			NewCommit(vote.Height, vote.Round, vote.BlockID, vote.VoteExtensions,
 				&CommitSigns{
 					QuorumHash: quorumHash,
@@ -93,8 +92,8 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 						BlockSign:               []byte("invalid block signature"),
 						VoteExtensionSignatures: sig.VoteExtensionSignatures,
 					}}), true},
-
-		{"threshold block signature is invalid", chainID, vote.BlockID, vote.Height,
+		// quorum signs are replaced with vote2 non-threshold signature
+		{"invalid block signature", chainID, vote.BlockID, vote.Height,
 			NewCommit(vote.Height, vote.Round, vote.BlockID,
 				vote.VoteExtensions,
 				&CommitSigns{
@@ -143,7 +142,7 @@ func TestValidatorSet_VerifyCommit_CheckThresholdSignatures(t *testing.T) {
 	commit.ThresholdBlockSignature = v.BlockSignature
 	err = valSet.VerifyCommit(chainID, blockID, h, commit)
 	if assert.Error(t, err) {
-		assert.Contains(t, err.Error(), "threshold block signature is invalid")
+		assert.Contains(t, err.Error(), "invalid block signature")
 	}
 
 	goodVote := voteSet.GetByIndex(0)

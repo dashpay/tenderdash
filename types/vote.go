@@ -172,11 +172,9 @@ func (vote *Vote) String() string {
 	)
 }
 
-// VerifyVoteAndExtension performs the same verification as Verify, but
-// additionally checks whether the vote extension signature corresponds to the
-// given chain ID and public key. We only verify vote extension signatures for
-// precommits.
-func (vote *Vote) VerifyWithExtension(
+// Verify performs vote signature verification. It checks whether the block signature
+// and vote extensions signatures correspond to the given chain ID and public key.
+func (vote *Vote) Verify(
 	chainID string,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
@@ -191,28 +189,8 @@ func (vote *Vote) VerifyWithExtension(
 	if err != nil {
 		return err
 	}
-	return vote.verifySign(pubKey, quorumSignData, WithVerifyExtensions(vote.Type == tmproto.PrecommitType))
-}
 
-func (vote *Vote) Verify(
-	chainID string,
-	quorumType btcjson.LLMQType,
-	quorumHash []byte,
-	pubKey crypto.PubKey,
-	proTxHash crypto.ProTxHash,
-	_stateID tmproto.StateID,
-) error {
-	err := vote.verifyBasic(proTxHash, pubKey)
-	if err != nil {
-		return err
-	}
-	quorumSignData, err := MakeQuorumSigns(chainID, quorumType, quorumHash, vote.ToProto())
-	if err != nil {
-		return err
-	}
-
-	// TODO check why we don't verify extensions here
-	return vote.verifySign(pubKey, quorumSignData, WithVerifyExtensions(false))
+	return quorumSignData.Verify(pubKey, vote.makeQuorumSigns())
 }
 
 func (vote *Vote) verifyBasic(proTxHash ProTxHash, pubKey crypto.PubKey) error {
@@ -221,6 +199,10 @@ func (vote *Vote) verifyBasic(proTxHash ProTxHash, pubKey crypto.PubKey) error {
 	}
 	if len(pubKey.Bytes()) != bls12381.PubKeySize {
 		return ErrVoteInvalidValidatorPubKeySize
+	}
+
+	if vote.Type != tmproto.PrecommitType && vote.VoteExtensions.Len() > 0 {
+		return ErrVoteInvalidExtension
 	}
 
 	return nil
@@ -236,23 +218,8 @@ func (vote *Vote) VerifyExtensionSign(chainID string, pubKey crypto.PubKey, quor
 	if err != nil {
 		return err
 	}
-	verifier := NewQuorumSignsVerifier(
-		quorumSignData,
-		WithVerifyBlock(false),
-	)
-	return verifier.Verify(pubKey, vote.makeQuorumSigns())
-}
 
-func (vote *Vote) verifySign(
-	pubKey crypto.PubKey,
-	quorumSignData QuorumSignData,
-	opts ...func(verifier *QuorumSingsVerifier),
-) error {
-	verifier := NewQuorumSignsVerifier(
-		quorumSignData,
-		opts...,
-	)
-	return verifier.Verify(pubKey, vote.makeQuorumSigns())
+	return quorumSignData.VerifyVoteExtensions(pubKey, vote.makeQuorumSigns())
 }
 
 func (vote *Vote) makeQuorumSigns() QuorumSigns {

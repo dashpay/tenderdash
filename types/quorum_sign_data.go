@@ -6,10 +6,12 @@ import (
 
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 	"github.com/dashpay/dashd-go/btcjson"
+	"github.com/hashicorp/go-multierror"
+	"github.com/rs/zerolog"
+
 	"github.com/dashpay/tenderdash/crypto"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/proto/tendermint/types"
-	"github.com/rs/zerolog"
 )
 
 // QuorumSignData holds data which is necessary for signing and verification block, state, and each vote-extension in a list
@@ -40,9 +42,52 @@ func (q QuorumSignData) SignWithPrivkey(key crypto.PrivKey) (QuorumSigns, error)
 	return signs, nil
 }
 
-// Verify verifies a quorum signatures: block, state and vote-extensions
-func (q QuorumSignData) Verify(pubKey crypto.PubKey, signs QuorumSigns) error {
-	return NewQuorumSignsVerifier(q).Verify(pubKey, signs)
+// Verify verifies a block and threshold vote extensions quorum signatures.
+// It needs quorum to be reached so that we have enough signatures to verify.
+func (q QuorumSignData) Verify(pubKey crypto.PubKey, signatures QuorumSigns) error {
+	var err error
+	if err1 := q.VerifyBlock(pubKey, signatures); err1 != nil {
+		err = multierror.Append(err, err1)
+	}
+
+	if err1 := q.VerifyVoteExtensions(pubKey, signatures); err1 != nil {
+		err = multierror.Append(err, err1)
+	}
+
+	return err
+}
+
+// VerifyBlock verifies block signature
+func (q QuorumSignData) VerifyBlock(pubKey crypto.PubKey, signatures QuorumSigns) error {
+	if !q.Block.VerifySignature(pubKey, signatures.BlockSign) {
+		return ErrVoteInvalidBlockSignature
+	}
+
+	return nil
+}
+
+// VerifyVoteExtensions verifies threshold vote extensions signatures
+func (q QuorumSignData) VerifyVoteExtensions(pubKey crypto.PubKey, signatures QuorumSigns) error {
+	if len(q.VoteExtensionSignItems) != len(signatures.VoteExtensionSignatures) {
+		return fmt.Errorf("count of vote extension signatures (%d) doesn't match recoverable vote extensions (%d)",
+			len(signatures.VoteExtensionSignatures), len(q.VoteExtensionSignItems),
+		)
+	}
+
+	var err error
+	for i, signItem := range q.VoteExtensionSignItems {
+		if !signItem.VerifySignature(pubKey, signatures.VoteExtensionSignatures[i]) {
+			err = multierror.Append(err, fmt.Errorf("vote-extension %d signature is invalid: pubkey %X, raw msg: %X, sigHash: %X, signature %X",
+				i,
+				pubKey.Bytes(),
+				signItem.Msg,
+				signItem.MsgHash,
+				signatures.VoteExtensionSignatures[i],
+			))
+		}
+	}
+
+	return err
 }
 
 // MakeQuorumSignsWithVoteSet creates and returns QuorumSignData struct built with a vote-set and an added vote
@@ -208,4 +253,9 @@ func (i *SignItem) UpdateSignHash(reverse bool) {
 	copy(signHash, blsSignHash[:])
 
 	i.SignHash = signHash
+}
+
+// VerifySignature verifies signature for a sign item
+func (i *SignItem) VerifySignature(pubkey crypto.PubKey, sig []byte) bool {
+	return pubkey.VerifySignatureDigest(i.SignHash, sig)
 }

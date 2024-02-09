@@ -216,7 +216,7 @@ func (voteSet *VoteSet) addVote(vote *Vote) (added bool, err error) {
 	}
 
 	// Check signature.
-	err = vote.VerifyWithExtension(
+	err = vote.Verify(
 		voteSet.chainID,
 		voteSet.valSet.QuorumType,
 		voteSet.valSet.QuorumHash,
@@ -341,6 +341,8 @@ func (voteSet *VoteSet) addVerifiedVote(
 	return true, conflicting
 }
 
+// recoverThresholdSignsAndVerify recovers threshold signatures and verifies them.
+// precondition: quorum reached
 func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes, quorumDataSigns QuorumSignData) error {
 	if len(blockVotes.votes) == 0 {
 		return nil
@@ -359,11 +361,10 @@ func (voteSet *VoteSet) recoverThresholdSignsAndVerify(blockVotes *blockVotes, q
 	if err != nil {
 		return err
 	}
-	verifier := NewQuorumSignsVerifier(
-		quorumDataSigns,
-		WithVerifyReachedQuorum(voteSet.IsQuorumReached()),
-	)
-	return verifier.Verify(voteSet.valSet.ThresholdPublicKey, voteSet.makeQuorumSigns())
+
+	sigs := voteSet.makeQuorumSigns()
+	// we assume quorum is reached
+	return quorumDataSigns.Verify(voteSet.valSet.ThresholdPublicKey, sigs)
 }
 
 func (voteSet *VoteSet) recoverThresholdSigns(blockVotes *blockVotes) error {
