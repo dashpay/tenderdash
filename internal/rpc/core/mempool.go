@@ -22,11 +22,17 @@ import (
 // More:
 // https://docs.tendermint.com/master/rpc/#/Tx/broadcast_tx_async
 // Deprecated and should be removed in 0.37
-func (env *Environment) BroadcastTxAsync(ctx context.Context, req *coretypes.RequestBroadcastTx) (*coretypes.ResultBroadcastTx, error) {
-	ctx, cancel := context.WithTimeout(ctx, mempool.CheckTxTimeout)
-	defer cancel()
+func (env *Environment) BroadcastTxAsync(_ctx context.Context, req *coretypes.RequestBroadcastTx) (*coretypes.ResultBroadcastTx, error) {
+	go func() {
+		// We need to create a new context here, because the original context
+		// may be canceled after parent function returns.
+		ctx, cancel := context.WithTimeout(context.Background(), mempool.CheckTxTimeout)
+		defer cancel()
 
-	go func() { _ = env.Mempool.CheckTx(ctx, req.Tx, nil, mempool.TxInfo{}) }()
+		if res, err := env.BroadcastTx(ctx, req); err != nil || res.Code != abci.CodeTypeOK {
+			env.Logger.Error("error on broadcastTxAsync", "err", err, "result", res, "tx", req.Tx.Hash())
+		}
+	}()
 
 	return &coretypes.ResultBroadcastTx{Hash: req.Tx.Hash()}, nil
 }
