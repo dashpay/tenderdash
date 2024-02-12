@@ -549,7 +549,7 @@ func (txmp *TxMempool) addNewTransaction(wtx *WrappedTx, checkTxRes *abci.Respon
 
 		haveSpace := len(victims) != 0 && victimBytes <= wtx.Size()
 		txmp.logger.Debug("addNewTransaction haveSpace", "have_space", haveSpace, "victims", victims)
-		if haveSpace {
+		if !haveSpace {
 			// Sort lowest priority items first so they will be evicted first.  Break
 			// ties in favor of newer items (to maintain FIFO semantics in a group).
 			sort.Slice(victims, func(i, j int) bool {
