@@ -3,6 +3,7 @@ package abciclient_test
 import (
 	"context"
 	"fmt"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -26,14 +27,25 @@ import (
 func TestRouting(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+	// infoMtx blocks Info until we finish the test
+	var infoMtx sync.Mutex
+	infoMtx.Lock()
+	infoExecuted := false
 
 	logger := log.NewTestingLogger(t)
 
 	defaultApp, defaultSocket := startApp(ctx, t, logger, "default")
 	defer defaultApp.AssertExpectations(t)
+
 	defaultApp.On("Info", mock.Anything, mock.Anything).Return(&types.ResponseInfo{
 		Data: "info",
-	}, nil).Once()
+	}, nil).Run(func(args mock.Arguments) {
+		t.Log("Info: before lock")
+		infoMtx.Lock()
+		defer infoMtx.Unlock()
+		t.Log("Info: after lock")
+		infoExecuted = true
+	}).Once()
 
 	queryApp, querySocket := startApp(ctx, t, logger, "query")
 	defer queryApp.AssertExpectations(t)
@@ -63,10 +75,17 @@ func TestRouting(t *testing.T) {
 	assert.NoError(t, err)
 
 	// Test routing
+	wg := sync.WaitGroup{}
 
-	// Info
-	_, err = routedClient.Info(ctx, &types.RequestInfo{})
-	require.NoError(t, err)
+	// Info is called from separate thread, as we want it to block
+	// to see if we can execute other calls (on other clients) without blocking
+	wg.Add(1)
+	go func() {
+		// info is locked, so it should finish last
+		_, err := routedClient.Info(ctx, &types.RequestInfo{})
+		require.NoError(t, err)
+		wg.Done()
+	}()
 
 	// CheckTx
 	_, err = routedClient.CheckTx(ctx, &types.RequestCheckTx{})
@@ -79,6 +98,12 @@ func TestRouting(t *testing.T) {
 	// PrepareProposal
 	_, err = routedClient.PrepareProposal(ctx, &types.RequestPrepareProposal{})
 	assert.NoError(t, err)
+
+	// unlock info
+	assert.False(t, infoExecuted)
+	infoMtx.Unlock()
+	wg.Wait()
+	assert.True(t, infoExecuted)
 }
 
 func startApp(ctx context.Context, t *testing.T, logger log.Logger, id string) (*mocks.Application, string) {
