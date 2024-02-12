@@ -71,7 +71,8 @@ func NewRoutedClientWithAddr(logger log.Logger, addr string, mustConnect bool) (
 		// Create a new client if it doesn't exist
 		clientName := fmt.Sprintf("%s:%s", transport, address)
 		if _, ok := clients[clientName]; !ok {
-			c, err := NewClient(logger, address, transport, mustConnect)
+			// TODO: Fix metrics
+			c, err := NewClient(logger, address, transport, mustConnect, NopMetrics())
 			if err != nil {
 				return nil, err
 			}
