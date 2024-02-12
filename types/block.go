@@ -790,10 +790,11 @@ func (commit *Commit) ToCommitInfo() types.CommitInfo {
 // GetCanonicalVote returns the message that is being voted on in the form of a vote without signatures.
 func (commit *Commit) GetCanonicalVote() *Vote {
 	return &Vote{
-		Type:    tmproto.PrecommitType,
-		Height:  commit.Height,
-		Round:   commit.Round,
-		BlockID: commit.BlockID,
+		Type:           tmproto.PrecommitType,
+		Height:         commit.Height,
+		Round:          commit.Round,
+		BlockID:        commit.BlockID,
+		VoteExtensions: VoteExtensionsFromProto(commit.ThresholdVoteExtensions...),
 	}
 }
 

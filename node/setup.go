@@ -20,6 +20,8 @@ import (
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/evidence"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
+
 	"github.com/dashpay/tenderdash/internal/mempool"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/p2p/client"
@@ -363,20 +365,20 @@ func makeNodeInfo(
 		NodeID:  nodeKey.ID,
 		Network: genDoc.ChainID,
 		Version: version.TMCoreSemVer,
-		Channels: []byte{
-			byte(p2p.BlockSyncChannel),
-			byte(p2p.ConsensusStateChannel),
-			byte(p2p.ConsensusDataChannel),
-			byte(p2p.ConsensusVoteChannel),
-			byte(p2p.VoteSetBitsChannel),
-			byte(p2p.MempoolChannel),
-			byte(evidence.EvidenceChannel),
-			byte(statesync.SnapshotChannel),
-			byte(statesync.ChunkChannel),
-			byte(statesync.LightBlockChannel),
-			byte(statesync.ParamsChannel),
-			byte(pex.PexChannel),
-		},
+		Channels: tmsync.NewConcurrentSlice[uint16](
+			uint16(p2p.BlockSyncChannel),
+			uint16(p2p.ConsensusStateChannel),
+			uint16(p2p.ConsensusDataChannel),
+			uint16(p2p.ConsensusVoteChannel),
+			uint16(p2p.VoteSetBitsChannel),
+			uint16(p2p.MempoolChannel),
+			uint16(evidence.EvidenceChannel),
+			uint16(statesync.SnapshotChannel),
+			uint16(statesync.ChunkChannel),
+			uint16(statesync.LightBlockChannel),
+			uint16(statesync.ParamsChannel),
+			uint16(pex.PexChannel),
+		),
 		Moniker: cfg.Moniker,
 		Other: types.NodeInfoOther{
 			TxIndex:    txIndexerStatus,
@@ -405,13 +407,11 @@ func makeSeedNodeInfo(
 			Block: state.Version.Consensus.Block,
 			App:   state.Version.Consensus.App,
 		},
-		NodeID:  nodeKey.ID,
-		Network: genDoc.ChainID,
-		Version: version.TMCoreSemVer,
-		Channels: []byte{
-			pex.PexChannel,
-		},
-		Moniker: cfg.Moniker,
+		NodeID:   nodeKey.ID,
+		Network:  genDoc.ChainID,
+		Version:  version.TMCoreSemVer,
+		Channels: tmsync.NewConcurrentSlice[uint16](pex.PexChannel),
+		Moniker:  cfg.Moniker,
 		Other: types.NodeInfoOther{
 			TxIndex:    "off",
 			RPCAddress: cfg.RPC.ListenAddress,

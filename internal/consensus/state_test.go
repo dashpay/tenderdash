@@ -3332,12 +3332,7 @@ func mockProposerApplicationCalls(t *testing.T, m *abcimocks.Application, round 
 
 	if final {
 		m.On("ExtendVote", mock.Anything, roundMatcher).
-			Return(&abci.ResponseExtendVote{
-				VoteExtensions: []*abci.ExtendVoteExtension{{
-					Type:      tmproto.VoteExtensionType_THRESHOLD_RECOVER,
-					Extension: []byte("extension"),
-				}},
-			}, nil).Once()
+			Return(&abci.ResponseExtendVote{}, nil).Once()
 
 		m.On("VerifyVoteExtension", mock.Anything, roundMatcher).
 			Return(&abci.ResponseVerifyVoteExtension{
