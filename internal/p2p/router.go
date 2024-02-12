@@ -773,7 +773,8 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 // passes them on to the appropriate channel.
 func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Connection) error {
 	// default timeout; by default, we set it to ~ 10 years so that it will practically never fire
-	timeout := time.NewTimer(24 * 30 * 12 * 10 * time.Hour)
+	const DefaultTimeout = 24 * 30 * 12 * 10 * time.Hour
+	timeout := time.NewTimer(DefaultTimeout)
 	defer timeout.Stop()
 
 	for {
@@ -808,8 +809,13 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		envelope.From = peerID
 		envelope.ChannelID = chID
 
+		if !timeout.Stop() {
+			<-timeout.C
+		}
 		if chDesc.EnqueueTimeout > 0 {
 			timeout.Reset(chDesc.EnqueueTimeout)
+		} else {
+			timeout.Reset(DefaultTimeout)
 		}
 
 		select {
