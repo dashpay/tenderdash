@@ -245,7 +245,11 @@ func (txmp *TxMempool) CheckTx(
 func (txmp *TxMempool) RemoveTxByKey(txKey types.TxKey) error {
 	txmp.mtx.Lock()
 	defer txmp.mtx.Unlock()
-	return txmp.removeTxByKey(txKey)
+	if err := txmp.removeTxByKey(txKey); err != nil {
+		return err
+	}
+	txmp.metrics.Size.Add(-1)
+	return nil
 }
 
 // removeTxByKey removes the specified transaction key from the mempool.
