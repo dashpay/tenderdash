@@ -458,10 +458,13 @@ func (c *mConnConnection) SendMessage(ctx context.Context, chID ChannelID, msg [
 func (c *mConnConnection) ReceiveMessage(ctx context.Context) (ChannelID, []byte, error) {
 	select {
 	case err := <-c.errorCh:
+		c.logger.Debug("ReceiveMessage: error occurred", "err", err)
 		return 0, nil, err
 	case <-c.doneCh:
+		c.logger.Debug("ReceiveMessage: connection closed - doneCh")
 		return 0, nil, io.EOF
 	case <-ctx.Done():
+		c.logger.Debug("ReceiveMessage: connection closed - ctx.Done()")
 		return 0, nil, io.EOF
 	case msg := <-c.receiveCh:
 		return msg.channelID, msg.payload, nil
@@ -496,6 +499,7 @@ func (c *mConnConnection) RemoteEndpoint() Endpoint {
 func (c *mConnConnection) Close() error {
 	var err error
 	c.closeOnce.Do(func() {
+		c.logger.Debug("mConnConnection.Close(): closing doneCh")
 		defer close(c.doneCh)
 
 		if c.mconn != nil && c.mconn.IsRunning() {

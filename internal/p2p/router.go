@@ -733,15 +733,21 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	var err error
 	select {
 	case err = <-errCh:
+		r.logger.Debug("routePeer: received error from subroutine 1", "peer", peerID, "err", err)
 	case <-ctx.Done():
+		r.logger.Debug("routePeer: ctx done in subroutine 1", "peer", peerID)
 	}
 
 	_ = conn.Close()
 	sendQueue.close()
 
+	r.logger.Debug("routePeer: closed conn and send queue", "peer", peerID, "err", err)
+
 	select {
 	case <-ctx.Done():
+		r.logger.Debug("routePeer: ctx done in subroutine 2", "peer", peerID)
 	case e := <-errCh:
+		r.logger.Debug("routePeer: received error from subroutine 2", "peer", peerID, "err", e)
 		// The first err was nil, so we update it with the second err, which may
 		// or may not be nil.
 		if err == nil {
@@ -771,15 +777,18 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 	defer timeout.Stop()
 
 	for {
+		r.logger.Debug("receivePeer: before ReceiveMessage", "peer", peerID)
 		chID, bz, err := conn.ReceiveMessage(ctx)
 		if err != nil {
 			return err
 		}
 
+		r.logger.Debug("receivePeer: before RLock", "peer", peerID, "chID", chID)
 		r.channelMtx.RLock()
 		queue, queueOk := r.channelQueues[chID]
 		chDesc, chDescOk := r.chDescs[chID]
 		r.channelMtx.RUnlock()
+		r.logger.Debug("receivePeer: after RUnlock", "peer", peerID, "chID", chID)
 
 		if !queueOk || !chDescOk {
 			r.logger.Debug("dropping message for unknown channel",
