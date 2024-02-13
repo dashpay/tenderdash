@@ -147,11 +147,15 @@ func (m *MConnTransport) Accept(ctx context.Context) (Connection, error) {
 		if err != nil {
 			select {
 			case errCh <- err:
+			case <-m.doneCh:
+				m.logger.Debug("MConnTransport Accept: connection closed - doneCh")
 			case <-ctx.Done():
 			}
 		}
 		select {
 		case conCh <- tcpConn:
+		case <-m.doneCh:
+			m.logger.Debug("MConnTransport Accept: connection closed - doneCh")
 		case <-ctx.Done():
 		}
 	}()
@@ -187,12 +191,10 @@ func (m *MConnTransport) Dial(ctx context.Context, endpoint *Endpoint) (Connecti
 	tcpConn, err := dialer.DialContext(ctx, "tcp", net.JoinHostPort(
 		endpoint.IP.String(), strconv.Itoa(int(endpoint.Port))))
 	if err != nil {
-		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		default:
-			return nil, err
+		if e := ctx.Err(); e != nil {
+			return nil, e
 		}
+		return nil, err
 	}
 
 	return newMConnConnection(m.logger, tcpConn, m.mConnConfig, m.channelDescs), nil
@@ -313,6 +315,7 @@ func (c *mConnConnection) Handshake(
 
 		select {
 		case errCh <- err:
+		case <-c.doneCh:
 		case <-handshakeCtx.Done():
 		}
 
@@ -322,7 +325,8 @@ func (c *mConnConnection) Handshake(
 	case <-handshakeCtx.Done():
 		_ = c.Close()
 		return types.NodeInfo{}, nil, handshakeCtx.Err()
-
+	case <-c.doneCh:
+		return types.NodeInfo{}, nil, io.EOF
 	case err := <-errCh:
 		if err != nil {
 			return types.NodeInfo{}, nil, err
@@ -365,6 +369,7 @@ func (c *mConnConnection) handshake(
 		_, err := protoio.NewDelimitedWriter(secretConn).WriteMsg(nodeInfo.ToProto())
 		select {
 		case errCh <- err:
+		case <-c.doneCh:
 		case <-ctx.Done():
 		}
 
@@ -375,6 +380,7 @@ func (c *mConnConnection) handshake(
 		_, err := protoio.NewDelimitedReader(secretConn, types.MaxNodeInfoSize()).ReadMsg(&pbPeerInfo)
 		select {
 		case errCh <- err:
+		case <-c.doneCh:
 		case <-ctx.Done():
 		}
 	}()
@@ -410,6 +416,7 @@ func (c *mConnConnection) handshake(
 func (c *mConnConnection) onReceive(ctx context.Context, chID ChannelID, payload []byte) {
 	select {
 	case c.receiveCh <- mConnMessage{channelID: chID, payload: payload}:
+	case <-c.doneCh:
 	case <-ctx.Done():
 	}
 }
@@ -426,6 +433,7 @@ func (c *mConnConnection) onError(ctx context.Context, e interface{}) {
 	_ = c.Close()
 	select {
 	case c.errorCh <- err:
+	case <-c.doneCh:
 	case <-ctx.Done():
 	}
 }
@@ -444,6 +452,8 @@ func (c *mConnConnection) SendMessage(ctx context.Context, chID ChannelID, msg [
 	case err := <-c.errorCh:
 		return err
 	case <-ctx.Done():
+		return io.EOF
+	case <-c.doneCh:
 		return io.EOF
 	default:
 		if ok := c.mconn.Send(chID, msg); !ok {

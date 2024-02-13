@@ -699,6 +699,10 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	r.metrics.PeersConnected.Add(1)
 	r.peerManager.Ready(ctx, peerID, channels)
 
+	// we use context to manage the lifecycle of the peer
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	sendQueue := r.getOrMakeQueue(peerID, channels)
 	defer func() {
 		r.peerMtx.Lock()
@@ -706,6 +710,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 		delete(r.peerChannels, peerID)
 		r.peerMtx.Unlock()
 
+		_ = conn.Close()
 		sendQueue.close()
 
 		r.peerManager.Disconnected(ctx, peerID)
@@ -715,12 +720,15 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	r.logger.Info("peer connected", "peer", peerID, "endpoint", conn)
 
 	errCh := make(chan error, 2)
+	wg := sync.WaitGroup{}
+	wg.Add(2)
 
 	go func() {
 		select {
 		case errCh <- r.receivePeer(ctx, peerID, conn):
 		case <-ctx.Done():
 		}
+		wg.Done()
 	}()
 
 	go func() {
@@ -728,36 +736,51 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 		case errCh <- r.sendPeer(ctx, peerID, conn, sendQueue):
 		case <-ctx.Done():
 		}
+		wg.Done()
 	}()
 
-	var err error
+	// wait for error from first goroutine
+
+	var (
+		err    error
+		ctxErr error
+	)
+
 	select {
 	case err = <-errCh:
 		r.logger.Debug("routePeer: received error from subroutine 1", "peer", peerID, "err", err)
 	case <-ctx.Done():
-		r.logger.Debug("routePeer: ctx done in subroutine 1", "peer", peerID)
+		r.logger.Debug("routePeer: ctx done", "peer", peerID)
+		ctxErr = ctx.Err()
 	}
 
+	// goroutine 1 has finished, so we can cancel the context and close everything
+	cancel()
 	_ = conn.Close()
 	sendQueue.close()
 
-	r.logger.Debug("routePeer: closed conn and send queue", "peer", peerID, "err", err)
+	r.logger.Debug("routePeer: closed conn and send queue, waiting for all goroutines to finish", "peer", peerID, "err", err)
+	wg.Wait()
 
-	select {
-	case <-ctx.Done():
-		r.logger.Debug("routePeer: ctx done in subroutine 2", "peer", peerID)
-	case e := <-errCh:
-		r.logger.Debug("routePeer: received error from subroutine 2", "peer", peerID, "err", e)
-		// The first err was nil, so we update it with the second err, which may
-		// or may not be nil.
-		if err == nil {
-			err = e
+	// Drain the error channel; these should typically not be interesting
+FOR:
+	for i := 0; ; i++ {
+		select {
+		case e := <-errCh:
+			r.logger.Debug("routePeer: received error when draining errCh", "peer", peerID, "err", e)
+			// if we received non-context error, we should return it
+			if err == nil && !errors.Is(e, context.Canceled) && !errors.Is(e, context.DeadlineExceeded) {
+				err = e
+			}
+		default:
+			break FOR
 		}
 	}
+	close(errCh)
 
-	// if the context was canceled
-	if e := ctx.Err(); err == nil && e != nil {
-		err = e
+	// if the context was canceled, and no other error received on errCh
+	if err == nil {
+		err = ctxErr
 	}
 
 	switch err {
