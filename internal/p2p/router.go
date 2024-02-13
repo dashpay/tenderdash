@@ -702,6 +702,10 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	r.metrics.PeersConnected.Add(1)
 	r.peerManager.Ready(ctx, peerID, channels)
 
+	// we use context to manage the lifecycle of the peer
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	sendQueue := r.getOrMakeQueue(peerID, channels)
 	defer func() {
 		r.logger.Debug("routePeer cleanup: terminated peer", "peer", peerID)
@@ -711,6 +715,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 		r.peerMtx.Unlock()
 		r.logger.Debug("routePeer cleanup: deleted peer queues", "peer", peerID)
 
+		_ = conn.Close()
 		sendQueue.close()
 		r.logger.Debug("routePeer cleanup: closed send queue", "peer", peerID)
 
@@ -722,12 +727,15 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	r.logger.Info("peer connected", "peer", peerID, "endpoint", conn)
 
 	errCh := make(chan error, 2)
+	wg := sync.WaitGroup{}
+	wg.Add(2)
 
 	go func() {
 		select {
 		case errCh <- r.receivePeer(ctx, peerID, conn):
 		case <-ctx.Done():
 		}
+		wg.Done()
 	}()
 
 	go func() {
@@ -735,30 +743,51 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 		case errCh <- r.sendPeer(ctx, peerID, conn, sendQueue):
 		case <-ctx.Done():
 		}
+		wg.Done()
 	}()
 
-	var err error
+	// wait for error from first goroutine
+
+	var (
+		err    error
+		ctxErr error
+	)
+
 	select {
 	case err = <-errCh:
+		r.logger.Debug("routePeer: received error from subroutine 1", "peer", peerID, "err", err)
 	case <-ctx.Done():
+		r.logger.Debug("routePeer: ctx done", "peer", peerID)
+		ctxErr = ctx.Err()
 	}
 
+	// goroutine 1 has finished, so we can cancel the context and close everything
+	cancel()
 	_ = conn.Close()
 	sendQueue.close()
 
-	select {
-	case <-ctx.Done():
-	case e := <-errCh:
-		// The first err was nil, so we update it with the second err, which may
-		// or may not be nil.
-		if err == nil {
-			err = e
+	r.logger.Debug("routePeer: closed conn and send queue, waiting for all goroutines to finish", "peer", peerID, "err", err)
+	wg.Wait()
+
+	// Drain the error channel; these should typically not be interesting
+FOR:
+	for i := 0; ; i++ {
+		select {
+		case e := <-errCh:
+			r.logger.Debug("routePeer: received error when draining errCh", "peer", peerID, "err", e)
+			// if we received non-context error, we should return it
+			if err == nil && !errors.Is(e, context.Canceled) && !errors.Is(e, context.DeadlineExceeded) {
+				err = e
+			}
+		default:
+			break FOR
 		}
 	}
+	close(errCh)
 
-	// if the context was canceled
-	if e := ctx.Err(); err == nil && e != nil {
-		err = e
+	// if the context was canceled, and no other error received on errCh
+	if err == nil {
+		err = ctxErr
 	}
 
 	switch err {
@@ -778,15 +807,18 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 	defer timeout.Stop()
 
 	for {
+		r.logger.Debug("receivePeer: before ReceiveMessage", "peer", peerID)
 		chID, bz, err := conn.ReceiveMessage(ctx)
 		if err != nil {
 			return err
 		}
 
+		r.logger.Debug("receivePeer: before RLock", "peer", peerID, "chID", chID)
 		r.channelMtx.RLock()
 		queue, queueOk := r.channelQueues[chID]
 		chDesc, chDescOk := r.chDescs[chID]
 		r.channelMtx.RUnlock()
+		r.logger.Debug("receivePeer: after RUnlock", "peer", peerID, "chID", chID)
 
 		if !queueOk || !chDescOk {
 			r.logger.Debug("dropping message for unknown channel",
