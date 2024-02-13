@@ -761,6 +761,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 
 	r.logger.Debug("routePeer: closed conn and send queue, waiting for all goroutines to finish", "peer", peerID, "err", err)
 	wg.Wait()
+	r.logger.Debug("routePeer: all goroutines finished", "peer", peerID, "err", err)
 
 	// Drain the error channel; these should typically not be interesting
 FOR:
@@ -800,18 +801,15 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 	defer timeout.Stop()
 
 	for {
-		r.logger.Debug("receivePeer: before ReceiveMessage", "peer", peerID)
 		chID, bz, err := conn.ReceiveMessage(ctx)
 		if err != nil {
 			return err
 		}
 
-		r.logger.Debug("receivePeer: before RLock", "peer", peerID, "chID", chID)
 		r.channelMtx.RLock()
 		queue, queueOk := r.channelQueues[chID]
 		chDesc, chDescOk := r.chDescs[chID]
 		r.channelMtx.RUnlock()
-		r.logger.Debug("receivePeer: after RUnlock", "peer", peerID, "chID", chID)
 
 		if !queueOk || !chDescOk {
 			r.logger.Debug("dropping message for unknown channel",
@@ -834,9 +832,12 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		envelope.From = peerID
 		envelope.ChannelID = chID
 
-		if !timeout.Stop() {
-			<-timeout.C
+		timeout.Stop()
+		select {
+		case <-timeout.C:
+		default:
 		}
+
 		if chDesc.EnqueueTimeout > 0 {
 			timeout.Reset(chDesc.EnqueueTimeout)
 		} else {
@@ -866,6 +867,7 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 			)
 
 		case <-ctx.Done():
+			r.logger.Debug("receivePeer: ctx is done", "peer", peerID, "channel", chID)
 			return nil
 		}
 	}
