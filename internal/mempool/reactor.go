@@ -205,6 +205,9 @@ func (r *Reactor) broadcastTxRoutine(ctx context.Context, peerID types.NodeID) {
 				r.logger.Error("failed to gossip transaction", "peerID", peerID, "error", err)
 				return
 			}
+			// This is optimistic approach, we assume that the transaction was successfully
+			// gossiped to the peer.
+			memTx.SetPeer(peerMempoolID)
 
 			r.logger.Debug("gossiped tx to peer",
 				"tx", tmstrings.LazySprintf("%X", memTx.tx.Hash()),
