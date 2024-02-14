@@ -394,6 +394,7 @@ size = {{ .Mempool.Size }}
 max-txs-bytes = {{ .Mempool.MaxTxsBytes }}
 
 # Size of the cache (used to filter transactions we saw earlier) in transactions
+# Should be much bigger than mempool size.
 cache-size = {{ .Mempool.CacheSize }}
 
 # Do not remove invalid transactions from the cache (default: false)
