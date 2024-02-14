@@ -622,6 +622,8 @@ type ChannelDescriptor struct {
 	Name string
 
 	// Timeout for enqueue operations on the incoming queue.
+	// It is applied to all messages received from remote peer
+	// and delievered to this channel.
 	// When timeout expires, messages will be silently dropped.
 	//
 	// If zero, enqueue operations will not time out.
