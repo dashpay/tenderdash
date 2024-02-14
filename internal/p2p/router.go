@@ -703,7 +703,8 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	r.peerManager.Ready(ctx, peerID, channels)
 
 	// we use context to manage the lifecycle of the peer
-	ctx, cancel := context.WithCancel(ctx)
+	// note that original ctx will be used in cleanup
+	ioCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	sendQueue := r.getOrMakeQueue(peerID, channels)
@@ -732,16 +733,16 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 
 	go func() {
 		select {
-		case errCh <- r.receivePeer(ctx, peerID, conn):
-		case <-ctx.Done():
+		case errCh <- r.receivePeer(ioCtx, peerID, conn):
+		case <-ioCtx.Done():
 		}
 		wg.Done()
 	}()
 
 	go func() {
 		select {
-		case errCh <- r.sendPeer(ctx, peerID, conn, sendQueue):
-		case <-ctx.Done():
+		case errCh <- r.sendPeer(ioCtx, peerID, conn, sendQueue):
+		case <-ioCtx.Done():
 		}
 		wg.Done()
 	}()
@@ -756,9 +757,9 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	select {
 	case err = <-errCh:
 		r.logger.Debug("routePeer: received error from subroutine 1", "peer", peerID, "err", err)
-	case <-ctx.Done():
+	case <-ioCtx.Done():
 		r.logger.Debug("routePeer: ctx done", "peer", peerID)
-		ctxErr = ctx.Err()
+		ctxErr = ioCtx.Err()
 	}
 
 	// goroutine 1 has finished, so we can cancel the context and close everything
