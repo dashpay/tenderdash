@@ -29,7 +29,8 @@ type Reactor struct {
 
 	cfg     *config.MempoolConfig
 	mempool *TxMempool
-	ids     *IDs
+	// Peer IDs assigned for peers
+	ids *IDs
 
 	peerEvents p2p.PeerEventSubscriber
 	p2pClient  *client.Client
