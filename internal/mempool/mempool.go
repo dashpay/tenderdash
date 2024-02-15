@@ -57,6 +57,9 @@ type TxMempool struct {
 	txs        *clist.CList // valid transactions (passed CheckTx)
 	txByKey    map[types.TxKey]*clist.CElement
 	txBySender map[string]*clist.CElement // for sender != ""
+
+	// cancellation function for recheck txs tasks
+	recheckCancel context.CancelFunc
 }
 
 // NewTxMempool constructs a new, empty priority mempool at the specified
@@ -730,6 +733,12 @@ func (txmp *TxMempool) handleRecheckResult(tx types.Tx, checkTxRes *abci.Respons
 // Precondition: The mempool is not empty.
 // The caller must hold txmp.mtx exclusively.
 func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
+	// cancel previous recheck if it is still running
+	if txmp.recheckCancel != nil {
+		txmp.recheckCancel()
+	}
+	ctx, txmp.recheckCancel = context.WithCancel(ctx)
+
 	if txmp.Size() == 0 {
 		panic("mempool: cannot run recheck on an empty mempool")
 	}
@@ -753,6 +762,10 @@ func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
 		for _, wtx := range wtxs {
 			wtx := wtx
 			start(func() error {
+				if err := ctx.Err(); err != nil {
+					txmp.logger.Trace("recheck txs task canceled", "err", err, "tx", wtx.hash.String())
+					return err
+				}
 				rsp, err := txmp.proxyAppConn.CheckTx(ctx, &abci.RequestCheckTx{
 					Tx:   wtx.tx,
 					Type: abci.CheckTxType_Recheck,
