@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -118,4 +119,26 @@ func startApp(ctx context.Context, t *testing.T, logger log.Logger, id string) (
 	require.NoError(t, err)
 
 	return app, addr
+}
+
+// / TestRoutedClientGrpc tests the RoutedClient correctly forwards requests to a gRPC server.
+func TestRoutedClientGrpc(t *testing.T) {
+	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	defer cancel()
+
+	logger := log.NewTestingLogger(t)
+
+	app := types.NewBaseApplication()
+	grpcServer := server.NewGRPCServer(logger, "tcp://127.0.0.1:1234", app)
+	require.NoError(t, grpcServer.Start(ctx))
+
+	addr := "*:grpc:tcp://127.0.0.1:1234"
+	logger.Info("configuring routed abci client with address", "addr", addr)
+	client, err := abciclient.NewRoutedClientWithAddr(logger, addr, true)
+	require.NoError(t, err)
+	require.NoError(t, client.Start(ctx))
+
+	_, err = client.Info(ctx, &types.RequestInfo{})
+	assert.NoError(t, err)
+
 }
