@@ -23,6 +23,10 @@ type BlockClient struct {
 func (_m *BlockClient) GetBlock(ctx context.Context, height int64, peerID types.NodeID) (*promise.Promise[*blocksync.BlockResponse], error) {
 	ret := _m.Called(ctx, height, peerID)
 
+	if len(ret) == 0 {
+		panic("no return value specified for GetBlock")
+	}
+
 	var r0 *promise.Promise[*blocksync.BlockResponse]
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, int64, types.NodeID) (*promise.Promise[*blocksync.BlockResponse], error)); ok {
@@ -49,6 +53,10 @@ func (_m *BlockClient) GetBlock(ctx context.Context, height int64, peerID types.
 func (_m *BlockClient) GetSyncStatus(ctx context.Context) error {
 	ret := _m.Called(ctx)
 
+	if len(ret) == 0 {
+		panic("no return value specified for GetSyncStatus")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
 		r0 = rf(ctx)
@@ -62,6 +70,10 @@ func (_m *BlockClient) GetSyncStatus(ctx context.Context) error {
 // Send provides a mock function with given fields: ctx, msg
 func (_m *BlockClient) Send(ctx context.Context, msg interface{}) error {
 	ret := _m.Called(ctx, msg)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Send")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, interface{}) error); ok {

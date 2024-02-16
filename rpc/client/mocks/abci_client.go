@@ -24,6 +24,10 @@ type ABCIClient struct {
 func (_m *ABCIClient) ABCIInfo(_a0 context.Context) (*coretypes.ResultABCIInfo, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for ABCIInfo")
+	}
+
 	var r0 *coretypes.ResultABCIInfo
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultABCIInfo, error)); ok {
@@ -49,6 +53,10 @@ func (_m *ABCIClient) ABCIInfo(_a0 context.Context) (*coretypes.ResultABCIInfo, 
 // ABCIQuery provides a mock function with given fields: ctx, path, data
 func (_m *ABCIClient) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*coretypes.ResultABCIQuery, error) {
 	ret := _m.Called(ctx, path, data)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ABCIQuery")
+	}
 
 	var r0 *coretypes.ResultABCIQuery
 	var r1 error
@@ -76,6 +84,10 @@ func (_m *ABCIClient) ABCIQuery(ctx context.Context, path string, data bytes.Hex
 func (_m *ABCIClient) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	ret := _m.Called(ctx, path, data, opts)
 
+	if len(ret) == 0 {
+		panic("no return value specified for ABCIQueryWithOptions")
+	}
+
 	var r0 *coretypes.ResultABCIQuery
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, bytes.HexBytes, client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error)); ok {
@@ -101,6 +113,10 @@ func (_m *ABCIClient) ABCIQueryWithOptions(ctx context.Context, path string, dat
 // BroadcastTx provides a mock function with given fields: _a0, _a1
 func (_m *ABCIClient) BroadcastTx(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	ret := _m.Called(_a0, _a1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BroadcastTx")
+	}
 
 	var r0 *coretypes.ResultBroadcastTx
 	var r1 error
@@ -128,6 +144,10 @@ func (_m *ABCIClient) BroadcastTx(_a0 context.Context, _a1 types.Tx) (*coretypes
 func (_m *ABCIClient) BroadcastTxAsync(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for BroadcastTxAsync")
+	}
+
 	var r0 *coretypes.ResultBroadcastTx
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) (*coretypes.ResultBroadcastTx, error)); ok {
@@ -154,6 +174,10 @@ func (_m *ABCIClient) BroadcastTxAsync(_a0 context.Context, _a1 types.Tx) (*core
 func (_m *ABCIClient) BroadcastTxCommit(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTxCommit, error) {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for BroadcastTxCommit")
+	}
+
 	var r0 *coretypes.ResultBroadcastTxCommit
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) (*coretypes.ResultBroadcastTxCommit, error)); ok {
@@ -179,6 +203,10 @@ func (_m *ABCIClient) BroadcastTxCommit(_a0 context.Context, _a1 types.Tx) (*cor
 // BroadcastTxSync provides a mock function with given fields: _a0, _a1
 func (_m *ABCIClient) BroadcastTxSync(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	ret := _m.Called(_a0, _a1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BroadcastTxSync")
+	}
 
 	var r0 *coretypes.ResultBroadcastTx
 	var r1 error
