@@ -49,10 +49,12 @@ type TxMempool struct {
 	// Synchronized fields, protected by mtx.
 	mtx                  *sync.RWMutex
 	notifiedTxsAvailable bool
-	txsAvailable         *tmsync.Waker
-	preCheck             PreCheckFunc
-	postCheck            PostCheckFunc
-	height               int64 // the latest height passed to Update
+	// txsAvailable is a waker that triggers when transactions are available in the mempool.
+	// Can be nil if not enabled with EnableTxsAvailable.
+	txsAvailable *tmsync.Waker
+	preCheck     PreCheckFunc
+	postCheck    PostCheckFunc
+	height       int64 // the latest height passed to Update
 
 	txs        *clist.CList // valid transactions (passed CheckTx)
 	txByKey    map[types.TxKey]*clist.CElement
@@ -82,6 +84,7 @@ func NewTxMempool(
 		txByKey:      make(map[types.TxKey]*clist.CElement),
 		txBySender:   make(map[string]*clist.CElement),
 	}
+
 	if cfg.CacheSize > 0 {
 		txmp.cache = NewLRUTxCache(cfg.CacheSize)
 	}
@@ -150,12 +153,26 @@ func (txmp *TxMempool) EnableTxsAvailable() {
 	txmp.mtx.Lock()
 	defer txmp.mtx.Unlock()
 
+	if txmp.txsAvailable != nil {
+		if err := txmp.txsAvailable.Close(); err != nil {
+			txmp.logger.Error("failed to close txsAvailable", "err", err)
+		}
+	}
 	txmp.txsAvailable = tmsync.NewWaker()
 }
 
 // TxsAvailable returns a channel which fires once for every height, and only
 // when transactions are available in the mempool. It is thread-safe.
-func (txmp *TxMempool) TxsAvailable() <-chan struct{} { return txmp.txsAvailable.Sleep() }
+//
+// Note: returned channel might never close if EnableTxsAvailable() was not called before
+// calling this function.
+func (txmp *TxMempool) TxsAvailable() <-chan struct{} {
+	if txmp.txsAvailable == nil {
+		return make(<-chan struct{})
+	}
+
+	return txmp.txsAvailable.Sleep()
+}
 
 // CheckTx adds the given transaction to the mempool if it fits and passes the
 // application's ABCI CheckTx method.
