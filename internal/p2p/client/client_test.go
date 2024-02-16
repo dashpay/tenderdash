@@ -185,7 +185,7 @@ func (suite *ChannelTestSuite) TestConsumeHandle() {
 	suite.p2pChannel.
 		On("Receive", ctx).
 		Once().
-		Return(func(ctx context.Context) *p2p.ChannelIterator {
+		Return(func(ctx context.Context) p2p.ChannelIterator {
 			return p2p.NewChannelIterator(outCh)
 		})
 	consumer := newMockConsumer(suite.T())
@@ -226,7 +226,7 @@ func (suite *ChannelTestSuite) TestConsumeResolve() {
 			suite.p2pChannel.
 				On("Receive", ctx).
 				Once().
-				Return(func(ctx context.Context) *p2p.ChannelIterator {
+				Return(func(ctx context.Context) p2p.ChannelIterator {
 					return p2p.NewChannelIterator(outCh)
 				})
 			resCh := suite.client.addPending(reqID)
@@ -278,7 +278,7 @@ func (suite *ChannelTestSuite) TestConsumeError() {
 			suite.p2pChannel.
 				On("Receive", ctx).
 				Once().
-				Return(func(ctx context.Context) *p2p.ChannelIterator {
+				Return(func(ctx context.Context) p2p.ChannelIterator {
 					return p2p.NewChannelIterator(outCh)
 				})
 			consumer := newMockConsumer(suite.T())

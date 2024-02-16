@@ -616,8 +616,17 @@ type ChannelDescriptor struct {
 	SendQueueCapacity   int
 	RecvMessageCapacity int
 
+	/// SendRateLimit is used to limit the rate of sending messages, per second.
 	SendRateLimit rate.Limit
 	SendRateBurst int
+
+	/// RecvRateLimit is used to limit the rate of receiving messages, per second.
+	RecvRateLimit rate.Limit
+	RecvRateBurst int
+	// RecvRateShouldErr is used to determine if the rate limiter should
+	// report an error whenever recv rate limit is exceeded, most likely
+	// causing the peer to disconnect.
+	RecvRateShouldErr bool
 
 	// RecvBufferCapacity defines the max buffer size of inbound messages for a
 	// given p2p Channel queue.
