@@ -377,12 +377,14 @@ func (tci *throttledChannelIterator) Next(ctx context.Context) bool {
 		}
 		e := tci.innerIter.Envelope()
 		if tci.reportErr && e != nil {
-			tci.innerChan.SendError(ctx, PeerError{
+			msg := PeerError{
 				NodeID: e.From,
 				Err:    ErrRecvRateLimitExceeded,
-				Fatal:  false,
-			})
-
+				Fatal:  true,
+			}
+			if err := tci.innerChan.SendError(ctx, msg); err != nil {
+				tci.logger.Error("error sending error message", "err", err, "msg", msg)
+			}
 		} else {
 			tci.logger.Trace("dropping message due to rate limit", "channel", tci.innerChan, "rate", tci.limiter.Limit())
 		}
