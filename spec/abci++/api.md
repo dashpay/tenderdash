@@ -142,7 +142,6 @@ ExecTxResult contains results of executing one individual transaction.
 | data | [bytes](#bytes) |  | Result bytes, if any (arbitrary data, not interpreted by Tenderdash). |
 | log | [string](#string) |  | The output of the application&#39;s logger. May be non-deterministic. |
 | info | [string](#string) |  | Additional information. May be non-deterministic. |
-| gas_wanted | [int64](#int64) |  | Amount of gas requested for transaction. |
 | gas_used | [int64](#int64) |  | Amount of gas consumed by transaction. |
 | events | [Event](#tendermint-abci-Event) | repeated | Type &amp; Key-Value events for indexing transactions (e.g. by account). |
 | codespace | [string](#string) |  | Namespace for the code. |
