@@ -59,7 +59,7 @@ type PeerState struct {
 func NewPeerState(logger log.Logger, peerID types.NodeID) *PeerState {
 	return &PeerState{
 		peerID: peerID,
-		logger: logger,
+		logger: logger.With("peer", peerID),
 		PRS: cstypes.PeerRoundState{
 			Round:              -1,
 			ProposalPOLRound:   -1,
