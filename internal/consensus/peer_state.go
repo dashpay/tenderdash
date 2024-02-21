@@ -59,7 +59,7 @@ type PeerState struct {
 func NewPeerState(logger log.Logger, peerID types.NodeID) *PeerState {
 	return &PeerState{
 		peerID: peerID,
-		logger: logger,
+		logger: logger.With("peer", peerID),
 		PRS: cstypes.PeerRoundState{
 			Round:              -1,
 			ProposalPOLRound:   -1,
@@ -482,6 +482,9 @@ func (ps *PeerState) setHasCommit(height int64, round int32) {
 func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
+
+	// TODO change to TRACE
+	ps.logger.Debug("apply new round step message", "peer", ps.peerID, "msg", msg.String())
 
 	// ignore duplicates or decreases
 	if CompareHRS(msg.Height, msg.Round, msg.Step, ps.PRS.Height, ps.PRS.Round, ps.PRS.Step) <= 0 {

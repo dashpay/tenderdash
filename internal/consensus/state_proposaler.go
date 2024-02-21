@@ -206,7 +206,11 @@ func (p *Proposaler) proposalTimestampDifferenceMetric(rs cstypes.RoundState) {
 
 func (p *Proposaler) sendMessages(ctx context.Context, msgs ...Message) {
 	for _, msg := range msgs {
-		_ = p.msgInfoQueue.send(ctx, msg, "")
+		err := p.msgInfoQueue.send(ctx, msg, "")
+		if err != nil {
+			// just warning, we don't want to stop the proposaler
+			p.logger.Error("proposaler failed to send message to msgInfoQueue", "error", err)
+		}
 	}
 }
 

@@ -25,6 +25,10 @@ func (_m *SubscriptionClient) Subscribe(ctx context.Context, subscriber string, 
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Subscribe")
+	}
+
 	var r0 <-chan coretypes.ResultEvent
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...int) (<-chan coretypes.ResultEvent, error)); ok {
@@ -51,6 +55,10 @@ func (_m *SubscriptionClient) Subscribe(ctx context.Context, subscriber string, 
 func (_m *SubscriptionClient) Unsubscribe(ctx context.Context, subscriber string, query string) error {
 	ret := _m.Called(ctx, subscriber, query)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Unsubscribe")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
 		r0 = rf(ctx, subscriber, query)
@@ -64,6 +72,10 @@ func (_m *SubscriptionClient) Unsubscribe(ctx context.Context, subscriber string
 // UnsubscribeAll provides a mock function with given fields: ctx, subscriber
 func (_m *SubscriptionClient) UnsubscribeAll(ctx context.Context, subscriber string) error {
 	ret := _m.Called(ctx, subscriber)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UnsubscribeAll")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {

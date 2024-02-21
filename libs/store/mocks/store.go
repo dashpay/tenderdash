@@ -16,6 +16,10 @@ type Store[K comparable, V interface{}] struct {
 func (_m *Store[K, V]) All() []V {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for All")
+	}
+
 	var r0 []V
 	if rf, ok := ret.Get(0).(func() []V); ok {
 		r0 = rf()
@@ -36,6 +40,10 @@ func (_m *Store[K, V]) Delete(key K) {
 // Get provides a mock function with given fields: key
 func (_m *Store[K, V]) Get(key K) (V, bool) {
 	ret := _m.Called(key)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Get")
+	}
 
 	var r0 V
 	var r1 bool
@@ -61,6 +69,10 @@ func (_m *Store[K, V]) Get(key K) (V, bool) {
 func (_m *Store[K, V]) GetAndDelete(key K) (V, bool) {
 	ret := _m.Called(key)
 
+	if len(ret) == 0 {
+		panic("no return value specified for GetAndDelete")
+	}
+
 	var r0 V
 	var r1 bool
 	if rf, ok := ret.Get(0).(func(K) (V, bool)); ok {
@@ -85,6 +97,10 @@ func (_m *Store[K, V]) GetAndDelete(key K) (V, bool) {
 func (_m *Store[K, V]) IsZero() bool {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for IsZero")
+	}
+
 	var r0 bool
 	if rf, ok := ret.Get(0).(func() bool); ok {
 		r0 = rf()
@@ -98,6 +114,10 @@ func (_m *Store[K, V]) IsZero() bool {
 // Len provides a mock function with given fields:
 func (_m *Store[K, V]) Len() int {
 	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Len")
+	}
 
 	var r0 int
 	if rf, ok := ret.Get(0).(func() int); ok {
@@ -117,6 +137,10 @@ func (_m *Store[K, V]) Put(key K, data V) {
 // Query provides a mock function with given fields: spec, limit
 func (_m *Store[K, V]) Query(spec store.QueryFunc[K, V], limit int) []V {
 	ret := _m.Called(spec, limit)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Query")
+	}
 
 	var r0 []V
 	if rf, ok := ret.Get(0).(func(store.QueryFunc[K, V], int) []V); ok {
