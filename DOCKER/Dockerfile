@@ -94,6 +94,7 @@ COPY --from=compile /src/tenderdash/build/tenderdash /src/tenderdash/build/abcid
 # config.json and genesis.json. Additionally, you can override
 # CMD to add parameters to `tenderdash node`.
 ENV PROXY_APP=kvstore MONIKER=dockernode CHAIN_ID=dockerchain
+ENV ABCI
 
 COPY ./DOCKER/docker-entrypoint.sh /usr/local/bin/
 
