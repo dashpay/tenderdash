@@ -14,7 +14,8 @@ to ensure garbage collection of removed elements.
 import (
 	"fmt"
 
-	sync "github.com/sasha-s/go-deadlock"
+	// This is performance-critical code, so we don't use go-deadlock
+	"sync"
 )
 
 // MaxLength is the max allowed number of elements a linked list is
