@@ -53,7 +53,6 @@ require (
 	github.com/go-pkgz/jrpc v0.2.0
 	github.com/google/go-cmp v0.6.0
 	github.com/vektra/mockery/v2 v2.41.0
-	gotest.tools v2.2.0+incompatible
 )
 
 require (

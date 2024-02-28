@@ -7,20 +7,22 @@ import (
 	"os"
 	"os/signal"
 	"strings"
+	"sync"
 	"syscall"
 	"testing"
 	"time"
 
+	"github.com/go-kit/kit/metrics"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-
-	"gotest.tools/assert"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	abcimocks "github.com/dashpay/tenderdash/abci/client/mocks"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	"github.com/dashpay/tenderdash/abci/server"
 	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/abci/types/mocks"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 )
@@ -238,4 +240,103 @@ func TestAppConns_Failure(t *testing.T) {
 	case <-ctx.Done():
 		t.Fatal("expected process to receive SIGTERM signal")
 	}
+}
+func TestFailureMetrics(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := log.NewTestingLogger(t)
+	mtr := mockMetrics()
+	hst := mtr.MethodTiming.(*mockMetric)
+
+	app := mocks.NewApplication(t)
+	app.On("CheckTx", mock.Anything, mock.Anything).Return(&types.ResponseCheckTx{}, errors.New("some error")).Once()
+	app.On("CheckTx", mock.Anything, mock.Anything).Return(&types.ResponseCheckTx{}, nil).Times(2)
+	app.On("Info", mock.Anything, mock.Anything).Return(&types.ResponseInfo{}, nil)
+
+	// promtest.ToFloat64(hst)
+	cli := abciclient.NewLocalClient(logger, app)
+
+	proxy := New(cli, log.NewNopLogger(), mtr)
+
+	var err error
+	for i := 0; i < 5; i++ {
+		_, err = proxy.Info(ctx, &types.RequestInfo{})
+		assert.NoError(t, err)
+	}
+
+	for i := 0; i < 3; i++ {
+		_, err = proxy.CheckTx(ctx, &types.RequestCheckTx{})
+		if i == 0 {
+			assert.Error(t, err)
+		} else {
+			assert.NoError(t, err)
+		}
+	}
+
+	cancel() // this should stop all clients
+	proxy.Wait()
+	assert.Equal(t, 5, hst.count["method=info,type=sync,success=true"])
+	assert.Equal(t, 1, hst.count["method=check_tx,type=sync,success=false"])
+	assert.Equal(t, 2, hst.count["method=check_tx,type=sync,success=true"])
+}
+
+func mockMetrics() *Metrics {
+	return &Metrics{
+		MethodTiming: &mockMetric{
+			labels: []string{},
+			count:  make(map[string]int),
+			mtx:    &sync.Mutex{},
+		},
+	}
+}
+
+type mockMetric struct {
+	labels []string
+	/// count maps concatenated labels to the count of observations.
+	count map[string]int
+	mtx   *sync.Mutex
+}
+
+var _ = metrics.Histogram(&mockMetric{})
+
+func (m *mockMetric) With(labelValues ...string) metrics.Histogram {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	return &mockMetric{
+		labels: append(m.labels, labelValues...),
+		count:  m.count,
+		mtx:    m.mtx, // pointer, as we use the same m.count
+	}
+}
+
+func (m *mockMetric) Observe(_value float64) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	labels := ""
+	for i, label := range m.labels {
+		labels += label
+		if i < len(m.labels)-1 {
+			if i%2 == 0 {
+				labels += "="
+			} else {
+				labels += ","
+			}
+		}
+	}
+
+	m.count[labels]++
+}
+
+func (m *mockMetric) String() (s string) {
+	m.mtx.Lock()
+	defer m.mtx.Unlock()
+
+	for labels, total := range m.count {
+		s += fmt.Sprintf("%s: %d\n", labels, total)
+	}
+
+	return s
 }
