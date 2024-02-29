@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"math/big"
 	"math/rand"
+	"os"
+	"sort"
 	"testing"
 	"time"
 
@@ -13,6 +15,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/abci/example/code"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	"github.com/dashpay/tenderdash/rpc/client/http"
 	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
@@ -195,12 +198,62 @@ func TestApp_Tx(t *testing.T) {
 // when I submit them to the node,
 // then the first transaction should be committed before the last one.
 func TestApp_TxTooBig(t *testing.T) {
-	const timeout = 60 * time.Second
+	// Pair of txs, last must be in block later than first
+	type txPair struct {
+		firstTxHash tmbytes.HexBytes
+		lastTxHash  tmbytes.HexBytes
+	}
 
-	testNode(t, func(ctx context.Context, t *testing.T, node e2e.Node) {
+	/// timeout for broadcast to single node
+	const broadcastTimeout = 5 * time.Second
+	/// Timeout to read response from single node
+	const readTimeout = 1 * time.Second
+	/// Time to process whole mempool
+	const includeInBlockTimeout = 75 * time.Second
+
+	mainCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	t.Helper()
+
+	testnet := loadTestnet(t)
+	nodes := testnet.Nodes
+
+	if name := os.Getenv("E2E_NODE"); name != "" {
+		node := testnet.LookupNode(name)
+		require.NotNil(t, node, "node %q not found in testnet %q", name, testnet.Name)
+		nodes = []*e2e.Node{node}
+	} else {
+		sort.Slice(nodes, func(i, j int) bool {
+			return nodes[i].Name < nodes[j].Name
+		})
+	}
+
+	// we will use last client to check if txs were included in block
+	var client *http.HTTP
+	outcome := make([]txPair, 0, len(nodes))
+
+	start := time.Now()
+	/// First we broadcast to all nodes
+	for _, node := range nodes {
+		ctx, cancel := context.WithTimeout(mainCtx, broadcastTimeout)
+		defer cancel()
+
+		if ctx.Err() != nil {
+			t.Fatalf("context canceled before broadcasting to all nodes")
+		}
+		node := *node
+
+		if node.Stateless() {
+			continue
+		}
+
+		t.Logf("broadcasting to %s", node.Name)
+
 		session := rand.Int63()
 
-		client, err := node.Client()
+		var err error
+		client, err = node.Client()
 		require.NoError(t, err)
 
 		// FIXME: ConsensusParams is broken for last height, this is just workaround
@@ -237,9 +290,26 @@ func TestApp_TxTooBig(t *testing.T) {
 			assert.NoError(t, err, "failed to broadcast tx %06x", i)
 		}
 
-		lastTxHash := tx.Hash()
+		outcome = append(outcome, txPair{
+			firstTxHash: firstTxHash,
+			lastTxHash:  tx.Hash(),
+		})
+	}
 
-		require.Eventuallyf(t, func() bool {
+	t.Logf("submitted txs in %s", time.Since(start).String())
+
+	successful := 0
+	// now we check if these txs were committed within timeout
+	require.Eventuallyf(t, func() bool {
+		failed := false
+		successful = 0
+		for _, item := range outcome {
+			ctx, cancel := context.WithTimeout(mainCtx, readTimeout)
+			defer cancel()
+
+			firstTxHash := item.firstTxHash
+			lastTxHash := item.lastTxHash
+
 			// last tx should be committed later than first
 			lastTxResp, err := client.Tx(ctx, lastTxHash, false)
 			if err == nil {
@@ -262,22 +332,17 @@ func TestApp_TxTooBig(t *testing.T) {
 				)
 
 				assert.Less(t, firstTxResp.Height, lastTxResp.Height, "first tx should in block before last tx")
-				return true
+				successful++
+			} else {
+				failed = true
 			}
-
-			return false
-		},
-			timeout,     // timeout
-			time.Second, // interval
-			"submitted tx %X wasn't committed after %v",
-			lastTxHash, timeout,
-		)
-
-		// abciResp, err := client.ABCIQuery(ctx, "", []byte(lastTxKey))
-		// require.NoError(t, err)
-		// assert.Equal(t, code.CodeTypeOK, abciResp.Response.Code)
-		// assert.Equal(t, lastTxKey, string(abciResp.Response.Key))
-		// assert.Equal(t, lastTxHash, types.Tx(abciResp.Response.Value).Hash())
-	})
-
+		}
+		t.Logf("checked txs in block, successful: %d", successful)
+		return !failed
+	},
+		includeInBlockTimeout, // timeout
+		time.Second,           // interval
+		"submitted transactions were not committed after %v",
+		includeInBlockTimeout,
+	)
 }
