@@ -3,6 +3,7 @@ package p2p_test
 import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/ed25519"
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -25,7 +26,7 @@ var (
 		ListenAddr: "0.0.0.0:0",
 		Network:    "test",
 		Moniker:    string(selfID),
-		Channels:   []byte{0x01, 0x02},
+		Channels:   tmsync.NewConcurrentSlice[uint16](0x01, 0x02),
 	}
 
 	peerKey  crypto.PrivKey = ed25519.GenPrivKeyFromSecret([]byte{0x84, 0xd7, 0x01, 0xbf, 0x83, 0x20, 0x1c, 0xfe})
@@ -35,6 +36,6 @@ var (
 		ListenAddr: "0.0.0.0:0",
 		Network:    "test",
 		Moniker:    string(peerID),
-		Channels:   []byte{0x01, 0x02},
+		Channels:   tmsync.NewConcurrentSlice[uint16](0x01, 0x02),
 	}
 )

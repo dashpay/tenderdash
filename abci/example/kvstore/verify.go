@@ -17,7 +17,6 @@ func (app *Application) verifyBlockCommit(qsd types.QuorumSignData, commit abci.
 	if !bytes.Equal(commit.QuorumHash, vsu.QuorumHash) {
 		return fmt.Errorf("mismatch quorum hashes got %X, want %X", commit.QuorumHash, vsu.QuorumHash)
 	}
-	verifier := types.NewQuorumSignsVerifier(qsd)
 	pubKey, err := encoding.PubKeyFromProto(vsu.ThresholdPublicKey)
 	if err != nil {
 		return err
@@ -28,7 +27,7 @@ func (app *Application) verifyBlockCommit(qsd types.QuorumSignData, commit abci.
 		extSigs = append(extSigs, ext.Signature)
 	}
 
-	return verifier.Verify(pubKey, types.QuorumSigns{
+	return qsd.Verify(pubKey, types.QuorumSigns{
 		BlockSign:               commit.BlockSignature,
 		VoteExtensionSignatures: extSigs,
 	})

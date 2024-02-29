@@ -733,12 +733,13 @@ message EventAttribute {
 
 // ExecTxResult contains results of executing one individual transaction.
 message ExecTxResult {
-  uint32 code       = 1;  // Response code within codespace; by convention, 0 means success.
-  bytes  data       = 2;  // Result bytes, if any (arbitrary data, not interpreted by Tenderdash).
-  string log        = 3;  // The output of the application's logger. May be non-deterministic.
-  string info       = 4;  // Additional information. May be non-deterministic.
-  int64  gas_wanted = 5;  // Amount of gas requested for transaction.
-  int64  gas_used   = 6;  // Amount of gas consumed by transaction.
+  uint32 code = 1;  // Response code within codespace; by convention, 0 means success.
+  bytes  data = 2;  // Result bytes, if any (arbitrary data, not interpreted by Tenderdash).
+  string log  = 3;  // The output of the application's logger. May be non-deterministic.
+  string info = 4;  // Additional information. May be non-deterministic.
+  reserved "gas_wanted";
+  reserved 5;
+  int64 gas_used = 6;  // Amount of gas consumed by transaction.
   // Type & Key-Value events for indexing transactions (e.g. by account).
   repeated Event events = 7
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];

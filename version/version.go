@@ -11,7 +11,7 @@ const (
 	// when not using git describe. It is formatted with semantic versioning.
 	TMVersionDefault = "0.14.0-dev.2"
 	// ABCISemVer is the semantic version of the ABCI library
-	ABCISemVer = "0.25.0"
+	ABCISemVer = "0.25.1"
 
 	ABCIVersion = ABCISemVer
 )
@@ -19,7 +19,7 @@ const (
 var (
 	// P2PProtocol versions all p2p behavior and msgs.
 	// This includes proposer selection.
-	P2PProtocol uint64 = 8
+	P2PProtocol uint64 = 9
 
 	// BlockProtocol versions all block data structures and processing.
 	// This includes validity of blocks and state updates.
