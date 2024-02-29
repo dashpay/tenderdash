@@ -22,6 +22,10 @@ type SnapshotClient struct {
 func (_m *SnapshotClient) GetChunk(ctx context.Context, peerID types.NodeID, height uint64, format uint32, index uint32) (*promise.Promise[*statesync.ChunkResponse], error) {
 	ret := _m.Called(ctx, peerID, height, format, index)
 
+	if len(ret) == 0 {
+		panic("no return value specified for GetChunk")
+	}
+
 	var r0 *promise.Promise[*statesync.ChunkResponse]
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.NodeID, uint64, uint32, uint32) (*promise.Promise[*statesync.ChunkResponse], error)); ok {
@@ -47,6 +51,10 @@ func (_m *SnapshotClient) GetChunk(ctx context.Context, peerID types.NodeID, hei
 // GetLightBlock provides a mock function with given fields: ctx, peerID, height
 func (_m *SnapshotClient) GetLightBlock(ctx context.Context, peerID types.NodeID, height uint64) (*promise.Promise[*statesync.LightBlockResponse], error) {
 	ret := _m.Called(ctx, peerID, height)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetLightBlock")
+	}
 
 	var r0 *promise.Promise[*statesync.LightBlockResponse]
 	var r1 error
@@ -74,6 +82,10 @@ func (_m *SnapshotClient) GetLightBlock(ctx context.Context, peerID types.NodeID
 func (_m *SnapshotClient) GetParams(ctx context.Context, peerID types.NodeID, height uint64) (*promise.Promise[*statesync.ParamsResponse], error) {
 	ret := _m.Called(ctx, peerID, height)
 
+	if len(ret) == 0 {
+		panic("no return value specified for GetParams")
+	}
+
 	var r0 *promise.Promise[*statesync.ParamsResponse]
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.NodeID, uint64) (*promise.Promise[*statesync.ParamsResponse], error)); ok {
@@ -99,6 +111,10 @@ func (_m *SnapshotClient) GetParams(ctx context.Context, peerID types.NodeID, he
 // GetSnapshots provides a mock function with given fields: ctx, peerID
 func (_m *SnapshotClient) GetSnapshots(ctx context.Context, peerID types.NodeID) error {
 	ret := _m.Called(ctx, peerID)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetSnapshots")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.NodeID) error); ok {

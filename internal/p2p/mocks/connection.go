@@ -27,6 +27,10 @@ type Connection struct {
 func (_m *Connection) Close() error {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for Close")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func() error); ok {
 		r0 = rf()
@@ -40,6 +44,10 @@ func (_m *Connection) Close() error {
 // Handshake provides a mock function with given fields: _a0, _a1, _a2, _a3
 func (_m *Connection) Handshake(_a0 context.Context, _a1 time.Duration, _a2 types.NodeInfo, _a3 crypto.PrivKey) (types.NodeInfo, crypto.PubKey, error) {
 	ret := _m.Called(_a0, _a1, _a2, _a3)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Handshake")
+	}
 
 	var r0 types.NodeInfo
 	var r1 crypto.PubKey
@@ -74,6 +82,10 @@ func (_m *Connection) Handshake(_a0 context.Context, _a1 time.Duration, _a2 type
 func (_m *Connection) LocalEndpoint() p2p.Endpoint {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for LocalEndpoint")
+	}
+
 	var r0 p2p.Endpoint
 	if rf, ok := ret.Get(0).(func() p2p.Endpoint); ok {
 		r0 = rf()
@@ -87,6 +99,10 @@ func (_m *Connection) LocalEndpoint() p2p.Endpoint {
 // ReceiveMessage provides a mock function with given fields: _a0
 func (_m *Connection) ReceiveMessage(_a0 context.Context) (conn.ChannelID, []byte, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReceiveMessage")
+	}
 
 	var r0 conn.ChannelID
 	var r1 []byte
@@ -121,6 +137,10 @@ func (_m *Connection) ReceiveMessage(_a0 context.Context) (conn.ChannelID, []byt
 func (_m *Connection) RemoteEndpoint() p2p.Endpoint {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for RemoteEndpoint")
+	}
+
 	var r0 p2p.Endpoint
 	if rf, ok := ret.Get(0).(func() p2p.Endpoint); ok {
 		r0 = rf()
@@ -135,6 +155,10 @@ func (_m *Connection) RemoteEndpoint() p2p.Endpoint {
 func (_m *Connection) SendMessage(_a0 context.Context, _a1 conn.ChannelID, _a2 []byte) error {
 	ret := _m.Called(_a0, _a1, _a2)
 
+	if len(ret) == 0 {
+		panic("no return value specified for SendMessage")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, conn.ChannelID, []byte) error); ok {
 		r0 = rf(_a0, _a1, _a2)
@@ -148,6 +172,10 @@ func (_m *Connection) SendMessage(_a0 context.Context, _a1 conn.ChannelID, _a2 [
 // String provides a mock function with given fields:
 func (_m *Connection) String() string {
 	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for String")
+	}
 
 	var r0 string
 	if rf, ok := ret.Get(0).(func() string); ok {

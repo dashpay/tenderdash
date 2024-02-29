@@ -18,6 +18,10 @@ type NetworkClient struct {
 func (_m *NetworkClient) ConsensusParams(ctx context.Context, height *int64) (*coretypes.ResultConsensusParams, error) {
 	ret := _m.Called(ctx, height)
 
+	if len(ret) == 0 {
+		panic("no return value specified for ConsensusParams")
+	}
+
 	var r0 *coretypes.ResultConsensusParams
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, *int64) (*coretypes.ResultConsensusParams, error)); ok {
@@ -43,6 +47,10 @@ func (_m *NetworkClient) ConsensusParams(ctx context.Context, height *int64) (*c
 // ConsensusState provides a mock function with given fields: _a0
 func (_m *NetworkClient) ConsensusState(_a0 context.Context) (*coretypes.ResultConsensusState, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ConsensusState")
+	}
 
 	var r0 *coretypes.ResultConsensusState
 	var r1 error
@@ -70,6 +78,10 @@ func (_m *NetworkClient) ConsensusState(_a0 context.Context) (*coretypes.ResultC
 func (_m *NetworkClient) DumpConsensusState(_a0 context.Context) (*coretypes.ResultDumpConsensusState, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for DumpConsensusState")
+	}
+
 	var r0 *coretypes.ResultDumpConsensusState
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultDumpConsensusState, error)); ok {
@@ -96,6 +108,10 @@ func (_m *NetworkClient) DumpConsensusState(_a0 context.Context) (*coretypes.Res
 func (_m *NetworkClient) Health(_a0 context.Context) (*coretypes.ResultHealth, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Health")
+	}
+
 	var r0 *coretypes.ResultHealth
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultHealth, error)); ok {
@@ -121,6 +137,10 @@ func (_m *NetworkClient) Health(_a0 context.Context) (*coretypes.ResultHealth, e
 // NetInfo provides a mock function with given fields: _a0
 func (_m *NetworkClient) NetInfo(_a0 context.Context) (*coretypes.ResultNetInfo, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NetInfo")
+	}
 
 	var r0 *coretypes.ResultNetInfo
 	var r1 error
