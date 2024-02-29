@@ -18,6 +18,10 @@ type HistoryClient struct {
 func (_m *HistoryClient) BlockchainInfo(ctx context.Context, minHeight int64, maxHeight int64) (*coretypes.ResultBlockchainInfo, error) {
 	ret := _m.Called(ctx, minHeight, maxHeight)
 
+	if len(ret) == 0 {
+		panic("no return value specified for BlockchainInfo")
+	}
+
 	var r0 *coretypes.ResultBlockchainInfo
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, int64, int64) (*coretypes.ResultBlockchainInfo, error)); ok {
@@ -44,6 +48,10 @@ func (_m *HistoryClient) BlockchainInfo(ctx context.Context, minHeight int64, ma
 func (_m *HistoryClient) Genesis(_a0 context.Context) (*coretypes.ResultGenesis, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Genesis")
+	}
+
 	var r0 *coretypes.ResultGenesis
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultGenesis, error)); ok {
@@ -69,6 +77,10 @@ func (_m *HistoryClient) Genesis(_a0 context.Context) (*coretypes.ResultGenesis,
 // GenesisChunked provides a mock function with given fields: _a0, _a1
 func (_m *HistoryClient) GenesisChunked(_a0 context.Context, _a1 uint) (*coretypes.ResultGenesisChunk, error) {
 	ret := _m.Called(_a0, _a1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GenesisChunked")
+	}
 
 	var r0 *coretypes.ResultGenesisChunk
 	var r1 error

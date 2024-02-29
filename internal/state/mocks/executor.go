@@ -20,6 +20,10 @@ type Executor struct {
 func (_m *Executor) ApplyBlock(ctx context.Context, _a1 state.State, blockID types.BlockID, block *types.Block, commit *types.Commit) (state.State, error) {
 	ret := _m.Called(ctx, _a1, blockID, block, commit)
 
+	if len(ret) == 0 {
+		panic("no return value specified for ApplyBlock")
+	}
+
 	var r0 state.State
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, state.State, types.BlockID, *types.Block, *types.Commit) (state.State, error)); ok {
@@ -43,6 +47,10 @@ func (_m *Executor) ApplyBlock(ctx context.Context, _a1 state.State, blockID typ
 // CreateProposalBlock provides a mock function with given fields: ctx, height, round, _a3, commit, proposerProTxHash, proposedAppVersion
 func (_m *Executor) CreateProposalBlock(ctx context.Context, height int64, round int32, _a3 state.State, commit *types.Commit, proposerProTxHash []byte, proposedAppVersion uint64) (*types.Block, state.CurrentRoundState, error) {
 	ret := _m.Called(ctx, height, round, _a3, commit, proposerProTxHash, proposedAppVersion)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CreateProposalBlock")
+	}
 
 	var r0 *types.Block
 	var r1 state.CurrentRoundState
@@ -82,6 +90,10 @@ func (_m *Executor) ExtendVote(ctx context.Context, vote *types.Vote) {
 func (_m *Executor) FinalizeBlock(ctx context.Context, _a1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit) (state.State, error) {
 	ret := _m.Called(ctx, _a1, uncommittedState, blockID, block, commit)
 
+	if len(ret) == 0 {
+		panic("no return value specified for FinalizeBlock")
+	}
+
 	var r0 state.State
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit) (state.State, error)); ok {
@@ -105,6 +117,10 @@ func (_m *Executor) FinalizeBlock(ctx context.Context, _a1 state.State, uncommit
 // ProcessProposal provides a mock function with given fields: ctx, block, round, _a3, verify
 func (_m *Executor) ProcessProposal(ctx context.Context, block *types.Block, round int32, _a3 state.State, verify bool) (state.CurrentRoundState, error) {
 	ret := _m.Called(ctx, block, round, _a3, verify)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ProcessProposal")
+	}
 
 	var r0 state.CurrentRoundState
 	var r1 error
@@ -130,6 +146,10 @@ func (_m *Executor) ProcessProposal(ctx context.Context, block *types.Block, rou
 func (_m *Executor) ValidateBlock(ctx context.Context, _a1 state.State, block *types.Block) error {
 	ret := _m.Called(ctx, _a1, block)
 
+	if len(ret) == 0 {
+		panic("no return value specified for ValidateBlock")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, state.State, *types.Block) error); ok {
 		r0 = rf(ctx, _a1, block)
@@ -144,6 +164,10 @@ func (_m *Executor) ValidateBlock(ctx context.Context, _a1 state.State, block *t
 func (_m *Executor) ValidateBlockWithRoundState(ctx context.Context, _a1 state.State, uncommittedState state.CurrentRoundState, block *types.Block) error {
 	ret := _m.Called(ctx, _a1, uncommittedState, block)
 
+	if len(ret) == 0 {
+		panic("no return value specified for ValidateBlockWithRoundState")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, state.State, state.CurrentRoundState, *types.Block) error); ok {
 		r0 = rf(ctx, _a1, uncommittedState, block)
@@ -157,6 +181,10 @@ func (_m *Executor) ValidateBlockWithRoundState(ctx context.Context, _a1 state.S
 // VerifyVoteExtension provides a mock function with given fields: ctx, vote
 func (_m *Executor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {
 	ret := _m.Called(ctx, vote)
+
+	if len(ret) == 0 {
+		panic("no return value specified for VerifyVoteExtension")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, *types.Vote) error); ok {

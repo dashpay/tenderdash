@@ -18,6 +18,10 @@ type Client struct {
 func (_m *Client) Close() error {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for Close")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func() error); ok {
 		r0 = rf()
@@ -31,6 +35,10 @@ func (_m *Client) Close() error {
 // GetNetworkInfo provides a mock function with given fields:
 func (_m *Client) GetNetworkInfo() (*btcjson.GetNetworkInfoResult, error) {
 	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetNetworkInfo")
+	}
 
 	var r0 *btcjson.GetNetworkInfoResult
 	var r1 error
@@ -58,6 +66,10 @@ func (_m *Client) GetNetworkInfo() (*btcjson.GetNetworkInfoResult, error) {
 func (_m *Client) MasternodeListJSON(filter string) (map[string]btcjson.MasternodelistResultJSON, error) {
 	ret := _m.Called(filter)
 
+	if len(ret) == 0 {
+		panic("no return value specified for MasternodeListJSON")
+	}
+
 	var r0 map[string]btcjson.MasternodelistResultJSON
 	var r1 error
 	if rf, ok := ret.Get(0).(func(string) (map[string]btcjson.MasternodelistResultJSON, error)); ok {
@@ -83,6 +95,10 @@ func (_m *Client) MasternodeListJSON(filter string) (map[string]btcjson.Masterno
 // MasternodeStatus provides a mock function with given fields:
 func (_m *Client) MasternodeStatus() (*btcjson.MasternodeStatusResult, error) {
 	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for MasternodeStatus")
+	}
 
 	var r0 *btcjson.MasternodeStatusResult
 	var r1 error
@@ -110,6 +126,10 @@ func (_m *Client) MasternodeStatus() (*btcjson.MasternodeStatusResult, error) {
 func (_m *Client) Ping() error {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for Ping")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func() error); ok {
 		r0 = rf()
@@ -123,6 +143,10 @@ func (_m *Client) Ping() error {
 // QuorumInfo provides a mock function with given fields: quorumType, quorumHash
 func (_m *Client) QuorumInfo(quorumType btcjson.LLMQType, quorumHash bytes.HexBytes) (*btcjson.QuorumInfoResult, error) {
 	ret := _m.Called(quorumType, quorumHash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for QuorumInfo")
+	}
 
 	var r0 *btcjson.QuorumInfoResult
 	var r1 error
@@ -150,6 +174,10 @@ func (_m *Client) QuorumInfo(quorumType btcjson.LLMQType, quorumHash bytes.HexBy
 func (_m *Client) QuorumSign(quorumType btcjson.LLMQType, requestID bytes.HexBytes, messageHash bytes.HexBytes, quorumHash bytes.HexBytes) (*btcjson.QuorumSignResult, error) {
 	ret := _m.Called(quorumType, requestID, messageHash, quorumHash)
 
+	if len(ret) == 0 {
+		panic("no return value specified for QuorumSign")
+	}
+
 	var r0 *btcjson.QuorumSignResult
 	var r1 error
 	if rf, ok := ret.Get(0).(func(btcjson.LLMQType, bytes.HexBytes, bytes.HexBytes, bytes.HexBytes) (*btcjson.QuorumSignResult, error)); ok {
@@ -175,6 +203,10 @@ func (_m *Client) QuorumSign(quorumType btcjson.LLMQType, requestID bytes.HexByt
 // QuorumVerify provides a mock function with given fields: quorumType, requestID, messageHash, signature, quorumHash
 func (_m *Client) QuorumVerify(quorumType btcjson.LLMQType, requestID bytes.HexBytes, messageHash bytes.HexBytes, signature bytes.HexBytes, quorumHash bytes.HexBytes) (bool, error) {
 	ret := _m.Called(quorumType, requestID, messageHash, signature, quorumHash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for QuorumVerify")
+	}
 
 	var r0 bool
 	var r1 error
