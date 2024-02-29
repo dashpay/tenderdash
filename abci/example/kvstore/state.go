@@ -209,7 +209,7 @@ func (state *kvState) Load(from io.Reader) error {
 	item := exportItem{}
 	var err error
 	for err = decoder.Decode(&item); err == nil; err = decoder.Decode(&item) {
-		if err := batch.Set(item.Key, item.Value); err != nil {
+		if err := batch.Set([]byte(item.Key), []byte(item.Value)); err != nil {
 			return fmt.Errorf("error restoring state item %+v: %w", item, err)
 		}
 	}
@@ -249,7 +249,7 @@ func (state kvState) Save(to io.Writer) error {
 	defer iter.Close()
 
 	for ; iter.Valid(); iter.Next() {
-		item := exportItem{Key: iter.Key(), Value: iter.Value()}
+		item := exportItem{Key: string(iter.Key()), Value: string(iter.Value())}
 		if err := encoder.Encode(item); err != nil {
 			return fmt.Errorf("error encoding state item %+v: %w", item, err)
 		}
@@ -258,16 +258,9 @@ func (state kvState) Save(to io.Writer) error {
 	return nil
 }
 
-type StateExport struct {
-	Height        *int64            `json:"height,omitempty"`
-	InitialHeight *int64            `json:"initial_height,omitempty"`
-	AppHash       tmbytes.HexBytes  `json:"app_hash,omitempty"`
-	Items         map[string]string `json:"items,omitempty"` // we store items as string-encoded values
-}
-
 type exportItem struct {
-	Key   []byte `json:"key"`
-	Value []byte `json:"value"`
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 func (state *kvState) Close() error {

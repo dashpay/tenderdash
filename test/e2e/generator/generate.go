@@ -1,14 +1,12 @@
 package main
 
 import (
-	"encoding/json"
 	"fmt"
 	"math/rand"
 	"sort"
 	"strings"
 	"time"
 
-	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -20,7 +18,11 @@ var (
 		"topology": {"single", "quad", "large"},
 		"initialState": {
 			"{}",
-			`{"items": {"initial01": "a", "initial02": "b", "initial03": "c"}}`,
+			`{}
+			{"key":"initial01","value": "a"}
+			{"key":"initial02","value":"b"}
+			{"key":"initial03","value":"c"}
+			`,
 		},
 
 		"validators": {"genesis", "initchain"},
@@ -113,13 +115,8 @@ type Options struct {
 
 // generateTestnet generates a single testnet with the given options.
 func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, error) {
-	initialState := kvstore.StateExport{}
-	if opt["initialState"] != nil {
-		data := opt["initialState"].(string)
-		if err := json.Unmarshal([]byte(data), &initialState); err != nil {
-			return e2e.Manifest{}, fmt.Errorf("unmarshal initialState: %w", err)
-		}
-	}
+	initialState := opt["initialState"].(string)
+
 	manifest := e2e.Manifest{
 		IPv6:             ipv6.Choose(r).(bool),
 		InitialState:     initialState,

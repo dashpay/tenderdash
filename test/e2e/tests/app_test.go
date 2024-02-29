@@ -13,8 +13,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	db "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/abci/example/code"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	"github.com/dashpay/tenderdash/rpc/client/http"
@@ -29,17 +31,24 @@ const (
 // Tests that any initial state given in genesis has made it into the app.
 func TestApp_InitialState(t *testing.T) {
 	testNode(t, func(ctx context.Context, t *testing.T, node e2e.Node) {
-		if len(node.Testnet.InitialState.Items) == 0 {
-			return
-		}
 
 		client, err := node.Client()
 		require.NoError(t, err)
-		for k, v := range node.Testnet.InitialState.Items {
-			resp, err := client.ABCIQuery(ctx, "", []byte(k))
+		state := kvstore.NewKvState(db.NewMemDB(), 0)
+		err = state.Load(bytes.NewBufferString(node.Testnet.InitialState))
+		require.NoError(t, err)
+		iter, err := state.Iterator(nil, nil)
+		require.NoError(t, err)
+
+		for iter.Valid() {
+			k := iter.Key()
+			v := iter.Value()
+			resp, err := client.ABCIQuery(ctx, "", k)
 			require.NoError(t, err)
-			assert.Equal(t, k, string(resp.Response.Key))
-			assert.Equal(t, v, string(resp.Response.Value))
+			assert.Equal(t, k, resp.Response.Key)
+			assert.Equal(t, v, resp.Response.Value)
+
+			iter.Next()
 		}
 	})
 }
@@ -337,12 +346,12 @@ func TestApp_TxTooBig(t *testing.T) {
 				failed = true
 			}
 		}
-		t.Logf("checked txs in block, successful: %d", successful)
+
 		return !failed
 	},
 		includeInBlockTimeout, // timeout
 		time.Second,           // interval
-		"submitted transactions were not committed after %v",
-		includeInBlockTimeout,
+		"submitted transactions were not committed after %s",
+		includeInBlockTimeout.String(),
 	)
 }
