@@ -40,7 +40,7 @@ func TestRouting(t *testing.T) {
 
 	defaultApp.On("Info", mock.Anything, mock.Anything).Return(&types.ResponseInfo{
 		Data: "info",
-	}, nil).Run(func(args mock.Arguments) {
+	}, nil).Run(func(_args mock.Arguments) {
 		t.Log("Info: before lock")
 		infoMtx.Lock()
 		defer infoMtx.Unlock()
@@ -128,11 +128,19 @@ func TestRoutedClientGrpc(t *testing.T) {
 
 	logger := log.NewTestingLogger(t)
 
-	app := types.NewBaseApplication()
+	// app := types.NewBaseApplication()
+	app := mocks.NewApplication(t)
+	defer app.AssertExpectations(t)
+	app.On("Echo", mock.Anything, mock.Anything).Return(
+		func(_ctx context.Context, msg *types.RequestEcho) (*types.ResponseEcho, error) {
+			return &types.ResponseEcho{Message: msg.Message}, nil
+		}).Maybe()
+	app.On("Info", mock.Anything, mock.Anything).Return(&types.ResponseInfo{}, nil).Once()
+
 	grpcServer := server.NewGRPCServer(logger, "tcp://127.0.0.1:1234", app)
 	require.NoError(t, grpcServer.Start(ctx))
 
-	addr := "*:grpc:tcp://127.0.0.1:1234"
+	addr := "*:grpc:127.0.0.1:1234"
 	logger.Info("configuring routed abci client with address", "addr", addr)
 	client, err := abciclient.NewRoutedClientWithAddr(logger, addr, true)
 	require.NoError(t, err)
