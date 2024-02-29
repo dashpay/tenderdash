@@ -20,6 +20,10 @@ type EvidencePool struct {
 func (_m *EvidencePool) AddEvidence(_a0 context.Context, _a1 types.Evidence) error {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for AddEvidence")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.Evidence) error); ok {
 		r0 = rf(_a0, _a1)
@@ -34,6 +38,10 @@ func (_m *EvidencePool) AddEvidence(_a0 context.Context, _a1 types.Evidence) err
 func (_m *EvidencePool) CheckEvidence(_a0 context.Context, _a1 types.EvidenceList) error {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for CheckEvidence")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.EvidenceList) error); ok {
 		r0 = rf(_a0, _a1)
@@ -47,6 +55,10 @@ func (_m *EvidencePool) CheckEvidence(_a0 context.Context, _a1 types.EvidenceLis
 // PendingEvidence provides a mock function with given fields: maxBytes
 func (_m *EvidencePool) PendingEvidence(maxBytes int64) ([]types.Evidence, int64) {
 	ret := _m.Called(maxBytes)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PendingEvidence")
+	}
 
 	var r0 []types.Evidence
 	var r1 int64

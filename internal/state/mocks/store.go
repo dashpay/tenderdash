@@ -20,6 +20,10 @@ type Store struct {
 func (_m *Store) Bootstrap(_a0 state.State) error {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Bootstrap")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(state.State) error); ok {
 		r0 = rf(_a0)
@@ -34,6 +38,10 @@ func (_m *Store) Bootstrap(_a0 state.State) error {
 func (_m *Store) Close() error {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for Close")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func() error); ok {
 		r0 = rf()
@@ -47,6 +55,10 @@ func (_m *Store) Close() error {
 // Load provides a mock function with given fields:
 func (_m *Store) Load() (state.State, error) {
 	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Load")
+	}
 
 	var r0 state.State
 	var r1 error
@@ -71,6 +83,10 @@ func (_m *Store) Load() (state.State, error) {
 // LoadABCIResponses provides a mock function with given fields: _a0
 func (_m *Store) LoadABCIResponses(_a0 int64) (*tendermintstate.ABCIResponses, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for LoadABCIResponses")
+	}
 
 	var r0 *tendermintstate.ABCIResponses
 	var r1 error
@@ -98,6 +114,10 @@ func (_m *Store) LoadABCIResponses(_a0 int64) (*tendermintstate.ABCIResponses, e
 func (_m *Store) LoadConsensusParams(_a0 int64) (types.ConsensusParams, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for LoadConsensusParams")
+	}
+
 	var r0 types.ConsensusParams
 	var r1 error
 	if rf, ok := ret.Get(0).(func(int64) (types.ConsensusParams, error)); ok {
@@ -121,6 +141,10 @@ func (_m *Store) LoadConsensusParams(_a0 int64) (types.ConsensusParams, error) {
 // LoadValidators provides a mock function with given fields: _a0
 func (_m *Store) LoadValidators(_a0 int64) (*types.ValidatorSet, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for LoadValidators")
+	}
 
 	var r0 *types.ValidatorSet
 	var r1 error
@@ -148,6 +172,10 @@ func (_m *Store) LoadValidators(_a0 int64) (*types.ValidatorSet, error) {
 func (_m *Store) PruneStates(_a0 int64) error {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for PruneStates")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(int64) error); ok {
 		r0 = rf(_a0)
@@ -161,6 +189,10 @@ func (_m *Store) PruneStates(_a0 int64) error {
 // Save provides a mock function with given fields: _a0
 func (_m *Store) Save(_a0 state.State) error {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Save")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(state.State) error); ok {
@@ -176,6 +208,10 @@ func (_m *Store) Save(_a0 state.State) error {
 func (_m *Store) SaveABCIResponses(_a0 int64, _a1 tendermintstate.ABCIResponses) error {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for SaveABCIResponses")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(int64, tendermintstate.ABCIResponses) error); ok {
 		r0 = rf(_a0, _a1)
@@ -189,6 +225,10 @@ func (_m *Store) SaveABCIResponses(_a0 int64, _a1 tendermintstate.ABCIResponses)
 // SaveValidatorSets provides a mock function with given fields: _a0, _a1, _a2
 func (_m *Store) SaveValidatorSets(_a0 int64, _a1 int64, _a2 *types.ValidatorSet) error {
 	ret := _m.Called(_a0, _a1, _a2)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SaveValidatorSets")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(int64, int64, *types.ValidatorSet) error); ok {
