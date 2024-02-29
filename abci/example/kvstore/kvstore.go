@@ -3,9 +3,9 @@ package kvstore
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path"
 	"strconv"
 	"time"
@@ -228,7 +228,12 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 	defer in.Close()
 
 	if err := app.LastCommittedState.Load(in); err != nil {
-		return nil, fmt.Errorf("load state: %w", err)
+		// EOF means we most likely don't have any state yet
+		if !errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("load state: %w", err)
+		} else {
+			app.logger.Debug("no state found, using initial state")
+		}
 	}
 
 	app.snapshots, err = NewSnapshotStore(path.Join(app.cfg.Dir, "snapshots"))
@@ -264,9 +269,9 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	}
 
 	// Overwrite state based on AppStateBytes
+	// Note this is not optimal from memory perspective; use chunked state sync instead
 	if len(req.AppStateBytes) > 0 {
-		err := json.Unmarshal(req.AppStateBytes, &app.LastCommittedState)
-		if err != nil {
+		if err := app.LastCommittedState.Load(bytes.NewBuffer(req.AppStateBytes)); err != nil {
 			return &abci.ResponseInitChain{}, err
 		}
 	}
@@ -530,14 +535,16 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 	}
 
 	if app.offerSnapshot.isFull() {
-		chunks := app.offerSnapshot.bytes()
-		err := json.Unmarshal(chunks, &app.LastCommittedState)
-		if err != nil {
+		// TODO: Refactor to use streaming
+		chunks := app.offerSnapshot.reader()
+		defer chunks.Close()
+
+		if err := app.LastCommittedState.Load(chunks); err != nil {
 			return &abci.ResponseApplySnapshotChunk{}, fmt.Errorf("cannot unmarshal state: %w", err)
 		}
+
 		app.logger.Info("restored state snapshot",
 			"height", app.LastCommittedState.GetHeight(),
-			"json", string(chunks),
 			"apphash", app.LastCommittedState.GetAppHash(),
 			"snapshot_height", app.offerSnapshot.snapshot.Height,
 			"snapshot_apphash", app.offerSnapshot.appHash,

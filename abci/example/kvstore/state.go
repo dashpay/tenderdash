@@ -19,8 +19,6 @@ import (
 // Caller of State methods should do proper concurrency locking (eg. mutexes)
 type State interface {
 	dbm.DB
-	json.Marshaler
-	json.Unmarshaler
 
 	// Save writes full content of this state to some output
 	Save(output io.Writer) error
@@ -50,7 +48,7 @@ type State interface {
 }
 
 type kvState struct {
-	dbm.DB
+	dbm.DB `json:"-"`
 	// Height of the state. Special value of 0 means zero state.
 	Height        int64            `json:"height"`
 	InitialHeight int64            `json:"initial_height,omitempty"`
@@ -182,36 +180,75 @@ func (state *kvState) UpdateAppHash(lastCommittedState State, _txs types1.Txs, t
 	return nil
 }
 
+// / Load state from the reader.
+// / It expects json-encoded kvState, followed by all items from the state.
 func (state *kvState) Load(from io.Reader) error {
 	if state == nil || state.DB == nil {
 		return errors.New("cannot load into nil state")
 	}
 
-	stateBytes, err := io.ReadAll(from)
-	if err != nil {
-		return fmt.Errorf("kvState read: %w", err)
-	}
-	if len(stateBytes) == 0 {
-		return nil // NOOP
+	newState := kvState{}
+	decoder := json.NewDecoder(from)
+	if err := decoder.Decode(&newState); err != nil {
+		return fmt.Errorf("error reading state header: %w", err)
 	}
 
-	err = json.Unmarshal(stateBytes, &state)
-	if err != nil {
-		return fmt.Errorf("kvState unmarshal: %w", err)
+	// Lload items to state DB; we don't need to create and use newState.DB
+	// as we use atomic batches.
+	batch := state.DB.NewBatch()
+	defer batch.Close()
+
+	if err := resetDB(state.DB, batch); err != nil {
+		return err
+	}
+
+	item := exportItem{}
+	var err error
+	for err = decoder.Decode(&item); err == nil; err = decoder.Decode(&item) {
+		if err := batch.Set(item.Key, item.Value); err != nil {
+			return fmt.Errorf("error restoring state item %+v: %w", item, err)
+		}
+	}
+
+	if !errors.Is(err, io.EOF) {
+		return err
+	}
+
+	// commit changes
+	if err := batch.Write(); err != nil {
+		return fmt.Errorf("error finalizing restore batch: %w", err)
+	}
+
+	state.InitialHeight = newState.InitialHeight
+	state.Height = newState.Height
+	state.Round = newState.Round
+	state.AppHash = newState.AppHash
+	if len(state.AppHash) == 0 {
+		state.AppHash = make(tmbytes.HexBytes, crypto.DefaultAppHashSize)
 	}
 
 	return nil
 }
 
+// / Save saves state to the writer.
+// / First it puts json-encoded kvState, followed by all items from the state.
 func (state kvState) Save(to io.Writer) error {
-	stateBytes, err := json.Marshal(state)
-	if err != nil {
+	encoder := json.NewEncoder(to)
+	if err := encoder.Encode(state); err != nil {
 		return fmt.Errorf("kvState marshal: %w", err)
 	}
 
-	_, err = to.Write(stateBytes)
+	iter, err := state.DB.Iterator(nil, nil)
 	if err != nil {
-		return fmt.Errorf("kvState write: %w", err)
+		return fmt.Errorf("error creating state iterator: %w", err)
+	}
+	defer iter.Close()
+
+	for ; iter.Valid(); iter.Next() {
+		item := exportItem{Key: iter.Key(), Value: iter.Value()}
+		if err := encoder.Encode(item); err != nil {
+			return fmt.Errorf("error encoding state item %+v: %w", item, err)
+		}
 	}
 
 	return nil
@@ -224,56 +261,9 @@ type StateExport struct {
 	Items         map[string]string `json:"items,omitempty"` // we store items as string-encoded values
 }
 
-// MarshalJSON implements json.Marshaler
-func (state kvState) MarshalJSON() ([]byte, error) {
-	iter, err := state.DB.Iterator(nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer iter.Close()
-
-	height := state.Height
-	initialHeight := state.InitialHeight
-	apphash := state.GetAppHash()
-
-	export := StateExport{
-		Height:        &height,
-		InitialHeight: &initialHeight,
-		AppHash:       apphash,
-		Items:         nil,
-	}
-
-	for ; iter.Valid(); iter.Next() {
-		if export.Items == nil {
-			export.Items = map[string]string{}
-		}
-		export.Items[string(iter.Key())] = string(iter.Value())
-	}
-
-	return json.Marshal(&export)
-}
-
-// UnmarshalJSON implements json.Unmarshaler.
-// Note that it unmarshals only existing (non-nil) values.
-// If unmarshaled data contains a nil value (eg. is not present in json), these will stay intact.
-func (state *kvState) UnmarshalJSON(data []byte) error {
-
-	export := StateExport{}
-	if err := json.Unmarshal(data, &export); err != nil {
-		return err
-	}
-
-	if export.Height != nil {
-		state.Height = *export.Height
-	}
-	if export.InitialHeight != nil {
-		state.InitialHeight = *export.InitialHeight
-	}
-	if export.AppHash != nil {
-		state.AppHash = export.AppHash
-	}
-
-	return state.persistItems(export.Items)
+type exportItem struct {
+	Key   []byte `json:"key"`
+	Value []byte `json:"value"`
 }
 
 func (state *kvState) Close() error {
@@ -281,24 +271,4 @@ func (state *kvState) Close() error {
 		return state.DB.Close()
 	}
 	return nil
-}
-
-func (state *kvState) persistItems(items map[string]string) error {
-	if items == nil {
-		return nil
-	}
-	batch := state.DB.NewBatch()
-	defer batch.Close()
-
-	if len(items) > 0 {
-		if err := resetDB(state.DB, batch); err != nil {
-			return err
-		}
-		for key, value := range items {
-			if err := batch.Set([]byte(key), []byte(value)); err != nil {
-				return err
-			}
-		}
-	}
-	return batch.Write()
 }

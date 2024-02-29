@@ -1,4 +1,3 @@
-//nolint:gosec
 package kvstore
 
 import (
@@ -7,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -97,20 +97,28 @@ func (s *SnapshotStore) Create(state State) (abci.Snapshot, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	bz, err := json.Marshal(state)
-	if err != nil {
+	bz := bytes.NewBuffer(nil)
+	if err := state.Save(bz); err != nil {
 		return abci.Snapshot{}, err
 	}
+
 	height := state.GetHeight()
 	snapshot := abci.Snapshot{
 		Height:  uint64(height),
 		Version: 1,
-		Hash:    crypto.Checksum(bz),
+		Hash:    crypto.Checksum(bz.Bytes()),
 	}
-	err = os.WriteFile(filepath.Join(s.dir, fmt.Sprintf("%v.json", height)), bz, 0644)
+
+	f, err := os.Create(filepath.Join(s.dir, fmt.Sprintf("%v.json", height)))
 	if err != nil {
 		return abci.Snapshot{}, err
 	}
+	defer f.Close()
+
+	if _, err := io.Copy(f, bz); err != nil {
+		return abci.Snapshot{}, err
+	}
+
 	s.metadata = append(s.metadata, snapshot)
 	err = s.saveMetadata()
 	if err != nil {
@@ -214,6 +222,16 @@ func (s *offerSnapshot) bytes() []byte {
 		buf.Write(chunk)
 	}
 	return buf.Bytes()
+}
+
+func (s *offerSnapshot) reader() io.ReadCloser {
+	// TODO: refactor to support streaming
+	chunks := s.chunks.Values()
+	buf := bytes.NewBuffer(nil)
+	for _, chunk := range chunks {
+		buf.Write(chunk)
+	}
+	return io.NopCloser(buf)
 }
 
 // makeChunkItem returns the chunk at a given index from the full byte slice.
