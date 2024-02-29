@@ -16,6 +16,10 @@ type BlockEventPublisher struct {
 func (_m *BlockEventPublisher) PublishEventNewBlock(_a0 types.EventDataNewBlock) error {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for PublishEventNewBlock")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(types.EventDataNewBlock) error); ok {
 		r0 = rf(_a0)
@@ -29,6 +33,10 @@ func (_m *BlockEventPublisher) PublishEventNewBlock(_a0 types.EventDataNewBlock)
 // PublishEventNewBlockHeader provides a mock function with given fields: _a0
 func (_m *BlockEventPublisher) PublishEventNewBlockHeader(_a0 types.EventDataNewBlockHeader) error {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PublishEventNewBlockHeader")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(types.EventDataNewBlockHeader) error); ok {
@@ -44,6 +52,10 @@ func (_m *BlockEventPublisher) PublishEventNewBlockHeader(_a0 types.EventDataNew
 func (_m *BlockEventPublisher) PublishEventNewEvidence(_a0 types.EventDataNewEvidence) error {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for PublishEventNewEvidence")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(types.EventDataNewEvidence) error); ok {
 		r0 = rf(_a0)
@@ -58,6 +70,10 @@ func (_m *BlockEventPublisher) PublishEventNewEvidence(_a0 types.EventDataNewEvi
 func (_m *BlockEventPublisher) PublishEventTx(_a0 types.EventDataTx) error {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for PublishEventTx")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(types.EventDataTx) error); ok {
 		r0 = rf(_a0)
@@ -71,6 +87,10 @@ func (_m *BlockEventPublisher) PublishEventTx(_a0 types.EventDataTx) error {
 // PublishEventValidatorSetUpdates provides a mock function with given fields: _a0
 func (_m *BlockEventPublisher) PublishEventValidatorSetUpdates(_a0 types.EventDataValidatorSetUpdate) error {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for PublishEventValidatorSetUpdates")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(types.EventDataValidatorSetUpdate) error); ok {

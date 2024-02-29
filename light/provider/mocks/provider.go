@@ -19,6 +19,10 @@ type Provider struct {
 func (_m *Provider) ID() string {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for ID")
+	}
+
 	var r0 string
 	if rf, ok := ret.Get(0).(func() string); ok {
 		r0 = rf()
@@ -32,6 +36,10 @@ func (_m *Provider) ID() string {
 // LightBlock provides a mock function with given fields: ctx, height
 func (_m *Provider) LightBlock(ctx context.Context, height int64) (*types.LightBlock, error) {
 	ret := _m.Called(ctx, height)
+
+	if len(ret) == 0 {
+		panic("no return value specified for LightBlock")
+	}
 
 	var r0 *types.LightBlock
 	var r1 error
@@ -58,6 +66,10 @@ func (_m *Provider) LightBlock(ctx context.Context, height int64) (*types.LightB
 // ReportEvidence provides a mock function with given fields: _a0, _a1
 func (_m *Provider) ReportEvidence(_a0 context.Context, _a1 types.Evidence) error {
 	ret := _m.Called(_a0, _a1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ReportEvidence")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.Evidence) error); ok {
