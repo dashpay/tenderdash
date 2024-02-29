@@ -403,7 +403,8 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	appHash := tmbytes.HexBytes(req.Block.Header.AppHash)
 	roundState, ok := app.roundStates[roundKey(appHash, req.Height, req.Round)]
 	if !ok {
-		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s not found", appHash)
+		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s at height %d round %d not found",
+			appHash, req.Height, req.Round)
 	}
 	if roundState.GetHeight() != req.Height {
 		return &abci.ResponseFinalizeBlock{},

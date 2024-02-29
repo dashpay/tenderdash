@@ -182,23 +182,27 @@ func (state *kvState) UpdateAppHash(lastCommittedState State, _txs types1.Txs, t
 
 // / Load state from the reader.
 // / It expects json-encoded kvState, followed by all items from the state.
+// /
+// / As a special case, io.EOF when reading the header means that the state is empty.
 func (state *kvState) Load(from io.Reader) error {
 	if state == nil || state.DB == nil {
 		return errors.New("cannot load into nil state")
 	}
 
-	newState := kvState{}
+	// We reuse DB as we can use atomic batches to load items.
+	newState := NewKvState(state.DB, state.InitialHeight).(*kvState)
+
 	decoder := json.NewDecoder(from)
 	if err := decoder.Decode(&newState); err != nil {
 		return fmt.Errorf("error reading state header: %w", err)
 	}
 
-	// Lload items to state DB; we don't need to create and use newState.DB
+	// Load items to state DB; we don't need to create and use newState.DB
 	// as we use atomic batches.
-	batch := state.DB.NewBatch()
+	batch := newState.DB.NewBatch()
 	defer batch.Close()
 
-	if err := resetDB(state.DB, batch); err != nil {
+	if err := resetDB(newState.DB, batch); err != nil {
 		return err
 	}
 
