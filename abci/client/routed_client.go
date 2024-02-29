@@ -109,8 +109,6 @@ func NewRoutedClientWithAddr(logger log.Logger, addr string, mustConnect bool) (
 //   - `routing` - The clients to route requests to.
 //
 // See docs of routedClient.delegate() for more details about implemented logic.
-//
-// TODO: Implement metrics for routed client and separate metrics for underlying clients.
 func NewRoutedClient(logger log.Logger, defaultClient Client, routing Routing) (Client, error) {
 	defaultClientID := ""
 	if s, ok := defaultClient.(fmt.Stringer); ok {
@@ -196,8 +194,7 @@ func (cli *routedClient) delegate(args ...interface{}) (firstResult any, err err
 	clients, ok := cli.routing[RequestType(funcName)]
 	if !ok {
 		clients = []ClientInfo{cli.defaultClient}
-		// TODO change to trace or remove
-		cli.logger.Debug("no client found for method, falling back to default client", "method", funcName)
+		cli.logger.Trace("no client found for method, falling back to default client", "method", funcName)
 	}
 	// client that provided first non-zero result
 	winner := ""
@@ -220,16 +217,14 @@ func (cli *routedClient) delegate(args ...interface{}) (firstResult any, err err
 			winner = client.ClientID
 		}
 
-		// TODO change to Trace
-		cli.logger.Debug("routed ABCI request to a client",
+		cli.logger.Trace("routed ABCI request to a client",
 			"method", funcName,
 			"client_id", client.ClientID,
 			"nil", zerosReturned,
 			"took", time.Since(start).String())
 	}
 
-	// TODO change to Trace
-	cli.logger.Debug("routed ABCI request execution successful",
+	cli.logger.Trace("routed ABCI request execution successful",
 		"method", funcName,
 		"client_id", winner,
 		"took", time.Since(startAll).String(),
