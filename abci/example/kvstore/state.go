@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 
 	dbm "github.com/tendermint/tm-db"
 
@@ -209,7 +210,27 @@ func (state *kvState) Load(from io.Reader) error {
 	item := exportItem{}
 	var err error
 	for err = decoder.Decode(&item); err == nil; err = decoder.Decode(&item) {
-		if err := batch.Set([]byte(item.Key), []byte(item.Value)); err != nil {
+		// var key []byte
+		// var value []byte
+		// // Ensure that value is not escaped
+
+		// if err := json.Unmarshal([]byte(item.Key), &key); err != nil {
+		// 	return fmt.Errorf("error restoring state item key %+v: %w", item, err)
+		// }
+		// if err := json.Unmarshal([]byte(item.Value), &value); err != nil {
+		// 	return fmt.Errorf("error restoring state item value %+v: %w", item, err)
+		// }
+
+		key, err := url.QueryUnescape(item.Key)
+		if err != nil {
+			return fmt.Errorf("error restoring state item key %+v: %w", item, err)
+		}
+		value, err := url.QueryUnescape(item.Value)
+		if err != nil {
+			return fmt.Errorf("error restoring state item value %+v: %w", item, err)
+		}
+
+		if err := batch.Set([]byte(key), []byte(value)); err != nil {
 			return fmt.Errorf("error restoring state item %+v: %w", item, err)
 		}
 	}
@@ -249,7 +270,18 @@ func (state kvState) Save(to io.Writer) error {
 	defer iter.Close()
 
 	for ; iter.Valid(); iter.Next() {
-		item := exportItem{Key: string(iter.Key()), Value: string(iter.Value())}
+		// key, err := json.Marshal(string(iter.Key()))
+		// if err != nil {
+		// 	return fmt.Errorf("error encoding state item key %+v: %w", iter.Key(), err)
+		// }
+
+		// value, err := json.Marshal(string(iter.Value()))
+		// if err != nil {
+		// 	return fmt.Errorf("error encoding state item value %+v: %w", iter.Value(), err)
+		// }
+		key := url.QueryEscape(string(iter.Key()))
+		value := url.QueryEscape(string(iter.Value()))
+		item := exportItem{Key: key, Value: value}
 		if err := encoder.Encode(item); err != nil {
 			return fmt.Errorf("error encoding state item %+v: %w", item, err)
 		}

@@ -2,7 +2,6 @@ package kvstore
 
 import (
 	"context"
-	"encoding/base64"
 	"fmt"
 	"os"
 	"path"
@@ -138,9 +137,7 @@ func TestPersistentKVStoreKV(t *testing.T) {
 	data, err := os.ReadFile(path.Join(dir, "state.json"))
 	require.NoError(t, err)
 
-	assert.Contains(t, string(data), fmt.Sprintf(`"key":"%s","value":"%s"`,
-		base64.StdEncoding.EncodeToString([]byte(key)),
-		base64.StdEncoding.EncodeToString([]byte(value))))
+	assert.Contains(t, string(data), fmt.Sprintf(`"key":"%s","value":"%s"`, key, value))
 }
 
 func TestPersistentKVStoreInfo(t *testing.T) {

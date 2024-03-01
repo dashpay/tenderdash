@@ -32,9 +32,12 @@ func TestStateMarshalUnmarshal(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEmpty(t, encoded)
 
+	t.Log("encoded:", encoded.String())
+
 	decoded := NewKvState(dbm.NewMemDB(), 1)
 	err = decoded.Load(encoded)
 	require.NoError(t, err)
+	decoded.Print()
 
 	v1, err := decoded.Get([]byte("key1"))
 	require.NoError(t, err)
@@ -91,8 +94,8 @@ func TestStateLoad(t *testing.T) {
 				"height": 6531,
 				"app_hash": "1C9ECEC90E28D2461650418635878A5C91E49F47586ECF75F2B0CBB94E897112"
 			}
-			{"key":"a2V5MQ==","value":"dmFsdWUx"}
-			{"key":"a2V5Mg==","value":"dmFsdWUy"}`),
+			{"key":"key1","value":"value1"}
+			{"key":"key2","value":"value2"}`),
 			expectHeight:  6531,
 			expectAppHash: tmbytes.MustHexDecode("1C9ECEC90E28D2461650418635878A5C91E49F47586ECF75F2B0CBB94E897112"),
 			expectKeyVals: []keyVals{
