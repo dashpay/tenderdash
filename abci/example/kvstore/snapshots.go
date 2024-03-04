@@ -2,6 +2,7 @@ package kvstore
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -97,26 +98,29 @@ func (s *SnapshotStore) Create(state State) (abci.Snapshot, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	bz := bytes.NewBuffer(nil)
-	if err := state.Save(bz); err != nil {
-		return abci.Snapshot{}, err
-	}
-
 	height := state.GetHeight()
-	snapshot := abci.Snapshot{
-		Height:  uint64(height),
-		Version: 1,
-		Hash:    crypto.Checksum(bz.Bytes()),
-	}
 
-	f, err := os.Create(filepath.Join(s.dir, fmt.Sprintf("%v.json", height)))
+	filename := filepath.Join(s.dir, fmt.Sprintf("%v.json", height))
+	f, err := os.Create(filename)
 	if err != nil {
 		return abci.Snapshot{}, err
 	}
 	defer f.Close()
 
-	if _, err := io.Copy(f, bz); err != nil {
+	hasher := sha256.New()
+	writer := io.MultiWriter(f, hasher)
+
+	if err := state.Save(writer); err != nil {
+		f.Close()
+		// Cleanup incomplete file; ignore errors during cleanup
+		_ = os.Remove(filename)
 		return abci.Snapshot{}, err
+	}
+
+	snapshot := abci.Snapshot{
+		Height:  uint64(height),
+		Version: 1,
+		Hash:    hasher.Sum(nil),
 	}
 
 	s.metadata = append(s.metadata, snapshot)
@@ -224,14 +228,42 @@ func (s *offerSnapshot) bytes() []byte {
 	return buf.Bytes()
 }
 
+// reader returns a reader for the snapshot data.
 func (s *offerSnapshot) reader() io.ReadCloser {
-	// TODO: refactor to support streaming
 	chunks := s.chunks.Values()
-	buf := bytes.NewBuffer(nil)
-	for _, chunk := range chunks {
-		buf.Write(chunk)
+	reader := &chunkedReader{chunks: chunks}
+
+	return reader
+}
+
+type chunkedReader struct {
+	chunks [][]byte
+	index  int
+	offset int
+}
+
+func (r *chunkedReader) Read(p []byte) (n int, err error) {
+	if r.chunks == nil {
+		return 0, io.EOF
 	}
-	return io.NopCloser(buf)
+	for n < len(p) && r.index < len(r.chunks) {
+		copyCount := copy(p[n:], r.chunks[r.index][r.offset:])
+		n += copyCount
+		r.offset += copyCount
+		if r.offset >= len(r.chunks[r.index]) {
+			r.index++
+			r.offset = 0
+		}
+	}
+	if r.index >= len(r.chunks) {
+		err = io.EOF
+	}
+	return
+}
+
+func (r *chunkedReader) Close() error {
+	r.chunks = nil
+	return nil
 }
 
 // makeChunkItem returns the chunk at a given index from the full byte slice.

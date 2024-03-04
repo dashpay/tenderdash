@@ -536,7 +536,6 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 	}
 
 	if app.offerSnapshot.isFull() {
-		// TODO: Refactor to use streaming
 		chunks := app.offerSnapshot.reader()
 		defer chunks.Close()
 
