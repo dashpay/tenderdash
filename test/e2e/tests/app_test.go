@@ -223,8 +223,6 @@ func TestApp_TxTooBig(t *testing.T) {
 	mainCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	t.Helper()
-
 	testnet := loadTestnet(t)
 	nodes := testnet.Nodes
 
@@ -238,12 +236,13 @@ func TestApp_TxTooBig(t *testing.T) {
 		})
 	}
 
-	// we will use last client to check if txs were included in block
+	// we will use last client to check if txs were included in block, so we
+	// define it outside the loop
 	var client *http.HTTP
 	outcome := make([]txPair, 0, len(nodes))
 
 	start := time.Now()
-	/// First we broadcast to all nodes
+	/// Send to each node more txs than we can fit into block
 	for _, node := range nodes {
 		ctx, cancel := context.WithTimeout(mainCtx, broadcastTimeout)
 		defer cancel()

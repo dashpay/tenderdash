@@ -19,7 +19,7 @@ var (
 		"initialState": {
 			"{}",
 			`{}
-			{"key":"initial01","value": "a"}
+			{"key":"initial01","value":"a"}
 			{"key":"initial02","value":"b"}
 			{"key":"initial03","value":"c"}
 			`,

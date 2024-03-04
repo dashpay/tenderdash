@@ -181,10 +181,10 @@ func (state *kvState) UpdateAppHash(lastCommittedState State, _txs types1.Txs, t
 	return nil
 }
 
-// / Load state from the reader.
-// / It expects json-encoded kvState, followed by all items from the state.
-// /
-// / As a special case, io.EOF when reading the header means that the state is empty.
+// Load state from the reader.
+// It expects json-encoded kvState, followed by all items from the state.
+//
+// As a special case, io.EOF when reading the header means that the state is empty.
 func (state *kvState) Load(from io.Reader) error {
 	if state == nil || state.DB == nil {
 		return errors.New("cannot load into nil state")
@@ -198,8 +198,7 @@ func (state *kvState) Load(from io.Reader) error {
 		return fmt.Errorf("error reading state header: %w", err)
 	}
 
-	// Load items to state DB; we don't need to create and use newState.DB
-	// as we use atomic batches.
+	// Load items to state DB
 	batch := newState.DB.NewBatch()
 	defer batch.Close()
 
@@ -210,17 +209,6 @@ func (state *kvState) Load(from io.Reader) error {
 	item := exportItem{}
 	var err error
 	for err = decoder.Decode(&item); err == nil; err = decoder.Decode(&item) {
-		// var key []byte
-		// var value []byte
-		// // Ensure that value is not escaped
-
-		// if err := json.Unmarshal([]byte(item.Key), &key); err != nil {
-		// 	return fmt.Errorf("error restoring state item key %+v: %w", item, err)
-		// }
-		// if err := json.Unmarshal([]byte(item.Value), &value); err != nil {
-		// 	return fmt.Errorf("error restoring state item value %+v: %w", item, err)
-		// }
-
 		key, err := url.QueryUnescape(item.Key)
 		if err != nil {
 			return fmt.Errorf("error restoring state item key %+v: %w", item, err)
@@ -244,10 +232,12 @@ func (state *kvState) Load(from io.Reader) error {
 		return fmt.Errorf("error finalizing restore batch: %w", err)
 	}
 
+	// copy loaded values to the state
 	state.InitialHeight = newState.InitialHeight
 	state.Height = newState.Height
 	state.Round = newState.Round
 	state.AppHash = newState.AppHash
+	// apphash cannot be nil,zero-length
 	if len(state.AppHash) == 0 {
 		state.AppHash = make(tmbytes.HexBytes, crypto.DefaultAppHashSize)
 	}
@@ -255,8 +245,8 @@ func (state *kvState) Load(from io.Reader) error {
 	return nil
 }
 
-// / Save saves state to the writer.
-// / First it puts json-encoded kvState, followed by all items from the state.
+// Save saves state to the writer.
+// First it puts json-encoded kvState, followed by all items from the state.
 func (state kvState) Save(to io.Writer) error {
 	encoder := json.NewEncoder(to)
 	if err := encoder.Encode(state); err != nil {
@@ -270,15 +260,6 @@ func (state kvState) Save(to io.Writer) error {
 	defer iter.Close()
 
 	for ; iter.Valid(); iter.Next() {
-		// key, err := json.Marshal(string(iter.Key()))
-		// if err != nil {
-		// 	return fmt.Errorf("error encoding state item key %+v: %w", iter.Key(), err)
-		// }
-
-		// value, err := json.Marshal(string(iter.Value()))
-		// if err != nil {
-		// 	return fmt.Errorf("error encoding state item value %+v: %w", iter.Value(), err)
-		// }
 		key := url.QueryEscape(string(iter.Key()))
 		value := url.QueryEscape(string(iter.Value()))
 		item := exportItem{Key: key, Value: value}
