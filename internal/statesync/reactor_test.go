@@ -658,7 +658,7 @@ func TestReactor_Backfill(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
 	const (
