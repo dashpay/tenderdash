@@ -43,7 +43,7 @@ func NewClient(logger log.Logger, addr, transport string, mustConnect bool, metr
 	case "grpc":
 		return NewGRPCClient(logger, addr, mustConnect), nil
 	case "routed":
-		return NewRoutedClientWithAddr(logger, addr, mustConnect)
+		return NewRoutedClientWithAddr(logger, addr, mustConnect, metrics)
 	default:
 		return nil, fmt.Errorf("unknown abci transport %s", transport)
 	}
@@ -104,9 +104,9 @@ func makeReqRes(ctx context.Context, req *types.Request) *requestAndResponse {
 }
 
 // markDone marks the ReqRes object as done.
-func (r *requestAndResponse) markDone() {
-	r.mtx.Lock()
-	defer r.mtx.Unlock()
+func (reqResp *requestAndResponse) markDone() {
+	reqResp.mtx.Lock()
+	defer reqResp.mtx.Unlock()
 
-	close(r.signal)
+	close(reqResp.signal)
 }

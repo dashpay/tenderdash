@@ -51,7 +51,7 @@ type ClientInfo struct {
 //   - `logger` - The logger to use for the client.
 //   - `addr` - comma-separated list of routing rules, consisting of request type, transport name and client address separated with colon.
 //     Special request type "*" is used for default client.
-func NewRoutedClientWithAddr(logger log.Logger, addr string, mustConnect bool) (Client, error) {
+func NewRoutedClientWithAddr(logger log.Logger, addr string, mustConnect bool, metrics *Metrics) (Client, error) {
 	// Split the routing rules
 	routing := make(Routing)
 	clients := make(map[string]Client)
@@ -71,7 +71,7 @@ func NewRoutedClientWithAddr(logger log.Logger, addr string, mustConnect bool) (
 		// Create a new client if it doesn't exist
 		clientName := fmt.Sprintf("%s:%s", transport, address)
 		if _, ok := clients[clientName]; !ok {
-			c, err := NewClient(logger, address, transport, mustConnect)
+			c, err := NewClient(logger, address, transport, mustConnect, metrics)
 			if err != nil {
 				return nil, err
 			}
