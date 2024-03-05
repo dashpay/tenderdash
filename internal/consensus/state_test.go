@@ -2658,8 +2658,8 @@ func TestEmitNewValidBlockEventOnCommitWithoutBlock(t *testing.T) {
 	ensureNewValidBlock(t, validBlockCh, height, round)
 
 	rs := cs1.GetRoundState()
-	assert.True(t, rs.Step == cstypes.RoundStepPrecommit)
-	assert.True(t, rs.ProposalBlock == nil)
+	assert.EqualValues(t, cstypes.RoundStepPrecommit.String(), rs.Step.String())
+	assert.Nil(t, rs.ProposalBlock)
 	assert.True(t, rs.ProposalBlockParts.Header().Equals(blockID.PartSetHeader))
 }
 
