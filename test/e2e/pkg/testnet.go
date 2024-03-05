@@ -15,7 +15,6 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
@@ -77,7 +76,7 @@ type Testnet struct {
 	Dir                    string
 	IP                     *net.IPNet
 	InitialHeight          int64
-	InitialState           kvstore.StateExport
+	InitialState           string
 	Validators             ValidatorsMap
 	ValidatorUpdates       map[int64]ValidatorsMap
 	Nodes                  []*Node

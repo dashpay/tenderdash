@@ -2,6 +2,7 @@
 package types
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -202,7 +203,8 @@ func TestGenesisCorrect(t *testing.T) {
 
 func TestBasicGenesisDoc(t *testing.T) {
 	// test a good one by raw json
-	genDocBytes := []byte(
+	appState := base64.StdEncoding.AppendEncode(nil, []byte(`{"account_owner": "Bob"}`))
+	genDocBytes := []byte(fmt.Sprintf(
 		`{
 			"genesis_time": "0001-01-01T00:00:00Z",
 			"chain_id": "test-chain-QDKdJr",
@@ -222,7 +224,7 @@ func TestBasicGenesisDoc(t *testing.T) {
 			"validator_quorum_hash":"43FF39CC1F41B9FC63DFA5B1EDF3F0CA3AD5CAFAE4B12B4FE9263B08BB50C4CC",
 			"validator_quorum_type":100,
 			"app_hash":"",
-			"app_state":{"account_owner": "Bob"},
+			"app_state":"%s",
 			"consensus_params": {
 				"synchrony":  {"precision": "1", "message_delay": "10"},
 				"timeout": {
@@ -237,8 +239,8 @@ func TestBasicGenesisDoc(t *testing.T) {
 				"block": {"max_bytes": "100"},
 				"evidence": {"max_age_num_blocks": "100", "max_age_duration": "10"}
 			}
-		}`,
-	)
+		}`, appState,
+	))
 	_, err := GenesisDocFromJSON(genDocBytes)
 	assert.NoError(t, err, "expected no error for good genDoc json")
 
