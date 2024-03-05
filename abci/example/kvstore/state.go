@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net/url"
 
 	dbm "github.com/tendermint/tm-db"
 
@@ -19,8 +20,6 @@ import (
 // Caller of State methods should do proper concurrency locking (eg. mutexes)
 type State interface {
 	dbm.DB
-	json.Marshaler
-	json.Unmarshaler
 
 	// Save writes full content of this state to some output
 	Save(output io.Writer) error
@@ -50,7 +49,7 @@ type State interface {
 }
 
 type kvState struct {
-	dbm.DB
+	dbm.DB `json:"-"`
 	// Height of the state. Special value of 0 means zero state.
 	Height        int64            `json:"height"`
 	InitialHeight int64            `json:"initial_height,omitempty"`
@@ -182,98 +181,99 @@ func (state *kvState) UpdateAppHash(lastCommittedState State, _txs types1.Txs, t
 	return nil
 }
 
+// Load state from the reader.
+// It expects json-encoded kvState, followed by all items from the state.
+//
+// As a special case, io.EOF when reading the header means that the state is empty.
 func (state *kvState) Load(from io.Reader) error {
 	if state == nil || state.DB == nil {
 		return errors.New("cannot load into nil state")
 	}
 
-	stateBytes, err := io.ReadAll(from)
-	if err != nil {
-		return fmt.Errorf("kvState read: %w", err)
-	}
-	if len(stateBytes) == 0 {
-		return nil // NOOP
-	}
+	// We reuse DB as we can use atomic batches to load items.
+	newState := NewKvState(state.DB, state.InitialHeight).(*kvState)
 
-	err = json.Unmarshal(stateBytes, &state)
-	if err != nil {
-		return fmt.Errorf("kvState unmarshal: %w", err)
+	decoder := json.NewDecoder(from)
+	if err := decoder.Decode(&newState); err != nil {
+		return fmt.Errorf("error reading state header: %w", err)
 	}
 
-	return nil
-}
+	// Load items to state DB
+	batch := newState.DB.NewBatch()
+	defer batch.Close()
 
-func (state kvState) Save(to io.Writer) error {
-	stateBytes, err := json.Marshal(state)
-	if err != nil {
-		return fmt.Errorf("kvState marshal: %w", err)
-	}
-
-	_, err = to.Write(stateBytes)
-	if err != nil {
-		return fmt.Errorf("kvState write: %w", err)
-	}
-
-	return nil
-}
-
-type StateExport struct {
-	Height        *int64            `json:"height,omitempty"`
-	InitialHeight *int64            `json:"initial_height,omitempty"`
-	AppHash       tmbytes.HexBytes  `json:"app_hash,omitempty"`
-	Items         map[string]string `json:"items,omitempty"` // we store items as string-encoded values
-}
-
-// MarshalJSON implements json.Marshaler
-func (state kvState) MarshalJSON() ([]byte, error) {
-	iter, err := state.DB.Iterator(nil, nil)
-	if err != nil {
-		return nil, err
-	}
-	defer iter.Close()
-
-	height := state.Height
-	initialHeight := state.InitialHeight
-	apphash := state.GetAppHash()
-
-	export := StateExport{
-		Height:        &height,
-		InitialHeight: &initialHeight,
-		AppHash:       apphash,
-		Items:         nil,
-	}
-
-	for ; iter.Valid(); iter.Next() {
-		if export.Items == nil {
-			export.Items = map[string]string{}
-		}
-		export.Items[string(iter.Key())] = string(iter.Value())
-	}
-
-	return json.Marshal(&export)
-}
-
-// UnmarshalJSON implements json.Unmarshaler.
-// Note that it unmarshals only existing (non-nil) values.
-// If unmarshaled data contains a nil value (eg. is not present in json), these will stay intact.
-func (state *kvState) UnmarshalJSON(data []byte) error {
-
-	export := StateExport{}
-	if err := json.Unmarshal(data, &export); err != nil {
+	if err := resetDB(newState.DB, batch); err != nil {
 		return err
 	}
 
-	if export.Height != nil {
-		state.Height = *export.Height
-	}
-	if export.InitialHeight != nil {
-		state.InitialHeight = *export.InitialHeight
-	}
-	if export.AppHash != nil {
-		state.AppHash = export.AppHash
+	item := exportItem{}
+	var err error
+	for err = decoder.Decode(&item); err == nil; err = decoder.Decode(&item) {
+		key, err := url.QueryUnescape(item.Key)
+		if err != nil {
+			return fmt.Errorf("error restoring state item key %+v: %w", item, err)
+		}
+		value, err := url.QueryUnescape(item.Value)
+		if err != nil {
+			return fmt.Errorf("error restoring state item value %+v: %w", item, err)
+		}
+
+		if err := batch.Set([]byte(key), []byte(value)); err != nil {
+			return fmt.Errorf("error restoring state item %+v: %w", item, err)
+		}
 	}
 
-	return state.persistItems(export.Items)
+	if !errors.Is(err, io.EOF) {
+		return err
+	}
+
+	// commit changes
+	if err := batch.Write(); err != nil {
+		return fmt.Errorf("error finalizing restore batch: %w", err)
+	}
+
+	// copy loaded values to the state
+	state.InitialHeight = newState.InitialHeight
+	state.Height = newState.Height
+	state.Round = newState.Round
+	state.AppHash = newState.AppHash
+	// apphash cannot be nil,zero-length
+	if len(state.AppHash) == 0 {
+		state.AppHash = make(tmbytes.HexBytes, crypto.DefaultAppHashSize)
+	}
+
+	return nil
+}
+
+// Save saves state to the writer.
+// First it puts json-encoded kvState, followed by all items from the state.
+func (state kvState) Save(to io.Writer) error {
+	encoder := json.NewEncoder(to)
+	if err := encoder.Encode(state); err != nil {
+		return fmt.Errorf("kvState marshal: %w", err)
+	}
+
+	iter, err := state.DB.Iterator(nil, nil)
+	if err != nil {
+		return fmt.Errorf("error creating state iterator: %w", err)
+	}
+	defer iter.Close()
+
+	for ; iter.Valid(); iter.Next() {
+		key := url.QueryEscape(string(iter.Key()))
+		value := url.QueryEscape(string(iter.Value()))
+		item := exportItem{Key: key, Value: value}
+		if err := encoder.Encode(item); err != nil {
+			return fmt.Errorf("error encoding state item %+v: %w", item, err)
+		}
+	}
+
+	return nil
+}
+
+type exportItem struct {
+	Key   string `json:"key"`
+	Value string `json:"value"`
 }
 
 func (state *kvState) Close() error {
@@ -281,24 +281,4 @@ func (state *kvState) Close() error {
 		return state.DB.Close()
 	}
 	return nil
-}
-
-func (state *kvState) persistItems(items map[string]string) error {
-	if items == nil {
-		return nil
-	}
-	batch := state.DB.NewBatch()
-	defer batch.Close()
-
-	if len(items) > 0 {
-		if err := resetDB(state.DB, batch); err != nil {
-			return err
-		}
-		for key, value := range items {
-			if err := batch.Set([]byte(key), []byte(value)); err != nil {
-				return err
-			}
-		}
-	}
-	return batch.Write()
 }

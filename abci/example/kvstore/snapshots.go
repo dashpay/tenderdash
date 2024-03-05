@@ -1,12 +1,13 @@
-//nolint:gosec
 package kvstore
 
 import (
 	"bytes"
+	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 
@@ -97,20 +98,31 @@ func (s *SnapshotStore) Create(state State) (abci.Snapshot, error) {
 	s.Lock()
 	defer s.Unlock()
 
-	bz, err := json.Marshal(state)
+	height := state.GetHeight()
+
+	filename := filepath.Join(s.dir, fmt.Sprintf("%v.json", height))
+	f, err := os.Create(filename)
 	if err != nil {
 		return abci.Snapshot{}, err
 	}
-	height := state.GetHeight()
+	defer f.Close()
+
+	hasher := sha256.New()
+	writer := io.MultiWriter(f, hasher)
+
+	if err := state.Save(writer); err != nil {
+		f.Close()
+		// Cleanup incomplete file; ignore errors during cleanup
+		_ = os.Remove(filename)
+		return abci.Snapshot{}, err
+	}
+
 	snapshot := abci.Snapshot{
 		Height:  uint64(height),
 		Version: 1,
-		Hash:    crypto.Checksum(bz),
+		Hash:    hasher.Sum(nil),
 	}
-	err = os.WriteFile(filepath.Join(s.dir, fmt.Sprintf("%v.json", height)), bz, 0644)
-	if err != nil {
-		return abci.Snapshot{}, err
-	}
+
 	s.metadata = append(s.metadata, snapshot)
 	err = s.saveMetadata()
 	if err != nil {
@@ -214,6 +226,44 @@ func (s *offerSnapshot) bytes() []byte {
 		buf.Write(chunk)
 	}
 	return buf.Bytes()
+}
+
+// reader returns a reader for the snapshot data.
+func (s *offerSnapshot) reader() io.ReadCloser {
+	chunks := s.chunks.Values()
+	reader := &chunkedReader{chunks: chunks}
+
+	return reader
+}
+
+type chunkedReader struct {
+	chunks [][]byte
+	index  int
+	offset int
+}
+
+func (r *chunkedReader) Read(p []byte) (n int, err error) {
+	if r.chunks == nil {
+		return 0, io.EOF
+	}
+	for n < len(p) && r.index < len(r.chunks) {
+		copyCount := copy(p[n:], r.chunks[r.index][r.offset:])
+		n += copyCount
+		r.offset += copyCount
+		if r.offset >= len(r.chunks[r.index]) {
+			r.index++
+			r.offset = 0
+		}
+	}
+	if r.index >= len(r.chunks) {
+		err = io.EOF
+	}
+	return
+}
+
+func (r *chunkedReader) Close() error {
+	r.chunks = nil
+	return nil
 }
 
 // makeChunkItem returns the chunk at a given index from the full byte slice.
