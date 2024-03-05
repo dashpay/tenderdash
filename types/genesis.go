@@ -75,7 +75,7 @@ type GenesisDoc struct {
 	ConsensusParams *ConsensusParams
 	Validators      []GenesisValidator
 	AppHash         tmbytes.HexBytes
-	AppState        json.RawMessage
+	AppState        []byte
 
 	// dash fields
 	InitialCoreChainLockedHeight uint32                 `json:"initial_core_chain_locked_height"`
@@ -92,7 +92,7 @@ type genesisDocJSON struct {
 	ConsensusParams *ConsensusParams   `json:"consensus_params,omitempty"`
 	Validators      []GenesisValidator `json:"validators,omitempty"`
 	AppHash         tmbytes.HexBytes   `json:"app_hash,omitempty"`
-	AppState        json.RawMessage    `json:"app_state,omitempty"`
+	AppState        []byte             `json:"app_state,omitempty"`
 
 	// dash fields
 	InitialCoreChainLockedHeight uint32                 `json:"initial_core_chain_locked_height,omitempty"`

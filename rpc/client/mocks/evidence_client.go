@@ -20,6 +20,10 @@ type EvidenceClient struct {
 func (_m *EvidenceClient) BroadcastEvidence(_a0 context.Context, _a1 types.Evidence) (*coretypes.ResultBroadcastEvidence, error) {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for BroadcastEvidence")
+	}
+
 	var r0 *coretypes.ResultBroadcastEvidence
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.Evidence) (*coretypes.ResultBroadcastEvidence, error)); ok {

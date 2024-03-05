@@ -18,6 +18,10 @@ type EventsClient struct {
 func (_m *EventsClient) Events(ctx context.Context, req *coretypes.RequestEvents) (*coretypes.ResultEvents, error) {
 	ret := _m.Called(ctx, req)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Events")
+	}
+
 	var r0 *coretypes.ResultEvents
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, *coretypes.RequestEvents) (*coretypes.ResultEvents, error)); ok {

@@ -24,6 +24,10 @@ type EventSink struct {
 func (_m *EventSink) GetTxByHash(_a0 []byte) (*types.TxResult, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for GetTxByHash")
+	}
+
 	var r0 *types.TxResult
 	var r1 error
 	if rf, ok := ret.Get(0).(func([]byte) (*types.TxResult, error)); ok {
@@ -50,6 +54,10 @@ func (_m *EventSink) GetTxByHash(_a0 []byte) (*types.TxResult, error) {
 func (_m *EventSink) HasBlock(_a0 int64) (bool, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for HasBlock")
+	}
+
 	var r0 bool
 	var r1 error
 	if rf, ok := ret.Get(0).(func(int64) (bool, error)); ok {
@@ -74,6 +82,10 @@ func (_m *EventSink) HasBlock(_a0 int64) (bool, error) {
 func (_m *EventSink) IndexBlockEvents(_a0 tenderdashtypes.EventDataNewBlockHeader) error {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for IndexBlockEvents")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(tenderdashtypes.EventDataNewBlockHeader) error); ok {
 		r0 = rf(_a0)
@@ -88,6 +100,10 @@ func (_m *EventSink) IndexBlockEvents(_a0 tenderdashtypes.EventDataNewBlockHeade
 func (_m *EventSink) IndexTxEvents(_a0 []*types.TxResult) error {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for IndexTxEvents")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func([]*types.TxResult) error); ok {
 		r0 = rf(_a0)
@@ -101,6 +117,10 @@ func (_m *EventSink) IndexTxEvents(_a0 []*types.TxResult) error {
 // SearchBlockEvents provides a mock function with given fields: _a0, _a1
 func (_m *EventSink) SearchBlockEvents(_a0 context.Context, _a1 *query.Query) ([]int64, error) {
 	ret := _m.Called(_a0, _a1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SearchBlockEvents")
+	}
 
 	var r0 []int64
 	var r1 error
@@ -128,6 +148,10 @@ func (_m *EventSink) SearchBlockEvents(_a0 context.Context, _a1 *query.Query) ([
 func (_m *EventSink) SearchTxEvents(_a0 context.Context, _a1 *query.Query) ([]*types.TxResult, error) {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for SearchTxEvents")
+	}
+
 	var r0 []*types.TxResult
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, *query.Query) ([]*types.TxResult, error)); ok {
@@ -154,6 +178,10 @@ func (_m *EventSink) SearchTxEvents(_a0 context.Context, _a1 *query.Query) ([]*t
 func (_m *EventSink) Stop() error {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for Stop")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func() error); ok {
 		r0 = rf()
@@ -167,6 +195,10 @@ func (_m *EventSink) Stop() error {
 // Type provides a mock function with given fields:
 func (_m *EventSink) Type() indexer.EventSinkType {
 	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Type")
+	}
 
 	var r0 indexer.EventSinkType
 	if rf, ok := ret.Get(0).(func() indexer.EventSinkType); ok {

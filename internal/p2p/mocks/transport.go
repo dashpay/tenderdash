@@ -21,6 +21,10 @@ type Transport struct {
 func (_m *Transport) Accept(_a0 context.Context) (p2p.Connection, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Accept")
+	}
+
 	var r0 p2p.Connection
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context) (p2p.Connection, error)); ok {
@@ -52,6 +56,10 @@ func (_m *Transport) AddChannelDescriptors(_a0 []*conn.ChannelDescriptor) {
 func (_m *Transport) Close() error {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for Close")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func() error); ok {
 		r0 = rf()
@@ -65,6 +73,10 @@ func (_m *Transport) Close() error {
 // Dial provides a mock function with given fields: _a0, _a1
 func (_m *Transport) Dial(_a0 context.Context, _a1 *p2p.Endpoint) (p2p.Connection, error) {
 	ret := _m.Called(_a0, _a1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Dial")
+	}
 
 	var r0 p2p.Connection
 	var r1 error
@@ -92,6 +104,10 @@ func (_m *Transport) Dial(_a0 context.Context, _a1 *p2p.Endpoint) (p2p.Connectio
 func (_m *Transport) Endpoint() (*p2p.Endpoint, error) {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for Endpoint")
+	}
+
 	var r0 *p2p.Endpoint
 	var r1 error
 	if rf, ok := ret.Get(0).(func() (*p2p.Endpoint, error)); ok {
@@ -118,6 +134,10 @@ func (_m *Transport) Endpoint() (*p2p.Endpoint, error) {
 func (_m *Transport) Listen(_a0 *p2p.Endpoint) error {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Listen")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(*p2p.Endpoint) error); ok {
 		r0 = rf(_a0)
@@ -131,6 +151,10 @@ func (_m *Transport) Listen(_a0 *p2p.Endpoint) error {
 // Protocols provides a mock function with given fields:
 func (_m *Transport) Protocols() []p2p.Protocol {
 	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Protocols")
+	}
 
 	var r0 []p2p.Protocol
 	if rf, ok := ret.Get(0).(func() []p2p.Protocol); ok {
@@ -147,6 +171,10 @@ func (_m *Transport) Protocols() []p2p.Protocol {
 // String provides a mock function with given fields:
 func (_m *Transport) String() string {
 	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for String")
+	}
 
 	var r0 string
 	if rf, ok := ret.Get(0).(func() string); ok {

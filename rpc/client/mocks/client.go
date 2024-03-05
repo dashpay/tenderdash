@@ -24,6 +24,10 @@ type Client struct {
 func (_m *Client) ABCIInfo(_a0 context.Context) (*coretypes.ResultABCIInfo, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for ABCIInfo")
+	}
+
 	var r0 *coretypes.ResultABCIInfo
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultABCIInfo, error)); ok {
@@ -49,6 +53,10 @@ func (_m *Client) ABCIInfo(_a0 context.Context) (*coretypes.ResultABCIInfo, erro
 // ABCIQuery provides a mock function with given fields: ctx, path, data
 func (_m *Client) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*coretypes.ResultABCIQuery, error) {
 	ret := _m.Called(ctx, path, data)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ABCIQuery")
+	}
 
 	var r0 *coretypes.ResultABCIQuery
 	var r1 error
@@ -76,6 +84,10 @@ func (_m *Client) ABCIQuery(ctx context.Context, path string, data bytes.HexByte
 func (_m *Client) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	ret := _m.Called(ctx, path, data, opts)
 
+	if len(ret) == 0 {
+		panic("no return value specified for ABCIQueryWithOptions")
+	}
+
 	var r0 *coretypes.ResultABCIQuery
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, bytes.HexBytes, client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error)); ok {
@@ -101,6 +113,10 @@ func (_m *Client) ABCIQueryWithOptions(ctx context.Context, path string, data by
 // Block provides a mock function with given fields: ctx, height
 func (_m *Client) Block(ctx context.Context, height *int64) (*coretypes.ResultBlock, error) {
 	ret := _m.Called(ctx, height)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Block")
+	}
 
 	var r0 *coretypes.ResultBlock
 	var r1 error
@@ -128,6 +144,10 @@ func (_m *Client) Block(ctx context.Context, height *int64) (*coretypes.ResultBl
 func (_m *Client) BlockByHash(ctx context.Context, hash bytes.HexBytes) (*coretypes.ResultBlock, error) {
 	ret := _m.Called(ctx, hash)
 
+	if len(ret) == 0 {
+		panic("no return value specified for BlockByHash")
+	}
+
 	var r0 *coretypes.ResultBlock
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (*coretypes.ResultBlock, error)); ok {
@@ -153,6 +173,10 @@ func (_m *Client) BlockByHash(ctx context.Context, hash bytes.HexBytes) (*corety
 // BlockResults provides a mock function with given fields: ctx, height
 func (_m *Client) BlockResults(ctx context.Context, height *int64) (*coretypes.ResultBlockResults, error) {
 	ret := _m.Called(ctx, height)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BlockResults")
+	}
 
 	var r0 *coretypes.ResultBlockResults
 	var r1 error
@@ -180,6 +204,10 @@ func (_m *Client) BlockResults(ctx context.Context, height *int64) (*coretypes.R
 func (_m *Client) BlockSearch(ctx context.Context, query string, page *int, perPage *int, orderBy string) (*coretypes.ResultBlockSearch, error) {
 	ret := _m.Called(ctx, query, page, perPage, orderBy)
 
+	if len(ret) == 0 {
+		panic("no return value specified for BlockSearch")
+	}
+
 	var r0 *coretypes.ResultBlockSearch
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, *int, *int, string) (*coretypes.ResultBlockSearch, error)); ok {
@@ -205,6 +233,10 @@ func (_m *Client) BlockSearch(ctx context.Context, query string, page *int, perP
 // BlockchainInfo provides a mock function with given fields: ctx, minHeight, maxHeight
 func (_m *Client) BlockchainInfo(ctx context.Context, minHeight int64, maxHeight int64) (*coretypes.ResultBlockchainInfo, error) {
 	ret := _m.Called(ctx, minHeight, maxHeight)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BlockchainInfo")
+	}
 
 	var r0 *coretypes.ResultBlockchainInfo
 	var r1 error
@@ -232,6 +264,10 @@ func (_m *Client) BlockchainInfo(ctx context.Context, minHeight int64, maxHeight
 func (_m *Client) BroadcastEvidence(_a0 context.Context, _a1 types.Evidence) (*coretypes.ResultBroadcastEvidence, error) {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for BroadcastEvidence")
+	}
+
 	var r0 *coretypes.ResultBroadcastEvidence
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.Evidence) (*coretypes.ResultBroadcastEvidence, error)); ok {
@@ -257,6 +293,10 @@ func (_m *Client) BroadcastEvidence(_a0 context.Context, _a1 types.Evidence) (*c
 // BroadcastTx provides a mock function with given fields: _a0, _a1
 func (_m *Client) BroadcastTx(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	ret := _m.Called(_a0, _a1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BroadcastTx")
+	}
 
 	var r0 *coretypes.ResultBroadcastTx
 	var r1 error
@@ -284,6 +324,10 @@ func (_m *Client) BroadcastTx(_a0 context.Context, _a1 types.Tx) (*coretypes.Res
 func (_m *Client) BroadcastTxAsync(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for BroadcastTxAsync")
+	}
+
 	var r0 *coretypes.ResultBroadcastTx
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) (*coretypes.ResultBroadcastTx, error)); ok {
@@ -309,6 +353,10 @@ func (_m *Client) BroadcastTxAsync(_a0 context.Context, _a1 types.Tx) (*coretype
 // BroadcastTxCommit provides a mock function with given fields: _a0, _a1
 func (_m *Client) BroadcastTxCommit(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTxCommit, error) {
 	ret := _m.Called(_a0, _a1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for BroadcastTxCommit")
+	}
 
 	var r0 *coretypes.ResultBroadcastTxCommit
 	var r1 error
@@ -336,6 +384,10 @@ func (_m *Client) BroadcastTxCommit(_a0 context.Context, _a1 types.Tx) (*coretyp
 func (_m *Client) BroadcastTxSync(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for BroadcastTxSync")
+	}
+
 	var r0 *coretypes.ResultBroadcastTx
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) (*coretypes.ResultBroadcastTx, error)); ok {
@@ -361,6 +413,10 @@ func (_m *Client) BroadcastTxSync(_a0 context.Context, _a1 types.Tx) (*coretypes
 // CheckTx provides a mock function with given fields: _a0, _a1
 func (_m *Client) CheckTx(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultCheckTx, error) {
 	ret := _m.Called(_a0, _a1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for CheckTx")
+	}
 
 	var r0 *coretypes.ResultCheckTx
 	var r1 error
@@ -388,6 +444,10 @@ func (_m *Client) CheckTx(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultC
 func (_m *Client) Commit(ctx context.Context, height *int64) (*coretypes.ResultCommit, error) {
 	ret := _m.Called(ctx, height)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Commit")
+	}
+
 	var r0 *coretypes.ResultCommit
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, *int64) (*coretypes.ResultCommit, error)); ok {
@@ -413,6 +473,10 @@ func (_m *Client) Commit(ctx context.Context, height *int64) (*coretypes.ResultC
 // ConsensusParams provides a mock function with given fields: ctx, height
 func (_m *Client) ConsensusParams(ctx context.Context, height *int64) (*coretypes.ResultConsensusParams, error) {
 	ret := _m.Called(ctx, height)
+
+	if len(ret) == 0 {
+		panic("no return value specified for ConsensusParams")
+	}
 
 	var r0 *coretypes.ResultConsensusParams
 	var r1 error
@@ -440,6 +504,10 @@ func (_m *Client) ConsensusParams(ctx context.Context, height *int64) (*coretype
 func (_m *Client) ConsensusState(_a0 context.Context) (*coretypes.ResultConsensusState, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for ConsensusState")
+	}
+
 	var r0 *coretypes.ResultConsensusState
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultConsensusState, error)); ok {
@@ -465,6 +533,10 @@ func (_m *Client) ConsensusState(_a0 context.Context) (*coretypes.ResultConsensu
 // DumpConsensusState provides a mock function with given fields: _a0
 func (_m *Client) DumpConsensusState(_a0 context.Context) (*coretypes.ResultDumpConsensusState, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for DumpConsensusState")
+	}
 
 	var r0 *coretypes.ResultDumpConsensusState
 	var r1 error
@@ -492,6 +564,10 @@ func (_m *Client) DumpConsensusState(_a0 context.Context) (*coretypes.ResultDump
 func (_m *Client) Events(ctx context.Context, req *coretypes.RequestEvents) (*coretypes.ResultEvents, error) {
 	ret := _m.Called(ctx, req)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Events")
+	}
+
 	var r0 *coretypes.ResultEvents
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, *coretypes.RequestEvents) (*coretypes.ResultEvents, error)); ok {
@@ -517,6 +593,10 @@ func (_m *Client) Events(ctx context.Context, req *coretypes.RequestEvents) (*co
 // Genesis provides a mock function with given fields: _a0
 func (_m *Client) Genesis(_a0 context.Context) (*coretypes.ResultGenesis, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Genesis")
+	}
 
 	var r0 *coretypes.ResultGenesis
 	var r1 error
@@ -544,6 +624,10 @@ func (_m *Client) Genesis(_a0 context.Context) (*coretypes.ResultGenesis, error)
 func (_m *Client) GenesisChunked(_a0 context.Context, _a1 uint) (*coretypes.ResultGenesisChunk, error) {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for GenesisChunked")
+	}
+
 	var r0 *coretypes.ResultGenesisChunk
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, uint) (*coretypes.ResultGenesisChunk, error)); ok {
@@ -569,6 +653,10 @@ func (_m *Client) GenesisChunked(_a0 context.Context, _a1 uint) (*coretypes.Resu
 // Header provides a mock function with given fields: ctx, height
 func (_m *Client) Header(ctx context.Context, height *int64) (*coretypes.ResultHeader, error) {
 	ret := _m.Called(ctx, height)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Header")
+	}
 
 	var r0 *coretypes.ResultHeader
 	var r1 error
@@ -596,6 +684,10 @@ func (_m *Client) Header(ctx context.Context, height *int64) (*coretypes.ResultH
 func (_m *Client) HeaderByHash(ctx context.Context, hash bytes.HexBytes) (*coretypes.ResultHeader, error) {
 	ret := _m.Called(ctx, hash)
 
+	if len(ret) == 0 {
+		panic("no return value specified for HeaderByHash")
+	}
+
 	var r0 *coretypes.ResultHeader
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (*coretypes.ResultHeader, error)); ok {
@@ -621,6 +713,10 @@ func (_m *Client) HeaderByHash(ctx context.Context, hash bytes.HexBytes) (*coret
 // Health provides a mock function with given fields: _a0
 func (_m *Client) Health(_a0 context.Context) (*coretypes.ResultHealth, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Health")
+	}
 
 	var r0 *coretypes.ResultHealth
 	var r1 error
@@ -648,6 +744,10 @@ func (_m *Client) Health(_a0 context.Context) (*coretypes.ResultHealth, error) {
 func (_m *Client) NetInfo(_a0 context.Context) (*coretypes.ResultNetInfo, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for NetInfo")
+	}
+
 	var r0 *coretypes.ResultNetInfo
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultNetInfo, error)); ok {
@@ -673,6 +773,10 @@ func (_m *Client) NetInfo(_a0 context.Context) (*coretypes.ResultNetInfo, error)
 // NumUnconfirmedTxs provides a mock function with given fields: _a0
 func (_m *Client) NumUnconfirmedTxs(_a0 context.Context) (*coretypes.ResultUnconfirmedTxs, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NumUnconfirmedTxs")
+	}
 
 	var r0 *coretypes.ResultUnconfirmedTxs
 	var r1 error
@@ -700,6 +804,10 @@ func (_m *Client) NumUnconfirmedTxs(_a0 context.Context) (*coretypes.ResultUncon
 func (_m *Client) RemoveTx(_a0 context.Context, _a1 types.TxKey) error {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveTx")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.TxKey) error); ok {
 		r0 = rf(_a0, _a1)
@@ -714,6 +822,10 @@ func (_m *Client) RemoveTx(_a0 context.Context, _a1 types.TxKey) error {
 func (_m *Client) Start(_a0 context.Context) error {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Start")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context) error); ok {
 		r0 = rf(_a0)
@@ -727,6 +839,10 @@ func (_m *Client) Start(_a0 context.Context) error {
 // Status provides a mock function with given fields: _a0
 func (_m *Client) Status(_a0 context.Context) (*coretypes.ResultStatus, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Status")
+	}
 
 	var r0 *coretypes.ResultStatus
 	var r1 error
@@ -761,6 +877,10 @@ func (_m *Client) Subscribe(ctx context.Context, subscriber string, query string
 	_ca = append(_ca, _va...)
 	ret := _m.Called(_ca...)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Subscribe")
+	}
+
 	var r0 <-chan coretypes.ResultEvent
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, string, ...int) (<-chan coretypes.ResultEvent, error)); ok {
@@ -786,6 +906,10 @@ func (_m *Client) Subscribe(ctx context.Context, subscriber string, query string
 // Tx provides a mock function with given fields: ctx, hash, prove
 func (_m *Client) Tx(ctx context.Context, hash bytes.HexBytes, prove bool) (*coretypes.ResultTx, error) {
 	ret := _m.Called(ctx, hash, prove)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Tx")
+	}
 
 	var r0 *coretypes.ResultTx
 	var r1 error
@@ -813,6 +937,10 @@ func (_m *Client) Tx(ctx context.Context, hash bytes.HexBytes, prove bool) (*cor
 func (_m *Client) TxSearch(ctx context.Context, query string, prove bool, page *int, perPage *int, orderBy string) (*coretypes.ResultTxSearch, error) {
 	ret := _m.Called(ctx, query, prove, page, perPage, orderBy)
 
+	if len(ret) == 0 {
+		panic("no return value specified for TxSearch")
+	}
+
 	var r0 *coretypes.ResultTxSearch
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, bool, *int, *int, string) (*coretypes.ResultTxSearch, error)); ok {
@@ -838,6 +966,10 @@ func (_m *Client) TxSearch(ctx context.Context, query string, prove bool, page *
 // UnconfirmedTxs provides a mock function with given fields: ctx, page, perPage
 func (_m *Client) UnconfirmedTxs(ctx context.Context, page *int, perPage *int) (*coretypes.ResultUnconfirmedTxs, error) {
 	ret := _m.Called(ctx, page, perPage)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UnconfirmedTxs")
+	}
 
 	var r0 *coretypes.ResultUnconfirmedTxs
 	var r1 error
@@ -865,6 +997,10 @@ func (_m *Client) UnconfirmedTxs(ctx context.Context, page *int, perPage *int) (
 func (_m *Client) Unsubscribe(ctx context.Context, subscriber string, query string) error {
 	ret := _m.Called(ctx, subscriber, query)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Unsubscribe")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, string) error); ok {
 		r0 = rf(ctx, subscriber, query)
@@ -879,6 +1015,10 @@ func (_m *Client) Unsubscribe(ctx context.Context, subscriber string, query stri
 func (_m *Client) UnsubscribeAll(ctx context.Context, subscriber string) error {
 	ret := _m.Called(ctx, subscriber)
 
+	if len(ret) == 0 {
+		panic("no return value specified for UnsubscribeAll")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, string) error); ok {
 		r0 = rf(ctx, subscriber)
@@ -892,6 +1032,10 @@ func (_m *Client) UnsubscribeAll(ctx context.Context, subscriber string) error {
 // Validators provides a mock function with given fields: ctx, height, page, perPage, requestQuorumInfo
 func (_m *Client) Validators(ctx context.Context, height *int64, page *int, perPage *int, requestQuorumInfo *bool) (*coretypes.ResultValidators, error) {
 	ret := _m.Called(ctx, height, page, perPage, requestQuorumInfo)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Validators")
+	}
 
 	var r0 *coretypes.ResultValidators
 	var r1 error

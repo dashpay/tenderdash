@@ -20,6 +20,10 @@ type MempoolClient struct {
 func (_m *MempoolClient) CheckTx(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultCheckTx, error) {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for CheckTx")
+	}
+
 	var r0 *coretypes.ResultCheckTx
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.Tx) (*coretypes.ResultCheckTx, error)); ok {
@@ -45,6 +49,10 @@ func (_m *MempoolClient) CheckTx(_a0 context.Context, _a1 types.Tx) (*coretypes.
 // NumUnconfirmedTxs provides a mock function with given fields: _a0
 func (_m *MempoolClient) NumUnconfirmedTxs(_a0 context.Context) (*coretypes.ResultUnconfirmedTxs, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for NumUnconfirmedTxs")
+	}
 
 	var r0 *coretypes.ResultUnconfirmedTxs
 	var r1 error
@@ -72,6 +80,10 @@ func (_m *MempoolClient) NumUnconfirmedTxs(_a0 context.Context) (*coretypes.Resu
 func (_m *MempoolClient) RemoveTx(_a0 context.Context, _a1 types.TxKey) error {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for RemoveTx")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, types.TxKey) error); ok {
 		r0 = rf(_a0, _a1)
@@ -85,6 +97,10 @@ func (_m *MempoolClient) RemoveTx(_a0 context.Context, _a1 types.TxKey) error {
 // UnconfirmedTxs provides a mock function with given fields: ctx, page, perPage
 func (_m *MempoolClient) UnconfirmedTxs(ctx context.Context, page *int, perPage *int) (*coretypes.ResultUnconfirmedTxs, error) {
 	ret := _m.Called(ctx, page, perPage)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UnconfirmedTxs")
+	}
 
 	var r0 *coretypes.ResultUnconfirmedTxs
 	var r1 error

@@ -4,8 +4,8 @@
 # * compile - builds final binaries
 # * image - creates final image of minimal size
 
-ARG ALIPNE_VERSION=3.17
-ARG GOLANG_VERSION=1.21
+ARG ALIPNE_VERSION=3.19
+ARG GOLANG_VERSION=1.22
 #################################
 # STAGE 1: install dependencies #
 #################################
@@ -93,7 +93,7 @@ COPY --from=compile /src/tenderdash/build/tenderdash /src/tenderdash/build/abcid
 # You can overwrite these before the first run to influence
 # config.json and genesis.json. Additionally, you can override
 # CMD to add parameters to `tenderdash node`.
-ENV PROXY_APP=kvstore MONIKER=dockernode CHAIN_ID=dockerchain
+ENV PROXY_APP=kvstore MONIKER=dockernode CHAIN_ID=dockerchain ABCI=""
 
 COPY ./DOCKER/docker-entrypoint.sh /usr/local/bin/
 

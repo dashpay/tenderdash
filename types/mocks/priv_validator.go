@@ -28,6 +28,10 @@ type PrivValidator struct {
 func (_m *PrivValidator) ExtractIntoValidator(ctx context.Context, quorumHash bytes.HexBytes) *types.Validator {
 	ret := _m.Called(ctx, quorumHash)
 
+	if len(ret) == 0 {
+		panic("no return value specified for ExtractIntoValidator")
+	}
+
 	var r0 *types.Validator
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) *types.Validator); ok {
 		r0 = rf(ctx, quorumHash)
@@ -43,6 +47,10 @@ func (_m *PrivValidator) ExtractIntoValidator(ctx context.Context, quorumHash by
 // GetFirstQuorumHash provides a mock function with given fields: _a0
 func (_m *PrivValidator) GetFirstQuorumHash(_a0 context.Context) (bytes.HexBytes, error) {
 	ret := _m.Called(_a0)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetFirstQuorumHash")
+	}
 
 	var r0 bytes.HexBytes
 	var r1 error
@@ -70,6 +78,10 @@ func (_m *PrivValidator) GetFirstQuorumHash(_a0 context.Context) (bytes.HexBytes
 func (_m *PrivValidator) GetHeight(ctx context.Context, quorumHash bytes.HexBytes) (int64, error) {
 	ret := _m.Called(ctx, quorumHash)
 
+	if len(ret) == 0 {
+		panic("no return value specified for GetHeight")
+	}
+
 	var r0 int64
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (int64, error)); ok {
@@ -93,6 +105,10 @@ func (_m *PrivValidator) GetHeight(ctx context.Context, quorumHash bytes.HexByte
 // GetPrivateKey provides a mock function with given fields: ctx, quorumHash
 func (_m *PrivValidator) GetPrivateKey(ctx context.Context, quorumHash bytes.HexBytes) (crypto.PrivKey, error) {
 	ret := _m.Called(ctx, quorumHash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetPrivateKey")
+	}
 
 	var r0 crypto.PrivKey
 	var r1 error
@@ -120,6 +136,10 @@ func (_m *PrivValidator) GetPrivateKey(ctx context.Context, quorumHash bytes.Hex
 func (_m *PrivValidator) GetProTxHash(_a0 context.Context) (bytes.HexBytes, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for GetProTxHash")
+	}
+
 	var r0 bytes.HexBytes
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context) (bytes.HexBytes, error)); ok {
@@ -145,6 +165,10 @@ func (_m *PrivValidator) GetProTxHash(_a0 context.Context) (bytes.HexBytes, erro
 // GetPubKey provides a mock function with given fields: ctx, quorumHash
 func (_m *PrivValidator) GetPubKey(ctx context.Context, quorumHash bytes.HexBytes) (crypto.PubKey, error) {
 	ret := _m.Called(ctx, quorumHash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetPubKey")
+	}
 
 	var r0 crypto.PubKey
 	var r1 error
@@ -172,6 +196,10 @@ func (_m *PrivValidator) GetPubKey(ctx context.Context, quorumHash bytes.HexByte
 func (_m *PrivValidator) GetThresholdPublicKey(ctx context.Context, quorumHash bytes.HexBytes) (crypto.PubKey, error) {
 	ret := _m.Called(ctx, quorumHash)
 
+	if len(ret) == 0 {
+		panic("no return value specified for GetThresholdPublicKey")
+	}
+
 	var r0 crypto.PubKey
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (crypto.PubKey, error)); ok {
@@ -198,6 +226,10 @@ func (_m *PrivValidator) GetThresholdPublicKey(ctx context.Context, quorumHash b
 func (_m *PrivValidator) SignProposal(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash bytes.HexBytes, proposal *tenderminttypes.Proposal) (bytes.HexBytes, error) {
 	ret := _m.Called(ctx, chainID, quorumType, quorumHash, proposal)
 
+	if len(ret) == 0 {
+		panic("no return value specified for SignProposal")
+	}
+
 	var r0 bytes.HexBytes
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, bytes.HexBytes, *tenderminttypes.Proposal) (bytes.HexBytes, error)); ok {
@@ -223,6 +255,10 @@ func (_m *PrivValidator) SignProposal(ctx context.Context, chainID string, quoru
 // SignVote provides a mock function with given fields: ctx, chainID, quorumType, quorumHash, vote, logger
 func (_m *PrivValidator) SignVote(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash bytes.HexBytes, vote *tenderminttypes.Vote, logger log.Logger) error {
 	ret := _m.Called(ctx, chainID, quorumType, quorumHash, vote, logger)
+
+	if len(ret) == 0 {
+		panic("no return value specified for SignVote")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, bytes.HexBytes, *tenderminttypes.Vote, log.Logger) error); ok {
