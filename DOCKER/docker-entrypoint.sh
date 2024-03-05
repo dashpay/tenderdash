@@ -15,8 +15,14 @@ if [ ! -d "$TMHOME/config" ]; then
 		-e 's/^prometheus\s*=.*/prometheus = true/' \
 		"$TMHOME/config/config.toml"
 
+	if [ -n "$ABCI" ]; then
+		sed -i \
+			-e "s/^abci\s*=.*/abci = \"$ABCI\"/" \
+			"$TMHOME/config/config.toml"
+	fi
+
 	jq ".chain_id = \"$CHAIN_ID\" | .consensus_params.block.time_iota_ms = \"500\"" \
-		"$TMHOME/config/genesis.json" > "$TMHOME/config/genesis.json.new"
+		"$TMHOME/config/genesis.json" >"$TMHOME/config/genesis.json.new"
 	mv "$TMHOME/config/genesis.json.new" "$TMHOME/config/genesis.json"
 fi
 

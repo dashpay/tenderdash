@@ -1,7 +1,7 @@
 package kvstore
 
 import (
-	"encoding/json"
+	"bytes"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -27,14 +27,17 @@ func TestStateMarshalUnmarshal(t *testing.T) {
 	assert.NoError(t, state.UpdateAppHash(state, nil, nil))
 	apphash := state.GetAppHash()
 
-	encoded, err := json.MarshalIndent(state, "", "   ")
+	encoded := bytes.NewBuffer(nil)
+	err := state.Save(encoded)
 	require.NoError(t, err)
 	assert.NotEmpty(t, encoded)
-	t.Log(string(encoded))
+
+	t.Log("encoded:", encoded.String())
 
 	decoded := NewKvState(dbm.NewMemDB(), 1)
-	err = json.Unmarshal(encoded, &decoded)
+	err = decoded.Load(encoded)
 	require.NoError(t, err)
+	decoded.Print()
 
 	v1, err := decoded.Get([]byte("key1"))
 	require.NoError(t, err)
@@ -44,14 +47,14 @@ func TestStateMarshalUnmarshal(t *testing.T) {
 	require.NoError(t, err)
 	assert.EqualValues(t, []byte("value2"), v2)
 
-	v3, err := decoded.Get([]byte("key2"))
+	v3, err := decoded.Get(key3)
 	require.NoError(t, err)
-	assert.EqualValues(t, []byte("value2"), v3)
+	assert.EqualValues(t, value3, v3)
 
 	assert.EqualValues(t, apphash, decoded.GetAppHash())
 }
 
-func TestStateUnmarshal(t *testing.T) {
+func TestStateLoad(t *testing.T) {
 	const initialHeight = 12345678
 	zeroAppHash := make(tmbytes.HexBytes, crypto.DefaultAppHashSize)
 	type keyVals struct {
@@ -89,11 +92,10 @@ func TestStateUnmarshal(t *testing.T) {
 			name: "full",
 			encoded: []byte(`{
 				"height": 6531,
-				"app_hash": "1C9ECEC90E28D2461650418635878A5C91E49F47586ECF75F2B0CBB94E897112",
-				"items": {
-				   "key1": "value1",
-				   "key2": "value2"
-				}}`),
+				"app_hash": "1C9ECEC90E28D2461650418635878A5C91E49F47586ECF75F2B0CBB94E897112"
+			}
+			{"key":"key1","value":"value1"}
+			{"key":"key2","value":"value2"}`),
 			expectHeight:  6531,
 			expectAppHash: tmbytes.MustHexDecode("1C9ECEC90E28D2461650418635878A5C91E49F47586ECF75F2B0CBB94E897112"),
 			expectKeyVals: []keyVals{
@@ -106,7 +108,7 @@ func TestStateUnmarshal(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			decoded := NewKvState(dbm.NewMemDB(), initialHeight)
-			err := json.Unmarshal(tc.encoded, &decoded)
+			err := decoded.Load(bytes.NewBuffer(tc.encoded))
 			if tc.expectDecodeError {
 				require.Error(t, err, "decode error expected")
 			} else {

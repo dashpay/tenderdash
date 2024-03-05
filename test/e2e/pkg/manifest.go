@@ -7,8 +7,6 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-
-	"github.com/dashpay/tenderdash/abci/example/kvstore"
 )
 
 // Manifest represents a TOML testnet manifest.
@@ -31,7 +29,7 @@ type Manifest struct {
 
 	// InitialState is an initial set of key/value pairs for the application,
 	// set in genesis. Defaults to nothing.
-	InitialState kvstore.StateExport `toml:"initial_state"`
+	InitialState string `toml:"initial_state"`
 
 	// Validators is the initial validator set in genesis, given as node names
 	// and power (for Dash power must all be set to default power):
