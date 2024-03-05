@@ -51,7 +51,7 @@ func AddNodeFlags(cmd *cobra.Command, conf *cfg.Config) {
 		conf.ProxyApp,
 		"proxy app address, or one of: 'kvstore',"+
 			" 'persistent_kvstore', 'e2e' or 'noop' for local testing.")
-	cmd.Flags().String("abci", conf.ABCI, "specify abci transport (socket | grpc)")
+	cmd.Flags().String("abci", conf.ABCI, "specify abci transport (socket | grpc | routed)")
 
 	// rpc flags
 	cmd.Flags().String("rpc.laddr", conf.RPC.ListenAddress, "RPC listen address. Port required")
