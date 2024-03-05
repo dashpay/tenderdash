@@ -482,10 +482,7 @@ func (e ThresholdRawVoteExtension) SignItem(_ string, height int64, round int32,
 	// that reversal.
 	msgHash := tmbytes.Reverse(ext.Extension)
 
-	signItem, err := NewSignItemFromHash(quorumType, quorumHash, signRequestID, msgHash), nil
-	if err != nil {
-		return SignItem{}, err
-	}
+	signItem := NewSignItemFromHash(quorumType, quorumHash, signRequestID, msgHash)
 	// signItem.Msg left empty by purpose, as we don't want hash to be checked in Verify()
 
 	return signItem, nil

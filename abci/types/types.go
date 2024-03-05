@@ -235,10 +235,9 @@ func (m *ValidatorUpdate) UnmarshalJSON(b []byte) error {
 // non-deterministic fields. The input response is not modified.
 func deterministicExecTxResult(response *ExecTxResult) *ExecTxResult {
 	return &ExecTxResult{
-		Code:      response.Code,
-		Data:      response.Data,
-		GasWanted: response.GasWanted,
-		GasUsed:   response.GasUsed,
+		Code:    response.Code,
+		Data:    response.Data,
+		GasUsed: response.GasUsed,
 	}
 }
 

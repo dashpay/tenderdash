@@ -165,7 +165,7 @@ type BaseConfig struct { //nolint: maligned
 	// This should be set in viper so it can unmarshal into this struct
 	RootDir string `mapstructure:"home"`
 
-	// TCP or UNIX socket address of the ABCI application,
+	// TCP or UNIX socket address of the ABCI application,or routing rules for routed ABCI client,
 	// or the name of an ABCI application compiled in with the Tendermint binary
 	ProxyApp string `mapstructure:"proxy-app"`
 
@@ -223,7 +223,7 @@ type BaseConfig struct { //nolint: maligned
 	// A JSON file containing the private key to use for p2p authenticated encryption
 	NodeKey string `mapstructure:"node-key-file"`
 
-	// Mechanism to connect to the ABCI application: socket | grpc
+	// Mechanism to connect to the ABCI application: socket | grpc | routed
 	ABCI string `mapstructure:"abci"`
 
 	// If true, query the ABCI app on connecting to a new peer

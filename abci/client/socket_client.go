@@ -123,6 +123,14 @@ func (cli *socketClient) OnStop() {
 	cli.drainQueue()
 }
 
+func (cli *socketClient) String() string {
+	if err := cli.Error(); err != nil {
+		return fmt.Sprintf("%T(%s):err=%s", cli, cli.addr, err.Error())
+	}
+
+	return fmt.Sprintf("%T(%s)", cli, cli.addr)
+}
+
 // Error returns an error if the client was stopped abruptly.
 func (cli *socketClient) Error() error {
 	cli.mtx.Lock()

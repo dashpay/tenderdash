@@ -1,6 +1,6 @@
 module github.com/dashpay/tenderdash
 
-go 1.21
+go 1.22
 
 require (
 	github.com/BurntSushi/toml v1.3.2
@@ -52,7 +52,7 @@ require (
 	github.com/creachadair/taskgroup v0.3.2
 	github.com/go-pkgz/jrpc v0.2.0
 	github.com/google/go-cmp v0.6.0
-	github.com/vektra/mockery/v2 v2.33.2
+	github.com/vektra/mockery/v2 v2.41.0
 	gotest.tools v2.2.0+incompatible
 )
 
@@ -72,7 +72,7 @@ require (
 	github.com/butuzov/mirror v1.1.0 // indirect
 	github.com/catenacyber/perfsprint v0.2.0 // indirect
 	github.com/ccojocar/zxcvbn-go v1.0.1 // indirect
-	github.com/chigopher/pathlib v0.15.0 // indirect
+	github.com/chigopher/pathlib v0.19.1 // indirect
 	github.com/containerd/containerd v1.6.6 // indirect
 	github.com/containerd/typeurl v1.0.2 // indirect
 	github.com/curioswitch/go-reassign v0.2.0 // indirect
@@ -90,6 +90,7 @@ require (
 	github.com/go-pkgz/expirable-cache v0.0.3 // indirect
 	github.com/go-pkgz/rest v1.5.0 // indirect
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
+	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/iancoleman/strcase v0.2.0 // indirect
 	github.com/jinzhu/copier v0.3.5 // indirect
 	github.com/kkHAIKE/contextcheck v1.1.4 // indirect
