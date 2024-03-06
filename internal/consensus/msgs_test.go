@@ -502,7 +502,7 @@ func TestVoteSetBitsMessageValidateBasic(t *testing.T) {
 		malleateFn func(*VoteSetBitsMessage)
 		expErr     string
 	}{
-		{func(msg *VoteSetBitsMessage) {}, ""},
+		{func(_msg *VoteSetBitsMessage) {}, ""},
 		{func(msg *VoteSetBitsMessage) { msg.Height = -1 }, "negative Height"},
 		{func(msg *VoteSetBitsMessage) { msg.Type = 0x03 }, "invalid Type"},
 		{func(msg *VoteSetBitsMessage) {
@@ -616,7 +616,7 @@ func TestNewValidBlockMessageValidateBasic(t *testing.T) {
 		malleateFn func(*NewValidBlockMessage)
 		expErr     string
 	}{
-		{func(msg *NewValidBlockMessage) {}, ""},
+		{func(_msg *NewValidBlockMessage) {}, ""},
 		{func(msg *NewValidBlockMessage) { msg.Height = -1 }, "negative Height"},
 		{func(msg *NewValidBlockMessage) { msg.Round = -1 }, "negative Round"},
 		{
@@ -662,7 +662,7 @@ func TestProposalPOLMessageValidateBasic(t *testing.T) {
 		malleateFn func(*ProposalPOLMessage)
 		expErr     string
 	}{
-		{func(msg *ProposalPOLMessage) {}, ""},
+		{func(_msg *ProposalPOLMessage) {}, ""},
 		{func(msg *ProposalPOLMessage) { msg.Height = -1 }, "negative Height"},
 		{func(msg *ProposalPOLMessage) { msg.ProposalPOLRound = -1 }, "negative ProposalPOLRound"},
 		{func(msg *ProposalPOLMessage) { msg.ProposalPOL = bits.NewBitArray(0) }, "empty ProposalPOL bit array"},
