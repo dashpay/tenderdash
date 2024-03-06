@@ -303,7 +303,7 @@ func TestStateProposalTime(t *testing.T) {
 			expectNewBlock: false,
 		},
 		{ // TEST 1: BLOCK TIME IS IN FUTURE
-			blockTimeFunc:  func(s *State) time.Time { return tmtime.Now().Add(delay + precision + 24*time.Hour) },
+			blockTimeFunc:  func(_s *State) time.Time { return tmtime.Now().Add(delay + precision + 24*time.Hour) },
 			expectNewBlock: true,
 		},
 		{ // TEST 2: BLOCK TIME IS OLDER THAN PREVIOUS BLOCK TIME

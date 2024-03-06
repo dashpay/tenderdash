@@ -136,7 +136,7 @@ func (p *PeerManager) Start(ctx context.Context) {
 		}
 		return nil
 	})
-	p.peerSubs.On(p2p.PeerStatusDown, func(ctx context.Context, update p2p.PeerUpdate) error {
+	p.peerSubs.On(p2p.PeerStatusDown, func(_ctx context.Context, update p2p.PeerUpdate) error {
 		p.peerStore.Delete(update.NodeID)
 		return nil
 	})

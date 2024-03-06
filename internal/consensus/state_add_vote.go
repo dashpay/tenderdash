@@ -86,7 +86,7 @@ func (c *AddVoteAction) Execute(ctx context.Context, stateEvent StateEvent) erro
 
 // addVoteToVoteSetFunc adds a vote to the vote-set
 func addVoteToVoteSetFunc(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
-	return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+	return func(_ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 		added, err := stateData.Votes.AddVote(vote)
 		if !added || err != nil {
 			return added, err

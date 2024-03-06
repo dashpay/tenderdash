@@ -97,7 +97,7 @@ func TestReactorInvalidBlockChainLock(t *testing.T) {
 }
 
 func newCounterWithCoreChainLocks(initCoreChainHeight uint32, step int32) func(logger log.Logger, _ string) abci.Application {
-	return func(logger log.Logger, _ string) abci.Application {
+	return func(_logger log.Logger, _ string) abci.Application {
 		counterApp := counter.NewApplication(true)
 		counterApp.InitCoreChainLock(initCoreChainHeight, step)
 		return counterApp

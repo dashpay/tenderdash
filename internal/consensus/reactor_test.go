@@ -97,7 +97,7 @@ func setup(
 	t.Cleanup(cancel)
 
 	chCreator := func(nodeID types.NodeID) p2p.ChannelCreator {
-		return func(ctx context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
+		return func(_ctx context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
 			switch desc.ID {
 			case StateChannel:
 				return rts.stateChannels[nodeID], nil
