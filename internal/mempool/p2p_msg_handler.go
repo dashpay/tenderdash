@@ -54,7 +54,8 @@ func (h *mempoolP2PMessageHandler) Handle(ctx context.Context, _ *client.Client,
 		SenderNodeID: envelope.From,
 	}
 	for _, tx := range protoTxs {
-		subCtx, subCtxCancel := context.WithTimeout(ctx, 5*time.Second)
+		// TODO add configuration for timeout
+		subCtx, subCtxCancel := context.WithTimeout(ctx, 1*time.Second)
 		defer subCtxCancel()
 
 		if err := h.checker.CheckTx(subCtx, tx, nil, txInfo); err != nil {
