@@ -159,7 +159,7 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 		select {
 		case <-ctx.Done():
 			return
-		case <-cli.reqWaker.Sleep():
+		case <-cli.reqSleep():
 		}
 
 		for reqres := cli.dequeue(ctx); reqres != nil; reqres = cli.dequeue(ctx) {
@@ -261,7 +261,7 @@ func (cli *socketClient) doRequest(ctx context.Context, req *types.Request) (*ty
 	}
 
 	// Asynchronously wake up the sender.
-	cli.reqWaker.Wake()
+	cli.reqWake()
 
 	// wait for response for our request
 	select {
@@ -295,6 +295,20 @@ func (cli *socketClient) drainQueue() {
 		reqres := req.Value.(*requestAndResponse)
 		reqres.markDone()
 	}
+}
+
+func (cli *socketClient) reqWake() {
+	cli.mtx.Lock()
+	defer cli.mtx.Unlock()
+
+	cli.reqWaker.Wake()
+}
+
+func (cli *socketClient) reqSleep() <-chan struct{} {
+	cli.mtx.Lock()
+	defer cli.mtx.Unlock()
+
+	return cli.reqWaker.Sleep()
 }
 
 //----------------------------------------
