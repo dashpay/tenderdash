@@ -59,41 +59,6 @@ type requestAndResponse struct {
 	signal chan struct{}
 }
 
-// priority of this request type; higher number means more important
-func (reqResp *requestAndResponse) priority() (priority int8) {
-	if reqResp == nil || reqResp.Request == nil || reqResp.Request.Value == nil {
-		// Error
-		return -128
-	}
-	// consensus-related requests are more important
-	switch reqResp.Request.Value.(type) {
-	case *types.Request_InitChain:
-		priority = 110
-	case *types.Request_PrepareProposal:
-		priority = 100
-	case *types.Request_ProcessProposal:
-		priority = 100
-	case *types.Request_FinalizeBlock:
-		priority = 100
-	case *types.Request_Flush:
-		priority = 100
-	case *types.Request_ExtendVote:
-		priority = 100
-	case *types.Request_VerifyVoteExtension:
-		priority = 90
-	case *types.Request_Info:
-		priority = 120
-	case *types.Request_CheckTx:
-		priority = -10
-	case *types.Request_Query:
-		priority = -20
-	default:
-		priority = 0
-	}
-
-	return priority
-}
-
 func makeReqRes(ctx context.Context, req *types.Request) *requestAndResponse {
 	return &requestAndResponse{
 		Request:  req,

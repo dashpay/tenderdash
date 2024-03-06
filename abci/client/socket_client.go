@@ -11,11 +11,9 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/ethereum/go-ethereum/common/prque"
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashpay/tenderdash/abci/types"
-	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmnet "github.com/dashpay/tenderdash/libs/net"
 	"github.com/dashpay/tenderdash/libs/service"
@@ -36,10 +34,7 @@ type socketClient struct {
 	mustConnect bool
 	conn        net.Conn
 
-	// Requests queue
-	reqQueue *prque.Prque[int8, *requestAndResponse]
-	// Wake up sender when new request is added to the queue.
-	reqWaker *tmsync.Waker
+	reqQueue chan *requestAndResponse
 
 	mtx     sync.Mutex
 	err     error
@@ -62,10 +57,8 @@ func NewSocketClient(logger log.Logger, addr string, mustConnect bool, metrics *
 	}
 
 	cli := &socketClient{
-		logger:   logger,
-		reqQueue: prque.New[int8, *requestAndResponse](nil),
-		reqWaker: tmsync.NewWaker(),
-
+		logger:      logger,
+		reqQueue:    make(chan *requestAndResponse),
 		mustConnect: mustConnect,
 		addr:        addr,
 		reqSent:     list.New(),
@@ -193,18 +186,8 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 		select {
 		case <-ctx.Done():
 			return
-		case <-cli.reqSleep():
-		}
-
-		for !cli.reqQueueEmpty() {
-			reqres := cli.dequeue()
-			if err := reqres.ctx.Err(); err != nil {
-				// request expired, skip it
-				cli.logger.Debug("abci.socketClient request expired, skipping", "req", reqres.Request.Value, "error", err)
-				continue
-			}
-
-			// N.B. We must track request before sending it out, otherwise the
+		case reqres := <-cli.reqQueue:
+			// N.B. We must enqueue before sending out the request, otherwise the
 			// server may reply before we do it, and the receiver will fail for an
 			// unsolicited reply.
 			cli.trackRequest(reqres)
@@ -299,8 +282,11 @@ func (cli *socketClient) doRequest(ctx context.Context, req *types.Request) (*ty
 	reqres := makeReqRes(ctx, req)
 	cli.enqueue(reqres)
 
-	// Asynchronously wake up the sender.
-	cli.reqWake()
+	select {
+	case cli.reqQueue <- reqres:
+	case <-ctx.Done():
+		return nil, fmt.Errorf("can't queue req: %w", ctx.Err())
+	}
 
 	// wait for response for our request
 	select {
@@ -321,12 +307,6 @@ func (cli *socketClient) drainQueue() {
 	cli.mtx.Lock()
 	defer cli.mtx.Unlock()
 
-	if err := cli.reqWaker.Close(); err != nil {
-		cli.logger.Debug("abci.socketClient failed to close waker", "err", err)
-	}
-	cli.reqWaker = tmsync.NewWaker()
-
-	cli.reqQueue.Reset()
 	// mark all in-flight messages as resolved (they will get cli.Error())
 	for req := cli.reqSent.Front(); req != nil; req = req.Next() {
 		reqres := req.Value.(*requestAndResponse)
