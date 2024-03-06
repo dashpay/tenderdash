@@ -43,7 +43,7 @@ func NewClient(logger log.Logger, addr, transport string, mustConnect bool) (Cli
 	case "grpc":
 		return NewGRPCClient(logger, addr, mustConnect), nil
 	case "routed":
-		return NewRoutedClientWithAddr(logger, addr, mustConnect, metrics)
+		return NewRoutedClientWithAddr(logger, addr, mustConnect)
 	default:
 		return nil, fmt.Errorf("unknown abci transport %s", transport)
 	}

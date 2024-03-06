@@ -119,33 +119,6 @@ func (cli *socketClient) Error() error {
 	return cli.err
 }
 
-// Add the request to the pending messages queue.
-//
-// Note that you still need to wake up sendRequestsRoutine writing to `cli.reqSignal`
-func (cli *socketClient) enqueue(reqres *requestAndResponse) {
-	cli.mtx.Lock()
-	cli.reqQueue.Push(reqres, reqres.priority())
-	cli.mtx.Unlock()
-
-	cli.metrics.EnqueuedMessage(reqres)
-}
-
-// Remove the first request from the queue and return it.
-func (cli *socketClient) dequeue() *requestAndResponse {
-	cli.mtx.Lock()
-	reqres := cli.reqQueue.PopItem()
-	cli.mtx.Unlock()
-
-	cli.metrics.DequeuedMessage(reqres)
-	return reqres
-}
-
-func (cli *socketClient) reqQueueEmpty() bool {
-	cli.mtx.Lock()
-	defer cli.mtx.Unlock()
-	return cli.reqQueue.Empty()
-}
-
 func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer) {
 	bw := bufio.NewWriter(conn)
 	for {
@@ -241,7 +214,6 @@ func (cli *socketClient) doRequest(ctx context.Context, req *types.Request) (*ty
 	}
 
 	reqres := makeReqRes(ctx, req)
-	cli.enqueue(reqres)
 
 	select {
 	case cli.reqQueue <- reqres:

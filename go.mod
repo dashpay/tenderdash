@@ -90,6 +90,7 @@ require (
 	github.com/go-pkgz/expirable-cache v0.0.3 // indirect
 	github.com/go-pkgz/rest v1.5.0 // indirect
 	github.com/golang/glog v0.0.0-20160126235308-23def4e6c14b // indirect
+	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
 	github.com/iancoleman/strcase v0.2.0 // indirect
 	github.com/jinzhu/copier v0.3.5 // indirect
@@ -301,7 +302,6 @@ require (
 
 require (
 	github.com/creachadair/tomledit v0.0.23
-	github.com/ethereum/go-ethereum v1.13.8
 	github.com/jonboulle/clockwork v0.3.0
 	github.com/oasisprotocol/oasis-core/go v0.2202.5
 	github.com/sasha-s/go-deadlock v0.3.1

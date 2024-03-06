@@ -70,7 +70,7 @@ func TestRouting(t *testing.T) {
 		fmt.Sprintf(",*:socket:%s", defaultSocket)
 
 	logger.Info("configuring routed abci client with address", "addr", addr)
-	routedClient, err := abciclient.NewRoutedClientWithAddr(logger, addr, true, abciclient.NopMetrics())
+	routedClient, err := abciclient.NewRoutedClientWithAddr(logger, addr, true)
 	assert.NoError(t, err)
 	err = routedClient.Start(ctx)
 	assert.NoError(t, err)
@@ -141,7 +141,7 @@ func TestRoutedClientGrpc(t *testing.T) {
 
 	addr := "*:grpc:127.0.0.1:1234"
 	logger.Info("configuring routed abci client with address", "addr", addr)
-	client, err := abciclient.NewRoutedClientWithAddr(logger, addr, true, abciclient.NopMetrics())
+	client, err := abciclient.NewRoutedClientWithAddr(logger, addr, true)
 	require.NoError(t, err)
 	require.NoError(t, client.Start(ctx))
 
