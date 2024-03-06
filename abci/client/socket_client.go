@@ -43,9 +43,8 @@ var _ Client = (*socketClient)(nil)
 // if it fails to connect.
 func NewSocketClient(logger log.Logger, addr string, mustConnect bool) Client {
 	cli := &socketClient{
-		logger:   logger,
-		reqQueue: make(chan *requestAndResponse),
-
+		logger:      logger,
+		reqQueue:    make(chan *requestAndResponse),
 		mustConnect: mustConnect,
 		addr:        addr,
 		reqSent:     list.New(),
@@ -144,33 +143,31 @@ func (cli *socketClient) dequeue(ctx context.Context) *requestAndResponse {
 
 func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer) {
 	bw := bufio.NewWriter(conn)
-	for ctx.Err() == nil {
-		// dequeue will block until a message arrives
-		for reqres := cli.dequeue(ctx); reqres != nil; reqres = cli.dequeue(ctx) {
-			if err := reqres.ctx.Err(); err != nil {
-				// request expired, skip it
-				cli.logger.Debug("abci.socketClient request expired, skipping", "req", reqres.Request.Value, "error", err)
-				continue
-			}
+	// dequeue will block until a message arrives
+	for reqres := cli.dequeue(ctx); reqres != nil && ctx.Err() == nil; reqres = cli.dequeue(ctx) {
+		if err := reqres.ctx.Err(); err != nil {
+			// request expired, skip it
+			cli.logger.Debug("abci.socketClient request expired, skipping", "req", reqres.Request.Value, "error", err)
+			continue
+		}
 
-			// N.B. We must track request before sending it out, otherwise the
-			// server may reply before we do it, and the receiver will fail for an
-			// unsolicited reply.
-			cli.trackRequest(reqres)
+		// N.B. We must track request before sending it out, otherwise the
+		// server may reply before we do it, and the receiver will fail for an
+		// unsolicited reply.
+		cli.trackRequest(reqres)
 
-			if err := types.WriteMessage(reqres.Request, bw); err != nil {
-				cli.stopForError(fmt.Errorf("write to buffer: %w", err))
-				return
-			}
+		if err := types.WriteMessage(reqres.Request, bw); err != nil {
+			cli.stopForError(fmt.Errorf("write to buffer: %w", err))
+			return
+		}
 
-			if err := bw.Flush(); err != nil {
-				cli.stopForError(fmt.Errorf("flush buffer: %w", err))
-				return
-			}
+		if err := bw.Flush(); err != nil {
+			cli.stopForError(fmt.Errorf("flush buffer: %w", err))
+			return
 		}
 	}
 
-	cli.logger.Info("context canceled, stopping sendRequestsRoutine")
+	cli.logger.Debug("context canceled, stopping sendRequestsRoutine")
 }
 
 func (cli *socketClient) recvResponseRoutine(ctx context.Context, conn io.Reader) {
@@ -196,7 +193,7 @@ func (cli *socketClient) recvResponseRoutine(ctx context.Context, conn io.Reader
 		}
 	}
 
-	cli.logger.Info("context canceled, stopping recvResponseRoutine")
+	cli.logger.Debug("context canceled, stopping recvResponseRoutine")
 }
 
 func (cli *socketClient) trackRequest(reqres *requestAndResponse) {
