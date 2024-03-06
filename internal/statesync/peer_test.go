@@ -26,11 +26,11 @@ func TestPeerSubscriberBasic(_t *testing.T) {
 	}
 	peerSub := NewPeerSubscriber(log.NewNopLogger(), p2pSub)
 	outCh := make(chan struct{})
-	peerSub.On(p2p.PeerStatusUp, func(ctx context.Context, update p2p.PeerUpdate) error {
+	peerSub.On(p2p.PeerStatusUp, func(_ctx context.Context, _update p2p.PeerUpdate) error {
 		outCh <- struct{}{}
 		return nil
 	})
-	peerSub.On(p2p.PeerStatusDown, func(ctx context.Context, update p2p.PeerUpdate) error {
+	peerSub.On(p2p.PeerStatusDown, func(_ctx context.Context, _update p2p.PeerUpdate) error {
 		outCh <- struct{}{}
 		return nil
 	})
