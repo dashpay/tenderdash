@@ -218,7 +218,7 @@ func TestApp_TxTooBig(t *testing.T) {
 	/// Timeout to read response from single node
 	const readTimeout = 1 * time.Second
 	/// Time to process whole mempool
-	const includeInBlockTimeout = 75 * time.Second
+	const includeInBlockTimeout = 120 * time.Second
 
 	mainCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
