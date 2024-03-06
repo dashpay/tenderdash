@@ -204,7 +204,7 @@ func startNode(ctx context.Context, cfg *Config) error {
 		ctx,
 		tmcfg,
 		nodeLogger,
-		node.MakeClientCreator(abciclient.NewLocalClient(nodeLogger, app)),
+		abciclient.NewLocalClient(nodeLogger, app),
 		nil,
 	)
 	if err != nil {

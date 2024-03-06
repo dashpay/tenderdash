@@ -24,7 +24,7 @@ import (
 //
 // The Closer is a noop except for persistent_kvstore applications,
 // which will clean up the store.
-func ClientFactory(logger log.Logger, addr, transport, dbDir string, clientMetrics *abciclient.Metrics) (abciclient.Client, io.Closer, error) {
+func ClientFactory(logger log.Logger, addr, transport, dbDir string) (abciclient.Client, io.Closer, error) {
 	switch addr {
 	case "kvstore":
 		app, err := kvstore.NewMemoryApp(
@@ -53,7 +53,7 @@ func ClientFactory(logger log.Logger, addr, transport, dbDir string, clientMetri
 		return abciclient.NewLocalClient(logger, types.NewBaseApplication()), tmos.NoopCloser{}, nil
 	default:
 		const mustConnect = false // loop retrying
-		client, err := abciclient.NewClient(logger, addr, transport, mustConnect, clientMetrics)
+		client, err := abciclient.NewClient(logger, addr, transport, mustConnect)
 		if err != nil {
 			return nil, tmos.NoopCloser{}, err
 		}

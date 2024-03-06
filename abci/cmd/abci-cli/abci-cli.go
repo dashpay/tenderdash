@@ -63,7 +63,7 @@ func RootCmmand(logger log.Logger) *cobra.Command {
 
 			if client == nil {
 				var err error
-				client, err = abciclient.NewClient(logger.With("module", "abci-client"), flagAddress, flagAbci, false, nil)
+				client, err = abciclient.NewClient(logger.With("module", "abci-client"), flagAddress, flagAbci, false)
 				if err != nil {
 					return err
 				}

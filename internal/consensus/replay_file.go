@@ -12,7 +12,6 @@ import (
 
 	dbm "github.com/tendermint/tm-db"
 
-	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/proxy"
@@ -39,7 +38,7 @@ func RunReplayFile(
 	csConfig *config.ConsensusConfig,
 	console bool,
 ) error {
-	consensusState, err := newConsensusStateForReplay(ctx, cfg, logger, csConfig, nil)
+	consensusState, err := newConsensusStateForReplay(ctx, cfg, logger, csConfig)
 	if err != nil {
 		return err
 	}
@@ -302,7 +301,6 @@ func newConsensusStateForReplay(
 	cfg config.BaseConfig,
 	logger log.Logger,
 	csConfig *config.ConsensusConfig,
-	clientMetrics *abciclient.Metrics,
 ) (*State, error) {
 	dbType := dbm.BackendType(cfg.DBBackend)
 	// Get BlockStore
@@ -329,7 +327,7 @@ func newConsensusStateForReplay(
 		return nil, err
 	}
 
-	client, _, err := proxy.ClientFactory(logger, cfg.ProxyApp, cfg.ABCI, cfg.DBDir(), clientMetrics)
+	client, _, err := proxy.ClientFactory(logger, cfg.ProxyApp, cfg.ABCI, cfg.DBDir())
 	if err != nil {
 		return nil, err
 	}

@@ -36,10 +36,10 @@ type Client interface {
 
 // NewClient returns a new ABCI client of the specified transport type.
 // It returns an error if the transport is not "socket" or "grpc"
-func NewClient(logger log.Logger, addr, transport string, mustConnect bool, metrics *Metrics) (Client, error) {
+func NewClient(logger log.Logger, addr, transport string, mustConnect bool) (Client, error) {
 	switch transport {
 	case "socket":
-		return NewSocketClient(logger, addr, mustConnect, metrics), nil
+		return NewSocketClient(logger, addr, mustConnect), nil
 	case "grpc":
 		return NewGRPCClient(logger, addr, mustConnect), nil
 	case "routed":
