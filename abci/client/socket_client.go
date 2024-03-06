@@ -144,7 +144,7 @@ func (cli *socketClient) dequeue(ctx context.Context) *requestAndResponse {
 
 func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer) {
 	bw := bufio.NewWriter(conn)
-	for {
+	for ctx.Err() == nil {
 		// dequeue will block until a message arrives
 		for reqres := cli.dequeue(ctx); reqres != nil; reqres = cli.dequeue(ctx) {
 			if err := reqres.ctx.Err(); err != nil {
@@ -169,14 +169,13 @@ func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer
 			}
 		}
 	}
+
+	cli.logger.Info("context canceled, stopping sendRequestsRoutine")
 }
 
 func (cli *socketClient) recvResponseRoutine(ctx context.Context, conn io.Reader) {
 	r := bufio.NewReader(conn)
-	for {
-		if ctx.Err() != nil {
-			return
-		}
+	for ctx.Err() == nil {
 		res := &types.Response{}
 
 		if err := types.ReadMessage(r, res); err != nil {
@@ -196,6 +195,8 @@ func (cli *socketClient) recvResponseRoutine(ctx context.Context, conn io.Reader
 			}
 		}
 	}
+
+	cli.logger.Info("context canceled, stopping recvResponseRoutine")
 }
 
 func (cli *socketClient) trackRequest(reqres *requestAndResponse) {
