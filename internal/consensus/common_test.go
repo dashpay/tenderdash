@@ -246,7 +246,7 @@ func startConsensusState(ctx context.Context, cs *State, maxSteps int) {
 			steps++
 		}
 	}()
-	go cs.receiveRoutine(ctx, func(state *State) bool {
+	go cs.receiveRoutine(ctx, func(_state *State) bool {
 		return maxSteps > 0 && steps >= maxSteps
 	})
 }
@@ -919,9 +919,7 @@ func genFilePV(dir string) (types.PrivValidator, error) {
 		return nil, err
 	}
 	privVal := privval.GenFilePV(tempKeyFile.Name(), tempStateFile.Name())
-	if err != nil {
-		return nil, err
-	}
+
 	return privVal, nil
 }
 

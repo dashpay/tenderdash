@@ -73,7 +73,7 @@ func newMsgInfoDispatcher(
 }
 
 func proposalMessageHandler(propSetter cstypes.ProposalSetter) msgHandlerFunc {
-	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
+	return func(_ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*ProposalMessage)
 		return propSetter.Set(msg.Proposal, envelope.ReceiveTime, &stateData.RoundState)
 	}
@@ -183,13 +183,6 @@ func msgInfoWithCtxMiddleware() msgMiddlewareFunc {
 			return hd(ctx, stateData, envelope)
 		}
 	}
-}
-
-func logKeyValsWithError(keyVals []any, err error) []any {
-	if err == nil {
-		return keyVals
-	}
-	return append(keyVals, "error", err)
 }
 
 func makeLogArgsFromMessage(msg Message) []any {
