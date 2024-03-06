@@ -265,7 +265,7 @@ func (cli *socketClient) drainQueue() {
 	cli.mtx.Lock()
 	defer cli.mtx.Unlock()
 
-	cli.reqQueue = make(chan *requestAndResponse, RequestQueueSize)
+	cli.reqQueue = make(chan *requestAndResponse)
 	// mark all in-flight messages as resolved (they will get cli.Error())
 	for req := cli.reqSent.Front(); req != nil; req = req.Next() {
 		reqres := req.Value.(*requestAndResponse)
