@@ -154,7 +154,7 @@ func setup(
 	rts.privVal = types.NewMockPV()
 	rts.dashcoreClient = dashcore.NewMockClient(chainID, llmqType, rts.privVal, false)
 
-	chCreator := func(ctx context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
+	chCreator := func(_ctx context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
 		switch desc.ID {
 		case SnapshotChannel:
 			return rts.snapshotChannel, nil
@@ -716,7 +716,7 @@ func TestReactor_Backfill(t *testing.T) {
 					mock.AnythingOfType("int64"),
 					mock.AnythingOfType("*types.ValidatorSet")).
 				Maybe().
-				Return(func(lh, uh int64, vals *types.ValidatorSet) error {
+				Return(func(lh, uh int64, _vals *types.ValidatorSet) error {
 					require.Equal(t, trackingHeight, lh)
 					require.Equal(t, lh, uh)
 					require.GreaterOrEqual(t, lh, stopHeight)

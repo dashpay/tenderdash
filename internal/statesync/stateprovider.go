@@ -246,9 +246,6 @@ func (s *stateProviderP2P) AppHash(ctx context.Context, height uint64) (tmbytes.
 	if err != nil {
 		return nil, err
 	}
-	if err != nil {
-		return nil, err
-	}
 
 	return header.AppHash, nil
 }
