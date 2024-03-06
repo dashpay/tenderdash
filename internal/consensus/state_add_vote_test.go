@@ -60,11 +60,11 @@ func (suite *AddVoteTestSuite) TestAddVoteAction() {
 	prevoteCalled := false
 	precommitCalled := false
 	cmd := AddVoteAction{
-		prevote: func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+		prevote: func(_ctx context.Context, _stateData *StateData, _vote *types.Vote) (bool, error) {
 			prevoteCalled = true
 			return true, nil
 		},
-		precommit: func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+		precommit: func(_ctx context.Context, _stateData *StateData, _vote *types.Vote) (bool, error) {
 			precommitCalled = true
 			return true, nil
 		},
@@ -105,7 +105,7 @@ func (suite *AddVoteTestSuite) TestAddVoteToVoteSet() {
 	defer cancel()
 	const H100 = int64(100)
 	eventFired := false
-	suite.emitter.AddListener(types.EventVoteValue, func(data eventemitter.EventData) error {
+	suite.emitter.AddListener(types.EventVoteValue, func(_data eventemitter.EventData) error {
 		eventFired = true
 		return nil
 	})
@@ -171,7 +171,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	eventFired := false
-	suite.emitter.AddListener(types.EventValidBlockValue, func(data eventemitter.EventData) error {
+	suite.emitter.AddListener(types.EventValidBlockValue, func(_data eventemitter.EventData) error {
 		eventFired = true
 		return nil
 	})
@@ -197,7 +197,7 @@ func (suite *AddVoteTestSuite) TestAddVoteUpdateValidBlockMw() {
 	suite.NoError(err)
 	returnAdded := true
 	var returnError error
-	mockFn := func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+	mockFn := func(_ctx context.Context, _stateData *StateData, _vote *types.Vote) (bool, error) {
 		return returnAdded, returnError
 	}
 	fn := addVoteUpdateValidBlockMw(suite.publisher)(mockFn)

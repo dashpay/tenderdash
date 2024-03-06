@@ -73,7 +73,7 @@ func newMsgInfoDispatcher(
 }
 
 func proposalMessageHandler(propSetter cstypes.ProposalSetter) msgHandlerFunc {
-	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
+	return func(_ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*ProposalMessage)
 		return propSetter.Set(msg.Proposal, envelope.ReceiveTime, &stateData.RoundState)
 	}

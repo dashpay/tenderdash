@@ -26,10 +26,10 @@ func TestPeerGossipWorker(t *testing.T) {
 		clock:  fakeClock,
 		logger: logger,
 		handlers: []gossipHandler{
-			newGossipHandler(func(ctx context.Context, appState StateData) {
+			newGossipHandler(func(_ctx context.Context, _appState StateData) {
 				handlerCalledCh <- struct{}{}
 			}, 1*time.Second),
-			newGossipHandler(func(ctx context.Context, appState StateData) {
+			newGossipHandler(func(_ctx context.Context, _appState StateData) {
 				handlerCalledCh <- struct{}{}
 			}, 1*time.Second),
 		},
