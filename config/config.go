@@ -517,6 +517,13 @@ type RPCConfig struct {
 	// See https://github.com/tendermint/tendermint/issues/3435
 	TimeoutBroadcastTxCommit time.Duration `mapstructure:"timeout-broadcast-tx-commit"`
 
+	// Timeout of transaction broadcast to mempool; 0 to disable.
+	//
+	// This setting affects timeout of CheckTX operations used before
+	// adding transaction to the mempool. If the operation takes longer,
+	// the transaction is rejected with an error.
+	TimeoutBroadcastTx time.Duration `mapstructure:"timeout-broadcast-tx"`
+
 	// Maximum size of request body, in bytes
 	MaxBodyBytes int64 `mapstructure:"max-body-bytes"`
 
@@ -564,6 +571,7 @@ func DefaultRPCConfig() *RPCConfig {
 		EventLogMaxItems:             0,
 
 		TimeoutBroadcastTxCommit: 10 * time.Second,
+		TimeoutBroadcastTx:       0,
 
 		MaxBodyBytes:   int64(1000000), // 1MB
 		MaxHeaderBytes: 1 << 20,        // same as the net/http default
@@ -601,6 +609,9 @@ func (cfg *RPCConfig) ValidateBasic() error {
 	}
 	if cfg.TimeoutBroadcastTxCommit < 0 {
 		return errors.New("timeout-broadcast-tx-commit can't be negative")
+	}
+	if cfg.TimeoutBroadcastTx < 0 {
+		return errors.New("timeout-broadcast-tx can't be negative")
 	}
 	if cfg.MaxBodyBytes < 0 {
 		return errors.New("max-body-bytes can't be negative")

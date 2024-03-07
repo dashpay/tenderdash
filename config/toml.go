@@ -273,6 +273,13 @@ event-log-max-items = {{ .RPC.EventLogMaxItems }}
 # See https://github.com/tendermint/tendermint/issues/3435
 timeout-broadcast-tx-commit = "{{ .RPC.TimeoutBroadcastTxCommit }}"
 
+# Timeout of transaction broadcast to mempool; 0 to disable.
+#
+# This setting affects timeout of CheckTX operations used before
+# adding transaction to the mempool. If the operation takes longer,
+# the transaction is rejected with an error.
+timeout-broadcast-tx = "{{ .RPC.TimeoutBroadcastTx }}"
+
 # Maximum size of request body, in bytes
 max-body-bytes = {{ .RPC.MaxBodyBytes }}
 
