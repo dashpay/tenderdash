@@ -15,6 +15,7 @@ import (
 
 const (
 	// CheckTxTimeout is the maximum time we wait for CheckTx to return.
+	// TODO: Change to config option
 	CheckTxTimeout = 1 * time.Second
 )
 

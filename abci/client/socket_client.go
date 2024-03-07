@@ -18,11 +18,6 @@ import (
 	"github.com/dashpay/tenderdash/libs/service"
 )
 
-const (
-	// Maximum number of requests stored in the request queue
-	RequestQueueSize = 1000
-)
-
 // This is goroutine-safe, but users should beware that the application in
 // general is not meant to be interfaced with concurrent callers.
 type socketClient struct {
@@ -33,6 +28,7 @@ type socketClient struct {
 	mustConnect bool
 	conn        net.Conn
 
+	// Requests queue
 	reqQueue chan *requestAndResponse
 
 	mtx     sync.Mutex
@@ -119,38 +115,64 @@ func (cli *socketClient) Error() error {
 	return cli.err
 }
 
+//----------------------------------------
+
+// Add the request to the pending messages queue.
+//
+// If the context `ctx` is canceled, return ctx.Err().
+func (cli *socketClient) enqueue(ctx context.Context, reqres *requestAndResponse) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case cli.reqQueue <- reqres:
+		return nil
+	}
+}
+
+// Block until first request arrives, then return it.
+//
+// If the context `ctx` is canceled, return nil.
+func (cli *socketClient) dequeue(ctx context.Context) *requestAndResponse {
+	select {
+	case item := <-cli.reqQueue:
+		return item
+	case <-ctx.Done():
+		return nil
+	}
+}
+
 func (cli *socketClient) sendRequestsRoutine(ctx context.Context, conn io.Writer) {
 	bw := bufio.NewWriter(conn)
-	for {
-		// wait for new message to arrive
-		select {
-		case <-ctx.Done():
+	// dequeue will block until a message arrives
+	for reqres := cli.dequeue(ctx); reqres != nil && ctx.Err() == nil; reqres = cli.dequeue(ctx) {
+		if err := reqres.ctx.Err(); err != nil {
+			// request expired, skip it
+			cli.logger.Debug("abci.socketClient request expired, skipping", "req", reqres.Request.Value, "error", err)
+			continue
+		}
+
+		// N.B. We must track request before sending it out, otherwise the
+		// server may reply before we do it, and the receiver will fail for an
+		// unsolicited reply.
+		cli.trackRequest(reqres)
+
+		if err := types.WriteMessage(reqres.Request, bw); err != nil {
+			cli.stopForError(fmt.Errorf("write to buffer: %w", err))
 			return
-		case reqres := <-cli.reqQueue:
-			// N.B. We must enqueue before sending out the request, otherwise the
-			// server may reply before we do it, and the receiver will fail for an
-			// unsolicited reply.
-			cli.trackRequest(reqres)
+		}
 
-			if err := types.WriteMessage(reqres.Request, bw); err != nil {
-				cli.stopForError(fmt.Errorf("write to buffer: %w", err))
-				return
-			}
-
-			if err := bw.Flush(); err != nil {
-				cli.stopForError(fmt.Errorf("flush buffer: %w", err))
-				return
-			}
+		if err := bw.Flush(); err != nil {
+			cli.stopForError(fmt.Errorf("flush buffer: %w", err))
+			return
 		}
 	}
+
+	cli.logger.Debug("context canceled, stopping sendRequestsRoutine")
 }
 
 func (cli *socketClient) recvResponseRoutine(ctx context.Context, conn io.Reader) {
 	r := bufio.NewReader(conn)
-	for {
-		if ctx.Err() != nil {
-			return
-		}
+	for ctx.Err() == nil {
 		res := &types.Response{}
 
 		if err := types.ReadMessage(r, res); err != nil {
@@ -170,6 +192,8 @@ func (cli *socketClient) recvResponseRoutine(ctx context.Context, conn io.Reader
 			}
 		}
 	}
+
+	cli.logger.Debug("context canceled, stopping recvResponseRoutine")
 }
 
 func (cli *socketClient) trackRequest(reqres *requestAndResponse) {
@@ -214,15 +238,14 @@ func (cli *socketClient) doRequest(ctx context.Context, req *types.Request) (*ty
 	}
 
 	reqres := makeReqRes(ctx, req)
-
-	select {
-	case cli.reqQueue <- reqres:
-	case <-ctx.Done():
-		return nil, fmt.Errorf("can't queue req: %w", ctx.Err())
+	if err := cli.enqueue(ctx, reqres); err != nil {
+		return nil, err
 	}
 
 	// wait for response for our request
 	select {
+	case <-reqres.ctx.Done():
+		return nil, reqres.ctx.Err()
 	case <-reqres.signal:
 		if err := cli.Error(); err != nil {
 			return nil, err
