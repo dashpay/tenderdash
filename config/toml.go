@@ -433,6 +433,10 @@ ttl-duration = "{{ .Mempool.TTLDuration }}"
 # it's insertion time into the mempool is beyond ttl-duration.
 ttl-num-blocks = {{ .Mempool.TTLNumBlocks }}
 
+// Timeout of check TX operations received from other nodes, using p2p protocol.
+// Use 0 to disable.
+timeout-check-tx = "{{ .Mempool.TimeoutCheckTx }}"
+
 #######################################################
 ###         State Sync Configuration Options        ###
 #######################################################

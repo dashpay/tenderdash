@@ -830,6 +830,10 @@ type MempoolConfig struct {
 	// has existed in the mempool at least TTLNumBlocks number of blocks or if
 	// it's insertion time into the mempool is beyond TTLDuration.
 	TTLNumBlocks int64 `mapstructure:"ttl-num-blocks"`
+
+	// Timeout of check TX operations received from other nodes.
+	// Use 0 to disable.
+	TimeoutCheckTx time.Duration `mapstructure:"timeout-check-tx"`
 }
 
 // DefaultMempoolConfig returns a default configuration for the Tendermint mempool.
@@ -838,12 +842,13 @@ func DefaultMempoolConfig() *MempoolConfig {
 		Broadcast: true,
 		// Each signature verification takes .5ms, Size reduced until we implement
 		// ABCI Recheck
-		Size:         5000,
-		MaxTxsBytes:  1024 * 1024 * 1024, // 1GB
-		CacheSize:    10000,
-		MaxTxBytes:   1024 * 1024, // 1MB
-		TTLDuration:  0 * time.Second,
-		TTLNumBlocks: 0,
+		Size:           5000,
+		MaxTxsBytes:    1024 * 1024 * 1024, // 1GB
+		CacheSize:      10000,
+		MaxTxBytes:     1024 * 1024, // 1MB
+		TTLDuration:    0 * time.Second,
+		TTLNumBlocks:   0,
+		TimeoutCheckTx: 0,
 	}
 }
 
@@ -874,6 +879,9 @@ func (cfg *MempoolConfig) ValidateBasic() error {
 	}
 	if cfg.TTLNumBlocks < 0 {
 		return errors.New("ttl-num-blocks can't be negative")
+	}
+	if cfg.TimeoutCheckTx < 0 {
+		return errors.New("timeout-check-tx can't be negative")
 	}
 	return nil
 }
