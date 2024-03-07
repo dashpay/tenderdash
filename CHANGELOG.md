@@ -1,3 +1,38 @@
+## [0.14.0-dev.3] - 2024-03-07
+
+### Bug Fixes
+
+- Race condition when adding new channel to NodeInfo (#735)
+- [**breaking**] E2e tests are flaky due to slow app state processing (#745)
+
+### Features
+
+- Env var ABCI changes abci option in config.toml (#742)
+- Route abci requests depending on request type (#734)
+- Add request result to prometheus stats (#743)
+- Support timeouts in abci calls (#749)
+
+### Miscellaneous Tasks
+
+- Update CODEOWNERS (#736)
+- [**breaking**] Remove ExecTxResult.GasWanted (#740)
+- Regenerate mocks (#744)
+- Don't use go-deadlock in clist due to performance issues (#747)
+- Fix linter warnings in v0.14-dev (#748)
+
+### Refactor
+
+- Remove QuorumSingsVerifier (#727)
+- Relaxed locking of mempool (#737)
+
+### Build
+
+- Simplify build process (#732)
+- Fix docker platforms for releases (#733)
+- Bump golangci/golangci-lint-action from 3.7.0 to 4.0.0 (#738)
+- Bump go to 1.22, alpine to 3.19, mockery to 2.41.0 (#741)
+- Bump docker/setup-buildx-action from 3.0.0 to 3.1.0 (#746)
+
 ## [0.14.0-dev.2] - 2024-01-31
 
 ### Bug Fixes
