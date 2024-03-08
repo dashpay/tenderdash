@@ -54,9 +54,8 @@ func (opts *NetworkOptions) setDefaults() {
 
 // MakeNetwork creates a test network with the given number of nodes and
 // connects them to each other.
-func MakeNetwork(ctx context.Context, t *testing.T, opts NetworkOptions) *Network {
+func MakeNetwork(ctx context.Context, t *testing.T, opts NetworkOptions, logger log.Logger) *Network {
 	opts.setDefaults()
-	logger := log.NewNopLogger()
 	network := &Network{
 		Nodes:         map[types.NodeID]*Node{},
 		logger:        logger,

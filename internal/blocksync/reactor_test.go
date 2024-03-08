@@ -63,7 +63,7 @@ func setup(
 	rts := &reactorTestSuite{
 		config:            conf,
 		logger:            log.NewTestingLogger(t).With("module", "block_sync", "testCase", t.Name()),
-		network:           p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{Config: conf, NumNodes: numNodes}),
+		network:           p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{Config: conf, NumNodes: numNodes}, log.NewNopLogger()),
 		nodes:             make([]types.NodeID, 0, numNodes),
 		reactors:          make(map[types.NodeID]*Reactor, numNodes),
 		app:               make(map[types.NodeID]abciclient.Client, numNodes),

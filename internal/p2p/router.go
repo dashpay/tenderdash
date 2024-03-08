@@ -796,7 +796,6 @@ FOR:
 // receivePeer receives inbound messages from a peer, deserializes them and
 // passes them on to the appropriate channel.
 func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Connection) error {
-	// default timeout; by default, we set it to ~ 10 years so that it will practically never fire
 	timeout := time.NewTimer(0)
 	defer timeout.Stop()
 
@@ -823,7 +822,6 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 			r.logger.Error("message decoding failed, dropping message", "peer", peerID, "err", err)
 			continue
 		}
-		start := time.Now().UTC()
 		envelope, err := EnvelopeFromProto(protoEnvelope)
 		if err != nil {
 			r.logger.Error("message decoding failed, dropping message", "peer", peerID, "err", err)
@@ -842,6 +840,7 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		if chDesc.EnqueueTimeout > 0 {
 			timeout.Reset(chDesc.EnqueueTimeout)
 		}
+		start := time.Now().UTC()
 
 		select {
 		case queue.enqueue() <- envelope:
@@ -862,6 +861,7 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 				"channel_name", chDesc.Name,
 				"timeout", chDesc.EnqueueTimeout.String(),
 				"type", reflect.TypeOf((envelope.Message)).Name(),
+				"took", time.Since(start).String(),
 			)
 
 		case <-ctx.Done():
