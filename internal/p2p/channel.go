@@ -335,7 +335,7 @@ type throttledChannelIterator struct {
 // the messages will be dropped without error
 // - innerChannel: the channel related; errors will be sent to this channel, also used for logging
 // - logger: the logger to use
-func ThrottledChannelIterator(ctx context.Context, limiter *rate.Limiter, innerIterator ChannelIterator,
+func ThrottledChannelIterator(_ context.Context, limiter *rate.Limiter, innerIterator ChannelIterator,
 	reportError bool, innerChannel Channel, logger log.Logger) (ChannelIterator, error) {
 	if innerChannel == nil {
 		if reportError {
