@@ -426,6 +426,14 @@ ttl-duration = "{{ .Mempool.TTLDuration }}"
 # it's insertion time into the mempool is beyond ttl-duration.
 ttl-num-blocks = {{ .Mempool.TTLNumBlocks }}
 
+# TxEnqueueTimeout defines how many nanoseconds new mempool transaction (received
+# from other nodes) will wait when internal processing queue is full
+# (most likely due to busy CheckTx execution).Once the timeout is reached, the transaction
+# will be silently dropped. 
+# 
+# If set to 0, the timeout is disabled and transactions will wait indefinitely.
+tx-enqueue-timeout" = "{{ .Mempool.TxEnqueueTimeout }}"
+
 #######################################################
 ###         State Sync Configuration Options        ###
 #######################################################

@@ -2,7 +2,6 @@ package p2p
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -69,7 +68,7 @@ func ChannelDescriptors(cfg *config.Config) map[ChannelID]*ChannelDescriptor {
 			RecvMessageCapacity: mempoolBatchSize(cfg.Mempool.MaxTxBytes),
 			RecvBufferCapacity:  128,
 			Name:                "mempool",
-			EnqueueTimeout:      10 * time.Millisecond,
+			EnqueueTimeout:      cfg.Mempool.TxEnqueueTimeout,
 		},
 		SnapshotChannel: {
 			ID:                  SnapshotChannel,
