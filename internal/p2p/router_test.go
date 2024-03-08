@@ -911,7 +911,7 @@ func TestRouter_Channel_Enqueue_Timeout(t *testing.T) {
 
 	// how many more messages we send than the recv channel capacity
 
-	logger := log.NewTestingLoggerWithLevel(t, log.LogLevelTrace).WithTimestamp()
+	logger := log.NewTestingLoggerWithLevel(t, log.LogLevelDebug).WithTimestamp()
 
 	t.Cleanup(leaktest.Check(t))
 
@@ -948,7 +948,6 @@ func TestRouter_Channel_Enqueue_Timeout(t *testing.T) {
 
 				wg.Done()
 			}()
-			runtime.Gosched()
 
 			// sleep to ensure the timeout expired and at least some msgs will be dropped
 			time.Sleep(tc.delay)
@@ -962,7 +961,7 @@ func TestRouter_Channel_Enqueue_Timeout(t *testing.T) {
 				logger.Trace("received message", "message", e.Message)
 				count++
 			}
-			logger.Info("Received %d messages", count)
+			logger.Info("received %d messages", count)
 
 			wg.Wait()
 
