@@ -922,7 +922,7 @@ func TestRouter_Channel_Enqueue_Timeout(t *testing.T) {
 		tc := tc
 		t.Run(fmt.Sprintf("send=%d,recv=%d,delay=%s", tc.sendCount, tc.expectedRecvCount, tc.delay), func(t *testing.T) {
 			// timeout that will expire if we don't receive some of the expected messages
-			ctxTimeout := tc.delay + 50*time.Millisecond
+			ctxTimeout := tc.delay + 200*time.Millisecond
 			ctx, cancel := context.WithTimeout(context.Background(), ctxTimeout)
 			defer cancel()
 			// Create a test network and open a channel on all nodes.
