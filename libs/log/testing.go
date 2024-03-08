@@ -71,13 +71,13 @@ type TestingLogger struct {
 }
 
 // WithTimestamp returns a new TestingLogger with timestamp enabled.
-func (t *TestingLogger) WithTimestamp() *TestingLogger {
+func (tw *TestingLogger) WithTimestamp() *TestingLogger {
 	l := TestingLogger{
-		t:          t.t,
-		assertions: t.assertions,
+		t:          tw.t,
+		assertions: tw.assertions,
 		defaultLogger: defaultLogger{
-			Logger:     t.defaultLogger.Logger.With().Timestamp().Logger(),
-			closeFuncs: t.defaultLogger.closeFuncs,
+			Logger:     tw.defaultLogger.Logger.With().Timestamp().Logger(),
+			closeFuncs: tw.defaultLogger.closeFuncs,
 		},
 	}
 
