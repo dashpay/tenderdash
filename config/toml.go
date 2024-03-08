@@ -426,6 +426,25 @@ ttl-duration = "{{ .Mempool.TTLDuration }}"
 # it's insertion time into the mempool is beyond ttl-duration.
 ttl-num-blocks = {{ .Mempool.TTLNumBlocks }}
 
+
+# tx-send-rate-limit is the rate limit for sending transactions to peers, in transactions per second.
+# If zero, the rate limiter is disabled.
+#
+# Default: 0
+tx-send-rate-limit = {{ .Mempool.TxSendRateLimit }}
+
+# tx-recv-rate-limit is the rate limit for receiving transactions from peers, in transactions per second.
+# If zero, the rate limiter is disabled.
+#
+# Default: 0
+tx-recv-rate-limit = {{ .Mempool.TxRecvRateLimit }}
+
+# tx-recv-rate-punish-peer set to true means that when tx-recv-rate-limit is reached, the peer will be punished 
+# (disconnected). If set to false, the peer will be throttled (messages will be dropped).
+#
+# Default: false
+tx-recv-rate-punish-peer = {{ .Mempool.TxRecvRatePunishPeer }}
+
 #######################################################
 ###         State Sync Configuration Options        ###
 #######################################################

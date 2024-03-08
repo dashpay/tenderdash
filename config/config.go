@@ -819,6 +819,24 @@ type MempoolConfig struct {
 	// has existed in the mempool at least TTLNumBlocks number of blocks or if
 	// it's insertion time into the mempool is beyond TTLDuration.
 	TTLNumBlocks int64 `mapstructure:"ttl-num-blocks"`
+
+	// TxSendRateLimit is the rate limit for sending transactions to peers, in
+	// transactions per second. If zero, the rate limiter is disabled.
+	//
+	// Default: 0
+	TxSendRateLimit float64 `mapstructure:"tx-send-rate-limit"`
+
+	// TxRecvRateLimit is the rate limit for receiving transactions from peers, in
+	// transactions per second. If zero, the rate limiter is disabled.
+	//
+	// Default: 0
+	TxRecvRateLimit float64 `mapstructure:"tx-recv-rate-limit"`
+
+	// TxRecvRatePunishPeer set to true means that when the rate limit set in TxRecvRateLimit is reached, the
+	// peer will be punished (disconnected). If set to false, the peer will be throttled (messages will be dropped).
+	//
+	// Default: false
+	TxRecvRatePunishPeer bool `mapstructure:"tx-recv-rate-punish-peer"`
 }
 
 // DefaultMempoolConfig returns a default configuration for the Tendermint mempool.
