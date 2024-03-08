@@ -148,7 +148,6 @@ func TestThrottledChannelRecvError(t *testing.T) {
 // Given some thrrottled channel that generates messages all the time, we should be able to receive them at a rate
 // of 10 messages per second.
 func TestThrottledChannelRecv(t *testing.T) {
-	const n = 31
 	const rate rate.Limit = 10
 	const burst = int(rate)
 
