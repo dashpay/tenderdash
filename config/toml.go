@@ -432,7 +432,7 @@ ttl-num-blocks = {{ .Mempool.TTLNumBlocks }}
 # will be silently dropped. 
 # 
 # If set to 0, the timeout is disabled and transactions will wait indefinitely.
-tx-enqueue-timeout" = "{{ .Mempool.TxEnqueueTimeout }}"
+tx-enqueue-timeout = "{{ .Mempool.TxEnqueueTimeout }}"
 
 #######################################################
 ###         State Sync Configuration Options        ###
