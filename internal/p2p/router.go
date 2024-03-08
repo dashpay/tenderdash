@@ -766,7 +766,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 
 	// Drain the error channel; these should typically not be interesting
 FOR:
-	for i := 0; ; i++ {
+	for {
 		select {
 		case e := <-errCh:
 			r.logger.Debug("routePeer: received error when draining errCh", "peer", peerID, "err", e)
@@ -797,8 +797,7 @@ FOR:
 // passes them on to the appropriate channel.
 func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Connection) error {
 	// default timeout; by default, we set it to ~ 10 years so that it will practically never fire
-	const DefaultTimeout = 24 * 30 * 12 * 10 * time.Hour
-	timeout := time.NewTimer(DefaultTimeout)
+	timeout := time.NewTimer(0)
 	defer timeout.Stop()
 
 	for {
@@ -833,6 +832,7 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		envelope.From = peerID
 		envelope.ChannelID = chID
 
+		// stop previous timeout counter and drain the timeout channel
 		timeout.Stop()
 		select {
 		case <-timeout.C:
@@ -841,8 +841,6 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 
 		if chDesc.EnqueueTimeout > 0 {
 			timeout.Reset(chDesc.EnqueueTimeout)
-		} else {
-			timeout.Reset(DefaultTimeout)
 		}
 
 		select {
@@ -858,7 +856,6 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 			r.logger.Debug("channel closed, dropping message", "peer", peerID, "channel", chID)
 
 		case <-timeout.C:
-			// TODO change to Trace
 			r.logger.Debug("dropping message from peer due to enqueue timeout",
 				"peer", peerID,
 				"channel", chID,
