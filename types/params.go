@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/dashpay/tenderdash/crypto/bls12381"
@@ -90,6 +91,11 @@ type TimeoutParams struct {
 	ProposeDelta time.Duration `json:"propose_delta,string"`
 	Vote         time.Duration `json:"vote,string"`
 	VoteDelta    time.Duration `json:"vote_delta,string"`
+
+	// Unused, TODO: Remove in 0.15
+	Commit time.Duration `json:"commit,string"`
+	// Unused, TODO: Remove in 0.15
+	BypassCommitTimeout bool `json:"bypass_commit_timeout"`
 }
 
 // ABCIParams configure ABCI functionality specific to the Application Blockchain
@@ -307,6 +313,15 @@ func (params ConsensusParams) ValidateConsensusParams() error {
 
 	if len(params.Validator.PubKeyTypes) == 0 {
 		return errors.New("len(Validator.PubKeyTypes) must be greater than 0")
+	}
+
+	// TODO: Remove in v0.15
+	if params.Timeout.Commit != 0 {
+		fmt.Fprintln(os.Stderr, "WARNING: ConsensusParams.Timeout.Commit is not used and will be removed in v0.15")
+	}
+	// TODO: Remove in v0.15
+	if params.Timeout.BypassCommitTimeout {
+		fmt.Fprintln(os.Stderr, "WARNING: ConsensusParams.Timeout.BypassCommitTimeout is not used and will be removed in v0.15")
 	}
 
 	// Check if keyType is a known ABCIPubKeyType
