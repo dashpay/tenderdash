@@ -1049,20 +1049,6 @@ type ConsensusConfig struct {
 	// If it is set to true, the consensus engine will proceed to the next height
 	// as soon as the node has gathered votes from all of the validators on the network.
 	UnsafeBypassCommitTimeoutOverride *bool `mapstructure:"unsafe-bypass-commit-timeout-override"`
-
-	// Deprecated timeout parameters. These parameters are present in this struct
-	// so that they can be parsed so that validation can check if they have erroneously
-	// been included and provide a helpful error message.
-	// These fields should be completely removed in v0.37.
-	// See: https://github.com/tendermint/tendermint/issues/8188
-	DeprecatedTimeoutPropose        *interface{} `mapstructure:"timeout-propose"`
-	DeprecatedTimeoutProposeDelta   *interface{} `mapstructure:"timeout-propose-delta"`
-	DeprecatedTimeoutPrevote        *interface{} `mapstructure:"timeout-prevote"`
-	DeprecatedTimeoutPrevoteDelta   *interface{} `mapstructure:"timeout-prevote-delta"`
-	DeprecatedTimeoutPrecommit      *interface{} `mapstructure:"timeout-precommit"`
-	DeprecatedTimeoutPrecommitDelta *interface{} `mapstructure:"timeout-precommit-delta"`
-	DeprecatedTimeoutCommit         *interface{} `mapstructure:"timeout-commit"`
-	DeprecatedSkipTimeoutCommit     *interface{} `mapstructure:"skip-timeout-commit"`
 }
 
 // DefaultConsensusConfig returns a default configuration for the consensus service
@@ -1141,30 +1127,7 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 
 func (cfg *ConsensusConfig) DeprecatedFieldWarning() error {
 	var fields []string
-	if cfg.DeprecatedSkipTimeoutCommit != nil {
-		fields = append(fields, "skip-timeout-commit")
-	}
-	if cfg.DeprecatedTimeoutPropose != nil {
-		fields = append(fields, "timeout-propose")
-	}
-	if cfg.DeprecatedTimeoutProposeDelta != nil {
-		fields = append(fields, "timeout-propose-delta")
-	}
-	if cfg.DeprecatedTimeoutPrevote != nil {
-		fields = append(fields, "timeout-prevote")
-	}
-	if cfg.DeprecatedTimeoutPrevoteDelta != nil {
-		fields = append(fields, "timeout-prevote-delta")
-	}
-	if cfg.DeprecatedTimeoutPrecommit != nil {
-		fields = append(fields, "timeout-precommit")
-	}
-	if cfg.DeprecatedTimeoutPrecommitDelta != nil {
-		fields = append(fields, "timeout-precommit-delta")
-	}
-	if cfg.DeprecatedTimeoutCommit != nil {
-		fields = append(fields, "timeout-commit")
-	}
+
 	if cfg.DeprecatedQuorumType != 0 {
 		fields = append(fields, "quorum-type")
 	}
