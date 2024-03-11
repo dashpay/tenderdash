@@ -664,9 +664,7 @@ const testGenesisFmt = `{
 			"propose": "30000000",
 			"propose_delta": "50000",
 			"vote": "30000000",
-			"vote_delta": "50000",
-			"commit": "10000000",
-			"bypass_timeout_commit": true
+			"vote_delta": "50000"
 		},
 		"evidence": {
 			"max_age_num_blocks": "100000",
