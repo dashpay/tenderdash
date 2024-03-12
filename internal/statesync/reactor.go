@@ -48,18 +48,6 @@ const (
 	// recentSnapshots is the number of recent snapshots to send and receive per peer.
 	recentSnapshots = 10
 
-	// snapshotMsgSize is the maximum size of a snapshotResponseMessage
-	snapshotMsgSize = int(4e6) // ~4MB
-
-	// chunkMsgSize is the maximum size of a chunkResponseMessage
-	chunkMsgSize = int(16e6) // ~16MB
-
-	// lightBlockMsgSize is the maximum size of a lightBlockResponseMessage
-	lightBlockMsgSize = int(1e7) // ~1MB
-
-	// paramMsgSize is the maximum size of a paramsResponseMessage
-	paramMsgSize = int(1e5) // ~100kb
-
 	// lightBlockResponseTimeout is how long the dispatcher waits for a peer to
 	// return a light block
 	lightBlockResponseTimeout = 10 * time.Second
