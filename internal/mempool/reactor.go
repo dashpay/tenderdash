@@ -74,7 +74,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		r.logger.Info("tx broadcasting is disabled")
 	}
 	go func() {
-		err := r.p2pClient.Consume(ctx, consumerHandler(r.logger, r.mempool, r.ids))
+		err := r.p2pClient.Consume(ctx, consumerHandler(r.logger, r.mempool.config, r.mempool, r.ids))
 		if err != nil {
 			r.logger.Error("failed to consume p2p checker messages", "error", err)
 		}
