@@ -253,13 +253,10 @@ func NewPersistentApp(cfg Config, opts ...OptFunc) (*Application, error) {
 }
 
 // InitChain implements ABCI
-func (app *Application) InitChain(ctx context.Context, req *abci.RequestInitChain) (*abci.ResponseInitChain, error) {
+func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain) (*abci.ResponseInitChain, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 	if req.InitialHeight != 0 {
 		app.initialHeight = req.InitialHeight
 		if app.LastCommittedState.GetHeight() == 0 {
@@ -314,13 +311,9 @@ func (app *Application) InitChain(ctx context.Context, req *abci.RequestInitChai
 }
 
 // PrepareProposal implements ABCI
-func (app *Application) PrepareProposal(ctx context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
+func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrepareProposal) (*abci.ResponsePrepareProposal, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 
 	if req.MaxTxBytes <= 0 {
 		return &abci.ResponsePrepareProposal{}, fmt.Errorf("MaxTxBytes must be positive, got: %d", req.MaxTxBytes)
@@ -397,13 +390,9 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 }
 
 // FinalizeBlock implements ABCI
-func (app *Application) FinalizeBlock(ctx context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
+func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 
 	blockHash := tmbytes.HexBytes(req.Hash)
 
@@ -491,13 +480,9 @@ func (app *Application) eventValUpdate(height int64) abci.Event {
 }
 
 // ListSnapshots implements ABCI.
-func (app *Application) ListSnapshots(ctx context.Context, req *abci.RequestListSnapshots) (*abci.ResponseListSnapshots, error) {
+func (app *Application) ListSnapshots(_ context.Context, req *abci.RequestListSnapshots) (*abci.ResponseListSnapshots, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 
 	snapshots, err := app.snapshots.List()
 	if err != nil {
@@ -510,13 +495,9 @@ func (app *Application) ListSnapshots(ctx context.Context, req *abci.RequestList
 }
 
 // LoadSnapshotChunk implements ABCI.
-func (app *Application) LoadSnapshotChunk(ctx context.Context, req *abci.RequestLoadSnapshotChunk) (*abci.ResponseLoadSnapshotChunk, error) {
+func (app *Application) LoadSnapshotChunk(_ context.Context, req *abci.RequestLoadSnapshotChunk) (*abci.ResponseLoadSnapshotChunk, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 
 	chunk, err := app.snapshots.LoadChunk(req.Height, req.Version, req.ChunkId)
 	if err != nil {
@@ -529,13 +510,9 @@ func (app *Application) LoadSnapshotChunk(ctx context.Context, req *abci.Request
 }
 
 // OfferSnapshot implements ABCI.
-func (app *Application) OfferSnapshot(ctx context.Context, req *abci.RequestOfferSnapshot) (*abci.ResponseOfferSnapshot, error) {
+func (app *Application) OfferSnapshot(_ context.Context, req *abci.RequestOfferSnapshot) (*abci.ResponseOfferSnapshot, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 
 	app.offerSnapshot = newOfferSnapshot(req.Snapshot, req.AppHash)
 	resp := &abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ACCEPT}
@@ -545,13 +522,9 @@ func (app *Application) OfferSnapshot(ctx context.Context, req *abci.RequestOffe
 }
 
 // ApplySnapshotChunk implements ABCI.
-func (app *Application) ApplySnapshotChunk(ctx context.Context, req *abci.RequestApplySnapshotChunk) (*abci.ResponseApplySnapshotChunk, error) {
+func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestApplySnapshotChunk) (*abci.ResponseApplySnapshotChunk, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 
 	if app.offerSnapshot == nil {
 		return &abci.ResponseApplySnapshotChunk{}, fmt.Errorf("no restore in progress")
@@ -604,14 +577,9 @@ func (app *Application) createSnapshot() error {
 }
 
 // Info implements ABCI
-func (app *Application) Info(ctx context.Context, req *abci.RequestInfo) (*abci.ResponseInfo, error) {
+func (app *Application) Info(_ context.Context, req *abci.RequestInfo) (*abci.ResponseInfo, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
-
 	appHash := app.LastCommittedState.GetAppHash()
 	resp := &abci.ResponseInfo{
 		Data:             fmt.Sprintf("{\"appHash\":\"%s\"}", appHash.String()),
@@ -625,13 +593,9 @@ func (app *Application) Info(ctx context.Context, req *abci.RequestInfo) (*abci.
 }
 
 // CheckTx implements ABCI
-func (app *Application) CheckTx(ctx context.Context, req *abci.RequestCheckTx) (*abci.ResponseCheckTx, error) {
+func (app *Application) CheckTx(_ context.Context, req *abci.RequestCheckTx) (*abci.ResponseCheckTx, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 
 	resp, err := app.verifyTx(req.Tx, req.Type)
 	if app.cfg.CheckTxDelayMS != 0 {
@@ -642,13 +606,9 @@ func (app *Application) CheckTx(ctx context.Context, req *abci.RequestCheckTx) (
 }
 
 // Query returns an associated value or nil if missing.
-func (app *Application) Query(ctx context.Context, reqQuery *abci.RequestQuery) (*abci.ResponseQuery, error) {
+func (app *Application) Query(_ context.Context, reqQuery *abci.RequestQuery) (*abci.ResponseQuery, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
-
-	if err := ctx.Err(); err != nil {
-		return nil, err
-	}
 
 	switch reqQuery.Path {
 	case "/val":
