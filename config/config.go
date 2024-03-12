@@ -517,6 +517,13 @@ type RPCConfig struct {
 	// See https://github.com/tendermint/tendermint/issues/3435
 	TimeoutBroadcastTxCommit time.Duration `mapstructure:"timeout-broadcast-tx-commit"`
 
+	// Timeout of transaction broadcast to mempool; 0 to disable.
+	//
+	// This setting affects timeout of CheckTX operations used before
+	// adding transaction to the mempool. If the operation takes longer,
+	// the transaction is rejected with an error.
+	TimeoutBroadcastTx time.Duration `mapstructure:"timeout-broadcast-tx"`
+
 	// Maximum size of request body, in bytes
 	MaxBodyBytes int64 `mapstructure:"max-body-bytes"`
 
@@ -564,6 +571,7 @@ func DefaultRPCConfig() *RPCConfig {
 		EventLogMaxItems:             0,
 
 		TimeoutBroadcastTxCommit: 10 * time.Second,
+		TimeoutBroadcastTx:       0,
 
 		MaxBodyBytes:   int64(1000000), // 1MB
 		MaxHeaderBytes: 1 << 20,        // same as the net/http default
@@ -601,6 +609,9 @@ func (cfg *RPCConfig) ValidateBasic() error {
 	}
 	if cfg.TimeoutBroadcastTxCommit < 0 {
 		return errors.New("timeout-broadcast-tx-commit can't be negative")
+	}
+	if cfg.TimeoutBroadcastTx < 0 {
+		return errors.New("timeout-broadcast-tx can't be negative")
 	}
 	if cfg.MaxBodyBytes < 0 {
 		return errors.New("max-body-bytes can't be negative")
@@ -820,6 +831,10 @@ type MempoolConfig struct {
 	// has existed in the mempool at least TTLNumBlocks number of blocks or if
 	// it's insertion time into the mempool is beyond TTLDuration.
 	TTLNumBlocks int64 `mapstructure:"ttl-num-blocks"`
+
+	// Timeout of check TX operations received from other nodes.
+	// Use 0 to disable.
+	TimeoutCheckTx time.Duration `mapstructure:"timeout-check-tx"`
 }
 
 // DefaultMempoolConfig returns a default configuration for the Tendermint mempool.
@@ -828,12 +843,13 @@ func DefaultMempoolConfig() *MempoolConfig {
 		Broadcast: true,
 		// Each signature verification takes .5ms, Size reduced until we implement
 		// ABCI Recheck
-		Size:         5000,
-		MaxTxsBytes:  1024 * 1024 * 1024, // 1GB
-		CacheSize:    10000,
-		MaxTxBytes:   1024 * 1024, // 1MB
-		TTLDuration:  0 * time.Second,
-		TTLNumBlocks: 0,
+		Size:           5000,
+		MaxTxsBytes:    1024 * 1024 * 1024, // 1GB
+		CacheSize:      10000,
+		MaxTxBytes:     1024 * 1024, // 1MB
+		TTLDuration:    0 * time.Second,
+		TTLNumBlocks:   0,
+		TimeoutCheckTx: 0,
 	}
 }
 
@@ -864,6 +880,9 @@ func (cfg *MempoolConfig) ValidateBasic() error {
 	}
 	if cfg.TTLNumBlocks < 0 {
 		return errors.New("ttl-num-blocks can't be negative")
+	}
+	if cfg.TimeoutCheckTx < 0 {
+		return errors.New("timeout-check-tx can't be negative")
 	}
 	return nil
 }
@@ -1050,20 +1069,6 @@ type ConsensusConfig struct {
 	// If it is set to true, the consensus engine will proceed to the next height
 	// as soon as the node has gathered votes from all of the validators on the network.
 	UnsafeBypassCommitTimeoutOverride *bool `mapstructure:"unsafe-bypass-commit-timeout-override"`
-
-	// Deprecated timeout parameters. These parameters are present in this struct
-	// so that they can be parsed so that validation can check if they have erroneously
-	// been included and provide a helpful error message.
-	// These fields should be completely removed in v0.37.
-	// See: https://github.com/tendermint/tendermint/issues/8188
-	DeprecatedTimeoutPropose        *interface{} `mapstructure:"timeout-propose"`
-	DeprecatedTimeoutProposeDelta   *interface{} `mapstructure:"timeout-propose-delta"`
-	DeprecatedTimeoutPrevote        *interface{} `mapstructure:"timeout-prevote"`
-	DeprecatedTimeoutPrevoteDelta   *interface{} `mapstructure:"timeout-prevote-delta"`
-	DeprecatedTimeoutPrecommit      *interface{} `mapstructure:"timeout-precommit"`
-	DeprecatedTimeoutPrecommitDelta *interface{} `mapstructure:"timeout-precommit-delta"`
-	DeprecatedTimeoutCommit         *interface{} `mapstructure:"timeout-commit"`
-	DeprecatedSkipTimeoutCommit     *interface{} `mapstructure:"skip-timeout-commit"`
 }
 
 // DefaultConsensusConfig returns a default configuration for the consensus service
@@ -1142,30 +1147,7 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 
 func (cfg *ConsensusConfig) DeprecatedFieldWarning() error {
 	var fields []string
-	if cfg.DeprecatedSkipTimeoutCommit != nil {
-		fields = append(fields, "skip-timeout-commit")
-	}
-	if cfg.DeprecatedTimeoutPropose != nil {
-		fields = append(fields, "timeout-propose")
-	}
-	if cfg.DeprecatedTimeoutProposeDelta != nil {
-		fields = append(fields, "timeout-propose-delta")
-	}
-	if cfg.DeprecatedTimeoutPrevote != nil {
-		fields = append(fields, "timeout-prevote")
-	}
-	if cfg.DeprecatedTimeoutPrevoteDelta != nil {
-		fields = append(fields, "timeout-prevote-delta")
-	}
-	if cfg.DeprecatedTimeoutPrecommit != nil {
-		fields = append(fields, "timeout-precommit")
-	}
-	if cfg.DeprecatedTimeoutPrecommitDelta != nil {
-		fields = append(fields, "timeout-precommit-delta")
-	}
-	if cfg.DeprecatedTimeoutCommit != nil {
-		fields = append(fields, "timeout-commit")
-	}
+
 	if cfg.DeprecatedQuorumType != 0 {
 		fields = append(fields, "quorum-type")
 	}

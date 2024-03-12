@@ -1100,20 +1100,22 @@ func TestStateProto(t *testing.T) {
 
 	for _, tt := range tc {
 		tt := tt
-		pbs, err := tt.state.ToProto()
-		if !tt.expPass1 {
-			assert.Error(t, err)
-		} else {
-			assert.NoError(t, err, tt.testName)
-		}
+		t.Run(tt.testName, func(t *testing.T) {
+			pbs, err := tt.state.ToProto()
+			if !tt.expPass1 {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err, tt.testName)
+			}
 
-		smt, err := sm.FromProto(pbs)
-		if tt.expPass2 {
-			require.NoError(t, err, tt.testName)
-			require.Equal(t, tt.state, smt, tt.testName)
-		} else {
-			require.Error(t, err, tt.testName)
-		}
+			smt, err := sm.FromProto(pbs)
+			if tt.expPass2 {
+				require.NoError(t, err, tt.testName)
+				require.Equal(t, tt.state, smt, tt.testName)
+			} else {
+				require.Error(t, err, tt.testName)
+			}
+		})
 	}
 }
 
