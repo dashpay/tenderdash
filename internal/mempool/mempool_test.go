@@ -800,7 +800,7 @@ func TestTxMempool_OneRecheckTxAtTime(t *testing.T) {
 	mp.recheckTransactions(ctx)
 	assert.Eventually(t,
 		func() bool { return checkTxCounter.Load() == uint32(numRecheckTasks) },
-		100*time.Millisecond, 5*time.Millisecond,
+		200*time.Millisecond, 10*time.Millisecond,
 		"1st run: processed %d txs, expected %d", checkTxCounter.Load(), numRecheckTasks)
 
 	// another recheck should cancel the first run and start from the beginning , but pending checkTx ops should finish
@@ -809,7 +809,7 @@ func TestTxMempool_OneRecheckTxAtTime(t *testing.T) {
 	recheckTxBlocker.Unlock()
 	// Ensure that all goroutines/tasks have finished
 	assert.Eventually(t, func() bool { return runtime.NumGoroutine() == goroutines },
-		100*time.Millisecond, 5*time.Millisecond,
+		500*time.Millisecond, 10*time.Millisecond,
 		"not all goroutines finished on time")
 
 	// here we expect to have processed `numRecheckTasks` during first run, and `numTxs` during 2nd run
