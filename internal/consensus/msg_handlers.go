@@ -185,13 +185,6 @@ func msgInfoWithCtxMiddleware() msgMiddlewareFunc {
 	}
 }
 
-func logKeyValsWithError(keyVals []any, err error) []any {
-	if err == nil {
-		return keyVals
-	}
-	return append(keyVals, "error", err)
-}
-
 func makeLogArgsFromMessage(msg Message) []any {
 	switch m := msg.(type) {
 	case *ProposalMessage:

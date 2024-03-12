@@ -24,9 +24,17 @@ import (
 // Deprecated and should be removed in 0.37
 func (env *Environment) BroadcastTxAsync(_ctx context.Context, req *coretypes.RequestBroadcastTx) (*coretypes.ResultBroadcastTx, error) {
 	go func() {
+		var (
+			ctx    context.Context
+			cancel context.CancelFunc
+		)
 		// We need to create a new context here, because the original context
 		// may be canceled after parent function returns.
-		ctx, cancel := context.WithTimeout(context.Background(), mempool.CheckTxTimeout)
+		if env.Config.TimeoutBroadcastTx > 0 {
+			ctx, cancel = context.WithTimeout(context.Background(), env.Config.TimeoutBroadcastTx)
+		} else {
+			ctx, cancel = context.WithCancel(context.Background())
+		}
 		defer cancel()
 
 		if res, err := env.BroadcastTx(ctx, req); err != nil || res.Code != abci.CodeTypeOK {
@@ -46,7 +54,13 @@ func (env *Environment) BroadcastTxSync(ctx context.Context, req *coretypes.Requ
 // DeliverTx result.
 // More: https://docs.tendermint.com/master/rpc/#/Tx/broadcast_tx_sync
 func (env *Environment) BroadcastTx(ctx context.Context, req *coretypes.RequestBroadcastTx) (*coretypes.ResultBroadcastTx, error) {
-	ctx, cancel := context.WithTimeout(ctx, mempool.CheckTxTimeout)
+	var cancel context.CancelFunc
+
+	if env.Config.TimeoutBroadcastTx > 0 {
+		ctx, cancel = context.WithTimeout(ctx, env.Config.TimeoutBroadcastTx)
+	} else {
+		ctx, cancel = context.WithCancel(ctx)
+	}
 	defer cancel()
 
 	resCh := make(chan *abci.ResponseCheckTx, 1)

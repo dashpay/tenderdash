@@ -47,9 +47,10 @@ func (c *AddCommitAction) Execute(ctx context.Context, stateEvent StateEvent) er
 	if err != nil {
 		return fmt.Errorf("error adding commit: %w", err)
 	}
-	if stateData.bypassCommitTimeout() {
-		_ = stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
-	}
+
+	// We go to next round, as in Tenderdash we don't need to wait for new commits
+	_ = stateEvent.Ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
+
 	_ = c.statsQueue.send(ctx, msgInfoFromCtx(ctx))
 	return nil
 }

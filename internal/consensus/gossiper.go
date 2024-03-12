@@ -311,10 +311,6 @@ func (g *msgGossiper) ensurePeerPartSetHeader(blockPartSetHeader types.PartSetHe
 // there is a vote to send and (nil,false) otherwise.
 func (g *msgGossiper) pickVoteForGossip(rs cstypes.RoundState, prs *cstypes.PeerRoundState) (*types.Vote, bool) {
 	var voteSets []*types.VoteSet
-	// if there are lastPrecommits to send
-	if prs.Step == cstypes.RoundStepNewHeight {
-		voteSets = append(voteSets, rs.LastPrecommits)
-	}
 	if prs.Round != -1 && prs.Round <= rs.Round {
 		// if there are POL prevotes to send
 		if prs.Step <= cstypes.RoundStepPropose && prs.ProposalPOLRound != -1 {

@@ -512,8 +512,9 @@ func (cs *State) OnStop() {
 	if cs.GetRoundState().Step == cstypes.RoundStepApplyCommit {
 		select {
 		case <-cs.getOnStopCh():
-		case <-time.After(stateData.state.ConsensusParams.Timeout.Commit):
-			cs.logger.Error("OnStop: timeout waiting for commit to finish", "time", stateData.state.ConsensusParams.Timeout.Commit)
+		case <-time.After(stateData.state.ConsensusParams.Timeout.Vote):
+			// we wait vote timeout, just in case
+			cs.logger.Error("OnStop: timeout waiting for commit to finish", "time", stateData.state.ConsensusParams.Timeout.Vote)
 		}
 	}
 

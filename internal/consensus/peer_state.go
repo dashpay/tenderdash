@@ -268,7 +268,7 @@ func (ps *PeerState) getVoteBitArray(height int64, round int32, votesType tmprot
 				return nil
 
 			case tmproto.PrecommitType:
-				return ps.PRS.LastPrecommits
+				return ps.PRS.Precommits
 			}
 		}
 
@@ -334,10 +334,6 @@ func (ps *PeerState) ensureVoteBitArrays(height int64, numValidators int) {
 		}
 		if ps.PRS.ProposalPOL == nil {
 			ps.PRS.ProposalPOL = bits.NewBitArray(numValidators)
-		}
-	} else if ps.PRS.Height == height+1 {
-		if ps.PRS.LastPrecommits == nil {
-			ps.PRS.LastPrecommits = bits.NewBitArray(numValidators)
 		}
 	}
 }
@@ -530,10 +526,8 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 		// Shift Precommits to LastPrecommits.
 		if psHeight+1 == msg.Height && psRound == msg.LastCommitRound {
 			ps.PRS.LastCommitRound = msg.LastCommitRound
-			ps.PRS.LastPrecommits = ps.PRS.Precommits.Copy()
 		} else {
 			ps.PRS.LastCommitRound = msg.LastCommitRound
-			ps.PRS.LastPrecommits = nil
 		}
 
 		// we'll update the BitArray capacity later

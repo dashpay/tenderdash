@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/p2p/client"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -13,27 +13,23 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-const (
-	// CheckTxTimeout is the maximum time we wait for CheckTx to return.
-	// TODO: Change to config option
-	CheckTxTimeout = 1 * time.Second
-)
-
 type (
 	mempoolP2PMessageHandler struct {
 		logger  log.Logger
+		config  *config.MempoolConfig
 		checker TxChecker
 		ids     *IDs
 	}
 )
 
-func consumerHandler(logger log.Logger, checker TxChecker, ids *IDs) client.ConsumerParams {
+func consumerHandler(logger log.Logger, config *config.MempoolConfig, checker TxChecker, ids *IDs) client.ConsumerParams {
 	chanIDs := []p2p.ChannelID{p2p.MempoolChannel}
 	return client.ConsumerParams{
 		ReadChannels: chanIDs,
 		Handler: client.HandlerWithMiddlewares(
 			&mempoolP2PMessageHandler{
 				logger:  logger,
+				config:  config,
 				checker: checker,
 				ids:     ids,
 			},
@@ -60,7 +56,16 @@ func (h *mempoolP2PMessageHandler) Handle(ctx context.Context, _ *client.Client,
 		SenderNodeID: envelope.From,
 	}
 	for _, tx := range protoTxs {
-		subCtx, subCtxCancel := context.WithTimeout(ctx, CheckTxTimeout)
+		var (
+			subCtx       context.Context
+			subCtxCancel context.CancelFunc
+		)
+		if h.config.TimeoutCheckTx > 0 {
+			subCtx, subCtxCancel = context.WithTimeout(ctx, h.config.TimeoutCheckTx)
+		} else {
+			subCtx, subCtxCancel = context.WithCancel(ctx)
+		}
+
 		defer subCtxCancel()
 
 		if err := h.checker.CheckTx(subCtx, tx, nil, txInfo); err != nil {
