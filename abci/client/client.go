@@ -69,9 +69,9 @@ func makeReqRes(ctx context.Context, req *types.Request) *requestAndResponse {
 }
 
 // markDone marks the ReqRes object as done.
-func (r *requestAndResponse) markDone() {
-	r.mtx.Lock()
-	defer r.mtx.Unlock()
+func (reqResp *requestAndResponse) markDone() {
+	reqResp.mtx.Lock()
+	defer reqResp.mtx.Unlock()
 
-	close(r.signal)
+	close(reqResp.signal)
 }

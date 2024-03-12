@@ -128,7 +128,6 @@ func TestRoutedClientGrpc(t *testing.T) {
 
 	logger := log.NewTestingLogger(t)
 
-	// app := types.NewBaseApplication()
 	app := mocks.NewApplication(t)
 	defer app.AssertExpectations(t)
 	app.On("Echo", mock.Anything, mock.Anything).Return(
