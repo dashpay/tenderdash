@@ -254,12 +254,12 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	)
 	if bytes.Equal(blockExec.lastRequestPrepareProposalHash, reqHash) &&
 		!bytes.Equal(blockExec.lastResponsePrepareProposalHash, respHash) {
+		// we don't panic here, as we don't want to break this node and
+		// remove it from voting quorum
 		blockExec.logger.Error("PrepareProposal response is non-deterministic",
 			"request_hash", hex.EncodeToString(reqHash),
 			"response_hash", hex.EncodeToString(respHash),
 		)
-		// TODO: Remove panic after we find the root cause of the non-determinism
-		panic("PrepareProposal response is non-deterministic")
 	}
 
 	if err := rpp.Validate(); err != nil {
