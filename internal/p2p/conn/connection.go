@@ -14,6 +14,7 @@ import (
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
+	"golang.org/x/time/rate"
 
 	"github.com/gogo/protobuf/proto"
 
@@ -615,6 +616,18 @@ type ChannelDescriptor struct {
 	SendQueueCapacity int
 	// RecvMessageCapacity defines the max message size for a given p2p Channel.
 	RecvMessageCapacity int
+
+	/// SendRateLimit is used to limit the rate of sending messages, per second.
+	SendRateLimit rate.Limit
+	SendRateBurst int
+
+	/// RecvRateLimit is used to limit the rate of receiving messages, per second.
+	RecvRateLimit rate.Limit
+	RecvRateBurst int
+	// RecvRateShouldErr is used to determine if the rate limiter should
+	// report an error whenever recv rate limit is exceeded, most likely
+	// causing the peer to disconnect.
+	RecvRateShouldErr bool
 
 	// RecvBufferCapacity defines the max number of inbound messages for a
 	// given p2p Channel queue.

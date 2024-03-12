@@ -272,7 +272,7 @@ func (c *Client) Consume(ctx context.Context, params ConsumerParams) error {
 	return c.iter(ctx, iter, params.Handler)
 }
 
-func (c *Client) iter(ctx context.Context, iter *p2p.ChannelIterator, handler ConsumerHandler) error {
+func (c *Client) iter(ctx context.Context, iter p2p.ChannelIterator, handler ConsumerHandler) error {
 	for iter.Next(ctx) {
 		envelope := iter.Envelope()
 		if isMessageResolvable(envelope.Message) {

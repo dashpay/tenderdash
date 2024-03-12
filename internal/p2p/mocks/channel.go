@@ -33,19 +33,19 @@ func (_m *Channel) Err() error {
 }
 
 // Receive provides a mock function with given fields: _a0
-func (_m *Channel) Receive(_a0 context.Context) *p2p.ChannelIterator {
+func (_m *Channel) Receive(_a0 context.Context) p2p.ChannelIterator {
 	ret := _m.Called(_a0)
 
 	if len(ret) == 0 {
 		panic("no return value specified for Receive")
 	}
 
-	var r0 *p2p.ChannelIterator
-	if rf, ok := ret.Get(0).(func(context.Context) *p2p.ChannelIterator); ok {
+	var r0 p2p.ChannelIterator
+	if rf, ok := ret.Get(0).(func(context.Context) p2p.ChannelIterator); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*p2p.ChannelIterator)
+			r0 = ret.Get(0).(p2p.ChannelIterator)
 		}
 	}
 
