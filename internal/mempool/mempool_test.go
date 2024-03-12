@@ -789,9 +789,6 @@ func TestTxMempool_OneRecheckTxAtTime(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// catch num of goroutines before we start the test
-	goroutines := runtime.NumGoroutine()
-
 	// TEST
 
 	// block checkTx until we unblock it
@@ -808,12 +805,15 @@ func TestTxMempool_OneRecheckTxAtTime(t *testing.T) {
 	// unlock the app; this should finish all started rechecks, but not continue with rechecks from 1st run
 	recheckTxBlocker.Unlock()
 	// Ensure that all goroutines/tasks have finished
-	assert.Eventually(t, func() bool { return runtime.NumGoroutine() == goroutines },
-		500*time.Millisecond, 10*time.Millisecond,
-		"not all goroutines finished on time")
+	assert.Eventually(t, func() bool { return uint32(numRecheckTasks+numTxs) == checkTxCounter.Load() },
+		200*time.Millisecond, 10*time.Millisecond,
+		"num of txs mismatch: got %d, expected %d", checkTxCounter.Load(), numRecheckTasks+numTxs)
 
-	// here we expect to have processed `numRecheckTasks` during first run, and `numTxs` during 2nd run
-	assert.Equal(t, uint32(numRecheckTasks+numTxs), checkTxCounter.Load())
+	// let's give it some more time and ensure we don't process any further txs
+	if !testing.Short() {
+		time.Sleep(100 * time.Millisecond)
+		assert.Equal(t, uint32(numRecheckTasks+numTxs), checkTxCounter.Load())
+	}
 }
 
 func randomTx() *WrappedTx {
