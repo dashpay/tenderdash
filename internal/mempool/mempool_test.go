@@ -745,7 +745,7 @@ func TestTxMempool_CheckTxPostCheckError(t *testing.T) {
 	}
 }
 
-// TestTxMempool_OneRecheckTxAtTime checks if recheck tx subtasks are stopped when new block is received.
+// TestTxMempool_OneRecheckTxAtTime checks if previous recheckTransactions task is canceled when another one is started.
 //
 // Given mempool with some transactions AND app that processes CheckTX very slowly,
 // when we call recheckTransactions() twice,
