@@ -173,21 +173,19 @@ func TestConsensusParamsValidation(t *testing.T) {
 }
 
 type makeParamsArgs struct {
-	blockBytes          int64
-	blockGas            int64
-	recheck             bool
-	evidenceAge         int64
-	maxEvidenceBytes    int64
-	pubkeyTypes         []string
-	precision           time.Duration
-	messageDelay        time.Duration
-	bypassCommitTimeout bool
+	blockBytes       int64
+	blockGas         int64
+	recheck          bool
+	evidenceAge      int64
+	maxEvidenceBytes int64
+	pubkeyTypes      []string
+	precision        time.Duration
+	messageDelay     time.Duration
 
 	propose      *time.Duration
 	proposeDelta *time.Duration
 	vote         *time.Duration
 	voteDelta    *time.Duration
-	commit       *time.Duration
 }
 
 func makeParams(args makeParamsArgs) ConsensusParams {
@@ -206,9 +204,7 @@ func makeParams(args makeParamsArgs) ConsensusParams {
 	if args.voteDelta == nil {
 		args.voteDelta = durationPtr(1)
 	}
-	if args.commit == nil {
-		args.commit = durationPtr(1)
-	}
+
 	return ConsensusParams{
 		Block: BlockParams{
 			MaxBytes: args.blockBytes,
@@ -227,12 +223,10 @@ func makeParams(args makeParamsArgs) ConsensusParams {
 			MessageDelay: args.messageDelay,
 		},
 		Timeout: TimeoutParams{
-			Propose:             *args.propose,
-			ProposeDelta:        *args.proposeDelta,
-			Vote:                *args.vote,
-			VoteDelta:           *args.voteDelta,
-			Commit:              *args.commit,
-			BypassCommitTimeout: args.bypassCommitTimeout,
+			Propose:      *args.propose,
+			ProposeDelta: *args.proposeDelta,
+			Vote:         *args.vote,
+			VoteDelta:    *args.voteDelta,
 		},
 		ABCI: ABCIParams{
 			RecheckTx: args.recheck,
@@ -293,30 +287,24 @@ func TestConsensusParamsUpdate(t *testing.T) {
 		{
 			// update timeout params
 			initialParams: makeParams(makeParamsArgs{
-				propose:             durationPtr(3 * time.Second),
-				proposeDelta:        durationPtr(500 * time.Millisecond),
-				vote:                durationPtr(time.Second),
-				voteDelta:           durationPtr(500 * time.Millisecond),
-				commit:              durationPtr(time.Second),
-				bypassCommitTimeout: false,
+				propose:      durationPtr(3 * time.Second),
+				proposeDelta: durationPtr(500 * time.Millisecond),
+				vote:         durationPtr(time.Second),
+				voteDelta:    durationPtr(500 * time.Millisecond),
 			}),
 			updates: &tmproto.ConsensusParams{
 				Timeout: &tmproto.TimeoutParams{
-					Propose:             durationPtr(2 * time.Second),
-					ProposeDelta:        durationPtr(400 * time.Millisecond),
-					Vote:                durationPtr(5 * time.Second),
-					VoteDelta:           durationPtr(400 * time.Millisecond),
-					Commit:              durationPtr(time.Minute),
-					BypassCommitTimeout: true,
+					Propose:      durationPtr(2 * time.Second),
+					ProposeDelta: durationPtr(400 * time.Millisecond),
+					Vote:         durationPtr(5 * time.Second),
+					VoteDelta:    durationPtr(400 * time.Millisecond),
 				},
 			},
 			updatedParams: makeParams(makeParamsArgs{
-				propose:             durationPtr(2 * time.Second),
-				proposeDelta:        durationPtr(400 * time.Millisecond),
-				vote:                durationPtr(5 * time.Second),
-				voteDelta:           durationPtr(400 * time.Millisecond),
-				commit:              durationPtr(time.Minute),
-				bypassCommitTimeout: true,
+				propose:      durationPtr(2 * time.Second),
+				proposeDelta: durationPtr(400 * time.Millisecond),
+				vote:         durationPtr(5 * time.Second),
+				voteDelta:    durationPtr(400 * time.Millisecond),
 			}),
 		},
 		// fine updates
@@ -396,12 +384,10 @@ func TestProto(t *testing.T) {
 		makeParams(makeParamsArgs{precision: time.Second, messageDelay: time.Minute}),
 		makeParams(makeParamsArgs{precision: time.Nanosecond, messageDelay: time.Millisecond}),
 		makeParams(makeParamsArgs{
-			propose:             durationPtr(2 * time.Second),
-			proposeDelta:        durationPtr(400 * time.Millisecond),
-			vote:                durationPtr(5 * time.Second),
-			voteDelta:           durationPtr(400 * time.Millisecond),
-			commit:              durationPtr(time.Minute),
-			bypassCommitTimeout: true,
+			propose:      durationPtr(2 * time.Second),
+			proposeDelta: durationPtr(400 * time.Millisecond),
+			vote:         durationPtr(5 * time.Second),
+			voteDelta:    durationPtr(400 * time.Millisecond),
 		}),
 	}
 

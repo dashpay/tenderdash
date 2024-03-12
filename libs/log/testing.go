@@ -70,6 +70,20 @@ type TestingLogger struct {
 	assertions []assertion
 }
 
+// WithTimestamp returns a new TestingLogger with timestamp enabled.
+func (tw *TestingLogger) WithTimestamp() *TestingLogger {
+	l := TestingLogger{
+		t:          tw.t,
+		assertions: tw.assertions,
+		defaultLogger: defaultLogger{
+			Logger:     tw.defaultLogger.Logger.With().Timestamp().Logger(),
+			closeFuncs: tw.defaultLogger.closeFuncs,
+		},
+	}
+
+	return &l
+}
+
 type assertion struct {
 	match  regexp.Regexp
 	passed bool

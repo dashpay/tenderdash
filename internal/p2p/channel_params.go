@@ -74,6 +74,7 @@ func ChannelDescriptors(cfg *config.Config) map[ChannelID]*ChannelDescriptor {
 			RecvRateLimit:       rate.Limit(cfg.Mempool.TxRecvRateLimit),
 			RecvRateBurst:       int(10 * cfg.Mempool.TxRecvRateLimit), // twice as big as send, to avoid false punishment
 			RecvRateShouldErr:   cfg.Mempool.TxRecvRatePunishPeer,
+			EnqueueTimeout:      cfg.Mempool.TxEnqueueTimeout,
 		},
 		SnapshotChannel: {
 			ID:                  SnapshotChannel,

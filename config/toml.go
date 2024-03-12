@@ -273,6 +273,13 @@ event-log-max-items = {{ .RPC.EventLogMaxItems }}
 # See https://github.com/tendermint/tendermint/issues/3435
 timeout-broadcast-tx-commit = "{{ .RPC.TimeoutBroadcastTxCommit }}"
 
+# Timeout of transaction broadcast to mempool; 0 to disable.
+#
+# This setting affects timeout of CheckTX operations used before
+# adding transaction to the mempool. If the operation takes longer,
+# the transaction is rejected with an error.
+timeout-broadcast-tx = "{{ .RPC.TimeoutBroadcastTx }}"
+
 # Maximum size of request body, in bytes
 max-body-bytes = {{ .RPC.MaxBodyBytes }}
 
@@ -444,6 +451,18 @@ tx-recv-rate-limit = {{ .Mempool.TxRecvRateLimit }}
 #
 # Default: false
 tx-recv-rate-punish-peer = {{ .Mempool.TxRecvRatePunishPeer }}
+
+# TxEnqueueTimeout defines how many nanoseconds new mempool transaction (received
+# from other nodes) will wait when internal processing queue is full
+# (most likely due to busy CheckTx execution).Once the timeout is reached, the transaction
+# will be silently dropped. 
+# 
+# If set to 0, the timeout is disabled and transactions will wait indefinitely.
+tx-enqueue-timeout = "{{ .Mempool.TxEnqueueTimeout }}"
+
+# Timeout of check TX operations received from other nodes, using p2p protocol.
+# Use 0 to disable.
+timeout-check-tx = "{{ .Mempool.TimeoutCheckTx }}"
 
 #######################################################
 ###         State Sync Configuration Options        ###
@@ -683,9 +702,7 @@ const testGenesisFmt = `{
 			"propose": "30000000",
 			"propose_delta": "50000",
 			"vote": "30000000",
-			"vote_delta": "50000",
-			"commit": "10000000",
-			"bypass_timeout_commit": true
+			"vote_delta": "50000"
 		},
 		"evidence": {
 			"max_age_num_blocks": "100000",

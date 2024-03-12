@@ -81,7 +81,7 @@ func setup(
 		privProTxHashes[i] = state.privValidator.ProTxHash
 	}
 	rts := &reactorTestSuite{
-		network:       p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: numNodes, ProTxHashes: privProTxHashes}),
+		network:       p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: numNodes, ProTxHashes: privProTxHashes}, log.NewNopLogger()),
 		states:        make(map[types.NodeID]*State),
 		reactors:      make(map[types.NodeID]*Reactor, numNodes),
 		subs:          make(map[types.NodeID]eventbus.Subscription, numNodes),
@@ -556,7 +556,6 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		validatorUpdates: updates,
 		consensusParams: factory.ConsensusParams(func(cp *types.ConsensusParams) {
 			cp.Timeout.Propose = 2 * time.Second
-			cp.Timeout.Commit = 1 * time.Second
 			cp.Timeout.Vote = 1 * time.Second
 		}),
 	}

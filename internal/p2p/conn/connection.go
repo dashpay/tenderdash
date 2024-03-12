@@ -613,7 +613,8 @@ type ChannelDescriptor struct {
 	Priority int
 
 	// TODO: Remove once p2p refactor is complete.
-	SendQueueCapacity   int
+	SendQueueCapacity int
+	// RecvMessageCapacity defines the max message size for a given p2p Channel.
 	RecvMessageCapacity int
 
 	/// SendRateLimit is used to limit the rate of sending messages, per second.
@@ -628,13 +629,19 @@ type ChannelDescriptor struct {
 	// causing the peer to disconnect.
 	RecvRateShouldErr bool
 
-	// RecvBufferCapacity defines the max buffer size of inbound messages for a
+	// RecvBufferCapacity defines the max number of inbound messages for a
 	// given p2p Channel queue.
 	RecvBufferCapacity int
 
 	// Human readable name of the channel, used in logging and
 	// diagnostics.
 	Name string
+
+	// Timeout for enqueue operations on the incoming queue.
+	// When timeout expires, messages will be silently dropped.
+	//
+	// If zero, enqueue operations will not time out.
+	EnqueueTimeout time.Duration
 }
 
 func (chDesc ChannelDescriptor) FillDefaults() (filled ChannelDescriptor) {
