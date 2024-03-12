@@ -148,14 +148,14 @@ func (m *MConnTransport) Accept(ctx context.Context) (Connection, error) {
 			select {
 			case errCh <- err:
 			case <-m.doneCh:
-				m.logger.Debug("MConnTransport Accept: connection closed - doneCh")
+				m.logger.Trace("MConnTransport Accept: connection closed - doneCh")
 			case <-ctx.Done():
 			}
 		}
 		select {
 		case conCh <- tcpConn:
 		case <-m.doneCh:
-			m.logger.Debug("MConnTransport Accept: connection closed - doneCh")
+			m.logger.Trace("MConnTransport Accept: connection closed - doneCh")
 		case <-ctx.Done():
 		}
 	}()
@@ -471,10 +471,10 @@ func (c *mConnConnection) ReceiveMessage(ctx context.Context) (ChannelID, []byte
 		c.logger.Debug("ReceiveMessage: error occurred", "err", err)
 		return 0, nil, err
 	case <-c.doneCh:
-		c.logger.Debug("ReceiveMessage: connection closed - doneCh")
+		c.logger.Trace("ReceiveMessage: connection closed - doneCh")
 		return 0, nil, io.EOF
 	case <-ctx.Done():
-		c.logger.Debug("ReceiveMessage: connection closed - ctx.Done()")
+		c.logger.Trace("ReceiveMessage: connection closed - ctx.Done()")
 		return 0, nil, io.EOF
 	case msg := <-c.receiveCh:
 		return msg.channelID, msg.payload, nil
@@ -509,7 +509,7 @@ func (c *mConnConnection) RemoteEndpoint() Endpoint {
 func (c *mConnConnection) Close() error {
 	var err error
 	c.closeOnce.Do(func() {
-		c.logger.Debug("mConnConnection.Close(): closing doneCh")
+		c.logger.Trace("mConnConnection.Close(): closing doneCh")
 		defer close(c.doneCh)
 
 		if c.mconn != nil && c.mconn.IsRunning() {

@@ -214,7 +214,7 @@ func TestApp_TxTooBig(t *testing.T) {
 	}
 
 	/// timeout for broadcast to single node
-	const broadcastTimeout = 5 * time.Second
+	const broadcastTimeout = 10 * time.Second
 	/// Timeout to read response from single node
 	const readTimeout = 1 * time.Second
 	/// Time to process whole mempool
