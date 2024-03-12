@@ -712,19 +712,15 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 
 	sendQueue := r.getOrMakeQueue(peerID, channels)
 	defer func() {
-		r.logger.Debug("routePeer cleanup: terminated peer", "peer", peerID)
 		r.peerMtx.Lock()
 		delete(r.peerQueues, peerID)
 		delete(r.peerChannels, peerID)
 		r.peerMtx.Unlock()
-		r.logger.Debug("routePeer cleanup: deleted peer queues", "peer", peerID)
 
 		_ = conn.Close()
 		sendQueue.close()
-		r.logger.Debug("routePeer cleanup: closed send queue", "peer", peerID)
 
 		r.peerManager.Disconnected(ctx, peerID)
-		r.logger.Debug("routePeer cleanup: peer marked as disconnected", "peer", peerID)
 		r.metrics.PeersConnected.Add(-1)
 	}()
 
