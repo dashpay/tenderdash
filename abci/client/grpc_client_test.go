@@ -91,7 +91,7 @@ func makeGRPCClientServer(
 	return client, server, nil
 }
 
-// mockApplication that will decrease mcokApplication.started when called Info, and then wait until
+// mockApplication that will decrease mockApplication.started when called Info, and then wait until
 // mtx is unlocked before it finishes
 type mockApplication struct {
 	types.BaseApplication
