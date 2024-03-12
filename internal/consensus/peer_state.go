@@ -483,8 +483,7 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
 
-	// TODO change to TRACE
-	ps.logger.Debug("apply new round step message", "peer", ps.peerID, "msg", msg.String())
+	ps.logger.Trace("apply new round step message", "peer", ps.peerID, "msg", msg.String())
 
 	// ignore duplicates or decreases
 	if CompareHRS(msg.Height, msg.Round, msg.Step, ps.PRS.Height, ps.PRS.Round, ps.PRS.Step) <= 0 {

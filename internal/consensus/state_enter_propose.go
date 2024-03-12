@@ -57,7 +57,7 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	if isProposer {
 		pwt := proposerWaitTime(tmtime.Now(), stateData.state.LastBlockTime)
 		if pwt > 0 {
-			c.logger.Info("enter propose: latest block is newer, sleeping",
+			c.logger.Debug("enter propose: latest block is newer, sleeping",
 				"duration", pwt.String(),
 				"last_block_time", stateData.state.LastBlockTime,
 				"now", tmtime.Now(),
