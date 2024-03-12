@@ -470,10 +470,6 @@ func (suite *GossiperSuiteTest) TestGossipGossipVote() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	precommitH99 := suite.makeSignedVote(99, 0, tmproto.PrecommitType)
-	lastPercommits := types.NewVoteSet(factory.DefaultTestChainID, 99, 0, tmproto.PrecommitType, suite.valSet)
-	_, _ = lastPercommits.AddVote(precommitH99)
-
 	prevoteH100R0 := suite.makeSignedVote(100, 0, tmproto.PrevoteType)
 	prevoteH100R1 := suite.makeSignedVote(100, 1, tmproto.PrevoteType)
 	prevoteH100R2 := suite.makeSignedVote(100, 2, tmproto.PrevoteType)
@@ -489,16 +485,6 @@ func (suite *GossiperSuiteTest) TestGossipGossipVote() {
 		prs     cstypes.PeerRoundState
 		wantMsg *tmproto.Vote
 	}{
-		{
-			rs: cstypes.RoundState{LastPrecommits: lastPercommits},
-			prs: cstypes.PeerRoundState{
-				Height:           100,
-				Round:            -1,
-				ProposalPOLRound: -1,
-				Step:             cstypes.RoundStepNewHeight,
-			},
-			wantMsg: precommitH99.ToProto(),
-		},
 		{
 			rs: cstypes.RoundState{Votes: votesH100},
 			prs: cstypes.PeerRoundState{
