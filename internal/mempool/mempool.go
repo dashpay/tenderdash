@@ -752,7 +752,7 @@ func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
 			wtx := wtx
 			start(func() error {
 				if err := ctx.Err(); err != nil {
-					txmp.logger.Trace("recheck txs task canceled", "err", err, "tx", wtx.hash.String())
+					txmp.logger.Trace("recheck txs task canceled", "err", err, "tx", wtx.hash)
 					return err
 				}
 				rsp, err := txmp.proxyAppConn.CheckTx(ctx, &abci.RequestCheckTx{

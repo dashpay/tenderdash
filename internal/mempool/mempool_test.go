@@ -7,23 +7,29 @@ import (
 	"fmt"
 	"math/rand"
 	"os"
+	"runtime"
 	"sort"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/fortytw2/leaktest"
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/code"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/abci/types/mocks"
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -736,6 +742,89 @@ func TestTxMempool_CheckTxPostCheckError(t *testing.T) {
 				require.EqualError(t, err, "test error")
 			}
 		})
+	}
+}
+
+// TestTxMempool_OneRecheckTxAtTime checks if recheck tx subtasks are stopped when new block is received.
+//
+// Given mempool with some transactions AND app that processes CheckTX very slowly,
+// when we call recheckTransactions() twice,
+// then first recheckTransactions task is canceled and second one starts from the beginning.
+func TestTxMempool_OneRecheckTxAtTime(t *testing.T) {
+	// SETUP
+	t.Cleanup(leaktest.Check(t))
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := log.NewTestingLogger(t)
+
+	// num of parallel tasks started in recheckTransactions; this is how many
+	// txs will be processed as a minimum
+	numRecheckTasks := 2 * runtime.NumCPU()
+	numTxs := 3 * numRecheckTasks
+
+	app := mocks.NewApplication(t)
+	var (
+		checkTxCounter   atomic.Uint32
+		recheckTxBlocker sync.Mutex
+	)
+	// app will wait on recheckTxBlocker until we unblock it
+	app.On("CheckTx", mock.Anything, mock.Anything).Return(&abci.ResponseCheckTx{
+		Priority: 1,
+		Code:     abci.CodeTypeOK}, nil).
+		Run(func(_ mock.Arguments) {
+			// increase counter before locking, so we can check if it was called
+			checkTxCounter.Add(1)
+			recheckTxBlocker.Lock()
+			defer recheckTxBlocker.Unlock()
+		})
+
+	client := abciclient.NewLocalClient(log.NewNopLogger(), app)
+	cfg := config.TestConfig()
+	mp := NewTxMempool(logger, cfg.Mempool, client)
+	// add some txs to mempool
+	for i := 0; i < numTxs; i++ {
+		err := mp.addNewTransaction(randomTx(), &abci.ResponseCheckTx{Code: abci.CodeTypeOK, GasWanted: 1, Priority: int64(i + 1)})
+		require.NoError(t, err)
+	}
+
+	// catch num of goroutines before we start the test
+	goroutines := runtime.NumGoroutine()
+
+	// TEST
+
+	// block checkTx until we unblock it
+	recheckTxBlocker.Lock()
+	// start recheckTransactions in the background; it should process exactly one tx per recheck task
+	mp.recheckTransactions(ctx)
+	assert.Eventually(t,
+		func() bool { return checkTxCounter.Load() == uint32(numRecheckTasks) },
+		100*time.Millisecond, 5*time.Millisecond,
+		"1st run: processed %d txs, expected %d", checkTxCounter.Load(), numRecheckTasks)
+
+	// another recheck should cancel the first run and start from the beginning , but pending checkTx ops should finish
+	mp.recheckTransactions(ctx)
+	// unlock the app; this should finish all started rechecks, but not continue with rechecks from 1st run
+	recheckTxBlocker.Unlock()
+	// Ensure that all goroutines/tasks have finished
+	assert.Eventually(t, func() bool { return runtime.NumGoroutine() == goroutines },
+		100*time.Millisecond, 5*time.Millisecond,
+		"not all goroutines finished on time")
+
+	// here we expect to have processed `numRecheckTasks` during first run, and `numTxs` during 2nd run
+	assert.Equal(t, uint32(numRecheckTasks+numTxs), checkTxCounter.Load())
+}
+
+func randomTx() *WrappedTx {
+	tx := tmrand.Bytes(10)
+	return &WrappedTx{
+		tx:        tx,
+		height:    1,
+		timestamp: time.Now(),
+		gasWanted: 1,
+		priority:  1,
+		peers:     map[uint16]bool{},
 	}
 }
 
