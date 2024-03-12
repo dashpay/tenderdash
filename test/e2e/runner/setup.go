@@ -218,6 +218,8 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 		cfg.LogLevel = node.LogLevel
 	}
 
+	cfg.Mempool.TxEnqueueTimeout = 10 * time.Millisecond
+
 	cfg.RPC.ListenAddress = "tcp://0.0.0.0:26657"
 	cfg.RPC.PprofListenAddress = ":6060"
 	cfg.P2P.ExternalAddress = fmt.Sprintf("tcp://%v", node.AddressP2P(false))

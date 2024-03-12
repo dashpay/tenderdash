@@ -3,8 +3,10 @@ package p2p_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"runtime"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -12,6 +14,7 @@ import (
 	"github.com/fortytw2/leaktest"
 	gogotypes "github.com/gogo/protobuf/types"
 	sync "github.com/sasha-s/go-deadlock"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
@@ -51,7 +54,7 @@ func TestRouter_Network(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
 
 	// Create a test network and open a channel where all peers run echoReactor.
-	network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 8})
+	network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 8}, log.NewNopLogger())
 	local := network.AnyNode()
 	peers := network.Peers(local.NodeID)
 	channels := network.MakeChannels(ctx, t, chDesc)
@@ -107,7 +110,7 @@ func TestRouter_Channel_Basic(t *testing.T) {
 	peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
 	require.NoError(t, err)
 
-	testnet := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 1})
+	testnet := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 1}, log.NewNopLogger())
 
 	router, err := p2p.NewRouter(
 		log.NewNopLogger(),
@@ -174,7 +177,7 @@ func TestRouter_Channel_SendReceive(t *testing.T) {
 	t.Cleanup(leaktest.Check(t))
 
 	// Create a test network and open a channel on all nodes.
-	network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 3})
+	network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 3}, log.NewNopLogger())
 
 	ids := network.NodeIDs()
 	aID, bID, cID := ids[0], ids[1], ids[2]
@@ -240,7 +243,7 @@ func TestRouter_Channel_Broadcast(t *testing.T) {
 	defer cancel()
 
 	// Create a test network and open a channel on all nodes.
-	network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 4})
+	network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 4}, log.NewNopLogger())
 
 	ids := network.NodeIDs()
 	aID, bID, cID, dID := ids[0], ids[1], ids[2], ids[3]
@@ -271,7 +274,7 @@ func TestRouter_Channel_Error(t *testing.T) {
 	defer cancel()
 
 	// Create a test network and open a channel on all nodes.
-	network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 3})
+	network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 3}, log.NewNopLogger())
 	network.Start(ctx, t)
 
 	ids := network.NodeIDs()
@@ -873,4 +876,100 @@ func TestRouter_DontSendOnInvalidChannel(t *testing.T) {
 
 	router.Stop()
 	mockTransport.AssertExpectations(t)
+}
+
+// Given a channel with non-zero enqueue timeout,
+// when I send more messages than recv channel capacity,
+// and I wait longer than enqueue timeout,
+// then I should receive only the messages that fit into the recv channel capacity.
+func TestRouter_Channel_Enqueue_Timeout(t *testing.T) {
+	type testCase struct {
+		sendCount         int
+		expectedRecvCount int
+		delay             time.Duration
+	}
+
+	chDesc := &p2p.ChannelDescriptor{
+		ID:                  chID,
+		Priority:            5,
+		SendQueueCapacity:   100,
+		RecvMessageCapacity: 10240,                 //10kB
+		EnqueueTimeout:      10 * time.Millisecond, // FIXME: Check if this doesn't affect other tests
+		RecvBufferCapacity:  10,
+	}
+	const processingTime = 10 * time.Millisecond
+
+	testCases := []testCase{
+		{sendCount: chDesc.RecvBufferCapacity, expectedRecvCount: chDesc.RecvBufferCapacity, delay: 0},
+		{sendCount: chDesc.RecvBufferCapacity * 2, expectedRecvCount: chDesc.RecvBufferCapacity * 2, delay: 0},
+		{sendCount: 1, expectedRecvCount: 1, delay: chDesc.EnqueueTimeout + 10*time.Millisecond},
+		{sendCount: chDesc.RecvBufferCapacity - 1, expectedRecvCount: chDesc.RecvBufferCapacity - 1, delay: chDesc.EnqueueTimeout + processingTime},
+		{sendCount: chDesc.RecvBufferCapacity, expectedRecvCount: chDesc.RecvBufferCapacity, delay: chDesc.EnqueueTimeout + processingTime},
+		{sendCount: chDesc.RecvBufferCapacity + 1, expectedRecvCount: chDesc.RecvBufferCapacity, delay: 2*chDesc.EnqueueTimeout + processingTime},
+		{sendCount: chDesc.RecvBufferCapacity + 5, expectedRecvCount: chDesc.RecvBufferCapacity, delay: 6*chDesc.EnqueueTimeout + processingTime},
+	}
+
+	// how many more messages we send than the recv channel capacity
+
+	logger := log.NewTestingLoggerWithLevel(t, log.LogLevelDebug).WithTimestamp()
+
+	t.Cleanup(leaktest.Check(t))
+
+	// ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	// defer cancel()
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(fmt.Sprintf("send=%d,recv=%d,delay=%s", tc.sendCount, tc.expectedRecvCount, tc.delay), func(t *testing.T) {
+			// timeout that will expire if we don't receive some of the expected messages
+			ctxTimeout := tc.delay + 200*time.Millisecond
+			ctx, cancel := context.WithTimeout(context.Background(), ctxTimeout)
+			defer cancel()
+			// Create a test network and open a channel on all nodes.
+			network := p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: 2}, logger)
+
+			ids := network.NodeIDs()
+			aID, bID := ids[0], ids[1]
+			channels := network.MakeChannels(ctx, t, chDesc)
+			a, b := channels[aID], channels[bID]
+
+			network.Start(ctx, t)
+
+			wg := sync.WaitGroup{}
+
+			// Start the test - send messages in a goroutine to not block on full chan
+			wg.Add(1)
+			go func() {
+				for i := 0; i < tc.sendCount; i++ {
+					sentEnvelope := p2p.Envelope{To: bID, Message: &p2ptest.Message{Value: strconv.Itoa(i)}}
+					p2ptest.RequireSend(ctx, t, a, sentEnvelope)
+					logger.Trace("Sent message", "id", i)
+				}
+
+				wg.Done()
+			}()
+
+			// sleep to ensure the timeout expired and at least some msgs will be dropped
+			time.Sleep(tc.delay)
+			count := 0
+
+			// check if we received all the messages we expected
+			iter := b.Receive(ctx)
+			for count < tc.expectedRecvCount && iter.Next(ctx) {
+				// this will hang if we don't receive the expected number of messages
+				e := iter.Envelope()
+				logger.Trace("received message", "message", e.Message)
+				count++
+			}
+			logger.Info("received %d messages", count)
+
+			wg.Wait()
+
+			// this will error if we receive too many messages
+			p2ptest.RequireEmpty(ctx, t, a, b)
+
+			// this will error if we don't receive the expected number of messages
+			assert.NoError(t, ctx.Err(), "timed out, received %d msgs, expected %d", count, tc.expectedRecvCount)
+		})
+	}
 }

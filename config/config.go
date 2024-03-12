@@ -831,6 +831,12 @@ type MempoolConfig struct {
 	// it's insertion time into the mempool is beyond TTLDuration.
 	TTLNumBlocks int64 `mapstructure:"ttl-num-blocks"`
 
+	// TxEnqueueTimeout defines how long new mempool transaction will wait when internal
+	// processing queue is full (most likely due to busy CheckTx execution).
+	// Once the timeout is reached, the transaction will be silently dropped.
+	// If set to 0, the timeout is disabled and transactions will wait indefinitely.
+	TxEnqueueTimeout time.Duration `mapstructure:"tx-enqueue-timeout"`
+
 	// Timeout of check TX operations received from other nodes.
 	// Use 0 to disable.
 	TimeoutCheckTx time.Duration `mapstructure:"timeout-check-tx"`
@@ -879,6 +885,9 @@ func (cfg *MempoolConfig) ValidateBasic() error {
 	}
 	if cfg.TTLNumBlocks < 0 {
 		return errors.New("ttl-num-blocks can't be negative")
+	}
+	if cfg.TxEnqueueTimeout < 0 {
+		return errors.New("tx-enqueue-timeout can't be negative")
 	}
 	if cfg.TimeoutCheckTx < 0 {
 		return errors.New("timeout-check-tx can't be negative")

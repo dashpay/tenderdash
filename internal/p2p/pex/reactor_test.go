@@ -380,7 +380,7 @@ func setupNetwork(ctx context.Context, t *testing.T, opts testOptions) *reactorT
 
 	rts := &reactorTestSuite{
 		logger:      log.NewNopLogger().With("testCase", t.Name()),
-		network:     p2ptest.MakeNetwork(ctx, t, networkOpts),
+		network:     p2ptest.MakeNetwork(ctx, t, networkOpts, log.NewNopLogger()),
 		reactors:    make(map[types.NodeID]*pex.Reactor, realNodes),
 		pexChannels: make(map[types.NodeID]p2p.Channel, opts.TotalNodes),
 		peerChans:   make(map[types.NodeID]chan p2p.PeerUpdate, opts.TotalNodes),
