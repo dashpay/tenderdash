@@ -1,3 +1,36 @@
+## [0.14.0-dev.4] - 2024-03-13
+
+### Bug Fixes
+
+- Cancel previous mempool run when starting new one (#760)
+- Valid/locked block incorrectly marked as not timely (#762)
+
+### Features
+
+- Allow configuration of check TX timeout for rpc and p2p tx broadcast (#750)
+- Channel enqueue timeout and improved router cleanup (#754)
+- Channels with limit of send and recv rate (#753)
+
+### Miscellaneous Tasks
+
+- Minor improvements: logging, comments, locks (#726)
+
+### Refactor
+
+- [**breaking**] Remove deprecated config fields (#755)
+- Remove not needed commit timeout and unused LastPrecommits (#751)
+- Tune channel priorities and move channel definitions to p2p/channel_params.go (#759)
+- Use tmsync.Waker when txs are available (#761)
+
+### Testing
+
+- Add parallel grpc execution test (#758)
+
+### Build
+
+- Bump docker/build-push-action from 5.0.0 to 5.2.0 (#756)
+- Bump bufbuild/buf-setup-action from 1.29.0 to 1.30.0 (#757)
+
 ## [0.14.0-dev.3] - 2024-03-07
 
 ### Bug Fixes
