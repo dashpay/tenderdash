@@ -768,6 +768,8 @@ func (cs *State) handleTimeout(
 }
 
 func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
+	// TODO: Change to trace
+	cs.logger.Debug("new transactions are available", "height", stateData.Height, "round", stateData.Round, "step", stateData.Step)
 	// We only need to do this for round 0.
 	if stateData.Round != 0 {
 		return

@@ -16,6 +16,7 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/libs/clist"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -48,10 +49,12 @@ type TxMempool struct {
 	// Synchronized fields, protected by mtx.
 	mtx                  *sync.RWMutex
 	notifiedTxsAvailable bool
-	txsAvailable         chan struct{} // one value sent per height when mempool is not empty
-	preCheck             PreCheckFunc
-	postCheck            PostCheckFunc
-	height               int64 // the latest height passed to Update
+	// txsAvailable is a waker that triggers when transactions are available in the mempool.
+	// Can be nil if not enabled with EnableTxsAvailable.
+	txsAvailable *tmsync.Waker
+	preCheck     PreCheckFunc
+	postCheck    PostCheckFunc
+	height       int64 // the latest height passed to Update
 
 	txs        *clist.CList // valid transactions (passed CheckTx)
 	txByKey    map[types.TxKey]*clist.CElement
@@ -81,6 +84,7 @@ func NewTxMempool(
 		txByKey:      make(map[types.TxKey]*clist.CElement),
 		txBySender:   make(map[string]*clist.CElement),
 	}
+
 	if cfg.CacheSize > 0 {
 		txmp.cache = NewLRUTxCache(cfg.CacheSize)
 	}
@@ -149,12 +153,26 @@ func (txmp *TxMempool) EnableTxsAvailable() {
 	txmp.mtx.Lock()
 	defer txmp.mtx.Unlock()
 
-	txmp.txsAvailable = make(chan struct{}, 1)
+	if txmp.txsAvailable != nil {
+		if err := txmp.txsAvailable.Close(); err != nil {
+			txmp.logger.Error("failed to close txsAvailable", "err", err)
+		}
+	}
+	txmp.txsAvailable = tmsync.NewWaker()
 }
 
 // TxsAvailable returns a channel which fires once for every height, and only
 // when transactions are available in the mempool. It is thread-safe.
-func (txmp *TxMempool) TxsAvailable() <-chan struct{} { return txmp.txsAvailable }
+//
+// Note: returned channel might never close if EnableTxsAvailable() was not called before
+// calling this function.
+func (txmp *TxMempool) TxsAvailable() <-chan struct{} {
+	if txmp.txsAvailable == nil {
+		return make(<-chan struct{})
+	}
+
+	return txmp.txsAvailable.Sleep()
+}
 
 // CheckTx adds the given transaction to the mempool if it fits and passes the
 // application's ABCI CheckTx method.
@@ -397,8 +415,10 @@ func (txmp *TxMempool) Update(
 			len(blockTxs), len(deliverTxResponses)))
 	}
 
-	txmp.height = blockHeight
-	txmp.notifiedTxsAvailable = false
+	if txmp.height != blockHeight {
+		txmp.height = blockHeight
+		txmp.notifiedTxsAvailable = false
+	}
 
 	if newPreFn != nil {
 		txmp.preCheck = newPreFn
@@ -774,8 +794,10 @@ func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
 
 		// When recheck is complete, trigger a notification for more transactions.
 		_ = g.Wait()
+
 		txmp.mtx.Lock()
 		defer txmp.mtx.Unlock()
+
 		txmp.notifyTxsAvailable()
 	}()
 }
@@ -830,6 +852,11 @@ func (txmp *TxMempool) purgeExpiredTxs(blockHeight int64) {
 	}
 }
 
+// notifyTxsAvailable triggers a notification that transactions are available in
+// the mempool. It is a no-op if the mempool is empty or if a notification has
+// already been sent.
+//
+// No locking is required to call this method.
 func (txmp *TxMempool) notifyTxsAvailable() {
 	if txmp.Size() == 0 {
 		return // nothing to do
@@ -839,9 +866,6 @@ func (txmp *TxMempool) notifyTxsAvailable() {
 		// channel cap is 1, so this will send once
 		txmp.notifiedTxsAvailable = true
 
-		select {
-		case txmp.txsAvailable <- struct{}{}:
-		default:
-		}
+		txmp.txsAvailable.Wake()
 	}
 }

@@ -34,7 +34,9 @@ func (s *voteSigner) signAddVote(
 	}
 	// If the node not in the validator set, do nothing.
 	if !stateData.Validators.HasProTxHash(s.privValidator.ProTxHash) {
-		s.logger.Error("do nothing, node is not a part of validator set")
+		s.logger.Error("do nothing, node is not a part of validator set",
+			"protxhash", s.privValidator.ProTxHash.ShortString(),
+			"validators", stateData.Validators)
 		return nil
 	}
 	keyVals := []any{"height", stateData.Height, "round", stateData.Round, "quorum_hash", stateData.Validators.QuorumHash}
