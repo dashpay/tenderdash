@@ -117,9 +117,14 @@ func shouldProposalBeGossiped(rs cstypes.RoundState, prs *cstypes.PeerRoundState
 }
 
 func shouldBlockPartsBeGossiped(rs cstypes.RoundState, prs *cstypes.PeerRoundState, isValidator bool) bool {
+	if rs.Height != prs.Height || rs.Round < prs.Round {
+		return false
+	}
+
 	if isValidator && rs.ProposalBlockParts.HasHeader(prs.ProposalBlockPartSetHeader) {
 		return true
 	}
+
 	return prs.HasCommit && rs.ProposalBlockParts != nil
 }
 
