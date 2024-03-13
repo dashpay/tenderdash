@@ -58,7 +58,7 @@ func NewReactor(
 		p2pClient:    p2pClient,
 		peerEvents:   peerEvents,
 		peerRoutines: make(map[types.NodeID]context.CancelFunc),
-		observePanic: func(i interface{}) {},
+		observePanic: func(_i interface{}) {},
 	}
 
 	r.BaseService = *service.NewBaseService(logger, "Mempool", r)
