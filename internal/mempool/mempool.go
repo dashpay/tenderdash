@@ -47,7 +47,8 @@ type TxMempool struct {
 	txsBytes int64 // atomic: the total size of all transactions in the mempool, in bytes
 
 	// Synchronized fields, protected by mtx.
-	mtx *sync.RWMutex
+	mtx                  *sync.RWMutex
+	notifiedTxsAvailable bool
 	// txsAvailable is a waker that triggers when transactions are available in the mempool.
 	// Can be nil if not enabled with EnableTxsAvailable.
 	txsAvailable *tmsync.Waker
@@ -412,6 +413,7 @@ func (txmp *TxMempool) Update(
 	}
 
 	txmp.height = blockHeight
+	txmp.notifiedTxsAvailable = false
 
 	if newPreFn != nil {
 		txmp.preCheck = newPreFn
@@ -836,13 +838,16 @@ func (txmp *TxMempool) purgeExpiredTxs(blockHeight int64) {
 // the mempool. It is a no-op if the mempool is empty or if a notification has
 // already been sent.
 //
-// Caller should hold txmp.mtx read lock.
+// No locking is required to call this method.
 func (txmp *TxMempool) notifyTxsAvailable() {
 	if txmp.Size() == 0 {
 		return // nothing to do
 	}
 
-	if txmp.txsAvailable != nil {
+	if txmp.txsAvailable != nil && !txmp.notifiedTxsAvailable {
+		// channel cap is 1, so this will send once
+		txmp.notifiedTxsAvailable = true
+
 		txmp.txsAvailable.Wake()
 	}
 }
