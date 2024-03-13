@@ -419,8 +419,10 @@ func (txmp *TxMempool) Update(
 			len(blockTxs), len(deliverTxResponses)))
 	}
 
-	txmp.height = blockHeight
-	txmp.notifiedTxsAvailable = false
+	if txmp.height != blockHeight {
+		txmp.height = blockHeight
+		txmp.notifiedTxsAvailable = false
+	}
 
 	if newPreFn != nil {
 		txmp.preCheck = newPreFn
@@ -799,6 +801,9 @@ func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
 
 		// When recheck is complete, trigger a notification for more transactions.
 		_ = g.Wait()
+
+		txmp.mtx.Lock()
+		defer txmp.mtx.Unlock()
 
 		txmp.notifyTxsAvailable()
 	}()
