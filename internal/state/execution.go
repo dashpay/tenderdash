@@ -5,6 +5,7 @@ package state
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -103,6 +104,10 @@ type BlockExecutor struct {
 
 	// cache the verification results over a single height
 	cache map[string]struct{}
+
+	// detect non-deterministic prepare proposal responses
+	lastRequestPrepareProposalHash  []byte
+	lastResponsePrepareProposalHash []byte
 }
 
 // BlockExecWithLogger is an option function to set a logger to BlockExecutor
@@ -209,26 +214,25 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 
 	localLastCommit := buildLastCommitInfo(block, state.InitialHeight)
 	version := block.Version.ToProto()
-	rpp, err := blockExec.appClient.PrepareProposal(
-		ctx,
-		&abci.RequestPrepareProposal{
-			MaxTxBytes:         maxDataBytes,
-			Txs:                block.Txs.ToSliceOfBytes(),
-			LocalLastCommit:    localLastCommit,
-			Misbehavior:        block.Evidence.ToABCI(),
-			Height:             block.Height,
-			Round:              round,
-			Time:               block.Time,
-			NextValidatorsHash: block.NextValidatorsHash,
+	request := abci.RequestPrepareProposal{
+		MaxTxBytes:         maxDataBytes,
+		Txs:                block.Txs.ToSliceOfBytes(),
+		LocalLastCommit:    localLastCommit,
+		Misbehavior:        block.Evidence.ToABCI(),
+		Height:             block.Height,
+		Round:              round,
+		Time:               block.Time,
+		NextValidatorsHash: block.NextValidatorsHash,
 
-			// Dash's fields
-			CoreChainLockedHeight: state.LastCoreChainLockedBlockHeight,
-			ProposerProTxHash:     block.ProposerProTxHash,
-			ProposedAppVersion:    block.ProposedAppVersion,
-			Version:               &version,
-			QuorumHash:            state.Validators.QuorumHash,
-		},
-	)
+		// Dash's fields
+		CoreChainLockedHeight: state.LastCoreChainLockedBlockHeight,
+		ProposerProTxHash:     block.ProposerProTxHash,
+		ProposedAppVersion:    block.ProposedAppVersion,
+		Version:               &version,
+		QuorumHash:            state.Validators.QuorumHash,
+	}
+	start := time.Now()
+	rpp, err := blockExec.appClient.PrepareProposal(ctx, &request)
 	if err != nil {
 		// The App MUST ensure that only valid (and hence 'processable') transactions
 		// enter the mempool. Hence, at this point, we can't have any non-processable
@@ -239,6 +243,23 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		// this block, repair what caused the error and try again. Hence, we return an
 		// error for now (the production code calling this function is expected to panic).
 		return nil, CurrentRoundState{}, err
+	}
+
+	// ensure that the proposal response is deterministic
+	reqHash, respHash := deterministicPrepareProposalHashes(&request, rpp)
+	blockExec.logger.Debug("PrepareProposal executed",
+		"request_hash", hex.EncodeToString(reqHash),
+		"response_hash", hex.EncodeToString(respHash),
+		"took", time.Since(start).String(),
+	)
+	if bytes.Equal(blockExec.lastRequestPrepareProposalHash, reqHash) &&
+		!bytes.Equal(blockExec.lastResponsePrepareProposalHash, respHash) {
+		// we don't panic here, as we don't want to break this node and
+		// remove it from voting quorum
+		blockExec.logger.Error("PrepareProposal response is non-deterministic",
+			"request_hash", hex.EncodeToString(reqHash),
+			"response_hash", hex.EncodeToString(respHash),
+		)
 	}
 
 	if err := rpp.Validate(); err != nil {
@@ -279,6 +300,23 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 
 	return block, stateChanges, nil
+}
+
+func deterministicPrepareProposalHashes(request *abci.RequestPrepareProposal, response *abci.ResponsePrepareProposal) (requestHash, responseHash []byte) {
+	deterministicReq := *request
+	deterministicReq.Round = 0
+
+	reqBytes, err := deterministicReq.Marshal()
+	if err != nil {
+		// should never happen, as we just marshaled it before sending
+		panic("failed to marshal RequestPrepareProposal: " + err.Error())
+	}
+	respBytes, err := response.Marshal()
+	if err != nil {
+		// should never happen, as we just marshaled it before sending
+		panic("failed to marshal ResponsePrepareProposal: " + err.Error())
+	}
+	return crypto.Checksum(reqBytes), crypto.Checksum(respBytes)
 }
 
 // ProcessProposal sends the proposal to ABCI App and verifies the response

@@ -79,11 +79,12 @@ func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 }
 
 // Create creates, sings and sends a created proposal to the queue
+//
 // To create a proposal is used RoundState.ValidBlock if it isn't nil and valid, otherwise create a new one
 func (p *Proposaler) Create(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
-	// If there is valid block, choose that.
+	// Create a block.
+	// Note that we only create a block if we don't have a valid block already.
 	block, blockParts := rs.ValidBlock, rs.ValidBlockParts
-	// Create on block
 	if !p.checkValidBlock(rs) {
 		var err error
 		block, blockParts, err = p.createProposalBlock(ctx, round, rs)
@@ -161,7 +162,7 @@ func (p *Proposaler) checkValidBlock(rs *cstypes.RoundState) bool {
 	}
 	if !rs.ValidBlock.IsTimely(rs.ValidBlockRecvTime, sp, rs.ValidRound) {
 		p.logger.Error(
-			"proposal block is outdated",
+			"proposal block is not timely",
 			"height", rs.Height,
 			"round", rs.ValidRound,
 			"received", rs.ValidBlockRecvTime,

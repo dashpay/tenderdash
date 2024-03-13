@@ -354,7 +354,7 @@ func addVoteLoggingMw() AddVoteMiddlewareFunc {
 				return added, err
 			}
 			votes := stateData.Votes.GetVoteSet(vote.Round, vote.Type)
-			logger.Trace("vote added", "data", votes)
+			logger.Debug("vote added", "data", votes, "nil", vote.BlockID.IsNil())
 			return added, err
 		}
 	}

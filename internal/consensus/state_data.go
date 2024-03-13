@@ -313,11 +313,35 @@ func (s *StateData) proposalIsTimely() bool {
 	return s.Proposal.IsTimely(s.ProposalReceiveTime, sp, s.Round)
 }
 
-func (s *StateData) updateValidBlock() {
+// Updates ValidBlock to current proposal.
+// Returns true if the block was updated.
+func (s *StateData) updateValidBlock() bool {
 	s.ValidRound = s.Round
-	s.ValidBlock = s.ProposalBlock
-	s.ValidBlockRecvTime = s.ProposalReceiveTime
-	s.ValidBlockParts = s.ProposalBlockParts
+	// we only update valid block if it's not set already; otherwise we might overwrite the recv time
+	if !s.ValidBlock.HashesTo(s.ProposalBlock.Hash()) {
+		s.ValidBlock = s.ProposalBlock
+		s.ValidBlockRecvTime = s.ProposalReceiveTime
+		s.ValidBlockParts = s.ProposalBlockParts
+
+		return true
+	}
+
+	s.logger.Debug("valid block is already up to date, not updating",
+		"proposal_block", s.ProposalBlock.Hash(),
+		"proposal_round", s.Round,
+		"valid_block", s.ValidBlock.Hash(),
+		"valid_block_round", s.ValidRound,
+	)
+
+	return false
+}
+
+// Locks the proposed block.
+// You might also need to call updateValidBlock().
+func (s *StateData) updateLockedBlock() {
+	s.LockedRound = s.Round
+	s.LockedBlock = s.ProposalBlock
+	s.LockedBlockParts = s.ProposalBlockParts
 }
 
 func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
@@ -452,13 +476,14 @@ func (s *StateData) isValidForPrevote() error {
 	if !s.Proposal.Timestamp.Equal(s.ProposalBlock.Header.Time) {
 		return errPrevoteTimestampNotEqual
 	}
-	//TODO: Remove this temporary fix when the complete solution is ready. See #8739
-	if !s.replayMode && s.Proposal.POLRound == -1 && s.LockedRound == -1 && !s.proposalIsTimely() {
+
+	// if this block was not validated yet, we check if it's timely
+	if !s.replayMode && !s.ProposalBlock.HashesTo(s.ValidBlock.Hash()) && !s.proposalIsTimely() {
 		return errPrevoteProposalNotTimely
 	}
+
 	// Validate proposal core chain lock
-	err := sm.ValidateBlockChainLock(s.state, s.ProposalBlock)
-	if err != nil {
+	if err := sm.ValidateBlockChainLock(s.state, s.ProposalBlock); err != nil {
 		return errPrevoteInvalidChainLock
 	}
 	return nil
