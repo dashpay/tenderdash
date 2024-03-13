@@ -782,6 +782,9 @@ func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
 		// When recheck is complete, trigger a notification for more transactions.
 		_ = g.Wait()
 
+		txmp.mtx.Lock()
+		defer txmp.mtx.Unlock()
+
 		txmp.notifyTxsAvailable()
 	}()
 }
