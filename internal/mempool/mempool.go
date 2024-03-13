@@ -412,8 +412,10 @@ func (txmp *TxMempool) Update(
 			len(blockTxs), len(deliverTxResponses)))
 	}
 
-	txmp.height = blockHeight
-	txmp.notifiedTxsAvailable = false
+	if txmp.height != blockHeight {
+		txmp.height = blockHeight
+		txmp.notifiedTxsAvailable = false
+	}
 
 	if newPreFn != nil {
 		txmp.preCheck = newPreFn
