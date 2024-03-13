@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/p2p"
@@ -55,6 +56,10 @@ func (h *mempoolP2PMessageHandler) Handle(ctx context.Context, _ *client.Client,
 		SenderID:     h.ids.GetForPeer(envelope.From),
 		SenderNodeID: envelope.From,
 	}
+	// some stats for logging
+	start := time.Now()
+	known := 0
+	failed := 0
 	for _, tx := range protoTxs {
 		var (
 			subCtx       context.Context
@@ -76,6 +81,7 @@ func (h *mempoolP2PMessageHandler) Handle(ctx context.Context, _ *client.Client,
 				// got. Gossip should be
 				// smarter, but it's not a
 				// problem.
+				known++
 				continue
 			}
 
@@ -84,10 +90,16 @@ func (h *mempoolP2PMessageHandler) Handle(ctx context.Context, _ *client.Client,
 			if errCtx := ctx.Err(); errCtx != nil {
 				return errCtx
 			}
+			failed++
 			logger.Error("checktx failed for tx",
 				"tx", fmt.Sprintf("%X", types.Tx(tx).Hash()),
 				"error", err)
 		}
 	}
+	logger.Debug("processed txs from peer", "took", time.Since(start).String(),
+		"num_txs", len(protoTxs),
+		"already_known", known,
+		"failed", failed,
+	)
 	return nil
 }

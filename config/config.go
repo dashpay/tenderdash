@@ -799,6 +799,7 @@ type MempoolConfig struct {
 	MaxTxsBytes int64 `mapstructure:"max-txs-bytes"`
 
 	// Size of the cache (used to filter transactions we saw earlier) in transactions
+	// Should be much bigger than mempool size.
 	CacheSize int `mapstructure:"cache-size"`
 
 	// Do not remove invalid transactions from the cache (default: false)

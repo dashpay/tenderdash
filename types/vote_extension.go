@@ -87,7 +87,7 @@ func (e VoteExtensions) GetExtensions() [][]byte {
 
 // Validate returns error if an added vote-extension is invalid
 func (e VoteExtensions) Validate() error {
-	var errs *multierror.Error
+	var errs error
 
 	for i, ext := range e {
 		if err := ext.Validate(); err != nil {
@@ -95,7 +95,7 @@ func (e VoteExtensions) Validate() error {
 		}
 	}
 
-	return errs.ErrorOrNil()
+	return errs
 }
 
 // IsEmpty returns true if a vote-extension container is empty, otherwise false

@@ -723,17 +723,17 @@ func (cs *State) handleTimeout(
 	ti timeoutInfo,
 	stateData *StateData,
 ) {
-	cs.logger.Trace("received tock", "timeout", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
 
 	// timeouts must be for current height, round, step
 	if ti.Height != stateData.Height || ti.Round < stateData.Round || (ti.Round == stateData.Round && ti.Step < stateData.Step) {
-		cs.logger.Debug("ignoring tock because we are ahead",
-			"height", stateData.Height,
-			"round", stateData.Round,
-			"step", stateData.Step.String(),
+		cs.logger.Trace("ignoring tock because we are ahead",
+			"timeout", ti.Duration, "tock_height", ti.Height, "tock_round", ti.Round, "tock_step", ti.Step,
+			"height", stateData.Height, "round", stateData.Round, "step", stateData.Step.String(),
 		)
 		return
 	}
+
+	cs.logger.Trace("received tock", "timeout", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step)
 
 	// the timeout will now cause a state transition
 	cs.mtx.Lock()

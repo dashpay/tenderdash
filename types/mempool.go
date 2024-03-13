@@ -2,6 +2,7 @@ package types
 
 import (
 	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 )
@@ -11,6 +12,10 @@ var ErrTxInCache = errors.New("tx already exists in cache")
 
 // TxKey is the fixed length array key used as an index.
 type TxKey [sha256.Size]byte
+
+func (k TxKey) String() string {
+	return hex.EncodeToString(k[:])
+}
 
 // ErrTxTooLarge defines an error when a transaction is too big to be sent in a
 // message to other peers.

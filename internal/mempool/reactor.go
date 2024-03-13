@@ -58,7 +58,7 @@ func NewReactor(
 		p2pClient:    p2pClient,
 		peerEvents:   peerEvents,
 		peerRoutines: make(map[types.NodeID]context.CancelFunc),
-		observePanic: func(i interface{}) {},
+		observePanic: func(_i interface{}) {},
 	}
 
 	r.BaseService = *service.NewBaseService(logger, "Mempool", r)
@@ -194,6 +194,8 @@ func (r *Reactor) broadcastTxRoutine(ctx context.Context, peerID types.NodeID) {
 
 		memTx := nextGossipTx.Value.(*WrappedTx)
 
+		// We expect the peer to send tx back once it gets it, and that's
+		// when we will mark it as seen.
 		// NOTE: Transaction batching was disabled due to:
 		// https://github.com/tendermint/tendermint/issues/5796
 		if !memTx.HasPeer(peerMempoolID) {

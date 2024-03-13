@@ -2,6 +2,7 @@ package sync
 
 import (
 	"encoding/json"
+	"fmt"
 	"sync"
 )
 
@@ -113,4 +114,11 @@ func (cs *ConcurrentSlice[T]) UnmarshalJSON(data []byte) error {
 
 	cs.items = items
 	return nil
+}
+
+func (cs *ConcurrentSlice[T]) String() string {
+	cs.mtx.RLock()
+	defer cs.mtx.RUnlock()
+
+	return fmt.Sprintf("%v", cs.items)
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	"github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmos "github.com/dashpay/tenderdash/libs/os"
 	"github.com/dashpay/tenderdash/libs/service"
 	e2e "github.com/dashpay/tenderdash/test/e2e/app"
 )
@@ -33,7 +34,7 @@ func ClientFactory(logger log.Logger, addr, transport, dbDir string) (abciclient
 		if err != nil {
 			return nil, nil, err
 		}
-		return abciclient.NewLocalClient(logger, app), noopCloser{}, nil
+		return abciclient.NewLocalClient(logger, app), tmos.NoopCloser{}, nil
 	case "persistent_kvstore":
 		app, err := kvstore.NewPersistentApp(
 			kvstore.DefaultConfig(dbDir),
@@ -46,25 +47,21 @@ func ClientFactory(logger log.Logger, addr, transport, dbDir string) (abciclient
 	case "e2e":
 		app, err := e2e.NewApplication(kvstore.DefaultConfig(dbDir))
 		if err != nil {
-			return nil, noopCloser{}, err
+			return nil, tmos.NoopCloser{}, err
 		}
-		return abciclient.NewLocalClient(logger, app), noopCloser{}, nil
+		return abciclient.NewLocalClient(logger, app), tmos.NoopCloser{}, nil
 	case "noop":
-		return abciclient.NewLocalClient(logger, types.NewBaseApplication()), noopCloser{}, nil
+		return abciclient.NewLocalClient(logger, types.NewBaseApplication()), tmos.NoopCloser{}, nil
 	default:
 		const mustConnect = false // loop retrying
 		client, err := abciclient.NewClient(logger, addr, transport, mustConnect)
 		if err != nil {
-			return nil, noopCloser{}, err
+			return nil, tmos.NoopCloser{}, err
 		}
 
-		return client, noopCloser{}, nil
+		return client, tmos.NoopCloser{}, nil
 	}
 }
-
-type noopCloser struct{}
-
-func (noopCloser) Close() error { return nil }
 
 // proxyClient provides the application connection.
 type proxyClient struct {

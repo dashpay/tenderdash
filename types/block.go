@@ -1061,8 +1061,9 @@ func (data *Data) MarshalZerologObject(e *zerolog.Event) {
 	}
 	e.Bool("nil", false)
 
-	e.Array("txs", data.Txs)
-	e.Hex("hash", data.Hash())
+	e.Str("hash", data.Hash().ShortString())
+	e.Int("num_txs", len(data.Txs))
+	e.Array("txs", &data.Txs)
 }
 
 // DataFromProto takes a protobuf representation of Data &

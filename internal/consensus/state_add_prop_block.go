@@ -179,6 +179,7 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			"proposal_height", stateData.ProposalBlock.Height,
 			"hash", stateData.ProposalBlock.Hash(),
 			"round_height", stateData.RoundState.GetHeight(),
+			"num_txs", len(stateData.ProposalBlock.Txs),
 		)
 
 		c.eventPublisher.PublishCompleteProposalEvent(stateData.CompleteProposalEvent())

@@ -44,7 +44,7 @@ func setupTestCase(t *testing.T) (func(t *testing.T), dbm.DB, sm.State) {
 	err = stateStore.Save(state)
 	require.NoError(t, err)
 
-	tearDown := func(t *testing.T) { _ = os.RemoveAll(cfg.RootDir) }
+	tearDown := func(_ *testing.T) { _ = os.RemoveAll(cfg.RootDir) }
 
 	return tearDown, stateDB, state
 }

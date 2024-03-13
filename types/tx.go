@@ -105,9 +105,17 @@ func (txs Txs) ToSliceOfBytes() [][]byte {
 	return txBzs
 }
 
-func (txs Txs) MarshalZerologArray(e *zerolog.Array) {
-	for _, tx := range txs {
-		e.Hex(tx.Hash())
+func (txs *Txs) MarshalZerologArray(e *zerolog.Array) {
+	if txs == nil {
+		return
+	}
+
+	for i, tx := range *txs {
+		e.Str(tx.Hash().ShortString())
+		if i >= 20 {
+			e.Str("...")
+			return
+		}
 	}
 }
 

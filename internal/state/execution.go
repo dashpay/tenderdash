@@ -250,6 +250,8 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	blockExec.logger.Debug("PrepareProposal executed",
 		"request_hash", hex.EncodeToString(reqHash),
 		"response_hash", hex.EncodeToString(respHash),
+		"height", height,
+		"round", round,
 		"took", time.Since(start).String(),
 	)
 	if bytes.Equal(blockExec.lastRequestPrepareProposalHash, reqHash) &&
@@ -491,9 +493,6 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	}
 	endTime := time.Now().UnixNano()
 	blockExec.metrics.BlockProcessingTime.Observe(float64(endTime-startTime) / 1000000)
-	if err != nil {
-		return state, ErrProxyAppConn(err)
-	}
 
 	// Save the results before we commit.
 	// We need to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
@@ -506,8 +505,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 		return state, err
 	}
 
-	state, err = state.Update(blockID, &block.Header, &uncommittedState)
-	if err != nil {
+	if state, err = state.Update(blockID, &block.Header, &uncommittedState); err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
 	}
 
@@ -520,7 +518,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// Update evpool with the latest state.
 	blockExec.evpool.Update(ctx, state, block.Evidence)
 
-	if err := blockExec.store.Save(state); err != nil {
+	if err = blockExec.store.Save(state); err != nil {
 		return state, err
 	}
 
@@ -533,8 +531,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
 	es := NewFullEventSet(block, blockID, uncommittedState, fbResp, state.Validators)
-	err = es.Publish(blockExec.eventPublisher)
-	if err != nil {
+	if err = es.Publish(blockExec.eventPublisher); err != nil {
 		blockExec.logger.Error("failed publishing event", "err", err)
 	}
 
@@ -711,9 +708,7 @@ func execBlock(
 	}
 	blockID := block.BlockID(nil)
 	protoBlockID := blockID.ToProto()
-	if err != nil {
-		return nil, err
-	}
+
 	responseFinalizeBlock, err := appConn.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{

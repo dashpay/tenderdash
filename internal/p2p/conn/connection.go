@@ -101,9 +101,6 @@ type MConnection struct {
 	// Closing quitRecvRouting will cause the recvRouting to eventually quit.
 	quitRecvRoutine chan struct{}
 
-	// used to ensure FlushStop and OnStop
-	// are safe to call concurrently.
-	stopMtx    sync.Mutex
 	stopSignal <-chan struct{}
 
 	cancel context.CancelFunc
@@ -232,11 +229,8 @@ func (c *MConnection) getLastMessageAt() time.Time {
 
 // stopServices stops the BaseService and timers and closes the quitSendRoutine.
 // if the quitSendRoutine was already closed, it returns true, otherwise it returns false.
-// It uses the stopMtx to ensure only one of FlushStop and OnStop can do this at a time.
+// It doesn't lock, as we rely on the caller (eg. BaseService) locking
 func (c *MConnection) stopServices() (alreadyStopped bool) {
-	c.stopMtx.Lock()
-	defer c.stopMtx.Unlock()
-
 	select {
 	case <-c.quitSendRoutine:
 		// already quit
@@ -638,6 +632,8 @@ type ChannelDescriptor struct {
 	Name string
 
 	// Timeout for enqueue operations on the incoming queue.
+	// It is applied to all messages received from remote peer
+	// and delievered to this channel.
 	// When timeout expires, messages will be silently dropped.
 	//
 	// If zero, enqueue operations will not time out.
@@ -654,6 +650,7 @@ func (chDesc ChannelDescriptor) FillDefaults() (filled ChannelDescriptor) {
 	if chDesc.RecvMessageCapacity == 0 {
 		chDesc.RecvMessageCapacity = defaultRecvMessageCapacity
 	}
+
 	filled = chDesc
 	return
 }
