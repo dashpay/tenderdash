@@ -303,9 +303,9 @@ func (b *Block) MarshalZerologObject(e *zerolog.Event) {
 
 	e.Interface("header", b.Header)
 	e.Interface("core_chain_lock", b.CoreChainLock)
-	e.Interface("data", b.Data)
+	e.Object("data", &b.Data)
 	e.Interface("evidence", b.Evidence)
-	e.Interface("last_commit", b.LastCommit)
+	e.Object("last_commit", b.LastCommit)
 }
 
 // FromProto sets a protobuf Block to the given pointer.
@@ -1062,8 +1062,7 @@ func (data *Data) MarshalZerologObject(e *zerolog.Event) {
 	e.Bool("nil", false)
 
 	e.Str("hash", data.Hash().ShortString())
-	e.Int("num_txs", len(data.Txs))
-	e.Array("txs", &data.Txs)
+	e.Object("txs", data.Txs)
 }
 
 // DataFromProto takes a protobuf representation of Data &

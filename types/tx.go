@@ -16,6 +16,9 @@ import (
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
+// maxLoggedTxs is the maximum number of transactions to log in a Txs object.
+const maxLoggedTxs = 20
+
 // Tx is an arbitrary byte array.
 // NOTE: Tx has no types at this level, so when wire encoded it's just length-prefixed.
 // Might we want types here ?
@@ -105,18 +108,24 @@ func (txs Txs) ToSliceOfBytes() [][]byte {
 	return txBzs
 }
 
-func (txs *Txs) MarshalZerologArray(e *zerolog.Array) {
+func (txs Txs) MarshalZerologArray(e *zerolog.Array) {
 	if txs == nil {
 		return
 	}
 
-	for i, tx := range *txs {
-		e.Str(tx.Hash().ShortString())
-		if i >= 20 {
+	for i, tx := range txs {
+		if i >= maxLoggedTxs {
 			e.Str("...")
 			return
 		}
+
+		e.Str(tx.Hash().ShortString())
 	}
+}
+
+func (txs Txs) MarshalZerologObject(e *zerolog.Event) {
+	e.Int("num_txs", len(txs))
+	e.Array("hashes", txs)
 }
 
 // TxRecordSet contains indexes into an underlying set of transactions.
