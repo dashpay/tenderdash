@@ -118,6 +118,16 @@ func (tw *TestingLogger) AssertMatch(re *regexp.Regexp) {
 	tw.Logger = tw.Logger.Level(zerolog.DebugLevel)
 }
 
+// AssertContains defines assertions to check for each subsequent
+// log item. It must be called before the log is generated.
+// Assertion will pass if at least one log contains `s`.
+//
+// Note that assertions are only executed on logs matching defined log level.
+// Use NewTestingLoggerWithLevel(t, zerolog.LevelDebugValue) to control this.
+func (tw *TestingLogger) AssertContains(s string) {
+	tw.AssertMatch(regexp.MustCompile(regexp.QuoteMeta(s)))
+}
+
 // Run implements zerolog.Hook.
 // Execute all log assertions against a message.
 func (tw *TestingLogger) checkAssertions(msg string) {
