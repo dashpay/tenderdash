@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -33,12 +34,11 @@ eg, L = latency = 0.1s
 
 const (
 	requestInterval           = 2 * time.Millisecond
-	poolWorkerSize            = 600
 	maxPendingRequestsPerPeer = 20
 
 	// Minimum recv rate to ensure we're receiving blocks from a peer fast
 	// enough. If a peer is not sending us data at at least that rate, we
-	// consider them to have timedout and we disconnect.
+	// consider them to have timed out and we disconnect.
 	//
 	// Assuming a DSL connection (not a good choice) 128 Kbps (upload) ~ 15 KB/s,
 	// sending data across atlantic ~ 7.5 KB/s.
@@ -56,7 +56,6 @@ const (
 	are not at peer limits, we can probably switch to consensus reactor
 */
 
-// Synchronizer keeps track of the block sync peers, block requests and block responses.
 type (
 	PeerAdder interface {
 		AddPeer(peer PeerData)
@@ -64,6 +63,8 @@ type (
 	PeerRemover interface {
 		RemovePeer(peerID types.NodeID)
 	}
+
+	// Synchronizer keeps track of the block sync peers, block requests and block responses.
 	Synchronizer struct {
 		service.BaseService
 		logger log.Logger
@@ -113,6 +114,9 @@ func WithClock(clock clockwork.Clock) OptionFunc {
 
 // NewSynchronizer returns a new Synchronizer with the height equal to start
 func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApplier, opts ...OptionFunc) *Synchronizer {
+	// we default to 4 * numCPU workers
+	poolWorkerSize := runtime.NumCPU() * 4
+
 	peerStore := NewInMemPeerStore()
 	logger := log.NewNopLogger()
 	bp := &Synchronizer{
