@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"runtime"
 	"sync/atomic"
 	"time"
 
@@ -34,6 +33,7 @@ eg, L = latency = 0.1s
 
 const (
 	requestInterval           = 2 * time.Millisecond
+	poolWorkerSize            = 600
 	maxPendingRequestsPerPeer = 20
 
 	// Minimum recv rate to ensure we're receiving blocks from a peer fast
@@ -114,9 +114,6 @@ func WithClock(clock clockwork.Clock) OptionFunc {
 
 // NewSynchronizer returns a new Synchronizer with the height equal to start
 func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApplier, opts ...OptionFunc) *Synchronizer {
-	// we default to 4 * numCPU workers
-	poolWorkerSize := runtime.NumCPU() * 4
-
 	peerStore := NewInMemPeerStore()
 	logger := log.NewNopLogger()
 	bp := &Synchronizer{
