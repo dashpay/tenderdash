@@ -186,7 +186,6 @@ func (p *pbtsTestHarness) nextHeight(
 	t *testing.T,
 	currentHeightConfig pbtsTestHeightConfiguration,
 ) heightResult {
-	// deliveryDelay := currentHeightConfig.deliveryDelay
 	proposalDelay := currentHeightConfig.proposalDelay
 
 	bid := types.BlockID{}
@@ -524,10 +523,7 @@ func TestTooFarInTheFutureProposal(t *testing.T) {
 		heights: map[int64]pbtsTestHeightConfiguration{
 			2: {
 				proposalDelay: 100 * time.Millisecond,
-				deliveryDelay: -30 * time.Millisecond,
-			},
-			4: {
-				proposalDelay: 50 * time.Millisecond,
+				deliveryDelay: -40 * time.Millisecond, // Recv time will be 40 ms before proposal time
 			},
 		},
 		maxHeight: 2,
