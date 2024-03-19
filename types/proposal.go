@@ -9,12 +9,13 @@ import (
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
+	"github.com/rs/zerolog"
+
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
-	"github.com/rs/zerolog"
 )
 
 var (
@@ -97,7 +98,7 @@ func (p *Proposal) ValidateBasic() error {
 	return nil
 }
 
-// IsTimely validates that the block timestamp is 'timely' according to the proposer-based timestamp algorithm.
+// CheckTimely validates that the block timestamp is 'timely' according to the proposer-based timestamp algorithm.
 // To evaluate if a block is timely, its timestamp is compared to the local time of the validator along with the
 // configured Precision and MsgDelay parameters.
 // Specifically, a proposed block timestamp is considered timely if it is satisfies the following inequalities:
@@ -109,8 +110,14 @@ func (p *Proposal) ValidateBasic() error {
 // https://github.com/dashpay/tenderdash/tree/master/spec/consensus/proposer-based-timestamp
 //
 // NOTE: by definition, at initial height, recvTime MUST be genesis time.
-func (p *Proposal) IsTimely(recvTime time.Time, sp SynchronyParams, round int32) bool {
-	return isTimely(p.Timestamp, recvTime, sp, round)
+//
+// # Returns
+//
+// 0: timely
+// -1: too early
+// 1: too late
+func (p *Proposal) CheckTimely(recvTime time.Time, sp SynchronyParams, round int32) int {
+	return checkTimely(p.Timestamp, recvTime, sp, round)
 }
 
 // String returns a string representation of the Proposal.

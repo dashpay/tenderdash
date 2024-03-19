@@ -82,7 +82,7 @@ func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 		rs.ProposalBlockParts = types.NewPartSetFromHeader(proposal.BlockID.PartSetHeader)
 	}
 
-	p.logger.Info("received proposal", "proposal", proposal)
+	p.logger.Info("received proposal", "proposal", proposal, "received", receivedAt)
 	return nil
 }
 
@@ -192,8 +192,8 @@ func (p *Proposaler) proposalTimestampDifferenceMetric(rs cstypes.RoundState) {
 		if rs.Height == p.committedState.InitialHeight {
 			recvTime = p.committedState.LastBlockTime // genesis time
 		}
-		isTimely := rs.Proposal.IsTimely(recvTime, sp, rs.Round)
-		p.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", isTimely)).
+		timely := rs.Proposal.CheckTimely(recvTime, sp, rs.Round)
+		p.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", timely == 0)).
 			Observe(rs.ProposalReceiveTime.Sub(rs.Proposal.Timestamp).Seconds())
 	}
 }

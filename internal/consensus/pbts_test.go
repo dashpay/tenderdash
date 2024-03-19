@@ -106,7 +106,22 @@ func newPBTSTestHarness(ctx context.Context, t *testing.T, tc pbtsTestConfigurat
 	kvApp, err := kvstore.NewMemoryApp(kvstore.WithLogger(logger))
 	require.NoError(t, err)
 
-	cs := newState(ctx, t, logger.With("module", "consensus"), state, privVals[0], kvApp)
+	msgMw := func(cs *State) {
+		cs.msgMiddlewares = append(cs.msgMiddlewares,
+			func(hd msgHandlerFunc) msgHandlerFunc {
+				return func(ctx context.Context, stateData *StateData, msg msgEnvelope) error {
+					if proposal, ok := msg.Msg.(*ProposalMessage); ok {
+						if cfg, ok := tc.heights[stateData.Height]; ok {
+							msg.ReceiveTime = proposal.Proposal.Timestamp.Add(cfg.deliveryDelay)
+						}
+
+					}
+					return hd(ctx, stateData, msg)
+				}
+			})
+	}
+
+	cs := newState(ctx, t, logger.With("module", "consensus"), state, privVals[0], kvApp, msgMw)
 	vss := make([]*validatorStub, validators)
 	for i := 0; i < validators; i++ {
 		vss[i] = newValidatorStub(privVals[i], int32(i), 0)
@@ -171,7 +186,7 @@ func (p *pbtsTestHarness) nextHeight(
 	t *testing.T,
 	currentHeightConfig pbtsTestHeightConfiguration,
 ) heightResult {
-	deliveryDelay := currentHeightConfig.deliveryDelay
+	// deliveryDelay := currentHeightConfig.deliveryDelay
 	proposalDelay := currentHeightConfig.proposalDelay
 
 	bid := types.BlockID{}
@@ -186,7 +201,7 @@ func (p *pbtsTestHarness) nextHeight(
 		time.Sleep(proposalDelay)
 		prop, _, ps := p.newProposal(ctx, t)
 
-		time.Sleep(deliveryDelay)
+		// time.Sleep(deliveryDelay) -- handled by the middleware
 		if err := p.observedState.SetProposalAndBlock(ctx, &prop, ps, "peerID"); err != nil {
 			t.Fatal(err)
 		}
@@ -475,20 +490,20 @@ func TestTooFarInThePastProposal(t *testing.T) {
 	cfg := pbtsTestConfiguration{
 		synchronyParams: types.SynchronyParams{
 			Precision:    1 * time.Millisecond,
-			MessageDelay: 10 * time.Millisecond,
+			MessageDelay: 30 * time.Millisecond,
 		},
 		timeoutPropose: 50 * time.Millisecond,
 		heights: map[int64]pbtsTestHeightConfiguration{
 			2: {
 				proposalDelay: 15 * time.Millisecond,
-				deliveryDelay: 13 * time.Millisecond,
+				deliveryDelay: 33 * time.Millisecond,
 			},
 		},
 		maxHeight: 2,
 	}
 
 	pbtsTest := newPBTSTestHarness(ctx, t, cfg)
-	pbtsTest.logger.AssertMatch(regexp.MustCompile(`"proposal is not timely","height":2`))
+	pbtsTest.logger.AssertContains("proposal is not timely: received too late: height 2")
 	results := pbtsTest.run(ctx, t)
 
 	require.Nil(t, results[2].prevote.BlockID.Hash)
@@ -503,13 +518,13 @@ func TestTooFarInTheFutureProposal(t *testing.T) {
 	cfg := pbtsTestConfiguration{
 		synchronyParams: types.SynchronyParams{
 			Precision:    1 * time.Millisecond,
-			MessageDelay: 10 * time.Millisecond,
+			MessageDelay: 30 * time.Millisecond,
 		},
 		timeoutPropose: 500 * time.Millisecond,
 		heights: map[int64]pbtsTestHeightConfiguration{
 			2: {
 				proposalDelay: 100 * time.Millisecond,
-				deliveryDelay: 10 * time.Millisecond,
+				deliveryDelay: -30 * time.Millisecond,
 			},
 			4: {
 				proposalDelay: 50 * time.Millisecond,
@@ -519,7 +534,7 @@ func TestTooFarInTheFutureProposal(t *testing.T) {
 	}
 
 	pbtsTest := newPBTSTestHarness(ctx, t, cfg)
-	pbtsTest.logger.AssertMatch(regexp.MustCompile(`"proposal is not timely","height":2`))
+	pbtsTest.logger.AssertMatch(regexp.MustCompile("proposal is not timely: received too early: height 2,"))
 	results := pbtsTest.run(ctx, t)
 
 	require.Nil(t, results[2].prevote.BlockID.Hash)
