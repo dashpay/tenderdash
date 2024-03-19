@@ -314,6 +314,8 @@ func (s *StateData) proposalIsTimely() error {
 				errPrevoteProposalNotTimely, s.Height, s.Round, s.Proposal.Timestamp, s.state.LastBlockTime,
 			)
 		}
+
+		return nil
 	}
 
 	sp := s.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()

@@ -334,7 +334,7 @@ func TestIsTimely(t *testing.T) {
 			}
 
 			ti := p.CheckTimely(testCase.recvTime, sp, testCase.round)
-			assert.Equal(t, testCase.expectTimely, ti)
+			assert.Equal(t, testCase.expectTimely, ti == 0)
 		})
 	}
 }
