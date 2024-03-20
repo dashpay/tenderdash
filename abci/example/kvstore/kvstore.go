@@ -27,7 +27,9 @@ import (
 	"github.com/dashpay/tenderdash/version"
 )
 
-const ProtocolVersion uint64 = 0x12345678
+// ProtocolVersion defines initial protocol (app) version.
+// App version is incremented on every block, to match current height.
+const ProtocolVersion uint64 = 1
 
 //---------------------------------------------------
 
@@ -85,12 +87,23 @@ type Application struct {
 	offerSnapshot *offerSnapshot
 
 	shouldCommitVerify bool
+	// shouldEnforceVersionToHeight set to true will cause the application to enforce the app version to be equal to the height
+	shouldEnforceVersionToHeight bool
 }
 
 // WithCommitVerification enables commit verification
 func WithCommitVerification() OptFunc {
 	return func(app *Application) error {
 		app.shouldCommitVerify = true
+		return nil
+	}
+}
+
+// WithEnforceVersionToHeight enables the application to enforce the app version to be equal to the height using app_version
+// field in the RequestPrepareProposal
+func WithEnforceVersionToHeight() OptFunc {
+	return func(app *Application) error {
+		app.shouldEnforceVersionToHeight = true
 		return nil
 	}
 }
@@ -199,19 +212,20 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 	var err error
 
 	app := &Application{
-		logger:                 log.NewNopLogger(),
-		LastCommittedState:     NewKvState(dbm.NewMemDB(), initialHeight), // initial state to avoid InitChain() in unit tests
-		roundStates:            map[string]State{},
-		preparedProposals:      map[int32]bool{},
-		processedProposals:     map[int32]bool{},
-		validatorSetUpdates:    map[int64]abci.ValidatorSetUpdate{},
-		consensusParamsUpdates: map[int64]types1.ConsensusParams{},
-		initialHeight:          initialHeight,
-		store:                  stateStore,
-		prepareTxs:             prepareTxs,
-		verifyTx:               verifyTx,
-		execTx:                 execTx,
-		shouldCommitVerify:     false,
+		logger:                       log.NewNopLogger(),
+		LastCommittedState:           NewKvState(dbm.NewMemDB(), initialHeight), // initial state to avoid InitChain() in unit tests
+		roundStates:                  map[string]State{},
+		preparedProposals:            map[int32]bool{},
+		processedProposals:           map[int32]bool{},
+		validatorSetUpdates:          map[int64]abci.ValidatorSetUpdate{},
+		consensusParamsUpdates:       map[int64]types1.ConsensusParams{},
+		initialHeight:                initialHeight,
+		store:                        stateStore,
+		prepareTxs:                   prepareTxs,
+		verifyTx:                     verifyTx,
+		execTx:                       execTx,
+		shouldCommitVerify:           false,
+		shouldEnforceVersionToHeight: false,
 	}
 
 	for _, opt := range opts {
@@ -287,7 +301,7 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	if !ok {
 		consensusParams = types1.ConsensusParams{
 			Version: &types1.VersionParams{
-				AppVersion: ProtocolVersion,
+				AppVersion: uint64(app.LastCommittedState.GetHeight()) + 1,
 			},
 		}
 	}
@@ -348,6 +362,10 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
 	}
 
+	if app.shouldEnforceVersionToHeight {
+		resp.XAppVersion = &abci.ResponsePrepareProposal_AppVersion{AppVersion: uint64(roundState.GetHeight())}
+	}
+
 	if app.cfg.PrepareProposalDelayMS != 0 {
 		time.Sleep(time.Duration(app.cfg.PrepareProposalDelayMS) * time.Millisecond)
 	}
@@ -373,6 +391,15 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 			Status: abci.ResponseProcessProposal_REJECT,
 		}, err
 	}
+
+	if app.shouldEnforceVersionToHeight && req.Version.App != uint64(roundState.GetHeight()) {
+		app.logger.Error("app version mismatch, kvstore expects it to be equal to the current height",
+			"version", req.Version, "height", roundState.GetHeight())
+		return &abci.ResponseProcessProposal{
+			Status: abci.ResponseProcessProposal_REJECT,
+		}, nil
+	}
+
 	resp := &abci.ResponseProcessProposal{
 		Status:                abci.ResponseProcessProposal_ACCEPT,
 		AppHash:               roundState.GetAppHash(),
@@ -581,10 +608,15 @@ func (app *Application) Info(_ context.Context, req *abci.RequestInfo) (*abci.Re
 	app.mu.Lock()
 	defer app.mu.Unlock()
 	appHash := app.LastCommittedState.GetAppHash()
+
+	appVersion := ProtocolVersion
+	if app.shouldEnforceVersionToHeight {
+		appVersion = uint64(app.LastCommittedState.GetHeight()) + 1 // we set app version to CURRENT height
+	}
 	resp := &abci.ResponseInfo{
 		Data:             fmt.Sprintf("{\"appHash\":\"%s\"}", appHash.String()),
 		Version:          version.ABCIVersion,
-		AppVersion:       ProtocolVersion,
+		AppVersion:       appVersion,
 		LastBlockHeight:  app.LastCommittedState.GetHeight(),
 		LastBlockAppHash: app.LastCommittedState.GetAppHash(),
 	}

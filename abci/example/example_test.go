@@ -20,6 +20,7 @@ import (
 	"github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmnet "github.com/dashpay/tenderdash/libs/net"
+	"github.com/dashpay/tenderdash/proto/tendermint/version"
 )
 
 func TestKVStore(t *testing.T) {
@@ -28,7 +29,7 @@ func TestKVStore(t *testing.T) {
 	logger := log.NewNopLogger()
 
 	t.Log("### Testing KVStore")
-	app, err := kvstore.NewMemoryApp(kvstore.WithLogger(logger))
+	app, err := kvstore.NewMemoryApp(kvstore.WithLogger(logger), kvstore.WithEnforceVersionToHeight())
 	require.NoError(t, err)
 	testBulk(ctx, t, logger, app)
 }
@@ -73,7 +74,11 @@ func testBulk(ctx context.Context, t *testing.T, logger log.Logger, app types.Ap
 	require.NoError(t, err)
 
 	// Construct request
-	rpp := &types.RequestProcessProposal{Height: 1, Txs: make([][]byte, numDeliverTxs)}
+	rpp := &types.RequestProcessProposal{
+		Height:  1,
+		Txs:     make([][]byte, numDeliverTxs),
+		Version: &version.Consensus{App: 1},
+	}
 	for counter := 0; counter < numDeliverTxs; counter++ {
 		rpp.Txs[counter] = []byte("test")
 	}
