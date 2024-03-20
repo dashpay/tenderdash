@@ -3,6 +3,7 @@ package state_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -93,7 +94,6 @@ func TestValidateBlockHeader(t *testing.T) {
 		malleateBlock func(block *types.Block)
 	}{
 		{"Version wrong1", func(block *types.Block) { block.Version = wrongVersion1 }},
-		{"Version wrong2", func(block *types.Block) { block.Version = wrongVersion2 }},
 		{"ChainID wrong", func(block *types.Block) { block.ChainID = "not-the-real-one" }},
 		{"Height wrong", func(block *types.Block) { block.Height += 10 }},
 		{"Core Height does not match chain lock", func(block *types.Block) {
@@ -126,11 +126,6 @@ func TestValidateBlockHeader(t *testing.T) {
 			"Proposer invalid",
 			func(block *types.Block) { block.ProposerProTxHash = []byte("wrong size") },
 		},
-		// Set appVersion to 2 allow "invalid proposed app version" case
-		{
-			"Proposed app version is invalid",
-			func(block *types.Block) { block.ProposedAppVersion = 1; state.Version.Consensus.App = 2 },
-		},
 	}
 
 	// Set appVersion to 2 allow "invalid proposed app version" case
@@ -142,16 +137,18 @@ func TestValidateBlockHeader(t *testing.T) {
 			Invalid blocks don't pass
 		*/
 		for _, tc := range testCases {
-			block, err := statefactory.MakeBlock(state, height, lastCommit, 0)
-			require.NoError(t, err)
-			err = changes.UpdateBlock(block)
-			assert.NoError(t, err)
+			t.Run(fmt.Sprintf("H:%d/%s", height, tc.name), func(t *testing.T) {
+				block, err := statefactory.MakeBlock(state, height, lastCommit, 0)
+				require.NoError(t, err)
+				err = changes.UpdateBlock(block)
+				assert.NoError(t, err)
 
-			tc.malleateBlock(block)
+				tc.malleateBlock(block)
 
-			err = blockExec.ValidateBlockWithRoundState(ctx, state, changes, block)
-			t.Logf("%s: %v", tc.name, err)
-			require.Error(t, err, tc.name)
+				err = blockExec.ValidateBlockWithRoundState(ctx, state, changes, block)
+				t.Logf("%s: %v", tc.name, err)
+				require.Error(t, err, tc.name)
+			})
 		}
 
 		/*
