@@ -366,6 +366,7 @@ message RequestProcessProposal {
   // Proposer's latest available app protocol version.
   uint64 proposed_app_version = 12;
   // App and block version used to generate the block.
+  // App version MUST be verified by the app.
   tendermint.version.Consensus version = 13;
   // quorum_hash contains hash of validator quorum that will sign the block
   bytes quorum_hash = 14;

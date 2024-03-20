@@ -1470,6 +1470,7 @@ type RequestProcessProposal struct {
 	// Proposer's latest available app protocol version.
 	ProposedAppVersion uint64 `protobuf:"varint,12,opt,name=proposed_app_version,json=proposedAppVersion,proto3" json:"proposed_app_version,omitempty"`
 	// App and block version used to generate the block.
+	// App version MUST be verified by the app.
 	Version *version.Consensus `protobuf:"bytes,13,opt,name=version,proto3" json:"version,omitempty"`
 	// quorum_hash contains hash of validator quorum that will sign the block
 	QuorumHash []byte `protobuf:"bytes,14,opt,name=quorum_hash,json=quorumHash,proto3" json:"quorum_hash,omitempty"`

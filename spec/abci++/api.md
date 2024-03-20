@@ -712,7 +712,7 @@ When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which
 | core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Next core-chain-lock-update for validation in ABCI. |
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
-| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
+| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. App version MUST be verified by the app. |
 | quorum_hash | [bytes](#bytes) |  | quorum_hash contains hash of validator quorum that will sign the block |
 
 
