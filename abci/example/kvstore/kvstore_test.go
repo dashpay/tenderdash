@@ -124,7 +124,9 @@ func TestPersistentKVStoreKV(t *testing.T) {
 	dir := t.TempDir()
 	logger := log.NewNopLogger()
 
-	kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger.With("module", "kvstore")))
+	kvstore, err := NewPersistentApp(DefaultConfig(dir),
+		WithLogger(logger.With("module", "kvstore")),
+		WithEnforceVersionToHeight())
 	require.NoError(t, err)
 
 	key := testKey
@@ -159,7 +161,7 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 			dir := t.TempDir()
 			logger := log.NewTestingLogger(t).With("module", "kvstore")
 
-			kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger))
+			kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger), WithEnforceVersionToHeight())
 			require.NoError(t, err)
 			defer kvstore.Close()
 
@@ -385,7 +387,7 @@ func TestClientServer(t *testing.T) {
 	runClientTests(ctx, t, client)
 
 	// set up grpc app
-	kvstore, err = NewMemoryApp()
+	kvstore, err = NewMemoryApp(WithEnforceVersionToHeight())
 	require.NoError(t, err)
 
 	gclient, gserver, err := makeGRPCClientServer(ctx, t, logger, kvstore, "/tmp/kvstore-grpc")
