@@ -350,6 +350,81 @@ func TestUpdateConsensusParams(t *testing.T) {
 	app.AssertCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
 }
 
+// TestOverrideAppVersion ensures that app_version set in PrepareProposal overrides the one in the block
+// and is passed to ProcessProposal.
+func TestOverrideAppVersion(t *testing.T) {
+	const (
+		height     = 1
+		round      = int32(12)
+		appVersion = uint64(12345)
+	)
+	txs := factory.MakeNTxs(height, 10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	app := abcimocks.NewApplication(t)
+	logger := log.NewNopLogger()
+	cc := abciclient.NewLocalClient(logger, app)
+	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
+	err := proxyApp.Start(ctx)
+	require.NoError(t, err)
+
+	state, stateDB, _ := makeState(t, 1, height)
+	stateStore := sm.NewStore(stateDB)
+	blockStore := store.NewBlockStore(dbm.NewMemDB())
+
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+
+	pool := new(mpmocks.Mempool)
+	pool.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs).Once()
+
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		proxyApp,
+		pool,
+		sm.EmptyEvidencePool{},
+		blockStore,
+		eventBus,
+	)
+
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil, nil)
+	txResults := factory.ExecTxResults(txs)
+
+	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
+		TxRecords:   txsToTxRecords(txs),
+		AppHash:     rand.Bytes(crypto.DefaultAppHashSize),
+		TxResults:   txResults,
+		XAppVersion: &abci.ResponsePrepareProposal_AppVersion{AppVersion: appVersion},
+	}, nil).Once()
+
+	block1, _, err := blockExec.CreateProposalBlock(
+		ctx,
+		height,
+		round,
+		state,
+		lastCommit,
+		state.Validators.GetProposer().ProTxHash,
+		1,
+	)
+	require.NoError(t, err)
+
+	app.On("ProcessProposal", mock.Anything,
+		mock.MatchedBy(func(r *abci.RequestProcessProposal) bool {
+			return r.Version.App == appVersion
+		})).Return(&abci.ResponseProcessProposal{
+		AppHash:   block1.AppHash,
+		TxResults: txResults,
+		Status:    abci.ResponseProcessProposal_ACCEPT,
+	}, nil).Once()
+
+	_, err = blockExec.ProcessProposal(ctx, block1, round, state, true)
+	require.NoError(t, err)
+	assert.EqualValues(t, appVersion, block1.Version.App, "App version should be overridden by PrepareProposal")
+
+	app.AssertExpectations(t)
+}
+
 func TestValidateValidatorUpdates(t *testing.T) {
 	pubkey1 := bls12381.GenPrivKey().PubKey()
 	pubkey2 := bls12381.GenPrivKey().PubKey()
