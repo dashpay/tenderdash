@@ -38,7 +38,7 @@ const (
 
 	// Minimum recv rate to ensure we're receiving blocks from a peer fast
 	// enough. If a peer is not sending us data at at least that rate, we
-	// consider them to have timedout and we disconnect.
+	// consider them to have timed out and we disconnect.
 	//
 	// Assuming a DSL connection (not a good choice) 128 Kbps (upload) ~ 15 KB/s,
 	// sending data across atlantic ~ 7.5 KB/s.
@@ -56,7 +56,6 @@ const (
 	are not at peer limits, we can probably switch to consensus reactor
 */
 
-// Synchronizer keeps track of the block sync peers, block requests and block responses.
 type (
 	PeerAdder interface {
 		AddPeer(peer PeerData)
@@ -64,6 +63,8 @@ type (
 	PeerRemover interface {
 		RemovePeer(peerID types.NodeID)
 	}
+
+	// Synchronizer keeps track of the block sync peers, block requests and block responses.
 	Synchronizer struct {
 		service.BaseService
 		logger log.Logger

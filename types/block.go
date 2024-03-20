@@ -536,7 +536,7 @@ func (h Header) ValidateBasic() error {
 // IsTimely defines whether the the proposal time is correct, as per PBTS spec.
 // NOTE: By definition, at initial height, recvTime MUST be genesis time.
 func (h Header) IsTimely(recvTime time.Time, sp SynchronyParams, round int32) bool {
-	return isTimely(h.Time, recvTime, sp, round)
+	return checkTimely(h.Time, recvTime, sp, round) == 0
 }
 
 // StateID returns a state ID of this block

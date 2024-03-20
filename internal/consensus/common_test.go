@@ -474,13 +474,14 @@ func newState(
 	state sm.State,
 	pv types.PrivValidator,
 	app abci.Application,
+	opts ...StateOption,
 ) *State {
 	t.Helper()
 
 	cfg, err := config.ResetTestRoot(t.TempDir(), "consensus_state_test")
 	require.NoError(t, err)
 
-	return newStateWithConfig(ctx, t, logger, cfg, state, pv, app)
+	return newStateWithConfig(ctx, t, logger, cfg, state, pv, app, opts...)
 }
 
 func newStateWithConfig(

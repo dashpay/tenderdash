@@ -81,7 +81,9 @@ type VersionParams struct {
 // block validity, see the Proposer-Based Timestamps specification:
 // https://github.com/tendermint/tendermint/blob/master/spec/consensus/proposer-based-timestamp/README.md
 type SynchronyParams struct {
-	Precision    time.Duration `json:"precision,string"`
+	// Precision is the maximum amount of time by which node clocks can differ.
+	Precision time.Duration `json:"precision,string"`
+	// MessageDelay is the maximum amount of time a message spend in transit.
 	MessageDelay time.Duration `json:"message_delay,string"`
 }
 

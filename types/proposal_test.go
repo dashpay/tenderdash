@@ -171,7 +171,7 @@ func TestProposalValidateBasic(t *testing.T) {
 		malleateProposal func(*Proposal)
 		expectErr        bool
 	}{
-		{"Good Proposal", func(p *Proposal) {}, false},
+		{"Good Proposal", func(_ *Proposal) {}, false},
 		{"Invalid Type", func(p *Proposal) { p.Type = tmproto.PrecommitType }, true},
 		{"Invalid Height", func(p *Proposal) { p.Height = -1 }, true},
 		{"Invalid Round", func(p *Proposal) { p.Round = -1 }, true},
@@ -333,8 +333,8 @@ func TestIsTimely(t *testing.T) {
 				MessageDelay: testCase.msgDelay,
 			}
 
-			ti := p.IsTimely(testCase.recvTime, sp, testCase.round)
-			assert.Equal(t, testCase.expectTimely, ti)
+			ti := p.CheckTimely(testCase.recvTime, sp, testCase.round)
+			assert.Equal(t, testCase.expectTimely, ti == 0)
 		})
 	}
 }

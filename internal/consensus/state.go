@@ -180,6 +180,7 @@ type State struct {
 	voteSigner     *voteSigner
 	ctrl           *Controller
 	roundScheduler *roundScheduler
+	msgMiddlewares []msgMiddlewareFunc
 
 	stopFn func(cs *State) bool
 }
@@ -282,7 +283,7 @@ func NewState(
 	for _, sub := range subs {
 		sub.Subscribe(cs.emitter)
 	}
-	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger)
+	cs.msgDispatcher = newMsgInfoDispatcher(cs.ctrl, propler, wal, cs.logger, cs.msgMiddlewares...)
 
 	// this is not ideal, but it lets the consensus tests start
 	// node-fragments gracefully while letting the nodes

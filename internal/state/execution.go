@@ -210,6 +210,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 
 	txs := blockExec.mempool.ReapMaxBytesMaxGas(maxDataBytes, maxGas)
+	numRequestedTxs := txs.Len()
 	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 
 	localLastCommit := buildLastCommitInfo(block, state.InitialHeight)
@@ -252,6 +253,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		"response_hash", hex.EncodeToString(respHash),
 		"height", height,
 		"round", round,
+		"requested_txs", numRequestedTxs,
 		"took", time.Since(start).String(),
 	)
 	if bytes.Equal(blockExec.lastRequestPrepareProposalHash, reqHash) &&

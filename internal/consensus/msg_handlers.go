@@ -49,17 +49,23 @@ func (c *msgInfoDispatcher) dispatch(ctx context.Context, stateData *StateData, 
 	return handler(ctx, stateData, envelope)
 }
 
+// msgInfoDispatcher creates a new dispatcher for messages that are received from peers.
+// It is used to dispatch messages to the appropriate handler.
 func newMsgInfoDispatcher(
 	ctrl *Controller,
 	proposaler cstypes.Proposaler,
 	wal WALWriteFlusher,
 	logger log.Logger,
+	middleware ...msgMiddlewareFunc,
 ) *msgInfoDispatcher {
+
 	mws := []msgMiddlewareFunc{
 		msgInfoWithCtxMiddleware(),
 		loggingMiddleware(logger),
 		walMiddleware(wal, logger),
 	}
+	mws = append(mws, middleware...)
+
 	proposalHandler := withMiddleware(proposalMessageHandler(proposaler), mws...)
 	blockPartHandler := withMiddleware(blockPartMessageHandler(ctrl), mws...)
 	voteHandler := withMiddleware(voteMessageHandler(ctrl), mws...)

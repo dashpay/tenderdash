@@ -304,13 +304,39 @@ func (s *StateData) HeightVoteSet() (int64, *cstypes.HeightVoteSet) {
 	return s.Height, s.Votes
 }
 
-func (s *StateData) proposalIsTimely() bool {
+// proposalIsTimely returns an error if the proposal is not timely
+func (s *StateData) proposalIsTimely() error {
 	if s.Height == s.state.InitialHeight {
 		// by definition, initial block must have genesis time
-		return s.Proposal.Timestamp.Equal(s.state.LastBlockTime)
+		if !s.Proposal.Timestamp.Equal(s.state.LastBlockTime) {
+			return fmt.Errorf(
+				"%w: initial block must have genesis time: height %d, round %d, proposal time %v, genesis time %v",
+				errPrevoteProposalNotTimely, s.Height, s.Round, s.Proposal.Timestamp, s.state.LastBlockTime,
+			)
+		}
+
+		return nil
 	}
+
 	sp := s.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
-	return s.Proposal.IsTimely(s.ProposalReceiveTime, sp, s.Round)
+	switch s.Proposal.CheckTimely(s.ProposalReceiveTime, sp, s.Round) {
+	case 0:
+		return nil
+	case -1: // too early
+		return fmt.Errorf(
+			"%w: received too early: height %d, round %d, delay %s",
+			errPrevoteProposalNotTimely, s.Height, s.Round,
+			s.ProposalReceiveTime.Sub(s.Proposal.Timestamp).String(),
+		)
+	case 1: // too late
+		return fmt.Errorf(
+			"%w: received too late: height %d, round %d, delay %s",
+			errPrevoteProposalNotTimely, s.Height, s.Round,
+			s.ProposalReceiveTime.Sub(s.Proposal.Timestamp).String(),
+		)
+	default:
+		panic("unexpected return value from isTimely")
+	}
 }
 
 // Updates ValidBlock to current proposal.
@@ -478,8 +504,10 @@ func (s *StateData) isValidForPrevote() error {
 	}
 
 	// if this block was not validated yet, we check if it's timely
-	if !s.replayMode && !s.ProposalBlock.HashesTo(s.ValidBlock.Hash()) && !s.proposalIsTimely() {
-		return errPrevoteProposalNotTimely
+	if !s.replayMode && !s.ProposalBlock.HashesTo(s.ValidBlock.Hash()) {
+		if err := s.proposalIsTimely(); err != nil {
+			return err
+		}
 	}
 
 	// Validate proposal core chain lock
