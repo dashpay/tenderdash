@@ -391,17 +391,6 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		}
 	}
 
-	// Save ABCI responses.
-	// FIXME: As we don't save the ResponseFinalizeBlock here, there is a scenario where we might lose some events.
-	// That's why we re-save ABCI responses once we are done with FinalizeBlock.
-	abciResponses := tmstate.ABCIResponses{
-		ProcessProposal: stateChanges.Params.ToProcessProposal(),
-	}
-
-	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
-		return stateChanges, err
-	}
-
 	return stateChanges, nil
 }
 
@@ -499,6 +488,16 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
 		return state, ErrInvalidBlock{err}
 	}
+
+	// Save ResponseProcessProposal before FinalizeBlock to be able to recover when app state is ahead of tenderdash state
+	// (eg. when tenderdash fails just after receiving ResponseFinalizeBlock).
+	abciResponses := tmstate.ABCIResponses{
+		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
+	}
+	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
+		return state, err
+	}
+
 	startTime := time.Now().UnixNano()
 	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, commit, blockExec.logger)
 	if err != nil {
@@ -506,16 +505,6 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	}
 	endTime := time.Now().UnixNano()
 	blockExec.metrics.BlockProcessingTime.Observe(float64(endTime-startTime) / 1000000)
-
-	// Save the results before we commit.
-	// We need to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
-	// in FinalizeResponse.
-	abciResponses := tmstate.ABCIResponses{
-		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
-	}
-	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
-		return state, err
-	}
 
 	if state, err = state.Update(blockID, &block.Header, &uncommittedState); err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
