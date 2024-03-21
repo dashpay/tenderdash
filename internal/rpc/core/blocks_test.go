@@ -101,7 +101,7 @@ func TestBlockResults(t *testing.T) {
 			Height:                100,
 			TxsResults:            results.ProcessProposal.TxResults,
 			TotalGasUsed:          15,
-			BlockEvents:           results.ProcessProposal.Events,
+			FinalizeBlockEvents:   results.ProcessProposal.Events,
 			ValidatorSetUpdate:    results.ProcessProposal.ValidatorSetUpdate,
 			ConsensusParamUpdates: consensusParamsPtrFromProtoPtr(results.ProcessProposal.ConsensusParamUpdates),
 		}},

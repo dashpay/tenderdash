@@ -202,7 +202,7 @@ func (env *Environment) BlockResults(_ctx context.Context, req *coretypes.Reques
 		Height:                height,
 		TxsResults:            results.ProcessProposal.TxResults,
 		TotalGasUsed:          totalGasUsed,
-		BlockEvents:           results.ProcessProposal.Events,
+		FinalizeBlockEvents:   results.ProcessProposal.Events,
 		ValidatorSetUpdate:    results.ProcessProposal.ValidatorSetUpdate,
 		ConsensusParamUpdates: consensusParamsPtrFromProtoPtr(results.ProcessProposal.ConsensusParamUpdates),
 	}, nil
