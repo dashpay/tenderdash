@@ -391,6 +391,17 @@ func (blockExec *BlockExecutor) ProcessProposal(
 		}
 	}
 
+	// Save ABCI responses.
+	// FIXME: As we don't save the ResponseFinalizeBlock here, there is a scenario where we might lose some events.
+	// That's why we re-save ABCI responses once we are done with FinalizeBlock.
+	abciResponses := tmstate.ABCIResponses{
+		ProcessProposal: stateChanges.Params.ToProcessProposal(),
+	}
+
+	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
+		return stateChanges, err
+	}
+
 	return stateChanges, nil
 }
 

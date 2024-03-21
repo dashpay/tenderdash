@@ -170,7 +170,8 @@ func (r *BlockReplayer) syncStateIfItIsOneAheadOfStore(ctx context.Context, rs r
 		return r.replayBlocks(ctx, rs, state, true)
 	}
 	if rs.appHeight == rs.stateHeight {
-		// We haven't run Commit (both the state and app are one block behind),
+		// Store is ahead of both App and State
+		// We haven't run FinalizeBlock (both the state and app are one block behind),
 		// so replay with the real app.
 		// NOTE: We could instead use the cs.WAL on cs.Start,
 		// but we'd have to allow the WAL to block a block that wrote its #ENDHEIGHT
@@ -182,6 +183,7 @@ func (r *BlockReplayer) syncStateIfItIsOneAheadOfStore(ctx context.Context, rs r
 		return state.LastAppHash, nil
 	}
 	if rs.appHeight == rs.storeHeight {
+		// Store and App are ahead of State
 		// We ran Commit, but didn't save the state, so replay with mock app.
 		abciResponses, err := r.stateStore.LoadABCIResponses(rs.storeHeight)
 		if err != nil {
