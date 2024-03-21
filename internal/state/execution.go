@@ -512,7 +512,6 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// in FinalizeResponse.
 	abciResponses := tmstate.ABCIResponses{
 		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
-		FinalizeBlock:   fbResp,
 	}
 	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
 		return state, err
@@ -543,7 +542,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
-	es := NewFullEventSet(block, blockID, uncommittedState, fbResp, state.Validators)
+	es := NewFullEventSet(block, blockID, uncommittedState, state.Validators)
 	if err = es.Publish(blockExec.eventPublisher); err != nil {
 		blockExec.logger.Error("failed publishing event", "err", err)
 	}

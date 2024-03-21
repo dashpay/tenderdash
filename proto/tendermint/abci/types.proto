@@ -463,8 +463,8 @@ message RequestVerifyVoteExtension {
 // - The application must execute the transactions in full, in the order they appear in `RequestFinalizeBlock.txs`,
 //   before returning control to Tenderdash. Alternatively, it can commit the candidate state corresponding to the same block
 //   previously executed via `PrepareProposal` or `ProcessProposal`.
-// - `ResponseFinalizeBlock.tx_results[i].Code == 0` only if the _i_-th transaction is fully valid.
-// - Application is expected to persist its state at the end of this call, before calling `ResponseFinalizeBlock`.
+// - If ProcessProposal for the same arguments have succeeded, FinalizeBlock MUST always succeed.
+// - Application is expected to persist its state at the end of this call, before returning `ResponseFinalizeBlock`.
 // - Later calls to `Query` can return proofs about the application state anchored
 //   in this Merkle root hash.
 // - Use `ResponseFinalizeBlock.retain_height` with caution! If all nodes in the network remove historical
@@ -658,6 +658,9 @@ message ResponseProcessProposal {
 
   // Changes to validator set (set voting power to 0 to remove).
   ValidatorSetUpdate validator_set_update = 5 [(gogoproto.nullable) = true];
+
+  // Type & Key-Value events for indexing
+  repeated Event events = 6 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
 }
 
 // Provides a vote extension for signing. `type` and `extension` fields are mandatory for filling
@@ -698,8 +701,10 @@ message ResponseVerifyVoteExtension {
 }
 
 message ResponseFinalizeBlock {
-  // Type & Key-Value events for indexing
-  repeated Event events = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
+  // Events are moved to ProcessProposal
+  reserved "events";
+  reserved 1;
+
   // Blocks below this height may be removed. Defaults to `0` (retain all).
   int64 retain_height = 2;
 }

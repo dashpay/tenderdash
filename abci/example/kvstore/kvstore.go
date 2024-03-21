@@ -373,12 +373,14 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 			Status: abci.ResponseProcessProposal_REJECT,
 		}, err
 	}
+
 	resp := &abci.ResponseProcessProposal{
 		Status:                abci.ResponseProcessProposal_ACCEPT,
 		AppHash:               roundState.GetAppHash(),
 		TxResults:             txResults,
 		ConsensusParamUpdates: app.getConsensusParamsUpdate(req.Height),
 		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
+		Events:                []abci.Event{app.eventValUpdate(req.Height)},
 	}
 
 	if app.cfg.ProcessProposalDelayMS != 0 {
@@ -425,10 +427,7 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 			return nil, err
 		}
 	}
-	events := []abci.Event{app.eventValUpdate(req.Height)}
-	resp := &abci.ResponseFinalizeBlock{
-		Events: events,
-	}
+	resp := &abci.ResponseFinalizeBlock{}
 	if app.RetainBlocks > 0 && app.LastCommittedState.GetHeight() >= app.RetainBlocks {
 		resp.RetainHeight = app.LastCommittedState.GetHeight() - app.RetainBlocks + 1
 	}

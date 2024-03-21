@@ -23,14 +23,13 @@ func NewFullEventSet(
 	block *types.Block,
 	blockID types.BlockID,
 	uncommittedState CurrentRoundState,
-	fbResp *abci.ResponseFinalizeBlock,
 	validatorsSet *types.ValidatorSet,
 ) EventSet {
-	rpp := uncommittedState.Params.ToProcessProposal()
+	responseProcessProposal := uncommittedState.Params.ToProcessProposal()
 	es := EventSet{}
 	es.
-		WithNewBlock(block, blockID, *fbResp).
-		WthNewBlockHeader(block, *rpp, *fbResp).
+		WithNewBlock(block, blockID, *responseProcessProposal).
+		WthNewBlockHeader(block, *responseProcessProposal).
 		WithNewEvidences(block).
 		WithTxs(block, uncommittedState.TxResults).
 		WithValidatorSetUpdate(validatorsSet)
@@ -41,12 +40,12 @@ func NewFullEventSet(
 func (e *EventSet) WithNewBlock(
 	block *types.Block,
 	blockID types.BlockID,
-	fbResp abci.ResponseFinalizeBlock,
+	responseProcessProposal abci.ResponseProcessProposal,
 ) *EventSet {
 	e.NewBlock = &types.EventDataNewBlock{
-		Block:               block,
-		BlockID:             blockID,
-		ResultFinalizeBlock: fbResp,
+		Block:                 block,
+		BlockID:               blockID,
+		ResultProcessProposal: responseProcessProposal,
 	}
 	return e
 }
@@ -55,13 +54,11 @@ func (e *EventSet) WithNewBlock(
 func (e *EventSet) WthNewBlockHeader(
 	block *types.Block,
 	ppResp abci.ResponseProcessProposal,
-	fbResp abci.ResponseFinalizeBlock,
 ) *EventSet {
 	e.NewBlockHeader = &types.EventDataNewBlockHeader{
 		Header:                block.Header,
 		NumTxs:                int64(len(block.Txs)),
 		ResultProcessProposal: ppResp,
-		ResultFinalizeBlock:   fbResp,
 	}
 	return e
 }

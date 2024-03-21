@@ -234,19 +234,18 @@ func (r *BlockReplayer) replayBlocks(
 	var (
 		block   *types.Block
 		commit  *types.Commit
-		fbResp  *abci.ResponseFinalizeBlock
 		ucState sm.CurrentRoundState
 	)
 	for i := firstBlock; i <= finalBlock; i++ {
 		block = r.store.LoadBlock(i)
 		commit = r.store.LoadSeenCommitAt(i)
-		ucState, fbResp, err = r.replayBlock(ctx, block, commit, state, i)
+		ucState, err = r.replayBlock(ctx, block, commit, state, i)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if !mutateState {
-		err = r.publishEvents(block, ucState, fbResp)
+		err = r.publishEvents(block, ucState)
 		if err != nil {
 			return nil, err
 		}
@@ -273,27 +272,26 @@ func (r *BlockReplayer) replayBlock(
 	commit *types.Commit,
 	state sm.State,
 	height int64,
-) (sm.CurrentRoundState, *abci.ResponseFinalizeBlock, error) {
+) (sm.CurrentRoundState, error) {
 	r.logger.Info("Replay: applying block", "height", height)
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
 	ucState, err := r.blockExec.ProcessProposal(ctx, block, commit.Round, state, false)
 	if err != nil {
-		return sm.CurrentRoundState{}, nil, fmt.Errorf("blockReplayer process proposal: %w", err)
+		return sm.CurrentRoundState{}, fmt.Errorf("blockReplayer process proposal: %w", err)
 	}
-
 	// We emit events for the index services at the final block due to the sync issue when
 	// the node shutdown during the block committing status.
 	// For all other cases, we disable emitting events by providing blockExec=nil in ExecReplayedCommitBlock
-	fbResp, err := sm.ExecReplayedCommitBlock(ctx, r.appClient, block, commit, r.logger)
+	_, err = sm.ExecReplayedCommitBlock(ctx, r.appClient, block, commit, r.logger)
 	if err != nil {
-		return sm.CurrentRoundState{}, nil, err
+		return sm.CurrentRoundState{}, err
 	}
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
 	if err := checkAppHashEqualsOneFromBlock(ucState.AppHash, block); err != nil {
-		return sm.CurrentRoundState{}, nil, err
+		return sm.CurrentRoundState{}, err
 	}
 	r.nBlocks++
-	return ucState, fbResp, nil
+	return ucState, nil
 }
 
 // syncStateAt loads block's data for a height H to sync it with the application.
@@ -374,10 +372,9 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 func (r *BlockReplayer) publishEvents(
 	block *types.Block,
 	ucState sm.CurrentRoundState,
-	fbResp *abci.ResponseFinalizeBlock,
 ) error {
 	blockID := block.BlockID(nil)
-	es := sm.NewFullEventSet(block, blockID, ucState, fbResp, ucState.NextValidators)
+	es := sm.NewFullEventSet(block, blockID, ucState, ucState.NextValidators)
 	err := es.Publish(r.publisher)
 	if err != nil {
 		r.logger.Error("failed publishing event", "err", err)

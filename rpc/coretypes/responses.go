@@ -69,7 +69,7 @@ type ResultBlockResults struct {
 	Height                int64                    `json:"height,string"`
 	TxsResults            []*abci.ExecTxResult     `json:"txs_results"`
 	TotalGasUsed          int64                    `json:"total_gas_used,string"`
-	FinalizeBlockEvents   []abci.Event             `json:"finalize_block_events"`
+	BlockEvents           []abci.Event             `json:"block_events"`
 	ValidatorSetUpdate    *abci.ValidatorSetUpdate `json:"validator_set_updates"`
 	ConsensusParamUpdates *types.ConsensusParams   `json:"consensus_param_updates"`
 }
