@@ -1198,7 +1198,7 @@ func (m *RequestApplySnapshotChunk) GetSender() string {
 //     their propose timeout goes off.
 //   - As a result of executing the prepared proposal, the Application may produce header events or transaction events.
 //     The Application must keep those events until a block is decided and then pass them on to Tenderdash via
-//     `ResponseFinalizeBlock`.
+//     `ResponsePrepareProposal`.
 //   - As a sanity check, Tenderdash will check the returned parameters for validity if the Application modified them.
 //     In particular, `ResponsePrepareProposal.tx_records` will be deemed invalid if
 //   - There is a duplicate transaction in the list.
