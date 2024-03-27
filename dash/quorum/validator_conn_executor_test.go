@@ -658,8 +658,9 @@ func (app *testApp) PrepareProposal(_ context.Context, req *abci.RequestPrepareP
 	}
 
 	return &abci.ResponsePrepareProposal{
-		AppHash:   resultsHash,
-		TxResults: results,
+		AppHash:    resultsHash,
+		TxResults:  results,
+		AppVersion: 1,
 	}, nil
 }
 

@@ -3,13 +3,16 @@ package mock
 import (
 	"context"
 
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/internal/proxy"
 	"github.com/dashpay/tenderdash/libs/bytes"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/dashpay/tenderdash/proto/tendermint/version"
 	"github.com/dashpay/tenderdash/rpc/client"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 	"github.com/dashpay/tenderdash/types"
+	tmversion "github.com/dashpay/tenderdash/version"
 )
 
 // ABCIApp will send all abci related request to the named app,
@@ -65,7 +68,11 @@ func (a ABCIApp) BroadcastTxCommit(ctx context.Context, tx types.Tx) (*coretypes
 	if res.CheckTx.IsErr() {
 		return res, nil
 	}
-	propResp, err := a.App.ProcessProposal(ctx, &abci.RequestProcessProposal{Height: 1, Txs: [][]byte{tx}})
+	propResp, err := a.App.ProcessProposal(ctx, &abci.RequestProcessProposal{
+		Height:  1,
+		Txs:     [][]byte{tx},
+		Version: &version.Consensus{Block: tmversion.BlockProtocol, App: kvstore.ProtocolVersion},
+	})
 	if err != nil {
 		return nil, err
 	}

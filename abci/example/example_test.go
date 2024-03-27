@@ -29,7 +29,7 @@ func TestKVStore(t *testing.T) {
 	logger := log.NewNopLogger()
 
 	t.Log("### Testing KVStore")
-	app, err := kvstore.NewMemoryApp(kvstore.WithLogger(logger), kvstore.WithEnforceVersionToHeight())
+	app, err := kvstore.NewMemoryApp(kvstore.WithLogger(logger), kvstore.WithAppVersion(0))
 	require.NoError(t, err)
 	testBulk(ctx, t, logger, app)
 }

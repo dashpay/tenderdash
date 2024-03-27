@@ -324,6 +324,7 @@ func TestUpdateConsensusParams(t *testing.T) {
 		AppHash:               rand.Bytes(crypto.DefaultAppHashSize),
 		TxResults:             txResults,
 		ConsensusParamUpdates: &tmtypes.ConsensusParams{Block: &tmtypes.BlockParams{MaxBytes: 1024 * 1024}},
+		AppVersion:            1,
 	}, nil).Once()
 	block1, _, err := blockExec.CreateProposalBlock(
 		ctx,
@@ -790,7 +791,7 @@ func TestEmptyPrepareProposal(t *testing.T) {
 	})
 
 	app.On("PrepareProposal", mock.Anything, reqPrepProposalMatch).Return(&abci.ResponsePrepareProposal{
-		AppHash: make([]byte, crypto.DefaultAppHashSize),
+		AppHash: make([]byte, crypto.DefaultAppHashSize), AppVersion: 1,
 	}, nil)
 	cc := abciclient.NewLocalClient(logger, app)
 	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
@@ -858,8 +859,9 @@ func TestPrepareProposalErrorOnNonExistingRemoved(t *testing.T) {
 				Tx:     []byte("new tx"),
 			},
 		},
-		TxResults: []*abci.ExecTxResult{{}},
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+		TxResults:  []*abci.ExecTxResult{{}},
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		AppVersion: 1,
 	}
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(rpp, nil)
 
@@ -916,9 +918,10 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 
 	app := abcimocks.NewApplication(t)
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		TxRecords: trs,
-		TxResults: txResults,
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+		TxRecords:  trs,
+		TxResults:  txResults,
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		AppVersion: 1,
 	}, nil)
 
 	cc := abciclient.NewLocalClient(logger, app)
@@ -978,9 +981,10 @@ func TestPrepareProposalDelayedTxs(t *testing.T) {
 
 	app := abcimocks.NewApplication(t)
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		TxRecords: trs,
-		TxResults: txResults,
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+		TxRecords:  trs,
+		TxResults:  txResults,
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		AppVersion: 1,
 	}, nil)
 
 	cc := abciclient.NewLocalClient(logger, app)
@@ -1037,9 +1041,10 @@ func TestPrepareProposalAddedTxsIncluded(t *testing.T) {
 
 	app := abcimocks.NewApplication(t)
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
-		TxRecords: trs,
-		TxResults: txres,
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		TxRecords:  trs,
+		TxResults:  txres,
+		AppVersion: 1,
 	}, nil)
 
 	cc := abciclient.NewLocalClient(logger, app)
@@ -1097,9 +1102,10 @@ func TestPrepareProposalReorderTxs(t *testing.T) {
 
 	app := abcimocks.NewApplication(t)
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
-		TxRecords: trs,
-		TxResults: txresults,
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		TxRecords:  trs,
+		TxResults:  txresults,
+		AppVersion: 1,
 	}, nil)
 
 	cc := abciclient.NewLocalClient(logger, app)
@@ -1162,9 +1168,10 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 
 	app := abcimocks.NewApplication(t)
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		TxRecords: trs,
-		TxResults: factory.ExecTxResults(txs),
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+		TxRecords:  trs,
+		TxResults:  factory.ExecTxResults(txs),
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		AppVersion: 1,
 	}, nil)
 
 	cc := abciclient.NewLocalClient(logger, app)

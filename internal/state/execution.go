@@ -360,11 +360,11 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	if resp.IsStatusUnknown() {
 		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with status %s", resp.Status.String())
 	}
-	if err := resp.Validate(); err != nil {
-		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
-	}
 	if !resp.IsAccepted() {
 		return CurrentRoundState{}, ErrBlockRejected
+	}
+	if err := resp.Validate(); err != nil {
+		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
 	}
 	if err := validateExecTxResults(resp.TxResults, block.Data.Txs); err != nil {
 		return CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)

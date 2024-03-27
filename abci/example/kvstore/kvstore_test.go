@@ -126,7 +126,7 @@ func TestPersistentKVStoreKV(t *testing.T) {
 
 	kvstore, err := NewPersistentApp(DefaultConfig(dir),
 		WithLogger(logger.With("module", "kvstore")),
-		WithEnforceVersionToHeight())
+		WithAppVersion(0))
 	require.NoError(t, err)
 
 	key := testKey
@@ -161,7 +161,7 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 			dir := t.TempDir()
 			logger := log.NewTestingLogger(t).With("module", "kvstore")
 
-			kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger), WithEnforceVersionToHeight())
+			kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger), WithAppVersion(0))
 			require.NoError(t, err)
 			defer kvstore.Close()
 
@@ -245,7 +245,7 @@ func TestValUpdates(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	kvstore, err := NewMemoryApp(WithEnforceVersionToHeight())
+	kvstore, err := NewMemoryApp(WithAppVersion(0))
 	require.NoError(t, err)
 
 	// init with some validators
@@ -375,7 +375,7 @@ func TestClientServer(t *testing.T) {
 	// set up socket app
 	kvstore, err := NewMemoryApp(
 		WithLogger(logger.With("module", "app")),
-		WithEnforceVersionToHeight())
+		WithAppVersion(0))
 	require.NoError(t, err)
 
 	client, server, err := makeSocketClientServer(ctx, t, logger, kvstore, "kvstore-socket")
@@ -387,7 +387,7 @@ func TestClientServer(t *testing.T) {
 	runClientTests(ctx, t, client)
 
 	// set up grpc app
-	kvstore, err = NewMemoryApp(WithEnforceVersionToHeight())
+	kvstore, err = NewMemoryApp(WithAppVersion(0))
 	require.NoError(t, err)
 
 	gclient, gserver, err := makeGRPCClientServer(ctx, t, logger, kvstore, "/tmp/kvstore-grpc")
@@ -530,7 +530,7 @@ func newKvApp(ctx context.Context, t *testing.T, genesisHeight int64, opts ...Op
 		WithValidatorSetUpdates(map[int64]types.ValidatorSetUpdate{
 			genesisHeight: RandValidatorSetUpdate(1),
 		}),
-		WithEnforceVersionToHeight(),
+		WithAppVersion(0),
 	}
 	app, err := NewMemoryApp(append(defaultOpts, opts...)...)
 	require.NoError(t, err)

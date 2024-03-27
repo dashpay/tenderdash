@@ -87,8 +87,9 @@ type Application struct {
 	offerSnapshot *offerSnapshot
 
 	shouldCommitVerify bool
-	// shouldEnforceVersionToHeight set to true will cause the application to enforce the app version to be equal to the height
-	shouldEnforceVersionToHeight bool
+	// appVersion returned in ResponsePrepareProposal.
+	// Special value of 0 means that it will be always set to current height.
+	appVersion uint64
 }
 
 // WithCommitVerification enables commit verification
@@ -99,11 +100,11 @@ func WithCommitVerification() OptFunc {
 	}
 }
 
-// WithEnforceVersionToHeight enables the application to enforce the app version to be equal to the height using app_version
-// field in the RequestPrepareProposal
-func WithEnforceVersionToHeight() OptFunc {
+// WithAppVersion enables the application to enforce the app version to be equal to provided value.
+// Special value of `0` means that app version will be always set to current block version.
+func WithAppVersion(version uint64) OptFunc {
 	return func(app *Application) error {
-		app.shouldEnforceVersionToHeight = true
+		app.appVersion = version
 		return nil
 	}
 }
@@ -212,20 +213,20 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 	var err error
 
 	app := &Application{
-		logger:                       log.NewNopLogger(),
-		LastCommittedState:           NewKvState(dbm.NewMemDB(), initialHeight), // initial state to avoid InitChain() in unit tests
-		roundStates:                  map[string]State{},
-		preparedProposals:            map[int32]bool{},
-		processedProposals:           map[int32]bool{},
-		validatorSetUpdates:          map[int64]abci.ValidatorSetUpdate{},
-		consensusParamsUpdates:       map[int64]types1.ConsensusParams{},
-		initialHeight:                initialHeight,
-		store:                        stateStore,
-		prepareTxs:                   prepareTxs,
-		verifyTx:                     verifyTx,
-		execTx:                       execTx,
-		shouldCommitVerify:           false,
-		shouldEnforceVersionToHeight: false,
+		logger:                 log.NewNopLogger(),
+		LastCommittedState:     NewKvState(dbm.NewMemDB(), initialHeight), // initial state to avoid InitChain() in unit tests
+		roundStates:            map[string]State{},
+		preparedProposals:      map[int32]bool{},
+		processedProposals:     map[int32]bool{},
+		validatorSetUpdates:    map[int64]abci.ValidatorSetUpdate{},
+		consensusParamsUpdates: map[int64]types1.ConsensusParams{},
+		initialHeight:          initialHeight,
+		store:                  stateStore,
+		prepareTxs:             prepareTxs,
+		verifyTx:               verifyTx,
+		execTx:                 execTx,
+		shouldCommitVerify:     false,
+		appVersion:             ProtocolVersion,
 	}
 
 	for _, opt := range opts {
@@ -360,10 +361,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 		ConsensusParamUpdates: app.getConsensusParamsUpdate(req.Height),
 		CoreChainLockUpdate:   coreChainLock,
 		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
-	}
-
-	if app.shouldEnforceVersionToHeight {
-		resp.AppVersion = uint64(roundState.GetHeight())
+		AppVersion:            app.appVersionForHeight(req.Height),
 	}
 
 	if app.cfg.PrepareProposalDelayMS != 0 {
@@ -392,9 +390,9 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 		}, err
 	}
 
-	if app.shouldEnforceVersionToHeight && req.Version.App != uint64(roundState.GetHeight()) {
-		app.logger.Error("app version mismatch, kvstore expects it to be equal to the current height",
-			"version", req.Version, "height", roundState.GetHeight())
+	if req.Version.App != app.appVersionForHeight(req.Height) {
+		app.logger.Error("app version mismatch in process proposal request",
+			"version", req.Version.App, "expected", app.appVersionForHeight(req.Height), "height", roundState.GetHeight())
 		return &abci.ResponseProcessProposal{
 			Status: abci.ResponseProcessProposal_REJECT,
 		}, nil
@@ -583,6 +581,13 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 	app.logger.Debug("ApplySnapshotChunk", "resp", resp)
 	return resp, nil
 }
+func (app *Application) appVersionForHeight(height int64) uint64 {
+	if app.appVersion == 0 {
+		return uint64(height)
+	}
+
+	return app.appVersion
+}
 
 func (app *Application) createSnapshot() error {
 	height := app.LastCommittedState.GetHeight()
@@ -608,11 +613,8 @@ func (app *Application) Info(_ context.Context, req *abci.RequestInfo) (*abci.Re
 	app.mu.Lock()
 	defer app.mu.Unlock()
 	appHash := app.LastCommittedState.GetAppHash()
+	appVersion := app.appVersionForHeight(app.LastCommittedState.GetHeight() + 1) // we set app version to CURRENT height
 
-	appVersion := ProtocolVersion
-	if app.shouldEnforceVersionToHeight {
-		appVersion = uint64(app.LastCommittedState.GetHeight()) + 1 // we set app version to CURRENT height
-	}
 	resp := &abci.ResponseInfo{
 		Data:             fmt.Sprintf("{\"appHash\":\"%s\"}", appHash.String()),
 		Version:          version.ABCIVersion,

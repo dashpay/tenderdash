@@ -58,7 +58,8 @@ func TestRouting(t *testing.T) {
 	consensusApp, consensusSocket := startApp(ctx, t, logger, "consensus")
 	defer consensusApp.AssertExpectations(t)
 	consensusApp.On("PrepareProposal", mock.Anything, mock.Anything).Return(&types.ResponsePrepareProposal{
-		AppHash: []byte("apphash"),
+		AppHash:    []byte("apphash"),
+		AppVersion: 1,
 	}, nil).Once()
 	consensusApp.On("FinalizeBlock", mock.Anything, mock.Anything).Return(&types.ResponseFinalizeBlock{
 		RetainHeight: 1,
