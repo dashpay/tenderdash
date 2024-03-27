@@ -24,6 +24,7 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/proto/tendermint/crypto"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	pbversion "github.com/dashpay/tenderdash/proto/tendermint/version"
 	"github.com/dashpay/tenderdash/version"
 )
 
@@ -54,7 +55,7 @@ func RootCmmand(logger log.Logger) *cobra.Command {
 		Use:   "abci-cli",
 		Short: "the ABCI CLI tool wraps an ABCI client",
 		Long:  "the ABCI CLI tool wraps an ABCI client and is used for testing ABCI servers",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
+		PersistentPreRunE: func(cmd *cobra.Command, _args []string) (err error) {
 
 			switch cmd.Use {
 			case "kvstore", "version":
@@ -223,7 +224,7 @@ var versionCmd = &cobra.Command{
 	Short: "print ABCI console version",
 	Long:  "print ABCI console version",
 	Args:  cobra.ExactArgs(0),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_cmd *cobra.Command, _args []string) error {
 		fmt.Println(version.ABCIVersion)
 		return nil
 	},
@@ -697,8 +698,9 @@ func cmdProcessProposal(cmd *cobra.Command, args []string) error {
 		panic(err)
 	}
 	res, err := client.ProcessProposal(cmd.Context(), &types.RequestProcessProposal{
-		Height: height,
-		Txs:    txsBytesArray,
+		Height:  height,
+		Txs:     txsBytesArray,
+		Version: &pbversion.Consensus{Block: version.BlockProtocol, App: kvstore.ProtocolVersion},
 	})
 	if err != nil {
 		return err
@@ -711,7 +713,7 @@ func cmdProcessProposal(cmd *cobra.Command, args []string) error {
 }
 
 func makeKVStoreCmd(logger log.Logger) func(*cobra.Command, []string) error {
-	return func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, _args []string) error {
 		// Create the application - in memory or persisted to disk
 		var (
 			app types.Application
