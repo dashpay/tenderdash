@@ -32,9 +32,8 @@ func TestEventSetError(t *testing.T) {
 		Params:    RoundParams{},
 		TxResults: []*abci.ExecTxResult{{}},
 	}
-	fbResp := abci.ResponseFinalizeBlock{}
 	validatorSet := &types.ValidatorSet{}
-	es := NewFullEventSet(block, blockID, ucs, &fbResp, validatorSet)
+	es := NewFullEventSet(block, blockID, ucs, validatorSet)
 	publisher := &mocks.BlockEventPublisher{}
 	publisher.
 		On("PublishEventNewBlock", mock.Anything).
@@ -75,15 +74,14 @@ func TestEventSet(t *testing.T) {
 	}
 	blockID := types.BlockID{}
 	ppResp := abci.ResponseProcessProposal{}
-	fbResp := abci.ResponseFinalizeBlock{}
 	validatorSet := &types.ValidatorSet{}
 	txResults := []*abci.ExecTxResult{{}, {}}
 	publisher := &mocks.BlockEventPublisher{}
 	publisher.
 		On("PublishEventNewBlock", types.EventDataNewBlock{
-			Block:               block,
-			BlockID:             blockID,
-			ResultFinalizeBlock: fbResp,
+			Block:                 block,
+			BlockID:               blockID,
+			ResultProcessProposal: ppResp,
 		}).
 		Once().
 		Return(nil)
@@ -92,7 +90,6 @@ func TestEventSet(t *testing.T) {
 			Header:                block.Header,
 			NumTxs:                2,
 			ResultProcessProposal: ppResp,
-			ResultFinalizeBlock:   fbResp,
 		}).
 		Once().
 		Return(nil)
@@ -142,8 +139,8 @@ func TestEventSet(t *testing.T) {
 		Return(nil)
 	es := EventSet{}
 	es.
-		WithNewBlock(block, blockID, fbResp).
-		WthNewBlockHeader(block, ppResp, fbResp).
+		WithNewBlock(block, blockID, ppResp).
+		WthNewBlockHeader(block, ppResp).
 		WithValidatorSetUpdate(validatorSet).
 		WithNewEvidences(block).
 		WithTxs(block, txResults)

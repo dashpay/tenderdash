@@ -391,8 +391,8 @@ Finalize newly decided block.
 - The application must execute the transactions in full, in the order they appear in `RequestFinalizeBlock.txs`,
   before returning control to Tenderdash. Alternatively, it can commit the candidate state corresponding to the same block
   previously executed via `PrepareProposal` or `ProcessProposal`.
-- `ResponseFinalizeBlock.tx_results[i].Code == 0` only if the _i_-th transaction is fully valid.
-- Application is expected to persist its state at the end of this call, before calling `ResponseFinalizeBlock`.
+- If ProcessProposal for the same arguments have succeeded, FinalizeBlock MUST always succeed.
+- Application is expected to persist its state at the end of this call, before returning `ResponseFinalizeBlock`.
 - Later calls to `Query` can return proofs about the application state anchored
   in this Merkle root hash.
 - Use `ResponseFinalizeBlock.retain_height` with caution! If all nodes in the network remove historical
@@ -582,7 +582,7 @@ Prepare new block proposal, potentially altering list of transactions.
       their propose timeout goes off.
 - As a result of executing the prepared proposal, the Application may produce header events or transaction events.
   The Application must keep those events until a block is decided and then pass them on to Tenderdash via
-  `ResponseFinalizeBlock`.
+  `ResponsePrepareProposal`.
 - As a sanity check, Tenderdash will check the returned parameters for validity if the Application modified them.
   In particular, `ResponsePrepareProposal.tx_records` will be deemed invalid if
     - There is a duplicate transaction in the list.
@@ -912,7 +912,6 @@ nondeterministic
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| events | [Event](#tendermint-abci-Event) | repeated | Type &amp; Key-Value events for indexing |
 | retain_height | [int64](#int64) |  | Blocks below this height may be removed. Defaults to `0` (retain all). |
 
 
@@ -1046,6 +1045,7 @@ nondeterministic
 | tx_results | [ExecTxResult](#tendermint-abci-ExecTxResult) | repeated | List of structures containing the data resulting from executing the transactions. |
 | consensus_param_updates | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Changes to consensus-critical gas, size, and other parameters. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Changes to validator set (set voting power to 0 to remove). |
+| events | [Event](#tendermint-abci-Event) | repeated | Type &amp; Key-Value events for indexing |
 
 
 

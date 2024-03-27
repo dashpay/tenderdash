@@ -233,7 +233,6 @@ func TestPruneStates(t *testing.T) {
 							{Data: []byte{3}},
 						},
 					},
-					FinalizeBlock: &abci.ResponseFinalizeBlock{},
 				})
 				require.NoError(t, err)
 			}

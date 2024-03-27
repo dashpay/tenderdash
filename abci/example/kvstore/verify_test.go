@@ -60,6 +60,7 @@ func TestVerifyBlockCommit(t *testing.T) {
 	assert.Len(t, respPrep.TxRecords, 1)
 	require.Equal(t, 1, len(respPrep.TxResults))
 	require.False(t, respPrep.TxResults[0].IsErr(), respPrep.TxResults[0].Log)
+
 	pbBlock, err := block.ToProto()
 	require.NoError(t, err)
 	blockID := block.BlockID(nil)
@@ -70,9 +71,8 @@ func TestVerifyBlockCommit(t *testing.T) {
 		Block:   pbBlock,
 		BlockID: &pbBlockID,
 	}
-	respFb, err := kvstore.FinalizeBlock(ctx, reqFb)
+	_, err = kvstore.FinalizeBlock(ctx, reqFb)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(respFb.Events))
 }
 
 type blockExecutor struct {

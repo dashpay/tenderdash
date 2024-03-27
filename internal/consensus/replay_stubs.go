@@ -113,10 +113,7 @@ func (mock *mockProxyApp) ProcessProposal(_ context.Context, _req *abci.RequestP
 }
 
 func (mock *mockProxyApp) FinalizeBlock(_ context.Context, _req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
-	r := mock.abciResponses.FinalizeBlock
 	mock.txCount++
-	if r == nil {
-		return &abci.ResponseFinalizeBlock{}, nil
-	}
-	return r, nil
+
+	return &abci.ResponseFinalizeBlock{}, nil
 }

@@ -55,6 +55,7 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 	require.NoError(t, err)
 	require.Len(t, respProcess.TxResults, 1)
 	require.False(t, respProcess.TxResults[0].IsErr(), respProcess.TxResults[0].Log)
+	require.Len(t, respProcess.Events, 1)
 
 	// Duplicate ProcessProposal calls should return error
 	_, err = app.ProcessProposal(ctx, reqProcess)
@@ -62,9 +63,8 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 
 	reqFin := &types.RequestFinalizeBlock{Height: height}
 	reqFin.Block, reqFin.BlockID = makeBlock(t, height, [][]byte{tx}, respPrep.AppHash)
-	respFin, err := app.FinalizeBlock(ctx, reqFin)
+	_, err = app.FinalizeBlock(ctx, reqFin)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(respFin.Events))
 
 	// repeating tx raises an error
 	_, err = app.FinalizeBlock(ctx, reqFin)
@@ -290,12 +290,12 @@ func makeApplyBlock(
 	require.NoError(t, err)
 	require.NotZero(t, respProcessProposal)
 	require.Equal(t, types.ResponseProcessProposal_ACCEPT, respProcessProposal.Status)
+	require.Len(t, respProcessProposal.Events, 1)
 
 	rfb := &types.RequestFinalizeBlock{Hash: hash, Height: height}
 	rfb.Block, rfb.BlockID = makeBlock(t, height, txs, respProcessProposal.AppHash)
 	resFinalizeBlock, err := kvstore.FinalizeBlock(ctx, rfb)
 	require.NoError(t, err)
-	require.Len(t, resFinalizeBlock.Events, 1)
 
 	return respProcessProposal, resFinalizeBlock
 }
@@ -413,13 +413,13 @@ func testClient(ctx context.Context, t *testing.T, app abciclient.Client, height
 	require.NotZero(t, rpp)
 	require.Equal(t, 1, len(rpp.TxResults))
 	require.False(t, rpp.TxResults[0].IsErr())
+	require.Len(t, rpp.Events, 1)
 
 	rfb := &types.RequestFinalizeBlock{Height: height}
 	rfb.Block, rfb.BlockID = makeBlock(t, height, [][]byte{tx}, rpp.AppHash)
 	ar, err := app.FinalizeBlock(ctx, rfb)
 	require.NoError(t, err)
 	require.Zero(t, ar.RetainHeight)
-	require.Len(t, ar.Events, 1)
 
 	info, err := app.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)

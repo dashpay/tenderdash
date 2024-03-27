@@ -488,6 +488,16 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
 		return state, ErrInvalidBlock{err}
 	}
+
+	// Save ResponseProcessProposal before FinalizeBlock to be able to recover when app state is ahead of tenderdash state
+	// (eg. when tenderdash fails just after receiving ResponseFinalizeBlock).
+	abciResponses := tmstate.ABCIResponses{
+		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
+	}
+	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
+		return state, err
+	}
+
 	startTime := time.Now().UnixNano()
 	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, commit, blockExec.logger)
 	if err != nil {
@@ -495,17 +505,6 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	}
 	endTime := time.Now().UnixNano()
 	blockExec.metrics.BlockProcessingTime.Observe(float64(endTime-startTime) / 1000000)
-
-	// Save the results before we commit.
-	// We need to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
-	// in FinalizeResponse.
-	abciResponses := tmstate.ABCIResponses{
-		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
-		FinalizeBlock:   fbResp,
-	}
-	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
-		return state, err
-	}
 
 	if state, err = state.Update(blockID, &block.Header, &uncommittedState); err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
@@ -532,7 +531,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
-	es := NewFullEventSet(block, blockID, uncommittedState, fbResp, state.Validators)
+	es := NewFullEventSet(block, blockID, uncommittedState, state.Validators)
 	if err = es.Publish(blockExec.eventPublisher); err != nil {
 		blockExec.logger.Error("failed publishing event", "err", err)
 	}
