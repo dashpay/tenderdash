@@ -234,9 +234,7 @@ func (app *testApp) Info(_ context.Context, _req *abci.RequestInfo) (*abci.Respo
 func (app *testApp) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	app.Misbehavior = req.Misbehavior
 
-	return &abci.ResponseFinalizeBlock{
-		Events: []abci.Event{},
-	}, nil
+	return &abci.ResponseFinalizeBlock{}, nil
 }
 
 func (app *testApp) CheckTx(_ context.Context, _req *abci.RequestCheckTx) (*abci.ResponseCheckTx, error) {
@@ -280,5 +278,6 @@ func (app *testApp) ProcessProposal(_ context.Context, req *abci.RequestProcessP
 		},
 		TxResults: resTxs,
 		Status:    abci.ResponseProcessProposal_ACCEPT,
+		Events:    []abci.Event{},
 	}, nil
 }

@@ -202,9 +202,7 @@ func eventReIndex(cmd *cobra.Command, args eventReIndexArgs) error {
 				NumTxs:                int64(len(b.Txs)),
 				ResultProcessProposal: *r.ProcessProposal,
 			}
-			if r.FinalizeBlock != nil {
-				e.ResultFinalizeBlock = *r.FinalizeBlock
-			}
+
 			var batch *indexer.Batch
 			if e.NumTxs > 0 {
 				batch = indexer.NewBatch(e.NumTxs)

@@ -71,7 +71,6 @@ func TestBlockchainInfo(t *testing.T) {
 
 func TestBlockResults(t *testing.T) {
 	results := state.ABCIResponses{
-		FinalizeBlock: &abci.ResponseFinalizeBlock{},
 		ProcessProposal: &abci.ResponseProcessProposal{
 			TxResults: []*abci.ExecTxResult{
 				{Code: 0, Data: []byte{0x01}, Log: "ok", GasUsed: 10},
@@ -102,7 +101,7 @@ func TestBlockResults(t *testing.T) {
 			Height:                100,
 			TxsResults:            results.ProcessProposal.TxResults,
 			TotalGasUsed:          15,
-			FinalizeBlockEvents:   results.FinalizeBlock.Events,
+			FinalizeBlockEvents:   results.ProcessProposal.Events,
 			ValidatorSetUpdate:    results.ProcessProposal.ValidatorSetUpdate,
 			ConsensusParamUpdates: consensusParamsPtrFromProtoPtr(results.ProcessProposal.ConsensusParamUpdates),
 		}},
