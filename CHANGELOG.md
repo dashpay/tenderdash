@@ -1,3 +1,23 @@
+## [0.14.0-dev.5] - 2024-03-27
+
+### Features
+
+- Proposer-based app version (#769)
+
+### Refactor
+
+- [**breaking**] Move Events from FinalizeBlock to ResponseProcessProposal (#770)
+
+### Testing
+
+- Fix flaky TestTooFarInTheFutureProposal (#768)
+
+### Build
+
+- Bump docker/setup-buildx-action from 3.1.0 to 3.2.0 (#765)
+- Bump docker/login-action from 3.0.0 to 3.1.0 (#767)
+- Bump docker/build-push-action from 5.2.0 to 5.3.0 (#766)
+
 ## [0.14.0-dev.4] - 2024-03-13
 
 ### Bug Fixes
@@ -14,6 +34,7 @@
 ### Miscellaneous Tasks
 
 - Minor improvements: logging, comments, locks (#726)
+- Update changelog and version to 0.14.0-dev.4 (#763)
 
 ### Refactor
 
