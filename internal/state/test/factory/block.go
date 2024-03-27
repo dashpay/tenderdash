@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -50,7 +51,7 @@ func MakeBlocks(ctx context.Context, t *testing.T, n int, state *sm.State, privV
 	return blocks
 }
 
-func MakeBlock(state sm.State, height int64, c *types.Commit, appVersion uint64) (*types.Block, error) {
+func MakeBlock(state sm.State, height int64, c *types.Commit, proposedAppVersion uint64) (*types.Block, error) {
 	if state.LastBlockHeight != (height - 1) {
 		return nil, fmt.Errorf("requested height %d should be 1 more than last block height %d", height, state.LastBlockHeight)
 	}
@@ -60,7 +61,7 @@ func MakeBlock(state sm.State, height int64, c *types.Commit, appVersion uint64)
 		c,
 		nil,
 		state.Validators.GetProposer().ProTxHash,
-		appVersion,
+		proposedAppVersion,
 	)
 	var err error
 	block.AppHash = make([]byte, crypto.DefaultAppHashSize)
@@ -69,7 +70,7 @@ func MakeBlock(state sm.State, height int64, c *types.Commit, appVersion uint64)
 	}
 	// this should be set by PrepareProposal, but we don't always call PrepareProposal
 	if block.Version.App == 0 {
-		block.Version.App = appVersion
+		block.Version.App = kvstore.ProtocolVersion
 	}
 
 	return block, nil

@@ -88,7 +88,7 @@ func TestApplyBlock(t *testing.T) {
 	consensusParamsBefore := state.ConsensusParams
 	validatorsBefore := state.Validators.Hash()
 
-	block, err := sf.MakeBlock(state, 1, new(types.Commit), 1)
+	block, err := sf.MakeBlock(state, 1, new(types.Commit), 2)
 	require.NoError(t, err)
 	bps, err := block.MakePartSet(testPartSize)
 	require.NoError(t, err)
@@ -100,8 +100,8 @@ func TestApplyBlock(t *testing.T) {
 	// State for next block
 	// nextState, err := state.NewStateChangeset(ctx, nil)
 	// require.NoError(t, err)
-	assert.EqualValues(t, 0, block.Version.App, "App version should not change in current block")
-	assert.EqualValues(t, 1, block.ProposedAppVersion, "Block should propose new version")
+	assert.EqualValues(t, 1, block.Version.App, "App version should not change in current block")
+	assert.EqualValues(t, 2, block.ProposedAppVersion, "Block should propose new version")
 
 	assert.Equal(t, consensusParamsBefore.HashConsensusParams(), block.ConsensusHash, "consensus params should change in next block")
 	assert.Equal(t, validatorsBefore, block.ValidatorsHash, "validators should change from the next block")
