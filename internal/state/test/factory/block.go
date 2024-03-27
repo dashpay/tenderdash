@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -66,6 +67,10 @@ func MakeBlock(state sm.State, height int64, c *types.Commit, proposedAppVersion
 	block.AppHash = make([]byte, crypto.DefaultAppHashSize)
 	if block.ResultsHash, err = abci.TxResultsHash(factory.ExecTxResults(block.Txs)); err != nil {
 		return nil, err
+	}
+	// this should be set by PrepareProposal, but we don't always call PrepareProposal
+	if block.Version.App == 0 {
+		block.Version.App = kvstore.ProtocolVersion
 	}
 
 	return block, nil

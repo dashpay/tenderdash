@@ -54,7 +54,7 @@ message RequestFlush {}
 //
 // Used to sync Tenderdash with the application during a handshake that happens on startup.
 // The returned app_version will be included in the Header of every block.
-// Tenderdsah expects last_block_app_hash and last_block_height to be updated during Commit,
+// Tenderdash expects last_block_app_hash and last_block_height to be updated during Commit,
 // ensuring that Commit is never called twice for the same block height.
 message RequestInfo {
   string version       = 1;  // The Tenderdash software semantic version.
@@ -290,6 +290,7 @@ message RequestPrepareProposal {
   // Proposer's latest available app protocol version.
   uint64 proposed_app_version = 11;
   // App and block version used to generate the block.
+  // App version included in the block can be modified by setting ResponsePrepareProposal.app_version.
   tendermint.version.Consensus version = 12;
   // quorum_hash contains hash of validator quorum that will sign the block
   bytes quorum_hash = 13;
@@ -365,6 +366,7 @@ message RequestProcessProposal {
   // Proposer's latest available app protocol version.
   uint64 proposed_app_version = 12;
   // App and block version used to generate the block.
+  // App version MUST be verified by the app.
   tendermint.version.Consensus version = 13;
   // quorum_hash contains hash of validator quorum that will sign the block
   bytes quorum_hash = 14;
@@ -637,6 +639,8 @@ message ResponsePrepareProposal {
   tendermint.types.CoreChainLock core_chain_lock_update = 5;
   // Changes to validator set that will be applied at next height.
   ValidatorSetUpdate validator_set_update = 6 [(gogoproto.nullable) = true];
+  // Application version that was used to create the current proposal.
+  uint64 app_version = 7;
 }
 
 message ResponseProcessProposal {

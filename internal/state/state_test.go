@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
@@ -1000,6 +1001,8 @@ func TestStateMakeBlock(t *testing.T) {
 
 	proposerProTxHash := state.Validators.GetProposer().ProTxHash
 	stateVersion := state.Version.Consensus
+	// temporary workaround; state.Version.Consensus is deprecated and will be removed
+	stateVersion.App = kvstore.ProtocolVersion
 	var height int64 = 2
 	state.LastBlockHeight = height - 1
 	block, err := statefactory.MakeBlock(state, height, new(types.Commit), 0)

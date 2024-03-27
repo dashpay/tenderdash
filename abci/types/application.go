@@ -111,8 +111,9 @@ func (BaseApplication) PrepareProposal(_ context.Context, req *RequestPreparePro
 		})
 	}
 	return &ResponsePrepareProposal{TxRecords: trs,
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
-		TxResults: txResults(req.Txs),
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		TxResults:  txResults(req.Txs),
+		AppVersion: 1,
 	}, nil
 }
 

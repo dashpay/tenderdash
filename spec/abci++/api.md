@@ -443,7 +443,7 @@ Return information about the application state.
 
 Used to sync Tenderdash with the application during a handshake that happens on startup.
 The returned app_version will be included in the Header of every block.
-Tenderdsah expects last_block_app_hash and last_block_height to be updated during Commit,
+Tenderdash expects last_block_app_hash and last_block_height to be updated during Commit,
 ensuring that Commit is never called twice for the same block height.
 
 
@@ -642,7 +642,7 @@ Note that, if _p_ has a non-`nil` _validValue_, Tenderdash will use it as propos
 | core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
-| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
+| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. App version included in the block can be modified by setting ResponsePrepareProposal.app_version. |
 | quorum_hash | [bytes](#bytes) |  | quorum_hash contains hash of validator quorum that will sign the block |
 
 
@@ -712,7 +712,7 @@ When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which
 | core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Next core-chain-lock-update for validation in ABCI. |
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
-| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
+| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. App version MUST be verified by the app. |
 | quorum_hash | [bytes](#bytes) |  | quorum_hash contains hash of validator quorum that will sign the block |
 
 
@@ -1026,6 +1026,7 @@ nondeterministic
 | consensus_param_updates | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Changes to consensus-critical gas, size, and other parameters that will be applied at next height. |
 | core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Core chain lock that will be used for next block. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Changes to validator set that will be applied at next height. |
+| app_version | [uint64](#uint64) |  | Application version that was used to create the current proposal. |
 
 
 

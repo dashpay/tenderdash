@@ -2025,7 +2025,7 @@ func TestProcessProposalAccept(t *testing.T) {
 				Status:  status,
 			}, nil)
 			m.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-				AppHash: make([]byte, crypto.DefaultAppHashSize),
+				AppHash: make([]byte, crypto.DefaultAppHashSize), AppVersion: 1,
 			}, nil).Maybe()
 
 			cs1, _ := makeState(ctx, t, makeStateArgs{config: config, application: m})
@@ -2080,7 +2080,7 @@ func TestFinalizeBlockCalled(t *testing.T) {
 				Status:  abci.ResponseProcessProposal_ACCEPT,
 			}, nil)
 			m.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-				AppHash: make([]byte, crypto.DefaultAppHashSize),
+				AppHash: make([]byte, crypto.DefaultAppHashSize), AppVersion: 1,
 			}, nil)
 			// We only expect VerifyVoteExtension to be called on non-nil precommits.
 			// https://github.com/tendermint/tendermint/issues/8487
@@ -2152,7 +2152,7 @@ func TestExtendVote(t *testing.T) {
 		Status:  abci.ResponseProcessProposal_ACCEPT,
 	}, nil)
 	m.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		AppHash: make([]byte, crypto.DefaultAppHashSize),
+		AppHash: make([]byte, crypto.DefaultAppHashSize), AppVersion: 1,
 	}, nil)
 	m.On("ExtendVote", mock.Anything, mock.Anything).Return(&abci.ResponseExtendVote{
 		VoteExtensions: []*abci.ExtendVoteExtension{
@@ -2311,7 +2311,7 @@ func TestVerifyVoteExtensionNotCalledOnAbsentPrecommit(t *testing.T) {
 		Status:  abci.ResponseProcessProposal_ACCEPT,
 	}, nil)
 	m.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		AppHash: make([]byte, crypto.DefaultAppHashSize),
+		AppHash: make([]byte, crypto.DefaultAppHashSize), AppVersion: 1,
 	}, nil)
 	m.On("ExtendVote", mock.Anything, mock.Anything).Return(&abci.ResponseExtendVote{
 		VoteExtensions: voteExtensions.ToExtendProto(),
@@ -2434,7 +2434,7 @@ func TestPrepareProposalReceivesVoteExtensions(t *testing.T) {
 			assert.EqualValues(t, voteExtensions.GetExtensions(), extensions)
 
 	})).Return(&abci.ResponsePrepareProposal{
-		AppHash: make([]byte, crypto.DefaultAppHashSize),
+		AppHash: make([]byte, crypto.DefaultAppHashSize), AppVersion: 1,
 	}, nil)
 
 	m.On("VerifyVoteExtension", mock.Anything, mock.Anything).Return(&abci.ResponseVerifyVoteExtension{Status: abci.ResponseVerifyVoteExtension_ACCEPT}, nil)
@@ -3157,6 +3157,7 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 
 	block, err := sf.MakeBlock(css0StateData.state, 1, &types.Commit{}, kvstore.ProtocolVersion)
 	require.NoError(t, err)
+	require.NotZero(t, block.Version.App)
 	block.CoreChainLockedHeight = 1
 
 	commit, err := factory.MakeCommit(
@@ -3322,7 +3323,7 @@ func mockProposerApplicationCalls(t *testing.T, m *abcimocks.Application, round 
 	})
 
 	m.On("PrepareProposal", mock.Anything, roundMatcher).Return(&abci.ResponsePrepareProposal{
-		AppHash: make([]byte, crypto.DefaultAppHashSize),
+		AppHash: make([]byte, crypto.DefaultAppHashSize), AppVersion: 1,
 	}, nil).Once()
 
 	m.On("ProcessProposal", mock.Anything, roundMatcher).Return(&abci.ResponseProcessProposal{

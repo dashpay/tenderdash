@@ -258,7 +258,8 @@ func (app *testApp) PrepareProposal(_ context.Context, req *abci.RequestPrepareP
 				AppVersion: 1,
 			},
 		},
-		TxResults: resTxs,
+		AppVersion: 1,
+		TxResults:  resTxs,
 	}, nil
 }
 

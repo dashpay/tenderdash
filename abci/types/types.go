@@ -272,6 +272,9 @@ func (m *ResponsePrepareProposal) Validate() error {
 	if !isValidApphash(m.AppHash) {
 		return fmt.Errorf("apphash (%X) of size %d is invalid", m.AppHash, len(m.AppHash))
 	}
+	if m.AppVersion == 0 {
+		return fmt.Errorf("app version cannot be 0")
+	}
 
 	return nil
 }

@@ -233,7 +233,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		QuorumHash:            state.Validators.QuorumHash,
 	}
 	start := time.Now()
-	rpp, err := blockExec.appClient.PrepareProposal(ctx, &request)
+	response, err := blockExec.appClient.PrepareProposal(ctx, &request)
 	if err != nil {
 		// The App MUST ensure that only valid (and hence 'processable') transactions
 		// enter the mempool. Hence, at this point, we can't have any non-processable
@@ -247,7 +247,7 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 
 	// ensure that the proposal response is deterministic
-	reqHash, respHash := deterministicPrepareProposalHashes(&request, rpp)
+	reqHash, respHash := deterministicPrepareProposalHashes(&request, response)
 	blockExec.logger.Debug("PrepareProposal executed",
 		"request_hash", hex.EncodeToString(reqHash),
 		"response_hash", hex.EncodeToString(respHash),
@@ -266,11 +266,11 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		)
 	}
 
-	if err := rpp.Validate(); err != nil {
+	if err := response.Validate(); err != nil {
 		return nil, CurrentRoundState{}, fmt.Errorf("PrepareProposal responded with invalid response: %w", err)
 	}
 
-	txrSet := types.NewTxRecordSet(rpp.TxRecords)
+	txrSet := types.NewTxRecordSet(response.TxRecords)
 
 	if err := txrSet.Validate(maxDataBytes, block.Txs); err != nil {
 		return nil, CurrentRoundState{}, err
@@ -283,13 +283,17 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 	itxs := txrSet.IncludedTxs()
 
-	if err := validateExecTxResults(rpp.TxResults, itxs); err != nil {
+	if err := validateExecTxResults(response.TxResults, itxs); err != nil {
 		return nil, CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
 	}
 
 	block.SetTxs(itxs)
 
-	rp, err := RoundParamsFromPrepareProposal(rpp, round)
+	if ver := response.GetAppVersion(); ver > 0 {
+		block.Version.App = ver
+	}
+
+	rp, err := RoundParamsFromPrepareProposal(response, round)
 	if err != nil {
 		return nil, CurrentRoundState{}, err
 	}
@@ -356,11 +360,11 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	if resp.IsStatusUnknown() {
 		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with status %s", resp.Status.String())
 	}
-	if err := resp.Validate(); err != nil {
-		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
-	}
 	if !resp.IsAccepted() {
 		return CurrentRoundState{}, ErrBlockRejected
+	}
+	if err := resp.Validate(); err != nil {
+		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
 	}
 	if err := validateExecTxResults(resp.TxResults, block.Data.Txs); err != nil {
 		return CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)

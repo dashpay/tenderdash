@@ -349,9 +349,10 @@ func (app *CounterApplication) PrepareProposal(_ context.Context, req *abci.Requ
 		})
 	}
 	return &abci.ResponsePrepareProposal{
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
-		TxRecords: trs,
-		TxResults: app.txResults(req.Txs),
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		TxRecords:  trs,
+		TxResults:  app.txResults(req.Txs),
+		AppVersion: 1,
 	}, nil
 }
 

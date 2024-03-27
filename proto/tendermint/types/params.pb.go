@@ -33,6 +33,8 @@ type ConsensusParams struct {
 	Block     *BlockParams     `protobuf:"bytes,1,opt,name=block,proto3" json:"block,omitempty"`
 	Evidence  *EvidenceParams  `protobuf:"bytes,2,opt,name=evidence,proto3" json:"evidence,omitempty"`
 	Validator *ValidatorParams `protobuf:"bytes,3,opt,name=validator,proto3" json:"validator,omitempty"`
+	// DEPRECATED. This will be removed in a future release.
+	// Replaced by ResponsePrepareProposal.app_version
 	Version   *VersionParams   `protobuf:"bytes,4,opt,name=version,proto3" json:"version,omitempty"`
 	Synchrony *SynchronyParams `protobuf:"bytes,5,opt,name=synchrony,proto3" json:"synchrony,omitempty"`
 	Timeout   *TimeoutParams   `protobuf:"bytes,6,opt,name=timeout,proto3" json:"timeout,omitempty"`
@@ -298,6 +300,7 @@ func (m *ValidatorParams) GetPubKeyTypes() []string {
 }
 
 // VersionParams contains the ABCI application version.
+// DEPRECATED. This will be removed in a future release.
 type VersionParams struct {
 	AppVersion uint64 `protobuf:"varint,1,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
 }

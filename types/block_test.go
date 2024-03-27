@@ -499,7 +499,7 @@ func TestMaxHeaderBytes(t *testing.T) {
 	timestamp := time.Date(math.MaxInt64, 0, 0, 0, 0, 0, math.MaxInt64, time.UTC)
 
 	h := Header{
-		Version:               version.Consensus{Block: math.MaxInt64, App: math.MaxInt64},
+		Version:               version.Consensus{Block: math.MaxInt64, App: math.MaxUint64},
 		ChainID:               maxChainID,
 		Height:                math.MaxInt64,
 		Time:                  timestamp,
@@ -559,7 +559,7 @@ func TestBlockMaxDataBytes(t *testing.T) {
 	require.NotNil(t, commit)
 
 	// minBlockSize is minimum correct size of a block
-	const minBlockSize = 1370
+	const minBlockSize = 1371
 
 	testCases := []struct {
 		maxBytes      int64
@@ -596,7 +596,7 @@ func TestBlockMaxDataBytes(t *testing.T) {
 
 func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
 	// minBlockSize is minimum correct size of a block
-	const minBlockSize = 1128
+	const minBlockSize = 1129
 
 	testCases := []struct {
 		maxBytes int64

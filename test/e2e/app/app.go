@@ -51,6 +51,7 @@ func NewApplication(cfg kvstore.Config, opts ...kvstore.OptFunc) (*Application, 
 		kvstore.WithLogger(logger.With("module", "kvstore")),
 		kvstore.WithVerifyTxFunc(verifyTx),
 		kvstore.WithPrepareTxsFunc(prepareTxs),
+		kvstore.WithAppVersion(0),
 	}, opts...)
 	app := Application{
 		logger: logger.With("module", "kvstore"),

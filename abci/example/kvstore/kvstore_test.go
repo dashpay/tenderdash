@@ -21,6 +21,7 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/service"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	pbversion "github.com/dashpay/tenderdash/proto/tendermint/version"
 	tmtypes "github.com/dashpay/tenderdash/types"
 	"github.com/dashpay/tenderdash/version"
 )
@@ -48,8 +49,9 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 	require.ErrorContains(t, err, "duplicate PrepareProposal call")
 
 	reqProcess := &types.RequestProcessProposal{
-		Txs:    [][]byte{tx},
-		Height: height,
+		Txs:     [][]byte{tx},
+		Height:  height,
+		Version: &pbversion.Consensus{App: uint64(height)},
 	}
 	respProcess, err := app.ProcessProposal(ctx, reqProcess)
 	require.NoError(t, err)
@@ -122,7 +124,9 @@ func TestPersistentKVStoreKV(t *testing.T) {
 	dir := t.TempDir()
 	logger := log.NewNopLogger()
 
-	kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger.With("module", "kvstore")))
+	kvstore, err := NewPersistentApp(DefaultConfig(dir),
+		WithLogger(logger.With("module", "kvstore")),
+		WithAppVersion(0))
 	require.NoError(t, err)
 
 	key := testKey
@@ -157,7 +161,7 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 			dir := t.TempDir()
 			logger := log.NewTestingLogger(t).With("module", "kvstore")
 
-			kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger))
+			kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger), WithAppVersion(0))
 			require.NoError(t, err)
 			defer kvstore.Close()
 
@@ -241,7 +245,7 @@ func TestValUpdates(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	kvstore, err := NewMemoryApp()
+	kvstore, err := NewMemoryApp(WithAppVersion(0))
 	require.NoError(t, err)
 
 	// init with some validators
@@ -283,9 +287,10 @@ func makeApplyBlock(
 	}
 
 	respProcessProposal, err := kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{
-		Hash:   hash,
-		Height: height,
-		Txs:    txs,
+		Hash:    hash,
+		Height:  height,
+		Txs:     txs,
+		Version: &pbversion.Consensus{App: uint64(height)},
 	})
 	require.NoError(t, err)
 	require.NotZero(t, respProcessProposal)
@@ -368,7 +373,9 @@ func TestClientServer(t *testing.T) {
 	logger := log.NewTestingLogger(t)
 
 	// set up socket app
-	kvstore, err := NewMemoryApp(WithLogger(logger.With("module", "app")))
+	kvstore, err := NewMemoryApp(
+		WithLogger(logger.With("module", "app")),
+		WithAppVersion(0))
 	require.NoError(t, err)
 
 	client, server, err := makeSocketClientServer(ctx, t, logger, kvstore, "kvstore-socket")
@@ -380,7 +387,7 @@ func TestClientServer(t *testing.T) {
 	runClientTests(ctx, t, client)
 
 	// set up grpc app
-	kvstore, err = NewMemoryApp()
+	kvstore, err = NewMemoryApp(WithAppVersion(0))
 	require.NoError(t, err)
 
 	gclient, gserver, err := makeGRPCClientServer(ctx, t, logger, kvstore, "/tmp/kvstore-grpc")
@@ -406,8 +413,9 @@ func runClientTests(ctx context.Context, t *testing.T, client abciclient.Client)
 
 func testClient(ctx context.Context, t *testing.T, app abciclient.Client, height int64, tx []byte, key, value string) {
 	rpp, err := app.ProcessProposal(ctx, &types.RequestProcessProposal{
-		Txs:    [][]byte{tx},
-		Height: height,
+		Txs:     [][]byte{tx},
+		Height:  height,
+		Version: &pbversion.Consensus{App: uint64(height)},
 	})
 	require.NoError(t, err)
 	require.NotZero(t, rpp)
@@ -522,6 +530,7 @@ func newKvApp(ctx context.Context, t *testing.T, genesisHeight int64, opts ...Op
 		WithValidatorSetUpdates(map[int64]types.ValidatorSetUpdate{
 			genesisHeight: RandValidatorSetUpdate(1),
 		}),
+		WithAppVersion(0),
 	}
 	app, err := NewMemoryApp(append(defaultOpts, opts...)...)
 	require.NoError(t, err)
@@ -536,17 +545,17 @@ func newKvApp(ctx context.Context, t *testing.T, genesisHeight int64, opts ...Op
 	return app
 }
 
-func assertRespInfo(t *testing.T, expectHeight int64, expectAppHash tmbytes.HexBytes, actual types.ResponseInfo, msgs ...interface{}) {
+func assertRespInfo(t *testing.T, expectLastBlockHeight int64, expectAppHash tmbytes.HexBytes, actual types.ResponseInfo, msgs ...interface{}) {
 	t.Helper()
 
 	if expectAppHash == nil {
 		expectAppHash = make(tmbytes.HexBytes, tmcrypto.DefaultAppHashSize)
 	}
 	expected := types.ResponseInfo{
-		LastBlockHeight:  expectHeight,
+		LastBlockHeight:  expectLastBlockHeight,
 		LastBlockAppHash: expectAppHash,
 		Version:          version.ABCIVersion,
-		AppVersion:       ProtocolVersion,
+		AppVersion:       uint64(expectLastBlockHeight + 1),
 		Data:             fmt.Sprintf(`{"appHash":"%s"}`, expectAppHash.String()),
 	}
 

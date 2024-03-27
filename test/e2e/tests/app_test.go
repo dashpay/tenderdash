@@ -354,3 +354,21 @@ func TestApp_TxTooBig(t *testing.T) {
 		includeInBlockTimeout.String(),
 	)
 }
+
+// Tests that the app version in most recent block is set to height of the block.
+// Requires kvstore.WithEnforceVersionToHeight() to be enabled.
+func TestApp_AppVersion(t *testing.T) {
+	testNode(t, func(ctx context.Context, t *testing.T, node e2e.Node) {
+		client, err := node.Client()
+		require.NoError(t, err)
+		info, err := client.ABCIInfo(ctx)
+		require.NoError(t, err)
+		require.NotZero(t, info.Response.LastBlockHeight)
+
+		block, err := client.Block(ctx, &info.Response.LastBlockHeight)
+		require.NoError(t, err)
+
+		require.Equal(t, info.Response.LastBlockHeight, block.Block.Height)
+		require.EqualValues(t, block.Block.Height, block.Block.Version.App)
+	})
+}

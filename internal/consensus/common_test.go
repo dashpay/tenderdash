@@ -876,7 +876,7 @@ func makeConsensusState(
 		walDir := filepath.Dir(thisConfig.Consensus.WalFile())
 		ensureDir(t, walDir, 0700)
 
-		app, err := kvstore.NewMemoryApp()
+		app, err := kvstore.NewMemoryApp(kvstore.WithLogger(logger))
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = app.Close() })
 
