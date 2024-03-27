@@ -639,11 +639,8 @@ message ResponsePrepareProposal {
   tendermint.types.CoreChainLock core_chain_lock_update = 5;
   // Changes to validator set that will be applied at next height.
   ValidatorSetUpdate validator_set_update = 6 [(gogoproto.nullable) = true];
-  // Override the application version that was used to create the current block.
-  // If this field is set to a value other than zero, it will replace the
-  // application version specified in consensus params and in
-  // `RequestPrepareProposal.version.app`.
-  optional uint64 app_version = 7;
+  // Application version that was used to create the current proposal.
+  uint64 app_version = 7;
 }
 
 message ResponseProcessProposal {

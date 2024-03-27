@@ -392,10 +392,10 @@ func TestOverrideAppVersion(t *testing.T) {
 	txResults := factory.ExecTxResults(txs)
 
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		TxRecords:   txsToTxRecords(txs),
-		AppHash:     rand.Bytes(crypto.DefaultAppHashSize),
-		TxResults:   txResults,
-		XAppVersion: &abci.ResponsePrepareProposal_AppVersion{AppVersion: appVersion},
+		TxRecords:  txsToTxRecords(txs),
+		AppHash:    rand.Bytes(crypto.DefaultAppHashSize),
+		TxResults:  txResults,
+		AppVersion: appVersion,
 	}, nil).Once()
 
 	block1, _, err := blockExec.CreateProposalBlock(

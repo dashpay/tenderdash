@@ -1027,7 +1027,7 @@ nondeterministic
 | consensus_param_updates | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Changes to consensus-critical gas, size, and other parameters that will be applied at next height. |
 | core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Core chain lock that will be used for next block. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Changes to validator set that will be applied at next height. |
-| app_version | [uint64](#uint64) | optional | Override the application version that was used to create the current block. If this field is set to a value other than zero, it will replace the application version specified in consensus params and in `RequestPrepareProposal.version.app`. |
+| app_version | [uint64](#uint64) |  | Application version that was used to create the current proposal. |
 
 
 

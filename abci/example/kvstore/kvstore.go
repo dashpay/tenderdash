@@ -363,7 +363,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 	}
 
 	if app.shouldEnforceVersionToHeight {
-		resp.XAppVersion = &abci.ResponsePrepareProposal_AppVersion{AppVersion: uint64(roundState.GetHeight())}
+		resp.AppVersion = uint64(roundState.GetHeight())
 	}
 
 	if app.cfg.PrepareProposalDelayMS != 0 {
