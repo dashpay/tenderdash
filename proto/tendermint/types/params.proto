@@ -14,6 +14,8 @@ message ConsensusParams {
   BlockParams     block     = 1;
   EvidenceParams  evidence  = 2;
   ValidatorParams validator = 3;
+  // DEPRECATED. This will be removed in a future release.
+  // Replaced by ResponsePrepareProposal.app_version
   VersionParams   version   = 4;
   SynchronyParams synchrony = 5;
   TimeoutParams   timeout   = 6;
@@ -59,6 +61,7 @@ message ValidatorParams {
 }
 
 // VersionParams contains the ABCI application version.
+// DEPRECATED. This will be removed in a future release.
 message VersionParams {
   uint64 app_version = 1;
 }
