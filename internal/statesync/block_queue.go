@@ -119,6 +119,7 @@ func (q *blockQueue) nextHeight() <-chan int64 {
 		return ch
 	}
 
+	// we check initialHeight instead of startHeight as also need to address the startTime which we don't have here
 	if q.terminal == nil && q.fetchHeight >= q.initialHeight {
 		// return and decrement the fetch height
 		ch <- q.fetchHeight
