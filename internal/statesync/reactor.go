@@ -489,14 +489,32 @@ func (r *Reactor) backfill(
 						return
 					}
 					r.logger.Debug("fetching next block", "height", height, "peer", peer)
-					lb, err := func() (*types.LightBlock, error) {
-						subCtx, reqCancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
-						defer reqCancel()
-						// request the light block with a timeout
-						return r.dispatcher.LightBlock(subCtx, height, peer)
-					}()
+					// request the light block with a timeout
+					subCtx, subCtxCancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
+					lb, err := r.dispatcher.LightBlock(subCtx, height, peer)
+					subCtxCancel()
+
+					if err != nil {
+						queue.retry(height)
+						if errors.Is(err, errNoConnectedPeers) {
+							r.logger.Info("backfill: no connected peers to fetch light blocks from; sleeping...",
+								"sleepTime", sleepTime)
+							time.Sleep(sleepTime)
+						} else if errors.Is(err, context.DeadlineExceeded) {
+							// we don't punish the peer as it might just have not responded in time
+							// In future, we might want to consider a backoff strategy
+							r.logger.Debug("backfill: peer didn't respond on time",
+								"height", height, "peer", peer, "error", err)
+							r.peers.Append(peer)
+						} else {
+							r.logger.Info("backfill: error fetching light block",
+								"height", height,
+								"error", err)
+						}
+						continue
+					}
 					if lb == nil {
-						r.logger.Info("backfill: peer didn't have block, fetching from another peer", "height", height)
+						r.logger.Info("backfill: peer didn't have block, fetching from another peer", "height", height, "peers_outstanding", r.peers.Len())
 						queue.retry(height)
 						// As we are fetching blocks backwards, if this node doesn't have the block it likely doesn't
 						// have any prior ones, thus we remove it from the peer list.
@@ -506,20 +524,6 @@ func (r *Reactor) backfill(
 					r.peers.Append(peer)
 					if errors.Is(err, context.Canceled) {
 						return
-					}
-					if err != nil {
-						queue.retry(height)
-						if errors.Is(err, errNoConnectedPeers) {
-							r.logger.Info("backfill: no connected peers to fetch light blocks from; sleeping...",
-								"sleepTime", sleepTime)
-							time.Sleep(sleepTime)
-						} else {
-							// we don't punish the peer as it might just have not responded in time
-							r.logger.Info("backfill: error with fetching light block",
-								"height", height,
-								"error", err)
-						}
-						continue
 					}
 
 					// run a validate basic. This checks the validator set and commit
@@ -534,6 +538,7 @@ func (r *Reactor) backfill(
 							NodeID: peer,
 							Err:    fmt.Errorf("received invalid light block: %w", err),
 						}); serr != nil {
+							r.logger.Error("backfill: failed to send block error", "error", serr)
 							return
 						}
 						continue
