@@ -4,11 +4,12 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/rs/zerolog"
+
 	abci "github.com/dashpay/tenderdash/abci/types"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmtypes "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
-	"github.com/rs/zerolog"
 )
 
 const (
@@ -341,6 +342,16 @@ func valsetUpdate(
 			nValSet = types.NewValidatorSetWithLocalNodeProTxHash(validatorUpdates, thresholdPubKey,
 				currentVals.QuorumType, quorumHash, nodeProTxHash)
 		}
+	} else {
+		// validators not changed, but we might have a new quorum hash or threshold public key
+		if !quorumHash.IsZero() {
+			nValSet.QuorumHash = quorumHash
+		}
+
+		if thresholdPubKey != nil {
+			nValSet.ThresholdPublicKey = thresholdPubKey
+		}
 	}
+
 	return nValSet, nil
 }
