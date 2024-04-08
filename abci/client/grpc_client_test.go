@@ -25,31 +25,38 @@ func TestGRPCClientServerParallel(t *testing.T) {
 	)
 
 	type testCase struct {
-		threads     int
-		concurrency uint16
+		threads           int
+		infoConcurrency   uint16
+		defautConcurrency uint16
 	}
 
 	testCases := []testCase{
-		{threads: 1, concurrency: 1},
-		{threads: 2, concurrency: 1},
-		{threads: 2, concurrency: 2},
-		{threads: 5, concurrency: 0},
-		{threads: 5, concurrency: 1},
-		{threads: 5, concurrency: 2},
-		{threads: 5, concurrency: 5},
+		{threads: 1, infoConcurrency: 1},
+		{threads: 2, infoConcurrency: 1},
+		{threads: 2, infoConcurrency: 2},
+		{threads: 5, infoConcurrency: 0},
+		{threads: 5, infoConcurrency: 0, defautConcurrency: 2},
+		{threads: 5, infoConcurrency: 1},
+		{threads: 5, infoConcurrency: 2},
+		{threads: 5, infoConcurrency: 5},
 	}
 
 	logger := log.NewNopLogger()
 
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("%+v", tc), func(t *testing.T) {
+		t.Run(fmt.Sprintf("t_%d-i_%d,d_%d", tc.threads, tc.infoConcurrency, tc.defautConcurrency), func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(context.Background(), timeout)
 			defer cancel()
 
-			app := &mockApplication{t: t, concurrencyLimit: int32(tc.concurrency)}
+			app := &mockApplication{t: t, concurrencyLimit: int32(tc.infoConcurrency)}
 
 			socket := t.TempDir() + "/grpc_test"
-			client, _, err := makeGRPCClientServer(ctx, t, logger, app, socket, tc.concurrency)
+			limits := map[string]uint16{
+				"/tendermint.abci.ABCIApplication/Info": tc.infoConcurrency,
+				"*":                                     tc.defautConcurrency,
+			}
+
+			client, _, err := makeGRPCClientServer(ctx, t, logger, app, socket, limits)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -70,7 +77,10 @@ func TestGRPCClientServerParallel(t *testing.T) {
 				}()
 			}
 
-			expectThreads := int32(tc.concurrency)
+			expectThreads := int32(tc.infoConcurrency)
+			if expectThreads == 0 {
+				expectThreads = int32(tc.defautConcurrency)
+			}
 			if expectThreads == 0 {
 				expectThreads = int32(tc.threads)
 			}
@@ -98,7 +108,7 @@ func makeGRPCClientServer(
 	logger log.Logger,
 	app types.Application,
 	name string,
-	limit uint16,
+	limits map[string]uint16,
 ) (Client, service.Service, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
@@ -115,7 +125,7 @@ func makeGRPCClientServer(
 	}
 
 	client := NewGRPCClient(logger.With("module", "abci-client"), socket, true)
-	client.(*grpcClient).SetMaxConcurrentStreams(limit)
+	client.(*grpcClient).SetMaxConcurrentStreams(limits)
 
 	if err := client.Start(ctx); err != nil {
 		cancel()

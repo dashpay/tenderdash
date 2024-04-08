@@ -31,7 +31,13 @@ type grpcClient struct {
 	addr string
 	err  error
 
-	concurrency chan struct{}
+	// map between method name (in grpc format, for example `/tendermint.abci.ABCIApplication/Echo`)
+	// and a channel that will be used to limit the number of concurrent requests for that method.
+	//
+	// If the value is nil, no limit is enforced.
+	//
+	// Not thread-safe, only modify this before starting the client.
+	concurrency map[string]chan struct{}
 }
 
 var _ Client = (*grpcClient)(nil)
@@ -44,7 +50,7 @@ func NewGRPCClient(logger log.Logger, addr string, mustConnect bool) Client {
 		logger:      logger,
 		addr:        addr,
 		mustConnect: mustConnect,
-		concurrency: nil,
+		concurrency: make(map[string]chan struct{}, 20),
 	}
 	cli.BaseService = *service.NewBaseService(logger, "grpcClient", cli)
 	return cli
@@ -56,14 +62,33 @@ func NewGRPCClient(logger log.Logger, addr string, mustConnect bool) Client {
 // Not thread-safe, only use this before starting the client.
 //
 // If limit is 0, no limit is enforced.
-func (cli *grpcClient) SetMaxConcurrentStreams(n uint16) {
+func (cli *grpcClient) SetMaxConcurrentStreamsForMethod(method string, n uint16) {
 	if cli.IsRunning() {
 		panic("cannot set max concurrent streams after starting the client")
 	}
-	if n == 0 {
-		cli.concurrency = nil
-	} else {
-		cli.concurrency = make(chan struct{}, n)
+
+	if n != 0 {
+		cli.mtx.Lock()
+		cli.concurrency[method] = make(chan struct{}, n)
+		cli.mtx.Unlock()
+	}
+}
+
+// SetMaxConcurrentStreams sets the maximum number of concurrent streams to be
+// allowed on this client.
+// # Arguments
+//
+// * `methods` - A map between method name (in grpc format, for example `/tendermint.abci.ABCIApplication/Echo`)
+// and the maximum number of concurrent streams to be allowed for that method.
+//
+// Special method name "*" can be used to set the default limit for methods not explicitly listed.
+//
+// If the value is 0, no limit is enforced.
+//
+// Not thread-safe, only use this before starting the client.
+func (cli *grpcClient) SetMaxConcurrentStreams(methods map[string]uint16) {
+	for method, n := range methods {
+		cli.SetMaxConcurrentStreamsForMethod(method, n)
 	}
 }
 
@@ -73,24 +98,34 @@ func dialerFunc(_ctx context.Context, addr string) (net.Conn, error) {
 
 // rateLimit blocks until the client is allowed to send a request.
 // It returns a function that should be called after the request is done.
-func (cli *grpcClient) rateLimit() context.CancelFunc {
-	if cli.concurrency == nil {
+//
+// method should be the method name in grpc format, for example `/tendermint.abci.ABCIApplication/Echo`.
+// Special method name "*" can be used to define the default limit.
+// If no limit is set for the method, the default limit is used.
+func (cli *grpcClient) rateLimit(method string) context.CancelFunc {
+	ch := cli.concurrency[method]
+	// handle default
+	if ch == nil {
+		ch = cli.concurrency["*"]
+	}
+	if ch == nil {
 		return func() {}
 	}
-	cli.logger.Debug("grpcClient rateLimit", "addr", cli.addr)
-	cli.concurrency <- struct{}{}
-	return func() { <-cli.concurrency }
+
+	cli.logger.Trace("grpcClient rateLimit", "addr", cli.addr)
+	ch <- struct{}{}
+	return func() { <-ch }
 }
 
 func (cli *grpcClient) unaryClientInterceptor(ctx context.Context, method string, req, reply interface{}, cc *grpc.ClientConn, invoker grpc.UnaryInvoker, opts ...grpc.CallOption) error {
-	done := cli.rateLimit()
+	done := cli.rateLimit(method)
 	defer done()
 
 	return invoker(ctx, method, req, reply, cc, opts...)
 }
 
 func (cli *grpcClient) streamClientInterceptor(ctx context.Context, desc *grpc.StreamDesc, cc *grpc.ClientConn, method string, streamer grpc.Streamer, opts ...grpc.CallOption) (grpc.ClientStream, error) {
-	done := cli.rateLimit()
+	done := cli.rateLimit(method)
 	defer done()
 
 	return streamer(ctx, desc, cc, method, opts...)
