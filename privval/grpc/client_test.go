@@ -50,7 +50,7 @@ func TestSignerClient_GetPubKey(t *testing.T) {
 	srv, dialer := dialer(t, mockPV, logger)
 	defer srv.Stop()
 
-	conn, err := grpc.DialContext(ctx, "",
+	conn, err := grpc.NewClient("",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(dialer),
 	)
@@ -78,7 +78,7 @@ func TestSignerClient_SignVote(t *testing.T) {
 	srv, dialer := dialer(t, mockPV, logger)
 	defer srv.Stop()
 
-	conn, err := grpc.DialContext(ctx, "",
+	conn, err := grpc.NewClient("",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(dialer),
 	)
@@ -139,11 +139,11 @@ func TestSignerClient_SignProposal(t *testing.T) {
 	logger := log.NewTestingLogger(t)
 	srv, dialer := dialer(t, mockPV, logger)
 	defer srv.Stop()
-
-	conn, err := grpc.DialContext(ctx, "",
+	conn, err := grpc.NewClient("",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(dialer),
 	)
+
 	require.NoError(t, err)
 	defer conn.Close()
 

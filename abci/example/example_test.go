@@ -116,7 +116,7 @@ func testGRPCSync(ctx context.Context, t *testing.T, logger log.Logger, app type
 	t.Cleanup(server.Wait)
 
 	// Connect to the socket
-	conn, err := grpc.Dial(socket,
+	conn, err := grpc.NewClient(socket,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(dialerFunc),
 	)
