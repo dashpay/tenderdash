@@ -730,7 +730,7 @@ func execBlock(
 		logger.Error("executing block", "err", err)
 		return responseFinalizeBlock, err
 	}
-	logger.Info("executed block", "height", block.Height)
+	logger.Debug("executed block", "height", block.Height)
 
 	return responseFinalizeBlock, nil
 }

@@ -333,6 +333,39 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 	}
 }
 
+// TestEmptyValidatorUpdates tests that the validator set is updated correctly when there are no validator updates.
+func TestEmptyValidatorUpdates(t *testing.T) {
+	tearDown, _, state := setupTestCase(t)
+	defer tearDown(t)
+
+	firstNode := state.Validators.GetByIndex(0)
+	require.NotZero(t, firstNode.ProTxHash)
+	ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
+
+	newPrivKey := bls12381.GenPrivKeyFromSecret([]byte("test"))
+	newPubKey := newPrivKey.PubKey()
+	newQuorumHash := crypto.RandQuorumHash()
+
+	expectValidators := types.ValidatorListString(state.Validators.Validators)
+
+	resp := abci.ResponseProcessProposal{
+		ValidatorSetUpdate: &abci.ValidatorSetUpdate{
+			ValidatorUpdates:   nil,
+			ThresholdPublicKey: cryptoenc.MustPubKeyToProto(newPubKey),
+			QuorumHash:         newQuorumHash,
+		}}
+
+	changes, err := state.NewStateChangeset(
+		ctx,
+		sm.RoundParamsFromProcessProposal(&resp, nil, 0),
+	)
+	require.NoError(t, err)
+
+	assert.EqualValues(t, newQuorumHash, changes.NextValidators.QuorumHash, "quorum hash should be updated")
+	assert.EqualValues(t, newPubKey, changes.NextValidators.ThresholdPublicKey, "threshold public key should be updated")
+	assert.Equal(t, expectValidators, types.ValidatorListString(changes.NextValidators.Validators), "validator should not change")
+}
+
 //func TestProposerFrequency(t *testing.T) {
 //	ctx, cancel := context.WithCancel(context.Background())
 //	defer cancel()

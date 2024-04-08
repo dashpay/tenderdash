@@ -3843,6 +3843,21 @@ func (m *ValidatorUpdate) GetNodeAddress() string {
 	return ""
 }
 
+// ValidatorSetUpdate represents a change in the validator set.
+// It can be used to add, remove, or update a validator.
+//
+// Validator set update consists of multiple ValidatorUpdate records,
+// each of them can be used to add, remove, or update a validator, according to the
+// following rules:
+//
+// 1. If a validator with the same public key already exists in the validator set
+// and power is greater than 0, the existing validator will be updated with the new power.
+// 2. If a validator with the same public key already exists in the validator set
+// and power is 0, the existing validator will be removed from the validator set.
+// 3. If a validator with the same public key does not exist in the validator set and the power is greater than 0,
+// a new validator will be added to the validator set.
+// 4. As a special case, if quorum hash has changed, all existing validators will be removed before applying
+// the new validator set update.
 type ValidatorSetUpdate struct {
 	ValidatorUpdates   []ValidatorUpdate `protobuf:"bytes,1,rep,name=validator_updates,json=validatorUpdates,proto3" json:"validator_updates"`
 	ThresholdPublicKey crypto.PublicKey  `protobuf:"bytes,2,opt,name=threshold_public_key,json=thresholdPublicKey,proto3" json:"threshold_public_key"`
