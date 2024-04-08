@@ -116,6 +116,7 @@ func DialRemoteSigner(
 	conn, err := grpc.NewClient(address, dialOptions...)
 	if err != nil {
 		logger.Error("unable to connect to server", "target", address, "err", err)
+		return nil, err
 	}
 
 	return NewSignerClient(conn, chainID, logger)
