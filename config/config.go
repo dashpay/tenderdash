@@ -470,14 +470,17 @@ func (cfg *AbciConfig) ValidateBasic() error {
 		err = multierror.Append(err, fmt.Errorf("unknown field: %s", key))
 	}
 
-	switch cfg.Transport {
-	case "socket", "grpc", "routed":
-	default:
-		err = multierror.Append(err, fmt.Errorf("unknown ABCI connection method: %v", cfg.Transport))
-	}
+	// empty transport and address is allowed, as it means we use built in app
+	if !(cfg.Transport == "" && cfg.Address == "") {
+		switch cfg.Transport {
+		case "socket", "grpc", "routed":
+		default:
+			err = multierror.Append(err, fmt.Errorf("unknown ABCI connection method: %v", cfg.Transport))
+		}
 
-	if len(cfg.Address) == 0 {
-		err = multierror.Append(err, errors.New("address cannot be empty"))
+		if len(cfg.Address) == 0 {
+			err = multierror.Append(err, errors.New("address cannot be empty"))
+		}
 	}
 
 	return err
