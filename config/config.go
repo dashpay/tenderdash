@@ -457,7 +457,7 @@ func DefaultAbciConfig() *AbciConfig {
 // TestAbciConfig returns a configuration for testing the ABCI client
 func TestAbciConfig() *AbciConfig {
 	cfg := DefaultAbciConfig()
-	cfg.ProxyApp = "socket"
+	cfg.ProxyApp = "kvstore"
 	return cfg
 }
 
