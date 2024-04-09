@@ -273,9 +273,16 @@ var plan = transform.Plan{
 			for _, e := range found {
 				e.Remove()
 				e.Name = parser.Key{e.Name[0]}
-				if e.Name.String() == "abci" {
+
+				switch e.Name[0] {
+				case "abci":
 					e.Name = parser.Key{"transport"}
+				case "proxy-app":
+					e.Name = parser.Key{"address"}
+				default:
+					e.Name = parser.Key{e.Name[0]}
 				}
+
 				sec.Items = append(sec.Items, e.KeyValue)
 			}
 			return nil
