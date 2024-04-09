@@ -39,7 +39,7 @@ type Client interface {
 // It returns an error if the transport is not "socket" or "grpc"
 func NewClient(logger log.Logger, cfg config.AbciConfig, mustConnect bool) (Client, error) {
 	transport := cfg.Transport
-	addr := cfg.ProxyApp
+	addr := cfg.Address
 
 	switch transport {
 	case "socket":

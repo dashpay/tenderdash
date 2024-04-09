@@ -63,7 +63,7 @@ const SOCKET = "socket"
 func TestEcho(t *testing.T) {
 	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", t.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
-	cfg := config.AbciConfig{ProxyApp: sockPath, Transport: SOCKET}
+	cfg := config.AbciConfig{Address: sockPath, Transport: SOCKET}
 	client, err := abciclient.NewClient(logger, cfg, true)
 	if err != nil {
 		t.Fatal(err)
@@ -108,7 +108,7 @@ func BenchmarkEcho(b *testing.B) {
 	b.StopTimer() // Initialize
 	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", b.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
-	cfg := config.AbciConfig{ProxyApp: sockPath, Transport: SOCKET}
+	cfg := config.AbciConfig{Address: sockPath, Transport: SOCKET}
 	client, err := abciclient.NewClient(logger, cfg, true)
 	if err != nil {
 		b.Fatal(err)
@@ -160,7 +160,7 @@ func TestInfo(t *testing.T) {
 
 	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", t.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
-	cfg := config.AbciConfig{ProxyApp: sockPath, Transport: SOCKET}
+	cfg := config.AbciConfig{Address: sockPath, Transport: SOCKET}
 	client, err := abciclient.NewClient(logger, cfg, true)
 	require.NoError(t, err)
 

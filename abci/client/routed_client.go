@@ -72,7 +72,7 @@ func NewRoutedClientWithAddr(logger log.Logger, addr string, mustConnect bool) (
 		// Create a new client if it doesn't exist
 		clientName := fmt.Sprintf("%s:%s", transport, address)
 		if _, ok := clients[clientName]; !ok {
-			cfg := config.AbciConfig{ProxyApp: address, Transport: transport}
+			cfg := config.AbciConfig{Address: address, Transport: transport}
 			c, err := NewClient(logger, cfg, mustConnect)
 			if err != nil {
 				return nil, err

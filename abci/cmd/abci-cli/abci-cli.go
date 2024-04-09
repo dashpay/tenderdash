@@ -65,7 +65,7 @@ func RootCmmand(logger log.Logger) *cobra.Command {
 
 			if client == nil {
 				var err error
-				cfg := config.AbciConfig{ProxyApp: flagAddress, Transport: flagAbci}
+				cfg := config.AbciConfig{Address: flagAddress, Transport: flagAbci}
 				client, err = abciclient.NewClient(logger.With("module", "abci-client"), cfg, false)
 				if err != nil {
 					return err

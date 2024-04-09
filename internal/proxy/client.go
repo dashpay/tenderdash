@@ -27,7 +27,7 @@ import (
 // The Closer is a noop except for persistent_kvstore applications,
 // which will clean up the store.
 func ClientFactory(logger log.Logger, cfg config.AbciConfig, dbDir string) (abciclient.Client, io.Closer, error) {
-	addr := cfg.ProxyApp
+	addr := cfg.Address
 
 	switch addr {
 	case "kvstore":

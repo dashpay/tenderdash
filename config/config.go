@@ -431,7 +431,7 @@ func (cfg *PrivValidatorConfig) AreSecurityOptionsPresent() bool {
 type AbciConfig struct {
 	// TCP or UNIX socket address of the ABCI application,or routing rules for routed ABCI client,
 	// or the name of an ABCI application compiled in with the Tendermint binary
-	ProxyApp string `mapstructure:"proxy-app"`
+	Address string `mapstructure:"address"`
 
 	// Transport protocol used to connect to the ABCI application: socket | grpc | routed
 	Transport string `mapstructure:"transport"`
@@ -448,7 +448,7 @@ type AbciConfig struct {
 // DefaultAbciConfig returns a default ABCI configuration for a Tendermint node
 func DefaultAbciConfig() *AbciConfig {
 	return &AbciConfig{
-		ProxyApp:        "tcp://127.0.0.1:26658",
+		Address:         "tcp://127.0.0.1:26658",
 		Transport:       "socket",
 		GrpcConcurrency: map[string]uint16{"*": 0},
 	}
@@ -457,7 +457,7 @@ func DefaultAbciConfig() *AbciConfig {
 // TestAbciConfig returns a configuration for testing the ABCI client
 func TestAbciConfig() *AbciConfig {
 	cfg := DefaultAbciConfig()
-	cfg.ProxyApp = "kvstore"
+	cfg.Address = "kvstore"
 	return cfg
 }
 
@@ -476,8 +476,8 @@ func (cfg *AbciConfig) ValidateBasic() error {
 		err = multierror.Append(err, fmt.Errorf("unknown ABCI connection method: %v", cfg.Transport))
 	}
 
-	if len(cfg.ProxyApp) == 0 {
-		err = multierror.Append(err, errors.New("proxy-app cannot be empty"))
+	if len(cfg.Address) == 0 {
+		err = multierror.Append(err, errors.New("address cannot be empty"))
 	}
 
 	return err

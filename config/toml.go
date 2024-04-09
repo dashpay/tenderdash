@@ -159,9 +159,9 @@ filter-peers = {{ .BaseConfig.FilterPeers }}
 # or the name of an ABCI application compiled in with the Tendermint binary
 # Example for routed multi-app setup:
 #   abci = "routed"
-#   proxy-app = "Info:socket:unix:///tmp/socket.1,Info:socket:unix:///tmp/socket.2,CheckTx:socket:unix:///tmp/socket.1,*:socket:unix:///tmp/socket.3"
+#   address = "Info:socket:unix:///tmp/socket.1,Info:socket:unix:///tmp/socket.2,CheckTx:socket:unix:///tmp/socket.1,*:socket:unix:///tmp/socket.3"
 
-proxy-app = "{{ .Abci.ProxyApp }}"
+address = "{{ .Abci.Address }}"
 
 # Transport mechanism to connect to the ABCI application: socket | grpc | routed
 transport = "{{ .Abci.Transport }}"

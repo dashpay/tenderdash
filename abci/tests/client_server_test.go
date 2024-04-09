@@ -35,7 +35,7 @@ func TestClientServerNoAddrPrefix(t *testing.T) {
 	assert.NoError(t, err, "expected no error on server.Start")
 	t.Cleanup(server.Wait)
 
-	cfg := config.AbciConfig{ProxyApp: addr, Transport: transport}
+	cfg := config.AbciConfig{Address: addr, Transport: transport}
 	client, err := abciclientent.NewClient(logger, cfg, true)
 	assert.NoError(t, err, "expected no error on NewClient")
 	err = client.Start(ctx)
