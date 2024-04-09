@@ -11,6 +11,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/service"
 )
@@ -71,7 +72,8 @@ func NewRoutedClientWithAddr(logger log.Logger, addr string, mustConnect bool) (
 		// Create a new client if it doesn't exist
 		clientName := fmt.Sprintf("%s:%s", transport, address)
 		if _, ok := clients[clientName]; !ok {
-			c, err := NewClient(logger, address, transport, mustConnect)
+			cfg := config.AbciConfig{ProxyApp: address, Transport: transport}
+			c, err := NewClient(logger, cfg, mustConnect)
 			if err != nil {
 				return nil, err
 			}

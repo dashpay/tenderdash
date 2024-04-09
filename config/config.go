@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
+	"github.com/hashicorp/go-multierror"
 
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -66,6 +67,9 @@ type Config struct {
 	// Top level options use an anonymous struct
 	BaseConfig `mapstructure:",squash"`
 
+	// Options for ABCI application connectivity
+	Abci *AbciConfig `mapstructure:"abci"`
+
 	// Options for services
 	RPC             *RPCConfig             `mapstructure:"rpc"`
 	P2P             *P2PConfig             `mapstructure:"p2p"`
@@ -80,6 +84,7 @@ type Config struct {
 // DefaultConfig returns a default configuration for a Tendermint node
 func DefaultConfig() *Config {
 	return &Config{
+		Abci:            DefaultAbciConfig(),
 		BaseConfig:      DefaultBaseConfig(),
 		RPC:             DefaultRPCConfig(),
 		P2P:             DefaultP2PConfig(),
@@ -102,6 +107,7 @@ func DefaultValidatorConfig() *Config {
 // TestConfig returns a configuration that can be used for testing
 func TestConfig() *Config {
 	return &Config{
+		Abci:            TestAbciConfig(),
 		BaseConfig:      TestBaseConfig(),
 		RPC:             TestRPCConfig(),
 		P2P:             TestP2PConfig(),
@@ -128,6 +134,10 @@ func (cfg *Config) SetRoot(root string) *Config {
 // ValidateBasic performs basic validation (checking param bounds, etc.) and
 // returns an error if any check fails.
 func (cfg *Config) ValidateBasic() error {
+
+	if err := cfg.Abci.ValidateBasic(); err != nil {
+		return fmt.Errorf("error in [abci] section: %w", err)
+	}
 	if err := cfg.BaseConfig.ValidateBasic(); err != nil {
 		return err
 	}
@@ -164,10 +174,6 @@ type BaseConfig struct { //nolint: maligned
 	// The root directory for all data.
 	// This should be set in viper so it can unmarshal into this struct
 	RootDir string `mapstructure:"home"`
-
-	// TCP or UNIX socket address of the ABCI application,or routing rules for routed ABCI client,
-	// or the name of an ABCI application compiled in with the Tendermint binary
-	ProxyApp string `mapstructure:"proxy-app"`
 
 	// A custom human readable name for this node
 	Moniker string `mapstructure:"moniker"`
@@ -223,9 +229,6 @@ type BaseConfig struct { //nolint: maligned
 	// A JSON file containing the private key to use for p2p authenticated encryption
 	NodeKey string `mapstructure:"node-key-file"`
 
-	// Mechanism to connect to the ABCI application: socket | grpc | routed
-	ABCI string `mapstructure:"abci"`
-
 	// If true, query the ABCI app on connecting to a new peer
 	// so the app can decide if we should keep the connection or not
 	FilterPeers bool `mapstructure:"filter-peers"` // false
@@ -240,25 +243,6 @@ func DefaultBaseConfig() BaseConfig {
 		NodeKey:     defaultNodeKeyPath,
 		Mode:        defaultMode,
 		Moniker:     defaultMoniker,
-		ProxyApp:    "tcp://127.0.0.1:26658",
-		ABCI:        "socket",
-		LogLevel:    DefaultLogLevel,
-		LogFormat:   log.LogFormatPlain,
-		FilterPeers: false,
-		DBBackend:   "goleveldb",
-		DBPath:      "data",
-	}
-}
-
-// SingleNodeBaseConfig returns a default base configuration for a Tendermint node
-func SingleNodeBaseConfig() BaseConfig {
-	return BaseConfig{
-		Genesis:     defaultGenesisJSONPath,
-		NodeKey:     defaultNodeKeyPath,
-		Mode:        defaultMode,
-		Moniker:     defaultMoniker,
-		ProxyApp:    "tcp://127.0.0.1:26658",
-		ABCI:        "socket",
 		LogLevel:    DefaultLogLevel,
 		LogFormat:   log.LogFormatPlain,
 		FilterPeers: false,
@@ -272,7 +256,6 @@ func TestBaseConfig() BaseConfig {
 	cfg := DefaultBaseConfig()
 	cfg.chainID = factory.DefaultTestChainID
 	cfg.Mode = ModeValidator
-	cfg.ProxyApp = "kvstore"
 	cfg.DBBackend = "memdb"
 	return cfg
 }
@@ -439,6 +422,65 @@ func (cfg *PrivValidatorConfig) AreSecurityOptionsPresent() bool {
 	default:
 		return true
 	}
+}
+
+//-----------------------------------------------------------------------------
+// AbciConfig
+
+// AbciConfig defines the configuration options for the ABCI client connection
+type AbciConfig struct {
+	// TCP or UNIX socket address of the ABCI application,or routing rules for routed ABCI client,
+	// or the name of an ABCI application compiled in with the Tendermint binary
+	ProxyApp string `mapstructure:"proxy-app"`
+
+	// Transport protocol used to connect to the ABCI application: socket | grpc | routed
+	Transport string `mapstructure:"transport"`
+
+	// Maximum number of simultaneous connections to the ABCI application
+	// per each method. Mapped method names, like "echo", to the number of concurrent requests.
+	// Special method name "*" can be used to set the default limit for methods not explicitly listed.
+	GrpcConcurrency map[string]uint16 `mapstructure:"grpc-concurrency"`
+
+	// Other options should be empty
+	Other map[string]interface{} `mapstructure:",remain"`
+}
+
+// DefaultAbciConfig returns a default ABCI configuration for a Tendermint node
+func DefaultAbciConfig() *AbciConfig {
+	return &AbciConfig{
+		ProxyApp:        "tcp://127.0.0.1:26658",
+		Transport:       "socket",
+		GrpcConcurrency: map[string]uint16{"*": 0},
+	}
+}
+
+// TestAbciConfig returns a configuration for testing the ABCI client
+func TestAbciConfig() *AbciConfig {
+	cfg := DefaultAbciConfig()
+	cfg.ProxyApp = "socket"
+	return cfg
+}
+
+// ValidateBasic performs basic validation (checking param bounds, etc.) and
+// returns an error if any check fails.
+func (cfg *AbciConfig) ValidateBasic() error {
+	var err error
+
+	for key := range cfg.Other {
+		err = multierror.Append(err, fmt.Errorf("unknown field: %s", key))
+	}
+
+	switch cfg.Transport {
+	case "socket", "grpc", "routed":
+	default:
+		err = multierror.Append(err, fmt.Errorf("unknown ABCI connection method: %v", cfg.Transport))
+	}
+
+	if len(cfg.ProxyApp) == 0 {
+		err = multierror.Append(err, errors.New("proxy-app cannot be empty"))
+	}
+
+	return err
 }
 
 //-----------------------------------------------------------------------------

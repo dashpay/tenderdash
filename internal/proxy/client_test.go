@@ -23,6 +23,7 @@ import (
 	"github.com/dashpay/tenderdash/abci/server"
 	"github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/abci/types/mocks"
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 )
@@ -57,12 +58,13 @@ func (app *appConnTest) Info(ctx context.Context, req *types.RequestInfo) (*type
 
 //----------------------------------------
 
-var SOCKET = "socket"
+const SOCKET = "socket"
 
 func TestEcho(t *testing.T) {
 	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", t.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
-	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true)
+	cfg := config.AbciConfig{ProxyApp: sockPath, Transport: SOCKET}
+	client, err := abciclient.NewClient(logger, cfg, true)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,7 +108,8 @@ func BenchmarkEcho(b *testing.B) {
 	b.StopTimer() // Initialize
 	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", b.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
-	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true)
+	cfg := config.AbciConfig{ProxyApp: sockPath, Transport: SOCKET}
+	client, err := abciclient.NewClient(logger, cfg, true)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -157,7 +160,8 @@ func TestInfo(t *testing.T) {
 
 	sockPath := fmt.Sprintf("unix://%s/echo_%v.sock", t.TempDir(), tmrand.Str(6))
 	logger := log.NewNopLogger()
-	client, err := abciclient.NewClient(logger, sockPath, SOCKET, true)
+	cfg := config.AbciConfig{ProxyApp: sockPath, Transport: SOCKET}
+	client, err := abciclient.NewClient(logger, cfg, true)
 	require.NoError(t, err)
 
 	// Start server

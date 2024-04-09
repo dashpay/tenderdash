@@ -211,7 +211,7 @@ func MakeGenesis(testnet *e2e.Testnet, genesisTime time.Time) (types.GenesisDoc,
 func MakeConfig(node *e2e.Node) (*config.Config, error) {
 	cfg := config.DefaultConfig()
 	cfg.Moniker = node.Name
-	cfg.ProxyApp = AppAddressTCP
+	cfg.Abci.ProxyApp = AppAddressTCP
 	cfg.TxIndex = config.TestTxIndexConfig()
 
 	if node.LogLevel != "" {
@@ -232,15 +232,15 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 
 	switch node.Testnet.ABCIProtocol {
 	case e2e.ProtocolUNIX:
-		cfg.ProxyApp = AppAddressUNIX
+		cfg.Abci.ProxyApp = AppAddressUNIX
 	case e2e.ProtocolTCP:
-		cfg.ProxyApp = AppAddressTCP
+		cfg.Abci.ProxyApp = AppAddressTCP
 	case e2e.ProtocolGRPC:
-		cfg.ProxyApp = AppAddressTCP
-		cfg.ABCI = ABCIGRPC
+		cfg.Abci.ProxyApp = AppAddressTCP
+		cfg.Abci.Transport = ABCIGRPC
 	case e2e.ProtocolBuiltin:
-		cfg.ProxyApp = ""
-		cfg.ABCI = ""
+		cfg.Abci.ProxyApp = ""
+		cfg.Abci.Transport = ""
 	default:
 		return nil, fmt.Errorf("unexpected ABCI protocol setting %q", node.Testnet.ABCIProtocol)
 	}

@@ -108,7 +108,7 @@ func makeGRPCClientServer(
 	logger log.Logger,
 	app types.Application,
 	name string,
-	limits map[string]uint16,
+	concurrency map[string]uint16,
 ) (Client, service.Service, error) {
 	ctx, cancel := context.WithCancel(ctx)
 	t.Cleanup(cancel)
@@ -124,8 +124,7 @@ func makeGRPCClientServer(
 		return nil, nil, err
 	}
 
-	client := NewGRPCClient(logger.With("module", "abci-client"), socket, true)
-	client.(*grpcClient).SetMaxConcurrentStreams(limits)
+	client := NewGRPCClient(logger.With("module", "abci-client"), socket, concurrency, true)
 
 	if err := client.Start(ctx); err != nil {
 		cancel()

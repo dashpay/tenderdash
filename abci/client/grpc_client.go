@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net"
+	"strings"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -45,7 +46,7 @@ var _ Client = (*grpcClient)(nil)
 // NewGRPCClient creates a gRPC client, which will connect to addr upon the
 // start. Note Client#Start returns an error if connection is unsuccessful and
 // mustConnect is true.
-func NewGRPCClient(logger log.Logger, addr string, mustConnect bool) Client {
+func NewGRPCClient(logger log.Logger, addr string, concurrency map[string]uint16, mustConnect bool) Client {
 	cli := &grpcClient{
 		logger:      logger,
 		addr:        addr,
@@ -53,7 +54,17 @@ func NewGRPCClient(logger log.Logger, addr string, mustConnect bool) Client {
 		concurrency: make(map[string]chan struct{}, 20),
 	}
 	cli.BaseService = *service.NewBaseService(logger, "grpcClient", cli)
+	cli.SetMaxConcurrentStreams(concurrency)
+
 	return cli
+}
+
+func methodID(method string) string {
+	if pos := strings.LastIndex(method, "/"); pos > 0 {
+		method = method[pos+1:]
+	}
+
+	return strings.ToLower(method)
 }
 
 // SetMaxConcurrentStreams sets the maximum number of concurrent streams to be
@@ -66,12 +77,14 @@ func (cli *grpcClient) SetMaxConcurrentStreamsForMethod(method string, n uint16)
 	if cli.IsRunning() {
 		panic("cannot set max concurrent streams after starting the client")
 	}
-
+	var ch chan struct{}
 	if n != 0 {
-		cli.mtx.Lock()
-		cli.concurrency[method] = make(chan struct{}, n)
-		cli.mtx.Unlock()
+		ch = make(chan struct{}, n)
 	}
+
+	cli.mtx.Lock()
+	cli.concurrency[methodID(method)] = ch
+	cli.mtx.Unlock()
 }
 
 // SetMaxConcurrentStreams sets the maximum number of concurrent streams to be
@@ -103,7 +116,7 @@ func dialerFunc(_ctx context.Context, addr string) (net.Conn, error) {
 // Special method name "*" can be used to define the default limit.
 // If no limit is set for the method, the default limit is used.
 func (cli *grpcClient) rateLimit(method string) context.CancelFunc {
-	ch := cli.concurrency[method]
+	ch := cli.concurrency[methodID(method)]
 	// handle default
 	if ch == nil {
 		ch = cli.concurrency["*"]

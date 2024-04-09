@@ -11,6 +11,7 @@ import (
 	abciclientent "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abciserver "github.com/dashpay/tenderdash/abci/server"
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
 )
 
@@ -34,7 +35,8 @@ func TestClientServerNoAddrPrefix(t *testing.T) {
 	assert.NoError(t, err, "expected no error on server.Start")
 	t.Cleanup(server.Wait)
 
-	client, err := abciclientent.NewClient(logger, addr, transport, true)
+	cfg := config.AbciConfig{ProxyApp: addr, Transport: transport}
+	client, err := abciclientent.NewClient(logger, cfg, true)
 	assert.NoError(t, err, "expected no error on NewClient")
 	err = client.Start(ctx)
 	assert.NoError(t, err, "expected no error on client.Start")

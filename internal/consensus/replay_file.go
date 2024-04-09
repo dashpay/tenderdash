@@ -34,7 +34,7 @@ const (
 func RunReplayFile(
 	ctx context.Context,
 	logger log.Logger,
-	cfg config.BaseConfig,
+	cfg config.Config,
 	csConfig *config.ConsensusConfig,
 	console bool,
 ) error {
@@ -298,7 +298,7 @@ func (pb *playback) replayConsoleLoop(ctx context.Context) (int, error) {
 // convenience for replay mode
 func newConsensusStateForReplay(
 	ctx context.Context,
-	cfg config.BaseConfig,
+	cfg config.Config,
 	logger log.Logger,
 	csConfig *config.ConsensusConfig,
 ) (*State, error) {
@@ -327,7 +327,7 @@ func newConsensusStateForReplay(
 		return nil, err
 	}
 
-	client, _, err := proxy.ClientFactory(logger, cfg.ProxyApp, cfg.ABCI, cfg.DBDir())
+	client, _, err := proxy.ClientFactory(logger, *cfg.Abci, cfg.DBDir())
 	if err != nil {
 		return nil, err
 	}
