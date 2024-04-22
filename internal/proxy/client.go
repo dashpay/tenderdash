@@ -13,6 +13,7 @@ import (
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmos "github.com/dashpay/tenderdash/libs/os"
 	"github.com/dashpay/tenderdash/libs/service"
@@ -25,7 +26,9 @@ import (
 //
 // The Closer is a noop except for persistent_kvstore applications,
 // which will clean up the store.
-func ClientFactory(logger log.Logger, addr, transport, dbDir string) (abciclient.Client, io.Closer, error) {
+func ClientFactory(logger log.Logger, cfg config.AbciConfig, dbDir string) (abciclient.Client, io.Closer, error) {
+	addr := cfg.Address
+
 	switch addr {
 	case "kvstore":
 		app, err := kvstore.NewMemoryApp(
@@ -54,7 +57,7 @@ func ClientFactory(logger log.Logger, addr, transport, dbDir string) (abciclient
 		return abciclient.NewLocalClient(logger, types.NewBaseApplication()), tmos.NoopCloser{}, nil
 	default:
 		const mustConnect = false // loop retrying
-		client, err := abciclient.NewClient(logger, addr, transport, mustConnect)
+		client, err := abciclient.NewClient(logger, cfg, mustConnect)
 		if err != nil {
 			return nil, tmos.NoopCloser{}, err
 		}

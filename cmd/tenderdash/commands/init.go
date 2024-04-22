@@ -59,7 +59,6 @@ func initFilesWithConfig(ctx context.Context, conf nodeConfig, logger log.Logger
 		pv  *privval.FilePV
 		err error
 	)
-
 	if conf.Mode == config.ModeValidator {
 		// private validator
 		privValKeyFile := conf.PrivValidator.KeyFile()
@@ -74,8 +73,8 @@ func initFilesWithConfig(ctx context.Context, conf nodeConfig, logger log.Logger
 				"stateFile", privValStateFile)
 		} else {
 			pv = privval.GenFilePV(privValKeyFile, privValStateFile)
-			if err != nil {
-				return err
+			if pv == nil {
+				return fmt.Errorf("failed to create priv validator at %v", privValKeyFile)
 			}
 			if err := pv.Save(); err != nil {
 				return err
@@ -150,6 +149,5 @@ func initFilesWithConfig(ctx context.Context, conf nodeConfig, logger log.Logger
 		return err
 	}
 	logger.Info("Generated config", "mode", conf.Mode)
-
 	return nil
 }

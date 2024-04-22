@@ -86,15 +86,6 @@ const defaultConfigTemplate = `# This is a TOML config file.
 ###                   Main Base Config Options                      ###
 #######################################################################
 
-# TCP or UNIX socket address of the ABCI application,
-# or routing rules for routed multi-app setup,
-# or the name of an ABCI application compiled in with the Tendermint binary
-# Example for routed multi-app setup:
-#   abci = "routed"
-#   proxy-app = "Info:socket:unix:///tmp/socket.1,Info:socket:unix:///tmp/socket.2,CheckTx:socket:unix:///tmp/socket.1,*:socket:unix:///tmp/socket.3"
-
-proxy-app = "{{ .BaseConfig.ProxyApp }}"
-
 # A custom human readable name for this node
 moniker = "{{ .BaseConfig.Moniker }}"
 
@@ -151,12 +142,44 @@ genesis-file = "{{ js .BaseConfig.Genesis }}"
 # Path to the JSON file containing the private key to use for node authentication in the p2p protocol
 node-key-file = "{{ js .BaseConfig.NodeKey }}"
 
-# Mechanism to connect to the ABCI application: socket | grpc | routed
-abci = "{{ .BaseConfig.ABCI }}"
-
 # If true, query the ABCI app on connecting to a new peer
 # so the app can decide if we should keep the connection or not
 filter-peers = {{ .BaseConfig.FilterPeers }}
+
+#######################################################
+###       ABCI App Connection Options               ###
+#######################################################
+
+
+[abci]
+
+
+# TCP or UNIX socket address of the ABCI application,
+# or routing rules for routed multi-app setup,
+# or the name of an ABCI application compiled in with the Tendermint binary
+# Example for routed multi-app setup:
+#   abci = "routed"
+#   address = "Info:socket:unix:///tmp/socket.1,Info:socket:unix:///tmp/socket.2,CheckTx:socket:unix:///tmp/socket.1,*:socket:unix:///tmp/socket.3"
+
+address = "{{ .Abci.Address }}"
+
+# Transport mechanism to connect to the ABCI application: socket | grpc | routed
+transport = "{{ .Abci.Transport }}"
+
+# Maximum number of simultaneous connections to the ABCI application
+# per each method. Map of a gRPC method name,like "echo", to the number of concurrent connections.
+# Special value "*" can be used to set the default limit for methods not explicitly listed.
+#
+# Example:
+#
+# grpc-concurrency = [
+#	{ "*" = 10 },
+#	{ "echo" = 2 },
+#	{ "info" = 2 },
+#]
+grpc-concurrency = [{{ range $key, $value := .Abci.GrpcConcurrency }}
+	{ "{{ $key }}" = {{ $value }} },{{ end }}
+]
 
 
 #######################################################

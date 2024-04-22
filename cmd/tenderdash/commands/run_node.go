@@ -48,10 +48,10 @@ func AddNodeFlags(cmd *cobra.Command, conf *cfg.Config) {
 	// abci flags
 	cmd.Flags().String(
 		"proxy-app",
-		conf.ProxyApp,
+		conf.Abci.Address,
 		"proxy app address, or one of: 'kvstore',"+
 			" 'persistent_kvstore', 'e2e' or 'noop' for local testing.")
-	cmd.Flags().String("abci", conf.ABCI, "specify abci transport (socket | grpc | routed)")
+	cmd.Flags().String("abci", conf.Abci.Transport, "specify abci transport (socket | grpc | routed)")
 
 	// rpc flags
 	cmd.Flags().String("rpc.laddr", conf.RPC.ListenAddress, "RPC listen address. Port required")
@@ -98,7 +98,7 @@ func NewRunNodeCmd(nodeProvider cfg.ServiceProvider, conf *cfg.Config, logger lo
 		Use:     "start",
 		Aliases: []string{"node", "run"},
 		Short:   "Run the tendermint node",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _args []string) error {
 			if err := checkGenesisHash(conf); err != nil {
 				return err
 			}

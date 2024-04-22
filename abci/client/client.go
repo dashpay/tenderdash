@@ -7,6 +7,7 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/service"
 )
@@ -36,12 +37,15 @@ type Client interface {
 
 // NewClient returns a new ABCI client of the specified transport type.
 // It returns an error if the transport is not "socket" or "grpc"
-func NewClient(logger log.Logger, addr, transport string, mustConnect bool) (Client, error) {
+func NewClient(logger log.Logger, cfg config.AbciConfig, mustConnect bool) (Client, error) {
+	transport := cfg.Transport
+	addr := cfg.Address
+
 	switch transport {
 	case "socket":
 		return NewSocketClient(logger, addr, mustConnect), nil
 	case "grpc":
-		return NewGRPCClient(logger, addr, mustConnect), nil
+		return NewGRPCClient(logger, addr, cfg.GrpcConcurrency, mustConnect), nil
 	case "routed":
 		return NewRoutedClientWithAddr(logger, addr, mustConnect)
 	default:

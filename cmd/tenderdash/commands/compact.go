@@ -27,7 +27,7 @@ the planned refactor to the storage engine.
 
 Currently, only GoLevelDB is supported.
 	`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_cmd *cobra.Command, _args []string) error {
 			if cfg.DBBackend != "goleveldb" {
 				return errors.New("compaction is currently only supported with goleveldb")
 			}

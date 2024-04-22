@@ -101,7 +101,8 @@ func newDefaultNode(
 		)
 	}
 
-	appClient, _, err := proxy.ClientFactory(logger, cfg.ProxyApp, cfg.ABCI, cfg.DBDir())
+	logger.Debug("Loaded ABCI config", "config", cfg.Abci)
+	appClient, _, err := proxy.ClientFactory(logger, *cfg.Abci, cfg.DBDir())
 	if err != nil {
 		return nil, err
 	}

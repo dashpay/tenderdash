@@ -358,7 +358,7 @@ func makeGRPCClientServer(
 		return nil, nil, err
 	}
 
-	client := abciclient.NewGRPCClient(logger.With("module", "abci-client"), socket, true)
+	client := abciclient.NewGRPCClient(logger.With("module", "abci-client"), socket, nil, true)
 
 	if err := client.Start(ctx); err != nil {
 		cancel()

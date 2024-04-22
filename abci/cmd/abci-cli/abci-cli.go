@@ -21,6 +21,7 @@ import (
 	"github.com/dashpay/tenderdash/abci/server"
 	servertest "github.com/dashpay/tenderdash/abci/tests/server"
 	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/proto/tendermint/crypto"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -64,7 +65,8 @@ func RootCmmand(logger log.Logger) *cobra.Command {
 
 			if client == nil {
 				var err error
-				client, err = abciclient.NewClient(logger.With("module", "abci-client"), flagAddress, flagAbci, false)
+				cfg := config.AbciConfig{Address: flagAddress, Transport: flagAbci}
+				client, err = abciclient.NewClient(logger.With("module", "abci-client"), cfg, false)
 				if err != nil {
 					return err
 				}
