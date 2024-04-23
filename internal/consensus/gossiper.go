@@ -246,7 +246,7 @@ func (g *msgGossiper) GossipVote(ctx context.Context, rs cstypes.RoundState, prs
 		"proto_vote_size", protoVote.Size(),
 	})
 	logger.Trace("syncing vote message")
-	err := g.sync(ctx, protoVote, updatePeerVote(g.ps, vote))
+	err := g.sync(ctx, protoVote, nil)
 	if err != nil {
 		logger.Error("failed to sync vote message to the peer", "error", err)
 	}
@@ -400,12 +400,6 @@ func updatePeerCommit(ps *PeerState, commit *types.Commit) func() error {
 	return func() error {
 		ps.SetHasCommit(commit)
 		return nil
-	}
-}
-
-func updatePeerVote(ps *PeerState, vote *types.Vote) func() error {
-	return func() error {
-		return ps.SetHasVote(vote)
 	}
 }
 

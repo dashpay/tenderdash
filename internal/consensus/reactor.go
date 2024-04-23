@@ -521,38 +521,55 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 
 		// Respond with a VoteSetBitsMessage showing which votes we have and
 		// consequently shows which we don't have.
-		var ourVotes *bits.BitArray
-		switch vsmMsg.Type {
-		case tmproto.PrevoteType:
-			ourVotes = votes.Prevotes(msg.Round).BitArrayByBlockID(vsmMsg.BlockID)
-
-		case tmproto.PrecommitType:
-			ourVotes = votes.Precommits(msg.Round).BitArrayByBlockID(vsmMsg.BlockID)
-
-		default:
-			panic("bad VoteSetBitsMessage field type; forgot to add a check in ValidateBasic?")
+		if err := r.sendVoteSetBits(ctx, envelope.From, vsmMsg.Height, vsmMsg.Round, vsmMsg.BlockID, vsmMsg.Type, voteSetCh); err != nil {
+			return fmt.Errorf("send vote set bits to %s failed: %w", envelope.From, err)
 		}
-
-		eMsg := &tmcons.VoteSetBits{
-			Height:  msg.Height,
-			Round:   msg.Round,
-			Type:    msg.Type,
-			BlockID: msg.BlockID,
-		}
-
-		if votesProto := ourVotes.ToProto(); votesProto != nil {
-			eMsg.Votes = *votesProto
-		}
-
-		if err := voteSetCh.Send(ctx, p2p.Envelope{
-			To:      envelope.From,
-			Message: eMsg,
-		}); err != nil {
-			return err
-		}
-
 	default:
 		return fmt.Errorf("received unknown message on StateChannel: %T", msg)
+	}
+
+	return nil
+}
+
+// sendVoteSetBits notifies the peer about votes we have for a given height, round, and blockID.
+func (r *Reactor) sendVoteSetBits(ctx context.Context, to types.NodeID, height int64, round int32, blockID types.BlockID, voteType tmproto.SignedMsgType, voteSetBitsCh p2p.Channel) error {
+	stateData := r.state.GetStateData()
+	ourHeight, votes := stateData.HeightVoteSet()
+
+	r.logger.Trace("sending VoteSetBits", "peer", to, "height", height, "round", round, "blockID", blockID, "voteType", voteType)
+
+	if height != ourHeight {
+		return fmt.Errorf("invalid height; we are at %d, but requestd vote set bits at %d", ourHeight, height)
+	}
+
+	var ourVotes *bits.BitArray
+	switch voteType {
+	case tmproto.PrevoteType:
+		ourVotes = votes.Prevotes(round).BitArrayByBlockID(blockID)
+
+	case tmproto.PrecommitType:
+		ourVotes = votes.Precommits(round).BitArrayByBlockID(blockID)
+
+	default:
+		panic("bad VoteSetBitsMessage field type; forgot to add a check in ValidateBasic?")
+	}
+
+	voteBitsMsg := &tmcons.VoteSetBits{
+		Height:  height,
+		Round:   round,
+		Type:    voteType,
+		BlockID: blockID.ToProto(),
+	}
+
+	if votesProto := ourVotes.ToProto(); votesProto != nil {
+		voteBitsMsg.Votes = *votesProto
+	}
+
+	if err := voteSetBitsCh.Send(ctx, p2p.Envelope{
+		To:      to,
+		Message: voteBitsMsg,
+	}); err != nil {
+		return err
 	}
 
 	return nil
@@ -603,7 +620,7 @@ func (r *Reactor) handleDataMessage(ctx context.Context, envelope *p2p.Envelope,
 // fail to find the peer state for the envelope sender, we perform a no-op and
 // return. This can happen when we process the envelope after the peer is
 // removed.
-func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope, msgI Message) error {
+func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope, msgI Message, voteSetCh p2p.Channel) error {
 	logger := r.logger.With("peer", envelope.From, "ch_id", "VoteChannel")
 
 	ps, ok := r.GetPeerState(envelope.From)
@@ -640,16 +657,23 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 
 		if isValidator { // ignore votes on non-validator nodes; TODO don't even send it
 			vMsg := msgI.(*VoteMessage)
+			vote := vMsg.Vote
 
-			if err := vMsg.Vote.ValidateBasic(); err != nil {
+			if err := vote.ValidateBasic(); err != nil {
 				return fmt.Errorf("invalid vote received from %s: %w", envelope.From, err)
 			}
 
 			ps.EnsureVoteBitArrays(height, valSize)
 			ps.EnsureVoteBitArrays(height-1, lastValSize)
-			if err := ps.SetHasVote(vMsg.Vote); err != nil {
+			if err := ps.SetHasVote(vote); err != nil {
 				return err
 			}
+
+			// let's respond with our current votes
+			if err := r.sendVoteSetBits(ctx, envelope.From, vote.Height, vote.Round, vote.BlockID, vote.Type, voteSetCh); err != nil {
+				return fmt.Errorf("send vote set bits to %s failed: %w", envelope.From, err)
+			}
+
 			return r.state.sendMessage(ctx, vMsg, envelope.From)
 		}
 	default:
@@ -667,6 +691,7 @@ func (r *Reactor) handleVoteSetBitsMessage(_ context.Context, envelope *p2p.Enve
 	logger := r.logger.With("peer", envelope.From, "ch_id", "VoteSetBitsChannel")
 
 	ps, ok := r.GetPeerState(envelope.From)
+	logger.Trace("received vote set bits message", "peer", envelope.From, "msg", envelope.Message)
 	if !ok || ps == nil {
 		r.logger.Debug("failed to find peer state")
 		return nil
@@ -743,7 +768,7 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 	case p2p.ConsensusDataChannel:
 		err = r.handleDataMessage(ctx, envelope, msg)
 	case p2p.ConsensusVoteChannel:
-		err = r.handleVoteMessage(ctx, envelope, msg)
+		err = r.handleVoteMessage(ctx, envelope, msg, chans.voteSet)
 	case p2p.VoteSetBitsChannel:
 		err = r.handleVoteSetBitsMessage(ctx, envelope, msg)
 	default:
