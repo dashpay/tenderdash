@@ -532,14 +532,15 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 }
 
 // sendVoteSetBits notifies the peer about votes we have for a given height, round, and blockID.
-func (r *Reactor) sendVoteSetBits(ctx context.Context, to types.NodeID, height int64, round int32, blockID types.BlockID, voteType tmproto.SignedMsgType, voteSetBitsCh p2p.Channel) error {
+func (r *Reactor) sendVoteSetBits(ctx context.Context, to types.NodeID, peerHeight int64, round int32, blockID types.BlockID, voteType tmproto.SignedMsgType, voteSetBitsCh p2p.Channel) error {
 	stateData := r.state.GetStateData()
 	ourHeight, votes := stateData.HeightVoteSet()
 
-	r.logger.Trace("sending VoteSetBits", "peer", to, "height", height, "round", round, "blockID", blockID, "voteType", voteType)
+	r.logger.Trace("sending VoteSetBits", "peer", to, "height", peerHeight, "round", round, "blockID", blockID, "voteType", voteType)
 
-	if height != ourHeight {
-		return fmt.Errorf("invalid height; we are at %d, but requestd vote set bits at %d", ourHeight, height)
+	if peerHeight != ourHeight {
+		r.logger.Debug("invalid height; we are at %d, but peer requested vote set bits at %d, skipping send", "height", ourHeight, "peer_height", peerHeight)
+		return nil
 	}
 
 	var ourVotes *bits.BitArray
@@ -555,7 +556,7 @@ func (r *Reactor) sendVoteSetBits(ctx context.Context, to types.NodeID, height i
 	}
 
 	voteBitsMsg := &tmcons.VoteSetBits{
-		Height:  height,
+		Height:  peerHeight,
 		Round:   round,
 		Type:    voteType,
 		BlockID: blockID.ToProto(),
@@ -669,12 +670,23 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 				return err
 			}
 
-			// let's respond with our current votes
-			if err := r.sendVoteSetBits(ctx, envelope.From, vote.Height, vote.Round, vote.BlockID, vote.Type, voteSetCh); err != nil {
-				return fmt.Errorf("send vote set bits to %s failed: %w", envelope.From, err)
+			if err := r.state.sendMessage(ctx, vMsg, envelope.From); err != nil {
+				return err
 			}
 
-			return r.state.sendMessage(ctx, vMsg, envelope.From)
+			// let's respond with our current votes
+			if envelope.From != "" {
+				if err := r.sendVoteSetBits(ctx,
+					envelope.From,
+					vote.Height, vote.Round,
+					vote.BlockID,
+					vote.Type,
+					voteSetCh); err != nil {
+					return fmt.Errorf("send vote set bits to %s failed: %w", envelope.From, err)
+				}
+			}
+
+			return nil
 		}
 	default:
 		return fmt.Errorf("received unknown message on VoteChannel: %T", msg)
