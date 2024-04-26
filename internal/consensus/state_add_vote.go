@@ -45,6 +45,7 @@ func newAddVoteAction(cs *State, ctrl *Controller, statsQueue *chanQueue[msgInfo
 	statsMw := addVoteStatsMw(statsQueue)
 	dispatchPrecommitMw := addVoteDispatchPrecommitMw(ctrl)
 	verifyVoteExtensionMw := addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExec, cs.metrics, cs.emitter)
+	addToLastPrecommitMw := addVoteToLastPrecommitMw(cs.eventPublisher, ctrl)
 	return &AddVoteAction{
 		prevote: withVoterMws(
 			addToVoteSet,
@@ -61,6 +62,7 @@ func newAddVoteAction(cs *State, ctrl *Controller, statsQueue *chanQueue[msgInfo
 			dispatchPrecommitMw,
 			verifyVoteExtensionMw,
 			validateVoteMw,
+			addToLastPrecommitMw,
 			errorMw,
 			statsMw,
 		),
@@ -96,6 +98,42 @@ func addVoteToVoteSetFunc(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
 		}
 		_ = ep.PublishVoteEvent(vote)
 		return true, nil
+	}
+}
+
+func addVoteToLastPrecommitMw(ep *EventPublisher, ctrl *Controller) AddVoteMiddlewareFunc {
+	return func(next AddVoteFunc) AddVoteFunc {
+		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+			if vote.Height+1 != stateData.Height || vote.Type != tmproto.PrecommitType {
+				return next(ctx, stateData, vote)
+			}
+			logger := log.FromCtxOrNop(ctx)
+			if stateData.Step != cstypes.RoundStepNewHeight {
+				// Late precommit at prior height is ignored
+				logger.Trace("precommit vote came in after commit timeout and has been ignored")
+				return false, nil
+			}
+			if stateData.LastPrecommits == nil {
+				logger.Debug("no last round precommits on node", "vote", vote)
+				return false, nil
+			}
+			added, err := stateData.LastPrecommits.AddVote(vote)
+			if !added {
+				logger.Debug("vote not added to last precommits", "err", err)
+				return false, nil
+			}
+			logger.Trace("added vote to last precommits", "last_precommits", stateData.LastPrecommits)
+
+			err = ep.PublishVoteEvent(vote)
+			if err != nil {
+				return added, err
+			}
+
+			if stateData.LastPrecommits.HasAll() {
+				_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
+			}
+			return added, err
+		}
 	}
 }
 

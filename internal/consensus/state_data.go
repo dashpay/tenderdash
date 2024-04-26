@@ -226,6 +226,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 	switch {
 	case state.LastBlockHeight == 0: // Very first commit should be empty.
 		s.LastCommit = (*types.Commit)(nil)
+		s.LastPrecommits = (*types.VoteSet)(nil)
 	case s.CommitRound > -1 && s.Votes != nil && commit == nil: // Otherwise, use cs.Votes
 		if !s.Votes.Precommits(s.CommitRound).HasTwoThirdsMajority() {
 			panic(fmt.Sprintf(
@@ -233,9 +234,14 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 				state.LastBlockHeight, s.CommitRound, s.Votes.Precommits(s.CommitRound),
 			))
 		}
-		precommits := s.Votes.Precommits(s.CommitRound)
-		s.LastCommit = precommits.MakeCommit()
+		s.LastPrecommits = s.Votes.Precommits(s.CommitRound)
+		s.LastCommit = s.LastPrecommits.MakeCommit()
 	case commit != nil:
+		// We either got the commit from a remote node
+		// In which Last precommits will be nil
+		// Or we got the commit from finalize commit
+		// In which Last precommits will not be nil
+		s.LastPrecommits = s.Votes.Precommits(s.CommitRound)
 		s.LastCommit = commit
 	case s.LastCommit == nil:
 		// NOTE: when Tendermint starts, it has no votes. reconstructLastCommit

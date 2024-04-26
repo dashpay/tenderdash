@@ -677,8 +677,7 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 	case *tmcons.Vote:
 		stateData := r.state.stateDataStore.Get()
 		isValidator := stateData.isValidator(r.state.privValidator.ProTxHash)
-		height, valSize := stateData.Height, stateData.Validators.Size()
-		lastValSize := len(stateData.LastValidators.Validators)
+		height, valSize, lastCommitSize := stateData.Height, stateData.Validators.Size(), stateData.LastPrecommits.Size()
 
 		if isValidator { // ignore votes on non-validator nodes; TODO don't even send it
 			vMsg := msgI.(*VoteMessage)
@@ -689,7 +688,7 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 			}
 
 			ps.EnsureVoteBitArrays(height, valSize)
-			ps.EnsureVoteBitArrays(height-1, lastValSize)
+			ps.EnsureVoteBitArrays(height-1, lastCommitSize)
 			if err := ps.SetHasVote(vote); err != nil {
 				return err
 			}
