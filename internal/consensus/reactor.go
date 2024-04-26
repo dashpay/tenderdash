@@ -473,7 +473,7 @@ func (r *Reactor) peerDown(_ context.Context, peerUpdate p2p.PeerUpdate, _chans 
 // If we fail to find the peer state for the envelope sender, we perform a no-op
 // and return. This can happen when we process the envelope after the peer is
 // removed.
-func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope, msgI Message, voteSetCh p2p.Channel) error {
+func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope, msgI Message, chans channelBundle) error {
 	ps, ok := r.GetPeerState(envelope.From)
 	if !ok || ps == nil {
 		r.logger.Debug("failed to find peer state", "peer", envelope.From, "ch_id", "StateChannel")
@@ -521,7 +521,7 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 
 		// Respond with a VoteSetBitsMessage showing which votes we have and
 		// consequently shows which we don't have.
-		if err := r.sendVoteSetBits(ctx, envelope.From, vsmMsg.Height, vsmMsg.Round, vsmMsg.BlockID, vsmMsg.Type, voteSetCh); err != nil {
+		if err := r.sendVoteSetBits(ctx, envelope.From, vsmMsg.Height, vsmMsg.Round, vsmMsg.BlockID, vsmMsg.Type, chans); err != nil {
 			return fmt.Errorf("send vote set bits to %s failed: %w", envelope.From, err)
 		}
 	default:
@@ -532,14 +532,37 @@ func (r *Reactor) handleStateMessage(ctx context.Context, envelope *p2p.Envelope
 }
 
 // sendVoteSetBits notifies the peer about votes we have for a given height, round, and blockID.
-func (r *Reactor) sendVoteSetBits(ctx context.Context, to types.NodeID, peerHeight int64, round int32, blockID types.BlockID, voteType tmproto.SignedMsgType, voteSetBitsCh p2p.Channel) error {
+func (r *Reactor) sendVoteSetBits(ctx context.Context,
+	to types.NodeID,
+	peerHeight int64,
+	round int32,
+	blockID types.BlockID,
+	voteType tmproto.SignedMsgType,
+	chans channelBundle,
+) error {
 	stateData := r.state.GetStateData()
 	ourHeight, votes := stateData.HeightVoteSet()
 
 	r.logger.Trace("sending VoteSetBits", "peer", to, "height", peerHeight, "round", round, "blockID", blockID, "voteType", voteType)
 
+	if peerHeight == ourHeight-1 {
+		r.logger.Debug("invalid height - peer is behind, sending commit instead of vote bit set",
+			"height", ourHeight, "peer_height", peerHeight, "commit", stateData.LastCommit)
+
+		if err := chans.vote.Send(ctx, p2p.Envelope{
+			To: to,
+			Message: &tmcons.Commit{
+				Commit: stateData.LastCommit.ToProto(),
+			},
+		}); err != nil {
+			return fmt.Errorf("cannot send commit to peer: %w", err)
+		}
+		return nil
+	}
+
 	if peerHeight != ourHeight {
-		r.logger.Debug("invalid height; we are at %d, but peer requested vote set bits at %d, skipping send", "height", ourHeight, "peer_height", peerHeight)
+		r.logger.Debug("invalid height - peer on a different height, not sending vote bit set",
+			"height", ourHeight, "peer_height", peerHeight)
 		return nil
 	}
 
@@ -566,7 +589,7 @@ func (r *Reactor) sendVoteSetBits(ctx context.Context, to types.NodeID, peerHeig
 		voteBitsMsg.Votes = *votesProto
 	}
 
-	if err := voteSetBitsCh.Send(ctx, p2p.Envelope{
+	if err := chans.voteSet.Send(ctx, p2p.Envelope{
 		To:      to,
 		Message: voteBitsMsg,
 	}); err != nil {
@@ -621,7 +644,7 @@ func (r *Reactor) handleDataMessage(ctx context.Context, envelope *p2p.Envelope,
 // fail to find the peer state for the envelope sender, we perform a no-op and
 // return. This can happen when we process the envelope after the peer is
 // removed.
-func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope, msgI Message, voteSetCh p2p.Channel) error {
+func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope, msgI Message, chans channelBundle) error {
 	logger := r.logger.With("peer", envelope.From, "ch_id", "VoteChannel")
 
 	ps, ok := r.GetPeerState(envelope.From)
@@ -639,6 +662,7 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 
 	switch msg := envelope.Message.(type) {
 	case *tmcons.Commit:
+		r.logger.Debug("received commit message", "msg", msg, "peer", envelope.From)
 		c, err := types.CommitFromProto(msg.Commit)
 		if err != nil {
 			return err
@@ -676,12 +700,20 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 
 			// let's respond with our current votes
 			if envelope.From != "" {
+				r.logger.Debug("responding with our votes",
+					"peer", envelope.From,
+					"vote", vote,
+					"height", height,
+					"vote_height", vote.Height,
+					"vote_round", vote.Round,
+				)
+
 				if err := r.sendVoteSetBits(ctx,
 					envelope.From,
 					vote.Height, vote.Round,
 					vote.BlockID,
 					vote.Type,
-					voteSetCh); err != nil {
+					chans); err != nil {
 					return fmt.Errorf("send vote set bits to %s failed: %w", envelope.From, err)
 				}
 			}
@@ -776,11 +808,11 @@ func (r *Reactor) handleMessage(ctx context.Context, envelope *p2p.Envelope, cha
 
 	switch envelope.ChannelID {
 	case p2p.ConsensusStateChannel:
-		err = r.handleStateMessage(ctx, envelope, msg, chans.voteSet)
+		err = r.handleStateMessage(ctx, envelope, msg, chans)
 	case p2p.ConsensusDataChannel:
 		err = r.handleDataMessage(ctx, envelope, msg)
 	case p2p.ConsensusVoteChannel:
-		err = r.handleVoteMessage(ctx, envelope, msg, chans.voteSet)
+		err = r.handleVoteMessage(ctx, envelope, msg, chans)
 	case p2p.VoteSetBitsChannel:
 		err = r.handleVoteSetBitsMessage(ctx, envelope, msg)
 	default:
