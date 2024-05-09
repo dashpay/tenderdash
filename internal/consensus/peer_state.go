@@ -53,6 +53,9 @@ type PeerState struct {
 
 	// ProTxHash is accessible only for the validator
 	ProTxHash types.ProTxHash
+
+	// TODO: Remove
+	receivedVotes map[string]bool
 }
 
 // NewPeerState returns a new PeerState for the given node ID.
@@ -613,10 +616,13 @@ func (ps *PeerState) ApplyVoteSetBitsMessage(msg *VoteSetBitsMessage, ourVotes *
 	if votes != nil {
 		if ourVotes == nil {
 			votes.Update(msg.Votes)
+			ps.logger.Debug("ApplyVoteSetBitsMessage", "otherVotes", nil, "newVotes", msg.Votes.String(), "ourVotes", ourVotes.String())
+
 		} else {
 			otherVotes := votes.Sub(ourVotes)
 			hasVotes := otherVotes.Or(msg.Votes)
 			votes.Update(hasVotes)
+			ps.logger.Debug("ApplyVoteSetBitsMessage", "otherVotes", otherVotes.String(), "newVotes", hasVotes.String(), "ourVotes", ourVotes.String())
 		}
 	}
 }

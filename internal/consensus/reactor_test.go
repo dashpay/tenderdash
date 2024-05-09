@@ -535,6 +535,9 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		t.Skip("skipping test in short mode")
 	}
 
+	sync.Opts.DeadlockTimeout = 10 * time.Second
+	sync.Opts.Disable = false
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 

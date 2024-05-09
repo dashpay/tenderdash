@@ -545,37 +545,30 @@ func (r *Reactor) sendVoteSetBits(ctx context.Context,
 
 	r.logger.Trace("sending VoteSetBits", "peer", to, "height", peerHeight, "round", round, "blockID", blockID, "voteType", voteType)
 
+	var ourVotes *bits.BitArray
+
 	if peerHeight == ourHeight-1 {
-		r.logger.Debug("invalid height - peer is behind, sending commit instead of vote bit set",
-			"height", ourHeight, "peer_height", peerHeight, "commit", stateData.LastCommit)
-
-		if err := chans.vote.Send(ctx, p2p.Envelope{
-			To: to,
-			Message: &tmcons.Commit{
-				Commit: stateData.LastCommit.ToProto(),
-			},
-		}); err != nil {
-			return fmt.Errorf("cannot send commit to peer: %w", err)
-		}
-		return nil
-	}
-
-	if peerHeight != ourHeight {
+		r.logger.Debug("invalid height - peer is 1 height behind, sending previous precommits vote bit set",
+			"height", ourHeight, "peer_height", peerHeight)
+		ourVotes = stateData.LastPrecommits.BitArray()
+		round = stateData.LastPrecommits.GetRound()
+		voteType = tmproto.PrecommitType
+	} else if peerHeight != ourHeight {
 		r.logger.Debug("invalid height - peer on a different height, not sending vote bit set",
 			"height", ourHeight, "peer_height", peerHeight)
 		return nil
-	}
+	} else {
+		// current height
+		switch voteType {
+		case tmproto.PrevoteType:
+			ourVotes = votes.Prevotes(round).BitArrayByBlockID(blockID)
 
-	var ourVotes *bits.BitArray
-	switch voteType {
-	case tmproto.PrevoteType:
-		ourVotes = votes.Prevotes(round).BitArrayByBlockID(blockID)
+		case tmproto.PrecommitType:
+			ourVotes = votes.Precommits(round).BitArrayByBlockID(blockID)
 
-	case tmproto.PrecommitType:
-		ourVotes = votes.Precommits(round).BitArrayByBlockID(blockID)
-
-	default:
-		panic("bad VoteSetBitsMessage field type; forgot to add a check in ValidateBasic?")
+		default:
+			panic("bad VoteSetBitsMessage field type; forgot to add a check in ValidateBasic?")
+		}
 	}
 
 	voteBitsMsg := &tmcons.VoteSetBits{
@@ -675,6 +668,29 @@ func (r *Reactor) handleVoteMessage(ctx context.Context, envelope *p2p.Envelope,
 			return err
 		}
 	case *tmcons.Vote:
+		// TODO: Remove from here
+		ps.mtx.Lock()
+		if ps.receivedVotes == nil {
+			ps.receivedVotes = make(map[string]bool)
+		}
+		vote := msgI.(*VoteMessage).Vote
+		// key := vote.String()
+
+		key := vote.BlockSignature.ShortString()
+
+		if ps.receivedVotes[key] {
+			r.logger.Error("received duplicate vote from peer",
+				"vote", msg.Vote,
+				"peer", envelope.From,
+				"height", vote.Height,
+				"round", vote.Round,
+			)
+		} else {
+			ps.receivedVotes[key] = true
+		}
+		ps.mtx.Unlock()
+		// TODO: Remove to here
+
 		stateData := r.state.stateDataStore.Get()
 		isValidator := stateData.isValidator(r.state.privValidator.ProTxHash)
 		height, valSize, lastCommitSize := stateData.Height, stateData.Validators.Size(), stateData.LastPrecommits.Size()
@@ -749,10 +765,21 @@ func (r *Reactor) handleVoteSetBitsMessage(_ context.Context, envelope *p2p.Enve
 	case *tmcons.VoteSetBits:
 		stateData := r.state.GetStateData()
 		height, votes := stateData.Height, stateData.Votes
+		bid, _ := types.BlockIDFromProto(&msg.BlockID)
 
 		vsbMsg := msgI.(*VoteSetBitsMessage)
 
 		if height == msg.Height {
+			r.logger.Debug("received VoteSetBits",
+				"height", height,
+				"round", stateData.Round,
+				"step", stateData.Step.String(),
+				"peer", envelope.From,
+				"peer_height", msg.Height,
+				"peer_round", msg.Round,
+				"type", msg.Type.String(),
+				"blockID", bid.String())
+
 			var ourVotes *bits.BitArray
 
 			switch msg.Type {
@@ -766,8 +793,24 @@ func (r *Reactor) handleVoteSetBitsMessage(_ context.Context, envelope *p2p.Enve
 				panic("bad VoteSetBitsMessage field type; forgot to add a check in ValidateBasic?")
 			}
 
+			// TODO: If we don't have a vote, `ApplyVoteSetBitsMessage` will exclude the bit from the peer's vote set.
+			// This is to make other parts of code a bit easier, but it also makes newly implemented mechanism which
+			// uses `ApplyVoteSetBitsMessage` to mark votes as received by the peer, less reliable.
+			//
+			// We should store info about all votes possessed by the peer here, to avoid re-sending them, and
+			// adjust other parts of the code accordingly.
 			ps.ApplyVoteSetBitsMessage(vsbMsg, ourVotes)
 		} else {
+			r.logger.Debug("received VoteSetBits for wrong height",
+				"height", height,
+				"round", stateData.Round,
+				"step", stateData.Step.String(),
+				"peer", envelope.From,
+				"peer_height", msg.Height,
+				"peer_round", msg.Round,
+				"type", msg.Type.String(),
+				"blockID", bid.String())
+
 			ps.ApplyVoteSetBitsMessage(vsbMsg, nil)
 		}
 
