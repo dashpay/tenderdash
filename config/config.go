@@ -473,6 +473,11 @@ func TestAbciConfig() *AbciConfig {
 func (cfg *AbciConfig) ValidateBasic() error {
 	var err error
 
+	if cfg == nil {
+		err = multierror.Append(err, errors.New("[abci] config section is nil"))
+		return err
+	}
+
 	for key := range cfg.Other {
 		err = multierror.Append(err, fmt.Errorf("unknown field: %s", key))
 	}
