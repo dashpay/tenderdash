@@ -46,6 +46,7 @@ var (
 	ErrVoteExtensionTypeWrongForRequestID = errors.New("provided vote extension type does not support sign request ID")
 	ErrVoteInvalidValidatorProTxHash      = errors.New("invalid validator pro_tx_hash")
 	ErrVoteInvalidValidatorPubKeySize     = errors.New("invalid validator public key size")
+	ErrVoteMissingValidatorPubKey         = errors.New("missing validator public key")
 	ErrVoteInvalidBlockSignature          = errors.New("invalid block signature")
 	ErrVoteInvalidStateSignature          = errors.New("invalid state signature")
 	ErrVoteStateSignatureShouldBeNil      = errors.New("state signature when voting for nil block")
@@ -197,6 +198,11 @@ func (vote *Vote) verifyBasic(proTxHash ProTxHash, pubKey crypto.PubKey) error {
 	if !bytes.Equal(proTxHash, vote.ValidatorProTxHash) {
 		return ErrVoteInvalidValidatorProTxHash
 	}
+
+	if pubKey == nil {
+		return ErrVoteMissingValidatorPubKey
+	}
+
 	if len(pubKey.Bytes()) != bls12381.PubKeySize {
 		return ErrVoteInvalidValidatorPubKeySize
 	}

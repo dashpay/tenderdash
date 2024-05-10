@@ -169,7 +169,14 @@ func (pb2tm) ValidatorSetFromProtoUpdate(
 			hasPublicKeys = false
 			break
 		}
+
+		pubkey, err := cryptoenc.PubKeyFromProto(*v.PubKey)
+		if err != nil || len(pubkey.Bytes()) == 0 {
+			hasPublicKeys = false
+			break
+		}
 	}
+
 	tmVals, pub, quorumHash, err := PB2TM.ValidatorUpdatesFromValidatorSet(valSetUpdate)
 	if err != nil {
 		return nil, err

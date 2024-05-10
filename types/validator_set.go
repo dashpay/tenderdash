@@ -199,6 +199,9 @@ func (vals *ValidatorSet) ThresholdPublicKeyValid() error {
 		return errors.New("threshold public key is wrong size")
 	}
 	if len(vals.Validators) == 1 && vals.HasPublicKeys {
+		if vals.Validators[0].PubKey == nil {
+			return errors.New("validator public key is not set")
+		}
 		if !vals.Validators[0].PubKey.Equals(vals.ThresholdPublicKey) {
 			return errors.New("incorrect threshold public key")
 		}
