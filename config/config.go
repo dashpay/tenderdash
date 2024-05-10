@@ -134,29 +134,36 @@ func (cfg *Config) SetRoot(root string) *Config {
 // ValidateBasic performs basic validation (checking param bounds, etc.) and
 // returns an error if any check fails.
 func (cfg *Config) ValidateBasic() error {
+	var errs error
 
-	if err := cfg.Abci.ValidateBasic(); err != nil {
-		return fmt.Errorf("error in [abci] section: %w", err)
-	}
 	if err := cfg.BaseConfig.ValidateBasic(); err != nil {
-		return err
+		errs = multierror.Append(errs, err)
 	}
+
+	// ignore [abci] section on seed nodes
+	if cfg.Mode != ModeSeed {
+		if err := cfg.Abci.ValidateBasic(); err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("error in [abci] section: %w", err))
+		}
+	}
+
 	if err := cfg.RPC.ValidateBasic(); err != nil {
-		return fmt.Errorf("error in [rpc] section: %w", err)
+		errs = multierror.Append(errs, fmt.Errorf("error in [rpc] section: %w", err))
 	}
 	if err := cfg.Mempool.ValidateBasic(); err != nil {
-		return fmt.Errorf("error in [mempool] section: %w", err)
+		errs = multierror.Append(errs, fmt.Errorf("error in [mempool] section: %w", err))
 	}
 	if err := cfg.StateSync.ValidateBasic(); err != nil {
-		return fmt.Errorf("error in [statesync] section: %w", err)
+		errs = multierror.Append(errs, fmt.Errorf("error in [statesync] section: %w", err))
 	}
 	if err := cfg.Consensus.ValidateBasic(); err != nil {
-		return fmt.Errorf("error in [consensus] section: %w", err)
+		errs = multierror.Append(errs, fmt.Errorf("error in [consensus] section: %w", err))
 	}
 	if err := cfg.Instrumentation.ValidateBasic(); err != nil {
-		return fmt.Errorf("error in [instrumentation] section: %w", err)
+		errs = multierror.Append(errs, fmt.Errorf("error in [instrumentation] section: %w", err))
 	}
-	return nil
+
+	return errs
 }
 
 func (cfg *Config) DeprecatedFieldWarning() error {
@@ -465,6 +472,11 @@ func TestAbciConfig() *AbciConfig {
 // returns an error if any check fails.
 func (cfg *AbciConfig) ValidateBasic() error {
 	var err error
+
+	if cfg == nil {
+		err = multierror.Append(err, errors.New("[abci] config section is nil"))
+		return err
+	}
 
 	for key := range cfg.Other {
 		err = multierror.Append(err, fmt.Errorf("unknown field: %s", key))
