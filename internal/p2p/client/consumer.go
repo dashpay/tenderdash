@@ -4,9 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"time"
+
+	"golang.org/x/time/rate"
 
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/types"
 )
 
 var (
@@ -41,6 +46,21 @@ type (
 		allowedChannelIDs map[p2p.ChannelID]struct{}
 		next              ConsumerHandler
 	}
+
+	recvRateLimitPerPeerHandler struct {
+		// nTokens is a function that returns number of tokens to consume for a given envelope; if unsure, return 1
+		nTokensFunc func(*p2p.Envelope) uint
+		// limit is the rate limit per peer per second; 0 means no limit
+		limit float64
+		// map of peerID to rate.Limiter
+		limiters sync.Map
+		// next is the next handler in the chain
+		next ConsumerHandler
+		// drop is a flag to silently drop the message if the rate limit is exceeded; otherwise we will wait
+		drop bool
+
+		logger log.Logger
+	}
 )
 
 // WithRecoveryMiddleware creates panic recovery middleware
@@ -69,6 +89,21 @@ func WithValidateMessageHandler(allowedChannelIDs []p2p.ChannelID) ConsumerMiddl
 	for _, chanID := range allowedChannelIDs {
 		hd.allowedChannelIDs[chanID] = struct{}{}
 	}
+	return func(next ConsumerHandler) ConsumerHandler {
+		hd.next = next
+		return hd
+	}
+}
+
+func WithRecvRateLimitPerPeerHandler(limit float64, nTokensFunc func(*p2p.Envelope) uint, drop bool, logger log.Logger) ConsumerMiddlewareFunc {
+	hd := &recvRateLimitPerPeerHandler{
+		limiters:    sync.Map{},
+		limit:       limit,
+		nTokensFunc: nTokensFunc,
+		drop:        drop,
+		logger:      logger,
+	}
+
 	return func(next ConsumerHandler) ConsumerHandler {
 		hd.next = next
 		return hd
@@ -122,6 +157,40 @@ func (h *validateMessageHandler) Handle(ctx context.Context, client *Client, env
 		if !ok {
 			return ErrResponseIDAttributeRequired
 		}
+	}
+	return h.next.Handle(ctx, client, envelope)
+}
+func (h *recvRateLimitPerPeerHandler) getLimiter(peerID types.NodeID) *rate.Limiter {
+	var limiter *rate.Limiter
+	if l, ok := h.limiters.Load(peerID); ok {
+		limiter = l.(*rate.Limiter)
+	} else {
+		limiter = rate.NewLimiter(rate.Limit(h.limit), int(10*h.limit))
+		// we have a slight race condition here, possibly overwriting the limiter, but it's not a big deal
+		// as the worst case scenario is that we allow one or two more messages than we should
+		h.limiters.Store(peerID, limiter)
+	}
+
+	return limiter
+}
+
+func (h *recvRateLimitPerPeerHandler) Handle(ctx context.Context, client *Client, envelope *p2p.Envelope) error {
+	if h.limit > 0 {
+		peerID := envelope.From
+		limiter := h.getLimiter(peerID)
+		nTokens := int(h.nTokensFunc(envelope))
+
+		if h.drop {
+			if !limiter.AllowN(time.Now(), nTokens) {
+				h.logger.Debug("dropping message due to rate limit", "peer", peerID, "envelope", envelope)
+				return nil
+			}
+		} else {
+			if err := limiter.WaitN(ctx, 1); err != nil {
+				return fmt.Errorf("rate limit failed for peer %s: %w", peerID, err)
+			}
+		}
+
 	}
 	return h.next.Handle(ctx, client, envelope)
 }

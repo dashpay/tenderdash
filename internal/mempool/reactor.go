@@ -2,9 +2,11 @@ package mempool
 
 import (
 	"context"
+	"fmt"
 	"runtime/debug"
 
 	sync "github.com/sasha-s/go-deadlock"
+	"golang.org/x/time/rate"
 
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/libs/clist"
@@ -40,6 +42,8 @@ type Reactor struct {
 
 	mtx          sync.Mutex
 	peerRoutines map[types.NodeID]context.CancelFunc
+
+	txSendLimiter sync.Map
 }
 
 // NewReactor returns a reference to a new reactor.
@@ -153,6 +157,33 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 	}
 }
 
+// sendTxs sends the given txs to the given peer.
+//
+// Sending txs to a peer is rate limited to prevent spamming the network.
+// Each peer has its own rate limiter.
+//
+// As we will wait for confirmation of the txs being delivered, it is generally safe to
+// drop the txs if the send fails.
+func (r *Reactor) sendTxs(ctx context.Context, peerID types.NodeID, txs ...types.Tx) error {
+	if r.cfg.TxSendRateLimit > 0 {
+		var limiter *rate.Limiter
+		if l, ok := r.txSendLimiter.Load(peerID); ok {
+			limiter = l.(*rate.Limiter)
+		} else {
+			limiter = rate.NewLimiter(rate.Limit(r.cfg.TxSendRateLimit), int(10*r.cfg.TxSendRateLimit))
+			// we have a slight race condition here, but we deliberately ignore it as the worst case
+			// scenario is that we allow one or two more messages than we should
+			r.txSendLimiter.Store(peerID, limiter)
+		}
+
+		if err := limiter.WaitN(ctx, len(txs)); err != nil {
+			return fmt.Errorf("rate limit failed for peer %s: %w", peerID, err)
+		}
+	}
+
+	return r.p2pClient.SendTxs(ctx, peerID, txs...)
+}
+
 func (r *Reactor) broadcastTxRoutine(ctx context.Context, peerID types.NodeID) {
 	peerMempoolID := r.ids.GetForPeer(peerID)
 	var nextGossipTx *clist.CElement
@@ -201,7 +232,7 @@ func (r *Reactor) broadcastTxRoutine(ctx context.Context, peerID types.NodeID) {
 		if !memTx.HasPeer(peerMempoolID) {
 			// Send the mempool tx to the corresponding peer. Note, the peer may be
 			// behind and thus would not be able to process the mempool tx correctly.
-			err := r.p2pClient.SendTxs(ctx, peerID, memTx.tx)
+			err := r.sendTxs(ctx, peerID, memTx.tx)
 			if err != nil {
 				r.logger.Error("failed to gossip transaction", "peerID", peerID, "error", err)
 				return
