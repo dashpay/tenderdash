@@ -266,7 +266,7 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 	if chDesc.SendRateLimit > 0 || chDesc.RecvRateLimit > 0 {
 		channel = NewThrottledChannel(channel,
 			chDesc.SendRateLimit, chDesc.SendRateBurst,
-			chDesc.RecvRateLimit, chDesc.RecvRateBurst, chDesc.RecvRateShouldErr,
+			chDesc.RecvRateLimit, chDesc.RecvRateBurst, false,
 			r.logger)
 	}
 

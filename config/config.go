@@ -901,12 +901,6 @@ type MempoolConfig struct {
 	// Default: 0
 	TxRecvRateLimit float64 `mapstructure:"tx-recv-rate-limit"`
 
-	// TxRecvRatePunishPeer set to true means that when the rate limit set in TxRecvRateLimit is reached, the
-	// peer will be punished (disconnected). If set to false, the peer will be throttled (messages will be dropped).
-	//
-	// Default: false
-	TxRecvRatePunishPeer bool `mapstructure:"tx-recv-rate-punish-peer"`
-
 	// TxEnqueueTimeout defines how long new mempool transaction will wait when internal
 	// processing queue is full (most likely due to busy CheckTx execution).
 	// Once the timeout is reached, the transaction will be silently dropped.
