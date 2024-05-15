@@ -4,14 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"sync"
-	"time"
-
-	"golang.org/x/time/rate"
 
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/libs/log"
-	"github.com/dashpay/tenderdash/types"
 )
 
 // DefaultRecvBurstMultiplier tells how many times burst is bigger than the limit in recvRateLimitPerPeerHandler
@@ -51,20 +46,13 @@ type (
 	}
 
 	recvRateLimitPerPeerHandler struct {
-		// nTokens is a function that returns number of tokens to consume for a given envelope; if unsure, return 1
-		nTokensFunc func(*p2p.Envelope) uint
-		// limit is the rate limit per peer per second; 0 means no limit
-		limit float64
-		// burst is the initial number of tokens; see rate module for more details
-		burst int
-		// map of peerID to rate.Limiter
-		limiters sync.Map
+		RateLimit
+
 		// next is the next handler in the chain
 		next ConsumerHandler
-		// drop is a flag to silently drop the message if the rate limit is exceeded; otherwise we will wait
-		drop bool
 
-		logger log.Logger
+		// nTokens is a function that returns number of tokens to consume for a given envelope; if unsure, return 1
+		nTokensFunc TokenNumberFunc
 	}
 )
 
@@ -100,17 +88,13 @@ func WithValidateMessageHandler(allowedChannelIDs []p2p.ChannelID) ConsumerMiddl
 	}
 }
 
-func WithRecvRateLimitPerPeerHandler(limit float64, nTokensFunc func(*p2p.Envelope) uint, drop bool, logger log.Logger) ConsumerMiddlewareFunc {
-	hd := &recvRateLimitPerPeerHandler{
-		limiters:    sync.Map{},
-		limit:       limit,
-		burst:       int(DefaultRecvBurstMultiplier * limit),
-		nTokensFunc: nTokensFunc,
-		drop:        drop,
-		logger:      logger,
-	}
-
+func WithRecvRateLimitPerPeerHandler(limit float64, nTokensFunc TokenNumberFunc, drop bool, logger log.Logger) ConsumerMiddlewareFunc {
 	return func(next ConsumerHandler) ConsumerHandler {
+		hd := &recvRateLimitPerPeerHandler{
+			RateLimit:   *NewRateLimit(limit, drop, logger),
+			nTokensFunc: nTokensFunc,
+		}
+
 		hd.next = next
 		return hd
 	}
@@ -166,36 +150,15 @@ func (h *validateMessageHandler) Handle(ctx context.Context, client *Client, env
 	}
 	return h.next.Handle(ctx, client, envelope)
 }
-func (h *recvRateLimitPerPeerHandler) getLimiter(peerID types.NodeID) *rate.Limiter {
-	var limiter *rate.Limiter
-	if l, ok := h.limiters.Load(peerID); ok {
-		limiter = l.(*rate.Limiter)
-	} else {
-		limiter = rate.NewLimiter(rate.Limit(h.limit), h.burst)
-		// we have a slight race condition here, possibly overwriting the limiter, but it's not a big deal
-		// as the worst case scenario is that we allow one or two more messages than we should
-		h.limiters.Store(peerID, limiter)
-	}
-
-	return limiter
-}
 
 func (h *recvRateLimitPerPeerHandler) Handle(ctx context.Context, client *Client, envelope *p2p.Envelope) error {
-	if h.limit > 0 {
-		peerID := envelope.From
-		limiter := h.getLimiter(peerID)
-		nTokens := int(h.nTokensFunc(envelope))
-
-		if h.drop {
-			if !limiter.AllowN(time.Now(), nTokens) {
-				h.logger.Debug("dropping message due to rate limit", "peer", peerID, "envelope", envelope)
-				return nil
-			}
-		} else {
-			if err := limiter.WaitN(ctx, 1); err != nil {
-				return fmt.Errorf("rate limit failed for peer %s: %w", peerID, err)
-			}
-		}
+	accepted, err := h.RateLimit.Limit(ctx, envelope.From, int(h.nTokensFunc(envelope)))
+	if err != nil {
+		return fmt.Errorf("rate limit failed for peer '%s;: %w", envelope.From, err)
+	}
+	if !accepted {
+		h.logger.Debug("silently dropping message due to rate limit", "peer", envelope.From, "envelope", envelope)
+		return nil
 	}
 
 	return h.next.Handle(ctx, client, envelope)

@@ -203,7 +203,7 @@ func TestRateLimitHandler(t *testing.T) {
 			start.RLock()
 			defer start.RUnlock()
 
-			for {
+			for s := 0; s < TestTimeSeconds; s++ {
 				until := time.NewTimer(time.Second)
 				defer until.Stop()
 
@@ -244,7 +244,7 @@ func TestRateLimitHandler(t *testing.T) {
 
 	// we floor with 1 decimal place, as elapsed will be slightly more than TestTimeSeconds
 	elapsed := math.Floor(time.Since(startTime).Seconds()*10) / 10
-	require.Equal(t, float64(TestTimeSeconds), elapsed, "test should run for %d seconds", TestTimeSeconds)
+	assert.Equal(t, float64(TestTimeSeconds), elapsed, "test should run for %d seconds", TestTimeSeconds)
 
 	for peer := 1; peer <= Peers; peer++ {
 		expected := int(RateLimit)*TestTimeSeconds + Burst
