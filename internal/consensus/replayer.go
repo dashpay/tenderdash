@@ -394,12 +394,11 @@ func validatorSetUpdateFromGenesis(genDoc *types.GenesisDoc, nodeProTxHash types
 			return nil, fmt.Errorf("blockReplayer blocks error when validating validator: %s", err)
 		}
 	}
-	validatorSet := types.NewValidatorSetWithLocalNodeProTxHash(
+	validatorSet := types.NewValidatorSetCheckPublicKeys(
 		validators,
 		genDoc.ThresholdPublicKey,
 		genDoc.QuorumType,
 		genDoc.QuorumHash,
-		nodeProTxHash,
 	)
 	err := validatorSet.ValidateBasic()
 	if err != nil {
