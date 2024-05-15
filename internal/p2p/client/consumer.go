@@ -14,6 +14,9 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+// DefaultRecvBurstMultiplier tells how many times burst is bigger than the limit in recvRateLimitPerPeerHandler
+const DefaultRecvBurstMultiplier = 10
+
 var (
 	ErrRequestIDAttributeRequired  = errors.New("envelope requestID attribute is required")
 	ErrResponseIDAttributeRequired = errors.New("envelope responseID attribute is required")
@@ -52,6 +55,8 @@ type (
 		nTokensFunc func(*p2p.Envelope) uint
 		// limit is the rate limit per peer per second; 0 means no limit
 		limit float64
+		// burst is the initial number of tokens; see rate module for more details
+		burst int
 		// map of peerID to rate.Limiter
 		limiters sync.Map
 		// next is the next handler in the chain
@@ -99,6 +104,7 @@ func WithRecvRateLimitPerPeerHandler(limit float64, nTokensFunc func(*p2p.Envelo
 	hd := &recvRateLimitPerPeerHandler{
 		limiters:    sync.Map{},
 		limit:       limit,
+		burst:       int(DefaultRecvBurstMultiplier * limit),
 		nTokensFunc: nTokensFunc,
 		drop:        drop,
 		logger:      logger,
@@ -165,7 +171,7 @@ func (h *recvRateLimitPerPeerHandler) getLimiter(peerID types.NodeID) *rate.Limi
 	if l, ok := h.limiters.Load(peerID); ok {
 		limiter = l.(*rate.Limiter)
 	} else {
-		limiter = rate.NewLimiter(rate.Limit(h.limit), int(10*h.limit))
+		limiter = rate.NewLimiter(rate.Limit(h.limit), h.burst)
 		// we have a slight race condition here, possibly overwriting the limiter, but it's not a big deal
 		// as the worst case scenario is that we allow one or two more messages than we should
 		h.limiters.Store(peerID, limiter)
@@ -190,7 +196,7 @@ func (h *recvRateLimitPerPeerHandler) Handle(ctx context.Context, client *Client
 				return fmt.Errorf("rate limit failed for peer %s: %w", peerID, err)
 			}
 		}
-
 	}
+
 	return h.next.Handle(ctx, client, envelope)
 }
