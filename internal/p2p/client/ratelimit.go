@@ -4,16 +4,16 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
 
-	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
 
-type TokenNumberFunc func(*p2p.Envelope) uint
+const PeerRateLimitLifetime = 60 // number of seconds to keep the rate limiter for a peer
 
 // RateLimit is a rate limiter for p2p messages.
 // It is used to limit the rate of incoming messages from a peer.
@@ -34,35 +34,49 @@ type RateLimit struct {
 	logger log.Logger
 }
 
+type limiter struct {
+	*rate.Limiter
+	// lastAccess is the last time the limiter was accessed, as Unix time (seconds)
+	lastAccess atomic.Int64
+}
+
 // NewRateLimit creates a new rate limiter.
 //
 // # Arguments
 //
+// * `ctx` - context; used to gracefully shutdown the garbage collection routine
 // * `limit` - rate limit per peer per second; 0 means no limit
 // * `drop` - silently drop the message if the rate limit is exceeded; otherwise we will wait until the message is allowed
 // * `logger` - logger
-func NewRateLimit(limit float64, drop bool, logger log.Logger) *RateLimit {
-	return &RateLimit{
+func NewRateLimit(ctx context.Context, limit float64, drop bool, logger log.Logger) *RateLimit {
+	h := &RateLimit{
 		limiters: sync.Map{},
 		limit:    limit,
 		burst:    int(DefaultRecvBurstMultiplier * limit),
 		drop:     drop,
 		logger:   logger,
 	}
+
+	// start the garbage collection routine
+	go h.gcRoutine(ctx)
+
+	return h
 }
 
-func (h *RateLimit) getLimiter(peerID types.NodeID) *rate.Limiter {
-	var limiter *rate.Limiter
+func (h *RateLimit) getLimiter(peerID types.NodeID) *limiter {
+	var limit *limiter
 	if l, ok := h.limiters.Load(peerID); ok {
-		limiter = l.(*rate.Limiter)
+		limit = l.(*limiter)
 	} else {
-		limiter = rate.NewLimiter(rate.Limit(h.limit), h.burst)
+		limit = &limiter{Limiter: rate.NewLimiter(rate.Limit(h.limit), h.burst)}
 		// we have a slight race condition here, possibly overwriting the limiter, but it's not a big deal
 		// as the worst case scenario is that we allow one or two more messages than we should
-		h.limiters.Store(peerID, limiter)
+		h.limiters.Store(peerID, limit)
 	}
 
-	return limiter
+	limit.lastAccess.Store(time.Now().Unix())
+
+	return limit
 }
 
 // Limit waits for the rate limit to allow the message to be sent.
@@ -89,4 +103,30 @@ func (h *RateLimit) Limit(ctx context.Context, peerID types.NodeID, nTokens int)
 		}
 	}
 	return true, nil
+}
+
+// gcRoutine is a goroutine that removes unused limiters for peers every `PeerRateLimitLifetime` seconds.
+func (h *RateLimit) gcRoutine(ctx context.Context) {
+	ticker := time.NewTicker(PeerRateLimitLifetime * time.Second)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			h.gc()
+		}
+	}
+}
+
+// GC removes old limiters.
+func (h *RateLimit) gc() {
+	now := time.Now().Unix()
+	h.limiters.Range(func(key, value interface{}) bool {
+		if value.(*limiter).lastAccess.Load() < now-60 {
+			h.limiters.Delete(key)
+		}
+		return true
+	})
 }

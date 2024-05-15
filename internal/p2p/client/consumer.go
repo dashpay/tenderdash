@@ -45,6 +45,9 @@ type (
 		next              ConsumerHandler
 	}
 
+	// TokenNumberFunc is a function that returns number of tokens to consume for a given envelope
+	TokenNumberFunc func(*p2p.Envelope) uint
+
 	recvRateLimitPerPeerHandler struct {
 		RateLimit
 
@@ -88,10 +91,10 @@ func WithValidateMessageHandler(allowedChannelIDs []p2p.ChannelID) ConsumerMiddl
 	}
 }
 
-func WithRecvRateLimitPerPeerHandler(limit float64, nTokensFunc TokenNumberFunc, drop bool, logger log.Logger) ConsumerMiddlewareFunc {
+func WithRecvRateLimitPerPeerHandler(ctx context.Context, limit float64, nTokensFunc TokenNumberFunc, drop bool, logger log.Logger) ConsumerMiddlewareFunc {
 	return func(next ConsumerHandler) ConsumerHandler {
 		hd := &recvRateLimitPerPeerHandler{
-			RateLimit:   *NewRateLimit(limit, drop, logger),
+			RateLimit:   *NewRateLimit(ctx, limit, drop, logger),
 			nTokensFunc: nTokensFunc,
 		}
 

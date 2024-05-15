@@ -23,7 +23,7 @@ type (
 	}
 )
 
-func consumerHandler(logger log.Logger, config *config.MempoolConfig, checker TxChecker, ids *IDs) client.ConsumerParams {
+func consumerHandler(ctx context.Context, logger log.Logger, config *config.MempoolConfig, checker TxChecker, ids *IDs) client.ConsumerParams {
 	chanIDs := []p2p.ChannelID{p2p.MempoolChannel}
 
 	nTokensFunc := func(e *p2p.Envelope) uint {
@@ -46,7 +46,7 @@ func consumerHandler(logger log.Logger, config *config.MempoolConfig, checker Tx
 				checker: checker,
 				ids:     ids,
 			},
-			client.WithRecvRateLimitPerPeerHandler(config.TxRecvRateLimit, nTokensFunc, true, logger),
+			client.WithRecvRateLimitPerPeerHandler(ctx, config.TxRecvRateLimit, nTokensFunc, true, logger),
 			client.WithValidateMessageHandler(chanIDs),
 			client.WithErrorLoggerMiddleware(logger),
 			client.WithRecoveryMiddleware(logger),

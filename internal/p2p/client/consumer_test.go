@@ -180,7 +180,7 @@ func TestRateLimitHandler(t *testing.T) {
 	logger := log.NewTestingLogger(t)
 	client := &Client{}
 
-	mw := WithRecvRateLimitPerPeerHandler(RateLimit, func(*p2p.Envelope) uint { return 1 }, false, logger)(fakeHandler).(*recvRateLimitPerPeerHandler)
+	mw := WithRecvRateLimitPerPeerHandler(ctx, RateLimit, func(*p2p.Envelope) uint { return 1 }, false, logger)(fakeHandler).(*recvRateLimitPerPeerHandler)
 	mw.burst = Burst
 
 	start := sync.RWMutex{}
