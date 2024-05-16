@@ -320,7 +320,7 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 		return nil
 	}
 	stateBlockHeight := state.LastBlockHeight
-	nextVals, err := validatorSetUpdateFromGenesis(r.genDoc, r.nodeProTxHash)
+	nextVals, err := validatorSetUpdateFromGenesis(r.genDoc)
 	if err != nil {
 		return err
 	}
@@ -382,7 +382,7 @@ func (r *BlockReplayer) publishEvents(
 	return nil
 }
 
-func validatorSetUpdateFromGenesis(genDoc *types.GenesisDoc, nodeProTxHash types.ProTxHash) (*abci.ValidatorSetUpdate, error) {
+func validatorSetUpdateFromGenesis(genDoc *types.GenesisDoc) (*abci.ValidatorSetUpdate, error) {
 	if len(genDoc.QuorumHash) != crypto.DefaultHashSize {
 		return nil, nil
 	}
@@ -394,12 +394,11 @@ func validatorSetUpdateFromGenesis(genDoc *types.GenesisDoc, nodeProTxHash types
 			return nil, fmt.Errorf("blockReplayer blocks error when validating validator: %s", err)
 		}
 	}
-	validatorSet := types.NewValidatorSetWithLocalNodeProTxHash(
+	validatorSet := types.NewValidatorSetCheckPublicKeys(
 		validators,
 		genDoc.ThresholdPublicKey,
 		genDoc.QuorumType,
 		genDoc.QuorumHash,
-		nodeProTxHash,
 	)
 	err := validatorSet.ValidateBasic()
 	if err != nil {

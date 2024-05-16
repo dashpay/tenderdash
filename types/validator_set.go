@@ -100,21 +100,21 @@ func NewValidatorSet(valz []*Validator, newThresholdPublicKey crypto.PubKey, quo
 	return vals
 }
 
-// NewValidatorSetWithLocalNodeProTxHash initializes a ValidatorSet the same way as NewValidatorSet does,
-// however it does allows to set the localNodeProTxHash to more easily identify if the validator set should have public
-// keys. If the local node is part of the validator set the public keys must be present
-func NewValidatorSetWithLocalNodeProTxHash(
+// NewValidatorSetCheckPublicKeys initializes a ValidatorSet the same way as NewValidatorSet does,
+// but determines if the public keys are present.
+func NewValidatorSetCheckPublicKeys(
 	valz []*Validator,
 	newThresholdPublicKey crypto.PubKey,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
-	localNodeProTxHash crypto.ProTxHash,
 ) *ValidatorSet {
-	vals := NewValidatorSet(valz, newThresholdPublicKey, quorumType, quorumHash, false)
-	if vals.HasProTxHash(localNodeProTxHash) {
-		vals.HasPublicKeys = true
+	hasPublicKeys := true
+	for _, val := range valz {
+		if val.PubKey == nil || len(val.PubKey.Bytes()) == 0 {
+			hasPublicKeys = false
+		}
 	}
-	return vals
+	return NewValidatorSet(valz, newThresholdPublicKey, quorumType, quorumHash, hasPublicKeys)
 }
 
 // NewEmptyValidatorSet initializes a ValidatorSet with no validators
@@ -199,6 +199,9 @@ func (vals *ValidatorSet) ThresholdPublicKeyValid() error {
 		return errors.New("threshold public key is wrong size")
 	}
 	if len(vals.Validators) == 1 && vals.HasPublicKeys {
+		if vals.Validators[0].PubKey == nil {
+			return errors.New("validator public key is not set")
+		}
 		if !vals.Validators[0].PubKey.Equals(vals.ThresholdPublicKey) {
 			return errors.New("incorrect threshold public key")
 		}

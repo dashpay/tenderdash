@@ -195,7 +195,7 @@ func (candidate *CurrentRoundState) populateValsetUpdates() error {
 
 	base := candidate.Base
 
-	newValSet, err := valsetUpdate(candidate.ProTxHash, update, base.Validators, candidate.NextConsensusParams.Validator)
+	newValSet, err := valsetUpdate(update, base.Validators, candidate.NextConsensusParams.Validator)
 	if err != nil {
 		return fmt.Errorf("validator set updates: %w", err)
 	}
@@ -313,7 +313,6 @@ func RoundParamsFromInitChain(resp *abci.ResponseInitChain) (RoundParams, error)
 
 // valsetUpdate processes validator set updates received from ABCI app.
 func valsetUpdate(
-	nodeProTxHash types.ProTxHash,
 	vu *abci.ValidatorSetUpdate,
 	currentVals *types.ValidatorSet,
 	params types.ValidatorParams,
@@ -339,8 +338,8 @@ func valsetUpdate(
 			}
 		} else {
 			// if we don't have proTxHash, NewValidatorSetWithLocalNodeProTxHash behaves like NewValidatorSet
-			nValSet = types.NewValidatorSetWithLocalNodeProTxHash(validatorUpdates, thresholdPubKey,
-				currentVals.QuorumType, quorumHash, nodeProTxHash)
+			nValSet = types.NewValidatorSetCheckPublicKeys(validatorUpdates, thresholdPubKey,
+				currentVals.QuorumType, quorumHash)
 		}
 	} else {
 		// validators not changed, but we might have a new quorum hash or threshold public key
