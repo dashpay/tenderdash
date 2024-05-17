@@ -459,14 +459,14 @@ ttl-num-blocks = {{ .Mempool.TTLNumBlocks }}
 
 
 # tx-send-rate-limit is the rate limit for sending transactions to peers, in transactions per second.
-# This rate limit is shared across all peers.
+# This rate limit is individual for each peer.
 # If zero, the rate limiter is disabled.
 #
 # Default: 0
 tx-send-rate-limit = {{ .Mempool.TxSendRateLimit }}
 
 # tx-recv-rate-limit is the rate limit for receiving transactions from peers, in transactions per second.
-# This rate limit is shared across all peers.
+# This rate limit is individual for each peer.
 # If zero, the rate limiter is disabled.
 #
 # Default: 0

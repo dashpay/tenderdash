@@ -130,11 +130,11 @@ func WithChanIDResolver(resolver func(msg proto.Message) p2p.ChannelID) OptionFu
 	}
 }
 
-// WithRateLimits defines a rate limiter for the provided channels.
+// WithSendRateLimits defines a rate limiter for the provided channels.
 //
 // Provided rate limiter will be shared between provided channels.
 // Use this function multiple times to set different rate limiters for different channels.
-func WithRateLimits(rateLimit *RateLimit, channels ...p2p.ChannelID) OptionFunc {
+func WithSendRateLimits(rateLimit *RateLimit, channels ...p2p.ChannelID) OptionFunc {
 	return func(c *Client) {
 		for _, ch := range channels {
 			c.rateLimit[ch] = rateLimit
