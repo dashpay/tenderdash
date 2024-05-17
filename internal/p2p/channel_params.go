@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	"github.com/gogo/protobuf/proto"
-	"golang.org/x/time/rate"
 
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/proto/tendermint/blocksync"
@@ -80,10 +79,6 @@ func ChannelDescriptors(cfg *config.Config) map[ChannelID]*ChannelDescriptor {
 			RecvMessageCapacity: mempoolBatchSize(cfg.Mempool.MaxTxBytes),
 			RecvBufferCapacity:  1000,
 			Name:                "mempool",
-			SendRateLimit:       rate.Limit(cfg.Mempool.TxSendRateLimit),
-			SendRateBurst:       int(5 * cfg.Mempool.TxSendRateLimit),
-			RecvRateLimit:       rate.Limit(cfg.Mempool.TxRecvRateLimit),
-			RecvRateBurst:       int(10 * cfg.Mempool.TxRecvRateLimit), // twice as big as send, to avoid false punishment
 			EnqueueTimeout:      cfg.Mempool.TxEnqueueTimeout,
 		},
 	}

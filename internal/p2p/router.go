@@ -263,12 +263,6 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 	outCh := make(chan Envelope, chDesc.RecvBufferCapacity)
 	errCh := make(chan PeerError, chDesc.RecvBufferCapacity)
 	channel := NewChannel(chDesc.ID, chDesc.Name, queue.dequeue(), outCh, errCh)
-	if chDesc.SendRateLimit > 0 || chDesc.RecvRateLimit > 0 {
-		channel = NewThrottledChannel(channel,
-			chDesc.SendRateLimit, chDesc.SendRateBurst,
-			chDesc.RecvRateLimit, chDesc.RecvRateBurst, false,
-			r.logger)
-	}
 
 	r.channelQueues[id] = queue
 
