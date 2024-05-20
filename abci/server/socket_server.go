@@ -106,7 +106,7 @@ func (s *SocketServer) acceptConnectionsRoutine(ctx context.Context) {
 			if !s.IsRunning() {
 				return // Ignore error from listener closing.
 			}
-			s.logger.Error("Failed to accept connection", "err", err)
+			s.logger.Warn("Failed to accept connection", "err", err)
 			continue
 		}
 

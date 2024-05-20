@@ -439,7 +439,7 @@ func (r *Router) acceptPeers(ctx context.Context, transport Transport) {
 			return
 		case err != nil:
 			// in this case we got an error from the net.Listener.
-			r.logger.Error("failed to accept connection", "transport", transport, "err", err)
+			r.logger.Warn("failed to accept connection", "transport", transport, "err", err)
 			continue
 		}
 
@@ -503,7 +503,7 @@ func (r *Router) openConnection(ctx context.Context, conn Connection) {
 
 	err = r.peerManager.Accepted(peerInfo.NodeID, SetProTxHashToPeerInfo(peerInfo.ProTxHash))
 	if err != nil {
-		r.logger.Error("failed to accept connection",
+		r.logger.Warn("failed to accept connection",
 			"op", "incoming/accepted", "peer", peerInfo.NodeID, "err", err)
 		return
 	}
@@ -766,16 +766,16 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	_ = conn.Close()
 	sendQueue.close()
 
-	r.logger.Debug("routePeer: closed conn and send queue, waiting for all goroutines to finish", "peer", peerID, "err", err)
+	r.logger.Trace("routePeer: closed conn and send queue, waiting for all goroutines to finish", "peer", peerID, "err", err)
 	wg.Wait()
-	r.logger.Debug("routePeer: all goroutines finished", "peer", peerID, "err", err)
+	r.logger.Trace("routePeer: all goroutines finished", "peer", peerID, "err", err)
 
 	// Drain the error channel; these should typically not be interesting
 FOR:
 	for {
 		select {
 		case e := <-errCh:
-			r.logger.Debug("routePeer: received error when draining errCh", "peer", peerID, "err", e)
+			r.logger.Trace("routePeer: received error when draining errCh", "peer", peerID, "err", e)
 			// if we received non-context error, we should return it
 			if err == nil && !errors.Is(e, context.Canceled) && !errors.Is(e, context.DeadlineExceeded) {
 				err = e

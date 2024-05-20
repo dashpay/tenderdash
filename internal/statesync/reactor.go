@@ -992,7 +992,7 @@ func (r *Reactor) processPeerUp(ctx context.Context, peerUpdate p2p.PeerUpdate) 
 
 		r.peers.Append(peerUpdate.NodeID)
 	} else {
-		r.logger.Error("could not use peer for statesync", "peer", peerUpdate.NodeID)
+		r.logger.Warn("could not use peer for statesync", "peer", peerUpdate.NodeID)
 	}
 	newProvider := NewBlockProvider(peerUpdate.NodeID, r.chainID, r.dispatcher)
 
