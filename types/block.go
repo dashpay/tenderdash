@@ -13,7 +13,6 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/rs/zerolog"
@@ -814,24 +813,6 @@ func (commit *Commit) VoteBlockRequestID() []byte {
 
 	hash := sha256.Sum256(requestIDMessage)
 	return hash[:]
-}
-
-// CanonicalVoteVerifySignBytes returns the bytes of the Canonical Vote that is threshold signed.
-func (commit *Commit) CanonicalVoteVerifySignBytes(chainID string) []byte {
-	voteCanonical := commit.GetCanonicalVote()
-	vCanonical := voteCanonical.ToProto()
-	bz, err := vCanonical.SignBytes(chainID)
-	if err != nil {
-		panic(fmt.Errorf("canonical vote sign bytes: %w", err))
-	}
-	return bz
-}
-
-// CanonicalVoteVerifySignID returns the signID bytes of the Canonical Vote that is threshold signed.
-func (commit *Commit) CanonicalVoteVerifySignID(chainID string, quorumType btcjson.LLMQType, quorumHash []byte) []byte {
-	voteCanonical := commit.GetCanonicalVote()
-	vCanonical := voteCanonical.ToProto()
-	return VoteBlockSignID(chainID, vCanonical, quorumType, quorumHash)
 }
 
 // Type returns the vote type of the commit, which is always VoteTypePrecommit
