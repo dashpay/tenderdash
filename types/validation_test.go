@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -98,6 +99,15 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 				vote.VoteExtensions,
 				&CommitSigns{
 					QuorumHash:  quorumHash,
+					QuorumSigns: QuorumSigns{BlockSign: vote2.BlockSignature, VoteExtensionSignatures: vote2.VoteExtensions.GetSignatures()},
+				},
+			), true},
+		// quorum hash mismatch
+		{"wrong quorum hash", chainID, vote.BlockID, vote.Height,
+			NewCommit(vote.Height, vote.Round, vote.BlockID,
+				vote.VoteExtensions,
+				&CommitSigns{
+					QuorumHash:  bytes.Repeat([]byte{0xaa}, crypto.QuorumHashSize),
 					QuorumSigns: QuorumSigns{BlockSign: vote2.BlockSignature, VoteExtensionSignatures: vote2.VoteExtensions.GetSignatures()},
 				},
 			), true},
