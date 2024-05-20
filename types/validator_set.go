@@ -914,6 +914,11 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 	if err != nil {
 		return err
 	}
+	if !vals.QuorumHash.Equal(commit.QuorumHash) {
+		return fmt.Errorf("invalid commit -- wrong quorum hash: validator set uses %X, commit has %X",
+			vals.QuorumHash, commit.QuorumHash)
+
+	}
 	err = quorumSigns.Verify(vals.ThresholdPublicKey, NewQuorumSignsFromCommit(commit))
 	if err != nil {
 		return fmt.Errorf("invalid commit signatures for quorum(type=%v, hash=%X), thresholdPubKey=%X: %w",
@@ -991,7 +996,7 @@ func (vals *ValidatorSet) StringIndented(indent string) string {
 		return "nil-ValidatorSet"
 	}
 	var valStrings []string
-	vals.Iterate(func(index int, val *Validator) bool {
+	vals.Iterate(func(_index int, val *Validator) bool {
 		valStrings = append(valStrings, val.String())
 		return false
 	})
@@ -1021,7 +1026,7 @@ func (vals *ValidatorSet) StringIndentedBasic(indent string) string {
 		return "nil-ValidatorSet"
 	}
 	var valStrings []string
-	vals.Iterate(func(index int, val *Validator) bool {
+	vals.Iterate(func(_index int, val *Validator) bool {
 		valStrings = append(valStrings, val.ShortStringBasic())
 		return false
 	})
