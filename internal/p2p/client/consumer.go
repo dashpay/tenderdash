@@ -9,6 +9,9 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 )
 
+// DefaultRecvBurstMultiplier tells how many times burst is bigger than the limit in recvRateLimitPerPeerHandler
+const DefaultRecvBurstMultiplier = 10
+
 var (
 	ErrRequestIDAttributeRequired  = errors.New("envelope requestID attribute is required")
 	ErrResponseIDAttributeRequired = errors.New("envelope responseID attribute is required")
@@ -41,6 +44,19 @@ type (
 		allowedChannelIDs map[p2p.ChannelID]struct{}
 		next              ConsumerHandler
 	}
+
+	// TokenNumberFunc is a function that returns number of tokens to consume for a given envelope
+	TokenNumberFunc func(*p2p.Envelope) uint
+
+	recvRateLimitPerPeerHandler struct {
+		RateLimit
+
+		// next is the next handler in the chain
+		next ConsumerHandler
+
+		// nTokens is a function that returns number of tokens to consume for a given envelope; if unsure, return 1
+		nTokensFunc TokenNumberFunc
+	}
 )
 
 // WithRecoveryMiddleware creates panic recovery middleware
@@ -70,6 +86,18 @@ func WithValidateMessageHandler(allowedChannelIDs []p2p.ChannelID) ConsumerMiddl
 		hd.allowedChannelIDs[chanID] = struct{}{}
 	}
 	return func(next ConsumerHandler) ConsumerHandler {
+		hd.next = next
+		return hd
+	}
+}
+
+func WithRecvRateLimitPerPeerHandler(ctx context.Context, limit float64, nTokensFunc TokenNumberFunc, drop bool, logger log.Logger) ConsumerMiddlewareFunc {
+	return func(next ConsumerHandler) ConsumerHandler {
+		hd := &recvRateLimitPerPeerHandler{
+			RateLimit:   *NewRateLimit(ctx, limit, drop, logger),
+			nTokensFunc: nTokensFunc,
+		}
+
 		hd.next = next
 		return hd
 	}
@@ -123,5 +151,18 @@ func (h *validateMessageHandler) Handle(ctx context.Context, client *Client, env
 			return ErrResponseIDAttributeRequired
 		}
 	}
+	return h.next.Handle(ctx, client, envelope)
+}
+
+func (h *recvRateLimitPerPeerHandler) Handle(ctx context.Context, client *Client, envelope *p2p.Envelope) error {
+	accepted, err := h.RateLimit.Limit(ctx, envelope.From, int(h.nTokensFunc(envelope)))
+	if err != nil {
+		return fmt.Errorf("rate limit failed for peer '%s;: %w", envelope.From, err)
+	}
+	if !accepted {
+		h.logger.Debug("silently dropping message due to rate limit", "peer", envelope.From, "envelope", envelope)
+		return nil
+	}
+
 	return h.next.Handle(ctx, client, envelope)
 }

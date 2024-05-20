@@ -23,8 +23,20 @@ type (
 	}
 )
 
-func consumerHandler(logger log.Logger, config *config.MempoolConfig, checker TxChecker, ids *IDs) client.ConsumerParams {
+func consumerHandler(ctx context.Context, logger log.Logger, config *config.MempoolConfig, checker TxChecker, ids *IDs) client.ConsumerParams {
 	chanIDs := []p2p.ChannelID{p2p.MempoolChannel}
+
+	nTokensFunc := func(e *p2p.Envelope) uint {
+		if m, ok := e.Message.(*protomem.Txs); ok {
+			return uint(len(m.Txs))
+		}
+
+		// unknown message type; this should not happen, we expect only Txs messages
+		// But we don't panic, as this is not a critical error
+		logger.Error("received unknown message type, expected Txs; assuming weight 1", "type", fmt.Sprintf("%T", e.Message), "from", e.From)
+		return 1
+	}
+
 	return client.ConsumerParams{
 		ReadChannels: chanIDs,
 		Handler: client.HandlerWithMiddlewares(
@@ -34,6 +46,7 @@ func consumerHandler(logger log.Logger, config *config.MempoolConfig, checker Tx
 				checker: checker,
 				ids:     ids,
 			},
+			client.WithRecvRateLimitPerPeerHandler(ctx, config.TxRecvRateLimit, nTokensFunc, true, logger),
 			client.WithValidateMessageHandler(chanIDs),
 			client.WithErrorLoggerMiddleware(logger),
 			client.WithRecoveryMiddleware(logger),
