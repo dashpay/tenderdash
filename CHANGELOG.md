@@ -1,9 +1,24 @@
-## [0.14.0-dev.7] - 2024-05-16
+## [0.14.0-dev.8] - 2024-05-20
+
+### Bug Fixes
+
+- [**breaking**] Limit mempool gossip rate on a per-peer basis (#787)
+
+### Miscellaneous Tasks
+
+- Add Warn log level and decrease verbosity of some logs (#790)
+- Detect quorum hash mismatch when verifying commit (#791)
+
+## [0.14.0-dev.7] - 2024-05-17
 
 ### Bug Fixes
 
 - Ignore abci section on seeds (#785)
 - Abci valset update abci does not need a public key on replay (#786)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.14.0-dev.7 (#789)
 
 ### Build
 
