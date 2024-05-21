@@ -224,8 +224,10 @@ func (r *Router) createQueueFactory(ctx context.Context) (func(int) queue, error
 			if size%2 != 0 {
 				size++
 			}
-
+			// lock to prevent r.chDescs from being modified while constructing the queue
+			r.channelMtx.RLock()
 			q := newPQScheduler(r.logger, r.metrics, r.lc, r.chDescs, uint(size)/2, uint(size)/2, defaultCapacity)
+			r.channelMtx.RUnlock()
 			q.start(ctx)
 			return q
 		}, nil
