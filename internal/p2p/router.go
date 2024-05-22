@@ -214,6 +214,9 @@ func NewRouter(
 	return router, nil
 }
 
+// createQueueFactory creates a queue factory function based on the queue type
+//
+// Caller should hold the r.channelMtx RLock.
 func (r *Router) createQueueFactory(ctx context.Context) (func(int) queue, error) {
 	switch r.options.QueueType {
 	case queueTypeFifo:
@@ -224,7 +227,6 @@ func (r *Router) createQueueFactory(ctx context.Context) (func(int) queue, error
 			if size%2 != 0 {
 				size++
 			}
-
 			q := newPQScheduler(r.logger, r.metrics, r.lc, r.chDescs, uint(size)/2, uint(size)/2, defaultCapacity)
 			q.start(ctx)
 			return q
@@ -601,7 +603,10 @@ func (r *Router) getOrMakeQueue(peerID types.NodeID, channels ChannelIDSet) queu
 		return peerQueue
 	}
 
+	r.channelMtx.RLock()
 	peerQueue := r.queueFactory(queueBufferDefault)
+	r.channelMtx.RUnlock()
+
 	r.peerQueues[peerID] = peerQueue
 	r.peerChannels[peerID] = channels
 	return peerQueue
