@@ -11,7 +11,7 @@ const (
 	// when not using git describe. It is formatted with semantic versioning.
 	TMVersionDefault = "1.0.0-dev.1"
 	// ABCISemVer is the semantic version of the ABCI library
-	ABCISemVer = "0.27.0"
+	ABCISemVer = "1.0.0"
 
 	ABCIVersion = ABCISemVer
 )
@@ -19,11 +19,19 @@ const (
 var (
 	// P2PProtocol versions all p2p behavior and msgs.
 	// This includes proposer selection.
-	P2PProtocol uint64 = 9
+	//
+	// This is hex-encoded SemVer-like version, prefixed with 2 zero-bytes, where
+	// each component (major, minor, patch) is a 2-byte number.
+	// For example, 1.2.3 would be 0x0000 0001 0002 0003
+	P2PProtocol uint64 = 0x0000000100000000
 
 	// BlockProtocol versions all block data structures and processing.
 	// This includes validity of blocks and state updates.
-	BlockProtocol uint64 = 13
+	//
+	// This is hex-encoded SemVer-like version, prefixed with 2 zero-bytes, where
+	// each component (major, minor, patch) is a 2-byte number.
+	// For example, 1.2.3 would be 0x0000 0001 0002 0003
+	BlockProtocol uint64 = 0x0000000100000000
 )
 
 type Consensus struct {
