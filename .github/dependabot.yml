@@ -18,11 +18,10 @@ updates:
     directory: "/"
     schedule:
       interval: weekly
-    target-branch: "v0.35.x"
+    target-branch: "master"
     open-pull-requests-limit: 10
     reviewers:
-      - shotonoff
+      - shumkov
       - lklimek
-      - iammadab
     labels:
       - dependencies

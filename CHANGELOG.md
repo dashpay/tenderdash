@@ -1,3 +1,19 @@
+## [1.0.0-dev.1] - 2024-06-24
+
+### Bug Fixes
+
+- Router.chDesc concurrent map iteration and write in pqueue (#794)
+
+### Build
+
+- Bump bufbuild/buf-setup-action from 1.31.0 to 1.32.0 (#793)
+- Bump bufbuild/buf-setup-action from 1.32.0 to 1.32.2 (#796)
+- Bump docker/login-action from 3.1.0 to 3.2.0 (#797)
+- Bump docker/build-push-action from 5.3.0 to 5.4.0 (#799)
+- Bump docker/build-push-action from 5.4.0 to 6.0.0 (#801)
+- Bump bufbuild/buf-setup-action from 1.32.2 to 1.33.0 (#800)
+- Bump goreleaser/goreleaser-action from 5 to 6 (#798)
+
 ## [0.14.0-dev.8] - 2024-05-20
 
 ### Bug Fixes
@@ -8,6 +24,7 @@
 
 - Add Warn log level and decrease verbosity of some logs (#790)
 - Detect quorum hash mismatch when verifying commit (#791)
+- Update changelog and version to 0.14.0-dev.8 (#792)
 
 ## [0.14.0-dev.7] - 2024-05-17
 
