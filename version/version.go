@@ -19,19 +19,11 @@ const (
 var (
 	// P2PProtocol versions all p2p behavior and msgs.
 	// This includes proposer selection.
-	//
-	// This is hex-encoded SemVer-like version, prefixed with 2 zero-bytes, where
-	// each component (major, minor, patch) is a 2-byte number.
-	// For example, 1.2.3 would be 0x0000 0001 0002 0003
-	P2PProtocol uint64 = 0x0000000100000000
+	P2PProtocol uint64 = 10
 
 	// BlockProtocol versions all block data structures and processing.
 	// This includes validity of blocks and state updates.
-	//
-	// This is hex-encoded SemVer-like version, prefixed with 2 zero-bytes, where
-	// each component (major, minor, patch) is a 2-byte number.
-	// For example, 1.2.3 would be 0x0000 0001 0002 0003
-	BlockProtocol uint64 = 0x0000000100000000
+	BlockProtocol uint64 = 14
 )
 
 type Consensus struct {
