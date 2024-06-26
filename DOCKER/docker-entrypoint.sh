@@ -6,7 +6,7 @@ if [ ! -d "$TMHOME/config" ]; then
 	tenderdash init validator
 
 	sed -i \
-		-e "s/^proxy-app\s*=.*/proxy-app = \"$PROXY_APP\"/" \
+		-e "s/^address\s*=.*/address = \"$PROXY_APP\"/" \
 		-e "s/^moniker\s*=.*/moniker = \"$MONIKER\"/" \
 		-e 's/^addr-book-strict\s*=.*/addr-book-strict = false/' \
 		-e 's/^timeout-commit\s*=.*/timeout-commit = "500ms"/' \
@@ -17,7 +17,7 @@ if [ ! -d "$TMHOME/config" ]; then
 
 	if [ -n "$ABCI" ]; then
 		sed -i \
-			-e "s/^abci\s*=.*/abci = \"$ABCI\"/" \
+			-e "s/^transport\s*=.*/transport = \"$ABCI\"/" \
 			"$TMHOME/config/config.toml"
 	fi
 
