@@ -1,3 +1,9 @@
+## [1.0.0-dev.2] - 2024-06-26
+
+### Bug Fixes
+
+- Ineffective PROXY_APP and ABCI env in entrypoint (#805)
+
 ## [1.0.0-dev.1] - 2024-06-24
 
 ### Bug Fixes
