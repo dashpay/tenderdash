@@ -51,7 +51,7 @@ require (
 	github.com/creachadair/atomicfile v0.2.6
 	github.com/creachadair/taskgroup v0.3.2
 	github.com/go-pkgz/jrpc v0.2.0
-	github.com/google/go-cmp v0.5.9
+	github.com/google/go-cmp v0.6.0
 	github.com/vektra/mockery/v2 v2.33.2
 	gotest.tools v2.2.0+incompatible
 )
