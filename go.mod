@@ -41,7 +41,7 @@ require (
 	github.com/tendermint/tm-db v0.6.6
 	golang.org/x/crypto v0.21.0
 	golang.org/x/net v0.22.0
-	golang.org/x/sync v0.6.0
+	golang.org/x/sync v0.7.0
 	google.golang.org/grpc v1.63.0
 	pgregory.net/rapid v0.4.8
 )
