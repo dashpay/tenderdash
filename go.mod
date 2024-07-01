@@ -14,7 +14,7 @@ require (
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fxamacker/cbor/v2 v2.4.0
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
-	github.com/go-kit/kit v0.12.0
+	github.com/go-kit/kit v0.13.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.4
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
