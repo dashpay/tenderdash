@@ -5,7 +5,6 @@ go 1.22
 require (
 	github.com/BurntSushi/toml v1.3.2
 	github.com/adlio/schema v1.3.3
-	github.com/btcsuite/btcd v0.22.1
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/containerd/continuity v0.3.0 // indirect
 	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20230207105415-06df92693ac8
