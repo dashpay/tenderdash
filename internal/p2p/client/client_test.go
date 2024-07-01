@@ -54,11 +54,11 @@ func (suite *ChannelTestSuite) SetupTest() {
 	suite.fakeClock = clockwork.NewFakeClock()
 	suite.client = New(
 		suite.descriptors,
-		func(ctx context.Context, descriptor *p2p.ChannelDescriptor) (p2p.Channel, error) {
+		func(_ctx context.Context, _descriptor *p2p.ChannelDescriptor) (p2p.Channel, error) {
 			return suite.p2pChannel, nil
 		},
 		WithClock(suite.fakeClock),
-		WithChanIDResolver(func(msg proto.Message) p2p.ChannelID {
+		WithChanIDResolver(func(_msg proto.Message) p2p.ChannelID {
 			return testChannelID
 		}),
 	)
@@ -185,7 +185,7 @@ func (suite *ChannelTestSuite) TestConsumeHandle() {
 	suite.p2pChannel.
 		On("Receive", ctx).
 		Once().
-		Return(func(ctx context.Context) *p2p.ChannelIterator {
+		Return(func(_ctx context.Context) p2p.ChannelIterator {
 			return p2p.NewChannelIterator(outCh)
 		})
 	consumer := newMockConsumer(suite.T())
@@ -226,7 +226,7 @@ func (suite *ChannelTestSuite) TestConsumeResolve() {
 			suite.p2pChannel.
 				On("Receive", ctx).
 				Once().
-				Return(func(ctx context.Context) *p2p.ChannelIterator {
+				Return(func(_ctx context.Context) p2p.ChannelIterator {
 					return p2p.NewChannelIterator(outCh)
 				})
 			resCh := suite.client.addPending(reqID)
@@ -278,7 +278,7 @@ func (suite *ChannelTestSuite) TestConsumeError() {
 			suite.p2pChannel.
 				On("Receive", ctx).
 				Once().
-				Return(func(ctx context.Context) *p2p.ChannelIterator {
+				Return(func(_ctx context.Context) p2p.ChannelIterator {
 					return p2p.NewChannelIterator(outCh)
 				})
 			consumer := newMockConsumer(suite.T())

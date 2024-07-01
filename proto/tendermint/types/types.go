@@ -39,14 +39,6 @@ func (m *PartSetHeader) IsZero() bool {
 	return m == nil || len(m.Hash) == 0
 }
 
-// VoteExtensionsToMap creates a map where a key is vote-extension type and value is the extensions grouped by type
-func (m *Vote) VoteExtensionsToMap() VoteExtensions {
-	if m == nil {
-		return nil
-	}
-	return VoteExtensionsToMap(m.VoteExtensions)
-}
-
 // SignBytes represent data to be signed for the given vote.
 // It's a 64-byte slice containing concatenation of:
 // * Checksum of CanonicalVote
@@ -170,12 +162,4 @@ func (s StateID) ValidateBasic() error {
 	}
 
 	return nil
-}
-
-func VoteExtensionsToMap(voteExtensions []*VoteExtension) VoteExtensions {
-	res := make(map[VoteExtensionType][]*VoteExtension)
-	for _, ext := range voteExtensions {
-		res[ext.Type] = append(res[ext.Type], ext)
-	}
-	return res
 }

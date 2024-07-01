@@ -34,6 +34,65 @@ func TestConfigValidateBasic(t *testing.T) {
 	assert.Error(t, cfg.ValidateBasic())
 }
 
+func TestAbciConfigValidation(t *testing.T) {
+	type testCase struct {
+		name string
+		*AbciConfig
+		expectErr string // empty when no error, or error message to expect
+	}
+	// negative test cases that should fail on validator, but pass on seeds
+	invalidCases := []testCase{
+		{
+			name:      "no abci config",
+			expectErr: "",
+		},
+		{
+			name:       "unexpected data",
+			AbciConfig: &AbciConfig{Other: map[string]interface{}{"foo": "bar"}},
+			expectErr:  "",
+		},
+		{
+			name: "invalid transport",
+			AbciConfig: &AbciConfig{
+				Transport: "invalid",
+				Address:   "tcp://127.0.0.1:1234",
+			},
+			expectErr: "",
+		},
+		{
+			name: "missing address",
+			AbciConfig: &AbciConfig{
+				Transport: "invalid",
+				Address:   "",
+			},
+			expectErr: "",
+		},
+	}
+
+	for _, tc := range invalidCases {
+		tc := tc
+
+		t.Run(tc.name+" on validator", func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Mode = ModeValidator
+			cfg.Abci = nil
+
+			err := cfg.ValidateBasic()
+			if tc.expectErr != "" {
+				assert.ErrorContains(t, err, tc.expectErr)
+			}
+		})
+		t.Run(tc.name+" on seed", func(t *testing.T) {
+			cfg := DefaultConfig()
+			cfg.Mode = ModeSeed
+			cfg.Abci = nil
+
+			err := cfg.ValidateBasic()
+			assert.NoError(t, err)
+		})
+	}
+}
+
 func TestTLSConfiguration(t *testing.T) {
 	cfg := DefaultConfig()
 	cfg.SetRoot("/home/user")

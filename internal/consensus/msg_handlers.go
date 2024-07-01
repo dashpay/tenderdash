@@ -49,17 +49,23 @@ func (c *msgInfoDispatcher) dispatch(ctx context.Context, stateData *StateData, 
 	return handler(ctx, stateData, envelope)
 }
 
+// msgInfoDispatcher creates a new dispatcher for messages that are received from peers.
+// It is used to dispatch messages to the appropriate handler.
 func newMsgInfoDispatcher(
 	ctrl *Controller,
 	proposaler cstypes.Proposaler,
 	wal WALWriteFlusher,
 	logger log.Logger,
+	middleware ...msgMiddlewareFunc,
 ) *msgInfoDispatcher {
+
 	mws := []msgMiddlewareFunc{
 		msgInfoWithCtxMiddleware(),
 		loggingMiddleware(logger),
 		walMiddleware(wal, logger),
 	}
+	mws = append(mws, middleware...)
+
 	proposalHandler := withMiddleware(proposalMessageHandler(proposaler), mws...)
 	blockPartHandler := withMiddleware(blockPartMessageHandler(ctrl), mws...)
 	voteHandler := withMiddleware(voteMessageHandler(ctrl), mws...)
@@ -73,7 +79,7 @@ func newMsgInfoDispatcher(
 }
 
 func proposalMessageHandler(propSetter cstypes.ProposalSetter) msgHandlerFunc {
-	return func(ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
+	return func(_ctx context.Context, stateData *StateData, envelope msgEnvelope) error {
 		msg := envelope.Msg.(*ProposalMessage)
 		return propSetter.Set(msg.Proposal, envelope.ReceiveTime, &stateData.RoundState)
 	}
@@ -183,13 +189,6 @@ func msgInfoWithCtxMiddleware() msgMiddlewareFunc {
 			return hd(ctx, stateData, envelope)
 		}
 	}
-}
-
-func logKeyValsWithError(keyVals []any, err error) []any {
-	if err == nil {
-		return keyVals
-	}
-	return append(keyVals, "error", err)
 }
 
 func makeLogArgsFromMessage(msg Message) []any {

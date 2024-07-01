@@ -48,3 +48,8 @@ func CopyFile(src, dst string) error {
 	_, err = io.Copy(dstfile, srcfile)
 	return err
 }
+
+// NoopCloser is a no-op io.Closer.
+type NoopCloser struct{}
+
+func (NoopCloser) Close() error { return nil }

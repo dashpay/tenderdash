@@ -18,6 +18,10 @@ type StatusClient struct {
 func (_m *StatusClient) Status(_a0 context.Context) (*coretypes.ResultStatus, error) {
 	ret := _m.Called(_a0)
 
+	if len(ret) == 0 {
+		panic("no return value specified for Status")
+	}
+
 	var r0 *coretypes.ResultStatus
 	var r1 error
 	if rf, ok := ret.Get(0).(func(context.Context) (*coretypes.ResultStatus, error)); ok {

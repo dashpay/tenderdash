@@ -171,11 +171,11 @@ func (sc *DashCoreSignerClient) GetPubKey(ctx context.Context, quorumHash crypto
 	return bls12381.PubKey(decodedPublicKeyShare), nil
 }
 
-func (sc *DashCoreSignerClient) GetFirstQuorumHash(ctx context.Context) (crypto.QuorumHash, error) {
+func (sc *DashCoreSignerClient) GetFirstQuorumHash(_ctx context.Context) (crypto.QuorumHash, error) {
 	return nil, errors.New("getFirstQuorumHash should not be called on a dash core signer client")
 }
 
-func (sc *DashCoreSignerClient) GetThresholdPublicKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
+func (sc *DashCoreSignerClient) GetThresholdPublicKey(_ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
 	if len(quorumHash.Bytes()) != crypto.DefaultHashSize {
 		return nil, fmt.Errorf("quorum hash must be 32 bytes long if requesting public key from dash core")
 	}
@@ -200,11 +200,11 @@ func (sc *DashCoreSignerClient) GetThresholdPublicKey(ctx context.Context, quoru
 	return bls12381.PubKey(decodedThresholdPublicKey), nil
 }
 
-func (sc *DashCoreSignerClient) GetHeight(ctx context.Context, quorumHash crypto.QuorumHash) (int64, error) {
+func (sc *DashCoreSignerClient) GetHeight(_ctx context.Context, quorumHash crypto.QuorumHash) (int64, error) {
 	return 0, fmt.Errorf("getHeight should not be called on a dash core signer client %s", quorumHash.String())
 }
 
-func (sc *DashCoreSignerClient) GetProTxHash(ctx context.Context) (crypto.ProTxHash, error) {
+func (sc *DashCoreSignerClient) GetProTxHash(_ctx context.Context) (crypto.ProTxHash, error) {
 	if sc.cachedProTxHash != nil {
 		return sc.cachedProTxHash, nil
 	}
@@ -275,10 +275,10 @@ func (sc *DashCoreSignerClient) SignVote(
 		"voteType", protoVote.Type,
 		"quorumType", quorumType,
 		"quorumHash", quorumHash,
-		"signature", qs.sign,
+		"signature", hex.EncodeToString(qs.sign),
 		"proTxHash", proTxHash,
 		"coreBlockRequestId", qs.ID,
-		"coreSignId", tmbytes.Reverse(qs.signHash),
+		"coreSignId", hex.EncodeToString(tmbytes.Reverse(qs.signHash)),
 		"signItem", quorumSigns,
 		"signResult", qs,
 	)
@@ -314,11 +314,8 @@ func (sc *DashCoreSignerClient) QuorumSign(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 ) ([]byte, []byte, error) {
-	signItem := types.SignItem{
-		ReqID: requestIDHash,
-		ID:    types.MakeSignID(msgHash, requestIDHash, quorumType, quorumHash),
-		Hash:  msgHash,
-	}
+	signItem := types.NewSignItemFromHash(quorumType, quorumHash, requestIDHash, msgHash)
+
 	qs, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
 	if err != nil {
 		return nil, nil, err
@@ -327,16 +324,16 @@ func (sc *DashCoreSignerClient) QuorumSign(
 }
 
 func (sc *DashCoreSignerClient) UpdatePrivateKey(
-	ctx context.Context,
-	privateKey crypto.PrivKey,
-	quorumHash crypto.QuorumHash,
-	thresholdPublicKey crypto.PubKey,
-	height int64,
+	_ctx context.Context,
+	_privateKey crypto.PrivKey,
+	_quorumHash crypto.QuorumHash,
+	_thresholdPublicKey crypto.PubKey,
+	_height int64,
 ) {
 
 }
 
-func (sc *DashCoreSignerClient) GetPrivateKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
+func (sc *DashCoreSignerClient) GetPrivateKey(_ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
 	key := &dashConsensusPrivateKey{
 		quorumHash: quorumHash,
 		quorumType: sc.defaultQuorumType,
@@ -372,22 +369,27 @@ func (sc *DashCoreSignerClient) signVoteExtensions(
 	protoVote *tmproto.Vote,
 	quorumSignData types.QuorumSignData,
 ) error {
+	sc.logger.Trace("signing vote extensions", "vote", protoVote)
+
 	if protoVote.Type != tmproto.PrecommitType {
 		if len(protoVote.VoteExtensions) > 0 {
 			return errors.New("unexpected vote extension - extensions are only allowed in precommits")
 		}
 		return nil
 	}
-	for et, extensions := range protoVote.VoteExtensionsToMap() {
-		for i, ext := range extensions {
-			signItem := quorumSignData.Extensions[et][i]
-			resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
-			if err != nil {
-				return err
-			}
-			ext.Signature = resp.sign
+
+	for i, ext := range quorumSignData.VoteExtensionSignItems {
+		signItem := ext
+		resp, err := sc.quorumSignAndVerify(ctx, quorumType, quorumHash, signItem)
+		if err != nil {
+			return err
 		}
+
+		protoVote.VoteExtensions[i].Signature = resp.sign
 	}
+
+	sc.logger.Trace("vote extensions signed", "extensions", protoVote.VoteExtensions)
+
 	return nil
 }
 
@@ -404,16 +406,16 @@ func (sc *DashCoreSignerClient) quorumSignAndVerify(
 	sc.logger.Trace("quorum sign result",
 		"sign", hex.EncodeToString(qs.sign),
 		"sign_hash", hex.EncodeToString(qs.signHash),
-		"req_id", hex.EncodeToString(signItem.ReqID),
-		"id", hex.EncodeToString(signItem.ID),
-		"raw", hex.EncodeToString(signItem.Raw),
-		"hash", hex.EncodeToString(signItem.Hash),
+		"req_id", hex.EncodeToString(signItem.ID),
+		"id", hex.EncodeToString(signItem.SignHash),
+		"raw", hex.EncodeToString(signItem.Msg),
+		"hash", hex.EncodeToString(signItem.MsgHash),
 		"quorum_sign_result", *qs.QuorumSignResult)
 	pubKey, err := sc.GetPubKey(ctx, quorumHash)
 	if err != nil {
 		return nil, &RemoteSignerError{Code: 500, Description: err.Error()}
 	}
-	verified := pubKey.VerifySignatureDigest(signItem.ID, qs.sign)
+	verified := pubKey.VerifySignatureDigest(signItem.SignHash, qs.sign)
 	if !verified {
 		return nil, fmt.Errorf("unable to verify signature with pubkey %s", pubKey.String())
 	}
@@ -425,7 +427,7 @@ func (sc *DashCoreSignerClient) quorumSign(
 	quorumHash crypto.QuorumHash,
 	signItem types.SignItem,
 ) (*quorumSignResult, error) {
-	resp, err := sc.dashCoreRPCClient.QuorumSign(quorumType, signItem.ReqID, signItem.Hash, quorumHash)
+	resp, err := sc.dashCoreRPCClient.QuorumSign(quorumType, signItem.ID, signItem.MsgHash, quorumHash)
 	if err != nil {
 		return nil, &RemoteSignerError{Code: 500, Description: "cannot sign vote: " + err.Error()}
 	}

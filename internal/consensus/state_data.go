@@ -226,7 +226,6 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 	switch {
 	case state.LastBlockHeight == 0: // Very first commit should be empty.
 		s.LastCommit = (*types.Commit)(nil)
-		s.LastPrecommits = (*types.VoteSet)(nil)
 	case s.CommitRound > -1 && s.Votes != nil && commit == nil: // Otherwise, use cs.Votes
 		if !s.Votes.Precommits(s.CommitRound).HasTwoThirdsMajority() {
 			panic(fmt.Sprintf(
@@ -234,14 +233,9 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 				state.LastBlockHeight, s.CommitRound, s.Votes.Precommits(s.CommitRound),
 			))
 		}
-		s.LastPrecommits = s.Votes.Precommits(s.CommitRound)
-		s.LastCommit = s.LastPrecommits.MakeCommit()
+		precommits := s.Votes.Precommits(s.CommitRound)
+		s.LastCommit = precommits.MakeCommit()
 	case commit != nil:
-		// We either got the commit from a remote node
-		// In which Last precommits will be nil
-		// Or we got the commit from finalize commit
-		// In which Last precommits will not be nil
-		s.LastPrecommits = s.Votes.Precommits(s.CommitRound)
 		s.LastCommit = commit
 	case s.LastCommit == nil:
 		// NOTE: when Tendermint starts, it has no votes. reconstructLastCommit
@@ -266,13 +260,9 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 
 	if s.CommitTime.IsZero() {
 		// "Now" makes it easier to sync up dev nodes.
-		// We add timeoutCommit to allow transactions
-		// to be gathered for the first block.
-		// And alternative solution that relies on clocks:
-		// cs.StartTime = state.LastBlockTime.Add(timeoutCommit)
-		s.StartTime = s.commitTime(tmtime.Now())
+		s.StartTime = tmtime.Now()
 	} else {
-		s.StartTime = s.commitTime(s.CommitTime)
+		s.StartTime = s.CommitTime
 	}
 
 	if s.Validators == nil || !bytes.Equal(s.Validators.QuorumHash, validators.QuorumHash) {
@@ -314,28 +304,70 @@ func (s *StateData) HeightVoteSet() (int64, *cstypes.HeightVoteSet) {
 	return s.Height, s.Votes
 }
 
-func (s *StateData) commitTime(t time.Time) time.Time {
-	c := s.state.ConsensusParams.Timeout.Commit
-	if s.config.UnsafeCommitTimeoutOverride != 0 {
-		c = s.config.UnsafeProposeTimeoutOverride
-	}
-	return t.Add(c)
-}
-
-func (s *StateData) proposalIsTimely() bool {
+// proposalIsTimely returns an error if the proposal is not timely
+func (s *StateData) proposalIsTimely() error {
 	if s.Height == s.state.InitialHeight {
 		// by definition, initial block must have genesis time
-		return s.Proposal.Timestamp.Equal(s.state.LastBlockTime)
+		if !s.Proposal.Timestamp.Equal(s.state.LastBlockTime) {
+			return fmt.Errorf(
+				"%w: initial block must have genesis time: height %d, round %d, proposal time %v, genesis time %v",
+				errPrevoteProposalNotTimely, s.Height, s.Round, s.Proposal.Timestamp, s.state.LastBlockTime,
+			)
+		}
+
+		return nil
 	}
+
 	sp := s.state.ConsensusParams.Synchrony.SynchronyParamsOrDefaults()
-	return s.Proposal.IsTimely(s.ProposalReceiveTime, sp, s.Round)
+	switch s.Proposal.CheckTimely(s.ProposalReceiveTime, sp, s.Round) {
+	case 0:
+		return nil
+	case -1: // too early
+		return fmt.Errorf(
+			"%w: received too early: height %d, round %d, delay %s",
+			errPrevoteProposalNotTimely, s.Height, s.Round,
+			s.ProposalReceiveTime.Sub(s.Proposal.Timestamp).String(),
+		)
+	case 1: // too late
+		return fmt.Errorf(
+			"%w: received too late: height %d, round %d, delay %s",
+			errPrevoteProposalNotTimely, s.Height, s.Round,
+			s.ProposalReceiveTime.Sub(s.Proposal.Timestamp).String(),
+		)
+	default:
+		panic("unexpected return value from isTimely")
+	}
 }
 
-func (s *StateData) updateValidBlock() {
+// Updates ValidBlock to current proposal.
+// Returns true if the block was updated.
+func (s *StateData) updateValidBlock() bool {
 	s.ValidRound = s.Round
-	s.ValidBlock = s.ProposalBlock
-	s.ValidBlockRecvTime = s.ProposalReceiveTime
-	s.ValidBlockParts = s.ProposalBlockParts
+	// we only update valid block if it's not set already; otherwise we might overwrite the recv time
+	if !s.ValidBlock.HashesTo(s.ProposalBlock.Hash()) {
+		s.ValidBlock = s.ProposalBlock
+		s.ValidBlockRecvTime = s.ProposalReceiveTime
+		s.ValidBlockParts = s.ProposalBlockParts
+
+		return true
+	}
+
+	s.logger.Debug("valid block is already up to date, not updating",
+		"proposal_block", s.ProposalBlock.Hash(),
+		"proposal_round", s.Round,
+		"valid_block", s.ValidBlock.Hash(),
+		"valid_block_round", s.ValidRound,
+	)
+
+	return false
+}
+
+// Locks the proposed block.
+// You might also need to call updateValidBlock().
+func (s *StateData) updateLockedBlock() {
+	s.LockedRound = s.Round
+	s.LockedBlock = s.ProposalBlock
+	s.LockedBlockParts = s.ProposalBlockParts
 }
 
 func (s *StateData) verifyCommit(commit *types.Commit, peerID types.NodeID, ignoreProposalBlock bool) (verified bool, err error) {
@@ -459,13 +491,6 @@ func (s *StateData) voteTimeout(round int32) time.Duration {
 	) * time.Nanosecond
 }
 
-func (s *StateData) bypassCommitTimeout() bool {
-	if s.config.UnsafeBypassCommitTimeoutOverride != nil {
-		return *s.config.UnsafeBypassCommitTimeoutOverride
-	}
-	return s.state.ConsensusParams.Timeout.BypassCommitTimeout
-}
-
 func (s *StateData) isValidForPrevote() error {
 	// Check that a proposed block was not received within this round (and thus executing this from a timeout).
 	if s.ProposalBlock == nil {
@@ -477,13 +502,16 @@ func (s *StateData) isValidForPrevote() error {
 	if !s.Proposal.Timestamp.Equal(s.ProposalBlock.Header.Time) {
 		return errPrevoteTimestampNotEqual
 	}
-	//TODO: Remove this temporary fix when the complete solution is ready. See #8739
-	if !s.replayMode && s.Proposal.POLRound == -1 && s.LockedRound == -1 && !s.proposalIsTimely() {
-		return errPrevoteProposalNotTimely
+
+	// if this block was not validated yet, we check if it's timely
+	if !s.replayMode && !s.ProposalBlock.HashesTo(s.ValidBlock.Hash()) {
+		if err := s.proposalIsTimely(); err != nil {
+			return err
+		}
 	}
+
 	// Validate proposal core chain lock
-	err := sm.ValidateBlockChainLock(s.state, s.ProposalBlock)
-	if err != nil {
+	if err := sm.ValidateBlockChainLock(s.state, s.ProposalBlock); err != nil {
 		return errPrevoteInvalidChainLock
 	}
 	return nil

@@ -29,7 +29,7 @@ type Reactor struct {
 
 	cfg     *config.MempoolConfig
 	mempool *TxMempool
-	ids     *IDs
+	ids     *IDs // Peer IDs assigned for peers
 
 	peerEvents p2p.PeerEventSubscriber
 	p2pClient  *client.Client
@@ -58,7 +58,7 @@ func NewReactor(
 		p2pClient:    p2pClient,
 		peerEvents:   peerEvents,
 		peerRoutines: make(map[types.NodeID]context.CancelFunc),
-		observePanic: func(i interface{}) {},
+		observePanic: func(_i interface{}) {},
 	}
 
 	r.BaseService = *service.NewBaseService(logger, "Mempool", r)
@@ -74,7 +74,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		r.logger.Info("tx broadcasting is disabled")
 	}
 	go func() {
-		err := r.p2pClient.Consume(ctx, consumerHandler(r.logger, r.mempool, r.ids))
+		err := r.p2pClient.Consume(ctx, consumerHandler(ctx, r.logger, r.mempool.config, r.mempool, r.ids))
 		if err != nil {
 			r.logger.Error("failed to consume p2p checker messages", "error", err)
 		}
@@ -153,6 +153,17 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 	}
 }
 
+// sendTxs sends the given txs to the given peer.
+//
+// Sending txs to a peer is rate limited to prevent spamming the network.
+// Each peer has its own rate limiter.
+//
+// As we will wait for confirmation of the txs being delivered, it is generally safe to
+// drop the txs if the send fails.
+func (r *Reactor) sendTxs(ctx context.Context, peerID types.NodeID, txs ...types.Tx) error {
+	return r.p2pClient.SendTxs(ctx, peerID, txs...)
+}
+
 func (r *Reactor) broadcastTxRoutine(ctx context.Context, peerID types.NodeID) {
 	peerMempoolID := r.ids.GetForPeer(peerID)
 	var nextGossipTx *clist.CElement
@@ -194,12 +205,14 @@ func (r *Reactor) broadcastTxRoutine(ctx context.Context, peerID types.NodeID) {
 
 		memTx := nextGossipTx.Value.(*WrappedTx)
 
+		// We expect the peer to send tx back once it gets it, and that's
+		// when we will mark it as seen.
 		// NOTE: Transaction batching was disabled due to:
 		// https://github.com/tendermint/tendermint/issues/5796
 		if !memTx.HasPeer(peerMempoolID) {
 			// Send the mempool tx to the corresponding peer. Note, the peer may be
 			// behind and thus would not be able to process the mempool tx correctly.
-			err := r.p2pClient.SendTxs(ctx, peerID, memTx.tx)
+			err := r.sendTxs(ctx, peerID, memTx.tx)
 			if err != nil {
 				r.logger.Error("failed to gossip transaction", "peerID", peerID, "error", err)
 				return

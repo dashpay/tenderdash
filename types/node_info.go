@@ -9,7 +9,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
-	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	tmp2p "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 )
 
@@ -48,8 +48,8 @@ type NodeInfo struct {
 	// Channels are HexBytes so easier to read as JSON
 	Network string `json:"network"` // network/chain ID
 	Version string `json:"version"` // major.minor.revision
-	// FIXME: This should be changed to uint16 to be consistent with the updated channel type
-	Channels tmbytes.HexBytes `json:"channels"` // channels this node knows about
+	// Channels supported by this node. Use GetChannels() as a getter.
+	Channels *tmsync.ConcurrentSlice[uint16] `json:"channels"` // channels this node knows about
 
 	// ASCIIText fields
 	Moniker string        `json:"moniker"` // arbitrary moniker
@@ -97,11 +97,15 @@ func (info NodeInfo) Validate() error {
 	}
 
 	// Validate Channels - ensure max and check for duplicates.
-	if len(info.Channels) > maxNumChannels {
-		return fmt.Errorf("info.Channels is too long (%v). Max is %v", len(info.Channels), maxNumChannels)
+	if info.Channels == nil {
+		return fmt.Errorf("info.Channels is nil")
 	}
-	channels := make(map[byte]struct{})
-	for _, ch := range info.Channels {
+
+	if info.Channels.Len() > maxNumChannels {
+		return fmt.Errorf("info.Channels is too long (%v). Max is %v", info.Channels.Len(), maxNumChannels)
+	}
+	channels := make(map[uint16]struct{})
+	for _, ch := range info.Channels.ToSlice() {
 		_, ok := channels[ch]
 		if ok {
 			return fmt.Errorf("info.Channels contains duplicate channel id %v", ch)
@@ -147,15 +151,15 @@ func (info NodeInfo) CompatibleWith(other NodeInfo) error {
 	}
 
 	// if we have no channels, we're just testing
-	if len(info.Channels) == 0 {
+	if info.Channels.Len() == 0 {
 		return nil
 	}
 
 	// for each of our channels, check if they have it
 	found := false
 OUTER_LOOP:
-	for _, ch1 := range info.Channels {
-		for _, ch2 := range other.Channels {
+	for _, ch1 := range info.Channels.ToSlice() {
+		for _, ch2 := range other.Channels.ToSlice() {
 			if ch1 == ch2 {
 				found = true
 				break OUTER_LOOP // only need one
@@ -171,23 +175,24 @@ OUTER_LOOP:
 // AddChannel is used by the router when a channel is opened to add it to the node info
 func (info *NodeInfo) AddChannel(channel uint16) {
 	// check that the channel doesn't already exist
-	for _, ch := range info.Channels {
-		if ch == byte(channel) {
+	for _, ch := range info.Channels.ToSlice() {
+		if ch == channel {
 			return
 		}
 	}
 
-	info.Channels = append(info.Channels, byte(channel))
+	info.Channels.Append(channel)
 }
 
 func (info NodeInfo) Copy() NodeInfo {
+	chans := info.Channels.Copy()
 	return NodeInfo{
 		ProtocolVersion: info.ProtocolVersion,
 		NodeID:          info.NodeID,
 		ListenAddr:      info.ListenAddr,
 		Network:         info.Network,
 		Version:         info.Version,
-		Channels:        info.Channels,
+		Channels:        &chans,
 		Moniker:         info.Moniker,
 		Other:           info.Other,
 		ProTxHash:       info.ProTxHash.Copy(),
@@ -203,11 +208,14 @@ func (info NodeInfo) ToProto() *tmp2p.NodeInfo {
 		App:   info.ProtocolVersion.App,
 	}
 
+	for _, ch := range info.Channels.ToSlice() {
+		dni.Channels = append(dni.Channels, uint32(ch))
+	}
+
 	dni.NodeID = string(info.NodeID)
 	dni.ListenAddr = info.ListenAddr
 	dni.Network = info.Network
 	dni.Version = info.Version
-	dni.Channels = info.Channels
 	dni.Moniker = info.Moniker
 	dni.ProTxHash = info.ProTxHash.Copy()
 	dni.Other = tmp2p.NodeInfoOther{
@@ -232,7 +240,7 @@ func NodeInfoFromProto(pb *tmp2p.NodeInfo) (NodeInfo, error) {
 		ListenAddr: pb.ListenAddr,
 		Network:    pb.Network,
 		Version:    pb.Version,
-		Channels:   pb.Channels,
+		Channels:   tmsync.NewConcurrentSlice[uint16](),
 		Moniker:    pb.Moniker,
 		Other: NodeInfoOther{
 			TxIndex:    pb.Other.TxIndex,
@@ -240,6 +248,11 @@ func NodeInfoFromProto(pb *tmp2p.NodeInfo) (NodeInfo, error) {
 		},
 		ProTxHash: pb.ProTxHash,
 	}
+
+	for _, ch := range pb.Channels {
+		dni.Channels.Append(uint16(ch))
+	}
+
 	return dni, nil
 }
 

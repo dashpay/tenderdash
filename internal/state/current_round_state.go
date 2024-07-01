@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"fmt"
 
+	"github.com/rs/zerolog"
+
 	abci "github.com/dashpay/tenderdash/abci/types"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmtypes "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -193,7 +195,7 @@ func (candidate *CurrentRoundState) populateValsetUpdates() error {
 
 	base := candidate.Base
 
-	newValSet, err := valsetUpdate(candidate.ProTxHash, update, base.Validators, candidate.NextConsensusParams.Validator)
+	newValSet, err := valsetUpdate(update, base.Validators, candidate.NextConsensusParams.Validator)
 	if err != nil {
 		return fmt.Errorf("validator set updates: %w", err)
 	}
@@ -234,6 +236,30 @@ func (rp RoundParams) ToProcessProposal() *abci.ResponseProcessProposal {
 		ConsensusParamUpdates: rp.ConsensusParamUpdates,
 		ValidatorSetUpdate:    rp.ValidatorSetUpdate,
 	}
+}
+
+func (rp *RoundParams) MarshalZerologObject(e *zerolog.Event) {
+	if rp == nil {
+		e.Bool("nil", true)
+		return
+	}
+
+	e.Str("app_hash", rp.AppHash.ShortString())
+
+	e.Int("tx_results_len", len(rp.TxResults))
+	for i, txResult := range rp.TxResults {
+		e.Interface(fmt.Sprintf("tx_result[%d]", i), txResult)
+		if i >= 20 {
+			e.Str("tx_result[...]", "...")
+			break
+		}
+	}
+
+	e.Interface("consensus_param_updates", rp.ConsensusParamUpdates)
+	e.Interface("validator_set_update", rp.ValidatorSetUpdate)
+	e.Interface("core_chain_lock", rp.CoreChainLock)
+	e.Str("source", rp.Source)
+	e.Int32("round", rp.Round)
 }
 
 // RoundParamsFromPrepareProposal creates RoundParams from ResponsePrepareProposal
@@ -287,7 +313,6 @@ func RoundParamsFromInitChain(resp *abci.ResponseInitChain) (RoundParams, error)
 
 // valsetUpdate processes validator set updates received from ABCI app.
 func valsetUpdate(
-	nodeProTxHash types.ProTxHash,
 	vu *abci.ValidatorSetUpdate,
 	currentVals *types.ValidatorSet,
 	params types.ValidatorParams,
@@ -313,9 +338,19 @@ func valsetUpdate(
 			}
 		} else {
 			// if we don't have proTxHash, NewValidatorSetWithLocalNodeProTxHash behaves like NewValidatorSet
-			nValSet = types.NewValidatorSetWithLocalNodeProTxHash(validatorUpdates, thresholdPubKey,
-				currentVals.QuorumType, quorumHash, nodeProTxHash)
+			nValSet = types.NewValidatorSetCheckPublicKeys(validatorUpdates, thresholdPubKey,
+				currentVals.QuorumType, quorumHash)
+		}
+	} else {
+		// validators not changed, but we might have a new quorum hash or threshold public key
+		if !quorumHash.IsZero() {
+			nValSet.QuorumHash = quorumHash
+		}
+
+		if thresholdPubKey != nil {
+			nValSet.ThresholdPublicKey = thresholdPubKey
 		}
 	}
+
 	return nValSet, nil
 }

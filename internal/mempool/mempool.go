@@ -16,6 +16,7 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/libs/clist"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -48,14 +49,19 @@ type TxMempool struct {
 	// Synchronized fields, protected by mtx.
 	mtx                  *sync.RWMutex
 	notifiedTxsAvailable bool
-	txsAvailable         chan struct{} // one value sent per height when mempool is not empty
-	preCheck             PreCheckFunc
-	postCheck            PostCheckFunc
-	height               int64 // the latest height passed to Update
+	// txsAvailable is a waker that triggers when transactions are available in the mempool.
+	// Can be nil if not enabled with EnableTxsAvailable.
+	txsAvailable *tmsync.Waker
+	preCheck     PreCheckFunc
+	postCheck    PostCheckFunc
+	height       int64 // the latest height passed to Update
 
 	txs        *clist.CList // valid transactions (passed CheckTx)
 	txByKey    map[types.TxKey]*clist.CElement
 	txBySender map[string]*clist.CElement // for sender != ""
+
+	// cancellation function for recheck txs tasks
+	recheckCancel context.CancelFunc
 }
 
 // NewTxMempool constructs a new, empty priority mempool at the specified
@@ -78,6 +84,7 @@ func NewTxMempool(
 		txByKey:      make(map[types.TxKey]*clist.CElement),
 		txBySender:   make(map[string]*clist.CElement),
 	}
+
 	if cfg.CacheSize > 0 {
 		txmp.cache = NewLRUTxCache(cfg.CacheSize)
 	}
@@ -146,12 +153,26 @@ func (txmp *TxMempool) EnableTxsAvailable() {
 	txmp.mtx.Lock()
 	defer txmp.mtx.Unlock()
 
-	txmp.txsAvailable = make(chan struct{}, 1)
+	if txmp.txsAvailable != nil {
+		if err := txmp.txsAvailable.Close(); err != nil {
+			txmp.logger.Error("failed to close txsAvailable", "err", err)
+		}
+	}
+	txmp.txsAvailable = tmsync.NewWaker()
 }
 
 // TxsAvailable returns a channel which fires once for every height, and only
 // when transactions are available in the mempool. It is thread-safe.
-func (txmp *TxMempool) TxsAvailable() <-chan struct{} { return txmp.txsAvailable }
+//
+// Note: returned channel might never close if EnableTxsAvailable() was not called before
+// calling this function.
+func (txmp *TxMempool) TxsAvailable() <-chan struct{} {
+	if txmp.txsAvailable == nil {
+		return make(<-chan struct{})
+	}
+
+	return txmp.txsAvailable.Sleep()
+}
 
 // CheckTx adds the given transaction to the mempool if it fits and passes the
 // application's ABCI CheckTx method.
@@ -245,7 +266,11 @@ func (txmp *TxMempool) CheckTx(
 func (txmp *TxMempool) RemoveTxByKey(txKey types.TxKey) error {
 	txmp.mtx.Lock()
 	defer txmp.mtx.Unlock()
-	return txmp.removeTxByKey(txKey)
+	if err := txmp.removeTxByKey(txKey); err != nil {
+		return err
+	}
+	txmp.metrics.Size.Add(-1)
+	return nil
 }
 
 // removeTxByKey removes the specified transaction key from the mempool.
@@ -394,8 +419,10 @@ func (txmp *TxMempool) Update(
 			len(blockTxs), len(deliverTxResponses)))
 	}
 
-	txmp.height = blockHeight
-	txmp.notifiedTxsAvailable = false
+	if txmp.height != blockHeight {
+		txmp.height = blockHeight
+		txmp.notifiedTxsAvailable = false
+	}
 
 	if newPreFn != nil {
 		txmp.preCheck = newPreFn
@@ -448,11 +475,29 @@ func (txmp *TxMempool) Update(
 // transactions are evicted.
 //
 // Finally, the new transaction is added and size stats updated.
+//
+// Note: due to locking appoach we take, it is possible that meanwhile another thread evicted the same items.
+// This means we can put put slightly more items into the mempool, but it has significant performance impact
 func (txmp *TxMempool) addNewTransaction(wtx *WrappedTx, checkTxRes *abci.ResponseCheckTx) error {
-	txmp.mtx.Lock()
-	defer txmp.mtx.Unlock()
-
 	var err error
+	// RLock here.
+
+	// When the mempool is full, we we don't need a writable lock. RLocking here should add significant
+	// performance boost in this case, as threads will not need to wait to obtain writable lock.
+	//
+	// A disadvantage is that we need to relock RW when we need to evict peers, what introduces race condition
+	// when two threads want to evict the same transactions. We choose to manage that race condition to gain some
+	// performance.
+	txmp.mtx.RLock()
+	rlocked := true
+	defer func() {
+		if rlocked {
+			txmp.mtx.RUnlock()
+		} else {
+			txmp.mtx.Unlock()
+		}
+	}()
+
 	if txmp.postCheck != nil {
 		err = txmp.postCheck(wtx.tx, checkTxRes)
 	}
@@ -461,7 +506,7 @@ func (txmp *TxMempool) addNewTransaction(wtx *WrappedTx, checkTxRes *abci.Respon
 		txmp.logger.Info(
 			"rejected bad transaction",
 			"priority", wtx.Priority(),
-			"tx", fmt.Sprintf("%X", wtx.tx.Hash()),
+			"tx", fmt.Sprintf("%X", wtx.hash),
 			"peer_id", wtx.peers,
 			"code", checkTxRes.Code,
 			"post_check_err", err,
@@ -496,13 +541,13 @@ func (txmp *TxMempool) addNewTransaction(wtx *WrappedTx, checkTxRes *abci.Respon
 			w := elt.Value.(*WrappedTx)
 			txmp.logger.Debug(
 				"rejected valid incoming transaction; tx already exists for sender",
-				"tx", fmt.Sprintf("%X", w.tx.Hash()),
+				"tx", fmt.Sprintf("%X", w.hash),
 				"sender", sender,
 			)
 			txmp.metrics.RejectedTxs.Add(1)
 			// TODO(creachadair): Report an error for a duplicate sender.
 			// This is an API change, unfortunately, but should be made safe if it isn't.
-			// fmt.Errorf("transaction rejected: tx already exists for sender %q (%X)", sender, w.tx.Hash())
+			// fmt.Errorf("transaction rejected: tx already exists for sender %q (%X)", sender, w.hash)
 			return nil
 		}
 	}
@@ -513,7 +558,10 @@ func (txmp *TxMempool) addNewTransaction(wtx *WrappedTx, checkTxRes *abci.Respon
 	// of them as necessary to make room for tx. If no such items exist, we
 	// discard tx.
 
+	txmp.logger.Debug("addNewTransaction canAddTx")
 	if err := txmp.canAddTx(wtx); err != nil {
+		txmp.logger.Debug("addNewTransaction findVictims", "err", err)
+
 		var victims []*clist.CElement // eligible transactions for eviction
 		var victimBytes int64         // total size of victims
 		for cur := txmp.txs.Front(); cur != nil; cur = cur.Next() {
@@ -524,65 +572,68 @@ func (txmp *TxMempool) addNewTransaction(wtx *WrappedTx, checkTxRes *abci.Respon
 			}
 		}
 
+		haveSpace := victimBytes >= wtx.Size()
+		if haveSpace {
+			// Sort lowest priority items first so they will be evicted first.  Break
+			// ties in favor of newer items (to maintain FIFO semantics in a group).
+			sort.Slice(victims, func(i, j int) bool {
+				iw := victims[i].Value.(*WrappedTx)
+				jw := victims[j].Value.(*WrappedTx)
+				if iw.Priority() == jw.Priority() {
+					return iw.timestamp.After(jw.timestamp)
+				}
+				return iw.Priority() < jw.Priority()
+			})
+
+			txmp.logger.Debug("evicting lower-priority transactions",
+				"new_tx", tmstrings.LazySprintf("%X", wtx.hash),
+				"new_priority", priority)
+
+			// Evict as many of the victims as necessary to make room.
+			// We need to drop RLock and Lock here, as from now on, we will be modifying the mempool.
+			// This introduces race condition which we handle inside evict()
+			if rlocked {
+				txmp.mtx.RUnlock()
+				txmp.mtx.Lock()
+				rlocked = false
+			}
+
+			haveSpace = txmp.evict(wtx.Size(), victims)
+
+			if !haveSpace {
+				txmp.logger.Debug("unexpected mempool eviction failure - possibly concurrent eviction happened")
+			}
+		}
+
 		// If there are no suitable eviction candidates, or the total size of
 		// those candidates is not enough to make room for the new transaction,
 		// drop the new one.
-		if len(victims) == 0 || victimBytes < wtx.Size() {
+		if !haveSpace {
 			txmp.cache.Remove(wtx.tx)
 			txmp.logger.Error(
 				"rejected valid incoming transaction; mempool is full",
-				"tx", fmt.Sprintf("%X", wtx.tx.Hash()),
+				"tx", fmt.Sprintf("%X", wtx.hash),
 				"err", err.Error(),
 			)
 			txmp.metrics.RejectedTxs.Add(1)
 			// TODO(creachadair): Report an error for a full mempool.
 			// This is an API change, unfortunately, but should be made safe if it isn't.
-			// fmt.Errorf("transaction rejected: mempool is full (%X)", wtx.tx.Hash())
+			// fmt.Errorf("transaction rejected: mempool is full (%X)", wtx.hash)
 			return nil
-		}
-
-		txmp.logger.Debug("evicting lower-priority transactions",
-			"new_tx", tmstrings.LazySprintf("%X", wtx.tx.Hash()),
-			"new_priority", priority,
-		)
-
-		// Sort lowest priority items first so they will be evicted first.  Break
-		// ties in favor of newer items (to maintain FIFO semantics in a group).
-		sort.Slice(victims, func(i, j int) bool {
-			iw := victims[i].Value.(*WrappedTx)
-			jw := victims[j].Value.(*WrappedTx)
-			if iw.Priority() == jw.Priority() {
-				return iw.timestamp.After(jw.timestamp)
-			}
-			return iw.Priority() < jw.Priority()
-		})
-
-		// Evict as many of the victims as necessary to make room.
-		var evictedBytes int64
-		for _, vic := range victims {
-			w := vic.Value.(*WrappedTx)
-
-			txmp.logger.Debug(
-				"evicted valid existing transaction; mempool full",
-				"old_tx", tmstrings.LazySprintf("%X", w.tx.Hash()),
-				"old_priority", w.priority,
-			)
-			txmp.removeTxByElement(vic)
-			txmp.cache.Remove(w.tx)
-			txmp.metrics.EvictedTxs.Add(1)
-
-			// We may not need to evict all the eligible transactions.  Bail out
-			// early if we have made enough room.
-			evictedBytes += w.Size()
-			if evictedBytes >= wtx.Size() {
-				break
-			}
 		}
 	}
 
 	wtx.SetGasWanted(checkTxRes.GasWanted)
 	wtx.SetPriority(priority)
 	wtx.SetSender(sender)
+
+	// Ensure we have writable lock
+	if rlocked {
+		txmp.mtx.RUnlock()
+		txmp.mtx.Lock()
+		rlocked = false
+	}
+
 	txmp.insertTx(wtx)
 
 	txmp.metrics.TxSizeBytes.Observe(float64(wtx.Size()))
@@ -590,12 +641,49 @@ func (txmp *TxMempool) addNewTransaction(wtx *WrappedTx, checkTxRes *abci.Respon
 	txmp.logger.Debug(
 		"inserted new valid transaction",
 		"priority", wtx.Priority(),
-		"tx", tmstrings.LazySprintf("%X", wtx.tx.Hash()),
+		"tx", tmstrings.LazySprintf("%X", wtx.hash),
 		"height", txmp.height,
 		"num_txs", txmp.Size(),
 	)
+
 	txmp.notifyTxsAvailable()
+
 	return nil
+}
+
+// Remove victims from the mempool until we fee up to <size> bytes
+// Returns true when enough victims were removed.
+//
+// Caller should hold writable lock
+func (txmp *TxMempool) evict(size int64, victims []*clist.CElement) bool {
+	var evictedBytes int64
+	for _, vic := range victims {
+		w := vic.Value.(*WrappedTx)
+
+		if vic.Removed() {
+			// Race condition - some other thread already removed this item
+			// We handle it by just skipping this tx
+			continue
+		}
+
+		txmp.logger.Debug(
+			"evicted valid existing transaction; mempool full",
+			"old_tx", tmstrings.LazySprintf("%X", w.hash),
+			"old_priority", w.priority,
+		)
+		txmp.removeTxByElement(vic)
+		txmp.cache.Remove(w.tx)
+		txmp.metrics.EvictedTxs.Add(1)
+
+		// We may not need to evict all the eligible transactions.  Bail out
+		// early if we have made enough room.
+		evictedBytes += w.Size()
+		if evictedBytes >= size {
+			return true
+		}
+	}
+
+	return false
 }
 
 func (txmp *TxMempool) insertTx(wtx *WrappedTx) {
@@ -642,7 +730,7 @@ func (txmp *TxMempool) handleRecheckResult(tx types.Tx, checkTxRes *abci.Respons
 	txmp.logger.Debug(
 		"existing transaction no longer valid; failed re-CheckTx callback",
 		"priority", wtx.Priority(),
-		"tx", fmt.Sprintf("%X", wtx.tx.Hash()),
+		"tx", fmt.Sprintf("%X", wtx.hash),
 		"err", err,
 		"code", checkTxRes.Code,
 	)
@@ -661,6 +749,12 @@ func (txmp *TxMempool) handleRecheckResult(tx types.Tx, checkTxRes *abci.Respons
 // Precondition: The mempool is not empty.
 // The caller must hold txmp.mtx exclusively.
 func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
+	// cancel previous recheck if it is still running
+	if txmp.recheckCancel != nil {
+		txmp.recheckCancel()
+	}
+	ctx, txmp.recheckCancel = context.WithCancel(ctx)
+
 	if txmp.Size() == 0 {
 		panic("mempool: cannot run recheck on an empty mempool")
 	}
@@ -684,13 +778,17 @@ func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
 		for _, wtx := range wtxs {
 			wtx := wtx
 			start(func() error {
+				if err := ctx.Err(); err != nil {
+					txmp.logger.Trace("recheck txs task canceled", "err", err, "tx", wtx.hash.String())
+					return err
+				}
 				rsp, err := txmp.proxyAppConn.CheckTx(ctx, &abci.RequestCheckTx{
 					Tx:   wtx.tx,
 					Type: abci.CheckTxType_Recheck,
 				})
 				if err != nil {
 					txmp.logger.Error("failed to execute CheckTx during recheck",
-						"err", err, "hash", fmt.Sprintf("%x", wtx.tx.Hash()))
+						"err", err, "hash", fmt.Sprintf("%x", wtx.hash))
 				} else {
 					txmp.handleRecheckResult(wtx.tx, rsp)
 				}
@@ -703,8 +801,10 @@ func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
 
 		// When recheck is complete, trigger a notification for more transactions.
 		_ = g.Wait()
+
 		txmp.mtx.Lock()
 		defer txmp.mtx.Unlock()
+
 		txmp.notifyTxsAvailable()
 	}()
 }
@@ -759,6 +859,11 @@ func (txmp *TxMempool) purgeExpiredTxs(blockHeight int64) {
 	}
 }
 
+// notifyTxsAvailable triggers a notification that transactions are available in
+// the mempool. It is a no-op if the mempool is empty or if a notification has
+// already been sent.
+//
+// No locking is required to call this method.
 func (txmp *TxMempool) notifyTxsAvailable() {
 	if txmp.Size() == 0 {
 		return // nothing to do
@@ -768,9 +873,6 @@ func (txmp *TxMempool) notifyTxsAvailable() {
 		// channel cap is 1, so this will send once
 		txmp.notifiedTxsAvailable = true
 
-		select {
-		case txmp.txsAvailable <- struct{}{}:
-		default:
-		}
+		txmp.txsAvailable.Wake()
 	}
 }

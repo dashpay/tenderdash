@@ -234,4 +234,58 @@ var plan = transform.Plan{
 		T:       transform.Remove(parser.Key{"p2p", "seeds"}),
 		ErrorOK: true,
 	},
+
+	{
+		// Since https://github.com/dashpay/tenderdash/pull/775/
+		Desc: "Move ABCI related methods to [abci] section",
+		T: transform.Func(func(_ context.Context, doc *tomledit.Document) error {
+			var found []*tomledit.Entry
+			doc.Global.Scan(func(key parser.Key, e *tomledit.Entry) bool {
+				if len(key) == 1 && (key[0] == "abci" || key[0] == "proxy-app") {
+					found = append(found, e)
+				}
+				return true
+			})
+			if len(found) == 0 {
+				return nil // nothing to do
+			}
+
+			// Now that we know we have work to do, find the target table.
+			var sec *tomledit.Section
+			if dst := transform.FindTable(doc, "abci"); dst == nil {
+				// If the table doesn't exist, create it. Old config files
+				// probably will not have it, so plug in the comment too.
+				sec = &tomledit.Section{
+					Heading: &parser.Heading{
+						Block: parser.Comments{
+							"#######################################################",
+							"###       ABCI App Connection Options               ###",
+							"#######################################################",
+						},
+						Name: parser.Key{"abci"},
+					},
+				}
+				doc.Sections = append(doc.Sections, sec)
+			} else {
+				sec = dst.Section
+			}
+
+			for _, e := range found {
+				e.Remove()
+				e.Name = parser.Key{e.Name[0]}
+
+				switch e.Name[0] {
+				case "abci":
+					e.Name = parser.Key{"transport"}
+				case "proxy-app":
+					e.Name = parser.Key{"address"}
+				default:
+					e.Name = parser.Key{e.Name[0]}
+				}
+
+				sec.Items = append(sec.Items, e.KeyValue)
+			}
+			return nil
+		}),
+	},
 }

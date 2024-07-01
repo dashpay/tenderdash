@@ -86,10 +86,6 @@ const defaultConfigTemplate = `# This is a TOML config file.
 ###                   Main Base Config Options                      ###
 #######################################################################
 
-# TCP or UNIX socket address of the ABCI application,
-# or the name of an ABCI application compiled in with the Tendermint binary
-proxy-app = "{{ .BaseConfig.ProxyApp }}"
-
 # A custom human readable name for this node
 moniker = "{{ .BaseConfig.Moniker }}"
 
@@ -146,12 +142,44 @@ genesis-file = "{{ js .BaseConfig.Genesis }}"
 # Path to the JSON file containing the private key to use for node authentication in the p2p protocol
 node-key-file = "{{ js .BaseConfig.NodeKey }}"
 
-# Mechanism to connect to the ABCI application: socket | grpc
-abci = "{{ .BaseConfig.ABCI }}"
-
 # If true, query the ABCI app on connecting to a new peer
 # so the app can decide if we should keep the connection or not
 filter-peers = {{ .BaseConfig.FilterPeers }}
+
+#######################################################
+###       ABCI App Connection Options               ###
+#######################################################
+
+
+[abci]
+
+
+# TCP or UNIX socket address of the ABCI application,
+# or routing rules for routed multi-app setup,
+# or the name of an ABCI application compiled in with the Tendermint binary
+# Example for routed multi-app setup:
+#   abci = "routed"
+#   address = "Info:socket:unix:///tmp/socket.1,Info:socket:unix:///tmp/socket.2,CheckTx:socket:unix:///tmp/socket.1,*:socket:unix:///tmp/socket.3"
+
+address = "{{ .Abci.Address }}"
+
+# Transport mechanism to connect to the ABCI application: socket | grpc | routed
+transport = "{{ .Abci.Transport }}"
+
+# Maximum number of simultaneous connections to the ABCI application
+# per each method. Map of a gRPC method name,like "echo", to the number of concurrent connections.
+# Special value "*" can be used to set the default limit for methods not explicitly listed.
+#
+# Example:
+#
+# grpc-concurrency = [
+#	{ "*" = 10 },
+#	{ "echo" = 2 },
+#	{ "info" = 2 },
+#]
+grpc-concurrency = [{{ range $key, $value := .Abci.GrpcConcurrency }}
+	{ "{{ $key }}" = {{ $value }} },{{ end }}
+]
 
 
 #######################################################
@@ -267,6 +295,13 @@ event-log-max-items = {{ .RPC.EventLogMaxItems }}
 # global HTTP write timeout, which applies to all connections and endpoints.
 # See https://github.com/tendermint/tendermint/issues/3435
 timeout-broadcast-tx-commit = "{{ .RPC.TimeoutBroadcastTxCommit }}"
+
+# Timeout of transaction broadcast to mempool; 0 to disable.
+#
+# This setting affects timeout of CheckTX operations used before
+# adding transaction to the mempool. If the operation takes longer,
+# the transaction is rejected with an error.
+timeout-broadcast-tx = "{{ .RPC.TimeoutBroadcastTx }}"
 
 # Maximum size of request body, in bytes
 max-body-bytes = {{ .RPC.MaxBodyBytes }}
@@ -389,6 +424,7 @@ size = {{ .Mempool.Size }}
 max-txs-bytes = {{ .Mempool.MaxTxsBytes }}
 
 # Size of the cache (used to filter transactions we saw earlier) in transactions
+# Should be much bigger than mempool size.
 cache-size = {{ .Mempool.CacheSize }}
 
 # Do not remove invalid transactions from the cache (default: false)
@@ -420,6 +456,33 @@ ttl-duration = "{{ .Mempool.TTLDuration }}"
 # has existed in the mempool at least ttl-num-blocks number of blocks or if
 # it's insertion time into the mempool is beyond ttl-duration.
 ttl-num-blocks = {{ .Mempool.TTLNumBlocks }}
+
+
+# tx-send-rate-limit is the rate limit for sending transactions to peers, in transactions per second.
+# This rate limit is individual for each peer.
+# If zero, the rate limiter is disabled.
+#
+# Default: 0
+tx-send-rate-limit = {{ .Mempool.TxSendRateLimit }}
+
+# tx-recv-rate-limit is the rate limit for receiving transactions from peers, in transactions per second.
+# This rate limit is individual for each peer.
+# If zero, the rate limiter is disabled.
+#
+# Default: 0
+tx-recv-rate-limit = {{ .Mempool.TxRecvRateLimit }}
+
+# TxEnqueueTimeout defines how many nanoseconds new mempool transaction (received
+# from other nodes) will wait when internal processing queue is full
+# (most likely due to busy CheckTx execution).Once the timeout is reached, the transaction
+# will be silently dropped. 
+# 
+# If set to 0, the timeout is disabled and transactions will wait indefinitely.
+tx-enqueue-timeout = "{{ .Mempool.TxEnqueueTimeout }}"
+
+# Timeout of check TX operations received from other nodes, using p2p protocol.
+# Use 0 to disable.
+timeout-check-tx = "{{ .Mempool.TimeoutCheckTx }}"
 
 #######################################################
 ###         State Sync Configuration Options        ###
@@ -659,9 +722,7 @@ const testGenesisFmt = `{
 			"propose": "30000000",
 			"propose_delta": "50000",
 			"vote": "30000000",
-			"vote_delta": "50000",
-			"commit": "10000000",
-			"bypass_timeout_commit": true
+			"vote_delta": "50000"
 		},
 		"evidence": {
 			"max_age_num_blocks": "100000",

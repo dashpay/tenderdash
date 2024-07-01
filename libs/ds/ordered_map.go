@@ -68,12 +68,15 @@ func (m *OrderedMap[T, V]) Delete(key T) {
 	if !ok {
 		return
 	}
-	i++
-	for ; i < len(m.values); i++ {
-		m.values[i-1] = m.values[i]
-	}
 	delete(m.keys, key)
+
+	m.values = append(m.values[:i], m.values[i+1:]...)
 	m.len--
+	for k, v := range m.keys {
+		if v > i {
+			m.keys[k] = v - 1
+		}
+	}
 }
 
 // Values returns all values in the map

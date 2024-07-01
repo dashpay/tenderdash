@@ -88,7 +88,7 @@ func TestApplyBlock(t *testing.T) {
 	consensusParamsBefore := state.ConsensusParams
 	validatorsBefore := state.Validators.Hash()
 
-	block, err := sf.MakeBlock(state, 1, new(types.Commit), 1)
+	block, err := sf.MakeBlock(state, 1, new(types.Commit), 2)
 	require.NoError(t, err)
 	bps, err := block.MakePartSet(testPartSize)
 	require.NoError(t, err)
@@ -100,8 +100,8 @@ func TestApplyBlock(t *testing.T) {
 	// State for next block
 	// nextState, err := state.NewStateChangeset(ctx, nil)
 	// require.NoError(t, err)
-	assert.EqualValues(t, 0, block.Version.App, "App version should not change in current block")
-	assert.EqualValues(t, 1, block.ProposedAppVersion, "Block should propose new version")
+	assert.EqualValues(t, 1, block.Version.App, "App version should not change in current block")
+	assert.EqualValues(t, 2, block.ProposedAppVersion, "Block should propose new version")
 
 	assert.Equal(t, consensusParamsBefore.HashConsensusParams(), block.ConsensusHash, "consensus params should change in next block")
 	assert.Equal(t, validatorsBefore, block.ValidatorsHash, "validators should change from the next block")
@@ -236,7 +236,7 @@ func TestProcessProposal(t *testing.T) {
 		Signature:       make([]byte, bls12381.SignatureSize),
 	}
 
-	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil, nil)
 	block1, err := sf.MakeBlock(state, height, lastCommit, 1)
 	require.NoError(t, err)
 	block1.SetCoreChainLock(&coreChainLockUpdate)
@@ -316,7 +316,7 @@ func TestUpdateConsensusParams(t *testing.T) {
 		eventBus,
 	)
 
-	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil)
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil, nil)
 	txResults := factory.ExecTxResults(txs)
 
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
@@ -324,6 +324,7 @@ func TestUpdateConsensusParams(t *testing.T) {
 		AppHash:               rand.Bytes(crypto.DefaultAppHashSize),
 		TxResults:             txResults,
 		ConsensusParamUpdates: &tmtypes.ConsensusParams{Block: &tmtypes.BlockParams{MaxBytes: 1024 * 1024}},
+		AppVersion:            1,
 	}, nil).Once()
 	block1, _, err := blockExec.CreateProposalBlock(
 		ctx,
@@ -348,6 +349,81 @@ func TestUpdateConsensusParams(t *testing.T) {
 
 	app.AssertExpectations(t)
 	app.AssertCalled(t, "ProcessProposal", mock.Anything, mock.Anything)
+}
+
+// TestOverrideAppVersion ensures that app_version set in PrepareProposal overrides the one in the block
+// and is passed to ProcessProposal.
+func TestOverrideAppVersion(t *testing.T) {
+	const (
+		height     = 1
+		round      = int32(12)
+		appVersion = uint64(12345)
+	)
+	txs := factory.MakeNTxs(height, 10)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	app := abcimocks.NewApplication(t)
+	logger := log.NewNopLogger()
+	cc := abciclient.NewLocalClient(logger, app)
+	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
+	err := proxyApp.Start(ctx)
+	require.NoError(t, err)
+
+	state, stateDB, _ := makeState(t, 1, height)
+	stateStore := sm.NewStore(stateDB)
+	blockStore := store.NewBlockStore(dbm.NewMemDB())
+
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+
+	pool := new(mpmocks.Mempool)
+	pool.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs).Once()
+
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		proxyApp,
+		pool,
+		sm.EmptyEvidencePool{},
+		blockStore,
+		eventBus,
+	)
+
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, nil, nil)
+	txResults := factory.ExecTxResults(txs)
+
+	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
+		TxRecords:  txsToTxRecords(txs),
+		AppHash:    rand.Bytes(crypto.DefaultAppHashSize),
+		TxResults:  txResults,
+		AppVersion: appVersion,
+	}, nil).Once()
+
+	block1, _, err := blockExec.CreateProposalBlock(
+		ctx,
+		height,
+		round,
+		state,
+		lastCommit,
+		state.Validators.GetProposer().ProTxHash,
+		1,
+	)
+	require.NoError(t, err)
+
+	app.On("ProcessProposal", mock.Anything,
+		mock.MatchedBy(func(r *abci.RequestProcessProposal) bool {
+			return r.Version.App == appVersion
+		})).Return(&abci.ResponseProcessProposal{
+		AppHash:   block1.AppHash,
+		TxResults: txResults,
+		Status:    abci.ResponseProcessProposal_ACCEPT,
+	}, nil).Once()
+
+	_, err = blockExec.ProcessProposal(ctx, block1, round, state, true)
+	require.NoError(t, err)
+	assert.EqualValues(t, appVersion, block1.Version.App, "App version should be overridden by PrepareProposal")
+
+	app.AssertExpectations(t)
 }
 
 func TestValidateValidatorUpdates(t *testing.T) {
@@ -601,7 +677,7 @@ func TestFinalizeBlockValidatorUpdates(t *testing.T) {
 		1,
 		round,
 		state,
-		types.NewCommit(state.LastBlockHeight, 0, state.LastBlockID, nil),
+		types.NewCommit(state.LastBlockHeight, 0, state.LastBlockID, nil, nil),
 		proTxHashes[0],
 		1,
 	)
@@ -715,7 +791,7 @@ func TestEmptyPrepareProposal(t *testing.T) {
 	})
 
 	app.On("PrepareProposal", mock.Anything, reqPrepProposalMatch).Return(&abci.ResponsePrepareProposal{
-		AppHash: make([]byte, crypto.DefaultAppHashSize),
+		AppHash: make([]byte, crypto.DefaultAppHashSize), AppVersion: 1,
 	}, nil)
 	cc := abciclient.NewLocalClient(logger, app)
 	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
@@ -783,8 +859,9 @@ func TestPrepareProposalErrorOnNonExistingRemoved(t *testing.T) {
 				Tx:     []byte("new tx"),
 			},
 		},
-		TxResults: []*abci.ExecTxResult{{}},
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+		TxResults:  []*abci.ExecTxResult{{}},
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		AppVersion: 1,
 	}
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(rpp, nil)
 
@@ -841,9 +918,10 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 
 	app := abcimocks.NewApplication(t)
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		TxRecords: trs,
-		TxResults: txResults,
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+		TxRecords:  trs,
+		TxResults:  txResults,
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		AppVersion: 1,
 	}, nil)
 
 	cc := abciclient.NewLocalClient(logger, app)
@@ -870,6 +948,67 @@ func TestPrepareProposalRemoveTxs(t *testing.T) {
 
 	mp.AssertCalled(t, "RemoveTxByKey", types.Tx(trs[0].Tx).Key())
 	mp.AssertCalled(t, "RemoveTxByKey", types.Tx(trs[1].Tx).Key())
+	mp.AssertExpectations(t)
+}
+
+// TestPrepareProposalDelayedTxs tests that any transactions marked as DELAYED
+// are not included in the block produced by CreateProposalBlock. The test also
+// ensures that delayed transactions are NOT removed from the mempool.
+func TestPrepareProposalDelayedTxs(t *testing.T) {
+	const height = 2
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := log.NewNopLogger()
+	eventBus := eventbus.NewDefault(logger)
+	require.NoError(t, eventBus.Start(ctx))
+
+	state, stateDB, privVals := makeState(t, 1, height)
+	stateStore := sm.NewStore(stateDB)
+
+	evpool := &mocks.EvidencePool{}
+	evpool.On("PendingEvidence", mock.Anything).Return([]types.Evidence{}, int64(0))
+
+	txs := factory.MakeNTxs(height, 10)
+	// 2 first transactions will be removed, so results only contain info about 8 txs
+	txResults := factory.ExecTxResults(txs[2:])
+	mp := &mpmocks.Mempool{}
+	mp.On("ReapMaxBytesMaxGas", mock.Anything, mock.Anything).Return(txs)
+
+	trs := txsToTxRecords(txs)
+	trs[0].Action = abci.TxRecord_DELAYED
+	trs[1].Action = abci.TxRecord_DELAYED
+
+	app := abcimocks.NewApplication(t)
+	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
+		TxRecords:  trs,
+		TxResults:  txResults,
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		AppVersion: 1,
+	}, nil)
+
+	cc := abciclient.NewLocalClient(logger, app)
+	proxyApp := proxy.New(cc, logger, proxy.NopMetrics())
+	err := proxyApp.Start(ctx)
+	require.NoError(t, err)
+
+	blockExec := sm.NewBlockExecutor(
+		stateStore,
+		proxyApp,
+		mp,
+		evpool,
+		nil,
+		eventBus,
+	)
+	val := state.Validators.GetByIndex(0)
+	commit, _ := makeValidCommit(ctx, t, height, types.BlockID{}, state.Validators, privVals)
+	block, _, err := blockExec.CreateProposalBlock(ctx, height, 0, state, commit, val.ProTxHash, 0)
+	require.NoError(t, err)
+	require.Len(t, block.Data.Txs.ToSliceOfBytes(), len(trs)-2)
+
+	require.Equal(t, -1, block.Data.Txs.Index(types.Tx(trs[0].Tx)))
+	require.Equal(t, -1, block.Data.Txs.Index(types.Tx(trs[1].Tx)))
+
 	mp.AssertExpectations(t)
 }
 
@@ -902,9 +1041,10 @@ func TestPrepareProposalAddedTxsIncluded(t *testing.T) {
 
 	app := abcimocks.NewApplication(t)
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
-		TxRecords: trs,
-		TxResults: txres,
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		TxRecords:  trs,
+		TxResults:  txres,
+		AppVersion: 1,
 	}, nil)
 
 	cc := abciclient.NewLocalClient(logger, app)
@@ -962,9 +1102,10 @@ func TestPrepareProposalReorderTxs(t *testing.T) {
 
 	app := abcimocks.NewApplication(t)
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
-		TxRecords: trs,
-		TxResults: txresults,
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		TxRecords:  trs,
+		TxResults:  txresults,
+		AppVersion: 1,
 	}, nil)
 
 	cc := abciclient.NewLocalClient(logger, app)
@@ -1027,9 +1168,10 @@ func TestPrepareProposalErrorOnTooManyTxs(t *testing.T) {
 
 	app := abcimocks.NewApplication(t)
 	app.On("PrepareProposal", mock.Anything, mock.Anything).Return(&abci.ResponsePrepareProposal{
-		TxRecords: trs,
-		TxResults: factory.ExecTxResults(txs),
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
+		TxRecords:  trs,
+		TxResults:  factory.ExecTxResults(txs),
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		AppVersion: 1,
 	}, nil)
 
 	cc := abciclient.NewLocalClient(logger, app)

@@ -24,7 +24,7 @@ message NodeInfo {
   string          listen_addr      = 3;
   string          network          = 4;
   string          version          = 5;
-  bytes           channels         = 6;
+  repeated uint32 channels         = 6;
   string          moniker          = 7;
   NodeInfoOther   other            = 8 [(gogoproto.nullable) = false];
   bytes           pro_tx_hash      = 9;

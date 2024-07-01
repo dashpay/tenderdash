@@ -54,7 +54,7 @@ message RequestFlush {}
 //
 // Used to sync Tenderdash with the application during a handshake that happens on startup.
 // The returned app_version will be included in the Header of every block.
-// Tenderdsah expects last_block_app_hash and last_block_height to be updated during Commit,
+// Tenderdash expects last_block_app_hash and last_block_height to be updated during Commit,
 // ensuring that Commit is never called twice for the same block height.
 message RequestInfo {
   string version       = 1;  // The Tenderdash software semantic version.
@@ -219,7 +219,7 @@ message RequestApplySnapshotChunk {
 //       their propose timeout goes off.
 // - As a result of executing the prepared proposal, the Application may produce header events or transaction events.
 //   The Application must keep those events until a block is decided and then pass them on to Tenderdash via
-//   `ResponseFinalizeBlock`.
+//   `ResponsePrepareProposal`.
 // - As a sanity check, Tenderdash will check the returned parameters for validity if the Application modified them.
 //   In particular, `ResponsePrepareProposal.tx_records` will be deemed invalid if
 //     - There is a duplicate transaction in the list.
@@ -290,6 +290,7 @@ message RequestPrepareProposal {
   // Proposer's latest available app protocol version.
   uint64 proposed_app_version = 11;
   // App and block version used to generate the block.
+  // App version included in the block can be modified by setting ResponsePrepareProposal.app_version.
   tendermint.version.Consensus version = 12;
   // quorum_hash contains hash of validator quorum that will sign the block
   bytes quorum_hash = 13;
@@ -365,6 +366,7 @@ message RequestProcessProposal {
   // Proposer's latest available app protocol version.
   uint64 proposed_app_version = 12;
   // App and block version used to generate the block.
+  // App version MUST be verified by the app.
   tendermint.version.Consensus version = 13;
   // quorum_hash contains hash of validator quorum that will sign the block
   bytes quorum_hash = 14;
@@ -463,8 +465,8 @@ message RequestVerifyVoteExtension {
 // - The application must execute the transactions in full, in the order they appear in `RequestFinalizeBlock.txs`,
 //   before returning control to Tenderdash. Alternatively, it can commit the candidate state corresponding to the same block
 //   previously executed via `PrepareProposal` or `ProcessProposal`.
-// - `ResponseFinalizeBlock.tx_results[i].Code == 0` only if the _i_-th transaction is fully valid.
-// - Application is expected to persist its state at the end of this call, before calling `ResponseFinalizeBlock`.
+// - If ProcessProposal for the same arguments have succeeded, FinalizeBlock MUST always succeed.
+// - Application is expected to persist its state at the end of this call, before returning `ResponseFinalizeBlock`.
 // - Later calls to `Query` can return proofs about the application state anchored
 //   in this Merkle root hash.
 // - Use `ResponseFinalizeBlock.retain_height` with caution! If all nodes in the network remove historical
@@ -637,6 +639,8 @@ message ResponsePrepareProposal {
   tendermint.types.CoreChainLock core_chain_lock_update = 5;
   // Changes to validator set that will be applied at next height.
   ValidatorSetUpdate validator_set_update = 6 [(gogoproto.nullable) = true];
+  // Application version that was used to create the current proposal.
+  uint64 app_version = 7;
 }
 
 message ResponseProcessProposal {
@@ -658,15 +662,32 @@ message ResponseProcessProposal {
 
   // Changes to validator set (set voting power to 0 to remove).
   ValidatorSetUpdate validator_set_update = 5 [(gogoproto.nullable) = true];
+
+  // Type & Key-Value events for indexing
+  repeated Event events = 6 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
 }
 
-// Provides a vote extension for signing. Each field is mandatory for filling
+// Provides a vote extension for signing. `type` and `extension` fields are mandatory for filling
 message ExtendVoteExtension {
-  // Vote extension type can be either DEFAULT or THRESHOLD_RECOVER.
-  // The Tenderdash supports only THRESHOLD_RECOVER at this moment.
+  // Vote extension type can be either DEFAULT, THRESHOLD_RECOVER or THRESHOLD_RECOVER_RAW.
+  // The Tenderdash supports only THRESHOLD_RECOVER and THRESHOLD_RECOVER_RAW at this moment.
   tendermint.types.VoteExtensionType type = 1;
   // Deterministic or (Non-Deterministic) extension provided by the sending validator's Application.
+  //
+  // For THRESHOLD_RECOVER_RAW, it MUST be 32 bytes.
   bytes extension = 2;
+  // Sign request ID that will be used to sign the vote extensions.
+  // Only applicable for THRESHOLD_RECOVER_RAW vote extension type.
+  //
+  // Tenderdash will use SHA256 checksum of `sign_request_id` when generating quorum signatures of
+  // THRESHOLD_RECOVER_RAW vote extensions. It MUST NOT be set for any other vote extension types.
+
+  // If not set, Tenderdash will generate it based on height and round.
+  //
+  // If set, it SHOULD be unique per voting round, and it MUST start with `dpevote` or `\x06plwdtx` prefix.
+  //
+  // Use with caution - it can have severe security consequences.
+  optional bytes sign_request_id = 3;
 }
 
 message ResponseExtendVote {
@@ -684,8 +705,10 @@ message ResponseVerifyVoteExtension {
 }
 
 message ResponseFinalizeBlock {
-  // Type & Key-Value events for indexing
-  repeated Event events = 1 [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
+  // Events are moved to ProcessProposal
+  reserved "events";
+  reserved 1;
+
   // Blocks below this height may be removed. Defaults to `0` (retain all).
   int64 retain_height = 2;
 }
@@ -719,12 +742,13 @@ message EventAttribute {
 
 // ExecTxResult contains results of executing one individual transaction.
 message ExecTxResult {
-  uint32 code       = 1;  // Response code within codespace; by convention, 0 means success.
-  bytes  data       = 2;  // Result bytes, if any (arbitrary data, not interpreted by Tenderdash).
-  string log        = 3;  // The output of the application's logger. May be non-deterministic.
-  string info       = 4;  // Additional information. May be non-deterministic.
-  int64  gas_wanted = 5;  // Amount of gas requested for transaction.
-  int64  gas_used   = 6;  // Amount of gas consumed by transaction.
+  uint32 code = 1;  // Response code within codespace; by convention, 0 means success.
+  bytes  data = 2;  // Result bytes, if any (arbitrary data, not interpreted by Tenderdash).
+  string log  = 3;  // The output of the application's logger. May be non-deterministic.
+  string info = 4;  // Additional information. May be non-deterministic.
+  reserved "gas_wanted";
+  reserved 5;
+  int64 gas_used = 6;  // Amount of gas consumed by transaction.
   // Type & Key-Value events for indexing transactions (e.g. by account).
   repeated Event events = 7
       [(gogoproto.nullable) = false, (gogoproto.jsontag) = "events,omitempty"];
@@ -751,6 +775,7 @@ message TxRecord {
     UNMODIFIED = 1;  // The Application did not modify this transaction.
     ADDED      = 2;  // The Application added this transaction.
     REMOVED    = 3;  // The Application wants this transaction removed from the proposal and the mempool.
+    DELAYED    = 4;  // The Application wants this transaction removed from the proposal but not the mempool.
   }
 }
 
@@ -773,6 +798,21 @@ message ValidatorUpdate {
   string node_address = 4 [(gogoproto.nullable) = true];
 }
 
+// ValidatorSetUpdate represents a change in the validator set.
+// It can be used to add, remove, or update a validator.
+//
+// Validator set update consists of multiple ValidatorUpdate records,
+// each of them can be used to add, remove, or update a validator, according to the
+// following rules:
+//
+// 1. If a validator with the same public key already exists in the validator set
+// and power is greater than 0, the existing validator will be updated with the new power.
+// 2. If a validator with the same public key already exists in the validator set
+// and power is 0, the existing validator will be removed from the validator set.
+// 3. If a validator with the same public key does not exist in the validator set and the power is greater than 0,
+// a new validator will be added to the validator set.
+// 4. As a special case, if quorum hash has changed, all existing validators will be removed before applying
+// the new validator set update.
 message ValidatorSetUpdate {
   repeated ValidatorUpdate    validator_updates    = 1 [(gogoproto.nullable) = false];
   tendermint.crypto.PublicKey threshold_public_key = 2 [(gogoproto.nullable) = false];

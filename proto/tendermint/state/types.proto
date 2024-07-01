@@ -17,7 +17,6 @@ import "google/protobuf/timestamp.proto";
 // It is persisted to disk for each height before calling Commit.
 message ABCIResponses {
   tendermint.abci.ResponseProcessProposal process_proposal = 1;
-  tendermint.abci.ResponseFinalizeBlock   finalize_block   = 2;
 }
 
 // ValidatorsInfo represents the latest validator set, or the last height it changed

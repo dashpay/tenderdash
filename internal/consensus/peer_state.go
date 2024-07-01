@@ -59,7 +59,7 @@ type PeerState struct {
 func NewPeerState(logger log.Logger, peerID types.NodeID) *PeerState {
 	return &PeerState{
 		peerID: peerID,
-		logger: logger,
+		logger: logger.With("peer", peerID),
 		PRS: cstypes.PeerRoundState{
 			Round:              -1,
 			ProposalPOLRound:   -1,
@@ -268,7 +268,7 @@ func (ps *PeerState) getVoteBitArray(height int64, round int32, votesType tmprot
 				return nil
 
 			case tmproto.PrecommitType:
-				return ps.PRS.LastPrecommits
+				return ps.PRS.Precommits
 			}
 		}
 
@@ -334,10 +334,6 @@ func (ps *PeerState) ensureVoteBitArrays(height int64, numValidators int) {
 		}
 		if ps.PRS.ProposalPOL == nil {
 			ps.PRS.ProposalPOL = bits.NewBitArray(numValidators)
-		}
-	} else if ps.PRS.Height == height+1 {
-		if ps.PRS.LastPrecommits == nil {
-			ps.PRS.LastPrecommits = bits.NewBitArray(numValidators)
 		}
 	}
 }
@@ -487,6 +483,8 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 	ps.mtx.Lock()
 	defer ps.mtx.Unlock()
 
+	ps.logger.Trace("apply new round step message", "peer", ps.peerID, "msg", msg.String())
+
 	// ignore duplicates or decreases
 	if CompareHRS(msg.Height, msg.Round, msg.Step, ps.PRS.Height, ps.PRS.Round, ps.PRS.Step) <= 0 {
 		return
@@ -530,10 +528,8 @@ func (ps *PeerState) ApplyNewRoundStepMessage(msg *NewRoundStepMessage) {
 		// Shift Precommits to LastPrecommits.
 		if psHeight+1 == msg.Height && psRound == msg.LastCommitRound {
 			ps.PRS.LastCommitRound = msg.LastCommitRound
-			ps.PRS.LastPrecommits = ps.PRS.Precommits.Copy()
 		} else {
 			ps.PRS.LastCommitRound = msg.LastCommitRound
-			ps.PRS.LastPrecommits = nil
 		}
 
 		// we'll update the BitArray capacity later

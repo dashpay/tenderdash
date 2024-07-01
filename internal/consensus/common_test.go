@@ -157,10 +157,7 @@ func signVote(
 	blockID types.BlockID,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash) *types.Vote {
-	exts := make(types.VoteExtensions)
-	if voteType == tmproto.PrecommitType && !blockID.IsNil() {
-		exts.Add(tmproto.VoteExtensionType_DEFAULT, []byte("extension"))
-	}
+	exts := make(types.VoteExtensions, 0)
 	v, err := vs.signVote(ctx, voteType, chainID, blockID, quorumType, quorumHash, exts)
 	require.NoError(t, err, "failed to sign vote")
 
@@ -175,7 +172,7 @@ func signVotes(
 	voteType tmproto.SignedMsgType,
 	chainID string,
 	blockID types.BlockID,
-	appHash []byte,
+	_appHash []byte,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	vss ...*validatorStub,
@@ -249,7 +246,7 @@ func startConsensusState(ctx context.Context, cs *State, maxSteps int) {
 			steps++
 		}
 	}()
-	go cs.receiveRoutine(ctx, func(state *State) bool {
+	go cs.receiveRoutine(ctx, func(_state *State) bool {
 		return maxSteps > 0 && steps >= maxSteps
 	})
 }
@@ -362,7 +359,7 @@ func validatePrevote(
 	}
 }
 
-func validateLastCommit(ctx context.Context, t *testing.T, cs *State, privVal *validatorStub, blockHash []byte) {
+func validateLastCommit(_ctx context.Context, t *testing.T, cs *State, _privVal *validatorStub, blockHash []byte) {
 	t.Helper()
 
 	stateData := cs.GetStateData()
@@ -477,13 +474,14 @@ func newState(
 	state sm.State,
 	pv types.PrivValidator,
 	app abci.Application,
+	opts ...StateOption,
 ) *State {
 	t.Helper()
 
 	cfg, err := config.ResetTestRoot(t.TempDir(), "consensus_state_test")
 	require.NoError(t, err)
 
-	return newStateWithConfig(ctx, t, logger, cfg, state, pv, app)
+	return newStateWithConfig(ctx, t, logger, cfg, state, pv, app, opts...)
 }
 
 func newStateWithConfig(
@@ -852,7 +850,7 @@ func consensusLogger(t *testing.T) log.Logger {
 func makeConsensusState(
 	ctx context.Context,
 	t *testing.T,
-	cfg *config.Config,
+	_cfg *config.Config,
 	nValidators int,
 	testName string,
 	tickerFunc func() TimeoutTicker,
@@ -878,7 +876,7 @@ func makeConsensusState(
 		walDir := filepath.Dir(thisConfig.Consensus.WalFile())
 		ensureDir(t, walDir, 0700)
 
-		app, err := kvstore.NewMemoryApp()
+		app, err := kvstore.NewMemoryApp(kvstore.WithLogger(logger))
 		require.NoError(t, err)
 		t.Cleanup(func() { _ = app.Close() })
 
@@ -922,9 +920,7 @@ func genFilePV(dir string) (types.PrivValidator, error) {
 		return nil, err
 	}
 	privVal := privval.GenFilePV(tempKeyFile.Name(), tempStateFile.Name())
-	if err != nil {
-		return nil, err
-	}
+
 	return privVal, nil
 }
 
@@ -1031,7 +1027,7 @@ type genesisStateArgs struct {
 	Time       time.Time
 }
 
-func makeGenesisState(ctx context.Context, t *testing.T, cfg *config.Config, args genesisStateArgs) (sm.State, []types.PrivValidator) {
+func makeGenesisState(_ctx context.Context, t *testing.T, _cfg *config.Config, args genesisStateArgs) (sm.State, []types.PrivValidator) {
 	t.Helper()
 	if args.Power == 0 {
 		args.Power = 1
@@ -1109,7 +1105,7 @@ func signDataIsEqual(v1 *types.Vote, v2 *tmproto.Vote) bool {
 	if v1 == nil || v2 == nil {
 		return false
 	}
-	if v1.VoteExtensions.IsSameWithProto(v2.VoteExtensionsToMap()) {
+	if v1.VoteExtensions.IsSameWithProto(v2.VoteExtensions) {
 		return false
 	}
 	return v1.Type == v2.Type &&

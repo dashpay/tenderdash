@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
@@ -44,7 +45,7 @@ func setupTestCase(t *testing.T) (func(t *testing.T), dbm.DB, sm.State) {
 	err = stateStore.Save(state)
 	require.NoError(t, err)
 
-	tearDown := func(t *testing.T) { _ = os.RemoveAll(cfg.RootDir) }
+	tearDown := func(_ *testing.T) { _ = os.RemoveAll(cfg.RootDir) }
 
 	return tearDown, stateDB, state
 }
@@ -330,6 +331,39 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 
 		assert.Equal(t, pubKey, val.PubKey, fmt.Sprintf(`unexpected pubKey at height %d`, height))
 	}
+}
+
+// TestEmptyValidatorUpdates tests that the validator set is updated correctly when there are no validator updates.
+func TestEmptyValidatorUpdates(t *testing.T) {
+	tearDown, _, state := setupTestCase(t)
+	defer tearDown(t)
+
+	firstNode := state.Validators.GetByIndex(0)
+	require.NotZero(t, firstNode.ProTxHash)
+	ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
+
+	newPrivKey := bls12381.GenPrivKeyFromSecret([]byte("test"))
+	newPubKey := newPrivKey.PubKey()
+	newQuorumHash := crypto.RandQuorumHash()
+
+	expectValidators := types.ValidatorListString(state.Validators.Validators)
+
+	resp := abci.ResponseProcessProposal{
+		ValidatorSetUpdate: &abci.ValidatorSetUpdate{
+			ValidatorUpdates:   nil,
+			ThresholdPublicKey: cryptoenc.MustPubKeyToProto(newPubKey),
+			QuorumHash:         newQuorumHash,
+		}}
+
+	changes, err := state.NewStateChangeset(
+		ctx,
+		sm.RoundParamsFromProcessProposal(&resp, nil, 0),
+	)
+	require.NoError(t, err)
+
+	assert.EqualValues(t, newQuorumHash, changes.NextValidators.QuorumHash, "quorum hash should be updated")
+	assert.EqualValues(t, newPubKey, changes.NextValidators.ThresholdPublicKey, "threshold public key should be updated")
+	assert.Equal(t, expectValidators, types.ValidatorListString(changes.NextValidators.Validators), "validator should not change")
 }
 
 //func TestProposerFrequency(t *testing.T) {
@@ -1000,6 +1034,8 @@ func TestStateMakeBlock(t *testing.T) {
 
 	proposerProTxHash := state.Validators.GetProposer().ProTxHash
 	stateVersion := state.Version.Consensus
+	// temporary workaround; state.Version.Consensus is deprecated and will be removed
+	stateVersion.App = kvstore.ProtocolVersion
 	var height int64 = 2
 	state.LastBlockHeight = height - 1
 	block, err := statefactory.MakeBlock(state, height, new(types.Commit), 0)
@@ -1100,24 +1136,26 @@ func TestStateProto(t *testing.T) {
 
 	for _, tt := range tc {
 		tt := tt
-		pbs, err := tt.state.ToProto()
-		if !tt.expPass1 {
-			assert.Error(t, err)
-		} else {
-			assert.NoError(t, err, tt.testName)
-		}
+		t.Run(tt.testName, func(t *testing.T) {
+			pbs, err := tt.state.ToProto()
+			if !tt.expPass1 {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err, tt.testName)
+			}
 
-		smt, err := sm.FromProto(pbs)
-		if tt.expPass2 {
-			require.NoError(t, err, tt.testName)
-			require.Equal(t, tt.state, smt, tt.testName)
-		} else {
-			require.Error(t, err, tt.testName)
-		}
+			smt, err := sm.FromProto(pbs)
+			if tt.expPass2 {
+				require.NoError(t, err, tt.testName)
+				require.Equal(t, tt.state, smt, tt.testName)
+			} else {
+				require.Error(t, err, tt.testName)
+			}
+		})
 	}
 }
 
-func blockExecutorFunc(ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
+func blockExecutorFunc(_ctx context.Context, t *testing.T) func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
 	return func(prevState, state sm.State, ucState sm.CurrentRoundState) sm.State {
 		t.Helper()
 

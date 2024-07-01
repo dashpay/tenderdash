@@ -22,8 +22,25 @@ import (
 // More:
 // https://docs.tendermint.com/master/rpc/#/Tx/broadcast_tx_async
 // Deprecated and should be removed in 0.37
-func (env *Environment) BroadcastTxAsync(ctx context.Context, req *coretypes.RequestBroadcastTx) (*coretypes.ResultBroadcastTx, error) {
-	go func() { _ = env.Mempool.CheckTx(ctx, req.Tx, nil, mempool.TxInfo{}) }()
+func (env *Environment) BroadcastTxAsync(_ctx context.Context, req *coretypes.RequestBroadcastTx) (*coretypes.ResultBroadcastTx, error) {
+	go func() {
+		var (
+			ctx    context.Context
+			cancel context.CancelFunc
+		)
+		// We need to create a new context here, because the original context
+		// may be canceled after parent function returns.
+		if env.Config.TimeoutBroadcastTx > 0 {
+			ctx, cancel = context.WithTimeout(context.Background(), env.Config.TimeoutBroadcastTx)
+		} else {
+			ctx, cancel = context.WithCancel(context.Background())
+		}
+		defer cancel()
+
+		if res, err := env.BroadcastTx(ctx, req); err != nil || res.Code != abci.CodeTypeOK {
+			env.Logger.Error("error on broadcastTxAsync", "err", err, "result", res, "tx", req.Tx.Hash())
+		}
+	}()
 
 	return &coretypes.ResultBroadcastTx{Hash: req.Tx.Hash()}, nil
 }
@@ -37,6 +54,15 @@ func (env *Environment) BroadcastTxSync(ctx context.Context, req *coretypes.Requ
 // DeliverTx result.
 // More: https://docs.tendermint.com/master/rpc/#/Tx/broadcast_tx_sync
 func (env *Environment) BroadcastTx(ctx context.Context, req *coretypes.RequestBroadcastTx) (*coretypes.ResultBroadcastTx, error) {
+	var cancel context.CancelFunc
+
+	if env.Config.TimeoutBroadcastTx > 0 {
+		ctx, cancel = context.WithTimeout(ctx, env.Config.TimeoutBroadcastTx)
+	} else {
+		ctx, cancel = context.WithCancel(ctx)
+	}
+	defer cancel()
+
 	resCh := make(chan *abci.ResponseCheckTx, 1)
 	err := env.Mempool.CheckTx(
 		ctx,
@@ -128,7 +154,7 @@ func (env *Environment) BroadcastTxCommit(ctx context.Context, req *coretypes.Re
 					Prove: false,
 				})
 				if err != nil {
-					jitter := 100*time.Millisecond + time.Duration(rand.Int63n(int64(time.Second))) // nolint: gosec
+					jitter := 100*time.Millisecond + time.Duration(rand.Int63n(int64(time.Second))) //nolint:gosec
 					backoff := 100 * time.Duration(count) * time.Millisecond
 					timer.Reset(jitter + backoff)
 					continue
@@ -147,7 +173,7 @@ func (env *Environment) BroadcastTxCommit(ctx context.Context, req *coretypes.Re
 
 // UnconfirmedTxs gets unconfirmed transactions from the mempool in order of priority
 // More: https://docs.tendermint.com/master/rpc/#/Info/unconfirmed_txs
-func (env *Environment) UnconfirmedTxs(ctx context.Context, req *coretypes.RequestUnconfirmedTxs) (*coretypes.ResultUnconfirmedTxs, error) {
+func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.RequestUnconfirmedTxs) (*coretypes.ResultUnconfirmedTxs, error) {
 	totalCount := env.Mempool.Size()
 	perPage := env.validatePerPage(req.PerPage.IntPtr())
 	page, err := validatePage(req.Page.IntPtr(), perPage, totalCount)
@@ -170,7 +196,7 @@ func (env *Environment) UnconfirmedTxs(ctx context.Context, req *coretypes.Reque
 
 // NumUnconfirmedTxs gets number of unconfirmed transactions.
 // More: https://docs.tendermint.com/master/rpc/#/Info/num_unconfirmed_txs
-func (env *Environment) NumUnconfirmedTxs(ctx context.Context) (*coretypes.ResultUnconfirmedTxs, error) {
+func (env *Environment) NumUnconfirmedTxs(_ctx context.Context) (*coretypes.ResultUnconfirmedTxs, error) {
 	return &coretypes.ResultUnconfirmedTxs{
 		Count:      env.Mempool.Size(),
 		Total:      env.Mempool.Size(),
@@ -188,6 +214,6 @@ func (env *Environment) CheckTx(ctx context.Context, req *coretypes.RequestCheck
 	return &coretypes.ResultCheckTx{ResponseCheckTx: *res}, nil
 }
 
-func (env *Environment) RemoveTx(ctx context.Context, req *coretypes.RequestRemoveTx) error {
+func (env *Environment) RemoveTx(_ctx context.Context, req *coretypes.RequestRemoveTx) error {
 	return env.Mempool.RemoveTxByKey(req.TxKey)
 }

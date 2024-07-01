@@ -15,7 +15,7 @@ type proxyService struct {
 	Client *lrpc.Client
 }
 
-func (p proxyService) ABCIInfo(ctx context.Context) (*coretypes.ResultABCIInfo, error) { panic("ok") }
+func (p proxyService) ABCIInfo(_ctx context.Context) (*coretypes.ResultABCIInfo, error) { panic("ok") }
 
 func (p proxyService) ABCIQuery(ctx context.Context, req *coretypes.RequestABCIQuery) (*coretypes.ResultABCIQuery, error) {
 	return p.Client.ABCIQueryWithOptions(ctx, req.Path, req.Data, rpcclient.ABCIQueryOptions{

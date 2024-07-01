@@ -101,7 +101,8 @@ func newDefaultNode(
 		)
 	}
 
-	appClient, _, err := proxy.ClientFactory(logger, cfg.ProxyApp, cfg.ABCI, cfg.DBDir())
+	logger.Debug("Loaded ABCI config", "config", cfg.Abci)
+	appClient, _, err := proxy.ClientFactory(logger, *cfg.Abci, cfg.DBDir())
 	if err != nil {
 		return nil, err
 	}
@@ -305,7 +306,9 @@ func makeNode(
 		p2p.ChannelDescriptors(cfg),
 		node.router.OpenChannel,
 		p2pclient.WithLogger(logger),
+		p2pclient.WithSendRateLimits(p2pclient.NewRateLimit(ctx, cfg.Mempool.TxSendRateLimit, false, logger), p2p.MempoolChannel),
 	)
+
 	evReactor, evPool, edbCloser, err := createEvidenceReactor(logger, cfg, dbProvider,
 		stateStore, blockStore, peerManager.Subscribe, node.router.OpenChannel, nodeMetrics.evidence, eventBus)
 	closers = append(closers, edbCloser)

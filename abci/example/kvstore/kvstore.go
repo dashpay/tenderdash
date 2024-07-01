@@ -3,9 +3,9 @@ package kvstore
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"path"
 	"strconv"
 	"time"
@@ -27,7 +27,9 @@ import (
 	"github.com/dashpay/tenderdash/version"
 )
 
-const ProtocolVersion uint64 = 0x12345678
+// ProtocolVersion defines initial protocol (app) version.
+// App version is incremented on every block, to match current height.
+const ProtocolVersion uint64 = 1
 
 //---------------------------------------------------
 
@@ -85,12 +87,24 @@ type Application struct {
 	offerSnapshot *offerSnapshot
 
 	shouldCommitVerify bool
+	// appVersion returned in ResponsePrepareProposal.
+	// Special value of 0 means that it will be always set to current height.
+	appVersion uint64
 }
 
 // WithCommitVerification enables commit verification
 func WithCommitVerification() OptFunc {
 	return func(app *Application) error {
 		app.shouldCommitVerify = true
+		return nil
+	}
+}
+
+// WithAppVersion enables the application to enforce the app version to be equal to provided value.
+// Special value of `0` means that app version will be always set to current block version.
+func WithAppVersion(version uint64) OptFunc {
+	return func(app *Application) error {
+		app.appVersion = version
 		return nil
 	}
 }
@@ -212,6 +226,7 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 		verifyTx:               verifyTx,
 		execTx:                 execTx,
 		shouldCommitVerify:     false,
+		appVersion:             ProtocolVersion,
 	}
 
 	for _, opt := range opts {
@@ -228,7 +243,12 @@ func newApplication(stateStore StoreFactory, opts ...OptFunc) (*Application, err
 	defer in.Close()
 
 	if err := app.LastCommittedState.Load(in); err != nil {
-		return nil, fmt.Errorf("load state: %w", err)
+		// EOF means we most likely don't have any state yet
+		if !errors.Is(err, io.EOF) {
+			return nil, fmt.Errorf("load state: %w", err)
+		} else {
+			app.logger.Debug("no state found, using initial state")
+		}
 	}
 
 	app.snapshots, err = NewSnapshotStore(path.Join(app.cfg.Dir, "snapshots"))
@@ -264,9 +284,9 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	}
 
 	// Overwrite state based on AppStateBytes
+	// Note this is not optimal from memory perspective; use chunked state sync instead
 	if len(req.AppStateBytes) > 0 {
-		err := json.Unmarshal(req.AppStateBytes, &app.LastCommittedState)
-		if err != nil {
+		if err := app.LastCommittedState.Load(bytes.NewBuffer(req.AppStateBytes)); err != nil {
 			return &abci.ResponseInitChain{}, err
 		}
 	}
@@ -282,7 +302,7 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	if !ok {
 		consensusParams = types1.ConsensusParams{
 			Version: &types1.VersionParams{
-				AppVersion: ProtocolVersion,
+				AppVersion: uint64(app.LastCommittedState.GetHeight()) + 1,
 			},
 		}
 	}
@@ -341,6 +361,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *abci.RequestPrep
 		ConsensusParamUpdates: app.getConsensusParamsUpdate(req.Height),
 		CoreChainLockUpdate:   coreChainLock,
 		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
+		AppVersion:            app.appVersionForHeight(req.Height),
 	}
 
 	if app.cfg.PrepareProposalDelayMS != 0 {
@@ -368,12 +389,22 @@ func (app *Application) ProcessProposal(_ context.Context, req *abci.RequestProc
 			Status: abci.ResponseProcessProposal_REJECT,
 		}, err
 	}
+
+	if req.Version.App != app.appVersionForHeight(req.Height) {
+		app.logger.Error("app version mismatch in process proposal request",
+			"version", req.Version.App, "expected", app.appVersionForHeight(req.Height), "height", roundState.GetHeight())
+		return &abci.ResponseProcessProposal{
+			Status: abci.ResponseProcessProposal_REJECT,
+		}, nil
+	}
+
 	resp := &abci.ResponseProcessProposal{
 		Status:                abci.ResponseProcessProposal_ACCEPT,
 		AppHash:               roundState.GetAppHash(),
 		TxResults:             txResults,
 		ConsensusParamUpdates: app.getConsensusParamsUpdate(req.Height),
 		ValidatorSetUpdate:    app.getValidatorSetUpdate(req.Height),
+		Events:                []abci.Event{app.eventValUpdate(req.Height)},
 	}
 
 	if app.cfg.ProcessProposalDelayMS != 0 {
@@ -398,7 +429,8 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	appHash := tmbytes.HexBytes(req.Block.Header.AppHash)
 	roundState, ok := app.roundStates[roundKey(appHash, req.Height, req.Round)]
 	if !ok {
-		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s not found", appHash)
+		return &abci.ResponseFinalizeBlock{}, fmt.Errorf("state with apphash %s at height %d round %d not found",
+			appHash, req.Height, req.Round)
 	}
 	if roundState.GetHeight() != req.Height {
 		return &abci.ResponseFinalizeBlock{},
@@ -411,18 +443,15 @@ func (app *Application) FinalizeBlock(_ context.Context, req *abci.RequestFinali
 	if app.shouldCommitVerify {
 		vsu := app.getActiveValidatorSetUpdates()
 		qsd := types.QuorumSignData{
-			Block:      makeBlockSignItem(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
-			Extensions: makeVoteExtensionSignItems(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
+			Block:                  makeBlockSignItem(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
+			VoteExtensionSignItems: makeVoteExtensionSignItems(req, btcjson.LLMQType_5_60, vsu.QuorumHash),
 		}
 		err := app.verifyBlockCommit(qsd, req.Commit)
 		if err != nil {
 			return nil, err
 		}
 	}
-	events := []abci.Event{app.eventValUpdate(req.Height)}
-	resp := &abci.ResponseFinalizeBlock{
-		Events: events,
-	}
+	resp := &abci.ResponseFinalizeBlock{}
 	if app.RetainBlocks > 0 && app.LastCommittedState.GetHeight() >= app.RetainBlocks {
 		resp.RetainHeight = app.LastCommittedState.GetHeight() - app.RetainBlocks + 1
 	}
@@ -530,14 +559,15 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 	}
 
 	if app.offerSnapshot.isFull() {
-		chunks := app.offerSnapshot.bytes()
-		err := json.Unmarshal(chunks, &app.LastCommittedState)
-		if err != nil {
+		chunks := app.offerSnapshot.reader()
+		defer chunks.Close()
+
+		if err := app.LastCommittedState.Load(chunks); err != nil {
 			return &abci.ResponseApplySnapshotChunk{}, fmt.Errorf("cannot unmarshal state: %w", err)
 		}
+
 		app.logger.Info("restored state snapshot",
 			"height", app.LastCommittedState.GetHeight(),
-			"json", string(chunks),
 			"apphash", app.LastCommittedState.GetAppHash(),
 			"snapshot_height", app.offerSnapshot.snapshot.Height,
 			"snapshot_apphash", app.offerSnapshot.appHash,
@@ -548,6 +578,13 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 
 	app.logger.Debug("ApplySnapshotChunk", "resp", resp)
 	return resp, nil
+}
+func (app *Application) appVersionForHeight(height int64) uint64 {
+	if app.appVersion == 0 {
+		return uint64(height)
+	}
+
+	return app.appVersion
 }
 
 func (app *Application) createSnapshot() error {
@@ -574,10 +611,12 @@ func (app *Application) Info(_ context.Context, req *abci.RequestInfo) (*abci.Re
 	app.mu.Lock()
 	defer app.mu.Unlock()
 	appHash := app.LastCommittedState.GetAppHash()
+	appVersion := app.appVersionForHeight(app.LastCommittedState.GetHeight() + 1) // we set app version to CURRENT height
+
 	resp := &abci.ResponseInfo{
 		Data:             fmt.Sprintf("{\"appHash\":\"%s\"}", appHash.String()),
 		Version:          version.ABCIVersion,
-		AppVersion:       ProtocolVersion,
+		AppVersion:       appVersion,
 		LastBlockHeight:  app.LastCommittedState.GetHeight(),
 		LastBlockAppHash: app.LastCommittedState.GetAppHash(),
 	}

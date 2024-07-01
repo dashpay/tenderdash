@@ -27,9 +27,9 @@ func validateBlock(state State, block *types.Block) error {
 	}
 
 	// Validate basic info.
-	if block.Version.App != state.Version.Consensus.App ||
-		block.Version.Block != state.Version.Consensus.Block {
-		return fmt.Errorf("wrong Block.Header.Version. Expected %v, got %v",
+	// We don't validate app version because proposer can override it on a block-by-block basis.
+	if block.Version.Block != state.Version.Consensus.Block {
+		return fmt.Errorf("wrong Block.Header.Version.Block. Expected %v, got %v",
 			state.Version.Consensus,
 			block.Version,
 		)

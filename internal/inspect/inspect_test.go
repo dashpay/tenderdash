@@ -264,7 +264,6 @@ func TestBlockResults(t *testing.T) {
 	testGasUsed := int64(100)
 	stateStoreMock := &statemocks.Store{}
 	stateStoreMock.On("LoadABCIResponses", testHeight).Return(&state.ABCIResponses{
-		FinalizeBlock: &abcitypes.ResponseFinalizeBlock{},
 		ProcessProposal: &abcitypes.ResponseProcessProposal{
 			TxResults: []*abcitypes.ExecTxResult{
 				{

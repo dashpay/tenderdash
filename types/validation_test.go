@@ -1,6 +1,7 @@
 package types
 
 import (
+	"bytes"
 	"context"
 	"testing"
 
@@ -31,21 +32,24 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 	vote.ValidatorProTxHash = proTxHash
 	v := vote.ToProto()
 
-	quorumSigns, err := MakeQuorumSigns(chainID, btcjson.LLMQType_5_60, quorumHash, v)
+	dataToSign, err := MakeQuorumSigns(chainID, btcjson.LLMQType_5_60, quorumHash, v)
 	require.NoError(t, err)
 
-	blockSig, err := privKey.SignDigest(quorumSigns.Block.ID)
+	sig, err := dataToSign.SignWithPrivkey(privKey)
 	require.NoError(t, err)
-	vote.BlockSignature = blockSig
+
+	vote.BlockSignature = sig.BlockSign
+	err = vote.VoteExtensions.SetSignatures(sig.VoteExtensionSignatures)
+	require.NoError(t, err)
 
 	commit := NewCommit(vote.Height,
 		vote.Round,
 		vote.BlockID,
+		vote.VoteExtensions,
+
 		&CommitSigns{
-			QuorumSigns: QuorumSigns{
-				BlockSign: blockSig,
-			},
-			QuorumHash: quorumHash,
+			QuorumSigns: sig,
+			QuorumHash:  quorumHash,
 		},
 	)
 
@@ -65,8 +69,7 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 		expErr      bool
 	}{
 		{"good", chainID, vote.BlockID, vote.Height, commit, false},
-
-		{"threshold block signature is invalid", "EpsilonEridani", vote.BlockID, vote.Height, commit, true},
+		{"invalid block signature", "EpsilonEridani", vote.BlockID, vote.Height, commit, true},
 		{"wrong block ID", chainID, makeBlockIDRandom(), vote.Height, commit, true},
 		{
 			description: "invalid commit -- wrong block ID",
@@ -81,15 +84,31 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 			expErr: true,
 		},
 		{"wrong height", chainID, vote.BlockID, vote.Height - 1, commit, true},
-
-		{"threshold block signature is invalid", chainID, vote.BlockID, vote.Height,
-			NewCommit(vote.Height, vote.Round, vote.BlockID, &CommitSigns{QuorumHash: quorumHash}), true},
-
-		{"threshold block signature is invalid", chainID, vote.BlockID, vote.Height,
+		// block sign malformed
+		{"invalid block signature", chainID, vote.BlockID, vote.Height,
+			NewCommit(vote.Height, vote.Round, vote.BlockID, vote.VoteExtensions,
+				&CommitSigns{
+					QuorumHash: quorumHash,
+					QuorumSigns: QuorumSigns{
+						BlockSign:               []byte("invalid block signature"),
+						VoteExtensionSignatures: sig.VoteExtensionSignatures,
+					}}), true},
+		// quorum signs are replaced with vote2 non-threshold signature
+		{"invalid block signature", chainID, vote.BlockID, vote.Height,
 			NewCommit(vote.Height, vote.Round, vote.BlockID,
+				vote.VoteExtensions,
 				&CommitSigns{
 					QuorumHash:  quorumHash,
-					QuorumSigns: QuorumSigns{BlockSign: vote2.BlockSignature},
+					QuorumSigns: QuorumSigns{BlockSign: vote2.BlockSignature, VoteExtensionSignatures: vote2.VoteExtensions.GetSignatures()},
+				},
+			), true},
+		// quorum hash mismatch
+		{"wrong quorum hash", chainID, vote.BlockID, vote.Height,
+			NewCommit(vote.Height, vote.Round, vote.BlockID,
+				vote.VoteExtensions,
+				&CommitSigns{
+					QuorumHash:  bytes.Repeat([]byte{0xaa}, crypto.QuorumHashSize),
+					QuorumSigns: QuorumSigns{BlockSign: vote2.BlockSignature, VoteExtensionSignatures: vote2.VoteExtensions.GetSignatures()},
 				},
 			), true},
 	}
@@ -133,14 +152,19 @@ func TestValidatorSet_VerifyCommit_CheckThresholdSignatures(t *testing.T) {
 	commit.ThresholdBlockSignature = v.BlockSignature
 	err = valSet.VerifyCommit(chainID, blockID, h, commit)
 	if assert.Error(t, err) {
-		assert.Contains(t, err.Error(), "threshold block signature is invalid")
+		assert.Contains(t, err.Error(), "invalid block signature")
 	}
 
+	goodVote := voteSet.GetByIndex(0)
 	recoverer := NewSignsRecoverer(voteSet.votes)
 	thresholdSigns, err := recoverer.Recover()
 	require.NoError(t, err)
 	commit.ThresholdBlockSignature = thresholdSigns.BlockSign
-	commit.ThresholdVoteExtensions = thresholdSigns.ExtensionSigns
+	exts := goodVote.VoteExtensions.Copy()
+	for i, ext := range exts {
+		ext.SetSignature(thresholdSigns.VoteExtensionSignatures[i])
+	}
+	commit.ThresholdVoteExtensions = exts.ToProto()
 	err = valSet.VerifyCommit(chainID, blockID, h, commit)
 	require.NoError(t, err)
 }

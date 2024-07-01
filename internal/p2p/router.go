@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"reflect"
 	"runtime"
 	"time"
 
@@ -151,7 +152,7 @@ type Router struct {
 	options     RouterOptions
 	privKey     crypto.PrivKey
 	peerManager *PeerManager
-	chDescs     []*ChannelDescriptor
+	chDescs     map[ChannelID]*ChannelDescriptor
 	transport   Transport
 	endpoint    *Endpoint
 	connTracker connectionTracker
@@ -198,7 +199,7 @@ func NewRouter(
 			options.MaxIncomingConnectionAttempts,
 			options.IncomingConnectionWindow,
 		),
-		chDescs:       make([]*ChannelDescriptor, 0),
+		chDescs:       make(map[ChannelID]*ChannelDescriptor, 0),
 		transport:     transport,
 		endpoint:      endpoint,
 		peerManager:   peerManager,
@@ -213,6 +214,9 @@ func NewRouter(
 	return router, nil
 }
 
+// createQueueFactory creates a queue factory function based on the queue type
+//
+// Caller should hold the r.channelMtx RLock.
 func (r *Router) createQueueFactory(ctx context.Context) (func(int) queue, error) {
 	switch r.options.QueueType {
 	case queueTypeFifo:
@@ -223,14 +227,13 @@ func (r *Router) createQueueFactory(ctx context.Context) (func(int) queue, error
 			if size%2 != 0 {
 				size++
 			}
-
 			q := newPQScheduler(r.logger, r.metrics, r.lc, r.chDescs, uint(size)/2, uint(size)/2, defaultCapacity)
 			q.start(ctx)
 			return q
 		}, nil
 
 	case queueTypeSimplePriority:
-		return func(size int) queue { return newSimplePriorityQueue(ctx, size, r.chDescs) }, nil
+		return func(size int) queue { return newSimplePriorityQueue(ctx, size) }, nil
 
 	default:
 		return nil, fmt.Errorf("cannot construct queue of type %q", r.options.QueueType)
@@ -256,7 +259,7 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 	if _, ok := r.channelQueues[id]; ok {
 		return nil, fmt.Errorf("channel %v already exists", id)
 	}
-	r.chDescs = append(r.chDescs, chDesc)
+	r.chDescs[id] = chDesc
 
 	queue := r.queueFactory(chDesc.RecvBufferCapacity)
 	outCh := make(chan Envelope, chDesc.RecvBufferCapacity)
@@ -432,7 +435,7 @@ func (r *Router) acceptPeers(ctx context.Context, transport Transport) {
 			return
 		case err != nil:
 			// in this case we got an error from the net.Listener.
-			r.logger.Error("failed to accept connection", "transport", transport, "err", err)
+			r.logger.Warn("failed to accept connection", "transport", transport, "err", err)
 			continue
 		}
 
@@ -496,12 +499,12 @@ func (r *Router) openConnection(ctx context.Context, conn Connection) {
 
 	err = r.peerManager.Accepted(peerInfo.NodeID, SetProTxHashToPeerInfo(peerInfo.ProTxHash))
 	if err != nil {
-		r.logger.Error("failed to accept connection",
+		r.logger.Warn("failed to accept connection",
 			"op", "incoming/accepted", "peer", peerInfo.NodeID, "err", err)
 		return
 	}
 
-	r.routePeer(ctx, peerInfo.NodeID, conn, toChannelIDs(peerInfo.Channels))
+	r.routePeer(ctx, peerInfo.NodeID, conn, toChannelIDs(peerInfo.Channels.ToSlice()))
 }
 
 // dialPeers maintains outbound connections to peers by dialing them.
@@ -589,7 +592,7 @@ func (r *Router) connectPeer(ctx context.Context, address NodeAddress) {
 	}
 
 	// routePeer (also) calls connection close
-	go r.routePeer(ctx, address.NodeID, conn, toChannelIDs(peerInfo.Channels))
+	go r.routePeer(ctx, address.NodeID, conn, toChannelIDs(peerInfo.Channels.ToSlice()))
 }
 
 func (r *Router) getOrMakeQueue(peerID types.NodeID, channels ChannelIDSet) queue {
@@ -600,7 +603,10 @@ func (r *Router) getOrMakeQueue(peerID types.NodeID, channels ChannelIDSet) queu
 		return peerQueue
 	}
 
+	r.channelMtx.RLock()
 	peerQueue := r.queueFactory(queueBufferDefault)
+	r.channelMtx.RUnlock()
+
 	r.peerQueues[peerID] = peerQueue
 	r.peerChannels[peerID] = channels
 	return peerQueue
@@ -698,6 +704,11 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	r.metrics.PeersConnected.Add(1)
 	r.peerManager.Ready(ctx, peerID, channels)
 
+	// we use context to manage the lifecycle of the peer
+	// note that original ctx will be used in cleanup
+	ioCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	sendQueue := r.getOrMakeQueue(peerID, channels)
 	defer func() {
 		r.peerMtx.Lock()
@@ -705,6 +716,7 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 		delete(r.peerChannels, peerID)
 		r.peerMtx.Unlock()
 
+		_ = conn.Close()
 		sendQueue.close()
 
 		r.peerManager.Disconnected(ctx, peerID)
@@ -714,43 +726,68 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 	r.logger.Info("peer connected", "peer", peerID, "endpoint", conn)
 
 	errCh := make(chan error, 2)
+	wg := sync.WaitGroup{}
+	wg.Add(2)
 
 	go func() {
 		select {
-		case errCh <- r.receivePeer(ctx, peerID, conn):
-		case <-ctx.Done():
+		case errCh <- r.receivePeer(ioCtx, peerID, conn):
+		case <-ioCtx.Done():
 		}
+		wg.Done()
 	}()
 
 	go func() {
 		select {
-		case errCh <- r.sendPeer(ctx, peerID, conn, sendQueue):
-		case <-ctx.Done():
+		case errCh <- r.sendPeer(ioCtx, peerID, conn, sendQueue):
+		case <-ioCtx.Done():
 		}
+		wg.Done()
 	}()
 
-	var err error
+	// wait for error from first goroutine
+
+	var (
+		err    error
+		ctxErr error
+	)
+
 	select {
 	case err = <-errCh:
-	case <-ctx.Done():
+		r.logger.Debug("routePeer: received error from subroutine 1", "peer", peerID, "err", err)
+	case <-ioCtx.Done():
+		r.logger.Debug("routePeer: ctx done", "peer", peerID)
+		ctxErr = ioCtx.Err()
 	}
 
+	// goroutine 1 has finished, so we can cancel the context and close everything
+	cancel()
 	_ = conn.Close()
 	sendQueue.close()
 
-	select {
-	case <-ctx.Done():
-	case e := <-errCh:
-		// The first err was nil, so we update it with the second err, which may
-		// or may not be nil.
-		if err == nil {
-			err = e
+	r.logger.Trace("routePeer: closed conn and send queue, waiting for all goroutines to finish", "peer", peerID, "err", err)
+	wg.Wait()
+	r.logger.Trace("routePeer: all goroutines finished", "peer", peerID, "err", err)
+
+	// Drain the error channel; these should typically not be interesting
+FOR:
+	for {
+		select {
+		case e := <-errCh:
+			r.logger.Trace("routePeer: received error when draining errCh", "peer", peerID, "err", e)
+			// if we received non-context error, we should return it
+			if err == nil && !errors.Is(e, context.Canceled) && !errors.Is(e, context.DeadlineExceeded) {
+				err = e
+			}
+		default:
+			break FOR
 		}
 	}
+	close(errCh)
 
-	// if the context was canceled
-	if e := ctx.Err(); err == nil && e != nil {
-		err = e
+	// if the context was canceled, and no other error received on errCh
+	if err == nil {
+		err = ctxErr
 	}
 
 	switch err {
@@ -764,6 +801,9 @@ func (r *Router) routePeer(ctx context.Context, peerID types.NodeID, conn Connec
 // receivePeer receives inbound messages from a peer, deserializes them and
 // passes them on to the appropriate channel.
 func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Connection) error {
+	timeout := time.NewTimer(0)
+	defer timeout.Stop()
+
 	for {
 		chID, bz, err := conn.ReceiveMessage(ctx)
 		if err != nil {
@@ -771,11 +811,14 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		}
 
 		r.channelMtx.RLock()
-		queue, ok := r.channelQueues[chID]
+		queue, queueOk := r.channelQueues[chID]
+		chDesc, chDescOk := r.chDescs[chID]
 		r.channelMtx.RUnlock()
 
-		if !ok {
-			r.logger.Debug("dropping message for unknown channel", "peer", peerID, "channel", chID)
+		if !queueOk || !chDescOk {
+			r.logger.Debug("dropping message for unknown channel",
+				"peer", peerID, "channel", chID,
+				"queue", queueOk, "chDesc", chDescOk)
 			continue
 		}
 
@@ -784,7 +827,6 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 			r.logger.Error("message decoding failed, dropping message", "peer", peerID, "err", err)
 			continue
 		}
-		start := time.Now().UTC()
 		envelope, err := EnvelopeFromProto(protoEnvelope)
 		if err != nil {
 			r.logger.Error("message decoding failed, dropping message", "peer", peerID, "err", err)
@@ -792,6 +834,19 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		}
 		envelope.From = peerID
 		envelope.ChannelID = chID
+
+		// stop previous timeout counter and drain the timeout channel
+		timeout.Stop()
+		select {
+		case <-timeout.C:
+		default:
+		}
+
+		if chDesc.EnqueueTimeout > 0 {
+			timeout.Reset(chDesc.EnqueueTimeout)
+		}
+		start := time.Now().UTC()
+
 		select {
 		case queue.enqueue() <- envelope:
 			r.metrics.PeerReceiveBytesTotal.With(
@@ -804,7 +859,18 @@ func (r *Router) receivePeer(ctx context.Context, peerID types.NodeID, conn Conn
 		case <-queue.closed():
 			r.logger.Debug("channel closed, dropping message", "peer", peerID, "channel", chID)
 
+		case <-timeout.C:
+			r.logger.Debug("dropping message from peer due to enqueue timeout",
+				"peer", peerID,
+				"channel", chID,
+				"channel_name", chDesc.Name,
+				"timeout", chDesc.EnqueueTimeout.String(),
+				"type", reflect.TypeOf((envelope.Message)).Name(),
+				"took", time.Since(start).String(),
+			)
+
 		case <-ctx.Done():
+			r.logger.Debug("receivePeer: ctx is done", "peer", peerID, "channel", chID)
 			return nil
 		}
 	}
@@ -943,9 +1009,9 @@ func (cs ChannelIDSet) Contains(id ChannelID) bool {
 	return ok
 }
 
-func toChannelIDs(bytes []byte) ChannelIDSet {
-	c := make(map[ChannelID]struct{}, len(bytes))
-	for _, b := range bytes {
+func toChannelIDs(ids []uint16) ChannelIDSet {
+	c := make(map[ChannelID]struct{}, len(ids))
+	for _, b := range ids {
 		c[ChannelID(b)] = struct{}{}
 	}
 	return c

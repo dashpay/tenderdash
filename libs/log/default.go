@@ -88,6 +88,10 @@ func (l defaultLogger) Info(msg string, keyVals ...interface{}) {
 	l.Logger.Info().Fields(getLogFields(keyVals...)).Msg(msg)
 }
 
+func (l defaultLogger) Warn(msg string, keyVals ...interface{}) {
+	l.Logger.Warn().Fields(getLogFields(keyVals...)).Msg(msg)
+}
+
 func (l defaultLogger) Error(msg string, keyVals ...interface{}) {
 	l.Logger.Error().Fields(getLogFields(keyVals...)).Msg(msg)
 }

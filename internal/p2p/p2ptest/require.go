@@ -25,7 +25,8 @@ func RequireEmpty(ctx context.Context, t *testing.T, channels ...p2p.Channel) {
 	count := 0
 	for iter.Next(ctx) {
 		count++
-		require.Nil(t, iter.Envelope())
+		e := iter.Envelope()
+		require.Nil(t, e, "received unexpected message %v", e.Message)
 	}
 	require.Zero(t, count)
 	require.Error(t, ctx.Err())

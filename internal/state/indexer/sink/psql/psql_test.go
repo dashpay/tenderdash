@@ -227,8 +227,6 @@ func newTestBlockHeader() types.EventDataNewBlockHeader {
 		ResultProcessProposal: abci.ResponseProcessProposal{
 			Status:  abci.ResponseProcessProposal_ACCEPT,
 			AppHash: make([]byte, crypto.DefaultAppHashSize),
-		},
-		ResultFinalizeBlock: abci.ResponseFinalizeBlock{
 			Events: []abci.Event{
 				makeIndexedEvent("finalize_event.proposer", "FCAA001"),
 				makeIndexedEvent("thingy.whatzit", "O.O"),

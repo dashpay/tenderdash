@@ -9,7 +9,7 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 
 	tmcrypto "github.com/dashpay/tenderdash/crypto"
-	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type dashConsensusPrivateKey struct {
@@ -105,12 +105,7 @@ func (pub DashConsensusPublicKey) VerifySignature(msg []byte, sig []byte) bool {
 	return pub.VerifySignatureDigest(hash, sig)
 }
 func (pub DashConsensusPublicKey) VerifySignatureDigest(hash []byte, sig []byte) bool {
-	signID := tmcrypto.SignID(
-		pub.quorumType,
-		tmbytes.Reverse(pub.quorumHash),
-		tmbytes.Reverse(hash[:]),
-		tmbytes.Reverse(hash[:]),
-	)
+	signID := types.NewSignItemFromHash(pub.quorumType, pub.quorumHash, hash, hash).SignHash
 
 	return pub.PubKey.VerifySignatureDigest(signID, sig)
 }

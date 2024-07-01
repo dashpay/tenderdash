@@ -22,6 +22,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/log"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -117,7 +118,7 @@ func TestBlockValidateBasic(t *testing.T) {
 			blk.LastCommit = nil
 		}, true},
 		{"Invalid LastCommit", func(blk *Block) {
-			blk.LastCommit = NewCommit(-1, 0, *voteSet.maj23, nil)
+			blk.LastCommit = NewCommit(-1, 0, *voteSet.maj23, nil, nil)
 		}, true},
 		{"Invalid Evidence", func(blk *Block) {
 			emptyEv := &DuplicateVoteEvidence{}
@@ -211,6 +212,36 @@ func TestBlockSize(t *testing.T) {
 	if size <= 0 {
 		t.Fatal("Size of the block is zero or negative")
 	}
+}
+
+// Given a block with more than `maxLoggedTxs` transactions,
+// when we marshal it for logging,
+// then we should see short hashes of the first `maxLoggedTxs` transactions in the log message, ending with "..."
+func TestBlockMarshalZerolog(t *testing.T) {
+	ctx := context.Background()
+	logger := log.NewTestingLogger(t)
+
+	txs := make(Txs, 0, 2*maxLoggedTxs)
+	expectTxs := make(Txs, 0, maxLoggedTxs)
+	for i := 0; i < 2*maxLoggedTxs; i++ {
+		txs = append(txs, Tx(fmt.Sprintf("tx%d", i)))
+		if i < maxLoggedTxs {
+			expectTxs = append(expectTxs, txs[i])
+		}
+	}
+
+	block := MakeBlock(1, txs, randCommit(ctx, t, 1, RandStateID()), nil)
+
+	// define assertions
+	expected := fmt.Sprintf(",\"txs\":{\"num_txs\":%d,\"hashes\":[", 2*maxLoggedTxs)
+	for i := 0; i < maxLoggedTxs; i++ {
+		expected += "\"" + expectTxs[i].Hash().ShortString() + "\","
+	}
+	expected += "\"...\"]}"
+	logger.AssertContains(expected)
+
+	// execute test
+	logger.Info("test block", "block", block)
 }
 
 func TestBlockString(t *testing.T) {
@@ -468,7 +499,7 @@ func TestMaxHeaderBytes(t *testing.T) {
 	timestamp := time.Date(math.MaxInt64, 0, 0, 0, 0, 0, math.MaxInt64, time.UTC)
 
 	h := Header{
-		Version:               version.Consensus{Block: math.MaxInt64, App: math.MaxInt64},
+		Version:               version.Consensus{Block: math.MaxInt64, App: math.MaxUint64},
 		ChainID:               maxChainID,
 		Height:                math.MaxInt64,
 		Time:                  timestamp,
@@ -528,7 +559,7 @@ func TestBlockMaxDataBytes(t *testing.T) {
 	require.NotNil(t, commit)
 
 	// minBlockSize is minimum correct size of a block
-	const minBlockSize = 1231
+	const minBlockSize = 1371
 
 	testCases := []struct {
 		maxBytes      int64
@@ -565,7 +596,7 @@ func TestBlockMaxDataBytes(t *testing.T) {
 
 func TestBlockMaxDataBytesNoEvidence(t *testing.T) {
 	// minBlockSize is minimum correct size of a block
-	const minBlockSize = 1128
+	const minBlockSize = 1129
 
 	testCases := []struct {
 		maxBytes int64

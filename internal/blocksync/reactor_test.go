@@ -63,7 +63,7 @@ func setup(
 	rts := &reactorTestSuite{
 		config:            conf,
 		logger:            log.NewTestingLogger(t).With("module", "block_sync", "testCase", t.Name()),
-		network:           p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{Config: conf, NumNodes: numNodes}),
+		network:           p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{Config: conf, NumNodes: numNodes}, log.NewNopLogger()),
 		nodes:             make([]types.NodeID, 0, numNodes),
 		reactors:          make(map[types.NodeID]*Reactor, numNodes),
 		app:               make(map[types.NodeID]abciclient.Client, numNodes),
@@ -102,9 +102,9 @@ func makeReactor(
 	t *testing.T,
 	conf *config.Config,
 	proTxHash types.ProTxHash,
-	nodeID types.NodeID,
+	_nodeID types.NodeID,
 	genDoc *types.GenesisDoc,
-	privVal types.PrivValidator,
+	_privVal types.PrivValidator,
 	channelCreator p2p.ChannelCreator,
 	peerEvents p2p.PeerEventSubscriber) *Reactor {
 
@@ -189,7 +189,7 @@ func (rts *reactorTestSuite) addNode(
 	peerEvents := func(ctx context.Context, _ string) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] }
 	reactor := makeReactor(ctx, t, rts.config, proTxHash, nodeID, genDoc, privVal, chCreator, peerEvents)
 
-	commit := types.NewCommit(0, 0, types.BlockID{}, nil)
+	commit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 
 	state, err := reactor.stateStore.Load()
 	require.NoError(t, err)
@@ -237,10 +237,11 @@ func makeNextBlock(ctx context.Context,
 		vote.Height,
 		vote.Round,
 		blockID,
+		vote.VoteExtensions,
 		&types.CommitSigns{
 			QuorumSigns: types.QuorumSigns{
-				BlockSign:      vote.BlockSignature,
-				ExtensionSigns: types.MakeThresholdExtensionSigns(vote.VoteExtensions),
+				BlockSign:               vote.BlockSignature,
+				VoteExtensionSignatures: vote.VoteExtensions.GetSignatures(),
 			},
 			QuorumHash: state.Validators.QuorumHash,
 		},

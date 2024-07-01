@@ -131,7 +131,7 @@ func PreCheckMaxBytes(maxBytes int64) PreCheckFunc {
 // PostCheckMaxGas checks that the wanted gas is smaller or equal to the passed
 // maxGas. Returns nil if maxGas is -1.
 func PostCheckMaxGas(maxGas int64) PostCheckFunc {
-	return func(tx types.Tx, res *abci.ResponseCheckTx) error {
+	return func(_tx types.Tx, res *abci.ResponseCheckTx) error {
 		if maxGas == -1 {
 			return nil
 		}

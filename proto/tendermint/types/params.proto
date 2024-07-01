@@ -14,6 +14,8 @@ message ConsensusParams {
   BlockParams     block     = 1;
   EvidenceParams  evidence  = 2;
   ValidatorParams validator = 3;
+  // DEPRECATED. This will be removed in a future release.
+  // Replaced by ResponsePrepareProposal.app_version
   VersionParams   version   = 4;
   SynchronyParams synchrony = 5;
   TimeoutParams   timeout   = 6;
@@ -59,6 +61,7 @@ message ValidatorParams {
 }
 
 // VersionParams contains the ABCI application version.
+// DEPRECATED. This will be removed in a future release.
 message VersionParams {
   uint64 app_version = 1;
 }
@@ -116,17 +119,9 @@ message TimeoutParams {
   google.protobuf.Duration vote       = 3 [(gogoproto.stdduration) = true];
   google.protobuf.Duration vote_delta = 4 [(gogoproto.stdduration) = true];
 
-  // commit configures how long Tendermint will wait after receiving a quorum of
-  // precommits before beginning consensus for the next height. This can be
-  // used to allow slow precommits to arrive for inclusion in the next height before progressing.
-  google.protobuf.Duration commit = 5 [(gogoproto.stdduration) = true];
-
-  // bypass_commit_timeout configures the node to proceed immediately to
-  // the next height once the node has received all precommits for a block, forgoing
-  // the remaining commit timeout.
-  // Setting bypass_commit_timeout false (the default) causes Tendermint to wait
-  // for the full commit timeout.
-  bool bypass_commit_timeout = 6;
+  // removed fields in 0.14
+  reserved "commit", "bypass_commit_timeout";
+  reserved 5, 6;
 }
 
 // ABCIParams configure functionality specific to the Application Blockchain Interface.

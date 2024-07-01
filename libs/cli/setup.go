@@ -68,7 +68,7 @@ func concatCobraCmdFuncs(fs ...cobraCmdFunc) cobraCmdFunc {
 }
 
 // Bind all flags and read the config into viper
-func BindFlagsLoadViper(cmd *cobra.Command, args []string) error {
+func BindFlagsLoadViper(cmd *cobra.Command, _args []string) error {
 	// cmd.Flags() includes flags from this command and all persistent flags from the parent
 	if err := viper.BindPFlags(cmd.Flags()); err != nil {
 		return err

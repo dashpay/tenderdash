@@ -170,7 +170,8 @@ func (r *BlockReplayer) syncStateIfItIsOneAheadOfStore(ctx context.Context, rs r
 		return r.replayBlocks(ctx, rs, state, true)
 	}
 	if rs.appHeight == rs.stateHeight {
-		// We haven't run Commit (both the state and app are one block behind),
+		// Store is ahead of both App and State
+		// We haven't run FinalizeBlock (both the state and app are one block behind),
 		// so replay with the real app.
 		// NOTE: We could instead use the cs.WAL on cs.Start,
 		// but we'd have to allow the WAL to block a block that wrote its #ENDHEIGHT
@@ -182,6 +183,7 @@ func (r *BlockReplayer) syncStateIfItIsOneAheadOfStore(ctx context.Context, rs r
 		return state.LastAppHash, nil
 	}
 	if rs.appHeight == rs.storeHeight {
+		// Store and App are ahead of State
 		// We ran Commit, but didn't save the state, so replay with mock app.
 		abciResponses, err := r.stateStore.LoadABCIResponses(rs.storeHeight)
 		if err != nil {
@@ -232,19 +234,18 @@ func (r *BlockReplayer) replayBlocks(
 	var (
 		block   *types.Block
 		commit  *types.Commit
-		fbResp  *abci.ResponseFinalizeBlock
 		ucState sm.CurrentRoundState
 	)
 	for i := firstBlock; i <= finalBlock; i++ {
 		block = r.store.LoadBlock(i)
 		commit = r.store.LoadSeenCommitAt(i)
-		ucState, fbResp, err = r.replayBlock(ctx, block, commit, state, i)
+		ucState, err = r.replayBlock(ctx, block, commit, state, i)
 		if err != nil {
 			return nil, err
 		}
 	}
 	if !mutateState {
-		err = r.publishEvents(block, ucState, fbResp)
+		err = r.publishEvents(block, ucState)
 		if err != nil {
 			return nil, err
 		}
@@ -271,27 +272,26 @@ func (r *BlockReplayer) replayBlock(
 	commit *types.Commit,
 	state sm.State,
 	height int64,
-) (sm.CurrentRoundState, *abci.ResponseFinalizeBlock, error) {
+) (sm.CurrentRoundState, error) {
 	r.logger.Info("Replay: applying block", "height", height)
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
 	ucState, err := r.blockExec.ProcessProposal(ctx, block, commit.Round, state, false)
 	if err != nil {
-		return sm.CurrentRoundState{}, nil, fmt.Errorf("blockReplayer process proposal: %w", err)
+		return sm.CurrentRoundState{}, fmt.Errorf("blockReplayer process proposal: %w", err)
 	}
-
 	// We emit events for the index services at the final block due to the sync issue when
 	// the node shutdown during the block committing status.
 	// For all other cases, we disable emitting events by providing blockExec=nil in ExecReplayedCommitBlock
-	fbResp, err := sm.ExecReplayedCommitBlock(ctx, r.appClient, block, commit, r.logger)
+	_, err = sm.ExecReplayedCommitBlock(ctx, r.appClient, block, commit, r.logger)
 	if err != nil {
-		return sm.CurrentRoundState{}, nil, err
+		return sm.CurrentRoundState{}, err
 	}
 	// Extra check to ensure the app was not changed in a way it shouldn't have.
 	if err := checkAppHashEqualsOneFromBlock(ucState.AppHash, block); err != nil {
-		return sm.CurrentRoundState{}, nil, err
+		return sm.CurrentRoundState{}, err
 	}
 	r.nBlocks++
-	return ucState, fbResp, nil
+	return ucState, nil
 }
 
 // syncStateAt loads block's data for a height H to sync it with the application.
@@ -320,7 +320,7 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 		return nil
 	}
 	stateBlockHeight := state.LastBlockHeight
-	nextVals, err := validatorSetUpdateFromGenesis(r.genDoc, r.nodeProTxHash)
+	nextVals, err := validatorSetUpdateFromGenesis(r.genDoc)
 	if err != nil {
 		return err
 	}
@@ -372,10 +372,9 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 func (r *BlockReplayer) publishEvents(
 	block *types.Block,
 	ucState sm.CurrentRoundState,
-	fbResp *abci.ResponseFinalizeBlock,
 ) error {
 	blockID := block.BlockID(nil)
-	es := sm.NewFullEventSet(block, blockID, ucState, fbResp, ucState.NextValidators)
+	es := sm.NewFullEventSet(block, blockID, ucState, ucState.NextValidators)
 	err := es.Publish(r.publisher)
 	if err != nil {
 		r.logger.Error("failed publishing event", "err", err)
@@ -383,7 +382,7 @@ func (r *BlockReplayer) publishEvents(
 	return nil
 }
 
-func validatorSetUpdateFromGenesis(genDoc *types.GenesisDoc, nodeProTxHash types.ProTxHash) (*abci.ValidatorSetUpdate, error) {
+func validatorSetUpdateFromGenesis(genDoc *types.GenesisDoc) (*abci.ValidatorSetUpdate, error) {
 	if len(genDoc.QuorumHash) != crypto.DefaultHashSize {
 		return nil, nil
 	}
@@ -395,12 +394,11 @@ func validatorSetUpdateFromGenesis(genDoc *types.GenesisDoc, nodeProTxHash types
 			return nil, fmt.Errorf("blockReplayer blocks error when validating validator: %s", err)
 		}
 	}
-	validatorSet := types.NewValidatorSetWithLocalNodeProTxHash(
+	validatorSet := types.NewValidatorSetCheckPublicKeys(
 		validators,
 		genDoc.ThresholdPublicKey,
 		genDoc.QuorumType,
 		genDoc.QuorumHash,
-		nodeProTxHash,
 	)
 	err := validatorSet.ValidateBasic()
 	if err != nil {

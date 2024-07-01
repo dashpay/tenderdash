@@ -86,7 +86,7 @@ func TestEventBusPublishEventNewBlock(t *testing.T) {
 	bps, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 	blockID := types.BlockID{Hash: block.Hash(), PartSetHeader: bps.Header()}
-	resultFinalizeBlock := abci.ResponseFinalizeBlock{
+	respProcessProposal := abci.ResponseProcessProposal{
 		Events: []abci.Event{
 			{Type: "testType", Attributes: []abci.EventAttribute{
 				{Key: "baz", Value: "1"},
@@ -112,13 +112,13 @@ func TestEventBusPublishEventNewBlock(t *testing.T) {
 		edt := msg.Data().(types.EventDataNewBlock)
 		assert.Equal(t, block, edt.Block)
 		assert.Equal(t, blockID, edt.BlockID)
-		assert.Equal(t, resultFinalizeBlock, edt.ResultFinalizeBlock)
+		assert.Equal(t, respProcessProposal, edt.ResultProcessProposal)
 	}()
 
 	err = eventBus.PublishEventNewBlock(types.EventDataNewBlock{
-		Block:               block,
-		BlockID:             blockID,
-		ResultFinalizeBlock: resultFinalizeBlock,
+		Block:                 block,
+		BlockID:               blockID,
+		ResultProcessProposal: respProcessProposal,
 	})
 	assert.NoError(t, err)
 
@@ -256,20 +256,19 @@ func TestEventBusPublishEventNewBlockHeader(t *testing.T) {
 
 	block := types.MakeBlock(0, []types.Tx{}, nil, []types.Evidence{})
 	block.SetDashParams(0, nil, 1, nil)
-	resultFinalizeBlock := abci.ResponseFinalizeBlock{
-		Events: []abci.Event{
-			{Type: "testType", Attributes: []abci.EventAttribute{
-				{Key: "baz", Value: "1"},
-				{Key: "foz", Value: "2"},
-			}},
-		},
-	}
+
 	resultProcessProposal := abci.ResponseProcessProposal{
 		Status:  abci.ResponseProcessProposal_ACCEPT,
 		AppHash: make([]byte, crypto.DefaultAppHashSize),
 		TxResults: []*abci.ExecTxResult{
 			{Code: abci.CodeTypeOK, Data: []byte("baz=1")},
 			{Code: abci.CodeTypeOK, Data: []byte("foz=2")},
+		},
+		Events: []abci.Event{
+			{Type: "testType", Attributes: []abci.EventAttribute{
+				{Key: "baz", Value: "1"},
+				{Key: "foz", Value: "2"},
+			}},
 		},
 	}
 
@@ -289,13 +288,11 @@ func TestEventBusPublishEventNewBlockHeader(t *testing.T) {
 
 		edt := msg.Data().(types.EventDataNewBlockHeader)
 		assert.Equal(t, block.Header, edt.Header)
-		assert.Equal(t, resultFinalizeBlock, edt.ResultFinalizeBlock)
 	}()
 
 	err = eventBus.PublishEventNewBlockHeader(types.EventDataNewBlockHeader{
 		Header:                block.Header,
 		ResultProcessProposal: resultProcessProposal,
-		ResultFinalizeBlock:   resultFinalizeBlock,
 	})
 	assert.NoError(t, err)
 
@@ -478,9 +475,6 @@ func BenchmarkEventBus(b *testing.B) {
 }
 
 func benchmarkEventBus(numClients int, randQueries bool, randEvents bool, b *testing.B) {
-	// for random* functions
-	mrand.Seed(time.Now().Unix())
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

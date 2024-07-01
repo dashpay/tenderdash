@@ -99,13 +99,16 @@ func newPQScheduler(
 	logger log.Logger,
 	m *Metrics,
 	lc *metricsLabelCache,
-	chDescs []*ChannelDescriptor,
+	chDescs map[ChannelID]*ChannelDescriptor,
 	enqueueBuf, dequeueBuf, capacity uint,
 ) *pqScheduler {
 
 	// copy each ChannelDescriptor and sort them by ascending channel priority
-	chDescsCopy := make([]*ChannelDescriptor, len(chDescs))
-	copy(chDescsCopy, chDescs)
+	chDescsCopy := make([]*ChannelDescriptor, 0, len(chDescs))
+	for _, chDesc := range chDescs {
+		chDescsCopy = append(chDescsCopy, chDesc)
+	}
+
 	sort.Slice(chDescsCopy, func(i, j int) bool { return chDescsCopy[i].Priority < chDescsCopy[j].Priority })
 
 	var (

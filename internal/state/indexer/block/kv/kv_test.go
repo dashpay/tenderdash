@@ -20,7 +20,7 @@ func TestBlockIndexer(t *testing.T) {
 
 	require.NoError(t, indexer.Index(types.EventDataNewBlockHeader{
 		Header: types.Header{Height: 1},
-		ResultFinalizeBlock: abci.ResponseFinalizeBlock{
+		ResultProcessProposal: abci.ResponseProcessProposal{
 			Events: []abci.Event{
 				{
 					Type: "finalize_event1",
@@ -53,7 +53,7 @@ func TestBlockIndexer(t *testing.T) {
 		}
 		require.NoError(t, indexer.Index(types.EventDataNewBlockHeader{
 			Header: types.Header{Height: int64(i)},
-			ResultFinalizeBlock: abci.ResponseFinalizeBlock{
+			ResultProcessProposal: abci.ResponseProcessProposal{
 				Events: []abci.Event{
 					{
 						Type: "finalize_event1",

@@ -13,7 +13,6 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/gogo/protobuf/proto"
 	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/rs/zerolog"
@@ -32,7 +31,7 @@ const (
 	// MaxHeaderBytes is a maximum header size.
 	// NOTE: Because app hash can be of arbitrary size, the header is therefore not
 	// capped in size and thus this number should be seen as a soft max
-	MaxHeaderBytes       int64 = 725
+	MaxHeaderBytes       int64 = 726
 	MaxCoreChainLockSize int64 = 132
 
 	// MaxOverheadForBlock - maximum overhead to encode a block (up to
@@ -294,6 +293,20 @@ func (b *Block) ToProto() (*tmproto.Block, error) {
 	return pb, nil
 }
 
+func (b *Block) MarshalZerologObject(e *zerolog.Event) {
+	if b == nil {
+		e.Bool("nil", true)
+		return
+	}
+	e.Bool("nil", false)
+
+	e.Interface("header", b.Header)
+	e.Interface("core_chain_lock", b.CoreChainLock)
+	e.Object("data", &b.Data)
+	e.Interface("evidence", b.Evidence)
+	e.Object("last_commit", b.LastCommit)
+}
+
 // FromProto sets a protobuf Block to the given pointer.
 // It returns an error if the block is invalid.
 func BlockFromProto(bp *tmproto.Block) (*Block, error) {
@@ -522,7 +535,7 @@ func (h Header) ValidateBasic() error {
 // IsTimely defines whether the the proposal time is correct, as per PBTS spec.
 // NOTE: By definition, at initial height, recvTime MUST be genesis time.
 func (h Header) IsTimely(recvTime time.Time, sp SynchronyParams, round int32) bool {
-	return isTimely(h.Time, recvTime, sp, round)
+	return checkTimely(h.Time, recvTime, sp, round) == 0
 }
 
 // StateID returns a state ID of this block
@@ -737,7 +750,7 @@ type Commit struct {
 	QuorumHash              crypto.QuorumHash `json:"quorum_hash"`
 	ThresholdBlockSignature []byte            `json:"threshold_block_signature"`
 	// ThresholdVoteExtensions keeps the list of recovered threshold signatures for vote-extensions
-	ThresholdVoteExtensions []ThresholdExtensionSign `json:"threshold_vote_extensions"`
+	ThresholdVoteExtensions tmproto.VoteExtensions `json:"threshold_vote_extensions"`
 
 	// Memoized in first call to corresponding method.
 	// NOTE: can't memoize in constructor because constructor isn't used for
@@ -746,12 +759,17 @@ type Commit struct {
 }
 
 // NewCommit returns a new Commit.
-func NewCommit(height int64, round int32, blockID BlockID, commitSigns *CommitSigns) *Commit {
+func NewCommit(height int64, round int32, blockID BlockID, voteExtensions VoteExtensions, commitSigns *CommitSigns) *Commit {
 	commit := &Commit{
 		Height:  height,
 		Round:   round,
 		BlockID: blockID,
+		ThresholdVoteExtensions: voteExtensions.Filter(func(ext VoteExtensionIf) bool {
+			_, ok := ext.(ThresholdVoteExtensionIf)
+			return ok
+		}).ToProto(),
 	}
+
 	if commitSigns != nil {
 		commitSigns.CopyToCommit(commit)
 	}
@@ -764,17 +782,18 @@ func (commit *Commit) ToCommitInfo() types.CommitInfo {
 		Round:                   commit.Round,
 		QuorumHash:              commit.QuorumHash,
 		BlockSignature:          commit.ThresholdBlockSignature,
-		ThresholdVoteExtensions: ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions),
+		ThresholdVoteExtensions: commit.ThresholdVoteExtensions,
 	}
 }
 
 // GetCanonicalVote returns the message that is being voted on in the form of a vote without signatures.
 func (commit *Commit) GetCanonicalVote() *Vote {
 	return &Vote{
-		Type:    tmproto.PrecommitType,
-		Height:  commit.Height,
-		Round:   commit.Round,
-		BlockID: commit.BlockID,
+		Type:           tmproto.PrecommitType,
+		Height:         commit.Height,
+		Round:          commit.Round,
+		BlockID:        commit.BlockID,
+		VoteExtensions: VoteExtensionsFromProto(commit.ThresholdVoteExtensions...),
 	}
 }
 
@@ -794,24 +813,6 @@ func (commit *Commit) VoteBlockRequestID() []byte {
 
 	hash := sha256.Sum256(requestIDMessage)
 	return hash[:]
-}
-
-// CanonicalVoteVerifySignBytes returns the bytes of the Canonical Vote that is threshold signed.
-func (commit *Commit) CanonicalVoteVerifySignBytes(chainID string) []byte {
-	voteCanonical := commit.GetCanonicalVote()
-	vCanonical := voteCanonical.ToProto()
-	bz, err := vCanonical.SignBytes(chainID)
-	if err != nil {
-		panic(fmt.Errorf("canonical vote sign bytes: %w", err))
-	}
-	return bz
-}
-
-// CanonicalVoteVerifySignID returns the signID bytes of the Canonical Vote that is threshold signed.
-func (commit *Commit) CanonicalVoteVerifySignID(chainID string, quorumType btcjson.LLMQType, quorumHash []byte) []byte {
-	voteCanonical := commit.GetCanonicalVote()
-	vCanonical := voteCanonical.ToProto()
-	return VoteBlockSignID(chainID, vCanonical, quorumType, quorumHash)
 }
 
 // Type returns the vote type of the commit, which is always VoteTypePrecommit
@@ -943,7 +944,7 @@ func (commit *Commit) ToProto() *tmproto.Commit {
 	c.BlockID = commit.BlockID.ToProto()
 
 	c.ThresholdBlockSignature = commit.ThresholdBlockSignature
-	c.ThresholdVoteExtensions = ThresholdExtensionSignToProto(commit.ThresholdVoteExtensions)
+	c.ThresholdVoteExtensions = commit.ThresholdVoteExtensions
 	c.QuorumHash = commit.QuorumHash
 
 	return c
@@ -967,7 +968,7 @@ func CommitFromProto(cp *tmproto.Commit) (*Commit, error) {
 
 	commit.QuorumHash = cp.QuorumHash
 	commit.ThresholdBlockSignature = cp.ThresholdBlockSignature
-	commit.ThresholdVoteExtensions = ThresholdExtensionSignFromProto(cp.ThresholdVoteExtensions)
+	commit.ThresholdVoteExtensions = cp.ThresholdVoteExtensions
 
 	commit.Height = cp.Height
 	commit.Round = cp.Round
@@ -1032,6 +1033,17 @@ func (data *Data) ToProto() tmproto.Data {
 	}
 
 	return *tp
+}
+
+func (data *Data) MarshalZerologObject(e *zerolog.Event) {
+	if data == nil {
+		e.Bool("nil", true)
+		return
+	}
+	e.Bool("nil", false)
+
+	e.Str("hash", data.Hash().ShortString())
+	e.Object("txs", data.Txs)
 }
 
 // DataFromProto takes a protobuf representation of Data &

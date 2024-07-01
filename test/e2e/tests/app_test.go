@@ -4,14 +4,20 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"math/big"
 	"math/rand"
+	"os"
+	"sort"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	db "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/abci/example/code"
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	"github.com/dashpay/tenderdash/rpc/client/http"
 	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
@@ -25,17 +31,24 @@ const (
 // Tests that any initial state given in genesis has made it into the app.
 func TestApp_InitialState(t *testing.T) {
 	testNode(t, func(ctx context.Context, t *testing.T, node e2e.Node) {
-		if len(node.Testnet.InitialState.Items) == 0 {
-			return
-		}
 
 		client, err := node.Client()
 		require.NoError(t, err)
-		for k, v := range node.Testnet.InitialState.Items {
-			resp, err := client.ABCIQuery(ctx, "", []byte(k))
+		state := kvstore.NewKvState(db.NewMemDB(), 0)
+		err = state.Load(bytes.NewBufferString(node.Testnet.InitialState))
+		require.NoError(t, err)
+		iter, err := state.Iterator(nil, nil)
+		require.NoError(t, err)
+
+		for iter.Valid() {
+			k := iter.Key()
+			v := iter.Value()
+			resp, err := client.ABCIQuery(ctx, "", k)
 			require.NoError(t, err)
-			assert.Equal(t, k, string(resp.Response.Key))
-			assert.Equal(t, v, string(resp.Response.Value))
+			assert.Equal(t, k, resp.Response.Key)
+			assert.Equal(t, v, resp.Response.Value)
+
+			iter.Next()
 		}
 	})
 }
@@ -188,4 +201,174 @@ func TestApp_Tx(t *testing.T) {
 
 	}
 
+}
+
+// Given transactions which take more than the block size,
+// when I submit them to the node,
+// then the first transaction should be committed before the last one.
+func TestApp_TxTooBig(t *testing.T) {
+	// Pair of txs, last must be in block later than first
+	type txPair struct {
+		firstTxHash tmbytes.HexBytes
+		lastTxHash  tmbytes.HexBytes
+	}
+
+	/// timeout for broadcast to single node
+	const broadcastTimeout = 10 * time.Second
+	/// Timeout to read response from single node
+	const readTimeout = 1 * time.Second
+	/// Time to process whole mempool
+	const includeInBlockTimeout = 120 * time.Second
+
+	mainCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	testnet := loadTestnet(t)
+	nodes := testnet.Nodes
+
+	if name := os.Getenv("E2E_NODE"); name != "" {
+		node := testnet.LookupNode(name)
+		require.NotNil(t, node, "node %q not found in testnet %q", name, testnet.Name)
+		nodes = []*e2e.Node{node}
+	} else {
+		sort.Slice(nodes, func(i, j int) bool {
+			return nodes[i].Name < nodes[j].Name
+		})
+	}
+
+	// we will use last client to check if txs were included in block, so we
+	// define it outside the loop
+	var client *http.HTTP
+	outcome := make([]txPair, 0, len(nodes))
+
+	start := time.Now()
+	/// Send to each node more txs than we can fit into block
+	for _, node := range nodes {
+		ctx, cancel := context.WithTimeout(mainCtx, broadcastTimeout)
+		defer cancel()
+
+		if ctx.Err() != nil {
+			t.Fatalf("context canceled before broadcasting to all nodes")
+		}
+		node := *node
+
+		if node.Stateless() {
+			continue
+		}
+
+		t.Logf("broadcasting to %s", node.Name)
+
+		session := rand.Int63()
+
+		var err error
+		client, err = node.Client()
+		require.NoError(t, err)
+
+		// FIXME: ConsensusParams is broken for last height, this is just workaround
+		status, err := client.Status(ctx)
+		assert.NoError(t, err)
+		cp, err := client.ConsensusParams(ctx, &status.SyncInfo.LatestBlockHeight)
+		assert.NoError(t, err)
+
+		// ensure we have more txs than fits the block
+		TxPayloadSize := int(cp.ConsensusParams.Block.MaxBytes / 100) // 1% of block size
+		numTxs := 101
+
+		tx := make(types.Tx, TxPayloadSize) // first tx is just zeros
+
+		var firstTxHash []byte
+		var key string
+
+		for i := 0; i < numTxs; i++ {
+			key = fmt.Sprintf("testapp-big-tx-%v-%08x-%d=", node.Name, session, i)
+			copy(tx, key)
+
+			payloadOffset := len(tx) - 8 // where we put the `i` into the payload
+			assert.Greater(t, payloadOffset, len(key))
+
+			big.NewInt(int64(i)).FillBytes(tx[payloadOffset:])
+			assert.Len(t, tx, TxPayloadSize)
+
+			if i == 0 {
+				firstTxHash = tx.Hash()
+			}
+
+			_, err = client.BroadcastTxAsync(ctx, tx)
+
+			assert.NoError(t, err, "failed to broadcast tx %06x", i)
+		}
+
+		outcome = append(outcome, txPair{
+			firstTxHash: firstTxHash,
+			lastTxHash:  tx.Hash(),
+		})
+	}
+
+	t.Logf("submitted txs in %s", time.Since(start).String())
+
+	successful := 0
+	// now we check if these txs were committed within timeout
+	require.Eventuallyf(t, func() bool {
+		failed := false
+		successful = 0
+		for _, item := range outcome {
+			ctx, cancel := context.WithTimeout(mainCtx, readTimeout)
+			defer cancel()
+
+			firstTxHash := item.firstTxHash
+			lastTxHash := item.lastTxHash
+
+			// last tx should be committed later than first
+			lastTxResp, err := client.Tx(ctx, lastTxHash, false)
+			if err == nil {
+				assert.Equal(t, lastTxHash, lastTxResp.Tx.Hash())
+
+				// fetch first tx
+				firstTxResp, err := client.Tx(ctx, firstTxHash, false)
+				assert.NoError(t, err, "first tx should be committed before second")
+				assert.EqualValues(t, firstTxHash, firstTxResp.Tx.Hash())
+
+				firstTxBlock, err := client.Header(ctx, &firstTxResp.Height)
+				assert.NoError(t, err)
+				lastTxBlock, err := client.Header(ctx, &lastTxResp.Height)
+				assert.NoError(t, err)
+
+				t.Logf("first tx in block %d, last tx in block %d, time diff %s",
+					firstTxResp.Height,
+					lastTxResp.Height,
+					lastTxBlock.Header.Time.Sub(firstTxBlock.Header.Time).String(),
+				)
+
+				assert.Less(t, firstTxResp.Height, lastTxResp.Height, "first tx should in block before last tx")
+				successful++
+			} else {
+				failed = true
+			}
+		}
+
+		return !failed
+	},
+		includeInBlockTimeout, // timeout
+		time.Second,           // interval
+		"submitted transactions were not committed after %s",
+		includeInBlockTimeout.String(),
+	)
+}
+
+// Tests that the app version in most recent block is set to height of the block.
+// Requires kvstore.WithEnforceVersionToHeight() to be enabled.
+func TestApp_AppVersion(t *testing.T) {
+	testNode(t, func(ctx context.Context, t *testing.T, node e2e.Node) {
+		client, err := node.Client()
+		require.NoError(t, err)
+		info, err := client.ABCIInfo(ctx)
+		require.NoError(t, err)
+		require.NotZero(t, info.Response.LastBlockHeight)
+
+		block, err := client.Block(ctx, &info.Response.LastBlockHeight)
+		require.NoError(t, err)
+
+		require.Equal(t, info.Response.LastBlockHeight, block.Block.Height)
+		require.EqualValues(t, block.Block.Height, block.Block.Version.App)
+	})
 }

@@ -154,7 +154,7 @@ func setup(
 	rts.privVal = types.NewMockPV()
 	rts.dashcoreClient = dashcore.NewMockClient(chainID, llmqType, rts.privVal, false)
 
-	chCreator := func(ctx context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
+	chCreator := func(_ctx context.Context, desc *p2p.ChannelDescriptor) (p2p.Channel, error) {
 		switch desc.ID {
 		case SnapshotChannel:
 			return rts.snapshotChannel, nil
@@ -261,7 +261,7 @@ func TestReactor_Sync(t *testing.T) {
 
 	appHash := []byte{1, 2, 3}
 
-	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0)
+	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0, 0)
 	go graduallyAddPeers(ctx, t, rts.peerUpdateCh, closeCh, 1*time.Second)
 	go handleSnapshotRequests(ctx, t, rts.snapshotOutCh, rts.snapshotInCh, closeCh, []snapshot{
 		{
@@ -549,7 +549,7 @@ func TestReactor_BlockProviders(t *testing.T) {
 	defer close(closeCh)
 
 	chain := buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
-	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0)
+	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0, 0)
 
 	peers := rts.reactor.peers.All()
 	require.Len(t, peers, 2)
@@ -608,7 +608,7 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	defer close(closeCh)
 
 	chain := buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
-	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0)
+	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0, 0)
 	go handleConsensusParamsRequest(ctx, t, rts.paramsOutCh, rts.paramsInCh, closeCh)
 
 	rts.reactor.cfg.UseP2P = true
@@ -689,7 +689,7 @@ func TestReactor_Backfill(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(fmt.Sprintf("failure rate: %d", tc.failureRate), func(t *testing.T) {
-			ctx, cancel := context.WithCancel(ctx)
+			ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
 
 			t.Cleanup(leaktest.CheckTimeout(t, 1*time.Minute))
@@ -716,7 +716,7 @@ func TestReactor_Backfill(t *testing.T) {
 					mock.AnythingOfType("int64"),
 					mock.AnythingOfType("*types.ValidatorSet")).
 				Maybe().
-				Return(func(lh, uh int64, vals *types.ValidatorSet) error {
+				Return(func(lh, uh int64, _vals *types.ValidatorSet) error {
 					require.Equal(t, trackingHeight, lh)
 					require.Equal(t, lh, uh)
 					require.GreaterOrEqual(t, lh, stopHeight)
@@ -728,7 +728,7 @@ func TestReactor_Backfill(t *testing.T) {
 
 			closeCh := make(chan struct{})
 			defer close(closeCh)
-			go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, tc.failureRate)
+			go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, tc.failureRate, uint64(stopHeight))
 
 			err := rts.reactor.backfill(
 				ctx,
@@ -775,6 +775,19 @@ func retryUntil(ctx context.Context, t *testing.T, fn func() bool, timeout time.
 	}
 }
 
+// handleLightBlockRequests will handle light block requests and respond with the appropriate light block
+// based on the height of the request. It will also simulate failures based on the failure rate.
+// The function will return when the context is done.
+// # Arguments
+// * `ctx` - the context
+// * `t` - the testing.T instance
+// * `chain` - the light block chain
+// * `receiving` - the channel to receive requests
+// * `sending` - the channel to send responses
+// * `close` - the channel to close the function
+// * `failureRate` - the rate of failure
+// * `stopHeight` - minimum height for which to respond; below this height, the function will not respond to requests,
+// causing timeouts. Use 0 to disable this mechanism.
 func handleLightBlockRequests(
 	ctx context.Context,
 	t *testing.T,
@@ -782,7 +795,9 @@ func handleLightBlockRequests(
 	receiving chan p2p.Envelope,
 	sending chan p2p.Envelope,
 	close chan struct{},
-	failureRate int) {
+	failureRate int,
+	stopHeight uint64,
+) {
 	requests := 0
 	errorCount := 0
 	for {
@@ -791,6 +806,12 @@ func handleLightBlockRequests(
 			return
 		case envelope := <-receiving:
 			if msg, ok := envelope.Message.(*ssproto.LightBlockRequest); ok {
+				if msg.Height < stopHeight {
+					// this causes timeout; needed for backfill tests
+					// to ensure heights below stopHeight are not processed
+					// before all heights above stopHeight are processed
+					continue
+				}
 				if requests%10 >= failureRate {
 					lb, err := chain[int64(msg.Height)].ToProto()
 					require.NoError(t, err)
@@ -901,7 +922,7 @@ func mockLB(ctx context.Context, t *testing.T, height int64, time time.Time, las
 		StateID: stateID.Hash(),
 	}
 	voteSet := types.NewVoteSet(factory.DefaultTestChainID, height, 0, tmproto.PrecommitType, currentVals)
-	commit, err := factory.MakeCommit(ctx, lastBlockID, height, 0, voteSet, currentVals, currentPrivVals, stateID)
+	commit, err := factory.MakeCommit(ctx, lastBlockID, height, 0, voteSet, currentVals, currentPrivVals)
 	require.NoError(t, err)
 	return nextVals, nextPrivVals, &types.LightBlock{
 		SignedHeader: &types.SignedHeader{

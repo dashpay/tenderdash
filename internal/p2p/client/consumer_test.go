@@ -35,7 +35,7 @@ func TestErrorLoggerP2PMessageHandler(t *testing.T) {
 			wantErr: "error",
 		},
 		{
-			mockFn: func(hd *mockConsumer, logger *log.TestingLogger) {
+			mockFn: func(hd *mockConsumer, _logger *log.TestingLogger) {
 				hd.On("Handle", mock.Anything, mock.Anything, mock.Anything).
 					Once().
 					Return(nil)

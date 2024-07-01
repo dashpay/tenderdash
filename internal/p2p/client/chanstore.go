@@ -31,7 +31,7 @@ func newChanStore(descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor, creator 
 	return store
 }
 
-func (c *chanStore) iter(ctx context.Context, chanIDs ...p2p.ChannelID) (*p2p.ChannelIterator, error) {
+func (c *chanStore) iter(ctx context.Context, chanIDs ...p2p.ChannelID) (p2p.ChannelIterator, error) {
 	chans := make([]p2p.Channel, 0, len(chanIDs))
 	for _, chanID := range chanIDs {
 		ch, err := c.get(ctx, chanID)

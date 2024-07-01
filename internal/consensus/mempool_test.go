@@ -285,7 +285,7 @@ func NewCounterApplication() *CounterApplication {
 	return &CounterApplication{}
 }
 
-func (app *CounterApplication) Info(_ context.Context, req *abci.RequestInfo) (*abci.ResponseInfo, error) {
+func (app *CounterApplication) Info(_ context.Context, _req *abci.RequestInfo) (*abci.ResponseInfo, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
@@ -310,7 +310,7 @@ func (app *CounterApplication) txResults(txs [][]byte) []*abci.ExecTxResult {
 	return respTxs
 }
 
-func (app *CounterApplication) FinalizeBlock(_ context.Context, req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
+func (app *CounterApplication) FinalizeBlock(_ context.Context, _req *abci.RequestFinalizeBlock) (*abci.ResponseFinalizeBlock, error) {
 	return &abci.ResponseFinalizeBlock{}, nil
 }
 
@@ -349,9 +349,10 @@ func (app *CounterApplication) PrepareProposal(_ context.Context, req *abci.Requ
 		})
 	}
 	return &abci.ResponsePrepareProposal{
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
-		TxRecords: trs,
-		TxResults: app.txResults(req.Txs),
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		TxRecords:  trs,
+		TxResults:  app.txResults(req.Txs),
+		AppVersion: 1,
 	}, nil
 }
 

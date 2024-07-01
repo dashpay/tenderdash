@@ -15,20 +15,20 @@ var _ indexer.TxIndexer = (*TxIndex)(nil)
 type TxIndex struct{}
 
 // Get on a TxIndex is disabled and panics when invoked.
-func (txi *TxIndex) Get(hash []byte) (*abci.TxResult, error) {
+func (txi *TxIndex) Get(_hash []byte) (*abci.TxResult, error) {
 	return nil, errors.New(`indexing is disabled (set 'tx_index = "kv"' in config)`)
 }
 
 // AddBatch is a noop and always returns nil.
-func (txi *TxIndex) AddBatch(batch *indexer.Batch) error {
+func (txi *TxIndex) AddBatch(_batch *indexer.Batch) error {
 	return nil
 }
 
 // Index is a noop and always returns nil.
-func (txi *TxIndex) Index(results []*abci.TxResult) error {
+func (txi *TxIndex) Index(_results []*abci.TxResult) error {
 	return nil
 }
 
-func (txi *TxIndex) Search(ctx context.Context, q *query.Query) ([]*abci.TxResult, error) {
+func (txi *TxIndex) Search(_ctx context.Context, _q *query.Query) ([]*abci.TxResult, error) {
 	return []*abci.TxResult{}, nil
 }

@@ -88,7 +88,7 @@ func TestValidator_Propose(t *testing.T) {
 	defer cancel()
 
 	blocks := fetchBlockChain(ctx, t)
-	testNode(t, func(ctx context.Context, t *testing.T, node e2e.Node) {
+	testNode(t, func(_ctx context.Context, t *testing.T, node e2e.Node) {
 		if node.Mode != e2e.ModeValidator {
 			return
 		}

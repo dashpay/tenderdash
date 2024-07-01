@@ -47,7 +47,7 @@ func setupReactors(ctx context.Context, t *testing.T, logger log.Logger, numNode
 
 	rts := &reactorTestSuite{
 		logger:      log.NewNopLogger().With("testCase", t.Name()),
-		network:     p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: numNodes}),
+		network:     p2ptest.MakeNetwork(ctx, t, p2ptest.NetworkOptions{NumNodes: numNodes}, log.NewNopLogger()),
 		reactors:    make(map[types.NodeID]*Reactor, numNodes),
 		mempools:    make(map[types.NodeID]*TxMempool, numNodes),
 		kvstores:    make(map[types.NodeID]*kvstore.Application, numNodes),
@@ -74,7 +74,7 @@ func setupReactors(ctx context.Context, t *testing.T, logger log.Logger, numNode
 			cfg.Mempool,
 			mempool,
 			rts.network.Nodes[nodeID].Client,
-			func(ctx context.Context, n string) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] },
+			func(_ctx context.Context, _n string) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] },
 		)
 		rts.nodes = append(rts.nodes, nodeID)
 
@@ -146,7 +146,7 @@ func TestReactorBroadcastDoesNotPanic(t *testing.T) {
 	logger := log.NewNopLogger()
 	rts := setupReactors(ctx, t, logger, numNodes, 0)
 
-	observePanic := func(r interface{}) {
+	observePanic := func(_r interface{}) {
 		t.Fatal("panic detected in reactor")
 	}
 

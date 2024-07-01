@@ -51,7 +51,8 @@ func ValidateSignatureSize(keyType crypto.KeyType, h []byte) error {
 	return nil
 }
 
-func isTimely(timestamp time.Time, recvTime time.Time, sp SynchronyParams, round int32) bool {
+// checkTimely returns 0 when message is timely, -1 when received too early, 1 when received too late.
+func checkTimely(timestamp time.Time, recvTime time.Time, sp SynchronyParams, round int32) int {
 	// The message delay values are scaled as rounds progress.
 	// Every 10 rounds, the message delay is doubled to allow consensus to
 	// proceed in the case that the chosen value was too small for the given network conditions.
@@ -72,8 +73,11 @@ func isTimely(timestamp time.Time, recvTime time.Time, sp SynchronyParams, round
 	// rhs is `proposedBlockTime + MsgDelay + Precision` in the second inequality
 	rhs := timestamp.Add(msgDelay).Add(sp.Precision)
 
-	if recvTime.Before(lhs) || recvTime.After(rhs) {
-		return false
+	if recvTime.Before(lhs) {
+		return -1
 	}
-	return true
+	if recvTime.After(rhs) {
+		return 1
+	}
+	return 0
 }

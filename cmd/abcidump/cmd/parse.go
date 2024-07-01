@@ -72,7 +72,7 @@ func (parseCmd *ParseCmd) Command() *cobra.Command {
 }
 
 // PreRunE parses command line arguments
-func (parseCmd *ParseCmd) PreRunE(cmd *cobra.Command, args []string) (err error) {
+func (parseCmd *ParseCmd) PreRunE(_cmd *cobra.Command, _args []string) (err error) {
 	if parseCmd.Input, err = loadInputData(parseCmd.InputData, parseCmd.InputFormat); err != nil {
 		return err
 	}
@@ -114,7 +114,7 @@ func loadInputData(input, format string) (reader io.Reader, err error) {
 }
 
 // RunE executes parsing logic
-func (parseCmd *ParseCmd) RunE(cmd *cobra.Command, args []string) error {
+func (parseCmd *ParseCmd) RunE(cmd *cobra.Command, _args []string) error {
 	var err error
 
 	parser := parser.NewParser(cmd.InOrStdin())

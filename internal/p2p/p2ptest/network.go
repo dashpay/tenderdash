@@ -12,6 +12,7 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/ed25519"
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	p2pclient "github.com/dashpay/tenderdash/internal/p2p/client"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -53,9 +54,8 @@ func (opts *NetworkOptions) setDefaults() {
 
 // MakeNetwork creates a test network with the given number of nodes and
 // connects them to each other.
-func MakeNetwork(ctx context.Context, t *testing.T, opts NetworkOptions) *Network {
+func MakeNetwork(ctx context.Context, t *testing.T, opts NetworkOptions, logger log.Logger) *Network {
 	opts.setDefaults()
-	logger := log.NewNopLogger()
 	network := &Network{
 		Nodes:         map[types.NodeID]*Node{},
 		logger:        logger,
@@ -272,6 +272,7 @@ func (n *Network) MakeNode(ctx context.Context, t *testing.T, proTxHash crypto.P
 		ListenAddr: "0.0.0.0:0", // FIXME: We have to fake this for now.
 		Moniker:    string(nodeID),
 		ProTxHash:  proTxHash.Copy(),
+		Channels:   tmsync.NewConcurrentSlice[uint16](),
 	}
 
 	transport := n.memoryNetwork.CreateTransport(nodeID)
@@ -374,7 +375,7 @@ func (n *Node) MakePeerUpdates(ctx context.Context, t *testing.T) *p2p.PeerUpdat
 // MakePeerUpdatesNoRequireEmpty opens a peer update subscription, with automatic cleanup.
 // It does *not* check that all updates have been consumed, but will
 // close the update channel.
-func (n *Node) MakePeerUpdatesNoRequireEmpty(ctx context.Context, t *testing.T) *p2p.PeerUpdates {
+func (n *Node) MakePeerUpdatesNoRequireEmpty(ctx context.Context, _t *testing.T) *p2p.PeerUpdates {
 	return n.PeerManager.Subscribe(ctx, "p2ptest")
 }
 

@@ -142,7 +142,6 @@ ExecTxResult contains results of executing one individual transaction.
 | data | [bytes](#bytes) |  | Result bytes, if any (arbitrary data, not interpreted by Tenderdash). |
 | log | [string](#string) |  | The output of the application&#39;s logger. May be non-deterministic. |
 | info | [string](#string) |  | Additional information. May be non-deterministic. |
-| gas_wanted | [int64](#int64) |  | Amount of gas requested for transaction. |
 | gas_used | [int64](#int64) |  | Amount of gas consumed by transaction. |
 | events | [Event](#tendermint-abci-Event) | repeated | Type &amp; Key-Value events for indexing transactions (e.g. by account). |
 | codespace | [string](#string) |  | Namespace for the code. |
@@ -155,13 +154,24 @@ ExecTxResult contains results of executing one individual transaction.
 <a name="tendermint-abci-ExtendVoteExtension"></a>
 
 ### ExtendVoteExtension
-Provides a vote extension for signing. Each field is mandatory for filling
+Provides a vote extension for signing. `type` and `extension` fields are mandatory for filling
 
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| type | [tendermint.types.VoteExtensionType](#tendermint-types-VoteExtensionType) |  | Vote extension type can be either DEFAULT or THRESHOLD_RECOVER. The Tenderdash supports only THRESHOLD_RECOVER at this moment. |
-| extension | [bytes](#bytes) |  | Deterministic or (Non-Deterministic) extension provided by the sending validator&#39;s Application. |
+| type | [tendermint.types.VoteExtensionType](#tendermint-types-VoteExtensionType) |  | Vote extension type can be either DEFAULT, THRESHOLD_RECOVER or THRESHOLD_RECOVER_RAW. The Tenderdash supports only THRESHOLD_RECOVER and THRESHOLD_RECOVER_RAW at this moment. |
+| extension | [bytes](#bytes) |  | Deterministic or (Non-Deterministic) extension provided by the sending validator&#39;s Application.
+
+For THRESHOLD_RECOVER_RAW, it MUST be 32 bytes.
+
+Sign request ID that will be used to sign the vote extensions. Only applicable for THRESHOLD_RECOVER_RAW vote extension type.
+
+Tenderdash will use SHA256 checksum of `sign_request_id` when generating quorum signatures of THRESHOLD_RECOVER_RAW vote extensions. It MUST NOT be set for any other vote extension types. |
+| sign_request_id | [bytes](#bytes) | optional | If not set, Tenderdash will generate it based on height and round.
+
+If set, it SHOULD be unique per voting round, and it MUST start with `dpevote` or `\x06plwdtx` prefix.
+
+Use with caution - it can have severe security consequences. |
 
 
 
@@ -381,8 +391,8 @@ Finalize newly decided block.
 - The application must execute the transactions in full, in the order they appear in `RequestFinalizeBlock.txs`,
   before returning control to Tenderdash. Alternatively, it can commit the candidate state corresponding to the same block
   previously executed via `PrepareProposal` or `ProcessProposal`.
-- `ResponseFinalizeBlock.tx_results[i].Code == 0` only if the _i_-th transaction is fully valid.
-- Application is expected to persist its state at the end of this call, before calling `ResponseFinalizeBlock`.
+- If ProcessProposal for the same arguments have succeeded, FinalizeBlock MUST always succeed.
+- Application is expected to persist its state at the end of this call, before returning `ResponseFinalizeBlock`.
 - Later calls to `Query` can return proofs about the application state anchored
   in this Merkle root hash.
 - Use `ResponseFinalizeBlock.retain_height` with caution! If all nodes in the network remove historical
@@ -433,7 +443,7 @@ Return information about the application state.
 
 Used to sync Tenderdash with the application during a handshake that happens on startup.
 The returned app_version will be included in the Header of every block.
-Tenderdsah expects last_block_app_hash and last_block_height to be updated during Commit,
+Tenderdash expects last_block_app_hash and last_block_height to be updated during Commit,
 ensuring that Commit is never called twice for the same block height.
 
 
@@ -572,7 +582,7 @@ Prepare new block proposal, potentially altering list of transactions.
       their propose timeout goes off.
 - As a result of executing the prepared proposal, the Application may produce header events or transaction events.
   The Application must keep those events until a block is decided and then pass them on to Tenderdash via
-  `ResponseFinalizeBlock`.
+  `ResponsePrepareProposal`.
 - As a sanity check, Tenderdash will check the returned parameters for validity if the Application modified them.
   In particular, `ResponsePrepareProposal.tx_records` will be deemed invalid if
     - There is a duplicate transaction in the list.
@@ -632,7 +642,7 @@ Note that, if _p_ has a non-`nil` _validValue_, Tenderdash will use it as propos
 | core_chain_locked_height | [uint32](#uint32) |  | Core chain lock height to be used when signing this block. |
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
-| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
+| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. App version included in the block can be modified by setting ResponsePrepareProposal.app_version. |
 | quorum_hash | [bytes](#bytes) |  | quorum_hash contains hash of validator quorum that will sign the block |
 
 
@@ -702,7 +712,7 @@ When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which
 | core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Next core-chain-lock-update for validation in ABCI. |
 | proposer_pro_tx_hash | [bytes](#bytes) |  | ProTxHash of the original proposer of the block. |
 | proposed_app_version | [uint64](#uint64) |  | Proposer&#39;s latest available app protocol version. |
-| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. |
+| version | [tendermint.version.Consensus](#tendermint-version-Consensus) |  | App and block version used to generate the block. App version MUST be verified by the app. |
 | quorum_hash | [bytes](#bytes) |  | quorum_hash contains hash of validator quorum that will sign the block |
 
 
@@ -902,7 +912,6 @@ nondeterministic
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| events | [Event](#tendermint-abci-Event) | repeated | Type &amp; Key-Value events for indexing |
 | retain_height | [int64](#int64) |  | Blocks below this height may be removed. Defaults to `0` (retain all). |
 
 
@@ -1017,6 +1026,7 @@ nondeterministic
 | consensus_param_updates | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Changes to consensus-critical gas, size, and other parameters that will be applied at next height. |
 | core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Core chain lock that will be used for next block. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Changes to validator set that will be applied at next height. |
+| app_version | [uint64](#uint64) |  | Application version that was used to create the current proposal. |
 
 
 
@@ -1036,6 +1046,7 @@ nondeterministic
 | tx_results | [ExecTxResult](#tendermint-abci-ExecTxResult) | repeated | List of structures containing the data resulting from executing the transactions. |
 | consensus_param_updates | [tendermint.types.ConsensusParams](#tendermint-types-ConsensusParams) |  | Changes to consensus-critical gas, size, and other parameters. |
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Changes to validator set (set voting power to 0 to remove). |
+| events | [Event](#tendermint-abci-Event) | repeated | Type &amp; Key-Value events for indexing |
 
 
 
@@ -1168,7 +1179,21 @@ Validator
 <a name="tendermint-abci-ValidatorSetUpdate"></a>
 
 ### ValidatorSetUpdate
+ValidatorSetUpdate represents a change in the validator set.
+It can be used to add, remove, or update a validator.
 
+Validator set update consists of multiple ValidatorUpdate records,
+each of them can be used to add, remove, or update a validator, according to the
+following rules:
+
+1. If a validator with the same public key already exists in the validator set
+and power is greater than 0, the existing validator will be updated with the new power.
+2. If a validator with the same public key already exists in the validator set
+and power is 0, the existing validator will be removed from the validator set.
+3. If a validator with the same public key does not exist in the validator set and the power is greater than 0,
+a new validator will be added to the validator set.
+4. As a special case, if quorum hash has changed, all existing validators will be removed before applying
+the new validator set update.
 
 
 | Field | Type | Label | Description |
@@ -1313,6 +1338,7 @@ TxAction contains App-provided information on what to do with a transaction that
 | UNMODIFIED | 1 | The Application did not modify this transaction. |
 | ADDED | 2 | The Application added this transaction. |
 | REMOVED | 3 | The Application wants this transaction removed from the proposal and the mempool. |
+| DELAYED | 4 | The Application wants this transaction removed from the proposal but not the mempool. |
 
 
  

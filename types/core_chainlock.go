@@ -8,6 +8,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	"github.com/rs/zerolog"
 )
 
 type CoreChainLock struct {
@@ -105,6 +106,16 @@ func (cl *CoreChainLock) StringIndented(indent string) string {
 }
 func (cl *CoreChainLock) IsZero() bool {
 	return cl == nil || (len(cl.CoreBlockHash) == 0 && len(cl.Signature) == 0 && cl.CoreBlockHeight == 0)
+}
+
+func (cl *CoreChainLock) MarshalZerologObject(e *zerolog.Event) {
+	if cl == nil {
+		e.Bool("nil", true)
+		return
+	}
+	e.Hex("core_block_hash", cl.CoreBlockHash)
+	e.Uint32("core_block_height", cl.CoreBlockHeight)
+	e.Hex("signature", cl.Signature)
 }
 
 // FromProto sets a protobuf Header to the given pointer.

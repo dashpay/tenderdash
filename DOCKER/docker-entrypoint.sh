@@ -6,7 +6,7 @@ if [ ! -d "$TMHOME/config" ]; then
 	tenderdash init validator
 
 	sed -i \
-		-e "s/^proxy-app\s*=.*/proxy-app = \"$PROXY_APP\"/" \
+		-e "s/^address\s*=.*/address = \"$PROXY_APP\"/" \
 		-e "s/^moniker\s*=.*/moniker = \"$MONIKER\"/" \
 		-e 's/^addr-book-strict\s*=.*/addr-book-strict = false/' \
 		-e 's/^timeout-commit\s*=.*/timeout-commit = "500ms"/' \
@@ -15,8 +15,14 @@ if [ ! -d "$TMHOME/config" ]; then
 		-e 's/^prometheus\s*=.*/prometheus = true/' \
 		"$TMHOME/config/config.toml"
 
+	if [ -n "$ABCI" ]; then
+		sed -i \
+			-e "s/^transport\s*=.*/transport = \"$ABCI\"/" \
+			"$TMHOME/config/config.toml"
+	fi
+
 	jq ".chain_id = \"$CHAIN_ID\" | .consensus_params.block.time_iota_ms = \"500\"" \
-		"$TMHOME/config/genesis.json" > "$TMHOME/config/genesis.json.new"
+		"$TMHOME/config/genesis.json" >"$TMHOME/config/genesis.json.new"
 	mv "$TMHOME/config/genesis.json.new" "$TMHOME/config/genesis.json"
 fi
 

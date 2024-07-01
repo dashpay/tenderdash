@@ -98,6 +98,8 @@ type (
 		pending        sync.Map
 		reqTimeout     time.Duration
 		chanIDResolver func(msg proto.Message) p2p.ChannelID
+		// rateLimit represents a rate limiter for the channel; can be nil
+		rateLimit map[p2p.ChannelID]*RateLimit
 	}
 	// OptionFunc is a client optional function, it is used to override the default parameters in a Client
 	OptionFunc func(c *Client)
@@ -128,6 +130,18 @@ func WithChanIDResolver(resolver func(msg proto.Message) p2p.ChannelID) OptionFu
 	}
 }
 
+// WithSendRateLimits defines a rate limiter for the provided channels.
+//
+// Provided rate limiter will be shared between provided channels.
+// Use this function multiple times to set different rate limiters for different channels.
+func WithSendRateLimits(rateLimit *RateLimit, channels ...p2p.ChannelID) OptionFunc {
+	return func(c *Client) {
+		for _, ch := range channels {
+			c.rateLimit[ch] = rateLimit
+		}
+	}
+}
+
 // New creates and returns Client with optional functions
 func New(descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor, creator p2p.ChannelCreator, opts ...OptionFunc) *Client {
 	client := &Client{
@@ -136,6 +150,7 @@ func New(descriptors map[p2p.ChannelID]*p2p.ChannelDescriptor, creator p2p.Chann
 		logger:         log.NewNopLogger(),
 		reqTimeout:     peerTimeout,
 		chanIDResolver: p2p.ResolveChannelID,
+		rateLimit:      make(map[p2p.ChannelID]*RateLimit),
 	}
 	for _, opt := range opts {
 		opt(client)
@@ -224,15 +239,27 @@ func (c *Client) GetSyncStatus(ctx context.Context) error {
 }
 
 // SendTxs sends a transaction to the peer
-func (c *Client) SendTxs(ctx context.Context, peerID types.NodeID, tx types.Tx) error {
+func (c *Client) SendTxs(ctx context.Context, peerID types.NodeID, tx ...types.Tx) error {
+	txs := make([][]byte, len(tx))
+	for i := 0; i < len(tx); i++ {
+		txs[i] = tx[i]
+	}
+
 	return c.Send(ctx, p2p.Envelope{
 		To:      peerID,
-		Message: &protomem.Txs{Txs: [][]byte{tx}},
+		Message: &protomem.Txs{Txs: txs},
 	})
 }
 
 // Send sends p2p message to a peer, allowed p2p.Envelope or p2p.PeerError types
 func (c *Client) Send(ctx context.Context, msg any) error {
+	return c.SendN(ctx, msg, 1)
+}
+
+// SendN sends p2p message to a peer, consuming `nTokens` from rate limiter.
+//
+// Allowed `msg` types are: p2p.Envelope or p2p.PeerError
+func (c *Client) SendN(ctx context.Context, msg any, nTokens int) error {
 	switch t := msg.(type) {
 	case p2p.PeerError:
 		ch, err := c.chanStore.get(ctx, p2p.ErrorChannel)
@@ -252,6 +279,19 @@ func (c *Client) Send(ctx context.Context, msg any) error {
 		if err != nil {
 			return err
 		}
+		if limiter, ok := c.rateLimit[t.ChannelID]; ok {
+			ok, err := limiter.Limit(ctx, t.To, nTokens)
+			if err != nil {
+				return fmt.Errorf("rate limited when sending message %T on channel %d to %s: %w",
+					t.Message, t.ChannelID, t.To, err)
+			}
+			if !ok {
+				c.logger.Debug("dropping message due to rate limit",
+					"channel", t.ChannelID, "peer", t.To, "message", t.Message)
+				return nil
+			}
+		}
+
 		return ch.Send(ctx, t)
 	}
 	return fmt.Errorf("cannot send an unsupported message type %T", msg)
@@ -267,7 +307,7 @@ func (c *Client) Consume(ctx context.Context, params ConsumerParams) error {
 	return c.iter(ctx, iter, params.Handler)
 }
 
-func (c *Client) iter(ctx context.Context, iter *p2p.ChannelIterator, handler ConsumerHandler) error {
+func (c *Client) iter(ctx context.Context, iter p2p.ChannelIterator, handler ConsumerHandler) error {
 	for iter.Next(ctx) {
 		envelope := iter.Envelope()
 		if isMessageResolvable(envelope.Message) {

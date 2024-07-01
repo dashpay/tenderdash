@@ -592,7 +592,7 @@ func setup(
 }
 
 // cleanup frees some resources allocated for tests
-func cleanup(t *testing.T, bus *eventbus.EventBus, dialer p2p.DashDialer, vc *ValidatorConnExecutor) {
+func cleanup(_t *testing.T, bus *eventbus.EventBus, _dialer p2p.DashDialer, vc *ValidatorConnExecutor) {
 	bus.Stop()
 	vc.Stop()
 }
@@ -620,7 +620,7 @@ func makeState(nVals int, height int64) (sm.State, dbm.DB) {
 	return s, stateDB
 }
 
-func makeBlock(ctx context.Context, t *testing.T, blockExec *sm.BlockExecutor, state sm.State, height int64, commit *types.Commit) *types.Block {
+func makeBlock(ctx context.Context, t *testing.T, blockExec *sm.BlockExecutor, state sm.State, _height int64, commit *types.Commit) *types.Block {
 	block, crs, err := blockExec.CreateProposalBlock(ctx, 1, 0, state, commit, state.Validators.Proposer.ProTxHash, 1)
 	require.NoError(t, err)
 
@@ -658,8 +658,9 @@ func (app *testApp) PrepareProposal(_ context.Context, req *abci.RequestPrepareP
 	}
 
 	return &abci.ResponsePrepareProposal{
-		AppHash:   resultsHash,
-		TxResults: results,
+		AppHash:    resultsHash,
+		TxResults:  results,
+		AppVersion: 1,
 	}, nil
 }
 

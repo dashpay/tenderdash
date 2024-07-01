@@ -43,10 +43,11 @@ Verify that you have the latest version of Go installed:
 
 ```sh
 $ go version
-go version go1.19.x darwin/amd64
+go version go1.22.x darwin/amd64
 ```
 
 Note that the exact patch number may differ as Go releases come out.
+
 ## 1.2 Creating a new Go project
 
 We'll start by creating a new Go project. First, initialize the project folder with `go mod init`. Running this command should create the `go.mod` file.
@@ -270,6 +271,7 @@ func (app *KVStoreApplication) DeliverTx(req abcitypes.RequestDeliverTx) abcityp
 	return abcitypes.ResponseDeliverTx{Code: 0}
 }
 ```
+
 Note that we check the validity of the transaction _again_ during `DeliverTx`.
 Transactions are not guaranteed to be valid when they are delivered to an
 application. This can happen if the application state is used to determine transaction
@@ -300,6 +302,7 @@ func (app *KVStoreApplication) Commit() abcitypes.ResponseCommit {
 	"github.com/dgraph-io/badger/v3"
 	abcitypes "github.com/tendermint/tendermint/abci/types"
 )
+
 ```
 
 You may have noticed that the application we are writing will _crash_ if it receives an
@@ -493,6 +496,7 @@ Next, we create a database handle and use it to construct our ABCI application:
 ```
 
 Then we construct a logger:
+
 ```go
 ...
 	logger := tmlog.MustNewDefaultLogger(tmlog.LogFormatPlain, tmlog.LogLevelInfo, false)
@@ -592,7 +596,7 @@ This will populate the `go.mod` with a release number followed by a hash for Ten
 ```go
 module github.com/<username>/kvstore
 
-go 1.19
+go 1.22
 
 require (
  github.com/dgraph-io/badger/v3 v3.2103.2

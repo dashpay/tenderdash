@@ -100,9 +100,6 @@ type MConnection struct {
 	// Closing quitRecvRouting will cause the recvRouting to eventually quit.
 	quitRecvRoutine chan struct{}
 
-	// used to ensure FlushStop and OnStop
-	// are safe to call concurrently.
-	stopMtx    sync.Mutex
 	stopSignal <-chan struct{}
 
 	cancel context.CancelFunc
@@ -231,11 +228,8 @@ func (c *MConnection) getLastMessageAt() time.Time {
 
 // stopServices stops the BaseService and timers and closes the quitSendRoutine.
 // if the quitSendRoutine was already closed, it returns true, otherwise it returns false.
-// It uses the stopMtx to ensure only one of FlushStop and OnStop can do this at a time.
+// It doesn't lock, as we rely on the caller (eg. BaseService) locking
 func (c *MConnection) stopServices() (alreadyStopped bool) {
-	c.stopMtx.Lock()
-	defer c.stopMtx.Unlock()
-
 	select {
 	case <-c.quitSendRoutine:
 		// already quit
@@ -612,16 +606,25 @@ type ChannelDescriptor struct {
 	Priority int
 
 	// TODO: Remove once p2p refactor is complete.
-	SendQueueCapacity   int
+	SendQueueCapacity int
+	// RecvMessageCapacity defines the max message size for a given p2p Channel.
 	RecvMessageCapacity int
 
-	// RecvBufferCapacity defines the max buffer size of inbound messages for a
+	// RecvBufferCapacity defines the max number of inbound messages for a
 	// given p2p Channel queue.
 	RecvBufferCapacity int
 
 	// Human readable name of the channel, used in logging and
 	// diagnostics.
 	Name string
+
+	// Timeout for enqueue operations on the incoming queue.
+	// It is applied to all messages received from remote peer
+	// and delievered to this channel.
+	// When timeout expires, messages will be silently dropped.
+	//
+	// If zero, enqueue operations will not time out.
+	EnqueueTimeout time.Duration
 }
 
 func (chDesc ChannelDescriptor) FillDefaults() (filled ChannelDescriptor) {
@@ -634,6 +637,7 @@ func (chDesc ChannelDescriptor) FillDefaults() (filled ChannelDescriptor) {
 	if chDesc.RecvMessageCapacity == 0 {
 		chDesc.RecvMessageCapacity = defaultRecvMessageCapacity
 	}
+
 	filled = chDesc
 	return
 }

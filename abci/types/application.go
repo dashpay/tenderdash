@@ -55,37 +55,37 @@ func NewBaseApplication() *BaseApplication {
 	return &BaseApplication{}
 }
 
-func (BaseApplication) Info(_ context.Context, req *RequestInfo) (*ResponseInfo, error) {
+func (BaseApplication) Info(_ context.Context, _req *RequestInfo) (*ResponseInfo, error) {
 	return &ResponseInfo{}, nil
 }
 
-func (BaseApplication) CheckTx(_ context.Context, req *RequestCheckTx) (*ResponseCheckTx, error) {
+func (BaseApplication) CheckTx(_ context.Context, _req *RequestCheckTx) (*ResponseCheckTx, error) {
 	return &ResponseCheckTx{Code: CodeTypeOK}, nil
 }
 
-func (BaseApplication) ExtendVote(_ context.Context, req *RequestExtendVote) (*ResponseExtendVote, error) {
+func (BaseApplication) ExtendVote(_ context.Context, _req *RequestExtendVote) (*ResponseExtendVote, error) {
 	return &ResponseExtendVote{}, nil
 }
 
-func (BaseApplication) VerifyVoteExtension(_ context.Context, req *RequestVerifyVoteExtension) (*ResponseVerifyVoteExtension, error) {
+func (BaseApplication) VerifyVoteExtension(_ context.Context, _req *RequestVerifyVoteExtension) (*ResponseVerifyVoteExtension, error) {
 	return &ResponseVerifyVoteExtension{
 		Status: ResponseVerifyVoteExtension_ACCEPT,
 	}, nil
 }
 
-func (BaseApplication) Query(_ context.Context, req *RequestQuery) (*ResponseQuery, error) {
+func (BaseApplication) Query(_ context.Context, _req *RequestQuery) (*ResponseQuery, error) {
 	return &ResponseQuery{Code: CodeTypeOK}, nil
 }
 
-func (BaseApplication) InitChain(_ context.Context, req *RequestInitChain) (*ResponseInitChain, error) {
+func (BaseApplication) InitChain(_ context.Context, _req *RequestInitChain) (*ResponseInitChain, error) {
 	return &ResponseInitChain{}, nil
 }
 
-func (BaseApplication) ListSnapshots(_ context.Context, req *RequestListSnapshots) (*ResponseListSnapshots, error) {
+func (BaseApplication) ListSnapshots(_ context.Context, _req *RequestListSnapshots) (*ResponseListSnapshots, error) {
 	return &ResponseListSnapshots{}, nil
 }
 
-func (BaseApplication) OfferSnapshot(_ context.Context, req *RequestOfferSnapshot) (*ResponseOfferSnapshot, error) {
+func (BaseApplication) OfferSnapshot(_ context.Context, _req *RequestOfferSnapshot) (*ResponseOfferSnapshot, error) {
 	return &ResponseOfferSnapshot{}, nil
 }
 
@@ -93,7 +93,7 @@ func (BaseApplication) LoadSnapshotChunk(_ context.Context, _ *RequestLoadSnapsh
 	return &ResponseLoadSnapshotChunk{}, nil
 }
 
-func (BaseApplication) ApplySnapshotChunk(_ context.Context, req *RequestApplySnapshotChunk) (*ResponseApplySnapshotChunk, error) {
+func (BaseApplication) ApplySnapshotChunk(_ context.Context, _req *RequestApplySnapshotChunk) (*ResponseApplySnapshotChunk, error) {
 	return &ResponseApplySnapshotChunk{}, nil
 }
 
@@ -111,8 +111,9 @@ func (BaseApplication) PrepareProposal(_ context.Context, req *RequestPreparePro
 		})
 	}
 	return &ResponsePrepareProposal{TxRecords: trs,
-		AppHash:   make([]byte, crypto.DefaultAppHashSize),
-		TxResults: txResults(req.Txs),
+		AppHash:    make([]byte, crypto.DefaultAppHashSize),
+		TxResults:  txResults(req.Txs),
+		AppVersion: 1,
 	}, nil
 }
 
@@ -132,7 +133,7 @@ func (BaseApplication) ProcessProposal(_ context.Context, req *RequestProcessPro
 	}, nil
 }
 
-func (BaseApplication) FinalizeBlock(_ context.Context, req *RequestFinalizeBlock) (*ResponseFinalizeBlock, error) {
+func (BaseApplication) FinalizeBlock(_ context.Context, _req *RequestFinalizeBlock) (*ResponseFinalizeBlock, error) {
 
 	return &ResponseFinalizeBlock{}, nil
 }

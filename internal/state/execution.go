@@ -5,6 +5,7 @@ package state
 import (
 	"bytes"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"time"
@@ -103,6 +104,10 @@ type BlockExecutor struct {
 
 	// cache the verification results over a single height
 	cache map[string]struct{}
+
+	// detect non-deterministic prepare proposal responses
+	lastRequestPrepareProposalHash  []byte
+	lastResponsePrepareProposalHash []byte
 }
 
 // BlockExecWithLogger is an option function to set a logger to BlockExecutor
@@ -205,30 +210,30 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 
 	txs := blockExec.mempool.ReapMaxBytesMaxGas(maxDataBytes, maxGas)
+	numRequestedTxs := txs.Len()
 	block := state.MakeBlock(height, txs, commit, evidence, proposerProTxHash, proposedAppVersion)
 
 	localLastCommit := buildLastCommitInfo(block, state.InitialHeight)
 	version := block.Version.ToProto()
-	rpp, err := blockExec.appClient.PrepareProposal(
-		ctx,
-		&abci.RequestPrepareProposal{
-			MaxTxBytes:         maxDataBytes,
-			Txs:                block.Txs.ToSliceOfBytes(),
-			LocalLastCommit:    localLastCommit,
-			Misbehavior:        block.Evidence.ToABCI(),
-			Height:             block.Height,
-			Round:              round,
-			Time:               block.Time,
-			NextValidatorsHash: block.NextValidatorsHash,
+	request := abci.RequestPrepareProposal{
+		MaxTxBytes:         maxDataBytes,
+		Txs:                block.Txs.ToSliceOfBytes(),
+		LocalLastCommit:    localLastCommit,
+		Misbehavior:        block.Evidence.ToABCI(),
+		Height:             block.Height,
+		Round:              round,
+		Time:               block.Time,
+		NextValidatorsHash: block.NextValidatorsHash,
 
-			// Dash's fields
-			CoreChainLockedHeight: state.LastCoreChainLockedBlockHeight,
-			ProposerProTxHash:     block.ProposerProTxHash,
-			ProposedAppVersion:    block.ProposedAppVersion,
-			Version:               &version,
-			QuorumHash:            state.Validators.QuorumHash,
-		},
-	)
+		// Dash's fields
+		CoreChainLockedHeight: state.LastCoreChainLockedBlockHeight,
+		ProposerProTxHash:     block.ProposerProTxHash,
+		ProposedAppVersion:    block.ProposedAppVersion,
+		Version:               &version,
+		QuorumHash:            state.Validators.QuorumHash,
+	}
+	start := time.Now()
+	response, err := blockExec.appClient.PrepareProposal(ctx, &request)
 	if err != nil {
 		// The App MUST ensure that only valid (and hence 'processable') transactions
 		// enter the mempool. Hence, at this point, we can't have any non-processable
@@ -241,11 +246,31 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 		return nil, CurrentRoundState{}, err
 	}
 
-	if err := rpp.Validate(); err != nil {
+	// ensure that the proposal response is deterministic
+	reqHash, respHash := deterministicPrepareProposalHashes(&request, response)
+	blockExec.logger.Debug("PrepareProposal executed",
+		"request_hash", hex.EncodeToString(reqHash),
+		"response_hash", hex.EncodeToString(respHash),
+		"height", height,
+		"round", round,
+		"requested_txs", numRequestedTxs,
+		"took", time.Since(start).String(),
+	)
+	if bytes.Equal(blockExec.lastRequestPrepareProposalHash, reqHash) &&
+		!bytes.Equal(blockExec.lastResponsePrepareProposalHash, respHash) {
+		// we don't panic here, as we don't want to break this node and
+		// remove it from voting quorum
+		blockExec.logger.Error("PrepareProposal response is non-deterministic",
+			"request_hash", hex.EncodeToString(reqHash),
+			"response_hash", hex.EncodeToString(respHash),
+		)
+	}
+
+	if err := response.Validate(); err != nil {
 		return nil, CurrentRoundState{}, fmt.Errorf("PrepareProposal responded with invalid response: %w", err)
 	}
 
-	txrSet := types.NewTxRecordSet(rpp.TxRecords)
+	txrSet := types.NewTxRecordSet(response.TxRecords)
 
 	if err := txrSet.Validate(maxDataBytes, block.Txs); err != nil {
 		return nil, CurrentRoundState{}, err
@@ -258,13 +283,17 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 	itxs := txrSet.IncludedTxs()
 
-	if err := validateExecTxResults(rpp.TxResults, itxs); err != nil {
+	if err := validateExecTxResults(response.TxResults, itxs); err != nil {
 		return nil, CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
 	}
 
 	block.SetTxs(itxs)
 
-	rp, err := RoundParamsFromPrepareProposal(rpp, round)
+	if ver := response.GetAppVersion(); ver > 0 {
+		block.Version.App = ver
+	}
+
+	rp, err := RoundParamsFromPrepareProposal(response, round)
 	if err != nil {
 		return nil, CurrentRoundState{}, err
 	}
@@ -279,6 +308,23 @@ func (blockExec *BlockExecutor) CreateProposalBlock(
 	}
 
 	return block, stateChanges, nil
+}
+
+func deterministicPrepareProposalHashes(request *abci.RequestPrepareProposal, response *abci.ResponsePrepareProposal) (requestHash, responseHash []byte) {
+	deterministicReq := *request
+	deterministicReq.Round = 0
+
+	reqBytes, err := deterministicReq.Marshal()
+	if err != nil {
+		// should never happen, as we just marshaled it before sending
+		panic("failed to marshal RequestPrepareProposal: " + err.Error())
+	}
+	respBytes, err := response.Marshal()
+	if err != nil {
+		// should never happen, as we just marshaled it before sending
+		panic("failed to marshal ResponsePrepareProposal: " + err.Error())
+	}
+	return crypto.Checksum(reqBytes), crypto.Checksum(respBytes)
 }
 
 // ProcessProposal sends the proposal to ABCI App and verifies the response
@@ -314,11 +360,11 @@ func (blockExec *BlockExecutor) ProcessProposal(
 	if resp.IsStatusUnknown() {
 		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with status %s", resp.Status.String())
 	}
-	if err := resp.Validate(); err != nil {
-		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
-	}
 	if !resp.IsAccepted() {
 		return CurrentRoundState{}, ErrBlockRejected
+	}
+	if err := resp.Validate(); err != nil {
+		return CurrentRoundState{}, fmt.Errorf("ProcessProposal responded with invalid response: %w", err)
 	}
 	if err := validateExecTxResults(resp.TxResults, block.Data.Txs); err != nil {
 		return CurrentRoundState{}, fmt.Errorf("invalid tx results: %w", err)
@@ -446,6 +492,16 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	if err := blockExec.ValidateBlockWithRoundState(ctx, state, uncommittedState, block); err != nil {
 		return state, ErrInvalidBlock{err}
 	}
+
+	// Save ResponseProcessProposal before FinalizeBlock to be able to recover when app state is ahead of tenderdash state
+	// (eg. when tenderdash fails just after receiving ResponseFinalizeBlock).
+	abciResponses := tmstate.ABCIResponses{
+		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
+	}
+	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
+		return state, err
+	}
+
 	startTime := time.Now().UnixNano()
 	fbResp, err := execBlockWithoutState(ctx, blockExec.appClient, block, commit, blockExec.logger)
 	if err != nil {
@@ -453,23 +509,8 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	}
 	endTime := time.Now().UnixNano()
 	blockExec.metrics.BlockProcessingTime.Observe(float64(endTime-startTime) / 1000000)
-	if err != nil {
-		return state, ErrProxyAppConn(err)
-	}
 
-	// Save the results before we commit.
-	// We need to save Prepare/ProcessProposal AND FinalizeBlock responses, as we don't have details like validators
-	// in FinalizeResponse.
-	abciResponses := tmstate.ABCIResponses{
-		ProcessProposal: uncommittedState.Params.ToProcessProposal(),
-		FinalizeBlock:   fbResp,
-	}
-	if err := blockExec.store.SaveABCIResponses(block.Height, abciResponses); err != nil {
-		return state, err
-	}
-
-	state, err = state.Update(blockID, &block.Header, &uncommittedState)
-	if err != nil {
+	if state, err = state.Update(blockID, &block.Header, &uncommittedState); err != nil {
 		return state, fmt.Errorf("commit failed for application: %w", err)
 	}
 
@@ -482,7 +523,7 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 	// Update evpool with the latest state.
 	blockExec.evpool.Update(ctx, state, block.Evidence)
 
-	if err := blockExec.store.Save(state); err != nil {
+	if err = blockExec.store.Save(state); err != nil {
 		return state, err
 	}
 
@@ -494,9 +535,8 @@ func (blockExec *BlockExecutor) FinalizeBlock(
 
 	// Events are fired after everything else.
 	// NOTE: if we crash between Commit and Save, events wont be fired during replay
-	es := NewFullEventSet(block, blockID, uncommittedState, fbResp, state.Validators)
-	err = es.Publish(blockExec.eventPublisher)
-	if err != nil {
+	es := NewFullEventSet(block, blockID, uncommittedState, state.Validators)
+	if err = es.Publish(blockExec.eventPublisher); err != nil {
 		blockExec.logger.Error("failed publishing event", "err", err)
 	}
 
@@ -615,7 +655,7 @@ func buildLastCommitInfo(block *types.Block, initialHeight int64) abci.CommitInf
 		Round:                   block.LastCommit.Round,
 		QuorumHash:              block.LastCommit.QuorumHash,
 		BlockSignature:          block.LastCommit.ThresholdBlockSignature,
-		ThresholdVoteExtensions: types.ThresholdExtensionSignToProto(block.LastCommit.ThresholdVoteExtensions),
+		ThresholdVoteExtensions: block.LastCommit.ThresholdVoteExtensions,
 	}
 }
 
@@ -673,9 +713,7 @@ func execBlock(
 	}
 	blockID := block.BlockID(nil)
 	protoBlockID := blockID.ToProto()
-	if err != nil {
-		return nil, err
-	}
+
 	responseFinalizeBlock, err := appConn.FinalizeBlock(
 		ctx,
 		&abci.RequestFinalizeBlock{
@@ -692,7 +730,7 @@ func execBlock(
 		logger.Error("executing block", "err", err)
 		return responseFinalizeBlock, err
 	}
-	logger.Info("executed block", "height", block.Height)
+	logger.Debug("executed block", "height", block.Height)
 
 	return responseFinalizeBlock, nil
 }

@@ -3,6 +3,7 @@ package state_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -78,7 +79,7 @@ func TestValidateBlockHeader(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil)
+	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 
 	// some bad values
 	wrongHash := crypto.Checksum([]byte("this hash is wrong"))
@@ -93,7 +94,6 @@ func TestValidateBlockHeader(t *testing.T) {
 		malleateBlock func(block *types.Block)
 	}{
 		{"Version wrong1", func(block *types.Block) { block.Version = wrongVersion1 }},
-		{"Version wrong2", func(block *types.Block) { block.Version = wrongVersion2 }},
 		{"ChainID wrong", func(block *types.Block) { block.ChainID = "not-the-real-one" }},
 		{"Height wrong", func(block *types.Block) { block.Height += 10 }},
 		{"Core Height does not match chain lock", func(block *types.Block) {
@@ -126,11 +126,6 @@ func TestValidateBlockHeader(t *testing.T) {
 			"Proposer invalid",
 			func(block *types.Block) { block.ProposerProTxHash = []byte("wrong size") },
 		},
-		// Set appVersion to 2 allow "invalid proposed app version" case
-		{
-			"Proposed app version is invalid",
-			func(block *types.Block) { block.ProposedAppVersion = 1; state.Version.Consensus.App = 2 },
-		},
 	}
 
 	// Set appVersion to 2 allow "invalid proposed app version" case
@@ -142,16 +137,18 @@ func TestValidateBlockHeader(t *testing.T) {
 			Invalid blocks don't pass
 		*/
 		for _, tc := range testCases {
-			block, err := statefactory.MakeBlock(state, height, lastCommit, 0)
-			require.NoError(t, err)
-			err = changes.UpdateBlock(block)
-			assert.NoError(t, err)
+			t.Run(fmt.Sprintf("H:%d/%s", height, tc.name), func(t *testing.T) {
+				block, err := statefactory.MakeBlock(state, height, lastCommit, 0)
+				require.NoError(t, err)
+				err = changes.UpdateBlock(block)
+				assert.NoError(t, err)
 
-			tc.malleateBlock(block)
+				tc.malleateBlock(block)
 
-			err = blockExec.ValidateBlockWithRoundState(ctx, state, changes, block)
-			t.Logf("%s: %v", tc.name, err)
-			require.Error(t, err, tc.name)
+				err = blockExec.ValidateBlockWithRoundState(ctx, state, changes, block)
+				t.Logf("%s: %v", tc.name, err)
+				require.Error(t, err, tc.name)
+			})
 		}
 
 		/*
@@ -206,8 +203,8 @@ func TestValidateBlockCommit(t *testing.T) {
 		blockStore,
 		eventBus,
 	)
-	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil)
-	wrongVoteMessageSignedCommit := types.NewCommit(1, 0, types.BlockID{}, nil)
+	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
+	wrongVoteMessageSignedCommit := types.NewCommit(1, 0, types.BlockID{}, nil, nil)
 	badPrivValQuorumHash := crypto.RandQuorumHash()
 	badPrivVal := types.NewMockPVForQuorum(badPrivValQuorumHash)
 
@@ -235,6 +232,7 @@ func TestValidateBlockCommit(t *testing.T) {
 				wrongHeightVote.Height,
 				wrongHeightVote.Round,
 				state.LastBlockID,
+				wrongHeightVote.VoteExtensions,
 				&types.CommitSigns{
 					QuorumSigns: *thresholdSigns,
 					QuorumHash:  state.Validators.QuorumHash,
@@ -328,8 +326,8 @@ func TestValidateBlockCommit(t *testing.T) {
 		require.NoError(t, err, "height %d", height)
 
 		goodVote.BlockSignature, badVote.BlockSignature = g.BlockSignature, b.BlockSignature
-		goodVote.VoteExtensions = types.VoteExtensionsFromProto(g.VoteExtensions)
-		badVote.VoteExtensions = types.VoteExtensionsFromProto(b.VoteExtensions)
+		goodVote.VoteExtensions = types.VoteExtensionsFromProto(g.VoteExtensions...)
+		badVote.VoteExtensions = types.VoteExtensionsFromProto(b.VoteExtensions...)
 
 		thresholdSigns, err := types.NewSignsRecoverer([]*types.Vote{badVote}).Recover()
 		require.NoError(t, err)
@@ -338,7 +336,7 @@ func TestValidateBlockCommit(t *testing.T) {
 			QuorumHash:  state.Validators.QuorumHash,
 		}
 		wrongVoteMessageSignedCommit = types.NewCommit(goodVote.Height, goodVote.Round,
-			blockID, quorumSigns)
+			blockID, goodVote.VoteExtensions, quorumSigns)
 	}
 }
 
@@ -385,7 +383,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 		blockStore,
 		eventBus,
 	)
-	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil)
+	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 
 	for height := int64(1); height < validationTestsStopHeight; height++ {
 		proposerProTxHash := state.Validators.GetProposer().ProTxHash

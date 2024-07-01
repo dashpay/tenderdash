@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -98,7 +97,7 @@ func Setup(ctx context.Context, logger log.Logger, testnet *e2e.Testnet, ti infr
 		if err != nil {
 			return err
 		}
-		// nolint: gosec
+		//nolint:gosec
 		// G306: Expect WriteFile permissions to be 0600 or less
 		err = os.WriteFile(filepath.Join(nodeDir, "config", "app.toml"), appCfg, 0644)
 		if err != nil {
@@ -174,6 +173,12 @@ func MakeGenesis(testnet *e2e.Testnet, genesisTime time.Time) (types.GenesisDoc,
 		append(genesis.ConsensusParams.Validator.PubKeyTypes, types.ABCIPubKeyTypeBLS12381)
 	genesis.ConsensusParams.Evidence.MaxAgeNumBlocks = e2e.EvidenceAgeHeight
 	genesis.ConsensusParams.Evidence.MaxAgeDuration = e2e.EvidenceAgeTime
+	if testnet.MaxEvidenceSize > 0 {
+		genesis.ConsensusParams.Evidence.MaxBytes = testnet.MaxEvidenceSize
+	}
+	if testnet.MaxBlockSize > 0 {
+		genesis.ConsensusParams.Block.MaxBytes = testnet.MaxBlockSize
+	}
 
 	for validator, validatorUpdate := range testnet.Validators {
 		if validatorUpdate.PubKey == nil {
@@ -196,13 +201,9 @@ func MakeGenesis(testnet *e2e.Testnet, genesisTime time.Time) (types.GenesisDoc,
 	sort.Slice(genesis.Validators, func(i, j int) bool {
 		return strings.Compare(genesis.Validators[i].Name, genesis.Validators[j].Name) == -1
 	})
-	if len(testnet.InitialState.Items) > 0 {
-		appState, err := json.Marshal(testnet.InitialState)
-		if err != nil {
-			return genesis, err
-		}
-		genesis.AppState = appState
-	}
+
+	genesis.AppState = []byte(testnet.InitialState)
+
 	return genesis, genesis.ValidateAndComplete()
 }
 
@@ -210,12 +211,14 @@ func MakeGenesis(testnet *e2e.Testnet, genesisTime time.Time) (types.GenesisDoc,
 func MakeConfig(node *e2e.Node) (*config.Config, error) {
 	cfg := config.DefaultConfig()
 	cfg.Moniker = node.Name
-	cfg.ProxyApp = AppAddressTCP
+	cfg.Abci.Address = AppAddressTCP
 	cfg.TxIndex = config.TestTxIndexConfig()
 
 	if node.LogLevel != "" {
 		cfg.LogLevel = node.LogLevel
 	}
+
+	cfg.Mempool.TxEnqueueTimeout = 10 * time.Millisecond
 
 	cfg.RPC.ListenAddress = "tcp://0.0.0.0:26657"
 	cfg.RPC.PprofListenAddress = ":6060"
@@ -229,15 +232,15 @@ func MakeConfig(node *e2e.Node) (*config.Config, error) {
 
 	switch node.Testnet.ABCIProtocol {
 	case e2e.ProtocolUNIX:
-		cfg.ProxyApp = AppAddressUNIX
+		cfg.Abci.Address = AppAddressUNIX
 	case e2e.ProtocolTCP:
-		cfg.ProxyApp = AppAddressTCP
+		cfg.Abci.Address = AppAddressTCP
 	case e2e.ProtocolGRPC:
-		cfg.ProxyApp = AppAddressTCP
-		cfg.ABCI = ABCIGRPC
+		cfg.Abci.Address = AppAddressTCP
+		cfg.Abci.Transport = ABCIGRPC
 	case e2e.ProtocolBuiltin:
-		cfg.ProxyApp = ""
-		cfg.ABCI = ""
+		cfg.Abci.Address = ""
+		cfg.Abci.Transport = ""
 	default:
 		return nil, fmt.Errorf("unexpected ABCI protocol setting %q", node.Testnet.ABCIProtocol)
 	}

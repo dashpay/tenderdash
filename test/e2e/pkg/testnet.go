@@ -15,7 +15,6 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
@@ -77,7 +76,7 @@ type Testnet struct {
 	Dir                    string
 	IP                     *net.IPNet
 	InitialHeight          int64
-	InitialState           kvstore.StateExport
+	InitialState           string
 	Validators             ValidatorsMap
 	ValidatorUpdates       map[int64]ValidatorsMap
 	Nodes                  []*Node
@@ -91,6 +90,8 @@ type Testnet struct {
 	CheckTxDelayMS         int
 	VoteExtensionDelayMS   int
 	FinalizeBlockDelayMS   int
+	MaxBlockSize           int64
+	MaxEvidenceSize        int64
 
 	// Tenderdash-specific fields
 	GenesisCoreHeight         uint32 // InitialCoreHeight is a core height put into genesis file
@@ -208,6 +209,8 @@ func LoadTestnet(file string) (*Testnet, error) {
 		CheckTxDelayMS:            int(manifest.CheckTxDelayMS),
 		VoteExtensionDelayMS:      int(manifest.VoteExtensionDelayMS),
 		FinalizeBlockDelayMS:      int(manifest.FinalizeBlockDelayMS),
+		MaxBlockSize:              int64(manifest.MaxBlockSize),
+		MaxEvidenceSize:           int64(manifest.MaxEvidenceSize),
 		ThresholdPublicKey:        ld.ThresholdPubKey,
 		ThresholdPublicKeyUpdates: map[int64]crypto.PubKey{},
 		QuorumType:                btcjson.LLMQType(quorumType),
@@ -663,7 +666,7 @@ type keyGenerator struct {
 }
 
 func newKeyGenerator(seed int64) *keyGenerator {
-	// nolint: gosec
+	//nolint:gosec
 	// G404: Use of weak random number generator (math/rand instead of crypto/rand)
 	return &keyGenerator{
 		random: rand.New(rand.NewSource(seed)),

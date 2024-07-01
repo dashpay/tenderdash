@@ -57,7 +57,7 @@ to notify you of vulnerabilities and fixes in Tendermint Core. You can subscribe
 
 | Requirement | Notes            |
 |-------------|------------------|
-| Go version  | Go1.17 or higher |
+| Go version  | Go1.22 or higher |
 
 ### Install
 

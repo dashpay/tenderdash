@@ -44,8 +44,15 @@ func NewProposaler(
 
 // Set updates Proposal, ProposalReceiveTime and ProposalBlockParts in RoundState if the passed proposal met conditions
 func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cstypes.RoundState) error {
-	// Does not apply
-	if rs.Proposal != nil || proposal.Height != rs.Height || proposal.Round != rs.Round {
+
+	if rs.Proposal != nil {
+		// We already have a proposal
+		return nil
+	}
+
+	if proposal.Height != rs.Height || proposal.Round != rs.Round {
+		p.logger.Debug("received proposal for invalid height/round, ignoring", "proposal", proposal,
+			"height", rs.Height, "round", rs.Round, "received", receivedAt)
 		return nil
 	}
 
@@ -65,6 +72,7 @@ func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 	}
 	rs.Proposal = proposal
 	rs.ProposalReceiveTime = receivedAt
+
 	p.proposalTimestampDifferenceMetric(*rs)
 	// We don't update cs.ProposalBlockParts if it is already set.
 	// This happens if we're already in cstypes.RoundStepApplyCommit or if there is a valid block in the current round.
@@ -74,19 +82,23 @@ func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 		rs.ProposalBlockParts = types.NewPartSetFromHeader(proposal.BlockID.PartSetHeader)
 	}
 
-	p.logger.Info("received proposal", "proposal", proposal)
+	p.logger.Info("received proposal", "proposal", proposal, "received", receivedAt)
 	return nil
 }
 
 // Create creates, sings and sends a created proposal to the queue
+//
 // To create a proposal is used RoundState.ValidBlock if it isn't nil and valid, otherwise create a new one
 func (p *Proposaler) Create(ctx context.Context, height int64, round int32, rs *cstypes.RoundState) error {
-	// If there is valid block, choose that.
+	// Create a block.
+	// Note that we only create a block if we don't have a valid block already.
 	block, blockParts := rs.ValidBlock, rs.ValidBlockParts
-	// Create on block
 	if !p.checkValidBlock(rs) {
 		var err error
+		start := time.Now()
 		block, blockParts, err = p.createProposalBlock(ctx, round, rs)
+		p.logger.Trace("createProposalBlock executed", "took", time.Since(start).String())
+
 		if err != nil {
 			return err
 		}
@@ -94,8 +106,10 @@ func (p *Proposaler) Create(ctx context.Context, height int64, round int32, rs *
 	logger := p.logger.With(
 		"height", height,
 		"round", round)
+
 	// Make proposal
 	proposal := makeProposal(height, round, rs.ValidRound, block, blockParts)
+
 	// Sign proposal
 	err := p.signProposal(ctx, height, proposal)
 	if err != nil {
@@ -161,11 +175,11 @@ func (p *Proposaler) checkValidBlock(rs *cstypes.RoundState) bool {
 	}
 	if !rs.ValidBlock.IsTimely(rs.ValidBlockRecvTime, sp, rs.ValidRound) {
 		p.logger.Error(
-			"proposal block is outdated",
+			"proposal block is not timely",
 			"height", rs.Height,
 			"round", rs.ValidRound,
 			"received", rs.ValidBlockRecvTime,
-			"block", rs.ValidBlock)
+			"block", rs.ValidBlock.Hash())
 		return false
 	}
 	return true
@@ -178,15 +192,19 @@ func (p *Proposaler) proposalTimestampDifferenceMetric(rs cstypes.RoundState) {
 		if rs.Height == p.committedState.InitialHeight {
 			recvTime = p.committedState.LastBlockTime // genesis time
 		}
-		isTimely := rs.Proposal.IsTimely(recvTime, sp, rs.Round)
-		p.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", isTimely)).
+		timely := rs.Proposal.CheckTimely(recvTime, sp, rs.Round)
+		p.metrics.ProposalTimestampDifference.With("is_timely", fmt.Sprintf("%t", timely == 0)).
 			Observe(rs.ProposalReceiveTime.Sub(rs.Proposal.Timestamp).Seconds())
 	}
 }
 
 func (p *Proposaler) sendMessages(ctx context.Context, msgs ...Message) {
 	for _, msg := range msgs {
-		_ = p.msgInfoQueue.send(ctx, msg, "")
+		err := p.msgInfoQueue.send(ctx, msg, "")
+		if err != nil {
+			// just warning, we don't want to stop the proposaler
+			p.logger.Error("proposaler failed to send message to msgInfoQueue", "error", err)
+		}
 	}
 }
 

@@ -48,18 +48,6 @@ const (
 	// recentSnapshots is the number of recent snapshots to send and receive per peer.
 	recentSnapshots = 10
 
-	// snapshotMsgSize is the maximum size of a snapshotResponseMessage
-	snapshotMsgSize = int(4e6) // ~4MB
-
-	// chunkMsgSize is the maximum size of a chunkResponseMessage
-	chunkMsgSize = int(16e6) // ~16MB
-
-	// lightBlockMsgSize is the maximum size of a lightBlockResponseMessage
-	lightBlockMsgSize = int(1e7) // ~1MB
-
-	// paramMsgSize is the maximum size of a paramsResponseMessage
-	paramMsgSize = int(1e5) // ~100kb
-
 	// lightBlockResponseTimeout is how long the dispatcher waits for a peer to
 	// return a light block
 	lightBlockResponseTimeout = 10 * time.Second
@@ -83,41 +71,7 @@ const (
 )
 
 func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
-	return map[p2p.ChannelID]*p2p.ChannelDescriptor{
-		SnapshotChannel: {
-			ID:                  SnapshotChannel,
-			Priority:            6,
-			SendQueueCapacity:   10,
-			RecvMessageCapacity: snapshotMsgSize,
-			RecvBufferCapacity:  128,
-			Name:                "snapshot",
-		},
-		ChunkChannel: {
-			ID:                  ChunkChannel,
-			Priority:            3,
-			SendQueueCapacity:   4,
-			RecvMessageCapacity: chunkMsgSize,
-			RecvBufferCapacity:  128,
-			Name:                "chunk",
-		},
-		LightBlockChannel: {
-			ID:                  LightBlockChannel,
-			Priority:            5,
-			SendQueueCapacity:   10,
-			RecvMessageCapacity: lightBlockMsgSize,
-			RecvBufferCapacity:  128,
-			Name:                "light-block",
-		},
-		ParamsChannel: {
-			ID:                  ParamsChannel,
-			Priority:            2,
-			SendQueueCapacity:   10,
-			RecvMessageCapacity: paramMsgSize,
-			RecvBufferCapacity:  128,
-			Name:                "params",
-		},
-	}
-
+	return p2p.StatesyncChannelDescriptors()
 }
 
 // Metricer defines an interface used for the rpc sync info query, please see statesync.metrics
@@ -389,7 +343,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 		return sm.State{}, fmt.Errorf("failed to bootstrap node with new state: %w", err)
 	}
 
-	if err := r.blockStore.SaveSeenCommit(state.LastBlockHeight, commit); err != nil {
+	if err := r.blockStore.SaveSeenCommit(commit); err != nil {
 		return sm.State{}, fmt.Errorf("failed to store last seen commit: %w", err)
 	}
 
@@ -535,14 +489,32 @@ func (r *Reactor) backfill(
 						return
 					}
 					r.logger.Debug("fetching next block", "height", height, "peer", peer)
-					lb, err := func() (*types.LightBlock, error) {
-						subCtx, reqCancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
-						defer reqCancel()
-						// request the light block with a timeout
-						return r.dispatcher.LightBlock(subCtx, height, peer)
-					}()
+					// request the light block with a timeout
+					subCtx, subCtxCancel := context.WithTimeout(ctxWithCancel, lightBlockResponseTimeout)
+					lb, err := r.dispatcher.LightBlock(subCtx, height, peer)
+					subCtxCancel()
+
+					if err != nil {
+						queue.retry(height)
+						if errors.Is(err, errNoConnectedPeers) {
+							r.logger.Info("backfill: no connected peers to fetch light blocks from; sleeping...",
+								"sleepTime", sleepTime)
+							time.Sleep(sleepTime)
+						} else if errors.Is(err, context.DeadlineExceeded) {
+							// we don't punish the peer as it might just have not responded in time
+							// In future, we might want to consider a backoff strategy
+							r.logger.Debug("backfill: peer didn't respond on time",
+								"height", height, "peer", peer, "error", err)
+							r.peers.Append(peer)
+						} else {
+							r.logger.Info("backfill: error fetching light block",
+								"height", height,
+								"error", err)
+						}
+						continue
+					}
 					if lb == nil {
-						r.logger.Info("backfill: peer didn't have block, fetching from another peer", "height", height)
+						r.logger.Info("backfill: peer didn't have block, fetching from another peer", "height", height, "peers_outstanding", r.peers.Len())
 						queue.retry(height)
 						// As we are fetching blocks backwards, if this node doesn't have the block it likely doesn't
 						// have any prior ones, thus we remove it from the peer list.
@@ -552,20 +524,6 @@ func (r *Reactor) backfill(
 					r.peers.Append(peer)
 					if errors.Is(err, context.Canceled) {
 						return
-					}
-					if err != nil {
-						queue.retry(height)
-						if errors.Is(err, errNoConnectedPeers) {
-							r.logger.Info("backfill: no connected peers to fetch light blocks from; sleeping...",
-								"sleepTime", sleepTime)
-							time.Sleep(sleepTime)
-						} else {
-							// we don't punish the peer as it might just have not responded in time
-							r.logger.Info("backfill: error with fetching light block",
-								"height", height,
-								"error", err)
-						}
-						continue
 					}
 
 					// run a validate basic. This checks the validator set and commit
@@ -580,6 +538,7 @@ func (r *Reactor) backfill(
 							NodeID: peer,
 							Err:    fmt.Errorf("received invalid light block: %w", err),
 						}); serr != nil {
+							r.logger.Error("backfill: failed to send block error", "error", serr)
 							return
 						}
 						continue
@@ -1033,7 +992,7 @@ func (r *Reactor) processPeerUp(ctx context.Context, peerUpdate p2p.PeerUpdate) 
 
 		r.peers.Append(peerUpdate.NodeID)
 	} else {
-		r.logger.Error("could not use peer for statesync", "peer", peerUpdate.NodeID)
+		r.logger.Warn("could not use peer for statesync", "peer", peerUpdate.NodeID)
 	}
 	newProvider := NewBlockProvider(peerUpdate.NodeID, r.chainID, r.dispatcher)
 
@@ -1055,7 +1014,7 @@ func (r *Reactor) processPeerUp(ctx context.Context, peerUpdate p2p.PeerUpdate) 
 	}
 }
 
-func (r *Reactor) processPeerDown(ctx context.Context, peerUpdate p2p.PeerUpdate) {
+func (r *Reactor) processPeerDown(_ctx context.Context, peerUpdate p2p.PeerUpdate) {
 	r.peers.Remove(peerUpdate.NodeID)
 	syncer := r.getSyncer()
 	if syncer != nil {

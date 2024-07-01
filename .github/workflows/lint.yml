@@ -11,6 +11,8 @@ on:
   pull_request:
     paths:
       - "**.go"
+      - ".golangci.yml"
+      - ".github/linters/*"
   push:
     branches:
       - master
@@ -28,15 +30,16 @@ jobs:
       - uses: actions/checkout@v4
         with:
           submodules: true
-      - uses: actions/setup-go@v3.5.0
+      - uses: actions/setup-go@v5.0.1
         with:
-          go-version: "^1.19"
+          go-version: "^1.22"
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
             **/**.go
             go.mod
             go.sum
+            .golangci.yml
 
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev
@@ -45,12 +48,12 @@ jobs:
         name: Install BLS library
         if: "env.GIT_DIFF != ''"
 
-      - uses: golangci/golangci-lint-action@v3.4.0
+      - uses: golangci/golangci-lint-action@v6.0.1
         with:
           # Required: the version of golangci-lint is required and
           # must be specified without patch version: we always use the
           # latest patch version.
-          version: v1.46
+          version: v1.55
           args: --timeout 10m
           github-token: ${{ secrets.github_token }}
         if: env.GIT_DIFF

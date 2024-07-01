@@ -129,10 +129,10 @@ func TestWALCrash(t *testing.T) {
 		heightToStop int64
 	}{
 		{"empty block",
-			func(stateDB dbm.DB, cs *State, ctx context.Context) {},
+			func(_stateDB dbm.DB, _cs *State, _ctx context.Context) {},
 			1},
 		{"many non-empty blocks",
-			func(stateDB dbm.DB, cs *State, ctx context.Context) {
+			func(_stateDB dbm.DB, cs *State, ctx context.Context) {
 				go sendTxs(ctx, t, cs)
 			},
 			3},
@@ -1121,10 +1121,11 @@ func makeBlockchainFromWAL(t *testing.T, wal WAL) ([]*types.Block, []*types.Comm
 			if p.Type == tmproto.PrecommitType {
 				thisBlockCommit = types.NewCommit(p.Height, p.Round,
 					p.BlockID,
+					p.VoteExtensions,
 					&types.CommitSigns{
 						QuorumSigns: types.QuorumSigns{
-							BlockSign:      p.BlockSignature,
-							ExtensionSigns: types.MakeThresholdExtensionSigns(p.VoteExtensions),
+							BlockSign:               p.BlockSignature,
+							VoteExtensionSignatures: p.VoteExtensions.GetSignatures(),
 						},
 						QuorumHash: crypto.RandQuorumHash(),
 					},
@@ -1212,10 +1213,10 @@ func (bs *mockBlockStore) Base() int64                   { return bs.base }
 func (bs *mockBlockStore) Size() int64                         { return bs.Height() - bs.Base() + 1 }
 func (bs *mockBlockStore) LoadBaseMeta() *types.BlockMeta      { return bs.LoadBlockMeta(bs.base) }
 func (bs *mockBlockStore) LoadBlock(height int64) *types.Block { return bs.chain[height-1] }
-func (bs *mockBlockStore) LoadBlockByHash(hash []byte) *types.Block {
+func (bs *mockBlockStore) LoadBlockByHash(_hash []byte) *types.Block {
 	return bs.chain[int64(len(bs.chain))-1]
 }
-func (bs *mockBlockStore) LoadBlockMetaByHash(hash []byte) *types.BlockMeta { return nil }
+func (bs *mockBlockStore) LoadBlockMetaByHash(_hash []byte) *types.BlockMeta { return nil }
 func (bs *mockBlockStore) LoadBlockMeta(height int64) *types.BlockMeta {
 	block := bs.chain[height-1]
 	bps, err := block.MakePartSet(types.BlockPartSizeBytes)
@@ -1227,10 +1228,10 @@ func (bs *mockBlockStore) LoadBlockMeta(height int64) *types.BlockMeta {
 		Header:  block.Header,
 	}
 }
-func (bs *mockBlockStore) LoadBlockPart(height int64, index int) *types.Part { return nil }
+func (bs *mockBlockStore) LoadBlockPart(_height int64, _index int) *types.Part { return nil }
 func (bs *mockBlockStore) SaveBlock(
 	block *types.Block,
-	blockParts *types.PartSet,
+	_blockParts *types.PartSet,
 	seenCommit *types.Commit,
 ) {
 	bs.chain = append(bs.chain, block)
@@ -1456,7 +1457,7 @@ type initChainApp struct {
 	initialCoreHeight uint32
 }
 
-func (ica *initChainApp) InitChain(_ context.Context, req *abci.RequestInitChain) (*abci.ResponseInitChain, error) {
+func (ica *initChainApp) InitChain(_ context.Context, _req *abci.RequestInitChain) (*abci.ResponseInitChain, error) {
 	resp := abci.ResponseInitChain{
 		InitialCoreHeight: ica.initialCoreHeight,
 	}

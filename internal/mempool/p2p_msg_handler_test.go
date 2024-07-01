@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/mock"
 
 	abcitypes "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	tmrequire "github.com/dashpay/tenderdash/internal/test/require"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -18,6 +19,7 @@ import (
 func TestMempoolP2PMessageHandler(t *testing.T) {
 	ctx := context.Background()
 	logger := log.NewTestingLogger(t)
+	cfg := config.DefaultMempoolConfig()
 	peerID1 := types.NodeID("peer1")
 	ids := NewMempoolIDs()
 	ids.ReserveForPeer(peerID1)
@@ -69,6 +71,7 @@ func TestMempoolP2PMessageHandler(t *testing.T) {
 				logger:  logger,
 				checker: mockTxChecker,
 				ids:     ids,
+				config:  cfg,
 			}
 			err := hd.Handle(ctx, nil, &tc.envelope)
 			tmrequire.Error(t, tc.wantErr, err)

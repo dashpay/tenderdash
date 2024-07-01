@@ -70,6 +70,20 @@ type TestingLogger struct {
 	assertions []assertion
 }
 
+// WithTimestamp returns a new TestingLogger with timestamp enabled.
+func (tw *TestingLogger) WithTimestamp() *TestingLogger {
+	l := TestingLogger{
+		t:          tw.t,
+		assertions: tw.assertions,
+		defaultLogger: defaultLogger{
+			Logger:     tw.defaultLogger.Logger.With().Timestamp().Logger(),
+			closeFuncs: tw.defaultLogger.closeFuncs,
+		},
+	}
+
+	return &l
+}
+
 type assertion struct {
 	match  regexp.Regexp
 	passed bool
@@ -102,6 +116,16 @@ func (tw *TestingLogger) AssertMatch(re *regexp.Regexp) {
 	defer tw.mtx.Unlock()
 	tw.assertions = append(tw.assertions, assertion{match: *re})
 	tw.Logger = tw.Logger.Level(zerolog.DebugLevel)
+}
+
+// AssertContains defines assertions to check for each subsequent
+// log item. It must be called before the log is generated.
+// Assertion will pass if at least one log contains `s`.
+//
+// Note that assertions are only executed on logs matching defined log level.
+// Use NewTestingLoggerWithLevel(t, zerolog.LevelDebugValue) to control this.
+func (tw *TestingLogger) AssertContains(s string) {
+	tw.AssertMatch(regexp.MustCompile(regexp.QuoteMeta(s)))
 }
 
 // Run implements zerolog.Hook.

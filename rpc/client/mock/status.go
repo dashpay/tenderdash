@@ -17,7 +17,7 @@ var (
 	_ client.StatusClient = (*StatusRecorder)(nil)
 )
 
-func (m *StatusMock) Status(ctx context.Context) (*coretypes.ResultStatus, error) {
+func (m *StatusMock) Status(_ctx context.Context) (*coretypes.ResultStatus, error) {
 	res, err := m.GetResponse(nil)
 	if err != nil {
 		return nil, err

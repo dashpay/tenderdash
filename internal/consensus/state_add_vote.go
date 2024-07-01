@@ -45,7 +45,6 @@ func newAddVoteAction(cs *State, ctrl *Controller, statsQueue *chanQueue[msgInfo
 	statsMw := addVoteStatsMw(statsQueue)
 	dispatchPrecommitMw := addVoteDispatchPrecommitMw(ctrl)
 	verifyVoteExtensionMw := addVoteVerifyVoteExtensionMw(cs.privValidator, cs.blockExec, cs.metrics, cs.emitter)
-	addToLastPrecommitMw := addVoteToLastPrecommitMw(cs.eventPublisher, ctrl)
 	return &AddVoteAction{
 		prevote: withVoterMws(
 			addToVoteSet,
@@ -62,7 +61,6 @@ func newAddVoteAction(cs *State, ctrl *Controller, statsQueue *chanQueue[msgInfo
 			dispatchPrecommitMw,
 			verifyVoteExtensionMw,
 			validateVoteMw,
-			addToLastPrecommitMw,
 			errorMw,
 			statsMw,
 		),
@@ -86,7 +84,7 @@ func (c *AddVoteAction) Execute(ctx context.Context, stateEvent StateEvent) erro
 
 // addVoteToVoteSetFunc adds a vote to the vote-set
 func addVoteToVoteSetFunc(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
-	return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
+	return func(_ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
 		added, err := stateData.Votes.AddVote(vote)
 		if !added || err != nil {
 			return added, err
@@ -98,45 +96,6 @@ func addVoteToVoteSetFunc(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
 		}
 		_ = ep.PublishVoteEvent(vote)
 		return true, nil
-	}
-}
-
-func addVoteToLastPrecommitMw(ep *EventPublisher, ctrl *Controller) AddVoteMiddlewareFunc {
-	return func(next AddVoteFunc) AddVoteFunc {
-		return func(ctx context.Context, stateData *StateData, vote *types.Vote) (bool, error) {
-			if vote.Height+1 != stateData.Height || vote.Type != tmproto.PrecommitType {
-				return next(ctx, stateData, vote)
-			}
-			logger := log.FromCtxOrNop(ctx)
-			if stateData.Step != cstypes.RoundStepNewHeight {
-				// Late precommit at prior height is ignored
-				logger.Trace("precommit vote came in after commit timeout and has been ignored")
-				return false, nil
-			}
-			if stateData.LastPrecommits == nil {
-				logger.Debug("no last round precommits on node", "vote", vote)
-				return false, nil
-			}
-			added, err := stateData.LastPrecommits.AddVote(vote)
-			if !added {
-				logger.Debug("vote not added to last precommits", logKeyValsWithError(nil, err)...)
-				return false, nil
-			}
-			logger.Trace("added vote to last precommits", "last_precommits", stateData.LastPrecommits)
-
-			err = ep.PublishVoteEvent(vote)
-			if err != nil {
-				return added, err
-			}
-
-			// if we can skip timeoutCommit and have all the votes now,
-			if stateData.bypassCommitTimeout() && stateData.LastPrecommits.HasAll() {
-				// go straight to new round (skip timeout commit)
-				// c.scheduleTimeout(time.Duration(0), c.Height, 0, cstypes.RoundStepNewHeight)
-				_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
-			}
-			return added, err
-		}
 	}
 }
 
@@ -250,7 +209,7 @@ func addVoteDispatchPrecommitMw(ctrl *Controller) AddVoteMiddlewareFunc {
 				return added, err
 			}
 			_ = ctrl.Dispatch(ctx, &EnterCommitEvent{Height: height, CommitRound: vote.Round}, stateData)
-			if stateData.bypassCommitTimeout() && precommits.HasAll() {
+			if precommits.HasTwoThirdsMajority() {
 				_ = ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: stateData.Height}, stateData)
 			}
 			return added, err
@@ -395,7 +354,7 @@ func addVoteLoggingMw() AddVoteMiddlewareFunc {
 				return added, err
 			}
 			votes := stateData.Votes.GetVoteSet(vote.Round, vote.Type)
-			logger.Trace("vote added", "data", votes)
+			logger.Debug("vote added", "data", votes, "nil", vote.BlockID.IsNil())
 			return added, err
 		}
 	}

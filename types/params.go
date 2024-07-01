@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"os"
 	"time"
 
 	"github.com/dashpay/tenderdash/crypto/bls12381"
@@ -80,18 +81,23 @@ type VersionParams struct {
 // block validity, see the Proposer-Based Timestamps specification:
 // https://github.com/tendermint/tendermint/blob/master/spec/consensus/proposer-based-timestamp/README.md
 type SynchronyParams struct {
-	Precision    time.Duration `json:"precision,string"`
+	// Precision is the maximum amount of time by which node clocks can differ.
+	Precision time.Duration `json:"precision,string"`
+	// MessageDelay is the maximum amount of time a message spend in transit.
 	MessageDelay time.Duration `json:"message_delay,string"`
 }
 
 // TimeoutParams configure the timings of the steps of the Tendermint consensus algorithm.
 type TimeoutParams struct {
-	Propose             time.Duration `json:"propose,string"`
-	ProposeDelta        time.Duration `json:"propose_delta,string"`
-	Vote                time.Duration `json:"vote,string"`
-	VoteDelta           time.Duration `json:"vote_delta,string"`
-	Commit              time.Duration `json:"commit,string"`
-	BypassCommitTimeout bool          `json:"bypass_commit_timeout"`
+	Propose      time.Duration `json:"propose,string"`
+	ProposeDelta time.Duration `json:"propose_delta,string"`
+	Vote         time.Duration `json:"vote,string"`
+	VoteDelta    time.Duration `json:"vote_delta,string"`
+
+	// Unused, TODO: Remove in 0.15
+	Commit time.Duration `json:"commit,string"`
+	// Unused, TODO: Remove in 0.15
+	BypassCommitTimeout bool `json:"bypass_commit_timeout"`
 }
 
 // ABCIParams configure ABCI functionality specific to the Application Blockchain
@@ -172,12 +178,10 @@ func (s SynchronyParams) SynchronyParamsOrDefaults() SynchronyParams {
 
 func DefaultTimeoutParams() TimeoutParams {
 	return TimeoutParams{
-		Propose:             3000 * time.Millisecond,
-		ProposeDelta:        500 * time.Millisecond,
-		Vote:                1000 * time.Millisecond,
-		VoteDelta:           500 * time.Millisecond,
-		Commit:              1000 * time.Millisecond,
-		BypassCommitTimeout: false,
+		Propose:      3000 * time.Millisecond,
+		ProposeDelta: 500 * time.Millisecond,
+		Vote:         1000 * time.Millisecond,
+		VoteDelta:    500 * time.Millisecond,
 	}
 }
 
@@ -207,9 +211,6 @@ func (t TimeoutParams) TimeoutParamsOrDefaults() TimeoutParams {
 	if t.VoteDelta == 0 {
 		t.VoteDelta = defaults.VoteDelta
 	}
-	if t.Commit == 0 {
-		t.Commit = defaults.Commit
-	}
 	return t
 }
 
@@ -225,13 +226,6 @@ func (t TimeoutParams) VoteTimeout(round int32) time.Duration {
 	return time.Duration(
 		t.Vote.Nanoseconds()+t.VoteDelta.Nanoseconds()*int64(round),
 	) * time.Nanosecond
-}
-
-// CommitTime accepts ti, the time at which the consensus engine received +2/3
-// precommits for a block and returns the point in time at which the consensus
-// engine should begin consensus on the next block.
-func (t TimeoutParams) CommitTime(ti time.Time) time.Time {
-	return ti.Add(t.Commit)
 }
 
 func (val *ValidatorParams) IsValidPubkeyType(pubkeyType string) bool {
@@ -319,12 +313,17 @@ func (params ConsensusParams) ValidateConsensusParams() error {
 		return fmt.Errorf("timeout.VoteDelta must be greater than 0. Got: %d", params.Timeout.VoteDelta)
 	}
 
-	if params.Timeout.Commit <= 0 {
-		return fmt.Errorf("timeout.Commit must be greater than 0. Got: %d", params.Timeout.Commit)
-	}
-
 	if len(params.Validator.PubKeyTypes) == 0 {
 		return errors.New("len(Validator.PubKeyTypes) must be greater than 0")
+	}
+
+	// TODO: Remove in v0.15
+	if params.Timeout.Commit != 0 {
+		fmt.Fprintln(os.Stderr, "WARNING: ConsensusParams.Timeout.Commit is not used and will be removed in v0.15")
+	}
+	// TODO: Remove in v0.15
+	if params.Timeout.BypassCommitTimeout {
+		fmt.Fprintln(os.Stderr, "WARNING: ConsensusParams.Timeout.BypassCommitTimeout is not used and will be removed in v0.15")
 	}
 
 	// Check if keyType is a known ABCIPubKeyType
@@ -418,10 +417,6 @@ func (params ConsensusParams) UpdateConsensusParams(params2 *tmproto.ConsensusPa
 		if params2.Timeout.VoteDelta != nil {
 			res.Timeout.VoteDelta = *params2.Timeout.GetVoteDelta()
 		}
-		if params2.Timeout.Commit != nil {
-			res.Timeout.Commit = *params2.Timeout.GetCommit()
-		}
-		res.Timeout.BypassCommitTimeout = params2.Timeout.GetBypassCommitTimeout()
 	}
 	if params2.Abci != nil {
 		res.ABCI.RecheckTx = params2.Abci.GetRecheckTx()
@@ -451,12 +446,10 @@ func (params *ConsensusParams) ToProto() tmproto.ConsensusParams {
 			Precision:    &params.Synchrony.Precision,
 		},
 		Timeout: &tmproto.TimeoutParams{
-			Propose:             &params.Timeout.Propose,
-			ProposeDelta:        &params.Timeout.ProposeDelta,
-			Vote:                &params.Timeout.Vote,
-			VoteDelta:           &params.Timeout.VoteDelta,
-			Commit:              &params.Timeout.Commit,
-			BypassCommitTimeout: params.Timeout.BypassCommitTimeout,
+			Propose:      &params.Timeout.Propose,
+			ProposeDelta: &params.Timeout.ProposeDelta,
+			Vote:         &params.Timeout.Vote,
+			VoteDelta:    &params.Timeout.VoteDelta,
 		},
 		Abci: &tmproto.ABCIParams{
 			RecheckTx: params.ABCI.RecheckTx,
@@ -503,10 +496,6 @@ func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams 
 		if pbParams.Timeout.VoteDelta != nil {
 			c.Timeout.VoteDelta = *pbParams.Timeout.GetVoteDelta()
 		}
-		if pbParams.Timeout.Commit != nil {
-			c.Timeout.Commit = *pbParams.Timeout.GetCommit()
-		}
-		c.Timeout.BypassCommitTimeout = pbParams.Timeout.BypassCommitTimeout
 	}
 	if pbParams.Abci != nil {
 		c.ABCI.RecheckTx = pbParams.Abci.GetRecheckTx()

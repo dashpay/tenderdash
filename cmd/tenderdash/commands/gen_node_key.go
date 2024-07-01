@@ -57,7 +57,7 @@ Seed phrase and optional password is read from standard input.`,
 	return cmd
 }
 
-func genNodeKeyFlagsPreRunE(cmd *cobra.Command, args []string) error {
+func genNodeKeyFlagsPreRunE(_cmd *cobra.Command, _args []string) error {
 	if useSeedPhrase && pemFile != "" {
 		return fmt.Errorf("--%s cannot be be used with --%s", flagFromMnemonic, flagFromPem)
 	}
@@ -138,7 +138,7 @@ func readMnemonic(in io.Reader, out io.Writer) (mnemonic string, password string
 }
 
 // nodeKeyFromMnemonic reads BIP39 mnemonic and optional passphrase from stdin, and derives node key from it.
-func nodeKeyFromMnemonic(cmd *cobra.Command, args []string) (types.NodeKey, error) {
+func nodeKeyFromMnemonic(cmd *cobra.Command, _args []string) (types.NodeKey, error) {
 	mnemonic, password, err := readMnemonic(cmd.InOrStdin(), cmd.OutOrStdout())
 	if err != nil {
 		return types.NodeKey{}, err

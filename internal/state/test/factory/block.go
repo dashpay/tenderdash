@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -67,6 +68,10 @@ func MakeBlock(state sm.State, height int64, c *types.Commit, proposedAppVersion
 	if block.ResultsHash, err = abci.TxResultsHash(factory.ExecTxResults(block.Txs)); err != nil {
 		return nil, err
 	}
+	// this should be set by PrepareProposal, but we don't always call PrepareProposal
+	if block.Version.App == 0 {
+		block.Version.App = kvstore.ProtocolVersion
+	}
 
 	return block, nil
 }
@@ -84,7 +89,11 @@ func makeBlockAndPartSet(
 	t.Helper()
 
 	quorumSigns := &types.CommitSigns{QuorumHash: state.LastValidators.QuorumHash}
-	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, quorumSigns)
+	var ve types.VoteExtensions
+	if lastBlock != nil && lastBlock.LastCommit != nil {
+		ve = types.VoteExtensionsFromProto(lastBlock.LastCommit.ThresholdVoteExtensions...)
+	}
+	lastCommit := types.NewCommit(height-1, 0, types.BlockID{}, ve, quorumSigns)
 	if height > 1 {
 		var err error
 		votes := make([]*types.Vote, len(privVals))
@@ -106,6 +115,7 @@ func makeBlockAndPartSet(
 			lastBlock.Header.Height,
 			0,
 			lastBlockMeta.BlockID,
+			types.VoteExtensionsFromProto(lastBlock.LastCommit.ThresholdVoteExtensions...),
 			&types.CommitSigns{
 				QuorumSigns: *thresholdSigns,
 				QuorumHash:  state.LastValidators.QuorumHash,

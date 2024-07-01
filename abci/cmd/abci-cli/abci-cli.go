@@ -21,9 +21,11 @@ import (
 	"github.com/dashpay/tenderdash/abci/server"
 	servertest "github.com/dashpay/tenderdash/abci/tests/server"
 	"github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/proto/tendermint/crypto"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	pbversion "github.com/dashpay/tenderdash/proto/tendermint/version"
 	"github.com/dashpay/tenderdash/version"
 )
 
@@ -54,7 +56,7 @@ func RootCmmand(logger log.Logger) *cobra.Command {
 		Use:   "abci-cli",
 		Short: "the ABCI CLI tool wraps an ABCI client",
 		Long:  "the ABCI CLI tool wraps an ABCI client and is used for testing ABCI servers",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
+		PersistentPreRunE: func(cmd *cobra.Command, _args []string) (err error) {
 
 			switch cmd.Use {
 			case "kvstore", "version":
@@ -63,7 +65,8 @@ func RootCmmand(logger log.Logger) *cobra.Command {
 
 			if client == nil {
 				var err error
-				client, err = abciclient.NewClient(logger.With("module", "abci-client"), flagAddress, flagAbci, false)
+				cfg := config.AbciConfig{Address: flagAddress, Transport: flagAbci}
+				client, err = abciclient.NewClient(logger.With("module", "abci-client"), cfg, false)
 				if err != nil {
 					return err
 				}
@@ -223,7 +226,7 @@ var versionCmd = &cobra.Command{
 	Short: "print ABCI console version",
 	Long:  "print ABCI console version",
 	Args:  cobra.ExactArgs(0),
-	RunE: func(cmd *cobra.Command, args []string) error {
+	RunE: func(_cmd *cobra.Command, _args []string) error {
 		fmt.Println(version.ABCIVersion)
 		return nil
 	},
@@ -316,7 +319,7 @@ func compose(fs []func() error) error {
 	return err
 }
 
-func cmdTest(cmd *cobra.Command, args []string) error {
+func cmdTest(cmd *cobra.Command, _args []string) error {
 	ctx := cmd.Context()
 	return compose(
 		[]func() error{
@@ -379,7 +382,7 @@ func cmdTest(cmd *cobra.Command, args []string) error {
 		})
 }
 
-func cmdBatch(cmd *cobra.Command, args []string) error {
+func cmdBatch(cmd *cobra.Command, _args []string) error {
 	bufReader := bufio.NewReader(os.Stdin)
 LOOP:
 	for {
@@ -405,7 +408,7 @@ LOOP:
 	return nil
 }
 
-func cmdConsole(cmd *cobra.Command, args []string) error {
+func cmdConsole(cmd *cobra.Command, _args []string) error {
 	for {
 		fmt.Printf("> ")
 		bufReader := bufio.NewReader(os.Stdin)
@@ -674,7 +677,7 @@ func cmdPrepareProposal(cmd *cobra.Command, args []string) error {
 		existingTx := inTxArray(txsBytesArray, tx.Tx)
 		if tx.Action == types.TxRecord_UNKNOWN ||
 			(existingTx && tx.Action == types.TxRecord_ADDED) ||
-			(!existingTx && (tx.Action == types.TxRecord_UNMODIFIED || tx.Action == types.TxRecord_REMOVED)) {
+			(!existingTx && (tx.Action == types.TxRecord_UNMODIFIED || tx.Action == types.TxRecord_REMOVED || tx.Action == types.TxRecord_DELAYED)) {
 			resps = append(resps, response{
 				Code: codeBad,
 				Log:  "Failed. Tx: " + string(tx.GetTx()) + " action: " + tx.Action.String(),
@@ -697,8 +700,9 @@ func cmdProcessProposal(cmd *cobra.Command, args []string) error {
 		panic(err)
 	}
 	res, err := client.ProcessProposal(cmd.Context(), &types.RequestProcessProposal{
-		Height: height,
-		Txs:    txsBytesArray,
+		Height:  height,
+		Txs:     txsBytesArray,
+		Version: &pbversion.Consensus{Block: version.BlockProtocol, App: kvstore.ProtocolVersion},
 	})
 	if err != nil {
 		return err
@@ -711,7 +715,7 @@ func cmdProcessProposal(cmd *cobra.Command, args []string) error {
 }
 
 func makeKVStoreCmd(logger log.Logger) func(*cobra.Command, []string) error {
-	return func(cmd *cobra.Command, args []string) error {
+	return func(cmd *cobra.Command, _args []string) error {
 		// Create the application - in memory or persisted to disk
 		var (
 			app types.Application

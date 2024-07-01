@@ -4,8 +4,8 @@
 # * compile - builds final binaries
 # * image - creates final image of minimal size
 
-ARG ALIPNE_VERSION=3.17
-ARG GOLANG_VERSION=1.19
+ARG ALIPNE_VERSION=3.19
+ARG GOLANG_VERSION=1.22
 #################################
 # STAGE 1: install dependencies #
 #################################
@@ -13,15 +13,14 @@ FROM golang:${GOLANG_VERSION}-alpine${ALIPNE_VERSION} AS base
 
 RUN apk update && \
     apk upgrade && \
-    apk --no-cache add bash git gmp-dev sudo cmake build-base python3-dev libpcap-dev leveldb-dev && \
+    apk --no-cache add bash git gmp-dev sudo cmake build-base libpcap-dev leveldb-dev && \
     rm -rf /var/cache/apk/*
 
 WORKDIR /src/bls
 
 # Install BLS library
 COPY third_party ./third_party
-RUN ./third_party/bls-signatures/build.sh && \
-    ./third_party/bls-signatures/install.sh
+RUN ./third_party/bls-signatures/build.sh
 
 #####################################
 # STAGE 2: install golang libraries #
@@ -94,7 +93,7 @@ COPY --from=compile /src/tenderdash/build/tenderdash /src/tenderdash/build/abcid
 # You can overwrite these before the first run to influence
 # config.json and genesis.json. Additionally, you can override
 # CMD to add parameters to `tenderdash node`.
-ENV PROXY_APP=kvstore MONIKER=dockernode CHAIN_ID=dockerchain
+ENV PROXY_APP=kvstore MONIKER=dockernode CHAIN_ID=dockerchain ABCI=""
 
 COPY ./DOCKER/docker-entrypoint.sh /usr/local/bin/
 

@@ -1,8 +1,109 @@
+## [1.0.0] - 2024-06-26
+
+### Bug Fixes
+
+- Panic in ordered_map Key() (#721)
+- Race condition when adding new channel to NodeInfo (#735)
+- [**breaking**] E2e tests are flaky due to slow app state processing (#745)
+- Cancel previous mempool run when starting new one (#760)
+- Valid/locked block incorrectly marked as not timely (#762)
+- Handle ValidatorSetUpdate with no validator changes (#774)
+- Ignore abci section on seeds (#785)
+- Abci valset update abci does not need a public key on replay (#786)
+- [**breaking**] Limit mempool gossip rate on a per-peer basis (#787)
+- Router.chDesc concurrent map iteration and write in pqueue (#794)
+- Ineffective PROXY_APP and ABCI env in entrypoint (#805)
+
+### Features
+
+- Allow delaying transactions in ResponsePrepareProposal (#717)
+- New vote extenison type THRESHOLD_RAW (#715)
+- Env var ABCI changes abci option in config.toml (#742)
+- Route abci requests depending on request type (#734)
+- Add request result to prometheus stats (#743)
+- Support timeouts in abci calls (#749)
+- Allow configuration of check TX timeout for rpc and p2p tx broadcast (#750)
+- Channel enqueue timeout and improved router cleanup (#754)
+- Channels with limit of send and recv rate (#753)
+- Proposer-based app version (#769)
+- [**breaking**] Limit concurrent gRPC connections (#775)
+
+### Miscellaneous Tasks
+
+- Update CODEOWNERS (#736)
+- [**breaking**] Remove ExecTxResult.GasWanted (#740)
+- Regenerate mocks (#744)
+- Don't use go-deadlock in clist due to performance issues (#747)
+- Fix linter warnings in v0.14-dev (#748)
+- Minor improvements: logging, comments, locks (#726)
+- Update changelog and version to 0.14.0-dev.4 (#763)
+- Update changelog and version to 0.14.0-dev.6 (#778)
+- Update changelog and version to 0.14.0-dev.7 (#789)
+- Add Warn log level and decrease verbosity of some logs (#790)
+- Detect quorum hash mismatch when verifying commit (#791)
+- Update changelog and version to 0.14.0-dev.8 (#792)
+- Update changelog and version to 1.0.0-dev.2 (#806)
+
+### Refactor
+
+- Remove QuorumSingsVerifier (#727)
+- Relaxed locking of mempool (#737)
+- [**breaking**] Remove deprecated config fields (#755)
+- Remove not needed commit timeout and unused LastPrecommits (#751)
+- Tune channel priorities and move channel definitions to p2p/channel_params.go (#759)
+- Use tmsync.Waker when txs are available (#761)
+- [**breaking**] Move Events from FinalizeBlock to ResponseProcessProposal (#770)
+
+### Testing
+
+- Add parallel grpc execution test (#758)
+- Fix flaky TestTooFarInTheFutureProposal (#768)
+- Fix flaky TestEmitNewValidBlockEventOnCommitWithoutBlock (#772)
+
+### Build
+
+- Bump actions/setup-go from 3.5.0 to 5.0.0
+- Bump actions/stale from 7 to 9
+- Update golang to 1.21 (#716)
+- Bump actions/download-artifact from 3 to 4 (#720)
+- Bump actions/upload-artifact from 3 to 4 (#719)
+- Manual docker image build platform selection (#722)
+- Bump bufbuild/buf-setup-action from 1.27.0 to 1.29.0 (#729)
+- Bump styfle/cancel-workflow-action from 0.12.0 to 0.12.1 (#728)
+- Fix depguard linter configuration (#730)
+- Simplify build process (#732)
+- Fix docker platforms for releases (#733)
+- Bump golangci/golangci-lint-action from 3.7.0 to 4.0.0 (#738)
+- Bump go to 1.22, alpine to 3.19, mockery to 2.41.0 (#741)
+- Bump docker/setup-buildx-action from 3.0.0 to 3.1.0 (#746)
+- Bump docker/build-push-action from 5.0.0 to 5.2.0 (#756)
+- Bump bufbuild/buf-setup-action from 1.29.0 to 1.30.0 (#757)
+- Bump docker/setup-buildx-action from 3.1.0 to 3.2.0 (#765)
+- Bump docker/login-action from 3.0.0 to 3.1.0 (#767)
+- Bump docker/build-push-action from 5.2.0 to 5.3.0 (#766)
+- Bump docker/setup-buildx-action from 3.2.0 to 3.3.0 (#776)
+- Bump bufbuild/buf-setup-action from 1.30.0 to 1.30.1 (#777)
+- Bump golangci/golangci-lint-action from 4.0.0 to 5.3.0 (#784)
+- Bump actions/setup-go from 5.0.0 to 5.0.1 (#783)
+- Bump bufbuild/buf-setup-action from 1.30.1 to 1.31.0 (#780)
+- Bump golangci/golangci-lint-action from 5.3.0 to 6.0.1 (#788)
+- Bump bufbuild/buf-setup-action from 1.31.0 to 1.32.0 (#793)
+- Bump bufbuild/buf-setup-action from 1.32.0 to 1.32.2 (#796)
+- Bump docker/login-action from 3.1.0 to 3.2.0 (#797)
+- Bump docker/build-push-action from 5.3.0 to 5.4.0 (#799)
+- Bump docker/build-push-action from 5.4.0 to 6.0.0 (#801)
+- Bump bufbuild/buf-setup-action from 1.32.2 to 1.33.0 (#800)
+- Bump goreleaser/goreleaser-action from 5 to 6 (#798)
+
 ## [0.13.4] - 2023-12-11
 
 ### Bug Fixes
 
 - Ordered map race condition (#708)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 0.13.4
 
 ### Performance
 
@@ -19,15 +120,29 @@
 
 - Update changelog and version to 0.13.3
 
+### Build
+
+- Bump styfle/cancel-workflow-action from 0.10.0 to 0.12.0 (#696)
+- Bump bufbuild/buf-setup-action from 1.14.0 to 1.27.0 (#695)
+
 ## [0.13.2] - 2023-10-09
 
 ### Bug Fixes
 
 - Log-file-path setting does not work (#691)
+- Log-file-path setting does not work (#691)
 
 ### Miscellaneous Tasks
 
 - Update changelog and version to 0.13.2
+
+### Build
+
+- Bump goreleaser/goreleaser-action from 4 to 5
+- Bump docker/metadata-action from 3 to 5
+- Bump docker/login-action from 2.0.0 to 3.0.0
+- Bump docker/build-push-action from 4.0.0 to 5.0.0
+- Bump docker/setup-buildx-action from 2.4.1 to 3.0.0
 
 ## [0.13.1] - 2023-09-14
 

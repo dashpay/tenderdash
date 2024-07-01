@@ -9,7 +9,6 @@ import (
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
-	types1 "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -18,32 +17,20 @@ func (app *Application) verifyBlockCommit(qsd types.QuorumSignData, commit abci.
 	if !bytes.Equal(commit.QuorumHash, vsu.QuorumHash) {
 		return fmt.Errorf("mismatch quorum hashes got %X, want %X", commit.QuorumHash, vsu.QuorumHash)
 	}
-	verifier := types.NewQuorumSignsVerifier(qsd)
 	pubKey, err := encoding.PubKeyFromProto(vsu.ThresholdPublicKey)
 	if err != nil {
 		return err
 	}
-	return verifier.Verify(pubKey, types.QuorumSigns{
-		BlockSign:      commit.BlockSignature,
-		ExtensionSigns: makeThresholdVoteExtensions(commit.ThresholdVoteExtensions),
-	})
-}
 
-func makeThresholdVoteExtensions(pbVoteExtensions []*types1.VoteExtension) []types.ThresholdExtensionSign {
-	voteExtensions := types.VoteExtensionsFromProto(pbVoteExtensions)
-	var thresholdExtensionSigns []types.ThresholdExtensionSign
-	thresholdVoteExtensions, ok := voteExtensions[types1.VoteExtensionType_THRESHOLD_RECOVER]
-	if !ok {
-		return nil
+	extSigs := make([][]byte, 0, len(commit.ThresholdVoteExtensions))
+	for _, ext := range commit.ThresholdVoteExtensions {
+		extSigs = append(extSigs, ext.Signature)
 	}
-	thresholdExtensionSigns = make([]types.ThresholdExtensionSign, len(thresholdVoteExtensions))
-	for i, voteExtension := range thresholdVoteExtensions {
-		thresholdExtensionSigns[i] = types.ThresholdExtensionSign{
-			Extension:          voteExtension.Extension,
-			ThresholdSignature: voteExtension.Signature,
-		}
-	}
-	return thresholdExtensionSigns
+
+	return qsd.Verify(pubKey, types.QuorumSigns{
+		BlockSign:               commit.BlockSignature,
+		VoteExtensionSignatures: extSigs,
+	})
 }
 
 func makeBlockSignItem(
@@ -67,19 +54,14 @@ func makeVoteExtensionSignItems(
 	req *abci.RequestFinalizeBlock,
 	quorumType btcjson.LLMQType,
 	quorumHash []byte,
-) map[types1.VoteExtensionType][]types.SignItem {
-	items := make(map[types1.VoteExtensionType][]types.SignItem)
-	reqID := types.VoteExtensionRequestID(req.Height, req.Round)
-	protoExtensionsMap := types1.VoteExtensionsToMap(req.Commit.ThresholdVoteExtensions)
-	for t, exts := range protoExtensionsMap {
-		if items[t] == nil && len(exts) > 0 {
-			items[t] = make([]types.SignItem, len(exts))
-		}
-		chainID := req.Block.Header.ChainID
-		for i, ext := range exts {
-			raw := types.VoteExtensionSignBytes(chainID, req.Height, req.Round, ext)
-			items[t][i] = types.NewSignItem(quorumType, quorumHash, reqID, raw)
-		}
+) []types.SignItem {
+
+	extensions := types.VoteExtensionsFromProto(req.Commit.ThresholdVoteExtensions...)
+	chainID := req.Block.Header.ChainID
+
+	items, err := extensions.SignItems(chainID, quorumType, quorumHash, req.Height, req.Round)
+	if err != nil {
+		panic(fmt.Errorf("vote extension sign items: %w", err))
 	}
 	return items
 }

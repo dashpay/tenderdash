@@ -45,7 +45,7 @@ func newProviderBenchmarkImpl(headers map[int64]*types.SignedHeader,
 	return &impl
 }
 
-func (impl *providerBenchmarkImpl) LightBlock(ctx context.Context, height int64) (*types.LightBlock, error) {
+func (impl *providerBenchmarkImpl) LightBlock(_ctx context.Context, height int64) (*types.LightBlock, error) {
 	if height == 0 {
 		return impl.blocks[impl.currentHeight], nil
 	}

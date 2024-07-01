@@ -79,6 +79,7 @@ func (app *Application) PrepareProposal(_ context.Context, req *types.RequestPre
 		AppHash:             make([]byte, tmcrypto.DefaultAppHashSize),
 		CoreChainLockUpdate: app.lastCoreChainLock.ToProto(),
 		TxResults:           app.lastTxResults,
+		AppVersion:          1,
 	}
 	return &resp, nil
 }

@@ -126,7 +126,7 @@ type EventDataNewBlock struct {
 	Block   *Block  `json:"block"`
 	BlockID BlockID `json:"block_id"`
 
-	ResultFinalizeBlock abci.ResponseFinalizeBlock `json:"result_finalize_block"`
+	ResultProcessProposal abci.ResponseProcessProposal `json:"result_finalize_block"`
 }
 
 // TypeTag implements the required method of jsontypes.Tagged.
@@ -135,7 +135,7 @@ func (EventDataNewBlock) TypeTag() string { return "tendermint/event/NewBlock" }
 // ABCIEvents implements the eventlog.ABCIEventer interface.
 func (e EventDataNewBlock) ABCIEvents() []abci.Event {
 	base := []abci.Event{eventWithAttr(BlockHeightKey, fmt.Sprint(e.Block.Header.Height))}
-	return append(base, e.ResultFinalizeBlock.Events...)
+	return append(base, e.ResultProcessProposal.Events...)
 }
 
 type EventDataNewBlockHeader struct {
@@ -144,7 +144,6 @@ type EventDataNewBlockHeader struct {
 	NumTxs int64 `json:"num_txs,string"` // Number of txs in a block
 
 	ResultProcessProposal abci.ResponseProcessProposal `json:"result_process_proposal"`
-	ResultFinalizeBlock   abci.ResponseFinalizeBlock   `json:"result_finalize_block"`
 }
 
 // TypeTag implements the required method of jsontypes.Tagged.
@@ -153,7 +152,7 @@ func (EventDataNewBlockHeader) TypeTag() string { return "tendermint/event/NewBl
 // ABCIEvents implements the eventlog.ABCIEventer interface.
 func (e EventDataNewBlockHeader) ABCIEvents() []abci.Event {
 	base := []abci.Event{eventWithAttr(BlockHeightKey, fmt.Sprint(e.Header.Height))}
-	return append(base, e.ResultFinalizeBlock.Events...)
+	return append(base, e.ResultProcessProposal.Events...)
 }
 
 type EventDataNewEvidence struct {

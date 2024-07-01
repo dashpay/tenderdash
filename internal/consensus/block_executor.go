@@ -40,9 +40,8 @@ func (c *blockExecutor) create(ctx context.Context, rs *cstypes.RoundState, roun
 	case rs.Height == c.committedState.InitialHeight:
 		// We're creating a proposal for the first block.
 		// The commit is empty, but not nil.
-		commit = types.NewCommit(0, 0, types.BlockID{}, nil)
+		commit = types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 	case rs.LastCommit != nil:
-		// Make the commit from LastPrecommits
 		commit = rs.LastCommit
 
 	default: // This shouldn't happen.
@@ -65,7 +64,7 @@ func (c *blockExecutor) ensureProcess(ctx context.Context, rs *cstypes.RoundStat
 	block := rs.ProposalBlock
 	crs := rs.CurrentRoundState
 	if crs.Params.Source != sm.ProcessProposalSource || !crs.MatchesBlock(block.Header, round) {
-		c.logger.Debug("CurrentRoundState is outdated, executing ProcessProposal", "crs", crs)
+		c.logger.Trace("CurrentRoundState is outdated, executing ProcessProposal", "crs", crs)
 		uncommittedState, err := c.blockExec.ProcessProposal(ctx, block, round, c.committedState, true)
 		if err != nil {
 			return fmt.Errorf("ProcessProposal abci method: %w", err)

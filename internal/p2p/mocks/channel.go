@@ -18,6 +18,10 @@ type Channel struct {
 func (_m *Channel) Err() error {
 	ret := _m.Called()
 
+	if len(ret) == 0 {
+		panic("no return value specified for Err")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func() error); ok {
 		r0 = rf()
@@ -29,15 +33,19 @@ func (_m *Channel) Err() error {
 }
 
 // Receive provides a mock function with given fields: _a0
-func (_m *Channel) Receive(_a0 context.Context) *p2p.ChannelIterator {
+func (_m *Channel) Receive(_a0 context.Context) p2p.ChannelIterator {
 	ret := _m.Called(_a0)
 
-	var r0 *p2p.ChannelIterator
-	if rf, ok := ret.Get(0).(func(context.Context) *p2p.ChannelIterator); ok {
+	if len(ret) == 0 {
+		panic("no return value specified for Receive")
+	}
+
+	var r0 p2p.ChannelIterator
+	if rf, ok := ret.Get(0).(func(context.Context) p2p.ChannelIterator); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*p2p.ChannelIterator)
+			r0 = ret.Get(0).(p2p.ChannelIterator)
 		}
 	}
 
@@ -47,6 +55,10 @@ func (_m *Channel) Receive(_a0 context.Context) *p2p.ChannelIterator {
 // Send provides a mock function with given fields: _a0, _a1
 func (_m *Channel) Send(_a0 context.Context, _a1 p2p.Envelope) error {
 	ret := _m.Called(_a0, _a1)
+
+	if len(ret) == 0 {
+		panic("no return value specified for Send")
+	}
 
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, p2p.Envelope) error); ok {
@@ -62,6 +74,10 @@ func (_m *Channel) Send(_a0 context.Context, _a1 p2p.Envelope) error {
 func (_m *Channel) SendError(_a0 context.Context, _a1 p2p.PeerError) error {
 	ret := _m.Called(_a0, _a1)
 
+	if len(ret) == 0 {
+		panic("no return value specified for SendError")
+	}
+
 	var r0 error
 	if rf, ok := ret.Get(0).(func(context.Context, p2p.PeerError) error); ok {
 		r0 = rf(_a0, _a1)
@@ -75,6 +91,10 @@ func (_m *Channel) SendError(_a0 context.Context, _a1 p2p.PeerError) error {
 // String provides a mock function with given fields:
 func (_m *Channel) String() string {
 	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for String")
+	}
 
 	var r0 string
 	if rf, ok := ret.Get(0).(func() string); ok {

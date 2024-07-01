@@ -21,6 +21,7 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/service"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
+	pbversion "github.com/dashpay/tenderdash/proto/tendermint/version"
 	tmtypes "github.com/dashpay/tenderdash/types"
 	"github.com/dashpay/tenderdash/version"
 )
@@ -48,13 +49,15 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 	require.ErrorContains(t, err, "duplicate PrepareProposal call")
 
 	reqProcess := &types.RequestProcessProposal{
-		Txs:    [][]byte{tx},
-		Height: height,
+		Txs:     [][]byte{tx},
+		Height:  height,
+		Version: &pbversion.Consensus{App: uint64(height)},
 	}
 	respProcess, err := app.ProcessProposal(ctx, reqProcess)
 	require.NoError(t, err)
 	require.Len(t, respProcess.TxResults, 1)
 	require.False(t, respProcess.TxResults[0].IsErr(), respProcess.TxResults[0].Log)
+	require.Len(t, respProcess.Events, 1)
 
 	// Duplicate ProcessProposal calls should return error
 	_, err = app.ProcessProposal(ctx, reqProcess)
@@ -62,9 +65,8 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 
 	reqFin := &types.RequestFinalizeBlock{Height: height}
 	reqFin.Block, reqFin.BlockID = makeBlock(t, height, [][]byte{tx}, respPrep.AppHash)
-	respFin, err := app.FinalizeBlock(ctx, reqFin)
+	_, err = app.FinalizeBlock(ctx, reqFin)
 	require.NoError(t, err)
-	require.Equal(t, 1, len(respFin.Events))
 
 	// repeating tx raises an error
 	_, err = app.FinalizeBlock(ctx, reqFin)
@@ -122,7 +124,9 @@ func TestPersistentKVStoreKV(t *testing.T) {
 	dir := t.TempDir()
 	logger := log.NewNopLogger()
 
-	kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger.With("module", "kvstore")))
+	kvstore, err := NewPersistentApp(DefaultConfig(dir),
+		WithLogger(logger.With("module", "kvstore")),
+		WithAppVersion(0))
 	require.NoError(t, err)
 
 	key := testKey
@@ -136,7 +140,8 @@ func TestPersistentKVStoreKV(t *testing.T) {
 
 	data, err := os.ReadFile(path.Join(dir, "state.json"))
 	require.NoError(t, err)
-	assert.Contains(t, string(data), fmt.Sprintf(`"%s":"%s"`, key, value))
+
+	assert.Contains(t, string(data), fmt.Sprintf(`"key":"%s","value":"%s"`, key, value))
 }
 
 func TestPersistentKVStoreInfo(t *testing.T) {
@@ -156,7 +161,7 @@ func TestPersistentKVStoreInfo(t *testing.T) {
 			dir := t.TempDir()
 			logger := log.NewTestingLogger(t).With("module", "kvstore")
 
-			kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger))
+			kvstore, err := NewPersistentApp(DefaultConfig(dir), WithLogger(logger), WithAppVersion(0))
 			require.NoError(t, err)
 			defer kvstore.Close()
 
@@ -240,7 +245,7 @@ func TestValUpdates(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	kvstore, err := NewMemoryApp()
+	kvstore, err := NewMemoryApp(WithAppVersion(0))
 	require.NoError(t, err)
 
 	// init with some validators
@@ -282,19 +287,20 @@ func makeApplyBlock(
 	}
 
 	respProcessProposal, err := kvstore.ProcessProposal(ctx, &types.RequestProcessProposal{
-		Hash:   hash,
-		Height: height,
-		Txs:    txs,
+		Hash:    hash,
+		Height:  height,
+		Txs:     txs,
+		Version: &pbversion.Consensus{App: uint64(height)},
 	})
 	require.NoError(t, err)
 	require.NotZero(t, respProcessProposal)
 	require.Equal(t, types.ResponseProcessProposal_ACCEPT, respProcessProposal.Status)
+	require.Len(t, respProcessProposal.Events, 1)
 
 	rfb := &types.RequestFinalizeBlock{Hash: hash, Height: height}
 	rfb.Block, rfb.BlockID = makeBlock(t, height, txs, respProcessProposal.AppHash)
 	resFinalizeBlock, err := kvstore.FinalizeBlock(ctx, rfb)
 	require.NoError(t, err)
-	require.Len(t, resFinalizeBlock.Events, 1)
 
 	return respProcessProposal, resFinalizeBlock
 }
@@ -352,7 +358,7 @@ func makeGRPCClientServer(
 		return nil, nil, err
 	}
 
-	client := abciclient.NewGRPCClient(logger.With("module", "abci-client"), socket, true)
+	client := abciclient.NewGRPCClient(logger.With("module", "abci-client"), socket, nil, true)
 
 	if err := client.Start(ctx); err != nil {
 		cancel()
@@ -367,7 +373,9 @@ func TestClientServer(t *testing.T) {
 	logger := log.NewTestingLogger(t)
 
 	// set up socket app
-	kvstore, err := NewMemoryApp(WithLogger(logger.With("module", "app")))
+	kvstore, err := NewMemoryApp(
+		WithLogger(logger.With("module", "app")),
+		WithAppVersion(0))
 	require.NoError(t, err)
 
 	client, server, err := makeSocketClientServer(ctx, t, logger, kvstore, "kvstore-socket")
@@ -379,7 +387,7 @@ func TestClientServer(t *testing.T) {
 	runClientTests(ctx, t, client)
 
 	// set up grpc app
-	kvstore, err = NewMemoryApp()
+	kvstore, err = NewMemoryApp(WithAppVersion(0))
 	require.NoError(t, err)
 
 	gclient, gserver, err := makeGRPCClientServer(ctx, t, logger, kvstore, "/tmp/kvstore-grpc")
@@ -405,20 +413,21 @@ func runClientTests(ctx context.Context, t *testing.T, client abciclient.Client)
 
 func testClient(ctx context.Context, t *testing.T, app abciclient.Client, height int64, tx []byte, key, value string) {
 	rpp, err := app.ProcessProposal(ctx, &types.RequestProcessProposal{
-		Txs:    [][]byte{tx},
-		Height: height,
+		Txs:     [][]byte{tx},
+		Height:  height,
+		Version: &pbversion.Consensus{App: uint64(height)},
 	})
 	require.NoError(t, err)
 	require.NotZero(t, rpp)
 	require.Equal(t, 1, len(rpp.TxResults))
 	require.False(t, rpp.TxResults[0].IsErr())
+	require.Len(t, rpp.Events, 1)
 
 	rfb := &types.RequestFinalizeBlock{Height: height}
 	rfb.Block, rfb.BlockID = makeBlock(t, height, [][]byte{tx}, rpp.AppHash)
 	ar, err := app.FinalizeBlock(ctx, rfb)
 	require.NoError(t, err)
 	require.Zero(t, ar.RetainHeight)
-	require.Len(t, ar.Events, 1)
 
 	info, err := app.Info(ctx, &types.RequestInfo{})
 	require.NoError(t, err)
@@ -521,6 +530,7 @@ func newKvApp(ctx context.Context, t *testing.T, genesisHeight int64, opts ...Op
 		WithValidatorSetUpdates(map[int64]types.ValidatorSetUpdate{
 			genesisHeight: RandValidatorSetUpdate(1),
 		}),
+		WithAppVersion(0),
 	}
 	app, err := NewMemoryApp(append(defaultOpts, opts...)...)
 	require.NoError(t, err)
@@ -535,17 +545,17 @@ func newKvApp(ctx context.Context, t *testing.T, genesisHeight int64, opts ...Op
 	return app
 }
 
-func assertRespInfo(t *testing.T, expectHeight int64, expectAppHash tmbytes.HexBytes, actual types.ResponseInfo, msgs ...interface{}) {
+func assertRespInfo(t *testing.T, expectLastBlockHeight int64, expectAppHash tmbytes.HexBytes, actual types.ResponseInfo, msgs ...interface{}) {
 	t.Helper()
 
 	if expectAppHash == nil {
 		expectAppHash = make(tmbytes.HexBytes, tmcrypto.DefaultAppHashSize)
 	}
 	expected := types.ResponseInfo{
-		LastBlockHeight:  expectHeight,
+		LastBlockHeight:  expectLastBlockHeight,
 		LastBlockAppHash: expectAppHash,
 		Version:          version.ABCIVersion,
-		AppVersion:       ProtocolVersion,
+		AppVersion:       uint64(expectLastBlockHeight + 1),
 		Data:             fmt.Sprintf(`{"appHash":"%s"}`, expectAppHash.String()),
 	}
 

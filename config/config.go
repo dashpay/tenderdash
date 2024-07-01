@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
+	"github.com/hashicorp/go-multierror"
 
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -66,6 +67,9 @@ type Config struct {
 	// Top level options use an anonymous struct
 	BaseConfig `mapstructure:",squash"`
 
+	// Options for ABCI application connectivity
+	Abci *AbciConfig `mapstructure:"abci"`
+
 	// Options for services
 	RPC             *RPCConfig             `mapstructure:"rpc"`
 	P2P             *P2PConfig             `mapstructure:"p2p"`
@@ -80,6 +84,7 @@ type Config struct {
 // DefaultConfig returns a default configuration for a Tendermint node
 func DefaultConfig() *Config {
 	return &Config{
+		Abci:            DefaultAbciConfig(),
 		BaseConfig:      DefaultBaseConfig(),
 		RPC:             DefaultRPCConfig(),
 		P2P:             DefaultP2PConfig(),
@@ -102,6 +107,7 @@ func DefaultValidatorConfig() *Config {
 // TestConfig returns a configuration that can be used for testing
 func TestConfig() *Config {
 	return &Config{
+		Abci:            TestAbciConfig(),
 		BaseConfig:      TestBaseConfig(),
 		RPC:             TestRPCConfig(),
 		P2P:             TestP2PConfig(),
@@ -128,25 +134,36 @@ func (cfg *Config) SetRoot(root string) *Config {
 // ValidateBasic performs basic validation (checking param bounds, etc.) and
 // returns an error if any check fails.
 func (cfg *Config) ValidateBasic() error {
+	var errs error
+
 	if err := cfg.BaseConfig.ValidateBasic(); err != nil {
-		return err
+		errs = multierror.Append(errs, err)
 	}
+
+	// ignore [abci] section on seed nodes
+	if cfg.Mode != ModeSeed {
+		if err := cfg.Abci.ValidateBasic(); err != nil {
+			errs = multierror.Append(errs, fmt.Errorf("error in [abci] section: %w", err))
+		}
+	}
+
 	if err := cfg.RPC.ValidateBasic(); err != nil {
-		return fmt.Errorf("error in [rpc] section: %w", err)
+		errs = multierror.Append(errs, fmt.Errorf("error in [rpc] section: %w", err))
 	}
 	if err := cfg.Mempool.ValidateBasic(); err != nil {
-		return fmt.Errorf("error in [mempool] section: %w", err)
+		errs = multierror.Append(errs, fmt.Errorf("error in [mempool] section: %w", err))
 	}
 	if err := cfg.StateSync.ValidateBasic(); err != nil {
-		return fmt.Errorf("error in [statesync] section: %w", err)
+		errs = multierror.Append(errs, fmt.Errorf("error in [statesync] section: %w", err))
 	}
 	if err := cfg.Consensus.ValidateBasic(); err != nil {
-		return fmt.Errorf("error in [consensus] section: %w", err)
+		errs = multierror.Append(errs, fmt.Errorf("error in [consensus] section: %w", err))
 	}
 	if err := cfg.Instrumentation.ValidateBasic(); err != nil {
-		return fmt.Errorf("error in [instrumentation] section: %w", err)
+		errs = multierror.Append(errs, fmt.Errorf("error in [instrumentation] section: %w", err))
 	}
-	return nil
+
+	return errs
 }
 
 func (cfg *Config) DeprecatedFieldWarning() error {
@@ -164,10 +181,6 @@ type BaseConfig struct { //nolint: maligned
 	// The root directory for all data.
 	// This should be set in viper so it can unmarshal into this struct
 	RootDir string `mapstructure:"home"`
-
-	// TCP or UNIX socket address of the ABCI application,
-	// or the name of an ABCI application compiled in with the Tendermint binary
-	ProxyApp string `mapstructure:"proxy-app"`
 
 	// A custom human readable name for this node
 	Moniker string `mapstructure:"moniker"`
@@ -223,9 +236,6 @@ type BaseConfig struct { //nolint: maligned
 	// A JSON file containing the private key to use for p2p authenticated encryption
 	NodeKey string `mapstructure:"node-key-file"`
 
-	// Mechanism to connect to the ABCI application: socket | grpc
-	ABCI string `mapstructure:"abci"`
-
 	// If true, query the ABCI app on connecting to a new peer
 	// so the app can decide if we should keep the connection or not
 	FilterPeers bool `mapstructure:"filter-peers"` // false
@@ -240,25 +250,6 @@ func DefaultBaseConfig() BaseConfig {
 		NodeKey:     defaultNodeKeyPath,
 		Mode:        defaultMode,
 		Moniker:     defaultMoniker,
-		ProxyApp:    "tcp://127.0.0.1:26658",
-		ABCI:        "socket",
-		LogLevel:    DefaultLogLevel,
-		LogFormat:   log.LogFormatPlain,
-		FilterPeers: false,
-		DBBackend:   "goleveldb",
-		DBPath:      "data",
-	}
-}
-
-// SingleNodeBaseConfig returns a default base configuration for a Tendermint node
-func SingleNodeBaseConfig() BaseConfig {
-	return BaseConfig{
-		Genesis:     defaultGenesisJSONPath,
-		NodeKey:     defaultNodeKeyPath,
-		Mode:        defaultMode,
-		Moniker:     defaultMoniker,
-		ProxyApp:    "tcp://127.0.0.1:26658",
-		ABCI:        "socket",
 		LogLevel:    DefaultLogLevel,
 		LogFormat:   log.LogFormatPlain,
 		FilterPeers: false,
@@ -272,7 +263,6 @@ func TestBaseConfig() BaseConfig {
 	cfg := DefaultBaseConfig()
 	cfg.chainID = factory.DefaultTestChainID
 	cfg.Mode = ModeValidator
-	cfg.ProxyApp = "kvstore"
 	cfg.DBBackend = "memdb"
 	return cfg
 }
@@ -442,6 +432,73 @@ func (cfg *PrivValidatorConfig) AreSecurityOptionsPresent() bool {
 }
 
 //-----------------------------------------------------------------------------
+// AbciConfig
+
+// AbciConfig defines the configuration options for the ABCI client connection
+type AbciConfig struct {
+	// TCP or UNIX socket address of the ABCI application,or routing rules for routed ABCI client,
+	// or the name of an ABCI application compiled in with the Tendermint binary
+	Address string `mapstructure:"address"`
+
+	// Transport protocol used to connect to the ABCI application: socket | grpc | routed
+	Transport string `mapstructure:"transport"`
+
+	// Maximum number of simultaneous connections to the ABCI application
+	// per each method. Mapped method names, like "echo", to the number of concurrent requests.
+	// Special method name "*" can be used to set the default limit for methods not explicitly listed.
+	GrpcConcurrency map[string]uint16 `mapstructure:"grpc-concurrency"`
+
+	// Other options should be empty
+	Other map[string]interface{} `mapstructure:",remain"`
+}
+
+// DefaultAbciConfig returns a default ABCI configuration for a Tendermint node
+func DefaultAbciConfig() *AbciConfig {
+	return &AbciConfig{
+		Address:         "tcp://127.0.0.1:26658",
+		Transport:       "socket",
+		GrpcConcurrency: map[string]uint16{"*": 0},
+	}
+}
+
+// TestAbciConfig returns a configuration for testing the ABCI client
+func TestAbciConfig() *AbciConfig {
+	cfg := DefaultAbciConfig()
+	cfg.Address = "kvstore"
+	return cfg
+}
+
+// ValidateBasic performs basic validation (checking param bounds, etc.) and
+// returns an error if any check fails.
+func (cfg *AbciConfig) ValidateBasic() error {
+	var err error
+
+	if cfg == nil {
+		err = multierror.Append(err, errors.New("[abci] config section is nil"))
+		return err
+	}
+
+	for key := range cfg.Other {
+		err = multierror.Append(err, fmt.Errorf("unknown field: %s", key))
+	}
+
+	// empty transport and address is allowed, as it means we use built in app
+	if !(cfg.Transport == "" && cfg.Address == "") {
+		switch cfg.Transport {
+		case "socket", "grpc", "routed":
+		default:
+			err = multierror.Append(err, fmt.Errorf("unknown ABCI connection method: %v", cfg.Transport))
+		}
+
+		if len(cfg.Address) == 0 {
+			err = multierror.Append(err, errors.New("address cannot be empty"))
+		}
+	}
+
+	return err
+}
+
+//-----------------------------------------------------------------------------
 // RPCConfig
 
 // RPCConfig defines the configuration options for the Tendermint RPC server
@@ -517,6 +574,13 @@ type RPCConfig struct {
 	// See https://github.com/tendermint/tendermint/issues/3435
 	TimeoutBroadcastTxCommit time.Duration `mapstructure:"timeout-broadcast-tx-commit"`
 
+	// Timeout of transaction broadcast to mempool; 0 to disable.
+	//
+	// This setting affects timeout of CheckTX operations used before
+	// adding transaction to the mempool. If the operation takes longer,
+	// the transaction is rejected with an error.
+	TimeoutBroadcastTx time.Duration `mapstructure:"timeout-broadcast-tx"`
+
 	// Maximum size of request body, in bytes
 	MaxBodyBytes int64 `mapstructure:"max-body-bytes"`
 
@@ -564,6 +628,7 @@ func DefaultRPCConfig() *RPCConfig {
 		EventLogMaxItems:             0,
 
 		TimeoutBroadcastTxCommit: 10 * time.Second,
+		TimeoutBroadcastTx:       0,
 
 		MaxBodyBytes:   int64(1000000), // 1MB
 		MaxHeaderBytes: 1 << 20,        // same as the net/http default
@@ -601,6 +666,9 @@ func (cfg *RPCConfig) ValidateBasic() error {
 	}
 	if cfg.TimeoutBroadcastTxCommit < 0 {
 		return errors.New("timeout-broadcast-tx-commit can't be negative")
+	}
+	if cfg.TimeoutBroadcastTx < 0 {
+		return errors.New("timeout-broadcast-tx can't be negative")
 	}
 	if cfg.MaxBodyBytes < 0 {
 		return errors.New("max-body-bytes can't be negative")
@@ -788,6 +856,7 @@ type MempoolConfig struct {
 	MaxTxsBytes int64 `mapstructure:"max-txs-bytes"`
 
 	// Size of the cache (used to filter transactions we saw earlier) in transactions
+	// Should be much bigger than mempool size.
 	CacheSize int `mapstructure:"cache-size"`
 
 	// Do not remove invalid transactions from the cache (default: false)
@@ -819,6 +888,28 @@ type MempoolConfig struct {
 	// has existed in the mempool at least TTLNumBlocks number of blocks or if
 	// it's insertion time into the mempool is beyond TTLDuration.
 	TTLNumBlocks int64 `mapstructure:"ttl-num-blocks"`
+
+	// TxSendRateLimit is the rate limit for sending transactions to peers, in
+	// transactions per second. If zero, the rate limiter is disabled.
+	//
+	// Default: 0
+	TxSendRateLimit float64 `mapstructure:"tx-send-rate-limit"`
+
+	// TxRecvRateLimit is the rate limit for receiving transactions from peers, in
+	// transactions per second. If zero, the rate limiter is disabled.
+	//
+	// Default: 0
+	TxRecvRateLimit float64 `mapstructure:"tx-recv-rate-limit"`
+
+	// TxEnqueueTimeout defines how long new mempool transaction will wait when internal
+	// processing queue is full (most likely due to busy CheckTx execution).
+	// Once the timeout is reached, the transaction will be silently dropped.
+	// If set to 0, the timeout is disabled and transactions will wait indefinitely.
+	TxEnqueueTimeout time.Duration `mapstructure:"tx-enqueue-timeout"`
+
+	// Timeout of check TX operations received from other nodes.
+	// Use 0 to disable.
+	TimeoutCheckTx time.Duration `mapstructure:"timeout-check-tx"`
 }
 
 // DefaultMempoolConfig returns a default configuration for the Tendermint mempool.
@@ -827,12 +918,13 @@ func DefaultMempoolConfig() *MempoolConfig {
 		Broadcast: true,
 		// Each signature verification takes .5ms, Size reduced until we implement
 		// ABCI Recheck
-		Size:         5000,
-		MaxTxsBytes:  1024 * 1024 * 1024, // 1GB
-		CacheSize:    10000,
-		MaxTxBytes:   1024 * 1024, // 1MB
-		TTLDuration:  0 * time.Second,
-		TTLNumBlocks: 0,
+		Size:           5000,
+		MaxTxsBytes:    1024 * 1024 * 1024, // 1GB
+		CacheSize:      10000,
+		MaxTxBytes:     1024 * 1024, // 1MB
+		TTLDuration:    0 * time.Second,
+		TTLNumBlocks:   0,
+		TimeoutCheckTx: 0,
 	}
 }
 
@@ -863,6 +955,12 @@ func (cfg *MempoolConfig) ValidateBasic() error {
 	}
 	if cfg.TTLNumBlocks < 0 {
 		return errors.New("ttl-num-blocks can't be negative")
+	}
+	if cfg.TxEnqueueTimeout < 0 {
+		return errors.New("tx-enqueue-timeout can't be negative")
+	}
+	if cfg.TimeoutCheckTx < 0 {
+		return errors.New("timeout-check-tx can't be negative")
 	}
 	return nil
 }
@@ -1049,20 +1147,6 @@ type ConsensusConfig struct {
 	// If it is set to true, the consensus engine will proceed to the next height
 	// as soon as the node has gathered votes from all of the validators on the network.
 	UnsafeBypassCommitTimeoutOverride *bool `mapstructure:"unsafe-bypass-commit-timeout-override"`
-
-	// Deprecated timeout parameters. These parameters are present in this struct
-	// so that they can be parsed so that validation can check if they have erroneously
-	// been included and provide a helpful error message.
-	// These fields should be completely removed in v0.37.
-	// See: https://github.com/tendermint/tendermint/issues/8188
-	DeprecatedTimeoutPropose        *interface{} `mapstructure:"timeout-propose"`
-	DeprecatedTimeoutProposeDelta   *interface{} `mapstructure:"timeout-propose-delta"`
-	DeprecatedTimeoutPrevote        *interface{} `mapstructure:"timeout-prevote"`
-	DeprecatedTimeoutPrevoteDelta   *interface{} `mapstructure:"timeout-prevote-delta"`
-	DeprecatedTimeoutPrecommit      *interface{} `mapstructure:"timeout-precommit"`
-	DeprecatedTimeoutPrecommitDelta *interface{} `mapstructure:"timeout-precommit-delta"`
-	DeprecatedTimeoutCommit         *interface{} `mapstructure:"timeout-commit"`
-	DeprecatedSkipTimeoutCommit     *interface{} `mapstructure:"skip-timeout-commit"`
 }
 
 // DefaultConsensusConfig returns a default configuration for the consensus service
@@ -1141,30 +1225,7 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 
 func (cfg *ConsensusConfig) DeprecatedFieldWarning() error {
 	var fields []string
-	if cfg.DeprecatedSkipTimeoutCommit != nil {
-		fields = append(fields, "skip-timeout-commit")
-	}
-	if cfg.DeprecatedTimeoutPropose != nil {
-		fields = append(fields, "timeout-propose")
-	}
-	if cfg.DeprecatedTimeoutProposeDelta != nil {
-		fields = append(fields, "timeout-propose-delta")
-	}
-	if cfg.DeprecatedTimeoutPrevote != nil {
-		fields = append(fields, "timeout-prevote")
-	}
-	if cfg.DeprecatedTimeoutPrevoteDelta != nil {
-		fields = append(fields, "timeout-prevote-delta")
-	}
-	if cfg.DeprecatedTimeoutPrecommit != nil {
-		fields = append(fields, "timeout-precommit")
-	}
-	if cfg.DeprecatedTimeoutPrecommitDelta != nil {
-		fields = append(fields, "timeout-precommit-delta")
-	}
-	if cfg.DeprecatedTimeoutCommit != nil {
-		fields = append(fields, "timeout-commit")
-	}
+
 	if cfg.DeprecatedQuorumType != 0 {
 		fields = append(fields, "quorum-type")
 	}

@@ -19,7 +19,7 @@ type simpleQueue struct {
 	chDescs []*ChannelDescriptor
 }
 
-func newSimplePriorityQueue(ctx context.Context, size int, chDescs []*ChannelDescriptor) *simpleQueue {
+func newSimplePriorityQueue(ctx context.Context, size int) *simpleQueue {
 	if size%2 != 0 {
 		size++
 	}

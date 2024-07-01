@@ -423,7 +423,7 @@ func LoadOrGenFilePV(keyFilePath, stateFilePath string) (*FilePV, error) {
 
 // GetPubKey returns the public key of the validator.
 // Implements PrivValidator.
-func (pv *FilePV) GetPubKey(context context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
+func (pv *FilePV) GetPubKey(_ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -435,7 +435,7 @@ func (pv *FilePV) GetPubKey(context context.Context, quorumHash crypto.QuorumHas
 
 // GetFirstPubKey returns the first public key of the validator.
 // Implements PrivValidator.
-func (pv *FilePV) GetFirstPubKey(context context.Context) (crypto.PubKey, error) {
+func (pv *FilePV) GetFirstPubKey(_ctx context.Context) (crypto.PubKey, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -445,7 +445,7 @@ func (pv *FilePV) GetFirstPubKey(context context.Context) (crypto.PubKey, error)
 	return nil, nil
 }
 
-func (pv *FilePV) GetQuorumHashes(context context.Context) ([]crypto.QuorumHash, error) {
+func (pv *FilePV) GetQuorumHashes(_ctx context.Context) ([]crypto.QuorumHash, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -462,7 +462,7 @@ func (pv *FilePV) GetQuorumHashes(context context.Context) ([]crypto.QuorumHash,
 	return quorumHashes, nil
 }
 
-func (pv *FilePV) GetFirstQuorumHash(context context.Context) (crypto.QuorumHash, error) {
+func (pv *FilePV) GetFirstQuorumHash(_ctx context.Context) (crypto.QuorumHash, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -473,7 +473,7 @@ func (pv *FilePV) GetFirstQuorumHash(context context.Context) (crypto.QuorumHash
 }
 
 // GetThresholdPublicKey ...
-func (pv *FilePV) GetThresholdPublicKey(context context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
+func (pv *FilePV) GetThresholdPublicKey(_ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -491,7 +491,7 @@ func (pv *FilePV) GetPrivateKey(context context.Context, quorumHash crypto.Quoru
 	return pv.getPrivateKey(context, quorumHash)
 }
 
-func (pv *FilePV) getPrivateKey(context context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
+func (pv *FilePV) getPrivateKey(_ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
 	if keys, ok := pv.Key.PrivateKeys[quorumHash.String()]; ok {
 		return keys.PrivKey, nil
 	}
@@ -515,7 +515,7 @@ func (pv *FilePV) GetPublicKey(context context.Context, quorumHash crypto.Quorum
 }
 
 // GetHeight ...
-func (pv *FilePV) GetHeight(_ context.Context, quorumHash crypto.QuorumHash) (int64, error) {
+func (pv *FilePV) GetHeight(_ctx context.Context, quorumHash crypto.QuorumHash) (int64, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -543,7 +543,7 @@ func (pv *FilePV) ExtractIntoValidator(ctx context.Context, quorumHash crypto.Qu
 
 // GetProTxHash returns the pro tx hash of the validator.
 // Implements PrivValidator.
-func (pv *FilePV) GetProTxHash(context context.Context) (crypto.ProTxHash, error) {
+func (pv *FilePV) GetProTxHash(_ctx context.Context) (crypto.ProTxHash, error) {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
 
@@ -561,7 +561,7 @@ func (pv *FilePV) SignVote(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	vote *tmproto.Vote,
-	logger log.Logger,
+	_logger log.Logger,
 ) error {
 	pv.mtx.RLock()
 	defer pv.mtx.RUnlock()
@@ -626,7 +626,7 @@ func (pv *FilePV) String() string {
 }
 
 func (pv *FilePV) UpdatePrivateKey(
-	context context.Context,
+	_ctx context.Context,
 	privateKey crypto.PrivKey,
 	quorumHash crypto.QuorumHash,
 	thresholdPublicKey crypto.PubKey,
@@ -686,16 +686,14 @@ func (pv *FilePV) signVote(
 	// application may have created a different extension. We therefore always
 	// re-sign the vote extensions of precommits. For prevotes, the extension
 	// signature will always be empty.
-	extSigns := make(map[tmproto.VoteExtensionType][]tmbytes.HexBytes)
+	extSigns := make([]tmbytes.HexBytes, 0, len(quorumSigns.VoteExtensionSignItems))
 	if vote.Type == tmproto.PrecommitType {
-		for et, signItems := range quorumSigns.Extensions {
-			for _, signItem := range signItems {
-				extSig, err := privKey.SignDigest(signItem.ID)
-				if err != nil {
-					return err
-				}
-				extSigns[et] = append(extSigns[et], extSig)
+		for _, signItem := range quorumSigns.VoteExtensionSignItems {
+			extSig, err := privKey.SignDigest(signItem.SignHash)
+			if err != nil {
+				return err
 			}
+			extSigns = append(extSigns, extSig)
 		}
 	} else if len(vote.VoteExtensions) > 0 {
 		return errors.New("unexpected vote extension - extensions are only allowed in precommits")
@@ -707,16 +705,16 @@ func (pv *FilePV) signVote(
 	// If they only differ by timestamp, use last timestamp and signature
 	// Otherwise, return error
 	if sameHRS {
-		if bytes.Equal(quorumSigns.Block.Raw, lss.BlockSignBytes) {
+		if bytes.Equal(quorumSigns.Block.Msg, lss.BlockSignBytes) {
 			vote.BlockSignature = lss.BlockSignature
 		} else {
 			return errors.New("conflicting data")
 		}
-		fillProtoVoteExtensionSigns(vote.VoteExtensionsToMap(), extSigns)
+		fillProtoVoteExtensionSigns(vote.VoteExtensions, extSigns)
 		return nil
 	}
 
-	sigBlock, err := privKey.SignDigest(quorumSigns.Block.ID)
+	sigBlock, err := privKey.SignDigest(quorumSigns.Block.SignHash)
 	if err != nil {
 		return err
 	}
@@ -729,13 +727,13 @@ func (pv *FilePV) signVote(
 	//	   sigBlock, vote)
 	//  }
 
-	err = pv.saveSigned(height, round, step, quorumSigns.Block.Raw, sigBlock)
+	err = pv.saveSigned(height, round, step, quorumSigns.Block.Msg, sigBlock)
 	if err != nil {
 		return err
 	}
 
 	vote.BlockSignature = sigBlock
-	fillProtoVoteExtensionSigns(vote.VoteExtensionsToMap(), extSigns)
+	fillProtoVoteExtensionSigns(vote.VoteExtensions, extSigns)
 
 	return nil
 }
@@ -815,12 +813,12 @@ func (pv *FilePV) saveSigned(
 }
 
 func fillProtoVoteExtensionSigns(
-	voteExtensions map[tmproto.VoteExtensionType][]*tmproto.VoteExtension,
-	signs map[tmproto.VoteExtensionType][]tmbytes.HexBytes,
+	extensions []*tmproto.VoteExtension,
+	signs []tmbytes.HexBytes,
 ) {
-	for et, extensions := range voteExtensions {
-		for i, ext := range extensions {
-			ext.Signature = signs[et][i]
-		}
+
+	for i, ext := range extensions {
+		ext.Signature = signs[i]
 	}
+
 }

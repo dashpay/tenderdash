@@ -161,7 +161,11 @@ func registerPrometheus(addr string, s *grpc.Server) *http.Server {
 	// Initialize all metrics.
 	grpcMetrics.InitializeMetrics(s)
 	// create http server to serve prometheus
-	httpServer := &http.Server{Handler: promhttp.HandlerFor(reg, promhttp.HandlerOpts{}), Addr: addr}
+	httpServer := &http.Server{
+		Handler:           promhttp.HandlerFor(reg, promhttp.HandlerOpts{}),
+		Addr:              addr,
+		ReadHeaderTimeout: 10 * time.Second,
+	}
 
 	go func() {
 		if err := httpServer.ListenAndServe(); err != nil {

@@ -11,12 +11,10 @@ import (
 func ConsensusParams(opts ...func(*types.ConsensusParams)) *types.ConsensusParams {
 	c := types.DefaultConsensusParams()
 	c.Timeout = types.TimeoutParams{
-		Commit:              10 * time.Millisecond,
-		Propose:             40 * time.Millisecond,
-		ProposeDelta:        1 * time.Millisecond,
-		Vote:                10 * time.Millisecond,
-		VoteDelta:           1 * time.Millisecond,
-		BypassCommitTimeout: true,
+		Propose:      40 * time.Millisecond,
+		ProposeDelta: 1 * time.Millisecond,
+		Vote:         10 * time.Millisecond,
+		VoteDelta:    1 * time.Millisecond,
 	}
 	for _, opt := range opts {
 		opt(c)

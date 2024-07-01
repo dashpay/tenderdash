@@ -34,9 +34,17 @@ const (
 type Logger interface {
 	io.Closer
 
+	// Trace events are logged from the primary path of execution (eg. when everything goes well)
 	Trace(msg string, keyVals ...interface{})
+	// Debug events are used in non-primary path to provide fine-grained information useful for debugging
 	Debug(msg string, keyVals ...interface{})
+	// Info events provide general, business-level information about what's happening inside the application, to
+	// let the user know what the application is doing
 	Info(msg string, keyVals ...interface{})
+	// Warn events are used when something unexpected happened, but the application can recover/continue
+	Warn(msg string, keyVals ...interface{})
+	// Error events are used when something unexpected happened and the application cannot recover, or the
+	// issue is serious and the user needs to take action
 	Error(msg string, keyVals ...interface{})
 
 	With(keyVals ...interface{}) Logger

@@ -164,12 +164,21 @@ func (pb2tm) ValidatorSetFromProtoUpdate(
 	valSetUpdate *abci.ValidatorSetUpdate,
 ) (*ValidatorSet, error) {
 	hasPublicKeys := true
-	for _, v := range valSetUpdate.ValidatorUpdates {
+	for i, v := range valSetUpdate.ValidatorUpdates {
 		if v.PubKey == nil {
 			hasPublicKeys = false
 			break
 		}
+
+		pubkey, err := cryptoenc.PubKeyFromProto(*v.PubKey)
+		if err != nil {
+			return nil, fmt.Errorf("invalid pubkey of validator %d (%x) in valset update: %w", i, v.ProTxHash, err)
+		}
+		if len(pubkey.Bytes()) == 0 {
+			return nil, fmt.Errorf("pubkey of validator %d (%x) in valset update has zero length", i, v.ProTxHash)
+		}
 	}
+
 	tmVals, pub, quorumHash, err := PB2TM.ValidatorUpdatesFromValidatorSet(valSetUpdate)
 	if err != nil {
 		return nil, err

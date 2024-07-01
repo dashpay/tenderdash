@@ -134,12 +134,15 @@ func (c *EnterPrecommitAction) Execute(ctx context.Context, stateEvent StateEven
 		// Validate the block.
 		c.blockExec.mustValidate(ctx, stateData)
 
-		stateData.LockedRound = round
-		stateData.LockedBlock = stateData.ProposalBlock
-		stateData.LockedBlockParts = stateData.ProposalBlockParts
+		stateData.updateLockedBlock()
 
 		c.eventPublisher.PublishLockEvent(stateData.RoundState)
 		c.voteSigner.signAddVote(ctx, stateData, tmproto.PrecommitType, blockID)
+
+		if stateData.updateValidBlock() {
+			c.eventPublisher.PublishValidBlockEvent(stateData.RoundState)
+		}
+
 		return nil
 	}
 
