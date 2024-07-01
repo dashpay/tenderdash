@@ -4,7 +4,7 @@ go 1.22
 
 require (
 	github.com/BurntSushi/toml v1.3.2
-	github.com/adlio/schema v1.3.3
+	github.com/adlio/schema v1.3.6
 	github.com/btcsuite/btcd v0.22.1
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/containerd/continuity v0.3.0 // indirect
@@ -40,7 +40,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/tendermint/tm-db v0.6.6
 	golang.org/x/crypto v0.21.0
-	golang.org/x/net v0.22.0
+	golang.org/x/net v0.23.0
 	golang.org/x/sync v0.6.0
 	google.golang.org/grpc v1.63.0
 	pgregory.net/rapid v0.4.8
@@ -250,7 +250,7 @@ require (
 	github.com/olekukonko/tablewriter v0.0.5 // indirect
 	github.com/opencontainers/go-digest v1.0.0 // indirect
 	github.com/opencontainers/image-spec v1.1.0 // indirect
-	github.com/opencontainers/runc v1.1.3 // indirect
+	github.com/opencontainers/runc v1.1.12 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pkg/profile v1.7.0 // indirect
