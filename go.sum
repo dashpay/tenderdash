@@ -214,8 +214,10 @@ github.com/cpuguy83/go-md2man/v2 v2.0.0-20190314233015-f79a8a8ca69d/go.mod h1:ma
 github.com/cpuguy83/go-md2man/v2 v2.0.3/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
 github.com/cpuguy83/go-md2man/v2 v2.0.4 h1:wfIWP927BUkWJb2NmU/kNDYIBTh/ziUX91+lVfRxZq4=
 github.com/cpuguy83/go-md2man/v2 v2.0.4/go.mod h1:tgQtvFlXSQOSOSIRvRPT7W67SCa46tRHOmNcaadrF8o=
-github.com/creachadair/atomicfile v0.2.6 h1:FgYxYvGcqREApTY8Nxg8msM6P/KVKK3ob5h9FaRUTNg=
-github.com/creachadair/atomicfile v0.2.6/go.mod h1:BRq8Une6ckFneYXZQ+kO7p1ZZP3I2fzVzf28JxrIkBc=
+github.com/creachadair/atomicfile v0.3.4 h1:AjNK7To+S1p+nk7uJXJMZFpcV9XHOyAaULyDeU6LEqM=
+github.com/creachadair/atomicfile v0.3.4/go.mod h1:ByEUbfQyms+tRtE7Wk7WdS6PZeyMzfSFlNX1VoKEh6E=
+github.com/creachadair/mds v0.13.3 h1:OqXNRorXKsuvfjor+0ixtrpA4IINApH8zgm23XLlngk=
+github.com/creachadair/mds v0.13.3/go.mod h1:4vrFYUzTXMJpMBU+OA292I6IUxKWCCfZkgXg+/kBZMo=
 github.com/creachadair/taskgroup v0.3.2 h1:zlfutDS+5XG40AOxcHDSThxKzns8Tnr9jnr6VqkYlkM=
 github.com/creachadair/taskgroup v0.3.2/go.mod h1:wieWwecHVzsidg2CsUnFinW1faVN4+kq+TDlRJQ0Wbk=
 github.com/creachadair/tomledit v0.0.23 h1:ohYJjMsxwzj4dDzKaBWFbWH5J+3LO/8CYnlVY+baBWA=
