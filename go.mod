@@ -13,7 +13,6 @@ require (
 	github.com/dashpay/dashd-go/btcec/v2 v2.1.0 // indirect
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fxamacker/cbor/v2 v2.4.0
-	github.com/go-chi/chi v4.1.2+incompatible // indirect
 	github.com/go-kit/kit v0.12.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.4
@@ -50,7 +49,7 @@ require (
 	github.com/bufbuild/buf v1.30.1
 	github.com/creachadair/atomicfile v0.2.6
 	github.com/creachadair/taskgroup v0.3.2
-	github.com/go-pkgz/jrpc v0.2.0
+	github.com/go-pkgz/jrpc v0.3.0
 	github.com/google/go-cmp v0.6.0
 	github.com/vektra/mockery/v2 v2.41.0
 )
@@ -83,8 +82,8 @@ require (
 	github.com/curioswitch/go-reassign v0.2.0 // indirect
 	github.com/dashpay/dashd-go/btcutil v1.2.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.1.0 // indirect
-	github.com/didip/tollbooth/v6 v6.0.1 // indirect
-	github.com/didip/tollbooth_chi v0.0.0-20200524181329-8b84cd7183d9 // indirect
+	github.com/didip/tollbooth/v7 v7.0.0 // indirect
+	github.com/didip/tollbooth_chi v0.0.0-20220719025231-d662a7f6928f // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/cli v26.0.0+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
@@ -97,8 +96,8 @@ require (
 	github.com/go-chi/render v1.0.1 // indirect
 	github.com/go-logr/logr v1.4.1 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-pkgz/expirable-cache v0.0.3 // indirect
-	github.com/go-pkgz/rest v1.5.0 // indirect
+	github.com/go-pkgz/expirable-cache v0.1.0 // indirect
+	github.com/go-pkgz/rest v1.15.6 // indirect
 	github.com/gofrs/uuid/v5 v5.0.0 // indirect
 	github.com/golang/glog v1.2.0 // indirect
 	github.com/google/cel-go v0.20.1 // indirect
