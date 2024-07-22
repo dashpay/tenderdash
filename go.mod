@@ -318,7 +318,7 @@ require (
 
 require (
 	github.com/creachadair/tomledit v0.0.23
-	github.com/jonboulle/clockwork v0.3.0
+	github.com/jonboulle/clockwork v0.4.0
 	github.com/oasisprotocol/oasis-core/go v0.2202.5
 	github.com/sasha-s/go-deadlock v0.3.1
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
