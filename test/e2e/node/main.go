@@ -407,7 +407,7 @@ func setupCoreServer(cfg *Config) (*mockcoreserver.JRPCServer, error) {
 	srv = mockcoreserver.WithMethods(
 		srv,
 		mockcoreserver.WithQuorumInfoMethod(coreServer, mockcoreserver.Endless),
-		mockcoreserver.WithQuorumSignMethod(coreServer, mockcoreserver.Endless),
+		mockcoreserver.WithQuorumSignMethod(coreServer, mockcoreserver.Endless, coreServer.LLMQType),
 		mockcoreserver.WithQuorumVerifyMethod(coreServer, mockcoreserver.Endless),
 		mockcoreserver.WithMasternodeMethod(coreServer, mockcoreserver.Endless),
 		mockcoreserver.WithGetNetworkInfoMethod(coreServer, mockcoreserver.Endless),
