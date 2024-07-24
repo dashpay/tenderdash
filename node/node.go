@@ -235,27 +235,6 @@ func makeNode(
 			fmt.Errorf("failed to create peer manager: %w", err),
 			makeCloser(closers))
 	}
-
-	// Start Dash connection executor
-	var validatorConnExecutor *dashquorum.ValidatorConnExecutor
-	if len(proTxHash) > 0 {
-		vcLogger := logger.With("node_proTxHash", proTxHash.ShortString(), "module", "ValidatorConnExecutor")
-		dcm := p2p.NewRouterDashDialer(peerManager, vcLogger)
-		validatorConnExecutor, err = dashquorum.NewValidatorConnExecutor(
-			proTxHash,
-			eventBus,
-			dcm,
-			dashquorum.WithLogger(vcLogger),
-			dashquorum.WithValidatorsSet(state.Validators),
-		)
-		if err != nil {
-			return nil, combineCloseError(err, makeCloser(closers))
-		}
-	} else {
-		logger.Debug("ProTxHash not set, so we are not a validator; skipping ValidatorConnExecutor initialization")
-	}
-
-	// TODO construct node here:
 	node := &nodeImpl{
 		config:        cfg,
 		logger:        logger,
@@ -267,7 +246,7 @@ func makeNode(
 
 		eventSinks:     eventSinks,
 		indexerService: indexerService,
-		services:       []service.Service{eventBus, validatorConnExecutor},
+		services:       []service.Service{eventBus},
 
 		initialState: state,
 		stateStore:   stateStore,
@@ -290,6 +269,28 @@ func makeNode(
 			Logger:     logger.With("module", "rpc"),
 			Config:     *cfg.RPC,
 		},
+	}
+
+	// Start Dash connection executor
+	if len(proTxHash) > 0 {
+		var validatorConnExecutor *dashquorum.ValidatorConnExecutor
+
+		vcLogger := logger.With("node_proTxHash", proTxHash.ShortString(), "module", "ValidatorConnExecutor")
+		dcm := p2p.NewRouterDashDialer(peerManager, vcLogger)
+		validatorConnExecutor, err = dashquorum.NewValidatorConnExecutor(
+			proTxHash,
+			eventBus,
+			dcm,
+			dashquorum.WithLogger(vcLogger),
+			dashquorum.WithValidatorsSet(state.Validators),
+		)
+		if err != nil {
+			return nil, combineCloseError(err, makeCloser(closers))
+		}
+
+		node.services = append(node.services, validatorConnExecutor)
+	} else {
+		logger.Debug("ProTxHash not set, so we are not a validator; skipping ValidatorConnExecutor initialization")
 	}
 
 	node.router, err = createRouter(logger, nodeMetrics.p2p, node.NodeInfo, nodeKey, peerManager, cfg, proxyApp)

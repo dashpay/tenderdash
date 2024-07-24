@@ -264,7 +264,7 @@ func (vc *ValidatorConnExecutor) resolveNodeID(va *types.ValidatorAddress) error
 			va.NodeID = address.NodeID
 			return nil // success
 		}
-		vc.logger.Debug(
+		vc.logger.Trace(
 			"warning: validator node id lookup method failed",
 			"url", va.String(),
 			"method", method,
@@ -305,7 +305,7 @@ func (vc *ValidatorConnExecutor) ensureValidatorsHaveNodeIDs(validators []*types
 	for _, validator := range validators {
 		err := vc.resolveNodeID(&validator.NodeAddress)
 		if err != nil {
-			vc.logger.Error("cannot determine node id for validator, skipping", "url", validator.String(), "error", err)
+			vc.logger.Warn("cannot determine node id for validator, skipping", "url", validator.String(), "error", err)
 			continue
 		}
 		results = append(results, validator)
