@@ -73,9 +73,6 @@ type nodeImpl struct {
 	shutdownOps    closer
 	rpcEnv         *rpccore.Environment
 	prometheusSrv  *http.Server
-
-	// Dash
-	validatorConnExecutor *dashquorum.ValidatorConnExecutor
 }
 
 // newDefaultNode returns a Tendermint node with default settings for the
@@ -238,25 +235,6 @@ func makeNode(
 			fmt.Errorf("failed to create peer manager: %w", err),
 			makeCloser(closers))
 	}
-
-	// Start Dash connection executor
-	var validatorConnExecutor *dashquorum.ValidatorConnExecutor
-	if len(proTxHash) > 0 {
-		vcLogger := logger.With("node_proTxHash", proTxHash.ShortString(), "module", "ValidatorConnExecutor")
-		dcm := p2p.NewRouterDashDialer(peerManager, vcLogger)
-		validatorConnExecutor, err = dashquorum.NewValidatorConnExecutor(
-			proTxHash,
-			eventBus,
-			dcm,
-			dashquorum.WithLogger(vcLogger),
-			dashquorum.WithValidatorsSet(state.Validators),
-		)
-		if err != nil {
-			return nil, combineCloseError(err, makeCloser(closers))
-		}
-	}
-
-	// TODO construct node here:
 	node := &nodeImpl{
 		config:        cfg,
 		logger:        logger,
@@ -276,8 +254,6 @@ func makeNode(
 
 		shutdownOps: makeCloser(closers),
 
-		validatorConnExecutor: validatorConnExecutor,
-
 		rpcEnv: &rpccore.Environment{
 			ProxyApp: proxyApp,
 
@@ -293,6 +269,28 @@ func makeNode(
 			Logger:     logger.With("module", "rpc"),
 			Config:     *cfg.RPC,
 		},
+	}
+
+	// Start Dash connection executor
+	if len(proTxHash) > 0 {
+		var validatorConnExecutor *dashquorum.ValidatorConnExecutor
+
+		vcLogger := logger.With("node_proTxHash", proTxHash.ShortString(), "module", "ValidatorConnExecutor")
+		dcm := p2p.NewRouterDashDialer(peerManager, vcLogger)
+		validatorConnExecutor, err = dashquorum.NewValidatorConnExecutor(
+			proTxHash,
+			eventBus,
+			dcm,
+			dashquorum.WithLogger(vcLogger),
+			dashquorum.WithValidatorsSet(state.Validators),
+		)
+		if err != nil {
+			return nil, combineCloseError(err, makeCloser(closers))
+		}
+
+		node.services = append(node.services, validatorConnExecutor)
+	} else {
+		logger.Debug("ProTxHash not set, so we are not a validator; skipping ValidatorConnExecutor initialization")
 	}
 
 	node.router, err = createRouter(logger, nodeMetrics.p2p, node.NodeInfo, nodeKey, peerManager, cfg, proxyApp)
