@@ -1,8 +1,19 @@
+## [1.1.0-dev.2] - 2024-07-24
+
+### Bug Fixes
+
+- Address already in use (#845)
+- Active validators not always connected to each other (#844)
+
 ## [1.1.0-dev.1] - 2024-07-23
 
 ### Features
 
 - [**breaking**] Replace dash core quorum sign with quorum platformsign (#828)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.1.0-dev.1 (#842)
 
 ### Build
 
