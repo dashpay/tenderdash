@@ -672,7 +672,7 @@ func TestNodeSetEventSink(t *testing.T) {
 
 	logger := log.NewNopLogger()
 
-	setupTest := func(t *testing.T, conf *config.Config) []indexer.EventSink {
+	setupTest := func(t *testing.T, _conf *config.Config) []indexer.EventSink {
 		eventBus := eventbus.NewDefault(logger.With("module", "events"))
 		require.NoError(t, eventBus.Start(ctx))
 
