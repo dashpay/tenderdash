@@ -73,9 +73,6 @@ type nodeImpl struct {
 	shutdownOps    closer
 	rpcEnv         *rpccore.Environment
 	prometheusSrv  *http.Server
-
-	// Dash
-	validatorConnExecutor *dashquorum.ValidatorConnExecutor
 }
 
 // newDefaultNode returns a Tendermint node with default settings for the
@@ -254,6 +251,8 @@ func makeNode(
 		if err != nil {
 			return nil, combineCloseError(err, makeCloser(closers))
 		}
+	} else {
+		logger.Debug("ProTxHash not set, so we are not a validator; skipping ValidatorConnExecutor initialization")
 	}
 
 	// TODO construct node here:
@@ -268,15 +267,13 @@ func makeNode(
 
 		eventSinks:     eventSinks,
 		indexerService: indexerService,
-		services:       []service.Service{eventBus},
+		services:       []service.Service{eventBus, validatorConnExecutor},
 
 		initialState: state,
 		stateStore:   stateStore,
 		blockStore:   blockStore,
 
 		shutdownOps: makeCloser(closers),
-
-		validatorConnExecutor: validatorConnExecutor,
 
 		rpcEnv: &rpccore.Environment{
 			ProxyApp: proxyApp,
