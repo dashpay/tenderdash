@@ -184,7 +184,7 @@ func (vc *ValidatorConnExecutor) subscribe() error {
 // receiveEvents processes received events and executes all the logic.
 // Returns non-nil error only if fatal error occurred and the main goroutine should be terminated.
 func (vc *ValidatorConnExecutor) receiveEvents(ctx context.Context) error {
-	vc.logger.Debug("ValidatorConnExecutor: waiting for an event")
+	vc.logger.Trace("ValidatorConnExecutor: waiting for an event")
 	sCtx, cancel := context.WithCancel(ctx) // TODO check value for correctness
 	defer cancel()
 	msg, err := vc.subscription.Next(sCtx)
@@ -202,7 +202,7 @@ func (vc *ValidatorConnExecutor) receiveEvents(ctx context.Context) error {
 		vc.logger.Error("cannot handle validator update", "error", err)
 		return nil // non-fatal, so no error returned to continue the loop
 	}
-	vc.logger.Debug("validator updates processed successfully", "event", event)
+	vc.logger.Trace("validator updates processed successfully", "event", event)
 	return nil
 }
 
@@ -318,7 +318,7 @@ func (vc *ValidatorConnExecutor) disconnectValidator(validator types.Validator) 
 		return err
 	}
 	id := validator.NodeAddress.NodeID
-	vc.logger.Debug("disconnecting Validator", "validator", validator, "id", id, "address", validator.NodeAddress.String())
+	vc.logger.Trace("disconnecting Validator", "validator", validator, "id", id, "address", validator.NodeAddress.String())
 	if err := vc.dialer.DisconnectAsync(id); err != nil {
 		return err
 	}
@@ -337,7 +337,7 @@ func (vc *ValidatorConnExecutor) disconnectValidators(exceptions validatorMap) e
 				vc.logger.Error("cannot disconnect Validator", "error", err)
 				continue
 			}
-			vc.logger.Debug("Validator already disconnected", "error", err)
+			vc.logger.Trace("Validator already disconnected", "error", err)
 			// We still delete the validator from vc.connectedValidators
 		}
 		delete(vc.connectedValidators, currentKey)
@@ -373,11 +373,11 @@ func (vc *ValidatorConnExecutor) updateConnections() error {
 	if err := vc.disconnectValidators(newValidators); err != nil {
 		return fmt.Errorf("cannot disconnect unused validators: %w", err)
 	}
-	vc.logger.Debug("filtering validators", "validators", newValidators.String())
+	vc.logger.Trace("filtering validators", "validators", newValidators.String())
 	// ensure that we can connect to all validators
 	newValidators = vc.filterAddresses(newValidators)
 	// Connect to new validators
-	vc.logger.Debug("dialing validators", "validators", newValidators.String())
+	vc.logger.Trace("dialing validators", "validators", newValidators.String())
 	if err := vc.dial(newValidators); err != nil {
 		return fmt.Errorf("cannot dial validators: %w", err)
 	}
@@ -390,20 +390,20 @@ func (vc *ValidatorConnExecutor) filterAddresses(validators validatorMap) valida
 	filtered := make(validatorMap, len(validators))
 	for id, validator := range validators {
 		if vc.proTxHash != nil && string(id) == vc.proTxHash.String() {
-			vc.logger.Debug("validator is ourself", "id", id, "address", validator.NodeAddress.String())
+			vc.logger.Trace("validator is ourself", "id", id, "address", validator.NodeAddress.String())
 			continue
 		}
 
 		if err := validator.ValidateBasic(); err != nil {
-			vc.logger.Debug("validator address is invalid", "id", id, "address", validator.NodeAddress.String())
+			vc.logger.Warn("validator address is invalid", "id", id, "address", validator.NodeAddress.String())
 			continue
 		}
 		if vc.connectedValidators.contains(validator) {
-			vc.logger.Debug("validator already connected", "id", id)
+			vc.logger.Trace("validator already connected", "id", id)
 			continue
 		}
 		if vc.dialer.IsDialingOrConnected(validator.NodeAddress.NodeID) {
-			vc.logger.Debug("already dialing this validator", "id", id, "address", validator.NodeAddress.String())
+			vc.logger.Trace("already dialing this validator", "id", id, "address", validator.NodeAddress.String())
 			continue
 		}
 
