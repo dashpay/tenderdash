@@ -27,3 +27,14 @@ if [ ! -d "$TMHOME/config" ]; then
 fi
 
 exec tenderdash "$@"
+local exit_code=$?
+
+# TODO: Workaround for busy port problem happening with docker restart policy
+#   we are trying to start a new container but previous process still not release
+#   the port. Must be fix with graceful shutdown of tenderdash process.
+if [ $exit_code -ne 0 ] && [ "$1" == "start" ]; then
+  echo "Sleeping for 10 seconds as workaround for the busy port problem. See entrypoint code for details."
+  sleep 10
+fi
+
+exit $error_code
