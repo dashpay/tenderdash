@@ -338,7 +338,7 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 
 	quorumType := state.Validators.QuorumType
 	if err := quorumType.Validate(); err != nil {
-		r.logger.Error("state quorum type validation failed: %w", err)
+		r.logger.Debug("state quorum type validation failed, falling back to genesis one", "err", err)
 		quorumType = r.genDoc.QuorumType
 	}
 
@@ -355,6 +355,12 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	if err != nil {
 		return err
 	}
+
+	// Allow overriding genesis block time
+	if res.GetGenesisTime() != nil {
+		state.LastBlockTime = *res.GetGenesisTime()
+	}
+
 	candidateState, err := state.NewStateChangeset(ctx, rp)
 	if err != nil {
 		return err
@@ -366,6 +372,7 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	state.LastCoreChainLockedBlockHeight = res.InitialCoreHeight
 	// We update the last results hash with the empty hash, to conform with RFC-6962.
 	state.LastResultsHash = merkle.HashFromByteSlices(nil)
+
 	return r.stateStore.Save(*state)
 }
 
