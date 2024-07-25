@@ -1,9 +1,19 @@
+## [1.1.0-dev.3] - 2024-07-25
+
+### Features
+
+- Allow overriding genesis time in InitChain (#847)
+
 ## [1.1.0-dev.2] - 2024-07-24
 
 ### Bug Fixes
 
 - Address already in use (#845)
 - Active validators not always connected to each other (#844)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.1.0-dev.2 (#846)
 
 ## [1.1.0-dev.1] - 2024-07-23
 
