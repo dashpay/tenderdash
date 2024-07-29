@@ -15,6 +15,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
+	"github.com/dashpay/tenderdash/internal/state"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/service"
@@ -61,6 +62,9 @@ type ValidatorConnExecutor struct {
 	nodeIDResolvers map[string]p2p.NodeIDResolver
 	// mux is a mutex to ensure only one goroutine is processing connections
 	mux sync.Mutex
+
+	// state store used on start to setup initial validators
+	stateStore state.Store
 
 	// *** configuration *** //
 
@@ -120,6 +124,15 @@ func WithValidatorsSet(valSet *types.ValidatorSet) func(vc *ValidatorConnExecuto
 	}
 }
 
+// WithStateStore sets state store to be used when setting up initial validators
+// Can be nil, in which case no initial validators will be set up.
+func WithStateStore(store state.Store) func(vc *ValidatorConnExecutor) error {
+	return func(vc *ValidatorConnExecutor) error {
+		vc.stateStore = store
+		return nil
+	}
+}
+
 // WithLogger sets a logger
 func WithLogger(logger log.Logger) func(vc *ValidatorConnExecutor) error {
 	return func(vc *ValidatorConnExecutor) error {
@@ -130,6 +143,22 @@ func WithLogger(logger log.Logger) func(vc *ValidatorConnExecutor) error {
 
 // OnStart implements Service to subscribe to Validator Update events
 func (vc *ValidatorConnExecutor) OnStart(ctx context.Context) error {
+	// initial setup of validators, if state store is provided
+	if vc.stateStore != nil {
+		valset, err := vc.stateStore.Load()
+		if err != nil {
+			return fmt.Errorf("cannot load initial state from state store: %w", err)
+		}
+		if err = vc.handleValidatorUpdateEvent(types.EventDataValidatorSetUpdate{
+			ValidatorSetUpdates: valset.Validators.Validators,
+			ThresholdPublicKey:  valset.Validators.ThresholdPublicKey,
+			QuorumHash:          valset.Validators.QuorumHash,
+		}); err != nil {
+			// not fatal, but we should log it
+			vc.logger.Warn("cannot handle initial validator set, skipping", "err", err)
+		}
+	}
+
 	if err := vc.subscribe(); err != nil {
 		return err
 	}
