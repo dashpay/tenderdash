@@ -116,7 +116,7 @@ function configureFinal() {
     CURRENT_BRANCH="$(git branch --show-current)"
     SOURCE_BRANCH="v${VERSION_WITHOUT_PRERELEASE%.*}-dev"
     RELEASE_BRANCH="release_${NEW_PACKAGE_VERSION}"
-    MILESTONE="v${VERSION_WITHOUT_PRERELEASE}"
+    MILESTONE="v${VERSION_WITHOUT_PRERELEASE%.*}"
 
     if [[ ${RELEASE_TYPE} != "prerelease" ]]; then # full release
         TARGET_BRANCH="master"
@@ -235,7 +235,7 @@ function createRelease() {
         --generate-notes \
         --target "${TARGET_BRANCH}" \
         ${gh_args} \
-       "v${NEW_PACKAGE_VERSION}"
+        "v${NEW_PACKAGE_VERSION}"
 }
 
 function deleteRelease() {
@@ -251,6 +251,71 @@ function getReleaseUrl() {
     gh release view --json url --jq .url "v${NEW_PACKAGE_VERSION}"
 }
 
+function waitForRelease() {
+    debug 'Waiting for release to be published; use ^C to cancel'
+
+    while [[ "$(gh release view --json isDraft --jq .isDraft "v${NEW_PACKAGE_VERSION}")" != "false" ]]; do
+        sleep 10
+    done
+}
+
+function buildAndUploadArtifacts() {
+    waitForRelease
+
+    buildBinaries
+
+    # Sign binaries
+    signBinaries "$(realpath "$(dirname "${0}")/../../build/tenderdash")"
+
+    # Create tarball
+    pushd "$(realpath "$(dirname "${0}")/../../build")"
+    tar -czf "tenderdash-${NEW_PACKAGE_VERSION}-linux-amd64.tar.gz" tenderdash tenderdash.sig
+    sha256sum ./*.tar.gz >SHA256SUMS
+    popd
+
+    # Upload to release
+    uploadBinaries
+}
+
+function buildBinaries() {
+    debug Building binaries
+    pushd "$(realpath "$(dirname "${0}")/../..")"
+
+    # checkout and build binaries from release tag
+    git fetch --tags && git checkout "v${NEW_PACKAGE_VERSION}"
+    export TENDERMINT_BUILD_OPTIONS='tenderdash,stable'
+    make clean && make build
+
+    popd
+}
+
+function uploadBinaries() {
+    debug uploading artifacts to release "v${NEW_PACKAGE_VERSION}"
+    gh release upload --clobber "v${NEW_PACKAGE_VERSION}" "$(realpath "$(dirname "${0}")/../../build")"/{*.tar.gz,SHA256SUMS}
+}
+
+# Sign tenederdash binary using default gpg key
+#
+# The key can be overridden by setting GPG_KEY_ID environment variable
+#
+# Args:
+#   $1: path to the binary
+function signBinaries() {
+    local binary_path="$1"
+
+    if [[ -z "${binary_path}" ]]; then
+        error "Binary path is required to sign binaries"
+    fi
+
+    local gpg_cmd="gpg"
+    if [[ -n "${GPG_KEY_ID}" ]]; then
+        gpg_cmd="gpg --local-user=${GPG_KEY_ID}"
+    fi
+
+    debug "Signing binaries with GPG ${gpg_cmd}"
+    $gpg_cmd --armor "--output=${binary_path}.sig" --detach-sign "${binary_path}"
+}
+
 function cleanup() {
     debug Cleaning up
 
@@ -260,6 +325,8 @@ function cleanup() {
 
     # We need to re-detect current branch again
     CURRENT_BRANCH="$(git branch --show-current)"
+
+    make clean
 }
 
 configureDefaults
@@ -283,11 +350,11 @@ success "Release PR: ${PR_URL}"
 
 success "Please review it and merge."
 
-if [[ "${RELEASE_TYPE}" = "prerelease" ]] ; then
+if [[ "${RELEASE_TYPE}" = "prerelease" ]]; then
     success "NOTE: Use 'squash and merge' approach."
-else 
+else
     success "NOTE: Use 'create merge commit' approach."
-fi 
+fi
 
 waitForMerge
 
@@ -300,3 +367,5 @@ sleep 5 # wait for the release to be finalized
 
 success "Release ${NEW_PACKAGE_VERSION} created successfully."
 success "Accept it at: $(getReleaseUrl)"
+
+buildAndUploadArtifacts

@@ -8,7 +8,7 @@ BUILD_TAGS ?= tenderdash
 ifneq ($(shell git symbolic-ref -q --short HEAD),)
 VERSION := unreleased-$(shell git symbolic-ref -q --short HEAD)-$(shell git rev-parse HEAD)
 else
-VERSION := $(shell git describe)
+VERSION := $(shell git describe --tags)
 endif
 LD_FLAGS = -X ${REPO_NAME}/version.TMCoreSemVer=$(VERSION)
 BUILD_FLAGS = -mod=readonly -ldflags "$(LD_FLAGS)"
