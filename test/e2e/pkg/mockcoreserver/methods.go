@@ -33,20 +33,18 @@ func WithQuorumInfoMethod(cs CoreServer, times int) MethodFunc {
 }
 
 // WithQuorumSignMethod ...
-func WithQuorumSignMethod(cs CoreServer, times int, quorumType btcjson.LLMQType) MethodFunc {
+func WithQuorumSignMethod(cs CoreServer, times int) MethodFunc {
 	call := OnMethod(func(ctx context.Context, req btcjson.Request) (interface{}, error) {
 		cmd := btcjson.QuorumCmd{}
-		err := unmarshalCmd(req, &cmd.SubCmd, &cmd.RequestID, &cmd.MessageHash, &cmd.QuorumHash, &cmd.Submit)
+		err := unmarshalCmd(req, &cmd.SubCmd, &cmd.LLMQType, &cmd.RequestID, &cmd.MessageHash, &cmd.QuorumHash, &cmd.Submit)
 		if err != nil {
 			return nil, err
 		}
-		cmd.LLMQType = &quorumType
-
 		return cs.QuorumSign(ctx, cmd), nil
 	})
 	return func(srv *JRPCServer) {
 		srv.
-			On("quorum platformsign").
+			On("quorum sign").
 			Expect(And(Debug())).
 			Times(times).
 			Respond(call, JSONContentType())
@@ -102,7 +100,7 @@ func WithMasternodeMethod(cs CoreServer, times int) MethodFunc {
 
 // WithGetNetworkInfoMethod ...
 func WithGetNetworkInfoMethod(cs CoreServer, times int) MethodFunc {
-	call := OnMethod(func(ctx context.Context, _req btcjson.Request) (interface{}, error) {
+	call := OnMethod(func(ctx context.Context, req btcjson.Request) (interface{}, error) {
 		cmd := btcjson.GetNetworkInfoCmd{}
 		return cs.GetNetworkInfo(ctx, cmd), nil
 	})
@@ -117,7 +115,7 @@ func WithGetNetworkInfoMethod(cs CoreServer, times int) MethodFunc {
 
 // WithPingMethod ...
 func WithPingMethod(cs CoreServer, times int) MethodFunc {
-	call := OnMethod(func(ctx context.Context, _req btcjson.Request) (interface{}, error) {
+	call := OnMethod(func(ctx context.Context, req btcjson.Request) (interface{}, error) {
 		cmd := btcjson.PingCmd{}
 		return cs.Ping(ctx, cmd), nil
 	})

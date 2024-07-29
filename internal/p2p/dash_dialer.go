@@ -110,14 +110,12 @@ func (cm *routerDashDialer) lookupIPPort(ctx context.Context, ip net.IP, port ui
 	for _, nodeID := range peers {
 		addresses := cm.peerManager.Addresses(nodeID)
 		for _, addr := range addresses {
-			if endpoints, err := addr.Resolve(ctx); err == nil {
+			if endpoints, err := addr.Resolve(ctx); err != nil {
 				for _, item := range endpoints {
 					if item.IP.Equal(ip) && item.Port == port {
 						return item.NodeAddress(nodeID), nil
 					}
 				}
-			} else {
-				cm.logger.Warn("lookupIPPort: failed to resolve address", "peer", nodeID, "address", addr, "err", err)
 			}
 		}
 	}
