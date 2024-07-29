@@ -260,60 +260,98 @@ function waitForRelease() {
 }
 
 function buildAndUploadArtifacts() {
-    waitForRelease
 
-    buildBinaries
+    bindir="$(mktemp -d)"
+    local platforms=("linux/amd64" "linux/arm64")
+
+    waitForRelease
+    # checkout and build binaries from release tag
+    # TODO: uncomment
+    # git fetch --tags && git checkout "v${NEW_PACKAGE_VERSION}"
+
+    buildBinaries "${bindir}" "${platforms[@]}"
 
     # Sign binaries
-    signBinaries "$(realpath "$(dirname "${0}")/../../build/tenderdash")"
+    signBinary "${bindir}"/tenderdash-*
 
     # Create tarball
-    pushd "$(realpath "$(dirname "${0}")/../../build")"
-    tar -czf "tenderdash-${NEW_PACKAGE_VERSION}-linux-amd64.tar.gz" tenderdash tenderdash.sig
-    sha256sum ./*.tar.gz >SHA256SUMS
-    popd
+    for platform in "${platforms[@]}"; do
+        local platform_safe="${platform//\//-}"
+
+        tar -C "${bindir}" \
+            -czf "${bindir}/tenderdash-${NEW_PACKAGE_VERSION}-${platform_safe}.tar.gz" \
+            "tenderdash-${platform_safe}" "tenderdash-${platform_safe}.sig"
+    done
+
+    sha256sum "${bindir}"/*.tar.gz >"${bindir}"/SHA256SUMS
 
     # Upload to release
-    uploadBinaries
+    uploadBinaries "${bindir}"
+
+    # Cleanup
+    rm -r "${bindir}"
 }
 
+# buildBinaries <destdir> <platform1> <platform2> ...
 function buildBinaries() {
+    local dest_dir="$1"
+    shift
+    if [[ -z "${dest_dir}" ]]; then
+        error "Destination directory is required to build binaries"
+    fi
+
     debug Building binaries
     pushd "$(realpath "$(dirname "${0}")/../..")"
 
-    # checkout and build binaries from release tag
-    git fetch --tags && git checkout "v${NEW_PACKAGE_VERSION}"
-    export TENDERMINT_BUILD_OPTIONS='tenderdash,stable'
-    make clean && make build
+    while [ -n "$1" ]; do
+        platform="$1"
+        shift
+
+        local platform_safe="${platform//\//-}"
+
+        debug "Building binaries for ${platform}"
+        make clean
+        docker buildx build \
+            --platform "${platform}" \
+            --build-arg TENDERMINT_BUILD_OPTIONS='tenderdash,stable' \
+            -f DOCKER/Dockerfile \
+            -t tenderdash-local:"v${NEW_PACKAGE_VERSION}-${platform_safe}" \
+            --load \
+            .
+        # Copy /usr/bin/tenderdash from image to dest_dir
+        docker create --name tenderdash-local-"${platform_safe}" --platform "${platform}" tenderdash-local:"v${NEW_PACKAGE_VERSION}-${platform_safe}"
+        docker cp tenderdash-local-"${platform_safe}":/usr/bin/tenderdash "${dest_dir}/tenderdash-${platform_safe}"
+        docker rm tenderdash-local-"${platform_safe}"
+        # Remove the image
+        docker rmi tenderdash-local:"v${NEW_PACKAGE_VERSION}-${platform_safe}"
+    done
 
     popd
-}
-
-function uploadBinaries() {
-    debug uploading artifacts to release "v${NEW_PACKAGE_VERSION}"
-    gh release upload --clobber "v${NEW_PACKAGE_VERSION}" "$(realpath "$(dirname "${0}")/../../build")"/{*.tar.gz,SHA256SUMS}
 }
 
 # Sign tenederdash binary using default gpg key
 #
 # The key can be overridden by setting GPG_KEY_ID environment variable
 #
-# Args:
-#   $1: path to the binary
-function signBinaries() {
-    local binary_path="$1"
-
-    if [[ -z "${binary_path}" ]]; then
-        error "Binary path is required to sign binaries"
-    fi
+# Args: list of binaries to sign
+function signBinary() {
 
     local gpg_cmd="gpg"
     if [[ -n "${GPG_KEY_ID}" ]]; then
         gpg_cmd="gpg --local-user=${GPG_KEY_ID}"
     fi
 
-    debug "Signing binaries with GPG ${gpg_cmd}"
-    $gpg_cmd --armor "--output=${binary_path}.sig" --detach-sign "${binary_path}"
+    for binary in "$@"; do
+        debug "Signing binaries with GPG ${gpg_cmd}"
+        $gpg_cmd --armor "--output=${binary}.sig" --detach-sign "${binary}"
+    done
+}
+
+function uploadBinaries() {
+    local bin_dir="$1"
+
+    debug uploading artifacts to release "v${NEW_PACKAGE_VERSION}"
+    gh release upload --clobber "v${NEW_PACKAGE_VERSION}" "${bin_dir}"/{*.tar.gz,SHA256SUMS}
 }
 
 function cleanup() {
