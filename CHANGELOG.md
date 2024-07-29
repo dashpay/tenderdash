@@ -1,4 +1,28 @@
-## [1.0.0] - 2024-06-26
+## [1.1.0] - 2024-07-29
+
+### Bug Fixes
+
+- Address already in use (#845)
+- Active validators not always connected to each other (#844)
+- Validators form islands on genesis (#850)
+
+### Features
+
+- [**breaking**] Replace dash core quorum sign with quorum platformsign (#828)
+- Allow overriding genesis time in InitChain (#847)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.1.0-dev.1 (#842)
+- Update changelog and version to 1.1.0-dev.2 (#846)
+- Update changelog and version to 1.1.0-dev.3 (#848)
+
+### Build
+
+- Bump bufbuild/buf-setup-action from 1.33.0 to 1.35.0 (#841)
+- Run dependabot on default branch, not master (#843)
+
+## [1.0.0] - 2024-07-01
 
 ### Bug Fixes
 
@@ -43,6 +67,7 @@
 - Detect quorum hash mismatch when verifying commit (#791)
 - Update changelog and version to 0.14.0-dev.8 (#792)
 - Update changelog and version to 1.0.0-dev.2 (#806)
+- Update changelog and version to 1.0.0
 
 ### Refactor
 
@@ -94,6 +119,7 @@
 - Bump docker/build-push-action from 5.4.0 to 6.0.0 (#801)
 - Bump bufbuild/buf-setup-action from 1.32.2 to 1.33.0 (#800)
 - Bump goreleaser/goreleaser-action from 5 to 6 (#798)
+- Bump github.com/stretchr/testify from 1.8.2 to 1.9.0 (#817)
 
 ## [0.13.4] - 2023-12-11
 
