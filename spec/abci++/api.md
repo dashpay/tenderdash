@@ -961,7 +961,6 @@ nondeterministic
 | validator_set_update | [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate) |  | Initial validator set (optional). |
 | next_core_chain_lock_update | [tendermint.types.CoreChainLock](#tendermint-types-CoreChainLock) |  | Initial core chain lock update. |
 | initial_core_height | [uint32](#uint32) |  | Initial height of core lock. |
-| genesis_time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) | optional | Override genesis time with provided time. |
 
 
 

@@ -172,13 +172,13 @@ func (rpcClient *RPCClient) QuorumSign(
 	if err := quorumType.Validate(); err != nil {
 		return nil, err
 	}
-	quorumSignResultWithBool, err := rpcClient.endpoint.QuorumPlatformSign(
+	quorumSignResultWithBool, err := rpcClient.endpoint.QuorumSign(
+		quorumType,
 		requestID.String(),
 		messageHash.String(),
 		quorumHash.String(),
 		false,
 	)
-
 	rpcClient.logger.Trace("core rpc call QuorumSign",
 		"quorumType", quorumType,
 		"requestID", requestID.String(),
@@ -192,15 +192,7 @@ func (rpcClient *RPCClient) QuorumSign(
 	if quorumSignResultWithBool == nil {
 		return nil, err
 	}
-
-	// as QuorumPlatformSign does not provide the quorum type, we need to check it manually
-	// to ensure we deliver what was requested by the caller
 	quorumSignResult := quorumSignResultWithBool.QuorumSignResult
-	if quorumType != btcjson.LLMQType(quorumSignResult.LLMQType) {
-		return nil, fmt.Errorf("possible misconfiguration: quorum platform sign uses unexpected quorum type %d, expected %d",
-			quorumSignResultWithBool.LLMQType, quorumType)
-	}
-
 	return &quorumSignResult, err
 }
 

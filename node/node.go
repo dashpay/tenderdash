@@ -73,6 +73,9 @@ type nodeImpl struct {
 	shutdownOps    closer
 	rpcEnv         *rpccore.Environment
 	prometheusSrv  *http.Server
+
+	// Dash
+	validatorConnExecutor *dashquorum.ValidatorConnExecutor
 }
 
 // newDefaultNode returns a Tendermint node with default settings for the
@@ -235,6 +238,25 @@ func makeNode(
 			fmt.Errorf("failed to create peer manager: %w", err),
 			makeCloser(closers))
 	}
+
+	// Start Dash connection executor
+	var validatorConnExecutor *dashquorum.ValidatorConnExecutor
+	if len(proTxHash) > 0 {
+		vcLogger := logger.With("node_proTxHash", proTxHash.ShortString(), "module", "ValidatorConnExecutor")
+		dcm := p2p.NewRouterDashDialer(peerManager, vcLogger)
+		validatorConnExecutor, err = dashquorum.NewValidatorConnExecutor(
+			proTxHash,
+			eventBus,
+			dcm,
+			dashquorum.WithLogger(vcLogger),
+			dashquorum.WithValidatorsSet(state.Validators),
+		)
+		if err != nil {
+			return nil, combineCloseError(err, makeCloser(closers))
+		}
+	}
+
+	// TODO construct node here:
 	node := &nodeImpl{
 		config:        cfg,
 		logger:        logger,
@@ -253,6 +275,8 @@ func makeNode(
 		blockStore:   blockStore,
 
 		shutdownOps: makeCloser(closers),
+
+		validatorConnExecutor: validatorConnExecutor,
 
 		rpcEnv: &rpccore.Environment{
 			ProxyApp: proxyApp,
@@ -429,29 +453,6 @@ func makeNode(
 			csState.SetPrivValidator(ctx, privValidator)
 		}
 		node.rpcEnv.ProTxHash = proTxHash
-	}
-
-	// Start Dash connection executor
-	// We do it at the end, as we require the state to be loaded and network routing to be set up
-	if len(proTxHash) > 0 {
-		var validatorConnExecutor *dashquorum.ValidatorConnExecutor
-
-		vcLogger := logger.With("node_proTxHash", proTxHash.ShortString(), "module", "ValidatorConnExecutor")
-		dcm := p2p.NewRouterDashDialer(peerManager, vcLogger)
-		validatorConnExecutor, err = dashquorum.NewValidatorConnExecutor(
-			proTxHash,
-			eventBus,
-			dcm,
-			dashquorum.WithLogger(vcLogger),
-			dashquorum.WithValidatorsSet(state.Validators),
-			dashquorum.WithStateStore(stateStore))
-		if err != nil {
-			return nil, combineCloseError(err, makeCloser(closers))
-		}
-
-		node.services = append(node.services, validatorConnExecutor)
-	} else {
-		logger.Debug("ProTxHash not set, so we are not a validator; skipping ValidatorConnExecutor initialization")
 	}
 
 	node.BaseService = *service.NewBaseService(logger, "Node", node)

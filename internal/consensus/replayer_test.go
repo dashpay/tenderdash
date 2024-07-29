@@ -1,30 +1,21 @@
 package consensus
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
-
-	"github.com/dashpay/dashd-go/btcjson"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
-	"github.com/dashpay/tenderdash/abci/types/mocks"
 	"github.com/dashpay/tenderdash/crypto"
-	"github.com/dashpay/tenderdash/crypto/bls12381"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/proxy"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/store"
-	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmtypes "github.com/dashpay/tenderdash/types"
@@ -147,82 +138,6 @@ func TestBlockReplayerReplay(t *testing.T) {
 			require.Equal(t, tc.wantNBlocks, replayer.nBlocks)
 		})
 	}
-}
-
-// TestInitChainGenesisTime checks if genesis time provided to InitChain is correctly included in first block.
-//
-// Given some hardcoded genesis time,
-// When I return it in response to InitChain,
-// Then the first block should have that genesis time.
-func TestInitChainGenesisTime(t *testing.T) {
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-
-	logger := log.NewTestingLogger(t)
-
-	eventBus := eventbus.NewDefault(logger)
-	require.NoError(t, eventBus.Start(ctx))
-
-	genesisAppHash := make([]byte, crypto.DefaultAppHashSize)
-
-	genesisTime := time.Date(2001, 12, 31, 12, 34, 56, 78, time.UTC)
-
-	// configure mock app to return expected genesis time
-	app := mocks.NewApplication(t)
-	defer app.AssertExpectations(t)
-	app.On("InitChain", mock.Anything, mock.Anything).Return(&abci.ResponseInitChain{
-		AppHash: genesisAppHash,
-		XGenesisTime: &abci.ResponseInitChain_GenesisTime{
-			GenesisTime: &genesisTime,
-		},
-	}, nil)
-
-	client := abciclient.NewLocalClient(logger, app)
-	proxyApp := proxy.New(client, logger, proxy.NopMetrics())
-
-	// Prepare genesis document with another genesis time
-	vset, _ := factory.MockValidatorSet()
-	recoveredThresholdPublicKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(
-		vset.GetPublicKeys(),
-		vset.GetProTxHashesAsByteArrays(),
-	)
-	require.NoError(t, err)
-	vset.ThresholdPublicKey = recoveredThresholdPublicKey
-	proposerProTxHash := vset.GetProposer().ProTxHash
-
-	genDoc := tmtypes.GenesisDoc{
-		ChainID:            "test-chain",
-		QuorumType:         btcjson.LLMQType_100_67,
-		Validators:         tmtypes.MakeGenesisValsFromValidatorSet(vset),
-		ConsensusParams:    tmtypes.DefaultConsensusParams(),
-		ThresholdPublicKey: recoveredThresholdPublicKey,
-		QuorumHash:         make([]byte, 32),
-		GenesisTime:        time.Date(1999, 1, 1, 0, 0, 0, 0, time.UTC),
-	}
-
-	err = genDoc.ValidateAndComplete()
-	require.NoError(t, err)
-
-	// initialize state and stores
-	smState, err := sm.MakeGenesisState(&genDoc)
-	require.NoError(t, err)
-	stateStore := sm.NewStore(dbm.NewMemDB())
-	blockStore := store.NewBlockStore(dbm.NewMemDB())
-	replayer := newBlockReplayer(stateStore, blockStore, &genDoc, eventBus, proxyApp, proposerProTxHash)
-
-	// use replayer to call initChain
-	appHash, err := replayer.Replay(ctx, smState, bytes.Clone(genesisAppHash), 0)
-	require.NoError(t, err)
-	require.NotEmpty(t, appHash)
-
-	// reload smState, as replayer does not modify it
-	smState, err = stateStore.Load()
-	require.NoError(t, err)
-
-	// ensure the block contains expected genesis time
-	block := smState.MakeBlock(1, []tmtypes.Tx{}, nil, nil, proposerProTxHash, 1)
-	assert.Equal(t, genesisTime, block.Header.Time, "block: %+v\n\nsm.State: %+v", block, smState)
-
 }
 
 func updateStateStoreWithState(state sm.State, store sm.Store) sm.Store {

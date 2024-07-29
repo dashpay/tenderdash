@@ -64,7 +64,7 @@ LABEL maintainer="developers@dash.org"
 # private validator file into /tenderdash/config.
 #
 # The /tenderdash/data dir is used by tenderdash to store state.
-ENV TMHOME=/tenderdash
+ENV TMHOME /tenderdash
 
 # OS environment setup
 # Set user right away for determinism, create directory for persistence and give our user ownership

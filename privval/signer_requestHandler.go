@@ -47,6 +47,10 @@ func DefaultValidationRequestHandler(
 		var proTxHash crypto.ProTxHash
 		proTxHash, err = privVal.GetProTxHash(context.Background())
 		if err != nil {
+			return res, err
+		}
+
+		if err != nil {
 			res = mustWrapMsg(&privvalproto.ProTxHashResponse{
 				ProTxHash: nil, Error: &privvalproto.RemoteSignerError{Code: 0, Description: err.Error()}})
 		} else {
