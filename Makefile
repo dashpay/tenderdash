@@ -3,14 +3,14 @@
 OUTPUT ?= build/tenderdash
 BUILDDIR ?= $(CURDIR)/build
 REPO_NAME ?= github.com/dashevo/tenderdash
-BUILD_TAGS ?= tenderdash
+BUILD_TAGS ?= tenderdash,netgo,osusergo
 # If building a release, please checkout the version tag to get the correct version setting
 ifneq ($(shell git symbolic-ref -q --short HEAD),)
 VERSION := unreleased-$(shell git symbolic-ref -q --short HEAD)-$(shell git rev-parse HEAD)
 else
-VERSION := $(shell git describe)
+VERSION := $(shell git describe --tags)
 endif
-LD_FLAGS = -X ${REPO_NAME}/version.TMCoreSemVer=$(VERSION)
+LD_FLAGS = -X ${REPO_NAME}/version.TMCoreSemVer=$(VERSION) -linkmode 'external' -extldflags '-static'
 BUILD_FLAGS = -mod=readonly -ldflags "$(LD_FLAGS)"
 HTTPS_GIT := https://${REPO_NAME}.git
 BUILD_IMAGE := ghcr.io/tendermint/docker-build-proto
