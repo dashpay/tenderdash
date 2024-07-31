@@ -746,7 +746,7 @@ func (cs *State) handleTimeout(
 		// XXX: should we fire timeout here (for timeout commit)?
 		_ = cs.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: ti.Height}, stateData)
 	case cstypes.RoundStepNewRound:
-		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: ti.Height}, stateData)
+		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: ti.Height, Round: ti.Round}, stateData)
 	case cstypes.RoundStepPropose:
 		if err := cs.eventBus.PublishEventTimeoutPropose(stateData.RoundStateEvent()); err != nil {
 			cs.logger.Error("failed publishing timeout propose", "err", err)
@@ -788,7 +788,7 @@ func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 		cs.roundScheduler.ScheduleTimeout(timeoutCommit, stateData.Height, 0, cstypes.RoundStepNewRound)
 
 	case cstypes.RoundStepNewRound: // after timeoutCommit
-		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: stateData.Height}, stateData)
+		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: stateData.Height, Round: stateData.Round}, stateData)
 	}
 }
 

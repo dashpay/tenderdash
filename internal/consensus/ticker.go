@@ -115,9 +115,9 @@ func (t *timeoutTicker) timeoutRoutine(ctx context.Context) {
 			// NOTE time.Timer allows duration to be non-positive
 			ti = newti
 			t.timer.Reset(ti.Duration)
-			t.logger.Trace("Internal state machine timeout scheduled", "duration", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step.String())
+			t.logger.Trace("Internal state machine timeout scheduled", "duration", ti.Duration.String(), "height", ti.Height, "round", ti.Round, "step", ti.Step.String())
 		case <-t.timer.C:
-			t.logger.Debug("Internal state machine timeout elapsed", "duration", ti.Duration, "height", ti.Height, "round", ti.Round, "step", ti.Step.String())
+			t.logger.Debug("Internal state machine timeout elapsed", "duration", ti.Duration.String(), "height", ti.Height, "round", ti.Round, "step", ti.Step.String())
 			// go routine here guarantees timeoutRoutine doesn't block.
 			// Determinism comes from playback in the receiveRoutine.
 			// We can eliminate it by merging the timeoutRoutine into receiveRoutine
