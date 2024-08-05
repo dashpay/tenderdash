@@ -126,7 +126,7 @@ build-binary:
 .PHONY: build-binary
 
 install:
-	$(GO) install $(BUILD_FLAGS) -tags $(BUILD_TAGS) ./cmd/tenderdash
+	$(GO) install $(BUILD_FLAGS) -tags '$(BUILD_TAGS)' ./cmd/tenderdash
 .PHONY: install
 
 $(BUILDDIR)/:
@@ -239,7 +239,7 @@ generate_test_cert:
 # dist builds binaries for all platforms and packages them for distribution
 # TODO add abci to these scripts
 dist:
-	@BUILD_TAGS=$(BUILD_TAGS) sh -c "'$(CURDIR)/scripts/dist.sh'"
+	@BUILD_TAGS='$(BUILD_TAGS)' sh -c "'$(CURDIR)/scripts/dist.sh'"
 .PHONY: dist
 
 go-mod-cache: go.sum
@@ -260,7 +260,7 @@ draw_deps:
 
 get_deps_bin_size:
 	@# Copy of build recipe with additional flags to perform binary size analysis
-	$(eval $(shell go build -work -a $(BUILD_FLAGS) -tags $(BUILD_TAGS) -o $(BUILDDIR)/ ./cmd/tendermint/ 2>&1))
+	$(eval $(shell go build -work -a $(BUILD_FLAGS) -tags '$(BUILD_TAGS)' -o $(BUILDDIR)/ ./cmd/tendermint/ 2>&1))
 	@find $(WORK) -type f -name "*.a" | xargs -I{} du -hxs "{}" | sort -rh | sed -e s:${WORK}/::g > deps_bin_size.log
 	@echo "Results can be found here: $(CURDIR)/deps_bin_size.log"
 .PHONY: get_deps_bin_size
