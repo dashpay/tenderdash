@@ -3,7 +3,7 @@
 OUTPUT ?= build/tenderdash
 BUILDDIR ?= $(CURDIR)/build
 REPO_NAME ?= github.com/dashevo/tenderdash
-BUILD_TAGS ?= tenderdash,netgo,osusergo
+BUILD_TAGS ?= tenderdash netgo osusergo
 # If building a release, please checkout the version tag to get the correct version setting
 ifneq ($(shell git symbolic-ref -q --short HEAD),)
 VERSION := unreleased-$(shell git symbolic-ref -q --short HEAD)-$(shell git rev-parse HEAD)

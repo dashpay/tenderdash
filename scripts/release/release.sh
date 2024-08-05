@@ -38,6 +38,7 @@ where flags can be one of:
     -r=<x.y.z-dev.n>, --release=<x.y.z-dev.n> - release number, like 0.7.0 (REQUIRED)
     --cleanup - clean up before releasing; it can remove your local changes
     -C=<path> - path to local Tenderdash repository
+    -s, --sign - generate signed binaries
     -h, --help - display this help message
 
 ## Examples
@@ -94,6 +95,10 @@ function parseArgs {
             displayHelp
             shift
             exit 0
+            ;;
+        -s | --sign)
+            SIGN=1
+            shift 1
             ;;
         *)
             error "Unrecoginzed command line argument '${arg}';  try '$0 --help'"
@@ -406,4 +411,6 @@ sleep 5 # wait for the release to be finalized
 success "Release ${NEW_PACKAGE_VERSION} created successfully."
 success "Accept it at: $(getReleaseUrl)"
 
-buildAndUploadArtifacts
+if [ -n "${SIGN}"  ];then
+    buildAndUploadArtifacts
+fi
