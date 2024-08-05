@@ -1,8 +1,22 @@
-## [1.2.0-dev.1] - 2024-07-31
+## [1.2.0-dev.2] - 2024-08-05
+
+### Bug Fixes
+
+- Build of dev releases fails due to invalid tags (#859)
+
+### Build
+
+- E2e tests fail due to lack of docker-compose command (#860)
+
+## [1.2.0-dev.1] - 2024-08-05
 
 ### Bug Fixes
 
 - Proposal not generated after waiting for last block time to pass (#849)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.2.0-dev.1 (#858)
 
 ### Build
 
