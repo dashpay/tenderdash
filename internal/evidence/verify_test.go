@@ -84,9 +84,9 @@ func TestVerifyDuplicateVoteEvidence(t *testing.T) {
 			Timestamp:        defaultEvidenceTime,
 		}
 		if c.valid {
-			assert.Nil(t, evidence.VerifyDuplicateVote(ev, chainID, valSet), "evidence should be valid")
+			assert.Nil(t, evidence.VerifyDuplicateVote(ev, chainID, valSet, logger), "evidence should be valid")
 		} else {
-			assert.NotNil(t, evidence.VerifyDuplicateVote(ev, chainID, valSet), "evidence should be invalid")
+			assert.NotNil(t, evidence.VerifyDuplicateVote(ev, chainID, valSet, logger), "evidence should be invalid")
 		}
 	}
 
