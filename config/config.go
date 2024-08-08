@@ -1165,15 +1165,16 @@ type ConsensusConfig struct {
 // DefaultConsensusConfig returns a default configuration for the consensus service
 func DefaultConsensusConfig() *ConsensusConfig {
 	return &ConsensusConfig{
-		WalPath:                      filepath.Join(defaultDataDir, "cs.wal", "wal"),
-		WalSkipRoundsToLast:          false,
-		CreateEmptyBlocks:            true,
-		CreateEmptyBlocksInterval:    0 * time.Second,
-		PeerGossipSleepDuration:      100 * time.Millisecond,
-		PeerQueryMaj23SleepDuration:  2000 * time.Millisecond,
-		DoubleSignCheckHeight:        int64(0),
-		DontAutoPropose:              false,
-		ValidatorConnectionAlgorithm: ValidatorConnectionAlgorithmDIP6,
+		WalPath:                     filepath.Join(defaultDataDir, "cs.wal", "wal"),
+		WalSkipRoundsToLast:         false,
+		CreateEmptyBlocks:           true,
+		CreateEmptyBlocksInterval:   0 * time.Second,
+		PeerGossipSleepDuration:     100 * time.Millisecond,
+		PeerQueryMaj23SleepDuration: 2000 * time.Millisecond,
+		DoubleSignCheckHeight:       int64(0),
+		DontAutoPropose:             false,
+		// TODO: Change to DIP6 or update docs that default is "all"
+		ValidatorConnectionAlgorithm: ValidatorConnectionAlgorithmAll,
 	}
 }
 
