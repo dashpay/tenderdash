@@ -166,6 +166,7 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 				"height", stateData.RoundState.Height,
 				"round", stateData.RoundState.Round,
 				"hash", stateData.ProposalBlock.Hash(),
+				"peer", peerID,
 			)
 			// We received a commit before the block
 			// Transit to AddCommit
@@ -180,6 +181,7 @@ func (c *AddProposalBlockPartAction) addProposalBlockPart(
 			"hash", stateData.ProposalBlock.Hash(),
 			"round_height", stateData.RoundState.GetHeight(),
 			"num_txs", len(stateData.ProposalBlock.Txs),
+			"peer", peerID,
 		)
 
 		c.eventPublisher.PublishCompleteProposalEvent(stateData.CompleteProposalEvent())
