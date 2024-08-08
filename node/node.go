@@ -444,7 +444,9 @@ func makeNode(
 			dcm,
 			dashquorum.WithLogger(vcLogger),
 			dashquorum.WithValidatorsSet(state.Validators),
-			dashquorum.WithStateStore(stateStore))
+			dashquorum.WithStateStore(stateStore),
+			dashquorum.WithSelectionAlgorithm(cfg.Consensus.ValidatorConnectionAlgorithm),
+		)
 		if err != nil {
 			return nil, combineCloseError(err, makeCloser(closers))
 		}

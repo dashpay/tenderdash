@@ -32,6 +32,11 @@ const (
 	ModeFull      = "full"
 	ModeValidator = "validator"
 	ModeSeed      = "seed"
+
+	// ValidatorConnectionAlgorithmAll is a name of the peer selection algorithm that selects all validators
+	ValidatorConnectionAlgorithmAll = "all"
+	// ValidatorConnectionAlgorithmDIP6 is a name of the peer selection algorithm that selects validators based on DIP-6
+	ValidatorConnectionAlgorithmDIP6 = "dip6"
 )
 
 // NOTE: Most of the structs & relevant comments + the
@@ -1111,7 +1116,15 @@ type ConsensusConfig struct {
 	PeerGossipSleepDuration     time.Duration `mapstructure:"peer-gossip-sleep-duration"`
 	PeerQueryMaj23SleepDuration time.Duration `mapstructure:"peer-query-maj23-sleep-duration"`
 
-	DoubleSignCheckHeight int64 `mapstructure:"double-sign-check-height"`
+	// ValidatorConnectionAlgorithm defines the algorithm used to select the
+	// validators to which direct connection should be established.
+	// Possible values are:
+	// - "all" - validators establish direct connections to all other validators in the current quorum
+	// - "dip6" - validators establish direct connections to a subset of other validators, determined according to DIP-6
+	//
+	// Defaults to "dip6".
+	ValidatorConnectionAlgorithm string `mapstructure:"validator-connection-algorithm"`
+	DoubleSignCheckHeight        int64  `mapstructure:"double-sign-check-height"`
 
 	DeprecatedQuorumType btcjson.LLMQType `mapstructure:"quorum-type"`
 
@@ -1152,14 +1165,15 @@ type ConsensusConfig struct {
 // DefaultConsensusConfig returns a default configuration for the consensus service
 func DefaultConsensusConfig() *ConsensusConfig {
 	return &ConsensusConfig{
-		WalPath:                     filepath.Join(defaultDataDir, "cs.wal", "wal"),
-		WalSkipRoundsToLast:         false,
-		CreateEmptyBlocks:           true,
-		CreateEmptyBlocksInterval:   0 * time.Second,
-		PeerGossipSleepDuration:     100 * time.Millisecond,
-		PeerQueryMaj23SleepDuration: 2000 * time.Millisecond,
-		DoubleSignCheckHeight:       int64(0),
-		DontAutoPropose:             false,
+		WalPath:                      filepath.Join(defaultDataDir, "cs.wal", "wal"),
+		WalSkipRoundsToLast:          false,
+		CreateEmptyBlocks:            true,
+		CreateEmptyBlocksInterval:    0 * time.Second,
+		PeerGossipSleepDuration:      100 * time.Millisecond,
+		PeerQueryMaj23SleepDuration:  2000 * time.Millisecond,
+		DoubleSignCheckHeight:        int64(0),
+		DontAutoPropose:              false,
+		ValidatorConnectionAlgorithm: ValidatorConnectionAlgorithmDIP6,
 	}
 }
 
@@ -1219,6 +1233,9 @@ func (cfg *ConsensusConfig) ValidateBasic() error {
 	}
 	if cfg.DoubleSignCheckHeight < 0 {
 		return errors.New("double-sign-check-height can't be negative")
+	}
+	if cfg.ValidatorConnectionAlgorithm != ValidatorConnectionAlgorithmAll && cfg.ValidatorConnectionAlgorithm != ValidatorConnectionAlgorithmDIP6 {
+		return fmt.Errorf("validator-connection-algorithm must be either 'all' or 'dip6'")
 	}
 	return nil
 }
