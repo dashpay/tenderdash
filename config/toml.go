@@ -553,6 +553,15 @@ create-empty-blocks-interval = "{{ .Consensus.CreateEmptyBlocksInterval }}"
 peer-gossip-sleep-duration = "{{ .Consensus.PeerGossipSleepDuration }}"
 peer-query-maj23-sleep-duration = "{{ .Consensus.PeerQueryMaj23SleepDuration }}"
 
+# ValidatorConnectionAlgorithm defines the algorithm used to select the
+# validators to which direct connection should be established.
+# Possible values are:
+# - "all" - validators establish direct connections to all other validators in the current quorum
+# - "dip6" - validators establish direct connections to a subset of other validators, determined according to DIP-6
+#
+# Defaults to "dip6".
+validator-connection-algorithm = "{{ .Consensus.ValidatorConnectionAlgorithm }}"
+
 ### Unsafe Timeout Overrides ###
 
 # These fields provide temporary overrides for the Timeout consensus parameters.

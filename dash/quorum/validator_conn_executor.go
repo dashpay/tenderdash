@@ -4,12 +4,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/hashicorp/go-multierror"
 
+	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/dash/quorum/selectpeers"
 	"github.com/dashpay/tenderdash/internal/eventbus"
@@ -70,6 +72,10 @@ type ValidatorConnExecutor struct {
 
 	// EventBusCapacity sets event bus buffer capacity, defaults to 10
 	EventBusCapacity int
+
+	// selectionAlgorithm determines how to select validators to connect to
+	// Supported values: "all", "dip6"
+	selectionAlgorithm string
 }
 
 var (
@@ -93,6 +99,7 @@ func NewValidatorConnExecutor(
 		validatorSetMembers: validatorMap{},
 		connectedValidators: validatorMap{},
 		quorumHash:          make(tmbytes.HexBytes, crypto.QuorumHashSize),
+		selectionAlgorithm:  config.ValidatorConnectionAlgorithmDIP6,
 	}
 	vc.nodeIDResolvers = map[string]p2p.NodeIDResolver{
 		resolverAddressBook: vc.dialer,
@@ -106,6 +113,7 @@ func NewValidatorConnExecutor(
 			return nil, err
 		}
 	}
+
 	return vc, nil
 }
 
@@ -141,8 +149,23 @@ func WithLogger(logger log.Logger) func(vc *ValidatorConnExecutor) error {
 	}
 }
 
+// WithSelectionAlgorithm sets the algorithm used to select validators to connect to
+func WithSelectionAlgorithm(algorithm string) func(vc *ValidatorConnExecutor) error {
+	return func(vc *ValidatorConnExecutor) error {
+		algorithm := strings.ToLower(algorithm)
+
+		if algorithm != config.ValidatorConnectionAlgorithmAll && algorithm != config.ValidatorConnectionAlgorithmDIP6 {
+			return fmt.Errorf("invalid selection algorithm: %s", algorithm)
+		}
+
+		vc.selectionAlgorithm = algorithm
+		return nil
+	}
+}
+
 // OnStart implements Service to subscribe to Validator Update events
 func (vc *ValidatorConnExecutor) OnStart(ctx context.Context) error {
+	vc.logger.Debug("ValidatorConnExecutor starting with selection algorithm " + vc.selectionAlgorithm)
 	// initial setup of validators, if state store is provided
 	if vc.stateStore != nil {
 		valset, err := vc.stateStore.Load()
@@ -314,7 +337,16 @@ func (vc *ValidatorConnExecutor) selectValidators() (validatorMap, error) {
 		return validatorMap{}, fmt.Errorf("current node is not member of active validator set")
 	}
 
-	selector := selectpeers.NewDIP6ValidatorSelector(vc.quorumHash)
+	var selector selectpeers.ValidatorSelector
+	switch vc.selectionAlgorithm {
+	case config.ValidatorConnectionAlgorithmAll:
+		selector = selectpeers.NewAllValidatorsSelector()
+	case config.ValidatorConnectionAlgorithmDIP6:
+		selector = selectpeers.NewDIP6ValidatorSelector(vc.quorumHash)
+	default:
+		return validatorMap{}, fmt.Errorf("invalid selection algorithm: %s", vc.selectionAlgorithm)
+	}
+
 	selectedValidators, err := selector.SelectValidators(activeValidators.values(), me)
 	if err != nil {
 		return validatorMap{}, err
