@@ -324,7 +324,7 @@ func makeNode(
 	blockSync := !onlyValidatorIsUs(state, proTxHash) // TODO compare with this: blockSync := cfg.BlockSync.Enable && !weAreOnlyValidator
 	waitSync := stateSync || blockSync
 
-	csState, err := consensus.NewState(logger.With("module", "consensus"),
+	csState, err := consensus.NewState(logger.With("module", "consensus", "node_id", nodeKey.ID),
 		cfg.Consensus,
 		stateStore,
 		blockExec,

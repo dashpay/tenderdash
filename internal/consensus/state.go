@@ -46,7 +46,13 @@ var (
 	ErrPrivValidatorNotSet = errors.New("priv-validator is not set")
 )
 
-var msgQueueSize = 1000
+// msgInfoQueue must fit info about all votes from all validators 100 for Dash Evo mainnet),
+// multiplied by number of peers that can broadcast these votes (also assuming 100),
+// multiplied by some factor (here 2) to address multiple rounds.
+//
+// Note this allows potential OOM condition if we put 20 000 proposal block of size
+// types.BlockPartSizeBytes==64 kB, what gives us 1.2 GB of memory usage.
+var msgQueueSize = 100 * 100 * 2
 
 // msgs from the reactor which may update the state
 type msgInfo struct {
