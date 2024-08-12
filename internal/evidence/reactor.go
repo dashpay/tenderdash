@@ -101,6 +101,19 @@ func (r *Reactor) handleEvidenceMessage(ctx context.Context, envelope *p2p.Envel
 
 	switch msg := envelope.Message.(type) {
 	case *tmproto.Evidence:
+
+		// Only accept evidence if we are an active validator.
+		// On other hosts, signatures in evidence (if any) cannot be verified due to lack of validator public keys,
+		// and it creates risk of adding invalid evidence to the pool.
+		//
+		// TODO: We need to figure out how to handle evidence from non-validator nodes, to avoid scenarios where some
+		// evidence is lost.
+		if !r.evpool.hasPublicKeys() {
+			// silently drop the message
+			logger.Debug("dropping evidence message as we don't have validator public keys", "evidence", envelope.Message)
+			return nil
+		}
+
 		// Process the evidence received from a peer
 		// Evidence is sent and received one by one
 		ev, err := types.EvidenceFromProto(msg)

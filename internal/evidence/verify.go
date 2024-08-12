@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -64,7 +65,7 @@ func (evpool *Pool) verify(ctx context.Context, evidence types.Evidence) error {
 			return err
 		}
 
-		if err := VerifyDuplicateVote(ev, state.ChainID, valSet); err != nil {
+		if err := VerifyDuplicateVote(ev, state.ChainID, valSet, evpool.logger); err != nil {
 			return types.NewErrInvalidEvidence(evidence, err)
 		}
 
@@ -90,17 +91,15 @@ func (evpool *Pool) verify(ctx context.Context, evidence types.Evidence) error {
 //   - the validator is in the validator set at the height of the evidence
 //   - the height, round, type and validator address of the votes must be the same
 //   - the block ID's must be different
-//   - The signatures must both be valid
-func VerifyDuplicateVote(e *types.DuplicateVoteEvidence, chainID string, valSet *types.ValidatorSet) error {
+//   - The signatures must both be valid (only if we have public keys of the validator set)
+//
+// TODO: Double-check that this will still work for quite old heights, where validator set has already been rotated.
+func VerifyDuplicateVote(e *types.DuplicateVoteEvidence, chainID string, valSet *types.ValidatorSet, logger log.Logger) error {
 	_, val := valSet.GetByProTxHash(e.VoteA.ValidatorProTxHash)
 	if val == nil {
 		return fmt.Errorf("protxhash %X was not a validator at height %d", e.VoteA.ValidatorProTxHash, e.Height())
 	}
 	proTxHash := val.ProTxHash
-	pubKey := val.PubKey
-	if pubKey == nil {
-		return fmt.Errorf("we don't have a public key of validator %X at height %d", proTxHash, e.Height())
-	}
 
 	// H/R/S must be the same
 	if e.VoteA.Height != e.VoteB.Height ||
@@ -134,14 +133,22 @@ func VerifyDuplicateVote(e *types.DuplicateVoteEvidence, chainID string, valSet 
 			voteProTxHash, proTxHash)
 	}
 
-	va := e.VoteA.ToProto()
-	vb := e.VoteB.ToProto()
-	// Signatures must be valid
-	if !pubKey.VerifySignatureDigest(types.VoteBlockSignID(chainID, va, valSet.QuorumType, valSet.QuorumHash), e.VoteA.BlockSignature) {
-		return fmt.Errorf("verifying VoteA: %w", types.ErrVoteInvalidBlockSignature)
-	}
-	if !pubKey.VerifySignatureDigest(types.VoteBlockSignID(chainID, vb, valSet.QuorumType, valSet.QuorumHash), e.VoteB.BlockSignature) {
-		return fmt.Errorf("verifying VoteB: %w", types.ErrVoteInvalidBlockSignature)
+	pubKey := val.PubKey
+
+	if pubKey != nil {
+		va := e.VoteA.ToProto()
+		vb := e.VoteB.ToProto()
+		// Signatures must be valid
+		if !pubKey.VerifySignatureDigest(types.VoteBlockSignID(chainID, va, valSet.QuorumType, valSet.QuorumHash), e.VoteA.BlockSignature) {
+			return fmt.Errorf("verifying VoteA: %w", types.ErrVoteInvalidBlockSignature)
+		}
+		if !pubKey.VerifySignatureDigest(types.VoteBlockSignID(chainID, vb, valSet.QuorumType, valSet.QuorumHash), e.VoteB.BlockSignature) {
+			return fmt.Errorf("verifying VoteB: %w", types.ErrVoteInvalidBlockSignature)
+		}
+	} else if valSet.HasPublicKeys {
+		return fmt.Errorf("we don't have a public key of validator %X at height %d", proTxHash, e.Height())
+	} else {
+		logger.Debug("skipping verification of duplicate vote evidence signatures - no access public key", "evidence", e)
 	}
 
 	return nil
