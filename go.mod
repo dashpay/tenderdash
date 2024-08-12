@@ -48,7 +48,7 @@ require (
 
 require (
 	github.com/bufbuild/buf v1.35.1
-	github.com/creachadair/atomicfile v0.2.6
+	github.com/creachadair/atomicfile v0.3.3
 	github.com/creachadair/taskgroup v0.3.2
 	github.com/go-pkgz/jrpc v0.2.0
 	github.com/google/go-cmp v0.6.0
@@ -321,7 +321,7 @@ require (
 )
 
 require (
-	github.com/creachadair/tomledit v0.0.23
+	github.com/creachadair/tomledit v0.0.26
 	github.com/jonboulle/clockwork v0.3.0
 	github.com/oasisprotocol/oasis-core/go v0.2202.5
 	github.com/sasha-s/go-deadlock v0.3.1
