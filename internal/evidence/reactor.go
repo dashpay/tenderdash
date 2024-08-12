@@ -111,6 +111,7 @@ func (r *Reactor) handleEvidenceMessage(ctx context.Context, envelope *p2p.Envel
 		if !r.evpool.state.Validators.HasPublicKeys {
 			// silently drop the message
 			logger.Debug("dropping evidence message as we are not a validator", "evidence", envelope.Message)
+			return nil
 		}
 
 		// Process the evidence received from a peer
