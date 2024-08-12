@@ -544,6 +544,13 @@ func (evpool *Pool) updateState(state sm.State) {
 	evpool.state = state
 }
 
+// hasPublicKeys returns true if we have public keys of the current validator set.
+func (evpool *Pool) hasPublicKeys() bool {
+	evpool.mtx.Lock()
+	defer evpool.mtx.Unlock()
+	return evpool.state.Validators.HasPublicKeys
+}
+
 // processConsensusBuffer converts all the duplicate votes witnessed from consensus
 // into DuplicateVoteEvidence. It sets the evidence timestamp to the block height
 // from the most recently committed block.

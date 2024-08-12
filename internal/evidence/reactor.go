@@ -108,9 +108,9 @@ func (r *Reactor) handleEvidenceMessage(ctx context.Context, envelope *p2p.Envel
 		//
 		// TODO: We need to figure out how to handle evidence from non-validator nodes, to avoid scenarios where some
 		// evidence is lost.
-		if !r.evpool.state.Validators.HasPublicKeys {
+		if !r.evpool.hasPublicKeys() {
 			// silently drop the message
-			logger.Debug("dropping evidence message as we are not a validator", "evidence", envelope.Message)
+			logger.Debug("dropping evidence message as we don't have validator public keys", "evidence", envelope.Message)
 			return nil
 		}
 
