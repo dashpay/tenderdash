@@ -38,7 +38,7 @@ func newPrevote(logger log.Logger, voteSigner *voteSigner, blockExec *blockExecu
 func (p *prevoter) Do(ctx context.Context, stateData *StateData) error {
 	err := stateData.isValidForPrevote()
 	if err != nil {
-		keyVals := append(prevoteKeyVals(stateData), "error", err)
+		keyVals := append(prevoteKeyVals(stateData), "err", err)
 
 		if !errors.Is(err, errPrevoteProposalBlockNil) {
 			p.logger.Error("prevote is invalid", keyVals...)
