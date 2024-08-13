@@ -1,8 +1,23 @@
+## [1.2.0-dev.3] - 2024-08-12
+
+### Bug Fixes
+
+- Msg queue is too small for mainnet (#863)
+- Non-active validators can't verify evidence signatures (#865)
+
+### Miscellaneous Tasks
+
+- Improve logs (#866)
+
 ## [1.2.0-dev.2] - 2024-08-05
 
 ### Bug Fixes
 
 - Build of dev releases fails due to invalid tags (#859)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.2.0-dev.2 (#861)
 
 ### Build
 
