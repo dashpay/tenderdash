@@ -12,6 +12,7 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/cli"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/node"
 )
 
 const ctxTimeout = 4 * time.Second
@@ -57,6 +58,8 @@ func RootCommand(conf *config.Config, logger log.Logger) *cobra.Command {
 			if warning := pconf.DeprecatedFieldWarning(); warning != nil {
 				logger.Info("WARNING", "deprecated field warning", warning)
 			}
+
+			node.SetupDeadlockDetection(&conf.BaseConfig)
 
 			return nil
 		},
