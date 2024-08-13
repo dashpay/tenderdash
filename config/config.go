@@ -271,7 +271,7 @@ func TestBaseConfig() BaseConfig {
 	cfg.chainID = factory.DefaultTestChainID
 	cfg.Mode = ModeValidator
 	cfg.DBBackend = "memdb"
-	cfg.DeadlockDetection = 10*time.Second
+	cfg.DeadlockDetection = 10 * time.Second
 	return cfg
 }
 
@@ -350,7 +350,7 @@ func (cfg BaseConfig) ValidateBasic() error {
 	if cfg.DeadlockDetection < 0 {
 		return errors.New("deadlock-detection can't be negative")
 	}
-	
+
 	return nil
 }
 
