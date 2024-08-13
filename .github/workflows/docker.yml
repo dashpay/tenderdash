@@ -62,7 +62,7 @@ jobs:
             if ('${{ github.ref_type }}' == 'tag' && ! '${{ github.ref_name }}'.includes('-dev')) {
               return 'tenderdash,stable'
             }
-            return 'tenderdash,dev,deadlock'
+            return 'tenderdash,dev'
 
       - name: Set Docker tags and labels
         id: docker_meta

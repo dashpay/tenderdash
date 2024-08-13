@@ -240,21 +240,28 @@ type BaseConfig struct { //nolint: maligned
 	// so the app can decide if we should keep the connection or not
 	FilterPeers bool `mapstructure:"filter-peers"` // false
 
+	// If set to positive duration, deadlock detection is enabled and set to the given time.
+	// Use 0 to disable.
+	//
+	// Default: 0
+	DeadlockDetection time.Duration `mapstructure:"deadlock-detection"`
+
 	Other map[string]interface{} `mapstructure:",remain"`
 }
 
 // DefaultBaseConfig returns a default base configuration for a Tendermint node
 func DefaultBaseConfig() BaseConfig {
 	return BaseConfig{
-		Genesis:     defaultGenesisJSONPath,
-		NodeKey:     defaultNodeKeyPath,
-		Mode:        defaultMode,
-		Moniker:     defaultMoniker,
-		LogLevel:    DefaultLogLevel,
-		LogFormat:   log.LogFormatPlain,
-		FilterPeers: false,
-		DBBackend:   "goleveldb",
-		DBPath:      "data",
+		Genesis:           defaultGenesisJSONPath,
+		NodeKey:           defaultNodeKeyPath,
+		Mode:              defaultMode,
+		Moniker:           defaultMoniker,
+		LogLevel:          DefaultLogLevel,
+		LogFormat:         log.LogFormatPlain,
+		FilterPeers:       false,
+		DBBackend:         "goleveldb",
+		DBPath:            "data",
+		DeadlockDetection: 0,
 	}
 }
 
@@ -264,6 +271,7 @@ func TestBaseConfig() BaseConfig {
 	cfg.chainID = factory.DefaultTestChainID
 	cfg.Mode = ModeValidator
 	cfg.DBBackend = "memdb"
+	cfg.DeadlockDetection = 10 * time.Second
 	return cfg
 }
 
@@ -337,6 +345,10 @@ func (cfg BaseConfig) ValidateBasic() error {
 
 	default:
 		return fmt.Errorf("unknown mode: %v", cfg.Mode)
+	}
+
+	if cfg.DeadlockDetection < 0 {
+		return errors.New("deadlock-detection can't be negative")
 	}
 
 	return nil
