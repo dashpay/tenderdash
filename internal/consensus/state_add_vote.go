@@ -1,6 +1,7 @@
 package consensus
 
 import (
+	"bytes"
 	"context"
 	"errors"
 
@@ -236,6 +237,14 @@ func addVoteVerifyVoteExtensionMw(
 				privVal.IsProTxHashEqual(vote.ValidatorProTxHash) {
 				// Skip the VerifyVoteExtension call if the vote was issued by this validator.
 				return next(ctx, stateData, vote)
+			}
+
+			// If we already know of this vote, return false to not verify it multiple times
+			existing := stateData.Votes.GetVoteSet(vote.Round, vote.Type).GetByIndex(vote.ValidatorIndex)
+			if existing != nil &&
+				bytes.Equal(existing.BlockSignature, vote.BlockSignature) &&
+				bytes.Equal(existing.VoteExtensions.Fingerprint(), vote.VoteExtensions.Fingerprint()) {
+				return false, nil
 			}
 
 			// The core fields of the vote message were already validated in the
