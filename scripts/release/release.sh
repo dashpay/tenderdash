@@ -379,9 +379,6 @@ configureDefaults
 parseArgs "$@"
 configureFinal
 
-generateChangelog
-exit 0
-
 if [[ -n "${CLEANUP}" ]]; then
     cleanup
     deleteRelease
