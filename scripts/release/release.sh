@@ -291,7 +291,9 @@ function buildAndUploadArtifacts() {
             "tenderdash-${platform_safe}" "tenderdash-${platform_safe}.sig"
     done
 
-    sha256sum "${bindir}"/*.tar.gz >"${bindir}"/SHA256SUMS
+    pushd "${bindir}"
+    sha256sum *.tar.gz >SHA256SUMS
+    popd
 
     # Upload to release
     uploadBinaries "${bindir}"
