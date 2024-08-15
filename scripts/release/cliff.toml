@@ -1,4 +1,4 @@
-# configuration file for git-cliff (0.1.0)
+# configuration file for git-cliff (2.4.0)
 
 [changelog]
 # changelog header
@@ -59,3 +59,7 @@ ignore_tags = 'v[0-9]\.[0-9]+\.[0-9]+-[a-z]+\.[0-9]+'
 topo_order = true
 # sort the commits inside sections by oldest/newest order
 sort_commits = "oldest"
+
+[remote.github]
+owner = "dashpay"
+repo = "tenderdash"

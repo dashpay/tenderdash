@@ -162,8 +162,9 @@ function generateChangelog {
     debug Generating CHANGELOG
 
     CLIFF_CONFIG="${REPO_DIR}/scripts/release/cliff.toml"
+    CLIFF_ARGS=
     if [[ "${RELEASE_TYPE}" = "prerelease" ]]; then
-        CLIFF_CONFIG="${REPO_DIR}/scripts/release/cliff-pre.toml"
+        CLIFF_ARGS="--ignore-tags='v[0-9]\.[0-9]+\.[0-9]+-[a-z]+\.[0-9]+'"
     fi
 
     echo 2>"${REPO_DIR}/CHANGELOG.md"
@@ -172,12 +173,14 @@ function generateChangelog {
         -v "${REPO_DIR}/.git":/app/.git:ro \
         -v "${CLIFF_CONFIG}":/cliff.toml:ro \
         -v "${REPO_DIR}/CHANGELOG.md":/CHANGELOG.md \
-        orhunp/git-cliff:0.10.0 \
+        orhunp/git-cliff:2.4.0 \
         --config /cliff.toml \
         --output /CHANGELOG.md \
         --tag "v${NEW_PACKAGE_VERSION}" \
+        ${CLIFF_ARGS} \
         --strip all \
-        --verbose
+        --verbose \
+        'v1.0.0-dev.1..HEAD'
 }
 
 function updateVersionGo {
@@ -375,6 +378,9 @@ function cleanup() {
 configureDefaults
 parseArgs "$@"
 configureFinal
+
+generateChangelog
+exit 0
 
 if [[ -n "${CLEANUP}" ]]; then
     cleanup
