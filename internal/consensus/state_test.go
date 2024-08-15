@@ -361,6 +361,74 @@ func TestStateProposalTime(t *testing.T) {
 	}
 }
 
+// TestStateLastBlockTimeInFuture ensures that whenever the last block time is in the future at genesis,
+// the node waits before generating proposal.
+func TestStateLastBlockTimeInFuture(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	logger := log.NewTestingLoggerWithLevel(t, log.LogLevelTrace)
+
+	config := configSetup(t)
+
+	app, err := kvstore.NewMemoryApp(kvstore.WithDuplicateRequestDetection(false))
+	require.NoError(t, err)
+	cs1, _ := makeState(ctx, t, makeStateArgs{config: config, validators: 1, application: app, logger: logger})
+	ctx = dash.ContextWithProTxHash(ctx, cs1.privValidator.ProTxHash)
+	stateData := cs1.GetStateData()
+	height, round := stateData.Height, stateData.Round
+	cs1.config.DontAutoPropose = true
+	cs1.config.CreateEmptyBlocksInterval = 0
+	stateData.state.ConsensusParams.Synchrony.MessageDelay = 5 * time.Millisecond
+	stateData.state.ConsensusParams.Synchrony.Precision = 10 * time.Millisecond
+	delay := stateData.state.ConsensusParams.Synchrony.MessageDelay
+	precision := stateData.state.ConsensusParams.Synchrony.Precision
+
+	// set genesis time (==last block time at height 0) in the future
+	assert.Equal(t, int64(1), height, "we should be on genesis")
+	genesisTime := tmtime.Now().Add(delay + precision + 10*time.Millisecond)
+	stateData.state.LastBlockTime = genesisTime
+	err = stateData.Save()
+	require.NoError(t, err)
+
+	newRoundCh := subscribe(ctx, t, cs1.eventBus, types.EventQueryNewRound)
+
+	startTestRound(ctx, cs1, height, round)
+
+	// Wait for new round so proposer is set.
+	ensureNewRound(t, newRoundCh, height, round)
+
+	stateData = cs1.GetStateData()
+	height, round = stateData.Height, stateData.Round
+	cs := cs1
+	// Generate proposal block
+	propBlock, err := cs.CreateProposalBlock(ctx)
+	require.NoError(t, err)
+
+	parSet, err := propBlock.MakePartSet(types.BlockPartSizeBytes)
+	require.NoError(t, err)
+	stateData.ValidBlock = propBlock
+	stateData.ValidBlockParts = parSet
+
+	// Wait for complete proposal.
+	err = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{
+		Height: height,
+		Round:  round,
+	}, &stateData)
+	require.NoError(t, err)
+
+	time.Sleep(delay + precision + 100*time.Millisecond)
+	ensureNewRound(t, newRoundCh, height+1, 0)
+
+	stateData = cs.GetStateData()
+
+	assert.Greater(t, stateData.Height, int64(1), "we should have at least one block")
+	block1 := cs.blockStore.LoadBlock(1)
+	require.NotNil(t, block1)
+
+	assert.Equal(t, genesisTime, block1.Time, "expected that last block time is in the past")
+}
+
 func TestStateOversizedBlock(t *testing.T) {
 	config := configSetup(t)
 	ctx, cancel := context.WithCancel(context.Background())

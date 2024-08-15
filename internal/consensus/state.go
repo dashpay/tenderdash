@@ -46,7 +46,13 @@ var (
 	ErrPrivValidatorNotSet = errors.New("priv-validator is not set")
 )
 
-var msgQueueSize = 1000
+// msgInfoQueue must fit info about all votes from all validators 100 for Dash Evo mainnet),
+// multiplied by number of peers that can broadcast these votes (also assuming 100),
+// multiplied by some factor (here 2) to address multiple rounds.
+//
+// Note this allows potential OOM condition if we put 20 000 proposal block of size
+// types.BlockPartSizeBytes==64 kB, what gives us 1.2 GB of memory usage.
+var msgQueueSize = 100 * 100 * 2
 
 // msgs from the reactor which may update the state
 type msgInfo struct {
@@ -746,7 +752,7 @@ func (cs *State) handleTimeout(
 		// XXX: should we fire timeout here (for timeout commit)?
 		_ = cs.ctrl.Dispatch(ctx, &EnterNewRoundEvent{Height: ti.Height}, stateData)
 	case cstypes.RoundStepNewRound:
-		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: ti.Height}, stateData)
+		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: ti.Height, Round: ti.Round}, stateData)
 	case cstypes.RoundStepPropose:
 		if err := cs.eventBus.PublishEventTimeoutPropose(stateData.RoundStateEvent()); err != nil {
 			cs.logger.Error("failed publishing timeout propose", "err", err)
@@ -788,7 +794,7 @@ func (cs *State) handleTxsAvailable(ctx context.Context, stateData *StateData) {
 		cs.roundScheduler.ScheduleTimeout(timeoutCommit, stateData.Height, 0, cstypes.RoundStepNewRound)
 
 	case cstypes.RoundStepNewRound: // after timeoutCommit
-		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: stateData.Height}, stateData)
+		_ = cs.ctrl.Dispatch(ctx, &EnterProposeEvent{Height: stateData.Height, Round: stateData.Round}, stateData)
 	}
 }
 

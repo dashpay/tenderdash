@@ -146,6 +146,12 @@ node-key-file = "{{ js .BaseConfig.NodeKey }}"
 # so the app can decide if we should keep the connection or not
 filter-peers = {{ .BaseConfig.FilterPeers }}
 
+
+# If set to positive duration, deadlock detection is enabled and set to the given time.
+# Use 0 to disable.
+# Default: 0
+deadlock-detection = "{{ .BaseConfig.DeadlockDetection }}"
+
 #######################################################
 ###       ABCI App Connection Options               ###
 #######################################################

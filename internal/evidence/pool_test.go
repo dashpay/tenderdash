@@ -528,6 +528,7 @@ func initializeValidatorState(
 		ThresholdPublicKey: validator.PubKey,
 		QuorumType:         quorumType,
 		QuorumHash:         quorumHash,
+		HasPublicKeys:      true,
 	}
 
 	return initializeStateFromValidatorSet(t, valSet, height)
