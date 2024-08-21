@@ -44,7 +44,11 @@ func (nk *NodeKey) Validate() error {
 		return fmt.Errorf("invalid or empty private key")
 	}
 	if err := nk.ID.Validate(); err != nil {
-		return fmt.Errorf("invalid key ID: %w", err)
+		return fmt.Errorf("invalid node ID: %w", err)
+	}
+	keyID := NodeIDFromPubKey(nk.PrivKey.PubKey())
+	if nk.ID != keyID {
+		return fmt.Errorf("saved node ID %s does not match public key %s", nk.ID, keyID)
 	}
 	return nil
 }
