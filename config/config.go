@@ -300,6 +300,11 @@ func (cfg BaseConfig) LoadNodeKeyID() (types.NodeID, error) {
 	if err != nil {
 		return "", err
 	}
+
+	if err = nodeKey.Validate(); err != nil {
+		return "", fmt.Errorf("invalid node key file %s: %w", cfg.NodeKeyFile(), err)
+	}
+
 	nodeKey.ID = types.NodeIDFromPubKey(nodeKey.PubKey())
 	return nodeKey.ID, nil
 }
