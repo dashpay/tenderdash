@@ -321,6 +321,7 @@ require (
 )
 
 require (
+	github.com/Masterminds/semver/v3 v3.3.0
 	github.com/creachadair/tomledit v0.0.23
 	github.com/jonboulle/clockwork v0.3.0
 	github.com/oasisprotocol/oasis-core/go v0.2202.5
