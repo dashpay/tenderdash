@@ -1,4 +1,15 @@
-## [1.3.0-dev.1] - 2024-08-15
+## [1.2.1-dev.1] - 2024-08-29
+
+### Bug Fixes
+
+- Genesis.json not loaded on restart before genesis block is mined
+- Panic when loading invalid node key file (#888)
+
+### Build
+
+- Bump git-cliff to 2.4 and remove history before 1.0 (#882)
+
+## [1.2.0] - 2024-08-15
 
 ### Bug Fixes
 
@@ -8,12 +19,14 @@
 
 - Configuration of deadlock detection (#880)
 
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.2.0
+
 ## [1.2.0-dev.3] - 2024-08-12
 
 ### Bug Fixes
 
-- Proposal not generated after waiting for last block time to pass (#849)
-- Build of dev releases fails due to invalid tags (#859)
 - Msg queue is too small for mainnet (#863)
 - Non-active validators can't verify evidence signatures (#865)
 
@@ -45,14 +58,10 @@
 ### Miscellaneous Tasks
 
 - Update changelog and version to 1.2.0-dev.1 (#858)
-- Update changelog and version to 1.2.0-dev.2 (#861)
-- Improve logs (#866)
-- Update changelog and version to 1.2.0-dev.3 (#868)
 
 ### Build
 
 - Add signed binaries to releases (#854)
-- E2e tests fail due to lack of docker-compose command (#860)
 
 ## [1.1.0] - 2024-07-29
 
