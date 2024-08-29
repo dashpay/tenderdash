@@ -1,9 +1,13 @@
-## [1.2.1-dev.1] - 2024-08-29
+## [1.2.1] - 2024-08-29
 
 ### Bug Fixes
 
 - Genesis.json not loaded on restart before genesis block is mined
 - Panic when loading invalid node key file (#888)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.2.1-dev.1
 
 ### Build
 
@@ -13,6 +17,10 @@
 
 ### Bug Fixes
 
+- Proposal not generated after waiting for last block time to pass (#849)
+- Build of dev releases fails due to invalid tags (#859)
+- Msg queue is too small for mainnet (#863)
+- Non-active validators can't verify evidence signatures (#865)
 - Vote extensions verified multiple times (#867)
 
 ### Features
@@ -21,47 +29,16 @@
 
 ### Miscellaneous Tasks
 
-- Update changelog and version to 1.2.0
-
-## [1.2.0-dev.3] - 2024-08-12
-
-### Bug Fixes
-
-- Msg queue is too small for mainnet (#863)
-- Non-active validators can't verify evidence signatures (#865)
-
-### Miscellaneous Tasks
-
+- Update changelog and version to 1.2.0-dev.1 (#858)
+- Update changelog and version to 1.2.0-dev.2 (#861)
 - Improve logs (#866)
 - Update changelog and version to 1.2.0-dev.3 (#868)
-
-## [1.2.0-dev.2] - 2024-08-05
-
-### Bug Fixes
-
-- Build of dev releases fails due to invalid tags (#859)
-
-### Miscellaneous Tasks
-
-- Update changelog and version to 1.2.0-dev.2 (#861)
-
-### Build
-
-- E2e tests fail due to lack of docker-compose command (#860)
-
-## [1.2.0-dev.1] - 2024-08-05
-
-### Bug Fixes
-
-- Proposal not generated after waiting for last block time to pass (#849)
-
-### Miscellaneous Tasks
-
-- Update changelog and version to 1.2.0-dev.1 (#858)
+- Update changelog and version to 1.2.0
 
 ### Build
 
 - Add signed binaries to releases (#854)
+- E2e tests fail due to lack of docker-compose command (#860)
 
 ## [1.1.0] - 2024-07-29
 
@@ -90,16 +67,6 @@
 
 ## [1.0.0] - 2024-07-01
 
-### Miscellaneous Tasks
-
-- Update changelog and version to 1.0.0
-
-### Build
-
-- Bump github.com/stretchr/testify from 1.8.2 to 1.9.0 (#817)
-
-## [1.0.0-dev.2] - 2024-06-26
-
 ### Bug Fixes
 
 - Ineffective PROXY_APP and ABCI env in entrypoint (#805)
@@ -107,4 +74,9 @@
 ### Miscellaneous Tasks
 
 - Update changelog and version to 1.0.0-dev.2 (#806)
+- Update changelog and version to 1.0.0
+
+### Build
+
+- Bump github.com/stretchr/testify from 1.8.2 to 1.9.0 (#817)
 
