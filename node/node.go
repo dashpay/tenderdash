@@ -719,7 +719,8 @@ func loadStateFromDBOrGenesisDocProvider(stateStore sm.Store, genDoc *types.Gene
 		return sm.State{}, err
 	}
 
-	if state.IsEmpty() {
+	// If genesis state wasn't mined yet (last block height is 0), we assume that loaded state should be wiped
+	if state.IsEmpty() || state.LastBlockHeight == 0 {
 		// 2. If it's not there, derive it from the genesis doc
 		state, err = sm.MakeGenesisState(genDoc)
 		if err != nil {

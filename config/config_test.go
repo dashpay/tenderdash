@@ -1,6 +1,7 @@
 package config
 
 import (
+	"os"
 	"reflect"
 	"testing"
 	"time"
@@ -221,5 +222,41 @@ func TestP2PConfigValidateBasic(t *testing.T) {
 		reflect.ValueOf(cfg).Elem().FieldByName(fieldName).SetInt(-1)
 		assert.Error(t, cfg.ValidateBasic())
 		reflect.ValueOf(cfg).Elem().FieldByName(fieldName).SetInt(0)
+	}
+}
+
+// Given some invalid node key file, when I try to load it, I get an error
+func TestLoadNodeKeyID(t *testing.T) {
+
+	testCases := []string{
+		`{
+  "type": "tendermint/PrivKeyEd25519",
+  "value": "wIVaBy3v4bKcrBxGsgFen9qJeqXiK4h18iWCM2LSYxMyH8PomXsANUb3KoucY9EBDj0NQi4LqrmG8DyT5D6xWQ=="
+}`,
+		`{
+	"id":"0d846d89021b617026c3a3d4051ebcf4cdd09f7c",
+	"priv_key":{
+		"type":"tendermint/PrivKeyEd25519",
+		"value":"J5EWnwSixAZuuw2Gf5nbXXNbyliaURFgBawfwN+zU/N7ucjnxu0GLcVi107XEj2Myq95101jcPPcJE+dCncY1A=="
+	}
+}`,
+	}
+
+	for _, tc := range testCases {
+		t.Run("", func(t *testing.T) {
+			cfg := DefaultBaseConfig()
+			tmpDir := t.TempDir()
+
+			// create invalid node key file
+			cfg.NodeKey = tmpDir + "/node_key.json"
+			err := os.WriteFile(cfg.NodeKey, []byte(tc), 0600)
+			require.NoError(t, err)
+
+			// when I try to load the node key
+			_, err = cfg.LoadNodeKeyID()
+
+			// then I get an error
+			assert.Error(t, err)
+		})
 	}
 }
