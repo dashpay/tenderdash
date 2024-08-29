@@ -12,6 +12,8 @@
 
 ### Bug Fixes
 
+- Proposal not generated after waiting for last block time to pass (#849)
+- Build of dev releases fails due to invalid tags (#859)
 - Msg queue is too small for mainnet (#863)
 - Non-active validators can't verify evidence signatures (#865)
 
@@ -43,10 +45,14 @@
 ### Miscellaneous Tasks
 
 - Update changelog and version to 1.2.0-dev.1 (#858)
+- Update changelog and version to 1.2.0-dev.2 (#861)
+- Improve logs (#866)
+- Update changelog and version to 1.2.0-dev.3 (#868)
 
 ### Build
 
 - Add signed binaries to releases (#854)
+- E2e tests fail due to lack of docker-compose command (#860)
 
 ## [1.1.0] - 2024-07-29
 
