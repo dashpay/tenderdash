@@ -242,12 +242,11 @@ func WaitForMNReady(client Client, retryTimeout time.Duration) error {
 			return fmt.Errorf("failed to get masternode status: %w", err)
 		}
 		switch result.State {
-		case btcjson.MNStatusStateReady:
+		case btcjson.MNStatusStateReady, btcjson.MNStatusStatePoseBanned:
 			return nil
 		case btcjson.MNStatusStateWaitingForProtx:
 			sleep(retryTimeout)
-		case btcjson.MNStatusStatePoseBanned,
-			btcjson.MNStatusStateRemoved,
+		case btcjson.MNStatusStateRemoved,
 			btcjson.MNStatusStateOperatorKeyChanged,
 			btcjson.MNStatusStateProtxIpChanged,
 			btcjson.MNStatusStateError,
