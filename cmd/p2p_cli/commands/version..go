@@ -3,6 +3,7 @@ package commands
 import (
 	"bufio"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -21,9 +22,10 @@ import (
 )
 
 type versionCmd struct {
-	nodeKey string
-	peers   []string
-	logger  log.Logger
+	nodeKey   string
+	peers     []string
+	logger    log.Logger
+	outFormat string
 }
 
 func newVersionCmd(logger log.Logger) Cmd {
@@ -32,17 +34,21 @@ func newVersionCmd(logger log.Logger) Cmd {
 	}
 }
 
+/// curl -s https://mnowatch.org/json/?method=emn_details | jq -r '.[] | "tcp://\(.platformNodeID)@\(.ip):\(.platformP2PPort)#\(.protx_hash)"'
+
 func (c *versionCmd) Command() *cobra.Command {
 	versionCmd := &cobra.Command{
-		Use:     "version node_1 ... node_n",
-		Short:   "Connect to another host and display version",
-		Long:    "Connect to another host and display version. Peers should be listed as arguments or provided from standard input.",
+		Use:   "version node_1 ... node_n",
+		Short: "Connect to another host and display version",
+		Long:  "Connect to another host and display version. Peers should be listed as arguments or provided from standard input.",
+
 		Example: "version --key node_key.json tcp://NODE_ID1@IP:PORT1#label1 tcp://NODE_ID2@IP2:PORT#label2",
 		RunE:    c.versionRunE,
 		PreRunE: c.versionPreRunE,
 	}
 
 	versionCmd.Flags().StringVarP(&c.nodeKey, "key", "k", "", "File with node key to use when running the test")
+	versionCmd.Flags().StringVarP(&c.outFormat, "format", "f", "text", "Output format (text, json)")
 
 	return versionCmd
 }
@@ -79,7 +85,7 @@ func (c *versionCmd) versionPreRunE(_cmd *cobra.Command, args []string) error {
 }
 
 // versionRun implements the version command
-func (c *versionCmd) versionRunE(cmd *cobra.Command, args []string) error {
+func (c *versionCmd) versionRunE(_cmd *cobra.Command, _args []string) error {
 	logger := c.logger
 	nodeKey, err := types.LoadNodeKey(c.nodeKey)
 	if err != nil {
@@ -93,16 +99,7 @@ func (c *versionCmd) versionRunE(cmd *cobra.Command, args []string) error {
 	}
 
 	// execute the query
-	nodeInfos, err := QueryNodeInfos(logger, nodeKey, addresses)
-	if err != nil {
-		return fmt.Errorf("failed to query node infos: %w", err)
-	}
-
-	// gather some statistics
-	versions := map[string]int{}
-	for _, info := range nodeInfos {
-		versions[info.Version]++
-	}
+	nodeInfos, errs := QueryNodeInfos(logger, nodeKey, addresses)
 
 	// generate the report
 	items := make([]reportItem, 0, len(nodeInfos))
@@ -116,6 +113,55 @@ func (c *versionCmd) versionRunE(cmd *cobra.Command, args []string) error {
 
 		items = append(items, item)
 	}
+	for label, e := range errs {
+		items = append(items, reportItem{
+			label:   label,
+			comment: e.Error(),
+		})
+	}
+
+	return c.output(items)
+}
+
+func (c *versionCmd) output(items []reportItem) error {
+	switch c.outFormat {
+	case "json":
+		return c.outputJSON(items)
+	default:
+		return c.outputText(items)
+	}
+}
+
+func (c *versionCmd) outputText(items []reportItem) error {
+	versions := map[string]int{}
+	for _, item := range items {
+		if item.comment != "" {
+			fmt.Printf("%s: %s\n", item.label, item.comment)
+		} else {
+			fmt.Printf("%s: %s %s\n", item.label, item.version, item.address)
+		}
+
+		if item.version != "" {
+			versions[item.version]++
+		} else {
+			versions["unknown"]++
+		}
+	}
+
+	fmt.Println("\nVersions statistics:")
+	for version, count := range versions {
+		fmt.Printf("Version %s: %d\n", version, count)
+	}
+
+	return nil
+}
+
+func (c *versionCmd) outputJSON(items []reportItem) error {
+	d, err := json.MarshalIndent(items, "", "  ")
+	if err != nil {
+		return fmt.Errorf("failed to marshal json: %w", err)
+	}
+	fmt.Println(string(d))
 
 	return nil
 }
@@ -164,23 +210,30 @@ func parsePeers(peers []string, logger log.Logger) (map[string]*types.NetAddress
 // ## Returns
 //
 // - a map of label to node infos
-// - an error if any
-
-func QueryNodeInfos(logger log.Logger, nodeKey types.NodeKey, peers map[string]*types.NetAddress) (map[string]types.NodeInfo, error) {
+// - a map of label to errors, or nil if no errors occurred
+//
+// It is not guaranteed that all peers will be in the returned maps.
+func QueryNodeInfos(logger log.Logger, nodeKey types.NodeKey, peers map[string]*types.NetAddress) (map[string]types.NodeInfo, map[string]error) {
 	transport := setupTransport(logger)
 	defer transport.Close()
 
-	nodeInfos := map[string]types.NodeInfo{}
+	errs := map[string]error{}
+	infos := map[string]types.NodeInfo{}
+
 	for label, addr := range peers {
 		peerInfo, err := queryNodeInfo(transport, *addr, nodeKey.PrivKey)
 		if err != nil {
-			return nil, fmt.Errorf("cannot query node info: %w", err)
+			errs[label] = err
+		} else {
+			infos[label] = peerInfo
 		}
-
-		nodeInfos[label] = peerInfo
 	}
 
-	return nodeInfos, nil
+	if len(errs) == 0 {
+		errs = nil
+	}
+
+	return infos, errs
 }
 
 func setupTransport(logger log.Logger) *p2p.MConnTransport {

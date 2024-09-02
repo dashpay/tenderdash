@@ -17,7 +17,7 @@ type Cmd interface {
 	Command() *cobra.Command
 }
 
-func NewRootCmd(commands ...*cobra.Command) *cobra.Command {
+func NewRootCmd() *cobra.Command {
 	rootCmd := &cobra.Command{
 		Use:               "app",
 		Short:             "A CLI application",
@@ -31,7 +31,7 @@ func NewRootCmd(commands ...*cobra.Command) *cobra.Command {
 	return rootCmd
 }
 
-func rootPreRunE(cmd *cobra.Command, _args []string) error {
+func rootPreRunE(_cmd *cobra.Command, _args []string) error {
 	var err error
 	switch logLevel {
 	case "info":
