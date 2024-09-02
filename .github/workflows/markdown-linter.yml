@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev
       - name: Lint Code Base
-        uses: github/super-linter@v5
+        uses: github/super-linter@v7
         env:
           VALIDATE_ALL_CODEBASE: true
           DEFAULT_BRANCH: master
