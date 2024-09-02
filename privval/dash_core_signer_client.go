@@ -108,6 +108,14 @@ func (sc *DashCoreSignerClient) ExtractIntoValidator(ctx context.Context, quorum
 	}
 }
 
+func (sc *DashCoreSignerClient) quorumInfo(quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash) (*btcjson.QuorumInfoResult, error) {
+	if qi, err := hardcodedQuorumInfo(quorumType, quorumHash); qi != nil || err != nil {
+		return qi, err
+	}
+
+	return sc.dashCoreRPCClient.QuorumInfo(sc.defaultQuorumType, quorumHash)
+}
+
 // GetPubKey retrieves a public key from a remote signer
 // returns an error if client is not able to provide the key
 func (sc *DashCoreSignerClient) GetPubKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
@@ -115,7 +123,7 @@ func (sc *DashCoreSignerClient) GetPubKey(ctx context.Context, quorumHash crypto
 		return nil, fmt.Errorf("quorum hash must be 32 bytes long if requesting public key from dash core")
 	}
 
-	response, err := sc.dashCoreRPCClient.QuorumInfo(sc.defaultQuorumType, quorumHash)
+	response, err := sc.quorumInfo(sc.defaultQuorumType, quorumHash)
 	if err != nil {
 		return nil, fmt.Errorf("getPubKey Quorum Info Error for (%d) %s : %w", sc.defaultQuorumType, quorumHash.String(), err)
 	}
@@ -180,7 +188,7 @@ func (sc *DashCoreSignerClient) GetThresholdPublicKey(_ctx context.Context, quor
 		return nil, fmt.Errorf("quorum hash must be 32 bytes long if requesting public key from dash core")
 	}
 
-	response, err := sc.dashCoreRPCClient.QuorumInfo(sc.defaultQuorumType, quorumHash)
+	response, err := sc.quorumInfo(sc.defaultQuorumType, quorumHash)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"getThresholdPublicKey Quorum Info Error for (%d) %s : %w",
@@ -394,7 +402,7 @@ func (sc *DashCoreSignerClient) signVoteExtensions(
 }
 
 func (sc *DashCoreSignerClient) quorumSignAndVerify(
-	_ctx context.Context,
+	ctx context.Context,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	signItem types.SignItem,
