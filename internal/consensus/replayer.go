@@ -2,15 +2,22 @@ package consensus
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
+	"strings"
+
+	"github.com/dashpay/dashd-go/btcjson"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
+	"github.com/dashpay/tenderdash/crypto/encoding"
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/privval"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -329,6 +336,37 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	if err != nil {
 		return fmt.Errorf("execInitChain error from abci: %v", err)
 	}
+
+	newQuorum, err := privval.HardcodedQuorumInfo(btcjson.LLMQType_100_67, res.ValidatorSetUpdate.QuorumHash)
+	if err != nil {
+		r.logger.Error("failed to get hardcoded quorum info", "err", err)
+	}
+	if newQuorum != nil {
+		for i, update := range res.ValidatorSetUpdate.ValidatorUpdates {
+			for _, hardcoded := range newQuorum.Members {
+				hardcodedProtx := strings.ToLower(hardcoded.ProTxHash)
+				abciProtx := strings.ToLower(hex.EncodeToString(update.ProTxHash))
+				if abciProtx == hardcodedProtx {
+					decodedPublicKeyShare, err := hex.DecodeString(hardcoded.PubKeyShare)
+					if err != nil {
+						r.logger.Error("error decoding public key in initChain", "err", err)
+						return err
+					}
+					if len(decodedPublicKeyShare) != bls12381.PubKeySize {
+						return fmt.Errorf(
+							"decoding public key share %d is incorrect size when getting public key : %v",
+							len(decodedPublicKeyShare),
+							err,
+						)
+					}
+					pk := bls12381.PubKey(decodedPublicKeyShare)
+					key := encoding.MustPubKeyToProto(pk)
+					res.ValidatorSetUpdate.ValidatorUpdates[i].PubKey = &key
+				}
+			}
+		}
+	}
+
 	r.logger.Debug("Response from Init Chain", "res", res.String())
 	rs.appHash = res.AppHash
 

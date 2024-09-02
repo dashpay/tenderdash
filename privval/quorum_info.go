@@ -9,7 +9,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 )
 
-func hardcodedQuorumInfo(quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash) (*btcjson.QuorumInfoResult, error) {
+func HardcodedQuorumInfo(quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash) (*btcjson.QuorumInfoResult, error) {
 	if quorumType.Name() == "llmq_100_67" &&
 		strings.ToLower(quorumHash.String()) == "00000000000000105f2d1ceda3c63d2b677a227d7ed77c5bad3776725cad0002" {
 		quorumInfo := btcjson.QuorumInfoResult{}

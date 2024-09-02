@@ -109,7 +109,7 @@ func (sc *DashCoreSignerClient) ExtractIntoValidator(ctx context.Context, quorum
 }
 
 func (sc *DashCoreSignerClient) quorumInfo(quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash) (*btcjson.QuorumInfoResult, error) {
-	if qi, err := hardcodedQuorumInfo(quorumType, quorumHash); qi != nil || err != nil {
+	if qi, err := HardcodedQuorumInfo(quorumType, quorumHash); qi != nil || err != nil {
 		return qi, err
 	}
 
