@@ -41,8 +41,9 @@ func (c *versionCmd) Command() *cobra.Command {
 		Use:   "version node_1 ... node_n",
 		Short: "Connect to another host and display version",
 		Long:  "Connect to another host and display version. Peers should be listed as arguments or provided from standard input.",
-
-		Example: "version --key node_key.json tcp://NODE_ID1@IP:PORT1#label1 tcp://NODE_ID2@IP2:PORT#label2",
+		Example: `curl -s https://mnowatch.org/json/?method=emn_details | ` +
+			`jq -r '.[] | "tcp://\(.platformNodeID)@\(.ip):\(.platformP2PPort)#\(.protx_hash)"' | ` +
+			`go run ./cmd/p2p_cli version -k ~/.tenderdash/config/node_key.json`,
 		RunE:    c.versionRunE,
 		PreRunE: c.versionPreRunE,
 	}
