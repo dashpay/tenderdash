@@ -394,15 +394,25 @@ func (sc *DashCoreSignerClient) signVoteExtensions(
 }
 
 func (sc *DashCoreSignerClient) quorumSignAndVerify(
-	ctx context.Context,
+	_ctx context.Context,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 	signItem types.SignItem,
 ) (*quorumSignResult, error) {
 	qs, err := sc.quorumSign(quorumType, quorumHash, signItem)
 	if err != nil {
+		sc.logger.Error("quorum sign failed",
+			"sign", hex.EncodeToString(qs.sign),
+			"sign_hash", hex.EncodeToString(qs.signHash),
+			"req_id", hex.EncodeToString(signItem.ID),
+			"id", hex.EncodeToString(signItem.SignHash),
+			"raw", hex.EncodeToString(signItem.Msg),
+			"hash", hex.EncodeToString(signItem.MsgHash),
+			"quorum_sign_result", *qs.QuorumSignResult,
+			"err", err)
 		return nil, err
 	}
+
 	sc.logger.Trace("quorum sign result",
 		"sign", hex.EncodeToString(qs.sign),
 		"sign_hash", hex.EncodeToString(qs.signHash),
