@@ -200,9 +200,9 @@ func (candidate *CurrentRoundState) populateValsetUpdates() error {
 		return fmt.Errorf("validator set updates: %w", err)
 	}
 
+	// we take validator sets as they arrive from InitChainSource response
 	if updateSource != InitChainSource {
-		// we take validator sets as they arrive from InitChainSource response
-		newValSet.IncrementProposerPriority(1)
+		newValSet.IncrementProposerPriority(1 + candidate.Round)
 	}
 
 	candidate.NextValidators = newValSet
