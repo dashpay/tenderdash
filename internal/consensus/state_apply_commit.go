@@ -34,9 +34,6 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	event := stateEvent.Data.(*ApplyCommitEvent)
 	stateData := stateEvent.StateData
 	commit := event.Commit
-	c.logger.Info("applying commit", "commit", commit)
-
-	block, blockParts := stateData.ProposalBlock, stateData.ProposalBlockParts
 
 	height := stateData.Height
 	round := stateData.Round
@@ -45,6 +42,9 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 		height = commit.Height
 		round = commit.Round
 	}
+	c.logger.Info("applying commit", "commit", commit, "height", height, "round", round)
+
+	block, blockParts := stateData.ProposalBlock, stateData.ProposalBlockParts
 
 	c.blockExec.mustEnsureProcess(ctx, &stateData.RoundState, round)
 	c.blockExec.mustValidate(ctx, stateData)

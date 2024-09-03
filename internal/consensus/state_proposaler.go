@@ -82,7 +82,11 @@ func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 		rs.ProposalBlockParts = types.NewPartSetFromHeader(proposal.BlockID.PartSetHeader)
 	}
 
-	p.logger.Info("received proposal", "proposal", proposal, "received", receivedAt)
+	p.logger.Info("received proposal",
+		"proposal", proposal,
+		"height", proposal.Height,
+		"round", proposal.Round,
+		"received", receivedAt)
 	return nil
 }
 
