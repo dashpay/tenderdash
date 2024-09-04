@@ -105,12 +105,6 @@ func (candidate *CurrentRoundState) UpdateState(target *State) error {
 	return nil
 }
 
-// UpdateFunc implements UpdateFunc
-func (candidate *CurrentRoundState) UpdateFunc(state State) (State, error) {
-	err := candidate.UpdateState(&state)
-	return state, err
-}
-
 // GetHeight returns height of current block
 func (candidate *CurrentRoundState) GetHeight() int64 {
 	if candidate.Base.LastBlockHeight == 0 {
@@ -202,7 +196,7 @@ func (candidate *CurrentRoundState) populateValsetUpdates() error {
 
 	// we take validator sets as they arrive from InitChainSource response
 	if updateSource != InitChainSource {
-		newValSet.IncrementProposerPriority(1 + candidate.Round)
+		newValSet.IncrementProposerPriority(1 + candidate.Params.Round)
 	}
 
 	candidate.NextValidators = newValSet

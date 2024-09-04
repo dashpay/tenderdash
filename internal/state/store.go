@@ -499,6 +499,9 @@ func (store dbStore) SaveValidatorSets(lowerHeight, upperHeight int64, vals *typ
 
 // LoadValidators loads the ValidatorSet for a given height.
 // Returns ErrNoValSetForHeight if the validator set can't be found for this height.
+//
+// TODO: The returned ValidatorSet proposer score does not take into account changing round numbers
+// and is not guaranteed to be correct.
 func (store dbStore) LoadValidators(height int64) (*types.ValidatorSet, error) {
 
 	valInfo, err := loadValidatorsInfo(store.db, height)
@@ -525,7 +528,7 @@ func (store dbStore) LoadValidators(height int64) (*types.ValidatorSet, error) {
 		if err != nil {
 			return nil, err
 		}
-
+		// TODO: rounds should be also considered here
 		vs.IncrementProposerPriority(h) // mutate
 		vi2, err := vs.ToProto()
 		if err != nil {
