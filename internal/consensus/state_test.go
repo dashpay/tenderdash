@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -155,8 +154,6 @@ func TestStateProposerSelection2(t *testing.T) {
 // When consensus runs with multiple rounds and heights,
 // Then the proposer should be selected in a round-robin fashion.
 func TestStateProposerSelectionBetweenRoundsAndHeights(t *testing.T) {
-	// TODO: Enable deadlock detection and check why it complains
-	deadlock.Opts.Disable = true
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
