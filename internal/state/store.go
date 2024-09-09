@@ -10,6 +10,7 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -92,7 +93,7 @@ type Store interface {
 	// Load loads the current state of the blockchain
 	Load() (State, error)
 	// LoadValidators loads the validator set that is used to validate the given height
-	LoadValidators(int64) (*types.ValidatorSet, error)
+	LoadValidators(int64, validatorscoring.BlockCommitStore) (*types.ValidatorSet, error)
 	// LoadABCIResponses loads the abciResponse for a given height
 	LoadABCIResponses(int64) (*tmstate.ABCIResponses, error)
 	// LoadConsensusParams loads the consensus params for a given height
@@ -499,10 +500,7 @@ func (store dbStore) SaveValidatorSets(lowerHeight, upperHeight int64, vals *typ
 
 // LoadValidators loads the ValidatorSet for a given height.
 // Returns ErrNoValSetForHeight if the validator set can't be found for this height.
-//
-// TODO: The returned ValidatorSet proposer score does not take into account changing round numbers
-// and is not guaranteed to be correct.
-func (store dbStore) LoadValidators(height int64) (*types.ValidatorSet, error) {
+func (store dbStore) LoadValidators(height int64, commitStore validatorscoring.BlockCommitStore) (*types.ValidatorSet, error) {
 
 	valInfo, err := loadValidatorsInfo(store.db, height)
 	if err != nil {
@@ -524,12 +522,15 @@ func (store dbStore) LoadValidators(height int64) (*types.ValidatorSet, error) {
 		if err != nil {
 			return nil, err
 		}
-		h, err := tmmath.SafeConvertInt32(height - lastStoredHeight)
+
+		cp, err := store.LoadConsensusParams(lastStoredHeight)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("loading validators needs consensus params at height %d: %w", height, err)
 		}
-		// TODO: rounds should be also considered here
-		vs.IncrementProposerPriority(h) // mutate
+
+		strategy, err := validatorscoring.NewValidatorScoringStrategy(cp, vs, lastStoredHeight, 0, commitStore)
+		strategy.UpdateScores(height, 0)
+
 		vi2, err := vs.ToProto()
 		if err != nil {
 			return nil, err

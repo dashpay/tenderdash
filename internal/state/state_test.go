@@ -9,6 +9,7 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
@@ -21,6 +22,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	"github.com/dashpay/tenderdash/dash"
 	"github.com/dashpay/tenderdash/dash/llmq"
+	"github.com/dashpay/tenderdash/internal/evidence/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
@@ -242,18 +244,20 @@ func TestValidatorSimpleSaveLoad(t *testing.T) {
 	defer tearDown(t)
 
 	statestore := sm.NewStore(stateDB)
+	blockStore := mocks.NewBlockStore(t)
+	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
 
 	// Can't load anything for height 0.
-	_, err := statestore.LoadValidators(0)
+	_, err := statestore.LoadValidators(0, blockStore)
 	assert.IsType(t, sm.ErrNoValSetForHeight{}, err, "expected err at height 0")
 
 	// Should be able to load for height 1.
-	v, err := statestore.LoadValidators(1)
+	v, err := statestore.LoadValidators(1, blockStore)
 	require.NoError(t, err, "expected no err at height 1")
 	assert.Equal(t, v.Hash(), state.Validators.Hash(), "expected validator hashes to match")
 
 	// Should NOT be able to load for height 2.
-	_, err = statestore.LoadValidators(2)
+	_, err = statestore.LoadValidators(2, blockStore)
 	require.Error(t, err, "expected no err at height 2")
 
 	// Increment height, save; should be able to load for next height.
@@ -261,11 +265,11 @@ func TestValidatorSimpleSaveLoad(t *testing.T) {
 	nextHeight := state.LastBlockHeight + 1
 	err = statestore.Save(state)
 	require.NoError(t, err)
-	vp0, err := statestore.LoadValidators(nextHeight + 0)
+	vp0, err := statestore.LoadValidators(nextHeight+0, blockStore)
 	assert.NoError(t, err)
 	assert.Equal(t, vp0.Hash(), state.Validators.Hash(), "expected validator hashes to match")
 
-	_, err = statestore.LoadValidators(nextHeight + 1)
+	_, err = statestore.LoadValidators(nextHeight+1, blockStore)
 	assert.Error(t, err)
 	// assert.Equal(t, vp1.Hash(), state.NextValidators.Hash(), "expected next validator hashes to match")
 }
@@ -275,6 +279,8 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 	tearDown, stateDB, state := setupTestCase(t)
 	defer tearDown(t)
 	stateStore := sm.NewStore(stateDB)
+	blockStore := mocks.NewBlockStore(t)
+	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
 
 	// Change vals at these heights.
 	changeHeights := []int64{1, 2, 4, 5, 10, 15, 16, 17, 20}
@@ -323,8 +329,8 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 	}
 
 	for height := int64(2); height < highestHeight; height++ {
-		pubKey := keys[height]                      // new validators are in effect in the next block
-		v, err := stateStore.LoadValidators(height) // load validators that validate block at `height``
+		pubKey := keys[height]                                  // new validators are in effect in the next block
+		v, err := stateStore.LoadValidators(height, blockStore) // load validators that validate block at `height``
 		require.NoError(t, err, fmt.Sprintf("expected no err at height %d", height))
 		assert.Equal(t, 1, v.Size(), "validator set size is greater than 1: %d", v.Size())
 		val := v.GetByIndex(0)
@@ -934,20 +940,23 @@ func TestStoreLoadValidatorsIncrementsProposerPriority(t *testing.T) {
 	err := stateStore.Save(state)
 	require.NoError(t, err)
 
+	blockStore := mocks.NewBlockStore(t)
+	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
+
 	state2 := state.Copy()
 	state2.LastBlockHeight++
-	state2.Validators = state.Validators.CopyIncrementProposerPriority(1)
+	state2.Validators = state.Validators.Copy()
 	state2.LastHeightValidatorsChanged = state2.LastBlockHeight + 1
 	err = stateStore.Save(state2)
 	require.NoError(t, err)
 
 	nextHeight := state.LastBlockHeight + 1
 
-	v0, err := stateStore.LoadValidators(nextHeight)
+	v0, err := stateStore.LoadValidators(nextHeight, blockStore)
 	assert.NoError(t, err)
 	acc0 := v0.Validators[0].ProposerPriority
 
-	v1, err := stateStore.LoadValidators(nextHeight + 1)
+	v1, err := stateStore.LoadValidators(nextHeight+1, blockStore)
 	assert.NoError(t, err)
 	acc1 := v1.Validators[0].ProposerPriority
 
@@ -958,6 +967,8 @@ func TestStoreLoadValidatorsIncrementsProposerPriority(t *testing.T) {
 // changes.
 func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	const valSetSize = 7
+	blockStore := mocks.NewBlockStore(t)
+	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
 
 	// ====== GENESIS STATE, height 1 ====== //
 
@@ -1005,7 +1016,7 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	require.NoError(t, err)
 
 	// Load height, it should be the oldpubkey.
-	v0, err := stateStore.LoadValidators(currentHeight - 1)
+	v0, err := stateStore.LoadValidators(currentHeight-1, blockStore)
 	assert.NoError(t, err)
 	assert.Equal(t, valSetSize, v0.Size())
 	index, val := v0.GetByProTxHash(proTxHash)
@@ -1016,7 +1027,7 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	}
 
 	// Load nextheight+1, it should be the new pubkey.
-	v1, err := stateStore.LoadValidators(currentHeight)
+	v1, err := stateStore.LoadValidators(currentHeight, blockStore)
 	require.NoError(t, err)
 	assert.Equal(t, valSetSize, v1.Size())
 	index, val = v1.GetByProTxHash(proTxHash)
@@ -1032,12 +1043,12 @@ func TestStateMakeBlock(t *testing.T) {
 	tearDown, _, state := setupTestCase(t)
 	defer tearDown(t)
 
-	proposerProTxHash := state.Validators.GetProposer().ProTxHash
 	stateVersion := state.Version.Consensus
 	// temporary workaround; state.Version.Consensus is deprecated and will be removed
 	stateVersion.App = kvstore.ProtocolVersion
 	var height int64 = 2
 	state.LastBlockHeight = height - 1
+	proposerProTxHash := state.ProposerSelector().MustGetProposer(height, 0).ProTxHash
 	block, err := statefactory.MakeBlock(state, height, new(types.Commit), 0)
 	require.NoError(t, err)
 

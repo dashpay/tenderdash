@@ -22,7 +22,7 @@ func (env *Environment) Validators(_ctx context.Context, req *coretypes.RequestV
 		return nil, err
 	}
 
-	validators, err := env.StateStore.LoadValidators(height)
+	validators, err := env.StateStore.LoadValidators(height, env.BlockStore)
 	if err != nil {
 		return nil, err
 	}

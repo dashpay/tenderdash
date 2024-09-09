@@ -87,7 +87,7 @@ func (suite *ProposalerTestSuite) SetupTest() {
 		blockExec:      blockExec,
 		committedState: suite.committedState,
 	}
-	suite.proposerProTxHash = suite.mockValSet.GetProposer().ProTxHash
+	suite.proposerProTxHash = suite.committedState.ProposerSelector().MustGetProposer(100, 0).ProTxHash
 	suite.blockH100R0 = suite.committedState.MakeBlock(100, []types.Tx{}, &suite.commitH99R0, nil, suite.proposerProTxHash, 0)
 }
 

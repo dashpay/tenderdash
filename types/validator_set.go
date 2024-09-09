@@ -19,6 +19,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	"github.com/dashpay/tenderdash/dash/llmq"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
@@ -94,9 +95,7 @@ func NewValidatorSet(valz []*Validator, newThresholdPublicKey crypto.PubKey, quo
 	if err != nil {
 		panic(fmt.Sprintf("Cannot create validator set: %v", err))
 	}
-	if len(valz) > 0 {
-		vals.IncrementProposerPriority(1)
-	}
+
 	return vals
 }
 
@@ -237,41 +236,6 @@ func (vals *ValidatorSet) QuorumHashValid() error {
 	return nil
 }
 
-// CopyIncrementProposerPriority increments ProposerPriority and updates the
-// proposer on a copy, and returns it.
-func (vals *ValidatorSet) CopyIncrementProposerPriority(times int32) *ValidatorSet {
-	copy := vals.Copy()
-	copy.IncrementProposerPriority(times)
-	return copy
-}
-
-// IncrementProposerPriority increments ProposerPriority of each validator and
-// updates the proposer. Panics if validator set is empty.
-// `times` must be positive.
-func (vals *ValidatorSet) IncrementProposerPriority(times int32) {
-	if vals.IsNilOrEmpty() {
-		panic("empty validator set")
-	}
-	if times <= 0 {
-		panic("Cannot call IncrementProposerPriority with non-positive times")
-	}
-
-	// Cap the difference between priorities to be proportional to 2*totalPower by
-	// re-normalizing priorities, i.e., rescale all priorities by multiplying with:
-	//  2*totalVotingPower/(maxPriority - minPriority)
-	diffMax := PriorityWindowSizeFactor * vals.TotalVotingPower()
-	vals.RescalePriorities(diffMax)
-	vals.shiftByAvgProposerPriority()
-
-	var proposer *Validator
-	// Call IncrementProposerPriority(1) times times.
-	for i := int32(0); i < times; i++ {
-		proposer = vals.incrementProposerPriority()
-	}
-
-	vals.Proposer = proposer
-}
-
 // RescalePriorities rescales the priorities such that the distance between the
 // maximum and minimum is smaller than `diffMax`. Panics if validator set is
 // empty.
@@ -296,20 +260,8 @@ func (vals *ValidatorSet) RescalePriorities(diffMax int64) {
 			val.ProposerPriority /= ratio
 		}
 	}
-}
 
-func (vals *ValidatorSet) incrementProposerPriority() *Validator {
-	for _, val := range vals.Validators {
-		// Check for overflow for sum.
-		newPrio := safeAddClip(val.ProposerPriority, val.VotingPower)
-		val.ProposerPriority = newPrio
-	}
-	// Decrement the validator with most ProposerPriority.
-	mostest := vals.getValWithMostPriority()
-	// Mind the underflow.
-	mostest.ProposerPriority = safeSubClip(mostest.ProposerPriority, vals.TotalVotingPower())
-
-	return mostest
+	vals.shiftByAvgProposerPriority()
 }
 
 // Should not be called on an empty validator set.
@@ -350,21 +302,13 @@ func computeMaxMinPriorityDiff(vals *ValidatorSet) int64 {
 	return diff
 }
 
-func (vals *ValidatorSet) getValWithMostPriority() *Validator {
-	var res *Validator
-	for _, val := range vals.Validators {
-		res = res.CompareProposerPriority(val)
-	}
-	return res
-}
-
 func (vals *ValidatorSet) shiftByAvgProposerPriority() {
 	if vals.IsNilOrEmpty() {
 		panic("empty validator set")
 	}
 	avgProposerPriority := vals.computeAvgProposerPriority()
 	for _, val := range vals.Validators {
-		val.ProposerPriority = safeSubClip(val.ProposerPriority, avgProposerPriority)
+		val.ProposerPriority = tmmath.SafeSubClipInt64(val.ProposerPriority, avgProposerPriority)
 	}
 }
 
@@ -388,7 +332,6 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 	return &ValidatorSet{
 		Validators:         validatorListCopy(vals.Validators),
 		Proposer:           vals.Proposer,
-		totalVotingPower:   vals.totalVotingPower,
 		ThresholdPublicKey: vals.ThresholdPublicKey,
 		QuorumHash:         vals.QuorumHash,
 		QuorumType:         vals.QuorumType,
@@ -474,13 +417,22 @@ func (vals *ValidatorSet) Size() int {
 	return len(vals.Validators)
 }
 
+// TotalVotingPower returns the sum of the voting powers of all validators.
+// It recomputes the total voting power if required.
+func (vals *ValidatorSet) TotalVotingPower() int64 {
+	if vals.totalVotingPower == 0 {
+		vals.updateTotalVotingPower()
+	}
+	return vals.totalVotingPower
+}
+
 // Forces recalculation of the set's total voting power.
 // Panics if total voting power is bigger than MaxTotalVotingPower.
 func (vals *ValidatorSet) updateTotalVotingPower() {
 	sum := int64(0)
 	for _, val := range vals.Validators {
 		// mind overflow
-		sum = safeAddClip(sum, val.VotingPower)
+		sum = tmmath.SafeAddClipInt64(sum, val.VotingPower)
 		if sum > MaxTotalVotingPower {
 			panic(fmt.Sprintf(
 				"Total voting power should be guarded to not exceed %v; got: %v",
@@ -490,15 +442,6 @@ func (vals *ValidatorSet) updateTotalVotingPower() {
 	}
 
 	vals.totalVotingPower = sum
-}
-
-// TotalVotingPower returns the sum of the voting powers of all validators.
-// It recomputes the total voting power if required.
-func (vals *ValidatorSet) TotalVotingPower() int64 {
-	if vals.totalVotingPower == 0 {
-		vals.updateTotalVotingPower()
-	}
-	return vals.totalVotingPower
 }
 
 // QuorumVotingPower returns the voting power of the quorum if all the members existed.
@@ -528,18 +471,6 @@ func (vals *ValidatorSet) QuorumTypeThresholdCount() int {
 		return len(vals.Validators)*2/3 + 1
 	}
 	return threshold
-}
-
-// GetProposer returns the current proposer. If the validator set is empty, nil
-// is returned.
-func (vals *ValidatorSet) GetProposer() (proposer *Validator) {
-	if len(vals.Validators) == 0 {
-		return nil
-	}
-	if vals.Proposer == nil {
-		vals.Proposer = vals.findProposer()
-	}
-	return vals.Proposer.Copy()
 }
 
 func (vals *ValidatorSet) findProposer() *Validator {
@@ -859,7 +790,6 @@ func (vals *ValidatorSet) updateWithChangeSet(changes []*Validator, allowDeletes
 
 	// Scale and center.
 	vals.RescalePriorities(PriorityWindowSizeFactor * vals.TotalVotingPower())
-	vals.shiftByAvgProposerPriority()
 
 	sort.Sort(ValidatorsByVotingPower(vals.Validators))
 
@@ -1000,13 +930,12 @@ func (vals *ValidatorSet) StringIndented(indent string) string {
 		valStrings = append(valStrings, val.String())
 		return false
 	})
+
 	return fmt.Sprintf(`ValidatorSet{
-%s  Proposer: %v
 %s  QuorumHash: %v
 %s  Validators:
 %s    %v
 %s}`,
-		indent, vals.GetProposer().String(),
 		indent, vals.QuorumHash.String(),
 		indent,
 		indent, strings.Join(valStrings, "\n"+indent+"    "),
@@ -1031,12 +960,10 @@ func (vals *ValidatorSet) StringIndentedBasic(indent string) string {
 		return false
 	})
 	return fmt.Sprintf(`ValidatorSet{
-%s  Proposer: %v
 %s  QuorumHash: %v
 %s  Validators:
 %s    %v
 %s}`,
-		indent, vals.GetProposer().ProTxHash.ShortString(),
 		indent, vals.QuorumHash.String(),
 		indent,
 		indent, strings.Join(valStrings, "\n"+indent+"    "),
@@ -1049,7 +976,6 @@ func (vals *ValidatorSet) MarshalZerologObject(e *zerolog.Event) {
 	if vals == nil {
 		return
 	}
-	e.Str("proposer", vals.GetProposer().ProTxHash.ShortString())
 	e.Str("quorum_hash", vals.QuorumHash.ShortString())
 	validators := zerolog.Arr()
 	for _, item := range vals.Validators {
@@ -1250,68 +1176,4 @@ func ValidatorUpdatesRegenerateOnProTxHashes(proTxHashes []crypto.ProTxHash) abc
 		ThresholdPublicKey: abciThresholdPublicKey,
 		QuorumHash:         crypto.RandQuorumHash(),
 	}
-}
-
-// safe addition/subtraction/multiplication
-
-func safeAdd(a, b int64) (int64, bool) {
-	if b > 0 && a > math.MaxInt64-b {
-		return -1, true
-	} else if b < 0 && a < math.MinInt64-b {
-		return -1, true
-	}
-	return a + b, false
-}
-
-func safeSub(a, b int64) (int64, bool) {
-	if b > 0 && a < math.MinInt64+b {
-		return -1, true
-	} else if b < 0 && a > math.MaxInt64+b {
-		return -1, true
-	}
-	return a - b, false
-}
-
-func safeAddClip(a, b int64) int64 {
-	c, overflow := safeAdd(a, b)
-	if overflow {
-		if b < 0 {
-			return math.MinInt64
-		}
-		return math.MaxInt64
-	}
-	return c
-}
-
-func safeSubClip(a, b int64) int64 {
-	c, overflow := safeSub(a, b)
-	if overflow {
-		if b > 0 {
-			return math.MinInt64
-		}
-		return math.MaxInt64
-	}
-	return c
-}
-
-func safeMul(a, b int64) (int64, bool) {
-	if a == 0 || b == 0 {
-		return 0, false
-	}
-
-	absOfB := b
-	if b < 0 {
-		absOfB = -b
-	}
-
-	absOfA := a
-	if a < 0 {
-		absOfA = -a
-	}
-
-	if absOfA > math.MaxInt64/absOfB {
-		return 0, true
-	}
-
-	return a * b, false
 }

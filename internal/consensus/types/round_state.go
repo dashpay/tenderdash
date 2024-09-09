@@ -128,7 +128,12 @@ func (rs *RoundState) RoundStateSimple() RoundStateSimple {
 		panic(err)
 	}
 
-	proTxHash := rs.Validators.GetProposer().ProTxHash
+	proposer, err := rs.CurrentRoundState.Base.ProposerSelector().GetProposer(rs.Height, rs.Round)
+	if err != nil {
+		panic(err)
+	}
+
+	proTxHash := proposer.ProTxHash
 	idx, _ := rs.Validators.GetByProTxHash(proTxHash)
 
 	return RoundStateSimple{
@@ -147,7 +152,11 @@ func (rs *RoundState) RoundStateSimple() RoundStateSimple {
 
 // NewRoundEvent returns the RoundState with proposer information as an event.
 func (rs *RoundState) NewRoundEvent() types.EventDataNewRound {
-	proTxHash := rs.Validators.GetProposer().ProTxHash
+	proposer, err := rs.CurrentRoundState.Base.ProposerSelector().GetProposer(rs.Height, rs.Round)
+	if err != nil {
+		panic(fmt.Errorf("failed to get proposer for height/round %d:%d: %v", rs.Height, rs.Round, err))
+	}
+	proTxHash := proposer.ProTxHash
 	idx, _ := rs.Validators.GetByProTxHash(proTxHash)
 
 	return types.EventDataNewRound{

@@ -188,7 +188,6 @@ func TestInitChainGenesisTime(t *testing.T) {
 	)
 	require.NoError(t, err)
 	vset.ThresholdPublicKey = recoveredThresholdPublicKey
-	proposerProTxHash := vset.GetProposer().ProTxHash
 
 	genDoc := tmtypes.GenesisDoc{
 		ChainID:            "test-chain",
@@ -208,6 +207,7 @@ func TestInitChainGenesisTime(t *testing.T) {
 	require.NoError(t, err)
 	stateStore := sm.NewStore(dbm.NewMemDB())
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
+	proposerProTxHash := smState.ProposerSelector().MustGetProposer(1, 0).ProTxHash
 	replayer := newBlockReplayer(stateStore, blockStore, &genDoc, eventBus, proxyApp, proposerProTxHash)
 
 	// use replayer to call initChain

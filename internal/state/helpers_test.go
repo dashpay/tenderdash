@@ -188,7 +188,7 @@ func makeRandomStateFromValidatorSet(
 ) sm.State {
 	return sm.State{
 		LastBlockHeight:                  height - 1,
-		Validators:                       lastValSet.CopyIncrementProposerPriority(1),
+		Validators:                       lastValSet.Copy(),
 		LastValidators:                   lastValSet.Copy(),
 		LastHeightConsensusParamsChanged: height,
 		ConsensusParams:                  *types.DefaultConsensusParams(),
@@ -209,7 +209,7 @@ func makeRandomStateFromConsensusParams(
 		LastBlockHeight:                  height - 1,
 		ConsensusParams:                  *consensusParams,
 		LastHeightConsensusParamsChanged: lastHeightConsensusParamsChanged,
-		Validators:                       valSet.CopyIncrementProposerPriority(1),
+		Validators:                       valSet.Copy(),
 		LastValidators:                   valSet.Copy(),
 		LastHeightValidatorsChanged:      height,
 		InitialHeight:                    1,

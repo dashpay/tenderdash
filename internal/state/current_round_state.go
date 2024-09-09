@@ -58,10 +58,10 @@ func NewCurrentRoundState(proTxHash types.ProTxHash, rp RoundParams, baseState S
 		Params:    rp,
 		Round:     rp.Round,
 	}
-	err := candidate.populate()
-	if err != nil {
+	if err := candidate.populate(); err != nil {
 		return CurrentRoundState{}, err
 	}
+
 	return candidate, nil
 }
 
@@ -92,6 +92,7 @@ func (candidate *CurrentRoundState) UpdateBlock(target *types.Block) error {
 
 // UpdateState updates state when the block is committed. State will contain data needed by next block.
 func (candidate *CurrentRoundState) UpdateState(target *State) error {
+	target.LastBlockRound = candidate.Round
 	target.LastAppHash = candidate.AppHash
 	target.LastResultsHash = candidate.ResultsHash
 	target.ConsensusParams = candidate.NextConsensusParams
@@ -192,11 +193,6 @@ func (candidate *CurrentRoundState) populateValsetUpdates() error {
 	newValSet, err := valsetUpdate(update, base.Validators, candidate.NextConsensusParams.Validator)
 	if err != nil {
 		return fmt.Errorf("validator set updates: %w", err)
-	}
-
-	// we take validator sets as they arrive from InitChainSource response
-	if updateSource != InitChainSource {
-		newValSet.IncrementProposerPriority(1 + candidate.Params.Round)
 	}
 
 	candidate.NextValidators = newValSet

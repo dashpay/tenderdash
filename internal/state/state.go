@@ -11,6 +11,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/dashpay/tenderdash/dash"
+	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
@@ -78,6 +79,7 @@ type State struct {
 
 	// LastBlockHeight=0 at genesis (ie. block(H=0) does not exist)
 	LastBlockHeight int64
+	LastBlockRound  int32
 	LastBlockID     types.BlockID
 	LastBlockTime   time.Time
 
@@ -126,6 +128,7 @@ func (state State) Copy() State {
 		InitialHeight: state.InitialHeight,
 
 		LastBlockHeight: state.LastBlockHeight,
+		LastBlockRound:  state.LastBlockRound,
 		LastBlockID:     state.LastBlockID,
 		LastBlockTime:   state.LastBlockTime,
 
@@ -188,6 +191,7 @@ func (state *State) ToProto() (*tmstate.State, error) {
 	sm.ChainID = state.ChainID
 	sm.InitialHeight = state.InitialHeight
 	sm.LastBlockHeight = state.LastBlockHeight
+	sm.LastBlockRound = state.LastBlockRound
 
 	sm.LastCoreChainLockedBlockHeight = state.LastCoreChainLockedBlockHeight
 
@@ -234,6 +238,7 @@ func FromProto(pb *tmstate.State) (*State, error) { //nolint:golint
 	}
 	state.LastBlockID = *bi
 	state.LastBlockHeight = pb.LastBlockHeight
+	state.LastBlockRound = pb.LastBlockRound
 	state.LastBlockTime = pb.LastBlockTime
 
 	state.LastCoreChainLockedBlockHeight = pb.LastCoreChainLockedBlockHeight
@@ -306,6 +311,27 @@ func (state State) ValidatorsAtHeight(height int64) *types.ValidatorSet {
 	default:
 		return state.Validators
 	}
+}
+
+// ProposerSelector returns a validator scoring strategy for the current state
+// that allows for selecting the proposer for the next block.
+//
+// ## Panics
+//
+// Panics if the proposer selector cannot be created, as the consensus cannot continue without it.
+func (state State) ProposerSelector() validatorscoring.ValidatorScoringStrategy {
+	vs, err := validatorscoring.NewValidatorScoringStrategy(
+		state.ConsensusParams,
+		state.LastValidators.Copy(),
+		state.LastBlockHeight,
+		state.LastBlockRound,
+		nil,
+	)
+	if err != nil {
+		panic(fmt.Errorf("failed to create validator scoring strategy: %w", err))
+	}
+
+	return vs
 }
 
 // NewStateChangeset returns a structure that will hold new changes to the state, that can be applied once the block is finalized

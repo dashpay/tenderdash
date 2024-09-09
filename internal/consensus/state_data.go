@@ -9,6 +9,7 @@ import (
 
 	"github.com/dashpay/tenderdash/config"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -26,15 +27,16 @@ var (
 
 // StateDataStore is a state-data store
 type StateDataStore struct {
-	mtx            sync.Mutex
-	roundState     cstypes.RoundState
-	committedState sm.State
-	metrics        *Metrics
-	logger         log.Logger
-	config         *config.ConsensusConfig
-	emitter        *eventemitter.EventEmitter
-	replayMode     bool
-	version        int64
+	mtx              sync.Mutex
+	roundState       cstypes.RoundState
+	committedState   sm.State
+	metrics          *Metrics
+	logger           log.Logger
+	config           *config.ConsensusConfig
+	emitter          *eventemitter.EventEmitter
+	replayMode       bool
+	version          int64
+	validatorScoring validatorscoring.ValidatorScoringStrategy
 }
 
 // NewStateDataStore creates and returns a new state-data store
@@ -86,14 +88,15 @@ func (s *StateDataStore) UpdateReplayMode(flag bool) {
 
 func (s *StateDataStore) load() StateData {
 	return StateData{
-		config:     s.config,
-		RoundState: s.roundState,
-		state:      s.committedState,
-		version:    s.version,
-		metrics:    s.metrics,
-		replayMode: s.replayMode,
-		store:      s,
-		logger:     s.logger,
+		config:           s.config,
+		RoundState:       s.roundState,
+		state:            s.committedState,
+		version:          s.version,
+		metrics:          s.metrics,
+		replayMode:       s.replayMode,
+		store:            s,
+		logger:           s.logger,
+		validatorScoring: s.validatorScoring,
 	}
 }
 
@@ -129,6 +132,8 @@ type StateData struct {
 	store      *StateDataStore
 	version    int64
 	replayMode bool
+
+	validatorScoring validatorscoring.ValidatorScoringStrategy
 }
 
 // Save persists the current state-data using store and updates state-data with the version inclusive
@@ -140,11 +145,17 @@ func (s *StateData) Save() error {
 	s.RoundState = stateData.RoundState
 	s.state = stateData.state
 	s.version = stateData.version
+	s.validatorScoring = stateData.validatorScoring
 	return nil
 }
 
 func (s *StateData) isProposer(proTxHash types.ProTxHash) bool {
-	return proTxHash != nil && bytes.Equal(s.Validators.GetProposer().ProTxHash.Bytes(), proTxHash.Bytes())
+	prop, err := s.validatorScoring.GetProposer(s.Height, s.Round)
+	if err != nil {
+		s.logger.Error("error getting proposer", "err", err, "height", s.Height, "round", s.Round)
+		return false
+	}
+	return proTxHash != nil && bytes.Equal(prop.ProTxHash.Bytes(), proTxHash.Bytes())
 }
 
 func (s *StateData) isValidator(proTxHash types.ProTxHash) bool {
@@ -177,11 +188,13 @@ func (s *StateData) updateRoundStep(round int32, step cstypes.RoundStepType) {
 	}
 	s.Round = round
 	s.Step = step
+
+	s.validatorScoring.UpdateScores(s.Height, round)
 }
 
 // Updates State and increments height to match that of state.
 // The round becomes 0 and cs.Step becomes cstypes.RoundStepNewHeight.
-func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
+func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockStore validatorscoring.BlockCommitStore) {
 	if s.CommitRound > -1 && 0 < s.Height && s.Height != state.LastBlockHeight {
 		panic(fmt.Sprintf(
 			"updateToState() expected state height of %v but found %v",
@@ -252,6 +265,24 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 		height = state.InitialHeight
 	}
 
+	if s.Validators == nil || !bytes.Equal(s.Validators.QuorumHash, validators.QuorumHash) {
+		s.logger.Info("Updating validators", "from", s.Validators.BasicInfoString(),
+			"to", validators.BasicInfoString())
+	}
+
+	s.Validators = validators
+	vs, err := validatorscoring.NewValidatorScoringStrategy(
+		state.ConsensusParams,
+		validators,
+		s.Height,
+		s.Round,
+		blockStore)
+
+	if err != nil {
+		panic(fmt.Sprintf("failed to initialize validator scoring strategy: %v", err))
+	}
+	s.validatorScoring = vs
+
 	s.logger.Trace("updating state height", "newHeight", height)
 
 	// RoundState fields
@@ -265,12 +296,6 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 		s.StartTime = s.CommitTime
 	}
 
-	if s.Validators == nil || !bytes.Equal(s.Validators.QuorumHash, validators.QuorumHash) {
-		s.logger.Info("Updating validators", "from", s.Validators.BasicInfoString(),
-			"to", validators.BasicInfoString())
-	}
-
-	s.Validators = validators
 	s.Proposal = nil
 	s.ProposalReceiveTime = time.Time{}
 	s.ProposalBlock = nil

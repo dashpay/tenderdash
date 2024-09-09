@@ -222,8 +222,11 @@ func (p *Proposaler) verifyProposal(proposal *types.Proposal, rs *cstypes.RoundS
 		stateValSet.QuorumType,
 		stateValSet.QuorumHash,
 	)
-	vset := rs.Validators
-	proposer := vset.GetProposer()
+	proposer, err := p.committedState.ProposerSelector().GetProposer(rs.Height, rs.Round)
+	if err != nil {
+		return fmt.Errorf("error getting proposer: %w", err)
+	}
+
 	if proposer.PubKey == nil {
 		return p.verifyProposalForNonValidatorSet(proposal, *rs)
 	}
@@ -255,11 +258,18 @@ func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, 
 	// We might have a commit already for the Round State
 	// We need to verify that the commit block id is equal to the proposal block id
 	if !proposal.BlockID.Equals(commit.BlockID) {
-		proposer := rs.Validators.GetProposer()
-		p.logger.Error("proposal blockID isn't the same as the commit blockID",
-			"height", proposal.Height,
-			"round", proposal.Round,
-			"proposer_proTxHash", proposer.ProTxHash.ShortString())
+		proposer, err := rs.CurrentRoundState.Base.ProposerSelector().GetProposer(proposal.Height, proposal.Round)
+		if err != nil {
+			p.logger.Error("error getting proposer",
+				"height", proposal.Height,
+				"round", proposal.Round,
+				"err", err)
+		} else {
+			p.logger.Error("proposal blockID isn't the same as the commit blockID",
+				"height", proposal.Height,
+				"round", proposal.Round,
+				"proposer_proTxHash", proposer.ProTxHash.ShortString())
+		}
 		return ErrInvalidProposalForCommit
 	}
 	return nil

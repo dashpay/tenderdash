@@ -133,7 +133,7 @@ func setupStateStore(t *testing.T, height int64) state.Store {
 		LastResultsHash:                  factory.RandomHash(),
 		LastBlockHeight:                  height,
 		LastValidators:                   valSet,
-		Validators:                       valSet.CopyIncrementProposerPriority(1),
+		Validators:                       valSet.Copy(),
 		LastHeightValidatorsChanged:      height + 1,
 		ConsensusParams:                  *params,
 		LastHeightConsensusParamsChanged: height + 1,

@@ -88,7 +88,7 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	c.RecordMetrics(stateData, height, block, lastBlockMeta)
 
 	// NewHeightStep!
-	stateData.updateToState(stateCopy, commit)
+	stateData.updateToState(stateCopy, commit, c.blockStore)
 	err = stateData.Save()
 	if err != nil {
 		return err

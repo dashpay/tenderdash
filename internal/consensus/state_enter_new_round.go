@@ -68,10 +68,6 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 
 	// increment validators if necessary
 	validators := stateData.Validators
-	if stateData.Round < round {
-		validators = validators.Copy()
-		validators.IncrementProposerPriority(round - stateData.Round)
-	}
 
 	// Setup new round
 	// we don't fire newStep for this step,

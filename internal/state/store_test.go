@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
@@ -14,6 +15,8 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
+	"github.com/dashpay/tenderdash/internal/evidence/mocks"
+	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 	"github.com/dashpay/tenderdash/types"
@@ -29,17 +32,20 @@ func TestStoreBootstrap(t *testing.T) {
 	stateStore := sm.NewStore(stateDB)
 	vals, _ := types.RandValidatorSet(3)
 
+	blockStore := mocks.NewBlockStore(t)
+	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
+
 	bootstrapState := makeRandomStateFromValidatorSet(vals, 100, 100)
 	require.NoError(t, stateStore.Bootstrap(bootstrapState))
 
 	// bootstrap should also save the previous validator
-	_, err := stateStore.LoadValidators(99)
+	_, err := stateStore.LoadValidators(99, blockStore)
 	require.NoError(t, err)
 
-	_, err = stateStore.LoadValidators(100)
+	_, err = stateStore.LoadValidators(100, blockStore)
 	require.NoError(t, err)
 
-	_, err = stateStore.LoadValidators(101)
+	_, err = stateStore.LoadValidators(101, blockStore)
 	require.Error(t, err)
 
 	state, err := stateStore.Load()
@@ -50,19 +56,26 @@ func TestStoreBootstrap(t *testing.T) {
 func TestStoreLoadValidators(t *testing.T) {
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
+	blockStore := mocks.NewBlockStore(t)
+	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
+
 	vals, _ := types.RandValidatorSet(3)
+	expectedVS, err := validatorscoring.NewValidatorScoringStrategy(types.ConsensusParams{}, vals.Copy(), 0, 0, blockStore)
 
 	// 1) LoadValidators loads validators using a height where they were last changed
 	// Note that only the current validators at height h are saved
-	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals, 1, 1)))
-	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals.CopyIncrementProposerPriority(1), 2, 1)))
-	loadedVals, err := stateStore.LoadValidators(2)
+	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals.Copy(), 1, 1)))
+	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals.Copy(), 2, 1)))
+	loadedValsH2, err := stateStore.LoadValidators(2, blockStore)
 	require.NoError(t, err)
 
-	_, err = stateStore.LoadValidators(3)
+	_, err = stateStore.LoadValidators(3, blockStore)
 	assert.Error(t, err, "no validator expected at this height")
 
-	require.Equal(t, vals.CopyIncrementProposerPriority(2), loadedVals)
+	err = expectedVS.UpdateScores(2, 0)
+	require.NoError(t, err)
+
+	require.Equal(t, expectedVS.ValidatorSet(), loadedValsH2)
 
 	// 2) LoadValidators loads validators using a checkpoint height
 
@@ -72,7 +85,7 @@ func TestStoreLoadValidators(t *testing.T) {
 	require.NoError(t, err)
 
 	// check that a request will go back to the last checkpoint
-	_, err = stateStore.LoadValidators(valSetCheckpointInterval + 1)
+	_, err = stateStore.LoadValidators(valSetCheckpointInterval+1, blockStore)
 	require.Error(t, err)
 	require.Equal(t, fmt.Sprintf("couldn't find validators at height %d (height %d was originally requested): "+
 		"value retrieved from db is empty",
@@ -82,11 +95,15 @@ func TestStoreLoadValidators(t *testing.T) {
 	err = stateStore.Save(makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval, 1))
 	require.NoError(t, err)
 
-	loadedVals, err = stateStore.LoadValidators(valSetCheckpointInterval)
+	loadedValsH2, err = stateStore.LoadValidators(valSetCheckpointInterval, blockStore)
 	require.NoError(t, err)
 	// ensure we have correct validator set loaded
-	require.Equal(t, vals.CopyIncrementProposerPriority(valSetCheckpointInterval), loadedVals)
-	require.NotEqual(t, vals.CopyIncrementProposerPriority(valSetCheckpointInterval-1), loadedVals)
+	// we were at h 2
+	require.NoError(t, expectedVS.UpdateScores(2+valSetCheckpointInterval-1, 0))
+	require.NotEqual(t, expectedVS.ValidatorSet(), loadedValsH2)
+
+	require.NoError(t, expectedVS.UpdateScores(2+valSetCheckpointInterval, 0))
+	require.Equal(t, expectedVS.ValidatorSet(), loadedValsH2)
 }
 
 // This benchmarks the speed of loading validators from different heights if there is no validator set change.
@@ -95,6 +112,8 @@ func TestStoreLoadValidators(t *testing.T) {
 // and 2) retrieve the validator set at the aforementioned height 1.
 func BenchmarkLoadValidators(b *testing.B) {
 	const valSetSize = 100
+	blockStore := mocks.NewBlockStore(b)
+	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
 
 	cfg, err := config.ResetTestRoot(b.TempDir(), "state_")
 	require.NoError(b, err)
@@ -125,7 +144,7 @@ func BenchmarkLoadValidators(b *testing.B) {
 
 		b.Run(fmt.Sprintf("height=%d", i), func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
-				_, err := stateStore.LoadValidators(int64(i))
+				_, err := stateStore.LoadValidators(int64(i), blockStore)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -159,6 +178,9 @@ func TestStoreLoadConsensusParams(t *testing.T) {
 }
 
 func TestPruneStates(t *testing.T) {
+	blockStore := mocks.NewBlockStore(t)
+	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
+
 	testcases := map[string]struct {
 		startHeight           int64
 		endHeight             int64
@@ -246,7 +268,7 @@ func TestPruneStates(t *testing.T) {
 			require.NoError(t, err)
 
 			for h := tc.pruneHeight; h <= tc.endHeight; h++ {
-				vals, err := stateStore.LoadValidators(h)
+				vals, err := stateStore.LoadValidators(h, blockStore)
 				require.NoError(t, err, h)
 				require.NotNil(t, vals, h)
 
@@ -262,7 +284,7 @@ func TestPruneStates(t *testing.T) {
 			emptyParams := types.ConsensusParams{}
 
 			for h := tc.startHeight; h < tc.pruneHeight; h++ {
-				vals, err := stateStore.LoadValidators(h)
+				vals, err := stateStore.LoadValidators(h, blockStore)
 				if h == tc.remainingValSetHeight {
 					require.NoError(t, err, h)
 					require.NotNil(t, vals, h)
