@@ -88,15 +88,14 @@ func (s *StateDataStore) UpdateReplayMode(flag bool) {
 
 func (s *StateDataStore) load() StateData {
 	return StateData{
-		config:           s.config,
-		RoundState:       s.roundState,
-		state:            s.committedState,
-		version:          s.version,
-		metrics:          s.metrics,
-		replayMode:       s.replayMode,
-		store:            s,
-		logger:           s.logger,
-		validatorScoring: s.validatorScoring,
+		config:     s.config,
+		RoundState: s.roundState,
+		state:      s.committedState,
+		version:    s.version,
+		metrics:    s.metrics,
+		replayMode: s.replayMode,
+		store:      s,
+		logger:     s.logger,
 	}
 }
 
@@ -132,8 +131,6 @@ type StateData struct {
 	store      *StateDataStore
 	version    int64
 	replayMode bool
-
-	validatorScoring validatorscoring.ValidatorScoringStrategy
 }
 
 // Save persists the current state-data using store and updates state-data with the version inclusive
@@ -145,12 +142,11 @@ func (s *StateData) Save() error {
 	s.RoundState = stateData.RoundState
 	s.state = stateData.state
 	s.version = stateData.version
-	s.validatorScoring = stateData.validatorScoring
 	return nil
 }
 
 func (s *StateData) isProposer(proTxHash types.ProTxHash) bool {
-	prop, err := s.validatorScoring.GetProposer(s.Height, s.Round)
+	prop, err := s.ProposerSelector.GetProposer(s.Height, s.Round)
 	if err != nil {
 		s.logger.Error("error getting proposer", "err", err, "height", s.Height, "round", s.Round)
 		return false
@@ -189,7 +185,11 @@ func (s *StateData) updateRoundStep(round int32, step cstypes.RoundStepType) {
 	s.Round = round
 	s.Step = step
 
-	s.validatorScoring.UpdateScores(s.Height, round)
+	if err := s.ProposerSelector.UpdateScores(s.Height, round); err != nil {
+		s.logger.Error("error updating proposer scores",
+			"height", s.Height, "round", round,
+			"err", err)
+	}
 }
 
 // Updates State and increments height to match that of state.
@@ -234,7 +234,6 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 	}
 
 	// Reset fields based on state.
-	validators := state.Validators
 
 	switch {
 	case state.LastBlockHeight == 0: // Very first commit should be empty.
@@ -265,29 +264,45 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 		height = state.InitialHeight
 	}
 
+	// state.Validators contain validator set at (state.LastBlockHeight, 0)
+	validators := state.Validators
+
 	if s.Validators == nil || !bytes.Equal(s.Validators.QuorumHash, validators.QuorumHash) {
 		s.logger.Info("Updating validators", "from", s.Validators.BasicInfoString(),
 			"to", validators.BasicInfoString())
 	}
 
 	s.Validators = validators
-	vs, err := validatorscoring.NewValidatorScoringStrategy(
-		state.ConsensusParams,
-		validators,
-		s.Height,
-		s.Round,
-		blockStore)
+	var err error
+	if s.state.LastBlockHeight == 0 {
+		s.ProposerSelector, err = validatorscoring.NewProposerStrategy(
+			state.ConsensusParams,
+			s.Validators,
+			state.InitialHeight,
+			0,
+			nil,
+		)
+	} else {
+		// validators == state.Validators contain validator set at (state.LastBlockHeight, 0)
+		s.ProposerSelector, err = validatorscoring.NewProposerStrategy(
+			state.ConsensusParams,
+			s.Validators,
+			state.LastBlockHeight,
+			0,
+			nil,
+		)
+
+	}
 
 	if err != nil {
-		panic(fmt.Sprintf("failed to initialize validator scoring strategy: %v", err))
+		s.logger.Error("error creating proposer selector",
+			"height", s.state.LastBlockHeight, "round", 0,
+			"validators", s.Validators,
+			"err", err)
+		panic(fmt.Sprintf("error creating proposer selector: %v", err))
 	}
-	s.validatorScoring = vs
 
 	s.logger.Trace("updating state height", "newHeight", height)
-
-	// RoundState fields
-	s.updateHeight(height)
-	s.updateRoundStep(0, cstypes.RoundStepNewHeight)
 
 	if s.CommitTime.IsZero() {
 		// "Now" makes it easier to sync up dev nodes.
@@ -313,6 +328,10 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 	s.TriggeredTimeoutPrecommit = false
 
 	s.state = state
+
+	// RoundState fields
+	s.updateHeight(height)
+	s.updateRoundStep(0, cstypes.RoundStepNewHeight)
 }
 
 func (s *StateData) updateHeight(height int64) {

@@ -222,7 +222,8 @@ func (p *Proposaler) verifyProposal(proposal *types.Proposal, rs *cstypes.RoundS
 		stateValSet.QuorumType,
 		stateValSet.QuorumHash,
 	)
-	proposer, err := p.committedState.ProposerSelector().GetProposer(rs.Height, rs.Round)
+
+	proposer, err := rs.ProposerSelector.GetProposer(rs.Height, rs.Round)
 	if err != nil {
 		return fmt.Errorf("error getting proposer: %w", err)
 	}
@@ -258,7 +259,7 @@ func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, 
 	// We might have a commit already for the Round State
 	// We need to verify that the commit block id is equal to the proposal block id
 	if !proposal.BlockID.Equals(commit.BlockID) {
-		proposer, err := rs.CurrentRoundState.Base.ProposerSelector().GetProposer(proposal.Height, proposal.Round)
+		proposer, err := rs.ProposerSelector.GetProposer(proposal.Height, proposal.Round)
 		if err != nil {
 			p.logger.Error("error getting proposer",
 				"height", proposal.Height,

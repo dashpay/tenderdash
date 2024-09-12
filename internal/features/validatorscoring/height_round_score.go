@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sync"
 
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/types"
@@ -19,6 +20,8 @@ type heightRoundBasedScoringStrategy struct {
 	round  int32
 
 	commitStore BlockCommitStore
+
+	mtx sync.Mutex
 }
 
 // NewheightRoundBasedScoringStrategy creates a new scoring strategy that considers both height and round.
@@ -46,13 +49,20 @@ func NewHeightRoundBasedScoringStrategy(vset *types.ValidatorSet,
 	}
 
 	return &heightRoundBasedScoringStrategy{
-		valSet: vset,
-		height: currentHeight,
-		round:  currentRound,
+		valSet:      vset,
+		height:      currentHeight,
+		round:       currentRound,
+		commitStore: commitStore,
 	}, nil
 }
 
 func (s *heightRoundBasedScoringStrategy) UpdateScores(h int64, r int32) error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	// ensure all scores are correctly adjusted
+	s.valSet.Recalculate()
+
 	if err := s.updateHeight(h, r); err != nil {
 		return fmt.Errorf("update validator set for height: %w", err)
 	}
@@ -66,9 +76,11 @@ func (s *heightRoundBasedScoringStrategy) UpdateScores(h int64, r int32) error {
 	return nil
 }
 
+// updateHeight updates the validator scores from the current height to the newHeight, round 0.
 func (s *heightRoundBasedScoringStrategy) updateHeight(newHeight int64, newRound int32) error {
 	heightDiff := newHeight - s.height
 	if heightDiff == 0 {
+		// NOOP
 		return nil
 	}
 	if heightDiff < 0 {
@@ -76,38 +88,35 @@ func (s *heightRoundBasedScoringStrategy) updateHeight(newHeight int64, newRound
 		return fmt.Errorf("cannot go back in height: %d -> %d", s.height, newHeight)
 	}
 
-	if heightDiff == 1 && newRound == 0 {
+	if heightDiff == 1 && newRound == 0 && s.commitStore == nil {
 		// we assume it's just new round, and we have valset for the last round of previous height
 		s.updatePriorities(1)
 		return nil
 	}
 
-	if heightDiff > 1 {
-		if s.commitStore == nil {
-			return fmt.Errorf("block store required to update validator scores from %d:%d to %d:%d", s.height, s.round, newHeight, newRound)
-		}
-
-		// process all heights from current height to new height, exclusive (as the new height is not processed yet, and
-		// we have target round provided anyway).
-		for h := s.height; h < newHeight; h++ {
-			// get the last commit for the height
-			commit := s.commitStore.LoadBlockCommit(h)
-			if commit == nil {
-				return fmt.Errorf("cannot find commit for height %d", h)
-			}
-
-			// go from round 0 to commit round + 1 (what means "h+1, round 0"
-			if s.updateRound(int32(commit.Round+1)) != nil {
-				return fmt.Errorf("cannot update validator scores to round %d:%d", h, commit.Round)
-			}
-			// ok, we're at h+1, round 0
-		}
-
-		// so we are at newheight, round 0
-		return nil
+	if s.commitStore == nil {
+		return fmt.Errorf("block store required to update validator scores from %d:%d to %d:%d", s.height, s.round, newHeight, newRound)
 	}
 
-	return fmt.Errorf("cannot update height/round from %d:%d to %d:%d", s.height, s.round, newHeight, newRound)
+	// process all heights from current height to new height, exclusive (as the new height is not processed yet, and
+	// we have target round provided anyway).
+	for h := s.height; h < newHeight; h++ {
+		// get the last commit for the height
+		commit := s.commitStore.LoadBlockCommit(h)
+		if commit == nil {
+			return fmt.Errorf("cannot find commit for height %d", h)
+		}
+
+		// go from round 0 to commit round + 1 (what means "h+1, round 0"
+		if s.updateRound(commit.Round) != nil {
+			return fmt.Errorf("cannot update validator scores to round %d:%d", h, commit.Round)
+		}
+		s.updatePriorities(1)
+		// ok, we're at h+1, round 0
+	}
+
+	// so we are at newheight, round 0
+	return nil
 }
 
 func (s *heightRoundBasedScoringStrategy) updateRound(newRound int32) error {
@@ -124,20 +133,16 @@ func (s *heightRoundBasedScoringStrategy) updateRound(newRound int32) error {
 }
 
 func (s *heightRoundBasedScoringStrategy) GetProposer(height int64, round int32) (*types.Validator, error) {
-	// go to the correct height
-	if s.UpdateScores(height, 0) != nil {
-		return nil, fmt.Errorf("cannot update scores for height %d round %d", height, round)
+	// no locking here, as we rely on locks inside UpdateScores
+	if err := s.UpdateScores(height, round); err != nil {
+		return nil, fmt.Errorf("cannot update scores for height %d round %d: %w", height, round, err)
 	}
 
-	// advance a copy of the validator set to the correct round
-	copied := s.Copy().(*heightRoundBasedScoringStrategy)
-	if round > 0 {
-		copied.updatePriorities(int64(round))
-	}
-
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
 	val := s.getValWithMostPriority()
 	if val == nil {
-		return nil, fmt.Errorf("no validator found")
+		return nil, fmt.Errorf("no validator found at height %d, round %d", height, round)
 	}
 	return val, nil
 }
@@ -150,14 +155,20 @@ func (s *heightRoundBasedScoringStrategy) MustGetProposer(height int64, round in
 	return proposer
 }
 
+// Not thread safe
 func (s *heightRoundBasedScoringStrategy) ValidatorSet() *types.ValidatorSet {
 	return s.valSet
 }
 
 func (s *heightRoundBasedScoringStrategy) Copy() ValidatorScoringStrategy {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
 	return &heightRoundBasedScoringStrategy{
-		valSet: s.valSet.Copy(),
-		height: s.height,
+		valSet:      s.valSet.Copy(),
+		height:      s.height,
+		round:       s.round,
+		commitStore: s.commitStore,
 	}
 }
 

@@ -84,7 +84,7 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	c.scheduler.ScheduleTimeout(stateData.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
 
 	if !isProposer {
-		prop, err := stateData.validatorScoring.GetProposer(stateData.Height, stateData.Round)
+		prop, err := stateData.ProposerSelector.GetProposer(stateData.Height, stateData.Round)
 		if err != nil {
 			logger.Error("failed to get proposer", "err", err)
 			return nil // not a critical error, as we don't propose anyway

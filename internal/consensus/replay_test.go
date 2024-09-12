@@ -495,7 +495,7 @@ func createSignSendProposal(ctx context.Context,
 	height := stateData.RoundState.Height
 	round := stateData.RoundState.Round
 
-	proposer := stateData.validatorScoring.MustGetProposer(height, round)
+	proposer := stateData.ProposerSelector.MustGetProposer(height, round)
 	proposerVs := findValByProTxHash(ctx, t, vss, proposer.ProTxHash)
 	proposerCs := findStateByProTxHash(t, css, proposer.ProTxHash)
 

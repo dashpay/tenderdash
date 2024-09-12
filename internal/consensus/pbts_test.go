@@ -293,7 +293,7 @@ type timestampedEvent struct {
 
 func (p *pbtsTestHarness) pickProposer() types.PrivValidator {
 	stateData := p.observedState.GetStateData()
-	proposer := stateData.validatorScoring.MustGetProposer(p.currentHeight, p.currentRound)
+	proposer := stateData.ProposerSelector.MustGetProposer(p.currentHeight, p.currentRound)
 	p.observedState.logger.Debug("picking proposer", "protxhash", proposer.ProTxHash)
 
 	allVals := append(p.otherValidators, p.observedValidator)

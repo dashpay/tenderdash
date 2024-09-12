@@ -23,7 +23,9 @@ import (
 	"github.com/dashpay/tenderdash/dash"
 	"github.com/dashpay/tenderdash/dash/llmq"
 	"github.com/dashpay/tenderdash/internal/evidence/mocks"
+	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
 	sm "github.com/dashpay/tenderdash/internal/state"
+	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 	"github.com/dashpay/tenderdash/types"
@@ -554,6 +556,8 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	updatedState2, err := updatedState.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
 
+	valsetScoresNewHeight(t, &updatedState2)
+
 	require.Equal(t, len(updatedState2.Validators.Validators), 2)
 	_, updatedVal1 := updatedState2.Validators.GetByProTxHash(val1ProTxHash)
 	_, addedVal2 := updatedState2.Validators.GetByProTxHash(val2ProTxHash)
@@ -595,6 +599,8 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	updatedState3, err := updatedState2.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
 
+	valsetScoresNewHeight(t, &updatedState3)
+
 	require.Equal(t, len(updatedState3.Validators.Validators), 2)
 	_, prevVal1 := updatedState2.Validators.GetByProTxHash(val1ProTxHash)
 	_, prevVal2 := updatedState2.Validators.GetByProTxHash(val2ProTxHash)
@@ -634,6 +640,21 @@ func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
 	assert.Equal(t, wantVal1Prio, updatedVal1.ProposerPriority)
 }
 
+func valsetScoresNewHeight(t *testing.T, state *sm.State) *types.Validator {
+	ps, err := validatorscoring.NewProposerStrategy(
+		state.ConsensusParams,
+		state.Validators,
+		state.LastBlockHeight,
+		state.LastBlockRound,
+		nil)
+
+	require.NoError(t, err)
+	err = ps.UpdateScores(state.LastBlockHeight+1, 0)
+	require.NoError(t, err)
+
+	return ps.MustGetProposer(state.LastBlockHeight+1, 0)
+}
+
 func TestProposerPriorityProposerAlternates(t *testing.T) {
 	// Regression test that would fail if the inner workings of
 	// IncrementProposerPriority change.
@@ -653,7 +674,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	// reset state validators to above validator, the threshold key is just the validator key since there is only 1 validator
 	quorumHash := crypto.RandQuorumHash()
 	state.Validators = types.NewValidatorSet([]*types.Validator{val1}, val1PubKey, btcjson.LLMQType_5_60, quorumHash, true)
-
+	valsetScoresNewHeight(t, &state)
 	// we only have one validator:
 	assert.Equal(t, val1ProTxHash, state.Validators.Proposer.ProTxHash)
 
@@ -671,6 +692,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 	updatedState, err := state.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
+	updatedState.Validators.Recalculate()
 
 	// 0 + 10 (initial prio) - 10 (avg) - 10 (mostest - total) = -10
 	totalPower := val1VotingPower
@@ -694,6 +716,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 	updatedState2, err := updatedState.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
+	updatedState2.Validators.Recalculate()
 
 	require.Equal(t, len(updatedState2.Validators.Validators), 2)
 
@@ -735,8 +758,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	assert.NoError(t, err)
 	updatedState3, err := updatedState2.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
-
-	assert.Equal(t, updatedState3.Validators.Proposer.ProTxHash, updatedState3.Validators.Proposer.ProTxHash)
+	updatedState3.Validators.Recalculate()
 
 	// assert.Equal(t, updatedState3.Validators, updatedState2.Validators)
 	_, updatedVal1 = updatedState3.Validators.GetByProTxHash(val1ProTxHash)
@@ -941,7 +963,7 @@ func TestStoreLoadValidatorsIncrementsProposerPriority(t *testing.T) {
 	require.NoError(t, err)
 
 	blockStore := mocks.NewBlockStore(t)
-	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
+	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{}).Maybe()
 
 	state2 := state.Copy()
 	state2.LastBlockHeight++
@@ -968,7 +990,6 @@ func TestStoreLoadValidatorsIncrementsProposerPriority(t *testing.T) {
 func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	const valSetSize = 7
 	blockStore := mocks.NewBlockStore(t)
-	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
 
 	// ====== GENESIS STATE, height 1 ====== //
 
@@ -1048,7 +1069,7 @@ func TestStateMakeBlock(t *testing.T) {
 	stateVersion.App = kvstore.ProtocolVersion
 	var height int64 = 2
 	state.LastBlockHeight = height - 1
-	proposerProTxHash := state.ProposerSelector().MustGetProposer(height, 0).ProTxHash
+	proposerProTxHash := sf.GetProposerFromState(state, height, 0).ProTxHash
 	block, err := statefactory.MakeBlock(state, height, new(types.Commit), 0)
 	require.NoError(t, err)
 

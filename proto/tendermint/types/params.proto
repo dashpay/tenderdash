@@ -61,9 +61,17 @@ message ValidatorParams {
 }
 
 // VersionParams contains the ABCI application version.
-// DEPRECATED. This will be removed in a future release.
 message VersionParams {
   uint64 app_version = 1;
+  // Version of consensus protocol, used to upgrade consensus without hard forks
+  ConsensusVersion consensus_version = 2;
+
+  enum ConsensusVersion {
+    // CONSENSUS_VERSION_0 is the original version of the consensus protocol.
+    CONSENSUS_VERSION_0 = 0;
+    // CONSENSUS_VERSION_1 changes proposer selection algorithm to not double-propose when previous proposer is offline.
+    CONSENSUS_VERSION_1 = 1;
+  }
 }
 
 // HashedParams is a subset of ConsensusParams.

@@ -96,6 +96,8 @@ func NewValidatorSet(valz []*Validator, newThresholdPublicKey crypto.PubKey, quo
 		panic(fmt.Sprintf("Cannot create validator set: %v", err))
 	}
 
+	vals.Recalculate()
+
 	return vals
 }
 
@@ -264,6 +266,17 @@ func (vals *ValidatorSet) RescalePriorities(diffMax int64) {
 	vals.shiftByAvgProposerPriority()
 }
 
+// Recaulculate recalculates all dynamic/cached parameters for the validator set, like scores, total voting power, etc.
+func (vals *ValidatorSet) Recalculate() {
+	if vals.IsNilOrEmpty() {
+		return
+	}
+
+	vals.updateTotalVotingPower()
+	vals.Proposer = vals.findProposer()
+	vals.RescalePriorities(PriorityWindowSizeFactor * vals.TotalVotingPower())
+}
+
 // Should not be called on an empty validator set.
 func (vals *ValidatorSet) computeAvgProposerPriority() int64 {
 	n := int64(len(vals.Validators))
@@ -329,7 +342,7 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 	if vals == nil {
 		return nil
 	}
-	return &ValidatorSet{
+	valset := &ValidatorSet{
 		Validators:         validatorListCopy(vals.Validators),
 		Proposer:           vals.Proposer,
 		ThresholdPublicKey: vals.ThresholdPublicKey,
@@ -337,6 +350,9 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 		QuorumType:         vals.QuorumType,
 		HasPublicKeys:      vals.HasPublicKeys,
 	}
+	valset.Recalculate()
+
+	return valset
 }
 
 // HasProTxHash returns true if proTxHash given is in the validator set, false -
@@ -781,6 +797,7 @@ func (vals *ValidatorSet) updateWithChangeSet(changes []*Validator, allowDeletes
 
 	// Compute the priorities for updates.
 	computeNewPriorities(updates, vals, tvpAfterUpdatesBeforeRemovals)
+	vals.updateTotalVotingPower()
 
 	// Apply updates and removals.
 	vals.applyUpdates(updates)

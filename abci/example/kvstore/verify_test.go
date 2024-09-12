@@ -3,6 +3,7 @@ package kvstore
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"testing"
 
@@ -11,6 +12,7 @@ import (
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
+	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -85,7 +87,7 @@ func (e *blockExecutor) createBlock(txs types.Txs, commit *types.Commit) *types.
 	if commit == nil {
 		commit = &types.Commit{}
 	}
-	proposer := e.state.ProposerSelector().MustGetProposer(e.state.LastBlockHeight+1, 0)
+	proposer := getProposerFromState(e.state, e.state.LastBlockHeight+1, 0)
 	block := e.state.MakeBlock(
 		e.state.LastBlockHeight+1,
 		txs,
@@ -131,4 +133,19 @@ func (e *blockExecutor) commit(ctx context.Context, block *types.Block) (*types.
 		}
 	}
 	return vs.MakeCommit(), nil
+}
+
+func getProposerFromState(state sm.State, height int64, round int32) *types.Validator {
+	vs, err := validatorscoring.NewProposerStrategy(
+		state.ConsensusParams,
+		state.Validators.Copy(),
+		state.LastBlockHeight,
+		state.LastBlockRound,
+		nil,
+	)
+	if err != nil {
+		panic(fmt.Errorf("failed to create validator scoring strategy: %w", err))
+	}
+	proposer := vs.MustGetProposer(height, round)
+	return proposer
 }

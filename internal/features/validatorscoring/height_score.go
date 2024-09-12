@@ -7,7 +7,7 @@ import (
 )
 
 type heightBasedScoringStrategy struct {
-	inner ValidatorScoringStrategy
+	inner *heightRoundBasedScoringStrategy
 }
 
 // NewHeightBasedScoringStrategy creates a new height-based scoring strategy
@@ -24,26 +24,48 @@ type heightBasedScoringStrategy struct {
 //
 // * `vset` - the validator set; it must not be empty and can be modified in place
 // * `currentHeight` - the current height for which vset has correct scores
-func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64) (ValidatorScoringStrategy, error) {
+func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64, bs BlockCommitStore) (ValidatorScoringStrategy, error) {
 	if vset.IsNilOrEmpty() {
 		return nil, fmt.Errorf("empty validator set")
 	}
 
-	heightRoundStrategy, err := NewHeightRoundBasedScoringStrategy(vset, currentHeight, 0, nil)
+	heightRoundStrategy, err := NewHeightRoundBasedScoringStrategy(vset, currentHeight, 0, bs)
 	if err != nil {
 		return nil, fmt.Errorf("error creating inner scoring strategy: %v", err)
 	}
-
+	s, ok := heightRoundStrategy.(*heightRoundBasedScoringStrategy)
+	if !ok {
+		return nil, fmt.Errorf("inner scoring strategy is not of type heightRoundBasedScoringStrategy")
+	}
 	return &heightBasedScoringStrategy{
-		inner: heightRoundStrategy,
+		inner: s,
 	}, nil
 }
 
-func (s *heightBasedScoringStrategy) UpdateScores(h int64, r int32) error {
-	return s.inner.UpdateScores(h, 0)
+func (s *heightBasedScoringStrategy) UpdateScores(newHeight int64, _round int32) error {
+	heightDiff := newHeight - s.inner.height
+	if heightDiff == 0 {
+		// NOOP
+		return nil
+	}
+	if heightDiff < 0 {
+		// TODO: handle going back in height
+		return fmt.Errorf("cannot go back in height: %d -> %d", s.inner.height, newHeight)
+	}
+
+	for h := s.inner.height; h < newHeight; h++ {
+		s.inner.incrementProposerPriority()
+	}
+	s.inner.valSet.Recalculate()
+	s.inner.height = newHeight
+
+	return nil
 }
 
 func (s *heightBasedScoringStrategy) GetProposer(height int64, round int32) (*types.Validator, error) {
+	if err := s.UpdateScores(height, 0); err != nil {
+		return nil, err
+	}
 	if round == 0 {
 		return s.inner.GetProposer(height, round)
 	}
@@ -78,7 +100,7 @@ func (s *heightBasedScoringStrategy) ValidatorSet() *types.ValidatorSet {
 }
 
 func (s *heightBasedScoringStrategy) Copy() ValidatorScoringStrategy {
-	innerCopy := s.inner.Copy()
+	innerCopy := s.inner.Copy().(*heightRoundBasedScoringStrategy)
 	return &heightBasedScoringStrategy{
 		inner: innerCopy,
 	}

@@ -498,18 +498,20 @@ func (store dbStore) SaveValidatorSets(lowerHeight, upperHeight int64, vals *typ
 
 //-----------------------------------------------------------------------------
 
-// LoadValidators loads the ValidatorSet for a given height.
+// LoadValidators loads the ValidatorSet for a given height and round 0.
+//
 // Returns ErrNoValSetForHeight if the validator set can't be found for this height.
 func (store dbStore) LoadValidators(height int64, commitStore validatorscoring.BlockCommitStore) (*types.ValidatorSet, error) {
-
 	valInfo, err := loadValidatorsInfo(store.db, height)
 	if err != nil {
 		return nil, ErrNoValSetForHeight{Height: height, Err: err}
 	}
+	var lastStoredHeight int64
+
 	if valInfo.ValidatorSet == nil {
-		lastStoredHeight := lastStoredHeightFor(height, valInfo.LastHeightChanged)
-		valInfo2, err := loadValidatorsInfo(store.db, lastStoredHeight)
-		if err != nil || valInfo2.ValidatorSet == nil {
+		lastStoredHeight = lastStoredHeightFor(height, valInfo.LastHeightChanged)
+		valInfo, err = loadValidatorsInfo(store.db, lastStoredHeight)
+		if err != nil || valInfo.ValidatorSet == nil {
 			return nil,
 				fmt.Errorf("couldn't find validators at height %d (height %d was originally requested): %w",
 					lastStoredHeight,
@@ -517,36 +519,46 @@ func (store dbStore) LoadValidators(height int64, commitStore validatorscoring.B
 					err,
 				)
 		}
-
-		vs, err := types.ValidatorSetFromProto(valInfo2.ValidatorSet)
-		if err != nil {
-			return nil, err
-		}
-
-		cp, err := store.LoadConsensusParams(lastStoredHeight)
-		if err != nil {
-			return nil, fmt.Errorf("loading validators needs consensus params at height %d: %w", height, err)
-		}
-
-		strategy, err := validatorscoring.NewValidatorScoringStrategy(cp, vs, lastStoredHeight, 0, commitStore)
-		strategy.UpdateScores(height, 0)
-
-		vi2, err := vs.ToProto()
-		if err != nil {
-			return nil, err
-		}
-
-		valInfo2.ValidatorSet = vi2
-		valInfo = valInfo2
+	} else {
+		lastStoredHeight = valInfo.LastHeightChanged
 	}
 
-	vip, err := types.ValidatorSetFromProto(valInfo.ValidatorSet)
+	valSet, err := types.ValidatorSetFromProto(valInfo.ValidatorSet)
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Printf("loaded validators at %d %v", height, vip)
 
-	return vip, nil
+	cp := *types.DefaultConsensusParams()
+
+	// using proposer strategy defined in the consensus params at height H, process all rounds at that height.
+	var round int32
+	for h := lastStoredHeight + 1; h <= height; h++ {
+		// if cp cannot be loaded, we use previous ones - or default
+		if retrievedConsensusParams, err := store.LoadConsensusParams(h); err == nil {
+			cp = retrievedConsensusParams
+		}
+
+		// valSet is from height `h-1`, round `round`
+		// TODO: ensure we save validator set at round 0, so that initial round == 0 here.
+		strategy, err := validatorscoring.NewProposerStrategy(cp, valSet, h-1, round, commitStore)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create validator scoring strategy: %w", err)
+		}
+
+		// load new round; we default to round 0 for not committed height
+		round = 0
+		if commit := commitStore.LoadBlockCommit(h); commit != nil {
+			round = commit.Round
+		}
+		if err = strategy.UpdateScores(h, round); err != nil {
+			return nil, fmt.Errorf("failed to update validator scores at height %d, round %d: %w",
+				h, round, err)
+		}
+
+		// not needed as original valSet still points to the same valSet, but doing it for consistency
+		valSet = strategy.ValidatorSet()
+	}
+	return valSet, nil
 }
 
 func lastStoredHeightFor(height, lastHeightChanged int64) int64 {

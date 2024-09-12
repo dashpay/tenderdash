@@ -73,7 +73,8 @@ type ValidatorParams struct {
 }
 
 type VersionParams struct {
-	AppVersion uint64 `json:"app_version,string"`
+	AppVersion       uint64 `json:"app_version,string"`
+	ConsensusVersion int32  `json:"consensus,string"`
 }
 
 // SynchronyParams influence the validity of block timestamps.
@@ -146,7 +147,8 @@ func DefaultValidatorParams() ValidatorParams {
 
 func DefaultVersionParams() VersionParams {
 	return VersionParams{
-		AppVersion: 0,
+		AppVersion:       0,
+		ConsensusVersion: 0,
 	}
 }
 
@@ -439,7 +441,8 @@ func (params *ConsensusParams) ToProto() tmproto.ConsensusParams {
 			PubKeyTypes: params.Validator.PubKeyTypes,
 		},
 		Version: &tmproto.VersionParams{
-			AppVersion: params.Version.AppVersion,
+			AppVersion:       params.Version.AppVersion,
+			ConsensusVersion: tmproto.VersionParams_ConsensusVersion(params.Version.ConsensusVersion),
 		},
 		Synchrony: &tmproto.SynchronyParams{
 			MessageDelay: &params.Synchrony.MessageDelay,
@@ -472,7 +475,8 @@ func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams 
 			PubKeyTypes: pbParams.Validator.PubKeyTypes,
 		},
 		Version: VersionParams{
-			AppVersion: pbParams.Version.AppVersion,
+			AppVersion:       pbParams.Version.AppVersion,
+			ConsensusVersion: int32(pbParams.Version.ConsensusVersion),
 		},
 	}
 	if pbParams.Synchrony != nil {

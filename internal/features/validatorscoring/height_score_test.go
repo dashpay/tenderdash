@@ -30,7 +30,7 @@ func TestProposerSelection1(t *testing.T) {
 	}, bls12381.GenPrivKey().PubKey(), btcjson.LLMQType_5_60, crypto.RandQuorumHash(), true)
 	var proposers []string
 
-	vs, err := validatorscoring.NewValidatorScoringStrategy(types.ConsensusParams{}, vset, 0, 0, nil)
+	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset, 0, 0, nil)
 	require.NoError(t, err)
 
 	for height := int64(0); height < 99; height++ {
@@ -60,7 +60,7 @@ func TestProposerSelection2(t *testing.T) {
 	addresses[2] = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 	vals, _ := types.GenerateValidatorSet(types.NewValSetParam(proTxHashes))
-	vs, err := validatorscoring.NewValidatorScoringStrategy(types.ConsensusParams{}, vals.Copy(), 0, 0, nil)
+	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vals.Copy(), 0, 0, nil)
 	require.NoError(t, err)
 
 	height := 0
@@ -94,7 +94,7 @@ func TestProposerSelection3(t *testing.T) {
 
 	vset, _ := types.GenerateValidatorSet(types.NewValSetParam(proTxHashes))
 
-	vs, err := validatorscoring.NewValidatorScoringStrategy(types.ConsensusParams{}, vset.Copy(), 0, 0, nil)
+	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), 0, 0, nil)
 	require.NoError(t, err)
 
 	proposerOrder := make([]*types.Validator, 4)
@@ -109,7 +109,7 @@ func TestProposerSelection3(t *testing.T) {
 		i int
 		j int32
 	)
-	vs, err = validatorscoring.NewValidatorScoringStrategy(types.ConsensusParams{}, vset.Copy(), 0, 0, nil)
+	vs, err = validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), 0, 0, nil)
 	require.NoError(t, err)
 
 	for ; i < 10000; i++ {
@@ -158,13 +158,60 @@ func TestAveragingInIncrementProposerPriority(t *testing.T) {
 	}
 	for i, tc := range tcs {
 		// work on copy to have the old ProposerPriorities:
-		vs, err := validatorscoring.NewValidatorScoringStrategy(types.ConsensusParams{}, tc.vs.Copy(), 0, 0, nil)
+		vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, tc.vs.Copy(), 0, 0, nil)
 		require.NoError(t, err)
 		require.NoError(t, vs.UpdateScores(int64(tc.times), 0))
 		newVset := vs.ValidatorSet()
 		for _, val := range tc.vs.Validators {
 			_, updatedVal := newVset.GetByProTxHash(val.ProTxHash)
 			assert.Equal(t, updatedVal.ProposerPriority, val.ProposerPriority-tc.avg, "test case: %v", i)
+		}
+	}
+}
+
+func setupTestHeightScore(t *testing.T, genesisHeight int64) ([]crypto.ProTxHash, validatorscoring.ValidatorScoringStrategy) {
+	var proTxHashes []crypto.ProTxHash
+	for i := byte(1); i <= 5; i++ {
+		protx := make([]byte, 32)
+		protx[0] = i
+		proTxHashes = append(proTxHashes, protx)
+	}
+
+	vset, _ := types.GenerateValidatorSet(types.NewValSetParam(proTxHashes))
+
+	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), genesisHeight, 0, nil)
+	require.NoError(t, err)
+
+	return proTxHashes, vs
+}
+
+func TestHeightScoreH(t *testing.T) {
+	const genesisHeight = 1
+
+	proTxHashes, vs := setupTestHeightScore(t, genesisHeight)
+
+	// test that the proposer changes after the height is updated
+	for h := int64(1); h < 100; h++ {
+		proposer := vs.MustGetProposer(h, 0)
+		pos := (h - genesisHeight) % int64(len(proTxHashes))
+		assert.Equal(t, proTxHashes[pos], proposer.ProTxHash, "height %d", h)
+		require.NoError(t, vs.UpdateScores(h, 0), "height %d", h)
+	}
+}
+
+// TestHeightScoreRound tests that round proposers don't affect the height proposers
+func TestHeightScoreHR(t *testing.T) {
+	const genesisHeight = 1
+
+	proTxHashes, vs := setupTestHeightScore(t, genesisHeight)
+
+	// now test with rounds
+	for h := int64(1); h < 100; h++ {
+		for r := int32(0); r < 100; r++ {
+			proposer := vs.MustGetProposer(h, r)
+			pos := (h - genesisHeight + int64(r)) % int64(len(proTxHashes))
+			assert.Equal(t, proTxHashes[pos], proposer.ProTxHash, "height %d", h)
+			require.NoError(t, vs.UpdateScores(h, r), "height %d", h)
 		}
 	}
 }

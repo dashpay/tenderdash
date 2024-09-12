@@ -489,7 +489,7 @@ func (r *Router) openConnection(ctx context.Context, conn Connection) {
 	case errors.Is(err, context.Canceled):
 		return
 	case err != nil:
-		r.logger.Error("peer handshake failed", "endpoint", conn, "err", err)
+		r.logger.Warn("peer handshake failed", "endpoint", conn, "err", err)
 		return
 	}
 	if err := r.filterPeersID(ctx, peerInfo.NodeID); err != nil {

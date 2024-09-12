@@ -92,7 +92,7 @@ func TestStateProposerSelection0(t *testing.T) {
 	ensureNewRound(t, newRoundCh, height, round)
 
 	// Commit a block and ensure proposer for the next height is correct.
-	prop := cs1.GetRoundState().Base.ProposerSelector().MustGetProposer(height, round)
+	prop := stateData.ProposerSelector.MustGetProposer(height, round)
 	proTxHash, err := cs1.privValidator.GetProTxHash(ctx)
 	require.NoError(t, err)
 	require.Truef(t, bytes.Equal(prop.ProTxHash, proTxHash), "expected proposer to be validator %d. Got %X", 0, prop.ProTxHash.ShortString())
@@ -106,7 +106,7 @@ func TestStateProposerSelection0(t *testing.T) {
 	// Wait for new round so next validator is set.
 	ensureNewRound(t, newRoundCh, height+1, 0)
 
-	prop = cs1.GetRoundState().Base.ProposerSelector().MustGetProposer(height+1, 0)
+	prop = stateData.ProposerSelector.MustGetProposer(height+1, 0)
 	proTxHash, err = vss[1].GetProTxHash(ctx)
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(prop.ProTxHash, proTxHash), "expected proposer to be validator %d. Got %X", 1, prop.ProTxHash.ShortString())
@@ -134,7 +134,7 @@ func TestStateProposerSelection2(t *testing.T) {
 
 	// everyone just votes nil. we get a new proposer each round
 	for i := int32(0); int(i) < len(vss); i++ {
-		prop := cs1.GetRoundState().Base.ProposerSelector().MustGetProposer(height, round)
+		prop := stateData.ProposerSelector.MustGetProposer(height, round)
 		proTxHash, err := vss[int(i+round)%len(vss)].GetProTxHash(ctx)
 		require.NoError(t, err)
 		correctProposer := proTxHash
@@ -215,7 +215,7 @@ func TestStateProposerSelectionBetweenRoundsAndHeights(t *testing.T) {
 	proposers = append(proposers, proposer{
 		height:   height,
 		round:    round,
-		proposer: cs1.GetRoundState().Base.ProposerSelector().MustGetProposer(height, round),
+		proposer: stateData.ProposerSelector.MustGetProposer(height, round),
 	})
 
 	ensureNewProposal(t, proposalCh, height, round)
@@ -231,7 +231,7 @@ func TestStateProposerSelectionBetweenRoundsAndHeights(t *testing.T) {
 		incrementHeight(vss[1:]...)
 		resetRound(vss[1:]...)
 		for round := int32(0); round < int32(height); round++ {
-			prop := cs1.GetRoundState().Base.ProposerSelector().MustGetProposer(height, round)
+			prop := stateData.ProposerSelector.MustGetProposer(height, round)
 			proposers = append(proposers, proposer{
 				height:   height,
 				round:    round,

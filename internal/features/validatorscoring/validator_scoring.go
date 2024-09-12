@@ -1,6 +1,9 @@
 package validatorscoring
 
 import (
+	"fmt"
+
+	tmtypes "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -24,16 +27,27 @@ type ValidatorScoringStrategy interface {
 	Copy() ValidatorScoringStrategy
 }
 
-// NewValidatorScoringStrategy creates a ValidatorScoringStrategy from the ValidatorSet.
-// Original ValidatorSet should not be used anymore. Height and round should point to the current height and round,
-// eg. the one for which GetProposer() returns proposer that generates proposal at the given height and round.
+// NewProposerStrategy creates a ValidatorScoringStrategy from the ValidatorSet.
+//
+// Original ValidatorSet should not be used anymore. Height and round should point to the height and round that
+// is reflected in validator scores, eg. the one for which GetProposer() returns proposer that generates proposal
+// at the given height and round.
 //
 // ## Arguments
 //
 // - `cp` - ConsensusParams that determine scoring strategy to use
-// - `height` - current height of the validator set
-// - `round` - current round of the validator set
-func NewValidatorScoringStrategy(cp types.ConsensusParams, valSet *types.ValidatorSet, currentHeight int64, currentRound int32,
+// - `valSet` - validator set to use
+// - `valsetHeight` - current height of the validator set
+// - `valsetRound` - current round of the validator set
+// - `bs` - block store used to retreve info about historical commits; optional, can be nil
+func NewProposerStrategy(cp types.ConsensusParams, valSet *types.ValidatorSet, valsetHeight int64, valsetRound int32,
 	bs BlockCommitStore) (ValidatorScoringStrategy, error) {
-	return NewHeightBasedScoringStrategy(valSet, currentHeight)
+	switch cp.Version.ConsensusVersion {
+	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_0):
+		return NewHeightBasedScoringStrategy(valSet, valsetHeight, bs)
+	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_1):
+		return NewHeightRoundBasedScoringStrategy(valSet, valsetHeight, valsetRound, bs)
+	default:
+		return nil, fmt.Errorf("unknown consensus version: %v", cp.Version.ConsensusVersion)
+	}
 }

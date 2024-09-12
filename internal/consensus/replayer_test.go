@@ -23,6 +23,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/proxy"
 	sm "github.com/dashpay/tenderdash/internal/state"
+	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
@@ -207,7 +208,8 @@ func TestInitChainGenesisTime(t *testing.T) {
 	require.NoError(t, err)
 	stateStore := sm.NewStore(dbm.NewMemDB())
 	blockStore := store.NewBlockStore(dbm.NewMemDB())
-	proposerProTxHash := smState.ProposerSelector().MustGetProposer(1, 0).ProTxHash
+	proposer := sf.GetProposerFromState(smState, 1, 0)
+	proposerProTxHash := proposer.ProTxHash
 	replayer := newBlockReplayer(stateStore, blockStore, &genDoc, eventBus, proxyApp, proposerProTxHash)
 
 	// use replayer to call initChain

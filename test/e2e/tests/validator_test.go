@@ -156,7 +156,7 @@ func newValidatorSchedule(testnet e2e.Testnet) *validatorSchedule {
 		}
 	}
 	valset := types.NewValidatorSet(makeVals(valMap), thresholdPublicKey, quorumType, quorumHash, true)
-	vs := test.Must(validatorscoring.NewValidatorScoringStrategy(types.ConsensusParams{}, valset,
+	vs := test.Must(validatorscoring.NewProposerStrategy(types.ConsensusParams{}, valset,
 		testnet.InitialHeight, 0, nil))
 	return &validatorSchedule{
 		height:                    testnet.InitialHeight,
@@ -184,7 +184,7 @@ func (s *validatorSchedule) Increment(heights int64) error {
 
 							vset := types.NewValidatorSet(makeVals(update), thresholdPublicKeyUpdate, btcjson.LLMQType_5_60,
 								quorumHashUpdate, true)
-							s.Set = test.Must(validatorscoring.NewValidatorScoringStrategy(types.ConsensusParams{}, vset,
+							s.Set = test.Must(validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset,
 								s.height, 0, nil))
 						}
 					}

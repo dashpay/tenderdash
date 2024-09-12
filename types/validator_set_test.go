@@ -7,6 +7,7 @@ import (
 	"math"
 	"math/rand"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -250,8 +251,11 @@ func BenchmarkValidatorSetCopy(b *testing.B) {
 	for i := 0; i < 1000; i++ {
 		privKey := bls12381.GenPrivKey()
 		pubKey := privKey.PubKey()
-		val := NewValidatorDefaultVotingPower(pubKey, crypto.ProTxHash{})
-		err := vset.UpdateWithChangeSet([]*Validator{val}, nil, crypto.RandQuorumHash())
+
+		quorumKey := bls12381.GenPrivKey().PubKey()
+		ProTxHash := crypto.RandProTxHash()
+		val := NewValidatorDefaultVotingPower(pubKey, ProTxHash)
+		err := vset.UpdateWithChangeSet([]*Validator{val}, quorumKey, crypto.RandQuorumHash())
 		require.NoError(b, err)
 	}
 	b.StartTimer()
@@ -565,7 +569,7 @@ type valSetErrTestCaseWithErr struct {
 func executeValSetErrTestCaseIgnoreThresholdPublicKey(t *testing.T, idx int, tt valSetErrTestCaseWithErr) {
 	// create a new set and apply updates, keeping copies for the checks
 	valSet := createNewValidatorSet(tt.startVals)
-	valSetCopy := valSet.Copy()
+	valSetExpected := valSet.Copy()
 	valList := createNewValidatorList(tt.updateVals)
 	valListCopy := validatorListCopy(valList)
 	err := valSet.UpdateWithChangeSet(valList, bls12381.GenPrivKey().PubKey(), crypto.RandQuorumHash())
@@ -574,7 +578,7 @@ func executeValSetErrTestCaseIgnoreThresholdPublicKey(t *testing.T, idx int, tt 
 	if assert.Error(t, err, "test %d", idx) {
 		assert.Contains(t, err.Error(), tt.errString)
 	}
-	assert.Equal(t, valSet, valSetCopy, "test %v", idx)
+	assert.Equal(t, valSetExpected, valSet, "test %v", idx)
 
 	// check the parameter list has not changed
 	assert.Equal(t, valList, valListCopy, "test %v", idx)
@@ -660,7 +664,9 @@ func TestValSetUpdatesDuplicateEntries(t *testing.T) {
 	}
 
 	for i, tt := range testCases {
-		executeValSetErrTestCaseIgnoreThresholdPublicKey(t, i, tt)
+		t.Run(strconv.Itoa(i), func(t *testing.T) {
+			executeValSetErrTestCaseIgnoreThresholdPublicKey(t, i, tt)
+		})
 	}
 }
 

@@ -11,6 +11,7 @@ import (
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
@@ -185,13 +186,24 @@ func makeHeaderPartsResponsesParams(
 func makeRandomStateFromValidatorSet(
 	lastValSet *types.ValidatorSet,
 	height, lastHeightValidatorsChanged int64,
+	bs validatorscoring.BlockCommitStore,
 ) sm.State {
+	vs := lastValSet.Copy()
+	cp := types.DefaultConsensusParams()
+	expectedVS, err := validatorscoring.NewProposerStrategy(*cp, vs, lastHeightValidatorsChanged, 0, bs)
+	if err != nil {
+		panic(err)
+	}
+	if err := expectedVS.UpdateScores(height, 0); err != nil {
+		panic(err)
+	}
+
 	return sm.State{
 		LastBlockHeight:                  height - 1,
-		Validators:                       lastValSet.Copy(),
-		LastValidators:                   lastValSet.Copy(),
+		Validators:                       vs.Copy(),
+		LastValidators:                   vs.Copy(),
 		LastHeightConsensusParamsChanged: height,
-		ConsensusParams:                  *types.DefaultConsensusParams(),
+		ConsensusParams:                  *cp,
 		LastHeightValidatorsChanged:      lastHeightValidatorsChanged,
 		InitialHeight:                    1,
 	}

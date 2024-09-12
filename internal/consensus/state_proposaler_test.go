@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	"github.com/dashpay/tenderdash/internal/test/factory"
@@ -87,7 +88,19 @@ func (suite *ProposalerTestSuite) SetupTest() {
 		blockExec:      blockExec,
 		committedState: suite.committedState,
 	}
-	suite.proposerProTxHash = suite.committedState.ProposerSelector().MustGetProposer(100, 0).ProTxHash
+
+	vs, err := validatorscoring.NewProposerStrategy(
+		suite.committedState.ConsensusParams,
+		suite.committedState.Validators.Copy(),
+		suite.committedState.LastBlockHeight,
+		suite.committedState.LastBlockRound,
+		nil,
+	)
+	if err != nil {
+		panic(fmt.Errorf("failed to create validator scoring strategy: %w", err))
+	}
+
+	suite.proposerProTxHash = vs.MustGetProposer(100, 0).ProTxHash
 	suite.blockH100R0 = suite.committedState.MakeBlock(100, []types.Tx{}, &suite.commitH99R0, nil, suite.proposerProTxHash, 0)
 }
 
