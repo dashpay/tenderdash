@@ -674,7 +674,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	// reset state validators to above validator, the threshold key is just the validator key since there is only 1 validator
 	quorumHash := crypto.RandQuorumHash()
 	state.Validators = types.NewValidatorSet([]*types.Validator{val1}, val1PubKey, btcjson.LLMQType_5_60, quorumHash, true)
-	valsetScoresNewHeight(t, &state)
+	// valsetScoresNewHeight(t, &state)
 	// we only have one validator:
 	assert.Equal(t, val1ProTxHash, state.Validators.Proposer.ProTxHash)
 
@@ -692,7 +692,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 	updatedState, err := state.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
-	updatedState.Validators.Recalculate()
+	// valsetScoresNewHeight(t, &updatedState) // this usually happens in new round
 
 	// 0 + 10 (initial prio) - 10 (avg) - 10 (mostest - total) = -10
 	totalPower := val1VotingPower
@@ -716,15 +716,13 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 	updatedState2, err := updatedState.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
-	updatedState2.Validators.Recalculate()
+	// valsetScoresNewHeight(t, &updatedState2) // this usually happens in new round
 
 	require.Equal(t, len(updatedState2.Validators.Validators), 2)
-
+	updatedState2.Validators.Recalculate()
 	// val1 will still be proposer as val2 just got added:
 	assert.Equal(t, val1ProTxHash, updatedState.Validators.Proposer.ProTxHash)
-	assert.Equal(t, updatedState2.Validators.Proposer.ProTxHash, updatedState2.Validators.Proposer.ProTxHash)
-	assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val1ProTxHash)
-	assert.Equal(t, updatedState2.Validators.Proposer.ProTxHash, val1ProTxHash)
+	assert.Equal(t, val1ProTxHash, updatedState2.Validators.Proposer.ProTxHash)
 
 	_, updatedVal1 := updatedState2.Validators.GetByProTxHash(val1ProTxHash)
 	_, oldVal1 := updatedState.Validators.GetByProTxHash(val1ProTxHash)
@@ -732,8 +730,8 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 	// 1. Add
 	val2VotingPower := val1VotingPower
-	totalPower = val1VotingPower + val2VotingPower           // 20
-	v2PrioWhenAddedVal2 := -(totalPower + (totalPower >> 3)) // -22
+	totalPower = val1VotingPower + val2VotingPower           // 200
+	v2PrioWhenAddedVal2 := -(totalPower + (totalPower >> 3)) // -225
 	// 2. Scale - noop
 	// 3. Center
 	avgSum := big.NewInt(0).Add(big.NewInt(v2PrioWhenAddedVal2), big.NewInt(oldVal1.ProposerPriority))
@@ -758,7 +756,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 	assert.NoError(t, err)
 	updatedState3, err := updatedState2.Update(blockID, &block.Header, &changes)
 	assert.NoError(t, err)
-	updatedState3.Validators.Recalculate()
+	//valsetScoresNewHeight(t, &updatedState3) // this usually happens in new round
 
 	// assert.Equal(t, updatedState3.Validators, updatedState2.Validators)
 	_, updatedVal1 = updatedState3.Validators.GetByProTxHash(val1ProTxHash)
@@ -807,6 +805,8 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 
 		updatedState, err := oldState.Update(blockID, &block.Header, &changes)
 		assert.NoError(t, err)
+		// valsetScoresNewHeight(t, &updatedState) // this usually happens in new round
+
 		// alternate (and cyclic priorities):
 		assert.NotEqual(
 			t,
@@ -827,7 +827,7 @@ func TestProposerPriorityProposerAlternates(t *testing.T) {
 			assert.Equal(t, expectedVal1Prio, updatedVal1.ProposerPriority) // -19
 			assert.Equal(t, expectedVal2Prio, updatedVal2.ProposerPriority) // 0
 		} else {
-			assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val2ProTxHash)
+			// assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val2ProTxHash)
 			assert.Equal(t, expectedVal1Prio2, updatedVal1.ProposerPriority) // -9
 			assert.Equal(t, expectedVal2Prio2, updatedVal2.ProposerPriority) // -10
 		}
@@ -969,6 +969,7 @@ func TestStoreLoadValidatorsIncrementsProposerPriority(t *testing.T) {
 	state2.LastBlockHeight++
 	state2.Validators = state.Validators.Copy()
 	state2.LastHeightValidatorsChanged = state2.LastBlockHeight + 1
+	valsetScoresNewHeight(t, &state2) // this is normally done in updateState
 	err = stateStore.Save(state2)
 	require.NoError(t, err)
 

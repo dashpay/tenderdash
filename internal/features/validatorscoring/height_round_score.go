@@ -67,12 +67,6 @@ func (s *heightRoundBasedScoringStrategy) UpdateScores(h int64, r int32) error {
 		return fmt.Errorf("update validator set for height: %w", err)
 	}
 
-	if err := s.updateRound(r); err != nil {
-		return fmt.Errorf("update validator set for round: %w", err)
-	}
-
-	s.height = h
-	s.round = r
 	return nil
 }
 
@@ -80,8 +74,7 @@ func (s *heightRoundBasedScoringStrategy) UpdateScores(h int64, r int32) error {
 func (s *heightRoundBasedScoringStrategy) updateHeight(newHeight int64, newRound int32) error {
 	heightDiff := newHeight - s.height
 	if heightDiff == 0 {
-		// NOOP
-		return nil
+		return s.updateRound(newRound)
 	}
 	if heightDiff < 0 {
 		// TODO: handle going back in height
@@ -97,22 +90,24 @@ func (s *heightRoundBasedScoringStrategy) updateHeight(newHeight int64, newRound
 	if s.commitStore == nil {
 		return fmt.Errorf("block store required to update validator scores from %d:%d to %d:%d", s.height, s.round, newHeight, newRound)
 	}
-
+	current_height := s.height
 	// process all heights from current height to new height, exclusive (as the new height is not processed yet, and
 	// we have target round provided anyway).
-	for h := s.height; h < newHeight; h++ {
+	for h := current_height; h < newHeight; h++ {
 		// get the last commit for the height
 		commit := s.commitStore.LoadBlockCommit(h)
 		if commit == nil {
 			return fmt.Errorf("cannot find commit for height %d", h)
 		}
 
-		// go from round 0 to commit round + 1 (what means "h+1, round 0"
+		// go from round 0 to commit round (h, commit.Round)
 		if s.updateRound(commit.Round) != nil {
 			return fmt.Errorf("cannot update validator scores to round %d:%d", h, commit.Round)
 		}
+		// go to (h+1, 0)
 		s.updatePriorities(1)
-		// ok, we're at h+1, round 0
+		s.height = h + 1
+		s.round = 0
 	}
 
 	// so we are at newheight, round 0
@@ -129,6 +124,8 @@ func (s *heightRoundBasedScoringStrategy) updateRound(newRound int32) error {
 	}
 
 	s.updatePriorities(int64(roundDiff))
+	s.round = newRound
+
 	return nil
 }
 

@@ -2,7 +2,7 @@ package validatorscoring_test
 
 import (
 	"bytes"
-	"fmt"
+	"math/rand"
 	"strings"
 	"testing"
 
@@ -86,6 +86,8 @@ func TestProposerSelection2(t *testing.T) {
 }
 
 func TestProposerSelection3(t *testing.T) {
+	const initialHeight = 1
+
 	proTxHashes := make([]crypto.ProTxHash, 4)
 	proTxHashes[0] = crypto.Checksum([]byte("avalidator_address12"))
 	proTxHashes[1] = crypto.Checksum([]byte("bvalidator_address12"))
@@ -94,30 +96,37 @@ func TestProposerSelection3(t *testing.T) {
 
 	vset, _ := types.GenerateValidatorSet(types.NewValSetParam(proTxHashes))
 
-	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), 0, 0, nil)
+	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), initialHeight, 0, nil)
 	require.NoError(t, err)
 
+	// initialize proposers
 	proposerOrder := make([]*types.Validator, 4)
 	for i := 0; i < 4; i++ {
-		proposerOrder[i] = vs.MustGetProposer(int64(i), 0)
+		proposerOrder[i] = vs.MustGetProposer(int64(i+initialHeight), 0)
 	}
 
-	// i for the loop
+	// h for the loop
 	// j for the times
 	// we should go in order for ever, despite some IncrementProposerPriority with times > 1
 	var (
-		i int
-		j int32
+		h int
+		j uint32
 	)
-	vs, err = validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), 0, 0, nil)
-	require.NoError(t, err)
 
-	for ; i < 10000; i++ {
-		got := vs.MustGetProposer(int64(i), 0).ProTxHash
+	vs, err = validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), 1, 0, nil)
+	require.NoError(t, err)
+	j = 0
+	for h = 1; h <= 10000; h++ {
+
+		got := vs.MustGetProposer(int64(h), 0).ProTxHash
 		expected := proposerOrder[j%4].ProTxHash
 		if !bytes.Equal(got, expected) {
-			t.Fatalf(fmt.Sprintf("vset.Proposer (%X) does not match expected proposer (%X) for (%d, %d)", got, expected, i, j))
+			t.Fatalf("vset.Proposer (%X) does not match expected proposer (%X) for (%d, %d)", got, expected, h, j)
 		}
+
+		round := uint32(rand.Int31n(100))
+		require.NoError(t, vs.UpdateScores(int64(h), int32(round)))
+		j++ // height proposer strategy only increment by 1 each height, regardless of the rounds
 	}
 }
 
