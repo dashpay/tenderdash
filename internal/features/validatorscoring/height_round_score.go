@@ -10,6 +10,7 @@ import (
 type BlockCommitStore interface {
 	LoadBlockCommit(height int64) *types.Commit
 	LoadBlockMeta(height int64) *types.BlockMeta
+	Base() int64
 }
 
 type heightRoundBasedScoringStrategy struct {

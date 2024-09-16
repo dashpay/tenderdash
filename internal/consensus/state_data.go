@@ -280,7 +280,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 			s.Validators,
 			state.InitialHeight,
 			0,
-			nil,
+			blockStore,
 		)
 	} else {
 		// validators == state.Validators contain validator set at (state.LastBlockHeight, 0)
@@ -289,7 +289,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 			s.Validators,
 			state.LastBlockHeight,
 			0,
-			nil,
+			blockStore,
 		)
 
 	}

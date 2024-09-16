@@ -30,7 +30,9 @@ const _ = proto.GoGoProtoPackageIsVersion3 // please upgrade the proto package
 type VersionParams_ConsensusVersion int32
 
 const (
+	// CONSENSUS_VERSION_0 is the original version of the consensus protocol.
 	VersionParams_CONSENSUS_VERSION_0 VersionParams_ConsensusVersion = 0
+	// CONSENSUS_VERSION_1 changes proposer selection algorithm to not double-propose when previous proposer is offline.
 	VersionParams_CONSENSUS_VERSION_1 VersionParams_ConsensusVersion = 1
 )
 
@@ -327,7 +329,7 @@ func (m *ValidatorParams) GetPubKeyTypes() []string {
 // VersionParams contains the ABCI application version.
 type VersionParams struct {
 	AppVersion uint64 `protobuf:"varint,1,opt,name=app_version,json=appVersion,proto3" json:"app_version,omitempty"`
-	// consensus_version
+	// Version of consensus protocol, used to upgrade consensus without hard forks
 	ConsensusVersion VersionParams_ConsensusVersion `protobuf:"varint,2,opt,name=consensus_version,json=consensusVersion,proto3,enum=tendermint.types.VersionParams_ConsensusVersion" json:"consensus_version,omitempty"`
 }
 

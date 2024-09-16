@@ -9,5 +9,6 @@ import (
 type BlockStore interface {
 	LoadBlockMeta(height int64) *types.BlockMeta
 	LoadBlockCommit(height int64) *types.Commit
+	Base() int64
 	Height() int64
 }

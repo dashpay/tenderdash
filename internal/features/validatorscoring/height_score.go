@@ -4,12 +4,16 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
 
 type heightBasedScoringStrategy struct {
 	valSet *types.ValidatorSet
 	height int64
+	bs     BlockCommitStore
+	logger log.Logger
 	mtx    sync.Mutex
 }
 
@@ -32,23 +36,30 @@ func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64
 		return nil, fmt.Errorf("empty validator set")
 	}
 
+	logger, err := log.NewDefaultLogger(log.LogFormatPlain, log.LogLevelDebug) // TODO: make configurable
+	if err != nil {
+		return nil, fmt.Errorf("could not create logger: %w", err)
+	}
+
 	s := &heightBasedScoringStrategy{
 		valSet: vset,
 		height: currentHeight,
+		bs:     bs,
+		logger: logger,
 	}
 
 	// if we have a block store, we can determine the proposer for the current height;
 	// otherwise we just trust the state of `vset`
-	if bs != nil {
-		if err := s.initProposer(currentHeight, bs); err != nil {
-			return nil, err
+	if bs != nil && bs.Base() > 0 && currentHeight >= bs.Base() {
+		if err := s.selectProposer(currentHeight, bs); err != nil {
+			return nil, fmt.Errorf("could not initialize proposer: %w", err)
 		}
 	}
 	return s, nil
 }
 
-// initProposer determines the proposer for the given height using block store and consensus params.
-func (s *heightBasedScoringStrategy) initProposer(height int64, bs BlockCommitStore) error {
+// selectProposer determines the proposer for the given height using block store and consensus params.
+func (s *heightBasedScoringStrategy) selectProposer(height int64, bs BlockCommitStore) error {
 	if bs == nil {
 		return fmt.Errorf("block store is nil")
 	}
@@ -57,16 +68,18 @@ func (s *heightBasedScoringStrategy) initProposer(height int64, bs BlockCommitSt
 	if height == 0 || height == 1 {
 		// we take first proposer from the validator set
 		if err := s.valSet.SetProposer(s.valSet.Validators[0].ProTxHash); err != nil {
-			return fmt.Errorf("could not set initial proposer: %w", err)
+			return fmt.Errorf("could not determine proposer: %w", err)
 		}
 
 		return nil
 	}
 
 	meta := bs.LoadBlockMeta(height)
+	var proposer bytes.HexBytes
+
 	addToIdx := int32(0)
 	if meta == nil {
-		// we use previous height, and will just add 1 to proposer index
+		// block not found; we try previous height, and will just add 1 to proposer index
 		meta = bs.LoadBlockMeta(height - 1)
 		if meta == nil {
 			return fmt.Errorf("could not find block meta for previous height %d", height-1)
@@ -74,7 +87,23 @@ func (s *heightBasedScoringStrategy) initProposer(height int64, bs BlockCommitSt
 		addToIdx = 1
 	}
 
-	if err := s.valSet.SetProposer(meta.Header.ProposerProTxHash); err != nil {
+	if !meta.Header.ValidatorsHash.Equal(s.valSet.Hash()) {
+		s.logger.Debug("quorum rotation happened",
+			"height", height,
+			"validators_hash", meta.Header.ValidatorsHash, "quorum_hash", s.valSet.QuorumHash,
+			"validators", s.valSet,
+			"meta", meta)
+		// quorum rotation happened - we select 1st validator as proposer, and don't rotate
+		// NOTE: We use index 1 due to bug in original code - we need to preserve the original bad behavior
+		// to avoid breaking consensus
+		proposer = s.valSet.GetByIndex(1).ProTxHash
+
+		addToIdx = 0
+	} else {
+		proposer = meta.Header.ProposerProTxHash
+	}
+
+	if err := s.valSet.SetProposer(proposer); err != nil {
 		return fmt.Errorf("could not set proposer: %w", err)
 	}
 
@@ -107,7 +136,17 @@ func (s *heightBasedScoringStrategy) updateScores(newHeight int64, _round int32)
 	}
 
 	if heightDiff > 1 {
-		return fmt.Errorf("cannot jump more than one height: %d -> %d", s.height, newHeight)
+		if s.bs == nil || s.bs.Base() > s.height {
+			return fmt.Errorf("cannot jump more than one height without data in block store: %d -> %d", s.height, newHeight)
+		}
+		// FIXME: we assume that no consensus version update happened in the meantime
+
+		if err := s.selectProposer(newHeight, s.bs); err != nil {
+			return fmt.Errorf("could not determine proposer: %w", err)
+		}
+
+		s.height = newHeight
+		return nil
 	}
 
 	s.valSet.IncProposerIndex(int32(heightDiff)) //nolint:gosec

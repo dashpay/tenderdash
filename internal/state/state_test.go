@@ -263,11 +263,7 @@ func TestValidatorSimpleSaveLoad(t *testing.T) {
 	assert.Equal(t, v.Hash(), state.Validators.Hash(), "expected validator hashes to match")
 
 	// Should NOT be able to load for height 2.
-	blockStore.On("LoadBlockMeta", int64(2)).Return(&types.BlockMeta{
-		Header: types.Header{
-			Height:            2,
-			ProposerProTxHash: state.Validators.GetByIndex((int32(state.LastBlockHeight) % int32(state.Validators.Size()))).ProTxHash,
-		}})
+	blockStore.On("LoadBlockMeta", int64(2)).Return(nil)
 	_, err = statestore.LoadValidators(2, blockStore)
 	require.Error(t, err, "expected no err at height 2")
 
@@ -331,6 +327,12 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 		require.NoError(t, err)
 
 		state, err = state.Update(blockID, &header, &changes)
+
+		blockStore.On("LoadBlockMeta", header.Height).Return(&types.BlockMeta{
+			Header: types.Header{
+				Height:            header.Height,
+				ProposerProTxHash: header.ProposerProTxHash,
+			}}).Maybe()
 
 		require.NoError(t, err)
 		validator := state.Validators.Validators[0]
@@ -656,12 +658,13 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	require.Equal(t, int64(0), state.LastBlockHeight)
 	state.Validators, _ = types.RandValidatorSet(valSetSize)
 	err := stateStore.Save(state)
+	require.NoError(t, err)
+
 	blockStore.On("LoadBlockMeta", state.LastBlockHeight).Return(&types.BlockMeta{
 		Header: types.Header{
 			Height:            state.LastBlockHeight,
-			ProposerProTxHash: state.Validators.GetByIndex(int32(state.LastBlockHeight-state.InitialHeight) % valSetSize).ProTxHash,
+			ProposerProTxHash: state.Validators.GetByIndex(0).ProTxHash,
 		}}).Maybe()
-	require.NoError(t, err)
 
 	// ====== HEIGHT 2 ====== //
 
@@ -697,6 +700,11 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 
 	err = stateStore.Save(state)
 	require.NoError(t, err)
+	blockStore.On("LoadBlockMeta", currentHeight).Return(&types.BlockMeta{
+		Header: types.Header{
+			Height:            currentHeight,
+			ProposerProTxHash: state.Validators.GetByIndex(int32(currentHeight-state.InitialHeight) % valSetSize).ProTxHash,
+		}}).Maybe()
 
 	// Load height, it should be the oldpubkey.
 	v0, err := stateStore.LoadValidators(currentHeight-1, blockStore)
