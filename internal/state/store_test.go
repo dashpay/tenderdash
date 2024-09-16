@@ -33,7 +33,15 @@ func TestStoreBootstrap(t *testing.T) {
 	vals, _ := types.RandValidatorSet(3)
 
 	blockStore := mocks.NewBlockStore(t)
-	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{}).Maybe()
+	for h := int64(99); h <= 100; h++ {
+		blockStore.On("LoadBlockMeta", h).
+			Return(&types.BlockMeta{
+				Header: types.Header{
+					Height:            h,
+					ProposerProTxHash: vals.GetByIndex(int32(int(h+1) % vals.Size())).ProTxHash,
+				},
+			})
+	}
 
 	bootstrapState := makeRandomStateFromValidatorSet(vals, 100, 100, blockStore)
 	require.NoError(t, stateStore.Bootstrap(bootstrapState))
@@ -60,7 +68,7 @@ func assertProposer(t *testing.T, valSet *types.ValidatorSet, h int64) {
 	const initialHeight = 1
 
 	// check if currently selected proposer is correct
-	idx, _ := valSet.GetByProTxHash(valSet.Proposer.ProTxHash)
+	idx, _ := valSet.GetByProTxHash(valSet.Proposer().ProTxHash)
 	exp := (h - initialHeight) % int64(valSet.Size())
 	assert.EqualValues(t, exp, idx, "pre-set proposer at height %d", h)
 
@@ -76,17 +84,26 @@ func assertProposer(t *testing.T, valSet *types.ValidatorSet, h int64) {
 func TestStoreLoadValidators(t *testing.T) {
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
-	blockStore := mocks.NewBlockStore(t)
-	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
-
 	vals, _ := types.RandValidatorSet(3)
 
-	expectedVS, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vals.Copy(), 1, 0, blockStore)
+	expectedVS, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vals.Copy(), 1, 0, nil)
 	require.NoError(t, err)
+
+	// initialize block store - create mock validators for each height
+	blockStoreVS := expectedVS.Copy()
+	blockStore := mocks.NewBlockStore(t)
+	for h := int64(1); h <= valSetCheckpointInterval; h++ {
+		blockStore.On("LoadBlockMeta", h).Return(&types.BlockMeta{
+			Header: types.Header{
+				Height:            h,
+				ProposerProTxHash: blockStoreVS.MustGetProposer(h, 0).ProTxHash,
+			}}).Maybe()
+	}
 
 	// 1) LoadValidators loads validators using a height where they were last changed
 	// Note that only the current validators at height h are saved
 	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals, 1, 1, blockStore)))
+
 	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals, 2, 1, blockStore)))
 
 	loadedValsH1, err := stateStore.LoadValidators(1, blockStore)
@@ -109,7 +126,7 @@ func TestStoreLoadValidators(t *testing.T) {
 	// 2) LoadValidators loads validators using a checkpoint height
 
 	// add a validator set after the checkpoint
-	state := makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval+1, 1, blockStore)
+	state := makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval+1, 1, nil)
 	err = stateStore.Save(state)
 	require.NoError(t, err)
 
@@ -129,7 +146,9 @@ func TestStoreLoadValidators(t *testing.T) {
 
 	// ensure we have correct validator set loaded; at height h, we expcect `(h+1) % 3`
 	// (adding 1 as we start from initial height 1).
-	require.NoError(t, expectedVS.UpdateScores(valSetCheckpointInterval-1, 0))
+	for h := int64(2); h <= valSetCheckpointInterval-1; h++ {
+		require.NoError(t, expectedVS.UpdateScores(h, 0))
+	}
 	expected := expectedVS.ValidatorSet()
 	assertProposer(t, expected, valSetCheckpointInterval-1)
 	require.NotEqual(t, expected, valsAtCheckpoint)
@@ -212,9 +231,6 @@ func TestStoreLoadConsensusParams(t *testing.T) {
 }
 
 func TestPruneStates(t *testing.T) {
-	blockStore := mocks.NewBlockStore(t)
-	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
-
 	testcases := map[string]struct {
 		startHeight           int64
 		endHeight             int64
@@ -248,7 +264,6 @@ func TestPruneStates(t *testing.T) {
 			validator := &types.Validator{VotingPower: types.DefaultDashVotingPower, PubKey: pk, ProTxHash: proTxHash}
 			validatorSet := &types.ValidatorSet{
 				Validators:         []*types.Validator{validator},
-				Proposer:           validator,
 				ThresholdPublicKey: validator.PubKey,
 				QuorumHash:         crypto.RandQuorumHash(),
 			}
@@ -301,6 +316,20 @@ func TestPruneStates(t *testing.T) {
 			}
 			require.NoError(t, err)
 
+			blockStore := mocks.NewBlockStore(t)
+			// We initialize block store from remainingValSetHeight just to pass this test; in practive, it can be
+			// pruned. But here we want to check state store logic, not block store logic.
+			for h := int64(1); h < tc.remainingValSetHeight; h++ {
+				blockStore.On("LoadBlockMeta", h).Return(nil).Maybe()
+			}
+			for h := tc.remainingValSetHeight; h <= tc.endHeight; h++ {
+				blockStore.On("LoadBlockMeta", h).Return(&types.BlockMeta{
+					Header: types.Header{
+						Height:            h,
+						ProposerProTxHash: proTxHash,
+					},
+				}).Maybe()
+			}
 			for h := tc.pruneHeight; h <= tc.endHeight; h++ {
 				vals, err := stateStore.LoadValidators(h, blockStore)
 				require.NoError(t, err, h)

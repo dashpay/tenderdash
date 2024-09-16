@@ -130,55 +130,7 @@ func TestProposerSelection3(t *testing.T) {
 	}
 }
 
-func TestAveragingInIncrementProposerPriority(t *testing.T) {
-	// Test that the averaging works as expected inside of IncrementProposerPriority.
-	// Each validator comes with zero voting power which simplifies reasoning about
-	// the expected ProposerPriority.
-	tcs := []struct {
-		vs    types.ValidatorSet
-		times int32
-		avg   int64
-	}{
-		0: {types.ValidatorSet{
-			Validators: []*types.Validator{
-				{ProTxHash: []byte("a"), ProposerPriority: 1},
-				{ProTxHash: []byte("b"), ProposerPriority: 2},
-				{ProTxHash: []byte("c"), ProposerPriority: 3}}},
-			1,
-			2,
-		},
-		1: {types.ValidatorSet{
-			Validators: []*types.Validator{
-				{ProTxHash: []byte("a"), ProposerPriority: 10},
-				{ProTxHash: []byte("b"), ProposerPriority: -10},
-				{ProTxHash: []byte("c"), ProposerPriority: 1}}},
-			// this should average twice but the average should be 0 after the first iteration
-			// (voting power is 0 -> no changes)
-			// 1/3 -> 0
-			11, 0},
-		2: {types.ValidatorSet{
-			Validators: []*types.Validator{
-				{ProTxHash: []byte("a"), ProposerPriority: 100},
-				{ProTxHash: []byte("b"), ProposerPriority: -10},
-				{ProTxHash: []byte("c"), ProposerPriority: 1}}},
-			1,
-			91 / 3,
-		},
-	}
-	for i, tc := range tcs {
-		// work on copy to have the old ProposerPriorities:
-		vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, tc.vs.Copy(), 0, 0, nil)
-		require.NoError(t, err)
-		require.NoError(t, vs.UpdateScores(int64(tc.times), 0))
-		newVset := vs.ValidatorSet()
-		for _, val := range tc.vs.Validators {
-			_, updatedVal := newVset.GetByProTxHash(val.ProTxHash)
-			assert.Equal(t, updatedVal.ProposerPriority, val.ProposerPriority-tc.avg, "test case: %v", i)
-		}
-	}
-}
-
-func setupTestHeightScore(t *testing.T, genesisHeight int64) ([]crypto.ProTxHash, validatorscoring.ValidatorScoringStrategy) {
+func setupTestHeightScore(t *testing.T, genesisHeight int64) ([]crypto.ProTxHash, validatorscoring.ProposerProvider) {
 	var proTxHashes []crypto.ProTxHash
 	for i := byte(1); i <= 5; i++ {
 		protx := make([]byte, 32)
@@ -215,12 +167,12 @@ func TestHeightScoreHR(t *testing.T) {
 	proTxHashes, vs := setupTestHeightScore(t, genesisHeight)
 
 	// now test with rounds
-	for h := int64(1); h < 100; h++ {
-		for r := int32(0); r < 100; r++ {
+	for h := int64(1); h < 10; h++ {
+		for r := int32(0); r < 10; r++ {
 			proposer := vs.MustGetProposer(h, r)
 			pos := (h - genesisHeight + int64(r)) % int64(len(proTxHashes))
-			assert.Equal(t, proTxHashes[pos], proposer.ProTxHash, "height %d", h)
-			require.NoError(t, vs.UpdateScores(h, r), "height %d", h)
+			require.Equal(t, proTxHashes[pos], proposer.ProTxHash, "height %d, round %d", h, r)
+			require.NoError(t, vs.UpdateScores(h, r), "height %d, round %d", h, r)
 		}
 	}
 }

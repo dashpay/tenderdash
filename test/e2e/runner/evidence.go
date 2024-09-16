@@ -68,9 +68,15 @@ func InjectEvidence(ctx context.Context, logger log.Logger, r *rand.Rand, testne
 		return errors.New("quorum hash must be returned when requested")
 	}
 
-	valSet, err := types.ValidatorSetFromExistingValidators(valRes.Validators, *valRes.ThresholdPublicKey, valRes.QuorumType, *valRes.QuorumHash)
-	if err != nil {
-		return err
+	valSet := types.NewValidatorSet(valRes.Validators, *valRes.ThresholdPublicKey,
+		valRes.QuorumType,
+		*valRes.QuorumHash,
+		false)
+	if valSet == nil {
+		return fmt.Errorf("could not create validator set from response")
+	}
+	if err = valSet.SetProposer(blockRes.Block.ProposerProTxHash); err != nil {
+		return fmt.Errorf("could not set proposer: %w", err)
 	}
 
 	// get the private keys of all the validators in the network

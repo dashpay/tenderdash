@@ -38,11 +38,16 @@ func (env *Environment) Validators(_ctx context.Context, req *coretypes.RequestV
 
 	v := validators.Validators[skipCount : skipCount+tmmath.MinInt(perPage, totalCount-skipCount)]
 
+	quorumHash := validators.QuorumHash.Copy()
+
 	result := &coretypes.ResultValidators{
-		BlockHeight: height,
-		Validators:  v,
-		Count:       len(v),
-		Total:       totalCount,
+		BlockHeight:        height,
+		Validators:         v,
+		Count:              len(v),
+		Total:              totalCount,
+		ThresholdPublicKey: &validators.ThresholdPublicKey,
+		QuorumType:         validators.QuorumType,
+		QuorumHash:         &quorumHash,
 	}
 	if libs.BoolValue(req.RequestQuorumInfo) {
 		result.QuorumHash = &validators.QuorumHash

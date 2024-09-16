@@ -36,7 +36,7 @@ type StateDataStore struct {
 	emitter          *eventemitter.EventEmitter
 	replayMode       bool
 	version          int64
-	validatorScoring validatorscoring.ValidatorScoringStrategy
+	validatorScoring validatorscoring.ProposerProvider
 }
 
 // NewStateDataStore creates and returns a new state-data store

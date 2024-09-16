@@ -7,7 +7,7 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-type ValidatorScoringStrategy interface {
+type ProposerProvider interface {
 	// GetProposer returns the proposer for the given height and round. It calls Update if necessary.
 	GetProposer(height int64, round int32) (*types.Validator, error)
 
@@ -24,7 +24,7 @@ type ValidatorScoringStrategy interface {
 	// Returns pointer to underlying validator set; not thread-safe, and should be modified with caution
 	ValidatorSet() *types.ValidatorSet
 	// Create deep copy of the strategy and its underlying validator set
-	Copy() ValidatorScoringStrategy
+	Copy() ProposerProvider
 }
 
 // NewProposerStrategy creates a ValidatorScoringStrategy from the ValidatorSet.
@@ -41,7 +41,7 @@ type ValidatorScoringStrategy interface {
 // - `valsetRound` - current round of the validator set
 // - `bs` - block store used to retreve info about historical commits; optional, can be nil
 func NewProposerStrategy(cp types.ConsensusParams, valSet *types.ValidatorSet, valsetHeight int64, valsetRound int32,
-	bs BlockCommitStore) (ValidatorScoringStrategy, error) {
+	bs BlockCommitStore) (ProposerProvider, error) {
 	switch cp.Version.ConsensusVersion {
 	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_0):
 		return NewHeightBasedScoringStrategy(valSet, valsetHeight, bs)

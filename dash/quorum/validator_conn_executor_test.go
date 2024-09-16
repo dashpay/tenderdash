@@ -621,7 +621,7 @@ func makeState(nVals int, height int64) (sm.State, dbm.DB) {
 }
 
 func makeBlock(ctx context.Context, t *testing.T, blockExec *sm.BlockExecutor, state sm.State, _height int64, commit *types.Commit) *types.Block {
-	block, crs, err := blockExec.CreateProposalBlock(ctx, 1, 0, state, commit, state.Validators.Proposer.ProTxHash, 1)
+	block, crs, err := blockExec.CreateProposalBlock(ctx, 1, 0, state, commit, state.Validators.Proposer().ProTxHash, 1)
 	require.NoError(t, err)
 
 	err = crs.UpdateBlock(block)

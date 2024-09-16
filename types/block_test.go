@@ -89,8 +89,7 @@ func TestBlockValidateBasic(t *testing.T) {
 	}{
 		{"Make Block", func(blk *Block) {}, false},
 		{"Make Block w/ proposer pro_tx_hash", func(blk *Block) {
-			// use of obsolete findProposer method, only for test
-			blk.ProposerProTxHash = valSet.findProposer().ProTxHash
+			blk.ProposerProTxHash = valSet.Proposer().ProTxHash
 		}, false},
 		{"Negative Height", func(blk *Block) { blk.Height = -1 }, true},
 		{"Modify the last Commit", func(blk *Block) {
@@ -131,7 +130,7 @@ func TestBlockValidateBasic(t *testing.T) {
 		j := i
 		t.Run(tcRun.testName, func(t *testing.T) {
 			block := MakeBlock(h, txs, commit, evList)
-			block.ProposerProTxHash = valSet.findProposer().ProTxHash
+			block.ProposerProTxHash = valSet.Proposer().ProTxHash
 			tcRun.malleateBlock(block)
 			err = block.ValidateBasic()
 			assert.Equal(t, tcRun.expErr, err != nil, "#%d: %v", j, err)

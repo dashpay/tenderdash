@@ -194,8 +194,10 @@ func makeRandomStateFromValidatorSet(
 	if err != nil {
 		panic(err)
 	}
-	if err := expectedVS.UpdateScores(height, 0); err != nil {
-		panic(err)
+	for h := lastHeightValidatorsChanged; h <= height; h++ {
+		if err := expectedVS.UpdateScores(h, 0); err != nil {
+			panic(err)
+		}
 	}
 
 	return sm.State{

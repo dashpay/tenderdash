@@ -5,7 +5,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"math/big"
 	"sort"
 	"strings"
 
@@ -19,7 +18,6 @@ import (
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	"github.com/dashpay/tenderdash/dash/llmq"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
-	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
@@ -51,27 +49,20 @@ var (
 // ValidatorSet represent a set of *Validator at a given height.
 //
 // The validators can be fetched by address or index.
-// The index is in order of .VotingPower, so the indices are fixed for all
+// The index is in order of .ProTxHash, so the indices are fixed for all
 // rounds of a given blockchain height - ie. the validators are sorted by their
-// voting power (descending). Secondary index - .ProTxHash (ascending).
-//
-// On the other hand, the .ProposerPriority of each validator and the
-// designated .GetProposer() of a set changes every round, upon calling
-// .IncrementProposerPriority().
+// .ProTxHash (ascending).
 //
 // NOTE: Not goroutine-safe.
 // NOTE: All get/set to validators should copy the value for safety.
 type ValidatorSet struct {
 	// NOTE: persisted via reflect, must be exported.
-	Validators         []*Validator      `json:"validators"`
-	Proposer           *Validator        `json:"proposer"`
+	Validators         []*Validator `json:"validators"`
+	proposerIndex      int32
 	ThresholdPublicKey crypto.PubKey     `json:"threshold_public_key"`
 	QuorumHash         crypto.QuorumHash `json:"quorum_hash"`
 	QuorumType         btcjson.LLMQType  `json:"quorum_type"`
 	HasPublicKeys      bool              `json:"has_public_keys"`
-
-	// cached (unexported)
-	totalVotingPower int64
 }
 
 // NewValidatorSet initializes a ValidatorSet by copying over the values from
@@ -95,8 +86,6 @@ func NewValidatorSet(valz []*Validator, newThresholdPublicKey crypto.PubKey, quo
 	if err != nil {
 		panic(fmt.Sprintf("Cannot create validator set: %v", err))
 	}
-
-	vals.Recalculate()
 
 	return vals
 }
@@ -128,8 +117,8 @@ func (vals *ValidatorSet) ValidateBasic() error {
 		return ErrValidatorSetNilOrEmpty
 	}
 
-	if vals.Proposer == nil {
-		return errors.New("validator set proposer is not set")
+	if vals.proposerIndex >= int32(vals.Size()) {
+		return fmt.Errorf("validator set proposer index %d out of range, expected < %d", vals.proposerIndex, vals.Size())
 	}
 
 	for idx, val := range vals.Validators {
@@ -152,7 +141,7 @@ func (vals *ValidatorSet) ValidateBasic() error {
 		return fmt.Errorf("quorumHash error: %w", err)
 	}
 
-	if err := vals.Proposer.ValidateBasic(); err != nil {
+	if err := vals.Proposer().ValidateBasic(); err != nil {
 		return fmt.Errorf("proposer failed validate basic, error: %w", err)
 	}
 
@@ -238,91 +227,38 @@ func (vals *ValidatorSet) QuorumHashValid() error {
 	return nil
 }
 
-// RescalePriorities rescales the priorities such that the distance between the
-// maximum and minimum is smaller than `diffMax`. Panics if validator set is
-// empty.
-func (vals *ValidatorSet) RescalePriorities(diffMax int64) {
+// Proposer returns the proposer of the validator set.
+//
+// Panics on empty validator set.
+func (vals *ValidatorSet) Proposer() *Validator {
 	if vals.IsNilOrEmpty() {
 		panic("empty validator set")
 	}
-	// NOTE: This check is merely a sanity check which could be
-	// removed if all tests would init. voting power appropriately;
-	// i.e. diffMax should always be > 0
-	if diffMax <= 0 {
-		return
-	}
-
-	// Calculating ceil(diff/diffMax):
-	// Re-normalization is performed by dividing by an integer for simplicity.
-	// NOTE: This may make debugging priority issues easier as well.
-	diff := computeMaxMinPriorityDiff(vals)
-	ratio := (diff + diffMax - 1) / diffMax
-	if diff > diffMax && ratio != 0 {
-		for _, val := range vals.Validators {
-			val.ProposerPriority /= ratio
-		}
-	}
-
-	vals.shiftByAvgProposerPriority()
+	return vals.GetByIndex(vals.proposerIndex)
 }
 
-// Recaulculate recalculates all dynamic/cached parameters for the validator set, like scores, total voting power, etc.
-func (vals *ValidatorSet) Recalculate() {
-	if vals.IsNilOrEmpty() {
-		return
+// SetProposer sets the proposer of the validator set.
+func (vals *ValidatorSet) SetProposer(newProposer ProTxHash) error {
+	idx, _ := vals.GetByProTxHash(newProposer)
+	if idx < 0 {
+		return fmt.Errorf("proposer %X not found in validator set", newProposer)
 	}
 
-	vals.updateTotalVotingPower()
-	vals.Proposer = vals.findProposer()
-	vals.RescalePriorities(PriorityWindowSizeFactor * vals.TotalVotingPower())
+	vals.proposerIndex = idx
+	return nil
 }
 
-// Should not be called on an empty validator set.
-func (vals *ValidatorSet) computeAvgProposerPriority() int64 {
-	n := int64(len(vals.Validators))
-	sum := big.NewInt(0)
-	for _, val := range vals.Validators {
-		sum.Add(sum, big.NewInt(val.ProposerPriority))
-	}
-	avg := sum.Div(sum, big.NewInt(n))
-	if avg.IsInt64() {
-		return avg.Int64()
+// increaseProposerIndex increments the proposer index by `times`, wrapping around if necessary.
+// It also supports negative `times` to decrement the index.
+func (vals *ValidatorSet) IncProposerIndex(times int32) {
+	newIndex := (vals.proposerIndex + times)
+	nVals := int32(vals.Size())
+
+	for newIndex < 0 {
+		newIndex += nVals
 	}
 
-	// This should never happen: each val.ProposerPriority is in bounds of int64.
-	panic(fmt.Sprintf("Cannot represent avg ProposerPriority as an int64 %v", avg))
-}
-
-// Compute the difference between the max and min ProposerPriority of that set.
-func computeMaxMinPriorityDiff(vals *ValidatorSet) int64 {
-	if vals.IsNilOrEmpty() {
-		panic("empty validator set")
-	}
-	max := int64(math.MinInt64)
-	min := int64(math.MaxInt64)
-	for _, v := range vals.Validators {
-		if v.ProposerPriority < min {
-			min = v.ProposerPriority
-		}
-		if v.ProposerPriority > max {
-			max = v.ProposerPriority
-		}
-	}
-	diff := max - min
-	if diff < 0 {
-		return -1 * diff
-	}
-	return diff
-}
-
-func (vals *ValidatorSet) shiftByAvgProposerPriority() {
-	if vals.IsNilOrEmpty() {
-		panic("empty validator set")
-	}
-	avgProposerPriority := vals.computeAvgProposerPriority()
-	for _, val := range vals.Validators {
-		val.ProposerPriority = tmmath.SafeSubClipInt64(val.ProposerPriority, avgProposerPriority)
-	}
+	vals.proposerIndex = newIndex % nVals
 }
 
 // Makes a copy of the validator list.
@@ -344,13 +280,12 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 	}
 	valset := &ValidatorSet{
 		Validators:         validatorListCopy(vals.Validators),
-		Proposer:           vals.Proposer,
 		ThresholdPublicKey: vals.ThresholdPublicKey,
 		QuorumHash:         vals.QuorumHash,
 		QuorumType:         vals.QuorumType,
 		HasPublicKeys:      vals.HasPublicKeys,
+		proposerIndex:      vals.proposerIndex,
 	}
-	valset.Recalculate()
 
 	return valset
 }
@@ -436,28 +371,7 @@ func (vals *ValidatorSet) Size() int {
 // TotalVotingPower returns the sum of the voting powers of all validators.
 // It recomputes the total voting power if required.
 func (vals *ValidatorSet) TotalVotingPower() int64 {
-	if vals.totalVotingPower == 0 {
-		vals.updateTotalVotingPower()
-	}
-	return vals.totalVotingPower
-}
-
-// Forces recalculation of the set's total voting power.
-// Panics if total voting power is bigger than MaxTotalVotingPower.
-func (vals *ValidatorSet) updateTotalVotingPower() {
-	sum := int64(0)
-	for _, val := range vals.Validators {
-		// mind overflow
-		sum = tmmath.SafeAddClipInt64(sum, val.VotingPower)
-		if sum > MaxTotalVotingPower {
-			panic(fmt.Sprintf(
-				"Total voting power should be guarded to not exceed %v; got: %v",
-				MaxTotalVotingPower,
-				sum))
-		}
-	}
-
-	vals.totalVotingPower = sum
+	return int64(vals.Size()) * DefaultDashVotingPower
 }
 
 // QuorumVotingPower returns the voting power of the quorum if all the members existed.
@@ -487,16 +401,6 @@ func (vals *ValidatorSet) QuorumTypeThresholdCount() int {
 		return len(vals.Validators)*2/3 + 1
 	}
 	return threshold
-}
-
-func (vals *ValidatorSet) findProposer() *Validator {
-	var proposer *Validator
-	for _, val := range vals.Validators {
-		if proposer == nil || !bytes.Equal(val.ProTxHash, proposer.ProTxHash) {
-			proposer = proposer.CompareProposerPriority(val)
-		}
-	}
-	return proposer
 }
 
 // Hash returns the Quorum Hash.
@@ -625,39 +529,6 @@ func numNewValidators(updates []*Validator, vals *ValidatorSet) int {
 		}
 	}
 	return numNewValidators
-}
-
-// computeNewPriorities computes the proposer priority for the validators not present in the set based on
-// 'updatedTotalVotingPower'.
-// Leaves unchanged the priorities of validators that are changed.
-//
-// 'updates' parameter must be a list of unique validators to be added or updated.
-//
-// 'updatedTotalVotingPower' is the total voting power of a set where all updates would be applied but
-//
-//	not the removals. It must be < 2*MaxTotalVotingPower and may be close to this limit if close to
-//	MaxTotalVotingPower will be removed. This is still safe from overflow since MaxTotalVotingPower is maxInt64/8.
-//
-// No changes are made to the validator set 'vals'.
-func computeNewPriorities(updates []*Validator, vals *ValidatorSet, updatedTotalVotingPower int64) {
-	for _, valUpdate := range updates {
-		proTxHash := valUpdate.ProTxHash
-		_, val := vals.GetByProTxHash(proTxHash)
-		if val == nil {
-			// add val
-			// Set ProposerPriority to -C*totalVotingPower (with C ~= 1.125) to make sure validators can't
-			// un-bond and then re-bond to reset their (potentially previously negative) ProposerPriority to zero.
-			//
-			// Contract: updatedVotingPower < 2 * MaxTotalVotingPower to ensure ProposerPriority does
-			// not exceed the bounds of int64.
-			//
-			// Compute ProposerPriority = -1.125*totalVotingPower == -(updatedVotingPower + (updatedVotingPower >> 3)).
-			valUpdate.ProposerPriority = -(updatedTotalVotingPower + (updatedTotalVotingPower >> 3))
-		} else {
-			valUpdate.ProposerPriority = val.ProposerPriority
-		}
-	}
-
 }
 
 // Merges the vals' validator list with the updates list.
@@ -790,25 +661,15 @@ func (vals *ValidatorSet) updateWithChangeSet(changes []*Validator, allowDeletes
 
 	// Verify that applying the 'updates' against 'vals' will not result in error.
 	// Get the updated total voting power before removal. Note that this is < 2 * MaxTotalVotingPower
-	tvpAfterUpdatesBeforeRemovals, err := verifyUpdates(updates, vals, removedVotingPower)
+	_, err = verifyUpdates(updates, vals, removedVotingPower)
 	if err != nil {
 		return err
 	}
-
-	// Compute the priorities for updates.
-	computeNewPriorities(updates, vals, tvpAfterUpdatesBeforeRemovals)
-	vals.updateTotalVotingPower()
-
 	// Apply updates and removals.
 	vals.applyUpdates(updates)
 	vals.applyRemovals(deletes)
 
-	vals.updateTotalVotingPower() // will panic if total voting power > MaxTotalVotingPower
-
-	// Scale and center.
-	vals.RescalePriorities(PriorityWindowSizeFactor * vals.TotalVotingPower())
-
-	sort.Sort(ValidatorsByVotingPower(vals.Validators))
+	sort.Sort(ValidatorsByProTxHashes(vals.Validators))
 
 	vals.ThresholdPublicKey = newThresholdPublicKey
 	vals.QuorumHash = newQuorumHash
@@ -872,24 +733,6 @@ func (vals *ValidatorSet) VerifyCommit(chainID string, blockID BlockID,
 			vals.QuorumType, vals.QuorumHash, vals.ThresholdPublicKey, err)
 	}
 	return nil
-}
-
-// findPreviousProposer reverses the compare proposer priority function to find the validator
-// with the lowest proposer priority which would have been the previous proposer.
-//
-// Is used when recreating a validator set from an existing array of validators.
-func (vals *ValidatorSet) findPreviousProposer() *Validator {
-	var previousProposer *Validator
-	for _, val := range vals.Validators {
-		if previousProposer == nil {
-			previousProposer = val
-			continue
-		}
-		if previousProposer == previousProposer.CompareProposerPriority(val) {
-			previousProposer = val
-		}
-	}
-	return previousProposer
 }
 
 //-----------------
@@ -1003,23 +846,6 @@ func (vals *ValidatorSet) MarshalZerologObject(e *zerolog.Event) {
 
 //-------------------------------------
 
-// ValidatorsByVotingPower implements sort.Interface for []*Validator based on
-// the VotingPower and Address fields.
-type ValidatorsByVotingPower []*Validator
-
-func (valz ValidatorsByVotingPower) Len() int { return len(valz) }
-
-func (valz ValidatorsByVotingPower) Less(i, j int) bool {
-	if valz[i].VotingPower == valz[j].VotingPower {
-		return bytes.Compare(valz[i].ProTxHash, valz[j].ProTxHash) == -1
-	}
-	return valz[i].VotingPower > valz[j].VotingPower
-}
-
-func (valz ValidatorsByVotingPower) Swap(i, j int) {
-	valz[i], valz[j] = valz[j], valz[i]
-}
-
 // ValidatorsByAddress implements sort.Interface for []*Validator based on
 // the Address field.
 type ValidatorsByProTxHashes []*Validator
@@ -1051,7 +877,7 @@ func (vals *ValidatorSet) ToProto() (*tmproto.ValidatorSet, error) {
 	}
 	vp.Validators = valsProto
 
-	valProposer, err := vals.Proposer.ToProto()
+	valProposer, err := vals.Proposer().ToProto()
 	if err != nil {
 		return nil, fmt.Errorf("toProto: validatorSet proposer error: %w", err)
 	}
@@ -1106,8 +932,7 @@ func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 	var err error
 	proposer := vp.GetProposer()
 	if proposer != nil {
-		vals.Proposer, err = ValidatorFromProto(vp.GetProposer())
-		if err != nil {
+		if err := vals.SetProposer(proposer.GetProTxHash()); err != nil {
 			return nil, fmt.Errorf("fromProto: validatorSet proposer error: %w", err)
 		}
 	}
@@ -1133,42 +958,6 @@ func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 	vals.HasPublicKeys = vp.HasPublicKeys
 
 	return vals, vals.ValidateBasic()
-}
-
-// ValidatorSetFromExistingValidators takes an existing array of validators and rebuilds
-// the exact same validator set that corresponds to it without changing the proposer priority or power
-// if any of the validators fail validate basic then an empty set is returned.
-func ValidatorSetFromExistingValidators(
-	valz []*Validator,
-	thresholdPublicKey crypto.PubKey,
-	quorumType btcjson.LLMQType,
-	quorumHash crypto.QuorumHash,
-) (*ValidatorSet, error) {
-	if len(valz) == 0 {
-		return nil, errors.New("validator set is empty")
-	}
-	hasPublicKeys := true
-	for _, val := range valz {
-		err := val.ValidateBasic()
-		if val.PubKey == nil {
-			hasPublicKeys = false
-		}
-		if err != nil {
-			return nil, fmt.Errorf("can't create validator set: %w", err)
-		}
-	}
-
-	vals := &ValidatorSet{
-		Validators:         valz,
-		ThresholdPublicKey: thresholdPublicKey,
-		QuorumType:         quorumType,
-		QuorumHash:         quorumHash,
-		HasPublicKeys:      hasPublicKeys,
-	}
-	vals.Proposer = vals.findPreviousProposer()
-	vals.updateTotalVotingPower()
-	sort.Sort(ValidatorsByVotingPower(vals.Validators))
-	return vals, nil
 }
 
 //----------------------------------------

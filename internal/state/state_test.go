@@ -3,7 +3,6 @@ package state_test
 import (
 	"context"
 	"fmt"
-	"math/big"
 	"os"
 	"testing"
 
@@ -247,18 +246,28 @@ func TestValidatorSimpleSaveLoad(t *testing.T) {
 
 	statestore := sm.NewStore(stateDB)
 	blockStore := mocks.NewBlockStore(t)
-	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
 
 	// Can't load anything for height 0.
 	_, err := statestore.LoadValidators(0, blockStore)
 	assert.IsType(t, sm.ErrNoValSetForHeight{}, err, "expected err at height 0")
 
 	// Should be able to load for height 1.
+	blockStore.On("LoadBlockMeta", int64(1)).Return(&types.BlockMeta{
+		Header: types.Header{
+			Height:            1,
+			ProposerProTxHash: state.Validators.GetByIndex((int32(state.LastBlockHeight) % int32(state.Validators.Size()))).ProTxHash,
+		}})
+
 	v, err := statestore.LoadValidators(1, blockStore)
 	require.NoError(t, err, "expected no err at height 1")
 	assert.Equal(t, v.Hash(), state.Validators.Hash(), "expected validator hashes to match")
 
 	// Should NOT be able to load for height 2.
+	blockStore.On("LoadBlockMeta", int64(2)).Return(&types.BlockMeta{
+		Header: types.Header{
+			Height:            2,
+			ProposerProTxHash: state.Validators.GetByIndex((int32(state.LastBlockHeight) % int32(state.Validators.Size()))).ProTxHash,
+		}})
 	_, err = statestore.LoadValidators(2, blockStore)
 	require.Error(t, err, "expected no err at height 2")
 
@@ -501,145 +510,6 @@ func TestEmptyValidatorUpdates(t *testing.T) {
 //	}
 //}
 
-// TestProposerPriorityDoesNotGetResetToZero assert that we preserve accum when calling updateState
-// see https://github.com/tendermint/tendermint/issues/2718
-func TestProposerPriorityDoesNotGetResetToZero(t *testing.T) {
-	tearDown, _, state := setupTestCase(t)
-	defer tearDown(t)
-
-	ld := llmq.MustGenerate(crypto.RandProTxHashes(2))
-
-	val1VotingPower := types.DefaultDashVotingPower
-	val1ProTxHash := ld.ProTxHashes[0]
-	val1PubKey := ld.PubKeyShares[0]
-	val1 := &types.Validator{ProTxHash: val1ProTxHash, PubKey: val1PubKey, VotingPower: val1VotingPower}
-
-	quorumHash := crypto.RandQuorumHash()
-	state.Validators = types.NewValidatorSet([]*types.Validator{val1}, val1PubKey, btcjson.LLMQType_5_60, quorumHash, true)
-
-	// NewValidatorSet calls IncrementProposerPriority but uses on a copy of val1
-	assert.EqualValues(t, 0, val1.ProposerPriority)
-
-	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), 0)
-	require.NoError(t, err)
-	blockID := block.BlockID(nil)
-	require.NoError(t, err)
-
-	// Any node pro tx hash should do
-	firstNode := state.Validators.GetByIndex(0)
-	ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
-	changes, err := state.NewStateChangeset(ctx, sm.RoundParams{})
-	assert.NoError(t, err)
-	updatedState, err := state.Update(blockID, &block.Header, &changes)
-	assert.NoError(t, err)
-	curTotal := val1VotingPower
-	// one increment step and one validator: 0 + power - total_power == 0
-	assert.Equal(t, 0+val1VotingPower-curTotal, updatedState.Validators.Validators[0].ProposerPriority)
-
-	// add a validator
-	val2ProTxHash := ld.ProTxHashes[1]
-	val2PubKey := ld.PubKeyShares[1]
-	val2VotingPower := types.DefaultDashVotingPower
-	fvp, err := cryptoenc.PubKeyToProto(val2PubKey)
-	require.NoError(t, err)
-
-	updateAddVal := abci.ValidatorUpdate{ProTxHash: val2ProTxHash, PubKey: &fvp, Power: val2VotingPower}
-	validatorSetUpdate := &abci.ValidatorSetUpdate{
-		ValidatorUpdates:   []abci.ValidatorUpdate{updateAddVal},
-		ThresholdPublicKey: fvp,
-		QuorumHash:         quorumHash,
-	}
-
-	changes, err = updatedState.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: validatorSetUpdate})
-	assert.NoError(t, err)
-
-	updatedState2, err := updatedState.Update(blockID, &block.Header, &changes)
-	assert.NoError(t, err)
-
-	valsetScoresNewHeight(t, &updatedState2)
-
-	require.Equal(t, len(updatedState2.Validators.Validators), 2)
-	_, updatedVal1 := updatedState2.Validators.GetByProTxHash(val1ProTxHash)
-	_, addedVal2 := updatedState2.Validators.GetByProTxHash(val2ProTxHash)
-
-	// adding a validator should not lead to a ProposerPriority equal to zero (unless the combination of averaging and
-	// incrementing would cause so; which is not the case here)
-	// Steps from adding new validator:
-	// 0 - val1 prio is 0, TVP after add:
-	wantVal1Prio := int64(0)
-	totalPowerAfter := val1VotingPower + val2VotingPower
-	// 1. Add - Val2 should be initially added with (-123) =>
-	wantVal2Prio := -(totalPowerAfter + (totalPowerAfter >> 3))
-	// 2. Scale - noop
-	// 3. Center - with avg, resulting val2:-61, val1:62
-	avg := big.NewInt(0).Add(big.NewInt(wantVal1Prio), big.NewInt(wantVal2Prio))
-	avg.Div(avg, big.NewInt(2))
-	wantVal2Prio -= avg.Int64() // -61
-	wantVal1Prio -= avg.Int64() // 62
-
-	// 4. Steps from IncrementProposerPriority
-	wantVal1Prio += val1VotingPower // 72
-	wantVal2Prio += val2VotingPower // 39
-	wantVal1Prio -= totalPowerAfter // -38 as val1 is proposer
-
-	assert.Equal(t, wantVal1Prio, updatedVal1.ProposerPriority)
-	assert.Equal(t, wantVal2Prio, addedVal2.ProposerPriority)
-
-	// Updating validators does not reset the ProposerPriority to zero if we keep the same quorum:
-	// If we change quorums it will!
-	// 1. Add - Val2 VotingPower change to 1 =>
-	abciValidatorUpdates := types.ValidatorUpdatesRegenerateOnProTxHashes(ld.ProTxHashes)
-
-	// this will cause the diff of priorities (77)
-	// to be larger than threshold == 2*totalVotingPower (22):
-	abciValidatorUpdates.QuorumHash = quorumHash
-	changes, err = updatedState2.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: validatorSetUpdate})
-	require.NoError(t, err)
-
-	updatedState3, err := updatedState2.Update(blockID, &block.Header, &changes)
-	assert.NoError(t, err)
-
-	valsetScoresNewHeight(t, &updatedState3)
-
-	require.Equal(t, len(updatedState3.Validators.Validators), 2)
-	_, prevVal1 := updatedState2.Validators.GetByProTxHash(val1ProTxHash)
-	_, prevVal2 := updatedState2.Validators.GetByProTxHash(val2ProTxHash)
-	_, updatedVal1 = updatedState3.Validators.GetByProTxHash(val1ProTxHash)
-	_, updatedVal2 := updatedState3.Validators.GetByProTxHash(val2ProTxHash)
-
-	assert.NotZero(t, updatedVal1)
-	assert.NotZero(t, updatedVal2)
-	// 2. Scale
-	// old prios: v1(100):13, v2(100):-12
-	wantVal1Prio = prevVal1.ProposerPriority
-	wantVal2Prio = prevVal2.ProposerPriority
-	// scale to diffMax = 400 = 2 * tvp, diff=13-(-12)=25
-	// new totalPower
-	totalPower := updatedVal1.VotingPower + updatedVal2.VotingPower
-	dist := wantVal2Prio - wantVal1Prio
-	if dist < 0 { // get the absolute distance
-		dist *= -1
-	}
-	// ratio := (dist + 2*totalPower - 1) / 2*totalPower = 224/200 = 1
-	ratio := int64(float64(dist+2*totalPower-1) / float64(2*totalPower))
-	// v1(100):13/1, v2(100):-12/1
-	if ratio != 0 {
-		wantVal1Prio /= ratio // 13
-		wantVal2Prio /= ratio // -12
-	}
-
-	// 3. Center - noop
-	// 4. IncrementProposerPriority() ->
-	// v1(100):13+100, v2(100):-12+100 -> v2 proposer so subtract tvp(11)
-	// v1(100):-87, v2(1):88
-	wantVal2Prio += updatedVal2.VotingPower // 88 -> prop
-	wantVal1Prio += updatedVal1.VotingPower // 113
-	wantVal1Prio -= totalPower              // -87
-
-	assert.Equal(t, wantVal2Prio, updatedVal2.ProposerPriority)
-	assert.Equal(t, wantVal1Prio, updatedVal1.ProposerPriority)
-}
-
 func valsetScoresNewHeight(t *testing.T, state *sm.State) *types.Validator {
 	ps, err := validatorscoring.NewProposerStrategy(
 		state.ConsensusParams,
@@ -653,187 +523,6 @@ func valsetScoresNewHeight(t *testing.T, state *sm.State) *types.Validator {
 	require.NoError(t, err)
 
 	return ps.MustGetProposer(state.LastBlockHeight+1, 0)
-}
-
-func TestProposerPriorityProposerAlternates(t *testing.T) {
-	// Regression test that would fail if the inner workings of
-	// IncrementProposerPriority change.
-	// Additionally, make sure that same power validators alternate if both
-	// have the same voting power (and the 2nd was added later).
-	tearDown, _, state := setupTestCase(t)
-	defer tearDown(t)
-
-	ld := llmq.MustGenerate(crypto.RandProTxHashes(2))
-	thresholdPublicKey := cryptoenc.MustPubKeyToProto(ld.ThresholdPubKey)
-
-	val1VotingPower := types.DefaultDashVotingPower
-	val1ProTxHash := ld.ProTxHashes[0]
-	val1PubKey := ld.PubKeyShares[0]
-	val1 := &types.Validator{ProTxHash: val1ProTxHash, PubKey: val1PubKey, VotingPower: val1VotingPower}
-
-	// reset state validators to above validator, the threshold key is just the validator key since there is only 1 validator
-	quorumHash := crypto.RandQuorumHash()
-	state.Validators = types.NewValidatorSet([]*types.Validator{val1}, val1PubKey, btcjson.LLMQType_5_60, quorumHash, true)
-	// valsetScoresNewHeight(t, &state)
-	// we only have one validator:
-	assert.Equal(t, val1ProTxHash, state.Validators.Proposer.ProTxHash)
-
-	firstNode := state.Validators.GetByIndex(0)
-	ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
-
-	block, err := statefactory.MakeBlock(state, state.LastBlockHeight+1, new(types.Commit), 0)
-	require.NoError(t, err)
-	blockID := block.BlockID(nil)
-	require.NoError(t, err)
-
-	// no updates:
-	changes, err := state.NewStateChangeset(ctx, sm.RoundParams{})
-	assert.NoError(t, err)
-
-	updatedState, err := state.Update(blockID, &block.Header, &changes)
-	assert.NoError(t, err)
-	// valsetScoresNewHeight(t, &updatedState) // this usually happens in new round
-
-	// 0 + 10 (initial prio) - 10 (avg) - 10 (mostest - total) = -10
-	totalPower := val1VotingPower
-	wantVal1Prio := 0 + val1VotingPower - totalPower
-	assert.Equal(t, wantVal1Prio, updatedState.Validators.Validators[0].ProposerPriority)
-	assert.Equal(t, val1ProTxHash, updatedState.Validators.Proposer.ProTxHash)
-
-	// add a validator with the same voting power as the first
-	val2ProTxHash := ld.ProTxHashes[1]
-	val2PubKey := ld.PubKeyShares[1]
-	fvp, err := cryptoenc.PubKeyToProto(val2PubKey)
-	require.NoError(t, err)
-	updateAddVal := abci.ValidatorUpdate{ProTxHash: val2ProTxHash, PubKey: &fvp, Power: val1VotingPower}
-	valsetUpdate := &abci.ValidatorSetUpdate{
-		ValidatorUpdates:   []abci.ValidatorUpdate{updateAddVal},
-		ThresholdPublicKey: thresholdPublicKey,
-		QuorumHash:         quorumHash,
-	}
-	changes, err = updatedState.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: valsetUpdate})
-	assert.NoError(t, err)
-
-	updatedState2, err := updatedState.Update(blockID, &block.Header, &changes)
-	assert.NoError(t, err)
-	// valsetScoresNewHeight(t, &updatedState2) // this usually happens in new round
-
-	require.Equal(t, len(updatedState2.Validators.Validators), 2)
-	updatedState2.Validators.Recalculate()
-	// val1 will still be proposer as val2 just got added:
-	assert.Equal(t, val1ProTxHash, updatedState.Validators.Proposer.ProTxHash)
-	assert.Equal(t, val1ProTxHash, updatedState2.Validators.Proposer.ProTxHash)
-
-	_, updatedVal1 := updatedState2.Validators.GetByProTxHash(val1ProTxHash)
-	_, oldVal1 := updatedState.Validators.GetByProTxHash(val1ProTxHash)
-	_, updatedVal2 := updatedState2.Validators.GetByProTxHash(val2ProTxHash)
-
-	// 1. Add
-	val2VotingPower := val1VotingPower
-	totalPower = val1VotingPower + val2VotingPower           // 200
-	v2PrioWhenAddedVal2 := -(totalPower + (totalPower >> 3)) // -225
-	// 2. Scale - noop
-	// 3. Center
-	avgSum := big.NewInt(0).Add(big.NewInt(v2PrioWhenAddedVal2), big.NewInt(oldVal1.ProposerPriority))
-	avg := avgSum.Div(avgSum, big.NewInt(2))                   // -11
-	expectedVal2Prio := v2PrioWhenAddedVal2 - avg.Int64()      // -11
-	expectedVal1Prio := oldVal1.ProposerPriority - avg.Int64() // 11
-	// 4. Increment
-	expectedVal2Prio += val2VotingPower // -11 + 10 = -1
-	expectedVal1Prio += val1VotingPower // 11 + 10 == 21
-	expectedVal1Prio -= totalPower      // 1, val1 proposer
-
-	assert.EqualValues(t, expectedVal1Prio, updatedVal1.ProposerPriority)
-	assert.EqualValues(
-		t,
-		expectedVal2Prio,
-		updatedVal2.ProposerPriority,
-		"unexpected proposer priority for validator: %v",
-		updatedVal2,
-	)
-
-	changes, err = updatedState2.NewStateChangeset(ctx, sm.RoundParams{ValidatorSetUpdate: valsetUpdate})
-	assert.NoError(t, err)
-	updatedState3, err := updatedState2.Update(blockID, &block.Header, &changes)
-	assert.NoError(t, err)
-	//valsetScoresNewHeight(t, &updatedState3) // this usually happens in new round
-
-	// assert.Equal(t, updatedState3.Validators, updatedState2.Validators)
-	_, updatedVal1 = updatedState3.Validators.GetByProTxHash(val1ProTxHash)
-	_, updatedVal2 = updatedState3.Validators.GetByProTxHash(val2ProTxHash)
-
-	// val1 will still be proposer:
-	assert.Equal(t, val1ProTxHash, updatedState3.Validators.Proposer.ProTxHash)
-
-	// check if expected proposer prio is matched:
-	// Increment
-	expectedVal2Prio2 := expectedVal2Prio + val2VotingPower // -1 + 10 = 9
-	expectedVal1Prio2 := expectedVal1Prio + val1VotingPower // 1 + 10 == 11
-	expectedVal1Prio2 -= totalPower                         // -9, val1 proposer
-
-	assert.EqualValues(
-		t,
-		expectedVal1Prio2,
-		updatedVal1.ProposerPriority,
-		"unexpected proposer priority for validator: %v",
-		updatedVal2,
-	)
-	assert.EqualValues(
-		t,
-		expectedVal2Prio2,
-		updatedVal2.ProposerPriority,
-		"unexpected proposer priority for validator: %v",
-		updatedVal2,
-	)
-
-	// no changes in voting power and both validators have same voting power
-	// -> proposers should alternate:
-	oldState := updatedState3
-	changes, err = oldState.NewStateChangeset(ctx, sm.RoundParams{})
-	assert.NoError(t, err)
-	oldState, err = oldState.Update(blockID, &block.Header, &changes)
-	assert.NoError(t, err)
-	expectedVal1Prio2 = 13
-	expectedVal2Prio2 = -12
-	expectedVal1Prio = -87
-	expectedVal2Prio = 88
-
-	for i := 0; i < 1000; i++ {
-		// no validator updates:
-		changes, err = oldState.NewStateChangeset(ctx, sm.RoundParams{})
-		require.NoError(t, err)
-
-		updatedState, err := oldState.Update(blockID, &block.Header, &changes)
-		assert.NoError(t, err)
-		// valsetScoresNewHeight(t, &updatedState) // this usually happens in new round
-
-		// alternate (and cyclic priorities):
-		assert.NotEqual(
-			t,
-			updatedState.Validators.Proposer.ProTxHash,
-			oldState.Validators.Proposer.ProTxHash,
-			"iter: %v",
-			i,
-		)
-		assert.Equal(t, oldState.LastValidators.Proposer.ProTxHash, updatedState.Validators.Proposer.ProTxHash, "iter: %v", i)
-
-		_, updatedVal1 = updatedState.Validators.GetByProTxHash(val1ProTxHash)
-		assert.NotNil(t, updatedVal1)
-		_, updatedVal2 = updatedState.Validators.GetByProTxHash(val2ProTxHash)
-		assert.NotNil(t, updatedVal2)
-
-		if i%2 == 0 {
-			assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val1ProTxHash)
-			assert.Equal(t, expectedVal1Prio, updatedVal1.ProposerPriority) // -19
-			assert.Equal(t, expectedVal2Prio, updatedVal2.ProposerPriority) // 0
-		} else {
-			// assert.Equal(t, updatedState.Validators.Proposer.ProTxHash, val2ProTxHash)
-			assert.Equal(t, expectedVal1Prio2, updatedVal1.ProposerPriority) // -9
-			assert.Equal(t, expectedVal2Prio2, updatedVal2.ProposerPriority) // -10
-		}
-		// update for next iteration:
-		oldState = updatedState
-	}
 }
 
 func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
@@ -945,45 +634,12 @@ func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {
 		updatedState = execute(state, updatedState, changes)
 		if i > numVals { // expect proposers to cycle through after the first iteration (of numVals blocks):
 			if proposers[i%numVals] == nil {
-				proposers[i%numVals] = updatedState.Validators.Proposer
+				proposers[i%numVals] = updatedState.Validators.Proposer()
 			} else {
-				assert.Equal(t, proposers[i%numVals], updatedState.Validators.Proposer)
+				assert.Equal(t, proposers[i%numVals], updatedState.Validators.Proposer())
 			}
 		}
 	}
-}
-
-func TestStoreLoadValidatorsIncrementsProposerPriority(t *testing.T) {
-	const valSetSize = 2
-	tearDown, stateDB, state := setupTestCase(t)
-	t.Cleanup(func() { tearDown(t) })
-	stateStore := sm.NewStore(stateDB)
-	state.Validators, _ = types.RandValidatorSet(valSetSize)
-	err := stateStore.Save(state)
-	require.NoError(t, err)
-
-	blockStore := mocks.NewBlockStore(t)
-	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{}).Maybe()
-
-	state2 := state.Copy()
-	state2.LastBlockHeight++
-	state2.Validators = state.Validators.Copy()
-	state2.LastHeightValidatorsChanged = state2.LastBlockHeight + 1
-	valsetScoresNewHeight(t, &state2) // this is normally done in updateState
-	err = stateStore.Save(state2)
-	require.NoError(t, err)
-
-	nextHeight := state.LastBlockHeight + 1
-
-	v0, err := stateStore.LoadValidators(nextHeight, blockStore)
-	assert.NoError(t, err)
-	acc0 := v0.Validators[0].ProposerPriority
-
-	v1, err := stateStore.LoadValidators(nextHeight+1, blockStore)
-	assert.NoError(t, err)
-	acc1 := v1.Validators[0].ProposerPriority
-
-	assert.NotEqual(t, acc1, acc0, "expected ProposerPriority value to change between heights")
 }
 
 // TestValidatorChangesSaveLoad tests saving and loading a validator set with
@@ -1000,6 +656,11 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 	require.Equal(t, int64(0), state.LastBlockHeight)
 	state.Validators, _ = types.RandValidatorSet(valSetSize)
 	err := stateStore.Save(state)
+	blockStore.On("LoadBlockMeta", state.LastBlockHeight).Return(&types.BlockMeta{
+		Header: types.Header{
+			Height:            state.LastBlockHeight,
+			ProposerProTxHash: state.Validators.GetByIndex(int32(state.LastBlockHeight-state.InitialHeight) % valSetSize).ProTxHash,
+		}}).Maybe()
 	require.NoError(t, err)
 
 	// ====== HEIGHT 2 ====== //

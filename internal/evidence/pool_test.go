@@ -525,7 +525,6 @@ func initializeValidatorState(
 	// create validator set and state
 	valSet := &types.ValidatorSet{
 		Validators:         []*types.Validator{validator},
-		Proposer:           validator,
 		ThresholdPublicKey: validator.PubKey,
 		QuorumType:         quorumType,
 		QuorumHash:         quorumHash,

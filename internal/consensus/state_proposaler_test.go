@@ -24,6 +24,7 @@ type ProposalerTestSuite struct {
 	suite.Suite
 
 	proposer          *Proposaler
+	proposerSelector  validatorscoring.ProposerProvider
 	mockBlockExec     *mocks.Executor
 	mockPrivVals      []types.PrivValidator
 	mockValSet        *types.ValidatorSet
@@ -88,19 +89,19 @@ func (suite *ProposalerTestSuite) SetupTest() {
 		blockExec:      blockExec,
 		committedState: suite.committedState,
 	}
-
-	vs, err := validatorscoring.NewProposerStrategy(
+	var err error
+	suite.proposerSelector, err = validatorscoring.NewProposerStrategy(
 		suite.committedState.ConsensusParams,
-		suite.committedState.Validators.Copy(),
-		suite.committedState.LastBlockHeight,
-		suite.committedState.LastBlockRound,
+		valSet,
+		0,
+		0,
 		nil,
 	)
 	if err != nil {
 		panic(fmt.Errorf("failed to create validator scoring strategy: %w", err))
 	}
 
-	suite.proposerProTxHash = vs.MustGetProposer(100, 0).ProTxHash
+	suite.proposerProTxHash = suite.proposerSelector.MustGetProposer(100, 0).ProTxHash
 	suite.blockH100R0 = suite.committedState.MakeBlock(100, []types.Tx{}, &suite.commitH99R0, nil, suite.proposerProTxHash, 0)
 }
 
@@ -158,7 +159,11 @@ func (suite *ProposalerTestSuite) TestSet() {
 			wantErr:    ErrInvalidProposalPOLRound.Error(),
 		},
 		{
-			rs:              cstypes.RoundState{Height: 100, Round: 0, Validators: suite.mockValSet},
+			rs: cstypes.RoundState{Height: 100,
+				Round:            0,
+				Validators:       suite.mockValSet,
+				ProposerSelector: suite.proposerSelector,
+			},
 			proposal:        *proposalH100R0,
 			receivedAt:      receivedAt,
 			wantProposal:    proposalH100R0,
@@ -183,6 +188,8 @@ func (suite *ProposalerTestSuite) TestDecide() {
 	state := suite.committedState
 	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Header.Time)
 	suite.signProposal(ctx, proposalH100R0)
+	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, suite.mockValSet, 100, 0, nil)
+	suite.Require().NoError(err)
 	testCases := []struct {
 		height       int64
 		round        int32
@@ -195,12 +202,13 @@ func (suite *ProposalerTestSuite) TestDecide() {
 			height: 100,
 			round:  0,
 			rs: cstypes.RoundState{
-				Height:     100,
-				Round:      0,
-				Validators: suite.mockValSet,
-				ValidBlock: nil,
-				LastCommit: &suite.commitH99R0,
-				ValidRound: 0,
+				Height:           100,
+				Round:            0,
+				Validators:       suite.mockValSet,
+				ValidBlock:       nil,
+				LastCommit:       &suite.commitH99R0,
+				ValidRound:       0,
+				ProposerSelector: vs,
 			},
 			mockFn: func(rs cstypes.RoundState) {
 				suite.mockBlockExec.
@@ -229,6 +237,7 @@ func (suite *ProposalerTestSuite) TestDecide() {
 				ValidBlockRecvTime: suite.blockH100R0.Time.Add(100 * time.Millisecond),
 				LastCommit:         &suite.commitH99R0,
 				ValidRound:         0,
+				ProposerSelector:   vs,
 			},
 			wantProposal: proposalH100R0,
 		},
@@ -266,9 +275,11 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 	proposalH100R0wrongSig := *proposalH100R0
 	proposalH100R0wrongSig.Signature = make([]byte, 96)
 	valSet := *suite.mockValSet
-	proposer := valSet.Proposer.Copy()
+	proposer := valSet.Proposer()
 	proposer.PubKey = nil
-	valSet.Proposer = proposer
+	idx, _ := valSet.GetByProTxHash(proposer.ProTxHash)
+	valSet.Validators[int(idx)] = proposer
+
 	testCases := []struct {
 		proposal *types.Proposal
 		rs       cstypes.RoundState
@@ -277,53 +288,60 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 		{
 			proposal: proposalH100R0,
 			rs: cstypes.RoundState{
-				Validators: suite.mockValSet,
+				Validators:       suite.mockValSet,
+				ProposerSelector: suite.proposerSelector,
 			},
 		},
 		{
 			proposal: &proposalH100R0wrongSig,
 			rs: cstypes.RoundState{
-				Validators: suite.mockValSet,
+				Validators:       suite.mockValSet,
+				ProposerSelector: suite.proposerSelector,
 			},
 			wantErr: ErrInvalidProposalSignature.Error(),
 		},
 		{
 			proposal: proposalH100R0,
 			rs: cstypes.RoundState{
-				Commit:     nil,
-				Validators: &valSet,
+				Commit:           nil,
+				Validators:       &valSet,
+				ProposerSelector: suite.proposerSelector,
 			},
 			wantErr: ErrUnableToVerifyProposal.Error(),
 		},
 		{
 			proposal: proposalH100R0,
 			rs: cstypes.RoundState{
-				Commit:     &types.Commit{Height: 99},
-				Validators: &valSet,
+				Commit:           &types.Commit{Height: 99},
+				Validators:       &valSet,
+				ProposerSelector: suite.proposerSelector,
 			},
 			wantErr: ErrUnableToVerifyProposal.Error(),
 		},
 		{
 			proposal: proposalH100R0,
 			rs: cstypes.RoundState{
-				Commit:     &types.Commit{Height: 100, Round: 1},
-				Validators: &valSet,
+				Commit:           &types.Commit{Height: 100, Round: 1},
+				Validators:       &valSet,
+				ProposerSelector: suite.proposerSelector,
 			},
 			wantErr: ErrUnableToVerifyProposal.Error(),
 		},
 		{
 			proposal: proposalH100R0,
 			rs: cstypes.RoundState{
-				Commit:     &types.Commit{Height: 100, Round: 0, BlockID: types.BlockID{Hash: nil}},
-				Validators: &valSet,
+				Commit:           &types.Commit{Height: 100, Round: 0, BlockID: types.BlockID{Hash: nil}},
+				Validators:       &valSet,
+				ProposerSelector: suite.proposerSelector,
 			},
 			wantErr: ErrInvalidProposalForCommit.Error(),
 		},
 		{
 			proposal: proposalH100R0,
 			rs: cstypes.RoundState{
-				Commit:     &types.Commit{Height: 100, Round: 0, BlockID: proposalH100R0.BlockID},
-				Validators: &valSet,
+				Commit:           &types.Commit{Height: 100, Round: 0, BlockID: proposalH100R0.BlockID},
+				Validators:       &valSet,
+				ProposerSelector: suite.proposerSelector,
 			},
 		},
 	}

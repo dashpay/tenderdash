@@ -77,7 +77,7 @@ type RoundState struct {
 	// Subjective time when +2/3 precommits for Block at Round were found
 	CommitTime          time.Time           `json:"commit_time"`
 	Validators          *types.ValidatorSet `json:"validators"`
-	ProposerSelector    validatorscoring.ValidatorScoringStrategy
+	ProposerSelector    validatorscoring.ProposerProvider
 	Proposal            *types.Proposal `json:"proposal"`
 	ProposalReceiveTime time.Time       `json:"proposal_receive_time"`
 	ProposalBlock       *types.Block    `json:"proposal_block"`

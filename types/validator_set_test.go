@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"math"
 	"math/rand"
 	"sort"
 	"strconv"
@@ -42,7 +41,7 @@ func TestValidatorSetBasic(t *testing.T) {
 	assert.Equal(t, int64(0), vset.TotalVotingPower())
 	assert.Equal(t, tmbytes.HexBytes(nil), vset.Hash())
 	// add
-	val = randModuloValidator(vset.TotalVotingPower())
+	val = randValidator()
 	assert.NoError(t, vset.UpdateWithChangeSet([]*Validator{val}, val.PubKey, crypto.RandQuorumHash()))
 
 	assert.True(t, vset.HasProTxHash(val.ProTxHash))
@@ -55,16 +54,10 @@ func TestValidatorSetBasic(t *testing.T) {
 	assert.NotNil(t, vset.Hash())
 
 	// update
-	val = randModuloValidator(vset.TotalVotingPower())
+	val = randValidator()
 	assert.NoError(t, vset.UpdateWithChangeSet([]*Validator{val}, val.PubKey, crypto.RandQuorumHash()))
 	_, val = vset.GetByProTxHash(val.ProTxHash)
 	val.PubKey = bls12381.GenPrivKey().PubKey()
-	proposerPriority := val.ProposerPriority
-
-	val.ProposerPriority = 0
-	assert.NoError(t, vset.UpdateWithChangeSet([]*Validator{val}, val.PubKey, crypto.RandQuorumHash()))
-	_, val = vset.GetByProTxHash(val.ProTxHash)
-	assert.Equal(t, proposerPriority, val.ProposerPriority)
 
 }
 
@@ -128,8 +121,7 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 				QuorumHash:         crypto.RandQuorumHash(),
 				HasPublicKeys:      true,
 			},
-			err: true,
-			msg: "validator set proposer is not set",
+			err: false,
 		},
 		{
 			testName: "Validator in set has wrong public key for threshold",
@@ -138,7 +130,6 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 				ThresholdPublicKey: bls12381.GenPrivKey().PubKey(),
 				QuorumHash:         crypto.RandQuorumHash(),
 				HasPublicKeys:      true,
-				Proposer:           val,
 			},
 			err: true,
 			msg: "thresholdPublicKey error: incorrect threshold public key",
@@ -150,7 +141,6 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 				ThresholdPublicKey: bls12381.GenPrivKey().PubKey(),
 				QuorumHash:         crypto.RandQuorumHash(),
 				HasPublicKeys:      true,
-				Proposer:           badValNoPublicKey,
 			},
 			err: true,
 			msg: "invalid validator pub key #0: validator does not have a public key",
@@ -162,7 +152,6 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 				ThresholdPublicKey: bls12381.GenPrivKey().PubKey(),
 				QuorumHash:         crypto.RandQuorumHash(),
 				HasPublicKeys:      true,
-				Proposer:           badValNoProTxHash,
 			},
 			err: true,
 			msg: "invalid validator #0: validator does not have a provider transaction hash",
@@ -171,7 +160,6 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 			testName: "Validator set needs quorum hash",
 			vals: ValidatorSet{
 				Validators:         []*Validator{val},
-				Proposer:           val,
 				ThresholdPublicKey: val.PubKey,
 				HasPublicKeys:      true,
 			},
@@ -182,7 +170,6 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 			testName: "Validator set single val good",
 			vals: ValidatorSet{
 				Validators:         []*Validator{val},
-				Proposer:           val,
 				ThresholdPublicKey: val.PubKey,
 				QuorumHash:         crypto.RandQuorumHash(),
 				HasPublicKeys:      true,
@@ -194,7 +181,6 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 			testName: "Validator set needs threshold public key",
 			vals: ValidatorSet{
 				Validators:    []*Validator{val},
-				Proposer:      val,
 				QuorumHash:    crypto.RandQuorumHash(),
 				HasPublicKeys: true,
 			},
@@ -271,12 +257,9 @@ func randPubKey() crypto.PubKey {
 	return bls12381.PubKey(tmrand.Bytes(32))
 }
 
-func randModuloValidator(totalVotingPower int64) *Validator {
-	// this modulo limits the ProposerPriority/VotingPower to stay in the
-	// bounds of MaxTotalVotingPower minus the already existing voting power:
+func randValidator() *Validator {
 	address := RandValidatorAddress().String()
 	val := NewValidator(randPubKey(), DefaultDashVotingPower, crypto.RandProTxHash(), address)
-	val.ProposerPriority = rand.Int63() % (MaxTotalVotingPower - totalVotingPower)
 	return val
 }
 
@@ -314,47 +297,10 @@ func (vals *ValidatorSet) fromBytes(t *testing.T, b []byte) *ValidatorSet {
 	return vs
 }
 
-func TestAvgProposerPriority(t *testing.T) {
-	// Create Validator set without calling IncrementProposerPriority:
-	tcs := []struct {
-		vs   ValidatorSet
-		want int64
-	}{
-		0: {ValidatorSet{Validators: []*Validator{{ProposerPriority: 0}, {ProposerPriority: 0}, {ProposerPriority: 0}}}, 0},
-		1: {
-			ValidatorSet{
-				Validators: []*Validator{{ProposerPriority: math.MaxInt64}, {ProposerPriority: 0}, {ProposerPriority: 0}},
-			}, math.MaxInt64 / 3,
-		},
-		2: {
-			ValidatorSet{
-				Validators: []*Validator{{ProposerPriority: math.MaxInt64}, {ProposerPriority: 0}},
-			}, math.MaxInt64 / 2,
-		},
-		3: {
-			ValidatorSet{
-				Validators: []*Validator{{ProposerPriority: math.MaxInt64}, {ProposerPriority: math.MaxInt64}},
-			}, math.MaxInt64,
-		},
-		4: {
-			ValidatorSet{
-				Validators: []*Validator{{ProposerPriority: math.MinInt64}, {ProposerPriority: math.MinInt64}},
-			}, math.MinInt64,
-		},
-	}
-	for i, tc := range tcs {
-		got := tc.vs.computeAvgProposerPriority()
-		assert.Equal(t, tc.want, got, "test case: %v", i)
-	}
-}
-
 func TestEmptySet(t *testing.T) {
 
 	var valList []*Validator
 	valSet := NewValidatorSet(valList, bls12381.PubKey{}, btcjson.LLMQType_5_60, crypto.QuorumHash{}, true)
-	assert.Panics(t, func() { valSet.RescalePriorities(100) })
-	assert.Panics(t, func() { valSet.shiftByAvgProposerPriority() })
-	assert.Panics(t, func() { assert.Zero(t, computeMaxMinPriorityDiff(valSet)) })
 
 	// Add to empty set
 	proTxHashes := []crypto.ProTxHash{crypto.Checksum([]byte("v1")), crypto.Checksum([]byte("v2"))}
@@ -397,9 +343,8 @@ func TestUpdatesForNewValidatorSet(t *testing.T) {
 	// Verify set including validator with negative voting power cannot be created
 	v1 = NewTestValidatorGeneratedFromProTxHash(crypto.Checksum([]byte("v1")))
 	v2 = &Validator{
-		VotingPower:      -20,
-		ProposerPriority: 0,
-		ProTxHash:        crypto.Checksum([]byte("v2")),
+		VotingPower: -20,
+		ProTxHash:   crypto.Checksum([]byte("v2")),
 	}
 	v3 = NewTestValidatorGeneratedFromProTxHash(crypto.Checksum([]byte("v3")))
 	valList = []*Validator{v1, v2, v3}
@@ -493,36 +438,16 @@ func addValidatorsToValidatorSet(vals *ValidatorSet, testValList []testVal) ([]*
 
 }
 
-func valSetTotalProposerPriority(valSet *ValidatorSet) int64 {
-	sum := int64(0)
-	for _, val := range valSet.Validators {
-		// mind overflow
-		sum = tmmath.SafeAddClipInt64(sum, val.ProposerPriority)
-	}
-	return sum
-}
-
 func verifyValidatorSet(t *testing.T, valSet *ValidatorSet) {
 	// verify that the capacity and length of validators is the same
 	assert.Equal(t, len(valSet.Validators), cap(valSet.Validators))
 
 	// verify that the set's total voting power has been updated
-	tvp := valSet.totalVotingPower
-	valSet.updateTotalVotingPower()
-	expectedTvp := valSet.TotalVotingPower()
-	assert.Equal(t, expectedTvp, tvp,
-		"expected TVP %d. Got %d, valSet=%s", expectedTvp, tvp, valSet)
-
-	// verify that validator priorities are centered
-	valsCount := int64(len(valSet.Validators))
-	tpp := valSetTotalProposerPriority(valSet)
-	assert.True(t, tpp < valsCount && tpp > -valsCount,
-		"expected total priority in (-%d, %d). Got %d", valsCount, valsCount, tpp)
-
-	// verify that priorities are scaled
-	dist := computeMaxMinPriorityDiff(valSet)
-	assert.True(t, dist <= PriorityWindowSizeFactor*tvp,
-		"expected priority distance < %d. Got %d", PriorityWindowSizeFactor*tvp, dist)
+	tvp := int64(0)
+	for _, v := range valSet.Validators {
+		tvp += v.VotingPower
+	}
+	assert.Equal(t, tvp, valSet.TotalVotingPower())
 
 	recoveredPublicKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(valSet.GetPublicKeys(), valSet.GetProTxHashesAsByteArrays())
 	assert.NoError(t, err)
@@ -949,10 +874,10 @@ func TestValidatorSetProtoBuf(t *testing.T) {
 	valset2.Validators[0] = &Validator{}
 
 	valset3, _ := RandValidatorSet(10)
-	valset3.Proposer = nil
+	valset3.Validators[0] = nil
 
 	valset4, _ := RandValidatorSet(10)
-	valset4.Proposer = &Validator{}
+	valset4.Validators[0] = &Validator{}
 
 	testCases := []struct {
 		msg      string
@@ -983,28 +908,6 @@ func TestValidatorSetProtoBuf(t *testing.T) {
 			require.Error(t, err, tc.msg)
 		}
 	}
-}
-
-// ---------------------
-// Sort validators by priority and address
-type validatorsByPriority []*Validator
-
-func (valz validatorsByPriority) Len() int {
-	return len(valz)
-}
-
-func (valz validatorsByPriority) Less(i, j int) bool {
-	if valz[i].ProposerPriority < valz[j].ProposerPriority {
-		return true
-	}
-	if valz[i].ProposerPriority > valz[j].ProposerPriority {
-		return false
-	}
-	return bytes.Compare(valz[i].ProTxHash, valz[j].ProTxHash) < 0
-}
-
-func (valz validatorsByPriority) Swap(i, j int) {
-	valz[i], valz[j] = valz[j], valz[i]
 }
 
 //-------------------------------------

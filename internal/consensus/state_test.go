@@ -135,7 +135,7 @@ func TestStateProposerSelection2(t *testing.T) {
 	// everyone just votes nil. we get a new proposer each round
 	for i := int32(0); int(i) < len(vss); i++ {
 		prop := stateData.ProposerSelector.MustGetProposer(height, round)
-		proTxHash, err := vss[int(i+round)%len(vss)].GetProTxHash(ctx)
+		proTxHash, err := vss[int(int32(height-1)+round)%len(vss)].GetProTxHash(ctx)
 		require.NoError(t, err)
 		correctProposer := proTxHash
 		require.True(t, bytes.Equal(prop.ProTxHash, correctProposer),
@@ -263,10 +263,11 @@ func TestStateProposerSelectionBetweenRoundsAndHeights(t *testing.T) {
 	}
 
 	// ensure correct order of voting
-	for i, p := range proposers {
-		expectedProTx := expectedValidatorSet.Validators[(i)%len(expectedValidatorSet.Validators)].ProTxHash
-		assert.Equal(t, expectedProTx, p.proposer.ProTxHash)
-		t.Logf("height %d, round %d, proposer %x", p.height, p.round, p.proposer.ProTxHash[:6])
+
+	for _, p := range proposers {
+		expectedProTx := expectedValidatorSet.Validators[(int(p.height-1)+int(p.round))%expectedValidatorSet.Size()].ProTxHash
+		assert.Equal(t, expectedProTx, p.proposer.ProTxHash,
+			"height %d, round %d, proposer %x, vset %v", p.height, p.round, p.proposer.ProTxHash[:6], expectedValidatorSet)
 	}
 
 }
@@ -3373,7 +3374,7 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 	parts, err := block.MakePartSet(999999999)
 	require.NoError(t, err)
 
-	peerID := css0StateData.Validators.Proposer.NodeAddress.NodeID
+	peerID := css0StateData.Validators.Proposer().NodeAddress.NodeID
 	css1StateData.Proposal = proposal
 	css1StateData.ProposalBlock = block
 	css1StateData.ProposalBlockParts = parts

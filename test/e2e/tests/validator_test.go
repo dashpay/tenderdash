@@ -129,7 +129,7 @@ func TestValidator_Propose(t *testing.T) {
 // validatorSchedule is a validator set iterator, which takes into account
 // validator set updates.
 type validatorSchedule struct {
-	Set                       validatorscoring.ValidatorScoringStrategy
+	Set                       validatorscoring.ProposerProvider
 	height                    int64
 	updates                   map[int64]e2e.ValidatorsMap
 	thresholdPublicKeyUpdates map[int64]crypto.PubKey
