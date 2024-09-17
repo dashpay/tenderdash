@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"sync"
 
+	"github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -54,13 +55,84 @@ func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int6
 	// if we have a block store, we can determine the proposer for the current height;
 	// otherwise we just trust the state of `vset`
 	if bs != nil && bs.Base() > 0 && currentHeight >= bs.Base() {
-		if _, err := selectRound0Proposer(currentHeight, s.valSet, s.bs, s.logger); err != nil {
+		if err := s.proposerFromStore(currentHeight, currentRound); err != nil {
 			return nil, fmt.Errorf("could not initialize proposer: %w", err)
 		}
-		s.valSet.IncProposerIndex(currentRound)
 	}
 
 	return s, nil
+}
+
+func (s *heightRoundProposerSelector) proposerFromStore(height int64, round int32) error {
+	if s.bs == nil {
+		return fmt.Errorf("block store is nil")
+	}
+
+	// special case for genesis
+	if height == 0 || height == 1 {
+		// we take first proposer from the validator set
+		if err := s.valSet.SetProposer(s.valSet.Validators[0].ProTxHash); err != nil {
+			return fmt.Errorf("could not determine proposer: %w", err)
+		}
+
+		return nil
+	}
+
+	var proposer bytes.HexBytes
+	indexIncrement := int32(0)
+
+	meta := s.bs.LoadBlockMeta(height)
+	if meta != nil {
+		// block already saved to store, just take the proposer
+		if !meta.Header.ValidatorsHash.Equal(s.valSet.Hash()) {
+			// we loaded the same block, so quorum should be the same
+			s.logger.Error("quorum rotation detected but not expected",
+				"height", height,
+				"validators_hash", meta.Header.ValidatorsHash, "quorum_hash", s.valSet.QuorumHash,
+				"validators", s.valSet)
+
+			return fmt.Errorf("quorum hash mismatch at height %d", height)
+		}
+
+		proposer = meta.Header.ProposerProTxHash
+		// adjust round number to match the requested one
+		indexIncrement = round - meta.Round
+	} else {
+		// block not found; we try previous height, and will just add 1 to proposer index
+		meta = s.bs.LoadBlockMeta(height - 1)
+		if meta == nil {
+			return fmt.Errorf("could not find block meta for previous height %d", height-1)
+		}
+
+		if meta.Header.ValidatorsHash.Equal(s.valSet.Hash()) {
+			// validators hash matches, so we can take proposer from previous height
+			proposer = meta.Header.ProposerProTxHash
+			// we are at previous height+prev committed round, so we need to increment proposer index by 1 to go to next height,
+			// and then by round number to match the requested round
+			indexIncrement = 1 + round
+		} else {
+			// quorum rotation happened - we select 1st validator as proposer, and only adjust round number
+			proposer = s.valSet.GetByIndex(0).ProTxHash
+			indexIncrement = round
+
+			s.logger.Debug("quorum rotation detected, setting proposer to 1st validator",
+				"height", height,
+				"validators_hash", meta.Header.ValidatorsHash, "quorum_hash", s.valSet.QuorumHash,
+				"validators", s.valSet,
+				"proposer_proTxHash", proposer)
+		}
+	}
+
+	// we're done, set the proposer
+	if err := s.valSet.SetProposer(proposer); err != nil {
+		return fmt.Errorf("could not set proposer: %w", err)
+	}
+
+	if indexIncrement != 0 {
+		s.valSet.IncProposerIndex(indexIncrement)
+	}
+
+	return nil
 }
 
 // SetLogger sets the logger for the strategy
@@ -101,11 +173,10 @@ func (s *heightRoundProposerSelector) updateScores(newHeight int64, newRound int
 			return fmt.Errorf("cannot jump more than one height without data in block store: %d -> %d", s.height, newHeight)
 		}
 		// we assume that no consensus version update happened in the meantime
-		if _, err := selectRound0Proposer(newHeight, s.valSet, s.bs, s.logger); err != nil {
+		if err := s.proposerFromStore(newHeight, newRound); err != nil {
 			return fmt.Errorf("could not determine proposer: %w", err)
 		}
 
-		s.valSet.IncProposerIndex(newRound)
 		s.height = newHeight
 		s.round = newRound
 
