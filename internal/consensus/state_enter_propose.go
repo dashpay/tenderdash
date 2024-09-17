@@ -90,8 +90,8 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 			return nil // not a critical error, as we don't propose anyway
 		}
 		logger.Info("propose step; not our turn to propose",
-			"proposer_proTxHash", prop.ProTxHash,
-			"node_proTxHash", proTxHash.String(),
+			"proposer_proTxHash", prop.ProTxHash.ShortString(),
+			"node_proTxHash", proTxHash.ShortString(),
 			"step", stateData.Step)
 		return nil
 	}

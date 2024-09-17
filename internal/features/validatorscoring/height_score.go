@@ -41,6 +41,8 @@ func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64
 		return nil, fmt.Errorf("could not create logger: %w", err)
 	}
 
+	logger.Debug("new height proposer selector", "height", currentHeight)
+
 	s := &heightBasedScoringStrategy{
 		valSet: vset,
 		height: currentHeight,
@@ -124,6 +126,10 @@ func (s *heightBasedScoringStrategy) UpdateScores(newHeight int64, round int32) 
 	defer s.mtx.Unlock()
 
 	return s.updateScores(newHeight, round)
+}
+
+func (s *heightBasedScoringStrategy) SetLogger(logger log.Logger) {
+	s.logger = logger
 }
 
 func (s *heightBasedScoringStrategy) updateScores(newHeight int64, _round int32) error {

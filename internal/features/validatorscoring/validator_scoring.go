@@ -3,6 +3,7 @@ package validatorscoring
 import (
 	"fmt"
 
+	"github.com/dashpay/tenderdash/libs/log"
 	tmtypes "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -25,6 +26,9 @@ type ProposerProvider interface {
 	ValidatorSet() *types.ValidatorSet
 	// Create deep copy of the strategy and its underlying validator set
 	Copy() ProposerProvider
+
+	// Define logger to use
+	SetLogger(logger log.Logger)
 }
 
 type BlockCommitStore interface {
@@ -52,6 +56,7 @@ func NewProposerStrategy(cp types.ConsensusParams, valSet *types.ValidatorSet, v
 	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_0):
 		return NewHeightBasedScoringStrategy(valSet, valsetHeight, bs)
 	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_1):
+
 		return NewHeightRoundProposerSelector(valSet, valsetHeight, valsetRound, bs)
 	default:
 		return nil, fmt.Errorf("unknown consensus version: %v", cp.Version.ConsensusVersion)

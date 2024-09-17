@@ -78,8 +78,9 @@ message VersionParams {
 //
 // It is hashed into the Header.ConsensusHash.
 message HashedParams {
-  int64 block_max_bytes = 1;
-  int64 block_max_gas   = 2;
+  int64 block_max_bytes   = 1;
+  int64 block_max_gas     = 2;
+  int32 consensus_version = 3;
 }
 
 // SynchronyParams configure the bounds under which a proposed block's timestamp is considered valid.

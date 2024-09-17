@@ -40,6 +40,9 @@ func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int6
 	if err != nil {
 		return nil, fmt.Errorf("could not create logger: %w", err)
 	}
+
+	logger.Debug("new height round proposer selector", "height", currentHeight, "round", currentRound)
+
 	s := &heightRoundProposerSelector{
 		valSet: vset,
 		height: currentHeight,
@@ -58,6 +61,11 @@ func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int6
 	}
 
 	return s, nil
+}
+
+// SetLogger sets the logger for the strategy
+func (s *heightRoundProposerSelector) SetLogger(logger log.Logger) {
+	s.logger = logger
 }
 
 // UpdateScores updates the scores of the validators to the given height and round.

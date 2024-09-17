@@ -347,8 +347,9 @@ func (params ConsensusParams) ValidateConsensusParams() error {
 // TODO: We should hash the other parameters as well
 func (params ConsensusParams) HashConsensusParams() tmbytes.HexBytes {
 	hp := tmproto.HashedParams{
-		BlockMaxBytes: params.Block.MaxBytes,
-		BlockMaxGas:   params.Block.MaxGas,
+		BlockMaxBytes:    params.Block.MaxBytes,
+		BlockMaxGas:      params.Block.MaxGas,
+		ConsensusVersion: params.Version.ConsensusVersion,
 	}
 
 	bz, err := hp.Marshal()
@@ -397,6 +398,7 @@ func (params ConsensusParams) UpdateConsensusParams(params2 *tmproto.ConsensusPa
 	}
 	if params2.Version != nil {
 		res.Version.AppVersion = params2.Version.AppVersion
+		res.Version.ConsensusVersion = int32(params2.Version.ConsensusVersion)
 	}
 	if params2.Synchrony != nil {
 		if params2.Synchrony.MessageDelay != nil {

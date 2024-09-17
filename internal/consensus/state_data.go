@@ -288,12 +288,10 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 			state.ConsensusParams,
 			s.Validators,
 			state.LastBlockHeight,
-			0,
+			state.LastBlockRound,
 			blockStore,
 		)
-
 	}
-
 	if err != nil {
 		s.logger.Error("error creating proposer selector",
 			"height", s.state.LastBlockHeight, "round", 0,
@@ -301,6 +299,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 			"err", err)
 		panic(fmt.Sprintf("error creating proposer selector: %v", err))
 	}
+	s.ProposerSelector.SetLogger(s.logger)
 
 	s.logger.Trace("updating state height", "newHeight", height)
 
