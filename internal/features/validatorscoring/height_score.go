@@ -108,7 +108,7 @@ func (s *heightBasedScoringStrategy) proposerFromStore(height int64) error {
 			// validators hash matches, so we can take proposer from previous height
 			proposer = meta.Header.ProposerProTxHash
 			// rewind rounds, as this is how heightBasedScoringStrategy works
-			indexIncrement = -meta.Round
+			indexIncrement = indexIncrement - meta.Round
 		} else {
 			// quorum rotation happened - we select 1st validator as proposer, and don't rotate
 			// NOTE: We use index 1 due to bug in original code that causes first validator to never propose.
