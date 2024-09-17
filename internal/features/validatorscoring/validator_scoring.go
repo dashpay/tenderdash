@@ -27,6 +27,12 @@ type ProposerProvider interface {
 	Copy() ProposerProvider
 }
 
+type BlockCommitStore interface {
+	LoadBlockCommit(height int64) *types.Commit
+	LoadBlockMeta(height int64) *types.BlockMeta
+	Base() int64
+}
+
 // NewProposerStrategy creates a ValidatorScoringStrategy from the ValidatorSet.
 //
 // Original ValidatorSet should not be used anymore. Height and round should point to the height and round that
@@ -46,7 +52,7 @@ func NewProposerStrategy(cp types.ConsensusParams, valSet *types.ValidatorSet, v
 	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_0):
 		return NewHeightBasedScoringStrategy(valSet, valsetHeight, bs)
 	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_1):
-		return NewHeightRoundBasedScoringStrategy(valSet, valsetHeight, valsetRound, bs)
+		return NewHeightRoundProposerSelector(valSet, valsetHeight, valsetRound, bs)
 	default:
 		return nil, fmt.Errorf("unknown consensus version: %v", cp.Version.ConsensusVersion)
 	}

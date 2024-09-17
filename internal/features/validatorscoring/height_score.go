@@ -51,15 +51,17 @@ func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64
 	// if we have a block store, we can determine the proposer for the current height;
 	// otherwise we just trust the state of `vset`
 	if bs != nil && bs.Base() > 0 && currentHeight >= bs.Base() {
-		if err := s.selectProposer(currentHeight, bs); err != nil {
+		if err := selectRound0Proposer(currentHeight, s.valSet, s.bs, s.logger); err != nil {
 			return nil, fmt.Errorf("could not initialize proposer: %w", err)
 		}
 	}
 	return s, nil
 }
 
-// selectProposer determines the proposer for the given height using block store and consensus params.
-func (s *heightBasedScoringStrategy) selectProposer(height int64, bs BlockCommitStore) error {
+// selectRound0Proposer determines the proposer for the given height and round 0 based on validators read from the block
+// store `bs`.
+// It updates the proposer in the validator set `valSet`.
+func selectRound0Proposer(height int64, valSet *types.ValidatorSet, bs BlockCommitStore, logger log.Logger) error {
 	if bs == nil {
 		return fmt.Errorf("block store is nil")
 	}
@@ -67,7 +69,7 @@ func (s *heightBasedScoringStrategy) selectProposer(height int64, bs BlockCommit
 	// special case for genesis
 	if height == 0 || height == 1 {
 		// we take first proposer from the validator set
-		if err := s.valSet.SetProposer(s.valSet.Validators[0].ProTxHash); err != nil {
+		if err := valSet.SetProposer(valSet.Validators[0].ProTxHash); err != nil {
 			return fmt.Errorf("could not determine proposer: %w", err)
 		}
 
@@ -87,29 +89,29 @@ func (s *heightBasedScoringStrategy) selectProposer(height int64, bs BlockCommit
 		addToIdx = 1
 	}
 
-	if !meta.Header.ValidatorsHash.Equal(s.valSet.Hash()) {
-		s.logger.Debug("quorum rotation happened",
+	if !meta.Header.ValidatorsHash.Equal(valSet.Hash()) {
+		logger.Debug("quorum rotation happened",
 			"height", height,
-			"validators_hash", meta.Header.ValidatorsHash, "quorum_hash", s.valSet.QuorumHash,
-			"validators", s.valSet,
+			"validators_hash", meta.Header.ValidatorsHash, "quorum_hash", valSet.QuorumHash,
+			"validators", valSet,
 			"meta", meta)
 		// quorum rotation happened - we select 1st validator as proposer, and don't rotate
 		// NOTE: We use index 1 due to bug in original code - we need to preserve the original bad behavior
 		// to avoid breaking consensus
-		proposer = s.valSet.GetByIndex(1).ProTxHash
+		proposer = valSet.GetByIndex(1).ProTxHash
 
 		addToIdx = 0
 	} else {
 		proposer = meta.Header.ProposerProTxHash
 	}
 
-	if err := s.valSet.SetProposer(proposer); err != nil {
+	if err := valSet.SetProposer(proposer); err != nil {
 		return fmt.Errorf("could not set proposer: %w", err)
 	}
 
 	if (addToIdx + meta.Round) > 0 {
 		// we want to return proposer at round 0, so we move back
-		s.valSet.IncProposerIndex(addToIdx - meta.Round)
+		valSet.IncProposerIndex(addToIdx - meta.Round)
 	}
 
 	return nil
@@ -141,7 +143,7 @@ func (s *heightBasedScoringStrategy) updateScores(newHeight int64, _round int32)
 		}
 		// FIXME: we assume that no consensus version update happened in the meantime
 
-		if err := s.selectProposer(newHeight, s.bs); err != nil {
+		if err := selectRound0Proposer(newHeight, s.valSet, s.bs, s.logger); err != nil {
 			return fmt.Errorf("could not determine proposer: %w", err)
 		}
 
@@ -149,7 +151,7 @@ func (s *heightBasedScoringStrategy) updateScores(newHeight int64, _round int32)
 		return nil
 	}
 
-	s.valSet.IncProposerIndex(int32(heightDiff)) //nolint:gosec
+	s.valSet.IncProposerIndex(1)
 
 	s.height = newHeight
 
@@ -195,5 +197,7 @@ func (s *heightBasedScoringStrategy) Copy() ProposerProvider {
 	return &heightBasedScoringStrategy{
 		valSet: s.valSet.Copy(),
 		height: s.height,
+		bs:     s.bs,
+		logger: s.logger,
 	}
 }

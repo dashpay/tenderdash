@@ -61,6 +61,5 @@ func TestProposerSelectionHR(t *testing.T) {
 
 		round := uint32(rand.Int31n(100))
 		require.NoError(t, vs.UpdateScores(int64(h), int32(round)))
-		j += round + 1
 	}
 }
