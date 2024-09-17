@@ -54,7 +54,7 @@ func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int6
 	// if we have a block store, we can determine the proposer for the current height;
 	// otherwise we just trust the state of `vset`
 	if bs != nil && bs.Base() > 0 && currentHeight >= bs.Base() {
-		if err := selectRound0Proposer(currentHeight, s.valSet, s.bs, s.logger); err != nil {
+		if _, err := selectRound0Proposer(currentHeight, s.valSet, s.bs, s.logger); err != nil {
 			return nil, fmt.Errorf("could not initialize proposer: %w", err)
 		}
 		s.valSet.IncProposerIndex(currentRound)
@@ -100,8 +100,8 @@ func (s *heightRoundProposerSelector) updateScores(newHeight int64, newRound int
 		if s.bs == nil || s.bs.Base() > s.height {
 			return fmt.Errorf("cannot jump more than one height without data in block store: %d -> %d", s.height, newHeight)
 		}
-		// FIXME: we assume that no consensus version update happened in the meantime
-		if err := selectRound0Proposer(newHeight, s.valSet, s.bs, s.logger); err != nil {
+		// we assume that no consensus version update happened in the meantime
+		if _, err := selectRound0Proposer(newHeight, s.valSet, s.bs, s.logger); err != nil {
 			return fmt.Errorf("could not determine proposer: %w", err)
 		}
 

@@ -92,6 +92,7 @@ func TestStoreLoadValidators(t *testing.T) {
 	// initialize block store - create mock validators for each height
 	blockStoreVS := expectedVS.Copy()
 	blockStore := mocks.NewBlockStore(t)
+	blockStore.On("Base").Return(int64(1)).Maybe()
 	for h := int64(1); h <= valSetCheckpointInterval; h++ {
 		blockStore.On("LoadBlockMeta", h).Return(&types.BlockMeta{
 			Header: types.Header{

@@ -264,7 +264,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 		height = state.InitialHeight
 	}
 
-	// state.Validators contain validator set at (state.LastBlockHeight, 0)
+	// state.Validators contain validator set at (state.LastBlockHeight+1, 0)
 	validators := state.Validators
 
 	if s.Validators == nil || !bytes.Equal(s.Validators.QuorumHash, validators.QuorumHash) {
@@ -274,29 +274,16 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 
 	s.Validators = validators
 	var err error
-	if s.state.LastBlockHeight == 0 {
-		s.ProposerSelector, err = validatorscoring.NewProposerStrategy(
-			state.ConsensusParams,
-			s.Validators,
-			state.InitialHeight,
-			0,
-			blockStore,
-		)
-	} else {
-		// validators == state.Validators contain validator set at (state.LastBlockHeight, 0)
-		s.ProposerSelector, err = validatorscoring.NewProposerStrategy(
-			state.ConsensusParams,
-			s.Validators,
-			state.LastBlockHeight,
-			state.LastBlockRound,
-			blockStore,
-		)
-	}
+
+	s.ProposerSelector, err = validatorscoring.NewProposerStrategy(
+		state.ConsensusParams,
+		s.Validators,
+		height,
+		0,
+		blockStore,
+	)
 	if err != nil {
-		s.logger.Error("error creating proposer selector",
-			"height", s.state.LastBlockHeight, "round", 0,
-			"validators", s.Validators,
-			"err", err)
+		s.logger.Error("error creating proposer selector", "height", height, "round", 0, "validators", s.Validators, "err", err)
 		panic(fmt.Sprintf("error creating proposer selector: %v", err))
 	}
 	s.ProposerSelector.SetLogger(s.logger)
