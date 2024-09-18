@@ -552,7 +552,7 @@ func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) 
 			return nil, fmt.Errorf("could not set proposer: %w", err)
 		}
 
-		strategy, err := selectproposer.NewProposerSelector(cp, valSet, meta.Header.Height, meta.Round, bs)
+		strategy, err := selectproposer.NewProposerSelector(cp, valSet, meta.Header.Height, meta.Round, bs, store.logger)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create validator scoring strategy: %w", err)
 		}
@@ -572,7 +572,7 @@ func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) 
 	if err := valSet.SetProposer(prevMeta.Header.ProposerProTxHash); err != nil {
 		return nil, fmt.Errorf("could not set proposer: %w", err)
 	}
-	strategy, err := selectproposer.NewProposerSelector(cp, valSet, prevMeta.Header.Height, prevMeta.Round, bs)
+	strategy, err := selectproposer.NewProposerSelector(cp, valSet, prevMeta.Header.Height, prevMeta.Round, bs, store.logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create validator scoring strategy: %w", err)
 	}

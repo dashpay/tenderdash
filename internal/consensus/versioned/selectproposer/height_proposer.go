@@ -17,10 +17,9 @@ type heightProposerSelector struct {
 	mtx    sync.Mutex
 }
 
-// NewHeightBasedScoringStrategy creates a new height-based scoring strategy
+// NewHeightProposerSelector creates a new height-based proposer selector.
 //
-// The strategy increments the ProposerPriority of each validator by 1 at each height
-// and updates the proposer accordingly.
+// This selector goes through validators in a round-robin approach, increasing proposer index by 1 at each height.
 //
 // Subsequent rounds at the same height will select next proposer on the list, but not persist these changes,
 // so that the proposer of height H and round 1 is selected again at height H+1 and round 0.
@@ -31,14 +30,14 @@ type heightProposerSelector struct {
 //
 // * `vset` - the validator set; it must not be empty and can be modified in place
 // * `currentHeight` - the current height for which vset has correct scores
-func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64, bs BlockStore) (ProposerSelector, error) {
+// * `bs` - block store used to retrieve info about historical commits
+// * `logger` - logger to use
+func NewHeightProposerSelector(vset *types.ValidatorSet, currentHeight int64, bs BlockStore, logger log.Logger) (ProposerSelector, error) {
 	if vset.IsNilOrEmpty() {
 		return nil, fmt.Errorf("empty validator set")
 	}
-
-	logger, err := log.NewDefaultLogger(log.LogFormatPlain, log.LogLevelDebug) // TODO: make configurable
-	if err != nil {
-		return nil, fmt.Errorf("could not create logger: %w", err)
+	if logger == nil {
+		logger = log.NewNopLogger()
 	}
 
 	logger.Debug("new height proposer selector", "height", currentHeight)
@@ -60,6 +59,8 @@ func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64
 	return s, nil
 }
 
+// proposerFromStore determines the proposer for the given height and round 0
+// based on current or previous block stored in the block store.
 func (s *heightProposerSelector) proposerFromStore(height int64) error {
 	if s.bs == nil {
 		return fmt.Errorf("block store is nil")

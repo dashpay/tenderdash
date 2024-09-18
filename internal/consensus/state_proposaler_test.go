@@ -96,6 +96,7 @@ func (suite *ProposalerTestSuite) SetupTest() {
 		0,
 		0,
 		nil,
+		logger,
 	)
 	if err != nil {
 		panic(fmt.Errorf("failed to create validator scoring strategy: %w", err))
@@ -188,7 +189,7 @@ func (suite *ProposalerTestSuite) TestDecide() {
 	state := suite.committedState
 	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Header.Time)
 	suite.signProposal(ctx, proposalH100R0)
-	vs, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, suite.mockValSet, 100, 0, nil)
+	vs, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, suite.mockValSet, 100, 0, nil, nil)
 	suite.Require().NoError(err)
 	testCases := []struct {
 		height       int64

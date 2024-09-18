@@ -281,6 +281,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 		height,
 		0,
 		blockStore,
+		s.logger,
 	)
 	if err != nil {
 		s.logger.Error("error creating proposer selector", "height", height, "round", 0, "validators", s.Validators, "err", err)

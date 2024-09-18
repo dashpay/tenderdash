@@ -52,14 +52,18 @@ type BlockStore interface {
 // - `valsetHeight` - current height of the validator set
 // - `valsetRound` - current round of the validator set
 // - `bs` - block store used to retreve info about historical commits
+// - `logger` - logger to use; can be nil
 func NewProposerSelector(cp types.ConsensusParams, valSet *types.ValidatorSet, valsetHeight int64, valsetRound int32,
-	bs BlockStore) (ProposerSelector, error) {
+	bs BlockStore, logger log.Logger) (ProposerSelector, error) {
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
 	switch cp.Version.ConsensusVersion {
 	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_0):
-		return NewHeightBasedScoringStrategy(valSet, valsetHeight, bs)
+		return NewHeightProposerSelector(valSet, valsetHeight, bs, logger)
 	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_1):
 
-		return NewHeightRoundProposerSelector(valSet, valsetHeight, valsetRound, bs)
+		return NewHeightRoundProposerSelector(valSet, valsetHeight, valsetRound, bs, logger)
 	default:
 		return nil, fmt.Errorf("unknown consensus version: %v", cp.Version.ConsensusVersion)
 	}

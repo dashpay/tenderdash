@@ -32,14 +32,12 @@ type heightRoundProposerSelector struct {
 //
 // * `vset` - the validator set; it must not be empty and can be modified in place
 // * `currentHeight` - the current height for which vset has correct scores
-func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int64, currentRound int32, bs BlockStore) (ProposerSelector, error) {
+func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int64, currentRound int32, bs BlockStore, logger log.Logger) (ProposerSelector, error) {
 	if vset.IsNilOrEmpty() {
 		return nil, fmt.Errorf("empty validator set")
 	}
-
-	logger, err := log.NewDefaultLogger(log.LogFormatPlain, log.LogLevelDebug) // TODO: make configurable
-	if err != nil {
-		return nil, fmt.Errorf("could not create logger: %w", err)
+	if logger == nil {
+		logger = log.NewNopLogger()
 	}
 
 	logger.Debug("new height round proposer selector", "height", currentHeight, "round", currentRound)

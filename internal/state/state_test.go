@@ -26,6 +26,7 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
+	"github.com/dashpay/tenderdash/libs/log"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -518,7 +519,8 @@ func valsetScoresNewHeight(t *testing.T, state *sm.State) *types.Validator {
 		state.Validators,
 		state.LastBlockHeight,
 		state.LastBlockRound,
-		nil)
+		nil,
+		log.NewTestingLogger(t))
 
 	require.NoError(t, err)
 	err = ps.UpdateScores(state.LastBlockHeight+1, 0)

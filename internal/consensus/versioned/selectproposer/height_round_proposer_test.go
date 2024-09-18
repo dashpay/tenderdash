@@ -10,6 +10,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	"github.com/dashpay/tenderdash/libs/log"
 	tmtypes "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -44,7 +45,7 @@ func TestProposerSelectionHR(t *testing.T) {
 		Version: types.VersionParams{
 			ConsensusVersion: int32(tmtypes.VersionParams_CONSENSUS_VERSION_1),
 		},
-	}, vset.Copy(), initialHeight, 0, nil)
+	}, vset.Copy(), initialHeight, 0, nil, log.NewTestingLogger(t))
 	require.NoError(t, err)
 
 	proposerIndex = 0

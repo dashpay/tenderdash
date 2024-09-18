@@ -190,7 +190,7 @@ func makeRandomStateFromValidatorSet(
 ) sm.State {
 	vs := lastValSet.Copy()
 	cp := types.DefaultConsensusParams()
-	expectedVS, err := selectproposer.NewProposerSelector(*cp, vs, lastHeightValidatorsChanged, 0, bs)
+	expectedVS, err := selectproposer.NewProposerSelector(*cp, vs, lastHeightValidatorsChanged, 0, bs, nil)
 	if err != nil {
 		panic(err)
 	}

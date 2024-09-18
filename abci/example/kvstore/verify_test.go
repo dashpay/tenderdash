@@ -146,6 +146,7 @@ func getProposerFromState(state sm.State, height int64, round int32) *types.Vali
 		state.LastBlockHeight,
 		state.LastBlockRound,
 		nil,
+		nil,
 	)
 	if err != nil {
 		panic(fmt.Errorf("failed to create validator scoring strategy: %w", err))

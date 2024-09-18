@@ -18,6 +18,7 @@ import (
 	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	"github.com/dashpay/tenderdash/internal/evidence/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/libs/log"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -73,7 +74,7 @@ func assertProposer(t *testing.T, valSet *types.ValidatorSet, h int64) {
 	assert.EqualValues(t, exp, idx, "pre-set proposer at height %d", h)
 
 	// check if GetProposer returns the same proposer
-	vs, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, valSet.Copy(), h, 0, nil)
+	vs, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, valSet.Copy(), h, 0, nil, log.NewTestingLogger(t))
 	require.NoError(t, err)
 
 	prop := vs.MustGetProposer(h, 0)
@@ -86,7 +87,7 @@ func TestStoreLoadValidators(t *testing.T) {
 	stateStore := sm.NewStore(stateDB)
 	vals, _ := types.RandValidatorSet(3)
 
-	expectedVS, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, vals.Copy(), 1, 0, nil)
+	expectedVS, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, vals.Copy(), 1, 0, nil, log.NewTestingLogger(t))
 	require.NoError(t, err)
 
 	// initialize block store - create mock validators for each height
