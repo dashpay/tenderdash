@@ -24,7 +24,6 @@ import (
 	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	"github.com/dashpay/tenderdash/internal/evidence/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
-	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
@@ -741,7 +740,7 @@ func TestStateMakeBlock(t *testing.T) {
 	stateVersion.App = kvstore.ProtocolVersion
 	var height int64 = 2
 	state.LastBlockHeight = height - 1
-	proposerProTxHash := sf.GetProposerFromState(state, height, 0).ProTxHash
+	proposerProTxHash := state.GetProposerFromState(height, 0).ProTxHash
 	block, err := statefactory.MakeBlock(state, height, new(types.Commit), 0)
 	require.NoError(t, err)
 

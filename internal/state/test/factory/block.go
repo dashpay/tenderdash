@@ -12,7 +12,6 @@ import (
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
-	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/types"
@@ -56,7 +55,7 @@ func MakeBlock(state sm.State, height int64, c *types.Commit, proposedAppVersion
 	if state.LastBlockHeight != (height - 1) {
 		return nil, fmt.Errorf("requested height %d should be 1 more than last block height %d", height, state.LastBlockHeight)
 	}
-	proposer := GetProposerFromState(state, height, 0)
+	proposer := state.GetProposerFromState(height, 0)
 	block := state.MakeBlock(
 		height,
 		factory.MakeNTxs(state.LastBlockHeight, 10),
@@ -124,26 +123,10 @@ func makeBlockAndPartSet(
 			},
 		)
 	}
-	proposer := GetProposerFromState(state, height, 0)
+	proposer := state.GetProposerFromState(height, 0)
 	block := state.MakeBlock(height, []types.Tx{}, lastCommit, nil, proposer.ProTxHash, proposedAppVersion)
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 
 	return block, partSet
-}
-
-func GetProposerFromState(state sm.State, height int64, round int32) *types.Validator {
-	vs, err := selectproposer.NewProposerSelector(
-		state.ConsensusParams,
-		state.Validators.Copy(),
-		state.LastBlockHeight,
-		state.LastBlockRound,
-		nil,
-		nil,
-	)
-	if err != nil {
-		panic(fmt.Errorf("failed to create validator scoring strategy: %w", err))
-	}
-	proposer := vs.MustGetProposer(height, round)
-	return proposer
 }

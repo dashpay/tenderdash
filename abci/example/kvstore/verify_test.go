@@ -3,7 +3,6 @@ package kvstore
 import (
 	"context"
 	"errors"
-	"fmt"
 	"os"
 	"testing"
 
@@ -12,7 +11,6 @@ import (
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
-	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -87,7 +85,7 @@ func (e *blockExecutor) createBlock(txs types.Txs, commit *types.Commit) *types.
 	if commit == nil {
 		commit = &types.Commit{}
 	}
-	proposer := getProposerFromState(e.state, e.state.LastBlockHeight+1, 0)
+	proposer := e.state.GetProposerFromState(e.state.LastBlockHeight+1, 0)
 	block := e.state.MakeBlock(
 		e.state.LastBlockHeight+1,
 		txs,
@@ -133,24 +131,4 @@ func (e *blockExecutor) commit(ctx context.Context, block *types.Block) (*types.
 		}
 	}
 	return vs.MakeCommit(), nil
-}
-
-// GetProposerFromState returns the proposer for the given height and round.
-//
-// This function is a copy of the one in internal/state/test/factory/block.go
-// to avoid a circular dependency.
-func getProposerFromState(state sm.State, height int64, round int32) *types.Validator {
-	vs, err := selectproposer.NewProposerSelector(
-		state.ConsensusParams,
-		state.Validators.Copy(),
-		state.LastBlockHeight,
-		state.LastBlockRound,
-		nil,
-		nil,
-	)
-	if err != nil {
-		panic(fmt.Errorf("failed to create validator scoring strategy: %w", err))
-	}
-	proposer := vs.MustGetProposer(height, round)
-	return proposer
 }

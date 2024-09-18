@@ -19,7 +19,6 @@ import (
 	tmquery "github.com/dashpay/tenderdash/internal/pubsub/query"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	smmocks "github.com/dashpay/tenderdash/internal/state/mocks"
-	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
@@ -541,7 +540,7 @@ func initializeBlockStore(db dbm.DB, state sm.State) (*store.BlockStore, error) 
 
 	for i := int64(1); i <= state.LastBlockHeight; i++ {
 		lastCommit := makeCommit(i-1, state.Validators.QuorumHash)
-		prop := sf.GetProposerFromState(state, i, 0)
+		prop := state.GetProposerFromState(i, 0)
 		block := state.MakeBlock(i, []types.Tx{}, lastCommit, nil, prop.ProTxHash, 0)
 
 		block.Header.Time = defaultEvidenceTime.Add(time.Duration(i) * time.Minute)

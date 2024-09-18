@@ -6,11 +6,13 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"testing"
 	"time"
 
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/dashpay/tenderdash/dash"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
@@ -310,6 +312,28 @@ func (state State) ValidatorsAtHeight(height int64) *types.ValidatorSet {
 	default:
 		return state.Validators
 	}
+}
+
+// GetProposerFromState is a helper function that returns the proposer for the given height and round,
+// based on current state. Only use in tests.
+func (state *State) GetProposerFromState(height int64, round int32) *types.Validator {
+	if !testing.Testing() {
+		panic("GetProposerFromState should only be used in tests")
+	}
+
+	vs, err := selectproposer.NewProposerSelector(
+		state.ConsensusParams,
+		state.Validators.Copy(),
+		state.LastBlockHeight,
+		state.LastBlockRound,
+		nil,
+		nil,
+	)
+	if err != nil {
+		panic(fmt.Errorf("failed to create validator scoring strategy: %w", err))
+	}
+	proposer := vs.MustGetProposer(height, round)
+	return proposer
 }
 
 // NewStateChangeset returns a structure that will hold new changes to the state, that can be applied once the block is finalized

@@ -132,7 +132,7 @@ func TestValidateBlockHeader(t *testing.T) {
 
 	// Build up state for multiple heights
 	for height := int64(1); height < validationTestsStopHeight; height++ {
-		proposer := statefactory.GetProposerFromState(state, height, 0)
+		proposer := state.GetProposerFromState(height, 0)
 		proposerProTxHash := proposer.ProTxHash
 		/*
 			Invalid blocks don't pass
@@ -210,7 +210,7 @@ func TestValidateBlockCommit(t *testing.T) {
 	badPrivVal := types.NewMockPVForQuorum(badPrivValQuorumHash)
 
 	for height := int64(1); height < validationTestsStopHeight; height++ {
-		proposer := statefactory.GetProposerFromState(state, height, 0)
+		proposer := state.GetProposerFromState(height, 0)
 		proTxHash := proposer.ProTxHash
 		if height > 1 {
 			/*
@@ -388,7 +388,7 @@ func TestValidateBlockEvidence(t *testing.T) {
 	lastCommit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 
 	for height := int64(1); height < validationTestsStopHeight; height++ {
-		proposer := statefactory.GetProposerFromState(state, height, 0)
+		proposer := state.GetProposerFromState(height, 0)
 		proposerProTxHash := proposer.ProTxHash
 		maxBytesEvidence := state.ConsensusParams.Evidence.MaxBytes
 		if height > 1 {
