@@ -12,7 +12,7 @@ import (
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/proposer"
+	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"

@@ -15,7 +15,7 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/proposer"
+	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	"github.com/dashpay/tenderdash/internal/evidence/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"

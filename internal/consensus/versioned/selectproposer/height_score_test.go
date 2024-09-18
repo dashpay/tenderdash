@@ -1,4 +1,4 @@
-package validatorscoring_test
+package selectproposer_test
 
 import (
 	"bytes"
@@ -13,7 +13,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/proposer"
+	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	"github.com/dashpay/tenderdash/types"
 )
 

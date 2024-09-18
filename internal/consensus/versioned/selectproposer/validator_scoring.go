@@ -1,4 +1,4 @@
-package validatorscoring
+package selectproposer
 
 import (
 	"fmt"

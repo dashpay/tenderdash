@@ -21,7 +21,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	"github.com/dashpay/tenderdash/dash"
 	"github.com/dashpay/tenderdash/dash/llmq"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/proposer"
+	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	"github.com/dashpay/tenderdash/internal/evidence/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	sf "github.com/dashpay/tenderdash/internal/state/test/factory"

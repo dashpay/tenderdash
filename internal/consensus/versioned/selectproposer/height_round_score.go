@@ -1,4 +1,4 @@
-package validatorscoring
+package selectproposer
 
 import (
 	"fmt"
@@ -9,9 +9,10 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-type heightBasedScoringStrategy struct {
+type heightRoundProposerSelector struct {
 	valSet *types.ValidatorSet
 	height int64
+	round  int32
 	bs     BlockCommitStore
 	logger log.Logger
 	mtx    sync.Mutex
@@ -31,7 +32,7 @@ type heightBasedScoringStrategy struct {
 //
 // * `vset` - the validator set; it must not be empty and can be modified in place
 // * `currentHeight` - the current height for which vset has correct scores
-func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64, bs BlockCommitStore) (ProposerProvider, error) {
+func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int64, currentRound int32, bs BlockCommitStore) (ProposerProvider, error) {
 	if vset.IsNilOrEmpty() {
 		return nil, fmt.Errorf("empty validator set")
 	}
@@ -41,11 +42,12 @@ func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64
 		return nil, fmt.Errorf("could not create logger: %w", err)
 	}
 
-	logger.Debug("new height proposer selector", "height", currentHeight)
+	logger.Debug("new height round proposer selector", "height", currentHeight, "round", currentRound)
 
-	s := &heightBasedScoringStrategy{
+	s := &heightRoundProposerSelector{
 		valSet: vset,
 		height: currentHeight,
+		round:  currentRound,
 		bs:     bs,
 		logger: logger,
 	}
@@ -53,14 +55,15 @@ func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64
 	// if we have a block store, we can determine the proposer for the current height;
 	// otherwise we just trust the state of `vset`
 	if bs != nil && bs.Base() > 0 && currentHeight >= bs.Base() {
-		if err := s.proposerFromStore(currentHeight); err != nil {
+		if err := s.proposerFromStore(currentHeight, currentRound); err != nil {
 			return nil, fmt.Errorf("could not initialize proposer: %w", err)
 		}
 	}
+
 	return s, nil
 }
 
-func (s *heightBasedScoringStrategy) proposerFromStore(height int64) error {
+func (s *heightRoundProposerSelector) proposerFromStore(height int64, round int32) error {
 	if s.bs == nil {
 		return fmt.Errorf("block store is nil")
 	}
@@ -92,8 +95,8 @@ func (s *heightBasedScoringStrategy) proposerFromStore(height int64) error {
 		}
 
 		proposer = meta.Header.ProposerProTxHash
-		// rewind rounds, as the proposer in header is for round `meta.Round` and we want round 0
-		indexIncrement = -meta.Round
+		// adjust round number to match the requested one
+		indexIncrement = round - meta.Round
 	} else {
 		// block not found; we try previous height, and will just add 1 to proposer index
 		meta = s.bs.LoadBlockMeta(height - 1)
@@ -101,20 +104,16 @@ func (s *heightBasedScoringStrategy) proposerFromStore(height int64) error {
 			return fmt.Errorf("could not find block meta for previous height %d", height-1)
 		}
 
-		// we are at previous height, so we need to increment proposer index by 1 to go to next height
-		indexIncrement = 1
-
 		if meta.Header.ValidatorsHash.Equal(s.valSet.Hash()) {
 			// validators hash matches, so we can take proposer from previous height
 			proposer = meta.Header.ProposerProTxHash
-			// rewind rounds, as this is how heightBasedScoringStrategy works
-			indexIncrement = indexIncrement - meta.Round
+			// we are at previous height+prev committed round, so we need to increment proposer index by 1 to go to next height,
+			// and then by round number to match the requested round
+			indexIncrement = 1 + round
 		} else {
-			// quorum rotation happened - we select 1st validator as proposer, and don't rotate
-			// NOTE: We use index 1 due to bug in original code that causes first validator to never propose.
-			// We need to preserve the original bad behavior to avoid breaking consensus
-			proposer = s.valSet.GetByIndex(1).ProTxHash
-			indexIncrement = 0
+			// quorum rotation happened - we select 1st validator as proposer, and only adjust round number
+			proposer = s.valSet.GetByIndex(0).ProTxHash
+			indexIncrement = round
 
 			s.logger.Debug("quorum rotation detected, setting proposer to 1st validator",
 				"height", height,
@@ -136,25 +135,34 @@ func (s *heightBasedScoringStrategy) proposerFromStore(height int64) error {
 	return nil
 }
 
-// UpdateScores updates the scores of the validators to the given height.
-// Here, we ignore the round, as we don't want to persist round info.
-func (s *heightBasedScoringStrategy) UpdateScores(newHeight int64, round int32) error {
-	s.mtx.Lock()
-	defer s.mtx.Unlock()
-
-	return s.updateScores(newHeight, round)
-}
-
-func (s *heightBasedScoringStrategy) SetLogger(logger log.Logger) {
+// SetLogger sets the logger for the strategy
+func (s *heightRoundProposerSelector) SetLogger(logger log.Logger) {
 	s.logger = logger
 }
 
-func (s *heightBasedScoringStrategy) updateScores(newHeight int64, _round int32) error {
+// UpdateScores updates the scores of the validators to the given height and round.
+func (s *heightRoundProposerSelector) UpdateScores(newHeight int64, newRound int32) error {
+	s.mtx.Lock()
+	defer s.mtx.Unlock()
+
+	return s.updateScores(newHeight, newRound)
+}
+
+func (s *heightRoundProposerSelector) updateScores(newHeight int64, newRound int32) error {
 	heightDiff := newHeight - s.height
-	if heightDiff == 0 {
+	roundDiff := newRound - s.round
+	if heightDiff == 0 && roundDiff == 0 {
 		// NOOP
 		return nil
 	}
+
+	if heightDiff == 0 && roundDiff != 0 {
+		// only update round
+		s.valSet.IncProposerIndex(roundDiff)
+		s.round = newRound
+		return nil
+	}
+
 	if heightDiff < 0 {
 		// TODO: handle going back in height
 		return fmt.Errorf("cannot go back in height: %d -> %d", s.height, newHeight)
@@ -164,41 +172,39 @@ func (s *heightBasedScoringStrategy) updateScores(newHeight int64, _round int32)
 		if s.bs == nil || s.bs.Base() > s.height {
 			return fmt.Errorf("cannot jump more than one height without data in block store: %d -> %d", s.height, newHeight)
 		}
-		// FIXME: we assume that no consensus version update happened in the meantime
-
-		if err := s.proposerFromStore(newHeight); err != nil {
+		// we assume that no consensus version update happened in the meantime
+		if err := s.proposerFromStore(newHeight, newRound); err != nil {
 			return fmt.Errorf("could not determine proposer: %w", err)
 		}
 
 		s.height = newHeight
+		s.round = newRound
+
 		return nil
 	}
 
-	s.valSet.IncProposerIndex(1)
+	// heightDiff is 1; it means we go to the newHeight+ newRound
+	// Assuming s.round is the last one as we are not able to determine this
+	s.valSet.IncProposerIndex(int32(heightDiff) + newRound)
 
 	s.height = newHeight
+	s.round = newRound
 
 	return nil
 }
 
-func (s *heightBasedScoringStrategy) GetProposer(height int64, round int32) (*types.Validator, error) {
+func (s *heightRoundProposerSelector) GetProposer(height int64, round int32) (*types.Validator, error) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	if err := s.updateScores(height, 0); err != nil {
+	if err := s.updateScores(height, round); err != nil {
 		return nil, err
 	}
-	if round == 0 {
-		return s.valSet.Proposer(), nil
-	}
 
-	// advance a copy of the validator set to the correct round, but don't persist the changes
-	vs := s.valSet.Copy()
-	vs.IncProposerIndex(round)
-	return vs.Proposer(), nil
+	return s.valSet.Proposer(), nil
 }
 
-func (s *heightBasedScoringStrategy) MustGetProposer(height int64, round int32) *types.Validator {
+func (s *heightRoundProposerSelector) MustGetProposer(height int64, round int32) *types.Validator {
 	proposer, err := s.GetProposer(height, round)
 	if err != nil {
 		panic(err)
@@ -206,20 +212,21 @@ func (s *heightBasedScoringStrategy) MustGetProposer(height int64, round int32) 
 	return proposer
 }
 
-func (s *heightBasedScoringStrategy) ValidatorSet() *types.ValidatorSet {
+func (s *heightRoundProposerSelector) ValidatorSet() *types.ValidatorSet {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	return s.valSet
 }
 
-func (s *heightBasedScoringStrategy) Copy() ProposerProvider {
+func (s *heightRoundProposerSelector) Copy() ProposerProvider {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	return &heightBasedScoringStrategy{
+	return &heightRoundProposerSelector{
 		valSet: s.valSet.Copy(),
 		height: s.height,
+		round:  s.round,
 		bs:     s.bs,
 		logger: s.logger,
 	}
