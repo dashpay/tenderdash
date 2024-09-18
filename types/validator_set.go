@@ -18,6 +18,8 @@ import (
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	"github.com/dashpay/tenderdash/dash/llmq"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
+
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
@@ -117,7 +119,12 @@ func (vals *ValidatorSet) ValidateBasic() error {
 		return ErrValidatorSetNilOrEmpty
 	}
 
-	if vals.proposerIndex >= int32(vals.Size()) {
+	nVals, err := tmmath.SafeConvertInt32(int64(vals.Size()))
+	if err != nil {
+		return fmt.Errorf("failed to convert int to int32: %w", err)
+	}
+
+	if vals.proposerIndex >= nVals {
 		return fmt.Errorf("validator set proposer index %d out of range, expected < %d", vals.proposerIndex, vals.Size())
 	}
 
@@ -250,15 +257,19 @@ func (vals *ValidatorSet) SetProposer(newProposer ProTxHash) error {
 
 // increaseProposerIndex increments the proposer index by `times`, wrapping around if necessary.
 // It also supports negative `times` to decrement the index.
-func (vals *ValidatorSet) IncProposerIndex(times int32) {
-	newIndex := (vals.proposerIndex + times)
-	nVals := int32(vals.Size())
+func (vals *ValidatorSet) IncProposerIndex(times int64) {
+	newIndex := int64(vals.proposerIndex) + times
+	nVals := int64(vals.Size())
 
 	for newIndex < 0 {
 		newIndex += nVals
 	}
 
-	vals.proposerIndex = newIndex % nVals
+	idx, err := tmmath.SafeConvertInt32(newIndex % nVals)
+	if err != nil {
+		panic(fmt.Errorf("failed to convert int64 to int32: %w", err))
+	}
+	vals.proposerIndex = idx
 }
 
 // Makes a copy of the validator list.
@@ -309,7 +320,11 @@ func (vals *ValidatorSet) HasProTxHash(proTxHash crypto.ProTxHash) bool {
 func (vals *ValidatorSet) GetByProTxHash(proTxHash []byte) (index int32, val *Validator) {
 	for idx, val := range vals.Validators {
 		if bytes.Equal(val.ProTxHash, proTxHash) {
-			return int32(idx), val.Copy()
+			index, err := tmmath.SafeConvertInt32(int64(idx))
+			if err != nil {
+				panic(fmt.Errorf("failed to convert int to int32: %w", err))
+			}
+			return index, val.Copy()
 		}
 	}
 	return -1, nil
@@ -901,7 +916,11 @@ func (vals *ValidatorSet) ToProto() (*tmproto.ValidatorSet, error) {
 		return nil, fmt.Errorf("toProto: quorumHash is incorrect size: %d", len(vals.QuorumHash))
 	}
 
-	vp.QuorumType = int32(vals.QuorumType)
+	quorumType, err := tmmath.SafeConvertInt32(int64(vals.QuorumType))
+	if err != nil {
+		return nil, fmt.Errorf("toProto: quorumType error: %w", err)
+	}
+	vp.QuorumType = quorumType
 
 	vp.QuorumHash = vals.QuorumHash
 

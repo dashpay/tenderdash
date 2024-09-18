@@ -130,7 +130,7 @@ func (s *heightRoundProposerSelector) proposerFromStore(height int64, round int3
 	}
 
 	if indexIncrement != 0 {
-		s.valSet.IncProposerIndex(indexIncrement)
+		s.valSet.IncProposerIndex(int64(indexIncrement))
 	}
 
 	return nil
@@ -151,7 +151,7 @@ func (s *heightRoundProposerSelector) UpdateScores(newHeight int64, newRound int
 
 func (s *heightRoundProposerSelector) updateScores(newHeight int64, newRound int32) error {
 	heightDiff := newHeight - s.height
-	roundDiff := newRound - s.round
+	roundDiff := int64(newRound - s.round)
 	if heightDiff == 0 && roundDiff == 0 {
 		// NOOP
 		return nil
@@ -186,7 +186,7 @@ func (s *heightRoundProposerSelector) updateScores(newHeight int64, newRound int
 
 	// heightDiff is 1; it means we go to the newHeight+ newRound
 	// Assuming s.round is the last one as we are not able to determine this
-	s.valSet.IncProposerIndex(int32(heightDiff) + newRound)
+	s.valSet.IncProposerIndex(heightDiff + int64(newRound))
 
 	s.height = newHeight
 	s.round = newRound

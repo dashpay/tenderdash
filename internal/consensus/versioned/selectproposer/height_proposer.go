@@ -77,7 +77,7 @@ func (s *heightProposerSelector) proposerFromStore(height int64) error {
 	}
 
 	var proposer bytes.HexBytes
-	indexIncrement := int32(0)
+	indexIncrement := int64(0)
 
 	meta := s.bs.LoadBlockMeta(height)
 	if meta != nil {
@@ -94,7 +94,7 @@ func (s *heightProposerSelector) proposerFromStore(height int64) error {
 
 		proposer = meta.Header.ProposerProTxHash
 		// rewind rounds, as the proposer in header is for round `meta.Round` and we want round 0
-		indexIncrement = -meta.Round
+		indexIncrement = int64(-meta.Round)
 	} else {
 		// block not found; we try previous height, and will just add 1 to proposer index
 		meta = s.bs.LoadBlockMeta(height - 1)
@@ -109,7 +109,7 @@ func (s *heightProposerSelector) proposerFromStore(height int64) error {
 			// validators hash matches, so we can take proposer from previous height
 			proposer = meta.Header.ProposerProTxHash
 			// rewind rounds, as this is how heightBasedScoringStrategy works
-			indexIncrement = indexIncrement - meta.Round
+			indexIncrement = indexIncrement - int64(meta.Round)
 		} else {
 			// quorum rotation happened - we select 1st validator as proposer, and don't rotate
 			// NOTE: We use index 1 due to bug in original code that causes first validator to never propose.
@@ -195,7 +195,7 @@ func (s *heightProposerSelector) GetProposer(height int64, round int32) (*types.
 
 	// advance a copy of the validator set to the correct round, but don't persist the changes
 	vs := s.valSet.Copy()
-	vs.IncProposerIndex(round)
+	vs.IncProposerIndex(int64(round))
 	return vs.Proposer(), nil
 }
 
