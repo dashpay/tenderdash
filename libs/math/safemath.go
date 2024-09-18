@@ -2,11 +2,13 @@ package math
 
 import (
 	"errors"
+	"fmt"
 	"math"
 )
 
 var ErrOverflowInt64 = errors.New("int64 overflow")
 var ErrOverflowInt32 = errors.New("int32 overflow")
+var ErrOverflowUint32 = errors.New("uint32 overflow")
 var ErrOverflowUint8 = errors.New("uint8 overflow")
 var ErrOverflowInt8 = errors.New("int8 overflow")
 
@@ -73,13 +75,47 @@ func SafeSubInt32(a, b int32) (int32, error) {
 }
 
 // SafeConvertInt32 takes a int and checks if it overflows.
-func SafeConvertInt32(a int64) (int32, error) {
-	if a > math.MaxInt32 {
+func SafeConvertInt32[T Integer](a T) (int32, error) {
+	if int64(a) > math.MaxInt32 {
 		return 0, ErrOverflowInt32
-	} else if a < math.MinInt32 {
+	} else if int64(a) < math.MinInt32 {
 		return 0, ErrOverflowInt32
 	}
 	return int32(a), nil
+}
+
+// SafeConvertInt32 takes a int and checks if it overflows.
+func SafeConvertUint32[T Integer](a T) (uint32, error) {
+	if uint64(a) > math.MaxUint32 {
+		return 0, ErrOverflowUint32
+	} else if a < 0 {
+		return 0, ErrOverflowUint32
+	}
+	return uint32(a), nil
+}
+
+type Integer interface {
+	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
+}
+
+// MustConvertInt32 takes an Integer and converts it to int32.
+// Panics if the conversion overflows.
+func MustConvertInt32[T Integer](a T) int32 {
+	i, err := SafeConvertInt32(a)
+	if err != nil {
+		panic(fmt.Errorf("cannot convert %d to int32: %w", a, err))
+	}
+	return i
+}
+
+// MustConvertInt32 takes an Integer and converts it to int32.
+// Panics if the conversion overflows.
+func MustConvertUint32[T Integer](a T) uint32 {
+	i, err := SafeConvertUint32(a)
+	if err != nil {
+		panic(fmt.Errorf("cannot convert %d to int32: %w", a, err))
+	}
+	return i
 }
 
 // SafeConvertUint8 takes an int64 and checks if it overflows.

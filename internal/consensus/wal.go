@@ -15,6 +15,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/jsontypes"
 	auto "github.com/dashpay/tenderdash/internal/libs/autofile"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmos "github.com/dashpay/tenderdash/libs/os"
 	"github.com/dashpay/tenderdash/libs/service"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
@@ -331,7 +332,7 @@ func (enc *WALEncoder) Encode(v *TimedWALMessage) error {
 	}
 
 	crc := crc32.Checksum(data, crc32c)
-	length := uint32(len(data))
+	length := tmmath.MustConvertUint32(len(data))
 	if length > maxMsgSizeBytes {
 		return fmt.Errorf("msg is too big: %d bytes, max: %d bytes", length, maxMsgSizeBytes)
 	}

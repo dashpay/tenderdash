@@ -36,7 +36,6 @@ type StateDataStore struct {
 	emitter        *eventemitter.EventEmitter
 	replayMode     bool
 	version        int64
-	selectproposer selectproposer.ProposerSelector
 }
 
 // NewStateDataStore creates and returns a new state-data store

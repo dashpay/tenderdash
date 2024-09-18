@@ -104,8 +104,6 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	logger.Info("propose step; our turn to propose",
 		"node_proTxHash", proTxHash.ShortString(),
 		"proposer_proTxHash", proTxHash.ShortString(),
-		"height", stateData.Height,
-		"round", stateData.Round,
 		"step", stateData.Step,
 	)
 	// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,

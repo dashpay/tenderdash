@@ -196,12 +196,6 @@ func incrementRound(vss ...*validatorStub) {
 	}
 }
 
-func resetRound(vss ...*validatorStub) {
-	for _, vs := range vss {
-		vs.Round = 0
-	}
-}
-
 func sortVValidatorStubsByPower(ctx context.Context, t *testing.T, vss []*validatorStub) []*validatorStub {
 	t.Helper()
 	sort.Slice(vss, func(i, j int) bool {

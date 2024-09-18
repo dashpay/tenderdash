@@ -11,7 +11,7 @@ import (
 func TestSafeAdd(t *testing.T) {
 	f := func(a, b int64) bool {
 		c, overflow := SafeAddInt64(a, b)
-		return overflow != nil || (overflow == nil && c == a+b)
+		return overflow != nil || c == a+b
 	}
 	if err := quick.Check(f, nil); err != nil {
 		t.Error(err)
@@ -29,6 +29,34 @@ func TestSafeSubClip(t *testing.T) {
 	assert.EqualValues(t, 0, SafeSubClipInt64(math.MinInt64, math.MinInt64))
 	assert.EqualValues(t, math.MinInt64, SafeSubClipInt64(math.MinInt64, math.MaxInt64))
 	assert.EqualValues(t, math.MaxInt64, SafeSubClipInt64(math.MaxInt64, -10))
+}
+
+func TestSafeConvertUint32(t *testing.T) {
+	testCases := []struct {
+		a        int64
+		overflow bool
+	}{
+		{-1, true},
+		{0, false},
+		{1, false},
+		{math.MaxInt64, true},
+		{math.MaxInt32, false},
+		{math.MaxUint32, false},
+		{math.MaxUint32 + 1, true},
+		{math.MaxInt32, false},
+	}
+
+	for i, tc := range testCases {
+		b, err := SafeConvertUint32(tc.a)
+		if tc.overflow {
+			assert.Error(t, err, "#%d", i)
+			assert.Panics(t, func() { MustConvertUint32(tc.a) }, "#%d", i)
+		} else {
+			assert.EqualValues(t, tc.a, b, "#%d", i)
+			assert.NotPanics(t, func() { MustConvertUint32(tc.a) }, "#%d", i)
+		}
+
+	}
 }
 
 func TestSafeMul(t *testing.T) {
