@@ -287,7 +287,6 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 		s.logger.Error("error creating proposer selector", "height", height, "round", 0, "validators", s.Validators, "err", err)
 		panic(fmt.Sprintf("error creating proposer selector: %v", err))
 	}
-	s.ProposerSelector.SetLogger(s.logger)
 
 	s.logger.Trace("updating state height", "newHeight", height)
 

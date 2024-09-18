@@ -26,9 +26,6 @@ type ProposerSelector interface {
 	ValidatorSet() *types.ValidatorSet
 	// Create deep copy of the strategy and its underlying validator set
 	Copy() ProposerSelector
-
-	// Define logger to use
-	SetLogger(logger log.Logger)
 }
 
 type BlockStore interface {

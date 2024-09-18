@@ -146,10 +146,6 @@ func (s *heightProposerSelector) UpdateHeightRound(newHeight int64, round int32)
 	return s.updateScores(newHeight, round)
 }
 
-func (s *heightProposerSelector) SetLogger(logger log.Logger) {
-	s.logger = logger
-}
-
 func (s *heightProposerSelector) updateScores(newHeight int64, _round int32) error {
 	heightDiff := newHeight - s.height
 	if heightDiff == 0 {

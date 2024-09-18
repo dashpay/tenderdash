@@ -136,11 +136,6 @@ func (s *heightRoundProposerSelector) proposerFromStore(height int64, round int3
 	return nil
 }
 
-// SetLogger sets the logger for the strategy
-func (s *heightRoundProposerSelector) SetLogger(logger log.Logger) {
-	s.logger = logger
-}
-
 // UpdateHeightRound updates the scores of the validators to the given height and round.
 func (s *heightRoundProposerSelector) UpdateHeightRound(newHeight int64, newRound int32) error {
 	s.mtx.Lock()
