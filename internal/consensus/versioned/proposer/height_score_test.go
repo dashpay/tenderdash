@@ -13,7 +13,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
-	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
+	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/proposer"
 	"github.com/dashpay/tenderdash/types"
 )
 

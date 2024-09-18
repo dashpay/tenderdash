@@ -10,7 +10,7 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
-	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
+	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/proposer"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"

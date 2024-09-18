@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
+	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/proposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/bytes"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"

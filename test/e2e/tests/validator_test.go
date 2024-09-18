@@ -10,7 +10,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
-	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
+	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/proposer"
 	"github.com/dashpay/tenderdash/internal/libs/test"
 	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
 	"github.com/dashpay/tenderdash/types"

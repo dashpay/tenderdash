@@ -9,7 +9,7 @@ import (
 
 	"github.com/dashpay/tenderdash/config"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
-	"github.com/dashpay/tenderdash/internal/features/validatorscoring"
+	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/proposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
