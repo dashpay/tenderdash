@@ -135,6 +135,10 @@ func (e *blockExecutor) commit(ctx context.Context, block *types.Block) (*types.
 	return vs.MakeCommit(), nil
 }
 
+// GetProposerFromState returns the proposer for the given height and round.
+//
+// This function is a copy of the one in internal/state/test/factory/block.go
+// to avoid a circular dependency.
 func getProposerFromState(state sm.State, height int64, round int32) *types.Validator {
 	vs, err := validatorscoring.NewProposerStrategy(
 		state.ConsensusParams,
