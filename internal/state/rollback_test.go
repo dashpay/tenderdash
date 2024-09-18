@@ -44,24 +44,30 @@ func TestRollback(t *testing.T) {
 	block := &types.BlockMeta{
 		BlockID: initialState.LastBlockID,
 		Header: types.Header{
-			Height:      initialState.LastBlockHeight,
-			AppHash:     factory.RandomHash(),
-			LastBlockID: factory.MakeBlockID(),
-			ResultsHash: initialState.LastResultsHash,
+			Height:             initialState.LastBlockHeight,
+			AppHash:            factory.RandomHash(),
+			LastBlockID:        factory.MakeBlockID(),
+			ResultsHash:        initialState.LastResultsHash,
+			ProposerProTxHash:  initialState.Validators.Validators[0].ProTxHash,
+			ValidatorsHash:     initialState.Validators.Hash(),
+			NextValidatorsHash: nextState.Validators.Hash(),
 		},
 	}
 	nextBlock := &types.BlockMeta{
 		BlockID: initialState.LastBlockID,
 		Header: types.Header{
-			Height:      nextState.LastBlockHeight,
-			AppHash:     initialState.LastAppHash,
-			LastBlockID: block.BlockID,
-			ResultsHash: nextState.LastResultsHash,
+			Height:            nextState.LastBlockHeight,
+			AppHash:           initialState.LastAppHash,
+			LastBlockID:       block.BlockID,
+			ResultsHash:       nextState.LastResultsHash,
+			ProposerProTxHash: nextState.Validators.Validators[1].ProTxHash,
+			ValidatorsHash:    nextState.Validators.Hash(),
 		},
 	}
 	blockStore.On("LoadBlockMeta", height).Return(block)
 	blockStore.On("LoadBlockMeta", nextHeight).Return(nextBlock)
 	blockStore.On("Height").Return(nextHeight)
+	blockStore.On("Base").Return(height)
 
 	// rollback the state
 	rollbackHeight, rollbackHash, err := state.Rollback(blockStore, stateStore)

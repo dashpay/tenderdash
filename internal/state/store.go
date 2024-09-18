@@ -533,7 +533,7 @@ func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) 
 	if height == 1 {
 		proposer := valSet.GetByIndex(0)
 		if err := valSet.SetProposer(proposer.ProTxHash); err != nil {
-			return nil, fmt.Errorf("could not set proposer: %w", err)
+			return nil, fmt.Errorf("could not set first proposer: %w", err)
 		}
 		return valSet, nil
 	}
