@@ -18,13 +18,11 @@ type heightRoundProposerSelector struct {
 	mtx    sync.Mutex
 }
 
-// NewHeightBasedScoringStrategy creates a new height-based scoring strategy
+// NewHeightRoundProposerSelector creates a new proposer selector that goes around the validator set and ensures
+// every proposer votes once.
 //
-// The strategy increments the ProposerPriority of each validator by 1 at each height
-// and updates the proposer accordingly.
-//
-// Subsequent rounds at the same height will select next proposer on the list, but not persist these changes,
-// so that the proposer of height H and round 1 is selected again at height H+1 and round 0.
+// Each height and round increases proposer index. For example, that if a proposer is selected at height H and round R
+// and the block is committed, next proposer will be selected at height H+1 and round 0 (contrary to heightProposerSelector).
 //
 // It modifies `valSet` in place.
 //
@@ -32,6 +30,9 @@ type heightRoundProposerSelector struct {
 //
 // * `vset` - the validator set; it must not be empty and can be modified in place
 // * `currentHeight` - the current height for which vset has correct scores
+// * `currentRound` - the current round for which vset has correct scores
+// * `bs` - the block store to use for historical data; can be nil
+// * `logger` - the logger to use; can be nil
 func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int64, currentRound int32, bs BlockStore, logger log.Logger) (ProposerSelector, error) {
 	if vset.IsNilOrEmpty() {
 		return nil, fmt.Errorf("empty validator set")
@@ -61,6 +62,8 @@ func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int6
 	return s, nil
 }
 
+// proposerFromStore determines the proposer for the given height and round using current or previous block read from
+// the block store.
 func (s *heightRoundProposerSelector) proposerFromStore(height int64, round int32) error {
 	if s.bs == nil {
 		return fmt.Errorf("block store is nil")
