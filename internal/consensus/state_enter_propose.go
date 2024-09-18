@@ -102,6 +102,7 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	}
 
 	logger.Info("propose step; our turn to propose",
+		"node_proTxHash", proTxHash.ShortString(),
 		"proposer_proTxHash", proTxHash.ShortString(),
 		"height", stateData.Height,
 		"round", stateData.Round,
