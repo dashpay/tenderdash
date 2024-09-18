@@ -8,7 +8,7 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-type ProposerProvider interface {
+type ProposerSelector interface {
 	// GetProposer returns the proposer for the given height and round. It calls Update if necessary.
 	GetProposer(height int64, round int32) (*types.Validator, error)
 
@@ -25,23 +25,25 @@ type ProposerProvider interface {
 	// Returns pointer to underlying validator set; not thread-safe, and should be modified with caution
 	ValidatorSet() *types.ValidatorSet
 	// Create deep copy of the strategy and its underlying validator set
-	Copy() ProposerProvider
+	Copy() ProposerSelector
 
 	// Define logger to use
 	SetLogger(logger log.Logger)
 }
 
-type BlockCommitStore interface {
+type BlockStore interface {
 	LoadBlockCommit(height int64) *types.Commit
 	LoadBlockMeta(height int64) *types.BlockMeta
 	Base() int64
 }
 
-// NewProposerStrategy creates a selectproposerStrategy from the ValidatorSet.
+// NewProposerSelector creates an instance of ProposerSelector based on the given ConsensusParams.
 //
 // Original ValidatorSet should not be used anymore. Height and round should point to the height and round that
 // is reflected in validator scores, eg. the one for which GetProposer() returns proposer that generates proposal
 // at the given height and round.
+//
+// If block store is provided, it will be used to determine the proposer for the current height.
 //
 // ## Arguments
 //
@@ -49,9 +51,9 @@ type BlockCommitStore interface {
 // - `valSet` - validator set to use
 // - `valsetHeight` - current height of the validator set
 // - `valsetRound` - current round of the validator set
-// - `bs` - block store used to retreve info about historical commits; optional, can be nil
-func NewProposerStrategy(cp types.ConsensusParams, valSet *types.ValidatorSet, valsetHeight int64, valsetRound int32,
-	bs BlockCommitStore) (ProposerProvider, error) {
+// - `bs` - block store used to retreve info about historical commits
+func NewProposerSelector(cp types.ConsensusParams, valSet *types.ValidatorSet, valsetHeight int64, valsetRound int32,
+	bs BlockStore) (ProposerSelector, error) {
 	switch cp.Version.ConsensusVersion {
 	case int32(tmtypes.VersionParams_CONSENSUS_VERSION_0):
 		return NewHeightBasedScoringStrategy(valSet, valsetHeight, bs)

@@ -140,7 +140,7 @@ func (e *blockExecutor) commit(ctx context.Context, block *types.Block) (*types.
 // This function is a copy of the one in internal/state/test/factory/block.go
 // to avoid a circular dependency.
 func getProposerFromState(state sm.State, height int64, round int32) *types.Validator {
-	vs, err := selectproposer.NewProposerStrategy(
+	vs, err := selectproposer.NewProposerSelector(
 		state.ConsensusParams,
 		state.Validators.Copy(),
 		state.LastBlockHeight,

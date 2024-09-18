@@ -36,7 +36,7 @@ type StateDataStore struct {
 	emitter        *eventemitter.EventEmitter
 	replayMode     bool
 	version        int64
-	selectproposer selectproposer.ProposerProvider
+	selectproposer selectproposer.ProposerSelector
 }
 
 // NewStateDataStore creates and returns a new state-data store
@@ -194,7 +194,7 @@ func (s *StateData) updateRoundStep(round int32, step cstypes.RoundStepType) {
 
 // Updates State and increments height to match that of state.
 // The round becomes 0 and cs.Step becomes cstypes.RoundStepNewHeight.
-func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockStore selectproposer.BlockCommitStore) {
+func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockStore selectproposer.BlockStore) {
 	if s.CommitRound > -1 && 0 < s.Height && s.Height != state.LastBlockHeight {
 		panic(fmt.Sprintf(
 			"updateToState() expected state height of %v but found %v",
@@ -275,7 +275,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 	s.Validators = validators
 	var err error
 
-	s.ProposerSelector, err = selectproposer.NewProposerStrategy(
+	s.ProposerSelector, err = selectproposer.NewProposerSelector(
 		state.ConsensusParams,
 		s.Validators,
 		height,

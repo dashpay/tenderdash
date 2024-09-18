@@ -9,10 +9,10 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
-type heightBasedScoringStrategy struct {
+type heightProposerSelector struct {
 	valSet *types.ValidatorSet
 	height int64
-	bs     BlockCommitStore
+	bs     BlockStore
 	logger log.Logger
 	mtx    sync.Mutex
 }
@@ -31,7 +31,7 @@ type heightBasedScoringStrategy struct {
 //
 // * `vset` - the validator set; it must not be empty and can be modified in place
 // * `currentHeight` - the current height for which vset has correct scores
-func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64, bs BlockCommitStore) (ProposerProvider, error) {
+func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64, bs BlockStore) (ProposerSelector, error) {
 	if vset.IsNilOrEmpty() {
 		return nil, fmt.Errorf("empty validator set")
 	}
@@ -43,7 +43,7 @@ func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64
 
 	logger.Debug("new height proposer selector", "height", currentHeight)
 
-	s := &heightBasedScoringStrategy{
+	s := &heightProposerSelector{
 		valSet: vset,
 		height: currentHeight,
 		bs:     bs,
@@ -60,7 +60,7 @@ func NewHeightBasedScoringStrategy(vset *types.ValidatorSet, currentHeight int64
 	return s, nil
 }
 
-func (s *heightBasedScoringStrategy) proposerFromStore(height int64) error {
+func (s *heightProposerSelector) proposerFromStore(height int64) error {
 	if s.bs == nil {
 		return fmt.Errorf("block store is nil")
 	}
@@ -138,18 +138,18 @@ func (s *heightBasedScoringStrategy) proposerFromStore(height int64) error {
 
 // UpdateScores updates the scores of the validators to the given height.
 // Here, we ignore the round, as we don't want to persist round info.
-func (s *heightBasedScoringStrategy) UpdateScores(newHeight int64, round int32) error {
+func (s *heightProposerSelector) UpdateScores(newHeight int64, round int32) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	return s.updateScores(newHeight, round)
 }
 
-func (s *heightBasedScoringStrategy) SetLogger(logger log.Logger) {
+func (s *heightProposerSelector) SetLogger(logger log.Logger) {
 	s.logger = logger
 }
 
-func (s *heightBasedScoringStrategy) updateScores(newHeight int64, _round int32) error {
+func (s *heightProposerSelector) updateScores(newHeight int64, _round int32) error {
 	heightDiff := newHeight - s.height
 	if heightDiff == 0 {
 		// NOOP
@@ -181,7 +181,7 @@ func (s *heightBasedScoringStrategy) updateScores(newHeight int64, _round int32)
 	return nil
 }
 
-func (s *heightBasedScoringStrategy) GetProposer(height int64, round int32) (*types.Validator, error) {
+func (s *heightProposerSelector) GetProposer(height int64, round int32) (*types.Validator, error) {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -198,7 +198,7 @@ func (s *heightBasedScoringStrategy) GetProposer(height int64, round int32) (*ty
 	return vs.Proposer(), nil
 }
 
-func (s *heightBasedScoringStrategy) MustGetProposer(height int64, round int32) *types.Validator {
+func (s *heightProposerSelector) MustGetProposer(height int64, round int32) *types.Validator {
 	proposer, err := s.GetProposer(height, round)
 	if err != nil {
 		panic(err)
@@ -206,18 +206,18 @@ func (s *heightBasedScoringStrategy) MustGetProposer(height int64, round int32) 
 	return proposer
 }
 
-func (s *heightBasedScoringStrategy) ValidatorSet() *types.ValidatorSet {
+func (s *heightProposerSelector) ValidatorSet() *types.ValidatorSet {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
 	return s.valSet
 }
 
-func (s *heightBasedScoringStrategy) Copy() ProposerProvider {
+func (s *heightProposerSelector) Copy() ProposerSelector {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	return &heightBasedScoringStrategy{
+	return &heightProposerSelector{
 		valSet: s.valSet.Copy(),
 		height: s.height,
 		bs:     s.bs,

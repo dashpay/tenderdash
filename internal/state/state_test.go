@@ -513,7 +513,7 @@ func TestEmptyValidatorUpdates(t *testing.T) {
 //}
 
 func valsetScoresNewHeight(t *testing.T, state *sm.State) *types.Validator {
-	ps, err := selectproposer.NewProposerStrategy(
+	ps, err := selectproposer.NewProposerSelector(
 		state.ConsensusParams,
 		state.Validators,
 		state.LastBlockHeight,

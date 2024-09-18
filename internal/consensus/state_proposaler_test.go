@@ -24,7 +24,7 @@ type ProposalerTestSuite struct {
 	suite.Suite
 
 	proposer          *Proposaler
-	proposerSelector  selectproposer.ProposerProvider
+	proposerSelector  selectproposer.ProposerSelector
 	mockBlockExec     *mocks.Executor
 	mockPrivVals      []types.PrivValidator
 	mockValSet        *types.ValidatorSet
@@ -90,7 +90,7 @@ func (suite *ProposalerTestSuite) SetupTest() {
 		committedState: suite.committedState,
 	}
 	var err error
-	suite.proposerSelector, err = selectproposer.NewProposerStrategy(
+	suite.proposerSelector, err = selectproposer.NewProposerSelector(
 		suite.committedState.ConsensusParams,
 		valSet,
 		0,
@@ -188,7 +188,7 @@ func (suite *ProposalerTestSuite) TestDecide() {
 	state := suite.committedState
 	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Header.Time)
 	suite.signProposal(ctx, proposalH100R0)
-	vs, err := selectproposer.NewProposerStrategy(types.ConsensusParams{}, suite.mockValSet, 100, 0, nil)
+	vs, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, suite.mockValSet, 100, 0, nil)
 	suite.Require().NoError(err)
 	testCases := []struct {
 		height       int64

@@ -133,7 +133,7 @@ func makeBlockAndPartSet(
 }
 
 func GetProposerFromState(state sm.State, height int64, round int32) *types.Validator {
-	vs, err := selectproposer.NewProposerStrategy(
+	vs, err := selectproposer.NewProposerSelector(
 		state.ConsensusParams,
 		state.Validators.Copy(),
 		state.LastBlockHeight,

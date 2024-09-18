@@ -186,11 +186,11 @@ func makeHeaderPartsResponsesParams(
 func makeRandomStateFromValidatorSet(
 	lastValSet *types.ValidatorSet,
 	height, lastHeightValidatorsChanged int64,
-	bs selectproposer.BlockCommitStore,
+	bs selectproposer.BlockStore,
 ) sm.State {
 	vs := lastValSet.Copy()
 	cp := types.DefaultConsensusParams()
-	expectedVS, err := selectproposer.NewProposerStrategy(*cp, vs, lastHeightValidatorsChanged, 0, bs)
+	expectedVS, err := selectproposer.NewProposerSelector(*cp, vs, lastHeightValidatorsChanged, 0, bs)
 	if err != nil {
 		panic(err)
 	}

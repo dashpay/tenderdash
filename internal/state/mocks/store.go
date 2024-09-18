@@ -141,7 +141,7 @@ func (_m *Store) LoadConsensusParams(_a0 int64) (types.ConsensusParams, error) {
 }
 
 // LoadValidators provides a mock function with given fields: _a0, _a1
-func (_m *Store) LoadValidators(_a0 int64, _a1 selectproposer.BlockCommitStore) (*types.ValidatorSet, error) {
+func (_m *Store) LoadValidators(_a0 int64, _a1 selectproposer.BlockStore) (*types.ValidatorSet, error) {
 	ret := _m.Called(_a0, _a1)
 
 	if len(ret) == 0 {
@@ -150,10 +150,10 @@ func (_m *Store) LoadValidators(_a0 int64, _a1 selectproposer.BlockCommitStore) 
 
 	var r0 *types.ValidatorSet
 	var r1 error
-	if rf, ok := ret.Get(0).(func(int64, selectproposer.BlockCommitStore) (*types.ValidatorSet, error)); ok {
+	if rf, ok := ret.Get(0).(func(int64, selectproposer.BlockStore) (*types.ValidatorSet, error)); ok {
 		return rf(_a0, _a1)
 	}
-	if rf, ok := ret.Get(0).(func(int64, selectproposer.BlockCommitStore) *types.ValidatorSet); ok {
+	if rf, ok := ret.Get(0).(func(int64, selectproposer.BlockStore) *types.ValidatorSet); ok {
 		r0 = rf(_a0, _a1)
 	} else {
 		if ret.Get(0) != nil {
@@ -161,7 +161,7 @@ func (_m *Store) LoadValidators(_a0 int64, _a1 selectproposer.BlockCommitStore) 
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(int64, selectproposer.BlockCommitStore) error); ok {
+	if rf, ok := ret.Get(1).(func(int64, selectproposer.BlockStore) error); ok {
 		r1 = rf(_a0, _a1)
 	} else {
 		r1 = ret.Error(1)

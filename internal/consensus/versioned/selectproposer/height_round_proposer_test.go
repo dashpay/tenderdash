@@ -40,7 +40,7 @@ func TestProposerSelectionHR(t *testing.T) {
 
 	// HEIGHT ROUND STRATEGY
 
-	vs, err := selectproposer.NewProposerStrategy(types.ConsensusParams{
+	vs, err := selectproposer.NewProposerSelector(types.ConsensusParams{
 		Version: types.VersionParams{
 			ConsensusVersion: int32(tmtypes.VersionParams_CONSENSUS_VERSION_1),
 		},

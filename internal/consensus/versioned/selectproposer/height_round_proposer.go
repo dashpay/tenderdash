@@ -13,7 +13,7 @@ type heightRoundProposerSelector struct {
 	valSet *types.ValidatorSet
 	height int64
 	round  int32
-	bs     BlockCommitStore
+	bs     BlockStore
 	logger log.Logger
 	mtx    sync.Mutex
 }
@@ -32,7 +32,7 @@ type heightRoundProposerSelector struct {
 //
 // * `vset` - the validator set; it must not be empty and can be modified in place
 // * `currentHeight` - the current height for which vset has correct scores
-func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int64, currentRound int32, bs BlockCommitStore) (ProposerProvider, error) {
+func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int64, currentRound int32, bs BlockStore) (ProposerSelector, error) {
 	if vset.IsNilOrEmpty() {
 		return nil, fmt.Errorf("empty validator set")
 	}
@@ -219,7 +219,7 @@ func (s *heightRoundProposerSelector) ValidatorSet() *types.ValidatorSet {
 	return s.valSet
 }
 
-func (s *heightRoundProposerSelector) Copy() ProposerProvider {
+func (s *heightRoundProposerSelector) Copy() ProposerSelector {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
