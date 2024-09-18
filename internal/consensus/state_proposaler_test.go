@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/suite"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	"github.com/dashpay/tenderdash/internal/test/factory"
@@ -24,7 +24,7 @@ type ProposalerTestSuite struct {
 	suite.Suite
 
 	proposer          *Proposaler
-	proposerSelector  validatorscoring.ProposerProvider
+	proposerSelector  selectproposer.ProposerProvider
 	mockBlockExec     *mocks.Executor
 	mockPrivVals      []types.PrivValidator
 	mockValSet        *types.ValidatorSet
@@ -90,7 +90,7 @@ func (suite *ProposalerTestSuite) SetupTest() {
 		committedState: suite.committedState,
 	}
 	var err error
-	suite.proposerSelector, err = validatorscoring.NewProposerStrategy(
+	suite.proposerSelector, err = selectproposer.NewProposerStrategy(
 		suite.committedState.ConsensusParams,
 		valSet,
 		0,
@@ -188,7 +188,7 @@ func (suite *ProposalerTestSuite) TestDecide() {
 	state := suite.committedState
 	proposalH100R0 := types.NewProposal(100, state.LastCoreChainLockedBlockHeight, 0, 0, blockID, suite.blockH100R0.Header.Time)
 	suite.signProposal(ctx, proposalH100R0)
-	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, suite.mockValSet, 100, 0, nil)
+	vs, err := selectproposer.NewProposerStrategy(types.ConsensusParams{}, suite.mockValSet, 100, 0, nil)
 	suite.Require().NoError(err)
 	testCases := []struct {
 		height       int64

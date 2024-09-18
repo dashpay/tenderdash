@@ -13,7 +13,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -30,7 +30,7 @@ func TestProposerSelection1(t *testing.T) {
 	}, bls12381.GenPrivKey().PubKey(), btcjson.LLMQType_5_60, crypto.RandQuorumHash(), true)
 	var proposers []string
 
-	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset, 0, 0, nil)
+	vs, err := selectproposer.NewProposerStrategy(types.ConsensusParams{}, vset, 0, 0, nil)
 	require.NoError(t, err)
 
 	for height := int64(0); height < 99; height++ {
@@ -60,7 +60,7 @@ func TestProposerSelection2(t *testing.T) {
 	addresses[2] = []byte{0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0}
 
 	vals, _ := types.GenerateValidatorSet(types.NewValSetParam(proTxHashes))
-	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vals.Copy(), 0, 0, nil)
+	vs, err := selectproposer.NewProposerStrategy(types.ConsensusParams{}, vals.Copy(), 0, 0, nil)
 	require.NoError(t, err)
 
 	height := 0
@@ -96,7 +96,7 @@ func TestProposerSelection3(t *testing.T) {
 
 	vset, _ := types.GenerateValidatorSet(types.NewValSetParam(proTxHashes))
 
-	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), initialHeight, 0, nil)
+	vs, err := selectproposer.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), initialHeight, 0, nil)
 	require.NoError(t, err)
 
 	// initialize proposers
@@ -113,7 +113,7 @@ func TestProposerSelection3(t *testing.T) {
 		j uint32
 	)
 
-	vs, err = validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), 1, 0, nil)
+	vs, err = selectproposer.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), 1, 0, nil)
 	require.NoError(t, err)
 	j = 0
 	for h = 1; h <= 10000; h++ {
@@ -130,7 +130,7 @@ func TestProposerSelection3(t *testing.T) {
 	}
 }
 
-func setupTestHeightScore(t *testing.T, genesisHeight int64) ([]crypto.ProTxHash, validatorscoring.ProposerProvider) {
+func setupTestHeightScore(t *testing.T, genesisHeight int64) ([]crypto.ProTxHash, selectproposer.ProposerProvider) {
 	var proTxHashes []crypto.ProTxHash
 	for i := byte(1); i <= 5; i++ {
 		protx := make([]byte, 32)
@@ -140,7 +140,7 @@ func setupTestHeightScore(t *testing.T, genesisHeight int64) ([]crypto.ProTxHash
 
 	vset, _ := types.GenerateValidatorSet(types.NewValSetParam(proTxHashes))
 
-	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), genesisHeight, 0, nil)
+	vs, err := selectproposer.NewProposerStrategy(types.ConsensusParams{}, vset.Copy(), genesisHeight, 0, nil)
 	require.NoError(t, err)
 
 	return proTxHashes, vs

@@ -12,7 +12,7 @@ import (
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/types"
@@ -133,7 +133,7 @@ func makeBlockAndPartSet(
 }
 
 func GetProposerFromState(state sm.State, height int64, round int32) *types.Validator {
-	vs, err := validatorscoring.NewProposerStrategy(
+	vs, err := selectproposer.NewProposerStrategy(
 		state.ConsensusParams,
 		state.Validators.Copy(),
 		state.LastBlockHeight,

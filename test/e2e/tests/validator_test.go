@@ -10,7 +10,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	"github.com/dashpay/tenderdash/internal/libs/test"
 	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
 	"github.com/dashpay/tenderdash/types"
@@ -129,7 +129,7 @@ func TestValidator_Propose(t *testing.T) {
 // validatorSchedule is a validator set iterator, which takes into account
 // validator set updates.
 type validatorSchedule struct {
-	Set                       validatorscoring.ProposerProvider
+	Set                       selectproposer.ProposerProvider
 	height                    int64
 	updates                   map[int64]e2e.ValidatorsMap
 	thresholdPublicKeyUpdates map[int64]crypto.PubKey
@@ -156,7 +156,7 @@ func newValidatorSchedule(testnet e2e.Testnet) *validatorSchedule {
 		}
 	}
 	valset := types.NewValidatorSet(makeVals(valMap), thresholdPublicKey, quorumType, quorumHash, true)
-	vs := test.Must(validatorscoring.NewProposerStrategy(types.ConsensusParams{}, valset,
+	vs := test.Must(selectproposer.NewProposerStrategy(types.ConsensusParams{}, valset,
 		testnet.InitialHeight, 0, nil))
 	return &validatorSchedule{
 		height:                    testnet.InitialHeight,
@@ -184,7 +184,7 @@ func (s *validatorSchedule) Increment(heights int64) error {
 
 							vset := types.NewValidatorSet(makeVals(update), thresholdPublicKeyUpdate, btcjson.LLMQType_5_60,
 								quorumHashUpdate, true)
-							s.Set = test.Must(validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vset,
+							s.Set = test.Must(selectproposer.NewProposerStrategy(types.ConsensusParams{}, vset,
 								s.height, 0, nil))
 						}
 					}

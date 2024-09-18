@@ -21,7 +21,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	"github.com/dashpay/tenderdash/dash"
 	"github.com/dashpay/tenderdash/dash/llmq"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	"github.com/dashpay/tenderdash/internal/evidence/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
@@ -513,7 +513,7 @@ func TestEmptyValidatorUpdates(t *testing.T) {
 //}
 
 func valsetScoresNewHeight(t *testing.T, state *sm.State) *types.Validator {
-	ps, err := validatorscoring.NewProposerStrategy(
+	ps, err := selectproposer.NewProposerStrategy(
 		state.ConsensusParams,
 		state.Validators,
 		state.LastBlockHeight,

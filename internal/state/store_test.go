@@ -15,7 +15,7 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	"github.com/dashpay/tenderdash/internal/evidence/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
@@ -73,7 +73,7 @@ func assertProposer(t *testing.T, valSet *types.ValidatorSet, h int64) {
 	assert.EqualValues(t, exp, idx, "pre-set proposer at height %d", h)
 
 	// check if GetProposer returns the same proposer
-	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, valSet.Copy(), h, 0, nil)
+	vs, err := selectproposer.NewProposerStrategy(types.ConsensusParams{}, valSet.Copy(), h, 0, nil)
 	require.NoError(t, err)
 
 	prop := vs.MustGetProposer(h, 0)
@@ -86,7 +86,7 @@ func TestStoreLoadValidators(t *testing.T) {
 	stateStore := sm.NewStore(stateDB)
 	vals, _ := types.RandValidatorSet(3)
 
-	expectedVS, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{}, vals.Copy(), 1, 0, nil)
+	expectedVS, err := selectproposer.NewProposerStrategy(types.ConsensusParams{}, vals.Copy(), 1, 0, nil)
 	require.NoError(t, err)
 
 	// initialize block store - create mock validators for each height

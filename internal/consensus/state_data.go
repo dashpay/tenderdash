@@ -9,7 +9,7 @@ import (
 
 	"github.com/dashpay/tenderdash/config"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -27,16 +27,16 @@ var (
 
 // StateDataStore is a state-data store
 type StateDataStore struct {
-	mtx              sync.Mutex
-	roundState       cstypes.RoundState
-	committedState   sm.State
-	metrics          *Metrics
-	logger           log.Logger
-	config           *config.ConsensusConfig
-	emitter          *eventemitter.EventEmitter
-	replayMode       bool
-	version          int64
-	validatorScoring validatorscoring.ProposerProvider
+	mtx            sync.Mutex
+	roundState     cstypes.RoundState
+	committedState sm.State
+	metrics        *Metrics
+	logger         log.Logger
+	config         *config.ConsensusConfig
+	emitter        *eventemitter.EventEmitter
+	replayMode     bool
+	version        int64
+	selectproposer selectproposer.ProposerProvider
 }
 
 // NewStateDataStore creates and returns a new state-data store
@@ -194,7 +194,7 @@ func (s *StateData) updateRoundStep(round int32, step cstypes.RoundStepType) {
 
 // Updates State and increments height to match that of state.
 // The round becomes 0 and cs.Step becomes cstypes.RoundStepNewHeight.
-func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockStore validatorscoring.BlockCommitStore) {
+func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockStore selectproposer.BlockCommitStore) {
 	if s.CommitRound > -1 && 0 < s.Height && s.Height != state.LastBlockHeight {
 		panic(fmt.Sprintf(
 			"updateToState() expected state height of %v but found %v",
@@ -275,7 +275,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 	s.Validators = validators
 	var err error
 
-	s.ProposerSelector, err = validatorscoring.NewProposerStrategy(
+	s.ProposerSelector, err = selectproposer.NewProposerStrategy(
 		state.ConsensusParams,
 		s.Validators,
 		height,

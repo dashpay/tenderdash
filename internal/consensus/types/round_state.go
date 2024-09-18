@@ -6,7 +6,7 @@ import (
 	"strconv"
 	"time"
 
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/bytes"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
@@ -77,7 +77,7 @@ type RoundState struct {
 	// Subjective time when +2/3 precommits for Block at Round were found
 	CommitTime          time.Time           `json:"commit_time"`
 	Validators          *types.ValidatorSet `json:"validators"`
-	ProposerSelector    validatorscoring.ProposerProvider
+	ProposerSelector    selectproposer.ProposerProvider
 	Proposal            *types.Proposal `json:"proposal"`
 	ProposalReceiveTime time.Time       `json:"proposal_receive_time"`
 	ProposalBlock       *types.Block    `json:"proposal_block"`

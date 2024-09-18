@@ -37,7 +37,7 @@ type BlockCommitStore interface {
 	Base() int64
 }
 
-// NewProposerStrategy creates a ValidatorScoringStrategy from the ValidatorSet.
+// NewProposerStrategy creates a selectproposerStrategy from the ValidatorSet.
 //
 // Original ValidatorSet should not be used anymore. Height and round should point to the height and round that
 // is reflected in validator scores, eg. the one for which GetProposer() returns proposer that generates proposal

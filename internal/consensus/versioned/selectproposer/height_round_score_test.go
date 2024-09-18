@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	tmtypes "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -40,7 +40,7 @@ func TestProposerSelectionHR(t *testing.T) {
 
 	// HEIGHT ROUND STRATEGY
 
-	vs, err := validatorscoring.NewProposerStrategy(types.ConsensusParams{
+	vs, err := selectproposer.NewProposerStrategy(types.ConsensusParams{
 		Version: types.VersionParams{
 			ConsensusVersion: int32(tmtypes.VersionParams_CONSENSUS_VERSION_1),
 		},

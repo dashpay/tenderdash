@@ -10,7 +10,7 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
-	validatorscoring "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	"github.com/dashpay/tenderdash/libs/log"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
@@ -94,7 +94,7 @@ type Store interface {
 	// Load loads the current state of the blockchain
 	Load() (State, error)
 	// LoadValidators loads the validator set that is used to validate the given height
-	LoadValidators(int64, validatorscoring.BlockCommitStore) (*types.ValidatorSet, error)
+	LoadValidators(int64, selectproposer.BlockCommitStore) (*types.ValidatorSet, error)
 	// LoadABCIResponses loads the abciResponse for a given height
 	LoadABCIResponses(int64) (*tmstate.ABCIResponses, error)
 	// LoadConsensusParams loads the consensus params for a given height
@@ -503,7 +503,7 @@ func (store dbStore) SaveValidatorSets(lowerHeight, upperHeight int64, vals *typ
 // LoadValidators loads the ValidatorSet for a given height and round 0.
 //
 // Returns ErrNoValSetForHeight if the validator set can't be found for this height.
-func (store dbStore) LoadValidators(height int64, bs validatorscoring.BlockCommitStore) (*types.ValidatorSet, error) {
+func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockCommitStore) (*types.ValidatorSet, error) {
 	valInfo, err := loadValidatorsInfo(store.db, height)
 	if err != nil {
 		return nil, ErrNoValSetForHeight{Height: height, Err: err}
@@ -552,7 +552,7 @@ func (store dbStore) LoadValidators(height int64, bs validatorscoring.BlockCommi
 			return nil, fmt.Errorf("could not set proposer: %w", err)
 		}
 
-		strategy, err := validatorscoring.NewProposerStrategy(cp, valSet, meta.Header.Height, meta.Round, bs)
+		strategy, err := selectproposer.NewProposerStrategy(cp, valSet, meta.Header.Height, meta.Round, bs)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create validator scoring strategy: %w", err)
 		}
@@ -572,7 +572,7 @@ func (store dbStore) LoadValidators(height int64, bs validatorscoring.BlockCommi
 	if err := valSet.SetProposer(prevMeta.Header.ProposerProTxHash); err != nil {
 		return nil, fmt.Errorf("could not set proposer: %w", err)
 	}
-	strategy, err := validatorscoring.NewProposerStrategy(cp, valSet, prevMeta.Header.Height, prevMeta.Round, bs)
+	strategy, err := selectproposer.NewProposerStrategy(cp, valSet, prevMeta.Header.Height, prevMeta.Round, bs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create validator scoring strategy: %w", err)
 	}
