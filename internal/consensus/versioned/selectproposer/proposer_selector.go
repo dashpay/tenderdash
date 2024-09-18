@@ -15,7 +15,7 @@ type ProposerSelector interface {
 	// MustGetProposer returns the proposer for the given height and round. It calls Update if necessary.
 	// It panics on any error.
 	//
-	// Use in tests
+	// Only use in tests.
 	// See [GetProposer](#GetProposer) for details.
 	MustGetProposer(height int64, round int32) *types.Validator
 	// UpdateHeightRound updates proposer to match provided height and round. It should be called at least once for each round.

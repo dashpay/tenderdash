@@ -3,6 +3,7 @@ package selectproposer
 import (
 	"fmt"
 	"sync"
+	"testing"
 
 	"github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -201,6 +202,10 @@ func (s *heightRoundProposerSelector) GetProposer(height int64, round int32) (*t
 }
 
 func (s *heightRoundProposerSelector) MustGetProposer(height int64, round int32) *types.Validator {
+	if !testing.Testing() {
+		panic("MustGetProposer should only be used in tests")
+	}
+
 	proposer, err := s.GetProposer(height, round)
 	if err != nil {
 		panic(err)
