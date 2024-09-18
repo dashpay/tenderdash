@@ -213,6 +213,11 @@ func (p *Proposaler) sendMessages(ctx context.Context, msgs ...Message) {
 }
 
 func (p *Proposaler) verifyProposal(proposal *types.Proposal, rs *cstypes.RoundState) error {
+	if proposal.Height != rs.Height || proposal.Round != rs.Round {
+		return fmt.Errorf("proposal for invalid height/round, proposal height %d, round %d, expected height %d, round %d",
+			proposal.Height, proposal.Round, rs.Height, rs.Round)
+	}
+
 	protoProposal := proposal.ToProto()
 	stateValSet := p.committedState.Validators
 	// Verify signature

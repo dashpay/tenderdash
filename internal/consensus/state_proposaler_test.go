@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
@@ -93,7 +94,7 @@ func (suite *ProposalerTestSuite) SetupTest() {
 	suite.proposerSelector, err = selectproposer.NewProposerSelector(
 		suite.committedState.ConsensusParams,
 		valSet,
-		0,
+		100,
 		0,
 		nil,
 		logger,
@@ -275,11 +276,16 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 	suite.signProposal(ctx, proposalH100R0)
 	proposalH100R0wrongSig := *proposalH100R0
 	proposalH100R0wrongSig.Signature = make([]byte, 96)
-	valSet := *suite.mockValSet
+	valSet := *suite.mockValSet.Copy()
 	proposer := valSet.Proposer()
 	proposer.PubKey = nil
 	idx, _ := valSet.GetByProTxHash(proposer.ProTxHash)
-	valSet.Validators[int(idx)] = proposer
+	valSet.Validators[idx] = proposer
+
+	proposerSelectorNoPubkeys, err := selectproposer.NewProposerSelector(state.ConsensusParams, &valSet,
+		100, 0,
+		nil, nil)
+	require.NoError(suite.T(), err)
 
 	testCases := []struct {
 		proposal *types.Proposal
@@ -291,6 +297,8 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 			rs: cstypes.RoundState{
 				Validators:       suite.mockValSet,
 				ProposerSelector: suite.proposerSelector,
+				Height:           proposalH100R0.Height,
+				Round:            proposalH100R0.Round,
 			},
 		},
 		{
@@ -298,6 +306,8 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 			rs: cstypes.RoundState{
 				Validators:       suite.mockValSet,
 				ProposerSelector: suite.proposerSelector,
+				Height:           proposalH100R0wrongSig.Height,
+				Round:            proposalH100R0wrongSig.Round,
 			},
 			wantErr: ErrInvalidProposalSignature.Error(),
 		},
@@ -306,7 +316,9 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 			rs: cstypes.RoundState{
 				Commit:           nil,
 				Validators:       &valSet,
-				ProposerSelector: suite.proposerSelector,
+				ProposerSelector: proposerSelectorNoPubkeys,
+				Height:           proposalH100R0.Height,
+				Round:            proposalH100R0.Round,
 			},
 			wantErr: ErrUnableToVerifyProposal.Error(),
 		},
@@ -315,7 +327,9 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 			rs: cstypes.RoundState{
 				Commit:           &types.Commit{Height: 99},
 				Validators:       &valSet,
-				ProposerSelector: suite.proposerSelector,
+				ProposerSelector: proposerSelectorNoPubkeys,
+				Height:           proposalH100R0.Height,
+				Round:            proposalH100R0.Round,
 			},
 			wantErr: ErrUnableToVerifyProposal.Error(),
 		},
@@ -324,7 +338,9 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 			rs: cstypes.RoundState{
 				Commit:           &types.Commit{Height: 100, Round: 1},
 				Validators:       &valSet,
-				ProposerSelector: suite.proposerSelector,
+				ProposerSelector: proposerSelectorNoPubkeys,
+				Height:           proposalH100R0.Height,
+				Round:            proposalH100R0.Round,
 			},
 			wantErr: ErrUnableToVerifyProposal.Error(),
 		},
@@ -333,7 +349,9 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 			rs: cstypes.RoundState{
 				Commit:           &types.Commit{Height: 100, Round: 0, BlockID: types.BlockID{Hash: nil}},
 				Validators:       &valSet,
-				ProposerSelector: suite.proposerSelector,
+				ProposerSelector: proposerSelectorNoPubkeys,
+				Height:           proposalH100R0.Height,
+				Round:            proposalH100R0.Round,
 			},
 			wantErr: ErrInvalidProposalForCommit.Error(),
 		},
@@ -342,7 +360,9 @@ func (suite *ProposalerTestSuite) TestVerifyProposal() {
 			rs: cstypes.RoundState{
 				Commit:           &types.Commit{Height: 100, Round: 0, BlockID: proposalH100R0.BlockID},
 				Validators:       &valSet,
-				ProposerSelector: suite.proposerSelector,
+				ProposerSelector: proposerSelectorNoPubkeys,
+				Height:           proposalH100R0.Height,
+				Round:            proposalH100R0.Round,
 			},
 		},
 	}

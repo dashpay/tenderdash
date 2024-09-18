@@ -28,21 +28,35 @@ const (
 	valSetCheckpointInterval = 100000
 )
 
+// mockBlockStoreForProposerSelector creates a mock block store that returns proposers based on the height.
+// It assumes every block ends in round 0 and the proposer is the next validator in the validator set.
+func mockBlockStoreForProposerSelector(t *testing.T, startHeight, endHeight int64, vals *types.ValidatorSet) selectproposer.BlockStore {
+	vals = vals.Copy()
+	valsHash := vals.Hash()
+	blockStore := mocks.NewBlockStore(t)
+	blockStore.On("Base").Return(startHeight).Maybe()
+	for h := startHeight; h <= endHeight; h++ {
+		blockStore.On("LoadBlockMeta", h).
+			Return(&types.BlockMeta{
+				Header: types.Header{
+					Height:             h,
+					ProposerProTxHash:  vals.Proposer().ProTxHash,
+					ValidatorsHash:     valsHash,
+					NextValidatorsHash: valsHash,
+				},
+			}).Maybe()
+		vals.IncProposerIndex(1)
+	}
+
+	return blockStore
+}
+
 func TestStoreBootstrap(t *testing.T) {
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
 	vals, _ := types.RandValidatorSet(3)
 
-	blockStore := mocks.NewBlockStore(t)
-	for h := int64(99); h <= 100; h++ {
-		blockStore.On("LoadBlockMeta", h).
-			Return(&types.BlockMeta{
-				Header: types.Header{
-					Height:            h,
-					ProposerProTxHash: vals.GetByIndex(int32(int(h+1) % vals.Size())).ProTxHash,
-				},
-			})
-	}
+	blockStore := mockBlockStoreForProposerSelector(t, 99, 100, vals)
 
 	bootstrapState := makeRandomStateFromValidatorSet(vals, 100, 100, blockStore)
 	require.NoError(t, stateStore.Bootstrap(bootstrapState))
@@ -92,15 +106,7 @@ func TestStoreLoadValidators(t *testing.T) {
 
 	// initialize block store - create mock validators for each height
 	blockStoreVS := expectedVS.Copy()
-	blockStore := mocks.NewBlockStore(t)
-	blockStore.On("Base").Return(int64(1)).Maybe()
-	for h := int64(1); h <= valSetCheckpointInterval; h++ {
-		blockStore.On("LoadBlockMeta", h).Return(&types.BlockMeta{
-			Header: types.Header{
-				Height:            h,
-				ProposerProTxHash: blockStoreVS.MustGetProposer(h, 0).ProTxHash,
-			}}).Maybe()
-	}
+	blockStore := mockBlockStoreForProposerSelector(t, 1, valSetCheckpointInterval, blockStoreVS.ValidatorSet())
 
 	// 1) LoadValidators loads validators using a height where they were last changed
 	// Note that only the current validators at height h are saved
@@ -318,20 +324,13 @@ func TestPruneStates(t *testing.T) {
 			}
 			require.NoError(t, err)
 
-			blockStore := mocks.NewBlockStore(t)
+			blockStore := mockBlockStoreForProposerSelector(t, tc.remainingValSetHeight, tc.endHeight, validatorSet)
 			// We initialize block store from remainingValSetHeight just to pass this test; in practive, it can be
 			// pruned. But here we want to check state store logic, not block store logic.
-			for h := int64(1); h < tc.remainingValSetHeight; h++ {
-				blockStore.On("LoadBlockMeta", h).Return(nil).Maybe()
-			}
-			for h := tc.remainingValSetHeight; h <= tc.endHeight; h++ {
-				blockStore.On("LoadBlockMeta", h).Return(&types.BlockMeta{
-					Header: types.Header{
-						Height:            h,
-						ProposerProTxHash: proTxHash,
-					},
-				}).Maybe()
-			}
+			// for h := int64(1); h < tc.remainingValSetHeight; h++ {
+			// 	blockStore.On("LoadBlockMeta", h).Return(nil).Maybe()
+			// }
+
 			for h := tc.pruneHeight; h <= tc.endHeight; h++ {
 				vals, err := stateStore.LoadValidators(h, blockStore)
 				require.NoError(t, err, h)
