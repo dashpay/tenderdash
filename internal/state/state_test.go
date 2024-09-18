@@ -8,7 +8,6 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
@@ -252,6 +251,7 @@ func TestValidatorSimpleSaveLoad(t *testing.T) {
 	assert.IsType(t, sm.ErrNoValSetForHeight{}, err, "expected err at height 0")
 
 	// Should be able to load for height 1.
+	blockStore.On("Base").Return(int64(1))
 	blockStore.On("LoadBlockMeta", int64(1)).Return(&types.BlockMeta{
 		Header: types.Header{
 			Height:            1,
@@ -287,7 +287,7 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 	defer tearDown(t)
 	stateStore := sm.NewStore(stateDB)
 	blockStore := mocks.NewBlockStore(t)
-	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
+	blockStore.On("Base").Return(int64(1))
 
 	// Change vals at these heights.
 	changeHeights := []int64{1, 2, 4, 5, 10, 15, 16, 17, 20}
@@ -329,12 +329,11 @@ func TestOneValidatorChangesSaveLoad(t *testing.T) {
 		state, err = state.Update(blockID, &header, &changes)
 
 		blockStore.On("LoadBlockMeta", header.Height).Return(&types.BlockMeta{
-			Header: types.Header{
-				Height:            header.Height,
-				ProposerProTxHash: header.ProposerProTxHash,
-			}}).Maybe()
+			Header: header,
+		}).Maybe()
 
 		require.NoError(t, err)
+
 		validator := state.Validators.Validators[0]
 		keys[height+1] = validator.PubKey
 		err = stateStore.Save(state)
@@ -666,6 +665,7 @@ func TestManyValidatorChangesSaveLoad(t *testing.T) {
 			Height:            state.LastBlockHeight,
 			ProposerProTxHash: state.Validators.GetByIndex(0).ProTxHash,
 		}}).Maybe()
+	blockStore.On("Base").Return(state.LastBlockHeight)
 
 	// ====== HEIGHT 2 ====== //
 
