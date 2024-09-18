@@ -137,9 +137,9 @@ func (s *heightProposerSelector) proposerFromStore(height int64) error {
 	return nil
 }
 
-// UpdateScores updates the scores of the validators to the given height.
+// UpdateHeightRound updates the scores of the validators to the given height.
 // Here, we ignore the round, as we don't want to persist round info.
-func (s *heightProposerSelector) UpdateScores(newHeight int64, round int32) error {
+func (s *heightProposerSelector) UpdateHeightRound(newHeight int64, round int32) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 

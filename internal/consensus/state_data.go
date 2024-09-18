@@ -185,7 +185,7 @@ func (s *StateData) updateRoundStep(round int32, step cstypes.RoundStepType) {
 	s.Round = round
 	s.Step = step
 
-	if err := s.ProposerSelector.UpdateScores(s.Height, round); err != nil {
+	if err := s.ProposerSelector.UpdateHeightRound(s.Height, round); err != nil {
 		s.logger.Error("error updating proposer scores",
 			"height", s.Height, "round", round,
 			"err", err)

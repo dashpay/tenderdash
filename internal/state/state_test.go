@@ -522,7 +522,7 @@ func valsetScoresNewHeight(t *testing.T, state *sm.State) *types.Validator {
 		log.NewTestingLogger(t))
 
 	require.NoError(t, err)
-	err = ps.UpdateScores(state.LastBlockHeight+1, 0)
+	err = ps.UpdateHeightRound(state.LastBlockHeight+1, 0)
 	require.NoError(t, err)
 
 	return ps.MustGetProposer(state.LastBlockHeight+1, 0)

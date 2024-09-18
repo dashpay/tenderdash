@@ -57,7 +57,7 @@ func TestProposerSelectionHR(t *testing.T) {
 		}
 
 		round := uint32(rand.Int31n(100))
-		require.NoError(t, vs.UpdateScores(int64(h), int32(round)))
+		require.NoError(t, vs.UpdateHeightRound(int64(h), int32(round)))
 
 		// t.Logf("Height: %d, Round: %d, proposer index %d", h, round, proposerIndex)
 		// we expect proposer increase for each round, plus one for next height

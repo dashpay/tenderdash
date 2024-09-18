@@ -126,7 +126,7 @@ func TestProposerSelection3(t *testing.T) {
 		}
 
 		round := uint32(rand.Int31n(100))
-		require.NoError(t, vs.UpdateScores(int64(h), int32(round)))
+		require.NoError(t, vs.UpdateHeightRound(int64(h), int32(round)))
 		j++ // height proposer strategy only increment by 1 each height, regardless of the rounds
 	}
 }
@@ -157,7 +157,7 @@ func TestHeightScoreH(t *testing.T) {
 		proposer := vs.MustGetProposer(h, 0)
 		pos := (h - genesisHeight) % int64(len(proTxHashes))
 		assert.Equal(t, proTxHashes[pos], proposer.ProTxHash, "height %d", h)
-		require.NoError(t, vs.UpdateScores(h, 0), "height %d", h)
+		require.NoError(t, vs.UpdateHeightRound(h, 0), "height %d", h)
 	}
 }
 
@@ -173,7 +173,7 @@ func TestHeightScoreHR(t *testing.T) {
 			proposer := vs.MustGetProposer(h, r)
 			pos := (h - genesisHeight + int64(r)) % int64(len(proTxHashes))
 			require.Equal(t, proTxHashes[pos], proposer.ProTxHash, "height %d, round %d", h, r)
-			require.NoError(t, vs.UpdateScores(h, r), "height %d, round %d", h, r)
+			require.NoError(t, vs.UpdateHeightRound(h, r), "height %d, round %d", h, r)
 		}
 	}
 }

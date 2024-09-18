@@ -18,10 +18,10 @@ type ProposerSelector interface {
 	// Use in tests
 	// See [GetProposer](#GetProposer) for details.
 	MustGetProposer(height int64, round int32) *types.Validator
-	// Update updates scores for the given height and round. It should be called at least once for each round.
+	// UpdateHeightRound updates proposer to match provided height and round. It should be called at least once for each round.
 	//   - `height` is the height
 	//  - `round` is the round
-	UpdateScores(height int64, round int32) error
+	UpdateHeightRound(height int64, round int32) error
 	// Returns pointer to underlying validator set; not thread-safe, and should be modified with caution
 	ValidatorSet() *types.ValidatorSet
 	// Create deep copy of the strategy and its underlying validator set

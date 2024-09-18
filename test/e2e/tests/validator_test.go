@@ -191,7 +191,7 @@ func (s *validatorSchedule) Increment(heights int64) error {
 				}
 			}
 		}
-		if err := s.Set.UpdateScores(s.height, 0); err != nil {
+		if err := s.Set.UpdateHeightRound(s.height, 0); err != nil {
 			return err
 		}
 	}

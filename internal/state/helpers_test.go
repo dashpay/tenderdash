@@ -195,7 +195,7 @@ func makeRandomStateFromValidatorSet(
 		panic(err)
 	}
 	for h := lastHeightValidatorsChanged; h <= height; h++ {
-		if err := expectedVS.UpdateScores(h, 0); err != nil {
+		if err := expectedVS.UpdateHeightRound(h, 0); err != nil {
 			panic(err)
 		}
 	}

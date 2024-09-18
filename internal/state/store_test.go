@@ -119,7 +119,7 @@ func TestStoreLoadValidators(t *testing.T) {
 	_, err = stateStore.LoadValidators(3, blockStore)
 	assert.Error(t, err, "no validator expected at this height")
 
-	err = expectedVS.UpdateScores(2, 0)
+	err = expectedVS.UpdateHeightRound(2, 0)
 	require.NoError(t, err)
 	assertProposer(t, expectedVS.ValidatorSet(), 2)
 
@@ -149,13 +149,13 @@ func TestStoreLoadValidators(t *testing.T) {
 	// ensure we have correct validator set loaded; at height h, we expcect `(h+1) % 3`
 	// (adding 1 as we start from initial height 1).
 	for h := int64(2); h <= valSetCheckpointInterval-1; h++ {
-		require.NoError(t, expectedVS.UpdateScores(h, 0))
+		require.NoError(t, expectedVS.UpdateHeightRound(h, 0))
 	}
 	expected := expectedVS.ValidatorSet()
 	assertProposer(t, expected, valSetCheckpointInterval-1)
 	require.NotEqual(t, expected, valsAtCheckpoint)
 
-	require.NoError(t, expectedVS.UpdateScores(valSetCheckpointInterval, 0))
+	require.NoError(t, expectedVS.UpdateHeightRound(valSetCheckpointInterval, 0))
 	expected = expectedVS.ValidatorSet()
 	assertProposer(t, expected, valSetCheckpointInterval)
 	require.Equal(t, expected, valsAtCheckpoint)

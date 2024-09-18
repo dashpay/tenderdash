@@ -141,8 +141,8 @@ func (s *heightRoundProposerSelector) SetLogger(logger log.Logger) {
 	s.logger = logger
 }
 
-// UpdateScores updates the scores of the validators to the given height and round.
-func (s *heightRoundProposerSelector) UpdateScores(newHeight int64, newRound int32) error {
+// UpdateHeightRound updates the scores of the validators to the given height and round.
+func (s *heightRoundProposerSelector) UpdateHeightRound(newHeight int64, newRound int32) error {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 

@@ -556,7 +556,7 @@ func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) 
 		if err != nil {
 			return nil, fmt.Errorf("failed to create validator scoring strategy: %w", err)
 		}
-		if err := strategy.UpdateScores(meta.Header.Height, 0); err != nil {
+		if err := strategy.UpdateHeightRound(meta.Header.Height, 0); err != nil {
 			return nil, fmt.Errorf("failed to update validator scores at height %d, round 0: %w", meta.Header.Height, err)
 		}
 		return strategy.ValidatorSet(), nil
@@ -578,7 +578,7 @@ func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) 
 	}
 
 	// now, advance to (height,0)
-	if err := strategy.UpdateScores(height, 0); err != nil {
+	if err := strategy.UpdateHeightRound(height, 0); err != nil {
 		return nil, fmt.Errorf("failed to update validator scores at height %d, round 0: %w", height, err)
 	}
 
