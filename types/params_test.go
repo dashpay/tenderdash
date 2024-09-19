@@ -401,6 +401,17 @@ func TestProto(t *testing.T) {
 	}
 }
 
+func TestFromProto(t *testing.T) {
+	params := []tmproto.ConsensusParams{
+		{},
+	}
+
+	for i := range params {
+		pbParams := params[i]
+		assert.NotPanics(t, func() { ConsensusParamsFromProto(pbParams) })
+	}
+}
+
 func durationPtr(t time.Duration) *time.Duration {
 	return &t
 }
