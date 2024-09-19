@@ -73,7 +73,8 @@ type ValidatorParams struct {
 }
 
 type VersionParams struct {
-	AppVersion uint64 `json:"app_version,string"`
+	AppVersion       uint64 `json:"app_version,string"`
+	ConsensusVersion int32  `json:"consensus,string"`
 }
 
 // SynchronyParams influence the validity of block timestamps.
@@ -146,7 +147,8 @@ func DefaultValidatorParams() ValidatorParams {
 
 func DefaultVersionParams() VersionParams {
 	return VersionParams{
-		AppVersion: 0,
+		AppVersion:       0,
+		ConsensusVersion: 0,
 	}
 }
 
@@ -345,8 +347,9 @@ func (params ConsensusParams) ValidateConsensusParams() error {
 // TODO: We should hash the other parameters as well
 func (params ConsensusParams) HashConsensusParams() tmbytes.HexBytes {
 	hp := tmproto.HashedParams{
-		BlockMaxBytes: params.Block.MaxBytes,
-		BlockMaxGas:   params.Block.MaxGas,
+		BlockMaxBytes:    params.Block.MaxBytes,
+		BlockMaxGas:      params.Block.MaxGas,
+		ConsensusVersion: params.Version.ConsensusVersion,
 	}
 
 	bz, err := hp.Marshal()
@@ -395,6 +398,7 @@ func (params ConsensusParams) UpdateConsensusParams(params2 *tmproto.ConsensusPa
 	}
 	if params2.Version != nil {
 		res.Version.AppVersion = params2.Version.AppVersion
+		res.Version.ConsensusVersion = int32(params2.Version.ConsensusVersion)
 	}
 	if params2.Synchrony != nil {
 		if params2.Synchrony.MessageDelay != nil {
@@ -439,7 +443,8 @@ func (params *ConsensusParams) ToProto() tmproto.ConsensusParams {
 			PubKeyTypes: params.Validator.PubKeyTypes,
 		},
 		Version: &tmproto.VersionParams{
-			AppVersion: params.Version.AppVersion,
+			AppVersion:       params.Version.AppVersion,
+			ConsensusVersion: tmproto.VersionParams_ConsensusVersion(params.Version.ConsensusVersion),
 		},
 		Synchrony: &tmproto.SynchronyParams{
 			MessageDelay: &params.Synchrony.MessageDelay,
@@ -457,24 +462,38 @@ func (params *ConsensusParams) ToProto() tmproto.ConsensusParams {
 	}
 }
 
+// ConsensusParamsFromProto returns a ConsensusParams from a protobuf representation.
 func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams {
-	c := ConsensusParams{
-		Block: BlockParams{
+
+	c := ConsensusParams{}
+	if pbParams.Block != nil {
+		c.Block = BlockParams{
 			MaxBytes: pbParams.Block.MaxBytes,
 			MaxGas:   pbParams.Block.MaxGas,
-		},
-		Evidence: EvidenceParams{
+		}
+	}
+
+	if pbParams.Evidence != nil {
+		c.Evidence = EvidenceParams{
 			MaxAgeNumBlocks: pbParams.Evidence.MaxAgeNumBlocks,
 			MaxAgeDuration:  pbParams.Evidence.MaxAgeDuration,
 			MaxBytes:        pbParams.Evidence.MaxBytes,
-		},
-		Validator: ValidatorParams{
-			PubKeyTypes: pbParams.Validator.PubKeyTypes,
-		},
-		Version: VersionParams{
-			AppVersion: pbParams.Version.AppVersion,
-		},
+		}
 	}
+
+	if pbParams.Validator != nil {
+		c.Validator = ValidatorParams{
+			PubKeyTypes: pbParams.Validator.PubKeyTypes,
+		}
+	}
+
+	if pbParams.Version != nil {
+		c.Version = VersionParams{
+			AppVersion:       pbParams.Version.AppVersion,
+			ConsensusVersion: int32(pbParams.Version.ConsensusVersion),
+		}
+	}
+
 	if pbParams.Synchrony != nil {
 		if pbParams.Synchrony.MessageDelay != nil {
 			c.Synchrony.MessageDelay = *pbParams.Synchrony.GetMessageDelay()
@@ -483,6 +502,7 @@ func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams 
 			c.Synchrony.Precision = *pbParams.Synchrony.GetPrecision()
 		}
 	}
+
 	if pbParams.Timeout != nil {
 		if pbParams.Timeout.Propose != nil {
 			c.Timeout.Propose = *pbParams.Timeout.GetPropose()
@@ -497,8 +517,10 @@ func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams 
 			c.Timeout.VoteDelta = *pbParams.Timeout.GetVoteDelta()
 		}
 	}
+
 	if pbParams.Abci != nil {
 		c.ABCI.RecheckTx = pbParams.Abci.GetRecheckTx()
 	}
+
 	return c
 }

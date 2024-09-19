@@ -91,10 +91,10 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 		LastAppHash:     []byte("app_hash"),
 
 		LastValidators: &types.ValidatorSet{
-			Proposer: &types.Validator{ProTxHash: crypto.Checksum([]byte("val1"))},
+			Validators: []*types.Validator{{ProTxHash: crypto.Checksum([]byte("val1"))}},
 		},
 		Validators: &types.ValidatorSet{
-			Proposer: &types.Validator{ProTxHash: crypto.Checksum([]byte("val2"))},
+			Validators: []*types.Validator{{ProTxHash: crypto.Checksum([]byte("val2"))}},
 		},
 
 		ConsensusParams:                  *types.DefaultConsensusParams(),

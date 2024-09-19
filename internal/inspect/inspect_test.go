@@ -478,7 +478,7 @@ func TestValidators(t *testing.T) {
 		},
 	}
 	stateStoreMock := &statemocks.Store{}
-	stateStoreMock.On("LoadValidators", testHeight).Return(&testValidators, nil)
+	stateStoreMock.On("LoadValidators", testHeight, mock.Anything).Return(&testValidators, nil)
 
 	blockStoreMock := &statemocks.BlockStore{}
 	blockStoreMock.On("Height").Return(testHeight)

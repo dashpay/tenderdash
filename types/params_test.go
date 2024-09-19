@@ -186,6 +186,8 @@ type makeParamsArgs struct {
 	proposeDelta *time.Duration
 	vote         *time.Duration
 	voteDelta    *time.Duration
+
+	consensusVersion int32
 }
 
 func makeParams(args makeParamsArgs) ConsensusParams {
@@ -205,7 +207,7 @@ func makeParams(args makeParamsArgs) ConsensusParams {
 		args.voteDelta = durationPtr(1)
 	}
 
-	return ConsensusParams{
+	cp := ConsensusParams{
 		Block: BlockParams{
 			MaxBytes: args.blockBytes,
 			MaxGas:   args.blockGas,
@@ -232,6 +234,15 @@ func makeParams(args makeParamsArgs) ConsensusParams {
 			RecheckTx: args.recheck,
 		},
 	}
+
+	if args.consensusVersion != 0 {
+		cp.Version = VersionParams{
+			AppVersion:       1,
+			ConsensusVersion: args.consensusVersion,
+		}
+	}
+
+	return cp
 }
 
 func TestConsensusParamsHash(t *testing.T) {
@@ -244,6 +255,7 @@ func TestConsensusParamsHash(t *testing.T) {
 		makeParams(makeParamsArgs{blockBytes: 9, blockGas: 5, evidenceAge: 4, maxEvidenceBytes: 1}),
 		makeParams(makeParamsArgs{blockBytes: 7, blockGas: 8, evidenceAge: 9, maxEvidenceBytes: 1}),
 		makeParams(makeParamsArgs{blockBytes: 4, blockGas: 6, evidenceAge: 5, maxEvidenceBytes: 1}),
+		makeParams(makeParamsArgs{blockBytes: 4, blockGas: 6, evidenceAge: 5, maxEvidenceBytes: 1, consensusVersion: 1}),
 	}
 
 	hashes := make([][]byte, len(params))
@@ -352,6 +364,20 @@ func TestConsensusParamsUpdate(t *testing.T) {
 				evidenceAge:      300,
 				maxEvidenceBytes: 50,
 			}),
+		}, {
+			initialParams: makeParams(makeParamsArgs{blockBytes: 100, blockGas: 200, evidenceAge: 300}),
+			updates: &tmproto.ConsensusParams{
+				Version: &tmproto.VersionParams{
+					AppVersion:       1,
+					ConsensusVersion: 1,
+				},
+			},
+			updatedParams: makeParams(makeParamsArgs{
+				blockBytes:       100,
+				blockGas:         200,
+				evidenceAge:      300,
+				consensusVersion: 1,
+			}),
 		},
 	}
 
@@ -360,15 +386,16 @@ func TestConsensusParamsUpdate(t *testing.T) {
 	}
 }
 
-func TestConsensusParamsUpdate_AppVersion(t *testing.T) {
+func TestConsensusParamsUpdate_Version(t *testing.T) {
 	params := makeParams(makeParamsArgs{blockBytes: 1, blockGas: 2, evidenceAge: 3})
 
 	assert.EqualValues(t, 0, params.Version.AppVersion)
 
 	updated := params.UpdateConsensusParams(
-		&tmproto.ConsensusParams{Version: &tmproto.VersionParams{AppVersion: 1}})
+		&tmproto.ConsensusParams{Version: &tmproto.VersionParams{AppVersion: 1, ConsensusVersion: 1}})
 
 	assert.EqualValues(t, 1, updated.Version.AppVersion)
+	assert.EqualValues(t, 1, updated.Version.ConsensusVersion)
 }
 
 func TestProto(t *testing.T) {
@@ -398,6 +425,17 @@ func TestProto(t *testing.T) {
 
 		assert.Equal(t, params[i], oriParams)
 
+	}
+}
+
+func TestFromProto(t *testing.T) {
+	params := []tmproto.ConsensusParams{
+		{},
+	}
+
+	for i := range params {
+		pbParams := params[i]
+		assert.NotPanics(t, func() { ConsensusParamsFromProto(pbParams) })
 	}
 }
 

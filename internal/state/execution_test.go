@@ -326,13 +326,14 @@ func TestUpdateConsensusParams(t *testing.T) {
 		ConsensusParamUpdates: &tmtypes.ConsensusParams{Block: &tmtypes.BlockParams{MaxBytes: 1024 * 1024}},
 		AppVersion:            1,
 	}, nil).Once()
+	prop := state.GetProposerFromState(height, round)
 	block1, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
 		round,
 		state,
 		lastCommit,
-		state.Validators.GetProposer().ProTxHash,
+		prop.ProTxHash,
 		1,
 	)
 	require.NoError(t, err)
@@ -399,13 +400,14 @@ func TestOverrideAppVersion(t *testing.T) {
 		AppVersion: appVersion,
 	}, nil).Once()
 
+	proposer := state.GetProposerFromState(height, round)
 	block1, _, err := blockExec.CreateProposalBlock(
 		ctx,
 		height,
 		round,
 		state,
 		lastCommit,
-		state.Validators.GetProposer().ProTxHash,
+		proposer.ProTxHash,
 		1,
 	)
 	require.NoError(t, err)

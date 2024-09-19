@@ -55,12 +55,13 @@ func MakeBlock(state sm.State, height int64, c *types.Commit, proposedAppVersion
 	if state.LastBlockHeight != (height - 1) {
 		return nil, fmt.Errorf("requested height %d should be 1 more than last block height %d", height, state.LastBlockHeight)
 	}
+	proposer := state.GetProposerFromState(height, 0)
 	block := state.MakeBlock(
 		height,
 		factory.MakeNTxs(state.LastBlockHeight, 10),
 		c,
 		nil,
-		state.Validators.GetProposer().ProTxHash,
+		proposer.ProTxHash,
 		proposedAppVersion,
 	)
 	var err error
@@ -122,8 +123,8 @@ func makeBlockAndPartSet(
 			},
 		)
 	}
-
-	block := state.MakeBlock(height, []types.Tx{}, lastCommit, nil, state.Validators.GetProposer().ProTxHash, proposedAppVersion)
+	proposer := state.GetProposerFromState(height, 0)
+	block := state.MakeBlock(height, []types.Tx{}, lastCommit, nil, proposer.ProTxHash, proposedAppVersion)
 	partSet, err := block.MakePartSet(types.BlockPartSizeBytes)
 	require.NoError(t, err)
 

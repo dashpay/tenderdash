@@ -1,7 +1,6 @@
 package types
 
 import (
-	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -25,8 +24,6 @@ type Validator struct {
 	PubKey      crypto.PubKey
 	VotingPower int64
 	NodeAddress ValidatorAddress
-
-	ProposerPriority int64
 }
 
 type validatorJSON struct {
@@ -39,9 +36,8 @@ type validatorJSON struct {
 
 func (v Validator) MarshalJSON() ([]byte, error) {
 	val := validatorJSON{
-		ProTxHash:        v.ProTxHash,
-		VotingPower:      v.VotingPower,
-		ProposerPriority: v.ProposerPriority,
+		ProTxHash:   v.ProTxHash,
+		VotingPower: v.VotingPower,
 	}
 	if v.PubKey != nil {
 		pk, err := jsontypes.Marshal(v.PubKey)
@@ -63,23 +59,20 @@ func (v *Validator) UnmarshalJSON(data []byte) error {
 	}
 	v.ProTxHash = val.ProTxHash
 	v.VotingPower = val.VotingPower
-	v.ProposerPriority = val.ProposerPriority
 	return nil
 }
 
 func NewTestValidatorGeneratedFromProTxHash(proTxHash crypto.ProTxHash) *Validator {
 	return &Validator{
-		VotingPower:      DefaultDashVotingPower,
-		ProposerPriority: 0,
-		ProTxHash:        proTxHash,
+		VotingPower: DefaultDashVotingPower,
+		ProTxHash:   proTxHash,
 	}
 }
 
 func NewTestRemoveValidatorGeneratedFromProTxHash(proTxHash crypto.ProTxHash) *Validator {
 	return &Validator{
-		VotingPower:      0,
-		ProposerPriority: 0,
-		ProTxHash:        proTxHash,
+		VotingPower: 0,
+		ProTxHash:   proTxHash,
 	}
 }
 
@@ -100,11 +93,10 @@ func NewValidator(pubKey crypto.PubKey, votingPower int64, proTxHash ProTxHash, 
 		}
 	}
 	return &Validator{
-		PubKey:           pubKey,
-		VotingPower:      votingPower,
-		ProposerPriority: 0,
-		ProTxHash:        proTxHash,
-		NodeAddress:      addr,
+		PubKey:      pubKey,
+		VotingPower: votingPower,
+		ProTxHash:   proTxHash,
+		NodeAddress: addr,
 	}
 }
 
@@ -154,29 +146,6 @@ func (v *Validator) Copy() *Validator {
 	return &vCopy
 }
 
-// CompareProposerPriority Returns the one with higher ProposerPriority.
-func (v *Validator) CompareProposerPriority(other *Validator) *Validator {
-	if v == nil {
-		return other
-	}
-	switch {
-	case v.ProposerPriority > other.ProposerPriority:
-		return v
-	case v.ProposerPriority < other.ProposerPriority:
-		return other
-	default:
-		result := bytes.Compare(v.ProTxHash, other.ProTxHash)
-		switch {
-		case result < 0:
-			return v
-		case result > 0:
-			return other
-		default:
-			panic("Cannot compare identical validators")
-		}
-	}
-}
-
 // String returns a string representation of String.
 //
 // 1. address
@@ -188,11 +157,10 @@ func (v *Validator) String() string {
 	if v == nil {
 		return "nil-Validator"
 	}
-	return fmt.Sprintf("Validator{%v %v VP:%v A:%v N:%s}",
+	return fmt.Sprintf("Validator{%v %v VP:%v N:%s}",
 		v.ProTxHash,
 		v.PubKey,
 		v.VotingPower,
-		v.ProposerPriority,
 		v.NodeAddress.String())
 }
 
@@ -209,7 +177,6 @@ func (v *Validator) ShortStringBasic() string {
 func (v *Validator) MarshalZerologObject(e *zerolog.Event) {
 	e.Str("protxhash", v.ProTxHash.ShortString())
 	e.Int64("voting_power", v.VotingPower)
-	e.Int64("proposer_priority", v.ProposerPriority)
 	e.Str("address", v.NodeAddress.String())
 
 	if v.PubKey != nil {
@@ -262,9 +229,8 @@ func (v *Validator) ToProto() (*tmproto.Validator, error) {
 	}
 
 	vp := tmproto.Validator{
-		VotingPower:      v.VotingPower,
-		ProposerPriority: v.ProposerPriority,
-		ProTxHash:        v.ProTxHash,
+		VotingPower: v.VotingPower,
+		ProTxHash:   v.ProTxHash,
 	}
 
 	if v.PubKey != nil && len(v.PubKey.Bytes()) > 0 {
@@ -287,7 +253,6 @@ func ValidatorFromProto(vp *tmproto.Validator) (*Validator, error) {
 	}
 	v := new(Validator)
 	v.VotingPower = vp.GetVotingPower()
-	v.ProposerPriority = vp.GetProposerPriority()
 	v.ProTxHash = vp.ProTxHash
 
 	var err error

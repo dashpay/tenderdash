@@ -50,6 +50,36 @@ validator04 = 100
 validator05 = 100
 validator09 = 100
 
+[validator_update.1060]
+validator01 = 100
+validator02 = 100
+validator03 = 100
+validator04 = 100
+validator05 = 100
+
+[validator_update.1061]
+validator01 = 100
+validator07 = 100
+validator08 = 100
+validator09 = 100
+validator10 = 100
+
+
+[validator_update.1062]
+validator01 = 100
+validator02 = 100
+validator03 = 100
+validator04 = 100
+validator05 = 100
+
+
+[validator_update.1063]
+validator01 = 100
+validator03 = 100
+validator04 = 100
+validator05 = 100
+validator11 = 100
+
 [node.seed01]
 mode = "seed"
 perturb = ["restart"]

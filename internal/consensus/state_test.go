@@ -92,7 +92,7 @@ func TestStateProposerSelection0(t *testing.T) {
 	ensureNewRound(t, newRoundCh, height, round)
 
 	// Commit a block and ensure proposer for the next height is correct.
-	prop := cs1.GetRoundState().Validators.GetProposer()
+	prop := stateData.ProposerSelector.MustGetProposer(height, round)
 	proTxHash, err := cs1.privValidator.GetProTxHash(ctx)
 	require.NoError(t, err)
 	require.Truef(t, bytes.Equal(prop.ProTxHash, proTxHash), "expected proposer to be validator %d. Got %X", 0, prop.ProTxHash.ShortString())
@@ -106,7 +106,7 @@ func TestStateProposerSelection0(t *testing.T) {
 	// Wait for new round so next validator is set.
 	ensureNewRound(t, newRoundCh, height+1, 0)
 
-	prop = cs1.GetRoundState().Validators.GetProposer()
+	prop = stateData.ProposerSelector.MustGetProposer(height+1, 0)
 	proTxHash, err = vss[1].GetProTxHash(ctx)
 	require.NoError(t, err)
 	require.True(t, bytes.Equal(prop.ProTxHash, proTxHash), "expected proposer to be validator %d. Got %X", 1, prop.ProTxHash.ShortString())
@@ -134,8 +134,8 @@ func TestStateProposerSelection2(t *testing.T) {
 
 	// everyone just votes nil. we get a new proposer each round
 	for i := int32(0); int(i) < len(vss); i++ {
-		prop := cs1.GetRoundState().Validators.GetProposer()
-		proTxHash, err := vss[int(i+round)%len(vss)].GetProTxHash(ctx)
+		prop := stateData.ProposerSelector.MustGetProposer(height, round)
+		proTxHash, err := vss[int(int32(height-1)+round)%len(vss)].GetProTxHash(ctx)
 		require.NoError(t, err)
 		correctProposer := proTxHash
 		require.True(t, bytes.Equal(prop.ProTxHash, correctProposer),
@@ -3252,7 +3252,7 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 	parts, err := block.MakePartSet(999999999)
 	require.NoError(t, err)
 
-	peerID := css0StateData.Validators.Proposer.NodeAddress.NodeID
+	peerID := css0StateData.Validators.Proposer().NodeAddress.NodeID
 	css1StateData.Proposal = proposal
 	css1StateData.ProposalBlock = block
 	css1StateData.ProposalBlockParts = parts

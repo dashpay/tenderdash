@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
@@ -14,7 +15,10 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	"github.com/dashpay/tenderdash/internal/evidence/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
+	"github.com/dashpay/tenderdash/libs/log"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -24,22 +28,47 @@ const (
 	valSetCheckpointInterval = 100000
 )
 
+// mockBlockStoreForProposerSelector creates a mock block store that returns proposers based on the height.
+// It assumes every block ends in round 0 and the proposer is the next validator in the validator set.
+func mockBlockStoreForProposerSelector(t *testing.T, startHeight, endHeight int64, vals *types.ValidatorSet) selectproposer.BlockStore {
+	vals = vals.Copy()
+	valsHash := vals.Hash()
+	blockStore := mocks.NewBlockStore(t)
+	blockStore.On("Base").Return(startHeight).Maybe()
+	for h := startHeight; h <= endHeight; h++ {
+		blockStore.On("LoadBlockMeta", h).
+			Return(&types.BlockMeta{
+				Header: types.Header{
+					Height:             h,
+					ProposerProTxHash:  vals.Proposer().ProTxHash,
+					ValidatorsHash:     valsHash,
+					NextValidatorsHash: valsHash,
+				},
+			}).Maybe()
+		vals.IncProposerIndex(1)
+	}
+
+	return blockStore
+}
+
 func TestStoreBootstrap(t *testing.T) {
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
 	vals, _ := types.RandValidatorSet(3)
 
-	bootstrapState := makeRandomStateFromValidatorSet(vals, 100, 100)
+	blockStore := mockBlockStoreForProposerSelector(t, 99, 100, vals)
+
+	bootstrapState := makeRandomStateFromValidatorSet(vals, 100, 100, blockStore)
 	require.NoError(t, stateStore.Bootstrap(bootstrapState))
 
 	// bootstrap should also save the previous validator
-	_, err := stateStore.LoadValidators(99)
+	_, err := stateStore.LoadValidators(99, blockStore)
 	require.NoError(t, err)
 
-	_, err = stateStore.LoadValidators(100)
+	_, err = stateStore.LoadValidators(100, blockStore)
 	require.NoError(t, err)
 
-	_, err = stateStore.LoadValidators(101)
+	_, err = stateStore.LoadValidators(101, blockStore)
 	require.Error(t, err)
 
 	state, err := stateStore.Load()
@@ -47,46 +76,95 @@ func TestStoreBootstrap(t *testing.T) {
 	require.Equal(t, bootstrapState, state)
 }
 
+// assertProposer checks if the proposer at height h is correct (assuming no rounds and we started at initial height 1)
+func assertProposer(t *testing.T, valSet *types.ValidatorSet, h int64) {
+	t.Helper()
+
+	const initialHeight = 1
+
+	// check if currently selected proposer is correct
+	idx, _ := valSet.GetByProTxHash(valSet.Proposer().ProTxHash)
+	exp := (h - initialHeight) % int64(valSet.Size())
+	assert.EqualValues(t, exp, idx, "pre-set proposer at height %d", h)
+
+	// check if GetProposer returns the same proposer
+	vs, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, valSet.Copy(), h, 0, nil, log.NewTestingLogger(t))
+	require.NoError(t, err)
+
+	prop := vs.MustGetProposer(h, 0)
+	idx, _ = valSet.GetByProTxHash(prop.ProTxHash)
+	assert.EqualValues(t, exp, idx, "strategy-generated proposer at height %d", h)
+}
+
 func TestStoreLoadValidators(t *testing.T) {
 	stateDB := dbm.NewMemDB()
 	stateStore := sm.NewStore(stateDB)
 	vals, _ := types.RandValidatorSet(3)
 
-	// 1) LoadValidators loads validators using a height where they were last changed
-	// Note that only the current validators at height h are saved
-	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals, 1, 1)))
-	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals.CopyIncrementProposerPriority(1), 2, 1)))
-	loadedVals, err := stateStore.LoadValidators(2)
+	expectedVS, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, vals.Copy(), 1, 0, nil, log.NewTestingLogger(t))
 	require.NoError(t, err)
 
-	_, err = stateStore.LoadValidators(3)
+	// initialize block store - create mock validators for each height
+	blockStoreVS := expectedVS.Copy()
+	blockStore := mockBlockStoreForProposerSelector(t, 1, valSetCheckpointInterval, blockStoreVS.ValidatorSet())
+
+	// 1) LoadValidators loads validators using a height where they were last changed
+	// Note that only the current validators at height h are saved
+	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals, 1, 1, blockStore)))
+
+	require.NoError(t, stateStore.Save(makeRandomStateFromValidatorSet(vals, 2, 1, blockStore)))
+
+	loadedValsH1, err := stateStore.LoadValidators(1, blockStore)
+	require.NoError(t, err)
+	assertProposer(t, loadedValsH1, 1)
+
+	loadedValsH2, err := stateStore.LoadValidators(2, blockStore)
+	require.NoError(t, err)
+	assertProposer(t, loadedValsH2, 2)
+
+	_, err = stateStore.LoadValidators(3, blockStore)
 	assert.Error(t, err, "no validator expected at this height")
 
-	require.Equal(t, vals.CopyIncrementProposerPriority(2), loadedVals)
+	err = expectedVS.UpdateHeightRound(2, 0)
+	require.NoError(t, err)
+	assertProposer(t, expectedVS.ValidatorSet(), 2)
+
+	require.Equal(t, expectedVS.ValidatorSet(), loadedValsH2)
 
 	// 2) LoadValidators loads validators using a checkpoint height
 
 	// add a validator set after the checkpoint
-	state := makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval+1, 1)
+	state := makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval+1, 1, nil)
 	err = stateStore.Save(state)
 	require.NoError(t, err)
 
 	// check that a request will go back to the last checkpoint
-	_, err = stateStore.LoadValidators(valSetCheckpointInterval + 1)
+	_, err = stateStore.LoadValidators(valSetCheckpointInterval+1, blockStore)
 	require.Error(t, err)
 	require.Equal(t, fmt.Sprintf("couldn't find validators at height %d (height %d was originally requested): "+
 		"value retrieved from db is empty",
 		valSetCheckpointInterval, valSetCheckpointInterval+1), err.Error())
 
 	// now save a validator set at that checkpoint
-	err = stateStore.Save(makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval, 1))
+	err = stateStore.Save(makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval, 1, blockStore))
 	require.NoError(t, err)
 
-	loadedVals, err = stateStore.LoadValidators(valSetCheckpointInterval)
+	valsAtCheckpoint, err := stateStore.LoadValidators(valSetCheckpointInterval, blockStore)
 	require.NoError(t, err)
-	// ensure we have correct validator set loaded
-	require.Equal(t, vals.CopyIncrementProposerPriority(valSetCheckpointInterval), loadedVals)
-	require.NotEqual(t, vals.CopyIncrementProposerPriority(valSetCheckpointInterval-1), loadedVals)
+
+	// ensure we have correct validator set loaded; at height h, we expcect `(h+1) % 3`
+	// (adding 1 as we start from initial height 1).
+	for h := int64(2); h <= valSetCheckpointInterval-1; h++ {
+		require.NoError(t, expectedVS.UpdateHeightRound(h, 0))
+	}
+	expected := expectedVS.ValidatorSet()
+	assertProposer(t, expected, valSetCheckpointInterval-1)
+	require.NotEqual(t, expected, valsAtCheckpoint)
+
+	require.NoError(t, expectedVS.UpdateHeightRound(valSetCheckpointInterval, 0))
+	expected = expectedVS.ValidatorSet()
+	assertProposer(t, expected, valSetCheckpointInterval)
+	require.Equal(t, expected, valsAtCheckpoint)
 }
 
 // This benchmarks the speed of loading validators from different heights if there is no validator set change.
@@ -95,6 +173,8 @@ func TestStoreLoadValidators(t *testing.T) {
 // and 2) retrieve the validator set at the aforementioned height 1.
 func BenchmarkLoadValidators(b *testing.B) {
 	const valSetSize = 100
+	blockStore := mocks.NewBlockStore(b)
+	blockStore.On("LoadBlockCommit", mock.Anything).Return(&types.Commit{})
 
 	cfg, err := config.ResetTestRoot(b.TempDir(), "state_")
 	require.NoError(b, err)
@@ -118,14 +198,14 @@ func BenchmarkLoadValidators(b *testing.B) {
 	for i := 10; i < 10000000000; i *= 10 { // 10, 100, 1000, ...
 		i := i
 		err = stateStore.Save(makeRandomStateFromValidatorSet(state.Validators,
-			int64(i)-1, state.LastHeightValidatorsChanged))
+			int64(i)-1, state.LastHeightValidatorsChanged, blockStore))
 		if err != nil {
 			b.Fatalf("error saving store: %v", err)
 		}
 
 		b.Run(fmt.Sprintf("height=%d", i), func(b *testing.B) {
 			for n := 0; n < b.N; n++ {
-				_, err := stateStore.LoadValidators(int64(i))
+				_, err := stateStore.LoadValidators(int64(i), blockStore)
 				if err != nil {
 					b.Fatal(err)
 				}
@@ -192,7 +272,6 @@ func TestPruneStates(t *testing.T) {
 			validator := &types.Validator{VotingPower: types.DefaultDashVotingPower, PubKey: pk, ProTxHash: proTxHash}
 			validatorSet := &types.ValidatorSet{
 				Validators:         []*types.Validator{validator},
-				Proposer:           validator,
 				ThresholdPublicKey: validator.PubKey,
 				QuorumHash:         crypto.RandQuorumHash(),
 			}
@@ -245,8 +324,15 @@ func TestPruneStates(t *testing.T) {
 			}
 			require.NoError(t, err)
 
+			blockStore := mockBlockStoreForProposerSelector(t, tc.remainingValSetHeight, tc.endHeight, validatorSet)
+			// We initialize block store from remainingValSetHeight just to pass this test; in practive, it can be
+			// pruned. But here we want to check state store logic, not block store logic.
+			// for h := int64(1); h < tc.remainingValSetHeight; h++ {
+			// 	blockStore.On("LoadBlockMeta", h).Return(nil).Maybe()
+			// }
+
 			for h := tc.pruneHeight; h <= tc.endHeight; h++ {
-				vals, err := stateStore.LoadValidators(h)
+				vals, err := stateStore.LoadValidators(h, blockStore)
 				require.NoError(t, err, h)
 				require.NotNil(t, vals, h)
 
@@ -262,7 +348,7 @@ func TestPruneStates(t *testing.T) {
 			emptyParams := types.ConsensusParams{}
 
 			for h := tc.startHeight; h < tc.pruneHeight; h++ {
-				vals, err := stateStore.LoadValidators(h)
+				vals, err := stateStore.LoadValidators(h, blockStore)
 				if h == tc.remainingValSetHeight {
 					require.NoError(t, err, h)
 					require.NotNil(t, vals, h)

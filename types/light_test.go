@@ -26,7 +26,7 @@ func TestLightBlockValidateBasic(t *testing.T) {
 	header.Version.Block = version.BlockProtocol
 	vals2, _ := RandValidatorSet(3)
 	vals3 := vals.Copy()
-	vals3.Proposer = &Validator{}
+	vals3.QuorumHash = []byte("invalid")
 	commit.BlockID.Hash = header.Hash()
 
 	sh := &SignedHeader{
@@ -94,8 +94,6 @@ func TestLightBlockProtobuf(t *testing.T) {
 	header.LastBlockID = commit.BlockID
 	header.Version.Block = version.BlockProtocol
 	header.ValidatorsHash = vals.Hash()
-	vals3 := vals.Copy()
-	vals3.Proposer = &Validator{}
 	commit.BlockID.Hash = header.Hash()
 	commit.QuorumHash = vals.QuorumHash
 

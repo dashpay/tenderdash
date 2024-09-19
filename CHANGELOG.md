@@ -1,3 +1,28 @@
+## [1.3.0] - 2024-09-19
+
+### Bug Fixes
+
+- Address already in use (#845)
+- Active validators not always connected to each other (#844)
+- Validators form islands on genesis (#850)
+- Panic on block_results when consensus params change (#923)
+
+### Features
+
+- [**breaking**] Replace dash core quorum sign with quorum platformsign (#828)
+- Allow overriding genesis time in InitChain (#847)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.1.0-dev.1 (#842)
+- Update changelog and version to 1.1.0-dev.2 (#846)
+- Update changelog and version to 1.1.0-dev.3 (#848)
+
+### Build
+
+- Bump bufbuild/buf-setup-action from 1.33.0 to 1.35.0 (#841)
+- Run dependabot on default branch, not master (#843)
+
 ## [1.2.1] - 2024-08-29
 
 ### Bug Fixes
@@ -8,6 +33,7 @@
 ### Miscellaneous Tasks
 
 - Update changelog and version to 1.2.1-dev.1
+- Update changelog and version to 1.2.1
 
 ### Build
 

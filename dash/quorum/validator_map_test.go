@@ -3,9 +3,10 @@ package quorum
 import (
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/dashpay/tenderdash/dash/quorum/mock"
 	"github.com/dashpay/tenderdash/types"
-	"github.com/stretchr/testify/assert"
 )
 
 func Test_validatorMap_String(t *testing.T) {
@@ -30,11 +31,11 @@ func Test_validatorMap_String(t *testing.T) {
 		{
 			vm: newValidatorMap(vals),
 			contains: []string{
-				"<nil> VP:0 A:0 N:tcp://0100000000000000000000000000000000000000@127.0.0.1:1}",
-				"<nil> VP:0 A:0 N:tcp://0200000000000000000000000000000000000000@127.0.0.1:2}",
-				"<nil> VP:0 A:0 N:tcp://0300000000000000000000000000000000000000@127.0.0.1:3}",
-				"<nil> VP:0 A:0 N:tcp://0400000000000000000000000000000000000000@127.0.0.1:4}",
-				"<nil> VP:0 A:0 N:tcp://0500000000000000000000000000000000000000@127.0.0.1:5}",
+				"<nil> VP:0 N:tcp://0100000000000000000000000000000000000000@127.0.0.1:1}",
+				"<nil> VP:0 N:tcp://0200000000000000000000000000000000000000@127.0.0.1:2}",
+				"<nil> VP:0 N:tcp://0300000000000000000000000000000000000000@127.0.0.1:3}",
+				"<nil> VP:0 N:tcp://0400000000000000000000000000000000000000@127.0.0.1:4}",
+				"<nil> VP:0 N:tcp://0500000000000000000000000000000000000000@127.0.0.1:5}",
 			},
 		},
 	}

@@ -48,7 +48,7 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		return -1, nil, fmt.Errorf("block at height %d not found", invalidState.LastBlockHeight)
 	}
 
-	previousLastValidatorSet, err := ss.LoadValidators(rollbackHeight)
+	previousLastValidatorSet, err := ss.LoadValidators(rollbackHeight, bs)
 	if err != nil {
 		return -1, nil, err
 	}
@@ -84,6 +84,7 @@ func Rollback(bs BlockStore, ss Store) (int64, []byte, error) {
 		InitialHeight: invalidState.InitialHeight,
 
 		LastBlockHeight: rollbackBlock.Header.Height,
+		LastBlockRound:  invalidState.LastBlockRound,
 		LastBlockID:     rollbackBlock.BlockID,
 		LastBlockTime:   rollbackBlock.Header.Time,
 

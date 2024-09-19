@@ -155,6 +155,7 @@ func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, 
 		Software:  version.TMCoreSemVer,
 	}
 	state.LastBlockHeight = lastLightBlock.Height
+	state.LastBlockRound = lastLightBlock.Commit.Round
 	state.LastBlockTime = lastLightBlock.Time
 	state.LastBlockID = lastLightBlock.Commit.BlockID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
@@ -293,6 +294,7 @@ func (s *stateProviderP2P) State(ctx context.Context, height uint64) (sm.State, 
 		Software:  version.TMCoreSemVer,
 	}
 	state.LastBlockHeight = lastLightBlock.Height
+	state.LastBlockRound = lastLightBlock.Commit.Round
 	state.LastBlockTime = lastLightBlock.Time
 	state.LastBlockID = lastLightBlock.Commit.BlockID
 	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight

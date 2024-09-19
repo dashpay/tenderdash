@@ -223,7 +223,7 @@ func (r *Reactor) SwitchToConsensus(ctx context.Context, state sm.State, skipWAL
 
 	// NOTE: The line below causes broadcastNewRoundStepRoutine() to broadcast a
 	// NewRoundStepMessage.
-	stateData.updateToState(state, nil)
+	stateData.updateToState(state, nil, r.state.blockStore)
 	err := r.state.stateDataStore.Update(stateData)
 	if err != nil {
 		panic(err)
