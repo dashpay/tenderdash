@@ -20,11 +20,9 @@ import (
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	"github.com/dashpay/tenderdash/dash"
 	"github.com/dashpay/tenderdash/dash/llmq"
-	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	"github.com/dashpay/tenderdash/internal/evidence/mocks"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	statefactory "github.com/dashpay/tenderdash/internal/state/test/factory"
-	"github.com/dashpay/tenderdash/libs/log"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -382,149 +380,6 @@ func TestEmptyValidatorUpdates(t *testing.T) {
 	assert.EqualValues(t, newQuorumHash, changes.NextValidators.QuorumHash, "quorum hash should be updated")
 	assert.EqualValues(t, newPubKey, changes.NextValidators.ThresholdPublicKey, "threshold public key should be updated")
 	assert.Equal(t, expectValidators, types.ValidatorListString(changes.NextValidators.Validators), "validator should not change")
-}
-
-//func TestProposerFrequency(t *testing.T) {
-//	ctx, cancel := context.WithCancel(context.Background())
-//	defer cancel()
-//
-//	// some explicit test cases
-//	testCases := []struct {
-//		powers []int64
-//	}{
-//		// 2 vals
-//		{[]int64{1, 1}},
-//		{[]int64{1, 2}},
-//		{[]int64{1, 100}},
-//		{[]int64{5, 5}},
-//		{[]int64{5, 100}},
-//		{[]int64{50, 50}},
-//		{[]int64{50, 100}},
-//		{[]int64{1, 1000}},
-//
-//		// 3 vals
-//		{[]int64{1, 1, 1}},
-//		{[]int64{1, 2, 3}},
-//		{[]int64{1, 2, 3}},
-//		{[]int64{1, 1, 10}},
-//		{[]int64{1, 1, 100}},
-//		{[]int64{1, 10, 100}},
-//		{[]int64{1, 1, 1000}},
-//		{[]int64{1, 10, 1000}},
-//		{[]int64{1, 100, 1000}},
-//
-//		// 4 vals
-//		{[]int64{1, 1, 1, 1}},
-//		{[]int64{1, 2, 3, 4}},
-//		{[]int64{1, 1, 1, 10}},
-//		{[]int64{1, 1, 1, 100}},
-//		{[]int64{1, 1, 1, 1000}},
-//		{[]int64{1, 1, 10, 100}},
-//		{[]int64{1, 1, 10, 1000}},
-//		{[]int64{1, 1, 100, 1000}},
-//		{[]int64{1, 10, 100, 1000}},
-//	}
-//
-//	for caseNum, testCase := range testCases {
-//		// run each case 5 times to sample different
-//		// initial priorities
-//		for i := 0; i < 5; i++ {
-//			valSet := genValSetWithPowers(testCase.powers)
-//			testProposerFreq(t, caseNum, valSet)
-//		}
-//	}
-//
-//	// some random test cases with up to 100 validators
-//	maxVals := 100
-//	maxPower := 1000
-//	nTestCases := 5
-//	for i := 0; i < nTestCases; i++ {
-//		N := mrand.Int()%maxVals + 1
-//		vals := make([]*types.Validator, N)
-//		totalVotePower := int64(0)
-//		for j := 0; j < N; j++ {
-//			// make sure votePower > 0
-//			votePower := int64(mrand.Int()%maxPower) + 1
-//			totalVotePower += votePower
-//			privVal := types.NewMockPV()
-//			pubKey, err := privVal.GetPubKey(ctx)
-//			require.NoError(t, err)
-//			val := types.NewValidator(pubKey, votePower)
-//			val.ProposerPriority = mrand.Int63()
-//			vals[j] = val
-//		}
-//		valSet := types.NewValidatorSet(vals)
-//		valSet.RescalePriorities(totalVotePower)
-//		testProposerFreq(t, i, valSet)
-//	}
-//}
-//
-//// new val set with given powers and random initial priorities
-//func genValSetWithPowers(powers []int64) *types.ValidatorSet {
-//	size := len(powers)
-//	vals := make([]*types.Validator, size)
-//	totalVotePower := int64(0)
-//	for i := 0; i < size; i++ {
-//		totalVotePower += powers[i]
-//		val := types.NewValidator(ed25519.GenPrivKey().PubKey(), powers[i])
-//		val.ProposerPriority = mrand.Int63()
-//		vals[i] = val
-//	}
-//	valSet := types.NewValidatorSet(vals)
-//	valSet.RescalePriorities(totalVotePower)
-//	return valSet
-//}
-//
-//// test a proposer appears as frequently as expected
-//func testProposerFreq(t *testing.T, caseNum int, valSet *types.ValidatorSet) {
-//	N := valSet.Size()
-//	totalPower := valSet.TotalVotingPower()
-//
-//	// run the proposer selection and track frequencies
-//	runMult := 1
-//	runs := int(totalPower) * runMult
-//	freqs := make([]int, N)
-//	for i := 0; i < runs; i++ {
-//		prop := valSet.GetProposer()
-//		idx, _ := valSet.GetByAddress(prop.Address)
-//		freqs[idx]++
-//		valSet.IncrementProposerPriority(1)
-//	}
-//
-//	// assert frequencies match expected (max off by 1)
-//	for i, freq := range freqs {
-//		_, val := valSet.GetByIndex(int32(i))
-//		expectFreq := int(val.VotingPower) * runMult
-//		gotFreq := freq
-//		abs := int(math.Abs(float64(expectFreq - gotFreq)))
-//
-//		// max bound on expected vs seen freq was proven
-//		// to be 1 for the 2 validator case in
-//		// https://github.com/cwgoes/tm-proposer-idris
-//		// and inferred to generalize to N-1
-//		bound := N - 1
-//		require.True(
-//			t,
-//			abs <= bound,
-//			fmt.Sprintf("Case %d val %d (%d): got %d, expected %d", caseNum, i, N, gotFreq, expectFreq),
-//		)
-//	}
-//}
-
-func valsetScoresNewHeight(t *testing.T, state *sm.State) *types.Validator {
-	ps, err := selectproposer.NewProposerSelector(
-		state.ConsensusParams,
-		state.Validators,
-		state.LastBlockHeight,
-		state.LastBlockRound,
-		nil,
-		log.NewTestingLogger(t))
-
-	require.NoError(t, err)
-	err = ps.UpdateHeightRound(state.LastBlockHeight+1, 0)
-	require.NoError(t, err)
-
-	return ps.MustGetProposer(state.LastBlockHeight+1, 0)
 }
 
 func TestFourAddFourMinusOneGenesisValidators(t *testing.T) {

@@ -276,27 +276,6 @@ func randValidatorInQuorum(ctx context.Context, t *testing.T, quorumHash crypto.
 	return val, privVal
 }
 
-func (vals *ValidatorSet) toBytes(t *testing.T) []byte {
-	pbvs, err := vals.ToProto()
-	require.NoError(t, err)
-
-	bz, err := pbvs.Marshal()
-	require.NoError(t, err)
-
-	return bz
-}
-
-func (vals *ValidatorSet) fromBytes(t *testing.T, b []byte) *ValidatorSet {
-	pbvs := new(tmproto.ValidatorSet)
-	err := pbvs.Unmarshal(b)
-	require.NoError(t, err)
-
-	vs, err := ValidatorSetFromProto(pbvs)
-	require.NoError(t, err)
-
-	return vs
-}
-
 func TestEmptySet(t *testing.T) {
 
 	var valList []*Validator
@@ -792,82 +771,6 @@ func TestValSetApplyUpdatesTestsExecute(t *testing.T) {
 	}
 }
 
-type testVSetCfg struct {
-	startVals    []testVal
-	deletedVals  []testVal
-	updatedVals  []testVal
-	addedVals    []testVal
-	expectedVals []testVal
-}
-
-func randTestVSetCfg(t *testing.T, nBase, nAddMax int) testVSetCfg {
-	if nBase <= 0 || nAddMax < 0 {
-		t.Fatalf("bad parameters %v %v", nBase, nAddMax)
-	}
-
-	var nOld, nDel, nChanged, nAdd int
-
-	nOld = int(uint(rand.Int())%uint(nBase)) + 1
-	if nBase-nOld > 0 {
-		nDel = int(uint(rand.Int()) % uint(nBase-nOld))
-	}
-	nChanged = nBase - nOld - nDel
-
-	if nAddMax > 0 {
-		nAdd = rand.Int()%nAddMax + 1
-	}
-
-	cfg := testVSetCfg{}
-
-	cfg.startVals = make([]testVal, nBase)
-	cfg.deletedVals = make([]testVal, nDel)
-	cfg.addedVals = make([]testVal, nAdd)
-	cfg.updatedVals = make([]testVal, nChanged)
-	cfg.expectedVals = make([]testVal, nBase-nDel+nAdd)
-
-	for i := 0; i < nBase; i++ {
-		cfg.startVals[i] = testVal{fmt.Sprintf("v%d", i), DefaultDashVotingPower}
-		if i < nOld {
-			cfg.expectedVals[i] = cfg.startVals[i]
-		}
-		if i >= nOld && i < nOld+nChanged {
-			cfg.updatedVals[i-nOld] = testVal{fmt.Sprintf("v%d", i), DefaultDashVotingPower}
-			cfg.expectedVals[i] = cfg.updatedVals[i-nOld]
-		}
-		if i >= nOld+nChanged {
-			cfg.deletedVals[i-nOld-nChanged] = testVal{fmt.Sprintf("v%d", i), 0}
-		}
-	}
-
-	for i := nBase; i < nBase+nAdd; i++ {
-		cfg.addedVals[i-nBase] = testVal{fmt.Sprintf("v%d", i), DefaultDashVotingPower}
-		cfg.expectedVals[i-nDel] = cfg.addedVals[i-nBase]
-	}
-
-	sort.Sort(testValsByVotingPower(cfg.startVals))
-	sort.Sort(testValsByVotingPower(cfg.deletedVals))
-	sort.Sort(testValsByVotingPower(cfg.updatedVals))
-	sort.Sort(testValsByVotingPower(cfg.addedVals))
-	sort.Sort(testValsByVotingPower(cfg.expectedVals))
-
-	return cfg
-
-}
-
-func applyChangesToValSet(t *testing.T, expErr error, valSet *ValidatorSet, valsLists ...[]testVal) {
-	changes := make([]testVal, 0)
-	for _, valsList := range valsLists {
-		changes = append(changes, valsList...)
-	}
-	valList, thresholdPublicKey := addValidatorsToValidatorSet(valSet, changes)
-	err := valSet.UpdateWithChangeSet(valList, thresholdPublicKey, crypto.RandQuorumHash())
-	if expErr != nil {
-		assert.Equal(t, expErr, err)
-	} else {
-		assert.NoError(t, err)
-	}
-}
-
 func TestValidatorSetProtoBuf(t *testing.T) {
 	valset, _ := RandValidatorSet(10)
 	valset2, _ := RandValidatorSet(10)
@@ -908,28 +811,6 @@ func TestValidatorSetProtoBuf(t *testing.T) {
 			require.Error(t, err, tc.msg)
 		}
 	}
-}
-
-//-------------------------------------
-
-type testValsByVotingPower []testVal
-
-func (tvals testValsByVotingPower) Len() int {
-	return len(tvals)
-}
-
-// Here we need to sort by the pro_tx_hash and not the name if the power is equal, in the test the pro_tx_hash is derived
-//
-//	from the name by applying a single SHA256
-func (tvals testValsByVotingPower) Less(i, j int) bool {
-	if tvals[i].power == tvals[j].power {
-		return bytes.Compare(crypto.Checksum([]byte(tvals[i].name)), crypto.Checksum([]byte(tvals[j].name))) == -1
-	}
-	return tvals[i].power > tvals[j].power
-}
-
-func (tvals testValsByVotingPower) Swap(i, j int) {
-	tvals[i], tvals[j] = tvals[j], tvals[i]
 }
 
 // -------------------------------------

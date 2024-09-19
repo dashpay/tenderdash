@@ -247,7 +247,9 @@ func (p *http) validatorSet(ctx context.Context, height *int64, proposer types.P
 		return nil, provider.ErrBadLightBlock{Reason: fmt.Errorf("invalid validator set retrieved: %w", err)}
 	}
 
-	valSet.SetProposer(proposer)
+	if err := valSet.SetProposer(proposer); err != nil {
+		return nil, provider.ErrBadLightBlock{Reason: fmt.Errorf("failed to determine proposer: %w", err)}
+	}
 
 	return valSet, nil
 }
