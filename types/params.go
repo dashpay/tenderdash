@@ -457,6 +457,7 @@ func (params *ConsensusParams) ToProto() tmproto.ConsensusParams {
 	}
 }
 
+// ConsensusParamsFromProto returns a ConsensusParams from a protobuf representation.
 func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams {
 
 	c := ConsensusParams{}
