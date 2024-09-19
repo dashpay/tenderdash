@@ -12,6 +12,24 @@ type BlockStore struct {
 	mock.Mock
 }
 
+// Base provides a mock function with given fields:
+func (_m *BlockStore) Base() int64 {
+	ret := _m.Called()
+
+	if len(ret) == 0 {
+		panic("no return value specified for Base")
+	}
+
+	var r0 int64
+	if rf, ok := ret.Get(0).(func() int64); ok {
+		r0 = rf()
+	} else {
+		r0 = ret.Get(0).(int64)
+	}
+
+	return r0
+}
+
 // Height provides a mock function with given fields:
 func (_m *BlockStore) Height() int64 {
 	ret := _m.Called()

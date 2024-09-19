@@ -495,7 +495,7 @@ func TestReactor_LightBlockResponse(t *testing.T) {
 
 	require.NoError(t, rts.blockStore.SaveSignedHeader(sh, blockID))
 
-	rts.stateStore.On("LoadValidators", height).Return(vals, nil)
+	rts.stateStore.On("LoadValidators", height, mock.Anything).Return(vals, nil)
 
 	rts.blockInCh <- p2p.Envelope{
 		From:      types.NodeID("aa"),

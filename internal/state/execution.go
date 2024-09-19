@@ -668,7 +668,7 @@ func (state State) Update(
 
 	nextVersion := state.Version
 
-	// NOTE: LastStateIDHash, AppHash and VoteExtension has not been populated.
+	// NOTE: LastBlockRound, LastStateIDHash, AppHash and VoteExtension has not been populated.
 	// It will be filled on state.Save.
 	newState := State{
 		Version:                          nextVersion,

@@ -203,10 +203,10 @@ func (g *msgGossiper) GossipCommit(ctx context.Context, rs cstypes.RoundState, p
 	if prs.HasCommit {
 		return
 	}
-	logger := g.logger.With([]any{
+	logger := g.logger.With(
 		"height", rs.Height,
 		"peer_height", prs.Height,
-	})
+	)
 	var commit *types.Commit
 	blockStoreBase := g.blockStore.Base()
 	if rs.Height == prs.Height+1 {

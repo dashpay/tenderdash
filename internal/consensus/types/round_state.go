@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/bytes"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
@@ -76,14 +77,15 @@ type RoundState struct {
 	// Subjective time when +2/3 precommits for Block at Round were found
 	CommitTime          time.Time           `json:"commit_time"`
 	Validators          *types.ValidatorSet `json:"validators"`
-	Proposal            *types.Proposal     `json:"proposal"`
-	ProposalReceiveTime time.Time           `json:"proposal_receive_time"`
-	ProposalBlock       *types.Block        `json:"proposal_block"`
-	ProposalBlockParts  *types.PartSet      `json:"proposal_block_parts"`
-	LockedRound         int32               `json:"locked_round"`
-	LockedBlock         *types.Block        `json:"locked_block"`
-	LockedBlockParts    *types.PartSet      `json:"locked_block_parts"`
-	Commit              *types.Commit       `json:"commit"`
+	ProposerSelector    selectproposer.ProposerSelector
+	Proposal            *types.Proposal `json:"proposal"`
+	ProposalReceiveTime time.Time       `json:"proposal_receive_time"`
+	ProposalBlock       *types.Block    `json:"proposal_block"`
+	ProposalBlockParts  *types.PartSet  `json:"proposal_block_parts"`
+	LockedRound         int32           `json:"locked_round"`
+	LockedBlock         *types.Block    `json:"locked_block"`
+	LockedBlockParts    *types.PartSet  `json:"locked_block_parts"`
+	Commit              *types.Commit   `json:"commit"`
 
 	// The variables below starting with "Valid..." derive their name from
 	// the algorithm presented in this paper:
@@ -128,7 +130,12 @@ func (rs *RoundState) RoundStateSimple() RoundStateSimple {
 		panic(err)
 	}
 
-	proTxHash := rs.Validators.GetProposer().ProTxHash
+	proposer, err := rs.ProposerSelector.GetProposer(rs.Height, rs.Round)
+	if err != nil {
+		panic(err)
+	}
+
+	proTxHash := proposer.ProTxHash
 	idx, _ := rs.Validators.GetByProTxHash(proTxHash)
 
 	return RoundStateSimple{
@@ -147,7 +154,11 @@ func (rs *RoundState) RoundStateSimple() RoundStateSimple {
 
 // NewRoundEvent returns the RoundState with proposer information as an event.
 func (rs *RoundState) NewRoundEvent() types.EventDataNewRound {
-	proTxHash := rs.Validators.GetProposer().ProTxHash
+	proposer, err := rs.ProposerSelector.GetProposer(rs.Height, rs.Round)
+	if err != nil {
+		panic(fmt.Errorf("failed to get proposer for height/round %d:%d: %v", rs.Height, rs.Round, err))
+	}
+	proTxHash := proposer.ProTxHash
 	idx, _ := rs.Validators.GetByProTxHash(proTxHash)
 
 	return types.EventDataNewRound{

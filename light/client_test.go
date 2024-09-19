@@ -576,7 +576,6 @@ func TestClient(t *testing.T) {
 	t.Run("EnsureValidHeadersAndValSets", func(t *testing.T) {
 		emptyValSet := &types.ValidatorSet{
 			Validators: nil,
-			Proposer:   nil,
 		}
 
 		testCases := []struct {

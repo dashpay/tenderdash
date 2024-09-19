@@ -87,10 +87,9 @@ func TestBlockValidateBasic(t *testing.T) {
 		malleateBlock func(*Block)
 		expErr        bool
 	}{
-		{"Make Block", func(blk *Block) {}, false},
+		{"Make Block", func(_blk *Block) {}, false},
 		{"Make Block w/ proposer pro_tx_hash", func(blk *Block) {
-			blk.ProposerProTxHash =
-				valSet.GetProposer().ProTxHash
+			blk.ProposerProTxHash = valSet.Proposer().ProTxHash
 		}, false},
 		{"Negative Height", func(blk *Block) { blk.Height = -1 }, true},
 		{"Modify the last Commit", func(blk *Block) {
@@ -131,7 +130,7 @@ func TestBlockValidateBasic(t *testing.T) {
 		j := i
 		t.Run(tcRun.testName, func(t *testing.T) {
 			block := MakeBlock(h, txs, commit, evList)
-			block.ProposerProTxHash = valSet.GetProposer().ProTxHash
+			block.ProposerProTxHash = valSet.Proposer().ProTxHash
 			tcRun.malleateBlock(block)
 			err = block.ValidateBasic()
 			assert.Equal(t, tcRun.expErr, err != nil, "#%d: %v", j, err)
@@ -322,7 +321,7 @@ func TestCommitValidateBasic(t *testing.T) {
 		malleateCommit func(*Commit)
 		expectErr      bool
 	}{
-		{"Random Commit", func(com *Commit) {}, false},
+		{"Random Commit", func(_com *Commit) {}, false},
 		{"Incorrect block signature", func(com *Commit) { com.ThresholdBlockSignature = []byte{0} }, true},
 		{"Incorrect height", func(com *Commit) { com.Height = int64(-100) }, true},
 		{"Incorrect round", func(com *Commit) { com.Round = -100 }, true},

@@ -14,6 +14,7 @@ import (
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/libs/bits"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/math"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -214,7 +215,11 @@ func (ps *PeerState) PickVoteToSend(votes types.VoteSetReader) (*types.Vote, boo
 	}
 
 	if index, ok := votes.BitArray().Sub(psVotes).PickRandom(); ok {
-		vote := votes.GetByIndex(int32(index))
+		idx, err := math.SafeConvertInt32(int64(index))
+		if err != nil {
+			panic(fmt.Errorf("failed to convert index to int32: %w", err))
+		}
+		vote := votes.GetByIndex(idx)
 		if vote != nil {
 			return vote, true
 		}

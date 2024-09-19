@@ -82,7 +82,11 @@ func (p *Proposaler) Set(proposal *types.Proposal, receivedAt time.Time, rs *cst
 		rs.ProposalBlockParts = types.NewPartSetFromHeader(proposal.BlockID.PartSetHeader)
 	}
 
-	p.logger.Info("received proposal", "proposal", proposal, "received", receivedAt)
+	p.logger.Info("received proposal",
+		"proposal", proposal,
+		"height", proposal.Height,
+		"round", proposal.Round,
+		"received", receivedAt)
 	return nil
 }
 
@@ -209,6 +213,11 @@ func (p *Proposaler) sendMessages(ctx context.Context, msgs ...Message) {
 }
 
 func (p *Proposaler) verifyProposal(proposal *types.Proposal, rs *cstypes.RoundState) error {
+	if proposal.Height != rs.Height || proposal.Round != rs.Round {
+		return fmt.Errorf("proposal for invalid height/round, proposal height %d, round %d, expected height %d, round %d",
+			proposal.Height, proposal.Round, rs.Height, rs.Round)
+	}
+
 	protoProposal := proposal.ToProto()
 	stateValSet := p.committedState.Validators
 	// Verify signature
@@ -218,8 +227,12 @@ func (p *Proposaler) verifyProposal(proposal *types.Proposal, rs *cstypes.RoundS
 		stateValSet.QuorumType,
 		stateValSet.QuorumHash,
 	)
-	vset := rs.Validators
-	proposer := vset.GetProposer()
+
+	proposer, err := rs.ProposerSelector.GetProposer(rs.Height, rs.Round)
+	if err != nil {
+		return fmt.Errorf("error getting proposer: %w", err)
+	}
+
 	if proposer.PubKey == nil {
 		return p.verifyProposalForNonValidatorSet(proposal, *rs)
 	}
@@ -251,11 +264,18 @@ func (p *Proposaler) verifyProposalForNonValidatorSet(proposal *types.Proposal, 
 	// We might have a commit already for the Round State
 	// We need to verify that the commit block id is equal to the proposal block id
 	if !proposal.BlockID.Equals(commit.BlockID) {
-		proposer := rs.Validators.GetProposer()
-		p.logger.Error("proposal blockID isn't the same as the commit blockID",
-			"height", proposal.Height,
-			"round", proposal.Round,
-			"proposer_proTxHash", proposer.ProTxHash.ShortString())
+		proposer, err := rs.ProposerSelector.GetProposer(proposal.Height, proposal.Round)
+		if err != nil {
+			p.logger.Error("error getting proposer",
+				"height", proposal.Height,
+				"round", proposal.Round,
+				"err", err)
+		} else {
+			p.logger.Error("proposal blockID isn't the same as the commit blockID",
+				"height", proposal.Height,
+				"round", proposal.Round,
+				"proposer_proTxHash", proposer.ProTxHash.ShortString())
+		}
 		return ErrInvalidProposalForCommit
 	}
 	return nil

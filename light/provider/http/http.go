@@ -138,7 +138,7 @@ func (p *http) LightBlock(ctx context.Context, height int64) (*types.LightBlock,
 			Reason: fmt.Errorf("height %d responded doesn't match height %d requested", sh.Height, height),
 		}
 	}
-	vs, err := p.validatorSet(ctx, &sh.Height)
+	vs, err := p.validatorSet(ctx, &sh.Height, sh.Header.ProposerProTxHash)
 	if err != nil {
 		return nil, err
 	}
@@ -162,7 +162,7 @@ func (p *http) ReportEvidence(ctx context.Context, ev types.Evidence) error {
 	return err
 }
 
-func (p *http) validatorSet(ctx context.Context, height *int64) (*types.ValidatorSet, error) {
+func (p *http) validatorSet(ctx context.Context, height *int64, proposer types.ProTxHash) (*types.ValidatorSet, error) {
 	// Since the malicious node could report a massive number of pages, making us
 	// spend a considerable time iterating, we restrict the number of pages here.
 	// => 10000 validators max
@@ -238,11 +238,19 @@ func (p *http) validatorSet(ctx context.Context, height *int64) (*types.Validato
 			break
 		}
 	}
+	valSet := types.NewValidatorSet(vals, thresholdPubKey, quorumType, quorumHash, false)
 
-	valSet, err := types.ValidatorSetFromExistingValidators(vals, thresholdPubKey, quorumType, quorumHash)
-	if err != nil {
-		return nil, provider.ErrBadLightBlock{Reason: err}
+	if valSet == nil || valSet.IsNilOrEmpty() {
+		return nil, provider.ErrBadLightBlock{Reason: fmt.Errorf("retrieved nil or empty validator set")}
 	}
+	if err := valSet.ValidateBasic(); err != nil {
+		return nil, provider.ErrBadLightBlock{Reason: fmt.Errorf("invalid validator set retrieved: %w", err)}
+	}
+
+	if err := valSet.SetProposer(proposer); err != nil {
+		return nil, provider.ErrBadLightBlock{Reason: fmt.Errorf("failed to determine proposer: %w", err)}
+	}
+
 	return valSet, nil
 }
 

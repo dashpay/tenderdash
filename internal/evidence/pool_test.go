@@ -58,7 +58,7 @@ func TestEvidencePoolBasic(t *testing.T) {
 	blockStore.On("LoadBlockMeta", mock.AnythingOfType("int64")).Return(
 		&types.BlockMeta{Header: types.Header{Time: defaultEvidenceTime}},
 	)
-	stateStore.On("LoadValidators", mock.AnythingOfType("int64")).Return(valSet, nil)
+	stateStore.On("LoadValidators", mock.AnythingOfType("int64"), mock.Anything).Return(valSet, nil)
 	stateStore.On("Load").Return(createState(height+1, valSet), nil)
 
 	logger := log.NewTestingLogger(t)
@@ -524,7 +524,6 @@ func initializeValidatorState(
 	// create validator set and state
 	valSet := &types.ValidatorSet{
 		Validators:         []*types.Validator{validator},
-		Proposer:           validator,
 		ThresholdPublicKey: validator.PubKey,
 		QuorumType:         quorumType,
 		QuorumHash:         quorumHash,
@@ -541,7 +540,8 @@ func initializeBlockStore(db dbm.DB, state sm.State) (*store.BlockStore, error) 
 
 	for i := int64(1); i <= state.LastBlockHeight; i++ {
 		lastCommit := makeCommit(i-1, state.Validators.QuorumHash)
-		block := state.MakeBlock(i, []types.Tx{}, lastCommit, nil, state.Validators.GetProposer().ProTxHash, 0)
+		prop := state.GetProposerFromState(i, 0)
+		block := state.MakeBlock(i, []types.Tx{}, lastCommit, nil, prop.ProTxHash, 0)
 
 		block.Header.Time = defaultEvidenceTime.Add(time.Duration(i) * time.Minute)
 		block.Header.Version = version.Consensus{Block: version.BlockProtocol, App: 1}
