@@ -458,23 +458,35 @@ func (params *ConsensusParams) ToProto() tmproto.ConsensusParams {
 }
 
 func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams {
-	c := ConsensusParams{
-		Block: BlockParams{
+
+	c := ConsensusParams{}
+	if pbParams.Block != nil {
+		c.Block = BlockParams{
 			MaxBytes: pbParams.Block.MaxBytes,
 			MaxGas:   pbParams.Block.MaxGas,
-		},
-		Evidence: EvidenceParams{
+		}
+	}
+
+	if pbParams.Evidence != nil {
+		c.Evidence = EvidenceParams{
 			MaxAgeNumBlocks: pbParams.Evidence.MaxAgeNumBlocks,
 			MaxAgeDuration:  pbParams.Evidence.MaxAgeDuration,
 			MaxBytes:        pbParams.Evidence.MaxBytes,
-		},
-		Validator: ValidatorParams{
-			PubKeyTypes: pbParams.Validator.PubKeyTypes,
-		},
-		Version: VersionParams{
-			AppVersion: pbParams.Version.AppVersion,
-		},
+		}
 	}
+
+	if pbParams.Validator != nil {
+		c.Validator = ValidatorParams{
+			PubKeyTypes: pbParams.Validator.PubKeyTypes,
+		}
+	}
+
+	if pbParams.Version != nil {
+		c.Version = VersionParams{
+			AppVersion: pbParams.Version.AppVersion,
+		}
+	}
+
 	if pbParams.Synchrony != nil {
 		if pbParams.Synchrony.MessageDelay != nil {
 			c.Synchrony.MessageDelay = *pbParams.Synchrony.GetMessageDelay()
@@ -483,6 +495,7 @@ func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams 
 			c.Synchrony.Precision = *pbParams.Synchrony.GetPrecision()
 		}
 	}
+
 	if pbParams.Timeout != nil {
 		if pbParams.Timeout.Propose != nil {
 			c.Timeout.Propose = *pbParams.Timeout.GetPropose()
@@ -497,8 +510,10 @@ func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams 
 			c.Timeout.VoteDelta = *pbParams.Timeout.GetVoteDelta()
 		}
 	}
+
 	if pbParams.Abci != nil {
 		c.ABCI.RecheckTx = pbParams.Abci.GetRecheckTx()
 	}
+
 	return c
 }
