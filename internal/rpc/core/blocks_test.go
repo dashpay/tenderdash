@@ -14,7 +14,9 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	"github.com/dashpay/tenderdash/proto/tendermint/state"
+	"github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
+	tmtypes "github.com/dashpay/tenderdash/types"
 )
 
 func TestBlockchainInfo(t *testing.T) {
@@ -77,6 +79,11 @@ func TestBlockResults(t *testing.T) {
 				{Code: 0, Data: []byte{0x02}, Log: "ok", GasUsed: 5},
 				{Code: 1, Log: "not ok", GasUsed: 0},
 			},
+			ConsensusParamUpdates: &types.ConsensusParams{
+				Version: &types.VersionParams{
+					AppVersion: 1,
+				},
+			},
 		},
 	}
 
@@ -98,25 +105,30 @@ func TestBlockResults(t *testing.T) {
 		{0, true, nil},
 		{101, true, nil},
 		{100, false, &coretypes.ResultBlockResults{
-			Height:                100,
-			TxsResults:            results.ProcessProposal.TxResults,
-			TotalGasUsed:          15,
-			FinalizeBlockEvents:   results.ProcessProposal.Events,
-			ValidatorSetUpdate:    results.ProcessProposal.ValidatorSetUpdate,
-			ConsensusParamUpdates: consensusParamsPtrFromProtoPtr(results.ProcessProposal.ConsensusParamUpdates),
+			Height:              100,
+			TxsResults:          results.ProcessProposal.TxResults,
+			TotalGasUsed:        15,
+			FinalizeBlockEvents: results.ProcessProposal.Events,
+			ValidatorSetUpdate:  results.ProcessProposal.ValidatorSetUpdate,
+			ConsensusParamUpdates: &tmtypes.ConsensusParams{
+				Version: tmtypes.VersionParams{AppVersion: 1},
+			},
 		}},
 	}
 
 	ctx := context.Background()
 	for _, tc := range testCases {
-		res, err := env.BlockResults(ctx, &coretypes.RequestBlockInfo{
-			Height: (*coretypes.Int64)(&tc.height),
+		t.Run("", func(t *testing.T) {
+			res, err := env.BlockResults(ctx, &coretypes.RequestBlockInfo{
+				Height: (*coretypes.Int64)(&tc.height),
+			})
+			if tc.wantErr {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+				t.Logf("Consensus params: %+v", res.ConsensusParamUpdates)
+				assert.Equal(t, tc.wantRes, res)
+			}
 		})
-		if tc.wantErr {
-			assert.Error(t, err)
-		} else {
-			assert.NoError(t, err)
-			assert.Equal(t, tc.wantRes, res)
-		}
 	}
 }
