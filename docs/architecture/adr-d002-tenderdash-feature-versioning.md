@@ -70,4 +70,7 @@ Introduce a new mechanism within consensus parameters to define and control vari
 
 ## Decision
 
-TODO
+We decided to follow solution 1: use block version.
+
+We believe that at this point, having single, consistent consensus algorithm version is more important from long-term
+perspective than managing and maintaining multiple distinct features.
