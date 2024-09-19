@@ -84,11 +84,14 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	c.scheduler.ScheduleTimeout(stateData.proposeTimeout(round), height, round, cstypes.RoundStepPropose)
 
 	if !isProposer {
+		prop, err := stateData.ProposerSelector.GetProposer(stateData.Height, stateData.Round)
+		if err != nil {
+			logger.Error("failed to get proposer", "err", err)
+			return nil // not a critical error, as we don't propose anyway
+		}
 		logger.Info("propose step; not our turn to propose",
-			"proposer_proTxHash", stateData.Validators.GetProposer().ProTxHash,
-			"node_proTxHash", proTxHash.String(),
-			"height", stateData.Height,
-			"round", stateData.Round,
+			"proposer_proTxHash", prop.ProTxHash.ShortString(),
+			"node_proTxHash", proTxHash.ShortString(),
 			"step", stateData.Step)
 		return nil
 	}
@@ -99,9 +102,8 @@ func (c *EnterProposeAction) Execute(ctx context.Context, stateEvent StateEvent)
 	}
 
 	logger.Info("propose step; our turn to propose",
+		"node_proTxHash", proTxHash.ShortString(),
 		"proposer_proTxHash", proTxHash.ShortString(),
-		"height", stateData.Height,
-		"round", stateData.Round,
 		"step", stateData.Step,
 	)
 	// Flush the WAL. Otherwise, we may not recompute the same proposal to sign,

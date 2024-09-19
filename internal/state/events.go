@@ -6,6 +6,7 @@ import (
 	"github.com/hashicorp/go-multierror"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -87,7 +88,7 @@ func (e *EventSet) WithTxs(block *types.Block, txResults []*abci.ExecTxResult) *
 		e.Txs[i] = types.EventDataTx{
 			TxResult: abci.TxResult{
 				Height: block.Height,
-				Index:  uint32(i),
+				Index:  math.MustConvertUint32(i),
 				Tx:     tx,
 				Result: *(txResults[i]),
 			},

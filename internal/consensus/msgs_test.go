@@ -78,7 +78,7 @@ func TestMsgToProto(t *testing.T) {
 	vote, err := factory.MakeVote(
 		ctx,
 		pv,
-		&types.ValidatorSet{Proposer: val, Validators: []*types.Validator{val}, QuorumHash: quorumHash, ThresholdPublicKey: pk},
+		&types.ValidatorSet{Validators: []*types.Validator{val}, QuorumHash: quorumHash, ThresholdPublicKey: pk},
 		"chainID",
 		0,
 		1,

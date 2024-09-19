@@ -334,7 +334,7 @@ func (cs *State) updateStateFromStore() error {
 		}
 	}
 
-	stateData.updateToState(state, nil)
+	stateData.updateToState(state, nil, cs.blockStore)
 	err = cs.stateDataStore.Update(stateData)
 	if err != nil {
 		return err

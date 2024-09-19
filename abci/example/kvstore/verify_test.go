@@ -85,7 +85,7 @@ func (e *blockExecutor) createBlock(txs types.Txs, commit *types.Commit) *types.
 	if commit == nil {
 		commit = &types.Commit{}
 	}
-	proposer := e.state.Validators.GetProposer()
+	proposer := e.state.GetProposerFromState(e.state.LastBlockHeight+1, 0)
 	block := e.state.MakeBlock(
 		e.state.LastBlockHeight+1,
 		txs,

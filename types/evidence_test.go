@@ -136,7 +136,7 @@ func TestDuplicateVoteEvidenceValidation(t *testing.T) {
 		malleateEvidence func(*DuplicateVoteEvidence)
 		expectErr        bool
 	}{
-		{"Good DuplicateVoteEvidence", func(ev *DuplicateVoteEvidence) {}, false},
+		{"Good DuplicateVoteEvidence", func(_ *DuplicateVoteEvidence) {}, false},
 		{"Nil vote A", func(ev *DuplicateVoteEvidence) { ev.VoteA = nil }, true},
 		{"Nil vote B", func(ev *DuplicateVoteEvidence) { ev.VoteB = nil }, true},
 		{"Nil votes", func(ev *DuplicateVoteEvidence) {

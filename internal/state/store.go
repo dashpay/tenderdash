@@ -10,6 +10,8 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	"github.com/dashpay/tenderdash/libs/log"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmstate "github.com/dashpay/tenderdash/proto/tendermint/state"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -92,7 +94,7 @@ type Store interface {
 	// Load loads the current state of the blockchain
 	Load() (State, error)
 	// LoadValidators loads the validator set that is used to validate the given height
-	LoadValidators(int64) (*types.ValidatorSet, error)
+	LoadValidators(int64, selectproposer.BlockStore) (*types.ValidatorSet, error)
 	// LoadABCIResponses loads the abciResponse for a given height
 	LoadABCIResponses(int64) (*tmstate.ABCIResponses, error)
 	// LoadConsensusParams loads the consensus params for a given height
@@ -113,14 +115,15 @@ type Store interface {
 
 // dbStore wraps a db (github.com/tendermint/tm-db)
 type dbStore struct {
-	db dbm.DB
+	db     dbm.DB
+	logger log.Logger
 }
 
 var _ Store = (*dbStore)(nil)
 
 // NewStore creates the dbStore of the state pkg.
 func NewStore(db dbm.DB) Store {
-	return dbStore{db}
+	return dbStore{db, log.NewNopLogger()}
 }
 
 // LoadState loads the State from the database.
@@ -497,18 +500,19 @@ func (store dbStore) SaveValidatorSets(lowerHeight, upperHeight int64, vals *typ
 
 //-----------------------------------------------------------------------------
 
-// LoadValidators loads the ValidatorSet for a given height.
+// LoadValidators loads the ValidatorSet for a given height and round 0.
+//
 // Returns ErrNoValSetForHeight if the validator set can't be found for this height.
-func (store dbStore) LoadValidators(height int64) (*types.ValidatorSet, error) {
-
+func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) (*types.ValidatorSet, error) {
 	valInfo, err := loadValidatorsInfo(store.db, height)
 	if err != nil {
 		return nil, ErrNoValSetForHeight{Height: height, Err: err}
 	}
+
 	if valInfo.ValidatorSet == nil {
 		lastStoredHeight := lastStoredHeightFor(height, valInfo.LastHeightChanged)
-		valInfo2, err := loadValidatorsInfo(store.db, lastStoredHeight)
-		if err != nil || valInfo2.ValidatorSet == nil {
+		valInfo, err = loadValidatorsInfo(store.db, lastStoredHeight)
+		if err != nil || valInfo.ValidatorSet == nil {
 			return nil,
 				fmt.Errorf("couldn't find validators at height %d (height %d was originally requested): %w",
 					lastStoredHeight,
@@ -516,33 +520,69 @@ func (store dbStore) LoadValidators(height int64) (*types.ValidatorSet, error) {
 					err,
 				)
 		}
-
-		vs, err := types.ValidatorSetFromProto(valInfo2.ValidatorSet)
-		if err != nil {
-			return nil, err
-		}
-		h, err := tmmath.SafeConvertInt32(height - lastStoredHeight)
-		if err != nil {
-			return nil, err
-		}
-
-		vs.IncrementProposerPriority(h) // mutate
-		vi2, err := vs.ToProto()
-		if err != nil {
-			return nil, err
-		}
-
-		valInfo2.ValidatorSet = vi2
-		valInfo = valInfo2
 	}
 
-	vip, err := types.ValidatorSetFromProto(valInfo.ValidatorSet)
+	valSet, err := types.ValidatorSetFromProto(valInfo.ValidatorSet)
 	if err != nil {
 		return nil, err
 	}
-	// fmt.Printf("loaded validators at %d %v", height, vip)
 
-	return vip, nil
+	// FIND PROPOSER
+
+	// As per definition, proposer at height 1 is the first validator in the validator set.
+	if height == 1 {
+		proposer := valSet.GetByIndex(0)
+		if err := valSet.SetProposer(proposer.ProTxHash); err != nil {
+			return nil, fmt.Errorf("could not set first proposer: %w", err)
+		}
+		return valSet, nil
+	}
+
+	// load consensus params to determine algorithm to use for proposer selection
+	cp, err := store.LoadConsensusParams(height)
+	if err != nil {
+		store.logger.Warn("failed to load consensus params, falling back to defaults", "height", height, "err", err)
+		cp = *types.DefaultConsensusParams()
+	}
+
+	// if we have that block in block store, we just rolllback to round 0
+	if meta := bs.LoadBlockMeta(height); meta != nil {
+		proposer := meta.Header.ProposerProTxHash
+		if err := valSet.SetProposer(proposer); err != nil {
+			return nil, fmt.Errorf("could not set proposer: %w", err)
+		}
+
+		strategy, err := selectproposer.NewProposerSelector(cp, valSet, meta.Header.Height, meta.Round, bs, store.logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create validator scoring strategy: %w", err)
+		}
+		if err := strategy.UpdateHeightRound(meta.Header.Height, 0); err != nil {
+			return nil, fmt.Errorf("failed to update validator scores at height %d, round 0: %w", meta.Header.Height, err)
+		}
+		return strategy.ValidatorSet(), nil
+	}
+
+	// If we have that height in the block store, we just take proposer from previous block and advance it.
+	// We don't use current height block because we want to return proposer at round 0.
+	prevMeta := bs.LoadBlockMeta(height - 1)
+	if prevMeta == nil {
+		return nil, fmt.Errorf("could not find block meta for height %d", height-1)
+	}
+	// Configure proposer strategy; first set proposer from previous block
+	if err := valSet.SetProposer(prevMeta.Header.ProposerProTxHash); err != nil {
+		return nil, fmt.Errorf("could not set proposer: %w", err)
+	}
+	strategy, err := selectproposer.NewProposerSelector(cp, valSet, prevMeta.Header.Height, prevMeta.Round, bs, store.logger)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create validator scoring strategy: %w", err)
+	}
+
+	// now, advance to (height,0)
+	if err := strategy.UpdateHeightRound(height, 0); err != nil {
+		return nil, fmt.Errorf("failed to update validator scores at height %d, round 0: %w", height, err)
+	}
+
+	return strategy.ValidatorSet(), nil
 }
 
 func lastStoredHeightFor(height, lastHeightChanged int64) int64 {
