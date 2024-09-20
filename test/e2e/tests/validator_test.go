@@ -6,12 +6,12 @@ import (
 	"testing"
 
 	"github.com/dashpay/dashd-go/btcjson"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto"
 	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
-	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
-	"github.com/dashpay/tenderdash/internal/libs/test"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -62,7 +62,7 @@ func TestValidator_Sets(t *testing.T) {
 			}
 			// fmt.Printf("node %s(%X) validator set for height %d is %v\n",
 			//	node.Name, node.ProTxHash, h, valSchedule.Set)
-			for i, valScheduleValidator := range valSchedule.Set.ValidatorSet().Validators {
+			for i, valScheduleValidator := range valSchedule.Set.Validators {
 				validator := validators[i]
 				require.Equal(t, valScheduleValidator.ProTxHash, validator.ProTxHash,
 					"mismatching validator proTxHashes at height %v (%X <=> %X", h,
@@ -74,9 +74,9 @@ func TestValidator_Sets(t *testing.T) {
 				// Validators in the schedule don't contain addresses
 				validator.NodeAddress = types.ValidatorAddress{}
 			}
-			require.Equal(t, valSchedule.Set.ValidatorSet().Validators, validators,
+			require.Equal(t, valSchedule.Set.Validators, validators,
 				"incorrect validator set at height %v", h)
-			require.Equal(t, valSchedule.Set.ValidatorSet().ThresholdPublicKey, thresholdPublicKey,
+			require.Equal(t, valSchedule.Set.ThresholdPublicKey, thresholdPublicKey,
 				"incorrect thresholdPublicKey at height %v", h)
 			require.NoError(t, valSchedule.Increment(1))
 		}
@@ -90,6 +90,29 @@ func TestValidator_Propose(t *testing.T) {
 	defer cancel()
 
 	blocks := fetchBlockChain(ctx, t)
+
+	// check if proposer order is correct, that it:
+	// - validators don't vote twice in a row
+	// - validators vote in ascending proTxHash order
+	// - validators vote in round-robin order
+	var prevProposer tmbytes.HexBytes
+	var prevBlock *types.Block
+	for _, block := range blocks {
+		currentProposer := block.ProposerProTxHash
+		require.NotEmpty(t, currentProposer, "block %v has no proposer", block.Height)
+
+		// don't verify heights where validator rotation happens
+		if prevBlock != nil && prevBlock.ValidatorsHash.Equal(block.ValidatorsHash) {
+			assert.NotEqual(t, prevProposer, currentProposer,
+				"validator %s proposed two blocks in a row", currentProposer.ShortString())
+			assert.Less(t, prevProposer, currentProposer,
+				"previous proposer %s is higher than proposer %s at height %d",
+				prevProposer.ShortString(), currentProposer.ShortString(), block.Header.Height)
+		}
+
+		prevBlock = block
+	}
+
 	testNode(t, func(_ctx context.Context, t *testing.T, node e2e.Node) {
 		if node.Mode != e2e.ModeValidator {
 			return
@@ -99,16 +122,10 @@ func TestValidator_Propose(t *testing.T) {
 
 		expectCount := 0
 		proposeCount := 0
-		var prevBlock *types.Block
 		for _, block := range blocks {
-			if prevBlock == nil {
-				prevBlock = block
-				continue
-			}
-
-			if bytes.Equal(valSchedule.Set.MustGetProposer(prevBlock.Height, block.LastCommit.Round).ProTxHash, proTxHash) {
+			if bytes.Equal(valSchedule.Set.Proposer().ProTxHash, proTxHash) {
 				expectCount++
-				if bytes.Equal(prevBlock.ProposerProTxHash, proTxHash) {
+				if bytes.Equal(block.ProposerProTxHash, proTxHash) {
 					proposeCount++
 				}
 			}
@@ -129,7 +146,7 @@ func TestValidator_Propose(t *testing.T) {
 // validatorSchedule is a validator set iterator, which takes into account
 // validator set updates.
 type validatorSchedule struct {
-	Set                       selectproposer.ProposerSelector
+	Set                       *types.ValidatorSet
 	height                    int64
 	updates                   map[int64]e2e.ValidatorsMap
 	thresholdPublicKeyUpdates map[int64]crypto.PubKey
@@ -155,12 +172,10 @@ func newValidatorSchedule(testnet e2e.Testnet) *validatorSchedule {
 			panic("quorum hash key must be set for height 0 if validator changes")
 		}
 	}
-	valset := types.NewValidatorSet(makeVals(valMap), thresholdPublicKey, quorumType, quorumHash, true)
-	vs := test.Must(selectproposer.NewProposerSelector(types.ConsensusParams{}, valset,
-		testnet.InitialHeight, 0, nil, nil))
+
 	return &validatorSchedule{
 		height:                    testnet.InitialHeight,
-		Set:                       vs,
+		Set:                       types.NewValidatorSet(makeVals(valMap), thresholdPublicKey, quorumType, quorumHash, true),
 		updates:                   testnet.ValidatorUpdates,
 		thresholdPublicKeyUpdates: testnet.ThresholdPublicKeyUpdates,
 		quorumHashUpdates:         testnet.QuorumHashUpdates,
@@ -176,23 +191,17 @@ func (s *validatorSchedule) Increment(heights int64) error {
 			if update, ok := s.updates[s.height-1]; ok {
 				if thresholdPublicKeyUpdate, ok := s.thresholdPublicKeyUpdates[s.height-1]; ok {
 					if quorumHashUpdate, ok := s.quorumHashUpdates[s.height-1]; ok {
-						if bytes.Equal(quorumHashUpdate, s.Set.ValidatorSet().QuorumHash) {
-							if err := s.Set.ValidatorSet().UpdateWithChangeSet(makeVals(update), thresholdPublicKeyUpdate, quorumHashUpdate); err != nil {
+						if bytes.Equal(quorumHashUpdate, s.Set.QuorumHash) {
+							if err := s.Set.UpdateWithChangeSet(makeVals(update), thresholdPublicKeyUpdate, quorumHashUpdate); err != nil {
 								return err
 							}
 						} else {
-
-							vset := types.NewValidatorSet(makeVals(update), thresholdPublicKeyUpdate, btcjson.LLMQType_5_60,
+							s.Set = types.NewValidatorSet(makeVals(update), thresholdPublicKeyUpdate, btcjson.LLMQType_5_60,
 								quorumHashUpdate, true)
-							s.Set = test.Must(selectproposer.NewProposerSelector(types.ConsensusParams{}, vset,
-								s.height, 0, nil, nil))
 						}
 					}
 				}
 			}
-		}
-		if err := s.Set.UpdateHeightRound(s.height, 0); err != nil {
-			return err
 		}
 	}
 	return nil
