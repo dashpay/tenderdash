@@ -8,6 +8,8 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+//go:generate ../../../../scripts/mockery_generate.sh ProposerSelector
+
 type ProposerSelector interface {
 	// GetProposer returns the proposer for the given height and round. It calls Update if necessary.
 	GetProposer(height int64, round int32) (*types.Validator, error)

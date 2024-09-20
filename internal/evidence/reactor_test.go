@@ -77,9 +77,10 @@ func setup(ctx context.Context, t *testing.T, stateStores []sm.Store) *reactorTe
 		evidenceDB := dbm.NewMemDB()
 		blockStore := &mocks.BlockStore{}
 		state, _ := stateStores[idx].Load()
+		blockStore.On("Base").Return(int64(1))
 		blockStore.On("LoadBlockMeta", mock.AnythingOfType("int64")).Return(func(h int64) *types.BlockMeta {
 			if h <= state.LastBlockHeight {
-				return &types.BlockMeta{Header: types.Header{Time: evidenceTime}}
+				return makeBlockMeta(h, evidenceTime, state.Validators)
 			}
 			return nil
 		})

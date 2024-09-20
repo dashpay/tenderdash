@@ -7,6 +7,7 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	dbm "github.com/tendermint/tm-db"
 
@@ -110,7 +111,7 @@ func TestVerifyDuplicateVoteEvidence(t *testing.T) {
 		ConsensusParams: *types.DefaultConsensusParams(),
 	}
 	stateStore := &smmocks.Store{}
-	stateStore.On("LoadValidators", int64(10)).Return(valSet, nil)
+	stateStore.On("LoadValidators", int64(10), mock.Anything).Return(valSet, nil)
 	stateStore.On("Load").Return(state, nil)
 	blockStore := &mocks.BlockStore{}
 	blockStore.On("LoadBlockMeta", int64(10)).Return(&types.BlockMeta{Header: types.Header{Time: defaultEvidenceTime}})
