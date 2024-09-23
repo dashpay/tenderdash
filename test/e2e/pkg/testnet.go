@@ -102,6 +102,9 @@ type Testnet struct {
 	QuorumType                btcjson.LLMQType
 	QuorumHash                crypto.QuorumHash
 	QuorumHashUpdates         map[int64]crypto.QuorumHash
+	// ConsensusVersionUpdates is maps height where consensus params updates shall be generated
+	// to ConsensusParams.Version.ProtocolVersion.
+	ConsensusVersionUpdates map[int64]int32
 }
 
 // Node represents a Tenderdash node in a testnet.
@@ -216,6 +219,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 		QuorumType:                btcjson.LLMQType(quorumType),
 		QuorumHash:                quorumHash,
 		QuorumHashUpdates:         map[int64]crypto.QuorumHash{},
+		ConsensusVersionUpdates:   map[int64]int32{},
 	}
 	if len(manifest.KeyType) != 0 {
 		testnet.KeyType = manifest.KeyType
@@ -425,6 +429,13 @@ func LoadTestnet(file string) (*Testnet, error) {
 		testnet.ValidatorUpdates[int64(height)] = valUpdate
 		testnet.ThresholdPublicKeyUpdates[int64(height)] = ld.ThresholdPubKey
 		testnet.QuorumHashUpdates[int64(height)] = quorumHash
+		if cpUpdate, ok := manifest.ConsensusVersionUpdates[strconv.Itoa(height)]; ok {
+			h, err := strconv.Atoi(heightStr)
+			if err != nil {
+				return nil, fmt.Errorf("invalid consensus version update height %q: %w", height, err)
+			}
+			testnet.ConsensusVersionUpdates[int64(h)] = cpUpdate
+		}
 	}
 
 	chainLockSetHeights := make([]int, 0, len(manifest.ChainLockUpdates))

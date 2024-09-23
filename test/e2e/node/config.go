@@ -30,6 +30,7 @@ type Config struct {
 	QuorumHashUpdate        map[string]string `toml:"quorum_hash_update"`
 	ChainLockUpdates        map[string]string `toml:"chainlock_updates"`
 	PrivValServerType       string            `toml:"privval_server_type"`
+	ConsenusVersionUpdates  map[string]int32  `toml:"consensus_version_updates"`
 }
 
 // App extracts out the application specific configuration parameters
@@ -46,6 +47,7 @@ func (cfg *Config) App() *kvstore.Config {
 		QuorumHashUpdate:        cfg.QuorumHashUpdate,
 		ChainLockUpdates:        cfg.ChainLockUpdates,
 		PrivValServerType:       cfg.PrivValServerType,
+		ConsenusVersionUpdates:  cfg.ConsenusVersionUpdates,
 	}
 }
 

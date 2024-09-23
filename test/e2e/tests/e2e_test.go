@@ -122,6 +122,10 @@ func fetchBlockChain(ctx context.Context, t *testing.T) []*types.Block {
 
 	from := status.SyncInfo.EarliestBlockHeight
 	to := status.SyncInfo.LatestBlockHeight
+	// limit blocks to 100 to avoid long test times
+	if to-from > 100 {
+		to = from + 100
+	}
 	blocks, ok := blocksCache[testnet.Name]
 	if !ok {
 		blocks = make([]*types.Block, 0, to-from+1)

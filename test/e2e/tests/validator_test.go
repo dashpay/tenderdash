@@ -3,6 +3,7 @@ package e2e_test
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"testing"
 
 	"github.com/dashpay/dashd-go/btcjson"
@@ -11,6 +12,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"
+	"github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
 	"github.com/dashpay/tenderdash/types"
@@ -35,6 +37,10 @@ func TestValidator_Sets(t *testing.T) {
 		}
 
 		last := status.SyncInfo.LatestBlockHeight
+		// limit the test to 100 blocks, to avoid long test times
+		if last > first+100 {
+			last = first + 100
+		}
 
 		// skip first block if node is pruning blocks, to avoid race conditions
 		if node.RetainBlocks > 0 {
@@ -62,7 +68,7 @@ func TestValidator_Sets(t *testing.T) {
 			}
 			// fmt.Printf("node %s(%X) validator set for height %d is %v\n",
 			//	node.Name, node.ProTxHash, h, valSchedule.Set)
-			for i, valScheduleValidator := range valSchedule.Set.Validators {
+			for i, valScheduleValidator := range valSchedule.ValidatorProposer.ValidatorSet().Validators {
 				validator := validators[i]
 				require.Equal(t, valScheduleValidator.ProTxHash, validator.ProTxHash,
 					"mismatching validator proTxHashes at height %v (%X <=> %X", h,
@@ -74,9 +80,9 @@ func TestValidator_Sets(t *testing.T) {
 				// Validators in the schedule don't contain addresses
 				validator.NodeAddress = types.ValidatorAddress{}
 			}
-			require.Equal(t, valSchedule.Set.Validators, validators,
+			require.Equal(t, valSchedule.ValidatorProposer.ValidatorSet().Validators, validators,
 				"incorrect validator set at height %v", h)
-			require.Equal(t, valSchedule.Set.ThresholdPublicKey, thresholdPublicKey,
+			require.Equal(t, valSchedule.ValidatorProposer.ValidatorSet().ThresholdPublicKey, thresholdPublicKey,
 				"incorrect thresholdPublicKey at height %v", h)
 			require.NoError(t, valSchedule.Increment(1))
 		}
@@ -122,8 +128,13 @@ func TestValidator_Propose(t *testing.T) {
 
 		expectCount := 0
 		proposeCount := 0
-		for _, block := range blocks {
-			if bytes.Equal(valSchedule.Set.Proposer().ProTxHash, proTxHash) {
+		for i, block := range blocks {
+			round := int32(0)
+			if i+1 < len(blocks) { // we might be missing the last commit, we'll assume round 0
+				round = blocks[i+1].LastCommit.Round
+			}
+			expectedProposer := valSchedule.ValidatorProposer.MustGetProposer(block.Height, round).ProTxHash
+			if bytes.Equal(expectedProposer, proTxHash) {
 				expectCount++
 				if bytes.Equal(block.ProposerProTxHash, proTxHash) {
 					proposeCount++
@@ -146,11 +157,14 @@ func TestValidator_Propose(t *testing.T) {
 // validatorSchedule is a validator set iterator, which takes into account
 // validator set updates.
 type validatorSchedule struct {
-	Set                       *types.ValidatorSet
+	ValidatorProposer         selectproposer.ProposerSelector
 	height                    int64
 	updates                   map[int64]e2e.ValidatorsMap
 	thresholdPublicKeyUpdates map[int64]crypto.PubKey
 	quorumHashUpdates         map[int64]crypto.QuorumHash
+	consensusVersionUpdates   map[int64]int32
+
+	consensusVersions map[int64]int32
 }
 
 func newValidatorSchedule(testnet e2e.Testnet) *validatorSchedule {
@@ -173,35 +187,86 @@ func newValidatorSchedule(testnet e2e.Testnet) *validatorSchedule {
 		}
 	}
 
+	vs := types.NewValidatorSet(makeVals(valMap), thresholdPublicKey, quorumType, quorumHash, true)
+	ps, err := selectproposer.NewProposerSelector(*types.DefaultConsensusParams(), vs, testnet.InitialHeight, 0, nil, nil)
+	if err != nil {
+		panic(err)
+	}
+
 	return &validatorSchedule{
 		height:                    testnet.InitialHeight,
-		Set:                       types.NewValidatorSet(makeVals(valMap), thresholdPublicKey, quorumType, quorumHash, true),
+		ValidatorProposer:         ps,
 		updates:                   testnet.ValidatorUpdates,
 		thresholdPublicKeyUpdates: testnet.ThresholdPublicKeyUpdates,
 		quorumHashUpdates:         testnet.QuorumHashUpdates,
+		consensusVersions:         make(map[int64]int32),
+		consensusVersionUpdates:   testnet.ConsensusVersionUpdates,
 	}
+}
+func (s *validatorSchedule) consensusVersionUpdate() {
+	ver, ok := s.consensusVersionUpdates[s.height]
+	if !ok && s.height-1 > 0 {
+		ver = s.consensusVersions[s.height-1]
+	}
+
+	s.consensusVersions[s.height] = ver
+}
+
+func (s *validatorSchedule) ConsensusParams() types.ConsensusParams {
+	ver, ok := s.consensusVersions[s.height]
+	if !ok {
+		panic(fmt.Errorf("consensus version not set for height %d", s.height))
+	}
+
+	cp := *types.DefaultConsensusParams()
+	cp.Version.ConsensusVersion = ver
+
+	return cp
 }
 
 func (s *validatorSchedule) Increment(heights int64) error {
 	for i := int64(0); i < heights; i++ {
 		s.height++
+
+		// consensus params update - for now, we only support consensus version updates
+		s.consensusVersionUpdate()
+		cp := s.ConsensusParams()
+
+		// validator set update
 		if s.height > 1 {
 			// validator set updates are offset by 1, since they only take effect
 			// 1 block after they're returned.
 			if update, ok := s.updates[s.height-1]; ok {
 				if thresholdPublicKeyUpdate, ok := s.thresholdPublicKeyUpdates[s.height-1]; ok {
 					if quorumHashUpdate, ok := s.quorumHashUpdates[s.height-1]; ok {
-						if bytes.Equal(quorumHashUpdate, s.Set.QuorumHash) {
-							if err := s.Set.UpdateWithChangeSet(makeVals(update), thresholdPublicKeyUpdate, quorumHashUpdate); err != nil {
+						currentQuorumHash := s.ValidatorProposer.ValidatorSet().QuorumHash
+						if bytes.Equal(quorumHashUpdate, currentQuorumHash) {
+							vs := s.ValidatorProposer.ValidatorSet()
+
+							if err := vs.UpdateWithChangeSet(makeVals(update), thresholdPublicKeyUpdate, quorumHashUpdate); err != nil {
 								return err
 							}
 						} else {
-							s.Set = types.NewValidatorSet(makeVals(update), thresholdPublicKeyUpdate, btcjson.LLMQType_5_60,
+							vs := types.NewValidatorSet(makeVals(update), thresholdPublicKeyUpdate, btcjson.LLMQType_5_60,
 								quorumHashUpdate, true)
+
+							ps, err := selectproposer.NewProposerSelector(cp, vs, s.height, 0, nil, nil)
+							if err != nil {
+								return err
+							}
+							if cp.Version.ConsensusVersion == 0 {
+								//consensus version 0 had an issue where first proposer didn't propose
+								// TODO: double check if this is really needed
+								ps.ValidatorSet().IncProposerIndex(1)
+							}
+							s.ValidatorProposer = ps
 						}
 					}
 				}
 			}
+		}
+		if err := s.ValidatorProposer.UpdateHeightRound(s.height, 0); err != nil {
+			return err
 		}
 	}
 	return nil
