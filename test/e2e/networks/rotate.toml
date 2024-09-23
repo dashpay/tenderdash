@@ -96,7 +96,6 @@ validator08 = 100
 validator10 = 100
 validator11 = 100
 
-
 [consensus_version_updates]
 
 1070 = 1

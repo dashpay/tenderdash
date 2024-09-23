@@ -62,6 +62,20 @@ func NewApplication(cfg kvstore.Config, opts ...kvstore.OptFunc) (*Application, 
 		return nil, err
 	}
 
+	for h, ver := range cfg.ConsenusVersionUpdates {
+		height, err := strconv.Atoi(h)
+		if err != nil {
+			return nil, fmt.Errorf("consensus_version_updates: failed to parse height %s: %w", h, err)
+		}
+		params := types1.ConsensusParams{
+			Version: &types1.VersionParams{
+				ConsensusVersion: types1.VersionParams_ConsensusVersion(ver),
+				AppVersion:       kvstore.ProtocolVersion,
+			},
+		}
+		app.AddConsensusParamsUpdate(params, int64(height))
+	}
+
 	return &app, nil
 }
 
@@ -146,7 +160,7 @@ func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.Request
 	}
 
 	if app.cfg.VoteExtensionDelayMS != 0 {
-		time.Sleep(time.Duration(app.cfg.VoteExtensionDelayMS) * time.Millisecond)
+		time.Sleep(time.Duration(app.cfg.VoteExtensionDelayMS) * time.Millisecond) //#nosec G115
 	}
 
 	app.logger.Info("verified vote extension value", "req", req, "nums", nums)

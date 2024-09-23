@@ -3,7 +3,6 @@ package e2e_test
 import (
 	"bytes"
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/dashpay/dashd-go/btcjson"
@@ -203,20 +202,30 @@ func newValidatorSchedule(testnet e2e.Testnet) *validatorSchedule {
 		consensusVersionUpdates:   testnet.ConsensusVersionUpdates,
 	}
 }
-func (s *validatorSchedule) consensusVersionUpdate() {
-	ver, ok := s.consensusVersionUpdates[s.height]
-	if !ok && s.height-1 > 0 {
-		ver = s.consensusVersions[s.height-1]
+
+func (s *validatorSchedule) consensusVersionUpdate() int32 {
+	var version int32
+	ok := false
+
+	// find last consensus params
+	for h := s.height; h > 0 && !ok; h-- {
+		if version, ok = s.consensusVersions[h]; !ok {
+			var updatedVersion int32
+			if updatedVersion, ok = s.consensusVersionUpdates[h]; ok {
+				version = updatedVersion
+				s.consensusVersions[h] = version
+			}
+		}
 	}
 
-	s.consensusVersions[s.height] = ver
+	// save it
+	s.consensusVersions[s.height] = version
+
+	return version
 }
 
 func (s *validatorSchedule) ConsensusParams() types.ConsensusParams {
-	ver, ok := s.consensusVersions[s.height]
-	if !ok {
-		panic(fmt.Errorf("consensus version not set for height %d", s.height))
-	}
+	ver := s.consensusVersionUpdate()
 
 	cp := *types.DefaultConsensusParams()
 	cp.Version.ConsensusVersion = ver

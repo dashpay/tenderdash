@@ -429,13 +429,6 @@ func LoadTestnet(file string) (*Testnet, error) {
 		testnet.ValidatorUpdates[int64(height)] = valUpdate
 		testnet.ThresholdPublicKeyUpdates[int64(height)] = ld.ThresholdPubKey
 		testnet.QuorumHashUpdates[int64(height)] = quorumHash
-		if cpUpdate, ok := manifest.ConsensusVersionUpdates[strconv.Itoa(height)]; ok {
-			h, err := strconv.Atoi(heightStr)
-			if err != nil {
-				return nil, fmt.Errorf("invalid consensus version update height %q: %w", height, err)
-			}
-			testnet.ConsensusVersionUpdates[int64(h)] = cpUpdate
-		}
 	}
 
 	chainLockSetHeights := make([]int, 0, len(manifest.ChainLockUpdates))
@@ -450,12 +443,20 @@ func LoadTestnet(file string) (*Testnet, error) {
 
 	sort.Ints(chainLockSetHeights)
 
-	// Set up validator updates.
+	// Set up chainlock updates.
 	for _, height := range chainLockSetHeights {
 		heightStr := strconv.FormatInt(int64(height), 10)
 		chainLockHeight := manifest.ChainLockUpdates[heightStr]
 		testnet.ChainLockUpdates[int64(height)] = chainLockHeight
 		fmt.Printf("Set chainlock at height %d / core height is %d\n", height, chainLockHeight)
+	}
+
+	for heightStr, cpUpdate := range manifest.ConsensusVersionUpdates {
+		height, err := strconv.Atoi(heightStr)
+		if err != nil {
+			return nil, fmt.Errorf("invalid consensus version update height %q: %w", height, err)
+		}
+		testnet.ConsensusVersionUpdates[int64(height)] = cpUpdate
 	}
 
 	return testnet, testnet.Validate()
