@@ -32,7 +32,7 @@ require (
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20220708102147-0a8a51822cae
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.13.0
-	github.com/rs/cors v1.11.0
+	github.com/rs/cors v1.11.1
 	github.com/rs/zerolog v1.29.0
 	github.com/snikch/goodman v0.0.0-20171125024755-10e37e294daa
 	github.com/spf13/cobra v1.8.1
