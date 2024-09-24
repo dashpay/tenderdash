@@ -1,4 +1,4 @@
-# Tendermint
+# Tenderdash
 
 ![banner](docs/tendermint-core-image.jpg)
 
@@ -15,14 +15,18 @@ Or [Blockchain](<https://en.wikipedia.org/wiki/Blockchain_(database)>), for shor
 |--------|-------|----------|---------|
 | master | [![Tests](https://github.com/dashpay/tenderdash/actions/workflows/tests.yml/badge.svg)](https://github.com/dashpay/tenderdash/actions/workflows/tests.yml) | [![codecov](https://codecov.io/gh/dashpay/tenderdash/branch/master/graph/badge.svg)](https://codecov.io/gh/dashpay/tenderdash) | [![Golang Linter](https://github.com/dashpay/tenderdash/actions/workflows/lint.yml/badge.svg)](https://github.com/dashpay/tenderdash/actions/workflows/lint.yml) |
 
-Tendermint Core is a Byzantine Fault Tolerant (BFT) middleware that takes a state transition machine - written in any programming language - and securely replicates it on many machines.
+Tenderdash is a Byzantine Fault Tolerant (BFT) middleware that takes a state transition machine -
+written in any programming language - and securely replicates it on many machines.
 
-For protocol details, refer to the [Tendermint Specification](./spec/README.md).
+## Background
 
-For detailed analysis of the consensus protocol, including safety and liveness proofs,
-read our paper, "[The latest gossip on BFT consensus](https://arxiv.org/abs/1807.04938)".
+Tenderdash started as a fork of [Tendermint Core](https://www.github.com/tendermint/tendermint)
+which has been used in public environments such as the Cosmos Network. For Tendermint protocol
+details, refer to the [Tendermint Specification](./spec/README.md). For detailed analysis of the
+consensus protocol, including safety and liveness proofs, read the Tendermint paper, "[The latest
+gossip on BFT consensus](https://arxiv.org/abs/1807.04938)".
 
-## Documentation
+### Tendermint documentation
 
 Complete documentation can be found on the [website](https://docs.tendermint.com/).
 
@@ -70,10 +74,10 @@ these public APIs will be documented in the [CHANGELOG](./CHANGELOG.md).
 
 ### Supported Versions
 
-Because we are a small core team, we only ship patch updates, including security updates,
-to the most recent minor release and the second-most recent minor release. Consequently,
-we strongly recommend keeping Tendermint up-to-date. Upgrading instructions can be found
-in [UPGRADING.md](./UPGRADING.md).
+Because we are a small core team, we only ship patch updates, including security updates, to the
+most recent minor release and the second-most recent minor release. Consequently, we strongly
+recommend keeping Tenderdash up-to-date. Upgrading instructions can be found in
+[UPGRADING.md](./UPGRADING.md).
 
 ## Resources
 
@@ -99,6 +103,5 @@ in [UPGRADING.md](./UPGRADING.md).
 
 ## Join us
 
-Tenderdash is maintained by [Dash Core Group](https://www.dash.org/dcg/).
-If you'd like to work full-time on Tenderdash, [see our Jobs page](https://www.dash.org/dcg/jobs/).
-
+Tenderdash is maintained by [Dash Core Group](https://www.dash.org/dcg/). If you'd like to work
+full-time on Tenderdash, [see our Jobs page](https://www.dash.org/dcg/jobs/).
