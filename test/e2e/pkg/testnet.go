@@ -102,8 +102,7 @@ type Testnet struct {
 	QuorumType                btcjson.LLMQType
 	QuorumHash                crypto.QuorumHash
 	QuorumHashUpdates         map[int64]crypto.QuorumHash
-	// ConsensusVersionUpdates is maps height where consensus params updates shall be generated
-	// to ConsensusParams.Version.ProtocolVersion.
+	// ConsensusVersionUpdates maps height to new consensus version (ConsensusParams.Version.ConsensusVersion)
 	ConsensusVersionUpdates map[int64]int32
 }
 
@@ -207,13 +206,13 @@ func LoadTestnet(file string) (*Testnet, error) {
 		LogLevel:                  manifest.LogLevel,
 		TxSize:                    manifest.TxSize,
 		ABCIProtocol:              Protocol(manifest.ABCIProtocol),
-		PrepareProposalDelayMS:    int(manifest.PrepareProposalDelayMS),
-		ProcessProposalDelayMS:    int(manifest.ProcessProposalDelayMS),
-		CheckTxDelayMS:            int(manifest.CheckTxDelayMS),
-		VoteExtensionDelayMS:      int(manifest.VoteExtensionDelayMS),
-		FinalizeBlockDelayMS:      int(manifest.FinalizeBlockDelayMS),
-		MaxBlockSize:              int64(manifest.MaxBlockSize),
-		MaxEvidenceSize:           int64(manifest.MaxEvidenceSize),
+		PrepareProposalDelayMS:    int(manifest.PrepareProposalDelayMS), //#nosec G115
+		ProcessProposalDelayMS:    int(manifest.ProcessProposalDelayMS), //#nosec G115
+		CheckTxDelayMS:            int(manifest.CheckTxDelayMS),         //#nosec G115
+		VoteExtensionDelayMS:      int(manifest.VoteExtensionDelayMS),   //#nosec G115
+		FinalizeBlockDelayMS:      int(manifest.FinalizeBlockDelayMS),   //#nosec G115
+		MaxBlockSize:              int64(manifest.MaxBlockSize),         //#nosec G115
+		MaxEvidenceSize:           int64(manifest.MaxEvidenceSize),      //#nosec G115
 		ThresholdPublicKey:        ld.ThresholdPubKey,
 		ThresholdPublicKeyUpdates: map[int64]crypto.PubKey{},
 		QuorumType:                btcjson.LLMQType(quorumType),

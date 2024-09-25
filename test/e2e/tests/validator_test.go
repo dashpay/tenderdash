@@ -265,7 +265,6 @@ func (s *validatorSchedule) Increment(heights int64) error {
 							}
 							if cp.Version.ConsensusVersion == 0 {
 								//consensus version 0 had an issue where first proposer didn't propose
-								// TODO: double check if this is really needed
 								ps.ValidatorSet().IncProposerIndex(1)
 							}
 							s.ValidatorProposer = ps
