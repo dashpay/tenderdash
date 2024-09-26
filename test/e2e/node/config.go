@@ -47,7 +47,7 @@ func (cfg *Config) App() *kvstore.Config {
 		QuorumHashUpdate:        cfg.QuorumHashUpdate,
 		ChainLockUpdates:        cfg.ChainLockUpdates,
 		PrivValServerType:       cfg.PrivValServerType,
-		ConsenusVersionUpdates:  cfg.ConsensusVersionUpdates,
+		ConsensusVersionUpdates: cfg.ConsensusVersionUpdates,
 	}
 }
 

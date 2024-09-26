@@ -62,7 +62,7 @@ func NewApplication(cfg kvstore.Config, opts ...kvstore.OptFunc) (*Application, 
 		return nil, err
 	}
 
-	for h, ver := range cfg.ConsenusVersionUpdates {
+	for h, ver := range cfg.ConsensusVersionUpdates {
 		height, err := strconv.Atoi(h)
 		if err != nil {
 			return nil, fmt.Errorf("consensus_version_updates: failed to parse height %s: %w", h, err)
