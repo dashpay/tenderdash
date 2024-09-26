@@ -56,6 +56,13 @@ type Manifest struct {
 	// not specified are not changed.
 	ValidatorUpdates map[string]map[string]int64 `toml:"validator_update"`
 
+	// ConsensusVersionUpdates is a map of heights to consensus versions, and
+	// will be sent by the ABCI application as a consensus params update.
+	// For example, the following sets the consensus version to 1 at height 1000:
+	//
+	// [consensus_version_updates]
+	// 1000 = 1
+	ConsensusVersionUpdates map[string]int32 `toml:"consensus_version_updates"`
 	// ChainLockUpdates is a map of heights at which a new chain lock should be proposed
 	// The first number is the tendermint height, and the second is the
 	//
@@ -64,8 +71,6 @@ type Manifest struct {
 	// 1004 = 3451
 	// 1020 = 3454
 	// 1040 = 3500
-	//
-
 	ChainLockUpdates map[string]int64 `toml:"chainlock_updates"`
 
 	// Nodes specifies the network nodes. At least one node must be given.
