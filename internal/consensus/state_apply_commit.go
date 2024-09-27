@@ -116,8 +116,8 @@ func (c *ApplyCommitAction) RecordMetrics(stateData *StateData, height int64, bl
 
 	// Calculate validators that didn't sign
 
-	// we initialize with total validators power and count and then decrement as we find the validators
-	// who have not signed the precommit
+	// We initialize with total validators count and power, and then decrement as we find the validators
+	// who have signed the precommit
 	missingValidators := totalValidators
 	missingValidatorsPower := totalValidatorsPower
 	precommits := stateData.Votes.Precommits(stateData.CommitRound)
