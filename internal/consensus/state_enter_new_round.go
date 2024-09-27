@@ -66,18 +66,10 @@ func (c *EnterNewRoundAction) Execute(ctx context.Context, stateEvent StateEvent
 		"round", stateData.Round,
 		"step", stateData.Step)
 
-	// increment validators if necessary
-	validators := stateData.Validators
-	if stateData.Round < round {
-		validators = validators.Copy()
-		validators.IncrementProposerPriority(round - stateData.Round)
-	}
-
 	// Setup new round
 	// we don't fire newStep for this step,
 	// but we fire an event, so update the round step first
 	stateData.updateRoundStep(round, cstypes.RoundStepNewRound)
-	stateData.Validators = validators
 	if round == 0 {
 		// We've already reset these upon new height,
 		// and meanwhile we might have received a proposal

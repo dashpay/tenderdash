@@ -12,6 +12,8 @@ import (
 	dbm "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
+	psmocks "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer/mocks"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/evidence"
 	"github.com/dashpay/tenderdash/internal/evidence/mocks"
@@ -58,7 +60,7 @@ func TestEvidencePoolBasic(t *testing.T) {
 	blockStore.On("LoadBlockMeta", mock.AnythingOfType("int64")).Return(
 		&types.BlockMeta{Header: types.Header{Time: defaultEvidenceTime}},
 	)
-	stateStore.On("LoadValidators", mock.AnythingOfType("int64")).Return(valSet, nil)
+	stateStore.On("LoadValidators", mock.AnythingOfType("int64"), mock.Anything).Return(valSet, nil)
 	stateStore.On("Load").Return(createState(height+1, valSet), nil)
 
 	logger := log.NewTestingLogger(t)
@@ -108,6 +110,17 @@ func TestEvidencePoolBasic(t *testing.T) {
 	require.Equal(t, 1, len(evs))
 }
 
+func makeBlockMeta(height int64, time time.Time, vals *types.ValidatorSet) *types.BlockMeta {
+	return &types.BlockMeta{
+		Header: types.Header{
+			Height:            height,
+			Time:              time,
+			ProposerProTxHash: vals.Proposer().ProTxHash,
+			ValidatorsHash:    vals.Hash(),
+		},
+	}
+}
+
 // Tests inbound evidence for the right time and height
 func TestAddExpiredEvidence(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
@@ -115,20 +128,23 @@ func TestAddExpiredEvidence(t *testing.T) {
 
 	var (
 		quorumHash          = crypto.RandQuorumHash()
-		val                 = types.NewMockPVForQuorum(quorumHash)
+		privval             = types.NewMockPVForQuorum(quorumHash)
+		val                 = privval.ExtractIntoValidator(ctx, quorumHash)
+		valSet              = types.NewValidatorSet([]*types.Validator{val}, val.PubKey, btcjson.LLMQType_5_60, quorumHash, true)
 		height              = int64(30)
-		stateStore          = initializeValidatorState(ctx, t, val, height, btcjson.LLMQType_5_60, quorumHash)
+		stateStore          = initializeValidatorState(ctx, t, privval, height, btcjson.LLMQType_5_60, quorumHash)
 		evidenceDB          = dbm.NewMemDB()
 		blockStore          = &mocks.BlockStore{}
 		expiredEvidenceTime = time.Date(2018, 1, 1, 0, 0, 0, 0, time.UTC)
 		expiredHeight       = int64(2)
 	)
 
+	blockStore.On("Base").Return(int64(3))
 	blockStore.On("LoadBlockMeta", mock.AnythingOfType("int64")).Return(func(h int64) *types.BlockMeta {
 		if h == height || h == expiredHeight {
-			return &types.BlockMeta{Header: types.Header{Time: defaultEvidenceTime}}
+			return makeBlockMeta(h, defaultEvidenceTime, valSet)
 		}
-		return &types.BlockMeta{Header: types.Header{Time: expiredEvidenceTime}}
+		return makeBlockMeta(h, expiredEvidenceTime, valSet)
 	})
 
 	logger := log.NewNopLogger()
@@ -160,7 +176,7 @@ func TestAddExpiredEvidence(t *testing.T) {
 			defer cancel()
 
 			vals := pool.State().Validators
-			ev, err := types.NewMockDuplicateVoteEvidenceWithValidator(ctx, tc.evHeight, tc.evTime, val, evidenceChainID, vals.QuorumType, vals.QuorumHash)
+			ev, err := types.NewMockDuplicateVoteEvidenceWithValidator(ctx, tc.evHeight, tc.evTime, privval, evidenceChainID, vals.QuorumType, vals.QuorumHash)
 			require.NoError(t, err)
 			err = pool.AddEvidence(ctx, ev)
 			if tc.expErr {
@@ -408,7 +424,9 @@ func TestRecoverPendingEvidence(t *testing.T) {
 	state, err := stateStore.Load()
 	require.NoError(t, err)
 
-	blockStore, err := initializeBlockStore(dbm.NewMemDB(), state)
+	propSel := mockProposerSelector(t, val.ExtractIntoValidator(ctx, quorumHash))
+
+	blockStore, err := initializeBlockStore(dbm.NewMemDB(), state, propSel)
 	require.NoError(t, err)
 
 	logger := log.NewNopLogger()
@@ -524,7 +542,6 @@ func initializeValidatorState(
 	// create validator set and state
 	valSet := &types.ValidatorSet{
 		Validators:         []*types.Validator{validator},
-		Proposer:           validator,
 		ThresholdPublicKey: validator.PubKey,
 		QuorumType:         quorumType,
 		QuorumHash:         quorumHash,
@@ -536,12 +553,13 @@ func initializeValidatorState(
 
 // initializeBlockStore creates a block storage and populates it w/ a dummy
 // block at +height+.
-func initializeBlockStore(db dbm.DB, state sm.State) (*store.BlockStore, error) {
+func initializeBlockStore(db dbm.DB, state sm.State, propsel selectproposer.ProposerSelector) (*store.BlockStore, error) {
 	blockStore := store.NewBlockStore(db)
 
 	for i := int64(1); i <= state.LastBlockHeight; i++ {
 		lastCommit := makeCommit(i-1, state.Validators.QuorumHash)
-		block := state.MakeBlock(i, []types.Tx{}, lastCommit, nil, state.Validators.GetProposer().ProTxHash, 0)
+		prop := propsel.MustGetProposer(i, 0)
+		block := state.MakeBlock(i, []types.Tx{}, lastCommit, nil, prop.ProTxHash, 0)
 
 		block.Header.Time = defaultEvidenceTime.Add(time.Duration(i) * time.Minute)
 		block.Header.Version = version.Consensus{Block: version.BlockProtocol, App: 1}
@@ -573,16 +591,38 @@ func makeCommit(height int64, quorumHash []byte) *types.Commit {
 	)
 }
 
+func mockProposerSelector(t *testing.T, validator *types.Validator) selectproposer.ProposerSelector {
+	t.Helper()
+	propSel := psmocks.NewProposerSelector(t)
+	propSel.On("GetProposer", mock.Anything, mock.Anything).
+		Return(validator, nil).
+		Maybe()
+	propSel.On("MustGetProposer", mock.Anything, mock.Anything).
+		Return(validator).
+		Maybe()
+	propSel.On("UpdateHeightRound", mock.Anything, mock.Anything).
+		Return(nil).
+		Maybe()
+
+	return propSel
+}
+
 func defaultTestPool(ctx context.Context, t *testing.T, height int64) (*evidence.Pool, *types.MockPV, *eventbus.EventBus) {
 	t.Helper()
 	quorumHash := crypto.RandQuorumHash()
-	val := types.NewMockPVForQuorum(quorumHash)
+	privval := types.NewMockPVForQuorum(quorumHash)
+	val := privval.ExtractIntoValidator(ctx, quorumHash)
 
 	evidenceDB := dbm.NewMemDB()
-	stateStore := initializeValidatorState(ctx, t, val, height, btcjson.LLMQType_5_60, quorumHash)
+	stateStore := initializeValidatorState(ctx, t, privval, height, btcjson.LLMQType_5_60, quorumHash)
 	state, err := stateStore.Load()
 	require.NoError(t, err)
-	blockStore, err := initializeBlockStore(dbm.NewMemDB(), state)
+
+	propSel := mockProposerSelector(t, val)
+
+	require.NoError(t, err)
+
+	blockStore, err := initializeBlockStore(dbm.NewMemDB(), state, propSel)
 	require.NoError(t, err)
 
 	logger := log.NewNopLogger()
@@ -592,7 +632,7 @@ func defaultTestPool(ctx context.Context, t *testing.T, height int64) (*evidence
 
 	pool := evidence.NewPool(logger, evidenceDB, stateStore, blockStore, evidence.NopMetrics(), eventBus)
 	startPool(t, pool, stateStore)
-	return pool, val, eventBus
+	return pool, privval, eventBus
 }
 
 func createState(height int64, valSet *types.ValidatorSet) sm.State {

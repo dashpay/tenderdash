@@ -34,7 +34,7 @@ func (r *LightBlockRepository) Get(height uint64) (*types.LightBlock, error) {
 		return nil, nil
 	}
 
-	vals, err := r.stateStore.LoadValidators(h)
+	vals, err := r.stateStore.LoadValidators(h, r.blockStore)
 	if err != nil {
 		return nil, err
 	}

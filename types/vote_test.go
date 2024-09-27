@@ -236,7 +236,7 @@ func TestVoteVerifySignature(t *testing.T) {
 	testCases := []testCase{
 		{
 			name:        "correct",
-			modify:      func(v *tmproto.Vote) {},
+			modify:      func(_ *tmproto.Vote) {},
 			expectValid: true,
 		},
 		{
@@ -430,7 +430,7 @@ func TestIsVoteTypeValid(t *testing.T) {
 
 	for _, tt := range tc {
 		tt := tt
-		t.Run(tt.name, func(st *testing.T) {
+		t.Run(tt.name, func(_st *testing.T) {
 			if rs := IsVoteTypeValid(tt.in); rs != tt.out {
 				t.Errorf("got unexpected Vote type. Expected:\n%v\nGot:\n%v", rs, tt.out)
 			}
@@ -455,8 +455,6 @@ func TestVoteVerify(t *testing.T) {
 	vote := examplePrevote(t)
 	vote.ValidatorProTxHash = proTxHash
 
-	stateID := RandStateID()
-	stateID.Height = uint64(vote.Height - 1)
 	pubKey := bls12381.GenPrivKey().PubKey()
 	err = vote.Verify("test_chain_id", quorumType, quorumHash, pubKey, crypto.RandProTxHash())
 
@@ -531,7 +529,7 @@ func TestValidVotes(t *testing.T) {
 		vote         *Vote
 		malleateVote func(*Vote)
 	}{
-		{"good prevote", examplePrevote(t), func(v *Vote) {}},
+		{"good prevote", examplePrevote(t), func(_ *Vote) {}},
 		{"good precommit without vote extension", examplePrecommit(t), func(v *Vote) { v.VoteExtensions = nil }},
 		{
 			"good precommit with vote extension",

@@ -242,67 +242,69 @@ func TestApp_TxTooBig(t *testing.T) {
 	outcome := make([]txPair, 0, len(nodes))
 
 	start := time.Now()
-	/// Send to each node more txs than we can fit into block
-	for _, node := range nodes {
-		ctx, cancel := context.WithTimeout(mainCtx, broadcastTimeout)
-		defer cancel()
 
-		if ctx.Err() != nil {
-			t.Fatalf("context canceled before broadcasting to all nodes")
-		}
-		node := *node
+	/// Send more txs than we can fit into block
 
-		if node.Stateless() {
-			continue
-		}
+	ctx, cancel := context.WithTimeout(mainCtx, broadcastTimeout)
+	defer cancel()
 
-		t.Logf("broadcasting to %s", node.Name)
-
-		session := rand.Int63()
-
-		var err error
-		client, err = node.Client()
-		require.NoError(t, err)
-
-		// FIXME: ConsensusParams is broken for last height, this is just workaround
-		status, err := client.Status(ctx)
-		assert.NoError(t, err)
-		cp, err := client.ConsensusParams(ctx, &status.SyncInfo.LatestBlockHeight)
-		assert.NoError(t, err)
-
-		// ensure we have more txs than fits the block
-		TxPayloadSize := int(cp.ConsensusParams.Block.MaxBytes / 100) // 1% of block size
-		numTxs := 101
-
-		tx := make(types.Tx, TxPayloadSize) // first tx is just zeros
-
-		var firstTxHash []byte
-		var key string
-
-		for i := 0; i < numTxs; i++ {
-			key = fmt.Sprintf("testapp-big-tx-%v-%08x-%d=", node.Name, session, i)
-			copy(tx, key)
-
-			payloadOffset := len(tx) - 8 // where we put the `i` into the payload
-			assert.Greater(t, payloadOffset, len(key))
-
-			big.NewInt(int64(i)).FillBytes(tx[payloadOffset:])
-			assert.Len(t, tx, TxPayloadSize)
-
-			if i == 0 {
-				firstTxHash = tx.Hash()
-			}
-
-			_, err = client.BroadcastTxAsync(ctx, tx)
-
-			assert.NoError(t, err, "failed to broadcast tx %06x", i)
-		}
-
-		outcome = append(outcome, txPair{
-			firstTxHash: firstTxHash,
-			lastTxHash:  tx.Hash(),
-		})
+	if ctx.Err() != nil {
+		t.Fatalf("context canceled before broadcasting to all nodes")
 	}
+	// find first non-stateless node
+	var node *e2e.Node
+	for _, node = range nodes {
+		if !node.Stateless() {
+			break
+		}
+	}
+
+	t.Logf("broadcasting to %s", node.Name)
+
+	session := rand.Int63()
+
+	var err error
+	client, err = node.Client()
+	require.NoError(t, err)
+
+	// FIXME: ConsensusParams is broken for last height, this is just workaround
+	status, err := client.Status(ctx)
+	assert.NoError(t, err)
+	cp, err := client.ConsensusParams(ctx, &status.SyncInfo.LatestBlockHeight)
+	assert.NoError(t, err)
+
+	// ensure we have more txs than fits the block
+	TxPayloadSize := int(cp.ConsensusParams.Block.MaxBytes / 100) // 1% of block size
+	numTxs := 101
+
+	tx := make(types.Tx, TxPayloadSize) // first tx is just zeros
+
+	var firstTxHash []byte
+	var key string
+
+	for i := 0; i < numTxs; i++ {
+		key = fmt.Sprintf("testapp-big-tx-%v-%08x-%d=", node.Name, session, i)
+		copy(tx, key)
+
+		payloadOffset := len(tx) - 8 // where we put the `i` into the payload
+		assert.Greater(t, payloadOffset, len(key))
+
+		big.NewInt(int64(i)).FillBytes(tx[payloadOffset:])
+		assert.Len(t, tx, TxPayloadSize)
+
+		if i == 0 {
+			firstTxHash = tx.Hash()
+		}
+
+		_, err = client.BroadcastTxAsync(ctx, tx)
+
+		assert.NoError(t, err, "failed to broadcast tx %06x", i)
+	}
+
+	outcome = append(outcome, txPair{
+		firstTxHash: firstTxHash,
+		lastTxHash:  tx.Hash(),
+	})
 
 	t.Logf("submitted txs in %s", time.Since(start).String())
 

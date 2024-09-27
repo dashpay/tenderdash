@@ -9,6 +9,7 @@ import (
 
 	"github.com/dashpay/tenderdash/config"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
+	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/eventemitter"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -144,7 +145,12 @@ func (s *StateData) Save() error {
 }
 
 func (s *StateData) isProposer(proTxHash types.ProTxHash) bool {
-	return proTxHash != nil && bytes.Equal(s.Validators.GetProposer().ProTxHash.Bytes(), proTxHash.Bytes())
+	prop, err := s.ProposerSelector.GetProposer(s.Height, s.Round)
+	if err != nil {
+		s.logger.Error("error getting proposer", "err", err, "height", s.Height, "round", s.Round)
+		return false
+	}
+	return proTxHash != nil && bytes.Equal(prop.ProTxHash.Bytes(), proTxHash.Bytes())
 }
 
 func (s *StateData) isValidator(proTxHash types.ProTxHash) bool {
@@ -177,11 +183,17 @@ func (s *StateData) updateRoundStep(round int32, step cstypes.RoundStepType) {
 	}
 	s.Round = round
 	s.Step = step
+
+	if err := s.ProposerSelector.UpdateHeightRound(s.Height, round); err != nil {
+		s.logger.Error("error updating proposer scores",
+			"height", s.Height, "round", round,
+			"err", err)
+	}
 }
 
 // Updates State and increments height to match that of state.
 // The round becomes 0 and cs.Step becomes cstypes.RoundStepNewHeight.
-func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
+func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockStore selectproposer.BlockStore) {
 	if s.CommitRound > -1 && 0 < s.Height && s.Height != state.LastBlockHeight {
 		panic(fmt.Sprintf(
 			"updateToState() expected state height of %v but found %v",
@@ -221,7 +233,6 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 	}
 
 	// Reset fields based on state.
-	validators := state.Validators
 
 	switch {
 	case state.LastBlockHeight == 0: // Very first commit should be empty.
@@ -252,11 +263,31 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 		height = state.InitialHeight
 	}
 
-	s.logger.Trace("updating state height", "newHeight", height)
+	// state.Validators contain validator set at (state.LastBlockHeight+1, 0)
+	validators := state.Validators
 
-	// RoundState fields
-	s.updateHeight(height)
-	s.updateRoundStep(0, cstypes.RoundStepNewHeight)
+	if s.Validators == nil || !bytes.Equal(s.Validators.QuorumHash, validators.QuorumHash) {
+		s.logger.Info("Updating validators", "from", s.Validators.BasicInfoString(),
+			"to", validators.BasicInfoString())
+	}
+
+	s.Validators = validators
+	var err error
+
+	s.ProposerSelector, err = selectproposer.NewProposerSelector(
+		state.ConsensusParams,
+		s.Validators,
+		height,
+		0,
+		blockStore,
+		s.logger,
+	)
+	if err != nil {
+		s.logger.Error("error creating proposer selector", "height", height, "round", 0, "validators", s.Validators, "err", err)
+		panic(fmt.Sprintf("error creating proposer selector: %v", err))
+	}
+
+	s.logger.Trace("updating state height", "newHeight", height)
 
 	if s.CommitTime.IsZero() {
 		// "Now" makes it easier to sync up dev nodes.
@@ -265,12 +296,6 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 		s.StartTime = s.CommitTime
 	}
 
-	if s.Validators == nil || !bytes.Equal(s.Validators.QuorumHash, validators.QuorumHash) {
-		s.logger.Info("Updating validators", "from", s.Validators.BasicInfoString(),
-			"to", validators.BasicInfoString())
-	}
-
-	s.Validators = validators
 	s.Proposal = nil
 	s.ProposalReceiveTime = time.Time{}
 	s.ProposalBlock = nil
@@ -288,6 +313,10 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit) {
 	s.TriggeredTimeoutPrecommit = false
 
 	s.state = state
+
+	// RoundState fields
+	s.updateHeight(height)
+	s.updateRoundStep(0, cstypes.RoundStepNewHeight)
 }
 
 func (s *StateData) updateHeight(height int64) {

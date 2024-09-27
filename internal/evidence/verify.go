@@ -60,7 +60,7 @@ func (evpool *Pool) verify(ctx context.Context, evidence types.Evidence) error {
 	// apply the evidence-specific verification logic
 	switch ev := evidence.(type) {
 	case *types.DuplicateVoteEvidence:
-		valSet, err := evpool.stateDB.LoadValidators(evidence.Height())
+		valSet, err := evpool.stateDB.LoadValidators(evidence.Height(), evpool.blockStore)
 		if err != nil {
 			return err
 		}

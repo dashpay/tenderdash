@@ -576,7 +576,7 @@ func (evpool *Pool) processConsensusBuffer(ctx context.Context, state sm.State) 
 			)
 
 		case voteSet.VoteA.Height < state.LastBlockHeight:
-			valSet, dbErr := evpool.stateDB.LoadValidators(voteSet.VoteA.Height)
+			valSet, dbErr := evpool.stateDB.LoadValidators(voteSet.VoteA.Height, evpool.blockStore)
 			if dbErr != nil {
 				evpool.logger.Error("failed to load validator set for conflicting votes",
 					"height", voteSet.VoteA.Height, "err", err)
