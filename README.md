@@ -20,46 +20,34 @@ written in any programming language - and securely replicates it on many machine
 
 ## Background
 
-Tenderdash started as a fork of [Tendermint Core](https://www.github.com/tendermint/tendermint)
-which has been used in public environments such as the Cosmos Network. For Tendermint protocol
-details, refer to the [Tendermint Specification](./spec/README.md). For detailed analysis of the
-consensus protocol, including safety and liveness proofs, read the Tendermint paper, "[The latest
-gossip on BFT consensus](https://arxiv.org/abs/1807.04938)".
+Tenderdash started as a fork of the [Tendermint Core](https://www.github.com/tendermint/tendermint)
+project and has been used in public environments such as the Cosmos Network. Although based on
+Tendermint, Tenderdash differs from Tendermint through its use of Dash's [long-living masternode
+quorums (LLMQs)](https://github.com/dashpay/dips/blob/master/dip-0006.md) to support threshold
+signatures, quorum-based voting, and dynamic validator set rotation. These enhancements to support
+rapid transaction finality and maintain strong security guarantees make Tenderdash ideal for Dash
+Platform’s needs.
 
-### Tendermint documentation
-
-Complete documentation can be found on the [website](https://docs.tendermint.com/).
+For Tendermint protocol details, refer to the [Tendermint Specification](./spec/README.md). For a
+detailed analysis of the consensus protocol, including safety and liveness proofs, read the
+Tendermint paper, "[The latest gossip on BFT consensus](https://arxiv.org/abs/1807.04938)".
+Tendermint documentation can be found on [docs.tendermint.com](https://docs.tendermint.com/).
 
 ## Releases
 
-Please do not depend on master as your production branch. Use the
-[GitHub releases page](https://github.com/dashpay/tenderdash/releases) instead.
+Please do not depend on master as your production branch. Use the binaries provided on the [GitHub
+releases page](https://github.com/dashpay/tenderdash/releases) instead.
 
-More on how releases are conducted can be found [here](./RELEASES.md).
+## Install
 
-## Minimum requirements
+See the [install instructions](./docs/introduction/install.md). Make sure to meet the minimum
+requirements if installing from source.
+
+### Minimum requirements
 
 | Requirement | Notes            |
 |-------------|------------------|
 | Go version  | Go1.22 or higher |
-
-### Install
-
-See the [install instructions](./docs/introduction/install.md).
-
-### Quick Start
-
-- [Single node](./docs/introduction/quick-start.md)
-- [Local cluster using docker-compose](./docs/tools/docker-compose.md)
-- [Remote cluster using Terraform and Ansible](./docs/tools/terraform-and-ansible.md)
-
-## Contributing
-
-Before contributing to the project, please take a look at the [contributing
-guidelines](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md). You may also find it helpful to
-read the [Tendermint specifications](./spec/README.md), and familiarize yourself with the
-[Architectural Decision Records (ADRs)](./docs/architecture/README.md) and [Request For Comments
-(RFCs)](./docs/rfc/README.md).
 
 ## Versioning
 
@@ -76,8 +64,7 @@ these public APIs will be documented in the [CHANGELOG](./CHANGELOG.md).
 
 Because we are a small core team, we only ship patch updates, including security updates, to the
 most recent minor release and the second-most recent minor release. Consequently, we strongly
-recommend keeping Tenderdash up-to-date. Upgrading instructions can be found in
-[UPGRADING.md](./UPGRADING.md).
+recommend keeping Tenderdash up-to-date.
 
 ## Resources
 
@@ -100,6 +87,14 @@ recommend keeping Tenderdash up-to-date. Upgrading instructions can be found in
 - [The latest gossip on BFT consensus](https://arxiv.org/abs/1807.04938)
 - [Master's Thesis on Tendermint](https://atrium.lib.uoguelph.ca/xmlui/handle/10214/9769)
 - [Original Whitepaper: "Tendermint: Consensus Without Mining"](https://tendermint.com/static/docs/tendermint.pdf)
+
+## Contributing
+
+Before contributing to the project, please take a look at the [contributing
+guidelines](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md). You may also find it helpful to
+read the [Tendermint specifications](./spec/README.md), and familiarize yourself with the
+[Architectural Decision Records (ADRs)](./docs/architecture/README.md) and [Request For Comments
+(RFCs)](./docs/rfc/README.md).
 
 ## Join us
 
