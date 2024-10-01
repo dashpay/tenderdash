@@ -16,6 +16,10 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+// maxBlocks is the maximum number of blocks to fetch from the archive node.
+// Use to limit test run time.
+const maxBlocks = 500
+
 func init() {
 	// This can be used to manually specify a testnet manifest and/or node to
 	// run tests against. The testnet must have been started by the runner first.
@@ -122,6 +126,10 @@ func fetchBlockChain(ctx context.Context, t *testing.T) []*types.Block {
 
 	from := status.SyncInfo.EarliestBlockHeight
 	to := status.SyncInfo.LatestBlockHeight
+	// limit blocks to fetch to avoid long test times
+	if to-from > maxBlocks {
+		to = from + maxBlocks
+	}
 	blocks, ok := blocksCache[testnet.Name]
 	if !ok {
 		blocks = make([]*types.Block, 0, to-from+1)

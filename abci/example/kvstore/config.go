@@ -70,6 +70,8 @@ type Config struct {
 	ChainLockUpdates         map[string]string `toml:"chainlock_updates"`
 	PrivValServerType        string            `toml:"privval_server_type"`
 	InitAppInitialCoreHeight uint32            `toml:"init_app_core_chain_locked_height"`
+	// ConsensusVersionUpdates is a map of heights to consensus version ; ONLY SUPPORTED BY e2e.Application
+	ConsensusVersionUpdates map[string]int32 `toml:"consensus_version_updates"`
 }
 
 func DefaultConfig(dir string) Config {
