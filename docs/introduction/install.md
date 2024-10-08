@@ -8,7 +8,7 @@ order: 3
 
 Dashmate is a part of the Dash Platform and provides a comprehensive solution for installing the entire platform. We highly recommend using Dashmate for a seamless and straightforward installation process.
 
-For detailed instructions on how to set up a node using Dashmate, please refer to the official Dash documentation: [Set Up a Node](https://docs.dash.org/projects/platform/en/stable/docs/tutorials/setup-a-node.html).
+For detailed instructions on how to set up a node using Dashmate, please refer to the official Dash documentation: [Set Up a Node](https://docs.dash.org/en/stable/docs/user/network/dashmate/index.html).
 
 ## From Binary
 
