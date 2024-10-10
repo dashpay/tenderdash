@@ -446,7 +446,7 @@ func (cs *State) OnStart(ctx context.Context) error {
 				break LOOP
 
 			case !IsDataCorruptionError(err):
-				cs.logger.Error("error on catchup replay; proceeding to start state anyway", "err", err)
+				cs.logger.Warn("error on catchup replay; proceeding to start state anyway", "err", err)
 				break LOOP
 
 			case repairAttempted:
