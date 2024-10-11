@@ -1,6 +1,7 @@
 module github.com/dashpay/tenderdash
 
 go 1.22
+toolchain go1.23.2
 
 require (
 	github.com/BurntSushi/toml v1.3.2
@@ -52,7 +53,7 @@ require (
 	github.com/creachadair/taskgroup v0.3.2
 	github.com/go-pkgz/jrpc v0.2.0
 	github.com/google/go-cmp v0.6.0
-	github.com/vektra/mockery/v2 v2.41.0
+	github.com/vektra/mockery/v2 v2.46.2
 )
 
 require (
