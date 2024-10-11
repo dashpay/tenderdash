@@ -13,4 +13,4 @@ if ! mockery --version 2>/dev/null | grep $VERSION; then
   exit 1
 fi
 
-mockery --disable-version-string --case underscore --name "$@"
+mockery
