@@ -155,7 +155,6 @@ func TestDuplicateVoteEvidenceValidation(t *testing.T) {
 		}, true},
 	}
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			const height int64 = math.MaxInt64
 			vote1 := makeVote(ctx, t, val, chainID, math.MaxInt32, height, math.MaxInt32, 0x02, quorumType,
@@ -250,7 +249,6 @@ func TestEvidenceProto(t *testing.T) {
 		{"DuplicateVoteEvidence success", &DuplicateVoteEvidence{VoteA: v2, VoteB: v}, false, false},
 	}
 	for _, tt := range tests {
-		tt := tt
 		t.Run(tt.testName, func(t *testing.T) {
 			pb, err := EvidenceToProto(tt.evidence)
 			if tt.toProtoErr {
@@ -307,7 +305,6 @@ func TestEvidenceVectors(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		hash := tc.evList.Hash()
 		require.Equal(t, tc.expBytes, hex.EncodeToString(hash), tc.testName)
 	}

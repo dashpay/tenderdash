@@ -16,7 +16,7 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 )
 
-var jRPCRequestKey = struct{}{}
+type jRPCRequestKey struct{}
 
 // MockServer ...
 type MockServer interface {
@@ -144,7 +144,7 @@ func (s *JRPCServer) Start() {
 			return err
 		}
 		// put unmarshalled JRPC request into a context
-		ctx := context.WithValue(req.Context(), jRPCRequestKey, jReq)
+		ctx := context.WithValue(req.Context(), jRPCRequestKey{}, jReq)
 		return call.execute(w, req.WithContext(ctx))
 	}
 	s.httpSrv.Start()

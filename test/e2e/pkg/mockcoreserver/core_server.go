@@ -9,6 +9,7 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 
 	"github.com/dashpay/tenderdash/crypto"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/privval"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -69,7 +70,7 @@ func (c *MockCoreServer) QuorumInfo(ctx context.Context, cmd btcjson.QuorumCmd) 
 		panic(err)
 	}
 	return btcjson.QuorumInfoResult{
-		Height:          uint32(height),
+		Height:          tmmath.MustConvertUint32(height),
 		Type:            strconv.Itoa(int(c.LLMQType)),
 		QuorumHash:      quorumHash.String(),
 		Members:         members,

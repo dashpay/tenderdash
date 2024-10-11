@@ -10,6 +10,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmp2p "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 )
 
@@ -250,7 +251,7 @@ func NodeInfoFromProto(pb *tmp2p.NodeInfo) (NodeInfo, error) {
 	}
 
 	for _, ch := range pb.Channels {
-		dni.Channels.Append(uint16(ch))
+		dni.Channels.Append(tmmath.MustConvert[uint32, uint16](ch))
 	}
 
 	return dni, nil

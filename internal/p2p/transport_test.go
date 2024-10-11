@@ -502,7 +502,6 @@ func TestEndpoint_NodeAddress(t *testing.T) {
 		{p2p.Endpoint{Path: "path"}, p2p.NodeAddress{Path: "path"}},
 	}
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.endpoint.String(), func(t *testing.T) {
 			// Without NodeID.
 			expect := tc.expect
@@ -554,7 +553,6 @@ func TestEndpoint_String(t *testing.T) {
 		{p2p.Endpoint{Path: "foo"}, "/foo"},
 	}
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.expect, func(t *testing.T) {
 			require.Equal(t, tc.expect, tc.endpoint.String())
 		})

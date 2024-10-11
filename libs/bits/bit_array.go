@@ -66,10 +66,10 @@ func (bA *BitArray) GetIndex(i int) bool {
 }
 
 func (bA *BitArray) getIndex(i int) bool {
-	if i >= bA.Bits {
+	if i < 0 || i >= bA.Bits {
 		return false
 	}
-	return bA.Elems[i/64]&(uint64(1)<<uint(i%64)) > 0
+	return bA.Elems[i/64]&(uint64(1)<<(i%64)) > 0
 }
 
 // SetIndex sets the bit at index i within the bit array.
@@ -88,9 +88,9 @@ func (bA *BitArray) setIndex(i int, v bool) bool {
 		return false
 	}
 	if v {
-		bA.Elems[i/64] |= (uint64(1) << uint(i%64))
+		bA.Elems[i/64] |= (uint64(1) << (i % 64))
 	} else {
-		bA.Elems[i/64] &= ^(uint64(1) << uint(i%64))
+		bA.Elems[i/64] &= ^(uint64(1) << (i % 64))
 	}
 	return true
 }
@@ -243,9 +243,9 @@ func (bA *BitArray) IsFull() bool {
 	}
 
 	// Check that the last element has (lastElemBits) 1's
-	lastElemBits := (bA.Bits+63)%64 + 1
+	lastElemBits := tmmath.MustConvert[int, uint]((bA.Bits+63)%64 + 1)
 	lastElem := bA.Elems[len(bA.Elems)-1]
-	return (lastElem+1)&((uint64(1)<<uint(lastElemBits))-1) == 0
+	return (lastElem+1)&((uint64(1)<<lastElemBits)-1) == 0
 }
 
 // PickRandom returns a random index for a set bit in the bit array.
@@ -285,7 +285,7 @@ func (bA *BitArray) getTrueIndices() []int {
 			continue
 		}
 		for j := 0; j < 64; j++ {
-			if (elem & (uint64(1) << uint64(j))) > 0 {
+			if (elem & (uint64(1) << j)) > 0 {
 				trueIndices = append(trueIndices, curBit)
 			}
 			curBit++
@@ -293,9 +293,9 @@ func (bA *BitArray) getTrueIndices() []int {
 	}
 	// handle last element
 	lastElem := bA.Elems[numElems-1]
-	numFinalBits := bA.Bits - curBit
-	for i := 0; i < numFinalBits; i++ {
-		if (lastElem & (uint64(1) << uint64(i))) > 0 {
+	numFinalBits := tmmath.MustConvert[int, uint64](bA.Bits - curBit)
+	for i := uint64(0); i < numFinalBits; i++ {
+		if (lastElem & (uint64(1) << i)) > 0 {
 			trueIndices = append(trueIndices, curBit)
 		}
 		curBit++

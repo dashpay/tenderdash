@@ -27,10 +27,10 @@ const maxPingPongPacketSize = 1024 // bytes
 func createTestMConnection(logger log.Logger, conn net.Conn) *MConnection {
 	return createMConnectionWithCallbacks(logger, conn,
 		// onRecieve
-		func(ctx context.Context, chID ChannelID, msgBytes []byte) {
+		func(_ context.Context, _ ChannelID, _ []byte) {
 		},
 		// onError
-		func(ctx context.Context, r interface{}) {
+		func(_ context.Context, _ interface{}) {
 		})
 }
 
@@ -122,7 +122,7 @@ func TestMConnectionReceive(t *testing.T) {
 
 	receivedCh := make(chan []byte)
 	errorsCh := make(chan interface{})
-	onReceive := func(ctx context.Context, chID ChannelID, msgBytes []byte) {
+	onReceive := func(ctx context.Context, _ ChannelID, msgBytes []byte) {
 		select {
 		case receivedCh <- msgBytes:
 		case <-ctx.Done():
@@ -209,7 +209,7 @@ func TestMConnectionMultiplePongsInTheBeginning(t *testing.T) {
 
 	receivedCh := make(chan []byte)
 	errorsCh := make(chan interface{})
-	onReceive := func(ctx context.Context, chID ChannelID, msgBytes []byte) {
+	onReceive := func(ctx context.Context, _ ChannelID, msgBytes []byte) {
 		select {
 		case receivedCh <- msgBytes:
 		case <-ctx.Done():
@@ -268,7 +268,7 @@ func TestMConnectionMultiplePings(t *testing.T) {
 
 	receivedCh := make(chan []byte)
 	errorsCh := make(chan interface{})
-	onReceive := func(ctx context.Context, chID ChannelID, msgBytes []byte) {
+	onReceive := func(ctx context.Context, _ ChannelID, msgBytes []byte) {
 		select {
 		case receivedCh <- msgBytes:
 		case <-ctx.Done():
@@ -331,7 +331,7 @@ func TestMConnectionPingPongs(t *testing.T) {
 
 	receivedCh := make(chan []byte)
 	errorsCh := make(chan interface{})
-	onReceive := func(ctx context.Context, chID ChannelID, msgBytes []byte) {
+	onReceive := func(ctx context.Context, _ ChannelID, msgBytes []byte) {
 		select {
 		case receivedCh <- msgBytes:
 		case <-ctx.Done():
@@ -388,7 +388,7 @@ func TestMConnectionStopsAndReturnsError(t *testing.T) {
 
 	receivedCh := make(chan []byte)
 	errorsCh := make(chan interface{})
-	onReceive := func(ctx context.Context, chID ChannelID, msgBytes []byte) {
+	onReceive := func(ctx context.Context, _ ChannelID, msgBytes []byte) {
 		select {
 		case receivedCh <- msgBytes:
 		case <-ctx.Done():
@@ -447,7 +447,7 @@ func newClientAndServerConnsForReadErrors(
 	// create server conn with 1 channel
 	// it fires on chOnErr when there's an error
 	serverLogger := logger.With("module", "server")
-	onError = func(ctx context.Context, r interface{}) {
+	onError = func(ctx context.Context, _ interface{}) {
 		select {
 		case <-ctx.Done():
 		case chOnErr <- struct{}{}:
@@ -515,7 +515,7 @@ func TestMConnectionReadErrorLongMessage(t *testing.T) {
 	mconnClient, mconnServer := newClientAndServerConnsForReadErrors(ctx, t, chOnErr)
 	t.Cleanup(waitAll(mconnClient, mconnServer))
 
-	mconnServer.onReceive = func(ctx context.Context, chID ChannelID, msgBytes []byte) {
+	mconnServer.onReceive = func(ctx context.Context, _ ChannelID, _ []byte) {
 		select {
 		case <-ctx.Done():
 		case chOnRcv <- struct{}{}:
@@ -604,8 +604,6 @@ func TestConnVectors(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
-
 		pm := mustWrapPacket(tc.msg)
 		bz, err := pm.Marshal()
 		require.NoError(t, err, tc.testName)
@@ -628,7 +626,7 @@ func TestMConnectionChannelOverflow(t *testing.T) {
 	mconnClient, mconnServer := newClientAndServerConnsForReadErrors(ctx, t, chOnErr)
 	t.Cleanup(waitAll(mconnClient, mconnServer))
 
-	mconnServer.onReceive = func(ctx context.Context, chID ChannelID, msgBytes []byte) {
+	mconnServer.onReceive = func(ctx context.Context, _ ChannelID, _ []byte) {
 		select {
 		case <-ctx.Done():
 		case chOnRcv <- struct{}{}:

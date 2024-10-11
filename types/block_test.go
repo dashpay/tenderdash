@@ -327,7 +327,6 @@ func TestCommitValidateBasic(t *testing.T) {
 		{"Incorrect round", func(com *Commit) { com.Round = -100 }, true},
 	}
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -893,7 +892,6 @@ func TestHeaderProto(t *testing.T) {
 	}
 
 	for _, tt := range tc {
-		tt := tt
 		t.Run(tt.msg, func(t *testing.T) {
 			pb := tt.h1.ToProto()
 			h, err := HeaderFromProto(pb)
@@ -1262,8 +1260,6 @@ func TestHeader_ValidateBasic(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.header.ValidateBasic()
 			if tc.expectErr {
@@ -1377,8 +1373,6 @@ func TestCommit_ValidateBasic(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
-
 		t.Run(tc.name, func(t *testing.T) {
 			err := tc.commit.ValidateBasic()
 			if tc.expectErr {
