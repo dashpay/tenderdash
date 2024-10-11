@@ -77,8 +77,8 @@ recommend keeping Tenderdash up-to-date.
 Before contributing to the project, please take a look at the [contributing
 guidelines](CONTRIBUTING.md) and the [style guide](STYLE_GUIDE.md). You may also find it helpful to
 read the [Tendermint specifications](./spec/README.md), and familiarize yourself with the
-[Architectural Decision Records (ADRs)](./docs/architecture/README.md) and [Request For Comments
-(RFCs)](./docs/rfc/README.md).
+[Architectural Decision Records (ADRs)](./docs/architecture/) and [Request For Comments
+(RFCs)](./docs/rfc/).
 
 ## Join us
 
