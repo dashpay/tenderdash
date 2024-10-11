@@ -106,7 +106,7 @@ func TestPartSetHeaderValidateBasic(t *testing.T) {
 		malleatePartSetHeader func(*PartSetHeader)
 		expectErr             bool
 	}{
-		{"Good PartSet", func(psHeader *PartSetHeader) {}, false},
+		{"Good PartSet", func(_ *PartSetHeader) {}, false},
 		{"Invalid Hash", func(psHeader *PartSetHeader) { psHeader.Hash = make([]byte, 1) }, true},
 	}
 	for _, tc := range testCases {

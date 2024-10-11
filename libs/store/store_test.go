@@ -50,7 +50,7 @@ func TestInMemStore(t *testing.T) {
 	}
 	// Update test
 	{
-		updateFun := func(key string, it *int) {
+		updateFun := func(_ string, it *int) {
 			*it++
 		}
 		store.Update(pairs[2].key, updateFun)

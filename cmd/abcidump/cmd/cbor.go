@@ -35,7 +35,7 @@ func (cborCmd *CborCmd) Command() *cobra.Command {
 		Short:   "Decode a CBOR-encoded message",
 		PreRunE: cborCmd.PreRunE,
 		RunE:    cborCmd.RunE,
-		PostRun: func(cmd *cobra.Command, args []string) {
+		PostRun: func(_ *cobra.Command, _ []string) {
 			if cborCmd.Input != nil {
 				if closer, ok := cborCmd.Input.(io.Closer); ok {
 					closer.Close()
