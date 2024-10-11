@@ -1,5 +1,5 @@
 ---
-with-expecter: true
+with-expecter: false
 dir: "{{.InterfaceDir}}/mocks"
 mockname: "{{.InterfaceName}}"
 outpkg: "mocks"
@@ -44,6 +44,7 @@ packages:
       BlockStore:
       EvidencePool:
       Executor:
+      Store:
   github.com/dashpay/tenderdash/internal/state/indexer:
     interfaces:
       EventSink:

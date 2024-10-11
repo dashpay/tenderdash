@@ -14,47 +14,9 @@ type Gossiper struct {
 	mock.Mock
 }
 
-type Gossiper_Expecter struct {
-	mock *mock.Mock
-}
-
-func (_m *Gossiper) EXPECT() *Gossiper_Expecter {
-	return &Gossiper_Expecter{mock: &_m.Mock}
-}
-
 // GossipBlockPartsForCatchup provides a mock function with given fields: ctx, rs, prs
 func (_m *Gossiper) GossipBlockPartsForCatchup(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState) {
 	_m.Called(ctx, rs, prs)
-}
-
-// Gossiper_GossipBlockPartsForCatchup_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GossipBlockPartsForCatchup'
-type Gossiper_GossipBlockPartsForCatchup_Call struct {
-	*mock.Call
-}
-
-// GossipBlockPartsForCatchup is a helper method to define mock.On call
-//   - ctx context.Context
-//   - rs types.RoundState
-//   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipBlockPartsForCatchup(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipBlockPartsForCatchup_Call {
-	return &Gossiper_GossipBlockPartsForCatchup_Call{Call: _e.mock.On("GossipBlockPartsForCatchup", ctx, rs, prs)}
-}
-
-func (_c *Gossiper_GossipBlockPartsForCatchup_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipBlockPartsForCatchup_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
-	})
-	return _c
-}
-
-func (_c *Gossiper_GossipBlockPartsForCatchup_Call) Return() *Gossiper_GossipBlockPartsForCatchup_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *Gossiper_GossipBlockPartsForCatchup_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipBlockPartsForCatchup_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // GossipCommit provides a mock function with given fields: ctx, rs, prs
@@ -62,69 +24,9 @@ func (_m *Gossiper) GossipCommit(ctx context.Context, rs types.RoundState, prs *
 	_m.Called(ctx, rs, prs)
 }
 
-// Gossiper_GossipCommit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GossipCommit'
-type Gossiper_GossipCommit_Call struct {
-	*mock.Call
-}
-
-// GossipCommit is a helper method to define mock.On call
-//   - ctx context.Context
-//   - rs types.RoundState
-//   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipCommit(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipCommit_Call {
-	return &Gossiper_GossipCommit_Call{Call: _e.mock.On("GossipCommit", ctx, rs, prs)}
-}
-
-func (_c *Gossiper_GossipCommit_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipCommit_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
-	})
-	return _c
-}
-
-func (_c *Gossiper_GossipCommit_Call) Return() *Gossiper_GossipCommit_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *Gossiper_GossipCommit_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipCommit_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // GossipProposal provides a mock function with given fields: ctx, rs, prs
 func (_m *Gossiper) GossipProposal(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState) {
 	_m.Called(ctx, rs, prs)
-}
-
-// Gossiper_GossipProposal_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GossipProposal'
-type Gossiper_GossipProposal_Call struct {
-	*mock.Call
-}
-
-// GossipProposal is a helper method to define mock.On call
-//   - ctx context.Context
-//   - rs types.RoundState
-//   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipProposal(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipProposal_Call {
-	return &Gossiper_GossipProposal_Call{Call: _e.mock.On("GossipProposal", ctx, rs, prs)}
-}
-
-func (_c *Gossiper_GossipProposal_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipProposal_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
-	})
-	return _c
-}
-
-func (_c *Gossiper_GossipProposal_Call) Return() *Gossiper_GossipProposal_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *Gossiper_GossipProposal_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipProposal_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // GossipProposalBlockParts provides a mock function with given fields: ctx, rs, prs
@@ -132,104 +34,14 @@ func (_m *Gossiper) GossipProposalBlockParts(ctx context.Context, rs types.Round
 	_m.Called(ctx, rs, prs)
 }
 
-// Gossiper_GossipProposalBlockParts_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GossipProposalBlockParts'
-type Gossiper_GossipProposalBlockParts_Call struct {
-	*mock.Call
-}
-
-// GossipProposalBlockParts is a helper method to define mock.On call
-//   - ctx context.Context
-//   - rs types.RoundState
-//   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipProposalBlockParts(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipProposalBlockParts_Call {
-	return &Gossiper_GossipProposalBlockParts_Call{Call: _e.mock.On("GossipProposalBlockParts", ctx, rs, prs)}
-}
-
-func (_c *Gossiper_GossipProposalBlockParts_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipProposalBlockParts_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
-	})
-	return _c
-}
-
-func (_c *Gossiper_GossipProposalBlockParts_Call) Return() *Gossiper_GossipProposalBlockParts_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *Gossiper_GossipProposalBlockParts_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipProposalBlockParts_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // GossipVote provides a mock function with given fields: ctx, rs, prs
 func (_m *Gossiper) GossipVote(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState) {
 	_m.Called(ctx, rs, prs)
 }
 
-// Gossiper_GossipVote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GossipVote'
-type Gossiper_GossipVote_Call struct {
-	*mock.Call
-}
-
-// GossipVote is a helper method to define mock.On call
-//   - ctx context.Context
-//   - rs types.RoundState
-//   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipVote(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipVote_Call {
-	return &Gossiper_GossipVote_Call{Call: _e.mock.On("GossipVote", ctx, rs, prs)}
-}
-
-func (_c *Gossiper_GossipVote_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipVote_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
-	})
-	return _c
-}
-
-func (_c *Gossiper_GossipVote_Call) Return() *Gossiper_GossipVote_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *Gossiper_GossipVote_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipVote_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // GossipVoteSetMaj23 provides a mock function with given fields: ctx, rs, prs
 func (_m *Gossiper) GossipVoteSetMaj23(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState) {
 	_m.Called(ctx, rs, prs)
-}
-
-// Gossiper_GossipVoteSetMaj23_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GossipVoteSetMaj23'
-type Gossiper_GossipVoteSetMaj23_Call struct {
-	*mock.Call
-}
-
-// GossipVoteSetMaj23 is a helper method to define mock.On call
-//   - ctx context.Context
-//   - rs types.RoundState
-//   - prs *types.PeerRoundState
-func (_e *Gossiper_Expecter) GossipVoteSetMaj23(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipVoteSetMaj23_Call {
-	return &Gossiper_GossipVoteSetMaj23_Call{Call: _e.mock.On("GossipVoteSetMaj23", ctx, rs, prs)}
-}
-
-func (_c *Gossiper_GossipVoteSetMaj23_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipVoteSetMaj23_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
-	})
-	return _c
-}
-
-func (_c *Gossiper_GossipVoteSetMaj23_Call) Return() *Gossiper_GossipVoteSetMaj23_Call {
-	_c.Call.Return()
-	return _c
-}
-
-func (_c *Gossiper_GossipVoteSetMaj23_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipVoteSetMaj23_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // NewGossiper creates a new instance of Gossiper. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

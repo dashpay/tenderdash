@@ -20,14 +20,6 @@ type Connection struct {
 	mock.Mock
 }
 
-type Connection_Expecter struct {
-	mock *mock.Mock
-}
-
-func (_m *Connection) EXPECT() *Connection_Expecter {
-	return &Connection_Expecter{mock: &_m.Mock}
-}
-
 // Close provides a mock function with given fields:
 func (_m *Connection) Close() error {
 	ret := _m.Called()
@@ -44,33 +36,6 @@ func (_m *Connection) Close() error {
 	}
 
 	return r0
-}
-
-// Connection_Close_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Close'
-type Connection_Close_Call struct {
-	*mock.Call
-}
-
-// Close is a helper method to define mock.On call
-func (_e *Connection_Expecter) Close() *Connection_Close_Call {
-	return &Connection_Close_Call{Call: _e.mock.On("Close")}
-}
-
-func (_c *Connection_Close_Call) Run(run func()) *Connection_Close_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *Connection_Close_Call) Return(_a0 error) *Connection_Close_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *Connection_Close_Call) RunAndReturn(run func() error) *Connection_Close_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // Handshake provides a mock function with given fields: _a0, _a1, _a2, _a3
@@ -110,37 +75,6 @@ func (_m *Connection) Handshake(_a0 context.Context, _a1 time.Duration, _a2 type
 	return r0, r1, r2
 }
 
-// Connection_Handshake_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Handshake'
-type Connection_Handshake_Call struct {
-	*mock.Call
-}
-
-// Handshake is a helper method to define mock.On call
-//   - _a0 context.Context
-//   - _a1 time.Duration
-//   - _a2 types.NodeInfo
-//   - _a3 crypto.PrivKey
-func (_e *Connection_Expecter) Handshake(_a0 interface{}, _a1 interface{}, _a2 interface{}, _a3 interface{}) *Connection_Handshake_Call {
-	return &Connection_Handshake_Call{Call: _e.mock.On("Handshake", _a0, _a1, _a2, _a3)}
-}
-
-func (_c *Connection_Handshake_Call) Run(run func(_a0 context.Context, _a1 time.Duration, _a2 types.NodeInfo, _a3 crypto.PrivKey)) *Connection_Handshake_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(time.Duration), args[2].(types.NodeInfo), args[3].(crypto.PrivKey))
-	})
-	return _c
-}
-
-func (_c *Connection_Handshake_Call) Return(_a0 types.NodeInfo, _a1 crypto.PubKey, _a2 error) *Connection_Handshake_Call {
-	_c.Call.Return(_a0, _a1, _a2)
-	return _c
-}
-
-func (_c *Connection_Handshake_Call) RunAndReturn(run func(context.Context, time.Duration, types.NodeInfo, crypto.PrivKey) (types.NodeInfo, crypto.PubKey, error)) *Connection_Handshake_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // LocalEndpoint provides a mock function with given fields:
 func (_m *Connection) LocalEndpoint() p2p.Endpoint {
 	ret := _m.Called()
@@ -157,33 +91,6 @@ func (_m *Connection) LocalEndpoint() p2p.Endpoint {
 	}
 
 	return r0
-}
-
-// Connection_LocalEndpoint_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LocalEndpoint'
-type Connection_LocalEndpoint_Call struct {
-	*mock.Call
-}
-
-// LocalEndpoint is a helper method to define mock.On call
-func (_e *Connection_Expecter) LocalEndpoint() *Connection_LocalEndpoint_Call {
-	return &Connection_LocalEndpoint_Call{Call: _e.mock.On("LocalEndpoint")}
-}
-
-func (_c *Connection_LocalEndpoint_Call) Run(run func()) *Connection_LocalEndpoint_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *Connection_LocalEndpoint_Call) Return(_a0 p2p.Endpoint) *Connection_LocalEndpoint_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *Connection_LocalEndpoint_Call) RunAndReturn(run func() p2p.Endpoint) *Connection_LocalEndpoint_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // ReceiveMessage provides a mock function with given fields: _a0
@@ -223,34 +130,6 @@ func (_m *Connection) ReceiveMessage(_a0 context.Context) (p2p.ChannelID, []byte
 	return r0, r1, r2
 }
 
-// Connection_ReceiveMessage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ReceiveMessage'
-type Connection_ReceiveMessage_Call struct {
-	*mock.Call
-}
-
-// ReceiveMessage is a helper method to define mock.On call
-//   - _a0 context.Context
-func (_e *Connection_Expecter) ReceiveMessage(_a0 interface{}) *Connection_ReceiveMessage_Call {
-	return &Connection_ReceiveMessage_Call{Call: _e.mock.On("ReceiveMessage", _a0)}
-}
-
-func (_c *Connection_ReceiveMessage_Call) Run(run func(_a0 context.Context)) *Connection_ReceiveMessage_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
-	})
-	return _c
-}
-
-func (_c *Connection_ReceiveMessage_Call) Return(_a0 p2p.ChannelID, _a1 []byte, _a2 error) *Connection_ReceiveMessage_Call {
-	_c.Call.Return(_a0, _a1, _a2)
-	return _c
-}
-
-func (_c *Connection_ReceiveMessage_Call) RunAndReturn(run func(context.Context) (p2p.ChannelID, []byte, error)) *Connection_ReceiveMessage_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // RemoteEndpoint provides a mock function with given fields:
 func (_m *Connection) RemoteEndpoint() p2p.Endpoint {
 	ret := _m.Called()
@@ -267,33 +146,6 @@ func (_m *Connection) RemoteEndpoint() p2p.Endpoint {
 	}
 
 	return r0
-}
-
-// Connection_RemoteEndpoint_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoteEndpoint'
-type Connection_RemoteEndpoint_Call struct {
-	*mock.Call
-}
-
-// RemoteEndpoint is a helper method to define mock.On call
-func (_e *Connection_Expecter) RemoteEndpoint() *Connection_RemoteEndpoint_Call {
-	return &Connection_RemoteEndpoint_Call{Call: _e.mock.On("RemoteEndpoint")}
-}
-
-func (_c *Connection_RemoteEndpoint_Call) Run(run func()) *Connection_RemoteEndpoint_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *Connection_RemoteEndpoint_Call) Return(_a0 p2p.Endpoint) *Connection_RemoteEndpoint_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *Connection_RemoteEndpoint_Call) RunAndReturn(run func() p2p.Endpoint) *Connection_RemoteEndpoint_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // SendMessage provides a mock function with given fields: _a0, _a1, _a2
@@ -314,36 +166,6 @@ func (_m *Connection) SendMessage(_a0 context.Context, _a1 p2p.ChannelID, _a2 []
 	return r0
 }
 
-// Connection_SendMessage_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SendMessage'
-type Connection_SendMessage_Call struct {
-	*mock.Call
-}
-
-// SendMessage is a helper method to define mock.On call
-//   - _a0 context.Context
-//   - _a1 p2p.ChannelID
-//   - _a2 []byte
-func (_e *Connection_Expecter) SendMessage(_a0 interface{}, _a1 interface{}, _a2 interface{}) *Connection_SendMessage_Call {
-	return &Connection_SendMessage_Call{Call: _e.mock.On("SendMessage", _a0, _a1, _a2)}
-}
-
-func (_c *Connection_SendMessage_Call) Run(run func(_a0 context.Context, _a1 p2p.ChannelID, _a2 []byte)) *Connection_SendMessage_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(p2p.ChannelID), args[2].([]byte))
-	})
-	return _c
-}
-
-func (_c *Connection_SendMessage_Call) Return(_a0 error) *Connection_SendMessage_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *Connection_SendMessage_Call) RunAndReturn(run func(context.Context, p2p.ChannelID, []byte) error) *Connection_SendMessage_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // String provides a mock function with given fields:
 func (_m *Connection) String() string {
 	ret := _m.Called()
@@ -360,33 +182,6 @@ func (_m *Connection) String() string {
 	}
 
 	return r0
-}
-
-// Connection_String_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'String'
-type Connection_String_Call struct {
-	*mock.Call
-}
-
-// String is a helper method to define mock.On call
-func (_e *Connection_Expecter) String() *Connection_String_Call {
-	return &Connection_String_Call{Call: _e.mock.On("String")}
-}
-
-func (_c *Connection_String_Call) Run(run func()) *Connection_String_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *Connection_String_Call) Return(_a0 string) *Connection_String_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *Connection_String_Call) RunAndReturn(run func() string) *Connection_String_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // NewConnection creates a new instance of Connection. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

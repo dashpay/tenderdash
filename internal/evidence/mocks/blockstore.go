@@ -12,14 +12,6 @@ type BlockStore struct {
 	mock.Mock
 }
 
-type BlockStore_Expecter struct {
-	mock *mock.Mock
-}
-
-func (_m *BlockStore) EXPECT() *BlockStore_Expecter {
-	return &BlockStore_Expecter{mock: &_m.Mock}
-}
-
 // Base provides a mock function with given fields:
 func (_m *BlockStore) Base() int64 {
 	ret := _m.Called()
@@ -38,33 +30,6 @@ func (_m *BlockStore) Base() int64 {
 	return r0
 }
 
-// BlockStore_Base_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Base'
-type BlockStore_Base_Call struct {
-	*mock.Call
-}
-
-// Base is a helper method to define mock.On call
-func (_e *BlockStore_Expecter) Base() *BlockStore_Base_Call {
-	return &BlockStore_Base_Call{Call: _e.mock.On("Base")}
-}
-
-func (_c *BlockStore_Base_Call) Run(run func()) *BlockStore_Base_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *BlockStore_Base_Call) Return(_a0 int64) *BlockStore_Base_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *BlockStore_Base_Call) RunAndReturn(run func() int64) *BlockStore_Base_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // Height provides a mock function with given fields:
 func (_m *BlockStore) Height() int64 {
 	ret := _m.Called()
@@ -81,33 +46,6 @@ func (_m *BlockStore) Height() int64 {
 	}
 
 	return r0
-}
-
-// BlockStore_Height_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Height'
-type BlockStore_Height_Call struct {
-	*mock.Call
-}
-
-// Height is a helper method to define mock.On call
-func (_e *BlockStore_Expecter) Height() *BlockStore_Height_Call {
-	return &BlockStore_Height_Call{Call: _e.mock.On("Height")}
-}
-
-func (_c *BlockStore_Height_Call) Run(run func()) *BlockStore_Height_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *BlockStore_Height_Call) Return(_a0 int64) *BlockStore_Height_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *BlockStore_Height_Call) RunAndReturn(run func() int64) *BlockStore_Height_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // LoadBlockCommit provides a mock function with given fields: height
@@ -130,34 +68,6 @@ func (_m *BlockStore) LoadBlockCommit(height int64) *types.Commit {
 	return r0
 }
 
-// BlockStore_LoadBlockCommit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LoadBlockCommit'
-type BlockStore_LoadBlockCommit_Call struct {
-	*mock.Call
-}
-
-// LoadBlockCommit is a helper method to define mock.On call
-//   - height int64
-func (_e *BlockStore_Expecter) LoadBlockCommit(height interface{}) *BlockStore_LoadBlockCommit_Call {
-	return &BlockStore_LoadBlockCommit_Call{Call: _e.mock.On("LoadBlockCommit", height)}
-}
-
-func (_c *BlockStore_LoadBlockCommit_Call) Run(run func(height int64)) *BlockStore_LoadBlockCommit_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
-	})
-	return _c
-}
-
-func (_c *BlockStore_LoadBlockCommit_Call) Return(_a0 *types.Commit) *BlockStore_LoadBlockCommit_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *BlockStore_LoadBlockCommit_Call) RunAndReturn(run func(int64) *types.Commit) *BlockStore_LoadBlockCommit_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // LoadBlockMeta provides a mock function with given fields: height
 func (_m *BlockStore) LoadBlockMeta(height int64) *types.BlockMeta {
 	ret := _m.Called(height)
@@ -176,34 +86,6 @@ func (_m *BlockStore) LoadBlockMeta(height int64) *types.BlockMeta {
 	}
 
 	return r0
-}
-
-// BlockStore_LoadBlockMeta_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LoadBlockMeta'
-type BlockStore_LoadBlockMeta_Call struct {
-	*mock.Call
-}
-
-// LoadBlockMeta is a helper method to define mock.On call
-//   - height int64
-func (_e *BlockStore_Expecter) LoadBlockMeta(height interface{}) *BlockStore_LoadBlockMeta_Call {
-	return &BlockStore_LoadBlockMeta_Call{Call: _e.mock.On("LoadBlockMeta", height)}
-}
-
-func (_c *BlockStore_LoadBlockMeta_Call) Run(run func(height int64)) *BlockStore_LoadBlockMeta_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
-	})
-	return _c
-}
-
-func (_c *BlockStore_LoadBlockMeta_Call) Return(_a0 *types.BlockMeta) *BlockStore_LoadBlockMeta_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *BlockStore_LoadBlockMeta_Call) RunAndReturn(run func(int64) *types.BlockMeta) *BlockStore_LoadBlockMeta_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // NewBlockStore creates a new instance of BlockStore. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

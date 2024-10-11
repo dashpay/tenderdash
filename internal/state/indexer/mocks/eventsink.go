@@ -20,14 +20,6 @@ type EventSink struct {
 	mock.Mock
 }
 
-type EventSink_Expecter struct {
-	mock *mock.Mock
-}
-
-func (_m *EventSink) EXPECT() *EventSink_Expecter {
-	return &EventSink_Expecter{mock: &_m.Mock}
-}
-
 // GetTxByHash provides a mock function with given fields: _a0
 func (_m *EventSink) GetTxByHash(_a0 []byte) (*types.TxResult, error) {
 	ret := _m.Called(_a0)
@@ -58,34 +50,6 @@ func (_m *EventSink) GetTxByHash(_a0 []byte) (*types.TxResult, error) {
 	return r0, r1
 }
 
-// EventSink_GetTxByHash_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetTxByHash'
-type EventSink_GetTxByHash_Call struct {
-	*mock.Call
-}
-
-// GetTxByHash is a helper method to define mock.On call
-//   - _a0 []byte
-func (_e *EventSink_Expecter) GetTxByHash(_a0 interface{}) *EventSink_GetTxByHash_Call {
-	return &EventSink_GetTxByHash_Call{Call: _e.mock.On("GetTxByHash", _a0)}
-}
-
-func (_c *EventSink_GetTxByHash_Call) Run(run func(_a0 []byte)) *EventSink_GetTxByHash_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]byte))
-	})
-	return _c
-}
-
-func (_c *EventSink_GetTxByHash_Call) Return(_a0 *types.TxResult, _a1 error) *EventSink_GetTxByHash_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *EventSink_GetTxByHash_Call) RunAndReturn(run func([]byte) (*types.TxResult, error)) *EventSink_GetTxByHash_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // HasBlock provides a mock function with given fields: _a0
 func (_m *EventSink) HasBlock(_a0 int64) (bool, error) {
 	ret := _m.Called(_a0)
@@ -114,34 +78,6 @@ func (_m *EventSink) HasBlock(_a0 int64) (bool, error) {
 	return r0, r1
 }
 
-// EventSink_HasBlock_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'HasBlock'
-type EventSink_HasBlock_Call struct {
-	*mock.Call
-}
-
-// HasBlock is a helper method to define mock.On call
-//   - _a0 int64
-func (_e *EventSink_Expecter) HasBlock(_a0 interface{}) *EventSink_HasBlock_Call {
-	return &EventSink_HasBlock_Call{Call: _e.mock.On("HasBlock", _a0)}
-}
-
-func (_c *EventSink_HasBlock_Call) Run(run func(_a0 int64)) *EventSink_HasBlock_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
-	})
-	return _c
-}
-
-func (_c *EventSink_HasBlock_Call) Return(_a0 bool, _a1 error) *EventSink_HasBlock_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *EventSink_HasBlock_Call) RunAndReturn(run func(int64) (bool, error)) *EventSink_HasBlock_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // IndexBlockEvents provides a mock function with given fields: _a0
 func (_m *EventSink) IndexBlockEvents(_a0 tenderdashtypes.EventDataNewBlockHeader) error {
 	ret := _m.Called(_a0)
@@ -160,34 +96,6 @@ func (_m *EventSink) IndexBlockEvents(_a0 tenderdashtypes.EventDataNewBlockHeade
 	return r0
 }
 
-// EventSink_IndexBlockEvents_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IndexBlockEvents'
-type EventSink_IndexBlockEvents_Call struct {
-	*mock.Call
-}
-
-// IndexBlockEvents is a helper method to define mock.On call
-//   - _a0 tenderdashtypes.EventDataNewBlockHeader
-func (_e *EventSink_Expecter) IndexBlockEvents(_a0 interface{}) *EventSink_IndexBlockEvents_Call {
-	return &EventSink_IndexBlockEvents_Call{Call: _e.mock.On("IndexBlockEvents", _a0)}
-}
-
-func (_c *EventSink_IndexBlockEvents_Call) Run(run func(_a0 tenderdashtypes.EventDataNewBlockHeader)) *EventSink_IndexBlockEvents_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(tenderdashtypes.EventDataNewBlockHeader))
-	})
-	return _c
-}
-
-func (_c *EventSink_IndexBlockEvents_Call) Return(_a0 error) *EventSink_IndexBlockEvents_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *EventSink_IndexBlockEvents_Call) RunAndReturn(run func(tenderdashtypes.EventDataNewBlockHeader) error) *EventSink_IndexBlockEvents_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // IndexTxEvents provides a mock function with given fields: _a0
 func (_m *EventSink) IndexTxEvents(_a0 []*types.TxResult) error {
 	ret := _m.Called(_a0)
@@ -204,34 +112,6 @@ func (_m *EventSink) IndexTxEvents(_a0 []*types.TxResult) error {
 	}
 
 	return r0
-}
-
-// EventSink_IndexTxEvents_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IndexTxEvents'
-type EventSink_IndexTxEvents_Call struct {
-	*mock.Call
-}
-
-// IndexTxEvents is a helper method to define mock.On call
-//   - _a0 []*types.TxResult
-func (_e *EventSink_Expecter) IndexTxEvents(_a0 interface{}) *EventSink_IndexTxEvents_Call {
-	return &EventSink_IndexTxEvents_Call{Call: _e.mock.On("IndexTxEvents", _a0)}
-}
-
-func (_c *EventSink_IndexTxEvents_Call) Run(run func(_a0 []*types.TxResult)) *EventSink_IndexTxEvents_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]*types.TxResult))
-	})
-	return _c
-}
-
-func (_c *EventSink_IndexTxEvents_Call) Return(_a0 error) *EventSink_IndexTxEvents_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *EventSink_IndexTxEvents_Call) RunAndReturn(run func([]*types.TxResult) error) *EventSink_IndexTxEvents_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // SearchBlockEvents provides a mock function with given fields: _a0, _a1
@@ -264,35 +144,6 @@ func (_m *EventSink) SearchBlockEvents(_a0 context.Context, _a1 *query.Query) ([
 	return r0, r1
 }
 
-// EventSink_SearchBlockEvents_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SearchBlockEvents'
-type EventSink_SearchBlockEvents_Call struct {
-	*mock.Call
-}
-
-// SearchBlockEvents is a helper method to define mock.On call
-//   - _a0 context.Context
-//   - _a1 *query.Query
-func (_e *EventSink_Expecter) SearchBlockEvents(_a0 interface{}, _a1 interface{}) *EventSink_SearchBlockEvents_Call {
-	return &EventSink_SearchBlockEvents_Call{Call: _e.mock.On("SearchBlockEvents", _a0, _a1)}
-}
-
-func (_c *EventSink_SearchBlockEvents_Call) Run(run func(_a0 context.Context, _a1 *query.Query)) *EventSink_SearchBlockEvents_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*query.Query))
-	})
-	return _c
-}
-
-func (_c *EventSink_SearchBlockEvents_Call) Return(_a0 []int64, _a1 error) *EventSink_SearchBlockEvents_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *EventSink_SearchBlockEvents_Call) RunAndReturn(run func(context.Context, *query.Query) ([]int64, error)) *EventSink_SearchBlockEvents_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // SearchTxEvents provides a mock function with given fields: _a0, _a1
 func (_m *EventSink) SearchTxEvents(_a0 context.Context, _a1 *query.Query) ([]*types.TxResult, error) {
 	ret := _m.Called(_a0, _a1)
@@ -323,35 +174,6 @@ func (_m *EventSink) SearchTxEvents(_a0 context.Context, _a1 *query.Query) ([]*t
 	return r0, r1
 }
 
-// EventSink_SearchTxEvents_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'SearchTxEvents'
-type EventSink_SearchTxEvents_Call struct {
-	*mock.Call
-}
-
-// SearchTxEvents is a helper method to define mock.On call
-//   - _a0 context.Context
-//   - _a1 *query.Query
-func (_e *EventSink_Expecter) SearchTxEvents(_a0 interface{}, _a1 interface{}) *EventSink_SearchTxEvents_Call {
-	return &EventSink_SearchTxEvents_Call{Call: _e.mock.On("SearchTxEvents", _a0, _a1)}
-}
-
-func (_c *EventSink_SearchTxEvents_Call) Run(run func(_a0 context.Context, _a1 *query.Query)) *EventSink_SearchTxEvents_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*query.Query))
-	})
-	return _c
-}
-
-func (_c *EventSink_SearchTxEvents_Call) Return(_a0 []*types.TxResult, _a1 error) *EventSink_SearchTxEvents_Call {
-	_c.Call.Return(_a0, _a1)
-	return _c
-}
-
-func (_c *EventSink_SearchTxEvents_Call) RunAndReturn(run func(context.Context, *query.Query) ([]*types.TxResult, error)) *EventSink_SearchTxEvents_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // Stop provides a mock function with given fields:
 func (_m *EventSink) Stop() error {
 	ret := _m.Called()
@@ -370,33 +192,6 @@ func (_m *EventSink) Stop() error {
 	return r0
 }
 
-// EventSink_Stop_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Stop'
-type EventSink_Stop_Call struct {
-	*mock.Call
-}
-
-// Stop is a helper method to define mock.On call
-func (_e *EventSink_Expecter) Stop() *EventSink_Stop_Call {
-	return &EventSink_Stop_Call{Call: _e.mock.On("Stop")}
-}
-
-func (_c *EventSink_Stop_Call) Run(run func()) *EventSink_Stop_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *EventSink_Stop_Call) Return(_a0 error) *EventSink_Stop_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *EventSink_Stop_Call) RunAndReturn(run func() error) *EventSink_Stop_Call {
-	_c.Call.Return(run)
-	return _c
-}
-
 // Type provides a mock function with given fields:
 func (_m *EventSink) Type() indexer.EventSinkType {
 	ret := _m.Called()
@@ -413,33 +208,6 @@ func (_m *EventSink) Type() indexer.EventSinkType {
 	}
 
 	return r0
-}
-
-// EventSink_Type_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Type'
-type EventSink_Type_Call struct {
-	*mock.Call
-}
-
-// Type is a helper method to define mock.On call
-func (_e *EventSink_Expecter) Type() *EventSink_Type_Call {
-	return &EventSink_Type_Call{Call: _e.mock.On("Type")}
-}
-
-func (_c *EventSink_Type_Call) Run(run func()) *EventSink_Type_Call {
-	_c.Call.Run(func(args mock.Arguments) {
-		run()
-	})
-	return _c
-}
-
-func (_c *EventSink_Type_Call) Return(_a0 indexer.EventSinkType) *EventSink_Type_Call {
-	_c.Call.Return(_a0)
-	return _c
-}
-
-func (_c *EventSink_Type_Call) RunAndReturn(run func() indexer.EventSinkType) *EventSink_Type_Call {
-	_c.Call.Return(run)
-	return _c
 }
 
 // NewEventSink creates a new instance of EventSink. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
