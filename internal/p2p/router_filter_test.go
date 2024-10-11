@@ -22,7 +22,7 @@ func TestConnectionFiltering(t *testing.T) {
 		logger:      logger,
 		connTracker: newConnTracker(1, time.Second),
 		options: RouterOptions{
-			FilterPeerByIP: func(_ context.Context, _ net.IP, port uint16) error {
+			FilterPeerByIP: func(_ context.Context, _ net.IP, _ uint16) error {
 				filterByIPCount++
 				return errors.New("mock")
 			},

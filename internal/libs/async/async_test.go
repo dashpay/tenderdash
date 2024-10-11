@@ -107,13 +107,13 @@ func TestParallelRecover(t *testing.T) {
 
 	// Create tasks.
 	var tasks = []Task{
-		func(i int) (res interface{}, abort bool, err error) {
+		func(_ int) (res interface{}, abort bool, err error) {
 			return 0, false, nil
 		},
-		func(i int) (res interface{}, abort bool, err error) {
+		func(_ int) (res interface{}, abort bool, err error) {
 			return 1, false, errors.New("some error")
 		},
-		func(i int) (res interface{}, abort bool, err error) {
+		func(_ int) (res interface{}, abort bool, err error) {
 			panic(2)
 		},
 	}

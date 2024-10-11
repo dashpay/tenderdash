@@ -26,7 +26,7 @@ func MakeResetCommand(conf *config.Config, logger log.Logger) *cobra.Command {
 	resetBlocksCmd := &cobra.Command{
 		Use:   "blockchain",
 		Short: "Removes all blocks, state, transactions and evidence stored by the tendermint node",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return ResetState(conf.DBDir(), logger)
 		},
 	}
@@ -34,7 +34,7 @@ func MakeResetCommand(conf *config.Config, logger log.Logger) *cobra.Command {
 	resetPeersCmd := &cobra.Command{
 		Use:   "peers",
 		Short: "Removes all peer addresses",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return ResetPeerStore(conf.DBDir())
 		},
 	}
@@ -44,7 +44,7 @@ func MakeResetCommand(conf *config.Config, logger log.Logger) *cobra.Command {
 		Short: "esets private validator signer state",
 		Long: `Resets private validator signer state.
 Only use in testing. This can cause the node to double sign`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return ResetFilePV(conf.PrivValidator.KeyFile(), conf.PrivValidator.StateFile(), logger, keyType)
 		},
 	}
@@ -54,7 +54,7 @@ Only use in testing. This can cause the node to double sign`,
 		Short: "Removes all tendermint data including signing state",
 		Long: `Removes all tendermint data including signing state.
 Only use in testing. This can cause the node to double sign`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			return ResetAll(conf.DBDir(), conf.PrivValidator.KeyFile(),
 				conf.PrivValidator.StateFile(), logger, keyType)
 		},

@@ -15,7 +15,7 @@ var VersionCmd *cobra.Command = func() *cobra.Command {
 		Use:   "version",
 		Short: "Show version info",
 
-		Run: func(cmd *cobra.Command, args []string) {
+		Run: func(cmd *cobra.Command, _ []string) {
 			cmd.Println(version.TMCoreSemVer)
 			if verbose {
 				cmd.Println("Go version: " + runtime.Version())

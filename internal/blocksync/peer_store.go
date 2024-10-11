@@ -156,7 +156,7 @@ func (p *InMemPeerStore) updateMaxHeight() {
 
 // TODO with fixed worker pool size this condition is not needed anymore
 func peerNumPendingCond(val int32, op string) store.QueryFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer PeerData) bool {
+	return func(_ types.NodeID, peer PeerData) bool {
 		switch op {
 		case "<":
 			return peer.numPending < val
@@ -168,20 +168,20 @@ func peerNumPendingCond(val int32, op string) store.QueryFunc[types.NodeID, Peer
 }
 
 func heightBetweenPeerHeightRange(height int64) store.QueryFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer PeerData) bool {
+	return func(_ types.NodeID, peer PeerData) bool {
 		return height >= peer.base && height <= peer.height
 	}
 }
 
 func transferRateNotZeroAndLessMinRate(minRate int64) store.QueryFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer PeerData) bool {
+	return func(_ types.NodeID, peer PeerData) bool {
 		curRate := peer.recvMonitor.CurrentTransferRate()
 		return curRate != 0 && curRate < minRate
 	}
 }
 
 func ignoreTimedOutPeers(minRate int64) store.QueryFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer PeerData) bool {
+	return func(_ types.NodeID, peer PeerData) bool {
 		curRate := peer.recvMonitor.CurrentTransferRate()
 		if curRate == 0 {
 			return true
@@ -216,7 +216,7 @@ func AddNumPending(val int32) store.UpdateFunc[types.NodeID, PeerData] {
 
 // UpdateMonitor adds a block size value to the peer monitor if numPending is greater than zero
 func UpdateMonitor(recvSize int) store.UpdateFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer *PeerData) {
+	return func(_ types.NodeID, peer *PeerData) {
 		if peer.numPending > 0 {
 			peer.recvMonitor.Update(recvSize)
 		}
@@ -225,7 +225,7 @@ func UpdateMonitor(recvSize int) store.UpdateFunc[types.NodeID, PeerData] {
 
 // ResetMonitor replaces a peer monitor on a new one if numPending is zero
 func ResetMonitor() store.UpdateFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer *PeerData) {
+	return func(_ types.NodeID, peer *PeerData) {
 		if peer.numPending == 0 {
 			peer.recvMonitor = newPeerMonitor(peer.startAt)
 		}

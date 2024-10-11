@@ -206,7 +206,7 @@ func TestTransport_Endpoints(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	withTransports(ctx, t, func(ctx context.Context, t *testing.T, makeTransport transportFactory) {
+	withTransports(ctx, t, func(_ context.Context, t *testing.T, makeTransport transportFactory) {
 		a := makeTransport(t)
 		b := makeTransport(t)
 
@@ -238,7 +238,7 @@ func TestTransport_Protocols(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	withTransports(ctx, t, func(ctx context.Context, t *testing.T, makeTransport transportFactory) {
+	withTransports(ctx, t, func(_ context.Context, t *testing.T, makeTransport transportFactory) {
 		a := makeTransport(t)
 		protocols := a.Protocols()
 		endpoint, err := a.Endpoint()
@@ -254,7 +254,7 @@ func TestTransport_String(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	withTransports(ctx, t, func(ctx context.Context, t *testing.T, makeTransport transportFactory) {
+	withTransports(ctx, t, func(_ context.Context, t *testing.T, makeTransport transportFactory) {
 		a := makeTransport(t)
 		require.NotEmpty(t, a.String())
 	})

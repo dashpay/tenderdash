@@ -319,7 +319,7 @@ func (bs *BlockStore) PruneBlocks(height int64) (uint64, error) {
 	}
 
 	// when removing the block meta, use the hash to remove the hash key at the same time
-	removeBlockHash := func(key, value []byte, batch dbm.Batch) error {
+	removeBlockHash := func(_, value []byte, batch dbm.Batch) error {
 		// unmarshal block meta
 		var pbbm = new(tmproto.BlockMeta)
 		err := proto.Unmarshal(value, pbbm)

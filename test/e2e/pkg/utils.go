@@ -76,7 +76,7 @@ func initValidator(iter *llmq.Iter, quorumHash crypto.QuorumHash, handlers ...in
 }
 
 func updateProTxHash() initValidatorFunc {
-	return func(node *Node, proTxHash crypto.ProTxHash, qks crypto.QuorumKeys) error {
+	return func(node *Node, proTxHash crypto.ProTxHash, _ crypto.QuorumKeys) error {
 		node.ProTxHash = proTxHash
 		fmt.Printf("Setting validator %s proTxHash to %s\n", node.Name, node.ProTxHash.ShortString())
 		return nil
@@ -84,7 +84,7 @@ func updateProTxHash() initValidatorFunc {
 }
 
 func updateGenesisValidators(testnet *Testnet) initValidatorFunc {
-	return func(node *Node, proTxHash crypto.ProTxHash, qks crypto.QuorumKeys) error {
+	return func(node *Node, _ crypto.ProTxHash, qks crypto.QuorumKeys) error {
 		vu, err := node.validatorUpdate(qks.PubKey)
 		if err != nil {
 			return err
@@ -105,7 +105,7 @@ func updatePrivvalUpdateHeights(height int, quorumHash crypto.QuorumHash) initNo
 }
 
 func updateValidatorUpdate(valUpdate ValidatorsMap) initValidatorFunc {
-	return func(node *Node, proTxHash crypto.ProTxHash, qks crypto.QuorumKeys) error {
+	return func(node *Node, _ crypto.ProTxHash, qks crypto.QuorumKeys) error {
 		vu, err := node.validatorUpdate(qks.PubKey)
 		if err != nil {
 			return err
@@ -129,7 +129,7 @@ func initAnyNode(thresholdPublicKey crypto.PubKey, quorumHash crypto.QuorumHash)
 }
 
 func printInitValidatorInfo(height int) initValidatorFunc {
-	return func(node *Node, proTxHash crypto.ProTxHash, qks crypto.QuorumKeys) error {
+	return func(node *Node, _ crypto.ProTxHash, qks crypto.QuorumKeys) error {
 		if height == 0 {
 			fmt.Printf("Set validator %s/%X (at genesis) pubkey to %X\n", node.Name,
 				node.ProTxHash, qks.PubKey.Bytes())
