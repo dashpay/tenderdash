@@ -5,10 +5,7 @@ package mocks
 import (
 	context "context"
 
-	conn "github.com/dashpay/tenderdash/internal/p2p/conn"
-
 	crypto "github.com/dashpay/tenderdash/crypto"
-
 	mock "github.com/stretchr/testify/mock"
 
 	p2p "github.com/dashpay/tenderdash/internal/p2p"
@@ -97,23 +94,23 @@ func (_m *Connection) LocalEndpoint() p2p.Endpoint {
 }
 
 // ReceiveMessage provides a mock function with given fields: _a0
-func (_m *Connection) ReceiveMessage(_a0 context.Context) (conn.ChannelID, []byte, error) {
+func (_m *Connection) ReceiveMessage(_a0 context.Context) (p2p.ChannelID, []byte, error) {
 	ret := _m.Called(_a0)
 
 	if len(ret) == 0 {
 		panic("no return value specified for ReceiveMessage")
 	}
 
-	var r0 conn.ChannelID
+	var r0 p2p.ChannelID
 	var r1 []byte
 	var r2 error
-	if rf, ok := ret.Get(0).(func(context.Context) (conn.ChannelID, []byte, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) (p2p.ChannelID, []byte, error)); ok {
 		return rf(_a0)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) conn.ChannelID); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) p2p.ChannelID); ok {
 		r0 = rf(_a0)
 	} else {
-		r0 = ret.Get(0).(conn.ChannelID)
+		r0 = ret.Get(0).(p2p.ChannelID)
 	}
 
 	if rf, ok := ret.Get(1).(func(context.Context) []byte); ok {
@@ -152,7 +149,7 @@ func (_m *Connection) RemoteEndpoint() p2p.Endpoint {
 }
 
 // SendMessage provides a mock function with given fields: _a0, _a1, _a2
-func (_m *Connection) SendMessage(_a0 context.Context, _a1 conn.ChannelID, _a2 []byte) error {
+func (_m *Connection) SendMessage(_a0 context.Context, _a1 p2p.ChannelID, _a2 []byte) error {
 	ret := _m.Called(_a0, _a1, _a2)
 
 	if len(ret) == 0 {
@@ -160,7 +157,7 @@ func (_m *Connection) SendMessage(_a0 context.Context, _a1 conn.ChannelID, _a2 [
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, conn.ChannelID, []byte) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, p2p.ChannelID, []byte) error); ok {
 		r0 = rf(_a0, _a1, _a2)
 	} else {
 		r0 = ret.Error(0)

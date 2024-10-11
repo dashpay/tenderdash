@@ -68,7 +68,7 @@ func (_m *BlockClient) GetSyncStatus(ctx context.Context) error {
 }
 
 // Send provides a mock function with given fields: ctx, msg
-func (_m *BlockClient) Send(ctx context.Context, msg interface{}) error {
+func (_m *BlockClient) Send(ctx context.Context, msg any) error {
 	ret := _m.Called(ctx, msg)
 
 	if len(ret) == 0 {
@@ -76,7 +76,7 @@ func (_m *BlockClient) Send(ctx context.Context, msg interface{}) error {
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, interface{}) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, any) error); ok {
 		r0 = rf(ctx, msg)
 	} else {
 		r0 = ret.Error(0)
