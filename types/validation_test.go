@@ -114,7 +114,6 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.description, func(t *testing.T) {
 			err := vset.VerifyCommit(tc.chainID, tc.blockID, tc.height, tc.commit)
 			if tc.expErr {

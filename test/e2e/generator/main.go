@@ -52,7 +52,7 @@ func NewCLI() (*CLI, error) {
 		Short:         "End-to-end testnet generator",
 		SilenceUsage:  true,
 		SilenceErrors: true, // we'll output them ourselves in Run()
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			configPreset, err := cmd.Flags().GetString("preset")
 			if err != nil {
 				return err

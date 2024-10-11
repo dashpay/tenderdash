@@ -639,7 +639,6 @@ func Migrate(ctx context.Context, storeName string, db dbm.DB) error {
 	}).Limit(runtime.NumCPU())
 
 	for _, key := range keys {
-		key := key
 		start(func() error {
 			if err := ctx.Err(); err != nil {
 				return err

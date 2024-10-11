@@ -48,7 +48,6 @@ func compactGoLevelDBs(rootDir string, logger log.Logger) {
 	wg := sync.WaitGroup{}
 
 	for _, dbName := range dbNames {
-		dbName := dbName
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

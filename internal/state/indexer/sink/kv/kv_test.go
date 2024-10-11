@@ -142,7 +142,6 @@ func TestBlockFuncs(t *testing.T) {
 	}
 
 	for name, tc := range testCases {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -243,7 +242,6 @@ func TestTxSearchDeprecatedIndexing(t *testing.T) {
 	ctx := context.Background()
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.q, func(t *testing.T) {
 			results, err := indexer.SearchTxEvents(ctx, query.MustCompile(tc.q))
 			require.NoError(t, err)

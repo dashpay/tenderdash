@@ -248,8 +248,8 @@ func initValidation() func(ld *blsLLMQData) error {
 			return err
 		}
 		pk := bls12381.PubKey(ld.pks[0].Serialize())
-		if err != nil {
-			return err
+		if len(pk) == 0 {
+			return fmt.Errorf("public key is empty")
 		}
 		if !thresholdPubKey.Equals(pk) {
 			return fmt.Errorf(

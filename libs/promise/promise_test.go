@@ -22,13 +22,13 @@ func TestPromise(t *testing.T) {
 		wantErr string
 	}{
 		{
-			exec: func(resolve func(data data), reject func(err error)) {
+			exec: func(resolve func(data data), _ func(err error)) {
 				resolve(data{value: 10})
 			},
 			wantVal: 10,
 		},
 		{
-			exec: func(resolve func(data data), reject func(err error)) {
+			exec: func(_ func(data data), reject func(err error)) {
 				reject(errors.New("reject"))
 			},
 			wantErr: "reject",

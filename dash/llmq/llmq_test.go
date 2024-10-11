@@ -184,7 +184,6 @@ func TestLLMQ(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		tc := tc
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
 			t.Parallel()
 			llmqData := tc.llmqDataGetter()

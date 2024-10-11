@@ -44,7 +44,6 @@ func TestWorkerPool_Basic(t *testing.T) {
 		},
 	}
 	for i, tc := range testCases {
-		tc := tc
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()
@@ -103,7 +102,7 @@ func TestWorkerPool_Send(t *testing.T) {
 	}{
 		{
 			wantErr: context.Canceled.Error(),
-			stopFn: func(ctx context.Context, cancel func(), _ *WorkerPool) {
+			stopFn: func(_ context.Context, cancel func(), _ *WorkerPool) {
 				cancel()
 			},
 		},
@@ -146,13 +145,13 @@ func TestWorkerPool_Receive(t *testing.T) {
 		wantErr string
 	}{
 		{
-			stopFn: func(ctx context.Context, cancel func(), wp *WorkerPool) {
+			stopFn: func(_ context.Context, cancel func(), _ *WorkerPool) {
 				cancel()
 			},
 			wantErr: context.Canceled.Error(),
 		},
 		{
-			stopFn: func(ctx context.Context, cancel func(), wp *WorkerPool) {
+			stopFn: func(ctx context.Context, _ func(), wp *WorkerPool) {
 				wp.Stop(ctx)
 			},
 			wantErr: ErrWorkerPoolStopped.Error(),
@@ -253,7 +252,7 @@ func consumeResult(ctx context.Context, wp *WorkerPool, num int) ([]Result, erro
 func generateJobs(n int) []*Job {
 	jobs := make([]*Job, n)
 	for i := 0; i < n; i++ {
-		jobs[i] = NewJob(func(ctx context.Context) Result {
+		jobs[i] = NewJob(func(_ context.Context) Result {
 			return Result{Value: n}
 		})
 	}

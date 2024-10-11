@@ -425,8 +425,6 @@ func TestReactor_SnapshotsRequest(t *testing.T) {
 	defer cancel()
 
 	for name, tc := range testcases {
-		tc := tc
-
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()

@@ -873,7 +873,6 @@ func TestClientMethodCallsAdvanced(t *testing.T) {
 				)
 
 				for page := 1; page <= pages; page++ {
-					page := page
 					result, err := c.TxSearch(ctx, "tx.height >= 1", false, &page, &perPage, "asc")
 					require.NoError(t, err)
 					if page < pages {

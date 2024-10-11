@@ -196,7 +196,6 @@ func BenchmarkLoadValidators(b *testing.B) {
 	b.ResetTimer()
 
 	for i := 10; i < 10000000000; i *= 10 { // 10, 100, 1000, ...
-		i := i
 		err = stateStore.Save(makeRandomStateFromValidatorSet(state.Validators,
 			int64(i)-1, state.LastHeightValidatorsChanged, blockStore))
 		if err != nil {
@@ -258,7 +257,6 @@ func TestPruneStates(t *testing.T) {
 		"prune across checkpoint":    {99900, 100002, 100002, false, 100000, 99995},
 	}
 	for name, tc := range testcases {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			db := dbm.NewMemDB()
 

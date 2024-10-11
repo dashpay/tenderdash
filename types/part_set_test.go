@@ -110,7 +110,6 @@ func TestPartSetHeaderValidateBasic(t *testing.T) {
 		{"Invalid Hash", func(psHeader *PartSetHeader) { psHeader.Hash = make([]byte, 1) }, true},
 	}
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			data := tmrand.Bytes(testPartSize * 100)
 			ps := NewPartSetFromData(data, testPartSize)
@@ -143,7 +142,6 @@ func TestPartValidateBasic(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			data := tmrand.Bytes(testPartSize * 100)
 			ps := NewPartSetFromData(data, testPartSize)

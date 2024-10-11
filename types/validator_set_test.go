@@ -202,7 +202,6 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			err := tc.vals.ValidateBasic()
 			if tc.err {
@@ -851,7 +850,6 @@ func BenchmarkValidatorSet_VerifyCommit_Ed25519(b *testing.B) {
 	defer cancel()
 
 	for _, n := range []int{1, 8, 64, 1024} {
-		n := n
 		var (
 			chainID = "test_chain_id"
 			h       = int64(3)

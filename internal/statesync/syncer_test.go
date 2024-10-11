@@ -603,7 +603,6 @@ func (suite *SyncerTestSuite) TestApplyChunksResults() {
 	}
 
 	for name, tc := range testCases {
-		tc := tc
 		suite.Run(name, func() {
 			suite.SetupTest() // reset
 			ctx, cancel := context.WithCancel(suite.ctx)
@@ -616,8 +615,7 @@ func (suite *SyncerTestSuite) TestApplyChunksResults() {
 
 			fetchStartTime := time.Now()
 
-			c := &chunk{Height: 1, Version: 1, ID: []byte{0}, Chunk: body}
-			chunks.Enqueue(c.ID)
+			chunks.Enqueue([]byte{0})
 
 			for _, resp := range tc.resps {
 				suite.conn.
@@ -805,7 +803,6 @@ func (suite *SyncerTestSuite) TestApplyChunksRejectSenders() {
 	defer cancel()
 
 	for name, tc := range testCases {
-		tc := tc
 		suite.Run(name, func() {
 			for _, peerSnapshot := range peerSnapshots {
 				for _, s := range peerSnapshot.snapshot {

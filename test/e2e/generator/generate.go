@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -129,8 +130,8 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 		TxSize:           opt["txSize"].(int),
 
 		// Tenderdash specific settings
-		GenesisCoreChainLockedHeight: uint32(opt["initialCoreChainLockedHeight"].(int)),
-		InitAppCoreChainLockedHeight: uint32(opt["initAppCoreChainLockedHeight"].(int)),
+		GenesisCoreChainLockedHeight: tmmath.MustConvertUint32(opt["initialCoreChainLockedHeight"].(int)),
+		InitAppCoreChainLockedHeight: tmmath.MustConvertUint32(opt["initAppCoreChainLockedHeight"].(int)),
 		ChainLockUpdates:             map[string]int64{},
 	}
 
@@ -316,9 +317,9 @@ func generateNode(
 		Database:         nodeDatabases.Choose(r),
 		PrivvalProtocol:  nodePrivvalProtocols.Choose(r),
 		StateSync:        e2e.StateSyncDisabled,
-		PersistInterval:  ptrUint64(uint64(nodePersistIntervals.Choose(r).(int))),
-		SnapshotInterval: uint64(nodeSnapshotIntervals.Choose(r).(int)),
-		RetainBlocks:     uint64(nodeRetainBlocks.Choose(r).(int)),
+		PersistInterval:  ptrUint64(tmmath.MustConvertUint64(nodePersistIntervals.Choose(r).(int))),
+		SnapshotInterval: tmmath.MustConvertUint64(nodeSnapshotIntervals.Choose(r).(int)),
+		RetainBlocks:     tmmath.MustConvertUint64(nodeRetainBlocks.Choose(r).(int)),
 		Perturb:          nodePerturbations.Choose(r),
 	}
 

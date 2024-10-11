@@ -28,7 +28,6 @@ var testTransports = map[string]transportFactory{}
 func withTransports(ctx context.Context, t *testing.T, tester func(context.Context, *testing.T, transportFactory)) {
 	t.Helper()
 	for name, transportFactory := range testTransports {
-		transportFactory := transportFactory
 		t.Run(name, func(t *testing.T) {
 			t.Cleanup(leaktest.Check(t))
 			tctx, cancel := context.WithCancel(ctx)
@@ -126,7 +125,6 @@ func TestTransport_DialEndpoints(t *testing.T) {
 		// Tests for networked endpoints (with IP).
 		if len(endpoint.IP) > 0 && endpoint.Protocol != p2p.MemoryProtocol {
 			for _, tc := range ipTestCases {
-				tc := tc
 				t.Run(tc.ip.String(), func(t *testing.T) {
 					e := endpoint
 					require.NotNil(t, e)
@@ -586,7 +584,6 @@ func TestEndpoint_Validate(t *testing.T) {
 		{p2p.Endpoint{Protocol: "tcp", Port: 8080, Path: "path"}, false},
 	}
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.endpoint.String(), func(t *testing.T) {
 			err := tc.endpoint.Validate()
 			if tc.expectValid {

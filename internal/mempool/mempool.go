@@ -776,7 +776,6 @@ func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
 		g, start := taskgroup.New(nil).Limit(2 * runtime.NumCPU())
 
 		for _, wtx := range wtxs {
-			wtx := wtx
 			start(func() error {
 				if err := ctx.Err(); err != nil {
 					txmp.logger.Trace("recheck txs task canceled", "err", err, "tx", wtx.hash.String())

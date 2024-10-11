@@ -318,7 +318,6 @@ func TestRouter_AcceptPeers(t *testing.T) {
 	defer bcancel()
 
 	for name, tc := range testcases {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(bctx)
 			defer cancel()
@@ -521,7 +520,6 @@ func TestRouter_DialPeers(t *testing.T) {
 	defer bcancel()
 
 	for name, tc := range testcases {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			t.Cleanup(leaktest.Check(t))
 			ctx, cancel := context.WithCancel(bctx)
@@ -919,7 +917,6 @@ func TestRouter_Channel_Enqueue_Timeout(t *testing.T) {
 	// defer cancel()
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(fmt.Sprintf("send=%d,recv=%d,delay=%s", tc.sendCount, tc.expectedRecvCount, tc.delay), func(t *testing.T) {
 			// timeout that will expire if we don't receive some of the expected messages
 			ctxTimeout := tc.delay + 200*time.Millisecond
