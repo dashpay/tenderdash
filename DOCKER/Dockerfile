@@ -5,7 +5,7 @@
 # * image - creates final image of minimal size
 
 ARG ALIPNE_VERSION=3.19
-ARG GOLANG_VERSION=1.22
+ARG GOLANG_VERSION=1.23
 #################################
 # STAGE 1: install dependencies #
 #################################
