@@ -38,7 +38,7 @@ func mockBlockStoreForProposerSelector(t *testing.T, startHeight, endHeight int6
 	return blockStore
 }
 
-// / configureBlockMetaWithValidators configures the block store to return proposers based on the height.
+// configureBlockMetaWithValidators configures the block store to return proposers based on the height.
 func configureBlockMetaWithValidators(_ *testing.T, blockStore *mocks.BlockStore, startHeight, endHeight int64, vals *types.ValidatorSet) {
 	vals = vals.Copy()
 	valsHash := vals.Hash()
@@ -174,9 +174,9 @@ func TestStoreLoadValidators(t *testing.T) {
 	require.Equal(t, expected, valsAtCheckpoint)
 }
 
-// / Given a set of blocks in the block store and two validator sets that rotate,
-// / When we load the validators during quorum rotation,
-// / Then we receive the correct validators for each height.
+// Given a set of blocks in the block store and two validator sets that rotate,
+// When we load the validators during quorum rotation,
+// Then we receive the correct validators for each height.
 func TestStoreLoadValidatorsOnRotation(t *testing.T) {
 	const startHeight = int64(1)
 

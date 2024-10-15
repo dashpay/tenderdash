@@ -509,7 +509,7 @@ func (store dbStore) SaveValidatorSets(lowerHeight, upperHeight int64, vals *typ
 func (store dbStore) loadValidators(height int64) (*tmstate.ValidatorsInfo, error) {
 	valInfo, err := loadValidatorsInfo(store.db, height)
 	if err != nil {
-		return nil, ErrNoValSetForHeight{Height: height, Err: err}
+		return nil, ErrNoValSetForHeight{Height: height, Err: fmt.Errorf("failed to load validators info: %w", err)}
 	}
 
 	if valInfo.ValidatorSet == nil {
@@ -517,12 +517,11 @@ func (store dbStore) loadValidators(height int64) (*tmstate.ValidatorsInfo, erro
 		store.logger.Debug("Validator set is nil, loading last stored height", "height", height, "last_height_changed", valInfo.LastHeightChanged, "last_stored_height", lastStoredHeight)
 		valInfo, err = loadValidatorsInfo(store.db, lastStoredHeight)
 		if err != nil || valInfo.ValidatorSet == nil {
-			return nil,
-				fmt.Errorf("couldn't find validators at height %d (height %d was originally requested): %w",
-					lastStoredHeight,
-					height,
-					err,
-				)
+			return nil, ErrNoValSetForHeight{Height: height, Err: fmt.Errorf("couldn't find validators at height %d (height %d was originally requested): %w",
+				lastStoredHeight,
+				height,
+				err,
+			)}
 		}
 	}
 
