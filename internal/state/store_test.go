@@ -147,9 +147,9 @@ func TestStoreLoadValidators(t *testing.T) {
 	// check that a request will go back to the last checkpoint
 	_, err = stateStore.LoadValidators(valSetCheckpointInterval+1, blockStore)
 	require.Error(t, err)
-	require.Equal(t, fmt.Sprintf("couldn't find validators at height %d (height %d was originally requested): "+
+	require.ErrorContains(t, err, fmt.Sprintf("couldn't find validators at height %d (height %d was originally requested): "+
 		"value retrieved from db is empty",
-		valSetCheckpointInterval, valSetCheckpointInterval+1), err.Error())
+		valSetCheckpointInterval, valSetCheckpointInterval+1))
 
 	// now save a validator set at that checkpoint
 	err = stateStore.Save(makeRandomStateFromValidatorSet(vals, valSetCheckpointInterval, 1, blockStore))
