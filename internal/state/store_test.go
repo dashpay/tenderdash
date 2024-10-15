@@ -112,8 +112,7 @@ func TestStoreLoadValidators(t *testing.T) {
 
 	// initialize block store - create mock validators for each height
 	blockStoreVS := expectedVS.Copy()
-	blockStore := mocks.NewBlockStore(t)
-	configureBlockMetaWithValidators(t, blockStore, 1, valSetCheckpointInterval, blockStoreVS.ValidatorSet())
+	blockStore := mockBlockStoreForProposerSelector(t, 1, valSetCheckpointInterval, blockStoreVS.ValidatorSet())
 
 	// 1) LoadValidators loads validators using a height where they were last changed
 	// Note that only the current validators at height h are saved
