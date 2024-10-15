@@ -31,10 +31,18 @@ const (
 // mockBlockStoreForProposerSelector creates a mock block store that returns proposers based on the height.
 // It assumes every block ends in round 0 and the proposer is the next validator in the validator set.
 func mockBlockStoreForProposerSelector(t *testing.T, startHeight, endHeight int64, vals *types.ValidatorSet) selectproposer.BlockStore {
-	vals = vals.Copy()
-	valsHash := vals.Hash()
 	blockStore := mocks.NewBlockStore(t)
 	blockStore.On("Base").Return(startHeight).Maybe()
+	configureBlockMetaWithValidators(t, blockStore, startHeight, endHeight, vals)
+
+	return blockStore
+}
+
+// / configureBlockMetaWithValidators configures the block store to return proposers based on the height.
+func configureBlockMetaWithValidators(_ *testing.T, blockStore *mocks.BlockStore, startHeight, endHeight int64, vals *types.ValidatorSet) {
+	vals = vals.Copy()
+	valsHash := vals.Hash()
+
 	for h := startHeight; h <= endHeight; h++ {
 		blockStore.On("LoadBlockMeta", h).
 			Return(&types.BlockMeta{
@@ -47,8 +55,6 @@ func mockBlockStoreForProposerSelector(t *testing.T, startHeight, endHeight int6
 			}).Maybe()
 		vals.IncProposerIndex(1)
 	}
-
-	return blockStore
 }
 
 func TestStoreBootstrap(t *testing.T) {
@@ -106,7 +112,8 @@ func TestStoreLoadValidators(t *testing.T) {
 
 	// initialize block store - create mock validators for each height
 	blockStoreVS := expectedVS.Copy()
-	blockStore := mockBlockStoreForProposerSelector(t, 1, valSetCheckpointInterval, blockStoreVS.ValidatorSet())
+	blockStore := mocks.NewBlockStore(t)
+	configureBlockMetaWithValidators(t, blockStore, 1, valSetCheckpointInterval, blockStoreVS.ValidatorSet())
 
 	// 1) LoadValidators loads validators using a height where they were last changed
 	// Note that only the current validators at height h are saved
@@ -165,6 +172,89 @@ func TestStoreLoadValidators(t *testing.T) {
 	expected = expectedVS.ValidatorSet()
 	assertProposer(t, expected, valSetCheckpointInterval)
 	require.Equal(t, expected, valsAtCheckpoint)
+}
+
+// / Given a set of blocks in the block store and two validator sets that rotate,
+// / When we load the validators during quorum rotation,
+// / Then we receive the correct validators for each height.
+func TestStoreLoadValidatorsOnRotation(t *testing.T) {
+	const startHeight = int64(1)
+
+	testCases := []struct {
+		rotations int64
+		nVals     int
+		nValSets  int64
+	}{
+		{1, 3, 3},
+		{2, 3, 2},
+		{3, 2, 4},
+	}
+
+	for _, tc := range testCases {
+		t.Run(fmt.Sprintf("rotations=%d,nVals=%d,nValSets=%d", tc.rotations, tc.nVals, tc.nValSets), func(t *testing.T) {
+			rotations := tc.rotations
+			nVals := tc.nVals
+			nValSets := tc.nValSets
+			uncommittedHeight := startHeight + rotations*int64(nVals)
+
+			stateDB := dbm.NewMemDB()
+			stateStore := sm.NewStore(stateDB)
+			validators := make([]*types.ValidatorSet, nValSets)
+			for i := int64(0); i < nValSets; i++ {
+				validators[i], _ = types.RandValidatorSet(nVals)
+				t.Logf("Validator set %d: %v", i, validators[i].Hash())
+			}
+
+			blockStore := mocks.NewBlockStore(t)
+			blockStore.On("Base").Return(startHeight).Maybe()
+
+			// configure block store and state store to return correct validators and block meta
+			for i := int64(0); i < rotations; i++ {
+				nextQuorumHeight := startHeight + (i+1)*int64(nVals)
+
+				err := stateStore.SaveValidatorSets(startHeight+i*int64(nVals), nextQuorumHeight-1, validators[i%nValSets])
+				require.NoError(t, err)
+
+				vals := validators[i%nValSets].Copy()
+				// reset proposer
+				require.NoError(t, vals.SetProposer(vals.GetByIndex(0).ProTxHash))
+				valsHash := vals.Hash()
+				nextValsHash := valsHash // we only change it in last block
+
+				// configure block store to return correct validator sets and proposers
+				for h := startHeight + i*int64(nVals); h < nextQuorumHeight; h++ {
+					if h == nextQuorumHeight-1 {
+						nextValsHash = validators[(i+1)%nValSets].Hash()
+					}
+					blockStore.On("LoadBlockMeta", h).
+						Return(&types.BlockMeta{
+							Header: types.Header{
+								Height:             h,
+								ProposerProTxHash:  vals.Proposer().ProTxHash,
+								ValidatorsHash:     valsHash,
+								NextValidatorsHash: nextValsHash,
+							},
+						}).Maybe()
+					vals.IncProposerIndex(1)
+				}
+
+				assert.LessOrEqual(t, nextQuorumHeight, uncommittedHeight, "we should not save block at height {}", uncommittedHeight)
+			}
+
+			// now, we are at height 10, and we should rotate to next validators
+			// we don't have the last block yet, but we already have validator set for the next height
+			blockStore.On("LoadBlockMeta", uncommittedHeight).Return(nil).Maybe()
+
+			expectedValidators := validators[rotations%nValSets]
+			err := stateStore.SaveValidatorSets(uncommittedHeight, uncommittedHeight, expectedValidators)
+			require.NoError(t, err)
+
+			// We should get correct validator set from the store
+			readVals, err := stateStore.LoadValidators(uncommittedHeight, blockStore)
+			require.NoError(t, err)
+			assert.Equal(t, expectedValidators, readVals)
+		})
+	}
 }
 
 // This benchmarks the speed of loading validators from different heights if there is no validator set change.

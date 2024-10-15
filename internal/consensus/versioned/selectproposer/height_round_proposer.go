@@ -98,7 +98,7 @@ func (s *heightRoundProposerSelector) proposerFromStore(height int64, round int3
 				"next_validators_hash", meta.Header.NextValidatorsHash,
 				"validators", s.valSet)
 
-			return fmt.Errorf("quorum hash mismatch at height %d", height)
+			return fmt.Errorf("validators hash mismatch at height %d", height)
 		}
 
 		proposer = meta.Header.ProposerProTxHash

@@ -594,7 +594,7 @@ func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) 
 		if !prevMeta.Header.NextValidatorsHash.Equal(valSetHash) {
 			return nil, ErrNoValSetForHeight{
 				height,
-				fmt.Errorf("quorum hash mismatch at height %d, expected %X, got %X", height,
+				fmt.Errorf("next validators hash mismatch at height %d, expected %X, got %X", height,
 					prevMeta.Header.NextValidatorsHash, valSetHash),
 			}
 		}
