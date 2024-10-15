@@ -136,7 +136,7 @@ func makeNode(
 	}
 	closers = append(closers, dbCloser)
 
-	stateStore := sm.NewStoreWithLogger(stateDB, logger.With("module", "state_store"))
+	stateStore := sm.NewStore(stateDB, logger.With("module", "state_store"))
 
 	genDoc, err := genesisDocProvider()
 	if err != nil {

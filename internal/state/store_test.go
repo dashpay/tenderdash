@@ -181,24 +181,30 @@ func TestStoreLoadValidatorsOnRotation(t *testing.T) {
 	const startHeight = int64(1)
 
 	testCases := []struct {
-		rotations int64
-		nVals     int
-		nValSets  int64
+		rotations        int64
+		nVals            int
+		nValSets         int64
+		consensusVersion int32
 	}{
-		{1, 3, 3},
-		{2, 3, 2},
-		{3, 2, 4},
+		{1, 3, 3, 0},
+		{1, 3, 3, 1},
+		{2, 3, 2, 0},
+		{2, 3, 2, 1},
+		{3, 2, 4, 0},
+		{3, 2, 4, 1},
 	}
 
 	for _, tc := range testCases {
-		t.Run(fmt.Sprintf("rotations=%d,nVals=%d,nValSets=%d", tc.rotations, tc.nVals, tc.nValSets), func(t *testing.T) {
+		t.Run(fmt.Sprintf("rotations=%d,nVals=%d,nValSets=%d,ver=%d",
+			tc.rotations, tc.nVals, tc.nValSets, tc.consensusVersion), func(t *testing.T) {
 			rotations := tc.rotations
 			nVals := tc.nVals
 			nValSets := tc.nValSets
 			uncommittedHeight := startHeight + rotations*int64(nVals)
 
 			stateDB := dbm.NewMemDB()
-			stateStore := sm.NewStore(stateDB)
+			stateStore := sm.NewStore(stateDB, log.NewTestingLoggerWithLevel(t, log.LogLevelDebug))
+
 			validators := make([]*types.ValidatorSet, nValSets)
 			for i := int64(0); i < nValSets; i++ {
 				validators[i], _ = types.RandValidatorSet(nVals)
@@ -236,6 +242,12 @@ func TestStoreLoadValidatorsOnRotation(t *testing.T) {
 							},
 						}).Maybe()
 					vals.IncProposerIndex(1)
+
+					// set consensus version
+					state := makeRandomStateFromValidatorSet(vals, h+1, startHeight+i*int64(nVals), blockStore)
+					state.LastHeightConsensusParamsChanged = h + 1
+					state.ConsensusParams.Version.ConsensusVersion = tc.consensusVersion
+					require.NoError(t, stateStore.Save(state))
 				}
 
 				assert.LessOrEqual(t, nextQuorumHeight, uncommittedHeight, "we should not save block at height {}", uncommittedHeight)
