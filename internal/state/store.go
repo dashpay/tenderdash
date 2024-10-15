@@ -126,6 +126,11 @@ func NewStore(db dbm.DB) Store {
 	return dbStore{db, log.NewNopLogger()}
 }
 
+// NewStoreWithLogger creates the dbStore of the state pkg.
+func NewStoreWithLogger(db dbm.DB, logger log.Logger) Store {
+	return dbStore{db, logger}
+}
+
 // LoadState loads the State from the database.
 func (store dbStore) Load() (State, error) {
 	return store.loadState(stateKey)
@@ -498,12 +503,11 @@ func (store dbStore) SaveValidatorSets(lowerHeight, upperHeight int64, vals *typ
 	return batch.WriteSync()
 }
 
-//-----------------------------------------------------------------------------
+// -----------------------------------------------------------------------------
 
-// LoadValidators loads the ValidatorSet for a given height and round 0.
-//
-// Returns ErrNoValSetForHeight if the validator set can't be found for this height.
-func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) (*types.ValidatorSet, error) {
+// loadValidators is a helper that loads the validator set from height or last stored height.
+// It does NOT set a correct proposer.
+func (store dbStore) loadValidators(height int64) (*tmstate.ValidatorsInfo, error) {
 	valInfo, err := loadValidatorsInfo(store.db, height)
 	if err != nil {
 		return nil, ErrNoValSetForHeight{Height: height, Err: err}
@@ -511,6 +515,7 @@ func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) 
 
 	if valInfo.ValidatorSet == nil {
 		lastStoredHeight := lastStoredHeightFor(height, valInfo.LastHeightChanged)
+		store.logger.Debug("Validator set is nil, loading last stored height", "height", height, "last_height_changed", valInfo.LastHeightChanged, "last_stored_height", lastStoredHeight)
 		valInfo, err = loadValidatorsInfo(store.db, lastStoredHeight)
 		if err != nil || valInfo.ValidatorSet == nil {
 			return nil,
@@ -520,6 +525,20 @@ func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) 
 					err,
 				)
 		}
+	}
+
+	return valInfo, nil
+}
+
+// LoadValidators loads the ValidatorSet for a given height and round 0.
+//
+// Returns ErrNoValSetForHeight if the validator set can't be found for this height.
+func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) (*types.ValidatorSet, error) {
+	store.logger.Debug("Loading validators", "height", height)
+
+	valInfo, err := store.loadValidators(height)
+	if err != nil {
+		return nil, ErrNoValSetForHeight{Height: height, Err: err}
 	}
 
 	valSet, err := types.ValidatorSetFromProto(valInfo.ValidatorSet)
@@ -562,27 +581,48 @@ func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) 
 		return strategy.ValidatorSet(), nil
 	}
 
-	// If we have that height in the block store, we just take proposer from previous block and advance it.
+	// If we don't have that height in the block store, we just take proposer from previous block and advance it.
 	// We don't use current height block because we want to return proposer at round 0.
 	prevMeta := bs.LoadBlockMeta(height - 1)
 	if prevMeta == nil {
 		return nil, fmt.Errorf("could not find block meta for height %d", height-1)
 	}
-	// Configure proposer strategy; first set proposer from previous block
-	if err := valSet.SetProposer(prevMeta.Header.ProposerProTxHash); err != nil {
-		return nil, fmt.Errorf("could not set proposer: %w", err)
-	}
-	strategy, err := selectproposer.NewProposerSelector(cp, valSet, prevMeta.Header.Height, prevMeta.Round, bs, store.logger)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create validator scoring strategy: %w", err)
+	// Configure proposer strategy; first check if we have a quorum change
+	if !prevMeta.Header.ValidatorsHash.Equal(prevMeta.Header.NextValidatorsHash) {
+		// rotation happened - we select 1st validator as proposer
+		valSetHash := valSet.Hash()
+		if !prevMeta.Header.NextValidatorsHash.Equal(valSetHash) {
+			return nil, ErrNoValSetForHeight{
+				height,
+				fmt.Errorf("quorum hash mismatch at height %d, expected %X, got %X", height,
+					prevMeta.Header.NextValidatorsHash, valSetHash),
+			}
+		}
+
+		if err = valSet.SetProposer(valSet.GetByIndex(0).ProTxHash); err != nil {
+			return nil, ErrNoValSetForHeight{height, fmt.Errorf("could not set proposer: %w", err)}
+		}
+
+		return valSet, nil
+	} else {
+
+		// set proposer from previous block
+		if err := valSet.SetProposer(prevMeta.Header.ProposerProTxHash); err != nil {
+			return nil, fmt.Errorf("could not set proposer: %w", err)
+		}
+		strategy, err := selectproposer.NewProposerSelector(cp, valSet, prevMeta.Header.Height, prevMeta.Round, bs, store.logger)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create validator scoring strategy: %w", err)
+		}
+
+		// now, advance to (height,0)
+		if err := strategy.UpdateHeightRound(height, 0); err != nil {
+			return nil, fmt.Errorf("failed to update validator scores at height %d, round 0: %w", height, err)
+		}
+
+		return strategy.ValidatorSet(), nil
 	}
 
-	// now, advance to (height,0)
-	if err := strategy.UpdateHeightRound(height, 0); err != nil {
-		return nil, fmt.Errorf("failed to update validator scores at height %d, round 0: %w", height, err)
-	}
-
-	return strategy.ValidatorSet(), nil
 }
 
 func lastStoredHeightFor(height, lastHeightChanged int64) int64 {
@@ -643,6 +683,7 @@ func (store dbStore) saveValidatorsInfo(
 		return err
 	}
 
+	store.logger.Debug("saving validator set", "height", height, "last_height_changed", lastHeightChanged, "validators", valSet)
 	return batch.Set(validatorsKey(height), bz)
 }
 

@@ -65,6 +65,8 @@ func NewHeightRoundProposerSelector(vset *types.ValidatorSet, currentHeight int6
 
 // proposerFromStore determines the proposer for the given height and round using current or previous block read from
 // the block store.
+//
+// Requires s.valSet to be set to correct validator set.
 func (s *heightRoundProposerSelector) proposerFromStore(height int64, round int32) error {
 	if s.bs == nil {
 		return fmt.Errorf("block store is nil")
@@ -85,12 +87,15 @@ func (s *heightRoundProposerSelector) proposerFromStore(height int64, round int3
 
 	meta := s.bs.LoadBlockMeta(height)
 	if meta != nil {
+		valSetHash := s.valSet.Hash()
 		// block already saved to store, just take the proposer
-		if !meta.Header.ValidatorsHash.Equal(s.valSet.Hash()) {
+		if !meta.Header.ValidatorsHash.Equal(valSetHash) {
 			// we loaded the same block, so quorum should be the same
 			s.logger.Error("quorum rotation detected but not expected",
 				"height", height,
-				"validators_hash", meta.Header.ValidatorsHash, "quorum_hash", s.valSet.QuorumHash,
+				"validators_hash", meta.Header.ValidatorsHash,
+				"expected_validators_hash", valSetHash,
+				"next_validators_hash", meta.Header.NextValidatorsHash,
 				"validators", s.valSet)
 
 			return fmt.Errorf("quorum hash mismatch at height %d", height)
