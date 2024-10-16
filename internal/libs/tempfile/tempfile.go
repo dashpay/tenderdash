@@ -10,6 +10,8 @@ import (
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
+
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 )
 
 const (
@@ -43,7 +45,7 @@ func writeFileRandReseed() uint64 {
 	// The important thing here is that now for a seed conflict, they would both have to be on
 	// the correct nanosecond offset, and second-based offset, which is much less likely than
 	// just a conflict with the correct nanosecond offset.
-	return uint64(time.Now().UnixNano() + int64(os.Getpid()<<20))
+	return tmmath.MustConvertUint64(time.Now().UnixNano() + int64(os.Getpid()<<20))
 }
 
 // Use a fast thread safe LCG for atomic write file names.
@@ -62,7 +64,7 @@ func randWriteFileSuffix() string {
 	atomicWriteFileRand = r
 	atomicWriteFileRandMu.Unlock()
 	// Can have a negative name, replace this in the following
-	suffix := strconv.Itoa(int(r))
+	suffix := strconv.FormatUint(r, 10)
 	if string(suffix[0]) == "-" {
 		// Replace first "-" with "0". This is purely for UI clarity,
 		// as otherwhise there would be two `-` in a row.

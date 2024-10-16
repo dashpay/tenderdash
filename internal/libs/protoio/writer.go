@@ -34,10 +34,11 @@ import (
 	"bytes"
 	"encoding/binary"
 	"io"
-
 	"sync"
 
 	"github.com/gogo/protobuf/proto"
+
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 )
 
 // NewDelimitedWriter writes a varint-delimited Protobuf message to a writer. It is
@@ -60,7 +61,7 @@ func (w *varintWriter) WriteMsg(msg proto.Message) (int, error) {
 			if n+binary.MaxVarintLen64 >= len(w.buffer) {
 				w.buffer = make([]byte, n+binary.MaxVarintLen64)
 			}
-			lenOff := binary.PutUvarint(w.buffer, uint64(n))
+			lenOff := binary.PutUvarint(w.buffer, tmmath.MustConvertUint64(n))
 			_, err := m.MarshalTo(w.buffer[lenOff:])
 			if err != nil {
 				return 0, err
@@ -94,7 +95,7 @@ func (w *varintWriter) Close() error {
 
 func varintWrittenBytes(m marshaler, size int) ([]byte, error) {
 	buf := make([]byte, size+binary.MaxVarintLen64)
-	n := binary.PutUvarint(buf, uint64(size))
+	n := binary.PutUvarint(buf, tmmath.MustConvertUint64(size))
 	nw, err := m.MarshalTo(buf[n:])
 	if err != nil {
 		return nil, err

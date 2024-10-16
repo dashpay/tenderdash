@@ -8,6 +8,8 @@ import (
 	"math"
 	"strconv"
 	"time"
+
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 )
 
 // clockRate is the resolution and precision of clock().
@@ -39,7 +41,7 @@ func percentOf(x, total float64) Percent {
 	if x < 0 || total <= 0 {
 		return 0
 	} else if p := round(x / total * 1e5); p <= math.MaxUint32 {
-		return Percent(p)
+		return Percent(tmmath.MustConvertUint32(p))
 	}
 	return Percent(math.MaxUint32)
 }
