@@ -40,7 +40,7 @@ require (
 	github.com/stretchr/testify v1.9.0
 	github.com/tendermint/tm-db v0.6.6
 	golang.org/x/crypto v0.28.0
-	golang.org/x/net v0.28.0
+	golang.org/x/net v0.30.0
 	golang.org/x/sync v0.8.0
 	google.golang.org/grpc v1.66.0
 	pgregory.net/rapid v0.4.8
