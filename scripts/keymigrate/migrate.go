@@ -183,7 +183,7 @@ var migrations = []migrationDefinition{
 		storeName: "state",
 		prefix:    []byte(legacyStateKeyPrefix),
 		ktype:     stateStoreKey,
-		transform: func(key keyID) (keyID, error) {
+		transform: func(_ keyID) (keyID, error) {
 			return orderedcode.Append(nil, int64(8))
 		},
 	},
@@ -276,7 +276,7 @@ var migrations = []migrationDefinition{
 		storeName: "light",
 		prefix:    []byte(legacyLightSizePrefix),
 		ktype:     lightSizeKey,
-		transform: func(key keyID) (keyID, error) {
+		transform: func(_ keyID) (keyID, error) {
 			return orderedcode.Append(nil, int64(12))
 		},
 	},
@@ -402,8 +402,10 @@ var migrations = []migrationDefinition{
 }
 
 // checkKeyType classifies a candidate key based on its structure.
+
 func checkKeyType(key keyID, storeName string) (keyType, error) {
-	var migrations []migrationDefinition
+	// Migrations are empty, as we don't have any migrations to do atm, but we leave it here for future use.
+	migrations := []migrationDefinition{}
 	for _, m := range migrations {
 		if m.storeName != storeName {
 			continue

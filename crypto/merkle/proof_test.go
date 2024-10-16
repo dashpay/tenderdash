@@ -146,7 +146,7 @@ func TestProofValidateBasic(t *testing.T) {
 		malleateProof func(*Proof)
 		errStr        string
 	}{
-		{"Good", func(sp *Proof) {}, ""},
+		{"Good", func(_ *Proof) {}, ""},
 		{"Negative Total", func(sp *Proof) { sp.Total = -1 }, "negative Total"},
 		{"Negative Index", func(sp *Proof) { sp.Index = -1 }, "negative Index"},
 		{"Invalid LeafHash", func(sp *Proof) { sp.LeafHash = make([]byte, 10) },

@@ -29,7 +29,7 @@ func FuzzRPCJSONRPCServer(f *testing.F) {
 
 	mux := http.NewServeMux()
 	rpcserver.RegisterRPCFuncs(mux, rpcFuncMap, log.NewNopLogger())
-	f.Fuzz(func(t *testing.T, data []byte) {
+	f.Fuzz(func(_ *testing.T, data []byte) {
 		if len(data) == 0 {
 			return
 		}

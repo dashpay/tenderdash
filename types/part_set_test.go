@@ -130,7 +130,7 @@ func TestPartValidateBasic(t *testing.T) {
 		malleatePart func(*Part)
 		expectErr    bool
 	}{
-		{"Good Part", func(pt *Part) {}, false},
+		{"Good Part", func(_ *Part) {}, false},
 		{"Too big part", func(pt *Part) { pt.Bytes = make([]byte, BlockPartSizeBytes+1) }, true},
 		{"Too big proof", func(pt *Part) {
 			pt.Proof = merkle.Proof{

@@ -31,7 +31,7 @@ func FuzzMempool(f *testing.F) {
 
 	mp := mempool.NewTxMempool(logger, cfg, conn)
 
-	f.Fuzz(func(t *testing.T, data []byte) {
+	f.Fuzz(func(_ *testing.T, data []byte) {
 		_ = mp.CheckTx(context.Background(), data, nil, mempool.TxInfo{})
 	})
 }

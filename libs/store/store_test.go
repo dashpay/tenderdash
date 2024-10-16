@@ -27,7 +27,7 @@ func TestInMemStore(t *testing.T) {
 	require.Equal(t, []int{1, 2, 3}, store.All())
 	// Query test
 	{
-		vals := store.Query(func(key string, val int) bool {
+		vals := store.Query(func(_ string, val int) bool {
 			return val > 1
 		}, 0)
 		require.Equal(t, []int{2, 3}, vals)

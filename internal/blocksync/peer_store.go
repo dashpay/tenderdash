@@ -209,7 +209,7 @@ func newPeerMonitor(at time.Time) *flowrate.Monitor {
 
 // AddNumPending adds a value to the numPending field
 func AddNumPending(val int32) store.UpdateFunc[types.NodeID, PeerData] {
-	return func(peerID types.NodeID, peer *PeerData) {
+	return func(_ types.NodeID, peer *PeerData) {
 		peer.numPending += val
 	}
 }

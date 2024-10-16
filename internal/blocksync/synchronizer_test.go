@@ -75,14 +75,14 @@ func (suite *SynchronizerTestSuite) TestBasic() {
 	suite.blockExec.
 		On("ApplyBlock", mock.Anything, mock.Anything, mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
-		Return(func(_ context.Context, state sm.State, _ types.BlockID, block *types.Block, _ *types.Commit) sm.State {
+		Return(func(_ context.Context, state sm.State, _ types.BlockID, _ *types.Block, _ *types.Commit) sm.State {
 			return state
 		}, nil)
 	suite.client.
 		On("GetBlock", mock.Anything, mock.Anything, mock.Anything).
 		Maybe().
-		Return(func(ctx context.Context, height int64, peerID types.NodeID) *promise.Promise[*blocksync.BlockResponse] {
-			return promise.New(func(resolve func(data *blocksync.BlockResponse), reject func(err error)) {
+		Return(func(_ context.Context, height int64, _ types.NodeID) *promise.Promise[*blocksync.BlockResponse] {
+			return promise.New(func(resolve func(data *blocksync.BlockResponse), _ func(err error)) {
 				resolve(suite.responses[int(height-1)])
 			})
 		}, nil)
@@ -179,7 +179,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 	}{
 		{
 			result: workerpool.Result{Value: respH1},
-			mockFn: func(pool *Synchronizer) {
+			mockFn: func(_ *Synchronizer) {
 				suite.store.
 					On("SaveBlock", mock.Anything, mock.Anything, mock.Anything).
 					Once().
@@ -197,7 +197,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 		{
 			result:       workerpool.Result{Err: mockErr},
 			wantPushBack: []int64{1},
-			mockFn: func(pool *Synchronizer) {
+			mockFn: func(_ *Synchronizer) {
 				suite.client.
 					On("Send", mock.Anything, p2p.PeerError{NodeID: "peer 1", Err: mockErr}).
 					Once().
@@ -233,7 +233,7 @@ func (suite *SynchronizerTestSuite) TestConsumeJobResult() {
 		},
 		{
 			result: workerpool.Result{Value: respH2},
-			mockFn: func(pool *Synchronizer) {},
+			mockFn: func(_ *Synchronizer) {},
 		},
 	}
 	for i, tc := range testCases {
