@@ -12,6 +12,7 @@ import (
 	"github.com/gogo/protobuf/proto"
 
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 )
 
 // pqEnvelope defines a wrapper around an Envelope with priority to be inserted
@@ -118,8 +119,8 @@ func newPQScheduler(
 
 	for _, chDesc := range chDescsCopy {
 		chID := chDesc.ID
-		chPriorities[chID] = uint(chDesc.Priority)
-		sizes[uint(chDesc.Priority)] = 0
+		chPriorities[chID] = chDesc.Priority
+		sizes[chDesc.Priority] = 0
 	}
 
 	pq := make(priorityQueue, 0)
@@ -170,7 +171,7 @@ func (s *pqScheduler) process(ctx context.Context) {
 			chIDStr := strconv.Itoa(int(e.ChannelID))
 			pqEnv := &pqEnvelope{
 				envelope:  e,
-				size:      uint(proto.Size(e.Message)),
+				size:      tmmath.MustConvertUint(proto.Size(e.Message)),
 				priority:  s.chPriorities[e.ChannelID],
 				timestamp: time.Now().UTC(),
 			}
@@ -255,8 +256,8 @@ func (s *pqScheduler) process(ctx context.Context) {
 				s.size -= pqEnv.size
 
 				// deduct the Envelope size from all the relevant cumulative sizes
-				for i := 0; i < len(s.chDescs) && pqEnv.priority <= uint(s.chDescs[i].Priority); i++ {
-					s.sizes[uint(s.chDescs[i].Priority)] -= pqEnv.size
+				for i := 0; i < len(s.chDescs) && pqEnv.priority <= s.chDescs[i].Priority; i++ {
+					s.sizes[s.chDescs[i].Priority] -= pqEnv.size
 				}
 
 				s.metrics.PeerSendBytesTotal.With(
@@ -287,7 +288,7 @@ func (s *pqScheduler) push(pqEnv *pqEnvelope) {
 
 	// Update the cumulative sizes by adding the Envelope's size to every
 	// priority less than or equal to it.
-	for i := 0; i < len(s.chDescs) && pqEnv.priority <= uint(s.chDescs[i].Priority); i++ {
-		s.sizes[uint(s.chDescs[i].Priority)] += pqEnv.size
+	for i := 0; i < len(s.chDescs) && pqEnv.priority <= s.chDescs[i].Priority; i++ {
+		s.sizes[s.chDescs[i].Priority] += pqEnv.size
 	}
 }

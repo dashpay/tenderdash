@@ -14,6 +14,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/ed25519"
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/internal/p2p/conn"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -281,7 +282,7 @@ func TestConnection_Handshake(t *testing.T) {
 			ListenAddr: "listenaddr",
 			Network:    "network",
 			Version:    "1.2.3",
-			Channels:   tmsync.NewConcurrentSlice[uint16](0xf0, 0x0f),
+			Channels:   tmsync.NewConcurrentSlice[conn.ChannelID](0xf0, 0x0f),
 			Moniker:    "moniker",
 			Other: types.NodeInfoOther{
 				TxIndex:    "txindex",
@@ -291,7 +292,7 @@ func TestConnection_Handshake(t *testing.T) {
 		bKey := ed25519.GenPrivKey()
 		bInfo := types.NodeInfo{
 			NodeID:   types.NodeIDFromPubKey(bKey.PubKey()),
-			Channels: tmsync.NewConcurrentSlice[uint16](),
+			Channels: tmsync.NewConcurrentSlice[conn.ChannelID](),
 		}
 
 		errCh := make(chan error, 1)
@@ -639,13 +640,13 @@ func dialAcceptHandshake(ctx context.Context, t *testing.T, a, b p2p.Transport) 
 	errCh := make(chan error, 1)
 	go func() {
 		privKey := ed25519.GenPrivKey()
-		nodeInfo := types.NodeInfo{NodeID: types.NodeIDFromPubKey(privKey.PubKey()), Channels: tmsync.NewConcurrentSlice[uint16]()}
+		nodeInfo := types.NodeInfo{NodeID: types.NodeIDFromPubKey(privKey.PubKey()), Channels: tmsync.NewConcurrentSlice[conn.ChannelID]()}
 		_, _, err := ba.Handshake(ctx, 0, nodeInfo, privKey)
 		errCh <- err
 	}()
 
 	privKey := ed25519.GenPrivKey()
-	nodeInfo := types.NodeInfo{NodeID: types.NodeIDFromPubKey(privKey.PubKey()), Channels: tmsync.NewConcurrentSlice[uint16]()}
+	nodeInfo := types.NodeInfo{NodeID: types.NodeIDFromPubKey(privKey.PubKey()), Channels: tmsync.NewConcurrentSlice[conn.ChannelID]()}
 	_, _, err := ab.Handshake(ctx, 0, nodeInfo, privKey)
 	require.NoError(t, err)
 

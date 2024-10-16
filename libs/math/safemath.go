@@ -156,6 +156,22 @@ func MustConvertInt64[T Integer](a T) int64 {
 	return MustConvert[T, int64](a)
 }
 
+func MustConvertUint16[T Integer](a T) uint16 {
+	return MustConvert[T, uint16](a)
+}
+
+func MustConvertInt16[T Integer](a T) int16 {
+	return MustConvert[T, int16](a)
+}
+
+func MustConvertUint[T Integer](a T) uint {
+	return MustConvert[T, uint](a)
+}
+
+func MustConvertInt[T Integer](a T) int {
+	return MustConvert[T, int](a)
+}
+
 // MustConvertInt32 takes an Integer and converts it to int32.
 // Panics if the conversion overflows.
 func MustConvertInt32[T Integer](a T) int32 {

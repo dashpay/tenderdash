@@ -15,6 +15,7 @@ import (
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	p2pclient "github.com/dashpay/tenderdash/internal/p2p/client"
+	"github.com/dashpay/tenderdash/internal/p2p/conn"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -272,7 +273,7 @@ func (n *Network) MakeNode(ctx context.Context, t *testing.T, proTxHash crypto.P
 		ListenAddr: "0.0.0.0:0", // FIXME: We have to fake this for now.
 		Moniker:    string(nodeID),
 		ProTxHash:  proTxHash.Copy(),
-		Channels:   tmsync.NewConcurrentSlice[uint16](),
+		Channels:   tmsync.NewConcurrentSlice[conn.ChannelID](),
 	}
 
 	transport := n.memoryNetwork.CreateTransport(nodeID)

@@ -599,11 +599,11 @@ type ChannelStatus struct {
 
 // -----------------------------------------------------------------------------
 // ChannelID is an arbitrary channel ID.
-type ChannelID uint16
+type ChannelID int32
 
 type ChannelDescriptor struct {
 	ID       ChannelID
-	Priority int
+	Priority uint
 
 	// TODO: Remove once p2p refactor is complete.
 	SendQueueCapacity int

@@ -22,6 +22,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/internal/p2p"
+	"github.com/dashpay/tenderdash/internal/p2p/conn"
 	"github.com/dashpay/tenderdash/internal/p2p/mocks"
 	"github.com/dashpay/tenderdash/internal/p2p/p2ptest"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -307,7 +308,7 @@ func TestRouter_AcceptPeers(t *testing.T) {
 				ListenAddr: "0.0.0.0:0",
 				Network:    "other-network",
 				Moniker:    string(peerID),
-				Channels:   tmsync.NewConcurrentSlice[uint16](),
+				Channels:   tmsync.NewConcurrentSlice[conn.ChannelID](),
 			},
 			peerKey.PubKey(),
 			false,
@@ -508,7 +509,7 @@ func TestRouter_DialPeers(t *testing.T) {
 				ListenAddr: "0.0.0.0:0",
 				Network:    "other-network",
 				Moniker:    string(peerID),
-				Channels:   tmsync.NewConcurrentSlice[uint16](),
+				Channels:   tmsync.NewConcurrentSlice[conn.ChannelID](),
 			},
 			peerKey.PubKey(),
 			nil,
@@ -770,7 +771,7 @@ func TestRouter_ChannelCompatability(t *testing.T) {
 		ListenAddr: "0.0.0.0:0",
 		Network:    "test",
 		Moniker:    string(peerID),
-		Channels:   tmsync.NewConcurrentSlice[uint16](0x03),
+		Channels:   tmsync.NewConcurrentSlice[conn.ChannelID](0x03),
 	}
 
 	mockConnection := &mocks.Connection{}
@@ -821,7 +822,7 @@ func TestRouter_DontSendOnInvalidChannel(t *testing.T) {
 		ListenAddr: "0.0.0.0:0",
 		Network:    "test",
 		Moniker:    string(peerID),
-		Channels:   tmsync.NewConcurrentSlice[uint16](0x02),
+		Channels:   tmsync.NewConcurrentSlice[conn.ChannelID](0x02),
 	}
 
 	mockConnection := &mocks.Connection{}

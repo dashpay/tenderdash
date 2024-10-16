@@ -16,7 +16,9 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
+	"github.com/dashpay/tenderdash/internal/p2p/conn"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/proto/tendermint/p2p"
 	"github.com/dashpay/tenderdash/types"
@@ -227,7 +229,8 @@ func (r *Router) createQueueFactory(ctx context.Context) (func(int) queue, error
 			if size%2 != 0 {
 				size++
 			}
-			q := newPQScheduler(r.logger, r.metrics, r.lc, r.chDescs, uint(size)/2, uint(size)/2, defaultCapacity)
+			halfSize := tmmath.MustConvertUint(size / 2)
+			q := newPQScheduler(r.logger, r.metrics, r.lc, r.chDescs, halfSize, halfSize, defaultCapacity)
 			q.start(ctx)
 			return q
 		}, nil
@@ -269,7 +272,7 @@ func (r *Router) OpenChannel(ctx context.Context, chDesc *ChannelDescriptor) (Ch
 	r.channelQueues[id] = queue
 
 	// add the channel to the nodeInfo if it's not already there.
-	r.nodeInfoProducer().AddChannel(uint16(chDesc.ID))
+	r.nodeInfoProducer().AddChannel(chDesc.ID)
 
 	r.transport.AddChannelDescriptors([]*ChannelDescriptor{chDesc})
 
@@ -1009,10 +1012,10 @@ func (cs ChannelIDSet) Contains(id ChannelID) bool {
 	return ok
 }
 
-func toChannelIDs(ids []uint16) ChannelIDSet {
+func toChannelIDs(ids []conn.ChannelID) ChannelIDSet {
 	c := make(map[ChannelID]struct{}, len(ids))
 	for _, b := range ids {
-		c[ChannelID(b)] = struct{}{}
+		c[b] = struct{}{}
 	}
 	return c
 }

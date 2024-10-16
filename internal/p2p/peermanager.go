@@ -19,6 +19,7 @@ import (
 
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -1071,7 +1072,7 @@ func (m *PeerManager) Advertise(peerID types.NodeID, limit uint16) []NodeAddress
 	// if the number of addresses is less than the number of peers
 	// to advertise, adjust the limit downwards
 	if numAddresses < int(limit) {
-		limit = uint16(numAddresses)
+		limit = tmmath.MustConvertUint16(numAddresses)
 	}
 
 	if numAddresses == 0 {
@@ -1674,7 +1675,7 @@ func (p *peerInfo) Score() PeerScore {
 		score = math.MinInt16
 	}
 
-	return PeerScore(score)
+	return PeerScore(tmmath.MustConvertInt16(score))
 }
 
 // Validate validates the peer info.
