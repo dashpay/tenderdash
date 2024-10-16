@@ -75,11 +75,15 @@ func (bz HexBytes) ReverseBytes() HexBytes {
 // with leading 0x (%p), or casts HexBytes to bytes and writes as hexadecimal
 // string to s.
 func (bz HexBytes) Format(s fmt.State, verb rune) {
+	var err error
 	switch verb {
 	case 'p':
-		s.Write([]byte(fmt.Sprintf("%p", bz)))
+		_, err = s.Write([]byte(fmt.Sprintf("%p", bz)))
 	default:
-		s.Write([]byte(fmt.Sprintf("%X", []byte(bz))))
+		_, err = s.Write([]byte(fmt.Sprintf("%X", []byte(bz))))
+	}
+	if err != nil {
+		panic(fmt.Errorf("tmbytes.Format failed: %w", err))
 	}
 }
 

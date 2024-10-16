@@ -47,7 +47,7 @@ func NewCLI(logger log.Logger) *CLI {
 		Short:         "End-to-end test runner",
 		SilenceUsage:  true,
 		SilenceErrors: true, // we'll output them ourselves in Run()
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
 			file, err := cmd.Flags().GetString("file")
 			if err != nil {
 				return err
@@ -71,7 +71,7 @@ func NewCLI(logger log.Logger) *CLI {
 			cli.testnet = testnet
 			return nil
 		},
-		RunE: func(cmd *cobra.Command, args []string) (err error) {
+		RunE: func(cmd *cobra.Command, _ []string) (err error) {
 			if err = Cleanup(cmd.Context(), logger, cli.testnet.Dir, cli.infra); err != nil {
 				return err
 			}
@@ -171,7 +171,7 @@ func NewCLI(logger log.Logger) *CLI {
 	cli.root.AddCommand(&cobra.Command{
 		Use:   "setup",
 		Short: "Generates the testnet directory and configuration",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return Setup(cmd.Context(), logger, cli.testnet, cli.infra)
 		},
 	})
@@ -179,7 +179,7 @@ func NewCLI(logger log.Logger) *CLI {
 	cli.root.AddCommand(&cobra.Command{
 		Use:   "start",
 		Short: "Starts the Docker testnet, waiting for nodes to become available",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			_, err := os.Stat(cli.testnet.Dir)
 			if os.IsNotExist(err) {
 				err = Setup(cmd.Context(), logger, cli.testnet, cli.infra)
@@ -194,7 +194,7 @@ func NewCLI(logger log.Logger) *CLI {
 	cli.root.AddCommand(&cobra.Command{
 		Use:   "perturb",
 		Short: "Perturbs the Docker testnet, e.g. by restarting or disconnecting nodes",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return Perturb(cmd.Context(), logger, cli.testnet, cli.infra)
 		},
 	})
@@ -202,7 +202,7 @@ func NewCLI(logger log.Logger) *CLI {
 	cli.root.AddCommand(&cobra.Command{
 		Use:   "wait",
 		Short: "Waits for a few blocks to be produced and all nodes to catch up",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return Wait(cmd.Context(), logger, cli.testnet, 5)
 		},
 	})
@@ -210,7 +210,7 @@ func NewCLI(logger log.Logger) *CLI {
 	cli.root.AddCommand(&cobra.Command{
 		Use:   "stop",
 		Short: "Stops the Docker testnet",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			logger.Info("Stopping testnet")
 			return cli.infra.Stop(cmd.Context())
 		},
@@ -219,7 +219,7 @@ func NewCLI(logger log.Logger) *CLI {
 	cli.root.AddCommand(&cobra.Command{
 		Use:   "pause",
 		Short: "Pauses the Docker testnet",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			logger.Info("Pausing testnet")
 			return cli.infra.Pause(cmd.Context())
 		},
@@ -228,7 +228,7 @@ func NewCLI(logger log.Logger) *CLI {
 	cli.root.AddCommand(&cobra.Command{
 		Use:   "resume",
 		Short: "Resumes the Docker testnet",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			logger.Info("Resuming testnet")
 			return cli.infra.Unpause(cmd.Context())
 		},
@@ -237,7 +237,7 @@ func NewCLI(logger log.Logger) *CLI {
 	cli.root.AddCommand(&cobra.Command{
 		Use:   "load",
 		Short: "Generates transaction load until the command is canceled",
-		RunE: func(cmd *cobra.Command, args []string) (err error) {
+		RunE: func(cmd *cobra.Command, _ []string) (err error) {
 			return Load(
 				cmd.Context(),
 				logger,
@@ -274,7 +274,7 @@ func NewCLI(logger log.Logger) *CLI {
 	cli.root.AddCommand(&cobra.Command{
 		Use:   "test",
 		Short: "Runs test cases against a running testnet",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return Test(cmd.Context(), cli.testnet)
 		},
 	})
@@ -282,7 +282,7 @@ func NewCLI(logger log.Logger) *CLI {
 	cli.root.AddCommand(&cobra.Command{
 		Use:   "cleanup",
 		Short: "Removes the testnet directory",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return Cleanup(cmd.Context(), logger, cli.testnet.Dir, cli.infra)
 		},
 	})
@@ -332,7 +332,7 @@ over a 100 block sampling period.
 
 Does not run any perbutations.
 		`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			if err := Cleanup(cmd.Context(), logger, cli.testnet.Dir, cli.infra); err != nil {
 				return err
 			}

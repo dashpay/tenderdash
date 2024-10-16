@@ -24,7 +24,7 @@ type Config struct {
 
 	// SnapshotInterval specifies the height interval at which the application
 	// will take state sync snapshots. Defaults to 0 (disabled).
-	SnapshotInterval uint64 `toml:"snapshot_interval"`
+	SnapshotInterval int64 `toml:"snapshot_interval"`
 
 	// RetainBlocks specifies the number of recent blocks to retain. Defaults to
 	// 0, which retains all blocks. Must be greater that PersistInterval,
@@ -38,7 +38,7 @@ type Config struct {
 	// PersistInterval specifies the height interval at which the application
 	// will persist state to disk. Defaults to 1 (every height), setting this to
 	// 0 disables state persistence.
-	PersistInterval uint64 `toml:"persist_interval"`
+	PersistInterval int64 `toml:"persist_interval"`
 
 	// ValidatorUpdates is a map of heights to validator names and their power,
 	// and will be returned by the ABCI application. For example, the following
@@ -58,11 +58,11 @@ type Config struct {
 
 	// Add artificial delays to each of the main ABCI calls to mimic computation time
 	// of the application
-	PrepareProposalDelayMS uint64 `toml:"prepare_proposal_delay_ms"`
-	ProcessProposalDelayMS uint64 `toml:"process_proposal_delay_ms"`
-	CheckTxDelayMS         uint64 `toml:"check_tx_delay_ms"`
-	VoteExtensionDelayMS   uint64 `toml:"vote_extension_delay_ms"`
-	FinalizeBlockDelayMS   uint64 `toml:"finalize_block_delay_ms"`
+	PrepareProposalDelayMS int64 `toml:"prepare_proposal_delay_ms"`
+	ProcessProposalDelayMS int64 `toml:"process_proposal_delay_ms"`
+	CheckTxDelayMS         int64 `toml:"check_tx_delay_ms"`
+	VoteExtensionDelayMS   int64 `toml:"vote_extension_delay_ms"`
+	FinalizeBlockDelayMS   int64 `toml:"finalize_block_delay_ms"`
 
 	// dash parameters
 	ThesholdPublicKeyUpdate  map[string]string `toml:"threshold_public_key_update"`

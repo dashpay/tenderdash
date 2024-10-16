@@ -45,8 +45,6 @@ func TestSocketClientTimeout(t *testing.T) {
 	logger := log.NewTestingLogger(t)
 
 	for i, tc := range testCases {
-		i := i
-		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 
 			// wait until all threads end, otherwise we'll get data race in t.Log()

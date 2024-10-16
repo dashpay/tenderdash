@@ -21,7 +21,7 @@ func MakeShowValidatorCommand(conf *config.Config, logger log.Logger) *cobra.Com
 	return &cobra.Command{
 		Use:   "show-validator",
 		Short: "Show this node's validator info",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			var (
 				pubKey crypto.PubKey
 				err    error

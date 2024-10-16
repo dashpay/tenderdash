@@ -22,6 +22,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	types1 "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 	"github.com/dashpay/tenderdash/version"
@@ -302,7 +303,7 @@ func (app *Application) InitChain(_ context.Context, req *abci.RequestInitChain)
 	if !ok {
 		consensusParams = types1.ConsensusParams{
 			Version: &types1.VersionParams{
-				AppVersion: uint64(app.LastCommittedState.GetHeight()) + 1,
+				AppVersion: tmmath.MustConvertUint64(app.LastCommittedState.GetHeight() + 1),
 			},
 		}
 	}
@@ -581,7 +582,7 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 }
 func (app *Application) appVersionForHeight(height int64) uint64 {
 	if app.appVersion == 0 {
-		return uint64(height)
+		return tmmath.MustConvertUint64(height)
 	}
 
 	return app.appVersion
@@ -589,7 +590,8 @@ func (app *Application) appVersionForHeight(height int64) uint64 {
 
 func (app *Application) createSnapshot() error {
 	height := app.LastCommittedState.GetHeight()
-	if app.cfg.SnapshotInterval == 0 || uint64(height)%app.cfg.SnapshotInterval != 0 {
+
+	if app.cfg.SnapshotInterval == 0 || height%app.cfg.SnapshotInterval != 0 {
 		return nil
 	}
 	_, err := app.snapshots.Create(app.LastCommittedState)
@@ -851,7 +853,7 @@ func (app *Application) chainLockUpdate(height int64) (*types1.CoreChainLock, er
 	if err != nil {
 		return nil, fmt.Errorf("invalid number chainLockUpdate value %q: %w", chainLockUpdateStr, err)
 	}
-	chainLock := types.NewMockChainLock(uint32(chainLockUpdate))
+	chainLock := types.NewMockChainLock(tmmath.MustConvertUint32(chainLockUpdate))
 	return chainLock.ToProto(), nil
 }
 
@@ -904,7 +906,7 @@ func (app *Application) persist() error {
 
 // persistInterval persists application state according to persist-interval parameter
 func (app *Application) persistInterval() error {
-	if app.cfg.PersistInterval == 0 || app.LastCommittedState.GetHeight()%int64(app.cfg.PersistInterval) != 0 {
+	if app.cfg.PersistInterval == 0 || app.LastCommittedState.GetHeight()%app.cfg.PersistInterval != 0 {
 		return nil
 	}
 	return app.persist()

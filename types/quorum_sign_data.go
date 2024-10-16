@@ -179,7 +179,7 @@ func (i SignItem) MarshalZerologObject(e *zerolog.Event) {
 	e.Hex("signID", i.SignHash)
 	e.Hex("msgHash", i.MsgHash)
 	e.Hex("quorumHash", i.QuorumHash)
-	e.Uint8("llmqType", uint8(i.LlmqType))
+	e.Int("llmqType", int(i.LlmqType))
 
 }
 

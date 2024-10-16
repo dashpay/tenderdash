@@ -197,7 +197,6 @@ func TestProposalValidateBasic(t *testing.T) {
 	)
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
 			defer cancel()

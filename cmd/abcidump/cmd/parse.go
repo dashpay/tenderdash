@@ -50,7 +50,7 @@ func (parseCmd *ParseCmd) Command() *cobra.Command {
 
 		PreRunE: parseCmd.PreRunE,
 		RunE:    parseCmd.RunE,
-		PostRun: func(cmd *cobra.Command, args []string) {
+		PostRun: func(_ *cobra.Command, _ []string) {
 			if parseCmd.Input != nil {
 				if closer, ok := parseCmd.Input.(io.Closer); ok {
 					closer.Close()

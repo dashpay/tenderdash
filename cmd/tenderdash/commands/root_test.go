@@ -46,7 +46,7 @@ func clearConfig(t *testing.T, dir string) *cfg.Config {
 func testRootCmd(conf *cfg.Config) *cobra.Command {
 	logger := log.NewNopLogger()
 	cmd := RootCommand(conf, logger)
-	cmd.RunE = func(cmd *cobra.Command, args []string) error { return nil }
+	cmd.RunE = func(_ *cobra.Command, _ []string) error { return nil }
 
 	var l string
 	cmd.PersistentFlags().String("log", l, "Log")

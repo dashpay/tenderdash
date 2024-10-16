@@ -51,7 +51,7 @@ either or both arguments.
 	tendermint reindex-event --end-height 10
 	tendermint reindex-event --start-height 2 --end-height 10
 	`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			bs, ss, err := loadStateAndBlockStore(conf)
 			if err != nil {
 				return fmt.Errorf("%s: %w", reindexFailed, err)
@@ -210,7 +210,7 @@ func eventReIndex(cmd *cobra.Command, args eventReIndexArgs) error {
 				for i := range b.Data.Txs {
 					tr := abcitypes.TxResult{
 						Height: b.Height,
-						Index:  uint32(i),
+						Index:  uint32(i), //#nosec:G115
 						Tx:     b.Data.Txs[i],
 						Result: *(r.ProcessProposal.TxResults[i]),
 					}

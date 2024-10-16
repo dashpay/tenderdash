@@ -137,7 +137,7 @@ func TestParseJSONRPC(t *testing.T) {
 		Height int    `json:"height,string"`
 		Name   string `json:"name"`
 	}
-	demo := func(ctx context.Context, _ *demoArgs) error { return nil }
+	demo := func(_ context.Context, _ *demoArgs) error { return nil }
 	rfunc := NewRPCFunc(demo)
 
 	cases := []struct {

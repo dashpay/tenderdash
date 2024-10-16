@@ -99,7 +99,6 @@ func TestPeerManagerOptions_Validate(t *testing.T) {
 		}, false},
 	}
 	for name, tc := range testcases {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			err := tc.options.Validate()
 			if tc.ok {
@@ -1068,7 +1067,7 @@ func TestPeerManager_Dialed_UpgradeNoEvict(t *testing.T) {
 func TestPeerManager_Accepted(t *testing.T) {
 	ctx := context.TODO()
 	a := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("a", 40))}
-	b := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("b", 40))}
+	b := p2p.NodeAddress{NodeID: types.NodeID(strings.Repeat("b", 40))}
 	c := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("c", 40))}
 	d := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("d", 40))}
 

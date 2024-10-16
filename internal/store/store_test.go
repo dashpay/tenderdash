@@ -225,8 +225,6 @@ func TestBlockStoreSaveLoadBlock(t *testing.T) {
 	}
 
 	for i, tuple := range tuples {
-		tuple := tuple
-
 		bs, db := newInMemoryBlockStore()
 		// SaveBlock
 		res, err, panicErr := doFn(func() (interface{}, error) {

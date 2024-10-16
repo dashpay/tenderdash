@@ -47,7 +47,7 @@ func (captureCmd *CaptureCmd) Command() *cobra.Command {
 		Short: "capture TCP traffic, parse as ABCI protocol and display it in JSON format",
 
 		RunE: captureCmd.RunE,
-		PostRun: func(cmd *cobra.Command, args []string) {
+		PostRun: func(_ *cobra.Command, _ []string) {
 			if captureCmd.Input != nil {
 				if closer, ok := captureCmd.Input.(io.Closer); ok {
 					closer.Close()

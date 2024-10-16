@@ -31,7 +31,7 @@ func setupReIndexEventCmd(ctx context.Context, conf *config.Config, logger log.L
 
 	reIndexEventCmd := &cobra.Command{
 		Use: cmd.Use,
-		Run: func(cmd *cobra.Command, args []string) {},
+		Run: func(_ *cobra.Command, _ []string) {},
 	}
 
 	_ = reIndexEventCmd.ExecuteContext(ctx)

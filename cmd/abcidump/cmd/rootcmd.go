@@ -19,7 +19,7 @@ func MakeRootCmd() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "abcidump",
 		Short: "Parse dump of protobuf communication between two nodes",
-		PersistentPreRunE: func(cmd *cobra.Command, args []string) (err error) {
+		PersistentPreRunE: func(_ *cobra.Command, _ []string) (err error) {
 			logger, err = log.NewDefaultLogger(log.LogFormatPlain, logLevel)
 			if err != nil {
 				return fmt.Errorf("cannot initialize logging: %w", err)

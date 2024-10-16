@@ -96,7 +96,7 @@ Example:
 	cmd.Flags().StringVar(&keyType, "key", types.ABCIPubKeyTypeEd25519,
 		"Key type to generate privval file with. Options: ed25519, secp256k1")
 
-	cmd.RunE = func(cmd *cobra.Command, args []string) error {
+	cmd.RunE = func(cmd *cobra.Command, _ []string) error {
 		if len(hostnames) > 0 && len(hostnames) != (nValidators+nNonValidators) {
 			return fmt.Errorf(
 				"testnet needs precisely %d hostnames (number of validators plus non-validators) if --hostname parameter is used",

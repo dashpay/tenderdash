@@ -547,11 +547,11 @@ func (h *Header) StateID() tmproto.StateID {
 		appHash = make([]byte, crypto.DefaultAppHashSize)
 	}
 
-	ts := uint64(h.Time.UnixMilli())
+	ts := tmmath.MustConvertUint64(h.Time.UnixMilli())
 
 	return tmproto.StateID{
 		AppVersion:            h.Version.App,
-		Height:                uint64(h.Height),
+		Height:                tmmath.MustConvertUint64(h.Height),
 		AppHash:               appHash,
 		CoreChainLockedHeight: h.CoreChainLockedHeight,
 		Time:                  ts,
@@ -804,9 +804,9 @@ func (commit *Commit) GetCanonicalVote() *Vote {
 func (commit *Commit) VoteBlockRequestID() []byte {
 	requestIDMessage := []byte("dpbvote")
 	heightByteArray := make([]byte, 8)
-	binary.LittleEndian.PutUint64(heightByteArray, uint64(commit.Height))
+	binary.LittleEndian.PutUint64(heightByteArray, tmmath.MustConvertUint64(commit.Height))
 	roundByteArray := make([]byte, 4)
-	binary.LittleEndian.PutUint32(roundByteArray, uint32(commit.Round))
+	binary.LittleEndian.PutUint32(roundByteArray, tmmath.MustConvertUint32(commit.Round))
 
 	requestIDMessage = append(requestIDMessage, heightByteArray...)
 	requestIDMessage = append(requestIDMessage, roundByteArray...)

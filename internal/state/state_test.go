@@ -693,7 +693,6 @@ func TestStateProto(t *testing.T) {
 	}
 
 	for _, tt := range tc {
-		tt := tt
 		t.Run(tt.testName, func(t *testing.T) {
 			pbs, err := tt.state.ToProto()
 			if !tt.expPass1 {

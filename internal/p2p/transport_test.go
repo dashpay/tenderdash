@@ -28,7 +28,6 @@ var testTransports = map[string]transportFactory{}
 func withTransports(ctx context.Context, t *testing.T, tester func(context.Context, *testing.T, transportFactory)) {
 	t.Helper()
 	for name, transportFactory := range testTransports {
-		transportFactory := transportFactory
 		t.Run(name, func(t *testing.T) {
 			t.Cleanup(leaktest.Check(t))
 			tctx, cancel := context.WithCancel(ctx)
@@ -126,7 +125,6 @@ func TestTransport_DialEndpoints(t *testing.T) {
 		// Tests for networked endpoints (with IP).
 		if len(endpoint.IP) > 0 && endpoint.Protocol != p2p.MemoryProtocol {
 			for _, tc := range ipTestCases {
-				tc := tc
 				t.Run(tc.ip.String(), func(t *testing.T) {
 					e := endpoint
 					require.NotNil(t, e)
@@ -208,7 +206,7 @@ func TestTransport_Endpoints(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	withTransports(ctx, t, func(ctx context.Context, t *testing.T, makeTransport transportFactory) {
+	withTransports(ctx, t, func(_ context.Context, t *testing.T, makeTransport transportFactory) {
 		a := makeTransport(t)
 		b := makeTransport(t)
 
@@ -240,7 +238,7 @@ func TestTransport_Protocols(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	withTransports(ctx, t, func(ctx context.Context, t *testing.T, makeTransport transportFactory) {
+	withTransports(ctx, t, func(_ context.Context, t *testing.T, makeTransport transportFactory) {
 		a := makeTransport(t)
 		protocols := a.Protocols()
 		endpoint, err := a.Endpoint()
@@ -256,7 +254,7 @@ func TestTransport_String(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	withTransports(ctx, t, func(ctx context.Context, t *testing.T, makeTransport transportFactory) {
+	withTransports(ctx, t, func(_ context.Context, t *testing.T, makeTransport transportFactory) {
 		a := makeTransport(t)
 		require.NotEmpty(t, a.String())
 	})
@@ -502,7 +500,6 @@ func TestEndpoint_NodeAddress(t *testing.T) {
 		{p2p.Endpoint{Path: "path"}, p2p.NodeAddress{Path: "path"}},
 	}
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.endpoint.String(), func(t *testing.T) {
 			// Without NodeID.
 			expect := tc.expect
@@ -554,7 +551,6 @@ func TestEndpoint_String(t *testing.T) {
 		{p2p.Endpoint{Path: "foo"}, "/foo"},
 	}
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.expect, func(t *testing.T) {
 			require.Equal(t, tc.expect, tc.endpoint.String())
 		})
@@ -588,7 +584,6 @@ func TestEndpoint_Validate(t *testing.T) {
 		{p2p.Endpoint{Protocol: "tcp", Port: 8080, Path: "path"}, false},
 	}
 	for _, tc := range testcases {
-		tc := tc
 		t.Run(tc.endpoint.String(), func(t *testing.T) {
 			err := tc.endpoint.Validate()
 			if tc.expectValid {
