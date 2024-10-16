@@ -25,7 +25,7 @@ type PrivValidator struct {
 }
 
 // ExtractIntoValidator provides a mock function with given fields: ctx, quorumHash
-func (_m *PrivValidator) ExtractIntoValidator(ctx context.Context, quorumHash bytes.HexBytes) *types.Validator {
+func (_m *PrivValidator) ExtractIntoValidator(ctx context.Context, quorumHash crypto.QuorumHash) *types.Validator {
 	ret := _m.Called(ctx, quorumHash)
 
 	if len(ret) == 0 {
@@ -33,7 +33,7 @@ func (_m *PrivValidator) ExtractIntoValidator(ctx context.Context, quorumHash by
 	}
 
 	var r0 *types.Validator
-	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) *types.Validator); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, crypto.QuorumHash) *types.Validator); ok {
 		r0 = rf(ctx, quorumHash)
 	} else {
 		if ret.Get(0) != nil {
@@ -45,23 +45,23 @@ func (_m *PrivValidator) ExtractIntoValidator(ctx context.Context, quorumHash by
 }
 
 // GetFirstQuorumHash provides a mock function with given fields: _a0
-func (_m *PrivValidator) GetFirstQuorumHash(_a0 context.Context) (bytes.HexBytes, error) {
+func (_m *PrivValidator) GetFirstQuorumHash(_a0 context.Context) (crypto.QuorumHash, error) {
 	ret := _m.Called(_a0)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetFirstQuorumHash")
 	}
 
-	var r0 bytes.HexBytes
+	var r0 crypto.QuorumHash
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (bytes.HexBytes, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) (crypto.QuorumHash, error)); ok {
 		return rf(_a0)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) bytes.HexBytes); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) crypto.QuorumHash); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(bytes.HexBytes)
+			r0 = ret.Get(0).(crypto.QuorumHash)
 		}
 	}
 
@@ -75,7 +75,7 @@ func (_m *PrivValidator) GetFirstQuorumHash(_a0 context.Context) (bytes.HexBytes
 }
 
 // GetHeight provides a mock function with given fields: ctx, quorumHash
-func (_m *PrivValidator) GetHeight(ctx context.Context, quorumHash bytes.HexBytes) (int64, error) {
+func (_m *PrivValidator) GetHeight(ctx context.Context, quorumHash crypto.QuorumHash) (int64, error) {
 	ret := _m.Called(ctx, quorumHash)
 
 	if len(ret) == 0 {
@@ -84,16 +84,16 @@ func (_m *PrivValidator) GetHeight(ctx context.Context, quorumHash bytes.HexByte
 
 	var r0 int64
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (int64, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, crypto.QuorumHash) (int64, error)); ok {
 		return rf(ctx, quorumHash)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) int64); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, crypto.QuorumHash) int64); ok {
 		r0 = rf(ctx, quorumHash)
 	} else {
 		r0 = ret.Get(0).(int64)
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, crypto.QuorumHash) error); ok {
 		r1 = rf(ctx, quorumHash)
 	} else {
 		r1 = ret.Error(1)
@@ -103,7 +103,7 @@ func (_m *PrivValidator) GetHeight(ctx context.Context, quorumHash bytes.HexByte
 }
 
 // GetPrivateKey provides a mock function with given fields: ctx, quorumHash
-func (_m *PrivValidator) GetPrivateKey(ctx context.Context, quorumHash bytes.HexBytes) (crypto.PrivKey, error) {
+func (_m *PrivValidator) GetPrivateKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
 	ret := _m.Called(ctx, quorumHash)
 
 	if len(ret) == 0 {
@@ -112,10 +112,10 @@ func (_m *PrivValidator) GetPrivateKey(ctx context.Context, quorumHash bytes.Hex
 
 	var r0 crypto.PrivKey
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (crypto.PrivKey, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, crypto.QuorumHash) (crypto.PrivKey, error)); ok {
 		return rf(ctx, quorumHash)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) crypto.PrivKey); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, crypto.QuorumHash) crypto.PrivKey); ok {
 		r0 = rf(ctx, quorumHash)
 	} else {
 		if ret.Get(0) != nil {
@@ -123,7 +123,7 @@ func (_m *PrivValidator) GetPrivateKey(ctx context.Context, quorumHash bytes.Hex
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, crypto.QuorumHash) error); ok {
 		r1 = rf(ctx, quorumHash)
 	} else {
 		r1 = ret.Error(1)
@@ -133,23 +133,23 @@ func (_m *PrivValidator) GetPrivateKey(ctx context.Context, quorumHash bytes.Hex
 }
 
 // GetProTxHash provides a mock function with given fields: _a0
-func (_m *PrivValidator) GetProTxHash(_a0 context.Context) (bytes.HexBytes, error) {
+func (_m *PrivValidator) GetProTxHash(_a0 context.Context) (crypto.ProTxHash, error) {
 	ret := _m.Called(_a0)
 
 	if len(ret) == 0 {
 		panic("no return value specified for GetProTxHash")
 	}
 
-	var r0 bytes.HexBytes
+	var r0 crypto.ProTxHash
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context) (bytes.HexBytes, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) (crypto.ProTxHash, error)); ok {
 		return rf(_a0)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context) bytes.HexBytes); ok {
+	if rf, ok := ret.Get(0).(func(context.Context) crypto.ProTxHash); ok {
 		r0 = rf(_a0)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(bytes.HexBytes)
+			r0 = ret.Get(0).(crypto.ProTxHash)
 		}
 	}
 
@@ -163,7 +163,7 @@ func (_m *PrivValidator) GetProTxHash(_a0 context.Context) (bytes.HexBytes, erro
 }
 
 // GetPubKey provides a mock function with given fields: ctx, quorumHash
-func (_m *PrivValidator) GetPubKey(ctx context.Context, quorumHash bytes.HexBytes) (crypto.PubKey, error) {
+func (_m *PrivValidator) GetPubKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
 	ret := _m.Called(ctx, quorumHash)
 
 	if len(ret) == 0 {
@@ -172,10 +172,10 @@ func (_m *PrivValidator) GetPubKey(ctx context.Context, quorumHash bytes.HexByte
 
 	var r0 crypto.PubKey
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (crypto.PubKey, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, crypto.QuorumHash) (crypto.PubKey, error)); ok {
 		return rf(ctx, quorumHash)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) crypto.PubKey); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, crypto.QuorumHash) crypto.PubKey); ok {
 		r0 = rf(ctx, quorumHash)
 	} else {
 		if ret.Get(0) != nil {
@@ -183,7 +183,7 @@ func (_m *PrivValidator) GetPubKey(ctx context.Context, quorumHash bytes.HexByte
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, crypto.QuorumHash) error); ok {
 		r1 = rf(ctx, quorumHash)
 	} else {
 		r1 = ret.Error(1)
@@ -193,7 +193,7 @@ func (_m *PrivValidator) GetPubKey(ctx context.Context, quorumHash bytes.HexByte
 }
 
 // GetThresholdPublicKey provides a mock function with given fields: ctx, quorumHash
-func (_m *PrivValidator) GetThresholdPublicKey(ctx context.Context, quorumHash bytes.HexBytes) (crypto.PubKey, error) {
+func (_m *PrivValidator) GetThresholdPublicKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
 	ret := _m.Called(ctx, quorumHash)
 
 	if len(ret) == 0 {
@@ -202,10 +202,10 @@ func (_m *PrivValidator) GetThresholdPublicKey(ctx context.Context, quorumHash b
 
 	var r0 crypto.PubKey
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) (crypto.PubKey, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, crypto.QuorumHash) (crypto.PubKey, error)); ok {
 		return rf(ctx, quorumHash)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, bytes.HexBytes) crypto.PubKey); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, crypto.QuorumHash) crypto.PubKey); ok {
 		r0 = rf(ctx, quorumHash)
 	} else {
 		if ret.Get(0) != nil {
@@ -213,7 +213,7 @@ func (_m *PrivValidator) GetThresholdPublicKey(ctx context.Context, quorumHash b
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, bytes.HexBytes) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, crypto.QuorumHash) error); ok {
 		r1 = rf(ctx, quorumHash)
 	} else {
 		r1 = ret.Error(1)
@@ -223,7 +223,7 @@ func (_m *PrivValidator) GetThresholdPublicKey(ctx context.Context, quorumHash b
 }
 
 // SignProposal provides a mock function with given fields: ctx, chainID, quorumType, quorumHash, proposal
-func (_m *PrivValidator) SignProposal(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash bytes.HexBytes, proposal *tenderminttypes.Proposal) (bytes.HexBytes, error) {
+func (_m *PrivValidator) SignProposal(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, proposal *tenderminttypes.Proposal) (bytes.HexBytes, error) {
 	ret := _m.Called(ctx, chainID, quorumType, quorumHash, proposal)
 
 	if len(ret) == 0 {
@@ -232,10 +232,10 @@ func (_m *PrivValidator) SignProposal(ctx context.Context, chainID string, quoru
 
 	var r0 bytes.HexBytes
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, bytes.HexBytes, *tenderminttypes.Proposal) (bytes.HexBytes, error)); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, crypto.QuorumHash, *tenderminttypes.Proposal) (bytes.HexBytes, error)); ok {
 		return rf(ctx, chainID, quorumType, quorumHash, proposal)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, bytes.HexBytes, *tenderminttypes.Proposal) bytes.HexBytes); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, crypto.QuorumHash, *tenderminttypes.Proposal) bytes.HexBytes); ok {
 		r0 = rf(ctx, chainID, quorumType, quorumHash, proposal)
 	} else {
 		if ret.Get(0) != nil {
@@ -243,7 +243,7 @@ func (_m *PrivValidator) SignProposal(ctx context.Context, chainID string, quoru
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, string, btcjson.LLMQType, bytes.HexBytes, *tenderminttypes.Proposal) error); ok {
+	if rf, ok := ret.Get(1).(func(context.Context, string, btcjson.LLMQType, crypto.QuorumHash, *tenderminttypes.Proposal) error); ok {
 		r1 = rf(ctx, chainID, quorumType, quorumHash, proposal)
 	} else {
 		r1 = ret.Error(1)
@@ -253,7 +253,7 @@ func (_m *PrivValidator) SignProposal(ctx context.Context, chainID string, quoru
 }
 
 // SignVote provides a mock function with given fields: ctx, chainID, quorumType, quorumHash, vote, logger
-func (_m *PrivValidator) SignVote(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash bytes.HexBytes, vote *tenderminttypes.Vote, logger log.Logger) error {
+func (_m *PrivValidator) SignVote(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, vote *tenderminttypes.Vote, logger log.Logger) error {
 	ret := _m.Called(ctx, chainID, quorumType, quorumHash, vote, logger)
 
 	if len(ret) == 0 {
@@ -261,7 +261,7 @@ func (_m *PrivValidator) SignVote(ctx context.Context, chainID string, quorumTyp
 	}
 
 	var r0 error
-	if rf, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, bytes.HexBytes, *tenderminttypes.Vote, log.Logger) error); ok {
+	if rf, ok := ret.Get(0).(func(context.Context, string, btcjson.LLMQType, crypto.QuorumHash, *tenderminttypes.Vote, log.Logger) error); ok {
 		r0 = rf(ctx, chainID, quorumType, quorumHash, vote, logger)
 	} else {
 		r0 = ret.Error(0)
@@ -271,7 +271,7 @@ func (_m *PrivValidator) SignVote(ctx context.Context, chainID string, quorumTyp
 }
 
 // UpdatePrivateKey provides a mock function with given fields: ctx, privateKey, quorumHash, thresholdPublicKey, height
-func (_m *PrivValidator) UpdatePrivateKey(ctx context.Context, privateKey crypto.PrivKey, quorumHash bytes.HexBytes, thresholdPublicKey crypto.PubKey, height int64) {
+func (_m *PrivValidator) UpdatePrivateKey(ctx context.Context, privateKey crypto.PrivKey, quorumHash crypto.QuorumHash, thresholdPublicKey crypto.PubKey, height int64) {
 	_m.Called(ctx, privateKey, quorumHash, thresholdPublicKey, height)
 }
 

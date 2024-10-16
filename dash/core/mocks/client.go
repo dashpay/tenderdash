@@ -6,6 +6,8 @@ import (
 	btcjson "github.com/dashpay/dashd-go/btcjson"
 	bytes "github.com/dashpay/tenderdash/libs/bytes"
 
+	crypto "github.com/dashpay/tenderdash/crypto"
+
 	mock "github.com/stretchr/testify/mock"
 )
 
@@ -141,7 +143,7 @@ func (_m *Client) Ping() error {
 }
 
 // QuorumInfo provides a mock function with given fields: quorumType, quorumHash
-func (_m *Client) QuorumInfo(quorumType btcjson.LLMQType, quorumHash bytes.HexBytes) (*btcjson.QuorumInfoResult, error) {
+func (_m *Client) QuorumInfo(quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash) (*btcjson.QuorumInfoResult, error) {
 	ret := _m.Called(quorumType, quorumHash)
 
 	if len(ret) == 0 {
@@ -150,10 +152,10 @@ func (_m *Client) QuorumInfo(quorumType btcjson.LLMQType, quorumHash bytes.HexBy
 
 	var r0 *btcjson.QuorumInfoResult
 	var r1 error
-	if rf, ok := ret.Get(0).(func(btcjson.LLMQType, bytes.HexBytes) (*btcjson.QuorumInfoResult, error)); ok {
+	if rf, ok := ret.Get(0).(func(btcjson.LLMQType, crypto.QuorumHash) (*btcjson.QuorumInfoResult, error)); ok {
 		return rf(quorumType, quorumHash)
 	}
-	if rf, ok := ret.Get(0).(func(btcjson.LLMQType, bytes.HexBytes) *btcjson.QuorumInfoResult); ok {
+	if rf, ok := ret.Get(0).(func(btcjson.LLMQType, crypto.QuorumHash) *btcjson.QuorumInfoResult); ok {
 		r0 = rf(quorumType, quorumHash)
 	} else {
 		if ret.Get(0) != nil {
@@ -161,7 +163,7 @@ func (_m *Client) QuorumInfo(quorumType btcjson.LLMQType, quorumHash bytes.HexBy
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(btcjson.LLMQType, bytes.HexBytes) error); ok {
+	if rf, ok := ret.Get(1).(func(btcjson.LLMQType, crypto.QuorumHash) error); ok {
 		r1 = rf(quorumType, quorumHash)
 	} else {
 		r1 = ret.Error(1)
