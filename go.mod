@@ -42,7 +42,7 @@ require (
 	golang.org/x/crypto v0.28.0
 	golang.org/x/net v0.28.0
 	golang.org/x/sync v0.8.0
-	google.golang.org/grpc v1.66.0
+	google.golang.org/grpc v1.67.1
 	pgregory.net/rapid v0.4.8
 )
 
@@ -108,7 +108,7 @@ require (
 	github.com/go-pkgz/rest v1.5.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.1.0 // indirect
 	github.com/gofrs/uuid/v5 v5.2.0 // indirect
-	github.com/golang/glog v1.2.1 // indirect
+	github.com/golang/glog v1.2.2 // indirect
 	github.com/golangci/modinfo v0.3.4 // indirect
 	github.com/golangci/plugin-module-register v0.1.1 // indirect
 	github.com/google/cel-go v0.20.1 // indirect
@@ -153,7 +153,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.28.0 // indirect
 	go.opentelemetry.io/otel/trace v1.29.0 // indirect
 	go.uber.org/automaxprocs v1.5.3 // indirect
-	google.golang.org/genproto/googleapis/api v0.0.0-20240725223205-93522f1f2a9f // indirect
+	google.golang.org/genproto/googleapis/api v0.0.0-20240814211410-ddb44dafa142 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240903143218-8af14fe29dc1 // indirect
 )
 
