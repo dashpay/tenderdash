@@ -8,6 +8,7 @@ import (
 	"github.com/dashpay/tenderdash/abci/example/code"
 	"github.com/dashpay/tenderdash/abci/types"
 	tmcrypto "github.com/dashpay/tenderdash/crypto"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmtypes "github.com/dashpay/tenderdash/types"
 )
 
@@ -34,7 +35,7 @@ func (app *Application) InitCoreChainLock(initCoreChainHeight uint32, step int32
 	app.CoreChainLockStep = step
 	app.HasCoreChainLocks = true
 	app.CurrentCoreChainLockHeight = initCoreChainHeight
-	app.lastCoreChainLock = tmtypes.NewMockChainLock(app.CurrentCoreChainLockHeight)
+	app.lastCoreChainLock = tmtypes.NewMockChainLock(tmmath.MustConvertUint32(app.CurrentCoreChainLockHeight))
 }
 
 func (app *Application) Info(_ context.Context, _ *types.RequestInfo) (*types.ResponseInfo, error) {
@@ -51,7 +52,7 @@ func (app *Application) CheckTx(_ context.Context, req *types.RequestCheckTx) (*
 		tx8 := make([]byte, 8)
 		copy(tx8[len(tx8)-len(req.Tx):], req.Tx)
 		txValue := binary.BigEndian.Uint64(tx8)
-		if txValue < uint64(app.txCount) {
+		if txValue < tmmath.MustConvertUint64(app.txCount) {
 			return &types.ResponseCheckTx{
 				Code: code.CodeTypeBadNonce,
 			}, nil
@@ -122,7 +123,7 @@ func (app *Application) handleTxs(txs [][]byte) []*types.ExecTxResult {
 			tx8 := make([]byte, 8)
 			copy(tx8[len(tx8)-len(tx):], tx)
 			txValue := binary.BigEndian.Uint64(tx8)
-			if txValue != uint64(app.txCount) {
+			if txValue != tmmath.MustConvertUint64(app.txCount) {
 				txResults = append(txResults, &types.ExecTxResult{
 					Code: code.CodeTypeBadNonce,
 					Log:  fmt.Sprintf("Invalid nonce. Expected %v, got %v", app.txCount, txValue),
@@ -138,6 +139,6 @@ func (app *Application) updateCoreChainLock() {
 	if !app.HasCoreChainLocks {
 		return
 	}
-	app.CurrentCoreChainLockHeight += uint32(app.CoreChainLockStep)
+	app.CurrentCoreChainLockHeight += tmmath.MustConvertUint32(app.CoreChainLockStep)
 	app.lastCoreChainLock = tmtypes.NewMockChainLock(app.CurrentCoreChainLockHeight)
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/cli"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/math"
 	rpchttp "github.com/dashpay/tenderdash/rpc/client/http"
 )
 
@@ -75,7 +76,7 @@ if enabled.`,
 			}
 			dumpDebugData(ctx, logger, rpc, dumpArgs)
 
-			ticker := time.NewTicker(time.Duration(frequency) * time.Second)
+			ticker := time.NewTicker(time.Duration(math.MustConvert[uint, int64](frequency)) * time.Second)
 			for range ticker.C {
 				dumpDebugData(ctx, logger, rpc, dumpArgs)
 			}

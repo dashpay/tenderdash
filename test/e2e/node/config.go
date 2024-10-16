@@ -16,8 +16,8 @@ type Config struct {
 	Protocol         string
 	Dir              string
 	Mode             string                       `toml:"mode"`
-	PersistInterval  uint64                       `toml:"persist_interval"`
-	SnapshotInterval uint64                       `toml:"snapshot_interval"`
+	PersistInterval  int64                        `toml:"persist_interval"`
+	SnapshotInterval int64                        `toml:"snapshot_interval"`
 	RetainBlocks     int64                        `toml:"retain_blocks"`
 	ValidatorUpdates map[string]map[string]string `toml:"validator_update"`
 	PrivValServer    string                       `toml:"privval_server"`

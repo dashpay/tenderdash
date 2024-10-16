@@ -17,6 +17,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/ds"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 )
 
 const (
@@ -118,7 +119,7 @@ func (s *SnapshotStore) Create(state State) (abci.Snapshot, error) {
 	}
 
 	snapshot := abci.Snapshot{
-		Height:  uint64(height),
+		Height:  tmmath.MustConvertUint64(height),
 		Version: 1,
 		Hash:    hasher.Sum(nil),
 	}

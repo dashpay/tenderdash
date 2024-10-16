@@ -7,6 +7,8 @@ import (
 	"strconv"
 	"strings"
 	"time"
+
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 )
 
 // A Source produces cursors based on a time index generator and a sequence
@@ -36,8 +38,8 @@ func (s *Source) nextCounter() int64 {
 // Cursor produces a fresh cursor from s at the current time index and counter.
 func (s *Source) Cursor() Cursor {
 	return Cursor{
-		timestamp: uint64(s.timeIndex()),
-		sequence:  uint16(s.nextCounter() & 0xffff),
+		timestamp: tmmath.MustConvertUint64(s.timeIndex()),
+		sequence:  tmmath.MustConvert[int64, uint16](s.nextCounter() & 0xffff),
 	}
 }
 
@@ -55,7 +57,7 @@ func (c Cursor) Before(o Cursor) bool { return c.timestamp < o.timestamp }
 // Diff returns the time duration between c and o. The duration is negative if
 // c is before o in time order.
 func (c Cursor) Diff(o Cursor) time.Duration {
-	return time.Duration(c.timestamp) - time.Duration(o.timestamp)
+	return time.Duration(tmmath.MustConvertInt64(c.timestamp) - tmmath.MustConvertInt64(o.timestamp))
 }
 
 // IsZero reports whether c is the zero cursor.
