@@ -1,3 +1,29 @@
+## [1.3.1] - 2024-11-02
+
+### Bug Fixes
+
+- Num of validators that didn't sign is always 0 (#905)
+- We should panic if finalize block on apply commit fails (#966)
+
+### Documentation
+
+- Update readme (#934)
+- Fix broken links (#940)
+
+### Testing
+
+- Update tests for new proposal selection algo (#925)
+- Fix proposer selection test (#926)
+
+### Build
+
+- Bump golangci/golangci-lint-action from 6.0.1 to 6.1.1 (#950)
+- Bump docker/setup-buildx-action from 3.3.0 to 3.7.1 (#949)
+- Bump golang.org/x/crypto from 0.25.0 to 0.28.0 (#945)
+- Bump golang.org/x/term from 0.22.0 to 0.25.0 (#942)
+- Bump docker/build-push-action from 6.0.0 to 6.9.0 (#935)
+- Go 1.23, mockery 2.46.2, golangci-lint 1.61 (#954)
+
 ## [1.3.0] - 2024-09-19
 
 ### Bug Fixes
@@ -17,6 +43,7 @@
 - Update changelog and version to 1.1.0-dev.1 (#842)
 - Update changelog and version to 1.1.0-dev.2 (#846)
 - Update changelog and version to 1.1.0-dev.3 (#848)
+- Update changelog and version to 1.3.0
 
 ### Build
 
