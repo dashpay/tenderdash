@@ -122,15 +122,31 @@ type dbStore struct {
 var _ Store = (*dbStore)(nil)
 
 // NewStore creates the dbStore of the state pkg.
+//
+// ## Parameters
+//
+//   - `db` - the database to use
+//   - `logger` - the logger to use; optional, defaults to a nop logger if not provided; if more than one is provided,
+//     it will panic
+//
+// ##Panics
+//
+// If more than one logger is provided.
 func NewStore(db dbm.DB, logger ...log.Logger) Store {
-	if len(logger) != 1 || logger[0] == nil {
+	// To avoid changing the API, we use `logger ...log.Logger` in function signature, so that old code can
+	// provide only `db`. In this case, we use NopLogger.
+	if logger[0] == nil {
 		logger = []log.Logger{log.NewNopLogger()}
+	}
+
+	if len(logger) > 1 {
+		panic("NewStore(): maximum one logger is allowed")
 	}
 
 	return dbStore{db, logger[0]}
 }
 
-// LoadState loads the State from the database.
+// Load loads the State from the database.
 func (store dbStore) Load() (State, error) {
 	return store.loadState(stateKey)
 }
