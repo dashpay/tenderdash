@@ -79,7 +79,9 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	stateCopy, err := c.blockExec.finalize(ctx, stateData, commit)
 	if err != nil {
 		c.logger.Error("failed to apply block", "err", err)
-		return nil
+		// If something went wrong within ABCI client, it can stop and we can't recover from it.
+		// So, we panic here to ensure that the node will be restarted.
+		panic(fmt.Errorf("failed to finalize block %X at height %d: %w", block.Hash(), block.Height, err))
 	}
 
 	lastBlockMeta := c.blockStore.LoadBlockMeta(height - 1)
@@ -108,13 +110,33 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 }
 
 func (c *ApplyCommitAction) RecordMetrics(stateData *StateData, height int64, block *types.Block, lastBlockMeta *types.BlockMeta) {
-	c.metrics.Validators.Set(float64(stateData.Validators.Size()))
-	c.metrics.ValidatorsPower.Set(float64(stateData.Validators.TotalVotingPower()))
+	totalValidators := stateData.Validators.Size()
+	totalValidatorsPower := stateData.Validators.TotalVotingPower()
 
-	var (
-		missingValidators      int
-		missingValidatorsPower int64
-	)
+	c.metrics.Validators.Set(float64(totalValidators))
+	c.metrics.ValidatorsPower.Set(float64(totalValidatorsPower))
+
+	// Calculate validators that didn't sign
+
+	// We initialize with total validators count and power, and then decrement as we find the validators
+	// who have signed the precommit
+	missingValidators := totalValidators
+	missingValidatorsPower := totalValidatorsPower
+	precommits := stateData.Votes.Precommits(stateData.CommitRound)
+
+	for _, vote := range precommits.List() {
+		if val := stateData.Validators.GetByIndex(vote.ValidatorIndex); val != nil {
+			missingValidators--
+			missingValidatorsPower -= val.VotingPower
+		} else {
+			c.logger.Error("precommit received from invalid validator",
+				"val", val,
+				"vote", vote,
+				"height", vote.Height,
+				"round", vote.Round)
+		}
+	}
+
 	c.metrics.MissingValidators.Set(float64(missingValidators))
 	c.metrics.MissingValidatorsPower.Set(float64(missingValidatorsPower))
 

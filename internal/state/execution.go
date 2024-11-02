@@ -763,13 +763,7 @@ func execBlockWithoutState(
 	commit *types.Commit,
 	logger log.Logger,
 ) (*abci.ResponseFinalizeBlock, error) {
-	respFinalizeBlock, err := execBlock(ctx, appConn, block, commit, logger)
-	if err != nil {
-		logger.Error("executing block", "err", err)
-		return respFinalizeBlock, err
-	}
-
-	return respFinalizeBlock, nil
+	return execBlock(ctx, appConn, block, commit, logger)
 }
 
 func (blockExec *BlockExecutor) pruneBlocks(retainHeight int64) {
