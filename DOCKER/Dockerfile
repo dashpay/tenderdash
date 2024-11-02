@@ -4,12 +4,12 @@
 # * compile - builds final binaries
 # * image - creates final image of minimal size
 
-ARG ALIPNE_VERSION=3.19
-ARG GOLANG_VERSION=1.22
+ARG ALPINE_VERSION=3.19
+ARG GOLANG_VERSION=1.23
 #################################
 # STAGE 1: install dependencies #
 #################################
-FROM golang:${GOLANG_VERSION}-alpine${ALIPNE_VERSION} AS base
+FROM golang:${GOLANG_VERSION}-alpine${ALPINE_VERSION} AS base
 
 RUN apk update && \
     apk upgrade && \
@@ -55,7 +55,7 @@ RUN rm -r /src/tenderdash/third_party && ln -s /src/bls/third_party /src/tenderd
 ########################
 # STAGE 4: FINAL IMAGE #
 ########################
-FROM alpine:${ALIPNE_VERSION} AS image
+FROM alpine:${ALPINE_VERSION} AS image
 
 LABEL maintainer="developers@dash.org"
 
