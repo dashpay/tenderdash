@@ -79,7 +79,9 @@ func (c *ApplyCommitAction) Execute(ctx context.Context, stateEvent StateEvent) 
 	stateCopy, err := c.blockExec.finalize(ctx, stateData, commit)
 	if err != nil {
 		c.logger.Error("failed to apply block", "err", err)
-		return nil
+		// If something went wrong within ABCI client, it can stop and we can't recover from it.
+		// So, we panic here to ensure that the node will be restarted.
+		panic(fmt.Errorf("failed to finalize block %X at height %d: %w", block.Hash(), block.Height, err))
 	}
 
 	lastBlockMeta := c.blockStore.LoadBlockMeta(height - 1)
