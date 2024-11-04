@@ -180,7 +180,7 @@ func TestNodeInfoAddChannel(t *testing.T) {
 	require.Empty(t, nodeInfo.Channels)
 
 	nodeInfo.AddChannel(2)
-	require.Contains(t, nodeInfo.Channels.ToSlice(), uint16(2))
+	require.Contains(t, nodeInfo.Channels.ToSlice(), conn.ChannelID(2))
 
 	// adding the same channel again shouldn't be a problem
 	nodeInfo.AddChannel(2)

@@ -96,6 +96,26 @@ func SafeConvertUint32[T Integer](a T) (uint32, error) {
 	return uint32(a), nil
 }
 
+// SafeConvertUint64 takes a int and checks if it overflows.
+func SafeConvertUint64[T Integer](a T) (uint64, error) {
+	return SafeConvert[T, uint64](a)
+}
+
+// SafeConvertInt64 takes a int and checks if it overflows.
+func SafeConvertInt64[T Integer](a T) (int64, error) {
+	return SafeConvert[T, int64](a)
+}
+
+// SafeConvertInt16 takes a int and checks if it overflows.
+func SafeConvertInt16[T Integer](a T) (int16, error) {
+	return SafeConvert[T, int16](a)
+}
+
+// SafeConvertUint16 takes a int and checks if it overflows.
+func SafeConvertUint16[T Integer](a T) (uint16, error) {
+	return SafeConvert[T, uint16](a)
+}
+
 type Integer interface {
 	~int | ~int8 | ~int16 | ~int32 | ~int64 | ~uint | ~uint8 | ~uint16 | ~uint32 | ~uint64
 }

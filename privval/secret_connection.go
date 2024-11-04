@@ -216,7 +216,7 @@ func (sc *SecretConnection) Write(data []byte) (n int, err error) {
 				chunk = data
 				data = nil
 			}
-			chunkLength, err := tmmath.SafeConvert[int, uint32](len(chunk))
+			chunkLength, err := tmmath.SafeConvertUint32(len(chunk))
 			if err != nil {
 				return fmt.Errorf("invalid chunk len %d: %w", len(chunk), err)
 			}
