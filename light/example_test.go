@@ -5,9 +5,9 @@ import (
 	"testing"
 	"time"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/require"
-	dbm "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	dashcore "github.com/dashpay/tenderdash/dash/core"
