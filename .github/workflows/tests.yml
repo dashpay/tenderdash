@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - "**.go"
+      - "go.sum"
   push:
     branches:
       - master

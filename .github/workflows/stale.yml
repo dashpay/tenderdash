@@ -10,11 +10,12 @@ jobs:
       - uses: actions/stale@v9
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-          stale-pr-message: "This pull request has been automatically marked as stale because it has not had
-    recent activity. It will be closed if no further activity occurs. Thank you
-    for your contributions."
+          stale-pr-message:
+            "This pull request has been automatically marked as stale because it has not had
+            recent activity. It will be closed if no further activity occurs. Thank you
+            for your contributions."
           days-before-stale: -1
           days-before-close: -1
-          days-before-pr-stale: 10
-          days-before-pr-close: 4
+          days-before-pr-stale: 31
+          days-before-pr-close: 16
           exempt-pr-labels: "S:wip"
