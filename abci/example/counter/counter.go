@@ -139,6 +139,7 @@ func (app *Application) updateCoreChainLock() {
 	if !app.HasCoreChainLocks {
 		return
 	}
-	app.CurrentCoreChainLockHeight += tmmath.MustConvertUint32(app.CoreChainLockStep)
+	// this allows negative CoreChainLockStep, but will panic if it goes below 0
+	app.CurrentCoreChainLockHeight = tmmath.MustConvertUint32(int64(app.CurrentCoreChainLockHeight) + int64(app.CoreChainLockStep))
 	app.lastCoreChainLock = tmtypes.NewMockChainLock(app.CurrentCoreChainLockHeight)
 }

@@ -547,7 +547,13 @@ func (h *Header) StateID() tmproto.StateID {
 		appHash = make([]byte, crypto.DefaultAppHashSize)
 	}
 
-	ts := tmmath.MustConvertUint64(h.Time.UnixMilli())
+	var ts uint64
+	if h.Time.IsZero() {
+		ts = 0
+	} else {
+		// this will panic if h.Time is before Unix Epoch, but this should never happen
+		ts = tmmath.MustConvertUint64(h.Time.UnixMilli())
+	}
 
 	return tmproto.StateID{
 		AppVersion:            h.Version.App,
