@@ -135,7 +135,7 @@ var _ Store = (*dbStore)(nil)
 func NewStore(db dbm.DB, logger ...log.Logger) Store {
 	// To avoid changing the API, we use `logger ...log.Logger` in function signature, so that old code can
 	// provide only `db`. In this case, we use NopLogger.
-	if logger[0] == nil {
+	if len(logger) == 0 || logger[0] == nil {
 		logger = []log.Logger{log.NewNopLogger()}
 	}
 
@@ -607,8 +607,8 @@ func (store dbStore) LoadValidators(height int64, bs selectproposer.BlockStore) 
 		valSetHash := valSet.Hash()
 		if !prevMeta.Header.NextValidatorsHash.Equal(valSetHash) {
 			return nil, ErrNoValSetForHeight{
-				height,
-				fmt.Errorf("next validators hash mismatch at height %d, expected %X, got %X", height,
+				Height: height,
+				Err: fmt.Errorf("next validators hash mismatch at height %d, expected %X, got %X", height,
 					prevMeta.Header.NextValidatorsHash, valSetHash),
 			}
 		}
