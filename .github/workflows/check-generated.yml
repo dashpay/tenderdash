@@ -21,7 +21,7 @@ jobs:
   check-mocks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v5.0.1
+      - uses: actions/setup-go@v5.1.0
         with:
           go-version: "1.23"
 
@@ -47,7 +47,7 @@ jobs:
   check-proto:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v5.0.1
+      - uses: actions/setup-go@v5.1.0
         with:
           go-version: "1.23"
 
