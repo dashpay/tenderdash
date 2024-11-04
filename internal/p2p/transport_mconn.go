@@ -17,6 +17,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	"github.com/dashpay/tenderdash/internal/p2p/conn"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -96,7 +97,7 @@ func (m *MConnTransport) Endpoint() (*Endpoint, error) {
 	}
 	if addr, ok := m.listener.Addr().(*net.TCPAddr); ok {
 		endpoint.IP = addr.IP
-		endpoint.Port = uint16(addr.Port)
+		endpoint.Port = tmmath.MustConvertUint16(addr.Port)
 	}
 	return endpoint, nil
 }
@@ -488,7 +489,7 @@ func (c *mConnConnection) LocalEndpoint() Endpoint {
 	}
 	if addr, ok := c.conn.LocalAddr().(*net.TCPAddr); ok {
 		endpoint.IP = addr.IP
-		endpoint.Port = uint16(addr.Port)
+		endpoint.Port = tmmath.MustConvertUint16(addr.Port)
 	}
 	return endpoint
 }
@@ -500,7 +501,7 @@ func (c *mConnConnection) RemoteEndpoint() Endpoint {
 	}
 	if addr, ok := c.conn.RemoteAddr().(*net.TCPAddr); ok {
 		endpoint.IP = addr.IP
-		endpoint.Port = uint16(addr.Port)
+		endpoint.Port = tmmath.MustConvertUint16(addr.Port)
 	}
 	return endpoint
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/internal/libs/autofile"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmtypes "github.com/dashpay/tenderdash/types"
 )
@@ -156,7 +157,7 @@ func TestWALWriteCommit(t *testing.T) {
 	// Prepare and write commit msg
 	height := rand.Int63()
 	stateID := tmtypes.RandStateID()
-	stateID.Height = uint64(height)
+	stateID.Height = tmmath.MustConvertUint64(height)
 	blockID := tmtypes.BlockID{
 		Hash: crypto.CRandBytes(crypto.HashSize),
 		PartSetHeader: tmtypes.PartSetHeader{

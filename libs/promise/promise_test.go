@@ -49,7 +49,7 @@ func TestThen(t *testing.T) {
 		T message[int]
 		M message[string]
 	)
-	promise := New[T](func(resolve func(data T), reject func(err error)) {
+	promise := New[T](func(resolve func(data T), _ func(err error)) {
 		resolve(T{val: 100})
 	})
 	wrappedPromise := Then[T, M](promise, func(msg T) M {

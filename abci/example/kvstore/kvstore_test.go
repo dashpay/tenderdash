@@ -19,6 +19,7 @@ import (
 	tmcrypto "github.com/dashpay/tenderdash/crypto"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/libs/service"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	pbversion "github.com/dashpay/tenderdash/proto/tendermint/version"
@@ -51,7 +52,7 @@ func testKVStore(ctx context.Context, t *testing.T, app types.Application, tx []
 	reqProcess := &types.RequestProcessProposal{
 		Txs:     [][]byte{tx},
 		Height:  height,
-		Version: &pbversion.Consensus{App: uint64(height)},
+		Version: &pbversion.Consensus{App: tmmath.MustConvertUint64(height)},
 	}
 	respProcess, err := app.ProcessProposal(ctx, reqProcess)
 	require.NoError(t, err)
@@ -290,7 +291,7 @@ func makeApplyBlock(
 		Hash:    hash,
 		Height:  height,
 		Txs:     txs,
-		Version: &pbversion.Consensus{App: uint64(height)},
+		Version: &pbversion.Consensus{App: tmmath.MustConvertUint64(height)},
 	})
 	require.NoError(t, err)
 	require.NotZero(t, respProcessProposal)
@@ -415,7 +416,7 @@ func testClient(ctx context.Context, t *testing.T, app abciclient.Client, height
 	rpp, err := app.ProcessProposal(ctx, &types.RequestProcessProposal{
 		Txs:     [][]byte{tx},
 		Height:  height,
-		Version: &pbversion.Consensus{App: uint64(height)},
+		Version: &pbversion.Consensus{App: tmmath.MustConvertUint64(height)},
 	})
 	require.NoError(t, err)
 	require.NotZero(t, rpp)
@@ -555,7 +556,7 @@ func assertRespInfo(t *testing.T, expectLastBlockHeight int64, expectAppHash tmb
 		LastBlockHeight:  expectLastBlockHeight,
 		LastBlockAppHash: expectAppHash,
 		Version:          version.ABCIVersion,
-		AppVersion:       uint64(expectLastBlockHeight + 1),
+		AppVersion:       tmmath.MustConvertUint64(expectLastBlockHeight + 1),
 		Data:             fmt.Sprintf(`{"appHash":"%s"}`, expectAppHash.String()),
 	}
 

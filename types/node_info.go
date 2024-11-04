@@ -11,7 +11,7 @@ import (
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 	"github.com/dashpay/tenderdash/internal/p2p/conn"
-	"github.com/dashpay/tenderdash/libs/math"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmp2p "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 )
 
@@ -211,7 +211,7 @@ func (info NodeInfo) ToProto() *tmp2p.NodeInfo {
 	}
 
 	for _, ch := range info.Channels.ToSlice() {
-		dni.Channels = append(dni.Channels, uint32(ch))
+		dni.Channels = append(dni.Channels, tmmath.MustConvertUint32(ch))
 	}
 
 	dni.NodeID = string(info.NodeID)
@@ -253,7 +253,7 @@ func NodeInfoFromProto(pb *tmp2p.NodeInfo) (NodeInfo, error) {
 
 	for _, ch := range pb.Channels {
 		// we need to explicitly validate the channel id, to avoid panics when remote host sends invalid channel id
-		chID, err := math.SafeConvert[uint32, int32](ch)
+		chID, err := tmmath.SafeConvert[uint32, int32](ch)
 		if err != nil {
 			return NodeInfo{}, fmt.Errorf("failed to convert channel id %d: %v", ch, err)
 		}
@@ -307,7 +307,7 @@ func ParseAddressString(addr string) (*NetAddress, error) {
 		return nil, err
 	}
 
-	na := NewNetAddressIPPort(ip, uint16(port))
+	na := NewNetAddressIPPort(ip, tmmath.MustConvertUint16(port))
 	na.ID = id
 
 	return na, nil

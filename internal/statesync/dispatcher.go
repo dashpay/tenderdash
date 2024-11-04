@@ -10,6 +10,7 @@ import (
 
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/light/provider"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -106,7 +107,7 @@ func (d *Dispatcher) dispatch(ctx context.Context, peer types.NodeID, height int
 	if err := d.requestCh.Send(ctx, p2p.Envelope{
 		To: peer,
 		Message: &ssproto.LightBlockRequest{
-			Height: uint64(height),
+			Height: tmmath.MustConvertUint64(height),
 		},
 	}); err != nil {
 		close(ch)

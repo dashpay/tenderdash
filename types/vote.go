@@ -12,6 +12,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
@@ -372,9 +373,9 @@ func VoteBlockRequestIDProto(vote *tmproto.Vote) []byte {
 func heightRoundRequestID(prefix string, height int64, round int32) []byte {
 	reqID := []byte(prefix)
 	heightBytes := make([]byte, 8)
-	binary.LittleEndian.PutUint64(heightBytes, uint64(height))
+	binary.LittleEndian.PutUint64(heightBytes, tmmath.MustConvertUint64(height))
 	roundBytes := make([]byte, 4)
-	binary.LittleEndian.PutUint32(roundBytes, uint32(round))
+	binary.LittleEndian.PutUint32(roundBytes, tmmath.MustConvertUint32(round))
 	reqID = append(reqID, heightBytes...)
 	reqID = append(reqID, roundBytes...)
 	return crypto.Checksum(reqID)

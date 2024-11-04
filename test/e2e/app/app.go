@@ -19,6 +19,7 @@ import (
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	types1 "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -73,7 +74,7 @@ func NewApplication(cfg kvstore.Config, opts ...kvstore.OptFunc) (*Application, 
 				AppVersion:       kvstore.ProtocolVersion,
 			},
 		}
-		app.AddConsensusParamsUpdate(params, int64(height))
+		app.AddConsensusParamsUpdate(params, tmmath.MustConvertInt64(height))
 	}
 
 	return &app, nil

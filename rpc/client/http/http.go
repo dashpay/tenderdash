@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dashpay/tenderdash/libs/bytes"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	rpcclient "github.com/dashpay/tenderdash/rpc/client"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 	jsonrpcclient "github.com/dashpay/tenderdash/rpc/jsonrpc/client"
@@ -362,7 +363,7 @@ func (c *baseRPCClient) Genesis(ctx context.Context) (*coretypes.ResultGenesis, 
 func (c *baseRPCClient) GenesisChunked(ctx context.Context, id uint) (*coretypes.ResultGenesisChunk, error) {
 	result := new(coretypes.ResultGenesisChunk)
 	if err := c.caller.Call(ctx, "genesis_chunked", &coretypes.RequestGenesisChunked{
-		Chunk: coretypes.Int64(id),
+		Chunk: coretypes.Int64(tmmath.MustConvertInt64(id)),
 	}, result); err != nil {
 		return nil, err
 	}

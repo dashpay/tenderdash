@@ -23,6 +23,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -552,7 +553,7 @@ func TestBlockMaxDataBytes(t *testing.T) {
 	ctx := context.Background()
 	height := int64(math.MaxInt64)
 	stateID := RandStateID()
-	stateID.Height = uint64(height)
+	stateID.Height = tmmath.MustConvertUint64(height)
 	commit := randCommit(ctx, t, height, stateID)
 	require.NotNil(t, commit)
 

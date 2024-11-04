@@ -6,6 +6,7 @@ import (
 	"math/rand"
 
 	"github.com/dashpay/tenderdash/crypto"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -19,7 +20,7 @@ func RandStateID() tmproto.StateID {
 		AppHash:               tmrand.Bytes(crypto.DefaultAppHashSize),
 		AppVersion:            StateIDVersion,
 		CoreChainLockedHeight: rand.Uint32(), //nolint:gosec
-		Time:                  uint64(tmtime.Now().UnixMilli()),
+		Time:                  tmmath.MustConvertUint64(tmtime.Now().UnixMilli()),
 	}
 }
 
@@ -40,7 +41,7 @@ func makeCommit(
 		}
 		vote := &Vote{
 			ValidatorProTxHash: proTxHash,
-			ValidatorIndex:     int32(i),
+			ValidatorIndex:     tmmath.MustConvertInt32(i),
 			Height:             height,
 			Round:              round,
 			Type:               tmproto.PrecommitType,

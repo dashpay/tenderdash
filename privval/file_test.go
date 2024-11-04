@@ -17,6 +17,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -351,7 +352,7 @@ func TestVoteExtensionsAreAlwaysSigned(t *testing.T) {
 	height, round := int64(10), int32(1)
 
 	stateID := types.RandStateID()
-	stateID.Height = uint64(height)
+	stateID.Height = tmmath.MustConvertUint64(height)
 	blockID := types.BlockID{
 		Hash:          tmrand.Bytes(crypto.HashSize),
 		PartSetHeader: types.PartSetHeader{Total: 5, Hash: tmrand.Bytes(crypto.HashSize)},

@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	lrpc "github.com/dashpay/tenderdash/light/rpc"
 	rpcclient "github.com/dashpay/tenderdash/rpc/client"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
@@ -19,7 +20,7 @@ func (p proxyService) ABCIInfo(_ctx context.Context) (*coretypes.ResultABCIInfo,
 
 func (p proxyService) ABCIQuery(ctx context.Context, req *coretypes.RequestABCIQuery) (*coretypes.ResultABCIQuery, error) {
 	return p.Client.ABCIQueryWithOptions(ctx, req.Path, req.Data, rpcclient.ABCIQueryOptions{
-		Height: int64(req.Height),
+		Height: tmmath.MustConvertInt64(req.Height),
 		Prove:  req.Prove,
 	})
 }
@@ -89,7 +90,7 @@ func (p proxyService) Genesis(ctx context.Context) (*coretypes.ResultGenesis, er
 }
 
 func (p proxyService) GenesisChunked(ctx context.Context, req *coretypes.RequestGenesisChunked) (*coretypes.ResultGenesisChunk, error) {
-	return p.Client.GenesisChunked(ctx, uint(req.Chunk))
+	return p.Client.GenesisChunked(ctx, tmmath.MustConvertUint(req.Chunk))
 }
 
 func (p proxyService) GetConsensusState(ctx context.Context) (*coretypes.ResultConsensusState, error) {

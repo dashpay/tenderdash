@@ -12,6 +12,7 @@ import (
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 )
 
 func BenchmarkTxMempool_CheckTx(b *testing.B) {
@@ -43,7 +44,7 @@ func BenchmarkTxMempool_CheckTx(b *testing.B) {
 
 		priority := int64(rng.Intn(9999-1000) + 1000)
 		tx := []byte(fmt.Sprintf("sender-%d-%d=%X=%d", n, peerID, prefix, priority))
-		txInfo := TxInfo{SenderID: uint16(peerID)}
+		txInfo := TxInfo{SenderID: tmmath.MustConvertUint16(peerID)}
 
 		b.StartTimer()
 

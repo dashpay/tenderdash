@@ -10,6 +10,7 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -22,7 +23,7 @@ type LightBlockRepository struct {
 // Get works out whether the node has a light block at a particular
 // height and if so returns it so it can be gossiped to peers
 func (r *LightBlockRepository) Get(height uint64) (*types.LightBlock, error) {
-	h := int64(height)
+	h := tmmath.MustConvertInt64(height)
 
 	blockMeta := r.blockStore.LoadBlockMeta(h)
 	if blockMeta == nil {

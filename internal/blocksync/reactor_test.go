@@ -27,6 +27,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -419,9 +420,11 @@ func TestReactor_BadBlockStopsPeer(t *testing.T) {
 	// XXX: This causes a potential race condition.
 	// See: https://github.com/tendermint/tendermint/issues/6005
 	otherGenDoc, otherPrivVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
+
 	newNode := rts.network.MakeNode(ctx, t, nil, p2ptest.NodeOptions{
-		MaxPeers:     uint16(len(rts.nodes) + 1),
-		MaxConnected: uint16(len(rts.nodes) + 1),
+
+		MaxPeers:     tmmath.MustConvertUint16(len(rts.nodes) + 1),
+		MaxConnected: tmmath.MustConvertUint16(len(rts.nodes) + 1),
 		ChanDescr:    p2p.ChannelDescriptors(cfg),
 	})
 	rts.addNode(ctx, t, newNode.NodeID, otherGenDoc, otherPrivVals[0], maxBlockHeight)

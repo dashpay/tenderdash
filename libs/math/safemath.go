@@ -164,6 +164,10 @@ func MustConvertInt16[T Integer](a T) int16 {
 	return MustConvert[T, int16](a)
 }
 
+func MustConvertUint8[T Integer](a T) uint8 {
+	return MustConvert[T, uint8](a)
+}
+
 func MustConvertUint[T Integer](a T) uint {
 	return MustConvert[T, uint](a)
 }

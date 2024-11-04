@@ -22,7 +22,7 @@ var _ tmcrypto.PrivKey = &dashConsensusPrivateKey{}
 
 func (key dashConsensusPrivateKey) Bytes() []byte {
 	quorumType := make([]byte, 8)
-	binary.LittleEndian.PutUint64(quorumType, uint64(key.quorumType))
+	binary.LittleEndian.PutUint64(quorumType, uint64(key.quorumType)) //#nosec:G115
 	ourType := key.TypeTag()
 
 	bytes := make([]byte, len(key.quorumHash)+len(ourType)+8)

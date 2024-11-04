@@ -3,6 +3,7 @@ package factory
 import (
 	"context"
 
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -24,7 +25,7 @@ func MakeCommit(
 		}
 		vote := &types.Vote{
 			ValidatorProTxHash: proTxHash,
-			ValidatorIndex:     int32(i),
+			ValidatorIndex:     tmmath.MustConvertInt32(i),
 			Height:             height,
 			Round:              round,
 			Type:               tmproto.PrecommitType,

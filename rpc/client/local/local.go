@@ -12,6 +12,7 @@ import (
 	rpccore "github.com/dashpay/tenderdash/internal/rpc/core"
 	"github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/math"
 	rpcclient "github.com/dashpay/tenderdash/rpc/client"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 	"github.com/dashpay/tenderdash/types"
@@ -154,7 +155,7 @@ func (c *Local) Genesis(ctx context.Context) (*coretypes.ResultGenesis, error) {
 }
 
 func (c *Local) GenesisChunked(ctx context.Context, id uint) (*coretypes.ResultGenesisChunk, error) {
-	return c.env.GenesisChunked(ctx, &coretypes.RequestGenesisChunked{Chunk: coretypes.Int64(id)})
+	return c.env.GenesisChunked(ctx, &coretypes.RequestGenesisChunked{Chunk: coretypes.Int64(math.MustConvertInt64(id))})
 }
 
 func (c *Local) Block(ctx context.Context, height *int64) (*coretypes.ResultBlock, error) {
@@ -296,7 +297,7 @@ func (c *Local) resubscribe(ctx context.Context, subArgs pubsub.SubscribeArgs) e
 		}
 
 		attempts++
-		timer.Reset((10 << uint(attempts)) * time.Millisecond) // 10ms -> 20ms -> 40ms
+		timer.Reset((10 << math.MustConvertUint(attempts)) * time.Millisecond) // 10ms -> 20ms -> 40ms
 		select {
 		case <-timer.C:
 			continue

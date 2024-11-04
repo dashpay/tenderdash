@@ -173,7 +173,7 @@ type PartSet struct {
 // CONTRACT: partSize is greater than zero.
 func NewPartSetFromData(data []byte, partSize uint32) *PartSet {
 	// divide data into 4kb parts.
-	total := (uint32(len(data)) + partSize - 1) / partSize
+	total := (tmmath.MustConvertUint32(len(data)) + partSize - 1) / partSize
 	parts := make([]*Part, total)
 	partsBytes := make([][]byte, total)
 	partsBitArray := bits.NewBitArray(int(total))

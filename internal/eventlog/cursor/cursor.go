@@ -92,7 +92,7 @@ func (c *Cursor) UnmarshalText(data []byte) error {
 		return fmt.Errorf("invalid sequence: %w", err)
 	}
 	c.timestamp = ts
-	c.sequence = uint16(sn)
+	c.sequence = tmmath.MustConvertUint16(sn)
 	return nil
 }
 
