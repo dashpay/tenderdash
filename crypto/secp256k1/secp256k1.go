@@ -17,7 +17,9 @@ import (
 	"github.com/dashpay/tenderdash/internal/jsontypes"
 
 	// necessary for Bitcoin address format
-	"golang.org/x/crypto/ripemd160" //nolint:staticcheck,deprecated,#nosec:G507
+	//nolint:staticcheck
+	//#nosec:G507
+	"golang.org/x/crypto/ripemd160"
 )
 
 // -------------------------------------
