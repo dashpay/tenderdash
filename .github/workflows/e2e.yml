@@ -8,6 +8,7 @@ on:
     paths:
       - "**Dockerfile"
       - "**.go"
+      - "go.sum"
   push:
     branches:
       - master

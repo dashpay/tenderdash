@@ -1,6 +1,5 @@
 #!/bin/bash
 
-
 # TODO: Workaround for busy port problem happening with docker restart policy
 #  we are trying to start a new container but previous process still not release
 #  the port.
@@ -15,9 +14,9 @@ got_signal=false
 # Function to handle signals and forward them to the tenderdash process
 # shellcheck disable=SC2317
 _forward_signal() {
-  echo "Caught signal! Forwarding to tenderdash process."
-  got_signal=true
-  kill -s "$1" "$child"
+	echo "Caught signal! Forwarding to tenderdash process."
+	got_signal=true
+	kill -s "$1" "$child"
 }
 
 # Trap signals and forward them to the tenderdash process
@@ -52,14 +51,14 @@ if [ ! -d "$TMHOME/config" ]; then
 fi
 
 # Start tenderdash in the background
-tenderdash "$@" &
+tenderdash "$@" 2>&1 &
 child=$!
 wait "$child"
 exit_code=$?
 
 if [ $got_signal == false ] && [ $exit_code -ne 0 ] && [ "$1" == "start" ]; then
-  echo "Sleeping for 10 seconds as workaround for the busy port problem. See entrypoint code for details."
-  sleep 10
+	echo "Sleeping for 10 seconds as workaround for the busy port problem. See entrypoint code for details."
+	sleep 10
 fi
 
 exit $exit_code
