@@ -47,14 +47,10 @@ issues:
 linters-settings:
   dogsled:
     max-blank-identifiers: 3
-  golint:
-    min-confidence: 0
   goconst:
     min-len: 5
     min-occurrences: 5
     ignore-tests: true
-  maligned:
-    suggest-new: true
   misspell:
     locale: US
   revive:
