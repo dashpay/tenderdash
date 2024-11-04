@@ -308,6 +308,7 @@ func (c *mConnConnection) Handshake(
 		// into an error. We should remove panics instead.
 		defer func() {
 			if r := recover(); r != nil {
+				c.logger.Error("recovered from panic", "panic", r)
 				errCh <- fmt.Errorf("recovered from panic: %v", r)
 			}
 		}()

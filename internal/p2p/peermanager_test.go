@@ -1088,7 +1088,7 @@ func TestPeerManager_Accepted(t *testing.T) {
 
 	// Accepting a connection from an unknown peer should work and register it.
 	require.NoError(t, peerManager.Accepted(b.NodeID))
-	require.Equal(t, "memory", b.Protocol)
+	require.Equal(t, p2p.Protocol("memory"), b.Protocol)
 	require.ElementsMatch(t, []types.NodeID{a.NodeID, b.NodeID}, peerManager.Peers())
 
 	// Accepting a connection from a peer that's being dialed should work, and
