@@ -161,7 +161,7 @@ func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.Request
 	}
 
 	if app.cfg.VoteExtensionDelayMS != 0 {
-		time.Sleep(time.Duration(app.cfg.VoteExtensionDelayMS) * time.Millisecond) //#nosec G115
+		time.Sleep(time.Duration(tmmath.MustConvertInt(app.cfg.VoteExtensionDelayMS)) * time.Millisecond)
 	}
 
 	app.logger.Info("verified vote extension value", "req", req, "nums", nums)

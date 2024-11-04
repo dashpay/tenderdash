@@ -18,6 +18,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/state/indexer/sink/psql"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/libs/os"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 	"github.com/dashpay/tenderdash/types"
@@ -210,7 +211,7 @@ func eventReIndex(cmd *cobra.Command, args eventReIndexArgs) error {
 				for i := range b.Data.Txs {
 					tr := abcitypes.TxResult{
 						Height: b.Height,
-						Index:  uint32(i), //#nosec:G115
+						Index:  tmmath.MustConvertUint32(i),
 						Tx:     b.Data.Txs[i],
 						Result: *(r.ProcessProposal.TxResults[i]),
 					}

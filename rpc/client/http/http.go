@@ -362,8 +362,12 @@ func (c *baseRPCClient) Genesis(ctx context.Context) (*coretypes.ResultGenesis, 
 
 func (c *baseRPCClient) GenesisChunked(ctx context.Context, id uint) (*coretypes.ResultGenesisChunk, error) {
 	result := new(coretypes.ResultGenesisChunk)
+	chunkID, err := tmmath.SafeConvert[uint, int64](id)
+	if err != nil {
+		return nil, fmt.Errorf("invalid chunk id %d: %w", id, err)
+	}
 	if err := c.caller.Call(ctx, "genesis_chunked", &coretypes.RequestGenesisChunked{
-		Chunk: coretypes.Int64(tmmath.MustConvertInt64(id)),
+		Chunk: coretypes.Int64(chunkID),
 	}, result); err != nil {
 		return nil, err
 	}

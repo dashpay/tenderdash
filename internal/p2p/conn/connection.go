@@ -539,7 +539,13 @@ FOR_LOOP:
 			// received" timestamp above, so we can ignore
 			// this message
 		case *tmp2p.Packet_PacketMsg:
-			channelID := ChannelID(pkt.PacketMsg.ChannelID)
+			channelID, err := tmmath.SafeConvert[int32, ChannelID](pkt.PacketMsg.ChannelID)
+			if err != nil {
+				c.logger.Debug("Connection failed @ recvRoutine: invalid channel ID",
+					"conn", c, "err", err, "channelID", pkt.PacketMsg.ChannelID)
+				c.stopForError(ctx, err)
+				break FOR_LOOP
+			}
 			channel, ok := c.channelsIdx[channelID]
 			if pkt.PacketMsg.ChannelID < 0 || pkt.PacketMsg.ChannelID > math.MaxUint8 || !ok || channel == nil {
 				err := fmt.Errorf("unknown channel %X", pkt.PacketMsg.ChannelID)
@@ -599,7 +605,7 @@ type ChannelStatus struct {
 
 // -----------------------------------------------------------------------------
 // ChannelID is an arbitrary channel ID.
-type ChannelID int32
+type ChannelID uint16
 
 type ChannelDescriptor struct {
 	ID       ChannelID

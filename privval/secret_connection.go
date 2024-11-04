@@ -28,6 +28,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	"github.com/dashpay/tenderdash/internal/libs/async"
 	"github.com/dashpay/tenderdash/internal/libs/protoio"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmprivval "github.com/dashpay/tenderdash/proto/tendermint/privval"
 )
 
@@ -215,8 +216,12 @@ func (sc *SecretConnection) Write(data []byte) (n int, err error) {
 				chunk = data
 				data = nil
 			}
-			chunkLength := len(chunk)
-			binary.LittleEndian.PutUint32(frame, uint32(chunkLength)) //#nosec:G115
+			chunkLength, err := tmmath.SafeConvert[int, uint32](len(chunk))
+			if err != nil {
+				return fmt.Errorf("invalid chunk len %d: %w", len(chunk), err)
+			}
+
+			binary.LittleEndian.PutUint32(frame, chunkLength)
 			copy(frame[dataLenSize:], chunk)
 
 			// encrypt the frame

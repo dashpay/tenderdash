@@ -45,24 +45,6 @@ const (
 	MaxOverheadForBlock int64 = 11
 )
 
-// Height is a type for a block height.
-type Height int64
-
-// NewHeight returns a new Height. It panics if the conversion fails.
-func NewHeight[T tmmath.Integer](height T) Height {
-	return Height(tmmath.MustConvert[T, int64](height))
-}
-
-// Uint64 converts Height to uint64. It panics if the conversion fails.
-func (h Height) Uint64() uint64 {
-	return tmmath.MustConvertUint64(h)
-}
-
-// Uint64 converts Height to uint64. It panics if the conversion fails.
-func (h Height) Int64() int64 {
-	return tmmath.MustConvertInt64(h)
-}
-
 // Block defines the atomic unit of a Tendermint blockchain.
 type Block struct {
 	mtx sync.Mutex

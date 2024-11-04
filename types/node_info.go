@@ -253,11 +253,11 @@ func NodeInfoFromProto(pb *tmp2p.NodeInfo) (NodeInfo, error) {
 
 	for _, ch := range pb.Channels {
 		// we need to explicitly validate the channel id, to avoid panics when remote host sends invalid channel id
-		chID, err := tmmath.SafeConvert[uint32, int32](ch)
+		chID, err := tmmath.SafeConvert[uint32, conn.ChannelID](ch)
 		if err != nil {
-			return NodeInfo{}, fmt.Errorf("failed to convert channel id %d: %v", ch, err)
+			return NodeInfo{}, fmt.Errorf("invalid channel id %d: %v", ch, err)
 		}
-		dni.Channels.Append(conn.ChannelID(chID))
+		dni.Channels.Append(chID)
 	}
 
 	return dni, nil

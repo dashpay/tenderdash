@@ -1067,7 +1067,7 @@ func TestPeerManager_Dialed_UpgradeNoEvict(t *testing.T) {
 func TestPeerManager_Accepted(t *testing.T) {
 	ctx := context.TODO()
 	a := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("a", 40))}
-	b := p2p.NodeAddress{NodeID: types.NodeID(strings.Repeat("b", 40))}
+	b := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("b", 40))}
 	c := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("c", 40))}
 	d := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("d", 40))}
 
@@ -1088,6 +1088,7 @@ func TestPeerManager_Accepted(t *testing.T) {
 
 	// Accepting a connection from an unknown peer should work and register it.
 	require.NoError(t, peerManager.Accepted(b.NodeID))
+	require.Equal(t, "memory", b.Protocol)
 	require.ElementsMatch(t, []types.NodeID{a.NodeID, b.NodeID}, peerManager.Peers())
 
 	// Accepting a connection from a peer that's being dialed should work, and

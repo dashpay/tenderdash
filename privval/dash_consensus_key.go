@@ -9,6 +9,7 @@ import (
 	"github.com/dashpay/dashd-go/btcjson"
 
 	tmcrypto "github.com/dashpay/tenderdash/crypto"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -22,7 +23,7 @@ var _ tmcrypto.PrivKey = &dashConsensusPrivateKey{}
 
 func (key dashConsensusPrivateKey) Bytes() []byte {
 	quorumType := make([]byte, 8)
-	binary.LittleEndian.PutUint64(quorumType, uint64(key.quorumType)) //#nosec:G115
+	binary.LittleEndian.PutUint64(quorumType, tmmath.MustConvertUint64(key.quorumType))
 	ourType := key.TypeTag()
 
 	bytes := make([]byte, len(key.quorumHash)+len(ourType)+8)
