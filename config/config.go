@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
@@ -343,7 +344,12 @@ func (cfg BaseConfig) ValidateBasic() error {
 		return errors.New("deadlock-detection can't be negative")
 	}
 
-	if cfg.DBBackend != "goleveldb" {
+	backends := map[string]bool{"goleveldb": true}
+	if testing.Testing() {
+		backends["memdb"] = true
+	}
+	// check if db_backends contains the db backend
+	if !backends[cfg.DBBackend] {
 		return fmt.Errorf("unsupported db backend: %s, only goleveldb is supported", cfg.DBBackend)
 	}
 
