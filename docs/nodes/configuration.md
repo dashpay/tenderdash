@@ -48,25 +48,10 @@ moniker = "sidewinder"
 #   - No priv_validator_key.json, priv_validator_state.json
 mode = "validator"
 
-# Database backend: goleveldb | cleveldb | boltdb | rocksdb | badgerdb
+# Database backend: goleveldb 
 # * goleveldb (github.com/syndtr/goleveldb - most popular implementation)
 #   - pure go
 #   - stable
-# * cleveldb (uses levigo wrapper)
-#   - fast
-#   - requires gcc
-#   - use cleveldb build tag (go build -tags cleveldb)
-# * boltdb (uses etcd's fork of bolt - github.com/etcd-io/bbolt)
-#   - EXPERIMENTAL
-#   - may be faster is some use-cases (random reads - indexer)
-#   - use boltdb build tag (go build -tags boltdb)
-# * rocksdb (uses github.com/tecbot/gorocksdb)
-#   - EXPERIMENTAL
-#   - requires gcc
-#   - use rocksdb build tag (go build -tags rocksdb)
-# * badgerdb (uses github.com/dgraph-io/badger)
-#   - EXPERIMENTAL
-#   - use badgerdb build tag (go build -tags badgerdb)
 db-backend = "goleveldb"
 
 # Database directory
@@ -533,29 +518,31 @@ Tendermint will only create blocks if there are transactions, or after waiting
 This section will cover settings within the p2p section of the `config.toml`.
 
 - `external-address` = is the address that will be advertised for other nodes to use. We recommend setting this field with your public IP and p2p port.
-  - > We recommend setting an external address. When used in a private network, Tendermint Core currently doesn't advertise the node's public address. There is active and ongoing work to improve the P2P system, but this is a helpful workaround for now.
+    - > We recommend setting an external address. When used in a private network, Tendermint Core currently doesn't advertise the node's public address. There is active and ongoing work to improve the P2P system, but this is a helpful workaround for now.
 - `persistent-peers` = is a list of comma separated peers that you will always want to be connected to. If you're already connected to the maximum number of peers, persistent peers will not be added.
 - `pex` = turns the peer exchange reactor on or off. Validator node will want the `pex` turned off so it would not begin gossiping to unknown peers on the network. PeX can also be turned off for statically configured networks with fixed network connectivity. For full nodes on open, dynamic networks, it should be turned on.
 - `private-peer-ids` = is a comma-separated list of node ids that will _not_ be exposed to other peers (i.e., you will not tell other peers about the ids in this list). This can be filled with a validator's node id.
 
-Recently the Tendermint Team conducted a refactor of the p2p layer. This lead to multiple config parameters being deprecated and/or replaced. 
+Recently the Tendermint Team conducted a refactor of the p2p layer. This lead to multiple config parameters being deprecated and/or replaced.
 
 We will cover the new and deprecated parameters below.
+
 ### New Parameters
 
 There are three new parameters, which are enabled if use-legacy is set to false.
 
 - `queue-type` = sets a type of queue to use in the p2p layer. There are three options available `fifo`, `priority` and `wdrr`. The default is priority
-- `bootstrap-peers` = is a list of comma seperated peers which will be used to bootstrap the address book. 
+- `bootstrap-peers` = is a list of comma seperated peers which will be used to bootstrap the address book.
 - `max-connections` = is the max amount of allowed inbound and outbound connections.
+
 ### Deprecated Parameters
 
 > Note: For Tendermint 0.35, there are two p2p implementations. The old version is used by default with the deprecated fields. The new implementation uses different config parameters, explained above.
 
-- `max-num-inbound-peers` = is the maximum number of peers you will accept inbound connections from at one time (where they dial your address and initiate the connection). *This was replaced by `max-connections`*
-- `max-num-outbound-peers` = is the maximum number of peers you will initiate outbound connects to at one time (where you dial their address and initiate the connection).*This was replaced by `max-connections`*
-- `unconditional-peer-ids` = is similar to `persistent-peers` except that these peers will be connected to even if you are already connected to the maximum number of peers. This can be a validator node ID on your sentry node. *Deprecated*
-- `seeds` = is a list of comma separated seed nodes that you will connect upon a start and ask for peers. A seed node is a node that does not participate in consensus but only helps propagate peers to nodes in the networks *Deprecated, replaced by bootstrap peers*
+- `max-num-inbound-peers` = is the maximum number of peers you will accept inbound connections from at one time (where they dial your address and initiate the connection). _This was replaced by `max-connections`_
+- `max-num-outbound-peers` = is the maximum number of peers you will initiate outbound connects to at one time (where you dial their address and initiate the connection)._This was replaced by `max-connections`_
+- `unconditional-peer-ids` = is similar to `persistent-peers` except that these peers will be connected to even if you are already connected to the maximum number of peers. This can be a validator node ID on your sentry node. _Deprecated_
+- `seeds` = is a list of comma separated seed nodes that you will connect upon a start and ask for peers. A seed node is a node that does not participate in consensus but only helps propagate peers to nodes in the networks _Deprecated, replaced by bootstrap peers_
 
 ## Indexing Settings
 
@@ -590,7 +577,7 @@ the `psql` indexer type.
 Example:
 
 ```shell
-$ psql ... -f state/indexer/sink/psql/schema.sql
+psql ... -f state/indexer/sink/psql/schema.sql
 ```
 
 ## Unsafe Consensus Timeout Overrides

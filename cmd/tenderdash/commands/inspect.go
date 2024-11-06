@@ -43,8 +43,6 @@ func MakeInspectCommand(conf *config.Config, logger log.Logger) *cobra.Command {
 	}
 	cmd.Flags().String("rpc.laddr",
 		conf.RPC.ListenAddress, "RPC listenener address. Port required")
-	cmd.Flags().String("db-backend",
-		conf.DBBackend, "database backend: goleveldb | cleveldb | boltdb | rocksdb | badgerdb")
 	cmd.Flags().String("db-dir", conf.DBPath, "database directory")
 
 	return cmd
