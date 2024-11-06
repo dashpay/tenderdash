@@ -6,8 +6,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/spf13/cobra"
-	dbm "github.com/tendermint/tm-db"
 
 	abcitypes "github.com/dashpay/tenderdash/abci/types"
 	tmcfg "github.com/dashpay/tenderdash/config"

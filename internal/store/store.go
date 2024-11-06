@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"strconv"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/gogo/protobuf/proto"
 	"github.com/google/orderedcode"
-	dbm "github.com/tendermint/tm-db"
 
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
