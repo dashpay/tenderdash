@@ -5,10 +5,10 @@ import (
 	"errors"
 	"testing"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	dbm "github.com/tendermint/tm-db"
 
 	abcitypes "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"

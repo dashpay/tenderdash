@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	dbm "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"

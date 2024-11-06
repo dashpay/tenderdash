@@ -3,7 +3,7 @@ package config
 import (
 	"context"
 
-	dbm "github.com/tendermint/tm-db"
+	dbm "github.com/cometbft/cometbft-db"
 
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/libs/service"

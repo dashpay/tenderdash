@@ -16,9 +16,9 @@ import (
 	"runtime"
 	"strconv"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/creachadair/taskgroup"
 	"github.com/google/orderedcode"
-	dbm "github.com/tendermint/tm-db"
 )
 
 type (

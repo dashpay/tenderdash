@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
@@ -197,25 +198,12 @@ type BaseConfig struct { //nolint: maligned
 	//   - No priv_validator_key.json, priv_validator_state.json
 	Mode string `mapstructure:"mode"`
 
-	// Database backend: goleveldb | cleveldb | boltdb | rocksdb
+	// Database backend: only goleveldb is supported
 	// * goleveldb (github.com/syndtr/goleveldb - most popular implementation)
 	//   - pure go
 	//   - stable
-	// * cleveldb (uses levigo wrapper)
-	//   - fast
-	//   - requires gcc
-	//   - use cleveldb build tag (go build -tags cleveldb)
-	// * boltdb (uses etcd's fork of bolt - github.com/etcd-io/bbolt)
-	//   - EXPERIMENTAL
-	//   - may be faster is some use-cases (random reads - indexer)
-	//   - use boltdb build tag (go build -tags boltdb)
-	// * rocksdb (uses github.com/tecbot/gorocksdb)
-	//   - EXPERIMENTAL
-	//   - requires gcc
-	//   - use rocksdb build tag (go build -tags rocksdb)
-	// * badgerdb (uses github.com/dgraph-io/badger)
-	//   - EXPERIMENTAL
-	//   - use badgerdb build tag (go build -tags badgerdb)
+	//
+	// Note: we don't remove it from config as we also use `memdb` in some tests.
 	DBBackend string `mapstructure:"db-backend"`
 
 	// Database directory
@@ -354,6 +342,15 @@ func (cfg BaseConfig) ValidateBasic() error {
 
 	if cfg.DeadlockDetection < 0 {
 		return errors.New("deadlock-detection can't be negative")
+	}
+
+	backends := map[string]bool{"goleveldb": true}
+	if testing.Testing() {
+		backends["memdb"] = true
+	}
+	// check if db_backends contains the db backend
+	if !backends[cfg.DBBackend] {
+		return fmt.Errorf("unsupported db backend: %s, only goleveldb is supported", cfg.DBBackend)
 	}
 
 	return nil
