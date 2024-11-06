@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	dbm "github.com/tendermint/tm-db"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	abci "github.com/dashpay/tenderdash/abci/types"

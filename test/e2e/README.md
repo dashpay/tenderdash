@@ -217,7 +217,7 @@ To analyze core dumps:
 1. Examine [Dockerfile](docker/Dockerfile) to ensure `ENV TENDERMINT_BUILD_OPTIONS`  contains `nostrip` option AND `GOTRACEBACK` is set to `crash`, for example:
 
    ```docker
-	ENV TENDERMINT_BUILD_OPTIONS badgerdb,boltdb,cleveldb,rocksdb,nostrip
+	ENV TENDERMINT_BUILD_OPTIONS nostrip
 	ENV GOTRACEBACK=crash
    ```
 
@@ -255,9 +255,9 @@ Docker does not enable IPv6 by default. To do so, enter the following in
 
 It is also possible to run a simple benchmark on a testnet. This is done through the `benchmark` command. This manages the entire process: setting up the environment, starting the test net, waiting for a considerable amount of blocks to be used (currently 100), and then returning the following metrics from the sample of the blockchain:
 
-- Average time to produce a block
-- Standard deviation of producing a block
-- Minimum and maximum time to produce a block
+* Average time to produce a block
+* Standard deviation of producing a block
+* Minimum and maximum time to produce a block
 
 ## Running Individual Nodes
 

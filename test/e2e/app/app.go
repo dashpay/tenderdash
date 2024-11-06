@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
+	db "github.com/cometbft/cometbft-db"
 	sync "github.com/sasha-s/go-deadlock"
-	db "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/abci/example/code"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"

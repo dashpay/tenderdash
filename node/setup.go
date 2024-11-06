@@ -7,10 +7,10 @@ import (
 	"strings"
 	"time"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	dbm "github.com/tendermint/tm-db"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/config"

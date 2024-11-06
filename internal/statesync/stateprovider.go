@@ -10,7 +10,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	dbm "github.com/tendermint/tm-db"
+	dbm "github.com/cometbft/cometbft-db"
 
 	dashcore "github.com/dashpay/tenderdash/dash/core"
 	"github.com/dashpay/tenderdash/internal/p2p"

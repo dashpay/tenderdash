@@ -11,13 +11,13 @@ import (
 	"testing"
 	"time"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/fortytw2/leaktest"
 	gogotypes "github.com/gogo/protobuf/types"
 	sync "github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	dbm "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/crypto"
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"

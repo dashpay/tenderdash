@@ -6,10 +6,10 @@ import (
 	"os"
 	"testing"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	dbm "github.com/tendermint/tm-db"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"

@@ -10,11 +10,11 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/fortytw2/leaktest"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	dbm "github.com/tendermint/tm-db"
 
 	clientmocks "github.com/dashpay/tenderdash/abci/client/mocks"
 	abci "github.com/dashpay/tenderdash/abci/types"

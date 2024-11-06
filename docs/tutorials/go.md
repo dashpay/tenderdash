@@ -454,7 +454,7 @@ This will populate the `go.mod` with a release number followed by a hash for Ten
 ```go
 module github.com/<username>/kvstore
 
-go 1.23
+go 1.23.2
 
 require (
  github.com/dgraph-io/badger/v3 v3.2103.2

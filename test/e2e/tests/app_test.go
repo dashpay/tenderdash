@@ -11,9 +11,9 @@ import (
 	"testing"
 	"time"
 
+	db "github.com/cometbft/cometbft-db"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	db "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/abci/example/code"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"

@@ -6,7 +6,7 @@ import (
 	"io"
 	"os"
 
-	dbm "github.com/tendermint/tm-db"
+	dbm "github.com/cometbft/cometbft-db"
 )
 
 // StoreFactory is a factory that offers a reader to read data from, or writer to write data to it.

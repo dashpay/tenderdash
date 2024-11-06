@@ -8,8 +8,8 @@ import (
 	"strconv"
 	"strings"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/google/orderedcode"
-	dbm "github.com/tendermint/tm-db"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/internal/pubsub/query"

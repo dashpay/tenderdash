@@ -9,11 +9,11 @@ import (
 	"time"
 
 	"github.com/adlio/schema"
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/ory/dockertest"
 	"github.com/ory/dockertest/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	dbm "github.com/tendermint/tm-db"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/internal/eventbus"
