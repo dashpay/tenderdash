@@ -6,8 +6,8 @@ import (
 	"math/rand"
 	"testing"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/gogo/protobuf/proto"
-	dbm "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/types"
 )

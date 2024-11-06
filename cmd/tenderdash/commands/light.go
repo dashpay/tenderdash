@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/spf13/cobra"
-	dbm "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/config"
 	dashcore "github.com/dashpay/tenderdash/dash/core"
