@@ -48,7 +48,7 @@ require (
 require (
 	github.com/bufbuild/buf v1.35.1
 	github.com/creachadair/atomicfile v0.2.6
-	github.com/creachadair/taskgroup v0.12.0
+	github.com/creachadair/taskgroup v0.13.1
 	github.com/go-pkgz/jrpc v0.2.0
 	github.com/google/go-cmp v0.6.0
 	github.com/vektra/mockery/v2 v2.46.3
