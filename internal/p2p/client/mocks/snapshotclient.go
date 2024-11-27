@@ -18,6 +18,14 @@ type SnapshotClient struct {
 	mock.Mock
 }
 
+type SnapshotClient_Expecter struct {
+	mock *mock.Mock
+}
+
+func (_m *SnapshotClient) EXPECT() *SnapshotClient_Expecter {
+	return &SnapshotClient_Expecter{mock: &_m.Mock}
+}
+
 // GetChunk provides a mock function with given fields: ctx, peerID, height, format, index
 func (_m *SnapshotClient) GetChunk(ctx context.Context, peerID types.NodeID, height uint64, format uint32, index uint32) (*promise.Promise[*statesync.ChunkResponse], error) {
 	ret := _m.Called(ctx, peerID, height, format, index)
@@ -46,6 +54,38 @@ func (_m *SnapshotClient) GetChunk(ctx context.Context, peerID types.NodeID, hei
 	}
 
 	return r0, r1
+}
+
+// SnapshotClient_GetChunk_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetChunk'
+type SnapshotClient_GetChunk_Call struct {
+	*mock.Call
+}
+
+// GetChunk is a helper method to define mock.On call
+//   - ctx context.Context
+//   - peerID types.NodeID
+//   - height uint64
+//   - format uint32
+//   - index uint32
+func (_e *SnapshotClient_Expecter) GetChunk(ctx interface{}, peerID interface{}, height interface{}, format interface{}, index interface{}) *SnapshotClient_GetChunk_Call {
+	return &SnapshotClient_GetChunk_Call{Call: _e.mock.On("GetChunk", ctx, peerID, height, format, index)}
+}
+
+func (_c *SnapshotClient_GetChunk_Call) Run(run func(ctx context.Context, peerID types.NodeID, height uint64, format uint32, index uint32)) *SnapshotClient_GetChunk_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(types.NodeID), args[2].(uint64), args[3].(uint32), args[4].(uint32))
+	})
+	return _c
+}
+
+func (_c *SnapshotClient_GetChunk_Call) Return(_a0 *promise.Promise[*statesync.ChunkResponse], _a1 error) *SnapshotClient_GetChunk_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *SnapshotClient_GetChunk_Call) RunAndReturn(run func(context.Context, types.NodeID, uint64, uint32, uint32) (*promise.Promise[*statesync.ChunkResponse], error)) *SnapshotClient_GetChunk_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // GetLightBlock provides a mock function with given fields: ctx, peerID, height
@@ -78,6 +118,36 @@ func (_m *SnapshotClient) GetLightBlock(ctx context.Context, peerID types.NodeID
 	return r0, r1
 }
 
+// SnapshotClient_GetLightBlock_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetLightBlock'
+type SnapshotClient_GetLightBlock_Call struct {
+	*mock.Call
+}
+
+// GetLightBlock is a helper method to define mock.On call
+//   - ctx context.Context
+//   - peerID types.NodeID
+//   - height uint64
+func (_e *SnapshotClient_Expecter) GetLightBlock(ctx interface{}, peerID interface{}, height interface{}) *SnapshotClient_GetLightBlock_Call {
+	return &SnapshotClient_GetLightBlock_Call{Call: _e.mock.On("GetLightBlock", ctx, peerID, height)}
+}
+
+func (_c *SnapshotClient_GetLightBlock_Call) Run(run func(ctx context.Context, peerID types.NodeID, height uint64)) *SnapshotClient_GetLightBlock_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(types.NodeID), args[2].(uint64))
+	})
+	return _c
+}
+
+func (_c *SnapshotClient_GetLightBlock_Call) Return(_a0 *promise.Promise[*statesync.LightBlockResponse], _a1 error) *SnapshotClient_GetLightBlock_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *SnapshotClient_GetLightBlock_Call) RunAndReturn(run func(context.Context, types.NodeID, uint64) (*promise.Promise[*statesync.LightBlockResponse], error)) *SnapshotClient_GetLightBlock_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetParams provides a mock function with given fields: ctx, peerID, height
 func (_m *SnapshotClient) GetParams(ctx context.Context, peerID types.NodeID, height uint64) (*promise.Promise[*statesync.ParamsResponse], error) {
 	ret := _m.Called(ctx, peerID, height)
@@ -108,6 +178,36 @@ func (_m *SnapshotClient) GetParams(ctx context.Context, peerID types.NodeID, he
 	return r0, r1
 }
 
+// SnapshotClient_GetParams_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetParams'
+type SnapshotClient_GetParams_Call struct {
+	*mock.Call
+}
+
+// GetParams is a helper method to define mock.On call
+//   - ctx context.Context
+//   - peerID types.NodeID
+//   - height uint64
+func (_e *SnapshotClient_Expecter) GetParams(ctx interface{}, peerID interface{}, height interface{}) *SnapshotClient_GetParams_Call {
+	return &SnapshotClient_GetParams_Call{Call: _e.mock.On("GetParams", ctx, peerID, height)}
+}
+
+func (_c *SnapshotClient_GetParams_Call) Run(run func(ctx context.Context, peerID types.NodeID, height uint64)) *SnapshotClient_GetParams_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(types.NodeID), args[2].(uint64))
+	})
+	return _c
+}
+
+func (_c *SnapshotClient_GetParams_Call) Return(_a0 *promise.Promise[*statesync.ParamsResponse], _a1 error) *SnapshotClient_GetParams_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *SnapshotClient_GetParams_Call) RunAndReturn(run func(context.Context, types.NodeID, uint64) (*promise.Promise[*statesync.ParamsResponse], error)) *SnapshotClient_GetParams_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GetSnapshots provides a mock function with given fields: ctx, peerID
 func (_m *SnapshotClient) GetSnapshots(ctx context.Context, peerID types.NodeID) error {
 	ret := _m.Called(ctx, peerID)
@@ -124,6 +224,35 @@ func (_m *SnapshotClient) GetSnapshots(ctx context.Context, peerID types.NodeID)
 	}
 
 	return r0
+}
+
+// SnapshotClient_GetSnapshots_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetSnapshots'
+type SnapshotClient_GetSnapshots_Call struct {
+	*mock.Call
+}
+
+// GetSnapshots is a helper method to define mock.On call
+//   - ctx context.Context
+//   - peerID types.NodeID
+func (_e *SnapshotClient_Expecter) GetSnapshots(ctx interface{}, peerID interface{}) *SnapshotClient_GetSnapshots_Call {
+	return &SnapshotClient_GetSnapshots_Call{Call: _e.mock.On("GetSnapshots", ctx, peerID)}
+}
+
+func (_c *SnapshotClient_GetSnapshots_Call) Run(run func(ctx context.Context, peerID types.NodeID)) *SnapshotClient_GetSnapshots_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(types.NodeID))
+	})
+	return _c
+}
+
+func (_c *SnapshotClient_GetSnapshots_Call) Return(_a0 error) *SnapshotClient_GetSnapshots_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *SnapshotClient_GetSnapshots_Call) RunAndReturn(run func(context.Context, types.NodeID) error) *SnapshotClient_GetSnapshots_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // NewSnapshotClient creates a new instance of SnapshotClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

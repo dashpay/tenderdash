@@ -1,11 +1,13 @@
 ---
-with-expecter: false
+with-expecter: true
 dir: "{{.InterfaceDir}}/mocks"
 mockname: "{{.InterfaceName}}"
 outpkg: "mocks"
 filename: "{{.InterfaceName | lower}}.go"
 log-level: "warn"
 disable-version-string: true
+resolve-type-alias: false
+issue-845-fix: True
 all: false
 packages:
   github.com/dashpay/tenderdash/abci/client:

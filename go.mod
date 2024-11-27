@@ -39,7 +39,7 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.9.0
 	golang.org/x/crypto v0.29.0
-	golang.org/x/net v0.30.0
+	golang.org/x/net v0.31.0
 	golang.org/x/sync v0.9.0
 	google.golang.org/grpc v1.68.0
 	pgregory.net/rapid v0.4.8
@@ -51,7 +51,7 @@ require (
 	github.com/creachadair/taskgroup v0.13.2
 	github.com/go-pkgz/jrpc v0.2.0
 	github.com/google/go-cmp v0.6.0
-	github.com/vektra/mockery/v2 v2.46.3
+	github.com/vektra/mockery/v2 v2.49.1
 )
 
 require (
