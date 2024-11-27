@@ -232,7 +232,7 @@ ExtendedVoteInfo
 <a name="tendermint-abci-Request"></a>
 
 ### Request
-Request types
+Request types.
 
 
 | Field | Type | Label | Description |

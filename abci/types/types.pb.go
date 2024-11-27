@@ -258,7 +258,7 @@ func (TxRecord_TxAction) EnumDescriptor() ([]byte, []int) {
 	return fileDescriptor_252557cfdd89a31a, []int{39, 0}
 }
 
-// Request types
+// Request types.
 type Request struct {
 	// Types that are valid to be assigned to Value:
 	//	*Request_Echo
