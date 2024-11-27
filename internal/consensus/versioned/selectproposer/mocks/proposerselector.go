@@ -13,6 +13,14 @@ type ProposerSelector struct {
 	mock.Mock
 }
 
+type ProposerSelector_Expecter struct {
+	mock *mock.Mock
+}
+
+func (_m *ProposerSelector) EXPECT() *ProposerSelector_Expecter {
+	return &ProposerSelector_Expecter{mock: &_m.Mock}
+}
+
 // Copy provides a mock function with given fields:
 func (_m *ProposerSelector) Copy() selectproposer.ProposerSelector {
 	ret := _m.Called()
@@ -31,6 +39,33 @@ func (_m *ProposerSelector) Copy() selectproposer.ProposerSelector {
 	}
 
 	return r0
+}
+
+// ProposerSelector_Copy_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Copy'
+type ProposerSelector_Copy_Call struct {
+	*mock.Call
+}
+
+// Copy is a helper method to define mock.On call
+func (_e *ProposerSelector_Expecter) Copy() *ProposerSelector_Copy_Call {
+	return &ProposerSelector_Copy_Call{Call: _e.mock.On("Copy")}
+}
+
+func (_c *ProposerSelector_Copy_Call) Run(run func()) *ProposerSelector_Copy_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *ProposerSelector_Copy_Call) Return(_a0 selectproposer.ProposerSelector) *ProposerSelector_Copy_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ProposerSelector_Copy_Call) RunAndReturn(run func() selectproposer.ProposerSelector) *ProposerSelector_Copy_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // GetProposer provides a mock function with given fields: height, round
@@ -63,6 +98,35 @@ func (_m *ProposerSelector) GetProposer(height int64, round int32) (*types.Valid
 	return r0, r1
 }
 
+// ProposerSelector_GetProposer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetProposer'
+type ProposerSelector_GetProposer_Call struct {
+	*mock.Call
+}
+
+// GetProposer is a helper method to define mock.On call
+//   - height int64
+//   - round int32
+func (_e *ProposerSelector_Expecter) GetProposer(height interface{}, round interface{}) *ProposerSelector_GetProposer_Call {
+	return &ProposerSelector_GetProposer_Call{Call: _e.mock.On("GetProposer", height, round)}
+}
+
+func (_c *ProposerSelector_GetProposer_Call) Run(run func(height int64, round int32)) *ProposerSelector_GetProposer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int64), args[1].(int32))
+	})
+	return _c
+}
+
+func (_c *ProposerSelector_GetProposer_Call) Return(_a0 *types.Validator, _a1 error) *ProposerSelector_GetProposer_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *ProposerSelector_GetProposer_Call) RunAndReturn(run func(int64, int32) (*types.Validator, error)) *ProposerSelector_GetProposer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // MustGetProposer provides a mock function with given fields: height, round
 func (_m *ProposerSelector) MustGetProposer(height int64, round int32) *types.Validator {
 	ret := _m.Called(height, round)
@@ -83,6 +147,35 @@ func (_m *ProposerSelector) MustGetProposer(height int64, round int32) *types.Va
 	return r0
 }
 
+// ProposerSelector_MustGetProposer_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'MustGetProposer'
+type ProposerSelector_MustGetProposer_Call struct {
+	*mock.Call
+}
+
+// MustGetProposer is a helper method to define mock.On call
+//   - height int64
+//   - round int32
+func (_e *ProposerSelector_Expecter) MustGetProposer(height interface{}, round interface{}) *ProposerSelector_MustGetProposer_Call {
+	return &ProposerSelector_MustGetProposer_Call{Call: _e.mock.On("MustGetProposer", height, round)}
+}
+
+func (_c *ProposerSelector_MustGetProposer_Call) Run(run func(height int64, round int32)) *ProposerSelector_MustGetProposer_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int64), args[1].(int32))
+	})
+	return _c
+}
+
+func (_c *ProposerSelector_MustGetProposer_Call) Return(_a0 *types.Validator) *ProposerSelector_MustGetProposer_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ProposerSelector_MustGetProposer_Call) RunAndReturn(run func(int64, int32) *types.Validator) *ProposerSelector_MustGetProposer_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UpdateHeightRound provides a mock function with given fields: height, round
 func (_m *ProposerSelector) UpdateHeightRound(height int64, round int32) error {
 	ret := _m.Called(height, round)
@@ -99,6 +192,35 @@ func (_m *ProposerSelector) UpdateHeightRound(height int64, round int32) error {
 	}
 
 	return r0
+}
+
+// ProposerSelector_UpdateHeightRound_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UpdateHeightRound'
+type ProposerSelector_UpdateHeightRound_Call struct {
+	*mock.Call
+}
+
+// UpdateHeightRound is a helper method to define mock.On call
+//   - height int64
+//   - round int32
+func (_e *ProposerSelector_Expecter) UpdateHeightRound(height interface{}, round interface{}) *ProposerSelector_UpdateHeightRound_Call {
+	return &ProposerSelector_UpdateHeightRound_Call{Call: _e.mock.On("UpdateHeightRound", height, round)}
+}
+
+func (_c *ProposerSelector_UpdateHeightRound_Call) Run(run func(height int64, round int32)) *ProposerSelector_UpdateHeightRound_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(int64), args[1].(int32))
+	})
+	return _c
+}
+
+func (_c *ProposerSelector_UpdateHeightRound_Call) Return(_a0 error) *ProposerSelector_UpdateHeightRound_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ProposerSelector_UpdateHeightRound_Call) RunAndReturn(run func(int64, int32) error) *ProposerSelector_UpdateHeightRound_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // ValidatorSet provides a mock function with given fields:
@@ -119,6 +241,33 @@ func (_m *ProposerSelector) ValidatorSet() *types.ValidatorSet {
 	}
 
 	return r0
+}
+
+// ProposerSelector_ValidatorSet_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ValidatorSet'
+type ProposerSelector_ValidatorSet_Call struct {
+	*mock.Call
+}
+
+// ValidatorSet is a helper method to define mock.On call
+func (_e *ProposerSelector_Expecter) ValidatorSet() *ProposerSelector_ValidatorSet_Call {
+	return &ProposerSelector_ValidatorSet_Call{Call: _e.mock.On("ValidatorSet")}
+}
+
+func (_c *ProposerSelector_ValidatorSet_Call) Run(run func()) *ProposerSelector_ValidatorSet_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *ProposerSelector_ValidatorSet_Call) Return(_a0 *types.ValidatorSet) *ProposerSelector_ValidatorSet_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *ProposerSelector_ValidatorSet_Call) RunAndReturn(run func() *types.ValidatorSet) *ProposerSelector_ValidatorSet_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // NewProposerSelector creates a new instance of ProposerSelector. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

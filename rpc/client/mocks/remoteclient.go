@@ -20,6 +20,14 @@ type RemoteClient struct {
 	mock.Mock
 }
 
+type RemoteClient_Expecter struct {
+	mock *mock.Mock
+}
+
+func (_m *RemoteClient) EXPECT() *RemoteClient_Expecter {
+	return &RemoteClient_Expecter{mock: &_m.Mock}
+}
+
 // ABCIInfo provides a mock function with given fields: _a0
 func (_m *RemoteClient) ABCIInfo(_a0 context.Context) (*coretypes.ResultABCIInfo, error) {
 	ret := _m.Called(_a0)
@@ -48,6 +56,34 @@ func (_m *RemoteClient) ABCIInfo(_a0 context.Context) (*coretypes.ResultABCIInfo
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_ABCIInfo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ABCIInfo'
+type RemoteClient_ABCIInfo_Call struct {
+	*mock.Call
+}
+
+// ABCIInfo is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *RemoteClient_Expecter) ABCIInfo(_a0 interface{}) *RemoteClient_ABCIInfo_Call {
+	return &RemoteClient_ABCIInfo_Call{Call: _e.mock.On("ABCIInfo", _a0)}
+}
+
+func (_c *RemoteClient_ABCIInfo_Call) Run(run func(_a0 context.Context)) *RemoteClient_ABCIInfo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_ABCIInfo_Call) Return(_a0 *coretypes.ResultABCIInfo, _a1 error) *RemoteClient_ABCIInfo_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_ABCIInfo_Call) RunAndReturn(run func(context.Context) (*coretypes.ResultABCIInfo, error)) *RemoteClient_ABCIInfo_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // ABCIQuery provides a mock function with given fields: ctx, path, data
@@ -80,6 +116,36 @@ func (_m *RemoteClient) ABCIQuery(ctx context.Context, path string, data bytes.H
 	return r0, r1
 }
 
+// RemoteClient_ABCIQuery_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ABCIQuery'
+type RemoteClient_ABCIQuery_Call struct {
+	*mock.Call
+}
+
+// ABCIQuery is a helper method to define mock.On call
+//   - ctx context.Context
+//   - path string
+//   - data bytes.HexBytes
+func (_e *RemoteClient_Expecter) ABCIQuery(ctx interface{}, path interface{}, data interface{}) *RemoteClient_ABCIQuery_Call {
+	return &RemoteClient_ABCIQuery_Call{Call: _e.mock.On("ABCIQuery", ctx, path, data)}
+}
+
+func (_c *RemoteClient_ABCIQuery_Call) Run(run func(ctx context.Context, path string, data bytes.HexBytes)) *RemoteClient_ABCIQuery_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(bytes.HexBytes))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_ABCIQuery_Call) Return(_a0 *coretypes.ResultABCIQuery, _a1 error) *RemoteClient_ABCIQuery_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_ABCIQuery_Call) RunAndReturn(run func(context.Context, string, bytes.HexBytes) (*coretypes.ResultABCIQuery, error)) *RemoteClient_ABCIQuery_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ABCIQueryWithOptions provides a mock function with given fields: ctx, path, data, opts
 func (_m *RemoteClient) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	ret := _m.Called(ctx, path, data, opts)
@@ -108,6 +174,37 @@ func (_m *RemoteClient) ABCIQueryWithOptions(ctx context.Context, path string, d
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_ABCIQueryWithOptions_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ABCIQueryWithOptions'
+type RemoteClient_ABCIQueryWithOptions_Call struct {
+	*mock.Call
+}
+
+// ABCIQueryWithOptions is a helper method to define mock.On call
+//   - ctx context.Context
+//   - path string
+//   - data bytes.HexBytes
+//   - opts client.ABCIQueryOptions
+func (_e *RemoteClient_Expecter) ABCIQueryWithOptions(ctx interface{}, path interface{}, data interface{}, opts interface{}) *RemoteClient_ABCIQueryWithOptions_Call {
+	return &RemoteClient_ABCIQueryWithOptions_Call{Call: _e.mock.On("ABCIQueryWithOptions", ctx, path, data, opts)}
+}
+
+func (_c *RemoteClient_ABCIQueryWithOptions_Call) Run(run func(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions)) *RemoteClient_ABCIQueryWithOptions_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(bytes.HexBytes), args[3].(client.ABCIQueryOptions))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_ABCIQueryWithOptions_Call) Return(_a0 *coretypes.ResultABCIQuery, _a1 error) *RemoteClient_ABCIQueryWithOptions_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_ABCIQueryWithOptions_Call) RunAndReturn(run func(context.Context, string, bytes.HexBytes, client.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error)) *RemoteClient_ABCIQueryWithOptions_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Block provides a mock function with given fields: ctx, height
@@ -140,6 +237,35 @@ func (_m *RemoteClient) Block(ctx context.Context, height *int64) (*coretypes.Re
 	return r0, r1
 }
 
+// RemoteClient_Block_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Block'
+type RemoteClient_Block_Call struct {
+	*mock.Call
+}
+
+// Block is a helper method to define mock.On call
+//   - ctx context.Context
+//   - height *int64
+func (_e *RemoteClient_Expecter) Block(ctx interface{}, height interface{}) *RemoteClient_Block_Call {
+	return &RemoteClient_Block_Call{Call: _e.mock.On("Block", ctx, height)}
+}
+
+func (_c *RemoteClient_Block_Call) Run(run func(ctx context.Context, height *int64)) *RemoteClient_Block_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*int64))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Block_Call) Return(_a0 *coretypes.ResultBlock, _a1 error) *RemoteClient_Block_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_Block_Call) RunAndReturn(run func(context.Context, *int64) (*coretypes.ResultBlock, error)) *RemoteClient_Block_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // BlockByHash provides a mock function with given fields: ctx, hash
 func (_m *RemoteClient) BlockByHash(ctx context.Context, hash bytes.HexBytes) (*coretypes.ResultBlock, error) {
 	ret := _m.Called(ctx, hash)
@@ -168,6 +294,35 @@ func (_m *RemoteClient) BlockByHash(ctx context.Context, hash bytes.HexBytes) (*
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_BlockByHash_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BlockByHash'
+type RemoteClient_BlockByHash_Call struct {
+	*mock.Call
+}
+
+// BlockByHash is a helper method to define mock.On call
+//   - ctx context.Context
+//   - hash bytes.HexBytes
+func (_e *RemoteClient_Expecter) BlockByHash(ctx interface{}, hash interface{}) *RemoteClient_BlockByHash_Call {
+	return &RemoteClient_BlockByHash_Call{Call: _e.mock.On("BlockByHash", ctx, hash)}
+}
+
+func (_c *RemoteClient_BlockByHash_Call) Run(run func(ctx context.Context, hash bytes.HexBytes)) *RemoteClient_BlockByHash_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(bytes.HexBytes))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_BlockByHash_Call) Return(_a0 *coretypes.ResultBlock, _a1 error) *RemoteClient_BlockByHash_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_BlockByHash_Call) RunAndReturn(run func(context.Context, bytes.HexBytes) (*coretypes.ResultBlock, error)) *RemoteClient_BlockByHash_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // BlockResults provides a mock function with given fields: ctx, height
@@ -200,6 +355,35 @@ func (_m *RemoteClient) BlockResults(ctx context.Context, height *int64) (*coret
 	return r0, r1
 }
 
+// RemoteClient_BlockResults_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BlockResults'
+type RemoteClient_BlockResults_Call struct {
+	*mock.Call
+}
+
+// BlockResults is a helper method to define mock.On call
+//   - ctx context.Context
+//   - height *int64
+func (_e *RemoteClient_Expecter) BlockResults(ctx interface{}, height interface{}) *RemoteClient_BlockResults_Call {
+	return &RemoteClient_BlockResults_Call{Call: _e.mock.On("BlockResults", ctx, height)}
+}
+
+func (_c *RemoteClient_BlockResults_Call) Run(run func(ctx context.Context, height *int64)) *RemoteClient_BlockResults_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*int64))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_BlockResults_Call) Return(_a0 *coretypes.ResultBlockResults, _a1 error) *RemoteClient_BlockResults_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_BlockResults_Call) RunAndReturn(run func(context.Context, *int64) (*coretypes.ResultBlockResults, error)) *RemoteClient_BlockResults_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // BlockSearch provides a mock function with given fields: ctx, query, page, perPage, orderBy
 func (_m *RemoteClient) BlockSearch(ctx context.Context, query string, page *int, perPage *int, orderBy string) (*coretypes.ResultBlockSearch, error) {
 	ret := _m.Called(ctx, query, page, perPage, orderBy)
@@ -228,6 +412,38 @@ func (_m *RemoteClient) BlockSearch(ctx context.Context, query string, page *int
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_BlockSearch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BlockSearch'
+type RemoteClient_BlockSearch_Call struct {
+	*mock.Call
+}
+
+// BlockSearch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - query string
+//   - page *int
+//   - perPage *int
+//   - orderBy string
+func (_e *RemoteClient_Expecter) BlockSearch(ctx interface{}, query interface{}, page interface{}, perPage interface{}, orderBy interface{}) *RemoteClient_BlockSearch_Call {
+	return &RemoteClient_BlockSearch_Call{Call: _e.mock.On("BlockSearch", ctx, query, page, perPage, orderBy)}
+}
+
+func (_c *RemoteClient_BlockSearch_Call) Run(run func(ctx context.Context, query string, page *int, perPage *int, orderBy string)) *RemoteClient_BlockSearch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(*int), args[3].(*int), args[4].(string))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_BlockSearch_Call) Return(_a0 *coretypes.ResultBlockSearch, _a1 error) *RemoteClient_BlockSearch_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_BlockSearch_Call) RunAndReturn(run func(context.Context, string, *int, *int, string) (*coretypes.ResultBlockSearch, error)) *RemoteClient_BlockSearch_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // BlockchainInfo provides a mock function with given fields: ctx, minHeight, maxHeight
@@ -260,6 +476,36 @@ func (_m *RemoteClient) BlockchainInfo(ctx context.Context, minHeight int64, max
 	return r0, r1
 }
 
+// RemoteClient_BlockchainInfo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BlockchainInfo'
+type RemoteClient_BlockchainInfo_Call struct {
+	*mock.Call
+}
+
+// BlockchainInfo is a helper method to define mock.On call
+//   - ctx context.Context
+//   - minHeight int64
+//   - maxHeight int64
+func (_e *RemoteClient_Expecter) BlockchainInfo(ctx interface{}, minHeight interface{}, maxHeight interface{}) *RemoteClient_BlockchainInfo_Call {
+	return &RemoteClient_BlockchainInfo_Call{Call: _e.mock.On("BlockchainInfo", ctx, minHeight, maxHeight)}
+}
+
+func (_c *RemoteClient_BlockchainInfo_Call) Run(run func(ctx context.Context, minHeight int64, maxHeight int64)) *RemoteClient_BlockchainInfo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int64), args[2].(int64))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_BlockchainInfo_Call) Return(_a0 *coretypes.ResultBlockchainInfo, _a1 error) *RemoteClient_BlockchainInfo_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_BlockchainInfo_Call) RunAndReturn(run func(context.Context, int64, int64) (*coretypes.ResultBlockchainInfo, error)) *RemoteClient_BlockchainInfo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // BroadcastEvidence provides a mock function with given fields: _a0, _a1
 func (_m *RemoteClient) BroadcastEvidence(_a0 context.Context, _a1 types.Evidence) (*coretypes.ResultBroadcastEvidence, error) {
 	ret := _m.Called(_a0, _a1)
@@ -288,6 +534,35 @@ func (_m *RemoteClient) BroadcastEvidence(_a0 context.Context, _a1 types.Evidenc
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_BroadcastEvidence_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BroadcastEvidence'
+type RemoteClient_BroadcastEvidence_Call struct {
+	*mock.Call
+}
+
+// BroadcastEvidence is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 types.Evidence
+func (_e *RemoteClient_Expecter) BroadcastEvidence(_a0 interface{}, _a1 interface{}) *RemoteClient_BroadcastEvidence_Call {
+	return &RemoteClient_BroadcastEvidence_Call{Call: _e.mock.On("BroadcastEvidence", _a0, _a1)}
+}
+
+func (_c *RemoteClient_BroadcastEvidence_Call) Run(run func(_a0 context.Context, _a1 types.Evidence)) *RemoteClient_BroadcastEvidence_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(types.Evidence))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_BroadcastEvidence_Call) Return(_a0 *coretypes.ResultBroadcastEvidence, _a1 error) *RemoteClient_BroadcastEvidence_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_BroadcastEvidence_Call) RunAndReturn(run func(context.Context, types.Evidence) (*coretypes.ResultBroadcastEvidence, error)) *RemoteClient_BroadcastEvidence_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // BroadcastTx provides a mock function with given fields: _a0, _a1
@@ -320,6 +595,35 @@ func (_m *RemoteClient) BroadcastTx(_a0 context.Context, _a1 types.Tx) (*coretyp
 	return r0, r1
 }
 
+// RemoteClient_BroadcastTx_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BroadcastTx'
+type RemoteClient_BroadcastTx_Call struct {
+	*mock.Call
+}
+
+// BroadcastTx is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 types.Tx
+func (_e *RemoteClient_Expecter) BroadcastTx(_a0 interface{}, _a1 interface{}) *RemoteClient_BroadcastTx_Call {
+	return &RemoteClient_BroadcastTx_Call{Call: _e.mock.On("BroadcastTx", _a0, _a1)}
+}
+
+func (_c *RemoteClient_BroadcastTx_Call) Run(run func(_a0 context.Context, _a1 types.Tx)) *RemoteClient_BroadcastTx_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(types.Tx))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_BroadcastTx_Call) Return(_a0 *coretypes.ResultBroadcastTx, _a1 error) *RemoteClient_BroadcastTx_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_BroadcastTx_Call) RunAndReturn(run func(context.Context, types.Tx) (*coretypes.ResultBroadcastTx, error)) *RemoteClient_BroadcastTx_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // BroadcastTxAsync provides a mock function with given fields: _a0, _a1
 func (_m *RemoteClient) BroadcastTxAsync(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	ret := _m.Called(_a0, _a1)
@@ -348,6 +652,35 @@ func (_m *RemoteClient) BroadcastTxAsync(_a0 context.Context, _a1 types.Tx) (*co
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_BroadcastTxAsync_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BroadcastTxAsync'
+type RemoteClient_BroadcastTxAsync_Call struct {
+	*mock.Call
+}
+
+// BroadcastTxAsync is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 types.Tx
+func (_e *RemoteClient_Expecter) BroadcastTxAsync(_a0 interface{}, _a1 interface{}) *RemoteClient_BroadcastTxAsync_Call {
+	return &RemoteClient_BroadcastTxAsync_Call{Call: _e.mock.On("BroadcastTxAsync", _a0, _a1)}
+}
+
+func (_c *RemoteClient_BroadcastTxAsync_Call) Run(run func(_a0 context.Context, _a1 types.Tx)) *RemoteClient_BroadcastTxAsync_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(types.Tx))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_BroadcastTxAsync_Call) Return(_a0 *coretypes.ResultBroadcastTx, _a1 error) *RemoteClient_BroadcastTxAsync_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_BroadcastTxAsync_Call) RunAndReturn(run func(context.Context, types.Tx) (*coretypes.ResultBroadcastTx, error)) *RemoteClient_BroadcastTxAsync_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // BroadcastTxCommit provides a mock function with given fields: _a0, _a1
@@ -380,6 +713,35 @@ func (_m *RemoteClient) BroadcastTxCommit(_a0 context.Context, _a1 types.Tx) (*c
 	return r0, r1
 }
 
+// RemoteClient_BroadcastTxCommit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BroadcastTxCommit'
+type RemoteClient_BroadcastTxCommit_Call struct {
+	*mock.Call
+}
+
+// BroadcastTxCommit is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 types.Tx
+func (_e *RemoteClient_Expecter) BroadcastTxCommit(_a0 interface{}, _a1 interface{}) *RemoteClient_BroadcastTxCommit_Call {
+	return &RemoteClient_BroadcastTxCommit_Call{Call: _e.mock.On("BroadcastTxCommit", _a0, _a1)}
+}
+
+func (_c *RemoteClient_BroadcastTxCommit_Call) Run(run func(_a0 context.Context, _a1 types.Tx)) *RemoteClient_BroadcastTxCommit_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(types.Tx))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_BroadcastTxCommit_Call) Return(_a0 *coretypes.ResultBroadcastTxCommit, _a1 error) *RemoteClient_BroadcastTxCommit_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_BroadcastTxCommit_Call) RunAndReturn(run func(context.Context, types.Tx) (*coretypes.ResultBroadcastTxCommit, error)) *RemoteClient_BroadcastTxCommit_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // BroadcastTxSync provides a mock function with given fields: _a0, _a1
 func (_m *RemoteClient) BroadcastTxSync(_a0 context.Context, _a1 types.Tx) (*coretypes.ResultBroadcastTx, error) {
 	ret := _m.Called(_a0, _a1)
@@ -408,6 +770,35 @@ func (_m *RemoteClient) BroadcastTxSync(_a0 context.Context, _a1 types.Tx) (*cor
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_BroadcastTxSync_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'BroadcastTxSync'
+type RemoteClient_BroadcastTxSync_Call struct {
+	*mock.Call
+}
+
+// BroadcastTxSync is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 types.Tx
+func (_e *RemoteClient_Expecter) BroadcastTxSync(_a0 interface{}, _a1 interface{}) *RemoteClient_BroadcastTxSync_Call {
+	return &RemoteClient_BroadcastTxSync_Call{Call: _e.mock.On("BroadcastTxSync", _a0, _a1)}
+}
+
+func (_c *RemoteClient_BroadcastTxSync_Call) Run(run func(_a0 context.Context, _a1 types.Tx)) *RemoteClient_BroadcastTxSync_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(types.Tx))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_BroadcastTxSync_Call) Return(_a0 *coretypes.ResultBroadcastTx, _a1 error) *RemoteClient_BroadcastTxSync_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_BroadcastTxSync_Call) RunAndReturn(run func(context.Context, types.Tx) (*coretypes.ResultBroadcastTx, error)) *RemoteClient_BroadcastTxSync_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // CheckTx provides a mock function with given fields: _a0, _a1
@@ -440,6 +831,35 @@ func (_m *RemoteClient) CheckTx(_a0 context.Context, _a1 types.Tx) (*coretypes.R
 	return r0, r1
 }
 
+// RemoteClient_CheckTx_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CheckTx'
+type RemoteClient_CheckTx_Call struct {
+	*mock.Call
+}
+
+// CheckTx is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 types.Tx
+func (_e *RemoteClient_Expecter) CheckTx(_a0 interface{}, _a1 interface{}) *RemoteClient_CheckTx_Call {
+	return &RemoteClient_CheckTx_Call{Call: _e.mock.On("CheckTx", _a0, _a1)}
+}
+
+func (_c *RemoteClient_CheckTx_Call) Run(run func(_a0 context.Context, _a1 types.Tx)) *RemoteClient_CheckTx_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(types.Tx))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_CheckTx_Call) Return(_a0 *coretypes.ResultCheckTx, _a1 error) *RemoteClient_CheckTx_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_CheckTx_Call) RunAndReturn(run func(context.Context, types.Tx) (*coretypes.ResultCheckTx, error)) *RemoteClient_CheckTx_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Commit provides a mock function with given fields: ctx, height
 func (_m *RemoteClient) Commit(ctx context.Context, height *int64) (*coretypes.ResultCommit, error) {
 	ret := _m.Called(ctx, height)
@@ -468,6 +888,35 @@ func (_m *RemoteClient) Commit(ctx context.Context, height *int64) (*coretypes.R
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_Commit_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Commit'
+type RemoteClient_Commit_Call struct {
+	*mock.Call
+}
+
+// Commit is a helper method to define mock.On call
+//   - ctx context.Context
+//   - height *int64
+func (_e *RemoteClient_Expecter) Commit(ctx interface{}, height interface{}) *RemoteClient_Commit_Call {
+	return &RemoteClient_Commit_Call{Call: _e.mock.On("Commit", ctx, height)}
+}
+
+func (_c *RemoteClient_Commit_Call) Run(run func(ctx context.Context, height *int64)) *RemoteClient_Commit_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*int64))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Commit_Call) Return(_a0 *coretypes.ResultCommit, _a1 error) *RemoteClient_Commit_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_Commit_Call) RunAndReturn(run func(context.Context, *int64) (*coretypes.ResultCommit, error)) *RemoteClient_Commit_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // ConsensusParams provides a mock function with given fields: ctx, height
@@ -500,6 +949,35 @@ func (_m *RemoteClient) ConsensusParams(ctx context.Context, height *int64) (*co
 	return r0, r1
 }
 
+// RemoteClient_ConsensusParams_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ConsensusParams'
+type RemoteClient_ConsensusParams_Call struct {
+	*mock.Call
+}
+
+// ConsensusParams is a helper method to define mock.On call
+//   - ctx context.Context
+//   - height *int64
+func (_e *RemoteClient_Expecter) ConsensusParams(ctx interface{}, height interface{}) *RemoteClient_ConsensusParams_Call {
+	return &RemoteClient_ConsensusParams_Call{Call: _e.mock.On("ConsensusParams", ctx, height)}
+}
+
+func (_c *RemoteClient_ConsensusParams_Call) Run(run func(ctx context.Context, height *int64)) *RemoteClient_ConsensusParams_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*int64))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_ConsensusParams_Call) Return(_a0 *coretypes.ResultConsensusParams, _a1 error) *RemoteClient_ConsensusParams_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_ConsensusParams_Call) RunAndReturn(run func(context.Context, *int64) (*coretypes.ResultConsensusParams, error)) *RemoteClient_ConsensusParams_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ConsensusState provides a mock function with given fields: _a0
 func (_m *RemoteClient) ConsensusState(_a0 context.Context) (*coretypes.ResultConsensusState, error) {
 	ret := _m.Called(_a0)
@@ -528,6 +1006,34 @@ func (_m *RemoteClient) ConsensusState(_a0 context.Context) (*coretypes.ResultCo
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_ConsensusState_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ConsensusState'
+type RemoteClient_ConsensusState_Call struct {
+	*mock.Call
+}
+
+// ConsensusState is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *RemoteClient_Expecter) ConsensusState(_a0 interface{}) *RemoteClient_ConsensusState_Call {
+	return &RemoteClient_ConsensusState_Call{Call: _e.mock.On("ConsensusState", _a0)}
+}
+
+func (_c *RemoteClient_ConsensusState_Call) Run(run func(_a0 context.Context)) *RemoteClient_ConsensusState_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_ConsensusState_Call) Return(_a0 *coretypes.ResultConsensusState, _a1 error) *RemoteClient_ConsensusState_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_ConsensusState_Call) RunAndReturn(run func(context.Context) (*coretypes.ResultConsensusState, error)) *RemoteClient_ConsensusState_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // DumpConsensusState provides a mock function with given fields: _a0
@@ -560,6 +1066,34 @@ func (_m *RemoteClient) DumpConsensusState(_a0 context.Context) (*coretypes.Resu
 	return r0, r1
 }
 
+// RemoteClient_DumpConsensusState_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'DumpConsensusState'
+type RemoteClient_DumpConsensusState_Call struct {
+	*mock.Call
+}
+
+// DumpConsensusState is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *RemoteClient_Expecter) DumpConsensusState(_a0 interface{}) *RemoteClient_DumpConsensusState_Call {
+	return &RemoteClient_DumpConsensusState_Call{Call: _e.mock.On("DumpConsensusState", _a0)}
+}
+
+func (_c *RemoteClient_DumpConsensusState_Call) Run(run func(_a0 context.Context)) *RemoteClient_DumpConsensusState_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_DumpConsensusState_Call) Return(_a0 *coretypes.ResultDumpConsensusState, _a1 error) *RemoteClient_DumpConsensusState_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_DumpConsensusState_Call) RunAndReturn(run func(context.Context) (*coretypes.ResultDumpConsensusState, error)) *RemoteClient_DumpConsensusState_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Events provides a mock function with given fields: ctx, req
 func (_m *RemoteClient) Events(ctx context.Context, req *coretypes.RequestEvents) (*coretypes.ResultEvents, error) {
 	ret := _m.Called(ctx, req)
@@ -588,6 +1122,35 @@ func (_m *RemoteClient) Events(ctx context.Context, req *coretypes.RequestEvents
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_Events_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Events'
+type RemoteClient_Events_Call struct {
+	*mock.Call
+}
+
+// Events is a helper method to define mock.On call
+//   - ctx context.Context
+//   - req *coretypes.RequestEvents
+func (_e *RemoteClient_Expecter) Events(ctx interface{}, req interface{}) *RemoteClient_Events_Call {
+	return &RemoteClient_Events_Call{Call: _e.mock.On("Events", ctx, req)}
+}
+
+func (_c *RemoteClient_Events_Call) Run(run func(ctx context.Context, req *coretypes.RequestEvents)) *RemoteClient_Events_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*coretypes.RequestEvents))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Events_Call) Return(_a0 *coretypes.ResultEvents, _a1 error) *RemoteClient_Events_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_Events_Call) RunAndReturn(run func(context.Context, *coretypes.RequestEvents) (*coretypes.ResultEvents, error)) *RemoteClient_Events_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Genesis provides a mock function with given fields: _a0
@@ -620,6 +1183,34 @@ func (_m *RemoteClient) Genesis(_a0 context.Context) (*coretypes.ResultGenesis, 
 	return r0, r1
 }
 
+// RemoteClient_Genesis_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Genesis'
+type RemoteClient_Genesis_Call struct {
+	*mock.Call
+}
+
+// Genesis is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *RemoteClient_Expecter) Genesis(_a0 interface{}) *RemoteClient_Genesis_Call {
+	return &RemoteClient_Genesis_Call{Call: _e.mock.On("Genesis", _a0)}
+}
+
+func (_c *RemoteClient_Genesis_Call) Run(run func(_a0 context.Context)) *RemoteClient_Genesis_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Genesis_Call) Return(_a0 *coretypes.ResultGenesis, _a1 error) *RemoteClient_Genesis_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_Genesis_Call) RunAndReturn(run func(context.Context) (*coretypes.ResultGenesis, error)) *RemoteClient_Genesis_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // GenesisChunked provides a mock function with given fields: _a0, _a1
 func (_m *RemoteClient) GenesisChunked(_a0 context.Context, _a1 uint) (*coretypes.ResultGenesisChunk, error) {
 	ret := _m.Called(_a0, _a1)
@@ -648,6 +1239,35 @@ func (_m *RemoteClient) GenesisChunked(_a0 context.Context, _a1 uint) (*coretype
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_GenesisChunked_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GenesisChunked'
+type RemoteClient_GenesisChunked_Call struct {
+	*mock.Call
+}
+
+// GenesisChunked is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 uint
+func (_e *RemoteClient_Expecter) GenesisChunked(_a0 interface{}, _a1 interface{}) *RemoteClient_GenesisChunked_Call {
+	return &RemoteClient_GenesisChunked_Call{Call: _e.mock.On("GenesisChunked", _a0, _a1)}
+}
+
+func (_c *RemoteClient_GenesisChunked_Call) Run(run func(_a0 context.Context, _a1 uint)) *RemoteClient_GenesisChunked_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(uint))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_GenesisChunked_Call) Return(_a0 *coretypes.ResultGenesisChunk, _a1 error) *RemoteClient_GenesisChunked_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_GenesisChunked_Call) RunAndReturn(run func(context.Context, uint) (*coretypes.ResultGenesisChunk, error)) *RemoteClient_GenesisChunked_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Header provides a mock function with given fields: ctx, height
@@ -680,6 +1300,35 @@ func (_m *RemoteClient) Header(ctx context.Context, height *int64) (*coretypes.R
 	return r0, r1
 }
 
+// RemoteClient_Header_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Header'
+type RemoteClient_Header_Call struct {
+	*mock.Call
+}
+
+// Header is a helper method to define mock.On call
+//   - ctx context.Context
+//   - height *int64
+func (_e *RemoteClient_Expecter) Header(ctx interface{}, height interface{}) *RemoteClient_Header_Call {
+	return &RemoteClient_Header_Call{Call: _e.mock.On("Header", ctx, height)}
+}
+
+func (_c *RemoteClient_Header_Call) Run(run func(ctx context.Context, height *int64)) *RemoteClient_Header_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*int64))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Header_Call) Return(_a0 *coretypes.ResultHeader, _a1 error) *RemoteClient_Header_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_Header_Call) RunAndReturn(run func(context.Context, *int64) (*coretypes.ResultHeader, error)) *RemoteClient_Header_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // HeaderByHash provides a mock function with given fields: ctx, hash
 func (_m *RemoteClient) HeaderByHash(ctx context.Context, hash bytes.HexBytes) (*coretypes.ResultHeader, error) {
 	ret := _m.Called(ctx, hash)
@@ -708,6 +1357,35 @@ func (_m *RemoteClient) HeaderByHash(ctx context.Context, hash bytes.HexBytes) (
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_HeaderByHash_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'HeaderByHash'
+type RemoteClient_HeaderByHash_Call struct {
+	*mock.Call
+}
+
+// HeaderByHash is a helper method to define mock.On call
+//   - ctx context.Context
+//   - hash bytes.HexBytes
+func (_e *RemoteClient_Expecter) HeaderByHash(ctx interface{}, hash interface{}) *RemoteClient_HeaderByHash_Call {
+	return &RemoteClient_HeaderByHash_Call{Call: _e.mock.On("HeaderByHash", ctx, hash)}
+}
+
+func (_c *RemoteClient_HeaderByHash_Call) Run(run func(ctx context.Context, hash bytes.HexBytes)) *RemoteClient_HeaderByHash_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(bytes.HexBytes))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_HeaderByHash_Call) Return(_a0 *coretypes.ResultHeader, _a1 error) *RemoteClient_HeaderByHash_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_HeaderByHash_Call) RunAndReturn(run func(context.Context, bytes.HexBytes) (*coretypes.ResultHeader, error)) *RemoteClient_HeaderByHash_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Health provides a mock function with given fields: _a0
@@ -740,6 +1418,34 @@ func (_m *RemoteClient) Health(_a0 context.Context) (*coretypes.ResultHealth, er
 	return r0, r1
 }
 
+// RemoteClient_Health_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Health'
+type RemoteClient_Health_Call struct {
+	*mock.Call
+}
+
+// Health is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *RemoteClient_Expecter) Health(_a0 interface{}) *RemoteClient_Health_Call {
+	return &RemoteClient_Health_Call{Call: _e.mock.On("Health", _a0)}
+}
+
+func (_c *RemoteClient_Health_Call) Run(run func(_a0 context.Context)) *RemoteClient_Health_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Health_Call) Return(_a0 *coretypes.ResultHealth, _a1 error) *RemoteClient_Health_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_Health_Call) RunAndReturn(run func(context.Context) (*coretypes.ResultHealth, error)) *RemoteClient_Health_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // NetInfo provides a mock function with given fields: _a0
 func (_m *RemoteClient) NetInfo(_a0 context.Context) (*coretypes.ResultNetInfo, error) {
 	ret := _m.Called(_a0)
@@ -768,6 +1474,34 @@ func (_m *RemoteClient) NetInfo(_a0 context.Context) (*coretypes.ResultNetInfo, 
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_NetInfo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NetInfo'
+type RemoteClient_NetInfo_Call struct {
+	*mock.Call
+}
+
+// NetInfo is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *RemoteClient_Expecter) NetInfo(_a0 interface{}) *RemoteClient_NetInfo_Call {
+	return &RemoteClient_NetInfo_Call{Call: _e.mock.On("NetInfo", _a0)}
+}
+
+func (_c *RemoteClient_NetInfo_Call) Run(run func(_a0 context.Context)) *RemoteClient_NetInfo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_NetInfo_Call) Return(_a0 *coretypes.ResultNetInfo, _a1 error) *RemoteClient_NetInfo_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_NetInfo_Call) RunAndReturn(run func(context.Context) (*coretypes.ResultNetInfo, error)) *RemoteClient_NetInfo_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // NumUnconfirmedTxs provides a mock function with given fields: _a0
@@ -800,6 +1534,34 @@ func (_m *RemoteClient) NumUnconfirmedTxs(_a0 context.Context) (*coretypes.Resul
 	return r0, r1
 }
 
+// RemoteClient_NumUnconfirmedTxs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'NumUnconfirmedTxs'
+type RemoteClient_NumUnconfirmedTxs_Call struct {
+	*mock.Call
+}
+
+// NumUnconfirmedTxs is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *RemoteClient_Expecter) NumUnconfirmedTxs(_a0 interface{}) *RemoteClient_NumUnconfirmedTxs_Call {
+	return &RemoteClient_NumUnconfirmedTxs_Call{Call: _e.mock.On("NumUnconfirmedTxs", _a0)}
+}
+
+func (_c *RemoteClient_NumUnconfirmedTxs_Call) Run(run func(_a0 context.Context)) *RemoteClient_NumUnconfirmedTxs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_NumUnconfirmedTxs_Call) Return(_a0 *coretypes.ResultUnconfirmedTxs, _a1 error) *RemoteClient_NumUnconfirmedTxs_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_NumUnconfirmedTxs_Call) RunAndReturn(run func(context.Context) (*coretypes.ResultUnconfirmedTxs, error)) *RemoteClient_NumUnconfirmedTxs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Remote provides a mock function with given fields:
 func (_m *RemoteClient) Remote() string {
 	ret := _m.Called()
@@ -816,6 +1578,33 @@ func (_m *RemoteClient) Remote() string {
 	}
 
 	return r0
+}
+
+// RemoteClient_Remote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Remote'
+type RemoteClient_Remote_Call struct {
+	*mock.Call
+}
+
+// Remote is a helper method to define mock.On call
+func (_e *RemoteClient_Expecter) Remote() *RemoteClient_Remote_Call {
+	return &RemoteClient_Remote_Call{Call: _e.mock.On("Remote")}
+}
+
+func (_c *RemoteClient_Remote_Call) Run(run func()) *RemoteClient_Remote_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Remote_Call) Return(_a0 string) *RemoteClient_Remote_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *RemoteClient_Remote_Call) RunAndReturn(run func() string) *RemoteClient_Remote_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // RemoveTx provides a mock function with given fields: _a0, _a1
@@ -836,6 +1625,35 @@ func (_m *RemoteClient) RemoveTx(_a0 context.Context, _a1 types.TxKey) error {
 	return r0
 }
 
+// RemoteClient_RemoveTx_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'RemoveTx'
+type RemoteClient_RemoveTx_Call struct {
+	*mock.Call
+}
+
+// RemoveTx is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 types.TxKey
+func (_e *RemoteClient_Expecter) RemoveTx(_a0 interface{}, _a1 interface{}) *RemoteClient_RemoveTx_Call {
+	return &RemoteClient_RemoveTx_Call{Call: _e.mock.On("RemoveTx", _a0, _a1)}
+}
+
+func (_c *RemoteClient_RemoveTx_Call) Run(run func(_a0 context.Context, _a1 types.TxKey)) *RemoteClient_RemoveTx_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(types.TxKey))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_RemoveTx_Call) Return(_a0 error) *RemoteClient_RemoveTx_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *RemoteClient_RemoveTx_Call) RunAndReturn(run func(context.Context, types.TxKey) error) *RemoteClient_RemoveTx_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Start provides a mock function with given fields: _a0
 func (_m *RemoteClient) Start(_a0 context.Context) error {
 	ret := _m.Called(_a0)
@@ -852,6 +1670,34 @@ func (_m *RemoteClient) Start(_a0 context.Context) error {
 	}
 
 	return r0
+}
+
+// RemoteClient_Start_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Start'
+type RemoteClient_Start_Call struct {
+	*mock.Call
+}
+
+// Start is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *RemoteClient_Expecter) Start(_a0 interface{}) *RemoteClient_Start_Call {
+	return &RemoteClient_Start_Call{Call: _e.mock.On("Start", _a0)}
+}
+
+func (_c *RemoteClient_Start_Call) Run(run func(_a0 context.Context)) *RemoteClient_Start_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Start_Call) Return(_a0 error) *RemoteClient_Start_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *RemoteClient_Start_Call) RunAndReturn(run func(context.Context) error) *RemoteClient_Start_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Status provides a mock function with given fields: _a0
@@ -882,6 +1728,34 @@ func (_m *RemoteClient) Status(_a0 context.Context) (*coretypes.ResultStatus, er
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_Status_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Status'
+type RemoteClient_Status_Call struct {
+	*mock.Call
+}
+
+// Status is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *RemoteClient_Expecter) Status(_a0 interface{}) *RemoteClient_Status_Call {
+	return &RemoteClient_Status_Call{Call: _e.mock.On("Status", _a0)}
+}
+
+func (_c *RemoteClient_Status_Call) Run(run func(_a0 context.Context)) *RemoteClient_Status_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Status_Call) Return(_a0 *coretypes.ResultStatus, _a1 error) *RemoteClient_Status_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_Status_Call) RunAndReturn(run func(context.Context) (*coretypes.ResultStatus, error)) *RemoteClient_Status_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Subscribe provides a mock function with given fields: ctx, subscriber, query, outCapacity
@@ -921,6 +1795,44 @@ func (_m *RemoteClient) Subscribe(ctx context.Context, subscriber string, query 
 	return r0, r1
 }
 
+// RemoteClient_Subscribe_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Subscribe'
+type RemoteClient_Subscribe_Call struct {
+	*mock.Call
+}
+
+// Subscribe is a helper method to define mock.On call
+//   - ctx context.Context
+//   - subscriber string
+//   - query string
+//   - outCapacity ...int
+func (_e *RemoteClient_Expecter) Subscribe(ctx interface{}, subscriber interface{}, query interface{}, outCapacity ...interface{}) *RemoteClient_Subscribe_Call {
+	return &RemoteClient_Subscribe_Call{Call: _e.mock.On("Subscribe",
+		append([]interface{}{ctx, subscriber, query}, outCapacity...)...)}
+}
+
+func (_c *RemoteClient_Subscribe_Call) Run(run func(ctx context.Context, subscriber string, query string, outCapacity ...int)) *RemoteClient_Subscribe_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]int, len(args)-3)
+		for i, a := range args[3:] {
+			if a != nil {
+				variadicArgs[i] = a.(int)
+			}
+		}
+		run(args[0].(context.Context), args[1].(string), args[2].(string), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Subscribe_Call) Return(out <-chan coretypes.ResultEvent, err error) *RemoteClient_Subscribe_Call {
+	_c.Call.Return(out, err)
+	return _c
+}
+
+func (_c *RemoteClient_Subscribe_Call) RunAndReturn(run func(context.Context, string, string, ...int) (<-chan coretypes.ResultEvent, error)) *RemoteClient_Subscribe_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Tx provides a mock function with given fields: ctx, hash, prove
 func (_m *RemoteClient) Tx(ctx context.Context, hash bytes.HexBytes, prove bool) (*coretypes.ResultTx, error) {
 	ret := _m.Called(ctx, hash, prove)
@@ -949,6 +1861,36 @@ func (_m *RemoteClient) Tx(ctx context.Context, hash bytes.HexBytes, prove bool)
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_Tx_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Tx'
+type RemoteClient_Tx_Call struct {
+	*mock.Call
+}
+
+// Tx is a helper method to define mock.On call
+//   - ctx context.Context
+//   - hash bytes.HexBytes
+//   - prove bool
+func (_e *RemoteClient_Expecter) Tx(ctx interface{}, hash interface{}, prove interface{}) *RemoteClient_Tx_Call {
+	return &RemoteClient_Tx_Call{Call: _e.mock.On("Tx", ctx, hash, prove)}
+}
+
+func (_c *RemoteClient_Tx_Call) Run(run func(ctx context.Context, hash bytes.HexBytes, prove bool)) *RemoteClient_Tx_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(bytes.HexBytes), args[2].(bool))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Tx_Call) Return(_a0 *coretypes.ResultTx, _a1 error) *RemoteClient_Tx_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_Tx_Call) RunAndReturn(run func(context.Context, bytes.HexBytes, bool) (*coretypes.ResultTx, error)) *RemoteClient_Tx_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // TxSearch provides a mock function with given fields: ctx, query, prove, page, perPage, orderBy
@@ -981,6 +1923,39 @@ func (_m *RemoteClient) TxSearch(ctx context.Context, query string, prove bool, 
 	return r0, r1
 }
 
+// RemoteClient_TxSearch_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'TxSearch'
+type RemoteClient_TxSearch_Call struct {
+	*mock.Call
+}
+
+// TxSearch is a helper method to define mock.On call
+//   - ctx context.Context
+//   - query string
+//   - prove bool
+//   - page *int
+//   - perPage *int
+//   - orderBy string
+func (_e *RemoteClient_Expecter) TxSearch(ctx interface{}, query interface{}, prove interface{}, page interface{}, perPage interface{}, orderBy interface{}) *RemoteClient_TxSearch_Call {
+	return &RemoteClient_TxSearch_Call{Call: _e.mock.On("TxSearch", ctx, query, prove, page, perPage, orderBy)}
+}
+
+func (_c *RemoteClient_TxSearch_Call) Run(run func(ctx context.Context, query string, prove bool, page *int, perPage *int, orderBy string)) *RemoteClient_TxSearch_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(bool), args[3].(*int), args[4].(*int), args[5].(string))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_TxSearch_Call) Return(_a0 *coretypes.ResultTxSearch, _a1 error) *RemoteClient_TxSearch_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_TxSearch_Call) RunAndReturn(run func(context.Context, string, bool, *int, *int, string) (*coretypes.ResultTxSearch, error)) *RemoteClient_TxSearch_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UnconfirmedTxs provides a mock function with given fields: ctx, page, perPage
 func (_m *RemoteClient) UnconfirmedTxs(ctx context.Context, page *int, perPage *int) (*coretypes.ResultUnconfirmedTxs, error) {
 	ret := _m.Called(ctx, page, perPage)
@@ -1011,6 +1986,36 @@ func (_m *RemoteClient) UnconfirmedTxs(ctx context.Context, page *int, perPage *
 	return r0, r1
 }
 
+// RemoteClient_UnconfirmedTxs_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UnconfirmedTxs'
+type RemoteClient_UnconfirmedTxs_Call struct {
+	*mock.Call
+}
+
+// UnconfirmedTxs is a helper method to define mock.On call
+//   - ctx context.Context
+//   - page *int
+//   - perPage *int
+func (_e *RemoteClient_Expecter) UnconfirmedTxs(ctx interface{}, page interface{}, perPage interface{}) *RemoteClient_UnconfirmedTxs_Call {
+	return &RemoteClient_UnconfirmedTxs_Call{Call: _e.mock.On("UnconfirmedTxs", ctx, page, perPage)}
+}
+
+func (_c *RemoteClient_UnconfirmedTxs_Call) Run(run func(ctx context.Context, page *int, perPage *int)) *RemoteClient_UnconfirmedTxs_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*int), args[2].(*int))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_UnconfirmedTxs_Call) Return(_a0 *coretypes.ResultUnconfirmedTxs, _a1 error) *RemoteClient_UnconfirmedTxs_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_UnconfirmedTxs_Call) RunAndReturn(run func(context.Context, *int, *int) (*coretypes.ResultUnconfirmedTxs, error)) *RemoteClient_UnconfirmedTxs_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Unsubscribe provides a mock function with given fields: ctx, subscriber, query
 func (_m *RemoteClient) Unsubscribe(ctx context.Context, subscriber string, query string) error {
 	ret := _m.Called(ctx, subscriber, query)
@@ -1029,6 +2034,36 @@ func (_m *RemoteClient) Unsubscribe(ctx context.Context, subscriber string, quer
 	return r0
 }
 
+// RemoteClient_Unsubscribe_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Unsubscribe'
+type RemoteClient_Unsubscribe_Call struct {
+	*mock.Call
+}
+
+// Unsubscribe is a helper method to define mock.On call
+//   - ctx context.Context
+//   - subscriber string
+//   - query string
+func (_e *RemoteClient_Expecter) Unsubscribe(ctx interface{}, subscriber interface{}, query interface{}) *RemoteClient_Unsubscribe_Call {
+	return &RemoteClient_Unsubscribe_Call{Call: _e.mock.On("Unsubscribe", ctx, subscriber, query)}
+}
+
+func (_c *RemoteClient_Unsubscribe_Call) Run(run func(ctx context.Context, subscriber string, query string)) *RemoteClient_Unsubscribe_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string), args[2].(string))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Unsubscribe_Call) Return(_a0 error) *RemoteClient_Unsubscribe_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *RemoteClient_Unsubscribe_Call) RunAndReturn(run func(context.Context, string, string) error) *RemoteClient_Unsubscribe_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UnsubscribeAll provides a mock function with given fields: ctx, subscriber
 func (_m *RemoteClient) UnsubscribeAll(ctx context.Context, subscriber string) error {
 	ret := _m.Called(ctx, subscriber)
@@ -1045,6 +2080,35 @@ func (_m *RemoteClient) UnsubscribeAll(ctx context.Context, subscriber string) e
 	}
 
 	return r0
+}
+
+// RemoteClient_UnsubscribeAll_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UnsubscribeAll'
+type RemoteClient_UnsubscribeAll_Call struct {
+	*mock.Call
+}
+
+// UnsubscribeAll is a helper method to define mock.On call
+//   - ctx context.Context
+//   - subscriber string
+func (_e *RemoteClient_Expecter) UnsubscribeAll(ctx interface{}, subscriber interface{}) *RemoteClient_UnsubscribeAll_Call {
+	return &RemoteClient_UnsubscribeAll_Call{Call: _e.mock.On("UnsubscribeAll", ctx, subscriber)}
+}
+
+func (_c *RemoteClient_UnsubscribeAll_Call) Run(run func(ctx context.Context, subscriber string)) *RemoteClient_UnsubscribeAll_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_UnsubscribeAll_Call) Return(_a0 error) *RemoteClient_UnsubscribeAll_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *RemoteClient_UnsubscribeAll_Call) RunAndReturn(run func(context.Context, string) error) *RemoteClient_UnsubscribeAll_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Validators provides a mock function with given fields: ctx, height, page, perPage, requestQuorumInfo
@@ -1075,6 +2139,38 @@ func (_m *RemoteClient) Validators(ctx context.Context, height *int64, page *int
 	}
 
 	return r0, r1
+}
+
+// RemoteClient_Validators_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Validators'
+type RemoteClient_Validators_Call struct {
+	*mock.Call
+}
+
+// Validators is a helper method to define mock.On call
+//   - ctx context.Context
+//   - height *int64
+//   - page *int
+//   - perPage *int
+//   - requestQuorumInfo *bool
+func (_e *RemoteClient_Expecter) Validators(ctx interface{}, height interface{}, page interface{}, perPage interface{}, requestQuorumInfo interface{}) *RemoteClient_Validators_Call {
+	return &RemoteClient_Validators_Call{Call: _e.mock.On("Validators", ctx, height, page, perPage, requestQuorumInfo)}
+}
+
+func (_c *RemoteClient_Validators_Call) Run(run func(ctx context.Context, height *int64, page *int, perPage *int, requestQuorumInfo *bool)) *RemoteClient_Validators_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*int64), args[2].(*int), args[3].(*int), args[4].(*bool))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_Validators_Call) Return(_a0 *coretypes.ResultValidators, _a1 error) *RemoteClient_Validators_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_Validators_Call) RunAndReturn(run func(context.Context, *int64, *int, *int, *bool) (*coretypes.ResultValidators, error)) *RemoteClient_Validators_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // NewRemoteClient creates a new instance of RemoteClient. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.
