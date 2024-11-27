@@ -14,6 +14,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/libs/protoio"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
@@ -196,9 +197,9 @@ func ProposalBlockSignID(
 func ProposalRequestID(p *Proposal) []byte {
 	requestIDMessage := []byte("dpproposal")
 	heightByteArray := make([]byte, 8)
-	binary.LittleEndian.PutUint64(heightByteArray, uint64(p.Height))
+	binary.LittleEndian.PutUint64(heightByteArray, tmmath.MustConvertUint64(p.Height))
 	roundByteArray := make([]byte, 4)
-	binary.LittleEndian.PutUint32(roundByteArray, uint32(p.Round))
+	binary.LittleEndian.PutUint32(roundByteArray, tmmath.MustConvertUint32(p.Round))
 
 	requestIDMessage = append(requestIDMessage, heightByteArray...)
 	requestIDMessage = append(requestIDMessage, roundByteArray...)
@@ -210,9 +211,9 @@ func ProposalRequestID(p *Proposal) []byte {
 func ProposalRequestIDProto(p *tmproto.Proposal) []byte {
 	requestIDMessage := []byte("dpproposal")
 	heightByteArray := make([]byte, 8)
-	binary.LittleEndian.PutUint64(heightByteArray, uint64(p.Height))
+	binary.LittleEndian.PutUint64(heightByteArray, tmmath.MustConvertUint64(p.Height))
 	roundByteArray := make([]byte, 4)
-	binary.LittleEndian.PutUint32(roundByteArray, uint32(p.Round))
+	binary.LittleEndian.PutUint32(roundByteArray, tmmath.MustConvertUint32(p.Round))
 
 	requestIDMessage = append(requestIDMessage, heightByteArray...)
 	requestIDMessage = append(requestIDMessage, roundByteArray...)

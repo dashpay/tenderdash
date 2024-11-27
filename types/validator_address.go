@@ -11,6 +11,7 @@ import (
 	"strconv"
 	"strings"
 
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 )
 
@@ -87,7 +88,7 @@ func parseValidatorAddressString(urlString string) (ValidatorAddress, error) {
 		if err != nil {
 			return ValidatorAddress{}, fmt.Errorf("invalid port %q: %w", portString, err)
 		}
-		address.Port = uint16(port64)
+		address.Port = tmmath.MustConvertUint16(port64)
 	}
 
 	return address, nil

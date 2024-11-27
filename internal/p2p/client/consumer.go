@@ -7,6 +7,7 @@ import (
 
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/libs/log"
+	"github.com/dashpay/tenderdash/libs/math"
 )
 
 // DefaultRecvBurstMultiplier tells how many times burst is bigger than the limit in recvRateLimitPerPeerHandler
@@ -155,7 +156,7 @@ func (h *validateMessageHandler) Handle(ctx context.Context, client *Client, env
 }
 
 func (h *recvRateLimitPerPeerHandler) Handle(ctx context.Context, client *Client, envelope *p2p.Envelope) error {
-	accepted, err := h.RateLimit.Limit(ctx, envelope.From, int(h.nTokensFunc(envelope)))
+	accepted, err := h.RateLimit.Limit(ctx, envelope.From, math.MustConvert[uint, int](h.nTokensFunc(envelope)))
 	if err != nil {
 		return fmt.Errorf("rate limit failed for peer '%s;: %w", envelope.From, err)
 	}

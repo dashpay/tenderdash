@@ -99,14 +99,14 @@ func setup(ctx context.Context, t *testing.T, stateStores []sm.Store) *reactorTe
 		rts.network.Nodes[nodeID].PeerManager.Register(ctx, pu)
 		rts.nodes = append(rts.nodes, rts.network.Nodes[nodeID])
 
-		chCreator := func(ctx context.Context, chdesc *p2p.ChannelDescriptor) (p2p.Channel, error) {
+		chCreator := func(_ context.Context, _ *p2p.ChannelDescriptor) (p2p.Channel, error) {
 			return rts.evidenceChannels[nodeID], nil
 		}
 
 		rts.reactors[nodeID] = evidence.NewReactor(
 			logger,
 			chCreator,
-			func(ctx context.Context, _ string) *p2p.PeerUpdates { return pu },
+			func(_ context.Context, _ string) *p2p.PeerUpdates { return pu },
 			rts.pools[nodeID])
 
 		require.NoError(t, rts.reactors[nodeID].Start(ctx))
@@ -571,8 +571,6 @@ func TestEvidenceListSerialization(t *testing.T) {
 	}
 
 	for name, tc := range testCases {
-		tc := tc
-
 		t.Run(name, func(t *testing.T) {
 			protoEv := make([]tmproto.Evidence, len(tc.evidenceList))
 			for i := 0; i < len(tc.evidenceList); i++ {

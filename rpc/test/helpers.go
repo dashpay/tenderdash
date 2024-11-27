@@ -114,7 +114,7 @@ func StartTendermint(
 		fmt.Println("Tendermint running!")
 	}
 
-	return tmNode, func(ctx context.Context) error {
+	return tmNode, func(_ context.Context) error {
 		cancel()
 		tmNode.Wait()
 		os.RemoveAll(conf.RootDir)

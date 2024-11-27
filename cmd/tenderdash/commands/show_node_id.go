@@ -13,7 +13,7 @@ func MakeShowNodeIDCommand(conf *config.Config) *cobra.Command {
 	return &cobra.Command{
 		Use:   "show-node-id",
 		Short: "Show this node's ID",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			nodeKeyID, err := conf.LoadNodeKeyID()
 			if err != nil {
 				return err

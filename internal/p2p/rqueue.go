@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/gogo/protobuf/proto"
+
+	"github.com/dashpay/tenderdash/libs/math"
 )
 
 type simpleQueue struct {
@@ -48,7 +50,7 @@ func (q *simpleQueue) run(ctx context.Context) {
 	var chPriorities = make(map[ChannelID]uint, len(q.chDescs))
 	for _, chDesc := range q.chDescs {
 		chID := chDesc.ID
-		chPriorities[chID] = uint(chDesc.Priority)
+		chPriorities[chID] = chDesc.Priority
 	}
 
 	pq := make(priorityQueue, 0, q.maxSize)
@@ -68,7 +70,7 @@ func (q *simpleQueue) run(ctx context.Context) {
 			// enqueue the incoming Envelope
 			heap.Push(&pq, &pqEnvelope{
 				envelope:  e,
-				size:      uint(proto.Size(e.Message)),
+				size:      math.MustConvertUint(proto.Size(e.Message)),
 				priority:  chPriorities[e.ChannelID],
 				timestamp: time.Now().UTC(),
 			})

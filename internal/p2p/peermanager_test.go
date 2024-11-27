@@ -99,7 +99,6 @@ func TestPeerManagerOptions_Validate(t *testing.T) {
 		}, false},
 	}
 	for name, tc := range testcases {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			err := tc.options.Validate()
 			if tc.ok {
@@ -1089,6 +1088,7 @@ func TestPeerManager_Accepted(t *testing.T) {
 
 	// Accepting a connection from an unknown peer should work and register it.
 	require.NoError(t, peerManager.Accepted(b.NodeID))
+	require.Equal(t, p2p.Protocol("memory"), b.Protocol)
 	require.ElementsMatch(t, []types.NodeID{a.NodeID, b.NodeID}, peerManager.Peers())
 
 	// Accepting a connection from a peer that's being dialed should work, and

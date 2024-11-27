@@ -10,6 +10,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -74,7 +75,7 @@ func (mc *MockClient) QuorumInfo(
 		panic(err)
 	}
 	return &btcjson.QuorumInfoResult{
-		Height:          uint32(height),
+		Height:          math.MustConvertUint32(height),
 		Type:            strconv.Itoa(int(quorumType)),
 		QuorumHash:      quorumHash.String(),
 		Members:         members,

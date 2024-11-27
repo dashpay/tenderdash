@@ -10,6 +10,8 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
+	"github.com/dashpay/tenderdash/internal/p2p/conn"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmp2p "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 )
 
@@ -49,7 +51,7 @@ type NodeInfo struct {
 	Network string `json:"network"` // network/chain ID
 	Version string `json:"version"` // major.minor.revision
 	// Channels supported by this node. Use GetChannels() as a getter.
-	Channels *tmsync.ConcurrentSlice[uint16] `json:"channels"` // channels this node knows about
+	Channels *tmsync.ConcurrentSlice[conn.ChannelID] `json:"channels"` // channels this node knows about
 
 	// ASCIIText fields
 	Moniker string        `json:"moniker"` // arbitrary moniker
@@ -104,7 +106,7 @@ func (info NodeInfo) Validate() error {
 	if info.Channels.Len() > maxNumChannels {
 		return fmt.Errorf("info.Channels is too long (%v). Max is %v", info.Channels.Len(), maxNumChannels)
 	}
-	channels := make(map[uint16]struct{})
+	channels := make(map[conn.ChannelID]struct{})
 	for _, ch := range info.Channels.ToSlice() {
 		_, ok := channels[ch]
 		if ok {
@@ -173,7 +175,7 @@ OUTER_LOOP:
 }
 
 // AddChannel is used by the router when a channel is opened to add it to the node info
-func (info *NodeInfo) AddChannel(channel uint16) {
+func (info *NodeInfo) AddChannel(channel conn.ChannelID) {
 	// check that the channel doesn't already exist
 	for _, ch := range info.Channels.ToSlice() {
 		if ch == channel {
@@ -209,7 +211,7 @@ func (info NodeInfo) ToProto() *tmp2p.NodeInfo {
 	}
 
 	for _, ch := range info.Channels.ToSlice() {
-		dni.Channels = append(dni.Channels, uint32(ch))
+		dni.Channels = append(dni.Channels, tmmath.MustConvertUint32(ch))
 	}
 
 	dni.NodeID = string(info.NodeID)
@@ -240,7 +242,7 @@ func NodeInfoFromProto(pb *tmp2p.NodeInfo) (NodeInfo, error) {
 		ListenAddr: pb.ListenAddr,
 		Network:    pb.Network,
 		Version:    pb.Version,
-		Channels:   tmsync.NewConcurrentSlice[uint16](),
+		Channels:   tmsync.NewConcurrentSlice[conn.ChannelID](),
 		Moniker:    pb.Moniker,
 		Other: NodeInfoOther{
 			TxIndex:    pb.Other.TxIndex,
@@ -250,7 +252,12 @@ func NodeInfoFromProto(pb *tmp2p.NodeInfo) (NodeInfo, error) {
 	}
 
 	for _, ch := range pb.Channels {
-		dni.Channels.Append(uint16(ch))
+		// we need to explicitly validate the channel id, to avoid panics when remote host sends invalid channel id
+		chID, err := tmmath.SafeConvertUint16(ch)
+		if err != nil {
+			return NodeInfo{}, fmt.Errorf("invalid channel id %d: %v", ch, err)
+		}
+		dni.Channels.Append(conn.ChannelID(chID))
 	}
 
 	return dni, nil
@@ -300,7 +307,7 @@ func ParseAddressString(addr string) (*NetAddress, error) {
 		return nil, err
 	}
 
-	na := NewNetAddressIPPort(ip, uint16(port))
+	na := NewNetAddressIPPort(ip, tmmath.MustConvertUint16(port))
 	na.ID = id
 
 	return na, nil

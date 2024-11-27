@@ -21,7 +21,7 @@ The application should also roll back to height n - 1. No blocks are removed, so
 restarting Tendermint the transactions in block n will be re-executed against the
 application.
 `,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			height, hash, err := RollbackState(conf)
 			if err != nil {
 				return fmt.Errorf("failed to rollback state: %w", err)

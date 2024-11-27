@@ -8,6 +8,7 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 )
 
 var (
@@ -92,7 +93,7 @@ func (j *Job) Status() JobStatus {
 }
 
 func (j *Job) SetStatus(status JobStatus) {
-	j.status.Swap(int32(status))
+	j.status.Swap(tmmath.MustConvertInt32(status))
 }
 
 // WithLogger sets a logger to worker-pool using option function

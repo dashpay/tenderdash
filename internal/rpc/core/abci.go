@@ -5,6 +5,7 @@ import (
 
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/internal/proxy"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 )
 
@@ -14,7 +15,7 @@ func (env *Environment) ABCIQuery(ctx context.Context, req *coretypes.RequestABC
 	resQuery, err := env.ProxyApp.Query(ctx, &abci.RequestQuery{
 		Path:   req.Path,
 		Data:   req.Data,
-		Height: int64(req.Height),
+		Height: tmmath.MustConvertInt64(req.Height),
 		Prove:  req.Prove,
 	})
 	if err != nil {

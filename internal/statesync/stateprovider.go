@@ -17,6 +17,7 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/light"
 	lightprovider "github.com/dashpay/tenderdash/light/provider"
 	lighthttp "github.com/dashpay/tenderdash/light/provider/http"
@@ -94,7 +95,7 @@ func NewRPCStateProvider(
 func (s *stateProviderRPC) verifyLightBlockAtHeight(ctx context.Context, height uint64, ts time.Time) (*types.LightBlock, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	return s.lc.VerifyLightBlockAtHeight(ctx, int64(height), ts)
+	return s.lc.VerifyLightBlockAtHeight(ctx, tmmath.MustConvertInt64(height), ts)
 }
 
 // AppHash implements part of StateProvider. It calls the application to verify the
@@ -235,7 +236,7 @@ func NewP2PStateProvider(
 func (s *stateProviderP2P) verifyLightBlockAtHeight(ctx context.Context, height uint64, ts time.Time) (*types.LightBlock, error) {
 	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
-	return s.lc.VerifyLightBlockAtHeight(ctx, int64(height), ts)
+	return s.lc.VerifyLightBlockAtHeight(ctx, tmmath.MustConvertInt64(height), ts)
 }
 
 // AppHash implements StateProvider.
@@ -368,7 +369,7 @@ func (s *stateProviderP2P) consensusParams(ctx context.Context, height int64) (t
 					if err := s.paramsSendCh.Send(ctx, p2p.Envelope{
 						To: peer,
 						Message: &ssproto.ParamsRequest{
-							Height: uint64(height),
+							Height: tmmath.MustConvertUint64(height),
 						},
 					}); err != nil {
 						// this only errors if

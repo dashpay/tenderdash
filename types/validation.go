@@ -8,6 +8,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	"github.com/dashpay/tenderdash/crypto/ed25519"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 )
 
 // ValidateHash returns an error if the hash is not empty, but its
@@ -58,7 +59,7 @@ func checkTimely(timestamp time.Time, recvTime time.Time, sp SynchronyParams, ro
 	// proceed in the case that the chosen value was too small for the given network conditions.
 	// For more information and discussion on this mechanism, see the relevant github issue:
 	// https://github.com/tendermint/spec/issues/371
-	maxShift := bits.LeadingZeros64(uint64(sp.MessageDelay)) - 1
+	maxShift := bits.LeadingZeros64(tmmath.MustConvertUint64(sp.MessageDelay)) - 1
 	nShift := int((round / 10))
 
 	if nShift > maxShift {

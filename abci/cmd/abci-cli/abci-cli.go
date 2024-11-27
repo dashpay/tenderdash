@@ -23,6 +23,7 @@ import (
 	"github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/proto/tendermint/crypto"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	pbversion "github.com/dashpay/tenderdash/proto/tendermint/version"
@@ -568,7 +569,7 @@ func cmdFinalizeBlock(cmd *cobra.Command, args []string) error {
 		txs[i] = txBytes
 	}
 	res, err := client.FinalizeBlock(cmd.Context(), &types.RequestFinalizeBlock{
-		Height: int64(height),
+		Height: tmmath.MustConvertInt64(height),
 		Block: &tmproto.Block{
 			Header: tmproto.Header{AppHash: appHash},
 			Data:   tmproto.Data{Txs: txs},
@@ -837,5 +838,5 @@ func processProposalArgs(args []string) (int64, [][]byte, error) {
 		}
 		txsBytesArray[i] = txBytes
 	}
-	return int64(height), txsBytesArray, nil
+	return tmmath.MustConvertInt64(height), txsBytesArray, nil
 }

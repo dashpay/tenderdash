@@ -441,7 +441,7 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 	if len(node.Testnet.ConsensusVersionUpdates) > 0 {
 		consensusVersionUpdates := map[string]int32{}
 		for height, version := range node.Testnet.ConsensusVersionUpdates {
-			consensusVersionUpdates[strconv.Itoa(int(height))] = version //#nosec:G115
+			consensusVersionUpdates[strconv.Itoa(int(height))] = version
 		}
 		cfg["consensus_version_updates"] = consensusVersionUpdates
 	}

@@ -577,7 +577,7 @@ func (c *Client) Validators(
 	}
 
 	skipCount := validateSkipCount(page, perPage)
-	v := l.ValidatorSet.Validators[skipCount : skipCount+tmmath.MinInt(int(perPage), totalCount-skipCount)]
+	v := l.ValidatorSet.Validators[skipCount : skipCount+tmmath.MinInt(tmmath.MustConvertInt(perPage), totalCount-skipCount)]
 	var (
 		thresholdPublicKey crypto.PubKey
 		quorumHash         crypto.QuorumHash
@@ -700,7 +700,7 @@ func validatePage(pagePtr *int, perPage uint, totalCount int) (int, error) {
 		return 1, nil
 	}
 
-	pages := ((totalCount - 1) / int(perPage)) + 1
+	pages := ((totalCount - 1) / tmmath.MustConvertInt(perPage)) + 1
 	if pages == 0 {
 		pages = 1 // one page (even if it's empty)
 	}
@@ -727,7 +727,7 @@ func validatePerPage(perPagePtr *int) uint {
 }
 
 func validateSkipCount(page int, perPage uint) int {
-	skipCount := (page - 1) * int(perPage)
+	skipCount := (page - 1) * tmmath.MustConvertInt(perPage)
 	if skipCount < 0 {
 		return 0
 	}

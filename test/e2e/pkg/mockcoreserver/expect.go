@@ -86,7 +86,7 @@ func And(fns ...ExpectFunc) ExpectFunc {
 // JRPCRequest transforms http.Request into btcjson.Request and executes passed list of functions
 func JRPCRequest(fns ...func(ctx context.Context, req btcjson.Request) error) ExpectFunc {
 	return func(req *http.Request) error {
-		jReq, ok := req.Context().Value(jRPCRequestKey).(btcjson.Request)
+		jReq, ok := req.Context().Value(jRPCRequestKey{}).(btcjson.Request)
 		if !ok {
 			return errors.New("missed btcjson.Request in a context")
 		}
@@ -102,8 +102,8 @@ func JRPCRequest(fns ...func(ctx context.Context, req btcjson.Request) error) Ex
 
 // JRPCParamsEmpty is a request expectation of empty JRPC params
 func JRPCParamsEmpty() ExpectFunc {
-	return JRPCRequest(func(ctx context.Context, req btcjson.Request) error {
-		if req.Params != nil && len(req.Params) > 0 {
+	return JRPCRequest(func(_ context.Context, req btcjson.Request) error {
+		if len(req.Params) > 0 {
 			return errors.New("jRPC request params should be empty")
 		}
 		return nil

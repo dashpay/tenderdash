@@ -71,8 +71,6 @@ func TestAbciConfigValidation(t *testing.T) {
 	}
 
 	for _, tc := range invalidCases {
-		tc := tc
-
 		t.Run(tc.name+" on validator", func(t *testing.T) {
 			cfg := DefaultConfig()
 			cfg.Mode = ModeValidator
@@ -183,7 +181,6 @@ func TestConsensusConfig_ValidateBasic(t *testing.T) {
 		"DoubleSignCheckHeight negative":             {func(c *ConsensusConfig) { c.DoubleSignCheckHeight = -1 }, true},
 	}
 	for desc, tc := range testcases {
-		tc := tc // appease linter
 		t.Run(desc, func(t *testing.T) {
 			cfg := DefaultConsensusConfig()
 			tc.modify(cfg)

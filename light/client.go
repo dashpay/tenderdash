@@ -520,6 +520,10 @@ func (c *Client) verifyBlockSignatureWithDashCore(_ctx context.Context, newLight
 	quorumType := newLightBlock.ValidatorSet.QuorumType
 
 	protoVote := newLightBlock.Commit.GetCanonicalVote().ToProto()
+	// double-check the block height and round
+	if protoVote.Height < 0 || protoVote.Round < 0 {
+		return fmt.Errorf("block height %d and round %d cannot be negative", protoVote.Height, protoVote.Round)
+	}
 	blockSignBytes, err := protoVote.SignBytes(c.chainID)
 	if err != nil {
 		return err

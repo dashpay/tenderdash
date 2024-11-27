@@ -12,6 +12,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	privvalproto "github.com/dashpay/tenderdash/proto/tendermint/privval"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
@@ -190,7 +191,7 @@ func (sc *SignerClient) SignVote(
 	voteRequest := privvalproto.SignVoteRequest{
 		Vote:       vote,
 		ChainId:    chainID,
-		QuorumType: int32(quorumType),
+		QuorumType: tmmath.MustConvertInt32(quorumType),
 		QuorumHash: quorumHash,
 	}
 
@@ -222,7 +223,7 @@ func (sc *SignerClient) SignProposal(
 ) (tmbytes.HexBytes, error) {
 	response, err := sc.endpoint.SendRequest(ctx, mustWrapMsg(
 		&privvalproto.SignProposalRequest{Proposal: proposal, ChainId: chainID,
-			QuorumType: int32(quorumType), QuorumHash: quorumHash},
+			QuorumType: tmmath.MustConvertInt32(quorumType), QuorumHash: quorumHash},
 	))
 	if err != nil {
 		return nil, err

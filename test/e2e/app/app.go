@@ -19,6 +19,7 @@ import (
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	types1 "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -73,7 +74,7 @@ func NewApplication(cfg kvstore.Config, opts ...kvstore.OptFunc) (*Application, 
 				AppVersion:       kvstore.ProtocolVersion,
 			},
 		}
-		app.AddConsensusParamsUpdate(params, int64(height))
+		app.AddConsensusParamsUpdate(params, tmmath.MustConvertInt64(height))
 	}
 
 	return &app, nil
@@ -160,7 +161,7 @@ func (app *Application) VerifyVoteExtension(_ context.Context, req *abci.Request
 	}
 
 	if app.cfg.VoteExtensionDelayMS != 0 {
-		time.Sleep(time.Duration(app.cfg.VoteExtensionDelayMS) * time.Millisecond) //#nosec G115
+		time.Sleep(time.Duration(tmmath.MustConvertInt(app.cfg.VoteExtensionDelayMS)) * time.Millisecond)
 	}
 
 	app.logger.Info("verified vote extension value", "req", req, "nums", nums)

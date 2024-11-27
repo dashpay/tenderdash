@@ -25,7 +25,7 @@ func MakeInspectCommand(conf *config.Config, logger log.Logger) *cobra.Command {
 	The inspect command can be used to query the block and state store using Tendermint
 	RPC calls to debug issues of inconsistent state.
 	`,
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			ctx, cancel := signal.NotifyContext(cmd.Context(), syscall.SIGTERM, syscall.SIGINT)
 			defer cancel()
 

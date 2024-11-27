@@ -3,6 +3,7 @@ package factory
 import (
 	"context"
 
+	"github.com/dashpay/tenderdash/libs/math"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -28,7 +29,7 @@ func MakeVote(
 		ValidatorIndex:     valIndex,
 		Height:             height,
 		Round:              round,
-		Type:               tmproto.SignedMsgType(step),
+		Type:               tmproto.SignedMsgType(math.MustConvertInt32(step)),
 		BlockID:            blockID,
 	}
 

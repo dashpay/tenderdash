@@ -40,7 +40,7 @@ func NewWebsocketManager(logger log.Logger, funcMap map[string]*RPCFunc, wsConnO
 	return &WebsocketManager{
 		funcMap: funcMap,
 		Upgrader: websocket.Upgrader{
-			CheckOrigin: func(r *http.Request) bool {
+			CheckOrigin: func(_ *http.Request) bool {
 				// TODO ???
 				//
 				// The default behavior would be relevant to browser-based clients,
@@ -268,7 +268,7 @@ func (wsc *wsConnection) readRoutine(ctx context.Context) {
 		}
 	}()
 
-	wsc.baseConn.SetPongHandler(func(m string) error {
+	wsc.baseConn.SetPongHandler(func(_ string) error {
 		return wsc.baseConn.SetReadDeadline(time.Now().Add(wsc.readWait))
 	})
 
@@ -321,7 +321,7 @@ func (wsc *wsConnection) readRoutine(ctx context.Context) {
 			rpcFunc := wsc.funcMap[request.Method]
 			if rpcFunc == nil {
 				if err := wsc.WriteRPCResponse(writeCtx,
-					request.MakeErrorf(rpctypes.CodeMethodNotFound, request.Method)); err != nil {
+					request.MakeErrorf(rpctypes.CodeMethodNotFound, "%s", request.Method)); err != nil {
 					wsc.Logger.Error("error writing RPC response", "err", err)
 				}
 				continue

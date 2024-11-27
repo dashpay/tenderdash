@@ -39,7 +39,7 @@ func TestMaxOpenConnections(t *testing.T) {
 	// Start the server.
 	var open int32
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		if n := atomic.AddInt32(&open, 1); n > int32(max) {
 			t.Errorf("%d open connections, want <= %d", n, max)
 		}
@@ -88,7 +88,7 @@ func TestServeTLS(t *testing.T) {
 	defer ln.Close()
 
 	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	mux.HandleFunc("/", func(w http.ResponseWriter, _ *http.Request) {
 		fmt.Fprint(w, "some body")
 	})
 

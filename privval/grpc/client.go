@@ -13,6 +13,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	privvalproto "github.com/dashpay/tenderdash/proto/tendermint/privval"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
@@ -138,7 +139,7 @@ func (sc *SignerClient) SignVote(
 		return fmt.Errorf("quorum hash must be 32 bytes long when signing vote")
 	}
 	resp, err := sc.client.SignVote(ctx, &privvalproto.SignVoteRequest{ChainId: sc.chainID, Vote: vote,
-		QuorumType: int32(quorumType), QuorumHash: quorumHash})
+		QuorumType: tmmath.MustConvertInt32(quorumType), QuorumHash: quorumHash})
 	if err != nil {
 		errStatus, _ := status.FromError(err)
 		sc.logger.Error("Client SignVote", "err", errStatus.Message())
@@ -156,7 +157,7 @@ func (sc *SignerClient) SignProposal(
 ) (tmbytes.HexBytes, error) {
 	resp, err := sc.client.SignProposal(
 		ctx, &privvalproto.SignProposalRequest{ChainId: chainID, Proposal: proposal,
-			QuorumType: int32(quorumType), QuorumHash: quorumHash})
+			QuorumType: tmmath.MustConvertInt32(quorumType), QuorumHash: quorumHash})
 
 	if err != nil {
 		errStatus, _ := status.FromError(err)

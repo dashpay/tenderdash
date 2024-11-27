@@ -14,6 +14,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/test/factory"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -39,7 +40,7 @@ func MakeBlocks(ctx context.Context, t *testing.T, n int, state *sm.State, privV
 
 		// update state
 		appHash := make([]byte, crypto.DefaultAppHashSize)
-		binary.BigEndian.PutUint64(appHash, uint64(height))
+		binary.BigEndian.PutUint64(appHash, tmmath.MustConvertUint64(height))
 		changes, err := state.NewStateChangeset(ctx, sm.RoundParams{AppHash: appHash})
 		require.NoError(t, err)
 		err = changes.UpdateState(state)

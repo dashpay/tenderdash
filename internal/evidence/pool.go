@@ -19,6 +19,7 @@ import (
 	clist "github.com/dashpay/tenderdash/internal/libs/clist"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -274,7 +275,7 @@ func (evpool *Pool) Start(state sm.State) error {
 		return err
 	}
 
-	atomic.StoreUint32(&evpool.evidenceSize, uint32(len(evList)))
+	atomic.StoreUint32(&evpool.evidenceSize, tmmath.MustConvertUint32(len(evList)))
 	evpool.Metrics.NumEvidence.Set(float64(evpool.evidenceSize))
 
 	for _, ev := range evList {
@@ -401,7 +402,7 @@ func (evpool *Pool) markEvidenceAsCommitted(evidence types.EvidenceList, height 
 	evpool.removeEvidenceFromList(blockEvidenceMap)
 
 	// update the evidence size
-	atomic.AddUint32(&evpool.evidenceSize, ^uint32(len(blockEvidenceMap)-1))
+	atomic.AddUint32(&evpool.evidenceSize, ^tmmath.MustConvertUint32(len(blockEvidenceMap)-1))
 	evpool.Metrics.NumEvidence.Set(float64(evpool.evidenceSize))
 }
 
@@ -482,7 +483,7 @@ func (evpool *Pool) removeExpiredPendingEvidence() (int64, time.Time) {
 	// remove evidence from the clist
 	evpool.removeEvidenceFromList(blockEvidenceMap)
 	// update the evidence size
-	atomic.AddUint32(&evpool.evidenceSize, ^uint32(len(blockEvidenceMap)-1))
+	atomic.AddUint32(&evpool.evidenceSize, ^tmmath.MustConvertUint32(len(blockEvidenceMap)-1))
 
 	return height, time
 }

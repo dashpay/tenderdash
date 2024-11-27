@@ -11,6 +11,8 @@ import (
 	"net"
 	"strconv"
 	"time"
+
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 )
 
 // EmptyNetAddress defines the string representation of an empty NetAddress
@@ -46,7 +48,7 @@ func NewNetAddress(id NodeID, addr net.Addr) *NetAddress {
 	}
 
 	ip := tcpAddr.IP
-	port := uint16(tcpAddr.Port)
+	port := tmmath.MustConvertUint16(tcpAddr.Port)
 	na := NewNetAddressIPPort(ip, port)
 	na.ID = id
 	return na

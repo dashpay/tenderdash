@@ -11,6 +11,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	"github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
@@ -179,7 +180,7 @@ func (i SignItem) MarshalZerologObject(e *zerolog.Event) {
 	e.Hex("signID", i.SignHash)
 	e.Hex("msgHash", i.MsgHash)
 	e.Hex("quorumHash", i.QuorumHash)
-	e.Uint8("llmqType", uint8(i.LlmqType))
+	e.Int("llmqType", int(i.LlmqType))
 
 }
 
@@ -247,7 +248,7 @@ func (i *SignItem) UpdateSignHash(reverse bool) {
 	// fmt.Printf("RequestID: %x + ", blsRequestID)
 	// fmt.Printf("MsgHash: %x\n", blsMessageHash)
 
-	blsSignHash := bls.BuildSignHash(uint8(llmqType), blsQuorumHash, blsRequestID, blsMessageHash)
+	blsSignHash := bls.BuildSignHash(math.MustConvertUint8(llmqType), blsQuorumHash, blsRequestID, blsMessageHash)
 
 	signHash := make([]byte, 32)
 	copy(signHash, blsSignHash[:])

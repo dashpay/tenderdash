@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -74,7 +75,7 @@ func ParseNodeAddress(urlString string) (NodeAddress, error) {
 		if err != nil {
 			return NodeAddress{}, fmt.Errorf("invalid port %q: %w", portString, err)
 		}
-		address.Port = uint16(port64)
+		address.Port = tmmath.MustConvertUint16(port64)
 	}
 
 	address.Path = url.Path

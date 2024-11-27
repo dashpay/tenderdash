@@ -22,6 +22,7 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/light/provider"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
@@ -848,7 +849,7 @@ func (r *Reactor) handleParamsMessage(ctx context.Context, envelope *p2p.Envelop
 	switch msg := envelope.Message.(type) {
 	case *ssproto.ParamsRequest:
 		r.logger.Debug("received consensus params request", "height", msg.Height)
-		cp, err := r.stateStore.LoadConsensusParams(int64(msg.Height))
+		cp, err := r.stateStore.LoadConsensusParams(tmmath.MustConvertInt64(msg.Height))
 		if err != nil {
 			r.logger.Error("failed to fetch requested consensus params",
 				"height", msg.Height,
@@ -1077,7 +1078,7 @@ func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, e
 // fetchLightBlock works out whether the node has a light block at a particular
 // height and if so returns it so it can be gossiped to peers
 func (r *Reactor) fetchLightBlock(height uint64) (*types.LightBlock, error) {
-	h := int64(height)
+	h := tmmath.MustConvertInt64(height)
 
 	blockMeta := r.blockStore.LoadBlockMeta(h)
 	if blockMeta == nil {

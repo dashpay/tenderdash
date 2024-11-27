@@ -4,6 +4,8 @@ import (
 	"crypto/sha256"
 	"hash"
 	"math/bits"
+
+	"github.com/dashpay/tenderdash/libs/math"
 )
 
 // HashFromByteSlices computes a Merkle tree where the leaves are the byte slice,
@@ -104,7 +106,7 @@ func getSplitPoint(length int64) int64 {
 	}
 	uLength := uint(length)
 	bitlen := bits.Len(uLength)
-	k := int64(1 << uint(bitlen-1))
+	k := int64(1 << math.MustConvert[int, uint](bitlen-1))
 	if k == length {
 		k >>= 1
 	}

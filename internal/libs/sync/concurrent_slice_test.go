@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dashpay/tenderdash/internal/p2p/conn"
 )
 
 func TestConcurrentSlice(t *testing.T) {
@@ -72,9 +74,9 @@ func TestConcurrentSlice_Concurrency(t *testing.T) {
 
 func TestConcurrentSlice_MarshalUnmarshalJSON(t *testing.T) {
 	type node struct {
-		Channels *ConcurrentSlice[uint16]
+		Channels *ConcurrentSlice[conn.ChannelID]
 	}
-	cs := NewConcurrentSlice[uint16](1, 2, 3)
+	cs := NewConcurrentSlice[conn.ChannelID](1, 2, 3)
 
 	node1 := node{
 		Channels: cs,
@@ -86,7 +88,7 @@ func TestConcurrentSlice_MarshalUnmarshalJSON(t *testing.T) {
 
 	// Unmarshal from JSON
 	node2 := node{
-		// Channels: NewConcurrentSlice[uint16](),
+		// Channels: NewConcurrentSlice[conn.ChannelID](),
 	}
 
 	err = json.Unmarshal(data, &node2)

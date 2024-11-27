@@ -21,6 +21,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/ed25519"
 	"github.com/dashpay/tenderdash/crypto/secp256k1"
 	"github.com/dashpay/tenderdash/dash/llmq"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	rpchttp "github.com/dashpay/tenderdash/rpc/client/http"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -379,7 +380,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 
 	// Set up validator updates.
 	for _, height := range heights {
-		heightStr := strconv.FormatInt(int64(height), 10)
+		heightStr := strconv.FormatInt(tmmath.MustConvertInt64(height), 10)
 		validators := manifest.ValidatorUpdates[heightStr]
 		valUpdate := ValidatorsMap{}
 		proTxHashes := make([]crypto.ProTxHash, 0, len(validators))
@@ -395,7 +396,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 			proTxHashes = append(proTxHashes, node.ProTxHash)
 		}
 
-		ld = llmq.MustGenerate(proTxHashes, llmq.WithSeed(randomSeed+int64(height)))
+		ld = llmq.MustGenerate(proTxHashes, llmq.WithSeed(randomSeed+tmmath.MustConvertInt64(height)))
 		quorumHash := quorumHashGen.generate()
 
 		err = updateNodeParams(
@@ -425,9 +426,9 @@ func LoadTestnet(file string) (*Testnet, error) {
 			testnet.ThresholdPublicKey = ld.ThresholdPubKey
 			testnet.Validators = valUpdate
 		}
-		testnet.ValidatorUpdates[int64(height)] = valUpdate
-		testnet.ThresholdPublicKeyUpdates[int64(height)] = ld.ThresholdPubKey
-		testnet.QuorumHashUpdates[int64(height)] = quorumHash
+		testnet.ValidatorUpdates[tmmath.MustConvertInt64(height)] = valUpdate
+		testnet.ThresholdPublicKeyUpdates[tmmath.MustConvertInt64(height)] = ld.ThresholdPubKey
+		testnet.QuorumHashUpdates[tmmath.MustConvertInt64(height)] = quorumHash
 	}
 
 	chainLockSetHeights := make([]int, 0, len(manifest.ChainLockUpdates))
@@ -444,9 +445,9 @@ func LoadTestnet(file string) (*Testnet, error) {
 
 	// Set up chainlock updates.
 	for _, height := range chainLockSetHeights {
-		heightStr := strconv.FormatInt(int64(height), 10)
+		heightStr := strconv.FormatInt(tmmath.MustConvertInt64(height), 10)
 		chainLockHeight := manifest.ChainLockUpdates[heightStr]
-		testnet.ChainLockUpdates[int64(height)] = chainLockHeight
+		testnet.ChainLockUpdates[tmmath.MustConvertInt64(height)] = chainLockHeight
 		fmt.Printf("Set chainlock at height %d / core height is %d\n", height, chainLockHeight)
 	}
 
@@ -455,7 +456,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid consensus version update height %q: %w", height, err)
 		}
-		testnet.ConsensusVersionUpdates[int64(height)] = cpUpdate
+		testnet.ConsensusVersionUpdates[tmmath.MustConvertInt64(height)] = cpUpdate
 	}
 
 	return testnet, testnet.Validate()

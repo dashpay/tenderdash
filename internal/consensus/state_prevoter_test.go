@@ -263,7 +263,7 @@ func (suite *PrevoterTestSuite) TestCheckPrevoteMaj23() {
 		{
 			modifier: func(stateData *StateData) {
 				stateData.Proposal.POLRound = -1
-				stateData.Votes = suite.makeHeightVoteSetMaj23(validStateData, -1)
+				stateData.Votes = suite.makeHeightVoteSetMaj23(validStateData, 0)
 			},
 			want: false,
 		},

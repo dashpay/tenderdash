@@ -16,7 +16,7 @@ func MakeKeyMigrateCommand(conf *config.Config, logger log.Logger) *cobra.Comman
 	cmd := &cobra.Command{
 		Use:   "key-migrate",
 		Short: "Run Database key migration",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(cmd *cobra.Command, _ []string) error {
 			return RunDatabaseMigration(cmd.Context(), logger, conf)
 		},
 	}

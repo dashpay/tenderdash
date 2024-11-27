@@ -15,7 +15,7 @@ func MakeGenValidatorCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "gen-validator",
 		Short: "Generate new validator keypair",
-		RunE: func(cmd *cobra.Command, args []string) error {
+		RunE: func(_ *cobra.Command, _ []string) error {
 			pv := privval.GenFilePV("", "")
 
 			jsbz, err := json.Marshal(pv)

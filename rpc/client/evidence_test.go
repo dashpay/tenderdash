@@ -9,6 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
 	"github.com/dashpay/tenderdash/privval"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -56,7 +57,7 @@ func makeEvidences(
 ) (correct *types.DuplicateVoteEvidence, fakes []*types.DuplicateVoteEvidence) {
 	const height = int64(1)
 	stateID := types.RandStateID()
-	stateID.Height = uint64(height)
+	stateID.Height = tmmath.MustConvertUint64(height)
 
 	vote := types.Vote{
 		ValidatorProTxHash: val.Key.ProTxHash,
