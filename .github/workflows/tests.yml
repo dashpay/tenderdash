@@ -2,9 +2,6 @@
 name: Test
 on:
   pull_request:
-    paths:
-      - "**.go"
-      - "go.sum"
   push:
     branches:
       - master
@@ -26,20 +23,26 @@ jobs:
           PATTERNS: |
             **/**.go
             "!test/"
+          FILES: |
             go.mod
             go.sum
             Makefile
+
       - name: Install libpcap
+        if: env.GIT_DIFF
         run: sudo apt-get install --yes libpcap-dev
       - uses: ./.github/actions/bls
         name: Install BLS library
-        if: "env.GIT_DIFF != ''"
+        if: env.GIT_DIFF
+
       - name: Install dependencies
+        if: env.GIT_DIFF
         run: sudo apt-get update && sudo apt-get install -y libpcap-dev
+
       - name: Run Go Tests
+        if: env.GIT_DIFF
         env:
           CGO_LDFLAGS: "-L/usr/local/lib -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
           CGO_CXXFLAGS: "-I/usr/local/include"
         run: |
           make test-group-${{ matrix.part }} NUM_SPLIT=6
-        if: env.GIT_DIFF
