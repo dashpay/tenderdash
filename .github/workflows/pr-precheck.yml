@@ -1,0 +1,24 @@
+---
+name: Wait for optional jobs
+
+on:
+  workflow_run:
+    workflows:
+      - "Check generated code"
+
+    types:
+      - completed
+
+jobs:
+  wait-for-optional-jobs:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check status of optional jobs
+        shell: bash
+        run: |
+          if [[ "${{ github.event.workflow_run.conclusion }}" == "success" || "${{ github.event.workflow_run.conclusion }}" == "skipped" ]]; then
+            echo "All optional jobs passed or were skipped."
+          else
+            echo "Some optional jobs failed."
+            exit 1
+          fi
