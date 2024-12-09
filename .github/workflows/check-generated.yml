@@ -6,9 +6,6 @@
 name: Check generated code
 on:
   pull_request:
-    paths:
-      - "**.go"
-      - "**.proto"
   push:
     branches:
       - master
