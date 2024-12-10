@@ -71,7 +71,7 @@ func (_c *Store_Bootstrap_Call) RunAndReturn(run func(state.State) error) *Store
 	return _c
 }
 
-// Close provides a mock function with given fields:
+// Close provides a mock function with no fields
 func (_m *Store) Close() error {
 	ret := _m.Called()
 
@@ -116,7 +116,7 @@ func (_c *Store_Close_Call) RunAndReturn(run func() error) *Store_Close_Call {
 	return _c
 }
 
-// Load provides a mock function with given fields:
+// Load provides a mock function with no fields
 func (_m *Store) Load() (state.State, error) {
 	ret := _m.Called()
 

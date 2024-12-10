@@ -25,7 +25,7 @@ func (_m *LightClient) EXPECT() *LightClient_Expecter {
 	return &LightClient_Expecter{mock: &_m.Mock}
 }
 
-// ChainID provides a mock function with given fields:
+// ChainID provides a mock function with no fields
 func (_m *LightClient) ChainID() string {
 	ret := _m.Called()
 

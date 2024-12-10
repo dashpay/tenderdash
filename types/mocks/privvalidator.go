@@ -577,7 +577,7 @@ func (_c *PrivValidator_UpdatePrivateKey_Call) Return() *PrivValidator_UpdatePri
 }
 
 func (_c *PrivValidator_UpdatePrivateKey_Call) RunAndReturn(run func(context.Context, crypto.PrivKey, crypto.QuorumHash, crypto.PubKey, int64)) *PrivValidator_UpdatePrivateKey_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 

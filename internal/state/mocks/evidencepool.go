@@ -207,7 +207,7 @@ func (_c *EvidencePool_Update_Call) Return() *EvidencePool_Update_Call {
 }
 
 func (_c *EvidencePool_Update_Call) RunAndReturn(run func(context.Context, state.State, types.EvidenceList)) *EvidencePool_Update_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 

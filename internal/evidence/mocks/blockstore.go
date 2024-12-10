@@ -20,7 +20,7 @@ func (_m *BlockStore) EXPECT() *BlockStore_Expecter {
 	return &BlockStore_Expecter{mock: &_m.Mock}
 }
 
-// Base provides a mock function with given fields:
+// Base provides a mock function with no fields
 func (_m *BlockStore) Base() int64 {
 	ret := _m.Called()
 
@@ -65,7 +65,7 @@ func (_c *BlockStore_Base_Call) RunAndReturn(run func() int64) *BlockStore_Base_
 	return _c
 }
 
-// Height provides a mock function with given fields:
+// Height provides a mock function with no fields
 func (_m *BlockStore) Height() int64 {
 	ret := _m.Called()
 

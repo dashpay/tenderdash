@@ -185,7 +185,7 @@ func (_c *Executor_ExtendVote_Call) Return() *Executor_ExtendVote_Call {
 }
 
 func (_c *Executor_ExtendVote_Call) RunAndReturn(run func(context.Context, *types.Vote)) *Executor_ExtendVote_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 

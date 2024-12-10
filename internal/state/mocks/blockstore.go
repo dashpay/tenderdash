@@ -21,7 +21,7 @@ func (_m *BlockStore) EXPECT() *BlockStore_Expecter {
 	return &BlockStore_Expecter{mock: &_m.Mock}
 }
 
-// Base provides a mock function with given fields:
+// Base provides a mock function with no fields
 func (_m *BlockStore) Base() int64 {
 	ret := _m.Called()
 
@@ -66,7 +66,7 @@ func (_c *BlockStore_Base_Call) RunAndReturn(run func() int64) *BlockStore_Base_
 	return _c
 }
 
-// CoreChainLockedHeight provides a mock function with given fields:
+// CoreChainLockedHeight provides a mock function with no fields
 func (_m *BlockStore) CoreChainLockedHeight() uint32 {
 	ret := _m.Called()
 
@@ -111,7 +111,7 @@ func (_c *BlockStore_CoreChainLockedHeight_Call) RunAndReturn(run func() uint32)
 	return _c
 }
 
-// Height provides a mock function with given fields:
+// Height provides a mock function with no fields
 func (_m *BlockStore) Height() int64 {
 	ret := _m.Called()
 
@@ -156,7 +156,7 @@ func (_c *BlockStore_Height_Call) RunAndReturn(run func() int64) *BlockStore_Hei
 	return _c
 }
 
-// LoadBaseMeta provides a mock function with given fields:
+// LoadBaseMeta provides a mock function with no fields
 func (_m *BlockStore) LoadBaseMeta() *types.BlockMeta {
 	ret := _m.Called()
 
@@ -492,7 +492,7 @@ func (_c *BlockStore_LoadBlockPart_Call) RunAndReturn(run func(int64, int) *type
 	return _c
 }
 
-// LoadSeenCommit provides a mock function with given fields:
+// LoadSeenCommit provides a mock function with no fields
 func (_m *BlockStore) LoadSeenCommit() *types.Commit {
 	ret := _m.Called()
 
@@ -674,11 +674,11 @@ func (_c *BlockStore_SaveBlock_Call) Return() *BlockStore_SaveBlock_Call {
 }
 
 func (_c *BlockStore_SaveBlock_Call) RunAndReturn(run func(*types.Block, *types.PartSet, *types.Commit)) *BlockStore_SaveBlock_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
-// Size provides a mock function with given fields:
+// Size provides a mock function with no fields
 func (_m *BlockStore) Size() int64 {
 	ret := _m.Called()
 

@@ -28,7 +28,7 @@ func (_m *Connection) EXPECT() *Connection_Expecter {
 	return &Connection_Expecter{mock: &_m.Mock}
 }
 
-// Close provides a mock function with given fields:
+// Close provides a mock function with no fields
 func (_m *Connection) Close() error {
 	ret := _m.Called()
 
@@ -141,7 +141,7 @@ func (_c *Connection_Handshake_Call) RunAndReturn(run func(context.Context, time
 	return _c
 }
 
-// LocalEndpoint provides a mock function with given fields:
+// LocalEndpoint provides a mock function with no fields
 func (_m *Connection) LocalEndpoint() p2p.Endpoint {
 	ret := _m.Called()
 
@@ -251,7 +251,7 @@ func (_c *Connection_ReceiveMessage_Call) RunAndReturn(run func(context.Context)
 	return _c
 }
 
-// RemoteEndpoint provides a mock function with given fields:
+// RemoteEndpoint provides a mock function with no fields
 func (_m *Connection) RemoteEndpoint() p2p.Endpoint {
 	ret := _m.Called()
 
@@ -344,7 +344,7 @@ func (_c *Connection_SendMessage_Call) RunAndReturn(run func(context.Context, p2
 	return _c
 }
 
-// String provides a mock function with given fields:
+// String provides a mock function with no fields
 func (_m *Connection) String() string {
 	ret := _m.Called()
 
