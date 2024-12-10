@@ -109,11 +109,11 @@ func (_c *Transport_AddChannelDescriptors_Call) Return() *Transport_AddChannelDe
 }
 
 func (_c *Transport_AddChannelDescriptors_Call) RunAndReturn(run func([]*p2p.ChannelDescriptor)) *Transport_AddChannelDescriptors_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
-// Close provides a mock function with given fields:
+// Close provides a mock function with no fields
 func (_m *Transport) Close() error {
 	ret := _m.Called()
 
@@ -217,7 +217,7 @@ func (_c *Transport_Dial_Call) RunAndReturn(run func(context.Context, *p2p.Endpo
 	return _c
 }
 
-// Endpoint provides a mock function with given fields:
+// Endpoint provides a mock function with no fields
 func (_m *Transport) Endpoint() (*p2p.Endpoint, error) {
 	ret := _m.Called()
 
@@ -320,7 +320,7 @@ func (_c *Transport_Listen_Call) RunAndReturn(run func(*p2p.Endpoint) error) *Tr
 	return _c
 }
 
-// Protocols provides a mock function with given fields:
+// Protocols provides a mock function with no fields
 func (_m *Transport) Protocols() []p2p.Protocol {
 	ret := _m.Called()
 
@@ -367,7 +367,7 @@ func (_c *Transport_Protocols_Call) RunAndReturn(run func() []p2p.Protocol) *Tra
 	return _c
 }
 
-// String provides a mock function with given fields:
+// String provides a mock function with no fields
 func (_m *Transport) String() string {
 	ret := _m.Called()
 

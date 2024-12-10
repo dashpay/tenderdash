@@ -53,7 +53,7 @@ func (_c *Gossiper_GossipBlockPartsForCatchup_Call) Return() *Gossiper_GossipBlo
 }
 
 func (_c *Gossiper_GossipBlockPartsForCatchup_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipBlockPartsForCatchup_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
@@ -88,7 +88,7 @@ func (_c *Gossiper_GossipCommit_Call) Return() *Gossiper_GossipCommit_Call {
 }
 
 func (_c *Gossiper_GossipCommit_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipCommit_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
@@ -123,7 +123,7 @@ func (_c *Gossiper_GossipProposal_Call) Return() *Gossiper_GossipProposal_Call {
 }
 
 func (_c *Gossiper_GossipProposal_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipProposal_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
@@ -158,7 +158,7 @@ func (_c *Gossiper_GossipProposalBlockParts_Call) Return() *Gossiper_GossipPropo
 }
 
 func (_c *Gossiper_GossipProposalBlockParts_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipProposalBlockParts_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
@@ -193,7 +193,7 @@ func (_c *Gossiper_GossipVote_Call) Return() *Gossiper_GossipVote_Call {
 }
 
 func (_c *Gossiper_GossipVote_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipVote_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
@@ -228,7 +228,7 @@ func (_c *Gossiper_GossipVoteSetMaj23_Call) Return() *Gossiper_GossipVoteSetMaj2
 }
 
 func (_c *Gossiper_GossipVoteSetMaj23_Call) RunAndReturn(run func(context.Context, types.RoundState, *types.PeerRoundState)) *Gossiper_GossipVoteSetMaj23_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 

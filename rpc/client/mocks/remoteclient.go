@@ -1562,7 +1562,7 @@ func (_c *RemoteClient_NumUnconfirmedTxs_Call) RunAndReturn(run func(context.Con
 	return _c
 }
 
-// Remote provides a mock function with given fields:
+// Remote provides a mock function with no fields
 func (_m *RemoteClient) Remote() string {
 	ret := _m.Called()
 

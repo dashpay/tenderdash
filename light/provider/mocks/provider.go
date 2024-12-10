@@ -23,7 +23,7 @@ func (_m *Provider) EXPECT() *Provider_Expecter {
 	return &Provider_Expecter{mock: &_m.Mock}
 }
 
-// ID provides a mock function with given fields:
+// ID provides a mock function with no fields
 func (_m *Provider) ID() string {
 	ret := _m.Called()
 

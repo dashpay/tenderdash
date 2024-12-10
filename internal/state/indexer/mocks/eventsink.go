@@ -352,7 +352,7 @@ func (_c *EventSink_SearchTxEvents_Call) RunAndReturn(run func(context.Context, 
 	return _c
 }
 
-// Stop provides a mock function with given fields:
+// Stop provides a mock function with no fields
 func (_m *EventSink) Stop() error {
 	ret := _m.Called()
 
@@ -397,7 +397,7 @@ func (_c *EventSink_Stop_Call) RunAndReturn(run func() error) *EventSink_Stop_Ca
 	return _c
 }
 
-// Type provides a mock function with given fields:
+// Type provides a mock function with no fields
 func (_m *EventSink) Type() indexer.EventSinkType {
 	ret := _m.Called()
 

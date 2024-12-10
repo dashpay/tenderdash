@@ -24,7 +24,7 @@ func (_m *Client) EXPECT() *Client_Expecter {
 	return &Client_Expecter{mock: &_m.Mock}
 }
 
-// Close provides a mock function with given fields:
+// Close provides a mock function with no fields
 func (_m *Client) Close() error {
 	ret := _m.Called()
 
@@ -69,7 +69,7 @@ func (_c *Client_Close_Call) RunAndReturn(run func() error) *Client_Close_Call {
 	return _c
 }
 
-// GetNetworkInfo provides a mock function with given fields:
+// GetNetworkInfo provides a mock function with no fields
 func (_m *Client) GetNetworkInfo() (*btcjson.GetNetworkInfoResult, error) {
 	ret := _m.Called()
 
@@ -184,7 +184,7 @@ func (_c *Client_MasternodeListJSON_Call) RunAndReturn(run func(string) (map[str
 	return _c
 }
 
-// MasternodeStatus provides a mock function with given fields:
+// MasternodeStatus provides a mock function with no fields
 func (_m *Client) MasternodeStatus() (*btcjson.MasternodeStatusResult, error) {
 	ret := _m.Called()
 
@@ -241,7 +241,7 @@ func (_c *Client_MasternodeStatus_Call) RunAndReturn(run func() (*btcjson.Master
 	return _c
 }
 
-// Ping provides a mock function with given fields:
+// Ping provides a mock function with no fields
 func (_m *Client) Ping() error {
 	ret := _m.Called()
 

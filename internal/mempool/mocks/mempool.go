@@ -76,7 +76,7 @@ func (_c *Mempool_CheckTx_Call) RunAndReturn(run func(context.Context, types.Tx,
 	return _c
 }
 
-// EnableTxsAvailable provides a mock function with given fields:
+// EnableTxsAvailable provides a mock function with no fields
 func (_m *Mempool) EnableTxsAvailable() {
 	_m.Called()
 }
@@ -104,11 +104,11 @@ func (_c *Mempool_EnableTxsAvailable_Call) Return() *Mempool_EnableTxsAvailable_
 }
 
 func (_c *Mempool_EnableTxsAvailable_Call) RunAndReturn(run func()) *Mempool_EnableTxsAvailable_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
-// Flush provides a mock function with given fields:
+// Flush provides a mock function with no fields
 func (_m *Mempool) Flush() {
 	_m.Called()
 }
@@ -136,7 +136,7 @@ func (_c *Mempool_Flush_Call) Return() *Mempool_Flush_Call {
 }
 
 func (_c *Mempool_Flush_Call) RunAndReturn(run func()) *Mempool_Flush_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
@@ -186,7 +186,7 @@ func (_c *Mempool_FlushAppConn_Call) RunAndReturn(run func(context.Context) erro
 	return _c
 }
 
-// Lock provides a mock function with given fields:
+// Lock provides a mock function with no fields
 func (_m *Mempool) Lock() {
 	_m.Called()
 }
@@ -214,7 +214,7 @@ func (_c *Mempool_Lock_Call) Return() *Mempool_Lock_Call {
 }
 
 func (_c *Mempool_Lock_Call) RunAndReturn(run func()) *Mempool_Lock_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
@@ -361,7 +361,7 @@ func (_c *Mempool_RemoveTxByKey_Call) RunAndReturn(run func(types.TxKey) error) 
 	return _c
 }
 
-// Size provides a mock function with given fields:
+// Size provides a mock function with no fields
 func (_m *Mempool) Size() int {
 	ret := _m.Called()
 
@@ -406,7 +406,7 @@ func (_c *Mempool_Size_Call) RunAndReturn(run func() int) *Mempool_Size_Call {
 	return _c
 }
 
-// SizeBytes provides a mock function with given fields:
+// SizeBytes provides a mock function with no fields
 func (_m *Mempool) SizeBytes() int64 {
 	ret := _m.Called()
 
@@ -451,7 +451,7 @@ func (_c *Mempool_SizeBytes_Call) RunAndReturn(run func() int64) *Mempool_SizeBy
 	return _c
 }
 
-// TxsAvailable provides a mock function with given fields:
+// TxsAvailable provides a mock function with no fields
 func (_m *Mempool) TxsAvailable() <-chan struct{} {
 	ret := _m.Called()
 
@@ -498,7 +498,7 @@ func (_c *Mempool_TxsAvailable_Call) RunAndReturn(run func() <-chan struct{}) *M
 	return _c
 }
 
-// Unlock provides a mock function with given fields:
+// Unlock provides a mock function with no fields
 func (_m *Mempool) Unlock() {
 	_m.Called()
 }
@@ -526,7 +526,7 @@ func (_c *Mempool_Unlock_Call) Return() *Mempool_Unlock_Call {
 }
 
 func (_c *Mempool_Unlock_Call) RunAndReturn(run func()) *Mempool_Unlock_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 

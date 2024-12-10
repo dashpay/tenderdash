@@ -22,7 +22,7 @@ func (_m *Channel) EXPECT() *Channel_Expecter {
 	return &Channel_Expecter{mock: &_m.Mock}
 }
 
-// Err provides a mock function with given fields:
+// Err provides a mock function with no fields
 func (_m *Channel) Err() error {
 	ret := _m.Called()
 
@@ -209,7 +209,7 @@ func (_c *Channel_SendError_Call) RunAndReturn(run func(context.Context, p2p.Pee
 	return _c
 }
 
-// String provides a mock function with given fields:
+// String provides a mock function with no fields
 func (_m *Channel) String() string {
 	ret := _m.Called()
 

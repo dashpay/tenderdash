@@ -21,7 +21,7 @@ func (_m *ProposerSelector) EXPECT() *ProposerSelector_Expecter {
 	return &ProposerSelector_Expecter{mock: &_m.Mock}
 }
 
-// Copy provides a mock function with given fields:
+// Copy provides a mock function with no fields
 func (_m *ProposerSelector) Copy() selectproposer.ProposerSelector {
 	ret := _m.Called()
 
@@ -223,7 +223,7 @@ func (_c *ProposerSelector_UpdateHeightRound_Call) RunAndReturn(run func(int64, 
 	return _c
 }
 
-// ValidatorSet provides a mock function with given fields:
+// ValidatorSet provides a mock function with no fields
 func (_m *ProposerSelector) ValidatorSet() *types.ValidatorSet {
 	ret := _m.Called()
 

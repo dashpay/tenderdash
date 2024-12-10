@@ -199,7 +199,7 @@ func (_c *Client_Echo_Call) RunAndReturn(run func(context.Context, string) (*typ
 	return _c
 }
 
-// Error provides a mock function with given fields:
+// Error provides a mock function with no fields
 func (_m *Client) Error() error {
 	ret := _m.Called()
 
@@ -526,7 +526,7 @@ func (_c *Client_InitChain_Call) RunAndReturn(run func(context.Context, *types.R
 	return _c
 }
 
-// IsRunning provides a mock function with given fields:
+// IsRunning provides a mock function with no fields
 func (_m *Client) IsRunning() bool {
 	ret := _m.Called()
 
@@ -1030,7 +1030,7 @@ func (_c *Client_VerifyVoteExtension_Call) RunAndReturn(run func(context.Context
 	return _c
 }
 
-// Wait provides a mock function with given fields:
+// Wait provides a mock function with no fields
 func (_m *Client) Wait() {
 	_m.Called()
 }
@@ -1058,7 +1058,7 @@ func (_c *Client_Wait_Call) Return() *Client_Wait_Call {
 }
 
 func (_c *Client_Wait_Call) RunAndReturn(run func()) *Client_Wait_Call {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 

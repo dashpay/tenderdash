@@ -20,7 +20,7 @@ func (_m *Store[K, V]) EXPECT() *Store_Expecter[K, V] {
 	return &Store_Expecter[K, V]{mock: &_m.Mock}
 }
 
-// All provides a mock function with given fields:
+// All provides a mock function with no fields
 func (_m *Store[K, V]) All() []V {
 	ret := _m.Called()
 
@@ -96,7 +96,7 @@ func (_c *Store_Delete_Call[K, V]) Return() *Store_Delete_Call[K, V] {
 }
 
 func (_c *Store_Delete_Call[K, V]) RunAndReturn(run func(K)) *Store_Delete_Call[K, V] {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
@@ -216,7 +216,7 @@ func (_c *Store_GetAndDelete_Call[K, V]) RunAndReturn(run func(K) (V, bool)) *St
 	return _c
 }
 
-// IsZero provides a mock function with given fields:
+// IsZero provides a mock function with no fields
 func (_m *Store[K, V]) IsZero() bool {
 	ret := _m.Called()
 
@@ -261,7 +261,7 @@ func (_c *Store_IsZero_Call[K, V]) RunAndReturn(run func() bool) *Store_IsZero_C
 	return _c
 }
 
-// Len provides a mock function with given fields:
+// Len provides a mock function with no fields
 func (_m *Store[K, V]) Len() int {
 	ret := _m.Called()
 
@@ -336,7 +336,7 @@ func (_c *Store_Put_Call[K, V]) Return() *Store_Put_Call[K, V] {
 }
 
 func (_c *Store_Put_Call[K, V]) RunAndReturn(run func(K, V)) *Store_Put_Call[K, V] {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
@@ -433,7 +433,7 @@ func (_c *Store_Update_Call[K, V]) Return() *Store_Update_Call[K, V] {
 }
 
 func (_c *Store_Update_Call[K, V]) RunAndReturn(run func(K, ...store.UpdateFunc[K, V])) *Store_Update_Call[K, V] {
-	_c.Call.Return(run)
+	_c.Run(run)
 	return _c
 }
 
