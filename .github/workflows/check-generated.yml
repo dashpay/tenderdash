@@ -28,6 +28,8 @@ jobs:
         with:
           PATTERNS: |
             **/*.go
+          FILES: |
+            .github/workflows/check-generated.yml
 
       - name: "Check generated mocks"
         if: env.GIT_DIFF
