@@ -3283,7 +3283,6 @@ func TestStateTryAddCommitPanicsOnClientError(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	config := configSetup(t)
-	t.Helper()
 
 	// setup some node and commit
 	genDoc, privVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
@@ -3299,7 +3298,8 @@ func TestStateTryAddCommitPanicsOnClientError(t *testing.T) {
 		Once()
 
 	// create a new consensus state
-	proTxHash, _ := privVals[0].GetProTxHash(ctx)
+	proTxHash, err := privVals[0].GetProTxHash(ctx)
+	require.NoError(t, err)
 	ctx = dash.ContextWithProTxHash(ctx, proTxHash)
 	consensusState := newStateWithConfig(ctx, t, logger, config, state, privVals[0], app)
 
@@ -3346,10 +3346,11 @@ func TestStateTryAddCommitPanicsOnClientError(t *testing.T) {
 		PeerID:      peerID,
 		ReceiveTime: time.Time{},
 	})
-
-	assert.Panics(t, func() {
-		_ = consensusState.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &stateData)
-	})
+	assert.PanicsWithError(t,
+		"ABCI client stopped, Tenderdash needs to be restarted: ProcessProposal abci method: client has stopped",
+		func() {
+			_ = consensusState.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &stateData)
+		})
 }
 
 // TestStateTimestamp_ProposalMatch tests that a validator prevotes a
