@@ -6,8 +6,8 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/google/orderedcode"
-	dbm "github.com/tendermint/tm-db"
 
 	"github.com/dashpay/tenderdash/light/store"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"

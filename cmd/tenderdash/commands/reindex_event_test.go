@@ -5,14 +5,15 @@ import (
 	"errors"
 	"testing"
 
+	dbm "github.com/cometbft/cometbft-db"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	dbm "github.com/tendermint/tm-db"
 
 	abcitypes "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/state/indexer"
+	indexermocks "github.com/dashpay/tenderdash/internal/state/indexer/mocks"
 	"github.com/dashpay/tenderdash/internal/state/mocks"
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/proto/tendermint/state"
@@ -136,7 +137,7 @@ func TestLoadBlockStore(t *testing.T) {
 func TestReIndexEvent(t *testing.T) {
 	mockBlockStore := &mocks.BlockStore{}
 	mockStateStore := &mocks.Store{}
-	mockEventSink := &mocks.EventSink{}
+	mockEventSink := &indexermocks.EventSink{}
 
 	mockBlockStore.
 		On("Base").Return(base).

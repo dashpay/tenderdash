@@ -21,9 +21,9 @@ jobs:
   check-mocks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v5.0.1
+      - uses: actions/setup-go@v5.1.0
         with:
-          go-version: "1.23"
+          go-version: "1.23.2"
 
       - uses: actions/checkout@v4
 
@@ -31,11 +31,11 @@ jobs:
         run: |
           set -euo pipefail
 
-          readonly MOCKERY=2.46.2  # N.B. no leading "v"
+          readonly MOCKERY=2.50.0  # N.B. no leading "v"
           curl -sL "https://github.com/vektra/mockery/releases/download/v${MOCKERY}/mockery_${MOCKERY}_Linux_x86_64.tar.gz" | tar -C /usr/local/bin -xzf -
           make mockery 2>/dev/null
 
-          if ! git diff --stat --exit-code ; then
+          if ! git diff --exit-code ; then
             echo ">> ERROR:"
             echo ">>"
             echo ">> Generated mocks require update (either Mockery or source files may have changed)."
@@ -47,9 +47,9 @@ jobs:
   check-proto:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v5.0.1
+      - uses: actions/setup-go@v5.1.0
         with:
-          go-version: "1.23"
+          go-version: "1.23.2"
 
       - uses: actions/checkout@v4
         with:

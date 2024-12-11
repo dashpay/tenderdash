@@ -101,25 +101,10 @@ moniker = "{{ .BaseConfig.Moniker }}"
 #   - No priv_validator_key.json, priv_validator_state.json
 mode = "{{ .BaseConfig.Mode }}"
 
-# Database backend: goleveldb | cleveldb | boltdb | rocksdb | badgerdb
+# Database backend: only goleveldb supported
 # * goleveldb (github.com/syndtr/goleveldb - most popular implementation)
 #   - pure go
 #   - stable
-# * cleveldb (uses levigo wrapper)
-#   - fast
-#   - requires gcc
-#   - use cleveldb build tag (go build -tags cleveldb)
-# * boltdb (uses etcd's fork of bolt - github.com/etcd-io/bbolt)
-#   - EXPERIMENTAL
-#   - may be faster is some use-cases (random reads - indexer)
-#   - use boltdb build tag (go build -tags boltdb)
-# * rocksdb (uses github.com/tecbot/gorocksdb)
-#   - EXPERIMENTAL
-#   - requires gcc
-#   - use rocksdb build tag (go build -tags rocksdb)
-# * badgerdb (uses github.com/dgraph-io/badger)
-#   - EXPERIMENTAL
-#   - use badgerdb build tag (go build -tags badgerdb)
 db-backend = "{{ .BaseConfig.DBBackend }}"
 
 # Database directory

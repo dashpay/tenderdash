@@ -132,8 +132,8 @@ type ManifestNode struct {
 	// this relates to the providers the light client is connected to.
 	PersistentPeers []string `toml:"persistent_peers"`
 
-	// Database specifies the database backend: "goleveldb", "cleveldb",
-	// "rocksdb", "boltdb", or "badgerdb". Defaults to goleveldb.
+	// Database specifies the database backend; only "goleveldb" is supported.
+	// Defaults to "goleveldb".
 	Database string `toml:"database"`
 
 	// PrivvalProtocol specifies the protocol used to sign consensus messages:

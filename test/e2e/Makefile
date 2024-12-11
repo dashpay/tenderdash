@@ -26,7 +26,7 @@ docker:
 		-f docker/Dockerfile ../..
 
 node:
-	GOTRACEBACK=crash $(GO) build -gcflags="all=-N -l" -o build/node -tags badgerdb,boltdb,cleveldb,deadlock ./node
+	GOTRACEBACK=crash $(GO) build -gcflags="all=-N -l" -o build/node -tags deadlock ./node
 
 e2e/app/compile:
 	docker run --rm -it --entrypoint "/src/tenderdash/test/e2e/entrypoint.sh" -w "/src/tenderdash/test/e2e" -v $(ROOT_PATH)/test/e2e:/src/tenderdash/test/e2e tenderdash/e2e-node

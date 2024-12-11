@@ -10,7 +10,7 @@ import (
 	"strconv"
 	"strings"
 
-	dbm "github.com/tendermint/tm-db"
+	dbm "github.com/cometbft/cometbft-db"
 
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/internal/eventbus"

@@ -16,6 +16,14 @@ type Executor struct {
 	mock.Mock
 }
 
+type Executor_Expecter struct {
+	mock *mock.Mock
+}
+
+func (_m *Executor) EXPECT() *Executor_Expecter {
+	return &Executor_Expecter{mock: &_m.Mock}
+}
+
 // ApplyBlock provides a mock function with given fields: ctx, _a1, blockID, block, commit
 func (_m *Executor) ApplyBlock(ctx context.Context, _a1 state.State, blockID types.BlockID, block *types.Block, commit *types.Commit) (state.State, error) {
 	ret := _m.Called(ctx, _a1, blockID, block, commit)
@@ -42,6 +50,38 @@ func (_m *Executor) ApplyBlock(ctx context.Context, _a1 state.State, blockID typ
 	}
 
 	return r0, r1
+}
+
+// Executor_ApplyBlock_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplyBlock'
+type Executor_ApplyBlock_Call struct {
+	*mock.Call
+}
+
+// ApplyBlock is a helper method to define mock.On call
+//   - ctx context.Context
+//   - _a1 state.State
+//   - blockID types.BlockID
+//   - block *types.Block
+//   - commit *types.Commit
+func (_e *Executor_Expecter) ApplyBlock(ctx interface{}, _a1 interface{}, blockID interface{}, block interface{}, commit interface{}) *Executor_ApplyBlock_Call {
+	return &Executor_ApplyBlock_Call{Call: _e.mock.On("ApplyBlock", ctx, _a1, blockID, block, commit)}
+}
+
+func (_c *Executor_ApplyBlock_Call) Run(run func(ctx context.Context, _a1 state.State, blockID types.BlockID, block *types.Block, commit *types.Commit)) *Executor_ApplyBlock_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(state.State), args[2].(types.BlockID), args[3].(*types.Block), args[4].(*types.Commit))
+	})
+	return _c
+}
+
+func (_c *Executor_ApplyBlock_Call) Return(_a0 state.State, _a1 error) *Executor_ApplyBlock_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Executor_ApplyBlock_Call) RunAndReturn(run func(context.Context, state.State, types.BlockID, *types.Block, *types.Commit) (state.State, error)) *Executor_ApplyBlock_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // CreateProposalBlock provides a mock function with given fields: ctx, height, round, _a3, commit, proposerProTxHash, proposedAppVersion
@@ -81,9 +121,72 @@ func (_m *Executor) CreateProposalBlock(ctx context.Context, height int64, round
 	return r0, r1, r2
 }
 
+// Executor_CreateProposalBlock_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CreateProposalBlock'
+type Executor_CreateProposalBlock_Call struct {
+	*mock.Call
+}
+
+// CreateProposalBlock is a helper method to define mock.On call
+//   - ctx context.Context
+//   - height int64
+//   - round int32
+//   - _a3 state.State
+//   - commit *types.Commit
+//   - proposerProTxHash []byte
+//   - proposedAppVersion uint64
+func (_e *Executor_Expecter) CreateProposalBlock(ctx interface{}, height interface{}, round interface{}, _a3 interface{}, commit interface{}, proposerProTxHash interface{}, proposedAppVersion interface{}) *Executor_CreateProposalBlock_Call {
+	return &Executor_CreateProposalBlock_Call{Call: _e.mock.On("CreateProposalBlock", ctx, height, round, _a3, commit, proposerProTxHash, proposedAppVersion)}
+}
+
+func (_c *Executor_CreateProposalBlock_Call) Run(run func(ctx context.Context, height int64, round int32, _a3 state.State, commit *types.Commit, proposerProTxHash []byte, proposedAppVersion uint64)) *Executor_CreateProposalBlock_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(int64), args[2].(int32), args[3].(state.State), args[4].(*types.Commit), args[5].([]byte), args[6].(uint64))
+	})
+	return _c
+}
+
+func (_c *Executor_CreateProposalBlock_Call) Return(_a0 *types.Block, _a1 state.CurrentRoundState, _a2 error) *Executor_CreateProposalBlock_Call {
+	_c.Call.Return(_a0, _a1, _a2)
+	return _c
+}
+
+func (_c *Executor_CreateProposalBlock_Call) RunAndReturn(run func(context.Context, int64, int32, state.State, *types.Commit, []byte, uint64) (*types.Block, state.CurrentRoundState, error)) *Executor_CreateProposalBlock_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ExtendVote provides a mock function with given fields: ctx, vote
 func (_m *Executor) ExtendVote(ctx context.Context, vote *types.Vote) {
 	_m.Called(ctx, vote)
+}
+
+// Executor_ExtendVote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ExtendVote'
+type Executor_ExtendVote_Call struct {
+	*mock.Call
+}
+
+// ExtendVote is a helper method to define mock.On call
+//   - ctx context.Context
+//   - vote *types.Vote
+func (_e *Executor_Expecter) ExtendVote(ctx interface{}, vote interface{}) *Executor_ExtendVote_Call {
+	return &Executor_ExtendVote_Call{Call: _e.mock.On("ExtendVote", ctx, vote)}
+}
+
+func (_c *Executor_ExtendVote_Call) Run(run func(ctx context.Context, vote *types.Vote)) *Executor_ExtendVote_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.Vote))
+	})
+	return _c
+}
+
+func (_c *Executor_ExtendVote_Call) Return() *Executor_ExtendVote_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Executor_ExtendVote_Call) RunAndReturn(run func(context.Context, *types.Vote)) *Executor_ExtendVote_Call {
+	_c.Run(run)
+	return _c
 }
 
 // FinalizeBlock provides a mock function with given fields: ctx, _a1, uncommittedState, blockID, block, commit
@@ -114,6 +217,39 @@ func (_m *Executor) FinalizeBlock(ctx context.Context, _a1 state.State, uncommit
 	return r0, r1
 }
 
+// Executor_FinalizeBlock_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FinalizeBlock'
+type Executor_FinalizeBlock_Call struct {
+	*mock.Call
+}
+
+// FinalizeBlock is a helper method to define mock.On call
+//   - ctx context.Context
+//   - _a1 state.State
+//   - uncommittedState state.CurrentRoundState
+//   - blockID types.BlockID
+//   - block *types.Block
+//   - commit *types.Commit
+func (_e *Executor_Expecter) FinalizeBlock(ctx interface{}, _a1 interface{}, uncommittedState interface{}, blockID interface{}, block interface{}, commit interface{}) *Executor_FinalizeBlock_Call {
+	return &Executor_FinalizeBlock_Call{Call: _e.mock.On("FinalizeBlock", ctx, _a1, uncommittedState, blockID, block, commit)}
+}
+
+func (_c *Executor_FinalizeBlock_Call) Run(run func(ctx context.Context, _a1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit)) *Executor_FinalizeBlock_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(state.State), args[2].(state.CurrentRoundState), args[3].(types.BlockID), args[4].(*types.Block), args[5].(*types.Commit))
+	})
+	return _c
+}
+
+func (_c *Executor_FinalizeBlock_Call) Return(_a0 state.State, _a1 error) *Executor_FinalizeBlock_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Executor_FinalizeBlock_Call) RunAndReturn(run func(context.Context, state.State, state.CurrentRoundState, types.BlockID, *types.Block, *types.Commit) (state.State, error)) *Executor_FinalizeBlock_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ProcessProposal provides a mock function with given fields: ctx, block, round, _a3, verify
 func (_m *Executor) ProcessProposal(ctx context.Context, block *types.Block, round int32, _a3 state.State, verify bool) (state.CurrentRoundState, error) {
 	ret := _m.Called(ctx, block, round, _a3, verify)
@@ -142,6 +278,38 @@ func (_m *Executor) ProcessProposal(ctx context.Context, block *types.Block, rou
 	return r0, r1
 }
 
+// Executor_ProcessProposal_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ProcessProposal'
+type Executor_ProcessProposal_Call struct {
+	*mock.Call
+}
+
+// ProcessProposal is a helper method to define mock.On call
+//   - ctx context.Context
+//   - block *types.Block
+//   - round int32
+//   - _a3 state.State
+//   - verify bool
+func (_e *Executor_Expecter) ProcessProposal(ctx interface{}, block interface{}, round interface{}, _a3 interface{}, verify interface{}) *Executor_ProcessProposal_Call {
+	return &Executor_ProcessProposal_Call{Call: _e.mock.On("ProcessProposal", ctx, block, round, _a3, verify)}
+}
+
+func (_c *Executor_ProcessProposal_Call) Run(run func(ctx context.Context, block *types.Block, round int32, _a3 state.State, verify bool)) *Executor_ProcessProposal_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.Block), args[2].(int32), args[3].(state.State), args[4].(bool))
+	})
+	return _c
+}
+
+func (_c *Executor_ProcessProposal_Call) Return(_a0 state.CurrentRoundState, _a1 error) *Executor_ProcessProposal_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Executor_ProcessProposal_Call) RunAndReturn(run func(context.Context, *types.Block, int32, state.State, bool) (state.CurrentRoundState, error)) *Executor_ProcessProposal_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // ValidateBlock provides a mock function with given fields: ctx, _a1, block
 func (_m *Executor) ValidateBlock(ctx context.Context, _a1 state.State, block *types.Block) error {
 	ret := _m.Called(ctx, _a1, block)
@@ -158,6 +326,36 @@ func (_m *Executor) ValidateBlock(ctx context.Context, _a1 state.State, block *t
 	}
 
 	return r0
+}
+
+// Executor_ValidateBlock_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ValidateBlock'
+type Executor_ValidateBlock_Call struct {
+	*mock.Call
+}
+
+// ValidateBlock is a helper method to define mock.On call
+//   - ctx context.Context
+//   - _a1 state.State
+//   - block *types.Block
+func (_e *Executor_Expecter) ValidateBlock(ctx interface{}, _a1 interface{}, block interface{}) *Executor_ValidateBlock_Call {
+	return &Executor_ValidateBlock_Call{Call: _e.mock.On("ValidateBlock", ctx, _a1, block)}
+}
+
+func (_c *Executor_ValidateBlock_Call) Run(run func(ctx context.Context, _a1 state.State, block *types.Block)) *Executor_ValidateBlock_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(state.State), args[2].(*types.Block))
+	})
+	return _c
+}
+
+func (_c *Executor_ValidateBlock_Call) Return(_a0 error) *Executor_ValidateBlock_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Executor_ValidateBlock_Call) RunAndReturn(run func(context.Context, state.State, *types.Block) error) *Executor_ValidateBlock_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // ValidateBlockWithRoundState provides a mock function with given fields: ctx, _a1, uncommittedState, block
@@ -178,6 +376,37 @@ func (_m *Executor) ValidateBlockWithRoundState(ctx context.Context, _a1 state.S
 	return r0
 }
 
+// Executor_ValidateBlockWithRoundState_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ValidateBlockWithRoundState'
+type Executor_ValidateBlockWithRoundState_Call struct {
+	*mock.Call
+}
+
+// ValidateBlockWithRoundState is a helper method to define mock.On call
+//   - ctx context.Context
+//   - _a1 state.State
+//   - uncommittedState state.CurrentRoundState
+//   - block *types.Block
+func (_e *Executor_Expecter) ValidateBlockWithRoundState(ctx interface{}, _a1 interface{}, uncommittedState interface{}, block interface{}) *Executor_ValidateBlockWithRoundState_Call {
+	return &Executor_ValidateBlockWithRoundState_Call{Call: _e.mock.On("ValidateBlockWithRoundState", ctx, _a1, uncommittedState, block)}
+}
+
+func (_c *Executor_ValidateBlockWithRoundState_Call) Run(run func(ctx context.Context, _a1 state.State, uncommittedState state.CurrentRoundState, block *types.Block)) *Executor_ValidateBlockWithRoundState_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(state.State), args[2].(state.CurrentRoundState), args[3].(*types.Block))
+	})
+	return _c
+}
+
+func (_c *Executor_ValidateBlockWithRoundState_Call) Return(_a0 error) *Executor_ValidateBlockWithRoundState_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Executor_ValidateBlockWithRoundState_Call) RunAndReturn(run func(context.Context, state.State, state.CurrentRoundState, *types.Block) error) *Executor_ValidateBlockWithRoundState_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // VerifyVoteExtension provides a mock function with given fields: ctx, vote
 func (_m *Executor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) error {
 	ret := _m.Called(ctx, vote)
@@ -194,6 +423,35 @@ func (_m *Executor) VerifyVoteExtension(ctx context.Context, vote *types.Vote) e
 	}
 
 	return r0
+}
+
+// Executor_VerifyVoteExtension_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'VerifyVoteExtension'
+type Executor_VerifyVoteExtension_Call struct {
+	*mock.Call
+}
+
+// VerifyVoteExtension is a helper method to define mock.On call
+//   - ctx context.Context
+//   - vote *types.Vote
+func (_e *Executor_Expecter) VerifyVoteExtension(ctx interface{}, vote interface{}) *Executor_VerifyVoteExtension_Call {
+	return &Executor_VerifyVoteExtension_Call{Call: _e.mock.On("VerifyVoteExtension", ctx, vote)}
+}
+
+func (_c *Executor_VerifyVoteExtension_Call) Run(run func(ctx context.Context, vote *types.Vote)) *Executor_VerifyVoteExtension_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.Vote))
+	})
+	return _c
+}
+
+func (_c *Executor_VerifyVoteExtension_Call) Return(_a0 error) *Executor_VerifyVoteExtension_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Executor_VerifyVoteExtension_Call) RunAndReturn(run func(context.Context, *types.Vote) error) *Executor_VerifyVoteExtension_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // NewExecutor creates a new instance of Executor. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

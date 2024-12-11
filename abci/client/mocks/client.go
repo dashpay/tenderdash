@@ -14,6 +14,14 @@ type Client struct {
 	mock.Mock
 }
 
+type Client_Expecter struct {
+	mock *mock.Mock
+}
+
+func (_m *Client) EXPECT() *Client_Expecter {
+	return &Client_Expecter{mock: &_m.Mock}
+}
+
 // ApplySnapshotChunk provides a mock function with given fields: _a0, _a1
 func (_m *Client) ApplySnapshotChunk(_a0 context.Context, _a1 *types.RequestApplySnapshotChunk) (*types.ResponseApplySnapshotChunk, error) {
 	ret := _m.Called(_a0, _a1)
@@ -42,6 +50,35 @@ func (_m *Client) ApplySnapshotChunk(_a0 context.Context, _a1 *types.RequestAppl
 	}
 
 	return r0, r1
+}
+
+// Client_ApplySnapshotChunk_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ApplySnapshotChunk'
+type Client_ApplySnapshotChunk_Call struct {
+	*mock.Call
+}
+
+// ApplySnapshotChunk is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestApplySnapshotChunk
+func (_e *Client_Expecter) ApplySnapshotChunk(_a0 interface{}, _a1 interface{}) *Client_ApplySnapshotChunk_Call {
+	return &Client_ApplySnapshotChunk_Call{Call: _e.mock.On("ApplySnapshotChunk", _a0, _a1)}
+}
+
+func (_c *Client_ApplySnapshotChunk_Call) Run(run func(_a0 context.Context, _a1 *types.RequestApplySnapshotChunk)) *Client_ApplySnapshotChunk_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestApplySnapshotChunk))
+	})
+	return _c
+}
+
+func (_c *Client_ApplySnapshotChunk_Call) Return(_a0 *types.ResponseApplySnapshotChunk, _a1 error) *Client_ApplySnapshotChunk_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_ApplySnapshotChunk_Call) RunAndReturn(run func(context.Context, *types.RequestApplySnapshotChunk) (*types.ResponseApplySnapshotChunk, error)) *Client_ApplySnapshotChunk_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // CheckTx provides a mock function with given fields: _a0, _a1
@@ -74,6 +111,35 @@ func (_m *Client) CheckTx(_a0 context.Context, _a1 *types.RequestCheckTx) (*type
 	return r0, r1
 }
 
+// Client_CheckTx_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'CheckTx'
+type Client_CheckTx_Call struct {
+	*mock.Call
+}
+
+// CheckTx is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestCheckTx
+func (_e *Client_Expecter) CheckTx(_a0 interface{}, _a1 interface{}) *Client_CheckTx_Call {
+	return &Client_CheckTx_Call{Call: _e.mock.On("CheckTx", _a0, _a1)}
+}
+
+func (_c *Client_CheckTx_Call) Run(run func(_a0 context.Context, _a1 *types.RequestCheckTx)) *Client_CheckTx_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestCheckTx))
+	})
+	return _c
+}
+
+func (_c *Client_CheckTx_Call) Return(_a0 *types.ResponseCheckTx, _a1 error) *Client_CheckTx_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_CheckTx_Call) RunAndReturn(run func(context.Context, *types.RequestCheckTx) (*types.ResponseCheckTx, error)) *Client_CheckTx_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Echo provides a mock function with given fields: _a0, _a1
 func (_m *Client) Echo(_a0 context.Context, _a1 string) (*types.ResponseEcho, error) {
 	ret := _m.Called(_a0, _a1)
@@ -104,7 +170,36 @@ func (_m *Client) Echo(_a0 context.Context, _a1 string) (*types.ResponseEcho, er
 	return r0, r1
 }
 
-// Error provides a mock function with given fields:
+// Client_Echo_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Echo'
+type Client_Echo_Call struct {
+	*mock.Call
+}
+
+// Echo is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 string
+func (_e *Client_Expecter) Echo(_a0 interface{}, _a1 interface{}) *Client_Echo_Call {
+	return &Client_Echo_Call{Call: _e.mock.On("Echo", _a0, _a1)}
+}
+
+func (_c *Client_Echo_Call) Run(run func(_a0 context.Context, _a1 string)) *Client_Echo_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(string))
+	})
+	return _c
+}
+
+func (_c *Client_Echo_Call) Return(_a0 *types.ResponseEcho, _a1 error) *Client_Echo_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_Echo_Call) RunAndReturn(run func(context.Context, string) (*types.ResponseEcho, error)) *Client_Echo_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Error provides a mock function with no fields
 func (_m *Client) Error() error {
 	ret := _m.Called()
 
@@ -120,6 +215,33 @@ func (_m *Client) Error() error {
 	}
 
 	return r0
+}
+
+// Client_Error_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Error'
+type Client_Error_Call struct {
+	*mock.Call
+}
+
+// Error is a helper method to define mock.On call
+func (_e *Client_Expecter) Error() *Client_Error_Call {
+	return &Client_Error_Call{Call: _e.mock.On("Error")}
+}
+
+func (_c *Client_Error_Call) Run(run func()) *Client_Error_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Client_Error_Call) Return(_a0 error) *Client_Error_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Client_Error_Call) RunAndReturn(run func() error) *Client_Error_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // ExtendVote provides a mock function with given fields: _a0, _a1
@@ -152,6 +274,35 @@ func (_m *Client) ExtendVote(_a0 context.Context, _a1 *types.RequestExtendVote) 
 	return r0, r1
 }
 
+// Client_ExtendVote_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ExtendVote'
+type Client_ExtendVote_Call struct {
+	*mock.Call
+}
+
+// ExtendVote is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestExtendVote
+func (_e *Client_Expecter) ExtendVote(_a0 interface{}, _a1 interface{}) *Client_ExtendVote_Call {
+	return &Client_ExtendVote_Call{Call: _e.mock.On("ExtendVote", _a0, _a1)}
+}
+
+func (_c *Client_ExtendVote_Call) Run(run func(_a0 context.Context, _a1 *types.RequestExtendVote)) *Client_ExtendVote_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestExtendVote))
+	})
+	return _c
+}
+
+func (_c *Client_ExtendVote_Call) Return(_a0 *types.ResponseExtendVote, _a1 error) *Client_ExtendVote_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_ExtendVote_Call) RunAndReturn(run func(context.Context, *types.RequestExtendVote) (*types.ResponseExtendVote, error)) *Client_ExtendVote_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // FinalizeBlock provides a mock function with given fields: _a0, _a1
 func (_m *Client) FinalizeBlock(_a0 context.Context, _a1 *types.RequestFinalizeBlock) (*types.ResponseFinalizeBlock, error) {
 	ret := _m.Called(_a0, _a1)
@@ -182,6 +333,35 @@ func (_m *Client) FinalizeBlock(_a0 context.Context, _a1 *types.RequestFinalizeB
 	return r0, r1
 }
 
+// Client_FinalizeBlock_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'FinalizeBlock'
+type Client_FinalizeBlock_Call struct {
+	*mock.Call
+}
+
+// FinalizeBlock is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestFinalizeBlock
+func (_e *Client_Expecter) FinalizeBlock(_a0 interface{}, _a1 interface{}) *Client_FinalizeBlock_Call {
+	return &Client_FinalizeBlock_Call{Call: _e.mock.On("FinalizeBlock", _a0, _a1)}
+}
+
+func (_c *Client_FinalizeBlock_Call) Run(run func(_a0 context.Context, _a1 *types.RequestFinalizeBlock)) *Client_FinalizeBlock_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestFinalizeBlock))
+	})
+	return _c
+}
+
+func (_c *Client_FinalizeBlock_Call) Return(_a0 *types.ResponseFinalizeBlock, _a1 error) *Client_FinalizeBlock_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_FinalizeBlock_Call) RunAndReturn(run func(context.Context, *types.RequestFinalizeBlock) (*types.ResponseFinalizeBlock, error)) *Client_FinalizeBlock_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Flush provides a mock function with given fields: _a0
 func (_m *Client) Flush(_a0 context.Context) error {
 	ret := _m.Called(_a0)
@@ -198,6 +378,34 @@ func (_m *Client) Flush(_a0 context.Context) error {
 	}
 
 	return r0
+}
+
+// Client_Flush_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Flush'
+type Client_Flush_Call struct {
+	*mock.Call
+}
+
+// Flush is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *Client_Expecter) Flush(_a0 interface{}) *Client_Flush_Call {
+	return &Client_Flush_Call{Call: _e.mock.On("Flush", _a0)}
+}
+
+func (_c *Client_Flush_Call) Run(run func(_a0 context.Context)) *Client_Flush_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *Client_Flush_Call) Return(_a0 error) *Client_Flush_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Client_Flush_Call) RunAndReturn(run func(context.Context) error) *Client_Flush_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // Info provides a mock function with given fields: _a0, _a1
@@ -230,6 +438,35 @@ func (_m *Client) Info(_a0 context.Context, _a1 *types.RequestInfo) (*types.Resp
 	return r0, r1
 }
 
+// Client_Info_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Info'
+type Client_Info_Call struct {
+	*mock.Call
+}
+
+// Info is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestInfo
+func (_e *Client_Expecter) Info(_a0 interface{}, _a1 interface{}) *Client_Info_Call {
+	return &Client_Info_Call{Call: _e.mock.On("Info", _a0, _a1)}
+}
+
+func (_c *Client_Info_Call) Run(run func(_a0 context.Context, _a1 *types.RequestInfo)) *Client_Info_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestInfo))
+	})
+	return _c
+}
+
+func (_c *Client_Info_Call) Return(_a0 *types.ResponseInfo, _a1 error) *Client_Info_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_Info_Call) RunAndReturn(run func(context.Context, *types.RequestInfo) (*types.ResponseInfo, error)) *Client_Info_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // InitChain provides a mock function with given fields: _a0, _a1
 func (_m *Client) InitChain(_a0 context.Context, _a1 *types.RequestInitChain) (*types.ResponseInitChain, error) {
 	ret := _m.Called(_a0, _a1)
@@ -260,7 +497,36 @@ func (_m *Client) InitChain(_a0 context.Context, _a1 *types.RequestInitChain) (*
 	return r0, r1
 }
 
-// IsRunning provides a mock function with given fields:
+// Client_InitChain_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'InitChain'
+type Client_InitChain_Call struct {
+	*mock.Call
+}
+
+// InitChain is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestInitChain
+func (_e *Client_Expecter) InitChain(_a0 interface{}, _a1 interface{}) *Client_InitChain_Call {
+	return &Client_InitChain_Call{Call: _e.mock.On("InitChain", _a0, _a1)}
+}
+
+func (_c *Client_InitChain_Call) Run(run func(_a0 context.Context, _a1 *types.RequestInitChain)) *Client_InitChain_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestInitChain))
+	})
+	return _c
+}
+
+func (_c *Client_InitChain_Call) Return(_a0 *types.ResponseInitChain, _a1 error) *Client_InitChain_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_InitChain_Call) RunAndReturn(run func(context.Context, *types.RequestInitChain) (*types.ResponseInitChain, error)) *Client_InitChain_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// IsRunning provides a mock function with no fields
 func (_m *Client) IsRunning() bool {
 	ret := _m.Called()
 
@@ -276,6 +542,33 @@ func (_m *Client) IsRunning() bool {
 	}
 
 	return r0
+}
+
+// Client_IsRunning_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IsRunning'
+type Client_IsRunning_Call struct {
+	*mock.Call
+}
+
+// IsRunning is a helper method to define mock.On call
+func (_e *Client_Expecter) IsRunning() *Client_IsRunning_Call {
+	return &Client_IsRunning_Call{Call: _e.mock.On("IsRunning")}
+}
+
+func (_c *Client_IsRunning_Call) Run(run func()) *Client_IsRunning_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Client_IsRunning_Call) Return(_a0 bool) *Client_IsRunning_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Client_IsRunning_Call) RunAndReturn(run func() bool) *Client_IsRunning_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // ListSnapshots provides a mock function with given fields: _a0, _a1
@@ -308,6 +601,35 @@ func (_m *Client) ListSnapshots(_a0 context.Context, _a1 *types.RequestListSnaps
 	return r0, r1
 }
 
+// Client_ListSnapshots_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ListSnapshots'
+type Client_ListSnapshots_Call struct {
+	*mock.Call
+}
+
+// ListSnapshots is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestListSnapshots
+func (_e *Client_Expecter) ListSnapshots(_a0 interface{}, _a1 interface{}) *Client_ListSnapshots_Call {
+	return &Client_ListSnapshots_Call{Call: _e.mock.On("ListSnapshots", _a0, _a1)}
+}
+
+func (_c *Client_ListSnapshots_Call) Run(run func(_a0 context.Context, _a1 *types.RequestListSnapshots)) *Client_ListSnapshots_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestListSnapshots))
+	})
+	return _c
+}
+
+func (_c *Client_ListSnapshots_Call) Return(_a0 *types.ResponseListSnapshots, _a1 error) *Client_ListSnapshots_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_ListSnapshots_Call) RunAndReturn(run func(context.Context, *types.RequestListSnapshots) (*types.ResponseListSnapshots, error)) *Client_ListSnapshots_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // LoadSnapshotChunk provides a mock function with given fields: _a0, _a1
 func (_m *Client) LoadSnapshotChunk(_a0 context.Context, _a1 *types.RequestLoadSnapshotChunk) (*types.ResponseLoadSnapshotChunk, error) {
 	ret := _m.Called(_a0, _a1)
@@ -336,6 +658,35 @@ func (_m *Client) LoadSnapshotChunk(_a0 context.Context, _a1 *types.RequestLoadS
 	}
 
 	return r0, r1
+}
+
+// Client_LoadSnapshotChunk_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LoadSnapshotChunk'
+type Client_LoadSnapshotChunk_Call struct {
+	*mock.Call
+}
+
+// LoadSnapshotChunk is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestLoadSnapshotChunk
+func (_e *Client_Expecter) LoadSnapshotChunk(_a0 interface{}, _a1 interface{}) *Client_LoadSnapshotChunk_Call {
+	return &Client_LoadSnapshotChunk_Call{Call: _e.mock.On("LoadSnapshotChunk", _a0, _a1)}
+}
+
+func (_c *Client_LoadSnapshotChunk_Call) Run(run func(_a0 context.Context, _a1 *types.RequestLoadSnapshotChunk)) *Client_LoadSnapshotChunk_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestLoadSnapshotChunk))
+	})
+	return _c
+}
+
+func (_c *Client_LoadSnapshotChunk_Call) Return(_a0 *types.ResponseLoadSnapshotChunk, _a1 error) *Client_LoadSnapshotChunk_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_LoadSnapshotChunk_Call) RunAndReturn(run func(context.Context, *types.RequestLoadSnapshotChunk) (*types.ResponseLoadSnapshotChunk, error)) *Client_LoadSnapshotChunk_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // OfferSnapshot provides a mock function with given fields: _a0, _a1
@@ -368,6 +719,35 @@ func (_m *Client) OfferSnapshot(_a0 context.Context, _a1 *types.RequestOfferSnap
 	return r0, r1
 }
 
+// Client_OfferSnapshot_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'OfferSnapshot'
+type Client_OfferSnapshot_Call struct {
+	*mock.Call
+}
+
+// OfferSnapshot is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestOfferSnapshot
+func (_e *Client_Expecter) OfferSnapshot(_a0 interface{}, _a1 interface{}) *Client_OfferSnapshot_Call {
+	return &Client_OfferSnapshot_Call{Call: _e.mock.On("OfferSnapshot", _a0, _a1)}
+}
+
+func (_c *Client_OfferSnapshot_Call) Run(run func(_a0 context.Context, _a1 *types.RequestOfferSnapshot)) *Client_OfferSnapshot_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestOfferSnapshot))
+	})
+	return _c
+}
+
+func (_c *Client_OfferSnapshot_Call) Return(_a0 *types.ResponseOfferSnapshot, _a1 error) *Client_OfferSnapshot_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_OfferSnapshot_Call) RunAndReturn(run func(context.Context, *types.RequestOfferSnapshot) (*types.ResponseOfferSnapshot, error)) *Client_OfferSnapshot_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // PrepareProposal provides a mock function with given fields: _a0, _a1
 func (_m *Client) PrepareProposal(_a0 context.Context, _a1 *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error) {
 	ret := _m.Called(_a0, _a1)
@@ -396,6 +776,35 @@ func (_m *Client) PrepareProposal(_a0 context.Context, _a1 *types.RequestPrepare
 	}
 
 	return r0, r1
+}
+
+// Client_PrepareProposal_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'PrepareProposal'
+type Client_PrepareProposal_Call struct {
+	*mock.Call
+}
+
+// PrepareProposal is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestPrepareProposal
+func (_e *Client_Expecter) PrepareProposal(_a0 interface{}, _a1 interface{}) *Client_PrepareProposal_Call {
+	return &Client_PrepareProposal_Call{Call: _e.mock.On("PrepareProposal", _a0, _a1)}
+}
+
+func (_c *Client_PrepareProposal_Call) Run(run func(_a0 context.Context, _a1 *types.RequestPrepareProposal)) *Client_PrepareProposal_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestPrepareProposal))
+	})
+	return _c
+}
+
+func (_c *Client_PrepareProposal_Call) Return(_a0 *types.ResponsePrepareProposal, _a1 error) *Client_PrepareProposal_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_PrepareProposal_Call) RunAndReturn(run func(context.Context, *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error)) *Client_PrepareProposal_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // ProcessProposal provides a mock function with given fields: _a0, _a1
@@ -428,6 +837,35 @@ func (_m *Client) ProcessProposal(_a0 context.Context, _a1 *types.RequestProcess
 	return r0, r1
 }
 
+// Client_ProcessProposal_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'ProcessProposal'
+type Client_ProcessProposal_Call struct {
+	*mock.Call
+}
+
+// ProcessProposal is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestProcessProposal
+func (_e *Client_Expecter) ProcessProposal(_a0 interface{}, _a1 interface{}) *Client_ProcessProposal_Call {
+	return &Client_ProcessProposal_Call{Call: _e.mock.On("ProcessProposal", _a0, _a1)}
+}
+
+func (_c *Client_ProcessProposal_Call) Run(run func(_a0 context.Context, _a1 *types.RequestProcessProposal)) *Client_ProcessProposal_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestProcessProposal))
+	})
+	return _c
+}
+
+func (_c *Client_ProcessProposal_Call) Return(_a0 *types.ResponseProcessProposal, _a1 error) *Client_ProcessProposal_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_ProcessProposal_Call) RunAndReturn(run func(context.Context, *types.RequestProcessProposal) (*types.ResponseProcessProposal, error)) *Client_ProcessProposal_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Query provides a mock function with given fields: _a0, _a1
 func (_m *Client) Query(_a0 context.Context, _a1 *types.RequestQuery) (*types.ResponseQuery, error) {
 	ret := _m.Called(_a0, _a1)
@@ -458,6 +896,35 @@ func (_m *Client) Query(_a0 context.Context, _a1 *types.RequestQuery) (*types.Re
 	return r0, r1
 }
 
+// Client_Query_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Query'
+type Client_Query_Call struct {
+	*mock.Call
+}
+
+// Query is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestQuery
+func (_e *Client_Expecter) Query(_a0 interface{}, _a1 interface{}) *Client_Query_Call {
+	return &Client_Query_Call{Call: _e.mock.On("Query", _a0, _a1)}
+}
+
+func (_c *Client_Query_Call) Run(run func(_a0 context.Context, _a1 *types.RequestQuery)) *Client_Query_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestQuery))
+	})
+	return _c
+}
+
+func (_c *Client_Query_Call) Return(_a0 *types.ResponseQuery, _a1 error) *Client_Query_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_Query_Call) RunAndReturn(run func(context.Context, *types.RequestQuery) (*types.ResponseQuery, error)) *Client_Query_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Start provides a mock function with given fields: _a0
 func (_m *Client) Start(_a0 context.Context) error {
 	ret := _m.Called(_a0)
@@ -474,6 +941,34 @@ func (_m *Client) Start(_a0 context.Context) error {
 	}
 
 	return r0
+}
+
+// Client_Start_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Start'
+type Client_Start_Call struct {
+	*mock.Call
+}
+
+// Start is a helper method to define mock.On call
+//   - _a0 context.Context
+func (_e *Client_Expecter) Start(_a0 interface{}) *Client_Start_Call {
+	return &Client_Start_Call{Call: _e.mock.On("Start", _a0)}
+}
+
+func (_c *Client_Start_Call) Run(run func(_a0 context.Context)) *Client_Start_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context))
+	})
+	return _c
+}
+
+func (_c *Client_Start_Call) Return(_a0 error) *Client_Start_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Client_Start_Call) RunAndReturn(run func(context.Context) error) *Client_Start_Call {
+	_c.Call.Return(run)
+	return _c
 }
 
 // VerifyVoteExtension provides a mock function with given fields: _a0, _a1
@@ -506,9 +1001,65 @@ func (_m *Client) VerifyVoteExtension(_a0 context.Context, _a1 *types.RequestVer
 	return r0, r1
 }
 
-// Wait provides a mock function with given fields:
+// Client_VerifyVoteExtension_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'VerifyVoteExtension'
+type Client_VerifyVoteExtension_Call struct {
+	*mock.Call
+}
+
+// VerifyVoteExtension is a helper method to define mock.On call
+//   - _a0 context.Context
+//   - _a1 *types.RequestVerifyVoteExtension
+func (_e *Client_Expecter) VerifyVoteExtension(_a0 interface{}, _a1 interface{}) *Client_VerifyVoteExtension_Call {
+	return &Client_VerifyVoteExtension_Call{Call: _e.mock.On("VerifyVoteExtension", _a0, _a1)}
+}
+
+func (_c *Client_VerifyVoteExtension_Call) Run(run func(_a0 context.Context, _a1 *types.RequestVerifyVoteExtension)) *Client_VerifyVoteExtension_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(*types.RequestVerifyVoteExtension))
+	})
+	return _c
+}
+
+func (_c *Client_VerifyVoteExtension_Call) Return(_a0 *types.ResponseVerifyVoteExtension, _a1 error) *Client_VerifyVoteExtension_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_VerifyVoteExtension_Call) RunAndReturn(run func(context.Context, *types.RequestVerifyVoteExtension) (*types.ResponseVerifyVoteExtension, error)) *Client_VerifyVoteExtension_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Wait provides a mock function with no fields
 func (_m *Client) Wait() {
 	_m.Called()
+}
+
+// Client_Wait_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Wait'
+type Client_Wait_Call struct {
+	*mock.Call
+}
+
+// Wait is a helper method to define mock.On call
+func (_e *Client_Expecter) Wait() *Client_Wait_Call {
+	return &Client_Wait_Call{Call: _e.mock.On("Wait")}
+}
+
+func (_c *Client_Wait_Call) Run(run func()) *Client_Wait_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Client_Wait_Call) Return() *Client_Wait_Call {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Client_Wait_Call) RunAndReturn(run func()) *Client_Wait_Call {
+	_c.Run(run)
+	return _c
 }
 
 // NewClient creates a new instance of Client. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

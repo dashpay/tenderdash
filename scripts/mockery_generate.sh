@@ -6,11 +6,12 @@
 # runs the published Docker container. This legerdemain is so that the CI build
 # and a local build can work off the same script.
 #
-VERSION=v2.46.2
+VERSION=v2.50.0
 
 if ! mockery --version 2>/dev/null | grep $VERSION; then
-  echo "Please install mockery $VERSION"
+  echo "Please install mockery $VERSION, example for Linux x86_64:"
+  echo "wget https://github.com/vektra/mockery/releases/download/${VERSION}/mockery_${VERSION#v}_Linux_x86_64.tar.gz"
   exit 1
 fi
 
-mockery --disable-version-string --case underscore --name "$@"
+mockery

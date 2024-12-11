@@ -12,7 +12,15 @@ type Store[K comparable, V any] struct {
 	mock.Mock
 }
 
-// All provides a mock function with given fields:
+type Store_Expecter[K comparable, V any] struct {
+	mock *mock.Mock
+}
+
+func (_m *Store[K, V]) EXPECT() *Store_Expecter[K, V] {
+	return &Store_Expecter[K, V]{mock: &_m.Mock}
+}
+
+// All provides a mock function with no fields
 func (_m *Store[K, V]) All() []V {
 	ret := _m.Called()
 
@@ -32,9 +40,64 @@ func (_m *Store[K, V]) All() []V {
 	return r0
 }
 
+// Store_All_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'All'
+type Store_All_Call[K comparable, V any] struct {
+	*mock.Call
+}
+
+// All is a helper method to define mock.On call
+func (_e *Store_Expecter[K, V]) All() *Store_All_Call[K, V] {
+	return &Store_All_Call[K, V]{Call: _e.mock.On("All")}
+}
+
+func (_c *Store_All_Call[K, V]) Run(run func()) *Store_All_Call[K, V] {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Store_All_Call[K, V]) Return(_a0 []V) *Store_All_Call[K, V] {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Store_All_Call[K, V]) RunAndReturn(run func() []V) *Store_All_Call[K, V] {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Delete provides a mock function with given fields: key
 func (_m *Store[K, V]) Delete(key K) {
 	_m.Called(key)
+}
+
+// Store_Delete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Delete'
+type Store_Delete_Call[K comparable, V any] struct {
+	*mock.Call
+}
+
+// Delete is a helper method to define mock.On call
+//   - key K
+func (_e *Store_Expecter[K, V]) Delete(key interface{}) *Store_Delete_Call[K, V] {
+	return &Store_Delete_Call[K, V]{Call: _e.mock.On("Delete", key)}
+}
+
+func (_c *Store_Delete_Call[K, V]) Run(run func(key K)) *Store_Delete_Call[K, V] {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(K))
+	})
+	return _c
+}
+
+func (_c *Store_Delete_Call[K, V]) Return() *Store_Delete_Call[K, V] {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Store_Delete_Call[K, V]) RunAndReturn(run func(K)) *Store_Delete_Call[K, V] {
+	_c.Run(run)
+	return _c
 }
 
 // Get provides a mock function with given fields: key
@@ -53,7 +116,9 @@ func (_m *Store[K, V]) Get(key K) (V, bool) {
 	if rf, ok := ret.Get(0).(func(K) V); ok {
 		r0 = rf(key)
 	} else {
-		r0 = ret.Get(0).(V)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(V)
+		}
 	}
 
 	if rf, ok := ret.Get(1).(func(K) bool); ok {
@@ -63,6 +128,34 @@ func (_m *Store[K, V]) Get(key K) (V, bool) {
 	}
 
 	return r0, r1
+}
+
+// Store_Get_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Get'
+type Store_Get_Call[K comparable, V any] struct {
+	*mock.Call
+}
+
+// Get is a helper method to define mock.On call
+//   - key K
+func (_e *Store_Expecter[K, V]) Get(key interface{}) *Store_Get_Call[K, V] {
+	return &Store_Get_Call[K, V]{Call: _e.mock.On("Get", key)}
+}
+
+func (_c *Store_Get_Call[K, V]) Run(run func(key K)) *Store_Get_Call[K, V] {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(K))
+	})
+	return _c
+}
+
+func (_c *Store_Get_Call[K, V]) Return(_a0 V, _a1 bool) *Store_Get_Call[K, V] {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Store_Get_Call[K, V]) RunAndReturn(run func(K) (V, bool)) *Store_Get_Call[K, V] {
+	_c.Call.Return(run)
+	return _c
 }
 
 // GetAndDelete provides a mock function with given fields: key
@@ -81,7 +174,9 @@ func (_m *Store[K, V]) GetAndDelete(key K) (V, bool) {
 	if rf, ok := ret.Get(0).(func(K) V); ok {
 		r0 = rf(key)
 	} else {
-		r0 = ret.Get(0).(V)
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(V)
+		}
 	}
 
 	if rf, ok := ret.Get(1).(func(K) bool); ok {
@@ -93,7 +188,35 @@ func (_m *Store[K, V]) GetAndDelete(key K) (V, bool) {
 	return r0, r1
 }
 
-// IsZero provides a mock function with given fields:
+// Store_GetAndDelete_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetAndDelete'
+type Store_GetAndDelete_Call[K comparable, V any] struct {
+	*mock.Call
+}
+
+// GetAndDelete is a helper method to define mock.On call
+//   - key K
+func (_e *Store_Expecter[K, V]) GetAndDelete(key interface{}) *Store_GetAndDelete_Call[K, V] {
+	return &Store_GetAndDelete_Call[K, V]{Call: _e.mock.On("GetAndDelete", key)}
+}
+
+func (_c *Store_GetAndDelete_Call[K, V]) Run(run func(key K)) *Store_GetAndDelete_Call[K, V] {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(K))
+	})
+	return _c
+}
+
+func (_c *Store_GetAndDelete_Call[K, V]) Return(_a0 V, _a1 bool) *Store_GetAndDelete_Call[K, V] {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Store_GetAndDelete_Call[K, V]) RunAndReturn(run func(K) (V, bool)) *Store_GetAndDelete_Call[K, V] {
+	_c.Call.Return(run)
+	return _c
+}
+
+// IsZero provides a mock function with no fields
 func (_m *Store[K, V]) IsZero() bool {
 	ret := _m.Called()
 
@@ -111,7 +234,34 @@ func (_m *Store[K, V]) IsZero() bool {
 	return r0
 }
 
-// Len provides a mock function with given fields:
+// Store_IsZero_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'IsZero'
+type Store_IsZero_Call[K comparable, V any] struct {
+	*mock.Call
+}
+
+// IsZero is a helper method to define mock.On call
+func (_e *Store_Expecter[K, V]) IsZero() *Store_IsZero_Call[K, V] {
+	return &Store_IsZero_Call[K, V]{Call: _e.mock.On("IsZero")}
+}
+
+func (_c *Store_IsZero_Call[K, V]) Run(run func()) *Store_IsZero_Call[K, V] {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Store_IsZero_Call[K, V]) Return(_a0 bool) *Store_IsZero_Call[K, V] {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Store_IsZero_Call[K, V]) RunAndReturn(run func() bool) *Store_IsZero_Call[K, V] {
+	_c.Call.Return(run)
+	return _c
+}
+
+// Len provides a mock function with no fields
 func (_m *Store[K, V]) Len() int {
 	ret := _m.Called()
 
@@ -129,9 +279,65 @@ func (_m *Store[K, V]) Len() int {
 	return r0
 }
 
+// Store_Len_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Len'
+type Store_Len_Call[K comparable, V any] struct {
+	*mock.Call
+}
+
+// Len is a helper method to define mock.On call
+func (_e *Store_Expecter[K, V]) Len() *Store_Len_Call[K, V] {
+	return &Store_Len_Call[K, V]{Call: _e.mock.On("Len")}
+}
+
+func (_c *Store_Len_Call[K, V]) Run(run func()) *Store_Len_Call[K, V] {
+	_c.Call.Run(func(args mock.Arguments) {
+		run()
+	})
+	return _c
+}
+
+func (_c *Store_Len_Call[K, V]) Return(_a0 int) *Store_Len_Call[K, V] {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Store_Len_Call[K, V]) RunAndReturn(run func() int) *Store_Len_Call[K, V] {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Put provides a mock function with given fields: key, data
 func (_m *Store[K, V]) Put(key K, data V) {
 	_m.Called(key, data)
+}
+
+// Store_Put_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Put'
+type Store_Put_Call[K comparable, V any] struct {
+	*mock.Call
+}
+
+// Put is a helper method to define mock.On call
+//   - key K
+//   - data V
+func (_e *Store_Expecter[K, V]) Put(key interface{}, data interface{}) *Store_Put_Call[K, V] {
+	return &Store_Put_Call[K, V]{Call: _e.mock.On("Put", key, data)}
+}
+
+func (_c *Store_Put_Call[K, V]) Run(run func(key K, data V)) *Store_Put_Call[K, V] {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(K), args[1].(V))
+	})
+	return _c
+}
+
+func (_c *Store_Put_Call[K, V]) Return() *Store_Put_Call[K, V] {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Store_Put_Call[K, V]) RunAndReturn(run func(K, V)) *Store_Put_Call[K, V] {
+	_c.Run(run)
+	return _c
 }
 
 // Query provides a mock function with given fields: spec, limit
@@ -154,6 +360,35 @@ func (_m *Store[K, V]) Query(spec store.QueryFunc[K, V], limit int) []V {
 	return r0
 }
 
+// Store_Query_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Query'
+type Store_Query_Call[K comparable, V any] struct {
+	*mock.Call
+}
+
+// Query is a helper method to define mock.On call
+//   - spec store.QueryFunc[K,V]
+//   - limit int
+func (_e *Store_Expecter[K, V]) Query(spec interface{}, limit interface{}) *Store_Query_Call[K, V] {
+	return &Store_Query_Call[K, V]{Call: _e.mock.On("Query", spec, limit)}
+}
+
+func (_c *Store_Query_Call[K, V]) Run(run func(spec store.QueryFunc[K, V], limit int)) *Store_Query_Call[K, V] {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(store.QueryFunc[K, V]), args[1].(int))
+	})
+	return _c
+}
+
+func (_c *Store_Query_Call[K, V]) Return(_a0 []V) *Store_Query_Call[K, V] {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Store_Query_Call[K, V]) RunAndReturn(run func(store.QueryFunc[K, V], int) []V) *Store_Query_Call[K, V] {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Update provides a mock function with given fields: key, updates
 func (_m *Store[K, V]) Update(key K, updates ...store.UpdateFunc[K, V]) {
 	_va := make([]interface{}, len(updates))
@@ -164,6 +399,42 @@ func (_m *Store[K, V]) Update(key K, updates ...store.UpdateFunc[K, V]) {
 	_ca = append(_ca, key)
 	_ca = append(_ca, _va...)
 	_m.Called(_ca...)
+}
+
+// Store_Update_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'Update'
+type Store_Update_Call[K comparable, V any] struct {
+	*mock.Call
+}
+
+// Update is a helper method to define mock.On call
+//   - key K
+//   - updates ...store.UpdateFunc[K,V]
+func (_e *Store_Expecter[K, V]) Update(key interface{}, updates ...interface{}) *Store_Update_Call[K, V] {
+	return &Store_Update_Call[K, V]{Call: _e.mock.On("Update",
+		append([]interface{}{key}, updates...)...)}
+}
+
+func (_c *Store_Update_Call[K, V]) Run(run func(key K, updates ...store.UpdateFunc[K, V])) *Store_Update_Call[K, V] {
+	_c.Call.Run(func(args mock.Arguments) {
+		variadicArgs := make([]store.UpdateFunc[K, V], len(args)-1)
+		for i, a := range args[1:] {
+			if a != nil {
+				variadicArgs[i] = a.(store.UpdateFunc[K, V])
+			}
+		}
+		run(args[0].(K), variadicArgs...)
+	})
+	return _c
+}
+
+func (_c *Store_Update_Call[K, V]) Return() *Store_Update_Call[K, V] {
+	_c.Call.Return()
+	return _c
+}
+
+func (_c *Store_Update_Call[K, V]) RunAndReturn(run func(K, ...store.UpdateFunc[K, V])) *Store_Update_Call[K, V] {
+	_c.Run(run)
+	return _c
 }
 
 // NewStore creates a new instance of Store. It also registers a testing interface on the mock and a cleanup function to assert the mocks expectations.

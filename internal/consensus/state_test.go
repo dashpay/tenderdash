@@ -12,6 +12,8 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 
+	abciclient "github.com/dashpay/tenderdash/abci/client"
+	clientmocks "github.com/dashpay/tenderdash/abci/client/mocks"
 	"github.com/dashpay/tenderdash/abci/example/kvstore"
 	abci "github.com/dashpay/tenderdash/abci/types"
 	abcimocks "github.com/dashpay/tenderdash/abci/types/mocks"
@@ -22,6 +24,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/mempool"
 	tmpubsub "github.com/dashpay/tenderdash/internal/pubsub"
 	tmquery "github.com/dashpay/tenderdash/internal/pubsub/query"
+	sm "github.com/dashpay/tenderdash/internal/state"
 	sf "github.com/dashpay/tenderdash/internal/state/test/factory"
 	"github.com/dashpay/tenderdash/internal/test/factory"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
@@ -3270,6 +3273,84 @@ func TestStateTryAddCommitCallsProcessProposal(t *testing.T) {
 	err = otherNode.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &css1StateData)
 	assert.Equal(t, int64(2), css1StateData.Height)
 	assert.NoError(t, err)
+}
+
+// TestStateTryAddCommitPanicsOnClientError ensures that
+// given ABCI client that errors on ProcessProposal,
+// when new block is about to be processed,
+// then the TryAddCommitEvent causes a panic.
+func TestStateTryAddCommitPanicsOnClientError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	config := configSetup(t)
+
+	// setup some node and commit
+	genDoc, privVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
+	logger := consensusLogger(t)
+
+	state, err := sm.MakeGenesisState(genDoc)
+	require.NoError(t, err)
+
+	// Create a panicking app
+	app := clientmocks.NewClient(t)
+	app.On("ProcessProposal", mock.Anything, mock.Anything).
+		Return(&abci.ResponseProcessProposal{}, abciclient.ErrClientStopped).
+		Once()
+
+	// create a new consensus state
+	proTxHash, err := privVals[0].GetProTxHash(ctx)
+	require.NoError(t, err)
+	ctx = dash.ContextWithProTxHash(ctx, proTxHash)
+	consensusState := newStateWithConfig(ctx, t, logger, config, state, privVals[0], app)
+
+	stateData := consensusState.GetStateData()
+
+	// create proposal and a block to be processed
+	block, err := sf.MakeBlock(state, 1, &types.Commit{}, kvstore.ProtocolVersion)
+	require.NoError(t, err)
+	require.NotZero(t, block.Version.App)
+	block.CoreChainLockedHeight = 1
+
+	commit, err := factory.MakeCommit(
+		ctx,
+		block.BlockID(nil),
+		block.Height,
+		0,
+		stateData.Votes.Precommits(0),
+		state.Validators,
+		privVals,
+	)
+	require.NoError(t, err)
+
+	proposal := types.NewProposal(
+		block.Height,
+		block.CoreChainLockedHeight,
+		0,
+		-1,
+		commit.BlockID,
+		block.Time)
+
+	parts, err := block.MakePartSet(999999999)
+	require.NoError(t, err)
+
+	// emulate that the node has received proposal and block
+	peerID := stateData.Validators.Proposer().NodeAddress.NodeID
+	stateData.Proposal = proposal
+	stateData.ProposalBlock = block
+	stateData.ProposalBlockParts = parts
+	stateData.updateRoundStep(commit.Round, cstypes.RoundStepPrevote)
+
+	// invoke the TryAddCommitEvent to see if it will panic
+	ctx = msgInfoWithCtx(ctx, msgInfo{
+		Msg:         &CommitMessage{commit},
+		PeerID:      peerID,
+		ReceiveTime: time.Time{},
+	})
+	assert.PanicsWithError(t,
+		"ABCI client stopped, Tenderdash needs to be restarted: ProcessProposal abci method: client has stopped",
+		func() {
+			_ = consensusState.ctrl.Dispatch(ctx, &TryAddCommitEvent{Commit: commit, PeerID: peerID}, &stateData)
+		})
 }
 
 // TestStateTimestamp_ProposalMatch tests that a validator prevotes a

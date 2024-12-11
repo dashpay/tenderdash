@@ -90,7 +90,7 @@ func (s *heightProposerSelector) proposerFromStore(height int64) error {
 				"validators_hash", meta.Header.ValidatorsHash, "quorum_hash", s.valSet.QuorumHash,
 				"validators", s.valSet)
 
-			return fmt.Errorf("quorum hash mismatch at height %d", height)
+			return fmt.Errorf("validator set hash mismatch at height %d", height)
 		}
 
 		proposer = meta.Header.ProposerProTxHash
