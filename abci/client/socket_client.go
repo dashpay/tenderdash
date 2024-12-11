@@ -39,6 +39,7 @@ type socketClient struct {
 var _ Client = (*socketClient)(nil)
 
 var (
+	// ErrClientStopped is returned when client wasn't started yet or it was terminated with an error.
 	ErrClientStopped = errors.New("client has stopped")
 )
 
