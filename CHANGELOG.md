@@ -1,3 +1,52 @@
+## [1.3.2] - 2024-12-11
+
+### Bug Fixes
+
+- Validators endpoint fail during quorum rotation (#959)
+- Node stalled after client has stopped (#1001)
+
+### Miscellaneous Tasks
+
+- [**breaking**] Docker log to stdout and minor logging tweaks (#951)
+- Tune stale and dependabot settings (#967)
+
+### Refactor
+
+- [**breaking**] Remove support for cleveldb, boltdb, rocksdb, badgerdb (#974)
+
+### Testing
+
+- Update mockery configuration and regenerate mocks (#955)
+
+### Build
+
+- Bump actions/setup-go from 5.0.1 to 5.1.0 (#965)
+- Bump github.com/creachadair/taskgroup from 0.3.2 to 0.12.0 (#961)
+- Bump github.com/prometheus/common from 0.37.0 to 0.60.1 (#964)
+- Bump github.com/oasisprotocol/oasis-core/go (#962)
+- Replace tendermint/tm-db with cometbft/cometbft-db (#973)
+- Bump golang.org/x/sync from 0.8.0 to 0.9.0 (#976)
+- Bump github.com/creachadair/taskgroup from 0.12.0 to 0.13.2 (#986)
+- Bump golang.org/x/crypto from 0.28.0 to 0.29.0 (#981)
+- Bump bufbuild/buf-setup-action from 1.35.0 to 1.46.0 (#969)
+- Bump golang.org/x/time from 0.6.0 to 0.8.0 (#980)
+- Bump github.com/vektra/mockery/v2 from 2.46.3 to 2.49.1 (#988)
+- Bump golang.org/x/net from 0.30.0 to 0.31.0 (#979)
+- Bump github.com/golangci/golangci-lint from 1.61.0 to 1.62.2 (#985)
+- Bump github.com/bufbuild/buf from 1.35.1 to 1.47.2 (#982)
+- Bump google.golang.org/grpc from 1.67.1 to 1.68.0 (#977)
+- Bump docker/build-push-action from 6.9.0 to 6.10.0 (#991)
+- Bump github.com/oasisprotocol/oasis-core/go (#990)
+- Bump bufbuild/buf-setup-action from 1.46.0 to 1.47.2 (#992)
+- Bump github.com/creachadair/atomicfile from 0.2.6 to 0.3.6 (#989)
+- Bump golang.org/x/term from 0.26.0 to 0.27.0 (#1000)
+- Bump google.golang.org/grpc from 1.68.0 to 1.68.1 (#998)
+- Bump golang.org/x/sync from 0.9.0 to 0.10.0 (#995)
+- Bump golang.org/x/crypto from 0.29.0 to 0.30.0 (#996)
+- Bump github.com/vektra/mockery/v2 from 2.49.1 to 2.50.0 (#999)
+- Bump golang.org/x/net from 0.31.0 to 0.32.0 (#994)
+- Bump github.com/prometheus/common from 0.60.1 to 0.61.0 (#997)
+
 ## [1.3.1] - 2024-11-02
 
 ### Bug Fixes
@@ -9,6 +58,10 @@
 
 - Update readme (#934)
 - Fix broken links (#940)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.3.1
 
 ### Testing
 
