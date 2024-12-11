@@ -2,8 +2,10 @@ package consensus
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
+	abciclient "github.com/dashpay/tenderdash/abci/client"
 	"github.com/dashpay/tenderdash/dash"
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/libs/log"
@@ -108,6 +110,10 @@ func (cs *TryAddCommitAction) verifyCommit(ctx context.Context, stateData *State
 	// We have a correct block, let's process it before applying the commit
 	err = cs.blockExec.ensureProcess(ctx, &stateData.RoundState, commit.Round)
 	if err != nil {
+		if errors.Is(err, abciclient.ErrClientStopped) {
+			// this is a non-recoverable error in current architecture
+			panic(fmt.Errorf("ABCI client stopped, Tenderdash needs to be restarted: %w", err))
+		}
 		return false, fmt.Errorf("unable to process proposal: %w", err)
 	}
 	err = cs.blockExec.validate(ctx, stateData)

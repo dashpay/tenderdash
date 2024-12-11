@@ -38,6 +38,10 @@ type socketClient struct {
 
 var _ Client = (*socketClient)(nil)
 
+var (
+	ErrClientStopped = errors.New("client has stopped")
+)
+
 // NewSocketClient creates a new socket client, which connects to a given
 // address. If mustConnect is true, the client will return an error upon start
 // if it fails to connect.
@@ -234,7 +238,7 @@ func (cli *socketClient) didRecvResponse(res *types.Response) error {
 
 func (cli *socketClient) doRequest(ctx context.Context, req *types.Request) (*types.Response, error) {
 	if !cli.IsRunning() {
-		return nil, errors.New("client has stopped")
+		return nil, ErrClientStopped
 	}
 
 	reqres := makeReqRes(ctx, req)
