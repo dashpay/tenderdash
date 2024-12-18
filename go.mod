@@ -9,8 +9,8 @@ require (
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/containerd/continuity v0.4.4 // indirect
 	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20230207105415-06df92693ac8
-	github.com/dashpay/dashd-go v0.25.1-0.20241217124940-f8ff6183bc12
-	github.com/dashpay/dashd-go/btcec/v2 v2.1.0 // indirect
+	github.com/dashpay/dashd-go v0.26.0
+	github.com/dashpay/dashd-go/btcec/v2 v2.2.0 // indirect
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fxamacker/cbor/v2 v2.4.0
 	github.com/go-chi/chi v4.1.2+incompatible // indirect
@@ -38,7 +38,7 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/crypto v0.30.0
+	golang.org/x/crypto v0.31.0
 	golang.org/x/net v0.32.0
 	golang.org/x/sync v0.10.0
 	google.golang.org/grpc v1.68.1
@@ -80,7 +80,7 @@ require (
 	github.com/alexkohler/nakedret/v2 v2.0.5 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/bombsimon/wsl/v4 v4.4.1 // indirect
-	github.com/btcsuite/btclog v0.0.0-20170628155309-84c8d2346e9f // indirect
+	github.com/btcsuite/btclog v1.0.0 // indirect
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
 	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792 // indirect
 	github.com/bufbuild/protocompile v0.14.1 // indirect
@@ -108,7 +108,7 @@ require (
 	github.com/containerd/ttrpc v1.2.6 // indirect
 	github.com/containerd/typeurl/v2 v2.2.3 // indirect
 	github.com/curioswitch/go-reassign v0.2.0 // indirect
-	github.com/dashpay/dashd-go/btcutil v1.2.0 // indirect
+	github.com/dashpay/dashd-go/btcutil v1.3.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/dgraph-io/badger/v4 v4.3.1 // indirect
 	github.com/didip/tollbooth/v6 v6.0.1 // indirect
