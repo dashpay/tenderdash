@@ -235,7 +235,6 @@ type BaseConfig struct { //nolint: maligned
 	DeadlockDetection time.Duration `mapstructure:"deadlock-detection"`
 
 	// SyncTimeout is the timeout for the initial sync process, before switching to consensus.
-	// If zero or empty, the default value is used.
 	//
 	// Default: 60s
 	SyncTimeout time.Duration `mapstructure:"sync-timeout"`
@@ -359,6 +358,10 @@ func (cfg BaseConfig) ValidateBasic() error {
 	// check if db_backends contains the db backend
 	if !backends[cfg.DBBackend] {
 		return fmt.Errorf("unsupported db backend: %s, only goleveldb is supported", cfg.DBBackend)
+	}
+
+	if cfg.SyncTimeout < 0 {
+		return errors.New("sync-timeout can't be negative, got: " + cfg.SyncTimeout.String())
 	}
 
 	return nil

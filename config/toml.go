@@ -138,7 +138,6 @@ filter-peers = {{ .BaseConfig.FilterPeers }}
 deadlock-detection = "{{ .BaseConfig.DeadlockDetection }}"
 
 # Timeout for the initial sync process, before switching to consensus.
-# If zero or empty, the default value is used.
 #
 # Default: 60s
 sync-timeout = "{{ .BaseConfig.SyncTimeout }}"
