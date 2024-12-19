@@ -367,7 +367,7 @@ func makeNode(
 		blockSync && !stateSync,
 		nodeMetrics.consensus,
 		eventBus,
-	)
+	).WithSyncTimeout(cfg.SyncTimeout)
 	node.services = append(node.services, bcReactor)
 	node.rpcEnv.BlockSyncReactor = bcReactor
 

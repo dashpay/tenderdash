@@ -234,6 +234,12 @@ type BaseConfig struct { //nolint: maligned
 	// Default: 0
 	DeadlockDetection time.Duration `mapstructure:"deadlock-detection"`
 
+	// SyncTimeout is the timeout for the initial sync process, before switching to consensus.
+	//
+	// Default: 60s
+	SyncTimeout time.Duration `mapstructure:"sync-timeout"`
+
+	// Other options should be empty
 	Other map[string]interface{} `mapstructure:",remain"`
 }
 
@@ -250,6 +256,7 @@ func DefaultBaseConfig() BaseConfig {
 		DBBackend:         "goleveldb",
 		DBPath:            "data",
 		DeadlockDetection: 0,
+		SyncTimeout:       60 * time.Second,
 	}
 }
 
@@ -351,6 +358,10 @@ func (cfg BaseConfig) ValidateBasic() error {
 	// check if db_backends contains the db backend
 	if !backends[cfg.DBBackend] {
 		return fmt.Errorf("unsupported db backend: %s, only goleveldb is supported", cfg.DBBackend)
+	}
+
+	if cfg.SyncTimeout < 0 {
+		return errors.New("sync-timeout can't be negative, got: " + cfg.SyncTimeout.String())
 	}
 
 	return nil

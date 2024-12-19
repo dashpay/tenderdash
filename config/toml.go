@@ -137,6 +137,11 @@ filter-peers = {{ .BaseConfig.FilterPeers }}
 # Default: 0
 deadlock-detection = "{{ .BaseConfig.DeadlockDetection }}"
 
+# Timeout for the initial sync process, before switching to consensus.
+#
+# Default: 60s
+sync-timeout = "{{ .BaseConfig.SyncTimeout }}"
+
 #######################################################
 ###       ABCI App Connection Options               ###
 #######################################################

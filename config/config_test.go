@@ -24,6 +24,8 @@ func TestDefaultConfig(t *testing.T) {
 
 	assert.Equal(t, "/foo/bar", cfg.GenesisFile())
 	assert.Equal(t, "/opt/data", cfg.DBDir())
+
+	assert.Equal(t, 60*time.Second, cfg.BaseConfig.SyncTimeout)
 }
 
 func TestConfigValidateBasic(t *testing.T) {
