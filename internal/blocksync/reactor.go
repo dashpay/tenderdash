@@ -30,7 +30,7 @@ const (
 	switchToConsensusIntervalSeconds = 1
 
 	// switch to consensus after this duration of inactivity
-	syncTimeout = 60 * time.Second
+	defaultSyncTimeout = 60 * time.Second
 )
 
 type consensusReactor interface {
@@ -62,6 +62,8 @@ type Reactor struct {
 	eventBus *eventbus.EventBus
 
 	syncStartTime time.Time
+	// syncTimeout defines how much time we will try to start sync before switching to consensus
+	syncTimeout time.Duration
 
 	nodeProTxHash types.ProTxHash
 
@@ -94,6 +96,7 @@ func NewReactor(
 		metrics:       metrics,
 		eventBus:      eventBus,
 		nodeProTxHash: nodeProTxHash,
+		syncTimeout:   defaultSyncTimeout,
 		executor: newBlockApplier(
 			blockExec,
 			store,
@@ -103,6 +106,12 @@ func NewReactor(
 	}
 	r.blockSyncFlag.Store(blockSync)
 	r.BaseService = *service.NewBaseService(logger, "BlockSync", r)
+	return r
+}
+
+func (r *Reactor) WithSyncTimeout(timeout time.Duration) *Reactor {
+	r.syncTimeout = timeout
+
 	return r
 }
 
@@ -130,7 +139,10 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		startHeight = state.InitialHeight
 	}
 
-	r.synchronizer = NewSynchronizer(startHeight, r.p2pClient, r.executor, WithLogger(r.logger))
+	r.synchronizer = NewSynchronizer(startHeight, r.p2pClient, r.executor,
+		WithLogger(r.logger),
+		WithSyncTimeout(r.syncTimeout),
+	)
 	if r.blockSyncFlag.Load() {
 		if err := r.synchronizer.Start(ctx); err != nil {
 			return err

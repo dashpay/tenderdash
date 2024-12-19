@@ -70,6 +70,8 @@ type (
 		logger log.Logger
 
 		lastAdvance time.Time
+		// syncTimeout defines how much time we will try to sync; defaults to 60 seconds
+		syncTimeout time.Duration
 
 		mtx sync.RWMutex
 
@@ -112,6 +114,12 @@ func WithClock(clock clockwork.Clock) OptionFunc {
 	}
 }
 
+func WithSyncTimeout(timeout time.Duration) OptionFunc {
+	return func(v *Synchronizer) {
+		v.syncTimeout = timeout
+	}
+}
+
 // NewSynchronizer returns a new Synchronizer with the height equal to start
 func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApplier, opts ...OptionFunc) *Synchronizer {
 	peerStore := NewInMemPeerStore()
@@ -127,6 +135,7 @@ func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApp
 		height:         start,
 		workerPool:     workerpool.New(poolWorkerSize, workerpool.WithLogger(logger)),
 		pendingToApply: map[int64]BlockResponse{},
+		syncTimeout:    defaultSyncTimeout,
 	}
 	for _, opt := range opts {
 		opt(bp)
@@ -239,14 +248,14 @@ func (s *Synchronizer) WaitForSync(ctx context.Context) {
 				lastAdvance = s.LastAdvance()
 				isCaughtUp  = s.IsCaughtUp()
 			)
-			if isCaughtUp || time.Since(lastAdvance) > syncTimeout {
+			if isCaughtUp || time.Since(lastAdvance) > s.syncTimeout {
 				return
 			}
 			s.logger.Info(
 				"not caught up yet",
 				"height", height,
 				"max_peer_height", s.MaxPeerHeight(),
-				"timeout_in", syncTimeout-time.Since(lastAdvance),
+				"timeout_in", s.syncTimeout-time.Since(lastAdvance),
 			)
 		}
 	}

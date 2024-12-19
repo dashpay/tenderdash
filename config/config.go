@@ -234,6 +234,13 @@ type BaseConfig struct { //nolint: maligned
 	// Default: 0
 	DeadlockDetection time.Duration `mapstructure:"deadlock-detection"`
 
+	// SyncTimeout is the timeout for the initial sync process, before switching to consensus.
+	// If zero or empty, the default value is used.
+	//
+	// Default: 60s
+	SyncTimeout time.Duration `mapstructure:"sync-timeout"`
+
+	// Other options should be empty
 	Other map[string]interface{} `mapstructure:",remain"`
 }
 
@@ -250,6 +257,7 @@ func DefaultBaseConfig() BaseConfig {
 		DBBackend:         "goleveldb",
 		DBPath:            "data",
 		DeadlockDetection: 0,
+		SyncTimeout:       60 * time.Second,
 	}
 }
 
