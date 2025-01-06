@@ -51,7 +51,7 @@ require (
 	github.com/creachadair/taskgroup v0.13.2
 	github.com/go-pkgz/jrpc v0.2.0
 	github.com/google/go-cmp v0.6.0
-	github.com/vektra/mockery/v2 v2.50.0
+	github.com/vektra/mockery/v2 v2.50.4
 )
 
 require (
