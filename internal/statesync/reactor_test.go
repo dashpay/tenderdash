@@ -625,7 +625,7 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	ictx, cancel := context.WithTimeout(ctx, time.Second)
 	defer cancel()
 
-	err := rts.reactor.initStateProvider(ictx, factory.DefaultTestChainID, 1)
+	err := rts.reactor.initStateProvider(ictx, factory.DefaultTestChainID, 1, nil)
 	require.NoError(t, err)
 
 	rts.reactor.getSyncer().stateProvider = rts.reactor.stateProvider
