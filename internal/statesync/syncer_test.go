@@ -616,8 +616,8 @@ func (suite *SyncerTestSuite) TestApplyChunksResults() {
 
 			fetchStartTime := time.Now()
 
-			c := &chunk{Height: 1, Version: 1, ID: []byte{0}, Chunk: body}
-			chunks.Enqueue(c.ID)
+			chunkID := []byte{0}
+			chunks.Enqueue(chunkID)
 
 			for _, resp := range tc.resps {
 				suite.conn.

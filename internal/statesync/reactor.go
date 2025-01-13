@@ -122,7 +122,7 @@ type Reactor struct {
 	initSyncer        func() *syncer
 	requestSnaphot    func() error
 	syncer            *syncer // syncer is nil when sync is not in progress
-	initStateProvider func(ctx context.Context, chainID string, initialHeight int64) error
+	initStateProvider func(ctx context.Context, chainID string, initialHeight int64, initialBlockHash []byte) error
 	stateProvider     StateProvider
 
 	eventBus           *eventbus.EventBus
@@ -234,7 +234,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	}
 	r.sendBlockError = blockCh.SendError
 
-	r.initStateProvider = func(ctx context.Context, chainID string, initialHeight int64) error {
+	r.initStateProvider = func(ctx context.Context, chainID string, initialHeight int64, initialBlockHash []byte) error {
 		spLogger := r.logger.With("module", "stateprovider")
 		spLogger.Info("initializing state provider",
 			"trustHeight", r.cfg.TrustHeight, "useP2P", r.cfg.UseP2P)
@@ -250,8 +250,8 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 				providers[idx] = NewBlockProvider(p, chainID, r.dispatcher)
 			}
 
-			stateProvider, err := NewP2PStateProvider(ctx, chainID, initialHeight, r.cfg.TrustHeight, providers,
-				paramsCh, r.logger.With("module", "stateprovider"), r.dashCoreClient)
+			stateProvider, err := NewP2PStateProvider(ctx, chainID, initialHeight, r.cfg.TrustHeight, r.cfg.TrustHashBytes(),
+				providers, paramsCh, r.logger.With("module", "stateprovider"), r.dashCoreClient)
 			if err != nil {
 				return fmt.Errorf("failed to initialize P2P state provider: %w", err)
 			}
@@ -259,7 +259,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 			return nil
 		}
 
-		stateProvider, err := NewRPCStateProvider(ctx, chainID, initialHeight, r.cfg.RPCServers, r.cfg.TrustHeight,
+		stateProvider, err := NewRPCStateProvider(ctx, chainID, initialHeight, r.cfg.RPCServers, r.cfg.TrustHeight, r.cfg.TrustHashBytes(),
 			spLogger, r.dashCoreClient)
 		if err != nil {
 			return fmt.Errorf("failed to initialize RPC state provider: %w", err)
@@ -386,7 +386,7 @@ func (r *Reactor) startStateProvider(ctx context.Context) error {
 	var err error
 	for retry := 0; retry < initStateProviderRetries; retry++ {
 		initCtx, cancel := context.WithTimeout(ctx, initStateProviderTimeout)
-		err = r.initStateProvider(initCtx, r.chainID, r.initialHeight)
+		err = r.initStateProvider(initCtx, r.chainID, r.initialHeight, r.cfg.TrustHashBytes())
 		cancel()
 
 		if err == nil { // success

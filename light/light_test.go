@@ -70,6 +70,7 @@ func TestClientIntegration_Update(t *testing.T) {
 	c, err := light.NewClientAtHeight(
 		ctx,
 		1,
+		nil,
 		chainID,
 		primary,
 		nil,
@@ -215,6 +216,7 @@ func TestClientStatusRPC(t *testing.T) {
 
 	c, err := light.NewClientAtHeight(ctx,
 		2,
+		nil,
 		chainID,
 		primary,
 		witnesses,

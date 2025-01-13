@@ -154,12 +154,13 @@ func NewClient(
 	dashCoreRPCClient dashcore.QuorumVerifier,
 	options ...Option) (*Client, error) {
 
-	return NewClientAtHeight(ctx, 0, chainID, primary, witnesses, trustedStore, dashCoreRPCClient, options...)
+	return NewClientAtHeight(ctx, 0, nil, chainID, primary, witnesses, trustedStore, dashCoreRPCClient, options...)
 }
 
 func NewClientAtHeight(
 	ctx context.Context,
 	height int64,
+	trustedBlockHash []byte,
 	chainID string,
 	primary provider.Provider,
 	witnesses []provider.Provider,
@@ -179,7 +180,7 @@ func NewClientAtHeight(
 
 	if c.latestTrustedBlock == nil && height > 0 {
 		c.logger.Info("Downloading trusted light block")
-		if err := c.initializeAtHeight(ctx, height); err != nil {
+		if err := c.initializeAtHeight(ctx, height, trustedBlockHash); err != nil {
 			return nil, fmt.Errorf("initialize at height: %w", err)
 		}
 	}
@@ -260,7 +261,8 @@ func (c *Client) initialize(ctx context.Context) error {
 
 // initializeAtHeight fetches a light block at given height from
 // primary provider.
-func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
+// If blockHash is not nil, it will be used to verify the block.
+func (c *Client) initializeAtHeight(ctx context.Context, height int64, blockHash []byte) error {
 	// 1) Fetch and verify the light block.
 	l, err := c.lightBlockFromPrimaryAtHeight(ctx, height)
 	if err != nil {
@@ -272,6 +274,11 @@ func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 	//         want to add yet another argument to NewClient* functions.
 	if err := l.ValidateBasic(c.chainID); err != nil {
 		return fmt.Errorf("validate light block: %w", err)
+	}
+
+	// 1.5) Verify that block hash matches the expected hash
+	if len(blockHash) > 0 && !bytes.Equal(l.Hash(), blockHash) {
+		return fmt.Errorf("block hash %x does not match expected hash %x", l.Hash(), blockHash)
 	}
 
 	// 2) Ensure the commit height is correct
