@@ -133,9 +133,16 @@ func (q *chunkQueue) dequeue() (bytes.HexBytes, error) {
 
 // Add adds a chunk to the queue. It ignores chunks that already exist, returning false.
 func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
-	if chunk == nil || chunk.Chunk == nil {
+	if chunk == nil {
 		return false, errChunkNil
 	}
+
+	// empty chunk content is allowed, but we ensure it's not nil
+	data := chunk.Chunk
+	if data == nil {
+		data = []byte{}
+	}
+
 	q.mtx.Lock()
 	defer q.mtx.Unlock()
 	if q.snapshot == nil {
@@ -154,7 +161,7 @@ func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
 		return false, err
 	}
 	item.file = filepath.Join(q.dir, chunkIDKey)
-	err = item.write(chunk.Chunk)
+	err = item.write(data)
 	if err != nil {
 		return false, err
 	}
