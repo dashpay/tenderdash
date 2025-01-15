@@ -87,6 +87,12 @@ func ToRequestApplySnapshotChunk(req *RequestApplySnapshotChunk) *Request {
 	}
 }
 
+func ToRequestFinalizeSnapshot(req *RequestFinalizeSnapshot) *Request {
+	return &Request{
+		Value: &Request_FinalizeSnapshot{req},
+	}
+}
+
 func ToRequestExtendVote(req *RequestExtendVote) *Request {
 	return &Request{
 		Value: &Request_ExtendVote{req},

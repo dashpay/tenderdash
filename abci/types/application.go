@@ -16,6 +16,8 @@ type StateSyncer interface {
 	LoadSnapshotChunk(context.Context, *RequestLoadSnapshotChunk) (*ResponseLoadSnapshotChunk, error)
 	// ApplySnapshotChunk applies a chunk of snapshot
 	ApplySnapshotChunk(context.Context, *RequestApplySnapshotChunk) (*ResponseApplySnapshotChunk, error)
+	// FinalizeSnapshot sends light block to ABCI app after successful state sync
+	FinalizeSnapshot(context.Context, *RequestFinalizeSnapshot) (*ResponseFinalizeSnapshot, error)
 }
 
 // Application is an interface that enables any finite, deterministic state machine
@@ -95,6 +97,10 @@ func (BaseApplication) LoadSnapshotChunk(_ context.Context, _ *RequestLoadSnapsh
 
 func (BaseApplication) ApplySnapshotChunk(_ context.Context, _req *RequestApplySnapshotChunk) (*ResponseApplySnapshotChunk, error) {
 	return &ResponseApplySnapshotChunk{}, nil
+}
+
+func (BaseApplication) FinalizeSnapshot(_ context.Context, _req *RequestFinalizeSnapshot) (*ResponseFinalizeSnapshot, error) {
+	return &ResponseFinalizeSnapshot{}, nil
 }
 
 func (BaseApplication) PrepareProposal(_ context.Context, req *RequestPrepareProposal) (*ResponsePrepareProposal, error) {

@@ -350,7 +350,8 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 			"err", err, "height", snapshot.Height)
 		return sm.State{}, nil, errRejectSnapshot
 	}
-	commit, err := s.getStateProvider().Commit(pctx, snapshot.Height)
+	block, err := s.getStateProvider().LightBlock(pctx, snapshot.Height)
+
 	if err != nil {
 		// check if the provider context exceeded the 10 second deadline
 		if ctx.Err() != nil {
@@ -358,9 +359,9 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 		}
 		if err == light.ErrNoWitnesses {
 			return sm.State{}, nil,
-				fmt.Errorf("failed to get commit at height %d. No witnesses remaining", snapshot.Height)
+				fmt.Errorf("failed to get light block at height %d. No witnesses remaining", snapshot.Height)
 		}
-		s.logger.Info("failed to get and verify commit. Dropping snapshot and trying again",
+		s.logger.Info("failed to get and verify light block. Dropping snapshot and trying again",
 			"err", err, "height", snapshot.Height)
 		return sm.State{}, nil, errRejectSnapshot
 	}
@@ -369,6 +370,11 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 	err = s.applyChunks(ctx, queue, fetchStartTime)
 	if err != nil {
 		return sm.State{}, nil, err
+	}
+
+	// Finalize
+	if err := s.finalizeSnapshot(ctx, snapshot, block); err != nil {
+		return sm.State{}, nil, fmt.Errorf("failed to finalize snapshot: %w", err)
 	}
 
 	// Verify app and app version
@@ -382,7 +388,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 		"version", snapshot.Version,
 		"hash", snapshot.Hash)
 
-	return state, commit, nil
+	return state, block.Commit, nil
 }
 
 // offerSnapshot offers a snapshot to the app. It returns various errors depending on the app's
@@ -570,6 +576,26 @@ func (s *syncer) requestChunk(ctx context.Context, snapshot *snapshot, chunkID t
 	}
 
 	return s.chunkCh.Send(ctx, msg)
+}
+
+// / finalizeSnapshot sends light block to ABCI app after state sync is done
+func (s *syncer) finalizeSnapshot(ctx context.Context, snapshot *snapshot, block *types.LightBlock) error {
+	s.logger.Info("Finalizing snapshot restoration",
+		"snapshot", snapshot.Hash.String(),
+		"height", snapshot.Height,
+		"version", snapshot.Version,
+		"app_hash", snapshot.trustedAppHash,
+	)
+	lightBlock, err := block.ToProto()
+	if err != nil {
+		return fmt.Errorf("failed to convert light block %s to proto: %w", lightBlock.String(), err)
+	}
+
+	_, err = s.conn.FinalizeSnapshot(ctx, &abci.RequestFinalizeSnapshot{
+		LightBlock: lightBlock,
+	})
+
+	return err
 }
 
 // verifyApp verifies the sync, checking the app hash, last block height and app version

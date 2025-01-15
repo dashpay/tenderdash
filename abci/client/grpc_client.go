@@ -255,6 +255,10 @@ func (cli *grpcClient) ApplySnapshotChunk(ctx context.Context, params *types.Req
 	return cli.client.ApplySnapshotChunk(ctx, types.ToRequestApplySnapshotChunk(params).GetApplySnapshotChunk(), grpc.WaitForReady(true))
 }
 
+func (cli *grpcClient) FinalizeSnapshot(ctx context.Context, params *types.RequestFinalizeSnapshot) (*types.ResponseFinalizeSnapshot, error) {
+	return cli.client.FinalizeSnapshot(ctx, types.ToRequestFinalizeSnapshot(params).GetFinalizeSnapshot(), grpc.WaitForReady(true))
+}
+
 func (cli *grpcClient) PrepareProposal(ctx context.Context, params *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error) {
 	return cli.client.PrepareProposal(ctx, types.ToRequestPrepareProposal(params).GetPrepareProposal(), grpc.WaitForReady(true))
 }

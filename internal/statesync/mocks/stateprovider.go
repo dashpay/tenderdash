@@ -145,6 +145,65 @@ func (_c *StateProvider_Commit_Call) RunAndReturn(run func(context.Context, uint
 	return _c
 }
 
+// LightBlock provides a mock function with given fields: ctx, height
+func (_m *StateProvider) LightBlock(ctx context.Context, height uint64) (*types.LightBlock, error) {
+	ret := _m.Called(ctx, height)
+
+	if len(ret) == 0 {
+		panic("no return value specified for LightBlock")
+	}
+
+	var r0 *types.LightBlock
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, uint64) (*types.LightBlock, error)); ok {
+		return rf(ctx, height)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, uint64) *types.LightBlock); ok {
+		r0 = rf(ctx, height)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*types.LightBlock)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, uint64) error); ok {
+		r1 = rf(ctx, height)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// StateProvider_LightBlock_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'LightBlock'
+type StateProvider_LightBlock_Call struct {
+	*mock.Call
+}
+
+// LightBlock is a helper method to define mock.On call
+//   - ctx context.Context
+//   - height uint64
+func (_e *StateProvider_Expecter) LightBlock(ctx interface{}, height interface{}) *StateProvider_LightBlock_Call {
+	return &StateProvider_LightBlock_Call{Call: _e.mock.On("LightBlock", ctx, height)}
+}
+
+func (_c *StateProvider_LightBlock_Call) Run(run func(ctx context.Context, height uint64)) *StateProvider_LightBlock_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].(uint64))
+	})
+	return _c
+}
+
+func (_c *StateProvider_LightBlock_Call) Return(_a0 *types.LightBlock, _a1 error) *StateProvider_LightBlock_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *StateProvider_LightBlock_Call) RunAndReturn(run func(context.Context, uint64) (*types.LightBlock, error)) *StateProvider_LightBlock_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // State provides a mock function with given fields: ctx, height
 func (_m *StateProvider) State(ctx context.Context, height uint64) (state.State, error) {
 	ret := _m.Called(ctx, height)

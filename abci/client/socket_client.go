@@ -357,6 +357,14 @@ func (cli *socketClient) ApplySnapshotChunk(ctx context.Context, req *types.Requ
 	return res.GetApplySnapshotChunk(), nil
 }
 
+func (cli *socketClient) FinalizeSnapshot(ctx context.Context, req *types.RequestFinalizeSnapshot) (*types.ResponseFinalizeSnapshot, error) {
+	res, err := cli.doRequest(ctx, types.ToRequestFinalizeSnapshot(req))
+	if err != nil {
+		return nil, err
+	}
+	return res.GetFinalizeSnapshot(), nil
+}
+
 func (cli *socketClient) PrepareProposal(ctx context.Context, req *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error) {
 	res, err := cli.doRequest(ctx, types.ToRequestPrepareProposal(req))
 	if err != nil {

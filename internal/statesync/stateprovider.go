@@ -40,6 +40,8 @@ type StateProvider interface {
 	Commit(ctx context.Context, height uint64) (*types.Commit, error)
 	// State returns a state object at the given height.
 	State(ctx context.Context, height uint64) (sm.State, error)
+	// LightBlock returns light block at the given height.
+	LightBlock(ctx context.Context, height uint64) (*types.LightBlock, error)
 }
 
 type stateProviderRPC struct {
@@ -122,6 +124,13 @@ func (s *stateProviderRPC) Commit(ctx context.Context, height uint64) (*types.Co
 		return nil, err
 	}
 	return header.Commit, nil
+}
+
+// LightBlock implements StateProvider.
+func (s *stateProviderRPC) LightBlock(ctx context.Context, height uint64) (*types.LightBlock, error) {
+	s.Lock()
+	defer s.Unlock()
+	return s.verifyLightBlockAtHeight(ctx, height, time.Now())
 }
 
 // State implements StateProvider.
@@ -262,6 +271,13 @@ func (s *stateProviderP2P) Commit(ctx context.Context, height uint64) (*types.Co
 		return nil, err
 	}
 	return header.Commit, nil
+}
+
+// LightBlock implements StateProvider.
+func (s *stateProviderP2P) LightBlock(ctx context.Context, height uint64) (*types.LightBlock, error) {
+	s.Lock()
+	defer s.Unlock()
+	return s.verifyLightBlockAtHeight(ctx, height, time.Now())
 }
 
 // State implements StateProvider.

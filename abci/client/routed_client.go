@@ -351,6 +351,11 @@ func (cli *routedClient) ApplySnapshotChunk(ctx context.Context, req *types.Requ
 	return result.(*types.ResponseApplySnapshotChunk), err
 }
 
+func (cli *routedClient) FinalizeSnapshot(ctx context.Context, req *types.RequestFinalizeSnapshot) (*types.ResponseFinalizeSnapshot, error) {
+	result, err := cli.delegate(ctx, req)
+	return result.(*types.ResponseFinalizeSnapshot), err
+}
+
 func (cli *routedClient) PrepareProposal(ctx context.Context, req *types.RequestPrepareProposal) (*types.ResponsePrepareProposal, error) {
 	result, err := cli.delegate(ctx, req)
 	return result.(*types.ResponsePrepareProposal), err
