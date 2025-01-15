@@ -18,7 +18,7 @@
     - [RequestEcho](#tendermint-abci-RequestEcho)
     - [RequestExtendVote](#tendermint-abci-RequestExtendVote)
     - [RequestFinalizeBlock](#tendermint-abci-RequestFinalizeBlock)
-    - [RequestFinalizeSnapshotSync](#tendermint-abci-RequestFinalizeSnapshotSync)
+    - [RequestFinalizeSnapshot](#tendermint-abci-RequestFinalizeSnapshot)
     - [RequestFlush](#tendermint-abci-RequestFlush)
     - [RequestInfo](#tendermint-abci-RequestInfo)
     - [RequestInitChain](#tendermint-abci-RequestInitChain)
@@ -36,7 +36,7 @@
     - [ResponseException](#tendermint-abci-ResponseException)
     - [ResponseExtendVote](#tendermint-abci-ResponseExtendVote)
     - [ResponseFinalizeBlock](#tendermint-abci-ResponseFinalizeBlock)
-    - [ResponseFinalizeSnapshotSync](#tendermint-abci-ResponseFinalizeSnapshotSync)
+    - [ResponseFinalizeSnapshot](#tendermint-abci-ResponseFinalizeSnapshot)
     - [ResponseFlush](#tendermint-abci-ResponseFlush)
     - [ResponseInfo](#tendermint-abci-ResponseInfo)
     - [ResponseInitChain](#tendermint-abci-ResponseInitChain)
@@ -249,7 +249,7 @@ Request types
 | offer_snapshot | [RequestOfferSnapshot](#tendermint-abci-RequestOfferSnapshot) |  |  |
 | load_snapshot_chunk | [RequestLoadSnapshotChunk](#tendermint-abci-RequestLoadSnapshotChunk) |  |  |
 | apply_snapshot_chunk | [RequestApplySnapshotChunk](#tendermint-abci-RequestApplySnapshotChunk) |  |  |
-| finalize_snapshot_sync | [RequestFinalizeSnapshotSync](#tendermint-abci-RequestFinalizeSnapshotSync) |  |  |
+| finalize_snapshot | [RequestFinalizeSnapshot](#tendermint-abci-RequestFinalizeSnapshot) |  |  |
 | prepare_proposal | [RequestPrepareProposal](#tendermint-abci-RequestPrepareProposal) |  |  |
 | process_proposal | [RequestProcessProposal](#tendermint-abci-RequestProcessProposal) |  |  |
 | extend_vote | [RequestExtendVote](#tendermint-abci-RequestExtendVote) |  |  |
@@ -426,9 +426,9 @@ Finalize newly decided block.
 
 
 
-<a name="tendermint-abci-RequestFinalizeSnapshotSync"></a>
+<a name="tendermint-abci-RequestFinalizeSnapshot"></a>
 
-### RequestFinalizeSnapshotSync
+### RequestFinalizeSnapshot
 After snapshot sync, Tenderdash calls this to finalize the snapshot sync.
 It includes the light block committed at the synced height, which Tenderdash uses
 to reconstruct its own state.
@@ -830,7 +830,7 @@ from this condition, but not sure), and _p_ receives a Precommit message for rou
 | offer_snapshot | [ResponseOfferSnapshot](#tendermint-abci-ResponseOfferSnapshot) |  |  |
 | load_snapshot_chunk | [ResponseLoadSnapshotChunk](#tendermint-abci-ResponseLoadSnapshotChunk) |  |  |
 | apply_snapshot_chunk | [ResponseApplySnapshotChunk](#tendermint-abci-ResponseApplySnapshotChunk) |  |  |
-| finalize_snapshot_sync | [ResponseFinalizeSnapshotSync](#tendermint-abci-ResponseFinalizeSnapshotSync) |  |  |
+| finalize_snapshot | [ResponseFinalizeSnapshot](#tendermint-abci-ResponseFinalizeSnapshot) |  |  |
 | prepare_proposal | [ResponsePrepareProposal](#tendermint-abci-ResponsePrepareProposal) |  |  |
 | process_proposal | [ResponseProcessProposal](#tendermint-abci-ResponseProcessProposal) |  |  |
 | extend_vote | [ResponseExtendVote](#tendermint-abci-ResponseExtendVote) |  |  |
@@ -941,9 +941,9 @@ nondeterministic
 
 
 
-<a name="tendermint-abci-ResponseFinalizeSnapshotSync"></a>
+<a name="tendermint-abci-ResponseFinalizeSnapshot"></a>
 
-### ResponseFinalizeSnapshotSync
+### ResponseFinalizeSnapshot
 The response to a `RequestPrepareSnapshot` message.
 
 
