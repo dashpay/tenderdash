@@ -22,21 +22,22 @@ import "gogoproto/gogo.proto";
 // Request types
 message Request {
   oneof value {
-    RequestEcho                echo                  = 1;
-    RequestFlush               flush                 = 2;
-    RequestInfo                info                  = 3;
-    RequestInitChain           init_chain            = 4;
-    RequestQuery               query                 = 5;
-    RequestCheckTx             check_tx              = 7;
-    RequestListSnapshots       list_snapshots        = 11;
-    RequestOfferSnapshot       offer_snapshot        = 12;
-    RequestLoadSnapshotChunk   load_snapshot_chunk   = 13;
-    RequestApplySnapshotChunk  apply_snapshot_chunk  = 14;
-    RequestPrepareProposal     prepare_proposal      = 15;
-    RequestProcessProposal     process_proposal      = 16;
-    RequestExtendVote          extend_vote           = 17;
-    RequestVerifyVoteExtension verify_vote_extension = 18;
-    RequestFinalizeBlock       finalize_block        = 19;
+    RequestEcho                 echo                   = 1;
+    RequestFlush                flush                  = 2;
+    RequestInfo                 info                   = 3;
+    RequestInitChain            init_chain             = 4;
+    RequestQuery                query                  = 5;
+    RequestCheckTx              check_tx               = 7;
+    RequestListSnapshots        list_snapshots         = 11;
+    RequestOfferSnapshot        offer_snapshot         = 12;
+    RequestLoadSnapshotChunk    load_snapshot_chunk    = 13;
+    RequestApplySnapshotChunk   apply_snapshot_chunk   = 14;
+    RequestFinalizeSnapshotSync finalize_snapshot_sync = 20;
+    RequestPrepareProposal      prepare_proposal       = 15;
+    RequestProcessProposal      process_proposal       = 16;
+    RequestExtendVote           extend_vote            = 17;
+    RequestVerifyVoteExtension  verify_vote_extension  = 18;
+    RequestFinalizeBlock        finalize_block         = 19;
   }
   reserved 6, 8, 9, 10;  // RequestBeginBlock, RequestDeliverTx, RequestEndBlock, RequestCommit
 }
@@ -181,6 +182,16 @@ message RequestApplySnapshotChunk {
   bytes  chunk_id = 1;  // The chunk index, starting from 0. Tenderdash applies chunks sequentially.
   bytes  chunk    = 2;  // The binary chunk contents, as returned by LoadSnapshotChunk.
   string sender   = 3;  // The P2P ID of the node who sent this chunk.
+}
+
+// After snapshot sync, Tenderdash calls this to finalize the snapshot sync.
+// It includes the light block committed at the synced height, which Tenderdash uses
+// to reconstruct its own state.
+message RequestFinalizeSnapshotSync {
+  // light block committed at the synced height
+  tendermint.types.LightBlock light_block = 1;
+  // commit fot the `light_block`
+  tendermint.types.Commit commit = 2;
 }
 
 // Prepare new block proposal, potentially altering list of transactions.
@@ -503,22 +514,23 @@ message RequestFinalizeBlock {
 
 message Response {
   oneof value {
-    ResponseException           exception             = 1;
-    ResponseEcho                echo                  = 2;
-    ResponseFlush               flush                 = 3;
-    ResponseInfo                info                  = 4;
-    ResponseInitChain           init_chain            = 5;
-    ResponseQuery               query                 = 6;
-    ResponseCheckTx             check_tx              = 7;
-    ResponseListSnapshots       list_snapshots        = 8;
-    ResponseOfferSnapshot       offer_snapshot        = 9;
-    ResponseLoadSnapshotChunk   load_snapshot_chunk   = 10;
-    ResponseApplySnapshotChunk  apply_snapshot_chunk  = 11;
-    ResponsePrepareProposal     prepare_proposal      = 12;
-    ResponseProcessProposal     process_proposal      = 13;
-    ResponseExtendVote          extend_vote           = 14;
-    ResponseVerifyVoteExtension verify_vote_extension = 15;
-    ResponseFinalizeBlock       finalize_block        = 16;
+    ResponseException            exception              = 1;
+    ResponseEcho                 echo                   = 2;
+    ResponseFlush                flush                  = 3;
+    ResponseInfo                 info                   = 4;
+    ResponseInitChain            init_chain             = 5;
+    ResponseQuery                query                  = 6;
+    ResponseCheckTx              check_tx               = 7;
+    ResponseListSnapshots        list_snapshots         = 8;
+    ResponseOfferSnapshot        offer_snapshot         = 9;
+    ResponseLoadSnapshotChunk    load_snapshot_chunk    = 10;
+    ResponseApplySnapshotChunk   apply_snapshot_chunk   = 11;
+    ResponseFinalizeSnapshotSync finalize_snapshot_sync = 17;
+    ResponsePrepareProposal      prepare_proposal       = 12;
+    ResponseProcessProposal      process_proposal       = 13;
+    ResponseExtendVote           extend_vote            = 14;
+    ResponseVerifyVoteExtension  verify_vote_extension  = 15;
+    ResponseFinalizeBlock        finalize_block         = 16;
   }
 }
 
@@ -627,6 +639,10 @@ message ResponseApplySnapshotChunk {
     REJECT_SNAPSHOT   = 5;  // Reject this snapshot, try others
     COMPLETE_SNAPSHOT = 6;  // Complete this snapshot, no more chunks
   }
+}
+
+// The response to a `RequestPrepareSnapshot` message.
+message ResponseFinalizeSnapshotSync {
 }
 
 message ResponsePrepareProposal {
