@@ -190,8 +190,6 @@ message RequestApplySnapshotChunk {
 message RequestFinalizeSnapshot {
   // light block committed at the synced height
   tendermint.types.LightBlock light_block = 1;
-  // commit fot the `light_block`
-  tendermint.types.Commit commit = 2;
 }
 
 // Prepare new block proposal, potentially altering list of transactions.

@@ -437,7 +437,6 @@ to reconstruct its own state.
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
 | light_block | [tendermint.types.LightBlock](#tendermint-types-LightBlock) |  | light block committed at the synced height |
-| commit | [tendermint.types.Commit](#tendermint-types-Commit) |  | commit fot the `light_block` |
 
 
 
