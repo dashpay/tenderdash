@@ -212,6 +212,11 @@ func (app *proxyClient) ApplySnapshotChunk(ctx context.Context, req *types.Reque
 	return app.client.ApplySnapshotChunk(ctx, req)
 }
 
+func (app *proxyClient) FinalizeSnapshot(ctx context.Context, req *types.RequestFinalizeSnapshot) (r *types.ResponseFinalizeSnapshot, err error) {
+	defer addTimeSample(app.metrics.MethodTiming.With("method", "finalize_snapshot", "type", "sync"))(&err)
+	return app.client.FinalizeSnapshot(ctx, req)
+}
+
 // addTimeSample returns a function that, when called, adds an observation to m.
 // The observation added to m is the number of seconds ellapsed since addTimeSample
 // was initially called. addTimeSample is meant to be called in a defer to calculate
