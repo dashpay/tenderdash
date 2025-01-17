@@ -2,7 +2,6 @@ package light_test
 
 import (
 	"context"
-	"encoding/hex"
 	"testing"
 	"time"
 
@@ -157,13 +156,9 @@ func TestClientLocalDevnet(t *testing.T) {
 		logger)
 	require.NoError(t, err)
 
-	trusted, err := hex.DecodeString("5EA22033B1855219F7579554EE75CBB48C25CDF7DF2AD6C1FD5428C1BA74CFE4")
-	require.NoError(t, err)
-
 	c, err := light.NewClientAtHeight(
 		ctx,
 		1,
-		trusted,
 		CHAINID,
 		primary,
 		nil,

@@ -9,7 +9,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
@@ -452,27 +451,6 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 		return nil, fmt.Errorf("failed to generate app config: %w", err)
 	}
 	return buf.Bytes(), nil
-}
-
-// UpdateConfigStateSync updates the state sync config for a node.
-// Arguments:
-// - node: the node to update
-// - height: the height to trust
-// - hash: the hash of the block at `height` to trust
-func UpdateConfigStateSync(node *e2e.Node, height int64, hash []byte) error {
-	cfgPath := filepath.Join(node.Testnet.Dir, node.Name, "config", "config.toml")
-
-	// FIXME Apparently there's no function to simply load a config file without
-	// involving the entire Viper apparatus, so we'll just resort to regexps.
-	bz, err := os.ReadFile(cfgPath)
-	if err != nil {
-		return err
-	}
-	bz = regexp.MustCompile(`(?m)^trust-height =.*`).ReplaceAll(bz, []byte(fmt.Sprintf(`trust-height = %v`, height)))
-	bz = regexp.MustCompile(`(?m)^trust-hash =.*`).ReplaceAll(bz, []byte(fmt.Sprintf(`trust-hash = "%X"`, hash)))
-	//nolint: gosec
-	// G306: Expect WriteFile permissions to be 0600 or less
-	return os.WriteFile(cfgPath, bz, 0644)
 }
 
 func newDefaultFilePV(node *e2e.Node, nodeDir string) (*privval.FilePV, error) {
