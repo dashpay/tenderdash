@@ -580,11 +580,11 @@ func (app *Application) ApplySnapshotChunk(_ context.Context, req *abci.RequestA
 	return resp, nil
 }
 
-func (app *Application) FinalizeSnapshot(ctx context.Context, req *abci.RequestFinalizeSnapshot) (*abci.ResponseFinalizeSnapshot, error) {
+func (app *Application) FinalizeSnapshot(_ctx context.Context, req *abci.RequestFinalizeSnapshot) (*abci.ResponseFinalizeSnapshot, error) {
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	// we only verify the snapshot
+	// we verify snapshot height and app hash, as there is no additional logic to be called here
 	if app.LastCommittedState.GetHeight() != req.LightBlock.SignedHeader.Header.Height {
 		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot height mismatch")
 	}
@@ -593,7 +593,7 @@ func (app *Application) FinalizeSnapshot(ctx context.Context, req *abci.RequestF
 		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot apphash mismatch")
 	}
 
-	app.logger.Info("FinalizeSnapshot finished successfully", "req", req)
+	app.logger.Debug("FinalizeSnapshot finished successfully", "req", req)
 	return &abci.ResponseFinalizeSnapshot{}, nil
 }
 func (app *Application) appVersionForHeight(height int64) uint64 {

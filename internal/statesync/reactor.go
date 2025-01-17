@@ -122,7 +122,7 @@ type Reactor struct {
 	initSyncer        func() *syncer
 	requestSnaphot    func() error
 	syncer            *syncer // syncer is nil when sync is not in progress
-	initStateProvider func(ctx context.Context, chainID string, initialHeight int64, initialBlockHash []byte) error
+	initStateProvider func(ctx context.Context, chainID string, initialHeight int64) error
 	stateProvider     StateProvider
 
 	eventBus           *eventbus.EventBus
@@ -234,7 +234,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	}
 	r.sendBlockError = blockCh.SendError
 
-	r.initStateProvider = func(ctx context.Context, chainID string, initialHeight int64, initialBlockHash []byte) error {
+	r.initStateProvider = func(ctx context.Context, chainID string, initialHeight int64) error {
 		spLogger := r.logger.With("module", "stateprovider")
 		spLogger.Info("initializing state provider",
 			"trustHeight", r.cfg.TrustHeight, "useP2P", r.cfg.UseP2P)
@@ -386,7 +386,7 @@ func (r *Reactor) startStateProvider(ctx context.Context) error {
 	var err error
 	for retry := 0; retry < initStateProviderRetries; retry++ {
 		initCtx, cancel := context.WithTimeout(ctx, initStateProviderTimeout)
-		err = r.initStateProvider(initCtx, r.chainID, r.initialHeight, r.cfg.TrustHashBytes())
+		err = r.initStateProvider(initCtx, r.chainID, r.initialHeight)
 		cancel()
 
 		if err == nil { // success
