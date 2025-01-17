@@ -70,11 +70,6 @@ func Start(ctx context.Context, logger log.Logger, testnet *e2e.Testnet, ti infr
 		"nodes", len(testnet.Nodes)-len(nodeQueue),
 		"pending", len(nodeQueue))
 
-	block, blockID, err := waitForHeight(ctx, testnet, networkHeight)
-	if err != nil {
-		return err
-	}
-
 	for _, node := range nodeQueue {
 		if node.StartAt > networkHeight {
 			// if we're starting a node that's ahead of
@@ -93,16 +88,7 @@ func Start(ctx context.Context, logger log.Logger, testnet *e2e.Testnet, ti infr
 
 			networkHeight = node.StartAt
 
-			block, blockID, err = waitForHeight(ctx, testnet, networkHeight)
-			if err != nil {
-				return err
-			}
-		}
-
-		// Update any state sync nodes with a trusted height and hash
-		if node.StateSync != e2e.StateSyncDisabled || node.Mode == e2e.ModeLight {
-			err = UpdateConfigStateSync(node, block.Height, blockID.Hash.Bytes())
-			if err != nil {
+			if _, _, err := waitForHeight(ctx, testnet, networkHeight); err != nil {
 				return err
 			}
 		}

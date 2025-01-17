@@ -277,8 +277,6 @@ func TestReactor_Sync(t *testing.T) {
 
 	// update the config to use the p2p provider
 	rts.reactor.cfg.UseP2P = true
-	rts.reactor.cfg.TrustHeight = 1
-	rts.reactor.cfg.TrustHash = fmt.Sprintf("%X", chain[1].Hash())
 	rts.reactor.cfg.DiscoveryTime = 1 * time.Second
 
 	// Run state sync
@@ -612,8 +610,6 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	go handleConsensusParamsRequest(ctx, t, rts.paramsOutCh, rts.paramsInCh, closeCh)
 
 	rts.reactor.cfg.UseP2P = true
-	rts.reactor.cfg.TrustHeight = 1
-	rts.reactor.cfg.TrustHash = fmt.Sprintf("%X", chain[1].Hash())
 
 	for _, p := range []types.NodeID{peerA, peerB} {
 		if !rts.reactor.peers.Contains(p) {

@@ -138,7 +138,6 @@ func TestClient(t *testing.T) {
 		c, err := light.NewClientAtHeight(
 			ctx,
 			1,
-			nil,
 			chainID,
 			mockFullNode,
 			nil,
@@ -169,7 +168,6 @@ func TestClient(t *testing.T) {
 		c, err := light.NewClientAtHeight(
 			ctx,
 			1,
-			nil,
 			chainID,
 			mockFullNode,
 			nil,
@@ -211,7 +209,6 @@ func TestClient(t *testing.T) {
 			c, err := light.NewClientAtHeight(
 				ctx,
 				1,
-				nil,
 				chainID,
 				mockNode,
 				nil,
@@ -245,7 +242,6 @@ func TestClient(t *testing.T) {
 			c, err := light.NewClientAtHeight(
 				ctx,
 				1,
-				nil,
 				chainID,
 				mockNode,
 				nil,
@@ -289,7 +285,6 @@ func TestClient(t *testing.T) {
 		c, err := light.NewClientAtHeight(
 			ctx,
 			1,
-			nil,
 			chainID,
 			mockFullNode,
 			[]provider.Provider{mockWitnessNode},
@@ -321,7 +316,6 @@ func TestClient(t *testing.T) {
 		c, err := light.NewClientAtHeight(
 			ctx,
 			1,
-			nil,
 			chainID,
 			mockFullNode,
 			nil,
@@ -376,7 +370,6 @@ func TestClient(t *testing.T) {
 		c, err := light.NewClientAtHeight(
 			ctx,
 			1,
-			nil,
 			chainID,
 			mockDeadNode,
 			[]provider.Provider{mockFullNode},
@@ -419,7 +412,6 @@ func TestClient(t *testing.T) {
 		c, err := light.NewClientAtHeight(
 			ctx,
 			1,
-			nil,
 			chainID,
 			mockDeadNode1,
 			[]provider.Provider{mockFullNode, mockDeadNode2},
@@ -513,7 +505,6 @@ func TestClient(t *testing.T) {
 		c, err := light.NewClientAtHeight(
 			ctx,
 			1,
-			nil,
 			chainID,
 			mockFullNode,
 			[]provider.Provider{mockBadValSetNode, mockGoodWitness},
@@ -561,7 +552,6 @@ func TestClient(t *testing.T) {
 		c, err := light.NewClientAtHeight(
 			ctx,
 			1,
-			nil,
 			chainID,
 			mockFullNode,
 			[]provider.Provider{mockGoodWitness},
@@ -655,9 +645,7 @@ func TestClient(t *testing.T) {
 
 				c, err := light.NewClientAtHeight(
 					ctx,
-					1,
-					nil,
-					chainID,
+					1, chainID,
 					mockBadNode,
 					nil,
 					dbs.New(dbm.NewMemDB()),
