@@ -64,8 +64,8 @@ func WithQuorumVerifyMethod(cs CoreServer, times int) MethodFunc {
 			&cmd.LLMQType,
 			&cmd.RequestID,
 			&cmd.MessageHash,
-			&cmd.QuorumHash,
 			&cmd.Signature,
+			&cmd.QuorumHash,
 		)
 		if err != nil {
 			return nil, err

@@ -161,7 +161,7 @@ func (i *SignItem) Validate() error {
 	if len(i.MsgHash) != crypto.DefaultHashSize {
 		return fmt.Errorf("invalid hash size %d: %X", len(i.MsgHash), i.MsgHash)
 	}
-	if len(i.QuorumHash) != crypto.DefaultHashSize {
+	if len(i.QuorumHash) != crypto.QuorumHashSize {
 		return fmt.Errorf("invalid quorum hash size %d: %X", len(i.QuorumHash), i.QuorumHash)
 	}
 	// Msg is optional

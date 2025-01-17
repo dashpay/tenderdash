@@ -455,6 +455,10 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 }
 
 // UpdateConfigStateSync updates the state sync config for a node.
+// Arguments:
+// - node: the node to update
+// - height: the height to trust
+// - hash: the hash of the block at `height` to trust
 func UpdateConfigStateSync(node *e2e.Node, height int64, hash []byte) error {
 	cfgPath := filepath.Join(node.Testnet.Dir, node.Name, "config", "config.toml")
 
@@ -464,7 +468,7 @@ func UpdateConfigStateSync(node *e2e.Node, height int64, hash []byte) error {
 	if err != nil {
 		return err
 	}
-	bz = regexp.MustCompile(`(?m)^trust-height =.*`).ReplaceAll(bz, []byte(fmt.Sprintf(`trust-height = %v`, height-1)))
+	bz = regexp.MustCompile(`(?m)^trust-height =.*`).ReplaceAll(bz, []byte(fmt.Sprintf(`trust-height = %v`, height)))
 	bz = regexp.MustCompile(`(?m)^trust-hash =.*`).ReplaceAll(bz, []byte(fmt.Sprintf(`trust-hash = "%X"`, hash)))
 	//nolint: gosec
 	// G306: Expect WriteFile permissions to be 0600 or less
