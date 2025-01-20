@@ -146,7 +146,7 @@ func (c *MockCoreServer) QuorumVerify(ctx context.Context, cmd btcjson.QuorumCmd
 
 	signatureVerified := thresholdPublicKey.VerifySignatureDigest(signID, signature)
 
-	res := btcjson.QuorumVerifyResult(signatureVerified)
+	res := btcjson.QuorumVerifyResult{Result: signatureVerified}
 
 	return res
 }
