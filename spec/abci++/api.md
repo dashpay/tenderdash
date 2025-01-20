@@ -1,70 +1,78 @@
 # Protocol Documentation
+
 <a name="top"></a>
 
 ## Table of Contents
 
-- [tendermint/abci/types.proto](#tendermint_abci_types-proto)
-    - [CommitInfo](#tendermint-abci-CommitInfo)
-    - [Event](#tendermint-abci-Event)
-    - [EventAttribute](#tendermint-abci-EventAttribute)
-    - [ExecTxResult](#tendermint-abci-ExecTxResult)
-    - [ExtendVoteExtension](#tendermint-abci-ExtendVoteExtension)
-    - [ExtendedVoteInfo](#tendermint-abci-ExtendedVoteInfo)
-    - [Misbehavior](#tendermint-abci-Misbehavior)
-    - [QuorumHashUpdate](#tendermint-abci-QuorumHashUpdate)
-    - [Request](#tendermint-abci-Request)
-    - [RequestApplySnapshotChunk](#tendermint-abci-RequestApplySnapshotChunk)
-    - [RequestCheckTx](#tendermint-abci-RequestCheckTx)
-    - [RequestEcho](#tendermint-abci-RequestEcho)
-    - [RequestExtendVote](#tendermint-abci-RequestExtendVote)
-    - [RequestFinalizeBlock](#tendermint-abci-RequestFinalizeBlock)
-    - [RequestFlush](#tendermint-abci-RequestFlush)
-    - [RequestInfo](#tendermint-abci-RequestInfo)
-    - [RequestInitChain](#tendermint-abci-RequestInitChain)
-    - [RequestListSnapshots](#tendermint-abci-RequestListSnapshots)
-    - [RequestLoadSnapshotChunk](#tendermint-abci-RequestLoadSnapshotChunk)
-    - [RequestOfferSnapshot](#tendermint-abci-RequestOfferSnapshot)
-    - [RequestPrepareProposal](#tendermint-abci-RequestPrepareProposal)
-    - [RequestProcessProposal](#tendermint-abci-RequestProcessProposal)
-    - [RequestQuery](#tendermint-abci-RequestQuery)
-    - [RequestVerifyVoteExtension](#tendermint-abci-RequestVerifyVoteExtension)
-    - [Response](#tendermint-abci-Response)
-    - [ResponseApplySnapshotChunk](#tendermint-abci-ResponseApplySnapshotChunk)
-    - [ResponseCheckTx](#tendermint-abci-ResponseCheckTx)
-    - [ResponseEcho](#tendermint-abci-ResponseEcho)
-    - [ResponseException](#tendermint-abci-ResponseException)
-    - [ResponseExtendVote](#tendermint-abci-ResponseExtendVote)
-    - [ResponseFinalizeBlock](#tendermint-abci-ResponseFinalizeBlock)
-    - [ResponseFlush](#tendermint-abci-ResponseFlush)
-    - [ResponseInfo](#tendermint-abci-ResponseInfo)
-    - [ResponseInitChain](#tendermint-abci-ResponseInitChain)
-    - [ResponseListSnapshots](#tendermint-abci-ResponseListSnapshots)
-    - [ResponseLoadSnapshotChunk](#tendermint-abci-ResponseLoadSnapshotChunk)
-    - [ResponseOfferSnapshot](#tendermint-abci-ResponseOfferSnapshot)
-    - [ResponsePrepareProposal](#tendermint-abci-ResponsePrepareProposal)
-    - [ResponseProcessProposal](#tendermint-abci-ResponseProcessProposal)
-    - [ResponseQuery](#tendermint-abci-ResponseQuery)
-    - [ResponseVerifyVoteExtension](#tendermint-abci-ResponseVerifyVoteExtension)
-    - [Snapshot](#tendermint-abci-Snapshot)
-    - [ThresholdPublicKeyUpdate](#tendermint-abci-ThresholdPublicKeyUpdate)
-    - [TxRecord](#tendermint-abci-TxRecord)
-    - [TxResult](#tendermint-abci-TxResult)
-    - [Validator](#tendermint-abci-Validator)
-    - [ValidatorSetUpdate](#tendermint-abci-ValidatorSetUpdate)
-    - [ValidatorUpdate](#tendermint-abci-ValidatorUpdate)
-    - [VoteInfo](#tendermint-abci-VoteInfo)
-  
-    - [CheckTxType](#tendermint-abci-CheckTxType)
-    - [MisbehaviorType](#tendermint-abci-MisbehaviorType)
-    - [ResponseApplySnapshotChunk.Result](#tendermint-abci-ResponseApplySnapshotChunk-Result)
-    - [ResponseOfferSnapshot.Result](#tendermint-abci-ResponseOfferSnapshot-Result)
-    - [ResponseProcessProposal.ProposalStatus](#tendermint-abci-ResponseProcessProposal-ProposalStatus)
-    - [ResponseVerifyVoteExtension.VerifyStatus](#tendermint-abci-ResponseVerifyVoteExtension-VerifyStatus)
-    - [TxRecord.TxAction](#tendermint-abci-TxRecord-TxAction)
-  
-    - [ABCIApplication](#tendermint-abci-ABCIApplication)
-  
-- [Scalar Value Types](#scalar-value-types)
+1. [Table of Contents](#table-of-contents)
+2. [tendermint/abci/types.proto](#tendermintabcitypesproto)
+   1. [CommitInfo](#commitinfo)
+   2. [Event](#event)
+   3. [EventAttribute](#eventattribute)
+   4. [ExecTxResult](#exectxresult)
+   5. [ExtendVoteExtension](#extendvoteextension)
+   6. [ExtendedVoteInfo](#extendedvoteinfo)
+   7. [Misbehavior](#misbehavior)
+   8. [QuorumHashUpdate](#quorumhashupdate)
+   9. [Request](#request)
+   10. [RequestApplySnapshotChunk](#requestapplysnapshotchunk)
+   11. [RequestCheckTx](#requestchecktx)
+   12. [RequestEcho](#requestecho)
+   13. [RequestExtendVote](#requestextendvote)
+       1. [Usage](#usage)
+       2. [When does Tenderdash call it?](#when-does-tenderdash-call-it)
+   14. [RequestFinalizeBlock](#requestfinalizeblock)
+       1. [Usage](#usage-1)
+   15. [RequestFlush](#requestflush)
+   16. [RequestInfo](#requestinfo)
+   17. [RequestInitChain](#requestinitchain)
+   18. [RequestListSnapshots](#requestlistsnapshots)
+   19. [RequestLoadSnapshotChunk](#requestloadsnapshotchunk)
+   20. [RequestOfferSnapshot](#requestoffersnapshot)
+   21. [RequestPrepareProposal](#requestprepareproposal)
+       1. [Usage](#usage-2)
+       2. [When does Tenderdash call it?](#when-does-tenderdash-call-it-1)
+   22. [RequestProcessProposal](#requestprocessproposal)
+       1. [Usage](#usage-3)
+       2. [When does Tenderdash call it?](#when-does-tenderdash-call-it-2)
+   23. [RequestQuery](#requestquery)
+   24. [RequestVerifyVoteExtension](#requestverifyvoteextension)
+       1. [Usage](#usage-4)
+       2. [When does Tenderdash call it?](#when-does-tenderdash-call-it-3)
+   25. [Response](#response)
+   26. [ResponseApplySnapshotChunk](#responseapplysnapshotchunk)
+   27. [ResponseCheckTx](#responsechecktx)
+   28. [ResponseEcho](#responseecho)
+   29. [ResponseException](#responseexception)
+   30. [ResponseExtendVote](#responseextendvote)
+   31. [ResponseFinalizeBlock](#responsefinalizeblock)
+   32. [ResponseFlush](#responseflush)
+   33. [ResponseInfo](#responseinfo)
+   34. [ResponseInitChain](#responseinitchain)
+   35. [ResponseListSnapshots](#responselistsnapshots)
+   36. [ResponseLoadSnapshotChunk](#responseloadsnapshotchunk)
+   37. [ResponseOfferSnapshot](#responseoffersnapshot)
+   38. [ResponsePrepareProposal](#responseprepareproposal)
+   39. [ResponseProcessProposal](#responseprocessproposal)
+   40. [ResponseQuery](#responsequery)
+   41. [ResponseVerifyVoteExtension](#responseverifyvoteextension)
+   42. [Snapshot](#snapshot)
+   43. [ThresholdPublicKeyUpdate](#thresholdpublickeyupdate)
+   44. [TxRecord](#txrecord)
+   45. [TxResult](#txresult)
+   46. [Validator](#validator)
+   47. [ValidatorSetUpdate](#validatorsetupdate)
+   48. [ValidatorUpdate](#validatorupdate)
+   49. [VoteInfo](#voteinfo)
+   50. [CheckTxType](#checktxtype)
+   51. [MisbehaviorType](#misbehaviortype)
+   52. [ResponseApplySnapshotChunk.Result](#responseapplysnapshotchunkresult)
+   53. [ResponseOfferSnapshot.Result](#responseoffersnapshotresult)
+   54. [ResponseProcessProposal.ProposalStatus](#responseprocessproposalproposalstatus)
+   55. [ResponseVerifyVoteExtension.VerifyStatus](#responseverifyvoteextensionverifystatus)
+   56. [TxRecord.TxAction](#txrecordtxaction)
+   57. [ABCIApplication](#abciapplication)
+3. [Scalar Value Types](#scalar-value-types)
 
 
 
@@ -96,6 +104,7 @@
 <a name="tendermint-abci-Event"></a>
 
 ### Event
+
 Event allows application developers to attach additional information to
 ResponseCheckTx, ResponsePrepareProposal, ResponseProcessProposal
 and ResponseFinalizeBlock.
@@ -116,6 +125,7 @@ Later, transactions may be queried using these events.
 <a name="tendermint-abci-EventAttribute"></a>
 
 ### EventAttribute
+
 EventAttribute is a single key-value pair, associated with an event.
 
 
@@ -133,6 +143,7 @@ EventAttribute is a single key-value pair, associated with an event.
 <a name="tendermint-abci-ExecTxResult"></a>
 
 ### ExecTxResult
+
 ExecTxResult contains results of executing one individual transaction.
 
 
@@ -154,6 +165,7 @@ ExecTxResult contains results of executing one individual transaction.
 <a name="tendermint-abci-ExtendVoteExtension"></a>
 
 ### ExtendVoteExtension
+
 Provides a vote extension for signing. `type` and `extension` fields are mandatory for filling
 
 
@@ -181,6 +193,7 @@ Use with caution - it can have severe security consequences. |
 <a name="tendermint-abci-ExtendedVoteInfo"></a>
 
 ### ExtendedVoteInfo
+
 ExtendedVoteInfo
 
 
@@ -207,7 +220,7 @@ ExtendedVoteInfo
 | validator | [Validator](#tendermint-abci-Validator) |  | The offending validator |
 | height | [int64](#int64) |  | The height when the offense occurred |
 | time | [google.protobuf.Timestamp](#google-protobuf-Timestamp) |  | The corresponding time where the offense occurred |
-| total_voting_power | [int64](#int64) |  | Total voting power of the validator set in case the ABCI application does not store historical validators. https://github.com/tendermint/tendermint/issues/4581 |
+| total_voting_power | [int64](#int64) |  | Total voting power of the validator set in case the ABCI application does not store historical validators. <https://github.com/tendermint/tendermint/issues/4581> |
 
 
 
@@ -232,6 +245,7 @@ ExtendedVoteInfo
 <a name="tendermint-abci-Request"></a>
 
 ### Request
+
 Request types
 
 
@@ -261,6 +275,7 @@ Request types
 <a name="tendermint-abci-RequestApplySnapshotChunk"></a>
 
 ### RequestApplySnapshotChunk
+
 Applies a snapshot chunk.
 
 - The application can choose to refetch chunks and/or ban P2P peers as appropriate.
@@ -289,6 +304,7 @@ Applies a snapshot chunk.
 <a name="tendermint-abci-RequestCheckTx"></a>
 
 ### RequestCheckTx
+
 Check if transaction is valid.
 
 - Technically optional - not involved in processing blocks.
@@ -314,6 +330,7 @@ Check if transaction is valid.
 <a name="tendermint-abci-RequestEcho"></a>
 
 ### RequestEcho
+
 Echo a string to test an abci client/server implementation
 
 
@@ -329,6 +346,7 @@ Echo a string to test an abci client/server implementation
 <a name="tendermint-abci-RequestExtendVote"></a>
 
 ### RequestExtendVote
+
 Extends a vote with application-side injection
 
 #### Usage
@@ -380,6 +398,7 @@ a [CanonicalVoteExtension](#canonicalvoteextension) field in the `precommit nil`
 <a name="tendermint-abci-RequestFinalizeBlock"></a>
 
 ### RequestFinalizeBlock
+
 Finalize newly decided block.
 
 #### Usage
@@ -426,6 +445,7 @@ Finalize newly decided block.
 <a name="tendermint-abci-RequestFlush"></a>
 
 ### RequestFlush
+
 Signals that messages queued on the client should be flushed to the server.
 It is called periodically by the client implementation to ensure asynchronous
 requests are actually sent, and is called immediately to make a synchronous request,
@@ -439,6 +459,7 @@ which returns when the Flush response comes back.
 <a name="tendermint-abci-RequestInfo"></a>
 
 ### RequestInfo
+
 Return information about the application state.
 
 Used to sync Tenderdash with the application during a handshake that happens on startup.
@@ -462,6 +483,7 @@ ensuring that Commit is never called twice for the same block height.
 <a name="tendermint-abci-RequestInitChain"></a>
 
 ### RequestInitChain
+
 Called once upon genesis.
 
 - If ResponseInitChain.Validators is empty, the initial validator set will be the RequestInitChain.Validators
@@ -490,6 +512,7 @@ Called once upon genesis.
 <a name="tendermint-abci-RequestListSnapshots"></a>
 
 ### RequestListSnapshots
+
 Lists available snapshots
 
 - Used during state sync to discover available snapshots on peers.
@@ -503,6 +526,7 @@ Lists available snapshots
 <a name="tendermint-abci-RequestLoadSnapshotChunk"></a>
 
 ### RequestLoadSnapshotChunk
+
 Used during state sync to retrieve snapshot chunks from peers.
 
 
@@ -520,6 +544,7 @@ Used during state sync to retrieve snapshot chunks from peers.
 <a name="tendermint-abci-RequestOfferSnapshot"></a>
 
 ### RequestOfferSnapshot
+
 Offers a snapshot to the application.
 
 - OfferSnapshot is called when bootstrapping a node using state sync. The application may accept or reject snapshots
@@ -545,6 +570,7 @@ Offers a snapshot to the application.
 <a name="tendermint-abci-RequestPrepareProposal"></a>
 
 ### RequestPrepareProposal
+
 Prepare new block proposal, potentially altering list of transactions.
 
 #### Usage
@@ -653,6 +679,7 @@ Note that, if _p_ has a non-`nil` _validValue_, Tenderdash will use it as propos
 <a name="tendermint-abci-RequestProcessProposal"></a>
 
 ### RequestProcessProposal
+
 Process prepared proposal.
 
 #### Usage
@@ -723,6 +750,7 @@ When a validator _p_ enters Tenderdash consensus round _r_, height _h_, in which
 <a name="tendermint-abci-RequestQuery"></a>
 
 ### RequestQuery
+
 Query for data from the application at current or past height.
 
 - Optionally return Merkle proof.
@@ -744,6 +772,7 @@ Query for data from the application at current or past height.
 <a name="tendermint-abci-RequestVerifyVoteExtension"></a>
 
 ### RequestVerifyVoteExtension
+
 Verify the vote extension
 
 #### Usage
@@ -767,14 +796,17 @@ When a validator _p_ is in Tenderdash consensus round _r_, height _h_, state _pr
 from this condition, but not sure), and _p_ receives a Precommit message for round _r_, height _h_ from _q_:
 
 1. If the Precommit message does not contain a vote extensions with a valid signature, Tenderdash discards the message as invalid.
-  - a 0-length vote extensions is valid as long as its accompanying signature is also valid.
+
+- a 0-length vote extensions is valid as long as its accompanying signature is also valid.
+
 2. Else, _p_&#39;s Tenderdash calls `RequestVerifyVoteExtension`.
 3. The Application returns _accept_ or _reject_ via `ResponseVerifyVoteExtension.status`.
 4. If the Application returns
-  - _accept_, _p_&#39;s Tenderdash will keep the received vote, together with its corresponding
+
+- _accept_, _p_&#39;s Tenderdash will keep the received vote, together with its corresponding
     vote extension in its internal data structures. It will be used to populate the [ExtendedCommitInfo](#extendedcommitinfo)
     structure in calls to `RequestPrepareProposal`, in rounds of height _h &#43; 1_ where _p_ is the proposer.
-  - _reject_, _p_&#39;s Tenderdash will deem the Precommit message invalid and discard it.
+- _reject_, _p_&#39;s Tenderdash will deem the Precommit message invalid and discard it.
 
 
 | Field | Type | Label | Description |
@@ -877,6 +909,7 @@ from this condition, but not sure), and _p_ receives a Precommit message for rou
 <a name="tendermint-abci-ResponseException"></a>
 
 ### ResponseException
+
 nondeterministic
 
 
@@ -1144,6 +1177,7 @@ nondeterministic
 <a name="tendermint-abci-TxResult"></a>
 
 ### TxResult
+
 TxResult contains results of executing the transaction.
 
 One usage is indexing transaction results.
@@ -1164,6 +1198,7 @@ One usage is indexing transaction results.
 <a name="tendermint-abci-Validator"></a>
 
 ### Validator
+
 Validator
 
 
@@ -1180,6 +1215,7 @@ Validator
 <a name="tendermint-abci-ValidatorSetUpdate"></a>
 
 ### ValidatorSetUpdate
+
 ValidatorSetUpdate represents a change in the validator set.
 It can be used to add, remove, or update a validator.
 
@@ -1211,6 +1247,7 @@ the new validator set update.
 <a name="tendermint-abci-ValidatorUpdate"></a>
 
 ### ValidatorUpdate
+
 ValidatorUpdate
 
 
@@ -1229,6 +1266,7 @@ ValidatorUpdate
 <a name="tendermint-abci-VoteInfo"></a>
 
 ### VoteInfo
+
 VoteInfo
 
 
@@ -1241,12 +1279,13 @@ VoteInfo
 
 
 
- 
+
 
 
 <a name="tendermint-abci-CheckTxType"></a>
 
 ### CheckTxType
+
 Type of transaction check
 
 | Name | Number | Description |
@@ -1331,6 +1370,7 @@ Type of transaction check
 <a name="tendermint-abci-TxRecord-TxAction"></a>
 
 ### TxRecord.TxAction
+
 TxAction contains App-provided information on what to do with a transaction that is part of a raw proposal
 
 | Name | Number | Description |
@@ -1342,9 +1382,9 @@ TxAction contains App-provided information on what to do with a transaction that
 | DELAYED | 4 | The Application wants this transaction removed from the proposal but not the mempool. |
 
 
- 
 
- 
+
+
 
 
 <a name="tendermint-abci-ABCIApplication"></a>
@@ -1370,7 +1410,7 @@ TxAction contains App-provided information on what to do with a transaction that
 | VerifyVoteExtension | [RequestVerifyVoteExtension](#tendermint-abci-RequestVerifyVoteExtension) | [ResponseVerifyVoteExtension](#tendermint-abci-ResponseVerifyVoteExtension) |  |
 | FinalizeBlock | [RequestFinalizeBlock](#tendermint-abci-RequestFinalizeBlock) | [ResponseFinalizeBlock](#tendermint-abci-ResponseFinalizeBlock) |  |
 
- 
+
 
 
 
