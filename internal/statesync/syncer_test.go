@@ -83,7 +83,7 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 			},
 			Software: version.TMCoreSemVer,
 		},
-
+		InitialHeight:   1,
 		LastBlockHeight: 1,
 		LastBlockID:     types.BlockID{Hash: []byte("blockhash")},
 		LastBlockTime:   time.Now(),
