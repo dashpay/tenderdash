@@ -584,15 +584,21 @@ func (app *Application) FinalizeSnapshot(_ctx context.Context, req *abci.Request
 	app.mu.Lock()
 	defer app.mu.Unlock()
 
-	// we verify snapshot height and app hash, as there is no additional logic to be called here
-	if app.LastCommittedState.GetHeight() != req.LightBlock.SignedHeader.Header.Height {
+	// we only run some verifications here
+
+	if app.LastCommittedState.GetHeight() != req.SnapshotBlock.SignedHeader.Header.Height {
 		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot height mismatch: expected %d, got %d",
-			app.LastCommittedState.GetHeight(), req.LightBlock.SignedHeader.Header.Height)
+			app.LastCommittedState.GetHeight(), req.SnapshotBlock.SignedHeader.Header.Height)
 	}
 
-	if !app.LastCommittedState.GetAppHash().Equal(req.LightBlock.SignedHeader.Header.AppHash) {
+	if !app.LastCommittedState.GetAppHash().Equal(req.SnapshotBlock.SignedHeader.Header.AppHash) {
 		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot apphash mismatch: expected %x, got %x",
-			app.LastCommittedState.GetAppHash(), req.LightBlock.SignedHeader.Header.AppHash)
+			app.LastCommittedState.GetAppHash(), req.SnapshotBlock.SignedHeader.Header.AppHash)
+	}
+
+	if app.initialHeight != req.GenesisBlock.SignedHeader.Header.Height {
+		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("genesis height mismatch: expected %d, got %d",
+			app.initialHeight, req.GenesisBlock.SignedHeader.Header.Height)
 	}
 
 	app.logger.Debug("FinalizeSnapshot finished successfully", "req", req)
