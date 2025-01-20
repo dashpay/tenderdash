@@ -362,7 +362,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 			return sm.State{}, nil,
 				fmt.Errorf("failed to get light block at height %d. No witnesses remaining", snapshot.Height)
 		}
-		s.logger.Info("failed to get and verify light block. Dropping snapshot and trying again",
+		s.logger.Error("failed to get and verify light block. Dropping snapshot and trying again",
 			"err", err, "height", snapshot.Height)
 		return sm.State{}, nil, errRejectSnapshot
 	}
@@ -597,6 +597,9 @@ func (s *syncer) finalizeSnapshot(ctx context.Context, snapshot *snapshot, genes
 		"version", snapshot.Version,
 		"app_hash", snapshot.trustedAppHash,
 	)
+	if genesisBlock == nil || snapshotBlock == nil {
+		return fmt.Errorf("nil block provided: genesis=%v snapshot=%v", genesisBlock == nil, snapshotBlock == nil)
+	}
 
 	snapshotBlockProto, err := snapshotBlock.ToProto()
 	if err != nil {

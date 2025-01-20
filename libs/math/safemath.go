@@ -163,7 +163,8 @@ func SafeConvert[T Integer, U Integer](from T) (U, error) {
 func MustConvert[FROM Integer, TO Integer](a FROM) TO {
 	i, err := SafeConvert[FROM, TO](a)
 	if err != nil {
-		panic(fmt.Errorf("cannot convert %d to %T: %w", a, any(i), err))
+		var zero TO
+		panic(fmt.Errorf("cannot convert %d to %T: %w", a, zero, err))
 	}
 	return i
 }

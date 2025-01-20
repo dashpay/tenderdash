@@ -587,17 +587,17 @@ func (app *Application) FinalizeSnapshot(_ctx context.Context, req *abci.Request
 	// we only run some verifications here
 
 	if app.LastCommittedState.GetHeight() != req.SnapshotBlock.SignedHeader.Header.Height {
-		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot height mismatch: expected %d, got %d",
+		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot height mismatch during state sync finalization: expected %d, got %d",
 			app.LastCommittedState.GetHeight(), req.SnapshotBlock.SignedHeader.Header.Height)
 	}
 
 	if !app.LastCommittedState.GetAppHash().Equal(req.SnapshotBlock.SignedHeader.Header.AppHash) {
-		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot apphash mismatch: expected %x, got %x",
+		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot apphash mismatch during state sync finalization: expected %x, got %x",
 			app.LastCommittedState.GetAppHash(), req.SnapshotBlock.SignedHeader.Header.AppHash)
 	}
 
 	if app.initialHeight != req.GenesisBlock.SignedHeader.Header.Height {
-		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("genesis height mismatch: expected %d, got %d",
+		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("genesis height mismatch during state sync finalization: expected %d, got %d",
 			app.initialHeight, req.GenesisBlock.SignedHeader.Header.Height)
 	}
 
