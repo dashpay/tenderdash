@@ -38,8 +38,8 @@ require (
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/crypto v0.31.0
-	golang.org/x/net v0.32.0
+	golang.org/x/crypto v0.32.0
+	golang.org/x/net v0.34.0
 	golang.org/x/sync v0.10.0
 	google.golang.org/grpc v1.69.4
 	pgregory.net/rapid v0.4.8
@@ -47,7 +47,7 @@ require (
 
 require (
 	github.com/bufbuild/buf v1.47.2
-	github.com/creachadair/atomicfile v0.3.6
+	github.com/creachadair/atomicfile v0.3.7
 	github.com/creachadair/taskgroup v0.13.2
 	github.com/go-pkgz/jrpc v0.2.0
 	github.com/google/go-cmp v0.6.0
@@ -348,8 +348,8 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20241108190413-2d47ceb2692f // indirect
 	golang.org/x/mod v0.22.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/term v0.27.0
+	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/term v0.28.0
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/tools v0.27.0 // indirect
 	google.golang.org/protobuf v1.35.2 // indirect
@@ -363,7 +363,7 @@ require (
 
 require (
 	github.com/cometbft/cometbft-db v1.0.1
-	github.com/creachadair/tomledit v0.0.23
+	github.com/creachadair/tomledit v0.0.27
 	github.com/jonboulle/clockwork v0.3.0
 	github.com/oasisprotocol/oasis-core/go v0.2403.1
 	github.com/sasha-s/go-deadlock v0.3.5
@@ -371,5 +371,5 @@ require (
 	github.com/tendermint/go-amino v0.16.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
-	golang.org/x/time v0.8.0
+	golang.org/x/time v0.9.0
 )
