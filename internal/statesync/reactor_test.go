@@ -236,6 +236,8 @@ func TestReactor_Sync(t *testing.T) {
 		Once().
 		Return(&abci.ResponseApplySnapshotChunk{Result: abci.ResponseApplySnapshotChunk_COMPLETE_SNAPSHOT}, nil)
 
+	rts.conn.On("FinalizeSnapshot", ctx, mock.Anything).Return(&abci.ResponseFinalizeSnapshot{}, nil).Once()
+
 	// app query returns valid state app hash
 	rts.conn.
 		On("Info", mock.Anything, &proxy.RequestInfo).

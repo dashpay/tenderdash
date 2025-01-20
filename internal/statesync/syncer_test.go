@@ -100,7 +100,19 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 		ConsensusParams:                  *types.DefaultConsensusParams(),
 		LastHeightConsensusParamsChanged: 1,
 	}
-	commit := &types.Commit{BlockID: types.BlockID{Hash: []byte("blockhash")}}
+	commit := &types.Commit{
+		Height:  1,
+		BlockID: types.BlockID{Hash: []byte("blockhash")},
+	}
+
+	lightBlock := types.LightBlock{
+		SignedHeader: &types.SignedHeader{
+			Commit: commit,
+			Header: &types.Header{
+				Height: 1,
+			},
+		},
+	}
 
 	s := &snapshot{Height: 1, Version: 1, Hash: []byte{0}}
 	chunks := []*chunk{
@@ -116,9 +128,8 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 	suite.stateProvider.
 		On("AppHash", mock.Anything, uint64(2)).
 		Return(tmbytes.HexBytes("app_hash_2"), nil)
-	suite.stateProvider.
-		On("Commit", mock.Anything, uint64(1)).
-		Return(commit, nil)
+	suite.stateProvider.On("LightBlock", mock.Anything, uint64(commit.Height)).
+		Return(&lightBlock, nil)
 	suite.stateProvider.
 		On("State", mock.Anything, uint64(1)).
 		Return(state, nil)
@@ -254,6 +265,9 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 			Once().
 			Return(asc.resp, nil)
 	}
+	suite.conn.On("FinalizeSnapshot", mock.Anything, mock.Anything).
+		Once().
+		Return(&abci.ResponseFinalizeSnapshot{}, nil)
 	suite.conn.
 		On("Info", mock.Anything, &proxy.RequestInfo).
 		Once().
