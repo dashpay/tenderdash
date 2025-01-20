@@ -16,6 +16,7 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/light"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
 	"github.com/dashpay/tenderdash/types"
@@ -215,7 +216,7 @@ func (s *syncer) SyncAny(
 		switch {
 		case err == nil:
 			s.metrics.SnapshotHeight.Set(float64(snapshot.Height))
-			s.lastSyncedSnapshotHeight = int64(snapshot.Height)
+			s.lastSyncedSnapshotHeight = tmmath.MustConvertInt64(snapshot.Height)
 			return newState, commit, nil
 
 		case errors.Is(err, errAbort):
@@ -375,7 +376,8 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 	if state.InitialHeight < 1 {
 		return sm.State{}, nil, fmt.Errorf("initial genesis height %d is invalid", state.InitialHeight)
 	}
-	genesisHeight := uint64(state.InitialHeight)
+
+	genesisHeight := tmmath.MustConvertUint64(state.InitialHeight)
 	genesisBlock, err := s.getStateProvider().LightBlock(ctx, genesisHeight)
 	if err != nil {
 		return sm.State{}, nil, fmt.Errorf("failed to get genesis block at height %d: %w", genesisHeight, err)
