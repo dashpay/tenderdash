@@ -372,8 +372,17 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 		return sm.State{}, nil, err
 	}
 
+	if state.InitialHeight < 1 {
+		return sm.State{}, nil, fmt.Errorf("initial genesis height %d is invalid", state.InitialHeight)
+	}
+	genesisHeight := uint64(state.InitialHeight)
+	genesisBlock, err := s.getStateProvider().LightBlock(ctx, genesisHeight)
+	if err != nil {
+		return sm.State{}, nil, fmt.Errorf("failed to get genesis block at height %d: %w", genesisHeight, err)
+	}
+
 	// Finalize
-	if err := s.finalizeSnapshot(ctx, snapshot, block); err != nil {
+	if err := s.finalizeSnapshot(ctx, snapshot, genesisBlock, block); err != nil {
 		return sm.State{}, nil, fmt.Errorf("failed to finalize snapshot: %w", err)
 	}
 
@@ -579,20 +588,26 @@ func (s *syncer) requestChunk(ctx context.Context, snapshot *snapshot, chunkID t
 }
 
 // / finalizeSnapshot sends light block to ABCI app after state sync is done
-func (s *syncer) finalizeSnapshot(ctx context.Context, snapshot *snapshot, block *types.LightBlock) error {
+func (s *syncer) finalizeSnapshot(ctx context.Context, snapshot *snapshot, genesisBlock *types.LightBlock, snapshotBlock *types.LightBlock) error {
 	s.logger.Info("Finalizing snapshot restoration",
 		"snapshot", snapshot.Hash.String(),
 		"height", snapshot.Height,
 		"version", snapshot.Version,
 		"app_hash", snapshot.trustedAppHash,
 	)
-	lightBlock, err := block.ToProto()
+
+	snapshotBlockProto, err := snapshotBlock.ToProto()
 	if err != nil {
-		return fmt.Errorf("failed to convert light block %s to proto: %w", lightBlock.String(), err)
+		return fmt.Errorf("failed to convert snapshot block %s to proto: %w", snapshotBlock.String(), err)
+	}
+	genesisBlockProto, err := genesisBlock.ToProto()
+	if err != nil {
+		return fmt.Errorf("failed to convert genesis block %s to proto: %w", genesisBlock.String(), err)
 	}
 
 	_, err = s.conn.FinalizeSnapshot(ctx, &abci.RequestFinalizeSnapshot{
-		LightBlock: lightBlock,
+		SnapshotBlock: snapshotBlockProto,
+		GenesisBlock:  genesisBlockProto,
 	})
 
 	return err

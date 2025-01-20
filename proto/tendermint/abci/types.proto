@@ -191,8 +191,10 @@ message RequestApplySnapshotChunk {
 // If the application fails to validate the light block, it should return error in the response.
 // This is considered fatal, non-recoverable consensus failure and will cause Tenderdash to restart.
 message RequestFinalizeSnapshot {
-  // light block committed at the synced height
-  tendermint.types.LightBlock light_block = 1;
+  // Snapshot block is a block at which the snapshot was taken.
+  tendermint.types.LightBlock snapshot_block = 1;
+  // Genesis block is the first block of the chain
+  tendermint.types.LightBlock genesis_block = 2;
 }
 
 // Prepare new block proposal, potentially altering list of transactions.

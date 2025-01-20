@@ -440,7 +440,8 @@ This is considered fatal, non-recoverable consensus failure and will cause Tende
 
 | Field | Type | Label | Description |
 | ----- | ---- | ----- | ----------- |
-| light_block | [tendermint.types.LightBlock](#tendermint-types-LightBlock) |  | light block committed at the synced height |
+| snapshot_block | [tendermint.types.LightBlock](#tendermint-types-LightBlock) |  | Snapshot block is a block at which the snapshot was taken. |
+| genesis_block | [tendermint.types.LightBlock](#tendermint-types-LightBlock) |  | Genesis block is the first block of the chain |
 
 
 
