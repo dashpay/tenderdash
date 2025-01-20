@@ -1174,7 +1174,7 @@ func (m *RequestApplySnapshotChunk) GetSender() string {
 	return ""
 }
 
-// RequestFinalizeSnapshot is called by Tenderdash after successfully applying all snapshot chunks, eg.
+// RequestFinalizeSnapshot is called by Tenderdash after successfully applying all snapshot chunks, e.g.
 // when the ABCI application returned `ResponseApplySnapshotChunk` with `Result = ACCEPT`.
 // It includes the light block committed at the synced height, which Tenderdash uses to reconstruct its own state.
 // The application should validate the light block against its restored state.

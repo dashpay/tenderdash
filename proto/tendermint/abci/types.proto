@@ -183,7 +183,7 @@ message RequestApplySnapshotChunk {
   bytes  chunk    = 2;  // The binary chunk contents, as returned by LoadSnapshotChunk.
   string sender   = 3;  // The P2P ID of the node who sent this chunk.
 }
-// RequestFinalizeSnapshot is called by Tenderdash after successfully applying all snapshot chunks, eg.
+// RequestFinalizeSnapshot is called by Tenderdash after successfully applying all snapshot chunks, e.g.
 // when the ABCI application returned `ResponseApplySnapshotChunk` with `Result = ACCEPT`.
 // It includes the light block committed at the synced height, which Tenderdash uses to reconstruct its own state.
 // The application should validate the light block against its restored state.
