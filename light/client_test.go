@@ -645,7 +645,8 @@ func TestClient(t *testing.T) {
 
 				c, err := light.NewClientAtHeight(
 					ctx,
-					1, chainID,
+					1,
+					chainID,
 					mockBadNode,
 					nil,
 					dbs.New(dbm.NewMemDB()),

@@ -260,7 +260,6 @@ func (c *Client) initialize(ctx context.Context) error {
 
 // initializeAtHeight fetches a light block at given height from
 // primary provider.
-// If blockHash is not nil, it will be used to verify the block.
 func (c *Client) initializeAtHeight(ctx context.Context, height int64) error {
 	// 1) Fetch and verify the light block.
 	l, err := c.lightBlockFromPrimaryAtHeight(ctx, height)
