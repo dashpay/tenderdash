@@ -586,11 +586,13 @@ func (app *Application) FinalizeSnapshot(_ctx context.Context, req *abci.Request
 
 	// we verify snapshot height and app hash, as there is no additional logic to be called here
 	if app.LastCommittedState.GetHeight() != req.LightBlock.SignedHeader.Header.Height {
-		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot height mismatch")
+		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot height mismatch: expected %d, got %d",
+			app.LastCommittedState.GetHeight(), req.LightBlock.SignedHeader.Header.Height)
 	}
 
 	if !app.LastCommittedState.GetAppHash().Equal(req.LightBlock.SignedHeader.Header.AppHash) {
-		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot apphash mismatch")
+		return &abci.ResponseFinalizeSnapshot{}, fmt.Errorf("snapshot apphash mismatch: expected %x, got %x",
+			app.LastCommittedState.GetAppHash(), req.LightBlock.SignedHeader.Header.AppHash)
 	}
 
 	app.logger.Debug("FinalizeSnapshot finished successfully", "req", req)

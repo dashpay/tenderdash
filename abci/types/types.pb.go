@@ -1174,9 +1174,13 @@ func (m *RequestApplySnapshotChunk) GetSender() string {
 	return ""
 }
 
-// After snapshot sync, Tenderdash calls this to finalize the snapshot sync.
-// It includes the light block committed at the synced height, which Tenderdash uses
-// to reconstruct its own state.
+// RequestFinalizeSnapshot is called by Tenderdash after successfully applying all snapshot chunks, eg.
+// when the ABCI application returned `ResponseApplySnapshotChunk` with `Result = ACCEPT`.
+// It includes the light block committed at the synced height, which Tenderdash uses to reconstruct its own state.
+// The application should validate the light block against its restored state.
+//
+// If the application fails to validate the light block, it should return error in the response.
+// This is considered fatal, non-recoverable consensus failure and will cause Tenderdash to restart.
 type RequestFinalizeSnapshot struct {
 	// light block committed at the synced height
 	LightBlock *types1.LightBlock `protobuf:"bytes,1,opt,name=light_block,json=lightBlock,proto3" json:"light_block,omitempty"`

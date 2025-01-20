@@ -99,6 +99,7 @@ func (BaseApplication) ApplySnapshotChunk(_ context.Context, _req *RequestApplyS
 	return &ResponseApplySnapshotChunk{}, nil
 }
 
+// FinalizeSnapshot provides a no-op implementation for the StateSyncer interface
 func (BaseApplication) FinalizeSnapshot(_ context.Context, _req *RequestFinalizeSnapshot) (*ResponseFinalizeSnapshot, error) {
 	return &ResponseFinalizeSnapshot{}, nil
 }
