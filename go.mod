@@ -368,7 +368,7 @@ require (
 
 require (
 	github.com/cometbft/cometbft-db v1.0.1
-	github.com/creachadair/tomledit v0.0.23
+	github.com/creachadair/tomledit v0.0.27
 	github.com/jonboulle/clockwork v0.3.0
 	github.com/oasisprotocol/oasis-core/go v0.2403.1
 	github.com/sasha-s/go-deadlock v0.3.5
@@ -376,5 +376,5 @@ require (
 	github.com/tendermint/go-amino v0.16.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/exp v0.0.0-20241108190413-2d47ceb2692f
-	golang.org/x/time v0.8.0
+	golang.org/x/time v0.9.0
 )
