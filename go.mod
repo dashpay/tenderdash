@@ -363,7 +363,7 @@ require (
 
 require (
 	github.com/cometbft/cometbft-db v1.0.1
-	github.com/creachadair/tomledit v0.0.23
+	github.com/creachadair/tomledit v0.0.27
 	github.com/jonboulle/clockwork v0.3.0
 	github.com/oasisprotocol/oasis-core/go v0.2403.1
 	github.com/sasha-s/go-deadlock v0.3.5
