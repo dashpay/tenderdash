@@ -13,7 +13,6 @@ require (
 	github.com/dashpay/dashd-go/btcec/v2 v2.1.0 // indirect
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fxamacker/cbor/v2 v2.4.0
-	github.com/go-chi/chi v4.1.2+incompatible // indirect
 	github.com/go-kit/kit v0.13.0
 	github.com/gogo/protobuf v1.3.2
 	github.com/golang/protobuf v1.5.4
@@ -49,7 +48,7 @@ require (
 	github.com/bufbuild/buf v1.50.0
 	github.com/creachadair/atomicfile v0.3.7
 	github.com/creachadair/taskgroup v0.13.2
-	github.com/go-pkgz/jrpc v0.2.0
+	github.com/go-pkgz/jrpc v0.3.1
 	github.com/google/go-cmp v0.6.0
 	github.com/vektra/mockery/v2 v2.51.1
 )
@@ -76,6 +75,7 @@ require (
 	github.com/Masterminds/semver/v3 v3.3.0 // indirect
 	github.com/Microsoft/hcsshim v0.12.9 // indirect
 	github.com/OpenPeeDeeP/depguard/v2 v2.2.0 // indirect
+	github.com/ajg/form v1.5.1 // indirect
 	github.com/alecthomas/go-check-sumtype v0.3.1 // indirect
 	github.com/alexkohler/nakedret/v2 v2.0.5 // indirect
 	github.com/alingse/nilnesserr v0.1.1 // indirect
@@ -112,8 +112,7 @@ require (
 	github.com/dashpay/dashd-go/btcutil v1.2.0 // indirect
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.3.0 // indirect
 	github.com/dgraph-io/badger/v4 v4.3.1 // indirect
-	github.com/didip/tollbooth/v6 v6.0.1 // indirect
-	github.com/didip/tollbooth_chi v0.0.0-20200524181329-8b84cd7183d9 // indirect
+	github.com/didip/tollbooth/v8 v8.0.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/docker/cli v27.5.0+incompatible // indirect
 	github.com/docker/distribution v2.8.3+incompatible // indirect
@@ -124,11 +123,11 @@ require (
 	github.com/getsentry/sentry-go v0.27.0 // indirect
 	github.com/ghostiam/protogetter v0.3.8 // indirect
 	github.com/go-chi/chi/v5 v5.2.0 // indirect
-	github.com/go-chi/render v1.0.1 // indirect
+	github.com/go-chi/render v1.0.3 // indirect
 	github.com/go-logr/logr v1.4.2 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-pkgz/expirable-cache v0.0.3 // indirect
-	github.com/go-pkgz/rest v1.5.0 // indirect
+	github.com/go-pkgz/expirable-cache/v3 v3.0.0 // indirect
+	github.com/go-pkgz/rest v1.20.2 // indirect
 	github.com/go-task/slim-sprig/v3 v3.0.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/golang/groupcache v0.0.0-20241129210726-2c02b8208cf8 // indirect
