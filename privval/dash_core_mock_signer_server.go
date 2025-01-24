@@ -5,6 +5,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/types"
+	"github.com/dashpay/tenderdash/version"
 )
 
 type DashCoreMockSignerServer struct {
@@ -23,13 +24,13 @@ func NewDashCoreMockSignerServer(
 	privVal types.PrivValidator,
 ) *DashCoreMockSignerServer {
 	// create plugin (jrpc server)
+	jrpcServer := jrpc.NewServer("/command",
+		jrpc.Auth("user", "password"),
+		jrpc.WithSignature("dashcoremock", "Dash Core Group", version.ABCIVersion),
+	)
+
 	mockServer := &DashCoreMockSignerServer{
-		server: &jrpc.Server{
-			API:        "/command",     // base url for rpc calls
-			AuthUser:   "user",         // basic auth user name
-			AuthPasswd: "password",     // basic auth password
-			AppName:    "dashcoremock", // plugin name for headers
-		},
+		server:     jrpcServer,
 		chainID:    chainID,
 		quorumHash: quorumHash,
 		privVal:    privVal,

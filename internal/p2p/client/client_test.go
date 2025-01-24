@@ -29,7 +29,7 @@ type ChannelTestSuite struct {
 
 	height      int64
 	peerID      types.NodeID
-	fakeClock   clockwork.FakeClock
+	fakeClock   *clockwork.FakeClock
 	p2pChannel  *mocks.Channel
 	client      *Client
 	response    *bcproto.BlockResponse
