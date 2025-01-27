@@ -1061,10 +1061,15 @@ func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, e
 			break
 		}
 
+		if r.csState == nil {
+			continue
+		}
+		currentHeight := r.csState.GetRoundState().Height
 		// we only accept snapshots where next block is already finalized, that is we are voting
 		// for `height + 2` or higher, because we need to be able to fetch light block containing
 		// commit for `height` from block store (which is stored in block `height+1`)
-		if s.Height <= uint64(r.csState.GetRoundState().Height)-2 {
+		if int64(s.Height) >= currentHeight-2 {
+			r.logger.Debug("snapshot too new, skipping", "height", s.Height, "state_height", currentHeight)
 			continue
 		}
 
