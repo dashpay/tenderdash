@@ -157,19 +157,6 @@ func (s *syncer) SyncAny(
 	timer := time.NewTimer(discoveryTime)
 	defer timer.Stop()
 
-	if discoveryTime > 0 {
-		if err := requestSnapshots(); err != nil {
-			return sm.State{}, nil, err
-		}
-		s.logger.Info("discovering snapshots",
-			"interval", discoveryTime)
-		select {
-		case <-ctx.Done():
-			return sm.State{}, nil, ctx.Err()
-		case <-timer.C:
-		}
-	}
-
 	// The app may ask us to retry a snapshot restoration, in which case we need to reuse
 	// the snapshot and chunk queue from the previous loop iteration.
 	var (
@@ -189,6 +176,10 @@ func (s *syncer) SyncAny(
 		if snapshot == nil {
 			if discoveryTime == 0 {
 				return sm.State{}, nil, errNoSnapshots
+			}
+			// we re-request snapshots
+			if err := requestSnapshots(); err != nil {
+				return sm.State{}, nil, err
 			}
 			s.logger.Info("discovering snapshots",
 				"iterations", iters,
