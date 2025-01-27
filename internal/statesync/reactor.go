@@ -277,7 +277,11 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	if r.needsStateSync {
 		r.logger.Info("starting state sync")
 		if _, err := r.Sync(ctx); err != nil {
-			r.logger.Error("state sync failed; shutting down this node", "error", err)
+			if errors.Is(err, errNoSnapshots) {
+				r.logger.Warn("no snapshots available; falling back to block sync", "err", err)
+				return nil
+			}
+			r.logger.Error("state sync failed; shutting down this node", "err", err)
 			return err
 		}
 	}
