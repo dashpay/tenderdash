@@ -327,7 +327,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 	}
 	r.getSyncer().SetStateProvider(r.stateProvider)
 
-	state, commit, err := r.syncer.SyncAny(ctx, r.cfg.DiscoveryTime, r.requestSnaphot)
+	state, commit, err := r.syncer.SyncAny(ctx, r.cfg.DiscoveryTime, r.cfg.Retries, r.requestSnaphot)
 	if err != nil {
 		return sm.State{}, fmt.Errorf("sync any: %w", err)
 	}
