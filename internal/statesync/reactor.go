@@ -1061,6 +1061,13 @@ func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, e
 			break
 		}
 
+		// we only accept snapshots where next block is already finalized, that is we are voting
+		// for `height + 2` or higher, because we need to be able to fetch light block containing
+		// commit for `height` from block store (which is stored in block `height+1`)
+		if s.Height <= uint64(r.csState.GetRoundState().Height)-2 {
+			continue
+		}
+
 		snapshots = append(snapshots, &snapshot{
 			Height:   s.Height,
 			Version:  s.Version,

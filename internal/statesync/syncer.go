@@ -18,7 +18,6 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/light"
-	"github.com/dashpay/tenderdash/light/provider"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -336,11 +335,6 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 		// check if the main context was triggered
 		if ctx.Err() != nil {
 			return sm.State{}, nil, ctx.Err()
-		}
-		// light block might not be found because it needs commit which is generated at `height+1`, so we
-		if errors.Is(err, provider.ErrLightBlockNotFound) {
-			s.logger.Debug("light block not found at height %d, retrying", "height", snapshot.Height)
-			return sm.State{}, nil, errRetrySnapshot
 		}
 		if errors.Is(err, light.ErrNoWitnesses) {
 			return sm.State{}, nil,
