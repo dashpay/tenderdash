@@ -277,7 +277,7 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 			LastBlockAppHash: []byte("app_hash"),
 		}, nil)
 
-	newState, lastCommit, err := suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	newState, lastCommit, err := suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().NoError(err)
 
 	suite.Require().Equal([]int{0: 2, 1: 1, 2: 1, 3: 1}, chunkRequests)
@@ -294,7 +294,7 @@ func (suite *SyncerTestSuite) TestSyncAnyNoSnapshots() {
 	ctx, cancel := context.WithCancel(suite.ctx)
 	defer cancel()
 
-	_, _, err := suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err := suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().Equal(errNoSnapshots, err)
 }
 
@@ -320,7 +320,7 @@ func (suite *SyncerTestSuite) TestSyncAnyAbort() {
 		Once().
 		Return(&abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ABORT}, nil)
 
-	_, _, err = suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err = suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().Equal(errAbort, err)
 }
 
@@ -370,7 +370,7 @@ func (suite *SyncerTestSuite) TestSyncAnyReject() {
 		Once().
 		Return(&abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}, nil)
 
-	_, _, err = suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err = suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().Equal(errNoSnapshots, err)
 }
 
@@ -413,7 +413,7 @@ func (suite *SyncerTestSuite) TestSyncAnyRejectFormat() {
 		Once().
 		Return(&abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ABORT}, nil)
 
-	_, _, err = suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err = suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().Equal(errAbort, err)
 }
 
@@ -467,7 +467,7 @@ func (suite *SyncerTestSuite) TestSyncAnyRejectSender() {
 		Once().
 		Return(&abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}, nil)
 
-	_, _, err := suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err := suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().Equal(errNoSnapshots, err)
 }
 
@@ -495,7 +495,7 @@ func (suite *SyncerTestSuite) TestSyncAnyAbciError() {
 		Once().
 		Return(nil, errBoom)
 
-	_, _, err = suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err = suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().True(errors.Is(err, errBoom))
 }
 

@@ -150,6 +150,7 @@ func (s *syncer) RemovePeer(peerID types.NodeID) {
 func (s *syncer) SyncAny(
 	ctx context.Context,
 	discoveryTime time.Duration,
+	retries int,
 	requestSnapshots func() error,
 ) (sm.State, *types.Commit, error) {
 	if discoveryTime != 0 && discoveryTime < minimumDiscoveryTime {
@@ -170,6 +171,10 @@ func (s *syncer) SyncAny(
 
 	for {
 		iters++
+
+		if retries > 0 && iters > retries {
+			return sm.State{}, nil, errNoSnapshots
+		}
 		// If not nil, we're going to retry restoration of the same snapshot.
 		if snapshot == nil {
 			snapshot = s.snapshots.Best()

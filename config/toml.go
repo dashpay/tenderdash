@@ -498,6 +498,10 @@ rpc-servers = "{{ StringsJoin .StateSync.RPCServers "," }}"
 # Time to spend discovering snapshots before initiating a restore.
 discovery-time = "{{ .StateSync.DiscoveryTime }}"
 
+# Number of times to retry state sync. When retries are exhausted, the node will
+# fall back to the regular block sync. Set to 0 to disable retries. Default is 1.
+retries = {{ .StateSync.Retries }}
+
 # Temporary directory for state sync snapshot chunks, defaults to os.TempDir().
 # The synchronizer will create a new, randomly named directory within this directory
 # and remove it when the sync is complete.

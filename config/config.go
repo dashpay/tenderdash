@@ -1003,6 +1003,10 @@ type StateSyncConfig struct {
 	// Time to spend discovering snapshots before initiating a restore.
 	DiscoveryTime time.Duration `mapstructure:"discovery-time"`
 
+	// Number of times to retry state sync. When retries are exhausted, the node will
+	// fall back to the regular block sync. Set to 0 to disable retries. Default is 1.
+	Retries int `mapstructure:"retries"`
+
 	// Temporary directory for state sync snapshot chunks, defaults to os.TempDir().
 	// The synchronizer will create a new, randomly named directory within this directory
 	// and remove it when the sync is complete.
@@ -1022,6 +1026,7 @@ func DefaultStateSyncConfig() *StateSyncConfig {
 		DiscoveryTime:       15 * time.Second,
 		ChunkRequestTimeout: 15 * time.Second,
 		Fetchers:            4,
+		Retries:             1,
 	}
 }
 
@@ -1052,6 +1057,10 @@ func (cfg *StateSyncConfig) ValidateBasic() error {
 
 	if cfg.DiscoveryTime != 0 && cfg.DiscoveryTime < 5*time.Second {
 		return errors.New("discovery time must be 0s or greater than five seconds")
+	}
+
+	if cfg.Retries < 0 {
+		return errors.New("retries must be greater than or equal to zero")
 	}
 
 	if cfg.ChunkRequestTimeout < 5*time.Second {
