@@ -287,9 +287,10 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 				if err := r.postSyncHook(ctx, state); err != nil {
 					return fmt.Errorf("post sync failed: %w", err)
 				}
+			} else {
+				r.logger.Error("state sync failed; shutting down this node", "err", err)
+				return err
 			}
-			r.logger.Error("state sync failed; shutting down this node", "err", err)
-			return err
 		}
 	}
 
