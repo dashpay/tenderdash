@@ -278,12 +278,13 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		r.logger.Info("starting state sync")
 		if _, err := r.Sync(ctx); err != nil {
 			if errors.Is(err, errNoSnapshots) && r.postSyncHook != nil {
+				r.logger.Warn("no snapshots available; falling back to block sync", "err", err)
+
 				state, err := r.stateStore.Load()
 				if err != nil {
 					return fmt.Errorf("failed to load state: %w", err)
 				}
 
-				r.logger.Warn("no snapshots available; falling back to block sync", "err", err)
 				if err := r.postSyncHook(ctx, state); err != nil {
 					return fmt.Errorf("post sync failed: %w", err)
 				}
