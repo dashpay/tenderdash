@@ -170,11 +170,11 @@ func (s *syncer) SyncAny(
 	)
 
 	for {
-		iters++
-
-		if retries > 0 && iters > retries {
+		if retries > 0 && snapshot == nil && iters > retries {
 			return sm.State{}, nil, errNoSnapshots
 		}
+
+		iters++
 		// If not nil, we're going to retry restoration of the same snapshot.
 		if snapshot == nil {
 			snapshot = s.snapshots.Best()
