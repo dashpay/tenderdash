@@ -119,7 +119,7 @@ func (s *StateDataStore) Subscribe(evsw *eventemitter.EventEmitter) {
 	})
 }
 
-// StateData is a copy of the current RoundState nad state.State stored in the store
+// StateData is a copy of the current RoundState and state.State stored in the store
 // Along with data, StateData provides some methods to check or update data inside
 type StateData struct {
 	config *config.ConsensusConfig

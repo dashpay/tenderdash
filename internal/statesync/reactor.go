@@ -277,9 +277,16 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	if r.needsStateSync {
 		r.logger.Info("starting state sync")
 		if _, err := r.Sync(ctx); err != nil {
-			if errors.Is(err, errNoSnapshots) {
+			if errors.Is(err, errNoSnapshots) && r.postSyncHook != nil {
+				state, err := r.stateStore.Load()
+				if err != nil {
+					return fmt.Errorf("failed to load state: %w", err)
+				}
+
 				r.logger.Warn("no snapshots available; falling back to block sync", "err", err)
-				return nil
+				if err := r.postSyncHook(ctx, state); err != nil {
+					return fmt.Errorf("post sync failed: %w", err)
+				}
 			}
 			r.logger.Error("state sync failed; shutting down this node", "err", err)
 			return err
