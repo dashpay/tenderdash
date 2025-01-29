@@ -1004,7 +1004,10 @@ type StateSyncConfig struct {
 	DiscoveryTime time.Duration `mapstructure:"discovery-time"`
 
 	// Number of times to retry state sync. When retries are exhausted, the node will
-	// fall back to the regular block sync. Set to 0 to disable retries. Default is 1.
+	// fall back to the regular block sync. Set to 0 to disable retries. Default is 3.
+	//
+	// Note that in pessimistic case, it will take at least `discovery-time * retries` before
+	// falling back to block sync.
 	Retries int `mapstructure:"retries"`
 
 	// Temporary directory for state sync snapshot chunks, defaults to os.TempDir().
@@ -1026,7 +1029,7 @@ func DefaultStateSyncConfig() *StateSyncConfig {
 		DiscoveryTime:       15 * time.Second,
 		ChunkRequestTimeout: 15 * time.Second,
 		Fetchers:            4,
-		Retries:             1,
+		Retries:             3,
 	}
 }
 
