@@ -22,6 +22,7 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/light/provider"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
@@ -1081,7 +1082,7 @@ func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, e
 		// we only accept snapshots where next block is already finalized, that is we are voting
 		// for `height + 2` or higher, because we need to be able to fetch light block containing
 		// commit for `height` from block store (which is stored in block `height+1`)
-		if int64(s.Height) >= currentHeight-2 {
+		if tmmath.MustConvertInt64(s.Height) >= currentHeight-2 {
 			r.logger.Debug("snapshot too new, skipping", "height", s.Height, "state_height", currentHeight)
 			continue
 		}
@@ -1100,7 +1101,7 @@ func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, e
 // fetchLightBlock works out whether the node has a light block at a particular
 // height and if so returns it so it can be gossiped to peers
 func (r *Reactor) fetchLightBlock(height uint64) (*types.LightBlock, error) {
-	h := int64(height)
+	h := tmmath.MustConvertInt64(height)
 
 	blockMeta := r.blockStore.LoadBlockMeta(h)
 	if blockMeta == nil {
