@@ -69,6 +69,8 @@ const (
 
 	// backfillSleepTime uses to sleep if no connected peers to fetch light blocks
 	backfillSleepTime = 1 * time.Second
+
+	MinPeers = 1
 )
 
 func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
@@ -240,7 +242,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		spLogger.Info("initializing state provider", "useP2P", r.cfg.UseP2P)
 
 		if r.cfg.UseP2P {
-			if err := r.waitForEnoughPeers(ctx, 2); err != nil {
+			if err := r.waitForEnoughPeers(ctx, MinPeers); err != nil {
 				return err
 			}
 
@@ -323,7 +325,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 
 	// We need at least two peers (for cross-referencing of light blocks) before we can
 	// begin state sync
-	if err := r.waitForEnoughPeers(ctx, 2); err != nil {
+	if err := r.waitForEnoughPeers(ctx, MinPeers); err != nil {
 		return sm.State{}, fmt.Errorf("wait for peers: %w", err)
 	}
 
