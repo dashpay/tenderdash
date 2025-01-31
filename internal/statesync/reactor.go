@@ -70,6 +70,7 @@ const (
 	// backfillSleepTime uses to sleep if no connected peers to fetch light blocks
 	backfillSleepTime = 1 * time.Second
 
+	// MinPeers is the minimum number of peers required to start a state sync; TODO: change to >= 2, or make configurable
 	MinPeers = 1
 )
 

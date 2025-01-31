@@ -220,8 +220,8 @@ func NewP2PStateProvider(
 	logger log.Logger,
 	dashCoreClient dashcore.Client,
 ) (StateProvider, error) {
-	if len(providers) < 2 {
-		return nil, fmt.Errorf("at least 2 peers are required, got %d", len(providers))
+	if len(providers) < MinPeers {
+		return nil, fmt.Errorf("at least %d peers are required, got %d", MinPeers, len(providers))
 	}
 
 	lc, err := light.NewClient(ctx, chainID, providers[0], providers[1:],
