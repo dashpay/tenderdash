@@ -985,7 +985,7 @@ func (r *Reactor) processChannels(ctx context.Context, chanTable map[p2p.Channel
 // processPeerUpdate processes a PeerUpdate, returning an error upon failing to
 // handle the PeerUpdate or if a panic is recovered.
 func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpdate) {
-	r.logger.Info("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
+	r.logger.Trace("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 
 	switch peerUpdate.Status {
 	case p2p.PeerStatusUp:
@@ -994,7 +994,7 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		r.processPeerDown(ctx, peerUpdate)
 	}
 
-	r.logger.Info("processed peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
+	r.logger.Trace("processed peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 }
 
 func (r *Reactor) processPeerUp(ctx context.Context, peerUpdate p2p.PeerUpdate) {

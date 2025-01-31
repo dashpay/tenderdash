@@ -96,7 +96,7 @@ func (p *PeerSubscriber) Stop(ctx context.Context) {
 // processPeerUpdate processes a PeerUpdate, returning an error upon failing to
 // handle the PeerUpdate or if a panic is recovered.
 func (p *PeerSubscriber) execute(ctx context.Context, peerUpdate p2p.PeerUpdate) error {
-	p.logger.Info("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
+	p.logger.Trace("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 	handler, ok := p.handles[peerUpdate.Status]
 	if !ok {
 		// TODO: return error or write a log
@@ -106,7 +106,7 @@ func (p *PeerSubscriber) execute(ctx context.Context, peerUpdate p2p.PeerUpdate)
 	if err != nil {
 		return err
 	}
-	p.logger.Info("processed peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
+	p.logger.Trace("processed peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 	return nil
 }
 
