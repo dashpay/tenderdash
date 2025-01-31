@@ -201,7 +201,7 @@ func (r *Reactor) processEvidenceCh(ctx context.Context) {
 //
 // REF: https://github.com/tendermint/tendermint/issues/4727
 func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpdate) {
-	r.logger.Debug("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
+	r.logger.Trace("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 
 	r.mtx.Lock()
 	defer r.mtx.Unlock()
