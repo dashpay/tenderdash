@@ -491,7 +491,7 @@ func (s *syncer) applyChunks(ctx context.Context, queue *chunkQueue, start time.
 		pending := queue.Pending()
 		if len(pending) > 0 {
 			// write list of pending chunks, in hex, to /tmp/td_pending_chunks.txt
-			if file, err := os.Create(fmt.Sprintf("/tmp/td_pending_chunks.%d.txt", time.Now().Unix())); err == nil {
+			if file, err := os.Create("/tmp/td_pending_chunks.txt"); err == nil {
 				defer file.Close()
 				for _, p := range pending {
 					_, err := file.WriteString(p.String() + "\n")
