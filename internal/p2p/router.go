@@ -357,12 +357,24 @@ func (r *Router) routeChannel(
 			for _, q := range queues {
 				start := time.Now().UTC()
 
+				qCtx, qcancel := context.WithTimeout(ctx, time.Minute)
+				defer qcancel()
+
+				if chID == ChunkChannel {
+					r.logger.Debug("sending chunk message", "peer", envelope.To, "chunk", envelope.Message, "channel", chID)
+				}
 				select {
 				case q.enqueue() <- envelope:
+					if chID == ChunkChannel {
+						r.logger.Debug("sent chunk message", "peer", envelope.To, "chunk", envelope.Message, "channel", chID)
+					}
 					r.metrics.RouterPeerQueueSend.Observe(time.Since(start).Seconds())
 
 				case <-q.closed():
 					r.logger.Debug("dropping message on closed channel", "peer", envelope.To, "channel", chID)
+
+				case <-qCtx.Done():
+					r.logger.Debug("dropping message on queue timeout", "peer", envelope.To, "channel", chID, "err", qCtx.Err())
 
 				case <-ctx.Done():
 					return
