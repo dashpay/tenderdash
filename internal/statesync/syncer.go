@@ -91,7 +91,7 @@ func (s *syncer) AddChunk(chunk *chunk) (bool, error) {
 	keyVals := []any{
 		"height", chunk.Height,
 		"version", chunk.Version,
-		"chunk", chunk.ID,
+		"chunkID", chunk.ID,
 	}
 	added, err := s.chunkQueue.Add(chunk)
 	if err != nil {
@@ -544,6 +544,7 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chu
 		if queue.IsRequestQueueEmpty() {
 			select {
 			case <-ctx.Done():
+				s.logger.Debug("fetchChunks context done on empty queue")
 				return
 			case <-time.After(dequeueChunkIDTimeout):
 				continue
@@ -556,17 +557,21 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chu
 		s.logger.Info("Fetching snapshot chunk",
 			"height", snapshot.Height,
 			"version", snapshot.Version,
-			"chunk", ID)
+			"chunkID", ID)
 		ticker.Reset(s.retryTimeout)
 		if err := s.requestChunk(ctx, snapshot, ID); err != nil {
+			s.logger.Error("failed to request snapshot chunk", "err", err, "chunkID", ID)
 			return
 		}
 		select {
 		case <-queue.WaitFor(ID):
 			// do nothing
 		case <-ticker.C:
+			s.logger.Debug("chunk not received on time, retrying",
+				"chunkID", ID, "timeout", s.retryTimeout)
 			s.chunkQueue.Enqueue(ID)
 		case <-ctx.Done():
+			s.logger.Debug("fetchChunks context done while waiting for chunk")
 			return
 		}
 	}
