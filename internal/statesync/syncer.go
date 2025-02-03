@@ -529,11 +529,13 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chu
 	}
 	for {
 		if queue.IsRequestQueueEmpty() {
+			s.logger.Debug("fetchChunks queue empty, waiting for chunk", "timeout", dequeueChunkIDTimeout)
 			select {
 			case <-ctx.Done():
 				s.logger.Debug("fetchChunks context done on empty queue")
 				return
 			case <-time.After(dequeueChunkIDTimeout):
+				s.logger.Debug("fetchChunks queue empty, timed out", "timeout", dequeueChunkIDTimeout)
 				continue
 			}
 		}
