@@ -1,6 +1,7 @@
 package statesync
 
 import (
+	"errors"
 	"os"
 	"testing"
 
@@ -244,7 +245,7 @@ func (suite *ChunkQueueTestSuite) TestNext() {
 	go func() {
 		for {
 			c, err := suite.queue.Next()
-			if err == errDone {
+			if errors.Is(err, errDone) {
 				close(chNext)
 				break
 			}
@@ -284,7 +285,7 @@ func (suite *ChunkQueueTestSuite) TestNextClosed() {
 	require.NoError(err)
 
 	_, err = suite.queue.Next()
-	require.Equal(errDone, err)
+	require.ErrorIs(err, errDone)
 }
 
 func (suite *ChunkQueueTestSuite) TestRetry() {
