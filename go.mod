@@ -32,7 +32,7 @@ require (
 	github.com/ory/dockertest v3.3.5+incompatible
 	github.com/prometheus/client_golang v1.20.5
 	github.com/rs/cors v1.11.1
-	github.com/rs/zerolog v1.29.0
+	github.com/rs/zerolog v1.33.0
 	github.com/snikch/goodman v0.0.0-20171125024755-10e37e294daa
 	github.com/spf13/cobra v1.8.1
 	github.com/spf13/viper v1.19.0
@@ -50,7 +50,7 @@ require (
 	github.com/creachadair/taskgroup v0.13.2
 	github.com/go-pkgz/jrpc v0.3.1
 	github.com/google/go-cmp v0.6.0
-	github.com/vektra/mockery/v2 v2.51.1
+	github.com/vektra/mockery/v2 v2.52.1
 )
 
 require (
