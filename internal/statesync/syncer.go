@@ -24,12 +24,15 @@ import (
 )
 
 const (
+
 	// chunkTimeout is the timeout while waiting for the next chunk from the chunk queue.
 	chunkTimeout = 2 * time.Minute
 
 	// minimumDiscoveryTime is the lowest allowable time for a
 	// SyncAny discovery time.
 	minimumDiscoveryTime = 5 * time.Second
+	// chunkRequestSendTimeout is the timeout sending chunk requests to peers.
+	chunkRequestSendTimeout = 5 * time.Second
 
 	dequeueChunkIDTimeoutDefault = 2 * time.Second
 )
@@ -552,6 +555,7 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chu
 		}
 		ID, err := queue.Dequeue()
 		if errors.Is(err, errQueueEmpty) {
+			s.logger.Debug("fetchChunks queue empty, waiting for chunk", "timeout", dequeueChunkIDTimeout, "err", err)
 			continue
 		}
 		s.logger.Info("Fetching snapshot chunk",
@@ -561,6 +565,8 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chu
 		ticker.Reset(s.retryTimeout)
 		if err := s.requestChunk(ctx, snapshot, ID); err != nil {
 			s.logger.Error("failed to request snapshot chunk", "err", err, "chunkID", ID)
+			// retry the chunk
+			s.chunkQueue.Enqueue(ID)
 			return
 		}
 		select {
@@ -606,8 +612,10 @@ func (s *syncer) requestChunk(ctx context.Context, snapshot *snapshot, chunkID t
 			ChunkId: chunkID,
 		},
 	}
+	sCtx, cancel := context.WithTimeout(ctx, chunkRequestSendTimeout)
+	defer cancel()
 
-	return s.chunkCh.Send(ctx, msg)
+	return s.chunkCh.Send(sCtx, msg)
 }
 
 // / finalizeSnapshot sends light block to ABCI app after state sync is done
