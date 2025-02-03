@@ -291,8 +291,29 @@ func (q *chunkQueue) Next() (*chunk, error) {
 		q.doneCount++
 		return loadedChunk, nil
 	case <-time.After(chunkTimeout):
-		return nil, errTimeout
+		pendingChunks := ""
+		// Locking is done inside q.Pending
+		pending := q.Pending()
+		for _, item := range pending {
+			pendingChunks = pendingChunks + " " + item.String()
+		}
+		return nil, fmt.Errorf("timed out waiting for chunks %s: %w", pendingChunks, errTimeout)
 	}
+}
+
+// Pending returns a list of all chunks that have been requested but not yet received.
+func (q *chunkQueue) Pending() []bytes.HexBytes {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+
+	// get all keys from the map that don't have a status of received
+	waiting := make([]bytes.HexBytes, 0, len(q.items))
+	for _, item := range q.items {
+		if item.status == initStatus || item.status == inProgressStatus {
+			waiting = append(waiting, item.chunkID)
+		}
+	}
+	return waiting
 }
 
 // Retry schedules a chunk to be retried, without refetching it.
