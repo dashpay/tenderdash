@@ -291,13 +291,9 @@ func (q *chunkQueue) Next() (*chunk, error) {
 		q.doneCount++
 		return loadedChunk, nil
 	case <-time.After(chunkTimeout):
-		pendingChunks := ""
 		// Locking is done inside q.Pending
-		pending := q.Pending()
-		for _, item := range pending {
-			pendingChunks = pendingChunks + " " + item.String()
-		}
-		return nil, fmt.Errorf("timed out waiting for chunks %s: %w", pendingChunks, errTimeout)
+		pendingChunks := len(q.Pending())
+		return nil, fmt.Errorf("timed out waiting for %d chunks: %w", pendingChunks, errTimeout)
 	}
 }
 
