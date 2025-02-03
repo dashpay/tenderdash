@@ -104,8 +104,10 @@ func (q *chunkQueue) Enqueue(chunkIDs ...[]byte) {
 
 func (q *chunkQueue) enqueue(chunkID bytes.HexBytes) {
 	q.requestQueue = append(q.requestQueue, chunkID)
-	_, ok := q.items[chunkID.String()]
+	chunk, ok := q.items[chunkID.String()]
 	if ok {
+		// If the chunk is already in the queue, reset its status to initStatus to retry fetching it.
+		chunk.status = initStatus
 		return
 	}
 	q.items[chunkID.String()] = &chunkItem{
