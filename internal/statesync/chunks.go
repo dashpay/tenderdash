@@ -15,11 +15,12 @@ import (
 
 // errDone is returned by chunkQueue.Next() when all chunks have been returned.
 var (
-	errDone        = errors.New("chunk queue has completed")
-	errQueueEmpty  = errors.New("requestQueue is empty")
-	errChunkNil    = errors.New("cannot add nil chunk")
-	errNoChunkItem = errors.New("no chunk item found")
-	errNilSnapshot = errors.New("snapshot is nil")
+	errDone              = errors.New("chunk queue has completed")
+	errQueueEmpty        = errors.New("requestQueue is empty")
+	errChunkNil          = errors.New("cannot add nil chunk")
+	errNoChunkItem       = errors.New("no chunk item found")
+	errNilSnapshot       = errors.New("snapshot is nil")
+	errInvalidChunkSatus = errors.New("unexpected chunk status")
 )
 
 const (
@@ -144,32 +145,47 @@ func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
 	}
 
 	q.mtx.Lock()
-	defer q.mtx.Unlock()
-	if q.snapshot == nil {
-		return false, errNilSnapshot
+	// we need to manage lock manually to securely unlock before sending to applyCh
+	locked := true
+	unlockFn := func() {
+		if locked {
+			q.mtx.Unlock()
+			locked = false
+		}
 	}
-	chunkIDKey := chunk.ID.String()
-	item, ok := q.items[chunkIDKey]
-	if !ok {
-		return false, fmt.Errorf("failed to add the chunk %x, it was never requested", chunk.ID)
-	}
-	if item.status != inProgressStatus && item.status != discardedStatus {
-		return false, nil
-	}
-	err := q.validateChunk(chunk)
+	defer unlockFn()
+
+	item, err := q.getItem(chunk.ID)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("get chunk %x: %w", chunk.ID, err)
 	}
-	item.file = filepath.Join(q.dir, chunkIDKey)
+
+	if item.status != inProgressStatus && item.status != discardedStatus {
+		return false, fmt.Errorf("invalid chunk %x status %d: %w", chunk.ID, item.status, errInvalidChunkSatus)
+	}
+
+	err = q.validateChunk(chunk)
+	if err != nil {
+		return false, fmt.Errorf("validate chunk %x: %w", chunk.ID, err)
+	}
+
+	item.file = filepath.Join(q.dir, chunk.ID.String())
 	err = item.write(data)
 	if err != nil {
 		return false, err
 	}
 	item.sender = chunk.Sender
 	item.status = receivedStatus
+
+	// unlock before sending to applyCh to avoid blocking/deadlock on the applyCh
+	unlockFn()
+
 	q.applyCh <- chunk.ID
 	// Signal any waiters that the chunk has arrived.
+	q.mtx.Lock()
 	item.closeWaitChs(true)
+	q.mtx.Unlock()
+
 	return true, nil
 }
 
@@ -369,6 +385,23 @@ func (q *chunkQueue) DoneChunksCount() int {
 	return q.doneCount
 }
 
+// getItem fetches chunk item from the items map. If the item is not found, it returns an error.
+// The caller must hold the mutex lock.
+func (q *chunkQueue) getItem(chunkID bytes.HexBytes) (*chunkItem, error) {
+	if q.snapshot == nil {
+		return nil, errNilSnapshot
+	}
+	chunkIDKey := chunkID.String()
+	item, ok := q.items[chunkIDKey]
+	if !ok {
+		return nil, fmt.Errorf("chunk %x not found", chunkID)
+	}
+
+	return item, nil
+}
+
+// validateChunk checks if the chunk is expected and valid for the current snapshot
+// The caller must hold the mutex lock.
 func (q *chunkQueue) validateChunk(chunk *chunk) error {
 	if chunk.Height != q.snapshot.Height {
 		return fmt.Errorf("invalid chunk height %v, expected %v",
