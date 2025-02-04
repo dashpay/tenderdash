@@ -53,6 +53,7 @@ packages:
   github.com/dashpay/tenderdash/internal/statesync:
     interfaces:
       StateProvider:
+      ConsensusStateProvider:
   github.com/dashpay/tenderdash/libs/store:
     interfaces:
       Store:
