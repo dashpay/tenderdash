@@ -16,7 +16,6 @@ import (
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
 	dashcore "github.com/dashpay/tenderdash/dash/core"
-	"github.com/dashpay/tenderdash/internal/consensus"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	sm "github.com/dashpay/tenderdash/internal/state"
@@ -136,7 +135,16 @@ type Reactor struct {
 
 	dashCoreClient dashcore.Client
 
-	csState *consensus.State
+	csState ConsensusStateProvider
+}
+
+// ConsensusStateProvider is an interface that allows the state sync reactor to
+// ineract with the consensus state.
+//
+// Implemented by consensus.State
+type ConsensusStateProvider interface {
+	PublishCommitEvent(commit *types.Commit) error
+	GetCurrentHeight() int64
 }
 
 // NewReactor returns a reference to a new state sync reactor, which implements
@@ -159,7 +167,7 @@ func NewReactor(
 	postSyncHook func(context.Context, sm.State) error,
 	needsStateSync bool,
 	client dashcore.Client,
-	csState *consensus.State,
+	csState ConsensusStateProvider,
 ) *Reactor {
 	r := &Reactor{
 		logger:         logger,
@@ -711,7 +719,7 @@ func (r *Reactor) handleSnapshotMessage(ctx context.Context, envelope *p2p.Envel
 			"version", msg.Version)
 
 	default:
-		return fmt.Errorf("received unknown message: %T", msg)
+		return fmt.Errorf("handleSnapshotMessage received unknown message: %T", msg)
 	}
 
 	return nil
@@ -792,7 +800,7 @@ func (r *Reactor) handleChunkMessage(ctx context.Context, envelope *p2p.Envelope
 		}
 
 	default:
-		return fmt.Errorf("received unknown message: %T", msg)
+		return fmt.Errorf("handleChunkMessage received unknown message: %T", msg)
 	}
 
 	return nil
@@ -853,7 +861,7 @@ func (r *Reactor) handleLightBlockMessage(ctx context.Context, envelope *p2p.Env
 		}
 
 	default:
-		return fmt.Errorf("received unknown message: %T", msg)
+		return fmt.Errorf("handleLightBlockMessage received unknown message: %T", msg)
 	}
 
 	return nil
@@ -863,7 +871,7 @@ func (r *Reactor) handleParamsMessage(ctx context.Context, envelope *p2p.Envelop
 	switch msg := envelope.Message.(type) {
 	case *ssproto.ParamsRequest:
 		r.logger.Debug("received consensus params request", "height", msg.Height)
-		cp, err := r.stateStore.LoadConsensusParams(int64(msg.Height))
+		cp, err := r.stateStore.LoadConsensusParams(tmmath.MustConvertInt64(msg.Height))
 		if err != nil {
 			r.logger.Error("failed to fetch requested consensus params",
 				"height", msg.Height,
@@ -901,7 +909,7 @@ func (r *Reactor) handleParamsMessage(ctx context.Context, envelope *p2p.Envelop
 		}
 
 	default:
-		return fmt.Errorf("received unknown message: %T", msg)
+		return fmt.Errorf("handleParamsMessage received unknown message: %T", msg)
 	}
 
 	return nil
@@ -1053,6 +1061,12 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 
 // recentSnapshots fetches the n most recent snapshots from the app
 func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, error) {
+	// if we don't have current state, we don't return any snapshots
+	if r.csState == nil {
+		return []*snapshot{}, nil
+	}
+	currentHeight := r.csState.GetCurrentHeight()
+
 	resp, err := r.conn.ListSnapshots(ctx, &abci.RequestListSnapshots{})
 	if err != nil {
 		return nil, err
@@ -1078,10 +1092,6 @@ func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, e
 			break
 		}
 
-		if r.csState == nil {
-			continue
-		}
-		currentHeight := r.csState.GetRoundState().Height
 		// we only accept snapshots where next block is already finalized, that is we are voting
 		// for `height + 2` or higher, because we need to be able to fetch light block containing
 		// commit for `height` from block store (which is stored in block `height+1`)

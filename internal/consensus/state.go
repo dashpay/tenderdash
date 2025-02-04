@@ -307,6 +307,10 @@ func (cs *State) SetProposedAppVersion(ver uint64) {
 	cs.emitter.Emit(setProposedAppVersionEventName, ver)
 }
 
+func (cs *State) GetCurrentHeight() int64 {
+	return cs.stateDataStore.Get().Height
+}
+
 func (cs *State) updateStateFromStore() error {
 	state, err := cs.stateStore.Load()
 	if err != nil {

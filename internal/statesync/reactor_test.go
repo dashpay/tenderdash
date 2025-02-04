@@ -21,6 +21,7 @@ import (
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
 	dashcore "github.com/dashpay/tenderdash/dash/core"
+
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/proxy"
 	smmocks "github.com/dashpay/tenderdash/internal/state/mocks"
@@ -86,6 +87,7 @@ func setup(
 	t *testing.T,
 	conn *clientmocks.Client,
 	stateProvider *mocks.StateProvider,
+	csState ConsensusStateProvider,
 	chBuf uint,
 ) *reactorTestSuite {
 	t.Helper()
@@ -187,7 +189,7 @@ func setup(
 		nil,   // post-sync-hook
 		false, // run Sync during Start()
 		rts.dashcoreClient,
-		nil,
+		csState,
 	)
 
 	rts.syncer = &syncer{
@@ -224,7 +226,7 @@ func TestReactor_Sync(t *testing.T) {
 	defer cancel()
 
 	const snapshotHeight = 7
-	rts := setup(ctx, t, nil, nil, 100)
+	rts := setup(ctx, t, nil, nil, nil, 100)
 	chain := buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
 	// app accepts any snapshot
 	rts.conn.
@@ -290,7 +292,7 @@ func TestReactor_ChunkRequest_InvalidRequest(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rts := setup(ctx, t, nil, nil, 2)
+	rts := setup(ctx, t, nil, nil, nil, 2)
 
 	rts.chunkInCh <- p2p.Envelope{
 		From:      types.NodeID("aa"),
@@ -350,7 +352,7 @@ func TestReactor_ChunkRequest(t *testing.T) {
 				ChunkId: tc.request.ChunkId,
 			}).Return(&abci.ResponseLoadSnapshotChunk{Chunk: tc.chunk}, nil)
 
-			rts := setup(ctx, t, conn, nil, 2)
+			rts := setup(ctx, t, conn, nil, nil, 2)
 
 			rts.chunkInCh <- p2p.Envelope{
 				From:      types.NodeID("aa"),
@@ -371,7 +373,7 @@ func TestReactor_SnapshotsRequest_InvalidRequest(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rts := setup(ctx, t, nil, nil, 2)
+	rts := setup(ctx, t, nil, nil, nil, 2)
 
 	rts.snapshotInCh <- p2p.Envelope{
 		From:      types.NodeID("aa"),
@@ -390,8 +392,9 @@ func TestReactor_SnapshotsRequest(t *testing.T) {
 	testcases := map[string]struct {
 		snapshots       []*abci.Snapshot
 		expectResponses []*ssproto.SnapshotsResponse
+		currentHeight   int64
 	}{
-		"no snapshots": {nil, []*ssproto.SnapshotsResponse{}},
+		"no snapshots": {nil, []*ssproto.SnapshotsResponse{}, 1},
 		">10 unordered snapshots": {
 			[]*abci.Snapshot{
 				{Height: 1, Version: 2, Hash: []byte{1, 2}, Metadata: []byte{1}},
@@ -419,6 +422,7 @@ func TestReactor_SnapshotsRequest(t *testing.T) {
 				{Height: 1, Version: 4, Hash: []byte{1, 4}, Metadata: []byte{7}},
 				{Height: 1, Version: 3, Hash: []byte{1, 3}, Metadata: []byte{10}},
 			},
+			6,
 		},
 	}
 	ctx, cancel := context.WithCancel(context.Background())
@@ -426,18 +430,21 @@ func TestReactor_SnapshotsRequest(t *testing.T) {
 
 	for name, tc := range testcases {
 		tc := tc
-
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
 
 			// mock ABCI connection to return local snapshots
-			conn := &clientmocks.Client{}
+			conn := clientmocks.NewClient(t)
 			conn.On("ListSnapshots", mock.Anything, &abci.RequestListSnapshots{}).Return(&abci.ResponseListSnapshots{
 				Snapshots: tc.snapshots,
-			}, nil)
+			}, nil).
+				Maybe()
 
-			rts := setup(ctx, t, conn, nil, 100)
+			cp := mocks.NewConsensusStateProvider(t)
+			cp.On("GetCurrentHeight").Return(tc.currentHeight).Maybe()
+
+			rts := setup(ctx, t, conn, nil, cp, 100)
 
 			rts.snapshotInCh <- p2p.Envelope{
 				From:      types.NodeID("aa"),
@@ -446,7 +453,10 @@ func TestReactor_SnapshotsRequest(t *testing.T) {
 			}
 
 			if len(tc.expectResponses) > 0 {
-				retryUntil(ctx, t, func() bool { return len(rts.snapshotOutCh) == len(tc.expectResponses) }, time.Second)
+				retryUntil(ctx, t,
+					func() bool { return len(rts.snapshotOutCh) == len(tc.expectResponses) },
+					time.Second,
+				)
 			}
 
 			responses := make([]*ssproto.SnapshotsResponse, len(tc.expectResponses))
@@ -465,7 +475,7 @@ func TestReactor_LightBlockResponse(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rts := setup(ctx, t, nil, nil, 2)
+	rts := setup(ctx, t, nil, nil, nil, 2)
 
 	var height int64 = 10
 	// generates a random header
@@ -523,7 +533,7 @@ func TestReactor_BlockProviders(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rts := setup(ctx, t, nil, nil, 2)
+	rts := setup(ctx, t, nil, nil, nil, 2)
 	rts.peerUpdateCh <- p2p.PeerUpdate{
 		NodeID: "aa",
 		Status: p2p.PeerStatusUp,
@@ -590,7 +600,7 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	rts := setup(ctx, t, nil, nil, 2)
+	rts := setup(ctx, t, nil, nil, nil, 2)
 	// make syncer non nil else test won't think we are state syncing
 	rts.reactor.syncer = rts.syncer
 	peerA := types.NodeID(strings.Repeat("a", 2*types.NodeIDByteLength))
@@ -691,7 +701,7 @@ func TestReactor_Backfill(t *testing.T) {
 			defer cancel()
 
 			t.Cleanup(leaktest.CheckTimeout(t, 1*time.Minute))
-			rts := setup(ctx, t, nil, nil, 21)
+			rts := setup(ctx, t, nil, nil, nil, 21)
 
 			peers := genPeerIDs(tc.numPeers)
 			for _, peer := range peers {
@@ -762,6 +772,8 @@ func TestReactor_Backfill(t *testing.T) {
 // retryUntil will continue to evaluate fn and will return successfully when true
 // or fail when the timeout is reached.
 func retryUntil(ctx context.Context, t *testing.T, fn func() bool, timeout time.Duration) {
+	t.Helper()
+
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 
