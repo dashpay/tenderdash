@@ -101,10 +101,10 @@ func (suite *ChunkQueueTestSuite) TestChunkQueue() {
 		{chunk: suite.chunks[1], want: true},
 	}
 	require := suite.Require()
-	for _, tc := range testCases {
+	for i, tc := range testCases {
 		added, err := suite.queue.Add(tc.chunk)
-		require.NoError(err)
-		require.Equal(tc.want, added)
+		require.NoError(err, "test case %d", i)
+		require.Equal(tc.want, added, "test case %d", i)
 	}
 
 	// At this point, we should be able to retrieve them all via Next

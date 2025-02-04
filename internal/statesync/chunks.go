@@ -9,18 +9,19 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
+
 	"github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/types"
 )
 
 // errDone is returned by chunkQueue.Next() when all chunks have been returned.
 var (
-	errDone              = errors.New("chunk queue has completed")
-	errQueueEmpty        = errors.New("requestQueue is empty")
-	errChunkNil          = errors.New("cannot add nil chunk")
-	errNoChunkItem       = errors.New("no chunk item found")
-	errNilSnapshot       = errors.New("snapshot is nil")
-	errInvalidChunkSatus = errors.New("unexpected chunk status")
+	errDone        = errors.New("chunk queue has completed")
+	errQueueEmpty  = errors.New("requestQueue is empty")
+	errChunkNil    = errors.New("cannot add nil chunk")
+	errNoChunkItem = errors.New("no chunk item found")
+	errNilSnapshot = errors.New("snapshot is nil")
 )
 
 const (
@@ -144,15 +145,7 @@ func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
 		data = []byte{}
 	}
 
-	q.mtx.Lock()
-	// we need to manage lock manually to securely unlock before sending to applyCh
-	locked := true
-	unlockFn := func() {
-		if locked {
-			q.mtx.Unlock()
-			locked = false
-		}
-	}
+	unlockFn := tmsync.LockGuard(&q.mtx)
 	defer unlockFn()
 
 	item, err := q.getItem(chunk.ID)
@@ -161,7 +154,8 @@ func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
 	}
 
 	if item.status != inProgressStatus && item.status != discardedStatus {
-		return false, fmt.Errorf("invalid chunk %x status %d: %w", chunk.ID, item.status, errInvalidChunkSatus)
+		// chunk either already exists, or we didn't request it yet, so we ignore it
+		return false, nil
 	}
 
 	err = q.validateChunk(chunk)
