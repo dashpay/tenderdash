@@ -5,7 +5,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -473,23 +472,6 @@ func (s *syncer) applyChunks(ctx context.Context, queue *chunkQueue, start time.
 		s.logger.Debug("snapshot chunk applied",
 			"result", resp.Result.String(),
 			"chunkID", chunk.ID.String())
-
-		// TODO: this is for debugging only, remove when not needed
-		pending := queue.Pending()
-		if len(pending) > 0 {
-			// write list of pending chunks, in hex, to /tmp/td_pending_chunks.txt
-			if file, err := os.Create("/tmp/td_pending_chunks.txt"); err == nil {
-				defer file.Close()
-				for _, p := range pending {
-					_, err := file.WriteString(p.String() + "\n")
-					if err != nil {
-						s.logger.Error("failed to write pending chunks to /tmp/td_pending_chunks.txt", "err", err)
-					}
-				}
-			} else {
-				s.logger.Error("failed to create /tmp/td_pending_chunks.txt", "err", err)
-			}
-		}
 
 		switch resp.Result {
 		case abci.ResponseApplySnapshotChunk_ACCEPT:
