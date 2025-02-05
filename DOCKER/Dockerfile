@@ -4,7 +4,7 @@
 # * compile - builds final binaries
 # * image - creates final image of minimal size
 
-ARG ALPINE_VERSION=3.19
+ARG ALPINE_VERSION=3.21
 ARG GOLANG_VERSION=1.23.6
 #################################
 # STAGE 1: install dependencies #
