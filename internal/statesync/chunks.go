@@ -1,6 +1,8 @@
 package statesync
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -64,6 +66,21 @@ type (
 		doneCount int
 	}
 )
+
+// Filename updates `chunkItem.file` with an absolute path to file containing the the chunk and returns it.
+// If the filename is already set, it isn't changed.
+//
+// Returns error if the filename cannot be created.
+//
+// Caller must ensure only one goroutine calls this method at a time, eg. by holding the mutex lock.
+func (c *chunkItem) Filename(parentDir string) (string, error) {
+	var err error
+	if c.file == "" {
+		filename := hex.EncodeToString(sha256.New().Sum(c.chunkID))
+		c.file, err = filepath.Abs(filepath.Join(parentDir, filename))
+	}
+	return c.file, err
+}
 
 // newChunkQueue creates a new chunk requestQueue for a snapshot, using a temp dir for storage.
 // Callers must call Close() when done.
@@ -163,7 +180,12 @@ func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
 		return false, fmt.Errorf("validate chunk %x: %w", chunk.ID, err)
 	}
 
-	item.file = filepath.Join(q.dir, chunk.ID.String())
+	// ensure filename is set on the item
+	_, err = item.Filename(q.dir)
+	if err != nil {
+		return false, fmt.Errorf("failed to get filename for chunk %x: %w", chunk.ID, err)
+	}
+
 	err = item.write(data)
 	if err != nil {
 		return false, err
@@ -330,12 +352,13 @@ func (q *chunkQueue) Retry(chunkID bytes.HexBytes) {
 }
 
 func (q *chunkQueue) retry(chunkID bytes.HexBytes) {
-	item, ok := q.items[chunkID.String()]
+	chunkKey := chunkID.String()
+	item, ok := q.items[chunkKey]
 	if !ok || (item.status != receivedStatus && item.status != doneStatus) {
 		return
 	}
 	q.requestQueue = append(q.requestQueue, chunkID)
-	q.items[chunkID.String()].status = initStatus
+	q.items[chunkKey].status = initStatus
 }
 
 // RetryAll schedules all chunks to be retried, without refetching them.
