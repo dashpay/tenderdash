@@ -76,7 +76,8 @@ type (
 func (c *chunkItem) Filename(parentDir string) (string, error) {
 	var err error
 	if c.file == "" {
-		filename := hex.EncodeToString(sha256.New().Sum(c.chunkID))
+		hash := sha256.Sum256(c.chunkID)
+		filename := hex.EncodeToString(hash[:])
 		c.file, err = filepath.Abs(filepath.Join(parentDir, filename))
 	}
 	return c.file, err
