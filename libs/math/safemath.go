@@ -260,6 +260,8 @@ func SafeMulInt64(a, b int64) (int64, bool) {
 }
 
 // Max returns the maximum value for a type T.
+//
+// The function panics if the type is not supported.
 func Max[T Integer]() uint64 {
 	var max T
 	switch any(max).(type) {
