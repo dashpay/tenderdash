@@ -1,7 +1,7 @@
 # fuzz
 
 Fuzzing for various packages in Tendermint using the fuzzing infrastructure included in
-Go 1.23.2.
+Go 1.23.6.
 
 Inputs:
 
