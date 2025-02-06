@@ -125,7 +125,8 @@ func (s *syncer) AddSnapshot(peerID types.NodeID, snapshot *snapshot) (bool, err
 			"version", snapshot.Version,
 			"hash", snapshot.Hash.ShortString())
 	} else {
-		s.logger.Debug("snapshot not added", "height", snapshot.Height, "hash", snapshot.Hash)
+		s.logger.Debug("snapshot not added, possibly duplicate or invalid",
+			"height", snapshot.Height, "hash", snapshot.Hash)
 	}
 	return added, nil
 }
@@ -173,6 +174,7 @@ func (s *syncer) SyncAny(
 	)
 
 	for {
+		// we loop one more time than `retries` to check if snapshots requested in previous iterations are available
 		if retries > 0 && snapshot == nil && iters > retries {
 			return sm.State{}, nil, errNoSnapshots
 		}
@@ -654,7 +656,7 @@ func (s *syncer) verifyApp(ctx context.Context, snapshot *snapshot, appVersion u
 		return errVerifyFailed
 	}
 
-	if uint64(resp.LastBlockHeight) != snapshot.Height {
+	if tmmath.MustConvertUint64(resp.LastBlockHeight) != snapshot.Height {
 		s.logger.Error(
 			"ABCI app reported unexpected last block height",
 			"expected", snapshot.Height,

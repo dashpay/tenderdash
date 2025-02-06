@@ -44,6 +44,8 @@ type StateProvider interface {
 	LightBlock(ctx context.Context, height uint64) (*types.LightBlock, error)
 }
 
+// stateProviderRPC is a state provider using RPC to communicate with light clients.
+// Deprecated, will be removed in future.
 type stateProviderRPC struct {
 	sync.Mutex    // light.Client is not concurrency-safe
 	lc            *light.Client
@@ -53,6 +55,7 @@ type stateProviderRPC struct {
 }
 
 // NewRPCStateProvider creates a new StateProvider using a light client and RPC clients.
+// Deprecated, will be removed in future.
 func NewRPCStateProvider(
 	ctx context.Context,
 	chainID string,

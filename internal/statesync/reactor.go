@@ -69,7 +69,7 @@ const (
 	// backfillSleepTime uses to sleep if no connected peers to fetch light blocks
 	backfillSleepTime = 1 * time.Second
 
-	// minPeers is the minimum number of peers required to start a state sync; TODO: change to >= 2, or make configurable
+	// minPeers is the minimum number of peers required to start a state sync
 	minPeers = 2
 )
 
@@ -139,7 +139,7 @@ type Reactor struct {
 }
 
 // ConsensusStateProvider is an interface that allows the state sync reactor to
-// ineract with the consensus state.
+// ineract with the consensus state. It is defined to improve testability.
 //
 // Implemented by consensus.State
 type ConsensusStateProvider interface {
@@ -248,7 +248,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 
 	r.initStateProvider = func(ctx context.Context, chainID string, initialHeight int64) error {
 		spLogger := r.logger.With("module", "stateprovider")
-		spLogger.Info("initializing state provider", "useP2P", r.cfg.UseP2P)
+		spLogger.Debug("initializing state sync state provider", "useP2P", r.cfg.UseP2P)
 
 		if r.cfg.UseP2P {
 			if err := r.waitForEnoughPeers(ctx, minPeers); err != nil {

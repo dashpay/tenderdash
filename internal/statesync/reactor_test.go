@@ -429,7 +429,6 @@ func TestReactor_SnapshotsRequest(t *testing.T) {
 	defer cancel()
 
 	for name, tc := range testcases {
-		tc := tc
 		t.Run(name, func(t *testing.T) {
 			ctx, cancel := context.WithCancel(ctx)
 			defer cancel()
@@ -438,13 +437,12 @@ func TestReactor_SnapshotsRequest(t *testing.T) {
 			conn := clientmocks.NewClient(t)
 			conn.On("ListSnapshots", mock.Anything, &abci.RequestListSnapshots{}).Return(&abci.ResponseListSnapshots{
 				Snapshots: tc.snapshots,
-			}, nil).
-				Maybe()
+			}, nil).Maybe()
 
-			cp := mocks.NewConsensusStateProvider(t)
-			cp.On("GetCurrentHeight").Return(tc.currentHeight).Maybe()
+			consensusStateProvider := mocks.NewConsensusStateProvider(t)
+			consensusStateProvider.On("GetCurrentHeight").Return(tc.currentHeight).Maybe()
 
-			rts := setup(ctx, t, conn, nil, cp, 100)
+			rts := setup(ctx, t, conn, nil, consensusStateProvider, 100)
 
 			rts.snapshotInCh <- p2p.Envelope{
 				From:      types.NodeID("aa"),
