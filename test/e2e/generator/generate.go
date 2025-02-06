@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	e2e "github.com/dashpay/tenderdash/test/e2e/pkg"
 	"github.com/dashpay/tenderdash/types"
 )
@@ -51,7 +52,6 @@ var (
 	nodeStateSyncs = weightedChoice{
 		e2e.StateSyncDisabled: 10,
 		e2e.StateSyncP2P:      45,
-		e2e.StateSyncRPC:      45,
 	}
 	nodePersistIntervals  = uniformChoice{0, 1, 5}
 	nodeSnapshotIntervals = uniformChoice{0, 5}
@@ -126,8 +126,8 @@ func generateTestnet(r *rand.Rand, opt map[string]interface{}) (e2e.Manifest, er
 		TxSize:           opt["txSize"].(int),
 
 		// Tenderdash specific settings
-		GenesisCoreChainLockedHeight: uint32(opt["initialCoreChainLockedHeight"].(int)),
-		InitAppCoreChainLockedHeight: uint32(opt["initAppCoreChainLockedHeight"].(int)),
+		GenesisCoreChainLockedHeight: tmmath.MustConvertUint32(opt["initialCoreChainLockedHeight"].(int)),
+		InitAppCoreChainLockedHeight: tmmath.MustConvertUint32(opt["initAppCoreChainLockedHeight"].(int)),
 		ChainLockUpdates:             map[string]int64{},
 	}
 
@@ -322,11 +322,8 @@ func generateNode(
 	if startAt > 0 && startAt != manifest.InitialHeight {
 		node.StateSync = nodeStateSyncs.Choose(r)
 		if manifest.InitialHeight-startAt <= 5 && node.StateSync == e2e.StateSyncDisabled {
-			// avoid needing to blocsync more than five total blocks.
-			node.StateSync = uniformSetChoice([]string{
-				e2e.StateSyncP2P,
-				e2e.StateSyncRPC,
-			}).Choose(r)[0]
+			// avoid needing to blocksync more than five total blocks.
+			node.StateSync = e2e.StateSyncP2P
 		}
 	}
 

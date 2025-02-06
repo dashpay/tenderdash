@@ -59,7 +59,6 @@ const (
 	EvidenceAgeTime   time.Duration = 500 * time.Millisecond
 
 	StateSyncP2P      = "p2p"
-	StateSyncRPC      = "rpc"
 	StateSyncDisabled = ""
 )
 
@@ -521,7 +520,7 @@ func (n Node) Validate(testnet Testnet) error {
 		}
 	}
 	switch n.StateSync {
-	case StateSyncDisabled, StateSyncP2P, StateSyncRPC:
+	case StateSyncDisabled, StateSyncP2P:
 	default:
 		return fmt.Errorf("invalid state sync setting %q", n.StateSync)
 	}

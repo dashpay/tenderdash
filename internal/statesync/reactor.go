@@ -248,31 +248,22 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 
 	r.initStateProvider = func(ctx context.Context, chainID string, initialHeight int64) error {
 		spLogger := r.logger.With("module", "stateprovider")
-		spLogger.Debug("initializing state sync state provider", "useP2P", r.cfg.UseP2P)
+		spLogger.Debug("initializing state sync state provider")
 
-		if r.cfg.UseP2P {
-			if err := r.waitForEnoughPeers(ctx, minPeers); err != nil {
-				return err
-			}
-
-			peers := r.peers.All()
-			providers := make([]provider.Provider, len(peers))
-			for idx, p := range peers {
-				providers[idx] = NewBlockProvider(p, chainID, r.dispatcher)
-			}
-
-			stateProvider, err := NewP2PStateProvider(ctx, chainID, initialHeight,
-				providers, paramsCh, r.logger.With("module", "stateprovider"), r.dashCoreClient)
-			if err != nil {
-				return fmt.Errorf("failed to initialize P2P state provider: %w", err)
-			}
-			r.setStateProvider(stateProvider)
-			return nil
+		if err := r.waitForEnoughPeers(ctx, minPeers); err != nil {
+			return err
 		}
 
-		stateProvider, err := NewRPCStateProvider(ctx, chainID, initialHeight, r.cfg.RPCServers, spLogger, r.dashCoreClient)
+		peers := r.peers.All()
+		providers := make([]provider.Provider, len(peers))
+		for idx, p := range peers {
+			providers[idx] = NewBlockProvider(p, chainID, r.dispatcher)
+		}
+
+		stateProvider, err := NewP2PStateProvider(ctx, chainID, initialHeight,
+			providers, paramsCh, r.logger.With("module", "stateprovider"), r.dashCoreClient)
 		if err != nil {
-			return fmt.Errorf("failed to initialize RPC state provider: %w", err)
+			return fmt.Errorf("failed to initialize P2P state provider: %w", err)
 		}
 		r.setStateProvider(stateProvider)
 		return nil

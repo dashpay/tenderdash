@@ -486,15 +486,6 @@ timeout-check-tx = "{{ .Mempool.TimeoutCheckTx }}"
 # starting from the height of the snapshot.
 enable = {{ .StateSync.Enable }}
 
-# State sync uses light client verification to verify state. This can be done either through the
-# P2P layer or RPC layer. Set this to true to use the P2P layer. If false (default), RPC layer
-# will be used.
-use-p2p = {{ .StateSync.UseP2P }}
-
-# If using RPC, at least two addresses need to be provided. They should be compatible with net.Dial,
-# for example: "host.example.com:2125"
-rpc-servers = "{{ StringsJoin .StateSync.RPCServers "," }}"
-
 # Time to spend discovering snapshots before initiating a restore.
 discovery-time = "{{ .StateSync.DiscoveryTime }}"
 

@@ -991,15 +991,6 @@ type StateSyncConfig struct {
 	// the height of the snapshot.
 	Enable bool `mapstructure:"enable"`
 
-	// State sync uses light client verification to verify state. This can be done either
-	// through the P2P layer or the RPC layer. Set this to true to use the P2P layer. If
-	// false (default), the RPC layer will be used.
-	UseP2P bool `mapstructure:"use-p2p"`
-
-	// If using RPC, at least two addresses need to be provided. They should be compatible
-	// with net.Dial, for example: "host.example.com:2125".
-	RPCServers []string `mapstructure:"rpc-servers"`
-
 	// Time to spend discovering snapshots before initiating a restore.
 	DiscoveryTime time.Duration `mapstructure:"discovery-time"`
 
@@ -1042,20 +1033,6 @@ func TestStateSyncConfig() *StateSyncConfig {
 func (cfg *StateSyncConfig) ValidateBasic() error {
 	if !cfg.Enable {
 		return nil
-	}
-
-	// If we're not using the P2P stack then we need to validate the
-	// RPCServers
-	if !cfg.UseP2P {
-		if len(cfg.RPCServers) < 2 {
-			return errors.New("at least two rpc-servers must be specified")
-		}
-
-		for _, server := range cfg.RPCServers {
-			if server == "" {
-				return errors.New("found empty rpc-servers entry")
-			}
-		}
 	}
 
 	if cfg.DiscoveryTime != 0 && cfg.DiscoveryTime < 5*time.Second {

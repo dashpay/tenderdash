@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"strings"
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
@@ -19,11 +18,8 @@ import (
 	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/light"
 	lightprovider "github.com/dashpay/tenderdash/light/provider"
-	lighthttp "github.com/dashpay/tenderdash/light/provider/http"
-	lightrpc "github.com/dashpay/tenderdash/light/rpc"
 	lightdb "github.com/dashpay/tenderdash/light/store/db"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
-	rpchttp "github.com/dashpay/tenderdash/rpc/client/http"
 	"github.com/dashpay/tenderdash/types"
 	"github.com/dashpay/tenderdash/version"
 )
@@ -42,166 +38,6 @@ type StateProvider interface {
 	State(ctx context.Context, height uint64) (sm.State, error)
 	// LightBlock returns light block at the given height.
 	LightBlock(ctx context.Context, height uint64) (*types.LightBlock, error)
-}
-
-// stateProviderRPC is a state provider using RPC to communicate with light clients.
-// Deprecated, will be removed in future.
-type stateProviderRPC struct {
-	sync.Mutex    // light.Client is not concurrency-safe
-	lc            *light.Client
-	initialHeight int64
-	providers     map[lightprovider.Provider]string
-	logger        log.Logger
-}
-
-// NewRPCStateProvider creates a new StateProvider using a light client and RPC clients.
-// Deprecated, will be removed in future.
-func NewRPCStateProvider(
-	ctx context.Context,
-	chainID string,
-	initialHeight int64,
-	servers []string,
-	logger log.Logger,
-	dashCoreClient dashcore.Client,
-) (StateProvider, error) {
-	if len(servers) < 2 {
-		return nil, fmt.Errorf("at least 2 RPC servers are required, got %d", len(servers))
-	}
-
-	providers := make([]lightprovider.Provider, 0, len(servers))
-	providerRemotes := make(map[lightprovider.Provider]string)
-	for _, server := range servers {
-		client, err := rpcClient(server)
-		if err != nil {
-			return nil, fmt.Errorf("failed to set up RPC client: %w", err)
-		}
-		provider := lighthttp.NewWithClient(chainID, client)
-		providers = append(providers, provider)
-		// We store the RPC addresses keyed by provider, so we can find the address of the primary
-		// provider used by the light client and use it to fetch consensus parameters.
-		providerRemotes[provider] = server
-	}
-	lc, err := light.NewClient(ctx, chainID, providers[0], providers[1:],
-		lightdb.New(dbm.NewMemDB()), dashCoreClient, light.Logger(logger))
-	if err != nil {
-		return nil, err
-	}
-	return &stateProviderRPC{
-		logger:        logger,
-		lc:            lc,
-		initialHeight: initialHeight,
-		providers:     providerRemotes,
-	}, nil
-}
-
-func (s *stateProviderRPC) verifyLightBlockAtHeight(ctx context.Context, height uint64, ts time.Time) (*types.LightBlock, error) {
-	ctx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	return s.lc.VerifyLightBlockAtHeight(ctx, int64(height), ts)
-}
-
-// AppHash implements part of StateProvider. It calls the application to verify the
-// light blocks at heights h+1 and h+2 and, if verification succeeds, reports the app
-// hash for the block at height h+1 which correlates to the state at height h.
-func (s *stateProviderRPC) AppHash(ctx context.Context, height uint64) (tmbytes.HexBytes, error) {
-	s.Lock()
-	defer s.Unlock()
-
-	header, err := s.verifyLightBlockAtHeight(ctx, height, time.Now())
-	if err != nil {
-		return nil, err
-	}
-
-	return header.AppHash, nil
-}
-
-// Commit implements StateProvider.
-func (s *stateProviderRPC) Commit(ctx context.Context, height uint64) (*types.Commit, error) {
-	s.Lock()
-	defer s.Unlock()
-	header, err := s.verifyLightBlockAtHeight(ctx, height, time.Now())
-	if err != nil {
-		return nil, err
-	}
-	return header.Commit, nil
-}
-
-// LightBlock implements StateProvider.
-func (s *stateProviderRPC) LightBlock(ctx context.Context, height uint64) (*types.LightBlock, error) {
-	s.Lock()
-	defer s.Unlock()
-	return s.verifyLightBlockAtHeight(ctx, height, time.Now())
-}
-
-// State implements StateProvider.
-func (s *stateProviderRPC) State(ctx context.Context, height uint64) (sm.State, error) {
-	s.Lock()
-	defer s.Unlock()
-
-	state := sm.State{
-		ChainID:       s.lc.ChainID(),
-		InitialHeight: s.initialHeight,
-	}
-	if state.InitialHeight == 0 {
-		state.InitialHeight = 1
-	}
-
-	// The snapshot height maps onto the state heights as follows:
-	//
-	// height: last block, i.e. the snapshotted height
-	// height+1: current block, i.e. the first block we'll process after the snapshot
-	// height+2: next block, i.e. the second block after the snapshot
-	lastLightBlock, err := s.verifyLightBlockAtHeight(ctx, height, time.Now())
-	if err != nil {
-		return sm.State{}, err
-	}
-	currentLightBlock, err := s.verifyLightBlockAtHeight(ctx, height+1, time.Now())
-	if err != nil {
-		return sm.State{}, err
-	}
-
-	state.Version = sm.Version{
-		Consensus: currentLightBlock.Version,
-		Software:  version.TMCoreSemVer,
-	}
-	state.LastBlockHeight = lastLightBlock.Height
-	state.LastBlockRound = lastLightBlock.Commit.Round
-	state.LastBlockTime = lastLightBlock.Time
-	state.LastBlockID = lastLightBlock.Commit.BlockID
-	state.LastCoreChainLockedBlockHeight = lastLightBlock.Header.CoreChainLockedHeight
-	state.LastAppHash = currentLightBlock.AppHash
-	state.LastResultsHash = currentLightBlock.ResultsHash
-	state.LastValidators = lastLightBlock.ValidatorSet
-	state.Validators = currentLightBlock.ValidatorSet
-	state.LastHeightValidatorsChanged = currentLightBlock.Height
-
-	// We'll also need to fetch consensus params via RPC, using light client verification.
-	primaryURL, ok := s.providers[s.lc.Primary()]
-	if !ok || primaryURL == "" {
-		return sm.State{}, fmt.Errorf("could not find address for primary light client provider")
-	}
-	primaryRPC, err := rpcClient(primaryURL)
-	if err != nil {
-		return sm.State{}, fmt.Errorf("unable to create RPC client: %w", err)
-	}
-	rpcclient := lightrpc.NewClient(s.logger, primaryRPC, s.lc)
-	result, err := rpcclient.ConsensusParams(ctx, &currentLightBlock.Height)
-	if err != nil {
-		return sm.State{}, fmt.Errorf("unable to fetch consensus parameters for height %v: %w",
-			currentLightBlock.Height, err)
-	}
-	state.ConsensusParams = result.ConsensusParams
-	state.LastHeightConsensusParamsChanged = currentLightBlock.Height
-
-	return state, nil
-}
-
-// rpcClient sets up a new RPC client
-func rpcClient(server string) (*rpchttp.HTTP, error) {
-	if !strings.Contains(server, "://") {
-		server = "http://" + server
-	}
-	return rpchttp.New(server)
 }
 
 type stateProviderP2P struct {

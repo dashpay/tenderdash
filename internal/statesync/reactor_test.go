@@ -279,8 +279,6 @@ func TestReactor_Sync(t *testing.T) {
 
 	go handleConsensusParamsRequest(ctx, t, rts.paramsOutCh, rts.paramsInCh, closeCh)
 
-	// update the config to use the p2p provider
-	rts.reactor.cfg.UseP2P = true
 	rts.reactor.cfg.DiscoveryTime = 1 * time.Second
 
 	// Run state sync
@@ -618,8 +616,6 @@ func TestReactor_StateProviderP2P(t *testing.T) {
 	chain := buildLightBlockChain(ctx, t, 1, 10, time.Now(), rts.privVal)
 	go handleLightBlockRequests(ctx, t, chain, rts.blockOutCh, rts.blockInCh, closeCh, 0, 0)
 	go handleConsensusParamsRequest(ctx, t, rts.paramsOutCh, rts.paramsInCh, closeCh)
-
-	rts.reactor.cfg.UseP2P = true
 
 	for _, p := range []types.NodeID{peerA, peerB} {
 		if !rts.reactor.peers.Contains(p) {
