@@ -50,7 +50,7 @@ jobs:
         if: env.GIT_DIFF
         name: Install BLS library
 
-      - uses: golangci/golangci-lint-action@v6.2.0
+      - uses: golangci/golangci-lint-action@v6.3.2
         if: env.GIT_DIFF
         with:
           # Required: the version of golangci-lint is required and
