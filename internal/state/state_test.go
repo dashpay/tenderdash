@@ -354,12 +354,14 @@ func TestEmptyValidatorUpdates(t *testing.T) {
 	tearDown, _, state := setupTestCase(t)
 	defer tearDown(t)
 
+	originalValidatorSet, _ := types.RandValidatorSet(2)
+	state.Validators = originalValidatorSet
+
 	firstNode := state.Validators.GetByIndex(0)
 	require.NotZero(t, firstNode.ProTxHash)
 	ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
 
-	newPrivKey := bls12381.GenPrivKeyFromSecret([]byte("test"))
-	newPubKey := newPrivKey.PubKey()
+	newPubKey := originalValidatorSet.ThresholdPublicKey
 	newQuorumHash := crypto.RandQuorumHash()
 
 	expectValidators := types.ValidatorListString(state.Validators.Validators)

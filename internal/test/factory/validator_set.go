@@ -44,5 +44,5 @@ func MockValidatorSet() (*types.ValidatorSet, []types.PrivValidator) {
 			false,
 		)
 	}
-	return types.NewValidatorSet(valz, thPubKey, btcjson.LLMQType_5_60, quorumHash, true), privVals
+	return types.NewValidatorSet(valz, thPubKey, btcjson.LLMQType_5_60, quorumHash, true, nil), privVals
 }

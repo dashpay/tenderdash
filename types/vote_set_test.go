@@ -640,7 +640,7 @@ func randVoteSetWithLLMQType(
 
 	sort.Sort(PrivValidatorsByProTxHash(privValidators))
 
-	valSet := NewValidatorSet(valz, ld.ThresholdPubKey, llmqType, quorumHash, true)
+	valSet := NewValidatorSet(valz, ld.ThresholdPubKey, llmqType, quorumHash, true, nil)
 	voteSet := NewVoteSet("test_chain_id", height, round, signedMsgType, valSet)
 
 	return voteSet, valSet, privValidators

@@ -24,7 +24,7 @@ import (
 
 func TestValidatorSetBasic(t *testing.T) {
 	// empty or nil validator lists are allowed,
-	vset := NewValidatorSet([]*Validator{}, nil, btcjson.LLMQType_5_60, nil, true)
+	vset := NewValidatorSet([]*Validator{}, nil, btcjson.LLMQType_5_60, nil, true, nil)
 
 	assert.EqualValues(t, vset, vset.Copy())
 	assert.False(t, vset.HasProTxHash([]byte("some val")))
@@ -233,7 +233,7 @@ func TestCopy(t *testing.T) {
 
 func BenchmarkValidatorSetCopy(b *testing.B) {
 	b.StopTimer()
-	vset := NewValidatorSet([]*Validator{}, nil, btcjson.LLMQType_5_60, nil, true)
+	vset := NewValidatorSet([]*Validator{}, nil, btcjson.LLMQType_5_60, nil, true, nil)
 	for i := 0; i < 1000; i++ {
 		privKey := bls12381.GenPrivKey()
 		pubKey := privKey.PubKey()
@@ -279,7 +279,7 @@ func randValidatorInQuorum(ctx context.Context, t *testing.T, quorumHash crypto.
 func TestEmptySet(t *testing.T) {
 
 	var valList []*Validator
-	valSet := NewValidatorSet(valList, bls12381.PubKey{}, btcjson.LLMQType_5_60, crypto.QuorumHash{}, true)
+	valSet := NewValidatorSet(valList, bls12381.PubKey{}, btcjson.LLMQType_5_60, crypto.QuorumHash{}, true, nil)
 
 	// Add to empty set
 	proTxHashes := []crypto.ProTxHash{crypto.Checksum([]byte("v1")), crypto.Checksum([]byte("v2"))}
@@ -310,14 +310,18 @@ func TestUpdatesForNewValidatorSet(t *testing.T) {
 	v112 := NewTestValidatorGeneratedFromProTxHash(crypto.Checksum([]byte("v1")))
 	v113 := NewTestValidatorGeneratedFromProTxHash(crypto.Checksum([]byte("v1")))
 	valList := []*Validator{v111, v112, v113}
-	assert.Panics(t, func() { NewValidatorSet(valList, bls12381.PubKey{}, btcjson.LLMQType_5_60, crypto.QuorumHash{}, true) })
+	assert.Panics(t, func() {
+		NewValidatorSet(valList, bls12381.PubKey{}, btcjson.LLMQType_5_60, crypto.QuorumHash{}, true, nil)
+	})
 
 	// Verify set including validator with voting power 0 cannot be created
 	v1 := NewTestRemoveValidatorGeneratedFromProTxHash(crypto.Checksum([]byte("v1")))
 	v2 := NewTestValidatorGeneratedFromProTxHash(crypto.Checksum([]byte("v2")))
 	v3 := NewTestValidatorGeneratedFromProTxHash(crypto.Checksum([]byte("v3")))
 	valList = []*Validator{v1, v2, v3}
-	assert.Panics(t, func() { NewValidatorSet(valList, bls12381.PubKey{}, btcjson.LLMQType_5_60, crypto.QuorumHash{}, true) })
+	assert.Panics(t, func() {
+		NewValidatorSet(valList, bls12381.PubKey{}, btcjson.LLMQType_5_60, crypto.QuorumHash{}, true, nil)
+	})
 
 	// Verify set including validator with negative voting power cannot be created
 	v1 = NewTestValidatorGeneratedFromProTxHash(crypto.Checksum([]byte("v1")))
@@ -327,7 +331,9 @@ func TestUpdatesForNewValidatorSet(t *testing.T) {
 	}
 	v3 = NewTestValidatorGeneratedFromProTxHash(crypto.Checksum([]byte("v3")))
 	valList = []*Validator{v1, v2, v3}
-	assert.Panics(t, func() { NewValidatorSet(valList, bls12381.PubKey{}, btcjson.LLMQType_5_60, crypto.QuorumHash{}, true) })
+	assert.Panics(t, func() {
+		NewValidatorSet(valList, bls12381.PubKey{}, btcjson.LLMQType_5_60, crypto.QuorumHash{}, true, nil)
+	})
 
 }
 

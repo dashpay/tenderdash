@@ -64,6 +64,7 @@ type ValidatorSet struct {
 	ThresholdPublicKey crypto.PubKey     `json:"threshold_public_key"`
 	QuorumHash         crypto.QuorumHash `json:"quorum_hash"`
 	QuorumType         btcjson.LLMQType  `json:"quorum_type"`
+	Params             ValidatorParams   `json:"validator_consensus_params"`
 	HasPublicKeys      bool              `json:"has_public_keys"`
 }
 
@@ -78,11 +79,14 @@ type ValidatorSet struct {
 // MaxVotesCount - commits by a validator set larger than this will fail
 // validation.
 func NewValidatorSet(valz []*Validator, newThresholdPublicKey crypto.PubKey, quorumType btcjson.LLMQType,
-	quorumHash crypto.QuorumHash, hasPublicKeys bool) *ValidatorSet {
+	quorumHash crypto.QuorumHash, hasPublicKeys bool, validatorParams *ValidatorParams) *ValidatorSet {
 	vals := &ValidatorSet{
 		QuorumHash:    quorumHash,
 		QuorumType:    quorumType,
 		HasPublicKeys: hasPublicKeys,
+	}
+	if validatorParams != nil {
+		vals.Params = *validatorParams
 	}
 	err := vals.updateWithChangeSet(valz, false, newThresholdPublicKey, quorumHash)
 	if err != nil {
@@ -99,6 +103,7 @@ func NewValidatorSetCheckPublicKeys(
 	newThresholdPublicKey crypto.PubKey,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
+	params *ValidatorParams,
 ) *ValidatorSet {
 	hasPublicKeys := true
 	for _, val := range valz {
@@ -106,12 +111,12 @@ func NewValidatorSetCheckPublicKeys(
 			hasPublicKeys = false
 		}
 	}
-	return NewValidatorSet(valz, newThresholdPublicKey, quorumType, quorumHash, hasPublicKeys)
+	return NewValidatorSet(valz, newThresholdPublicKey, quorumType, quorumHash, hasPublicKeys, params)
 }
 
 // NewEmptyValidatorSet initializes a ValidatorSet with no validators
 func NewEmptyValidatorSet() *ValidatorSet {
-	return NewValidatorSet(nil, nil, 0, nil, false)
+	return NewValidatorSet(nil, nil, 0, nil, false, nil)
 }
 
 func (vals *ValidatorSet) ValidateBasic() error {
@@ -150,6 +155,29 @@ func (vals *ValidatorSet) ValidateBasic() error {
 
 	if err := vals.Proposer().ValidateBasic(); err != nil {
 		return fmt.Errorf("proposer failed validate basic, error: %w", err)
+	}
+
+	if len(vals.Params.PubKeyTypes) != 0 {
+		for _, validator := range vals.Validators {
+			if !vals.Params.IsValidPubkeyType(validator.PubKey.Type()) {
+				return fmt.Errorf(
+					"validator %s is using pubkey %s, which is unsupported for consensus - expected %v",
+					validator.String(),
+					validator.PubKey.Type(),
+					vals.Params.PubKeyTypes,
+				)
+			}
+		}
+	}
+
+	if vals.Params.VotingPowerThreshold > 0 && vals.QuorumTypeMemberCount() > 3 {
+		power := vals.QuorumVotingPower()
+		if power < 0 {
+			return fmt.Errorf("quorum voting power %d is negative", power)
+		}
+		if uint64(power) < vals.Params.VotingPowerThreshold*2/3+1 {
+			return fmt.Errorf("quorum voting power %d is less than threshold %d", power, vals.Params.VotingPowerThreshold)
+		}
 	}
 
 	return nil

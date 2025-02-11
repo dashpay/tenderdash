@@ -69,7 +69,8 @@ type EvidenceParams struct {
 // ValidatorParams restrict the public key types validators can use.
 // NOTE: uses ABCI pubkey naming, not Amino names.
 type ValidatorParams struct {
-	PubKeyTypes []string `json:"pub_key_types"`
+	PubKeyTypes          []string `json:"pub_key_types"`
+	VotingPowerThreshold uint64   `json:"threshold"`
 }
 
 type VersionParams struct {
@@ -141,7 +142,8 @@ func DefaultEvidenceParams() EvidenceParams {
 // only bls12381 pubkeys.
 func DefaultValidatorParams() ValidatorParams {
 	return ValidatorParams{
-		PubKeyTypes: []string{ABCIPubKeyTypeBLS12381},
+		PubKeyTypes:          []string{ABCIPubKeyTypeBLS12381},
+		VotingPowerThreshold: 0,
 	}
 }
 
@@ -237,6 +239,33 @@ func (val *ValidatorParams) IsValidPubkeyType(pubkeyType string) bool {
 		}
 	}
 	return false
+}
+
+func ValidatorParamsFromProto(pbValParams *tmproto.ValidatorParams) ValidatorParams {
+	if pbValParams != nil {
+		return ValidatorParams{
+			// Copy Validator.PubkeyTypes, and set result's value to the copy.
+			// This avoids having to initialize the slice to 0 values, and then write to it again.
+			PubKeyTypes:          append([]string{}, pbValParams.PubKeyTypes...),
+			VotingPowerThreshold: pbValParams.GetVotingPowerThreshold(),
+		}
+	}
+
+	return ValidatorParams{
+		PubKeyTypes:          []string{},
+		VotingPowerThreshold: 0,
+	}
+}
+
+// GetVotingPowerThreshold returns the voting power threshold for the validator set.
+// For nil ValidatorParams, it returns 0.
+//
+// Value of 0 means that the threshold is not set.
+func (val *ValidatorParams) GetVotingPowerThreshold() uint64 {
+	if val != nil {
+		return val.VotingPowerThreshold
+	}
+	return 0
 }
 
 func (params *ConsensusParams) Complete() {
@@ -392,9 +421,7 @@ func (params ConsensusParams) UpdateConsensusParams(params2 *tmproto.ConsensusPa
 		res.Evidence.MaxBytes = params2.Evidence.MaxBytes
 	}
 	if params2.Validator != nil {
-		// Copy params2.Validator.PubkeyTypes, and set result's value to the copy.
-		// This avoids having to initialize the slice to 0 values, and then write to it again.
-		res.Validator.PubKeyTypes = append([]string{}, params2.Validator.PubKeyTypes...)
+		res.Validator = ValidatorParamsFromProto(params2.Validator)
 	}
 	if params2.Version != nil {
 		res.Version.AppVersion = params2.Version.AppVersion
@@ -441,6 +468,9 @@ func (params *ConsensusParams) ToProto() tmproto.ConsensusParams {
 		},
 		Validator: &tmproto.ValidatorParams{
 			PubKeyTypes: params.Validator.PubKeyTypes,
+			XVotingPowerThreshold: &tmproto.ValidatorParams_VotingPowerThreshold{
+				VotingPowerThreshold: params.Validator.VotingPowerThreshold,
+			},
 		},
 		Version: &tmproto.VersionParams{
 			AppVersion:       params.Version.AppVersion,
@@ -483,7 +513,8 @@ func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams 
 
 	if pbParams.Validator != nil {
 		c.Validator = ValidatorParams{
-			PubKeyTypes: pbParams.Validator.PubKeyTypes,
+			PubKeyTypes:          pbParams.Validator.PubKeyTypes,
+			VotingPowerThreshold: pbParams.Validator.GetVotingPowerThreshold(),
 		}
 	}
 

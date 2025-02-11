@@ -165,7 +165,8 @@ func TestDuplicateVoteEvidenceValidation(t *testing.T) {
 			thresholdPublicKey, err := val.GetThresholdPublicKey(context.Background(), quorumHash)
 			assert.NoError(t, err)
 			valSet := NewValidatorSet(
-				[]*Validator{val.ExtractIntoValidator(context.Background(), quorumHash)}, thresholdPublicKey, quorumType, quorumHash, true)
+				[]*Validator{val.ExtractIntoValidator(context.Background(), quorumHash)},
+				thresholdPublicKey, quorumType, quorumHash, true, nil)
 			ev, err := NewDuplicateVoteEvidence(vote1, vote2, defaultVoteTime, valSet)
 			require.NoError(t, err)
 			tc.malleateEvidence(ev)

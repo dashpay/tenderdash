@@ -1282,6 +1282,7 @@ func TestHandshakeUpdatesValidators(t *testing.T) {
 		btcjson.LLMQType_5_60,
 		randQuorumHash,
 		true,
+		nil,
 	)
 	abciValidatorSetUpdates := types.TM2PB.ValidatorUpdates(vals)
 	app := &initChainApp{vals: &abciValidatorSetUpdates}

@@ -238,7 +238,7 @@ func (p *http) validatorSet(ctx context.Context, height *int64, proposer types.P
 			break
 		}
 	}
-	valSet := types.NewValidatorSet(vals, thresholdPubKey, quorumType, quorumHash, false)
+	valSet := types.NewValidatorSet(vals, thresholdPubKey, quorumType, quorumHash, false, nil)
 
 	if valSet == nil || valSet.IsNilOrEmpty() {
 		return nil, provider.ErrBadLightBlock{Reason: fmt.Errorf("retrieved nil or empty validator set")}
