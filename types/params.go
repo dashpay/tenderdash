@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"time"
 
@@ -261,9 +262,14 @@ func ValidatorParamsFromProto(pbValParams *tmproto.ValidatorParams) ValidatorPar
 // For nil ValidatorParams, it returns 0.
 //
 // Value of 0 means that the threshold is not set.
-func (val *ValidatorParams) GetVotingPowerThreshold() uint64 {
+func (val *ValidatorParams) GetVotingPowerThreshold() int64 {
 	if val != nil {
-		return val.VotingPowerThreshold
+		//nolint:goosec
+		if val.VotingPowerThreshold > math.MaxInt64 || int64(val.VotingPowerThreshold) > MaxTotalVotingPower {
+			// this should never happen
+			panic(fmt.Sprintf("VotingPowerThreshold %d is too big", val.VotingPowerThreshold))
+		}
+		return int64(val.VotingPowerThreshold)
 	}
 	return 0
 }
