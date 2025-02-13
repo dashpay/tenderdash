@@ -564,15 +564,15 @@ func TestVoteSet_ValidatorParams_Threshold(t *testing.T) {
 		numValidators int
 		threshold     int
 	}{
-		{ // threshold allowing 1 vote
-			llmqType:      btcjson.LLMQType_100_67,
-			numValidators: 100,
-			threshold:     1,
-		},
 		{ // single node network
 			llmqType:      btcjson.LLMQType_100_67,
-			numValidators: 2,
+			numValidators: 1,
 			threshold:     1,
+		},
+		{ // two node network
+			llmqType:      btcjson.LLMQType_100_67,
+			numValidators: 2,
+			threshold:     2,
 		},
 		{ // normal network
 			llmqType:      btcjson.LLMQType_100_67,
@@ -581,7 +581,7 @@ func TestVoteSet_ValidatorParams_Threshold(t *testing.T) {
 		},
 		{ // network below threshold
 			llmqType:      btcjson.LLMQType_100_67,
-			numValidators: 66,
+			numValidators: 67,
 			threshold:     67,
 		},
 	}
@@ -601,9 +601,6 @@ func TestVoteSet_ValidatorParams_Threshold(t *testing.T) {
 				tt.threshold,
 				&params,
 			)
-			assert.GreaterOrEqual(t, len(privValidators), tt.threshold+3,
-				"need at least %d validators", tt.threshold+3)
-
 			blockHash := crypto.CRandBytes(32)
 			stateID := RandStateID()
 			blockPartSetHeader := PartSetHeader{uint32(123), crypto.CRandBytes(32)}
@@ -617,19 +614,25 @@ func TestVoteSet_ValidatorParams_Threshold(t *testing.T) {
 			}
 
 			// we add null vote
-			blockMaj, anyMaj := castVote(t, BlockID{}, height, round, privValidators, int32(tt.threshold), voteSet)
-			assert.False(t, blockMaj, "no block majority expected after nil vote")
-			assert.True(t, anyMaj, "'any' majority expected  after nil vote at threshold")
+			if tt.numValidators > tt.threshold {
+				// we add null vote
+				blockMaj, anyMaj := castVote(t, BlockID{}, height, round, privValidators, int32(tt.threshold), voteSet)
+				assert.False(t, blockMaj, "no block majority expected after nil vote")
+				assert.True(t, anyMaj, "'any' majority expected  after nil vote at threshold")
 
-			// at threshold
-			blockMaj, anyMaj = castVote(t, votedBlock, height, round, privValidators, int32(tt.threshold+1), voteSet)
-			assert.True(t, blockMaj, "block majority expected")
-			assert.True(t, anyMaj, "'any' majority expected")
-
+			}
+			if tt.numValidators > tt.threshold+1 {
+				// at threshold
+				blockMaj, anyMaj := castVote(t, votedBlock, height, round, privValidators, int32(tt.threshold+1), voteSet)
+				assert.True(t, blockMaj, "block majority expected")
+				assert.True(t, anyMaj, "'any' majority expected")
+			}
 			// above threshold
-			blockMaj, anyMaj = castVote(t, votedBlock, height, round, privValidators, int32(tt.threshold+2), voteSet)
-			assert.True(t, blockMaj, "block majority expected")
-			assert.True(t, anyMaj, "'any' majority expected")
+			if tt.numValidators > tt.threshold+2 {
+				blockMaj, anyMaj := castVote(t, votedBlock, height, round, privValidators, int32(tt.threshold+2), voteSet)
+				assert.True(t, blockMaj, "block majority expected")
+				assert.True(t, anyMaj, "'any' majority expected")
+			}
 		})
 	}
 }

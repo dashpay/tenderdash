@@ -242,6 +242,21 @@ func (val *ValidatorParams) IsValidPubkeyType(pubkeyType string) bool {
 	return false
 }
 
+func (val *ValidatorParams) ToProto() *tmproto.ValidatorParams {
+	if val == nil {
+		return nil
+	}
+
+	return &tmproto.ValidatorParams{
+		PubKeyTypes: val.PubKeyTypes,
+		XVotingPowerThreshold: &tmproto.ValidatorParams_VotingPowerThreshold{
+			VotingPowerThreshold: val.VotingPowerThreshold,
+		},
+	}
+}
+
+// ValidatorParamsFromProto returns a ValidatorParams from a protobuf representation.
+// If pbValParams is nil, it returns a ValidatorParams with empty PubKeyTypes and 0 VotingPowerThreshold.
 func ValidatorParamsFromProto(pbValParams *tmproto.ValidatorParams) ValidatorParams {
 	if pbValParams != nil {
 		return ValidatorParams{
@@ -472,12 +487,7 @@ func (params *ConsensusParams) ToProto() tmproto.ConsensusParams {
 			MaxAgeDuration:  params.Evidence.MaxAgeDuration,
 			MaxBytes:        params.Evidence.MaxBytes,
 		},
-		Validator: &tmproto.ValidatorParams{
-			PubKeyTypes: params.Validator.PubKeyTypes,
-			XVotingPowerThreshold: &tmproto.ValidatorParams_VotingPowerThreshold{
-				VotingPowerThreshold: params.Validator.VotingPowerThreshold,
-			},
-		},
+		Validator: params.Validator.ToProto(),
 		Version: &tmproto.VersionParams{
 			AppVersion:       params.Version.AppVersion,
 			ConsensusVersion: tmproto.VersionParams_ConsensusVersion(params.Version.ConsensusVersion),
@@ -519,7 +529,7 @@ func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams 
 
 	if pbParams.Validator != nil {
 		c.Validator = ValidatorParams{
-			PubKeyTypes:          pbParams.Validator.PubKeyTypes,
+			PubKeyTypes:          append([]string{}, pbParams.Validator.PubKeyTypes...),
 			VotingPowerThreshold: pbParams.Validator.GetVotingPowerThreshold(),
 		}
 	}

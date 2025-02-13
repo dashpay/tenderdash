@@ -64,8 +64,13 @@ message ValidatorParams {
   // For Dash Platform, the voting power can be calculated by multiply of the number of validators
   // and const `DefaultDashVotingPower == 100`.
   //
-  // For validator sets containing more than 3 validators, the threshold MUST be
-  // greater than 2/3 of the total voting power of all validators.
+  // The following validation rules MUST be enforced:
+  //
+  // 1. For validator sets containing 1 or 2 validators, the threshold MUST be equal to the total voting power
+  // of these validators.
+  // 2. For validator set with 3 validators, the threshold MUST be equal or greater than 2/3 of the total voting power.
+  // 3. For validator sets containing more than 3 validators, the threshold MUST be greater than 2/3 of the
+  // total voting power.
   //
   // If set to 0 or absent, default value is  determined based on LLMQ quorum type defined for the network,
   // with a fall back to 2/3 + 1 of the total voting power.
