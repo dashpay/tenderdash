@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/dashpay/tenderdash/libs/bytes"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	rpcclient "github.com/dashpay/tenderdash/rpc/client"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 	jsonrpcclient "github.com/dashpay/tenderdash/rpc/jsonrpc/client"
@@ -208,11 +209,11 @@ func (c *baseRPCClient) ABCIInfo(ctx context.Context) (*coretypes.ResultABCIInfo
 	return result, nil
 }
 
-func (c *baseRPCClient) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*coretypes.ResultABCIQuery, error) {
+func (c *baseRPCClient) ABCIQuery(ctx context.Context, path string, data tmbytes.HexBytes) (*coretypes.ResultABCIQuery, error) {
 	return c.ABCIQueryWithOptions(ctx, path, data, rpcclient.DefaultABCIQueryOptions)
 }
 
-func (c *baseRPCClient) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts rpcclient.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
+func (c *baseRPCClient) ABCIQueryWithOptions(ctx context.Context, path string, data tmbytes.HexBytes, opts rpcclient.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	result := new(coretypes.ResultABCIQuery)
 	if err := c.caller.Call(ctx, "abci_query", &coretypes.RequestABCIQuery{
 		Path:   path,
@@ -255,12 +256,13 @@ func (c *baseRPCClient) broadcastTX(ctx context.Context, route string, tx types.
 	return result, nil
 }
 
-func (c *baseRPCClient) UnconfirmedTxs(ctx context.Context, page *int, perPage *int) (*coretypes.ResultUnconfirmedTxs, error) {
+func (c *baseRPCClient) UnconfirmedTxs(ctx context.Context, page *int, perPage *int, txHash []byte) (*coretypes.ResultUnconfirmedTxs, error) {
 	result := new(coretypes.ResultUnconfirmedTxs)
 
 	if err := c.caller.Call(ctx, "unconfirmed_txs", &coretypes.RequestUnconfirmedTxs{
 		Page:    coretypes.Int64Ptr(page),
 		PerPage: coretypes.Int64Ptr(perPage),
+		TxHash:  tmbytes.HexBytes(txHash),
 	}, result); err != nil {
 		return nil, err
 	}

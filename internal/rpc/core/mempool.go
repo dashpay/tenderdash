@@ -171,7 +171,7 @@ func (env *Environment) BroadcastTxCommit(ctx context.Context, req *coretypes.Re
 	}
 }
 
-// UnconfirmedTxs gets unconfirmed transactions from the mempool in order of priority
+// UnconfirmedTxs gets unconfirmed transactions from the mempool in order of priority.
 // More: https://docs.tendermint.com/master/rpc/#/Info/unconfirmed_txs
 func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.RequestUnconfirmedTxs) (*coretypes.ResultUnconfirmedTxs, error) {
 	totalCount := env.Mempool.Size()
@@ -182,7 +182,7 @@ func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.Requ
 	}
 
 	skipCount := validateSkipCount(page, perPage)
-
+	// TODO: filter by tx hash here
 	txs := env.Mempool.ReapMaxTxs(skipCount + tmmath.MinInt(perPage, totalCount-skipCount))
 	result := txs[skipCount:]
 

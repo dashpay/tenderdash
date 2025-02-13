@@ -76,8 +76,9 @@ type RequestConsensusParams struct {
 }
 
 type RequestUnconfirmedTxs struct {
-	Page    *Int64 `json:"page"`
-	PerPage *Int64 `json:"per_page"`
+	Page    *Int64         `json:"page"`
+	PerPage *Int64         `json:"per_page"`
+	TxHash  bytes.HexBytes `json:"tx_hash,omitempty"`
 }
 
 type RequestBroadcastTx struct {
