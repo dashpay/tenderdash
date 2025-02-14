@@ -9,7 +9,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	"github.com/dashpay/tenderdash/internal/eventbus"

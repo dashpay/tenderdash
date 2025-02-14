@@ -6,7 +6,8 @@ package privval
 import (
 	context "context"
 	fmt "fmt"
-	proto "github.com/gogo/protobuf/proto"
+	grpc1 "github.com/cosmos/gogoproto/grpc"
+	proto "github.com/cosmos/gogoproto/proto"
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
@@ -70,10 +71,10 @@ type PrivValidatorAPIClient interface {
 }
 
 type privValidatorAPIClient struct {
-	cc *grpc.ClientConn
+	cc grpc1.ClientConn
 }
 
-func NewPrivValidatorAPIClient(cc *grpc.ClientConn) PrivValidatorAPIClient {
+func NewPrivValidatorAPIClient(cc grpc1.ClientConn) PrivValidatorAPIClient {
 	return &privValidatorAPIClient{cc}
 }
 
@@ -151,7 +152,7 @@ func (*UnimplementedPrivValidatorAPIServer) SignProposal(ctx context.Context, re
 	return nil, status.Errorf(codes.Unimplemented, "method SignProposal not implemented")
 }
 
-func RegisterPrivValidatorAPIServer(s *grpc.Server, srv PrivValidatorAPIServer) {
+func RegisterPrivValidatorAPIServer(s grpc1.Server, srv PrivValidatorAPIServer) {
 	s.RegisterService(&_PrivValidatorAPI_serviceDesc, srv)
 }
 
@@ -245,6 +246,7 @@ func _PrivValidatorAPI_SignProposal_Handler(srv interface{}, ctx context.Context
 	return interceptor(ctx, in, info, handler)
 }
 
+var PrivValidatorAPI_serviceDesc = _PrivValidatorAPI_serviceDesc
 var _PrivValidatorAPI_serviceDesc = grpc.ServiceDesc{
 	ServiceName: "tendermint.privval.PrivValidatorAPI",
 	HandlerType: (*PrivValidatorAPIServer)(nil),

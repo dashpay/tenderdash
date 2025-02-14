@@ -11,8 +11,8 @@ import (
 	sync "github.com/sasha-s/go-deadlock"
 
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/gogo/protobuf/proto"
-	gogotypes "github.com/gogo/protobuf/types"
+	"github.com/cosmos/gogoproto/proto"
+	gogotypes "github.com/cosmos/gogoproto/types"
 	"github.com/google/orderedcode"
 
 	"github.com/dashpay/tenderdash/internal/eventbus"

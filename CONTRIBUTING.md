@@ -106,7 +106,7 @@ specify exactly the dependency you want to update, eg.
 ## Protobuf
 
 We use [Protocol Buffers](https://developers.google.com/protocol-buffers) along
-with [`gogoproto`](https://github.com/gogo/protobuf) to generate code for use
+with [`gogoproto`](https://github.com/cosmos/gogoproto) to generate code for use
 across Tendermint Core.
 
 To generate proto stubs, lint, and check protos for breaking changes, you will
@@ -283,8 +283,8 @@ cd test/e2e && \
 
 ### Model-based tests (ADVANCED)
 
-*NOTE: if you're just submitting your first PR, you won't need to touch these
-most probably (99.9%)*.
+_NOTE: if you're just submitting your first PR, you won't need to touch these
+most probably (99.9%)_.
 
 For components, that have been [formally
 verified](https://en.wikipedia.org/wiki/Formal_verification) using
@@ -304,8 +304,8 @@ Run: `cd light/mbt && go test`
 
 ### Fuzz tests (ADVANCED)
 
-*NOTE: if you're just submitting your first PR, you won't need to touch these
-most probably (99.9%)*.
+_NOTE: if you're just submitting your first PR, you won't need to touch these
+most probably (99.9%)_.
 
 [Fuzz tests](https://en.wikipedia.org/wiki/Fuzzing) can be found inside the
 `./test/fuzz` directory. See [README.md](./test/fuzz/README.md) for details.
@@ -314,8 +314,8 @@ Run: `cd test/fuzz && make fuzz-{PACKAGE-COMPONENT}`
 
 ### Jepsen tests (ADVANCED)
 
-*NOTE: if you're just submitting your first PR, you won't need to touch these
-most probably (99.9%)*.
+_NOTE: if you're just submitting your first PR, you won't need to touch these
+most probably (99.9%)_.
 
 [Jepsen](http://jepsen.io/) tests are used to verify the
 [linearizability](https://jepsen.io/consistency/models/linearizable) property
