@@ -589,8 +589,9 @@ func TestVoteSet_ValidatorParams_Threshold(t *testing.T) {
 	for ti, tt := range testCases {
 		name := strconv.Itoa(ti)
 		t.Run(name, func(t *testing.T) {
+			threshold := uint64(int64(tt.threshold) * DefaultDashVotingPower)
 			params := ValidatorParams{
-				VotingPowerThreshold: uint64(int64(tt.threshold) * DefaultDashVotingPower),
+				VotingPowerThreshold: &threshold,
 			}
 			voteSet, _, privValidators := randVoteSetWithLLMQType(
 				height,

@@ -72,9 +72,11 @@ message ValidatorParams {
   // 3. For validator sets containing more than 3 validators, the threshold MUST be greater than 2/3 of the
   // total voting power.
   //
-  // If set to 0 or absent, default value is  determined based on LLMQ quorum type defined for the network,
+  // If set to 0, default value is  determined based on LLMQ quorum type defined for the network,
   // with a fall back to 2/3 + 1 of the total voting power.
-  optional uint64 voting_power_threshold = 2;
+  //
+  // If absent,
+  optional uint64 voting_power_threshold = 2;  //[(gogoproto.nullable) = true]
 }
 
 // VersionParams contains the ABCI application version.

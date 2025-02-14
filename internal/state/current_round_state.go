@@ -340,6 +340,10 @@ func valsetUpdate(
 		if thresholdPubKey != nil {
 			nValSet.ThresholdPublicKey = thresholdPubKey
 		}
+
+		if params.VotingPowerThreshold != nil {
+			nValSet.VotingPowerThreshold = *params.VotingPowerThreshold
+		}
 	}
 
 	return nValSet, nValSet.ValidateBasic()

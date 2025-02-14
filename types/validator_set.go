@@ -86,8 +86,8 @@ func NewValidatorSet(valz []*Validator, newThresholdPublicKey crypto.PubKey, quo
 		QuorumType:    quorumType,
 		HasPublicKeys: hasPublicKeys,
 	}
-	if validatorParams != nil {
-		vals.VotingPowerThreshold = validatorParams.VotingPowerThreshold
+	if validatorParams != nil && validatorParams.VotingPowerThreshold != nil {
+		vals.VotingPowerThreshold = *validatorParams.VotingPowerThreshold
 	}
 	err := vals.updateWithChangeSet(valz, false, newThresholdPublicKey, quorumHash)
 	if err != nil {
@@ -164,7 +164,7 @@ func (vals *ValidatorSet) ValidateBasic() error {
 	case 1, 2:
 		// For validator sets containing 1 or 2 validators, the threshold MUST be equal to the total voting power.
 		if totalPower != threshold {
-			return fmt.Errorf("with 1 validator, quorum voting power %d must be equal to threshold %d", totalPower, threshold)
+			return fmt.Errorf("with 1 or 2 validators, quorum voting power %d must be equal to threshold %d", totalPower, threshold)
 		}
 	case 3:
 		// For validator set with 3 validators, the threshold MUST be equal or greater than 2/3 of the total voting power.

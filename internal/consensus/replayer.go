@@ -342,14 +342,18 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 		quorumType = r.genDoc.QuorumType
 	}
 
+	var valParams *types.ValidatorParams
+	if res.ConsensusParams != nil && res.ConsensusParams.Validator != nil {
+		params := types.ValidatorParamsFromProto(res.ConsensusParams.Validator)
+		valParams = &params
+	}
+
 	if len(res.ValidatorSetUpdate.ValidatorUpdates) != 0 {
 		// we replace existing validator with the one from InitChain instead of applying it as a diff
-		var valParams *types.ValidatorParams
-		if res.ConsensusParams != nil && res.ConsensusParams.Validator != nil {
-			params := types.ValidatorParamsFromProto(res.ConsensusParams.Validator)
-			valParams = &params
-		}
 		state.Validators = types.NewValidatorSet(nil, nil, quorumType, nil, false, valParams)
+		// } else if valParams != nil && valParams.VotingPowerThreshold != nil {
+		// 	// we update the existing validator set with the new voting threshold
+		// 	state.Validators.VotingPowerThreshold = *valParams.VotingPowerThreshold
 	}
 
 	// we only update state when we are in initial state

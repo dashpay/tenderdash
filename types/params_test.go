@@ -219,7 +219,7 @@ func makeParams(args makeParamsArgs) ConsensusParams {
 		},
 		Validator: ValidatorParams{
 			PubKeyTypes:          args.pubkeyTypes,
-			VotingPowerThreshold: 0,
+			VotingPowerThreshold: nil,
 		},
 		Synchrony: SynchronyParams{
 			Precision:    args.precision,
