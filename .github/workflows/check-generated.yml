@@ -75,7 +75,9 @@ jobs:
           export GOBIN="${tools}/bin"
 
           go install github.com/bufbuild/buf/cmd/buf
-          go install github.com/cosmos/gogoproto/protoc-gen-gogofaster@latest
+          # Forked version of gogoproto plugin with fix https://github.com/cosmos/gogoproto/pull/150
+          # go install github.com/cosmos/gogoproto/protoc-gen-gogofaster@latest
+          go install github.com/lklimek/gogoproto/protoc-gen-gogofaster@564fd924f58c5d076b0ad8e3f1c6fb54d065cbbe
 
           make proto-gen
 
