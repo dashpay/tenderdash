@@ -274,6 +274,9 @@ func (m *Evidence) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Evidence) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -296,6 +299,9 @@ func (m *Evidence_DuplicateVoteEvidence) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Evidence_DuplicateVoteEvidence) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.DuplicateVoteEvidence != nil {
 		{
@@ -327,6 +333,9 @@ func (m *DuplicateVoteEvidence) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *DuplicateVoteEvidence) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -392,6 +401,9 @@ func (m *EvidenceList) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *EvidenceList) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

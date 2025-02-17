@@ -5211,6 +5211,9 @@ func (m *Request) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5233,6 +5236,9 @@ func (m *Request_Echo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_Echo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Echo != nil {
 		{
@@ -5254,6 +5260,9 @@ func (m *Request_Flush) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_Flush) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Flush != nil {
 		{
@@ -5275,6 +5284,9 @@ func (m *Request_Info) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_Info) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Info != nil {
 		{
@@ -5296,6 +5308,9 @@ func (m *Request_InitChain) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_InitChain) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.InitChain != nil {
 		{
@@ -5317,6 +5332,9 @@ func (m *Request_Query) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_Query) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Query != nil {
 		{
@@ -5338,6 +5356,9 @@ func (m *Request_CheckTx) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_CheckTx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.CheckTx != nil {
 		{
@@ -5359,6 +5380,9 @@ func (m *Request_ListSnapshots) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_ListSnapshots) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ListSnapshots != nil {
 		{
@@ -5380,6 +5404,9 @@ func (m *Request_OfferSnapshot) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_OfferSnapshot) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.OfferSnapshot != nil {
 		{
@@ -5401,6 +5428,9 @@ func (m *Request_LoadSnapshotChunk) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_LoadSnapshotChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.LoadSnapshotChunk != nil {
 		{
@@ -5422,6 +5452,9 @@ func (m *Request_ApplySnapshotChunk) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_ApplySnapshotChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ApplySnapshotChunk != nil {
 		{
@@ -5443,6 +5476,9 @@ func (m *Request_PrepareProposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_PrepareProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.PrepareProposal != nil {
 		{
@@ -5464,6 +5500,9 @@ func (m *Request_ProcessProposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_ProcessProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ProcessProposal != nil {
 		{
@@ -5487,6 +5526,9 @@ func (m *Request_ExtendVote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_ExtendVote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ExtendVote != nil {
 		{
@@ -5510,6 +5552,9 @@ func (m *Request_VerifyVoteExtension) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_VerifyVoteExtension) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.VerifyVoteExtension != nil {
 		{
@@ -5533,6 +5578,9 @@ func (m *Request_FinalizeBlock) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Request_FinalizeBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.FinalizeBlock != nil {
 		{
@@ -5566,6 +5614,9 @@ func (m *RequestEcho) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestEcho) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5596,6 +5647,9 @@ func (m *RequestFlush) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestFlush) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5619,6 +5673,9 @@ func (m *RequestInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5666,6 +5723,9 @@ func (m *RequestInitChain) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestInitChain) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5745,6 +5805,9 @@ func (m *RequestQuery) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestQuery) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5797,6 +5860,9 @@ func (m *RequestCheckTx) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestCheckTx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5832,6 +5898,9 @@ func (m *RequestListSnapshots) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestListSnapshots) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5855,6 +5924,9 @@ func (m *RequestOfferSnapshot) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestOfferSnapshot) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5897,6 +5969,9 @@ func (m *RequestLoadSnapshotChunk) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestLoadSnapshotChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5937,6 +6012,9 @@ func (m *RequestApplySnapshotChunk) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestApplySnapshotChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -5981,6 +6059,9 @@ func (m *RequestPrepareProposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestPrepareProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -6103,6 +6184,9 @@ func (m *RequestProcessProposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestProcessProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -6239,6 +6323,9 @@ func (m *RequestExtendVote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestExtendVote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -6279,6 +6366,9 @@ func (m *RequestVerifyVoteExtension) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestVerifyVoteExtension) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -6340,6 +6430,9 @@ func (m *RequestFinalizeBlock) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RequestFinalizeBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -6428,6 +6521,9 @@ func (m *Response) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -6450,6 +6546,9 @@ func (m *Response_Exception) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_Exception) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Exception != nil {
 		{
@@ -6471,6 +6570,9 @@ func (m *Response_Echo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_Echo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Echo != nil {
 		{
@@ -6492,6 +6594,9 @@ func (m *Response_Flush) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_Flush) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Flush != nil {
 		{
@@ -6513,6 +6618,9 @@ func (m *Response_Info) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_Info) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Info != nil {
 		{
@@ -6534,6 +6642,9 @@ func (m *Response_InitChain) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_InitChain) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.InitChain != nil {
 		{
@@ -6555,6 +6666,9 @@ func (m *Response_Query) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_Query) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Query != nil {
 		{
@@ -6576,6 +6690,9 @@ func (m *Response_CheckTx) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_CheckTx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.CheckTx != nil {
 		{
@@ -6597,6 +6714,9 @@ func (m *Response_ListSnapshots) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_ListSnapshots) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ListSnapshots != nil {
 		{
@@ -6618,6 +6738,9 @@ func (m *Response_OfferSnapshot) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_OfferSnapshot) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.OfferSnapshot != nil {
 		{
@@ -6639,6 +6762,9 @@ func (m *Response_LoadSnapshotChunk) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_LoadSnapshotChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.LoadSnapshotChunk != nil {
 		{
@@ -6660,6 +6786,9 @@ func (m *Response_ApplySnapshotChunk) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_ApplySnapshotChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ApplySnapshotChunk != nil {
 		{
@@ -6681,6 +6810,9 @@ func (m *Response_PrepareProposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_PrepareProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.PrepareProposal != nil {
 		{
@@ -6702,6 +6834,9 @@ func (m *Response_ProcessProposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_ProcessProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ProcessProposal != nil {
 		{
@@ -6723,6 +6858,9 @@ func (m *Response_ExtendVote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_ExtendVote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ExtendVote != nil {
 		{
@@ -6744,6 +6882,9 @@ func (m *Response_VerifyVoteExtension) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_VerifyVoteExtension) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.VerifyVoteExtension != nil {
 		{
@@ -6765,6 +6906,9 @@ func (m *Response_FinalizeBlock) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Response_FinalizeBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.FinalizeBlock != nil {
 		{
@@ -6798,6 +6942,9 @@ func (m *ResponseException) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseException) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -6828,6 +6975,9 @@ func (m *ResponseEcho) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseEcho) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -6858,6 +7008,9 @@ func (m *ResponseFlush) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseFlush) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -6881,6 +7034,9 @@ func (m *ResponseInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -6935,6 +7091,9 @@ func (m *ResponseInitChain) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseInitChain) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7003,6 +7162,9 @@ func (m *ResponseInitChain_GenesisTime) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseInitChain_GenesisTime) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.GenesisTime != nil {
 		n49, err49 := github_com_cosmos_gogoproto_types.StdTimeMarshalTo(*m.GenesisTime, dAtA[i-github_com_cosmos_gogoproto_types.SizeOfStdTime(*m.GenesisTime):])
@@ -7032,6 +7194,9 @@ func (m *ResponseQuery) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseQuery) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7117,6 +7282,9 @@ func (m *ResponseCheckTx) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseCheckTx) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7183,6 +7351,9 @@ func (m *ResponseListSnapshots) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseListSnapshots) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7220,6 +7391,9 @@ func (m *ResponseOfferSnapshot) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseOfferSnapshot) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7248,6 +7422,9 @@ func (m *ResponseLoadSnapshotChunk) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseLoadSnapshotChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7278,6 +7455,9 @@ func (m *ResponseApplySnapshotChunk) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseApplySnapshotChunk) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7333,6 +7513,9 @@ func (m *ResponsePrepareProposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponsePrepareProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7432,6 +7615,9 @@ func (m *ResponseProcessProposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseProcessProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7519,6 +7705,9 @@ func (m *ExtendVoteExtension) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ExtendVoteExtension) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7553,6 +7742,9 @@ func (m *ExtendVoteExtension_SignRequestId) MarshalTo(dAtA []byte) (int, error) 
 }
 
 func (m *ExtendVoteExtension_SignRequestId) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.SignRequestId != nil {
 		i -= len(m.SignRequestId)
@@ -7579,6 +7771,9 @@ func (m *ResponseExtendVote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseExtendVote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7616,6 +7811,9 @@ func (m *ResponseVerifyVoteExtension) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseVerifyVoteExtension) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7644,6 +7842,9 @@ func (m *ResponseFinalizeBlock) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ResponseFinalizeBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7672,6 +7873,9 @@ func (m *CommitInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *CommitInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7728,6 +7932,9 @@ func (m *Event) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Event) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7772,6 +7979,9 @@ func (m *EventAttribute) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *EventAttribute) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7819,6 +8029,9 @@ func (m *ExecTxResult) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ExecTxResult) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7894,6 +8107,9 @@ func (m *TxResult) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *TxResult) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7944,6 +8160,9 @@ func (m *TxRecord) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *TxRecord) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -7979,6 +8198,9 @@ func (m *Validator) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Validator) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -8014,6 +8236,9 @@ func (m *ValidatorUpdate) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ValidatorUpdate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -8068,6 +8293,9 @@ func (m *ValidatorSetUpdate) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ValidatorSetUpdate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -8122,6 +8350,9 @@ func (m *ThresholdPublicKeyUpdate) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ThresholdPublicKeyUpdate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -8155,6 +8386,9 @@ func (m *QuorumHashUpdate) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *QuorumHashUpdate) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -8185,6 +8419,9 @@ func (m *VoteInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *VoteInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -8228,6 +8465,9 @@ func (m *ExtendedVoteInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ExtendedVoteInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -8278,6 +8518,9 @@ func (m *Misbehavior) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Misbehavior) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -8334,6 +8577,9 @@ func (m *Snapshot) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Snapshot) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

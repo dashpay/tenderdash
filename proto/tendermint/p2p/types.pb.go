@@ -1008,6 +1008,9 @@ func (m *ProtocolVersion) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ProtocolVersion) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1046,6 +1049,9 @@ func (m *NodeInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *NodeInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1149,6 +1155,9 @@ func (m *NodeInfoOther) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *NodeInfoOther) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1186,6 +1195,9 @@ func (m *PeerInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PeerInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1257,6 +1269,9 @@ func (m *PeerAddressInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PeerAddressInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1312,6 +1327,9 @@ func (m *Echo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Echo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1342,6 +1360,9 @@ func (m *Envelope) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1383,6 +1404,9 @@ func (m *Envelope_Echo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_Echo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Echo != nil {
 		{
@@ -1404,6 +1428,9 @@ func (m *Envelope_PexRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_PexRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.PexRequest != nil {
 		{
@@ -1425,6 +1452,9 @@ func (m *Envelope_PexResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_PexResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.PexResponse != nil {
 		{
@@ -1446,6 +1476,9 @@ func (m *Envelope_Evidence) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_Evidence) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Evidence != nil {
 		{
@@ -1467,6 +1500,9 @@ func (m *Envelope_MempoolTxs) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_MempoolTxs) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.MempoolTxs != nil {
 		{
@@ -1488,6 +1524,9 @@ func (m *Envelope_BlockRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_BlockRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.BlockRequest != nil {
 		{
@@ -1509,6 +1548,9 @@ func (m *Envelope_NoBlockResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_NoBlockResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.NoBlockResponse != nil {
 		{
@@ -1530,6 +1572,9 @@ func (m *Envelope_BlockResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_BlockResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.BlockResponse != nil {
 		{
@@ -1551,6 +1596,9 @@ func (m *Envelope_StatusRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_StatusRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.StatusRequest != nil {
 		{
@@ -1572,6 +1620,9 @@ func (m *Envelope_StatusResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_StatusResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.StatusResponse != nil {
 		{
@@ -1593,6 +1644,9 @@ func (m *Envelope_SnapshotsRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_SnapshotsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.SnapshotsRequest != nil {
 		{
@@ -1614,6 +1668,9 @@ func (m *Envelope_SnapshotsResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_SnapshotsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.SnapshotsResponse != nil {
 		{
@@ -1635,6 +1692,9 @@ func (m *Envelope_ChunkRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_ChunkRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ChunkRequest != nil {
 		{
@@ -1656,6 +1716,9 @@ func (m *Envelope_ChunkResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_ChunkResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ChunkResponse != nil {
 		{
@@ -1677,6 +1740,9 @@ func (m *Envelope_LightBlockRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_LightBlockRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.LightBlockRequest != nil {
 		{
@@ -1700,6 +1766,9 @@ func (m *Envelope_LightBlockResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_LightBlockResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.LightBlockResponse != nil {
 		{
@@ -1723,6 +1792,9 @@ func (m *Envelope_ParamsRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_ParamsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ParamsRequest != nil {
 		{
@@ -1746,6 +1818,9 @@ func (m *Envelope_ParamsResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_ParamsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ParamsResponse != nil {
 		{
@@ -1769,6 +1844,9 @@ func (m *Envelope_NewRoundStep) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_NewRoundStep) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.NewRoundStep != nil {
 		{
@@ -1792,6 +1870,9 @@ func (m *Envelope_NewValidBlock) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_NewValidBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.NewValidBlock != nil {
 		{
@@ -1815,6 +1896,9 @@ func (m *Envelope_Proposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_Proposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Proposal != nil {
 		{
@@ -1838,6 +1922,9 @@ func (m *Envelope_ProposalPol) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_ProposalPol) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ProposalPol != nil {
 		{
@@ -1861,6 +1948,9 @@ func (m *Envelope_BlockPart) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_BlockPart) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.BlockPart != nil {
 		{
@@ -1884,6 +1974,9 @@ func (m *Envelope_Vote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_Vote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Vote != nil {
 		{
@@ -1907,6 +2000,9 @@ func (m *Envelope_HasVote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_HasVote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.HasVote != nil {
 		{
@@ -1930,6 +2026,9 @@ func (m *Envelope_VoteSetMaj23) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_VoteSetMaj23) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.VoteSetMaj23 != nil {
 		{
@@ -1953,6 +2052,9 @@ func (m *Envelope_VoteSetBits) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_VoteSetBits) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.VoteSetBits != nil {
 		{
@@ -1976,6 +2078,9 @@ func (m *Envelope_Commit) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_Commit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Commit != nil {
 		{
@@ -1999,6 +2104,9 @@ func (m *Envelope_HasCommit) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Envelope_HasCommit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.HasCommit != nil {
 		{

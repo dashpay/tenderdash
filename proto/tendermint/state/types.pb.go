@@ -491,6 +491,9 @@ func (m *ABCIResponses) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ABCIResponses) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -526,6 +529,9 @@ func (m *ValidatorsInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ValidatorsInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -566,6 +572,9 @@ func (m *ConsensusParamsInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ConsensusParamsInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -604,6 +613,9 @@ func (m *Version) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Version) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -644,6 +656,9 @@ func (m *State) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *State) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

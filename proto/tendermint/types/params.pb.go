@@ -1107,6 +1107,9 @@ func (m *ConsensusParams) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ConsensusParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1214,6 +1217,9 @@ func (m *BlockParams) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *BlockParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1247,6 +1253,9 @@ func (m *EvidenceParams) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *EvidenceParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1288,6 +1297,9 @@ func (m *ValidatorParams) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ValidatorParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1319,6 +1331,9 @@ func (m *ValidatorParams_VotingPowerThreshold) MarshalTo(dAtA []byte) (int, erro
 }
 
 func (m *ValidatorParams_VotingPowerThreshold) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	i = encodeVarintParams(dAtA, i, uint64(m.VotingPowerThreshold))
 	i--
@@ -1341,6 +1356,9 @@ func (m *VersionParams) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *VersionParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1374,6 +1392,9 @@ func (m *HashedParams) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *HashedParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1412,6 +1433,9 @@ func (m *SynchronyParams) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *SynchronyParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1455,6 +1479,9 @@ func (m *TimeoutParams) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *TimeoutParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1518,6 +1545,9 @@ func (m *ABCIParams) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ABCIParams) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

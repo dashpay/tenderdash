@@ -426,6 +426,9 @@ func (m *MsgInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *MsgInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -466,6 +469,9 @@ func (m *TimeoutInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *TimeoutInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -512,6 +518,9 @@ func (m *EndHeight) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *EndHeight) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -540,6 +549,9 @@ func (m *WALMessage) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *WALMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -562,6 +574,9 @@ func (m *WALMessage_EventDataRoundState) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *WALMessage_EventDataRoundState) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.EventDataRoundState != nil {
 		{
@@ -583,6 +598,9 @@ func (m *WALMessage_MsgInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *WALMessage_MsgInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.MsgInfo != nil {
 		{
@@ -604,6 +622,9 @@ func (m *WALMessage_TimeoutInfo) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *WALMessage_TimeoutInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.TimeoutInfo != nil {
 		{
@@ -625,6 +646,9 @@ func (m *WALMessage_EndHeight) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *WALMessage_EndHeight) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.EndHeight != nil {
 		{
@@ -656,6 +680,9 @@ func (m *TimedWALMessage) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *TimedWALMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

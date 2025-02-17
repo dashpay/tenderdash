@@ -311,6 +311,9 @@ func (m *ValidatorSet) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ValidatorSet) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -402,6 +405,9 @@ func (m *Validator) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Validator) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -461,6 +467,9 @@ func (m *SimpleValidator) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *SimpleValidator) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
