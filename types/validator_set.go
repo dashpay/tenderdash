@@ -427,6 +427,10 @@ func (vals *ValidatorSet) QuorumVotingPower() int64 {
 // Voting is considered successful when voting power is at or above this threshold.
 func (vals *ValidatorSet) QuorumVotingThresholdPower() int64 {
 	if thresholdPower := vals.VotingPowerThreshold; thresholdPower > 0 {
+		if thresholdPower > math.MaxInt64 {
+			// this should never happen
+			panic(fmt.Sprintf("threshold power %d is too large", thresholdPower))
+		}
 		return int64(thresholdPower)
 	}
 

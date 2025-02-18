@@ -99,7 +99,7 @@ func setup(ctx context.Context, t *testing.T, stateStores []sm.Store) *reactorTe
 		rts.network.Nodes[nodeID].PeerManager.Register(ctx, pu)
 		rts.nodes = append(rts.nodes, rts.network.Nodes[nodeID])
 
-		chCreator := func(_ctx context.Context, chdesc *p2p.ChannelDescriptor) (p2p.Channel, error) {
+		chCreator := func(_ctx context.Context, _chDesc *p2p.ChannelDescriptor) (p2p.Channel, error) {
 			return rts.evidenceChannels[nodeID], nil
 		}
 
