@@ -6,7 +6,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/hashicorp/go-multierror"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"

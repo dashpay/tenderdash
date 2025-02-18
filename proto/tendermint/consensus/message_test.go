@@ -5,7 +5,7 @@ import (
 	"math"
 	"testing"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/stretchr/testify/require"
 
 	tmcons "github.com/dashpay/tenderdash/proto/tendermint/consensus"

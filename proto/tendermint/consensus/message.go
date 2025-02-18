@@ -3,7 +3,7 @@ package consensus
 import (
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 )
 
 // Wrap implements the p2p Wrapper interface and wraps a consensus proto message.

@@ -5,8 +5,8 @@ package blocksync
 
 import (
 	fmt "fmt"
+	proto "github.com/cosmos/gogoproto/proto"
 	types "github.com/dashpay/tenderdash/proto/tendermint/types"
-	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"

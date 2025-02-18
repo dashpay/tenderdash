@@ -7,7 +7,7 @@ import (
 	"testing"
 
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/dashpay/tenderdash/types"
 )

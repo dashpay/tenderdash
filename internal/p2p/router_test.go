@@ -12,8 +12,8 @@ import (
 	"time"
 
 	dbm "github.com/cometbft/cometbft-db"
+	gogotypes "github.com/cosmos/gogoproto/types"
 	"github.com/fortytw2/leaktest"
-	gogotypes "github.com/gogo/protobuf/types"
 	sync "github.com/sasha-s/go-deadlock"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"

@@ -5,15 +5,15 @@ package p2p
 
 import (
 	fmt "fmt"
+	_ "github.com/cosmos/gogoproto/gogoproto"
+	proto "github.com/cosmos/gogoproto/proto"
+	_ "github.com/cosmos/gogoproto/types"
+	github_com_cosmos_gogoproto_types "github.com/cosmos/gogoproto/types"
 	blocksync "github.com/dashpay/tenderdash/proto/tendermint/blocksync"
 	consensus "github.com/dashpay/tenderdash/proto/tendermint/consensus"
 	mempool "github.com/dashpay/tenderdash/proto/tendermint/mempool"
 	statesync "github.com/dashpay/tenderdash/proto/tendermint/statesync"
 	types1 "github.com/dashpay/tenderdash/proto/tendermint/types"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
-	_ "github.com/gogo/protobuf/types"
-	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -1208,7 +1208,7 @@ func (m *PeerInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		dAtA[i] = 0x20
 	}
 	if m.LastConnected != nil {
-		n5, err5 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.LastConnected, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastConnected):])
+		n5, err5 := github_com_cosmos_gogoproto_types.StdTimeMarshalTo(*m.LastConnected, dAtA[i-github_com_cosmos_gogoproto_types.SizeOfStdTime(*m.LastConnected):])
 		if err5 != nil {
 			return 0, err5
 		}
@@ -1267,7 +1267,7 @@ func (m *PeerAddressInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		dAtA[i] = 0x20
 	}
 	if m.LastDialFailure != nil {
-		n6, err6 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.LastDialFailure, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastDialFailure):])
+		n6, err6 := github_com_cosmos_gogoproto_types.StdTimeMarshalTo(*m.LastDialFailure, dAtA[i-github_com_cosmos_gogoproto_types.SizeOfStdTime(*m.LastDialFailure):])
 		if err6 != nil {
 			return 0, err6
 		}
@@ -1277,7 +1277,7 @@ func (m *PeerAddressInfo) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		dAtA[i] = 0x1a
 	}
 	if m.LastDialSuccess != nil {
-		n7, err7 := github_com_gogo_protobuf_types.StdTimeMarshalTo(*m.LastDialSuccess, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastDialSuccess):])
+		n7, err7 := github_com_cosmos_gogoproto_types.StdTimeMarshalTo(*m.LastDialSuccess, dAtA[i-github_com_cosmos_gogoproto_types.SizeOfStdTime(*m.LastDialSuccess):])
 		if err7 != nil {
 			return 0, err7
 		}
@@ -2123,7 +2123,7 @@ func (m *PeerInfo) Size() (n int) {
 		}
 	}
 	if m.LastConnected != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastConnected)
+		l = github_com_cosmos_gogoproto_types.SizeOfStdTime(*m.LastConnected)
 		n += 1 + l + sovTypes(uint64(l))
 	}
 	if m.Inactive {
@@ -2147,11 +2147,11 @@ func (m *PeerAddressInfo) Size() (n int) {
 		n += 1 + l + sovTypes(uint64(l))
 	}
 	if m.LastDialSuccess != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastDialSuccess)
+		l = github_com_cosmos_gogoproto_types.SizeOfStdTime(*m.LastDialSuccess)
 		n += 1 + l + sovTypes(uint64(l))
 	}
 	if m.LastDialFailure != nil {
-		l = github_com_gogo_protobuf_types.SizeOfStdTime(*m.LastDialFailure)
+		l = github_com_cosmos_gogoproto_types.SizeOfStdTime(*m.LastDialFailure)
 		n += 1 + l + sovTypes(uint64(l))
 	}
 	if m.DialFailures != 0 {
@@ -3282,7 +3282,7 @@ func (m *PeerInfo) Unmarshal(dAtA []byte) error {
 			if m.LastConnected == nil {
 				m.LastConnected = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.LastConnected, dAtA[iNdEx:postIndex]); err != nil {
+			if err := github_com_cosmos_gogoproto_types.StdTimeUnmarshal(m.LastConnected, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3454,7 +3454,7 @@ func (m *PeerAddressInfo) Unmarshal(dAtA []byte) error {
 			if m.LastDialSuccess == nil {
 				m.LastDialSuccess = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.LastDialSuccess, dAtA[iNdEx:postIndex]); err != nil {
+			if err := github_com_cosmos_gogoproto_types.StdTimeUnmarshal(m.LastDialSuccess, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -3490,7 +3490,7 @@ func (m *PeerAddressInfo) Unmarshal(dAtA []byte) error {
 			if m.LastDialFailure == nil {
 				m.LastDialFailure = new(time.Time)
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(m.LastDialFailure, dAtA[iNdEx:postIndex]); err != nil {
+			if err := github_com_cosmos_gogoproto_types.StdTimeUnmarshal(m.LastDialFailure, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
