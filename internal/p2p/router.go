@@ -12,7 +12,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/dashpay/tenderdash/crypto"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"

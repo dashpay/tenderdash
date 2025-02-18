@@ -16,7 +16,7 @@ import (
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"

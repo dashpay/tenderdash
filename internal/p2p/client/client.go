@@ -10,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-multierror"
 	"github.com/jonboulle/clockwork"
