@@ -1,1 +1,3 @@
+voting_power_threshold = 100
+
 [node.validator]

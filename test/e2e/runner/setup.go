@@ -179,6 +179,10 @@ func MakeGenesis(testnet *e2e.Testnet, genesisTime time.Time) (types.GenesisDoc,
 	if testnet.MaxBlockSize > 0 {
 		genesis.ConsensusParams.Block.MaxBytes = testnet.MaxBlockSize
 	}
+	if testnet.VotingPowerThreshold > 0 {
+		threshold := testnet.VotingPowerThreshold
+		genesis.ConsensusParams.Validator.VotingPowerThreshold = &threshold
+	}
 
 	for validator, validatorUpdate := range testnet.Validators {
 		if validatorUpdate.PubKey == nil {

@@ -100,6 +100,7 @@ type Testnet struct {
 	ThresholdPublicKey        crypto.PubKey
 	ThresholdPublicKeyUpdates map[int64]crypto.PubKey
 	QuorumType                btcjson.LLMQType
+	VotingPowerThreshold      uint64
 	QuorumHash                crypto.QuorumHash
 	QuorumHashUpdates         map[int64]crypto.QuorumHash
 	// ConsensusVersionUpdates maps height to new consensus version (ConsensusParams.Version.ConsensusVersion)
@@ -216,6 +217,7 @@ func LoadTestnet(file string) (*Testnet, error) {
 		ThresholdPublicKey:        ld.ThresholdPubKey,
 		ThresholdPublicKeyUpdates: map[int64]crypto.PubKey{},
 		QuorumType:                btcjson.LLMQType(quorumType),
+		VotingPowerThreshold:      manifest.VotingPowerThreshold,
 		QuorumHash:                quorumHash,
 		QuorumHashUpdates:         map[int64]crypto.QuorumHash{},
 		ConsensusVersionUpdates:   map[int64]int32{},
