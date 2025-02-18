@@ -6,9 +6,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/cosmos/gogoproto/proto"
 	bls "github.com/dashpay/bls-signatures/go-bindings"
 	"github.com/dashpay/dashd-go/btcjson"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

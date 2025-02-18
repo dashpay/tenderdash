@@ -10,8 +10,8 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/fortytw2/leaktest"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/adlio/schema"
-	"github.com/gogo/protobuf/jsonpb"
+	"github.com/cosmos/gogoproto/jsonpb"
 	"github.com/ory/dockertest"
 	"github.com/ory/dockertest/docker"
 	"github.com/stretchr/testify/assert"

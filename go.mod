@@ -14,7 +14,7 @@ require (
 	github.com/fortytw2/leaktest v1.3.0
 	github.com/fxamacker/cbor/v2 v2.4.0
 	github.com/go-kit/kit v0.13.0
-	github.com/gogo/protobuf v1.3.2
+	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4
 	github.com/golang/snappy v0.0.5-0.20220116011046-fa5810519dcb // indirect
 	github.com/golangci/golangci-lint v1.63.4
@@ -369,6 +369,7 @@ require (
 
 require (
 	github.com/cometbft/cometbft-db v1.0.3
+	github.com/cosmos/gogoproto v1.7.0
 	github.com/creachadair/tomledit v0.0.27
 	github.com/jonboulle/clockwork v0.5.0
 	github.com/oasisprotocol/oasis-core/go v0.2500.0

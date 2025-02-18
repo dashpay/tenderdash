@@ -5,7 +5,7 @@ import (
 	"io"
 	"reflect"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	protoAbci "github.com/dashpay/tenderdash/abci/types"
 	protoP2p "github.com/dashpay/tenderdash/proto/tendermint/p2p"

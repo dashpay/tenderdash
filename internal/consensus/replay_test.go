@@ -13,9 +13,9 @@ import (
 	"time"
 
 	dbm "github.com/cometbft/cometbft-db"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/fortytw2/leaktest"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
