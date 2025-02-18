@@ -175,7 +175,8 @@ func (vals *ValidatorSet) ValidateBasic() error {
 	default:
 		// For validator sets containing more than 3 validators, the threshold MUST be at least 2/3 + 1 of the total voting power.
 		if threshold < (totalPower*2/3)+1 {
-			return fmt.Errorf("quorum voting power %d is less than threshold %d", totalPower, threshold)
+			return fmt.Errorf("voting threshold %d of quorum with power %d MUST be at least 2/3*%d+1 = %d",
+				threshold, totalPower, totalPower, (totalPower*2/3)+1)
 
 		}
 	}

@@ -552,8 +552,6 @@ func TestVoteSet_LLMQType_50_60(t *testing.T) {
 // Given a set of validators and a threshold defined in ValidatorParams,
 // when votes are cast,
 // then the threshold from ValidatorParams is respected.
-// FIXME: threshold 1 causes "panic: At least 2 coefficients required"
-// in bls-signatures C++ library.
 func TestVoteSet_ValidatorParams_Threshold(t *testing.T) {
 	const (
 		height = int64(1)
@@ -573,6 +571,16 @@ func TestVoteSet_ValidatorParams_Threshold(t *testing.T) {
 			llmqType:      btcjson.LLMQType_100_67,
 			numValidators: 2,
 			threshold:     2,
+		},
+		{ // full network but threshold 2
+			llmqType:      btcjson.LLMQType_100_67,
+			numValidators: 100,
+			threshold:     2,
+		},
+		{ // full network but threshold 3
+			llmqType:      btcjson.LLMQType_100_67,
+			numValidators: 100,
+			threshold:     3,
 		},
 		{ // normal network
 			llmqType:      btcjson.LLMQType_100_67,
