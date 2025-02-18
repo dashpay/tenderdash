@@ -245,41 +245,38 @@ func (val *ValidatorParams) ToProto() *tmproto.ValidatorParams {
 	if val == nil {
 		return nil
 	}
-	var threshold *tmproto.ValidatorParams_VotingPowerThreshold
+
+	params := tmproto.ValidatorParams{
+		PubKeyTypes: val.PubKeyTypes,
+	}
+
 	if val.VotingPowerThreshold != nil {
-		threshold = &tmproto.ValidatorParams_VotingPowerThreshold{
-			VotingPowerThreshold: uint64(*val.VotingPowerThreshold),
+		params.XVotingPowerThreshold = &tmproto.ValidatorParams_VotingPowerThreshold{
+			VotingPowerThreshold: *val.VotingPowerThreshold,
 		}
 	}
 
-	return &tmproto.ValidatorParams{
-		PubKeyTypes:           val.PubKeyTypes,
-		XVotingPowerThreshold: threshold,
-	}
+	return &params
 }
 
 // ValidatorParamsFromProto returns a ValidatorParams from a protobuf representation.
 // If pbValParams is nil, it returns a ValidatorParams with empty PubKeyTypes and 0 VotingPowerThreshold.
 func ValidatorParamsFromProto(pbValParams *tmproto.ValidatorParams) ValidatorParams {
+	var params = ValidatorParams{
+		PubKeyTypes: []string{},
+	}
+
 	if pbValParams != nil {
-		var threshold *uint64
 		if pbValParams.XVotingPowerThreshold != nil {
 			val := pbValParams.GetVotingPowerThreshold()
-			threshold = &val
+			params.VotingPowerThreshold = &val
 		}
-
-		return ValidatorParams{
-			// Copy Validator.PubkeyTypes, and set result's value to the copy.
-			// This avoids having to initialize the slice to 0 values, and then write to it again.
-			PubKeyTypes:          append([]string{}, pbValParams.PubKeyTypes...),
-			VotingPowerThreshold: threshold,
-		}
+		// Copy Validator.PubkeyTypes, and set result's value to the copy.
+		// This avoids having to initialize the slice to 0 values, and then write to it again.
+		params.PubKeyTypes = append(params.PubKeyTypes, pbValParams.PubKeyTypes...)
 	}
 
-	return ValidatorParams{
-		PubKeyTypes:          []string{},
-		VotingPowerThreshold: nil,
-	}
+	return params
 }
 
 func (params *ConsensusParams) Complete() {
