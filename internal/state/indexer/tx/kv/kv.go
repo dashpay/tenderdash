@@ -8,7 +8,7 @@ import (
 	"strings"
 
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/google/orderedcode"
 
 	abci "github.com/dashpay/tenderdash/abci/types"

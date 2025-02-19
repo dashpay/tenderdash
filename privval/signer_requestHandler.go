@@ -6,7 +6,7 @@ import (
 
 	"github.com/dashpay/dashd-go/btcjson"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/dashpay/tenderdash/crypto"
 	cryptoenc "github.com/dashpay/tenderdash/crypto/encoding"

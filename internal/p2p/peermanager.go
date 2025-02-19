@@ -11,8 +11,8 @@ import (
 	"time"
 
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/gogo/protobuf/jsonpb"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/jsonpb"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/google/orderedcode"
 	"github.com/rs/zerolog"
 	sync "github.com/sasha-s/go-deadlock"

@@ -6,7 +6,7 @@ import (
 	"io"
 	"testing"
 
-	gogotypes "github.com/gogo/protobuf/types"
+	gogotypes "github.com/cosmos/gogoproto/types"
 	"github.com/oasisprotocol/curve25519-voi/primitives/merlin"
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/chacha20poly1305"

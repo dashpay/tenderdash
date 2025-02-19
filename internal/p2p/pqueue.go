@@ -9,7 +9,7 @@ import (
 
 	sync "github.com/sasha-s/go-deadlock"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/dashpay/tenderdash/libs/log"
 )

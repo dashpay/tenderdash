@@ -4,7 +4,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/internal/p2p/client"

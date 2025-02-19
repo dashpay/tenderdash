@@ -6,7 +6,7 @@ import (
 	"sort"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 )
 
 type simpleQueue struct {
