@@ -6,12 +6,6 @@ import (
 	"math"
 )
 
-var ErrOverflowInt64 = errors.New("int64 overflow")
-var ErrOverflowInt32 = errors.New("int32 overflow")
-var ErrOverflowUint64 = errors.New("uint64 overflow")
-var ErrOverflowUint32 = errors.New("uint32 overflow")
-var ErrOverflowUint8 = errors.New("uint8 overflow")
-var ErrOverflowInt8 = errors.New("int8 overflow")
 var ErrOverflow = errors.New("integer overflow")
 
 // SafeAddClipInt64 adds two int64 integers and clips the result to the int64 range.
@@ -29,9 +23,9 @@ func SafeAddClipInt64(a, b int64) int64 {
 // SafeAddInt64 adds two int64 integers.
 func SafeAddInt64(a, b int64) (int64, error) {
 	if b > 0 && (a > math.MaxInt64-b) {
-		return 0, ErrOverflowInt64
+		return 0, ErrOverflow
 	} else if b < 0 && (a < math.MinInt64-b) {
-		return 0, ErrOverflowInt64
+		return 0, ErrOverflow
 	}
 	return a + b, nil
 }
@@ -39,9 +33,9 @@ func SafeAddInt64(a, b int64) (int64, error) {
 // SafeAddInt32 adds two int32 integers.
 func SafeAddInt32(a, b int32) (int32, error) {
 	if b > 0 && (a > math.MaxInt32-b) {
-		return 0, ErrOverflowInt32
+		return 0, ErrOverflow
 	} else if b < 0 && (a < math.MinInt32-b) {
-		return 0, ErrOverflowInt32
+		return 0, ErrOverflow
 	}
 	return a + b, nil
 }
@@ -69,9 +63,9 @@ func SafeSubClipInt64(a, b int64) int64 {
 // SafeSubInt32 subtracts two int32 integers.
 func SafeSubInt32(a, b int32) (int32, error) {
 	if b > 0 && (a < math.MinInt32+b) {
-		return 0, ErrOverflowInt32
+		return 0, ErrOverflow
 	} else if b < 0 && (a > math.MaxInt32+b) {
-		return 0, ErrOverflowInt32
+		return 0, ErrOverflow
 	}
 	return a - b, nil
 }
@@ -79,9 +73,9 @@ func SafeSubInt32(a, b int32) (int32, error) {
 // SafeConvertInt32 takes a int and checks if it overflows.
 func SafeConvertInt32[T Integer](a T) (int32, error) {
 	if int64(a) > math.MaxInt32 {
-		return 0, ErrOverflowInt32
+		return 0, ErrOverflow
 	} else if int64(a) < math.MinInt32 {
-		return 0, ErrOverflowInt32
+		return 0, ErrOverflow
 	}
 	return int32(a), nil
 }
@@ -89,9 +83,9 @@ func SafeConvertInt32[T Integer](a T) (int32, error) {
 // SafeConvertInt32 takes a int and checks if it overflows.
 func SafeConvertUint32[T Integer](a T) (uint32, error) {
 	if uint64(a) > math.MaxUint32 {
-		return 0, ErrOverflowUint32
+		return 0, ErrOverflow
 	} else if a < 0 {
-		return 0, ErrOverflowUint32
+		return 0, ErrOverflow
 	}
 	return uint32(a), nil
 }
@@ -220,9 +214,9 @@ func MustConvertUint32[T Integer](a T) uint32 {
 // SafeConvertUint8 takes an int64 and checks if it overflows.
 func SafeConvertUint8(a int64) (uint8, error) {
 	if a > math.MaxUint8 {
-		return 0, ErrOverflowUint8
+		return 0, ErrOverflow
 	} else if a < 0 {
-		return 0, ErrOverflowUint8
+		return 0, ErrOverflow
 	}
 	return uint8(a), nil
 }
@@ -230,9 +224,9 @@ func SafeConvertUint8(a int64) (uint8, error) {
 // SafeConvertInt8 takes an int64 and checks if it overflows.
 func SafeConvertInt8(a int64) (int8, error) {
 	if a > math.MaxInt8 {
-		return 0, ErrOverflowInt8
+		return 0, ErrOverflow
 	} else if a < math.MinInt8 {
-		return 0, ErrOverflowInt8
+		return 0, ErrOverflow
 	}
 	return int8(a), nil
 }
