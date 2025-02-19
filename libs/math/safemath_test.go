@@ -205,3 +205,9 @@ func TestSafeConvert(t *testing.T) {
 		})
 	}
 }
+
+func TestMustConvertPanics(t *testing.T) {
+	assert.NotPanics(t, func() { MustConvert[int32, int32](0) })
+	assert.Panics(t, func() { MustConvert[int32, int16](math.MaxInt16 + 1) })
+	assert.NotPanics(t, func() { MustConvert[int32, int16](math.MaxInt16) })
+}
