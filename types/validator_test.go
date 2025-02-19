@@ -115,8 +115,8 @@ func TestValidatorValidateBasic(t *testing.T) {
 	}
 }
 
-// TestValdiatorSetHashVectors checks if provided validator threshold pubkey and quorum hash returns expected hash
-func TestValdiatorSetHashVectors(t *testing.T) {
+// TestValidatorSetHashVectors checks if provided validator threshold pubkey and quorum hash returns expected hash
+func TestValidatorSetHashVectors(t *testing.T) {
 	thresholdPublicKey, err := base64.RawStdEncoding.DecodeString("gw5F5F5kFNnWFUc8woFOaxccUI+cd+ixaSS3RZT2HJlWpvoWM16YRn6sjYvbdtGH")
 	require.NoError(t, err)
 

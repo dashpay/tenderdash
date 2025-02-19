@@ -11,6 +11,10 @@ import (
 	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 )
 
+const (
+	timeout = 1 * time.Second
+)
+
 // TestLockGuardMultipleUnlocks checks that the LockGuard function correctly handles multiple unlock calls.
 func TestLockGuardMultipleUnlocks(t *testing.T) {
 	// Disable deadlock detection logic for this test
@@ -59,8 +63,7 @@ func TestLockGuard(t *testing.T) {
 		wg.Add(1)
 		go increment()
 	}
-
-	wg.Wait()
+	waitFor(wg.Wait)
 	assert.Equal(t, 100, counter, "Counter should be incremented to 100")
 }
 
@@ -97,8 +100,23 @@ func TestRLockGuard(t *testing.T) {
 		go write()
 	}
 
-	wg.Wait()
+	waitFor(wg.Wait)
 	assert.Equal(t, 10, counter, "Counter should be incremented to 10")
+}
+
+// waitFor waits for the function `f` to finish or times out after `timeout`.
+func waitFor(f func()) {
+	done := make(chan struct{})
+	go func() {
+		f()
+		close(done)
+	}()
+
+	select {
+	case <-time.After(timeout):
+		panic("Test timed out")
+	case <-done:
+	}
 }
 
 // TestMixedLocks checks the behavior of mixed read and write locks,
@@ -136,6 +154,6 @@ func TestMixedLocks(t *testing.T) {
 		go write()
 	}
 
-	wg.Wait()
+	waitFor(wg.Wait)
 	assert.Equal(t, 5, counter, "Counter should be incremented to 5")
 }

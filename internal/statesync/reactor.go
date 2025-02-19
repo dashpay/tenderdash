@@ -123,7 +123,7 @@ type Reactor struct {
 	// providers.
 	mtx               sync.RWMutex
 	initSyncer        func() *syncer
-	requestSnaphot    func() error
+	requestSnapshot   func() error
 	syncer            *syncer // syncer is nil when sync is not in progress
 	initStateProvider func(ctx context.Context, chainID string, initialHeight int64) error
 	stateProvider     StateProvider
@@ -139,7 +139,7 @@ type Reactor struct {
 }
 
 // ConsensusStateProvider is an interface that allows the state sync reactor to
-// ineract with the consensus state. It is defined to improve testability.
+// interact with the consensus state. It is defined to improve testability.
 //
 // Implemented by consensus.State
 type ConsensusStateProvider interface {
@@ -237,7 +237,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		}
 	}
 	r.dispatcher = NewDispatcher(blockCh, r.logger)
-	r.requestSnaphot = func() error {
+	r.requestSnapshot = func() error {
 		// request snapshots from all currently connected peers
 		return snapshotCh.Send(ctx, p2p.Envelope{
 			Broadcast: true,
@@ -352,7 +352,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 	}
 	r.getSyncer().SetStateProvider(r.stateProvider)
 
-	state, commit, err := r.syncer.SyncAny(ctx, r.cfg.DiscoveryTime, r.cfg.Retries, r.requestSnaphot)
+	state, commit, err := r.syncer.SyncAny(ctx, r.cfg.DiscoveryTime, r.cfg.Retries, r.requestSnapshot)
 	if err != nil {
 		return sm.State{}, fmt.Errorf("sync any: %w", err)
 	}
