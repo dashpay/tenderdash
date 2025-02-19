@@ -265,9 +265,7 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 			Once().
 			Return(asc.resp, nil)
 	}
-	suite.conn.On("FinalizeSnapshot", mock.Anything, mock.Anything).
-		Once().
-		Return(&abci.ResponseFinalizeSnapshot{}, nil)
+
 	suite.conn.
 		On("Info", mock.Anything, &proxy.RequestInfo).
 		Once().
