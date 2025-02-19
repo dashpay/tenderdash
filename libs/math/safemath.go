@@ -287,7 +287,7 @@ func Max[T Integer]() uint64 {
 	case uint64:
 		return uint64(math.MaxUint64)
 	default:
-		panic("unsupported type")
+		panic(fmt.Sprintf("unsupported type %T", max))
 	}
 }
 
