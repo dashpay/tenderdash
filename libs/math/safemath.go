@@ -116,7 +116,8 @@ type Integer interface {
 
 // SafeConvert converts a value of type T to a value of type U.
 // It returns an error if the conversion would cause an overflow.
-func SafeConvert[T Integer, U Integer](from T) (U, error) {
+func SafeConvert[F Integer, T Integer](from F) (T, error) {
+	// check if int and uint are smaller than int64 and uint64; we use constants here for performance reasons
 	const uintIsSmall = math.MaxUint < math.MaxUint64
 	const intIsSmall = math.MaxInt < math.MaxInt64 && math.MinInt > math.MinInt64
 
@@ -124,36 +125,42 @@ func SafeConvert[T Integer, U Integer](from T) (U, error) {
 	switch any(from).(type) {
 	case int64:
 		// conversion from int64 to uint64 - we need to check for negative values
-		if _, ok := any(U(0)).(uint64); ok && from < 0 {
+		if _, ok := any(T(0)).(uint64); ok && from < 0 {
 			return 0, ErrOverflow
 		}
-		return U(from), nil
+		// return T(from), nil
 	case uint64:
 		// conversion from uint64 to int64 - we need to check for overflow
-		if _, ok := any(U(0)).(int64); ok && uint64(from) > math.MaxInt64 {
+		if _, ok := any(T(0)).(int64); ok && uint64(from) > math.MaxInt64 {
 			return 0, ErrOverflow
 		}
-		return U(from), nil
+		// return T(from), nil
 	case int:
 		if !intIsSmall {
-			return SafeConvert[int64, U](int64(from))
+			// when int isn't smaller than int64, we just fall back to int64
+			return SafeConvert[int64, T](int64(from))
 		}
 		// no return here - it's safe to use normal logic
 	case uint:
 		if !uintIsSmall {
-			return SafeConvert[uint64, U](uint64(from))
+			// when uint isn't smaller than uint64, we just fall back to uint64
+			return SafeConvert[uint64, T](uint64(from))
 		}
 		// no return here - it's safe to use normal logic
 	}
-	if uint64(from) > Max[U]() {
+	if from >= 0 && uint64(from) > Max[T]() {
 		return 0, ErrOverflow
 	}
-	if int64(from) < Min[U]() {
+	if from <= 0 && int64(from) < Min[T]() {
 		return 0, ErrOverflow
 	}
-	return U(from), nil
+	return T(from), nil
 }
 
+// MustConvert converts a value of type T to a value of type U.
+// It panics if the conversion would cause an overflow.
+//
+// See SafeConvert for non-panicking version.
 func MustConvert[FROM Integer, TO Integer](a FROM) TO {
 	i, err := SafeConvert[FROM, TO](a)
 	if err != nil {

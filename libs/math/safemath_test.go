@@ -1,6 +1,7 @@
 package math
 
 import (
+	"fmt"
 	"math"
 	"testing"
 	"testing/quick"
@@ -113,79 +114,94 @@ func TestSafeConvert(t *testing.T) {
 		{int16(0), uint32(0), false},
 		{int16(-1), uint32(0), true},
 		{int16(math.MaxInt16), uint32(math.MaxInt16), false},
+		{int64(math.MinInt16), int16(math.MinInt16), false},
+		{int64(math.MinInt16 - 1), int16(0), true},
+		{int32(math.MinInt16), int16(math.MinInt16), false},
+		{int32(math.MinInt16 - 1), int16(0), true},
+		{int32(math.MinInt16 + 1), int16(math.MinInt16 + 1), false},
+		{int32(math.MaxInt16), int16(math.MaxInt16), false},
+		{int32(math.MaxInt16 + 1), int16(0), true},
+		{int32(math.MaxInt16 - 1), int16(math.MaxInt16 - 1), false},
 	}
 
 	for i, tc := range testCases {
-		var result interface{}
-		var err error
+		testName := fmt.Sprintf("%d:%T(%d)-%T(%d)", i, tc.from, tc.from, tc.want, tc.want)
+		t.Run(testName, func(t *testing.T) {
+			var result interface{}
+			var err error
 
-		switch from := tc.from.(type) {
-		case int:
-			switch tc.want.(type) {
+			switch from := tc.from.(type) {
+			case int:
+				switch tc.want.(type) {
+				case int64:
+					result, err = SafeConvert[int, int64](from)
+				default:
+					t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
+				}
+			case uint:
+				switch tc.want.(type) {
+				case uint64:
+					result, err = SafeConvert[uint, uint64](from)
+				default:
+					t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
+				}
 			case int64:
-				result, err = SafeConvert[int, int64](from)
-			default:
-				t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
-			}
-		case uint:
-			switch tc.want.(type) {
+				switch tc.want.(type) {
+				case uint64:
+					result, err = SafeConvert[int64, uint64](from)
+				case int64:
+					result, err = SafeConvert[int64, int64](from)
+				case uint16:
+					result, err = SafeConvert[int64, uint16](from)
+				case int16:
+					result, err = SafeConvert[int64, int16](from)
+				default:
+					t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
+				}
 			case uint64:
-				result, err = SafeConvert[uint, uint64](from)
-			default:
-				t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
-			}
-		case int64:
-			switch tc.want.(type) {
-			case uint64:
-				result, err = SafeConvert[int64, uint64](from)
-			case int64:
-				result, err = SafeConvert[int64, int64](from)
-			default:
-				t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
-			}
-		case uint64:
-			switch tc.want.(type) {
-			case int64:
-				result, err = SafeConvert[uint64, int64](from)
-			default:
-				t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
-			}
-		case int32:
-			switch tc.want.(type) {
-			case int16:
-				result, err = SafeConvert[int32, int16](from)
-			case uint32:
-				result, err = SafeConvert[int32, uint32](from)
-			default:
-				t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
-			}
-		case uint32:
-			switch tc.want.(type) {
-			case int16:
-				result, err = SafeConvert[uint32, int16](from)
+				switch tc.want.(type) {
+				case int64:
+					result, err = SafeConvert[uint64, int64](from)
+				default:
+					t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
+				}
 			case int32:
-				result, err = SafeConvert[uint32, int32](from)
-			default:
-				t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
-			}
-		case int16:
-			switch tc.want.(type) {
-			case int32:
-				result, err = SafeConvert[int16, int32](from)
+				switch tc.want.(type) {
+				case int16:
+					result, err = SafeConvert[int32, int16](from)
+				case uint32:
+					result, err = SafeConvert[int32, uint32](from)
+				default:
+					t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
+				}
 			case uint32:
-				result, err = SafeConvert[int16, uint32](from)
+				switch tc.want.(type) {
+				case int16:
+					result, err = SafeConvert[uint32, int16](from)
+				case int32:
+					result, err = SafeConvert[uint32, int32](from)
+				default:
+					t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
+				}
+			case int16:
+				switch tc.want.(type) {
+				case int32:
+					result, err = SafeConvert[int16, int32](from)
+				case uint32:
+					result, err = SafeConvert[int16, uint32](from)
+				default:
+					t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
+				}
 			default:
-				t.Fatalf("test case %d: unsupported target type %T", i, tc.want)
+				t.Fatalf("test case %d: unsupported source type %T", i, tc.from)
 			}
-		default:
-			t.Fatalf("test case %d: unsupported source type %T", i, tc.from)
-		}
 
-		if (err != nil) != tc.err {
-			t.Errorf("test case %d: expected error %v, got %v", i, tc.err, err)
-		}
-		if err == nil && result != tc.want {
-			t.Errorf("test case %d: expected result %v, got %v", i, tc.want, result)
-		}
+			if (err != nil) != tc.err {
+				t.Errorf("test case %d: expected error %v, got %v", i, tc.err, err)
+			}
+			if err == nil && result != tc.want {
+				t.Errorf("test case %d: expected result %v, got %v", i, tc.want, result)
+			}
+		})
 	}
 }
