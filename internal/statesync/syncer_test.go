@@ -105,15 +105,6 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 		BlockID: types.BlockID{Hash: []byte("blockhash")},
 	}
 
-	lightBlock := types.LightBlock{
-		SignedHeader: &types.SignedHeader{
-			Commit: commit,
-			Header: &types.Header{
-				Height: 1,
-			},
-		},
-	}
-
 	s := &snapshot{Height: 1, Version: 1, Hash: []byte{0}}
 	chunks := []*chunk{
 		{Height: 1, Version: 1, ID: []byte{0}, Chunk: []byte{0}},
@@ -128,8 +119,9 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 	suite.stateProvider.
 		On("AppHash", mock.Anything, uint64(2)).
 		Return(tmbytes.HexBytes("app_hash_2"), nil)
-	suite.stateProvider.On("LightBlock", mock.Anything, uint64(commit.Height)).
-		Return(&lightBlock, nil)
+	suite.stateProvider.
+		On("Commit", mock.Anything, uint64(1)).
+		Return(commit, nil)
 	suite.stateProvider.
 		On("State", mock.Anything, uint64(1)).
 		Return(state, nil)
