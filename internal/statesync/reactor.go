@@ -443,12 +443,12 @@ func (r *Reactor) publishCommitEvent(commit *types.Commit) error {
 // and time that is less or equal to the stopHeight and stopTime. The
 // trustedBlockID should be of the header at startHeight.
 func (r *Reactor) Backfill(ctx context.Context, state sm.State) error {
-	// TODO: revert to using consensus params for backfill criteria after testing
-	// params := state.ConsensusParams.Evidence
-	// stopHeight := state.LastBlockHeight - params.MaxAgeNumBlocks
-	// stopTime := state.LastBlockTime.Add(-params.MaxAgeDuration)
-	stopHeight := state.LastBlockHeight - 500
-	stopTime := state.LastBlockTime.Add(-24 * time.Hour)
+	params := state.ConsensusParams.Evidence
+	stopHeight := state.LastBlockHeight - params.MaxAgeNumBlocks
+	stopTime := state.LastBlockTime.Add(-params.MaxAgeDuration)
+	// To make tests on mainnet faster, we can use:
+	// stopHeight := state.LastBlockHeight - 500
+	// stopTime := state.LastBlockTime.Add(-24 * time.Hour)
 	// ensure that stop height doesn't go below the initial height
 	if stopHeight < state.InitialHeight {
 		stopHeight = state.InitialHeight
