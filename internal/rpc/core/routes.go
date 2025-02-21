@@ -56,6 +56,7 @@ func NewRoutesMap(svc RPCService, opts *RouteOptions) RoutesMap {
 		"consensus_state":      rpc.NewRPCFunc(svc.GetConsensusState),
 		"consensus_params":     rpc.NewRPCFunc(svc.ConsensusParams),
 		"unconfirmed_txs":      rpc.NewRPCFunc(svc.UnconfirmedTxs),
+		"unconfirmed_tx":       rpc.NewRPCFunc(svc.UnconfirmedTx),
 		"num_unconfirmed_txs":  rpc.NewRPCFunc(svc.NumUnconfirmedTxs),
 
 		// tx broadcast API
