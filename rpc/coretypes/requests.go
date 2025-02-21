@@ -82,7 +82,7 @@ type RequestUnconfirmedTxs struct {
 
 // RequestUnconfirmedTx is used to request a single unconfirmed transaction.
 type RequestUnconfirmedTx struct {
-	TxHash bytes.HexBytes `json:"tx_hash,omitempty"`
+	TxHash bytes.HexBytes `json:"hash,omitempty"`
 }
 
 type RequestBroadcastTx struct {

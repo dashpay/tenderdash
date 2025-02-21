@@ -8,6 +8,7 @@ import (
 	"time"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/mempool"
 	"github.com/dashpay/tenderdash/internal/state/indexer"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
@@ -197,8 +198,8 @@ func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.Requ
 
 // return single unconfirmed transaction, matching req.TxHash
 func (env *Environment) UnconfirmedTx(_ctx context.Context, req *coretypes.RequestUnconfirmedTx) (*coretypes.ResultUnconfirmedTx, error) {
-	if req == nil || req.TxHash.IsZero() {
-		return nil, errors.New("you mustprovide transaction hash in tx_hash")
+	if req == nil || req.TxHash.IsZero() || len(req.TxHash) != crypto.HashSize {
+		return nil, errors.New("you must provide transaction hash in hash= argument")
 	}
 
 	tx := env.Mempool.GetTxByHash(types.TxKey(req.TxHash))

@@ -314,7 +314,7 @@ type ResultUnconfirmedTxs struct {
 
 // Fetch transaction from mempool
 type ResultUnconfirmedTx struct {
-	Tx types.Tx `json:"txs"`
+	Tx types.Tx `json:"tx"`
 }
 
 // Info abci msg
