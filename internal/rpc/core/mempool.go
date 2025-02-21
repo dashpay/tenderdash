@@ -12,6 +12,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/state/indexer"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 //-----------------------------------------------------------------------------
@@ -192,6 +193,20 @@ func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.Requ
 		TotalBytes: env.Mempool.SizeBytes(),
 		Txs:        result,
 	}, nil
+}
+
+// return single unconfirmed transaction, matching req.TxHash
+func (env *Environment) UnconfirmedTx(_ctx context.Context, req *coretypes.RequestUnconfirmedTx) (*coretypes.ResultUnconfirmedTx, error) {
+	if req == nil || req.TxHash.IsZero() {
+		return nil, errors.New("you mustprovide transaction hash in tx_hash")
+	}
+
+	tx := env.Mempool.GetTxByHash(types.TxKey(req.TxHash))
+	if tx == nil {
+		return nil, fmt.Errorf("transaction %X not found", req.TxHash)
+	}
+
+	return &coretypes.ResultUnconfirmedTx{Tx: tx}, nil
 }
 
 // NumUnconfirmedTxs gets number of unconfirmed transactions.

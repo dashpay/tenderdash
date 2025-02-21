@@ -137,7 +137,11 @@ func (p proxyService) TxSearch(ctx context.Context, req *coretypes.RequestTxSear
 }
 
 func (p proxyService) UnconfirmedTxs(ctx context.Context, req *coretypes.RequestUnconfirmedTxs) (*coretypes.ResultUnconfirmedTxs, error) {
-	return p.Client.UnconfirmedTxs(ctx, req.Page.IntPtr(), req.PerPage.IntPtr(), req.TxHash)
+	return p.Client.UnconfirmedTxs(ctx, req.Page.IntPtr(), req.PerPage.IntPtr())
+}
+
+func (p proxyService) UnconfirmedTx(ctx context.Context, req *coretypes.RequestUnconfirmedTx) (*coretypes.ResultUnconfirmedTx, error) {
+	return p.Client.UnconfirmedTx(ctx, req.TxHash)
 }
 
 func (p proxyService) Unsubscribe(ctx context.Context, req *coretypes.RequestUnsubscribe) (*coretypes.ResultUnsubscribe, error) {

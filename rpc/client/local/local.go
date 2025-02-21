@@ -99,12 +99,14 @@ func (c *Local) BroadcastTxSync(ctx context.Context, tx types.Tx) (*coretypes.Re
 	return c.env.BroadcastTxSync(ctx, &coretypes.RequestBroadcastTx{Tx: tx})
 }
 
-func (c *Local) UnconfirmedTxs(ctx context.Context, page, perPage *int, txHash []byte) (*coretypes.ResultUnconfirmedTxs, error) {
+func (c *Local) UnconfirmedTxs(ctx context.Context, page, perPage *int) (*coretypes.ResultUnconfirmedTxs, error) {
 	return c.env.UnconfirmedTxs(ctx, &coretypes.RequestUnconfirmedTxs{
 		Page:    coretypes.Int64Ptr(page),
 		PerPage: coretypes.Int64Ptr(perPage),
-		TxHash:  txHash,
 	})
+}
+func (c *Local) UnconfirmedTx(ctx context.Context, txHash []byte) (*coretypes.ResultUnconfirmedTx, error) {
+	return c.env.UnconfirmedTx(ctx, &coretypes.RequestUnconfirmedTx{TxHash: txHash})
 }
 
 func (c *Local) NumUnconfirmedTxs(ctx context.Context) (*coretypes.ResultUnconfirmedTxs, error) {

@@ -312,6 +312,11 @@ type ResultUnconfirmedTxs struct {
 	Txs        []types.Tx `json:"txs"`
 }
 
+// Fetch transaction from mempool
+type ResultUnconfirmedTx struct {
+	Tx types.Tx `json:"txs"`
+}
+
 // Info abci msg
 type ResultABCIInfo struct {
 	Response abci.ResponseInfo `json:"response"`

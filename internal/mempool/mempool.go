@@ -260,6 +260,17 @@ func (txmp *TxMempool) CheckTx(
 	return txmp.addNewTransaction(wtx, rsp)
 }
 
+// GetTxByHash returns transaction by key from the mempool. If the transaction
+// does not exist, it returns nil.
+func (txmp *TxMempool) GetTxByHash(txHash types.TxKey) types.Tx {
+	if elt, ok := txmp.txByKey[txHash]; ok {
+		w := elt.Value.(*WrappedTx)
+		return w.tx
+	}
+
+	return nil
+}
+
 // RemoveTxByKey removes the transaction with the specified key from the
 // mempool. It reports an error if no such transaction exists.  This operation
 // does not remove the transaction from the cache.

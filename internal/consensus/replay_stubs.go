@@ -39,6 +39,7 @@ func (emptyMempool) Update(
 ) error {
 	return nil
 }
+func (emptyMempool) GetTxByHash(_ types.TxKey) types.Tx      { return nil }
 func (emptyMempool) Flush()                                  {}
 func (emptyMempool) FlushAppConn(_ctx context.Context) error { return nil }
 func (emptyMempool) TxsAvailable() <-chan struct{}           { return make(chan struct{}) }

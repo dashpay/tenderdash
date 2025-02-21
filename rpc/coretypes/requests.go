@@ -76,9 +76,13 @@ type RequestConsensusParams struct {
 }
 
 type RequestUnconfirmedTxs struct {
-	Page    *Int64         `json:"page"`
-	PerPage *Int64         `json:"per_page"`
-	TxHash  bytes.HexBytes `json:"tx_hash,omitempty"`
+	Page    *Int64 `json:"page"`
+	PerPage *Int64 `json:"per_page"`
+}
+
+// RequestUnconfirmedTx is used to request a single unconfirmed transaction.
+type RequestUnconfirmedTx struct {
+	TxHash bytes.HexBytes `json:"tx_hash,omitempty"`
 }
 
 type RequestBroadcastTx struct {

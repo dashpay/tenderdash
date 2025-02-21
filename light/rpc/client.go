@@ -236,8 +236,12 @@ func (c *Client) BroadcastTx(ctx context.Context, tx types.Tx) (*coretypes.Resul
 	return c.next.BroadcastTx(ctx, tx)
 }
 
-func (c *Client) UnconfirmedTxs(ctx context.Context, page, perPage *int, txHash []byte) (*coretypes.ResultUnconfirmedTxs, error) {
-	return c.next.UnconfirmedTxs(ctx, page, perPage, txHash)
+func (c *Client) UnconfirmedTxs(ctx context.Context, page, perPage *int) (*coretypes.ResultUnconfirmedTxs, error) {
+	return c.next.UnconfirmedTxs(ctx, page, perPage)
+}
+
+func (c *Client) UnconfirmedTx(ctx context.Context, txHash []byte) (*coretypes.ResultUnconfirmedTx, error) {
+	return c.next.UnconfirmedTx(ctx, txHash)
 }
 
 func (c *Client) NumUnconfirmedTxs(ctx context.Context) (*coretypes.ResultUnconfirmedTxs, error) {

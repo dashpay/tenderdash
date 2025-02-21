@@ -1956,9 +1956,68 @@ func (_c *RemoteClient_TxSearch_Call) RunAndReturn(run func(context.Context, str
 	return _c
 }
 
-// UnconfirmedTxs provides a mock function with given fields: ctx, page, perPage, txHash
-func (_m *RemoteClient) UnconfirmedTxs(ctx context.Context, page *int, perPage *int, txHash []byte) (*coretypes.ResultUnconfirmedTxs, error) {
-	ret := _m.Called(ctx, page, perPage, txHash)
+// UnconfirmedTx provides a mock function with given fields: ctx, txHash
+func (_m *RemoteClient) UnconfirmedTx(ctx context.Context, txHash []byte) (*coretypes.ResultUnconfirmedTx, error) {
+	ret := _m.Called(ctx, txHash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UnconfirmedTx")
+	}
+
+	var r0 *coretypes.ResultUnconfirmedTx
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, []byte) (*coretypes.ResultUnconfirmedTx, error)); ok {
+		return rf(ctx, txHash)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, []byte) *coretypes.ResultUnconfirmedTx); ok {
+		r0 = rf(ctx, txHash)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*coretypes.ResultUnconfirmedTx)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, []byte) error); ok {
+		r1 = rf(ctx, txHash)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// RemoteClient_UnconfirmedTx_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UnconfirmedTx'
+type RemoteClient_UnconfirmedTx_Call struct {
+	*mock.Call
+}
+
+// UnconfirmedTx is a helper method to define mock.On call
+//   - ctx context.Context
+//   - txHash []byte
+func (_e *RemoteClient_Expecter) UnconfirmedTx(ctx interface{}, txHash interface{}) *RemoteClient_UnconfirmedTx_Call {
+	return &RemoteClient_UnconfirmedTx_Call{Call: _e.mock.On("UnconfirmedTx", ctx, txHash)}
+}
+
+func (_c *RemoteClient_UnconfirmedTx_Call) Run(run func(ctx context.Context, txHash []byte)) *RemoteClient_UnconfirmedTx_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].([]byte))
+	})
+	return _c
+}
+
+func (_c *RemoteClient_UnconfirmedTx_Call) Return(_a0 *coretypes.ResultUnconfirmedTx, _a1 error) *RemoteClient_UnconfirmedTx_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *RemoteClient_UnconfirmedTx_Call) RunAndReturn(run func(context.Context, []byte) (*coretypes.ResultUnconfirmedTx, error)) *RemoteClient_UnconfirmedTx_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
+// UnconfirmedTxs provides a mock function with given fields: ctx, page, perPage
+func (_m *RemoteClient) UnconfirmedTxs(ctx context.Context, page *int, perPage *int) (*coretypes.ResultUnconfirmedTxs, error) {
+	ret := _m.Called(ctx, page, perPage)
 
 	if len(ret) == 0 {
 		panic("no return value specified for UnconfirmedTxs")
@@ -1966,19 +2025,19 @@ func (_m *RemoteClient) UnconfirmedTxs(ctx context.Context, page *int, perPage *
 
 	var r0 *coretypes.ResultUnconfirmedTxs
 	var r1 error
-	if rf, ok := ret.Get(0).(func(context.Context, *int, *int, []byte) (*coretypes.ResultUnconfirmedTxs, error)); ok {
-		return rf(ctx, page, perPage, txHash)
+	if rf, ok := ret.Get(0).(func(context.Context, *int, *int) (*coretypes.ResultUnconfirmedTxs, error)); ok {
+		return rf(ctx, page, perPage)
 	}
-	if rf, ok := ret.Get(0).(func(context.Context, *int, *int, []byte) *coretypes.ResultUnconfirmedTxs); ok {
-		r0 = rf(ctx, page, perPage, txHash)
+	if rf, ok := ret.Get(0).(func(context.Context, *int, *int) *coretypes.ResultUnconfirmedTxs); ok {
+		r0 = rf(ctx, page, perPage)
 	} else {
 		if ret.Get(0) != nil {
 			r0 = ret.Get(0).(*coretypes.ResultUnconfirmedTxs)
 		}
 	}
 
-	if rf, ok := ret.Get(1).(func(context.Context, *int, *int, []byte) error); ok {
-		r1 = rf(ctx, page, perPage, txHash)
+	if rf, ok := ret.Get(1).(func(context.Context, *int, *int) error); ok {
+		r1 = rf(ctx, page, perPage)
 	} else {
 		r1 = ret.Error(1)
 	}
@@ -1995,14 +2054,13 @@ type RemoteClient_UnconfirmedTxs_Call struct {
 //   - ctx context.Context
 //   - page *int
 //   - perPage *int
-//   - txHash []byte
-func (_e *RemoteClient_Expecter) UnconfirmedTxs(ctx interface{}, page interface{}, perPage interface{}, txHash interface{}) *RemoteClient_UnconfirmedTxs_Call {
-	return &RemoteClient_UnconfirmedTxs_Call{Call: _e.mock.On("UnconfirmedTxs", ctx, page, perPage, txHash)}
+func (_e *RemoteClient_Expecter) UnconfirmedTxs(ctx interface{}, page interface{}, perPage interface{}) *RemoteClient_UnconfirmedTxs_Call {
+	return &RemoteClient_UnconfirmedTxs_Call{Call: _e.mock.On("UnconfirmedTxs", ctx, page, perPage)}
 }
 
-func (_c *RemoteClient_UnconfirmedTxs_Call) Run(run func(ctx context.Context, page *int, perPage *int, txHash []byte)) *RemoteClient_UnconfirmedTxs_Call {
+func (_c *RemoteClient_UnconfirmedTxs_Call) Run(run func(ctx context.Context, page *int, perPage *int)) *RemoteClient_UnconfirmedTxs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*int), args[2].(*int), args[3].([]byte))
+		run(args[0].(context.Context), args[1].(*int), args[2].(*int))
 	})
 	return _c
 }
@@ -2012,7 +2070,7 @@ func (_c *RemoteClient_UnconfirmedTxs_Call) Return(_a0 *coretypes.ResultUnconfir
 	return _c
 }
 
-func (_c *RemoteClient_UnconfirmedTxs_Call) RunAndReturn(run func(context.Context, *int, *int, []byte) (*coretypes.ResultUnconfirmedTxs, error)) *RemoteClient_UnconfirmedTxs_Call {
+func (_c *RemoteClient_UnconfirmedTxs_Call) RunAndReturn(run func(context.Context, *int, *int) (*coretypes.ResultUnconfirmedTxs, error)) *RemoteClient_UnconfirmedTxs_Call {
 	_c.Call.Return(run)
 	return _c
 }
