@@ -1,9 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Tendermint RPC
-  contact:
-    name: Tendermint RPC
-    url: https://github.com/tendermint/tendermint/issues/new/choose
+  title: Tenderdash RPC
   description: |
     Tendermint supports the following RPC protocols:
 
@@ -59,10 +56,8 @@ info:
     name: Apache 2.0
     url: https://github.com/dashevo/tenderdash/blob/master/LICENSE
 servers:
-  - url: https://rpc.cosmos.network
-    description: Cosmos mainnet node to interact with the Tendermint RPC
   - url: http://localhost:26657
-    description: Interact with the Tendermint RPC locally on your device
+    description: Interact with the Tenderdash RPC locally on your device
 tags:
   - name: Websocket
     description: Subscribe/unsubscribe are reserved for websocket events.

@@ -184,7 +184,6 @@ func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.Requ
 	}
 
 	skipCount := validateSkipCount(page, perPage)
-	// TODO: filter by tx hash here
 	txs := env.Mempool.ReapMaxTxs(skipCount + tmmath.MinInt(perPage, totalCount-skipCount))
 	result := txs[skipCount:]
 
@@ -199,7 +198,7 @@ func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.Requ
 // return single unconfirmed transaction, matching req.TxHash
 func (env *Environment) UnconfirmedTx(_ctx context.Context, req *coretypes.RequestUnconfirmedTx) (*coretypes.ResultUnconfirmedTx, error) {
 	if req == nil || req.TxHash.IsZero() || len(req.TxHash) != crypto.HashSize {
-		return nil, errors.New("you must provide transaction hash in hash= argument")
+		return nil, fmt.Errorf("you must provide a valid %d-byte transaction hash in hash= argument", crypto.HashSize)
 	}
 
 	tx := env.Mempool.GetTxByHash(types.TxKey(req.TxHash))
