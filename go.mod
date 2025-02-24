@@ -49,7 +49,7 @@ require (
 	github.com/creachadair/atomicfile v0.3.7
 	github.com/creachadair/taskgroup v0.13.2
 	github.com/go-pkgz/jrpc v0.3.1
-	github.com/google/go-cmp v0.6.0
+	github.com/google/go-cmp v0.7.0
 	github.com/vektra/mockery/v2 v2.51.1
 )
 
