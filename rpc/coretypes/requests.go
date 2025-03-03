@@ -80,6 +80,11 @@ type RequestUnconfirmedTxs struct {
 	PerPage *Int64 `json:"per_page"`
 }
 
+// RequestUnconfirmedTx is used to request a single unconfirmed transaction.
+type RequestUnconfirmedTx struct {
+	TxHash bytes.HexBytes `json:"hash,omitempty"`
+}
+
 type RequestBroadcastTx struct {
 	Tx types.Tx `json:"tx"`
 }

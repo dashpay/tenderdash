@@ -24,6 +24,7 @@ Available endpoints:
 /status
 /health
 /unconfirmed_txs
+/unconfirmed_tx
 /unsafe_flush_mempool
 /validators
 

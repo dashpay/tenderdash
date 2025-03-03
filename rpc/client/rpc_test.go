@@ -663,6 +663,41 @@ func TestClientMethodCallsAdvanced(t *testing.T) {
 
 		pool.Flush()
 	})
+
+	t.Run("UnconfirmedTx", func(t *testing.T) {
+		// populate mempool with 5 tx
+		txs := make([]types.Tx, 5)
+		ch := make(chan error, 5)
+		for i := 0; i < 5; i++ {
+			_, _, tx := MakeTxKV()
+
+			txs[i] = tx
+			err := pool.CheckTx(ctx, tx, func(_ *abci.ResponseCheckTx) { ch <- nil }, mempool.TxInfo{})
+
+			require.NoError(t, err)
+		}
+		// wait for tx to arrive in mempoool.
+		for i := 0; i < 5; i++ {
+			select {
+			case <-ch:
+			case <-time.After(5 * time.Second):
+				t.Error("Timed out waiting for CheckTx callback")
+			}
+		}
+		close(ch)
+
+		for _, c := range GetClients(t, n, conf) {
+			for _, tx := range txs {
+				mc := c.(client.MempoolClient)
+				res, err := mc.UnconfirmedTx(ctx, tx.Hash())
+				require.NoError(t, err)
+
+				assert.Equal(t, tx, res.Tx)
+			}
+		}
+
+		pool.Flush()
+	})
 	t.Run("NumUnconfirmedTxs", func(t *testing.T) {
 		ch := make(chan struct{})
 
