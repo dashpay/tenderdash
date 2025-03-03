@@ -105,6 +105,9 @@ func (c *Local) UnconfirmedTxs(ctx context.Context, page, perPage *int) (*corety
 		PerPage: coretypes.Int64Ptr(perPage),
 	})
 }
+func (c *Local) UnconfirmedTx(ctx context.Context, txHash []byte) (*coretypes.ResultUnconfirmedTx, error) {
+	return c.env.UnconfirmedTx(ctx, &coretypes.RequestUnconfirmedTx{TxHash: txHash})
+}
 
 func (c *Local) NumUnconfirmedTxs(ctx context.Context) (*coretypes.ResultUnconfirmedTxs, error) {
 	return c.env.NumUnconfirmedTxs(ctx)

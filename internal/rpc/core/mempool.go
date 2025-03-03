@@ -8,10 +8,12 @@ import (
 	"time"
 
 	abci "github.com/dashpay/tenderdash/abci/types"
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/mempool"
 	"github.com/dashpay/tenderdash/internal/state/indexer"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 //-----------------------------------------------------------------------------
@@ -171,7 +173,7 @@ func (env *Environment) BroadcastTxCommit(ctx context.Context, req *coretypes.Re
 	}
 }
 
-// UnconfirmedTxs gets unconfirmed transactions from the mempool in order of priority
+// UnconfirmedTxs gets unconfirmed transactions from the mempool in order of priority.
 // More: https://docs.tendermint.com/master/rpc/#/Info/unconfirmed_txs
 func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.RequestUnconfirmedTxs) (*coretypes.ResultUnconfirmedTxs, error) {
 	totalCount := env.Mempool.Size()
@@ -182,7 +184,6 @@ func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.Requ
 	}
 
 	skipCount := validateSkipCount(page, perPage)
-
 	txs := env.Mempool.ReapMaxTxs(skipCount + tmmath.MinInt(perPage, totalCount-skipCount))
 	result := txs[skipCount:]
 
@@ -192,6 +193,20 @@ func (env *Environment) UnconfirmedTxs(_ctx context.Context, req *coretypes.Requ
 		TotalBytes: env.Mempool.SizeBytes(),
 		Txs:        result,
 	}, nil
+}
+
+// return single unconfirmed transaction, matching req.TxHash
+func (env *Environment) UnconfirmedTx(_ctx context.Context, req *coretypes.RequestUnconfirmedTx) (*coretypes.ResultUnconfirmedTx, error) {
+	if req == nil || req.TxHash.IsZero() || len(req.TxHash) != crypto.HashSize {
+		return nil, fmt.Errorf("you must provide a valid %d-byte transaction hash in hash= argument", crypto.HashSize)
+	}
+
+	tx := env.Mempool.GetTxByHash(types.TxKey(req.TxHash))
+	if tx == nil {
+		return nil, fmt.Errorf("transaction %X not found", req.TxHash)
+	}
+
+	return &coretypes.ResultUnconfirmedTx{Tx: tx}, nil
 }
 
 // NumUnconfirmedTxs gets number of unconfirmed transactions.

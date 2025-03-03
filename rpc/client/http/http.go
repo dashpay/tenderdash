@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/dashpay/tenderdash/libs/bytes"
+	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	rpcclient "github.com/dashpay/tenderdash/rpc/client"
 	"github.com/dashpay/tenderdash/rpc/coretypes"
 	jsonrpcclient "github.com/dashpay/tenderdash/rpc/jsonrpc/client"
@@ -208,11 +208,11 @@ func (c *baseRPCClient) ABCIInfo(ctx context.Context) (*coretypes.ResultABCIInfo
 	return result, nil
 }
 
-func (c *baseRPCClient) ABCIQuery(ctx context.Context, path string, data bytes.HexBytes) (*coretypes.ResultABCIQuery, error) {
+func (c *baseRPCClient) ABCIQuery(ctx context.Context, path string, data tmbytes.HexBytes) (*coretypes.ResultABCIQuery, error) {
 	return c.ABCIQueryWithOptions(ctx, path, data, rpcclient.DefaultABCIQueryOptions)
 }
 
-func (c *baseRPCClient) ABCIQueryWithOptions(ctx context.Context, path string, data bytes.HexBytes, opts rpcclient.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
+func (c *baseRPCClient) ABCIQueryWithOptions(ctx context.Context, path string, data tmbytes.HexBytes, opts rpcclient.ABCIQueryOptions) (*coretypes.ResultABCIQuery, error) {
 	result := new(coretypes.ResultABCIQuery)
 	if err := c.caller.Call(ctx, "abci_query", &coretypes.RequestABCIQuery{
 		Path:   path,
@@ -261,6 +261,17 @@ func (c *baseRPCClient) UnconfirmedTxs(ctx context.Context, page *int, perPage *
 	if err := c.caller.Call(ctx, "unconfirmed_txs", &coretypes.RequestUnconfirmedTxs{
 		Page:    coretypes.Int64Ptr(page),
 		PerPage: coretypes.Int64Ptr(perPage),
+	}, result); err != nil {
+		return nil, err
+	}
+	return result, nil
+}
+
+func (c *baseRPCClient) UnconfirmedTx(ctx context.Context, txHash []byte) (*coretypes.ResultUnconfirmedTx, error) {
+	result := new(coretypes.ResultUnconfirmedTx)
+
+	if err := c.caller.Call(ctx, "unconfirmed_tx", &coretypes.RequestUnconfirmedTx{
+		TxHash: tmbytes.HexBytes(txHash),
 	}, result); err != nil {
 		return nil, err
 	}
@@ -379,7 +390,7 @@ func (c *baseRPCClient) Block(ctx context.Context, height *int64) (*coretypes.Re
 	return result, nil
 }
 
-func (c *baseRPCClient) BlockByHash(ctx context.Context, hash bytes.HexBytes) (*coretypes.ResultBlock, error) {
+func (c *baseRPCClient) BlockByHash(ctx context.Context, hash tmbytes.HexBytes) (*coretypes.ResultBlock, error) {
 	result := new(coretypes.ResultBlock)
 	if err := c.caller.Call(ctx, "block_by_hash", &coretypes.RequestBlockByHash{Hash: hash}, result); err != nil {
 		return nil, err
@@ -407,7 +418,7 @@ func (c *baseRPCClient) Header(ctx context.Context, height *int64) (*coretypes.R
 	return result, nil
 }
 
-func (c *baseRPCClient) HeaderByHash(ctx context.Context, hash bytes.HexBytes) (*coretypes.ResultHeader, error) {
+func (c *baseRPCClient) HeaderByHash(ctx context.Context, hash tmbytes.HexBytes) (*coretypes.ResultHeader, error) {
 	result := new(coretypes.ResultHeader)
 	if err := c.caller.Call(ctx, "header_by_hash", &coretypes.RequestBlockByHash{
 		Hash: hash,
@@ -433,7 +444,7 @@ func (c *baseRPCClient) Commit(ctx context.Context, height *int64) (*coretypes.R
 	return result, nil
 }
 
-func (c *baseRPCClient) Tx(ctx context.Context, hash bytes.HexBytes, prove bool) (*coretypes.ResultTx, error) {
+func (c *baseRPCClient) Tx(ctx context.Context, hash tmbytes.HexBytes, prove bool) (*coretypes.ResultTx, error) {
 	result := new(coretypes.ResultTx)
 	if err := c.caller.Call(ctx, "tx", &coretypes.RequestTx{Hash: hash, Prove: prove}, result); err != nil {
 		return nil, err
