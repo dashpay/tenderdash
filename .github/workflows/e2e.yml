@@ -53,7 +53,7 @@ jobs:
         if: "github.event_name != 'pull_request' || env.GIT_DIFF != ''"
 
       - name: Build E2E Docker image
-        uses: docker/build-push-action@v6.13.0
+        uses: docker/build-push-action@v6.14.0
         with:
           context: .
           file: test/e2e/docker/Dockerfile
