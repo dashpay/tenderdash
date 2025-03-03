@@ -240,6 +240,10 @@ func (c *Client) UnconfirmedTxs(ctx context.Context, page, perPage *int) (*coret
 	return c.next.UnconfirmedTxs(ctx, page, perPage)
 }
 
+func (c *Client) UnconfirmedTx(ctx context.Context, txHash []byte) (*coretypes.ResultUnconfirmedTx, error) {
+	return c.next.UnconfirmedTx(ctx, txHash)
+}
+
 func (c *Client) NumUnconfirmedTxs(ctx context.Context) (*coretypes.ResultUnconfirmedTxs, error) {
 	return c.next.NumUnconfirmedTxs(ctx)
 }

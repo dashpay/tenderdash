@@ -56,6 +56,7 @@ func NewRoutesMap(svc RPCService, opts *RouteOptions) RoutesMap {
 		"consensus_state":      rpc.NewRPCFunc(svc.GetConsensusState),
 		"consensus_params":     rpc.NewRPCFunc(svc.ConsensusParams),
 		"unconfirmed_txs":      rpc.NewRPCFunc(svc.UnconfirmedTxs),
+		"unconfirmed_tx":       rpc.NewRPCFunc(svc.UnconfirmedTx),
 		"num_unconfirmed_txs":  rpc.NewRPCFunc(svc.NumUnconfirmedTxs),
 
 		// tx broadcast API
@@ -113,6 +114,7 @@ type RPCService interface {
 	Tx(ctx context.Context, req *coretypes.RequestTx) (*coretypes.ResultTx, error)
 	TxSearch(ctx context.Context, req *coretypes.RequestTxSearch) (*coretypes.ResultTxSearch, error)
 	UnconfirmedTxs(ctx context.Context, req *coretypes.RequestUnconfirmedTxs) (*coretypes.ResultUnconfirmedTxs, error)
+	UnconfirmedTx(ctx context.Context, req *coretypes.RequestUnconfirmedTx) (*coretypes.ResultUnconfirmedTx, error)
 	Unsubscribe(ctx context.Context, req *coretypes.RequestUnsubscribe) (*coretypes.ResultUnsubscribe, error)
 	UnsubscribeAll(ctx context.Context) (*coretypes.ResultUnsubscribe, error)
 	Validators(ctx context.Context, req *coretypes.RequestValidators) (*coretypes.ResultValidators, error)

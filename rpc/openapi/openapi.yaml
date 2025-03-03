@@ -1,9 +1,6 @@
 openapi: 3.0.0
 info:
-  title: Tendermint RPC
-  contact:
-    name: Tendermint RPC
-    url: https://github.com/tendermint/tendermint/issues/new/choose
+  title: Tenderdash RPC
   description: |
     Tendermint supports the following RPC protocols:
 
@@ -59,10 +56,8 @@ info:
     name: Apache 2.0
     url: https://github.com/dashevo/tenderdash/blob/master/LICENSE
 servers:
-  - url: https://rpc.cosmos.network
-    description: Cosmos mainnet node to interact with the Tendermint RPC
   - url: http://localhost:26657
-    description: Interact with the Tendermint RPC locally on your device
+    description: Interact with the Tenderdash RPC locally on your device
 tags:
   - name: Websocket
     description: Subscribe/unsubscribe are reserved for websocket events.
@@ -1107,7 +1102,6 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
 
-
   /dump_consensus_state:
     get:
       summary: Get consensus state
@@ -1218,6 +1212,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/UnconfirmedTransactionsResponse"
+        "500":
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /unconfirmed_tx:
+    get:
+      summary: Get unconfirmed transaction by hash
+      operationId: unconfirmed_tx
+      parameters:
+        - in: query
+          name: hash
+          description: "Transaction hash"
+          required: true
+          schema:
+            type: string
+            example: "0xD70952032620CC4E2737EB8AC379806359D8E0B17B0488F627997A0B043ABDED"
+
+      tags:
+        - Info
+      description: |
+        Get unconfirmed transaction by hash
+      responses:
+        "200":
+          description: Transaction
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnconfirmedTransactionResponse"
         "500":
           description: Error
           content:
@@ -2710,6 +2734,29 @@ components:
                 nullable: true
               example:
                 - "gAPwYl3uCjCMTXENChSMnIkb5ZpYHBKIZqecFEV2tuZr7xIUA75/FmYq9WymsOBJ0XSJ8yV8zmQKMIxNcQ0KFIyciRvlmlgcEohmp5wURXa25mvvEhQbrvwbvlNiT+Yjr86G+YQNx7kRVgowjE1xDQoUjJyJG+WaWBwSiGannBRFdrbma+8SFK2m+1oxgILuQLO55n8mWfnbIzyPCjCMTXENChSMnIkb5ZpYHBKIZqecFEV2tuZr7xIUQNGfkmhTNMis4j+dyMDIWXdIPiYKMIxNcQ0KFIyciRvlmlgcEohmp5wURXa25mvvEhS8sL0D0wwgGCItQwVowak5YB38KRIUCg4KBXVhdG9tEgUxMDA1NBDoxRgaagom61rphyECn8x7emhhKdRCB2io7aS/6Cpuq5NbVqbODmqOT3jWw6kSQKUresk+d+Gw0BhjiggTsu8+1voW+VlDCQ1GRYnMaFOHXhyFv7BCLhFWxLxHSAYT8a5XqoMayosZf9mANKdXArA="
+          type: object
+
+    UnconfirmedTransactionResponse:
+      type: object
+      required:
+        - "jsonrpc"
+        - "id"
+        - "result"
+      properties:
+        jsonrpc:
+          type: string
+          example: "2.0"
+        id:
+          type: integer
+          example: 0
+        result:
+          required:
+            - "tx"
+          properties:
+            tx:
+              type: string
+              example: "EjQSNFZ4kKvN7wmHZUMhAAA="
+              description: Base-64 encoded transaction
           type: object
 
     TxSearchResponse:

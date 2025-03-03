@@ -186,6 +186,54 @@ func (_c *Mempool_FlushAppConn_Call) RunAndReturn(run func(context.Context) erro
 	return _c
 }
 
+// GetTxByHash provides a mock function with given fields: txHash
+func (_m *Mempool) GetTxByHash(txHash types.TxKey) types.Tx {
+	ret := _m.Called(txHash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for GetTxByHash")
+	}
+
+	var r0 types.Tx
+	if rf, ok := ret.Get(0).(func(types.TxKey) types.Tx); ok {
+		r0 = rf(txHash)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(types.Tx)
+		}
+	}
+
+	return r0
+}
+
+// Mempool_GetTxByHash_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'GetTxByHash'
+type Mempool_GetTxByHash_Call struct {
+	*mock.Call
+}
+
+// GetTxByHash is a helper method to define mock.On call
+//   - txHash types.TxKey
+func (_e *Mempool_Expecter) GetTxByHash(txHash interface{}) *Mempool_GetTxByHash_Call {
+	return &Mempool_GetTxByHash_Call{Call: _e.mock.On("GetTxByHash", txHash)}
+}
+
+func (_c *Mempool_GetTxByHash_Call) Run(run func(txHash types.TxKey)) *Mempool_GetTxByHash_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(types.TxKey))
+	})
+	return _c
+}
+
+func (_c *Mempool_GetTxByHash_Call) Return(_a0 types.Tx) *Mempool_GetTxByHash_Call {
+	_c.Call.Return(_a0)
+	return _c
+}
+
+func (_c *Mempool_GetTxByHash_Call) RunAndReturn(run func(types.TxKey) types.Tx) *Mempool_GetTxByHash_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // Lock provides a mock function with no fields
 func (_m *Mempool) Lock() {
 	_m.Called()

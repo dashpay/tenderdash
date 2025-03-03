@@ -1911,6 +1911,65 @@ func (_c *Client_TxSearch_Call) RunAndReturn(run func(context.Context, string, b
 	return _c
 }
 
+// UnconfirmedTx provides a mock function with given fields: ctx, txHash
+func (_m *Client) UnconfirmedTx(ctx context.Context, txHash []byte) (*coretypes.ResultUnconfirmedTx, error) {
+	ret := _m.Called(ctx, txHash)
+
+	if len(ret) == 0 {
+		panic("no return value specified for UnconfirmedTx")
+	}
+
+	var r0 *coretypes.ResultUnconfirmedTx
+	var r1 error
+	if rf, ok := ret.Get(0).(func(context.Context, []byte) (*coretypes.ResultUnconfirmedTx, error)); ok {
+		return rf(ctx, txHash)
+	}
+	if rf, ok := ret.Get(0).(func(context.Context, []byte) *coretypes.ResultUnconfirmedTx); ok {
+		r0 = rf(ctx, txHash)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*coretypes.ResultUnconfirmedTx)
+		}
+	}
+
+	if rf, ok := ret.Get(1).(func(context.Context, []byte) error); ok {
+		r1 = rf(ctx, txHash)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
+}
+
+// Client_UnconfirmedTx_Call is a *mock.Call that shadows Run/Return methods with type explicit version for method 'UnconfirmedTx'
+type Client_UnconfirmedTx_Call struct {
+	*mock.Call
+}
+
+// UnconfirmedTx is a helper method to define mock.On call
+//   - ctx context.Context
+//   - txHash []byte
+func (_e *Client_Expecter) UnconfirmedTx(ctx interface{}, txHash interface{}) *Client_UnconfirmedTx_Call {
+	return &Client_UnconfirmedTx_Call{Call: _e.mock.On("UnconfirmedTx", ctx, txHash)}
+}
+
+func (_c *Client_UnconfirmedTx_Call) Run(run func(ctx context.Context, txHash []byte)) *Client_UnconfirmedTx_Call {
+	_c.Call.Run(func(args mock.Arguments) {
+		run(args[0].(context.Context), args[1].([]byte))
+	})
+	return _c
+}
+
+func (_c *Client_UnconfirmedTx_Call) Return(_a0 *coretypes.ResultUnconfirmedTx, _a1 error) *Client_UnconfirmedTx_Call {
+	_c.Call.Return(_a0, _a1)
+	return _c
+}
+
+func (_c *Client_UnconfirmedTx_Call) RunAndReturn(run func(context.Context, []byte) (*coretypes.ResultUnconfirmedTx, error)) *Client_UnconfirmedTx_Call {
+	_c.Call.Return(run)
+	return _c
+}
+
 // UnconfirmedTxs provides a mock function with given fields: ctx, page, perPage
 func (_m *Client) UnconfirmedTxs(ctx context.Context, page *int, perPage *int) (*coretypes.ResultUnconfirmedTxs, error) {
 	ret := _m.Called(ctx, page, perPage)
