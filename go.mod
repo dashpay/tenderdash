@@ -347,7 +347,7 @@ require (
 	github.com/yagipy/maintidx v1.0.0 // indirect
 	github.com/yeya24/promlinter v0.3.0 // indirect
 	gitlab.com/bosi/decorder v0.4.2 // indirect
-	go.etcd.io/bbolt v1.4.0-alpha.0.0.20240404170359-43604f3112c5 // indirect
+	go.etcd.io/bbolt v1.4.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac // indirect
@@ -366,7 +366,7 @@ require (
 )
 
 require (
-	github.com/cometbft/cometbft-db v1.0.3
+	github.com/cometbft/cometbft-db v1.0.4
 	github.com/cosmos/gogoproto v1.7.0
 	github.com/creachadair/tomledit v0.0.27
 	github.com/jonboulle/clockwork v0.5.0
