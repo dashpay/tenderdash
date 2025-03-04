@@ -24,7 +24,7 @@ runs:
       run: |
         echo "::set-output name=hash::$(git --git-dir=third_party/bls-signatures/src/.git rev-parse HEAD)"
       shell: bash
-    - uses: actions/cache@v2
+    - uses: actions/cache@v4
       id: bls-cache
       with:
         path: ~/bls-cache
@@ -49,7 +49,7 @@ runs:
         cp -rv ./third_party/bls-signatures/src/include/* ~/bls-cache/include
       if: steps.bls-cache.outputs.cache-hit != 'true'
       shell: bash
-    - uses: actions/cache@v2.1.2
+    - uses: actions/cache@v4
       with:
         path: ~/bls-cache
         key: ${{ runner.os }}-${{ inputs.arch }}-bls-${{ steps.bls-revision.outputs.hash }}
