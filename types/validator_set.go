@@ -157,7 +157,11 @@ func (vals *ValidatorSet) ValidateBasic() error {
 	if err := vals.Proposer().ValidateBasic(); err != nil {
 		return fmt.Errorf("proposer failed validate basic, error: %w", err)
 	}
-	// TODO: Validate that vals.VotingPowerThreshold == ValidatorParams.voting_power_threshold
+
+	if vals.VotingPowerThreshold > math.MaxInt64 {
+		return fmt.Errorf("voting power threshold %d is too large", vals.VotingPowerThreshold)
+	}
+
 	threshold := vals.QuorumVotingThresholdPower()
 	totalPower := vals.TotalVotingPower()
 	switch len(vals.Validators) {

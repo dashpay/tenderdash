@@ -19,7 +19,7 @@ DOCKER_PROTO := docker run -v $(shell pwd):/workspace --workdir /workspace $(BUI
 CGO_ENABLED ?= 1
 # Fix for a gogoproto bug
 # GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}' github.com/cosmos/gogoproto)
-GOGOPROTO_PATH = $(shell go  list -m -f '{{.Dir}}'  github.com/lklimek/gogoproto@564fd924f58c5d076b0ad8e3f1c6fb54d065cbbe)
+GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}'  github.com/lklimek/gogoproto@564fd924f58c5d076b0ad8e3f1c6fb54d065cbbe)
 
 MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURR_DIR := $(dir $(MAKEFILE_PATH))
