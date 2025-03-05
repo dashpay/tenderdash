@@ -41,7 +41,7 @@ require (
 	golang.org/x/net v0.35.0
 	golang.org/x/sync v0.11.0
 	google.golang.org/grpc v1.70.0
-	pgregory.net/rapid v0.4.8
+	pgregory.net/rapid v1.2.0
 )
 
 require (
