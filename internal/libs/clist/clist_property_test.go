@@ -10,7 +10,15 @@ import (
 )
 
 func TestCListProperties(t *testing.T) {
-	rapid.Check(t, rapid.Run(&clistModel{}))
+	rapid.Check(t, testClistProperties)
+}
+
+func testClistProperties(t *rapid.T) {
+	model := &clistModel{}
+	model.Init()
+
+	actions := rapid.StateMachineActions(model)
+	t.Repeat(actions)
 }
 
 // clistModel is used by the rapid state machine testing framework.
@@ -22,10 +30,9 @@ type clistModel struct {
 	model []*clist.CElement
 }
 
-// Init is a method used by the rapid state machine testing library.
-// Init is called when the test starts to initialize the data that will be used
-// in the state machine test.
-func (m *clistModel) Init(_t *rapid.T) {
+// Init is a method used to initiazlize the clistModel. It is called before any actions
+// are run.
+func (m *clistModel) Init() {
 	m.clist = clist.New()
 	m.model = []*clist.CElement{}
 }
@@ -34,7 +41,7 @@ func (m *clistModel) Init(_t *rapid.T) {
 // machines testing library. Every call to PushBack calls PushBack on the clist and
 // performs a similar action on the model data.
 func (m *clistModel) PushBack(t *rapid.T) {
-	value := rapid.String().Draw(t, "value").(string)
+	value := rapid.String().Draw(t, "value")
 	el := m.clist.PushBack(value)
 	m.model = append(m.model, el)
 }
@@ -47,7 +54,7 @@ func (m *clistModel) Remove(t *rapid.T) {
 	if len(m.model) == 0 {
 		return
 	}
-	ix := rapid.IntRange(0, len(m.model)-1).Draw(t, "index").(int)
+	ix := rapid.IntRange(0, len(m.model)-1).Draw(t, "index")
 	value := m.model[ix]
 	m.model = append(m.model[:ix], m.model[ix+1:]...)
 	m.clist.Remove(value)
@@ -55,7 +62,7 @@ func (m *clistModel) Remove(t *rapid.T) {
 
 // Check is a method required by the rapid state machine testing library.
 // Check is run after each action and is used to verify that the state of the object,
-// in this case a clist.CList matches the state of the objec.
+// in this case a clist.CList matches the state of the object.
 func (m *clistModel) Check(t *rapid.T) {
 	require.Equal(t, len(m.model), m.clist.Len())
 	if len(m.model) == 0 {
