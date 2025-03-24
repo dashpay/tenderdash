@@ -211,8 +211,8 @@ github.com/creachadair/mds v0.22.1 h1:Wink9jeYR7brBbOkOTVZVrd6vyb5W4ZBRhlZd96TSg
 github.com/creachadair/mds v0.22.1/go.mod h1:ArfS0vPHoLV/SzuIzoqTEZfoYmac7n9Cj8XPANHocvw=
 github.com/creachadair/taskgroup v0.13.2 h1:3KyqakBuFsm3KkXi/9XIb0QcA8tEzLHLgaoidf0MdVc=
 github.com/creachadair/taskgroup v0.13.2/go.mod h1:i3V1Zx7H8RjwljUEeUWYT30Lmb9poewSb2XI1yTwD0g=
-github.com/creachadair/tomledit v0.0.27 h1:6xOpEnkKmcpT/gmKhabN0JXrqNX065lyje1/mXTSSIE=
-github.com/creachadair/tomledit v0.0.27/go.mod h1:v1EWpgCisD3ct1kO8Gq4o4pdgX5JXD0rBI2PJ4UnPoA=
+github.com/creachadair/tomledit v0.0.28 h1:aQJVwcNTzx4SZ/tSbkyGE69w4YQ6Gn+xhHHKtqMZwuw=
+github.com/creachadair/tomledit v0.0.28/go.mod h1:pqb2HRQi0lMu6MBiUmTk/0XQ+SmPtq2QbUrG+eiLP5w=
 github.com/creack/pty v1.1.9/go.mod h1:oKZEueFk5CKHvIhNR5MUki03XCEU+Q6VDXinZuGJ33E=
 github.com/creack/pty v1.1.18 h1:n56/Zwd5o6whRC5PMGretI4IdRLlmBXYNjScPaBgsbY=
 github.com/creack/pty v1.1.18/go.mod h1:MOBLtS5ELjhRRrroQr9kyvTxUAFNvYEK993ew/Vr4O4=
