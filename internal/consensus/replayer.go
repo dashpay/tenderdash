@@ -346,6 +346,8 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 	if res.ConsensusParams != nil && res.ConsensusParams.Validator != nil {
 		params := types.ValidatorParamsFromProto(res.ConsensusParams.Validator)
 		valParams = &params
+	} else {
+		valParams = &r.genDoc.ConsensusParams.Validator
 	}
 
 	if len(res.ValidatorSetUpdate.ValidatorUpdates) != 0 {
