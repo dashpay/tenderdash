@@ -30,17 +30,17 @@ require (
 	github.com/mroth/weightedrand v0.4.1
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20230904125328-1f23a7beb09a
 	github.com/ory/dockertest v3.3.5+incompatible
-	github.com/prometheus/client_golang v1.21.0
+	github.com/prometheus/client_golang v1.21.1
 	github.com/rs/cors v1.11.1
 	github.com/rs/zerolog v1.29.0
 	github.com/snikch/goodman v0.0.0-20171125024755-10e37e294daa
 	github.com/spf13/cobra v1.9.1
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
-	golang.org/x/crypto v0.35.0
-	golang.org/x/net v0.35.0
-	golang.org/x/sync v0.11.0
-	google.golang.org/grpc v1.70.0
+	golang.org/x/crypto v0.36.0
+	golang.org/x/net v0.37.0
+	golang.org/x/sync v0.12.0
+	google.golang.org/grpc v1.71.0
 	pgregory.net/rapid v1.2.0
 )
 
@@ -352,9 +352,9 @@ require (
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20250210185358-939b2ce775ac // indirect
 	golang.org/x/mod v0.23.0 // indirect
-	golang.org/x/sys v0.30.0 // indirect
-	golang.org/x/term v0.29.0
-	golang.org/x/text v0.22.0 // indirect
+	golang.org/x/sys v0.31.0 // indirect
+	golang.org/x/term v0.30.0
+	golang.org/x/text v0.23.0 // indirect
 	golang.org/x/tools v0.30.0 // indirect
 	google.golang.org/protobuf v1.36.4 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
@@ -376,5 +376,5 @@ require (
 	github.com/tendermint/go-amino v0.16.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/exp v0.0.0-20250128182459-e0ece0dbea4c
-	golang.org/x/time v0.10.0
+	golang.org/x/time v0.11.0
 )
