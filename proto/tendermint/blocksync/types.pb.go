@@ -305,6 +305,9 @@ func (m *BlockRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *BlockRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -333,6 +336,9 @@ func (m *NoBlockResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *NoBlockResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -361,6 +367,9 @@ func (m *BlockResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *BlockResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -408,6 +417,9 @@ func (m *StatusRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *StatusRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -431,6 +443,9 @@ func (m *StatusResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *StatusResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

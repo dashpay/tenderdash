@@ -329,7 +329,7 @@ func valsetUpdate(
 		} else {
 			// if we don't have proTxHash, NewValidatorSetWithLocalNodeProTxHash behaves like NewValidatorSet
 			nValSet = types.NewValidatorSetCheckPublicKeys(validatorUpdates, thresholdPubKey,
-				currentVals.QuorumType, quorumHash)
+				currentVals.QuorumType, quorumHash, &params)
 		}
 	} else {
 		// validators not changed, but we might have a new quorum hash or threshold public key
@@ -340,7 +340,11 @@ func valsetUpdate(
 		if thresholdPubKey != nil {
 			nValSet.ThresholdPublicKey = thresholdPubKey
 		}
+
+		if params.VotingPowerThreshold != nil {
+			nValSet.VotingPowerThreshold = *params.VotingPowerThreshold
+		}
 	}
 
-	return nValSet, nil
+	return nValSet, nValSet.ValidateBasic()
 }

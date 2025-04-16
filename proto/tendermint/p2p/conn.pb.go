@@ -362,6 +362,9 @@ func (m *PacketPing) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PacketPing) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -385,6 +388,9 @@ func (m *PacketPong) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PacketPong) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -408,6 +414,9 @@ func (m *PacketMsg) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PacketMsg) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -453,6 +462,9 @@ func (m *Packet) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Packet) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -475,6 +487,9 @@ func (m *Packet_PacketPing) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Packet_PacketPing) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.PacketPing != nil {
 		{
@@ -496,6 +511,9 @@ func (m *Packet_PacketPong) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Packet_PacketPong) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.PacketPong != nil {
 		{
@@ -517,6 +535,9 @@ func (m *Packet_PacketMsg) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Packet_PacketMsg) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.PacketMsg != nil {
 		{
@@ -548,6 +569,9 @@ func (m *AuthSigMessage) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *AuthSigMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

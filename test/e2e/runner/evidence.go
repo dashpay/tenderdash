@@ -71,7 +71,7 @@ func InjectEvidence(ctx context.Context, logger log.Logger, r *rand.Rand, testne
 	valSet := types.NewValidatorSet(valRes.Validators, *valRes.ThresholdPublicKey,
 		valRes.QuorumType,
 		*valRes.QuorumHash,
-		false)
+		false, nil)
 	if valSet == nil {
 		return fmt.Errorf("could not create validator set from response")
 	}

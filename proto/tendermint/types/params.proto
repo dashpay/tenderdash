@@ -58,6 +58,25 @@ message EvidenceParams {
 // NOTE: uses ABCI pubkey naming, not Amino names.
 message ValidatorParams {
   repeated string pub_key_types = 1;
+  // Threshold defines the minimum voting power of validators that must vote for a proposal
+  // to be considered signed and added to the block.
+  //
+  // For Dash Platform, the voting power can be calculated by multiply of the number of validators
+  // and const `DefaultDashVotingPower == 100`.
+  //
+  // The following validation rules MUST be enforced:
+  //
+  // 1. For validator sets containing 1 or 2 validators, the threshold MUST be equal to the total voting power
+  // of these validators.
+  // 2. For validator set with 3 validators, the threshold MUST be equal or greater than 2/3 of the total voting power.
+  // 3. For validator sets containing more than 3 validators, the threshold MUST be greater than 2/3 of the
+  // total voting power.
+  //
+  // If set to 0, default value is  determined based on LLMQ quorum type defined for the network,
+  // with a fall back to 2/3 + 1 of the total voting power.
+  //
+  // If absent, previous value is used.
+  optional uint64 voting_power_threshold = 2;  //[(gogoproto.nullable) = true]
 }
 
 // VersionParams contains the ABCI application version.

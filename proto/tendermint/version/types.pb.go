@@ -143,6 +143,9 @@ func (m *Consensus) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Consensus) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
