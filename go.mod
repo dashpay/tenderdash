@@ -12,7 +12,7 @@ require (
 	github.com/dashpay/dashd-go v0.25.0
 	github.com/dashpay/dashd-go/btcec/v2 v2.1.0 // indirect
 	github.com/fortytw2/leaktest v1.3.0
-	github.com/fxamacker/cbor/v2 v2.4.0
+	github.com/fxamacker/cbor/v2 v2.8.0
 	github.com/go-kit/kit v0.13.0
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4
