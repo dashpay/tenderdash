@@ -437,6 +437,9 @@ func (m *CanonicalBlockID) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *CanonicalBlockID) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -477,6 +480,9 @@ func (m *CanonicalPartSetHeader) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *CanonicalPartSetHeader) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -512,6 +518,9 @@ func (m *CanonicalProposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *CanonicalProposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -584,6 +593,9 @@ func (m *CanonicalVote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *CanonicalVote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -647,6 +659,9 @@ func (m *CanonicalVoteExtension) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *CanonicalVoteExtension) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

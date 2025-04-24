@@ -218,7 +218,8 @@ func makeParams(args makeParamsArgs) ConsensusParams {
 			MaxBytes:        args.maxEvidenceBytes,
 		},
 		Validator: ValidatorParams{
-			PubKeyTypes: args.pubkeyTypes,
+			PubKeyTypes:          args.pubkeyTypes,
+			VotingPowerThreshold: nil,
 		},
 		Synchrony: SynchronyParams{
 			Precision:    args.precision,

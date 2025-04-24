@@ -18,7 +18,7 @@ jobs:
   check-mocks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v5.3.0
+      - uses: actions/setup-go@v5.4.0
         with:
           go-version: "1.23.6"
 
@@ -52,7 +52,7 @@ jobs:
   check-proto:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v5.3.0
+      - uses: actions/setup-go@v5.4.0
         with:
           go-version: "1.23.6"
 
@@ -75,7 +75,15 @@ jobs:
           export GOBIN="${tools}/bin"
 
           go install github.com/bufbuild/buf/cmd/buf
-          go install github.com/cosmos/gogoproto/protoc-gen-gogofaster@latest
+          # Forked version of gogoproto plugin with fix https://github.com/cosmos/gogoproto/pull/150
+          # go install github.com/cosmos/gogoproto/protoc-gen-gogofaster@latest
+          git clone --depth 1 --branch fix/panic-marshalto-nil-m \
+            https://github.com/lklimek/gogoproto /tmp/gogoproto
+          pushd /tmp/gogoproto
+          go install ./protoc-gen-gogofaster
+          popd
+          rm -rf /tmp/gogoproto
+          # End of forked version installation
 
           make proto-gen
 

@@ -3,14 +3,14 @@ package types_test
 import (
 	"testing"
 
-	"github.com/dashpay/tenderdash/proto/tendermint/types"
 	"github.com/stretchr/testify/assert"
+
+	"github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
 func TestMarshalVoteExtension(t *testing.T) {
 	testCases := []struct {
-		extension   types.VoteExtension
-		expectPanic bool
+		extension types.VoteExtension
 	}{
 		{
 			extension: types.VoteExtension{
@@ -31,10 +31,8 @@ func TestMarshalVoteExtension(t *testing.T) {
 				Extension:      []byte("threshold"),
 				XSignRequestId: &types.VoteExtension_SignRequestId{nil},
 			}},
-		// Test below panics because of nil pointer dereference bug in gogoproto
-		// FIXME: remove expectPanic when we replace gogoproto
+
 		{
-			expectPanic: true,
 			extension: types.VoteExtension{
 				Type:           types.VoteExtensionType_THRESHOLD_RECOVER_RAW,
 				Extension:      []byte("threshold"),
@@ -58,17 +56,10 @@ func TestMarshalVoteExtension(t *testing.T) {
 				Type:           types.PrecommitType,
 				VoteExtensions: []*types.VoteExtension{&tc.extension},
 			}
-			f := func() {
-				marshaled, err := v.Marshal()
-				assert.NoError(t, err)
-				assert.NotEmpty(t, marshaled)
-			}
 
-			if tc.expectPanic {
-				assert.Panics(t, f)
-			} else {
-				assert.NotPanics(t, f)
-			}
+			marshaled, err := v.Marshal()
+			assert.NoError(t, err)
+			assert.NotEmpty(t, marshaled)
 		})
 	}
 

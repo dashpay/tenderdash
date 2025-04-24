@@ -130,7 +130,7 @@ func TestAddExpiredEvidence(t *testing.T) {
 		quorumHash          = crypto.RandQuorumHash()
 		privval             = types.NewMockPVForQuorum(quorumHash)
 		val                 = privval.ExtractIntoValidator(ctx, quorumHash)
-		valSet              = types.NewValidatorSet([]*types.Validator{val}, val.PubKey, btcjson.LLMQType_5_60, quorumHash, true)
+		valSet              = types.NewValidatorSet([]*types.Validator{val}, val.PubKey, btcjson.LLMQType_5_60, quorumHash, true, nil)
 		height              = int64(30)
 		stateStore          = initializeValidatorState(ctx, t, privval, height, btcjson.LLMQType_5_60, quorumHash)
 		evidenceDB          = dbm.NewMemDB()
@@ -221,7 +221,7 @@ func TestReportConflictingVotes(t *testing.T) {
 	state.LastBlockHeight++
 	state.LastBlockTime = ev.Time()
 	state.LastValidators = types.NewValidatorSet([]*types.Validator{val}, val.PubKey, btcjson.LLMQType_5_60,
-		quorumHash, true)
+		quorumHash, true, nil)
 	pool.Update(ctx, state, []types.Evidence{})
 
 	// should be able to retrieve evidence from pool

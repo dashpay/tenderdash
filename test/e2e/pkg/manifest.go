@@ -17,6 +17,10 @@ type Manifest struct {
 	// QuorumType represents the initial quorum type
 	QuorumType uint32 `toml:"quorum_type"`
 
+	// VotingPowerThreshold represents how much voting power is needed to approve a block;
+	// typically it's set to `(2/3 * num of validators + 1) * 100` where 100 is the default voting power.
+	VotingPowerThreshold uint64 `toml:"voting_power_threshold"`
+
 	// InitialHeight specifies the initial block height, set in genesis. Defaults to 1.
 	InitialHeight int64 `toml:"initial_height"`
 

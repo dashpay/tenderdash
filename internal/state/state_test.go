@@ -354,12 +354,14 @@ func TestEmptyValidatorUpdates(t *testing.T) {
 	tearDown, _, state := setupTestCase(t)
 	defer tearDown(t)
 
+	originalValidatorSet, _ := types.RandValidatorSet(2)
+	state.Validators = originalValidatorSet
+
 	firstNode := state.Validators.GetByIndex(0)
 	require.NotZero(t, firstNode.ProTxHash)
 	ctx := dash.ContextWithProTxHash(context.Background(), firstNode.ProTxHash)
 
-	newPrivKey := bls12381.GenPrivKeyFromSecret([]byte("test"))
-	newPubKey := newPrivKey.PubKey()
+	newPubKey := originalValidatorSet.ThresholdPublicKey
 	newQuorumHash := crypto.RandQuorumHash()
 
 	expectValidators := types.ValidatorListString(state.Validators.Validators)
@@ -628,6 +630,7 @@ func TestConsensusParamsChangesSaveLoad(t *testing.T) {
 	for i := 1; i < N+1; i++ {
 		params[i] = *types.DefaultConsensusParams()
 		params[i].Block.MaxBytes += int64(i)
+		params[i].Validator.PubKeyTypes = []string{"bls12381"}
 	}
 
 	cp := params[changeIndex]
@@ -671,6 +674,7 @@ func TestConsensusParamsChangesSaveLoad(t *testing.T) {
 	for _, testCase := range testCases {
 		p, err := stateStore.LoadConsensusParams(testCase.height)
 
+		assert.EqualValues(t, []string{"bls12381"}, p.Validator.PubKeyTypes)
 		assert.NoError(t, err, fmt.Sprintf("expected no err at height %d", testCase.height))
 		assert.EqualValues(t, testCase.params, p, fmt.Sprintf(`unexpected consensus params at
                 height %d`, testCase.height))

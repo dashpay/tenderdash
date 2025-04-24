@@ -39,7 +39,7 @@ func TestVerifyDuplicateVoteEvidence(t *testing.T) {
 	val := types.NewMockPVForQuorum(quorumHash)
 	val2 := types.NewMockPVForQuorum(quorumHash)
 	validator1 := val.ExtractIntoValidator(context.Background(), quorumHash)
-	valSet := types.NewValidatorSet([]*types.Validator{validator1}, validator1.PubKey, quorumType, quorumHash, true)
+	valSet := types.NewValidatorSet([]*types.Validator{validator1}, validator1.PubKey, quorumType, quorumHash, true, nil)
 	stateID := types.RandStateID()
 	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), stateID)
 	blockID2 := makeBlockID([]byte("blockhash2"), 1000, []byte("partshash"), stateID)

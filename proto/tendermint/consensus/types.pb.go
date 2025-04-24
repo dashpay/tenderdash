@@ -1007,6 +1007,9 @@ func (m *NewRoundStep) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *NewRoundStep) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1055,6 +1058,9 @@ func (m *NewValidBlock) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *NewValidBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1120,6 +1126,9 @@ func (m *Proposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Proposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1153,6 +1162,9 @@ func (m *ProposalPOL) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ProposalPOL) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1196,6 +1208,9 @@ func (m *BlockPart) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *BlockPart) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1239,6 +1254,9 @@ func (m *Vote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Vote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1274,6 +1292,9 @@ func (m *HasVote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *HasVote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1317,6 +1338,9 @@ func (m *Commit) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Commit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1352,6 +1376,9 @@ func (m *HasCommit) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *HasCommit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1385,6 +1412,9 @@ func (m *VoteSetMaj23) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *VoteSetMaj23) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1433,6 +1463,9 @@ func (m *VoteSetBits) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *VoteSetBits) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1491,6 +1524,9 @@ func (m *Message) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1513,6 +1549,9 @@ func (m *Message_NewRoundStep) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_NewRoundStep) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.NewRoundStep != nil {
 		{
@@ -1534,6 +1573,9 @@ func (m *Message_NewValidBlock) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_NewValidBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.NewValidBlock != nil {
 		{
@@ -1555,6 +1597,9 @@ func (m *Message_Proposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_Proposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Proposal != nil {
 		{
@@ -1576,6 +1621,9 @@ func (m *Message_ProposalPol) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_ProposalPol) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ProposalPol != nil {
 		{
@@ -1597,6 +1645,9 @@ func (m *Message_BlockPart) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_BlockPart) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.BlockPart != nil {
 		{
@@ -1618,6 +1669,9 @@ func (m *Message_Vote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_Vote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Vote != nil {
 		{
@@ -1639,6 +1693,9 @@ func (m *Message_HasVote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_HasVote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.HasVote != nil {
 		{
@@ -1660,6 +1717,9 @@ func (m *Message_VoteSetMaj23) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_VoteSetMaj23) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.VoteSetMaj23 != nil {
 		{
@@ -1681,6 +1741,9 @@ func (m *Message_VoteSetBits) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_VoteSetBits) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.VoteSetBits != nil {
 		{
@@ -1702,6 +1765,9 @@ func (m *Message_Commit) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_Commit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Commit != nil {
 		{
@@ -1723,6 +1789,9 @@ func (m *Message_HasCommit) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_HasCommit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.HasCommit != nil {
 		{

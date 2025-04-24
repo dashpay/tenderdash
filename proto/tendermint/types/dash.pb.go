@@ -306,6 +306,9 @@ func (m *CoreChainLock) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *CoreChainLock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -348,6 +351,9 @@ func (m *VoteExtension) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *VoteExtension) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -389,6 +395,9 @@ func (m *VoteExtension_SignRequestId) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *VoteExtension_SignRequestId) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.SignRequestId != nil {
 		i -= len(m.SignRequestId)

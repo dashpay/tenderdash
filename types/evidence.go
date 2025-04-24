@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"testing"
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
@@ -490,6 +491,9 @@ func NewMockDuplicateVoteEvidenceWithValidator(
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
 ) (*DuplicateVoteEvidence, error) {
+	if !testing.Testing() {
+		panic("NewMockDuplicateVoteEvidenceWithValidator should only be used in tests")
+	}
 	pubKey, err := pv.GetPubKey(ctx, quorumHash)
 	if err != nil {
 		panic(err)
@@ -510,7 +514,7 @@ func NewMockDuplicateVoteEvidenceWithValidator(
 		voteA,
 		voteB,
 		time,
-		NewValidatorSet([]*Validator{val}, val.PubKey, quorumType, quorumHash, true),
+		NewValidatorSet([]*Validator{val}, val.PubKey, quorumType, quorumHash, true, nil),
 	)
 }
 

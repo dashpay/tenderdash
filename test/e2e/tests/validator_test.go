@@ -186,7 +186,7 @@ func newValidatorSchedule(testnet e2e.Testnet) *validatorSchedule {
 		}
 	}
 
-	vs := types.NewValidatorSet(makeVals(valMap), thresholdPublicKey, quorumType, quorumHash, true)
+	vs := types.NewValidatorSet(makeVals(valMap), thresholdPublicKey, quorumType, quorumHash, true, nil)
 	ps, err := selectproposer.NewProposerSelector(*types.DefaultConsensusParams(), vs, testnet.InitialHeight, 0, nil, nil)
 	if err != nil {
 		panic(err)
@@ -257,7 +257,7 @@ func (s *validatorSchedule) Increment(heights int64) error {
 							}
 						} else {
 							vs := types.NewValidatorSet(makeVals(update), thresholdPublicKeyUpdate, btcjson.LLMQType_5_60,
-								quorumHashUpdate, true)
+								quorumHashUpdate, true, &cp.Validator)
 
 							ps, err := selectproposer.NewProposerSelector(cp, vs, s.height, 0, nil, nil)
 							if err != nil {

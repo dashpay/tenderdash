@@ -2,6 +2,7 @@ package types
 
 import (
 	"fmt"
+	"testing"
 
 	"github.com/dashpay/dashd-go/btcjson"
 
@@ -159,10 +160,16 @@ func (pb2tm) ValidatorUpdatesFromValidatorSet(valSetUpdate *abci.ValidatorSetUpd
 	return tmVals, pub, valSetUpdate.QuorumHash, nil
 }
 
+// ValidatorSetFromProtoUpdate creates validator set from validator update.
+//
+// Only use in tests.
 func (pb2tm) ValidatorSetFromProtoUpdate(
 	quorumType btcjson.LLMQType,
 	valSetUpdate *abci.ValidatorSetUpdate,
 ) (*ValidatorSet, error) {
+	if !testing.Testing() {
+		panic("ValidatorSetFromProtoUpdate should only be used in tests")
+	}
 	hasPublicKeys := true
 	for i, v := range valSetUpdate.ValidatorUpdates {
 		if v.PubKey == nil {
@@ -183,7 +190,7 @@ func (pb2tm) ValidatorSetFromProtoUpdate(
 	if err != nil {
 		return nil, err
 	}
-	return NewValidatorSet(tmVals, pub, quorumType, quorumHash, hasPublicKeys), nil
+	return NewValidatorSet(tmVals, pub, quorumType, quorumHash, hasPublicKeys, nil), nil
 }
 
 func (pb2tm) ThresholdPublicKeyUpdate(thresholdPublicKey crypto2.PublicKey) (crypto.PubKey, error) {

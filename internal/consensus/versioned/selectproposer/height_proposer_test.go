@@ -28,7 +28,7 @@ func TestProposerSelection1(t *testing.T) {
 		types.NewTestValidatorGeneratedFromProTxHash(fooProTxHash),
 		types.NewTestValidatorGeneratedFromProTxHash(barProTxHash),
 		types.NewTestValidatorGeneratedFromProTxHash(bazProTxHash),
-	}, bls12381.GenPrivKey().PubKey(), btcjson.LLMQType_5_60, crypto.RandQuorumHash(), true)
+	}, bls12381.GenPrivKey().PubKey(), btcjson.LLMQType_5_60, crypto.RandQuorumHash(), true, nil)
 	var proposers []string
 
 	vs, err := selectproposer.NewProposerSelector(types.ConsensusParams{}, vset, 0, 0, nil, log.NewTestingLogger(t))

@@ -1268,6 +1268,9 @@ func (m *PartSetHeader) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PartSetHeader) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1303,6 +1306,9 @@ func (m *Part) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Part) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1348,6 +1354,9 @@ func (m *BlockID) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *BlockID) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1395,6 +1404,9 @@ func (m *StateID) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *StateID) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1449,6 +1461,9 @@ func (m *Header) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Header) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1596,6 +1611,9 @@ func (m *Data) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Data) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1628,6 +1646,9 @@ func (m *Vote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Vote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1709,6 +1730,9 @@ func (m *Commit) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Commit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1780,6 +1804,9 @@ func (m *Proposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Proposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1865,6 +1892,9 @@ func (m *SignedHeader) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *SignedHeader) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1912,6 +1942,9 @@ func (m *LightBlock) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *LightBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1959,6 +1992,9 @@ func (m *BlockMeta) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *BlockMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2027,6 +2063,9 @@ func (m *TxProof) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *TxProof) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

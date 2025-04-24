@@ -121,6 +121,9 @@ func (m *EventDataRoundState) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *EventDataRoundState) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
