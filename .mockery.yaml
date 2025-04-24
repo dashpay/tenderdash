@@ -4,6 +4,7 @@ log-level: warn
 structname: "{{.InterfaceName}}"
 pkgname: mocks
 template: testify
+filename: "{{.InterfaceName | lower}}.go"
 packages:
   github.com/dashpay/tenderdash/abci/client:
     interfaces:
@@ -34,7 +35,6 @@ packages:
   github.com/dashpay/tenderdash/internal/p2p/client:
     interfaces:
       BlockClient: {}
-      Client: {}
       SnapshotClient: {}
   github.com/dashpay/tenderdash/internal/state:
     interfaces:
@@ -60,10 +60,8 @@ packages:
       LightClient: {}
   github.com/dashpay/tenderdash/rpc/client:
     interfaces:
-      Client: {}
       RemoteClient: {}
   github.com/dashpay/tenderdash/types:
     interfaces:
       BlockEventPublisher: {}
       PrivValidator: {}
-      Store: {}
