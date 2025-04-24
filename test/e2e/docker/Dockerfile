@@ -46,7 +46,7 @@ FROM deps AS e2e
 WORKDIR /src/tenderdash
 
 # Install DLV debugger
-ENV DEBUG ""
+ENV DEBUG=""
 COPY --from=delve /go/bin/dlv /go/bin/dlv
 
 LABEL maintainer="developers@dash.org"
@@ -56,7 +56,7 @@ LABEL maintainer="developers@dash.org"
 # private validator file into /tenderdash/config.
 #
 # The /tenderdash/data dir is used by tenderdash to store state.
-ENV TMHOME /tenderdash
+ENV TMHOME=/tenderdash
 
 # Copy Tenderdash source
 # Avoid overwriting third-party libs
