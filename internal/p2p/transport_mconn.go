@@ -184,7 +184,7 @@ func (m *MConnTransport) Dial(ctx context.Context, endpoint *Endpoint) (Connecti
 		return nil, err
 	}
 	if endpoint.Port == 0 {
-		endpoint.Port = 26657
+		endpoint.Port = 26656
 	}
 
 	dialer := net.Dialer{}

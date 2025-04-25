@@ -1,7 +1,6 @@
 package config
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -1001,17 +1000,15 @@ type StateSyncConfig struct {
 	// with net.Dial, for example: "host.example.com:2125".
 	RPCServers []string `mapstructure:"rpc-servers"`
 
-	// The hash and height of a trusted block. Must be within the trust-period.
-	TrustHeight int64  `mapstructure:"trust-height"`
-	TrustHash   string `mapstructure:"trust-hash"`
-
-	// The trust period should be set so that Tendermint can detect and gossip
-	// misbehavior before it is considered expired. For chains based on the Cosmos SDK,
-	// one day less than the unbonding period should suffice.
-	TrustPeriod time.Duration `mapstructure:"trust-period"`
-
 	// Time to spend discovering snapshots before initiating a restore.
 	DiscoveryTime time.Duration `mapstructure:"discovery-time"`
+
+	// Number of times to retry state sync. When retries are exhausted, the node will
+	// fall back to the regular block sync. Set to 0 to disable retries. Default is 3.
+	//
+	// Note that in pessimistic case, it will take at least `discovery-time * retries` before
+	// falling back to block sync.
+	Retries int `mapstructure:"retries"`
 
 	// Temporary directory for state sync snapshot chunks, defaults to os.TempDir().
 	// The synchronizer will create a new, randomly named directory within this directory
@@ -1026,22 +1023,13 @@ type StateSyncConfig struct {
 	Fetchers int `mapstructure:"fetchers"`
 }
 
-func (cfg *StateSyncConfig) TrustHashBytes() []byte {
-	// validated in ValidateBasic, so we can safely panic here
-	bytes, err := hex.DecodeString(cfg.TrustHash)
-	if err != nil {
-		panic(err)
-	}
-	return bytes
-}
-
 // DefaultStateSyncConfig returns a default configuration for the state sync service
 func DefaultStateSyncConfig() *StateSyncConfig {
 	return &StateSyncConfig{
-		TrustPeriod:         168 * time.Hour,
 		DiscoveryTime:       15 * time.Second,
 		ChunkRequestTimeout: 15 * time.Second,
 		Fetchers:            4,
+		Retries:             3,
 	}
 }
 
@@ -1074,21 +1062,8 @@ func (cfg *StateSyncConfig) ValidateBasic() error {
 		return errors.New("discovery time must be 0s or greater than five seconds")
 	}
 
-	if cfg.TrustPeriod <= 0 {
-		return errors.New("trusted-period is required")
-	}
-
-	if cfg.TrustHeight <= 0 {
-		return errors.New("trusted-height is required")
-	}
-
-	if len(cfg.TrustHash) == 0 {
-		return errors.New("trusted-hash is required")
-	}
-
-	_, err := hex.DecodeString(cfg.TrustHash)
-	if err != nil {
-		return fmt.Errorf("invalid trusted-hash: %w", err)
+	if cfg.Retries < 0 {
+		return errors.New("retries must be greater than or equal to zero")
 	}
 
 	if cfg.ChunkRequestTimeout < 5*time.Second {

@@ -2,12 +2,15 @@ package types
 
 import (
 	"context"
+	"encoding/base64"
+	"encoding/hex"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto"
+	"github.com/dashpay/tenderdash/crypto/bls12381"
 )
 
 func TestValidatorProtoBuf(t *testing.T) {
@@ -110,4 +113,23 @@ func TestValidatorValidateBasic(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestValidatorSetHashVectors checks if provided validator threshold pubkey and quorum hash returns expected hash
+func TestValidatorSetHashVectors(t *testing.T) {
+	thresholdPublicKey, err := base64.RawStdEncoding.DecodeString("gw5F5F5kFNnWFUc8woFOaxccUI+cd+ixaSS3RZT2HJlWpvoWM16YRn6sjYvbdtGH")
+	require.NoError(t, err)
+
+	quorumHash, err := hex.DecodeString("703ee5bfc78765cc9e151d8dd84e30e196ababa83ac6cbdee31a88a46bba81b9")
+	require.NoError(t, err)
+
+	expected := "81742F95E99EAE96ABC727FE792CECB4996205DE6BFC88AFEE1F60B96BC648B2"
+
+	valset := ValidatorSet{
+		ThresholdPublicKey: bls12381.PubKey(thresholdPublicKey),
+		QuorumHash:         quorumHash,
+	}
+
+	hash := valset.Hash()
+	assert.Equal(t, expected, hash.String())
 }
