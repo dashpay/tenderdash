@@ -1,9 +1,29 @@
+## [1.5.0-dev.2] - 2025-04-25
+
+### Bug Fixes
+
+- Statesync is unstable and doesn't time out (#1059)
+
+### Build
+
+- Bump github.com/fxamacker/cbor/v2 from 2.4.0 to 2.8.0 (#1103)
+- Bump github.com/prometheus/client_model from 0.6.1 to 0.6.2 (#1104)
+- Bump google.golang.org/grpc from 1.71.1 to 1.72.0 (#1105)
+- Bump github.com/bufbuild/buf from 1.50.0 to 1.53.0 (#1102)
+- Update go to 1.24.2 (#1106)
+- Major update of mockery to 3.2.4 (#1107)
+- Bump github.com/oasisprotocol/oasis-core/go (#1089)
+
 ## [1.5.0-dev.1] - 2025-04-16
 
 ### Features
 
 - Filter unconfirmed txs by tx hash (#1053)
 - Allow defining validator power threshold in consensus params (#1052)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.5.0-dev.1 (#1101)
 
 ### Build
 
