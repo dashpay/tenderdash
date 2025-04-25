@@ -47,7 +47,7 @@ requirements if installing from source.
 
 | Requirement | Notes            |
 |-------------|------------------|
-| Go version  | Go1.23.6 or higher |
+| Go version  | Go1.24.2 or higher |
 
 ## Versioning
 

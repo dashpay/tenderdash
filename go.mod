@@ -1,6 +1,6 @@
 module github.com/dashpay/tenderdash
 
-go 1.23.6
+go 1.24.2
 
 require (
 	github.com/BurntSushi/toml v1.5.0
@@ -50,7 +50,7 @@ require (
 	github.com/creachadair/taskgroup v0.13.2
 	github.com/go-pkgz/jrpc v0.3.1
 	github.com/google/go-cmp v0.7.0
-	github.com/vektra/mockery/v2 v2.51.1
+	github.com/vektra/mockery/v2 v2.53.3
 )
 
 require (
@@ -134,9 +134,9 @@ require (
 	github.com/hashicorp/go-immutable-radix/v2 v2.1.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
 	github.com/huandu/xstrings v1.4.0 // indirect
-	github.com/iancoleman/strcase v0.2.0 // indirect
+	github.com/iancoleman/strcase v0.3.0 // indirect
 	github.com/jdx/go-netrc v1.0.0 // indirect
-	github.com/jinzhu/copier v0.3.5 // indirect
+	github.com/jinzhu/copier v0.4.0 // indirect
 	github.com/jjti/go-spancheck v0.6.4 // indirect
 	github.com/karamaru-alpha/copyloopvar v1.2.1 // indirect
 	github.com/kkHAIKE/contextcheck v1.1.6 // indirect
