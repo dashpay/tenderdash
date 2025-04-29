@@ -359,7 +359,7 @@ require (
 	github.com/cosmos/gogoproto v1.7.0
 	github.com/creachadair/tomledit v0.0.28
 	github.com/jonboulle/clockwork v0.5.0
-	github.com/oasisprotocol/oasis-core/go v0.2501.0
+	github.com/oasisprotocol/oasis-core/go v0.2502.0
 	github.com/sasha-s/go-deadlock v0.3.5
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/tendermint/go-amino v0.16.0
