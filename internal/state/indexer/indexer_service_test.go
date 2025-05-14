@@ -10,8 +10,8 @@ import (
 
 	"github.com/adlio/schema"
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/ory/dockertest"
-	"github.com/ory/dockertest/docker"
+	"github.com/ory/dockertest/v3"
+	"github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
