@@ -11,7 +11,6 @@ import (
 	"io"
 	"math/big"
 
-	"github.com/btcsuite/btcd/btcec/v2"
 	secp256k1 "github.com/btcsuite/btcd/btcec/v2"
 
 	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
@@ -203,7 +202,6 @@ func (pubKey PubKey) Equals(other crypto.PubKey) bool {
 // see:
 //   - https://github.com/ethereum/go-ethereum/blob/f9401ae011ddf7f8d2d95020b7446c17f8d98dc1/crypto/signature_nocgo.go#L90-L93
 //   - https://github.com/ethereum/go-ethereum/blob/f9401ae011ddf7f8d2d95020b7446c17f8d98dc1/crypto/crypto.go#L39
-var secp256k1halfN = new(big.Int).Rsh(secp256k1.S256().N, 1)
 
 // Sign creates an ECDSA signature on curve Secp256k1, using SHA256 on the msg.
 // The returned signature will be of the form R || S (in lower-S form).
@@ -232,7 +230,6 @@ func (pubKey PubKey) VerifySignature(msg []byte, sigStr []byte) bool {
 
 	// Reject malleable signatures. libsecp256k1 does this check but btcec doesn't.
 	// see: https://github.com/ethereum/go-ethereum/blob/f9401ae011ddf7f8d2d95020b7446c17f8d98dc1/crypto/signature_nocgo.go#L90-L93
-	// TODO: it was  signature.S.Cmp(secp256k1halfN) > 0, double-check during review
 	s := signature.S()
 	if s.IsOverHalfOrder() {
 		return false
@@ -276,13 +273,13 @@ func signatureFromBytes(sigStr []byte) (*ecdsa.Signature, error) {
 			len(sigStr), 64)
 	}
 
-	r := btcec.ModNScalar{}
+	r := secp256k1.ModNScalar{}
 	r.SetByteSlice(sigStr[:32])
 	if r.IsZero() {
 		return nil, fmt.Errorf("malformed signature: R is 0")
 	}
 
-	s := btcec.ModNScalar{}
+	s := secp256k1.ModNScalar{}
 	s.SetByteSlice(sigStr[32:64])
 	if s.IsZero() {
 		return nil, fmt.Errorf("malformed signature: S is 0")
