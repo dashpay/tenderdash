@@ -317,11 +317,13 @@ func setupDB(t *testing.T) *dockertest.Pool {
 		}
 	})
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	assert.NotNil(t, resource)
 
 	// Set the container to expire in a minute to avoid orphaned containers
 	// hanging around
-	_ = resource.Expire(60)
+	err = resource.Expire(60)
+	require.NoError(t, err)
 
 	conn := fmt.Sprintf(dsn, user, password, resource.GetPort(port+"/tcp"), dbName)
 
