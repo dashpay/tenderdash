@@ -308,7 +308,7 @@ func setupDB(t *testing.T) *dockertest.Pool {
 			"POSTGRES_DB=" + dbName,
 			"listen_addresses = '*'",
 		},
-		ExposedPorts: []string{port},
+		ExposedPorts: []string{port + "/tcp"}, // append /tcp to fix https://github.com/ory/dockertest/issues/518
 	}, func(config *docker.HostConfig) {
 		// set AutoRemove to true so that stopped container goes away by itself
 		config.AutoRemove = true
