@@ -5,7 +5,6 @@ go 1.24.2
 require (
 	github.com/BurntSushi/toml v1.5.0
 	github.com/adlio/schema v1.3.6
-	github.com/btcsuite/btcd v0.22.1
 	github.com/btcsuite/btcutil v1.0.3-0.20201208143702-a53e38424cce
 	github.com/containerd/continuity v0.4.5 // indirect
 	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20241206210929-0bb5c5b03249
@@ -84,6 +83,7 @@ require (
 	github.com/alingse/nilnesserr v0.1.2 // indirect
 	github.com/antlr4-go/antlr/v4 v4.13.1 // indirect
 	github.com/bombsimon/wsl/v4 v4.5.0 // indirect
+	github.com/btcsuite/btcd/chaincfg/chainhash v1.0.1 // indirect
 	github.com/btcsuite/btclog v1.0.0 // indirect
 	github.com/btcsuite/go-socks v0.0.0-20170105172521-4720035b7bfd // indirect
 	github.com/btcsuite/websocket v0.0.0-20150119174127-31079b680792 // indirect
@@ -359,6 +359,7 @@ require (
 )
 
 require (
+	github.com/btcsuite/btcd/btcec/v2 v2.3.4
 	github.com/cometbft/cometbft-db v1.0.4
 	github.com/cosmos/gogoproto v1.7.0
 	github.com/creachadair/tomledit v0.0.28
