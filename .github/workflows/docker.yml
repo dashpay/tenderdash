@@ -86,7 +86,7 @@ jobs:
       # on Docker Hub, as Github caches are not available for other branches.
       - name: Build and cache image with dependencies
         id: docker_bls
-        uses: docker/build-push-action@v6.16.0
+        uses: docker/build-push-action@v6.17.0
         with:
           context: .
           file: ./DOCKER/Dockerfile
@@ -102,7 +102,7 @@ jobs:
 
       - name: Publish to Docker Hub
         id: docker_build
-        uses: docker/build-push-action@v6.16.0
+        uses: docker/build-push-action@v6.17.0
         with:
           context: .
           file: ./DOCKER/Dockerfile
