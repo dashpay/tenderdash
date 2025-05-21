@@ -244,10 +244,14 @@ func (pubKey PubKey) VerifySignature(msg []byte, sigStr []byte) bool {
 //
 // `msg` is the SHA256 hash of the message to be signed.
 func (privKey PrivKey) SignDigest(msg []byte) ([]byte, error) {
+	if len(msg) != sha256.Size {
+		return nil, fmt.Errorf("digest must be sha256 with %d bytes, got %d", sha256.Size, len(msg))
+	}
+
 	priv, _ := secp256k1.PrivKeyFromBytes(privKey)
 	signature := ecdsa.Sign(priv, msg)
 	if signature == nil {
-		return nil, fmt.Errorf("failed to sign message")
+		return nil, errors.New("ecdsa failed to produce a signature")
 	}
 
 	return serializeSig(signature), nil
