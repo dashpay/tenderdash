@@ -14,8 +14,8 @@ import (
 
 	"github.com/adlio/schema"
 	"github.com/cosmos/gogoproto/jsonpb"
-	"github.com/ory/dockertest"
-	"github.com/ory/dockertest/docker"
+	"github.com/ory/dockertest/v3"
+	"github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -76,7 +76,7 @@ func TestMain(m *testing.M) {
 			"POSTGRES_DB=" + dbName,
 			"listen_addresses = '*'",
 		},
-		ExposedPorts: []string{port},
+		ExposedPorts: []string{port + "/tcp"}, // append /tcp to fix https://github.com/ory/dockertest/issues/518
 	}, func(config *docker.HostConfig) {
 		// set AutoRemove to true so that stopped container goes away by itself
 		config.AutoRemove = true
