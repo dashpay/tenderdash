@@ -65,7 +65,7 @@ func TestSignatureVerificationAndRejectUpperS(t *testing.T) {
 
 		// malleate:
 		n := secp256k1.ModNScalar{}
-		n.SetByteSlice(secp256k1.S256().CurveParams.N.Bytes())
+		n.SetByteSlice(secp256k1.S256().N.Bytes())
 		s.Add2(&n, s.Negate())
 		require.True(t, s.IsOverHalfOrder())
 		r := sig.R()
