@@ -306,7 +306,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/polyfloyd/go-errorlint v1.7.1 // indirect
 	github.com/prometheus/client_model v0.6.2
-	github.com/prometheus/common v0.63.0
+	github.com/prometheus/common v0.64.0
 	github.com/prometheus/procfs v0.16.1 // indirect
 	github.com/quasilyte/go-ruleguard v0.4.3-0.20240823090925-0fe6f58b47b1 // indirect
 	github.com/quasilyte/gogrep v0.5.0 // indirect
