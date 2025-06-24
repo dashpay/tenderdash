@@ -10,7 +10,7 @@ import (
 )
 
 func MakeRollbackStateCommand(conf *config.Config) *cobra.Command {
-	return &cobra.Command{
+	cmd := &cobra.Command{
 		Use:   "rollback",
 		Short: "rollback tendermint state by one height",
 		Long: `
@@ -20,9 +20,12 @@ progress. Rollback overwrites a state at height n with the state at height n - 1
 The application should also roll back to height n - 1. No blocks are removed, so upon
 restarting Tendermint the transactions in block n will be re-executed against the
 application.
+
+If the --store flag is set, the block store will also be rolled back to match the state height.
 `,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			height, hash, err := RollbackState(conf)
+			storeRollback, _ := cmd.Flags().GetBool("store")
+			height, hash, err := RollbackState(conf, storeRollback)
 			if err != nil {
 				return fmt.Errorf("failed to rollback state: %w", err)
 			}
@@ -32,12 +35,14 @@ application.
 		},
 	}
 
+	cmd.Flags().Bool("store", false, "also roll back the block store to match the state height")
+	return cmd
 }
 
 // RollbackState takes the state at the current height n and overwrites it with the state
 // at height n - 1. Note state here refers to tendermint state not application state.
 // Returns the latest state height and app hash alongside an error if there was one.
-func RollbackState(config *config.Config) (int64, []byte, error) {
+func RollbackState(config *config.Config, rollbackStore bool) (int64, []byte, error) {
 	// use the parsed config to load the block and state store
 	blockStore, stateStore, err := loadStateAndBlockStore(config)
 	if err != nil {
@@ -49,5 +54,20 @@ func RollbackState(config *config.Config) (int64, []byte, error) {
 	}()
 
 	// rollback the last state
-	return state.Rollback(blockStore, stateStore)
+	height, hash, err := state.Rollback(blockStore, stateStore)
+	if err != nil {
+		return -1, nil, err
+	}
+
+	if rollbackStore {
+		// Rollback the block store to match the state height
+		for currentHeight := blockStore.Height(); currentHeight > height; currentHeight-- {
+			_, err := blockStore.DeleteBlock(currentHeight)
+			if err != nil {
+				return -1, nil, fmt.Errorf("failed to delete block at height %d: %w", currentHeight, err)
+			}
+		}
+	}
+
+	return height, hash, nil
 }
