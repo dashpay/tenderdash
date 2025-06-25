@@ -380,21 +380,26 @@ func (params ConsensusParams) ValidateConsensusParams() error {
 	return nil
 }
 
-// Hash returns a hash of a subset of the parameters to store in the block header.
-// Only the Block.MaxBytes and Block.MaxGas are included in the hash.
-// This allows the ConsensusParams to evolve more without breaking the block
-// protocol. No need for a Merkle tree here, just a small struct to hash.
-// TODO: We should hash the other parameters as well
+// HashConsensusParams returns a hash of consensus params used to generate given block.
 func (params ConsensusParams) HashConsensusParams() tmbytes.HexBytes {
-	hp := tmproto.HashedParams{
-		BlockMaxBytes:    params.Block.MaxBytes,
-		BlockMaxGas:      params.Block.MaxGas,
-		ConsensusVersion: params.Version.ConsensusVersion,
-	}
-
-	bz, err := hp.Marshal()
-	if err != nil {
-		panic(err)
+	var err error
+	var bz []byte
+	// up to v1, we use a simpler representation of the consensus params, inherited from Tendermint.
+	if params.Version.ConsensusVersion <= 1 {
+		hp := &tmproto.HashedParams{
+			BlockMaxBytes:    params.Block.MaxBytes,
+			BlockMaxGas:      params.Block.MaxGas,
+			ConsensusVersion: params.Version.ConsensusVersion,
+		}
+		if bz, err = hp.Marshal(); err != nil {
+			panic(err)
+		}
+		// Since v2, we hash everything in the consensus params, so that we can ensure all nodes use the same consensus params.
+	} else {
+		consensusParamsProto := params.ToProto()
+		if bz, err = consensusParamsProto.Marshal(); err != nil {
+			panic(err)
+		}
 	}
 
 	sum := sha256.Sum256(bz)

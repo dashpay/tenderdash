@@ -90,6 +90,9 @@ message VersionParams {
     CONSENSUS_VERSION_0 = 0;
     // CONSENSUS_VERSION_1 changes proposer selection algorithm to not double-propose when previous proposer is offline.
     CONSENSUS_VERSION_1 = 1;
+    // CONSENSUS_VERSION_2 changes the way consensus parameters are hashed into the block header.
+    // It hashes the entire ConsensusParams instead of just a subset.
+    CONSENSUS_VERSION_2 = 2;
   }
 }
 
