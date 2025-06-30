@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
+
 	"github.com/dashpay/tenderdash/libs/log"
 	rpchttp "github.com/dashpay/tenderdash/rpc/client/http"
 	rpctypes "github.com/dashpay/tenderdash/rpc/coretypes"
@@ -206,8 +208,10 @@ func waitForNode(ctx context.Context, logger log.Logger, node *e2e.Node, height 
 // getLatestBlock returns the last block that all active nodes in the network have
 // agreed upon i.e. the earlist of each nodes latest block
 func getLatestBlock(ctx context.Context, testnet *e2e.Testnet) (*types.Block, error) {
+	const RETRIES = 3
 	var earliestBlock *types.Block
-	for range 3 {
+	var errs *multierror.Error
+	for i := range RETRIES {
 		for _, node := range testnet.Nodes {
 			// skip nodes that don't have state or haven't started yet
 			if node.Stateless() {
@@ -223,10 +227,11 @@ func getLatestBlock(ctx context.Context, testnet *e2e.Testnet) (*types.Block, er
 			}
 
 			wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-			defer cancel()
 			result, err := client.Block(wctx, nil)
+			cancel()
 			if err != nil {
-				return nil, err
+				errs = multierror.Append(errs, fmt.Errorf("attempt %d failed to get latest block from %s: %w", i, node.Name, err))
+				continue
 			}
 
 			if result.Block != nil && (earliestBlock == nil || earliestBlock.Height > result.Block.Height) {
@@ -237,12 +242,14 @@ func getLatestBlock(ctx context.Context, testnet *e2e.Testnet) (*types.Block, er
 			// If we found a block, we can return it
 			return earliestBlock, nil
 		}
-		time.Sleep(10 * time.Second)
+		if i < RETRIES-1 {
+			// If we didn't find a block, wait
+			time.Sleep(10 * time.Second)
+		}
+	}
+	if errs.Len() == 0 {
+		errs = multierror.Append(errs, fmt.Errorf("no blocks found in the network"))
 	}
 
-	if earliestBlock == nil {
-		return nil, fmt.Errorf("no blocks found in the network")
-	}
-
-	return earliestBlock, nil
+	return nil, errs
 }
