@@ -67,20 +67,21 @@ func (sc *RetrySignerClient) ExtractIntoValidator(ctx context.Context, quorumHas
 // retry runs some code with retries and a timeout.
 // It implements exponential backoff.
 func retry[T any](ctx context.Context, sc *RetrySignerClient, fn func() (T, error)) (T, error) {
-	var zero T
+	var val T
 	backoff := sc.timeout
+	var err error
 	for i := 0; i < sc.retries || sc.retries == 0; i++ {
-		val, err := fn()
+		val, err = fn()
 		if err == nil {
 			return val, nil
 		}
 		// If remote signer errors, we don't retry.
 		if _, ok := err.(*RemoteSignerError); ok {
-			return zero, err
+			return val, err
 		}
 		select {
 		case <-ctx.Done():
-			return zero, ctx.Err()
+			return val, ctx.Err()
 		case <-time.After(backoff):
 			// Exponential backoff with a cap (e.g., 10x initial timeout)
 			if backoff < sc.timeout*10 {
@@ -91,7 +92,7 @@ func retry[T any](ctx context.Context, sc *RetrySignerClient, fn func() (T, erro
 			}
 		}
 	}
-	return zero, fmt.Errorf("exhausted %d retry attempts", sc.retries)
+	return val, fmt.Errorf("exhausted %d retry attempts: %w", sc.retries, err)
 }
 
 func (sc *RetrySignerClient) GetPubKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
