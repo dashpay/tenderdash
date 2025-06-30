@@ -73,15 +73,20 @@ func (sc *DashCoreSignerClient) Close() error {
 //--------------------------------------------------------
 // Implement PrivValidator
 
-// Ping sends a ping request to the remote signer and will retry 2 extra times if failure
-func (sc *DashCoreSignerClient) Ping(_ctx context.Context) error {
+// Ping sends a ping request to the remote signer and will retry 2 extra times if failure,
+// but will stop early if the context is done.
+func (sc *DashCoreSignerClient) Ping(ctx context.Context) error {
 	var err error
 	for range 3 {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+		}
 		if err = sc.ping(); err == nil {
 			return nil
 		}
 	}
-
 	return err
 }
 
