@@ -103,7 +103,7 @@ func JRPCRequest(fns ...func(ctx context.Context, req btcjson.Request) error) Ex
 // JRPCParamsEmpty is a request expectation of empty JRPC params
 func JRPCParamsEmpty() ExpectFunc {
 	return JRPCRequest(func(ctx context.Context, req btcjson.Request) error {
-		if req.Params != nil && len(req.Params) > 0 {
+		if len(req.Params) > 0 {
 			return errors.New("jRPC request params should be empty")
 		}
 		return nil

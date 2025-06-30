@@ -454,7 +454,7 @@ func createAndStartPrivValidatorSocketClient(
 		maxTime = 5 * time.Second
 		retries = int(maxTime / timeout)
 	)
-	pvscWithRetries := privval.NewRetrySignerClient(pvsc, retries, timeout)
+	pvscWithRetries := privval.NewRetrySignerClient(ctx, pvsc, retries, timeout)
 
 	return pvscWithRetries, nil
 }
@@ -545,7 +545,7 @@ func createPrivval(ctx context.Context, logger log.Logger, conf *config.Config, 
 		logger.Info("Dash Core RPC Client is ready")
 
 		// If a local port is provided for Dash Core rpc into the service to sign.
-		privValidator, err := createAndStartPrivValidatorDashCoreClient(
+		privValidator, err := createAndStartPrivValidatorDashCoreClient(ctx,
 			genDoc.QuorumType,
 			dashCoreRPCClient,
 			logger,
@@ -566,17 +566,20 @@ func createPrivval(ctx context.Context, logger log.Logger, conf *config.Config, 
 }
 
 func createAndStartPrivValidatorDashCoreClient(
+	ctx context.Context,
 	defaultQuorumType btcjson.LLMQType,
 	dashCoreRPCClient dashcore.Client,
 	logger log.Logger,
 ) (types.PrivValidator, error) {
-	pvsc, err := privval.NewDashCoreSignerClient(dashCoreRPCClient, defaultQuorumType, logger)
+	dashcoreSignerClient, err := privval.NewDashCoreSignerClient(dashCoreRPCClient, defaultQuorumType, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start private validator: %w", err)
 	}
 
+	pvsc := privval.NewRetrySignerClient(ctx, dashcoreSignerClient, 3, 2*time.Second)
+
 	// try to ping Core from private validator first time to make sure connection works
-	err = pvsc.Ping()
+	err = pvsc.Ping(ctx)
 	if err != nil {
 		return nil, fmt.Errorf(
 			"can't ping core server when starting private validator rpc client: %w",

@@ -74,7 +74,7 @@ func (sc *DashCoreSignerClient) Close() error {
 // Implement PrivValidator
 
 // Ping sends a ping request to the remote signer and will retry 2 extra times if failure
-func (sc *DashCoreSignerClient) Ping() error {
+func (sc *DashCoreSignerClient) Ping(ctx context.Context) error {
 	var err error
 	for i := 0; i < 3; i++ {
 		if err = sc.ping(); err == nil {
