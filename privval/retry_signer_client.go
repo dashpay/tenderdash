@@ -34,7 +34,7 @@ type RetrySignerClient struct {
 
 // NewRetrySignerClient returns RetrySignerClient. If +retries+ is 0, the
 // client will be retrying each operation indefinitely.
-func NewRetrySignerClient(ctx context.Context, sc RetryableSignerClient, retries int, timeout time.Duration) *RetrySignerClient {
+func NewRetrySignerClient(_ctx context.Context, sc RetryableSignerClient, retries int, timeout time.Duration) *RetrySignerClient {
 	return &RetrySignerClient{sc, retries, timeout}
 }
 
