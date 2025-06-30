@@ -2,7 +2,6 @@ package privval
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"time"
@@ -111,8 +110,10 @@ func (sc *RetrySignerClient) GetProTxHash(ctx context.Context) (crypto.ProTxHash
 	})
 }
 
-func (sc *RetrySignerClient) GetFirstQuorumHash(_ctx context.Context) (crypto.QuorumHash, error) {
-	return nil, errors.New("getFirstQuorumHash should not be called on a signer client")
+func (sc *RetrySignerClient) GetFirstQuorumHash(ctx context.Context) (crypto.QuorumHash, error) {
+	return retry(ctx, sc, func() (crypto.QuorumHash, error) {
+		return sc.next.GetFirstQuorumHash(ctx)
+	})
 }
 
 func (sc *RetrySignerClient) GetThresholdPublicKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
