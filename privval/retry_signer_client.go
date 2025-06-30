@@ -29,12 +29,13 @@ type RetrySignerClient struct {
 	next    RetryableSignerClient
 	retries int
 	timeout time.Duration
+	logger  log.Logger
 }
 
 // NewRetrySignerClient returns RetrySignerClient. If +retries+ is 0, the
 // client will be retrying each operation indefinitely.
-func NewRetrySignerClient(_ctx context.Context, sc RetryableSignerClient, retries int, timeout time.Duration) *RetrySignerClient {
-	return &RetrySignerClient{sc, retries, timeout}
+func NewRetrySignerClient(_ctx context.Context, sc RetryableSignerClient, retries int, timeout time.Duration, logger log.Logger) *RetrySignerClient {
+	return &RetrySignerClient{sc, retries, timeout, logger}
 }
 
 var _ types.PrivValidator = (*RetrySignerClient)(nil)
@@ -89,8 +90,14 @@ func retry[T any](ctx context.Context, sc *RetrySignerClient, fn func() (T, erro
 					backoff = sc.timeout * 10
 				}
 			}
+			sc.logger.Trace("signer client operation failed, retrying",
+				"err", err,
+				"attempt", i+1, "max_attempts", sc.retries,
+				"backoff", backoff,
+			)
 		}
 	}
+
 	return val, fmt.Errorf("exhausted %d retry attempts: %w", sc.retries, err)
 }
 

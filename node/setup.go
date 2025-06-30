@@ -365,7 +365,7 @@ func makeNodeInfo(
 		NodeID:  nodeKey.ID,
 		Network: genDoc.ChainID,
 		Version: version.TMCoreSemVer,
-		Channels: tmsync.NewConcurrentSlice[uint16](
+		Channels: tmsync.NewConcurrentSlice(
 			uint16(p2p.BlockSyncChannel),
 			uint16(p2p.ConsensusStateChannel),
 			uint16(p2p.ConsensusDataChannel),
@@ -454,7 +454,7 @@ func createAndStartPrivValidatorSocketClient(
 		maxTime = 5 * time.Second
 		retries = int(maxTime / timeout)
 	)
-	pvscWithRetries := privval.NewRetrySignerClient(ctx, pvsc, retries, timeout)
+	pvscWithRetries := privval.NewRetrySignerClient(ctx, pvsc, retries, timeout, logger)
 
 	return pvscWithRetries, nil
 }
@@ -576,7 +576,7 @@ func createAndStartPrivValidatorDashCoreClient(
 		return nil, fmt.Errorf("failed to start private validator: %w", err)
 	}
 
-	pvsc := privval.NewRetrySignerClient(ctx, dashcoreSignerClient, 3, 2*time.Second)
+	pvsc := privval.NewRetrySignerClient(ctx, dashcoreSignerClient, 3, 2*time.Second, logger)
 
 	// try to ping Core from private validator first time to make sure connection works
 	err = pvsc.Ping(ctx)
