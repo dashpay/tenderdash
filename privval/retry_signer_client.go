@@ -70,7 +70,13 @@ func retry[T any](ctx context.Context, sc *RetrySignerClient, fn func() (T, erro
 	var val T
 	backoff := sc.timeout
 	var err error
-	for i := 0; i < sc.retries || sc.retries == 0; i++ {
+
+	retries := sc.retries
+	if retries <= 0 {
+		sc.logger.Debug("RetrySignerClient: retries is 0, setting to 1")
+		retries = 1 // one retry by default
+	}
+	for i := 0; i < retries; i++ {
 		val, err = fn()
 		if err == nil {
 			return val, nil
