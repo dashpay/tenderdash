@@ -130,9 +130,9 @@ func (sc *RetrySignerClient) GetHeight(ctx context.Context, quorumHash crypto.Qu
 
 func (sc *RetrySignerClient) SignVote(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
-	vote *tmproto.Vote, _logger log.Logger) error {
+	vote *tmproto.Vote, logger log.Logger) error {
 	_, err := retry(ctx, sc, func() (struct{}, error) {
-		return struct{}{}, sc.next.SignVote(ctx, chainID, quorumType, quorumHash, vote, nil)
+		return struct{}{}, sc.next.SignVote(ctx, chainID, quorumType, quorumHash, vote, logger)
 	})
 	return err
 }
