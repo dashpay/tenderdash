@@ -207,30 +207,42 @@ func waitForNode(ctx context.Context, logger log.Logger, node *e2e.Node, height 
 // agreed upon i.e. the earlist of each nodes latest block
 func getLatestBlock(ctx context.Context, testnet *e2e.Testnet) (*types.Block, error) {
 	var earliestBlock *types.Block
-	for _, node := range testnet.Nodes {
-		// skip nodes that don't have state or haven't started yet
-		if node.Stateless() {
-			continue
-		}
-		if !node.HasStarted {
-			continue
-		}
+	for range 3 {
+		for _, node := range testnet.Nodes {
+			// skip nodes that don't have state or haven't started yet
+			if node.Stateless() {
+				continue
+			}
+			if !node.HasStarted {
+				continue
+			}
 
-		client, err := node.Client()
-		if err != nil {
-			return nil, err
-		}
+			client, err := node.Client()
+			if err != nil {
+				return nil, err
+			}
 
-		wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
-		defer cancel()
-		result, err := client.Block(wctx, nil)
-		if err != nil {
-			return nil, err
-		}
+			wctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			defer cancel()
+			result, err := client.Block(wctx, nil)
+			if err != nil {
+				return nil, err
+			}
 
-		if result.Block != nil && (earliestBlock == nil || earliestBlock.Height > result.Block.Height) {
-			earliestBlock = result.Block
+			if result.Block != nil && (earliestBlock == nil || earliestBlock.Height > result.Block.Height) {
+				earliestBlock = result.Block
+			}
 		}
+		if earliestBlock != nil {
+			// If we found a block, we can return it
+			return earliestBlock, nil
+		}
+		time.Sleep(10 * time.Second)
 	}
+
+	if earliestBlock == nil {
+		return nil, fmt.Errorf("no blocks found in the network")
+	}
+
 	return earliestBlock, nil
 }
