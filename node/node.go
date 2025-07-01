@@ -779,12 +779,22 @@ func getRouterConfig(conf *config.Config, appClient abciclient.Client) p2p.Route
 	return opts
 }
 
-// DefaultDashCoreRPCClient returns RPC client for the Dash Core node
+// DefaultDashCoreRPCClient returns RPC client for the Dash Core node.
+// The client is configured with retry logic.
 func DefaultDashCoreRPCClient(cfg *config.Config, logger log.Logger) (core.Client, error) {
-	return core.NewRPCClient(
+	client, err := core.NewRPCClient(
 		cfg.PrivValidator.CoreRPCHost,
 		cfg.PrivValidator.CoreRPCUsername,
 		cfg.PrivValidator.CoreRPCPassword,
 		logger,
 	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create Dash Core RPC client: %w", err)
+	}
+
+	return core.NewRetryClient(
+		client,
+		1*time.Second,
+		4,
+		logger), nil
 }

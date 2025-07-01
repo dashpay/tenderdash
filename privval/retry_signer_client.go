@@ -98,13 +98,13 @@ func retry[T any](ctx context.Context, sc *RetrySignerClient, fn func() (T, erro
 			}
 			sc.logger.Trace("signer client operation failed, retrying",
 				"err", err,
-				"attempt", i+1, "max_attempts", sc.retries,
+				"attempt", i+1, "max_attempts", retries,
 				"backoff", backoff,
 			)
 		}
 	}
 
-	return val, fmt.Errorf("exhausted %d retry attempts: %w", sc.retries, err)
+	return val, fmt.Errorf("exhausted %d retry attempts: %w", retries, err)
 }
 
 func (sc *RetrySignerClient) GetPubKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {

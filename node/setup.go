@@ -571,12 +571,12 @@ func createAndStartPrivValidatorDashCoreClient(
 	dashCoreRPCClient dashcore.Client,
 	logger log.Logger,
 ) (types.PrivValidator, error) {
-	dashcoreSignerClient, err := privval.NewDashCoreSignerClient(dashCoreRPCClient, defaultQuorumType, logger)
+	pvsc, err := privval.NewDashCoreSignerClient(dashCoreRPCClient, defaultQuorumType, logger)
 	if err != nil {
 		return nil, fmt.Errorf("failed to start private validator: %w", err)
 	}
 
-	pvsc := privval.NewRetrySignerClient(ctx, dashcoreSignerClient, 3, 2*time.Second, logger)
+	// pvsc := privval.NewRetrySignerClient(ctx, dashcoreSignerClient, 3, 2*time.Second, logger)
 
 	// try to ping Core from private validator first time to make sure connection works
 	err = pvsc.Ping(ctx)
