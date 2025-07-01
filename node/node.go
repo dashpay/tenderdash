@@ -794,7 +794,7 @@ func DefaultDashCoreRPCClient(cfg *config.Config, logger log.Logger) (core.Clien
 
 	return core.NewRetryClient(
 		client,
-		1*time.Second,
+		500*time.Millisecond,
 		4,
 		logger), nil
 }
