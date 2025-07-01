@@ -2,8 +2,8 @@ package privval
 
 import (
 	"context"
-	"errors"
 	"fmt"
+	"io"
 	"time"
 
 	"github.com/dashpay/dashd-go/btcjson"
@@ -15,32 +15,33 @@ import (
 	"github.com/dashpay/tenderdash/types"
 )
 
+// RetryableSignerClient is a signer client that can retry operations
+type RetryableSignerClient interface {
+	io.Closer
+	types.PrivValidator
+
+	Ping(ctx context.Context) error
+}
+
 // RetrySignerClient wraps SignerClient adding retry for each operation (except
 // Ping) w/ a timeout.
 type RetrySignerClient struct {
-	next    *SignerClient
+	next    RetryableSignerClient
 	retries int
 	timeout time.Duration
+	logger  log.Logger
 }
 
 // NewRetrySignerClient returns RetrySignerClient. If +retries+ is 0, the
 // client will be retrying each operation indefinitely.
-func NewRetrySignerClient(sc *SignerClient, retries int, timeout time.Duration) *RetrySignerClient {
-	return &RetrySignerClient{sc, retries, timeout}
+func NewRetrySignerClient(_ctx context.Context, sc RetryableSignerClient, retries int, timeout time.Duration, logger log.Logger) *RetrySignerClient {
+	return &RetrySignerClient{sc, retries, timeout, logger}
 }
 
 var _ types.PrivValidator = (*RetrySignerClient)(nil)
 
 func (sc *RetrySignerClient) Close() error {
 	return sc.next.Close()
-}
-
-func (sc *RetrySignerClient) IsConnected() bool {
-	return sc.next.IsConnected()
-}
-
-func (sc *RetrySignerClient) WaitForConnection(ctx context.Context, maxWait time.Duration) error {
-	return sc.next.WaitForConnection(ctx, maxWait)
 }
 
 //--------------------------------------------------------
@@ -63,123 +64,109 @@ func (sc *RetrySignerClient) ExtractIntoValidator(ctx context.Context, quorumHas
 	}
 }
 
-func (sc *RetrySignerClient) GetPubKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
-	var (
-		pk  crypto.PubKey
-		err error
-	)
-	for i := 0; i < sc.retries || sc.retries == 0; i++ {
-		pk, err = sc.next.GetPubKey(ctx, quorumHash)
-		if err == nil {
-			return pk, nil
-		}
-		// If remote signer errors, we don't retry.
-		if _, ok := err.(*RemoteSignerError); ok {
-			return nil, err
-		}
-		time.Sleep(sc.timeout)
+// retry runs some code with retries and a timeout.
+// It implements exponential backoff.
+func retry[T any](ctx context.Context, sc *RetrySignerClient, fn func() (T, error)) (T, error) {
+	var val T
+	backoff := sc.timeout
+	var err error
+
+	retries := sc.retries
+	if retries <= 0 {
+		sc.logger.Debug("RetrySignerClient: retries is 0, setting to 1")
+		retries = 1 // one retry by default
 	}
-	return nil, fmt.Errorf("exhausted all attempts to get pubkey: %w", err)
-}
-
-func (sc *RetrySignerClient) GetProTxHash(ctx context.Context) (crypto.ProTxHash, error) {
-	var (
-		proTxHash crypto.ProTxHash
-		err       error
-	)
-	for i := 0; i < sc.retries || sc.retries == 0; i++ {
-		proTxHash, err = sc.next.GetProTxHash(ctx)
-		if len(proTxHash) != crypto.ProTxHashSize {
-			return nil, fmt.Errorf("retrySignerClient proTxHash is invalid size")
-		}
+	for i := 0; i < retries; i++ {
+		val, err = fn()
 		if err == nil {
-			return proTxHash, nil
+			return val, nil
 		}
 		// If remote signer errors, we don't retry.
 		if _, ok := err.(*RemoteSignerError); ok {
-			return nil, err
-		}
-		time.Sleep(sc.timeout)
-	}
-	return nil, fmt.Errorf("exhausted all attempts to get protxhash: %w", err)
-}
-
-func (sc *RetrySignerClient) GetFirstQuorumHash(_ctx context.Context) (crypto.QuorumHash, error) {
-	return nil, errors.New("getFirstQuorumHash should not be called on a signer client")
-}
-
-func (sc *RetrySignerClient) GetThresholdPublicKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
-	var (
-		pk  crypto.PubKey
-		err error
-	)
-
-	t := time.NewTimer(sc.timeout)
-	for i := 0; i < sc.retries || sc.retries == 0; i++ {
-		pk, err = sc.next.GetThresholdPublicKey(ctx, quorumHash)
-		if err == nil {
-			return pk, nil
-		}
-		// If remote signer errors, we don't retry.
-		if _, ok := err.(*RemoteSignerError); ok {
-			return nil, err
+			return val, err
 		}
 		select {
 		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-t.C:
-			t.Reset(sc.timeout)
+			return val, ctx.Err()
+		case <-time.After(backoff):
+			// Exponential backoff with a cap (e.g., 10x initial timeout)
+			if backoff < sc.timeout*10 {
+				backoff *= 2
+				if backoff > sc.timeout*10 {
+					backoff = sc.timeout * 10
+				}
+			}
+			sc.logger.Trace("signer client operation failed, retrying",
+				"err", err,
+				"attempt", i+1, "max_attempts", retries,
+				"backoff", backoff,
+			)
 		}
 	}
-	return nil, fmt.Errorf("exhausted all attempts to get pubkey: %w", err)
+
+	return val, fmt.Errorf("exhausted %d retry attempts: %w", retries, err)
 }
-func (sc *RetrySignerClient) GetHeight(_ctx context.Context, quorumHash crypto.QuorumHash) (int64, error) {
-	return 0, fmt.Errorf("getHeight should not be called on asigner client %s", quorumHash.String())
+
+func (sc *RetrySignerClient) GetPubKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
+	return retry(ctx, sc, func() (crypto.PubKey, error) {
+		return sc.next.GetPubKey(ctx, quorumHash)
+	})
+}
+
+func (sc *RetrySignerClient) GetProTxHash(ctx context.Context) (crypto.ProTxHash, error) {
+	return retry(ctx, sc, func() (crypto.ProTxHash, error) {
+		proTxHash, err := sc.next.GetProTxHash(ctx)
+		if len(proTxHash) != crypto.ProTxHashSize {
+			return nil, fmt.Errorf("retrySignerClient proTxHash is invalid size")
+		}
+		return proTxHash, err
+	})
+}
+
+func (sc *RetrySignerClient) GetFirstQuorumHash(ctx context.Context) (crypto.QuorumHash, error) {
+	return retry(ctx, sc, func() (crypto.QuorumHash, error) {
+		return sc.next.GetFirstQuorumHash(ctx)
+	})
+}
+
+func (sc *RetrySignerClient) GetThresholdPublicKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
+	return retry(ctx, sc, func() (crypto.PubKey, error) {
+		return sc.next.GetThresholdPublicKey(ctx, quorumHash)
+	})
+}
+
+func (sc *RetrySignerClient) GetHeight(ctx context.Context, quorumHash crypto.QuorumHash) (int64, error) {
+	return retry(ctx, sc, func() (int64, error) {
+		return sc.next.GetHeight(ctx, quorumHash)
+	})
 }
 
 func (sc *RetrySignerClient) SignVote(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash,
-	vote *tmproto.Vote, _logger log.Logger) error {
-	var err error
-	for i := 0; i < sc.retries || sc.retries == 0; i++ {
-		err = sc.next.SignVote(ctx, chainID, quorumType, quorumHash, vote, nil)
-		if err == nil {
-			return nil
-		}
-		// If remote signer errors, we don't retry.
-		if _, ok := err.(*RemoteSignerError); ok {
-			return err
-		}
-		time.Sleep(sc.timeout)
-	}
-	return fmt.Errorf("exhausted all attempts to sign vote: %w", err)
+	vote *tmproto.Vote, logger log.Logger) error {
+	_, err := retry(ctx, sc, func() (struct{}, error) {
+		return struct{}{}, sc.next.SignVote(ctx, chainID, quorumType, quorumHash, vote, logger)
+	})
+	return err
 }
 
 func (sc *RetrySignerClient) SignProposal(
 	ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, proposal *tmproto.Proposal,
 ) (tmbytes.HexBytes, error) {
-	var signID []byte
-	var err error
-	for i := 0; i < sc.retries || sc.retries == 0; i++ {
-		signID, err = sc.next.SignProposal(ctx, chainID, quorumType, quorumHash, proposal)
-		if err == nil {
-			return signID, nil
-		}
-		// If remote signer errors, we don't retry.
-		if _, ok := err.(*RemoteSignerError); ok {
-			return nil, err
-		}
-		time.Sleep(sc.timeout)
-	}
-	return signID, fmt.Errorf("exhausted all attempts to sign proposal: %w", err)
+	return retry(ctx, sc, func() (tmbytes.HexBytes, error) {
+		return sc.next.SignProposal(ctx, chainID, quorumType, quorumHash, proposal)
+	})
 }
 
 func (sc *RetrySignerClient) UpdatePrivateKey(
-	_ctx context.Context, _privateKey crypto.PrivKey, _quorumHash crypto.QuorumHash, _thresholdPublicKey crypto.PubKey, _height int64,
+	ctx context.Context, privateKey crypto.PrivKey, quorumHash crypto.QuorumHash, thresholdPublicKey crypto.PubKey, height int64,
 ) {
-
+	// not retryable
+	sc.next.UpdatePrivateKey(ctx, privateKey, quorumHash, thresholdPublicKey, height)
 }
 
-func (sc *RetrySignerClient) GetPrivateKey(_ctx context.Context, _quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
-	return nil, nil
+func (sc *RetrySignerClient) GetPrivateKey(ctx context.Context, quorumHash crypto.QuorumHash) (crypto.PrivKey, error) {
+	return retry(ctx, sc, func() (crypto.PrivKey, error) {
+		return sc.next.GetPrivateKey(ctx, quorumHash)
+	})
 }
