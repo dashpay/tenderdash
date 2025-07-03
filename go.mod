@@ -37,7 +37,7 @@ require (
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.10.0
 	golang.org/x/crypto v0.39.0
-	golang.org/x/net v0.40.0
+	golang.org/x/net v0.41.0
 	golang.org/x/sync v0.15.0
 	google.golang.org/grpc v1.73.0
 	pgregory.net/rapid v1.2.0
@@ -363,7 +363,7 @@ require (
 	github.com/cosmos/gogoproto v1.7.0
 	github.com/creachadair/tomledit v0.0.28
 	github.com/jonboulle/clockwork v0.5.0
-	github.com/oasisprotocol/oasis-core/go v0.2503.0
+	github.com/oasisprotocol/oasis-core/go v0.2504.0
 	github.com/sasha-s/go-deadlock v0.3.5
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/tendermint/go-amino v0.16.0
