@@ -1,8 +1,49 @@
+## [1.5.0-dev.3] - 2025-07-11
+
+### Bug Fixes
+
+- Retry dash core requests when they fail (#1139)
+
+### Features
+
+- Rollback --store flag to to include block store in rollback (#1137)
+
+### Miscellaneous Tasks
+
+- Remove shumkov from CODEOWNERS (#1119)
+- Update secp256k1 to use new version of btcsuite/btcd/btcec/v2 (#1118)
+
+### Build
+
+- Bump github.com/oasisprotocol/oasis-core/go (#1110)
+- Bump docker/build-push-action from 6.15.0 to 6.16.0 (#1109)
+- Bump golangci/golangci-lint-action from 7.0.0 to 8.0.0 (#1112)
+- Bump golang.org/x/sync from 0.13.0 to 0.14.0 (#1111)
+- Bump actions/setup-go from 5.4.0 to 5.5.0 (#1116)
+- Bump bls-signatures go-grpc-* weightedrand snappy x/net x/crypto buf and others (#1117)
+- Bump docker/build-push-action from 6.16.0 to 6.17.0 (#1123)
+- Bump google.golang.org/grpc from 1.72.0 to 1.72.2 (#1124)
+- Bump github.com/prometheus/common from 0.63.0 to 0.64.0 (#1120)
+- Bump github.com/oasisprotocol/oasis-core/go (#1125)
+- Bump golang.org/x/time from 0.11.0 to 0.12.0 (#1131)
+- Bump google.golang.org/grpc from 1.72.2 to 1.73.0 (#1129)
+- Bump docker/build-push-action from 6.17.0 to 6.18.0 (#1126)
+- Bump golang.org/x/crypto from 0.38.0 to 0.39.0 (#1130)
+- Bump golang.org/x/sync from 0.14.0 to 0.15.0 (#1128)
+- Bump docker/setup-buildx-action from 3.10.0 to 3.11.1 (#1136)
+- Bump github.com/prometheus/common from 0.64.0 to 0.65.0 (#1135)
+- Bump github.com/oasisprotocol/oasis-core/go (#1134)
+- Bump github.com/bufbuild/buf from 1.54.0 to 1.55.1 (#1133)
+
 ## [1.5.0-dev.2] - 2025-04-25
 
 ### Bug Fixes
 
 - Statesync is unstable and doesn't time out (#1059)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.5.0-dev.2 (#1108)
 
 ### Build
 
