@@ -10,7 +10,7 @@ require (
 	github.com/dashpay/bls-signatures/go-bindings v0.0.0-20241206210929-0bb5c5b03249
 	github.com/dashpay/dashd-go v0.26.1
 	github.com/fortytw2/leaktest v1.3.0
-	github.com/fxamacker/cbor/v2 v2.8.0
+	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/go-kit/kit v0.13.0
 	github.com/gogo/protobuf v1.3.2 // indirect
 	github.com/golang/protobuf v1.5.4
