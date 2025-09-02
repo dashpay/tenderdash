@@ -28,7 +28,7 @@ require (
 	github.com/mroth/weightedrand v1.0.0
 	github.com/oasisprotocol/curve25519-voi v0.0.0-20230904125328-1f23a7beb09a
 	github.com/ory/dockertest/v3 v3.12.0
-	github.com/prometheus/client_golang v1.22.0
+	github.com/prometheus/client_golang v1.23.0
 	github.com/rs/cors v1.11.1
 	github.com/rs/zerolog v1.34.0
 	github.com/snikch/goodman v0.0.0-20171125024755-10e37e294daa
