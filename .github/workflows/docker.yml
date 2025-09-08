@@ -46,7 +46,7 @@ jobs:
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set suffix to Docker tags
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         id: suffix
         if: ${{ github.event.release != null }}
         with:
@@ -54,7 +54,7 @@ jobs:
           script: "return (context.payload.release.tag_name.includes('-dev') ? '-dev' : '');"
 
       - name: Determine TENDERMINT_BUILD_OPTIONS
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         id: TENDERMINT_BUILD_OPTIONS
         with:
           result-encoding: string
