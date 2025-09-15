@@ -21,10 +21,10 @@ jobs:
         goos: ["linux"]
     timeout-minutes: 55
     steps:
-      - uses: actions/setup-go@v5.5.0
+      - uses: actions/setup-go@v6.0.0
         with:
           go-version: "1.24.2"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
@@ -52,10 +52,10 @@ jobs:
     needs: build
     timeout-minutes: 5
     steps:
-      - uses: actions/setup-go@v5.5.0
+      - uses: actions/setup-go@v6.0.0
         with:
           go-version: "1.24.2"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
@@ -77,10 +77,10 @@ jobs:
     needs: build
     timeout-minutes: 5
     steps:
-      - uses: actions/setup-go@v5.5.0
+      - uses: actions/setup-go@v6.0.0
         with:
           go-version: "1.24.2"
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: technote-space/get-diff-action@v6
         with:
           PATTERNS: |
