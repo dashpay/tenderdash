@@ -62,15 +62,26 @@ type EvidencePool_AddEvidence_Call struct {
 }
 
 // AddEvidence is a helper method to define mock.On call
-//   - context1
-//   - evidence
+//   - context1 context.Context
+//   - evidence types.Evidence
 func (_e *EvidencePool_Expecter) AddEvidence(context1 interface{}, evidence interface{}) *EvidencePool_AddEvidence_Call {
 	return &EvidencePool_AddEvidence_Call{Call: _e.mock.On("AddEvidence", context1, evidence)}
 }
 
 func (_c *EvidencePool_AddEvidence_Call) Run(run func(context1 context.Context, evidence types.Evidence)) *EvidencePool_AddEvidence_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.Evidence))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Evidence
+		if args[1] != nil {
+			arg1 = args[1].(types.Evidence)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -108,15 +119,26 @@ type EvidencePool_CheckEvidence_Call struct {
 }
 
 // CheckEvidence is a helper method to define mock.On call
-//   - context1
-//   - evidenceList
+//   - context1 context.Context
+//   - evidenceList types.EvidenceList
 func (_e *EvidencePool_Expecter) CheckEvidence(context1 interface{}, evidenceList interface{}) *EvidencePool_CheckEvidence_Call {
 	return &EvidencePool_CheckEvidence_Call{Call: _e.mock.On("CheckEvidence", context1, evidenceList)}
 }
 
 func (_c *EvidencePool_CheckEvidence_Call) Run(run func(context1 context.Context, evidenceList types.EvidenceList)) *EvidencePool_CheckEvidence_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.EvidenceList))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.EvidenceList
+		if args[1] != nil {
+			arg1 = args[1].(types.EvidenceList)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -165,14 +187,20 @@ type EvidencePool_PendingEvidence_Call struct {
 }
 
 // PendingEvidence is a helper method to define mock.On call
-//   - maxBytes
+//   - maxBytes int64
 func (_e *EvidencePool_Expecter) PendingEvidence(maxBytes interface{}) *EvidencePool_PendingEvidence_Call {
 	return &EvidencePool_PendingEvidence_Call{Call: _e.mock.On("PendingEvidence", maxBytes)}
 }
 
 func (_c *EvidencePool_PendingEvidence_Call) Run(run func(maxBytes int64)) *EvidencePool_PendingEvidence_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -199,16 +227,32 @@ type EvidencePool_Update_Call struct {
 }
 
 // Update is a helper method to define mock.On call
-//   - context1
-//   - state1
-//   - evidenceList
+//   - context1 context.Context
+//   - state1 state.State
+//   - evidenceList types.EvidenceList
 func (_e *EvidencePool_Expecter) Update(context1 interface{}, state1 interface{}, evidenceList interface{}) *EvidencePool_Update_Call {
 	return &EvidencePool_Update_Call{Call: _e.mock.On("Update", context1, state1, evidenceList)}
 }
 
 func (_c *EvidencePool_Update_Call) Run(run func(context1 context.Context, state1 state.State, evidenceList types.EvidenceList)) *EvidencePool_Update_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(state.State), args[2].(types.EvidenceList))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 state.State
+		if args[1] != nil {
+			arg1 = args[1].(state.State)
+		}
+		var arg2 types.EvidenceList
+		if args[2] != nil {
+			arg2 = args[2].(types.EvidenceList)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }

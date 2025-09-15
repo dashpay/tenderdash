@@ -107,14 +107,20 @@ type Channel_Receive_Call struct {
 }
 
 // Receive is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *Channel_Expecter) Receive(context1 interface{}) *Channel_Receive_Call {
 	return &Channel_Receive_Call{Call: _e.mock.On("Receive", context1)}
 }
 
 func (_c *Channel_Receive_Call) Run(run func(context1 context.Context)) *Channel_Receive_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -152,15 +158,26 @@ type Channel_Send_Call struct {
 }
 
 // Send is a helper method to define mock.On call
-//   - context1
-//   - envelope
+//   - context1 context.Context
+//   - envelope p2p.Envelope
 func (_e *Channel_Expecter) Send(context1 interface{}, envelope interface{}) *Channel_Send_Call {
 	return &Channel_Send_Call{Call: _e.mock.On("Send", context1, envelope)}
 }
 
 func (_c *Channel_Send_Call) Run(run func(context1 context.Context, envelope p2p.Envelope)) *Channel_Send_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(p2p.Envelope))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 p2p.Envelope
+		if args[1] != nil {
+			arg1 = args[1].(p2p.Envelope)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -198,15 +215,26 @@ type Channel_SendError_Call struct {
 }
 
 // SendError is a helper method to define mock.On call
-//   - context1
-//   - peerError
+//   - context1 context.Context
+//   - peerError p2p.PeerError
 func (_e *Channel_Expecter) SendError(context1 interface{}, peerError interface{}) *Channel_SendError_Call {
 	return &Channel_SendError_Call{Call: _e.mock.On("SendError", context1, peerError)}
 }
 
 func (_c *Channel_SendError_Call) Run(run func(context1 context.Context, peerError p2p.PeerError)) *Channel_SendError_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(p2p.PeerError))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 p2p.PeerError
+		if args[1] != nil {
+			arg1 = args[1].(p2p.PeerError)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }

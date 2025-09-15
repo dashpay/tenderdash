@@ -171,14 +171,20 @@ type Client_MasternodeListJSON_Call struct {
 }
 
 // MasternodeListJSON is a helper method to define mock.On call
-//   - filter
+//   - filter string
 func (_e *Client_Expecter) MasternodeListJSON(filter interface{}) *Client_MasternodeListJSON_Call {
 	return &Client_MasternodeListJSON_Call{Call: _e.mock.On("MasternodeListJSON", filter)}
 }
 
 func (_c *Client_MasternodeListJSON_Call) Run(run func(filter string)) *Client_MasternodeListJSON_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(string))
+		var arg0 string
+		if args[0] != nil {
+			arg0 = args[0].(string)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -326,15 +332,26 @@ type Client_QuorumInfo_Call struct {
 }
 
 // QuorumInfo is a helper method to define mock.On call
-//   - quorumType
-//   - quorumHash
+//   - quorumType btcjson.LLMQType
+//   - quorumHash crypto.QuorumHash
 func (_e *Client_Expecter) QuorumInfo(quorumType interface{}, quorumHash interface{}) *Client_QuorumInfo_Call {
 	return &Client_QuorumInfo_Call{Call: _e.mock.On("QuorumInfo", quorumType, quorumHash)}
 }
 
 func (_c *Client_QuorumInfo_Call) Run(run func(quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash)) *Client_QuorumInfo_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(btcjson.LLMQType), args[1].(crypto.QuorumHash))
+		var arg0 btcjson.LLMQType
+		if args[0] != nil {
+			arg0 = args[0].(btcjson.LLMQType)
+		}
+		var arg1 crypto.QuorumHash
+		if args[1] != nil {
+			arg1 = args[1].(crypto.QuorumHash)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -383,17 +400,38 @@ type Client_QuorumSign_Call struct {
 }
 
 // QuorumSign is a helper method to define mock.On call
-//   - quorumType
-//   - requestID
-//   - messageHash
-//   - quorumHash
+//   - quorumType btcjson.LLMQType
+//   - requestID bytes.HexBytes
+//   - messageHash bytes.HexBytes
+//   - quorumHash bytes.HexBytes
 func (_e *Client_Expecter) QuorumSign(quorumType interface{}, requestID interface{}, messageHash interface{}, quorumHash interface{}) *Client_QuorumSign_Call {
 	return &Client_QuorumSign_Call{Call: _e.mock.On("QuorumSign", quorumType, requestID, messageHash, quorumHash)}
 }
 
 func (_c *Client_QuorumSign_Call) Run(run func(quorumType btcjson.LLMQType, requestID bytes.HexBytes, messageHash bytes.HexBytes, quorumHash bytes.HexBytes)) *Client_QuorumSign_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(btcjson.LLMQType), args[1].(bytes.HexBytes), args[2].(bytes.HexBytes), args[3].(bytes.HexBytes))
+		var arg0 btcjson.LLMQType
+		if args[0] != nil {
+			arg0 = args[0].(btcjson.LLMQType)
+		}
+		var arg1 bytes.HexBytes
+		if args[1] != nil {
+			arg1 = args[1].(bytes.HexBytes)
+		}
+		var arg2 bytes.HexBytes
+		if args[2] != nil {
+			arg2 = args[2].(bytes.HexBytes)
+		}
+		var arg3 bytes.HexBytes
+		if args[3] != nil {
+			arg3 = args[3].(bytes.HexBytes)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
 	})
 	return _c
 }
@@ -440,18 +478,44 @@ type Client_QuorumVerify_Call struct {
 }
 
 // QuorumVerify is a helper method to define mock.On call
-//   - quorumType
-//   - requestID
-//   - messageHash
-//   - signature
-//   - quorumHash
+//   - quorumType btcjson.LLMQType
+//   - requestID bytes.HexBytes
+//   - messageHash bytes.HexBytes
+//   - signature bytes.HexBytes
+//   - quorumHash bytes.HexBytes
 func (_e *Client_Expecter) QuorumVerify(quorumType interface{}, requestID interface{}, messageHash interface{}, signature interface{}, quorumHash interface{}) *Client_QuorumVerify_Call {
 	return &Client_QuorumVerify_Call{Call: _e.mock.On("QuorumVerify", quorumType, requestID, messageHash, signature, quorumHash)}
 }
 
 func (_c *Client_QuorumVerify_Call) Run(run func(quorumType btcjson.LLMQType, requestID bytes.HexBytes, messageHash bytes.HexBytes, signature bytes.HexBytes, quorumHash bytes.HexBytes)) *Client_QuorumVerify_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(btcjson.LLMQType), args[1].(bytes.HexBytes), args[2].(bytes.HexBytes), args[3].(bytes.HexBytes), args[4].(bytes.HexBytes))
+		var arg0 btcjson.LLMQType
+		if args[0] != nil {
+			arg0 = args[0].(btcjson.LLMQType)
+		}
+		var arg1 bytes.HexBytes
+		if args[1] != nil {
+			arg1 = args[1].(bytes.HexBytes)
+		}
+		var arg2 bytes.HexBytes
+		if args[2] != nil {
+			arg2 = args[2].(bytes.HexBytes)
+		}
+		var arg3 bytes.HexBytes
+		if args[3] != nil {
+			arg3 = args[3].(bytes.HexBytes)
+		}
+		var arg4 bytes.HexBytes
+		if args[4] != nil {
+			arg4 = args[4].(bytes.HexBytes)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
 	})
 	return _c
 }

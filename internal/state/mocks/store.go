@@ -62,14 +62,20 @@ type Store_Bootstrap_Call struct {
 }
 
 // Bootstrap is a helper method to define mock.On call
-//   - state1
+//   - state1 state.State
 func (_e *Store_Expecter) Bootstrap(state1 interface{}) *Store_Bootstrap_Call {
 	return &Store_Bootstrap_Call{Call: _e.mock.On("Bootstrap", state1)}
 }
 
 func (_c *Store_Bootstrap_Call) Run(run func(state1 state.State)) *Store_Bootstrap_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(state.State))
+		var arg0 state.State
+		if args[0] != nil {
+			arg0 = args[0].(state.State)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -215,14 +221,20 @@ type Store_LoadABCIResponses_Call struct {
 }
 
 // LoadABCIResponses is a helper method to define mock.On call
-//   - n
+//   - n int64
 func (_e *Store_Expecter) LoadABCIResponses(n interface{}) *Store_LoadABCIResponses_Call {
 	return &Store_LoadABCIResponses_Call{Call: _e.mock.On("LoadABCIResponses", n)}
 }
 
 func (_c *Store_LoadABCIResponses_Call) Run(run func(n int64)) *Store_LoadABCIResponses_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -269,14 +281,20 @@ type Store_LoadConsensusParams_Call struct {
 }
 
 // LoadConsensusParams is a helper method to define mock.On call
-//   - n
+//   - n int64
 func (_e *Store_Expecter) LoadConsensusParams(n interface{}) *Store_LoadConsensusParams_Call {
 	return &Store_LoadConsensusParams_Call{Call: _e.mock.On("LoadConsensusParams", n)}
 }
 
 func (_c *Store_LoadConsensusParams_Call) Run(run func(n int64)) *Store_LoadConsensusParams_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -325,15 +343,26 @@ type Store_LoadValidators_Call struct {
 }
 
 // LoadValidators is a helper method to define mock.On call
-//   - n
-//   - blockStore
+//   - n int64
+//   - blockStore selectproposer.BlockStore
 func (_e *Store_Expecter) LoadValidators(n interface{}, blockStore interface{}) *Store_LoadValidators_Call {
 	return &Store_LoadValidators_Call{Call: _e.mock.On("LoadValidators", n, blockStore)}
 }
 
 func (_c *Store_LoadValidators_Call) Run(run func(n int64, blockStore selectproposer.BlockStore)) *Store_LoadValidators_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64), args[1].(selectproposer.BlockStore))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		var arg1 selectproposer.BlockStore
+		if args[1] != nil {
+			arg1 = args[1].(selectproposer.BlockStore)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -371,14 +400,20 @@ type Store_PruneStates_Call struct {
 }
 
 // PruneStates is a helper method to define mock.On call
-//   - n
+//   - n int64
 func (_e *Store_Expecter) PruneStates(n interface{}) *Store_PruneStates_Call {
 	return &Store_PruneStates_Call{Call: _e.mock.On("PruneStates", n)}
 }
 
 func (_c *Store_PruneStates_Call) Run(run func(n int64)) *Store_PruneStates_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -416,14 +451,20 @@ type Store_Save_Call struct {
 }
 
 // Save is a helper method to define mock.On call
-//   - state1
+//   - state1 state.State
 func (_e *Store_Expecter) Save(state1 interface{}) *Store_Save_Call {
 	return &Store_Save_Call{Call: _e.mock.On("Save", state1)}
 }
 
 func (_c *Store_Save_Call) Run(run func(state1 state.State)) *Store_Save_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(state.State))
+		var arg0 state.State
+		if args[0] != nil {
+			arg0 = args[0].(state.State)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -461,15 +502,26 @@ type Store_SaveABCIResponses_Call struct {
 }
 
 // SaveABCIResponses is a helper method to define mock.On call
-//   - n
-//   - aBCIResponses
+//   - n int64
+//   - aBCIResponses state0.ABCIResponses
 func (_e *Store_Expecter) SaveABCIResponses(n interface{}, aBCIResponses interface{}) *Store_SaveABCIResponses_Call {
 	return &Store_SaveABCIResponses_Call{Call: _e.mock.On("SaveABCIResponses", n, aBCIResponses)}
 }
 
 func (_c *Store_SaveABCIResponses_Call) Run(run func(n int64, aBCIResponses state0.ABCIResponses)) *Store_SaveABCIResponses_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64), args[1].(state0.ABCIResponses))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		var arg1 state0.ABCIResponses
+		if args[1] != nil {
+			arg1 = args[1].(state0.ABCIResponses)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -507,16 +559,32 @@ type Store_SaveValidatorSets_Call struct {
 }
 
 // SaveValidatorSets is a helper method to define mock.On call
-//   - n
-//   - n1
-//   - validatorSet
+//   - n int64
+//   - n1 int64
+//   - validatorSet *types.ValidatorSet
 func (_e *Store_Expecter) SaveValidatorSets(n interface{}, n1 interface{}, validatorSet interface{}) *Store_SaveValidatorSets_Call {
 	return &Store_SaveValidatorSets_Call{Call: _e.mock.On("SaveValidatorSets", n, n1, validatorSet)}
 }
 
 func (_c *Store_SaveValidatorSets_Call) Run(run func(n int64, n1 int64, validatorSet *types.ValidatorSet)) *Store_SaveValidatorSets_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64), args[1].(int64), args[2].(*types.ValidatorSet))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 *types.ValidatorSet
+		if args[2] != nil {
+			arg2 = args[2].(*types.ValidatorSet)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }

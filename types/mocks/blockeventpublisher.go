@@ -59,14 +59,20 @@ type BlockEventPublisher_PublishEventNewBlock_Call struct {
 }
 
 // PublishEventNewBlock is a helper method to define mock.On call
-//   - eventDataNewBlock
+//   - eventDataNewBlock types.EventDataNewBlock
 func (_e *BlockEventPublisher_Expecter) PublishEventNewBlock(eventDataNewBlock interface{}) *BlockEventPublisher_PublishEventNewBlock_Call {
 	return &BlockEventPublisher_PublishEventNewBlock_Call{Call: _e.mock.On("PublishEventNewBlock", eventDataNewBlock)}
 }
 
 func (_c *BlockEventPublisher_PublishEventNewBlock_Call) Run(run func(eventDataNewBlock types.EventDataNewBlock)) *BlockEventPublisher_PublishEventNewBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(types.EventDataNewBlock))
+		var arg0 types.EventDataNewBlock
+		if args[0] != nil {
+			arg0 = args[0].(types.EventDataNewBlock)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -104,14 +110,20 @@ type BlockEventPublisher_PublishEventNewBlockHeader_Call struct {
 }
 
 // PublishEventNewBlockHeader is a helper method to define mock.On call
-//   - eventDataNewBlockHeader
+//   - eventDataNewBlockHeader types.EventDataNewBlockHeader
 func (_e *BlockEventPublisher_Expecter) PublishEventNewBlockHeader(eventDataNewBlockHeader interface{}) *BlockEventPublisher_PublishEventNewBlockHeader_Call {
 	return &BlockEventPublisher_PublishEventNewBlockHeader_Call{Call: _e.mock.On("PublishEventNewBlockHeader", eventDataNewBlockHeader)}
 }
 
 func (_c *BlockEventPublisher_PublishEventNewBlockHeader_Call) Run(run func(eventDataNewBlockHeader types.EventDataNewBlockHeader)) *BlockEventPublisher_PublishEventNewBlockHeader_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(types.EventDataNewBlockHeader))
+		var arg0 types.EventDataNewBlockHeader
+		if args[0] != nil {
+			arg0 = args[0].(types.EventDataNewBlockHeader)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -149,14 +161,20 @@ type BlockEventPublisher_PublishEventNewEvidence_Call struct {
 }
 
 // PublishEventNewEvidence is a helper method to define mock.On call
-//   - eventDataNewEvidence
+//   - eventDataNewEvidence types.EventDataNewEvidence
 func (_e *BlockEventPublisher_Expecter) PublishEventNewEvidence(eventDataNewEvidence interface{}) *BlockEventPublisher_PublishEventNewEvidence_Call {
 	return &BlockEventPublisher_PublishEventNewEvidence_Call{Call: _e.mock.On("PublishEventNewEvidence", eventDataNewEvidence)}
 }
 
 func (_c *BlockEventPublisher_PublishEventNewEvidence_Call) Run(run func(eventDataNewEvidence types.EventDataNewEvidence)) *BlockEventPublisher_PublishEventNewEvidence_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(types.EventDataNewEvidence))
+		var arg0 types.EventDataNewEvidence
+		if args[0] != nil {
+			arg0 = args[0].(types.EventDataNewEvidence)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -194,14 +212,20 @@ type BlockEventPublisher_PublishEventTx_Call struct {
 }
 
 // PublishEventTx is a helper method to define mock.On call
-//   - eventDataTx
+//   - eventDataTx types.EventDataTx
 func (_e *BlockEventPublisher_Expecter) PublishEventTx(eventDataTx interface{}) *BlockEventPublisher_PublishEventTx_Call {
 	return &BlockEventPublisher_PublishEventTx_Call{Call: _e.mock.On("PublishEventTx", eventDataTx)}
 }
 
 func (_c *BlockEventPublisher_PublishEventTx_Call) Run(run func(eventDataTx types.EventDataTx)) *BlockEventPublisher_PublishEventTx_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(types.EventDataTx))
+		var arg0 types.EventDataTx
+		if args[0] != nil {
+			arg0 = args[0].(types.EventDataTx)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -239,14 +263,20 @@ type BlockEventPublisher_PublishEventValidatorSetUpdates_Call struct {
 }
 
 // PublishEventValidatorSetUpdates is a helper method to define mock.On call
-//   - eventDataValidatorSetUpdate
+//   - eventDataValidatorSetUpdate types.EventDataValidatorSetUpdate
 func (_e *BlockEventPublisher_Expecter) PublishEventValidatorSetUpdates(eventDataValidatorSetUpdate interface{}) *BlockEventPublisher_PublishEventValidatorSetUpdates_Call {
 	return &BlockEventPublisher_PublishEventValidatorSetUpdates_Call{Call: _e.mock.On("PublishEventValidatorSetUpdates", eventDataValidatorSetUpdate)}
 }
 
 func (_c *BlockEventPublisher_PublishEventValidatorSetUpdates_Call) Run(run func(eventDataValidatorSetUpdate types.EventDataValidatorSetUpdate)) *BlockEventPublisher_PublishEventValidatorSetUpdates_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(types.EventDataValidatorSetUpdate))
+		var arg0 types.EventDataValidatorSetUpdate
+		if args[0] != nil {
+			arg0 = args[0].(types.EventDataValidatorSetUpdate)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }

@@ -72,15 +72,26 @@ type Client_ApplySnapshotChunk_Call struct {
 }
 
 // ApplySnapshotChunk is a helper method to define mock.On call
-//   - context1
-//   - requestApplySnapshotChunk
+//   - context1 context.Context
+//   - requestApplySnapshotChunk *types.RequestApplySnapshotChunk
 func (_e *Client_Expecter) ApplySnapshotChunk(context1 interface{}, requestApplySnapshotChunk interface{}) *Client_ApplySnapshotChunk_Call {
 	return &Client_ApplySnapshotChunk_Call{Call: _e.mock.On("ApplySnapshotChunk", context1, requestApplySnapshotChunk)}
 }
 
 func (_c *Client_ApplySnapshotChunk_Call) Run(run func(context1 context.Context, requestApplySnapshotChunk *types.RequestApplySnapshotChunk)) *Client_ApplySnapshotChunk_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestApplySnapshotChunk))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestApplySnapshotChunk
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestApplySnapshotChunk)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -129,15 +140,26 @@ type Client_CheckTx_Call struct {
 }
 
 // CheckTx is a helper method to define mock.On call
-//   - context1
-//   - requestCheckTx
+//   - context1 context.Context
+//   - requestCheckTx *types.RequestCheckTx
 func (_e *Client_Expecter) CheckTx(context1 interface{}, requestCheckTx interface{}) *Client_CheckTx_Call {
 	return &Client_CheckTx_Call{Call: _e.mock.On("CheckTx", context1, requestCheckTx)}
 }
 
 func (_c *Client_CheckTx_Call) Run(run func(context1 context.Context, requestCheckTx *types.RequestCheckTx)) *Client_CheckTx_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestCheckTx))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestCheckTx
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestCheckTx)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -186,15 +208,26 @@ type Client_Echo_Call struct {
 }
 
 // Echo is a helper method to define mock.On call
-//   - context1
-//   - s
+//   - context1 context.Context
+//   - s string
 func (_e *Client_Expecter) Echo(context1 interface{}, s interface{}) *Client_Echo_Call {
 	return &Client_Echo_Call{Call: _e.mock.On("Echo", context1, s)}
 }
 
 func (_c *Client_Echo_Call) Run(run func(context1 context.Context, s string)) *Client_Echo_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -287,15 +320,26 @@ type Client_ExtendVote_Call struct {
 }
 
 // ExtendVote is a helper method to define mock.On call
-//   - context1
-//   - requestExtendVote
+//   - context1 context.Context
+//   - requestExtendVote *types.RequestExtendVote
 func (_e *Client_Expecter) ExtendVote(context1 interface{}, requestExtendVote interface{}) *Client_ExtendVote_Call {
 	return &Client_ExtendVote_Call{Call: _e.mock.On("ExtendVote", context1, requestExtendVote)}
 }
 
 func (_c *Client_ExtendVote_Call) Run(run func(context1 context.Context, requestExtendVote *types.RequestExtendVote)) *Client_ExtendVote_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestExtendVote))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestExtendVote
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestExtendVote)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -344,15 +388,26 @@ type Client_FinalizeBlock_Call struct {
 }
 
 // FinalizeBlock is a helper method to define mock.On call
-//   - context1
-//   - requestFinalizeBlock
+//   - context1 context.Context
+//   - requestFinalizeBlock *types.RequestFinalizeBlock
 func (_e *Client_Expecter) FinalizeBlock(context1 interface{}, requestFinalizeBlock interface{}) *Client_FinalizeBlock_Call {
 	return &Client_FinalizeBlock_Call{Call: _e.mock.On("FinalizeBlock", context1, requestFinalizeBlock)}
 }
 
 func (_c *Client_FinalizeBlock_Call) Run(run func(context1 context.Context, requestFinalizeBlock *types.RequestFinalizeBlock)) *Client_FinalizeBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestFinalizeBlock))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestFinalizeBlock
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestFinalizeBlock)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -390,14 +445,20 @@ type Client_Flush_Call struct {
 }
 
 // Flush is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *Client_Expecter) Flush(context1 interface{}) *Client_Flush_Call {
 	return &Client_Flush_Call{Call: _e.mock.On("Flush", context1)}
 }
 
 func (_c *Client_Flush_Call) Run(run func(context1 context.Context)) *Client_Flush_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -446,15 +507,26 @@ type Client_Info_Call struct {
 }
 
 // Info is a helper method to define mock.On call
-//   - context1
-//   - requestInfo
+//   - context1 context.Context
+//   - requestInfo *types.RequestInfo
 func (_e *Client_Expecter) Info(context1 interface{}, requestInfo interface{}) *Client_Info_Call {
 	return &Client_Info_Call{Call: _e.mock.On("Info", context1, requestInfo)}
 }
 
 func (_c *Client_Info_Call) Run(run func(context1 context.Context, requestInfo *types.RequestInfo)) *Client_Info_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestInfo))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestInfo
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestInfo)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -503,15 +575,26 @@ type Client_InitChain_Call struct {
 }
 
 // InitChain is a helper method to define mock.On call
-//   - context1
-//   - requestInitChain
+//   - context1 context.Context
+//   - requestInitChain *types.RequestInitChain
 func (_e *Client_Expecter) InitChain(context1 interface{}, requestInitChain interface{}) *Client_InitChain_Call {
 	return &Client_InitChain_Call{Call: _e.mock.On("InitChain", context1, requestInitChain)}
 }
 
 func (_c *Client_InitChain_Call) Run(run func(context1 context.Context, requestInitChain *types.RequestInitChain)) *Client_InitChain_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestInitChain))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestInitChain
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestInitChain)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -604,15 +687,26 @@ type Client_ListSnapshots_Call struct {
 }
 
 // ListSnapshots is a helper method to define mock.On call
-//   - context1
-//   - requestListSnapshots
+//   - context1 context.Context
+//   - requestListSnapshots *types.RequestListSnapshots
 func (_e *Client_Expecter) ListSnapshots(context1 interface{}, requestListSnapshots interface{}) *Client_ListSnapshots_Call {
 	return &Client_ListSnapshots_Call{Call: _e.mock.On("ListSnapshots", context1, requestListSnapshots)}
 }
 
 func (_c *Client_ListSnapshots_Call) Run(run func(context1 context.Context, requestListSnapshots *types.RequestListSnapshots)) *Client_ListSnapshots_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestListSnapshots))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestListSnapshots
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestListSnapshots)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -661,15 +755,26 @@ type Client_LoadSnapshotChunk_Call struct {
 }
 
 // LoadSnapshotChunk is a helper method to define mock.On call
-//   - context1
-//   - requestLoadSnapshotChunk
+//   - context1 context.Context
+//   - requestLoadSnapshotChunk *types.RequestLoadSnapshotChunk
 func (_e *Client_Expecter) LoadSnapshotChunk(context1 interface{}, requestLoadSnapshotChunk interface{}) *Client_LoadSnapshotChunk_Call {
 	return &Client_LoadSnapshotChunk_Call{Call: _e.mock.On("LoadSnapshotChunk", context1, requestLoadSnapshotChunk)}
 }
 
 func (_c *Client_LoadSnapshotChunk_Call) Run(run func(context1 context.Context, requestLoadSnapshotChunk *types.RequestLoadSnapshotChunk)) *Client_LoadSnapshotChunk_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestLoadSnapshotChunk))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestLoadSnapshotChunk
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestLoadSnapshotChunk)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -718,15 +823,26 @@ type Client_OfferSnapshot_Call struct {
 }
 
 // OfferSnapshot is a helper method to define mock.On call
-//   - context1
-//   - requestOfferSnapshot
+//   - context1 context.Context
+//   - requestOfferSnapshot *types.RequestOfferSnapshot
 func (_e *Client_Expecter) OfferSnapshot(context1 interface{}, requestOfferSnapshot interface{}) *Client_OfferSnapshot_Call {
 	return &Client_OfferSnapshot_Call{Call: _e.mock.On("OfferSnapshot", context1, requestOfferSnapshot)}
 }
 
 func (_c *Client_OfferSnapshot_Call) Run(run func(context1 context.Context, requestOfferSnapshot *types.RequestOfferSnapshot)) *Client_OfferSnapshot_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestOfferSnapshot))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestOfferSnapshot
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestOfferSnapshot)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -775,15 +891,26 @@ type Client_PrepareProposal_Call struct {
 }
 
 // PrepareProposal is a helper method to define mock.On call
-//   - context1
-//   - requestPrepareProposal
+//   - context1 context.Context
+//   - requestPrepareProposal *types.RequestPrepareProposal
 func (_e *Client_Expecter) PrepareProposal(context1 interface{}, requestPrepareProposal interface{}) *Client_PrepareProposal_Call {
 	return &Client_PrepareProposal_Call{Call: _e.mock.On("PrepareProposal", context1, requestPrepareProposal)}
 }
 
 func (_c *Client_PrepareProposal_Call) Run(run func(context1 context.Context, requestPrepareProposal *types.RequestPrepareProposal)) *Client_PrepareProposal_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestPrepareProposal))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestPrepareProposal
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestPrepareProposal)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -832,15 +959,26 @@ type Client_ProcessProposal_Call struct {
 }
 
 // ProcessProposal is a helper method to define mock.On call
-//   - context1
-//   - requestProcessProposal
+//   - context1 context.Context
+//   - requestProcessProposal *types.RequestProcessProposal
 func (_e *Client_Expecter) ProcessProposal(context1 interface{}, requestProcessProposal interface{}) *Client_ProcessProposal_Call {
 	return &Client_ProcessProposal_Call{Call: _e.mock.On("ProcessProposal", context1, requestProcessProposal)}
 }
 
 func (_c *Client_ProcessProposal_Call) Run(run func(context1 context.Context, requestProcessProposal *types.RequestProcessProposal)) *Client_ProcessProposal_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestProcessProposal))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestProcessProposal
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestProcessProposal)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -889,15 +1027,26 @@ type Client_Query_Call struct {
 }
 
 // Query is a helper method to define mock.On call
-//   - context1
-//   - requestQuery
+//   - context1 context.Context
+//   - requestQuery *types.RequestQuery
 func (_e *Client_Expecter) Query(context1 interface{}, requestQuery interface{}) *Client_Query_Call {
 	return &Client_Query_Call{Call: _e.mock.On("Query", context1, requestQuery)}
 }
 
 func (_c *Client_Query_Call) Run(run func(context1 context.Context, requestQuery *types.RequestQuery)) *Client_Query_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestQuery))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestQuery
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestQuery)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -935,14 +1084,20 @@ type Client_Start_Call struct {
 }
 
 // Start is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *Client_Expecter) Start(context1 interface{}) *Client_Start_Call {
 	return &Client_Start_Call{Call: _e.mock.On("Start", context1)}
 }
 
 func (_c *Client_Start_Call) Run(run func(context1 context.Context)) *Client_Start_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -991,15 +1146,26 @@ type Client_VerifyVoteExtension_Call struct {
 }
 
 // VerifyVoteExtension is a helper method to define mock.On call
-//   - context1
-//   - requestVerifyVoteExtension
+//   - context1 context.Context
+//   - requestVerifyVoteExtension *types.RequestVerifyVoteExtension
 func (_e *Client_Expecter) VerifyVoteExtension(context1 interface{}, requestVerifyVoteExtension interface{}) *Client_VerifyVoteExtension_Call {
 	return &Client_VerifyVoteExtension_Call{Call: _e.mock.On("VerifyVoteExtension", context1, requestVerifyVoteExtension)}
 }
 
 func (_c *Client_VerifyVoteExtension_Call) Run(run func(context1 context.Context, requestVerifyVoteExtension *types.RequestVerifyVoteExtension)) *Client_VerifyVoteExtension_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.RequestVerifyVoteExtension))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.RequestVerifyVoteExtension
+		if args[1] != nil {
+			arg1 = args[1].(*types.RequestVerifyVoteExtension)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }

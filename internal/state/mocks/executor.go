@@ -71,18 +71,44 @@ type Executor_ApplyBlock_Call struct {
 }
 
 // ApplyBlock is a helper method to define mock.On call
-//   - ctx
-//   - state1
-//   - blockID
-//   - block
-//   - commit
+//   - ctx context.Context
+//   - state1 state.State
+//   - blockID types.BlockID
+//   - block *types.Block
+//   - commit *types.Commit
 func (_e *Executor_Expecter) ApplyBlock(ctx interface{}, state1 interface{}, blockID interface{}, block interface{}, commit interface{}) *Executor_ApplyBlock_Call {
 	return &Executor_ApplyBlock_Call{Call: _e.mock.On("ApplyBlock", ctx, state1, blockID, block, commit)}
 }
 
 func (_c *Executor_ApplyBlock_Call) Run(run func(ctx context.Context, state1 state.State, blockID types.BlockID, block *types.Block, commit *types.Commit)) *Executor_ApplyBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(state.State), args[2].(types.BlockID), args[3].(*types.Block), args[4].(*types.Commit))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 state.State
+		if args[1] != nil {
+			arg1 = args[1].(state.State)
+		}
+		var arg2 types.BlockID
+		if args[2] != nil {
+			arg2 = args[2].(types.BlockID)
+		}
+		var arg3 *types.Block
+		if args[3] != nil {
+			arg3 = args[3].(*types.Block)
+		}
+		var arg4 *types.Commit
+		if args[4] != nil {
+			arg4 = args[4].(*types.Commit)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
 	})
 	return _c
 }
@@ -137,20 +163,56 @@ type Executor_CreateProposalBlock_Call struct {
 }
 
 // CreateProposalBlock is a helper method to define mock.On call
-//   - ctx
-//   - height
-//   - round
-//   - state1
-//   - commit
-//   - proposerProTxHash
-//   - proposedAppVersion
+//   - ctx context.Context
+//   - height int64
+//   - round int32
+//   - state1 state.State
+//   - commit *types.Commit
+//   - proposerProTxHash []byte
+//   - proposedAppVersion uint64
 func (_e *Executor_Expecter) CreateProposalBlock(ctx interface{}, height interface{}, round interface{}, state1 interface{}, commit interface{}, proposerProTxHash interface{}, proposedAppVersion interface{}) *Executor_CreateProposalBlock_Call {
 	return &Executor_CreateProposalBlock_Call{Call: _e.mock.On("CreateProposalBlock", ctx, height, round, state1, commit, proposerProTxHash, proposedAppVersion)}
 }
 
 func (_c *Executor_CreateProposalBlock_Call) Run(run func(ctx context.Context, height int64, round int32, state1 state.State, commit *types.Commit, proposerProTxHash []byte, proposedAppVersion uint64)) *Executor_CreateProposalBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(int64), args[2].(int32), args[3].(state.State), args[4].(*types.Commit), args[5].([]byte), args[6].(uint64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 int32
+		if args[2] != nil {
+			arg2 = args[2].(int32)
+		}
+		var arg3 state.State
+		if args[3] != nil {
+			arg3 = args[3].(state.State)
+		}
+		var arg4 *types.Commit
+		if args[4] != nil {
+			arg4 = args[4].(*types.Commit)
+		}
+		var arg5 []byte
+		if args[5] != nil {
+			arg5 = args[5].([]byte)
+		}
+		var arg6 uint64
+		if args[6] != nil {
+			arg6 = args[6].(uint64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+			arg5,
+			arg6,
+		)
 	})
 	return _c
 }
@@ -177,15 +239,26 @@ type Executor_ExtendVote_Call struct {
 }
 
 // ExtendVote is a helper method to define mock.On call
-//   - ctx
-//   - vote
+//   - ctx context.Context
+//   - vote *types.Vote
 func (_e *Executor_Expecter) ExtendVote(ctx interface{}, vote interface{}) *Executor_ExtendVote_Call {
 	return &Executor_ExtendVote_Call{Call: _e.mock.On("ExtendVote", ctx, vote)}
 }
 
 func (_c *Executor_ExtendVote_Call) Run(run func(ctx context.Context, vote *types.Vote)) *Executor_ExtendVote_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.Vote))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.Vote
+		if args[1] != nil {
+			arg1 = args[1].(*types.Vote)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -232,19 +305,50 @@ type Executor_FinalizeBlock_Call struct {
 }
 
 // FinalizeBlock is a helper method to define mock.On call
-//   - ctx
-//   - state1
-//   - uncommittedState
-//   - blockID
-//   - block
-//   - commit
+//   - ctx context.Context
+//   - state1 state.State
+//   - uncommittedState state.CurrentRoundState
+//   - blockID types.BlockID
+//   - block *types.Block
+//   - commit *types.Commit
 func (_e *Executor_Expecter) FinalizeBlock(ctx interface{}, state1 interface{}, uncommittedState interface{}, blockID interface{}, block interface{}, commit interface{}) *Executor_FinalizeBlock_Call {
 	return &Executor_FinalizeBlock_Call{Call: _e.mock.On("FinalizeBlock", ctx, state1, uncommittedState, blockID, block, commit)}
 }
 
 func (_c *Executor_FinalizeBlock_Call) Run(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, blockID types.BlockID, block *types.Block, commit *types.Commit)) *Executor_FinalizeBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(state.State), args[2].(state.CurrentRoundState), args[3].(types.BlockID), args[4].(*types.Block), args[5].(*types.Commit))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 state.State
+		if args[1] != nil {
+			arg1 = args[1].(state.State)
+		}
+		var arg2 state.CurrentRoundState
+		if args[2] != nil {
+			arg2 = args[2].(state.CurrentRoundState)
+		}
+		var arg3 types.BlockID
+		if args[3] != nil {
+			arg3 = args[3].(types.BlockID)
+		}
+		var arg4 *types.Block
+		if args[4] != nil {
+			arg4 = args[4].(*types.Block)
+		}
+		var arg5 *types.Commit
+		if args[5] != nil {
+			arg5 = args[5].(*types.Commit)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+			arg5,
+		)
 	})
 	return _c
 }
@@ -291,18 +395,44 @@ type Executor_ProcessProposal_Call struct {
 }
 
 // ProcessProposal is a helper method to define mock.On call
-//   - ctx
-//   - block
-//   - round
-//   - state1
-//   - verify
+//   - ctx context.Context
+//   - block *types.Block
+//   - round int32
+//   - state1 state.State
+//   - verify bool
 func (_e *Executor_Expecter) ProcessProposal(ctx interface{}, block interface{}, round interface{}, state1 interface{}, verify interface{}) *Executor_ProcessProposal_Call {
 	return &Executor_ProcessProposal_Call{Call: _e.mock.On("ProcessProposal", ctx, block, round, state1, verify)}
 }
 
 func (_c *Executor_ProcessProposal_Call) Run(run func(ctx context.Context, block *types.Block, round int32, state1 state.State, verify bool)) *Executor_ProcessProposal_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.Block), args[2].(int32), args[3].(state.State), args[4].(bool))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.Block
+		if args[1] != nil {
+			arg1 = args[1].(*types.Block)
+		}
+		var arg2 int32
+		if args[2] != nil {
+			arg2 = args[2].(int32)
+		}
+		var arg3 state.State
+		if args[3] != nil {
+			arg3 = args[3].(state.State)
+		}
+		var arg4 bool
+		if args[4] != nil {
+			arg4 = args[4].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
 	})
 	return _c
 }
@@ -340,16 +470,32 @@ type Executor_ValidateBlock_Call struct {
 }
 
 // ValidateBlock is a helper method to define mock.On call
-//   - ctx
-//   - state1
-//   - block
+//   - ctx context.Context
+//   - state1 state.State
+//   - block *types.Block
 func (_e *Executor_Expecter) ValidateBlock(ctx interface{}, state1 interface{}, block interface{}) *Executor_ValidateBlock_Call {
 	return &Executor_ValidateBlock_Call{Call: _e.mock.On("ValidateBlock", ctx, state1, block)}
 }
 
 func (_c *Executor_ValidateBlock_Call) Run(run func(ctx context.Context, state1 state.State, block *types.Block)) *Executor_ValidateBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(state.State), args[2].(*types.Block))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 state.State
+		if args[1] != nil {
+			arg1 = args[1].(state.State)
+		}
+		var arg2 *types.Block
+		if args[2] != nil {
+			arg2 = args[2].(*types.Block)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -387,17 +533,38 @@ type Executor_ValidateBlockWithRoundState_Call struct {
 }
 
 // ValidateBlockWithRoundState is a helper method to define mock.On call
-//   - ctx
-//   - state1
-//   - uncommittedState
-//   - block
+//   - ctx context.Context
+//   - state1 state.State
+//   - uncommittedState state.CurrentRoundState
+//   - block *types.Block
 func (_e *Executor_Expecter) ValidateBlockWithRoundState(ctx interface{}, state1 interface{}, uncommittedState interface{}, block interface{}) *Executor_ValidateBlockWithRoundState_Call {
 	return &Executor_ValidateBlockWithRoundState_Call{Call: _e.mock.On("ValidateBlockWithRoundState", ctx, state1, uncommittedState, block)}
 }
 
 func (_c *Executor_ValidateBlockWithRoundState_Call) Run(run func(ctx context.Context, state1 state.State, uncommittedState state.CurrentRoundState, block *types.Block)) *Executor_ValidateBlockWithRoundState_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(state.State), args[2].(state.CurrentRoundState), args[3].(*types.Block))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 state.State
+		if args[1] != nil {
+			arg1 = args[1].(state.State)
+		}
+		var arg2 state.CurrentRoundState
+		if args[2] != nil {
+			arg2 = args[2].(state.CurrentRoundState)
+		}
+		var arg3 *types.Block
+		if args[3] != nil {
+			arg3 = args[3].(*types.Block)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
 	})
 	return _c
 }
@@ -435,15 +602,26 @@ type Executor_VerifyVoteExtension_Call struct {
 }
 
 // VerifyVoteExtension is a helper method to define mock.On call
-//   - ctx
-//   - vote
+//   - ctx context.Context
+//   - vote *types.Vote
 func (_e *Executor_Expecter) VerifyVoteExtension(ctx interface{}, vote interface{}) *Executor_VerifyVoteExtension_Call {
 	return &Executor_VerifyVoteExtension_Call{Call: _e.mock.On("VerifyVoteExtension", ctx, vote)}
 }
 
 func (_c *Executor_VerifyVoteExtension_Call) Run(run func(ctx context.Context, vote *types.Vote)) *Executor_VerifyVoteExtension_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*types.Vote))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *types.Vote
+		if args[1] != nil {
+			arg1 = args[1].(*types.Vote)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }

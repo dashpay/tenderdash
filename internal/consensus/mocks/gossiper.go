@@ -50,16 +50,32 @@ type Gossiper_GossipBlockPartsForCatchup_Call struct {
 }
 
 // GossipBlockPartsForCatchup is a helper method to define mock.On call
-//   - ctx
-//   - rs
-//   - prs
+//   - ctx context.Context
+//   - rs types.RoundState
+//   - prs *types.PeerRoundState
 func (_e *Gossiper_Expecter) GossipBlockPartsForCatchup(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipBlockPartsForCatchup_Call {
 	return &Gossiper_GossipBlockPartsForCatchup_Call{Call: _e.mock.On("GossipBlockPartsForCatchup", ctx, rs, prs)}
 }
 
 func (_c *Gossiper_GossipBlockPartsForCatchup_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipBlockPartsForCatchup_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.RoundState
+		if args[1] != nil {
+			arg1 = args[1].(types.RoundState)
+		}
+		var arg2 *types.PeerRoundState
+		if args[2] != nil {
+			arg2 = args[2].(*types.PeerRoundState)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -86,16 +102,32 @@ type Gossiper_GossipCommit_Call struct {
 }
 
 // GossipCommit is a helper method to define mock.On call
-//   - ctx
-//   - rs
-//   - prs
+//   - ctx context.Context
+//   - rs types.RoundState
+//   - prs *types.PeerRoundState
 func (_e *Gossiper_Expecter) GossipCommit(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipCommit_Call {
 	return &Gossiper_GossipCommit_Call{Call: _e.mock.On("GossipCommit", ctx, rs, prs)}
 }
 
 func (_c *Gossiper_GossipCommit_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipCommit_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.RoundState
+		if args[1] != nil {
+			arg1 = args[1].(types.RoundState)
+		}
+		var arg2 *types.PeerRoundState
+		if args[2] != nil {
+			arg2 = args[2].(*types.PeerRoundState)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -122,16 +154,32 @@ type Gossiper_GossipProposal_Call struct {
 }
 
 // GossipProposal is a helper method to define mock.On call
-//   - ctx
-//   - rs
-//   - prs
+//   - ctx context.Context
+//   - rs types.RoundState
+//   - prs *types.PeerRoundState
 func (_e *Gossiper_Expecter) GossipProposal(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipProposal_Call {
 	return &Gossiper_GossipProposal_Call{Call: _e.mock.On("GossipProposal", ctx, rs, prs)}
 }
 
 func (_c *Gossiper_GossipProposal_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipProposal_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.RoundState
+		if args[1] != nil {
+			arg1 = args[1].(types.RoundState)
+		}
+		var arg2 *types.PeerRoundState
+		if args[2] != nil {
+			arg2 = args[2].(*types.PeerRoundState)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -158,16 +206,32 @@ type Gossiper_GossipProposalBlockParts_Call struct {
 }
 
 // GossipProposalBlockParts is a helper method to define mock.On call
-//   - ctx
-//   - rs
-//   - prs
+//   - ctx context.Context
+//   - rs types.RoundState
+//   - prs *types.PeerRoundState
 func (_e *Gossiper_Expecter) GossipProposalBlockParts(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipProposalBlockParts_Call {
 	return &Gossiper_GossipProposalBlockParts_Call{Call: _e.mock.On("GossipProposalBlockParts", ctx, rs, prs)}
 }
 
 func (_c *Gossiper_GossipProposalBlockParts_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipProposalBlockParts_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.RoundState
+		if args[1] != nil {
+			arg1 = args[1].(types.RoundState)
+		}
+		var arg2 *types.PeerRoundState
+		if args[2] != nil {
+			arg2 = args[2].(*types.PeerRoundState)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -194,16 +258,32 @@ type Gossiper_GossipVote_Call struct {
 }
 
 // GossipVote is a helper method to define mock.On call
-//   - ctx
-//   - rs
-//   - prs
+//   - ctx context.Context
+//   - rs types.RoundState
+//   - prs *types.PeerRoundState
 func (_e *Gossiper_Expecter) GossipVote(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipVote_Call {
 	return &Gossiper_GossipVote_Call{Call: _e.mock.On("GossipVote", ctx, rs, prs)}
 }
 
 func (_c *Gossiper_GossipVote_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipVote_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.RoundState
+		if args[1] != nil {
+			arg1 = args[1].(types.RoundState)
+		}
+		var arg2 *types.PeerRoundState
+		if args[2] != nil {
+			arg2 = args[2].(*types.PeerRoundState)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -230,16 +310,32 @@ type Gossiper_GossipVoteSetMaj23_Call struct {
 }
 
 // GossipVoteSetMaj23 is a helper method to define mock.On call
-//   - ctx
-//   - rs
-//   - prs
+//   - ctx context.Context
+//   - rs types.RoundState
+//   - prs *types.PeerRoundState
 func (_e *Gossiper_Expecter) GossipVoteSetMaj23(ctx interface{}, rs interface{}, prs interface{}) *Gossiper_GossipVoteSetMaj23_Call {
 	return &Gossiper_GossipVoteSetMaj23_Call{Call: _e.mock.On("GossipVoteSetMaj23", ctx, rs, prs)}
 }
 
 func (_c *Gossiper_GossipVoteSetMaj23_Call) Run(run func(ctx context.Context, rs types.RoundState, prs *types.PeerRoundState)) *Gossiper_GossipVoteSetMaj23_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.RoundState), args[2].(*types.PeerRoundState))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.RoundState
+		if args[1] != nil {
+			arg1 = args[1].(types.RoundState)
+		}
+		var arg2 *types.PeerRoundState
+		if args[2] != nil {
+			arg2 = args[2].(*types.PeerRoundState)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }

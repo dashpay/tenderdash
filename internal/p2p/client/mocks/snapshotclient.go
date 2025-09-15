@@ -74,18 +74,44 @@ type SnapshotClient_GetChunk_Call struct {
 }
 
 // GetChunk is a helper method to define mock.On call
-//   - ctx
-//   - peerID
-//   - height
-//   - format
-//   - index
+//   - ctx context.Context
+//   - peerID types.NodeID
+//   - height uint64
+//   - format uint32
+//   - index uint32
 func (_e *SnapshotClient_Expecter) GetChunk(ctx interface{}, peerID interface{}, height interface{}, format interface{}, index interface{}) *SnapshotClient_GetChunk_Call {
 	return &SnapshotClient_GetChunk_Call{Call: _e.mock.On("GetChunk", ctx, peerID, height, format, index)}
 }
 
 func (_c *SnapshotClient_GetChunk_Call) Run(run func(ctx context.Context, peerID types.NodeID, height uint64, format uint32, index uint32)) *SnapshotClient_GetChunk_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.NodeID), args[2].(uint64), args[3].(uint32), args[4].(uint32))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.NodeID
+		if args[1] != nil {
+			arg1 = args[1].(types.NodeID)
+		}
+		var arg2 uint64
+		if args[2] != nil {
+			arg2 = args[2].(uint64)
+		}
+		var arg3 uint32
+		if args[3] != nil {
+			arg3 = args[3].(uint32)
+		}
+		var arg4 uint32
+		if args[4] != nil {
+			arg4 = args[4].(uint32)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
 	})
 	return _c
 }
@@ -134,16 +160,32 @@ type SnapshotClient_GetLightBlock_Call struct {
 }
 
 // GetLightBlock is a helper method to define mock.On call
-//   - ctx
-//   - peerID
-//   - height
+//   - ctx context.Context
+//   - peerID types.NodeID
+//   - height uint64
 func (_e *SnapshotClient_Expecter) GetLightBlock(ctx interface{}, peerID interface{}, height interface{}) *SnapshotClient_GetLightBlock_Call {
 	return &SnapshotClient_GetLightBlock_Call{Call: _e.mock.On("GetLightBlock", ctx, peerID, height)}
 }
 
 func (_c *SnapshotClient_GetLightBlock_Call) Run(run func(ctx context.Context, peerID types.NodeID, height uint64)) *SnapshotClient_GetLightBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.NodeID), args[2].(uint64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.NodeID
+		if args[1] != nil {
+			arg1 = args[1].(types.NodeID)
+		}
+		var arg2 uint64
+		if args[2] != nil {
+			arg2 = args[2].(uint64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -192,16 +234,32 @@ type SnapshotClient_GetParams_Call struct {
 }
 
 // GetParams is a helper method to define mock.On call
-//   - ctx
-//   - peerID
-//   - height
+//   - ctx context.Context
+//   - peerID types.NodeID
+//   - height uint64
 func (_e *SnapshotClient_Expecter) GetParams(ctx interface{}, peerID interface{}, height interface{}) *SnapshotClient_GetParams_Call {
 	return &SnapshotClient_GetParams_Call{Call: _e.mock.On("GetParams", ctx, peerID, height)}
 }
 
 func (_c *SnapshotClient_GetParams_Call) Run(run func(ctx context.Context, peerID types.NodeID, height uint64)) *SnapshotClient_GetParams_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.NodeID), args[2].(uint64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.NodeID
+		if args[1] != nil {
+			arg1 = args[1].(types.NodeID)
+		}
+		var arg2 uint64
+		if args[2] != nil {
+			arg2 = args[2].(uint64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -239,15 +297,26 @@ type SnapshotClient_GetSnapshots_Call struct {
 }
 
 // GetSnapshots is a helper method to define mock.On call
-//   - ctx
-//   - peerID
+//   - ctx context.Context
+//   - peerID types.NodeID
 func (_e *SnapshotClient_Expecter) GetSnapshots(ctx interface{}, peerID interface{}) *SnapshotClient_GetSnapshots_Call {
 	return &SnapshotClient_GetSnapshots_Call{Call: _e.mock.On("GetSnapshots", ctx, peerID)}
 }
 
 func (_c *SnapshotClient_GetSnapshots_Call) Run(run func(ctx context.Context, peerID types.NodeID)) *SnapshotClient_GetSnapshots_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.NodeID))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.NodeID
+		if args[1] != nil {
+			arg1 = args[1].(types.NodeID)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
