@@ -28,7 +28,7 @@ jobs:
     env:
       PLATFORMS: ${{ github.event_name == 'release' && 'linux/amd64,linux/arm64' || github.event.inputs.platforms }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@master
