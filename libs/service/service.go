@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"sync/atomic"
 
 	sync "github.com/sasha-s/go-deadlock"
 
@@ -83,6 +84,11 @@ type BaseService struct {
 	quit   <-chan (struct{})
 	cancel context.CancelFunc
 
+	// running is an atomic flag set to 1 when the service is running,
+	// and 0 otherwise. It allows IsRunning to avoid locking and thus
+	// prevents recursive lock deadlocks from callers that also hold mtx.
+	running uint32
+
 	// The "subclass" of BaseService
 	impl Implementation
 }
@@ -122,6 +128,7 @@ func (bs *BaseService) Start(ctx context.Context) error {
 		srvCtx, cancel := context.WithCancel(context.Background())
 		bs.cancel = cancel
 		bs.quit = srvCtx.Done()
+		atomic.StoreUint32(&bs.running, 1)
 
 		go func(ctx context.Context) {
 			select {
@@ -158,6 +165,7 @@ func (bs *BaseService) Stop() {
 		bs.logger.Info("stopping service", "service", bs.name)
 		bs.impl.OnStop()
 		bs.cancel()
+		atomic.StoreUint32(&bs.running, 0)
 
 		return
 	}
@@ -165,21 +173,7 @@ func (bs *BaseService) Stop() {
 
 // IsRunning implements Service by returning true or false depending on the
 // service's state.
-func (bs *BaseService) IsRunning() bool {
-	bs.mtx.Lock()
-	defer bs.mtx.Unlock()
-
-	if bs.quit == nil {
-		return false
-	}
-
-	select {
-	case <-bs.quit:
-		return false
-	default:
-		return true
-	}
-}
+func (bs *BaseService) IsRunning() bool { return atomic.LoadUint32(&bs.running) == 1 }
 
 func (bs *BaseService) getWait() <-chan struct{} {
 	bs.mtx.Lock()
