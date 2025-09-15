@@ -124,43 +124,43 @@ func TestHTTPBatching(t *testing.T) {
 	_, err = batch.Send(ctx)
 	require.NoError(t, err)
 
-    // wait for the transactions to land by polling with a fresh batch each time
-    // and ensuring both queried values are non-empty
-    require.Eventually(t,
-        func() bool {
-            pollBatch := c.NewBatch()
-            for _, key := range [][]byte{k1, k2} {
-                if _, err := pollBatch.ABCIQuery(ctx, "/key", key); err != nil {
-                    return false
-                }
-            }
-            res, err := pollBatch.Send(ctx)
-            if err != nil || len(res) != 2 {
-                return false
-            }
-            found := 0
-            for _, r := range res {
-                qr, ok := r.(*coretypes.ResultABCIQuery)
-                if !ok {
-                    return false
-                }
-                if len(qr.Response.Value) > 0 {
-                    found++
-                }
-            }
-            return found == 2
-        },
-        10*time.Second,
-        time.Second,
-    )
+	// wait for the transactions to land by polling with a fresh batch each time
+	// and ensuring both queried values are non-empty
+	require.Eventually(t,
+		func() bool {
+			pollBatch := c.NewBatch()
+			for _, key := range [][]byte{k1, k2} {
+				if _, err := pollBatch.ABCIQuery(ctx, "/key", key); err != nil {
+					return false
+				}
+			}
+			res, err := pollBatch.Send(ctx)
+			if err != nil || len(res) != 2 {
+				return false
+			}
+			found := 0
+			for _, r := range res {
+				qr, ok := r.(*coretypes.ResultABCIQuery)
+				if !ok {
+					return false
+				}
+				if len(qr.Response.Value) > 0 {
+					found++
+				}
+			}
+			return found == 2
+		},
+		10*time.Second,
+		time.Second,
+	)
 
-    // Send the 2 queries and keep the results using a fresh batch
-    batch = c.NewBatch()
-    _, err = batch.ABCIQuery(ctx, "/key", k1)
-    require.NoError(t, err)
-    _, err = batch.ABCIQuery(ctx, "/key", k2)
-    require.NoError(t, err)
-    results, err := batch.Send(ctx)
+	// Send the 2 queries and keep the results using a fresh batch
+	batch = c.NewBatch()
+	_, err = batch.ABCIQuery(ctx, "/key", k1)
+	require.NoError(t, err)
+	_, err = batch.ABCIQuery(ctx, "/key", k2)
+	require.NoError(t, err)
+	results, err := batch.Send(ctx)
 	require.NoError(t, err)
 
 	require.Len(t, results, 2)
