@@ -132,7 +132,6 @@ require (
 	github.com/google/cel-go v0.26.0 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/google/go-containerregistry v0.20.6 // indirect
-	github.com/google/pprof v0.0.0-20250607225305-033d6d78b36a // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/hashicorp/go-immutable-radix/v2 v2.1.0 // indirect
@@ -159,7 +158,6 @@ require (
 	github.com/morikuni/aec v1.0.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/nunnatsa/ginkgolinter v0.19.1 // indirect
-	github.com/onsi/ginkgo/v2 v2.23.4 // indirect
 	github.com/onsi/gomega v1.36.3 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.4 // indirect
 	github.com/petermattis/goid v0.0.0-20250508124226-395b08cebbdb // indirect
@@ -356,7 +354,7 @@ require (
 	github.com/cosmos/gogoproto v1.7.0
 	github.com/creachadair/tomledit v0.0.28
 	github.com/jonboulle/clockwork v0.5.0
-	github.com/oasisprotocol/oasis-core/go v0.2504.0
+	github.com/oasisprotocol/oasis-core/go v0.2505.0
 	github.com/sasha-s/go-deadlock v0.3.5
 	github.com/syndtr/goleveldb v1.0.1-0.20210819022825-2ae1ddf74ef7
 	github.com/tendermint/go-amino v0.16.0
