@@ -63,3 +63,4 @@ proto/spec/**/*.pb.go
 *.pdf
 *.gz
 *.dvi
+.gocache
