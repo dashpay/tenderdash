@@ -38,7 +38,7 @@ require (
 	golang.org/x/crypto v0.42.0
 	golang.org/x/net v0.44.0
 	golang.org/x/sync v0.17.0
-	google.golang.org/grpc v1.74.2
+	google.golang.org/grpc v1.75.1
 	pgregory.net/rapid v1.2.0
 )
 
@@ -146,10 +146,11 @@ require (
 	github.com/golangci/golines v0.0.0-20250821215611-d4663ad2c370 // indirect
 	github.com/golangci/plugin-module-register v0.1.2 // indirect
 	github.com/golangci/swaggoswag v0.0.0-20250504205917-77f2aca3143e // indirect
-	github.com/google/cel-go v0.26.0 // indirect
+	github.com/google/cel-go v0.26.1 // indirect
 	github.com/google/flatbuffers v25.2.10+incompatible // indirect
 	github.com/google/go-containerregistry v0.20.6 // indirect
 	github.com/google/shlex v0.0.0-20191202100458-e7afc7fbc510 // indirect
+	github.com/grafana/regexp v0.0.0-20240518133315-a468a5bfb3bc // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.20.0 // indirect
 	github.com/hashicorp/go-immutable-radix/v2 v2.1.0 // indirect
 	github.com/hashicorp/golang-lru/v2 v2.0.7 // indirect
@@ -220,10 +221,10 @@ require (
 	go.opentelemetry.io/otel/trace v1.37.0 // indirect
 	go.uber.org/automaxprocs v1.6.0 // indirect
 	go.uber.org/mock v0.6.0 // indirect
-	go.yaml.in/yaml/v2 v2.4.3 // indirect
 	go.yaml.in/yaml/v3 v3.0.4 // indirect
 	google.golang.org/genproto/googleapis/api v0.0.0-20250826171959-ef028d996bc1 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20250826171959-ef028d996bc1 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gotest.tools/v3 v3.5.2 // indirect
 	pluginrpc.com/pluginrpc v0.5.0 // indirect
 )
@@ -317,7 +318,7 @@ require (
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/polyfloyd/go-errorlint v1.8.0 // indirect
 	github.com/prometheus/client_model v0.6.2
-	github.com/prometheus/common v0.66.1
+	github.com/prometheus/common v1.20.99
 	github.com/prometheus/procfs v0.17.0 // indirect
 	github.com/quasilyte/go-ruleguard v0.4.4 // indirect
 	github.com/quasilyte/gogrep v0.5.0 // indirect
