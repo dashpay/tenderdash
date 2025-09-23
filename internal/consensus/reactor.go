@@ -72,6 +72,10 @@ type Reactor struct {
 
 	peerEvents p2p.PeerEventSubscriber
 	chCreator  p2p.ChannelCreator
+
+	// Context for controlling reactor goroutines
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 // NewReactor returns a reference to a new consensus reactor, which implements
@@ -121,28 +125,31 @@ type channelBundle struct {
 func (r *Reactor) OnStart(ctx context.Context) error {
 	r.logger.Trace("consensus wait sync", "wait_sync", r.WaitSync())
 
-	peerUpdates := r.peerEvents(ctx, "consensus")
+	// Create reactor-specific context that will be canceled in OnStop
+	r.ctx, r.cancel = context.WithCancel(ctx)
+
+	peerUpdates := r.peerEvents(r.ctx, "consensus")
 
 	var chBundle channelBundle
 	var err error
 
 	chans := p2p.ConsensusChannelDescriptors()
-	chBundle.state, err = r.chCreator(ctx, chans[p2p.ConsensusStateChannel])
+	chBundle.state, err = r.chCreator(r.ctx, chans[p2p.ConsensusStateChannel])
 	if err != nil {
 		return err
 	}
 
-	chBundle.data, err = r.chCreator(ctx, chans[p2p.ConsensusDataChannel])
+	chBundle.data, err = r.chCreator(r.ctx, chans[p2p.ConsensusDataChannel])
 	if err != nil {
 		return err
 	}
 
-	chBundle.vote, err = r.chCreator(ctx, chans[p2p.ConsensusVoteChannel])
+	chBundle.vote, err = r.chCreator(r.ctx, chans[p2p.ConsensusVoteChannel])
 	if err != nil {
 		return err
 	}
 
-	chBundle.voteSet, err = r.chCreator(ctx, chans[p2p.VoteSetBitsChannel])
+	chBundle.voteSet, err = r.chCreator(r.ctx, chans[p2p.VoteSetBitsChannel])
 	if err != nil {
 		return err
 	}
@@ -151,12 +158,12 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	//
 	// TODO: Evaluate if we need this to be synchronized via WaitGroup as to not
 	// leak the goroutine when stopping the reactor.
-	go r.peerStatsRoutine(ctx, peerUpdates)
+	go r.peerStatsRoutine(r.ctx, peerUpdates)
 
-	r.subscribeToBroadcastEvents(ctx, chBundle.state)
+	r.subscribeToBroadcastEvents(r.ctx, chBundle.state)
 
 	if !r.WaitSync() {
-		if err := r.state.Start(ctx); err != nil {
+		if err := r.state.Start(r.ctx); err != nil {
 			return err
 		}
 	} else if err := r.state.updateStateFromStore(); err != nil {
@@ -167,18 +174,18 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	// Data, vote and vote set must wait.
 	// We cannot skip waiting messages, as the peers might already have marked them as delivered.
 	// XXX: this can lead to a deadlock, if so - we need additional buffer for (at least) Commits.
-	go r.processMsgCh(ctx, chBundle.state, chBundle)
+	go r.processMsgCh(r.ctx, chBundle.state, chBundle)
 	go func() {
 		select {
 		case <-r.readySignal:
-			go r.processMsgCh(ctx, chBundle.data, chBundle)
-			go r.processMsgCh(ctx, chBundle.vote, chBundle)
-			go r.processMsgCh(ctx, chBundle.voteSet, chBundle)
-		case <-ctx.Done():
+			go r.processMsgCh(r.ctx, chBundle.data, chBundle)
+			go r.processMsgCh(r.ctx, chBundle.vote, chBundle)
+			go r.processMsgCh(r.ctx, chBundle.voteSet, chBundle)
+		case <-r.ctx.Done():
 		}
 	}()
 
-	go r.processPeerUpdates(ctx, peerUpdates, chBundle)
+	go r.processPeerUpdates(r.ctx, peerUpdates, chBundle)
 
 	return nil
 }
@@ -187,6 +194,11 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 // blocking until they all exit, as well as unsubscribing from events and stopping
 // state.
 func (r *Reactor) OnStop() {
+	// Cancel the reactor context to signal all goroutines to stop
+	if r.cancel != nil {
+		r.cancel()
+	}
+
 	r.state.Stop()
 
 	if !r.WaitSync() {
@@ -789,13 +801,12 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 }
 
 func (r *Reactor) peerStatsRoutine(ctx context.Context, peerUpdates *p2p.PeerUpdates) {
+	r.logger.Debug("peerStatsRoutine starting")
 	for {
-		if !r.IsRunning() {
-			r.logger.Trace("stopping peerStatsRoutine")
-			return
-		}
-
 		select {
+		case <-ctx.Done():
+			r.logger.Trace("stopping peerStatsRoutine due to context cancellation")
+			return
 		case msg := <-r.state.statsMsgQueue.ch:
 			ps, ok := r.GetPeerState(msg.PeerID)
 			if !ok || ps == nil {
@@ -814,7 +825,8 @@ func (r *Reactor) peerStatsRoutine(ctx context.Context, peerUpdates *p2p.PeerUpd
 				}
 
 			case *VoteMessage:
-				if numVotes := ps.RecordVote(); numVotes%votesToContributeToBecomeGoodPeer == 0 {
+				numVotes := ps.RecordVote()
+				if numVotes%votesToContributeToBecomeGoodPeer == 0 {
 					peerUpdates.SendUpdate(ctx, p2p.PeerUpdate{
 						NodeID: msg.PeerID,
 						Status: p2p.PeerStatusGood,
@@ -822,15 +834,14 @@ func (r *Reactor) peerStatsRoutine(ctx context.Context, peerUpdates *p2p.PeerUpd
 				}
 
 			case *BlockPartMessage:
-				if numParts := ps.RecordBlockPart(); numParts%blocksToContributeToBecomeGoodPeer == 0 {
+				numParts := ps.RecordBlockPart()
+				if numParts%blocksToContributeToBecomeGoodPeer == 0 {
 					peerUpdates.SendUpdate(ctx, p2p.PeerUpdate{
 						NodeID: msg.PeerID,
 						Status: p2p.PeerStatusGood,
 					})
 				}
 			}
-		case <-ctx.Done():
-			return
 		}
 	}
 }
