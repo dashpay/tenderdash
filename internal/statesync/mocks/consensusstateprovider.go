@@ -103,14 +103,20 @@ type ConsensusStateProvider_PublishCommitEvent_Call struct {
 }
 
 // PublishCommitEvent is a helper method to define mock.On call
-//   - commit
+//   - commit *types.Commit
 func (_e *ConsensusStateProvider_Expecter) PublishCommitEvent(commit interface{}) *ConsensusStateProvider_PublishCommitEvent_Call {
 	return &ConsensusStateProvider_PublishCommitEvent_Call{Call: _e.mock.On("PublishCommitEvent", commit)}
 }
 
 func (_c *ConsensusStateProvider_PublishCommitEvent_Call) Run(run func(commit *types.Commit)) *ConsensusStateProvider_PublishCommitEvent_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(*types.Commit))
+		var arg0 *types.Commit
+		if args[0] != nil {
+			arg0 = args[0].(*types.Commit)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }

@@ -94,14 +94,20 @@ type Store_Delete_Call[K comparable, V any] struct {
 }
 
 // Delete is a helper method to define mock.On call
-//   - key
+//   - key K
 func (_e *Store_Expecter[K, V]) Delete(key interface{}) *Store_Delete_Call[K, V] {
 	return &Store_Delete_Call[K, V]{Call: _e.mock.On("Delete", key)}
 }
 
 func (_c *Store_Delete_Call[K, V]) Run(run func(key K)) *Store_Delete_Call[K, V] {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(K))
+		var arg0 K
+		if args[0] != nil {
+			arg0 = args[0].(K)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -150,14 +156,20 @@ type Store_Get_Call[K comparable, V any] struct {
 }
 
 // Get is a helper method to define mock.On call
-//   - key
+//   - key K
 func (_e *Store_Expecter[K, V]) Get(key interface{}) *Store_Get_Call[K, V] {
 	return &Store_Get_Call[K, V]{Call: _e.mock.On("Get", key)}
 }
 
 func (_c *Store_Get_Call[K, V]) Run(run func(key K)) *Store_Get_Call[K, V] {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(K))
+		var arg0 K
+		if args[0] != nil {
+			arg0 = args[0].(K)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -206,14 +218,20 @@ type Store_GetAndDelete_Call[K comparable, V any] struct {
 }
 
 // GetAndDelete is a helper method to define mock.On call
-//   - key
+//   - key K
 func (_e *Store_Expecter[K, V]) GetAndDelete(key interface{}) *Store_GetAndDelete_Call[K, V] {
 	return &Store_GetAndDelete_Call[K, V]{Call: _e.mock.On("GetAndDelete", key)}
 }
 
 func (_c *Store_GetAndDelete_Call[K, V]) Run(run func(key K)) *Store_GetAndDelete_Call[K, V] {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(K))
+		var arg0 K
+		if args[0] != nil {
+			arg0 = args[0].(K)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -328,15 +346,26 @@ type Store_Put_Call[K comparable, V any] struct {
 }
 
 // Put is a helper method to define mock.On call
-//   - key
-//   - data
+//   - key K
+//   - data V
 func (_e *Store_Expecter[K, V]) Put(key interface{}, data interface{}) *Store_Put_Call[K, V] {
 	return &Store_Put_Call[K, V]{Call: _e.mock.On("Put", key, data)}
 }
 
 func (_c *Store_Put_Call[K, V]) Run(run func(key K, data V)) *Store_Put_Call[K, V] {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(K), args[1].(V))
+		var arg0 K
+		if args[0] != nil {
+			arg0 = args[0].(K)
+		}
+		var arg1 V
+		if args[1] != nil {
+			arg1 = args[1].(V)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -376,15 +405,26 @@ type Store_Query_Call[K comparable, V any] struct {
 }
 
 // Query is a helper method to define mock.On call
-//   - spec
-//   - limit
+//   - spec store.QueryFunc[K, V]
+//   - limit int
 func (_e *Store_Expecter[K, V]) Query(spec interface{}, limit interface{}) *Store_Query_Call[K, V] {
 	return &Store_Query_Call[K, V]{Call: _e.mock.On("Query", spec, limit)}
 }
 
 func (_c *Store_Query_Call[K, V]) Run(run func(spec store.QueryFunc[K, V], limit int)) *Store_Query_Call[K, V] {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(store.QueryFunc[K, V]), args[1].(int))
+		var arg0 store.QueryFunc[K, V]
+		if args[0] != nil {
+			arg0 = args[0].(store.QueryFunc[K, V])
+		}
+		var arg1 int
+		if args[1] != nil {
+			arg1 = args[1].(int)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -416,8 +456,8 @@ type Store_Update_Call[K comparable, V any] struct {
 }
 
 // Update is a helper method to define mock.On call
-//   - key
-//   - updates
+//   - key K
+//   - updates ...store.UpdateFunc[K, V]
 func (_e *Store_Expecter[K, V]) Update(key interface{}, updates ...interface{}) *Store_Update_Call[K, V] {
 	return &Store_Update_Call[K, V]{Call: _e.mock.On("Update",
 		append([]interface{}{key}, updates...)...)}
@@ -425,8 +465,20 @@ func (_e *Store_Expecter[K, V]) Update(key interface{}, updates ...interface{}) 
 
 func (_c *Store_Update_Call[K, V]) Run(run func(key K, updates ...store.UpdateFunc[K, V])) *Store_Update_Call[K, V] {
 	_c.Call.Run(func(args mock.Arguments) {
-		variadicArgs := args[1].([]store.UpdateFunc[K, V])
-		run(args[0].(K), variadicArgs...)
+		var arg0 K
+		if args[0] != nil {
+			arg0 = args[0].(K)
+		}
+		var arg1 []store.UpdateFunc[K, V]
+		var variadicArgs []store.UpdateFunc[K, V]
+		if len(args) > 1 {
+			variadicArgs = args[1].([]store.UpdateFunc[K, V])
+		}
+		arg1 = variadicArgs
+		run(
+			arg0,
+			arg1...,
+		)
 	})
 	return _c
 }

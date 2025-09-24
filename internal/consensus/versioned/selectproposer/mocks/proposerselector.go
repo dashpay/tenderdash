@@ -117,15 +117,26 @@ type ProposerSelector_GetProposer_Call struct {
 }
 
 // GetProposer is a helper method to define mock.On call
-//   - height
-//   - round
+//   - height int64
+//   - round int32
 func (_e *ProposerSelector_Expecter) GetProposer(height interface{}, round interface{}) *ProposerSelector_GetProposer_Call {
 	return &ProposerSelector_GetProposer_Call{Call: _e.mock.On("GetProposer", height, round)}
 }
 
 func (_c *ProposerSelector_GetProposer_Call) Run(run func(height int64, round int32)) *ProposerSelector_GetProposer_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64), args[1].(int32))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		var arg1 int32
+		if args[1] != nil {
+			arg1 = args[1].(int32)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -165,15 +176,26 @@ type ProposerSelector_MustGetProposer_Call struct {
 }
 
 // MustGetProposer is a helper method to define mock.On call
-//   - height
-//   - round
+//   - height int64
+//   - round int32
 func (_e *ProposerSelector_Expecter) MustGetProposer(height interface{}, round interface{}) *ProposerSelector_MustGetProposer_Call {
 	return &ProposerSelector_MustGetProposer_Call{Call: _e.mock.On("MustGetProposer", height, round)}
 }
 
 func (_c *ProposerSelector_MustGetProposer_Call) Run(run func(height int64, round int32)) *ProposerSelector_MustGetProposer_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64), args[1].(int32))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		var arg1 int32
+		if args[1] != nil {
+			arg1 = args[1].(int32)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -211,15 +233,26 @@ type ProposerSelector_UpdateHeightRound_Call struct {
 }
 
 // UpdateHeightRound is a helper method to define mock.On call
-//   - height
-//   - round
+//   - height int64
+//   - round int32
 func (_e *ProposerSelector_Expecter) UpdateHeightRound(height interface{}, round interface{}) *ProposerSelector_UpdateHeightRound_Call {
 	return &ProposerSelector_UpdateHeightRound_Call{Call: _e.mock.On("UpdateHeightRound", height, round)}
 }
 
 func (_c *ProposerSelector_UpdateHeightRound_Call) Run(run func(height int64, round int32)) *ProposerSelector_UpdateHeightRound_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64), args[1].(int32))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		var arg1 int32
+		if args[1] != nil {
+			arg1 = args[1].(int32)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }

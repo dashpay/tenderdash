@@ -239,14 +239,20 @@ type BlockStore_LoadBlock_Call struct {
 }
 
 // LoadBlock is a helper method to define mock.On call
-//   - height
+//   - height int64
 func (_e *BlockStore_Expecter) LoadBlock(height interface{}) *BlockStore_LoadBlock_Call {
 	return &BlockStore_LoadBlock_Call{Call: _e.mock.On("LoadBlock", height)}
 }
 
 func (_c *BlockStore_LoadBlock_Call) Run(run func(height int64)) *BlockStore_LoadBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -286,14 +292,20 @@ type BlockStore_LoadBlockByHash_Call struct {
 }
 
 // LoadBlockByHash is a helper method to define mock.On call
-//   - hash
+//   - hash []byte
 func (_e *BlockStore_Expecter) LoadBlockByHash(hash interface{}) *BlockStore_LoadBlockByHash_Call {
 	return &BlockStore_LoadBlockByHash_Call{Call: _e.mock.On("LoadBlockByHash", hash)}
 }
 
 func (_c *BlockStore_LoadBlockByHash_Call) Run(run func(hash []byte)) *BlockStore_LoadBlockByHash_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]byte))
+		var arg0 []byte
+		if args[0] != nil {
+			arg0 = args[0].([]byte)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -333,14 +345,20 @@ type BlockStore_LoadBlockCommit_Call struct {
 }
 
 // LoadBlockCommit is a helper method to define mock.On call
-//   - height
+//   - height int64
 func (_e *BlockStore_Expecter) LoadBlockCommit(height interface{}) *BlockStore_LoadBlockCommit_Call {
 	return &BlockStore_LoadBlockCommit_Call{Call: _e.mock.On("LoadBlockCommit", height)}
 }
 
 func (_c *BlockStore_LoadBlockCommit_Call) Run(run func(height int64)) *BlockStore_LoadBlockCommit_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -380,14 +398,20 @@ type BlockStore_LoadBlockMeta_Call struct {
 }
 
 // LoadBlockMeta is a helper method to define mock.On call
-//   - height
+//   - height int64
 func (_e *BlockStore_Expecter) LoadBlockMeta(height interface{}) *BlockStore_LoadBlockMeta_Call {
 	return &BlockStore_LoadBlockMeta_Call{Call: _e.mock.On("LoadBlockMeta", height)}
 }
 
 func (_c *BlockStore_LoadBlockMeta_Call) Run(run func(height int64)) *BlockStore_LoadBlockMeta_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -427,14 +451,20 @@ type BlockStore_LoadBlockMetaByHash_Call struct {
 }
 
 // LoadBlockMetaByHash is a helper method to define mock.On call
-//   - hash
+//   - hash []byte
 func (_e *BlockStore_Expecter) LoadBlockMetaByHash(hash interface{}) *BlockStore_LoadBlockMetaByHash_Call {
 	return &BlockStore_LoadBlockMetaByHash_Call{Call: _e.mock.On("LoadBlockMetaByHash", hash)}
 }
 
 func (_c *BlockStore_LoadBlockMetaByHash_Call) Run(run func(hash []byte)) *BlockStore_LoadBlockMetaByHash_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]byte))
+		var arg0 []byte
+		if args[0] != nil {
+			arg0 = args[0].([]byte)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -474,15 +504,26 @@ type BlockStore_LoadBlockPart_Call struct {
 }
 
 // LoadBlockPart is a helper method to define mock.On call
-//   - height
-//   - index
+//   - height int64
+//   - index int
 func (_e *BlockStore_Expecter) LoadBlockPart(height interface{}, index interface{}) *BlockStore_LoadBlockPart_Call {
 	return &BlockStore_LoadBlockPart_Call{Call: _e.mock.On("LoadBlockPart", height, index)}
 }
 
 func (_c *BlockStore_LoadBlockPart_Call) Run(run func(height int64, index int)) *BlockStore_LoadBlockPart_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64), args[1].(int))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		var arg1 int
+		if args[1] != nil {
+			arg1 = args[1].(int)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -568,14 +609,20 @@ type BlockStore_LoadSeenCommitAt_Call struct {
 }
 
 // LoadSeenCommitAt is a helper method to define mock.On call
-//   - height
+//   - height int64
 func (_e *BlockStore_Expecter) LoadSeenCommitAt(height interface{}) *BlockStore_LoadSeenCommitAt_Call {
 	return &BlockStore_LoadSeenCommitAt_Call{Call: _e.mock.On("LoadSeenCommitAt", height)}
 }
 
 func (_c *BlockStore_LoadSeenCommitAt_Call) Run(run func(height int64)) *BlockStore_LoadSeenCommitAt_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -622,14 +669,20 @@ type BlockStore_PruneBlocks_Call struct {
 }
 
 // PruneBlocks is a helper method to define mock.On call
-//   - height
+//   - height int64
 func (_e *BlockStore_Expecter) PruneBlocks(height interface{}) *BlockStore_PruneBlocks_Call {
 	return &BlockStore_PruneBlocks_Call{Call: _e.mock.On("PruneBlocks", height)}
 }
 
 func (_c *BlockStore_PruneBlocks_Call) Run(run func(height int64)) *BlockStore_PruneBlocks_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -656,16 +709,32 @@ type BlockStore_SaveBlock_Call struct {
 }
 
 // SaveBlock is a helper method to define mock.On call
-//   - block
-//   - blockParts
-//   - seenCommit
+//   - block *types.Block
+//   - blockParts *types.PartSet
+//   - seenCommit *types.Commit
 func (_e *BlockStore_Expecter) SaveBlock(block interface{}, blockParts interface{}, seenCommit interface{}) *BlockStore_SaveBlock_Call {
 	return &BlockStore_SaveBlock_Call{Call: _e.mock.On("SaveBlock", block, blockParts, seenCommit)}
 }
 
 func (_c *BlockStore_SaveBlock_Call) Run(run func(block *types.Block, blockParts *types.PartSet, seenCommit *types.Commit)) *BlockStore_SaveBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(*types.Block), args[1].(*types.PartSet), args[2].(*types.Commit))
+		var arg0 *types.Block
+		if args[0] != nil {
+			arg0 = args[0].(*types.Block)
+		}
+		var arg1 *types.PartSet
+		if args[1] != nil {
+			arg1 = args[1].(*types.PartSet)
+		}
+		var arg2 *types.Commit
+		if args[2] != nil {
+			arg2 = args[2].(*types.Commit)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }

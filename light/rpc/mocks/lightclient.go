@@ -108,14 +108,20 @@ type LightClient_Status_Call struct {
 }
 
 // Status is a helper method to define mock.On call
-//   - ctx
+//   - ctx context.Context
 func (_e *LightClient_Expecter) Status(ctx interface{}) *LightClient_Status_Call {
 	return &LightClient_Status_Call{Call: _e.mock.On("Status", ctx)}
 }
 
 func (_c *LightClient_Status_Call) Run(run func(ctx context.Context)) *LightClient_Status_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -164,14 +170,20 @@ type LightClient_TrustedLightBlock_Call struct {
 }
 
 // TrustedLightBlock is a helper method to define mock.On call
-//   - height
+//   - height int64
 func (_e *LightClient_Expecter) TrustedLightBlock(height interface{}) *LightClient_TrustedLightBlock_Call {
 	return &LightClient_TrustedLightBlock_Call{Call: _e.mock.On("TrustedLightBlock", height)}
 }
 
 func (_c *LightClient_TrustedLightBlock_Call) Run(run func(height int64)) *LightClient_TrustedLightBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -220,15 +232,26 @@ type LightClient_Update_Call struct {
 }
 
 // Update is a helper method to define mock.On call
-//   - ctx
-//   - now
+//   - ctx context.Context
+//   - now time.Time
 func (_e *LightClient_Expecter) Update(ctx interface{}, now interface{}) *LightClient_Update_Call {
 	return &LightClient_Update_Call{Call: _e.mock.On("Update", ctx, now)}
 }
 
 func (_c *LightClient_Update_Call) Run(run func(ctx context.Context, now time.Time)) *LightClient_Update_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(time.Time))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 time.Time
+		if args[1] != nil {
+			arg1 = args[1].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -277,16 +300,32 @@ type LightClient_VerifyLightBlockAtHeight_Call struct {
 }
 
 // VerifyLightBlockAtHeight is a helper method to define mock.On call
-//   - ctx
-//   - height
-//   - now
+//   - ctx context.Context
+//   - height int64
+//   - now time.Time
 func (_e *LightClient_Expecter) VerifyLightBlockAtHeight(ctx interface{}, height interface{}, now interface{}) *LightClient_VerifyLightBlockAtHeight_Call {
 	return &LightClient_VerifyLightBlockAtHeight_Call{Call: _e.mock.On("VerifyLightBlockAtHeight", ctx, height, now)}
 }
 
 func (_c *LightClient_VerifyLightBlockAtHeight_Call) Run(run func(ctx context.Context, height int64, now time.Time)) *LightClient_VerifyLightBlockAtHeight_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(int64), args[2].(time.Time))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 time.Time
+		if args[2] != nil {
+			arg2 = args[2].(time.Time)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }

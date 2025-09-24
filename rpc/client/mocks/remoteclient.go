@@ -75,14 +75,20 @@ type RemoteClient_ABCIInfo_Call struct {
 }
 
 // ABCIInfo is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *RemoteClient_Expecter) ABCIInfo(context1 interface{}) *RemoteClient_ABCIInfo_Call {
 	return &RemoteClient_ABCIInfo_Call{Call: _e.mock.On("ABCIInfo", context1)}
 }
 
 func (_c *RemoteClient_ABCIInfo_Call) Run(run func(context1 context.Context)) *RemoteClient_ABCIInfo_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -131,16 +137,32 @@ type RemoteClient_ABCIQuery_Call struct {
 }
 
 // ABCIQuery is a helper method to define mock.On call
-//   - ctx
-//   - path
-//   - data
+//   - ctx context.Context
+//   - path string
+//   - data bytes.HexBytes
 func (_e *RemoteClient_Expecter) ABCIQuery(ctx interface{}, path interface{}, data interface{}) *RemoteClient_ABCIQuery_Call {
 	return &RemoteClient_ABCIQuery_Call{Call: _e.mock.On("ABCIQuery", ctx, path, data)}
 }
 
 func (_c *RemoteClient_ABCIQuery_Call) Run(run func(ctx context.Context, path string, data bytes.HexBytes)) *RemoteClient_ABCIQuery_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(bytes.HexBytes))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 bytes.HexBytes
+		if args[2] != nil {
+			arg2 = args[2].(bytes.HexBytes)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -189,17 +211,38 @@ type RemoteClient_ABCIQueryWithOptions_Call struct {
 }
 
 // ABCIQueryWithOptions is a helper method to define mock.On call
-//   - ctx
-//   - path
-//   - data
-//   - opts
+//   - ctx context.Context
+//   - path string
+//   - data bytes.HexBytes
+//   - opts client.ABCIQueryOptions
 func (_e *RemoteClient_Expecter) ABCIQueryWithOptions(ctx interface{}, path interface{}, data interface{}, opts interface{}) *RemoteClient_ABCIQueryWithOptions_Call {
 	return &RemoteClient_ABCIQueryWithOptions_Call{Call: _e.mock.On("ABCIQueryWithOptions", ctx, path, data, opts)}
 }
 
 func (_c *RemoteClient_ABCIQueryWithOptions_Call) Run(run func(ctx context.Context, path string, data bytes.HexBytes, opts client.ABCIQueryOptions)) *RemoteClient_ABCIQueryWithOptions_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(bytes.HexBytes), args[3].(client.ABCIQueryOptions))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 bytes.HexBytes
+		if args[2] != nil {
+			arg2 = args[2].(bytes.HexBytes)
+		}
+		var arg3 client.ABCIQueryOptions
+		if args[3] != nil {
+			arg3 = args[3].(client.ABCIQueryOptions)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
 	})
 	return _c
 }
@@ -248,15 +291,26 @@ type RemoteClient_Block_Call struct {
 }
 
 // Block is a helper method to define mock.On call
-//   - ctx
-//   - height
+//   - ctx context.Context
+//   - height *int64
 func (_e *RemoteClient_Expecter) Block(ctx interface{}, height interface{}) *RemoteClient_Block_Call {
 	return &RemoteClient_Block_Call{Call: _e.mock.On("Block", ctx, height)}
 }
 
 func (_c *RemoteClient_Block_Call) Run(run func(ctx context.Context, height *int64)) *RemoteClient_Block_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*int64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *int64
+		if args[1] != nil {
+			arg1 = args[1].(*int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -305,15 +359,26 @@ type RemoteClient_BlockByHash_Call struct {
 }
 
 // BlockByHash is a helper method to define mock.On call
-//   - ctx
-//   - hash
+//   - ctx context.Context
+//   - hash bytes.HexBytes
 func (_e *RemoteClient_Expecter) BlockByHash(ctx interface{}, hash interface{}) *RemoteClient_BlockByHash_Call {
 	return &RemoteClient_BlockByHash_Call{Call: _e.mock.On("BlockByHash", ctx, hash)}
 }
 
 func (_c *RemoteClient_BlockByHash_Call) Run(run func(ctx context.Context, hash bytes.HexBytes)) *RemoteClient_BlockByHash_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(bytes.HexBytes))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 bytes.HexBytes
+		if args[1] != nil {
+			arg1 = args[1].(bytes.HexBytes)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -362,15 +427,26 @@ type RemoteClient_BlockResults_Call struct {
 }
 
 // BlockResults is a helper method to define mock.On call
-//   - ctx
-//   - height
+//   - ctx context.Context
+//   - height *int64
 func (_e *RemoteClient_Expecter) BlockResults(ctx interface{}, height interface{}) *RemoteClient_BlockResults_Call {
 	return &RemoteClient_BlockResults_Call{Call: _e.mock.On("BlockResults", ctx, height)}
 }
 
 func (_c *RemoteClient_BlockResults_Call) Run(run func(ctx context.Context, height *int64)) *RemoteClient_BlockResults_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*int64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *int64
+		if args[1] != nil {
+			arg1 = args[1].(*int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -419,18 +495,44 @@ type RemoteClient_BlockSearch_Call struct {
 }
 
 // BlockSearch is a helper method to define mock.On call
-//   - ctx
-//   - query
-//   - page
-//   - perPage
-//   - orderBy
+//   - ctx context.Context
+//   - query string
+//   - page *int
+//   - perPage *int
+//   - orderBy string
 func (_e *RemoteClient_Expecter) BlockSearch(ctx interface{}, query interface{}, page interface{}, perPage interface{}, orderBy interface{}) *RemoteClient_BlockSearch_Call {
 	return &RemoteClient_BlockSearch_Call{Call: _e.mock.On("BlockSearch", ctx, query, page, perPage, orderBy)}
 }
 
 func (_c *RemoteClient_BlockSearch_Call) Run(run func(ctx context.Context, query string, page *int, perPage *int, orderBy string)) *RemoteClient_BlockSearch_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(*int), args[3].(*int), args[4].(string))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 *int
+		if args[2] != nil {
+			arg2 = args[2].(*int)
+		}
+		var arg3 *int
+		if args[3] != nil {
+			arg3 = args[3].(*int)
+		}
+		var arg4 string
+		if args[4] != nil {
+			arg4 = args[4].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
 	})
 	return _c
 }
@@ -479,16 +581,32 @@ type RemoteClient_BlockchainInfo_Call struct {
 }
 
 // BlockchainInfo is a helper method to define mock.On call
-//   - ctx
-//   - minHeight
-//   - maxHeight
+//   - ctx context.Context
+//   - minHeight int64
+//   - maxHeight int64
 func (_e *RemoteClient_Expecter) BlockchainInfo(ctx interface{}, minHeight interface{}, maxHeight interface{}) *RemoteClient_BlockchainInfo_Call {
 	return &RemoteClient_BlockchainInfo_Call{Call: _e.mock.On("BlockchainInfo", ctx, minHeight, maxHeight)}
 }
 
 func (_c *RemoteClient_BlockchainInfo_Call) Run(run func(ctx context.Context, minHeight int64, maxHeight int64)) *RemoteClient_BlockchainInfo_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(int64), args[2].(int64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 int64
+		if args[2] != nil {
+			arg2 = args[2].(int64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -537,15 +655,26 @@ type RemoteClient_BroadcastEvidence_Call struct {
 }
 
 // BroadcastEvidence is a helper method to define mock.On call
-//   - context1
-//   - evidence
+//   - context1 context.Context
+//   - evidence types.Evidence
 func (_e *RemoteClient_Expecter) BroadcastEvidence(context1 interface{}, evidence interface{}) *RemoteClient_BroadcastEvidence_Call {
 	return &RemoteClient_BroadcastEvidence_Call{Call: _e.mock.On("BroadcastEvidence", context1, evidence)}
 }
 
 func (_c *RemoteClient_BroadcastEvidence_Call) Run(run func(context1 context.Context, evidence types.Evidence)) *RemoteClient_BroadcastEvidence_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.Evidence))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Evidence
+		if args[1] != nil {
+			arg1 = args[1].(types.Evidence)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -594,15 +723,26 @@ type RemoteClient_BroadcastTx_Call struct {
 }
 
 // BroadcastTx is a helper method to define mock.On call
-//   - context1
-//   - tx
+//   - context1 context.Context
+//   - tx types.Tx
 func (_e *RemoteClient_Expecter) BroadcastTx(context1 interface{}, tx interface{}) *RemoteClient_BroadcastTx_Call {
 	return &RemoteClient_BroadcastTx_Call{Call: _e.mock.On("BroadcastTx", context1, tx)}
 }
 
 func (_c *RemoteClient_BroadcastTx_Call) Run(run func(context1 context.Context, tx types.Tx)) *RemoteClient_BroadcastTx_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.Tx))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Tx
+		if args[1] != nil {
+			arg1 = args[1].(types.Tx)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -651,15 +791,26 @@ type RemoteClient_BroadcastTxAsync_Call struct {
 }
 
 // BroadcastTxAsync is a helper method to define mock.On call
-//   - context1
-//   - tx
+//   - context1 context.Context
+//   - tx types.Tx
 func (_e *RemoteClient_Expecter) BroadcastTxAsync(context1 interface{}, tx interface{}) *RemoteClient_BroadcastTxAsync_Call {
 	return &RemoteClient_BroadcastTxAsync_Call{Call: _e.mock.On("BroadcastTxAsync", context1, tx)}
 }
 
 func (_c *RemoteClient_BroadcastTxAsync_Call) Run(run func(context1 context.Context, tx types.Tx)) *RemoteClient_BroadcastTxAsync_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.Tx))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Tx
+		if args[1] != nil {
+			arg1 = args[1].(types.Tx)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -708,15 +859,26 @@ type RemoteClient_BroadcastTxCommit_Call struct {
 }
 
 // BroadcastTxCommit is a helper method to define mock.On call
-//   - context1
-//   - tx
+//   - context1 context.Context
+//   - tx types.Tx
 func (_e *RemoteClient_Expecter) BroadcastTxCommit(context1 interface{}, tx interface{}) *RemoteClient_BroadcastTxCommit_Call {
 	return &RemoteClient_BroadcastTxCommit_Call{Call: _e.mock.On("BroadcastTxCommit", context1, tx)}
 }
 
 func (_c *RemoteClient_BroadcastTxCommit_Call) Run(run func(context1 context.Context, tx types.Tx)) *RemoteClient_BroadcastTxCommit_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.Tx))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Tx
+		if args[1] != nil {
+			arg1 = args[1].(types.Tx)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -765,15 +927,26 @@ type RemoteClient_BroadcastTxSync_Call struct {
 }
 
 // BroadcastTxSync is a helper method to define mock.On call
-//   - context1
-//   - tx
+//   - context1 context.Context
+//   - tx types.Tx
 func (_e *RemoteClient_Expecter) BroadcastTxSync(context1 interface{}, tx interface{}) *RemoteClient_BroadcastTxSync_Call {
 	return &RemoteClient_BroadcastTxSync_Call{Call: _e.mock.On("BroadcastTxSync", context1, tx)}
 }
 
 func (_c *RemoteClient_BroadcastTxSync_Call) Run(run func(context1 context.Context, tx types.Tx)) *RemoteClient_BroadcastTxSync_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.Tx))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Tx
+		if args[1] != nil {
+			arg1 = args[1].(types.Tx)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -822,15 +995,26 @@ type RemoteClient_CheckTx_Call struct {
 }
 
 // CheckTx is a helper method to define mock.On call
-//   - context1
-//   - tx
+//   - context1 context.Context
+//   - tx types.Tx
 func (_e *RemoteClient_Expecter) CheckTx(context1 interface{}, tx interface{}) *RemoteClient_CheckTx_Call {
 	return &RemoteClient_CheckTx_Call{Call: _e.mock.On("CheckTx", context1, tx)}
 }
 
 func (_c *RemoteClient_CheckTx_Call) Run(run func(context1 context.Context, tx types.Tx)) *RemoteClient_CheckTx_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.Tx))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Tx
+		if args[1] != nil {
+			arg1 = args[1].(types.Tx)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -879,15 +1063,26 @@ type RemoteClient_Commit_Call struct {
 }
 
 // Commit is a helper method to define mock.On call
-//   - ctx
-//   - height
+//   - ctx context.Context
+//   - height *int64
 func (_e *RemoteClient_Expecter) Commit(ctx interface{}, height interface{}) *RemoteClient_Commit_Call {
 	return &RemoteClient_Commit_Call{Call: _e.mock.On("Commit", ctx, height)}
 }
 
 func (_c *RemoteClient_Commit_Call) Run(run func(ctx context.Context, height *int64)) *RemoteClient_Commit_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*int64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *int64
+		if args[1] != nil {
+			arg1 = args[1].(*int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -936,15 +1131,26 @@ type RemoteClient_ConsensusParams_Call struct {
 }
 
 // ConsensusParams is a helper method to define mock.On call
-//   - ctx
-//   - height
+//   - ctx context.Context
+//   - height *int64
 func (_e *RemoteClient_Expecter) ConsensusParams(ctx interface{}, height interface{}) *RemoteClient_ConsensusParams_Call {
 	return &RemoteClient_ConsensusParams_Call{Call: _e.mock.On("ConsensusParams", ctx, height)}
 }
 
 func (_c *RemoteClient_ConsensusParams_Call) Run(run func(ctx context.Context, height *int64)) *RemoteClient_ConsensusParams_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*int64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *int64
+		if args[1] != nil {
+			arg1 = args[1].(*int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -993,14 +1199,20 @@ type RemoteClient_ConsensusState_Call struct {
 }
 
 // ConsensusState is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *RemoteClient_Expecter) ConsensusState(context1 interface{}) *RemoteClient_ConsensusState_Call {
 	return &RemoteClient_ConsensusState_Call{Call: _e.mock.On("ConsensusState", context1)}
 }
 
 func (_c *RemoteClient_ConsensusState_Call) Run(run func(context1 context.Context)) *RemoteClient_ConsensusState_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -1049,14 +1261,20 @@ type RemoteClient_DumpConsensusState_Call struct {
 }
 
 // DumpConsensusState is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *RemoteClient_Expecter) DumpConsensusState(context1 interface{}) *RemoteClient_DumpConsensusState_Call {
 	return &RemoteClient_DumpConsensusState_Call{Call: _e.mock.On("DumpConsensusState", context1)}
 }
 
 func (_c *RemoteClient_DumpConsensusState_Call) Run(run func(context1 context.Context)) *RemoteClient_DumpConsensusState_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -1105,15 +1323,26 @@ type RemoteClient_Events_Call struct {
 }
 
 // Events is a helper method to define mock.On call
-//   - ctx
-//   - req
+//   - ctx context.Context
+//   - req *coretypes.RequestEvents
 func (_e *RemoteClient_Expecter) Events(ctx interface{}, req interface{}) *RemoteClient_Events_Call {
 	return &RemoteClient_Events_Call{Call: _e.mock.On("Events", ctx, req)}
 }
 
 func (_c *RemoteClient_Events_Call) Run(run func(ctx context.Context, req *coretypes.RequestEvents)) *RemoteClient_Events_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*coretypes.RequestEvents))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *coretypes.RequestEvents
+		if args[1] != nil {
+			arg1 = args[1].(*coretypes.RequestEvents)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -1162,14 +1391,20 @@ type RemoteClient_Genesis_Call struct {
 }
 
 // Genesis is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *RemoteClient_Expecter) Genesis(context1 interface{}) *RemoteClient_Genesis_Call {
 	return &RemoteClient_Genesis_Call{Call: _e.mock.On("Genesis", context1)}
 }
 
 func (_c *RemoteClient_Genesis_Call) Run(run func(context1 context.Context)) *RemoteClient_Genesis_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -1218,15 +1453,26 @@ type RemoteClient_GenesisChunked_Call struct {
 }
 
 // GenesisChunked is a helper method to define mock.On call
-//   - context1
-//   - v
+//   - context1 context.Context
+//   - v uint
 func (_e *RemoteClient_Expecter) GenesisChunked(context1 interface{}, v interface{}) *RemoteClient_GenesisChunked_Call {
 	return &RemoteClient_GenesisChunked_Call{Call: _e.mock.On("GenesisChunked", context1, v)}
 }
 
 func (_c *RemoteClient_GenesisChunked_Call) Run(run func(context1 context.Context, v uint)) *RemoteClient_GenesisChunked_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(uint))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint
+		if args[1] != nil {
+			arg1 = args[1].(uint)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -1275,15 +1521,26 @@ type RemoteClient_Header_Call struct {
 }
 
 // Header is a helper method to define mock.On call
-//   - ctx
-//   - height
+//   - ctx context.Context
+//   - height *int64
 func (_e *RemoteClient_Expecter) Header(ctx interface{}, height interface{}) *RemoteClient_Header_Call {
 	return &RemoteClient_Header_Call{Call: _e.mock.On("Header", ctx, height)}
 }
 
 func (_c *RemoteClient_Header_Call) Run(run func(ctx context.Context, height *int64)) *RemoteClient_Header_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*int64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *int64
+		if args[1] != nil {
+			arg1 = args[1].(*int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -1332,15 +1589,26 @@ type RemoteClient_HeaderByHash_Call struct {
 }
 
 // HeaderByHash is a helper method to define mock.On call
-//   - ctx
-//   - hash
+//   - ctx context.Context
+//   - hash bytes.HexBytes
 func (_e *RemoteClient_Expecter) HeaderByHash(ctx interface{}, hash interface{}) *RemoteClient_HeaderByHash_Call {
 	return &RemoteClient_HeaderByHash_Call{Call: _e.mock.On("HeaderByHash", ctx, hash)}
 }
 
 func (_c *RemoteClient_HeaderByHash_Call) Run(run func(ctx context.Context, hash bytes.HexBytes)) *RemoteClient_HeaderByHash_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(bytes.HexBytes))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 bytes.HexBytes
+		if args[1] != nil {
+			arg1 = args[1].(bytes.HexBytes)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -1389,14 +1657,20 @@ type RemoteClient_Health_Call struct {
 }
 
 // Health is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *RemoteClient_Expecter) Health(context1 interface{}) *RemoteClient_Health_Call {
 	return &RemoteClient_Health_Call{Call: _e.mock.On("Health", context1)}
 }
 
 func (_c *RemoteClient_Health_Call) Run(run func(context1 context.Context)) *RemoteClient_Health_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -1445,14 +1719,20 @@ type RemoteClient_NetInfo_Call struct {
 }
 
 // NetInfo is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *RemoteClient_Expecter) NetInfo(context1 interface{}) *RemoteClient_NetInfo_Call {
 	return &RemoteClient_NetInfo_Call{Call: _e.mock.On("NetInfo", context1)}
 }
 
 func (_c *RemoteClient_NetInfo_Call) Run(run func(context1 context.Context)) *RemoteClient_NetInfo_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -1501,14 +1781,20 @@ type RemoteClient_NumUnconfirmedTxs_Call struct {
 }
 
 // NumUnconfirmedTxs is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *RemoteClient_Expecter) NumUnconfirmedTxs(context1 interface{}) *RemoteClient_NumUnconfirmedTxs_Call {
 	return &RemoteClient_NumUnconfirmedTxs_Call{Call: _e.mock.On("NumUnconfirmedTxs", context1)}
 }
 
 func (_c *RemoteClient_NumUnconfirmedTxs_Call) Run(run func(context1 context.Context)) *RemoteClient_NumUnconfirmedTxs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -1590,15 +1876,26 @@ type RemoteClient_RemoveTx_Call struct {
 }
 
 // RemoveTx is a helper method to define mock.On call
-//   - context1
-//   - txKey
+//   - context1 context.Context
+//   - txKey types.TxKey
 func (_e *RemoteClient_Expecter) RemoveTx(context1 interface{}, txKey interface{}) *RemoteClient_RemoveTx_Call {
 	return &RemoteClient_RemoveTx_Call{Call: _e.mock.On("RemoveTx", context1, txKey)}
 }
 
 func (_c *RemoteClient_RemoveTx_Call) Run(run func(context1 context.Context, txKey types.TxKey)) *RemoteClient_RemoveTx_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.TxKey))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.TxKey
+		if args[1] != nil {
+			arg1 = args[1].(types.TxKey)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -1636,14 +1933,20 @@ type RemoteClient_Start_Call struct {
 }
 
 // Start is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *RemoteClient_Expecter) Start(context1 interface{}) *RemoteClient_Start_Call {
 	return &RemoteClient_Start_Call{Call: _e.mock.On("Start", context1)}
 }
 
 func (_c *RemoteClient_Start_Call) Run(run func(context1 context.Context)) *RemoteClient_Start_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -1692,14 +1995,20 @@ type RemoteClient_Status_Call struct {
 }
 
 // Status is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *RemoteClient_Expecter) Status(context1 interface{}) *RemoteClient_Status_Call {
 	return &RemoteClient_Status_Call{Call: _e.mock.On("Status", context1)}
 }
 
 func (_c *RemoteClient_Status_Call) Run(run func(context1 context.Context)) *RemoteClient_Status_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -1754,10 +2063,10 @@ type RemoteClient_Subscribe_Call struct {
 }
 
 // Subscribe is a helper method to define mock.On call
-//   - ctx
-//   - subscriber
-//   - query
-//   - outCapacity
+//   - ctx context.Context
+//   - subscriber string
+//   - query string
+//   - outCapacity ...int
 func (_e *RemoteClient_Expecter) Subscribe(ctx interface{}, subscriber interface{}, query interface{}, outCapacity ...interface{}) *RemoteClient_Subscribe_Call {
 	return &RemoteClient_Subscribe_Call{Call: _e.mock.On("Subscribe",
 		append([]interface{}{ctx, subscriber, query}, outCapacity...)...)}
@@ -1765,8 +2074,30 @@ func (_e *RemoteClient_Expecter) Subscribe(ctx interface{}, subscriber interface
 
 func (_c *RemoteClient_Subscribe_Call) Run(run func(ctx context.Context, subscriber string, query string, outCapacity ...int)) *RemoteClient_Subscribe_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		variadicArgs := args[3].([]int)
-		run(args[0].(context.Context), args[1].(string), args[2].(string), variadicArgs...)
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		var arg3 []int
+		var variadicArgs []int
+		if len(args) > 3 {
+			variadicArgs = args[3].([]int)
+		}
+		arg3 = variadicArgs
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3...,
+		)
 	})
 	return _c
 }
@@ -1815,16 +2146,32 @@ type RemoteClient_Tx_Call struct {
 }
 
 // Tx is a helper method to define mock.On call
-//   - ctx
-//   - hash
-//   - prove
+//   - ctx context.Context
+//   - hash bytes.HexBytes
+//   - prove bool
 func (_e *RemoteClient_Expecter) Tx(ctx interface{}, hash interface{}, prove interface{}) *RemoteClient_Tx_Call {
 	return &RemoteClient_Tx_Call{Call: _e.mock.On("Tx", ctx, hash, prove)}
 }
 
 func (_c *RemoteClient_Tx_Call) Run(run func(ctx context.Context, hash bytes.HexBytes, prove bool)) *RemoteClient_Tx_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(bytes.HexBytes), args[2].(bool))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 bytes.HexBytes
+		if args[1] != nil {
+			arg1 = args[1].(bytes.HexBytes)
+		}
+		var arg2 bool
+		if args[2] != nil {
+			arg2 = args[2].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -1873,19 +2220,50 @@ type RemoteClient_TxSearch_Call struct {
 }
 
 // TxSearch is a helper method to define mock.On call
-//   - ctx
-//   - query
-//   - prove
-//   - page
-//   - perPage
-//   - orderBy
+//   - ctx context.Context
+//   - query string
+//   - prove bool
+//   - page *int
+//   - perPage *int
+//   - orderBy string
 func (_e *RemoteClient_Expecter) TxSearch(ctx interface{}, query interface{}, prove interface{}, page interface{}, perPage interface{}, orderBy interface{}) *RemoteClient_TxSearch_Call {
 	return &RemoteClient_TxSearch_Call{Call: _e.mock.On("TxSearch", ctx, query, prove, page, perPage, orderBy)}
 }
 
 func (_c *RemoteClient_TxSearch_Call) Run(run func(ctx context.Context, query string, prove bool, page *int, perPage *int, orderBy string)) *RemoteClient_TxSearch_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(bool), args[3].(*int), args[4].(*int), args[5].(string))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 bool
+		if args[2] != nil {
+			arg2 = args[2].(bool)
+		}
+		var arg3 *int
+		if args[3] != nil {
+			arg3 = args[3].(*int)
+		}
+		var arg4 *int
+		if args[4] != nil {
+			arg4 = args[4].(*int)
+		}
+		var arg5 string
+		if args[5] != nil {
+			arg5 = args[5].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+			arg5,
+		)
 	})
 	return _c
 }
@@ -1934,15 +2312,26 @@ type RemoteClient_UnconfirmedTx_Call struct {
 }
 
 // UnconfirmedTx is a helper method to define mock.On call
-//   - ctx
-//   - txHash
+//   - ctx context.Context
+//   - txHash []byte
 func (_e *RemoteClient_Expecter) UnconfirmedTx(ctx interface{}, txHash interface{}) *RemoteClient_UnconfirmedTx_Call {
 	return &RemoteClient_UnconfirmedTx_Call{Call: _e.mock.On("UnconfirmedTx", ctx, txHash)}
 }
 
 func (_c *RemoteClient_UnconfirmedTx_Call) Run(run func(ctx context.Context, txHash []byte)) *RemoteClient_UnconfirmedTx_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].([]byte))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 []byte
+		if args[1] != nil {
+			arg1 = args[1].([]byte)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -1991,16 +2380,32 @@ type RemoteClient_UnconfirmedTxs_Call struct {
 }
 
 // UnconfirmedTxs is a helper method to define mock.On call
-//   - ctx
-//   - page
-//   - perPage
+//   - ctx context.Context
+//   - page *int
+//   - perPage *int
 func (_e *RemoteClient_Expecter) UnconfirmedTxs(ctx interface{}, page interface{}, perPage interface{}) *RemoteClient_UnconfirmedTxs_Call {
 	return &RemoteClient_UnconfirmedTxs_Call{Call: _e.mock.On("UnconfirmedTxs", ctx, page, perPage)}
 }
 
 func (_c *RemoteClient_UnconfirmedTxs_Call) Run(run func(ctx context.Context, page *int, perPage *int)) *RemoteClient_UnconfirmedTxs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*int), args[2].(*int))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *int
+		if args[1] != nil {
+			arg1 = args[1].(*int)
+		}
+		var arg2 *int
+		if args[2] != nil {
+			arg2 = args[2].(*int)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -2038,16 +2443,32 @@ type RemoteClient_Unsubscribe_Call struct {
 }
 
 // Unsubscribe is a helper method to define mock.On call
-//   - ctx
-//   - subscriber
-//   - query
+//   - ctx context.Context
+//   - subscriber string
+//   - query string
 func (_e *RemoteClient_Expecter) Unsubscribe(ctx interface{}, subscriber interface{}, query interface{}) *RemoteClient_Unsubscribe_Call {
 	return &RemoteClient_Unsubscribe_Call{Call: _e.mock.On("Unsubscribe", ctx, subscriber, query)}
 }
 
 func (_c *RemoteClient_Unsubscribe_Call) Run(run func(ctx context.Context, subscriber string, query string)) *RemoteClient_Unsubscribe_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(string))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 string
+		if args[2] != nil {
+			arg2 = args[2].(string)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -2085,15 +2506,26 @@ type RemoteClient_UnsubscribeAll_Call struct {
 }
 
 // UnsubscribeAll is a helper method to define mock.On call
-//   - ctx
-//   - subscriber
+//   - ctx context.Context
+//   - subscriber string
 func (_e *RemoteClient_Expecter) UnsubscribeAll(ctx interface{}, subscriber interface{}) *RemoteClient_UnsubscribeAll_Call {
 	return &RemoteClient_UnsubscribeAll_Call{Call: _e.mock.On("UnsubscribeAll", ctx, subscriber)}
 }
 
 func (_c *RemoteClient_UnsubscribeAll_Call) Run(run func(ctx context.Context, subscriber string)) *RemoteClient_UnsubscribeAll_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -2142,18 +2574,44 @@ type RemoteClient_Validators_Call struct {
 }
 
 // Validators is a helper method to define mock.On call
-//   - ctx
-//   - height
-//   - page
-//   - perPage
-//   - requestQuorumInfo
+//   - ctx context.Context
+//   - height *int64
+//   - page *int
+//   - perPage *int
+//   - requestQuorumInfo *bool
 func (_e *RemoteClient_Expecter) Validators(ctx interface{}, height interface{}, page interface{}, perPage interface{}, requestQuorumInfo interface{}) *RemoteClient_Validators_Call {
 	return &RemoteClient_Validators_Call{Call: _e.mock.On("Validators", ctx, height, page, perPage, requestQuorumInfo)}
 }
 
 func (_c *RemoteClient_Validators_Call) Run(run func(ctx context.Context, height *int64, page *int, perPage *int, requestQuorumInfo *bool)) *RemoteClient_Validators_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*int64), args[2].(*int), args[3].(*int), args[4].(*bool))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *int64
+		if args[1] != nil {
+			arg1 = args[1].(*int64)
+		}
+		var arg2 *int
+		if args[2] != nil {
+			arg2 = args[2].(*int)
+		}
+		var arg3 *int
+		if args[3] != nil {
+			arg3 = args[3].(*int)
+		}
+		var arg4 *bool
+		if args[4] != nil {
+			arg4 = args[4].(*bool)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
 	})
 	return _c
 }

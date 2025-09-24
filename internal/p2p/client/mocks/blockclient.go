@@ -74,16 +74,32 @@ type BlockClient_GetBlock_Call struct {
 }
 
 // GetBlock is a helper method to define mock.On call
-//   - ctx
-//   - height
-//   - peerID
+//   - ctx context.Context
+//   - height int64
+//   - peerID types.NodeID
 func (_e *BlockClient_Expecter) GetBlock(ctx interface{}, height interface{}, peerID interface{}) *BlockClient_GetBlock_Call {
 	return &BlockClient_GetBlock_Call{Call: _e.mock.On("GetBlock", ctx, height, peerID)}
 }
 
 func (_c *BlockClient_GetBlock_Call) Run(run func(ctx context.Context, height int64, peerID types.NodeID)) *BlockClient_GetBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(int64), args[2].(types.NodeID))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 types.NodeID
+		if args[2] != nil {
+			arg2 = args[2].(types.NodeID)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }
@@ -121,14 +137,20 @@ type BlockClient_GetSyncStatus_Call struct {
 }
 
 // GetSyncStatus is a helper method to define mock.On call
-//   - ctx
+//   - ctx context.Context
 func (_e *BlockClient_Expecter) GetSyncStatus(ctx interface{}) *BlockClient_GetSyncStatus_Call {
 	return &BlockClient_GetSyncStatus_Call{Call: _e.mock.On("GetSyncStatus", ctx)}
 }
 
 func (_c *BlockClient_GetSyncStatus_Call) Run(run func(ctx context.Context)) *BlockClient_GetSyncStatus_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -166,15 +188,26 @@ type BlockClient_Send_Call struct {
 }
 
 // Send is a helper method to define mock.On call
-//   - ctx
-//   - msg
+//   - ctx context.Context
+//   - msg any
 func (_e *BlockClient_Expecter) Send(ctx interface{}, msg interface{}) *BlockClient_Send_Call {
 	return &BlockClient_Send_Call{Call: _e.mock.On("Send", ctx, msg)}
 }
 
 func (_c *BlockClient_Send_Call) Run(run func(ctx context.Context, msg any)) *BlockClient_Send_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(any))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 any
+		if args[1] != nil {
+			arg1 = args[1].(any)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }

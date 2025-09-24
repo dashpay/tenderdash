@@ -75,14 +75,20 @@ type EventSink_GetTxByHash_Call struct {
 }
 
 // GetTxByHash is a helper method to define mock.On call
-//   - bytes
+//   - bytes []byte
 func (_e *EventSink_Expecter) GetTxByHash(bytes interface{}) *EventSink_GetTxByHash_Call {
 	return &EventSink_GetTxByHash_Call{Call: _e.mock.On("GetTxByHash", bytes)}
 }
 
 func (_c *EventSink_GetTxByHash_Call) Run(run func(bytes []byte)) *EventSink_GetTxByHash_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]byte))
+		var arg0 []byte
+		if args[0] != nil {
+			arg0 = args[0].([]byte)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -129,14 +135,20 @@ type EventSink_HasBlock_Call struct {
 }
 
 // HasBlock is a helper method to define mock.On call
-//   - n
+//   - n int64
 func (_e *EventSink_Expecter) HasBlock(n interface{}) *EventSink_HasBlock_Call {
 	return &EventSink_HasBlock_Call{Call: _e.mock.On("HasBlock", n)}
 }
 
 func (_c *EventSink_HasBlock_Call) Run(run func(n int64)) *EventSink_HasBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -174,14 +186,20 @@ type EventSink_IndexBlockEvents_Call struct {
 }
 
 // IndexBlockEvents is a helper method to define mock.On call
-//   - eventDataNewBlockHeader
+//   - eventDataNewBlockHeader types0.EventDataNewBlockHeader
 func (_e *EventSink_Expecter) IndexBlockEvents(eventDataNewBlockHeader interface{}) *EventSink_IndexBlockEvents_Call {
 	return &EventSink_IndexBlockEvents_Call{Call: _e.mock.On("IndexBlockEvents", eventDataNewBlockHeader)}
 }
 
 func (_c *EventSink_IndexBlockEvents_Call) Run(run func(eventDataNewBlockHeader types0.EventDataNewBlockHeader)) *EventSink_IndexBlockEvents_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(types0.EventDataNewBlockHeader))
+		var arg0 types0.EventDataNewBlockHeader
+		if args[0] != nil {
+			arg0 = args[0].(types0.EventDataNewBlockHeader)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -219,14 +237,20 @@ type EventSink_IndexTxEvents_Call struct {
 }
 
 // IndexTxEvents is a helper method to define mock.On call
-//   - txResults
+//   - txResults []*types.TxResult
 func (_e *EventSink_Expecter) IndexTxEvents(txResults interface{}) *EventSink_IndexTxEvents_Call {
 	return &EventSink_IndexTxEvents_Call{Call: _e.mock.On("IndexTxEvents", txResults)}
 }
 
 func (_c *EventSink_IndexTxEvents_Call) Run(run func(txResults []*types.TxResult)) *EventSink_IndexTxEvents_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]*types.TxResult))
+		var arg0 []*types.TxResult
+		if args[0] != nil {
+			arg0 = args[0].([]*types.TxResult)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -275,15 +299,26 @@ type EventSink_SearchBlockEvents_Call struct {
 }
 
 // SearchBlockEvents is a helper method to define mock.On call
-//   - context1
-//   - query1
+//   - context1 context.Context
+//   - query1 *query.Query
 func (_e *EventSink_Expecter) SearchBlockEvents(context1 interface{}, query1 interface{}) *EventSink_SearchBlockEvents_Call {
 	return &EventSink_SearchBlockEvents_Call{Call: _e.mock.On("SearchBlockEvents", context1, query1)}
 }
 
 func (_c *EventSink_SearchBlockEvents_Call) Run(run func(context1 context.Context, query1 *query.Query)) *EventSink_SearchBlockEvents_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*query.Query))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *query.Query
+		if args[1] != nil {
+			arg1 = args[1].(*query.Query)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -332,15 +367,26 @@ type EventSink_SearchTxEvents_Call struct {
 }
 
 // SearchTxEvents is a helper method to define mock.On call
-//   - context1
-//   - query1
+//   - context1 context.Context
+//   - query1 *query.Query
 func (_e *EventSink_Expecter) SearchTxEvents(context1 interface{}, query1 interface{}) *EventSink_SearchTxEvents_Call {
 	return &EventSink_SearchTxEvents_Call{Call: _e.mock.On("SearchTxEvents", context1, query1)}
 }
 
 func (_c *EventSink_SearchTxEvents_Call) Run(run func(context1 context.Context, query1 *query.Query)) *EventSink_SearchTxEvents_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*query.Query))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *query.Query
+		if args[1] != nil {
+			arg1 = args[1].(*query.Query)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }

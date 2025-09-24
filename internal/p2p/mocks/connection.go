@@ -125,17 +125,38 @@ type Connection_Handshake_Call struct {
 }
 
 // Handshake is a helper method to define mock.On call
-//   - context1
-//   - duration
-//   - nodeInfo
-//   - privKey
+//   - context1 context.Context
+//   - duration time.Duration
+//   - nodeInfo types.NodeInfo
+//   - privKey crypto.PrivKey
 func (_e *Connection_Expecter) Handshake(context1 interface{}, duration interface{}, nodeInfo interface{}, privKey interface{}) *Connection_Handshake_Call {
 	return &Connection_Handshake_Call{Call: _e.mock.On("Handshake", context1, duration, nodeInfo, privKey)}
 }
 
 func (_c *Connection_Handshake_Call) Run(run func(context1 context.Context, duration time.Duration, nodeInfo types.NodeInfo, privKey crypto.PrivKey)) *Connection_Handshake_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(time.Duration), args[2].(types.NodeInfo), args[3].(crypto.PrivKey))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 time.Duration
+		if args[1] != nil {
+			arg1 = args[1].(time.Duration)
+		}
+		var arg2 types.NodeInfo
+		if args[2] != nil {
+			arg2 = args[2].(types.NodeInfo)
+		}
+		var arg3 crypto.PrivKey
+		if args[3] != nil {
+			arg3 = args[3].(crypto.PrivKey)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
 	})
 	return _c
 }
@@ -234,14 +255,20 @@ type Connection_ReceiveMessage_Call struct {
 }
 
 // ReceiveMessage is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *Connection_Expecter) ReceiveMessage(context1 interface{}) *Connection_ReceiveMessage_Call {
 	return &Connection_ReceiveMessage_Call{Call: _e.mock.On("ReceiveMessage", context1)}
 }
 
 func (_c *Connection_ReceiveMessage_Call) Run(run func(context1 context.Context)) *Connection_ReceiveMessage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -323,16 +350,32 @@ type Connection_SendMessage_Call struct {
 }
 
 // SendMessage is a helper method to define mock.On call
-//   - context1
-//   - v
-//   - bytes
+//   - context1 context.Context
+//   - v p2p.ChannelID
+//   - bytes []byte
 func (_e *Connection_Expecter) SendMessage(context1 interface{}, v interface{}, bytes interface{}) *Connection_SendMessage_Call {
 	return &Connection_SendMessage_Call{Call: _e.mock.On("SendMessage", context1, v, bytes)}
 }
 
 func (_c *Connection_SendMessage_Call) Run(run func(context1 context.Context, v p2p.ChannelID, bytes []byte)) *Connection_SendMessage_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(p2p.ChannelID), args[2].([]byte))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 p2p.ChannelID
+		if args[1] != nil {
+			arg1 = args[1].(p2p.ChannelID)
+		}
+		var arg2 []byte
+		if args[2] != nil {
+			arg2 = args[2].([]byte)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+		)
 	})
 	return _c
 }

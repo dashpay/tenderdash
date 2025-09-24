@@ -20,7 +20,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v6.0.0
         with:
-          go-version: "1.24.2"
+          go-version: "1.25.1"
 
       - uses: actions/checkout@v5
 
@@ -37,7 +37,7 @@ jobs:
           set -euo pipefail
 
 
-          readonly MOCKERY=3.2.4  # N.B. no leading "v"
+          readonly MOCKERY=3.5.4  # N.B. no leading "v"
           curl -sL "https://github.com/vektra/mockery/releases/download/v${MOCKERY}/mockery_${MOCKERY}_Linux_x86_64.tar.gz" | tar -C /usr/local/bin -xzf -
           make mockery 2>/dev/null
 
@@ -55,7 +55,7 @@ jobs:
     steps:
       - uses: actions/setup-go@v6.0.0
         with:
-          go-version: "1.24.2"
+          go-version: "1.25.1"
 
       - uses: actions/checkout@v5
 

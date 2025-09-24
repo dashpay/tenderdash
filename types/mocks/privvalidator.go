@@ -68,15 +68,26 @@ type PrivValidator_ExtractIntoValidator_Call struct {
 }
 
 // ExtractIntoValidator is a helper method to define mock.On call
-//   - ctx
-//   - quorumHash
+//   - ctx context.Context
+//   - quorumHash crypto.QuorumHash
 func (_e *PrivValidator_Expecter) ExtractIntoValidator(ctx interface{}, quorumHash interface{}) *PrivValidator_ExtractIntoValidator_Call {
 	return &PrivValidator_ExtractIntoValidator_Call{Call: _e.mock.On("ExtractIntoValidator", ctx, quorumHash)}
 }
 
 func (_c *PrivValidator_ExtractIntoValidator_Call) Run(run func(ctx context.Context, quorumHash crypto.QuorumHash)) *PrivValidator_ExtractIntoValidator_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(crypto.QuorumHash))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 crypto.QuorumHash
+		if args[1] != nil {
+			arg1 = args[1].(crypto.QuorumHash)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -125,14 +136,20 @@ type PrivValidator_GetFirstQuorumHash_Call struct {
 }
 
 // GetFirstQuorumHash is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *PrivValidator_Expecter) GetFirstQuorumHash(context1 interface{}) *PrivValidator_GetFirstQuorumHash_Call {
 	return &PrivValidator_GetFirstQuorumHash_Call{Call: _e.mock.On("GetFirstQuorumHash", context1)}
 }
 
 func (_c *PrivValidator_GetFirstQuorumHash_Call) Run(run func(context1 context.Context)) *PrivValidator_GetFirstQuorumHash_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -179,15 +196,26 @@ type PrivValidator_GetHeight_Call struct {
 }
 
 // GetHeight is a helper method to define mock.On call
-//   - ctx
-//   - quorumHash
+//   - ctx context.Context
+//   - quorumHash crypto.QuorumHash
 func (_e *PrivValidator_Expecter) GetHeight(ctx interface{}, quorumHash interface{}) *PrivValidator_GetHeight_Call {
 	return &PrivValidator_GetHeight_Call{Call: _e.mock.On("GetHeight", ctx, quorumHash)}
 }
 
 func (_c *PrivValidator_GetHeight_Call) Run(run func(ctx context.Context, quorumHash crypto.QuorumHash)) *PrivValidator_GetHeight_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(crypto.QuorumHash))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 crypto.QuorumHash
+		if args[1] != nil {
+			arg1 = args[1].(crypto.QuorumHash)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -236,15 +264,26 @@ type PrivValidator_GetPrivateKey_Call struct {
 }
 
 // GetPrivateKey is a helper method to define mock.On call
-//   - ctx
-//   - quorumHash
+//   - ctx context.Context
+//   - quorumHash crypto.QuorumHash
 func (_e *PrivValidator_Expecter) GetPrivateKey(ctx interface{}, quorumHash interface{}) *PrivValidator_GetPrivateKey_Call {
 	return &PrivValidator_GetPrivateKey_Call{Call: _e.mock.On("GetPrivateKey", ctx, quorumHash)}
 }
 
 func (_c *PrivValidator_GetPrivateKey_Call) Run(run func(ctx context.Context, quorumHash crypto.QuorumHash)) *PrivValidator_GetPrivateKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(crypto.QuorumHash))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 crypto.QuorumHash
+		if args[1] != nil {
+			arg1 = args[1].(crypto.QuorumHash)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -293,14 +332,20 @@ type PrivValidator_GetProTxHash_Call struct {
 }
 
 // GetProTxHash is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *PrivValidator_Expecter) GetProTxHash(context1 interface{}) *PrivValidator_GetProTxHash_Call {
 	return &PrivValidator_GetProTxHash_Call{Call: _e.mock.On("GetProTxHash", context1)}
 }
 
 func (_c *PrivValidator_GetProTxHash_Call) Run(run func(context1 context.Context)) *PrivValidator_GetProTxHash_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -349,15 +394,26 @@ type PrivValidator_GetPubKey_Call struct {
 }
 
 // GetPubKey is a helper method to define mock.On call
-//   - ctx
-//   - quorumHash
+//   - ctx context.Context
+//   - quorumHash crypto.QuorumHash
 func (_e *PrivValidator_Expecter) GetPubKey(ctx interface{}, quorumHash interface{}) *PrivValidator_GetPubKey_Call {
 	return &PrivValidator_GetPubKey_Call{Call: _e.mock.On("GetPubKey", ctx, quorumHash)}
 }
 
 func (_c *PrivValidator_GetPubKey_Call) Run(run func(ctx context.Context, quorumHash crypto.QuorumHash)) *PrivValidator_GetPubKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(crypto.QuorumHash))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 crypto.QuorumHash
+		if args[1] != nil {
+			arg1 = args[1].(crypto.QuorumHash)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -406,15 +462,26 @@ type PrivValidator_GetThresholdPublicKey_Call struct {
 }
 
 // GetThresholdPublicKey is a helper method to define mock.On call
-//   - ctx
-//   - quorumHash
+//   - ctx context.Context
+//   - quorumHash crypto.QuorumHash
 func (_e *PrivValidator_Expecter) GetThresholdPublicKey(ctx interface{}, quorumHash interface{}) *PrivValidator_GetThresholdPublicKey_Call {
 	return &PrivValidator_GetThresholdPublicKey_Call{Call: _e.mock.On("GetThresholdPublicKey", ctx, quorumHash)}
 }
 
 func (_c *PrivValidator_GetThresholdPublicKey_Call) Run(run func(ctx context.Context, quorumHash crypto.QuorumHash)) *PrivValidator_GetThresholdPublicKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(crypto.QuorumHash))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 crypto.QuorumHash
+		if args[1] != nil {
+			arg1 = args[1].(crypto.QuorumHash)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -463,18 +530,44 @@ type PrivValidator_SignProposal_Call struct {
 }
 
 // SignProposal is a helper method to define mock.On call
-//   - ctx
-//   - chainID
-//   - quorumType
-//   - quorumHash
-//   - proposal
+//   - ctx context.Context
+//   - chainID string
+//   - quorumType btcjson.LLMQType
+//   - quorumHash crypto.QuorumHash
+//   - proposal *types0.Proposal
 func (_e *PrivValidator_Expecter) SignProposal(ctx interface{}, chainID interface{}, quorumType interface{}, quorumHash interface{}, proposal interface{}) *PrivValidator_SignProposal_Call {
 	return &PrivValidator_SignProposal_Call{Call: _e.mock.On("SignProposal", ctx, chainID, quorumType, quorumHash, proposal)}
 }
 
 func (_c *PrivValidator_SignProposal_Call) Run(run func(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, proposal *types0.Proposal)) *PrivValidator_SignProposal_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(btcjson.LLMQType), args[3].(crypto.QuorumHash), args[4].(*types0.Proposal))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 btcjson.LLMQType
+		if args[2] != nil {
+			arg2 = args[2].(btcjson.LLMQType)
+		}
+		var arg3 crypto.QuorumHash
+		if args[3] != nil {
+			arg3 = args[3].(crypto.QuorumHash)
+		}
+		var arg4 *types0.Proposal
+		if args[4] != nil {
+			arg4 = args[4].(*types0.Proposal)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
 	})
 	return _c
 }
@@ -512,19 +605,50 @@ type PrivValidator_SignVote_Call struct {
 }
 
 // SignVote is a helper method to define mock.On call
-//   - ctx
-//   - chainID
-//   - quorumType
-//   - quorumHash
-//   - vote
-//   - logger
+//   - ctx context.Context
+//   - chainID string
+//   - quorumType btcjson.LLMQType
+//   - quorumHash crypto.QuorumHash
+//   - vote *types0.Vote
+//   - logger log.Logger
 func (_e *PrivValidator_Expecter) SignVote(ctx interface{}, chainID interface{}, quorumType interface{}, quorumHash interface{}, vote interface{}, logger interface{}) *PrivValidator_SignVote_Call {
 	return &PrivValidator_SignVote_Call{Call: _e.mock.On("SignVote", ctx, chainID, quorumType, quorumHash, vote, logger)}
 }
 
 func (_c *PrivValidator_SignVote_Call) Run(run func(ctx context.Context, chainID string, quorumType btcjson.LLMQType, quorumHash crypto.QuorumHash, vote *types0.Vote, logger log.Logger)) *PrivValidator_SignVote_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(string), args[2].(btcjson.LLMQType), args[3].(crypto.QuorumHash), args[4].(*types0.Vote), args[5].(log.Logger))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 string
+		if args[1] != nil {
+			arg1 = args[1].(string)
+		}
+		var arg2 btcjson.LLMQType
+		if args[2] != nil {
+			arg2 = args[2].(btcjson.LLMQType)
+		}
+		var arg3 crypto.QuorumHash
+		if args[3] != nil {
+			arg3 = args[3].(crypto.QuorumHash)
+		}
+		var arg4 *types0.Vote
+		if args[4] != nil {
+			arg4 = args[4].(*types0.Vote)
+		}
+		var arg5 log.Logger
+		if args[5] != nil {
+			arg5 = args[5].(log.Logger)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+			arg5,
+		)
 	})
 	return _c
 }
@@ -551,18 +675,44 @@ type PrivValidator_UpdatePrivateKey_Call struct {
 }
 
 // UpdatePrivateKey is a helper method to define mock.On call
-//   - ctx
-//   - privateKey
-//   - quorumHash
-//   - thresholdPublicKey
-//   - height
+//   - ctx context.Context
+//   - privateKey crypto.PrivKey
+//   - quorumHash crypto.QuorumHash
+//   - thresholdPublicKey crypto.PubKey
+//   - height int64
 func (_e *PrivValidator_Expecter) UpdatePrivateKey(ctx interface{}, privateKey interface{}, quorumHash interface{}, thresholdPublicKey interface{}, height interface{}) *PrivValidator_UpdatePrivateKey_Call {
 	return &PrivValidator_UpdatePrivateKey_Call{Call: _e.mock.On("UpdatePrivateKey", ctx, privateKey, quorumHash, thresholdPublicKey, height)}
 }
 
 func (_c *PrivValidator_UpdatePrivateKey_Call) Run(run func(ctx context.Context, privateKey crypto.PrivKey, quorumHash crypto.QuorumHash, thresholdPublicKey crypto.PubKey, height int64)) *PrivValidator_UpdatePrivateKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(crypto.PrivKey), args[2].(crypto.QuorumHash), args[3].(crypto.PubKey), args[4].(int64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 crypto.PrivKey
+		if args[1] != nil {
+			arg1 = args[1].(crypto.PrivKey)
+		}
+		var arg2 crypto.QuorumHash
+		if args[2] != nil {
+			arg2 = args[2].(crypto.QuorumHash)
+		}
+		var arg3 crypto.PubKey
+		if args[3] != nil {
+			arg3 = args[3].(crypto.PubKey)
+		}
+		var arg4 int64
+		if args[4] != nil {
+			arg4 = args[4].(int64)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+		)
 	})
 	return _c
 }

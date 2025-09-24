@@ -74,15 +74,26 @@ type StateProvider_AppHash_Call struct {
 }
 
 // AppHash is a helper method to define mock.On call
-//   - ctx
-//   - height
+//   - ctx context.Context
+//   - height uint64
 func (_e *StateProvider_Expecter) AppHash(ctx interface{}, height interface{}) *StateProvider_AppHash_Call {
 	return &StateProvider_AppHash_Call{Call: _e.mock.On("AppHash", ctx, height)}
 }
 
 func (_c *StateProvider_AppHash_Call) Run(run func(ctx context.Context, height uint64)) *StateProvider_AppHash_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(uint64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint64
+		if args[1] != nil {
+			arg1 = args[1].(uint64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -131,15 +142,26 @@ type StateProvider_Commit_Call struct {
 }
 
 // Commit is a helper method to define mock.On call
-//   - ctx
-//   - height
+//   - ctx context.Context
+//   - height uint64
 func (_e *StateProvider_Expecter) Commit(ctx interface{}, height interface{}) *StateProvider_Commit_Call {
 	return &StateProvider_Commit_Call{Call: _e.mock.On("Commit", ctx, height)}
 }
 
 func (_c *StateProvider_Commit_Call) Run(run func(ctx context.Context, height uint64)) *StateProvider_Commit_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(uint64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint64
+		if args[1] != nil {
+			arg1 = args[1].(uint64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -186,15 +208,26 @@ type StateProvider_State_Call struct {
 }
 
 // State is a helper method to define mock.On call
-//   - ctx
-//   - height
+//   - ctx context.Context
+//   - height uint64
 func (_e *StateProvider_Expecter) State(ctx interface{}, height interface{}) *StateProvider_State_Call {
 	return &StateProvider_State_Call{Call: _e.mock.On("State", ctx, height)}
 }
 
 func (_c *StateProvider_State_Call) Run(run func(ctx context.Context, height uint64)) *StateProvider_State_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(uint64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 uint64
+		if args[1] != nil {
+			arg1 = args[1].(uint64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }

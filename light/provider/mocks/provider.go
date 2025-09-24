@@ -116,15 +116,26 @@ type Provider_LightBlock_Call struct {
 }
 
 // LightBlock is a helper method to define mock.On call
-//   - ctx
-//   - height
+//   - ctx context.Context
+//   - height int64
 func (_e *Provider_Expecter) LightBlock(ctx interface{}, height interface{}) *Provider_LightBlock_Call {
 	return &Provider_LightBlock_Call{Call: _e.mock.On("LightBlock", ctx, height)}
 }
 
 func (_c *Provider_LightBlock_Call) Run(run func(ctx context.Context, height int64)) *Provider_LightBlock_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(int64))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -162,15 +173,26 @@ type Provider_ReportEvidence_Call struct {
 }
 
 // ReportEvidence is a helper method to define mock.On call
-//   - context1
-//   - evidence
+//   - context1 context.Context
+//   - evidence types.Evidence
 func (_e *Provider_Expecter) ReportEvidence(context1 interface{}, evidence interface{}) *Provider_ReportEvidence_Call {
 	return &Provider_ReportEvidence_Call{Call: _e.mock.On("ReportEvidence", context1, evidence)}
 }
 
 func (_c *Provider_ReportEvidence_Call) Run(run func(context1 context.Context, evidence types.Evidence)) *Provider_ReportEvidence_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.Evidence))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Evidence
+		if args[1] != nil {
+			arg1 = args[1].(types.Evidence)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }

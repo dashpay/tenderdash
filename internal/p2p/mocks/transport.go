@@ -72,14 +72,20 @@ type Transport_Accept_Call struct {
 }
 
 // Accept is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *Transport_Expecter) Accept(context1 interface{}) *Transport_Accept_Call {
 	return &Transport_Accept_Call{Call: _e.mock.On("Accept", context1)}
 }
 
 func (_c *Transport_Accept_Call) Run(run func(context1 context.Context)) *Transport_Accept_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -106,14 +112,20 @@ type Transport_AddChannelDescriptors_Call struct {
 }
 
 // AddChannelDescriptors is a helper method to define mock.On call
-//   - vs
+//   - vs []*p2p.ChannelDescriptor
 func (_e *Transport_Expecter) AddChannelDescriptors(vs interface{}) *Transport_AddChannelDescriptors_Call {
 	return &Transport_AddChannelDescriptors_Call{Call: _e.mock.On("AddChannelDescriptors", vs)}
 }
 
 func (_c *Transport_AddChannelDescriptors_Call) Run(run func(vs []*p2p.ChannelDescriptor)) *Transport_AddChannelDescriptors_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].([]*p2p.ChannelDescriptor))
+		var arg0 []*p2p.ChannelDescriptor
+		if args[0] != nil {
+			arg0 = args[0].([]*p2p.ChannelDescriptor)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -206,15 +218,26 @@ type Transport_Dial_Call struct {
 }
 
 // Dial is a helper method to define mock.On call
-//   - context1
-//   - endpoint
+//   - context1 context.Context
+//   - endpoint *p2p.Endpoint
 func (_e *Transport_Expecter) Dial(context1 interface{}, endpoint interface{}) *Transport_Dial_Call {
 	return &Transport_Dial_Call{Call: _e.mock.On("Dial", context1, endpoint)}
 }
 
 func (_c *Transport_Dial_Call) Run(run func(context1 context.Context, endpoint *p2p.Endpoint)) *Transport_Dial_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(*p2p.Endpoint))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 *p2p.Endpoint
+		if args[1] != nil {
+			arg1 = args[1].(*p2p.Endpoint)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -307,14 +330,20 @@ type Transport_Listen_Call struct {
 }
 
 // Listen is a helper method to define mock.On call
-//   - endpoint
+//   - endpoint *p2p.Endpoint
 func (_e *Transport_Expecter) Listen(endpoint interface{}) *Transport_Listen_Call {
 	return &Transport_Listen_Call{Call: _e.mock.On("Listen", endpoint)}
 }
 
 func (_c *Transport_Listen_Call) Run(run func(endpoint *p2p.Endpoint)) *Transport_Listen_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(*p2p.Endpoint))
+		var arg0 *p2p.Endpoint
+		if args[0] != nil {
+			arg0 = args[0].(*p2p.Endpoint)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }

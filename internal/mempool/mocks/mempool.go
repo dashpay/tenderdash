@@ -63,17 +63,38 @@ type Mempool_CheckTx_Call struct {
 }
 
 // CheckTx is a helper method to define mock.On call
-//   - ctx
-//   - tx
-//   - cb
-//   - txInfo
+//   - ctx context.Context
+//   - tx types.Tx
+//   - cb func(*types0.ResponseCheckTx)
+//   - txInfo mempool.TxInfo
 func (_e *Mempool_Expecter) CheckTx(ctx interface{}, tx interface{}, cb interface{}, txInfo interface{}) *Mempool_CheckTx_Call {
 	return &Mempool_CheckTx_Call{Call: _e.mock.On("CheckTx", ctx, tx, cb, txInfo)}
 }
 
 func (_c *Mempool_CheckTx_Call) Run(run func(ctx context.Context, tx types.Tx, cb func(*types0.ResponseCheckTx), txInfo mempool.TxInfo)) *Mempool_CheckTx_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(types.Tx), args[2].(func(*types0.ResponseCheckTx)), args[3].(mempool.TxInfo))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 types.Tx
+		if args[1] != nil {
+			arg1 = args[1].(types.Tx)
+		}
+		var arg2 func(*types0.ResponseCheckTx)
+		if args[2] != nil {
+			arg2 = args[2].(func(*types0.ResponseCheckTx))
+		}
+		var arg3 mempool.TxInfo
+		if args[3] != nil {
+			arg3 = args[3].(mempool.TxInfo)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+		)
 	})
 	return _c
 }
@@ -177,14 +198,20 @@ type Mempool_FlushAppConn_Call struct {
 }
 
 // FlushAppConn is a helper method to define mock.On call
-//   - context1
+//   - context1 context.Context
 func (_e *Mempool_Expecter) FlushAppConn(context1 interface{}) *Mempool_FlushAppConn_Call {
 	return &Mempool_FlushAppConn_Call{Call: _e.mock.On("FlushAppConn", context1)}
 }
 
 func (_c *Mempool_FlushAppConn_Call) Run(run func(context1 context.Context)) *Mempool_FlushAppConn_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -224,14 +251,20 @@ type Mempool_GetTxByHash_Call struct {
 }
 
 // GetTxByHash is a helper method to define mock.On call
-//   - txHash
+//   - txHash types.TxKey
 func (_e *Mempool_Expecter) GetTxByHash(txHash interface{}) *Mempool_GetTxByHash_Call {
 	return &Mempool_GetTxByHash_Call{Call: _e.mock.On("GetTxByHash", txHash)}
 }
 
 func (_c *Mempool_GetTxByHash_Call) Run(run func(txHash types.TxKey)) *Mempool_GetTxByHash_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(types.TxKey))
+		var arg0 types.TxKey
+		if args[0] != nil {
+			arg0 = args[0].(types.TxKey)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -304,15 +337,26 @@ type Mempool_ReapMaxBytesMaxGas_Call struct {
 }
 
 // ReapMaxBytesMaxGas is a helper method to define mock.On call
-//   - maxBytes
-//   - maxGas
+//   - maxBytes int64
+//   - maxGas int64
 func (_e *Mempool_Expecter) ReapMaxBytesMaxGas(maxBytes interface{}, maxGas interface{}) *Mempool_ReapMaxBytesMaxGas_Call {
 	return &Mempool_ReapMaxBytesMaxGas_Call{Call: _e.mock.On("ReapMaxBytesMaxGas", maxBytes, maxGas)}
 }
 
 func (_c *Mempool_ReapMaxBytesMaxGas_Call) Run(run func(maxBytes int64, maxGas int64)) *Mempool_ReapMaxBytesMaxGas_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int64), args[1].(int64))
+		var arg0 int64
+		if args[0] != nil {
+			arg0 = args[0].(int64)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		run(
+			arg0,
+			arg1,
+		)
 	})
 	return _c
 }
@@ -352,14 +396,20 @@ type Mempool_ReapMaxTxs_Call struct {
 }
 
 // ReapMaxTxs is a helper method to define mock.On call
-//   - max
+//   - max int
 func (_e *Mempool_Expecter) ReapMaxTxs(max interface{}) *Mempool_ReapMaxTxs_Call {
 	return &Mempool_ReapMaxTxs_Call{Call: _e.mock.On("ReapMaxTxs", max)}
 }
 
 func (_c *Mempool_ReapMaxTxs_Call) Run(run func(max int)) *Mempool_ReapMaxTxs_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(int))
+		var arg0 int
+		if args[0] != nil {
+			arg0 = args[0].(int)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -397,14 +447,20 @@ type Mempool_RemoveTxByKey_Call struct {
 }
 
 // RemoveTxByKey is a helper method to define mock.On call
-//   - txKey
+//   - txKey types.TxKey
 func (_e *Mempool_Expecter) RemoveTxByKey(txKey interface{}) *Mempool_RemoveTxByKey_Call {
 	return &Mempool_RemoveTxByKey_Call{Call: _e.mock.On("RemoveTxByKey", txKey)}
 }
 
 func (_c *Mempool_RemoveTxByKey_Call) Run(run func(txKey types.TxKey)) *Mempool_RemoveTxByKey_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(types.TxKey))
+		var arg0 types.TxKey
+		if args[0] != nil {
+			arg0 = args[0].(types.TxKey)
+		}
+		run(
+			arg0,
+		)
 	})
 	return _c
 }
@@ -609,20 +665,56 @@ type Mempool_Update_Call struct {
 }
 
 // Update is a helper method to define mock.On call
-//   - ctx
-//   - blockHeight
-//   - blockTxs
-//   - txResults
-//   - newPreFn
-//   - newPostFn
-//   - recheck
+//   - ctx context.Context
+//   - blockHeight int64
+//   - blockTxs types.Txs
+//   - txResults []*types0.ExecTxResult
+//   - newPreFn mempool.PreCheckFunc
+//   - newPostFn mempool.PostCheckFunc
+//   - recheck bool
 func (_e *Mempool_Expecter) Update(ctx interface{}, blockHeight interface{}, blockTxs interface{}, txResults interface{}, newPreFn interface{}, newPostFn interface{}, recheck interface{}) *Mempool_Update_Call {
 	return &Mempool_Update_Call{Call: _e.mock.On("Update", ctx, blockHeight, blockTxs, txResults, newPreFn, newPostFn, recheck)}
 }
 
 func (_c *Mempool_Update_Call) Run(run func(ctx context.Context, blockHeight int64, blockTxs types.Txs, txResults []*types0.ExecTxResult, newPreFn mempool.PreCheckFunc, newPostFn mempool.PostCheckFunc, recheck bool)) *Mempool_Update_Call {
 	_c.Call.Run(func(args mock.Arguments) {
-		run(args[0].(context.Context), args[1].(int64), args[2].(types.Txs), args[3].([]*types0.ExecTxResult), args[4].(mempool.PreCheckFunc), args[5].(mempool.PostCheckFunc), args[6].(bool))
+		var arg0 context.Context
+		if args[0] != nil {
+			arg0 = args[0].(context.Context)
+		}
+		var arg1 int64
+		if args[1] != nil {
+			arg1 = args[1].(int64)
+		}
+		var arg2 types.Txs
+		if args[2] != nil {
+			arg2 = args[2].(types.Txs)
+		}
+		var arg3 []*types0.ExecTxResult
+		if args[3] != nil {
+			arg3 = args[3].([]*types0.ExecTxResult)
+		}
+		var arg4 mempool.PreCheckFunc
+		if args[4] != nil {
+			arg4 = args[4].(mempool.PreCheckFunc)
+		}
+		var arg5 mempool.PostCheckFunc
+		if args[5] != nil {
+			arg5 = args[5].(mempool.PostCheckFunc)
+		}
+		var arg6 bool
+		if args[6] != nil {
+			arg6 = args[6].(bool)
+		}
+		run(
+			arg0,
+			arg1,
+			arg2,
+			arg3,
+			arg4,
+			arg5,
+			arg6,
+		)
 	})
 	return _c
 }
