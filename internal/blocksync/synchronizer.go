@@ -332,6 +332,8 @@ func (s *Synchronizer) advance() {
 }
 
 func (s *Synchronizer) updateMonitor() {
+	// get the current max peer height before locking to avoid deadlock
+	maxPeerHeight := s.peerStore.MaxHeight()
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
@@ -357,7 +359,7 @@ func (s *Synchronizer) updateMonitor() {
 	s.logger.Info(
 		"block sync rate",
 		"height", s.height,
-		"max_peer_height", s.peerStore.MaxHeight(),
+		"max_peer_height", maxPeerHeight,
 		"blocks/s", s.lastSyncRate,
 	)
 	s.lastMonitorUpdate = s.clock.Now()
