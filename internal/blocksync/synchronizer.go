@@ -32,10 +32,10 @@ eg, L = latency = 0.1s
 */
 
 const (
-	requestInterval                    = 2 * time.Millisecond
-	poolWorkerSize                     = 600
-	maxPendingRequestsPerPeer          = 20
-	defaultSyncRateIntervalBlocks uint = 100
+	requestInterval                     = 2 * time.Millisecond
+	poolWorkerSize                      = 600
+	maxPendingRequestsPerPeer           = 20
+	defaultSyncRateIntervalBlocks int64 = 100
 
 	// Minimum recv rate to ensure we're receiving blocks from a peer fast
 	// enough. If a peer is not sending us data at at least that rate, we
@@ -82,7 +82,7 @@ type (
 		jobProgressCounter atomic.Int32 // number of requests pending assignment or block response
 
 		startHeight       int64
-		monitorInterval   uint
+		monitorInterval   int64
 		lastMonitorUpdate time.Time
 		lastSyncRate      float64
 
@@ -114,7 +114,7 @@ func WithClock(clock clockwork.Clock) OptionFunc {
 	}
 }
 
-func WithMonitorInterval(blocks uint) OptionFunc {
+func WithMonitorInterval(blocks int64) OptionFunc {
 	return func(v *Synchronizer) {
 		if blocks > 0 {
 			v.monitorInterval = blocks
@@ -335,11 +335,11 @@ func (s *Synchronizer) updateMonitor() {
 	s.mtx.Lock()
 	defer s.mtx.Unlock()
 
-	diff := s.height - s.startHeight + 1
 	if s.monitorInterval <= 0 {
 		return
 	}
-	if diff%int64(s.monitorInterval) != 0 {
+	progress := s.height - s.startHeight
+	if progress <= 0 || progress%s.monitorInterval != 0 {
 		return
 	}
 	elapsed := s.clock.Since(s.lastMonitorUpdate).Seconds()

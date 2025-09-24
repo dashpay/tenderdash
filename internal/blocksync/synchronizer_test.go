@@ -328,7 +328,7 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 func (suite *SynchronizerTestSuite) TestUpdateMonitor() {
 	testCases := []struct {
 		name     string
-		interval uint
+		interval int64
 		options  []OptionFunc
 		advance  time.Duration
 		expected float64
@@ -357,7 +357,8 @@ func (suite *SynchronizerTestSuite) TestUpdateMonitor() {
 			sync := NewSynchronizer(1, suite.client, applier, opts...)
 			suite.Require().Equal(tc.interval, sync.monitorInterval)
 			sync.lastMonitorUpdate = fakeClock.Now()
-			for i := uint(1); i <= tc.interval; i++ {
+			for i := int64(1); i <= tc.interval; i++ {
+				sync.height++
 				fakeClock.Advance(tc.advance)
 				sync.updateMonitor()
 				if i < tc.interval {
@@ -365,7 +366,6 @@ func (suite *SynchronizerTestSuite) TestUpdateMonitor() {
 				} else {
 					suite.Require().InDelta(tc.expected, sync.lastSyncRate, 1e-9)
 				}
-				sync.height++
 			}
 		})
 	}
