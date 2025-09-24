@@ -32,9 +32,10 @@ eg, L = latency = 0.1s
 */
 
 const (
-	requestInterval           = 2 * time.Millisecond
-	poolWorkerSize            = 600
-	maxPendingRequestsPerPeer = 20
+	requestInterval                    = 2 * time.Millisecond
+	poolWorkerSize                     = 600
+	maxPendingRequestsPerPeer          = 20
+	defaultSyncRateIntervalBlocks uint = 100
 
 	// Minimum recv rate to ensure we're receiving blocks from a peer fast
 	// enough. If a peer is not sending us data at at least that rate, we
@@ -80,9 +81,10 @@ type (
 		// atomic
 		jobProgressCounter atomic.Int32 // number of requests pending assignment or block response
 
-		startHeight      int64
-		lastHundredBlock time.Time
-		lastSyncRate     float64
+		startHeight       int64
+		monitorInterval   uint
+		lastMonitorUpdate time.Time
+		lastSyncRate      float64
 
 		peerStore      *InMemPeerStore
 		client         client.BlockClient
@@ -112,21 +114,30 @@ func WithClock(clock clockwork.Clock) OptionFunc {
 	}
 }
 
+func WithMonitorInterval(blocks uint) OptionFunc {
+	return func(v *Synchronizer) {
+		if blocks > 0 {
+			v.monitorInterval = blocks
+		}
+	}
+}
+
 // NewSynchronizer returns a new Synchronizer with the height equal to start
 func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApplier, opts ...OptionFunc) *Synchronizer {
 	peerStore := NewInMemPeerStore()
 	logger := log.NewNopLogger()
 	bp := &Synchronizer{
-		logger:         logger,
-		clock:          clockwork.NewRealClock(),
-		client:         client,
-		applier:        blockExec,
-		peerStore:      peerStore,
-		jobGen:         newJobGenerator(start, logger, client, peerStore),
-		startHeight:    start,
-		height:         start,
-		workerPool:     workerpool.New(poolWorkerSize, workerpool.WithLogger(logger)),
-		pendingToApply: map[int64]BlockResponse{},
+		logger:          logger,
+		clock:           clockwork.NewRealClock(),
+		client:          client,
+		applier:         blockExec,
+		peerStore:       peerStore,
+		jobGen:          newJobGenerator(start, logger, client, peerStore),
+		startHeight:     start,
+		height:          start,
+		monitorInterval: defaultSyncRateIntervalBlocks,
+		workerPool:      workerpool.New(poolWorkerSize, workerpool.WithLogger(logger)),
+		pendingToApply:  map[int64]BlockResponse{},
 	}
 	for _, opt := range opts {
 		opt(bp)
@@ -138,8 +149,11 @@ func NewSynchronizer(start int64, client client.BlockClient, blockExec *blockApp
 // OnStart implements service.Service by spawning requesters routine and recording
 // synchronizer's start time.
 func (s *Synchronizer) OnStart(ctx context.Context) error {
+	if s.monitorInterval <= 0 {
+		s.monitorInterval = defaultSyncRateIntervalBlocks
+	}
 	s.lastAdvance = s.clock.Now()
-	s.lastHundredBlock = s.lastAdvance
+	s.lastMonitorUpdate = s.lastAdvance
 	s.workerPool.Run(ctx)
 	go s.runHandler(ctx, s.produceJob)
 	go s.runHandler(ctx, s.consumeJobResult)
@@ -322,12 +336,19 @@ func (s *Synchronizer) updateMonitor() {
 	defer s.mtx.Unlock()
 
 	diff := s.height - s.startHeight + 1
-	if diff%100 != 0 {
+	if s.monitorInterval <= 0 {
 		return
 	}
-	// the lastSyncRate will be updated every 100 blocks, it uses the adaptive filter
-	// to smooth the block sync rate and the unit represents the number of blocks per second.
-	newSyncRate := 100 / s.clock.Since(s.lastHundredBlock).Seconds()
+	if diff%int64(s.monitorInterval) != 0 {
+		return
+	}
+	elapsed := s.clock.Since(s.lastMonitorUpdate).Seconds()
+	if elapsed <= 0 {
+		return
+	}
+	// lastSyncRate is updated every monitorInterval blocks using an adaptive filter
+	// to smooth the block sync rate. The value represents blocks per second.
+	newSyncRate := float64(s.monitorInterval) / elapsed
 	if s.lastSyncRate == 0 {
 		s.lastSyncRate = newSyncRate
 	} else {
@@ -339,7 +360,7 @@ func (s *Synchronizer) updateMonitor() {
 		"max_peer_height", s.peerStore.MaxHeight(),
 		"blocks/s", s.lastSyncRate,
 	)
-	s.lastHundredBlock = s.clock.Now()
+	s.lastMonitorUpdate = s.clock.Now()
 }
 
 // addBlock validates that the block comes from the peer it was expected from

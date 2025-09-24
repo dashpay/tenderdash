@@ -326,16 +326,49 @@ func (suite *SynchronizerTestSuite) TestRemovePeer() {
 }
 
 func (suite *SynchronizerTestSuite) TestUpdateMonitor() {
-	fakeClock := clockwork.NewFakeClock()
-	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
-	sync := NewSynchronizer(1, suite.client, applier, WithClock(fakeClock))
-	sync.lastHundredBlock = fakeClock.Now()
-	for i := 1; i <= 555; i++ {
-		fakeClock.Advance(10 * time.Millisecond)
-		sync.updateMonitor()
-		sync.height++
+	testCases := []struct {
+		name     string
+		interval uint
+		options  []OptionFunc
+		advance  time.Duration
+		expected float64
+	}{
+		{
+			name:     "default interval",
+			interval: defaultSyncRateIntervalBlocks,
+			options:  nil,
+			advance:  10 * time.Millisecond,
+			expected: 100,
+		},
+		{
+			name:     "custom interval",
+			interval: 50,
+			options:  []OptionFunc{WithMonitorInterval(50)},
+			advance:  20 * time.Millisecond,
+			expected: 50,
+		},
 	}
-	require.Equal(suite.T(), float64(100), sync.lastSyncRate)
+
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			fakeClock := clockwork.NewFakeClock()
+			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+			opts := append([]OptionFunc{WithClock(fakeClock)}, tc.options...)
+			sync := NewSynchronizer(1, suite.client, applier, opts...)
+			suite.Require().Equal(tc.interval, sync.monitorInterval)
+			sync.lastMonitorUpdate = fakeClock.Now()
+			for i := uint(1); i <= tc.interval; i++ {
+				fakeClock.Advance(tc.advance)
+				sync.updateMonitor()
+				if i < tc.interval {
+					suite.Require().Zero(sync.lastSyncRate)
+				} else {
+					suite.Require().InDelta(tc.expected, sync.lastSyncRate, 1e-9)
+				}
+				sync.height++
+			}
+		})
+	}
 }
 
 func generateBlockResponses(t *testing.T, blocks []*types.Block) []*blocksync.BlockResponse {
