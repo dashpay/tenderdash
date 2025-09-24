@@ -5,10 +5,10 @@ package privval
 
 import (
 	fmt "fmt"
+	_ "github.com/cosmos/gogoproto/gogoproto"
+	proto "github.com/cosmos/gogoproto/proto"
 	crypto "github.com/dashpay/tenderdash/proto/tendermint/crypto"
 	types "github.com/dashpay/tenderdash/proto/tendermint/types"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -1114,6 +1114,9 @@ func (m *RemoteSignerError) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *RemoteSignerError) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1149,6 +1152,9 @@ func (m *PubKeyRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PubKeyRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1186,6 +1192,9 @@ func (m *ThresholdPubKeyRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ThresholdPubKeyRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1223,6 +1232,9 @@ func (m *ProTxHashRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ProTxHashRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1253,6 +1265,9 @@ func (m *PubKeyResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PubKeyResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1298,6 +1313,9 @@ func (m *ThresholdPubKeyResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ThresholdPubKeyResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1343,6 +1361,9 @@ func (m *ProTxHashResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ProTxHashResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1385,6 +1406,9 @@ func (m *SignVoteRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *SignVoteRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1439,6 +1463,9 @@ func (m *SignedVoteResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *SignedVoteResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1484,6 +1511,9 @@ func (m *SignProposalRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *SignProposalRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1538,6 +1568,9 @@ func (m *SignedProposalResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *SignedProposalResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1583,6 +1616,9 @@ func (m *PingRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PingRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1606,6 +1642,9 @@ func (m *PingResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PingResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1629,6 +1668,9 @@ func (m *Message) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1651,6 +1693,9 @@ func (m *Message_PubKeyRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_PubKeyRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.PubKeyRequest != nil {
 		{
@@ -1672,6 +1717,9 @@ func (m *Message_PubKeyResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_PubKeyResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.PubKeyResponse != nil {
 		{
@@ -1693,6 +1741,9 @@ func (m *Message_SignVoteRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_SignVoteRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.SignVoteRequest != nil {
 		{
@@ -1714,6 +1765,9 @@ func (m *Message_SignedVoteResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_SignedVoteResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.SignedVoteResponse != nil {
 		{
@@ -1735,6 +1789,9 @@ func (m *Message_SignProposalRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_SignProposalRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.SignProposalRequest != nil {
 		{
@@ -1756,6 +1813,9 @@ func (m *Message_SignedProposalResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_SignedProposalResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.SignedProposalResponse != nil {
 		{
@@ -1777,6 +1837,9 @@ func (m *Message_PingRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_PingRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.PingRequest != nil {
 		{
@@ -1798,6 +1861,9 @@ func (m *Message_PingResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_PingResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.PingResponse != nil {
 		{
@@ -1819,6 +1885,9 @@ func (m *Message_ProTxHashRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_ProTxHashRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ProTxHashRequest != nil {
 		{
@@ -1840,6 +1909,9 @@ func (m *Message_ProTxHashResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_ProTxHashResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ProTxHashResponse != nil {
 		{
@@ -1861,6 +1933,9 @@ func (m *Message_ThresholdPubKeyRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_ThresholdPubKeyRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ThresholdPubKeyRequest != nil {
 		{
@@ -1882,6 +1957,9 @@ func (m *Message_ThresholdPubKeyResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Message_ThresholdPubKeyResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.ThresholdPubKeyResponse != nil {
 		{
@@ -1913,6 +1991,9 @@ func (m *AuthSigMessage) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *AuthSigMessage) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

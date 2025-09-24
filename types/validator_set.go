@@ -65,6 +65,8 @@ type ValidatorSet struct {
 	QuorumHash         crypto.QuorumHash `json:"quorum_hash"`
 	QuorumType         btcjson.LLMQType  `json:"quorum_type"`
 	HasPublicKeys      bool              `json:"has_public_keys"`
+	// Threshold power, must equal to  ValidatorParams.voting_power_threshold
+	VotingPowerThreshold uint64 `json:"threshold_power"`
 }
 
 // NewValidatorSet initializes a ValidatorSet by copying over the values from
@@ -78,11 +80,14 @@ type ValidatorSet struct {
 // MaxVotesCount - commits by a validator set larger than this will fail
 // validation.
 func NewValidatorSet(valz []*Validator, newThresholdPublicKey crypto.PubKey, quorumType btcjson.LLMQType,
-	quorumHash crypto.QuorumHash, hasPublicKeys bool) *ValidatorSet {
+	quorumHash crypto.QuorumHash, hasPublicKeys bool, validatorParams *ValidatorParams) *ValidatorSet {
 	vals := &ValidatorSet{
 		QuorumHash:    quorumHash,
 		QuorumType:    quorumType,
 		HasPublicKeys: hasPublicKeys,
+	}
+	if validatorParams != nil && validatorParams.VotingPowerThreshold != nil {
+		vals.VotingPowerThreshold = *validatorParams.VotingPowerThreshold
 	}
 	err := vals.updateWithChangeSet(valz, false, newThresholdPublicKey, quorumHash)
 	if err != nil {
@@ -99,6 +104,7 @@ func NewValidatorSetCheckPublicKeys(
 	newThresholdPublicKey crypto.PubKey,
 	quorumType btcjson.LLMQType,
 	quorumHash crypto.QuorumHash,
+	params *ValidatorParams,
 ) *ValidatorSet {
 	hasPublicKeys := true
 	for _, val := range valz {
@@ -106,12 +112,12 @@ func NewValidatorSetCheckPublicKeys(
 			hasPublicKeys = false
 		}
 	}
-	return NewValidatorSet(valz, newThresholdPublicKey, quorumType, quorumHash, hasPublicKeys)
+	return NewValidatorSet(valz, newThresholdPublicKey, quorumType, quorumHash, hasPublicKeys, params)
 }
 
 // NewEmptyValidatorSet initializes a ValidatorSet with no validators
 func NewEmptyValidatorSet() *ValidatorSet {
-	return NewValidatorSet(nil, nil, 0, nil, false)
+	return NewValidatorSet(nil, nil, 0, nil, false, nil)
 }
 
 func (vals *ValidatorSet) ValidateBasic() error {
@@ -150,6 +156,33 @@ func (vals *ValidatorSet) ValidateBasic() error {
 
 	if err := vals.Proposer().ValidateBasic(); err != nil {
 		return fmt.Errorf("proposer failed validate basic, error: %w", err)
+	}
+
+	if vals.VotingPowerThreshold > math.MaxInt64 {
+		return fmt.Errorf("voting power threshold %d is too large", vals.VotingPowerThreshold)
+	}
+
+	threshold := vals.QuorumVotingThresholdPower()
+	totalPower := vals.TotalVotingPower()
+	switch len(vals.Validators) {
+	case 1, 2:
+		// For validator sets containing 1 or 2 validators, the threshold MUST be equal to the total voting power.
+		if totalPower != threshold {
+			return fmt.Errorf("with 1 or 2 validators, quorum voting power %d must be equal to threshold %d", totalPower, threshold)
+		}
+	case 3:
+		// For validator set with 3 validators, the threshold MUST be equal or greater than 2/3 of the total voting power.
+		if threshold < totalPower*2/3 {
+			return fmt.Errorf("%d-members quorum voting power %d is less than threshold %d",
+				len(vals.Validators), totalPower, vals.VotingPowerThreshold)
+		}
+	default:
+		// For validator sets containing more than 3 validators, the threshold MUST be at least 2/3 + 1 of the total voting power.
+		if threshold < (totalPower*2/3)+1 {
+			return fmt.Errorf("voting threshold %d of quorum with power %d MUST be at least 2/3*%d+1 = %d",
+				threshold, totalPower, totalPower, (totalPower*2/3)+1)
+
+		}
 	}
 
 	return nil
@@ -397,6 +430,14 @@ func (vals *ValidatorSet) QuorumVotingPower() int64 {
 // QuorumVotingThresholdPower returns the threshold power of the voting power of the quorum if all the members existed.
 // Voting is considered successful when voting power is at or above this threshold.
 func (vals *ValidatorSet) QuorumVotingThresholdPower() int64 {
+	if thresholdPower := vals.VotingPowerThreshold; thresholdPower > 0 {
+		if thresholdPower > math.MaxInt64 {
+			// this should never happen
+			panic(fmt.Sprintf("threshold power %d is too large", thresholdPower))
+		}
+		return int64(thresholdPower)
+	}
+
 	return int64(vals.QuorumTypeThresholdCount()) * DefaultDashVotingPower
 }
 
@@ -902,6 +943,8 @@ func (vals *ValidatorSet) ToProto() (*tmproto.ValidatorSet, error) {
 	// be consistent with cached data
 	vp.TotalVotingPower = 0
 
+	vp.VotingPowerThreshold = vals.VotingPowerThreshold
+
 	if vals.ThresholdPublicKey == nil {
 		return nil, fmt.Errorf("thresholdPublicKey is not set")
 	}
@@ -955,6 +998,8 @@ func ValidatorSetFromProto(vp *tmproto.ValidatorSet) (*ValidatorSet, error) {
 			return nil, fmt.Errorf("fromProto: validatorSet proposer error: %w", err)
 		}
 	}
+
+	vals.VotingPowerThreshold = vp.GetVotingPowerThreshold()
 
 	// NOTE: We can't trust the total voting power given to us by other peers. If someone were to
 	// inject a non-zeo value that wasn't the correct voting power we could assume a wrong total

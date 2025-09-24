@@ -105,7 +105,7 @@ func run(ctx context.Context, configFile string) error {
 }
 
 func startAppServer(ctx context.Context, cfg *Config, logger log.Logger) error {
-	// Start remote signer (must start before node if running builtin).
+	// Start remote signer (must start before node if running builtin)
 	if cfg.PrivValServer != "" {
 		err := startRemoteSigner(ctx, cfg, logger)
 		if err != nil {

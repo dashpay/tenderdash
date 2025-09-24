@@ -2,7 +2,6 @@ package types
 
 import (
 	"bytes"
-	"crypto/sha256"
 	"errors"
 	"fmt"
 	"sort"
@@ -25,7 +24,11 @@ const maxLoggedTxs = 20
 type Tx []byte
 
 // Key produces a fixed-length key for use in indexing.
-func (tx Tx) Key() TxKey { return sha256.Sum256(tx) }
+func (tx Tx) Key() TxKey {
+	// we must use the hash of the transaction as the key to
+	// make it easier to lookup transactions in the mempool
+	return TxKey(tx.Hash())
+}
 
 // Hash computes the TMHASH hash of the wire encoded transaction.
 func (tx Tx) Hash() tmbytes.HexBytes { return crypto.Checksum(tx) }

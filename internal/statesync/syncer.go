@@ -16,18 +16,22 @@ import (
 	sm "github.com/dashpay/tenderdash/internal/state"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/light"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
 	"github.com/dashpay/tenderdash/types"
 )
 
 const (
+
 	// chunkTimeout is the timeout while waiting for the next chunk from the chunk queue.
 	chunkTimeout = 2 * time.Minute
 
 	// minimumDiscoveryTime is the lowest allowable time for a
 	// SyncAny discovery time.
 	minimumDiscoveryTime = 5 * time.Second
+	// chunkRequestSendTimeout is the timeout sending chunk requests to peers.
+	chunkRequestSendTimeout = 5 * time.Second
 
 	dequeueChunkIDTimeoutDefault = 2 * time.Second
 )
@@ -89,7 +93,7 @@ func (s *syncer) AddChunk(chunk *chunk) (bool, error) {
 	keyVals := []any{
 		"height", chunk.Height,
 		"version", chunk.Version,
-		"chunk", chunk.ID,
+		"chunkID", chunk.ID,
 	}
 	added, err := s.chunkQueue.Add(chunk)
 	if err != nil {
@@ -120,6 +124,9 @@ func (s *syncer) AddSnapshot(peerID types.NodeID, snapshot *snapshot) (bool, err
 			"height", snapshot.Height,
 			"version", snapshot.Version,
 			"hash", snapshot.Hash.ShortString())
+	} else {
+		s.logger.Debug("snapshot not added, possibly duplicate or invalid",
+			"height", snapshot.Height, "hash", snapshot.Hash)
 	}
 	return added, nil
 }
@@ -147,6 +154,7 @@ func (s *syncer) RemovePeer(peerID types.NodeID) {
 func (s *syncer) SyncAny(
 	ctx context.Context,
 	discoveryTime time.Duration,
+	retries int,
 	requestSnapshots func() error,
 ) (sm.State, *types.Commit, error) {
 	if discoveryTime != 0 && discoveryTime < minimumDiscoveryTime {
@@ -155,19 +163,6 @@ func (s *syncer) SyncAny(
 
 	timer := time.NewTimer(discoveryTime)
 	defer timer.Stop()
-
-	if discoveryTime > 0 {
-		if err := requestSnapshots(); err != nil {
-			return sm.State{}, nil, err
-		}
-		s.logger.Info("discovering snapshots",
-			"interval", discoveryTime)
-		select {
-		case <-ctx.Done():
-			return sm.State{}, nil, ctx.Err()
-		case <-timer.C:
-		}
-	}
 
 	// The app may ask us to retry a snapshot restoration, in which case we need to reuse
 	// the snapshot and chunk queue from the previous loop iteration.
@@ -179,6 +174,11 @@ func (s *syncer) SyncAny(
 	)
 
 	for {
+		// we loop one more time than `retries` to check if snapshots requested in previous iterations are available
+		if retries > 0 && snapshot == nil && iters > retries {
+			return sm.State{}, nil, errNoSnapshots
+		}
+
 		iters++
 		// If not nil, we're going to retry restoration of the same snapshot.
 		if snapshot == nil {
@@ -188,6 +188,10 @@ func (s *syncer) SyncAny(
 		if snapshot == nil {
 			if discoveryTime == 0 {
 				return sm.State{}, nil, errNoSnapshots
+			}
+			// we re-request snapshots
+			if err := requestSnapshots(); err != nil {
+				return sm.State{}, nil, err
 			}
 			s.logger.Info("discovering snapshots",
 				"iterations", iters,
@@ -215,7 +219,7 @@ func (s *syncer) SyncAny(
 		switch {
 		case err == nil:
 			s.metrics.SnapshotHeight.Set(float64(snapshot.Height))
-			s.lastSyncedSnapshotHeight = int64(snapshot.Height)
+			s.lastSyncedSnapshotHeight = tmmath.MustConvertInt64(snapshot.Height)
 			return newState, commit, nil
 
 		case errors.Is(err, errAbort):
@@ -342,7 +346,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 		if ctx.Err() != nil {
 			return sm.State{}, nil, ctx.Err()
 		}
-		if err == light.ErrNoWitnesses {
+		if errors.Is(err, light.ErrNoWitnesses) {
 			return sm.State{}, nil,
 				fmt.Errorf("failed to get tendermint state at height %d. No witnesses remaining", snapshot.Height)
 		}
@@ -360,7 +364,7 @@ func (s *syncer) Sync(ctx context.Context, snapshot *snapshot, queue *chunkQueue
 			return sm.State{}, nil,
 				fmt.Errorf("failed to get commit at height %d. No witnesses remaining", snapshot.Height)
 		}
-		s.logger.Info("failed to get and verify commit. Dropping snapshot and trying again",
+		s.logger.Error("failed to get and verify light block. Dropping snapshot and trying again",
 			"err", err, "height", snapshot.Height)
 		return sm.State{}, nil, errRejectSnapshot
 	}
@@ -509,31 +513,41 @@ func (s *syncer) fetchChunks(ctx context.Context, snapshot *snapshot, queue *chu
 	}
 	for {
 		if queue.IsRequestQueueEmpty() {
+			s.logger.Debug("fetchChunks queue empty, waiting for chunk", "timeout", dequeueChunkIDTimeout)
 			select {
 			case <-ctx.Done():
+				s.logger.Debug("fetchChunks context done on empty queue")
 				return
 			case <-time.After(dequeueChunkIDTimeout):
+				s.logger.Debug("fetchChunks queue empty, timed out", "timeout", dequeueChunkIDTimeout)
 				continue
 			}
 		}
 		ID, err := queue.Dequeue()
 		if errors.Is(err, errQueueEmpty) {
+			s.logger.Debug("fetchChunks queue empty, waiting for chunk", "timeout", dequeueChunkIDTimeout, "err", err)
 			continue
 		}
 		s.logger.Info("Fetching snapshot chunk",
 			"height", snapshot.Height,
 			"version", snapshot.Version,
-			"chunk", ID)
+			"chunkID", ID)
 		ticker.Reset(s.retryTimeout)
 		if err := s.requestChunk(ctx, snapshot, ID); err != nil {
+			s.logger.Error("failed to request snapshot chunk", "err", err, "chunkID", ID)
+			// retry the chunk
+			s.chunkQueue.Enqueue(ID)
 			return
 		}
 		select {
 		case <-queue.WaitFor(ID):
 			// do nothing
 		case <-ticker.C:
+			s.logger.Debug("chunk not received on time, retrying",
+				"chunkID", ID, "timeout", s.retryTimeout)
 			s.chunkQueue.Enqueue(ID)
 		case <-ctx.Done():
+			s.logger.Debug("fetchChunks context done while waiting for chunk")
 			return
 		}
 	}
@@ -568,8 +582,10 @@ func (s *syncer) requestChunk(ctx context.Context, snapshot *snapshot, chunkID t
 			ChunkId: chunkID,
 		},
 	}
+	sCtx, cancel := context.WithTimeout(ctx, chunkRequestSendTimeout)
+	defer cancel()
 
-	return s.chunkCh.Send(ctx, msg)
+	return s.chunkCh.Send(sCtx, msg)
 }
 
 // verifyApp verifies the sync, checking the app hash, last block height and app version
@@ -595,7 +611,7 @@ func (s *syncer) verifyApp(ctx context.Context, snapshot *snapshot, appVersion u
 		return errVerifyFailed
 	}
 
-	if uint64(resp.LastBlockHeight) != snapshot.Height {
+	if tmmath.MustConvertUint64(resp.LastBlockHeight) != snapshot.Height {
 		s.logger.Error(
 			"ABCI app reported unexpected last block height",
 			"expected", snapshot.Height,

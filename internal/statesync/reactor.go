@@ -16,12 +16,12 @@ import (
 	abci "github.com/dashpay/tenderdash/abci/types"
 	"github.com/dashpay/tenderdash/config"
 	dashcore "github.com/dashpay/tenderdash/dash/core"
-	"github.com/dashpay/tenderdash/internal/consensus"
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	sm "github.com/dashpay/tenderdash/internal/state"
 	"github.com/dashpay/tenderdash/internal/store"
 	"github.com/dashpay/tenderdash/libs/log"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/libs/service"
 	"github.com/dashpay/tenderdash/light/provider"
 	ssproto "github.com/dashpay/tenderdash/proto/tendermint/statesync"
@@ -68,6 +68,9 @@ const (
 
 	// backfillSleepTime uses to sleep if no connected peers to fetch light blocks
 	backfillSleepTime = 1 * time.Second
+
+	// minPeers is the minimum number of peers required to start a state sync
+	minPeers = 2
 )
 
 func getChannelDescriptors() map[p2p.ChannelID]*p2p.ChannelDescriptor {
@@ -120,7 +123,7 @@ type Reactor struct {
 	// providers.
 	mtx               sync.RWMutex
 	initSyncer        func() *syncer
-	requestSnaphot    func() error
+	requestSnapshot   func() error
 	syncer            *syncer // syncer is nil when sync is not in progress
 	initStateProvider func(ctx context.Context, chainID string, initialHeight int64) error
 	stateProvider     StateProvider
@@ -132,7 +135,16 @@ type Reactor struct {
 
 	dashCoreClient dashcore.Client
 
-	csState *consensus.State
+	csState ConsensusStateProvider
+}
+
+// ConsensusStateProvider is an interface that allows the state sync reactor to
+// interact with the consensus state. It is defined to improve testability.
+//
+// Implemented by consensus.State
+type ConsensusStateProvider interface {
+	PublishCommitEvent(commit *types.Commit) error
+	GetCurrentHeight() int64
 }
 
 // NewReactor returns a reference to a new state sync reactor, which implements
@@ -155,7 +167,7 @@ func NewReactor(
 	postSyncHook func(context.Context, sm.State) error,
 	needsStateSync bool,
 	client dashcore.Client,
-	csState *consensus.State,
+	csState ConsensusStateProvider,
 ) *Reactor {
 	r := &Reactor{
 		logger:         logger,
@@ -225,7 +237,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		}
 	}
 	r.dispatcher = NewDispatcher(blockCh, r.logger)
-	r.requestSnaphot = func() error {
+	r.requestSnapshot = func() error {
 		// request snapshots from all currently connected peers
 		return snapshotCh.Send(ctx, p2p.Envelope{
 			Broadcast: true,
@@ -236,11 +248,10 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 
 	r.initStateProvider = func(ctx context.Context, chainID string, initialHeight int64) error {
 		spLogger := r.logger.With("module", "stateprovider")
-		spLogger.Info("initializing state provider",
-			"trustHeight", r.cfg.TrustHeight, "useP2P", r.cfg.UseP2P)
+		spLogger.Debug("initializing state sync state provider", "useP2P", r.cfg.UseP2P)
 
 		if r.cfg.UseP2P {
-			if err := r.waitForEnoughPeers(ctx, 2); err != nil {
+			if err := r.waitForEnoughPeers(ctx, minPeers); err != nil {
 				return err
 			}
 
@@ -250,8 +261,8 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 				providers[idx] = NewBlockProvider(p, chainID, r.dispatcher)
 			}
 
-			stateProvider, err := NewP2PStateProvider(ctx, chainID, initialHeight, r.cfg.TrustHeight, providers,
-				paramsCh, r.logger.With("module", "stateprovider"), r.dashCoreClient)
+			stateProvider, err := NewP2PStateProvider(ctx, chainID, initialHeight,
+				providers, paramsCh, r.logger.With("module", "stateprovider"), r.dashCoreClient)
 			if err != nil {
 				return fmt.Errorf("failed to initialize P2P state provider: %w", err)
 			}
@@ -259,8 +270,7 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 			return nil
 		}
 
-		stateProvider, err := NewRPCStateProvider(ctx, chainID, initialHeight, r.cfg.RPCServers, r.cfg.TrustHeight,
-			spLogger, r.dashCoreClient)
+		stateProvider, err := NewRPCStateProvider(ctx, chainID, initialHeight, r.cfg.RPCServers, spLogger, r.dashCoreClient)
 		if err != nil {
 			return fmt.Errorf("failed to initialize RPC state provider: %w", err)
 		}
@@ -279,8 +289,21 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 	if r.needsStateSync {
 		r.logger.Info("starting state sync")
 		if _, err := r.Sync(ctx); err != nil {
-			r.logger.Error("state sync failed; shutting down this node", "error", err)
-			return err
+			if errors.Is(err, errNoSnapshots) && r.postSyncHook != nil {
+				r.logger.Warn("no snapshots available; falling back to block sync", "err", err)
+
+				state, err := r.stateStore.Load()
+				if err != nil {
+					return fmt.Errorf("failed to load state: %w", err)
+				}
+
+				if err := r.postSyncHook(ctx, state); err != nil {
+					return fmt.Errorf("post sync failed: %w", err)
+				}
+			} else {
+				r.logger.Error("state sync failed; shutting down this node", "err", err)
+				return err
+			}
 		}
 	}
 
@@ -311,7 +334,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 
 	// We need at least two peers (for cross-referencing of light blocks) before we can
 	// begin state sync
-	if err := r.waitForEnoughPeers(ctx, 2); err != nil {
+	if err := r.waitForEnoughPeers(ctx, minPeers); err != nil {
 		return sm.State{}, fmt.Errorf("wait for peers: %w", err)
 	}
 
@@ -329,7 +352,7 @@ func (r *Reactor) Sync(ctx context.Context) (sm.State, error) {
 	}
 	r.getSyncer().SetStateProvider(r.stateProvider)
 
-	state, commit, err := r.syncer.SyncAny(ctx, r.cfg.DiscoveryTime, r.requestSnaphot)
+	state, commit, err := r.syncer.SyncAny(ctx, r.cfg.DiscoveryTime, r.cfg.Retries, r.requestSnapshot)
 	if err != nil {
 		return sm.State{}, fmt.Errorf("sync any: %w", err)
 	}
@@ -423,6 +446,9 @@ func (r *Reactor) Backfill(ctx context.Context, state sm.State) error {
 	params := state.ConsensusParams.Evidence
 	stopHeight := state.LastBlockHeight - params.MaxAgeNumBlocks
 	stopTime := state.LastBlockTime.Add(-params.MaxAgeDuration)
+	// To make tests on mainnet faster, we can use:
+	// stopHeight := state.LastBlockHeight - 500
+	// stopTime := state.LastBlockTime.Add(-24 * time.Hour)
 	// ensure that stop height doesn't go below the initial height
 	if stopHeight < state.InitialHeight {
 		stopHeight = state.InitialHeight
@@ -696,7 +722,7 @@ func (r *Reactor) handleSnapshotMessage(ctx context.Context, envelope *p2p.Envel
 			"version", msg.Version)
 
 	default:
-		return fmt.Errorf("received unknown message: %T", msg)
+		return fmt.Errorf("handleSnapshotMessage received unknown message: %T", msg)
 	}
 
 	return nil
@@ -777,7 +803,7 @@ func (r *Reactor) handleChunkMessage(ctx context.Context, envelope *p2p.Envelope
 		}
 
 	default:
-		return fmt.Errorf("received unknown message: %T", msg)
+		return fmt.Errorf("handleChunkMessage received unknown message: %T", msg)
 	}
 
 	return nil
@@ -838,7 +864,7 @@ func (r *Reactor) handleLightBlockMessage(ctx context.Context, envelope *p2p.Env
 		}
 
 	default:
-		return fmt.Errorf("received unknown message: %T", msg)
+		return fmt.Errorf("handleLightBlockMessage received unknown message: %T", msg)
 	}
 
 	return nil
@@ -848,7 +874,7 @@ func (r *Reactor) handleParamsMessage(ctx context.Context, envelope *p2p.Envelop
 	switch msg := envelope.Message.(type) {
 	case *ssproto.ParamsRequest:
 		r.logger.Debug("received consensus params request", "height", msg.Height)
-		cp, err := r.stateStore.LoadConsensusParams(int64(msg.Height))
+		cp, err := r.stateStore.LoadConsensusParams(tmmath.MustConvertInt64(msg.Height))
 		if err != nil {
 			r.logger.Error("failed to fetch requested consensus params",
 				"height", msg.Height,
@@ -886,7 +912,7 @@ func (r *Reactor) handleParamsMessage(ctx context.Context, envelope *p2p.Envelop
 		}
 
 	default:
-		return fmt.Errorf("received unknown message: %T", msg)
+		return fmt.Errorf("handleParamsMessage received unknown message: %T", msg)
 	}
 
 	return nil
@@ -971,7 +997,7 @@ func (r *Reactor) processChannels(ctx context.Context, chanTable map[p2p.Channel
 // processPeerUpdate processes a PeerUpdate, returning an error upon failing to
 // handle the PeerUpdate or if a panic is recovered.
 func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpdate) {
-	r.logger.Info("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
+	r.logger.Trace("received peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 
 	switch peerUpdate.Status {
 	case p2p.PeerStatusUp:
@@ -980,7 +1006,7 @@ func (r *Reactor) processPeerUpdate(ctx context.Context, peerUpdate p2p.PeerUpda
 		r.processPeerDown(ctx, peerUpdate)
 	}
 
-	r.logger.Info("processed peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
+	r.logger.Trace("processed peer update", "peer", peerUpdate.NodeID, "status", peerUpdate.Status)
 }
 
 func (r *Reactor) processPeerUp(ctx context.Context, peerUpdate p2p.PeerUpdate) {
@@ -1038,6 +1064,12 @@ func (r *Reactor) processPeerUpdates(ctx context.Context, peerUpdates *p2p.PeerU
 
 // recentSnapshots fetches the n most recent snapshots from the app
 func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, error) {
+	// if we don't have current state, we don't return any snapshots
+	if r.csState == nil {
+		return []*snapshot{}, nil
+	}
+	currentHeight := r.csState.GetCurrentHeight()
+
 	resp, err := r.conn.ListSnapshots(ctx, &abci.RequestListSnapshots{})
 	if err != nil {
 		return nil, err
@@ -1063,6 +1095,14 @@ func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, e
 			break
 		}
 
+		// we only accept snapshots where next block is already finalized, that is we are voting
+		// for `height + 2` or higher, because we need to be able to fetch light block containing
+		// commit for `height` from block store (which is stored in block `height+1`)
+		if tmmath.MustConvertInt64(s.Height) >= currentHeight-2 {
+			r.logger.Debug("snapshot too new, skipping", "height", s.Height, "state_height", currentHeight)
+			continue
+		}
+
 		snapshots = append(snapshots, &snapshot{
 			Height:   s.Height,
 			Version:  s.Version,
@@ -1077,7 +1117,7 @@ func (r *Reactor) recentSnapshots(ctx context.Context, n uint32) ([]*snapshot, e
 // fetchLightBlock works out whether the node has a light block at a particular
 // height and if so returns it so it can be gossiped to peers
 func (r *Reactor) fetchLightBlock(height uint64) (*types.LightBlock, error) {
-	h := int64(height)
+	h := tmmath.MustConvertInt64(height)
 
 	blockMeta := r.blockStore.LoadBlockMeta(h)
 	if blockMeta == nil {

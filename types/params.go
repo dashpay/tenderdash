@@ -69,7 +69,8 @@ type EvidenceParams struct {
 // ValidatorParams restrict the public key types validators can use.
 // NOTE: uses ABCI pubkey naming, not Amino names.
 type ValidatorParams struct {
-	PubKeyTypes []string `json:"pub_key_types"`
+	PubKeyTypes          []string `json:"pub_key_types"`
+	VotingPowerThreshold *uint64  `json:"threshold,omitempty"`
 }
 
 type VersionParams struct {
@@ -141,7 +142,8 @@ func DefaultEvidenceParams() EvidenceParams {
 // only bls12381 pubkeys.
 func DefaultValidatorParams() ValidatorParams {
 	return ValidatorParams{
-		PubKeyTypes: []string{ABCIPubKeyTypeBLS12381},
+		PubKeyTypes:          []string{ABCIPubKeyTypeBLS12381},
+		VotingPowerThreshold: nil,
 	}
 }
 
@@ -237,6 +239,44 @@ func (val *ValidatorParams) IsValidPubkeyType(pubkeyType string) bool {
 		}
 	}
 	return false
+}
+
+func (val *ValidatorParams) ToProto() *tmproto.ValidatorParams {
+	if val == nil {
+		return nil
+	}
+
+	params := tmproto.ValidatorParams{
+		PubKeyTypes: val.PubKeyTypes,
+	}
+
+	if val.VotingPowerThreshold != nil {
+		params.XVotingPowerThreshold = &tmproto.ValidatorParams_VotingPowerThreshold{
+			VotingPowerThreshold: *val.VotingPowerThreshold,
+		}
+	}
+
+	return &params
+}
+
+// ValidatorParamsFromProto returns a ValidatorParams from a protobuf representation.
+// If pbValParams is nil, it returns a ValidatorParams with empty PubKeyTypes and 0 VotingPowerThreshold.
+func ValidatorParamsFromProto(pbValParams *tmproto.ValidatorParams) ValidatorParams {
+	var params = ValidatorParams{
+		PubKeyTypes: []string{},
+	}
+
+	if pbValParams != nil {
+		if pbValParams.XVotingPowerThreshold != nil {
+			val := pbValParams.GetVotingPowerThreshold()
+			params.VotingPowerThreshold = &val
+		}
+		// Copy Validator.PubkeyTypes, and set result's value to the copy.
+		// This avoids having to initialize the slice to 0 values, and then write to it again.
+		params.PubKeyTypes = append(params.PubKeyTypes, pbValParams.PubKeyTypes...)
+	}
+
+	return params
 }
 
 func (params *ConsensusParams) Complete() {
@@ -392,9 +432,7 @@ func (params ConsensusParams) UpdateConsensusParams(params2 *tmproto.ConsensusPa
 		res.Evidence.MaxBytes = params2.Evidence.MaxBytes
 	}
 	if params2.Validator != nil {
-		// Copy params2.Validator.PubkeyTypes, and set result's value to the copy.
-		// This avoids having to initialize the slice to 0 values, and then write to it again.
-		res.Validator.PubKeyTypes = append([]string{}, params2.Validator.PubKeyTypes...)
+		res.Validator = ValidatorParamsFromProto(params2.Validator)
 	}
 	if params2.Version != nil {
 		res.Version.AppVersion = params2.Version.AppVersion
@@ -439,9 +477,7 @@ func (params *ConsensusParams) ToProto() tmproto.ConsensusParams {
 			MaxAgeDuration:  params.Evidence.MaxAgeDuration,
 			MaxBytes:        params.Evidence.MaxBytes,
 		},
-		Validator: &tmproto.ValidatorParams{
-			PubKeyTypes: params.Validator.PubKeyTypes,
-		},
+		Validator: params.Validator.ToProto(),
 		Version: &tmproto.VersionParams{
 			AppVersion:       params.Version.AppVersion,
 			ConsensusVersion: tmproto.VersionParams_ConsensusVersion(params.Version.ConsensusVersion),
@@ -482,8 +518,13 @@ func ConsensusParamsFromProto(pbParams tmproto.ConsensusParams) ConsensusParams 
 	}
 
 	if pbParams.Validator != nil {
+		var threshold *uint64
+		if n, ok := pbParams.Validator.XVotingPowerThreshold.(*tmproto.ValidatorParams_VotingPowerThreshold); ok && n != nil {
+			threshold = &n.VotingPowerThreshold
+		}
 		c.Validator = ValidatorParams{
-			PubKeyTypes: pbParams.Validator.PubKeyTypes,
+			PubKeyTypes:          append([]string{}, pbParams.Validator.PubKeyTypes...),
+			VotingPowerThreshold: threshold,
 		}
 	}
 

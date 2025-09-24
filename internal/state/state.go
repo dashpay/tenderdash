@@ -9,7 +9,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/dashpay/tenderdash/dash"
 	selectproposer "github.com/dashpay/tenderdash/internal/consensus/versioned/selectproposer"
@@ -382,8 +382,13 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 	}
 
 	var validatorSet *types.ValidatorSet
+	var valParams *types.ValidatorParams
+	if genDoc.ConsensusParams != nil {
+		valParams = &genDoc.ConsensusParams.Validator
+	}
+
 	if len(genDoc.Validators) == 0 {
-		validatorSet = types.NewValidatorSet(nil, nil, genDoc.QuorumType, nil, false)
+		validatorSet = types.NewValidatorSet(nil, nil, genDoc.QuorumType, nil, false, valParams)
 	} else {
 		validators := make([]*types.Validator, len(genDoc.Validators))
 		hasAllPublicKeys := true
@@ -394,7 +399,7 @@ func MakeGenesisState(genDoc *types.GenesisDoc) (State, error) {
 			}
 		}
 		validatorSet = types.NewValidatorSet(
-			validators, genDoc.ThresholdPublicKey, genDoc.QuorumType, genDoc.QuorumHash, hasAllPublicKeys,
+			validators, genDoc.ThresholdPublicKey, genDoc.QuorumType, genDoc.QuorumHash, hasAllPublicKeys, valParams,
 		)
 	}
 

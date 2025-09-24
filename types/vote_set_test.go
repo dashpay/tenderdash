@@ -513,6 +513,7 @@ func TestVoteSet_LLMQType_50_60(t *testing.T) {
 				tt.numValidators,
 				tt.llmqType,
 				tt.threshold,
+				nil,
 			)
 			assert.EqualValues(t, tt.threshold, valSet.QuorumTypeThresholdCount())
 			assert.GreaterOrEqual(t, len(privValidators), tt.threshold+3,
@@ -544,6 +545,103 @@ func TestVoteSet_LLMQType_50_60(t *testing.T) {
 			blockMaj, anyMaj = castVote(t, votedBlock, height, round, privValidators, int32(tt.threshold+2), voteSet)
 			assert.True(t, blockMaj, "block majority expected")
 			assert.True(t, anyMaj, "'any' majority expected")
+		})
+	}
+}
+
+// Given a set of validators and a threshold defined in ValidatorParams,
+// when votes are cast,
+// then the threshold from ValidatorParams is respected.
+func TestVoteSet_ValidatorParams_Threshold(t *testing.T) {
+	const (
+		height = int64(1)
+		round  = int32(0)
+	)
+	testCases := []struct {
+		llmqType      btcjson.LLMQType
+		numValidators int
+		threshold     int
+	}{
+		{ // single node network
+			llmqType:      btcjson.LLMQType_100_67,
+			numValidators: 1,
+			threshold:     1,
+		},
+		{ // two node network
+			llmqType:      btcjson.LLMQType_100_67,
+			numValidators: 2,
+			threshold:     2,
+		},
+		{ // full network but threshold 2
+			llmqType:      btcjson.LLMQType_100_67,
+			numValidators: 100,
+			threshold:     2,
+		},
+		{ // full network but threshold 3
+			llmqType:      btcjson.LLMQType_100_67,
+			numValidators: 100,
+			threshold:     3,
+		},
+		{ // normal network
+			llmqType:      btcjson.LLMQType_100_67,
+			numValidators: 100,
+			threshold:     67,
+		},
+		{ // network below threshold
+			llmqType:      btcjson.LLMQType_100_67,
+			numValidators: 67,
+			threshold:     67,
+		},
+	}
+
+	for ti, tt := range testCases {
+		name := strconv.Itoa(ti)
+		t.Run(name, func(t *testing.T) {
+			threshold := uint64(int64(tt.threshold) * DefaultDashVotingPower)
+			params := ValidatorParams{
+				VotingPowerThreshold: &threshold,
+			}
+			voteSet, _, privValidators := randVoteSetWithLLMQType(
+				height,
+				round,
+				tmproto.PrevoteType,
+				tt.numValidators,
+				tt.llmqType,
+				tt.threshold,
+				&params,
+			)
+			blockHash := crypto.CRandBytes(32)
+			stateID := RandStateID()
+			blockPartSetHeader := PartSetHeader{uint32(123), crypto.CRandBytes(32)}
+			votedBlock := BlockID{blockHash, blockPartSetHeader, stateID.Hash()}
+
+			// below threshold
+			for i := 0; i < tt.threshold-1; i++ {
+				blockMaj, anyMaj := castVote(t, votedBlock, height, round, privValidators, int32(i), voteSet)
+				assert.False(t, blockMaj, "no block majority expected here: i=%d, threshold=%d", i, tt.threshold)
+				assert.False(t, anyMaj, "no 'any' majority expected here: i=%d, threshold=%d", i, tt.threshold)
+			}
+
+			// we add null vote
+			if tt.numValidators > tt.threshold {
+				// we add null vote
+				blockMaj, anyMaj := castVote(t, BlockID{}, height, round, privValidators, int32(tt.threshold), voteSet)
+				assert.False(t, blockMaj, "no block majority expected after nil vote")
+				assert.True(t, anyMaj, "'any' majority expected  after nil vote at threshold")
+
+			}
+			if tt.numValidators > tt.threshold+1 {
+				// at threshold
+				blockMaj, anyMaj := castVote(t, votedBlock, height, round, privValidators, int32(tt.threshold+1), voteSet)
+				assert.True(t, blockMaj, "block majority expected")
+				assert.True(t, anyMaj, "'any' majority expected")
+			}
+			// above threshold
+			if tt.numValidators > tt.threshold+2 {
+				blockMaj, anyMaj := castVote(t, votedBlock, height, round, privValidators, int32(tt.threshold+2), voteSet)
+				assert.True(t, blockMaj, "block majority expected")
+				assert.True(t, anyMaj, "'any' majority expected")
+			}
 		})
 	}
 }
@@ -619,6 +717,7 @@ func randVoteSetWithLLMQType(
 	numValidators int,
 	llmqType btcjson.LLMQType,
 	threshold int,
+	params *ValidatorParams,
 ) (*VoteSet, *ValidatorSet, []PrivValidator) {
 	valz := make([]*Validator, 0, numValidators)
 	privValidators := make([]PrivValidator, 0, numValidators)
@@ -640,7 +739,7 @@ func randVoteSetWithLLMQType(
 
 	sort.Sort(PrivValidatorsByProTxHash(privValidators))
 
-	valSet := NewValidatorSet(valz, ld.ThresholdPubKey, llmqType, quorumHash, true)
+	valSet := NewValidatorSet(valz, ld.ThresholdPubKey, llmqType, quorumHash, true, params)
 	voteSet := NewVoteSet("test_chain_id", height, round, signedMsgType, valSet)
 
 	return voteSet, valSet, privValidators

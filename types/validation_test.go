@@ -23,7 +23,7 @@ func TestValidatorSet_VerifyCommit_All(t *testing.T) {
 		pubKey     = privKey.PubKey()
 		v1         = NewValidatorDefaultVotingPower(pubKey, proTxHash)
 		quorumHash = crypto.RandQuorumHash()
-		vset       = NewValidatorSet([]*Validator{v1}, v1.PubKey, btcjson.LLMQType_5_60, quorumHash, true)
+		vset       = NewValidatorSet([]*Validator{v1}, v1.PubKey, btcjson.LLMQType_5_60, quorumHash, true, nil)
 
 		chainID = "Lalande21185"
 	)

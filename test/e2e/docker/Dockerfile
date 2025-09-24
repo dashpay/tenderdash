@@ -1,6 +1,6 @@
 ## Stage 1 and 2 is copied from /DOCKER/Dockerfile
-ARG ALIPNE_VERSION=3.19
-ARG GOLANG_VERSION=1.23.2
+ARG ALIPNE_VERSION=3.21
+ARG GOLANG_VERSION=1.25.1
 #################################
 # STAGE 1: install dependencies #
 #################################
@@ -46,7 +46,7 @@ FROM deps AS e2e
 WORKDIR /src/tenderdash
 
 # Install DLV debugger
-ENV DEBUG ""
+ENV DEBUG=""
 COPY --from=delve /go/bin/dlv /go/bin/dlv
 
 LABEL maintainer="developers@dash.org"
@@ -56,7 +56,7 @@ LABEL maintainer="developers@dash.org"
 # private validator file into /tenderdash/config.
 #
 # The /tenderdash/data dir is used by tenderdash to store state.
-ENV TMHOME /tenderdash
+ENV TMHOME=/tenderdash
 
 # Copy Tenderdash source
 # Avoid overwriting third-party libs

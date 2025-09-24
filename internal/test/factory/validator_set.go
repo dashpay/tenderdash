@@ -44,5 +44,12 @@ func MockValidatorSet() (*types.ValidatorSet, []types.PrivValidator) {
 			false,
 		)
 	}
-	return types.NewValidatorSet(valz, thPubKey, btcjson.LLMQType_5_60, quorumHash, true), privVals
+	votingPowerThreshold := uint64(len(valz)) * uint64(types.DefaultDashVotingPower)
+	return types.NewValidatorSet(valz,
+		thPubKey,
+		btcjson.LLMQType_5_60,
+		quorumHash,
+		true,
+		&types.ValidatorParams{VotingPowerThreshold: &votingPowerThreshold},
+	), privVals
 }

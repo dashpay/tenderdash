@@ -99,14 +99,14 @@ func setup(ctx context.Context, t *testing.T, stateStores []sm.Store) *reactorTe
 		rts.network.Nodes[nodeID].PeerManager.Register(ctx, pu)
 		rts.nodes = append(rts.nodes, rts.network.Nodes[nodeID])
 
-		chCreator := func(ctx context.Context, chdesc *p2p.ChannelDescriptor) (p2p.Channel, error) {
+		chCreator := func(_ctx context.Context, _chDesc *p2p.ChannelDescriptor) (p2p.Channel, error) {
 			return rts.evidenceChannels[nodeID], nil
 		}
 
 		rts.reactors[nodeID] = evidence.NewReactor(
 			logger,
 			chCreator,
-			func(ctx context.Context, _ string) *p2p.PeerUpdates { return pu },
+			func(_ctx context.Context, _ string) *p2p.PeerUpdates { return pu },
 			rts.pools[nodeID])
 
 		require.NoError(t, rts.reactors[nodeID].Start(ctx))
@@ -550,6 +550,7 @@ func TestEvidenceListSerialization(t *testing.T) {
 		btcjson.LLMQType_5_60,
 		crypto.RandQuorumHash(),
 		true,
+		nil,
 	)
 
 	dupl, err := types.NewDuplicateVoteEvidence(

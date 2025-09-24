@@ -6,8 +6,8 @@ package crypto
 import (
 	bytes "bytes"
 	fmt "fmt"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/cosmos/gogoproto/gogoproto"
+	proto "github.com/cosmos/gogoproto/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -425,6 +425,9 @@ func (m *PublicKey) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PublicKey) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -447,6 +450,9 @@ func (m *PublicKey_Ed25519) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PublicKey_Ed25519) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Ed25519 != nil {
 		i -= len(m.Ed25519)
@@ -463,6 +469,9 @@ func (m *PublicKey_Secp256K1) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PublicKey_Secp256K1) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Secp256K1 != nil {
 		i -= len(m.Secp256K1)
@@ -479,6 +488,9 @@ func (m *PublicKey_Bls12381) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PublicKey_Bls12381) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	if m.Bls12381 != nil {
 		i -= len(m.Bls12381)

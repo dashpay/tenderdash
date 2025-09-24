@@ -5,8 +5,8 @@ package p2p
 
 import (
 	fmt "fmt"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/cosmos/gogoproto/gogoproto"
+	proto "github.com/cosmos/gogoproto/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -190,6 +190,9 @@ func (m *PexAddress) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PexAddress) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -220,6 +223,9 @@ func (m *PexRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PexRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -243,6 +249,9 @@ func (m *PexResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PexResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

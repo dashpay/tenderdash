@@ -1,6 +1,8 @@
 package statesync
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
@@ -8,6 +10,8 @@ import (
 	"time"
 
 	sync "github.com/sasha-s/go-deadlock"
+
+	tmsync "github.com/dashpay/tenderdash/internal/libs/sync"
 
 	"github.com/dashpay/tenderdash/libs/bytes"
 	"github.com/dashpay/tenderdash/types"
@@ -62,6 +66,22 @@ type (
 		doneCount int
 	}
 )
+
+// Filename updates `chunkItem.file` with an absolute path to file containing the the chunk and returns it.
+// If the filename is already set, it isn't changed.
+//
+// Returns error if the filename cannot be created.
+//
+// Caller must ensure only one goroutine calls this method at a time, eg. by holding the mutex lock.
+func (c *chunkItem) Filename(parentDir string) (string, error) {
+	var err error
+	if c.file == "" {
+		hash := sha256.Sum256(c.chunkID)
+		filename := hex.EncodeToString(hash[:])
+		c.file, err = filepath.Abs(filepath.Join(parentDir, filename))
+	}
+	return c.file, err
+}
 
 // newChunkQueue creates a new chunk requestQueue for a snapshot, using a temp dir for storage.
 // Callers must call Close() when done.
@@ -133,36 +153,56 @@ func (q *chunkQueue) dequeue() (bytes.HexBytes, error) {
 
 // Add adds a chunk to the queue. It ignores chunks that already exist, returning false.
 func (q *chunkQueue) Add(chunk *chunk) (bool, error) {
-	if chunk == nil || chunk.Chunk == nil {
+	if chunk == nil {
 		return false, errChunkNil
 	}
-	q.mtx.Lock()
-	defer q.mtx.Unlock()
-	if q.snapshot == nil {
-		return false, errNilSnapshot
+
+	// empty chunk content is allowed, but we ensure it's not nil
+	data := chunk.Chunk
+	if data == nil {
+		data = []byte{}
 	}
-	chunkIDKey := chunk.ID.String()
-	item, ok := q.items[chunkIDKey]
-	if !ok {
-		return false, fmt.Errorf("failed to add the chunk %x, it was never requested", chunk.ID)
+
+	unlockFn := tmsync.LockGuard(&q.mtx)
+	defer unlockFn()
+
+	item, err := q.getItem(chunk.ID)
+	if err != nil {
+		return false, fmt.Errorf("get chunk %x: %w", chunk.ID, err)
 	}
+
 	if item.status != inProgressStatus && item.status != discardedStatus {
+		// chunk either already exists, or we didn't request it yet, so we ignore it
 		return false, nil
 	}
-	err := q.validateChunk(chunk)
+
+	err = q.validateChunk(chunk)
 	if err != nil {
-		return false, err
+		return false, fmt.Errorf("validate chunk %x: %w", chunk.ID, err)
 	}
-	item.file = filepath.Join(q.dir, chunkIDKey)
-	err = item.write(chunk.Chunk)
+
+	// ensure filename is set on the item
+	_, err = item.Filename(q.dir)
+	if err != nil {
+		return false, fmt.Errorf("failed to get filename for chunk %x: %w", chunk.ID, err)
+	}
+
+	err = item.write(data)
 	if err != nil {
 		return false, err
 	}
 	item.sender = chunk.Sender
 	item.status = receivedStatus
+
+	// unlock before sending to applyCh to avoid blocking/deadlock on the applyCh
+	unlockFn()
+
 	q.applyCh <- chunk.ID
 	// Signal any waiters that the chunk has arrived.
+	q.mtx.Lock()
 	item.closeWaitChs(true)
+	q.mtx.Unlock()
+
 	return true, nil
 }
 
@@ -284,8 +324,25 @@ func (q *chunkQueue) Next() (*chunk, error) {
 		q.doneCount++
 		return loadedChunk, nil
 	case <-time.After(chunkTimeout):
-		return nil, errTimeout
+		// Locking is done inside q.Pending
+		pendingChunks := len(q.Pending())
+		return nil, fmt.Errorf("timed out waiting for %d chunks: %w", pendingChunks, errTimeout)
 	}
+}
+
+// Pending returns a list of all chunks that have been requested but not yet received.
+func (q *chunkQueue) Pending() []bytes.HexBytes {
+	q.mtx.Lock()
+	defer q.mtx.Unlock()
+
+	// get all keys from the map that don't have a status of received
+	waiting := make([]bytes.HexBytes, 0, len(q.items))
+	for _, item := range q.items {
+		if item.status == initStatus || item.status == inProgressStatus {
+			waiting = append(waiting, item.chunkID)
+		}
+	}
+	return waiting
 }
 
 // Retry schedules a chunk to be retried, without refetching it.
@@ -296,12 +353,13 @@ func (q *chunkQueue) Retry(chunkID bytes.HexBytes) {
 }
 
 func (q *chunkQueue) retry(chunkID bytes.HexBytes) {
-	item, ok := q.items[chunkID.String()]
+	chunkKey := chunkID.String()
+	item, ok := q.items[chunkKey]
 	if !ok || (item.status != receivedStatus && item.status != doneStatus) {
 		return
 	}
 	q.requestQueue = append(q.requestQueue, chunkID)
-	q.items[chunkID.String()].status = initStatus
+	q.items[chunkKey].status = initStatus
 }
 
 // RetryAll schedules all chunks to be retried, without refetching them.
@@ -345,6 +403,23 @@ func (q *chunkQueue) DoneChunksCount() int {
 	return q.doneCount
 }
 
+// getItem fetches chunk item from the items map. If the item is not found, it returns an error.
+// The caller must hold the mutex lock.
+func (q *chunkQueue) getItem(chunkID bytes.HexBytes) (*chunkItem, error) {
+	if q.snapshot == nil {
+		return nil, errNilSnapshot
+	}
+	chunkIDKey := chunkID.String()
+	item, ok := q.items[chunkIDKey]
+	if !ok {
+		return nil, fmt.Errorf("chunk %x not found", chunkID)
+	}
+
+	return item, nil
+}
+
+// validateChunk checks if the chunk is expected and valid for the current snapshot
+// The caller must hold the mutex lock.
 func (q *chunkQueue) validateChunk(chunk *chunk) error {
 	if chunk.Height != q.snapshot.Height {
 		return fmt.Errorf("invalid chunk height %v, expected %v",

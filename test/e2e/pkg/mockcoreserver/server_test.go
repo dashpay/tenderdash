@@ -85,7 +85,7 @@ func TestDashCoreSignerPingMethod(t *testing.T) {
 	assert.NoError(t, err)
 	client, err := privval.NewDashCoreSignerClient(dashCoreRPCClient, btcjson.LLMQType_5_60, logger)
 	assert.NoError(t, err)
-	err = client.Ping()
+	err = client.Ping(ctx)
 	assert.NoError(t, err)
 	srv.Stop(ctx)
 }

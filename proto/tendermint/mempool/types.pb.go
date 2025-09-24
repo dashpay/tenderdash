@@ -5,7 +5,7 @@ package mempool
 
 import (
 	fmt "fmt"
-	proto "github.com/gogo/protobuf/proto"
+	proto "github.com/cosmos/gogoproto/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -102,6 +102,9 @@ func (m *Txs) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Txs) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

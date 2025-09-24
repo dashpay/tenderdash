@@ -83,7 +83,7 @@ func GenerateValidatorSet(valParams []ValSetParam, opts ...ValSetOptionFunc) (*V
 		valz = append(valz, NewValidator(qks.PubKey, opt.VotingPower, proTxHash, ""))
 	}
 	sort.Sort(PrivValidatorsByProTxHash(privValidators))
-	return NewValidatorSet(valz, ld.ThresholdPubKey, crypto.SmallQuorumType(), quorumHash, true), privValidators
+	return NewValidatorSet(valz, ld.ThresholdPubKey, crypto.SmallQuorumType(), quorumHash, true, nil), privValidators
 }
 
 // MakeGenesisValsFromValidatorSet converts ValidatorSet data into a list of GenesisValidator

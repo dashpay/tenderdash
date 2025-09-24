@@ -342,9 +342,20 @@ func (r *BlockReplayer) execInitChain(ctx context.Context, rs *replayState, stat
 		quorumType = r.genDoc.QuorumType
 	}
 
+	var valParams *types.ValidatorParams
+	if res.ConsensusParams != nil && res.ConsensusParams.Validator != nil {
+		params := types.ValidatorParamsFromProto(res.ConsensusParams.Validator)
+		valParams = &params
+	} else {
+		valParams = &r.genDoc.ConsensusParams.Validator
+	}
+
 	if len(res.ValidatorSetUpdate.ValidatorUpdates) != 0 {
 		// we replace existing validator with the one from InitChain instead of applying it as a diff
-		state.Validators = types.NewValidatorSet(nil, nil, quorumType, nil, false)
+		state.Validators = types.NewValidatorSet(nil, nil, quorumType, nil, false, valParams)
+		// } else if valParams != nil && valParams.VotingPowerThreshold != nil {
+		// 	// we update the existing validator set with the new voting threshold
+		// 	state.Validators.VotingPowerThreshold = *valParams.VotingPowerThreshold
 	}
 
 	// we only update state when we are in initial state
@@ -401,11 +412,18 @@ func validatorSetUpdateFromGenesis(genDoc *types.GenesisDoc) (*abci.ValidatorSet
 			return nil, fmt.Errorf("blockReplayer blocks error when validating validator: %s", err)
 		}
 	}
+
+	var validatorParams types.ValidatorParams
+	if genDoc.ConsensusParams != nil {
+		validatorParams = genDoc.ConsensusParams.Validator
+	}
+
 	validatorSet := types.NewValidatorSetCheckPublicKeys(
 		validators,
 		genDoc.ThresholdPublicKey,
 		genDoc.QuorumType,
 		genDoc.QuorumHash,
+		&validatorParams,
 	)
 	err := validatorSet.ValidateBasic()
 	if err != nil {

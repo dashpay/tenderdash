@@ -28,7 +28,7 @@ jobs:
     env:
       PLATFORMS: ${{ github.event_name == 'release' && 'linux/amd64,linux/arm64' || github.event.inputs.platforms }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@master
@@ -36,17 +36,17 @@ jobs:
           platforms: all
 
       - name: Set up Docker Build
-        uses: docker/setup-buildx-action@v3.7.1
+        uses: docker/setup-buildx-action@v3.11.1
 
       - name: Login to DockerHub
         if: ${{ github.event_name != 'pull_request' }}
-        uses: docker/login-action@v3.2.0
+        uses: docker/login-action@v3.5.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Set suffix to Docker tags
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         id: suffix
         if: ${{ github.event.release != null }}
         with:
@@ -54,7 +54,7 @@ jobs:
           script: "return (context.payload.release.tag_name.includes('-dev') ? '-dev' : '');"
 
       - name: Determine TENDERMINT_BUILD_OPTIONS
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         id: TENDERMINT_BUILD_OPTIONS
         with:
           result-encoding: string
@@ -86,7 +86,7 @@ jobs:
       # on Docker Hub, as Github caches are not available for other branches.
       - name: Build and cache image with dependencies
         id: docker_bls
-        uses: docker/build-push-action@v6.10.0
+        uses: docker/build-push-action@v6.18.0
         with:
           context: .
           file: ./DOCKER/Dockerfile
@@ -102,7 +102,7 @@ jobs:
 
       - name: Publish to Docker Hub
         id: docker_build
-        uses: docker/build-push-action@v6.10.0
+        uses: docker/build-push-action@v6.18.0
         with:
           context: .
           file: ./DOCKER/Dockerfile

@@ -198,6 +198,9 @@ func TestInitChainGenesisTime(t *testing.T) {
 		QuorumHash:         make([]byte, 32),
 		GenesisTime:        time.Date(1999, 1, 1, 0, 0, 0, 0, time.UTC),
 	}
+	// We must synchronize genesis validator set voting threshold with the one from the validator set.
+	// In normal cicrumstances, the threshold is set in genesis or in ResponseInitChain.
+	genDoc.ConsensusParams.Validator.VotingPowerThreshold = &vset.VotingPowerThreshold
 
 	err = genDoc.ValidateAndComplete()
 	require.NoError(t, err)

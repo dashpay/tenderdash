@@ -5,9 +5,10 @@ import (
 	"math/big"
 	"testing"
 
+	ecdsa "github.com/btcsuite/btcd/btcec/v2/ecdsa"
 	"github.com/stretchr/testify/require"
 
-	secp256k1 "github.com/btcsuite/btcd/btcec"
+	secp256k1 "github.com/btcsuite/btcd/btcec/v2"
 )
 
 func Test_genPrivKey(t *testing.T) {
@@ -54,16 +55,22 @@ func TestSignatureVerificationAndRejectUpperS(t *testing.T) {
 		priv := GenPrivKey()
 		sigStr, err := priv.Sign(msg)
 		require.NoError(t, err)
-		sig := signatureFromBytes(sigStr)
-		require.False(t, sig.S.Cmp(secp256k1halfN) > 0)
+		sig, err := signatureFromBytes(sigStr)
+		require.NoError(t, err)
+		s := sig.S()
+		require.False(t, s.IsOverHalfOrder())
 
 		pub := priv.PubKey()
 		require.True(t, pub.VerifySignature(msg, sigStr))
 
 		// malleate:
-		sig.S.Sub(secp256k1.S256().CurveParams.N, sig.S)
-		require.True(t, sig.S.Cmp(secp256k1halfN) > 0)
-		malSigStr := serializeSig(sig)
+		n := secp256k1.ModNScalar{}
+		n.SetByteSlice(secp256k1.S256().N.Bytes())
+		s.Add2(&n, s.Negate())
+		require.True(t, s.IsOverHalfOrder())
+		r := sig.R()
+		malSig := ecdsa.NewSignature(&r, &s)
+		malSigStr := serializeSig(malSig)
 
 		require.False(t, pub.VerifySignature(msg, malSigStr),
 			"VerifyBytes incorrect with malleated & invalid S. sig=%v, key=%v",

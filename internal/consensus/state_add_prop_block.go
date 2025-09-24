@@ -6,7 +6,7 @@ import (
 	"fmt"
 	"io"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"

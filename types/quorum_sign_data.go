@@ -11,6 +11,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmmath "github.com/dashpay/tenderdash/libs/math"
 	"github.com/dashpay/tenderdash/proto/tendermint/types"
 )
 
@@ -161,7 +162,7 @@ func (i *SignItem) Validate() error {
 	if len(i.MsgHash) != crypto.DefaultHashSize {
 		return fmt.Errorf("invalid hash size %d: %X", len(i.MsgHash), i.MsgHash)
 	}
-	if len(i.QuorumHash) != crypto.DefaultHashSize {
+	if len(i.QuorumHash) != crypto.QuorumHashSize {
 		return fmt.Errorf("invalid quorum hash size %d: %X", len(i.QuorumHash), i.QuorumHash)
 	}
 	// Msg is optional
@@ -179,7 +180,7 @@ func (i SignItem) MarshalZerologObject(e *zerolog.Event) {
 	e.Hex("signID", i.SignHash)
 	e.Hex("msgHash", i.MsgHash)
 	e.Hex("quorumHash", i.QuorumHash)
-	e.Uint8("llmqType", uint8(i.LlmqType))
+	e.Uint8("llmqType", tmmath.MustConvertUint8(i.LlmqType))
 
 }
 
@@ -247,7 +248,7 @@ func (i *SignItem) UpdateSignHash(reverse bool) {
 	// fmt.Printf("RequestID: %x + ", blsRequestID)
 	// fmt.Printf("MsgHash: %x\n", blsMessageHash)
 
-	blsSignHash := bls.BuildSignHash(uint8(llmqType), blsQuorumHash, blsRequestID, blsMessageHash)
+	blsSignHash := bls.BuildSignHash(tmmath.MustConvertUint8(llmqType), blsQuorumHash, blsRequestID, blsMessageHash)
 
 	signHash := make([]byte, 32)
 	copy(signHash, blsSignHash[:])

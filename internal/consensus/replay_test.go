@@ -13,9 +13,9 @@ import (
 	"time"
 
 	dbm "github.com/cometbft/cometbft-db"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/dashpay/dashd-go/btcjson"
 	"github.com/fortytw2/leaktest"
-	"github.com/gogo/protobuf/proto"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -1282,6 +1282,7 @@ func TestHandshakeUpdatesValidators(t *testing.T) {
 		btcjson.LLMQType_5_60,
 		randQuorumHash,
 		true,
+		nil,
 	)
 	abciValidatorSetUpdates := types.TM2PB.ValidatorUpdates(vals)
 	app := &initChainApp{vals: &abciValidatorSetUpdates}

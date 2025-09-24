@@ -17,7 +17,9 @@ BUILD_IMAGE := ghcr.io/tendermint/docker-build-proto
 BASE_BRANCH ?= v0.8-dev
 DOCKER_PROTO := docker run -v $(shell pwd):/workspace --workdir /workspace $(BUILD_IMAGE)
 CGO_ENABLED ?= 1
-GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}' github.com/gogo/protobuf)
+# Fix for a gogoproto bug
+# GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}' github.com/cosmos/gogoproto)
+GOGOPROTO_PATH = $(shell go list -m -f '{{.Dir}}'  github.com/lklimek/gogoproto@564fd924f58c5d076b0ad8e3f1c6fb54d065cbbe)
 
 MAKEFILE_PATH := $(abspath $(lastword $(MAKEFILE_LIST)))
 CURR_DIR := $(dir $(MAKEFILE_PATH))
@@ -114,7 +116,8 @@ proto: proto-format proto-lint proto-doc proto-gen
 
 check-proto-deps:
 ifeq (,$(shell which protoc-gen-gogofaster))
-	$(error "gogofaster plugin for protoc is required. Run 'go install github.com/gogo/protobuf/protoc-gen-gogofaster@latest' to install")
+#	$(error "gogofaster plugin for protoc is required. Run 'go install github.com/cosmos/gogoproto/protoc-gen-gogofaster@latest' to install")
+	$(error "gogofaster plugin for protoc is required. Run 'go install github.com/lklimek/gogoproto/protoc-gen-gogofaster@564fd924f58c5d076b0ad8e3f1c6fb54d065cbbe' to install")
 endif
 .PHONY: check-proto-deps
 
@@ -270,7 +273,7 @@ format:
 
 lint:
 	@echo "--> Running linter"
-	go run github.com/golangci/golangci-lint/cmd/golangci-lint@v1.62.2 run
+	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.5.0 run
 .PHONY: lint
 
 DESTINATION = ./index.html.md

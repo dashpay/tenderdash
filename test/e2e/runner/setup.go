@@ -9,14 +9,13 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/BurntSushi/toml"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/dashpay/tenderdash/config"
 	"github.com/dashpay/tenderdash/crypto"
@@ -178,6 +177,10 @@ func MakeGenesis(testnet *e2e.Testnet, genesisTime time.Time) (types.GenesisDoc,
 	}
 	if testnet.MaxBlockSize > 0 {
 		genesis.ConsensusParams.Block.MaxBytes = testnet.MaxBlockSize
+	}
+	if testnet.VotingPowerThreshold > 0 {
+		threshold := testnet.VotingPowerThreshold
+		genesis.ConsensusParams.Validator.VotingPowerThreshold = &threshold
 	}
 
 	for validator, validatorUpdate := range testnet.Validators {
@@ -452,23 +455,6 @@ func MakeAppConfig(node *e2e.Node) ([]byte, error) {
 		return nil, fmt.Errorf("failed to generate app config: %w", err)
 	}
 	return buf.Bytes(), nil
-}
-
-// UpdateConfigStateSync updates the state sync config for a node.
-func UpdateConfigStateSync(node *e2e.Node, height int64, hash []byte) error {
-	cfgPath := filepath.Join(node.Testnet.Dir, node.Name, "config", "config.toml")
-
-	// FIXME Apparently there's no function to simply load a config file without
-	// involving the entire Viper apparatus, so we'll just resort to regexps.
-	bz, err := os.ReadFile(cfgPath)
-	if err != nil {
-		return err
-	}
-	bz = regexp.MustCompile(`(?m)^trust-height =.*`).ReplaceAll(bz, []byte(fmt.Sprintf(`trust-height = %v`, height-1)))
-	bz = regexp.MustCompile(`(?m)^trust-hash =.*`).ReplaceAll(bz, []byte(fmt.Sprintf(`trust-hash = "%X"`, hash)))
-	//nolint: gosec
-	// G306: Expect WriteFile permissions to be 0600 or less
-	return os.WriteFile(cfgPath, bz, 0644)
 }
 
 func newDefaultFilePV(node *e2e.Node, nodeDir string) (*privval.FilePV, error) {

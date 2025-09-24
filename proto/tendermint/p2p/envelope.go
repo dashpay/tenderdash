@@ -3,7 +3,7 @@ package p2p
 import (
 	"fmt"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 
 	"github.com/dashpay/tenderdash/proto/tendermint/blocksync"
 	"github.com/dashpay/tenderdash/proto/tendermint/consensus"

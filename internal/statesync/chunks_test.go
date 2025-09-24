@@ -1,8 +1,10 @@
 package statesync
 
 import (
+	"errors"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/suite"
 
@@ -100,10 +102,10 @@ func (suite *ChunkQueueTestSuite) TestChunkQueue() {
 		{chunk: suite.chunks[1], want: true},
 	}
 	require := suite.Require()
-	for _, tc := range testCases {
+	for i, tc := range testCases {
 		added, err := suite.queue.Add(tc.chunk)
-		require.NoError(err)
-		require.Equal(tc.want, added)
+		require.NoError(err, "test case %d", i)
+		require.Equal(tc.want, added, "test case %d", i)
 	}
 
 	// At this point, we should be able to retrieve them all via Next
@@ -239,38 +241,63 @@ func (suite *ChunkQueueTestSuite) TestGetSender() {
 func (suite *ChunkQueueTestSuite) TestNext() {
 	suite.initChunks()
 	require := suite.Require()
-	// Next should block waiting for the next chunks, even when given out of order.
-	chNext := make(chan *chunk)
+
+	type chunkResult struct {
+		chunk *chunk
+		err   error
+	}
+
+	results := make(chan chunkResult, len(suite.chunks)+1)
 	go func() {
 		for {
 			c, err := suite.queue.Next()
-			if err == errDone {
-				close(chNext)
-				break
+			results <- chunkResult{chunk: c, err: err}
+			if errors.Is(err, errDone) {
+				close(results)
+				return
 			}
-			require.NoError(err)
-			chNext <- c
 		}
 	}()
 
-	require.Empty(chNext)
+	select {
+	case res := <-results:
+		suite.T().Fatalf("unexpected chunk before any were added: chunk=%v err=%v", res.chunk, res.err)
+	case <-time.After(10 * time.Millisecond):
+	}
+
 	_, err := suite.queue.Add(suite.chunks[1])
 	require.NoError(err)
+	var res chunkResult
 	select {
-	case <-chNext:
-		suite.Fail("channel should be empty")
-	default:
+	case res = <-results:
+	case <-time.After(time.Second):
+		suite.T().Fatal("timed out waiting for first chunk")
 	}
+	require.NoError(res.err)
+	require.Equal(suite.chunks[1], res.chunk)
 
 	_, err = suite.queue.Add(suite.chunks[0])
 	require.NoError(err)
-	require.Equal(suite.chunks[1], <-chNext)
-	require.Equal(suite.chunks[0], <-chNext)
+	select {
+	case res = <-results:
+	case <-time.After(time.Second):
+		suite.T().Fatal("timed out waiting for second chunk")
+	}
+	require.NoError(res.err)
+	require.Equal(suite.chunks[0], res.chunk)
 
 	err = suite.queue.Close()
 	require.NoError(err)
+	select {
+	case res, ok := <-results:
+		require.True(ok)
+		require.ErrorIs(res.err, errDone)
+		require.Nil(res.chunk)
+	case <-time.After(time.Second):
+		suite.T().Fatal("timed out waiting for queue close notification")
+	}
 
-	_, ok := <-chNext
+	_, ok := <-results
 	require.False(ok)
 }
 
@@ -284,7 +311,7 @@ func (suite *ChunkQueueTestSuite) TestNextClosed() {
 	require.NoError(err)
 
 	_, err = suite.queue.Next()
-	require.Equal(errDone, err)
+	require.ErrorIs(err, errDone)
 }
 
 func (suite *ChunkQueueTestSuite) TestRetry() {

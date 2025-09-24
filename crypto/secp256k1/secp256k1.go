@@ -11,7 +11,9 @@ import (
 	"io"
 	"math/big"
 
-	secp256k1 "github.com/btcsuite/btcd/btcec"
+	secp256k1 "github.com/btcsuite/btcd/btcec/v2"
+
+	"github.com/btcsuite/btcd/btcec/v2/ecdsa"
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/internal/jsontypes"
@@ -50,7 +52,7 @@ func (privKey PrivKey) Bytes() []byte {
 // PubKey performs the point-scalar multiplication from the privKey on the
 // generator point to get the pubkey.
 func (privKey PrivKey) PubKey() crypto.PubKey {
-	_, pubkeyObject := secp256k1.PrivKeyFromBytes(secp256k1.S256(), privKey)
+	_, pubkeyObject := secp256k1.PrivKeyFromBytes(privKey)
 
 	pk := pubkeyObject.SerializeCompressed()
 
@@ -200,20 +202,12 @@ func (pubKey PubKey) Equals(other crypto.PubKey) bool {
 // see:
 //   - https://github.com/ethereum/go-ethereum/blob/f9401ae011ddf7f8d2d95020b7446c17f8d98dc1/crypto/signature_nocgo.go#L90-L93
 //   - https://github.com/ethereum/go-ethereum/blob/f9401ae011ddf7f8d2d95020b7446c17f8d98dc1/crypto/crypto.go#L39
-var secp256k1halfN = new(big.Int).Rsh(secp256k1.S256().N, 1)
 
 // Sign creates an ECDSA signature on curve Secp256k1, using SHA256 on the msg.
 // The returned signature will be of the form R || S (in lower-S form).
 func (privKey PrivKey) Sign(msg []byte) ([]byte, error) {
-	priv, _ := secp256k1.PrivKeyFromBytes(secp256k1.S256(), privKey)
 	seed := sha256.Sum256(msg)
-	sig, err := priv.Sign(seed[:])
-	if err != nil {
-		return nil, err
-	}
-
-	sigBytes := serializeSig(sig)
-	return sigBytes, nil
+	return privKey.SignDigest(seed[:])
 }
 
 // VerifySignature verifies a signature of the form R || S.
@@ -223,16 +217,21 @@ func (pubKey PubKey) VerifySignature(msg []byte, sigStr []byte) bool {
 		return false
 	}
 
-	pub, err := secp256k1.ParsePubKey(pubKey, secp256k1.S256())
+	pub, err := secp256k1.ParsePubKey(pubKey)
 	if err != nil {
 		return false
 	}
 
 	// parse the signature:
-	signature := signatureFromBytes(sigStr)
+	signature, err := signatureFromBytes(sigStr)
+	if err != nil {
+		return false
+	}
+
 	// Reject malleable signatures. libsecp256k1 does this check but btcec doesn't.
 	// see: https://github.com/ethereum/go-ethereum/blob/f9401ae011ddf7f8d2d95020b7446c17f8d98dc1/crypto/signature_nocgo.go#L90-L93
-	if signature.S.Cmp(secp256k1halfN) > 0 {
+	s := signature.S()
+	if s.IsOverHalfOrder() {
 		return false
 	}
 
@@ -242,16 +241,20 @@ func (pubKey PubKey) VerifySignature(msg []byte, sigStr []byte) bool {
 
 // SignDigest creates an ECDSA signature on curve Secp256k1.
 // The returned signature will be of the form R || S (in lower-S form).
+//
+// `msg` is the SHA256 hash of the message to be signed.
 func (privKey PrivKey) SignDigest(msg []byte) ([]byte, error) {
-	priv, _ := secp256k1.PrivKeyFromBytes(secp256k1.S256(), privKey)
-
-	sig, err := priv.Sign(msg)
-	if err != nil {
-		return nil, err
+	if len(msg) != sha256.Size {
+		return nil, fmt.Errorf("digest must be sha256 with %d bytes, got %d", sha256.Size, len(msg))
 	}
 
-	sigBytes := serializeSig(sig)
-	return sigBytes, nil
+	priv, _ := secp256k1.PrivKeyFromBytes(privKey)
+	signature := ecdsa.Sign(priv, msg)
+	if signature == nil {
+		return nil, errors.New("ecdsa failed to produce a signature")
+	}
+
+	return serializeSig(signature), nil
 }
 
 func (pubKey PubKey) AggregateSignatures(_sigSharesData [][]byte, _messages [][]byte) ([]byte, error) {
@@ -268,21 +271,37 @@ func (pubKey PubKey) VerifySignatureDigest(_hash []byte, _sig []byte) bool {
 
 // Read Signature struct from R || S. Caller needs to ensure
 // that len(sigStr) == 64.
-func signatureFromBytes(sigStr []byte) *secp256k1.Signature {
-	return &secp256k1.Signature{
-		R: new(big.Int).SetBytes(sigStr[:32]),
-		S: new(big.Int).SetBytes(sigStr[32:64]),
+func signatureFromBytes(sigStr []byte) (*ecdsa.Signature, error) {
+	if len(sigStr) != 64 {
+		return nil, fmt.Errorf("malformed signature: bad length %d != %d",
+			len(sigStr), 64)
 	}
+
+	r := secp256k1.ModNScalar{}
+	r.SetByteSlice(sigStr[:32])
+	if r.IsZero() {
+		return nil, fmt.Errorf("malformed signature: R is 0")
+	}
+
+	s := secp256k1.ModNScalar{}
+	s.SetByteSlice(sigStr[32:64])
+	if s.IsZero() {
+		return nil, fmt.Errorf("malformed signature: S is 0")
+	}
+
+	return ecdsa.NewSignature(&r, &s), nil
 }
 
 // Serialize signature to R || S.
 // R, S are padded to 32 bytes respectively.
-func serializeSig(sig *secp256k1.Signature) []byte {
-	rBytes := sig.R.Bytes()
-	sBytes := sig.S.Bytes()
-	sigBytes := make([]byte, 64)
-	// 0 pad the byte arrays from the left if they aren't big enough.
-	copy(sigBytes[32-len(rBytes):32], rBytes)
-	copy(sigBytes[64-len(sBytes):64], sBytes)
-	return sigBytes
+func serializeSig(sig *ecdsa.Signature) []byte {
+	bz := make([]byte, 64)
+
+	r := sig.R()
+	r.PutBytesUnchecked(bz[:32])
+
+	s := sig.S()
+	s.PutBytesUnchecked(bz[32:])
+
+	return bz
 }

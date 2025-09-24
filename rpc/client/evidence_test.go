@@ -39,7 +39,7 @@ func newEvidence(t *testing.T, val *privval.FilePV,
 	require.NoError(t, err)
 
 	validator := types.NewValidator(privKey.PubKey(), types.DefaultDashVotingPower, val.Key.ProTxHash, "")
-	valSet := types.NewValidatorSet([]*types.Validator{validator}, validator.PubKey, quorumType, quorumHash, true)
+	valSet := types.NewValidatorSet([]*types.Validator{validator}, validator.PubKey, quorumType, quorumHash, true, nil)
 
 	ev, err := types.NewDuplicateVoteEvidence(vote, vote2, timestamp, valSet)
 	require.NoError(t, err)

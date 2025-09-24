@@ -42,6 +42,8 @@ type StateProvider interface {
 	State(ctx context.Context, height uint64) (sm.State, error)
 }
 
+// stateProviderRPC is a state provider using RPC to communicate with light clients.
+// Deprecated, will be removed in future.
 type stateProviderRPC struct {
 	sync.Mutex    // light.Client is not concurrency-safe
 	lc            *light.Client
@@ -51,12 +53,12 @@ type stateProviderRPC struct {
 }
 
 // NewRPCStateProvider creates a new StateProvider using a light client and RPC clients.
+// Deprecated, will be removed in future.
 func NewRPCStateProvider(
 	ctx context.Context,
 	chainID string,
 	initialHeight int64,
 	servers []string,
-	trustHeight int64,
 	logger log.Logger,
 	dashCoreClient dashcore.Client,
 ) (StateProvider, error) {
@@ -77,8 +79,7 @@ func NewRPCStateProvider(
 		// provider used by the light client and use it to fetch consensus parameters.
 		providerRemotes[provider] = server
 	}
-
-	lc, err := light.NewClientAtHeight(ctx, trustHeight, chainID, providers[0], providers[1:],
+	lc, err := light.NewClient(ctx, chainID, providers[0], providers[1:],
 		lightdb.New(dbm.NewMemDB()), dashCoreClient, light.Logger(logger))
 	if err != nil {
 		return nil, err
@@ -208,17 +209,16 @@ func NewP2PStateProvider(
 	ctx context.Context,
 	chainID string,
 	initialHeight int64,
-	trustHeight int64,
 	providers []lightprovider.Provider,
 	paramsSendCh p2p.Channel,
 	logger log.Logger,
 	dashCoreClient dashcore.Client,
 ) (StateProvider, error) {
-	if len(providers) < 2 {
-		return nil, fmt.Errorf("at least 2 peers are required, got %d", len(providers))
+	if len(providers) < minPeers {
+		return nil, fmt.Errorf("at least %d peers are required, got %d", minPeers, len(providers))
 	}
 
-	lc, err := light.NewClientAtHeight(ctx, trustHeight, chainID, providers[0], providers[1:],
+	lc, err := light.NewClient(ctx, chainID, providers[0], providers[1:],
 		lightdb.New(dbm.NewMemDB()), dashCoreClient, light.Logger(logger))
 	if err != nil {
 		return nil, err

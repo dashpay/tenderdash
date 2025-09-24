@@ -140,6 +140,10 @@ func (p proxyService) UnconfirmedTxs(ctx context.Context, req *coretypes.Request
 	return p.Client.UnconfirmedTxs(ctx, req.Page.IntPtr(), req.PerPage.IntPtr())
 }
 
+func (p proxyService) UnconfirmedTx(ctx context.Context, req *coretypes.RequestUnconfirmedTx) (*coretypes.ResultUnconfirmedTx, error) {
+	return p.Client.UnconfirmedTx(ctx, req.TxHash)
+}
+
 func (p proxyService) Unsubscribe(ctx context.Context, req *coretypes.RequestUnsubscribe) (*coretypes.ResultUnsubscribe, error) {
 	return p.Client.UnsubscribeWS(ctx, req.Query)
 }

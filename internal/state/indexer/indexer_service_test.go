@@ -10,8 +10,8 @@ import (
 
 	"github.com/adlio/schema"
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/ory/dockertest"
-	"github.com/ory/dockertest/docker"
+	"github.com/ory/dockertest/v3"
+	"github.com/ory/dockertest/v3/docker"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -308,7 +308,7 @@ func setupDB(t *testing.T) *dockertest.Pool {
 			"POSTGRES_DB=" + dbName,
 			"listen_addresses = '*'",
 		},
-		ExposedPorts: []string{port},
+		ExposedPorts: []string{port + "/tcp"}, // append /tcp to fix https://github.com/ory/dockertest/issues/518
 	}, func(config *docker.HostConfig) {
 		// set AutoRemove to true so that stopped container goes away by itself
 		config.AutoRemove = true
@@ -317,11 +317,13 @@ func setupDB(t *testing.T) *dockertest.Pool {
 		}
 	})
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
+	assert.NotNil(t, resource)
 
 	// Set the container to expire in a minute to avoid orphaned containers
 	// hanging around
-	_ = resource.Expire(60)
+	err = resource.Expire(60)
+	require.NoError(t, err)
 
 	conn := fmt.Sprintf(dsn, user, password, resource.GetPort(port+"/tcp"), dbName)
 

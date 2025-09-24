@@ -7,7 +7,7 @@ import (
 	"strconv"
 
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/google/orderedcode"
 
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
@@ -356,6 +356,57 @@ func (bs *BlockStore) PruneBlocks(height int64) (uint64, error) {
 	}
 
 	return pruned, nil
+}
+
+// DeleteBlock removes the block at the given height, including its parts and commit.
+// It returns the number of blocks removed, which is always 1 in this case.
+func (bs *BlockStore) DeleteBlock(height int64) (uint64, error) {
+	if height <= 0 {
+		return 0, fmt.Errorf("height must be greater than 0")
+	}
+
+	// Check if block exists at this height
+	blockMeta := bs.LoadBlockMeta(height)
+	if blockMeta == nil {
+		return 0, fmt.Errorf("block at height %d does not exist", height)
+	}
+
+	batch := bs.db.NewBatch()
+	defer batch.Close()
+
+	// Delete the hash key corresponding to the block meta's hash
+	if err := batch.Delete(blockHashKey(blockMeta.BlockID.Hash)); err != nil {
+		return 0, fmt.Errorf("failed to delete hash key: %X: %w", blockHashKey(blockMeta.BlockID.Hash), err)
+	}
+
+	// Delete block meta
+	if err := batch.Delete(blockMetaKey(height)); err != nil {
+		return 0, fmt.Errorf("failed to delete block meta at height %d: %w", height, err)
+	}
+
+	// Delete block parts
+	for i := 0; i < int(blockMeta.BlockID.PartSetHeader.Total); i++ {
+		if err := batch.Delete(blockPartKey(height, i)); err != nil {
+			return 0, fmt.Errorf("failed to delete block part at height %d, index %d: %w", height, i, err)
+		}
+	}
+
+	// Delete block commit
+	if err := batch.Delete(blockCommitKey(height)); err != nil {
+		return 0, fmt.Errorf("failed to delete block commit at height %d: %w", height, err)
+	}
+
+	// Delete seen commit at this height if it exists
+	if err := batch.Delete(seenCommitAtKey(height)); err != nil {
+		return 0, fmt.Errorf("failed to delete seen commit at height %d: %w", height, err)
+	}
+
+	// Write all deletions atomically
+	if err := batch.WriteSync(); err != nil {
+		return 0, fmt.Errorf("failed to write deletions for height %d: %w", height, err)
+	}
+
+	return 1, nil
 }
 
 // pruneRange is a generic function for deleting a range of values based on the lowest

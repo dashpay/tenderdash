@@ -5,9 +5,9 @@ package statesync
 
 import (
 	fmt "fmt"
+	_ "github.com/cosmos/gogoproto/gogoproto"
+	proto "github.com/cosmos/gogoproto/proto"
 	types "github.com/dashpay/tenderdash/proto/tendermint/types"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -508,6 +508,9 @@ func (m *SnapshotsRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *SnapshotsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -531,6 +534,9 @@ func (m *SnapshotsResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *SnapshotsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -578,6 +584,9 @@ func (m *ChunkRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ChunkRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -618,6 +627,9 @@ func (m *ChunkResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ChunkResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -675,6 +687,9 @@ func (m *LightBlockRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *LightBlockRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -703,6 +718,9 @@ func (m *LightBlockResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *LightBlockResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -738,6 +756,9 @@ func (m *ParamsRequest) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ParamsRequest) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -766,6 +787,9 @@ func (m *ParamsResponse) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ParamsResponse) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

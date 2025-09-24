@@ -5,8 +5,8 @@ package crypto
 
 import (
 	fmt "fmt"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
+	_ "github.com/cosmos/gogoproto/gogoproto"
+	proto "github.com/cosmos/gogoproto/proto"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -366,6 +366,9 @@ func (m *Proof) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Proof) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -415,6 +418,9 @@ func (m *ValueOp) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ValueOp) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -457,6 +463,9 @@ func (m *DominoOp) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *DominoOp) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -501,6 +510,9 @@ func (m *ProofOp) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ProofOp) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -545,6 +557,9 @@ func (m *ProofOps) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *ProofOps) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int

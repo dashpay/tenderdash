@@ -13,8 +13,8 @@ import (
 	"testing"
 	"time"
 
+	gogotypes "github.com/cosmos/gogoproto/types"
 	"github.com/dashpay/dashd-go/btcjson"
-	gogotypes "github.com/gogo/protobuf/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 

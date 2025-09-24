@@ -51,6 +51,7 @@ func (pkz privKeys) ToValidators(thresholdPublicKey crypto.PubKey) *types.Valida
 		btcjson.LLMQType_5_60,
 		crypto.Checksum(thresholdPublicKey.Bytes()),
 		true,
+		nil,
 	)
 }
 

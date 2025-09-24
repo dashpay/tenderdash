@@ -6,12 +6,12 @@ package types
 import (
 	encoding_binary "encoding/binary"
 	fmt "fmt"
+	_ "github.com/cosmos/gogoproto/gogoproto"
+	proto "github.com/cosmos/gogoproto/proto"
+	_ "github.com/cosmos/gogoproto/types"
+	github_com_cosmos_gogoproto_types "github.com/cosmos/gogoproto/types"
 	crypto "github.com/dashpay/tenderdash/proto/tendermint/crypto"
 	version "github.com/dashpay/tenderdash/proto/tendermint/version"
-	_ "github.com/gogo/protobuf/gogoproto"
-	proto "github.com/gogo/protobuf/proto"
-	_ "github.com/gogo/protobuf/types"
-	github_com_gogo_protobuf_types "github.com/gogo/protobuf/types"
 	io "io"
 	math "math"
 	math_bits "math/bits"
@@ -1268,6 +1268,9 @@ func (m *PartSetHeader) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *PartSetHeader) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1303,6 +1306,9 @@ func (m *Part) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Part) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1348,6 +1354,9 @@ func (m *BlockID) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *BlockID) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1395,6 +1404,9 @@ func (m *StateID) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *StateID) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1449,6 +1461,9 @@ func (m *Header) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Header) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1547,7 +1562,7 @@ func (m *Header) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 	}
 	i--
 	dAtA[i] = 0x2a
-	n4, err4 := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Time, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(m.Time):])
+	n4, err4 := github_com_cosmos_gogoproto_types.StdTimeMarshalTo(m.Time, dAtA[i-github_com_cosmos_gogoproto_types.SizeOfStdTime(m.Time):])
 	if err4 != nil {
 		return 0, err4
 	}
@@ -1596,6 +1611,9 @@ func (m *Data) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Data) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1628,6 +1646,9 @@ func (m *Vote) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Vote) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1709,6 +1730,9 @@ func (m *Commit) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Commit) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1780,6 +1804,9 @@ func (m *Proposal) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *Proposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1808,7 +1835,7 @@ func (m *Proposal) MarshalToSizedBuffer(dAtA []byte) (int, error) {
 		i--
 		dAtA[i] = 0x3a
 	}
-	n9, err9 := github_com_gogo_protobuf_types.StdTimeMarshalTo(m.Timestamp, dAtA[i-github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp):])
+	n9, err9 := github_com_cosmos_gogoproto_types.StdTimeMarshalTo(m.Timestamp, dAtA[i-github_com_cosmos_gogoproto_types.SizeOfStdTime(m.Timestamp):])
 	if err9 != nil {
 		return 0, err9
 	}
@@ -1865,6 +1892,9 @@ func (m *SignedHeader) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *SignedHeader) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1912,6 +1942,9 @@ func (m *LightBlock) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *LightBlock) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -1959,6 +1992,9 @@ func (m *BlockMeta) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *BlockMeta) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2027,6 +2063,9 @@ func (m *TxProof) MarshalTo(dAtA []byte) (int, error) {
 }
 
 func (m *TxProof) MarshalToSizedBuffer(dAtA []byte) (int, error) {
+	if m == nil {
+		return 0, nil
+	}
 	i := len(dAtA)
 	_ = i
 	var l int
@@ -2164,7 +2203,7 @@ func (m *Header) Size() (n int) {
 	if m.Height != 0 {
 		n += 1 + sovTypes(uint64(m.Height))
 	}
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Time)
+	l = github_com_cosmos_gogoproto_types.SizeOfStdTime(m.Time)
 	n += 1 + l + sovTypes(uint64(l))
 	l = m.LastBlockId.Size()
 	n += 1 + l + sovTypes(uint64(l))
@@ -2320,7 +2359,7 @@ func (m *Proposal) Size() (n int) {
 	}
 	l = m.BlockID.Size()
 	n += 1 + l + sovTypes(uint64(l))
-	l = github_com_gogo_protobuf_types.SizeOfStdTime(m.Timestamp)
+	l = github_com_cosmos_gogoproto_types.SizeOfStdTime(m.Timestamp)
 	n += 1 + l + sovTypes(uint64(l))
 	l = len(m.Signature)
 	if l > 0 {
@@ -3078,7 +3117,7 @@ func (m *Header) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Time, dAtA[iNdEx:postIndex]); err != nil {
+			if err := github_com_cosmos_gogoproto_types.StdTimeUnmarshal(&m.Time, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex
@@ -4247,7 +4286,7 @@ func (m *Proposal) Unmarshal(dAtA []byte) error {
 			if postIndex > l {
 				return io.ErrUnexpectedEOF
 			}
-			if err := github_com_gogo_protobuf_types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
+			if err := github_com_cosmos_gogoproto_types.StdTimeUnmarshal(&m.Timestamp, dAtA[iNdEx:postIndex]); err != nil {
 				return err
 			}
 			iNdEx = postIndex

@@ -83,7 +83,7 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 			},
 			Software: version.TMCoreSemVer,
 		},
-
+		InitialHeight:   1,
 		LastBlockHeight: 1,
 		LastBlockID:     types.BlockID{Hash: []byte("blockhash")},
 		LastBlockTime:   time.Now(),
@@ -100,7 +100,10 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 		ConsensusParams:                  *types.DefaultConsensusParams(),
 		LastHeightConsensusParamsChanged: 1,
 	}
-	commit := &types.Commit{BlockID: types.BlockID{Hash: []byte("blockhash")}}
+	commit := &types.Commit{
+		Height:  1,
+		BlockID: types.BlockID{Hash: []byte("blockhash")},
+	}
 
 	s := &snapshot{Height: 1, Version: 1, Hash: []byte{0}}
 	chunks := []*chunk{
@@ -254,6 +257,7 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 			Once().
 			Return(asc.resp, nil)
 	}
+
 	suite.conn.
 		On("Info", mock.Anything, &proxy.RequestInfo).
 		Once().
@@ -263,7 +267,7 @@ func (suite *SyncerTestSuite) TestSyncAny() {
 			LastBlockAppHash: []byte("app_hash"),
 		}, nil)
 
-	newState, lastCommit, err := suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	newState, lastCommit, err := suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().NoError(err)
 
 	suite.Require().Equal([]int{0: 2, 1: 1, 2: 1, 3: 1}, chunkRequests)
@@ -280,7 +284,7 @@ func (suite *SyncerTestSuite) TestSyncAnyNoSnapshots() {
 	ctx, cancel := context.WithCancel(suite.ctx)
 	defer cancel()
 
-	_, _, err := suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err := suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().Equal(errNoSnapshots, err)
 }
 
@@ -306,7 +310,7 @@ func (suite *SyncerTestSuite) TestSyncAnyAbort() {
 		Once().
 		Return(&abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ABORT}, nil)
 
-	_, _, err = suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err = suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().Equal(errAbort, err)
 }
 
@@ -356,7 +360,7 @@ func (suite *SyncerTestSuite) TestSyncAnyReject() {
 		Once().
 		Return(&abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}, nil)
 
-	_, _, err = suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err = suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().Equal(errNoSnapshots, err)
 }
 
@@ -399,7 +403,7 @@ func (suite *SyncerTestSuite) TestSyncAnyRejectFormat() {
 		Once().
 		Return(&abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_ABORT}, nil)
 
-	_, _, err = suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err = suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().Equal(errAbort, err)
 }
 
@@ -453,7 +457,7 @@ func (suite *SyncerTestSuite) TestSyncAnyRejectSender() {
 		Once().
 		Return(&abci.ResponseOfferSnapshot{Result: abci.ResponseOfferSnapshot_REJECT}, nil)
 
-	_, _, err := suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err := suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().Equal(errNoSnapshots, err)
 }
 
@@ -481,7 +485,7 @@ func (suite *SyncerTestSuite) TestSyncAnyAbciError() {
 		Once().
 		Return(nil, errBoom)
 
-	_, _, err = suite.syncer.SyncAny(ctx, 0, func() error { return nil })
+	_, _, err = suite.syncer.SyncAny(ctx, 0, 0, func() error { return nil })
 	suite.Require().True(errors.Is(err, errBoom))
 }
 
@@ -616,8 +620,8 @@ func (suite *SyncerTestSuite) TestApplyChunksResults() {
 
 			fetchStartTime := time.Now()
 
-			c := &chunk{Height: 1, Version: 1, ID: []byte{0}, Chunk: body}
-			chunks.Enqueue(c.ID)
+			chunkID := []byte{0}
+			chunks.Enqueue(chunkID)
 
 			for _, resp := range tc.resps {
 				suite.conn.

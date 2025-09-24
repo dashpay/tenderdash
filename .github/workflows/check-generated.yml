@@ -6,9 +6,6 @@
 name: Check generated code
 on:
   pull_request:
-    paths:
-      - "**.go"
-      - "**.proto"
   push:
     branches:
       - master
@@ -21,17 +18,26 @@ jobs:
   check-mocks:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v5.1.0
+      - uses: actions/setup-go@v6.0.0
         with:
-          go-version: "1.23.2"
+          go-version: "1.25.1"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - uses: technote-space/get-diff-action@v6
+        with:
+          PATTERNS: |
+            **/*.go
+          FILES: |
+            .github/workflows/check-generated.yml
 
       - name: "Check generated mocks"
+        if: env.GIT_DIFF
         run: |
           set -euo pipefail
 
-          readonly MOCKERY=2.50.0  # N.B. no leading "v"
+
+          readonly MOCKERY=3.5.4  # N.B. no leading "v"
           curl -sL "https://github.com/vektra/mockery/releases/download/v${MOCKERY}/mockery_${MOCKERY}_Linux_x86_64.tar.gz" | tar -C /usr/local/bin -xzf -
           make mockery 2>/dev/null
 
@@ -47,15 +53,19 @@ jobs:
   check-proto:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/setup-go@v5.1.0
+      - uses: actions/setup-go@v6.0.0
         with:
-          go-version: "1.23.2"
+          go-version: "1.25.1"
 
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
+
+      - uses: technote-space/get-diff-action@v6
         with:
-          fetch-depth: 1 # we need a .git directory to run git diff
+          PATTERNS: |
+            **/*.proto
 
       - name: "Check protobuf generated code"
+        if: env.GIT_DIFF
         run: |
           set -euo pipefail
 
@@ -66,7 +76,15 @@ jobs:
           export GOBIN="${tools}/bin"
 
           go install github.com/bufbuild/buf/cmd/buf
-          go install github.com/gogo/protobuf/protoc-gen-gogofaster@latest
+          # Forked version of gogoproto plugin with fix https://github.com/cosmos/gogoproto/pull/150
+          # go install github.com/cosmos/gogoproto/protoc-gen-gogofaster@latest
+          git clone --depth 1 --branch fix/panic-marshalto-nil-m \
+            https://github.com/lklimek/gogoproto /tmp/gogoproto
+          pushd /tmp/gogoproto
+          go install ./protoc-gen-gogofaster
+          popd
+          rm -rf /tmp/gogoproto
+          # End of forked version installation
 
           make proto-gen
 

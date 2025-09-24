@@ -495,17 +495,14 @@ use-p2p = {{ .StateSync.UseP2P }}
 # for example: "host.example.com:2125"
 rpc-servers = "{{ StringsJoin .StateSync.RPCServers "," }}"
 
-# The hash and height of a trusted block. Must be within the trust-period.
-trust-height = {{ .StateSync.TrustHeight }}
-trust-hash = "{{ .StateSync.TrustHash }}"
-
-# The trust period should be set so that Tendermint can detect and gossip misbehavior before
-# it is considered expired. For chains based on the Cosmos SDK, one day less than the unbonding
-# period should suffice.
-trust-period = "{{ .StateSync.TrustPeriod }}"
-
 # Time to spend discovering snapshots before initiating a restore.
 discovery-time = "{{ .StateSync.DiscoveryTime }}"
+
+# Number of times to retry state sync. When retries are exhausted, the node will
+# fall back to the regular block sync. Set to 0 to disable retries. Default is 3.
+# Note that in pessimistic case, it will take at least (discovery-time * retries) before
+# falling back to block sync.
+retries = {{ .StateSync.Retries }}
 
 # Temporary directory for state sync snapshot chunks, defaults to os.TempDir().
 # The synchronizer will create a new, randomly named directory within this directory

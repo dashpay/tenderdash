@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/gogo/protobuf/proto"
+	"github.com/cosmos/gogoproto/proto"
 	"github.com/google/uuid"
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
@@ -29,7 +29,7 @@ type ChannelTestSuite struct {
 
 	height      int64
 	peerID      types.NodeID
-	fakeClock   clockwork.FakeClock
+	fakeClock   *clockwork.FakeClock
 	p2pChannel  *mocks.Channel
 	client      *Client
 	response    *bcproto.BlockResponse
