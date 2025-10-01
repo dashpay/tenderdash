@@ -1,70 +1,23 @@
-## [1.5.0-dev.3] - 2025-07-11
-
-### Bug Fixes
-
-- Retry dash core requests when they fail (#1139)
-
-### Features
-
-- Rollback --store flag to to include block store in rollback (#1137)
-
-### Miscellaneous Tasks
-
-- Remove shumkov from CODEOWNERS (#1119)
-- Update secp256k1 to use new version of btcsuite/btcd/btcec/v2 (#1118)
-
-### Build
-
-- Bump github.com/oasisprotocol/oasis-core/go (#1110)
-- Bump docker/build-push-action from 6.15.0 to 6.16.0 (#1109)
-- Bump golangci/golangci-lint-action from 7.0.0 to 8.0.0 (#1112)
-- Bump golang.org/x/sync from 0.13.0 to 0.14.0 (#1111)
-- Bump actions/setup-go from 5.4.0 to 5.5.0 (#1116)
-- Bump bls-signatures go-grpc-* weightedrand snappy x/net x/crypto buf and others (#1117)
-- Bump docker/build-push-action from 6.16.0 to 6.17.0 (#1123)
-- Bump google.golang.org/grpc from 1.72.0 to 1.72.2 (#1124)
-- Bump github.com/prometheus/common from 0.63.0 to 0.64.0 (#1120)
-- Bump github.com/oasisprotocol/oasis-core/go (#1125)
-- Bump golang.org/x/time from 0.11.0 to 0.12.0 (#1131)
-- Bump google.golang.org/grpc from 1.72.2 to 1.73.0 (#1129)
-- Bump docker/build-push-action from 6.17.0 to 6.18.0 (#1126)
-- Bump golang.org/x/crypto from 0.38.0 to 0.39.0 (#1130)
-- Bump golang.org/x/sync from 0.14.0 to 0.15.0 (#1128)
-- Bump docker/setup-buildx-action from 3.10.0 to 3.11.1 (#1136)
-- Bump github.com/prometheus/common from 0.64.0 to 0.65.0 (#1135)
-- Bump github.com/oasisprotocol/oasis-core/go (#1134)
-- Bump github.com/bufbuild/buf from 1.54.0 to 1.55.1 (#1133)
-
-## [1.5.0-dev.2] - 2025-04-25
+## [1.5.0] - 2025-09-24
 
 ### Bug Fixes
 
 - Statesync is unstable and doesn't time out (#1059)
-
-### Miscellaneous Tasks
-
-- Update changelog and version to 1.5.0-dev.2 (#1108)
-
-### Build
-
-- Bump github.com/fxamacker/cbor/v2 from 2.4.0 to 2.8.0 (#1103)
-- Bump github.com/prometheus/client_model from 0.6.1 to 0.6.2 (#1104)
-- Bump google.golang.org/grpc from 1.71.1 to 1.72.0 (#1105)
-- Bump github.com/bufbuild/buf from 1.50.0 to 1.53.0 (#1102)
-- Update go to 1.24.2 (#1106)
-- Major update of mockery to 3.2.4 (#1107)
-- Bump github.com/oasisprotocol/oasis-core/go (#1089)
-
-## [1.5.0-dev.1] - 2025-04-16
+- Retry dash core requests when they fail (#1139)
 
 ### Features
 
 - Filter unconfirmed txs by tx hash (#1053)
 - Allow defining validator power threshold in consensus params (#1052)
+- Rollback --store flag to to include block store in rollback (#1137)
 
 ### Miscellaneous Tasks
 
 - Update changelog and version to 1.5.0-dev.1 (#1101)
+- Update changelog and version to 1.5.0-dev.2 (#1108)
+- Remove shumkov from CODEOWNERS (#1119)
+- Update secp256k1 to use new version of btcsuite/btcd/btcec/v2 (#1118)
+- Update changelog and version to 1.5.0-dev.3 (#1140)
 
 ### Build
 
@@ -134,6 +87,54 @@
 - Bump github.com/prometheus/client_golang (#1097)
 - Bump golang.org/x/net from 0.37.0 to 0.39.0 (#1095)
 - Bump github.com/golangci/golangci-lint (#1088)
+- Bump github.com/fxamacker/cbor/v2 from 2.4.0 to 2.8.0 (#1103)
+- Bump github.com/prometheus/client_model from 0.6.1 to 0.6.2 (#1104)
+- Bump google.golang.org/grpc from 1.71.1 to 1.72.0 (#1105)
+- Bump github.com/bufbuild/buf from 1.50.0 to 1.53.0 (#1102)
+- Update go to 1.24.2 (#1106)
+- Major update of mockery to 3.2.4 (#1107)
+- Bump github.com/oasisprotocol/oasis-core/go (#1089)
+- Bump github.com/oasisprotocol/oasis-core/go (#1110)
+- Bump docker/build-push-action from 6.15.0 to 6.16.0 (#1109)
+- Bump golangci/golangci-lint-action from 7.0.0 to 8.0.0 (#1112)
+- Bump golang.org/x/sync from 0.13.0 to 0.14.0 (#1111)
+- Bump actions/setup-go from 5.4.0 to 5.5.0 (#1116)
+- Bump bls-signatures go-grpc-* weightedrand snappy x/net x/crypto buf and others (#1117)
+- Bump docker/build-push-action from 6.16.0 to 6.17.0 (#1123)
+- Bump google.golang.org/grpc from 1.72.0 to 1.72.2 (#1124)
+- Bump github.com/prometheus/common from 0.63.0 to 0.64.0 (#1120)
+- Bump github.com/oasisprotocol/oasis-core/go (#1125)
+- Bump golang.org/x/time from 0.11.0 to 0.12.0 (#1131)
+- Bump google.golang.org/grpc from 1.72.2 to 1.73.0 (#1129)
+- Bump docker/build-push-action from 6.17.0 to 6.18.0 (#1126)
+- Bump golang.org/x/crypto from 0.38.0 to 0.39.0 (#1130)
+- Bump golang.org/x/sync from 0.14.0 to 0.15.0 (#1128)
+- Bump docker/setup-buildx-action from 3.10.0 to 3.11.1 (#1136)
+- Bump github.com/prometheus/common from 0.64.0 to 0.65.0 (#1135)
+- Bump github.com/oasisprotocol/oasis-core/go (#1134)
+- Bump github.com/bufbuild/buf from 1.54.0 to 1.55.1 (#1133)
+- Bump github.com/adlio/schema from 1.3.6 to 1.3.9 (#1147)
+- Bump docker/login-action from 3.4.0 to 3.5.0 (#1149)
+- Bump actions/checkout from 4 to 5 (#1153)
+- Bump golang.org/x/net from 0.41.0 to 0.43.0 (#1156)
+- Bump github.com/spf13/cobra from 1.9.1 to 1.10.1 (#1160)
+- Bump actions/setup-go from 5.5.0 to 6.0.0 (#1162)
+- Bump actions/github-script from 6 to 8 (#1163)
+- Bump actions/download-artifact from 4 to 5 (#1154)
+- Bump github.com/creachadair/taskgroup from 0.13.2 to 0.14.0 (#1151)
+- Bump github.com/bufbuild/buf from 1.55.1 to 1.57.0 (#1158)
+- Bump github.com/spf13/viper from 1.20.1 to 1.21.0 (#1173)
+- Bump github.com/oasisprotocol/oasis-core/go (#1170)
+- Bump actions/stale from 9 to 10 (#1169)
+- Bump golang.org/x/time from 0.12.0 to 0.13.0 (#1168)
+- Bump github.com/sasha-s/go-deadlock from 0.3.5 to 0.3.6 (#1172)
+- Bump google.golang.org/grpc from 1.73.0 to 1.75.0 (#1157)
+- Bump github.com/stretchr/testify from 1.10.0 to 1.11.1 (#1161)
+- Bump github.com/prometheus/common from 0.65.0 to 1.20.99 (#1171)
+- Bump github.com/prometheus/client_golang from 1.22.0 to 1.23.2 (#1164)
+- Bump github.com/bufbuild/buf from 1.57.0 to 1.57.2 (#1175)
+- Bump github.com/creachadair/tomledit from 0.0.28 to 0.0.29 (#1174)
+- Update go to 1.25.1 and other dependencies (#1167)
 
 ## [1.4.0] - 2024-12-11
 
@@ -219,43 +220,22 @@
 
 ### Bug Fixes
 
-- Validators form islands on genesis (#850)
-- Panic on block_results when consensus params change (#923)
-
-### Miscellaneous Tasks
-
-- Update changelog and version to 1.3.0
-
-## [1.1.0-dev.3] - 2024-07-25
-
-### Features
-
-- Allow overriding genesis time in InitChain (#847)
-
-### Miscellaneous Tasks
-
-- Update changelog and version to 1.1.0-dev.3 (#848)
-
-## [1.1.0-dev.2] - 2024-07-24
-
-### Bug Fixes
-
 - Address already in use (#845)
 - Active validators not always connected to each other (#844)
-
-### Miscellaneous Tasks
-
-- Update changelog and version to 1.1.0-dev.2 (#846)
-
-## [1.1.0-dev.1] - 2024-07-23
+- Validators form islands on genesis (#850)
+- Panic on block_results when consensus params change (#923)
 
 ### Features
 
 - [**breaking**] Replace dash core quorum sign with quorum platformsign (#828)
+- Allow overriding genesis time in InitChain (#847)
 
 ### Miscellaneous Tasks
 
 - Update changelog and version to 1.1.0-dev.1 (#842)
+- Update changelog and version to 1.1.0-dev.2 (#846)
+- Update changelog and version to 1.1.0-dev.3 (#848)
+- Update changelog and version to 1.3.0
 
 ### Build
 
@@ -263,12 +243,6 @@
 - Run dependabot on default branch, not master (#843)
 
 ## [1.2.1] - 2024-08-29
-
-### Miscellaneous Tasks
-
-- Update changelog and version to 1.2.1
-
-## [1.2.1-dev.1] - 2024-08-29
 
 ### Bug Fixes
 
@@ -278,6 +252,7 @@
 ### Miscellaneous Tasks
 
 - Update changelog and version to 1.2.1-dev.1
+- Update changelog and version to 1.2.1
 
 ### Build
 
@@ -287,6 +262,10 @@
 
 ### Bug Fixes
 
+- Proposal not generated after waiting for last block time to pass (#849)
+- Build of dev releases fails due to invalid tags (#859)
+- Msg queue is too small for mainnet (#863)
+- Non-active validators can't verify evidence signatures (#865)
 - Vote extensions verified multiple times (#867)
 
 ### Features
@@ -295,47 +274,16 @@
 
 ### Miscellaneous Tasks
 
-- Update changelog and version to 1.2.0
-
-## [1.2.0-dev.3] - 2024-08-12
-
-### Bug Fixes
-
-- Msg queue is too small for mainnet (#863)
-- Non-active validators can't verify evidence signatures (#865)
-
-### Miscellaneous Tasks
-
+- Update changelog and version to 1.2.0-dev.1 (#858)
+- Update changelog and version to 1.2.0-dev.2 (#861)
 - Improve logs (#866)
 - Update changelog and version to 1.2.0-dev.3 (#868)
-
-## [1.2.0-dev.2] - 2024-08-05
-
-### Bug Fixes
-
-- Build of dev releases fails due to invalid tags (#859)
-
-### Miscellaneous Tasks
-
-- Update changelog and version to 1.2.0-dev.2 (#861)
-
-### Build
-
-- E2e tests fail due to lack of docker-compose command (#860)
-
-## [1.2.0-dev.1] - 2024-08-05
-
-### Bug Fixes
-
-- Proposal not generated after waiting for last block time to pass (#849)
-
-### Miscellaneous Tasks
-
-- Update changelog and version to 1.2.0-dev.1 (#858)
+- Update changelog and version to 1.2.0
 
 ### Build
 
 - Add signed binaries to releases (#854)
+- E2e tests fail due to lack of docker-compose command (#860)
 
 ## [1.1.0] - 2024-07-29
 
@@ -364,16 +312,6 @@
 
 ## [1.0.0] - 2024-07-01
 
-### Miscellaneous Tasks
-
-- Update changelog and version to 1.0.0
-
-### Build
-
-- Bump github.com/stretchr/testify from 1.8.2 to 1.9.0 (#817)
-
-## [1.0.0-dev.2] - 2024-06-26
-
 ### Bug Fixes
 
 - Ineffective PROXY_APP and ABCI env in entrypoint (#805)
@@ -381,4 +319,9 @@
 ### Miscellaneous Tasks
 
 - Update changelog and version to 1.0.0-dev.2 (#806)
+- Update changelog and version to 1.0.0
+
+### Build
+
+- Bump github.com/stretchr/testify from 1.8.2 to 1.9.0 (#817)
 
