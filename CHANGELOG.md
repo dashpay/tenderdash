@@ -1,3 +1,13 @@
+## [1.5.1] - 2025-10-01
+
+### Bug Fixes
+
+- Blockstore.db permission denied after upgrade (#1179)
+
+### Build
+
+- Bump docker/login-action from 3.5.0 to 3.6.0 (#1178)
+
 ## [1.5.0] - 2025-09-24
 
 ### Bug Fixes
@@ -18,6 +28,7 @@
 - Remove shumkov from CODEOWNERS (#1119)
 - Update secp256k1 to use new version of btcsuite/btcd/btcec/v2 (#1118)
 - Update changelog and version to 1.5.0-dev.3 (#1140)
+- Update changelog and version to 1.5.0
 
 ### Build
 
