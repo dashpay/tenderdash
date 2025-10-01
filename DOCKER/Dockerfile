@@ -79,7 +79,6 @@ RUN apk update && \
     apk --no-cache add curl jq bash gmp libsodium-dev libstdc++ libpcap && \
     rm -rf /var/cache/apk/* && \
     addgroup --gid 1000 tmuser && \
-    cat /etc/passwd && \
     deluser klogd  && \ 
     adduser -u 100 -S -G tmuser tmuser -h "$TMHOME"
 
