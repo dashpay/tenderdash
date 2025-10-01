@@ -71,12 +71,17 @@ ENV TMHOME=/tenderdash
 # jq and curl used for extracting `pub_key` from private validator while
 # deploying tenderdash with Kubernetes. It is nice to have bash so the users
 # could execute bash commands.
+#
+# Note: Alpine 3.21 has klogd user occupying UID 100, which we need for backwards-compatibility with pre-3.21 versions.
+# We delete that user as a workaround and reassign its UID to our tmuser user.
 RUN apk update && \
     apk upgrade && \
     apk --no-cache add curl jq bash gmp libsodium-dev libstdc++ libpcap && \
     rm -rf /var/cache/apk/* && \
-    addgroup tmuser && \
-    adduser -S -G tmuser tmuser -h "$TMHOME"
+    addgroup --gid 1000 tmuser && \
+    deluser klogd  && \ 
+    adduser -u 100 -S -G tmuser tmuser -h "$TMHOME"
+
 
 # Run the container with tmuser by default. (UID=100, GID=1000)
 USER tmuser
