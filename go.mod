@@ -382,7 +382,7 @@ require (
 	github.com/tendermint/go-amino v0.16.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621
-	golang.org/x/time v0.13.0
+	golang.org/x/time v0.14.0
 )
 
 replace github.com/cosmos/gogoproto => github.com/lklimek/gogoproto v0.0.0-20250217155326-564fd924f58c
