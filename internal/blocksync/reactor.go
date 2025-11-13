@@ -33,6 +33,8 @@ const (
 	syncTimeout = 60 * time.Second
 )
 
+type ReactorOption func(*Reactor)
+
 type consensusReactor interface {
 	// For when we switch from block sync reactor to the consensus
 	// machine.
@@ -66,6 +68,8 @@ type Reactor struct {
 	nodeProTxHash types.ProTxHash
 
 	executor *blockApplier
+
+	statusUpdateInterval time.Duration
 }
 
 // NewReactor returns new reactor instance.
@@ -81,19 +85,21 @@ func NewReactor(
 	blockSync bool,
 	metrics *consensus.Metrics,
 	eventBus *eventbus.EventBus,
+	opts ...ReactorOption,
 ) *Reactor {
 	r := &Reactor{
-		logger:        logger,
-		stateStore:    stateStore,
-		blockExec:     blockExec,
-		store:         store,
-		consReactor:   consReactor,
-		blockSyncFlag: &atomic.Bool{},
-		p2pClient:     p2pClient,
-		peerEvents:    peerEvents,
-		metrics:       metrics,
-		eventBus:      eventBus,
-		nodeProTxHash: nodeProTxHash,
+		logger:               logger,
+		stateStore:           stateStore,
+		blockExec:            blockExec,
+		store:                store,
+		consReactor:          consReactor,
+		blockSyncFlag:        &atomic.Bool{},
+		p2pClient:            p2pClient,
+		peerEvents:           peerEvents,
+		metrics:              metrics,
+		eventBus:             eventBus,
+		nodeProTxHash:        nodeProTxHash,
+		statusUpdateInterval: statusUpdateIntervalSeconds * time.Second,
 		executor: newBlockApplier(
 			blockExec,
 			store,
@@ -101,9 +107,24 @@ func NewReactor(
 			applierWithLogger(logger),
 		),
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
+	if r.statusUpdateInterval <= 0 {
+		r.statusUpdateInterval = statusUpdateIntervalSeconds * time.Second
+	}
 	r.blockSyncFlag.Store(blockSync)
 	r.BaseService = *service.NewBaseService(logger, "BlockSync", r)
 	return r
+}
+
+// WithStatusUpdateInterval overrides the interval used to poll peers for their status updates.
+func WithStatusUpdateInterval(interval time.Duration) ReactorOption {
+	return func(r *Reactor) {
+		if interval > 0 {
+			r.statusUpdateInterval = interval
+		}
+	}
 }
 
 // OnStart starts separate go routines for each p2p Channel and listens for
@@ -233,7 +254,7 @@ func (r *Reactor) SwitchToBlockSync(ctx context.Context, state sm.State) error {
 }
 
 func (r *Reactor) requestRoutine(ctx context.Context, p2pClient *client.Client) {
-	statusUpdateTicker := time.NewTicker(statusUpdateIntervalSeconds * time.Second)
+	statusUpdateTicker := time.NewTicker(r.statusUpdateInterval)
 	defer statusUpdateTicker.Stop()
 
 	for {
