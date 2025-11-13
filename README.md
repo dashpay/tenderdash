@@ -11,8 +11,8 @@ Or [Blockchain](<https://en.wikipedia.org/wiki/Blockchain_(database)>), for shor
 [![Discord chat](https://img.shields.io/badge/discord-Dev_chat-738adb)](https://chat.dashdevs.org)
 [![dashpay/tenderdash](https://tokei.rs/b1/github/dashpay/tenderdash?category=lines)](https://github.com/dashpay/tenderdash)
 
-| Branch | Tests | Coverage | Linting |
-|--------|-------|----------|---------|
+| Branch | Tests                                                                                                                                                      | Coverage                                                                                                                       | Linting                                                                                                                                                          |
+| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | master | [![Tests](https://github.com/dashpay/tenderdash/actions/workflows/tests.yml/badge.svg)](https://github.com/dashpay/tenderdash/actions/workflows/tests.yml) | [![codecov](https://codecov.io/gh/dashpay/tenderdash/branch/master/graph/badge.svg)](https://codecov.io/gh/dashpay/tenderdash) | [![Golang Linter](https://github.com/dashpay/tenderdash/actions/workflows/lint.yml/badge.svg)](https://github.com/dashpay/tenderdash/actions/workflows/lint.yml) |
 
 Tenderdash is a Byzantine Fault Tolerant (BFT) middleware that takes a state transition machine -
@@ -45,9 +45,9 @@ requirements if installing from source.
 
 ### Minimum requirements
 
-| Requirement | Notes            |
-|-------------|------------------|
-| Go version  | Go1.25.1 or higher |
+| Requirement | Notes              |
+| ----------- | ------------------ |
+| Go version  | Go1.25.4 or higher |
 
 ## Versioning
 
