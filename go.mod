@@ -34,9 +34,9 @@ require (
 	github.com/spf13/cobra v1.10.1
 	github.com/spf13/viper v1.21.0
 	github.com/stretchr/testify v1.11.1
-	golang.org/x/crypto v0.42.0
-	golang.org/x/net v0.44.0
-	golang.org/x/sync v0.17.0
+	golang.org/x/crypto v0.44.0
+	golang.org/x/net v0.46.0
+	golang.org/x/sync v0.18.0
 	google.golang.org/grpc v1.76.0
 	pgregory.net/rapid v1.2.0
 )
@@ -44,7 +44,7 @@ require (
 require (
 	github.com/bufbuild/buf v1.57.2
 	github.com/creachadair/atomicfile v0.4.0
-	github.com/creachadair/taskgroup v0.14.0
+	github.com/creachadair/taskgroup v0.14.2
 	github.com/go-pkgz/jrpc v0.3.1
 	github.com/google/go-cmp v0.7.0
 	github.com/vektra/mockery/v2 v2.53.5
@@ -356,11 +356,11 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/exp/typeparams v0.0.0-20250911091902-df9299821621 // indirect
-	golang.org/x/mod v0.28.0 // indirect
-	golang.org/x/sys v0.37.0 // indirect
-	golang.org/x/term v0.36.0
-	golang.org/x/text v0.29.0 // indirect
-	golang.org/x/tools v0.37.0 // indirect
+	golang.org/x/mod v0.29.0 // indirect
+	golang.org/x/sys v0.38.0 // indirect
+	golang.org/x/term v0.37.0
+	golang.org/x/text v0.31.0 // indirect
+	golang.org/x/tools v0.38.0 // indirect
 	google.golang.org/protobuf v1.36.9 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	honnef.co/go/tools v0.6.1 // indirect
@@ -369,7 +369,7 @@ require (
 )
 
 require (
-	github.com/btcsuite/btcd/btcec/v2 v2.3.5
+	github.com/btcsuite/btcd/btcec/v2 v2.3.6
 	github.com/cometbft/cometbft-db v1.0.4
 	github.com/cosmos/gogoproto v1.7.0
 	github.com/creachadair/tomledit v0.0.29
@@ -381,7 +381,7 @@ require (
 	github.com/tendermint/go-amino v0.16.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/exp v0.0.0-20250911091902-df9299821621
-	golang.org/x/time v0.13.0
+	golang.org/x/time v0.14.0
 )
 
 replace github.com/cosmos/gogoproto => github.com/lklimek/gogoproto v0.0.0-20250217155326-564fd924f58c
