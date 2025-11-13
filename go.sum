@@ -575,8 +575,8 @@ github.com/libp2p/go-buffer-pool v0.1.0 h1:oK4mSFcQz7cTQIfqbe4MIj9gLW+mnanjyFtc6
 github.com/libp2p/go-buffer-pool v0.1.0/go.mod h1:N+vh8gMqimBzdKkSMVuydVDq+UV5QTWy5HSiZacSbPg=
 github.com/linxGnu/grocksdb v1.10.2 h1:y0dXsWYULY15/BZMcwAZzLd13ZuyA470vyoNzWwmqG0=
 github.com/linxGnu/grocksdb v1.10.2/go.mod h1:C3CNe9UYc9hlEM2pC82AqiGS3LRW537u9LFV4wIZuHk=
-github.com/lklimek/gogoproto v0.0.0-20250217155326-564fd924f58c h1:oND1DULvyneJg4j+815oMOiCIAQrY5n+Ry3LYPHzljM=
-github.com/lklimek/gogoproto v0.0.0-20250217155326-564fd924f58c/go.mod h1:yWChEv5IUEYURQasfyBW5ffkMHR/90hiHgbNgrtp4j0=
+github.com/lklimek/gogoproto v0.0.0-20251113111343-8abb160fc047 h1:QS17Zd/yQWxUciJi4/DDgtBuM8d70ibRlQIYKAfmybM=
+github.com/lklimek/gogoproto v0.0.0-20251113111343-8abb160fc047/go.mod h1:8S7w53P1Y1cHwND64o0BnArT6RmdgIvsBuco6uTllsk=
 github.com/lucasb-eyer/go-colorful v1.3.0 h1:2/yBRLdWBZKrf7gB40FoiKfAWYQ0lqNcbuQwVHXptag=
 github.com/lucasb-eyer/go-colorful v1.3.0/go.mod h1:R4dSotOR9KMtayYi1e77YzuveK+i7ruzyGqttikkLy0=
 github.com/macabu/inamedparam v0.2.0 h1:VyPYpOc10nkhI2qeNUdh3Zket4fcZjEWe35poddBCpE=

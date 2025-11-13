@@ -375,7 +375,7 @@ require (
 require (
 	github.com/btcsuite/btcd/btcec/v2 v2.3.6
 	github.com/cometbft/cometbft-db v1.0.4
-	github.com/cosmos/gogoproto v1.7.0
+	github.com/cosmos/gogoproto v1.7.2
 	github.com/creachadair/tomledit v0.0.29
 	github.com/golangci/golangci-lint/v2 v2.5.0
 	github.com/jonboulle/clockwork v0.5.0
@@ -388,4 +388,5 @@ require (
 	golang.org/x/time v0.14.0
 )
 
-replace github.com/cosmos/gogoproto => github.com/lklimek/gogoproto v0.0.0-20250217155326-564fd924f58c
+// Fix gogoproto module to use fork with needed fixes; see https://github.com/cosmos/gogoproto/pull/150
+replace github.com/cosmos/gogoproto => github.com/lklimek/gogoproto v0.0.0-20251113111343-8abb160fc047
