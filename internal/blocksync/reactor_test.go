@@ -370,6 +370,30 @@ func TestReactor_NoBlockResponse(t *testing.T) {
 	secondaryPool := reactor.synchronizer
 	// Wait long enough to cover several status updates plus processing lag.
 	waitForFullSync := 4 * reactor.statusUpdateInterval
+	if waitForFullSync < 30*time.Second {
+		waitForFullSync = 30 * time.Second
+	}
+	statusLogTicker := time.NewTicker(2 * time.Second)
+	defer statusLogTicker.Stop()
+	stopStatusLog := make(chan struct{})
+	defer close(stopStatusLog)
+	go func() {
+		for {
+			select {
+			case <-statusLogTicker.C:
+				height, pending := secondaryPool.GetStatus()
+				reactor.logger.Info(
+					"sync progress",
+					"height", height,
+					"pending_requests", pending,
+					"max_peer_height", secondaryPool.MaxPeerHeight(),
+					"caught_up", secondaryPool.IsCaughtUp(),
+				)
+			case <-stopStatusLog:
+				return
+			}
+		}
+	}()
 
 	require.Eventually(
 		t,
