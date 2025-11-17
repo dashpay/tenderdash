@@ -23,7 +23,9 @@ var (
 	ErrHeightNotAvailable     = errors.New("height is not available")
 	// ErrInvalidRequest is used as a wrapper to cover more specific cases where the user has
 	// made an invalid request
-	ErrInvalidRequest = errors.New("invalid request")
+	ErrInvalidRequest                   = errors.New("invalid request")
+	ErrBroadcastConfirmationNotReceived = errors.New("broadcast confirmation not received")
+	ErrTooManyRequests                  = errors.New("too_many_requests")
 )
 
 // List of blocks

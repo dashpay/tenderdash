@@ -1,12 +1,17 @@
 package types
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dashpay/tenderdash/rpc/coretypes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 type SampleResult struct {
@@ -70,4 +75,31 @@ func TestRPCError(t *testing.T) {
 			Code:    12,
 			Message: "Badness",
 		}))
+}
+
+func TestRPCRequestMakeErrorMapsCodes(t *testing.T) {
+	req := RPCRequest{id: json.RawMessage(`"1"`)}
+	testCases := []struct {
+		name string
+		err  error
+		want ErrorCode
+	}{
+		{"invalid request", coretypes.ErrInvalidRequest, CodeInvalidRequest},
+		{"tx already in cache", types.ErrTxInCache, CodeTxAlreadyExists},
+		{"tx too large", types.ErrTxTooLarge{Max: 1, Actual: 2}, CodeTxTooLarge},
+		{"mempool full", types.ErrMempoolIsFull{}, CodeMempoolIsFull},
+		{"deadline exceeded", context.DeadlineExceeded, CodeTimeout},
+		{"too many requests sentinel", coretypes.ErrTooManyRequests, CodeTooManyRequests},
+		{"too many requests string", errors.New("too_many_requests: limiter triggered"), CodeTooManyRequests},
+		{"broadcast confirmation", fmt.Errorf("%w", coretypes.ErrBroadcastConfirmationNotReceived), CodeBroadcastConfirmationNotReceived},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			resp := req.MakeError(tc.err)
+			require.NotNil(t, resp.Error)
+			assert.Equal(t, int(tc.want), resp.Error.Code)
+		})
+	}
 }

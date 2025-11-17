@@ -83,7 +83,7 @@ func (env *Environment) BroadcastTx(ctx context.Context, req *coretypes.RequestB
 
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("broadcast confirmation not received: %w", ctx.Err())
+		return nil, fmt.Errorf("%w: %w", coretypes.ErrBroadcastConfirmationNotReceived, ctx.Err())
 	case r := <-resCh:
 		return &coretypes.ResultBroadcastTx{
 			Code:      r.Code,
@@ -116,7 +116,7 @@ func (env *Environment) BroadcastTxCommit(ctx context.Context, req *coretypes.Re
 
 	select {
 	case <-ctx.Done():
-		return nil, fmt.Errorf("broadcast confirmation not received: %w", ctx.Err())
+		return nil, fmt.Errorf("%w: %w", coretypes.ErrBroadcastConfirmationNotReceived, ctx.Err())
 	case r := <-resCh:
 		if r.Code != abci.CodeTypeOK {
 			return &coretypes.ResultBroadcastTxCommit{
