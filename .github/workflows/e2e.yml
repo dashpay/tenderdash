@@ -23,7 +23,7 @@ jobs:
       CGO_LDFLAGS: "-L/usr/local/lib -ldashbls -lrelic_s -lmimalloc-secure -lgmp"
       CGO_CXXFLAGS: "-I/usr/local/include"
     steps:
-      - uses: actions/setup-go@v6.0.0
+      - uses: actions/setup-go@v6.1.0
         with:
           go-version: "1.25.4"
 
