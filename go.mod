@@ -25,7 +25,7 @@ require (
 	github.com/lib/pq v1.10.9
 	github.com/libp2p/go-buffer-pool v0.1.0
 	github.com/mroth/weightedrand v1.0.0
-	github.com/oasisprotocol/curve25519-voi v0.0.0-20230904125328-1f23a7beb09a
+	github.com/oasisprotocol/curve25519-voi v0.0.0-20251114093237-2ab5a27a1729
 	github.com/ory/dockertest/v3 v3.12.0
 	github.com/prometheus/client_golang v1.23.2
 	github.com/rs/cors v1.11.1
@@ -378,7 +378,7 @@ require (
 	github.com/creachadair/tomledit v0.0.29
 	github.com/golangci/golangci-lint/v2 v2.6.1
 	github.com/jonboulle/clockwork v0.5.0
-	github.com/oasisprotocol/oasis-core/go v0.2507.0
+	github.com/oasisprotocol/oasis-core/go v0.2508.0
 	github.com/sasha-s/go-deadlock v0.3.6
 	github.com/syndtr/goleveldb v1.0.1-0.20220721030215-126854af5e6d
 	github.com/tendermint/go-amino v0.16.0
