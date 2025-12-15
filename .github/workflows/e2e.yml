@@ -75,7 +75,7 @@ jobs:
         if: ${{ failure() }}
 
       - name: Upload ${{ matrix.testnet }} logs
-        uses: actions/upload-artifact@v5
+        uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.testnet }}.log
           path: test/e2e/${{ matrix.testnet }}.log
