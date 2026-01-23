@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/dashpay/tenderdash/rpc/coretypes"
+	"github.com/dashpay/tenderdash/types"
 )
 
 // ErrorCode is the type of JSON-RPC error codes.
@@ -31,14 +32,28 @@ const (
 	CodeMethodNotFound ErrorCode = -32601 // The method does not exist or is unavailable
 	CodeInvalidParams  ErrorCode = -32602 // Invalid method parameters
 	CodeInternalError  ErrorCode = -32603 // Internal JSON-RPC error
+
+	// Application-specific server error codes (JSON-RPC -32000 to -32099).
+	CodeTxAlreadyExists                  ErrorCode = -32000
+	CodeTxTooLarge                       ErrorCode = -32001
+	CodeMempoolIsFull                    ErrorCode = -32002
+	CodeTimeout                          ErrorCode = -32003
+	CodeTooManyRequests                  ErrorCode = -32004
+	CodeBroadcastConfirmationNotReceived ErrorCode = -32005
 )
 
 var errorCodeString = map[ErrorCode]string{
-	CodeParseError:     "Parse error",
-	CodeInvalidRequest: "Invalid request",
-	CodeMethodNotFound: "Method not found",
-	CodeInvalidParams:  "Invalid params",
-	CodeInternalError:  "Internal error",
+	CodeParseError:                       "Parse error",
+	CodeInvalidRequest:                   "Invalid request",
+	CodeMethodNotFound:                   "Method not found",
+	CodeInvalidParams:                    "Invalid params",
+	CodeInternalError:                    "Internal error",
+	CodeTxAlreadyExists:                  "Tx already exists in cache",
+	CodeTxTooLarge:                       "Tx too large",
+	CodeMempoolIsFull:                    "Mempool is full",
+	CodeTimeout:                          "Timeout",
+	CodeTooManyRequests:                  "Too many requests",
+	CodeBroadcastConfirmationNotReceived: "Broadcast confirmation not received",
 }
 
 //----------------------------------------
@@ -144,21 +159,74 @@ func (req RPCRequest) MakeError(err error) RPCResponse {
 	if e, ok := err.(*RPCError); ok {
 		return RPCResponse{id: req.id, Error: e}
 	}
-	if errors.Is(err, coretypes.ErrZeroOrNegativeHeight) ||
-		errors.Is(err, coretypes.ErrZeroOrNegativePerPage) ||
-		errors.Is(err, coretypes.ErrPageOutOfRange) ||
-		errors.Is(err, coretypes.ErrInvalidRequest) {
-		return RPCResponse{id: req.id, Error: &RPCError{
-			Code:    int(CodeInvalidRequest),
-			Message: CodeInvalidRequest.String(),
-			Data:    err.Error(),
-		}}
-	}
+	code := rpcErrorCodeFor(err)
 	return RPCResponse{id: req.id, Error: &RPCError{
-		Code:    int(CodeInternalError),
-		Message: CodeInternalError.String(),
+		Code:    int(code),
+		Message: code.String(),
 		Data:    err.Error(),
 	}}
+}
+
+func rpcErrorCodeFor(err error) ErrorCode {
+	switch {
+	case err == nil:
+		return CodeInternalError
+	case errors.Is(err, coretypes.ErrZeroOrNegativeHeight),
+		errors.Is(err, coretypes.ErrZeroOrNegativePerPage),
+		errors.Is(err, coretypes.ErrPageOutOfRange),
+		errors.Is(err, coretypes.ErrInvalidRequest):
+		return CodeInvalidRequest
+	case errors.Is(err, types.ErrTxInCache):
+		return CodeTxAlreadyExists
+	case isErrTxTooLarge(err):
+		return CodeTxTooLarge
+	case isErrMempoolFull(err):
+		return CodeMempoolIsFull
+	case errors.Is(err, context.DeadlineExceeded):
+		return CodeTimeout
+	case isTooManyRequestsErr(err):
+		return CodeTooManyRequests
+	case isBroadcastConfirmationNotReceivedErr(err):
+		return CodeBroadcastConfirmationNotReceived
+	default:
+		return CodeInternalError
+	}
+}
+
+func isErrTxTooLarge(err error) bool {
+	if err == nil {
+		return false
+	}
+	var txErr types.ErrTxTooLarge
+	return errors.As(err, &txErr)
+}
+
+func isErrMempoolFull(err error) bool {
+	if err == nil {
+		return false
+	}
+	var fullErr types.ErrMempoolIsFull
+	return errors.As(err, &fullErr)
+}
+
+func isTooManyRequestsErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, coretypes.ErrTooManyRequests) {
+		return true
+	}
+	return strings.Contains(err.Error(), "too_many_requests")
+}
+
+func isBroadcastConfirmationNotReceivedErr(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, coretypes.ErrBroadcastConfirmationNotReceived) {
+		return true
+	}
+	return strings.Contains(err.Error(), "broadcast confirmation not received")
 }
 
 // SetMethodAndParams updates the method and parameters of req with the given
