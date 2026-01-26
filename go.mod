@@ -389,3 +389,6 @@ require (
 
 // Fix gogoproto module to use fork with needed fixes; see https://github.com/cosmos/gogoproto/pull/150
 replace github.com/cosmos/gogoproto => github.com/lklimek/gogoproto v0.0.0-20251113111343-8abb160fc047
+
+// docker cli < v29.2 breaks golangci-lint
+replace github.com/docker/cli => github.com/docker/cli v29.2.0-rc.2+incompatible
