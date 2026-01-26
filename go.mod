@@ -45,7 +45,7 @@ require (
 	github.com/bufbuild/buf v1.60.0
 	github.com/creachadair/atomicfile v0.4.0
 	github.com/creachadair/taskgroup v0.14.2
-	github.com/go-pkgz/jrpc v0.3.1
+	github.com/go-pkgz/jrpc v0.4.0
 	github.com/google/go-cmp v0.7.0
 	github.com/vektra/mockery/v2 v2.53.5
 )
@@ -83,7 +83,6 @@ require (
 	github.com/Masterminds/semver/v3 v3.4.0 // indirect
 	github.com/MirrexOne/unqueryvet v1.4.0 // indirect
 	github.com/OpenPeeDeeP/depguard/v2 v2.2.1 // indirect
-	github.com/ajg/form v1.5.1 // indirect
 	github.com/alecthomas/chroma/v2 v2.21.1 // indirect
 	github.com/alecthomas/go-check-sumtype v0.3.1 // indirect
 	github.com/alexkohler/nakedret/v2 v2.0.6 // indirect
@@ -129,7 +128,6 @@ require (
 	github.com/decred/dcrd/dcrec/secp256k1/v4 v4.4.0 // indirect
 	github.com/dgraph-io/badger/v4 v4.8.0 // indirect
 	github.com/dgraph-io/ristretto/v2 v2.3.0 // indirect
-	github.com/didip/tollbooth/v8 v8.0.1 // indirect
 	github.com/distribution/reference v0.6.0 // indirect
 	github.com/dlclark/regexp2 v1.11.5 // indirect
 	github.com/docker/cli v28.5.1+incompatible // indirect
@@ -140,11 +138,10 @@ require (
 	github.com/getsentry/sentry-go v0.35.3 // indirect
 	github.com/ghostiam/protogetter v0.3.18 // indirect
 	github.com/go-chi/chi/v5 v5.2.3 // indirect
-	github.com/go-chi/render v1.0.3 // indirect
 	github.com/go-logr/logr v1.4.3 // indirect
 	github.com/go-logr/stdr v1.2.2 // indirect
-	github.com/go-pkgz/expirable-cache/v3 v3.1.0 // indirect
 	github.com/go-pkgz/rest v1.20.4 // indirect
+	github.com/go-pkgz/routegroup v1.6.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.4.0 // indirect
 	github.com/godoc-lint/godoc-lint v0.11.1 // indirect
 	github.com/golangci/asciicheck v0.5.0 // indirect
