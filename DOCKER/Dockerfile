@@ -85,7 +85,6 @@ RUN apk update && \
 # Therefore, we delete any existing user with UID 100 and reassign that UID to
 # our tmuser. We create a dedicated group tmuser with GID 1000
 RUN addgroup --gid 1000 tmuser && \
-    cat /etc/passwd && \
     run_user="$(awk -F: '$3==100{print $1; exit}' /etc/passwd)" && \
     if [ -n "$run_user" ]; then deluser "$run_user"; fi && \
     adduser -u 100 -S -G tmuser tmuser -h "$TMHOME"
