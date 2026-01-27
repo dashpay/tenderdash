@@ -35,7 +35,7 @@ For Debian-based (eg. Ubuntu):
 For Alpine Linux:
 
   ```bash
-  apk add --no-cache git build-base cmake gmp-dev
+  apk add --no-cache git build-base cmake gmp-dev gmp-static
   ```
 
 Get the source code:

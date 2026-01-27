@@ -6,7 +6,7 @@ SRC_PATH="${SCRIPT_PATH}/src"
 BUILD_PATH="${SCRIPT_PATH}/build"
 BLS_SM_PATH="${SRC_PATH}"
 BLS_GIT_REPO="https://github.com/dashpay/bls-signatures.git"
-BLS_GIT_BRANCH=${BLS_GIT_BRANCH:-"1.2.6"}
+BLS_GIT_BRANCH=${BLS_GIT_BRANCH:-"1.3.6"}
 
 set -e
 
