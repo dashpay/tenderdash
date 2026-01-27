@@ -4,8 +4,8 @@
 # * compile - builds final binaries
 # * image - creates final image of minimal size
 
-ARG ALPINE_VERSION=3.21
-ARG GOLANG_VERSION=1.25.3
+ARG ALPINE_VERSION=3.23
+ARG GOLANG_VERSION=1.25.6
 #################################
 # STAGE 1: install dependencies #
 #################################
@@ -13,7 +13,7 @@ FROM golang:${GOLANG_VERSION}-alpine${ALPINE_VERSION} AS base
 
 RUN apk update && \
     apk upgrade && \
-    apk --no-cache add bash git gmp-dev sudo cmake build-base libpcap-dev leveldb-dev && \
+    apk --no-cache add bash git gmp-dev gmp-static sudo cmake build-base libpcap-dev leveldb-dev && \
     rm -rf /var/cache/apk/*
 
 WORKDIR /src/bls
