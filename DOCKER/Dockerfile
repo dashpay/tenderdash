@@ -4,8 +4,8 @@
 # * compile - builds final binaries
 # * image - creates final image of minimal size
 
-ARG ALPINE_VERSION=3.21
-ARG GOLANG_VERSION=1.25.4
+ARG ALPINE_VERSION=3.23
+ARG GOLANG_VERSION=1.25.6
 #################################
 # STAGE 1: install dependencies #
 #################################
@@ -13,7 +13,7 @@ FROM golang:${GOLANG_VERSION}-alpine${ALPINE_VERSION} AS base
 
 RUN apk update && \
     apk upgrade && \
-    apk --no-cache add bash git gmp-dev sudo cmake build-base libpcap-dev leveldb-dev && \
+    apk --no-cache add bash git gmp-dev gmp-static sudo cmake build-base libpcap-dev leveldb-dev && \
     rm -rf /var/cache/apk/*
 
 WORKDIR /src/bls
@@ -85,7 +85,8 @@ RUN apk update && \
 # Therefore, we delete any existing user with UID 100 and reassign that UID to
 # our tmuser. We create a dedicated group tmuser with GID 1000
 RUN addgroup --gid 1000 tmuser && \
-    { run_user="$(id -nu 100)" && deluser $run_user || true; } && \
+    run_user="$(awk -F: '$3==100{print $1; exit}' /etc/passwd)" && \
+    if [ -n "$run_user" ]; then deluser "$run_user"; fi && \
     adduser -u 100 -S -G tmuser tmuser -h "$TMHOME"
 
 
