@@ -5,7 +5,7 @@
 # * image - creates final image of minimal size
 
 ARG ALPINE_VERSION=3.21
-ARG GOLANG_VERSION=1.25.1
+ARG GOLANG_VERSION=1.25.4
 #################################
 # STAGE 1: install dependencies #
 #################################
@@ -71,15 +71,21 @@ ENV TMHOME=/tenderdash
 # jq and curl used for extracting `pub_key` from private validator while
 # deploying tenderdash with Kubernetes. It is nice to have bash so the users
 # could execute bash commands.
-#
-# Note: Alpine 3.21 has klogd user occupying UID 100, which we need for backwards-compatibility with pre-3.21 versions.
-# We delete that user as a workaround and reassign its UID to our tmuser user.
+
 RUN apk update && \
     apk upgrade && \
     apk --no-cache add curl jq bash gmp libsodium-dev libstdc++ libpcap && \
-    rm -rf /var/cache/apk/* && \
-    addgroup --gid 1000 tmuser && \
-    deluser klogd  && \ 
+    rm -rf /var/cache/apk/*
+
+# Create tmuser with UID=100 and GID=1000
+#
+# For backward compatibility, we need to run tenderdash as UID 100 (the
+# default UID used in previous tenderdash docker images). However, UID 100
+# is often already taken by other system users (e.g., klogd in Alpine 3.21).
+# Therefore, we delete any existing user with UID 100 and reassign that UID to
+# our tmuser. We create a dedicated group tmuser with GID 1000
+RUN addgroup --gid 1000 tmuser && \
+    { run_user="$(id -nu 100)" && deluser $run_user || true; } && \
     adduser -u 100 -S -G tmuser tmuser -h "$TMHOME"
 
 

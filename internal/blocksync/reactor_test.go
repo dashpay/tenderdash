@@ -51,6 +51,7 @@ func setup(
 	genDoc *types.GenesisDoc,
 	privVal types.PrivValidator,
 	maxBlockHeights []int64,
+	opts ...ReactorOption,
 ) *reactorTestSuite {
 	t.Helper()
 
@@ -77,7 +78,7 @@ func setup(
 
 	i := 0
 	for nodeID := range rts.network.Nodes {
-		rts.addNode(ctx, t, nodeID, genDoc, privVal, maxBlockHeights[i])
+		rts.addNode(ctx, t, nodeID, genDoc, privVal, maxBlockHeights[i], opts...)
 		i++
 	}
 
@@ -106,7 +107,8 @@ func makeReactor(
 	genDoc *types.GenesisDoc,
 	_privVal types.PrivValidator,
 	channelCreator p2p.ChannelCreator,
-	peerEvents p2p.PeerEventSubscriber) *Reactor {
+	peerEvents p2p.PeerEventSubscriber,
+	opts ...ReactorOption) *Reactor {
 
 	logger := log.NewTestingLogger(t)
 
@@ -158,6 +160,7 @@ func makeReactor(
 		true,
 		consensus.NopMetrics(),
 		nil, // eventbus, can be nil
+		opts...,
 	)
 }
 
@@ -168,6 +171,7 @@ func (rts *reactorTestSuite) addNode(
 	genDoc *types.GenesisDoc,
 	privVal types.PrivValidator,
 	maxBlockHeight int64,
+	opts ...ReactorOption,
 ) {
 	t.Helper()
 
@@ -187,7 +191,7 @@ func (rts *reactorTestSuite) addNode(
 
 	proTxHash := rts.network.Nodes[nodeID].NodeInfo.ProTxHash
 	peerEvents := func(ctx context.Context, _ string) *p2p.PeerUpdates { return rts.peerUpdates[nodeID] }
-	reactor := makeReactor(ctx, t, rts.config, proTxHash, nodeID, genDoc, privVal, chCreator, peerEvents)
+	reactor := makeReactor(ctx, t, rts.config, proTxHash, nodeID, genDoc, privVal, chCreator, peerEvents, opts...)
 
 	commit := types.NewCommit(0, 0, types.BlockID{}, nil, nil)
 
@@ -336,7 +340,17 @@ func TestReactor_NoBlockResponse(t *testing.T) {
 	genDoc, privVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
 	maxBlockHeight := int64(65)
 
-	rts := setup(ctx, t, cfg, genDoc, privVals[0], []int64{maxBlockHeight, 0})
+	shortStatusUpdateInterval := 2 * time.Second
+
+	rts := setup(
+		ctx,
+		t,
+		cfg,
+		genDoc,
+		privVals[0],
+		[]int64{maxBlockHeight, 0},
+		WithStatusUpdateInterval(shortStatusUpdateInterval),
+	)
 
 	require.Equal(t, maxBlockHeight, rts.reactors[rts.nodes[0]].store.Height())
 
@@ -352,16 +366,43 @@ func TestReactor_NoBlockResponse(t *testing.T) {
 		{100, false},
 	}
 
-	secondaryPool := rts.reactors[rts.nodes[1]].synchronizer
+	reactor := rts.reactors[rts.nodes[1]]
+	secondaryPool := reactor.synchronizer
+	// Wait long enough to cover several status updates plus processing lag.
+	waitForFullSync := 4 * reactor.statusUpdateInterval
+	if waitForFullSync < 30*time.Second {
+		waitForFullSync = 30 * time.Second
+	}
+	statusLogTicker := time.NewTicker(2 * time.Second)
+	defer statusLogTicker.Stop()
+	stopStatusLog := make(chan struct{})
+	defer close(stopStatusLog)
+	go func() {
+		for {
+			select {
+			case <-statusLogTicker.C:
+				height, pending := secondaryPool.GetStatus()
+				reactor.logger.Info(
+					"sync progress",
+					"height", height,
+					"pending_requests", pending,
+					"max_peer_height", secondaryPool.MaxPeerHeight(),
+					"caught_up", secondaryPool.IsCaughtUp(),
+				)
+			case <-stopStatusLog:
+				return
+			}
+		}
+	}()
+
 	require.Eventually(
 		t,
 		func() bool { return secondaryPool.MaxPeerHeight() > 0 && secondaryPool.IsCaughtUp() },
-		10*time.Second,
+		waitForFullSync,
 		10*time.Millisecond,
 		"expected node to be fully synced",
 	)
 
-	reactor := rts.reactors[rts.nodes[1]]
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("%d", i), func(t *testing.T) {
 			block := reactor.store.LoadBlock(tc.height)

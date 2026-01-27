@@ -28,7 +28,7 @@ jobs:
     env:
       PLATFORMS: ${{ github.event_name == 'release' && 'linux/amd64,linux/arm64' || github.event.inputs.platforms }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
 
       - name: Set up QEMU
         uses: docker/setup-qemu-action@master
@@ -36,7 +36,7 @@ jobs:
           platforms: all
 
       - name: Set up Docker Build
-        uses: docker/setup-buildx-action@v3.11.1
+        uses: docker/setup-buildx-action@v3.12.0
 
       - name: Login to DockerHub
         if: ${{ github.event_name != 'pull_request' }}

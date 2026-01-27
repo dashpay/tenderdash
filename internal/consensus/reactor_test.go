@@ -553,6 +553,7 @@ func TestReactorValidatorSetChanges(t *testing.T) {
 		nPeers:           nPeers,
 		nVals:            nVals,
 		appFunc:          newKVStoreFunc(t),
+		tickerFun:        newMockTickerFunc(true),
 		validatorUpdates: updates,
 		consensusParams: factory.ConsensusParams(func(cp *types.ConsensusParams) {
 			cp.Timeout.Propose = 2 * time.Second
