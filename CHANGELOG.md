@@ -1,8 +1,66 @@
+## [1.5.2] - 2026-01-27
+
+### Bug Fixes
+
+- Docker build fails when base image has no klogd user (#1205)
+
+### Refactor
+
+- More granular rpc error codes (#1206)
+
+### Testing
+
+- Fix flaky validator set changes test (#1204)
+- Fix flaky TestReactor_NoBlockResponse (#1203)
+
+### Build
+
+- Bump golang.org/x/term from 0.35.0 to 0.36.0 (#1184)
+- Bump google.golang.org/grpc from 1.75.1 to 1.76.0 (#1187)
+- Bump github.com/creachadair/atomicfile from 0.3.8 to 0.4.0 (#1190)
+- Bump actions/download-artifact from 5 to 6 (#1192)
+- Bump actions/upload-artifact from 4 to 5 (#1191)
+- Bump golangci/golangci-lint-action from 8.0.0 to 9.0.0 (#1195)
+- Bump golang.org/x/sync from 0.17.0 to 0.18.0 (#1199)
+- Bump github.com/creachadair/taskgroup from 0.14.0 to 0.14.2 (#1194)
+- Bump golang.org/x/time from 0.13.0 to 0.14.0 (#1183)
+- Bump github.com/btcsuite/btcd/btcec/v2 from 2.3.5 to 2.3.6 (#1193)
+- Bump golang.org/x/crypto from 0.42.0 to 0.44.0 (#1200)
+- Bump golang to 1.25.4 (#1202)
+- Bump golang.org/x/net from 0.44.0 to 0.47.0 (#1196)
+- Bump github.com/oasisprotocol/oasis-core/go from 0.2505.0 to 0.2507.0 (#1201)
+- Bump github.com/golangci/golangci-lint/v2 from 2.5.0 to 2.6.1 (#1197)
+- Bump github.com/bufbuild/buf from 1.57.2 to 1.59.0 (#1189)
+- Bump github.com/bufbuild/buf from 1.59.0 to 1.60.0 (#1214)
+- Bump google.golang.org/grpc from 1.76.0 to 1.77.0 (#1213)
+- Bump golang.org/x/crypto from 0.44.0 to 0.45.0 (#1212)
+- Bump github.com/oasisprotocol/oasis-core/go (#1211)
+- Bump actions/checkout from 5 to 6 (#1209)
+- Bump actions/setup-go from 6.0.0 to 6.1.0 (#1207)
+- Bump styfle/cancel-workflow-action from 0.12.1 to 0.13.0 (#1229)
+- Bump docker/setup-buildx-action from 3.11.1 to 3.12.0 (#1227)
+- Bump actions/upload-artifact from 5 to 6 (#1223)
+- Bump actions/download-artifact from 6 to 7 (#1222)
+- Bump actions/checkout to from 2 to 6 (#1230)
+- Bump github.com/BurntSushi/toml from 1.5.0 to 1.6.0 (#1228)
+- Bump golang.org/x/crypto from 0.45.0 to 0.46.0 (#1226)
+- Bump golangci/golangci-lint-action from 9.0.0 to 9.2.0 (#1217)
+- Bump golang.org/x/sync from 0.18.0 to 0.19.0 (#1218)
+- Bump golang.org/x/net from 0.47.0 to 0.48.0 (#1225)
+- Bump github.com/spf13/cobra from 1.10.1 to 1.10.2 (#1221)
+- Bump github.com/golangci/golangci-lint/v2 (#1219)
+- Bump github.com/oasisprotocol/oasis-core/go (#1216)
+- Bump github.com/go-pkgz/jrpc from 0.3.1 to 0.4.0 (#1220)
+- Bump actions/setup-go from 6.1.0 to 6.2.0 (#1231)
+- Bump google.golang.org/grpc from 1.77.0 to 1.78.0 (#1232)
+- Bump github.com/bufbuild/buf from 1.60.0 to 1.64.0 (#1233)
+
 ## [1.5.1] - 2025-10-01
 
 ### Bug Fixes
 
 - Blockstore.db permission denied after upgrade (#1179)
+- Potential deadlock in updateMonitor (#1176)
 
 ### Build
 
