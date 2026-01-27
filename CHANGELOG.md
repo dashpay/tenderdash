@@ -1,8 +1,20 @@
+## [1.5.3] - 2026-01-27
+
+### Build
+
+- Id command fails to lookup uid 100 (#1236)
+- Bump golang to 1.25.6, alpine to 3.23, bls-signatures to 1.3.6 (#1237)
+- Bump github.com/opencontainers/runc (#1238)
+
 ## [1.5.2] - 2026-01-27
 
 ### Bug Fixes
 
 - Docker build fails when base image has no klogd user (#1205)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.5.2
 
 ### Refactor
 

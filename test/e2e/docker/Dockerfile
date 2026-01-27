@@ -1,6 +1,6 @@
 ## Stage 1 and 2 is copied from /DOCKER/Dockerfile
-ARG ALIPNE_VERSION=3.21
-ARG GOLANG_VERSION=1.25.4
+ARG ALIPNE_VERSION=3.23
+ARG GOLANG_VERSION=1.25.6
 #################################
 # STAGE 1: install dependencies #
 #################################
@@ -8,7 +8,7 @@ FROM golang:${GOLANG_VERSION}-alpine${ALIPNE_VERSION} AS base
 
 RUN apk update && \
     apk upgrade && \
-    apk --no-cache add bash git gmp-dev sudo cmake build-base libpcap-dev leveldb-dev && \
+    apk --no-cache add bash git gmp-dev gmp-static sudo cmake build-base libpcap-dev leveldb-dev && \
     rm -rf /var/cache/apk/*
 
 WORKDIR /src/bls

@@ -6,20 +6,18 @@ updates:
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
-  #  - package-ecosystem: npm
-  #    directory: "/docs"
-  #    schedule:
-  #      interval: daily
-  #      time: "11:00"
-  #    open-pull-requests-limit: 10
-  #    reviewers:
-  #      - fadeev
+
+  - package-ecosystem: npm
+    directory: "/docs"
+    schedule:
+      interval: monthly
+    open-pull-requests-limit: 0
+    ignore:
+      - dependency-name: "*"
   - package-ecosystem: gomod
     directory: "/"
     schedule:
       interval: weekly
     open-pull-requests-limit: 10
-    reviewers:
-      - lklimek
     labels:
       - dependencies
