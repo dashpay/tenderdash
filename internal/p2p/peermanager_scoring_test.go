@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/crypto/ed25519"
+	"github.com/dashpay/tenderdash/libs/log"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -100,7 +101,7 @@ func TestPeerScoring(t *testing.T) {
 
 func makeMockPeerStore(t *testing.T, peers ...peerInfo) *peerStore {
 	t.Helper()
-	s, err := newPeerStore(dbm.NewMemDB())
+	s, err := newPeerStore(dbm.NewMemDB(), log.NewNopLogger())
 	if err != nil {
 		t.Fatal(err)
 	}

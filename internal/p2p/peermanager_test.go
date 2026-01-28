@@ -10,11 +10,13 @@ import (
 
 	dbm "github.com/cometbft/cometbft-db"
 	"github.com/fortytw2/leaktest"
+	"github.com/google/orderedcode"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dashpay/tenderdash/internal/p2p"
 	"github.com/dashpay/tenderdash/libs/log"
+	p2pproto "github.com/dashpay/tenderdash/proto/tendermint/p2p"
 	"github.com/dashpay/tenderdash/types"
 )
 
@@ -109,6 +111,56 @@ func TestPeerManagerOptions_Validate(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestPeerStoreLoadPeersSkipsInvalidAddress(t *testing.T) {
+	db := dbm.NewMemDB()
+	logger, err := log.NewDefaultLogger(log.LogFormatText, log.LogLevelInfo)
+	require.NoError(t, err)
+
+	invalidID := types.NodeID(strings.Repeat("a", 40))
+	invalidPeer := &p2pproto.PeerInfo{
+		ID: string(invalidID),
+		AddressInfo: []*p2pproto.PeerAddressInfo{{
+			Address: "mconn://" + string(invalidID) + "@[173.199.71.83:26656]:26656",
+		}},
+	}
+	invalidBz, err := invalidPeer.Marshal()
+	require.NoError(t, err)
+	require.NoError(t, db.Set(peerInfoKey(t, invalidID), invalidBz))
+
+	validID := types.NodeID(strings.Repeat("b", 40))
+	validAddr := p2p.NodeAddress{
+		Protocol: "mconn",
+		NodeID:   validID,
+		Hostname: "127.0.0.1",
+		Port:     26656,
+	}
+	validPeer := &p2pproto.PeerInfo{
+		ID: string(validID),
+		AddressInfo: []*p2pproto.PeerAddressInfo{{
+			Address: validAddr.String(),
+		}},
+	}
+	validBz, err := validPeer.Marshal()
+	require.NoError(t, err)
+	require.NoError(t, db.Set(peerInfoKey(t, validID), validBz))
+
+	selfID := types.NodeID(strings.Repeat("c", 40))
+	peerManager, err := p2p.NewPeerManager(context.Background(), selfID, db, p2p.PeerManagerOptions{})
+	require.NoError(t, err)
+	peerManager.SetLogger(logger)
+
+	peers := peerManager.Peers()
+	require.Contains(t, peers, validID)
+	require.NotContains(t, peers, invalidID)
+}
+
+func peerInfoKey(t *testing.T, id types.NodeID) []byte {
+	t.Helper()
+	key, err := orderedcode.Append(nil, int64(1), string(id))
+	require.NoError(t, err)
+	return key
 }
 
 func TestNewPeerManager(t *testing.T) {
