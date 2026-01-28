@@ -158,6 +158,10 @@ func (e Endpoint) NodeAddress(nodeID types.NodeID) NodeAddress {
 }
 
 func (e Endpoint) Equal(other *Endpoint) bool {
+	if other == nil {
+		return false
+	}
+
 	if e.Protocol != other.Protocol {
 		return false
 	}
