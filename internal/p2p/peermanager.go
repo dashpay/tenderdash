@@ -338,7 +338,7 @@ func NewPeerManager(_ctx context.Context, selfID types.NodeID, peerDB dbm.DB, op
 
 	options.optimize()
 
-	store, err := newPeerStore(peerDB)
+	store, err := newPeerStore(peerDB, log.NewNopLogger().With("module", "peerstore"))
 	if err != nil {
 		return nil, err
 	}
@@ -379,6 +379,9 @@ func NewPeerManager(_ctx context.Context, selfID types.NodeID, peerDB dbm.DB, op
 // SetLogger sets a logger for the PeerManager
 func (m *PeerManager) SetLogger(logger log.Logger) {
 	m.logger = logger
+	if m.store != nil {
+		m.store.logger = logger.With("module", "peerstore")
+	}
 }
 
 // Close closes peer manager and frees up all resources
@@ -1371,15 +1374,22 @@ type peerStore struct {
 	peers  map[types.NodeID]*peerInfo
 	index  map[NodeAddress]types.NodeID
 	ranked []*peerInfo // cache for Ranked(), nil invalidates cache
+	logger log.Logger
 }
 
 // newPeerStore creates a new peer store, loading all persisted peers from the
 // database into memory.
-func newPeerStore(db dbm.DB) (*peerStore, error) {
+func newPeerStore(db dbm.DB, logger log.Logger) (*peerStore, error) {
 	if db == nil {
 		return nil, errors.New("no database provided")
 	}
-	store := &peerStore{db: db}
+	if logger == nil {
+		logger = log.NewNopLogger()
+	}
+	store := &peerStore{
+		db:     db,
+		logger: logger,
+	}
 	if err := store.loadPeers(); err != nil {
 		return nil, err
 	}
@@ -1398,15 +1408,15 @@ func (s *peerStore) loadPeers() error {
 	}
 	defer iter.Close()
 	for ; iter.Valid(); iter.Next() {
-		// FIXME: We may want to tolerate failures here, by simply logging
-		// the errors and ignoring the faulty peer entries.
 		msg := new(p2pproto.PeerInfo)
 		if err := proto.Unmarshal(iter.Value(), msg); err != nil {
-			return fmt.Errorf("invalid peer Protobuf data: %w", err)
+			s.logger.Error("invalid peer Protobuf data, skipping", "key", fmt.Sprintf("%x", iter.Key()), "error", err)
+			continue
 		}
 		peer, err := peerInfoFromProto(msg)
 		if err != nil {
-			return fmt.Errorf("invalid peer data: %w", err)
+			s.logger.Error("invalid peer data, skipping", "key", fmt.Sprintf("%x", iter.Key()), "error", err)
+			continue
 		}
 		peers[peer.ID] = peer
 		for addr := range peer.AddressInfo {
