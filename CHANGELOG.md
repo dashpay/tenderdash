@@ -1,4 +1,18 @@
+## [1.5.4] - 2026-01-28
+
+### Bug Fixes
+
+- Ignore invalid peer db records (#1243)
+
+### Build
+
+- Bump the npm_and_yarn group across 1 directory with 26 updates (#1239)
+
 ## [1.5.3] - 2026-01-27
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.5.3
 
 ### Build
 
