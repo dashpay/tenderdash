@@ -738,6 +738,10 @@ type P2PConfig struct { //nolint: maligned
 	// Comma separated list of nodes to keep persistent connections to
 	PersistentPeers string `mapstructure:"persistent-peers"`
 
+	// If true, only peers from persistent-peers and bootstrap-peers are allowed
+	// to connect (inbound and outbound).
+	AllowlistOnly bool `mapstructure:"allowlist-only"`
+
 	// UPNP port forwarding
 	UPNP bool `mapstructure:"upnp"`
 
@@ -812,6 +816,7 @@ func DefaultP2PConfig() *P2PConfig {
 		HandshakeTimeout:        20 * time.Second,
 		DialTimeout:             3 * time.Second,
 		QueueType:               "simple-priority",
+		AllowlistOnly:           false,
 	}
 }
 
@@ -838,6 +843,9 @@ func (cfg *P2PConfig) ValidateBasic() error {
 	}
 	if cfg.IncomingConnectionWindow < 1*time.Millisecond {
 		return errors.New("incoming-connection-window must be set to at least 1ms")
+	}
+	if cfg.AllowlistOnly && strings.TrimSpace(cfg.PersistentPeers) == "" && strings.TrimSpace(cfg.BootstrapPeers) == "" {
+		return errors.New("allowlist-only requires at least one of persistent-peers or bootstrap-peers")
 	}
 	return nil
 }
