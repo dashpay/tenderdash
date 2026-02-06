@@ -7,6 +7,7 @@ import (
 	"math"
 	"net"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -137,6 +138,41 @@ func TestNodeDelayedStart(t *testing.T) {
 
 	startTime := tmtime.Now()
 	assert.Equal(t, true, startTime.After(n.GenesisDoc().GenesisTime))
+}
+
+func TestGetRouterConfigAllowlistOnlyFiltersByIDAndIP(t *testing.T) {
+	cfg := config.TestConfig()
+	cfg.P2P.AllowlistOnly = true
+
+	id1 := types.NodeID(strings.Repeat("a", 40))
+	id2 := types.NodeID(strings.Repeat("b", 40))
+	id3 := types.NodeID(strings.Repeat("c", 40))
+
+	cfg.P2P.PersistentPeers = fmt.Sprintf("tcp://%s@127.0.0.1:26656", id1)
+	cfg.P2P.BootstrapPeers = fmt.Sprintf("tcp://%s@127.0.0.2:26656", id2)
+
+	opts, err := getRouterConfig(cfg, nil)
+	require.NoError(t, err)
+	require.NotNil(t, opts.FilterPeerByID)
+
+	require.NoError(t, opts.FilterPeerByID(context.Background(), id1))
+	require.NoError(t, opts.FilterPeerByID(context.Background(), id2))
+	require.Error(t, opts.FilterPeerByID(context.Background(), id3))
+}
+
+func TestGetRouterConfigAllowlistOnlyAcceptsOnlyNodeIDs(t *testing.T) {
+	cfg := config.TestConfig()
+	cfg.P2P.AllowlistOnly = true
+
+	id1 := types.NodeID(strings.Repeat("a", 40))
+	cfg.P2P.PersistentPeers = fmt.Sprintf("tcp:%s", id1)
+
+	opts, err := getRouterConfig(cfg, nil)
+	require.NoError(t, err)
+	require.NotNil(t, opts.FilterPeerByID)
+
+	require.NoError(t, opts.FilterPeerByID(context.Background(), id1))
+	require.Error(t, opts.FilterPeerByID(context.Background(), types.NodeID(strings.Repeat("b", 40))))
 }
 
 func TestNodeSetAppVersion(t *testing.T) {

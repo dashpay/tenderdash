@@ -521,6 +521,7 @@ This section will cover settings within the p2p section of the `config.toml`.
     - > We recommend setting an external address. When used in a private network, Tendermint Core currently doesn't advertise the node's public address. There is active and ongoing work to improve the P2P system, but this is a helpful workaround for now.
 - `persistent-peers` = is a list of comma separated peers that you will always want to be connected to. If you're already connected to the maximum number of peers, persistent peers will not be added.
 - `pex` = turns the peer exchange reactor on or off. Validator node will want the `pex` turned off so it would not begin gossiping to unknown peers on the network. PeX can also be turned off for statically configured networks with fixed network connectivity. For full nodes on open, dynamic networks, it should be turned on.
+- `allowlist-only` = if true, only peers from `persistent-peers` and `bootstrap-peers` are allowed to connect (inbound and outbound).
 - `private-peer-ids` = is a comma-separated list of node ids that will _not_ be exposed to other peers (i.e., you will not tell other peers about the ids in this list). This can be filled with a validator's node id.
 
 Recently the Tendermint Team conducted a refactor of the p2p layer. This lead to multiple config parameters being deprecated and/or replaced.
