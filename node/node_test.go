@@ -140,7 +140,7 @@ func TestNodeDelayedStart(t *testing.T) {
 	assert.Equal(t, true, startTime.After(n.GenesisDoc().GenesisTime))
 }
 
-func TestGetRouterConfigAllowlistOnlyFiltersByIDAndIP(t *testing.T) {
+func TestGetRouterConfigAllowlistOnlyFilters(t *testing.T) {
 	cfg := config.TestConfig()
 	cfg.P2P.AllowlistOnly = true
 
