@@ -833,6 +833,15 @@ func buildAllowlist(conf *config.Config) (map[types.NodeID]struct{}, error) {
 		}
 	}
 
+	if len(allowedIDs) == 0 {
+		return nil, fmt.Errorf(
+			"allowlist-only enabled but no NodeIDs found in persistent-peers or bootstrap-peers; "+
+				"include NodeID@host:port entries or disable allowlist-only (persistent-peers=%q bootstrap-peers=%q)",
+			conf.P2P.PersistentPeers,
+			conf.P2P.BootstrapPeers,
+		)
+	}
+
 	return allowedIDs, nil
 }
 
