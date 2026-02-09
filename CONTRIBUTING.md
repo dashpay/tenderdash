@@ -145,7 +145,8 @@ git branch -r --list 'origin/v[0-9]*-dev' --sort=-version:refname | head -1
 ```
 
 Release tags are cut from `master`. We only maintain `master` and the current
-development branch.
+development branch. Changes merge into the development branch first; `master`
+receives cherry-picked release-critical fixes and release updates.
 
 Note all pull requests should be squash merged. This keeps the commit history
 clean and makes it easy to reference the pull request where a change was
