@@ -125,7 +125,7 @@ func CheckFileAccess(path string, operation string) error {
 		if isPermissionError(err) {
 			permErr.IsPermissionIssue = true
 
-			// File doesn't exist, check parent directory
+			// Can't stat the target; collect parent directory info for diagnostics
 			parentDir := filepath.Dir(path)
 			if parentInfo, parentErr := os.Stat(parentDir); parentErr == nil {
 				permErr.ParentDirMode = parentInfo.Mode()
