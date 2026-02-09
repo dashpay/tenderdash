@@ -5,24 +5,39 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"syscall"
+
+	"golang.org/x/sys/unix"
+)
+
+// Operation constants for file access checks
+const (
+	OperationRead           = "read"
+	OperationWrite          = "write"
+	OperationExecute        = "execute"
+	OperationReadFile       = "read file"
+	OperationWriteFile      = "write file"
+	OperationReadDirectory  = "read directory"
+	OperationWriteDirectory = "write directory"
+	OperationOpenDatabase   = "open database"
 )
 
 // PermissionError represents a detailed permission error with diagnostic information
 type PermissionError struct {
-	Path           string
-	Operation      string
-	OriginalError  error
-	FileUID        int
-	FileGID        int
-	FileMode       os.FileMode
-	ProcessUID     int
-	ProcessGID     int
-	ProcessEUID    int
-	ProcessEGID    int
-	ParentDirMode  os.FileMode
-	ParentDirUID   int
-	ParentDirGID   int
+	Path              string
+	Operation         string
+	OriginalError     error
+	FileUID           int
+	FileGID           int
+	FileMode          os.FileMode
+	ProcessUID        int
+	ProcessGID        int
+	ProcessEUID       int
+	ProcessEGID       int
+	ParentDirMode     os.FileMode
+	ParentDirUID      int
+	ParentDirGID      int
 	IsPermissionIssue bool
 }
 
@@ -63,10 +78,12 @@ func (e *PermissionError) Error() string {
 	}
 
 	msg += "  Option 1: Fix ownership from host (if volume is mounted from host):\n"
-	msg += fmt.Sprintf("    sudo chown -R %d:%d %s && sudo chmod -R 755 %s\n", e.ProcessUID, e.ProcessGID, targetDir, targetDir)
+	msg += fmt.Sprintf("    sudo chown -R %d:%d %s && sudo find %s -type d -exec chmod 750 {{}} + && sudo find %s -type f -exec chmod 640 {{}} +\n",
+		e.ProcessUID, e.ProcessGID, targetDir, targetDir, targetDir)
 	msg += "\n"
 	msg += "  Option 2: Fix from inside running container:\n"
-	msg += fmt.Sprintf("    docker exec -it --user root <CONTAINER_NAME> sh -c 'chown -R %d:%d %s && chmod -R 755 %s'\n", e.ProcessUID, e.ProcessGID, targetDir, targetDir)
+	msg += fmt.Sprintf("    docker exec -it --user root <CONTAINER_NAME> sh -c 'chown -R %d:%d %s && find %s -type d -exec chmod 750 {{}} + && find %s -type f -exec chmod 640 {{}} +'\n",
+		e.ProcessUID, e.ProcessGID, targetDir, targetDir, targetDir)
 
 	return msg
 }
@@ -129,48 +146,37 @@ func CheckFileAccess(path string, operation string) error {
 		permErr.FileGID = int(stat.Gid)
 	}
 
+	// Map operation to access flags and verify actual access
+	accessFlags := mapOperationToAccessFlags(operation)
+	if accessFlags != 0 {
+		if err := unix.Access(path, accessFlags); err != nil {
+			permErr.OriginalError = err
+			permErr.IsPermissionIssue = true
+			return permErr
+		}
+	}
+
 	return nil
 }
 
-// CheckDirectoryWritable checks if a directory is writable by creating and removing a test file
-func CheckDirectoryWritable(dir string) error {
-	err := CheckFileAccess(dir, "access directory")
-	if err != nil {
-		return err
+// mapOperationToAccessFlags maps operation strings to unix access flags
+func mapOperationToAccessFlags(operation string) uint32 {
+	// Convert operation to lowercase for case-insensitive matching
+	op := operation
+
+	// Default to read access for most operations
+	flags := uint32(unix.R_OK)
+
+	// Check for specific operation types
+	if strings.Contains(op, "write") || strings.Contains(op, "create") || strings.Contains(op, "save") {
+		flags = unix.W_OK
+	} else if strings.Contains(op, "exec") || strings.Contains(op, "execute") {
+		flags = unix.X_OK
+	} else if strings.Contains(op, "read") || strings.Contains(op, "open") || strings.Contains(op, "load") || strings.Contains(op, "access") {
+		flags = unix.R_OK
 	}
 
-	// Try to create a test file
-	testFile := filepath.Join(dir, ".tenderdash_write_test")
-	f, err := os.Create(testFile)
-	if err != nil {
-		permErr := &PermissionError{
-			Path:        dir,
-			Operation:   "write to directory",
-			OriginalError: err,
-			ProcessUID:  os.Getuid(),
-			ProcessGID:  os.Getgid(),
-			ProcessEUID: os.Geteuid(),
-			ProcessEGID: os.Getegid(),
-		}
-
-		if isPermissionError(err) {
-			permErr.IsPermissionIssue = true
-			if dirInfo, statErr := os.Stat(dir); statErr == nil {
-				permErr.FileMode = dirInfo.Mode()
-				if stat, ok := dirInfo.Sys().(*syscall.Stat_t); ok {
-					permErr.FileUID = int(stat.Uid)
-					permErr.FileGID = int(stat.Gid)
-				}
-			}
-			return permErr
-		}
-
-		return err
-	}
-
-	f.Close()
-	os.Remove(testFile)
-	return nil
+	return flags
 }
 
 // WrapPermissionError wraps an error with detailed permission diagnostics if it's a permission error
@@ -202,13 +208,13 @@ func WrapPermissionError(path string, operation string, err error) error {
 
 	// Create a basic PermissionError
 	return &PermissionError{
-		Path:          path,
-		Operation:     operation,
-		OriginalError: err,
-		ProcessUID:    os.Getuid(),
-		ProcessGID:    os.Getgid(),
-		ProcessEUID:   os.Geteuid(),
-		ProcessEGID:   os.Getegid(),
+		Path:              path,
+		Operation:         operation,
+		OriginalError:     err,
+		ProcessUID:        os.Getuid(),
+		ProcessGID:        os.Getgid(),
+		ProcessEUID:       os.Geteuid(),
+		ProcessEGID:       os.Getegid(),
 		IsPermissionIssue: true,
 	}
 }
@@ -232,22 +238,7 @@ func isPermissionError(err error) bool {
 
 	// Check error message as fallback
 	errMsg := err.Error()
-	return contains(errMsg, "permission denied") ||
-	       contains(errMsg, "access denied") ||
-	       contains(errMsg, "operation not permitted")
-}
-
-func contains(s, substr string) bool {
-	return len(s) >= len(substr) && (s == substr || len(s) > len(substr) &&
-		(s[:len(substr)] == substr || s[len(s)-len(substr):] == substr ||
-		 indexOf(s, substr) >= 0))
-}
-
-func indexOf(s, substr string) int {
-	for i := 0; i <= len(s)-len(substr); i++ {
-		if s[i:i+len(substr)] == substr {
-			return i
-		}
-	}
-	return -1
+	return strings.Contains(errMsg, "permission denied") ||
+		strings.Contains(errMsg, "access denied") ||
+		strings.Contains(errMsg, "operation not permitted")
 }

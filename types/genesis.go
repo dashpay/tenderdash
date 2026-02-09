@@ -277,7 +277,7 @@ func GenesisDocFromJSON(jsonBlob []byte) (*GenesisDoc, error) {
 func GenesisDocFromFile(genDocFile string) (*GenesisDoc, error) {
 	jsonBlob, err := os.ReadFile(genDocFile)
 	if err != nil {
-		err = tmos.WrapPermissionError(genDocFile, "read genesis file", err)
+		err = tmos.WrapPermissionError(genDocFile, tmos.OperationReadFile, err)
 		return nil, fmt.Errorf("couldn't read GenesisDoc file: %w", err)
 	}
 	genDoc, err := GenesisDocFromJSON(jsonBlob)

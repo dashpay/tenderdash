@@ -39,22 +39,17 @@ func DefaultDBProvider(ctx *DBContext) (dbm.DB, error) {
 	if err != nil {
 		// Wrap with permission diagnostics if it's a permission error
 		dbPath := filepath.Join(dbDir, ctx.ID+".db")
-		err = tmos.WrapPermissionError(dbPath, "open database", err)
+		err = tmos.WrapPermissionError(dbPath, tmos.OperationOpenDatabase, err)
 		return nil, fmt.Errorf("failed to initialize database: %w", err)
 	}
 
 	return db, nil
 }
 
-// checkDBDirectory verifies the database directory exists and is accessible
+// checkDBDirectory verifies the database directory exists and is writable
 func checkDBDirectory(dbDir string) error {
-	// Check if directory exists and is accessible
-	if err := tmos.CheckFileAccess(dbDir, "access database directory"); err != nil {
-		return err
-	}
-
-	// Check if directory is writable
-	if err := tmos.CheckDirectoryWritable(dbDir); err != nil {
+	// Check if directory exists and is writable
+	if err := tmos.CheckFileAccess(dbDir, tmos.OperationWriteDirectory); err != nil {
 		return err
 	}
 
