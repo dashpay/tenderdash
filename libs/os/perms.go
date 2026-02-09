@@ -78,11 +78,11 @@ func (e *PermissionError) Error() string {
 	}
 
 	msg += "  Option 1: Fix ownership from host (if volume is mounted from host):\n"
-	msg += fmt.Sprintf("    sudo chown -R %d:%d %s && sudo find %s -type d -exec chmod 750 {{}} + && sudo find %s -type f -exec chmod 640 {{}} +\n",
+	msg += fmt.Sprintf("    sudo chown -R %d:%d %s && sudo find %s -type d -exec chmod 750 {} + && sudo find %s -type f -exec chmod 640 {} +\n",
 		e.ProcessUID, e.ProcessGID, targetDir, targetDir, targetDir)
 	msg += "\n"
 	msg += "  Option 2: Fix from inside running container:\n"
-	msg += fmt.Sprintf("    docker exec -it --user root <CONTAINER_NAME> sh -c 'chown -R %d:%d %s && find %s -type d -exec chmod 750 {{}} + && find %s -type f -exec chmod 640 {{}} +'\n",
+	msg += fmt.Sprintf("    docker exec -it --user root <CONTAINER_NAME> sh -c 'chown -R %d:%d %s && find %s -type d -exec chmod 750 {} + && find %s -type f -exec chmod 640 {} +'\n",
 		e.ProcessUID, e.ProcessGID, targetDir, targetDir, targetDir)
 
 	return msg
