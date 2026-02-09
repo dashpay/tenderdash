@@ -89,7 +89,7 @@ After doing these steps, go back to the development branch and do the following:
    ```
 
 2. Create a new workflow to run e2e nightlies for the new backport branch.
-   (See [e2e.yml](./.github/workflows/e2e.yml) for an example.)
+   (See [e2e.yml](https://github.com/dashpay/tenderdash/blob/HEAD/.github/workflows/e2e.yml) for an example.)
 
 3. Add a new section to the Mergify config (`.github/mergify.yml`) to enable the
    backport bot to work on this branch, and add a corresponding `S:backport-to-v0.35.x`

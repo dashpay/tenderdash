@@ -268,7 +268,8 @@ We use conventional commit format for commit and PR titles. Follow the
 [Conventional Commits](https://www.conventionalcommits.org/) specification and
 use common types like `feat`, `fix`, `docs`, `refactor`, `test`, and `chore`.
 Scopes should describe the affected package or subsystem (e.g., `cmd/debug`).
-Write concise commits that follow `type(scope): summary`. For example,
+Write concise commits that follow `type(scope): summary` on the first line;
+optional body and footer sections may include context or references. For example,
 
 ```sh
 fix(cmd/debug): execute p.Signal only when p is not nil
