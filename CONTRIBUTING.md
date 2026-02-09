@@ -169,7 +169,8 @@ fill in every section of `.github/PULL_REQUEST_TEMPLATE.md`.
 
 If a change needs to land in the latest stable release, coordinate with the
 maintainers and open a follow-up PR against `master` after the development
-branch merge.
+branch merge. Follow-up PRs should cherry-pick the relevant commit(s) and are
+typically reserved for release-critical fixes.
 
 Once you have submitted a pull request label the pull request with either `R:minor`, if the change should be included in the next minor release, or `R:major`, if the change is meant for a major release.
 
