@@ -100,7 +100,9 @@ If you already have Tenderdash installed, and you make updates, simply
 make install
 ```
 
-To upgrade, run
+To upgrade, run (replace `<latest vMAJOR.MINOR-dev>` with the current development
+branch, e.g. `v1.2-dev`, which you can find with
+`git branch -r --list 'origin/v[0-9]*-dev' --sort=-version:refname | head -1`):
 
 ```sh
 git pull origin <latest vMAJOR.MINOR-dev>
