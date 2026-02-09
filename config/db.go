@@ -30,9 +30,12 @@ func DefaultDBProvider(ctx *DBContext) (dbm.DB, error) {
 	dbType := dbm.BackendType(ctx.Config.DBBackend)
 	dbDir := ctx.Config.DBDir()
 
-	// Check directory permissions before attempting to open the database
-	if err := checkDBDirectory(dbDir); err != nil {
-		return nil, fmt.Errorf("failed to initialize database: %w", err)
+	// Check directory permissions before attempting to open the database.
+	// Skip for in-memory databases that don't need disk access.
+	if dbType != dbm.MemDBBackend {
+		if err := checkDBDirectory(dbDir); err != nil {
+			return nil, fmt.Errorf("failed to initialize database: %w", err)
+		}
 	}
 
 	db, err := dbm.NewDB(ctx.ID, dbType, dbDir)
