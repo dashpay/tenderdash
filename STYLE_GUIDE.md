@@ -27,6 +27,7 @@ scroll down and understand the functionality of it just as well as you do. A loo
 
 ## General
 
+* Don't Repeat Yourself. Search the code base and well-maintained public modules before writing new code.
 * Use `gofmt` (or `goimport`) to format all code upon saving it.  (If you use VIM, check out vim-go).
 * Use a linter (see below) and generally try to keep the linter happy (where it makes sense).
 * Think about documentation, and try to leave godoc comments, when it will help new developers.
