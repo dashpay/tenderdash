@@ -57,30 +57,6 @@ Each stage of the process is aimed at creating feedback cycles which align contr
 - Contributors don’t waste their time implementing/proposing features which won’t land in the development branch.
 - Maintainers have the necessary context in order to support and review contributions.
 
-## Forking
-
-Please note that Go requires code to live under absolute paths, which complicates forking.
-While my fork lives at `https://github.com/ebuchman/tenderdash`,
-the code should never exist at `$GOPATH/src/github.com/ebuchman/tenderdash`.
-Instead, we use `git remote` to add the fork as a new remote for the original repo,
-`$GOPATH/src/github.com/dashpay/tenderdash`, and do all the work there.
-
-For instance, to create a fork and work on a branch of it, I would:
-
-- Create the fork on GitHub, using the fork button.
-- Go to the original repo checked out locally (i.e. `$GOPATH/src/github.com/dashpay/tenderdash`)
-- `git remote rename origin upstream`
-- `git remote add origin git@github.com:ebuchman/tenderdash.git`
-
-Now `origin` refers to my fork and `upstream` refers to the Tenderdash version.
-So I can `git push -u origin <development-branch>` to update my fork, and make pull requests to Tenderdash from there.
-Of course, replace `ebuchman` with your git handle.
-
-To pull in updates from the origin repo, run
-
-- `git fetch upstream`
-- `git rebase upstream/<development-branch>` (or whatever branch you want)
-
 ## Code Style
 
 Follow the conventions in [STYLE_GUIDE.md](./STYLE_GUIDE.md) for Go code
@@ -149,79 +125,50 @@ If you are a VS Code user, you may want to add the following to your `.vscode/se
 }
 ```
 
-## Changelog
+## Release Notes
 
-Every fix, improvement, feature, or breaking change should be made in a
-pull-request that includes an update to the `CHANGELOG_PENDING.md` file.
-
-Changelog entries should be formatted as follows:
-
-```md
-- [module] \#xxx Some description about the change (@contributor)
-```
-
-Here, `module` is the part of the code that changed (typically a
-top-level Go package), `xxx` is the pull-request number, and `contributor`
-is the author/s of the change.
-
-It's also acceptable for `xxx` to refer to the relevant issue number, but pull-request
-numbers are preferred.
-Note this means pull-requests should be opened first so the changelog can then
-be updated with the pull-request's number.
-There is no need to include the full link, as this will be added
-automatically during release. But please include the backslash and pound, eg. `\#2313`.
-
-Changelog entries should be ordered alphabetically according to the
-`module`, and numerically according to the pull-request number.
-
-Changes with multiple classifications should be doubly included (eg. a bug fix
-that is also a breaking change should be recorded under both).
-
-Breaking changes are further subdivided according to the APIs/users they impact.
-Any change that effects multiple APIs/users should be recorded multiply - for
-instance, a change to the `Blockchain Protocol` that removes a field from the
-header should also be recorded under `CLI/RPC/Config` since the field will be
-removed from the header in RPC responses as well.
+Release notes are generated from commit messages by `scripts/release.sh`. Use
+clear conventional commit summaries so the release tooling can assemble accurate
+notes; `CHANGELOG_PENDING.md` is no longer maintained.
 
 ## Branching Model and Release
 
-The main development branch is the highest-versioned `vMAJOR.MINOR-dev` branch.
-Find it with:
+Tenderdash maintains two primary branches:
+
+- `master` for the latest stable release.
+- The highest-versioned `vMAJOR.MINOR-dev` branch for active development.
+
+Find the current development branch with:
 
 ```sh
 git branch -r --list 'origin/v[0-9]*-dev' --sort=-version:refname | head -1
 ```
 
-Every release is maintained in a release branch named `vX.Y.Z`.
+Release tags are cut from `master`. We only maintain `master` and the current
+development branch.
 
-Pending minor releases have long-lived release candidate ("RC") branches. Minor
-release changes should be merged to these long-lived RC branches at the same
-time that the changes are merged to the development branch.
-
-Note all pull requests should be squash merged except for merging to a release branch (named `vX.Y`). This keeps the commit history clean and makes it
-easy to reference the pull request where a change was introduced.
+Note all pull requests should be squash merged. This keeps the commit history
+clean and makes it easy to reference the pull request where a change was
+introduced.
 
 ### Development Procedure
 
 The latest state of development is on the development branch (latest
-`vMAJOR.MINOR-dev`), which must never fail `go test -race -timeout=5m ./...`.
-_Never_ force push the development branch, unless fixing broken git history
-(which we rarely do anyways).
+`vMAJOR.MINOR-dev`), which must keep CI green (build, lint, and tests). _Never_
+force push the development branch, unless fixing broken git history (which we
+rarely do anyways).
 
 To begin contributing, create a development branch either on
 `github.com/dashpay/tenderdash`, or your fork (using `git remote add origin`).
 
-Make changes, and before submitting a pull request, update the
-`CHANGELOG_PENDING.md` to record your change. Run `make build`, `make lint`, and
-`go test -race -timeout=5m ./...` for your changes, and use `make format` as
-needed. Also, run either `git rebase` or `git merge` on top of the latest
-development branch. (Since pull requests are squash-merged, either is fine!)
-When opening a PR, fill in every section of
-`.github/PULL_REQUEST_TEMPLATE.md`.
+Make changes and keep your branch updated with the latest development branch.
+Ensure CI is green; run `make build`, `make lint`, and
+`go test -race -timeout=5m ./...` locally as needed. (Since pull requests are
+squash-merged, either `git rebase` or `git merge` is fine.) When opening a PR,
+fill in every section of `.github/PULL_REQUEST_TEMPLATE.md`.
 
-Update the `UPGRADING.md` if the change you've made is breaking and the
-instructions should be in place for a user on how he/she can upgrade it's
-software (ABCI application, Tenderdash-based blockchain, light client, wallet).
+If a change needs to land in the latest stable release, open a follow-up PR
+against `master` after the development branch merge.
 
 Once you have submitted a pull request label the pull request with either `R:minor`, if the change should be included in the next minor release, or `R:major`, if the change is meant for a major release.
 
@@ -238,29 +185,10 @@ It is also our convention that authors merge their own pull requests, when possi
 
 Before merging a pull request:
 
-- Ensure pull branch is up-to-date with a recent development branch (GitHub
-  won't let you merge without this!)
-- Run `make lint` and `go test -race -timeout=5m ./...` to ensure that all tests
-  pass
+- Ensure pull branch is up-to-date with the development branch (GitHub won't let
+  you merge without this!)
+- Ensure CI is green
 - [Squash](https://stackoverflow.com/questions/5189560/squash-my-last-x-commits-together-using-git) merge pull request
-
-#### Pull Requests for Minor Releases
-
-If your change should be included in a minor release, please also open a PR
-against the long-lived minor release candidate branch (e.g., `rc1/v0.33.5`)
-_immediately after your change has been merged to the development branch_.
-
-You can do this by cherry-picking your commit off the development branch:
-
-```sh
-$ git checkout rc1/v0.33.5
-$ git checkout -b {new branch name}
-$ git cherry-pick {commit SHA from the development branch}
-# may need to fix conflicts, and then use git add and git cherry-pick --continue
-$ git push origin {new branch name}
-```
-
-After this, you can open a PR. Please note in the PR body if there were merge conflicts so that reviewers can be sure to take a thorough look.
 
 ### Git Commit Style
 

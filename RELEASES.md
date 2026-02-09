@@ -2,7 +2,7 @@
 
 Tenderdash uses modified [semantic versioning](https://semver.org/) with each
 release following a `vX.Y.Z` format. Tenderdash is currently on major version
-0 and uses the minor version to signal breaking changes. The development branch
+1 and uses the minor version to signal breaking changes. The development branch
 (latest `vMAJOR.MINOR-dev`) is used for active development and thus it is not
 advisable to build against it.
 
@@ -247,13 +247,12 @@ operators.
 ### Nightly End-To-End Tests
 
 The Tenderdash team maintains [a set of end-to-end
-tests](./test/e2e/README.md)
-that run each night on the latest commit of the project and on the code in the
-tip of each supported backport branch. These tests start a network of containerized
-Tenderdash processes and run automated checks that the network functions as
-expected in both stable and unstable conditions. During the feature freeze,
-these tests are run nightly and must pass consistently for a release of
-Tenderdash to be considered stable.
+tests](./test/e2e/README.md) for the dashcore and rotating e2e networks; other
+networks are deprecated. These tests run nightly on the latest commit of the
+project. They start a network of containerized Tenderdash processes and run
+automated checks that the network functions as expected in both stable and
+unstable conditions. During the feature freeze, these tests are run nightly and
+must pass consistently for a release of Tenderdash to be considered stable.
 
 ### Upgrade Harness
 

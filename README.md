@@ -8,7 +8,6 @@ Or [Blockchain](<https://en.wikipedia.org/wiki/Blockchain_(database)>), for shor
 
 [![version](https://img.shields.io/github/tag/dashpay/tenderdash.svg)](https://github.com/dashpay/tenderdash/releases/latest)
 [![GitHub go.mod Go version](https://img.shields.io/github/go-mod/go-version/dashpay/tenderdash)](https://github.com/moovweb/gvm)
-[![Discord chat](https://img.shields.io/badge/discord-Dev_chat-738adb)](https://chat.dashdevs.org)
 [![dashpay/tenderdash](https://tokei.rs/b1/github/dashpay/tenderdash?category=lines)](https://github.com/dashpay/tenderdash)
 
 | Branch                                   | Tests                                                                                                                                                      | Coverage                                                                                                       | Linting                                                                                                                                                          |
