@@ -39,7 +39,7 @@ understand the functionality. A loose example:
 
 ## Linters
 
-* Lint your changes to the code base, not the whole project
+* Lint your changes to the code base, not the whole project.
 * [golangci-lint](https://github.com/golangci/golangci-lint) — see `.golangci.yml` for configuration.
 
 ## Naming and Conventions
