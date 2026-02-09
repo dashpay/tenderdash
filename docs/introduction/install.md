@@ -103,7 +103,7 @@ make install
 To upgrade, run
 
 ```sh
-git pull origin master
+git pull origin <latest vMAJOR.MINOR-dev>
 make install
 ```
 

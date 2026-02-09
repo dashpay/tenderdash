@@ -1,22 +1,24 @@
 # Releases
 
-Tendermint uses modified [semantic versioning](https://semver.org/) with each
-release following a `vX.Y.Z` format. Tendermint is currently on major version
-0 and uses the minor version to signal breaking changes. The `master` branch is
-used for active development and thus it is not advisable to build against it.
+Tenderdash uses modified [semantic versioning](https://semver.org/) with each
+release following a `vX.Y.Z` format. Tenderdash is currently on major version
+0 and uses the minor version to signal breaking changes. The development branch
+(latest `vMAJOR.MINOR-dev`) is used for active development and thus it is not
+advisable to build against it.
 
-The latest changes are always initially merged into `master`.
-Releases are specified using tags and are built from long-lived "backport" branches
-that are cut from `master` when the release process begins.
+The latest changes are always initially merged into the development branch.
+Releases are specified using tags and are built from long-lived "backport"
+branches that are cut from the development branch when the release process
+begins.
 Each release "line" (e.g. 0.34 or 0.33) has its own long-lived backport branch,
 and the backport branches have names like `v0.34.x` or `v0.33.x`
-(literally, `x`; it is not a placeholder in this case). Tendermint only
+(literally, `x`; it is not a placeholder in this case). Tenderdash only
 maintains the last two releases at a time (the oldest release is predominantly
 just security patches).
 
 ## Backporting
 
-As non-breaking changes land on `master`, they should also be backported
+As non-breaking changes land on the development branch, they should also be backported
 to these backport branches.
 
 We use Mergify's [backport feature](https://mergify.io/features/backports) to automatically backport
@@ -34,15 +36,15 @@ If this is the first release candidate for a minor version release, e.g.
 v0.25.0, you get to have the honor of creating the backport branch!
 
 Note that, after creating the backport branch, you'll also need to update the
-tags on `master` so that `go mod` is able to order the branches correctly. You
-should tag `master` with a "dev" tag that is "greater than" the backport
+tags on the development branch so that `go mod` is able to order the branches correctly. You
+should tag the development branch with a "dev" tag that is "greater than" the backport
 branches tags. See [#6072](https://github.com/tendermint/tendermint/pull/6072)
 for more context.
 
 In the following example, we'll assume that we're making a backport branch for
 the 0.35.x line.
 
-1. Start on `master`
+1. Start on the development branch (latest `vMAJOR.MINOR-dev`)
 
 2. Create and push the backport branch:
    ```sh
@@ -52,8 +54,8 @@ the 0.35.x line.
 
 3. Create a PR to update the documentation directory for the backport branch.
 
-   We only maintain RFC and ADR documents on master, to avoid confusion.
-   In addition, we rewrite Markdown URLs pointing to master to point to the
+   We only maintain RFC and ADR documents on the development branch, to avoid confusion.
+   In addition, we rewrite Markdown URLs pointing to the development branch to point to the
    backport branch, so that generated documentation will link to the correct
    versions of files elsewhere in the repository. For context on the latter,
    see https://github.com/tendermint/tendermint/issues/7675.
@@ -61,7 +63,7 @@ the 0.35.x line.
    To prepare the PR:
    ```sh
    # Remove the RFC and ADR documents from the backport.
-   # We only maintain these on master to avoid confusion.
+   # We only maintain these on the development branch to avoid confusion.
    git rm -r docs/rfc docs/architecture
 
    # Update absolute links to point to the backport.
@@ -76,28 +78,26 @@ the 0.35.x line.
    Be sure to merge this PR before making other changes on the newly-created
    backport branch.
 
-After doing these steps, go back to `master` and do the following:
+After doing these steps, go back to the development branch and do the following:
 
-1. Tag `master` as the dev branch for the _next_ minor version release and push
+1. Tag the development branch as the dev branch for the _next_ minor version release and push
    it up to GitHub.
    For example:
    ```sh
-   git tag -a v0.36.0-dev -m "Development base for Tendermint v0.36."
+   git tag -a v0.36.0-dev -m "Development base for Tenderdash v0.36."
    git push origin v0.36.0-dev
    ```
 
 2. Create a new workflow to run e2e nightlies for the new backport branch.
-   (See [e2e-nightly-master.yml][e2e] for an example.)
+   (See [e2e.yml](./.github/workflows/e2e.yml) for an example.)
 
 3. Add a new section to the Mergify config (`.github/mergify.yml`) to enable the
    backport bot to work on this branch, and add a corresponding `S:backport-to-v0.35.x`
-   [label](https://github.com/tendermint/tendermint/labels) so the bot can be triggered.
+   [label](https://github.com/dashpay/tenderdash/labels) so the bot can be triggered.
 
 4. Add a new section to the Dependabot config (`.github/dependabot.yml`) to
    enable automatic update of Go dependencies on this branch. Copy and edit one
    of the existing branch configurations to set the correct `target-branch`.
-
-[e2e]: https://github.com/tendermint/tendermint/blob/master/.github/workflows/e2e-nightly-master.yml
 
 ## Release candidates
 
@@ -115,9 +115,8 @@ If this is the first RC for a minor release, you'll have to make a new backport 
 Otherwise:
 
 1. Start from the backport branch (e.g. `v0.35.x`).
-2. Run the integration tests and the e2e nightlies
-   (which can be triggered from the Github UI;
-   e.g., https://github.com/tendermint/tendermint/actions/workflows/e2e-nightly-34x.yml).
+2. Run the integration tests and the e2e nightlies (which can be triggered from
+   the Github UI).
 3. Prepare the changelog:
    - Move the changes included in `CHANGELOG_PENDING.md` into `CHANGELOG.md`. Each RC should have
      it's own changelog section. These will be squashed when the final candidate is released.
@@ -168,23 +167,25 @@ Before performing these steps, be sure the [Minor Release Checklist](#minor-rele
    This will trigger the actual release `v0.35.0`.
    - `git tag -a v0.35.0 -m 'Release v0.35.0'`
    - `git push origin v0.35.0`
-6. Make sure that `master` is updated with the latest `CHANGELOG.md`, `CHANGELOG_PENDING.md`, and `UPGRADING.md`.
+6. Make sure that the development branch is updated with the latest
+   `CHANGELOG.md`, `CHANGELOG_PENDING.md`, and `UPGRADING.md`.
 7. Add the release to the documentation site generator config (see
    [DOCS_README.md](./docs/DOCS_README.md) for more details). In summary:
-   - Start on branch `master`.
+   - Start on the development branch.
    - Add a new line at the bottom of [`docs/versions`](./docs/versions) to
      ensure the newest release is the default for the landing page.
    - Add a new entry to `themeConfig.versions` in
      [`docs/.vuepress/config.js`](./docs/.vuepress/config.js) to include the
 	 release in the dropdown versions menu.
-   - Commit these changes to `master` and backport them into the backport
-     branch for this release.
+   - Commit these changes to the development branch and backport them into the backport
+  branch for this release.
 
 ## Patch release
 
 Patch releases are done differently from minor releases: They are built off of
-long-lived backport branches, rather than from master.  As non-breaking changes
-land on `master`, they should also be backported into these backport branches.
+long-lived backport branches, rather than from the development branch. As
+non-breaking changes land on the development branch, they should also be
+backported into these backport branches.
 
 Patch releases don't have release candidates by default, although any tricky
 changes may merit a release candidate.
@@ -206,20 +207,21 @@ To create a patch release:
 5. Once this change has landed on the backport branch, make sure to pull it locally, then push a tag.
    - `git tag -a v0.35.1 -m 'Release v0.35.1'`
    - `git push origin v0.35.1`
-6. Create a pull request back to master with the CHANGELOG & version changes from the latest release.
+6. Create a pull request back to the development branch with the CHANGELOG &
+   version changes from the latest release.
    - Remove all `R:patch` labels from the pull requests that were included in the release.
-   - Do not merge the backport branch into master.
+   - Do not merge the backport branch into the development branch.
 
 ## Minor Release Checklist
 
 The following set of steps are performed on all releases that increment the
-_minor_ version, e.g. v0.25 to v0.26. These steps ensure that Tendermint is
+_minor_ version, e.g. v0.25 to v0.26. These steps ensure that Tenderdash is
 well tested, stable, and suitable for adoption by the various diverse projects
-that rely on Tendermint.
+that rely on Tenderdash.
 
 ### Feature Freeze
 
-Ahead of any minor version release of Tendermint, the software enters 'Feature
+Ahead of any minor version release of Tenderdash, the software enters 'Feature
 Freeze' for at least two weeks. A feature freeze means that _no_ new features
 are added to the code being prepared for release. No code changes should be made
 to the code being released that do not directly improve pressing issues of code
@@ -233,42 +235,42 @@ quality. The following must not be merged during a feature freeze:
 code.
 
 This period directly follows the creation of the [backport
-branch](#creating-a-backport-branch). The Tendermint team instead directs all
+branch](#creating-a-backport-branch). The Tenderdash team instead directs all
 attention to ensuring that the existing code is stable and reliable. Broken
 tests are fixed, flakey-tests are remedied, end-to-end test failures are
 thoroughly diagnosed and all efforts of the team are aimed at improving the
 quality of the code. During this period, the upgrade harness tests are run
-repeatedly and a variety of in-house testnets are run to ensure Tendermint
+repeatedly and a variety of in-house testnets are run to ensure Tenderdash
 functions at the scale it will be used by application developers and node
 operators.
 
 ### Nightly End-To-End Tests
 
-The Tendermint team maintains [a set of end-to-end
-tests](https://github.com/tendermint/tendermint/blob/master/test/e2e/README.md#L1)
+The Tenderdash team maintains [a set of end-to-end
+tests](./test/e2e/README.md)
 that run each night on the latest commit of the project and on the code in the
 tip of each supported backport branch. These tests start a network of containerized
-Tendermint processes and run automated checks that the network functions as
+Tenderdash processes and run automated checks that the network functions as
 expected in both stable and unstable conditions. During the feature freeze,
 these tests are run nightly and must pass consistently for a release of
-Tendermint to be considered stable.
+Tenderdash to be considered stable.
 
 ### Upgrade Harness
 
 > TODO(williambanfield): Change to past tense and clarify this section once
 > upgrade harness is complete.
 
-The Tendermint team is creating an upgrade test harness to exercise the
-workflow of stopping an instance of Tendermint running one version of the
+The Tenderdash team is creating an upgrade test harness to exercise the
+workflow of stopping an instance of Tenderdash running one version of the
 software and starting up the same application running the next version. To
-support upgrade testing, we will add the ability to terminate the Tendermint
+support upgrade testing, we will add the ability to terminate the Tenderdash
 process at specific pre-defined points in its execution so that we can verify
 upgrades work in a representative sample of stop conditions.
 
 ### Large Scale Testnets
 
-The Tendermint end-to-end tests run a small network (~10s of nodes) to exercise
-basic consensus interactions. Real world deployments of Tendermint often have over 
+The Tenderdash end-to-end tests run a small network (~10s of nodes) to exercise
+basic consensus interactions. Real world deployments of Tenderdash often have over 
 a hundred nodes just in the validator set, with many others acting as full
 nodes and sentry nodes. To gain more assurance before a release, we will also run
 larger-scale test networks to shake out emergent behaviors at scale.
@@ -295,11 +297,11 @@ node:
 
 For these tests we intentionally target low-powered host machines (with low core
 counts and limited memory) to ensure we observe similar kinds of resource contention 
-and limitation that real-world  deployments of Tendermint experience in production. 
+and limitation that real-world  deployments of Tenderdash experience in production. 
 
 #### 200 Node Testnet
 
-To test the stability and performance of Tendermint in a real world scenario,
+To test the stability and performance of Tenderdash in a real world scenario,
 a 200 node test network is run. The network comprises 5 seed nodes, 100
 validators and 95 non-validating full nodes. All nodes begin by dialing
 a subset of the seed nodes to discover peers. The network is run for several
@@ -308,22 +310,22 @@ critical systems, testnets of larger sizes should be considered.
 
 #### Rotating Node Testnet
 
-Real-world deployments of Tendermint frequently see new nodes arrive and old
-nodes exit the network. The rotating node testnet ensures that Tendermint is
+Real-world deployments of Tenderdash frequently see new nodes arrive and old
+nodes exit the network. The rotating node testnet ensures that Tenderdash is
 able to handle this reliably. In this test, a network with 10 validators and
 3 seed nodes is started. A rolling set of 25 full nodes are started and each
 connects to the network by dialing one of the seed nodes. Once the node is able
 to blocksync to the head of the chain and begins producing blocks using
-Tendermint consensus it is stopped. Once stopped, a new node is started and
+Tenderdash consensus it is stopped. Once stopped, a new node is started and
 takes its place. This network is run for several days.
 
 #### Network Partition Testnet
 
-Tendermint is expected to recover from network partitions. A partition where no
+Tenderdash is expected to recover from network partitions. A partition where no
 subset of the nodes is left with the super-majority of the stake is expected to
 stop making blocks. Upon alleviation of the partition, the network is expected
 to once again become fully connected and capable of producing blocks. The
-network partition testnet ensures that Tendermint is able to handle this
+network partition testnet ensures that Tenderdash is able to handle this
 reliably at scale. In this test, a network with 100 validators and 95 full
 nodes is started. All validators have equal stake. Once the network is
 producing blocks, a set of firewall rules is deployed to create a partitioned
@@ -334,7 +336,7 @@ producing blocks.
 
 #### Absent Stake Testnet
 
-Tendermint networks often run with _some_ portion of the voting power offline.
+Tenderdash networks often run with _some_ portion of the voting power offline.
 The absent stake testnet ensures that large networks are able to handle this
 reliably. A set of 150 validator nodes and three seed nodes is started. The set
 of 150 validators is configured to only possess a cumulative stake of 67% of
