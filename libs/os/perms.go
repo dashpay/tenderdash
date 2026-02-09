@@ -77,13 +77,17 @@ func (e *PermissionError) Error() string {
 		targetDir = filepath.Dir(e.Path)
 	}
 
-	msg += "  Option 1: Fix ownership from host (if volume is mounted from host):\n"
-	msg += fmt.Sprintf("    sudo chown -R %d:%d %s && sudo find %s -type d -exec chmod 750 {{}} + && sudo find %s -type f -exec chmod 640 {{}} +\n",
+	cmd := fmt.Sprintf(
+		"chown -R %d:%d %s && find %s -type d -exec chmod 750 \\{\\} \\; && find %s -type f -exec chmod 640 \\{\\} \\;",
 		e.ProcessUID, e.ProcessGID, targetDir, targetDir, targetDir)
+
+	msg += "  Option 1: Fix ownership from host (if volume is mounted from host):\n"
+	msg += fmt.Sprintf("    sudo bash -c '%s'\n", cmd)
+
 	msg += "\n"
 	msg += "  Option 2: Fix from inside running container:\n"
-	msg += fmt.Sprintf("    docker exec -it --user root <CONTAINER_NAME> sh -c 'chown -R %d:%d %s && find %s -type d -exec chmod 750 {{}} + && find %s -type f -exec chmod 640 {{}} +'\n",
-		e.ProcessUID, e.ProcessGID, targetDir, targetDir, targetDir)
+	msg += fmt.Sprintf("    docker exec -it --user root <CONTAINER_NAME> sh -c '%s'\n",
+		cmd)
 
 	return msg
 }
@@ -147,36 +151,31 @@ func CheckFileAccess(path string, operation string) error {
 	}
 
 	// Map operation to access flags and verify actual access
-	accessFlags := mapOperationToAccessFlags(operation)
-	if accessFlags != 0 {
-		if err := unix.Access(path, accessFlags); err != nil {
-			permErr.OriginalError = err
-			permErr.IsPermissionIssue = true
-			return permErr
-		}
+	accessFlags, err := mapOperationToAccessFlags(operation)
+	if err != nil {
+		return fmt.Errorf("check file access for %q: %w", path, err)
+	}
+	if err := unix.Access(path, accessFlags); err != nil {
+		permErr.OriginalError = err
+		permErr.IsPermissionIssue = true
+		return permErr
 	}
 
 	return nil
 }
 
-// mapOperationToAccessFlags maps operation strings to unix access flags
-func mapOperationToAccessFlags(operation string) uint32 {
-	// Convert operation to lowercase for case-insensitive matching
-	op := operation
-
-	// Default to read access for most operations
-	flags := uint32(unix.R_OK)
-
-	// Check for specific operation types
-	if strings.Contains(op, "write") || strings.Contains(op, "create") || strings.Contains(op, "save") {
-		flags = unix.W_OK
-	} else if strings.Contains(op, "exec") || strings.Contains(op, "execute") {
-		flags = unix.X_OK
-	} else if strings.Contains(op, "read") || strings.Contains(op, "open") || strings.Contains(op, "load") || strings.Contains(op, "access") {
-		flags = unix.R_OK
+// mapOperationToAccessFlags maps operation constants to unix access flags
+func mapOperationToAccessFlags(operation string) (uint32, error) {
+	switch operation {
+	case OperationWrite, OperationWriteFile, OperationWriteDirectory, OperationOpenDatabase:
+		return unix.W_OK, nil
+	case OperationExecute:
+		return unix.X_OK, nil
+	case OperationRead, OperationReadFile, OperationReadDirectory:
+		return unix.R_OK, nil
 	}
 
-	return flags
+	return 0, fmt.Errorf("unsupported operation %q", operation)
 }
 
 // WrapPermissionError wraps an error with detailed permission diagnostics if it's a permission error
