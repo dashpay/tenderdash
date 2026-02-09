@@ -45,11 +45,11 @@ and regenerate with `make proto-gen`.
 # Build (includes BLS native dependency)
 make build
 
-# Run all unit tests with race detector
-go test -race -timeout=5m ./...
+# Run all unit tests with race detector (matches CI: CGO, BLS, -tags=deadlock, -p 1)
+make test_race
 
-# Run a single package's tests
-go test -race -timeout=5m ./dash/quorum/...
+# Run all unit tests without race detector (matches CI configuration)
+make test
 
 # Lint
 make lint
@@ -73,7 +73,7 @@ make format
 
 - Main development branch is the highest-versioned `vMAJOR.MINOR-dev` branch.
   Find it with: `git branch -r --list 'origin/v[0-9]*-dev' --sort=-version:refname | head -1`
-- Create feature branches from the development branch; open PRs back into it. 
+- Create feature branches from the development branch; open PRs back into it.
 - Keep commits focused and well-described.
 - Use conventional commit format for commit and PR titles.
 - PR descriptions: read `.github/PULL_REQUEST_TEMPLATE.md`, fill in every
