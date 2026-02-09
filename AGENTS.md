@@ -8,12 +8,13 @@ It does not duplicate details from the style guide; instead, it references the s
 Follow the rules in `STYLE_GUIDE.md`. Do not duplicate them here or in other
 agent configuration files.
 
-Key points (see `STYLE_GUIDE.md` for the full list):
+## Code quality and security
 
-- Format code with `gofmt` / `goimports`.
-- Use [golangci-lint](https://github.com/golangci/golangci-lint) configured
-  via `.golangci.yml`.
-- Do not use `TODO`; file an issue instead. Use `BUG` / `FIXME` sparingly.
+1. Ensure all changed code passes the linter.
+2. Ensure the code is thread-safe. Check memory leaks, deadlocks and race conditions.
+3. Review implementation to find any security issues. Identify and verify edge cases. Check known security issues.
+4. If unsure, explicitly report any potential security issues, gaps, missing features and TODO items.
+
 
 ## Repo Structure and Key Directories
 
