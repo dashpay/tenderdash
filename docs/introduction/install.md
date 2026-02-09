@@ -47,6 +47,8 @@ Get the source code:
   git submodule update
   ```
 
+The default `master` branch tracks the latest stable release.
+
 Build:
 
 to put the binary in `$GOPATH/bin`:
