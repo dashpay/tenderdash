@@ -71,11 +71,13 @@ make format
 
 ## Branching and PR Workflow
 
-- Main development branch is the most recent one with name in format `vMAJOR.MINOR-dev`, for example `v0.10-dev`.
+- Main development branch is the highest-versioned `vMAJOR.MINOR-dev` branch.
+  Find it with: `git branch -r --list 'origin/v[0-9]*-dev' --sort=-version:refname | head -1`
 - Create feature branches from the development branch; open PRs back into it. 
 - Keep commits focused and well-described.
-- PR descriptions should follow `.github/PULL_REQUEST_TEMPLATE.md`
 - Use conventional commit format for commit and PR titles.
+- PR descriptions: read `.github/PULL_REQUEST_TEMPLATE.md`, fill in every
+  section, base content on the full diff against the target branch.
 
 
 ## Security and Privacy (secrets, keys, logs)
