@@ -176,9 +176,9 @@ Before performing these steps, be sure the [Minor Release Checklist](#minor-rele
      ensure the newest release is the default for the landing page.
    - Add a new entry to `themeConfig.versions` in
      [`docs/.vuepress/config.js`](./docs/.vuepress/config.js) to include the
-	 release in the dropdown versions menu.
+     release in the dropdown versions menu.
    - Commit these changes to the development branch and backport them into the backport
-  branch for this release.
+     branch for this release.
 
 ## Patch release
 

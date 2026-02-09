@@ -264,8 +264,11 @@ After this, you can open a PR. Please note in the PR body if there were merge co
 
 ### Git Commit Style
 
-We use conventional commit format for commit and PR titles. Write concise
-commits that follow `type(scope): summary`. For example,
+We use conventional commit format for commit and PR titles. Follow the
+[Conventional Commits](https://www.conventionalcommits.org/) specification and
+use common types like `feat`, `fix`, `docs`, `refactor`, `test`, and `chore`.
+Scopes should describe the affected package or subsystem (e.g., `cmd/debug`).
+Write concise commits that follow `type(scope): summary`. For example,
 
 ```sh
 fix(cmd/debug): execute p.Signal only when p is not nil
