@@ -1,10 +1,10 @@
 # Releases
 
-Tenderdash uses modified [semantic versioning](https://semver.org/) with each
-release following a `vX.Y.Z` format. Tenderdash is currently on major version
-1 (v1.x) and uses a modified scheme where minor versions may include breaking
-changes. The development branch (latest `vMAJOR.MINOR-dev`, e.g. `v1.6-dev`) is
-used for active development and thus it is not advisable to build against it.
+Tenderdash follows [semantic versioning](https://semver.org/) with each release
+following a `vX.Y.Z` format. Tenderdash is currently on major version 1 (v1.x);
+breaking changes require a major version increment. The development branch
+(latest `vMAJOR.MINOR-dev`, e.g. `v1.6-dev`) is used for active development and
+thus it is not advisable to build against it.
 
 The latest changes are always initially merged into the development branch.
 Releases are specified using tags and are built from long-lived "backport"
