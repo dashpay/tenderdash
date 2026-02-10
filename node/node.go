@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"strconv"
 	"strings"
 	"time"
 
@@ -21,6 +20,7 @@ import (
 	"github.com/dashpay/tenderdash/internal/eventbus"
 	"github.com/dashpay/tenderdash/internal/eventlog"
 	"github.com/dashpay/tenderdash/internal/evidence"
+	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
 	"github.com/dashpay/tenderdash/internal/mempool"
 	"github.com/dashpay/tenderdash/internal/p2p"
 	p2pclient "github.com/dashpay/tenderdash/internal/p2p/client"
@@ -737,7 +737,7 @@ func loadStateFromDBOrGenesisDocProvider(stateStore sm.Store, genDoc *types.Gene
 	return state, nil
 }
 
-func getRouterConfig(conf *config.Config, appClient abciclient.Client) p2p.RouterOptions {
+func getRouterConfig(conf *config.Config, appClient abciclient.Client) (p2p.RouterOptions, error) {
 	opts := p2p.RouterOptions{
 		QueueType:                conf.P2P.QueueType,
 		HandshakeTimeout:         conf.P2P.HandshakeTimeout,
@@ -745,8 +745,24 @@ func getRouterConfig(conf *config.Config, appClient abciclient.Client) p2p.Route
 		IncomingConnectionWindow: conf.P2P.IncomingConnectionWindow,
 	}
 
+	var filterByID func(context.Context, types.NodeID) error
+
+	if conf.P2P.AllowlistOnly {
+		allowedIDs, err := buildAllowlist(conf)
+		if err != nil {
+			return p2p.RouterOptions{}, err
+		}
+
+		filterByID = func(_ context.Context, id types.NodeID) error {
+			if _, ok := allowedIDs[id]; !ok {
+				return fmt.Errorf("peer %s is not in allowlist", id)
+			}
+			return nil
+		}
+	}
+
 	if conf.FilterPeers && appClient != nil {
-		opts.FilterPeerByID = func(ctx context.Context, id types.NodeID) error {
+		abciFilterByID := func(ctx context.Context, id types.NodeID) error {
 			res, err := appClient.Query(ctx, &abci.RequestQuery{
 				Path: fmt.Sprintf("/p2p/filter/id/%s", id),
 			})
@@ -760,23 +776,73 @@ func getRouterConfig(conf *config.Config, appClient abciclient.Client) p2p.Route
 			return nil
 		}
 
-		opts.FilterPeerByIP = func(ctx context.Context, ip net.IP, port uint16) error {
-			res, err := appClient.Query(ctx, &abci.RequestQuery{
-				Path: fmt.Sprintf("/p2p/filter/addr/%s", net.JoinHostPort(ip.String(), strconv.Itoa(int(port)))),
-			})
-			if err != nil {
-				return err
-			}
-			if res.IsErr() {
-				return fmt.Errorf("error querying abci app: %v", res)
-			}
-
-			return nil
-		}
-
+		filterByID = chainFilterByID(filterByID, abciFilterByID)
 	}
 
-	return opts
+	opts.FilterPeerByID = filterByID
+
+	return opts, nil
+}
+
+func chainFilterByID(filters ...func(context.Context, types.NodeID) error) func(context.Context, types.NodeID) error {
+	var chained []func(context.Context, types.NodeID) error
+	for _, f := range filters {
+		if f != nil {
+			chained = append(chained, f)
+		}
+	}
+	if len(chained) == 0 {
+		return nil
+	}
+
+	return func(ctx context.Context, id types.NodeID) error {
+		for _, f := range chained {
+			if err := f(ctx, id); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+}
+
+func buildAllowlist(conf *config.Config) (map[types.NodeID]struct{}, error) {
+	allowedIDs := make(map[types.NodeID]struct{})
+
+	addPeer := func(p string) error {
+		address, err := p2p.ParseNodeAddress(p)
+		if err != nil {
+			return fmt.Errorf("invalid allowlist peer address %q: %w", p, err)
+		}
+
+		if address.NodeID != "" {
+			allowedIDs[address.NodeID] = struct{}{}
+		}
+
+		return nil
+	}
+
+	for _, p := range tmstrings.SplitAndTrimEmpty(conf.P2P.PersistentPeers, ",", " ") {
+		if err := addPeer(p); err != nil {
+			return nil, err
+		}
+	}
+
+	for _, p := range tmstrings.SplitAndTrimEmpty(conf.P2P.BootstrapPeers, ",", " ") {
+		if err := addPeer(p); err != nil {
+			return nil, err
+		}
+	}
+
+	if len(allowedIDs) == 0 {
+		return nil, fmt.Errorf(
+			"allowlist-only enabled but no NodeIDs found in persistent-peers or bootstrap-peers; "+
+				"include NodeID@host:port entries or disable allowlist-only (persistent-peers=%q bootstrap-peers=%q)",
+			conf.P2P.PersistentPeers,
+			conf.P2P.BootstrapPeers,
+		)
+	}
+
+	return allowedIDs, nil
 }
 
 // DefaultDashCoreRPCClient returns RPC client for the Dash Core node.
