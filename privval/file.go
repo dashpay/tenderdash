@@ -99,7 +99,11 @@ func (pvKey FilePVKey) Save() error {
 	if err != nil {
 		return err
 	}
-	return tempfile.WriteFileAtomic(outFile, data, 0600)
+	err = tempfile.WriteFileAtomic(outFile, data, 0600)
+	if err != nil {
+		return tmos.WrapPermissionError(outFile, tmos.OperationWriteFile, err)
+	}
+	return nil
 }
 
 func (pvKey FilePVKey) ThresholdPublicKeyForQuorumHash(quorumHash crypto.QuorumHash) (crypto.PubKey, error) {
@@ -182,7 +186,11 @@ func (lss *FilePVLastSignState) Save() error {
 	if err != nil {
 		return err
 	}
-	return tempfile.WriteFileAtomic(outFile, jsonBytes, 0600)
+	err = tempfile.WriteFileAtomic(outFile, jsonBytes, 0600)
+	if err != nil {
+		return tmos.WrapPermissionError(outFile, tmos.OperationWriteFile, err)
+	}
+	return nil
 }
 
 //-------------------------------------------------------------------------------
@@ -359,7 +367,7 @@ func LoadFilePVEmptyState(keyFilePath, stateFilePath string) (*FilePV, error) {
 func loadFilePV(keyFilePath, stateFilePath string, loadState bool) (*FilePV, error) {
 	keyJSONBytes, err := os.ReadFile(keyFilePath)
 	if err != nil {
-		return nil, err
+		return nil, tmos.WrapPermissionError(keyFilePath, tmos.OperationReadFile, err)
 	}
 	pvKey := FilePVKey{}
 	err = json.Unmarshal(keyJSONBytes, &pvKey)
@@ -378,7 +386,7 @@ func loadFilePV(keyFilePath, stateFilePath string, loadState bool) (*FilePV, err
 	if loadState {
 		stateJSONBytes, err := os.ReadFile(stateFilePath)
 		if err != nil {
-			return nil, err
+			return nil, tmos.WrapPermissionError(stateFilePath, tmos.OperationReadFile, err)
 		}
 		err = json.Unmarshal(stateJSONBytes, &pvState)
 		if err != nil {

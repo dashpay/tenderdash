@@ -77,7 +77,11 @@ func (nk NodeKey) SaveAs(filePath string) error {
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(filePath, jsonBytes, 0600)
+	err = os.WriteFile(filePath, jsonBytes, 0600)
+	if err != nil {
+		return tmos.WrapPermissionError(filePath, tmos.OperationWriteFile, err)
+	}
+	return nil
 }
 
 // LoadOrGenNodeKey attempts to load the NodeKey from the given filePath. If
@@ -113,7 +117,7 @@ func GenNodeKey() NodeKey {
 func LoadNodeKey(filePath string) (NodeKey, error) {
 	jsonBytes, err := os.ReadFile(filePath)
 	if err != nil {
-		return NodeKey{}, err
+		return NodeKey{}, tmos.WrapPermissionError(filePath, tmos.OperationReadFile, err)
 	}
 	nodeKey := NodeKey{}
 	err = json.Unmarshal(jsonBytes, &nodeKey)
