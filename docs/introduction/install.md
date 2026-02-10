@@ -47,6 +47,8 @@ Get the source code:
   git submodule update
   ```
 
+The default `master` branch tracks the latest stable release.
+
 Build:
 
 to put the binary in `$GOPATH/bin`:
@@ -100,7 +102,7 @@ If you already have Tenderdash installed, and you make updates, simply
 make install
 ```
 
-To upgrade, run
+To upgrade, run:
 
 ```sh
 git pull origin master
