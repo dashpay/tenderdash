@@ -102,7 +102,7 @@ func (va ValidatorAddress) Validate() error {
 	if va.Hostname == "" {
 		return ErrNoHostname
 	}
-	if err := validateHostname(va.Hostname); err != nil {
+	if err := ValidateHostname(va.Hostname); err != nil {
 		return err
 	}
 	if va.Port <= 0 {
@@ -117,15 +117,17 @@ func (va ValidatorAddress) Validate() error {
 	return nil
 }
 
-func validateHostname(hostname string) error {
+// ValidateHostname checks that hostname is a valid IP address or DNS name
+// and does not contain an embedded port.
+func ValidateHostname(hostname string) error {
 	if _, _, err := net.SplitHostPort(hostname); err == nil {
-		return fmt.Errorf("hostname must not include port")
+		return errors.New("hostname must not include port")
 	}
 	if net.ParseIP(hostname) != nil {
 		return nil
 	}
 	if !IsValidHostname(hostname) {
-		return fmt.Errorf("invalid hostname")
+		return errors.New("invalid hostname")
 	}
 	return nil
 }

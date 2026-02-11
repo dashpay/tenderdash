@@ -170,25 +170,12 @@ func (a NodeAddress) Validate() error {
 		return fmt.Errorf("invalid peer ID: %w", err)
 	}
 	if a.Hostname != "" {
-		if err := validateHostname(a.Hostname); err != nil {
+		if err := types.ValidateHostname(a.Hostname); err != nil {
 			return err
 		}
 	}
 	if a.Port > 0 && a.Hostname == "" {
 		return errors.New("cannot specify port without hostname")
-	}
-	return nil
-}
-
-func validateHostname(hostname string) error {
-	if _, _, err := net.SplitHostPort(hostname); err == nil {
-		return errors.New("hostname must not include port")
-	}
-	if net.ParseIP(hostname) != nil {
-		return nil
-	}
-	if !types.IsValidHostname(hostname) {
-		return errors.New("invalid hostname")
 	}
 	return nil
 }
