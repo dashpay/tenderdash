@@ -5,7 +5,7 @@
 # * image - creates final image of minimal size
 
 ARG ALPINE_VERSION=3.23
-ARG GOLANG_VERSION=1.25.6
+ARG GOLANG_VERSION=1.25.7
 #################################
 # STAGE 1: install dependencies #
 #################################
