@@ -212,7 +212,9 @@ func TestNodeAddress_Resolve(t *testing.T) {
 			true,
 		},
 		{
-			// note we don't check localhost, as it may resolve to IPv4 or IPv6 depending on the system
+			// We intentionally use an external DNS name (one.one.one.one) rather than
+			// localhost, because localhost may resolve to either IPv4 or IPv6 depending
+			// on the system, making the expected IP unpredictable.
 			p2p.NodeAddress{Protocol: "tcp", Hostname: "one.one.one.one", Port: 80, Path: "/path"},
 			&p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 1, 1, 1), Port: 80, Path: "/path"},
 			true,
