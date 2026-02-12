@@ -102,7 +102,10 @@ func (va ValidatorAddress) Validate() error {
 	if va.Hostname == "" {
 		return ErrNoHostname
 	}
-	if va.Port <= 0 {
+	if err := ValidateHostname(va.Hostname); err != nil {
+		return err
+	}
+	if va.Port == 0 {
 		return ErrNoPort
 	}
 	if len(va.NodeID) > 0 {
@@ -112,6 +115,54 @@ func (va ValidatorAddress) Validate() error {
 	}
 
 	return nil
+}
+
+// ValidateHostname checks that hostname is a valid IP address or DNS name
+// and does not contain an embedded port.
+// It rejects internationalized domain names (IDN/punycode); only ASCII
+// labels are accepted.
+func ValidateHostname(hostname string) error {
+	if _, _, err := net.SplitHostPort(hostname); err == nil {
+		return fmt.Errorf("hostname %q must not include port", hostname)
+	}
+	if net.ParseIP(hostname) != nil {
+		return nil
+	}
+	if !IsValidHostname(hostname) {
+		return fmt.Errorf("invalid hostname %q", hostname)
+	}
+	return nil
+}
+
+// IsValidHostname reports whether hostname is a valid DNS name.
+func IsValidHostname(hostname string) bool {
+	if hostname == "" {
+		return false
+	}
+	hostname = strings.TrimSuffix(hostname, ".")
+	if len(hostname) > 253 {
+		return false
+	}
+	labels := strings.Split(hostname, ".")
+	for _, label := range labels {
+		if len(label) == 0 || len(label) > 63 {
+			return false
+		}
+		if label[0] == '-' || label[len(label)-1] == '-' {
+			return false
+		}
+		for _, r := range label {
+			switch {
+			case r >= 'a' && r <= 'z':
+			case r >= 'A' && r <= 'Z':
+			case r >= '0' && r <= '9':
+			case r == '-':
+			default:
+				return false
+			}
+		}
+	}
+	return true
 }
 
 // Zero returns true if the ValidatorAddress is not initialized
