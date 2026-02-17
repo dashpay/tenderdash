@@ -561,6 +561,82 @@ func TestEndpoint_String(t *testing.T) {
 	}
 }
 
+func TestEndpoint_Equal(t *testing.T) {
+	testcases := []struct {
+		name   string
+		a      p2p.Endpoint
+		b      *p2p.Endpoint
+		expect bool
+	}{
+		{
+			"identical IPv4 endpoints",
+			p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 2, 3, 4), Port: 80, Path: "/path"},
+			&p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 2, 3, 4), Port: 80, Path: "/path"},
+			true,
+		},
+		{
+			"IPv4 vs IPv4-mapped IPv6",
+			p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(127, 0, 0, 1), Port: 80},
+			&p2p.Endpoint{Protocol: "tcp", IP: net.ParseIP("::ffff:127.0.0.1"), Port: 80},
+			true,
+		},
+		{
+			"identical IPv6 endpoints",
+			p2p.Endpoint{Protocol: "tcp", IP: net.IPv6loopback, Port: 80},
+			&p2p.Endpoint{Protocol: "tcp", IP: net.IPv6loopback, Port: 80},
+			true,
+		},
+		{
+			"different protocols",
+			p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 2, 3, 4), Port: 80},
+			&p2p.Endpoint{Protocol: "udp", IP: net.IPv4(1, 2, 3, 4), Port: 80},
+			false,
+		},
+		{
+			"different IPs",
+			p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 2, 3, 4), Port: 80},
+			&p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(5, 6, 7, 8), Port: 80},
+			false,
+		},
+		{
+			"different ports",
+			p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 2, 3, 4), Port: 80},
+			&p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 2, 3, 4), Port: 443},
+			false,
+		},
+		{
+			"different paths",
+			p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 2, 3, 4), Port: 80, Path: "/a"},
+			&p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 2, 3, 4), Port: 80, Path: "/b"},
+			false,
+		},
+		{
+			"nil other",
+			p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 2, 3, 4), Port: 80},
+			nil,
+			false,
+		},
+		{
+			"both nil IPs with same path",
+			p2p.Endpoint{Protocol: "memory", Path: "foo"},
+			&p2p.Endpoint{Protocol: "memory", Path: "foo"},
+			true,
+		},
+		{
+			"nil IP vs set IP",
+			p2p.Endpoint{Protocol: "tcp", Path: "foo"},
+			&p2p.Endpoint{Protocol: "tcp", IP: net.IPv4(1, 2, 3, 4), Path: "foo"},
+			false,
+		},
+	}
+	for _, tc := range testcases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			require.Equal(t, tc.expect, tc.a.Equal(tc.b))
+		})
+	}
+}
+
 func TestEndpoint_Validate(t *testing.T) {
 	var (
 		ip4    = []byte{1, 2, 3, 4}

@@ -157,6 +157,26 @@ func (e Endpoint) NodeAddress(nodeID types.NodeID) NodeAddress {
 	return address
 }
 
+func (e Endpoint) Equal(other *Endpoint) bool {
+	if other == nil {
+		return false
+	}
+
+	if e.Protocol != other.Protocol {
+		return false
+	}
+	if !e.IP.Equal(other.IP) {
+		return false
+	}
+	if e.Port != other.Port {
+		return false
+	}
+	if e.Path != other.Path {
+		return false
+	}
+	return true
+}
+
 // String formats the endpoint as a URL string.
 func (e Endpoint) String() string {
 	// If this is a non-networked endpoint with a valid node ID as a path,
