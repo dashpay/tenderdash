@@ -43,7 +43,7 @@ require (
 
 require (
 	github.com/bufbuild/buf v1.65.0
-	github.com/creachadair/atomicfile v0.4.0
+	github.com/creachadair/atomicfile v0.4.1
 	github.com/creachadair/taskgroup v0.14.2
 	github.com/go-pkgz/jrpc v0.4.0
 	github.com/google/go-cmp v0.7.0
