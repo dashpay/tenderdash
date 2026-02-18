@@ -232,10 +232,10 @@ github.com/coreos/go-systemd/v22 v22.5.0/go.mod h1:Y58oyj3AT4RCenI/lSvhwexgC+NSV
 github.com/cpuguy83/go-md2man/v2 v2.0.6/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
 github.com/cpuguy83/go-md2man/v2 v2.0.7 h1:zbFlGlXEAKlwXpmvle3d8Oe3YnkKIK4xSRTd3sHPnBo=
 github.com/cpuguy83/go-md2man/v2 v2.0.7/go.mod h1:oOW0eioCTA6cOiMLiUPZOpcVxMig6NIQQ7OS05n1F4g=
-github.com/creachadair/atomicfile v0.4.0 h1:umZ+njabCI7eeMLWXFRuUy83iQSiA8qnUj8MH04pfbM=
-github.com/creachadair/atomicfile v0.4.0/go.mod h1:OyQCzy3n5KhEXHcHxSzZ7BbRt7QmeVkaiMJmtENydDI=
-github.com/creachadair/mds v0.25.6 h1:l1MkbdJmhqXTpm92VWYTb0/s0wsiZSKKc/VKU0lf2bA=
-github.com/creachadair/mds v0.25.6/go.mod h1:4hatI3hRM+qhzuAmqPRFvaBM8mONkS7nsLxkcuTYUIs=
+github.com/creachadair/atomicfile v0.4.1 h1:72SopAy00u42/iL0p3CZILv51oUEem8uDbxUfnzmsXU=
+github.com/creachadair/atomicfile v0.4.1/go.mod h1:+PsFcWa9SZuK+xnykzupXErqESId5eCGsuqFWkazMQI=
+github.com/creachadair/mds v0.26.0 h1:MExm7XA3xrKa+r8ZS10Nb9SzWfm5GbG3xGp6P+ci9bo=
+github.com/creachadair/mds v0.26.0/go.mod h1:XtMfRW15sjd1iOi1Z1k+dq0pRsR5xPbulpoTrpyhk8w=
 github.com/creachadair/taskgroup v0.14.2 h1:vPHw50VFJ98Eb+h3S1RYRejK3DE0xpGCXb2ZFtHfFeA=
 github.com/creachadair/taskgroup v0.14.2/go.mod h1:FV5K1BzHUCnTVc04O1WLO+iLmvjfOTnYLTcZaC9ZxbM=
 github.com/creachadair/tomledit v0.0.29 h1:dB5CbdwJMpn/fmfAPTAAleXF/KJwY0Ggc1eL/zvZRgk=
