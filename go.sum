@@ -247,8 +247,8 @@ github.com/curioswitch/go-reassign v0.3.0 h1:dh3kpQHuADL3cobV/sSGETA8DOv457dwl+f
 github.com/curioswitch/go-reassign v0.3.0/go.mod h1:nApPCCTtqLJN/s8HfItCcKV0jIPwluBOvZP+dsJGA88=
 github.com/daixiang0/gci v0.13.7 h1:+0bG5eK9vlI08J+J/NWGbWPTNiXPG4WhNLJOkSxWITQ=
 github.com/daixiang0/gci v0.13.7/go.mod h1:812WVN6JLFY9S6Tv76twqmNqevN0pa3SX3nih0brVzQ=
-github.com/dashpay/bls-signatures/go-bindings v0.0.0-20241206210929-0bb5c5b03249 h1:9Y442UNNmdCg2ZrJSP76gyst7VgYqypTAINU7Ar1IJQ=
-github.com/dashpay/bls-signatures/go-bindings v0.0.0-20241206210929-0bb5c5b03249/go.mod h1:auvGS60NBZ+a21aCCQh366PdsjDvHinsCvl28VrYPu4=
+github.com/dashpay/bls-signatures/go-bindings v0.0.0-20251014172129-dd683653c6ea h1:A2GH9ESLNozEef2LQ3GlysKkbEtL4aTW0o8+uA2uaQg=
+github.com/dashpay/bls-signatures/go-bindings v0.0.0-20251014172129-dd683653c6ea/go.mod h1:auvGS60NBZ+a21aCCQh366PdsjDvHinsCvl28VrYPu4=
 github.com/dashpay/dashd-go v0.26.1 h1:/ZFgtPw1fPHpvoJgKfXo/v63ZXddjJm8KrHRpxcSpy0=
 github.com/dashpay/dashd-go v0.26.1/go.mod h1:7KKS2jSPkC1pTz9WLXpiXZ96wT5bUqKTRuk35AyRQ74=
 github.com/dashpay/dashd-go/btcec/v2 v2.2.0 h1:tk54BC++OvOUu0vcPoG8+45dGoJXKsmupYAawBO/1Vk=
