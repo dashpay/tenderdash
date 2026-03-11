@@ -382,7 +382,7 @@ require (
 	github.com/tendermint/go-amino v0.16.0
 	github.com/tyler-smith/go-bip39 v1.1.0
 	golang.org/x/exp v0.0.0-20260218203240-3dfff04db8fa
-	golang.org/x/time v0.14.0
+	golang.org/x/time v0.15.0
 )
 
 // Fix gogoproto module to use fork with needed fixes; see https://github.com/cosmos/gogoproto/pull/150
