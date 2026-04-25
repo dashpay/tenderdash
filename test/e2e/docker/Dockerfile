@@ -1,6 +1,6 @@
 ## Stage 1 and 2 is copied from /DOCKER/Dockerfile
 ARG ALIPNE_VERSION=3.23
-ARG GOLANG_VERSION=1.25.7
+ARG GOLANG_VERSION=1.26.1
 #################################
 # STAGE 1: install dependencies #
 #################################
