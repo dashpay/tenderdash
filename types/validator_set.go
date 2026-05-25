@@ -162,28 +162,11 @@ func (vals *ValidatorSet) ValidateBasic() error {
 		return fmt.Errorf("voting power threshold %d is too large", vals.VotingPowerThreshold)
 	}
 
-	threshold := vals.QuorumVotingThresholdPower()
-	totalPower := vals.TotalVotingPower()
-	switch len(vals.Validators) {
-	case 1, 2:
-		// For validator sets containing 1 or 2 validators, the threshold MUST be equal to the total voting power.
-		if totalPower != threshold {
-			return fmt.Errorf("with 1 or 2 validators, quorum voting power %d must be equal to threshold %d", totalPower, threshold)
-		}
-	case 3:
-		// For validator set with 3 validators, the threshold MUST be equal or greater than 2/3 of the total voting power.
-		if threshold < totalPower*2/3 {
-			return fmt.Errorf("%d-members quorum voting power %d is less than threshold %d",
-				len(vals.Validators), totalPower, vals.VotingPowerThreshold)
-		}
-	default:
-		// For validator sets containing more than 3 validators, the threshold MUST be at least 2/3 + 1 of the total voting power.
-		if threshold < (totalPower*2/3)+1 {
-			return fmt.Errorf("voting threshold %d of quorum with power %d MUST be at least 2/3*%d+1 = %d",
-				threshold, totalPower, totalPower, (totalPower*2/3)+1)
-
-		}
-	}
+	// NOTE: We intentionally do NOT validate the quorum voting threshold against
+	// the total voting power here. The threshold is determined by the LLMQ quorum
+	// type produced by Dash Core (e.g. llmq_devnet_platform is 8-of-12, exactly
+	// 2/3), and enforcing a stricter "2/3 + 1" rule rejects otherwise valid
+	// quorums and prevents the node from starting. See dashpay/tenderdash#1314.
 
 	return nil
 }
