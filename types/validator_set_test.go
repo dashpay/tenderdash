@@ -218,6 +218,7 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 
 func TestCopy(t *testing.T) {
 	vset, _ := RandValidatorSet(10)
+	vset.VotingPowerThreshold = 123
 	vsetHash := vset.Hash()
 	if len(vsetHash) == 0 {
 		t.Fatalf("ValidatorSet had unexpected zero hash")
@@ -229,6 +230,7 @@ func TestCopy(t *testing.T) {
 	if !bytes.Equal(vsetHash, vsetCopyHash) {
 		t.Fatalf("ValidatorSet copy had wrong hash. Orig: %X, Copy: %X", vsetHash, vsetCopyHash)
 	}
+	require.Equal(t, vset.VotingPowerThreshold, vsetCopy.VotingPowerThreshold)
 }
 
 func BenchmarkValidatorSetCopy(b *testing.B) {
