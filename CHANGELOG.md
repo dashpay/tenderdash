@@ -1,3 +1,12 @@
+## [Unreleased]
+
+### Bug Fixes
+
+- `ValidatorSet.ValidateBasic` now validates the quorum voting threshold against the
+  canonical LLMQ type definition instead of a rigid 2/3+1 floor, accepting legitimate
+  dev/test quorums such as `llmq_devnet_platform` (8-of-12) while preserving the strict
+  production floor for unknown quorum types (#1314)
+
 ## [1.5.4] - 2026-01-28
 
 ### Bug Fixes

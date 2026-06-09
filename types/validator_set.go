@@ -162,29 +162,83 @@ func (vals *ValidatorSet) ValidateBasic() error {
 		return fmt.Errorf("voting power threshold %d is too large", vals.VotingPowerThreshold)
 	}
 
+	return vals.validateThreshold()
+}
+
+// validateThreshold sanity-checks the quorum voting threshold against the total
+// voting power.
+//
+// The threshold validated here is the live commit gate: QuorumVotingThresholdPower()
+// feeds vote_set.go, where crossing it finalizes a block via the recovered BLS
+// threshold signature. This method is a LOCAL gate (not hashed, not in ToProto),
+// so it only constrains what a node accepts at startup/replay; it never forks a
+// running chain.
+//
+// Decision logic:
+//  1. Reject impossible thresholds (non-positive, or above total power).
+//  2. If the operator explicitly set VotingPowerThreshold, trust it (the #1052
+//     dev/single-node escape hatch); bounds are already checked.
+//  3. Otherwise the threshold derives from the quorum type:
+//     - recognized type: it MUST equal the canonical type definition.
+//     - unknown/custom type: enforce the strict size-based 2/3 production floor,
+//     since we have no canonical definition to trust.
+func (vals *ValidatorSet) validateThreshold() error {
 	threshold := vals.QuorumVotingThresholdPower()
 	totalPower := vals.TotalVotingPower()
+	strictFloor := (totalPower*2)/3 + 1 // classic SBFT >2/3 bound, in power units
+
+	switch {
+	case totalPower <= 0 || threshold <= 0:
+		return fmt.Errorf("invalid quorum: total voting power %d and threshold %d must both be positive",
+			totalPower, threshold)
+
+	case threshold > totalPower:
+		return fmt.Errorf("threshold %d exceeds total voting power %d", threshold, totalPower)
+
+	case vals.VotingPowerThreshold > 0:
+		// Explicit operator override (#1052). Bounds already checked above.
+		// TODO(#1314): warn when accepted quorum threshold < 2/3 BFT bound.
+		return nil
+
+	default:
+		_, typeThreshold, err := llmq.QuorumParams(vals.QuorumType)
+		if err != nil {
+			// Unknown/custom type: no canonical definition, enforce the strict production floor.
+			return vals.validateStrictFloor(threshold, totalPower, strictFloor)
+		}
+		// Recognized type: trust its canonical threshold definition.
+		if want := int64(typeThreshold) * DefaultDashVotingPower; threshold != want {
+			return fmt.Errorf("threshold %d does not match quorum type %q canonical threshold %d",
+				threshold, vals.QuorumType.Name(), want)
+		}
+		// Dev/test types (e.g. DEVNET_PLATFORM 8/12) may sit at or below 2/3 by design.
+		// TODO(#1314): warn when an accepted recognized type sits below the 2/3 BFT bound.
+		return nil
+	}
+}
+
+// validateStrictFloor enforces the size-based 2/3 production floor for quorum
+// types whose canonical definition is unknown.
+func (vals *ValidatorSet) validateStrictFloor(threshold, totalPower, strictFloor int64) error {
 	switch len(vals.Validators) {
 	case 1, 2:
-		// For validator sets containing 1 or 2 validators, the threshold MUST be equal to the total voting power.
+		// For 1 or 2 validators, the threshold MUST equal the total voting power.
 		if totalPower != threshold {
 			return fmt.Errorf("with 1 or 2 validators, quorum voting power %d must be equal to threshold %d", totalPower, threshold)
 		}
 	case 3:
-		// For validator set with 3 validators, the threshold MUST be equal or greater than 2/3 of the total voting power.
+		// For 3 validators, the threshold MUST be at least 2/3 of the total voting power.
 		if threshold < totalPower*2/3 {
 			return fmt.Errorf("%d-members quorum voting power %d is less than threshold %d",
 				len(vals.Validators), totalPower, vals.VotingPowerThreshold)
 		}
 	default:
-		// For validator sets containing more than 3 validators, the threshold MUST be at least 2/3 + 1 of the total voting power.
-		if threshold < (totalPower*2/3)+1 {
+		// For more than 3 validators, the threshold MUST be at least 2/3 + 1 of the total voting power.
+		if threshold < strictFloor {
 			return fmt.Errorf("voting threshold %d of quorum with power %d MUST be at least 2/3*%d+1 = %d",
-				threshold, totalPower, totalPower, (totalPower*2/3)+1)
-
+				threshold, totalPower, totalPower, strictFloor)
 		}
 	}
-
 	return nil
 }
 
@@ -457,6 +511,14 @@ func (vals *ValidatorSet) QuorumTypeThresholdCount() int {
 		return len(vals.Validators)*2/3 + 1
 	}
 	return threshold
+}
+
+// isDevOrTestQuorum reports whether the LLMQ type is a development/test type
+// (DIP-0006 ids 100..107, or SINGLE_NODE), as opposed to a production type (ids 1..6).
+// Dev/test quorums may legitimately define a threshold at or below the 2/3 BFT bound.
+func isDevOrTestQuorum(t btcjson.LLMQType) bool {
+	return (t >= btcjson.LLMQType_TEST && t <= btcjson.LLMQType_DEVNET_PLATFORM) ||
+		t == btcjson.LLMQType_SINGLE_NODE
 }
 
 // Hash returns the Quorum Hash.
