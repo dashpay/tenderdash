@@ -368,6 +368,31 @@ func TestValidatorSetValidateStrictFloor(t *testing.T) {
 	}
 }
 
+func TestValidatorSetBelowStrictThreshold(t *testing.T) {
+	testCases := []struct {
+		name      string
+		quorum    btcjson.LLMQType
+		members   int
+		threshold uint64 // VotingPowerThreshold; 0 => derived from quorum type
+		below     bool
+	}{
+		{"DEVNET_PLATFORM 8/12 at 2/3 is below 2/3+1", btcjson.LLMQType_DEVNET_PLATFORM, 12, 0, true},
+		{"production 100_67 above 2/3 is not below", btcjson.LLMQType_100_67, 100, 0, false},
+		{"override 800 on 12-member set is below floor", btcjson.LLMQType_DEVNET_PLATFORM, 12, 800, true},
+		{"override 900 on 12-member set is not below floor", btcjson.LLMQType_DEVNET_PLATFORM, 12, 900, false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			vs := &ValidatorSet{
+				Validators:           make([]*Validator, tc.members),
+				QuorumType:           tc.quorum,
+				VotingPowerThreshold: tc.threshold,
+			}
+			assert.Equal(t, tc.below, vs.BelowStrictThreshold())
+		})
+	}
+}
+
 func TestCopy(t *testing.T) {
 	vset, _ := RandValidatorSet(10)
 	vsetHash := vset.Hash()

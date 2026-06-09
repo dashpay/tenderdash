@@ -498,6 +498,11 @@ func (vals *ValidatorSet) QuorumVotingThresholdPower() int64 {
 	return int64(vals.QuorumTypeThresholdCount()) * DefaultDashVotingPower
 }
 
+// BelowStrictThreshold reports whether the quorum voting threshold is below the strict 2/3+1 BFT safety bound.
+func (vals *ValidatorSet) BelowStrictThreshold() bool {
+	return vals.QuorumVotingThresholdPower() < (vals.TotalVotingPower()*2)/3+1
+}
+
 // QuorumTypeMemberCount returns a number of validators for a quorum by a type
 func (vals *ValidatorSet) QuorumTypeMemberCount() int {
 	size, _, err := llmq.QuorumParams(vals.QuorumType)
