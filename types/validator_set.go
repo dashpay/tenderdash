@@ -196,8 +196,8 @@ func (vals *ValidatorSet) validateThreshold() error {
 		return fmt.Errorf("threshold %d exceeds total voting power %d", threshold, totalPower)
 
 	case vals.VotingPowerThreshold > 0:
-		// Explicit operator override (#1052). Bounds already checked above.
-		// TODO(#1314): warn when accepted quorum threshold < 2/3 BFT bound.
+		// Explicit operator override (#1052), recorded on-chain. Bounds already
+		// checked above; the operator owns any reduced safety margin.
 		return nil
 
 	default:
@@ -206,13 +206,16 @@ func (vals *ValidatorSet) validateThreshold() error {
 			// Unknown/custom type: no canonical definition, enforce the strict production floor.
 			return vals.validateStrictFloor(threshold, totalPower, strictFloor)
 		}
-		// Recognized type: trust its canonical threshold definition.
+		// Recognized type: trust its canonical threshold definition; dev/test types
+		// (e.g. DEVNET_PLATFORM 8/12) may legitimately sit at or below 2/3.
+		//
+		// With the threshold derived from the type (param unset), threshold always
+		// equals want, so this guard is defense-in-depth: it protects future callers
+		// that set QuorumVotingThresholdPower() independently of the type definition.
 		if want := int64(typeThreshold) * DefaultDashVotingPower; threshold != want {
 			return fmt.Errorf("threshold %d does not match quorum type %q canonical threshold %d",
 				threshold, vals.QuorumType.Name(), want)
 		}
-		// Dev/test types (e.g. DEVNET_PLATFORM 8/12) may sit at or below 2/3 by design.
-		// TODO(#1314): warn when an accepted recognized type sits below the 2/3 BFT bound.
 		return nil
 	}
 }
@@ -511,14 +514,6 @@ func (vals *ValidatorSet) QuorumTypeThresholdCount() int {
 		return len(vals.Validators)*2/3 + 1
 	}
 	return threshold
-}
-
-// isDevOrTestQuorum reports whether the LLMQ type is a development/test type
-// (DIP-0006 ids 100..107, or SINGLE_NODE), as opposed to a production type (ids 1..6).
-// Dev/test quorums may legitimately define a threshold at or below the 2/3 BFT bound.
-func isDevOrTestQuorum(t btcjson.LLMQType) bool {
-	return (t >= btcjson.LLMQType_TEST && t <= btcjson.LLMQType_DEVNET_PLATFORM) ||
-		t == btcjson.LLMQType_SINGLE_NODE
 }
 
 // Hash returns the Quorum Hash.

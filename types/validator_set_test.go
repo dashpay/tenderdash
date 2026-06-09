@@ -219,25 +219,31 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 // TestValidatorSetValidateBasicQuorumThreshold exercises the quorum-type-aware
 // threshold validation end-to-end against fully-formed (real BLS) validator sets.
 func TestValidatorSetValidateBasicQuorumThreshold(t *testing.T) {
-	// devnetPlatform is a 12-member set whose canonical threshold is 8 (800 power,
-	// exactly 2/3) — the #1314 case that the old rigid 2/3+1 floor wrongly rejected.
+	// devnetPlatform: recognized dev type DEVNET_PLATFORM, 12 members, param unset.
+	// Canonical threshold is 8 (800 power, exactly 2/3) — the #1314 case that the
+	// old rigid 2/3+1=801 floor wrongly rejected. Routes to the recognized-type branch.
 	devnetPlatform, _ := RandValidatorSet(12)
 	devnetPlatform.QuorumType = btcjson.LLMQType_DEVNET_PLATFORM
 
-	// override is the same canonical set but with an explicit operator threshold
-	// of 800, deliberately below the strict 2/3+1=801 floor (#1052 escape hatch).
+	// override: DEVNET_PLATFORM type but with an explicit operator threshold of 800,
+	// deliberately below the strict 2/3+1=801 floor. Routes to the override branch
+	// (#1052 escape hatch), which accepts regardless of type.
 	override, _ := RandValidatorSet(12)
+	override.QuorumType = btcjson.LLMQType_DEVNET_PLATFORM
 	override.VotingPowerThreshold = 800
 
-	// devnetPlatformOverride sets an explicit threshold that disagrees with the
-	// canonical DEVNET_PLATFORM definition (800); the explicit override still wins.
+	// devnetPlatformOverride: explicit threshold 900 disagrees with the canonical
+	// DEVNET_PLATFORM definition (800), but the override branch wins before the
+	// canonical check, so it is accepted.
 	devnetPlatformOverride, _ := RandValidatorSet(12)
 	devnetPlatformOverride.QuorumType = btcjson.LLMQType_DEVNET_PLATFORM
 	devnetPlatformOverride.VotingPowerThreshold = 900
 
-	// unknownType keeps the default LLMQType_TEST (not in the quorum map), so the
-	// derived threshold is len*2/3+1 = 9 => 900, above the 801 strict floor: accepted.
+	// unknownType: TEST (id 100) is absent from the quorum map, so QuorumParams
+	// errors and validation falls to the strict floor. Derived threshold is
+	// len*2/3+1 = 9 => 900, above the 801 floor for 12 validators: accepted.
 	unknownType, _ := RandValidatorSet(12)
+	unknownType.QuorumType = btcjson.LLMQType_TEST
 
 	testCases := []struct {
 		name string
@@ -262,8 +268,9 @@ func TestValidatorSetValidateBasicQuorumThreshold(t *testing.T) {
 }
 
 // TestValidatorSetValidateThreshold white-box tests the threshold decision branches
-// that are not reachable through the fully-derived happy path (bounds, mismatch,
-// and the unknown-type strict floor), using synthetic validator sets.
+// (bounds, recognized dev/production types, override, and the unknown-type strict
+// floor) using synthetic validator sets. The canonical-mismatch guard is omitted: it
+// is unreachable when the threshold derives from the type (defense-in-depth).
 func TestValidatorSetValidateThreshold(t *testing.T) {
 	testCases := []struct {
 		name      string
@@ -282,8 +289,16 @@ func TestValidatorSetValidateThreshold(t *testing.T) {
 			members: 4, threshold: 0, err: true, msg: "threshold 800 exceeds total voting power 400",
 		},
 		{
-			name: "recognized type matching canonical accepted", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
+			name: "recognized dev type matching canonical accepted", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
 			members: 12, threshold: 0, err: false,
+		},
+		{
+			name: "recognized production 100_67 matching canonical accepted", quorum: btcjson.LLMQType_100_67,
+			members: 100, threshold: 0, err: false,
+		},
+		{
+			name: "recognized production 50_60 below 2/3 accepted as canonical", quorum: btcjson.LLMQType_50_60,
+			members: 50, threshold: 0, err: false,
 		},
 		{
 			name: "explicit override below floor accepted", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
@@ -350,29 +365,6 @@ func TestValidatorSetValidateStrictFloor(t *testing.T) {
 				assert.NoError(t, err)
 			}
 		})
-	}
-}
-
-func TestIsDevOrTestQuorum(t *testing.T) {
-	devOrTest := []btcjson.LLMQType{
-		btcjson.LLMQType_TEST,
-		btcjson.LLMQType_DEVNET,
-		btcjson.LLMQType_TEST_PLATFORM,
-		btcjson.LLMQType_DEVNET_PLATFORM,
-		btcjson.LLMQType_SINGLE_NODE,
-	}
-	for _, qt := range devOrTest {
-		assert.Truef(t, isDevOrTestQuorum(qt), "%s should be dev/test", qt.Name())
-	}
-
-	production := []btcjson.LLMQType{
-		btcjson.LLMQType_50_60,
-		btcjson.LLMQType_400_85,
-		btcjson.LLMQType_100_67,
-		btcjson.LLMQType_25_67,
-	}
-	for _, qt := range production {
-		assert.Falsef(t, isDevOrTestQuorum(qt), "%s should be production", qt.Name())
 	}
 }
 
