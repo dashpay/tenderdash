@@ -464,8 +464,8 @@ func TestClient(t *testing.T) {
 		mockBadValSetNode := mockNodeFromHeadersAndVals(
 			map[int64]*types.SignedHeader{
 				1: h1,
-				// 3/3 signed, but validator set at height 2 below is invalid -> witness
-				// should be removed.
+				// 3/3 signed, but the header at height 2 differs from the primary's
+				// (different app hash) -> the witness reports a conflicting header.
 				2: keys.GenSignedHeaderLastBlockID(t, chainID, 2, bTime.Add(30*time.Minute), nil, vals, vals,
 					hash("app_hash2"), hash("cons_hash"), hash("results_hash"),
 					0, len(keys),
@@ -515,10 +515,13 @@ func TestClient(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, 2, len(c.Witnesses()))
 
+		// A witness reporting a header that conflicts with the primary's fails the
+		// verification; the dissenting witness is kept, since the primary may be
+		// the faulty party.
 		_, err = c.VerifyLightBlockAtHeight(ctx, 2, bTime.Add(2*time.Hour).Add(1*time.Second))
-		assert.NoError(t, err)
-		assert.Equal(t, 1, len(c.Witnesses()))
-		mockBadValSetNode.AssertExpectations(t)
+		require.Error(t, err)
+		assert.ErrorIs(t, err, light.ErrConflictingWitnessHeader)
+		assert.Equal(t, 2, len(c.Witnesses()))
 		mockFullNode.AssertExpectations(t)
 	})
 	t.Run("PrunesHeadersAndValidatorSets", func(t *testing.T) {

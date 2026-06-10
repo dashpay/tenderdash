@@ -834,6 +834,7 @@ func (c *Client) compareFirstHeaderWithWitnesses(ctx context.Context, h *types.S
 	}
 
 	witnessesToRemove := make([]int, 0, len(c.witnesses))
+	conflictingWitnesses := make([]int, 0, len(c.witnesses))
 
 	// handle errors from the header comparisons as they come in
 	for i := 0; i < cap(errc); i++ {
@@ -846,8 +847,9 @@ func (c *Client) compareFirstHeaderWithWitnesses(ctx context.Context, h *types.S
 			c.logger.Error(fmt.Sprintf("witness #%d has a different header. Please check primary is correct and"+
 				" remove witness. Otherwise, use the different primary", e.WitnessIndex), "witness",
 				c.witnesses[e.WitnessIndex])
-			// if attempt to generate conflicting headers failed then remove witness
-			witnessesToRemove = append(witnessesToRemove, e.WitnessIndex)
+			// The primary and a witness disagree; keep the dissenting witness, as
+			// the primary may be the faulty party, and fail the comparison below.
+			conflictingWitnesses = append(conflictingWitnesses, e.WitnessIndex)
 		case errBadWitness:
 			// If witness sent us an invalid header, then remove it
 			c.logger.Info("witness sent an invalid light block, removing...",
@@ -874,8 +876,18 @@ func (c *Client) compareFirstHeaderWithWitnesses(ctx context.Context, h *types.S
 
 	}
 
-	// remove all witnesses that misbehaved
-	return c.removeWitnesses(witnessesToRemove)
+	// remove all witnesses that sent an invalid header
+	if err := c.removeWitnesses(witnessesToRemove); err != nil {
+		return err
+	}
+
+	// A witness presenting a header that conflicts with the primary's means the
+	// primary's header cannot be trusted: fail the comparison.
+	if len(conflictingWitnesses) > 0 {
+		return fmt.Errorf("%w: witnesses %v", ErrConflictingWitnessHeader, conflictingWitnesses)
+	}
+
+	return nil
 }
 
 func (c *Client) Status(_ctx context.Context) *types.LightClientInfo {
