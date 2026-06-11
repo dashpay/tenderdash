@@ -316,6 +316,10 @@ func TestValidatorSetValidateThreshold(t *testing.T) {
 			name: "single validator type-derived equals total accepted", quorum: btcjson.LLMQType_TEST,
 			members: 1, threshold: 0, err: false,
 		},
+		{
+			name: "recognized type with non-canonical member count rejected", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
+			members: 13, threshold: 0, err: true, msg: "validator set has 13 members",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -400,12 +404,17 @@ func TestCopy(t *testing.T) {
 		t.Fatalf("ValidatorSet had unexpected zero hash")
 	}
 
+	vset.VotingPowerThreshold = 800
+
 	vsetCopy := vset.Copy()
 	vsetCopyHash := vsetCopy.Hash()
 
 	if !bytes.Equal(vsetHash, vsetCopyHash) {
 		t.Fatalf("ValidatorSet copy had wrong hash. Orig: %X, Copy: %X", vsetHash, vsetCopyHash)
 	}
+
+	assert.Equal(t, vset.VotingPowerThreshold, vsetCopy.VotingPowerThreshold,
+		"Copy must preserve the explicit VotingPowerThreshold override")
 }
 
 func BenchmarkValidatorSetCopy(b *testing.B) {

@@ -185,7 +185,7 @@ func (vals *ValidatorSet) ValidateBasic() error {
 func (vals *ValidatorSet) validateThreshold() error {
 	threshold := vals.QuorumVotingThresholdPower()
 	totalPower := vals.TotalVotingPower()
-	strictFloor := (totalPower*2)/3 + 1 // classic SBFT >2/3 bound, in power units
+	strictFloor := vals.StrictVotingPowerFloor() // classic SBFT >2/3 bound, in power units
 
 	switch {
 	case totalPower <= 0 || threshold <= 0:
@@ -201,10 +201,15 @@ func (vals *ValidatorSet) validateThreshold() error {
 		return nil
 
 	default:
-		_, typeThreshold, err := llmq.QuorumParams(vals.QuorumType)
+		typeMembers, typeThreshold, err := llmq.QuorumParams(vals.QuorumType)
 		if err != nil {
 			// Unknown/custom type: no canonical definition, enforce the strict production floor.
 			return vals.validateStrictFloor(threshold, totalPower, strictFloor)
+		}
+		// Recognized type: the set size MUST match the canonical member count.
+		if vals.Size() != typeMembers {
+			return fmt.Errorf("validator set has %d members, but quorum type %q requires %d",
+				vals.Size(), vals.QuorumType.Name(), typeMembers)
 		}
 		// Recognized type: trust its canonical threshold definition; dev/test types
 		// (e.g. DEVNET_PLATFORM 8/12) may legitimately sit at or below 2/3.
@@ -380,12 +385,13 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 		return nil
 	}
 	valset := &ValidatorSet{
-		Validators:         validatorListCopy(vals.Validators),
-		ThresholdPublicKey: vals.ThresholdPublicKey,
-		QuorumHash:         vals.QuorumHash,
-		QuorumType:         vals.QuorumType,
-		HasPublicKeys:      vals.HasPublicKeys,
-		proposerIndex:      vals.proposerIndex,
+		Validators:           validatorListCopy(vals.Validators),
+		ThresholdPublicKey:   vals.ThresholdPublicKey,
+		QuorumHash:           vals.QuorumHash,
+		QuorumType:           vals.QuorumType,
+		HasPublicKeys:        vals.HasPublicKeys,
+		VotingPowerThreshold: vals.VotingPowerThreshold,
+		proposerIndex:        vals.proposerIndex,
 	}
 
 	return valset
@@ -498,9 +504,14 @@ func (vals *ValidatorSet) QuorumVotingThresholdPower() int64 {
 	return int64(vals.QuorumTypeThresholdCount()) * DefaultDashVotingPower
 }
 
+// StrictVotingPowerFloor returns the strict 2/3+1 BFT safety bound, in voting-power units.
+func (vals *ValidatorSet) StrictVotingPowerFloor() int64 {
+	return (vals.TotalVotingPower()*2)/3 + 1
+}
+
 // BelowStrictThreshold reports whether the quorum voting threshold is below the strict 2/3+1 BFT safety bound.
 func (vals *ValidatorSet) BelowStrictThreshold() bool {
-	return vals.QuorumVotingThresholdPower() < (vals.TotalVotingPower()*2)/3+1
+	return vals.QuorumVotingThresholdPower() < vals.StrictVotingPowerFloor()
 }
 
 // QuorumTypeMemberCount returns a number of validators for a quorum by a type

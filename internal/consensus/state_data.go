@@ -276,7 +276,7 @@ func (s *StateData) updateToState(state sm.State, commit *types.Commit, blockSto
 				"quorum_type", validators.QuorumType.Name(),
 				"threshold", validators.QuorumVotingThresholdPower(),
 				"total_power", validators.TotalVotingPower(),
-				"strict_floor", (validators.TotalVotingPower()*2)/3+1)
+				"strict_floor", validators.StrictVotingPowerFloor())
 		}
 	}
 
