@@ -13,6 +13,7 @@ import (
 	"github.com/dashpay/tenderdash/crypto/bls12381"
 	"github.com/dashpay/tenderdash/internal/jsontypes"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
+	tmos "github.com/dashpay/tenderdash/libs/os"
 	tmtime "github.com/dashpay/tenderdash/libs/time"
 	tmproto "github.com/dashpay/tenderdash/proto/tendermint/types"
 )
@@ -276,6 +277,7 @@ func GenesisDocFromJSON(jsonBlob []byte) (*GenesisDoc, error) {
 func GenesisDocFromFile(genDocFile string) (*GenesisDoc, error) {
 	jsonBlob, err := os.ReadFile(genDocFile)
 	if err != nil {
+		err = tmos.WrapPermissionError(genDocFile, tmos.OperationReadFile, err)
 		return nil, fmt.Errorf("couldn't read GenesisDoc file: %w", err)
 	}
 	genDoc, err := GenesisDocFromJSON(jsonBlob)

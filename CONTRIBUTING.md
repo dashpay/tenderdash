@@ -1,23 +1,22 @@
 # Contributing
 
-Thank you for your interest in contributing to Tendermint! Before
+Thank you for your interest in contributing to Tenderdash! Before
 contributing, it may be helpful to understand the goal of the project. The goal
-of Tendermint is to develop a BFT consensus engine robust enough to
+of Tenderdash is to develop a BFT consensus engine robust enough to
 support permissionless value-carrying networks. While all contributions are
 welcome, contributors should bear this goal in mind in deciding if they should
-target the main Tendermint project or a potential fork. When targeting the
-main Tendermint project, the following process leads to the best chance of
-landing changes in master.
+target Tenderdash or a potential fork. When targeting Tenderdash, the following
+process leads to the best chance of landing changes in the development branch.
 
 All work on the code base should be motivated by a [Github
-Issue](https://github.com/tendermint/tendermint/issues).
-[Search](https://github.com/tendermint/tendermint/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22)
+Issue](https://github.com/dashpay/tenderdash/issues).
+[Search](https://github.com/dashpay/tenderdash/issues?q=is%3Aopen+is%3Aissue+label%3A%22help+wanted%22)
 is a good place start when looking for places to contribute. If you
 would like to work on an issue which already exists, please indicate so
 by leaving a comment.
 
 All new contributions should start with a [Github
-Issue](https://github.com/tendermint/tendermint/issues/new/choose). The
+Issue](https://github.com/dashpay/tenderdash/issues/new/choose). The
 issue helps capture the problem you're trying to solve and allows for
 early feedback. Once the issue is created the process can proceed in different
 directions depending on how well defined the problem and potential
@@ -26,8 +25,8 @@ will indicate their support with a heartfelt emoji.
 
 If the issue would benefit from thorough discussion, maintainers may
 request that you create a [Request For
-Comment](https://github.com/tendermint/spec/tree/master/rfc)
-in the Tendermint spec repo. Discussion
+Comment](./docs/rfc/)
+in the Tenderdash repo. Discussion
 at the RFC stage will build collective understanding of the dimensions
 of the problems and help structure conversations around trade-offs.
 
@@ -46,7 +45,8 @@ Find the largest existing ADR number and bump it by 1.
 When the problem as well as proposed solution are well understood,
 changes should start with a [draft
 pull request](https://github.blog/2019-02-14-introducing-draft-pull-requests/)
-against master. The draft signals that work is underway. When the work
+against the development branch (latest `vMAJOR.MINOR-dev`). The draft signals
+that work is underway. When the work
 is ready for feedback, hitting "Ready for Review" will signal to the
 maintainers to take a look.
 
@@ -54,46 +54,23 @@ maintainers to take a look.
 
 Each stage of the process is aimed at creating feedback cycles which align contributors and maintainers to make sure:
 
-- Contributors don’t waste their time implementing/proposing features which won’t land in master.
+- Contributors don’t waste their time implementing/proposing features which won’t land in the development branch.
 - Maintainers have the necessary context in order to support and review contributions.
 
-## Forking
+## Code Style
 
-Please note that Go requires code to live under absolute paths, which complicates forking.
-While my fork lives at `https://github.com/ebuchman/tendermint`,
-the code should never exist at `$GOPATH/src/github.com/ebuchman/tendermint`.
-Instead, we use `git remote` to add the fork as a new remote for the original repo,
-`$GOPATH/src/github.com/tendermint/tendermint`, and do all the work there.
-
-For instance, to create a fork and work on a branch of it, I would:
-
-- Create the fork on GitHub, using the fork button.
-- Go to the original repo checked out locally (i.e. `$GOPATH/src/github.com/tendermint/tendermint`)
-- `git remote rename origin upstream`
-- `git remote add origin git@github.com:ebuchman/basecoin.git`
-
-Now `origin` refers to my fork and `upstream` refers to the Tendermint version.
-So I can `git push -u origin master` to update my fork, and make pull requests to tendermint from there.
-Of course, replace `ebuchman` with your git handle.
-
-To pull in updates from the origin repo, run
-
-- `git fetch upstream`
-- `git rebase upstream/master` (or whatever branch you want)
+Follow the conventions in [STYLE_GUIDE.md](./STYLE_GUIDE.md) for Go code
+structure, comments, tests, and errors.
 
 ## Dependencies
 
 We use [go modules](https://github.com/golang/go/wiki/Modules) to manage dependencies.
 
-That said, the master branch of every Tendermint repository should just build
-with `go get`, which means they should be kept up-to-date with their
-dependencies so we can get away with telling people they can just `go get` our
-software.
-
-Since some dependencies are not under our control, a third party may break our
-build, in which case we can fall back on `go mod tidy`. Even for dependencies under our control, go helps us to
-keep multiple repos in sync as they evolve. Anything with an executable, such
-as apps, tools, and the core, should use dep.
+The development branch (latest `vMAJOR.MINOR-dev`) should build cleanly with
+`go get`, which means dependencies should be kept up-to-date so we can get away
+with telling people they can just `go get` our software. Since some
+dependencies are not under our control, a third party may break our build, in
+which case we can fall back on `go mod tidy`.
 
 Run `go list -u -m all` to get a list of dependencies that may not be
 up-to-date.
@@ -101,13 +78,13 @@ up-to-date.
 When updating dependencies, please only update the particular dependencies you
 need. Instead of running `go get -u=patch`, which will update anything,
 specify exactly the dependency you want to update, eg.
-`GO111MODULE=on go get -u github.com/tendermint/go-amino@master`.
+`go get -u github.com/tendermint/go-amino@<version>`.
 
 ## Protobuf
 
 We use [Protocol Buffers](https://developers.google.com/protocol-buffers) along
 with [`gogoproto`](https://github.com/cosmos/gogoproto) to generate code for use
-across Tendermint Core.
+across Tenderdash.
 
 To generate proto stubs, lint, and check protos for breaking changes, you will
 need to install [buf](https://buf.build/) and `gogoproto`. Then, from the root
@@ -148,66 +125,62 @@ If you are a VS Code user, you may want to add the following to your `.vscode/se
 }
 ```
 
-## Changelog
+## Release Notes
 
-Every fix, improvement, feature, or breaking change should be made in a
-pull-request that includes an update to the `CHANGELOG_PENDING.md` file.
-
-Changelog entries should be formatted as follows:
-
-```md
-- [module] \#xxx Some description about the change (@contributor)
-```
-
-Here, `module` is the part of the code that changed (typically a
-top-level Go package), `xxx` is the pull-request number, and `contributor`
-is the author/s of the change.
-
-It's also acceptable for `xxx` to refer to the relevant issue number, but pull-request
-numbers are preferred.
-Note this means pull-requests should be opened first so the changelog can then
-be updated with the pull-request's number.
-There is no need to include the full link, as this will be added
-automatically during release. But please include the backslash and pound, eg. `\#2313`.
-
-Changelog entries should be ordered alphabetically according to the
-`module`, and numerically according to the pull-request number.
-
-Changes with multiple classifications should be doubly included (eg. a bug fix
-that is also a breaking change should be recorded under both).
-
-Breaking changes are further subdivided according to the APIs/users they impact.
-Any change that effects multiple APIs/users should be recorded multiply - for
-instance, a change to the `Blockchain Protocol` that removes a field from the
-header should also be recorded under `CLI/RPC/Config` since the field will be
-removed from the header in RPC responses as well.
+Release notes are generated from commit messages by `scripts/release.sh`. Use
+clear conventional commit summaries so the release tooling can assemble accurate
+notes; `CHANGELOG_PENDING.md` is no longer maintained.
 
 ## Branching Model and Release
 
-The main development branch is master.
+Tenderdash maintains two primary branches:
 
-Every release is maintained in a release branch named `vX.Y.Z`.
+- `master` for the latest stable release.
+- The highest-versioned `vMAJOR.MINOR-dev` branch for active development.
 
-Pending minor releases have long-lived release candidate ("RC") branches. Minor release changes should be merged to these long-lived RC branches at the same time that the changes are merged to master.
+Find the current development branch with:
 
-Note all pull requests should be squash merged except for merging to a release branch (named `vX.Y`). This keeps the commit history clean and makes it
-easy to reference the pull request where a change was introduced.
+```sh
+git branch -r --list 'origin/v[0-9]*-dev' --sort=-version:refname | head -1
+```
+
+Release tags are cut from `master`. We only maintain `master` and the current
+development branch. Changes merge into the development branch first; `master`
+receives cherry-picked release-critical fixes and release updates.
+
+Note all pull requests should be squash merged. This keeps the commit history
+clean and makes it easy to reference the pull request where a change was
+introduced.
 
 ### Development Procedure
 
-The latest state of development is on `master`, which must never fail `make test`. _Never_ force push `master`, unless fixing broken git history (which we rarely do anyways).
+The latest state of development is on the development branch (latest
+`vMAJOR.MINOR-dev`), which must keep CI green (build, lint, and tests). _Never_
+force push the development branch, unless fixing broken git history (which we
+rarely do anyways).
 
-To begin contributing, create a development branch either on `github.com/tendermint/tendermint`, or your fork (using `git remote add origin`).
+To begin contributing, create a development branch either on
+`github.com/dashpay/tenderdash`, or your fork (using `git remote add origin`).
 
-Make changes, and before submitting a pull request, update the `CHANGELOG_PENDING.md` to record your change. Also, run either `git rebase` or `git merge` on top of the latest `master`. (Since pull requests are squash-merged, either is fine!)
+Make changes and keep your branch updated with the latest development branch.
+Ensure CI is green; run `make build`, `make lint`, and
+`go test -race -timeout=5m ./...` locally as needed. (Since pull requests are
+squash-merged, either `git rebase` or `git merge` is fine.) When opening a PR,
+fill in every section of `.github/PULL_REQUEST_TEMPLATE.md`.
 
-Update the `UPGRADING.md` if the change you've made is breaking and the
-instructions should be in place for a user on how he/she can upgrade it's
-software (ABCI application, Tendermint-based blockchain, light client, wallet).
+If a change needs to land in the latest stable release, coordinate with the
+maintainers and open a follow-up PR against `master` after the development
+branch merge. Follow-up PRs should cherry-pick the relevant commit(s) and are
+typically reserved for release-critical fixes.
 
 Once you have submitted a pull request label the pull request with either `R:minor`, if the change should be included in the next minor release, or `R:major`, if the change is meant for a major release.
 
-Sometimes (often!) pull requests get out-of-date with master, as other people merge different pull requests to master. It is our convention that pull request authors are responsible for updating their branches with master. (This also means that you shouldn't update someone else's branch for them; even if it seems like you're doing them a favor, you may be interfering with their git flow in some way!)
+Sometimes (often!) pull requests get out-of-date with the development branch, as
+other people merge different pull requests to the development branch. It is our
+convention that pull request authors are responsible for updating their
+branches with the development branch. (This also means that you shouldn't
+update someone else's branch for them; even if it seems like you're doing them
+a favor, you may be interfering with their git flow in some way!)
 
 #### Merging Pull Requests
 
@@ -215,39 +188,31 @@ It is also our convention that authors merge their own pull requests, when possi
 
 Before merging a pull request:
 
-- Ensure pull branch is up-to-date with a recent `master` (GitHub won't let you merge without this!)
-- Run `make test` to ensure that all tests pass
+- Ensure pull branch is up-to-date with the development branch (GitHub won't let
+  you merge without this!)
+- Ensure CI is green
 - [Squash](https://stackoverflow.com/questions/5189560/squash-my-last-x-commits-together-using-git) merge pull request
-
-#### Pull Requests for Minor Releases
-
-If your change should be included in a minor release, please also open a PR against the long-lived minor release candidate branch (e.g., `rc1/v0.33.5`) _immediately after your change has been merged to master_.
-
-You can do this by cherry-picking your commit off master:
-
-```sh
-$ git checkout rc1/v0.33.5
-$ git checkout -b {new branch name}
-$ git cherry-pick {commit SHA from master}
-# may need to fix conflicts, and then use git add and git cherry-pick --continue
-$ git push origin {new branch name}
-```
-
-After this, you can open a PR. Please note in the PR body if there were merge conflicts so that reviewers can be sure to take a thorough look.
 
 ### Git Commit Style
 
-We follow the [Go style guide on commit messages](https://tip.golang.org/doc/contribute.html#commit_messages). Write concise commits that start with the package name and have a description that finishes the sentence "This change modifies Tendermint to...". For example,
+We use conventional commit format for commit and PR titles. Follow the
+[Conventional Commits](https://www.conventionalcommits.org/) specification and
+use common types like `feat`, `fix`, `docs`, `refactor`, `test`, and `chore`.
+Scopes should describe the affected package or subsystem (e.g., `cmd/debug`).
+Write concise commits that follow `type(scope): summary` on the first line;
+optional body and footer sections may include context or references. For example,
 
 ```sh
-cmd/debug: execute p.Signal only when p is not nil
+fix(cmd/debug): execute p.Signal only when p is not nil
 
 [potentially longer description in the body]
 
 Fixes #nnnn
 ```
 
-Each PR should have one commit once it lands on `master`; this can be accomplished by using the "squash and merge" button on Github. Be sure to edit your commit message, though!
+Each PR should have one commit once it lands on the development branch; this
+can be accomplished by using the "squash and merge" button on Github. Be sure
+to edit your commit message, though!
 
 ## Testing
 
@@ -257,7 +222,9 @@ Unit tests are located in `_test.go` files as directed by [the Go testing
 package](https://golang.org/pkg/testing/). If you're adding or removing a
 function, please check there's a `TestType_Method` test for it.
 
-Run: `make test`
+Run: `go test -race -timeout=5m ./...`
+
+To run a single package's tests, use `go test -race -timeout=5m ./dash/quorum/...`.
 
 ### Integration tests
 
@@ -269,7 +236,7 @@ Run: `make test_integrations`
 
 ### End-to-end tests
 
-End-to-end tests are used to verify a fully integrated Tendermint network.
+End-to-end tests are used to verify a fully integrated Tenderdash network.
 
 See [README](./test/e2e/README.md) for details.
 

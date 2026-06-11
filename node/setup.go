@@ -329,6 +329,11 @@ func createRouter(
 		return nil, err
 	}
 
+	opts, err := getRouterConfig(cfg, appClient)
+	if err != nil {
+		return nil, err
+	}
+
 	return p2p.NewRouter(
 		p2pLogger,
 		p2pMetrics,
@@ -337,7 +342,7 @@ func createRouter(
 		nodeInfoProducer,
 		transport,
 		ep,
-		getRouterConfig(cfg, appClient),
+		opts,
 	)
 }
 

@@ -346,6 +346,10 @@ bootstrap-peers = "{{ .P2P.BootstrapPeers }}"
 # Comma separated list of nodes to keep persistent connections to
 persistent-peers = "{{ .P2P.PersistentPeers }}"
 
+# If true, only peers from persistent-peers and bootstrap-peers are allowed
+# to connect (inbound and outbound).
+allowlist-only = {{ .P2P.AllowlistOnly }}
+
 # UPNP port forwarding
 upnp = {{ .P2P.UPNP }}
 

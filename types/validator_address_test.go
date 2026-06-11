@@ -100,6 +100,36 @@ func TestValidatorAddress_HostPortProto(t *testing.T) {
 			wantProto: "tcp",
 		},
 		{
+			uri:       "tcp://127.0.0.1:26656:26656",
+			wantError: true,
+		},
+		{
+			uri:       "tcp://[127.0.0.1:26656]:26656",
+			wantError: true,
+		},
+		{
+			uri:       "tcp://[127.0.0.1:26656]",
+			wantError: true,
+		},
+		{
+			uri:       "tcp://[127.0.0.1]:26656",
+			wantError: true,
+		},
+		{
+			uri:       "tcp://[::1]:26656",
+			wantHost:  "::1",
+			wantPort:  26656,
+			wantProto: "tcp",
+			wantError: false,
+		},
+		{
+			uri:       "tcp://google.com:26656",
+			wantHost:  "google.com",
+			wantPort:  26656,
+			wantProto: "tcp",
+			wantError: false,
+		},
+		{
 			uri:       "",
 			wantError: true,
 		},

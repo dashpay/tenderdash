@@ -169,6 +169,11 @@ func (a NodeAddress) Validate() error {
 	} else if err := a.NodeID.Validate(); err != nil {
 		return fmt.Errorf("invalid peer ID: %w", err)
 	}
+	if a.Hostname != "" {
+		if err := types.ValidateHostname(a.Hostname); err != nil {
+			return err
+		}
+	}
 	if a.Port > 0 && a.Hostname == "" {
 		return errors.New("cannot specify port without hostname")
 	}
