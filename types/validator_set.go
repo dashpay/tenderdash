@@ -179,7 +179,8 @@ func (vals *ValidatorSet) ValidateBasic() error {
 //  2. If the operator explicitly set VotingPowerThreshold, trust it (the #1052
 //     dev/single-node escape hatch); bounds are already checked.
 //  3. Otherwise the threshold derives from the quorum type:
-//     - recognized type: it MUST equal the canonical type definition.
+//     - recognized type: the set may not exceed the canonical member maximum, and
+//     the threshold MUST match the canonical type definition.
 //     - unknown/custom type: enforce the strict size-based 2/3 production floor,
 //     since we have no canonical definition to trust.
 func (vals *ValidatorSet) validateThreshold() error {
@@ -206,9 +207,11 @@ func (vals *ValidatorSet) validateThreshold() error {
 			// Unknown/custom type: no canonical definition, enforce the strict production floor.
 			return vals.validateStrictFloor(threshold, totalPower, strictFloor)
 		}
-		// Recognized type: the set size MUST match the canonical member count.
-		if vals.Size() != typeMembers {
-			return fmt.Errorf("validator set has %d members, but quorum type %q requires %d",
+		// A quorum may be under-subscribed (fewer members than the type's max) — that
+		// only raises the threshold ratio, so it stays safe. Reject only sets LARGER
+		// than the canonical max, which would lower the live commit gate below 2/3.
+		if vals.Size() > typeMembers {
+			return fmt.Errorf("validator set has %d members, exceeding quorum type %q maximum of %d",
 				vals.Size(), vals.QuorumType.Name(), typeMembers)
 		}
 		// Recognized type: trust its canonical threshold definition; dev/test types

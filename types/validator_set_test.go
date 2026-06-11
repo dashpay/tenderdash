@@ -16,6 +16,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
+	"github.com/dashpay/tenderdash/dash/llmq"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
@@ -245,6 +246,24 @@ func TestValidatorSetValidateBasicQuorumThreshold(t *testing.T) {
 	unknownType, _ := RandValidatorSet(12)
 	unknownType.QuorumType = btcjson.LLMQType_TEST
 
+	// underSubscribed: DEVNET_PLATFORM with fewer members than its canonical
+	// maximum (12). An under-subscribed quorum keeps the type-fixed threshold (8 =>
+	// 800 power), so a smaller set only raises the threshold-to-total ratio and
+	// stays safe. It must be accepted, not rejected.
+	devnetMax, _, err := llmq.QuorumParams(btcjson.LLMQType_DEVNET_PLATFORM)
+	require.NoError(t, err)
+	require.Equal(t, 12, devnetMax, "canonical DEVNET_PLATFORM member maximum")
+	const underSize = 11
+	underSubscribed, _ := RandValidatorSet(underSize)
+	underSubscribed.QuorumType = btcjson.LLMQType_DEVNET_PLATFORM
+	require.Less(t, underSubscribed.Size(), devnetMax, "set must be under-subscribed")
+	// The type-fixed threshold over the (smaller) total power must still be >= 2/3,
+	// confirming the under-subscribed set is genuinely valid and not merely tolerated.
+	require.GreaterOrEqual(t,
+		float64(underSubscribed.QuorumVotingThresholdPower())/float64(underSubscribed.TotalVotingPower()),
+		2.0/3.0,
+		"under-subscribed threshold-to-total ratio must be >= 2/3")
+
 	testCases := []struct {
 		name string
 		vals *ValidatorSet
@@ -254,6 +273,7 @@ func TestValidatorSetValidateBasicQuorumThreshold(t *testing.T) {
 		{"explicit threshold 800 below strict floor (#1052 override)", override, false},
 		{"explicit threshold overrides recognized canonical", devnetPlatformOverride, false},
 		{"unknown quorum type, type-derived threshold above floor", unknownType, false},
+		{"DEVNET_PLATFORM under-subscribed (11 of 12 max) accepted", underSubscribed, false},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -317,8 +337,12 @@ func TestValidatorSetValidateThreshold(t *testing.T) {
 			members: 1, threshold: 0, err: false,
 		},
 		{
-			name: "recognized type with non-canonical member count rejected", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
-			members: 13, threshold: 0, err: true, msg: "validator set has 13 members",
+			name: "recognized type oversized member count rejected", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
+			members: 13, threshold: 0, err: true, msg: "validator set has 13 members, exceeding quorum type",
+		},
+		{
+			name: "recognized type under-subscribed member count accepted", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
+			members: 11, threshold: 0, err: false,
 		},
 	}
 
