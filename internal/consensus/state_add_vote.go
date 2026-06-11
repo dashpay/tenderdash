@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 
 	cstypes "github.com/dashpay/tenderdash/internal/consensus/types"
 	tmstrings "github.com/dashpay/tenderdash/internal/libs/strings"
@@ -92,8 +93,9 @@ func addVoteToVoteSetFunc(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
 		}
 		if vote.Round == stateData.Round {
 			vals := stateData.state.Validators
-			val := vals.GetByIndex(vote.ValidatorIndex)
-			metrics.MarkVoteReceived(vote.Type, val.VotingPower, vals.TotalVotingPower())
+			if val := vals.GetByIndex(vote.ValidatorIndex); val != nil {
+				metrics.MarkVoteReceived(vote.Type, val.VotingPower, vals.TotalVotingPower())
+			}
 		}
 		_ = ep.PublishVoteEvent(vote)
 		return true, nil
@@ -252,6 +254,9 @@ func addVoteVerifyVoteExtensionMw(
 			// Here, we verify the signature of the vote extension included in the vote
 			// message.
 			val := stateData.state.Validators.GetByIndex(vote.ValidatorIndex)
+			if val == nil {
+				return false, fmt.Errorf("validator index %d not found in validator set", vote.ValidatorIndex)
+			}
 			qt, qh := stateData.state.Validators.QuorumType, stateData.state.Validators.QuorumHash
 			if err := vote.VerifyExtensionSign(stateData.state.ChainID, val.PubKey, qt, qh); err != nil {
 				return false, err
@@ -277,6 +282,9 @@ func addVoteValidateVoteMw() AddVoteMiddlewareFunc {
 			// Ignore vote if we do not have public keys to verify votes
 			if !stateData.Validators.HasPublicKeys {
 				return false, nil
+			}
+			if vote.ValidatorIndex < 0 || int(vote.ValidatorIndex) >= stateData.Validators.Size() {
+				return false, fmt.Errorf("validator index %d out of range (validator set size %d)", vote.ValidatorIndex, stateData.Validators.Size())
 			}
 			return next(ctx, stateData, vote)
 		}
