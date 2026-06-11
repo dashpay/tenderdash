@@ -232,8 +232,8 @@ func (vals *ValidatorSet) validateStrictFloor(threshold, totalPower, strictFloor
 	case 3:
 		// For 3 validators, the threshold MUST be at least 2/3 of the total voting power.
 		if threshold < totalPower*2/3 {
-			return fmt.Errorf("%d-members quorum voting power %d is less than threshold %d",
-				len(vals.Validators), totalPower, vals.VotingPowerThreshold)
+			return fmt.Errorf("voting threshold %d is less than 2/3 of quorum voting power %d for %d-member quorum",
+				threshold, totalPower, len(vals.Validators))
 		}
 	default:
 		// For more than 3 validators, the threshold MUST be at least 2/3 + 1 of the total voting power.
