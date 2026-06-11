@@ -92,7 +92,7 @@ func addVoteToVoteSetFunc(metrics *Metrics, ep *EventPublisher) AddVoteFunc {
 			return added, err
 		}
 		if vote.Round == stateData.Round {
-			vals := stateData.state.Validators
+			vals := stateData.Validators
 			if val := vals.GetByIndex(vote.ValidatorIndex); val != nil {
 				metrics.MarkVoteReceived(vote.Type, val.VotingPower, vals.TotalVotingPower())
 			}
