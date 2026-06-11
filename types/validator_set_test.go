@@ -408,10 +408,19 @@ func TestCopy(t *testing.T) {
 	}
 }
 
+func TestCopyPreservesVotingPowerThreshold(t *testing.T) {
+	vset, _ := RandValidatorSet(12)
+	vset.VotingPowerThreshold = 800
+
+	cp := vset.Copy()
+	assert.Equal(t, vset.VotingPowerThreshold, cp.VotingPowerThreshold,
+		"Copy() must preserve VotingPowerThreshold")
+}
+
 func BenchmarkValidatorSetCopy(b *testing.B) {
 	b.StopTimer()
 	vset := NewValidatorSet([]*Validator{}, nil, btcjson.LLMQType_5_60, nil, true, nil)
-	for i := 0; i < 1000; i++ {
+
 		privKey := bls12381.GenPrivKey()
 		pubKey := privKey.PubKey()
 

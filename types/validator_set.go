@@ -380,12 +380,13 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 		return nil
 	}
 	valset := &ValidatorSet{
-		Validators:         validatorListCopy(vals.Validators),
-		ThresholdPublicKey: vals.ThresholdPublicKey,
-		QuorumHash:         vals.QuorumHash,
-		QuorumType:         vals.QuorumType,
-		HasPublicKeys:      vals.HasPublicKeys,
-		proposerIndex:      vals.proposerIndex,
+		Validators:           validatorListCopy(vals.Validators),
+		ThresholdPublicKey:   vals.ThresholdPublicKey,
+		QuorumHash:           vals.QuorumHash,
+		QuorumType:           vals.QuorumType,
+		VotingPowerThreshold: vals.VotingPowerThreshold,
+		HasPublicKeys:        vals.HasPublicKeys,
+		proposerIndex:        vals.proposerIndex,
 	}
 
 	return valset
