@@ -170,9 +170,9 @@ func (vals *ValidatorSet) ValidateBasic() error {
 //
 // The threshold validated here is the live commit gate: QuorumVotingThresholdPower()
 // feeds vote_set.go, where crossing it finalizes a block via the recovered BLS
-// threshold signature. This method is a LOCAL gate (not hashed, not in ToProto),
-// so it only constrains what a node accepts at startup/replay; it never forks a
-// running chain.
+// threshold signature. This method is a LOCAL validation gate (it does not affect
+// consensus hashes), so it only constrains what a node accepts at startup/replay;
+// it never forks a running chain.
 //
 // Decision logic:
 //  1. Reject impossible thresholds (non-positive, or above total power).
