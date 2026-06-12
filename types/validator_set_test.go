@@ -84,6 +84,73 @@ func TestValidatorSetNilReceiverSizeAndVotingPower(t *testing.T) {
 	})
 }
 
+// TestValidatorSetNilReceiverHardened asserts that every method that was
+// nil-unsafe returns its zero value on a nil *ValidatorSet without panicking.
+func TestValidatorSetNilReceiverHardened(t *testing.T) {
+	var vset *ValidatorSet
+
+	tests := []struct {
+		name string
+		fn   func()
+	}{
+		{
+			name: "HasProTxHash",
+			fn: func() {
+				assert.False(t, vset.HasProTxHash(crypto.ProTxHash{}))
+			},
+		},
+		{
+			name: "GetByProTxHash",
+			fn: func() {
+				idx, val := vset.GetByProTxHash([]byte{})
+				assert.Equal(t, int32(-1), idx)
+				assert.Nil(t, val)
+			},
+		},
+		{
+			name: "GetProTxHashes",
+			fn: func() {
+				assert.Nil(t, vset.GetProTxHashes())
+			},
+		},
+		{
+			name: "GetProTxHashesAsByteArrays",
+			fn: func() {
+				assert.Nil(t, vset.GetProTxHashesAsByteArrays())
+			},
+		},
+		{
+			name: "GetPublicKeys",
+			fn: func() {
+				assert.Nil(t, vset.GetPublicKeys())
+			},
+		},
+		{
+			name: "GetProTxHashesOrdered",
+			fn: func() {
+				assert.Nil(t, vset.GetProTxHashesOrdered())
+			},
+		},
+		{
+			name: "Iterate",
+			fn: func() {
+				called := false
+				vset.Iterate(func(_ int, _ *Validator) bool {
+					called = true
+					return false
+				})
+				assert.False(t, called)
+			},
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			require.NotPanics(t, tc.fn)
+		})
+	}
+}
+
 func TestValidatorSetValidateBasic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
