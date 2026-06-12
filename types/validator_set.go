@@ -269,6 +269,9 @@ func (vals *ValidatorSet) Equals(other *ValidatorSet) bool {
 	if vals.QuorumType != other.QuorumType {
 		return false
 	}
+	if vals.VotingPowerThreshold != other.VotingPowerThreshold {
+		return false
+	}
 	if len(vals.Validators) != len(other.Validators) {
 		return false
 	}

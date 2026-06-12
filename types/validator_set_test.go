@@ -1040,6 +1040,16 @@ func TestValidatorSetProtoBuf(t *testing.T) {
 	}
 }
 
+func TestValidatorSet_Equals_DetectsThresholdDifference(t *testing.T) {
+	a, _ := RandValidatorSet(4)
+	b := a.Copy()
+	a.VotingPowerThreshold = 100
+	b.VotingPowerThreshold = 101
+	require.False(t, a.Equals(b), "Equals must reflect VotingPowerThreshold once it is identity-relevant")
+	b.VotingPowerThreshold = 100
+	require.True(t, a.Equals(b))
+}
+
 // -------------------------------------
 // Benchmark tests
 func BenchmarkUpdates(b *testing.B) {
