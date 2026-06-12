@@ -1,17 +1,84 @@
-## [Unreleased]
+## [1.6.0-dev.1] - 2026-06-12
 
 ### Bug Fixes
 
-- `ValidatorSet.ValidateBasic` now validates the quorum voting threshold against the
-  canonical LLMQ type definition instead of a rigid 2/3+1 floor, accepting legitimate
-  dev/test quorums such as `llmq_devnet_platform` (8-of-12) while preserving the strict
-  production floor for unknown quorum types (#1314)
+- Improve address validation rules (#1245)
+- Validate vote validator index against the active validator set (#1329)
+- Guard nil/out-of-range validator lookup in vote index validation (#1331)
+- Validate quorum threshold against canonical LLMQ type (#1314) (#1328)
+- Guard nil receiver in ValidatorSet.Size/TotalVotingPower (follow-up to #1331) (#1334)
+
+### Documentation
+
+- Adjust CONTRIBUTING and similar documentation with AGENTS (#1252)
+
+### Features
+
+- Allowlist-only limits connection only to allowed nodes (#1248)
+- Better error handling for access denied errors (#1249)
+
+### Miscellaneous Tasks
+
+- Add AI agent instructions and streamline style guide (#1250)
+- Update Go to 1.25.7 and bump dependencies (#1258)
+- Bump grpc, golangci-lint, atomicfile, build-push-action, bls-signatures (#1263)
+- Fix release.sh bugs and rewrite RELEASES.md (#1336)
+
+### Refactor
+
+- Replace creachadair/taskgroup with x/sync/errgroup and ban it (#1333)
+
+### Build
+
+- Bump github.com/lib/pq from 1.10.9 to 1.11.1
+- Bump docker/login-action from 3.6.0 to 3.7.0
+- Bump github.com/lib/pq from 1.11.1 to 1.11.2 (#1253)
+- Bump github.com/bufbuild/buf from 1.65.0 to 1.66.0 (#1265)
+- Bump goreleaser/goreleaser-action from 6 to 7 (#1264)
+- Bump github.com/adlio/schema from 1.3.9 to 1.4.0 (#1266)
+- Bump actions/download-artifact from 7 to 8 (#1268)
+- Bump actions/upload-artifact from 6 to 7 (#1270)
+- Bump actions/setup-go from 6.2.0 to 6.3.0 (#1269)
+- Bump docker/metadata-action from 5 to 6 (#1275)
+- Bump github.com/golangci/golangci-lint/v2 (#1276)
+- Bump golang.org/x/sys from 0.41.0 to 0.42.0 (#1277)
+- Bump github.com/sasha-s/go-deadlock from 0.3.6 to 0.3.7 (#1280)
+- Bump docker/setup-buildx-action from 3.12.0 to 4.0.0 (#1273)
+- Bump docker/build-push-action from 6.19.2 to 7.0.0 (#1271)
+- Bump docker/login-action from 3.7.0 to 4.0.0 (#1272)
+- Bump golang.org/x/time from 0.14.0 to 0.15.0 (#1281)
+- Bump github.com/bufbuild/buf from 1.66.0 to 1.66.1 (#1278)
+- Bump google.golang.org/grpc from 1.79.1 to 1.79.2 (#1279)
+- Bump styfle/cancel-workflow-action from 0.13.0 to 0.13.1 (#1282)
+- Bump golang.org/x/term from 0.40.0 to 0.41.0 (#1285)
+- Bump golang.org/x/net from 0.51.0 to 0.52.0 (#1284)
+- Upgrade Go toolchain from 1.25.7 to 1.26.4 (#1287)
+- Bump google.golang.org/grpc from 1.79.2 to 1.81.1 (#1326)
+- Bump golang.org/x/net from 0.52.0 to 0.55.0 (#1323)
+- Bump docker/login-action from 4.0.0 to 4.2.0 (#1317)
+- Bump github.com/fxamacker/cbor/v2 from 2.9.0 to 2.9.2 (#1305)
+- Bump golangci/golangci-lint-action from 9.2.0 to 9.2.1 (#1319)
+- Bump golang.org/x/crypto from 0.51.0 to 0.53.0 (#1325)
+- Bump docker/build-push-action from 7.0.0 to 7.2.0 (#1318)
+- Bump github.com/rs/zerolog from 1.34.0 to 1.35.1 (#1306)
+- Bump docker/setup-buildx-action from 4.0.0 to 4.1.0 (#1320)
+- Bump github.com/golangci/golangci-lint/v2 (#1311)
+- Bump github.com/bufbuild/buf from 1.66.1 to 1.70.0 (#1321)
+- Bump github.com/quic-go/quic-go (#1332)
+
+### Ci
+
+- Add govulncheck vulnerability scanning (#1335)
 
 ## [1.5.4] - 2026-01-28
 
 ### Bug Fixes
 
 - Ignore invalid peer db records (#1243)
+
+### Miscellaneous Tasks
+
+- Update changelog and version to 1.5.4
 
 ### Build
 
