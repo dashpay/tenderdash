@@ -16,6 +16,7 @@ import (
 
 	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/bls12381"
+	"github.com/dashpay/tenderdash/dash/llmq"
 	tmbytes "github.com/dashpay/tenderdash/libs/bytes"
 	tmmath "github.com/dashpay/tenderdash/libs/math"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
@@ -227,6 +228,210 @@ func TestValidatorSetValidateBasic(t *testing.T) {
 	}
 }
 
+// TestValidatorSetValidateBasicQuorumThreshold exercises the quorum-type-aware
+// threshold validation end-to-end against fully-formed (real BLS) validator sets.
+func TestValidatorSetValidateBasicQuorumThreshold(t *testing.T) {
+	// devnetPlatform: recognized dev type DEVNET_PLATFORM, 12 members, param unset.
+	// Canonical threshold is 8 (800 power, exactly 2/3) — the #1314 case that the
+	// old rigid 2/3+1=801 floor wrongly rejected. Routes to the recognized-type branch.
+	devnetPlatform, _ := RandValidatorSet(12)
+	devnetPlatform.QuorumType = btcjson.LLMQType_DEVNET_PLATFORM
+
+	// override: DEVNET_PLATFORM type but with an explicit operator threshold of 800,
+	// deliberately below the strict 2/3+1=801 floor. Routes to the override branch
+	// (#1052 escape hatch), which accepts regardless of type.
+	override, _ := RandValidatorSet(12)
+	override.QuorumType = btcjson.LLMQType_DEVNET_PLATFORM
+	override.VotingPowerThreshold = 800
+
+	// devnetPlatformOverride: explicit threshold 900 disagrees with the canonical
+	// DEVNET_PLATFORM definition (800), but the override branch wins before the
+	// canonical check, so it is accepted.
+	devnetPlatformOverride, _ := RandValidatorSet(12)
+	devnetPlatformOverride.QuorumType = btcjson.LLMQType_DEVNET_PLATFORM
+	devnetPlatformOverride.VotingPowerThreshold = 900
+
+	// unknownType: TEST (id 100) is absent from the quorum map, so QuorumParams
+	// errors and validation falls to the strict floor. Derived threshold is
+	// len*2/3+1 = 9 => 900, above the 801 floor for 12 validators: accepted.
+	unknownType, _ := RandValidatorSet(12)
+	unknownType.QuorumType = btcjson.LLMQType_TEST
+
+	// underSubscribed: DEVNET_PLATFORM with fewer members than its canonical
+	// maximum (12). An under-subscribed quorum keeps the type-fixed threshold (8 =>
+	// 800 power), so a smaller set only raises the threshold-to-total ratio and
+	// stays safe. It must be accepted, not rejected.
+	devnetMax, _, err := llmq.QuorumParams(btcjson.LLMQType_DEVNET_PLATFORM)
+	require.NoError(t, err)
+	require.Equal(t, 12, devnetMax, "canonical DEVNET_PLATFORM member maximum")
+	const underSize = 11
+	underSubscribed, _ := RandValidatorSet(underSize)
+	underSubscribed.QuorumType = btcjson.LLMQType_DEVNET_PLATFORM
+	require.Less(t, underSubscribed.Size(), devnetMax, "set must be under-subscribed")
+	// The type-fixed threshold over the (smaller) total power must still be >= 2/3,
+	// confirming the under-subscribed set is genuinely valid and not merely tolerated.
+	require.GreaterOrEqual(t,
+		float64(underSubscribed.QuorumVotingThresholdPower())/float64(underSubscribed.TotalVotingPower()),
+		2.0/3.0,
+		"under-subscribed threshold-to-total ratio must be >= 2/3")
+
+	testCases := []struct {
+		name string
+		vals *ValidatorSet
+		err  bool
+	}{
+		{"DEVNET_PLATFORM 8/12 canonical, param unset (the #1314 fix)", devnetPlatform, false},
+		{"explicit threshold 800 below strict floor (#1052 override)", override, false},
+		{"explicit threshold overrides recognized canonical", devnetPlatformOverride, false},
+		{"unknown quorum type, type-derived threshold above floor", unknownType, false},
+		{"DEVNET_PLATFORM under-subscribed (11 of 12 max) accepted", underSubscribed, false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.vals.ValidateBasic()
+			if tc.err {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestValidatorSetValidateThreshold white-box tests the threshold decision branches
+// (bounds, recognized dev/production types, override, and the unknown-type strict
+// floor) using synthetic validator sets. The canonical-mismatch guard is omitted: it
+// is unreachable when the threshold derives from the type (defense-in-depth).
+func TestValidatorSetValidateThreshold(t *testing.T) {
+	testCases := []struct {
+		name      string
+		quorum    btcjson.LLMQType
+		members   int
+		threshold uint64 // VotingPowerThreshold; 0 => derived from quorum type
+		err       bool
+		msg       string
+	}{
+		{
+			name: "zero total power rejected", quorum: btcjson.LLMQType_TEST,
+			members: 0, threshold: 0, err: true, msg: "invalid quorum",
+		},
+		{
+			name: "threshold exceeds total power rejected", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
+			members: 4, threshold: 0, err: true, msg: "threshold 800 exceeds total voting power 400",
+		},
+		{
+			name: "recognized dev type matching canonical accepted", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
+			members: 12, threshold: 0, err: false,
+		},
+		{
+			name: "recognized production 100_67 matching canonical accepted", quorum: btcjson.LLMQType_100_67,
+			members: 100, threshold: 0, err: false,
+		},
+		{
+			name: "recognized production 50_60 below 2/3 accepted as canonical", quorum: btcjson.LLMQType_50_60,
+			members: 50, threshold: 0, err: false,
+		},
+		{
+			name: "explicit override below floor accepted", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
+			members: 12, threshold: 800, err: false,
+		},
+		{
+			name: "unknown type 12 members strict floor accepted (derived 900)", quorum: btcjson.LLMQType_TEST,
+			members: 12, threshold: 0, err: false,
+		},
+		{
+			name: "unknown type explicit below floor accepted (override)", quorum: btcjson.LLMQType_TEST,
+			members: 12, threshold: 800, err: false,
+		},
+		{
+			name: "single validator type-derived equals total accepted", quorum: btcjson.LLMQType_TEST,
+			members: 1, threshold: 0, err: false,
+		},
+		{
+			name: "recognized type oversized member count rejected", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
+			members: 13, threshold: 0, err: true, msg: "validator set has 13 members, exceeding quorum type",
+		},
+		{
+			name: "recognized type under-subscribed member count accepted", quorum: btcjson.LLMQType_DEVNET_PLATFORM,
+			members: 11, threshold: 0, err: false,
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			vs := &ValidatorSet{
+				Validators:           make([]*Validator, tc.members),
+				QuorumType:           tc.quorum,
+				VotingPowerThreshold: tc.threshold,
+			}
+			err := vs.validateThreshold()
+			if tc.err {
+				require.Error(t, err)
+				assert.True(t, strings.HasPrefix(err.Error(), tc.msg),
+					"error %q must start with %q", err.Error(), tc.msg)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+// TestValidatorSetValidateStrictFloor white-box tests the size-based production
+// floor enforced for quorum types with no canonical definition.
+func TestValidatorSetValidateStrictFloor(t *testing.T) {
+	testCases := []struct {
+		name       string
+		members    int
+		threshold  int64
+		totalPower int64
+		err        bool
+	}{
+		{"1 validator must equal total", 1, 100, 100, false},
+		{"1 validator below total rejected", 1, 90, 100, true},
+		{"3 validators at 2/3 accepted", 3, 200, 300, false},
+		{"3 validators below 2/3 rejected", 3, 100, 300, true},
+		{"12 validators at strict floor accepted", 12, 801, 1200, false},
+		{"12 validators below strict floor rejected", 12, 800, 1200, true},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			vs := &ValidatorSet{Validators: make([]*Validator, tc.members)}
+			strictFloor := (tc.totalPower*2)/3 + 1
+			err := vs.validateStrictFloor(tc.threshold, tc.totalPower, strictFloor)
+			if tc.err {
+				assert.Error(t, err)
+			} else {
+				assert.NoError(t, err)
+			}
+		})
+	}
+}
+
+func TestValidatorSetBelowStrictThreshold(t *testing.T) {
+	testCases := []struct {
+		name      string
+		quorum    btcjson.LLMQType
+		members   int
+		threshold uint64 // VotingPowerThreshold; 0 => derived from quorum type
+		below     bool
+	}{
+		{"DEVNET_PLATFORM 8/12 at 2/3 is below 2/3+1", btcjson.LLMQType_DEVNET_PLATFORM, 12, 0, true},
+		{"production 100_67 above 2/3 is not below", btcjson.LLMQType_100_67, 100, 0, false},
+		{"override 800 on 12-member set is below floor", btcjson.LLMQType_DEVNET_PLATFORM, 12, 800, true},
+		{"override 900 on 12-member set is not below floor", btcjson.LLMQType_DEVNET_PLATFORM, 12, 900, false},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			vs := &ValidatorSet{
+				Validators:           make([]*Validator, tc.members),
+				QuorumType:           tc.quorum,
+				VotingPowerThreshold: tc.threshold,
+			}
+			assert.Equal(t, tc.below, vs.BelowStrictThreshold())
+		})
+	}
+}
+
 func TestCopy(t *testing.T) {
 	vset, _ := RandValidatorSet(10)
 	vsetHash := vset.Hash()
@@ -234,12 +439,17 @@ func TestCopy(t *testing.T) {
 		t.Fatalf("ValidatorSet had unexpected zero hash")
 	}
 
+	vset.VotingPowerThreshold = 800
+
 	vsetCopy := vset.Copy()
 	vsetCopyHash := vsetCopy.Hash()
 
 	if !bytes.Equal(vsetHash, vsetCopyHash) {
 		t.Fatalf("ValidatorSet copy had wrong hash. Orig: %X, Copy: %X", vsetHash, vsetCopyHash)
 	}
+
+	assert.Equal(t, vset.VotingPowerThreshold, vsetCopy.VotingPowerThreshold,
+		"Copy must preserve the explicit VotingPowerThreshold override")
 }
 
 func BenchmarkValidatorSetCopy(b *testing.B) {
@@ -828,6 +1038,16 @@ func TestValidatorSetProtoBuf(t *testing.T) {
 			require.Error(t, err, tc.msg)
 		}
 	}
+}
+
+func TestValidatorSet_Equals_DetectsThresholdDifference(t *testing.T) {
+	a, _ := RandValidatorSet(4)
+	b := a.Copy()
+	a.VotingPowerThreshold = 100
+	b.VotingPowerThreshold = 101
+	require.False(t, a.Equals(b), "Equals must reflect VotingPowerThreshold once it is identity-relevant")
+	b.VotingPowerThreshold = 100
+	require.True(t, a.Equals(b))
 }
 
 // -------------------------------------

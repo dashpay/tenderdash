@@ -446,9 +446,40 @@ func SumTruncated(bz []byte) []byte {
 
 ### ValidatorParams
 
-| Name          | Type            | Description                                                           | Field Number |
-|---------------|-----------------|-----------------------------------------------------------------------|--------------|
-| pub_key_types | repeated string | List of accepted public key types. Uses same naming as `PubKey.Type`. | 1            |
+| Name                  | Type            | Description                                                                                       | Field Number |
+|-----------------------|-----------------|---------------------------------------------------------------------------------------------------|--------------|
+| pub_key_types         | repeated string | List of accepted public key types. Uses same naming as `PubKey.Type`.                            | 1            |
+| voting_power_threshold | uint64 (optional) | Minimum voting power required to commit a block. See [voting_power_threshold](#voting_power_threshold). | 2 |
+
+#### voting_power_threshold
+
+`voting_power_threshold` is the live commit gate: a block is finalized when accumulated precommit
+power crosses this value, recovering the BLS threshold signature. With `DefaultDashVotingPower = 100`
+per validator, a quorum of N members has total power `N * 100`.
+
+Validation is type-aware and operates as follows:
+
+1. **Recognized LLMQ type, threshold unset (0):** The threshold must equal the canonical value for
+   the quorum type as defined by Dash Core (e.g. 8 for `DEVNET_PLATFORM`, a 12-member quorum with
+   threshold 8). This is the normal production path and the fix for issue #1314, where the
+   canonical 8-of-12 threshold was previously rejected by an overly strict >2/3 check.
+
+2. **Unknown or custom quorum type, threshold unset (0):** The strict size-based floor applies —
+   threshold must equal `totalPower` for 1–2 validators, `>= 2/3 * totalPower` for 3 validators,
+   or `> 2/3 * totalPower` for 4+ validators.
+
+3. **Threshold explicitly set (> 0):** Accepted as-is, provided `0 < threshold <= totalPower`.
+   This is an operator override intended for single-node development or testing environments
+   (introduced in #1052). The value is recorded on-chain for accountability.
+
+**Operator footgun:** When the override is set, the only enforced bounds are `0 < threshold <=
+totalPower` — there is no mandatory 2/3 floor. Setting a value below 2/3 of total power is
+accepted but reduces Byzantine fault tolerance: for example, setting `voting_power_threshold = 1`
+on a 12-member quorum means a single node can commit a block alone, which is unsafe for
+production. Use this override only in controlled development or testing environments.
+
+This parameter validates locally (`ValidateBasic`) and is not hashed into the consensus state, so
+changes do not require an ABCI protocol bump and cannot fork a running chain.
 
 ### VersionParams
 
