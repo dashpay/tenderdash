@@ -274,6 +274,11 @@ lint:
 	go run github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.8 run
 .PHONY: lint
 
+vulncheck:
+	@echo "--> Running vulnerability scanner"
+	go run golang.org/x/vuln/cmd/govulncheck@v1.3.0 ./...
+.PHONY: vulncheck
+
 DESTINATION = ./index.html.md
 
 ###############################################################################
