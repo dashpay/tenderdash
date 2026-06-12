@@ -61,6 +61,17 @@ func TestValidatorSetBasic(t *testing.T) {
 
 }
 
+// TestValidatorSetGetByIndexNilReceiver ensures GetByIndex honors its documented
+// contract on a nil receiver: any index returns nil rather than panicking.
+func TestValidatorSetGetByIndexNilReceiver(t *testing.T) {
+	var vset *ValidatorSet
+	for _, idx := range []int32{-1, 0, 1, 100} {
+		require.NotPanics(t, func() {
+			assert.Nil(t, vset.GetByIndex(idx))
+		})
+	}
+}
+
 func TestValidatorSetValidateBasic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
