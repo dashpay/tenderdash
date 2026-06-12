@@ -1680,6 +1680,52 @@ func TestPeerManager_Disconnected(t *testing.T) {
 	require.Zero(t, dial)
 }
 
+// TestPeerManager_Broadcast_BenignCtxExpiry verifies that Ready and Disconnected
+// do NOT panic when the broadcast aborts because the caller's context expired.
+// A canceled context makes broadcast return context.Canceled, which is benign
+// (nothing was delivered) and must be treated as a normal skip, not a deadlock.
+func TestPeerManager_Broadcast_BenignCtxExpiry(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	a := p2p.NodeAddress{Protocol: "memory", NodeID: types.NodeID(strings.Repeat("a", 40))}
+
+	peerManager, err := p2p.NewPeerManager(ctx, selfID, dbm.NewMemDB(), p2p.PeerManagerOptions{})
+	require.NoError(t, err)
+
+	// A subscriber that never drains its channel.
+	sub := peerManager.Subscribe(ctx, "p2p")
+	_ = sub
+
+	added, err := peerManager.Add(a)
+	require.NoError(t, err)
+	require.True(t, added)
+	require.NoError(t, peerManager.Accepted(a.NodeID))
+
+	// Fill the subscription buffer exactly to capacity with non-blocking buffered
+	// sends. Capacity is the unexported broadcastSubscriptionChannelCapacity (3);
+	// Accepted does not broadcast, so three Ready calls fill the channel.
+	for i := 0; i < 3; i++ {
+		peerManager.Ready(ctx, a.NodeID, nil)
+	}
+
+	// With the buffer full, a further broadcast would block on the channel send.
+	// Use an already-canceled context so broadcast's select takes the ctx.Done()
+	// branch immediately, returning context.Canceled — a benign skip, not a panic.
+	bctx, bcancel := context.WithCancel(ctx)
+	bcancel()
+	require.NotPanics(t, func() { peerManager.Ready(bctx, a.NodeID, nil) })
+	require.NotPanics(t, func() { peerManager.Disconnected(bctx, a.NodeID) })
+}
+
+// TestErrBroadcastDeadlock_IsMatchable verifies the sentinel is errors.Is-able
+// so the deadlock guards key off it rather than a fragile string match.
+func TestErrBroadcastDeadlock_IsMatchable(t *testing.T) {
+	wrapped := fmt.Errorf("%w: extra context", p2p.ErrBroadcastDeadlock)
+	require.ErrorIs(t, wrapped, p2p.ErrBroadcastDeadlock)
+	require.NotErrorIs(t, context.DeadlineExceeded, p2p.ErrBroadcastDeadlock)
+}
+
 func TestPeerManager_Errored(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
