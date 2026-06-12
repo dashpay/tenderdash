@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eo pipefail
 
 function success {
     [[ -t 1 ]] && echo -e "\e[32mSUCCESS:\e[0m" "$@" || echo "SUCCESS:" "$@"
@@ -154,7 +154,15 @@ function validate {
 
     # ensure github authentication
     if ! gh auth status &>/dev/null; then
-        gh auth login
+        error "Not authenticated to GitHub; run 'gh auth login' first"
+    fi
+
+    # Ensure local branch is in sync with origin before generating the changelog,
+    # so commits on origin are not silently missed.
+    git fetch origin "${SOURCE_BRANCH}"
+    if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/${SOURCE_BRANCH}")" ]]; then
+        git merge --ff-only "origin/${SOURCE_BRANCH}" ||
+            error "Your ${SOURCE_BRANCH} is out of sync with origin; sync it before releasing"
     fi
 }
 
@@ -167,9 +175,7 @@ function generateChangelog {
         CLIFF_ARGS="--ignore-tags='v[0-9]\.[0-9]+\.[0-9]+-[a-z]+\.[0-9]+'"
     fi
 
-    echo 2>"${REPO_DIR}/CHANGELOG.md"
-
-    docker run --rm -ti \
+    docker run --rm \
         -v "${REPO_DIR}/.git":/app/.git:ro \
         -v "${CLIFF_CONFIG}":/cliff.toml:ro \
         -v "${REPO_DIR}/CHANGELOG.md":/CHANGELOG.md \
@@ -189,7 +195,6 @@ function updateVersionGo {
 
 function createReleasePR {
     debug "Creating release branch ${RELEASE_BRANCH}"
-    git pull -q
     git checkout -q -b "${RELEASE_BRANCH}"
 
     # commit changes
@@ -201,7 +206,8 @@ function createReleasePR {
     git push --force -u origin "${RELEASE_BRANCH}"
 
     debug "Creating milestone ${MILESTONE} if it doesn't exist yet"
-    gh api --silent --method POST 'repos/dashevo/tenderdash/milestones' --field "title=${MILESTONE}" || true
+    # {owner}/{repo} are substituted by gh from the current repo; HTTP 422 means it already exists.
+    gh api --silent --method POST 'repos/{owner}/{repo}/milestones' --field "title=${MILESTONE}" || true
 
     if [[ -n "$(getPrURL)" ]]; then
         debug "PR for branch ${TARGET_BRANCH} already exists, skipping creation"
@@ -273,9 +279,10 @@ function buildAndUploadArtifacts() {
     local platforms=("linux/amd64" "linux/arm64")
 
     waitForRelease
-    # checkout and build binaries from release tag
-    # TODO: uncomment
-    # git fetch --tags && git checkout "v${NEW_PACKAGE_VERSION}"
+
+    # Build signed binaries from the released tag, not the working checkout.
+    git fetch --tags
+    git checkout "v${NEW_PACKAGE_VERSION}"
 
     buildBinaries "${bindir}" "${platforms[@]}"
 
