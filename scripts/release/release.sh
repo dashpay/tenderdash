@@ -12,8 +12,8 @@ function debug {
 
 function error {
     debug Error: "$@"
-    cleanup
     [[ -t 1 ]] && echo -e '\e[91mERROR:\e[0m' "$@" || echo "ERROR:" "$@"
+    cleanup
     exit 1
 }
 function displayHelp {
@@ -170,9 +170,9 @@ function generateChangelog {
     debug Generating CHANGELOG
 
     CLIFF_CONFIG="${REPO_DIR}/scripts/release/cliff.toml"
-    CLIFF_ARGS=
+    CLIFF_ARGS=()
     if [[ "${RELEASE_TYPE}" = "prerelease" ]]; then
-        CLIFF_ARGS="--ignore-tags='v[0-9]\.[0-9]+\.[0-9]+-[a-z]+\.[0-9]+'"
+        CLIFF_ARGS+=(--ignore-tags 'v[0-9]\.[0-9]+\.[0-9]+-[a-z]+\.[0-9]+')
     fi
 
     docker run --rm \
@@ -183,7 +183,7 @@ function generateChangelog {
         --config /cliff.toml \
         --output /CHANGELOG.md \
         --tag "v${NEW_PACKAGE_VERSION}" \
-        ${CLIFF_ARGS} \
+        "${CLIFF_ARGS[@]}" \
         --strip all \
         --verbose \
         'v1.0.0-dev.1..HEAD'
@@ -277,6 +277,10 @@ function buildAndUploadArtifacts() {
 
     bindir="$(mktemp -d)"
     local platforms=("linux/amd64" "linux/arm64")
+
+    # The build checks out the release tag (detached HEAD); restore the branch on
+    # any exit so the developer is never left stranded.
+    trap 'git checkout -q "${SOURCE_BRANCH}" 2>/dev/null || true' EXIT
 
     waitForRelease
 
@@ -381,7 +385,7 @@ function cleanup() {
     # We need to re-detect current branch again
     CURRENT_BRANCH="$(git branch --show-current)"
 
-    make clean
+    make clean || true
 }
 
 configureDefaults

@@ -10,8 +10,10 @@ the `vX.Y.Z` format; prereleases use `vX.Y.Z-dev.N` (e.g. `v1.6.0-dev.1`).
 | `vX.Y-dev` (e.g. `v1.6-dev`) | Active development; new work targets this branch |
 | `master` | Latest stable release; receives release updates and cherry-picked critical fixes |
 
-All pull requests are squash-merged. The script creates a short-lived
-`release_<version>` branch for each release and opens a PR from it.
+Normal contribution PRs and prerelease release-PRs are squash-merged; the
+full-release PR into `master` is the exception and uses a merge commit (the
+script prints the correct strategy for each release). The script creates a
+short-lived `release_<version>` branch for each release and opens a PR from it.
 
 ## Versioning rules
 
@@ -68,14 +70,16 @@ key required; skipped for routine dev prereleases).
 6. Creates a GitHub milestone `vX.Y` if it does not already exist.
 7. Opens a PR targeting `vX.Y-dev` (prerelease) or `master` (full release).
 8. Prints the merge strategy and waits for the PR to be merged.
-9. Creates a **draft** GitHub release with auto-generated notes.
+9. Creates a **draft** release targeting the merge branch via
+   `gh release create --draft … --target <branch>`, with auto-generated notes.
 
 After the script exits:
 
 - **Prerelease PR** — squash-merge into `vX.Y-dev`.
 - **Full release PR** — merge-commit into `master`.
-- Review the draft release on GitHub, then **publish** it. Publishing creates the
-  `vX.Y.Z` tag and triggers any downstream CI that watches tags.
+- Review the draft release on GitHub, then **publish** it to finalize the
+  release and ensure the `vX.Y.Z` tag exists on the remote. (Draft releases and
+  their tags are mutable and not guaranteed on the remote until published.)
 
 ### Signed binaries (--sign)
 
@@ -87,11 +91,13 @@ specific key.
 
 ## CI and build tooling
 
-`.github/workflows/release.yml` is triggered manually (`workflow_dispatch`) and
-runs `goreleaser` (config: `.goreleaser.yml`). It currently builds a full
-release when `$GITHUB_REF` starts with `refs/tags/`; it runs a validate-only
-build on pull requests. This workflow is separate from the script's own Docker
-cross-compile path used for signed binaries.
+`.github/workflows/release.yml` runs `goreleaser` (config: `.goreleaser.yml`)
+and is triggered **only** manually via `workflow_dispatch`. Its goreleaser
+release step runs only when the workflow is dispatched against a tag ref
+(`refs/tags/…`); a `pull_request`-gated validate build is also defined but never
+fires, because the workflow has no `pull_request` trigger. No workflow currently
+runs automatically on tag push or on pull requests. This workflow is independent
+of the release script's own Docker cross-compile path used for `--sign` binaries.
 
 ## Minor Release Checklist
 
