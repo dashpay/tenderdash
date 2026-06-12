@@ -164,12 +164,12 @@ func (s *Synchronizer) OnStop() {
 	s.workerPool.Stop(context.Background())
 }
 
-func (s *Synchronizer) produceJob(ctx context.Context) {
+func (s *Synchronizer) produceJob(ctx context.Context) error {
 	if !s.jobGen.shouldJobBeGenerated() {
 		// TODO should we stop producer loop ?
 		// TODO need to come up with a smarter way how to produce jobs without sleeping
 		s.clock.Sleep(50 * time.Millisecond)
-		return
+		return nil
 	}
 	// remove timed out peers and redo its heights again
 	s.removeTimedoutPeers(ctx)
@@ -177,30 +177,37 @@ func (s *Synchronizer) produceJob(ctx context.Context) {
 	job, err := s.jobGen.nextJob(ctx)
 	if err != nil {
 		s.logger.Error("cannot create a next job", "error", err)
-		return
+		return nil
 	}
 	err = s.workerPool.Send(ctx, job)
 	if err != nil {
+		if errors.Is(err, workerpool.ErrWorkerPoolStopped) {
+			return err
+		}
 		s.logger.Error("cannot add a job to worker-pool", "error", err)
 	}
+	return nil
 }
 
-func (s *Synchronizer) consumeJobResult(ctx context.Context) {
+func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 	res, err := s.workerPool.Receive(ctx)
 	if err != nil {
+		if errors.Is(err, workerpool.ErrWorkerPoolStopped) {
+			return err
+		}
 		s.logger.Error("cannot receive a job result from worker pool", "error", err)
-		return
+		return nil
 	}
 	s.jobProgressCounter.Add(-1)
 	if res.Err != nil {
 		var bfErr *errBlockFetch
 		if !errors.As(res.Err, &bfErr) {
-			return
+			return nil
 		}
 		s.jobGen.pushBack(bfErr.height)
 		s.RemovePeer(bfErr.peerID)
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: bfErr.peerID, Err: bfErr})
-		return
+		return nil
 	}
 	resp := res.Value.(*BlockResponse)
 	s.peerStore.Update(resp.PeerID, AddNumPending(-1), UpdateMonitor(resp.Block.Size()))
@@ -210,7 +217,7 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) {
 			"height", resp.Block.Height,
 			"error", err.Error())
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
-		return
+		return nil
 	}
 	err = s.applyBlock(ctx)
 	if err != nil {
@@ -218,6 +225,7 @@ func (s *Synchronizer) consumeJobResult(ctx context.Context) {
 		s.RemovePeer(resp.PeerID)
 		_ = s.client.Send(ctx, p2p.PeerError{NodeID: resp.PeerID, Err: err})
 	}
+	return nil
 }
 
 // GetStatus returns synchronizer's height, count of in progress requests
@@ -415,13 +423,16 @@ func (s *Synchronizer) getLastSyncRate() float64 {
 	return s.lastSyncRate
 }
 
-func (s *Synchronizer) runHandler(ctx context.Context, handler func(ctx context.Context)) {
+func (s *Synchronizer) runHandler(ctx context.Context, handler func(ctx context.Context) error) {
 	for s.IsRunning() {
 		select {
 		case <-ctx.Done():
 			return
 		default:
-			handler(ctx)
+			if err := handler(ctx); errors.Is(err, workerpool.ErrWorkerPoolStopped) {
+				// The pool is stopping; exit instead of busy-spinning and flooding logs.
+				return
+			}
 		}
 	}
 }
