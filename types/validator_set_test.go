@@ -72,6 +72,18 @@ func TestValidatorSetGetByIndexNilReceiver(t *testing.T) {
 	}
 }
 
+// TestValidatorSetNilReceiverSizeAndVotingPower ensures Size and TotalVotingPower
+// return zero-value results on a nil receiver without panicking (follow-up to #1331).
+func TestValidatorSetNilReceiverSizeAndVotingPower(t *testing.T) {
+	var vset *ValidatorSet
+	require.NotPanics(t, func() {
+		assert.Equal(t, 0, vset.Size())
+	})
+	require.NotPanics(t, func() {
+		assert.Equal(t, int64(0), vset.TotalVotingPower())
+	})
+}
+
 func TestValidatorSetValidateBasic(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()

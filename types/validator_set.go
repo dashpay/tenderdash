@@ -412,7 +412,11 @@ func (vals *ValidatorSet) GetProTxHashesOrdered() []crypto.ProTxHash {
 }
 
 // Size returns the length of the validator set.
+// Returns 0 if vals is nil.
 func (vals *ValidatorSet) Size() int {
+	if vals == nil {
+		return 0
+	}
 	return len(vals.Validators)
 }
 
