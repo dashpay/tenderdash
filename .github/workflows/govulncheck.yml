@@ -2,7 +2,6 @@
 name: Vulnerability Scan
 # Runs govulncheck to detect known vulnerabilities in Go dependencies.
 # The scan is GATING: the job fails if any vulnerability is found.
-# (Local scan on 2026-06-12 against this module returned: No vulnerabilities found.)
 on:
   pull_request:
   push:
@@ -17,16 +16,16 @@ jobs:
   govulncheck:
     name: govulncheck
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 60
     steps:
-      - uses: actions/checkout@v6
-
       - uses: actions/setup-go@v6.3.0
         with:
           go-version: "1.26.4"
 
+      - uses: actions/checkout@v6
+
+      - name: Install BLS library
+        uses: ./.github/actions/bls
+
       - name: Run govulncheck
-        uses: golang/govulncheck-action@v1.0.4
-        with:
-          go-version-input: "1.26.4"
-          go-package: ./...
+        run: make vulncheck
