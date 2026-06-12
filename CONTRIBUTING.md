@@ -127,7 +127,8 @@ If you are a VS Code user, you may want to add the following to your `.vscode/se
 
 ## Release Notes
 
-Release notes are generated from commit messages by `scripts/release.sh`. Use
+Release notes are generated from commit messages by
+`scripts/release/release.sh`. Use
 clear conventional commit summaries so the release tooling can assemble accurate
 notes; `CHANGELOG_PENDING.md` is no longer maintained.
 
@@ -150,7 +151,8 @@ receives cherry-picked release-critical fixes and release updates.
 
 Note all pull requests should be squash merged. This keeps the commit history
 clean and makes it easy to reference the pull request where a change was
-introduced.
+introduced. The one exception is the full-release PR into `master`, which uses a
+merge commit (see [RELEASES.md](./RELEASES.md)).
 
 ### Development Procedure
 

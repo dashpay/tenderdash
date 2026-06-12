@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -eo pipefail
 
 function success {
     [[ -t 1 ]] && echo -e "\e[32mSUCCESS:\e[0m" "$@" || echo "SUCCESS:" "$@"
@@ -12,8 +12,8 @@ function debug {
 
 function error {
     debug Error: "$@"
-    cleanup
     [[ -t 1 ]] && echo -e '\e[91mERROR:\e[0m' "$@" || echo "ERROR:" "$@"
+    cleanup
     exit 1
 }
 function displayHelp {
@@ -154,7 +154,15 @@ function validate {
 
     # ensure github authentication
     if ! gh auth status &>/dev/null; then
-        gh auth login
+        error "Not authenticated to GitHub; run 'gh auth login' first"
+    fi
+
+    # Ensure local branch is in sync with origin before generating the changelog,
+    # so commits on origin are not silently missed.
+    git fetch origin "${SOURCE_BRANCH}"
+    if [[ "$(git rev-parse HEAD)" != "$(git rev-parse "origin/${SOURCE_BRANCH}")" ]]; then
+        git merge --ff-only "origin/${SOURCE_BRANCH}" ||
+            error "Your ${SOURCE_BRANCH} is out of sync with origin; sync it before releasing"
     fi
 }
 
@@ -162,14 +170,12 @@ function generateChangelog {
     debug Generating CHANGELOG
 
     CLIFF_CONFIG="${REPO_DIR}/scripts/release/cliff.toml"
-    CLIFF_ARGS=
+    CLIFF_ARGS=()
     if [[ "${RELEASE_TYPE}" = "prerelease" ]]; then
-        CLIFF_ARGS="--ignore-tags='v[0-9]\.[0-9]+\.[0-9]+-[a-z]+\.[0-9]+'"
+        CLIFF_ARGS+=(--ignore-tags 'v[0-9]\.[0-9]+\.[0-9]+-[a-z]+\.[0-9]+')
     fi
 
-    echo 2>"${REPO_DIR}/CHANGELOG.md"
-
-    docker run --rm -ti \
+    docker run --rm \
         -v "${REPO_DIR}/.git":/app/.git:ro \
         -v "${CLIFF_CONFIG}":/cliff.toml:ro \
         -v "${REPO_DIR}/CHANGELOG.md":/CHANGELOG.md \
@@ -177,7 +183,7 @@ function generateChangelog {
         --config /cliff.toml \
         --output /CHANGELOG.md \
         --tag "v${NEW_PACKAGE_VERSION}" \
-        ${CLIFF_ARGS} \
+        "${CLIFF_ARGS[@]}" \
         --strip all \
         --verbose \
         'v1.0.0-dev.1..HEAD'
@@ -189,7 +195,6 @@ function updateVersionGo {
 
 function createReleasePR {
     debug "Creating release branch ${RELEASE_BRANCH}"
-    git pull -q
     git checkout -q -b "${RELEASE_BRANCH}"
 
     # commit changes
@@ -201,7 +206,8 @@ function createReleasePR {
     git push --force -u origin "${RELEASE_BRANCH}"
 
     debug "Creating milestone ${MILESTONE} if it doesn't exist yet"
-    gh api --silent --method POST 'repos/dashevo/tenderdash/milestones' --field "title=${MILESTONE}" || true
+    # {owner}/{repo} are substituted by gh from the current repo; HTTP 422 means it already exists.
+    gh api --silent --method POST 'repos/{owner}/{repo}/milestones' --field "title=${MILESTONE}" || true
 
     if [[ -n "$(getPrURL)" ]]; then
         debug "PR for branch ${TARGET_BRANCH} already exists, skipping creation"
@@ -272,10 +278,15 @@ function buildAndUploadArtifacts() {
     bindir="$(mktemp -d)"
     local platforms=("linux/amd64" "linux/arm64")
 
+    # The build checks out the release tag (detached HEAD); restore the branch on
+    # any exit so the developer is never left stranded.
+    trap 'git checkout -q "${SOURCE_BRANCH}" 2>/dev/null || true' EXIT
+
     waitForRelease
-    # checkout and build binaries from release tag
-    # TODO: uncomment
-    # git fetch --tags && git checkout "v${NEW_PACKAGE_VERSION}"
+
+    # Build signed binaries from the released tag, not the working checkout.
+    git fetch --tags
+    git checkout "v${NEW_PACKAGE_VERSION}"
 
     buildBinaries "${bindir}" "${platforms[@]}"
 
@@ -374,7 +385,7 @@ function cleanup() {
     # We need to re-detect current branch again
     CURRENT_BRANCH="$(git branch --show-current)"
 
-    make clean
+    make clean || true
 }
 
 configureDefaults

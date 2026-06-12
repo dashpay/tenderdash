@@ -4,7 +4,7 @@
 ## Issue being fixed or feature implemented
 <!--- Why is this change required? What problem does it solve? -->
 <!--- If it fixes an open issue, please link to the issue here. -->
-Release new Dash Platform version
+Release new Tenderdash version
 
 ## What was done?
 <!--- Describe your changes in detail -->
@@ -27,6 +27,7 @@ None
 - [ ] I have performed a self-review of the generated changelog
 - [ ] I have checked that P2PProtocol in version/version.go is bumped if needed
 - [ ] I have checked that BlockProtocol in version/version.go is bumped if needed
+- [ ] I have checked that ABCISemVer in version/version.go is bumped if needed
 
 **For repository code-owners and collaborators only**
 - [ ] I have assigned this pull request to a milestone
