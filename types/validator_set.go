@@ -190,7 +190,7 @@ func (vals *ValidatorSet) validateThreshold() error {
 
 	switch {
 	case totalPower <= 0 || threshold <= 0:
-		return fmt.Errorf("invalid quorum: total voting power %d and threshold %d must both be positive",
+		return fmt.Errorf("invalid quorum: total voting power %d and threshold %d must both be > 0",
 			totalPower, threshold)
 
 	case threshold > totalPower:
