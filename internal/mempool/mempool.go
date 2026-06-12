@@ -8,8 +8,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/creachadair/taskgroup"
 	sync "github.com/sasha-s/go-deadlock"
+	"golang.org/x/sync/errgroup"
 
 	abciclient "github.com/dashpay/tenderdash/abci/client"
 	abci "github.com/dashpay/tenderdash/abci/types"
@@ -784,11 +784,12 @@ func (txmp *TxMempool) recheckTransactions(ctx context.Context) {
 	// Issue CheckTx calls for each remaining transaction, and when all the
 	// rechecks are complete signal watchers that transactions may be available.
 	go func() {
-		g, start := taskgroup.New(nil).Limit(2 * runtime.NumCPU())
+		var g errgroup.Group
+		g.SetLimit(2 * runtime.NumCPU())
 
 		for _, wtx := range wtxs {
 			wtx := wtx
-			start(func() error {
+			g.Go(func() error {
 				if err := ctx.Err(); err != nil {
 					txmp.logger.Trace("recheck txs task canceled", "err", err, "tx", wtx.hash.String())
 					return err

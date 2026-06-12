@@ -15,10 +15,11 @@ import (
 	"math/rand"
 	"runtime"
 	"strconv"
+	"sync"
 
 	dbm "github.com/cometbft/cometbft-db"
-	"github.com/creachadair/taskgroup"
 	"github.com/google/orderedcode"
+	"golang.org/x/sync/errgroup"
 )
 
 type (
@@ -632,19 +633,29 @@ func Migrate(ctx context.Context, storeName string, db dbm.DB) error {
 		return err
 	}
 
-	var errs []string
-	g, start := taskgroup.New(func(err error) error {
-		errs = append(errs, err.Error())
-		return err
-	}).Limit(runtime.NumCPU())
+	var (
+		g    errgroup.Group
+		mu   sync.Mutex
+		errs []string
+	)
+	g.SetLimit(runtime.NumCPU())
 
 	for _, key := range keys {
 		key := key
-		start(func() error {
+		g.Go(func() error {
 			if err := ctx.Err(); err != nil {
+				mu.Lock()
+				errs = append(errs, err.Error())
+				mu.Unlock()
 				return err
 			}
-			return replaceKey(db, storeName, key)
+			if err := replaceKey(db, storeName, key); err != nil {
+				mu.Lock()
+				errs = append(errs, err.Error())
+				mu.Unlock()
+				return err
+			}
+			return nil
 		})
 	}
 	if g.Wait() != nil {
