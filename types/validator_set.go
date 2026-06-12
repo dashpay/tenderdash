@@ -406,6 +406,9 @@ func (vals *ValidatorSet) Copy() *ValidatorSet {
 // HasProTxHash returns true if proTxHash given is in the validator set, false -
 // otherwise.
 func (vals *ValidatorSet) HasProTxHash(proTxHash crypto.ProTxHash) bool {
+	if vals == nil {
+		return false
+	}
 	if len(proTxHash) == 0 {
 		return false
 	}
@@ -420,6 +423,9 @@ func (vals *ValidatorSet) HasProTxHash(proTxHash crypto.ProTxHash) bool {
 // GetByProTxHash returns an index of the validator with protxhash and validator
 // itself (copy) if found. Otherwise, -1 and nil are returned.
 func (vals *ValidatorSet) GetByProTxHash(proTxHash []byte) (index int32, val *Validator) {
+	if vals == nil {
+		return -1, nil
+	}
 	for idx, val := range vals.Validators {
 		if bytes.Equal(val.ProTxHash, proTxHash) {
 			index, err := tmmath.SafeConvertInt32(int64(idx))
@@ -445,6 +451,9 @@ func (vals *ValidatorSet) GetByIndex(index int32) *Validator {
 
 // GetProTxHashes returns the all validator proTxHashes
 func (vals *ValidatorSet) GetProTxHashes() []crypto.ProTxHash {
+	if vals == nil {
+		return nil
+	}
 	proTxHashes := make([]crypto.ProTxHash, len(vals.Validators))
 	for i, val := range vals.Validators {
 		proTxHashes[i] = val.ProTxHash
@@ -454,6 +463,9 @@ func (vals *ValidatorSet) GetProTxHashes() []crypto.ProTxHash {
 
 // GetProTxHashesAsByteArrays returns the all validator proTxHashes as byte arrays for convenience
 func (vals *ValidatorSet) GetProTxHashesAsByteArrays() [][]byte {
+	if vals == nil {
+		return nil
+	}
 	proTxHashes := make([][]byte, len(vals.Validators))
 	for i, val := range vals.Validators {
 		proTxHashes[i] = val.ProTxHash
@@ -463,6 +475,9 @@ func (vals *ValidatorSet) GetProTxHashesAsByteArrays() [][]byte {
 
 // GetPublicKeys returns the all validator publicKeys
 func (vals *ValidatorSet) GetPublicKeys() []crypto.PubKey {
+	if vals == nil {
+		return nil
+	}
 	publicKeys := make([]crypto.PubKey, len(vals.Validators))
 	for i, val := range vals.Validators {
 		publicKeys[i] = val.PubKey
@@ -472,6 +487,9 @@ func (vals *ValidatorSet) GetPublicKeys() []crypto.PubKey {
 
 // GetProTxHashesOrdered returns the all validator proTxHashes in order
 func (vals *ValidatorSet) GetProTxHashesOrdered() []crypto.ProTxHash {
+	if vals == nil {
+		return nil
+	}
 	proTxHashes := make([]crypto.ProTxHash, len(vals.Validators))
 	for i, val := range vals.Validators {
 		proTxHashes[i] = val.ProTxHash
@@ -481,7 +499,11 @@ func (vals *ValidatorSet) GetProTxHashesOrdered() []crypto.ProTxHash {
 }
 
 // Size returns the length of the validator set.
+// Returns 0 if vals is nil.
 func (vals *ValidatorSet) Size() int {
+	if vals == nil {
+		return 0
+	}
 	return len(vals.Validators)
 }
 
@@ -551,6 +573,9 @@ func (vals *ValidatorSet) Hash() tmbytes.HexBytes {
 
 // Iterate will run the given function over the set.
 func (vals *ValidatorSet) Iterate(fn func(index int, val *Validator) bool) {
+	if vals == nil {
+		return
+	}
 	for i, val := range vals.Validators {
 		stop := fn(i, val.Copy())
 		if stop {
