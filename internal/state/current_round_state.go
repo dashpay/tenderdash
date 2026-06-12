@@ -326,6 +326,9 @@ func valsetUpdate(
 			if err != nil {
 				return nil, err
 			}
+			if params.VotingPowerThreshold != nil {
+				nValSet.VotingPowerThreshold = *params.VotingPowerThreshold
+			}
 		} else {
 			// if we don't have proTxHash, NewValidatorSetWithLocalNodeProTxHash behaves like NewValidatorSet
 			nValSet = types.NewValidatorSetCheckPublicKeys(validatorUpdates, thresholdPubKey,
