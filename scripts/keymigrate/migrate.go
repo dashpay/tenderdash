@@ -452,7 +452,7 @@ func checkKeyType(key keyID, storeName string) (keyType, error) {
 			// didn't pass the check. This probably means
 			// the evidence data is currupt (based on the
 			// defined migrations) best to error here.
-			return -1, fmt.Errorf("in store %q, key %q exists but is not a valid key of type %q", storeName, key, m.ktype)
+			return -1, fmt.Errorf("in store %q, key %q exists but is not a valid key of type %v", storeName, key, m.ktype)
 		}
 		// if we get here, the key in question is either
 		// migrated or of a different type. We can't break
