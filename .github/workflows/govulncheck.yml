@@ -27,5 +27,8 @@ jobs:
       - name: Install BLS library
         uses: ./.github/actions/bls
 
+      - name: Install libpcap
+        run: sudo apt-get update && sudo apt-get install --yes libpcap-dev
+
       - name: Run govulncheck
         run: make vulncheck
