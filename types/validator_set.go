@@ -431,10 +431,10 @@ func (vals *ValidatorSet) GetByProTxHash(proTxHash []byte) (index int32, val *Va
 
 // GetByIndex returns the validator's address and validator itself (copy) by
 // index.
-// It returns nil values if index is less than 0 or greater or equal to
-// len(ValidatorSet.Validators).
+// It returns nil if the receiver is nil, or if index is less than 0 or greater
+// or equal to len(ValidatorSet.Validators).
 func (vals *ValidatorSet) GetByIndex(index int32) *Validator {
-	if index < 0 || int(index) >= len(vals.Validators) {
+	if vals == nil || index < 0 || int(index) >= len(vals.Validators) {
 		return nil
 	}
 	return vals.Validators[index].Copy()
