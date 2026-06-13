@@ -201,8 +201,12 @@ func (p *WorkerPool) Receive(ctx context.Context) (Result, error) {
 
 // Start starts a pool of workers to process jobs.
 //
-// When Start returns, the pool is either stopped or has exactly initPoolSize
-// live workers — never zero workers with open channels.
+// Precondition: Start (and Run) must not be called again without an intervening
+// Stop, and must not be called concurrently. Starting an already-started pool is
+// not guarded — it spawns a second set of workers over the same channels, which
+// can panic on send-to-closed-channel during Stop. The sole production caller
+// (Synchronizer.OnStart) honors this by running the pool exactly once per service
+// lifecycle.
 func (p *WorkerPool) Start(ctx context.Context) {
 	p.lifecycleMtx.Lock()
 	defer p.lifecycleMtx.Unlock()
