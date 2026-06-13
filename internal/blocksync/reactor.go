@@ -70,6 +70,9 @@ type Reactor struct {
 	executor *blockApplier
 
 	statusUpdateInterval time.Duration
+
+	// synchronizerOpts are applied when the synchronizer is constructed in OnStart.
+	synchronizerOpts []OptionFunc
 }
 
 // NewReactor returns new reactor instance.
@@ -127,6 +130,13 @@ func WithStatusUpdateInterval(interval time.Duration) ReactorOption {
 	}
 }
 
+// WithSynchronizerOptions forwards options to the synchronizer built in OnStart.
+func WithSynchronizerOptions(opts ...OptionFunc) ReactorOption {
+	return func(r *Reactor) {
+		r.synchronizerOpts = append(r.synchronizerOpts, opts...)
+	}
+}
+
 // OnStart starts separate go routines for each p2p Channel and listens for
 // envelopes on each. In addition, it also listens for peer updates and handles
 // messages on that p2p channel accordingly. The caller must be sure to execute
@@ -151,7 +161,8 @@ func (r *Reactor) OnStart(ctx context.Context) error {
 		startHeight = state.InitialHeight
 	}
 
-	r.synchronizer = NewSynchronizer(startHeight, r.p2pClient, r.executor, WithLogger(r.logger))
+	syncOpts := append([]OptionFunc{WithLogger(r.logger)}, r.synchronizerOpts...)
+	r.synchronizer = NewSynchronizer(startHeight, r.p2pClient, r.executor, syncOpts...)
 	if r.blockSyncFlag.Load() {
 		if err := r.synchronizer.Start(ctx); err != nil {
 			return err
