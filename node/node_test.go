@@ -239,15 +239,19 @@ func TestNodeSetPrivValTCP(t *testing.T) {
 	}()
 	defer signerServer.Stop()
 
-	// Wait for the server to be ready before the client dials.
-	require.Eventually(t, signerServer.IsRunning, 5*time.Second, 10*time.Millisecond,
-		"signer server did not start in time")
-
-	// Drain the start error (non-blocking — server is running so no error expected yet).
-	select {
-	case err := <-startErrCh:
-		require.NoError(t, err, "signer server Start returned unexpected error")
-	default:
+	// Poll until the server is running, surfacing a Start() failure immediately
+	// with its actual error rather than a generic timeout message.
+	timeout := time.After(5 * time.Second)
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	for !signerServer.IsRunning() {
+		select {
+		case err := <-startErrCh:
+			require.NoError(t, err, "signer server Start returned unexpected error")
+		case <-timeout:
+			t.Fatal("signer server did not start in time")
+		case <-ticker.C:
+		}
 	}
 
 	genDoc, err := defaultGenesisDocProviderFunc(cfg)()
