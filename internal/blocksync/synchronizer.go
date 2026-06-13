@@ -185,14 +185,21 @@ func (s *Synchronizer) produceJob(ctx context.Context) error {
 	}
 	// remove timed out peers and redo its heights again
 	s.removeTimedoutPeers(ctx)
+	// Count the job as in-progress before Send: a worker may run it and
+	// consumeJobResult may decrement before Send even returns, so incrementing
+	// afterwards could drive the counter transiently negative. Every path that
+	// fails to hand the job to a worker must undo this increment, otherwise the
+	// in-progress count reported by GetStatus leaks upward permanently.
 	s.jobProgressCounter.Add(1)
 	job, err := s.jobGen.nextJob(ctx)
 	if err != nil {
+		s.jobProgressCounter.Add(-1)
 		s.logger.Error("cannot create a next job", "error", err)
 		return nil
 	}
 	err = s.workerPool.Send(ctx, job)
 	if err != nil {
+		s.jobProgressCounter.Add(-1)
 		if errors.Is(err, workerpool.ErrWorkerPoolStopped) {
 			return err
 		}

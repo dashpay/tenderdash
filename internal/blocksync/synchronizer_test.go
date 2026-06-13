@@ -387,7 +387,9 @@ func (suite *SynchronizerTestSuite) TestStopReleasesHandlers() {
 	// so produceJob idles (sleep + return nil) and never observes ErrWorkerPoolStopped.
 	sync := NewSynchronizer(1, suite.client, applier)
 
-	checkLeaks := leaktest.CheckTimeout(suite.T(), 5*time.Second)
+	// Snapshot the goroutine baseline now and defer the leak check so it still runs
+	// (and fails the test) if an assertion below trips mid-way.
+	defer leaktest.CheckTimeout(suite.T(), 5*time.Second)()
 
 	suite.Require().NoError(sync.Start(ctx))
 	suite.Require().Eventually(sync.IsRunning, time.Second, 5*time.Millisecond)
@@ -398,7 +400,68 @@ func (suite *SynchronizerTestSuite) TestStopReleasesHandlers() {
 
 	// With the parent ctx still live, both handler goroutines must have exited.
 	suite.Require().NoError(ctx.Err())
-	checkLeaks()
+}
+
+// TestProduceJobFailureKeepsCounterBalanced locks down the in-progress counter
+// accounting in produceJob: the increment happens before Send, so every path that
+// fails to hand the job to a worker must undo it. Otherwise GetStatus's in-progress
+// count leaks upward permanently. We force each failure path and assert the count
+// reported by GetStatus returns to its baseline.
+func (suite *SynchronizerTestSuite) TestProduceJobFailureKeepsCounterBalanced() {
+	const startAt = int64(10)
+
+	testCases := []struct {
+		name string
+		// prepare returns a context for produceJob; the synchronizer already has a
+		// peer so shouldJobBeGenerated() is true and nextJob can find a peer.
+		prepare func(sync *Synchronizer) context.Context
+	}{
+		{
+			// nextJob -> getPeer aborts on the canceled context, hitting the
+			// nextJob error path in produceJob.
+			name: "nextJob error",
+			prepare: func(_ *Synchronizer) context.Context {
+				ctx, cancel := context.WithCancel(context.Background())
+				cancel()
+				return ctx
+			},
+		},
+		{
+			// A stopped pool makes Send return ErrWorkerPoolStopped after the
+			// increment, hitting the Send error path in produceJob.
+			name: "send to stopped pool",
+			prepare: func(sync *Synchronizer) context.Context {
+				sync.workerPool.Stop(context.Background())
+				return context.Background()
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		suite.Run(tc.name, func() {
+			pool := workerpool.New(1)
+			applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+			sync := NewSynchronizer(startAt, suite.client, applier, WithWorkerPool(pool))
+
+			peerID := types.NodeID(tmrand.Str(12))
+			sync.AddPeer(newPeerData(peerID, startAt, startAt+100))
+
+			suite.Require().True(sync.jobGen.shouldJobBeGenerated())
+			_, baseline := sync.GetStatus()
+
+			ctx := tc.prepare(sync)
+
+			err := sync.produceJob(ctx)
+			// Either path may surface ErrWorkerPoolStopped; produceJob never errors
+			// on the nextJob path. Regardless, the counter must rebalance.
+			if err != nil {
+				suite.Require().ErrorIs(err, workerpool.ErrWorkerPoolStopped)
+			}
+
+			_, after := sync.GetStatus()
+			suite.Require().Equal(baseline, after, "in-progress counter must return to baseline after a failed produceJob")
+		})
+	}
 }
 
 func generateBlockResponses(t *testing.T, blocks []*types.Block) []*blocksync.BlockResponse {
