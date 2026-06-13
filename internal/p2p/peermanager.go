@@ -36,6 +36,14 @@ const (
 // its update channel within broadcastTimeout while the PeerManager mutex is held.
 // This signals a genuine deadlock that must be surfaced, as opposed to a benign
 // caller context expiry.
+//
+// Detection is best-effort: broadcast classifies the stall by which select arm
+// wins, so a genuinely wedged subscriber that races caller-context
+// cancellation/expiry (caller ctx deadline < broadcastTimeout) is reported as a
+// benign ctx error and skipped — a false negative. Detection is reliable only
+// when the caller ctx has no deadline shorter than broadcastTimeout. Production
+// callers (router.routePeer) currently pass a cancel-only ctx with no deadline,
+// so the realistic miss is "shutdown racing a real stall", not a fixed deadline.
 var ErrBroadcastDeadlock = errors.New("peer update broadcast deadlock: subscriber channel capacity exceeded")
 
 // PeerStatus is a peer status.
@@ -876,7 +884,9 @@ func (m *PeerManager) Ready(ctx context.Context, peerID types.NodeID, channels C
 				// A subscriber stalled while we hold the mutex: a real deadlock we must surface.
 				panic("possible deadlock when sending ready broadcast: " + err.Error())
 			}
-			// Benign caller context expiry/cancellation; nothing was delivered, just move on.
+			// Treated as benign caller-ctx expiry/cancellation; nothing was delivered, so
+			// just move on. Best-effort: a real stall racing ctx cancellation can land here
+			// too (see ErrBroadcastDeadlock).
 			m.logger.Debug("ready broadcast skipped", "peer", peerID, "error", err)
 		}
 	}
@@ -985,7 +995,9 @@ func (m *PeerManager) Disconnected(ctx context.Context, peerID types.NodeID) {
 				// A subscriber stalled while we hold the mutex: a real deadlock we must surface.
 				panic("possible deadlock when sending disconnected broadcast: " + err.Error())
 			}
-			// Benign caller context expiry/cancellation; nothing was delivered, just move on.
+			// Treated as benign caller-ctx expiry/cancellation; nothing was delivered, so
+			// just move on. Best-effort: a real stall racing ctx cancellation can land here
+			// too (see ErrBroadcastDeadlock).
 			m.logger.Debug("disconnected broadcast skipped", "peer", peerID, "error", err)
 		}
 	}
