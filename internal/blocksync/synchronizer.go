@@ -92,6 +92,13 @@ type (
 		workerPool     *workerpool.WorkerPool
 		jobGen         *jobGenerator
 		pendingToApply map[int64]BlockResponse
+
+		// ctx/cancel scope the handler goroutines' lifetime. Created in OnStart
+		// (live before the goroutines spawn, so it never observes a start-race)
+		// and canceled in OnStop so Stop releases the handlers even when the
+		// caller's context is still live.
+		ctx    context.Context
+		cancel context.CancelFunc
 	}
 	OptionFunc func(v *Synchronizer)
 )
@@ -154,21 +161,26 @@ func (s *Synchronizer) OnStart(ctx context.Context) error {
 	}
 	s.lastAdvance = s.clock.Now()
 	s.lastMonitorUpdate = s.lastAdvance
-	s.workerPool.Run(ctx)
-	go s.runHandler(ctx, s.produceJob)
-	go s.runHandler(ctx, s.consumeJobResult)
+	s.ctx, s.cancel = context.WithCancel(ctx)
+	s.workerPool.Run(s.ctx)
+	go s.runHandler(s.ctx, s.produceJob)
+	go s.runHandler(s.ctx, s.consumeJobResult)
 	return nil
 }
 
 func (s *Synchronizer) OnStop() {
+	s.cancel()
 	s.workerPool.Stop(context.Background())
 }
 
 func (s *Synchronizer) produceJob(ctx context.Context) error {
 	if !s.jobGen.shouldJobBeGenerated() {
-		// TODO should we stop producer loop ?
 		// TODO need to come up with a smarter way how to produce jobs without sleeping
-		s.clock.Sleep(50 * time.Millisecond)
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-s.clock.After(50 * time.Millisecond):
+		}
 		return nil
 	}
 	// remove timed out peers and redo its heights again

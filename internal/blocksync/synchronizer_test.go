@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/fortytw2/leaktest"
 	"github.com/jonboulle/clockwork"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
@@ -369,6 +370,35 @@ func (suite *SynchronizerTestSuite) TestUpdateMonitor() {
 			}
 		})
 	}
+}
+
+// TestStopReleasesHandlers locks down the switch-to-consensus path: after Stop()
+// the producer/consumer goroutines must exit even when the parent context passed
+// to Start is still live and the job generator is caught up (so produceJob keeps
+// idling without ever calling Send). A leaked producer goroutine + idle timer
+// would otherwise survive for the whole consensus phase.
+func (suite *SynchronizerTestSuite) TestStopReleasesHandlers() {
+	// Parent context stays live for the whole test — Stop must not depend on it.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	applier := newBlockApplier(suite.blockExec, suite.store, applierWithState(suite.initialState))
+	// startHeight 1 with no peers => MaxHeight 0 => shouldJobBeGenerated() is false,
+	// so produceJob idles (sleep + return nil) and never observes ErrWorkerPoolStopped.
+	sync := NewSynchronizer(1, suite.client, applier)
+
+	checkLeaks := leaktest.CheckTimeout(suite.T(), 5*time.Second)
+
+	suite.Require().NoError(sync.Start(ctx))
+	suite.Require().Eventually(sync.IsRunning, time.Second, 5*time.Millisecond)
+	// Give the idling producer a few iterations before stopping.
+	time.Sleep(50 * time.Millisecond)
+
+	sync.Stop()
+
+	// With the parent ctx still live, both handler goroutines must have exited.
+	suite.Require().NoError(ctx.Err())
+	checkLeaks()
 }
 
 func generateBlockResponses(t *testing.T, blocks []*types.Block) []*blocksync.BlockResponse {
