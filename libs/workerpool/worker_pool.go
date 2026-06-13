@@ -117,7 +117,12 @@ func WithJobCh(jobCh chan *Job) OptionFunc {
 }
 
 // WorkerPool is an implementation of a component that allows creating a set of workers
-// to process arbitrary jobs in background
+// to process arbitrary jobs in background.
+//
+// Concurrency invariant: Send and Receive read the jobCh/resultCh/doneCh fields
+// locklessly and must NOT run concurrently with Reset, Run, or Stop, which
+// reassign or close those channels under lifecycleMtx. Callers serialize the
+// lifecycle against in-flight Send/Receive (e.g. service OnStart/OnStop).
 type WorkerPool struct {
 	initPoolSize int
 	jobCh        chan *Job
