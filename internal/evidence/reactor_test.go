@@ -142,24 +142,19 @@ func (rts *reactorTestSuite) waitForEvidence(t *testing.T, evList types.Evidence
 	t.Helper()
 
 	fn := func(pool *evidence.Pool) {
-		var (
-			localEvList []types.Evidence
-			size        int64
-		)
+		var localEvList []types.Evidence
 
-		// wait till we have at least the amount of evidence
-		// that we expect. if there's more local evidence then
-		// it doesn't make sense to wait longer and a
-		// different assertion should catch the resulting error
-		for len(localEvList) < len(evList) {
-			// each evidence should not be more than 1000 bytes
+		// wait till we have at least the amount of evidence that we expect;
+		// if there's more local evidence the assertion below will catch it
+		require.Eventually(t, func() bool {
+			var size int64
 			localEvList, size = pool.PendingEvidence(int64(len(evList) * 1000))
-			time.Sleep(time.Millisecond * 100)
 			t.Log("current wait status:", "|",
 				"local", len(localEvList), "|",
 				"waitlist", len(evList), "|",
 				"size", size)
-		}
+			return len(localEvList) >= len(evList)
+		}, 30*time.Second, 100*time.Millisecond, "evidence did not propagate within timeout")
 
 		// put the reaped evidence in a map so we can quickly check we got everything
 		evMap := make(map[string]types.Evidence)
