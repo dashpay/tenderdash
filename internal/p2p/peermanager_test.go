@@ -1695,7 +1695,6 @@ func TestPeerManager_Broadcast_BenignCtxExpiry(t *testing.T) {
 
 	// A subscriber that never drains its channel.
 	sub := peerManager.Subscribe(ctx, "p2p")
-	_ = sub
 
 	added, err := peerManager.Add(a)
 	require.NoError(t, err)
@@ -1703,9 +1702,9 @@ func TestPeerManager_Broadcast_BenignCtxExpiry(t *testing.T) {
 	require.NoError(t, peerManager.Accepted(a.NodeID))
 
 	// Fill the subscription buffer exactly to capacity with non-blocking buffered
-	// sends. Capacity is the unexported broadcastSubscriptionChannelCapacity (3);
-	// Accepted does not broadcast, so three Ready calls fill the channel.
-	for i := 0; i < 3; i++ {
+	// sends. Derive the capacity from the actual channel rather than hard-coding it;
+	// Accepted does not broadcast, so capacity-many Ready calls fill the channel.
+	for i := 0; i < cap(sub.Updates()); i++ {
 		peerManager.Ready(ctx, a.NodeID, nil)
 	}
 
