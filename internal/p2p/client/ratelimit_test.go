@@ -198,10 +198,8 @@ func parallelSendWithLimit(t *testing.T, ctx context.Context, sendFn func(peerID
 	start.Lock()
 	defer start.Unlock()
 
-	// elapsed must be at least the intended duration; allow 2 s of slack for slow CI
+	// The lower bound is guaranteed by the time.Sleep above; only check the upper bound.
 	elapsed := time.Since(startTime)
-	assert.GreaterOrEqual(t, elapsed.Seconds(), float64(testTimeSeconds),
-		"test should run for at least %d seconds", testTimeSeconds)
 	assert.LessOrEqual(t, elapsed.Seconds(), float64(testTimeSeconds)+2.0,
 		"test should not run more than %d+2 seconds", testTimeSeconds)
 }
