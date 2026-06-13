@@ -424,15 +424,13 @@ func (s *Synchronizer) getLastSyncRate() float64 {
 }
 
 func (s *Synchronizer) runHandler(ctx context.Context, handler func(ctx context.Context) error) {
-	for s.IsRunning() {
-		select {
-		case <-ctx.Done():
+	// Drive the loop off the context, not IsRunning(): OnStart spawns this
+	// goroutine before BaseService marks the service running, so reading
+	// IsRunning() here could observe false and exit at birth, wedging sync.
+	for ctx.Err() == nil {
+		if err := handler(ctx); errors.Is(err, workerpool.ErrWorkerPoolStopped) {
+			// The pool is stopping; exit instead of busy-spinning and flooding logs.
 			return
-		default:
-			if err := handler(ctx); errors.Is(err, workerpool.ErrWorkerPoolStopped) {
-				// The pool is stopping; exit instead of busy-spinning and flooding logs.
-				return
-			}
 		}
 	}
 }
