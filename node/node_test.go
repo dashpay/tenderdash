@@ -216,9 +216,9 @@ func TestNodeSetPrivValTCP(t *testing.T) {
 	defer os.RemoveAll(cfg.RootDir)
 	cfg.PrivValidator.ListenAddr = addr
 
-	dialer := privval.DialTCPFn(addr, 100*time.Millisecond, ed25519.GenPrivKey())
+	dialer := privval.DialTCPFn(addr, 2*time.Second, ed25519.GenPrivKey())
 	dialerEndpoint := privval.NewSignerDialerEndpoint(logger, dialer)
-	privval.SignerDialerEndpointTimeoutReadWrite(100 * time.Millisecond)(dialerEndpoint)
+	privval.SignerDialerEndpointTimeoutReadWrite(2 * time.Second)(dialerEndpoint)
 
 	// We need to get the quorum hash used in config to set up the node
 	pv, err := privval.LoadOrGenFilePV(cfg.PrivValidator.KeyFile(), cfg.PrivValidator.StateFile())
@@ -232,11 +232,23 @@ func TestNodeSetPrivValTCP(t *testing.T) {
 		types.NewMockPVForQuorum(quorumHash),
 	)
 
+	// Use a buffered channel so the goroutine never blocks; assert on the test goroutine.
+	startErrCh := make(chan error, 1)
 	go func() {
-		err := signerServer.Start(ctx)
-		require.NoError(t, err)
+		startErrCh <- signerServer.Start(ctx)
 	}()
 	defer signerServer.Stop()
+
+	// Wait for the server to be ready before the client dials.
+	require.Eventually(t, signerServer.IsRunning, 5*time.Second, 10*time.Millisecond,
+		"signer server did not start in time")
+
+	// Drain the start error (non-blocking — server is running so no error expected yet).
+	select {
+	case err := <-startErrCh:
+		require.NoError(t, err, "signer server Start returned unexpected error")
+	default:
+	}
 
 	genDoc, err := defaultGenesisDocProviderFunc(cfg)()
 	require.NoError(t, err)
