@@ -263,6 +263,8 @@ func (txmp *TxMempool) CheckTx(
 // GetTxByHash returns transaction by key from the mempool. If the transaction
 // does not exist, it returns nil.
 func (txmp *TxMempool) GetTxByHash(txHash types.TxKey) types.Tx {
+	txmp.mtx.RLock()
+	defer txmp.mtx.RUnlock()
 	if elt, ok := txmp.txByKey[txHash]; ok {
 		w := elt.Value.(*WrappedTx)
 		return w.tx
