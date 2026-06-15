@@ -38,7 +38,7 @@ func (part *Part) ValidateBasic() error {
 		return fmt.Errorf("wrong Proof: %w", err)
 	}
 	if int64(part.Index) != part.Proof.Index {
-		return fmt.Errorf("part index %d does not match proof index %d", part.Index, part.Proof.Index)
+		return fmt.Errorf("%w: part index %d, proof index %d", ErrPartSetIndexMismatch, part.Index, part.Proof.Index)
 	}
 	return nil
 }

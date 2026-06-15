@@ -15,6 +15,8 @@ type SignsRecoverer struct {
 	validatorProTxHashes [][]byte
 	// List of all vote extensions. Order matters.
 	voteExtensions VoteExtensions
+	// true once the expected extension set has been established from the first observed vote.
+	voteExtensionsInitialized bool
 
 	// true when the recovery of vote extensions was already executed
 	voteExtensionsRecovered bool
@@ -89,6 +91,8 @@ func (v *SignsRecoverer) init(votes []*Vote) error {
 	v.blockSigs = nil
 	v.stateSigs = nil
 	v.validatorProTxHashes = nil
+	v.voteExtensions = nil
+	v.voteExtensionsInitialized = false
 
 	for _, vote := range votes {
 		if err := v.addVoteSigs(vote); err != nil {
@@ -115,11 +119,11 @@ func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) error {
 		return fmt.Errorf("only non-nil precommits can have vote extensions, got: %s", vote.String())
 	}
 
-	// Establish the expected extension set from the first vote that carries extensions.
-	if v.voteExtensions.IsEmpty() {
-		if len(vote.VoteExtensions) == 0 {
-			return nil
-		}
+	// Establish the expected extension set from the first vote observed, regardless of whether
+	// it carries any extensions. This ensures mixed-presence sets are rejected in both
+	// orderings: [N-ext, 0-ext] and [0-ext, N-ext].
+	if !v.voteExtensionsInitialized {
+		v.voteExtensionsInitialized = true
 		v.voteExtensions = vote.VoteExtensions.Copy()
 	}
 
@@ -129,7 +133,7 @@ func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) error {
 			len(v.voteExtensions), len(vote.VoteExtensions))
 	}
 
-	// append signatures from this vote to each extension
+	// append signatures from this vote to each extension (no-op when len == 0)
 	for i, ext := range vote.VoteExtensions {
 		if recoverable, ok := (v.voteExtensions[i]).(ThresholdVoteExtensionIf); ok {
 			if err := recoverable.AddThresholdSignature(vote.ValidatorProTxHash, ext.GetSignature()); err != nil {

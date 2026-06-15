@@ -251,6 +251,16 @@ func TestSignsRecovererErrors(t *testing.T) {
 			},
 			expectErr: true,
 		},
+		{
+			// Reverse order: 0-ext vote arrives first, then an N-ext vote.
+			// The baseline is seeded from the first (0-ext) vote, so the second must also have 0.
+			name: "non-zero extensions after zero established count",
+			votes: []*Vote{
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: nil},
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
+			},
+			expectErr: true,
+		},
 	}
 
 	for _, tc := range testCases {

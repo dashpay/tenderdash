@@ -278,7 +278,9 @@ func TestPartIndexProofBinding(t *testing.T) {
 		Bytes: source.GetPart(1).Bytes,
 		Proof: source.GetPart(1).Proof,
 	}
-	require.Error(t, relabeled.ValidateBasic(), "relabeled part must fail ValidateBasic")
+	err = relabeled.ValidateBasic()
+	require.Error(t, err, "relabeled part must fail ValidateBasic")
+	require.ErrorIs(t, err, ErrPartSetIndexMismatch, "ValidateBasic mismatch must wrap ErrPartSetIndexMismatch")
 	dest2 := NewPartSetFromHeader(source.Header())
 	added, err = dest2.AddPart(relabeled)
 	require.False(t, added)
