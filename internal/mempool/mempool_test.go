@@ -834,3 +834,94 @@ func mustKvStore(t *testing.T, opts ...kvstore.OptFunc) *kvstore.Application {
 	require.NoError(t, err)
 	return app
 }
+
+func TestTxMempool_GetTxByHash(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
+	require.NoError(t, client.Start(ctx))
+	t.Cleanup(client.Wait)
+
+	txmp := setup(t, client, 0)
+	txs := checkTxs(ctx, t, txmp, 5, 0)
+
+	present := txs[0].tx
+	var absent types.Tx = []byte("missing-sender=missing-key=42")
+
+	testCases := []struct {
+		name string
+		tx   types.Tx
+		want types.Tx
+	}{
+		{"present", present, present},
+		{"absent", absent, nil},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			got := txmp.GetTxByHash(tc.tx.Key())
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+// TestTxMempool_GetTxByHashConcurrent exercises GetTxByHash against concurrent
+// writers (CheckTx inserts, RemoveTxByKey deletes) to assert the read is
+// synchronized. It is meaningful only under the race detector (go test -race).
+func TestTxMempool_GetTxByHashConcurrent(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	client := abciclient.NewLocalClient(log.NewNopLogger(), &application{Application: mustKvStore(t)})
+	require.NoError(t, client.Start(ctx))
+	t.Cleanup(client.Wait)
+
+	txmp := setup(t, client, 0)
+
+	const (
+		writers      = 4
+		readers      = 4
+		txsPerWriter = 50
+	)
+
+	var (
+		writersWG sync.WaitGroup
+		readersWG sync.WaitGroup
+		stop      atomic.Bool
+		keys      sync.Map // types.TxKey -> struct{}: keys that have been inserted
+	)
+
+	for w := 0; w < writers; w++ {
+		writersWG.Add(1)
+		go func(peerID uint16) {
+			defer writersWG.Done()
+			for _, tx := range checkTxs(ctx, t, txmp, txsPerWriter, peerID) {
+				key := tx.tx.Key()
+				keys.Store(key, struct{}{})
+				_ = txmp.RemoveTxByKey(key)
+			}
+		}(uint16(w))
+	}
+
+	for r := 0; r < readers; r++ {
+		readersWG.Add(1)
+		go func() {
+			defer readersWG.Done()
+			for !stop.Load() {
+				keys.Range(func(k, _ any) bool {
+					txmp.GetTxByHash(k.(types.TxKey))
+					return true
+				})
+			}
+		}()
+	}
+
+	writersWG.Wait()
+	stop.Store(true)
+	readersWG.Wait()
+}
