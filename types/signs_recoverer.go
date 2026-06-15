@@ -110,19 +110,20 @@ func (v *SignsRecoverer) addVoteSigs(vote *Vote) error {
 
 // Add threshold-recovered vote extensions
 func (v *SignsRecoverer) addVoteExtensionSigs(vote *Vote) error {
-	if len(vote.VoteExtensions) == 0 {
-		return nil
-	}
-
-	// initialize vote extensions
-	if v.voteExtensions.IsEmpty() {
-		v.voteExtensions = vote.VoteExtensions.Copy()
-	}
-
-	if vote.Type != types.PrecommitType || vote.BlockID.IsNil() {
+	// Only non-nil precommits may carry vote extensions.
+	if len(vote.VoteExtensions) > 0 && (vote.Type != types.PrecommitType || vote.BlockID.IsNil()) {
 		return fmt.Errorf("only non-nil precommits can have vote extensions, got: %s", vote.String())
 	}
 
+	// Establish the expected extension set from the first vote that carries extensions.
+	if v.voteExtensions.IsEmpty() {
+		if len(vote.VoteExtensions) == 0 {
+			return nil
+		}
+		v.voteExtensions = vote.VoteExtensions.Copy()
+	}
+
+	// Every vote must carry the same number of extensions.
 	if len(vote.VoteExtensions) != len(v.voteExtensions) {
 		return fmt.Errorf("received vote extensions with different length: current %d, received %d",
 			len(v.voteExtensions), len(vote.VoteExtensions))

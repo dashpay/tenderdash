@@ -19,9 +19,14 @@ const (
 	// the number of validators.
 	MaxVotesCount = 10000
 
-	// maxPeerMaj23s bounds how many peers' majority claims a vote set tracks;
-	// each new claim may allocate a votesByBlock entry, so growth must be bounded.
-	maxPeerMaj23s = 256
+	// maxPeerMaj23s bounds how many peers' majority claims a VoteSet tracks.
+	// Each new claim from a previously unseen peer may allocate a votesByBlock
+	// entry, so unbounded growth is a memory-exhaustion vector. The cap is set
+	// well above any realistic node peer count and above the largest supported
+	// Dash LLMQ size (LLMQ_400_60 = 400 members). Excess claims are dropped
+	// silently (returning nil, not an error) so honest peers are not
+	// disconnected by the caller's error handling.
+	maxPeerMaj23s = 4096
 )
 
 /*
@@ -421,11 +426,12 @@ func (voteSet *VoteSet) SetPeerMaj23(peerID string, blockID BlockID, height int6
 			peerID, blockID, height, round, existing.BlockID, existing.Height, existing.Round)
 	}
 
-	// Bound peer-driven memory growth. A claim from a previously unseen peer is
-	// dropped (not an error) once the cap is reached, so honest peers are not
-	// disconnected by the caller's error handling.
+	// Bound peer-driven memory growth. Once the cap is reached, claims from
+	// new peers are silently dropped (not an error) so honest peers are not
+	// disconnected by the caller's error handling. No logger is available on
+	// VoteSet; see maxPeerMaj23s doc for the rationale behind the chosen cap.
 	if len(voteSet.peerMaj23s) >= maxPeerMaj23s {
-		return nil
+		return nil // drop: cap reached
 	}
 	voteSet.peerMaj23s[peerID] = maj23Info{blockID, height, round}
 

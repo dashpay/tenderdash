@@ -241,6 +241,16 @@ func TestSignsRecovererErrors(t *testing.T) {
 			},
 			expectErr: true,
 		},
+		{
+			// A vote with 0 extensions must not silently pass once an earlier vote
+			// established a non-zero extension count.
+			name: "zero extensions after non-zero established count",
+			votes: []*Vote{
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: nil},
+			},
+			expectErr: true,
+		},
 	}
 
 	for _, tc := range testCases {
