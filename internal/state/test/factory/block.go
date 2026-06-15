@@ -110,7 +110,9 @@ func makeBlockAndPartSet(
 			require.NoError(t, err)
 		}
 
-		thresholdSigns, err := types.NewSignsRecoverer(votes).Recover()
+		signsRecoverer, err := types.NewSignsRecoverer(votes)
+		require.NoError(t, err)
+		thresholdSigns, err := signsRecoverer.Recover()
 		require.NoError(t, err)
 		lastCommit = types.NewCommit(
 			lastBlock.Header.Height,

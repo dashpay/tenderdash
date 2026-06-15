@@ -2,13 +2,16 @@ package types
 
 import (
 	"io"
+	"math"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dashpay/tenderdash/crypto"
 	"github.com/dashpay/tenderdash/crypto/merkle"
 	tmrand "github.com/dashpay/tenderdash/libs/rand"
+	tmtime "github.com/dashpay/tenderdash/libs/time"
 )
 
 const (
@@ -207,4 +210,92 @@ func TestPartProtoBuf(t *testing.T) {
 			require.Equal(t, tc.ps1, p, tc.msg)
 		}
 	}
+}
+
+func TestPartSetHeaderValidateBasicTotal(t *testing.T) {
+	testCases := []struct {
+		name      string
+		total     uint32
+		expectErr bool
+	}{
+		{"zero", 0, false},
+		{"one", 1, false},
+		{"max", MaxBlockPartsCount, false},
+		{"max plus one", MaxBlockPartsCount + 1, true},
+		{"max uint32", math.MaxUint32, true},
+	}
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			psh := PartSetHeader{Total: tc.total, Hash: tmrand.Bytes(32)}
+			err := psh.ValidateBasic()
+			assert.Equal(t, tc.expectErr, err != nil, "unexpected validation result: %v", err)
+		})
+	}
+}
+
+func TestProposalPartSetHeaderTotalPropagation(t *testing.T) {
+	// An oversized Total inside a Proposal's BlockID.PartSetHeader must be
+	// rejected via the Proposal -> BlockID -> PartSetHeader admission chain.
+	proposalWithTotal := func(total uint32) *Proposal {
+		blockID := BlockID{
+			Hash:          tmrand.Bytes(crypto.HashSize),
+			PartSetHeader: PartSetHeader{Total: total, Hash: tmrand.Bytes(crypto.HashSize)},
+			StateID:       tmrand.Bytes(crypto.HashSize),
+		}
+		p := NewProposal(1, 0, 0, -1, blockID, tmtime.Now())
+		p.Signature = tmrand.Bytes(SignatureSize)
+		return p
+	}
+
+	err := proposalWithTotal(MaxBlockPartsCount + 1).ValidateBasic()
+	require.Error(t, err, "Proposal with oversized PartSetHeader.Total must fail validation")
+	require.Contains(t, err.Error(), "too many parts")
+
+	require.NoError(t, proposalWithTotal(MaxBlockPartsCount).ValidateBasic(),
+		"Proposal with in-bound PartSetHeader.Total must validate")
+}
+
+func TestPartIndexProofBinding(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping test in short mode")
+	}
+
+	data := tmrand.Bytes(testPartSize * 5)
+	source := NewPartSetFromData(data, testPartSize)
+
+	// genuine part: passes both ValidateBasic and AddPart
+	genuine := source.GetPart(1)
+	require.NoError(t, genuine.ValidateBasic())
+	dest := NewPartSetFromHeader(source.Header())
+	added, err := dest.AddPart(genuine)
+	require.True(t, added)
+	require.NoError(t, err)
+
+	// part relabeled to another valid slot (proof untouched) is rejected by both
+	relabeled := &Part{
+		Index: 2,
+		Bytes: source.GetPart(1).Bytes,
+		Proof: source.GetPart(1).Proof,
+	}
+	require.Error(t, relabeled.ValidateBasic(), "relabeled part must fail ValidateBasic")
+	dest2 := NewPartSetFromHeader(source.Header())
+	added, err = dest2.AddPart(relabeled)
+	require.False(t, added)
+	require.ErrorIs(t, err, ErrPartSetIndexMismatch)
+
+	// after rejecting the relabeled part, the genuine part for that slot is still accepted
+	added, err = dest2.AddPart(source.GetPart(2))
+	require.True(t, added)
+	require.NoError(t, err)
+
+	// relabeled to an out-of-range index still hits the unexpected-index path
+	outOfRange := &Part{
+		Index: source.Total(),
+		Bytes: source.GetPart(0).Bytes,
+		Proof: source.GetPart(0).Proof,
+	}
+	added, err = dest2.AddPart(outOfRange)
+	require.False(t, added)
+	require.ErrorIs(t, err, ErrPartSetUnexpectedIndex)
 }

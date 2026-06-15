@@ -228,7 +228,9 @@ func TestValidateBlockCommit(t *testing.T) {
 				state.LastBlockID,
 			)
 			require.NoError(t, err)
-			thresholdSigns, err := types.NewSignsRecoverer([]*types.Vote{wrongHeightVote}).Recover()
+			signsRecoverer, err := types.NewSignsRecoverer([]*types.Vote{wrongHeightVote})
+			require.NoError(t, err)
+			thresholdSigns, err := signsRecoverer.Recover()
 			require.NoError(t, err)
 			wrongHeightCommit := types.NewCommit(
 				wrongHeightVote.Height,
@@ -331,7 +333,9 @@ func TestValidateBlockCommit(t *testing.T) {
 		goodVote.VoteExtensions = types.VoteExtensionsFromProto(g.VoteExtensions...)
 		badVote.VoteExtensions = types.VoteExtensionsFromProto(b.VoteExtensions...)
 
-		thresholdSigns, err := types.NewSignsRecoverer([]*types.Vote{badVote}).Recover()
+		signsRecoverer, err := types.NewSignsRecoverer([]*types.Vote{badVote})
+		require.NoError(t, err)
+		thresholdSigns, err := signsRecoverer.Recover()
 		require.NoError(t, err)
 		quorumSigns := &types.CommitSigns{
 			QuorumSigns: *thresholdSigns,

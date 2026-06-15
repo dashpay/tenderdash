@@ -98,7 +98,9 @@ func makeValidCommit(
 		require.NoError(t, err)
 		votes[i] = vote
 	}
-	thresholdSigns, err := types.NewSignsRecoverer(votes).Recover()
+	signsRecoverer, err := types.NewSignsRecoverer(votes)
+	require.NoError(t, err)
+	thresholdSigns, err := signsRecoverer.Recover()
 	require.NoError(t, err)
 	return types.NewCommit(
 		height, 0,

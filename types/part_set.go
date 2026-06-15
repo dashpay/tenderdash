@@ -20,6 +20,7 @@ import (
 var (
 	ErrPartSetUnexpectedIndex = errors.New("error part set unexpected index")
 	ErrPartSetInvalidProof    = errors.New("error part set invalid proof")
+	ErrPartSetIndexMismatch   = errors.New("error part index does not match proof index")
 )
 
 type Part struct {
@@ -35,6 +36,9 @@ func (part *Part) ValidateBasic() error {
 	}
 	if err := part.Proof.ValidateBasic(); err != nil {
 		return fmt.Errorf("wrong Proof: %w", err)
+	}
+	if int64(part.Index) != part.Proof.Index {
+		return fmt.Errorf("part index %d does not match proof index %d", part.Index, part.Proof.Index)
 	}
 	return nil
 }
@@ -122,6 +126,9 @@ func (psh PartSetHeader) Equals(other PartSetHeader) bool {
 
 // ValidateBasic performs basic validation.
 func (psh PartSetHeader) ValidateBasic() error {
+	if psh.Total > MaxBlockPartsCount {
+		return fmt.Errorf("too many parts: %d, max: %d", psh.Total, MaxBlockPartsCount)
+	}
 	// Hash can be empty in case of POLBlockID.PartSetHeader in Proposal.
 	if err := ValidateHash(psh.Hash); err != nil {
 		return fmt.Errorf("wrong Hash: %w", err)
@@ -281,6 +288,12 @@ func (ps *PartSet) AddPart(part *Part) (bool, error) {
 	// Invalid part index
 	if part.Index >= ps.total {
 		return false, ErrPartSetUnexpectedIndex
+	}
+
+	// The outer index must match the index the proof was computed for, otherwise
+	// a part could be relabeled into another slot.
+	if int64(part.Index) != part.Proof.Index {
+		return false, ErrPartSetIndexMismatch
 	}
 
 	// If part already exists, return false.

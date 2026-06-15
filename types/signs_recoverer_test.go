@@ -119,10 +119,8 @@ func TestSigsRecoverer(t *testing.T) {
 	}
 	for i, tc := range testCases {
 		t.Run(fmt.Sprintf("test-case #%d", i), func(t *testing.T) {
-			var (
-				pubKeys []crypto.PubKey
-				IDs     [][]byte
-			)
+			pubKeys := make([]crypto.PubKey, 0, len(tc.votes))
+			IDs := make([][]byte, 0, len(tc.votes))
 			pvs := make([]*MockPV, len(tc.votes))
 			for i, vote := range tc.votes {
 				protoVote := vote.ToProto()
@@ -143,7 +141,8 @@ func TestSigsRecoverer(t *testing.T) {
 			thresholdPubKey, err := bls12381.RecoverThresholdPublicKeyFromPublicKeys(pubKeys, IDs)
 			require.NoError(t, err)
 
-			sr := NewSignsRecoverer(tc.votes)
+			sr, err := NewSignsRecoverer(tc.votes)
+			require.NoError(t, err)
 			thresholdVoteSigns, err := sr.Recover()
 			require.NoError(t, err)
 			err = quorumSigns.Verify(thresholdPubKey, *thresholdVoteSigns)
@@ -196,6 +195,67 @@ func TestSigsRecoverer_UsingVoteSet(t *testing.T) {
 		added, err := voteSet.AddVote(vote)
 		require.NoError(t, err)
 		require.True(t, added)
+	}
+}
+
+func TestSignsRecovererErrors(t *testing.T) {
+	blockID := makeBlockID([]byte("blockhash"), 1000, []byte("partshash"), nil)
+
+	// DEFAULT (non-threshold) extensions exercise the count/type guards without
+	// requiring recoverable threshold signatures.
+	twoExts := func() VoteExtensions {
+		return mockVoteExtensions(t,
+			tmproto.VoteExtensionType_DEFAULT, "a",
+			tmproto.VoteExtensionType_DEFAULT, "b",
+		)
+	}
+	oneExt := func() VoteExtensions {
+		return mockVoteExtensions(t, tmproto.VoteExtensionType_DEFAULT, "a")
+	}
+
+	testCases := []struct {
+		name      string
+		votes     []*Vote
+		expectErr bool
+	}{
+		{
+			name: "consistent extension counts",
+			votes: []*Vote{
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
+			},
+			expectErr: false,
+		},
+		{
+			name: "mismatched extension counts",
+			votes: []*Vote{
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: twoExts()},
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrecommitType, BlockID: blockID, VoteExtensions: oneExt()},
+			},
+			expectErr: true,
+		},
+		{
+			name: "non-precommit vote carrying extensions",
+			votes: []*Vote{
+				{ValidatorProTxHash: crypto.RandProTxHash(), Type: tmproto.PrevoteType, BlockID: blockID, VoteExtensions: twoExts()},
+			},
+			expectErr: true,
+		},
+	}
+
+	for _, tc := range testCases {
+		tc := tc
+		t.Run(tc.name, func(t *testing.T) {
+			// The constructor must surface inconsistent input as an error, never a panic.
+			require.NotPanics(t, func() {
+				_, err := NewSignsRecoverer(tc.votes)
+				if tc.expectErr {
+					require.Error(t, err)
+				} else {
+					require.NoError(t, err)
+				}
+			})
+		})
 	}
 }
 
