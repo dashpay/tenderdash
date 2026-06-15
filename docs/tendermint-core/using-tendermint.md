@@ -60,7 +60,7 @@ definition](https://github.com/tenderdash/tenderdash/blob/master/types/genesis.g
         - `max_age_duration`: Max age of evidence, in time. It should correspond
       with an app's "unbonding period" or other similar mechanism for handling
       [Nothing-At-Stake
-      attacks](https://github.com/ethereum/wiki/wiki/Proof-of-Stake-FAQ#what-is-the-nothing-at-stake-problem-and-how-can-it-be-fixed).
+      attacks](https://ethereum.org/en/developers/docs/consensus-mechanisms/pos/faqs/).
         - `max_num`: This sets the maximum number of evidence that can be committed
       in a single block. and should fall comfortably under the max block
       bytes when we consider the size of each evidence.

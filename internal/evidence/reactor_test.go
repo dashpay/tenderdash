@@ -3,7 +3,9 @@ package evidence_test
 import (
 	"context"
 	"encoding/hex"
+	"fmt"
 	"math/rand"
+	"reflect"
 	"testing"
 	"time"
 
@@ -141,24 +143,27 @@ func (rts *reactorTestSuite) start(ctx context.Context, t *testing.T) {
 func (rts *reactorTestSuite) waitForEvidence(t *testing.T, evList types.EvidenceList, ids ...types.NodeID) {
 	t.Helper()
 
-	fn := func(pool *evidence.Pool) {
-		var (
-			localEvList []types.Evidence
-			size        int64
-		)
+	// fn polls pool until it holds all expected evidence or 30s elapses.
+	// Returns nil on success, an error on timeout or mismatch.
+	// Safe to call from any goroutine — no t.FailNow inside.
+	fn := func(pool *evidence.Pool) error {
+		var localEvList []types.Evidence
 
-		// wait till we have at least the amount of evidence
-		// that we expect. if there's more local evidence then
-		// it doesn't make sense to wait longer and a
-		// different assertion should catch the resulting error
+		// wait till we have at least the amount of evidence that we expect;
+		// if there's more local evidence the assertion below will catch it
+		deadline := time.Now().Add(30 * time.Second)
 		for len(localEvList) < len(evList) {
-			// each evidence should not be more than 1000 bytes
+			if time.Now().After(deadline) {
+				return fmt.Errorf("timed out waiting for evidence: have %d, want %d",
+					len(localEvList), len(evList))
+			}
+			var size int64
 			localEvList, size = pool.PendingEvidence(int64(len(evList) * 1000))
-			time.Sleep(time.Millisecond * 100)
 			t.Log("current wait status:", "|",
 				"local", len(localEvList), "|",
 				"waitlist", len(evList), "|",
 				"size", size)
+			time.Sleep(100 * time.Millisecond)
 		}
 
 		// put the reaped evidence in a map so we can quickly check we got everything
@@ -169,25 +174,22 @@ func (rts *reactorTestSuite) waitForEvidence(t *testing.T, evList types.Evidence
 
 		for i, expectedEv := range evList {
 			gotEv := evMap[string(expectedEv.Hash())]
-			require.Equalf(
-				t,
-				expectedEv,
-				gotEv,
-				"evidence for pool %d in pool does not match; got: %v, expected: %v", i, gotEv, expectedEv,
-			)
+			if !reflect.DeepEqual(expectedEv, gotEv) {
+				return fmt.Errorf("evidence %d mismatch: got %v, expected %v", i, gotEv, expectedEv)
+			}
 		}
+		return nil
 	}
 
 	if len(ids) == 1 {
-		// special case waiting once, just to avoid the extra
-		// goroutine, in the case that this hits a timeout,
-		// the stack will be clearer.
-		fn(rts.pools[ids[0]])
+		// special case: single pool, run directly on the test goroutine so
+		// the stack trace is clearer on failure.
+		require.NoError(t, fn(rts.pools[ids[0]]))
 		return
 	}
 
-	wg := sync.WaitGroup{}
-
+	// Collect the pool IDs we need to wait for.
+	poolIDs := make([]types.NodeID, 0)
 	for id := range rts.pools {
 		if len(ids) > 0 && !p2ptest.NodeInSlice(id, ids) {
 			// if an ID list is specified, then we only
@@ -196,11 +198,27 @@ func (rts *reactorTestSuite) waitForEvidence(t *testing.T, evList types.Evidence
 			// all pools.
 			continue
 		}
+		poolIDs = append(poolIDs, id)
+	}
 
+	// Fan out to goroutines; collect errors via channel to avoid calling
+	// t.FailNow from a non-test goroutine (prohibited by Go's testing package).
+	errCh := make(chan error, len(poolIDs))
+	wg := sync.WaitGroup{}
+	for _, id := range poolIDs {
 		wg.Add(1)
-		go func(id types.NodeID) { defer wg.Done(); fn(rts.pools[id]) }(id)
+		go func(id types.NodeID) {
+			defer wg.Done()
+			errCh <- fn(rts.pools[id])
+		}(id)
 	}
 	wg.Wait()
+	close(errCh)
+
+	// Assert on the test goroutine after all workers finish.
+	for err := range errCh {
+		require.NoError(t, err)
+	}
 }
 
 func createEvidenceList(

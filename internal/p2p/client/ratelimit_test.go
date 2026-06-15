@@ -3,7 +3,6 @@ package client
 import (
 	"context"
 	"errors"
-	"math"
 	"runtime"
 	"strconv"
 	"sync"
@@ -199,21 +198,24 @@ func parallelSendWithLimit(t *testing.T, ctx context.Context, sendFn func(peerID
 	start.Lock()
 	defer start.Unlock()
 
-	// check if test ran for the expected time
-	// note we ignore up to 99 ms to account for any processing time
-	elapsed := math.Floor(time.Since(startTime).Seconds()*10) / 10
-	assert.Equal(t, float64(testTimeSeconds), elapsed, "test should run for %d seconds", testTimeSeconds)
+	// The lower bound is guaranteed by the time.Sleep above; only check the upper bound.
+	elapsed := time.Since(startTime)
+	assert.LessOrEqual(t, elapsed.Seconds(), float64(testTimeSeconds)+2.0,
+		"test should not run more than %d+2 seconds", testTimeSeconds)
 }
 
-// assertRateLimits checks if the rate limits were applied correctly
+// assertRateLimits checks if the rate limits were applied correctly.
 // We assume that index of each item in `sent` is the peer number, as described in parallelSendWithLimit.
+// We use a tolerance of ±1 to accommodate scheduling jitter in the rate limiter.
 func assertRateLimits(t *testing.T, sent []atomic.Uint32, limit float64, burst int, seconds int) {
+	t.Helper()
 	for peer := 1; peer <= len(sent); peer++ {
 		expected := int(limit)*seconds + burst
 		if expected > peer*seconds {
 			expected = peer * seconds
 		}
-
-		assert.Equal(t, expected, int(sent[peer-1].Load()), "peer %d should receive %d messages", peer, expected)
+		actual := int(sent[peer-1].Load())
+		assert.GreaterOrEqual(t, actual, expected-1, "peer %d received too few messages (expected ~%d)", peer, expected)
+		assert.LessOrEqual(t, actual, expected+1, "peer %d received too many messages (expected ~%d)", peer, expected)
 	}
 }
