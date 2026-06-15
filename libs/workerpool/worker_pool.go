@@ -246,7 +246,9 @@ func (p *WorkerPool) Stop(ctx context.Context) {
 		}
 		close(done)
 	}()
+	p.wgMtx.Lock()
 	p.wg.Wait()
+	p.wgMtx.Unlock()
 	close(p.jobCh)
 	close(p.resultCh)
 	<-done

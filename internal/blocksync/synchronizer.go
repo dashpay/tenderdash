@@ -194,13 +194,18 @@ func (s *Synchronizer) produceJob(ctx context.Context) error {
 	job, err := s.jobGen.nextJob(ctx)
 	if err != nil {
 		s.jobProgressCounter.Add(-1)
+		if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+			return err
+		}
 		s.logger.Error("cannot create a next job", "error", err)
 		return nil
 	}
 	err = s.workerPool.Send(ctx, job)
 	if err != nil {
 		s.jobProgressCounter.Add(-1)
-		if errors.Is(err, workerpool.ErrWorkerPoolStopped) {
+		if errors.Is(err, workerpool.ErrWorkerPoolStopped) ||
+			errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
 		s.logger.Error("cannot add a job to worker-pool", "error", err)
@@ -211,7 +216,9 @@ func (s *Synchronizer) produceJob(ctx context.Context) error {
 func (s *Synchronizer) consumeJobResult(ctx context.Context) error {
 	res, err := s.workerPool.Receive(ctx)
 	if err != nil {
-		if errors.Is(err, workerpool.ErrWorkerPoolStopped) {
+		if errors.Is(err, workerpool.ErrWorkerPoolStopped) ||
+			errors.Is(err, context.Canceled) ||
+			errors.Is(err, context.DeadlineExceeded) {
 			return err
 		}
 		s.logger.Error("cannot receive a job result from worker pool", "error", err)

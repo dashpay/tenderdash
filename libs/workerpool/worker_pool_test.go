@@ -268,3 +268,59 @@ func isChannelClosed[T any](ch <-chan T) bool {
 		return false
 	}
 }
+
+// TestWorkerPool_StopSendRace is a regression test for the WaitGroup misuse
+// panic that occurs when Stop's wg.Wait() races with Send's wg.Add(1).
+//
+// Exact panic sequence (pre-fix):
+//  1. A Send completes (counter→0); concurrently another Send passes the
+//     stopped.Load() gate but has not yet called wg.Add(1).
+//  2. Stop calls wg.Wait() while counter==0 and the second Add is pending.
+//     Internally Wait increments the waiters field to 1 before confirming
+//     counter==0 and returning.
+//  3. The second Send calls wg.Add(1) with waiters==1 and v==delta==1:
+//     the WaitGroup panics: "sync: WaitGroup misuse: Add called concurrently
+//     with Wait".
+//
+// The fix wraps wg.Wait() in Stop under wgMtx (Send already wraps wg.Add
+// under the same lock), so Add and Wait are mutually exclusive.
+//
+// The test exercises this with a direct white-box assertion: it drives the
+// pool through many Start/Send/Stop cycles using -race so the race detector
+// would flag any unsynchronised access between Add and Wait.  Without the
+// wgMtx guard on Wait the race detector reports a DATA RACE even before a
+// panic manifests.
+//
+// Run: go test -race -run TestWorkerPool_StopSendRace -count=200 ./libs/workerpool/
+func TestWorkerPool_StopSendRace(_ *testing.T) {
+	const iterations = 200
+	for i := 0; i < iterations; i++ {
+		ctx, cancel := context.WithCancel(context.Background())
+
+		// poolSize=0, so no workers drain jobCh.  Sends will block inside
+		// the select until doneCh closes, keeping counter>0 while blocked.
+		// The unbuffered jobCh means Send cannot complete until a reader
+		// appears or doneCh fires — giving Stop time to reach wg.Wait().
+		jobCh := make(chan *Job)
+		wp := New(0, WithJobCh(jobCh))
+		wp.Start(ctx)
+
+		// Launch many concurrent Sends to maximize overlap with Stop.
+		const senders = 8
+		var sendWg sync.WaitGroup
+		sendWg.Add(senders)
+		for s := 0; s < senders; s++ {
+			go func() {
+				defer sendWg.Done()
+				_ = wp.Send(ctx, NewJob(func(_ context.Context) Result { return Result{} }))
+			}()
+		}
+
+		// Stop races with in-flight Sends: the race detector will surface any
+		// unsynchronised Add/Wait overlap if the wgMtx guard is absent.
+		wp.Stop(ctx)
+
+		sendWg.Wait()
+		cancel()
+	}
+}
