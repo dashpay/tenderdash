@@ -164,8 +164,10 @@ func (bs *BaseService) Stop() {
 	default:
 		bs.logger.Info("stopping service", "service", bs.name)
 		bs.impl.OnStop()
-		bs.cancel()
+		// Clear running before cancel: cancel() closes quit, which unblocks Wait().
+		// Storing first guarantees IsRunning() is false by the time Wait() returns.
 		atomic.StoreUint32(&bs.running, 0)
+		bs.cancel()
 
 		return
 	}

@@ -312,7 +312,11 @@ func TestReactor_SyncTime(t *testing.T) {
 	genDoc, privVals := factory.RandGenesisDoc(1, factory.ConsensusParams())
 	maxBlockHeight := int64(199)
 
-	rts := setup(ctx, t, cfg, genDoc, privVals[0], []int64{maxBlockHeight, 0})
+	// A small monitor interval makes the sync-rate computation fire early
+	// (after ~10 blocks instead of the default 100), so the assertion below
+	// is deterministic rather than racing the rate filter.
+	rts := setup(ctx, t, cfg, genDoc, privVals[0], []int64{maxBlockHeight, 0},
+		WithSynchronizerOptions(WithMonitorInterval(10)))
 	require.Equal(t, maxBlockHeight, rts.reactors[rts.nodes[0]].store.Height())
 	rts.start(ctx, t)
 
