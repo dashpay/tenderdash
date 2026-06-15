@@ -411,7 +411,8 @@ func (suite *SynchronizerTestSuite) TestProduceJobFailureKeepsCounterBalanced() 
 	const startAt = int64(10)
 
 	testCases := []struct {
-		name string
+		name    string
+		wantErr error
 		// prepare returns a context for produceJob; the synchronizer already has a
 		// peer so shouldJobBeGenerated() is true and nextJob can find a peer.
 		prepare func(sync *Synchronizer) context.Context
@@ -419,7 +420,8 @@ func (suite *SynchronizerTestSuite) TestProduceJobFailureKeepsCounterBalanced() 
 		{
 			// nextJob -> getPeer aborts on the canceled context, hitting the
 			// nextJob error path in produceJob.
-			name: "nextJob error",
+			name:    "nextJob error",
+			wantErr: context.Canceled,
 			prepare: func(_ *Synchronizer) context.Context {
 				ctx, cancel := context.WithCancel(context.Background())
 				cancel()
@@ -429,7 +431,8 @@ func (suite *SynchronizerTestSuite) TestProduceJobFailureKeepsCounterBalanced() 
 		{
 			// A stopped pool makes Send return ErrWorkerPoolStopped after the
 			// increment, hitting the Send error path in produceJob.
-			name: "send to stopped pool",
+			name:    "send to stopped pool",
+			wantErr: workerpool.ErrWorkerPoolStopped,
 			prepare: func(sync *Synchronizer) context.Context {
 				sync.workerPool.Stop(context.Background())
 				return context.Background()
@@ -452,11 +455,7 @@ func (suite *SynchronizerTestSuite) TestProduceJobFailureKeepsCounterBalanced() 
 			ctx := tc.prepare(sync)
 
 			err := sync.produceJob(ctx)
-			// Either path may surface ErrWorkerPoolStopped; produceJob never errors
-			// on the nextJob path. Regardless, the counter must rebalance.
-			if err != nil {
-				suite.Require().ErrorIs(err, workerpool.ErrWorkerPoolStopped)
-			}
+			suite.Require().ErrorIs(err, tc.wantErr)
 
 			_, after := sync.GetStatus()
 			suite.Require().Equal(baseline, after, "in-progress counter must return to baseline after a failed produceJob")
