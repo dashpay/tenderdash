@@ -37,7 +37,7 @@ func TestMakeSecretConnectionRejectsLowOrderKey(t *testing.T) {
 			}()
 
 			_, err := MakeSecretConnection(local, ed25519.GenPrivKey())
-			require.ErrorIs(t, err, ErrSmallOrderRemotePubKey)
+			require.Error(t, err)
 
 			select {
 			case err := <-scriptDone:

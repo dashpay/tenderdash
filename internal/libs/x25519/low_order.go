@@ -1,13 +1,13 @@
-// Package x25519 provides helpers for validating Curve25519 public keys.
+// Package x25519 collects the known Curve25519 low-order points and a guard
+// test that pins the standard-library X25519 rejection of those points, which
+// the secret-connection handshakes rely on for correct key exchange.
 package x25519
-
-import "crypto/subtle"
 
 // LowOrderPoints lists the Curve25519 points whose order is too small to be
 // safe in a Diffie-Hellman exchange. The encodings match the canonical
-// libsodium blocklist; the high bit of the final byte is ignored during
-// comparison, so both encodings of each point are covered. It is the single
-// source of truth shared by callers and their tests.
+// libsodium blocklist; the high bit of the final byte is ignored when a point
+// is decoded, so both encodings of each point are covered. It is the single
+// source of truth consumed by the guard and handshake-rejection tests.
 var LowOrderPoints = [][32]byte{
 	// 0 (order 4)
 	{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,
@@ -30,19 +30,4 @@ var LowOrderPoints = [][32]byte{
 	// p+1 (order 1)
 	{0xee, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff,
 		0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0x7f},
-}
-
-// IsLowOrderPoint reports whether p decodes to one of the known low-order
-// Curve25519 points. The comparison is constant-time and masks the high bit of
-// the final byte, mirroring the canonical libsodium check.
-func IsLowOrderPoint(p *[32]byte) bool {
-	var candidate [32]byte
-	copy(candidate[:], p[:])
-	candidate[31] &= 0x7f
-
-	var found int
-	for i := range LowOrderPoints {
-		found |= subtle.ConstantTimeCompare(candidate[:], LowOrderPoints[i][:])
-	}
-	return found == 1
 }

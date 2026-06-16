@@ -5,7 +5,6 @@ import (
 	"crypto/cipher"
 	crand "crypto/rand"
 	"crypto/sha256"
-
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -29,7 +28,6 @@ import (
 	"github.com/dashpay/tenderdash/crypto/encoding"
 	"github.com/dashpay/tenderdash/internal/libs/async"
 	"github.com/dashpay/tenderdash/internal/libs/protoio"
-	"github.com/dashpay/tenderdash/internal/libs/x25519"
 	tmprivval "github.com/dashpay/tenderdash/proto/tendermint/privval"
 )
 
@@ -52,11 +50,7 @@ const (
 	labelSecretConnectionMac     = "SECRET_CONNECTION_MAC"
 )
 
-var (
-	ErrSmallOrderRemotePubKey = errors.New("detected low order point from remote peer")
-
-	secretConnKeyAndChallengeGen = []byte("TENDERMINT_SECRET_CONNECTION_KEY_AND_CHALLENGE_GEN")
-)
+var secretConnKeyAndChallengeGen = []byte("TENDERMINT_SECRET_CONNECTION_KEY_AND_CHALLENGE_GEN")
 
 // SecretConnection implements net.Conn.
 // It is an implementation of the STS protocol.
@@ -113,12 +107,6 @@ func MakeSecretConnection(conn io.ReadWriteCloser, locPrivKey crypto.PrivKey) (*
 	remEphPub, err := shareEphPubKey(conn, locEphPub)
 	if err != nil {
 		return nil, err
-	}
-
-	// Reject remote ephemeral keys that decode to a known low-order point
-	// before they are used in the key exchange.
-	if x25519.IsLowOrderPoint(remEphPub) {
-		return nil, ErrSmallOrderRemotePubKey
 	}
 
 	// Sort by lexical order.
@@ -389,6 +377,10 @@ func deriveSecrets(
 // computeDHSecret computes a Diffie-Hellman shared secret key
 // from our own local private key and the other's public key.
 func computeDHSecret(remPubKey, locPrivKey *[32]byte) (*[32]byte, error) {
+	// A low-order remote ephemeral key is rejected here: curve25519.X25519
+	// (backed by crypto/ecdh) returns an error rather than producing an
+	// all-zero shared secret for such points, so no separate pre-check is
+	// required. The guard test in internal/libs/x25519 pins this behavior.
 	shrKey, err := curve25519.X25519(locPrivKey[:], remPubKey[:])
 	if err != nil {
 		return nil, err
