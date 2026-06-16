@@ -377,7 +377,7 @@ func computeDHSecret(remPubKey, locPrivKey *[32]byte) (*[32]byte, error) {
 	// A low-order remote ephemeral key is rejected here: curve25519.X25519
 	// (backed by crypto/ecdh) returns an error rather than producing an
 	// all-zero shared secret for such points, so no separate pre-check is
-	// required. The guard test in internal/libs/x25519 pins this behavior.
+	// required. See TestMakeSecretConnectionRejectsLowOrderKey.
 	shrKey, err := curve25519.X25519(locPrivKey[:], remPubKey[:])
 	if err != nil {
 		return nil, err
